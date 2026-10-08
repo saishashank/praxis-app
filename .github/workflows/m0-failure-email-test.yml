@@ -1,0 +1,19 @@
+# BLD-010 row 16a / NFR-006: fails on purpose so the Owner can confirm that
+# GitHub's "workflow failed" email reaches their Gmail inbox. Manual run only.
+# Uses no secrets and prints nothing personal (SEC-110).
+name: M0 failure-email test
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  fail-on-purpose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Fail deliberately (BLD-010 r16a)
+        run: |
+          echo "This run fails on purpose to test GitHub failure emails (NFR-006)."
+          exit 1
