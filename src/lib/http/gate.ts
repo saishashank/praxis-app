@@ -29,6 +29,7 @@ const TEST_LOGIN_ROUTE = "/api/test-identity/login";
 const MACHINE_ROUTES = new Set([
   "/api/internal/self-check",
   "/api/internal/maintenance",
+  "/api/internal/backup-export",
   TEST_LOGIN_ROUTE,
 ]);
 const PUBLIC_EXACT = new Set(["/signin", "/privacy", "/terms", "/api/health", "/robots.txt"]);

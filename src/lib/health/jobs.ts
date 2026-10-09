@@ -27,7 +27,7 @@ export const JOBS: readonly JobDef[] = [
     job: "nightly-backup",
     label: "Nightly backup",
     expectedIntervalSec: 86_400,
-    noDataNote: "Not built yet",
+    noDataNote: "Not run yet (manual until the Worker dispatches it, M2)",
   },
 ];
 

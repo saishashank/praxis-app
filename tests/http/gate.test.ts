@@ -108,6 +108,7 @@ describe("authentication (PLT-031)", () => {
     "/api/auth/csrf",
     "/api/internal/self-check",
     "/api/internal/maintenance",
+    "/api/internal/backup-export",
     "/api/test-identity/login",
   ])("public path %s passes without a session", async (p) => {
     const readClaims = vi.fn(async () => null);
@@ -182,6 +183,15 @@ describe("same-origin check (SEC-011)", () => {
     expect(res.status).toBe(200);
     // sub-paths and look-alikes are not exempt
     for (const p of ["/api/internal/maintenance/x", "/api/internal/maintenancex"]) {
+      expect(isPublicPath(p)).toBe(false);
+      expect((await gate(req(p, { method: "POST" }), d)).status).toBe(403);
+    }
+  });
+  it("the signed backup-export route is exempt from the origin check and needs no session", async () => {
+    const d = await mk({ readClaims: async () => null });
+    const res = await gate(req("/api/internal/backup-export", { method: "POST" }), d);
+    expect(res.status).toBe(200);
+    for (const p of ["/api/internal/backup-export/x", "/api/internal/backup-exportx"]) {
       expect(isPublicPath(p)).toBe(false);
       expect((await gate(req(p, { method: "POST" }), d)).status).toBe(403);
     }

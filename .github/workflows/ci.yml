@@ -35,6 +35,8 @@ jobs:
       - run: npm test
       - run: npm run test:smoke
       - run: npm run test:routes
+      - name: Backup restore drill (TST-108, synthetic data, throwaway key)
+        run: node scripts/backup/drill.mjs
       - run: npm run build
       - name: Client bundle secret scan (AT-03)
         run: node scripts/ci/bundle-secret-scan.mjs
