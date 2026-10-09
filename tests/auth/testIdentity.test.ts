@@ -279,9 +279,9 @@ describe("login handler", () => {
     });
 
     it("non-test, unknown, revoked and malformed emails", async () => {
-      await addUser(db, { email: "real@gmail.com" });
+      await addUser(db, { email: "real@example.com" });
       await addUser(db, { email: "gone@praxis.test", status: "revoked" });
-      const emails = ["real@gmail.com", "nobody@praxis.test", "gone@praxis.test", 5, null, ""];
+      const emails = ["real@example.com", "nobody@praxis.test", "gone@praxis.test", 5, null, ""];
       for (const email of emails) await expect401(await make()(signed(login(email))));
       await expect401(await make()(signed("not json")));
       await expect401(await make()(signed("null")));
