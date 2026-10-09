@@ -4,7 +4,13 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
 import { formatMelbourne } from "@/lib/health/format";
-import { getHealthSummary, type HealthSummary, type JobState } from "@/lib/health/summary";
+import {
+  getHealthSummary,
+  type HealthSummary,
+  type JobState,
+  type QuotaSummary,
+} from "@/lib/health/summary";
+import type { MeterLevel } from "@/lib/usage/meters";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +18,6 @@ const PLACEHOLDERS: { label: string; note: string }[] = [
   { label: "Sentinel last poll", note: "M2" },
   { label: "Data freshness (last bar date per feed)", note: "M2" },
   { label: "LLM provider status", note: "M5" },
-  { label: "Quota usage", note: "M5" },
   { label: "Last backup", note: "M2" },
   { label: "Last restore test", note: "M2" },
   { label: "Last email", note: "M5" },
@@ -24,6 +29,22 @@ const STATE_LABEL: Record<JobState, string> = {
   failed: "FAILED",
   "no data": "NO DATA",
 };
+
+const QUOTA_LABEL: Record<MeterLevel, string> = {
+  ok: "OK",
+  notice: "NOTICE",
+  alert: "ALERT",
+  degrade: "DEGRADE",
+  "no data": "NO DATA",
+};
+
+function quotaText(q: QuotaSummary | undefined): string {
+  if (!q) return "Not available";
+  const base = `Worst level: ${QUOTA_LABEL[q.level]}`;
+  return q.meter !== undefined && q.ratio !== undefined
+    ? `${base} (${q.meter}, ${(q.ratio * 100).toFixed(1)}%)`
+    : base;
+}
 
 export default async function HealthPage() {
   const user = await requireUser("read", "/health");
@@ -152,6 +173,10 @@ export default async function HealthPage() {
           Other status
         </h2>
         <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+          <div className="flex flex-col">
+            <dt className="font-medium">Quota usage</dt>
+            <dd className="text-muted">{quotaText(summary?.quota)}</dd>
+          </div>
           {PLACEHOLDERS.map((p) => (
             <div key={p.label} className="flex flex-col">
               <dt className="font-medium">{p.label}</dt>

@@ -107,6 +107,7 @@ describe("authentication (PLT-031)", () => {
     "/api/auth/callback/google",
     "/api/auth/csrf",
     "/api/internal/self-check",
+    "/api/internal/maintenance",
     "/api/test-identity/login",
   ])("public path %s passes without a session", async (p) => {
     const readClaims = vi.fn(async () => null);
@@ -174,6 +175,16 @@ describe("same-origin check (SEC-011)", () => {
     const d = await mk({ readClaims: async () => null });
     const res = await gate(req("/api/internal/self-check", { method: "POST" }), d);
     expect(res.status).toBe(200);
+  });
+  it("the signed maintenance route is exempt from the origin check and needs no session", async () => {
+    const d = await mk({ readClaims: async () => null });
+    const res = await gate(req("/api/internal/maintenance", { method: "POST" }), d);
+    expect(res.status).toBe(200);
+    // sub-paths and look-alikes are not exempt
+    for (const p of ["/api/internal/maintenance/x", "/api/internal/maintenancex"]) {
+      expect(isPublicPath(p)).toBe(false);
+      expect((await gate(req(p, { method: "POST" }), d)).status).toBe(403);
+    }
   });
   it("the signed test-identity login is exempt from the origin check and needs no session", async () => {
     const d = await mk({ readClaims: async () => null });

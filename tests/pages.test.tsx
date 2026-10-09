@@ -176,6 +176,22 @@ describe("health page", () => {
     expect(screen.getByText(/not financial advice/)).toBeInTheDocument();
   });
 
+  it("quota line: worst level for viewers, meter and ratio for the owner", async () => {
+    summaryMock.mockResolvedValueOnce({ jobs, quota: { level: "alert" } });
+    await as("viewer");
+    render(await HealthPage());
+    expect(screen.getByText("Worst level: ALERT")).toBeInTheDocument();
+    cleanup();
+    summaryMock.mockResolvedValueOnce({
+      jobs,
+      quota: { level: "notice", meter: "Turso rows written", ratio: 0.7 },
+      secrets: { lastVerifiedAt: null, results: [] },
+    });
+    await as("owner");
+    render(await HealthPage());
+    expect(screen.getByText("Worst level: NOTICE (Turso rows written, 70.0%)")).toBeInTheDocument();
+  });
+
   it("owner: secrets section with PASS/FAIL/PENDING and error details", async () => {
     summaryMock.mockResolvedValueOnce({
       jobs,

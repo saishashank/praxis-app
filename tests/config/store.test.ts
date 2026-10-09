@@ -31,6 +31,8 @@ describe("config store", () => {
     expect(d("retention_logs_days")).toBe(30);
     expect(d("retention_runs_days")).toBe(180);
     expect(d("retention_news_days")).toBe(400);
+    expect(d("pii_hash_after_revocation_days")).toBe(90);
+    expect(CONFIG_KEYS.pii_hash_after_revocation_days.editable).toBe("fixed");
     expect(d("backup_retention")).toEqual({ daily: 14, weekly: 8, monthly: 12 });
     expect(d("storage_warn_gb")).toBe(2.5);
     expect(d("storage_ceiling_gb")).toBe(3);
@@ -43,6 +45,11 @@ describe("config store", () => {
     expect(d("token_warning_days")).toEqual([14, 7, 2]);
     expect(d("what_if_daily_limit_per_user")).toBe(5);
     expect(d("sentinel_blind_alert_min")).toBe(15);
+    expect(d("turso_writes_ceiling_month")).toBe(6_000_000);
+    expect(d("turso_reads_ceiling_month")).toBe(300_000_000);
+    expect(d("turso_staging_share")).toBe(0.15);
+    expect(d("actions_minutes_soft_ceiling")).toBe(3000);
+    expect(d("llm_daily_budget_total")).toBe(150_000);
     expect(isConfigKey("nope")).toBe(false);
     expect(isConfigKey("toString")).toBe(false);
   });

@@ -162,6 +162,53 @@ export const CONFIG_KEYS = {
     ref: "PLT-018",
     validate: intRange(1),
   },
+  // Line 142: turso ceilings (storage 3 GB, writes 6M/month, reads 300M/month, staging <= 15%); DAT-141.
+  turso_writes_ceiling_month: {
+    default: 6_000_000,
+    unit: "rows/month",
+    editable: "O",
+    ref: "DAT-141",
+    validate: intRange(1),
+  },
+  turso_reads_ceiling_month: {
+    default: 300_000_000,
+    unit: "rows/month",
+    editable: "O",
+    ref: "DAT-141",
+    validate: intRange(1),
+  },
+  turso_staging_share: {
+    default: 0.15,
+    unit: "fraction",
+    editable: "O",
+    ref: "DAT-141",
+    validate: async (v) =>
+      isNum(v) && v > 0 && v <= 1 ? null : "must be greater than 0 and at most 1",
+  },
+  // Line 154: actions_minutes_soft_ceiling 3,000/month, O; PLT-014 (warns only, PLT-051).
+  actions_minutes_soft_ceiling: {
+    default: 3000,
+    unit: "min/month",
+    editable: "O",
+    ref: "PLT-014",
+    validate: intRange(1),
+  },
+  // Line 187: llm_daily_budget_total 150,000 tokens, bounds 75,000-225,000, O; LLM-050.
+  llm_daily_budget_total: {
+    default: 150_000,
+    unit: "tokens/day",
+    editable: "O",
+    ref: "LLM-050",
+    validate: intRange(75_000, 225_000),
+  },
+  // NFR-030 / DAT-142: email and name are hashed 90 days after revocation. Fixed, not in ch.15.
+  pii_hash_after_revocation_days: {
+    default: 90,
+    unit: "days",
+    editable: "fixed",
+    ref: "NFR-030",
+    validate: never,
+  },
 } satisfies Record<string, ConfigKeyDef>;
 
 export type ConfigKey = keyof typeof CONFIG_KEYS;

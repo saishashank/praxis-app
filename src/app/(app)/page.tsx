@@ -37,6 +37,11 @@ export default async function HomePage() {
             Users &amp; roles
           </Link>
         )}
+        {user.role === "owner" && (
+          <Link href="/usage" className="text-accent underline">
+            Usage
+          </Link>
+        )}
         <Link href="/privacy" className="text-accent underline">
           Privacy
         </Link>

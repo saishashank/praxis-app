@@ -26,7 +26,11 @@ const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
 // HMAC-authenticated machine routes (SEC-017): public, exempt from the same-origin check.
 // The test-identity login answers 404 in production (SEC-109, TST-113).
 const TEST_LOGIN_ROUTE = "/api/test-identity/login";
-const MACHINE_ROUTES = new Set(["/api/internal/self-check", TEST_LOGIN_ROUTE]);
+const MACHINE_ROUTES = new Set([
+  "/api/internal/self-check",
+  "/api/internal/maintenance",
+  TEST_LOGIN_ROUTE,
+]);
 const PUBLIC_EXACT = new Set(["/signin", "/privacy", "/terms", "/api/health", "/robots.txt"]);
 
 export function isPublicPath(p: string): boolean {

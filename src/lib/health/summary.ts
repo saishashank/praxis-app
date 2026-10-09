@@ -3,6 +3,7 @@
 import type { Client } from "@libsql/client";
 import type { Role } from "@/lib/auth/permissions";
 import { latestPerJob, type RunStatus } from "@/lib/runs/runRecord";
+import { getMeters, usageEnvironment, worstMeter, type MeterLevel } from "@/lib/usage/meters";
 import { isStale, JOBS } from "./jobs";
 
 export const SELFCHECK_JOB = "credential-selfcheck-vercel";
@@ -22,8 +23,13 @@ export type JobSummary = {
 
 export type SecretResult = { name: string; ok: boolean; pending: boolean; detail?: string };
 
+// Quota usage (PLT-061, PLT-050): the worst level for every role; the meter name and ratio are
+// Owner-only (absent for others, like the Usage page itself, ROL-102a).
+export type QuotaSummary = { level: MeterLevel; meter?: string; ratio?: number };
+
 export type HealthSummary = {
   jobs: JobSummary[];
+  quota: QuotaSummary;
   secrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only
 };
 
@@ -44,10 +50,30 @@ function parseResults(details: unknown): SecretResult[] {
   return out;
 }
 
+async function getQuota(
+  mainDb: Client,
+  now: Date,
+  owner: boolean,
+  env: Record<string, string | undefined>,
+): Promise<QuotaSummary> {
+  try {
+    const worst = worstMeter(await getMeters(mainDb, now, usageEnvironment(env)));
+    const q: QuotaSummary = { level: worst.level };
+    if (owner && worst.meter && worst.meter.ratio !== null) {
+      q.meter = worst.meter.label;
+      q.ratio = worst.meter.ratio;
+    }
+    return q;
+  } catch {
+    return { level: "no data" }; // quota trouble never hides job status
+  }
+}
+
 export async function getHealthSummary(
   mainDb: Client,
   now: Date,
   role: Role,
+  env: Record<string, string | undefined> = process.env,
 ): Promise<HealthSummary> {
   const rows = await latestPerJob(mainDb); // throws on DB failure
   const byJob = new Map(rows.map((r) => [r.job, r]));
@@ -70,7 +96,7 @@ export async function getHealthSummary(
     return s;
   });
 
-  const summary: HealthSummary = { jobs };
+  const summary: HealthSummary = { jobs, quota: await getQuota(mainDb, now, owner, env) };
   if (owner) {
     const sc = byJob.get(SELFCHECK_JOB);
     summary.secrets = {
