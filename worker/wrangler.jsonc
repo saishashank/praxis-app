@@ -11,7 +11,8 @@
       "name": "praxis-sentinel-staging",
       "workers_dev": false,
       "preview_urls": false,
-      "triggers": { "crons": ["* * * * *"] },
+      // NFR-040: the staging cron runs only during test windows (none yet).
+      "triggers": { "crons": [] },
       "vars": { "PRAXIS_ENV": "staging" },
     },
   },
