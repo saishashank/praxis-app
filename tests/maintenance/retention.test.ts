@@ -3,7 +3,7 @@
 import type { Client } from "@libsql/client";
 import { createHmac } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { appendAudit, auditKey, hashUserPii, nullAuditPii, verifyAuditChain } from "@/lib/db/audit";
+import { appendAudit, auditKey, verifyAuditChain } from "@/lib/db/audit";
 import {
   concurrencyKeyFor,
   hashRevokedUsers,
@@ -288,26 +288,18 @@ describe("NFR-030 PII hashing", () => {
     expect(ra.email).not.toBe(rb.email);
   });
 
-  it("matches the existing hashUserPii / nullAuditPii helpers exactly", async () => {
+  it("produces the known-answer HMAC values from the shared audit helpers", async () => {
     const id = await addUser({
       email: "Same@Example.test",
       name: "Same Name",
       revokedAt: ago(100),
     });
-    await addAudit(id, "1.2.3.4", "UA");
-    const twin = await freshDb("auth");
-    await twin.execute({
-      sql: `INSERT INTO app_user (id, email, name, role, status, created_at, updated_at, revoked_at)
-            VALUES (?, 'Same@Example.test', 'Same Name', 'viewer', 'revoked', 'x', 'x', ?)`,
-      args: [id, ago(100)],
-    });
-    await hashUserPii(twin, PII, id, NOW.toISOString());
-    await nullAuditPii(twin, id);
     await run();
-    const a = await userRow(id);
-    const b = (await twin.execute({ sql: "SELECT * FROM app_user WHERE id = ?", args: [id] }))
-      .rows[0];
-    for (const col of ["email", "name", "pii_hashed_at", "updated_at"]) expect(a[col]).toBe(b[col]);
+    const u = await userRow(id);
+    expect(u.email).toBe("hashed:9a8a2036a7b1722ea964b1d8fe1cf5f57f8e780805044f2a79e7a799ddc02f1f");
+    expect(u.name).toBe("b16448134f02a267ea09c9e41a21b1cccbf351a32692408e40ef5c575383fba1");
+    expect(u.pii_hashed_at).toBe(NOW.toISOString());
+    expect(u.updated_at).toBe(NOW.toISOString());
   });
 
   it("nulls ip/user_agent on that user's audit rows only, keeps rows, chain still verifies", async () => {

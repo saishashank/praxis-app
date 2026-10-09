@@ -28,10 +28,9 @@
 // recorded by NAME only (never a value or an error message) and the other steps still run, so one
 // bad step cannot block the rest (catch-up).
 import type { Client, Transaction } from "@libsql/client";
-import { createHmac } from "node:crypto";
 import { CONFIG_KEYS } from "@/lib/config/keys";
 import { getConfig } from "@/lib/config/store";
-import { appendAuditTx, auditKey } from "@/lib/db/audit";
+import { appendAuditTx, auditKey, hashUserPii, nullAuditPii } from "@/lib/db/audit";
 import { finishRun, hasSuccess, pruneRuns, startRun } from "@/lib/runs/runRecord";
 
 export const MAINTENANCE_JOB = "maintenance-nightly";
@@ -88,11 +87,8 @@ export async function pruneNonces(db: Client, nowSec: number): Promise<number> {
   return res.rowsAffected;
 }
 
-const hmacHex = (piiHashKey: string, v: string) =>
-  createHmac("sha256", piiHashKey).update(v).digest("hex");
-
-// Same output as hashUserPii / nullAuditPii in db/audit.ts (a test compares them), but running on
-// the caller's transaction so the user row, the audit rows and the audit event commit together.
+// Runs on the caller's transaction so the user row, the audit rows and the audit event commit
+// together. The HMAC / nulling logic lives in db/audit.ts (hashUserPii, nullAuditPii).
 async function hashOneUser(
   tx: Transaction,
   piiHashKey: string,
@@ -103,39 +99,24 @@ async function hashOneUser(
 ): Promise<{ done: boolean; auditRowsNulled: number }> {
   // Re-checked inside the transaction: a user re-invited since the candidate query is left alone.
   const u = await tx.execute({
-    sql: `SELECT email, name FROM app_user
+    sql: `SELECT id FROM app_user
           WHERE id = ? AND status = 'revoked' AND revoked_at IS NOT NULL AND revoked_at < ?
             AND pii_hashed_at IS NULL`,
     args: [userId, cutoff],
   });
   if (!u.rows.length) return { done: false, auditRowsNulled: 0 };
-  const email = String(u.rows[0].email);
-  const name = u.rows[0].name === null ? null : String(u.rows[0].name);
-  await tx.execute({
-    sql: "UPDATE app_user SET email = ?, name = ?, pii_hashed_at = ?, updated_at = ? WHERE id = ?",
-    args: [
-      `hashed:${hmacHex(piiHashKey, email.toLowerCase())}`,
-      name === null ? null : hmacHex(piiHashKey, name),
-      nowIso,
-      nowIso,
-      userId,
-    ],
-  });
-  const nulled = await tx.execute({
-    sql: `UPDATE audit_event SET ip = NULL, user_agent = NULL
-          WHERE actor_user_id = ? AND (ip IS NOT NULL OR user_agent IS NOT NULL)`,
-    args: [userId],
-  });
+  await hashUserPii(tx, piiHashKey, userId, nowIso);
+  const auditRowsNulled = await nullAuditPii(tx, userId);
   await appendAuditTx(tx, chainKey, {
     at: nowIso,
     actorUserId: null,
     action: PII_HASHED_ACTION,
     targetType: "app_user",
     targetId: String(userId),
-    detail: { auditRowsNulled: nulled.rowsAffected },
+    detail: { auditRowsNulled },
   });
   await tx.commit();
-  return { done: true, auditRowsNulled: nulled.rowsAffected };
+  return { done: true, auditRowsNulled };
 }
 
 // NFR-030. One write transaction per user: if any statement fails nothing of that user changes.

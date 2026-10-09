@@ -5,6 +5,9 @@ import type { Client, Transaction } from "@libsql/client";
 import { createHmac } from "node:crypto";
 import { nowIso } from "./time";
 
+// A Client or a Transaction: the PII helpers run on either (retention uses its per-user transaction).
+export type Executor = Pick<Client, "execute">;
+
 export const GENESIS_HMAC = "0".repeat(64);
 
 export type AuditEvent = {
@@ -122,7 +125,7 @@ export async function verifyAuditChain(db: Client, key: Buffer): Promise<number 
 }
 
 // NFR-030: null ip/user_agent on a user's audit rows (the trigger permits exactly this change).
-export async function nullAuditPii(db: Client, userId: number): Promise<number> {
+export async function nullAuditPii(db: Executor, userId: number): Promise<number> {
   const res = await db.execute({
     sql: "UPDATE audit_event SET ip = NULL, user_agent = NULL WHERE actor_user_id = ? AND (ip IS NOT NULL OR user_agent IS NOT NULL)",
     args: [userId],
@@ -132,7 +135,7 @@ export async function nullAuditPii(db: Client, userId: number): Promise<number> 
 
 // NFR-030: replace email/name with HMAC-SHA-256 (never a plain hash). Email stays UNIQUE via prefix.
 export async function hashUserPii(
-  db: Client,
+  db: Executor,
   piiHashKey: string,
   userId: number,
   now: string,

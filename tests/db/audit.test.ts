@@ -93,4 +93,33 @@ describe("hashUserPii", () => {
     expect(r.rows[0].pii_hashed_at).toBe("2026-12-01T00:00:00.000Z");
     await expect(hashUserPii(db, "k", 99, T)).rejects.toThrow(/not found/);
   });
+
+  it("runs on a transaction too and rolls back with it", async () => {
+    const db = await freshDb("auth");
+    await db.execute({
+      sql: "INSERT INTO app_user (email, name, status, created_at, updated_at) VALUES ('Jo@x.io', 'Jo', 'revoked', ?, ?)",
+      args: [T, T],
+    });
+    await appendAudit(db, key, { action: "a", actorUserId: 1, ip: "1.1.1.1", userAgent: "ua" });
+    const tx = await db.transaction("write");
+    try {
+      await hashUserPii(tx, "k", 1, T);
+      expect(await nullAuditPii(tx, 1)).toBe(1);
+      await tx.rollback();
+    } finally {
+      tx.close();
+    }
+    const u = await db.execute("SELECT email, pii_hashed_at FROM app_user");
+    expect(u.rows[0]).toMatchObject({ email: "Jo@x.io", pii_hashed_at: null });
+    expect((await db.execute("SELECT ip FROM audit_event")).rows[0].ip).toBe("1.1.1.1");
+    const tx2 = await db.transaction("write");
+    try {
+      await hashUserPii(tx2, "k", 1, T);
+      await tx2.commit();
+    } finally {
+      tx2.close();
+    }
+    const u2 = await db.execute("SELECT email FROM app_user");
+    expect(u2.rows[0].email).toMatch(/^hashed:[0-9a-f]{64}$/);
+  });
 });
