@@ -1,0 +1,198 @@
+# Credential smoke test, stage 1 (BLD-011, SEC-101). Manual only.
+# Proves each secret that Actions can see works, without printing it.
+# Stage 2 (Vercel self-check route, Worker cron self-check) is separate.
+# Secrets are referenced ONLY in `env:` blocks, never inside `run:` scripts.
+# `deployment: false` gives the job the environment's secrets without creating
+# a deployment record (required reviewers still apply), so smoke runs never
+# count as an approved deploy (SEC-108 c).
+name: Credential smoke test (stage 1)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Which environment set to check (staging runs on main, production on release)
+        type: choice
+        options:
+          - staging
+          - production
+        default: staging
+
+permissions: {}
+
+concurrency:
+  group: smoke-test-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check branch matches target
+        env:
+          TARGET: ${{ inputs.target }}
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$TARGET" = "staging" ] && [ "$REF" = "refs/heads/main" ]; then exit 0; fi
+          if [ "$TARGET" = "production" ] && [ "$REF" = "refs/heads/release" ]; then exit 0; fi
+          echo "::error::target '$TARGET' must run on its own branch (staging on main, production on release); got '$REF'."
+          exit 1
+
+  # ---------------- target: staging ----------------
+  staging:
+    if: ${{ inputs.target == 'staging' }}
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    environment:
+      name: staging
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Smoke checks (app-staging)
+        run: node scripts/smoke/stage1.mjs --suite app-staging
+        env:
+          SMOKE_ENV: staging
+          FIXTURES_REPO: ${{ github.repository }}-fixtures
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_STAGING }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_STAGING }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY_STAGING }}
+          OWNER_EMAIL: ${{ secrets.OWNER_EMAIL_STAGING }}
+          ACTIONS_HMAC_SECRET: ${{ secrets.ACTIONS_HMAC_SECRET_STAGING }}
+          PII_HASH_KEY: ${{ secrets.PII_HASH_KEY_STAGING }}
+          FIXTURES_READ_TOKEN: ${{ secrets.FIXTURES_READ_TOKEN }}
+
+  deploy-staging:
+    if: ${{ inputs.target == 'staging' }}
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    environment:
+      name: deploy-staging
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Smoke checks (deploy-staging)
+        run: node scripts/smoke/stage1.mjs --suite deploy-staging
+        env:
+          SMOKE_ENV: staging
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID_STAGING }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_STAGING }}
+      - name: Install Worker dependencies
+        working-directory: worker
+        run: npm ci
+      - name: Worker dry-run deploy (no credentials passed)
+        working-directory: worker
+        run: npx wrangler deploy --dry-run --outdir dist --env staging
+        env:
+          WRANGLER_SEND_METRICS: "false"
+
+  ci-fixtures:
+    if: ${{ inputs.target == 'staging' }}
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    environment:
+      name: ci-fixtures
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Smoke checks (ci-fixtures)
+        run: node scripts/smoke/stage1.mjs --suite ci-fixtures
+        env:
+          SMOKE_ENV: staging
+          FIXTURES_REPO: ${{ github.repository }}-fixtures
+          FIXTURES_READ_TOKEN: ${{ secrets.FIXTURES_READ_TOKEN }}
+
+  # ---------------- target: production ----------------
+  production:
+    if: ${{ inputs.target == 'production' }}
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    environment:
+      name: production
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Smoke checks (app-production)
+        run: node scripts/smoke/stage1.mjs --suite app-production
+        env:
+          SMOKE_ENV: production
+          DATA_REPO: ${{ github.repository }}-data
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY_PROD }}
+          OWNER_EMAIL: ${{ secrets.OWNER_EMAIL_PROD }}
+          OWNER_RECOVERY_EMAIL: ${{ secrets.OWNER_RECOVERY_EMAIL_PROD }}
+          ACTIONS_HMAC_SECRET: ${{ secrets.ACTIONS_HMAC_SECRET_PROD }}
+          PII_HASH_KEY: ${{ secrets.PII_HASH_KEY_PROD }}
+          BACKUP_PUBLIC_KEY: ${{ secrets.BACKUP_PUBLIC_KEY }}
+          DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN_PROD }}
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+  deploy-production:
+    if: ${{ inputs.target == 'production' }}
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    environment:
+      name: deploy-production
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Smoke checks (deploy-production)
+        run: node scripts/smoke/stage1.mjs --suite deploy-production
+        env:
+          SMOKE_ENV: production
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID_PROD }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_PROD }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN_PROD }}
+      - name: Install Worker dependencies
+        working-directory: worker
+        run: npm ci
+      - name: Worker dry-run deploy (no credentials passed)
+        working-directory: worker
+        run: npx wrangler deploy --dry-run --outdir dist
+        env:
+          WRANGLER_SEND_METRICS: "false"
