@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import HomePage from "@/app/(app)/page";
 import HealthPage from "@/app/(app)/health/page";
@@ -80,6 +80,23 @@ describe("home page health link", () => {
   it("links to System Health", async () => {
     render(await HomePage());
     expect(screen.getByRole("link", { name: "System Health" })).toHaveAttribute("href", "/health");
+  });
+});
+
+describe("home page Users & roles link", () => {
+  it("is hidden for an editor and shown for the owner", async () => {
+    const { requireUser } = await import("@/lib/auth/guard");
+    render(await HomePage());
+    expect(screen.queryByRole("link", { name: "Users & roles" })).toBeNull();
+    cleanup();
+    vi.mocked(requireUser).mockResolvedValueOnce({
+      id: 1,
+      email: "o@example.test",
+      name: null,
+      role: "owner",
+    } as never);
+    render(await HomePage());
+    expect(screen.getByRole("link", { name: "Users & roles" })).toHaveAttribute("href", "/users");
   });
 });
 

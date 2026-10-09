@@ -1,7 +1,7 @@
 // Auth audit helpers (ROL-104, NFR-030). Refused emails are stored only as an HMAC.
-import type { Client } from "@libsql/client";
+import type { Client, Transaction } from "@libsql/client";
 import { createHmac } from "node:crypto";
-import { appendAudit, auditKey, type AuditEvent } from "@/lib/db/audit";
+import { appendAudit, appendAuditTx, auditKey, type AuditEvent } from "@/lib/db/audit";
 import { norm, type AuthEnv } from "./env";
 
 export type RequestMeta = { ip: string | null; userAgent: string | null };
@@ -36,6 +36,20 @@ export async function audit(
   event: Omit<AuditEvent, "ip" | "userAgent">,
 ): Promise<void> {
   await appendAudit(db, auditKey(requireKey(env)), {
+    ...event,
+    ip: meta.ip,
+    userAgent: meta.userAgent,
+  });
+}
+
+// Same as audit(), inside the caller's write transaction (state change + audit commit together).
+export async function auditTx(
+  tx: Transaction,
+  env: AuthEnv,
+  meta: RequestMeta,
+  event: Omit<AuditEvent, "ip" | "userAgent">,
+): Promise<void> {
+  await appendAuditTx(tx, auditKey(requireKey(env)), {
     ...event,
     ip: meta.ip,
     userAgent: meta.userAgent,

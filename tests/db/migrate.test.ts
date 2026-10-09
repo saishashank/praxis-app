@@ -34,7 +34,7 @@ describe.each(["main", "auth"] as const)("migrations (%s)", (name) => {
     await migrateUp(db, ms);
     const before = await schemaOf(db);
     const down = await migrateDown(db, ms, 1);
-    expect(down).toEqual({ rolledBack: 1, version: 0 });
+    expect(down).toEqual({ rolledBack: 1, version: ms.length - 1 });
     expect((await schemaOf(db)).length).toBeLessThan(before.length);
     await migrateUp(db, ms);
     expect(await schemaOf(db)).toEqual(before);

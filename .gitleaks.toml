@@ -1,0 +1,16 @@
+# gitleaks configuration (SEC-104, AT-03). Extends the default rules; allowlists only what is
+# justified below. Never allowlist a real secret: rotate it instead.
+title = "praxis-app gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "npm integrity hashes look like high-entropy tokens but are public checksums"
+paths = ['''(^|/)package-lock\.json$''']
+
+[[allowlists]]
+description = "Obviously fake values, only inside test files"
+condition = "AND"
+paths = ['''^(tests|scripts/(smoke|e2e|ci))/''']
+regexes = ['''SECRET-VALUE''', '''\ba{64}\b''']

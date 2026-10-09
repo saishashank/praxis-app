@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:smoke": "node --test \"scripts/smoke/*.test.mjs\" \"scripts/e2e/*.test.mjs\"",
+    "test:smoke": "node --test \"scripts/smoke/*.test.mjs\" \"scripts/e2e/*.test.mjs\" \"scripts/ci/*.test.mjs\"",
+    "test:routes": "node scripts/ci/route-coverage.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

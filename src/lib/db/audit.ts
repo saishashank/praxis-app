@@ -1,7 +1,7 @@
 // Audit hash chain (NFR-023, D-032) and personal-data handling (NFR-030).
 // row_hmac = HMAC-SHA256(key, prev_hmac + "|" + canonical JSON of the content fields).
 // ip and user_agent are deliberately NOT in the content so nulling them never breaks the chain.
-import type { Client } from "@libsql/client";
+import type { Client, Transaction } from "@libsql/client";
 import { createHmac } from "node:crypto";
 import { nowIso } from "./time";
 
@@ -50,7 +50,13 @@ function chain(key: Buffer, prev: string, c: Content): string {
     .digest("hex");
 }
 
-export async function appendAudit(db: Client, key: Buffer, event: AuditEvent): Promise<number> {
+// Appends inside a caller-supplied write transaction, so a state change and its audit event
+// commit together or not at all (ROL-104). The caller commits or rolls back.
+export async function appendAuditTx(
+  tx: Transaction,
+  key: Buffer,
+  event: AuditEvent,
+): Promise<number> {
   const content: Content = {
     at: event.at ?? nowIso(),
     actor_user_id: event.actorUserId ?? null,
@@ -59,29 +65,34 @@ export async function appendAudit(db: Client, key: Buffer, event: AuditEvent): P
     target_id: event.targetId ?? null,
     detail_json: event.detail === undefined ? null : JSON.stringify(event.detail),
   };
+  const last = await tx.execute("SELECT row_hmac FROM audit_event ORDER BY id DESC LIMIT 1");
+  const prev = last.rows.length ? String(last.rows[0].row_hmac) : GENESIS_HMAC;
+  const rowHmac = chain(key, prev, content);
+  const res = await tx.execute({
+    sql: `INSERT INTO audit_event (at, actor_user_id, action, target_type, target_id, detail_json, ip, user_agent, prev_hmac, row_hmac)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      content.at,
+      content.actor_user_id,
+      content.action,
+      content.target_type,
+      content.target_id,
+      content.detail_json,
+      event.ip ?? null,
+      event.userAgent ?? null,
+      prev,
+      rowHmac,
+    ],
+  });
+  return Number(res.lastInsertRowid);
+}
+
+export async function appendAudit(db: Client, key: Buffer, event: AuditEvent): Promise<number> {
   const tx = await db.transaction("write");
   try {
-    const last = await tx.execute("SELECT row_hmac FROM audit_event ORDER BY id DESC LIMIT 1");
-    const prev = last.rows.length ? String(last.rows[0].row_hmac) : GENESIS_HMAC;
-    const rowHmac = chain(key, prev, content);
-    const res = await tx.execute({
-      sql: `INSERT INTO audit_event (at, actor_user_id, action, target_type, target_id, detail_json, ip, user_agent, prev_hmac, row_hmac)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [
-        content.at,
-        content.actor_user_id,
-        content.action,
-        content.target_type,
-        content.target_id,
-        content.detail_json,
-        event.ip ?? null,
-        event.userAgent ?? null,
-        prev,
-        rowHmac,
-      ],
-    });
+    const id = await appendAuditTx(tx, key, event);
     await tx.commit();
-    return Number(res.lastInsertRowid);
+    return id;
   } finally {
     tx.close();
   }
