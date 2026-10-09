@@ -71,6 +71,13 @@ jobs:
           ACTIONS_HMAC_SECRET: ${{ secrets.ACTIONS_HMAC_SECRET_STAGING }}
           PII_HASH_KEY: ${{ secrets.PII_HASH_KEY_STAGING }}
           FIXTURES_READ_TOKEN: ${{ secrets.FIXTURES_READ_TOKEN }}
+      - name: Stage 2 — Vercel self-check
+        if: ${{ !cancelled() }}
+        run: node scripts/smoke/stage2.mjs
+        env:
+          SMOKE_ENV: staging
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL_STAGING }}
+          ACTIONS_HMAC_SECRET: ${{ secrets.ACTIONS_HMAC_SECRET_STAGING }}
 
   deploy-staging:
     if: ${{ inputs.target == 'staging' }}
@@ -163,6 +170,13 @@ jobs:
           GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      - name: Stage 2 — Vercel self-check
+        if: ${{ !cancelled() }}
+        run: node scripts/smoke/stage2.mjs
+        env:
+          SMOKE_ENV: production
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL_PROD }}
+          ACTIONS_HMAC_SECRET: ${{ secrets.ACTIONS_HMAC_SECRET_PROD }}
 
   deploy-production:
     if: ${{ inputs.target == 'production' }}
