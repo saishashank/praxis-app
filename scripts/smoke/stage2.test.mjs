@@ -20,9 +20,10 @@ const report = (over = {}) => ({
   ],
   ...over,
 });
-const fakeFetch = (status = 200, body = report()) => {
+const fakeFetch = (status = 200, body = report(), tiStatus = 401) => {
   const f = async (url, init) => {
     f.calls.push({ url, init });
+    if (String(url).endsWith('/api/test-identity/login')) return { status: tiStatus, json: async () => ({}) };
     return { status, json: async () => body };
   };
   f.calls = [];
@@ -71,7 +72,7 @@ test('pending results are shown as PENDING and do not fail the run', async () =>
   const { code, text } = await exec(env(), fakeFetch());
   assert.equal(code, 0);
   assert.match(text, /WORKER_HMAC_SECRET format\s+\| PENDING/);
-  assert.match(text, /Stage 2 staging: 1\/1 passed, 1 pending/);
+  assert.match(text, /Stage 2 staging: 2\/2 passed, 1 pending/);
 });
 
 test('a failing check exits 1', async () => {
@@ -137,4 +138,59 @@ test('step summary is written when GITHUB_STEP_SUMMARY is set', async () => {
   assert.match(md, /### Stage 2 staging/);
   assert.match(md, /\| WORKER_HMAC_SECRET format \| PENDING \|/);
   assert.ok(!md.includes(SECRET));
+});
+
+const ti = (f) => f.calls.find((c) => c.url.endsWith('/api/test-identity/login'));
+
+test('production: test identity login must return 404 (SEC-109)', async () => {
+  const prod = report({ env: 'production' });
+  const ok = fakeFetch(200, prod, 404);
+  const a = await exec(env({ SMOKE_ENV: 'production' }), ok);
+  assert.equal(a.code, 0);
+  assert.match(a.text, /Test identity login disableds+| PASSs+| HTTP 404/);
+  assert.equal(ti(ok).init.method, 'POST');
+  assert.equal(ti(ok).init.body, '{}');
+  assert.equal(ti(ok).init.headers['X-Praxis-Signature'], undefined);
+  assert.equal(ti(ok).url, `${URL_SECRET}/api/test-identity/login`);
+  for (const status of [401, 200, 500]) {
+    const b = await exec(env({ SMOKE_ENV: 'production' }), fakeFetch(200, prod, status));
+    assert.equal(b.code, 1);
+    assert.match(b.text, new RegExp(`Test identity login disabled\s+\| FAIL\s+\| HTTP ${status}`));
+  }
+});
+
+test('staging: unsigned test identity login must return 401', async () => {
+  const a = await exec(env(), fakeFetch(200, report(), 401));
+  assert.equal(a.code, 0);
+  assert.match(a.text, /Test identity login needs signatures+| PASSs+| HTTP 401/);
+  for (const status of [404, 200]) {
+    const b = await exec(env(), fakeFetch(200, report(), status));
+    assert.equal(b.code, 1);
+    assert.match(b.text, /Test identity login needs signatures+| FAIL/);
+  }
+});
+
+test('test identity probe: network failure and unknown SMOKE_ENV fail safely', async () => {
+  const f = async (url) => {
+    if (String(url).endsWith('/api/test-identity/login')) throw Object.assign(new Error(URL_SECRET), { name: 'TimeoutError' });
+    return { status: 200, json: async () => report() };
+  };
+  const a = await exec(env(), f);
+  assert.equal(a.code, 1);
+  assert.match(a.text, /request failed: TimeoutError/);
+  assert.ok(!a.text.includes('praxis-secret-host'));
+  const b = await exec(env({ SMOKE_ENV: 'other' }), fakeFetch(200, report({ env: 'other' })));
+  assert.equal(b.code, 1);
+  assert.match(b.text, /unknown SMOKE_ENV/);
+  const c = async (url) => {
+    if (String(url).endsWith('/api/test-identity/login')) throw 'x';
+    return { status: 200, json: async () => report() };
+  };
+  assert.match((await exec(env(), c)).text, /request failed: Error/);
+});
+
+test('step summary includes the test identity row', async () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'smoke2-')), 'summary.md');
+  await exec(env({ GITHUB_STEP_SUMMARY: file }), fakeFetch());
+  assert.match(readFileSync(file, 'utf8'), /| Test identity login needs signature | PASS | HTTP 401 |/);
 });

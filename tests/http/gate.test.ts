@@ -107,6 +107,7 @@ describe("authentication (PLT-031)", () => {
     "/api/auth/callback/google",
     "/api/auth/csrf",
     "/api/internal/self-check",
+    "/api/test-identity/login",
   ])("public path %s passes without a session", async (p) => {
     const readClaims = vi.fn(async () => null);
     const res = await gate(req(p), await mk({ readClaims }));
@@ -174,6 +175,20 @@ describe("same-origin check (SEC-011)", () => {
     const res = await gate(req("/api/internal/self-check", { method: "POST" }), d);
     expect(res.status).toBe(200);
   });
+  it("the signed test-identity login is exempt from the origin check and needs no session", async () => {
+    const d = await mk({ readClaims: async () => null });
+    const res = await gate(req("/api/test-identity/login", { method: "POST" }), d);
+    expect(res.status).toBe(200);
+    // sub-paths and look-alikes are not exempt
+    for (const p of [
+      "/api/test-identity/login/x",
+      "/api/test-identity",
+      "/api/test-identity/other",
+    ]) {
+      expect(isPublicPath(p)).toBe(false);
+      expect((await gate(req(p, { method: "POST" }), d)).status).toBe(403);
+    }
+  });
   it("the check runs before authentication (cross-origin POST by anonymous -> 403)", async () => {
     const d = await mk({ readClaims: async () => null });
     expect((await gate(post({ origin: "https://evil.test" }), d)).status).toBe(403);
@@ -189,6 +204,17 @@ describe("rate limits (SEC-014)", () => {
     // another IP is unaffected
     const other = await gate(req("/api/auth/callback/google", { ip: "8.8.8.8" }), d);
     expect(other.status).toBe(200);
+  });
+
+  it("the test-identity login is limited per IP like a sign-in", async () => {
+    const d = await mk({
+      readClaims: async () => null,
+      limits: { ...LIMITS, signin_per_min_ip: 2 },
+    });
+    const call = () => gate(req("/api/test-identity/login", { method: "POST", ip: "6.6.6.6" }), d);
+    expect((await call()).status).toBe(200);
+    expect((await call()).status).toBe(200);
+    expect((await call()).status).toBe(429);
   });
 
   it("limits /api/auth/signin/* and the sign-in form POST, not other auth GETs", async () => {

@@ -1,20 +1,19 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import {
-  ForbiddenError,
-  authorize,
-  defaultDeps,
-  requireUser,
-  withAuth,
-  type GuardDeps,
-} from "@/lib/auth/guard";
+import { authorize, defaultDeps, requireUser, withAuth, type GuardDeps } from "@/lib/auth/guard";
 import { AuthUnavailableError, type CurrentUser } from "@/lib/auth/session";
 import { auditRows, authDb, addUser } from "./helpers";
 
 const redirectMock = vi.fn((url: string) => {
   throw new Error(`REDIRECT:${url}`);
 });
-vi.mock("next/navigation", () => ({ redirect: (u: string) => redirectMock(u) }));
+const forbiddenMock = vi.fn(() => {
+  throw new Error("NEXT_HTTP_ERROR_FALLBACK;403");
+});
+vi.mock("next/navigation", () => ({
+  redirect: (u: string) => redirectMock(u),
+  forbidden: () => forbiddenMock(),
+}));
 const headersMock = vi.fn();
 vi.mock("next/headers", () => ({ headers: () => headersMock() }));
 const dbMock = vi.fn();
@@ -78,10 +77,19 @@ describe("requireUser", () => {
       "REDIRECT:/signin?callbackUrl=%2Fa%20b%3Fx%3D1",
     );
   });
-  it("throws ForbiddenError (403) for a disallowed role", async () => {
-    const err = await requireUser("admin", "/a", deps(user("editor"))).catch((e) => e);
-    expect(err).toBeInstanceOf(ForbiddenError);
-    expect(err.status).toBe(403);
+  it("calls Next forbidden() (403 page) for a disallowed role, after the audit write", async () => {
+    const forbid = vi.fn(async () => {});
+    forbiddenMock.mockClear();
+    await expect(requireUser("admin", "/a", deps(user("editor"), forbid))).rejects.toThrow(
+      "NEXT_HTTP_ERROR_FALLBACK;403",
+    );
+    expect(forbid).toHaveBeenCalledWith(user("editor"), "admin", "/a", META);
+    expect(forbiddenMock).toHaveBeenCalledTimes(1);
+  });
+  it("does not call forbidden() when the role is allowed", async () => {
+    forbiddenMock.mockClear();
+    await requireUser("read", "/", deps(user("viewer")));
+    expect(forbiddenMock).not.toHaveBeenCalled();
   });
   it("throws AuthUnavailableError when identity cannot be resolved", async () => {
     await expect(requireUser("read", "/", deps(new Error("x")))).rejects.toBeInstanceOf(

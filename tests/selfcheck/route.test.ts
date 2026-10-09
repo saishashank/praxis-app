@@ -139,3 +139,33 @@ describe("route module", () => {
     }
   });
 });
+
+describe("self-check run recording", () => {
+  it("passes only the report to recordRun and returns the same 200 body", async () => {
+    const calls: unknown[] = [];
+    const r = await make({ recordRun: async (rep: unknown) => void calls.push(rep) })(post());
+    expect(r.status).toBe(200);
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(await r.text())).toEqual(calls[0]);
+  });
+  it("still returns 200 with the full report when recording throws", async () => {
+    const throwing = async () => {
+      throw new Error("db down SECRET-123");
+    };
+    const r = await make({ recordRun: throwing })(post());
+    expect(r.status).toBe(200);
+    const text = await r.text();
+    expect(JSON.parse(text).results.length).toBeGreaterThan(5);
+    expect(text).not.toContain("SECRET-123");
+  });
+  it("does not record on a rejected request", async () => {
+    let called = false;
+    const r = await make({
+      recordRun: async () => {
+        called = true;
+      },
+    })(post(BODY, { "x-praxis-timestamp": "1" }));
+    expect(r.status).toBe(401);
+    expect(called).toBe(false);
+  });
+});

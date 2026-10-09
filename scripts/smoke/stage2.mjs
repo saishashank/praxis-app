@@ -11,6 +11,27 @@ const TIMEOUT_MS = 30000;
 const BODY = '{"purpose":"self-check"}';
 const has = (v) => typeof v === 'string' && v.trim() !== '';
 
+// SEC-109: the staging-only test login must not exist in production (404) and must demand a
+// signature on staging (401 for an unsigned call). The response body is never read or printed.
+async function testIdentityProbe(env, fetchImpl) {
+  const production = env.SMOKE_ENV === 'production';
+  const name = production ? 'Test identity login disabled' : 'Test identity login needs signature';
+  const want = production ? 404 : 401;
+  if (!production && env.SMOKE_ENV !== 'staging') return { name, ok: false, detail: 'unknown SMOKE_ENV' };
+  try {
+    const res = await fetchImpl(`${env.APP_BASE_URL.replace(/\/+$/, '')}/api/test-identity/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+      redirect: 'error',
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    return { name, ok: res.status === want, detail: `HTTP ${res.status}` };
+  } catch (e) {
+    return { name, ok: false, detail: `request failed: ${e && typeof e.name === 'string' ? e.name : 'Error'}` };
+  }
+}
+
 export async function run(argv, env, fetchImpl, out, nowMs = () => Date.now()) {
   if (!has(env.APP_BASE_URL)) {
     out('APP_BASE_URL not set — stage 2 skipped (add it to the GitHub environment)');
@@ -48,19 +69,21 @@ export async function run(argv, env, fetchImpl, out, nowMs = () => Date.now()) {
     return 1;
   }
   const label = (r) => (r.pending ? 'PENDING' : r.ok ? 'PASS' : 'FAIL');
-  const w = Math.max(5, ...results.map((r) => r.name.length));
+  const ti = await testIdentityProbe(env, fetchImpl);
+  const w = Math.max(5, ti.name.length, ...results.map((r) => r.name.length));
   out(`${'CHECK'.padEnd(w)} | RESULT  | DETAIL`);
-  for (const r of results) out(`${r.name.padEnd(w)} | ${label(r).padEnd(7)} | ${r.detail}`);
-  const counted = results.filter((r) => !r.pending);
+  for (const r of [...results, ti]) out(`${r.name.padEnd(w)} | ${label(r).padEnd(7)} | ${r.detail}`);
+  const all = [...results, ti];
+  const counted = all.filter((r) => !r.pending);
   const passed = counted.filter((r) => r.ok).length;
-  const pending = results.length - counted.length;
+  const pending = all.length - counted.length;
   const envOk = report.env === env.SMOKE_ENV;
   const line = `Stage 2 ${env.SMOKE_ENV}: ${passed}/${counted.length} passed, ${pending} pending${envOk ? '' : ', ENVIRONMENT MISMATCH'}`;
   out(line);
   if (env.GITHUB_STEP_SUMMARY) {
     const md = [
       `### ${line}`, '', '| Check | Result | Detail |', '| --- | --- | --- |',
-      ...results.map((r) => `| ${r.name} | ${label(r)} | ${r.detail} |`), '',
+      ...all.map((r) => `| ${r.name} | ${label(r)} | ${r.detail} |`), '',
     ].join('\n');
     appendFileSync(env.GITHUB_STEP_SUMMARY, md);
   }

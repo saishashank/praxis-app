@@ -23,12 +23,15 @@ export type GateDeps = {
 };
 
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
-const MACHINE_ROUTE = "/api/internal/self-check"; // HMAC-authenticated (SEC-017)
+// HMAC-authenticated machine routes (SEC-017): public, exempt from the same-origin check.
+// The test-identity login answers 404 in production (SEC-109, TST-113).
+const TEST_LOGIN_ROUTE = "/api/test-identity/login";
+const MACHINE_ROUTES = new Set(["/api/internal/self-check", TEST_LOGIN_ROUTE]);
 const PUBLIC_EXACT = new Set(["/signin", "/privacy", "/terms", "/api/health", "/robots.txt"]);
 
 export function isPublicPath(p: string): boolean {
   return (
-    PUBLIC_EXACT.has(p) || p === "/api/auth" || p.startsWith("/api/auth/") || p === MACHINE_ROUTE
+    PUBLIC_EXACT.has(p) || p === "/api/auth" || p.startsWith("/api/auth/") || MACHINE_ROUTES.has(p)
   );
 }
 
@@ -70,7 +73,7 @@ export async function gate(req: NextRequest, deps: GateDeps): Promise<NextRespon
   const isApi = path === "/api" || path.startsWith("/api/");
   const method = req.method.toUpperCase();
   const write = !SAFE.has(method);
-  const machine = path === MACHINE_ROUTE;
+  const machine = MACHINE_ROUTES.has(path);
 
   try {
     // SEC-011: writes must come from our own origin (Origin, else Referer; neither -> refuse).
@@ -84,6 +87,7 @@ export async function gate(req: NextRequest, deps: GateDeps): Promise<NextRespon
     const signinPath =
       path.startsWith("/api/auth/callback/") ||
       path.startsWith("/api/auth/signin/") ||
+      path === TEST_LOGIN_ROUTE ||
       (write && path === "/signin");
     if (signinPath) {
       const r = await rateLimit(

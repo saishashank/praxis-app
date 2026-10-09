@@ -11,6 +11,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  experimental: { authInterrupts: true }, // forbidden() / unauthorized() (D-038)
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

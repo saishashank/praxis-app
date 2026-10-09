@@ -29,6 +29,9 @@ export default async function HomePage() {
         </button>
       </form>
       <nav className="flex gap-6 text-sm">
+        <Link href="/health" className="text-accent underline">
+          System Health
+        </Link>
         <Link href="/privacy" className="text-accent underline">
           Privacy
         </Link>

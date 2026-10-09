@@ -1,19 +1,11 @@
 // Server-side authorisation (PLT-031, ROL-102a, AT-02). Every page, route handler and server
 // action calls requireUser / withAuth. A refusal for role is audit-logged as auth.forbidden.
-import { redirect } from "next/navigation";
+import { forbidden, redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { authDb } from "@/lib/db/client";
 import { audit, requestMeta, type RequestMeta } from "./audit";
 import { can, type Action } from "./permissions";
 import { AuthUnavailableError, getCurrentUser, type CurrentUser } from "./session";
-
-export class ForbiddenError extends Error {
-  readonly status = 403;
-  constructor() {
-    super("forbidden");
-    this.name = "ForbiddenError";
-  }
-}
 
 export type GuardDeps = {
   getUser: () => Promise<CurrentUser | null>;
@@ -77,7 +69,7 @@ export async function requireUser(
   const out = await authorize(action, path, null, deps);
   if (out.kind === "ok") return out.user;
   if (out.kind === "unauthenticated") redirect(`/signin?callbackUrl=${encodeURIComponent(path)}`);
-  if (out.kind === "forbidden") throw new ForbiddenError();
+  if (out.kind === "forbidden") forbidden(); // renders app/forbidden.tsx with status 403 (D-038)
   throw new AuthUnavailableError();
 }
 

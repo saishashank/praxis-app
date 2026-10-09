@@ -2,7 +2,7 @@
 // tests need no network. Every failure body is generic; no secret, URL or upstream body leaves here.
 import { isValidSecret, verifySignedRequest } from "@/lib/security/hmac";
 import type { NonceStore } from "@/lib/security/replay";
-import { runSelfChecks, type Env } from "./checks";
+import { runSelfChecks, type Env, type SelfCheckReport } from "./checks";
 import { MAX_BODY_BYTES } from "./config";
 
 export type Deps = {
@@ -10,6 +10,8 @@ export type Deps = {
   fetchImpl: typeof fetch;
   store: NonceStore;
   nowSec: () => number;
+  /** Optional run-record writer (SEC-101). Its failure never changes the response. */
+  recordRun?: (report: SelfCheckReport) => Promise<void>;
 };
 
 const json = (status: number, body: unknown) =>
@@ -53,7 +55,11 @@ export function createSelfCheckHandler(deps: Deps) {
       }
 
       const report = await runSelfChecks(deps.env, deps.fetchImpl);
-      // TODO(run-records): write `report` to the run record shown on System Health here.
+      try {
+        await deps.recordRun?.(report);
+      } catch {
+        // Recording is best effort; the caller still gets the report. Nothing is logged here.
+      }
       return json(200, report);
     } catch {
       return unavailable();

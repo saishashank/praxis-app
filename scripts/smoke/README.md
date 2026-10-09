@@ -66,3 +66,14 @@ The environment is derived on the server (no new variable): `BACKUP_PUBLIC_KEY` 
 production, otherwise `TEST_IDENTITY_SECRET` present means staging. The caller fails the run if
 that differs from its `SMOKE_ENV`. `WORKER_HMAC_SECRET` not set yet is reported `PENDING` and
 does not fail the run. No email is sent in stage 2.
+
+## Stage 2: test-identity login probe (SEC-109, TST-113)
+
+After the self-check, `stage2.mjs` sends one unsigned `POST /api/test-identity/login` with body
+`{}`. On `production` it passes only on HTTP 404 ("Test identity login disabled"); on `staging`
+it passes only on HTTP 401 (route enabled, signature required). Anything else fails the run.
+The response body is never read or printed.
+
+`scripts/e2e/test-login.mjs` exports `testLogin(baseUrl, secret, email, fetchImpl)` for the
+staging E2E suite: it signs the call with `TEST_IDENTITY_SECRET` (same scheme as `sign.mjs`) and
+returns the `name=value` session cookie.

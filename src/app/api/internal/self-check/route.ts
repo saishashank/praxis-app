@@ -1,5 +1,7 @@
 // Signed self-check route (SEC-017, SEC-101). POST only: other methods get Next's 405.
 import { TursoNonceStore } from "@/lib/security/replay";
+import { mainDb } from "@/lib/db/client";
+import { recordSelfCheckRun } from "@/lib/health/recordSelfCheck";
 import { createSelfCheckHandler } from "@/lib/selfcheck/handler";
 
 export const dynamic = "force-dynamic";
@@ -12,5 +14,6 @@ export async function POST(req: Request): Promise<Response> {
     fetchImpl: fetch,
     store: new TursoNonceStore(env.TURSO_MAIN_URL, env.TURSO_MAIN_TOKEN),
     nowSec: () => Math.floor(Date.now() / 1000),
+    recordRun: (report) => recordSelfCheckRun(mainDb(), report),
   })(req);
 }
