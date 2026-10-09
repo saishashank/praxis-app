@@ -7,7 +7,8 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "db:migrate": "node scripts/db/migrate.mjs",
+    "build": "node scripts/db/migrate.mjs --if-vercel && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -18,6 +19,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@libsql/client": "0.18.0",
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
