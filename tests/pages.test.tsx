@@ -1,16 +1,51 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import HomePage from "@/app/page";
+import { describe, expect, it, vi } from "vitest";
+import HomePage from "@/app/(app)/page";
+import SignInPage from "@/app/signin/page";
 import PrivacyPage from "@/app/privacy/page";
 import TermsPage from "@/app/terms/page";
 
+vi.mock("@/lib/auth/guard", () => ({
+  requireUser: vi.fn(async () => ({ id: 1, email: "e@example.test", name: null, role: "editor" })),
+}));
+vi.mock("@/lib/auth/actions", () => ({ signInAction: vi.fn(), signOutAction: vi.fn() }));
+
 describe("home page", () => {
-  it("shows heading, simulated line and legal links", () => {
-    render(<HomePage />);
+  it("shows heading, simulated line, role, sign-out and the disclaimer footer", async () => {
+    render(await HomePage());
     expect(screen.getByRole("heading", { name: "Praxis" })).toBeInTheDocument();
-    expect(screen.getByText(/All trades are simulated\./)).toBeInTheDocument();
+    expect(screen.getByText(/All trades are simulated./)).toBeInTheDocument();
+    expect(screen.getByText("Signed in as editor")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Simulation for personal information only — not financial advice"),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/privacy");
     expect(screen.getByRole("link", { name: "Terms" })).toHaveAttribute("href", "/terms");
+  });
+});
+
+describe("sign-in page", () => {
+  it("offers only the Google button and the legal links", async () => {
+    render(await SignInPage({ searchParams: Promise.resolve({ callbackUrl: "/markets" }) }));
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Sign in with Google" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link").map((l) => l.getAttribute("href"))).toEqual([
+      "/privacy",
+      "/terms",
+    ]);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(document.querySelector("input[name=callbackUrl]")).toHaveValue("/markets");
+  });
+
+  it("shows only the neutral message on error and sanitises callbackUrl", async () => {
+    render(
+      await SignInPage({
+        searchParams: Promise.resolve({ error: "AccessDenied", callbackUrl: "//evil.test" }),
+      }),
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(/^This account is not authorised.$/);
+    expect(document.querySelector("input[name=callbackUrl]")).toHaveValue("/");
   });
 });
 
