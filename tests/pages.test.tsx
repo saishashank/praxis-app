@@ -100,6 +100,23 @@ describe("home page Users & roles link", () => {
   });
 });
 
+describe("home page Configuration link", () => {
+  it("is hidden for an editor and shown for the owner", async () => {
+    const { requireUser } = await import("@/lib/auth/guard");
+    render(await HomePage());
+    expect(screen.queryByRole("link", { name: "Configuration" })).toBeNull();
+    cleanup();
+    vi.mocked(requireUser).mockResolvedValueOnce({
+      id: 1,
+      email: "o@example.test",
+      name: null,
+      role: "owner",
+    } as never);
+    render(await HomePage());
+    expect(screen.getByRole("link", { name: "Configuration" })).toHaveAttribute("href", "/config");
+  });
+});
+
 describe("forbidden page", () => {
   it("is plain, with a way home", () => {
     render(<Forbidden />);

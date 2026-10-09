@@ -44,6 +44,9 @@
     },
     "action src/app/(app)/users/actions.ts#signOutEverywhereAction": {
       "tests": ["tests/users/actions.test.ts"]
+    },
+    "action src/app/(app)/config/actions.ts#updateConfigAction": {
+      "tests": ["tests/config/actions.test.ts"]
     }
   }
 }

@@ -216,3 +216,134 @@ export type ConfigKey = keyof typeof CONFIG_KEYS;
 export function isConfigKey(k: string): k is ConfigKey {
   return Object.prototype.hasOwnProperty.call(CONFIG_KEYS, k);
 }
+
+// Display metadata for the Owner Configuration page (UX-116). Kept apart from CONFIG_KEYS so the
+// registry itself stays a pure description of values and validators.
+export type ConfigArea = "Retention" | "Quotas" | "Sessions & limits" | "Backups" | "Other";
+export type ConfigInput = "int" | "number" | "list" | "object";
+export type ConfigMeta = { label: string; area: ConfigArea; bounds: string; input: ConfigInput };
+
+export const CONFIG_AREAS: ConfigArea[] = [
+  "Retention",
+  "Quotas",
+  "Sessions & limits",
+  "Backups",
+  "Other",
+];
+
+export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
+  retention_logs_days: {
+    label: "Keep application logs for",
+    area: "Retention",
+    bounds: "whole days, at least 1",
+    input: "int",
+  },
+  retention_runs_days: {
+    label: "Keep job run records for",
+    area: "Retention",
+    bounds: "whole days, at least 1",
+    input: "int",
+  },
+  retention_news_days: {
+    label: "Keep news items for",
+    area: "Retention",
+    bounds: "whole days, at least 1",
+    input: "int",
+  },
+  pii_hash_after_revocation_days: {
+    label: "Hash a revoked user's email and name after",
+    area: "Retention",
+    bounds: "fixed",
+    input: "int",
+  },
+  backup_retention: {
+    label: "Backups kept (daily, weekly, monthly)",
+    area: "Backups",
+    bounds: "each a whole number, at least 1",
+    input: "object",
+  },
+  storage_warn_gb: {
+    label: "Database storage warning",
+    area: "Quotas",
+    bounds: "above 0, not above the storage ceiling",
+    input: "number",
+  },
+  storage_ceiling_gb: {
+    label: "Database storage ceiling",
+    area: "Quotas",
+    bounds: "above 0, not below the storage warning",
+    input: "number",
+  },
+  quota_thresholds: {
+    label: "Quota notice, alert and degrade levels",
+    area: "Quotas",
+    bounds: "0 < notice < alert < degrade <= 1",
+    input: "object",
+  },
+  turso_writes_ceiling_month: {
+    label: "Database writes ceiling",
+    area: "Quotas",
+    bounds: "whole number, at least 1",
+    input: "int",
+  },
+  turso_reads_ceiling_month: {
+    label: "Database reads ceiling",
+    area: "Quotas",
+    bounds: "whole number, at least 1",
+    input: "int",
+  },
+  turso_staging_share: {
+    label: "Staging share of the database limits",
+    area: "Quotas",
+    bounds: "above 0, at most 1",
+    input: "number",
+  },
+  actions_minutes_soft_ceiling: {
+    label: "GitHub Actions soft ceiling",
+    area: "Quotas",
+    bounds: "whole number, at least 1",
+    input: "int",
+  },
+  llm_daily_budget_total: {
+    label: "Daily LLM token budget",
+    area: "Quotas",
+    bounds: "75,000 to 225,000",
+    input: "int",
+  },
+  session_lifetime_days: {
+    label: "Sign-in session lifetime",
+    area: "Sessions & limits",
+    bounds: "1 to 14 days",
+    input: "int",
+  },
+  rate_limits: {
+    label: "Rate limits (sign-ins, writes, exports)",
+    area: "Sessions & limits",
+    bounds: "each a whole number, at least 1",
+    input: "object",
+  },
+  hmac_max_age_s: {
+    label: "Signed-request maximum age",
+    area: "Sessions & limits",
+    bounds: "fixed",
+    input: "int",
+  },
+  token_warning_days: {
+    label: "Token expiry warnings (days before)",
+    area: "Other",
+    bounds: "strictly descending whole days",
+    input: "list",
+  },
+  what_if_daily_limit_per_user: {
+    label: "What-if runs per user per day",
+    area: "Other",
+    bounds: "0 to 20",
+    input: "int",
+  },
+  sentinel_blind_alert_min: {
+    label: "Sentinel blind alert after",
+    area: "Other",
+    bounds: "whole minutes, at least 1",
+    input: "int",
+  },
+};
