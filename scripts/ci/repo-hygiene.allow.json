@@ -13,8 +13,8 @@
     "HYG-DATA": [],
     "HYG-SIZE": [],
     "HYG-PRIVATE": [],
-    "HYG-EMAIL": ["tests/auth/testIdentity.test.ts"],
-    "HYG-PHONE": [],
+    "HYG-EMAIL": ["tests/auth/testIdentity.test.ts", "scripts/ci/repo-hygiene.test.mjs"],
+    "HYG-PHONE": ["scripts/ci/repo-hygiene.test.mjs"],
     "HYG-MARKET": []
   }
 }
