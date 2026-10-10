@@ -47,21 +47,21 @@ describe("main migration 0004_au_data", () => {
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
     const before = await schemaOf(db);
-    expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 3 });
+    expect(await migrateDown(db, ms, 2)).toEqual({ rolledBack: 2, version: 3 });
     const mid = await schemaOf(db);
     for (const t of Object.values(AU_TABLES)) {
       expect(mid.some((s) => s.startsWith(`table:${t}:`))).toBe(false);
     }
     expect(mid.some((s) => s.startsWith("trigger:price_bar"))).toBe(false);
     expect(mid.some((s) => s.startsWith("index:idx_price_bar"))).toBe(false);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 1, version: 4 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 2, version: 5 });
     expect(await schemaOf(db)).toEqual(before);
   });
 
   it("migrate is idempotent: seeds are present exactly once after re-running", async () => {
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 4 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 5 });
     const market = (await db.execute("SELECT * FROM market")).rows;
     expect(market).toHaveLength(1);
     expect(market[0]).toMatchObject({
@@ -77,14 +77,14 @@ describe("main migration 0004_au_data", () => {
     expect(st.map((r) => r.source)).toEqual([...AU_SOURCES].sort());
     expect(st.every((r) => r.mode === "on")).toBe(true);
     expect(await count(db, "source_register_history")).toBe(AU_SOURCES.length);
-    expect(await count(db, "trading_calendar")).toBe(0); // calendar seed is T2
+    expect(await count(db, "trading_calendar")).toBe(522); // seeded by 0005 (all unconfirmed)
     expect(await count(db, "asx_rate_token")).toBe(1);
   });
 
   it("round trip down then up re-seeds exactly once", async () => {
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
-    await migrateDown(db, ms, 1);
+    await migrateDown(db, ms, 2); // 0005 then 0004
     await migrateUp(db, ms);
     expect(await count(db, "market")).toBe(1);
     expect(await count(db, "source_register")).toBe(AU_SOURCES.length);
@@ -179,7 +179,7 @@ describe("constraints and triggers", () => {
 
   it("trading_calendar: confirmed may go 0 to 1 once, nothing else changes, never deleted", async () => {
     await db.execute(
-      "INSERT INTO trading_calendar (market, d, kind, close_time, source) VALUES ('AU','2026-12-24','early_close','14:10','draft')",
+      "INSERT INTO trading_calendar (market, d, kind, close_time, source) VALUES ('AU','2030-12-24','early_close','14:10','draft')",
     );
     await expect(db.execute("UPDATE trading_calendar SET kind = 'holiday'")).rejects.toThrow(
       /only confirmed/,
@@ -197,7 +197,7 @@ describe("constraints and triggers", () => {
     await expect(db.execute("DELETE FROM trading_calendar")).rejects.toThrow(/forever/);
     await expect(
       db.execute(
-        "INSERT INTO trading_calendar (market, d, kind, source) VALUES ('AU','2026-12-25','nope','x')",
+        "INSERT INTO trading_calendar (market, d, kind, source) VALUES ('AU','2030-12-25','nope','x')",
       ),
     ).rejects.toThrow();
   });
@@ -425,8 +425,8 @@ describe("backup with the AU tables", () => {
     await expect(target.execute("UPDATE price_bar SET c = 1")).rejects.toThrow(/immutable/);
     await target.execute(bar("2026-10-09", 99));
     expect((await target.execute("SELECT c FROM price_bar")).rows[0].c).toBe(10);
-    // And the restored DB is at version 4, so later migrations continue from it.
+    // And the restored DB is at version 5 (0005 seeds the calendar), so later migrations continue from it.
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 4 });
+    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 5 });
   });
 });

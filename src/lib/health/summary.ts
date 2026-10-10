@@ -11,6 +11,8 @@ import {
   WATCHDOG_JOB,
   type WatchdogStatus,
 } from "@/lib/watchdog/state";
+import { marketDate, type CalendarSummary } from "@/lib/data/calendar";
+import { calendarYearSummary } from "@/lib/data/calendarAdmin";
 import { isStale, JOBS } from "./jobs";
 
 export const SELFCHECK_JOB = "credential-selfcheck-vercel";
@@ -46,6 +48,7 @@ export type WatchdogSummary = {
 
 export type HealthSummary = {
   jobs: JobSummary[];
+  calendar?: CalendarSummary[] | null; // AU trading calendar per year (DAT-160); null = unreadable
   quota: QuotaSummary;
   watchdog: WatchdogSummary;
   openIncidents?: IncidentRow[] | null; // Owner only; null = could not be read
@@ -86,6 +89,21 @@ async function getQuota(
     return q;
   } catch {
     return { level: "no data" }; // quota trouble never hides job status
+  }
+}
+
+// AU trading calendar status for the current Sydney year and the next one (only years with rows).
+async function getCalendar(mainDb: Client, now: Date): Promise<CalendarSummary[] | null> {
+  try {
+    const year = Number(marketDate(now, "Australia/Sydney").slice(0, 4));
+    const out: CalendarSummary[] = [];
+    for (const y of [year, year + 1]) {
+      const s = await calendarYearSummary(mainDb, "AU", y);
+      if (s.total > 0) out.push(s);
+    }
+    return out;
+  } catch {
+    return null; // calendar trouble never hides job status
   }
 }
 
@@ -130,6 +148,7 @@ export async function getHealthSummary(
     jobs,
     quota: await getQuota(mainDb, now, owner, env),
     watchdog,
+    calendar: await getCalendar(mainDb, now),
   };
   if (owner) {
     try {

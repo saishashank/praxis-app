@@ -28,7 +28,7 @@ describe("main migration 0003_incident", () => {
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
     const before = await schemaOf(db);
-    expect(await migrateDown(db, ms, 2)).toEqual({ rolledBack: 2, version: 2 });
+    expect(await migrateDown(db, ms, 3)).toEqual({ rolledBack: 3, version: 2 });
     expect((await schemaOf(db)).some((s) => s.includes("incident"))).toBe(false);
     await migrateUp(db, ms);
     expect(await schemaOf(db)).toEqual(before);

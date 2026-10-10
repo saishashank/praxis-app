@@ -5,6 +5,8 @@ import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
 import { formatMelbourne, type TimeFormat } from "@/lib/health/format";
 import { userPreferences } from "@/lib/preferences/read";
+import { CalendarConfirmForm } from "./CalendarConfirmForm";
+import { confirmCalendarAction } from "./actions";
 import {
   getHealthSummary,
   type HealthSummary,
@@ -224,6 +226,33 @@ export default async function HealthPage() {
               </tbody>
             </table>
           </section>
+
+          {summary.calendar && summary.calendar.length > 0 && (
+            <section aria-labelledby="calendar-h" className="flex flex-col gap-3">
+              <h2 id="calendar-h" className="text-xl font-semibold">
+                Trading calendar
+              </h2>
+              <ul className="flex flex-col gap-2 text-sm">
+                {summary.calendar.map((c) => (
+                  <li key={`${c.market}-${c.year}`} className="flex flex-wrap items-center gap-2">
+                    <span>
+                      {c.market} trading calendar {c.year}: {c.tradingDays} days,{" "}
+                      <span className="rounded border px-2 py-0.5 font-mono text-xs">
+                        {c.unconfirmed === 0 ? "CONFIRMED" : "NOT CONFIRMED"}
+                      </span>
+                    </span>
+                    {owner && c.unconfirmed > 0 && (
+                      <CalendarConfirmForm
+                        action={confirmCalendarAction}
+                        market={c.market}
+                        year={c.year}
+                      />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {owner && summary.secrets && (
             <SecretsSection
