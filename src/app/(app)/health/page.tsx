@@ -5,8 +5,17 @@ import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
 import { formatMelbourne, type TimeFormat } from "@/lib/health/format";
 import { userPreferences } from "@/lib/preferences/read";
+import { SOURCE_CONTROLS } from "@/lib/data/controls";
 import { CalendarConfirmForm } from "./CalendarConfirmForm";
-import { confirmCalendarAction } from "./actions";
+import { DataControlForm } from "./DataControlForm";
+import {
+  confirmCalendarAction,
+  resetAsxTripAction,
+  setAsxEnabledAction,
+  setDispatchEnabledAction,
+  setMarketModeAction,
+  setSourceAcceptedAction,
+} from "./actions";
 import {
   getHealthSummary,
   type HealthSummary,
@@ -56,6 +65,207 @@ function quotaText(q: QuotaSummary | undefined): string {
   return q.meter !== undefined && q.ratio !== undefined
     ? `${base} (${q.meter}, ${(q.ratio * 100).toFixed(1)}%)`
     : base;
+}
+
+const onOff = (v: boolean) => (v ? "ON" : "OFF");
+const SOURCE_STATUS_LABEL = {
+  pending: "Not accepted yet",
+  enabled: "Enabled",
+  disabled: "Disabled",
+  unknown: "Unknown",
+} as const;
+
+function DataControlsSection(props: {
+  c: NonNullable<HealthSummary["controls"]>;
+  incidents: HealthSummary["heartbeatIncidents"];
+  owner: boolean;
+  tf: TimeFormat;
+}) {
+  const { c, incidents, owner, tf } = props;
+  const status = (source: string) => c.sources.find((x) => x.source === source)?.status;
+  const asxReady = status("asx_announcements") === "enabled";
+  const yahooReady = status("yahoo_eod") === "enabled";
+  return (
+    <section aria-labelledby="controls-h" className="flex flex-col gap-3">
+      <h2 id="controls-h" className="text-xl font-semibold">
+        Data controls
+      </h2>
+      {c.dataOnly && (
+        <p role="status" className="text-sm">
+          <span className="rounded border px-2 py-0.5 font-mono text-xs">
+            Production data-only mode (BLD-024)
+          </span>
+          <span className="ml-2 text-text-muted">
+            The real nightly data pipeline runs. The Arena, emails and decision agents are off.
+          </span>
+        </p>
+      )}
+      <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+        <div className="flex flex-col">
+          <dt className="font-medium">Nightly dispatch</dt>
+          <dd className="text-text-muted">{onOff(c.dispatchEnabled)}</dd>
+        </div>
+        <div className="flex flex-col">
+          <dt className="font-medium">ASX contact</dt>
+          <dd className="text-text-muted">
+            {onOff(c.asxEnabled)}
+            {c.asxTripped ? " (stopped by the safety trip)" : ""}
+          </dd>
+        </div>
+        {c.sources.map((x) => (
+          <div key={x.source} className="flex flex-col">
+            <dt className="font-medium">
+              {x.label} ({x.ref})
+            </dt>
+            <dd className="text-text-muted">{SOURCE_STATUS_LABEL[x.status]}</dd>
+          </div>
+        ))}
+        {c.markets.map((m) => (
+          <div key={m.market} className="flex flex-col">
+            <dt className="font-medium">{m.market} market mode</dt>
+            <dd className="text-text-muted">
+              {m.mode === "data_only" ? "Data only" : m.mode === "off" ? "Off" : "Full"}
+              {owner && !m.inSync ? " (out of sync with the saved setting)" : ""}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {owner && (
+        <>
+          <p className="text-sm text-text-muted">
+            The Worker also needs the variables ASX_LIVE=1 and ASX_USER_AGENT, which you set in
+            Cloudflare. Last Worker report: ASX_LIVE {c.workerVars.asxLive}, ASX_USER_AGENT{" "}
+            {c.workerVars.asxUserAgent}.
+          </p>
+          {c.asxTripped && (
+            <div className="flex flex-col gap-1 text-sm">
+              <p>
+                ASX contact was stopped by the safety trip
+                {c.asxTrippedReason ? `: ${c.asxTrippedReason}` : ""}.
+              </p>
+              <DataControlForm
+                action={resetAsxTripAction}
+                fields={{}}
+                label="Reset ASX trip"
+                explain="This clears the safety trip so the Worker may contact ASX again once ASX contact is on. Only do this after you have checked why it tripped."
+              />
+            </div>
+          )}
+          <div className="flex flex-col gap-4">
+            {c.sources.map((x) => (
+              <div key={x.source} className="flex flex-col gap-1 text-sm">
+                <h3 className="font-medium">
+                  {x.label} ({x.ref})
+                </h3>
+                {x.status === "enabled" ? (
+                  <DataControlForm
+                    action={setSourceAcceptedAction}
+                    fields={{ source: x.source, accept: "0" }}
+                    label={`Disable ${x.label}`}
+                    explain={`Disabling ${x.label} stops contact with it.${
+                      x.source === "asx_announcements" ? " ASX contact is also switched off." : ""
+                    } You can accept the risk again later.`}
+                  />
+                ) : (
+                  <DataControlForm
+                    action={setSourceAcceptedAction}
+                    fields={{ source: x.source, accept: "1" }}
+                    label={`Accept risk (${x.ref})`}
+                    explain={SOURCE_CONTROLS[x.source].riskText}
+                    checkbox={`I accept this risk (${x.ref}).`}
+                    confirmLabel="Accept risk"
+                  />
+                )}
+              </div>
+            ))}
+            <div className="flex flex-col gap-1 text-sm">
+              <h3 className="font-medium">Nightly dispatch</h3>
+              {c.dispatchEnabled ? (
+                <DataControlForm
+                  action={setDispatchEnabledAction}
+                  fields={{ enabled: "0" }}
+                  label="Turn dispatch off"
+                  explain="The Worker stops starting the nightly jobs. Jobs already running finish."
+                />
+              ) : !yahooReady ? (
+                <p className="text-text-muted">
+                  Accept the Yahoo risk (O-26) before turning this on.
+                </p>
+              ) : !c.calendarConfirmed ? (
+                <p className="text-text-muted">Confirm the AU trading calendar first.</p>
+              ) : (
+                <DataControlForm
+                  action={setDispatchEnabledAction}
+                  fields={{ enabled: "1" }}
+                  label="Turn dispatch on"
+                  explain="The Worker starts the nightly jobs on production (Batch 1 reads Yahoo prices)."
+                />
+              )}
+            </div>
+            <div className="flex flex-col gap-1 text-sm">
+              <h3 className="font-medium">ASX contact</h3>
+              {c.asxEnabled ? (
+                <DataControlForm
+                  action={setAsxEnabledAction}
+                  fields={{ enabled: "0" }}
+                  label="Turn ASX contact off"
+                  explain="The Worker stops contacting asx.com.au at its next tick."
+                />
+              ) : asxReady ? (
+                <DataControlForm
+                  action={setAsxEnabledAction}
+                  fields={{ enabled: "1" }}
+                  label="Turn ASX contact on"
+                  explain="The Worker may contact asx.com.au (slowly, one request at a time) once ASX_LIVE and ASX_USER_AGENT are set in Cloudflare."
+                />
+              ) : (
+                <p className="text-text-muted">
+                  Accept the ASX risk (O-23) before turning this on.
+                </p>
+              )}
+            </div>
+            {c.markets.map((m) => (
+              <div key={m.market} className="flex flex-col gap-1 text-sm">
+                <h3 className="font-medium">{m.market} market mode</h3>
+                {m.mode === "off" ? (
+                  <DataControlForm
+                    action={setMarketModeAction}
+                    fields={{ market: m.market, mode: "data_only" }}
+                    label="Set data-only mode"
+                    explain="The nightly data pipeline and the Worker work for this market again. Nothing else runs."
+                  />
+                ) : (
+                  <DataControlForm
+                    action={setMarketModeAction}
+                    fields={{ market: m.market, mode: "off" }}
+                    label="Switch this market off"
+                    explain="The pipeline and the Worker skip this market until you set it back to data-only."
+                  />
+                )}
+                <p className="text-text-muted">Full mode is not available until M3.</p>
+              </div>
+            ))}
+          </div>
+          <div className="text-sm">
+            <h3 className="font-medium">Open S2 incidents</h3>
+            {incidents === null || incidents === undefined ? (
+              <p className="text-text-muted">Incident list unavailable.</p>
+            ) : incidents.length === 0 ? (
+              <p className="text-text-muted">None</p>
+            ) : (
+              <ul className="list-disc pl-5">
+                {incidents.map((i) => (
+                  <li key={i.id}>
+                    {i.kind.replace(/_/g, " ")} — opened {formatMelbourne(i.at, tf)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
 }
 
 function SecretsSection(props: {
@@ -341,6 +551,15 @@ export default async function HealthPage() {
                 ))}
               </ul>
             </section>
+          )}
+
+          {summary.controls && (
+            <DataControlsSection
+              c={summary.controls}
+              incidents={summary.heartbeatIncidents}
+              owner={owner}
+              tf={tf}
+            />
           )}
 
           {summary.quality && (

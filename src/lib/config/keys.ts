@@ -29,6 +29,25 @@ function exactKeys(v: unknown, keys: string[]): v is Record<string, unknown> {
 
 const never = async () => "this setting is fixed";
 
+/** Markets that have a mode (MKT-102: IN and US do not exist before their build starts). */
+export const MODE_MARKETS = ["AU"] as const;
+/** Modes that can be selected now. `full` needs the Arena and agents (M3). */
+export const SELECTABLE_MODES = ["off", "data_only"] as const;
+
+export function validateMarketModes(v: unknown): string | null {
+  if (!isObj(v)) return "must list a mode for each market";
+  const keys = Object.keys(v);
+  if (keys.length === 0 || !keys.every((k) => (MODE_MARKETS as readonly string[]).includes(k))) {
+    return "unknown market";
+  }
+  for (const x of Object.values(v)) {
+    if (x === "full") return "full is not available until M3";
+    if (!(SELECTABLE_MODES as readonly unknown[]).includes(x))
+      return "mode must be off or data_only";
+  }
+  return null;
+}
+
 export const CONFIG_KEYS = {
   // Line 145: retention (logs 30 d, runs 180 d, news 400 d), Edit O, no bounds given; DAT-142.
   retention_logs_days: {
@@ -279,6 +298,20 @@ export const CONFIG_KEYS = {
     ref: "DAT-221",
     validate: numRange(1, 50),
   },
+  // D-057 decision 3 (BLD-024): per-market operating mode, read by the Worker and every job.
+  // The value is an object keyed by market code. Ch.15 has no row for it (spec gap, M2 T10).
+  // AU starts `data_only` (production data-only mode, BLD-024); `full` is refused until M3
+  // (Arena, decision agents and emails do not exist yet). Marked fixed so the generic Configuration
+  // page cannot edit it: the ONLY writer is the Owner action in src/lib/data/controls.ts, which
+  // also updates `market.mode` (the column the Worker and the pipeline read at run time) in the
+  // same transaction. Editing only this row would change nothing at run time.
+  market_mode: {
+    default: { AU: "data_only" },
+    unit: "mode",
+    editable: "fixed",
+    ref: "BLD-024",
+    validate: async (v) => validateMarketModes(v),
+  },
   // NFR-030 / DAT-142: email and name are hashed 90 days after revocation. Fixed, not in ch.15.
   pii_hash_after_revocation_days: {
     default: 90,
@@ -471,5 +504,11 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
     area: "Other",
     bounds: "percent, 1 to 50",
     input: "number",
+  },
+  market_mode: {
+    label: "Market mode (changed only in System Health, Data controls)",
+    area: "Other",
+    bounds: "off or data_only per market; full from M3",
+    input: "object",
   },
 };

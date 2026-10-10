@@ -1,5 +1,10 @@
 // Known jobs for System Health (PLT-017, PLT-061). expectedIntervalSec = null means the job runs
 // on demand and is never flagged stale. A job is stale when now - last success > 2 x interval.
+import {
+  HEARTBEAT_EVENING_JOB,
+  HEARTBEAT_MORNING_JOB,
+  WORKER_CLOCK_JOB,
+} from "@/lib/heartbeat/state";
 import { WATCHDOG_JOB } from "@/lib/watchdog/state";
 
 export type JobDef = {
@@ -26,6 +31,13 @@ export const JOBS: readonly JobDef[] = [
     noDataNote: "Not reporting yet (M2)",
   },
   {
+    // M2 T3: the Worker writes one rollup record per Sydney day on its first tick (decision 10).
+    job: WORKER_CLOCK_JOB,
+    label: "Worker clock (daily rollup)",
+    expectedIntervalSec: 86_400,
+    noDataNote: "Production only; first record after the Worker is deployed",
+  },
+  {
     job: "worker-selfcheck",
     label: "Worker self-check",
     expectedIntervalSec: 86_400,
@@ -34,6 +46,20 @@ export const JOBS: readonly JobDef[] = [
   {
     job: WATCHDOG_JOB,
     label: "Production code approval check",
+    expectedIntervalSec: 86_400,
+    noDataNote: "Production only; first run after the next production deploy",
+  },
+  {
+    // PLT-074: Vercel Cron in the 00:xx UTC hour; a no-op outside production.
+    job: HEARTBEAT_MORNING_JOB,
+    label: "Morning heartbeat (Worker and Sentinel)",
+    expectedIntervalSec: 86_400,
+    noDataNote: "Production only; first run after the next production deploy",
+  },
+  {
+    // PLT-074: Vercel Cron in the 11:xx UTC hour; a no-op outside production.
+    job: HEARTBEAT_EVENING_JOB,
+    label: "Evening heartbeat (Worker, Sentinel and Batch 1 marker)",
     expectedIntervalSec: 86_400,
     noDataNote: "Production only; first run after the next production deploy",
   },

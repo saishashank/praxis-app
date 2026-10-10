@@ -311,6 +311,36 @@ Note: the spec's OPS-040a step 2 names the recovery email variable. The decision
 
 ---
 
+## M. M2 switches (data pipeline controls)
+
+These controls are on **System Health** (the "Data controls" section). Only you, the Owner, see the buttons. Every button first opens a short explanation and asks you to confirm. Nothing happens until you press Confirm, and every change is written to the audit log. [BLD-024, DAT-120, DAT-123, D-057]
+
+What each control does, in plain English:
+
+- **Production data-only mode.** The banner on that page means production runs the real nightly data pipeline and saves daily snapshots. The Arena, emails and the decision agents stay off until M3. [BLD-024]
+- **Accept risk (O-26, Yahoo prices) and Accept risk (O-23, ASX announcements).** These record your decision to accept the risk of automated personal-use access. You see the exact risk wording and must tick a box. Accepting does not start anything by itself. "Disable" reverses it, and disabling ASX also switches ASX contact off at once. [O-23, O-26, DAT-120]
+- **Nightly dispatch.** When on, the Worker starts the nightly jobs (Batch 1 and the others) on production. It cannot be turned on until O-26 is accepted. Turn it off to stop new jobs starting. [PLT-071]
+- **ASX contact.** When on, the Worker may contact asx.com.au, slowly and one request at a time. It cannot be turned on until O-23 is accepted. Turn it off at any time to stop all ASX contact within a minute. [DAT-122, DAT-123]
+- **Reset ASX trip.** If the safety trip stopped ASX contact (too many blocks), this button appears. Press it only after you have checked why it tripped. It does not turn ASX contact on. [DAT-123]
+- **Market mode.** "Switch this market off" stops the pipeline and the Worker for AU. "Set data-only mode" starts them again. Full mode is not available until M3. [D-057 decision 3]
+
+The Worker also needs two settings that you make in Cloudflare, not on this page: the variable `ASX_LIVE` set to `1`, and `ASX_USER_AGENT` set to a short text that identifies you (for example the name of the app and your contact email). The page cannot see them, so it says "not known". [DAT-122]
+
+**Order to turn things on:**
+
+1. Accept the Yahoo risk (O-26).
+2. Accept the ASX risk (O-23).
+3. In Cloudflare, set `ASX_LIVE` to `1` and set `ASX_USER_AGENT` on the production Worker.
+4. Confirm the AU trading calendar on System Health (the Confirm button next to each year). [DAT-160]
+5. Turn nightly dispatch on.
+6. Turn ASX contact on.
+
+To stop everything quickly: turn ASX contact off and nightly dispatch off.
+
+**Heartbeat checks.** Twice a day Vercel checks that the Worker is alive and, in the evening, that Batch 1 left its completion marker. A missing sign of life opens an S2 incident, listed under "Open S2 incidents" on System Health. There is no email for it yet (M5). [PLT-074, AT-05]
+
+---
+
 ## Where to find the rules
 
 - Spec chapter 10 has the security and testing rules (SEC-017, SEC-101, SEC-108, SEC-110, TST-112, TST-133).

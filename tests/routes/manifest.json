@@ -19,6 +19,12 @@
     "GET /api/cron/watchdog": {
       "tests": ["tests/watchdog/route.test.ts", "tests/watchdog/approvedCommit.test.ts"]
     },
+    "GET /api/cron/heartbeat-morning": {
+      "tests": ["tests/heartbeat/route.test.ts", "tests/heartbeat/checks.test.ts"]
+    },
+    "GET /api/cron/heartbeat-evening": {
+      "tests": ["tests/heartbeat/route.test.ts", "tests/heartbeat/checks.test.ts"]
+    },
     "POST /api/test-identity/login": {
       "tests": ["tests/auth/testIdentity.test.ts"]
     },
@@ -53,6 +59,21 @@
     },
     "action src/app/(app)/health/actions.ts#confirmCalendarAction": {
       "tests": ["tests/data/calendarConfirm.test.ts"]
+    },
+    "action src/app/(app)/health/actions.ts#setDispatchEnabledAction": {
+      "tests": ["tests/data/controls.test.ts"]
+    },
+    "action src/app/(app)/health/actions.ts#setAsxEnabledAction": {
+      "tests": ["tests/data/controls.test.ts"]
+    },
+    "action src/app/(app)/health/actions.ts#setSourceAcceptedAction": {
+      "tests": ["tests/data/controls.test.ts"]
+    },
+    "action src/app/(app)/health/actions.ts#setMarketModeAction": {
+      "tests": ["tests/data/controls.test.ts"]
+    },
+    "action src/app/(app)/health/actions.ts#resetAsxTripAction": {
+      "tests": ["tests/data/controls.test.ts"]
     },
     "action src/app/(app)/review/actions.ts#confirmCorporateActionAction": {
       "tests": ["tests/corporateActions/admin.test.ts"]

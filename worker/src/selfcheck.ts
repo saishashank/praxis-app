@@ -48,6 +48,9 @@ export interface SelfCheckEnv {
   WORKER_HMAC_SECRET?: string;
   TURSO_MAIN_URL?: string;
   TURSO_MAIN_TOKEN?: string;
+  /** Non-secret ASX settings (M2 T10): only present / absent is reported, never the value. */
+  ASX_LIVE?: string;
+  ASX_USER_AGENT?: string;
 }
 
 export type CheckResult = { name: string; ok: boolean; detail: string };
@@ -262,8 +265,19 @@ async function githubCheck(env: SelfCheckEnv, f: Fetch): Promise<CheckResult> {
 }
 
 // WORKER_HMAC_SECRET is proven by the signed report itself (the app records that result).
+// ASX_LIVE and ASX_USER_AGENT are informational: always ok, detail "set" / "not set" (no value).
+export function asxConfigChecks(env: SelfCheckEnv): CheckResult[] {
+  return [
+    result("ASX_LIVE", true, has(env.ASX_LIVE) ? "set" : "not set"),
+    result("ASX_USER_AGENT", true, has(env.ASX_USER_AGENT) ? "set" : "not set"),
+  ];
+}
+
 export async function runChecks(env: SelfCheckEnv, f: Fetch): Promise<CheckResult[]> {
-  return Promise.all([tursoCheck(env, f), githubCheck(env, f)]);
+  return [
+    ...(await Promise.all([tursoCheck(env, f), githubCheck(env, f)])),
+    ...asxConfigChecks(env),
+  ];
 }
 
 // ---- orchestration ---------------------------------------------------------------------------

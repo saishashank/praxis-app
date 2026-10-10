@@ -54,8 +54,11 @@ describe("getHealthSummary", () => {
     expect(s.jobs.map((j) => j.job)).toEqual([
       "credential-selfcheck-vercel",
       "worker-heartbeat",
+      "worker-clock",
       "worker-selfcheck",
       "watchdog-approved-commit",
+      "heartbeat-morning",
+      "heartbeat-evening",
       "nightly-backup",
       "ingest-batch1",
       "backfill-history",
@@ -287,5 +290,57 @@ describe("ingest-batch1 freshness (M2 T6)", () => {
   it("is stale beyond twice the three-day interval", async () => {
     await run("ingest-batch1", "success", 6 * DAY + 60);
     expect(find(await getHealthSummary(db, NOW, "viewer"), "ingest-batch1").stale).toBe(true);
+  });
+});
+
+describe("M2 T10 jobs and data controls in the summary", () => {
+  const DAYS = 86_400;
+
+  it("lists worker-clock and both heartbeats as daily jobs (stale after two days)", async () => {
+    for (const job of ["worker-clock", "heartbeat-morning", "heartbeat-evening"]) {
+      await run(job, "success", 2 * DAYS - 60);
+      expect(find(await getHealthSummary(db, NOW, "viewer"), job)).toMatchObject({
+        state: "ok",
+        stale: false,
+      });
+    }
+    await run("heartbeat-morning", "failed", 30); // a heartbeat that found a problem
+    const s = await getHealthSummary(db, NOW, "owner");
+    expect(find(s, "heartbeat-morning")).toMatchObject({ state: "failed" });
+    await db.execute("DELETE FROM run_record WHERE job = 'worker-clock'");
+    await run("worker-clock", "success", 2 * DAYS + 60);
+    expect(find(await getHealthSummary(db, NOW, "viewer"), "worker-clock").state).toBe("stale");
+  });
+
+  it("controls status is present for every role; the trip reason and S2 incidents are Owner only", async () => {
+    await db.execute(
+      "UPDATE source_status SET mode = 'tripped', reason = 'blocked', tripped_by = 'asx_block_trip' WHERE source = 'asx_announcements'",
+    );
+    await db.execute(
+      "INSERT INTO incident (at, severity, kind) VALUES ('2026-10-10T00:31:00.000Z', 'S2', 'worker_blind')",
+    );
+    const owner = await getHealthSummary(db, NOW, "owner");
+    expect(owner.controls).toMatchObject({
+      dataOnly: true,
+      asxTripped: true,
+      asxTrippedReason: "blocked",
+      dispatchEnabled: false,
+    });
+    expect(owner.heartbeatIncidents?.map((i) => i.kind)).toEqual(["worker_blind"]);
+    for (const role of ["editor", "viewer"] as const) {
+      const s = await getHealthSummary(db, NOW, role);
+      expect(s.controls).toMatchObject({ dataOnly: true, asxTripped: true });
+      expect("asxTrippedReason" in (s.controls ?? {})).toBe(false);
+      expect("heartbeatIncidents" in s).toBe(false);
+    }
+  });
+
+  it("unreadable controls or incidents hide nothing else", async () => {
+    await db.execute("DROP TABLE source_status");
+    await db.execute("DROP TABLE incident");
+    const s = await getHealthSummary(db, NOW, "owner");
+    expect(s.controls).toBeNull();
+    expect(s.heartbeatIncidents).toBeNull();
+    expect(s.jobs.length).toBeGreaterThan(0);
   });
 });

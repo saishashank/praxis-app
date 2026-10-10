@@ -30,6 +30,18 @@
 import type { Client, Transaction } from "@libsql/client";
 import { CONFIG_KEYS } from "@/lib/config/keys";
 import { getConfig } from "@/lib/config/store";
+import { localToUtc } from "@/lib/data/calendar";
+import {
+  ANNOUNCEMENT_SOURCE,
+  JOB_ASX,
+  MARKET as BACKFILL_MARKET,
+  NEWS_RETENTION_DAYS,
+  RUN_JOB as BACKFILL_RUN_JOB,
+  addMonths,
+  isMonth,
+  monthFirstDay,
+} from "@/lib/data/backfill/rules.mjs";
+import { readState } from "@/lib/data/backfill/engine.mjs";
 import { appendAuditTx, auditKey, hashUserPii, nullAuditPii } from "@/lib/db/audit";
 import { finishRun, hasSuccess, pruneRuns, startRun } from "@/lib/runs/runRecord";
 
@@ -44,6 +56,7 @@ export type MaintenanceCounts = {
   prunedLogs: number;
   prunedNonces: number;
   prunedFlags: number;
+  prunedAnnouncements: number;
   hashedUsers: number;
 };
 
@@ -89,6 +102,63 @@ export async function pruneQualityFlags(db: Client, nowIso: string, days: number
     args: [cutoffIso(nowIso, days)],
   });
   return res.rowsAffected;
+}
+
+// DAT-142 (news 400 days) with the T9 guard (docs/M2_design.md T9 open question 4): an announcement
+// older than the retention is deleted ONLY when its Sydney month has already been written to a
+// history file, and never otherwise. "Exported" is proved, not assumed:
+//  - a successful export run record `backfill-history:export:asx_announcements:<month>` exists
+//    for the month (the engine writes it after the file is uploaded and before the cursor moves;
+//    pruneRuns keeps these records past the 180-day run retention, otherwise the proof would be
+//    gone long before the announcements become prunable);
+//  - the month is on or after the cursor `exported_down_to` (the export runs newest month first,
+//    so every exported month is >= that boundary) and is not listed in the state's `conflicts`
+//    nor recorded with `file: conflict` (the stored file differs from the database, so those rows
+//    are NOT safely in a file);
+//  - the row was ingested at or before the export started (a later arrival is not in the file).
+// Only market AU and source `asx_announcements` rows are touched (the only ones exported). The
+// database trigger refuses a delete inside 400 days, so the cutoff never goes below that.
+// Months are deleted one at a time inside one write batch; a second run finds nothing more.
+export async function pruneAnnouncements(
+  db: Client,
+  nowIso: string,
+  days: number,
+): Promise<number> {
+  const state = await readState(db, JOB_ASX);
+  const boundary = state.exported_down_to;
+  if (!isMonth(boundary)) return 0; // nothing has been exported yet
+  const conflicts = new Set(
+    Array.isArray(state.conflicts) ? state.conflicts.filter((m) => isMonth(m)) : [],
+  );
+  const cutoff = cutoffIso(nowIso, Math.max(days, NEWS_RETENTION_DAYS));
+  const prefix = `${BACKFILL_RUN_JOB}:export:${JOB_ASX}:`;
+  const exports = await db.execute({
+    sql: `SELECT concurrency_key, started_at, json_extract(details_json, '$.file') AS file
+          FROM run_record
+          WHERE job = ? AND status = 'success' AND concurrency_key LIKE ? ORDER BY concurrency_key`,
+    args: [BACKFILL_RUN_JOB, `${prefix}%`],
+  });
+  const stmts = [];
+  for (const r of exports.rows) {
+    const month = String(r.concurrency_key).slice(prefix.length);
+    if (!isMonth(month) || month < boundary || conflicts.has(month)) continue;
+    if (r.file === "conflict") continue;
+    const start = localToUtc(monthFirstDay(month), "00:00", "Australia/Sydney").toISOString();
+    const next = localToUtc(
+      monthFirstDay(addMonths(month, 1)),
+      "00:00",
+      "Australia/Sydney",
+    ).toISOString();
+    stmts.push({
+      sql: `DELETE FROM announcement
+            WHERE market = ? AND source = ? AND published_at >= ? AND published_at < ?
+              AND published_at < ? AND ingested_at <= ?`,
+      args: [BACKFILL_MARKET, ANNOUNCEMENT_SOURCE, start, next, cutoff, String(r.started_at)],
+    });
+  }
+  if (stmts.length === 0) return 0;
+  const results = await db.batch(stmts, "write");
+  return results.reduce((n, x) => n + x.rowsAffected, 0);
 }
 
 export async function pruneNonces(db: Client, nowSec: number): Promise<number> {
@@ -198,6 +268,7 @@ export async function runMaintenance(
     prunedLogs: 0,
     prunedNonces: 0,
     prunedFlags: 0,
+    prunedAnnouncements: 0,
     hashedUsers: 0,
   };
   const failedSteps: string[] = [];
@@ -245,6 +316,18 @@ export async function runMaintenance(
   } catch {
     failedSteps.push("prune_flags");
   }
+  // News class (DAT-142, 400 days) with the T9 guard: only months already exported to history files.
+  try {
+    const days = positiveDays(
+      await getConfig(mainDb, "retention_news_days"),
+      CONFIG_KEYS.retention_news_days.default,
+    );
+    counts.prunedAnnouncements = await pruneAnnouncements(mainDb, nowIso, days);
+    rowsRead += 1;
+    rowsWritten += counts.prunedAnnouncements;
+  } catch {
+    failedSteps.push("prune_announcements");
+  }
   // NFR-030: the 90-day value is fixed (no stored override).
   try {
     const r = await hashRevokedUsers(
@@ -266,6 +349,7 @@ export async function runMaintenance(
     counts.prunedLogs +
     counts.prunedNonces +
     counts.prunedFlags +
+    counts.prunedAnnouncements +
     counts.hashedUsers;
   const ok = failedSteps.length === 0;
   const finish = (status: "success" | "failed") =>

@@ -111,6 +111,8 @@ describe("authentication (PLT-031)", () => {
     "/api/internal/maintenance",
     "/api/internal/backup-export",
     "/api/cron/watchdog",
+    "/api/cron/heartbeat-morning",
+    "/api/cron/heartbeat-evening",
     "/api/test-identity/login",
   ])("public path %s passes without a session", async (p) => {
     const readClaims = vi.fn(async () => null);
@@ -129,6 +131,9 @@ describe("authentication (PLT-031)", () => {
       "/api/authx",
       "/admin",
       "/api/cron/watchdog/x",
+      "/api/cron/heartbeat-morning/x",
+      "/api/cron/heartbeat-evening/x",
+      "/api/cron/heartbeat",
       "/api/cron",
     ]) {
       expect(isPublicPath(p)).toBe(false);

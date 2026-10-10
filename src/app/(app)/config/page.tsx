@@ -41,7 +41,9 @@ function Row({ r, tf }: { r: ConfigRow; tf: TimeFormat }) {
       <td className="py-2 pr-4">{r.ref}</td>
       <td className="py-2">
         {r.editable === "fixed" ? (
-          <span>Fixed by the spec</span>
+          <span>
+            {r.key === "market_mode" ? "Set on System Health (Data controls)" : "Fixed by the spec"}
+          </span>
         ) : (
           <ConfigForm action={updateConfigAction} className="flex flex-col gap-2">
             <input type="hidden" name="key" value={r.key} />

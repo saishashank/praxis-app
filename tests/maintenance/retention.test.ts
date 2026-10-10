@@ -200,7 +200,14 @@ describe("run record and concurrency (PLT-017, PLT-076)", () => {
     const out = await run();
     expect(out).toEqual({
       status: "success",
-      counts: { prunedRuns: 0, prunedLogs: 1, prunedNonces: 0, prunedFlags: 0, hashedUsers: 0 },
+      counts: {
+        prunedRuns: 0,
+        prunedLogs: 1,
+        prunedNonces: 0,
+        prunedFlags: 0,
+        prunedAnnouncements: 0,
+        hashedUsers: 0,
+      },
     });
     const r = (
       await main.execute({ sql: "SELECT * FROM run_record WHERE job = ?", args: [MAINTENANCE_JOB] })
@@ -210,12 +217,13 @@ describe("run record and concurrency (PLT-017, PLT-076)", () => {
     expect(r.scheduled_for).toBe(DATE);
     expect(r.items_processed).toBe(1);
     expect(Number(r.rows_written)).toBe(1);
-    expect(Number(r.rows_read)).toBe(3);
+    expect(Number(r.rows_read)).toBe(4);
     expect(JSON.parse(String(r.details_json))).toEqual({
       prunedRuns: 0,
       prunedLogs: 1,
       prunedNonces: 0,
       prunedFlags: 0,
+      prunedAnnouncements: 0,
       hashedUsers: 0,
     });
     expect(r.error_summary).toBeNull();
@@ -453,6 +461,7 @@ describe("failure path (PLT-017)", () => {
       prunedLogs: 1,
       prunedNonces: 0,
       prunedFlags: 0,
+      prunedAnnouncements: 0,
       hashedUsers: 0,
       failedSteps: ["prune_nonces"],
     });

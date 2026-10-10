@@ -169,8 +169,13 @@ describe("runChecks", () => {
   it("passes both checks with a healthy network", async () => {
     const { f, calls } = fakeFetch();
     const r = await runChecks(ENV, f);
-    expect(r.map((x) => x.ok)).toEqual([true, true]);
-    expect(r.map((x) => x.name)).toEqual(["TURSO_MAIN round trip", "GITHUB_DISPATCH_TOKEN"]);
+    expect(r.map((x) => x.ok)).toEqual([true, true, true, true]);
+    expect(r.map((x) => x.name)).toEqual([
+      "TURSO_MAIN round trip",
+      "GITHUB_DISPATCH_TOKEN",
+      "ASX_LIVE",
+      "ASX_USER_AGENT",
+    ]);
     const sqls = (
       JSON.parse(calls.find((c) => c.url.includes("pipeline"))!.body).requests as {
         stmt?: { sql: string };
@@ -202,6 +207,8 @@ describe("runChecks", () => {
     expect(r).toEqual([
       { name: "TURSO_MAIN round trip", ok: false, detail: "missing" },
       { name: "GITHUB_DISPATCH_TOKEN", ok: false, detail: "missing" },
+      { name: "ASX_LIVE", ok: true, detail: "not set" },
+      { name: "ASX_USER_AGENT", ok: true, detail: "not set" },
     ]);
     expect(calls).toHaveLength(0);
   });
@@ -210,9 +217,11 @@ describe("runChecks", () => {
     expect(a.map((x) => [x.ok, x.detail])).toEqual([
       [false, "HTTP 401"],
       [false, "HTTP 403"],
+      [true, "not set"],
+      [true, "not set"],
     ]);
     const b = await runChecks(ENV, fakeFetch({ turso: "throw", github: "throw" }).f);
-    expect(b.map((x) => x.detail)).toEqual(["TypeError", "Error"]);
+    expect(b.map((x) => x.detail)).toEqual(["TypeError", "Error", "not set", "not set"]);
     const c = await runChecks(ENV, fakeFetch({ selectMismatch: true }).f);
     expect(c[0]).toMatchObject({ ok: false, detail: "select mismatch" });
     expect(JSON.stringify([a, b, c])).not.toMatch(/TOPSECRET|secret-host/);
@@ -243,6 +252,8 @@ describe("runSelfCheck", () => {
       results: [
         { name: "TURSO_MAIN round trip", ok: true, detail: "create/insert/select/drop ok" },
         { name: "GITHUB_DISPATCH_TOKEN", ok: true, detail: "HTTP 200" },
+        { name: "ASX_LIVE", ok: true, detail: "not set" },
+        { name: "ASX_USER_AGENT", ok: true, detail: "not set" },
       ],
     });
     const ts = Math.floor((DAILY + 5000) / 1000);
@@ -254,7 +265,23 @@ describe("runSelfCheck", () => {
       ],
     );
     expect(rep.headers["content-type"]).toBe("application/json");
-    expect(log.mock.calls.map((c) => c[0])).toContain("selfcheck: 2/2 passed");
+    expect(log.mock.calls.map((c) => c[0])).toContain("selfcheck: 4/4 passed");
+  });
+
+  it("reports ASX_LIVE and ASX_USER_AGENT as set / not set, never the value", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const env = {
+      ...ENV,
+      ASX_LIVE: "1",
+      ASX_USER_AGENT: "praxis-secret-agent contact@example.test",
+    };
+    const { calls } = await run(env, DAILY);
+    const results = sent(calls).results as { name: string; ok: boolean; detail: string }[];
+    expect(results.slice(2)).toEqual([
+      { name: "ASX_LIVE", ok: true, detail: "set" },
+      { name: "ASX_USER_AGENT", ok: true, detail: "set" },
+    ]);
+    expect(JSON.stringify(sent(calls))).not.toContain("praxis-secret-agent");
   });
 
   it("each run uses a fresh nonce", async () => {
@@ -288,7 +315,7 @@ describe("runSelfCheck", () => {
       ok: false,
       detail: "HTTP 401",
     });
-    expect(log.mock.calls.map((c) => c[0])).toContain("selfcheck: 1/2 passed");
+    expect(log.mock.calls.map((c) => c[0])).toContain("selfcheck: 3/4 passed");
   });
 
   it("missing secrets other than the HMAC secret are still reported as missing", async () => {
@@ -298,6 +325,8 @@ describe("runSelfCheck", () => {
     expect(sent(calls).results.map((r: { detail: string }) => r.detail)).toEqual([
       "missing",
       "missing",
+      "not set",
+      "not set",
     ]);
   });
 
@@ -307,7 +336,7 @@ describe("runSelfCheck", () => {
       const { calls } = await run({ ...ENV, ...over }, DAILY);
       expect(reportCall(calls)).toBeUndefined();
     }
-    expect(log.mock.calls.map((c) => c[0])).toContain("selfcheck: 2/2 passed");
+    expect(log.mock.calls.map((c) => c[0])).toContain("selfcheck: 4/4 passed");
   });
 
   it("only https app addresses are used; the commit is sent as unknown when not 40 hex", async () => {
@@ -356,6 +385,6 @@ describe("scheduled handler", () => {
       vi.unstubAllGlobals();
     }
     expect(JSON.parse(log.mock.calls[0][0] as string).kind).toBe("heartbeat");
-    expect(log.mock.calls.map((c) => c[0])).toContain("selfcheck: 0/2 passed");
+    expect(log.mock.calls.map((c) => c[0])).toContain("selfcheck: 2/4 passed");
   });
 });

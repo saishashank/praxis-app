@@ -65,6 +65,7 @@ describe("maintenance handler", () => {
       prunedLogs: 0,
       prunedNonces: 0,
       prunedFlags: 0,
+      prunedAnnouncements: 0,
       hashedUsers: 0,
     });
     expect(await runCount()).toBe(1);

@@ -4,6 +4,7 @@ import type { Client } from "@libsql/client";
 import type { Role } from "@/lib/auth/permissions";
 import { latestPerJob, type RunStatus } from "@/lib/runs/runRecord";
 import { getMeters, usageEnvironment, worstMeter, type MeterLevel } from "@/lib/usage/meters";
+import { listOpenS2, type OpenS2 } from "@/lib/heartbeat/incidents";
 import { listOpenS1, type IncidentRow } from "@/lib/watchdog/incidents";
 import {
   parseWatchdogDetails,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/watchdog/state";
 import { marketDate, type CalendarSummary } from "@/lib/data/calendar";
 import { calendarYearSummary } from "@/lib/data/calendarAdmin";
+import { loadControlsView, type ControlsView } from "@/lib/data/controls";
 import { isStale, JOBS } from "./jobs";
 import { getQualitySummary, type QualitySummary } from "./quality";
 
@@ -50,10 +52,12 @@ export type WatchdogSummary = {
 export type HealthSummary = {
   jobs: JobSummary[];
   calendar?: CalendarSummary[] | null; // AU trading calendar per year (DAT-160); null = unreadable
+  controls?: ControlsView | null; // data controls status (M2 T10); null = unreadable
   quality?: QualitySummary | null; // data quality for the latest date (DAT-211); null = unreadable
   quota: QuotaSummary;
   watchdog: WatchdogSummary;
   openIncidents?: IncidentRow[] | null; // Owner only; null = could not be read
+  heartbeatIncidents?: OpenS2[] | null; // Owner only; open S2 incidents (PLT-074)
   secrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only (Vercel)
   workerSecrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only (Worker)
 };
@@ -109,6 +113,14 @@ async function getCalendar(mainDb: Client, now: Date): Promise<CalendarSummary[]
   }
 }
 
+async function getControls(mainDb: Client, owner: boolean): Promise<ControlsView | null> {
+  try {
+    return await loadControlsView(mainDb, owner);
+  } catch {
+    return null; // controls trouble never hides job status
+  }
+}
+
 async function getQuality(mainDb: Client, role: Role): Promise<QualitySummary | null> {
   try {
     return await getQualitySummary(mainDb, role);
@@ -159,6 +171,7 @@ export async function getHealthSummary(
     quota: await getQuota(mainDb, now, owner, env),
     watchdog,
     calendar: await getCalendar(mainDb, now),
+    controls: await getControls(mainDb, owner),
     quality: await getQuality(mainDb, role),
   };
   if (owner) {
@@ -166,6 +179,11 @@ export async function getHealthSummary(
       summary.openIncidents = await listOpenS1(mainDb);
     } catch {
       summary.openIncidents = null; // incident trouble never hides job status
+    }
+    try {
+      summary.heartbeatIncidents = await listOpenS2(mainDb);
+    } catch {
+      summary.heartbeatIncidents = null;
     }
     const sc = byJob.get(SELFCHECK_JOB);
     summary.secrets = {

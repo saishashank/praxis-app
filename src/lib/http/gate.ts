@@ -24,8 +24,9 @@ export type GateDeps = {
 
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
 // HMAC-authenticated machine routes (SEC-017): public, exempt from the same-origin check.
-// /api/cron/watchdog is a Vercel Cron GET (PLT-074): public here because it authenticates itself
-// with the CRON_SECRET bearer inside the handler (constant-time compare).
+// /api/cron/watchdog and /api/cron/heartbeat-morning|evening are Vercel Cron GETs (PLT-074): public
+// here because each authenticates itself with the CRON_SECRET bearer inside the handler
+// (constant-time compare).
 // The test-identity login answers 404 in production (SEC-109, TST-113).
 const TEST_LOGIN_ROUTE = "/api/test-identity/login";
 const MACHINE_ROUTES = new Set([
@@ -34,6 +35,8 @@ const MACHINE_ROUTES = new Set([
   "/api/internal/maintenance",
   "/api/internal/backup-export",
   "/api/cron/watchdog",
+  "/api/cron/heartbeat-morning",
+  "/api/cron/heartbeat-evening",
   TEST_LOGIN_ROUTE,
 ]);
 const PUBLIC_EXACT = new Set(["/signin", "/privacy", "/terms", "/api/health", "/robots.txt"]);
