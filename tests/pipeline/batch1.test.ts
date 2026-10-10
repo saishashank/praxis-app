@@ -71,7 +71,11 @@ describe("happy path", () => {
     );
     const d = details(r);
     expect(d.outcome).toBe("complete");
-    expect(d.stages.corporate_actions).toBe("stub");
+    expect(d.stages.corporate_actions).toMatchObject({
+      captured: 0,
+      auto_confirmed: 0,
+      queued_owner: 0,
+    });
     expect(d.stages.quality).toBe("noop");
     expect(d.file).toMatchObject({ total: 6, valid: 6, out_of_plan: 0 });
   });

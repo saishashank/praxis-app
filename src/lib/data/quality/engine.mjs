@@ -107,17 +107,32 @@ const barOf = (r) => ({
 /** Codes with a corporate action or a price-sensitive announcement in [from, to] (DAT-200). */
 async function loadExplained(db, io, market, from, to) {
   const out = new Set();
+  // T8: an action explains a move only once it is confirmed (newest event auto_confirmed,
+  // applied_best_evidence, or resolved/confirmed). A queued, rejected, superseded or reversed
+  // action does not. An action with no event rows at all (written outside the engine) explains it.
   const ca = await sel(
     db,
     io,
-    "SELECT DISTINCT code FROM corporate_action WHERE market = ? AND ex_date >= ? AND ex_date <= ?",
+    `SELECT DISTINCT ca.code FROM corporate_action ca
+     WHERE ca.market = ? AND ca.ex_date >= ? AND ca.ex_date <= ?
+       AND COALESCE((SELECT CASE
+           WHEN e.status IN ('auto_confirmed', 'applied_best_evidence') THEN 1
+           WHEN e.status = 'resolved' AND
+             CASE WHEN json_valid(e.note) THEN json_extract(e.note, '$.resolution') END
+               = 'confirmed' THEN 1
+           ELSE 0 END
+         FROM corporate_action_event e WHERE e.action_id = ca.id ORDER BY e.id DESC LIMIT 1), 1) = 1`,
     [market, from, to],
   );
   for (const r of ca) out.add(String(r.code));
   const af = await sel(
     db,
     io,
-    "SELECT DISTINCT code FROM adjustment_factor WHERE market = ? AND ex_date >= ? AND ex_date <= ?",
+    `SELECT DISTINCT code FROM adjustment_factor af
+     WHERE af.market = ? AND af.ex_date >= ? AND af.ex_date <= ? AND af.factor <> 1
+       AND af.computed_at = (SELECT MAX(f2.computed_at) FROM adjustment_factor f2
+         WHERE f2.market = af.market AND f2.code = af.code AND f2.ex_date = af.ex_date
+           AND f2.corporate_action_id = af.corporate_action_id)`,
     [market, from, to],
   );
   for (const r of af) out.add(String(r.code));
@@ -173,7 +188,11 @@ const keyOf = (code, rule, d) => `${d}|${code ?? ""}|${rule}`;
  *   tradingDay?: boolean,
  *   rejected?: { code: string | null, date: string | null, reason: string }[],
  *   refetchDiffs?: { code: string, d: string, maxDiffPct: number }[],
+ *   clearOnly?: string[],
  * }} ctx
+ * `clearOnly` (T8): when set, only flags of these rule ids may be cleared by this run. A caller
+ * that has no reject list or re-fetch diffs (a re-evaluation after a corporate action) passes the
+ * suspect-move id so it cannot clear flags it could not re-derive.
  */
 export async function runQuality(ctx) {
   const { db, market, d, io } = ctx;
@@ -278,9 +297,11 @@ export async function runQuality(ctx) {
   );
   const wantedKeys = new Set(wanted.map((w) => keyOf(w.code, w.finding.rule, w.d)));
   const reeval = new Set(REEVALUATED_IDS);
+  const only = ctx.clearOnly ? new Set(ctx.clearOnly) : null;
   const toClear = open.filter(
     (r) =>
       reeval.has(String(r.check_id)) &&
+      (only === null || only.has(String(r.check_id))) &&
       !wantedKeys.has(keyOf(r.code == null ? null : String(r.code), String(r.check_id), d)),
   );
 

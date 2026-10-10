@@ -28,6 +28,7 @@ import {
   throttleFrom,
   addDays,
 } from "./rules.mjs";
+import { corporateActionsHook } from "../corporateActions/engine.mjs";
 import { qualityHook, readQualityConfig } from "../quality/engine.mjs";
 import { TIERS } from "../quality/rules.mjs";
 
@@ -43,8 +44,8 @@ export const STAGE_NAMES = [
   "quality",
   "marker",
 ];
-/** Stages 4..7 are not built in M2 T6 (design section 1); they are recorded as stubs. */
-const STUB_STAGES = ["corporate_actions", "announcements", "macro_and_other", "fundamentals"];
+/** Stages 5..7 are not built in M2 (design section 1); they are recorded as stubs. */
+const STUB_STAGES = ["announcements", "macro_and_other", "fundamentals"];
 const CALENDAR_BACK_DAYS = 90;
 const ROWS_PER_STATEMENT = 100;
 
@@ -56,6 +57,9 @@ export class StageError extends Error {
     this.stage = stage;
   }
 }
+
+/** A stage-4 hook that does nothing (tests that need the pipeline without corporate actions). */
+export const noopCorporateActionsHook = async () => undefined;
 
 /** A hook that does nothing (tests that need to see the pipeline without stage 8). */
 export const noopQualityHook = async () => ({ flags: 0 });
@@ -280,6 +284,9 @@ export async function prepareBatch1(db, o) {
  * @property {number} [writeCap]  decision 13 cap on catch-up writes per UTC month
  * @property {number} [refetchPct]
  * @property {(ctx: any) => Promise<{ flags?: number } | void>} [qualityHook]
+ * @property {(ctx: any) => Promise<object | void>} [corporateActionsHook] stage 4 (T8)
+ * @property {(d: string) => object[]} [corporateActionCandidates] structured candidates for date d
+ * @property {(code: string) => boolean} [corporateActionRelevant] held or candidate codes (DAT-221)
  */
 
 /**
@@ -581,6 +588,20 @@ async function processDate(ctx, item, isTarget) {
     stages.refetch = refetch.summary;
 
     for (const s of STUB_STAGES) stages[s] = "stub";
+
+    // Stage 4: corporate actions (T8, DAT-220..223). The default is the corporate action engine.
+    stage = "corporate_actions";
+    const caHook = ctx.o.corporateActionsHook ?? corporateActionsHook;
+    const ca = await caHook({
+      db,
+      market,
+      d,
+      io,
+      now: iso(),
+      candidates: ctx.o.corporateActionCandidates ? ctx.o.corporateActionCandidates(d) : [],
+      relevant: ctx.o.corporateActionRelevant,
+    });
+    stages.corporate_actions = caHook === noopCorporateActionsHook ? "noop" : (ca ?? "done");
 
     // Stage 8: data quality (T7, DAT-200..211). The default is the quality engine.
     stage = "quality";

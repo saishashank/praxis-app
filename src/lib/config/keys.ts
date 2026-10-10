@@ -258,6 +258,27 @@ export const CONFIG_KEYS = {
     ref: "DAT-142",
     validate: intRange(180),
   },
+  // DAT-221: "A queued item unresolved after 5 sessions is applied using the best-evidence
+  // interpretation and flagged." The number 5 is in the spec text but not in ch.15, so this key
+  // and its bounds are a spec gap (M2 T8): whole sessions, 1 to 60. Mirrored by
+  // DEFAULT_AUTO_APPLY_SESSIONS in data/corporateActions/rules.mjs.
+  corporate_action_auto_apply_sessions: {
+    default: 5,
+    unit: "sessions",
+    editable: "O",
+    ref: "DAT-221",
+    validate: intRange(1, 60),
+  },
+  // DAT-221: an action is auto-confirmed when the announcement and "the price/vendor data agree".
+  // How close the price must be to the announced ratio is not in the spec or ch.15 (spec gap, M2
+  // T8): percent, 1 to 50. Mirrored by DEFAULT_PRICE_TOLERANCE_PCT in the same rules file.
+  corporate_action_price_tolerance: {
+    default: 10,
+    unit: "%",
+    editable: "O",
+    ref: "DAT-221",
+    validate: numRange(1, 50),
+  },
   // NFR-030 / DAT-142: email and name are hashed 90 days after revocation. Fixed, not in ch.15.
   pii_hash_after_revocation_days: {
     default: 90,
@@ -438,5 +459,17 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
     area: "Retention",
     bounds: "whole days, at least 180",
     input: "int",
+  },
+  corporate_action_auto_apply_sessions: {
+    label: "Apply an unresolved corporate action on best evidence after (sessions)",
+    area: "Other",
+    bounds: "whole sessions, 1 to 60",
+    input: "int",
+  },
+  corporate_action_price_tolerance: {
+    label: "Corporate action: price move may differ from the announced ratio by up to",
+    area: "Other",
+    bounds: "percent, 1 to 50",
+    input: "number",
   },
 };

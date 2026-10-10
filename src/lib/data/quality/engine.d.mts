@@ -32,6 +32,7 @@ export function runQuality(ctx: {
   tradingDay?: boolean;
   rejected?: { code: string | null; date: string | null; reason: string }[];
   refetchDiffs?: { code: string; d: string; maxDiffPct: number }[];
+  clearOnly?: string[];
 }): Promise<{ flags: number; cleared: number; summary: QualitySummary }>;
 
 export const qualityHook: QualityHook;

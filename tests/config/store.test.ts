@@ -133,6 +133,26 @@ describe("config store", () => {
     await expect(set("retention_flag_days", 365)).resolves.toMatchObject({ after: 365 });
   });
 
+  it("corporate action keys: DAT-221 gaps, defaults and bounds (M2 T8)", async () => {
+    expect(CONFIG_KEYS.corporate_action_auto_apply_sessions.default).toBe(5);
+    expect(CONFIG_KEYS.corporate_action_price_tolerance.default).toBe(10);
+    expect(CONFIG_KEYS.corporate_action_auto_apply_sessions.ref).toBe("DAT-221");
+    expect(CONFIG_KEYS.corporate_action_price_tolerance.ref).toBe("DAT-221");
+    expect(CONFIG_KEYS.corporate_action_auto_apply_sessions.editable).toBe("O");
+    expect(CONFIG_KEYS.corporate_action_price_tolerance.editable).toBe("O");
+    expect(await getConfig(db, "corporate_action_auto_apply_sessions")).toBe(5);
+    await expect(set("corporate_action_auto_apply_sessions", 0)).rejects.toThrow(ConfigError);
+    await expect(set("corporate_action_auto_apply_sessions", 61)).rejects.toThrow(ConfigError);
+    await expect(set("corporate_action_auto_apply_sessions", 2.5)).rejects.toThrow(ConfigError);
+    await expect(set("corporate_action_auto_apply_sessions", 3)).resolves.toMatchObject({
+      after: 3,
+    });
+    await expect(set("corporate_action_price_tolerance", 0.9)).rejects.toThrow(ConfigError);
+    await expect(set("corporate_action_price_tolerance", 51)).rejects.toThrow(ConfigError);
+    await expect(set("corporate_action_price_tolerance", "10")).rejects.toThrow(ConfigError);
+    await expect(set("corporate_action_price_tolerance", 15)).resolves.toMatchObject({ after: 15 });
+  });
+
   it("validates storage thresholds against each other", async () => {
     await expect(set("storage_warn_gb", 0)).rejects.toThrow(ConfigError);
     await expect(set("storage_warn_gb", 3.5)).rejects.toThrow(/ceiling/);

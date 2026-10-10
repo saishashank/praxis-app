@@ -117,6 +117,23 @@ describe("home page Configuration link", () => {
   });
 });
 
+describe("home page Data review link", () => {
+  it("is hidden for an editor and shown for the owner", async () => {
+    const { requireUser } = await import("@/lib/auth/guard");
+    render(await HomePage());
+    expect(screen.queryByRole("link", { name: "Data review" })).toBeNull();
+    cleanup();
+    vi.mocked(requireUser).mockResolvedValueOnce({
+      id: 1,
+      email: "o@example.test",
+      name: null,
+      role: "owner",
+    } as never);
+    render(await HomePage());
+    expect(screen.getByRole("link", { name: "Data review" })).toHaveAttribute("href", "/review");
+  });
+});
+
 describe("forbidden page", () => {
   it("is plain, with a way home", () => {
     render(<Forbidden />);

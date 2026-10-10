@@ -28,6 +28,17 @@ export type QualityHook = (
   ctx: QualityHookContext,
 ) => Promise<{ flags?: number; summary?: Record<string, unknown> } | void>;
 export const noopQualityHook: QualityHook;
+/** Stage 4: the default is the corporate action engine (src/lib/data/corporateActions/engine.mjs). */
+export type CorporateActionsHook = (ctx: {
+  db: Client;
+  market: string;
+  d: string;
+  io: Io;
+  now: string;
+  candidates: object[];
+  relevant?: (code: string) => boolean;
+}) => Promise<object | void>;
+export const noopCorporateActionsHook: CorporateActionsHook;
 
 export type FetchRequest = { codes: string[]; start: string; end: string };
 
@@ -83,6 +94,11 @@ export type RunOptions = {
   writeCap?: number;
   refetchPct?: number;
   qualityHook?: QualityHook;
+  corporateActionsHook?: CorporateActionsHook;
+  /** Structured announcement / vendor candidates for a date (none exist in the pipeline yet). */
+  corporateActionCandidates?: (d: string) => object[];
+  /** Held or candidate codes (DAT-221); default: every code. */
+  corporateActionRelevant?: (code: string) => boolean;
 };
 
 export type DateResult = {

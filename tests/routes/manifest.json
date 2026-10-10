@@ -54,6 +54,12 @@
     "action src/app/(app)/health/actions.ts#confirmCalendarAction": {
       "tests": ["tests/data/calendarConfirm.test.ts"]
     },
+    "action src/app/(app)/review/actions.ts#confirmCorporateActionAction": {
+      "tests": ["tests/corporateActions/admin.test.ts"]
+    },
+    "action src/app/(app)/review/actions.ts#rejectCorporateActionAction": {
+      "tests": ["tests/corporateActions/admin.test.ts"]
+    },
     "action src/app/(app)/config/actions.ts#updateConfigAction": {
       "tests": ["tests/config/actions.test.ts"]
     },

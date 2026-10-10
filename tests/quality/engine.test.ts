@@ -6,7 +6,7 @@ import path from "node:path";
 import type { Client } from "@libsql/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { setConfig } from "@/lib/config/store";
-import { runBatch1, type RunOptions } from "@/lib/data/pipeline/batch1";
+import { noopCorporateActionsHook, runBatch1, type RunOptions } from "@/lib/data/pipeline/batch1";
 import { readQualityConfig, runQuality } from "@/lib/data/quality/engine.mjs";
 import { entriesAllowed, exitsAllowed } from "@/lib/data/quality/gate";
 import { RULES } from "@/lib/data/quality/rules.mjs";
@@ -32,6 +32,7 @@ const go = (db: Client, date: string, bars: unknown[], o: Partial<RunOptions> = 
     nowMs: () => at1730(date),
     barsText: text(bars),
     commitSha: "a".repeat(40),
+    corporateActionsHook: noopCorporateActionsHook, // T7 tests isolate stage 8 (T8 has its own)
     ...o,
   });
 
