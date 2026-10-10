@@ -1,47 +1,59 @@
 @import "tailwindcss";
+@import "../styles/themes.css";
 
-:root {
-  --bg: #ffffff;
-  --fg: #131821;
-  --muted: #5b6576;
-  --accent: #2a8fd0;
-  --signal: #0e8a7a;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b0f15;
-    --fg: #e7ebf1;
-    --muted: #9aa4b5;
-    --accent: #8fd3ff;
-    --signal: #2db5a3;
-  }
-}
-
-@theme inline {
-  --color-bg: var(--bg);
-  --color-fg: var(--fg);
-  --color-muted: var(--muted);
-  --color-accent: var(--accent);
-  --color-signal: var(--signal);
+/*
+ * Tailwind utilities read the --color-* tokens. The values below are only the fallback (dark);
+ * the real values come from src/styles/themes.css per [data-theme].
+ */
+@theme static {
+  --color-bg: #0b0f15;
+  --color-surface: #131a24;
+  --color-text: #e7ebf1;
+  --color-text-muted: #9aa4b5;
+  --color-border: #5a677c;
+  --color-accent: #8fd3ff;
+  --color-accent-contrast: #0b0f15;
+  --color-positive: #2db5a3;
+  --color-negative: #f08a4b;
+  --color-warning: #e8b339;
+  --color-focus: #8fd3ff;
   --font-sans: var(--font-inter), system-ui, sans-serif;
 }
 
+*,
+::before,
+::after {
+  border-color: var(--color-border);
+}
+
 body {
-  background: var(--bg);
-  color: var(--fg);
+  background: var(--color-bg);
+  color: var(--color-text);
   font-family: var(--font-sans);
 }
 
-.logo-dark {
-  display: none;
+/* UXN-015: always-visible 2px keyboard focus ring on every interactive element. */
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
-@media (prefers-color-scheme: dark) {
-  .logo-light {
-    display: none;
+/* UXN-005: no non-essential motion when the OS asks for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
-  .logo-dark {
-    display: block;
-  }
+}
+
+.logo-dark {
+  display: var(--logo-dark-display);
+}
+
+.logo-light {
+  display: var(--logo-light-display);
 }

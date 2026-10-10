@@ -64,7 +64,9 @@ export default async function SettingsPage() {
           {user.role}
         </span>
       </header>
-      <p className="text-sm text-muted">Personal preferences. They apply to your account only.</p>
+      <p className="text-sm text-text-muted">
+        Personal preferences. They apply to your account only.
+      </p>
       <SettingsForm action={updatePreferencesAction}>
         <fieldset className="flex flex-col gap-4">
           <legend className="mb-2 text-lg font-medium">Appearance</legend>
@@ -92,7 +94,7 @@ export default async function SettingsPage() {
               ["12h", "12-hour (1:30 pm)"],
             ]}
           />
-          <p className="text-xs text-muted">Times are always shown in Melbourne time.</p>
+          <p className="text-xs text-text-muted">Times are always shown in Melbourne time.</p>
         </fieldset>
         <fieldset className="flex flex-col gap-4">
           <legend className="mb-2 text-lg font-medium">Alerts</legend>
@@ -112,7 +114,7 @@ export default async function SettingsPage() {
           Home
         </Link>
       </nav>
-      <footer className="text-xs text-muted">
+      <footer className="text-xs text-text-muted">
         Simulation for personal information only — not financial advice
       </footer>
     </main>

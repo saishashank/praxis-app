@@ -7,7 +7,7 @@ export default function PrivacyPage() {
   return (
     <main className="mx-auto max-w-2xl space-y-4 px-6 py-12 leading-relaxed">
       <h1 className="text-2xl font-semibold">Privacy</h1>
-      <p className="text-sm text-muted">Last updated: 2026-10-09</p>
+      <p className="text-sm text-text-muted">Last updated: 2026-10-09</p>
       <p>
         Praxis is a private, personal-use app. Access is by invitation only, through an allowlist
         kept by the app owner. Nobody else can sign in.

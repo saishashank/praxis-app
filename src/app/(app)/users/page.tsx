@@ -53,7 +53,7 @@ export default async function UsersPage() {
     <main className="mx-auto flex min-h-screen max-w-4xl flex-col gap-8 px-6 py-10">
       <header className="flex flex-col gap-2">
         <h1 className="text-3xl font-semibold tracking-tight">Users &amp; roles</h1>
-        <p className="text-sm text-muted">
+        <p className="text-sm text-text-muted">
           Times are shown in Australia/Melbourne. Revocation takes effect on the next request.
         </p>
         <Link href="/" className="text-sm text-accent underline">
@@ -110,7 +110,7 @@ export default async function UsersPage() {
           </thead>
           <tbody>
             {users.map((u) => (
-              <tr key={u.id} className="border-t border-black/10 align-top">
+              <tr key={u.id} className="border-t border-border align-top">
                 <th scope="row" className="py-2 pr-4 font-medium">
                   {u.email}
                 </th>
@@ -205,7 +205,7 @@ export default async function UsersPage() {
         <h2 id="audit-h" className="text-xl font-semibold">
           Audit log
         </h2>
-        <p className="text-sm text-muted">Latest 100 events, newest first.</p>
+        <p className="text-sm text-text-muted">Latest 100 events, newest first.</p>
         <table className="w-full border-collapse text-left text-sm">
           <caption className="sr-only">Audit log</caption>
           <thead>
@@ -229,7 +229,7 @@ export default async function UsersPage() {
           </thead>
           <tbody>
             {events.map((a) => (
-              <tr key={a.id} className="border-t border-black/10 align-top">
+              <tr key={a.id} className="border-t border-border align-top">
                 <td className="py-2 pr-4 whitespace-nowrap">{formatMelbourne(a.at, tf)}</td>
                 <td className="py-2 pr-4 font-mono text-xs">{a.action}</td>
                 <td className="py-2 pr-4">{who(a.actorUserId, names)}</td>
@@ -241,7 +241,7 @@ export default async function UsersPage() {
         </table>
       </section>
 
-      <footer className="text-xs text-muted">
+      <footer className="text-xs text-text-muted">
         Simulation for personal information only — not financial advice
       </footer>
     </main>

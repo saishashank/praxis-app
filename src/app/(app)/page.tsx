@@ -21,7 +21,9 @@ export default async function HomePage() {
         className="logo-dark h-auto"
       />
       <h1 className="text-3xl font-semibold tracking-tight">Praxis</h1>
-      <p className="text-muted">Practice-only investment research. All trades are simulated.</p>
+      <p className="text-text-muted">
+        Practice-only investment research. All trades are simulated.
+      </p>
       <p className="text-sm">Signed in as {user.role}</p>
       <form action={signOutAction}>
         <button type="submit" className="text-accent underline">
@@ -57,7 +59,7 @@ export default async function HomePage() {
           Terms
         </Link>
       </nav>
-      <footer className="text-xs text-muted">
+      <footer className="text-xs text-text-muted">
         Simulation for personal information only — not financial advice
       </footer>
     </main>

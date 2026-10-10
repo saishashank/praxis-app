@@ -31,6 +31,8 @@ jobs:
       - run: npm ci
       - run: npm run format:check
       - run: npm run lint
+      - name: Theme contrast (UXN-280, WCAG 2.2 AA / AAA)
+        run: node scripts/ci/contrast-check.mjs
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:smoke

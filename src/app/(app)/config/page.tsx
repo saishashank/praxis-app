@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 
 function Row({ r, tf }: { r: ConfigRow; tf: TimeFormat }) {
   return (
-    <tr className="border-t border-black/10 align-top">
+    <tr className="border-t border-border align-top">
       <th scope="row" className="py-2 pr-4 font-normal">
         <span className="font-medium">{r.label}</span>
         <br />
@@ -30,7 +30,7 @@ function Row({ r, tf }: { r: ConfigRow; tf: TimeFormat }) {
       <td className="py-2 pr-4">
         {formatConfigValue(r.value, r.unit)}
         <br />
-        <span className="text-xs text-muted">
+        <span className="text-xs text-text-muted">
           {r.source === "stored" && r.lastChange
             ? `Changed ${formatMelbourne(r.lastChange.at, tf)} (version ${r.lastChange.versionId})`
             : "Default"}
@@ -84,7 +84,7 @@ export default async function ConfigPage() {
     <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-8 px-6 py-10">
       <header className="flex flex-col gap-2">
         <h1 className="text-3xl font-semibold tracking-tight">Configuration</h1>
-        <p className="text-sm text-muted">
+        <p className="text-sm text-text-muted">
           Every change is saved as a new version with its reason and is audit-logged. Times are
           shown in Australia/Melbourne.
         </p>
@@ -167,7 +167,7 @@ export default async function ConfigPage() {
                 {history.map((h) => {
                   const unit = units.get(h.key) ?? "";
                   return (
-                    <tr key={h.id} className="border-t border-black/10 align-top">
+                    <tr key={h.id} className="border-t border-border align-top">
                       <td className="py-2 pr-4 whitespace-nowrap">{formatMelbourne(h.at, tf)}</td>
                       <td className="py-2 pr-4 font-mono text-xs">{h.key}</td>
                       <td className="py-2 pr-4">
@@ -183,7 +183,7 @@ export default async function ConfigPage() {
         )}
       </section>
 
-      <footer className="text-xs text-muted">
+      <footer className="text-xs text-text-muted">
         Simulation for personal information only — not financial advice
       </footer>
     </main>

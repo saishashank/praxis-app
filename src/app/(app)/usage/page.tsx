@@ -42,7 +42,7 @@ export default async function UsagePage() {
     <main className="mx-auto flex min-h-screen max-w-4xl flex-col gap-8 px-6 py-10">
       <header className="flex flex-col gap-2">
         <h1 className="text-3xl font-semibold tracking-tight">Usage</h1>
-        <p className="text-sm text-muted">
+        <p className="text-sm text-text-muted">
           As of {formatMelbourne(now.toISOString(), tf)}. Quota periods are UTC calendar months
           (days for LLM tokens). Times are shown in Australia/Melbourne.
         </p>
@@ -58,7 +58,7 @@ export default async function UsagePage() {
           <h2 id="meters-h" className="text-xl font-semibold">
             Free-tier meters
           </h2>
-          <p className="text-sm text-muted">
+          <p className="text-sm text-text-muted">
             Worst level: <span className="font-mono">{LEVEL_LABEL[worst.level]}</span>. Notice at
             70%, alert at 90%, degrade at 95% of a monthly limit. Figures are recorded by jobs (app
             traffic is not included), so compare them with the provider dashboards during the
@@ -87,7 +87,7 @@ export default async function UsagePage() {
             </thead>
             <tbody>
               {meters.map((m) => (
-                <tr key={m.id} className="border-t border-black/10 align-top">
+                <tr key={m.id} className="border-t border-border align-top">
                   <th scope="row" className="py-2 pr-4 font-medium">
                     {m.label}
                   </th>
@@ -102,7 +102,7 @@ export default async function UsagePage() {
                       {LEVEL_LABEL[m.level]}
                     </span>
                   </td>
-                  <td className="py-2 text-muted">{m.note}</td>
+                  <td className="py-2 text-text-muted">{m.note}</td>
                 </tr>
               ))}
             </tbody>
@@ -110,7 +110,7 @@ export default async function UsagePage() {
         </section>
       )}
 
-      <footer className="text-xs text-muted">
+      <footer className="text-xs text-text-muted">
         Simulation for personal information only — not financial advice
       </footer>
     </main>

@@ -62,7 +62,7 @@ export default async function HealthPage() {
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-6 py-10">
       <header className="flex flex-col gap-2">
         <h1 className="text-3xl font-semibold tracking-tight">System Health</h1>
-        <p className="text-sm text-muted">Times are shown in Australia/Melbourne.</p>
+        <p className="text-sm text-text-muted">Times are shown in Australia/Melbourne.</p>
         <Link href="/" className="text-sm text-accent underline">
           Home
         </Link>
@@ -76,7 +76,7 @@ export default async function HealthPage() {
             <h2 id="jobs-h" className="text-xl font-semibold">
               Jobs
             </h2>
-            <p className="text-sm text-muted">
+            <p className="text-sm text-text-muted">
               A job is flagged stale when its last success is older than twice its expected
               interval.
             </p>
@@ -102,7 +102,7 @@ export default async function HealthPage() {
               </thead>
               <tbody>
                 {summary.jobs.map((j) => (
-                  <tr key={j.job} className="border-t border-black/10">
+                  <tr key={j.job} className="border-t border-border">
                     <th scope="row" className="py-2 pr-4 font-medium">
                       {j.label}
                     </th>
@@ -110,7 +110,7 @@ export default async function HealthPage() {
                       <span className="rounded border px-2 py-0.5 font-mono text-xs">
                         {STATE_LABEL[j.state]}
                       </span>
-                      {j.note && <span className="ml-2 text-muted">{j.note}</span>}
+                      {j.note && <span className="ml-2 text-text-muted">{j.note}</span>}
                       {j.stale && j.state !== "stale" && (
                         <span className="ml-2 font-medium">Also stale</span>
                       )}
@@ -128,7 +128,7 @@ export default async function HealthPage() {
               <h2 id="secrets-h" className="text-xl font-semibold">
                 Secrets status
               </h2>
-              <p className="text-sm text-muted">
+              <p className="text-sm text-text-muted">
                 Last verified: {formatMelbourne(summary.secrets.lastVerifiedAt, tf)}. Values are
                 never shown.
               </p>
@@ -152,7 +152,7 @@ export default async function HealthPage() {
                   </thead>
                   <tbody>
                     {summary.secrets.results.map((r) => (
-                      <tr key={r.name} className="border-t border-black/10">
+                      <tr key={r.name} className="border-t border-border">
                         <th scope="row" className="py-2 pr-4 font-medium">
                           {r.name}
                         </th>
@@ -177,18 +177,18 @@ export default async function HealthPage() {
         <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
           <div className="flex flex-col">
             <dt className="font-medium">Quota usage</dt>
-            <dd className="text-muted">{quotaText(summary?.quota)}</dd>
+            <dd className="text-text-muted">{quotaText(summary?.quota)}</dd>
           </div>
           {PLACEHOLDERS.map((p) => (
             <div key={p.label} className="flex flex-col">
               <dt className="font-medium">{p.label}</dt>
-              <dd className="text-muted">Not available yet ({p.note})</dd>
+              <dd className="text-text-muted">Not available yet ({p.note})</dd>
             </div>
           ))}
         </dl>
       </section>
 
-      <footer className="text-xs text-muted">
+      <footer className="text-xs text-text-muted">
         Simulation for personal information only — not financial advice
       </footer>
     </main>
