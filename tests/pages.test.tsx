@@ -232,6 +232,52 @@ describe("health page", () => {
     expect(screen.getAllByText("None").length).toBe(2);
   });
 
+  it("owner: Worker secrets section is separate from the Vercel one", async () => {
+    summaryMock.mockResolvedValueOnce({
+      jobs,
+      secrets: { lastVerifiedAt: null, results: [] },
+      workerSecrets: {
+        lastVerifiedAt: "2026-07-01T00:30:00.000Z",
+        results: [
+          { name: "GITHUB_DISPATCH_TOKEN", ok: false, pending: false, detail: "HTTP 401" },
+          {
+            name: "WORKER_HMAC_SECRET",
+            ok: true,
+            pending: false,
+            detail: "signed report accepted",
+          },
+        ],
+      },
+    });
+    await as("owner");
+    render(await HealthPage());
+    expect(screen.getByRole("heading", { name: "Secrets status" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Worker secrets status" })).toBeInTheDocument();
+    expect(screen.getByRole("rowheader", { name: "GITHUB_DISPATCH_TOKEN" })).toBeInTheDocument();
+    expect(screen.getByText("HTTP 401")).toBeInTheDocument();
+    expect(screen.getByText("signed report accepted")).toBeInTheDocument();
+    expect(screen.getByText("PASS")).toBeInTheDocument();
+    expect(screen.getByText("FAIL")).toBeInTheDocument();
+  });
+
+  it("viewer: no Worker secrets section", async () => {
+    summaryMock.mockResolvedValueOnce({ jobs });
+    await as("viewer");
+    render(await HealthPage());
+    expect(screen.queryByRole("heading", { name: "Worker secrets status" })).toBeNull();
+  });
+
+  it("owner with no Worker report yet", async () => {
+    summaryMock.mockResolvedValueOnce({
+      jobs,
+      secrets: { lastVerifiedAt: null, results: [] },
+      workerSecrets: { lastVerifiedAt: null, results: [] },
+    });
+    await as("owner");
+    render(await HealthPage());
+    expect(screen.getByText("No Worker self-check has been recorded yet.")).toBeInTheDocument();
+  });
+
   it("owner with no self-check yet", async () => {
     summaryMock.mockResolvedValueOnce({ jobs, secrets: { lastVerifiedAt: null, results: [] } });
     await as("owner");

@@ -54,6 +54,7 @@ describe("getHealthSummary", () => {
     expect(s.jobs.map((j) => j.job)).toEqual([
       "credential-selfcheck-vercel",
       "worker-heartbeat",
+      "worker-selfcheck",
       "watchdog-approved-commit",
       "nightly-backup",
     ]);

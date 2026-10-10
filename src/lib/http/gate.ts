@@ -30,6 +30,7 @@ const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
 const TEST_LOGIN_ROUTE = "/api/test-identity/login";
 const MACHINE_ROUTES = new Set([
   "/api/internal/self-check",
+  "/api/internal/worker-report",
   "/api/internal/maintenance",
   "/api/internal/backup-export",
   "/api/cron/watchdog",

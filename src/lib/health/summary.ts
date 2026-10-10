@@ -14,6 +14,7 @@ import {
 import { isStale, JOBS } from "./jobs";
 
 export const SELFCHECK_JOB = "credential-selfcheck-vercel";
+export const WORKER_SELFCHECK_JOB = "worker-selfcheck";
 
 export type JobState = "ok" | "stale" | "failed" | "no data";
 
@@ -48,7 +49,8 @@ export type HealthSummary = {
   quota: QuotaSummary;
   watchdog: WatchdogSummary;
   openIncidents?: IncidentRow[] | null; // Owner only; null = could not be read
-  secrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only
+  secrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only (Vercel)
+  workerSecrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only (Worker)
 };
 
 function parseResults(details: unknown): SecretResult[] {
@@ -139,6 +141,11 @@ export async function getHealthSummary(
     summary.secrets = {
       lastVerifiedAt: sc?.last.endedAt ?? null,
       results: parseResults(sc?.last.details),
+    };
+    const ws = byJob.get(WORKER_SELFCHECK_JOB);
+    summary.workerSecrets = {
+      lastVerifiedAt: ws?.last.endedAt ?? null,
+      results: parseResults(ws?.last.details),
     };
   }
   return summary;

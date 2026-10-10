@@ -26,6 +26,12 @@ export const JOBS: readonly JobDef[] = [
     noDataNote: "Not reporting yet (M2)",
   },
   {
+    job: "worker-selfcheck",
+    label: "Worker self-check",
+    expectedIntervalSec: 86_400,
+    noDataNote: "Not reported yet (runs after each Worker deploy and daily at 02:15 UTC)",
+  },
+  {
     job: WATCHDOG_JOB,
     label: "Production code approval check",
     expectedIntervalSec: 86_400,

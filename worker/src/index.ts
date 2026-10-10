@@ -1,6 +1,6 @@
-export interface Env {
-  PRAXIS_ENV: string;
-}
+import { runSelfCheck, type SelfCheckEnv } from "./selfcheck";
+
+export type Env = SelfCheckEnv;
 
 export interface Heartbeat {
   kind: "heartbeat";
@@ -18,5 +18,7 @@ export default {
   },
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     console.log(JSON.stringify(heartbeat(controller.scheduledTime, env.PRAXIS_ENV)));
+    // Credential self-check (SEC-101): never throws; I/O waits only (PLT-070 CPU budget).
+    await runSelfCheck(env, controller.scheduledTime);
   },
 } satisfies ExportedHandler<Env>;

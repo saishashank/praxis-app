@@ -7,6 +7,9 @@
     "POST /api/internal/self-check": {
       "tests": ["tests/selfcheck/route.test.ts", "tests/security/hmac.test.ts"]
     },
+    "POST /api/internal/worker-report": {
+      "tests": ["tests/workerReport/route.test.ts", "tests/security/hmac.test.ts"]
+    },
     "POST /api/internal/maintenance": {
       "tests": ["tests/maintenance/route.test.ts", "tests/maintenance/retention.test.ts"]
     },

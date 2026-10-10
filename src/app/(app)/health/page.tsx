@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
-import { formatMelbourne } from "@/lib/health/format";
+import { formatMelbourne, type TimeFormat } from "@/lib/health/format";
 import { userPreferences } from "@/lib/preferences/read";
 import {
   getHealthSummary,
@@ -54,6 +54,59 @@ function quotaText(q: QuotaSummary | undefined): string {
   return q.meter !== undefined && q.ratio !== undefined
     ? `${base} (${q.meter}, ${(q.ratio * 100).toFixed(1)}%)`
     : base;
+}
+
+function SecretsSection(props: {
+  id: string;
+  title: string;
+  empty: string;
+  data: NonNullable<HealthSummary["secrets"]>;
+  tf: TimeFormat;
+}) {
+  const { id, title, empty, data, tf } = props;
+  return (
+    <section aria-labelledby={id} className="flex flex-col gap-3">
+      <h2 id={id} className="text-xl font-semibold">
+        {title}
+      </h2>
+      <p className="text-sm text-text-muted">
+        Last verified: {formatMelbourne(data.lastVerifiedAt, tf)}. Values are never shown.
+      </p>
+      {data.results.length === 0 ? (
+        <p>{empty}</p>
+      ) : (
+        <table className="w-full border-collapse text-left text-sm">
+          <caption className="sr-only">{title}</caption>
+          <thead>
+            <tr>
+              <th scope="col" className="py-2 pr-4">
+                Secret check
+              </th>
+              <th scope="col" className="py-2 pr-4">
+                Result
+              </th>
+              <th scope="col" className="py-2">
+                Detail
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.results.map((r) => (
+              <tr key={r.name} className="border-t border-border">
+                <th scope="row" className="py-2 pr-4 font-medium">
+                  {r.name}
+                </th>
+                <td className="py-2 pr-4 font-mono text-xs">
+                  {r.pending ? "PENDING" : r.ok ? "PASS" : "FAIL"}
+                </td>
+                <td className="py-2">{r.detail}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
 }
 
 export default async function HealthPage() {
@@ -173,48 +226,23 @@ export default async function HealthPage() {
           </section>
 
           {owner && summary.secrets && (
-            <section aria-labelledby="secrets-h" className="flex flex-col gap-3">
-              <h2 id="secrets-h" className="text-xl font-semibold">
-                Secrets status
-              </h2>
-              <p className="text-sm text-text-muted">
-                Last verified: {formatMelbourne(summary.secrets.lastVerifiedAt, tf)}. Values are
-                never shown.
-              </p>
-              {summary.secrets.results.length === 0 ? (
-                <p>No self-check has been recorded yet.</p>
-              ) : (
-                <table className="w-full border-collapse text-left text-sm">
-                  <caption className="sr-only">Secrets status</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col" className="py-2 pr-4">
-                        Secret check
-                      </th>
-                      <th scope="col" className="py-2 pr-4">
-                        Result
-                      </th>
-                      <th scope="col" className="py-2">
-                        Detail
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summary.secrets.results.map((r) => (
-                      <tr key={r.name} className="border-t border-border">
-                        <th scope="row" className="py-2 pr-4 font-medium">
-                          {r.name}
-                        </th>
-                        <td className="py-2 pr-4 font-mono text-xs">
-                          {r.pending ? "PENDING" : r.ok ? "PASS" : "FAIL"}
-                        </td>
-                        <td className="py-2">{r.detail}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </section>
+            <SecretsSection
+              id="secrets-h"
+              title="Secrets status"
+              empty="No self-check has been recorded yet."
+              data={summary.secrets}
+              tf={tf}
+            />
+          )}
+
+          {owner && summary.workerSecrets && (
+            <SecretsSection
+              id="worker-secrets-h"
+              title="Worker secrets status"
+              empty="No Worker self-check has been recorded yet."
+              data={summary.workerSecrets}
+              tf={tf}
+            />
           )}
         </>
       )}
