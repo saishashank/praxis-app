@@ -158,9 +158,16 @@ First, the workflow file must be on the default branch. Confirm that section D i
 
 These steps come after the bootstrap. The build agent tells you when to start each one. [BLD-010 rows 3, 11, 13, D-006, D-018]
 
-1. **Worker dispatch tokens (rows 3, D-006).** After the first Worker deploy, create two fine-grained GitHub tokens: one for production (b) and one for staging (b-s). Each has access to the code repository only, with Actions read and write, and an expiry of one year or less. Enter each one into the Cloudflare Worker secret for its environment, in the same step as you create it. [SEC-017 (b), (b-s)]
-2. **Worker to Vercel HMAC (D-018).** The build agent generates the value. You enter it into the Worker and the Vercel project of the same environment in one step. Do not keep a copy. [SEC-017 (c2)]
-3. **Worker Turso token.** Enter the Turso main-database token for each environment into the matching Cloudflare Worker secret. [SEC-017 (d)]
+1. **Worker key `WORKER_HMAC_SECRET` (D-018, D-055).** Generate one value per environment yourself in PowerShell (the build agent never sees it), and paste each straight into the two places named in step 4. Do not keep a copy. [SEC-017 (c2)]
+   `$b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); ($b | % { $_.ToString('x2') }) -join ''`
+2. **Worker dispatch tokens (row 3, D-006).** GitHub → your avatar → Settings → Developer settings → Fine-grained tokens → Generate new token. Make two: `praxis-worker-dispatch-prod` and `praxis-worker-dispatch-staging`. Each: resource owner `saishashank`, only repository `praxis-app`, permission **Actions: Read and write**, expiry one year or less. [SEC-017 (b), (b-s)]
+3. **Worker Turso tokens.** Turso → the **main** database of each environment → Create token (read and write). [SEC-017 (d)]
+   **Where everything goes (D-055):** Cloudflare → Workers & Pages → the Worker → Settings → Variables and Secrets → Add → type **Secret**:
+   | Worker | Secret names |
+   |---|---|
+   | `praxis-sentinel` (production) | `GITHUB_DISPATCH_TOKEN`, `WORKER_HMAC_SECRET`, `TURSO_MAIN_URL`, `TURSO_MAIN_TOKEN` |
+   | `praxis-sentinel-staging` | the same four names, staging values |
+   Also add `WORKER_HMAC_SECRET` to the Vercel project of the same environment (same value as its Worker), then re-run both deploys so Vercel picks it up.
 4. **2-step verification on Cloudflare and Turso.** Turn on two-step verification in each account. Check it under the account's security settings. [SEC-020]
 
 ---
