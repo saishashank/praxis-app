@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import backupYml from "../../.github/workflows/backup.yml?raw";
+import ingestYml from "../../.github/workflows/ingest-batch1.yml?raw";
 import maintenanceYml from "../../.github/workflows/maintenance.yml?raw";
 import {
   CLAIM_STALE_MS,
@@ -89,17 +90,26 @@ describe("slot table (docs/M2_design.md section 3)", () => {
       expect(s.minute).toBe(Number(s.time.slice(0, 2)) * 60 + Number(s.time.slice(3)));
   });
 
-  it("only workflows that exist today are enabled and allow-listed; ingest slots are off", () => {
-    expect([...DISPATCHABLE_WORKFLOWS].sort()).toEqual(["backup.yml", "maintenance.yml"]);
+  it("only workflows that exist today are enabled and allow-listed; later slots are off", () => {
+    expect([...DISPATCHABLE_WORKFLOWS].sort()).toEqual([
+      "backup.yml",
+      "ingest-batch1.yml",
+      "maintenance.yml",
+    ]);
     for (const s of AU_SLOTS.filter((x) => x.enabled)) {
       expect(s.runner).toBe("actions");
       expect(DISPATCHABLE_WORKFLOWS).toContain(s.workflow);
     }
-    for (const id of ["ingest-batch1", "asx-poll", "pre-open", "late-sweep", "marker-check"]) {
+    expect(AU_SLOTS.find((s) => s.id === "ingest-batch1")).toMatchObject({
+      enabled: true,
+      runner: "actions",
+      workflow: "ingest-batch1.yml",
+    });
+    for (const id of ["asx-poll", "pre-open", "decision-cutoff", "late-sweep", "marker-check"]) {
       expect(AU_SLOTS.find((s) => s.id === id)?.enabled).toBe(false);
     }
     // The allow-listed files exist and are dispatch-only.
-    for (const y of [backupYml, maintenanceYml]) {
+    for (const y of [backupYml, ingestYml, maintenanceYml]) {
       expect(y).toMatch(/^on: workflow_dispatch$/m);
       expect(y).not.toMatch(/^\s*schedule:/m);
     }
@@ -133,7 +143,9 @@ describe("candidateSlots (pure)", () => {
     const all = AU_SLOTS.map((s) => ({ ...s, enabled: true }));
     const ids = candidateSlots(L(MON, "17:30"), all).map((s) => s.id);
     expect(ids).toEqual(["ingest-batch1"]); // not asx-poll, pre-open, late-sweep (runner worker)
-    expect(candidateSlots(L(MON, "17:30"))).toEqual([]);
+    const off = AU_SLOTS.map((s) => ({ ...s, enabled: false }));
+    expect(candidateSlots(L(MON, "17:30"), off)).toEqual([]);
+    expect(candidateSlots(L(MON, "17:30")).map((s) => s.id)).toEqual(["ingest-batch1"]);
   });
   it("trading-day-only slots skip weekends", () => {
     const all = AU_SLOTS.map((s) => ({ ...s, enabled: true }));
@@ -460,13 +472,33 @@ describe("runClock with a real SQLite database", () => {
     expect(failures()[0].error_summary).toBe("dispatch evil workflow-not-allowed");
   });
 
-  it("the disabled ingest slot is never dispatched, even in its window with the switch on", async () => {
+  it("the ingest slot dispatches ingest-batch1.yml with ref release at 17:30, once", async () => {
     enable();
+    const s = await tick(at(MON, "17:30"));
+    expect(s.dispatched).toEqual(["ingest-batch1"]);
+    expect(net.github).toHaveLength(1);
+    expect(net.github[0].url).toContain("/actions/workflows/ingest-batch1.yml/dispatches");
+    expect(JSON.parse(net.github[0].body)).toEqual({ ref: "release" });
+    resetClockCache();
+    expect((await tick(at(MON, "17:31"))).dispatched).toEqual([]);
+    expect(net.github).toHaveLength(1);
+  });
+
+  it("the ingest slot is inert while the dispatch switch is off (D-060)", async () => {
     const s = await tick(at(MON, "17:30"));
     expect(s.dispatched).toEqual([]);
     expect(net.github).toHaveLength(0);
     expect(rows(db, "SELECT key FROM worker_state WHERE key LIKE 'slot:%'")).toEqual([]);
-    expect(net.pipelines).toBe(1); // only the daily rollup (idle minute, cold isolate)
+  });
+
+  it("the ingest slot waits for market mode and a trading day", async () => {
+    enable();
+    db.prepare("UPDATE market SET mode = 'off' WHERE code = 'AU'").run();
+    expect((await tick(at(MON, "17:30"))).dispatched).toEqual([]);
+    resetClockCache();
+    db.prepare("UPDATE market SET mode = 'data_only' WHERE code = 'AU'").run();
+    expect((await tick(at("2026-10-17", "17:30"))).dispatched).toEqual([]); // a Saturday
+    expect(net.github).toHaveLength(0);
   });
 
   it("an enabled trading-day slot respects a seeded holiday and an early-close day", async () => {

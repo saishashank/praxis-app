@@ -57,6 +57,7 @@ describe("getHealthSummary", () => {
       "worker-selfcheck",
       "watchdog-approved-commit",
       "nightly-backup",
+      "ingest-batch1",
     ]);
     for (const j of s.jobs) {
       expect(j).toMatchObject({ state: "no data", stale: false, lastRun: null });
@@ -261,5 +262,29 @@ describe("watchdog state (SEC-108 d, UX-092)", () => {
     const o = await getHealthSummary(db, NOW, "owner");
     expect(o.openIncidents).toBeNull();
     expect(o.jobs.length).toBeGreaterThan(0);
+  });
+});
+
+describe("ingest-batch1 freshness (M2 T6)", () => {
+  const DAY = 86_400;
+  it("shows 'no data' before the first run, ok over a long weekend, stale after six days", async () => {
+    expect(find(await getHealthSummary(db, NOW, "viewer"), "ingest-batch1")).toMatchObject({
+      state: "no data",
+      stale: false,
+    });
+    await run("ingest-batch1", "success", 5 * DAY); // Thursday to Tuesday over Easter
+    expect(find(await getHealthSummary(db, NOW, "viewer"), "ingest-batch1")).toMatchObject({
+      state: "ok",
+      stale: false,
+    });
+    await run("ingest-batch1", "failed", 60);
+    const failed = find(await getHealthSummary(db, NOW, "viewer"), "ingest-batch1");
+    expect(failed.stale).toBe(false); // the last success is still within six days
+    expect(failed.lastRun?.status).toBe("failed");
+  });
+
+  it("is stale beyond twice the three-day interval", async () => {
+    await run("ingest-batch1", "success", 6 * DAY + 60);
+    expect(find(await getHealthSummary(db, NOW, "viewer"), "ingest-batch1").stale).toBe(true);
   });
 });

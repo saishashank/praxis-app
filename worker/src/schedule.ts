@@ -2,7 +2,7 @@
 // Australia/Sydney local HH:MM (the spec says Melbourne; the two share offset and DST dates, so
 // one zone key serves both). The clock (clock.ts) only ever dispatches slots that are
 //  (1) `enabled`, (2) `runner: "actions"` and (3) name a workflow in DISPATCHABLE_WORKFLOWS.
-// Ingest slots are listed but disabled until their workflows exist (T6, T9).
+// Slots whose workflow does not exist yet stay disabled (T9, T10); ingest-batch1 exists since T6.
 import { hhmm } from "./localtime";
 
 export type Slot = {
@@ -33,7 +33,11 @@ type SlotInput = Omit<Slot, "minute">;
 const slot = (s: SlotInput): Slot => ({ ...s, minute: hhmm(s.time) });
 
 /** Workflow files the clock may dispatch. Nothing else is ever sent to GitHub. */
-export const DISPATCHABLE_WORKFLOWS: readonly string[] = ["backup.yml", "maintenance.yml"];
+export const DISPATCHABLE_WORKFLOWS: readonly string[] = [
+  "backup.yml",
+  "ingest-batch1.yml",
+  "maintenance.yml",
+];
 
 export const DEFAULT_CATCH_UP_MIN = 60;
 
@@ -73,7 +77,7 @@ export const AU_SLOTS: readonly Slot[] = [
     marketBound: true,
     priority: 10,
     catchUpMin: 40,
-    enabled: false,
+    enabled: true,
     note: "Batch 1, stages 1..9 (DAT-020); complete by 18:10 so catch-up closes at the cut-off (T6)",
   }),
   slot({

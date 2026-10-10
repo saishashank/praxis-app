@@ -43,6 +43,16 @@ export const JOBS: readonly JobDef[] = [
     expectedIntervalSec: 86_400,
     noDataNote: "Not run yet (manual until the Worker dispatches it, M2)",
   },
+  {
+    // Trading-day job (M2 T6, DAT-020): the longest normal gap between runs is a four-day weekend
+    // (Thursday to Tuesday, five days); an interval of 3 days flags it stale only after 6 days.
+    // The 19:50 marker check (T10) is the daily detector; this row shows freshness.
+    job: "ingest-batch1",
+    label: "Batch 1 end-of-day ingest (AU)",
+    expectedIntervalSec: 3 * 86_400,
+    noDataNote:
+      "Not run yet (production, trading days at 17:30 Sydney once the Owner enables dispatch)",
+  },
 ];
 
 export function isStale(

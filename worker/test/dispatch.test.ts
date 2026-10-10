@@ -78,7 +78,7 @@ describe("dispatchWorkflow (PLT-071, SEC-017 b / b-s)", () => {
     for (const w of [
       "",
       "deploy-production.yml",
-      "ingest-batch1.yml",
+      "ingest-batch2.yml",
       "../backup.yml",
       "backup.yml/../x.yml",
       "backup.yml?x=1",
