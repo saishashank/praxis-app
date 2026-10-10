@@ -1,3 +1,4 @@
+import { runClock } from "./clock";
 import { runSelfCheck, type SelfCheckEnv } from "./selfcheck";
 
 export type Env = SelfCheckEnv;
@@ -18,6 +19,15 @@ export default {
   },
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     console.log(JSON.stringify(heartbeat(controller.scheduledTime, env.PRAXIS_ENV)));
+    // Master clock (PLT-071): dispatches due workflows. Never throws; no work on idle minutes.
+    try {
+      await runClock(env, controller.scheduledTime, {
+        fetch: (i, init) => fetch(i, init),
+        nowMs: () => Date.now(),
+      });
+    } catch {
+      // runClock already contains its errors; nothing here may disturb the self-check.
+    }
     // Credential self-check (SEC-101): never throws; I/O waits only (PLT-070 CPU budget).
     await runSelfCheck(env, controller.scheduledTime);
   },
