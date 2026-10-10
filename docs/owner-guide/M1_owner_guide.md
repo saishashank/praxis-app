@@ -19,6 +19,11 @@ Tick each box when the section is done.
 | ☐ | E | Approve the first production deployment |
 | ☐ | F | Run the credential smoke test |
 | ☐ | G | Still to do later in M1 |
+| ☐ | H | Nightly backup: what it does and how to run it by hand |
+| ☐ | I | Decrypt a backup (only when restoring) |
+| ☐ | J | Nightly maintenance: what it does and how to run it by hand |
+| ☐ | K | Pages you can now use |
+| ☐ | L | Break-glass recovery (emergency only) |
 
 ---
 
@@ -106,10 +111,10 @@ The smoke test workflow only appears in the Actions list after this second merge
 
 This is the first approval that lets production deploy. [BLD-011, SEC-108 c]
 
-[VERIFY] The repository does not yet have a workflow named "Deploy production". The approval step below uses the GitHub screen that the build agent confirms. Until the first approved deployment, the app shows "awaiting first approval".
+[VERIFY] The repository does not yet have a workflow named "Deploy production". That workflow is to be added (pending your decision on the deploy workflows). The approval step below uses the GitHub screen that the build agent confirms. Until the first approved deployment, the app shows "awaiting first approval".
 
 1. Go to your code repository on GitHub. Select **Actions**.
-2. Select the run named **Deploy production** that the build agent started. [VERIFY name]
+2. Select the production deploy run that the build agent started. It is named **Deploy production**, which is to be added (pending your decision on the deploy workflows). [VERIFY name]
 3. Select **Review deployments**.
 4. Tick `deploy-production`. Select **Approve and deploy**. [VERIFY button label] [SEC-108 c]
 5. Wait for the run to finish green.
@@ -157,6 +162,113 @@ These steps come after the bootstrap. The build agent tells you when to start ea
 2. **Worker to Vercel HMAC (D-018).** The build agent generates the value. You enter it into the Worker and the Vercel project of the same environment in one step. Do not keep a copy. [SEC-017 (c2)]
 3. **Worker Turso token.** Enter the Turso main-database token for each environment into the matching Cloudflare Worker secret. [SEC-017 (d)]
 4. **2-step verification on Cloudflare and Turso.** Turn on two-step verification in each account. Check it under the account's security settings. [SEC-020]
+
+---
+
+## H. Nightly backup
+
+What it does: every night the app makes encrypted copies of both databases (the main database and the sign-in database) and stores them as release assets in the private data repository. Old copies are thinned out: 14 daily, 8 weekly and 12 monthly copies are kept. [PLT-022, PLT-022b, DAT-143, D-044, D-045]
+
+Why: if the free database service changes or is lost, the copies let the app be rebuilt. The recovery goal is no more than 24 hours of lost data. [NFR-004]
+
+In M1 the schedule is not running yet. The Worker starts this workflow every night from M2. Until then, run it by hand:
+
+1. Go to your code repository on GitHub. Select **Actions**.
+2. Select **Nightly backup** in the left list. [VERIFY name]
+3. Select **Run workflow**. Set **Branch** to `release`. Select **Run workflow**. The workflow only runs on `release`, so any other branch will do nothing.
+4. Wait for the `production` job to finish. Then wait for the `drill` job to finish.
+
+What a green run means: both copies were written to the data repository, old copies were thinned out, and the run was recorded. [PLT-076]
+
+If the run ends early with a message that a backup already succeeded today, that is correct. The workflow makes one backup per day. [PLT-076]
+
+**Where to see the files**
+
+1. Go to the private data repository on GitHub. Its name is `<your data repository>`. Select **Releases**. [VERIFY screen name]
+2. Open the release named `backup-<date>`, for example `backup-YYYY-MM-DD`.
+3. It holds two files: `main-<date>.ndjson.gz.age` (the main database) and `auth-<date>.ndjson.gz.age` (the sign-in database). Both are encrypted. You cannot read them without your offline key. [PLT-022b]
+
+**The restore drill**
+
+The `drill` job in the same workflow tests the backup code on small made-up databases. It makes its own throwaway key pair inside the run and deletes it afterwards. It uses no production data and no secrets. It must print `drill: PASS`. You never need your offline key for this job, so the real key never meets GitHub. [TST-108, D-046, SEC-108 f]
+
+---
+
+## I. Decrypt a backup (only when restoring)
+
+Do this only when you are restoring, or in the monthly offsite check. Do it on your own computer, never on GitHub. Never upload the key file to GitHub, and never paste it into chat. [SEC-108 f, OPS-020]
+
+1. Make a new, empty folder on your computer. Download the two `.age` files from the `backup-<date>` release into it. [VERIFY screen name]
+2. Open a terminal in that folder. Use the key file from your USB stick or paper copy. Keep the path of the key file as a placeholder in your notes, for example `<path to your key file>`.
+3. Run the decrypt command for each file:
+
+   ```
+   age -d -i <path to your key file> main-<date>.ndjson.gz.age > main-<date>.ndjson.gz
+   age -d -i <path to your key file> auth-<date>.ndjson.gz.age > auth-<date>.ndjson.gz
+   ```
+
+4. Check that each `.gz` file is not empty. A non-empty file means the decrypt worked. [OPS-020]
+5. Delete the decrypted `.gz` files and any unzipped copies when you have finished. Keep only the encrypted `.age` files. [PLT-022b]
+
+**Full restore into a new database (OPS-040)**
+
+A full restore is not a single command. Target time: no more than 4 hours, counted from when you start. [OPS-040, NFR-004] The steps, summarised from the spec:
+
+1. Revoke any active build-agent access token. [OPS-040 step 0]
+2. Add the offline private backup key and a temporary Turso platform token as secrets of the GitHub `production` environment. Use the narrowest scope and shortest expiry offered. [VERIFY scope and expiry options]
+3. Run the **Restore database** workflow. Choose the backup and the target (main database, sign-in database or both). It decrypts the backup, imports it into a new Turso database, and checks the checksums. [VERIFY: this workflow is built in a later task]
+4. In Turso, create the new database's tokens, one per caller. Enter each token and the new database address into the stores that the spec's SEC-017 table lists. Do not paste them into a workflow log. [OPS-040 step 3]
+5. Redeploy the current production Vercel deployment and the Worker, so they pick up the new values. Use the same commit, so it passes the approval check. [OPS-040 step 3]
+6. Delete the temporary token and the private-key secret. The workflow fails until both are gone. [OPS-040 step 4]
+7. Run the credential smoke test and record the incident. [OPS-040 step 5, F]
+
+---
+
+## J. Nightly maintenance
+
+What it does: once a night, the app tidies its own records. [DAT-142, NFR-030, D-043]
+
+- Run records older than 180 days are deleted. Logs older than 30 days are deleted. Expired security nonces are deleted.
+- 90 days after a user is removed, their email and name are replaced with a keyed hash that cannot be read back. Their IP address and browser details in the sign-in audit rows are cleared. The audit rows themselves stay. [NFR-030, D-043]
+
+Manual run (until the Worker starts it in M2):
+
+1. Go to your code repository on GitHub. Select **Actions**.
+2. Select **Nightly maintenance**. [VERIFY name]
+3. Select **Run workflow**. Set **Branch** to `release`. Select **Run workflow**.
+4. Wait for the run to finish green.
+
+Where to see the result: open the **System Health** page in the app. The run record shows whether maintenance ran for the day. [VERIFY where run records are listed]
+
+---
+
+## K. Pages you can now use
+
+One line each. Menu names may differ slightly. [VERIFY menu names]
+
+- **/health** (System Health): job freshness, recent run records and data freshness for each market. [PLT-061, UX-090]
+- **/users** (Settings → Users & roles): add and revoke users. Record the sharing acknowledgement first. Until you do, the Add user button stays disabled. Default role is Viewer. [ROL-107, OPS-060, D-040]
+- **/usage** (Usage): the free-tier meters for each service and each job. [OPS-034, D-042]
+- **/config** (Configuration, Owner only): change settings. Every edit needs a reason, and every edit is logged. [D-047]
+- **/settings** (personal): your theme, market, time format and alert settings. Every signed-in role can use it. [D-048, UX-110]
+
+---
+
+## L. Break-glass recovery (emergency only)
+
+Use this only if you cannot sign in with your main Google account, and Google's own account recovery has failed. [OPS-040a, O-33, D-034]
+
+Every use of the recovery address emails you and writes an audit event. Turning the flag on or off is a Vercel change, and a Vercel environment change needs a redeploy before it takes effect. [D-034]
+
+1. Go to Vercel and open the production project. Select **Settings → Environment Variables**. [VERIFY screen names]
+2. Add a variable named `OWNER_RECOVERY_ENABLED` with the value `true`. Set its environment to Production. Save.
+3. Redeploy the production project, so the change takes effect. [VERIFY redeploy screen]
+4. Sign in with the recovery Google address stored in `OWNER_RECOVERY_EMAIL`. Then follow the allowlist steps in OPS-040a step 3.
+5. Straight after you have finished, delete `OWNER_RECOVERY_ENABLED` from Vercel. Save.
+6. Redeploy the production project again, so the removal takes effect.
+7. Record the recovery event in Settings. [OPS-040a step 4]
+
+Note: the spec's OPS-040a step 2 names the recovery email variable. The decision log (D-034) uses the on/off flag above, and this guide follows D-034.
 
 ---
 
