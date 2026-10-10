@@ -21,7 +21,6 @@ import {
   parseBarsText,
   planDates,
   previousTradingDay,
-  REFETCH_DIFF_PCT,
   refetchHash,
   rejectSummary,
   SOURCE,
@@ -29,6 +28,8 @@ import {
   throttleFrom,
   addDays,
 } from "./rules.mjs";
+import { qualityHook, readQualityConfig } from "../quality/engine.mjs";
+import { TIERS } from "../quality/rules.mjs";
 
 export const JOB = "ingest-batch1";
 export const STAGE_NAMES = [
@@ -56,7 +57,7 @@ export class StageError extends Error {
   }
 }
 
-/** The T7 quality engine plugs in here. The default does nothing. */
+/** A hook that does nothing (tests that need to see the pipeline without stage 8). */
 export const noopQualityHook = async () => ({ flags: 0 });
 
 const keyFor = (market, d) => `batch1:${market}:${d}`;
@@ -447,7 +448,7 @@ async function processDate(ctx, item, isTarget) {
 
   // Decision 13: catch-up writes (every date but the live target) stop at the monthly cap.
   if (item.trading && !isTarget) {
-    const estimate = todays.length + 2; // bars, the marker and the refetch hash
+    const estimate = todays.length + 2 + TIERS.length; // bars, marker, refetch hash, quality scores
     if (ctx.monthUsed + io.written + estimate > ctx.writeCap) {
       ctx.capStopped = true;
       const id = await startRun(db, key, d, iso(), o.commitSha);
@@ -581,14 +582,15 @@ async function processDate(ctx, item, isTarget) {
 
     for (const s of STUB_STAGES) stages[s] = "stub";
 
-    // Stage 8: quality hook (T7). The default is a no-op.
+    // Stage 8: data quality (T7, DAT-200..211). The default is the quality engine.
     stage = "quality";
-    const hook = ctx.o.qualityHook ?? noopQualityHook;
+    const hook = ctx.o.qualityHook ?? qualityHook;
     const q = await hook({
       db,
       market,
       d,
       io,
+      now: iso(),
       universe: universe.length,
       barsValid: valid.length,
       rejected: (ctx.rejRows ?? []).filter((r) => r.date === d),
@@ -598,7 +600,7 @@ async function processDate(ctx, item, isTarget) {
       hook === noopQualityHook
         ? "noop"
         : q && typeof q.flags === "number"
-          ? { flags: q.flags }
+          ? { flags: q.flags, ...(q.summary ? q.summary : {}) }
           : "done";
 
     // Stage 9: completion marker (insert once).
@@ -729,7 +731,8 @@ async function refetchCompare(ctx, io, d) {
     [market, prev],
   );
   const by = new Map(stored.map((r) => [String(r.code), r]));
-  const threshold = ctx.o.refetchPct ?? REFETCH_DIFF_PCT;
+  // ch.15 refetch_diff_flag (Owner-editable), unless a caller pins the threshold.
+  const threshold = ctx.o.refetchPct ?? (await readQualityConfig(db, io)).refetchDiffPct;
   const compared = [];
   const diffs = [];
   const rows = [];

@@ -31,6 +31,7 @@ const go = (db: Client, date: string, rows: unknown[] | null, o: Partial<RunOpti
     nowMs: () => at1730(date),
     barsText: rows === null ? null : text(rows),
     commitSha: "a".repeat(40),
+    qualityHook: noopQualityHook, // the quality engine has its own tests (tests/quality)
     ...o,
   });
 
@@ -584,7 +585,7 @@ describe("catch-up (PLT-016, decision 13)", () => {
   it("the monthly write cap stops catch-up, is recorded, and the live date still runs", async () => {
     const db = await pipelineDb();
     await go(db, MON, barsFor([MON]));
-    const res = await go(db, FRI, barsFor([TUE, WED, THU, FRI]), { writeCap: 12 });
+    const res = await go(db, FRI, barsFor([TUE, WED, THU, FRI]), { writeCap: 15 });
     expect(res.status).toBe("degraded");
     expect(res.capStopped).toBe(true);
     expect(res.dates.map((d) => `${d.d}:${d.status}`)).toEqual([
@@ -598,7 +599,7 @@ describe("catch-up (PLT-016, decision 13)", () => {
       status: "skipped",
       error_summary: "backfill write cap reached",
     });
-    expect(details(capRec)).toMatchObject({ reason: "write_cap", cap: 12 });
+    expect(details(capRec)).toMatchObject({ reason: "write_cap", cap: 15 });
     expect(rs.find((r) => r.scheduled_for === THU)).toBeUndefined(); // stopped, not walked through
     expect(await count(db, "completion_marker", `d IN ('${WED}','${THU}')`)).toBe(0);
     expect(await count(db, "price_bar", `d='${FRI}'`)).toBe(3);

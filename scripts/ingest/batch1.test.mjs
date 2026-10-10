@@ -129,7 +129,7 @@ test("run ingests bars.json: exit 0, counts only, data and run record written", 
     const text = s.lines.join("\n");
     assert.match(
       text,
-      /^ingest-batch1: ok target=2026-10-13 dates=1 read=\d+ written=5 bars=2 rejected=0 refetch=0$/m,
+      /^ingest-batch1: ok target=2026-10-13 dates=1 read=\d+ written=8 bars=2 rejected=0 refetch=0$/m,
     );
     for (const secret of ["ZZA", "ZZB", "10.5", URL_MARK, TOKEN])
       assert.ok(!text.includes(secret), secret);

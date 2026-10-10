@@ -11,6 +11,7 @@ import {
   MAINTENANCE_JOB,
   pruneLogs,
   pruneNonces,
+  pruneQualityFlags,
   runMaintenance,
 } from "@/lib/maintenance/retention";
 import { setConfig } from "@/lib/config/store";
@@ -199,7 +200,7 @@ describe("run record and concurrency (PLT-017, PLT-076)", () => {
     const out = await run();
     expect(out).toEqual({
       status: "success",
-      counts: { prunedRuns: 0, prunedLogs: 1, prunedNonces: 0, hashedUsers: 0 },
+      counts: { prunedRuns: 0, prunedLogs: 1, prunedNonces: 0, prunedFlags: 0, hashedUsers: 0 },
     });
     const r = (
       await main.execute({ sql: "SELECT * FROM run_record WHERE job = ?", args: [MAINTENANCE_JOB] })
@@ -209,11 +210,12 @@ describe("run record and concurrency (PLT-017, PLT-076)", () => {
     expect(r.scheduled_for).toBe(DATE);
     expect(r.items_processed).toBe(1);
     expect(Number(r.rows_written)).toBe(1);
-    expect(Number(r.rows_read)).toBe(2);
+    expect(Number(r.rows_read)).toBe(3);
     expect(JSON.parse(String(r.details_json))).toEqual({
       prunedRuns: 0,
       prunedLogs: 1,
       prunedNonces: 0,
+      prunedFlags: 0,
       hashedUsers: 0,
     });
     expect(r.error_summary).toBeNull();
@@ -450,6 +452,7 @@ describe("failure path (PLT-017)", () => {
       prunedRuns: 0,
       prunedLogs: 1,
       prunedNonces: 0,
+      prunedFlags: 0,
       hashedUsers: 0,
       failedSteps: ["prune_nonces"],
     });
@@ -529,5 +532,84 @@ describe("failure path (PLT-017)", () => {
     ).rows[0];
     expect(rec.status).toBe("failed");
     expect(rec.error_summary).toBe("failed steps: finish");
+  });
+});
+
+describe("data-quality flag retention (D-057 decision 5, DAT-142)", () => {
+  // The table trigger compares with the real clock, so these tests use real time.
+  const REAL = new Date();
+  const agoReal = (days: number, extraMs = 0) =>
+    new Date(REAL.getTime() - days * DAY - extraMs).toISOString();
+  async function addFlag(raisedAt: string, blocks: 0 | 1, over: { cleared?: boolean } = {}) {
+    const r = await main.execute({
+      sql: `INSERT INTO data_quality_flag (market, code, d, check_id, severity, raised_at, cleared_at, blocks_entries)
+            VALUES ('AU', 'ZZA', '2026-01-02', 'DAT-200-x', 'warning', ?, ?, ?)`,
+      args: [raisedAt, over.cleared ? raisedAt : null, blocks],
+    });
+    return Number(r.lastInsertRowid);
+  }
+  const ids = async () =>
+    (await main.execute("SELECT id FROM data_quality_flag ORDER BY id")).rows.map((r) =>
+      Number(r.id),
+    );
+
+  it("deletes only non-blocking flags strictly older than the retention", async () => {
+    const old = await addFlag(agoReal(180, 1000), 0); // just over 180 days
+    const edge = await addFlag(agoReal(180), 0); // exactly 180 days: kept
+    const young = await addFlag(agoReal(179), 0);
+    const oldCleared = await addFlag(agoReal(400), 0, { cleared: true });
+    const blockedOld = await addFlag(agoReal(400), 1);
+    const blockedCleared = await addFlag(agoReal(900), 1, { cleared: true });
+    expect(await pruneQualityFlags(main, REAL.toISOString(), 180)).toBe(2);
+    expect(await ids()).toEqual([edge, young, blockedOld, blockedCleared].sort((a, b) => a - b));
+    expect([old, oldCleared].some((i) => i === edge)).toBe(false);
+  });
+
+  it("is idempotent and never deletes a decision-blocking flag", async () => {
+    await addFlag(agoReal(1000), 1);
+    expect(await pruneQualityFlags(main, REAL.toISOString(), 180)).toBe(0);
+    expect(await pruneQualityFlags(main, REAL.toISOString(), 180)).toBe(0);
+    expect(await count(main, "data_quality_flag")).toBe(1);
+  });
+
+  it("the database refuses a younger retention than 180 days (floor)", async () => {
+    await addFlag(agoReal(100), 0);
+    await expect(pruneQualityFlags(main, REAL.toISOString(), 50)).rejects.toThrow();
+    expect(await count(main, "data_quality_flag")).toBe(1);
+  });
+
+  it("the nightly job counts them, honours retention_flag_days and keeps blocking flags", async () => {
+    await addFlag(agoReal(200), 0);
+    await addFlag(agoReal(200), 1);
+    await addFlag(agoReal(190), 0);
+    await setConfig(main, {
+      key: "retention_flag_days",
+      value: 195,
+      userId: null,
+      now: REAL.toISOString(),
+    });
+    const out = await run({ now: REAL });
+    expect(out.status).toBe("success");
+    if (out.status === "success") expect(out.counts.prunedFlags).toBe(1);
+    expect(await count(main, "data_quality_flag")).toBe(2);
+  });
+
+  it("a failing flag step is named and the other steps still run", async () => {
+    await addFlag(agoReal(100), 0);
+    await main.execute({
+      sql: "INSERT INTO config_version (key, scope, value_json, changed_at) VALUES ('retention_flag_days', 'global', '50', ?)",
+      args: [REAL.toISOString()],
+    });
+    await addLog(agoReal(31));
+    const out = await run({ now: REAL });
+    expect(out.status).toBe("failed");
+    if (out.status === "failed") expect(out.counts.prunedLogs).toBe(1);
+    const rec = (
+      await main.execute({
+        sql: "SELECT error_summary FROM run_record WHERE job = ?",
+        args: [MAINTENANCE_JOB],
+      })
+    ).rows[0];
+    expect(rec.error_summary).toBe("failed steps: prune_flags");
   });
 });

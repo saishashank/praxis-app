@@ -43,6 +43,7 @@ export type MaintenanceCounts = {
   prunedRuns: number;
   prunedLogs: number;
   prunedNonces: number;
+  prunedFlags: number;
   hashedUsers: number;
 };
 
@@ -74,6 +75,17 @@ function positiveDays(v: unknown, fallback: number): number {
 export async function pruneLogs(db: Client, nowIso: string, days: number): Promise<number> {
   const res = await db.execute({
     sql: "DELETE FROM app_log WHERE at < ?",
+    args: [cutoffIso(nowIso, days)],
+  });
+  return res.rowsAffected;
+}
+
+// D-057 decision 5 (DAT-142): data-quality flags older than the retention are deleted unless they
+// blocked a decision (blocks_entries = 1, kept forever). The table trigger refuses anything else.
+// Decision-blocking flags are never touched here, whatever their age or state.
+export async function pruneQualityFlags(db: Client, nowIso: string, days: number): Promise<number> {
+  const res = await db.execute({
+    sql: "DELETE FROM data_quality_flag WHERE blocks_entries = 0 AND raised_at < ?",
     args: [cutoffIso(nowIso, days)],
   });
   return res.rowsAffected;
@@ -185,6 +197,7 @@ export async function runMaintenance(
     prunedRuns: 0,
     prunedLogs: 0,
     prunedNonces: 0,
+    prunedFlags: 0,
     hashedUsers: 0,
   };
   const failedSteps: string[] = [];
@@ -220,6 +233,18 @@ export async function runMaintenance(
   } catch {
     failedSteps.push("prune_nonces");
   }
+  // Data-quality flags (D-057 #5): the trigger keeps a 180-day floor, the key cannot go below it.
+  try {
+    const days = positiveDays(
+      await getConfig(mainDb, "retention_flag_days"),
+      CONFIG_KEYS.retention_flag_days.default,
+    );
+    counts.prunedFlags = await pruneQualityFlags(mainDb, nowIso, days);
+    rowsRead += 1;
+    rowsWritten += counts.prunedFlags;
+  } catch {
+    failedSteps.push("prune_flags");
+  }
   // NFR-030: the 90-day value is fixed (no stored override).
   try {
     const r = await hashRevokedUsers(
@@ -237,7 +262,11 @@ export async function runMaintenance(
   }
 
   const itemsProcessed =
-    counts.prunedRuns + counts.prunedLogs + counts.prunedNonces + counts.hashedUsers;
+    counts.prunedRuns +
+    counts.prunedLogs +
+    counts.prunedNonces +
+    counts.prunedFlags +
+    counts.hashedUsers;
   const ok = failedSteps.length === 0;
   const finish = (status: "success" | "failed") =>
     finishRun(mainDb, runId, {

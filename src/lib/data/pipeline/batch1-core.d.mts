@@ -14,6 +14,8 @@ export type QualityHookContext = {
   db: Client;
   market: string;
   d: string;
+  /** ISO time of the call. */
+  now: string;
   /** Rows read/written by this date so far; a hook adds its own counts here. */
   io: Io;
   universe: number;
@@ -21,8 +23,10 @@ export type QualityHookContext = {
   rejected: RejectedBarIn[];
   refetchDiffs: { code: string; d: string; maxDiffPct: number }[];
 };
-/** Stage 8 (T7 plugs in here). The default does nothing. */
-export type QualityHook = (ctx: QualityHookContext) => Promise<{ flags?: number } | void>;
+/** Stage 8: the default is the quality engine (src/lib/data/quality/engine.mjs). */
+export type QualityHook = (
+  ctx: QualityHookContext,
+) => Promise<{ flags?: number; summary?: Record<string, unknown> } | void>;
 export const noopQualityHook: QualityHook;
 
 export type FetchRequest = { codes: string[]; start: string; end: string };

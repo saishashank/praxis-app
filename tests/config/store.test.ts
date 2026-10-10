@@ -104,6 +104,35 @@ describe("config store", () => {
     expect(CONFIG_KEYS.yahoo_min_gap_s.editable).toBe("O");
   });
 
+  it("data-quality keys: ch.15 defaults and bounds (DAT-002, DAT-200, DAT-210, decision 5)", async () => {
+    expect(CONFIG_KEYS.refetch_diff_flag.default).toBe(0.1);
+    expect(CONFIG_KEYS.suspect_move.default).toBe(40);
+    expect(CONFIG_KEYS.u1_quality_gate.default).toBe(95);
+    expect(CONFIG_KEYS.retention_flag_days.default).toBe(180);
+    expect(await getConfig(db, "u1_quality_gate")).toBe(95);
+    for (const k of [
+      "refetch_diff_flag",
+      "suspect_move",
+      "u1_quality_gate",
+      "retention_flag_days",
+    ]) {
+      expect(CONFIG_KEYS[k as keyof typeof CONFIG_KEYS].editable).toBe("O");
+    }
+    await expect(set("refetch_diff_flag", 0.009)).rejects.toThrow(ConfigError);
+    await expect(set("refetch_diff_flag", 5.1)).rejects.toThrow(ConfigError);
+    await expect(set("refetch_diff_flag", "0.1")).rejects.toThrow(ConfigError);
+    await expect(set("refetch_diff_flag", 0.3)).resolves.toMatchObject({ after: 0.3 });
+    await expect(set("suspect_move", 9.9)).rejects.toThrow(ConfigError);
+    await expect(set("suspect_move", 91)).rejects.toThrow(ConfigError);
+    await expect(set("suspect_move", 60)).resolves.toMatchObject({ after: 60 });
+    await expect(set("u1_quality_gate", 49)).rejects.toThrow(ConfigError);
+    await expect(set("u1_quality_gate", 100.5)).rejects.toThrow(ConfigError);
+    await expect(set("u1_quality_gate", 90)).resolves.toMatchObject({ after: 90 });
+    await expect(set("retention_flag_days", 179)).rejects.toThrow(ConfigError);
+    await expect(set("retention_flag_days", 180.5)).rejects.toThrow(ConfigError);
+    await expect(set("retention_flag_days", 365)).resolves.toMatchObject({ after: 365 });
+  });
+
   it("validates storage thresholds against each other", async () => {
     await expect(set("storage_warn_gb", 0)).rejects.toThrow(ConfigError);
     await expect(set("storage_warn_gb", 3.5)).rejects.toThrow(/ceiling/);

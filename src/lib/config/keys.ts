@@ -20,6 +20,9 @@ const intRange =
   async (v: unknown) =>
     isInt(v) && v >= min && v <= max ? null : `must be a whole number from ${min} to ${max}`;
 
+const numRange = (min: number, max: number) => async (v: unknown) =>
+  isNum(v) && v >= min && v <= max ? null : `must be a number from ${min} to ${max}`;
+
 function exactKeys(v: unknown, keys: string[]): v is Record<string, unknown> {
   return isObj(v) && Object.keys(v).sort().join() === [...keys].sort().join();
 }
@@ -218,6 +221,43 @@ export const CONFIG_KEYS = {
     ref: "DAT-120",
     validate: intRange(1, 60),
   },
+  // Line 132: refetch_diff_flag 0.1%, O; DAT-002. Percent units. Ch.15 gives no bounds (spec gap,
+  // M2 T7): 0.01 to 5 keeps the flag meaningful. Mirrored by REFETCH_DIFF_PCT in rules.mjs.
+  refetch_diff_flag: {
+    default: 0.1,
+    unit: "%",
+    editable: "O",
+    ref: "DAT-002",
+    validate: numRange(0.01, 5),
+  },
+  // Line 133: suspect_move 40%, O; DAT-200. Percent units. No bounds in ch.15 (spec gap, M2 T7):
+  // 10 to 90. Mirrored by DEFAULT_SUSPECT_MOVE_PCT in quality/rules.mjs.
+  suspect_move: {
+    default: 40,
+    unit: "%",
+    editable: "O",
+    ref: "DAT-200",
+    validate: numRange(10, 90),
+  },
+  // Line 134: u1_quality_gate 95%, O; DAT-210. Percent units. No bounds in ch.15 (spec gap, M2 T7):
+  // 50 to 100. Mirrored by DEFAULT_U1_GATE_PCT in quality/rules.mjs.
+  u1_quality_gate: {
+    default: 95,
+    unit: "%",
+    editable: "O",
+    ref: "DAT-210",
+    validate: numRange(50, 100),
+  },
+  // D-057 decision 5: data-quality flags are kept 180 days unless they blocked a decision (those
+  // are kept forever). Not in ch.15 (spec gap, M2 T7). The database trigger refuses deleting a
+  // younger flag, so the minimum is 180.
+  retention_flag_days: {
+    default: 180,
+    unit: "days",
+    editable: "O",
+    ref: "DAT-142",
+    validate: intRange(180),
+  },
   // NFR-030 / DAT-142: email and name are hashed 90 days after revocation. Fixed, not in ch.15.
   pii_hash_after_revocation_days: {
     default: 90,
@@ -373,6 +413,30 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
     label: "Pause between Yahoo requests",
     area: "Other",
     bounds: "whole seconds, 1 to 60",
+    input: "int",
+  },
+  refetch_diff_flag: {
+    label: "Flag a re-fetched bar that differs by more than",
+    area: "Other",
+    bounds: "percent, 0.01 to 5",
+    input: "number",
+  },
+  suspect_move: {
+    label: "Treat a one-day close move above this as suspect",
+    area: "Other",
+    bounds: "percent, 10 to 90",
+    input: "number",
+  },
+  u1_quality_gate: {
+    label: "Block new entries when U1 data quality is below",
+    area: "Other",
+    bounds: "percent, 50 to 100",
+    input: "number",
+  },
+  retention_flag_days: {
+    label: "Keep data-quality flags for (unless they blocked a decision)",
+    area: "Retention",
+    bounds: "whole days, at least 180",
     input: "int",
   },
 };

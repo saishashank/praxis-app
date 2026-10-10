@@ -14,6 +14,7 @@ import {
 import { marketDate, type CalendarSummary } from "@/lib/data/calendar";
 import { calendarYearSummary } from "@/lib/data/calendarAdmin";
 import { isStale, JOBS } from "./jobs";
+import { getQualitySummary, type QualitySummary } from "./quality";
 
 export const SELFCHECK_JOB = "credential-selfcheck-vercel";
 export const WORKER_SELFCHECK_JOB = "worker-selfcheck";
@@ -49,6 +50,7 @@ export type WatchdogSummary = {
 export type HealthSummary = {
   jobs: JobSummary[];
   calendar?: CalendarSummary[] | null; // AU trading calendar per year (DAT-160); null = unreadable
+  quality?: QualitySummary | null; // data quality for the latest date (DAT-211); null = unreadable
   quota: QuotaSummary;
   watchdog: WatchdogSummary;
   openIncidents?: IncidentRow[] | null; // Owner only; null = could not be read
@@ -107,6 +109,14 @@ async function getCalendar(mainDb: Client, now: Date): Promise<CalendarSummary[]
   }
 }
 
+async function getQuality(mainDb: Client, role: Role): Promise<QualitySummary | null> {
+  try {
+    return await getQualitySummary(mainDb, role);
+  } catch {
+    return null; // quality trouble never hides job status
+  }
+}
+
 export async function getHealthSummary(
   mainDb: Client,
   now: Date,
@@ -149,6 +159,7 @@ export async function getHealthSummary(
     quota: await getQuota(mainDb, now, owner, env),
     watchdog,
     calendar: await getCalendar(mainDb, now),
+    quality: await getQuality(mainDb, role),
   };
   if (owner) {
     try {

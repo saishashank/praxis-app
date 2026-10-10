@@ -111,6 +111,95 @@ function SecretsSection(props: {
   );
 }
 
+function QualitySection(props: { q: NonNullable<HealthSummary["quality"]>; owner: boolean }) {
+  const { q, owner } = props;
+  const u1 = q.tiers.find((t) => t.tier === "U1");
+  return (
+    <>
+      <p role="status" className="text-sm">
+        <span className="rounded border px-2 py-0.5 font-mono text-xs">
+          {u1 === undefined ? "NO DATA" : u1.gatePass ? "PASS" : "FAIL — no new entries"}
+        </span>
+        <span className="ml-2 text-text-muted">
+          Latest date: {q.date}. Exits are never blocked.
+        </span>
+      </p>
+      <table className="w-full border-collapse text-left text-sm">
+        <caption className="sr-only">Quality score per tier</caption>
+        <thead>
+          <tr>
+            <th scope="col" className="py-2 pr-4">
+              Tier
+            </th>
+            <th scope="col" className="py-2 pr-4">
+              Valid bars
+            </th>
+            <th scope="col" className="py-2">
+              Score
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {q.tiers.map((t) => (
+            <tr key={t.tier} className="border-t border-border">
+              <th scope="row" className="py-2 pr-4 font-medium">
+                {t.tier}
+              </th>
+              <td className="py-2 pr-4">
+                {t.valid} of {t.expected}
+              </td>
+              <td className="py-2">{(t.score * 100).toFixed(1)}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {q.rules.length === 0 ? (
+        <p className="text-sm text-text-muted">No open flags for this date.</p>
+      ) : (
+        <table className="w-full border-collapse text-left text-sm">
+          <caption className="sr-only">Open flags by rule</caption>
+          <thead>
+            <tr>
+              <th scope="col" className="py-2 pr-4">
+                Rule
+              </th>
+              <th scope="col" className="py-2 pr-4">
+                Severity
+              </th>
+              <th scope="col" className="py-2 pr-4">
+                Open flags
+              </th>
+              <th scope="col" className="py-2 pr-4">
+                Blocks entries
+              </th>
+              {owner && (
+                <th scope="col" className="py-2">
+                  Codes
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {q.rules.map((r) => (
+              <tr key={`${r.checkId}-${r.severity}`} className="border-t border-border">
+                <th scope="row" className="py-2 pr-4 font-mono text-xs font-medium">
+                  {r.checkId}
+                </th>
+                <td className="py-2 pr-4">{r.severity}</td>
+                <td className="py-2 pr-4">{r.count}</td>
+                <td className="py-2 pr-4">{r.blocksEntries ? "Yes" : "No"}</td>
+                {owner && (
+                  <td className="py-2 font-mono text-xs">{(r.topCodes ?? []).join(", ")}</td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </>
+  );
+}
+
 export default async function HealthPage() {
   const user = await requireUser("read", "/health");
   const tf = (await userPreferences(user.id)).time_format;
@@ -251,6 +340,19 @@ export default async function HealthPage() {
                   </li>
                 ))}
               </ul>
+            </section>
+          )}
+
+          {summary.quality && (
+            <section aria-labelledby="quality-h" className="flex flex-col gap-3">
+              <h2 id="quality-h" className="text-xl font-semibold">
+                Data quality
+              </h2>
+              {summary.quality.date === null ? (
+                <p className="text-sm text-text-muted">No quality checks have run yet.</p>
+              ) : (
+                <QualitySection q={summary.quality} owner={owner} />
+              )}
             </section>
           )}
 
