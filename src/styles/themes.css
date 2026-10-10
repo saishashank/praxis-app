@@ -1,0 +1,149 @@
+/*
+ * Theme tokens (UXN-001, UXN-280). One token set, six themes.
+ *
+ * Spec text (verbatim):
+ * UXN-001 "Colour token system — The design system MUST define a single colour-blind-safe
+ *   gain/loss pair (teal/amber-orange) used everywhere a monetary result or P/L is shown, always
+ *   paired with a sign, arrow icon and (on hover/tap) a text label. Regime, validation-label and
+ *   thesis-breaker states MUST use separate, non-gain/loss token families. Contrast MUST meet WCAG
+ *   2.2 AA in both themes."
+ * UXN-280 "App themes — Settings → Appearance MUST offer six themes: Dark (default, O-35
+ *   preference), Light, Match device (follows the OS setting), Midnight (true black for OLED), Dim
+ *   (softer blue-grey dark) and High contrast (white on black, yellow accent, ≥ 7:1 text
+ *   contrast). All themes MUST be built from one token set (UXN-001) so every page, chart and
+ *   badge follows the theme; each theme MUST keep WCAG AA contrast (AAA for High contrast)."
+ * UX-001 "... dark and light themes (dark default); WCAG 2.2 AA contrast and keyboard
+ *   navigation."
+ * UXN-005 "All animation ... MUST respect prefers-reduced-motion: reduce by disabling non-essential
+ *   motion; essential state changes ... still convey information without animation."
+ * UXN-015 "... an always-visible 2px focus ring meeting AA contrast ..."
+ * AT-26 "... WCAG 2.2 AA automated checks pass ..."
+ * AT-27 "\"Simulated\", reality panels, validation labels and \"not yet measured\" appear where
+ *   required ..." (the Simulated label uses --color-text / --color-text-muted, so it keeps the
+ *   same contrast as body text in every theme; checked by scripts/ci/contrast-check.mjs).
+ * Brand (docs/brand/BRAND.md): line #8FD3FF -> #A7B4FF dark / #2A8FD0 -> #4453C9 light; signal dot
+ *   (gain colour) #2DB5A3 dark / #0E8A7A light; wordmark #E7EBF1 dark / #131821 light; tagline
+ *   #9AA4B5 dark / #5B6576 light; UI font Inter.
+ *
+ * Rules for this file:
+ * - Theme blocks are plain `:root[data-theme="..."]` rules with `--color-*` declarations; the
+ *   contrast checker (scripts/ci/contrast-check.mjs) parses them. Keep one declaration per line.
+ * - "system" (Match device) and a missing data-theme attribute (signed-out pages) use light
+ *   tokens, and dark tokens under prefers-color-scheme: dark. The dark values in the media block
+ *   MUST equal the dark theme block (checked by the contrast checker).
+ * - Gain/loss = --color-positive / --color-negative (teal / burnt orange). Always pair with sign,
+ *   arrow and label; never colour alone. Regime / validation families get their own tokens later.
+ */
+
+/* Dark (default) */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: #0b0f15;
+  --color-surface: #131a24;
+  --color-text: #e7ebf1;
+  --color-text-muted: #9aa4b5;
+  --color-border: #5a677c;
+  --color-accent: #8fd3ff;
+  --color-accent-contrast: #0b0f15;
+  --color-positive: #2db5a3;
+  --color-negative: #f08a4b;
+  --color-warning: #e8b339;
+  --color-focus: #8fd3ff;
+  --logo-light-display: none;
+  --logo-dark-display: block;
+}
+
+/* Light, plus Match device (system) and no attribute when the OS is not dark */
+:root[data-theme="light"],
+:root[data-theme="system"],
+:root:not([data-theme]) {
+  color-scheme: light;
+  --color-bg: #ffffff;
+  --color-surface: #f3f5f8;
+  --color-text: #131821;
+  --color-text-muted: #525c6d;
+  --color-border: #7a8496;
+  --color-accent: #1b6aa5;
+  --color-accent-contrast: #ffffff;
+  --color-positive: #0b7a6c;
+  --color-negative: #b0440c;
+  --color-warning: #85560a;
+  --color-focus: #1b6aa5;
+  --logo-light-display: block;
+  --logo-dark-display: none;
+}
+
+/* Match device: dark when the OS asks for it (values mirror the dark block) */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"],
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --color-bg: #0b0f15;
+    --color-surface: #131a24;
+    --color-text: #e7ebf1;
+    --color-text-muted: #9aa4b5;
+    --color-border: #5a677c;
+    --color-accent: #8fd3ff;
+    --color-accent-contrast: #0b0f15;
+    --color-positive: #2db5a3;
+    --color-negative: #f08a4b;
+    --color-warning: #e8b339;
+    --color-focus: #8fd3ff;
+    --logo-light-display: none;
+    --logo-dark-display: block;
+  }
+}
+
+/* Midnight: true black for OLED */
+:root[data-theme="midnight"] {
+  color-scheme: dark;
+  --color-bg: #000000;
+  --color-surface: #0a0d12;
+  --color-text: #f2f5f9;
+  --color-text-muted: #a0a9b8;
+  --color-border: #4f5a6d;
+  --color-accent: #8fd3ff;
+  --color-accent-contrast: #000000;
+  --color-positive: #2db5a3;
+  --color-negative: #f08a4b;
+  --color-warning: #e8b339;
+  --color-focus: #8fd3ff;
+  --logo-light-display: none;
+  --logo-dark-display: block;
+}
+
+/* Dim: softer blue-grey dark */
+:root[data-theme="dim"] {
+  color-scheme: dark;
+  --color-bg: #1a2230;
+  --color-surface: #232d3f;
+  --color-text: #e3e8f0;
+  --color-text-muted: #aab5c7;
+  --color-border: #6a7890;
+  --color-accent: #9bd8ff;
+  --color-accent-contrast: #101722;
+  --color-positive: #3cc4b2;
+  --color-negative: #f2935a;
+  --color-warning: #ecbb48;
+  --color-focus: #9bd8ff;
+  --logo-light-display: none;
+  --logo-dark-display: block;
+}
+
+/* High contrast: white on black, yellow accent, text at 7:1 or better (AAA) */
+:root[data-theme="high_contrast"] {
+  color-scheme: dark;
+  --color-bg: #000000;
+  --color-surface: #0c0c0c;
+  --color-text: #ffffff;
+  --color-text-muted: #e0e0e0;
+  --color-border: #ffffff;
+  --color-accent: #ffe14d;
+  --color-accent-contrast: #000000;
+  --color-positive: #4de6d0;
+  --color-negative: #ffa866;
+  --color-warning: #ffd23f;
+  --color-focus: #ffe14d;
+  --logo-light-display: none;
+  --logo-dark-display: block;
+}

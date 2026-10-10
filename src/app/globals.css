@@ -1,0 +1,59 @@
+@import "tailwindcss";
+@import "../styles/themes.css";
+
+/*
+ * Tailwind utilities read the --color-* tokens. The values below are only the fallback (dark);
+ * the real values come from src/styles/themes.css per [data-theme].
+ */
+@theme static {
+  --color-bg: #0b0f15;
+  --color-surface: #131a24;
+  --color-text: #e7ebf1;
+  --color-text-muted: #9aa4b5;
+  --color-border: #5a677c;
+  --color-accent: #8fd3ff;
+  --color-accent-contrast: #0b0f15;
+  --color-positive: #2db5a3;
+  --color-negative: #f08a4b;
+  --color-warning: #e8b339;
+  --color-focus: #8fd3ff;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+}
+
+*,
+::before,
+::after {
+  border-color: var(--color-border);
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+/* UXN-015: always-visible 2px keyboard focus ring on every interactive element. */
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* UXN-005: no non-essential motion when the OS asks for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.logo-dark {
+  display: var(--logo-dark-display);
+}
+
+.logo-light {
+  display: var(--logo-light-display);
+}

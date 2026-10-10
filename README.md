@@ -2,7 +2,14 @@
 
 Personal investment-research and **simulated** (paper) trading app for the ASX. Simulation for personal information only — not financial advice.
 
+## Run locally
+
+- App (Next.js 16): `npm ci`, then `npm run dev`. Checks: `npm run format:check && npm run lint && npm run typecheck && npm test && npm run build`.
+- Worker (Cloudflare cron-only skeleton, `worker/`): `cd worker && npm ci && npm test`.
+- Copy `.env.example` to `.env.local` and fill values when a feature needs them (names only are listed; never commit real values). Node 22 (`.nvmrc`).
+
 ## Documents
+
 - [`spec/`](spec/00_README_and_progress.md) — requirements (v2.4); start at `00_README_and_progress.md`.
 - [Owner guide — M0 set-up](docs/owner-guide/M0_owner_guide.md) — step-by-step account and secrets set-up (BLD-010, BLD-012).
 - [Glossary](docs/glossary.md) — one-line meanings of every term in the app and emails (BLD-012).

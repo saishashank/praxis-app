@@ -1,0 +1,66 @@
+# Deploy staging (OPS-041, PLT-006, SEC-108 a). Runs only for commits on `main` (the
+# `deploy-staging` environment allows `main` only). Vercel builds remotely, so no environment
+# value is pulled onto the runner. Targets are hard-coded and nothing else is ever named here:
+# Vercel project `praxis-app-staging` (D-028), Worker `praxis-sentinel-staging` (D-017).
+# Secrets are referenced ONLY in `env:` blocks, never inside `run:` scripts.
+name: Deploy staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+env:
+  VERCEL_TELEMETRY_DISABLED: "1"
+  WRANGLER_SEND_METRICS: "false"
+
+jobs:
+  deploy:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    environment: deploy-staging
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Install Worker dependencies
+        working-directory: worker
+        run: npm ci
+
+      - name: Deploy staging Worker (praxis-sentinel-staging only, D-017)
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_STAGING }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID_STAGING }}
+        run: >-
+          npx wrangler deploy --env staging --name praxis-sentinel-staging
+          --var "BUILD_COMMIT:${GITHUB_SHA}"
+
+      - name: Deploy staging Vercel project (praxis-app-staging only, D-028)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN_STAGING }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN_STAGING is not set in environment deploy-staging (Owner guide section B, D-028)."
+            exit 1
+          fi
+          npx --yes vercel@63.1.0 deploy --prod --yes \
+            --project praxis-app-staging --token "$VERCEL_TOKEN" \
+            --build-env "APP_COMMIT=${GITHUB_SHA}" --env "APP_COMMIT=${GITHUB_SHA}" \
+            > /dev/null
+          echo "Staging deployed at commit ${GITHUB_SHA}."

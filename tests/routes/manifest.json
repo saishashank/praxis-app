@@ -1,0 +1,58 @@
+{
+  "$comment": "TST-122: every API route and server action maps to the test files that cover it. Checked by scripts/ci/route-coverage.mjs (npm run test:routes). A test file must mention the route path (without the leading slash) or the action name. Auth.js-owned routes only get a file-exists check.",
+  "routes": {
+    "GET /api/health": {
+      "tests": ["tests/http/headers.test.ts", "tests/http/gate.test.ts"]
+    },
+    "POST /api/internal/self-check": {
+      "tests": ["tests/selfcheck/route.test.ts", "tests/security/hmac.test.ts"]
+    },
+    "POST /api/internal/maintenance": {
+      "tests": ["tests/maintenance/route.test.ts", "tests/maintenance/retention.test.ts"]
+    },
+    "POST /api/internal/backup-export": {
+      "tests": ["tests/backup/exportRoute.test.ts", "tests/backup/core.test.ts"]
+    },
+    "GET /api/cron/watchdog": {
+      "tests": ["tests/watchdog/route.test.ts", "tests/watchdog/approvedCommit.test.ts"]
+    },
+    "POST /api/test-identity/login": {
+      "tests": ["tests/auth/testIdentity.test.ts"]
+    },
+    "GET /api/auth/[...nextauth]": {
+      "owner": "auth.js",
+      "tests": ["tests/auth/config.test.ts", "tests/auth/session.test.ts"]
+    },
+    "POST /api/auth/[...nextauth]": {
+      "owner": "auth.js",
+      "tests": ["tests/auth/config.test.ts", "tests/auth/session.test.ts"]
+    },
+    "action src/lib/auth/actions.ts#signInAction": {
+      "tests": ["tests/auth/signout.test.ts"]
+    },
+    "action src/lib/auth/actions.ts#signOutAction": {
+      "tests": ["tests/auth/signout.test.ts"]
+    },
+    "action src/app/(app)/users/actions.ts#recordSharingAckAction": {
+      "tests": ["tests/users/actions.test.ts"]
+    },
+    "action src/app/(app)/users/actions.ts#addUserAction": {
+      "tests": ["tests/users/actions.test.ts"]
+    },
+    "action src/app/(app)/users/actions.ts#changeRoleAction": {
+      "tests": ["tests/users/actions.test.ts"]
+    },
+    "action src/app/(app)/users/actions.ts#revokeUserAction": {
+      "tests": ["tests/users/actions.test.ts"]
+    },
+    "action src/app/(app)/users/actions.ts#signOutEverywhereAction": {
+      "tests": ["tests/users/actions.test.ts"]
+    },
+    "action src/app/(app)/config/actions.ts#updateConfigAction": {
+      "tests": ["tests/config/actions.test.ts"]
+    },
+    "action src/app/(app)/settings/actions.ts#updatePreferencesAction": {
+      "tests": ["tests/preferences/actions.test.ts"]
+    }
+  }
+}

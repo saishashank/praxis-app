@@ -1,0 +1,57 @@
+# Nightly maintenance (retention + personal-data hashing), M1. Calls the signed Vercel route
+# POST /api/internal/maintenance (DAT-142, PLT-060, NFR-030, PLT-016, PLT-076, SEC-017).
+# workflow_dispatch ONLY: from M2 the Worker's per-minute cron (the master clock, PLT-071)
+# dispatches this workflow with `ref: release`. Until the Worker exists, run it by hand from the
+# Actions tab on the release branch. It has no `schedule:` trigger (PLT-015).
+# Secrets are referenced ONLY in `env:` blocks, never inside `run:` scripts.
+# SEC-108 c: the job checks out the latest approved deploy-production commit, not the release head.
+# `deployment: false` gives the job the environment's secrets without creating a deployment
+# record, so a maintenance run never counts as an approved deploy (D-023, SEC-108 c).
+name: Nightly maintenance
+
+on: workflow_dispatch
+
+permissions: {}
+
+jobs:
+  production:
+    if: github.ref == 'refs/heads/release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: read
+    # PLT-076: one run per day at a time, never cancelling one in progress. The date-keyed
+    # "already succeeded" check is made by the route (run record `maintenance:<local date>`).
+    concurrency:
+      group: maintenance
+      cancel-in-progress: false
+    environment:
+      name: production
+      deployment: false
+    steps:
+      # SEC-108 c: run the commit of the latest APPROVED deploy-production deployment, not the
+      # release head. These two steps run only the tiny reviewed script, with github.token
+      # alone (contents/deployments: read), never an environment secret.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ci-tools
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - name: Find approved commit
+        id: approved
+        run: node ci-tools/scripts/ci/approved-commit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.approved.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Run maintenance
+        run: node scripts/maintenance/run.mjs
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL_PROD }}
+          ACTIONS_HMAC_SECRET: ${{ secrets.ACTIONS_HMAC_SECRET_PROD }}

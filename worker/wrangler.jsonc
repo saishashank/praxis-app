@@ -1,0 +1,19 @@
+{
+  "name": "praxis-sentinel",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": { "PRAXIS_ENV": "production" },
+  "env": {
+    "staging": {
+      "name": "praxis-sentinel-staging",
+      "workers_dev": false,
+      "preview_urls": false,
+      // NFR-040: the staging cron runs only during test windows (none yet).
+      "triggers": { "crons": [] },
+      "vars": { "PRAXIS_ENV": "staging" },
+    },
+  },
+}
