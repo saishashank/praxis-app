@@ -163,6 +163,8 @@ def test_all_nan_day_is_skipped_but_partial_nan_becomes_null():
 
 def test_fractional_and_missing_volume_is_null():
     df = frame(["ZZZ"], days=2)
+    # yfinance can return float volume columns; make the fixture column float so pandas accepts 10.5.
+    df[("ZZZ.AX", "Volume")] = df[("ZZZ.AX", "Volume")].astype("float64")
     df.iloc[0, df.columns.get_loc(("ZZZ.AX", "Volume"))] = 10.5
     df.iloc[1, df.columns.get_loc(("ZZZ.AX", "Volume"))] = float("nan")
     rows = yf_fetch.rows_from_frame(df, ["ZZZ"], FETCHED)
