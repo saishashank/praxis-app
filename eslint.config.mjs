@@ -13,6 +13,8 @@ export default defineConfig([
     "spec/**",
     "docs/**",
     "scripts/**",
+    "playwright-report/**",
+    "test-results/**",
     "next-env.d.ts",
   ]),
 ]);

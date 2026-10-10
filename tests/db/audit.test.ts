@@ -79,13 +79,13 @@ describe("hashUserPii", () => {
   it("replaces email/name with HMAC (not plain sha256) and stays unique", async () => {
     const db = await freshDb("auth");
     await db.execute({
-      sql: "INSERT INTO app_user (email, name, status, created_at, updated_at) VALUES ('Jo@x.io', 'Jo', 'revoked', ?, ?), ('ka@x.io', NULL, 'revoked', ?, ?)",
+      sql: "INSERT INTO app_user (email, name, status, created_at, updated_at) VALUES ('Jo@example.com', 'Jo', 'revoked', ?, ?), ('ka@example.com', NULL, 'revoked', ?, ?)",
       args: [T, T, T, T],
     });
     await hashUserPii(db, "k", 1, "2026-12-01T00:00:00.000Z");
     await hashUserPii(db, "k", 2, "2026-12-01T00:00:00.000Z");
     const r = await db.execute("SELECT email, name, pii_hashed_at FROM app_user ORDER BY id");
-    const plain = createHash("sha256").update("jo@x.io").digest("hex");
+    const plain = createHash("sha256").update("jo@example.com").digest("hex");
     expect(r.rows[0].email).toMatch(/^hashed:[0-9a-f]{64}$/);
     expect(r.rows[0].email).not.toBe(`hashed:${plain}`);
     expect(r.rows[0].name).toMatch(/^[0-9a-f]{64}$/);
@@ -97,7 +97,7 @@ describe("hashUserPii", () => {
   it("runs on a transaction too and rolls back with it", async () => {
     const db = await freshDb("auth");
     await db.execute({
-      sql: "INSERT INTO app_user (email, name, status, created_at, updated_at) VALUES ('Jo@x.io', 'Jo', 'revoked', ?, ?)",
+      sql: "INSERT INTO app_user (email, name, status, created_at, updated_at) VALUES ('Jo@example.com', 'Jo', 'revoked', ?, ?)",
       args: [T, T],
     });
     await appendAudit(db, key, { action: "a", actorUserId: 1, ip: "1.1.1.1", userAgent: "ua" });
@@ -110,7 +110,7 @@ describe("hashUserPii", () => {
       tx.close();
     }
     const u = await db.execute("SELECT email, pii_hashed_at FROM app_user");
-    expect(u.rows[0]).toMatchObject({ email: "Jo@x.io", pii_hashed_at: null });
+    expect(u.rows[0]).toMatchObject({ email: "Jo@example.com", pii_hashed_at: null });
     expect((await db.execute("SELECT ip FROM audit_event")).rows[0].ip).toBe("1.1.1.1");
     const tx2 = await db.transaction("write");
     try {

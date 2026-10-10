@@ -10,3 +10,5 @@ worker/dist
 *.tsbuildinfo
 next-env.d.ts
 .DS_Store
+playwright-report
+test-results

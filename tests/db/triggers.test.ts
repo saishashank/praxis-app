@@ -63,7 +63,7 @@ describe("auth DB constraints", () => {
 
   it("defaults: viewer, invited, session_version 1", async () => {
     await db.execute({
-      sql: "INSERT INTO app_user (email, created_at, updated_at) VALUES ('a@x.io', ?, ?)",
+      sql: "INSERT INTO app_user (email, created_at, updated_at) VALUES ('a@example.com', ?, ?)",
       args: [T, T],
     });
     const r = await db.execute("SELECT role, status, session_version FROM app_user");
@@ -71,16 +71,16 @@ describe("auth DB constraints", () => {
   });
 
   it("allows only one non-revoked owner", async () => {
-    await user("o1@x.io", "owner");
-    await expect(user("o2@x.io", "owner")).rejects.toThrow();
+    await user("o1@example.com", "owner");
+    await expect(user("o2@example.com", "owner")).rejects.toThrow();
     await db.execute("UPDATE app_user SET status = 'revoked'");
-    await user("o2@x.io", "owner");
+    await user("o2@example.com", "owner");
   });
 
   it("rejects bad role and duplicate email", async () => {
-    await expect(user("a@x.io", "admin")).rejects.toThrow();
-    await user("a@x.io");
-    await expect(user("a@x.io")).rejects.toThrow();
+    await expect(user("a@example.com", "admin")).rejects.toThrow();
+    await user("a@example.com");
+    await expect(user("a@example.com")).rejects.toThrow();
   });
 
   it("audit_event: delete and edit abort; nulling ip/user_agent works", async () => {

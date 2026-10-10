@@ -10,14 +10,18 @@
     "db:migrate": "node scripts/db/migrate.mjs",
     "build": "node scripts/db/migrate.mjs --if-vercel && next build",
     "start": "next start",
+    "build:e2e": "next build",
+    "start:e2e": "next start -p 3100 -H 127.0.0.1",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:smoke": "node --test \"scripts/smoke/*.test.mjs\" \"scripts/e2e/*.test.mjs\" \"scripts/maintenance/*.test.mjs\" \"scripts/backup/*.test.mjs\" \"scripts/ci/*.test.mjs\"",
     "test:routes": "node scripts/ci/route-coverage.mjs",
+    "test:hygiene": "node scripts/ci/repo-hygiene.mjs",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@libsql/client": "0.18.0",
@@ -28,6 +32,8 @@
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.64.0",
     "@tailwindcss/postcss": "4.3.3",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "7.0.1",

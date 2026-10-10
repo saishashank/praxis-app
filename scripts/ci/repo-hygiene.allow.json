@@ -1,0 +1,20 @@
+{
+  "_comment": "Deliberate exceptions for scripts/ci/repo-hygiene.mjs (SEC-110). A path ending in / covers a folder. Never add personal data here; add a doc only after deciding it belongs in the public repo.",
+  "docs": [
+    "docs/07_decision_log.md",
+    "docs/06_open_questions.md",
+    "docs/glossary.md",
+    "docs/test-map.md",
+    "docs/M1_exit_evidence.md",
+    "docs/owner-guide/",
+    "docs/brand/"
+  ],
+  "files": {
+    "HYG-DATA": [],
+    "HYG-SIZE": [],
+    "HYG-PRIVATE": [],
+    "HYG-EMAIL": ["tests/auth/testIdentity.test.ts"],
+    "HYG-PHONE": [],
+    "HYG-MARKET": []
+  }
+}

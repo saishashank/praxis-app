@@ -146,7 +146,7 @@ describe("individual checks", () => {
     expect(await t("https://x.vercel.app/p")).toBe(false);
     expect(await t("https://x.vercel.app/?q=1")).toBe(false);
     expect(await t("https://x.example.com")).toBe(false);
-    expect(await t("https://u:p@x.vercel.app")).toBe(false);
+    expect(await t("https://u:p@example.com")).toBe(false);
     expect(await t("not a url")).toBe(false);
     expect(await t(undefined)).toBe(false);
   });
