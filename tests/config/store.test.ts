@@ -50,6 +50,8 @@ describe("config store", () => {
     expect(d("turso_staging_share")).toBe(0.15);
     expect(d("actions_minutes_soft_ceiling")).toBe(3000);
     expect(d("llm_daily_budget_total")).toBe(150_000);
+    expect(d("yahoo_chunk_size")).toBe(100);
+    expect(d("yahoo_min_gap_s")).toBe(5);
     expect(isConfigKey("nope")).toBe(false);
     expect(isConfigKey("toString")).toBe(false);
   });
@@ -88,6 +90,18 @@ describe("config store", () => {
     await expect(set("session_lifetime_days", 7, "bad scope")).rejects.toThrow(/scope/);
     const c = await db.execute("SELECT count(*) AS c FROM config_version");
     expect(Number(c.rows[0].c)).toBe(1);
+  });
+
+  it("bounds the Yahoo throttle keys (decision 8, D-057)", async () => {
+    await expect(set("yahoo_chunk_size", 9)).rejects.toThrow(ConfigError);
+    await expect(set("yahoo_chunk_size", 501)).rejects.toThrow(ConfigError);
+    await expect(set("yahoo_chunk_size", 10.5)).rejects.toThrow(ConfigError);
+    await expect(set("yahoo_min_gap_s", 0)).rejects.toThrow(ConfigError);
+    await expect(set("yahoo_min_gap_s", 61)).rejects.toThrow(ConfigError);
+    await expect(set("yahoo_chunk_size", 500)).resolves.toMatchObject({ after: 500 });
+    await expect(set("yahoo_min_gap_s", 1)).resolves.toMatchObject({ after: 1 });
+    expect(CONFIG_KEYS.yahoo_chunk_size.editable).toBe("O");
+    expect(CONFIG_KEYS.yahoo_min_gap_s.editable).toBe("O");
   });
 
   it("validates storage thresholds against each other", async () => {

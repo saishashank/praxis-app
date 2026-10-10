@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"data\":[{\"id\":\"SYN-0000\",\"code\":\"ZZZ\",\"time\":\"2020-01-06T10:10:00+11:00\",\"type\":\"Synthetic Notice\",\"price_sensitive\":true,\"title\":\"Synthetic announcement number 0\",\"url\":\"https://example.test/synthetic/0.pdf\"},{\"id\":\"SYN-BAD\",\"code\":\"zz\",\"title\":\"\"},{\"id\":\"SYN-0000\",\"code\":\"ZZZ\",\"time\":\"2020-01-06T10:10:00+11:00\",\"type\":\"Synthetic Notice\",\"price_sensitive\":true,\"title\":\"Synthetic announcement number 0\",\"url\":\"https://example.test/synthetic/0.pdf\"},{\"id\":\"SYN-0001\",\"code\":\"ZZY\",\"time\":\"2020-01-07T10:11:00+11:00\",\"type\":\"Synthetic Notice\",\"price_sensitive\":false,\"title\":\"Synthetic announcement number 1\",\"url\":\"https://example.test/synthetic/1.pdf\"}]}"
+}

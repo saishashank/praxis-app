@@ -201,6 +201,23 @@ export const CONFIG_KEYS = {
     ref: "LLM-050",
     validate: intRange(75_000, 225_000),
   },
+  // Architect decision 8 (D-057): ch.15 has no Yahoo throttle row (spec gap, M2_requirements s4);
+  // Owner-editable, bounds 10-500. Used by scripts/ingest/yahoo_fetch.py (DAT-120, DAT-103).
+  yahoo_chunk_size: {
+    default: 100,
+    unit: "tickers/request",
+    editable: "O",
+    ref: "DAT-120",
+    validate: intRange(10, 500),
+  },
+  // Architect decision 8 (D-057): minimum pause between Yahoo chunk requests, bounds 1-60.
+  yahoo_min_gap_s: {
+    default: 5,
+    unit: "s",
+    editable: "O",
+    ref: "DAT-120",
+    validate: intRange(1, 60),
+  },
   // NFR-030 / DAT-142: email and name are hashed 90 days after revocation. Fixed, not in ch.15.
   pii_hash_after_revocation_days: {
     default: 90,
@@ -344,6 +361,18 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
     label: "Sentinel blind alert after",
     area: "Other",
     bounds: "whole minutes, at least 1",
+    input: "int",
+  },
+  yahoo_chunk_size: {
+    label: "Yahoo tickers per request",
+    area: "Other",
+    bounds: "whole number, 10 to 500",
+    input: "int",
+  },
+  yahoo_min_gap_s: {
+    label: "Pause between Yahoo requests",
+    area: "Other",
+    bounds: "whole seconds, 1 to 60",
     input: "int",
   },
 };

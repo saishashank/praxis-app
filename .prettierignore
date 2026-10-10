@@ -11,3 +11,4 @@ docs
 .github/workflows/smoke-test.yml
 scripts/smoke
 vercel.json
+tests/fixtures
