@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -190,7 +191,8 @@ test("dry-run verifies and touches nothing (no database opened, no env needed)",
 });
 
 test("output never contains the URL, token or row content (success and failures)", async () => {
-  const SECRET_TOKEN = "tok-SECRET-9f8e7d";
+  // Generated per run so no token-shaped literal sits in the repo (gitleaks).
+  const SECRET_TOKEN = `fake-${randomBytes(24).toString("hex")}`;
   const env = { RESTORE_TARGET_URL: fileUrl(nextTarget()), RESTORE_TARGET_TOKEN: SECRET_TOKEN };
   const outs = [
     await exec(["--file", dumpFile, "--db", "main"], env), // success
