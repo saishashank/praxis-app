@@ -54,7 +54,7 @@ export const AU_SLOTS: readonly Slot[] = [
   }),
   slot({
     id: "pre-open",
-    time: "09:55",
+    time: "09:54",
     runner: "worker",
     workflow: null,
     tradingDaysOnly: true,

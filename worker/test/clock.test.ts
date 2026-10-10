@@ -80,7 +80,7 @@ describe("slot table (docs/M2_design.md section 3)", () => {
     expect(new Set(ids).size).toBe(ids.length);
     const by = Object.fromEntries(AU_SLOTS.map((s) => [s.id, s]));
     expect(by["asx-poll"]).toMatchObject({ time: "07:00", until: "19:30", everyMin: 4 });
-    expect(by["pre-open"].time).toBe("09:55");
+    expect(by["pre-open"].time).toBe("09:54");
     expect(by["ingest-batch1"]).toMatchObject({ time: "17:30", workflow: "ingest-batch1.yml" });
     expect(by["decision-cutoff"].time).toBe("18:10");
     expect(by["late-sweep"].time).toBe("19:35");

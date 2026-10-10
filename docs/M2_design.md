@@ -89,7 +89,7 @@ Principle (PLT-070, PLT-012): the Worker is a clock and poller, never a processo
 | Local time | Slot | Runner | Notes |
 |---|---|---|---|
 | 07:00..19:30, every 4 min | ASX announcement poll (DAT-122 slot 1) | Worker, then Vercel route if parsing is needed | alternate ticks; one ASX slot in 4 minutes stays free for slots 2..5 |
-| 09:55 | Pre-open re-check (slot 2) | Worker to signed Vercel route | stub in M2 (Arena disabled) |
+| 09:54 | Pre-open re-check (slot 2) | Worker to signed Vercel route | stub in M2 (Arena disabled) |
 | 10:00..10:59 AEST / 11:00..11:59 AEDT | Morning heartbeat (Vercel Cron 00:xx UTC) | Vercel | Worker last poll fresh? |
 | 17:30 | Batch 1, stages 1..9 (DAT-020) | Actions `ingest-batch1` | complete by 18:10 (DAT-021) |
 | 18:10 | Decision cut-off | Worker | M2 records only the first completed ASX poll after 18:10; Batch 2 does not exist yet |
