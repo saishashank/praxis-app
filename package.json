@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:smoke": "node --test \"scripts/smoke/*.test.mjs\" \"scripts/e2e/*.test.mjs\" \"scripts/maintenance/*.test.mjs\" \"scripts/backup/*.test.mjs\" \"scripts/ci/*.test.mjs\"",
+    "test:smoke": "node --test \"scripts/smoke/*.test.mjs\" \"scripts/e2e/*.test.mjs\" \"scripts/maintenance/*.test.mjs\" \"scripts/backup/*.test.mjs\" \"scripts/restore/*.test.mjs\" \"scripts/ci/*.test.mjs\"",
     "test:routes": "node scripts/ci/route-coverage.mjs",
     "test:hygiene": "node scripts/ci/repo-hygiene.mjs",
     "format": "prettier --write .",

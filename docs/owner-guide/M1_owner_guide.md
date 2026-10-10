@@ -200,11 +200,11 @@ Do this only when you are restoring, or in the monthly offsite check. Do it on y
 
 1. Make a new, empty folder on your computer. Download the two `.age` files from the `backup-<date>` release into it. [VERIFY screen name]
 2. Open a terminal in that folder. Use the key file from your USB stick or paper copy. Keep the path of the key file as a placeholder in your notes, for example `<path to your key file>`.
-3. Run the decrypt command for each file:
+3. Run the decrypt command for each file. Use `-o` for the output file (do not use `>`: in Windows PowerShell it damages binary files). Replace the placeholders:
 
    ```
-   age -d -i <path to your key file> main-<date>.ndjson.gz.age > main-<date>.ndjson.gz
-   age -d -i <path to your key file> auth-<date>.ndjson.gz.age > auth-<date>.ndjson.gz
+   age -d -o main-<date>.ndjson.gz -i <path to your key file> main-<date>.ndjson.gz.age
+   age -d -o auth-<date>.ndjson.gz -i <path to your key file> auth-<date>.ndjson.gz.age
    ```
 
 4. Check that each `.gz` file is not empty. A non-empty file means the decrypt worked. [OPS-020]
@@ -212,15 +212,47 @@ Do this only when you are restoring, or in the monthly offsite check. Do it on y
 
 **Full restore into a new database (OPS-040)**
 
-A full restore is not a single command. Target time: no more than 4 hours, counted from when you start. [OPS-040, NFR-004] The steps, summarised from the spec:
+Target time: no more than 4 hours, counted from when you start. Write down the time you start (step 1) and the time the smoke test passes (step 12). [OPS-040, NFR-004]
 
-1. Revoke any active build-agent access token. [OPS-040 step 0]
-2. Add the offline private backup key and a temporary Turso platform token as secrets of the GitHub `production` environment. Use the narrowest scope and shortest expiry offered. [VERIFY scope and expiry options]
-3. Run the **Restore database** workflow. Choose the backup and the target (main database, sign-in database or both). It decrypts the backup, imports it into a new Turso database, and checks the checksums. [VERIFY: this workflow is built in a later task]
-4. In Turso, create the new database's tokens, one per caller. Enter each token and the new database address into the stores that the spec's SEC-017 table lists. Do not paste them into a workflow log. [OPS-040 step 3]
-5. Redeploy the current production Vercel deployment and the Worker, so they pick up the new values. Use the same commit, so it passes the approval check. [OPS-040 step 3]
-6. Delete the temporary token and the private-key secret. The workflow fails until both are gone. [OPS-040 step 4]
-7. Run the credential smoke test and record the incident. [OPS-040 step 5, F]
+The restore runs on **your own computer**, not on GitHub. The offline key never goes to GitHub, and no Turso platform token is needed: you create the empty database yourself in the Turso dashboard. [SEC-108 f, PLT-022b, SEC-017 l] The script is `scripts/restore/restore.mjs` in the code repository (cloned on your computer, or ask the build agent to run these steps with you present). Do the steps once for the main database and once for the sign-in database (`--db main`, then `--db auth`).
+
+1. Write down the start time. Revoke any active build-agent access token. [OPS-040 step 0]
+2. Download the two `.age` files from the data repository release, or take them from your offsite copy. Decrypt them with the decrypt steps above. You now have `main-<date>.ndjson.gz` and `auth-<date>.ndjson.gz`.
+3. In the Turso dashboard, create a **new, empty** database for each one you restore. Never use the live database. [VERIFY screen names]
+4. For each new database, create a database token (full access to that database only, shortest expiry offered). [VERIFY options]
+5. Open a terminal in the code repository folder. Set the target in **this terminal only**. Never write them in a file, a chat or a workflow:
+
+   ```
+   # PowerShell
+   $env:RESTORE_TARGET_URL = "<new database URL>"
+   $env:RESTORE_TARGET_TOKEN = "<new database token>"
+   ```
+
+   (macOS or Linux: `export RESTORE_TARGET_URL="<new database URL>"` and the same for the token.)
+
+6. Check the file first. This opens no database and writes nothing:
+
+   ```
+   node scripts/restore/restore.mjs --file <path>/main-<date>.ndjson.gz --db main --dry-run
+   ```
+
+   It must end with `DRY RUN ok`.
+
+7. Restore:
+
+   ```
+   node scripts/restore/restore.mjs --file <path>/main-<date>.ndjson.gz --db main
+   ```
+
+   It must end with `restore: PASS`, a table of row counts, and the time taken. If it says the target is not empty or is the live database, stop and create a new empty database. It never prints the address, the token or any data.
+
+8. Repeat steps 3 to 7 for the sign-in database with `--db auth`. Close the terminal when both have passed, so the two variables are gone.
+9. In Turso, create the new database's tokens, one per caller. Enter each token and the new database address into the stores that the spec's SEC-017 table lists. Do not paste them into a workflow log. [OPS-040 step 3]
+10. Redeploy the current production Vercel deployment and the Worker, so they pick up the new values. Use the same commit, so it passes the approval check. [OPS-040 step 3]
+11. Revoke the restore token(s) at Turso. Delete the decrypted `.gz` files. Make sure there is no `TURSO_PLATFORM_TOKEN_TEMP` secret in the GitHub `production` environment and no restore token left at Turso. [OPS-040 step 4, SEC-017 l]
+12. Run the credential smoke test (F), write down the finish time and record the incident. [OPS-040 step 5]
+
+If GitHub is unavailable, steps 2 to 8 work from your offsite copy; you only need the code repository folder on your computer, or the build agent. [OPS-040]
 
 ---
 
