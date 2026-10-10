@@ -72,6 +72,6 @@ describe("migrate CLI", () => {
     });
     expect(r.code).toBe(0);
     expect(r.out).toContain("migrate main: applied 2");
-    expect(r.out).toContain("migrate auth: applied 2");
+    expect(r.out).toContain("migrate auth: applied 3");
   });
 });

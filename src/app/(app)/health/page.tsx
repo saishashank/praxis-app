@@ -4,6 +4,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
 import { formatMelbourne } from "@/lib/health/format";
+import { userPreferences } from "@/lib/preferences/read";
 import {
   getHealthSummary,
   type HealthSummary,
@@ -48,6 +49,7 @@ function quotaText(q: QuotaSummary | undefined): string {
 
 export default async function HealthPage() {
   const user = await requireUser("read", "/health");
+  const tf = (await userPreferences(user.id)).time_format;
   let summary: HealthSummary | null = null;
   try {
     summary = await getHealthSummary(mainDb(), new Date(), user.role);
@@ -113,7 +115,7 @@ export default async function HealthPage() {
                         <span className="ml-2 font-medium">Also stale</span>
                       )}
                     </td>
-                    <td className="py-2 pr-4">{formatMelbourne(j.lastSuccessAt)}</td>
+                    <td className="py-2 pr-4">{formatMelbourne(j.lastSuccessAt, tf)}</td>
                     {owner && <td className="py-2">{j.errorSummary ?? "None"}</td>}
                   </tr>
                 ))}
@@ -127,8 +129,8 @@ export default async function HealthPage() {
                 Secrets status
               </h2>
               <p className="text-sm text-muted">
-                Last verified: {formatMelbourne(summary.secrets.lastVerifiedAt)}. Values are never
-                shown.
+                Last verified: {formatMelbourne(summary.secrets.lastVerifiedAt, tf)}. Values are
+                never shown.
               </p>
               {summary.secrets.results.length === 0 ? (
                 <p>No self-check has been recorded yet.</p>

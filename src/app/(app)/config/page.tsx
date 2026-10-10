@@ -12,13 +12,14 @@ import {
 } from "@/lib/config/admin";
 import { CONFIG_AREAS } from "@/lib/config/keys";
 import { mainDb } from "@/lib/db/client";
-import { formatMelbourne } from "@/lib/health/format";
+import { formatMelbourne, type TimeFormat } from "@/lib/health/format";
+import { userPreferences } from "@/lib/preferences/read";
 import { ConfigForm } from "./ConfigForm";
 import { updateConfigAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-function Row({ r }: { r: ConfigRow }) {
+function Row({ r, tf }: { r: ConfigRow; tf: TimeFormat }) {
   return (
     <tr className="border-t border-black/10 align-top">
       <th scope="row" className="py-2 pr-4 font-normal">
@@ -31,7 +32,7 @@ function Row({ r }: { r: ConfigRow }) {
         <br />
         <span className="text-xs text-muted">
           {r.source === "stored" && r.lastChange
-            ? `Changed ${formatMelbourne(r.lastChange.at)} (version ${r.lastChange.versionId})`
+            ? `Changed ${formatMelbourne(r.lastChange.at, tf)} (version ${r.lastChange.versionId})`
             : "Default"}
         </span>
       </td>
@@ -73,7 +74,8 @@ function Row({ r }: { r: ConfigRow }) {
 }
 
 export default async function ConfigPage() {
-  await requireUser("admin", "/config");
+  const user = await requireUser("admin", "/config");
+  const tf = (await userPreferences(user.id)).time_format;
   const db = mainDb();
   const [rows, history] = await Promise.all([listConfig(db), listConfigHistory(db, 20)]);
   const units = new Map(rows.map((r) => [r.key as string, r.unit]));
@@ -126,7 +128,7 @@ export default async function ConfigPage() {
                 </thead>
                 <tbody>
                   {inArea.map((r) => (
-                    <Row key={r.key} r={r} />
+                    <Row key={r.key} r={r} tf={tf} />
                   ))}
                 </tbody>
               </table>
@@ -166,7 +168,7 @@ export default async function ConfigPage() {
                   const unit = units.get(h.key) ?? "";
                   return (
                     <tr key={h.id} className="border-t border-black/10 align-top">
-                      <td className="py-2 pr-4 whitespace-nowrap">{formatMelbourne(h.at)}</td>
+                      <td className="py-2 pr-4 whitespace-nowrap">{formatMelbourne(h.at, tf)}</td>
                       <td className="py-2 pr-4 font-mono text-xs">{h.key}</td>
                       <td className="py-2 pr-4">
                         {formatConfigValue(h.before, unit)} {"→"} {formatConfigValue(h.after, unit)}

@@ -47,6 +47,9 @@
     },
     "action src/app/(app)/config/actions.ts#updateConfigAction": {
       "tests": ["tests/config/actions.test.ts"]
+    },
+    "action src/app/(app)/settings/actions.ts#updatePreferencesAction": {
+      "tests": ["tests/preferences/actions.test.ts"]
     }
   }
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb } from "@/lib/db/client";
 import { formatMelbourne } from "@/lib/health/format";
+import { userPreferences } from "@/lib/preferences/read";
 import { ACK_TEXT } from "@/lib/users/ack";
 import {
   DEFAULT_MARKET,
@@ -38,7 +39,8 @@ function target(a: AuditRow, names: Map<number, string>): string {
 }
 
 export default async function UsersPage() {
-  await requireUser("admin", "/users");
+  const user = await requireUser("admin", "/users");
+  const tf = (await userPreferences(user.id)).time_format;
   const db = authDb();
   const [users, ack, events] = await Promise.all([
     listUsers(db),
@@ -65,7 +67,7 @@ export default async function UsersPage() {
         </h2>
         {ack ? (
           <p>
-            Recorded {formatMelbourne(ack.acknowledgedAt)} by {who(ack.acknowledgedBy, names)}{" "}
+            Recorded {formatMelbourne(ack.acknowledgedAt, tf)} by {who(ack.acknowledgedBy, names)}{" "}
             (market {ack.market}, text {ack.textVersion}).
           </p>
         ) : (
@@ -134,7 +136,7 @@ export default async function UsersPage() {
                   )}
                 </td>
                 <td className="py-2 pr-4">{LABEL(u.status)}</td>
-                <td className="py-2 pr-4">{formatMelbourne(u.updatedAt)}</td>
+                <td className="py-2 pr-4">{formatMelbourne(u.updatedAt, tf)}</td>
                 <td className="py-2">
                   {u.status === "revoked" ? null : (
                     <div className="flex flex-wrap items-center gap-4">
@@ -228,7 +230,7 @@ export default async function UsersPage() {
           <tbody>
             {events.map((a) => (
               <tr key={a.id} className="border-t border-black/10 align-top">
-                <td className="py-2 pr-4 whitespace-nowrap">{formatMelbourne(a.at)}</td>
+                <td className="py-2 pr-4 whitespace-nowrap">{formatMelbourne(a.at, tf)}</td>
                 <td className="py-2 pr-4 font-mono text-xs">{a.action}</td>
                 <td className="py-2 pr-4">{who(a.actorUserId, names)}</td>
                 <td className="py-2 pr-4">{target(a, names)}</td>

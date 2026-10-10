@@ -4,6 +4,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
 import { formatMelbourne } from "@/lib/health/format";
+import { userPreferences } from "@/lib/preferences/read";
 import {
   getMeters,
   usageEnvironment,
@@ -26,7 +27,8 @@ const nf = new Intl.NumberFormat("en-AU", { maximumFractionDigits: 2 });
 const amount = (v: number | null, unit: string) => (v === null ? "n/a" : `${nf.format(v)} ${unit}`);
 
 export default async function UsagePage() {
-  await requireUser("admin", "/usage");
+  const user = await requireUser("admin", "/usage");
+  const tf = (await userPreferences(user.id)).time_format;
   const now = new Date();
   let meters: Meter[] | null = null;
   try {
@@ -41,8 +43,8 @@ export default async function UsagePage() {
       <header className="flex flex-col gap-2">
         <h1 className="text-3xl font-semibold tracking-tight">Usage</h1>
         <p className="text-sm text-muted">
-          As of {formatMelbourne(now.toISOString())}. Quota periods are UTC calendar months (days
-          for LLM tokens). Times are shown in Australia/Melbourne.
+          As of {formatMelbourne(now.toISOString(), tf)}. Quota periods are UTC calendar months
+          (days for LLM tokens). Times are shown in Australia/Melbourne.
         </p>
         <Link href="/" className="text-sm text-accent underline">
           Home
