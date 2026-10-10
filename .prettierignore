@@ -1,0 +1,13 @@
+node_modules
+.next
+out
+coverage
+dist
+.wrangler
+package-lock.json
+spec
+docs
+.github/workflows/m0-failure-email-test.yml
+.github/workflows/smoke-test.yml
+scripts/smoke
+vercel.json

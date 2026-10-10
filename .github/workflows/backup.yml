@@ -1,0 +1,85 @@
+# Nightly encrypted backup + restore drill, M1 (PLT-022, PLT-022a, PLT-022b, DAT-143, TST-108).
+# workflow_dispatch ONLY: from M2 the Worker's per-minute cron (the master clock, PLT-071)
+# dispatches this workflow with `ref: release`. Until the Worker exists, run it by hand from the
+# Actions tab on the release branch. It has no `schedule:` trigger (PLT-015).
+# Secrets are referenced ONLY in `env:` blocks, never inside `run:` scripts.
+# SEC-108 c: the production job checks out the latest approved deploy-production commit, not the
+# release head. `deployment: false` gives the job the environment's secrets without creating a
+# deployment record, so a backup run never counts as an approved deploy (D-023, SEC-108 c).
+# SEC-108 f / PLT-022b: the backup PRIVATE key is never stored on GitHub; this workflow only ever
+# sees the public key. Backups are age-encrypted before they leave the runner.
+name: Nightly backup
+
+on: workflow_dispatch
+
+permissions: {}
+
+jobs:
+  production:
+    if: github.ref == 'refs/heads/release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      deployments: read
+    # PLT-076: one run per day at a time, never cancelling one in progress. The date-keyed
+    # "already succeeded" check is made by the script (run record `backup:<local date>`).
+    concurrency:
+      group: backup
+      cancel-in-progress: false
+    environment:
+      name: production
+      deployment: false
+    steps:
+      # SEC-108 c: run the commit of the latest APPROVED deploy-production deployment, not the
+      # release head. These two steps run only the tiny reviewed script, with github.token
+      # alone (contents/deployments: read), never an environment secret.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ci-tools
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - name: Find approved commit
+        id: approved
+        run: node ci-tools/scripts/ci/approved-commit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.approved.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - name: Run nightly backup
+        run: node scripts/backup/run.mjs
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+          BACKUP_PUBLIC_KEY: ${{ secrets.BACKUP_PUBLIC_KEY }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL_PROD }}
+          ACTIONS_HMAC_SECRET: ${{ secrets.ACTIONS_HMAC_SECRET_PROD }}
+          DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN_PROD }}
+          DATA_REPO: ${{ github.repository }}-data
+          COMMIT_SHA: ${{ steps.approved.outputs.sha }}
+
+  # TST-108 (build phase M1-M7): a fresh throwaway key pair is generated inside the run, a small
+  # SYNTHETIC database pair is dumped, encrypted, decrypted and restored into fresh local files,
+  # and counts and checksums are compared. No environment, no secrets, no production data.
+  drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Restore drill (throwaway key, synthetic data)
+        run: node scripts/backup/drill.mjs
