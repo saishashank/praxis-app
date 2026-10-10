@@ -4,6 +4,13 @@ import type { Client } from "@libsql/client";
 import type { Role } from "@/lib/auth/permissions";
 import { latestPerJob, type RunStatus } from "@/lib/runs/runRecord";
 import { getMeters, usageEnvironment, worstMeter, type MeterLevel } from "@/lib/usage/meters";
+import { listOpenS1, type IncidentRow } from "@/lib/watchdog/incidents";
+import {
+  parseWatchdogDetails,
+  shortSha,
+  WATCHDOG_JOB,
+  type WatchdogStatus,
+} from "@/lib/watchdog/state";
 import { isStale, JOBS } from "./jobs";
 
 export const SELFCHECK_JOB = "credential-selfcheck-vercel";
@@ -27,9 +34,20 @@ export type SecretResult = { name: string; ok: boolean; pending: boolean; detail
 // Owner-only (absent for others, like the Usage page itself, ROL-102a).
 export type QuotaSummary = { level: MeterLevel; meter?: string; ratio?: number };
 
+// Production code approval (SEC-108 d). The state line is for every role; the short commit ids
+// and open S1 incidents are Owner-only (absent for others, UX-092, ROL-102a).
+export type WatchdogSummary = {
+  status: WatchdogStatus | "no data";
+  checkedAt: string | null;
+  approvedShort?: string | null; // Owner only
+  deployedShort?: string | null; // Owner only
+};
+
 export type HealthSummary = {
   jobs: JobSummary[];
   quota: QuotaSummary;
+  watchdog: WatchdogSummary;
+  openIncidents?: IncidentRow[] | null; // Owner only; null = could not be read
   secrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only
 };
 
@@ -96,8 +114,27 @@ export async function getHealthSummary(
     return s;
   });
 
-  const summary: HealthSummary = { jobs, quota: await getQuota(mainDb, now, owner, env) };
+  const wd = byJob.get(WATCHDOG_JOB);
+  const watchdog: WatchdogSummary = wd
+    ? { status: parseWatchdogDetails(wd.last.details).status, checkedAt: wd.last.endedAt }
+    : { status: "no data", checkedAt: null };
   if (owner) {
+    const p = parseWatchdogDetails(wd?.last.details);
+    watchdog.approvedShort = shortSha(p.approvedSha);
+    watchdog.deployedShort = shortSha(p.deployedSha);
+  }
+
+  const summary: HealthSummary = {
+    jobs,
+    quota: await getQuota(mainDb, now, owner, env),
+    watchdog,
+  };
+  if (owner) {
+    try {
+      summary.openIncidents = await listOpenS1(mainDb);
+    } catch {
+      summary.openIncidents = null; // incident trouble never hides job status
+    }
     const sc = byJob.get(SELFCHECK_JOB);
     summary.secrets = {
       lastVerifiedAt: sc?.last.endedAt ?? null,

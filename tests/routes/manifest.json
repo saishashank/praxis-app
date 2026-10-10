@@ -13,6 +13,9 @@
     "POST /api/internal/backup-export": {
       "tests": ["tests/backup/exportRoute.test.ts", "tests/backup/core.test.ts"]
     },
+    "GET /api/cron/watchdog": {
+      "tests": ["tests/watchdog/route.test.ts", "tests/watchdog/approvedCommit.test.ts"]
+    },
     "POST /api/test-identity/login": {
       "tests": ["tests/auth/testIdentity.test.ts"]
     },

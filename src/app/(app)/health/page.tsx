@@ -10,6 +10,7 @@ import {
   type HealthSummary,
   type JobState,
   type QuotaSummary,
+  type WatchdogSummary,
 } from "@/lib/health/summary";
 import type { MeterLevel } from "@/lib/usage/meters";
 
@@ -37,6 +38,14 @@ const QUOTA_LABEL: Record<MeterLevel, string> = {
   alert: "ALERT",
   degrade: "DEGRADE",
   "no data": "NO DATA",
+};
+
+const WATCHDOG_LABEL: Record<WatchdogSummary["status"], string> = {
+  ok: "OK",
+  awaiting_first_approval: "Awaiting first approval",
+  mismatch: "MISMATCH — S1 incident",
+  unknown: "Unknown",
+  "no data": "Not checked yet",
 };
 
 function quotaText(q: QuotaSummary | undefined): string {
@@ -72,6 +81,46 @@ export default async function HealthPage() {
         <p role="status">Health data unavailable</p>
       ) : (
         <>
+          {summary.watchdog && (
+            <section aria-labelledby="approval-h" className="flex flex-col gap-3">
+              <h2 id="approval-h" className="text-xl font-semibold">
+                Production code approval
+              </h2>
+              <p role="status" className="text-sm">
+                <span className="rounded border px-2 py-0.5 font-mono text-xs">
+                  {WATCHDOG_LABEL[summary.watchdog.status]}
+                </span>
+                <span className="ml-2 text-text-muted">
+                  Last checked: {formatMelbourne(summary.watchdog.checkedAt, tf)}
+                </span>
+              </p>
+              {owner && summary.watchdog.status !== "no data" && (
+                <p className="text-sm text-text-muted">
+                  Approved commit: {summary.watchdog.approvedShort ?? "none"}. Deployed commit:{" "}
+                  {summary.watchdog.deployedShort ?? "unknown"}.
+                </p>
+              )}
+              {owner && summary.openIncidents !== undefined && (
+                <div className="text-sm">
+                  <h3 className="font-medium">Open S1 incidents</h3>
+                  {summary.openIncidents === null ? (
+                    <p className="text-text-muted">Incident list unavailable.</p>
+                  ) : summary.openIncidents.length === 0 ? (
+                    <p className="text-text-muted">None</p>
+                  ) : (
+                    <ul className="list-disc pl-5">
+                      {summary.openIncidents.map((i) => (
+                        <li key={i.id}>
+                          {i.kind.replace(/_/g, " ")} — opened {formatMelbourne(i.at, tf)}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+
           <section aria-labelledby="jobs-h" className="flex flex-col gap-3">
             <h2 id="jobs-h" className="text-xl font-semibold">
               Jobs

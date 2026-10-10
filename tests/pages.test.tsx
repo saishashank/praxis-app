@@ -239,6 +239,84 @@ describe("health page", () => {
     expect(screen.getByText("No self-check has been recorded yet.")).toBeInTheDocument();
   });
 
+  describe("production code approval line (SEC-108 d)", () => {
+    const A7 = "aaaaaaa";
+    const lines: [string, string][] = [
+      ["ok", "OK"],
+      ["awaiting_first_approval", "Awaiting first approval"],
+      ["mismatch", "MISMATCH — S1 incident"],
+      ["unknown", "Unknown"],
+      ["no data", "Not checked yet"],
+    ];
+    it.each(lines)(
+      "viewer sees the state line for %s but no commit ids or incidents",
+      async (status, label) => {
+        summaryMock.mockResolvedValueOnce({
+          jobs,
+          watchdog: { status, checkedAt: "2026-10-10T12:00:00.000Z" },
+        });
+        await as("viewer");
+        render(await HealthPage());
+        expect(
+          screen.getByRole("heading", { name: "Production code approval" }),
+        ).toBeInTheDocument();
+        expect(screen.getByText(label)).toBeInTheDocument();
+        expect(screen.queryByText(/Approved commit/)).toBeNull();
+        expect(screen.queryByText("Open S1 incidents")).toBeNull();
+      },
+    );
+
+    it("owner sees the two short ids and the open S1 list", async () => {
+      summaryMock.mockResolvedValueOnce({
+        jobs,
+        watchdog: {
+          status: "mismatch",
+          checkedAt: "2026-10-10T12:00:00.000Z",
+          approvedShort: A7,
+          deployedShort: "bbbbbbb",
+        },
+        openIncidents: [
+          {
+            id: 1,
+            at: "2026-10-10T12:00:00.000Z",
+            severity: "S1",
+            kind: "unapproved_production_code",
+          },
+        ],
+      });
+      await as("owner");
+      render(await HealthPage());
+      expect(screen.getByText("MISMATCH — S1 incident")).toBeInTheDocument();
+      expect(
+        screen.getByText(/Approved commit: aaaaaaa\. Deployed commit:\s+bbbbbbb\./),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Open S1 incidents")).toBeInTheDocument();
+      expect(
+        screen.getByText(/unapproved production code — opened 2026-10-10 23:00 AEDT/),
+      ).toBeInTheDocument();
+    });
+
+    it("owner: no incidents, and an unreadable incident list", async () => {
+      summaryMock.mockResolvedValueOnce({
+        jobs,
+        watchdog: { status: "ok", checkedAt: null, approvedShort: A7, deployedShort: A7 },
+        openIncidents: [],
+      });
+      await as("owner");
+      render(await HealthPage());
+      expect(screen.getByText("None", { selector: "p" })).toBeInTheDocument();
+      cleanup();
+      summaryMock.mockResolvedValueOnce({
+        jobs,
+        watchdog: { status: "ok", checkedAt: null },
+        openIncidents: null,
+      });
+      await as("owner");
+      render(await HealthPage());
+      expect(screen.getByText("Incident list unavailable.")).toBeInTheDocument();
+    });
+  });
+
   it("shows a neutral message when health data cannot be read", async () => {
     summaryMock.mockRejectedValueOnce(new Error("libsql://secret-host failed"));
     await as("owner");

@@ -6,6 +6,7 @@ import { formatMelbourne } from "@/lib/health/format";
 import { recordSelfCheckRun } from "@/lib/health/recordSelfCheck";
 import { getHealthSummary } from "@/lib/health/summary";
 import { finishRun, startRun } from "@/lib/runs/runRecord";
+import { openS1Once } from "@/lib/watchdog/incidents";
 import type { SelfCheckReport } from "@/lib/selfcheck/checks";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
 
@@ -53,6 +54,7 @@ describe("getHealthSummary", () => {
     expect(s.jobs.map((j) => j.job)).toEqual([
       "credential-selfcheck-vercel",
       "worker-heartbeat",
+      "watchdog-approved-commit",
       "nightly-backup",
     ]);
     for (const j of s.jobs) {
@@ -198,5 +200,65 @@ describe("formatMelbourne", () => {
   it("handles null and invalid", () => {
     expect(formatMelbourne(null)).toBe("Never");
     expect(formatMelbourne("nope")).toBe("Unknown");
+  });
+});
+
+describe("watchdog state (SEC-108 d, UX-092)", () => {
+  const A = "a".repeat(40);
+  const B = "b".repeat(40);
+  const wd = (status: string, extra: Record<string, unknown> = {}) =>
+    run("watchdog-approved-commit", status === "ok" ? "success" : "failed", 10, {
+      details: { status, approvedSha: A, deployedSha: B, ...extra },
+    });
+
+  it("no run yet: status no data for every role", async () => {
+    for (const role of ["viewer", "owner"] as const) {
+      const s = await getHealthSummary(db, NOW, role);
+      expect(s.watchdog).toMatchObject({ status: "no data", checkedAt: null });
+    }
+  });
+
+  it.each(["ok", "awaiting_first_approval", "mismatch", "unknown"])(
+    "%s comes from the latest run; viewers get no commit ids or incidents",
+    async (status) => {
+      await wd(status);
+      const v = await getHealthSummary(db, NOW, "viewer");
+      expect(v.watchdog.status).toBe(status);
+      expect(v.watchdog.checkedAt).toBe(at(10));
+      expect("approvedShort" in v.watchdog).toBe(false);
+      expect("deployedShort" in v.watchdog).toBe(false);
+      expect("openIncidents" in v).toBe(false);
+    },
+  );
+
+  it("owner gets 7-character ids and the open S1 incidents", async () => {
+    await wd("mismatch");
+    await openS1Once(db, "unapproved_production_code", { x: 1 }, at(5));
+    const o = await getHealthSummary(db, NOW, "owner");
+    expect(o.watchdog).toMatchObject({ approvedShort: "aaaaaaa", deployedShort: "bbbbbbb" });
+    expect(o.openIncidents).toEqual([
+      { id: 1, at: at(5), severity: "S1", kind: "unapproved_production_code" },
+    ]);
+    await db.execute("UPDATE incident SET resolved_at = 'x'");
+    expect((await getHealthSummary(db, NOW, "owner")).openIncidents).toEqual([]);
+  });
+
+  it("garbage details become unknown and never leak a malformed id", async () => {
+    await run("watchdog-approved-commit", "failed", 10, {
+      details: { status: "weird", approvedSha: "<script>", deployedSha: 5 },
+    });
+    const o = await getHealthSummary(db, NOW, "owner");
+    expect(o.watchdog).toMatchObject({
+      status: "unknown",
+      approvedShort: null,
+      deployedShort: null,
+    });
+  });
+
+  it("an unreadable incident table does not hide the rest (owner list is null)", async () => {
+    await db.execute("DROP TABLE incident");
+    const o = await getHealthSummary(db, NOW, "owner");
+    expect(o.openIncidents).toBeNull();
+    expect(o.jobs.length).toBeGreaterThan(0);
   });
 });

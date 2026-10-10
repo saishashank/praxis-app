@@ -1,5 +1,7 @@
 // Known jobs for System Health (PLT-017, PLT-061). expectedIntervalSec = null means the job runs
 // on demand and is never flagged stale. A job is stale when now - last success > 2 x interval.
+import { WATCHDOG_JOB } from "@/lib/watchdog/state";
+
 export type JobDef = {
   job: string;
   label: string;
@@ -22,6 +24,12 @@ export const JOBS: readonly JobDef[] = [
     label: "Worker heartbeat",
     expectedIntervalSec: 60,
     noDataNote: "Not reporting yet (M2)",
+  },
+  {
+    job: WATCHDOG_JOB,
+    label: "Production code approval check",
+    expectedIntervalSec: 86_400,
+    noDataNote: "Production only; first run after the next production deploy",
   },
   {
     job: "nightly-backup",

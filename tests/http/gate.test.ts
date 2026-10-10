@@ -109,6 +109,7 @@ describe("authentication (PLT-031)", () => {
     "/api/internal/self-check",
     "/api/internal/maintenance",
     "/api/internal/backup-export",
+    "/api/cron/watchdog",
     "/api/test-identity/login",
   ])("public path %s passes without a session", async (p) => {
     const readClaims = vi.fn(async () => null);
@@ -118,7 +119,17 @@ describe("authentication (PLT-031)", () => {
   });
 
   it("everything else is protected", async () => {
-    for (const p of ["/", "/api", "/api/other", "/signinx", "/privacy/x", "/api/authx", "/admin"]) {
+    for (const p of [
+      "/",
+      "/api",
+      "/api/other",
+      "/signinx",
+      "/privacy/x",
+      "/api/authx",
+      "/admin",
+      "/api/cron/watchdog/x",
+      "/api/cron",
+    ]) {
       expect(isPublicPath(p)).toBe(false);
     }
     expect(isPublicPath("/api/auth")).toBe(true);
