@@ -53,6 +53,15 @@ export const JOBS: readonly JobDef[] = [
     noDataNote:
       "Not run yet (production, trading days at 17:30 Sydney once the Owner enables dispatch)",
   },
+  {
+    // M2 T9 (DAT-125, DAT-125a): runs on demand; the Worker slot is off until the Owner enables the
+    // backfill, and a paused_cap or empty plan still ends in a success record or none at all.
+    job: "backfill-history",
+    label: "History backfill (AU)",
+    expectedIntervalSec: null,
+    noDataNote:
+      "Not run yet (off until the Owner enables the backfill; capped at 2M writes a month)",
+  },
 ];
 
 export function isStale(

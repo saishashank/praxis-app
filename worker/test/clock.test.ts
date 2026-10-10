@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import backfillYml from "../../.github/workflows/backfill-history.yml?raw";
 import backupYml from "../../.github/workflows/backup.yml?raw";
 import ingestYml from "../../.github/workflows/ingest-batch1.yml?raw";
 import maintenanceYml from "../../.github/workflows/maintenance.yml?raw";
@@ -92,6 +93,7 @@ describe("slot table (docs/M2_design.md section 3)", () => {
 
   it("only workflows that exist today are enabled and allow-listed; later slots are off", () => {
     expect([...DISPATCHABLE_WORKFLOWS].sort()).toEqual([
+      "backfill-history.yml",
       "backup.yml",
       "ingest-batch1.yml",
       "maintenance.yml",
@@ -105,11 +107,20 @@ describe("slot table (docs/M2_design.md section 3)", () => {
       runner: "actions",
       workflow: "ingest-batch1.yml",
     });
-    for (const id of ["asx-poll", "pre-open", "decision-cutoff", "late-sweep", "marker-check"]) {
+    // T9: the backfill workflow exists and is allow-listed, but its slot stays off until the Owner
+    // enables the backfill (BLD-024, decision 13).
+    for (const id of [
+      "asx-poll",
+      "pre-open",
+      "decision-cutoff",
+      "late-sweep",
+      "marker-check",
+      "backfill-history",
+    ]) {
       expect(AU_SLOTS.find((s) => s.id === id)?.enabled).toBe(false);
     }
     // The allow-listed files exist and are dispatch-only.
-    for (const y of [backupYml, ingestYml, maintenanceYml]) {
+    for (const y of [backupYml, backfillYml, ingestYml, maintenanceYml]) {
       expect(y).toMatch(/^on: workflow_dispatch$/m);
       expect(y).not.toMatch(/^\s*schedule:/m);
     }
@@ -117,7 +128,8 @@ describe("slot table (docs/M2_design.md section 3)", () => {
 
   it("nightly slots run every day, ingest slots only on trading days", () => {
     for (const s of AU_SLOTS) {
-      if (s.id === "backup" || s.id === "maintenance") expect(s.tradingDaysOnly).toBe(false);
+      if (s.id === "backup" || s.id === "maintenance" || s.id === "backfill-history")
+        expect(s.tradingDaysOnly).toBe(false);
       else expect(s.tradingDaysOnly).toBe(true);
     }
   });

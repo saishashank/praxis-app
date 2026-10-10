@@ -58,6 +58,7 @@ describe("getHealthSummary", () => {
       "watchdog-approved-commit",
       "nightly-backup",
       "ingest-batch1",
+      "backfill-history",
     ]);
     for (const j of s.jobs) {
       expect(j).toMatchObject({ state: "no data", stale: false, lastRun: null });
