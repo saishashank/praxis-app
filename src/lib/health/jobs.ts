@@ -80,6 +80,15 @@ export const JOBS: readonly JobDef[] = [
       "Not run yet (production, trading days at 17:30 Sydney once the Owner enables dispatch)",
   },
   {
+    // M2 T11 (D-067): the Worker imports the ASX listed-companies file once per trading day at
+    // 07:30 Sydney. Same gap logic as ingest-batch1: stale only after 6 days without a success.
+    job: "universe-import",
+    label: "Instrument universe import (AU)",
+    expectedIntervalSec: 3 * 86_400,
+    noDataNote:
+      "Not run yet (production, trading days at 07:30 Sydney once ASX contact and the listed-companies source are accepted)",
+  },
+  {
     // M2 T9 (DAT-125, DAT-125a): runs on demand; the Worker slot is off until the Owner enables the
     // backfill, and a paused_cap or empty plan still ends in a success record or none at all.
     job: "backfill-history",

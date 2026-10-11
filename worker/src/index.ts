@@ -1,8 +1,9 @@
 import { runAsx, type AsxEnv } from "./asx/slots";
+import { runUniverse, type UniverseEnv } from "./asx/universe";
 import { runClock } from "./clock";
 import { runSelfCheck, type SelfCheckEnv } from "./selfcheck";
 
-export type Env = SelfCheckEnv & AsxEnv;
+export type Env = SelfCheckEnv & AsxEnv & UniverseEnv;
 
 export interface Heartbeat {
   kind: "heartbeat";
@@ -38,6 +39,16 @@ export default {
       });
     } catch {
       // runAsx already contains its errors.
+    }
+    // ASX listed-companies import (D-067): one trading-day slot at 07:30 Sydney; the same
+    // switches as the poll and the same rate token (priority 3). Never throws.
+    try {
+      await runUniverse(env, controller.scheduledTime, {
+        fetch: (i, init) => fetch(i, init),
+        nowMs: () => Date.now(),
+      });
+    } catch {
+      // runUniverse already contains its errors.
     }
     // Credential self-check (SEC-101): never throws; I/O waits only (PLT-070 CPU budget).
     await runSelfCheck(env, controller.scheduledTime);

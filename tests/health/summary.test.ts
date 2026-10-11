@@ -61,6 +61,7 @@ describe("getHealthSummary", () => {
       "heartbeat-evening",
       "nightly-backup",
       "ingest-batch1",
+      "universe-import",
       "backfill-history",
     ]);
     for (const j of s.jobs) {

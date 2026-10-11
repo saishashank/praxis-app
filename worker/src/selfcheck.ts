@@ -79,7 +79,7 @@ const result = (name: string, ok: boolean, detail: string): CheckResult => ({
 const timed = (f: Fetch, url: string, init: RequestInit = {}) =>
   f(url, { ...init, signal: AbortSignal.timeout(CHECK_TIMEOUT_MS) });
 
-function randomHex(bytes: number): string {
+export function randomHex(bytes: number): string {
   const b = crypto.getRandomValues(new Uint8Array(bytes));
   return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }

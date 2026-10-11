@@ -47,3 +47,24 @@ export function buildAsxRequest(userAgent: unknown, etag: string | null): AsxFet
     },
   };
 }
+
+// ---- listed-companies file (M2 T11, D-067) ----------------------------------------------------
+// TODO(fixtures) [VERIFY]: the file URL is unconfirmed; check it against a recorded real fetch
+// (private fixtures repo). The file is covered by the Owner's O-23 acceptance (DAT-120).
+export const ASX_LISTED_COMPANIES_URL =
+  "https://www.asx.com.au/asx/research/ASXListedCompanies.csv";
+
+/** Null when the User-Agent is missing or not identifying: no request is made then. */
+export function buildListedCompaniesRequest(userAgent: unknown): AsxFetch | null {
+  const ua = validUserAgent(userAgent);
+  if (ua === null) return null;
+  return {
+    url: ASX_LISTED_COMPANIES_URL,
+    init: {
+      method: "GET",
+      headers: { "User-Agent": ua, Accept: "text/csv, text/plain;q=0.5" },
+      redirect: "manual",
+      signal: AbortSignal.timeout(ASX_TIMEOUT_MS),
+    },
+  };
+}

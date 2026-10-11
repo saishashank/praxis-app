@@ -33,8 +33,9 @@ describe.each(["main", "auth"] as const)("migrations (%s)", (name) => {
     const ms = await loadMigrations(MIGRATIONS(name));
     await migrateUp(db, ms);
     const before = await schemaOf(db);
-    // main: 0005 only reseeds data (its down leaves the schema identical), so roll back 0004 too.
-    const n = name === "main" ? 2 : 1;
+    // main: 0005 only reseeds data and 0006 only adds columns (down: DROP COLUMN), so roll back
+    // down to 0004 to see a smaller schema.
+    const n = name === "main" ? 3 : 1;
     const down = await migrateDown(db, ms, n);
     expect(down).toEqual({ rolledBack: n, version: ms.length - n });
     expect((await schemaOf(db)).length).toBeLessThan(before.length);

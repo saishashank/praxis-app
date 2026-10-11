@@ -61,6 +61,7 @@ import type { Client, Transaction } from "@libsql/client";
 import { marketDate } from "@/lib/data/calendar";
 import { audit, NO_META, type RequestMeta } from "@/lib/auth/audit";
 import type { AuthEnv } from "@/lib/auth/env";
+import { UNIVERSE_SOURCE } from "@/lib/data/schema";
 import {
   CONFIG_KEYS,
   MODE_MARKETS,
@@ -366,6 +367,15 @@ export async function setSourceAccepted(p: SourceInput): Promise<ControlResult> 
               "WHERE source = ? AND status IN ('pending', 'disabled')",
             args: [source],
           });
+          // D-067: the ASX listed-companies file is covered by the same O-23 acceptance.
+          if (source === ASX_SOURCE_ID) {
+            await tx.execute({
+              sql:
+                "UPDATE source_register SET status = 'enabled' " +
+                "WHERE source = ? AND status IN ('pending', 'disabled')",
+              args: [UNIVERSE_SOURCE],
+            });
+          }
           // An Owner-set `off` is lifted; a `tripped` source stays tripped until it is reset.
           await tx.execute({
             sql:
@@ -385,7 +395,13 @@ export async function setSourceAccepted(p: SourceInput): Promise<ControlResult> 
             "tripped_by = NULL WHERE source = ? AND mode != 'off'",
           args: [now, source],
         });
-        if (source === ASX_SOURCE_ID) await writeSwitch(tx, ASX_ENABLED_KEY, false, now);
+        if (source === ASX_SOURCE_ID) {
+          await tx.execute({
+            sql: "UPDATE source_register SET status = 'disabled' WHERE source = ? AND status != 'disabled'",
+            args: [UNIVERSE_SOURCE],
+          });
+          await writeSwitch(tx, ASX_ENABLED_KEY, false, now);
+        }
       },
     });
   } catch {

@@ -10,6 +10,9 @@
     "POST /api/internal/worker-report": {
       "tests": ["tests/workerReport/route.test.ts", "tests/security/hmac.test.ts"]
     },
+    "POST /api/internal/universe-import": {
+      "tests": ["tests/universe/route.test.ts", "tests/security/hmac.test.ts"]
+    },
     "POST /api/internal/maintenance": {
       "tests": ["tests/maintenance/route.test.ts", "tests/maintenance/retention.test.ts"]
     },

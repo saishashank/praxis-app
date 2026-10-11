@@ -590,6 +590,28 @@ describe("c. source risk acceptance (O-23 / O-26)", () => {
   });
 });
 
+describe("c2. the listed-companies source follows O-23 (D-067)", () => {
+  it("accepting O-23 enables asx_listed_companies too; disabling O-23 disables it; Yahoo never touches it", async () => {
+    expect(await reg("asx_listed_companies")).toBe("pending");
+    await accept("yahoo_eod");
+    expect(await reg("asx_listed_companies")).toBe("pending");
+    await accept("asx_announcements");
+    expect(await reg("asx_announcements")).toBe("enabled");
+    expect(await reg("asx_listed_companies")).toBe("enabled");
+    await setSourceAccepted(base({ source: "asx_announcements", accept: false }) as never);
+    expect(await reg("asx_announcements")).toBe("disabled");
+    expect(await reg("asx_listed_companies")).toBe("disabled");
+    await accept("asx_announcements");
+    expect(await reg("asx_listed_companies")).toBe("enabled");
+    // Both changes are logged by the register's history trigger.
+    expect(
+      await count(
+        "SELECT COUNT(*) AS n FROM source_register_history WHERE source = 'asx_listed_companies'",
+      ),
+    ).toBe(4); // insert (0006), enabled, disabled, enabled
+  });
+});
+
 describe("d. market mode (source of truth: market.mode; config value is the history)", () => {
   it("full is refused (not available until M3) with no audit; bad input is invalid", async () => {
     expect(await setMarketMode(base({ market: "AU", mode: "full" }) as never)).toEqual({

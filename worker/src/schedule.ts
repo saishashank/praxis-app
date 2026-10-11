@@ -71,6 +71,20 @@ export const AU_SLOTS: readonly Slot[] = [
     note: "Pre-open re-check, DAT-122 slot 2; stub in M2 (Arena disabled)",
   }),
   slot({
+    id: "universe",
+    time: "07:30",
+    runner: "worker",
+    workflow: null,
+    tradingDaysOnly: true,
+    marketBound: true,
+    priority: 3,
+    catchUpMin: 0,
+    enabled: false,
+    note:
+      "ASX listed-companies file, DAT-122 priority 3 (T11, D-067): once per trading day, " +
+      "even minute, never within 65 s of a poll (polls 07:28 and 07:32)",
+  }),
+  slot({
     id: "ingest-batch1",
     time: "17:30",
     runner: "actions",

@@ -6,6 +6,7 @@ import m2 from "../../db/migrations/main/0002_run_record_month.sql?raw";
 import m3 from "../../db/migrations/main/0003_incident.sql?raw";
 import m4 from "../../db/migrations/main/0004_au_data.sql?raw";
 import m5 from "../../db/migrations/main/0005_au_calendar_seed.sql?raw";
+import m6 from "../../db/migrations/main/0006_universe_import.sql?raw";
 
 export const TOKEN = "ghp_TOPSECRET_dispatch_value";
 export const TURSO_TOKEN = "turso-TOPSECRET-token";
@@ -13,7 +14,7 @@ export const TURSO_URL = "libsql://praxis-main-secret-host.turso.io";
 
 export function makeDb(): DatabaseSync {
   const db = new DatabaseSync(":memory:");
-  for (const m of [m1, m2, m3, m4, m5]) {
+  for (const m of [m1, m2, m3, m4, m5, m6]) {
     db.exec(m.split("-- +down")[0].replace("-- +up", ""));
   }
   return db;

@@ -45,6 +45,8 @@ export const AU_COLUMNS = {
     "delist_reason",
     "last_price",
     "last_price_d",
+    "industry",
+    "missing_count",
   ],
   universe_snapshot: ["market", "d", "code", "status", "tier", "mcap_est", "adv", "halted"],
   price_bar: [
@@ -135,6 +137,11 @@ export const AU_COLUMNS = {
 /** The AU source keys seeded into source_register / source_status. */
 export const AU_SOURCES = ["asx_announcements", "yahoo_eod", "rba", "abs", "asic_short"] as const;
 export type AuSource = (typeof AU_SOURCES)[number];
+/**
+ * The ASX listed-companies file (D-067): a register row only (migration 0006), covered by the ASX
+ * announcements entry O-23. It has no source_status row; the rate token uses `asx_announcements`.
+ */
+export const UNIVERSE_SOURCE = "asx_listed_companies";
 
 export type MarketMode = "off" | "data_only" | "full";
 export type CalendarKind = "session" | "holiday" | "early_close";
@@ -174,6 +181,10 @@ export type InstrumentRow = {
   delist_reason: string | null;
   last_price: number | null;
   last_price_d: string | null;
+  /** GICS industry group from the listed-companies file (migration 0006). */
+  industry: string | null;
+  /** Consecutive successful imports in which an active code was absent (migration 0006). */
+  missing_count: number;
 };
 
 export type UniverseSnapshotRow = {
