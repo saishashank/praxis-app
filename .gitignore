@@ -12,3 +12,6 @@ next-env.d.ts
 .DS_Store
 playwright-report
 test-results
+
+# Real recorded fixtures (private repo, checked out by CI job "fixtures"; SEC-110)
+/fixtures/

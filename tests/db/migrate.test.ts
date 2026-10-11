@@ -28,13 +28,16 @@ describe.each(["main", "auth"] as const)("migrations (%s)", (name) => {
     expect(String(rows.rows[0].checksum)).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("down(1) then up gives the same schema", async () => {
+  it("down then up gives the same schema", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
     const ms = await loadMigrations(MIGRATIONS(name));
     await migrateUp(db, ms);
     const before = await schemaOf(db);
-    const down = await migrateDown(db, ms, 1);
-    expect(down).toEqual({ rolledBack: 1, version: ms.length - 1 });
+    // main: 0005 only reseeds data and 0006 only adds columns (down: DROP COLUMN), so roll back
+    // down to 0004 to see a smaller schema.
+    const n = name === "main" ? 3 : 1;
+    const down = await migrateDown(db, ms, n);
+    expect(down).toEqual({ rolledBack: n, version: ms.length - n });
     expect((await schemaOf(db)).length).toBeLessThan(before.length);
     await migrateUp(db, ms);
     expect(await schemaOf(db)).toEqual(before);

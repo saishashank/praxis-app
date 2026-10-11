@@ -1,0 +1,7 @@
+{
+  "status": 403,
+  "headers": {
+    "content-type": "text/html"
+  },
+  "body": "<html>synthetic forbidden</html>"
+}

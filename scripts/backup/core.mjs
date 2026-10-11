@@ -61,6 +61,15 @@ export const FOREVER_TABLES = Object.freeze([
   "trading_calendar",
   "source_register",
   "audit_event",
+  // M2 AU data layer (migration 0004): forever per design section 2. No new table is ephemeral:
+  // asx_rate_token, worker_state, ingest_cursor and backfill_job are small state that a restore
+  // needs (the token row must exist for the compare-and-set).
+  "market",
+  "instrument",
+  "corporate_action_event",
+  "source_register_history",
+  "quality_score",
+  "completion_marker",
 ]);
 
 const MAX_PLAINTEXT_BYTES = 2 ** 30; // gunzip output cap (decompression-bomb guard)

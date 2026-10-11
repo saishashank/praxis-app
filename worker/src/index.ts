@@ -1,6 +1,9 @@
-export interface Env {
-  PRAXIS_ENV: string;
-}
+import { runAsx, type AsxEnv } from "./asx/slots";
+import { runUniverse, type UniverseEnv } from "./asx/universe";
+import { runClock } from "./clock";
+import { runSelfCheck, type SelfCheckEnv } from "./selfcheck";
+
+export type Env = SelfCheckEnv & AsxEnv & UniverseEnv;
 
 export interface Heartbeat {
   kind: "heartbeat";
@@ -18,5 +21,36 @@ export default {
   },
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     console.log(JSON.stringify(heartbeat(controller.scheduledTime, env.PRAXIS_ENV)));
+    // Master clock (PLT-071): dispatches due workflows. Never throws; no work on idle minutes.
+    try {
+      await runClock(env, controller.scheduledTime, {
+        fetch: (i, init) => fetch(i, init),
+        nowMs: () => Date.now(),
+      });
+    } catch {
+      // runClock already contains its errors; nothing here may disturb the self-check.
+    }
+    // ASX poll (DAT-122): zero database work unless ASX_LIVE is on, a poll slot is due and the
+    // environment is production; the token and kill switch decide the rest. Never throws.
+    try {
+      await runAsx(env, controller.scheduledTime, {
+        fetch: (i, init) => fetch(i, init),
+        nowMs: () => Date.now(),
+      });
+    } catch {
+      // runAsx already contains its errors.
+    }
+    // ASX listed-companies import (D-067): one trading-day slot at 07:30 Sydney; the same
+    // switches as the poll and the same rate token (priority 3). Never throws.
+    try {
+      await runUniverse(env, controller.scheduledTime, {
+        fetch: (i, init) => fetch(i, init),
+        nowMs: () => Date.now(),
+      });
+    } catch {
+      // runUniverse already contains its errors.
+    }
+    // Credential self-check (SEC-101): never throws; I/O waits only (PLT-070 CPU budget).
+    await runSelfCheck(env, controller.scheduledTime);
   },
 } satisfies ExportedHandler<Env>;

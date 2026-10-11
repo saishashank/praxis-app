@@ -7,6 +7,12 @@
     "POST /api/internal/self-check": {
       "tests": ["tests/selfcheck/route.test.ts", "tests/security/hmac.test.ts"]
     },
+    "POST /api/internal/worker-report": {
+      "tests": ["tests/workerReport/route.test.ts", "tests/security/hmac.test.ts"]
+    },
+    "POST /api/internal/universe-import": {
+      "tests": ["tests/universe/route.test.ts", "tests/security/hmac.test.ts"]
+    },
     "POST /api/internal/maintenance": {
       "tests": ["tests/maintenance/route.test.ts", "tests/maintenance/retention.test.ts"]
     },
@@ -15,6 +21,12 @@
     },
     "GET /api/cron/watchdog": {
       "tests": ["tests/watchdog/route.test.ts", "tests/watchdog/approvedCommit.test.ts"]
+    },
+    "GET /api/cron/heartbeat-morning": {
+      "tests": ["tests/heartbeat/route.test.ts", "tests/heartbeat/checks.test.ts"]
+    },
+    "GET /api/cron/heartbeat-evening": {
+      "tests": ["tests/heartbeat/route.test.ts", "tests/heartbeat/checks.test.ts"]
     },
     "POST /api/test-identity/login": {
       "tests": ["tests/auth/testIdentity.test.ts"]
@@ -47,6 +59,30 @@
     },
     "action src/app/(app)/users/actions.ts#signOutEverywhereAction": {
       "tests": ["tests/users/actions.test.ts"]
+    },
+    "action src/app/(app)/health/actions.ts#confirmCalendarAction": {
+      "tests": ["tests/data/calendarConfirm.test.ts"]
+    },
+    "action src/app/(app)/health/actions.ts#setDispatchEnabledAction": {
+      "tests": ["tests/data/controls.test.ts"]
+    },
+    "action src/app/(app)/health/actions.ts#setAsxEnabledAction": {
+      "tests": ["tests/data/controls.test.ts"]
+    },
+    "action src/app/(app)/health/actions.ts#setSourceAcceptedAction": {
+      "tests": ["tests/data/controls.test.ts"]
+    },
+    "action src/app/(app)/health/actions.ts#setMarketModeAction": {
+      "tests": ["tests/data/controls.test.ts"]
+    },
+    "action src/app/(app)/health/actions.ts#resetAsxTripAction": {
+      "tests": ["tests/data/controls.test.ts"]
+    },
+    "action src/app/(app)/review/actions.ts#confirmCorporateActionAction": {
+      "tests": ["tests/corporateActions/admin.test.ts"]
+    },
+    "action src/app/(app)/review/actions.ts#rejectCorporateActionAction": {
+      "tests": ["tests/corporateActions/admin.test.ts"]
     },
     "action src/app/(app)/config/actions.ts#updateConfigAction": {
       "tests": ["tests/config/actions.test.ts"]

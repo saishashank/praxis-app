@@ -50,6 +50,8 @@ describe("config store", () => {
     expect(d("turso_staging_share")).toBe(0.15);
     expect(d("actions_minutes_soft_ceiling")).toBe(3000);
     expect(d("llm_daily_budget_total")).toBe(150_000);
+    expect(d("yahoo_chunk_size")).toBe(100);
+    expect(d("yahoo_min_gap_s")).toBe(5);
     expect(isConfigKey("nope")).toBe(false);
     expect(isConfigKey("toString")).toBe(false);
   });
@@ -88,6 +90,67 @@ describe("config store", () => {
     await expect(set("session_lifetime_days", 7, "bad scope")).rejects.toThrow(/scope/);
     const c = await db.execute("SELECT count(*) AS c FROM config_version");
     expect(Number(c.rows[0].c)).toBe(1);
+  });
+
+  it("bounds the Yahoo throttle keys (decision 8, D-057)", async () => {
+    await expect(set("yahoo_chunk_size", 9)).rejects.toThrow(ConfigError);
+    await expect(set("yahoo_chunk_size", 501)).rejects.toThrow(ConfigError);
+    await expect(set("yahoo_chunk_size", 10.5)).rejects.toThrow(ConfigError);
+    await expect(set("yahoo_min_gap_s", 0)).rejects.toThrow(ConfigError);
+    await expect(set("yahoo_min_gap_s", 61)).rejects.toThrow(ConfigError);
+    await expect(set("yahoo_chunk_size", 500)).resolves.toMatchObject({ after: 500 });
+    await expect(set("yahoo_min_gap_s", 1)).resolves.toMatchObject({ after: 1 });
+    expect(CONFIG_KEYS.yahoo_chunk_size.editable).toBe("O");
+    expect(CONFIG_KEYS.yahoo_min_gap_s.editable).toBe("O");
+  });
+
+  it("data-quality keys: ch.15 defaults and bounds (DAT-002, DAT-200, DAT-210, decision 5)", async () => {
+    expect(CONFIG_KEYS.refetch_diff_flag.default).toBe(0.1);
+    expect(CONFIG_KEYS.suspect_move.default).toBe(40);
+    expect(CONFIG_KEYS.u1_quality_gate.default).toBe(95);
+    expect(CONFIG_KEYS.retention_flag_days.default).toBe(180);
+    expect(await getConfig(db, "u1_quality_gate")).toBe(95);
+    for (const k of [
+      "refetch_diff_flag",
+      "suspect_move",
+      "u1_quality_gate",
+      "retention_flag_days",
+    ]) {
+      expect(CONFIG_KEYS[k as keyof typeof CONFIG_KEYS].editable).toBe("O");
+    }
+    await expect(set("refetch_diff_flag", 0.009)).rejects.toThrow(ConfigError);
+    await expect(set("refetch_diff_flag", 5.1)).rejects.toThrow(ConfigError);
+    await expect(set("refetch_diff_flag", "0.1")).rejects.toThrow(ConfigError);
+    await expect(set("refetch_diff_flag", 0.3)).resolves.toMatchObject({ after: 0.3 });
+    await expect(set("suspect_move", 9.9)).rejects.toThrow(ConfigError);
+    await expect(set("suspect_move", 91)).rejects.toThrow(ConfigError);
+    await expect(set("suspect_move", 60)).resolves.toMatchObject({ after: 60 });
+    await expect(set("u1_quality_gate", 49)).rejects.toThrow(ConfigError);
+    await expect(set("u1_quality_gate", 100.5)).rejects.toThrow(ConfigError);
+    await expect(set("u1_quality_gate", 90)).resolves.toMatchObject({ after: 90 });
+    await expect(set("retention_flag_days", 179)).rejects.toThrow(ConfigError);
+    await expect(set("retention_flag_days", 180.5)).rejects.toThrow(ConfigError);
+    await expect(set("retention_flag_days", 365)).resolves.toMatchObject({ after: 365 });
+  });
+
+  it("corporate action keys: DAT-221 gaps, defaults and bounds (M2 T8)", async () => {
+    expect(CONFIG_KEYS.corporate_action_auto_apply_sessions.default).toBe(5);
+    expect(CONFIG_KEYS.corporate_action_price_tolerance.default).toBe(10);
+    expect(CONFIG_KEYS.corporate_action_auto_apply_sessions.ref).toBe("DAT-221");
+    expect(CONFIG_KEYS.corporate_action_price_tolerance.ref).toBe("DAT-221");
+    expect(CONFIG_KEYS.corporate_action_auto_apply_sessions.editable).toBe("O");
+    expect(CONFIG_KEYS.corporate_action_price_tolerance.editable).toBe("O");
+    expect(await getConfig(db, "corporate_action_auto_apply_sessions")).toBe(5);
+    await expect(set("corporate_action_auto_apply_sessions", 0)).rejects.toThrow(ConfigError);
+    await expect(set("corporate_action_auto_apply_sessions", 61)).rejects.toThrow(ConfigError);
+    await expect(set("corporate_action_auto_apply_sessions", 2.5)).rejects.toThrow(ConfigError);
+    await expect(set("corporate_action_auto_apply_sessions", 3)).resolves.toMatchObject({
+      after: 3,
+    });
+    await expect(set("corporate_action_price_tolerance", 0.9)).rejects.toThrow(ConfigError);
+    await expect(set("corporate_action_price_tolerance", 51)).rejects.toThrow(ConfigError);
+    await expect(set("corporate_action_price_tolerance", "10")).rejects.toThrow(ConfigError);
+    await expect(set("corporate_action_price_tolerance", 15)).resolves.toMatchObject({ after: 15 });
   });
 
   it("validates storage thresholds against each other", async () => {

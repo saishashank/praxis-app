@@ -107,9 +107,13 @@ describe("authentication (PLT-031)", () => {
     "/api/auth/callback/google",
     "/api/auth/csrf",
     "/api/internal/self-check",
+    "/api/internal/worker-report",
+    "/api/internal/universe-import",
     "/api/internal/maintenance",
     "/api/internal/backup-export",
     "/api/cron/watchdog",
+    "/api/cron/heartbeat-morning",
+    "/api/cron/heartbeat-evening",
     "/api/test-identity/login",
   ])("public path %s passes without a session", async (p) => {
     const readClaims = vi.fn(async () => null);
@@ -128,6 +132,9 @@ describe("authentication (PLT-031)", () => {
       "/api/authx",
       "/admin",
       "/api/cron/watchdog/x",
+      "/api/cron/heartbeat-morning/x",
+      "/api/cron/heartbeat-evening/x",
+      "/api/cron/heartbeat",
       "/api/cron",
     ]) {
       expect(isPublicPath(p)).toBe(false);
@@ -187,6 +194,24 @@ describe("same-origin check (SEC-011)", () => {
     const d = await mk({ readClaims: async () => null });
     const res = await gate(req("/api/internal/self-check", { method: "POST" }), d);
     expect(res.status).toBe(200);
+  });
+  it("the signed Worker report route is exempt from the origin check and needs no session", async () => {
+    const d = await mk({ readClaims: async () => null });
+    const res = await gate(req("/api/internal/worker-report", { method: "POST" }), d);
+    expect(res.status).toBe(200);
+    for (const p of ["/api/internal/worker-report/x", "/api/internal/worker-reportx"]) {
+      expect(isPublicPath(p)).toBe(false);
+      expect((await gate(req(p, { method: "POST" }), d)).status).toBe(403);
+    }
+  });
+  it("the signed universe import route is exempt from the origin check and needs no session", async () => {
+    const d = await mk({ readClaims: async () => null });
+    const res = await gate(req("/api/internal/universe-import", { method: "POST" }), d);
+    expect(res.status).toBe(200);
+    for (const p of ["/api/internal/universe-import/x", "/api/internal/universe-importx"]) {
+      expect(isPublicPath(p)).toBe(false);
+      expect((await gate(req(p, { method: "POST" }), d)).status).toBe(403);
+    }
   });
   it("the signed maintenance route is exempt from the origin check and needs no session", async () => {
     const d = await mk({ readClaims: async () => null });

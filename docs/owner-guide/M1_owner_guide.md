@@ -158,9 +158,16 @@ First, the workflow file must be on the default branch. Confirm that section D i
 
 These steps come after the bootstrap. The build agent tells you when to start each one. [BLD-010 rows 3, 11, 13, D-006, D-018]
 
-1. **Worker dispatch tokens (rows 3, D-006).** After the first Worker deploy, create two fine-grained GitHub tokens: one for production (b) and one for staging (b-s). Each has access to the code repository only, with Actions read and write, and an expiry of one year or less. Enter each one into the Cloudflare Worker secret for its environment, in the same step as you create it. [SEC-017 (b), (b-s)]
-2. **Worker to Vercel HMAC (D-018).** The build agent generates the value. You enter it into the Worker and the Vercel project of the same environment in one step. Do not keep a copy. [SEC-017 (c2)]
-3. **Worker Turso token.** Enter the Turso main-database token for each environment into the matching Cloudflare Worker secret. [SEC-017 (d)]
+1. **Worker key `WORKER_HMAC_SECRET` (D-018, D-055).** Generate one value per environment yourself in PowerShell (the build agent never sees it), and paste each straight into the two places named in step 4. Do not keep a copy. [SEC-017 (c2)]
+   `$b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); ($b | % { $_.ToString('x2') }) -join ''`
+2. **Worker dispatch tokens (row 3, D-006).** GitHub → your avatar → Settings → Developer settings → Fine-grained tokens → Generate new token. Make two: `praxis-worker-dispatch-prod` and `praxis-worker-dispatch-staging`. Each: resource owner `saishashank`, only repository `praxis-app`, permission **Actions: Read and write**, expiry one year or less. [SEC-017 (b), (b-s)]
+3. **Worker Turso tokens.** Turso → the **main** database of each environment → Create token (read and write). [SEC-017 (d)]
+   **Where everything goes (D-055):** Cloudflare → Workers & Pages → the Worker → Settings → Variables and Secrets → Add → type **Secret**:
+   | Worker | Secret names |
+   |---|---|
+   | `praxis-sentinel` (production) | `GITHUB_DISPATCH_TOKEN`, `WORKER_HMAC_SECRET`, `TURSO_MAIN_URL`, `TURSO_MAIN_TOKEN` |
+   | `praxis-sentinel-staging` | the same four names, staging values |
+   Also add `WORKER_HMAC_SECRET` to the Vercel project of the same environment (same value as its Worker), then re-run both deploys so Vercel picks it up.
 4. **2-step verification on Cloudflare and Turso.** Turn on two-step verification in each account. Check it under the account's security settings. [SEC-020]
 
 ---
@@ -301,6 +308,37 @@ Every use of the recovery address emails you and writes an audit event. Turning 
 7. Record the recovery event in Settings. [OPS-040a step 4]
 
 Note: the spec's OPS-040a step 2 names the recovery email variable. The decision log (D-034) uses the on/off flag above, and this guide follows D-034.
+
+---
+
+## M. M2 switches (data pipeline controls)
+
+These controls are on **System Health** (the "Data controls" section). Only you, the Owner, see the buttons. Every button first opens a short explanation and asks you to confirm. Nothing happens until you press Confirm, and every change is written to the audit log. [BLD-024, DAT-120, DAT-123, D-057]
+
+What each control does, in plain English:
+
+- **Production data-only mode.** The banner on that page means production runs the real nightly data pipeline and saves daily snapshots. The Arena, emails and the decision agents stay off until M3. [BLD-024]
+- **Accept risk (O-26, Yahoo prices) and Accept risk (O-23, ASX announcements).** These record your decision to accept the risk of automated personal-use access. You see the exact risk wording and must tick a box. Accepting does not start anything by itself. "Disable" reverses it, and disabling ASX also switches ASX contact off at once. [O-23, O-26, DAT-120]
+- **Listed-companies file (O-23).** Accepting O-23 also accepts the ASX list of listed companies, which the Worker fetches once on each trading morning (07:30 Sydney) to keep the list of tradable codes up to date. There is no separate button. A code is only marked delisted after it is missing from two daily files in a row, and a file that would remove more than a fifth of the list is rejected with an S2 incident. [O-23, DAT-120, DAT-130, D-067]
+- **Nightly dispatch.** When on, the Worker starts the nightly jobs (Batch 1 and the others) on production. It cannot be turned on until O-26 is accepted. Turn it off to stop new jobs starting. [PLT-071]
+- **ASX contact.** When on, the Worker may contact asx.com.au, slowly and one request at a time. It cannot be turned on until O-23 is accepted. Turn it off at any time to stop all ASX contact within a minute. [DAT-122, DAT-123]
+- **Reset ASX trip.** If the safety trip stopped ASX contact (too many blocks), this button appears. Press it only after you have checked why it tripped. It does not turn ASX contact on. [DAT-123]
+- **Market mode.** "Switch this market off" stops the pipeline and the Worker for AU. "Set data-only mode" starts them again. Full mode is not available until M3. [D-057 decision 3]
+
+The Worker also needs two settings that you make in Cloudflare, not on this page: the variable `ASX_LIVE` set to `1`, and `ASX_USER_AGENT` set to a short text that identifies you (for example the name of the app and your contact email). The page cannot see them, so it says "not known". [DAT-122]
+
+**Order to turn things on:**
+
+1. Accept the Yahoo risk (O-26).
+2. Accept the ASX risk (O-23).
+3. In Cloudflare, set `ASX_LIVE` to `1` and set `ASX_USER_AGENT` on the production Worker.
+4. Confirm the AU trading calendar on System Health (the Confirm button next to each year). [DAT-160]
+5. Turn nightly dispatch on.
+6. Turn ASX contact on.
+
+To stop everything quickly: turn ASX contact off and nightly dispatch off.
+
+**Heartbeat checks.** Twice a day Vercel checks that the Worker is alive and, in the evening, that Batch 1 left its completion marker. A missing sign of life opens an S2 incident, listed under "Open S2 incidents" on System Health. There is no email for it yet (M5). [PLT-074, AT-05]
 
 ---
 
