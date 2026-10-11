@@ -155,6 +155,7 @@ export function parseConfigInput(
   if (input === "number") {
     return NUM_RE.test(text) ? { value: Number(text) } : { error: "must be a number" };
   }
+  if (input === "text") return { value: text };
   if (input === "list") {
     const parts: unknown = text.startsWith("[") ? safeJson(text) : text.split(/[\s,]+/);
     const nums = Array.isArray(parts)

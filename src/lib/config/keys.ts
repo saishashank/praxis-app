@@ -1,3 +1,5 @@
+import { COST_PROFILE_CODES } from "@/lib/arena/costs";
+
 // Typed registry of configuration keys (spec ch.15). Values are stored as JSON in config_version.
 // Spec refs cite spec/15_configuration_reference.md line numbers.
 
@@ -28,6 +30,9 @@ function exactKeys(v: unknown, keys: string[]): v is Record<string, unknown> {
 }
 
 const never = async () => "this setting is fixed";
+
+const oneOf = (allowed: readonly string[]) => async (v: unknown) =>
+  typeof v === "string" && allowed.includes(v) ? null : `must be one of ${allowed.join(", ")}`;
 
 /** Markets that have a mode (MKT-102: IN and US do not exist before their build starts). */
 export const MODE_MARKETS = ["AU"] as const;
@@ -312,6 +317,35 @@ export const CONFIG_KEYS = {
     ref: "BLD-024",
     validate: async (v) => validateMarketModes(v),
   },
+  // Line 24: cost_profile_default P5 (enum P0-P5b), Edit O; ARN-031. Selects the brokerage profile
+  // of a new cohort; the P0-P5b tables themselves are versioned cost_profile rows, verified = 0
+  // until the Owner approves them (M3 design 4.4, D-070 note 8).
+  cost_profile_default: {
+    default: "P5",
+    unit: "profile",
+    editable: "O",
+    ref: "ARN-031",
+    validate: oneOf(COST_PROFILE_CODES),
+  },
+  // Line 12 (stall_floor, computed, not editable) with D-069 decision 4: the entry slippage inside
+  // the stall floor is max(10 bps, one price tick), so the 10 bps is a fixed key of its own.
+  stall_floor_bps: {
+    default: 10,
+    unit: "bps",
+    editable: "fixed",
+    ref: "ARN-032, spec 05 s5.1 l.12, D-069 decision 4",
+    validate: never,
+  },
+  // ARN-013 (spec 05 l.43): trades above 0.5% of ADV are "possibly un-tradeable". Ch.15 has no row
+  // (D-069 decision 12 adds this one). Percent of 20-session ADV, Owner-editable. The 0.1 to 5
+  // bounds are the architect's choice; the spec gives none.
+  untradeable_adv_pct: {
+    default: 0.5,
+    unit: "% of ADV",
+    editable: "O",
+    ref: "ARN-013, D-069 decision 12",
+    validate: numRange(0.1, 5),
+  },
   // NFR-030 / DAT-142: email and name are hashed 90 days after revocation. Fixed, not in ch.15.
   pii_hash_after_revocation_days: {
     default: 90,
@@ -331,7 +365,7 @@ export function isConfigKey(k: string): k is ConfigKey {
 // Display metadata for the Owner Configuration page (UX-116). Kept apart from CONFIG_KEYS so the
 // registry itself stays a pure description of values and validators.
 export type ConfigArea = "Retention" | "Quotas" | "Sessions & limits" | "Backups" | "Other";
-export type ConfigInput = "int" | "number" | "list" | "object";
+export type ConfigInput = "int" | "number" | "list" | "object" | "text";
 export type ConfigMeta = { label: string; area: ConfigArea; bounds: string; input: ConfigInput };
 
 export const CONFIG_AREAS: ConfigArea[] = [
@@ -510,5 +544,23 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
     area: "Other",
     bounds: "off or data_only per market; full from M3",
     input: "object",
+  },
+  cost_profile_default: {
+    label: "Brokerage cost profile for new cohorts",
+    area: "Other",
+    bounds: "one of P0, P1, P2, P3, P4, P5, P5b",
+    input: "text",
+  },
+  stall_floor_bps: {
+    label: "Entry slippage inside the stall floor (or one tick, if larger)",
+    area: "Other",
+    bounds: "fixed",
+    input: "int",
+  },
+  untradeable_adv_pct: {
+    label: 'Label a trade "possibly un-tradeable" above this share of daily volume',
+    area: "Other",
+    bounds: "percent of ADV, 0.1 to 5",
+    input: "number",
   },
 };

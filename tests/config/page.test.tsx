@@ -102,7 +102,8 @@ describe("configuration page", () => {
     expect(within(row).getByText("Fixed by the spec")).toBeInTheDocument();
     expect(within(row).queryByRole("button")).toBeNull();
     expect(within(row).queryByRole("textbox")).toBeNull();
-    expect(screen.getAllByText("Fixed by the spec")).toHaveLength(2);
+    // hmac_max_age_s, pii_hash_after_revocation_days, stall_floor_bps (M3 T2).
+    expect(screen.getAllByText("Fixed by the spec")).toHaveLength(3);
     // market_mode is not editable here: its only writer also updates market.mode (M2 T10).
     const mode = screen.getByRole("row", { name: /market_mode/ });
     expect(within(mode).getByText("Set on System Health (Data controls)")).toBeInTheDocument();
