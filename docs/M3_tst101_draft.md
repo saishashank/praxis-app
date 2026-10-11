@@ -344,7 +344,7 @@ Common to 022 to 025: buffer = 1% x NAV (ARN-024a). Pre-brokerage deployable = c
 | TST101-020 | A slipped fill that crosses into a coarser band is re-rounded on the new band's grid, adverse to the trader (design §2.4) → 105,000 micro. |
 | TST101-026 | Conservative settlement: sale proceeds are available from the start of the settlement session (T+2). |
 | TST101-030 | "After 20 sessions": the suspension haircut applies from session 21. |
-| TST101-034 | Exits at the open (CS) are processed before intraday exits (IS). |
+| TST101-034 | ARN-022 (spec/05:53): the earlier fill wins, so the CS exit at the open (9,790,000) is selected over the later intraday stop (9,490,000); the worse outcome applies only when intrabar ordering is ambiguous (both at the open). The table value was corrected from 9,490,000 to 9,790,000. |
 | TST101-036 | Sleeve slippage is inside the fill price, not an extra charge. |
 | TST101-037 | Brokerage beyond a fully consumed sleeve margin is charged to main cash (conservative) — [VERIFY]. |
 | TST101-043 | loss_to_recover per D-069 decision 5. |
