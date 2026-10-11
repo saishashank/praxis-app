@@ -221,6 +221,7 @@ export type TerminalKind = (typeof TERMINAL_KINDS)[number];
 export const COHORT_EVENT_KINDS = [
   "start",
   "terminal",
+  "liquidated",
   "restart",
   "shadow_continue",
   "lock",

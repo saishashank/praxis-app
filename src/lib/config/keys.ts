@@ -53,6 +53,12 @@ export function validateMarketModes(v: unknown): string | null {
   return null;
 }
 
+/**
+ * ARN-004 C1: the AU broad-index ETF code is an Owner [VERIFY] item (D-069 decision 20). This
+ * placeholder is not a ticker; while it is set, C1 places no orders (arena/cohort.ts c1EtfStatus).
+ */
+export const C1_ETF_PLACEHOLDER = "UNSET-C1-ETF";
+
 export const CONFIG_KEYS = {
   // Line 145: retention (logs 30 d, runs 180 d, news 400 d), Edit O, no bounds given; DAT-142.
   retention_logs_days: {
@@ -346,6 +352,44 @@ export const CONFIG_KEYS = {
     ref: "ARN-013, D-069 decision 12",
     validate: numRange(0.1, 5),
   },
+  // Spec 05 section 5.1 / ch.15 stall_sessions (3-10, O): stalled (a) needs the NAV below the stall
+  // floor for this many consecutive sessions. TST-101 is stated at the default 5.
+  stall_sessions: {
+    default: 5,
+    unit: "sessions",
+    editable: "O",
+    ref: "section 5.1 stalled (a), ch.15 stall_sessions",
+    validate: intRange(3, 10),
+  },
+  // Section 5.1 / ch.15 stall_parcel_rejections (10-40, O): stalled (b), sessions of parcel-only rejections.
+  stall_parcel_rejections: {
+    default: 20,
+    unit: "sessions",
+    editable: "O",
+    ref: "section 5.1 stalled (b), ch.15 stall_parcel_rejections",
+    validate: intRange(10, 40),
+  },
+  // Section 5.1 / ch.15 timeout_sessions (252, O). The spec gives no bounds; 20 to 1,000 is the
+  // architect's choice (M3 T9, D-076).
+  timeout_sessions: {
+    default: 252,
+    unit: "sessions",
+    editable: "O",
+    ref: "section 5.1 Timeout, ch.15 timeout_sessions",
+    validate: intRange(20, 1000),
+  },
+  // ARN-004 C1: AU broad-index ETF code, [VERIFY code] - an Owner item. The default is a PLACEHOLDER,
+  // not a ticker; C1 places no orders until the Owner replaces it (D-076).
+  c1_etf_code: {
+    default: C1_ETF_PLACEHOLDER,
+    unit: "ETF code",
+    editable: "O",
+    ref: "ARN-004 C1 [VERIFY code]",
+    validate: async (v: unknown) =>
+      typeof v === "string" && /^[A-Z0-9-]{1,12}$/.test(v)
+        ? null
+        : "must be 1 to 12 capital letters, digits or hyphens",
+  },
   // NFR-030 / DAT-142: email and name are hashed 90 days after revocation. Fixed, not in ch.15.
   pii_hash_after_revocation_days: {
     default: 90,
@@ -556,6 +600,30 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
     area: "Other",
     bounds: "fixed",
     input: "int",
+  },
+  stall_sessions: {
+    label: "Stalled: sessions below the stall floor with no position",
+    area: "Other",
+    bounds: "whole sessions, 3 to 10",
+    input: "int",
+  },
+  stall_parcel_rejections: {
+    label: "Stalled: sessions of signals rejected only for the parcel rule",
+    area: "Other",
+    bounds: "whole sessions, 10 to 40",
+    input: "int",
+  },
+  timeout_sessions: {
+    label: "Cohort timeout",
+    area: "Other",
+    bounds: "whole sessions, 20 to 1000",
+    input: "int",
+  },
+  c1_etf_code: {
+    label: "C1 control: broad-index ETF code [VERIFY]",
+    area: "Other",
+    bounds: "1 to 12 capitals, digits or hyphens; the placeholder means unset",
+    input: "text",
   },
   untradeable_adv_pct: {
     label: 'Label a trade "possibly un-tradeable" above this share of daily volume',

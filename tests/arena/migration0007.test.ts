@@ -866,6 +866,7 @@ describe("main migration 0007_arena: remaining CHECK constraints", () => {
     for (const k of [
       "start",
       "terminal",
+      "liquidated",
       "restart",
       "shadow_continue",
       "lock",

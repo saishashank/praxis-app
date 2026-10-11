@@ -2,8 +2,8 @@
 // TST-101 known-answer loader (M3 T3/T5; docs/M3_tst101_draft.md with the D-071 architect rulings).
 // Runs EVERY case of tests/fixtures/arena/tst101_public.json that belongs to the cost, slippage,
 // sizing and fill modules, asserting exact micro equality. Cases that belong to later tasks are
-// listed as `it.todo` with their task (T9 cohorts). T6 (ledger/NAV), T7 (corporate actions) and
-// T8 (sleeve: financing, close-out, loss cap, REC-2 unlock) are live.
+// listed as `it.todo` with their task. T6 (ledger/NAV), T7 (corporate actions), T8 (sleeve) and T9
+// (stall (a) and (b), C2 exit mapping) are live: all 43 cases are handled.
 // The table is the authority: this file never edits an expected value. Where the implementation
 // follows an architect ruling that differs from a table value, the test asserts the ruling and
 // the difference is named in DISAGREEMENTS below (reported to the architect).
@@ -63,7 +63,9 @@ import {
   sleevePricePlMicro,
   type SleeveTrade,
 } from "@/lib/arena/sleeve";
-import { sizeEntry, stallFloorMicro } from "@/lib/arena/sizing";
+import { sizeEntry, stallFloorMicro, isParcelOnlyRejection } from "@/lib/arena/sizing";
+import { controlStopMicro, parseAtrMultiple, resolveCohortParams } from "@/lib/arena/cohort";
+import { evaluateTerminal, type CloseDay } from "@/lib/arena/terminal";
 import { bucketBpsFor, slippageFill } from "@/lib/arena/slippage";
 import { sessionsBetween } from "@/lib/data/calendar";
 import { makeRational, mulRat, parseRational } from "@/lib/money/rational";
@@ -337,16 +339,61 @@ const liquidation039: Handler = (c) => {
   expect(String(day.row.liqNavMicro >= target)).toBe(str(c.expected.target_reached));
 };
 
+/** Closes of a flat cohort (no open position) on consecutive weekdays from a fixed start. */
+const FLAT_START = "2026-10-05"; // a Monday
+const FLAT_DATES = sessionsBetween(FLAT_START, "2027-12-31", []);
+const flatCloses = (
+  liq: bigint,
+  n: number,
+  signals: CloseDay["signals"] = 0,
+  parcelOnly = 0,
+): CloseDay[] =>
+  FLAT_DATES.slice(0, n).map((d) => ({
+    d,
+    navMicro: liq,
+    liqNavMicro: liq,
+    openPositions: 0n,
+    signals,
+    parcelOnlyRejections: parcelOnly,
+  }));
+const judge = (history: CloseDay[]) =>
+  evaluateTerminal({
+    params: resolveCohortParams().terminal,
+    startD: FLAT_START,
+    calendar: [],
+    history,
+  });
+
+/** T9: stall (a) on liquidation NAV for stall_sessions = 5 consecutive sessions, U and L. */
 const stall040: Handler = (c) => {
   const floor = stallFloorMicro({ profile: COST_PROFILES.P5 });
   expectBig(floor, "510606061");
   expect(floor >= 510_606_061n && floor <= 511_000_000n).toBe(true);
   expect(big(c.inputs.u_nav_micro) < floor).toBe(true);
   expect(big(c.inputs.l_nav_micro) > floor).toBe(true);
+  // the cohort parameters carry the same floor and the injected stall_sessions
+  const terminal = resolveCohortParams().terminal;
+  expect(terminal.stallFloorMicro).toBe(floor);
+  expect(String(terminal.stallSessions)).toBe(str(c.inputs.stall_sessions));
+  expect(big(c.inputs.open_positions)).toBe(0n);
+  const sessions = Number.parseInt(str(c.inputs.stall_sessions), 10);
+  const u = big(c.inputs.u_nav_micro);
+  const l = big(c.inputs.l_nav_micro);
+  expect(judge(flatCloses(u, sessions - 1))).toBeNull(); // not before the 5th session
+  const verdict = judge(flatCloses(u, sessions));
+  expect(verdict).toMatchObject({
+    kind: "stalled",
+    rule: "stall_floor",
+    ttdSessions: BigInt(sessions),
+  });
+  expect(String(verdict?.kind === "stalled")).toBe(str(c.expected.u_stalled_at_session_5));
+  for (let n = 1; n <= 40; n++) expect(judge(flatCloses(l, n))).toBeNull(); // L above the floor
+  expect(String(judge(flatCloses(l, 40)) !== null)).toBe(str(c.expected.l_stalled));
 };
 
+/** T9: stall (b), 20 consecutive sessions in which every family signal fails the parcel rule only. */
 const stall041: Handler = (c) => {
-  const r = sizeEntry({
+  const sized = sizeEntry({
     settledCashMicro: big(c.inputs.cash_micro),
     navMicro: big(c.inputs.nav_micro),
     refPriceMicro: big(c.inputs.reference_price_micro),
@@ -355,8 +402,42 @@ const stall041: Handler = (c) => {
     tier: "U1",
     profile: COST_PROFILES.P5,
   });
-  expect(r.reasons).toEqual(["parcel"]);
-  expectBig(r.orderValueMicro, c.expected.rejection_value_micro);
+  expect(sized.reasons).toEqual(["parcel"]);
+  expect(isParcelOnlyRejection(sized.reasons)).toBe(true);
+  expectBig(sized.orderValueMicro, c.expected.rejection_value_micro);
+  expect(sized.qty).toBe(39n);
+  // The same A$400 cohort, 20 sessions in a row, one signal each, each rejected by that rule only.
+  const sessions = Number.parseInt(str(c.inputs.stall_parcel_sessions), 10);
+  expect(String(resolveCohortParams().terminal.stallParcelRejections)).toBe(String(sessions));
+  const liq = big(c.inputs.nav_micro); // above bust, below the stall floor: isolate (b) below
+  const high = 520_000_000n; // above the floor, so stall (a) cannot be the cause
+  expect(liq).toBeGreaterThan(300_000_000n);
+  const rejected = (n: number) => flatCloses(high, n, 1, 1);
+  expect(judge(rejected(sessions - 1))).toBeNull();
+  const verdict = judge(rejected(sessions));
+  expect(verdict).toMatchObject({
+    kind: "stalled",
+    rule: "stall_parcel",
+    ttdSessions: BigInt(sessions),
+  });
+  expect(String(verdict?.rule === "stall_parcel")).toBe(str(c.expected.stalled_at_session_20));
+  // one session whose signal was rejected for another reason, or accepted, breaks the run
+  const broken = rejected(sessions).map((x, i) =>
+    i === 9 ? { ...x, parcelOnlyRejections: 0 } : x,
+  );
+  expect(judge(broken)).toBeNull();
+};
+
+/** T9: C2 exit mapping in ATR units (ARN-004): same distance in ATR(20) from the control's open. */
+const c2Mapping042: Handler = (c) => {
+  const multiple = parseAtrMultiple(str(c.inputs.atr_multiple));
+  const r = controlStopMicro({
+    entryDayOpenMicro: big(c.inputs.control_entry_day_open_micro),
+    atr20Micro: big(c.inputs.atr20_micro),
+    multiple,
+  });
+  expectBig(r.offsetMicro, c.expected.stop_offset_micro);
+  expectBig(r.stopMicro, c.expected.control_stop_level_micro);
 };
 
 /** A cohort that bought qty ZZA at priceMicro and holds them at the close of 2026-10-12. */
@@ -768,15 +849,13 @@ const handlers: Record<string, Handler> = {
   "TST101-039": liquidation039,
   "TST101-040": stall040,
   "TST101-041": stall041,
+  "TST101-042": c2Mapping042,
   "TST101-043": rec2Unlock043,
 };
 
-// Parts of a case (or whole cases) that belong to a later task. Each is an `it.todo`.
-const LATER: Record<string, string> = {
-  "TST101-040": "T9 stall: 5 consecutive sessions (the floor is asserted here)",
-  "TST101-041": "T9 stall: 20 consecutive sessions (per-session rejection is asserted here)",
-  "TST101-042": "T9 C2 exit mapping in ATR units",
-};
+// Parts of a case (or whole cases) that belong to a later task. Each is an `it.todo`. T9 handled the
+// last three (040 / 041 / 042), so nothing is deferred any more.
+const LATER: Record<string, string> = {};
 
 describe("TST-101 known answers (cost, slippage, sizing, fill modules)", () => {
   it("the table has 43 cases and every case is handled or deferred to a named task", () => {

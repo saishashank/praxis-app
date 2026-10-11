@@ -95,14 +95,15 @@ BEGIN
   SELECT RAISE(ABORT, 'forever table');
 END;
 
--- Cohort events (start, terminal, restart, shadow_continue, lock, unlock; ca_adjust records a
+-- Cohort events (start, terminal, liquidated = the realised value after the next-open liquidation,
+-- restart, shadow_continue, lock, unlock; ca_adjust records a
 -- split / consolidation quantity re-base, decision 14; data_event marks a corporate action,
 -- suspension or data correction that touched the cohort, ch.06). Append-only.
 CREATE TABLE cohort_event (
   cohort_id TEXT NOT NULL,
   seq INTEGER NOT NULL CHECK (seq >= 1),
   kind TEXT NOT NULL CHECK (kind IN
-    ('start','terminal','restart','shadow_continue','lock','unlock','ca_adjust','data_event')),
+    ('start','terminal','liquidated','restart','shadow_continue','lock','unlock','ca_adjust','data_event')),
   d TEXT NOT NULL,
   detail_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(detail_json)),
   PRIMARY KEY (cohort_id, seq)
