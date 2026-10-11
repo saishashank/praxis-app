@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "text/html"
+  },
+  "body": "<!doctype html><html><title>Just a moment</title><body>synthetic challenge page</body></html>"
+}

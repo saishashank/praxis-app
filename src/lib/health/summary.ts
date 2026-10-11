@@ -4,6 +4,7 @@ import type { Client } from "@libsql/client";
 import type { Role } from "@/lib/auth/permissions";
 import { latestPerJob, type RunStatus } from "@/lib/runs/runRecord";
 import { getMeters, usageEnvironment, worstMeter, type MeterLevel } from "@/lib/usage/meters";
+import { listOpenS2, type OpenS2 } from "@/lib/heartbeat/incidents";
 import { listOpenS1, type IncidentRow } from "@/lib/watchdog/incidents";
 import {
   parseWatchdogDetails,
@@ -11,9 +12,14 @@ import {
   WATCHDOG_JOB,
   type WatchdogStatus,
 } from "@/lib/watchdog/state";
+import { marketDate, type CalendarSummary } from "@/lib/data/calendar";
+import { calendarYearSummary } from "@/lib/data/calendarAdmin";
+import { loadControlsView, type ControlsView } from "@/lib/data/controls";
 import { isStale, JOBS } from "./jobs";
+import { getQualitySummary, type QualitySummary } from "./quality";
 
 export const SELFCHECK_JOB = "credential-selfcheck-vercel";
+export const WORKER_SELFCHECK_JOB = "worker-selfcheck";
 
 export type JobState = "ok" | "stale" | "failed" | "no data";
 
@@ -45,10 +51,15 @@ export type WatchdogSummary = {
 
 export type HealthSummary = {
   jobs: JobSummary[];
+  calendar?: CalendarSummary[] | null; // AU trading calendar per year (DAT-160); null = unreadable
+  controls?: ControlsView | null; // data controls status (M2 T10); null = unreadable
+  quality?: QualitySummary | null; // data quality for the latest date (DAT-211); null = unreadable
   quota: QuotaSummary;
   watchdog: WatchdogSummary;
   openIncidents?: IncidentRow[] | null; // Owner only; null = could not be read
-  secrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only
+  heartbeatIncidents?: OpenS2[] | null; // Owner only; open S2 incidents (PLT-074)
+  secrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only (Vercel)
+  workerSecrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only (Worker)
 };
 
 function parseResults(details: unknown): SecretResult[] {
@@ -84,6 +95,37 @@ async function getQuota(
     return q;
   } catch {
     return { level: "no data" }; // quota trouble never hides job status
+  }
+}
+
+// AU trading calendar status for the current Sydney year and the next one (only years with rows).
+async function getCalendar(mainDb: Client, now: Date): Promise<CalendarSummary[] | null> {
+  try {
+    const year = Number(marketDate(now, "Australia/Sydney").slice(0, 4));
+    const out: CalendarSummary[] = [];
+    for (const y of [year, year + 1]) {
+      const s = await calendarYearSummary(mainDb, "AU", y);
+      if (s.total > 0) out.push(s);
+    }
+    return out;
+  } catch {
+    return null; // calendar trouble never hides job status
+  }
+}
+
+async function getControls(mainDb: Client, owner: boolean): Promise<ControlsView | null> {
+  try {
+    return await loadControlsView(mainDb, owner);
+  } catch {
+    return null; // controls trouble never hides job status
+  }
+}
+
+async function getQuality(mainDb: Client, role: Role): Promise<QualitySummary | null> {
+  try {
+    return await getQualitySummary(mainDb, role);
+  } catch {
+    return null; // quality trouble never hides job status
   }
 }
 
@@ -128,6 +170,9 @@ export async function getHealthSummary(
     jobs,
     quota: await getQuota(mainDb, now, owner, env),
     watchdog,
+    calendar: await getCalendar(mainDb, now),
+    controls: await getControls(mainDb, owner),
+    quality: await getQuality(mainDb, role),
   };
   if (owner) {
     try {
@@ -135,10 +180,20 @@ export async function getHealthSummary(
     } catch {
       summary.openIncidents = null; // incident trouble never hides job status
     }
+    try {
+      summary.heartbeatIncidents = await listOpenS2(mainDb);
+    } catch {
+      summary.heartbeatIncidents = null;
+    }
     const sc = byJob.get(SELFCHECK_JOB);
     summary.secrets = {
       lastVerifiedAt: sc?.last.endedAt ?? null,
       results: parseResults(sc?.last.details),
+    };
+    const ws = byJob.get(WORKER_SELFCHECK_JOB);
+    summary.workerSecrets = {
+      lastVerifiedAt: ws?.last.endedAt ?? null,
+      results: parseResults(ws?.last.details),
     };
   }
   return summary;

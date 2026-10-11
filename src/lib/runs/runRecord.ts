@@ -139,11 +139,17 @@ export async function latestPerJob(
   }));
 }
 
+// The history-export records (one per exported month, concurrency key
+// `backfill-history:export:%`) are the proof that a month of announcements is in a history file
+// (M2 T10 prune guard, src/lib/maintenance/retention.ts). Announcements are pruned 400 days after
+// publication, long after the 180-day run-record retention, so these tiny records are kept.
+export const EXPORT_RECORD_KEY_PATTERN = "backfill-history:export:%";
+
 export async function pruneRuns(db: Client, now: string, retentionDays: number): Promise<number> {
   const cutoff = new Date(Date.parse(now) - retentionDays * 86_400_000).toISOString();
   const res = await db.execute({
-    sql: "DELETE FROM run_record WHERE started_at < ?",
-    args: [cutoff],
+    sql: "DELETE FROM run_record WHERE started_at < ? AND concurrency_key NOT LIKE ?",
+    args: [cutoff, EXPORT_RECORD_KEY_PATTERN],
   });
   return res.rowsAffected;
 }

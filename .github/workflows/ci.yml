@@ -112,3 +112,55 @@ jobs:
       - run: npm test
       - run: npx wrangler deploy --dry-run --outdir dist
       - run: npx wrangler deploy --dry-run --outdir dist --env staging
+
+  # TST-105 / SEC-110 / SEC-108 (a): fixture-backed tests with the private recordings. The token
+  # (FIXTURES_READ_TOKEN, read-only, in the ci-fixtures environment) is never given to fork PRs.
+  fixtures:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: ci-fixtures
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # An empty or missing fixtures repo must not fail the job: the tests then skip (see below).
+      - name: Check out the private fixtures repo
+        id: fixtures_checkout
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}-fixtures
+          token: ${{ secrets.FIXTURES_READ_TOKEN }}
+          path: fixtures
+          persist-credentials: false
+      - name: Note when fixtures are unavailable
+        if: steps.fixtures_checkout.outcome != 'success'
+        run: echo "::warning::fixtures repo not checked out (empty repo or token problem); fixture-backed tests will be skipped"
+      - name: Fixture-backed tests (skipped when PRAXIS_FIXTURES_DIR has no content)
+        env:
+          PRAXIS_FIXTURES_DIR: ${{ github.workspace }}/fixtures
+        run: npx vitest run tests/sources/realFixtures.test.ts --reporter=verbose
+
+  # PLT-072: the Yahoo fetcher is Python; its tests mock yfinance and never touch the network.
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scripts/ingest/requirements-dev.txt
+      - run: pip install -r scripts/ingest/requirements-dev.txt
+      - run: python -m pytest scripts/ingest -q

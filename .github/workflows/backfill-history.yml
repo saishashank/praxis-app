@@ -1,0 +1,81 @@
+# History backfill, M2 T9 (DAT-125, DAT-125a, DAT-140, DAT-142, decisions 7 and 13 of D-057).
+# workflow_dispatch ONLY: from M2 the Worker's per-minute cron (the master clock, PLT-071) can
+# dispatch this workflow with `ref: release` once the Owner enables its slot (disabled by default).
+# It has no `schedule:` trigger (PLT-015). Secrets are referenced ONLY in `env:` of the two steps
+# that read or write the database / the private data repository; the ASIC fetch step has NO
+# secrets and no database access.
+# SEC-108 c: the production job checks out the latest approved deploy-production commit, not the
+# release head. `deployment: false` gives the job the environment's secrets without creating a
+# deployment record, so a data run never counts as an approved deploy (D-023, SEC-108 c).
+# SEC-110: plan.json and chunks.json stay on the runner; nothing is uploaded as an artifact or
+# cached. Logs carry counts and statuses only.
+# This job never contacts asx.com.au (DAT-122: "GitHub Actions never waits on the ASX token"): the
+# announcement days are fetched by the Worker's backfill slot and committed through the engine.
+# Here: (1) `plan` reads the database (cursor, cap, source switch); (2) the ASIC files are fetched
+# politely with no secrets; (3) `commit` writes them as history files in the private data repo
+# (release assets, write-once, SHA-skip), moves the cursor, and exports completed announcement
+# months. Step 3 also runs when the fetch stopped or was not needed.
+name: Backfill history (AU)
+
+on: workflow_dispatch
+
+permissions: {}
+
+jobs:
+  production:
+    if: github.ref == 'refs/heads/release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      deployments: read
+    # PLT-076: one run at a time, never cancelling one in progress. Each chunk has its own
+    # unique-success run record (`backfill-history:<job>:<month or date>`), so a repeat is a no-op.
+    concurrency:
+      group: backfill-history
+      cancel-in-progress: false
+    environment:
+      name: production
+      deployment: false
+    steps:
+      # SEC-108 c: run the commit of the latest APPROVED deploy-production deployment, not the
+      # release head. These two steps run only the tiny reviewed script, with github.token
+      # alone (contents/deployments: read), never an environment secret.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ci-tools
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - name: Find approved commit
+        id: approved
+        run: node ci-tools/scripts/ci/approved-commit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.approved.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - name: Plan the fetch (read-only)
+        id: plan
+        run: node scripts/backfill/run.mjs plan --out plan.json
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+      # No secrets here: this step only talks to the public ASIC download host and writes
+      # chunks.json on the runner. It stops at the first 403/429/error (no retry loop).
+      - name: Fetch ASIC short positions (no secrets)
+        if: steps.plan.outputs.fetch == 'true'
+        run: node scripts/backfill/fetch-asic.mjs --plan plan.json --output chunks.json
+      - name: Write history files and move the cursors
+        if: ${{ !cancelled() && steps.plan.outcome == 'success' }}
+        run: node scripts/backfill/run.mjs commit --chunks chunks.json
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+          DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN_PROD }}
+          DATA_REPO: ${{ github.repository }}-data
+          COMMIT_SHA: ${{ steps.approved.outputs.sha }}

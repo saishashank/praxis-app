@@ -20,11 +20,33 @@ const intRange =
   async (v: unknown) =>
     isInt(v) && v >= min && v <= max ? null : `must be a whole number from ${min} to ${max}`;
 
+const numRange = (min: number, max: number) => async (v: unknown) =>
+  isNum(v) && v >= min && v <= max ? null : `must be a number from ${min} to ${max}`;
+
 function exactKeys(v: unknown, keys: string[]): v is Record<string, unknown> {
   return isObj(v) && Object.keys(v).sort().join() === [...keys].sort().join();
 }
 
 const never = async () => "this setting is fixed";
+
+/** Markets that have a mode (MKT-102: IN and US do not exist before their build starts). */
+export const MODE_MARKETS = ["AU"] as const;
+/** Modes that can be selected now. `full` needs the Arena and agents (M3). */
+export const SELECTABLE_MODES = ["off", "data_only"] as const;
+
+export function validateMarketModes(v: unknown): string | null {
+  if (!isObj(v)) return "must list a mode for each market";
+  const keys = Object.keys(v);
+  if (keys.length === 0 || !keys.every((k) => (MODE_MARKETS as readonly string[]).includes(k))) {
+    return "unknown market";
+  }
+  for (const x of Object.values(v)) {
+    if (x === "full") return "full is not available until M3";
+    if (!(SELECTABLE_MODES as readonly unknown[]).includes(x))
+      return "mode must be off or data_only";
+  }
+  return null;
+}
 
 export const CONFIG_KEYS = {
   // Line 145: retention (logs 30 d, runs 180 d, news 400 d), Edit O, no bounds given; DAT-142.
@@ -201,6 +223,95 @@ export const CONFIG_KEYS = {
     ref: "LLM-050",
     validate: intRange(75_000, 225_000),
   },
+  // Architect decision 8 (D-057): ch.15 has no Yahoo throttle row (spec gap, M2_requirements s4);
+  // Owner-editable, bounds 10-500. Used by scripts/ingest/yahoo_fetch.py (DAT-120, DAT-103).
+  yahoo_chunk_size: {
+    default: 100,
+    unit: "tickers/request",
+    editable: "O",
+    ref: "DAT-120",
+    validate: intRange(10, 500),
+  },
+  // Architect decision 8 (D-057): minimum pause between Yahoo chunk requests, bounds 1-60.
+  yahoo_min_gap_s: {
+    default: 5,
+    unit: "s",
+    editable: "O",
+    ref: "DAT-120",
+    validate: intRange(1, 60),
+  },
+  // Line 132: refetch_diff_flag 0.1%, O; DAT-002. Percent units. Ch.15 gives no bounds (spec gap,
+  // M2 T7): 0.01 to 5 keeps the flag meaningful. Mirrored by REFETCH_DIFF_PCT in rules.mjs.
+  refetch_diff_flag: {
+    default: 0.1,
+    unit: "%",
+    editable: "O",
+    ref: "DAT-002",
+    validate: numRange(0.01, 5),
+  },
+  // Line 133: suspect_move 40%, O; DAT-200. Percent units. No bounds in ch.15 (spec gap, M2 T7):
+  // 10 to 90. Mirrored by DEFAULT_SUSPECT_MOVE_PCT in quality/rules.mjs.
+  suspect_move: {
+    default: 40,
+    unit: "%",
+    editable: "O",
+    ref: "DAT-200",
+    validate: numRange(10, 90),
+  },
+  // Line 134: u1_quality_gate 95%, O; DAT-210. Percent units. No bounds in ch.15 (spec gap, M2 T7):
+  // 50 to 100. Mirrored by DEFAULT_U1_GATE_PCT in quality/rules.mjs.
+  u1_quality_gate: {
+    default: 95,
+    unit: "%",
+    editable: "O",
+    ref: "DAT-210",
+    validate: numRange(50, 100),
+  },
+  // D-057 decision 5: data-quality flags are kept 180 days unless they blocked a decision (those
+  // are kept forever). Not in ch.15 (spec gap, M2 T7). The database trigger refuses deleting a
+  // younger flag, so the minimum is 180.
+  retention_flag_days: {
+    default: 180,
+    unit: "days",
+    editable: "O",
+    ref: "DAT-142",
+    validate: intRange(180),
+  },
+  // DAT-221: "A queued item unresolved after 5 sessions is applied using the best-evidence
+  // interpretation and flagged." The number 5 is in the spec text but not in ch.15, so this key
+  // and its bounds are a spec gap (M2 T8): whole sessions, 1 to 60. Mirrored by
+  // DEFAULT_AUTO_APPLY_SESSIONS in data/corporateActions/rules.mjs.
+  corporate_action_auto_apply_sessions: {
+    default: 5,
+    unit: "sessions",
+    editable: "O",
+    ref: "DAT-221",
+    validate: intRange(1, 60),
+  },
+  // DAT-221: an action is auto-confirmed when the announcement and "the price/vendor data agree".
+  // How close the price must be to the announced ratio is not in the spec or ch.15 (spec gap, M2
+  // T8): percent, 1 to 50. Mirrored by DEFAULT_PRICE_TOLERANCE_PCT in the same rules file.
+  corporate_action_price_tolerance: {
+    default: 10,
+    unit: "%",
+    editable: "O",
+    ref: "DAT-221",
+    validate: numRange(1, 50),
+  },
+  // D-057 decision 3 (BLD-024): per-market operating mode, read by the Worker and every job.
+  // The value is an object keyed by market code. Ch.15 has no row for it (spec gap, M2 T10).
+  // AU starts `data_only` (production data-only mode, BLD-024); `full` is refused until M3
+  // (Arena, decision agents and emails do not exist yet). Marked fixed so the generic Configuration
+  // page cannot edit it: the ONLY writer is the Owner action in src/lib/data/controls.ts, which
+  // also updates `market.mode` (the column the Worker and the pipeline read at run time) in the
+  // same transaction. Editing only this row would change nothing at run time.
+  market_mode: {
+    default: { AU: "data_only" },
+    unit: "mode",
+    editable: "fixed",
+    ref: "BLD-024",
+    validate: async (v) => validateMarketModes(v),
+  },
   // NFR-030 / DAT-142: email and name are hashed 90 days after revocation. Fixed, not in ch.15.
   pii_hash_after_revocation_days: {
     default: 90,
@@ -345,5 +456,59 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
     area: "Other",
     bounds: "whole minutes, at least 1",
     input: "int",
+  },
+  yahoo_chunk_size: {
+    label: "Yahoo tickers per request",
+    area: "Other",
+    bounds: "whole number, 10 to 500",
+    input: "int",
+  },
+  yahoo_min_gap_s: {
+    label: "Pause between Yahoo requests",
+    area: "Other",
+    bounds: "whole seconds, 1 to 60",
+    input: "int",
+  },
+  refetch_diff_flag: {
+    label: "Flag a re-fetched bar that differs by more than",
+    area: "Other",
+    bounds: "percent, 0.01 to 5",
+    input: "number",
+  },
+  suspect_move: {
+    label: "Treat a one-day close move above this as suspect",
+    area: "Other",
+    bounds: "percent, 10 to 90",
+    input: "number",
+  },
+  u1_quality_gate: {
+    label: "Block new entries when U1 data quality is below",
+    area: "Other",
+    bounds: "percent, 50 to 100",
+    input: "number",
+  },
+  retention_flag_days: {
+    label: "Keep data-quality flags for (unless they blocked a decision)",
+    area: "Retention",
+    bounds: "whole days, at least 180",
+    input: "int",
+  },
+  corporate_action_auto_apply_sessions: {
+    label: "Apply an unresolved corporate action on best evidence after (sessions)",
+    area: "Other",
+    bounds: "whole sessions, 1 to 60",
+    input: "int",
+  },
+  corporate_action_price_tolerance: {
+    label: "Corporate action: price move may differ from the announced ratio by up to",
+    area: "Other",
+    bounds: "percent, 1 to 50",
+    input: "number",
+  },
+  market_mode: {
+    label: "Market mode (changed only in System Health, Data controls)",
+    area: "Other",
+    bounds: "off or data_only per market; full from M3",
+    input: "object",
   },
 };

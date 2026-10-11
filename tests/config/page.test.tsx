@@ -103,6 +103,10 @@ describe("configuration page", () => {
     expect(within(row).queryByRole("button")).toBeNull();
     expect(within(row).queryByRole("textbox")).toBeNull();
     expect(screen.getAllByText("Fixed by the spec")).toHaveLength(2);
+    // market_mode is not editable here: its only writer also updates market.mode (M2 T10).
+    const mode = screen.getByRole("row", { name: /market_mode/ });
+    expect(within(mode).getByText("Set on System Health (Data controls)")).toBeInTheDocument();
+    expect(within(mode).queryByRole("button")).toBeNull();
   });
 
   it("a stored value shows when it changed and prefills the edit field", async () => {
