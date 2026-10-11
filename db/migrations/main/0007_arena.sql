@@ -245,16 +245,20 @@ BEGIN
   SELECT RAISE(ABORT, 'forever table');
 END;
 
--- Cash ledger: double entry, append-only. The rows of one txn_id must net to zero across cash and
--- counter accounts: the writer checks it, the nightly invariant re-checks it (a CHECK cannot span
--- rows). A correction is a compensating `reversal` row, never an update (decision 13).
+-- Cash ledger: double entry, append-only. Debit-positive signs: assets (cash_settled, cash_recv,
+-- div_recv, sleeve_margin, position_cost = cost basis of shares held) and the expense fees_paid are
+-- positive; liabilities (cash_pay, fin_accrued) and `equity` (seed capital, realised P/L, income,
+-- financing) are negative. The rows of EVERY txn_id net to zero: the writer checks it, the nightly
+-- invariant re-checks it (a CHECK cannot span rows). A correction is a compensating `reversal`
+-- txn, never an update (decision 13).
 CREATE TABLE cash_ledger (
   id INTEGER PRIMARY KEY,
   cohort_id TEXT NOT NULL,
   d TEXT NOT NULL,
   txn_id TEXT NOT NULL,
   account TEXT NOT NULL CHECK (account IN
-    ('cash_settled','cash_recv','cash_pay','div_recv','sleeve_margin','fin_accrued','fees_paid')),
+    ('cash_settled','cash_recv','cash_pay','div_recv','sleeve_margin','fin_accrued','fees_paid',
+     'position_cost','equity')),
   delta_micro INTEGER NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN
     ('seed','buy','sell','brokerage','settle','div_accrue','div_pay','sleeve_open','sleeve_close',

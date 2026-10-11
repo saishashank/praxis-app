@@ -877,6 +877,8 @@ describe("main migration 0007_arena: remaining CHECK constraints", () => {
       );
     await row("cash_settled", "buy", -10_050_000);
     await row("cash_pay", "buy", 10_050_000);
+    await row("position_cost", "buy", 1, "X4");
+    await row("equity", "seed", -1, "X4");
     await expect(row("bank", "buy", 1)).rejects.toThrow(/CHECK/);
     await expect(row("cash_settled", "gift", 1, "X2")).rejects.toThrow(/CHECK/);
     await expect(row("cash_settled", "buy", 5)).rejects.toThrow(/UNIQUE/);

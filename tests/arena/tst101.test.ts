@@ -18,6 +18,19 @@ import {
   selectExit,
   type FillEnv,
 } from "@/lib/arena/fills";
+import {
+  availableCash,
+  balancesFromRows,
+  fillTxns,
+  pendingSettlements,
+  seedTxn,
+  settleTxn,
+  settlementDate,
+  txnRows,
+  zeroBalances,
+  type LedgerFill,
+} from "@/lib/arena/ledger";
+import { computeNavDay } from "@/lib/arena/nav";
 import { sizeEntry, stallFloorMicro } from "@/lib/arena/sizing";
 import { bucketBpsFor, slippageFill } from "@/lib/arena/slippage";
 import { parseRational } from "@/lib/money/rational";
@@ -156,6 +169,79 @@ const settlementSale: Handler = (c) => {
   expectBig(f.valueMicro - f.brokerageMicro, c.expected.net_proceeds_micro);
 };
 
+/**
+ * T6, ARN-025 / D-071 TST101-026: the sale of case 026 through the ledger. Matched: proceeds fund a
+ * buy the same session. Conservative: only from the start of the T+2 session (Tue 2026-10-13 sale,
+ * Thu 2026-10-15 settlement); the settlement posting then holds the same figure as settled cash.
+ */
+const settlementLedger026: Handler = (c) => {
+  settlementSale(c);
+  const open = big(c.inputs.reference_open_micro);
+  const f = fillCloseSignalExit(envFor(c, open, open), big(c.inputs.held_shares));
+  const tradeD = "2026-10-13";
+  const sale: LedgerFill = {
+    id: "F1",
+    d: tradeD,
+    code: "ZZA",
+    side: "sell",
+    qty: f.qty,
+    valueMicro: f.valueMicro,
+    brokerageMicro: f.brokerageMicro,
+  };
+  const rows = [
+    ...txnRows(seedTxn("2026-10-12", big(c.inputs.settled_cash_before_micro))),
+    ...fillTxns(sale, big(c.expected.sale_value_micro)).flatMap(txnRows),
+  ];
+  const balances = balancesFromRows(rows);
+  const pending = pendingSettlements([sale], new Set(), []);
+  const at = (mode: "matched" | "conservative", sessionD: string) =>
+    availableCash({ mode, balances, pending, sessionD });
+  expectBig(at("matched", tradeD), c.expected.matched_cash_available_same_day_micro);
+  expectBig(at("conservative", tradeD), c.expected.conservative_cash_available_same_day_micro);
+  expectBig(
+    at("conservative", "2026-10-14"),
+    c.expected.conservative_cash_available_same_day_micro,
+  );
+  const settleD = settlementDate(tradeD, []);
+  expect(settleD).toBe("2026-10-15");
+  expectBig(
+    at("conservative", settleD),
+    c.expected.conservative_cash_available_settlement_session_micro,
+  );
+  const settled = balancesFromRows([...rows, ...txnRows(settleTxn(pending[0], settleD))]);
+  expectBig(settled.cash_settled, c.expected.conservative_cash_available_settlement_session_micro);
+  expect(settled.cash_recv).toBe(0n);
+};
+
+/** T6, ARN-051: every NAV term once; margin counted once; franking excluded. */
+const nav038: Handler = (c) => {
+  const i = c.inputs;
+  const notional = big(i.sleeve_notional_micro);
+  const entry = big(i.sleeve_entry_fill_micro);
+  const unreal = (notional * (big(i.sleeve_mark_micro) - entry)) / entry; // exact: -8,000,000
+  expectBig(unreal, c.expected.sleeve_unrealised_pl_micro);
+  const day = computeNavDay({
+    cohortId: "K1",
+    d: "2026-10-14",
+    balances: {
+      ...zeroBalances(),
+      cash_settled: big(i.settled_cash_micro),
+      cash_recv: big(i.unsettled_receivable_micro),
+      div_recv: big(i.dividend_receivable_micro),
+      sleeve_margin: big(i.sleeve_margin_micro),
+      fin_accrued: -big(i.accrued_unpaid_financing_micro),
+    },
+    positions: new Map([["ZZA", big(i.holding_shares)]]),
+    markFor: () => ({ closeMicro: big(i.raw_close_micro), advMicro: 5_000_000_000_000n }),
+    profile: COST_PROFILES.P5,
+    sleeveUnrealMicro: unreal,
+  });
+  expectBig(day.row.positionsMicro, c.expected.holdings_value_micro);
+  expectBig(day.row.navMicro, c.expected.nav_micro);
+  // franking (6,428,571) is never an input to NAV: the figure above already excludes it
+  expect(big(i.franking_micro) > 0n).toBe(true);
+};
+
 const initialStop: Handler = (c) => {
   checkEnvInputs(c, "reference_open_micro");
   const open = big(c.inputs.reference_open_micro);
@@ -198,11 +284,24 @@ const liquidation039: Handler = (c) => {
   expectBig(f.valueMicro, c.expected.exit_value_micro);
   expectBig(f.slipMicro * qty, c.expected.exit_slippage_cost_micro);
   expectBig(f.brokerageMicro, c.expected.exit_brokerage_micro);
-  // liquidation NAV = NAV - slippage cost - brokerage (NAV itself belongs to T6).
   expectBig(
     big(c.expected.nav_micro) - f.slipMicro * qty - f.brokerageMicro,
     c.expected.liquidation_nav_micro,
   );
+  // T6: the same figures from the NAV module, and the target verdict (ARN-052, section 5.1).
+  const day = computeNavDay({
+    cohortId: "K1",
+    d: "2026-10-14",
+    balances: { ...zeroBalances(), cash_settled: big(c.inputs.cash_micro) },
+    positions: new Map([["ZZA", qty]]),
+    markFor: () => ({ closeMicro: open, advMicro: big(c.inputs.adv20_value_micro) }),
+    profile: profileOf(c),
+  });
+  expectBig(day.row.navMicro, c.expected.nav_micro);
+  expectBig(day.row.liqNavMicro, c.expected.liquidation_nav_micro);
+  const target = big(c.inputs.target_liquidation_micro);
+  expect(day.row.navMicro >= target).toBe(true); // NAV alone would call it a win
+  expect(String(day.row.liqNavMicro >= target)).toBe(str(c.expected.target_reached));
 };
 
 const stall040: Handler = (c) => {
@@ -234,13 +333,14 @@ const handlers: Record<string, Handler> = {
     ["014", "015", "016", "017", "018", "019", "020", "021"].map((n) => [`TST101-${n}`, slippage]),
   ),
   ...Object.fromEntries(["022", "023", "024", "025"].map((n) => [`TST101-${n}`, sizing])),
-  "TST101-026": settlementSale,
+  "TST101-026": settlementLedger026,
   "TST101-031": initialStop,
   "TST101-032": stopFill,
   "TST101-033": stopFill,
   "TST101-034": exitMapping034,
   "TST101-036": stopFill,
   "TST101-037": stopFill,
+  "TST101-038": nav038,
   "TST101-039": liquidation039,
   "TST101-040": stall040,
   "TST101-041": stall041,
@@ -248,7 +348,6 @@ const handlers: Record<string, Handler> = {
 
 // Parts of a case (or whole cases) that belong to a later task. Each is an `it.todo`.
 const LATER: Record<string, string> = {
-  "TST101-026": "T6 settlement: matched / conservative cash availability by session",
   "TST101-027": "T7 corporate actions: dividend receivable, pay date, franking",
   "TST101-028": "T7 corporate actions: split neutrality",
   "TST101-029": "T7 corporate actions: renounceable and non-renounceable rights",
@@ -256,8 +355,6 @@ const LATER: Record<string, string> = {
   "TST101-035": "T8 sleeve: financing 365-day cumulative",
   "TST101-036": "T8 sleeve: trigger price, P/L, cash returned (the IS fill is asserted here)",
   "TST101-037": "T8 sleeve: loss cap and brokerage beyond margin (the IS fill is asserted here)",
-  "TST101-038": "T6 NAV (ARN-051)",
-  "TST101-039": "T6/T9 liquidation NAV and the target verdict (the exit fill is asserted here)",
   "TST101-040": "T9 stall: 5 consecutive sessions (the floor is asserted here)",
   "TST101-041": "T9 stall: 20 consecutive sessions (per-session rejection is asserted here)",
   "TST101-042": "T9 C2 exit mapping in ATR units",

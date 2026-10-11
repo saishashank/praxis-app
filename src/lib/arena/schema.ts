@@ -255,6 +255,8 @@ export const LEDGER_ACCOUNTS = [
   "sleeve_margin",
   "fin_accrued",
   "fees_paid",
+  "position_cost",
+  "equity",
 ] as const;
 export type LedgerAccount = (typeof LEDGER_ACCOUNTS)[number];
 
