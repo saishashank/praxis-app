@@ -193,8 +193,10 @@ export type NavDayInput = NavCostOptions & {
   readonly balances: LedgerBalances;
   readonly positions: ReadonlyMap<string, bigint>;
   readonly markFor: (code: string) => Mark | undefined;
-  /** Sleeve unrealised price P/L at the close (sleeve engine, T8); default 0. */
+  /** Sleeve unrealised price P/L at the close (sleeveUnrealAt, T8); default 0. */
   readonly sleeveUnrealMicro?: Micro;
+  /** Cost of closing an open sleeve now (sleeveLiquidationCostMicro, T8); default 0. */
+  readonly sleeveLiquidationCostMicro?: Micro;
 };
 
 /** One cohort-day: the nav_daily row and its nav_daily_pos rows (codes ascending). */
@@ -241,7 +243,7 @@ export function computeNavDay(input: NavDayInput): NavDay {
       d: input.d,
       ...parts,
       navMicro,
-      liqNavMicro: navMicro - liquidationAdjustment,
+      liqNavMicro: navMicro - liquidationAdjustment - (input.sleeveLiquidationCostMicro ?? 0n),
       openPositions: BigInt(positions.length),
       invariantsOk: 1,
     },
@@ -264,6 +266,7 @@ export type CohortBooks = NavCostOptions & {
   readonly adjustments?: readonly QtyAdjustment[];
   readonly markFor: (d: string, code: string) => Mark | undefined;
   readonly sleeveUnrealFor?: (d: string) => Micro;
+  readonly sleeveLiquidationCostFor?: (d: string) => Micro;
 };
 
 /** Rebuild one day. A short position cannot be valued and raises. */
@@ -277,6 +280,7 @@ export function buildNavDay(books: CohortBooks, d: string): NavDay {
     positions: state.positions,
     markFor: (code) => books.markFor(d, code),
     sleeveUnrealMicro: books.sleeveUnrealFor?.(d) ?? 0n,
+    sleeveLiquidationCostMicro: books.sleeveLiquidationCostFor?.(d) ?? 0n,
     profile: books.profile,
     feeContext: books.feeContext,
     tickCrossFactor: books.tickCrossFactor,

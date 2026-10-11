@@ -324,9 +324,12 @@ BEGIN
   SELECT RAISE(ABORT, 'append-only');
 END;
 
--- Leverage sleeve trades (ARN-040..048). Opened with the entry; closed by one update that sets
--- closed_by, price_pl_micro, financing_micro (and the exit fill) together. A shadow trade
--- (shadow = 1, logged while locked, ARN-048) is hypothetical and has no fills.
+-- Leverage sleeve trades (ARN-040..048). Opened with the entry (open_d, entry_price_micro are the
+-- sleeve's own entry fill price); closed by ONE update that sets closed_by, close_d,
+-- exit_price_micro, price_pl_micro, financing_micro and costs_micro (and the exit fill) together.
+-- price_pl_micro is the price P/L after the loss cap (price P/L + financing >= -margin, ARN-044);
+-- costs_micro is the brokerage of both sides (slippage is inside the fill prices). A shadow trade
+-- (shadow = 1, logged while locked, ARN-048) is hypothetical: no fills, no ledger rows.
 CREATE TABLE sleeve_trade (
   id TEXT PRIMARY KEY,
   cohort_id TEXT NOT NULL,
@@ -337,14 +340,22 @@ CREATE TABLE sleeve_trade (
   entry_fill_id TEXT UNIQUE,
   exit_fill_id TEXT UNIQUE,
   price_pl_micro INTEGER,
-  financing_micro INTEGER,
+  financing_micro INTEGER CHECK (financing_micro IS NULL OR financing_micro >= 0),
   closed_by TEXT CHECK (closed_by IN ('exit','closeout')),
   shadow INTEGER NOT NULL DEFAULT 0 CHECK (shadow IN (0,1)),
+  open_d TEXT NOT NULL,
+  entry_price_micro INTEGER NOT NULL CHECK (entry_price_micro > 0),
+  close_d TEXT,
+  exit_price_micro INTEGER CHECK (exit_price_micro IS NULL OR exit_price_micro > 0),
+  costs_micro INTEGER CHECK (costs_micro IS NULL OR costs_micro >= 0),
   CHECK (shadow = 1 OR entry_fill_id IS NOT NULL),
+  CHECK (notional_micro = margin_micro * leverage),
   CHECK ((closed_by IS NULL AND price_pl_micro IS NULL AND financing_micro IS NULL
-          AND exit_fill_id IS NULL)
+          AND exit_fill_id IS NULL AND close_d IS NULL AND exit_price_micro IS NULL
+          AND costs_micro IS NULL)
       OR (closed_by IS NOT NULL AND price_pl_micro IS NOT NULL AND financing_micro IS NOT NULL
-          AND (shadow = 1 OR exit_fill_id IS NOT NULL)))
+          AND close_d IS NOT NULL AND exit_price_micro IS NOT NULL AND costs_micro IS NOT NULL
+          AND close_d >= open_d AND (shadow = 1 OR exit_fill_id IS NOT NULL)))
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX idx_sleeve_trade_cohort ON sleeve_trade (cohort_id);
 CREATE TRIGGER sleeve_trade_insert_guard BEFORE INSERT ON sleeve_trade
@@ -359,7 +370,8 @@ WHEN NOT (OLD.closed_by IS NULL AND NEW.closed_by IS NOT NULL
   AND NEW.id IS OLD.id AND NEW.cohort_id IS OLD.cohort_id AND NEW.code IS OLD.code
   AND NEW.margin_micro IS OLD.margin_micro AND NEW.leverage IS OLD.leverage
   AND NEW.notional_micro IS OLD.notional_micro AND NEW.entry_fill_id IS OLD.entry_fill_id
-  AND NEW.shadow IS OLD.shadow)
+  AND NEW.shadow IS OLD.shadow AND NEW.open_d IS OLD.open_d
+  AND NEW.entry_price_micro IS OLD.entry_price_micro)
 BEGIN
   SELECT RAISE(ABORT, 'sleeve_trade: only the one-way close may change');
 END;

@@ -5,7 +5,7 @@
 // nothing happens and `written` is false; when they differ the call raises `txn_conflict` /
 // `nav_conflict` (a replay must reproduce the rows exactly, ARN-102) and writes nothing.
 // Money goes in as bigint; reads accept bigint (intMode "bigint") or a safe-integer number.
-import type { Client, Row } from "@libsql/client";
+import type { Client, Row, Transaction } from "@libsql/client";
 import { assertInt64 } from "@/lib/money/micro";
 import { assertTxn, txnRows, type LedgerFill, type LedgerRow, type LedgerTxn } from "./ledger";
 import { serializeNavDays, type NavDay, type NavDayRow, type NavPosRow } from "./nav";
@@ -66,44 +66,12 @@ export async function writeLedgerTxn(
   txn: LedgerTxn,
 ): Promise<LedgerWriteResult> {
   assertTxn(txn);
-  const wanted = txnRows(txn);
   const tx = await db.transaction("write");
   try {
-    const existing = await tx.execute({
-      sql: `SELECT d, account, delta_micro, kind, ref_type, ref_id FROM cash_ledger
-            WHERE cohort_id = ? AND txn_id = ? ORDER BY account`,
-      args: [cohortId, txn.txnId],
-    });
-    if (existing.rows.length > 0) {
-      const have = existing.rows.map((r) => rowKey(ledgerRowFrom(r, txn.txnId))).sort();
-      const want = wanted.map(rowKey).sort();
-      if (have.length !== want.length || have.some((k, i) => k !== want[i])) {
-        throw new LedgerWriteError("txn_conflict", `txn ${txn.txnId} already exists differently`);
-      }
-      await tx.rollback();
-      return { written: false };
-    }
-    for (const r of wanted) {
-      const inserted = await tx.execute({
-        sql: `INSERT INTO cash_ledger (cohort_id, d, txn_id, account, delta_micro, kind, ref_type, ref_id)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
-        args: [
-          cohortId,
-          r.d,
-          r.txnId,
-          r.account,
-          assertInt64(r.deltaMicro),
-          r.kind,
-          r.refType,
-          r.refId,
-        ],
-      });
-      if (inserted.rowsAffected !== 1) {
-        throw new LedgerWriteError("txn_conflict", `txn ${txn.txnId} collides on ${r.account}`);
-      }
-    }
-    await tx.commit();
-    return { written: true };
+    const result = await writeLedgerTxnIn(tx, cohortId, txn);
+    if (result.written) await tx.commit();
+    else await tx.rollback();
+    return result;
   } catch (error) {
     await tx.rollback();
     if (error instanceof LedgerWriteError) throw error;
@@ -111,6 +79,52 @@ export async function writeLedgerTxn(
   } finally {
     tx.close();
   }
+}
+
+/**
+ * The same write inside a transaction the caller owns (sleeveWriter composes several writes into
+ * one atomic step). Raises `txn_conflict` for a differing stored txn; never commits or rolls back.
+ */
+export async function writeLedgerTxnIn(
+  tx: Transaction,
+  cohortId: string,
+  txn: LedgerTxn,
+): Promise<LedgerWriteResult> {
+  assertTxn(txn);
+  const wanted = txnRows(txn);
+  const existing = await tx.execute({
+    sql: `SELECT d, account, delta_micro, kind, ref_type, ref_id FROM cash_ledger
+          WHERE cohort_id = ? AND txn_id = ? ORDER BY account`,
+    args: [cohortId, txn.txnId],
+  });
+  if (existing.rows.length > 0) {
+    const have = existing.rows.map((r) => rowKey(ledgerRowFrom(r, txn.txnId))).sort();
+    const want = wanted.map(rowKey).sort();
+    if (have.length !== want.length || have.some((k, i) => k !== want[i])) {
+      throw new LedgerWriteError("txn_conflict", `txn ${txn.txnId} already exists differently`);
+    }
+    return { written: false };
+  }
+  for (const r of wanted) {
+    const inserted = await tx.execute({
+      sql: `INSERT INTO cash_ledger (cohort_id, d, txn_id, account, delta_micro, kind, ref_type, ref_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+      args: [
+        cohortId,
+        r.d,
+        r.txnId,
+        r.account,
+        assertInt64(r.deltaMicro),
+        r.kind,
+        r.refType,
+        r.refId,
+      ],
+    });
+    if (inserted.rowsAffected !== 1) {
+      throw new LedgerWriteError("txn_conflict", `txn ${txn.txnId} collides on ${r.account}`);
+    }
+  }
+  return { written: true };
 }
 
 function ledgerRowFrom(r: Row, txnId: string): LedgerRow {
@@ -139,11 +153,16 @@ export async function loadLedgerRows(
   return result.rows.map((r) => ledgerRowFrom(r, text(r.txn_id)));
 }
 
-/** The cohort's fills, in the shape the ledger and positions need. */
+/**
+ * The cohort's STOCK fills, in the shape the ledger and positions need. Sleeve fills (orders of
+ * kind sleeve_open / sleeve_close) are excluded: the sleeve is a margined derivative, never a holding.
+ */
 export async function loadLedgerFills(db: Client, cohortId: string): Promise<LedgerFill[]> {
   const result = await db.execute({
     sql: `SELECT id, d, code, side, qty, value_micro, brokerage_micro FROM fill
-          WHERE cohort_id = ? ORDER BY d, id`,
+          WHERE cohort_id = ?
+            AND order_id NOT IN (SELECT id FROM arena_order WHERE kind IN ('sleeve_open', 'sleeve_close'))
+          ORDER BY d, id`,
     args: [cohortId],
   });
   return result.rows.map((r) => ({

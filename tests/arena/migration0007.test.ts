@@ -737,12 +737,12 @@ describe("main migration 0007_arena: trades (one-way close)", () => {
 
 describe("main migration 0007_arena: sleeve trades (one-way close, shadow)", () => {
   const sleeve = (id = "S1", entry = "'F1'", extra = "") =>
-    `INSERT INTO sleeve_trade (id, cohort_id, code, margin_micro, leverage, notional_micro, entry_fill_id${
+    `INSERT INTO sleeve_trade (id, cohort_id, code, margin_micro, leverage, notional_micro, entry_fill_id, open_d, entry_price_micro${
       extra ? ", shadow" : ""
     })
-     VALUES ('${id}', 'K1', 'ZZAA', 60000000, 10, 600000000, ${entry}${extra})`;
+     VALUES ('${id}', 'K1', 'ZZAA', 60000000, 10, 600000000, ${entry}, '2026-10-12', 10000000${extra})`;
   const CLOSE =
-    "closed_by = 'exit', price_pl_micro = -12000000, financing_micro = 1500000, exit_fill_id = 'F2'";
+    "closed_by = 'exit', price_pl_micro = -12000000, financing_micro = 1500000, exit_fill_id = 'F2', close_d = '2026-10-13', exit_price_micro = 9000000, costs_micro = 10000000";
 
   async function openSleeveWithSell(db: Client) {
     await withBuyFill(db);
@@ -762,7 +762,7 @@ describe("main migration 0007_arena: sleeve trades (one-way close, shadow)", () 
       "closed_by = 'closeout'",
       "price_pl_micro = 0",
       "financing_micro = 0",
-      "closed_by = NULL, price_pl_micro = NULL, financing_micro = NULL, exit_fill_id = NULL",
+      "closed_by = NULL, price_pl_micro = NULL, financing_micro = NULL, exit_fill_id = NULL, close_d = NULL, exit_price_micro = NULL, costs_micro = NULL",
     ]) {
       await expect(run(db, `UPDATE sleeve_trade SET ${set}`), set).rejects.toThrow();
     }
@@ -776,7 +776,7 @@ describe("main migration 0007_arena: sleeve trades (one-way close, shadow)", () 
     await expect(
       run(
         db,
-        "UPDATE sleeve_trade SET closed_by = 'exit', price_pl_micro = 1, financing_micro = 1",
+        "UPDATE sleeve_trade SET closed_by = 'exit', price_pl_micro = 1, financing_micro = 1, close_d = '2026-10-13', exit_price_micro = 1, costs_micro = 0",
       ),
     ).rejects.toThrow(/CHECK/); // live trade needs the exit fill
     await expect(run(db, "UPDATE sleeve_trade SET price_pl_micro = 1")).rejects.toThrow();
@@ -790,6 +790,8 @@ describe("main migration 0007_arena: sleeve trades (one-way close, shadow)", () 
       "notional_micro = 1",
       "entry_fill_id = 'F2'",
       "shadow = 1",
+      "open_d = '2026-10-11'",
+      "entry_price_micro = 9999",
     ]) {
       await expect(run(db, `UPDATE sleeve_trade SET ${CLOSE}, ${set}`), set).rejects.toThrow();
     }
@@ -805,13 +807,10 @@ describe("main migration 0007_arena: sleeve trades (one-way close, shadow)", () 
 
   it("a shadow trade has no fills and closes without them", async () => {
     const db = await arenaDb();
+    await run(db, sleeve("SH", "NULL", ", 1"));
     await run(
       db,
-      sleeve("SH", "NULL", ", 1").replace("entry_fill_id, shadow)", "entry_fill_id, shadow)"),
-    );
-    await run(
-      db,
-      "UPDATE sleeve_trade SET closed_by = 'closeout', price_pl_micro = -60000000, financing_micro = 0 WHERE id = 'SH'",
+      "UPDATE sleeve_trade SET closed_by = 'closeout', price_pl_micro = -60000000, financing_micro = 0, close_d = '2026-10-12', exit_price_micro = 9000000, costs_micro = 10000000 WHERE id = 'SH'",
     );
     // A live trade without an entry fill is refused.
     await expect(run(db, sleeve("S2", "NULL"))).rejects.toThrow(/CHECK/);
@@ -827,7 +826,7 @@ describe("main migration 0007_arena: sleeve trades (one-way close, shadow)", () 
     await expect(
       run(
         db,
-        "INSERT INTO sleeve_trade (id, cohort_id, code, margin_micro, leverage, notional_micro, entry_fill_id, closed_by, price_pl_micro, financing_micro, exit_fill_id) VALUES ('S3','K1','ZZAA',1,10,10,'F1','exit',0,0,'F1')",
+        "INSERT INTO sleeve_trade (id, cohort_id, code, margin_micro, leverage, notional_micro, entry_fill_id, closed_by, price_pl_micro, financing_micro, exit_fill_id, open_d, entry_price_micro, close_d, exit_price_micro, costs_micro) VALUES ('S3','K1','ZZAA',1,10,10,'F1','exit',0,0,'F1','2026-10-12',1,'2026-10-12',1,0)",
       ),
     ).rejects.toThrow(/sleeve_trade:/);
   });
@@ -838,6 +837,20 @@ describe("main migration 0007_arena: sleeve trades (one-way close, shadow)", () 
     await expect(run(db, sleeve().replace("60000000", "0"))).rejects.toThrow(/CHECK/);
     await expect(run(db, sleeve().replace("600000000", "0"))).rejects.toThrow(/CHECK/);
     await expect(run(db, sleeve().replace("10,", "0,"))).rejects.toThrow(/CHECK/);
+  });
+
+  it("CHECKs: notional = margin x leverage; a close needs close_d >= open_d, exit price and costs", async () => {
+    const db = await arenaDb();
+    await openSleeveWithSell(db);
+    await expect(run(db, sleeve("S2").replace("600000000", "590000000"))).rejects.toThrow(/CHECK/);
+    for (const set of [
+      CLOSE.replace("close_d = '2026-10-13'", "close_d = '2026-10-11'"),
+      CLOSE.replace(", costs_micro = 10000000", ""),
+      CLOSE.replace(", exit_price_micro = 9000000", ""),
+      CLOSE.replace("financing_micro = 1500000", "financing_micro = -1"),
+    ]) {
+      await expect(run(db, `UPDATE sleeve_trade SET ${set}`), set).rejects.toThrow();
+    }
   });
 });
 
@@ -1029,7 +1042,7 @@ describe("main migration 0007_arena: forever retention and backup", () => {
     await run(db, fill("F2", "O2", "sell"));
     await run(
       db,
-      "INSERT INTO sleeve_trade (id, cohort_id, code, margin_micro, leverage, notional_micro, entry_fill_id) VALUES ('S1', 'K1', 'ZZAA', 6, 10, 60, 'F1')",
+      "INSERT INTO sleeve_trade (id, cohort_id, code, margin_micro, leverage, notional_micro, entry_fill_id, open_d, entry_price_micro) VALUES ('S1', 'K1', 'ZZAA', 6, 10, 60, 'F1', '2026-10-12', 1000000)",
     );
     for (const t of Object.values(ARENA_TABLES)) {
       expect((await q(db, `SELECT COUNT(*) AS n FROM ${t}`))[0].n, `${t} seeded`).toBeGreaterThan(

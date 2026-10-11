@@ -15,7 +15,13 @@
 //   6. NAV reconciles exactly (ARN-051): identity, position rows, cash side vs the ledger, and
 //      NAV = -equity - fees_paid + (market value - position_cost) + sleeve unrealised
 //   7. recomputing from scratch equals the stored daily rows (ARN-102)
-// Sleeve invariants (margin balance, loss cap, lock state) join in T8.
+//   8. sleeve (ARN-101, T8): the sleeve-margin balance equals the margin of the open real sleeve
+//      trade (else 0); accrued financing equals the cumulative formula; price P/L + financing loss
+//      never exceeds the margin (closed trades and every open mark); one real trade at a time,
+//      shadow trades leave no ledger row; sleeve txns tie to their trade; the lock history is
+//      consistent (alternating, loss_to_recover = the locking trade's net loss, no real trade opened
+//      while locked, every losing real trade locked). A close that draws main cash for brokerage
+//      beyond a consumed margin is a forced exit (non-fatal overdraft), like a forced sale.
 import type { CalendarRow } from "@/lib/data/calendar";
 import {
   balancesFromRows,
@@ -36,6 +42,14 @@ import {
   type NavDay,
 } from "./nav";
 import type { LedgerAccount } from "./schema";
+import {
+  financingAccruedAt,
+  netPlMicro,
+  openRealTradeAt,
+  type SleeveConfig,
+  type SleeveStateEntry,
+  type SleeveTrade,
+} from "./sleeve";
 
 export type InvariantCode =
   | "txn_inconsistent"
@@ -62,7 +76,21 @@ export type InvariantCode =
   | "nav_unbuildable"
   | "nav_missing"
   | "nav_recompute_mismatch"
-  | "stored_flag_not_ok";
+  | "stored_flag_not_ok"
+  | "sleeve_trade_shape"
+  | "sleeve_overlap"
+  | "sleeve_txn_shape"
+  | "sleeve_txn_tie"
+  | "sleeve_shadow_posted"
+  | "sleeve_margin_balance"
+  | "sleeve_financing_balance"
+  | "sleeve_financing_mismatch"
+  | "sleeve_loss_over_margin"
+  | "sleeve_unreal_orphan"
+  | "lock_state_inconsistent"
+  | "lock_missing"
+  | "lock_unexplained"
+  | "sleeve_opened_while_locked";
 
 export type Violation = {
   readonly code: InvariantCode;
@@ -197,8 +225,10 @@ export function checkTxns(
       if (!matches) {
         bad("txn_reversal_mismatch", txnId, d, "reversal does not negate the original txn");
       }
+    } else if (kind === "sleeve_open" || kind === "sleeve_close" || kind === "financing") {
+      checkSleeveTxnShape(group, kind, bad);
     }
-    // financing and sleeve_pnl: balanced is all there is to check until T8.
+    // sleeve_pnl is not used: the capped price P/L is part of the sleeve_close txn.
   }
   return out;
 }
@@ -355,6 +385,281 @@ export function compareStoredNav(stored: NavDay, recomputed: NavDay): Violation[
   return out;
 }
 
+// ---- 8: sleeve (ARN-101, T8) -------------------------------------------------------------------
+
+type BadFn = (code: InvariantCode, txnId: string, d: string, message: string) => void;
+
+const SLEEVE_ACCOUNTS: Record<string, readonly LedgerAccount[]> = {
+  sleeve_open: ["cash_settled", "sleeve_margin", "fees_paid"],
+  sleeve_close: ["sleeve_margin", "fin_accrued", "equity", "cash_settled", "fees_paid"],
+  financing: ["fin_accrued", "equity"],
+};
+
+/** Shape of one sleeve txn (accounts and signs); ties to the trade row are in checkSleeveStatic. */
+function checkSleeveTxnShape(group: readonly LedgerRow[], kind: string, bad: BadFn): void {
+  const first = group[0];
+  if (first.refType !== "sleeve_trade") return;
+  const allowed = SLEEVE_ACCOUNTS[kind] ?? [];
+  if (group.some((r) => !allowed.includes(r.account))) {
+    bad("sleeve_txn_shape", first.txnId, first.d, `${kind} uses an account it may not`);
+    return;
+  }
+  const margin = deltaOf(group, "sleeve_margin") ?? 0n;
+  const fees = deltaOf(group, "fees_paid") ?? 0n;
+  if (fees < 0n) bad("sleeve_txn_shape", first.txnId, first.d, `${kind} has negative brokerage`);
+  if (kind === "sleeve_open") {
+    const cash = deltaOf(group, "cash_settled") ?? 0n;
+    if (margin <= 0n || cash !== -(margin + fees)) {
+      bad(
+        "sleeve_txn_shape",
+        first.txnId,
+        first.d,
+        "open must move margin and brokerage out of cash",
+      );
+    }
+  } else if (kind === "sleeve_close") {
+    if (margin >= 0n)
+      bad("sleeve_txn_shape", first.txnId, first.d, "close must release the margin");
+    if ((deltaOf(group, "fin_accrued") ?? 0n) < 0n) {
+      bad("sleeve_txn_shape", first.txnId, first.d, "close must pay down accrued financing");
+    }
+  } else {
+    const fin = deltaOf(group, "fin_accrued") ?? 0n;
+    if (fin >= 0n || deltaOf(group, "equity") !== -fin) {
+      bad("sleeve_txn_shape", first.txnId, first.d, "financing must be a positive expense");
+    }
+  }
+}
+
+export type SleeveCheckOptions = {
+  readonly trades: readonly SleeveTrade[];
+  readonly states: readonly SleeveStateEntry[];
+  readonly cfg: SleeveConfig;
+};
+
+const sumOf = (rows: readonly LedgerRow[]): bigint => rows.reduce((t, r) => t + r.deltaMicro, 0n);
+
+/**
+ * Date-independent sleeve checks: trade shape and cap, one real trade at a time, ledger txns tied
+ * to their trade, shadow trades never posted, and a consistent lock history.
+ */
+export function checkSleeveStatic(
+  rows: readonly LedgerRow[],
+  options: SleeveCheckOptions,
+): Violation[] {
+  const out: Violation[] = [];
+  const { trades, states, cfg } = options;
+  const v = (code: InvariantCode, message: string, d?: string, txnId?: string) =>
+    out.push({
+      code,
+      message,
+      ...(d === undefined ? {} : { d }),
+      ...(txnId === undefined ? {} : { txnId }),
+    });
+  const byId = new Map(trades.map((t) => [t.id, t]));
+
+  // trade shape and the loss cap
+  for (const t of trades) {
+    const c = t.closed;
+    const real = !t.shadow;
+    if (
+      t.marginMicro <= 0n ||
+      t.leverage < 1n ||
+      t.notionalMicro !== t.marginMicro * t.leverage ||
+      (real && t.entryFillId === null) ||
+      (!real && (t.entryFillId !== null || (c !== null && c.exitFillId !== null))) ||
+      (real && c !== null && c.exitFillId === null) ||
+      (c !== null && c.closeD < t.openD)
+    ) {
+      v("sleeve_trade_shape", `sleeve trade ${t.id} is malformed`, t.openD);
+      continue;
+    }
+    if (c !== null) {
+      if (c.pricePlMicro - c.financingMicro < -t.marginMicro) {
+        v("sleeve_loss_over_margin", `sleeve trade ${t.id} lost more than its margin`, c.closeD);
+      }
+      if (c.financingMicro !== financingAccruedAt(t, c.closeD, cfg)) {
+        v(
+          "sleeve_financing_mismatch",
+          `sleeve trade ${t.id} financing is not the cumulative figure`,
+          c.closeD,
+        );
+      }
+    }
+  }
+
+  // one trade at a time, separately for real and shadow trades
+  for (const shadow of [false, true]) {
+    const list = trades
+      .filter((t) => t.shadow === shadow)
+      .sort((a, b) => (a.openD !== b.openD ? (a.openD < b.openD ? -1 : 1) : a.id < b.id ? -1 : 1));
+    for (let i = 1; i < list.length; i++) {
+      const prev = list[i - 1];
+      if (prev.closed === null || list[i].openD < prev.closed.closeD) {
+        v("sleeve_overlap", `sleeve trades ${prev.id} and ${list[i].id} overlap`, list[i].openD);
+      }
+    }
+  }
+
+  // ledger rows tied to their trade
+  const perTrade = new Map<string, LedgerRow[]>();
+  for (const r of rows.filter((x) => x.refType === "sleeve_trade")) {
+    const key = r.refId ?? "";
+    perTrade.set(key, [...(perTrade.get(key) ?? []), r]);
+  }
+  for (const [id, group] of perTrade) {
+    const t = byId.get(id);
+    if (t === undefined) {
+      v(
+        "sleeve_txn_tie",
+        `ledger rows reference unknown sleeve trade ${id}`,
+        group[0].d,
+        group[0].txnId,
+      );
+    } else if (t.shadow) {
+      v(
+        "sleeve_shadow_posted",
+        `shadow sleeve trade ${id} has ledger rows`,
+        group[0].d,
+        group[0].txnId,
+      );
+    }
+  }
+  for (const t of trades.filter((x) => !x.shadow)) {
+    const mine = perTrade.get(t.id) ?? [];
+    const of = (kind: string) => mine.filter((r) => r.kind === kind);
+    const open = of("sleeve_open");
+    const entryFee = sumOf(open.filter((r) => r.account === "fees_paid"));
+    if (
+      open.length === 0 ||
+      sumOf(open.filter((r) => r.account === "sleeve_margin")) !== t.marginMicro ||
+      open[0].d !== t.openD
+    ) {
+      v("sleeve_txn_tie", `sleeve trade ${t.id} has no open posting of its margin`, t.openD);
+    }
+    const fin = -sumOf(of("financing").filter((r) => r.account === "fin_accrued"));
+    const close = of("sleeve_close");
+    const c = t.closed;
+    if (c === null) {
+      if (close.length > 0) {
+        v("sleeve_txn_tie", `open sleeve trade ${t.id} has a close posting`, t.openD);
+      }
+      continue;
+    }
+    const exitFee = sumOf(close.filter((r) => r.account === "fees_paid"));
+    const cash = sumOf(close.filter((r) => r.account === "cash_settled"));
+    if (
+      close.length === 0 ||
+      close[0].d !== c.closeD ||
+      sumOf(close.filter((r) => r.account === "sleeve_margin")) !== -t.marginMicro ||
+      sumOf(close.filter((r) => r.account === "fin_accrued")) !== c.financingMicro ||
+      -sumOf(close.filter((r) => r.account === "equity")) !== c.pricePlMicro ||
+      cash !== t.marginMicro + c.pricePlMicro - c.financingMicro - exitFee ||
+      entryFee + exitFee !== c.costsMicro ||
+      fin !== c.financingMicro
+    ) {
+      v("sleeve_txn_tie", `sleeve trade ${t.id} close postings differ from the trade`, c.closeD);
+    }
+  }
+
+  // lock history
+  let previous: SleeveStateEntry | undefined;
+  states.forEach((s, i) => {
+    const bad = (message: string) => v("lock_state_inconsistent", message, s.d);
+    if (s.seq !== i + 1) bad(`sleeve_state seq ${s.seq} is not ${i + 1}`);
+    if (i === 0 && s.state !== "locked") bad("the first sleeve_state must be a lock");
+    if (previous !== undefined && previous.state === s.state) bad("lock and unlock must alternate");
+    if (s.state === "locked" && s.lossToRecoverMicro <= 0n) {
+      bad("a lock records a positive loss_to_recover");
+    }
+    if (s.state === "unlocked" && s.lossToRecoverMicro !== 0n) {
+      bad("an unlock carries no loss_to_recover");
+    }
+    if (previous !== undefined && s.d < previous.d) bad("sleeve_state dates go backwards");
+    previous = s;
+  });
+  const lockRows = states.filter((s) => s.state === "locked");
+  const losers = trades.filter((t) => !t.shadow && t.closed !== null && netPlMicro(t.closed) < 0n);
+  for (const t of losers) {
+    const c = t.closed as NonNullable<SleeveTrade["closed"]>;
+    if (!lockRows.some((s) => s.d === c.closeD && s.lossToRecoverMicro === -netPlMicro(c))) {
+      v("lock_missing", `losing sleeve trade ${t.id} did not lock the sleeve`, c.closeD);
+    }
+  }
+  for (const s of lockRows) {
+    const explained = losers.some(
+      (t) =>
+        t.closed !== null &&
+        t.closed.closeD === s.d &&
+        s.lossToRecoverMicro === -netPlMicro(t.closed),
+    );
+    if (!explained) v("lock_unexplained", `lock on ${s.d} has no losing sleeve trade`, s.d);
+  }
+  // no real trade opens while locked: lock day < open day <= unlock day (or not yet unlocked)
+  for (const t of trades.filter((x) => !x.shadow)) {
+    states.forEach((s, i) => {
+      if (s.state !== "locked") return;
+      const unlock = states.slice(i + 1).find((x) => x.state === "unlocked");
+      if (t.openD > s.d && (unlock === undefined || t.openD <= unlock.d)) {
+        v("sleeve_opened_while_locked", `real sleeve trade ${t.id} opened while locked`, t.openD);
+      }
+    });
+  }
+  return out;
+}
+
+/**
+ * Sleeve checks for one close: margin balance, financing balance and the loss cap on the NAV row
+ * (`day` is the recomputed NAV for its date).
+ */
+export function checkSleeveDay(
+  options: SleeveCheckOptions,
+  balances: LedgerBalances,
+  day: NavDay,
+): Violation[] {
+  const out: Violation[] = [];
+  const d = day.row.d;
+  let open: SleeveTrade | null;
+  try {
+    open = openRealTradeAt(options.trades, d);
+  } catch {
+    out.push({ code: "sleeve_overlap", d, message: "more than one real sleeve trade is open" });
+    return out;
+  }
+  const expectedMargin = open === null ? 0n : open.marginMicro;
+  if (balances.sleeve_margin !== expectedMargin) {
+    out.push({
+      code: "sleeve_margin_balance",
+      d,
+      message: `sleeve margin balance ${balances.sleeve_margin.toString()} != open trade margin ${expectedMargin.toString()}`,
+    });
+  }
+  const expectedFin = open === null ? 0n : financingAccruedAt(open, d, options.cfg);
+  if (-balances.fin_accrued !== expectedFin) {
+    out.push({
+      code: "sleeve_financing_balance",
+      d,
+      message: `accrued financing ${(-balances.fin_accrued).toString()} != cumulative ${expectedFin.toString()}`,
+    });
+  }
+  if (open === null) {
+    if (day.row.sleeveUnrealMicro !== 0n) {
+      out.push({
+        code: "sleeve_unreal_orphan",
+        d,
+        message: "sleeve unrealised P/L without an open trade",
+      });
+    }
+  } else if (day.row.sleeveUnrealMicro - day.row.finAccruedMicro < -open.marginMicro) {
+    out.push({
+      code: "sleeve_loss_over_margin",
+      d,
+      message: "open sleeve price P/L + financing loss exceeds the margin",
+    });
+  }
+  return out;
+}
+
 // ---- whole cohort ----------------------------------------------------------------------------
 
 export type CohortCheckOptions = {
@@ -365,6 +670,8 @@ export type CohortCheckOptions = {
   /** Stored nav_daily rows to compare with the recomputation, if any. */
   readonly stored?: readonly NavDay[];
   readonly seedMicro?: bigint;
+  /** Sleeve trades, lock history and settings (ARN-101 sleeve checks); omitted = no sleeve. */
+  readonly sleeve?: SleeveCheckOptions;
 };
 
 /** Run every invariant for every date. An empty result means all hold. */
@@ -378,6 +685,7 @@ export function checkCohortBooks(books: CohortBooks, options: CohortCheckOptions
     out.push({ code: "cost_unbuildable", message: (error as Error).message });
   }
   out.push(...checkTxns(books.rows, books.fills, { seedMicro: options.seedMicro, saleCosts }));
+  if (options.sleeve !== undefined) out.push(...checkSleeveStatic(books.rows, options.sleeve));
   const storedByDate = new Map((options.stored ?? []).map((s) => [s.row.d, s]));
   const settledAt = books.rows.filter((r) => r.kind === "settle" && r.refType === "fill");
   for (const d of options.dates) {
@@ -388,6 +696,16 @@ export function checkCohortBooks(books: CohortBooks, options: CohortCheckOptions
     for (const f of books.fills) {
       const net = fillNetMicro(f);
       if (f.side === "sell" && net < 0n && settled.has(f.id)) forcedDraw -= net;
+    }
+    for (const r of books.rows) {
+      if (
+        r.kind === "sleeve_close" &&
+        r.account === "cash_settled" &&
+        r.d <= d &&
+        r.deltaMicro < 0n
+      ) {
+        forcedDraw -= r.deltaMicro; // exit brokerage beyond a consumed margin (D-071 ruling)
+      }
     }
     out.push(...checkBalances(balances, options.mode, d, forcedDraw));
     const pending = pendingSettlements(
@@ -422,6 +740,9 @@ export function checkCohortBooks(books: CohortBooks, options: CohortCheckOptions
       continue;
     }
     out.push(...checkNavDay(recomputed, balances));
+    if (options.sleeve !== undefined) {
+      out.push(...checkSleeveDay(options.sleeve, balances, recomputed));
+    }
     const stored = storedByDate.get(d);
     if (options.stored !== undefined) {
       if (stored === undefined) {

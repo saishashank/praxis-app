@@ -58,7 +58,8 @@ function refusal(error: unknown): FillWriteError | null {
   return null;
 }
 
-function fillStatement(input: FillWriteInput): InStatement {
+/** The INSERT for one fill row (shared with sleeveWriter, which writes the sleeve's fills). */
+export function fillStatement(input: FillWriteInput): InStatement {
   const f = input.fill;
   return {
     sql: `INSERT INTO fill (id, order_id, cohort_id, d, code, side, qty, rule, ref_price_micro,

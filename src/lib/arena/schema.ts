@@ -177,6 +177,11 @@ export const ARENA_COLUMNS = {
     "financing_micro",
     "closed_by",
     "shadow",
+    "open_d",
+    "entry_price_micro",
+    "close_d",
+    "exit_price_micro",
+    "costs_micro",
   ],
   sleeve_state: ["cohort_id", "seq", "state", "d", "loss_to_recover_micro", "mode"],
   cost_profile: [
@@ -432,6 +437,11 @@ export type SleeveTradeRow = {
   financing_micro: Micro | null;
   closed_by: SleeveClosedBy | null;
   shadow: Flag01;
+  open_d: string;
+  entry_price_micro: Micro;
+  close_d: string | null;
+  exit_price_micro: Micro | null;
+  costs_micro: Micro | null;
 };
 
 export type SleeveStateRow = {
