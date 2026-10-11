@@ -6,7 +6,8 @@
 // `plan` decides what the secret-free ASIC fetch step should fetch (months of the ASIC job, newest
 // first, under the cap and the source switch) and reports `fetch=true|false` as a step output.
 // `commit` writes the fetched ASIC months as history files and moves the cursor, then exports any
-// completed past month of announcement history from Turso to its history file.
+// completed past month of announcement history from Turso to its history file: months newer than
+// the first export too, once settled (7 days after month end; D-066 follow-up).
 // The ASX announcement fetch is NOT here: only the Worker may contact asx.com.au (DAT-122); it
 // hands parsed days to `commitAsxDay` (src/lib/data/backfill/engine.mjs).
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN; commit also DATA_REPO (`<owner>/<repo>-data`),

@@ -49,6 +49,7 @@ import {
   monthFirstDay,
   monthLastDay,
   monthOf,
+  monthSettled,
   monthsToDo,
   previousWeekday,
   quotaMonth,
@@ -428,16 +429,112 @@ export async function planAsic(db, o) {
 }
 
 /**
- * Write every complete past month of announcement history that has no file yet (oldest data last).
- * A month is complete when the cursor is below its first day (or the job is done) and the month
- * is before the current Sydney month. An existing file with other content is a conflict: it is
- * reported, never replaced, and the export moves on.
+ * Export one month of announcement history from Turso to its write-once file and record it (run
+ * record + state) in one batch. Returns the new state, or a stop reason when the month cannot be
+ * exported now (cap, too many rows). A conflicting existing file is reported, never replaced.
+ */
+async function exportOneMonth(db, o, month, state, res, nowIso, forward) {
+  const cap = o.cap ?? BACKFILL_WRITE_CAP_MONTH;
+  const used = await monthUsage(db, o.nowMs);
+  if (!capDecision({ used, cap, needed: ADMIN_WRITES }).ok) {
+    await setStatus(db, JOB_ASX, state, "paused_cap", "write_cap", nowIso);
+    return { stopped: "paused_cap", state };
+  }
+  // Sydney months do not line up with UTC days: read a day either side, keep the right month.
+  const sel = await db.execute({
+    sql: `SELECT source, ann_id, code, published_at, type, price_sensitive, title, url FROM announcement
+          WHERE market = ? AND source = ? AND published_at >= ? AND published_at < ?
+          ORDER BY published_at, ann_id LIMIT ?`,
+    args: [
+      MARKET,
+      ANNOUNCEMENT_SOURCE,
+      `${addDays(monthFirstDay(month), -1)}T00:00:00.000Z`,
+      `${addDays(monthLastDay(month), 2)}T00:00:00.000Z`,
+      MAX_EXPORT_ROWS + 1,
+    ],
+  });
+  if (sel.rows.length > MAX_EXPORT_ROWS) return { stopped: "too_many_rows", state };
+  const lines = sel.rows
+    .filter((r) => monthOf(sydneyDate(Date.parse(String(r.published_at)))) === month)
+    .map((r) => announcementLine(r));
+  let fileResult = "none";
+  let sha = null;
+  if (lines.length > 0) {
+    try {
+      const f = await o.store.put(
+        historyLocation(JOB_ASX, month),
+        gzipDeterministic(toJsonl(lines)),
+      );
+      fileResult = f.result;
+      sha = f.sha256;
+      (f.result === "uploaded" ? res.exported : res.skipped).push(month);
+    } catch (e) {
+      if (!(e instanceof HistoryConflict)) throw e;
+      fileResult = "conflict";
+      res.conflicts.push(month);
+    }
+  }
+  const next = {
+    ...state,
+    conflicts:
+      fileResult === "conflict" ? [...(state.conflicts ?? []), month] : (state.conflicts ?? []),
+  };
+  // The newest exported month (forward export starts after it); the oldest (backward export).
+  if (!isMonth(next.exported_up_to) || month > next.exported_up_to) next.exported_up_to = month;
+  if (!forward) next.exported_down_to = month; // backward export only
+  try {
+    await db.batch(
+      [
+        runRecordStmt(`${RUN_JOB}:export:${JOB_ASX}:${month}`, monthLastDay(month), nowIso, {
+          items: lines.length,
+          rowsRead: sel.rows.length,
+          rowsWritten: ADMIN_WRITES,
+          details: { kind: "asx_export", month, rows: lines.length, file: fileResult, sha256: sha },
+          commitSha: o.commitSha,
+        }),
+        stateStmt(JOB_ASX, next, nowIso),
+      ],
+      "write",
+    );
+  } catch (e) {
+    if (!isConstraint(e)) throw e;
+    // The record already exists (an earlier run lost its state write): only advance the state.
+    await db.execute(stateStmt(JOB_ASX, next, nowIso));
+  }
+  return { stopped: null, state: next };
+}
+
+/** The newest month with an export run record or named in the state, or null. */
+async function newestExportedMonth(db, state) {
+  const prefix = `${RUN_JOB}:export:${JOB_ASX}:`;
+  const r = await db.execute({
+    sql: `SELECT concurrency_key FROM run_record WHERE job = ? AND status = 'success'
+          AND concurrency_key LIKE ?`,
+    args: [RUN_JOB, `${prefix}%`],
+  });
+  let newest = isMonth(state.exported_up_to) ? state.exported_up_to : null;
+  for (const row of r.rows) {
+    const m = String(row.concurrency_key).slice(prefix.length);
+    if (isMonth(m) && (newest === null || m > newest)) newest = m;
+  }
+  return newest;
+}
+
+/**
+ * Write the announcement history files of complete past months that have no file yet.
+ *  - Forward (months NEWER than the newest exported one, oldest first): a month is exported only
+ *    when it is settled (`monthSettled`: today is more than EXPORT_SETTLE_DAYS past its last day),
+ *    so the file, once written, is final. Announcements older than 400 days are pruned only for
+ *    exported months (retention.ts), so without this the months after the first export would pile
+ *    up in Turso (D-066 follow-up). It starts after a first export (the backward run).
+ *  - Backward (unchanged): from the first export's last complete month down to the six-year floor;
+ *    a month is complete when the cursor is below its first day (or the job is done).
+ * An existing file with other content is a conflict: reported, never replaced, the export moves on.
  * @param {Client} db
  * @param {{ store: { put: Function }, nowMs: number, cap?: number, maxMonths?: number,
  *   commitSha?: string }} o
  */
 export async function exportAsxMonths(db, o) {
-  const cap = o.cap ?? BACKFILL_WRITE_CAP_MONTH;
   const nowIso = new Date(o.nowMs).toISOString();
   const max = o.maxMonths ?? MAX_MONTHS_PER_RUN;
   const res = {
@@ -451,6 +548,20 @@ export async function exportAsxMonths(db, o) {
   const today = todayOf(o.nowMs);
   const floorMonth = monthOf(floorDate(today));
   let state = job.state;
+
+  const newest = await newestExportedMonth(db, state);
+  if (newest !== null) {
+    let month = addMonths(newest, 1);
+    for (let i = 0; i < max && monthSettled(month, today); i++, month = addMonths(month, 1)) {
+      const r = await exportOneMonth(db, o, month, state, res, nowIso, true);
+      state = r.state;
+      if (r.stopped !== null) {
+        res.stopped = r.stopped;
+        return res;
+      }
+    }
+  }
+
   for (let i = 0; i < max; i++) {
     const month = state.exported_down_to
       ? addMonths(state.exported_down_to, -1)
@@ -464,79 +575,11 @@ export async function exportAsxMonths(db, o) {
       res.stopped = "not_complete";
       break;
     }
-    const used = await monthUsage(db, o.nowMs);
-    if (!capDecision({ used, cap, needed: ADMIN_WRITES }).ok) {
-      await setStatus(db, JOB_ASX, state, "paused_cap", "write_cap", nowIso);
-      res.stopped = "paused_cap";
+    const r = await exportOneMonth(db, o, month, state, res, nowIso, false);
+    state = r.state;
+    if (r.stopped !== null) {
+      res.stopped = r.stopped;
       break;
-    }
-    // Sydney months do not line up with UTC days: read a day either side, keep the right month.
-    const sel = await db.execute({
-      sql: `SELECT source, ann_id, code, published_at, type, price_sensitive, title, url FROM announcement
-            WHERE market = ? AND source = ? AND published_at >= ? AND published_at < ?
-            ORDER BY published_at, ann_id LIMIT ?`,
-      args: [
-        MARKET,
-        ANNOUNCEMENT_SOURCE,
-        `${addDays(monthFirstDay(month), -1)}T00:00:00.000Z`,
-        `${addDays(monthLastDay(month), 2)}T00:00:00.000Z`,
-        MAX_EXPORT_ROWS + 1,
-      ],
-    });
-    if (sel.rows.length > MAX_EXPORT_ROWS) {
-      res.stopped = "too_many_rows";
-      break;
-    }
-    const lines = sel.rows
-      .filter((r) => monthOf(sydneyDate(Date.parse(String(r.published_at)))) === month)
-      .map((r) => announcementLine(r));
-    let fileResult = "none";
-    let sha = null;
-    if (lines.length > 0) {
-      try {
-        const f = await o.store.put(
-          historyLocation(JOB_ASX, month),
-          gzipDeterministic(toJsonl(lines)),
-        );
-        fileResult = f.result;
-        sha = f.sha256;
-        (f.result === "uploaded" ? res.exported : res.skipped).push(month);
-      } catch (e) {
-        if (!(e instanceof HistoryConflict)) throw e;
-        fileResult = "conflict";
-        res.conflicts.push(month);
-      }
-    }
-    state = {
-      ...state,
-      exported_down_to: month,
-      conflicts:
-        fileResult === "conflict" ? [...(state.conflicts ?? []), month] : (state.conflicts ?? []),
-    };
-    try {
-      await db.batch(
-        [
-          runRecordStmt(`${RUN_JOB}:export:${JOB_ASX}:${month}`, monthLastDay(month), nowIso, {
-            items: lines.length,
-            rowsRead: sel.rows.length,
-            rowsWritten: ADMIN_WRITES,
-            details: {
-              kind: "asx_export",
-              month,
-              rows: lines.length,
-              file: fileResult,
-              sha256: sha,
-            },
-            commitSha: o.commitSha,
-          }),
-          stateStmt(JOB_ASX, state, nowIso),
-        ],
-        "write",
-      );
-    } catch (e) {
-      if (!isConstraint(e)) throw e;
-      // The record already exists (an earlier run lost its state write): only advance the state.
-      await db.execute(stateStmt(JOB_ASX, state, nowIso));
     }
   }
   return res;
