@@ -425,12 +425,13 @@ describe("replayCostBasis (average cost, one rounding per partial sale)", () => 
     expect(r.holdings.get("ZZA")).toEqual({ qty: 90n, costMicro: 450_000_000n });
   });
 
-  it("an adjustment for a code not held is ignored; a fractional result is refused", () => {
+  it("an adjustment for a code not held is ignored; a fractional result is rounded down", () => {
     const fills = [b("F1", "2026-10-13", 60n, 600_000_000n)];
     const other = [{ code: "ZZB", exD: "2026-10-20", ratio: makeRational(2n) }];
     expect(replayCostBasis(fills, other, "2026-10-20").holdings.get("ZZA")?.qty).toBe(60n);
     const odd = [{ code: "ZZA", exD: "2026-10-20", ratio: makeRational(1n, 7n) }];
-    expectRange(() => replayCostBasis(fills, odd, "2026-10-20"), "fractional quantity");
+    const rebased = replayCostBasis(fills, odd, "2026-10-20").holdings.get("ZZA");
+    expect(rebased).toEqual({ qty: 8n, costMicro: 600_000_000n }); // floor(60/7); cost kept whole
     // two adjustments on the same code and day are applied in a fixed order (both sort equal)
     const two = [
       { code: "ZZA", exD: "2026-10-20", ratio: makeRational(2n) },

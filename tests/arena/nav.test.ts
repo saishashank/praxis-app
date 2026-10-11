@@ -111,11 +111,10 @@ describe("derivePositions (decision 11: derived from fills)", () => {
     ).toBe(60n);
   });
 
-  it("refuses a fractional result (cash in lieu is the corporate-action engine, T7)", () => {
+  it("rounds a fractional result down (ARN-023; corporate-action proposal D-074)", () => {
     const adj = [{ code: "ZZA", exD: "2026-10-20", ratio: makeRational(1n, 7n) }];
-    expect(() => derivePositions([fill({ id: "F1" })], adj, "2026-10-20")).toThrow(
-      "fractional quantity",
-    );
+    const held = derivePositions([fill({ id: "F1" })], adj, "2026-10-20").positions.get("ZZA");
+    expect(held).toBe(8n); // fill() default qty is 60
   });
 
   it("neutral split: value before and after the ex-date is equal (TST101-028)", () => {

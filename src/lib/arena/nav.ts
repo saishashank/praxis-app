@@ -8,10 +8,10 @@
 //                   - accrued unpaid financing.   Franking is never added.
 //   Liquidation NAV (ARN-052) = cash side unchanged + sum(positions sold at close - slippage
 //                   - brokerage), i.e. the sell fill and P5 fee a CS exit would pay on that close.
-//                   A haircut (suspended) position cannot be sold: it stays at its haircut value.
+//                   A suspended position (frozen or haircut) cannot be sold: it stays at its marked value.
 // Positions are DERIVED from fills (decision 11); a split or consolidation re-bases the quantity
 // by the recorded ratio on the ex-date, cash unchanged (decision 14); a fractional result is
-// refused here (cash in lieu belongs to the corporate-action engine, T7).
+// rounded down (rebaseQty; corpActions.ts, T7).
 import { type Micro } from "@/lib/money/micro";
 import { cmpRat, makeRational, mulRat, type Rational } from "@/lib/money/rational";
 import { roundHalfAwayFromZero } from "@/lib/money/round";
@@ -21,6 +21,7 @@ import {
   type LedgerBalances,
   type LedgerFill,
   type LedgerRow,
+  rebaseQty,
   type QtyAdjustment,
 } from "./ledger";
 import type { Flag01 } from "./schema";
@@ -63,11 +64,7 @@ export function derivePositions(
     for (const a of todaysAdjustments) {
       const qty = held.get(a.code) ?? 0n;
       if (qty === 0n) continue;
-      const scaled = mulRat(makeRational(qty), a.ratio);
-      if (scaled.den !== 1n) {
-        throw new RangeError(`fractional quantity after adjusting ${a.code} on ${d}`);
-      }
-      held.set(a.code, scaled.num);
+      held.set(a.code, rebaseQty(qty, a.ratio));
     }
     for (const f of fills.filter((x) => x.d === d)) {
       const qty = held.get(f.code) ?? 0n;
@@ -92,6 +89,8 @@ export type Mark = {
   readonly advMicro: Micro;
   /** Suspension haircut as an exact rational (ARN-026); null or absent = marked at close. */
   readonly haircut?: Rational | null;
+  /** Suspended: frozen at the last price, no fill possible (ARN-026); the haircut may not apply yet. */
+  readonly halted?: boolean;
 };
 
 export type NavCostOptions = {
@@ -174,7 +173,9 @@ export function positionValueMicro(qty: bigint, mark: Mark): Micro {
  * haircut value (it cannot trade).
  */
 export function liquidationValueMicro(qty: bigint, mark: Mark, options: NavCostOptions): Micro {
-  if (mark.haircut !== undefined && mark.haircut !== null) return positionValueMicro(qty, mark);
+  if (mark.halted === true || (mark.haircut !== undefined && mark.haircut !== null)) {
+    return positionValueMicro(qty, mark);
+  }
   const sell = slippageFill(
     mark.closeMicro,
     "sell",

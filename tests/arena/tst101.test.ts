@@ -2,7 +2,7 @@
 // TST-101 known-answer loader (M3 T3/T5; docs/M3_tst101_draft.md with the D-071 architect rulings).
 // Runs EVERY case of tests/fixtures/arena/tst101_public.json that belongs to the cost, slippage,
 // sizing and fill modules, asserting exact micro equality. Cases that belong to later tasks are
-// listed as `it.todo` with their task (T6 ledger/NAV, T7 corporate actions, T8 sleeve, T9 cohorts).
+// listed as `it.todo` with their task (T8 sleeve, T9 cohorts). T6 (ledger/NAV) and T7 (corporate actions) are live.
 // The table is the authority: this file never edits an expected value. Where the implementation
 // follows an architect ruling that differs from a table value, the test asserts the ruling and
 // the difference is named in DISAGREEMENTS below (reported to the architect).
@@ -10,6 +10,18 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { COST_PROFILES, feeFor, isCostProfileCode } from "@/lib/arena/costs";
+import {
+  DEFAULT_SUSPENSION,
+  parseDividend,
+  parseRights,
+  planCorporateActions,
+  quantityRatio,
+  rightsCompensationMicro,
+  rightsCount,
+  suspensionMark,
+  toQtyAdjustments,
+  type CorpActionRecord,
+} from "@/lib/arena/corpActions";
 import {
   fillCloseSignalExit,
   fillEntryAtOpen,
@@ -23,17 +35,20 @@ import {
   balancesFromRows,
   fillTxns,
   pendingSettlements,
+  replayCostBasis,
   seedTxn,
   settleTxn,
+  settlementItem,
   settlementDate,
   txnRows,
   zeroBalances,
   type LedgerFill,
 } from "@/lib/arena/ledger";
-import { computeNavDay } from "@/lib/arena/nav";
+import { computeNavDay, positionValueMicro } from "@/lib/arena/nav";
 import { sizeEntry, stallFloorMicro } from "@/lib/arena/sizing";
 import { bucketBpsFor, slippageFill } from "@/lib/arena/slippage";
-import { parseRational } from "@/lib/money/rational";
+import { sessionsBetween } from "@/lib/data/calendar";
+import { makeRational, mulRat, parseRational } from "@/lib/money/rational";
 import { tickFor } from "@/lib/money/tick";
 
 type Case = {
@@ -326,6 +341,186 @@ const stall041: Handler = (c) => {
   expectBig(r.orderValueMicro, c.expected.rejection_value_micro);
 };
 
+/** A cohort that bought qty ZZA at priceMicro and holds them at the close of 2026-10-12. */
+function holdingRows(qty: bigint, priceMicro: bigint, cashMicro: bigint) {
+  const buy: LedgerFill = {
+    id: "F1",
+    d: "2026-10-05",
+    code: "ZZA",
+    side: "buy",
+    qty,
+    valueMicro: qty * priceMicro,
+    brokerageMicro: 0n,
+  };
+  const txns = [
+    seedTxn("2026-10-01", qty * priceMicro + cashMicro),
+    ...fillTxns(buy),
+    settleTxn(settlementItem(buy, []), "2026-10-07"),
+  ];
+  return { buy, txns, rows: txns.flatMap(txnRows) };
+}
+const caAction = (type: string, exDate: string, payload: Record<string, unknown>) =>
+  ({ id: "A1", code: "ZZA", type, exDate, payload }) satisfies CorpActionRecord;
+
+/** T7, ARN-036: receivable from the ex-date (60 x dps), cash on the pay date, franking never in NAV. */
+const dividend027: Handler = (c) => {
+  const i = c.inputs;
+  const qty = big(i.shares_at_prior_close);
+  const { rows, buy } = holdingRows(qty, 10_000_000n, 0n);
+  const action = caAction("cash_dividend", "2026-10-13", {
+    dps_micro: str(i.dps_micro),
+    pay_date: "2026-10-20",
+    franking_pct: str(i.franking_pct),
+    franking_credit_micro: str(i.franking_credit_micro),
+  });
+  expect(parseDividend(action).payD).toBe("2026-10-20");
+  const plan = planCorporateActions({
+    d: "2026-10-13",
+    priorD: "2026-10-12",
+    actions: [action],
+    fills: [buy],
+    adjustments: [],
+    ledgerRows: rows,
+    lastCloseFor: () => undefined,
+  });
+  const exRows = [...rows, ...plan.txns.flatMap(txnRows)];
+  const ex = balancesFromRows(exRows);
+  expectBig(ex.div_recv, c.expected.receivable_micro);
+  expect(plan.franking[0].creditMicro).toBe(big(c.expected.franking_recorded_micro));
+  // no ledger row carries the franking credit, so NAV cannot include it
+  expect(exRows.some((r) => r.deltaMicro === big(i.franking_credit_micro))).toBe(false);
+  const navOf = (balances: typeof ex) =>
+    computeNavDay({
+      cohortId: "K1",
+      d: "2026-10-20",
+      balances,
+      positions: new Map([["ZZA", qty]]),
+      markFor: () => ({ closeMicro: 10_000_000n, advMicro: 5_000_000_000_000n }),
+      profile: COST_PROFILES.P5,
+    }).row.navMicro;
+  const navAtEx = navOf(ex);
+  const payPlan = planCorporateActions({
+    d: "2026-10-20",
+    priorD: "2026-10-19",
+    actions: [action],
+    fills: [buy],
+    adjustments: [],
+    ledgerRows: exRows,
+    lastCloseFor: () => undefined,
+  });
+  const paid = balancesFromRows([...exRows, ...payPlan.txns.flatMap(txnRows)]);
+  expectBig(paid.cash_settled, c.expected.cash_on_pay_date_micro);
+  expect(paid.div_recv).toBe(0n);
+  expectBig(navOf(paid) - navAtEx, c.expected.franking_in_nav_micro); // receivable to cash: NAV equal
+};
+
+/** T7, ARN-043 / decision 14: 2-for-1 re-bases quantity and price, no cash, no P/L. */
+const split028: Handler = (c) => {
+  const i = c.inputs;
+  const shares = big(i.shares_before);
+  const close = big(i.raw_close_before_micro);
+  const { buy, rows } = holdingRows(shares, close, big(i.cash_before_micro));
+  const action = caAction("split", "2026-10-13", {
+    new: Number(str(i.split_ratio_new_per_old)),
+    old: 1,
+  });
+  const plan = planCorporateActions({
+    d: "2026-10-13",
+    priorD: "2026-10-12",
+    actions: [action],
+    fills: [buy],
+    adjustments: [],
+    ledgerRows: rows,
+    lastCloseFor: () => undefined,
+  });
+  expect(plan.txns).toEqual([]); // cash delta 0: no cash, cost or P/L posting at all
+  const after = plan.adjustments[0].qtyAfter;
+  expectBig(after, c.expected.shares_after);
+  const factor = makeRational(1n, big(i.split_ratio_new_per_old)); // f = 1/2
+  const afterClose = mulRat(makeRational(close), factor);
+  expect(afterClose.den).toBe(1n);
+  expectBig(afterClose.num, c.expected.raw_close_after_micro);
+  expectBig(shares * close, c.expected.nav_before_micro);
+  expectBig(after * afterClose.num, c.expected.nav_after_micro);
+  expectBig(after * afterClose.num - shares * close, c.expected.price_pl_micro);
+  const navOn = (qty: bigint, price: bigint) =>
+    computeNavDay({
+      cohortId: "K1",
+      d: "2026-10-13",
+      balances: balancesFromRows(rows),
+      positions: new Map([["ZZA", qty]]),
+      markFor: () => ({ closeMicro: price, advMicro: 5_000_000_000_000n }),
+      profile: COST_PROFILES.P5,
+    }).row.navMicro;
+  expect(navOn(after, afterClose.num)).toBe(navOn(shares, close)); // whole-cohort NAV, cash included
+  expectBig(navOn(after, afterClose.num) - navOn(shares, close), c.expected.cash_delta_micro);
+  expect(replayCostBasis([buy], toQtyAdjustments(plan), "2026-10-13").holdings.get("ZZA")).toEqual({
+    qty: after,
+    costMicro: shares * close,
+  });
+  expect(quantityRatio(action)).toEqual(makeRational(big(i.split_ratio_new_per_old)));
+};
+
+/** T7, DAT-223: renounceable rights at the last traded price, non-renounceable nothing. */
+const rights029: Handler = (c) => {
+  const i = c.inputs;
+  const shares = big(i.shares);
+  const payload = {
+    rights: { new: 1, old: 4 },
+    last_price_micro: str(i.rights_last_traded_micro),
+  };
+  expect(parseRational(str(i.ratio_rights_per_share))).toEqual(makeRational(1n, 4n));
+  const ren = parseRights(caAction("rights_renounceable", "2026-10-13", payload));
+  const non = parseRights(caAction("rights_non_renounceable", "2026-10-13", payload));
+  const count = rightsCount(shares, ren);
+  expect(count.den).toBe(1n);
+  expectBig(count.num, c.expected.rights_count);
+  expectBig(rightsCompensationMicro(shares, ren), c.expected.renounceable_comp_micro);
+  expectBig(rightsCompensationMicro(shares, non), c.expected.non_renounceable_comp_micro);
+  const { buy, rows } = holdingRows(shares, 10_000_000n, big(i.cash_before_micro));
+  const planOf = (type: string) =>
+    planCorporateActions({
+      d: "2026-10-13",
+      priorD: "2026-10-12",
+      actions: [caAction(type, "2026-10-13", payload)],
+      fills: [buy],
+      adjustments: [],
+      ledgerRows: rows,
+      lastCloseFor: () => undefined,
+    });
+  const cash = (type: string) =>
+    balancesFromRows([...rows, ...planOf(type).txns.flatMap(txnRows)]).cash_settled -
+    balancesFromRows(rows).cash_settled;
+  expectBig(cash("rights_renounceable"), c.expected.renounceable_comp_micro);
+  expectBig(cash("rights_non_renounceable"), c.expected.non_renounceable_comp_micro);
+  expect(planOf("rights_renounceable").txns[0].kind).toBe("ca_comp");
+};
+
+/**
+ * T7, ARN-026, D-071 ruling: "after 20 sessions" = the haircut from halted session 21, i.e. once
+ * 20 halted sessions have ELAPSED before the marked day (halt_sessions_elapsed = 20). The table's
+ * 300,000,000 holds under that reading; with 19 elapsed the position is still frozen at 600,000,000.
+ */
+const suspension030: Handler = (c) => {
+  const i = c.inputs;
+  const sessions = sessionsBetween("2026-10-05", "2027-03-31", []);
+  const elapsed = Number(str(i.halt_sessions_elapsed));
+  const config = { haircut: parseRational(str(i.haircut)), afterSessions: 20 };
+  expect(config.haircut).toEqual(DEFAULT_SUSPENSION.haircut);
+  const markOn = (elapsedBefore: number) =>
+    suspensionMark({
+      lastCloseMicro: big(i.frozen_price_micro),
+      advMicro: 5_000_000_000_000n,
+      haltStartD: sessions[0],
+      d: sessions[elapsedBefore],
+      calendar: [],
+      config,
+    });
+  const qty = big(i.shares);
+  expectBig(positionValueMicro(qty, markOn(elapsed)), c.expected.marked_value_micro);
+  expect(positionValueMicro(qty, markOn(elapsed - 1))).toBe(qty * big(i.frozen_price_micro));
+};
+
 const feeIds = Array.from({ length: 13 }, (_, i) => `TST101-${String(i + 1).padStart(3, "0")}`);
 const handlers: Record<string, Handler> = {
   ...Object.fromEntries(feeIds.map((id) => [id, brokerage])),
@@ -334,6 +529,10 @@ const handlers: Record<string, Handler> = {
   ),
   ...Object.fromEntries(["022", "023", "024", "025"].map((n) => [`TST101-${n}`, sizing])),
   "TST101-026": settlementLedger026,
+  "TST101-027": dividend027,
+  "TST101-028": split028,
+  "TST101-029": rights029,
+  "TST101-030": suspension030,
   "TST101-031": initialStop,
   "TST101-032": stopFill,
   "TST101-033": stopFill,
@@ -348,10 +547,6 @@ const handlers: Record<string, Handler> = {
 
 // Parts of a case (or whole cases) that belong to a later task. Each is an `it.todo`.
 const LATER: Record<string, string> = {
-  "TST101-027": "T7 corporate actions: dividend receivable, pay date, franking",
-  "TST101-028": "T7 corporate actions: split neutrality",
-  "TST101-029": "T7 corporate actions: renounceable and non-renounceable rights",
-  "TST101-030": "T7 corporate actions: suspension haircut from session 21 (ruling)",
   "TST101-035": "T8 sleeve: financing 365-day cumulative",
   "TST101-036": "T8 sleeve: trigger price, P/L, cash returned (the IS fill is asserted here)",
   "TST101-037": "T8 sleeve: loss cap and brokerage beyond margin (the IS fill is asserted here)",

@@ -181,6 +181,12 @@ export function checkTxns(
       if ((deltaOf(group, "equity") ?? 0n) >= 0n) {
         bad("txn_sign", txnId, d, `${kind} must add income`);
       }
+    } else if (kind === "ca_dispose") {
+      // a corporate-action disposal removes cost basis; cash received (if any) is settled cash
+      const cash = deltaOf(group, "cash_settled") ?? 0n;
+      if ((deltaOf(group, "position_cost") ?? 0n) >= 0n || cash < 0n) {
+        bad("txn_sign", txnId, d, "ca_dispose must remove cost and may only add settled cash");
+      }
     } else if (kind === "reversal") {
       const original =
         first.refType === "txn" && first.refId !== null ? groups.get(first.refId) : undefined;

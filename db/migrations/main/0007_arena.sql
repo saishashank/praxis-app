@@ -262,7 +262,7 @@ CREATE TABLE cash_ledger (
   delta_micro INTEGER NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN
     ('seed','buy','sell','brokerage','settle','div_accrue','div_pay','sleeve_open','sleeve_close',
-     'sleeve_pnl','financing','ca_comp','reversal')),
+     'sleeve_pnl','financing','ca_comp','ca_dispose','reversal')),
   ref_type TEXT,
   ref_id TEXT,
   UNIQUE (cohort_id, d, txn_id, account)

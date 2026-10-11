@@ -28,7 +28,7 @@
 // Corrections are compensating `reversal` txns (decision 13), never edits.
 import { assertInt64, type Micro } from "@/lib/money/micro";
 import { makeRational, mulRat, type Rational } from "@/lib/money/rational";
-import { roundHalfAwayFromZero } from "@/lib/money/round";
+import { floorRat, roundHalfAwayFromZero } from "@/lib/money/round";
 import { addDays, nextTradingDay, type CalendarRow } from "@/lib/data/calendar";
 import { LEDGER_ACCOUNTS, type LedgerAccount, type LedgerKind } from "./schema";
 
@@ -218,6 +218,17 @@ export type QtyAdjustment = {
   readonly ratio: Rational;
 };
 
+/**
+ * Quantity after a re-base on an ex-date: floor(held x ratio) (ARN-023 whole shares, rounded down;
+ * T7 proposal D-074). Splits and bonus issues are exact; a consolidation can leave a fraction,
+ * which is dropped with its cost kept in the position (no cash in lieu, no invented P/L). A ratio
+ * of zero closes the holding (cash merger, delisting).
+ */
+export function rebaseQty(qty: bigint, ratio: Rational): bigint {
+  if (ratio.num < 0n) throw new RangeError("re-base ratio cannot be negative");
+  return floorRat(mulRat(makeRational(qty), ratio));
+}
+
 export type CostReplay = {
   /** Cost basis removed by each sale, by fill id. */
   readonly saleCostByFillId: ReadonlyMap<string, Micro>;
@@ -262,10 +273,8 @@ export function replayCostBasis(
     if (e.adj !== undefined) {
       const held = holdings.get(e.adj.code);
       if (held === undefined) continue;
-      const scaled = mulRat(makeRational(held.qty), e.adj.ratio);
-      if (scaled.den !== 1n)
-        throw new RangeError(`fractional quantity after adjusting ${e.adj.code}`);
-      held.qty = scaled.num;
+      held.qty = rebaseQty(held.qty, e.adj.ratio);
+      if (held.qty === 0n) holdings.delete(e.adj.code); // closed; the cost leaves via a ca_dispose txn
     } else if (e.fill !== undefined) {
       const f = e.fill;
       const held = holdings.get(f.code) ?? { qty: 0n, costMicro: 0n };

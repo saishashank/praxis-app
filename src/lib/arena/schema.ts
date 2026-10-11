@@ -273,6 +273,7 @@ export const LEDGER_KINDS = [
   "sleeve_pnl",
   "financing",
   "ca_comp",
+  "ca_dispose",
   "reversal",
 ] as const;
 export type LedgerKind = (typeof LEDGER_KINDS)[number];
