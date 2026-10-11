@@ -1,0 +1,69 @@
+# Batch 2a "close the books" for the AU arena, M3 T10 (docs/M3_design.md 4.1, 4.2, 4.6; ARN-060;
+# D-062 pattern; D-069 decision 16; D-077).
+# workflow_dispatch ONLY: the Worker's per-minute cron (the master clock, PLT-071) dispatches this
+# workflow with `ref: release` once Batch 1 has finished (its slot is DISABLED until the Owner
+# enables the arena). It has no `schedule:` trigger (PLT-015). The database secrets are referenced
+# ONLY in `env:` of the one step that reads and writes the arena tables.
+# SEC-108 c: the production job checks out the latest approved deploy-production commit, not the
+# release head. `deployment: false` gives the job the environment's secrets without creating a
+# deployment record, so a data run never counts as an approved deploy (D-023, SEC-108 c).
+# SEC-110: nothing is uploaded as an artifact or cached. Logs carry statuses and counts only.
+# What it does: fills, IS stops, corporate actions, sleeve, settlement, NAV, ARN-101 invariants and
+# the terminal checks for every active cohort for the session (src/lib/arena/closeBooks.ts), one
+# run_record per session keyed `arena-2a:AU:<date>`. With market.mode other than `full` (production
+# is data_only until the Owner approves M3, D-066) the script writes a skipped run record and
+# touches NO arena table.
+# NOT built here: batch 2b (18:10 signals and orders for D+1) and batch 3 (18:40 attribution,
+# controls, lessons, invariant re-check) are M4/M5; they will read the ledger this job closed.
+name: Arena close the books (batch 2a)
+
+on: workflow_dispatch
+
+permissions: {}
+
+jobs:
+  production:
+    if: github.ref == 'refs/heads/release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      deployments: read
+    # PLT-076: one run at a time, never cancelling one in progress. The "already succeeded" check is
+    # made by the script (run record `arena-2a:AU:<Sydney date>`).
+    concurrency:
+      group: arena-close
+      cancel-in-progress: false
+    environment:
+      name: production
+      deployment: false
+    steps:
+      # SEC-108 c: run the commit of the latest APPROVED deploy-production deployment, not the
+      # release head. These two steps run only the tiny reviewed script, with github.token
+      # alone (contents/deployments: read), never an environment secret.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ci-tools
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - name: Find approved commit
+        id: approved
+        run: node ci-tools/scripts/ci/approved-commit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.approved.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      # The only step with database secrets. It waits (up to 20 minutes) for Batch 1's completion
+      # marker, then closes the books of the session and any earlier session still open.
+      - name: Close the books
+        run: node scripts/arena/close-books.mjs
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+          COMMIT_SHA: ${{ steps.approved.outputs.sha }}

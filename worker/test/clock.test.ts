@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import backfillYml from "../../.github/workflows/backfill-history.yml?raw";
 import backupYml from "../../.github/workflows/backup.yml?raw";
 import ingestYml from "../../.github/workflows/ingest-batch1.yml?raw";
+import arenaYml from "../../.github/workflows/arena-close.yml?raw";
 import maintenanceYml from "../../.github/workflows/maintenance.yml?raw";
 import {
   CLAIM_STALE_MS,
@@ -93,6 +94,7 @@ describe("slot table (docs/M2_design.md section 3)", () => {
 
   it("only workflows that exist today are enabled and allow-listed; later slots are off", () => {
     expect([...DISPATCHABLE_WORKFLOWS].sort()).toEqual([
+      "arena-close.yml",
       "backfill-history.yml",
       "backup.yml",
       "ingest-batch1.yml",
@@ -116,11 +118,12 @@ describe("slot table (docs/M2_design.md section 3)", () => {
       "late-sweep",
       "marker-check",
       "backfill-history",
+      "arena-close",
     ]) {
       expect(AU_SLOTS.find((s) => s.id === id)?.enabled).toBe(false);
     }
     // The allow-listed files exist and are dispatch-only.
-    for (const y of [backupYml, backfillYml, ingestYml, maintenanceYml]) {
+    for (const y of [backupYml, backfillYml, ingestYml, maintenanceYml, arenaYml]) {
       expect(y).toMatch(/^on: workflow_dispatch$/m);
       expect(y).not.toMatch(/^\s*schedule:/m);
     }

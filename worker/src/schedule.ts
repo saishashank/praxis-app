@@ -35,6 +35,7 @@ const slot = (s: SlotInput): Slot => ({ ...s, minute: hhmm(s.time) });
 
 /** Workflow files the clock may dispatch. Nothing else is ever sent to GitHub. */
 export const DISPATCHABLE_WORKFLOWS: readonly string[] = [
+  "arena-close.yml",
   "backfill-history.yml",
   "backup.yml",
   "ingest-batch1.yml",
@@ -95,6 +96,22 @@ export const AU_SLOTS: readonly Slot[] = [
     catchUpMin: 40,
     enabled: true,
     note: "Batch 1, stages 1..9 (DAT-020); complete by 18:10 so catch-up closes at the cut-off (T6)",
+  }),
+  // M3 T10 (D-077): batch 2a "close the books". The workflow exists and is allow-listed, but the
+  // slot stays OFF until the Owner approves the [VERIFY] items and enables the arena (D-066: the
+  // script itself also refuses to write while market.mode is not `full`). It starts after
+  // Batch 1's catch-up window and waits for the completion marker; 2b (18:10) needs its result.
+  slot({
+    id: "arena-close",
+    time: "17:50",
+    runner: "actions",
+    workflow: "arena-close.yml",
+    tradingDaysOnly: true,
+    marketBound: true,
+    priority: 15,
+    catchUpMin: 20,
+    enabled: false,
+    note: "Batch 2a close the books (T10, ARN-060): fills, stops, settlement, NAV, invariants; OFF until the Owner enables the arena",
   }),
   slot({
     id: "decision-cutoff",
