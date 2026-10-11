@@ -70,6 +70,18 @@ export const FOREVER_TABLES = Object.freeze([
   "source_register_history",
   "quality_score",
   "completion_marker",
+  // M3 arena (migration 0007): the whole money trail is forever (DAT-142), nothing is pruned.
+  "execution",
+  "cohort",
+  "cohort_event",
+  "arena_order",
+  "cash_ledger",
+  "nav_daily",
+  "nav_daily_pos",
+  "sleeve_trade",
+  "sleeve_state",
+  "cost_profile",
+  "arena_control",
 ]);
 
 const MAX_PLAINTEXT_BYTES = 2 ** 30; // gunzip output cap (decompression-bomb guard)

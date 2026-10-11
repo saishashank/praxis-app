@@ -118,7 +118,7 @@ describe("dumpDatabase", () => {
       kind: "meta",
       format: 1,
       db: "main",
-      schema_version: 6,
+      schema_version: 7,
       created_at: AT,
       ephemeral: ["request_nonce"],
     });
@@ -195,7 +195,7 @@ describe("restoreDatabase", () => {
     expect(idx.rows.length).toBe(1);
     // And the migration table says the same version, so later migrations continue from it.
     const v = await target.execute("SELECT MAX(version) v FROM schema_migrations");
-    expect(Number(v.rows[0].v)).toBe(6);
+    expect(Number(v.rows[0].v)).toBe(7);
   });
 
   it("round-trips the auth DB (NULL name, unique indexes, audit trigger)", async () => {
@@ -306,7 +306,7 @@ describe("encryption (age)", () => {
     const r = await restoreDatabase(target, text);
     expect(r.sha256).toEqual(exp.sha256);
     expect(exp.tables).toContain("app_log");
-    expect(exp.schemaVersion).toBe(6);
+    expect(exp.schemaVersion).toBe(7);
   });
 
   it("another key cannot decrypt; tampered ciphertext is refused", async () => {
