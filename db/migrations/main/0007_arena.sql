@@ -121,6 +121,11 @@ END;
 -- parcel / whole-share" is a query. A rejected order may be inserted directly; a pending order moves
 -- to exactly one terminal status (filled / rejected / cancelled) once; `fill_d` and `reject_reason`
 -- may be set at that move. 'filled' is only reachable by UPDATE after the fill row exists.
+-- M4 columns (docs/M4_design.md section 3, D-078 #6; this file has not been applied anywhere, so
+-- they are edited in here, as D-073..D-076 did): signal_id and card_id link the order to its family
+-- signal and Decision Card; max_open_micro is the F3 gap cap (cancelled with reason 'gap' at fill
+-- when the open is at or above it); stop_spec is the canonical-JSON initial-stop recipe
+-- {atr_micro, k, cap, level_micro} (section 2.6). All four are immutable like the other columns.
 CREATE TABLE arena_order (
   id TEXT PRIMARY KEY,
   cohort_id TEXT NOT NULL,
@@ -136,6 +141,10 @@ CREATE TABLE arena_order (
   reject_reason TEXT CHECK (reject_reason IS NULL OR length(reject_reason) > 0),
   tier TEXT CHECK (tier IN ('U1','U2','U3')),
   untradeable_flag INTEGER NOT NULL DEFAULT 0 CHECK (untradeable_flag IN (0,1)),
+  signal_id TEXT,
+  card_id TEXT,
+  max_open_micro INTEGER CHECK (max_open_micro IS NULL OR max_open_micro > 0),
+  stop_spec TEXT CHECK (stop_spec IS NULL OR json_valid(stop_spec)),
   UNIQUE (cohort_id, decided_d, code, kind),
   CHECK ((status = 'rejected') = (reject_reason IS NOT NULL) OR status = 'cancelled'),
   CHECK (status <> 'filled' OR fill_d IS NOT NULL)
@@ -151,7 +160,9 @@ WHEN NOT (OLD.status = 'pending' AND NEW.status <> 'pending'
   AND NEW.id IS OLD.id AND NEW.cohort_id IS OLD.cohort_id AND NEW.decided_d IS OLD.decided_d
   AND NEW.code IS OLD.code AND NEW.side IS OLD.side AND NEW.kind IS OLD.kind
   AND NEW.qty IS OLD.qty AND NEW.ref_stop_micro IS OLD.ref_stop_micro
-  AND NEW.tier IS OLD.tier AND NEW.untradeable_flag IS OLD.untradeable_flag)
+  AND NEW.tier IS OLD.tier AND NEW.untradeable_flag IS OLD.untradeable_flag
+  AND NEW.signal_id IS OLD.signal_id AND NEW.card_id IS OLD.card_id
+  AND NEW.max_open_micro IS OLD.max_open_micro AND NEW.stop_spec IS OLD.stop_spec)
 BEGIN
   SELECT RAISE(ABORT, 'order: only pending to one terminal status; other columns are immutable');
 END;

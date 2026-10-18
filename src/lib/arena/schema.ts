@@ -105,6 +105,10 @@ export const ARENA_COLUMNS = {
     "reject_reason",
     "tier",
     "untradeable_flag",
+    "signal_id",
+    "card_id",
+    "max_open_micro",
+    "stop_spec",
   ],
   fill: [
     "id",
@@ -244,6 +248,7 @@ export const KNOWN_REJECT_REASONS = [
   "cash",
   "gate",
   "halted",
+  "gap",
 ] as const;
 export type Tier = "U1" | "U2" | "U3";
 
@@ -352,6 +357,14 @@ export type OrderRow = {
   reject_reason: string | null;
   tier: Tier | null;
   untradeable_flag: Flag01;
+  /** M4: the family signal this order came from (null for M3 / control orders). */
+  signal_id: string | null;
+  /** M4: the Decision Card it is linked to. */
+  card_id: string | null;
+  /** M4: F3 gap cap; the order is cancelled with reason 'gap' when the open is at or above it. */
+  max_open_micro: Micro | null;
+  /** M4: canonical JSON {atr_micro, k, cap, level_micro} of the initial-stop recipe. */
+  stop_spec: string | null;
 };
 
 export type FillRow = {

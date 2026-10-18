@@ -29,7 +29,7 @@ export type ConfigRow = {
   unit: string;
   default: unknown;
   bounds: string;
-  editable: "O" | "fixed";
+  editable: "O" | "B" | "fixed";
   ref: string;
   input: ConfigInput;
   value: unknown;

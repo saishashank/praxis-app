@@ -82,6 +82,25 @@ export const FOREVER_TABLES = Object.freeze([
   "sleeve_state",
   "cost_profile",
   "arena_control",
+  // M4 agents (migration 0008). Forever tables only; the retention-pruned ones (short_interest,
+  // indicator_daily, pattern_daily, insider_flow_score, replay_stat, llm_cache, llm_call) are not.
+  "index_bar",
+  "insider_notice",
+  "regime_daily",
+  "event",
+  "signal",
+  "card_note",
+  "stop_level",
+  "c2_selection",
+  "lineage",
+  "lineage_split",
+  "trial_ledger",
+  "ledger_row",
+  "ledger_control",
+  "replay_run",
+  "validation_result",
+  "label",
+  "killswitch_look",
 ]);
 
 const MAX_PLAINTEXT_BYTES = 2 ** 30; // gunzip output cap (decompression-bomb guard)

@@ -75,6 +75,10 @@ describe("configuration page", () => {
       "Quotas",
       "Sessions & limits",
       "Backups",
+      "Strategy families",
+      "Regime and events",
+      "Validation statistics",
+      "Replay and compute",
       "Other",
       "Recent changes",
     ]);
@@ -102,8 +106,11 @@ describe("configuration page", () => {
     expect(within(row).getByText("Fixed by the spec")).toBeInTheDocument();
     expect(within(row).queryByRole("button")).toBeNull();
     expect(within(row).queryByRole("textbox")).toBeNull();
-    // hmac_max_age_s, pii_hash_after_revocation_days, stall_floor_bps (M3 T2).
-    expect(screen.getAllByText("Fixed by the spec")).toHaveLength(3);
+    // hmac_max_age_s, pii_hash_after_revocation_days, stall_floor_bps (M3 T2) and the M4 fixed
+    // spec constants; market_mode is fixed in the registry but has its own text.
+    const fixed = Object.values(CONFIG_KEYS).filter((k) => k.editable === "fixed").length;
+    expect(screen.getAllByText("Fixed by the spec")).toHaveLength(fixed - 1);
+    expect(fixed).toBeGreaterThan(3);
     // market_mode is not editable here: its only writer also updates market.mode (M2 T10).
     const mode = screen.getByRole("row", { name: /market_mode/ });
     expect(within(mode).getByText("Set on System Health (Data controls)")).toBeInTheDocument();
