@@ -278,6 +278,11 @@ export async function liveCohortOutcomes(
       censored: !resolved,
       seedMicro: c.seedMicro,
       outcomeMicro: resolved && c.outcome !== null ? c.outcome : atEnd.liq,
+      // Live cohorts: the terminal-close liquidation NAV is the stored outcome; the realised
+      // wind-down value lives in the `liquidated` cohort event and is not re-read here.
+      terminalLiqNavMicro: resolved && c.outcome !== null ? c.outcome : atEnd.liq,
+      liquidatedD: null,
+      legacyValueMicro: 0n,
       navMicro: atEnd.nav,
       entries: t.n,
       exitsIs: t.is,
@@ -376,6 +381,7 @@ async function scorecardStage(
     if (gap > 0 && (i === 1 || gap < step)) step = gap;
   }
   const cohorts: CohortReplayResult = {
+    qualityGate: "supplied", // live 2a applied the real quality gate
     market: o.market,
     from: starts[0] ?? o.d,
     to: o.d,
