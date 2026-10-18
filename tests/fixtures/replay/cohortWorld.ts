@@ -1,4 +1,4 @@
-// A LedgerSource / CohortReplaySource over arbitrary bar series (M4 T14 tests; design decision 35:
+// A CohortReplaySource (a LedgerSource plus halts and the quality gate) over arbitrary bar series (M4 T14 tests; design decision 35:
 // public ZZ codes, invented numbers). Family inputs, position facts and the control universe come
 // from the SAME bars through the production fact builders, using only data up to the requested
 // session (a look-ahead bug shows when the future is poisoned). Differences from ledgerWorld's
@@ -14,7 +14,8 @@ import type { CorpActionRecord } from "@/lib/arena/corpActions";
 import { toMicroFromVendor } from "@/lib/money/micro";
 import { floorRat } from "@/lib/money/round";
 import type { PoolCode } from "@/lib/replay/controlLibrary";
-import type { LedgerSource } from "@/lib/replay/ledger";
+import type { EntryDecision } from "@/lib/data/quality/gate";
+import type { CohortReplaySource } from "@/lib/replay/cohortReplay";
 
 export type WorldSeries = { code: string; tier: Tier; bars: readonly (ViewBar | null)[] };
 
@@ -25,6 +26,10 @@ export type CohortWorldOptions = {
   readonly poisonAfter?: number;
   /** familyInputs for a session index above this throws (look-ahead tripwire). */
   readonly failInputsAfter?: number;
+  /** Universe halt flag per code and session (true halted, false trading, null no row). */
+  readonly halted?: (code: string, d: string) => boolean | null;
+  /** Entry decision of the data-quality gate per code and session. */
+  readonly qualityGate?: (code: string, d: string) => EntryDecision;
 };
 
 const POISON = 777_000_000n;
@@ -34,7 +39,7 @@ export function buildCohortWorld(
   series: readonly WorldSeries[],
   p: AgentParams,
   o: CohortWorldOptions = {},
-): LedgerSource & { inputsCalls: string[] } {
+): CohortReplaySource & { inputsCalls: string[] } {
   const byCode = new Map(series.map((s) => [s.code, s]));
   const idx = new Map<string, number>();
   sessions.forEach((d, i) => idx.set(d, i));
@@ -75,10 +80,12 @@ export function buildCohortWorld(
   };
   const events = o.events ?? [];
   const actions = o.actions ?? [];
-  const source: LedgerSource & { inputsCalls: string[] } = {
+  const source: CohortReplaySource & { inputsCalls: string[] } = {
     sessions,
     inputsCalls: [],
     corpActions: (code) => actions.filter((a) => a.code === code),
+    ...(o.halted === undefined ? {} : { halted: o.halted }),
+    ...(o.qualityGate === undefined ? {} : { qualityGate: o.qualityGate }),
     bar: (code, d) => barAt(code, idxOf(d)),
     positionFacts(code, d) {
       const i = idxOf(d);

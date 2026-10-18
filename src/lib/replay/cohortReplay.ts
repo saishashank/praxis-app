@@ -20,11 +20,17 @@
 // at `sleeve_leverage` (10x, the base group with all executions) and at `reality_cap` (5x, a group of
 // the L twins and C3 only; its controls are matched to the L twins' entries): ARN-049, data only.
 //
-// Deliberate simplifications (D-091): no data-quality gate (every code passes), the halt flag of the
-// facts stops an entry and a missing bar stops every fill, a held code without a bar is marked at its
-// last close (no ARN-026 haircut), a cohort that reaches a terminal state is not wound down (the
-// liquidation NAV at the terminal close is its outcome), no group restart after a terminal state (the
-// next start of the grid is the restart), twins and controls simply share the start grid.
+// Same as the live engine (D-091 follow-up; the SAME pure functions, no copies): a halted code gets no
+// fill and is marked with the ARN-026 suspension mark (`suspensionMark`, haircut from session 21,
+// injected `SuspensionConfig`); an entry is re-gated at its fill by the quality-gate result the
+// source supplies (`qualityGate`; without one every code passes and the result says so:
+// `qualityGate: "assumed_all_pass"`); a cohort that reaches a terminal state is wound down as in
+// closeBooks `windDown`: `planLiquidation` sells every holding at the next open (exit fill rules),
+// `planLegacy` moves a holding that cannot be sold (halted) to the legacy ledger at its suspension
+// mark, and the realised NAV (NAV of that session less the legacy value) is the outcome.
+//
+// Deliberate simplifications that remain: no group restart after a terminal state (the next start of
+// the grid is the restart), twins and controls simply share the start grid.
 //
 // Determinism (2.8): no clock, no Math.random; every iteration over codes, cohorts and orders is
 // sorted; the PRNG is the arena SplitMix64 seeded by `deriveRngSeed(master, <scope>)`.
@@ -97,7 +103,7 @@ import {
   type QtyAdjustment,
   type SettlementItem,
 } from "@/lib/arena/ledger";
-import { computeNavDay, type Mark } from "@/lib/arena/nav";
+import { computeNavDay, type Mark, type NavPosRow } from "@/lib/arena/nav";
 import type { ExecutionRow, LedgerAccount, TerminalKind } from "@/lib/arena/schema";
 import { isParcelOnlyRejection } from "@/lib/arena/sizing";
 import {
@@ -139,10 +145,16 @@ import {
   type TerminalRule,
 } from "@/lib/arena/terminal";
 import {
+  DEFAULT_SUSPENSION,
   planCorporateActions,
+  suspensionMark,
   type CorpActionRecord,
   type PlannedAdjustment,
+  type SuspensionConfig,
 } from "@/lib/arena/corpActions";
+import { planLegacy, planLiquidation } from "@/lib/arena/terminal";
+import { addDays, isWeekend, type CalendarRow } from "@/lib/data/calendar";
+import type { EntryDecision } from "@/lib/data/quality/gate";
 import { floorRat } from "@/lib/money/round";
 import { divFloor, type Rational } from "@/lib/money/rational";
 import type { ViewBar } from "@/lib/agents/decisionView";
@@ -152,8 +164,22 @@ import type { PositionFacts } from "./returns";
 /** Session counts at which a live cohort's liquidation NAV is sampled for the progress table (ARN-071). */
 export const PROGRESS_SESSIONS: readonly number[] = [21, 63, 126, 189]; // threshold-ok: progress sessions buckets (ch15 l.77, no registry key yet, D-091)
 
-/** Same source as the signal ledger: bars, position facts, family inputs and the control universe. */
-export type CohortReplaySource = LedgerSource;
+/**
+ * Same source as the signal ledger: bars, position facts, family inputs and the control universe,
+ * plus two optional pieces of live-engine state a snapshot may carry.
+ */
+export type CohortReplaySource = LedgerSource & {
+  /**
+   * Universe-snapshot halt flag of `code` on `d`: true halted, false trading, null no universe row.
+   * Without it the `halted` flag of the family facts of the session is used.
+   */
+  halted?(code: string, d: string): boolean | null;
+  /** The entry decision of the data-quality gate (`entriesAllowed`) on `d`; absent: no quality data. */
+  qualityGate?(code: string, d: string): EntryDecision;
+};
+
+/** `supplied`: entries were re-gated; `assumed_all_pass`: no quality data, every code passed. */
+export type QualityGateMode = "supplied" | "assumed_all_pass";
 
 export type ReplayProgress = {
   readonly stage: "starts" | "sessions";
@@ -174,6 +200,8 @@ export type CohortDayTrace = {
   readonly liqNavMicro: bigint;
   readonly openPositions: number;
   readonly cashSettledMicro: bigint;
+  /** The `nav_daily_pos` rows of the day (the haircut flag shows the ARN-026 mark). */
+  readonly positions: readonly NavPosRow[];
 };
 
 export type CohortReplayOptions = {
@@ -196,6 +224,10 @@ export type CohortReplayOptions = {
   /** Real ETF code of control C1; the placeholder (default) places no orders. */
   readonly c1EtfCode?: string;
   readonly checkpoints?: readonly number[];
+  /** Gate source; overrides the one of the source. Absent on both: every code passes (flagged). */
+  readonly qualityGate?: (code: string, d: string) => EntryDecision;
+  /** ARN-026 haircut and the sessions before it (default `DEFAULT_SUSPENSION`: 1/2 from session 21). */
+  readonly suspension?: SuspensionConfig;
   readonly progress?: (p: ReplayProgress) => void;
   /** Called with every cohort-day after its NAV is computed (off by default). */
   readonly trace?: (e: CohortDayTrace) => void;
@@ -234,9 +266,18 @@ export type CohortOutcome = {
   readonly terminalRule: TerminalRule | null;
   readonly censored: boolean;
   readonly seedMicro: bigint;
-  /** Liquidation NAV at `endD` (the outcome of a resolved cohort). */
+  /**
+   * The outcome of a resolved cohort: the realised NAV of its liquidation session (NAV less the legacy
+   * value) when `liquidatedD` is set, else the liquidation NAV at `endD` (also when censored).
+   */
   readonly outcomeMicro: bigint;
+  /** NAV and liquidation NAV at `endD` (the terminal close, or the last session when censored). */
   readonly navMicro: bigint;
+  readonly terminalLiqNavMicro: bigint;
+  /** Wound down: the session of the liquidation open (the `liquidated` event), else null. */
+  readonly liquidatedD: string | null;
+  /** Value of the halted holdings moved to the legacy ledger at the liquidation (0 without any). */
+  readonly legacyValueMicro: bigint;
   readonly entries: number;
   readonly exitsIs: number;
   readonly exitsCs: number;
@@ -254,6 +295,7 @@ export type CohortReplayResult = {
   readonly starts: readonly string[];
   readonly cohorts: readonly CohortOutcome[];
   readonly skippedC1: boolean;
+  readonly qualityGate: QualityGateMode;
 };
 
 // ---------------------------------------------------------------------------------------------------------
@@ -364,11 +406,20 @@ type Cohort = {
   dirty: boolean;
   lastNav: bigint;
   lastLiq: bigint;
+  /** Positions stored with the last NAV day (code, qty, close, value, haircut flag). */
+  lastPos: readonly NavPosRow[];
   todaySignals: number;
   /** Session index of the last close with an entry order decided (-1: none yet). */
   lastSignalIdx: number;
   todayParcel: number;
   done: boolean;
+  /** Codes held at the terminal close: sold at the next open (`planLiquidation`). */
+  liqCodes: string[];
+  liquidatedIdx: number;
+  termNav: bigint;
+  termLiq: bigint;
+  realisedMicro: bigint;
+  legacyMicro: bigint;
   verdict: {
     readonly kind: TerminalKind;
     readonly rule: TerminalRule;
@@ -418,6 +469,8 @@ type DayEnv = {
   readonly out: FamilyOutput;
   readonly facts: ReadonlyMap<string, CodeFacts>;
   bar(code: string): ViewBar | null;
+  /** Halted today (universe flag, ARN-026); a trading day also advances the code's halt clock. */
+  halted(code: string): boolean;
   positionFacts(code: string): PositionFacts | null;
   readonly advPrev: ReadonlyMap<string, bigint>;
   readonly prevClose: ReadonlyMap<string, bigint>;
@@ -461,6 +514,16 @@ export function replayCohorts(
   const slots = cohortSlots(registry, controls).filter(
     (s) => wanted === null || wanted.has(s.executionId),
   );
+
+  const suspension = opts.suspension ?? DEFAULT_SUSPENSION;
+  const gateSource =
+    opts.qualityGate ??
+    (src.qualityGate === undefined
+      ? undefined
+      : (code: string, d: string) => src.qualityGate!(code, d));
+  const calendar = calendarOf(sessions);
+  /** Session index of the last session each held code was seen trading (the halt starts the next one). */
+  const lastTrading = new Map<string, number>();
 
   // confirmed corporate actions of the codes seen so far (read lazily through the source)
   const actionsByCode = new Map<string, readonly CorpActionRecord[]>();
@@ -537,10 +600,17 @@ export function replayCohorts(
       dirty: true,
       lastNav: p.seedMicro,
       lastLiq: p.seedMicro,
+      lastPos: [],
       todaySignals: 0,
       lastSignalIdx: -1,
       todayParcel: 0,
       done: false,
+      liqCodes: [],
+      liquidatedIdx: -1,
+      termNav: 0n,
+      termLiq: 0n,
+      realisedMicro: 0n,
+      legacyMicro: 0n,
       verdict: null,
       endIdx: startIdx,
       entries: 0,
@@ -608,6 +678,7 @@ export function replayCohorts(
     type: "IS" | "CS",
     env: DayEnv,
     level: bigint | null,
+    liquidation = false,
   ): void => {
     const ledgerFill: LedgerFill = {
       id: `${c.id}|sell|${pos.orderId}`,
@@ -626,7 +697,9 @@ export function replayCohorts(
     if (item.netMicro !== 0n) c.pending.push(item);
     c.positions.delete(pos.code);
     c.stockExits.set(pos.orderId, { type, d: env.d, levelMicro: level });
-    if (type === "IS") {
+    if (liquidation) {
+      // a terminal liquidation is neither an IS nor a CS exit of the cohort's record (exit_type terminal)
+    } else if (type === "IS") {
       c.exitsIs += 1;
       c.lastIs.set(pos.code, env.i);
     } else {
@@ -713,7 +786,7 @@ export function replayCohorts(
     for (const pos of [...c.positions.values()].sort((a, b) => cmp(a.code, b.code))) {
       if (pos.pendingCs === null) continue;
       const bar = env.bar(pos.code);
-      if (bar === null) continue; // waits for a session with a bar
+      if (bar === null || env.halted(pos.code)) continue; // waits for a session with a bar, not halted
       const fe = fillEnv(c, bar, env, pos.code);
       const cs = fillCloseSignalExit(fe, pos.qty);
       const level = effLevel(pos);
@@ -737,8 +810,10 @@ export function replayCohorts(
         },
         {
           ...fe,
-          halted: env.facts.get(o.code)?.halted === true,
-          gate: { allowed: true, reason: "ok" }, // no data-quality gate in a replay (D-091)
+          halted: env.halted(o.code),
+          // the gate result of the fill session; without quality data every code passes (flagged)
+          gate:
+            gateSource === undefined ? { allowed: true, reason: "ok" } : gateSource(o.code, env.d),
         },
       );
       if (outcome.status !== "filled") continue;
@@ -794,7 +869,7 @@ export function replayCohorts(
     if (c.positions.size === 0) return;
     for (const pos of [...c.positions.values()].sort((a, b) => cmp(a.code, b.code))) {
       const bar = env.bar(pos.code);
-      if (bar === null) continue;
+      if (bar === null || env.halted(pos.code)) continue;
       const level = effLevel(pos);
       const fill = fillIntradayStop(fillEnv(c, bar, env, pos.code), pos.qty, level, {
         afterOpen: pos.entryIdx === env.i,
@@ -858,7 +933,7 @@ export function replayCohorts(
     };
     for (const t of c.sleeveTrades.filter((x) => x.closed === null)) {
       const bar = env.bar(t.code);
-      if (bar === null) continue;
+      if (bar === null || env.halted(t.code)) continue;
       const fe: FillEnv = { ...fillEnv(c, bar, env, t.code), profile: cfg.profile };
       const afterOpen = t.openD === env.d;
       const closeout = quoteSleeveExit(
@@ -951,7 +1026,19 @@ export function replayCohorts(
     const bar = env.bar(code);
     const close = bar !== null ? bar.close : closeMemory.get(code);
     if (close === undefined) return undefined;
-    return { closeMicro: close, advMicro: advMemory.get(code) ?? 0n };
+    const advMicro = advMemory.get(code) ?? 0n;
+    if (!env.halted(code)) return { closeMicro: close, advMicro };
+    // ARN-026: frozen at the last traded close; the halt began the session after the last trading one
+    const last = lastTrading.get(code);
+    const start = last === undefined ? env.i : Math.min(last + 1, env.i);
+    return suspensionMark({
+      lastCloseMicro: close,
+      advMicro,
+      haltStartD: sessions[start]!,
+      d: env.d,
+      calendar,
+      config: suspension,
+    });
   };
 
   /** One close for the terminal tests; only the last few are kept (the tests look back a fixed window). */
@@ -978,6 +1065,7 @@ export function replayCohorts(
     if (idle) {
       // nothing moved since the last stored NAV: the same cash, no position, no sleeve
       c.navs.push(c.lastNav);
+      c.lastPos = [];
       pushHistory(c, env.d, c.lastNav, c.lastLiq, 0n);
       return;
     }
@@ -1009,6 +1097,7 @@ export function replayCohorts(
     });
     c.lastNav = day.row.navMicro;
     c.lastLiq = day.row.liqNavMicro;
+    c.lastPos = day.positions;
     c.navs.push(day.row.navMicro);
     c.dirty = false;
     pushHistory(c, env.d, day.row.navMicro, day.row.liqNavMicro, day.row.openPositions);
@@ -1016,6 +1105,45 @@ export function replayCohorts(
       const bar = env.bar(pos.code);
       if (bar !== null && bar.close > pos.highest) pos.highest = bar.close;
     }
+  };
+
+  /** Terminal liquidation (ARN-053): every code held at the terminal close is sold at this open. */
+  const fillLiquidation = (c: Cohort, env: DayEnv): void => {
+    for (const code of c.liqCodes) {
+      const pos = c.positions.get(code);
+      if (pos === undefined) continue;
+      const bar = env.bar(code);
+      if (bar === null || env.halted(code)) continue; // waits: no bar, or halted (legacy at wind-down)
+      const fe = fillEnv(c, bar, env, code);
+      const level = effLevel(pos);
+      const chosen = selectExit(
+        fillCloseSignalExit(fe, pos.qty),
+        fillIntradayStop(fe, pos.qty, level),
+      );
+      if (chosen === null) continue;
+      closePosition(c, pos, chosen, "CS", env, null, true);
+    }
+  };
+
+  /** closeBooks `windDown`: once only halted codes are left unsold, they go to the legacy ledger. */
+  const windDown = (c: Cohort, env: DayEnv): void => {
+    if (c.liquidatedIdx >= 0) return; // the realised value is written once
+    const pending = c.liqCodes.filter((code) => c.positions.has(code));
+    const halted = new Set(pending.filter((code) => env.halted(code)));
+    if (pending.some((code) => !halted.has(code))) return; // a tradeable code is still unsold
+    const held = new Map<string, bigint>();
+    for (const [code, p] of c.positions) held.set(code, p.qty);
+    const items = planLegacy({
+      positions: held,
+      openTrades: [...c.positions.values()].map((p) => ({ tradeId: p.orderId, code: p.code })),
+      halted,
+      markFor: (code) => markFor(env, code) as Mark,
+    });
+    let legacy = 0n;
+    for (const item of items) legacy += item.valueMicro;
+    c.legacyMicro = legacy;
+    c.realisedMicro = c.lastNav - legacy;
+    c.liquidatedIdx = env.i;
   };
 
   const close2a = (c: Cohort, env: DayEnv): void => {
@@ -1028,6 +1156,7 @@ export function replayCohorts(
     }
     applyActions(c, env);
     fillPending(c, env);
+    if (c.done) fillLiquidation(c, env);
     isStops(c, env);
     if (c.cfg !== null && (c.filledToday.length > 0 || c.sleeveTrades.length > 0)) {
       sleeveStage(c, env, c.cfg);
@@ -1038,10 +1167,15 @@ export function replayCohorts(
       d: env.d,
       navMicro: c.lastNav,
       liqNavMicro: c.lastLiq,
+      positions: c.lastPos,
       openPositions: c.positions.size,
       cashSettledMicro: c.bal.cash_settled,
     });
     if (c.cfg !== null) unlockCheck(c, env, c.cfg);
+    if (c.done) {
+      windDown(c, env); // a resolved cohort keeps its terminal endIdx and verdict
+      return;
+    }
     c.endIdx = env.i;
     const elapsed = env.i - c.startIdx + 1;
     const v = judgeClose(c.params.terminal, c.history, elapsed, {
@@ -1051,6 +1185,17 @@ export function replayCohorts(
     if (v !== null) {
       c.done = true;
       c.verdict = { kind: v.kind, rule: v.rule, idx: env.i };
+      c.termNav = c.lastNav;
+      c.termLiq = c.lastLiq;
+      const held = new Map<string, bigint>();
+      for (const [code, p] of c.positions) held.set(code, p.qty);
+      c.liqCodes = planLiquidation({
+        cohortId: c.id,
+        d: env.d,
+        calendar,
+        positions: held,
+        openTrades: [...c.positions.values()].map((p) => ({ tradeId: p.orderId, code: p.code })),
+      }).orders.map((o) => o.code);
       return;
     }
     if (checkpoints.includes(elapsed)) {
@@ -1333,6 +1478,19 @@ export function replayCohorts(
       return b;
     };
     const pfMemo = new Map<string, PositionFacts | null>();
+    const haltMemo = new Map<string, boolean>();
+    const halted = (code: string): boolean => {
+      let h = haltMemo.get(code);
+      if (h === undefined) {
+        const f = facts.get(code);
+        const row =
+          src.halted !== undefined ? src.halted(code, d) : f === undefined ? null : f.halted;
+        if (row === false) lastTrading.set(code, i); // a trading session: the next halt starts after it
+        h = row === true;
+        haltMemo.set(code, h);
+      }
+      return h;
+    };
     const env: DayEnv = {
       i,
       d,
@@ -1341,6 +1499,7 @@ export function replayCohorts(
       out,
       facts,
       bar,
+      halted,
       positionFacts: (code) => {
         let p = pfMemo.get(code);
         if (p === undefined) {
@@ -1418,7 +1577,13 @@ export function replayCohorts(
         if (c.todaySignals > 0) c.lastSignalIdx = i;
       }
     }
-    live = live.filter((c) => !c.done);
+    // a resolved cohort stays until it is wound down (and its real sleeve trade, if any, is closed)
+    live = live.filter(
+      (c) =>
+        !c.done ||
+        c.liquidatedIdx < 0 ||
+        c.sleeveTrades.some((t) => !t.shadow && t.closed === null),
+    );
     advPrev = advNow;
     prevClose = closeNow;
     opts.progress?.({
@@ -1465,8 +1630,11 @@ export function replayCohorts(
         terminalRule: v === null ? null : v.rule,
         censored: v === null,
         seedMicro: c.params.seedMicro,
-        outcomeMicro: c.lastLiq,
-        navMicro: c.lastNav,
+        outcomeMicro: c.liquidatedIdx >= 0 ? c.realisedMicro : c.done ? c.termLiq : c.lastLiq,
+        navMicro: c.done ? c.termNav : c.lastNav,
+        terminalLiqNavMicro: c.done ? c.termLiq : c.lastLiq,
+        liquidatedD: c.liquidatedIdx >= 0 ? sessions[c.liquidatedIdx]! : null,
+        legacyValueMicro: c.legacyMicro,
         entries: c.entries,
         exitsIs: c.exitsIs,
         exitsCs: c.exitsCs,
@@ -1484,5 +1652,19 @@ export function replayCohorts(
     starts: startsSeen,
     cohorts: outcomes,
     skippedC1: !c1Active,
+    qualityGate: gateSource === undefined ? "assumed_all_pass" : "supplied",
   };
+}
+
+/** Calendar rows of a session list: every weekday between its first and last session that is not one is a holiday. */
+function calendarOf(sessions: readonly string[]): CalendarRow[] {
+  const have = new Set(sessions);
+  const rows: CalendarRow[] = [];
+  const first = sessions[0];
+  const last = sessions[sessions.length - 1];
+  if (first === undefined || last === undefined) return rows;
+  for (let d = first; d <= last; d = addDays(d, 1)) {
+    if (!isWeekend(d) && !have.has(d)) rows.push({ d, kind: "holiday", close_time: null });
+  }
+  return rows;
 }
