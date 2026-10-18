@@ -455,6 +455,8 @@ export type OpenTrade = {
   readonly fillD: string;
   readonly fillMicro: bigint;
   readonly stopSpec: string | null;
+  /** Decision Card of the entry order (exit orders link to it, decision 20). */
+  readonly cardId?: string | null;
 };
 
 /** Everything `evaluatePositions` needs for one open trade, on the basis of D (raw prices at D). */

@@ -4,7 +4,7 @@
 // the replay driver, so a night is exactly what production does, only against a local file.
 import type { Client } from "@libsql/client";
 import { buildAgentParams, type AgentParams } from "@/lib/agents/params";
-import { signalsDay, type SignalsResult } from "@/lib/agents/batch2b";
+import { signalsDay, type SignalsOptions, type SignalsResult } from "@/lib/agents/batch2b";
 import { CONFIG_KEYS } from "@/lib/config/keys";
 import { type ParamOverrides, buildExecutionRegistry, planInitialStart } from "@/lib/arena/cohort";
 import { resolveCohortParams } from "@/lib/arena/cohort";
@@ -209,6 +209,7 @@ export async function runNights(
   fromIndex: number,
   toIndex: number,
   hook?: (d: string, closed: CloseBooksResult, decided: SignalsResult) => Promise<void>,
+  extra: Partial<SignalsOptions> = {},
 ): Promise<NightRun> {
   const signals = new Map<string, SignalsResult>();
   const closes = await replaySessions(db, {
@@ -225,6 +226,7 @@ export async function runNights(
         now: NOW,
         masterSeed: MASTER_SEED,
         params,
+        ...extra,
       });
       signals.set(d, decided);
       if (hook !== undefined) await hook(d, closed, decided);

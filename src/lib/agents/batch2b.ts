@@ -35,7 +35,7 @@ import {
   loadCalendar,
   loadSleeveConfig,
 } from "@/lib/arena/closeBooks";
-import { feeFor } from "@/lib/arena/costs";
+import { COST_PROFILES, feeFor } from "@/lib/arena/costs";
 import { lockStatus, sleeveEligibility, sleeveMarginMicro } from "@/lib/arena/sleeve";
 import { loadSleeveStates, loadSleeveTrades } from "@/lib/arena/sleeveWriter";
 import {
@@ -58,6 +58,7 @@ import {
 import { loadLedgerFills, loadLedgerRows, toBig } from "@/lib/arena/ledgerWriter";
 import { derivePositions } from "@/lib/arena/nav";
 import type { ExecutionRow } from "@/lib/arena/schema";
+import type { LlmRouter } from "@/lib/llm/router";
 import { type Rational } from "@/lib/money/rational";
 import {
   AGENT_VERSION,
@@ -76,6 +77,19 @@ import {
   type OpenTrade,
   type SizingContext,
 } from "./candidates";
+import {
+  cardIdOf,
+  CardError,
+  cardNote,
+  checkCard,
+  finishCard,
+  loadScenarioInput,
+  putCard,
+  putCardNote,
+  type BuiltCard,
+  type CardNote,
+  type ScenarioInput,
+} from "./cards";
 import { controlPlan, controlPool } from "./controls";
 import { applyArn011 } from "./families/arn011";
 import { createContext } from "./families/context";
@@ -122,6 +136,8 @@ export type SignalsOptions = {
   readonly calendar?: CalendarRow[];
   /** Agent parameters (default: the config store, falling back to the registry defaults). */
   readonly params?: AgentParams;
+  /** Optional LLM router for the card summaries (D-084); absent = rules-only text, no call. */
+  readonly llm?: LlmRouter;
 };
 
 export type SignalsStatus = "success" | "degraded" | "failed" | "skipped" | "already_done";
@@ -137,6 +153,8 @@ export type SignalsStats = {
   controls: number;
   skips: number;
   cohorts: number;
+  /** Decision Cards written (taken and not taken, E cohorts only). */
+  cards: number;
 };
 
 export type SignalsResult = {
@@ -173,6 +191,7 @@ function emptyStats(): SignalsStats {
     controls: 0,
     skips: 0,
     cohorts: 0,
+    cards: 0,
   };
 }
 
@@ -251,6 +270,8 @@ type NewOrder = {
   readonly tier: Tier | null;
   readonly untradeable: boolean;
   readonly signalId: string | null;
+  /** Decision Card of the signal (entries and controls) or of the entry (exits); decision 20. */
+  readonly cardId: string | null;
   readonly maxOpenMicro: bigint | null;
   readonly stopSpec: string | null;
 };
@@ -268,6 +289,7 @@ const ORDER_COLS = [
   "tier",
   "untradeable_flag",
   "signal_id",
+  "card_id",
   "max_open_micro",
   "stop_spec",
 ] as const;
@@ -286,6 +308,7 @@ async function putOrder(db: Exec, o: NewOrder): Promise<boolean> {
     o.tier,
     o.untradeable ? 1 : 0,
     o.signalId,
+    o.cardId,
     o.maxOpenMicro,
     o.stopSpec,
   ];
@@ -535,6 +558,9 @@ type Ctx = {
   readonly masterSeed: bigint;
   readonly stats: SignalsStats;
   readonly gates: Map<string, EntryDecision>;
+  readonly llm: LlmRouter | undefined;
+  /** Scenario inputs per family|rule version|variant (one ledger read each per night). */
+  readonly scenarios: Map<string, ScenarioInput>;
 };
 
 async function gateOf(ctx: Ctx, code: string): Promise<EntryDecision> {
@@ -557,7 +583,7 @@ async function gateOf(ctx: Ctx, code: string): Promise<EntryDecision> {
 
 async function loadOpenTrades(db: Client): Promise<OpenTrade[]> {
   const rs = await db.execute(
-    `SELECT t.id, t.cohort_id, t.code, f.d AS fill_d, f.fill_price_micro, o.stop_spec
+    `SELECT t.id, t.cohort_id, t.code, f.d AS fill_d, f.fill_price_micro, o.stop_spec, o.card_id
      FROM trade t
      JOIN cohort c ON c.id = t.cohort_id
      JOIN fill f ON f.id = t.entry_fill_id
@@ -572,6 +598,7 @@ async function loadOpenTrades(db: Client): Promise<OpenTrade[]> {
     fillD: text(r.fill_d),
     fillMicro: toBig(r.fill_price_micro),
     stopSpec: r.stop_spec === null ? null : text(r.stop_spec),
+    cardId: r.card_id === null ? null : text(r.card_id),
   }));
 }
 
@@ -647,6 +674,7 @@ async function exitsStage(ctx: Ctx, cohorts: ReadonlyMap<string, StoredCohort>):
           tier: null,
           untradeable: false,
           signalId: null,
+          cardId: list.find((t) => t.code === ev.code)?.cardId ?? null,
           maxOpenMicro: null,
           stopSpec: exitOrderSpec(d, cross.ids, ev.cs.rule, ev.cs.via),
         };
@@ -674,6 +702,8 @@ type Taken = {
   readonly candidate: Candidate;
   readonly signalId: string;
   readonly halfSize: boolean;
+  /** The E execution's Decision Card of the signal: controls link to it (decision 20). */
+  readonly cardId: string;
 };
 
 function legFor(ctx: Ctx, facts: CodeFacts, halfSize: boolean, key: string): Leg | null {
@@ -708,6 +738,7 @@ async function writeLegs(
     code: string;
     tier: Tier;
     signalId: string;
+    cardId: string | null;
     plan: OrderPlan;
     maxOpen: bigint | null;
   },
@@ -725,6 +756,7 @@ async function writeLegs(
       kind: "entry" as const,
       tier: info.tier,
       signalId: info.signalId,
+      cardId: info.cardId,
     };
     if (r.sizing.accepted) {
       const wrote = await putOrder(tx, {
@@ -756,6 +788,102 @@ async function writeLegs(
   return { accepted, rejected };
 }
 
+// ---- Decision Cards (AGT-110, decision 20) ---------------------------------------------------------------
+
+async function scenarioFor(ctx: Ctx, c: Candidate): Promise<ScenarioInput> {
+  const key = `${c.family}|${c.ruleVersion}|${c.variant}`;
+  const hit = ctx.scenarios.get(key);
+  if (hit !== undefined) return hit;
+  const input = await loadScenarioInput(ctx.db, {
+    market: ctx.market,
+    family: c.family,
+    ruleVersion: c.ruleVersion,
+    variant: c.variant,
+  });
+  ctx.scenarios.set(key, input);
+  return input;
+}
+
+type CardStatus = {
+  readonly taken: boolean;
+  readonly reason: string | null;
+  /** The sizing result when the candidate was sized (accepted or rejected). */
+  readonly sized: LegResult | null;
+};
+
+type PreparedCard = {
+  readonly built: BuiltCard;
+  readonly note: CardNote;
+  readonly orderId: string | null;
+};
+
+/** Builds one card and its note (no database write; the router call happens before the transaction). */
+async function prepareCard(
+  ctx: Ctx,
+  books: CohortBooks,
+  exec: ExecutionRow,
+  c: Candidate,
+  signalId: string,
+  status: CardStatus,
+): Promise<PreparedCard | null> {
+  const facts = ctx.day.facts.get(c.code);
+  if (facts === undefined) return null;
+  const cross = crossing(ctx.actionsNext, c.code, ctx.d, ctx.nextD);
+  const sessions = ctx.day.inputs.sessions;
+  const from = sessions[Math.max(0, sessions.length - 1 - ctx.params.f2.lookbackSessions)] ?? ctx.d; // money-float-ok: slot count, not money
+  const events = (ctx.day.eventsByCode.get(c.code) ?? []).filter(
+    (e) => e.day0 >= from || (c.groupKey !== null && e.groupKey === c.groupKey),
+  );
+  const low =
+    c.groupKey === null
+      ? null
+      : (events.find((e) => e.groupKey === c.groupKey && e.day0LowMicro !== null)?.day0LowMicro ??
+        null);
+  const z = status.sized;
+  const built = finishCard({
+    signalId,
+    market: ctx.market,
+    d: ctx.d,
+    executionId: exec.id,
+    candidate: c,
+    taken: status.taken,
+    notTakenReason: status.reason,
+    closeMicro: scaleMicro(facts.bar.close, cross.priceFactor),
+    plan: entryPlan(ctx, c).plan.plan,
+    events,
+    insiderScoreQ: facts.insiderScoreQ,
+    shortDrop: facts.shortDrop,
+    eventLowMicro: low === null ? null : scaleMicro(low, cross.priceFactor),
+    sizing:
+      z === null
+        ? null
+        : {
+            accepted: z.sizing.accepted,
+            reasons: z.sizing.reasons,
+            qty: z.sizing.qty,
+            fillPriceMicro: z.sizing.fillPriceMicro,
+            slipMicro: z.sizing.slipMicro,
+            brokerageMicro: z.sizing.brokerageMicro,
+            orderValueMicro: z.sizing.orderValueMicro,
+            refPriceMicro: z.leg.env.refPriceMicro,
+            advValueMicro: z.leg.env.advValueMicro,
+          },
+    scenario: await scenarioFor(ctx, c),
+    params: ctx.params,
+    costProfile: COST_PROFILES[books.params.costProfile],
+    tickCrossFactor: books.params.tickCrossFactor,
+  });
+  const errors = checkCard(JSON.parse(built.json), ctx.params);
+  if (errors.length > 0) {
+    throw new SignalsError("card_invalid", errors.slice(0, 3).join("; ")); // threshold-ok: error text length
+  }
+  return {
+    built,
+    note: await cardNote(built.card, ctx.llm),
+    orderId: status.taken ? entryOrderId(books.cohort.id, ctx.d, c.code) : null,
+  };
+}
+
 /** Step 4 for one E cohort: returns the entries it took (for the controls). */
 async function entriesFor(
   ctx: Ctx,
@@ -766,34 +894,59 @@ async function entriesFor(
   signalIds: ReadonlyMap<Candidate, string>,
 ): Promise<Taken[]> {
   const slots = books.params.maxOpenPositions - books.positions.size;
-  if (slots < 1) return [];
-  const blocked = await reentryBlocked(ctx, exec.id);
+  const ranked = rankedCandidates(candidates.filter((c) => c.family === family));
+  if (ranked.length === 0) return [];
+  const cardIdFor = (c: Candidate): string => cardIdOf(signalIds.get(c)!, exec.id);
+  // every ranked candidate ends with exactly one status (a card each, taken or not)
+  const notTaken = new Map<Candidate, string>();
   const open = new Set(books.positions.keys());
-  const pool = rankedCandidates(candidates.filter((c) => c.family === family)).filter(
-    (c) => !open.has(c.code) && !blocked.has(c.code),
-  );
+  const blocked = slots < 1 ? new Set<string>() : await reentryBlocked(ctx, exec.id);
+  const pool: Candidate[] = [];
+  for (const c of ranked) {
+    if (slots < 1) notTaken.set(c, "positions_full");
+    else if (open.has(c.code)) notTaken.set(c, "holding");
+    else if (blocked.has(c.code)) notTaken.set(c, "reentry_block");
+    else pool.push(c);
+  }
   // the quality gate at creation: a global refusal rejects the top-ranked once, a blocked code
   // is rejected and the next candidate takes its place (entries only; exits are never gated)
   const eligible: Candidate[] = [];
   const gateRejects: { c: Candidate; reason: string }[] = [];
-  for (const c of pool) {
-    if (eligible.length >= slots) break;
-    if (crossing(ctx.actionsNext, c.code, ctx.d, ctx.nextD).disposal) continue;
+  let stoppedAt = pool.length;
+  for (const [i, c] of pool.entries()) {
+    if (eligible.length >= slots) {
+      stoppedAt = i;
+      break;
+    }
+    if (crossing(ctx.actionsNext, c.code, ctx.d, ctx.nextD).disposal) {
+      notTaken.set(c, "corporate_action");
+      continue;
+    }
     const g = await gateOf(ctx, c.code);
     if (g.allowed) {
       eligible.push(c);
       continue;
     }
     gateRejects.push({ c, reason: g.reason });
-    if (g.reason !== "code_blocked") break;
+    if (g.reason !== "code_blocked") {
+      stoppedAt = i + 1;
+      break;
+    }
   }
+  for (const c of pool.slice(stoppedAt)) notTaken.set(c, "rank");
   const legs: Leg[] = [];
   const byKey = new Map<string, Candidate>();
   for (const c of eligible) {
     const facts = ctx.day.facts.get(c.code);
-    if (facts === undefined) continue;
+    if (facts === undefined) {
+      notTaken.set(c, "no_facts");
+      continue;
+    }
     const leg = legFor(ctx, facts, c.halfSize, c.code);
-    if (leg === null) continue;
+    if (leg === null) {
+      notTaken.set(c, "corporate_action");
+      continue;
+    }
     legs.push(leg);
     byKey.set(c.code, c);
   }
@@ -804,8 +957,40 @@ async function entriesFor(
     sleeveReserveMicro: books.sleeveReserveMicro,
   };
   const results = planLegs(sizing, markSleeve(legs, books), slots);
+  const sizedOf = new Map(results.map((r) => [r.leg.key, r] as const));
+  const status = new Map<Candidate, CardStatus>();
+  for (const g of gateRejects) status.set(g.c, { taken: false, reason: "gate", sized: null });
+  for (const c of byKey.values()) {
+    const r = sizedOf.get(c.code);
+    if (r === undefined) {
+      notTaken.set(c, "rank");
+    } else {
+      status.set(
+        c,
+        r.sizing.accepted
+          ? { taken: true, reason: null, sized: r }
+          : { taken: false, reason: `rejected:${r.sizing.reasons.join(",")}`, sized: r },
+      );
+    }
+  }
+  for (const [c, reason] of notTaken) status.set(c, { taken: false, reason, sized: null });
+  // cards and notes first (the router call must not sit inside the write transaction)
+  const prepared = new Map<Candidate, PreparedCard>();
+  for (const c of ranked) {
+    const p = await prepareCard(ctx, books, exec, c, signalIds.get(c)!, status.get(c)!);
+    if (p !== null) prepared.set(c, p);
+  }
   const taken: Taken[] = [];
   await withTx(ctx.db, async (tx) => {
+    for (const c of ranked) {
+      const p = prepared.get(c);
+      if (p === undefined) continue;
+      const link = { orderId: p.orderId, cohortId: books.cohort.id };
+      if (await putCard(tx, p.built, link, signalIds.get(c)!, ctx.day.cutoff)) {
+        ctx.stats.cards += 1;
+      }
+      await putCardNote(tx, p.built.id, p.note);
+    }
     for (const g of gateRejects) {
       const wrote = await putOrder(tx, {
         id: entryOrderId(books.cohort.id, ctx.d, g.c.code),
@@ -820,6 +1005,7 @@ async function entriesFor(
         tier: g.c.tier,
         untradeable: false,
         signalId: signalIds.get(g.c) ?? null,
+        cardId: prepared.has(g.c) ? cardIdFor(g.c) : null,
         maxOpenMicro: null,
         stopSpec: null,
       });
@@ -832,13 +1018,19 @@ async function entriesFor(
         code: c.code,
         tier: c.tier,
         signalId: signalIds.get(c)!,
+        cardId: prepared.has(c) ? cardIdFor(c) : null,
         plan: plan.plan,
         maxOpen: plan.maxOpen,
       };
     });
     for (const key of out.accepted) {
       const c = byKey.get(key)!;
-      taken.push({ candidate: c, signalId: signalIds.get(c)!, halfSize: c.halfSize });
+      taken.push({
+        candidate: c,
+        signalId: signalIds.get(c)!,
+        halfSize: c.halfSize,
+        cardId: cardIdFor(c),
+      });
     }
   });
   return taken;
@@ -949,6 +1141,7 @@ async function controlsFor(
         code: leg.key,
         tier: facts.tier,
         signalId: dr.m.signalId,
+        cardId: dr.m.cardId,
         plan: planOf.get(leg.key)!,
         maxOpen: null,
       };
@@ -1106,6 +1299,8 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       masterSeed: o.masterSeed ?? ARENA_MASTER_SEED,
       stats,
       gates: new Map(),
+      llm: o.llm,
+      scenarios: new Map(),
     };
     const signalIds = new Map<Candidate, string>();
     await withTx(db, async (tx) => {
@@ -1169,7 +1364,8 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
         stats.rejected +
         stats.exits +
         stats.stopLevels +
-        stats.agentRows,
+        stats.agentRows +
+        stats.cards,
       details: { ...stats, partial: day.partialReasons.length > 0 ? day.partialReasons : null },
       now: o.now(),
     });
@@ -1178,9 +1374,11 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
     const code =
       error instanceof SignalsError
         ? error.code
-        : error instanceof Error
-          ? error.name
-          : "unknown_error";
+        : error instanceof CardError
+          ? "row_conflict"
+          : error instanceof Error
+            ? error.name
+            : "unknown_error";
     await finishRun(db, runId, {
       status: "failed",
       errorSummary: error instanceof Error ? `${code}: ${error.message}` : code,
