@@ -102,6 +102,7 @@ describe("slot table (docs/M2_design.md section 3)", () => {
       "backup.yml",
       "ingest-batch1.yml",
       "maintenance.yml",
+      "replay.yml",
     ]);
     for (const s of AU_SLOTS.filter((x) => x.enabled)) {
       expect(s.runner).toBe("actions");
@@ -124,6 +125,7 @@ describe("slot table (docs/M2_design.md section 3)", () => {
       "backfill-prices",
       "arena-close",
       "arena-signals",
+      "replay",
     ]) {
       expect(AU_SLOTS.find((s) => s.id === id)?.enabled).toBe(false);
     }
@@ -140,7 +142,8 @@ describe("slot table (docs/M2_design.md section 3)", () => {
         s.id === "backup" ||
         s.id === "maintenance" ||
         s.id === "backfill-history" ||
-        s.id === "backfill-prices"
+        s.id === "backfill-prices" ||
+        s.id === "replay"
       )
         expect(s.tradingDaysOnly).toBe(false);
       else expect(s.tradingDaysOnly).toBe(true);

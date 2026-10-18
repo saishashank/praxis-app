@@ -42,6 +42,7 @@ export const DISPATCHABLE_WORKFLOWS: readonly string[] = [
   "backup.yml",
   "ingest-batch1.yml",
   "maintenance.yml",
+  "replay.yml",
 ];
 
 export const DEFAULT_CATCH_UP_MIN = 60;
@@ -216,5 +217,19 @@ export const AU_SLOTS: readonly Slot[] = [
     catchUpMin: DEFAULT_CATCH_UP_MIN,
     enabled: false,
     note: "Yahoo price-history backfill (T16a, D-086/D-092): one month per run; OFF until the Owner accepts the source (O-26) and enables it",
+  }),
+  // M4 T16 (D-095): the replay workflow (default mode light). Allow-listed, slot OFF until the Owner
+  // enables the replay (weekly light, monthly full; the Owner dispatches the other modes by hand).
+  slot({
+    id: "replay",
+    time: "00:15",
+    runner: "actions",
+    workflow: "replay.yml",
+    tradingDaysOnly: false,
+    marketBound: false,
+    priority: 24,
+    catchUpMin: DEFAULT_CATCH_UP_MIN,
+    enabled: false,
+    note: "Replay light/full/evidence/null/injected (T16, ARN-080/100, AT-17); OFF until the Owner enables it",
   }),
 ];

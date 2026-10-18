@@ -1,0 +1,276 @@
+// Snapshot-backed replay source (M4 T16, D-095 draft): a `CohortReplaySource` (and so a
+// `LedgerSource`) over one loaded replay snapshot (DAT-140). Bars are the snapshot's RAW bars;
+// indicator facts are built per (code, session) from the last `barsNeeded` raw bars adjusted by the
+// confirmed splits with ex-date <= that session (DAT-126), exactly as the live batch builds them
+// (`LiveWorld`), and only from data up to the session. The benchmark regime is the A3 series over the
+// snapshot's index bars. The snapshot carries no event rows, short-interest or insider history, so
+// the world reports no event coverage and both sources off: F4 runs as its "no event filter"
+// variant, and the event/short-interest families output BLOCKED-DATA until those inputs exist
+// (ARN-082 labels this). No clock, no randomness.
+import type { ViewBar } from "@/lib/agents/decisionView";
+import { adjustBars, barsNeeded, splitActionsByCode } from "@/lib/agents/candidates";
+import {
+  buildCodeFacts,
+  type CodeFacts,
+  type FamilyInputs,
+  type Tier,
+} from "@/lib/agents/families";
+import { logReturns, microToFloat, stdevFloat, volumeRatio } from "@/lib/agents/indicators";
+import type { AgentParams } from "@/lib/agents/params";
+import { regimeSeries, type RegimeLabel } from "@/lib/agents/regime";
+import type { CorpActionRecord } from "@/lib/arena/corpActions";
+import { toMicroFromVendor } from "@/lib/money/micro";
+import { floorRat } from "@/lib/money/round";
+import type { PoolCode } from "./controlLibrary";
+import type { CohortReplaySource } from "./cohortReplay";
+import type { PositionFacts } from "./returns";
+import { loadSnapshot } from "./snapshot";
+
+type LoadedSnapshot = ReturnType<typeof loadSnapshot>;
+
+type UniverseRow = { d: string; code: string; tier: Tier; halted: number };
+type IndexRow = { index_code: string; d: string; c_micro: number };
+
+/** price factor (<1 for a split) -> shares-per-share ratio as a small integer pair, or null. */
+export function ratioPayload(type: string, factor: number): { new: number; old: number } | null {
+  if (!(factor > 0)) return null;
+  const inv = 1 / factor; // shares after per share before
+  for (let old = 1; old <= 20; old += 1) {
+    const nw = Math.round(inv * old);
+    if (nw >= 1 && Math.abs(nw / old - inv) < 1e-9) {
+      if (type === "bonus_issue") return nw > old ? { new: nw - old, old } : null;
+      return { new: nw, old };
+    }
+  }
+  return null;
+}
+
+/** Confirmed quantity-changing actions of the snapshot as arena records (others are not replayed). */
+export function corpRecordsOf(snap: LoadedSnapshot): CorpActionRecord[] {
+  const out: CorpActionRecord[] = [];
+  for (const a of snap.corporateActions) {
+    if (a.type !== "split" && a.type !== "consolidation" && a.type !== "bonus_issue") continue;
+    const p = ratioPayload(a.type, a.factor);
+    if (p === null) continue;
+    out.push({
+      id: `snap:${a.code}:${a.ex_date}:${a.action_id}`,
+      code: a.code,
+      type: a.type,
+      exDate: a.ex_date,
+      payload: p,
+    });
+  }
+  return out;
+}
+
+const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+export type SnapshotWorldOptions = {
+  readonly params: AgentParams;
+  readonly market?: string;
+  /** Benchmark index code of the regime classifier (default: the first index in the snapshot). */
+  readonly indexCode?: string;
+};
+
+export class SnapshotWorld implements CohortReplaySource {
+  readonly sessions: readonly string[];
+  readonly market: string;
+  readonly sha: string;
+  readonly firstBarD: string | null;
+  private readonly index = new Map<string, number>();
+  private readonly bars = new Map<string, ViewBar[]>();
+  private readonly barIdx = new Map<string, Map<string, number>>();
+  private readonly tiers = new Map<string, UniverseRow[]>();
+  private readonly splits: ReturnType<typeof splitActionsByCode>["byCode"];
+  private readonly actions: CorpActionRecord[];
+  private readonly regime = new Map<string, RegimeLabel>();
+  private readonly memo = new Map<string, CodeFacts>();
+  private readonly pfMemo = new Map<string, PositionFacts | null>();
+  private readonly need: number;
+  readonly codes: readonly string[];
+  /** Announcement days of the snapshot (DAT-125 list input). */
+  readonly announcements: readonly { readonly code: string; readonly d: string }[];
+  /** Delisting dates by code, from the confirmed corporate actions of type `delisting`. */
+  readonly delistings: ReadonlyMap<string, string>;
+
+  constructor(
+    snap: LoadedSnapshot,
+    private readonly o: SnapshotWorldOptions,
+  ) {
+    this.market = o.market ?? "AU";
+    this.sha = snap.sha;
+    this.sessions = (snap.tables.calendar as unknown as { d: string; kind: string }[])
+      .filter((r) => r.kind === "session" || r.kind === "early_close")
+      .map((r) => r.d)
+      .sort(cmp);
+    this.sessions.forEach((d, i) => this.index.set(d, i));
+    for (const b of snap.bars) {
+      let list = this.bars.get(b.code);
+      if (list === undefined) this.bars.set(b.code, (list = []));
+      list.push({
+        d: b.d,
+        open: toMicroFromVendor(b.o),
+        high: toMicroFromVendor(b.h),
+        low: toMicroFromVendor(b.l),
+        close: toMicroFromVendor(b.c),
+        volume: BigInt(b.volume),
+      });
+    }
+    let first: string | null = null;
+    for (const [code, list] of this.bars) {
+      list.sort((a, b) => cmp(a.d, b.d));
+      this.barIdx.set(code, new Map(list.map((b, i) => [b.d, i])));
+      if (first === null || list[0]!.d < first) first = list[0]!.d;
+    }
+    this.firstBarD = first;
+    this.codes = [...this.bars.keys()].sort(cmp);
+    for (const r of snap.tables.universe as unknown as UniverseRow[]) {
+      let list = this.tiers.get(r.code);
+      if (list === undefined) this.tiers.set(r.code, (list = []));
+      list.push(r);
+    }
+    for (const l of this.tiers.values()) l.sort((a, b) => cmp(a.d, b.d));
+    this.announcements = (
+      snap.tables.announcements as unknown as { code: string; published_at: string }[]
+    ).map((a) => ({ code: a.code, d: a.published_at.slice(0, 10) }));
+    const dl = new Map<string, string>();
+    for (const a of snap.corporateActions) {
+      if (a.type === "delisting" && (dl.get(a.code) ?? "9999") > a.ex_date)
+        dl.set(a.code, a.ex_date);
+    }
+    this.delistings = dl;
+    this.actions = corpRecordsOf(snap);
+    this.splits = splitActionsByCode(this.actions).byCode;
+    this.need = barsNeeded(o.params);
+    this.buildRegime(snap.tables.index_bars as unknown as IndexRow[]);
+  }
+
+  private buildRegime(rows: IndexRow[]): void {
+    if (rows.length === 0) return;
+    const code = this.o.indexCode ?? rows[0]!.index_code;
+    const mine = rows.filter((r) => r.index_code === code).sort((a, b) => cmp(a.d, b.d));
+    const res = regimeSeries(
+      mine.map((r) => BigInt(r.c_micro)),
+      this.o.params,
+    );
+    mine.forEach((r, i) => this.regime.set(r.d, res[i]!.state));
+  }
+
+  private tierOn(code: string, d: string): { tier: Tier; halted: boolean } {
+    const list = this.tiers.get(code);
+    if (list === undefined) return { tier: "U1", halted: false };
+    let lo = 0;
+    let hi = list.length - 1;
+    let hit = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (list[mid]!.d <= d) {
+        hit = mid;
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+    const r = hit >= 0 ? list[hit]! : list[0]!;
+    return { tier: r.tier, halted: list[hit >= 0 ? hit : 0]!.d === d && r.halted === 1 };
+  }
+
+  corpActions(code: string): readonly CorpActionRecord[] {
+    return this.actions.filter((a) => a.code === code);
+  }
+
+  bar(code: string, d: string): ViewBar | null {
+    const i = this.barIdx.get(code)?.get(d);
+    return i === undefined ? null : this.bars.get(code)![i]!;
+  }
+
+  private factsAt(code: string, i: number): CodeFacts {
+    const key = `${code}|${i}`;
+    let f = this.memo.get(key);
+    if (f === undefined) {
+      const raw = this.bars.get(code)!.slice(Math.max(0, i + 1 - this.need), i + 1);
+      const d = raw[raw.length - 1]!.d;
+      const known = (this.splits.get(code) ?? []).filter((a) => a.exDate <= d);
+      const { tier, halted } = this.tierOn(code, d);
+      f = buildCodeFacts(
+        { code, tier, adjusted: adjustBars(raw, known), raw, halted },
+        this.o.params,
+      );
+      this.memo.set(key, f);
+    }
+    return f;
+  }
+
+  /** Codes with a bar on `d`, in code order, with their bar position. */
+  private tradedOn(d: string): { code: string; i: number }[] {
+    const out: { code: string; i: number }[] = [];
+    for (const code of this.codes) {
+      const i = this.barIdx.get(code)?.get(d);
+      if (i !== undefined) out.push({ code, i });
+    }
+    return out;
+  }
+
+  positionFacts(code: string, d: string): PositionFacts | null {
+    const key = `${code}|${d}`;
+    const hit = this.pfMemo.get(key);
+    if (hit !== undefined) return hit;
+    const i = this.barIdx.get(code)?.get(d);
+    if (i === undefined) return null;
+    const f = this.factsAt(code, i);
+    const raw = this.bars.get(code)!.slice(Math.max(0, i + 1 - this.need), i + 1);
+    const known = (this.splits.get(code) ?? []).filter((a) => a.exDate <= d);
+    const volumes = adjustBars(raw, known).map((b) => b.volume);
+    const ratios = [];
+    for (let j = 4; j >= 0; j -= 1) {
+      ratios.push(
+        volumeRatio(volumes.slice(0, volumes.length - j), this.o.params.windows.volumeRatio),
+      );
+    }
+    const facts: PositionFacts = {
+      atrMicro: f.ind.atrWarm ? f.ind.atrMicro : null,
+      closeAboveExitSma: f.ind.closeAboveSmaShort,
+      volumeRatios: ratios,
+      events: [],
+    };
+    this.pfMemo.set(key, facts);
+    return facts;
+  }
+
+  familyInputs(d: string): FamilyInputs {
+    const idx = this.index.get(d);
+    if (idx === undefined) throw new RangeError(`unknown session ${d}`);
+    return {
+      market: this.market,
+      d,
+      regime: this.regime.get(d) ?? "unknown",
+      sessions: this.sessions.slice(0, idx + 1),
+      sources: { asx: "off", asic: "off" },
+      eventCoverage: false,
+      codes: this.tradedOn(d).map(({ code, i }) => this.factsAt(code, i)),
+      events: [],
+    };
+  }
+
+  halted(code: string, d: string): boolean | null {
+    const list = this.tiers.get(code);
+    const r = list?.find((x) => x.d === d);
+    return r === undefined ? null : r.halted === 1;
+  }
+
+  controlUniverse(d: string): readonly PoolCode[] {
+    return this.tradedOn(d).map(({ code, i }): PoolCode => {
+      const f = this.factsAt(code, i);
+      const closes = this.bars
+        .get(code)!
+        .slice(Math.max(0, i - 40), i + 1)
+        .map((b) => microToFloat(b.close));
+      return {
+        code,
+        tier: f.tier,
+        vol20: stdevFloat(logReturns(closes), 20, 1),
+        atrMicro: f.ind.atrMicro,
+        advMicro: f.ind.adv === null ? 0n : floorRat(f.ind.adv),
+        eligible: f.tier === "U1" && f.ind.atrWarm && !f.halted,
+      };
+    });
+  }
+}

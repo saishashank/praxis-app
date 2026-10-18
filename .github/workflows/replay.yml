@@ -1,0 +1,81 @@
+# Replay workflow, M4 T16 (ARN-080/081/100, AT-17, D-065, D-077 pattern, D-095 draft).
+# workflow_dispatch ONLY with a `mode` input: light (weekly, new rows and controls), full (monthly),
+# evidence (VAL-110 on validation + one holdout confirmation, labels), null (AT-17 random-signal size
+# check on the real snapshot, decision 31) and injected (AT-17 injected-edge power check). The Worker's
+# per-minute cron may dispatch it with `ref: release` (default mode light); its slot is DISABLED until
+# the Owner enables the replay. It has no `schedule:` trigger (PLT-015).
+# SEC-108 c: the job checks out the latest approved deploy-production commit, not the release head.
+# `deployment: false` gives the job the environment's secrets without creating a deployment record.
+# The database and data-repo secrets are referenced ONLY in `env:` of the one replay step: it
+# downloads the history files from the private data repo, builds the snapshot (database read-only for
+# the recent window), runs the replay in memory, writes summaries to the database and the bulky
+# outputs as write-once data-repo assets (SHA-skip). SEC-110: nothing is uploaded as an artifact or
+# cached; logs carry statuses, counts and minutes only. A run that passes its compute budget stops
+# cleanly and records `paused_budget`.
+name: Replay (AU)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Replay mode
+        type: choice
+        required: true
+        default: light
+        options:
+          - light
+          - full
+          - evidence
+          - "null"
+          - injected
+
+permissions: {}
+
+jobs:
+  production:
+    if: github.ref == 'refs/heads/release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      deployments: read
+    # PLT-076: one run at a time, never cancelling one in progress. The run id encodes mode, date,
+    # snapshot and commit, so a repeat is a no-op.
+    concurrency:
+      group: replay
+      cancel-in-progress: false
+    environment:
+      name: production
+      deployment: false
+    steps:
+      # SEC-108 c: run the commit of the latest APPROVED deploy-production deployment, not the
+      # release head. These two steps run only the tiny reviewed script, with github.token
+      # alone (contents/deployments: read), never an environment secret.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ci-tools
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - name: Find approved commit
+        id: approved
+        run: node ci-tools/scripts/ci/approved-commit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.approved.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      # The only step with secrets.
+      - name: Replay
+        run: node scripts/replay/run.mjs --mode "$REPLAY_MODE"
+        env:
+          REPLAY_MODE: ${{ inputs.mode || 'light' }}
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+          DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN_PROD }}
+          DATA_REPO: ${{ github.repository }}-data
+          COMMIT_SHA: ${{ steps.approved.outputs.sha }}

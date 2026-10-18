@@ -13,8 +13,9 @@ import { sha256Hex } from "./rules.mjs";
 const API = "https://api.github.com";
 const UPLOADS = "https://uploads.github.com";
 const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+-data$/;
-const TAG_RE = /^history-[a-z_]+-\d{4}$/;
-const ASSET_RE = /^[a-z_]+-\d{4}-\d{2}\.jsonl\.gz$/;
+// M4 T16: replay outputs use release `replay-<yyyy>-<mm>`, assets `replay-<run>-<part>.jsonl.gz`.
+const TAG_RE = /^(history-[a-z_]+-\d{4}|replay-\d{4}-\d{2})$/;
+const ASSET_RE = /^([a-z_]+-\d{4}-\d{2}|replay-[a-z0-9-]{1,150})\.jsonl\.gz$/;
 const TIMEOUT_MS = 60_000;
 const UPLOAD_TIMEOUT_MS = 300_000;
 export const MAX_FILE_BYTES = 64 * 1024 * 1024;
