@@ -1,0 +1,23 @@
+{
+  "format": "praxis-talib-ref/1",
+  "name": "handverified_6bars",
+  "generator": "hand-verified",
+  "tolerance": 1e-6,
+  "input": {
+    "open": [10, 10, 12, 11, 13, 12],
+    "high": [11, 13, 12, 14, 13, 14],
+    "low": [9, 10, 10, 11, 11, 12],
+    "close": [10, 12, 11, 13, 12, 14],
+    "volume": [1000, 1100, 900, 1200, 1000, 1500]
+  },
+  "expected": {
+    "SMA_3": { "fn": "sma", "period": 3, "values": [null, null, 11, 12, 12, 13] },
+    "EMA_3": { "fn": "ema", "period": 3, "values": [null, null, 11, 12, 12, 13] },
+    "RSI_2": {
+      "fn": "rsi",
+      "period": 2,
+      "values": [null, null, 66.66666666666667, 85.71428571428571, 54.54545454545455, 81.48148148148148]
+    },
+    "ATR_2": { "fn": "atr", "period": 2, "values": [null, null, 2.5, 2.75, 2.375, 2.1875] }
+  }
+}
