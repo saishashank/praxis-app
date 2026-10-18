@@ -18,7 +18,7 @@
     "docs/brand/"
   ],
   "files": {
-    "HYG-DATA": [],
+    "HYG-DATA": ["tests/fixtures/data/asic_short_sample.csv"],
     "HYG-SIZE": [],
     "HYG-PRIVATE": [],
     "HYG-EMAIL": ["tests/auth/testIdentity.test.ts", "scripts/ci/repo-hygiene.test.mjs"],
