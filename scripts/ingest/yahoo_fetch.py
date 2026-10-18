@@ -8,6 +8,9 @@ unusable value are written with null so the validator rejects them visibly; days
 all (non-trading days) are skipped.
 
 Request file:  {"codes": ["ZZZ", ...], "start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}   (end inclusive)
+Optional (M4 T3): "indices": ["^AXJO"] asks for index bars too; they go to --index-output (index.json),
+never into bars.json:  [{"code":"AXJO","date","open","high","low","close","source":"yahoo",
+                         "published_at":null,"fetched_at"}, ...]
 Output file:   [{"code","date","open","high","low","close","volume","adj_close",
                  "source":"yahoo","published_at":null,"fetched_at"}, ...]
 
@@ -39,6 +42,7 @@ MAX_RETRIES = 2
 BACKOFF_FACTOR = 4  # backoff = min_gap * BACKOFF_FACTOR ** attempt
 
 CODE_RE = re.compile(r"^[A-Z0-9]{2,6}$")
+INDEX_RE = re.compile(r"^^[A-Z0-9]{2,6}$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -73,6 +77,21 @@ def load_throttle(env: dict[str, str] | None = None) -> tuple[int, int]:
         _bounded_int("YAHOO_CHUNK_SIZE", e.get("YAHOO_CHUNK_SIZE"), DEFAULT_CHUNK_SIZE, CHUNK_BOUNDS),
         _bounded_int("YAHOO_MIN_GAP_S", e.get("YAHOO_MIN_GAP_S"), DEFAULT_MIN_GAP_S, GAP_BOUNDS),
     )
+
+
+def parse_indices(raw: Any) -> list[str]:
+    """The optional "indices" list of the request (Yahoo symbols such as ^AXJO), unique."""
+    if not isinstance(raw, dict) or "indices" not in raw:
+        return []
+    idx = raw["indices"]
+    if not isinstance(idx, list):
+        raise InputError("indices must be a list")
+    seen: dict[str, None] = {}
+    for i in idx:
+        if not isinstance(i, str) or not INDEX_RE.match(i):
+            raise InputError("every index must look like ^AXJO")
+        seen[i] = None
+    return list(seen)
 
 
 def parse_request(raw: Any) -> tuple[list[str], str, str]:
@@ -172,6 +191,77 @@ def rows_from_frame(df: Any, codes: list[str], fetched_at: str) -> list[dict[str
     return out
 
 
+def index_rows_from_frame(df: Any, symbol: str, fetched_at: str) -> list[dict[str, Any]]:
+    """Index bar rows (no repair, all-NaN days skipped). The stored code drops the caret."""
+    out: list[dict[str, Any]] = []
+    if df is None or getattr(df, "empty", True):
+        return out
+    sub = _frame_for(df, symbol)
+    if sub is None:
+        sub = df  # a single symbol may come back flat
+    if getattr(sub, "empty", True):
+        return out
+    for idx, rec in sub.iterrows():
+        o, h, lo, c = (_clean(rec.get(k)) for k in ("Open", "High", "Low", "Close"))
+        if all(x is None for x in (o, h, lo, c)):
+            continue
+        day = idx.date() if hasattr(idx, "date") else date.fromisoformat(str(idx)[:10])
+        out.append(
+            {
+                "code": symbol[1:],
+                "date": day.isoformat(),
+                "open": o,
+                "high": h,
+                "low": lo,
+                "close": c,
+                "source": "yahoo",
+                "published_at": None,
+                "fetched_at": fetched_at,
+            }
+        )
+    return out
+
+
+def fetch_indices(
+    symbols: list[str],
+    start: str,
+    end: str,
+    min_gap_s: int,
+    download: Callable[..., Any],
+    sleep: Callable[[float], None] = time.sleep,
+    now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+) -> list[dict[str, Any]]:
+    """One request per index symbol, after the equity requests (min gap kept). Same rate-limit
+    rule as the equities: bounded retries, then RateLimited."""
+    end_exclusive = (date.fromisoformat(end) + timedelta(days=1)).isoformat()
+    rows: list[dict[str, Any]] = []
+    for sym in symbols:
+        attempt = 0
+        while True:
+            sleep(min_gap_s if attempt == 0 else min_gap_s * BACKOFF_FACTOR**attempt)
+            try:
+                df = download(
+                    tickers=[sym],
+                    start=start,
+                    end=end_exclusive,
+                    interval="1d",
+                    auto_adjust=False,
+                    group_by="ticker",
+                    progress=False,
+                    threads=False,
+                )
+                break
+            except Exception as exc:  # noqa: BLE001 - classified below
+                if _is_rate_limit(exc):
+                    if attempt >= MAX_RETRIES:
+                        raise RateLimited("rate limited by Yahoo; retries exhausted") from exc
+                    attempt += 1
+                    continue
+                raise FetchError(f"download failed: {type(exc).__name__}") from exc
+        rows.extend(index_rows_from_frame(df, sym, now().strftime("%Y-%m-%dT%H:%M:%S.000Z")))
+    return rows
+
+
 def fetch_all(
     codes: list[str],
     start: str,
@@ -241,6 +331,7 @@ def run(
     env: dict[str, str] | None = None,
     download: Callable[..., Any] | None = None,
     sleep: Callable[[float], None] = time.sleep,
+    index_output_path: str | None = None,
 ) -> dict[str, Any]:
     with open(request_path, encoding="utf-8") as f:
         try:
@@ -258,6 +349,16 @@ def run(
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(rows, f, allow_nan=False, separators=(",", ":"))
     os.replace(tmp, output_path)  # the file appears complete or not at all
+    # M4 T3: the benchmark index. Bars are already safely written, so an index failure fails the
+    # stage visibly (exit code) without losing them.
+    symbols = parse_indices(raw)
+    if symbols and index_output_path:
+        index_rows = fetch_indices(symbols, start, end, min_gap_s, download, sleep=sleep)
+        itmp = f"{index_output_path}.tmp"
+        with open(itmp, "w", encoding="utf-8") as f:
+            json.dump(index_rows, f, allow_nan=False, separators=(",", ":"))
+        os.replace(itmp, index_output_path)
+        report["index_rows"] = len(index_rows)
     return report
 
 
@@ -265,10 +366,11 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Fetch Yahoo daily bars into bars.json (no DB access).")
     ap.add_argument("--request", required=True, help="JSON file: codes, start, end")
     ap.add_argument("--output", required=True, help="where to write bars.json")
+    ap.add_argument("--index-output", help="where to write index.json (optional index bars)")
     ap.add_argument("--report", help="optional path for a counts-only JSON report")
     args = ap.parse_args(argv)
     try:
-        report = run(args.request, args.output)
+        report = run(args.request, args.output, index_output_path=args.index_output)
     except InputError as exc:
         print(f"yahoo_fetch: input error: {exc}", file=sys.stderr)
         return 2

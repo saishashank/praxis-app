@@ -89,7 +89,7 @@ test("the Python fetch step has no secrets and only the throttle values from the
   assert.equal(f.if, "steps.plan.outputs.fetch == 'true'");
   assert.equal(
     f.run,
-    "python scripts/ingest/yahoo_fetch.py --request request.json --output bars.json",
+    "python scripts/ingest/yahoo_fetch.py --request request.json --output bars.json --index-output index.json",
   );
   assert.deepEqual(f.env, {
     YAHOO_CHUNK_SIZE: "${{ steps.plan.outputs.chunk_size }}",
@@ -102,6 +102,19 @@ test("the Python fetch step has no secrets and only the throttle values from the
   assert.match(read("scripts/ingest/requirements.txt"), /^yfinance==\d+\.\d+\.\d+$/m);
 });
 
+test("the ASIC fetch step has no secrets and runs between the fetch and the ingest (M4 T3)", () => {
+  const f = byName("Fetch ASIC short positions (no secrets)");
+  assert.equal(
+    f.run,
+    "node scripts/ingest/asic_fetch.mjs --request request.json --output short.json",
+  );
+  assert.equal(f.env, undefined);
+  assert.ok(!JSON.stringify(f).includes("secrets.") && !JSON.stringify(f).includes("TURSO"));
+  const i = steps.indexOf(f);
+  assert.ok(steps.indexOf(byName("Fetch bars (no secrets)")) < i);
+  assert.ok(i < steps.findIndex((x) => x.name === "Ingest batch 1"));
+});
+
 test("steps run in order: plan, fetch, ingest; ingest also records a failed or skipped fetch", () => {
   const names = steps.map((s) => s.name ?? s.uses ?? s.run);
   const plan = steps.findIndex((s) => s.id === "plan");
@@ -109,7 +122,10 @@ test("steps run in order: plan, fetch, ingest; ingest also records a failed or s
   const ingest = steps.findIndex((s) => s.name === "Ingest batch 1");
   assert.ok(0 < plan && plan < fetch && fetch < ingest, names.join(" | "));
   assert.equal(steps[plan].run, "node scripts/ingest/batch1.mjs prepare --request request.json");
-  assert.equal(steps[ingest].run, "node scripts/ingest/batch1.mjs run --bars bars.json");
+  assert.equal(
+    steps[ingest].run,
+    "node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json",
+  );
   assert.match(
     steps[ingest].if,
     /^\$\{\{ !cancelled\(\) && steps\.plan\.outcome == 'success' \}\}$/,

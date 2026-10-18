@@ -1,0 +1,7 @@
+[
+  {"code":"AXJO","date":"2026-10-12","open":1000.5,"high":1010.25,"low":995,"close":1005.75,"source":"yahoo","published_at":null,"fetched_at":"2026-10-13T06:35:00.000Z"},
+  {"code":"AXJO","date":"2026-10-13","open":1005.75,"high":1020,"low":1001.5,"close":1012.125,"source":"yahoo","published_at":null,"fetched_at":"2026-10-13T06:35:00.000Z"},
+  {"code":"AXJO","date":"2026-10-13","open":1,"high":1,"low":1,"close":1,"source":"yahoo","published_at":null,"fetched_at":"2026-10-13T06:35:00.000Z"},
+  {"code":"AXJO","date":"2026-10-14","open":0,"high":1,"low":1,"close":1,"source":"yahoo","published_at":null,"fetched_at":"2026-10-13T06:35:00.000Z"},
+  {"code":"XXXX","date":"2026-10-13","open":1,"high":1,"low":1,"close":1,"source":"yahoo","published_at":null,"fetched_at":"2026-10-13T06:35:00.000Z"}
+]

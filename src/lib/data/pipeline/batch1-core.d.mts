@@ -40,7 +40,15 @@ export type CorporateActionsHook = (ctx: {
 }) => Promise<object | void>;
 export const noopCorporateActionsHook: CorporateActionsHook;
 
-export type FetchRequest = { codes: string[]; start: string; end: string };
+export type FetchRequest = {
+  codes: string[];
+  start: string;
+  end: string;
+  /** Yahoo index symbols (M4 T3, `^AXJO`). */
+  indices?: string[];
+  /** Weekdays to ask ASIC for (M4 T3); empty when the ASIC source is off. */
+  short_dates?: string[];
+};
 
 export type Assessment =
   | { kind: "failed"; stage: string; reason: string; target: string; market: string; io: Io }
@@ -86,6 +94,11 @@ export function prepareBatch1(
 export type RunOptions = {
   nowMs: () => number;
   barsText?: string | null;
+  /** index.json contents (M4 T3); null/absent = no file. */
+  indexText?: string | null;
+  /** short.json contents (M4 T3); null/absent = no file. */
+  shortText?: string | null;
+  inputsHook?: import("../index/inputsStage.mjs").InputsHook;
   commitSha?: string;
   market?: string;
   maxDates?: number;

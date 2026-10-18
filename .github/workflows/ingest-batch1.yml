@@ -11,7 +11,8 @@
 # cached. Logs carry counts and statuses only.
 # Flow: (1) `prepare` reads the DB (market mode, success record for today's key, catch-up plan,
 # source gate, universe) and writes request.json; (2) Python/yfinance fetches into bars.json;
-# (3) the Node writer validates and writes market data only (BLD-024). Step 3 also runs when the
+# (2b) M4 T3: the same python step also fetches the S&P/ASX 200 into index.json, and a Node step
+# fetches the ASIC short positions into short.json (both secret-free); (3) the Node writer validates and writes market data only (BLD-024). Step 3 also runs when the
 # fetch failed or was not needed, so a skip or a failure is always recorded in a run record.
 name: Ingest batch 1 (AU EOD)
 
@@ -74,13 +75,18 @@ jobs:
       # bars.json. The throttle values come from the plan step's outputs, which are not secret.
       - name: Fetch bars (no secrets)
         if: steps.plan.outputs.fetch == 'true'
-        run: python scripts/ingest/yahoo_fetch.py --request request.json --output bars.json
+        run: python scripts/ingest/yahoo_fetch.py --request request.json --output bars.json --index-output index.json
         env:
           YAHOO_CHUNK_SIZE: ${{ steps.plan.outputs.chunk_size }}
           YAHOO_MIN_GAP_S: ${{ steps.plan.outputs.min_gap_s }}
+      # M4 T3: ASIC daily short positions (public source). No secrets, no database; it reads only
+      # the date list of request.json. Runs even if the Yahoo fetch failed (independent source).
+      - name: Fetch ASIC short positions (no secrets)
+        if: ${{ !cancelled() && steps.plan.outputs.fetch == 'true' }}
+        run: node scripts/ingest/asic_fetch.mjs --request request.json --output short.json
       - name: Ingest batch 1
         if: ${{ !cancelled() && steps.plan.outcome == 'success' }}
-        run: node scripts/ingest/batch1.mjs run --bars bars.json
+        run: node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json
         env:
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
