@@ -8,6 +8,7 @@
 // Callers pass series already adjusted with factors whose ex-date <= D (DAT-126) except where a
 // function says "raw" (ADV). Series are oldest first; the last element is session D.
 import { toMicro } from "@/lib/money/micro";
+import { defaultAgentParams } from "./params";
 import { cmpRat, makeRational, type Rational } from "@/lib/money/rational";
 
 /** One session bar in integer micro prices (adjusted unless stated). Volume in shares. */
@@ -35,17 +36,19 @@ export type IndicatorParams = {
 };
 
 /** Values from spec 07 AGT-030 / M4 design 2.2; key names are the proposed fixed registry keys. */
+/** Defaults resolved from the config registry (keys.ts via params.ts), never literals here. */
+const DEFAULT_WINDOWS = defaultAgentParams();
 export const DEFAULT_INDICATOR_PARAMS: IndicatorParams = {
-  atrPeriod: 20, // ind_atr_period (AGT-030 ATR(20))
-  rsiShortPeriod: 2, // ind_rsi_short_period (RSI(2))
-  rsiLongPeriod: 14, // ind_rsi_long_period (RSI(14))
-  smaShortPeriod: 5, // ind_sma_short_period (F4 exit close > SMA5)
-  smaLongPeriod: 200, // ind_sma_long_period (F4 entry close > SMA200)
-  returnLookback: 126, // ind_return_lookback (6-month return, 126 sessions)
-  highLookback: 250, // F1 high_lookback (250-session high)
-  volumeWindow: 20, // ind_volume_window (volume ratio over previous 20 sessions)
-  advWindow: 20, // ind_adv_window (ADV over previous 20 sessions)
-  warmupMultiple: 3, // ind_warmup_multiple (design 2.2)
+  atrPeriod: DEFAULT_WINDOWS.windows.atr,
+  rsiShortPeriod: DEFAULT_WINDOWS.windows.rsiShort,
+  rsiLongPeriod: DEFAULT_WINDOWS.windows.rsiLong,
+  smaShortPeriod: DEFAULT_WINDOWS.windows.smaExit,
+  smaLongPeriod: DEFAULT_WINDOWS.windows.smaTrend,
+  returnLookback: DEFAULT_WINDOWS.windows.returnWindow,
+  highLookback: DEFAULT_WINDOWS.f1.highLookback,
+  volumeWindow: DEFAULT_WINDOWS.windows.volumeRatio,
+  advWindow: DEFAULT_WINDOWS.windows.adv,
+  warmupMultiple: 3, // threshold-ok: design 2.2 warm-up rule (bars >= 3 x period), D-081
 };
 
 function assertPeriod(n: number, min = 1): void {
@@ -59,7 +62,7 @@ function assertPeriod(n: number, min = 1): void {
 
 /** Micro price to float64 (deterministic: one division). Float domain only. */
 export function microToFloat(value: bigint): number {
-  return Number(value) / 1e6;
+  return Number(value) / 1e6; // threshold-ok: micro-AUD unit conversion
 }
 
 /**
@@ -68,7 +71,7 @@ export function microToFloat(value: bigint): number {
  */
 export function atrToMicro(atr: number): bigint {
   if (!Number.isFinite(atr)) throw new RangeError("ATR is not finite");
-  const text = String(atr).includes("e") ? atr.toFixed(12) : String(atr);
+  const text = String(atr).includes("e") ? atr.toFixed(12) : String(atr); // threshold-ok: decimal digits for exponent-form doubles
   return toMicro(text, { rounding: "half-away-from-zero" });
 }
 
@@ -358,7 +361,7 @@ export function rsiInit(period: number): RsiState {
 function rsiValue(avgGain: number, avgLoss: number): number {
   // TA-Lib: 100 * G / (G + L), and 0 when both averages are 0 (flat series; parity choice).
   const total = avgGain + avgLoss;
-  return total === 0 ? 0 : 100 * (avgGain / total);
+  return total === 0 ? 0 : 100 * (avgGain / total); // threshold-ok: RSI scale 0-100
 }
 
 /** Wilder RSI step: averages seeded by the simple mean of the first n changes, then Wilder. */
@@ -544,7 +547,7 @@ export function computeIndicatorRow(
 // ---------------------------------------------------------------------------------------------
 
 export const TALIB_FIXTURE_FORMAT = "praxis-talib-ref/1";
-export const TALIB_FIXTURE_TOLERANCE = 1e-6; // AGT-032
+export const TALIB_FIXTURE_TOLERANCE = 1e-6; // threshold-ok: AGT-032 parity tolerance
 
 export type TaLibFn = "sma" | "ema" | "rsi" | "atr";
 

@@ -45,12 +45,12 @@ export type PatternSettings = {
 
 /** TA-Lib default settings (ta_global.c); proposed fixed registry keys pat_* (decision 10). */
 export const DEFAULT_PATTERN_SETTINGS: PatternSettings = {
-  bodyLong: { range: "realbody", period: 10, factor: ratFromInt(1n) }, // pat_body_long
-  bodyShort: { range: "realbody", period: 10, factor: ratFromInt(1n) }, // pat_body_short
-  shadowLong: { range: "realbody", period: 0, factor: ratFromInt(1n) }, // pat_shadow_long
-  shadowVeryShort: { range: "highlow", period: 10, factor: makeRational(1n, 10n) }, // pat_shadow_very_short
-  near: { range: "highlow", period: 5, factor: makeRational(1n, 5n) }, // pat_near
-  morningStarPenetration: makeRational(3n, 10n), // pat_morning_star_penetration
+  bodyLong: { range: "realbody", period: 10, factor: ratFromInt(1n) }, // threshold-ok: TA-Lib default (pat_body_long)
+  bodyShort: { range: "realbody", period: 10, factor: ratFromInt(1n) }, // threshold-ok: TA-Lib default (pat_body_short)
+  shadowLong: { range: "realbody", period: 0, factor: ratFromInt(1n) }, // threshold-ok: TA-Lib default (pat_shadow_long)
+  shadowVeryShort: { range: "highlow", period: 10, factor: makeRational(1n, 10n) }, // threshold-ok: TA-Lib default (pat_shadow_very_short)
+  near: { range: "highlow", period: 5, factor: makeRational(1n, 5n) }, // threshold-ok: TA-Lib default (pat_near)
+  morningStarPenetration: makeRational(3n, 10n), // threshold-ok: TA-Lib default (pat_morning_star_penetration)
   piercingPenetration: makeRational(1n, 2n), // pat_piercing_penetration
 };
 
