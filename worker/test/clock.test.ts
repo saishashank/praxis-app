@@ -98,6 +98,7 @@ describe("slot table (docs/M2_design.md section 3)", () => {
       "arena-close.yml",
       "arena-signals.yml",
       "backfill-history.yml",
+      "backfill-prices.yml",
       "backup.yml",
       "ingest-batch1.yml",
       "maintenance.yml",
@@ -120,6 +121,7 @@ describe("slot table (docs/M2_design.md section 3)", () => {
       "late-sweep",
       "marker-check",
       "backfill-history",
+      "backfill-prices",
       "arena-close",
       "arena-signals",
     ]) {
@@ -134,7 +136,12 @@ describe("slot table (docs/M2_design.md section 3)", () => {
 
   it("nightly slots run every day, ingest slots only on trading days", () => {
     for (const s of AU_SLOTS) {
-      if (s.id === "backup" || s.id === "maintenance" || s.id === "backfill-history")
+      if (
+        s.id === "backup" ||
+        s.id === "maintenance" ||
+        s.id === "backfill-history" ||
+        s.id === "backfill-prices"
+      )
         expect(s.tradingDaysOnly).toBe(false);
       else expect(s.tradingDaysOnly).toBe(true);
     }

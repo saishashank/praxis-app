@@ -163,4 +163,4 @@ jobs:
           cache: pip
           cache-dependency-path: scripts/ingest/requirements-dev.txt
       - run: pip install -r scripts/ingest/requirements-dev.txt
-      - run: python -m pytest scripts/ingest -q
+      - run: python -m pytest scripts/ingest scripts/backfill scripts/agents -q

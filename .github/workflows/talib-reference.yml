@@ -1,0 +1,30 @@
+# TA-Lib reference fixture (M4 T16a, D-092 draft; D-053, D-081; AGT-032). One-off, manual.
+# workflow_dispatch ONLY. It needs NO secrets and NO environment: it computes TA-Lib indicators
+# and candle patterns on a synthetic, deterministic series (codes ZZ, generated in the script) and
+# prints the fixture JSON (format praxis-talib-ref/1) to the job log and summary. Nothing is
+# uploaded or cached (SEC-110). The Owner copies the printed JSON into
+# tests/fixtures/agents/indicators/ and commits it; tests/agents then compares the TypeScript
+# indicators to it (parseTaLibFixture, compareToFixture).
+name: TA-Lib reference
+
+on: workflow_dispatch
+
+permissions: {}
+
+jobs:
+  reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install TA-Lib (pinned)
+        run: pip install TA-Lib==0.6.4 numpy==2.2.6
+      - name: Print the reference fixture
+        run: python scripts/agents/talib_reference.py
