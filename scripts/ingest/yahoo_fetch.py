@@ -42,7 +42,7 @@ MAX_RETRIES = 2
 BACKOFF_FACTOR = 4  # backoff = min_gap * BACKOFF_FACTOR ** attempt
 
 CODE_RE = re.compile(r"^[A-Z0-9]{2,6}$")
-INDEX_RE = re.compile(r"^^[A-Z0-9]{2,6}$")
+INDEX_RE = re.compile(r"^\^[A-Z0-9]{2,6}$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
