@@ -146,3 +146,46 @@ export function controlPlan(input: ControlPlanInput): OrderPlan | { readonly ski
     rel,
   };
 }
+
+// ---- arena_control: the Owner pause and the kill-switch trip (D-094) ---------------------------------
+
+export type ControlState = "enabled" | "paused" | "killed";
+export type ControlRow = {
+  readonly scope: string;
+  readonly scopeKey: string;
+  readonly state: string;
+};
+export type ControlStates = ReadonlyMap<string, ControlState>;
+
+/**
+ * Current state per `scope|scope_key` from the append-only log (rows in id order): the latest row
+ * wins, except that `killed` is sticky - only a later `enabled` row of the SAME scope lifts it, a
+ * later `paused` does not.
+ */
+export function controlStates(rows: readonly ControlRow[]): ControlStates {
+  const out = new Map<string, ControlState>();
+  for (const r of rows) {
+    if (r.state !== "enabled" && r.state !== "paused" && r.state !== "killed") continue;
+    const key = `${r.scope}|${r.scopeKey}`;
+    if (out.get(key) === "killed" && r.state === "paused") continue;
+    out.set(key, r.state);
+  }
+  return out;
+}
+
+/** The effective state of one cohort: most specific scope with a row wins (execution > family > market). */
+export function effectiveControl(
+  states: ControlStates,
+  scopes: { readonly market: string; readonly family: string | null; readonly execution: string },
+): ControlState {
+  return (
+    states.get(`execution|${scopes.execution}`) ??
+    (scopes.family === null ? undefined : states.get(`family|${scopes.family}`)) ??
+    states.get(`market|${scopes.market}`) ??
+    "enabled"
+  );
+}
+
+/** The not-taken / skip reason for a non-enabled state, or null. */
+export const controlReason = (s: ControlState): string | null =>
+  s === "enabled" ? null : `control_${s}`;

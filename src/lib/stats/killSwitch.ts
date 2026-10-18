@@ -20,8 +20,8 @@
 //     a CIF below effective N 3 writes nothing and is retried on a later night);
 //   - a trip only RECOMMENDS: it writes `killswitch_look.triggered = 1` and an append-only
 //     `arena_control` (family, killed) state row with the reason; nothing in this module pauses a
-//     cohort, cancels an order or edits a position, and batch 2b does not read `arena_control` yet,
-//     so exits and entries continue until the Owner (or a later reviewed task) acts on the state;
+//     cohort, cancels an order or edits a position, and batch 2b reads `arena_control` since D-094 and stops NEW entries,
+//     never exits, so open positions still close by their rules;
 //   - K = max(1, ceil(expected forward trades per year / 20)) is computed once per calendar year
 //     (and at the first evaluation) from the development entry rate and stored as a config version.
 import type { Client } from "@libsql/client";

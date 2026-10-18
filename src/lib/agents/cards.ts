@@ -57,7 +57,7 @@ export const FAMILY_THESIS: Readonly<Record<Family, string>> = {
 };
 
 const NOT_TAKEN =
-  /^(rank|positions_full|holding|reentry_block|corporate_action|no_facts|gate|rejected:[a-z_,]+)$/;
+  /^(rank|positions_full|holding|reentry_block|corporate_action|no_facts|gate|control_paused|control_killed|rejected:[a-z_,]+)$/;
 
 // ---- types -------------------------------------------------------------------------------------
 

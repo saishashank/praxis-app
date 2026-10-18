@@ -90,7 +90,15 @@ import {
   type CardNote,
   type ScenarioInput,
 } from "./cards";
-import { controlPlan, controlPool } from "./controls";
+import {
+  controlPlan,
+  controlPool,
+  controlReason,
+  controlStates,
+  effectiveControl,
+  type ControlState,
+  type ControlStates,
+} from "./controls";
 import { applyArn011 } from "./families/arn011";
 import { createContext } from "./families/context";
 import { runFamilies } from "./families";
@@ -155,6 +163,10 @@ export type SignalsStats = {
   cohorts: number;
   /** Decision Cards written (taken and not taken, E cohorts only). */
   cards: number;
+  /** Live cohorts held back by arena_control (D-094), and the candidates / draws that became skips. */
+  controlPaused: number;
+  controlKilled: number;
+  controlSkips: number;
 };
 
 export type SignalsResult = {
@@ -192,6 +204,9 @@ function emptyStats(): SignalsStats {
     skips: 0,
     cohorts: 0,
     cards: 0,
+    controlPaused: 0,
+    controlKilled: 0,
+    controlSkips: 0,
   };
 }
 
@@ -561,7 +576,32 @@ type Ctx = {
   readonly llm: LlmRouter | undefined;
   /** Scenario inputs per family|rule version|variant (one ledger read each per night). */
   readonly scenarios: Map<string, ScenarioInput>;
+  /** arena_control as of the start of the run (D-094). */
+  readonly control: ControlStates;
 };
+
+async function loadControl(db: Client): Promise<ControlStates> {
+  const rs = await db.execute("SELECT scope, scope_key, state FROM arena_control ORDER BY id");
+  return controlStates(
+    rs.rows.map((r) => ({
+      scope: text(r.scope),
+      scopeKey: text(r.scope_key),
+      state: text(r.state),
+    })),
+  );
+}
+
+/** The not-taken reason of a cohort held back by arena_control (entries and sleeves stop, exits never do). */
+function heldReason(ctx: Ctx, exec: ExecutionRow): string | null {
+  const s: ControlState = effectiveControl(ctx.control, {
+    market: ctx.market,
+    family: exec.family,
+    execution: exec.id,
+  });
+  if (s === "paused") ctx.stats.controlPaused += 1;
+  if (s === "killed") ctx.stats.controlKilled += 1;
+  return controlReason(s);
+}
 
 async function gateOf(ctx: Ctx, code: string): Promise<EntryDecision> {
   const hit = ctx.gates.get(code);
@@ -900,10 +940,15 @@ async function entriesFor(
   // every ranked candidate ends with exactly one status (a card each, taken or not)
   const notTaken = new Map<Candidate, string>();
   const open = new Set(books.positions.keys());
-  const blocked = slots < 1 ? new Set<string>() : await reentryBlocked(ctx, exec.id);
+  const held = heldReason(ctx, exec);
+  const blocked =
+    slots < 1 || held !== null ? new Set<string>() : await reentryBlocked(ctx, exec.id);
   const pool: Candidate[] = [];
   for (const c of ranked) {
-    if (slots < 1) notTaken.set(c, "positions_full");
+    if (held !== null) {
+      notTaken.set(c, held);
+      ctx.stats.controlSkips += 1;
+    } else if (slots < 1) notTaken.set(c, "positions_full");
     else if (open.has(c.code)) notTaken.set(c, "holding");
     else if (blocked.has(c.code)) notTaken.set(c, "reentry_block");
     else pool.push(c);
@@ -1040,11 +1085,13 @@ async function entriesFor(
 async function controlsFor(
   ctx: Ctx,
   books: CohortBooks,
+  exec: ExecutionRow,
   family: Family,
   matched: readonly Taken[],
   qualifying: ReadonlySet<string>,
   evalCtx: ReturnType<typeof createContext>,
 ): Promise<void> {
+  const held = heldReason(ctx, exec);
   const prng = createPrng(deriveRngSeed(ctx.masterSeed, `c2:${books.cohort.id}:${ctx.d}`));
   const tierOf = new Map<string, string>();
   for (const c of ctx.day.inputs.codes) tierOf.set(c.code, c.tier);
@@ -1067,6 +1114,11 @@ async function controlsFor(
   const legs: Leg[] = [];
   const planOf = new Map<string, OrderPlan>();
   for (const m of [...matched].sort((a, b) => cmp(a.signalId, b.signalId))) {
+    if (held !== null) {
+      draws.push({ m, code: null, pool: 0, draw: null, skip: held });
+      ctx.stats.controlSkips += 1;
+      continue;
+    }
     const signalFacts = ctx.day.facts.get(m.candidate.code);
     const excluded = new Set<string>([m.candidate.code, ...qualifying, ...eventToday]);
     const base = controlPool({
@@ -1301,6 +1353,7 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       gates: new Map(),
       llm: o.llm,
       scenarios: new Map(),
+      control: await loadControl(db),
     };
     const signalIds = new Map<Candidate, string>();
     await withTx(db, async (tx) => {
@@ -1351,7 +1404,7 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
         ...out.candidates.filter((c) => c.family === family).map((c) => c.code),
         ...out.blocked.filter((c) => c.family === family).map((c) => c.code),
       ]);
-      await controlsFor(ctx, books, family, list, qualifying, evalCtx);
+      await controlsFor(ctx, books, exec, family, list, qualifying, evalCtx);
     }
 
     const status: SignalsStatus = day.partial ? "degraded" : "success";
