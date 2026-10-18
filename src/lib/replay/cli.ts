@@ -51,13 +51,13 @@ export type CliDeps = {
 
 const isRealDate = (s: unknown): s is string =>
   typeof s === "string" &&
-  /^\d{4}-\d{2}-\d{2}$/.test(s) &&
+  /^\d{4}-\d{2}-\d{2}$/.test(s) && // threshold-ok: ISO date string width
   !Number.isNaN(Date.parse(`${s}T00:00:00Z`));
 
 function addYears(d: string, n: number): string {
   const t = new Date(`${d}T00:00:00Z`);
   t.setUTCFullYear(t.getUTCFullYear() + n);
-  return t.toISOString().slice(0, 10);
+  return t.toISOString().slice(0, 10); // threshold-ok: ISO date prefix length
 }
 
 const NEEDS_SNAPSHOT = (mode: RunMode, synthetic: boolean): boolean =>
@@ -408,7 +408,7 @@ export async function nullRunsMain(
     out("nullRuns: failed (usage: --kind null|injected [--runs N] [--snapshot FILE])");
     return 2;
   }
-  const runs = Number(flagOf(argv, "--runs") ?? (kind === "null" ? 2000 : 30));
+  const runs = Number(flagOf(argv, "--runs") ?? (kind === "null" ? 2000 : 30)); // threshold-ok: default replay run counts, design 4.9 / AT-17 (null 2000, injected 30)
   if (!Number.isInteger(runs) || runs < 1) {
     out("nullRuns: failed (bad argument)");
     return 2;
@@ -428,7 +428,7 @@ export async function nullRunsMain(
     now: nowMs,
     budgetMinutes: Number.MAX_SAFE_INTEGER,
   });
-  const minutes = (nowMs() - t0) / 60_000;
+  const minutes = (nowMs() - t0) / 60_000; // threshold-ok: ms per minute
   const s = o.size;
   if (kind === "null" && s !== null) {
     const lv = s.levels

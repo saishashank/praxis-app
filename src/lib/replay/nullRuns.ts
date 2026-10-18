@@ -65,7 +65,7 @@ export type ExcessRow = { readonly session: number; readonly excess: number };
 
 /** Fat-tailed standard deviate: a normal with a 3x scale on one draw in ten. */
 function deviate(rng: ReturnType<typeof scopedPrng>): number {
-  const u = Math.min(1 - 1e-12, Math.max(1e-12, uniform01(rng)));
+  const u = Math.min(1 - 1e-12, Math.max(1e-12, uniform01(rng))); // threshold-ok: numeric-stability clamp on the quantile argument
   const z = normalQuantile(u);
   return uniform01(rng) < 0.1 ? 3 * z : z; // threshold-ok: tail mixture of the synthetic pool
 }
@@ -183,7 +183,9 @@ export function syntheticBatch(kind: "null" | "injected", o: BatchOptions): Batc
 
 export const SIZE_LEVELS: readonly number[] = [0.05, 0.01]; // threshold-ok: AT-17 size-check levels
 const ACCEPT_ALPHA = 0.01; // threshold-ok: 99 % binomial acceptance bounds (AT-17)
-const UNIFORM_ALPHA = 0.01; // threshold-ok: KS uniformity level (decision 27)
+export const UNIFORM_ALPHA = 0.01; // threshold-ok: KS uniformity level (decision 27)
+/** Minimum active lineages assumed by the validation level (spec ch.15 active-lineages floor). */
+export const LINEAGES_FLOOR_MIN = 6; // threshold-ok: validation-level lineage floor, ch.15 active_lineages_floor — no separate key yet (D-095)
 const LOWER_TAIL = 0.1; // threshold-ok: lower-tail window of the uniformity check
 
 export type SizeLevel = {
@@ -231,7 +233,7 @@ export function sizeReport(tests: readonly RunTest[], params: AgentParams): Size
   const lower = ps.filter((p) => p <= LOWER_TAIL).map((p) => p / LOWER_TAIL);
   const ks = lower.length === 0 ? { n: 0, d: 0, p: 0 } : ksUniformityTest(lower);
   const uniformity = { ...ks, pass: lower.length > 0 && ks.p >= UNIFORM_ALPHA };
-  const L = Math.max(params.stats.activeLineagesFloor, 6);
+  const L = Math.max(params.stats.activeLineagesFloor, LINEAGES_FLOOR_MIN);
   const working = [
     params.stats.alpha / params.stats.trialBudgetPerLineage,
     validationLevel(params.stats.alpha, params.stats.trialBudgetPerLineage, L),
@@ -283,7 +285,7 @@ export function detectionReport(
         ? null
         : percentile(
             used.map((t) => t.mean),
-            0.5,
+            0.5, // threshold-ok: median
           ),
   };
 }
@@ -298,13 +300,13 @@ export function fewBlocksCheck(spec: SyntheticSpec = DEFAULT_SPEC): RunTest {
     syntheticRows("injected", 0, small, INJECTED_EDGE),
     sessions,
     spec.block,
-    1000,
+    1000, // threshold-ok: bootstrap replicates of the few-blocks check, ARN-081 (no ch.15 key; D-095)
   );
 }
 
 /** The validation level and replicate count of the committed-seed injected run (0.000417, 48,000). */
 export function workingLevel(params: AgentParams): { level: number; B: number } {
-  const L = Math.max(params.stats.activeLineagesFloor, 6);
+  const L = Math.max(params.stats.activeLineagesFloor, LINEAGES_FLOOR_MIN);
   const level = validationLevel(params.stats.alpha, params.stats.trialBudgetPerLineage, L);
   return { level, B: bootstrapReplications(level) };
 }

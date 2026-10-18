@@ -28,6 +28,10 @@ import { loadSnapshot } from "./snapshot";
 
 type LoadedSnapshot = ReturnType<typeof loadSnapshot>;
 
+const MAX_SPLIT_DENOM = 20; // threshold-ok: search bound for a small-integer split ratio
+const RATIO_EPS = 1e-9; // threshold-ok: numeric-stability epsilon
+const RATIO_LOOKBACK = 4; // threshold-ok: last five sessions of volume ratios, as in agents/forwardLedger
+
 type UniverseRow = { d: string; code: string; tier: Tier; halted: number };
 type IndexRow = { index_code: string; d: string; c_micro: number };
 
@@ -35,9 +39,9 @@ type IndexRow = { index_code: string; d: string; c_micro: number };
 export function ratioPayload(type: string, factor: number): { new: number; old: number } | null {
   if (!(factor > 0)) return null;
   const inv = 1 / factor; // shares after per share before
-  for (let old = 1; old <= 20; old += 1) {
+  for (let old = 1; old <= MAX_SPLIT_DENOM; old += 1) {
     const nw = Math.round(inv * old);
-    if (nw >= 1 && Math.abs(nw / old - inv) < 1e-9) {
+    if (nw >= 1 && Math.abs(nw / old - inv) < RATIO_EPS) {
       if (type === "bonus_issue") return nw > old ? { new: nw - old, old } : null;
       return { new: nw, old };
     }
@@ -132,7 +136,7 @@ export class SnapshotWorld implements CohortReplaySource {
     for (const l of this.tiers.values()) l.sort((a, b) => cmp(a.d, b.d));
     this.announcements = (
       snap.tables.announcements as unknown as { code: string; published_at: string }[]
-    ).map((a) => ({ code: a.code, d: a.published_at.slice(0, 10) }));
+    ).map((a) => ({ code: a.code, d: a.published_at.slice(0, 10) })); // threshold-ok: ISO date prefix length
     const dl = new Map<string, string>();
     for (const a of snap.corporateActions) {
       if (a.type === "delisting" && (dl.get(a.code) ?? "9999") > a.ex_date)
@@ -220,7 +224,7 @@ export class SnapshotWorld implements CohortReplaySource {
     const known = (this.splits.get(code) ?? []).filter((a) => a.exDate <= d);
     const volumes = adjustBars(raw, known).map((b) => b.volume);
     const ratios = [];
-    for (let j = 4; j >= 0; j -= 1) {
+    for (let j = RATIO_LOOKBACK; j >= 0; j -= 1) {
       ratios.push(
         volumeRatio(volumes.slice(0, volumes.length - j), this.o.params.windows.volumeRatio),
       );
@@ -261,12 +265,12 @@ export class SnapshotWorld implements CohortReplaySource {
       const f = this.factsAt(code, i);
       const closes = this.bars
         .get(code)!
-        .slice(Math.max(0, i - 40), i + 1)
+        .slice(Math.max(0, i - 40), i + 1) // threshold-ok: pre-roll closes feeding the vol window (test-world fixture)
         .map((b) => microToFloat(b.close));
       return {
         code,
         tier: f.tier,
-        vol20: stdevFloat(logReturns(closes), 20, 1),
+        vol20: stdevFloat(logReturns(closes), this.o.params.windows.vol, 1),
         atrMicro: f.ind.atrMicro,
         advMicro: f.ind.adv === null ? 0n : floorRat(f.ind.adv),
         eligible: f.tier === "U1" && f.ind.atrWarm && !f.halted,

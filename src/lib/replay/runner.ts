@@ -75,13 +75,16 @@ import {
   blockOf,
   detectionReport,
   fewBlocksCheck,
+  INJECTED_EDGE,
   INJECTED_SPEC,
+  LINEAGES_FLOOR_MIN,
   matchedQ,
   realNullBatch,
   sizeReport,
   syntheticBatch,
   syntheticRows,
   testRows,
+  UNIFORM_ALPHA,
   workingLevel,
   type SizeReport,
 } from "./nullRuns";
@@ -90,7 +93,7 @@ export type RunMode = "light" | "full" | "null" | "injected" | "evidence";
 export const RUN_MODES: readonly RunMode[] = ["light", "full", "null", "injected", "evidence"];
 
 const MARKET = "AU";
-const MS_PER_MINUTE = 60_000;
+const MS_PER_MINUTE = 60_000; // threshold-ok: ms per minute
 const NULL_RUNS_DEFAULT = 2000; // threshold-ok: AT-17 null runs (design 4.9)
 const SIZE_B = 2000; // threshold-ok: decision 24 size-check replicates (bootstrap_size_check_replications)
 
@@ -225,14 +228,14 @@ export function groupsOf(ledger: LedgerResult): Group[] {
 
 const isoWeek = (d: string): string => {
   const t = new Date(`${d}T00:00:00Z`);
-  const day = (t.getUTCDay() + 6) % 7; // Monday = 0
-  t.setUTCDate(t.getUTCDate() - day + 3);
+  const day = (t.getUTCDay() + 6) % 7; // Monday = 0 // threshold-ok: ISO weekday arithmetic (Monday = 0, Sunday = 6)
+  t.setUTCDate(t.getUTCDate() - day + 3); // threshold-ok: ISO week: Thursday of the week
   const y = t.getUTCFullYear();
-  const jan4 = new Date(Date.UTC(y, 0, 4));
+  const jan4 = new Date(Date.UTC(y, 0, 4)); // threshold-ok: ISO week 1 contains 4 January
   const w =
     1 +
     Math.round(
-      ((t.getTime() - jan4.getTime()) / 86_400_000 - 3 + ((jan4.getUTCDay() + 6) % 7)) / 7,
+      ((t.getTime() - jan4.getTime()) / 86_400_000 - 3 + ((jan4.getUTCDay() + 6) % 7)) / 7, // threshold-ok: ISO week arithmetic, ms per day, days per week
     );
   return `${y}-${String(w).padStart(2, "0")}`;
 };
@@ -404,7 +407,7 @@ export function runReplay(o: RunOptions): ReplayOutput {
     paramsSha,
     seed: BigInt(seed),
     nodeVersion: o.nodeVersion,
-    minutes: Math.round(total * 1000) / 1000,
+    minutes: Math.round(total * 1000) / 1000, // threshold-ok: rounding to 3 decimals
     files: keep ? files.map((f) => f.name) : [],
     // the digest covers the results, not the (clock-dependent) run scope
     digest: sha256Hex(
@@ -439,7 +442,7 @@ function runChecks(
   const { params, mode } = o;
   const budget = o.budgetMinutes ?? budgetFor(mode, params);
   const stop = (): boolean => tm.elapsed() > budget;
-  const L = Math.max(params.stats.activeLineagesFloor, 6);
+  const L = Math.max(params.stats.activeLineagesFloor, LINEAGES_FLOOR_MIN);
   const m = params.stats.trialBudgetPerLineage;
   const rec = (
     test: ValidationResultRecord["test"],
@@ -528,7 +531,7 @@ function runChecks(
       rec(
         "ks",
         {
-          level: 0.01,
+          level: UNIFORM_ALPHA,
           B: SIZE_B,
           n: report.uniformity.n,
           blocks: 0,
@@ -555,7 +558,7 @@ function runChecks(
     syntheticBatch("injected", { runs, B: SIZE_B, shouldStop: stop }),
   );
   const det = detectionReport(batch.tests, params.stats.alpha / m, power);
-  const rows = syntheticRows("injected", 0, INJECTED_SPEC, 0.015);
+  const rows = syntheticRows("injected", 0, INJECTED_SPEC, INJECTED_EDGE);
   const committed = testRows("injected", 0, rows, INJECTED_SPEC.sessions, INJECTED_SPEC.block, B);
   const few = fewBlocksCheck();
   stats.push(
