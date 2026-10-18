@@ -46,8 +46,6 @@ export interface LedgerSource extends ControlSource {
    * snapshot). Must contain data up to `d` only and end its `sessions` at `d`.
    */
   familyInputs(d: string): FamilyInputs;
-  /** True when the code has a corporate action with an ex-date in [fromD, toD] (rows are flagged). */
-  corpActionBetween?(code: string, fromD: string, toD: string): boolean;
 }
 
 export type LedgerOptions = {
@@ -103,6 +101,9 @@ export type LedgerEntry = {
   /** Paired excess r - mean(controls), exact (decision 25); null while open or without controls. */
   readonly excess: Rational | null;
   readonly flags: readonly string[];
+  /** Cash dividends credited at ex-dates (inside net, stress and gross) and shares sold. */
+  readonly dividendMicro: bigint;
+  readonly qtyOut: bigint | null;
   readonly mtm: readonly MtmPoint[];
   readonly controls: ControlDraw | null;
 };
@@ -264,12 +265,7 @@ export function replayLedger(src: LedgerSource, opts: LedgerOptions): LedgerResu
       const lineage = `${market}:${c.family}`;
       const rowId = ledgerRowId(lineage, c.ruleVersion, c.variant, c.code, w.entryD);
       const e = economicsOf(w);
-      const flags = [...c.flags];
-      if (
-        src.corpActionBetween?.(c.code, w.entryD, x === null ? sessions[endIdx]! : x.d) === true
-      ) {
-        flags.push("corp_action_in_hold");
-      }
+      const flags = [...c.flags, ...w.flags];
       const row: LedgerRowRecord = {
         id: rowId,
         signal_id: signalId(market, d, c.family, c.ruleVersion, c.variant, c.code),
@@ -341,6 +337,8 @@ export function replayLedger(src: LedgerSource, opts: LedgerOptions): LedgerResu
         stress: e === null ? null : e.stress,
         excess,
         flags: flags.sort(),
+        dividendMicro: w.dividendMicro,
+        qtyOut: x === null ? null : x.qtyOut,
         mtm: w.mtm,
         controls,
       });

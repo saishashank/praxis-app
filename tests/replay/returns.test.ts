@@ -313,3 +313,73 @@ describe("snapshot bar lookup", () => {
     expect(look.bar("ZZA", "2026-03-04")).toBeNull();
   });
 });
+
+describe("corporate actions inside the hold (ARN-036, ARN-043, DAT-223)", () => {
+  const facts = { atrMicro: null, closeAboveExitSma: null, volumeRatios: [], events: [] };
+  const plan = csPlan(timeStop(4));
+  const rec = (id: string, type: string, exIdx: number, payload: Record<string, unknown>) => ({
+    id,
+    code: "ZZA",
+    type,
+    exDate: S[exIdx]!,
+    payload,
+  });
+  const at = (price: bigint, i: number) => viewBar(S[i]!, price, price, price, price);
+  const series = (p0: bigint, p1: bigint, splitAt = 2) =>
+    Array.from({ length: 7 }, (_, i) => at(i < splitAt ? p0 : p1, i));
+  const walkWith = (bars: ReturnType<typeof series>, actions: ReturnType<typeof rec>[]) =>
+    filled(walkPosition(handSource(S, { ZZA: bars }, facts, undefined, actions), spec(plan), cost));
+  const twin = walkWith(series(50n * M, 50n * M), []);
+
+  it("a 2:1 split mid-hold doubles the quantity and gives the unsplit twin's return", () => {
+    const w = walkWith(series(50n * M, 25n * M), [rec("a1", "split", 2, { new: 2, old: 1 })]);
+    expect(w.qty).toBe(twin.qty); // entry quantity and cost are unchanged
+    expect(w.exit).toMatchObject({ qtyOut: 2n * twin.qty, idx: 4, tag: "CS" });
+    const e = economicsOf(w)!;
+    const et = economicsOf(twin)!;
+    expect(e.costMicro).toBe(et.costMicro);
+    expect(e.gross).toEqual(et.gross); // exactly the same gross return (zero), not -50 %
+    // net differs only by tick rounding of the exit fill (24.97 x 22 vs 49.95 x 11): under 0.1 %
+    expect(e.proceedsMicro).toBe(544_340_000n);
+    const diff =
+      e.proceedsMicro > et.proceedsMicro
+        ? e.proceedsMicro - et.proceedsMicro
+        : et.proceedsMicro - e.proceedsMicro;
+    expect(diff * 1000n < et.proceedsMicro).toBe(true);
+    expect(w.mtm.reduce((a, x) => a + x.pnlMicro, 0n)).toBe(e.proceedsMicro - e.costMicro);
+  });
+
+  it("a dividend adds exactly qty x dps at the ex-date to net, stress and the MTM", () => {
+    const div = rec("d1", "cash_dividend", 2, { dps: "0.10", pay_date: S[5]! });
+    const w = walkWith(series(50n * M, 50n * M), [div]);
+    const e = economicsOf(w)!;
+    const et = economicsOf(twin)!;
+    expect(w.dividendMicro).toBe(11n * 100_000n);
+    expect(e.proceedsMicro - et.proceedsMicro).toBe(1_100_000n);
+    expect(e.stressOutMicro - et.stressOutMicro).toBe(1_100_000n);
+    expect(e.net.num - et.net.num).toBe(1_100_000n);
+    expect(w.mtm.find((m) => m.d === S[2])!.pnlMicro).toBe(1_100_000n);
+    expect(w.mtm.reduce((a, x) => a + x.pnlMicro, 0n)).toBe(e.net.num);
+  });
+
+  it("a cash merger exits at the stated terms on the ex-date, without brokerage", () => {
+    const merger = rec("m1", "merger_cash", 2, { cash_per_share: "49" });
+    const w = walkWith(series(50n * M, 50n * M).slice(0, 2), [merger]);
+    expect(w.exit).toMatchObject({
+      idx: 2,
+      tag: "CS",
+      rule: "corp_action:merger_cash",
+      proceedsMicro: 539n * M,
+      brokOutMicro: 0n,
+    });
+    const e = economicsOf(w)!;
+    expect(e.net).toEqual({ num: 539n * M - 555_550_000n, den: 555_550_000n });
+    expect(w.mtm.reduce((a, x) => a + x.pnlMicro, 0n)).toBe(e.net.num);
+  });
+
+  it("an action that is not modelled (rights) leaves the return alone and flags the row", () => {
+    const w = walkWith(series(50n * M, 50n * M), [rec("r1", "rights_renounceable", 2, {})]);
+    expect(w.flags).toEqual(["corp_action_in_hold"]);
+    expect(economicsOf(w)).toEqual(economicsOf(twin));
+  });
+});

@@ -209,6 +209,26 @@ describe("drawing controls", () => {
   });
 });
 
+describe("controls see corporate actions like rows", () => {
+  it("a dividend inside the control hold is credited (qty x dps)", () => {
+    const withDividend: ControlSource = {
+      ...source(pool(210)),
+      corpActions: () => [
+        {
+          id: "d1",
+          code: "X",
+          type: "cash_dividend",
+          exDate: S[2]!,
+          payload: { dps: "0.10", pay_date: S[5]! },
+        },
+      ],
+    };
+    const d = createControlLibrary(withDividend, cost, 1n).draw(req());
+    expect(d.controls[0]!.net_num).toBe(-11_100_000n + 1_100_000n);
+    expect(d.controls[0]!.stress_num).toBe(-14_760_000n + 1_100_000n);
+  });
+});
+
 describe("mapping a plan onto a control (ARN-004, M3 mapControlExits)", () => {
   it("F1: the ATR multiple is kept on the control's own ATR; contributor rules are dropped", () => {
     const plan: ExitPlan = {

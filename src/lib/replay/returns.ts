@@ -40,6 +40,16 @@ import {
   type Rational,
 } from "@/lib/money/rational";
 import { toMicroFromVendor } from "@/lib/money/micro";
+import { roundHalfAwayFromZero } from "@/lib/money/round";
+import {
+  dividendAmountMicro,
+  parseDividend,
+  planCorporateActions,
+  type CorpActionRecord,
+} from "@/lib/arena/corpActions";
+
+const QTY_CHANGING: ReadonlySet<string> = new Set(["split", "consolidation", "bonus_issue"]);
+const CLOSING: ReadonlySet<string> = new Set(["merger_cash", "merger_scrip", "delisting"]);
 
 // ---------------------------------------------------------------------------------------------
 // What a walk reads from the world
@@ -62,6 +72,8 @@ export type PositionFacts = {
  * answers from a snapshot bounds both by `d`; the walk never asks for a session it has not reached.
  */
 export interface PathSource {
+  /** Confirmed corporate actions of a code (the walk reads those with an ex-date inside the hold). */
+  corpActions?(code: string): readonly CorpActionRecord[];
   /** Trading sessions, oldest first (the snapshot calendar). */
   readonly sessions: readonly string[];
   bar(code: string, d: string): ViewBar | null;
@@ -170,6 +182,11 @@ export type WalkExit = {
   readonly d: string;
   readonly idx: number;
   readonly tag: "IS" | "CS";
+  /** Shares sold (after any re-base by splits, consolidations and bonus issues). */
+  readonly qtyOut: bigint;
+  /** Cash received net of brokerage (exact; the stated terms for a corporate-action exit). */
+  readonly proceedsMicro: bigint;
+  readonly stressProceedsMicro: bigint;
   /** CS rule id, `end_of_data` for a forced exit, or `stop` for an IS exit. */
   readonly rule: string;
   readonly fillOutMicro: bigint;
@@ -192,6 +209,10 @@ export type WalkFilled = {
   readonly stressFillInMicro: bigint;
   readonly stressBrokInMicro: bigint;
   readonly exit: WalkExit | null;
+  /** Cash dividends credited at their ex-dates (ARN-036, franking excluded). */
+  readonly dividendMicro: bigint;
+  /** corp_action_in_hold when an action in the hold is not modelled (rights, spin-off, ...). */
+  readonly flags: readonly string[];
   /** The exit was forced at the end of the data (censored path). */
   readonly forced: boolean;
   readonly mtm: readonly MtmPoint[];
@@ -254,19 +275,35 @@ export function walkPosition(src: PathSource, spec: PositionSpec, cost: CostSetu
     DEFAULT_TICK_CROSS_FACTOR,
     cost.buckets,
   ).fillMicro;
-  const qty = divFloor(cost.notionalMicro, price);
-  if (qty <= 0n) return { kind: "skipped", reason: "unaffordable" };
-  const entry = fillEntryAtOpen(envOf(entryBar, false), qty);
-  const stressEntry = fillEntryAtOpen(envOf(entryBar, true), qty);
+  const qty0 = divFloor(cost.notionalMicro, price);
+  if (qty0 <= 0n) return { kind: "skipped", reason: "unaffordable" };
+  const entry = fillEntryAtOpen(envOf(entryBar, false), qty0);
+  const stressEntry = fillEntryAtOpen(envOf(entryBar, true), qty0);
 
-  const level0 = initialLevel(spec.plan, entry.fillPriceMicro);
+  let level0 = initialLevel(spec.plan, entry.fillPriceMicro);
+  let plan: ExitPlan = spec.plan;
+  let frameFill = entry.fillPriceMicro;
+  let qty = qty0;
   let trailLevels: readonly bigint[] = [];
   let pending: CsTrigger | null = null;
   let highest = 0n;
   let prevClose = 0n;
+  let heldValue = entry.valueMicro + entry.brokerageMicro;
+  let divTotal = 0n;
+  let divPending = 0n;
   let exit: WalkExit | null = null;
   let forced = false;
+  const flags = new Set<string>();
   const mtm: MtmPoint[] = [];
+
+  const actionsByD = new Map<string, CorpActionRecord[]>();
+  for (const a of src.corpActions?.(spec.code) ?? []) {
+    if (a.exDate <= entryD) continue;
+    const list = actionsByD.get(a.exDate);
+    if (list === undefined) actionsByD.set(a.exDate, [a]);
+    else list.push(a);
+  }
+  const rebase = (price: bigint, ratio: Rational): bigint => divFloor(price * ratio.den, ratio.num);
 
   const closeOut = (
     idx: number,
@@ -282,25 +319,108 @@ export function walkPosition(src: PathSource, spec: PositionSpec, cost: CostSetu
         : fillIntradayStop(envOf(bar, true), qty, level, { afterOpen: idx === spec.entryIdx });
     if (stressSell === null)
       throw new RangeError("stress exit did not fill where the base exit did");
+    const proceeds = qty * chosen.fillPriceMicro - chosen.brokerageMicro;
     exit = {
       d: bar.d,
       idx,
       tag,
       rule,
+      qtyOut: qty,
       fillOutMicro: chosen.fillPriceMicro,
       brokOutMicro: chosen.brokerageMicro,
       refOutMicro: chosen.refPriceMicro,
+      proceedsMicro: proceeds,
       stressFillOutMicro: stressSell.fillPriceMicro,
       stressBrokOutMicro: stressSell.brokerageMicro,
+      stressProceedsMicro: qty * stressSell.fillPriceMicro - stressSell.brokerageMicro,
     };
-    const proceeds = qty * chosen.fillPriceMicro - chosen.brokerageMicro;
-    const held = idx === spec.entryIdx ? entry.valueMicro + entry.brokerageMicro : qty * prevClose;
-    mtm.push({ d: bar.d, pnlMicro: proceeds - held });
+    mtm.push({ d: bar.d, pnlMicro: proceeds + divPending - heldValue });
+    divPending = 0n;
+  };
+
+  /** Corporate actions with ex-date d, on the holding at the prior close. True = position closed. */
+  const applyActions = (i: number, d: string, acts: readonly CorpActionRecord[]): boolean => {
+    const rest: CorpActionRecord[] = [];
+    for (const rec of [...acts].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+      if (rec.type === "cash_dividend" || rec.type === "special_dividend") {
+        // ARN-036: round_half_away(qty x dps) on the holding at the prior close; franking excluded
+        const amount = dividendAmountMicro(qty, parseDividend(rec).dpsMicro);
+        divTotal += amount;
+        divPending += amount;
+      } else if (QTY_CHANGING.has(rec.type) || CLOSING.has(rec.type)) rest.push(rec);
+      else flags.add("corp_action_in_hold"); // rights, spin-offs, code changes: not modelled
+    }
+    if (rest.length === 0) return false;
+    const day = planCorporateActions({
+      d,
+      priorD: sessions[i - 1]!,
+      actions: rest,
+      fills: [
+        {
+          id: "walk",
+          d: entryD,
+          code: spec.code,
+          side: "buy",
+          qty,
+          valueMicro: entry.valueMicro,
+          brokerageMicro: 0n,
+        },
+      ],
+      adjustments: [],
+      ledgerRows: [],
+      lastCloseFor: () => (prevClose > 0n ? prevClose : undefined),
+    });
+    for (const adj of day.adjustments) {
+      if (adj.qtyAfter === 0n) {
+        let proceeds = 0n;
+        for (const t of day.txns) {
+          if (t.kind !== "ca_dispose") continue;
+          for (const post of t.postings)
+            if (post.account === "cash_settled") proceeds += post.deltaMicro;
+        }
+        const perShare = roundHalfAwayFromZero(makeRational(proceeds, adj.qtyBefore));
+        const fillOut = perShare > 0n ? perShare : 1n; // the column needs > 0; exact proceeds are kept
+        exit = {
+          d,
+          idx: i,
+          tag: "CS",
+          rule: `corp_action:${adj.type}`,
+          qtyOut: adj.qtyBefore,
+          fillOutMicro: fillOut,
+          brokOutMicro: 0n,
+          refOutMicro: fillOut,
+          proceedsMicro: proceeds,
+          stressFillOutMicro: fillOut,
+          stressBrokOutMicro: 0n,
+          stressProceedsMicro: proceeds,
+        };
+        mtm.push({ d, pnlMicro: proceeds + divPending - heldValue });
+        divPending = 0n;
+        return true;
+      }
+      // split / consolidation / bonus: whole shares, cost unchanged (ARN-043); price state re-based
+      qty = adj.qtyAfter;
+      frameFill = rebase(frameFill, adj.ratio);
+      level0 = rebase(level0, adj.ratio);
+      highest = rebase(highest, adj.ratio);
+      trailLevels = trailLevels.map((l) => rebase(l, adj.ratio));
+      plan = {
+        ...plan,
+        cs: plan.cs.map((r) =>
+          r.kind === "close_below_level"
+            ? { ...r, levelMicro: rebase(r.levelMicro, adj.ratio) }
+            : r,
+        ),
+      };
+    }
+    return false;
   };
 
   for (let i = spec.entryIdx; i <= spec.endIdx; i += 1) {
     const d = sessions[i];
     if (d === undefined) break;
+    const acts = i === spec.entryIdx ? undefined : actionsByD.get(d);
+    if (acts !== undefined && applyActions(i, d, acts)) break;
     const bar = i === spec.entryIdx ? entryBar : src.bar(spec.code, d);
     if (bar === null) continue;
 
@@ -336,8 +456,10 @@ export function walkPosition(src: PathSource, spec: PositionSpec, cost: CostSetu
     }
 
     // still open at the close
-    const held = i === spec.entryIdx ? entry.valueMicro + entry.brokerageMicro : qty * prevClose;
-    mtm.push({ d, pnlMicro: qty * bar.close - held });
+    const value = qty * bar.close;
+    mtm.push({ d, pnlMicro: value + divPending - heldValue });
+    divPending = 0n;
+    heldValue = value;
     prevClose = bar.close;
     highest = maxBig(highest, bar.close);
     if (i === spec.endIdx) break;
@@ -351,9 +473,9 @@ export function walkPosition(src: PathSource, spec: PositionSpec, cost: CostSetu
       tradeId: "walk",
       code: spec.code,
       family: "F1", // evaluateExit does not branch on the family; the plan carries every rule
-      plan: spec.plan,
+      plan,
       fillDay: entryD,
-      fillMicro: entry.fillPriceMicro,
+      fillMicro: frameFill,
       sessionsHeld: i - spec.entryIdx + 1,
       closeMicro: bar.close,
       highestCloseMicro: highest,
@@ -371,7 +493,7 @@ export function walkPosition(src: PathSource, spec: PositionSpec, cost: CostSetu
     code: spec.code,
     entryD,
     entryIdx: spec.entryIdx,
-    qty,
+    qty: qty0,
     fillInMicro: entry.fillPriceMicro,
     brokInMicro: entry.brokerageMicro,
     refInMicro: entry.refPriceMicro,
@@ -379,6 +501,8 @@ export function walkPosition(src: PathSource, spec: PositionSpec, cost: CostSetu
     stressBrokInMicro: stressEntry.brokerageMicro,
     exit,
     forced,
+    dividendMicro: divTotal,
+    flags: [...flags].sort(),
     mtm,
   };
 }
@@ -410,9 +534,9 @@ export function economicsOf(w: WalkFilled): Economics | null {
   const x = w.exit;
   if (x === null) return null;
   const costMicro = w.qty * w.fillInMicro + w.brokInMicro;
-  const proceedsMicro = w.qty * x.fillOutMicro - x.brokOutMicro;
+  const proceedsMicro = x.proceedsMicro + w.dividendMicro;
   const stressInMicro = w.qty * w.stressFillInMicro + w.stressBrokInMicro;
-  const stressOutMicro = w.qty * x.stressFillOutMicro - x.stressBrokOutMicro;
+  const stressOutMicro = x.stressProceedsMicro + w.dividendMicro;
   return {
     costMicro,
     proceedsMicro,
@@ -420,7 +544,10 @@ export function economicsOf(w: WalkFilled): Economics | null {
     stressInMicro,
     stressOutMicro,
     stress: { num: stressOutMicro - stressInMicro, den: stressInMicro },
-    gross: { num: w.qty * (x.refOutMicro - w.refInMicro), den: w.qty * w.refInMicro },
+    gross: {
+      num: x.qtyOut * x.refOutMicro + w.dividendMicro - w.qty * w.refInMicro,
+      den: w.qty * w.refInMicro,
+    },
   };
 }
 

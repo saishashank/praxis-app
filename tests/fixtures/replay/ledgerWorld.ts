@@ -6,6 +6,7 @@
 //                 data up to the requested session (so a look-ahead bug shows when the future is
 //                 poisoned).
 import type { ViewBar } from "@/lib/agents/decisionView";
+import type { CorpActionRecord } from "@/lib/arena/corpActions";
 import { logReturns, microToFloat, stdevFloat } from "@/lib/agents/indicators";
 import { buildCodeFacts } from "@/lib/agents/families/facts";
 import type {
@@ -40,9 +41,11 @@ export function handSource(
   bars: Readonly<Record<string, readonly (ViewBar | null)[]>>,
   facts: PositionFacts | null = NO_FACTS,
   spy?: { bar: string[]; facts: string[] },
+  actions: readonly CorpActionRecord[] = [],
 ): PathSource {
   return {
     sessions,
+    corpActions: (code) => actions.filter((a) => a.code === code),
     bar(code, d) {
       spy?.bar.push(d);
       const i = sessions.indexOf(d);
