@@ -36,6 +36,15 @@ import {
   type CalendarKind,
   type CalendarRow,
 } from "@/lib/data/calendar";
+import {
+  caBasisOf,
+  crossing,
+  initialStopAtFill,
+  isUnit,
+  parsePlan,
+  rescaleQty,
+  scaleMicro,
+} from "@/lib/agents/orderPlan";
 import { entriesAllowed, type EntryDecision } from "@/lib/data/quality/gate";
 import { hasSuccess, finishRun, startRun } from "@/lib/runs/runRecord";
 import type { Micro } from "@/lib/money/micro";
@@ -379,6 +388,11 @@ type OpenTradeRow = {
   readonly code: string;
   readonly stopMicro: Micro;
   readonly entryD: string;
+  /**
+   * In-session IS levels written by batch 2b at the latest close before today (stop_level, design
+   * 2.6 and decision 7), each with the session it was written on. Empty for M3 trades.
+   */
+  readonly levels: readonly { readonly d: string; readonly levelMicro: Micro }[];
 };
 
 async function openTrades(ctx: DayCtx, cohortId: string): Promise<OpenTradeRow[]> {
@@ -388,11 +402,26 @@ async function openTrades(ctx: DayCtx, cohortId: string): Promise<OpenTradeRow[]
           WHERE t.cohort_id = ? AND t.exit_type IS NULL ORDER BY t.code, t.id`,
     args: [cohortId],
   });
+  if (rs.rows.length === 0) return [];
+  const levels = await ctx.db.execute({
+    sql: `SELECT s.trade_id, s.d, s.level_micro FROM stop_level s
+          WHERE s.cohort_id = ? AND s.d = (SELECT MAX(x.d) FROM stop_level x
+                                           WHERE x.trade_id = s.trade_id AND x.d < ?)
+          ORDER BY s.trade_id, s.rule`,
+    args: [cohortId, ctx.d],
+  });
+  const byTrade = new Map<string, { d: string; levelMicro: Micro }[]>();
+  for (const l of levels.rows) {
+    const list = byTrade.get(text(l.trade_id)) ?? [];
+    list.push({ d: text(l.d), levelMicro: toBig(l.level_micro) });
+    byTrade.set(text(l.trade_id), list);
+  }
   return rs.rows.map((r) => ({
     id: text(r.id),
     code: text(r.code),
     stopMicro: toBig(r.stop_micro),
     entryD: text(r.entry_d),
+    levels: byTrade.get(text(r.id)) ?? [],
   }));
 }
 
@@ -414,15 +443,27 @@ async function holdingsOf(
   return { positions: derivePositions(fills, adjustments, ctx.d).positions, adjustments };
 }
 
-/** A stop expressed in the code's current price terms after splits since the entry (ARN-043). */
+/**
+ * The IS level in force on `d`, in the code's current price terms after splits (ARN-043): the
+ * highest of the initial stop and of every level batch 2b wrote at the latest earlier close
+ * (design 2.6), each re-based by the exact factor since the date it was set.
+ */
 function effectiveStop(
   trade: OpenTradeRow,
   d: string,
   adjustments: readonly QtyAdjustment[],
 ): Micro {
-  const factor = priceFactorSince(trade.code, trade.entryD, d, adjustments);
-  const level = roundHalfAwayFromZero(mulRat(makeRational(trade.stopMicro), factor));
-  return level < 1n ? 1n : level;
+  const rebased = (level: Micro, from: string): Micro => {
+    const factor = priceFactorSince(trade.code, from, d, adjustments);
+    const v = roundHalfAwayFromZero(mulRat(makeRational(level), factor));
+    return v < 1n ? 1n : v;
+  };
+  let best = rebased(trade.stopMicro, trade.entryD);
+  for (const l of trade.levels) {
+    const v = rebased(l.levelMicro, l.d);
+    if (v > best) best = v;
+  }
+  return best;
 }
 
 async function cancelOrder(ctx: DayCtx, orderId: string, reason: string): Promise<void> {
@@ -471,7 +512,8 @@ async function entryFunded(ctx: DayCtx, cc: CohortCtx, needed: Micro): Promise<b
 async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
   const id = cc.cohort.id;
   const rs = await ctx.db.execute({
-    sql: `SELECT id, code, kind, qty, ref_stop_micro FROM arena_order
+    sql: `SELECT id, code, kind, qty, ref_stop_micro, decided_d, stop_spec, max_open_micro
+          FROM arena_order
           WHERE cohort_id = ? AND status = 'pending' AND decided_d < ? AND kind IN ('entry','exit_cs')
           ORDER BY id`,
     args: [id, ctx.d],
@@ -479,7 +521,12 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
   for (const o of rs.rows) {
     const orderId = text(o.id);
     const code = text(o.code);
-    const qty = toBig(o.qty);
+    const stopSpec = o.stop_spec === null ? null : text(o.stop_spec);
+    // Corporate actions between the order's quantity basis and today re-base its shares and prices
+    // (M4 T8; the M3 `order_qty_stale` limitation): a split rescales it, a disposal cancels it.
+    const basis = caBasisOf(stopSpec, text(o.decided_d));
+    const crossed = crossing(ctx.actions, code, basis.through, ctx.d, basis.applied);
+    const qty = !isUnit(crossed.ratio) ? rescaleQty(toBig(o.qty), crossed) : toBig(o.qty);
     const bar = await ctx.data.bar(code, ctx.d);
     const advMicro = await ctx.data.adv(code, ctx.priorD);
     const halted = await ctx.data.halted(code, ctx.d);
@@ -488,7 +535,31 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
         await cancelOrder(ctx, orderId, "no_bar");
         continue;
       }
-      if (o.ref_stop_micro === null) {
+      if (o.ref_stop_micro === null && stopSpec === null) {
+        await cancelOrder(ctx, orderId, "no_stop");
+        continue;
+      }
+      if (crossed.disposal) {
+        await cancelOrder(ctx, orderId, "corporate_action");
+        continue;
+      }
+      if (qty < 1n) {
+        await cancelOrder(ctx, orderId, "whole_share");
+        continue;
+      }
+      let plan: ReturnType<typeof parsePlan> | null = null;
+      if (stopSpec !== null) {
+        try {
+          plan = parsePlan(stopSpec);
+        } catch {
+          // a stop_spec that is not a plan (an exit order's basis note) cannot size a stop
+          if (o.ref_stop_micro === null) {
+            await cancelOrder(ctx, orderId, "no_stop");
+            continue;
+          }
+        }
+      }
+      if (plan === null && o.ref_stop_micro === null) {
         await cancelOrder(ctx, orderId, "no_stop");
         continue;
       }
@@ -501,7 +572,13 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
       let outcome: ReturnType<typeof fillOrder>;
       try {
         outcome = fillOrder(
-          { kind: "entry", qty, stopDistanceMicro: toBig(o.ref_stop_micro) },
+          plan !== null
+            ? {
+                kind: "entry",
+                qty,
+                stopFrom: (fillMicro) => initialStopAtFill(plan, fillMicro, crossed.priceFactor),
+              }
+            : { kind: "entry", qty, stopDistanceMicro: toBig(o.ref_stop_micro) },
           {
             ...fillEnvOf(cc, bar, advMicro),
             feeContext: { code, firstBuyOfSecurityToday: first },
@@ -516,6 +593,13 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
       }
       if (outcome.status === "cancelled") {
         await cancelOrder(ctx, orderId, outcome.reason);
+      } else if (
+        outcome.status === "filled" &&
+        o.max_open_micro !== null &&
+        bar.openMicro >= scaleMicro(toBig(o.max_open_micro), crossed.priceFactor)
+      ) {
+        // F3 (spec 7.4): the order is cancelled at the fill when the open gaps to the cap or above
+        await cancelOrder(ctx, orderId, "gap");
       } else if (outcome.status === "filled") {
         // a gap above the expected price can leave the order unaffordable: like a broker, refuse it
         // (cancelled 'cash') rather than overdraw the cohort (ARN-101 cash >= 0)
@@ -553,6 +637,7 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
       continue;
     }
     if (holding > qty) {
+      // only reachable when an action the order could not know about was confirmed late
       throw new CloseBooksError("order_qty_stale", `order ${orderId} sells less than the holding`);
     }
     const sellQty = holding < qty ? holding : qty;
@@ -807,8 +892,20 @@ async function stopLevelOf(
     args: [`T:${sleeveId.slice(2)}`, cohortId],
   });
   const r = rs.rows[0];
+  const levels = await ctx.db.execute({
+    sql: `SELECT s.d, s.level_micro FROM stop_level s
+          WHERE s.trade_id = ? AND s.d = (SELECT MAX(x.d) FROM stop_level x
+                                          WHERE x.trade_id = s.trade_id AND x.d < ?)`,
+    args: [text(r.id), ctx.d],
+  });
   return effectiveStop(
-    { id: text(r.id), code: text(r.code), stopMicro: toBig(r.stop_micro), entryD: text(r.entry_d) },
+    {
+      id: text(r.id),
+      code: text(r.code),
+      stopMicro: toBig(r.stop_micro),
+      entryD: text(r.entry_d),
+      levels: levels.rows.map((l) => ({ d: text(l.d), levelMicro: toBig(l.level_micro) })),
+    },
     ctx.d,
     adjustments,
   );

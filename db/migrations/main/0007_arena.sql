@@ -201,9 +201,11 @@ CREATE INDEX idx_fill_cohort_d ON fill (cohort_id, d);
 CREATE TRIGGER fill_insert_guard BEFORE INSERT ON fill
 WHEN NOT EXISTS (SELECT 1 FROM arena_order o WHERE o.id = NEW.order_id AND o.status = 'pending'
   AND o.cohort_id = NEW.cohort_id AND o.code = NEW.code AND o.side = NEW.side
-  AND NEW.qty <= o.qty)
+  AND (NEW.qty <= o.qty OR EXISTS (SELECT 1 FROM corporate_action ca
+    WHERE ca.code = NEW.code AND ca.type IN ('split', 'bonus_issue')
+      AND ca.ex_date > o.decided_d AND ca.ex_date <= NEW.d)))
 BEGIN
-  SELECT RAISE(ABORT, 'fill: needs a matching pending order (same cohort, code, side; qty not above the order)');
+  SELECT RAISE(ABORT, 'fill: needs a matching pending order (same cohort, code, side; qty not above the order unless a split or bonus issue went ex between decision and fill, M4 T8)');
 END;
 CREATE TRIGGER fill_no_update BEFORE UPDATE ON fill
 BEGIN

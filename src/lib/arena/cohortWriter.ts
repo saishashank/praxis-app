@@ -17,6 +17,7 @@
 // at D+1's open, closes an open sleeve with a `cs` exit and sets the trades' exit_type to
 // 'terminal' (fillWriter). Positions that cannot be sold because the code is halted then move to the
 // legacy ledger (writeLegacyMoves, ARN-026).
+import { exitOrderSpec } from "@/lib/agents/orderPlan";
 import type { Client, Row, Transaction } from "@libsql/client";
 import type { CalendarRow } from "@/lib/data/calendar";
 import { assertInt64, type Micro } from "@/lib/money/micro";
@@ -550,9 +551,16 @@ async function writeLiquidationOrdersIn(tx: Transaction, plan: LiquidationPlan):
       continue;
     }
     await tx.execute({
-      sql: `INSERT INTO arena_order (id, cohort_id, decided_d, code, side, kind, qty)
-            VALUES (?, ?, ?, ?, 'sell', 'exit_cs', ?)`,
-      args: [o.orderId, o.cohortId, o.decidedD, o.code, o.qty],
+      sql: `INSERT INTO arena_order (id, cohort_id, decided_d, code, side, kind, qty, stop_spec)
+            VALUES (?, ?, ?, ?, 'sell', 'exit_cs', ?, ?)`,
+      args: [
+        o.orderId,
+        o.cohortId,
+        o.decidedD,
+        o.code,
+        o.qty,
+        exitOrderSpec(o.decidedD, [], "terminal", null),
+      ],
     });
     written += 1;
   }

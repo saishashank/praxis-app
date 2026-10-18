@@ -36,6 +36,7 @@ const slot = (s: SlotInput): Slot => ({ ...s, minute: hhmm(s.time) });
 /** Workflow files the clock may dispatch. Nothing else is ever sent to GitHub. */
 export const DISPATCHABLE_WORKFLOWS: readonly string[] = [
   "arena-close.yml",
+  "arena-signals.yml",
   "backfill-history.yml",
   "backup.yml",
   "ingest-batch1.yml",
@@ -112,6 +113,21 @@ export const AU_SLOTS: readonly Slot[] = [
     catchUpMin: 20,
     enabled: false,
     note: "Batch 2a close the books (T10, ARN-060): fills, stops, settlement, NAV, invariants; OFF until the Owner enables the arena",
+  }),
+  // M4 T8 (D-087): batch 2b "signals and orders". Allow-listed, slot OFF like arena-close: the
+  // script waits for batch 2a of the same session and, with market.mode other than `full`, writes
+  // only a skipped run record (D-066). It decides one session; there is no catch-up.
+  slot({
+    id: "arena-signals",
+    time: "18:10",
+    runner: "actions",
+    workflow: "arena-signals.yml",
+    tradingDaysOnly: true,
+    marketBound: true,
+    priority: 16,
+    catchUpMin: 30,
+    enabled: false,
+    note: "Batch 2b signals and orders (M4 T8, ARN-060/020): A4/A3/A2, family rules, exits, FAM-001 entries, C2/C3 controls; OFF until the Owner enables the arena",
   }),
   slot({
     id: "decision-cutoff",

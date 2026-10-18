@@ -249,6 +249,7 @@ export const KNOWN_REJECT_REASONS = [
   "gate",
   "halted",
   "gap",
+  "corporate_action",
 ] as const;
 export type Tier = "U1" | "U2" | "U3";
 

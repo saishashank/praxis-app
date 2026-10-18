@@ -19,6 +19,14 @@ import { describe, expect, it } from "vitest";
 
 const ROOT = path.resolve(__dirname, "../..");
 const SCAN_DIRS = ["src/lib/money", "src/lib/arena"];
+// M4 design 2.1: the batch 2b money paths are scanned file by file (the rest of src/lib/agents is
+// the float indicator domain: Wilder, log-return volatility).
+const SCAN_FILES = [
+  "src/lib/agents/batch2b.ts",
+  "src/lib/agents/candidates.ts",
+  "src/lib/agents/controls.ts",
+  "src/lib/agents/orderPlan.ts",
+];
 const DIVISION_ALLOWED_FILES = new Set(["src/lib/money/rational.ts"]);
 const ESCAPE = /\/\/\s*money-float-ok:\s*\S/;
 
@@ -87,9 +95,12 @@ function walk(dir: string, out: string[]): string[] {
 }
 
 function scanned(): string[] {
-  return SCAN_DIRS.map((d) => path.join(ROOT, d))
-    .filter((d) => existsSync(d))
-    .flatMap((d) => walk(d, []));
+  return [
+    ...SCAN_DIRS.map((d) => path.join(ROOT, d))
+      .filter((d) => existsSync(d))
+      .flatMap((d) => walk(d, [])),
+    ...SCAN_FILES.map((f) => path.join(ROOT, f)).filter((f) => existsSync(f)),
+  ];
 }
 
 describe("no floating-point money (D-069 decision 18)", () => {

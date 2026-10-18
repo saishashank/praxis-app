@@ -4,6 +4,7 @@
 // tests can call it directly.
 //
 //   close-books [--date YYYY-MM-DD] [--wait-minutes N] [--max-sessions N] [--replay]
+//   signals [--date YYYY-MM-DD] [--wait-minutes N] [--replay]      (batch 2b, M4 T8)
 //   replay --db file:<path> --from YYYY-MM-DD --to YYYY-MM-DD [--market AU]
 //
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, COMMIT_SHA (optional), GITHUB_OUTPUT (optional).
@@ -17,7 +18,14 @@
 import { appendFileSync } from "node:fs";
 import { createClient, type Client } from "@libsql/client";
 import { addDays, marketDate, sessionsBetween } from "@/lib/data/calendar";
-import { ARENA_JOB, closeBooksDay, loadCalendar, type CloseBooksResult } from "./closeBooks";
+import { signalsDay, type SignalsResult } from "@/lib/agents/batch2b";
+import {
+  ARENA_JOB,
+  closeBooksDay,
+  closeBooksKey,
+  loadCalendar,
+  type CloseBooksResult,
+} from "./closeBooks";
 import { replaySessions } from "./replay";
 
 const MARKET = "AU";
@@ -214,4 +222,97 @@ export async function replayMain(
   } finally {
     db.close();
   }
+}
+
+function signalsSummary(r: SignalsResult): string {
+  const why = r.reason === null ? "" : ` (${r.reason})`;
+  const s = r.stats;
+  return (
+    `arena-2b ${r.market} ${r.d}: ${r.status}${why} cohorts=${s.cohorts} signals=${s.signals}` +
+    ` orders=${s.orders} rejected=${s.rejected} exits=${s.exits} stopLevels=${s.stopLevels}` +
+    ` controls=${s.controls} skips=${s.skips}`
+  );
+}
+
+async function hasClosedBooks(db: Client, d: string): Promise<boolean> {
+  const rs = await db.execute({
+    sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND status IN ('success', 'degraded')`,
+    args: [closeBooksKey(MARKET, d)],
+  });
+  return rs.rows.length > 0;
+}
+
+/**
+ * Batch 2b "signals and orders" for ONE session (M4 T8, design 4.1). It waits (default 20 minutes)
+ * for batch 2a of the same session, then decides it. There is no catch-up: an order for a past
+ * session would be filled after the fact (look-ahead), so a missed session simply has no orders.
+ * Statuses and counts only; never a row, a code, a URL, a token or a driver error.
+ */
+export async function signalsMain(
+  argv: readonly string[],
+  env: Readonly<Record<string, string | undefined>>,
+  deps: CliDeps = {},
+): Promise<number> {
+  const { openDb, nowMs, sleep, out } = defaults(deps);
+  const replay = argv.includes("--replay");
+  const url = env.TURSO_MAIN_URL;
+  const token = env.TURSO_MAIN_TOKEN;
+  if (!has(url) || (!has(token) && !url.startsWith("file:"))) {
+    out("arena-2b: failed (database not configured)");
+    return 1;
+  }
+  if (replay && !url.startsWith("file:")) {
+    out("arena-2b: refused (--replay needs a local file: database)");
+    return 2;
+  }
+  const waitMinutes = Number.parseInt(flag(argv, "--wait-minutes") ?? "", 10);
+  const wait =
+    Number.isInteger(waitMinutes) && waitMinutes >= 0 ? waitMinutes : DEFAULT_WAIT_MINUTES;
+  let db: Client;
+  try {
+    db = openDb(url, has(token) ? token : undefined);
+  } catch {
+    out("arena-2b: failed (cannot open database)");
+    return 1;
+  }
+  let exit = 0;
+  let last = "";
+  try {
+    const d = flag(argv, "--date") ?? marketDate(new Date(nowMs()), MARKET_TZ);
+    const calendar = await loadCalendar(db, MARKET);
+    const mode = await db.execute({
+      sql: "SELECT mode FROM market WHERE code = ?",
+      args: [MARKET],
+    });
+    const writes = mode.rows.length > 0 && (String(mode.rows[0].mode) === "full" || replay);
+    if (writes) {
+      const deadline = nowMs() + wait * 60_000;
+      while (!(await hasClosedBooks(db, d)) && nowMs() < deadline) await sleep(POLL_MS);
+    }
+    const result = await signalsDay(db, {
+      market: MARKET,
+      d,
+      replay,
+      calendar,
+      now: () => new Date(nowMs()).toISOString(),
+      commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
+    });
+    out(signalsSummary(result));
+    last = `status=${result.status}`;
+    if (result.status === "failed") exit = 1;
+    // 2a missing after the wait: a visible failure, never orders on a stale ledger
+    if (result.status === "skipped" && result.reason === "no_2a_success") exit = 1;
+  } catch (error) {
+    out(`arena-2b: failed (unexpected error ${error instanceof Error ? error.name : "unknown"})`);
+    exit = 1;
+  } finally {
+    db.close();
+  }
+  if (has(env.GITHUB_OUTPUT) && last !== "")
+    appendFileSync(
+      env.GITHUB_OUTPUT,
+      `${last}
+`,
+    );
+  return exit;
 }

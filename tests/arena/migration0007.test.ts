@@ -1094,3 +1094,41 @@ describe("main migration 0007_arena: forever retention and backup", () => {
     expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 8 });
   });
 });
+
+describe("fill_insert_guard: quantity above the order only across a split or bonus issue (M4 T8)", () => {
+  afterEach(cleanupTempDbs);
+
+  it("refuses a larger fill with no corporate action between decision and fill", async () => {
+    const db = await arenaDb();
+    await run(db, execution());
+    await run(db, cohort());
+    await run(db, order("O1", "pending", "ZZAA", "buy", 10));
+    await expect(run(db, fill("F1", "O1", "buy", 20))).rejects.toThrow(/fill: needs a matching/);
+  });
+
+  it("allows it when a split went ex after the decision and on or before the fill", async () => {
+    const db = await arenaDb();
+    await run(db, execution());
+    await run(db, cohort());
+    await run(db, order("O1", "pending", "ZZAA", "buy", 10));
+    await run(
+      db,
+      `INSERT INTO corporate_action (market, code, type, ex_date, payload_json)
+       VALUES ('AU', 'ZZAA', 'split', '2026-10-13', '{"new":2,"old":1}')`,
+    );
+    await run(db, fill("F1", "O1", "buy", 20));
+  });
+
+  it("a dividend between decision and fill does not lift the limit", async () => {
+    const db = await arenaDb();
+    await run(db, execution());
+    await run(db, cohort());
+    await run(db, order("O1", "pending", "ZZAA", "buy", 10));
+    await run(
+      db,
+      `INSERT INTO corporate_action (market, code, type, ex_date, payload_json)
+       VALUES ('AU', 'ZZAA', 'dividend', '2026-10-13', '{"dps":0.1}')`,
+    );
+    await expect(run(db, fill("F1", "O1", "buy", 20))).rejects.toThrow(/fill: needs a matching/);
+  });
+});

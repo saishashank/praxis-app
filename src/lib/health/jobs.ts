@@ -99,6 +99,16 @@ export const JOBS: readonly JobDef[] = [
       "Not run yet (off until the Owner enables the arena; records a skip while the market is data-only)",
   },
   {
+    // M4 T8 (D-087, ARN-060): batch 2b "signals and orders", one run per trading day after 2a.
+    // Same gap logic as arena-close; the slot is off until the Owner enables the arena, and in
+    // data_only production the run is a skipped record.
+    job: "arena-signals",
+    label: "Arena signals and orders (AU, batch 2b)",
+    expectedIntervalSec: 3 * 86_400,
+    noDataNote:
+      "Not run yet (off until the Owner enables the arena; records a skip while the market is data-only)",
+  },
+  {
     // M2 T9 (DAT-125, DAT-125a): runs on demand; the Worker slot is off until the Owner enables the
     // backfill, and a paused_cap or empty plan still ends in a success record or none at all.
     job: "backfill-history",

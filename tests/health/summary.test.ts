@@ -63,6 +63,7 @@ describe("getHealthSummary", () => {
       "ingest-batch1",
       "universe-import",
       "arena-close",
+      "arena-signals",
       "backfill-history",
     ]);
     for (const j of s.jobs) {

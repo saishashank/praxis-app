@@ -194,7 +194,14 @@ export function gateRefusal(
 }
 
 export type OrderToFill =
-  | { readonly kind: "entry"; readonly qty: bigint; readonly stopDistanceMicro: bigint }
+  | {
+      readonly kind: "entry";
+      readonly qty: bigint;
+      /** M3 orders: the initial stop is the fill price minus this distance. */
+      readonly stopDistanceMicro?: bigint;
+      /** M4 orders: the initial stop computed from the ACTUAL fill (the order plan, ARN-021). */
+      readonly stopFrom?: (fillPriceMicro: bigint) => bigint;
+    }
   | { readonly kind: "exit_cs"; readonly qty: bigint }
   | { readonly kind: "exit_is"; readonly qty: bigint; readonly levelMicro: bigint };
 
@@ -227,6 +234,14 @@ export function fillOrder(order: OrderToFill, env: FillOrderEnv): FillOutcome {
     if (refusal !== null) return { status: "cancelled", reason: "gate", detail: refusal.detail };
     if (env.halted === true) return { status: "cancelled", reason: "halted", detail: "halted" };
     const fill = fillEntryAtOpen(env, order.qty);
+    if (order.stopFrom !== undefined) {
+      const stop = order.stopFrom(fill.fillPriceMicro);
+      if (stop <= 0n) throw new RangeError("initial stop must be positive");
+      return { status: "filled", fill, initialStopMicro: stop };
+    }
+    if (order.stopDistanceMicro === undefined) {
+      throw new RangeError("an entry order needs a stop distance or a stop rule");
+    }
     return {
       status: "filled",
       fill,
