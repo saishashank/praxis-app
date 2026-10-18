@@ -16,6 +16,7 @@ import {
   type LedgerResult,
 } from "@/lib/replay/ledger";
 import { periodReturn } from "@/lib/replay/returns";
+import type { CorpActionRecord } from "@/lib/arena/corpActions";
 import { CENT, DOLLAR, ev, makeBars, wobble } from "../fixtures/agents/families/builders";
 import {
   buildWorld,
@@ -308,5 +309,43 @@ describe("determinism and look-ahead", () => {
     const pick = (e: LedgerEntry) => [e.row, e.net, e.stress, e.mtm, e.exitRule, e.flags];
     expect(closed(poisoned).map(pick)).toEqual(closed(clean).map(pick));
     expect(poisoned.skipped).toEqual(clean.skipped);
+  });
+});
+
+describe("D-091: the close sets the re-based quantity and the dividends (ledger_row columns)", () => {
+  const withActions = (actions: CorpActionRecord[]) => {
+    const world = buildWorld([leader, ...peers], p, {});
+    world.corpActions = (code) => actions.filter((a) => a.code === code);
+    const result = replayLedger(world, {
+      params: p,
+      from: SESSIONS[270]!,
+      familyOptions: { families: ["F1"] },
+    });
+    return rowsOf(result, "ZZA")[0]!;
+  };
+
+  it("with no corporate action the shares sold are the shares bought and no dividend is credited", () => {
+    const first = withActions([]);
+    expect(first.row.qty_out).toBe(first.row.qty);
+    expect(first.row.dividend_micro).toBe(0n);
+  });
+
+  it("a cash dividend in the hold: dividend_micro = qty x dps, inside net, gross and the stressed amount", () => {
+    const base = withActions([]);
+    const dividend: CorpActionRecord = {
+      id: "1",
+      code: "ZZA",
+      type: "cash_dividend",
+      exDate: SESSIONS[282]!, // inside the hold 281..283
+      payload: { dps: "0.10", pay_date: SESSIONS[290]! },
+    };
+    const first = withActions([dividend]);
+    const r = first.row;
+    expect(r.dividend_micro).toBe(BigInt(r.qty) * 100_000n);
+    const cost = BigInt(r.qty) * r.fill_in_micro + r.brok_in_micro;
+    const proceeds = BigInt(r.qty_out!) * r.fill_out_micro! - r.brok_out_micro! + r.dividend_micro;
+    expect(first.net).toEqual({ num: proceeds - cost, den: cost });
+    expect(r.stress_out_micro! - base.row.stress_out_micro!).toBe(r.dividend_micro);
+    expect(r.gross_num! - base.row.gross_num!).toBe(r.dividend_micro);
   });
 });

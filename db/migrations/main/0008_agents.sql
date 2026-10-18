@@ -488,8 +488,10 @@ BEGIN
 END;
 
 -- Forward signal-ledger rows only (decision 30: replay rows live in data-repo files). Amounts are
--- micro integers: cost = qty x fill_in + brok_in; proceeds = qty x fill_out - brok_out; the stressed
--- pair is the same under P3 + 50 % slippage. The row opens without any exit column; the close is ONE
+-- micro integers: cost = qty x fill_in + brok_in; proceeds = qty_out x fill_out - brok_out + dividend_micro
+-- (qty_out = qty re-based by splits in the hold, D-091; dividend_micro = cash dividends credited at ex-dates,
+-- franking excluded; both set by the close); the stressed pair is the same under P3 + 50 % slippage
+-- (its out amount includes the dividends). The row opens without any exit column; the close is ONE
 -- update that sets exit_d, exit_tag and the exit amounts together (CHECK), then never changes.
 CREATE TABLE ledger_row (
   id TEXT PRIMARY KEY,
@@ -505,15 +507,17 @@ CREATE TABLE ledger_row (
   brok_out_micro INTEGER CHECK (brok_out_micro IS NULL OR brok_out_micro >= 0),
   stress_in_micro INTEGER NOT NULL CHECK (stress_in_micro > 0),
   stress_out_micro INTEGER CHECK (stress_out_micro IS NULL OR stress_out_micro >= 0),
+  qty_out INTEGER CHECK (qty_out IS NULL OR qty_out > 0),
+  dividend_micro INTEGER NOT NULL DEFAULT 0 CHECK (dividend_micro >= 0),
   gross_num INTEGER,
   gross_den INTEGER CHECK (gross_den IS NULL OR gross_den > 0),
   timed INTEGER NOT NULL CHECK (timed IN (0,1)),
   forward INTEGER NOT NULL CHECK (forward IN (0,1)),
   CHECK ((exit_d IS NULL AND exit_tag IS NULL AND fill_out_micro IS NULL
-          AND brok_out_micro IS NULL AND stress_out_micro IS NULL
+          AND brok_out_micro IS NULL AND stress_out_micro IS NULL AND qty_out IS NULL
           AND gross_num IS NULL AND gross_den IS NULL)
       OR (exit_d IS NOT NULL AND exit_tag IS NOT NULL AND fill_out_micro IS NOT NULL
-          AND brok_out_micro IS NOT NULL AND stress_out_micro IS NOT NULL
+          AND brok_out_micro IS NOT NULL AND stress_out_micro IS NOT NULL AND qty_out IS NOT NULL
           AND gross_num IS NOT NULL AND gross_den IS NOT NULL AND exit_d >= entry_d))
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX idx_ledger_row_signal ON ledger_row (signal_id);

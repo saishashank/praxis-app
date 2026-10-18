@@ -826,7 +826,8 @@ export class CardError extends Error {
 /**
  * Scenario inputs from the development signal ledger (decision 21): closed `ledger_row` rows of the
  * lineage `<market>:<family>` whose signal has the card's rule version and variant, entered and
- * exited on or before the split's development end; net return = (proceeds - cost) / cost.
+ * exited on or before the split's development end; net return = (proceeds - cost) / cost with
+ * proceeds = shares sold (re-based by splits) x exit fill - exit brokerage + cash dividends (D-091).
  */
 export async function loadScenarioInput(
   db: Exec,
@@ -847,7 +848,8 @@ export async function loadScenarioInput(
   };
   if (split.devEndD === null) return { split, nets: [] };
   const rows = await db.execute({
-    sql: `SELECT l.qty, l.fill_in_micro, l.fill_out_micro, l.brok_in_micro, l.brok_out_micro
+    sql: `SELECT l.qty, l.qty_out, l.fill_in_micro, l.fill_out_micro, l.brok_in_micro, l.brok_out_micro,
+            l.dividend_micro
           FROM ledger_row l JOIN signal s ON s.id = l.signal_id
           WHERE s.market = ? AND s.family = ? AND s.rule_version = ? AND s.variant = ?
             AND l.exit_d IS NOT NULL AND l.entry_d <= ? AND l.exit_d <= ?
@@ -857,7 +859,10 @@ export async function loadScenarioInput(
   const nets = rows.rows.map((x) => {
     const qty = BigInt(String(x.qty));
     const cost = qty * BigInt(String(x.fill_in_micro)) + BigInt(String(x.brok_in_micro));
-    const proceeds = qty * BigInt(String(x.fill_out_micro)) - BigInt(String(x.brok_out_micro));
+    const proceeds =
+      BigInt(String(x.qty_out)) * BigInt(String(x.fill_out_micro)) -
+      BigInt(String(x.brok_out_micro)) +
+      BigInt(String(x.dividend_micro));
     return { num: proceeds - cost, den: cost };
   });
   return { split, nets };

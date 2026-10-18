@@ -476,10 +476,14 @@ export function evaluateF6(ctx: EvalContext, comps: Components): Evaluated[] {
   for (const c of ctx.codes) {
     if (!inTiers(c, ["U1", "U2"])) continue;
     const own = comps.get(c.code) ?? [];
-    const a = own.filter((x) => x.family === "F1" || x.family === "F4");
-    const b = own.filter((x) => x.family === "F2" || x.family === "F3" || x.family === "F5");
-    const insiderAvail = c.insiderScoreQ !== null;
-    const shortAvail = ctx.inputs.sources.asic === "on" && c.shortDrop !== "unknown";
+    const off = ctx.f6Disabled;
+    const a = off.has("a") ? [] : own.filter((x) => x.family === "F1" || x.family === "F4");
+    const b = off.has("b")
+      ? []
+      : own.filter((x) => x.family === "F2" || x.family === "F3" || x.family === "F5");
+    const insiderAvail = c.insiderScoreQ !== null && !off.has("c");
+    const shortAvail =
+      ctx.inputs.sources.asic === "on" && c.shortDrop !== "unknown" && !off.has("d");
     const classC =
       insiderAvail &&
       cmpRat(makeRational(BigInt(c.insiderScoreQ!), QUARTER_UNITS), p.f6.insiderMin) >= 0;
@@ -490,17 +494,23 @@ export function evaluateF6(ctx: EvalContext, comps: Components): Evaluated[] {
       ...(classC ? ["c"] : []),
       ...(classD ? ["d"] : []),
     ];
-    const available = 2 + (insiderAvail ? 1 : 0) + (shortAvail ? 1 : 0);
+    const available =
+      (off.has("a") ? 0 : 1) +
+      (off.has("b") ? 0 : 1) +
+      (insiderAvail ? 1 : 0) +
+      (shortAvail ? 1 : 0);
     const missing = EVIDENCE_CLASSES - available;
     const required = missing === 0 ? p.f6.minClasses : Math.min(p.f6.minClasses - 1, available);
     const variant =
-      !insiderAvail && !shortAvail
-        ? "F6-no-insider-no-short-interest"
-        : !insiderAvail
-          ? "F6-no-insider"
-          : !shortAvail
-            ? "F6-no-short-interest"
-            : "F6";
+      off.size > 0
+        ? `F6-loco-${[...off].sort().join("")}`
+        : !insiderAvail && !shortAvail
+          ? "F6-no-insider-no-short-interest"
+          : !insiderAvail
+            ? "F6-no-insider"
+            : !shortAvail
+              ? "F6-no-short-interest"
+              : "F6";
     const rules: RuleTrace[] = [
       trace("atr_warm", atrUsable(c), String(c.ind.atrMicro), "ATR warm"),
       trace(

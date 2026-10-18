@@ -79,6 +79,10 @@ export type LedgerRowRecord = {
   readonly brok_out_micro: bigint | null;
   readonly stress_in_micro: bigint;
   readonly stress_out_micro: bigint | null;
+  /** Shares sold, re-based by splits in the hold (equals qty without one); null while open. */
+  readonly qty_out: number | null;
+  /** Cash dividends credited at ex-dates inside net, stress and gross (franking excluded). */
+  readonly dividend_micro: bigint;
   readonly gross_num: bigint | null;
   readonly gross_den: bigint | null;
   readonly timed: 0 | 1;
@@ -101,9 +105,6 @@ export type LedgerEntry = {
   /** Paired excess r - mean(controls), exact (decision 25); null while open or without controls. */
   readonly excess: Rational | null;
   readonly flags: readonly string[];
-  /** Cash dividends credited at ex-dates (inside net, stress and gross) and shares sold. */
-  readonly dividendMicro: bigint;
-  readonly qtyOut: bigint | null;
   readonly mtm: readonly MtmPoint[];
   readonly controls: ControlDraw | null;
 };
@@ -280,6 +281,8 @@ export function replayLedger(src: LedgerSource, opts: LedgerOptions): LedgerResu
         brok_out_micro: x === null ? null : x.brokOutMicro,
         stress_in_micro: w.qty * w.stressFillInMicro + w.stressBrokInMicro,
         stress_out_micro: e === null ? null : e.stressOutMicro,
+        qty_out: x === null ? null : Number(x.qtyOut),
+        dividend_micro: w.dividendMicro,
         gross_num: e === null ? null : e.gross.num,
         gross_den: e === null ? null : e.gross.den,
         timed: flags.includes("assumed-time") ? 0 : 1,
@@ -337,8 +340,6 @@ export function replayLedger(src: LedgerSource, opts: LedgerOptions): LedgerResu
         stress: e === null ? null : e.stress,
         excess,
         flags: flags.sort(),
-        dividendMicro: w.dividendMicro,
-        qtyOut: x === null ? null : x.qtyOut,
         mtm: w.mtm,
         controls,
       });

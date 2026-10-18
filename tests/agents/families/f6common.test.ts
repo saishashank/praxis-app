@@ -45,6 +45,43 @@ const leader = (code = "ZZA", tier: "U1" | "U2" = "U1", extra: Partial<CodeFacts
 const world = (codes: CodeFacts[]) => [...codes, ...peers("ZZP", "U1", 9, p)];
 const f6 = (out: ReturnType<typeof runFamilies>) => out.candidates.filter((c) => c.family === "F6");
 
+describe("F6 leave-one-class-out (ARN-076)", () => {
+  const code = () => leader("ZZA", "U1", { insiderScoreQ: 2, shortDrop: true }); // classes a, c, d
+  const run = (off: readonly string[] | undefined) =>
+    f6(
+      runFamilies(
+        inputsOf(world([code()])),
+        p,
+        off === undefined ? {} : { f6DisabledClasses: off },
+      ),
+    );
+
+  it("an empty list changes nothing: the output is byte-identical to the live run", () => {
+    expect(familyOutputJson(run([]))).toBe(familyOutputJson(run(undefined)));
+  });
+
+  it("disabling the insider class (c) leaves (a) and (d) of the three that remain, labelled loco", () => {
+    const c = run(["c"])[0]!;
+    expect(c.variant).toBe("F6-loco-c");
+    expect(c.classes).toEqual(["a", "d"]);
+  });
+
+  it("disabling the short-interest class (d) leaves (a) and (c)", () => {
+    const c = run(["d"])[0]!;
+    expect(c.variant).toBe("F6-loco-d");
+    expect(c.classes).toEqual(["a", "c"]);
+  });
+
+  it("disabling the technical class (a) leaves no (a) or (b): no entry (at least one of them is needed)", () => {
+    expect(run(["a"])).toEqual([]);
+  });
+
+  it("disabling two classes keeps the rule that one of (a) or (b) and one more must agree", () => {
+    const c = run(["c", "d"])[0];
+    expect(c).toBeUndefined(); // only (a) agrees; (b) has no event: 1 of the 2 available
+  });
+});
+
 describe("F6 multi-agent consensus", () => {
   it("enters on 3 of 4 evidence classes (a, c, d) and lists the contributing family (golden)", () => {
     const code = leader("ZZA", "U1", { insiderScoreQ: 2, shortDrop: true });

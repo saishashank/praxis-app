@@ -284,6 +284,8 @@ export const AGENT_COLUMNS = {
     "brok_out_micro",
     "stress_in_micro",
     "stress_out_micro",
+    "qty_out",
+    "dividend_micro",
     "gross_num",
     "gross_den",
     "timed",

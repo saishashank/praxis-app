@@ -247,6 +247,8 @@ const ROW: Record<string, Record<string, V>> = {
     brok_out_micro: null,
     stress_in_micro: 10_050_000,
     stress_out_micro: null,
+    qty_out: null,
+    dividend_micro: 0,
     gross_num: null,
     gross_den: null,
     timed: 1,
@@ -501,6 +503,7 @@ describe("main migration 0008_agents: shape", () => {
       "brok_out_micro",
       "stress_in_micro",
       "stress_out_micro",
+      "dividend_micro",
     ]);
     expect(AGENT_MONEY_COLUMNS.stop_level).toEqual(["level_micro"]);
   });
@@ -795,20 +798,45 @@ describe("main migration 0008_agents: event (LLM fields NULL -> value once)", ()
 
 describe("main migration 0008_agents: ledger_row (one-way close)", () => {
   const CLOSE =
-    "UPDATE ledger_row SET exit_d = '2026-10-20', exit_tag = 'CS', fill_out_micro = 11000000, brok_out_micro = 5000000, stress_out_micro = 10900000, gross_num = 1, gross_den = 10";
+    "UPDATE ledger_row SET exit_d = '2026-10-20', exit_tag = 'CS', fill_out_micro = 11000000, brok_out_micro = 5000000, stress_out_micro = 10900000, qty_out = 60, dividend_micro = 12000, gross_num = 1, gross_den = 10";
 
   it("opens without an exit; the close sets all exit columns together, once; nothing else changes", async () => {
     const db = await seeded();
     await run(db, CLOSE);
     expect(
-      await q(db, "SELECT exit_d, exit_tag, fill_out_micro, gross_num FROM ledger_row"),
-    ).toEqual([{ exit_d: "2026-10-20", exit_tag: "CS", fill_out_micro: 11000000, gross_num: 1 }]);
+      await q(
+        db,
+        "SELECT exit_d, exit_tag, fill_out_micro, qty_out, dividend_micro, gross_num FROM ledger_row",
+      ),
+    ).toEqual([
+      {
+        exit_d: "2026-10-20",
+        exit_tag: "CS",
+        fill_out_micro: 11000000,
+        qty_out: 60,
+        dividend_micro: 12000,
+        gross_num: 1,
+      },
+    ]);
     // A second close, a re-close with the same values, or reopening is refused.
     await expect(run(db, CLOSE)).rejects.toThrow(/one-way close/);
     await expect(run(db, "UPDATE ledger_row SET fill_out_micro = 1")).rejects.toThrow(
       /one-way close/,
     );
     await expect(run(db, "DELETE FROM ledger_row")).rejects.toThrow(/forever table/);
+  });
+
+  it("the re-based quantity belongs to the close and dividends never go negative (D-091)", async () => {
+    const db = await seeded();
+    expect(await q(db, "SELECT qty_out, dividend_micro FROM ledger_row")).toEqual([
+      { qty_out: null, dividend_micro: 0 },
+    ]);
+    await expect(run(db, CLOSE.replace("qty_out = 60, ", ""))).rejects.toThrow(/CHECK/);
+    await expect(run(db, CLOSE.replace("qty_out = 60", "qty_out = 0"))).rejects.toThrow(/CHECK/);
+    await expect(
+      run(db, CLOSE.replace("dividend_micro = 12000", "dividend_micro = -1")),
+    ).rejects.toThrow(/CHECK/);
+    await expect(run(db, "UPDATE ledger_row SET qty_out = 60")).rejects.toThrow(/one-way close/);
   });
 
   it("refuses a change to an entry column in the same update as the close", async () => {
@@ -851,6 +879,7 @@ describe("main migration 0008_agents: ledger_row (one-way close)", () => {
         fill_out_micro: 1,
         brok_out_micro: 0,
         stress_out_micro: 1,
+        qty_out: 60,
         gross_num: 0,
         gross_den: 1,
       }),

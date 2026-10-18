@@ -462,7 +462,12 @@ describe("card note: rules-only by default, LLM text only when grounded", () => 
 });
 
 describe("scenario lookup from the development ledger (decision 21)", () => {
-  async function seed(db: Client, signals: number, devEnd: string | null): Promise<void> {
+  async function seed(
+    db: Client,
+    signals: number,
+    devEnd: string | null,
+    dividendMicro = 0,
+  ): Promise<void> {
     await db.execute({
       sql: "INSERT INTO lineage (id, created_d, parent) VALUES ('AU:F4', '2030-01-01', NULL)",
       args: [],
@@ -497,9 +502,10 @@ describe("scenario lookup from the development ledger (decision 21)", () => {
       });
       await db.execute({
         sql: `UPDATE ledger_row SET exit_d = ?, exit_tag = 'CS', fill_out_micro = ?,
-                brok_out_micro = 0, stress_out_micro = 1000000, gross_num = 1, gross_den = 1
+                brok_out_micro = 0, stress_out_micro = 1000000, qty_out = 100, dividend_micro = ?,
+                gross_num = 1, gross_den = 1
               WHERE id = ?`,
-        args: [d, 1_000_000 + (i + 1) * 10_000, `lr:${id}`],
+        args: [d, 1_000_000 + (i + 1) * 10_000, dividendMicro, `lr:${id}`],
       });
     }
   }
@@ -525,6 +531,20 @@ describe("scenario lookup from the development ledger (decision 21)", () => {
     // nearest ranks 4, 18, 33 of 36 -> 4 %, 18 %, 33 %
     expect([s.p10_ppm, s.p50_ppm, s.p90_ppm]).toEqual([40_000, 180_000, 330_000]);
     expect((await loadScenarioInput(db, { ...q, variant: "F4-other" })).nets).toHaveLength(0);
+  });
+
+  it("cash dividends credited in the hold are inside the net return (ledger_row.dividend_micro, D-091)", async () => {
+    const db = await freshReplayDb();
+    await seed(db, 12, "2030-09-30", 500_000); // 100 shares: A$0.005 a share = +0.5 % of the A$100 cost
+    const scen = await loadScenarioInput(db, q);
+    const without = await freshReplayDb();
+    await seed(without, 12, "2030-09-30");
+    const base = await loadScenarioInput(without, q);
+    expect(scen.nets).toHaveLength(12);
+    scen.nets.forEach((n, i) => {
+      expect(n.den).toBe(base.nets[i]!.den);
+      expect(n.num - base.nets[i]!.num).toBe(500_000n);
+    });
   });
 
   it("rows entered after the development end are not development rows; no split / deferred split", async () => {

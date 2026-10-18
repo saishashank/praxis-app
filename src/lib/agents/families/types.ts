@@ -110,6 +110,12 @@ export type FamilyOptions = {
   readonly constants?: SpecConstants;
   /** Which families to output (default all). F6 always computes its components internally. */
   readonly families?: readonly Family[];
+  /**
+   * Leave-one-input-class-out replay (ARN-076): F6 evidence classes (a)-(d) treated as unavailable.
+   * An unavailable class lowers F6's requirement exactly as a missing data source does (decision 14)
+   * and the variant is labelled `F6-loco-<classes>`. Never set by the live batch.
+   */
+  readonly f6DisabledClasses?: readonly string[];
 };
 
 /** ARN-011 thresholds (Owner-only). No registry keys exist yet: see D-085 (missing keys). */

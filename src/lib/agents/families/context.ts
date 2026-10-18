@@ -36,6 +36,8 @@ export type EvalContext = {
   readonly constants: SpecConstants;
   readonly u2OptInF1: boolean;
   readonly restrictToU1: boolean;
+  /** F6 evidence classes treated as unavailable (ARN-076 leave-one-class-out; empty live). */
+  readonly f6Disabled: ReadonlySet<string>;
   /** Codes sorted ascending (determinism). */
   readonly codes: readonly CodeFacts[];
   readonly groupsByCode: ReadonlyMap<string, readonly EventGroupFact[]>;
@@ -135,6 +137,7 @@ export function createContext(
     constants: opts.constants ?? SPEC_CONSTANTS_V1,
     u2OptInF1: opts.u2OptInF1 === true,
     restrictToU1: opts.restrictToU1 === true,
+    f6Disabled: new Set(opts.f6DisabledClasses ?? []),
     codes,
     groupsByCode,
     returnPercentile,
