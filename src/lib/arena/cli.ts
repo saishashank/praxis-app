@@ -4,7 +4,8 @@
 // tests can call it directly.
 //
 //   close-books [--date YYYY-MM-DD] [--wait-minutes N] [--max-sessions N] [--replay]
-//   signals [--date YYYY-MM-DD] [--wait-minutes N] [--replay]      (batch 2b, M4 T8)
+//   signals [--date YYYY-MM-DD] [--wait-minutes N] [--replay] [--phase 2b|3|all]
+//                                                                  (batch 2b, M4 T8; then batch 3, T15)
 //   replay --db file:<path> --from YYYY-MM-DD --to YYYY-MM-DD [--market AU]
 //
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, COMMIT_SHA (optional), GITHUB_OUTPUT (optional).
@@ -19,6 +20,7 @@ import { appendFileSync } from "node:fs";
 import { createClient, type Client } from "@libsql/client";
 import { addDays, marketDate, sessionsBetween } from "@/lib/data/calendar";
 import { signalsDay, type SignalsResult } from "@/lib/agents/batch2b";
+import { reviewDay, type ReviewResult } from "@/lib/agents/batch3";
 import {
   ARENA_JOB,
   closeBooksDay,
@@ -234,6 +236,18 @@ function signalsSummary(r: SignalsResult): string {
   );
 }
 
+function reviewSummary(r: ReviewResult): string {
+  const why = r.reason === null ? "" : ` (${r.reason})`;
+  const s = r.stats;
+  const l = s.ledger;
+  return (
+    `arena-3 ${r.market} ${r.d}: ${r.status}${why} rowsOpened=${l?.opened ?? 0} rowsClosed=${l?.closed ?? 0}` +
+    ` controlRows=${l?.controlRows ?? 0} cohorts=${s.cohorts} statRows=${s.statRows}` +
+    ` invariantViolations=${s.invariantViolations} killLooks=${s.killLooks} killTriggered=${s.killTriggered}` +
+    ` evidenceRows=${s.evidenceRows}`
+  );
+}
+
 async function hasClosedBooks(db: Client, d: string): Promise<boolean> {
   const rs = await db.execute({
     sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND status IN ('success', 'degraded')`,
@@ -265,6 +279,11 @@ export async function signalsMain(
     out("arena-2b: refused (--replay needs a local file: database)");
     return 2;
   }
+  const phase = flag(argv, "--phase") ?? "all";
+  if (phase !== "2b" && phase !== "3" && phase !== "all") {
+    out("arena-2b: refused (--phase must be 2b, 3 or all)");
+    return 2;
+  }
   const waitMinutes = Number.parseInt(flag(argv, "--wait-minutes") ?? "", 10);
   const wait =
     Number.isInteger(waitMinutes) && waitMinutes >= 0 ? waitMinutes : DEFAULT_WAIT_MINUTES;
@@ -277,6 +296,7 @@ export async function signalsMain(
   }
   let exit = 0;
   let last = "";
+  let lastReview = "";
   try {
     const d = flag(argv, "--date") ?? marketDate(new Date(nowMs()), MARKET_TZ);
     const calendar = await loadCalendar(db, MARKET);
@@ -285,34 +305,56 @@ export async function signalsMain(
       args: [MARKET],
     });
     const writes = mode.rows.length > 0 && (String(mode.rows[0].mode) === "full" || replay);
-    if (writes) {
-      const deadline = nowMs() + wait * 60_000;
-      while (!(await hasClosedBooks(db, d)) && nowMs() < deadline) await sleep(POLL_MS);
+    let runReview = phase === "3";
+    if (phase !== "3") {
+      if (writes) {
+        const deadline = nowMs() + wait * 60_000;
+        while (!(await hasClosedBooks(db, d)) && nowMs() < deadline) await sleep(POLL_MS);
+      }
+      const result = await signalsDay(db, {
+        market: MARKET,
+        d,
+        replay,
+        calendar,
+        now: () => new Date(nowMs()).toISOString(),
+        commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
+      });
+      out(signalsSummary(result));
+      last = `status=${result.status}`;
+      if (result.status === "failed") exit = 1;
+      // 2a missing after the wait: a visible failure, never orders on a stale ledger
+      if (result.status === "skipped" && result.reason === "no_2a_success") exit = 1;
+      // batch 3 follows 2b back-to-back (design 4.1), unless 2b failed or never had its inputs
+      runReview =
+        phase === "all" &&
+        (result.status === "success" ||
+          result.status === "degraded" ||
+          result.status === "already_done");
     }
-    const result = await signalsDay(db, {
-      market: MARKET,
-      d,
-      replay,
-      calendar,
-      now: () => new Date(nowMs()).toISOString(),
-      commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
-    });
-    out(signalsSummary(result));
-    last = `status=${result.status}`;
-    if (result.status === "failed") exit = 1;
-    // 2a missing after the wait: a visible failure, never orders on a stale ledger
-    if (result.status === "skipped" && result.reason === "no_2a_success") exit = 1;
+    if (runReview) {
+      const review = await reviewDay(db, {
+        market: MARKET,
+        d,
+        replay,
+        calendar,
+        now: () => new Date(nowMs()).toISOString(),
+        commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
+      });
+      out(reviewSummary(review));
+      lastReview = `review=${review.status}`;
+      if (review.status === "failed") exit = 1;
+      // 2b missing (phase 3 alone): a visible failure, never numbers on a day without signals
+      if (review.status === "skipped" && review.reason === "no_2b_success") exit = 1;
+    }
   } catch (error) {
     out(`arena-2b: failed (unexpected error ${error instanceof Error ? error.name : "unknown"})`);
     exit = 1;
   } finally {
     db.close();
   }
-  if (has(env.GITHUB_OUTPUT) && last !== "")
-    appendFileSync(
-      env.GITHUB_OUTPUT,
-      `${last}
-`,
-    );
+  if (has(env.GITHUB_OUTPUT) && (last !== "" || lastReview !== "")) {
+    const lines = [last, lastReview].filter((x) => x !== "");
+    appendFileSync(env.GITHUB_OUTPUT, `${lines.join("\n")}\n`);
+  }
   return exit;
 }

@@ -1,6 +1,9 @@
 // Batch 2b "signals and orders" CLI (M4 T8, ARN-060, ARN-020, design 4.1). Runs in the `production`
 // GitHub environment on the approved commit (SEC-108 c) from .github/workflows/arena-signals.yml.
-//   node scripts/arena/signals.mjs [--date YYYY-MM-DD] [--wait-minutes N]
+//   node scripts/arena/signals.mjs [--date YYYY-MM-DD] [--wait-minutes N] [--phase 2b|3|all]
+// The default phase `all` runs batch 2b and then, when 2b succeeded, batch 3 (the deterministic review
+// numbers: forward signal ledger, scorecards, ARN-101 re-check, kill switch, evidence timeline; M4 T15)
+// in the same job; `--phase 3` re-runs batch 3 alone for a session whose 2b has succeeded.
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, COMMIT_SHA (optional), GITHUB_OUTPUT (optional)
 // All logic lives in src/lib/arena/cli.ts (bundled by ./engine.mjs). In production with
 // `market.mode != 'full'` it only records a skipped run record and writes nothing to the arena or

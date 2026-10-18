@@ -13,6 +13,7 @@ import {
   familyOutputJson,
   runFamilies,
   type Candidate,
+  type FamilyOutput,
   type FamilyInputs,
   type FamilyOptions,
 } from "@/lib/agents/families";
@@ -46,6 +47,13 @@ export interface LedgerSource extends ControlSource {
    * snapshot). Must contain data up to `d` only and end its `sessions` at `d`.
    */
   familyInputs(d: string): FamilyInputs;
+  /**
+   * Optional: the family output of `d` already computed (the forward ledger stores each night's
+   * candidates, M4 T15, so a nightly window need not rebuild the inputs of every past session). When
+   * non-null it replaces `runFamilies(familyInputs(d))`; `market` must then be set.
+   */
+  familyOutput?(d: string): Pick<FamilyOutput, "candidates" | "blocked"> | null;
+  readonly market?: string;
 }
 
 export type LedgerOptions = {
@@ -152,7 +160,7 @@ export function ledgerRowId(
 }
 
 /** Event anchors of a signal for the F2 / F3 control mapping (distance in micro, ATR at decision). */
-function anchorsOf(c: Candidate, openMicro: bigint): EventAnchor[] | "no_atr" {
+export function anchorsOf(c: Candidate, openMicro: bigint): EventAnchor[] | "no_atr" {
   const atr = c.stopSpec.atr_micro;
   const out: EventAnchor[] = [];
   const dist = (level: bigint): bigint => (openMicro > level ? openMicro - level : 0n);
@@ -203,12 +211,19 @@ export function replayLedger(src: LedgerSource, opts: LedgerOptions): LedgerResu
     const d = sessions[idx]!;
     if (d < from) continue;
     if (d > to) break;
-    const inputs = src.familyInputs(d);
-    if (inputs.d !== d || inputs.sessions[inputs.sessions.length - 1] !== d) {
-      throw new RangeError(`family inputs for ${d} must end at ${d}`);
+    const pre = src.familyOutput?.(d) ?? null;
+    let out: Pick<FamilyOutput, "candidates" | "blocked">;
+    if (pre !== null) {
+      market = src.market ?? "";
+      out = pre;
+    } else {
+      const inputs = src.familyInputs(d);
+      if (inputs.d !== d || inputs.sessions[inputs.sessions.length - 1] !== d) {
+        throw new RangeError(`family inputs for ${d} must end at ${d}`);
+      }
+      market = inputs.market;
+      out = runFamilies(inputs, params, opts.familyOptions);
     }
-    market = inputs.market;
-    const out = runFamilies(inputs, params, opts.familyOptions);
     const sameDay = new Map<string, Set<string>>();
     for (const c of [...out.candidates, ...out.blocked]) {
       let s = sameDay.get(c.family);

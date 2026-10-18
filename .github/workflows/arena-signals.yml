@@ -15,7 +15,9 @@
 # `arena-2b:AU:<date>`. It decides ONE session (no catch-up: an order for a past session would be
 # filled after the fact). With market.mode other than `full` (production is data_only until the
 # Owner approves the arena, D-066) the script writes a skipped run record and touches NO table.
-# NOT built here: batch 3 (deterministic review numbers) is a later M4 task.
+# Batch 3 (deterministic review numbers: forward signal ledger, scorecards, ARN-101 re-check, kill
+# switch, evidence timeline; no LLM) runs back-to-back in the same step after 2b succeeded, one run
+# record `arena-3:AU:<date>` (M4 T15, D-093); `--phase 3` would re-run it alone.
 name: Arena signals and orders (batch 2b)
 
 on: workflow_dispatch

@@ -109,6 +109,15 @@ export const JOBS: readonly JobDef[] = [
       "Not run yet (off until the Owner enables the arena; records a skip while the market is data-only)",
   },
   {
+    // M4 T15 (D-093, ARN-093, ARN-101, VAL-102): batch 3 "deterministic review numbers", run back-to-back
+    // after 2b in the same job (scripts/arena/signals.mjs). Same gap logic as arena-signals; in
+    // data_only production no run is attempted (batch 2b is skipped first).
+    job: "arena-review",
+    label: "Arena review numbers (AU, batch 3)",
+    expectedIntervalSec: 3 * 86_400,
+    noDataNote: "Not run yet (follows batch 2b; off until the Owner enables the arena)",
+  },
+  {
     // M2 T9 (DAT-125, DAT-125a): runs on demand; the Worker slot is off until the Owner enables the
     // backfill, and a paused_cap or empty plan still ends in a success record or none at all.
     job: "backfill-history",

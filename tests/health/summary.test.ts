@@ -64,6 +64,7 @@ describe("getHealthSummary", () => {
       "universe-import",
       "arena-close",
       "arena-signals",
+      "arena-review",
       "backfill-history",
     ]);
     for (const j of s.jobs) {

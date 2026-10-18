@@ -188,7 +188,7 @@ async function sourcesOf(db: Client): Promise<Sources> {
   return { asx: mode("asx_announcements"), asic: mode("asic_short") };
 }
 
-function eventRowOf(r: Record<string, unknown>): EventRow {
+export function eventRowOf(r: Record<string, unknown>): EventRow {
   const n = (v: unknown): number | null => (v === null ? null : Number(v)); // money-float-ok: SQL integer column read as a version/flag
   return {
     market: String(r.market),
