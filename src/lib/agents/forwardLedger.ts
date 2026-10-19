@@ -407,6 +407,27 @@ const CLOSE_COLS = [
   "gross_den",
 ] as const;
 
+/** Metric of the exit marker (rule id and flags of a closed row; ledger_row keeps only IS / CS). */
+export const EXIT_RULE_METRIC = "exit_rule";
+export const exitRuleScope = (rowId: string): string => `exit:${rowId}`;
+
+/** First write wins: the rule that closed a row is a fact of its walk and never changes. */
+async function putExitRule(tx: Exec, e: LedgerEntry): Promise<void> {
+  if (e.row.exit_d === null || e.exitRule === null) return;
+  const market = e.lineage.slice(0, e.lineage.lastIndexOf(":"));
+  await tx.execute({
+    sql: `INSERT INTO replay_stat (run_id, scope, metric, d, value_json) VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT DO NOTHING`,
+    args: [
+      fwdRunId(market),
+      exitRuleScope(e.row.id),
+      EXIT_RULE_METRIC,
+      e.row.exit_d,
+      encodeJson({ flags: e.flags, rule: e.exitRule }),
+    ],
+  });
+}
+
 export type WriteCounts = { opened: number; closed: number; unchanged: number; noSignal: number };
 
 /** Insert the open row, or compare with the stored one; apply the one-way close when it is due. */
@@ -462,6 +483,7 @@ async function writeEntry(tx: Exec, e: LedgerEntry, counts: WriteCounts): Promis
           throw new ForwardLedgerError("row_conflict", `ledger_row ${r.id}: stored ${c} differs`);
         }
       }
+      await putExitRule(tx, e);
       counts.unchanged += 1;
       return;
     }
@@ -477,6 +499,7 @@ async function writeEntry(tx: Exec, e: LedgerEntry, counts: WriteCounts): Promis
           WHERE id = ? AND exit_d IS NULL`,
     args: [...CLOSE_COLS.map((c) => v[c]), r.id] as never,
   });
+  await putExitRule(tx, e);
   counts.closed += 1;
 }
 
@@ -509,6 +532,24 @@ export type ForwardOptions = {
   readonly reach?: number;
   /** Maximum sessions of candidates rebuilt in one night (catch-up after missed batch 3 runs). */
   readonly maxCatchUp?: number;
+  /**
+   * Called once after the rows and the final controls of the night are written (M6 T3: attribution of
+   * the blocked candidates walks them in this very world). It must not write `ledger_row`.
+   */
+  readonly afterWrite?: (night: ForwardNight) => Promise<void>;
+};
+
+/** What the nightly sync hands to `afterWrite`: the world of the window and the stored candidates. */
+export type ForwardNight = {
+  readonly db: Client;
+  readonly market: string;
+  readonly d: string;
+  readonly params: AgentParams;
+  readonly window: readonly string[];
+  /** First decision session whose rows this night wrote (the trusted zone starts here). */
+  readonly writeFrom: string;
+  readonly stored: ReadonlyMap<string, DayCandidates>;
+  readonly world: LiveWorld;
 };
 
 export type ForwardResult = {
@@ -653,6 +694,18 @@ export async function syncForwardLedger(db: Client, o: ForwardOptions): Promise<
   });
 
   const ctl = await syncControls(db, o);
+  if (o.afterWrite !== undefined) {
+    await o.afterWrite({
+      db,
+      market: o.market,
+      d: o.d,
+      params: o.params,
+      window,
+      writeFrom,
+      stored,
+      world,
+    });
+  }
   return {
     firstSignalD: firstD,
     windowSessions: window.length,
