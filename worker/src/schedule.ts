@@ -168,6 +168,22 @@ export const AU_SLOTS: readonly Slot[] = [
     enabled: false,
     note: "Evening Review retry and complete-version store 21:00-22:00 (M5 T10); OFF with the slot above",
   }),
+  // M5 T13 (D-108): health snapshot, attention reminder and Morning Brief. DISABLED like every M5
+  // slot. Single shot at 08:00; the route itself is idempotent per day (one snapshot, one email key).
+  slot({
+    id: "morning",
+    time: "08:00",
+    runner: "route",
+    route: "/api/internal/morning",
+    timeoutMs: 58_000,
+    workflow: null,
+    tradingDaysOnly: false,
+    marketBound: false,
+    priority: 5,
+    catchUpMin: 30,
+    enabled: false,
+    note: "Morning health snapshot, attention reminder and Morning Brief (M5 T13, PLT-061); OFF until the Owner enables emails",
+  }),
   slot({
     id: "universe",
     time: "07:30",

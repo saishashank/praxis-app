@@ -94,6 +94,7 @@ describe("the route slots in the table", () => {
       "alert-flush",
       "evening-review",
       "evening-review-late",
+      "morning",
       "pre-open",
       "pre-open-retry",
     ]);

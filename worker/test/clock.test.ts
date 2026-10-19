@@ -203,7 +203,8 @@ describe("slot table (docs/M2_design.md section 3)", () => {
         s.id === "replay" ||
         s.id === "ingest-batch1" || // M5 T10, decision 5: also the non-trading marker
         s.id === "evening-review" ||
-        s.id === "evening-review-late"
+        s.id === "evening-review-late" ||
+        s.id === "morning" // M5 T13: the reminder runs daily; the brief checks the trading day itself
       )
         expect(s.tradingDaysOnly).toBe(false);
       else expect(s.tradingDaysOnly).toBe(true);
