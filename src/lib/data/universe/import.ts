@@ -38,6 +38,8 @@ export type ImportInput = {
   /** ISO timestamp source (injected so tests are deterministic). */
   now: () => string;
   commit?: string;
+  /** Email environment: present = the shrink incident is also emailed (M5 T11). */
+  env?: Record<string, string | undefined>;
 };
 
 /** Records a rejected import: failed run record, plus the S2 incident for a shrink. */
@@ -61,7 +63,14 @@ async function reject(
     now: i.now(),
   });
   if (error === "suspicious_shrink") {
-    await openS2Once(i.db, UNIVERSE_INCIDENT, { rule: "universe_shrink", ...details }, i.now());
+    await openS2Once(
+      i.db,
+      UNIVERSE_INCIDENT,
+      { rule: "universe_shrink", ...details },
+      i.now(),
+      i.env ? { env: i.env } : undefined,
+      "The listed-companies import was rejected as a suspicious shrink",
+    );
   }
   return { ok: false, error };
 }

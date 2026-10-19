@@ -7,6 +7,7 @@
 import type { Client } from "@libsql/client";
 import { isValidSecret, verifySignedRequest } from "@/lib/security/hmac";
 import type { NonceStore } from "@/lib/security/replay";
+import { notifyIncident } from "@/lib/incidents/notify";
 import { exportEncrypted, parseRecipient } from "./crypto";
 import { isValidDate } from "./retention";
 
@@ -19,7 +20,23 @@ export type Deps = {
   nowSec: () => number;
   // Factory, so a misconfigured database surfaces as 503 inside the handler's try/catch.
   authDb: () => Client;
+  // Optional (M5 T11): the main database, to record and email a backup-failure incident.
+  mainDb?: () => Client;
 };
+
+async function reportBackupFailure(deps: Deps, why: string): Promise<void> {
+  if (!deps.mainDb) return;
+  try {
+    await notifyIncident(
+      { db: deps.mainDb(), env: deps.env, now: () => new Date(deps.nowSec() * 1000) },
+      "backup_failure",
+      "S2",
+      { summary: `The auth-database backup export failed: ${why}`, detail: { why } },
+    );
+  } catch {
+    // the route's own answer (503) already tells the caller; never mask it
+  }
+}
 
 const json = (status: number, body: unknown) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -64,13 +81,22 @@ export function createBackupExportHandler(deps: Deps) {
 
       // Fail closed: without a valid public key nothing is exported (never plaintext).
       const recipient = parseRecipient(deps.env.BACKUP_PUBLIC_KEY);
-      if (recipient === null) return unavailable();
+      if (recipient === null) {
+        await reportBackupFailure(deps, "no valid backup key");
+        return unavailable();
+      }
 
-      const out = await exportEncrypted(deps.authDb(), {
-        name: "auth",
-        createdAt: new Date(deps.nowSec() * 1000).toISOString(),
-        recipient,
-      });
+      let out: Awaited<ReturnType<typeof exportEncrypted>>;
+      try {
+        out = await exportEncrypted(deps.authDb(), {
+          name: "auth",
+          createdAt: new Date(deps.nowSec() * 1000).toISOString(),
+          recipient,
+        });
+      } catch {
+        await reportBackupFailure(deps, "export error");
+        return unavailable();
+      }
       return new Response(out.data as BodyInit, {
         status: 200,
         headers: {

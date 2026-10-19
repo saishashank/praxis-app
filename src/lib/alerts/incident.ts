@@ -5,9 +5,8 @@
 // after; switch, caps and recipient are the core's). The call is idempotent: a repeat finds the
 // open incident and the email key already claimed (`duplicate`), so a Worker that asks on every
 // blind tick costs one tiny request and never a second email. S3 kinds are in-app only.
-import { emailKeys } from "@/lib/email/keys";
-import { sendEmail, type SendStatus } from "@/lib/email/send";
-import { formatMelbourne } from "@/lib/health/format";
+import type { SendStatus } from "@/lib/email/send";
+import { notifyIncident } from "@/lib/incidents/notify";
 import { nowOf, type AlertCtx } from "./deliver";
 
 export type IncidentKind = "sentinel_blind" | "sentinel_ingest_failed";
@@ -61,45 +60,25 @@ export async function openIncident(
   const spec = INCIDENT_KINDS[kind];
   const now = o.nowMs !== undefined ? new Date(o.nowMs) : nowOf(ctx);
   const windowMin = o.windowMin ?? DEFAULT_BLIND_MIN;
-  const ins = await ctx.db.execute({
-    sql:
-      "INSERT INTO incident (at, severity, kind, detail_json) SELECT ?, ?, ?, ? " +
-      "WHERE NOT EXISTS (SELECT 1 FROM incident WHERE kind = ? AND resolved_at IS NULL)",
-    args: [
-      now.toISOString(),
-      spec.severity,
-      kind,
-      JSON.stringify({ source: "asx_announcements", window_min: windowMin }),
-      kind,
-    ],
-  });
-  const row = await ctx.db.execute({
-    sql: "SELECT id, at FROM incident WHERE kind = ? AND resolved_at IS NULL ORDER BY id DESC LIMIT 1",
-    args: [kind],
-  });
-  const id = row.rows.length ? Number(row.rows[0].id) : null;
-  const res: OpenResult = {
-    opened: ins.rowsAffected === 1,
-    id,
-    severity: spec.severity,
-    email: null,
-  };
-  if (!spec.email || id === null) return res;
-  const out = await sendEmail(
-    { db: ctx.db, env: ctx.env, now: () => now, provider: ctx.provider, sleep: ctx.sleep },
-    "incident_open",
-    emailKeys.incidentOpen(String(id)),
+  // One door for every incident writer (M5 T11): S3 kinds are recorded only, never emailed.
+  const r = await notifyIncident(
     {
-      incidentId: String(id),
-      severity: spec.severity === "S1" ? "S1" : "S2",
-      component: spec.component,
+      db: ctx.db,
+      env: spec.email ? ctx.env : undefined,
+      now: () => now,
+      provider: ctx.provider,
+      sleep: ctx.sleep,
+    },
+    kind,
+    spec.severity,
+    {
       summary: spec.summary(windowMin),
-      since: formatMelbourne(String(row.rows[0].at)),
+      detail: { source: "asx_announcements", window_min: windowMin },
+      component: spec.component,
       impact: spec.impact,
       fix: spec.fix,
       fixPath: spec.fixPath,
     },
   );
-  res.email = out.status;
-  return res;
+  return { opened: r.opened, id: r.id, severity: spec.severity, email: r.email };
 }

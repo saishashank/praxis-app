@@ -10,6 +10,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { Client } from "@libsql/client";
 import { finishRun, startRun } from "@/lib/runs/runRecord";
 import { CHECK_TIMEOUT_MS, CODE_REPO } from "@/lib/selfcheck/config";
+import type { EmailProvider } from "@/lib/email/provider";
 import { checkApprovedCommit, type WatchdogResult } from "./approvedCommit";
 import { KIND_UNAPPROVED_CODE, openS1Once } from "./incidents";
 import { WATCHDOG_JOB } from "./state";
@@ -21,6 +22,9 @@ export type Deps = {
   fetchImpl: typeof fetch;
   mainDb: () => Client;
   now: () => Date;
+  /** Email provider and sleep for tests; production selects its own. */
+  provider?: EmailProvider;
+  sleep?: (ms: number) => Promise<void>;
 };
 
 const json = (status: number, body: unknown) =>
@@ -116,6 +120,8 @@ export function createWatchdogHandler(deps: Deps) {
             KIND_UNAPPROVED_CODE,
             { approvedSha: result.approvedSha, deployedSha: result.deployedSha, date },
             now.toISOString(),
+            { env: deps.env, provider: deps.provider, sleep: deps.sleep },
+            "The running code does not match the approved release",
           );
           incident = opened ? "opened" : "already open";
         } catch {
