@@ -15,8 +15,13 @@ export type Slot = {
   /** Recurring slots (ASX poll): last start and spacing. Not fired by the dispatch clock. */
   until?: string;
   everyMin?: number;
-  /** "actions" = dispatched as a GitHub workflow; "worker" = run inside the Worker (T4/T10). */
-  runner: "actions" | "worker";
+  /**
+   * "actions" = dispatched as a GitHub workflow; "worker" = run inside the Worker (T4/T10);
+   * "route" = a signed POST to a Vercel route (decision 41, M5), never dispatched by this clock.
+   */
+  runner: "actions" | "worker" | "route";
+  /** App path for runner "route", else absent. */
+  route?: string;
   /** Workflow file under .github/workflows for runner "actions", else null. */
   workflow: string | null;
   tradingDaysOnly: boolean;
@@ -61,6 +66,24 @@ export const AU_SLOTS: readonly Slot[] = [
     catchUpMin: 0,
     enabled: false,
     note: "ASX announcement poll, DAT-122 slot 1 (T4)",
+  }),
+  // M5 T6 (D-101, design 4.1/4.3): the P0 batch flush. A `route` slot: odd minutes 07:01-20:59, one
+  // read of `worker_state.alert_flush_due` and, when it has passed, a signed POST. DISABLED, and the
+  // dispatch clock never fires `route` slots (the route runner arrives with the other M5 route slots).
+  slot({
+    id: "alert-flush",
+    time: "07:01",
+    until: "20:59",
+    everyMin: 2,
+    runner: "route",
+    route: "/api/internal/alert-flush",
+    workflow: null,
+    tradingDaysOnly: true,
+    marketBound: false,
+    priority: 4,
+    catchUpMin: 0,
+    enabled: false,
+    note: "P0 batch flush and missing alerts (M5 T6, decision 40); OFF until the Owner enables alerts",
   }),
   slot({
     id: "pre-open",

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BLIND_ALERT_MIN,
   SENTINEL_BODY_MAX_BYTES,
+  incidentUrl,
   isBlind,
   pollKind,
   sentinelUrl,
@@ -41,6 +42,11 @@ let net: Net;
 let asx: { calls: { url: string; init: RequestInit }[]; reply: () => Response };
 let app: { calls: { url: string; init: RequestInit }[]; reply: () => Response };
 let f: typeof fetch;
+// How the fake app answers the incident route: "route" opens the incident like the real route does.
+let incidentMode: "route" | "fail";
+const INCIDENT_PATH = "/api/internal/incident";
+const ingestCalls = () => app.calls.filter((c) => c.url.endsWith("/api/internal/sentinel-ingest"));
+const incidentCalls = () => app.calls.filter((c) => c.url.endsWith(INCIDENT_PATH));
 
 const setState = (key: string, v: string) =>
   db
@@ -82,6 +88,7 @@ beforeEach(() => {
   net = makeNet(db);
   asx = { calls: [], reply: feed(feedBody(1)) };
   app = { calls: [], reply: () => Response.json({ new: 1, assessed: 1, carried: 0 }) };
+  incidentMode = "route";
   f = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
     if (url.startsWith("https://www.asx.com.au/")) {
@@ -90,6 +97,14 @@ beforeEach(() => {
     }
     if (url.startsWith(APP)) {
       app.calls.push({ url, init: init ?? {} });
+      if (url.endsWith(INCIDENT_PATH)) {
+        if (incidentMode === "fail") return new Response("no", { status: 500 });
+        db.prepare(
+          "INSERT INTO incident (at, severity, kind, detail_json) SELECT ?, 'S2', 'sentinel_blind', '{}' " +
+            "WHERE NOT EXISTS (SELECT 1 FROM incident WHERE kind = 'sentinel_blind' AND resolved_at IS NULL)",
+        ).run(new Date().toISOString());
+        return Response.json({ opened: true, severity: "S2", email: "sent" });
+      }
       return app.reply();
     }
     return net.f(input, init);
@@ -112,6 +127,12 @@ describe("pure helpers", () => {
     for (const bad of [undefined, "", "  ", "http://x.test", "ftp://x.test", "nonsense"]) {
       expect(sentinelUrl(bad)).toBeNull();
     }
+  });
+
+  it("incidentUrl is the https origin plus the incident route, else null", () => {
+    expect(incidentUrl("https://x.test/some/path")).toBe("https://x.test/api/internal/incident");
+    for (const bad of [undefined, "", "http://x.test", "nonsense"])
+      expect(incidentUrl(bad)).toBeNull();
   });
 
   it("pollKind: 304 is a successful not_modified; rate limit and error are failed", () => {
@@ -326,7 +347,7 @@ describe("runAsx: the Sentinel hand-off", () => {
     asx.reply = feed("x".repeat(SENTINEL_BODY_MAX_BYTES + 1));
     const s = await runAsx(ENV, T0, deps(T0));
     expect(s.outcome).toBe("error");
-    expect(app.calls).toHaveLength(0);
+    expect(ingestCalls()).toHaveLength(0);
     expect(pollDay()[0]).toMatchObject({ scheduled: 1, ok: 0, failed: 1 });
     asx.reply = () =>
       new Response("x", {
@@ -335,7 +356,7 @@ describe("runAsx: the Sentinel hand-off", () => {
       });
     const t1 = T0 + POLL;
     expect((await runAsx(ENV, t1, deps(t1))).outcome).toBe("error");
-    expect(app.calls).toHaveLength(0);
+    expect(ingestCalls()).toHaveLength(0);
   });
 
   it("no app configured: nothing is posted and the ETag is withheld so the body is not lost", async () => {
@@ -392,6 +413,66 @@ describe("runAsx: blind state for the incident path", () => {
     expect(s.skipped).toBe("denied-source_off");
     expect(s.blind).toBe(true);
     expect(incidents()).toHaveLength(1);
+  });
+
+  it("the Worker asks the app, signed, to open the incident (the app emails; the Worker never does)", async () => {
+    const start = Date.UTC(2026, 9, 12, 20, 0, 0);
+    asx.reply = () => new Response("oops", { status: 500 });
+    for (let i = 0; i < 5; i++) {
+      const t = start + i * POLL;
+      await runAsx(ENV, t, deps(t));
+    }
+    const calls = incidentCalls();
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    const call = calls[0];
+    expect(call.url).toBe(`${APP}/api/internal/incident`);
+    expect(call.init.method).toBe("POST");
+    expect(call.init.redirect).toBe("manual");
+    const raw = String(call.init.body);
+    expect(JSON.parse(raw)).toEqual({
+      purpose: "incident",
+      env: "production",
+      d: DATE,
+      kind: "sentinel_blind",
+      window_min: BLIND_ALERT_MIN,
+    });
+    const h = call.init.headers as Record<string, string>;
+    expect(h["X-Praxis-Signature"]).toBe(
+      await hmacHex(SECRET, `${h["X-Praxis-Timestamp"]}.${h["X-Praxis-Nonce"]}.${raw}`),
+    );
+    expect(JSON.stringify(h)).not.toContain(SECRET);
+    expect(incidents()).toHaveLength(1); // one open incident, whatever the number of asks
+  });
+
+  it("when the app does not answer 200 the in-app incident is still written (blindness is never lost)", async () => {
+    incidentMode = "fail";
+    const start = Date.UTC(2026, 9, 12, 20, 0, 0);
+    asx.reply = () => new Response("oops", { status: 500 });
+    for (let i = 0; i < 5; i++) {
+      const t = start + i * POLL;
+      await runAsx(ENV, t, deps(t));
+    }
+    expect(incidentCalls().length).toBeGreaterThanOrEqual(1);
+    expect(incidents()).toEqual([{ severity: "S2", kind: "sentinel_blind", resolved_at: null }]);
+  });
+
+  it("no app configured: no ask is made and the in-app incident is written", async () => {
+    const start = Date.UTC(2026, 9, 12, 20, 0, 0);
+    asx.reply = () => new Response("oops", { status: 500 });
+    for (let i = 0; i < 5; i++) {
+      const t = start + i * POLL;
+      await runAsx({ ...ENV, APP_BASE_URL: undefined }, t, deps(t));
+    }
+    expect(incidentCalls()).toHaveLength(0);
+    expect(incidents()).toHaveLength(1);
+  });
+
+  it("not blind: the app is never asked", async () => {
+    const start = Date.UTC(2026, 9, 12, 20, 0, 0);
+    asx.reply = () => new Response("oops", { status: 500 });
+    await runAsx(ENV, start, deps(start));
+    expect(incidentCalls()).toHaveLength(0);
+    expect(incidents()).toEqual([]);
   });
 
   it("blind detection works the same on the AEST side of the year", async () => {

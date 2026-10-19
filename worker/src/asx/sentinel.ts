@@ -59,6 +59,15 @@ export function sentinelUrl(base: string | undefined): string | null {
   }
 }
 
+export const INCIDENT_ROUTE = "/api/internal/incident";
+export const INCIDENT_PURPOSE = "incident";
+
+/** The signed incident route URL from `APP_BASE_URL` (https only), or null. */
+export function incidentUrl(base: string | undefined): string | null {
+  const u = sentinelUrl(base);
+  return u === null ? null : new URL(INCIDENT_ROUTE, u).toString();
+}
+
 // ---- blind detection ----------------------------------------------------------------------------
 
 /** Minutes since local midnight inside MAP hours (inclusive). */
@@ -91,6 +100,37 @@ export function blindIncidentStmt(nowMs: number, alertMin: number = BLIND_ALERT_
       "WHERE NOT EXISTS (SELECT 1 FROM incident WHERE kind = 'sentinel_blind' AND resolved_at IS NULL)",
     args: [iso(nowMs), JSON.stringify({ source: ASX_SOURCE, window_min: alertMin })],
   };
+}
+
+/**
+ * Asks the app, signed, to open the Sentinel-blind incident (M5 T6, D-101): the app opens ONE S2
+ * incident and sends the incident e-mail; the Worker never emails. Never throws; `status` null
+ * means no answer. A non-200 answer makes the caller fall back to the in-app insert below.
+ */
+export async function reportBlind(
+  f: typeof fetch,
+  o: { url: string; secret: string; env: string; date: string; nowMs: number; windowMin?: number },
+): Promise<DeliverResult> {
+  try {
+    const body = JSON.stringify({
+      purpose: INCIDENT_PURPOSE,
+      env: o.env,
+      d: o.date,
+      kind: "sentinel_blind",
+      window_min: o.windowMin ?? BLIND_ALERT_MIN,
+    });
+    const headers = await signHeaders(o.secret, body, Math.floor(o.nowMs / 1000), randomHex(16));
+    const res = await f(o.url, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body,
+      redirect: "manual",
+      signal: AbortSignal.timeout(POST_TIMEOUT_MS),
+    });
+    return { status: res.status };
+  } catch {
+    return { status: null };
+  }
 }
 
 // ---- NFR-002 counters ---------------------------------------------------------------------------

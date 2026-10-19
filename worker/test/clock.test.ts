@@ -93,6 +93,25 @@ describe("slot table (docs/M2_design.md section 3)", () => {
       expect(s.minute).toBe(Number(s.time.slice(0, 2)) * 60 + Number(s.time.slice(3)));
   });
 
+  it("alert-flush (M5 T6, decision 41): a disabled route slot on odd minutes, never dispatched by the clock", () => {
+    const s = AU_SLOTS.find((x) => x.id === "alert-flush")!;
+    expect(s).toMatchObject({
+      time: "07:01",
+      until: "20:59",
+      everyMin: 2,
+      runner: "route",
+      route: "/api/internal/alert-flush",
+      workflow: null,
+      enabled: false,
+    });
+    expect(s.minute % 2).toBe(1); // odd minutes, away from the even-minute ASX poll
+    // even if someone enabled it, the dispatch clock does not fire a route slot
+    const on = AU_SLOTS.map((x) => ({ ...x, enabled: true }));
+    expect(candidateSlots(sydneyLocal(at(MON, "07:01")), on).map((x) => x.id)).not.toContain(
+      "alert-flush",
+    );
+  });
+
   it("only workflows that exist today are enabled and allow-listed; later slots are off", () => {
     expect([...DISPATCHABLE_WORKFLOWS].sort()).toEqual([
       "arena-close.yml",

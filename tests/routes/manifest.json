@@ -19,6 +19,31 @@
     "POST /api/internal/sentinel-ingest": {
       "tests": ["tests/sentinel/ingestRoute.test.ts", "tests/security/hmac.test.ts"]
     },
+    "POST /api/internal/alert-flush": {
+      "tests": [
+        "tests/alerts/routes.test.ts",
+        "tests/alerts/deliver.test.ts",
+        "tests/security/hmac.test.ts"
+      ]
+    },
+    "POST /api/internal/incident": {
+      "tests": ["tests/alerts/routes.test.ts", "tests/security/hmac.test.ts"]
+    },
+    "GET /api/alerts": {
+      "tests": ["tests/alerts/routes.test.ts", "tests/alerts/api.test.ts"]
+    },
+    "POST /api/alerts/[key]/ack": {
+      "tests": ["tests/alerts/routes.test.ts", "tests/alerts/api.test.ts"]
+    },
+    "POST /api/alerts/[key]/snooze": {
+      "tests": ["tests/alerts/routes.test.ts", "tests/alerts/api.test.ts"]
+    },
+    "GET /api/alerts/quiet-hours": {
+      "tests": ["tests/alerts/routes.test.ts", "tests/alerts/api.test.ts"]
+    },
+    "POST /api/alerts/quiet-hours": {
+      "tests": ["tests/alerts/routes.test.ts", "tests/alerts/api.test.ts"]
+    },
     "POST /api/internal/maintenance": {
       "tests": ["tests/maintenance/route.test.ts", "tests/maintenance/retention.test.ts"]
     },

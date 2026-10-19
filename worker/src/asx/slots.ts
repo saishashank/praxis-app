@@ -46,10 +46,12 @@ import {
   byteLength,
   deliverFeed,
   failedStmts,
+  incidentUrl,
   isBlind,
   parseFail,
   pollDayStmt,
   pollKind,
+  reportBlind,
   sentinelUrl,
   sha256Hex,
   type FailState,
@@ -125,6 +127,24 @@ export type AsxSummary = {
 
 const str = (r: Row | undefined, i: number): string | null =>
   r !== undefined && typeof r[i] === "string" ? (r[i] as string) : null;
+
+/**
+ * Sentinel blind (PLT-018): ask the app to open the incident and send its e-mail (M5 T6). Returns
+ * true when the app answered 200; false (not configured, no answer, any other status) means the
+ * caller writes the in-app incident itself, so blindness is never lost. The route is idempotent.
+ */
+async function askAppForBlindIncident(
+  env: AsxEnv,
+  deps: AsxDeps,
+  date: string,
+  nowMs: number,
+): Promise<boolean> {
+  const url = incidentUrl(env.APP_BASE_URL);
+  const secret = (env.WORKER_HMAC_SECRET ?? "").trim();
+  if (url === null || secret === "") return false;
+  const r = await reportBlind(deps.fetch, { url, secret, env: env.PRAXIS_ENV, date, nowMs });
+  return r.status === 200;
+}
 
 /** One tick. Never throws. */
 export async function runAsx(
@@ -233,7 +253,9 @@ export async function runAsx(
       const now = deps.nowMs();
       const stmts = [pollDayStmt(now, local.date, "denied")];
       if (blindNow) {
-        stmts.push(blindIncidentStmt(now));
+        if (!(await askAppForBlindIncident(env, deps, local.date, now))) {
+          stmts.push(blindIncidentStmt(now));
+        }
         sum.blind = true;
       }
       try {
@@ -327,7 +349,9 @@ export async function runAsx(
     const kind = pollKind(outcome, status);
     extra.push(pollDayStmt(now, local.date, kind));
     if (blindNow && kind !== "ok" && kind !== "not_modified") {
-      extra.push(blindIncidentStmt(now));
+      if (!(await askAppForBlindIncident(env, deps, local.date, now))) {
+        extra.push(blindIncidentStmt(now));
+      }
       sum.blind = true;
     }
 

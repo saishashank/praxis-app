@@ -100,6 +100,19 @@ export async function getPreferences(
   return merge(r.rows.length ? parseStored(r.rows[0].prefs_json) : null);
 }
 
+// Quiet hours (alerts API, M5 T6) live in the same prefs_json; an update of the D-048 fields keeps them.
+async function storedExtras(
+  db: Pick<Client, "execute">,
+  userId: number,
+): Promise<Record<string, unknown>> {
+  const r = await db.execute({
+    sql: "SELECT prefs_json FROM user_preference WHERE user_id = ?",
+    args: [userId],
+  });
+  const v = r.rows.length ? parseStored(r.rows[0].prefs_json) : null;
+  return isRecord(v) && isRecord(v.quiet_hours) ? { quiet_hours: v.quiet_hours } : {};
+}
+
 // Whole-patch validation: any unknown key or invalid value rejects everything.
 function validate(patch: unknown): Partial<Preferences> | null {
   if (!isRecord(patch)) return null;
@@ -139,6 +152,7 @@ export async function updatePreferences(
       return { ok: false, error: "forbidden" };
     }
     const cur = await getPreferences(tx, actor.id);
+    const keep = await storedExtras(tx, actor.id);
     const next: Preferences = { ...cur, ...clean };
     const changed = FIELDS.filter((f) => next[f] !== cur[f]);
     if (!changed.length) {
@@ -149,7 +163,7 @@ export async function updatePreferences(
     await tx.execute({
       sql: `INSERT INTO user_preference (user_id, prefs_json, updated_at) VALUES (?, ?, ?)
             ON CONFLICT (user_id) DO UPDATE SET prefs_json = excluded.prefs_json, updated_at = excluded.updated_at`,
-      args: [actor.id, JSON.stringify(next), at],
+      args: [actor.id, JSON.stringify({ ...keep, ...next }), at],
     });
     await auditTx(tx, env, meta ?? NO_META, {
       at,

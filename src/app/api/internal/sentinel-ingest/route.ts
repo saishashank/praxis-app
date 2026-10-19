@@ -5,6 +5,7 @@ import { getConfig } from "@/lib/config/store";
 import { sydneyDate } from "@/lib/data/pipeline/rules.mjs";
 import { createSentinelIngestHandler } from "@/lib/sentinel/handler";
 import { ingestFeed } from "@/lib/sentinel/ingest";
+import { processAssessments } from "@/lib/alerts/deliver";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,7 +23,7 @@ export async function POST(req: Request): Promise<Response> {
       try {
         const db = mainDb();
         const cap = await getConfig(db, "sentinel_max_items_per_run");
-        return await ingestFeed({
+        const r = await ingestFeed({
           db,
           feed,
           sha,
@@ -30,6 +31,16 @@ export async function POST(req: Request): Promise<Response> {
           now: new Date(nowSec * 1000).toISOString(),
           maxItems: typeof cap === "number" ? cap : undefined,
         });
+        if (r.ok) {
+          // Alerts and the P0 e-mail (M5 T6): a fault here never fails the ingest; the next
+          // alert-flush raises whatever is still missing.
+          try {
+            await processAssessments({ db, env, now: () => new Date(nowSec * 1000) });
+          } catch {
+            // retried by alert-flush
+          }
+        }
+        return r;
       } catch {
         return { ok: false, error: "unavailable" };
       }

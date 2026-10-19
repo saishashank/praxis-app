@@ -325,6 +325,24 @@ describe("the real route against a local database", () => {
     expect(await count("sentinel_ingest")).toBe(1);
   });
 
+  it("assessed items become alerts in the same request (M5 T6): once, by key, P2 for a tracked code", async () => {
+    await db.execute(
+      "INSERT INTO universe_snapshot (market, d, code, status, tier) VALUES ('AU', '2026-10-12', 'ZZAA', 'active', 'U1')",
+    );
+    const raw = JSON.stringify(good({}, feedOf(2, "-alerts")));
+    expect((await route.POST(post(raw))).status).toBe(200);
+    const rows = async () =>
+      (await db.execute("SELECT alert_key, tier, email_key FROM alert ORDER BY alert_key")).rows;
+    const first = await rows();
+    expect(first).toHaveLength(2);
+    expect(first.every((r) => r.tier === "P2" && r.email_key === null)).toBe(true);
+    expect(first.every((r) => String(r.alert_key).startsWith("ann:AU:asx_announcements:"))).toBe(
+      true,
+    );
+    expect((await route.POST(post(raw))).status).toBe(200); // the same body again
+    expect(await rows()).toEqual(first);
+  });
+
   it("a body that is not a feed is 422 and writes nothing", async () => {
     const feed = "<html>not a feed</html>";
     const r = await route.POST(post(good({}, feed)));
