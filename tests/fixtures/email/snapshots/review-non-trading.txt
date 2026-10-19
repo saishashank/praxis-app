@@ -1,0 +1,118 @@
+Subject: Praxis Evening Review (non-trading day) — Sat 17 Oct 2026
+
+PRAXIS EVENING REVIEW
+
+
+Sat 17 Oct 2026
+
+* Market: Market closed (non-trading day)
+* Carried NAV AUD: AUD 1,296,295.68
+* P0 alerts: 0
+* P0 alerts: 0
+
+
+1. Headline scorecard
+---------------------
+
+Market closed today. Carried NAV and system health are shown.
+
+System health: 8 of 9 components healthy.
+
+- Backups (needs attention, day 2): Re-run the backup workflow
+
+
+2. Investments made today
+-------------------------
+
+No trading today.
+
+
+3. Profit / loss
+----------------
+
+Execution | NAV | Day P/L | To target | Detail
+E01 Strategy 1 (https://praxis.example.test/executions/E01) | AUD 101,234.56 | - | █░░░░░░░░░ 7% (AUD 49,900.00 to go) | realised AUD +50.00; unrealised AUD -15.00; costs AUD 2.50; no sleeve
+E02 Strategy 2 (https://praxis.example.test/executions/E02) | AUD 102,469.12 | - | █░░░░░░░░░ 14% (AUD 49,800.00 to go) | realised AUD +100.00; unrealised AUD -30.00; costs AUD 5.00; sleeve AUD +2.00 unlocked
+E03 Strategy 3 (https://praxis.example.test/executions/E03) | AUD 103,703.68 | - | ██░░░░░░░░ 21% (AUD 49,700.00 to go) | realised AUD +150.00; unrealised AUD -45.00; costs AUD 7.50; no sleeve
+E04 Strategy 4 (https://praxis.example.test/executions/E04) | AUD 104,938.24 | - | ███░░░░░░░ 28% (AUD 49,600.00 to go) | realised AUD +200.00; unrealised AUD -60.00; costs AUD 10.00; sleeve AUD +4.00 locked, recovery 35%
+E05 Strategy 5 (https://praxis.example.test/executions/E05) | AUD 106,172.80 | - | ████░░░░░░ 35% (AUD 49,500.00 to go) | realised AUD +250.00; unrealised AUD -75.00; costs AUD 12.50; no sleeve
+E06 Strategy 6 (https://praxis.example.test/executions/E06) | AUD 107,407.36 | - | ████░░░░░░ 42% (AUD 49,400.00 to go) | realised AUD +300.00; unrealised AUD -90.00; costs AUD 15.00; sleeve AUD +6.00 unlocked
+E07 Strategy 7 (https://praxis.example.test/executions/E07) | AUD 108,641.92 | - | █████░░░░░ 49% (AUD 49,300.00 to go) | realised AUD +350.00; unrealised AUD -105.00; costs AUD 17.50; no sleeve
+E08 Strategy 8 (https://praxis.example.test/executions/E08) | AUD 109,876.48 | - | ██████░░░░ 56% (AUD 49,200.00 to go) | realised AUD +400.00; unrealised AUD -120.00; costs AUD 20.00; sleeve AUD +8.00 locked, recovery 35%
+E09 Strategy 9 (https://praxis.example.test/executions/E09) | AUD 111,111.04 | - | ██████░░░░ 63% (AUD 49,100.00 to go) | realised AUD +450.00; unrealised AUD -135.00; costs AUD 22.50; no sleeve
+E10 Strategy 10 (https://praxis.example.test/executions/E10) | AUD 112,345.60 | - | ███████░░░ 70% (AUD 49,000.00 to go) | realised AUD +500.00; unrealised AUD -150.00; costs AUD 25.00; sleeve AUD +10.00 unlocked
+E11 Strategy 11 (https://praxis.example.test/executions/E11) | AUD 113,580.16 | - | ████████░░ 77% (AUD 48,900.00 to go) | realised AUD +550.00; unrealised AUD -165.00; costs AUD 27.50; no sleeve
+E12 Strategy 12 (https://praxis.example.test/executions/E12) | AUD 114,814.72 | - | ████████░░ 84% (AUD 48,800.00 to go) | realised AUD +600.00; unrealised AUD -180.00; costs AUD 30.00; sleeve AUD +12.00 locked, recovery 35%
+
+
+4. What was learned today
+-------------------------
+
+Written without AI today — facts only.
+
+- Challenger C1 is at n = 12 of 30 required; promotion not yet possible.
+
+
+5. What worked better and why
+-----------------------------
+
+Written without AI today — facts only.
+
+- No detectable difference between families (n = 12).
+
+
+6. What needs improving for tomorrow
+------------------------------------
+
+Written without AI today — facts only.
+
+- 2 orders pending for the next session.
+- Known event tomorrow: RBA minutes.
+
+
+7. Overall picture — success %
+------------------------------
+
+P(target) 4.1%, P(bust) 9.8%, P(stalled) 20.0% vs matched controls (n = 12).
+
+Measure | Value | Detail
+Win rate | 52.0% | n = 50
+Expectancy | AUD +4.20 | per trade
+
+Signal success % by agent
+
+A1 Sentinel ██████░░░░ 61% (n = 40)
+
+Patterns █████░░░░░ 48% (n = 35)
+
+Scribe ░░░░░░░░░░ n/a
+
+
+8. Sentinel recap
+-----------------
+
+Tier | Code | What | Time | Effect
+P1 | TST07 | Quarterly activities report | 11:05 AEDT | Watch-list item, materiality 3
+
+
+9. System & quota health
+------------------------
+
+Check | Status | Detail
+Jobs | OK | all fresh
+Data | OK | ASX bars to 2026-10-19
+ASX switch | OK | on
+LLM budget | Needs attention | estimate 72% of quota
+Last backup | Down | failed 2026-10-18
+
+Read this review in the app: https://praxis.example.test/reviews/2026-10-17
+
+--
+
+10. Footer
+
+Simulation for personal information only; not financial advice.
+
+Open Praxis: https://praxis.example.test
+
+This is a transactional email sent to the account Owner only; there is no mailing list, so there is nothing to unsubscribe from. Reviews can be paused in Settings.

@@ -1,0 +1,16 @@
+Subject: [TEST] Praxis test email
+
+TEST EMAIL
+
+
+This test email was requested at Mon 19 Oct 2026 09:00 AEDT. If you can read it, delivery works.
+
+Open Praxis: https://praxis.example.test
+
+--
+
+Simulation for personal information only; not financial advice.
+
+Open Praxis: https://praxis.example.test
+
+This is a transactional email sent to the account Owner only; there is no mailing list, so there is nothing to unsubscribe from. Reviews can be paused in Settings.

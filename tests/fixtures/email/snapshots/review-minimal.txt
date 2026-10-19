@@ -1,0 +1,53 @@
+Subject: Praxis Evening Review (minimal) — Mon 19 Oct 2026
+
+PRAXIS EVENING REVIEW
+
+
+Mon 19 Oct 2026
+
+[Minimal review]
+  The email route was unreachable at 20:40.
+  Numbers are from the last completed data for this date.
+
+* Day P/L AUD: AUD +2,222.10 (12 executions)
+* Best execution: E12 AUD +1,481.40 (single-day result — noise)
+* Worst execution: E09 AUD -1,111.05 (single-day result — noise)
+* P0 alerts: 1
+
+
+3. Profit / loss
+----------------
+
+Execution | NAV | Day P/L
+E01 Strategy 1 (https://praxis.example.test/executions/E01) | AUD 101,234.56 | AUD +123.45
+E02 Strategy 2 (https://praxis.example.test/executions/E02) | AUD 102,469.12 | AUD +246.90
+E03 Strategy 3 (https://praxis.example.test/executions/E03) | AUD 103,703.68 | AUD -370.35
+E04 Strategy 4 (https://praxis.example.test/executions/E04) | AUD 104,938.24 | AUD +493.80
+E05 Strategy 5 (https://praxis.example.test/executions/E05) | AUD 106,172.80 | AUD +617.25
+E06 Strategy 6 (https://praxis.example.test/executions/E06) | AUD 107,407.36 | AUD -740.70
+E07 Strategy 7 (https://praxis.example.test/executions/E07) | AUD 108,641.92 | AUD +864.15
+E08 Strategy 8 (https://praxis.example.test/executions/E08) | AUD 109,876.48 | AUD +987.60
+E09 Strategy 9 (https://praxis.example.test/executions/E09) | AUD 111,111.04 | AUD -1,111.05
+E10 Strategy 10 (https://praxis.example.test/executions/E10) | AUD 112,345.60 | AUD +1,234.50
+E11 Strategy 11 (https://praxis.example.test/executions/E11) | AUD 113,580.16 | AUD +1,357.95
+E12 Strategy 12 (https://praxis.example.test/executions/E12) | AUD 114,814.72 | AUD -1,481.40
+
+
+9. System & quota health
+------------------------
+
+System health: 8 of 9 components healthy.
+
+- Backups: Re-run the backup workflow
+
+Read this review in the app: https://praxis.example.test/reviews/2026-10-19
+
+--
+
+10. Footer
+
+Simulation for personal information only; not financial advice.
+
+Open Praxis: https://praxis.example.test
+
+This is a transactional email sent to the account Owner only; there is no mailing list, so there is nothing to unsubscribe from. Reviews can be paused in Settings.
