@@ -170,6 +170,8 @@ export type CloseBooksOptions = {
   readonly calendar?: CalendarRow[];
   /** Parameter overrides for cohorts started by a restart (default: ch.15 defaults). */
   readonly restartParams?: (executionId: string) => ParamOverrides;
+  /** ch.15 max_promotions_per_week for a pending promotion at a restart (default: the registry value). */
+  readonly maxPromotionsPerWeek?: number;
 };
 
 export type CloseBooksStatus = "success" | "degraded" | "failed" | "skipped" | "already_done";
@@ -1321,6 +1323,7 @@ export async function closeBooksDay(
         }),
       masterSeed: opts.masterSeed ?? ARENA_MASTER_SEED,
       dataSnapshotId: await snapshotId(db, data, opts),
+      maxPromotionsPerWeek: opts.maxPromotionsPerWeek,
     };
     const checked = await runTerminalChecks(db, [...outcomes.keys()], {
       d: opts.d,

@@ -238,6 +238,124 @@ export function createLineageSplit(input: SplitCreateInput): LineageSplitRecord 
   };
 }
 
+export type SplitRollInput = {
+  readonly market: string;
+  readonly family: string;
+  /** The lineage's latest split (its version + 1 is the new one). */
+  readonly previous: Pick<LineageSplitRecord, "version">;
+  /** Ascending session dates up to the data end (the actual calendar; later sessions are estimated). */
+  readonly calendar: readonly string[];
+  readonly maxHoldingUpper: number;
+  /** Realised rows of the primary variant (entry and exit dates; exit null while open). */
+  readonly primaryRows: readonly { readonly entryD: string; readonly exitD: string | null }[];
+  readonly params: StatsParams;
+  /**
+   * The date after which the new holdout may start (ARN-082): the latest of the promoted version's
+   * registration, the Owner's last view of its shadow results and the promotion date.
+   */
+  readonly anchorD: string;
+  /** Idempotency marker stored on the new split (`promotion:<id>`). */
+  readonly measuredOnRun: string;
+};
+
+/**
+ * The split record at a roll caused by a promotion (ARN-082, M6 design 2.9; pure). The holdout
+ * starts one purge of sessions after the anchor date and the validation window ends one purge before
+ * it; development is everything earlier. Block and window lengths are re-measured exactly as at
+ * creation (p-percentile of realised holds on the data before the validation window, floor, window
+ * lengths from the block multiple). The holdout is usable once its length plus the completion window
+ * has passed: sessions beyond the data end are weekday ESTIMATES (the known limit of `addWeekdays`,
+ * as for deferral dates), so its dates are expected dates, not calendar facts.
+ */
+export function rollLineageSplit(input: SplitRollInput): LineageSplitRecord {
+  const { calendar, params } = input;
+  if (calendar.length === 0) throw new RangeError("calendar is empty");
+  const purge = purgeSessions(input.maxHoldingUpper, params);
+  const dataEnd = calendar[calendar.length - 1]!;
+  // first session strictly after the anchor, then one purge of sessions
+  let after = calendar.findIndex((d) => d > input.anchorD);
+  if (after < 0) after = calendar.length;
+  const holdoutStart = after + purge;
+
+  const at = (i: number): string => {
+    if (i < calendar.length) return calendar[i]!;
+    return addWeekdays(dataEnd, i - (calendar.length - 1));
+  };
+  const layoutFrom = (holdoutLen: number, validationLen: number): Layout => {
+    const holdoutEnd = holdoutStart + holdoutLen - 1;
+    const validationEnd = holdoutStart - 1 - purge;
+    const validationStart = validationEnd - validationLen + 1;
+    const devEnd = validationStart - 1 - purge;
+    return {
+      holdoutStart,
+      holdoutEnd,
+      validationStart,
+      validationEnd,
+      devEnd,
+      devSessions: devEnd + 1,
+    };
+  };
+
+  // block: measured on the entries before the validation window of the default-length layout
+  const def = layoutFrom(params.splitHoldoutMinSessions, params.splitValidationMinSessions);
+  const cutoff = def.validationStart - purge;
+  const index = new Map<string, number>();
+  calendar.forEach((d, i) => index.set(d, i));
+  const holds: number[] = [];
+  for (const r of input.primaryRows) {
+    if (r.exitD === null) continue;
+    const a = index.get(r.entryD);
+    const b = index.get(r.exitD);
+    if (a === undefined || b === undefined || a >= cutoff || b < a) continue;
+    holds.push(b - a);
+  }
+  const block =
+    holds.length === 0
+      ? params.bootstrapBlockMinSessions
+      : Math.max(
+          params.bootstrapBlockMinSessions,
+          percentile(holds, params.bootstrapBlockPercentile),
+        );
+  const holdoutLen = Math.max(params.splitHoldoutMinSessions, params.splitBlockMultiple * block);
+  const validationLen = Math.max(
+    params.splitValidationMinSessions,
+    params.splitBlockMultiple * block,
+  );
+  const lay = layoutFrom(holdoutLen, validationLen);
+  const base = {
+    lineage_id: lineageId(input.market, input.family),
+    version: input.previous.version + 1,
+    block_sessions: block,
+    holdout_len: holdoutLen,
+    validation_len: validationLen,
+    purge,
+    data_end_d: dataEnd,
+    reason: "roll",
+    measured_on_run: input.measuredOnRun,
+  } as const;
+  if (lay.devSessions < params.splitDevelopmentMinSessions || lay.validationStart < 0) {
+    const short = params.splitDevelopmentMinSessions - Math.max(0, lay.devSessions);
+    return {
+      ...base,
+      holdout_start_d: null,
+      holdout_end_d: null,
+      validation_start_d: null,
+      validation_end_d: null,
+      dev_end_d: null,
+      deferred_until_d: addWeekdays(dataEnd, short),
+    };
+  }
+  return {
+    ...base,
+    holdout_start_d: at(lay.holdoutStart),
+    holdout_end_d: at(lay.holdoutEnd),
+    validation_start_d: calendar[lay.validationStart]!,
+    validation_end_d: calendar[lay.validationEnd]!,
+    dev_end_d: calendar[lay.devEnd]!,
+    deferred_until_d: null,
+  };
+}
+
 /** Which split an entry date falls in (by entry date, ARN-082); null while the split is deferred. */
 export function splitOf(split: LineageSplitRecord, entryD: string): SplitName | null {
   if (split.deferred_until_d !== null) return null;

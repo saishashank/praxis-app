@@ -30,6 +30,7 @@ import {
   type GroupRestartPlan,
   type SlotCohort,
 } from "./cohort";
+import { commitChangeIn, selectDueChangeIn, type AppliedChange } from "@/lib/learning/promotion";
 import { loadQtyAdjustments } from "./corpActionWriter";
 import {
   loadNavDays,
@@ -47,6 +48,7 @@ import {
   isParcelOnlyReasonText,
   liquidationOrderId,
   planLiquidation,
+  restartSession,
   type CloseDay,
   type LegacyItem,
   type LiquidationPlan,
@@ -671,6 +673,8 @@ export type RestartConfig = {
   readonly paramsFor: (execution: ExecutionRow) => CohortParams;
   readonly masterSeed: bigint;
   readonly dataSnapshotId?: string | null;
+  /** ch.15 max_promotions_per_week for a pending promotion at this restart (default: the registry value). */
+  readonly maxPromotionsPerWeek?: number;
 };
 
 export type TerminalDayResult = {
@@ -679,6 +683,8 @@ export type TerminalDayResult = {
   readonly resolved: readonly TerminalEvaluation[];
   /** Group restarts written (live trigger present). */
   readonly restarts: readonly GroupRestartPlan[];
+  /** Rule-version changes (promotion, force-apply, rollback) applied at these restarts (M6 T10). */
+  readonly changes: readonly AppliedChange[];
   readonly written: boolean;
 };
 
@@ -735,6 +741,7 @@ export async function runTerminalChecks(
     }
   }
   const restarts: GroupRestartPlan[] = [];
+  const changes: AppliedChange[] = [];
   let written = false;
   for (const group of [...byGroup.keys()].sort()) {
     const members = byGroup.get(group) ?? [];
@@ -742,21 +749,44 @@ export async function runTerminalChecks(
       let wrote = false;
       for (const e of members) if (await writeTerminalIn(tx, e)) wrote = true;
       const live = await slotCohortsIn(tx, group, input.d, verdicts);
+      // A pending promotion / force-apply / rollback of the group's family applies at THIS restart
+      // (M6 design 2.9): the successors start with the new rule version, ending and shadow cohorts
+      // keep theirs. Read inside the same transaction, so the restart and the change are one unit.
+      const restartD = restartSession(input.d, input.calendar);
+      const scan = await selectDueChangeIn(tx, {
+        group,
+        restartD,
+        maxPromotionsPerWeek: input.restart.maxPromotionsPerWeek,
+      });
+      const due = scan.due?.promotion;
+      const baseFor = input.restart.executionFor;
+      const executionFor =
+        due === undefined
+          ? baseFor
+          : (executionId: string): ExecutionRow => {
+              const e = baseFor(executionId);
+              return e.market === due.market && e.family === due.family && e.twin_group === group
+                ? { ...e, rule_version: due.to_version }
+                : e;
+            };
       const restartPlan = planGroupRestart({
         group,
         triggerCohortId: members[0].cohort.id,
         closeD: input.d,
         calendar: input.calendar,
         live,
-        executionFor: input.restart.executionFor,
+        executionFor,
         paramsFor: input.restart.paramsFor,
         masterSeed: input.restart.masterSeed,
         dataSnapshotId: input.restart.dataSnapshotId,
       });
       if (await restartGroupIn(tx, restartPlan)) wrote = true;
-      return { restartPlan, wrote };
+      const committed = await commitChangeIn(tx, scan, { closeD: input.d, restartD, group });
+      if (committed.applied !== null || committed.cancelled.length > 0) wrote = true;
+      return { restartPlan, wrote, applied: committed.applied };
     });
     restarts.push(plan.restartPlan);
+    if (plan.applied !== null) changes.push(plan.applied);
     if (plan.wrote) written = true;
   }
   for (const e of loose) {
@@ -768,6 +798,7 @@ export async function runTerminalChecks(
     d: input.d,
     resolved: [...evaluations].sort((a, b) => (a.cohort.id < b.cohort.id ? -1 : 1)),
     restarts,
+    changes,
     written,
   };
 }
