@@ -24,6 +24,8 @@ import type {
 import { money, pct, plural } from "@/lib/email/templates/format";
 import type { EnvName } from "@/lib/email/templates/core";
 import { melbourneDate } from "@/lib/email/keys";
+import type { PicksParams } from "@/lib/agents/params";
+import { readSection7a } from "@/lib/picks/section7a";
 import { getMeters, usageEnvironment, worstMeter } from "@/lib/usage/meters";
 import { HEALTH_COMPONENTS } from "@/lib/sentinel/schema";
 import { learnLines, readLearnFacts, type LearnFacts } from "@/lib/learning/learnFacts";
@@ -1078,4 +1080,67 @@ export async function unreadStreak(db: Db, d: string): Promise<number> {
     n += 1;
   }
   return n;
+}
+
+// ---- section 7a: New picks (UXN-044, M6 T17) ------------------------------------------------------
+// Read from the STORED picks of the review date D and the stored outcomes: bounded to D, no
+// recomputation, no LLM. The review reads picks; no trading module does (a test pins it). The
+// assembler and the renderer take this section over in M7; until then it is a reader with facts.
+
+export type NewPickFact = {
+  readonly code: string;
+  readonly rank: number;
+  readonly buyUpToCents: number;
+  readonly validUntilD: string;
+  readonly stopCents: number;
+  readonly aimCents: number;
+  readonly timeFrameWeeks: number | null;
+  readonly basedOn: string | null;
+  readonly link: string;
+};
+
+export type NewPicksFacts = {
+  readonly d: string;
+  readonly profiles: readonly {
+    readonly profile: string;
+    readonly picks: readonly NewPickFact[];
+    readonly successLine: string;
+  }[];
+  readonly none: boolean;
+  readonly honesty: string;
+};
+
+export async function readPicksSection(
+  c: Ctx,
+  q: { picks: PicksParams; confidence: number },
+): Promise<NewPicksFacts> {
+  const f = await readSection7a(c.db, {
+    market: c.market,
+    d: c.d,
+    appUrl: c.appUrl,
+    picks: q.picks,
+    confidence: q.confidence,
+  });
+  return {
+    d: f.d,
+    none: f.none,
+    honesty: f.proven
+      ? "Personal use only · Not financial advice"
+      : "Personal use only · Not financial advice · Model not proven yet",
+    profiles: f.profiles.map((p) => ({
+      profile: p.profile,
+      successLine: p.successLine,
+      picks: p.picks.map((x) => ({
+        code: x.code,
+        rank: x.rank,
+        buyUpToCents: microToCents(x.buyUpToMicro),
+        validUntilD: x.validUntilD,
+        stopCents: microToCents(x.stopMicro),
+        aimCents: microToCents(x.aimMicro),
+        timeFrameWeeks: x.timeFrameWeeks,
+        basedOn: x.basedOn,
+        link: x.link,
+      })),
+    })),
+  };
 }
