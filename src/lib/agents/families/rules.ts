@@ -152,7 +152,7 @@ function build(b: Build): Evaluated {
     d: b.ctx.inputs.d,
     family: b.family,
     variant: b.variant,
-    ruleVersion: FAMILY_RULE_VERSION[b.family],
+    ruleVersion: b.ctx.ruleVersions[b.family] ?? FAMILY_RULE_VERSION[b.family],
     code: b.c.code,
     tier: b.c.tier,
     regime: b.ctx.inputs.regime,

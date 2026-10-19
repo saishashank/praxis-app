@@ -663,3 +663,33 @@ export function agentParamsJson(p: AgentParams): string {
 export function agentParamsSha(p: AgentParams): string {
   return createHash("sha256").update(agentParamsJson(p)).digest("hex");
 }
+
+// ---- rule versions (M6 T8, D-110 #32 / #44, D-115) ----
+
+const FAMILY_SLICE = { F1: "f1", F2: "f2", F3: "f3", F4: "f4", F5: "f5", F6: "f6" } as const;
+
+/**
+ * The parameters with one family's rule-version values laid over them. A rule version holds the
+ * family's Lane-B keys (`params_json`, ch.15 section 15.3); only the slice of AgentParams those keys
+ * feed is replaced: the family's own struct, `reentry_block`, the shared event polarity threshold
+ * and, for F6, the insider weights and window. Every other parameter keeps the base value.
+ */
+export function paramsWithVersion(
+  base: AgentParams,
+  family: keyof typeof FAMILY_SLICE,
+  versionParams: Readonly<Record<string, unknown>>,
+): AgentParams {
+  const has = (k: string): boolean => Object.prototype.hasOwnProperty.call(versionParams, k);
+  const built = buildAgentParams((k) => (has(k) ? versionParams[k] : CONFIG_KEYS[k].default));
+  const slice = FAMILY_SLICE[family];
+  const next: AgentParams = { ...base, [slice]: built[slice] };
+  if (has("reentry_block")) next.reentryBlock = built.reentryBlock;
+  if (has("event_polarity_threshold_pct")) {
+    next.eventPolarityThreshold = built.eventPolarityThreshold;
+  }
+  if (family === "F6") {
+    if (has("insider_score_weights")) next.insiderWeights = built.insiderWeights;
+    if (has("insider_window_sessions")) next.insiderWindowSessions = built.insiderWindowSessions;
+  }
+  return next;
+}

@@ -10,7 +10,7 @@
 //      Anything else records a `skipped` run and touches no table.
 //   1. A4 -> A3 -> A2 through the DecisionView (inputs bounded by D and cut-off(D)); the regime,
 //      event and insider/flow rows are recorded.
-//   2. `runFamilies` once for the day; every candidate becomes a `signal` row.
+//   2. `runFamilies` once per active rule version (M6 T8: the live set, then every other version); every candidate becomes a `signal` row.
 //   3. exits first, per cohort with open trades: CS rules -> `exit_cs` orders for D+1, trailing IS
 //      levels -> append-only `stop_level` rows (active from the next session).
 //   4. entries, per live E cohort (cohort id ascending): re-entry block, quality gate at creation,
@@ -101,7 +101,8 @@ import {
 } from "./controls";
 import { applyArn011 } from "./families/arn011";
 import { createContext } from "./families/context";
-import { runFamilies } from "./families";
+import { FAMILY_RULE_VERSION } from "./families";
+import { liveParams, loadVersionSet, runVersions, versionIdOf } from "./versionRuns";
 import type { Candidate, CodeFacts, Family } from "./families/types";
 import {
   crossing,
@@ -1419,7 +1420,10 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
   });
   const stats = emptyStats();
   try {
-    const params = o.params ?? (await loadAgentParams(db));
+    const executionList = await loadExecutions(db);
+    const versionSet = await loadVersionSet(db, o.market, executionList);
+    // live parameters: the incumbent rule versions laid over the configuration (D-115)
+    const params = liveParams(o.params ?? (await loadAgentParams(db)), versionSet);
     const nextD = nextTradingDay(o.d, calendar);
     const actions = await loadConfirmedActions(db, o.market, o.d);
     const actionsNext = await loadConfirmedActions(db, o.market, nextD);
@@ -1436,8 +1440,8 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
     });
     stats.agentRows = await recordAgentRows(db, day, o.market);
 
-    // A5: the rule interpreter, once for all cohorts
-    const out = runFamilies(day.inputs, params);
+    // A5: the rule interpreter, once per active rule version (live set first; D-110 #44)
+    const { out, paramsOf } = runVersions(day.inputs, params, versionSet);
     const ctx: Ctx = {
       db,
       market: o.market,
@@ -1464,13 +1468,21 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       }
     });
 
-    const executions = new Map((await loadExecutions(db)).map((e) => [e.id, e]));
+    const executions = new Map(executionList.map((e) => [e.id, e]));
     const unresolved = await loadUnresolvedCohorts(db, o.d);
     await exitsStage(ctx, new Map(unresolved.map((c) => [c.id, c])));
     await breakersStage(ctx, o.breakerSink ?? createAlertRowSink(db), o.now());
 
     const live = unresolved.filter((c) => c.live).sort((a, b) => cmp(a.id, b.id));
-    const matched = new Map<Family, Taken[]>();
+    const matched = new Map<string, Taken[]>();
+    // a cohort trades the candidates of its execution's rule version only; a database with no
+    // rule_version rows keeps the single v1 run, unfiltered
+    const versionOf = (exec: ExecutionRow, family: Family): string =>
+      versionSet === null ? FAMILY_RULE_VERSION[family] : versionIdOf(family, exec.rule_version);
+    const forVersion = (family: Family, id: string): Candidate[] =>
+      out.candidates.filter(
+        (c) => c.family === family && (versionSet === null || c.ruleVersion === id),
+      );
     for (const cohort of live) {
       const exec = executions.get(cohort.executionId);
       if (exec === undefined || exec.kind !== "E" || exec.family === null) continue;
@@ -1478,13 +1490,16 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       if (books === null) continue;
       stats.cohorts += 1;
       const family = exec.family as Family;
-      const taken = await entriesFor(ctx, books, exec, family, out.candidates, signalIds);
-      const list = matched.get(family) ?? [];
+      const vid = versionOf(exec, family);
+      const vctx: Ctx = { ...ctx, params: paramsOf.get(vid) ?? params };
+      const taken = await entriesFor(vctx, books, exec, family, forVersion(family, vid), signalIds);
+      const mkey = `${family}|${vid}`;
+      const list = matched.get(mkey) ?? [];
       for (const t of taken) if (!list.some((x) => x.signalId === t.signalId)) list.push(t);
-      matched.set(family, list);
+      matched.set(mkey, list);
     }
 
-    const evalCtx = createContext(day.inputs, params, {});
+    const evalCtxOf = new Map<string, ReturnType<typeof createContext>>();
     for (const cohort of live) {
       const exec = executions.get(cohort.executionId);
       if (
@@ -1495,16 +1510,25 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
         continue;
       }
       const family = exec.family as Family;
-      const list = matched.get(family) ?? [];
+      const vid = versionOf(exec, family);
+      const list = matched.get(`${family}|${vid}`) ?? [];
       if (list.length === 0) continue;
       const books = await booksOf(db, cohort, calendar, o.d);
       if (books === null) continue;
       stats.cohorts += 1;
       const qualifying = new Set<string>([
-        ...out.candidates.filter((c) => c.family === family).map((c) => c.code),
-        ...out.blocked.filter((c) => c.family === family).map((c) => c.code),
+        ...forVersion(family, vid).map((c) => c.code),
+        ...out.blocked
+          .filter((c) => c.family === family && (versionSet === null || c.ruleVersion === vid))
+          .map((c) => c.code),
       ]);
-      await controlsFor(ctx, books, exec, family, list, qualifying, evalCtx);
+      const vp = paramsOf.get(vid) ?? params;
+      let evalCtx = evalCtxOf.get(vid);
+      if (evalCtx === undefined) {
+        evalCtx = createContext(day.inputs, vp, {});
+        evalCtxOf.set(vid, evalCtx);
+      }
+      await controlsFor({ ...ctx, params: vp }, books, exec, family, list, qualifying, evalCtx);
     }
 
     const status: SignalsStatus = day.partial ? "degraded" : "success";

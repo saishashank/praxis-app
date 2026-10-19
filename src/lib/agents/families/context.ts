@@ -13,6 +13,7 @@ import type {
   RuleTrace,
   SpecConstants,
   Tier,
+  Family,
 } from "./types";
 
 /** One event group: all announcements of a code with the same day 0 (one event counts once). */
@@ -37,6 +38,8 @@ export type EvalContext = {
   readonly restrictToU1: boolean;
   /** F6 evidence classes treated as unavailable (ARN-076 leave-one-class-out; empty live). */
   readonly f6Disabled: ReadonlySet<string>;
+  /** Rule-version id stamped on each family's candidates (default: the v1 id, M6 T8). */
+  readonly ruleVersions: Readonly<Partial<Record<Family, string>>>;
   /** Codes sorted ascending (determinism). */
   readonly codes: readonly CodeFacts[];
   readonly groupsByCode: ReadonlyMap<string, readonly EventGroupFact[]>;
@@ -137,6 +140,7 @@ export function createContext(
     u2OptInF1: opts.u2OptInF1 === true,
     restrictToU1: opts.restrictToU1 === true,
     f6Disabled: new Set(opts.f6DisabledClasses ?? []),
+    ruleVersions: opts.ruleVersions ?? {},
     codes,
     groupsByCode,
     returnPercentile,

@@ -116,6 +116,11 @@ export type FamilyOptions = {
    * and the variant is labelled `F6-loco-<classes>`. Never set by the live batch.
    */
   readonly f6DisabledClasses?: readonly string[];
+  /**
+   * Rule-version id stamped on the candidates of a family (default `<family>.v1`). The caller runs the
+   * family with that version's parameters (M6 T8, D-110 #44); never changes a rule, only the label.
+   */
+  readonly ruleVersions?: Readonly<Partial<Record<Family, string>>>;
 };
 
 /** ARN-011 thresholds (Owner-only). No registry keys exist yet: see D-085 (missing keys). */
