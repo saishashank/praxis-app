@@ -293,6 +293,160 @@ const M4_META: Record<RangedKey | FixedKey, ConfigMeta> = {
   ) as Record<FixedKey, ConfigMeta>),
 };
 
+// ---- M5 keys (Sentinel, alerts, email; docs/M5_design.md 4.11, decisions D-096 and D-097) ----
+// Defaults and bounds are those of ch.15 where the spec gives them (ch.15 l.119-122, 158, 163-165,
+// 174-175, 189-198). Where ch.15 gives a default but no bounds, or the design adds a key (D-096), the
+// ref says so: "D-097" marks bounds chosen by the builder, "D-096" a key the architect added. Times
+// are Melbourne local "HH:MM" read by the Worker clock (docs/M5_design.md 2.1).
+
+const SEM: ConfigArea = "Sentinel and email";
+
+// prettier-ignore
+const M5_RANGED = [
+  // Alert tiers and the Sentinel (AGT-014, AGT-115, EML-020, PLT-075)
+  ["alert_p0_weight", "num", 0.1, 0.01, 0.5, "fraction of NAV", "O", SEM, "AGT-115; ch.15 l.119 (10 % NAV; bounds not in the extract, D-097)", "Held weight in its execution's NAV that makes a P0"],
+  ["p0_email_daily_cap", "int", 10, 1, 20, "emails/day", "O", SEM, "EML-020; ch.15 l.120 (bounds not in the extract, D-097)", "Most P0 alert emails per day"],
+  ["p0_batch_window_min", "int", 5, 1, 15, "min", "O", SEM, "EML-020, AGT-115; ch.15 l.120 (bounds not in the extract, D-097)", "P0 follow-ups inside this window are batched into one email"],
+  ["watch_list_window", "int", 20, 5, 60, "sessions", "O", SEM, "AGT-014; ch.15 l.121 (bounds not in the extract, D-097)", "A code with a family signal in the last this many sessions is on the watch-list"],
+  ["owner_add_expiry_days", "int", 90, 1, 90, "days", "O", SEM, "AGT-014 (expiry at most 90 days); ch.15 l.121 (lower bound D-097)", "Longest an Owner-added watch-list code stays on"],
+  ["sentinel_max_items_per_run", "int", 40, 1, 40, "items", "O", SEM, "AGT-010, PLT-075 (at most 40); ch.15 l.122 (lower bound D-097)", "Announcements assessed per Sentinel call"],
+  // Email budget and review follow-up (EML-004, EML-036, NFR-006)
+  ["email_daily_cap", "int", 20, 5, 50, "emails/day", "O", SEM, "EML-004; ch.15 l.189", "Emails per day (3 are reserved, P0 uses the rest)"],
+  ["email_monthly_cap", "int", 300, 50, 1000, "emails/month", "O", SEM, "EML-004; ch.15 l.190", "Emails per month"],
+  ["unopened_review_banner_days", "int", 3, 1, 14, "days", "O", SEM, "EML-036; ch.15 l.165 (bounds not in the extract, D-097)", "Banner and UNREAD subject after this many days without a read review"],
+  ["unopened_review_incident_days", "int", 7, 3, 14, "days", "O", SEM, "NFR-006, EML-036; ch.15 l.191", "Incident email after this many days without a read review"],
+  // Attention reminder (EML-023)
+  ["attention_snooze_max_days", "int", 7, 1, 14, "days", "O", SEM, "EML-023; ch.15 l.198", "Longest an attention item can be snoozed"],
+  // Thesis-breakers (AGT-111, decision 16)
+  ["tb_kw_confirm_sessions", "int", 1, 1, 5, "sessions", "O", SEM, "AGT-111, D-096 decision 16 (bounds D-097)", "A keyword thesis-breaker turns green again if unconfirmed after this many nights"],
+] as const satisfies readonly RangedRow[];
+
+// prettier-ignore
+const M5_FIXED = [
+  ["email_max_size_kb", "int", 90, "KB", SEM, "EML-013; ch.15 l.164", "Largest Evening Review email (HTML)"],
+  ["email_reserved_slots", "int", 3, "emails/day", SEM, "EML-004, EML-023; ch.15 l.174", "Emails reserved each day: Evening Review, new incident, attention reminder"],
+  ["sentinel_body_max_kb", "int", 256, "KB", SEM, "D-096 (design 4.2)", "Largest feed body the Worker hands to the Sentinel route"],
+  ["test_email_min_interval_min", "int", 10, "min", SEM, "EML-034, D-096 decision 23", "Shortest gap between test emails"],
+  ["test_email_daily_max", "int", 3, "emails/day", SEM, "EML-034, D-096 decision 23", "Most test emails per day"],
+] as const satisfies readonly FixedRow[];
+
+type M5RangedKey = (typeof M5_RANGED)[number][0];
+type M5FixedKey = (typeof M5_FIXED)[number][0];
+
+const M5_RANGED_KEYS = Object.fromEntries(
+  M5_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M5RangedKey, ConfigKeyDef>;
+
+const M5_FIXED_KEYS = Object.fromEntries(
+  M5_FIXED.map(([key, , def, unit, , ref]) => [
+    key,
+    { default: def, unit, editable: "fixed", ref, validate: never } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M5FixedKey, ConfigKeyDef>;
+
+const M5_META_TABLES: Record<M5RangedKey | M5FixedKey, ConfigMeta> = {
+  ...(Object.fromEntries(
+    M5_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+      key,
+      {
+        label,
+        area,
+        bounds: boundsText(kind, min, max, unit),
+        input: kind === "int" ? "int" : "number",
+      },
+    ]),
+  ) as Record<M5RangedKey, ConfigMeta>),
+  ...(Object.fromEntries(
+    M5_FIXED.map(([key, , , , area, , label]) => [
+      key,
+      { label, area, bounds: "fixed", input: "int" },
+    ]),
+  ) as Record<M5FixedKey, ConfigMeta>),
+};
+
+/** "HH:MM" Melbourne local time as minutes after midnight, or null when not of that shape. */
+export function clockMinutes(v: unknown): number | null {
+  if (typeof v !== "string") return null;
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(v);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+const hhmm = (min: number) =>
+  `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+
+/** A time of day inside [lo, hi] ("HH:MM", inclusive), the shape of every M5 time key. */
+const timeIn = (lo: string, hi: string) => async (v: unknown) => {
+  const t = clockMinutes(v);
+  return t !== null && t >= clockMinutes(lo)! && t <= clockMinutes(hi)!
+    ? null
+    : `must be a time of day from ${lo} to ${hi} written HH:MM (Melbourne)`;
+};
+
+/** A "on" / "off" switch stored as text, as written in ch.15 ("on / off"). */
+export const ON_OFF = ["on", "off"] as const;
+
+export const WATCHDOG_TIME_NAMES = ["first", "second"] as const;
+/** watchdog_times (ch.15 l.158): the two YAML watchdog runs, Melbourne local. Bounds D-097. */
+async function validateWatchdogTimes(v: unknown): Promise<string | null> {
+  if (!exactKeys(v, [...WATCHDOG_TIME_NAMES])) return "needs first and second";
+  const { first, second } = v;
+  const a = clockMinutes(first);
+  const b = clockMinutes(second);
+  if (a === null || b === null) return "first and second must be times written HH:MM";
+  if (a < 20 * 60 + 30 || a > 21 * 60 + 30) return "first must be from 20:30 to 21:30";
+  if (b < 21 * 60 || b > 23 * 60) return "second must be from 21:00 to 23:00";
+  return a < b ? null : "first must be earlier than second";
+}
+
+/** email_retry_policy (D-096 decision 23): in-request retry, Retry-After cap, next-invocation gap. */
+export const EMAIL_RETRY_POLICY = {
+  max_attempts: 3,
+  in_request_delay_s: 2,
+  retry_after_max_s: 5,
+  next_invocation_min_s: 60,
+  timeout_s: 8,
+} as const;
+
+/**
+ * The Evening Review times (ch.15 l.163). They must stay in order: send time < partial_at < send_by.
+ * Moving one past a neighbour needs the neighbour changed first. Bounds D-097.
+ */
+type OrderedTimeKey = "evening_review_time" | "partial_at" | "send_by";
+async function validateOrderedTime(
+  key: OrderedTimeKey,
+  v: unknown,
+  get: (k: OrderedTimeKey) => Promise<unknown>,
+): Promise<string | null> {
+  const range =
+    key === "evening_review_time"
+      ? (["19:30", "21:00"] as const)
+      : key === "partial_at"
+        ? (["20:00", "21:30"] as const)
+        : (["20:15", "22:00"] as const);
+  const bad = await timeIn(range[0], range[1])(v);
+  if (bad) return bad;
+  const t = clockMinutes(v)!;
+  const other = async (k: OrderedTimeKey) => clockMinutes(await get(k));
+  const start = key === "evening_review_time" ? t : await other("evening_review_time");
+  const partial = key === "partial_at" ? t : await other("partial_at");
+  const by = key === "send_by" ? t : await other("send_by");
+  if (start === null || partial === null || by === null) return null; // a neighbour is unreadable
+  if (!(start < partial && partial < by)) {
+    return `must keep the order send time < partial_at < send_by (now ${hhmm(start)}, ${hhmm(partial)}, ${hhmm(by)})`;
+  }
+  return null;
+}
+
 /** AGT-101 thresholds (ch.15 l.115): one Owner-editable object. Bounds are the architect's (D-079). */
 export const REGIME_PARAM_NAMES = [
   "sma_sessions",
@@ -347,6 +501,87 @@ async function validateMarketShare(v: unknown): Promise<string | null> {
 export const CONFIG_KEYS = {
   ...M4_RANGED_KEYS,
   ...M4_FIXED_KEYS,
+  ...M5_RANGED_KEYS,
+  ...M5_FIXED_KEYS,
+  // ch.15 l.163: evening_review_time / partial_at / send_by 20:00 / 20:30 / 20:45, O; EML-010/011.
+  evening_review_time: {
+    default: "20:00",
+    unit: "Melbourne time",
+    editable: "O",
+    ref: "EML-010; ch.15 l.163 (bounds not in the extract, D-097)",
+    validate: async (v, get): Promise<string | null> =>
+      validateOrderedTime("evening_review_time", v, (k) => get(k)),
+  },
+  partial_at: {
+    default: "20:30",
+    unit: "Melbourne time",
+    editable: "O",
+    ref: "EML-011; ch.15 l.163 (bounds not in the extract, D-097)",
+    validate: async (v, get): Promise<string | null> =>
+      validateOrderedTime("partial_at", v, (k) => get(k)),
+  },
+  send_by: {
+    default: "20:45",
+    unit: "Melbourne time",
+    editable: "O",
+    ref: "EML-011; ch.15 l.163 (bounds not in the extract, D-097)",
+    validate: async (v, get): Promise<string | null> =>
+      validateOrderedTime("send_by", v, (k) => get(k)),
+  },
+  // ch.15 l.158: watchdog_times 20:40 and 21:50 Melbourne, O; PLT-014a, NFR-006. The generated
+  // dual-UTC triggers of the YAML watchdog follow these; the workflow stays dispatch-only in M5.
+  watchdog_times: {
+    default: { first: "20:40", second: "21:50" },
+    unit: "Melbourne time",
+    editable: "O",
+    ref: "PLT-014a, NFR-006; ch.15 l.158 (bounds not in the extract, D-097)",
+    validate: async (v) => validateWatchdogTimes(v),
+  },
+  // ch.15 l.196-197: attention_reminder_enabled on, attention_reminder_time 08:00 (06:00-22:00), O.
+  attention_reminder_enabled: {
+    default: "on",
+    unit: "on/off",
+    editable: "O",
+    ref: "EML-023; ch.15 l.196",
+    validate: oneOf(ON_OFF),
+  },
+  attention_reminder_time: {
+    default: "08:00",
+    unit: "Melbourne time",
+    editable: "O",
+    ref: "EML-023; ch.15 l.197",
+    validate: timeIn("06:00", "22:00"),
+  },
+  // EML-016 Morning Brief and pause (D-096 decision 4): no ch.15 row; defaults off / 08:00 / off.
+  morning_brief_enabled: {
+    default: "off",
+    unit: "on/off",
+    editable: "O",
+    ref: "EML-016, D-096 decision 4",
+    validate: oneOf(ON_OFF),
+  },
+  morning_brief_time: {
+    default: "08:00",
+    unit: "Melbourne time",
+    editable: "O",
+    ref: "EML-016, D-096 decision 4",
+    validate: timeIn("06:00", "10:00"),
+  },
+  evening_review_paused: {
+    default: "off",
+    unit: "on/off",
+    editable: "O",
+    ref: "EML-016, D-096 decision 4",
+    validate: oneOf(ON_OFF),
+  },
+  // D-096 decision 23: three attempts (in-request, +2 s, next invocation). Fixed.
+  email_retry_policy: {
+    default: EMAIL_RETRY_POLICY,
+    unit: "mixed",
+    editable: "fixed",
+    ref: "EML-030, D-096 decision 23",
+    validate: never,
+  },
   // Line 145: retention (logs 30 d, runs 180 d, news 400 d), Edit O, no bounds given; DAT-142.
   retention_logs_days: {
     default: 30,
@@ -738,6 +973,7 @@ export type ConfigArea =
   | "Regime and events"
   | "Validation statistics"
   | "Replay and compute"
+  | "Sentinel and email"
   | "Other";
 export type ConfigInput = "int" | "number" | "list" | "object" | "text";
 export type ConfigMeta = { label: string; area: ConfigArea; bounds: string; input: ConfigInput };
@@ -751,11 +987,73 @@ export const CONFIG_AREAS: ConfigArea[] = [
   "Regime and events",
   "Validation statistics",
   "Replay and compute",
+  "Sentinel and email",
   "Other",
 ];
 
 export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   ...M4_META,
+  ...M5_META_TABLES,
+  evening_review_time: {
+    label: "Evening Review send time",
+    area: SEM,
+    bounds: "HH:MM, 19:30 to 21:00, before partial_at",
+    input: "text",
+  },
+  partial_at: {
+    label: "Send the review marked partial at",
+    area: SEM,
+    bounds: "HH:MM, 20:00 to 21:30, between the send time and send_by",
+    input: "text",
+  },
+  send_by: {
+    label: "Send the review by (latest)",
+    area: SEM,
+    bounds: "HH:MM, 20:15 to 22:00, after partial_at",
+    input: "text",
+  },
+  watchdog_times: {
+    label: "YAML watchdog times (Melbourne)",
+    area: SEM,
+    bounds: "first 20:30 to 21:30, second 21:00 to 23:00, first before second",
+    input: "object",
+  },
+  attention_reminder_enabled: {
+    label: "Daily attention reminder email",
+    area: SEM,
+    bounds: "on or off",
+    input: "text",
+  },
+  attention_reminder_time: {
+    label: "Attention reminder time",
+    area: SEM,
+    bounds: "HH:MM, 06:00 to 22:00",
+    input: "text",
+  },
+  morning_brief_enabled: {
+    label: "Morning Brief email (trading days)",
+    area: SEM,
+    bounds: "on or off",
+    input: "text",
+  },
+  morning_brief_time: {
+    label: "Morning Brief time",
+    area: SEM,
+    bounds: "HH:MM, 06:00 to 10:00",
+    input: "text",
+  },
+  evening_review_paused: {
+    label: "Pause the Evening Review email (it is still stored in the app)",
+    area: SEM,
+    bounds: "on or off",
+    input: "text",
+  },
+  email_retry_policy: {
+    label: "Email send retries",
+    area: SEM,
+    bounds: "fixed",
+    input: "object",
+  },
   regime_params: {
     label: "Regime thresholds (SMA, volatility percentiles, 5-session fall, exit hysteresis)",
     area: "Regime and events",
@@ -986,3 +1284,19 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
     input: "number",
   },
 };
+
+/** Every key added in M5 (docs/M5_design.md 4.11): the tables above plus the explicit entries. */
+export const M5_KEY_NAMES: readonly ConfigKey[] = [
+  ...M5_RANGED.map((r) => r[0]),
+  ...M5_FIXED.map((r) => r[0]),
+  "evening_review_time",
+  "partial_at",
+  "send_by",
+  "watchdog_times",
+  "attention_reminder_enabled",
+  "attention_reminder_time",
+  "morning_brief_enabled",
+  "morning_brief_time",
+  "evening_review_paused",
+  "email_retry_policy",
+];

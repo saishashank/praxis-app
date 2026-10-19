@@ -101,6 +101,19 @@ export const FOREVER_TABLES = Object.freeze([
   "validation_result",
   "label",
   "killswitch_look",
+  // M5 Sentinel and email (migration 0009). Forever tables only; the retention-pruned ones
+  // (sentinel_poll_day, sentinel_ingest, item_assessment, alert, email_message, email_attempt,
+  // health_snapshot) are not. The auth-DB alert_user_state is a forever table of the auth backup.
+  "watch_list_owner",
+  "thesis_breaker_eval",
+  "preopen_run",
+  "preopen_result",
+  "evening_review",
+  "review_read",
+  "attention_snooze",
+  "credential_expiry",
+  "credential_expiry_history",
+  "alert_user_state",
 ]);
 
 const MAX_PLAINTEXT_BYTES = 2 ** 30; // gunzip output cap (decompression-bomb guard)

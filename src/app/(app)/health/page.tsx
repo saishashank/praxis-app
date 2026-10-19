@@ -5,9 +5,15 @@ import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
 import { formatMelbourne, type TimeFormat } from "@/lib/health/format";
 import { userPreferences } from "@/lib/preferences/read";
-import { SOURCE_CONTROLS } from "@/lib/data/controls";
 import { CalendarConfirmForm } from "./CalendarConfirmForm";
 import { DataControlForm } from "./DataControlForm";
+import { EmailControlsSection } from "./EmailControlsSection";
+import { loadAttentionItems } from "@/lib/health/attention";
+import {
+  loadEmailControlsView,
+  SOURCE_CONTROLS,
+  type EmailControlsView,
+} from "@/lib/data/controls";
 import {
   confirmCalendarAction,
   resetAsxTripAction,
@@ -419,6 +425,16 @@ export default async function HealthPage() {
   } catch {
     summary = null; // neutral message below; no error details
   }
+  // M5 email and alert controls: Owner only; unreadable data shows "unavailable", never details.
+  let emailControls: EmailControlsView | null = null;
+  if (user.role === "owner") {
+    try {
+      const db = mainDb();
+      emailControls = await loadEmailControlsView(db, await loadAttentionItems(db));
+    } catch {
+      emailControls = null;
+    }
+  }
   const owner = user.role === "owner";
 
   return (
@@ -561,6 +577,8 @@ export default async function HealthPage() {
               tf={tf}
             />
           )}
+
+          {owner && <EmailControlsSection v={emailControls} />}
 
           {summary.quality && (
             <section aria-labelledby="quality-h" className="flex flex-col gap-3">

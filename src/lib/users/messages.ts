@@ -14,6 +14,14 @@ export const ERROR_TEXT: Record<string, string> = {
     "That source has not been accepted yet. Accept its risk first (the source must show Enabled).",
   calendar_unconfirmed: "Confirm the AU trading calendar first.",
   not_available: "That option is not available yet.",
+  data_only_market:
+    "Full email stays off while a market is in data-only mode (until go-live). Choose incidents only.",
+  email_mode_required: "The review test date needs the email mode set to incidents only first.",
+  unknown_code: "That code is not a listed share of this market.",
+  already_listed: "That code is already on your watch-list.",
+  item_not_found: "That item is no longer listed. Reload the page.",
+  snooze_red: "A red item cannot be snoozed. Fix it instead.",
+  snooze_deadline: "An item within 2 days of its deadline cannot be snoozed.",
   unavailable: "Something went wrong. Please try again.",
 };
 

@@ -4,7 +4,13 @@
 // transcription of the extract: a change to a default or a bound in keys.ts must change it here too.
 import { afterEach, describe, expect, it } from "vitest";
 import { parseConfigInput } from "@/lib/config/admin";
-import { CONFIG_AREAS, CONFIG_KEYS, CONFIG_META, type ConfigKey } from "@/lib/config/keys";
+import {
+  CONFIG_AREAS,
+  CONFIG_KEYS,
+  CONFIG_META,
+  M5_KEY_NAMES,
+  type ConfigKey,
+} from "@/lib/config/keys";
 import { getConfig, setConfig } from "@/lib/config/store";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
 
@@ -245,6 +251,7 @@ describe("M4 keys: defaults and bounds equal ch.15", () => {
       "timeout_sessions",
       "c1_etf_code",
       "pii_hash_after_revocation_days",
+      ...M5_KEY_NAMES, // the M5 keys have their own table in tests/sentinel/m5Keys.test.ts
     ]);
     const listed = new Set<string>([
       ...RANGED.map((r) => r[0]),

@@ -44,6 +44,7 @@ import {
 import { readState } from "@/lib/data/backfill/engine.mjs";
 import { appendAuditTx, auditKey, hashUserPii, nullAuditPii } from "@/lib/db/audit";
 import { finishRun, hasSuccess, pruneRuns, startRun } from "@/lib/runs/runRecord";
+import { SENTINEL_PRUNED_TABLES } from "@/lib/sentinel/schema";
 
 export const MAINTENANCE_JOB = "maintenance-nightly";
 export const PII_HASHED_ACTION = "user.pii_hashed";
@@ -57,6 +58,7 @@ export type MaintenanceCounts = {
   prunedNonces: number;
   prunedFlags: number;
   prunedAnnouncements: number;
+  prunedSentinel: number;
   hashedUsers: number;
 };
 
@@ -157,6 +159,22 @@ export async function pruneAnnouncements(
     });
   }
   if (stmts.length === 0) return 0;
+  const results = await db.batch(stmts, "write");
+  return results.reduce((n, x) => n + x.rowsAffected, 0);
+}
+
+// M5 (migration 0009, DAT-142): the Sentinel and email tables with a retention (poll counters 400
+// days, ingest log 180, assessments 400, alerts 2 years, email ledger and attempts 400, health
+// snapshots 400) lose rows older than their floor. The table triggers refuse anything younger, so
+// the cutoffs here are exactly the floors in SENTINEL_PRUNED_TABLES. Strictly older rows only.
+export async function pruneSentinelTables(db: Client, nowIso: string): Promise<number> {
+  const stmts = Object.entries(SENTINEL_PRUNED_TABLES).map(([table, def]) => {
+    const cutoff = cutoffIso(nowIso, def.days);
+    return {
+      sql: `DELETE FROM ${table} WHERE ${def.column} < ?`,
+      args: [def.kind === "date" ? cutoff.slice(0, 10) : cutoff],
+    };
+  });
   const results = await db.batch(stmts, "write");
   return results.reduce((n, x) => n + x.rowsAffected, 0);
 }
@@ -269,6 +287,7 @@ export async function runMaintenance(
     prunedNonces: 0,
     prunedFlags: 0,
     prunedAnnouncements: 0,
+    prunedSentinel: 0,
     hashedUsers: 0,
   };
   const failedSteps: string[] = [];
@@ -328,6 +347,13 @@ export async function runMaintenance(
   } catch {
     failedSteps.push("prune_announcements");
   }
+  // M5 Sentinel and email tables: fixed retention (SENTINEL_PRUNED_TABLES), one batch.
+  try {
+    counts.prunedSentinel = await pruneSentinelTables(mainDb, nowIso);
+    rowsWritten += counts.prunedSentinel;
+  } catch {
+    failedSteps.push("prune_sentinel");
+  }
   // NFR-030: the 90-day value is fixed (no stored override).
   try {
     const r = await hashRevokedUsers(
@@ -350,6 +376,7 @@ export async function runMaintenance(
     counts.prunedNonces +
     counts.prunedFlags +
     counts.prunedAnnouncements +
+    counts.prunedSentinel +
     counts.hashedUsers;
   const ok = failedSteps.length === 0;
   const finish = (status: "success" | "failed") =>
