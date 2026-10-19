@@ -89,7 +89,7 @@ export async function bakeoffMain(
   const out = deps.out ?? ((l: string) => console.log(l));
   try {
     const now = (deps.now ?? (() => new Date()))();
-    const date = flags(argv, "--date")[0] ?? now.toISOString().slice(0, 10);
+    const date = flags(argv, "--date")[0] ?? now.toISOString().slice(0, 10); // threshold-ok: length of an ISO date YYYY-MM-DD
     if (!DATE_RE.test(date)) throw new Usage("--date must be YYYY-MM-DD");
     const goldenDir = path.resolve(
       deps.cwd ?? process.cwd(),
