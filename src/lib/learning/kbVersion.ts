@@ -19,7 +19,7 @@ export function formatKbVersion(id: number): string {
 
 /** The change-ledger id inside a KB version text, or null when the text is not of that shape. */
 export function parseKbVersion(text: string): number | null {
-  const m = /^kb-(0|[1-9]\d{0,15})$/.exec(text);
+  const m = /^kb-(0|[1-9]\d{0,15})$/.exec(text); // threshold-ok: digit-count bounds of the KB version text
   return m ? Number(m[1]) : null;
 }
 

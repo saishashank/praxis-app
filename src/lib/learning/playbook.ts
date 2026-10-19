@@ -43,7 +43,7 @@ export type RenderedPlaybook = {
   excluded: InjectionEvent[];
 };
 
-const GRADE_RANK: Record<LessonGrade, number> = { L3: 3, L2: 2, L1: 1, L0: 0, retired: -1 };
+const GRADE_RANK: Record<LessonGrade, number> = { L3: 3, L2: 2, L1: 1, L0: 0, retired: -1 }; // threshold-ok: grade ordering, not a rule threshold
 
 export function sha256Hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");

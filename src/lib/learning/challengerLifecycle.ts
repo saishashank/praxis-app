@@ -511,8 +511,7 @@ export type TransitionResult = {
  *   - `shakedown -> review` needs the counter at `shakedown_sessions` (D-110 / KB-040);
  *   - `review -> approved` needs the `ready` mark (AGT-042: a failed check blocks promotion);
  *   - leaving `review` for a terminal state clears `ready` (the table CHECK ties it to review...promoted).
- * `approved -> rejected | retired` is refused by migration 0010 while `ready = 1` (the CHECK would
- * hold `ready` on a terminal state and the trigger forbids clearing it there); the error says so.
+ *   - leaving `approved` for a terminal state clears `ready` too (migration 0010 allows exactly that).
  */
 export async function transitionChallenger(
   db: Client,
@@ -539,16 +538,9 @@ export async function transitionChallenger(
     if (t.to === "approved" && row.ready !== 1) {
       throw new ChallengerError(`${t.id}: not ready (a Critic check has not passed)`);
     }
-    if (
-      row.state === "approved" &&
-      (t.to === "rejected" || t.to === "retired") &&
-      row.ready === 1
-    ) {
-      throw new ChallengerError(
-        `${t.id}: migration 0010 refuses approved -> ${t.to} while ready = 1 (CHECK ready keeps review..promoted)`,
-      );
-    }
-    const clearReady = row.state === "review" && (t.to === "rejected" || t.to === "retired");
+    const clearReady =
+      (row.state === "review" || row.state === "approved") &&
+      (t.to === "rejected" || t.to === "retired");
     await tx.execute({
       sql: `UPDATE challenger SET state = ?, state_d = ?${clearReady ? ", ready = 0" : ""} WHERE id = ?`,
       args: [t.to, t.d, t.id],

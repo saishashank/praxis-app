@@ -15,7 +15,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const ROOT = path.resolve(__dirname, "../..");
-const SCAN_DIRS = ["src/lib/agents", "src/lib/replay", "src/lib/llm"];
+const SCAN_DIRS = ["src/lib/agents", "src/lib/replay", "src/lib/llm", "src/lib/learning"];
 const SKIP_FILES = new Set(["schema.ts"]);
 const ALLOWED = new Set(["0", "1", "-1", "2"]);
 const MARKER = /\/\/\s*threshold-ok:\s*\S/;

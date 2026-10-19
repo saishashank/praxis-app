@@ -186,7 +186,7 @@ export function replicatesFor(params: AgentParams, level: number): number {
   const s = params.stats;
   return Math.max(
     s.bootstrapReplicationsMin,
-    Math.ceil(s.bootstrapReplicationsFactor / level - 1e-9),
+    Math.ceil(s.bootstrapReplicationsFactor / level - 1e-9), // threshold-ok: float guard against rounding up an exact integer (D-080)
   );
 }
 

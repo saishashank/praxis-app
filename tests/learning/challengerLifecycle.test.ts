@@ -430,7 +430,7 @@ describe("state machine: the edge table equals the trigger and the event CHECK, 
     ).rejects.toThrow(/KB-040 edges/);
   });
 
-  it("known gap in migration 0010: an approved challenger with ready = 1 cannot be rejected or retired", async () => {
+  it("an approved challenger with ready = 1 can be rejected or retired; ready is cleared (0010 rule)", async () => {
     const { db } = await world();
     for (const to of ["rejected", "retired"] as const) {
       const id = await rawAt(db, "review", "ready = 1");
@@ -438,21 +438,13 @@ describe("state machine: the edge table equals the trigger and the event CHECK, 
         sql: "UPDATE challenger SET state = 'approved' WHERE id = ?",
         args: [id],
       });
-      // the database refuses both ways (the CHECK keeps ready on review..promoted; the trigger forbids clearing it)
+      // keeping ready = 1 on a terminal state is still refused by the CHECK
       await expect(
         db.execute({ sql: `UPDATE challenger SET state = '${to}' WHERE id = ?`, args: [id] }),
       ).rejects.toThrow();
-      await expect(
-        db.execute({
-          sql: `UPDATE challenger SET state = '${to}', ready = 0 WHERE id = ?`,
-          args: [id],
-        }),
-      ).rejects.toThrow();
-      // the writer says so instead of surfacing a bare constraint error
-      await expect(
-        transitionChallenger(db, { id, to, d: D0, actor: "A6", reason: "x" }, LEARNING),
-      ).rejects.toThrow(/migration 0010 refuses approved/);
-      expect((await loadChallenger(db, id))!.state).toBe("approved");
+      // the writer moves it and clears ready in the same update
+      await transitionChallenger(db, { id, to, d: D0, actor: "A6", reason: "x" }, LEARNING);
+      expect(await loadChallenger(db, id)).toMatchObject({ state: to, ready: 0 });
     }
   });
 });

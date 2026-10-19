@@ -405,7 +405,8 @@ END;
 --   shakedown -> review | rejected | retired     review   -> approved | rejected | retired
 --   approved -> promoted | rejected | retired
 -- `ready` (D-111) is the mark of a challenger in review whose Critic checks all pass; it may flip
--- while in review and stays 0 before it. shakedown_ok_sessions only increases, except that an
+-- while in review and stays 0 before it; it is cleared when an approved challenger is rejected or
+-- retired (M6 T9 review). shakedown_ok_sessions only increases, except that an
 -- operational error resets it to 0 while the state stays `shakedown` (design 2.8).
 CREATE TABLE challenger (
   id TEXT PRIMARY KEY CHECK (id LIKE 'C-%'),
@@ -447,7 +448,8 @@ WHEN NOT (NEW.id IS OLD.id AND NEW.lineage_id IS OLD.lineage_id
     OR (NEW.shakedown_ok_sessions = 0 AND OLD.state = 'shakedown' AND NEW.state = 'shakedown'))
   AND (OLD.shadow_viewed_d IS NULL
     OR (NEW.shadow_viewed_d IS NOT NULL AND NEW.shadow_viewed_d >= OLD.shadow_viewed_d))
-  AND (NEW.ready IS OLD.ready OR NEW.state = 'review' OR OLD.state = 'review'))
+  AND (NEW.ready IS OLD.ready OR NEW.state = 'review' OR OLD.state = 'review'
+    OR (OLD.state = 'approved' AND NEW.state IN ('rejected','retired') AND NEW.ready = 0)))
 BEGIN
   SELECT RAISE(ABORT, 'challenger: only the KB-040 edges, counters and the shadow-view date may change');
 END;
