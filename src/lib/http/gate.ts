@@ -33,6 +33,7 @@ const MACHINE_ROUTES = new Set([
   "/api/internal/self-check",
   "/api/internal/worker-report",
   "/api/internal/universe-import",
+  "/api/internal/sentinel-ingest",
   "/api/internal/maintenance",
   "/api/internal/backup-export",
   "/api/cron/watchdog",

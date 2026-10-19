@@ -16,6 +16,9 @@
     "POST /api/email/test": {
       "tests": ["tests/email/testRoute.test.ts", "tests/email/send.test.ts"]
     },
+    "POST /api/internal/sentinel-ingest": {
+      "tests": ["tests/sentinel/ingestRoute.test.ts", "tests/security/hmac.test.ts"]
+    },
     "POST /api/internal/maintenance": {
       "tests": ["tests/maintenance/route.test.ts", "tests/maintenance/retention.test.ts"]
     },
