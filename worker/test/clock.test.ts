@@ -112,6 +112,43 @@ describe("slot table (docs/M2_design.md section 3)", () => {
     );
   });
 
+  it("pre-open (M5 T8, D-103): 09:54 and retry 09:58 are disabled route slots on even minutes, DST-safe, never dispatched by the clock", () => {
+    const a = AU_SLOTS.find((x) => x.id === "pre-open")!;
+    const b = AU_SLOTS.find((x) => x.id === "pre-open-retry")!;
+    for (const [s, time] of [
+      [a, "09:54"],
+      [b, "09:58"],
+    ] as const) {
+      expect(s).toMatchObject({
+        time,
+        runner: "route",
+        route: "/api/internal/preopen",
+        workflow: null,
+        tradingDaysOnly: true,
+        marketBound: true,
+        enabled: false,
+      });
+      expect(s.minute % 2).toBe(0); // D-061: every ASX-adjacent slot on an even minute
+    }
+    expect(b.minute - a.minute).toBe(4);
+    // the local minute is the same either side of both Sydney clock changes (AEST +10 / AEDT +11)
+    for (const [date, utc] of [
+      ["2026-10-02", "2026-10-01T23:54:00Z"], // Friday, AEST
+      ["2026-10-05", "2026-10-04T22:54:00Z"], // Monday, AEDT
+      ["2027-04-02", "2027-04-01T22:54:00Z"], // Friday, AEDT
+      ["2027-04-06", "2027-04-05T23:54:00Z"], // Tuesday, AEST
+    ] as const) {
+      const l = sydneyLocal(Date.parse(utc));
+      expect(l.date).toBe(date);
+      expect(l.minute).toBe(a.minute);
+      expect(sydneyLocal(Date.parse(utc) + 4 * 60_000).minute).toBe(b.minute);
+    }
+    const on = AU_SLOTS.map((x) => ({ ...x, enabled: true }));
+    for (const hm of ["09:54", "09:58"]) {
+      expect(candidateSlots(sydneyLocal(at(MON, hm)), on).map((x) => x.id)).toEqual([]);
+    }
+  });
+
   it("only workflows that exist today are enabled and allow-listed; later slots are off", () => {
     expect([...DISPATCHABLE_WORKFLOWS].sort()).toEqual([
       "arena-close.yml",
@@ -137,6 +174,7 @@ describe("slot table (docs/M2_design.md section 3)", () => {
     for (const id of [
       "asx-poll",
       "pre-open",
+      "pre-open-retry",
       "decision-cutoff",
       "late-sweep",
       "marker-check",

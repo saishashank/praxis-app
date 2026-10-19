@@ -111,6 +111,7 @@ describe("authentication (PLT-031)", () => {
     "/api/internal/universe-import",
     "/api/internal/sentinel-ingest",
     "/api/internal/alert-flush",
+    "/api/internal/preopen",
     "/api/internal/incident",
     "/api/internal/maintenance",
     "/api/internal/backup-export",

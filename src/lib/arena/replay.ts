@@ -10,6 +10,7 @@ import type { Client } from "@libsql/client";
 import { sessionsBetween } from "@/lib/data/calendar";
 import type { ParamOverrides } from "./cohort";
 import { closeBooksDay, loadCalendar, type CloseBooksResult } from "./closeBooks";
+import { runPreopen } from "./preopen";
 
 export type ReplayOptions = {
   readonly market: string;
@@ -22,12 +23,18 @@ export type ReplayOptions = {
   readonly stopOnFailure?: boolean;
   readonly masterSeed?: bigint;
   readonly restartParams?: (executionId: string) => ParamOverrides;
+  /** Apply the 09:55 pre-open re-check (ARN-020a) before each session's books close. Default false: the AT-12 golden digest covers the 2a engine alone. */
+  readonly preopen?: boolean;
 };
 
 export async function replaySessions(db: Client, o: ReplayOptions): Promise<CloseBooksResult[]> {
   const calendar = await loadCalendar(db, o.market);
   const results: CloseBooksResult[] = [];
   for (const d of sessionsBetween(o.from, o.to, calendar)) {
+    // the same rule as live, from the stored evidence bounded by 09:55 of d (ARN-020a, design 4.5)
+    if (o.preopen === true) {
+      await runPreopen(db, { market: o.market, d, replay: true, now: o.now });
+    }
     const result = await closeBooksDay(db, {
       market: o.market,
       d,

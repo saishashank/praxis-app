@@ -85,17 +85,35 @@ export const AU_SLOTS: readonly Slot[] = [
     enabled: false,
     note: "P0 batch flush and missing alerts (M5 T6, decision 40); OFF until the Owner enables alerts",
   }),
+  // M5 T8 (D-103, design 4.5): the pre-open re-check is a signed POST to the app route, not an ASX
+  // request, so it needs no rate token; 09:54 stays on an even minute (D-061). Attempt 2 at 09:58
+  // follows an error or timeout; a second failure raises the P1. Both DISABLED; the dispatch clock
+  // never fires `route` slots (the route runner arrives with the other M5 route slots).
   slot({
     id: "pre-open",
     time: "09:54",
-    runner: "worker",
+    runner: "route",
+    route: "/api/internal/preopen",
     workflow: null,
     tradingDaysOnly: true,
     marketBound: true,
     priority: 2,
     catchUpMin: 5,
     enabled: false,
-    note: "Pre-open re-check, DAT-122 slot 2; stub in M2 (Arena disabled)",
+    note: "Pre-open re-check attempt 1 (M5 T8, ARN-020a); OFF until the Owner enables the arena",
+  }),
+  slot({
+    id: "pre-open-retry",
+    time: "09:58",
+    runner: "route",
+    route: "/api/internal/preopen",
+    workflow: null,
+    tradingDaysOnly: true,
+    marketBound: true,
+    priority: 2,
+    catchUpMin: 1,
+    enabled: false,
+    note: "Pre-open re-check attempt 2, only after an error or timeout of 09:54 (M5 T8); OFF with it",
   }),
   slot({
     id: "universe",

@@ -26,6 +26,13 @@
         "tests/security/hmac.test.ts"
       ]
     },
+    "POST /api/internal/preopen": {
+      "tests": [
+        "tests/arena/preopenRoute.test.ts",
+        "tests/arena/preopen.test.ts",
+        "tests/security/hmac.test.ts"
+      ]
+    },
     "POST /api/internal/incident": {
       "tests": ["tests/alerts/routes.test.ts", "tests/security/hmac.test.ts"]
     },

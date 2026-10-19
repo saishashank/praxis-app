@@ -30,9 +30,9 @@ const json = (status: number, body: unknown) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-type Run = (body: Record<string, unknown>, nowSec: number) => Promise<Response>;
+export type Run = (body: Record<string, unknown>, nowSec: number) => Promise<Response>;
 
-function signed(purpose: string, deps: MachineDeps, run: Run) {
+export function signed(purpose: string, deps: MachineDeps, run: Run) {
   return async function handle(req: Request): Promise<Response> {
     try {
       const secret = deps.env.WORKER_HMAC_SECRET;

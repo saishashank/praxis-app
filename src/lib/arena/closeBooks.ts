@@ -135,6 +135,7 @@ import {
   writeSleeveFinancing,
   writeSleeveOpen,
 } from "./sleeveWriter";
+import { markNotRechecked } from "./preopen";
 import { planLegacy } from "./terminal";
 
 export const ARENA_JOB = "arena-close";
@@ -512,7 +513,7 @@ async function entryFunded(ctx: DayCtx, cc: CohortCtx, needed: Micro): Promise<b
 async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
   const id = cc.cohort.id;
   const rs = await ctx.db.execute({
-    sql: `SELECT id, code, kind, qty, ref_stop_micro, decided_d, stop_spec, max_open_micro
+    sql: `SELECT id, code, kind, qty, ref_stop_micro, decided_d, stop_spec, max_open_micro, card_id
           FROM arena_order
           WHERE cohort_id = ? AND status = 'pending' AND decided_d < ? AND kind IN ('entry','exit_cs')
           ORDER BY id`,
@@ -607,6 +608,14 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
           await cancelOrder(ctx, orderId, "cash");
           continue;
         }
+        // ARN-020a: an entry that was never re-checked fills flagged `not_rechecked` (AT-18 part B)
+        await markNotRechecked(ctx.db, {
+          market: ctx.market,
+          d: ctx.d,
+          orderId,
+          cardId: o.card_id === null ? null : text(o.card_id),
+          at: ctx.now(),
+        });
         const written = await writeFill(ctx.db, {
           fillId: `F2:${orderId}`,
           orderId,
