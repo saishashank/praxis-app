@@ -78,6 +78,24 @@
     "action src/app/(app)/health/actions.ts#resetAsxTripAction": {
       "tests": ["tests/data/controls.test.ts"]
     },
+    "action src/app/(app)/health/emailActions.ts#addWatchListCodeAction": {
+      "tests": ["tests/sentinel/emailControls.test.ts"]
+    },
+    "action src/app/(app)/health/emailActions.ts#removeWatchListCodeAction": {
+      "tests": ["tests/sentinel/emailControls.test.ts"]
+    },
+    "action src/app/(app)/health/emailActions.ts#setCredentialExpiryAction": {
+      "tests": ["tests/sentinel/emailControls.test.ts"]
+    },
+    "action src/app/(app)/health/emailActions.ts#setEmailModeAction": {
+      "tests": ["tests/sentinel/emailControls.test.ts"]
+    },
+    "action src/app/(app)/health/emailActions.ts#setEmailReviewTestDateAction": {
+      "tests": ["tests/sentinel/emailControls.test.ts"]
+    },
+    "action src/app/(app)/health/emailActions.ts#snoozeAttentionAction": {
+      "tests": ["tests/sentinel/emailControls.test.ts"]
+    },
     "action src/app/(app)/review/actions.ts#confirmCorporateActionAction": {
       "tests": ["tests/corporateActions/admin.test.ts"]
     },

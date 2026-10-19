@@ -961,6 +961,18 @@ describe("the actions (Owner guard, form parsing, server-side item state)", () =
     expect(rows[1].ip).toBe("9.9.9.9");
   });
 
+  it("the Owner sets a credential expiry date through the action and it is audited", async () => {
+    expect(
+      await setCredentialExpiryAction(
+        form({ name: "d_turso_main_tokens", expires_on: "2027-01-31" }),
+      ),
+    ).toEqual({ ok: true, changed: true });
+    expect((await auditRows(auth)).map((r) => r.actor_user_id)).toEqual([ownerId]);
+    expect(await setCredentialExpiryAction(form({ name: "d_turso_main_tokens" }))).toEqual({
+      error: "invalid",
+    });
+  });
+
   it("form numbers must be whole digits; a missing field is invalid, not a crash", async () => {
     expect(await addWatchListCodeAction(form({ market: "AU", code: "ZZAA", days: "5.5" }))).toEqual(
       {
