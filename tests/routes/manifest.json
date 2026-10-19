@@ -158,6 +158,51 @@
     },
     "action src/app/(app)/settings/actions.ts#updatePreferencesAction": {
       "tests": ["tests/preferences/actions.test.ts"]
+    },
+    "GET /api/learning/challengers": {
+      "tests": ["tests/learning/routes.test.ts"]
+    },
+    "GET /api/learning/lessons": {
+      "tests": ["tests/learning/routes.test.ts"]
+    },
+    "GET /api/learning/annotations": {
+      "tests": ["tests/learning/routes.test.ts"]
+    },
+    "POST /api/learning/annotations": {
+      "tests": ["tests/learning/routes.test.ts"]
+    },
+    "PATCH /api/learning/annotations": {
+      "tests": ["tests/learning/routes.test.ts"]
+    },
+    "DELETE /api/learning/annotations": {
+      "tests": ["tests/learning/routes.test.ts"]
+    },
+    "POST /api/learning/challengers/[id]/approve": {
+      "tests": ["tests/learning/routes.test.ts", "tests/learning/promotion.test.ts"]
+    },
+    "POST /api/learning/challengers/[id]/reject": {
+      "tests": ["tests/learning/routes.test.ts", "tests/learning/promotion.test.ts"]
+    },
+    "POST /api/learning/challengers/[id]/force-apply": {
+      "tests": ["tests/learning/routes.test.ts", "tests/learning/promotion.test.ts"]
+    },
+    "POST /api/learning/challengers/[id]/retire": {
+      "tests": ["tests/learning/routes.test.ts", "tests/learning/promotion.test.ts"]
+    },
+    "POST /api/learning/challengers/[id]/shadow-viewed": {
+      "tests": ["tests/learning/routes.test.ts"]
+    },
+    "POST /api/learning/families/[family]/rollback": {
+      "tests": ["tests/learning/routes.test.ts", "tests/learning/promotion.test.ts"]
+    },
+    "POST /api/learning/families/[family]/versions": {
+      "tests": ["tests/learning/routes.test.ts"]
+    },
+    "POST /api/learning/lessons/[id]/force-apply": {
+      "tests": ["tests/learning/routes.test.ts", "tests/learning/promotion.test.ts"]
+    },
+    "POST /api/learning/lessons/[id]/retire": {
+      "tests": ["tests/learning/routes.test.ts"]
     }
   }
 }
