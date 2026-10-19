@@ -40,6 +40,9 @@
         "tests/security/hmac.test.ts"
       ]
     },
+    "POST /api/internal/morning": {
+      "tests": ["tests/health/morningRoute.test.ts", "tests/security/hmac.test.ts"]
+    },
     "POST /api/internal/incident": {
       "tests": ["tests/alerts/routes.test.ts", "tests/security/hmac.test.ts"]
     },
