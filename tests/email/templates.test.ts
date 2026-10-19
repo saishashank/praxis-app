@@ -67,7 +67,8 @@ function snapshot(file: string, content: string): void {
     writeFileSync(p, content, "utf8");
     return;
   }
-  expect(content).toBe(readFileSync(p, "utf8"));
+  // autocrlf-safe: a Windows checkout may have converted the snapshot to CRLF.
+  expect(content).toBe(readFileSync(p, "utf8").replaceAll("\r\n", "\n"));
 }
 
 describe("snapshots (TST-129)", () => {
