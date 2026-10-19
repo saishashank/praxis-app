@@ -222,6 +222,8 @@ export type AgentParams = {
   thesisBreakersMin: number;
   thesisBreakersMax: number;
   thesisAmberFraction: Rational;
+  /** D-096 #16: nights a keyword breaker waits for its confirmation before it reads green again. */
+  tbKwConfirmSessions: number;
   stats: StatsParams;
   killswitch: KillswitchParams;
   replay: ReplayParams;
@@ -328,6 +330,7 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
     thesisBreakersMin: num("thesis_breakers_min"),
     thesisBreakersMax: num("thesis_breakers_max"),
     thesisAmberFraction: rat("thesis_amber_fraction"),
+    tbKwConfirmSessions: num("tb_kw_confirm_sessions"),
     stats: {
       alpha: num("alpha"),
       bootstrapReplicationsMin: num("bootstrap_replications_min"),

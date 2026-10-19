@@ -113,6 +113,8 @@ import {
   serializePlan,
   type OrderPlan,
 } from "./orderPlan";
+import { createAlertRowSink, type BreakerAlertSink } from "./breakerEval";
+import { evaluateSubject, loadBreakerSubjects, writeEvaluation } from "./breakerNightly";
 import { loadAgentParams, type AgentParams } from "./params";
 import type { Tier } from "./families/types";
 
@@ -146,6 +148,8 @@ export type SignalsOptions = {
   readonly params?: AgentParams;
   /** Optional LLM router for the card summaries (D-084); absent = rules-only text, no call. */
   readonly llm?: LlmRouter;
+  /** Receives every red thesis-breaker (M5 T7); default: writes the `alert` row when the table exists. */
+  readonly breakerSink?: BreakerAlertSink;
 };
 
 export type SignalsStatus = "success" | "degraded" | "failed" | "skipped" | "already_done";
@@ -167,6 +171,10 @@ export type SignalsStats = {
   controlPaused: number;
   controlKilled: number;
   controlSkips: number;
+  /** Thesis-breaker rows written, positions with a red breaker, and the exits they queued (M5 T7). */
+  breakerEvals: number;
+  breakerRed: number;
+  breakerExits: number;
 };
 
 export type SignalsResult = {
@@ -207,6 +215,9 @@ function emptyStats(): SignalsStats {
     controlPaused: 0,
     controlKilled: 0,
     controlSkips: 0,
+    breakerEvals: 0,
+    breakerRed: 0,
+    breakerExits: 0,
   };
 }
 
@@ -721,6 +732,94 @@ async function exitsStage(ctx: Ctx, cohorts: ReadonlyMap<string, StoredCohort>):
         if (await putOrder(tx, order)) ctx.stats.exits += 1;
       }
     });
+  }
+}
+
+/**
+ * Step 3b (M5 T7, AGT-111, D-096 #39): thesis-breakers of the open E positions and pending E entries.
+ * Every breaker is logged (`thesis_breaker_eval`, phase nightly); a red breaker on a HELD position
+ * queues one `exit_cs` for D+1 with rule = the breaker id (`TB-<id>`), unless an exit is already
+ * waiting. Exits are never blocked by arena_control (D-094) or by the quality gate. A red on a pending
+ * buy only logs and alerts here: the pre-open re-check cancels it (ARN-020a).
+ */
+async function breakersStage(ctx: Ctx, sink: BreakerAlertSink, now: string): Promise<void> {
+  const { db, d, nextD } = ctx;
+  const subjects = await loadBreakerSubjects(db, d);
+  const held = new Map<string, ReadonlyMap<string, bigint>>();
+  for (const s of subjects) {
+    const ev = await evaluateSubject(
+      { db, market: ctx.market, d, calendar: ctx.calendar, params: ctx.params, day: ctx.day },
+      s,
+    );
+    ctx.stats.breakerEvals += await withTx(db, (tx) =>
+      writeEvaluation(tx, s, ctx.market, d, "nightly", 1, ev),
+    );
+    if (ev.red.length === 0) continue;
+    ctx.stats.breakerRed += 1;
+    let queued = false;
+    const rule = ev.red[0]!;
+    if (s.kind === "trade") {
+      let positions = held.get(s.cohortId);
+      if (positions === undefined) {
+        const [fills, adjustments] = await Promise.all([
+          loadLedgerFills(db, s.cohortId),
+          loadQtyAdjustments(db, s.cohortId),
+        ]);
+        positions = derivePositions(fills, adjustments, d).positions;
+        held.set(s.cohortId, positions);
+      }
+      const cross = crossing(ctx.actionsNext, s.code, d, nextD);
+      const qty = rescaleQty(positions.get(s.code) ?? 0n, cross);
+      queued = await withTx(db, async (tx) => {
+        const waiting = await tx.execute({
+          sql: `SELECT 1 FROM arena_order WHERE cohort_id = ? AND code = ? AND status = 'pending'
+                AND kind = 'exit_cs' AND decided_d <= ?`,
+          args: [s.cohortId, s.code, d],
+        });
+        if (waiting.rows.length > 0 || cross.disposal || qty < 1n) return false;
+        return putOrder(tx, {
+          id: exitOrderId(s.cohortId, d, s.code),
+          cohortId: s.cohortId,
+          decidedD: d,
+          code: s.code,
+          side: "sell",
+          kind: "exit_cs",
+          qty,
+          status: "pending",
+          rejectReason: null,
+          tier: null,
+          untradeable: false,
+          signalId: null,
+          cardId: s.cardId,
+          maxOpenMicro: null,
+          stopSpec: exitOrderSpec(d, cross.ids, rule, null),
+        });
+      });
+      if (queued) {
+        ctx.stats.breakerExits += 1;
+        ctx.stats.exits += 1;
+      }
+    }
+    for (const e of ev.evaluations.filter((x) => x.status === "red")) {
+      await sink.record({
+        key: `tb:${s.id}:${e.id}:${d}`,
+        market: ctx.market,
+        code: s.code,
+        d,
+        phase: "nightly",
+        subjectKind: s.kind,
+        subjectId: s.id,
+        cardId: s.cardId,
+        executionId: s.executionId,
+        breakerId: e.id,
+        status: "red",
+        valueText: e.valueText,
+        triggerText: e.triggerText,
+        triggerRef: e.triggerRef,
+        effect: queued ? "exit_queued" : "none",
+        detectedAt: now,
+      });
+    }
   }
 }
 
@@ -1368,6 +1467,7 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
     const executions = new Map((await loadExecutions(db)).map((e) => [e.id, e]));
     const unresolved = await loadUnresolvedCohorts(db, o.d);
     await exitsStage(ctx, new Map(unresolved.map((c) => [c.id, c])));
+    await breakersStage(ctx, o.breakerSink ?? createAlertRowSink(db), o.now());
 
     const live = unresolved.filter((c) => c.live).sort((a, b) => cmp(a.id, b.id));
     const matched = new Map<Family, Taken[]>();
@@ -1418,7 +1518,8 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
         stats.exits +
         stats.stopLevels +
         stats.agentRows +
-        stats.cards,
+        stats.cards +
+        stats.breakerEvals,
       details: { ...stats, partial: day.partialReasons.length > 0 ? day.partialReasons : null },
       now: o.now(),
     });

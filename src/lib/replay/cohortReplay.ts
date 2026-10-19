@@ -48,6 +48,14 @@ import {
   type FamilyOutput,
   type Tier,
 } from "@/lib/agents/families";
+import {
+  buildObservation,
+  evaluateBreakers,
+  eventLowOf,
+  itemsFromEvents,
+  type AnnouncementText,
+} from "@/lib/agents/breakerEval";
+import { cardBreakers, type CardBreaker } from "@/lib/agents/thesisBreakers";
 import { applyArn011 } from "@/lib/agents/families/arn011";
 import { createContext } from "@/lib/agents/families/context";
 import {
@@ -176,6 +184,10 @@ export type CohortReplaySource = LedgerSource & {
   halted?(code: string, d: string): boolean | null;
   /** The entry decision of the data-quality gate (`entriesAllowed`) on `d`; absent: no quality data. */
   qualityGate?(code: string, d: string): EntryDecision;
+  /** Short-interest change (latest minus the value a window earlier, ppm) usable on `d`; absent: unknown. */
+  shortDeltaPpm?(code: string, d: string): number | null;
+  /** Title and ASX type of an event (`source|ann_id`) for the TB-KW keywords; absent: no text, no keyword hit. */
+  announcementText?(ref: string): AnnouncementText | null;
 };
 
 /** `supplied`: entries were re-gated; `assumed_all_pass`: no quality data, every code passed. */
@@ -356,6 +368,16 @@ type Pos = {
   plan: ExitPlan;
   highest: bigint;
   pendingCs: CsTrigger | null;
+  /** The card's thesis-breakers of an E entry (M5 T7); null for controls. */
+  readonly thesis: Thesis | null;
+};
+
+/** What an E entry carries from its Decision Card into the hold (AGT-111). */
+type Thesis = {
+  readonly breakers: readonly CardBreaker[];
+  /** Ids of the events known at the decision (published before its cut-off): not new later. */
+  readonly known: ReadonlySet<string>;
+  readonly refCloseMicro: bigint | null;
 };
 
 type EntryOrder = {
@@ -365,6 +387,7 @@ type EntryOrder = {
   readonly maxOpen: bigint | null;
   readonly tier: Tier;
   readonly id: string;
+  readonly thesis: Thesis | null;
 };
 
 type StockExit = {
@@ -859,6 +882,7 @@ export function replayCohorts(
         plan: { ...o.plan.plan, cs },
         highest: 0n,
         pendingCs: null,
+        thesis: o.thesis,
       });
       c.entries += 1;
       c.filledToday.push({ orderId: o.id, code: o.code, tier: o.tier });
@@ -1230,6 +1254,37 @@ export function replayCohorts(
         const cross = crossing(allActions(), pos.code, env.d, env.nextD);
         if (!cross.disposal) pos.pendingCs = ev.cs;
       }
+      // thesis-breakers (AGT-111, M5 T7): the SAME pure evaluator as batch 2b; a red one on a held
+      // position queues the exit for the next open unless an exit is already waiting. Never gated.
+      if (pos.pendingCs === null && pos.thesis !== null && c.execution.kind === "E") {
+        const t = pos.thesis;
+        const fresh = env.inputs.events.filter((e) => e.code === pos.code && !t.known.has(e.id));
+        const texts = new Map<string, AnnouncementText>();
+        for (const e of fresh) {
+          const text = src.announcementText?.(e.id);
+          if (text !== undefined && text !== null) texts.set(e.id, text);
+        }
+        const obs = buildObservation(
+          {
+            d: env.d,
+            phase: "nightly",
+            rawBars: env.facts.get(pos.code)?.rawBars ?? [bar],
+            refCloseMicro: t.refCloseMicro,
+            shortDeltaPpm: src.shortDeltaPpm?.(pos.code, env.d) ?? null,
+            regime: env.inputs.regime,
+            items: itemsFromEvents(fresh, env.inputs.sessions, env.d, texts),
+          },
+          params,
+        );
+        const verdict = evaluateBreakers(t.breakers, obs, params);
+        const red = verdict.evaluations.find((e) => e.status === "red");
+        if (red !== undefined) {
+          const cross = crossing(allActions(), pos.code, env.d, env.nextD);
+          if (!cross.disposal) {
+            pos.pendingCs = { rule: red.id, via: null, detail: red.valueText };
+          }
+        }
+      }
     }
   };
 
@@ -1287,7 +1342,12 @@ export function replayCohorts(
     c: Cohort,
     env: DayEnv,
     results: readonly LegResult[],
-    describe: (leg: Leg) => { plan: OrderPlan; maxOpen: bigint | null; tier: Tier },
+    describe: (leg: Leg) => {
+      plan: OrderPlan;
+      maxOpen: bigint | null;
+      tier: Tier;
+      thesis?: Thesis;
+    },
   ): void => {
     for (const r of results) {
       c.todaySignals += 1;
@@ -1303,6 +1363,7 @@ export function replayCohorts(
         maxOpen: info.maxOpen,
         tier: info.tier,
         id: `EN:${c.id}:${env.d}:${r.leg.key}`,
+        thesis: info.thesis ?? null,
       });
     }
   };
@@ -1332,7 +1393,10 @@ export function replayCohorts(
     if (slotsLeft < 1) return [];
     const blockFrom = env.i - params.reentryBlock;
     const legs: Leg[] = [];
-    const meta = new Map<string, { cand: Candidate; plan: OrderPlan; maxOpen: bigint | null }>();
+    const meta = new Map<
+      string,
+      { cand: Candidate; plan: OrderPlan; maxOpen: bigint | null; thesis: Thesis | undefined }
+    >();
     for (const cand of ranked) {
       if (legs.length >= slotsLeft) break;
       if (c.positions.has(cand.code)) continue;
@@ -1343,12 +1407,28 @@ export function replayCohorts(
       const made = legFor(env, facts, cand.halfSize, cand.code);
       if (made === null) continue;
       legs.push(made.leg);
-      meta.set(cand.code, { cand, ...entryPlanOf(cand, env, made) });
+      // the thesis-breakers the live card would carry (cards.ts: same function, same levels)
+      const codeEvents = env.inputs.events.filter((e) => e.code === cand.code);
+      const low = eventLowOf(codeEvents, cand.groupKey);
+      const cross = made.priceFactor;
+      const thesis: Thesis = {
+        breakers: cardBreakers(
+          { family: cand.family, shortInterestAvailable: facts.shortDrop !== "unknown" },
+          params,
+          {
+            closeMicro: scaleMicro(facts.bar.close, cross),
+            eventLowMicro: low === null ? null : scaleMicro(low, cross),
+          },
+        ),
+        known: new Set(codeEvents.map((e) => e.id)),
+        refCloseMicro: facts.bar.close,
+      };
+      meta.set(cand.code, { cand, thesis, ...entryPlanOf(cand, env, made) });
     }
     const results = planLegs(sizingOf(c, env), markSleeve(legs, sleeveReserve(c)), slotsLeft);
     placeOrders(c, env, results, (leg) => {
       const m = meta.get(leg.key)!;
-      return { plan: m.plan, maxOpen: m.maxOpen, tier: m.cand.tier };
+      return { plan: m.plan, maxOpen: m.maxOpen, tier: m.cand.tier, thesis: m.thesis };
     });
     const taken: Taken[] = [];
     for (const r of results) {

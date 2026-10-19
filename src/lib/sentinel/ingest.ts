@@ -9,12 +9,17 @@
 //      the rest are "carried" and are picked up by the next call (or by alert-flush, T6);
 //   4. classify them (membership sets read once, rule materiality, polarity) and write the
 //      `item_assessment` rows and the `sentinel_ingest` row in ONE write batch.
-// No order, alert or e-mail is written here (AGT-012: the Sentinel never changes orders; the alert
-// and e-mail path is T6). Nothing the feed says reaches a log or a response body.
+//   5. (M5 T7) the event thesis-breakers of held / pending positions on those codes: intraday rows
+//      and a sink call for a red one (`breakers.ts`).
+// No order is written here (AGT-012: the Sentinel never changes orders); the alert and e-mail path
+// is T6. Nothing the feed says reaches a log or a response body.
 import type { Client, InStatement } from "@libsql/client";
 import { ASX_SOURCE } from "@/lib/data/asxToken";
 import { ACTIVE_FEED_PARSER, type FeedItem, type FeedParser } from "./feed";
 import { assess, MATERIALITY_RULE_VERSION } from "./materiality";
+import type { BreakerAlertSink } from "@/lib/agents/breakerEval";
+import { loadAgentParams } from "@/lib/agents/params";
+import { evaluateIntraday, type IntradayAnnouncement } from "./breakers";
 import { loadMembership, membershipOf } from "./membership";
 
 export const MAX_ITEMS_PER_RUN = 40; // AGT-010, PLT-075: a hard ceiling whatever the config says
@@ -36,6 +41,8 @@ export type IngestInput = {
   maxItems?: number;
   market?: string;
   parser?: FeedParser;
+  /** Receives a red intraday thesis-breaker (M5 T7); default: writes the alert row. */
+  breakerSink?: BreakerAlertSink;
 };
 
 export type IngestResult =
@@ -102,7 +109,7 @@ export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
       [
         {
           sql:
-            "SELECT a.ann_id AS ann_id, a.code AS code, a.type AS type, " +
+            "SELECT a.ann_id AS ann_id, a.code AS code, a.type AS type, a.published_at AS published_at, " +
             "a.price_sensitive AS price_sensitive, a.title AS title " +
             `${where} ORDER BY a.published_at ASC, a.id ASC LIMIT ?`,
           args: [...qargs, max],
@@ -116,6 +123,7 @@ export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
     // 4. classify and write, one batch
     const sets = await loadMembership(i.db, market, i.today);
     const stmts: InStatement[] = [];
+    const affected: IntradayAnnouncement[] = [];
     for (const r of queue.rows) {
       const code = String(r.code);
       const m = membershipOf(code, sets);
@@ -127,6 +135,16 @@ export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
         },
         m,
       );
+      if (m.held || m.candidate) {
+        affected.push({
+          annId: String(r.ann_id),
+          code,
+          type: r.type === null ? null : String(r.type),
+          title: String(r.title),
+          priceSensitive: Number(r.price_sensitive) === 1,
+          publishedAt: String(r.published_at),
+        });
+      }
       stmts.push({
         sql:
           "INSERT INTO item_assessment (source, ann_id, market, code, materiality, rule_version, " +
@@ -166,6 +184,23 @@ export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
       ],
     });
     await i.db.batch(stmts, "write");
+    // Event breakers of the held / pending positions (M5 T7). A failure here never fails the ingest:
+    // the nightly cycle evaluates the same announcements again from the event rows.
+    if (affected.length > 0) {
+      try {
+        await evaluateIntraday({
+          db: i.db,
+          market,
+          today: i.today,
+          now: i.now,
+          params: await loadAgentParams(i.db),
+          announcements: affected,
+          sink: i.breakerSink,
+        });
+      } catch {
+        // swallowed on purpose
+      }
+    }
     return {
       ok: true,
       seen: parsed.items.length,
