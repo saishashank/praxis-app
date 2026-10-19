@@ -56,6 +56,7 @@ export const DISPATCHABLE_WORKFLOWS: readonly string[] = [
   "backfill-prices.yml",
   "backup.yml",
   "ingest-batch1.yml",
+  "kb-archive.yml",
   "maintenance.yml",
   "replay.yml",
 ];
@@ -344,5 +345,19 @@ export const AU_SLOTS: readonly Slot[] = [
     catchUpMin: DEFAULT_CATCH_UP_MIN,
     enabled: false,
     note: "Replay light/full/evidence/null/injected (T16, ARN-080/100, AT-17); OFF until the Owner enables it",
+  }),
+  // M6 T13 (D-116 draft): the knowledge-base archive to the private data repo (KB-001, PLT-022a).
+  // Allow-listed, slot OFF until the Owner enables it (design 4.8).
+  slot({
+    id: "kb-archive",
+    time: "22:15",
+    runner: "actions",
+    workflow: "kb-archive.yml",
+    tradingDaysOnly: false,
+    marketBound: false,
+    priority: 25,
+    catchUpMin: DEFAULT_CATCH_UP_MIN,
+    enabled: false,
+    note: "KB document archive to the data repo (M6 T13, KB-001); OFF until the Owner enables it",
   }),
 ];

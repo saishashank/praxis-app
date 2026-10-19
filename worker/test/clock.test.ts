@@ -157,6 +157,7 @@ describe("slot table (docs/M2_design.md section 3)", () => {
       "backfill-prices.yml",
       "backup.yml",
       "ingest-batch1.yml",
+      "kb-archive.yml",
       "maintenance.yml",
       "replay.yml",
     ]);
@@ -183,6 +184,7 @@ describe("slot table (docs/M2_design.md section 3)", () => {
       "arena-close",
       "arena-signals",
       "replay",
+      "kb-archive",
     ]) {
       expect(AU_SLOTS.find((s) => s.id === id)?.enabled).toBe(false);
     }
@@ -201,6 +203,7 @@ describe("slot table (docs/M2_design.md section 3)", () => {
         s.id === "backfill-history" ||
         s.id === "backfill-prices" ||
         s.id === "replay" ||
+        s.id === "kb-archive" ||
         s.id === "ingest-batch1" || // M5 T10, decision 5: also the non-trading marker
         s.id === "evening-review" ||
         s.id === "evening-review-late" ||
