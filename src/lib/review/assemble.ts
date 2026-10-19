@@ -208,9 +208,12 @@ function fromRow(r: Row, subject: string, created: boolean): StoredReview {
  */
 export async function assembleReview(
   db: Client,
-  o: BuildOptions & { createdAt?: string },
+  o: BuildOptions & {
+    createdAt?: string;
+    /** Already built (T10 decided on it): not read twice. */ built?: BuiltFacts;
+  },
 ): Promise<StoredReview & { facts: ReviewFacts; markerPresent: boolean }> {
-  const built = await buildFacts(db, o);
+  const built = o.built ?? (await buildFacts(db, o));
   const out = renderReview(built.facts);
   const sha = factsSha(built.facts);
   const latest = await db.execute({

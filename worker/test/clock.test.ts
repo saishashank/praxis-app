@@ -193,14 +193,17 @@ describe("slot table (docs/M2_design.md section 3)", () => {
     }
   });
 
-  it("nightly slots run every day, ingest slots only on trading days", () => {
+  it("nightly slots and Batch 1 run every day, the arena and Sentinel slots only on trading days", () => {
     for (const s of AU_SLOTS) {
       if (
         s.id === "backup" ||
         s.id === "maintenance" ||
         s.id === "backfill-history" ||
         s.id === "backfill-prices" ||
-        s.id === "replay"
+        s.id === "replay" ||
+        s.id === "ingest-batch1" || // M5 T10, decision 5: also the non-trading marker
+        s.id === "evening-review" ||
+        s.id === "evening-review-late"
       )
         expect(s.tradingDaysOnly).toBe(false);
       else expect(s.tradingDaysOnly).toBe(true);
@@ -232,10 +235,13 @@ describe("candidateSlots (pure)", () => {
     expect(candidateSlots(L(MON, "17:30"), off)).toEqual([]);
     expect(candidateSlots(L(MON, "17:30")).map((s) => s.id)).toEqual(["ingest-batch1"]);
   });
-  it("trading-day-only slots skip weekends", () => {
+  it("trading-day-only slots skip weekends; Batch 1 does not (non-trading marker, decision 5)", () => {
     const all = AU_SLOTS.map((s) => ({ ...s, enabled: true }));
-    expect(candidateSlots(L(SAT, "17:30"), all)).toEqual([]);
-    expect(candidateSlots(L("2026-06-14", "17:35"), all)).toEqual([]); // Sunday
+    expect(candidateSlots(L(SAT, "17:30"), all).map((s) => s.id)).toEqual(["ingest-batch1"]);
+    expect(candidateSlots(L(SAT, "18:11"), all)).toEqual([]); // arena-close and signals stay trading-day only
+    expect(candidateSlots(L("2026-06-14", "17:35"), all).map((s) => s.id)).toEqual([
+      "ingest-batch1",
+    ]); // Sunday
     expect(candidateSlots(L(MON, "17:35"), all).map((s) => s.id)).toEqual(["ingest-batch1"]);
   });
   it("catch-up: a slot missed at 17:30 is still open until 18:10, then closed", () => {
@@ -324,7 +330,9 @@ describe("decide (pure)", () => {
   it("holiday: trading-day-only slot skipped, nightly slots still run", () => {
     const all = AU_SLOTS.map((s) => ({ ...s, enabled: true }));
     const l2 = sydneyLocal(at(MON, "17:35"));
-    expect(decide(l2, { ...on, tradingDay: false }, none, NOW, all)).toEqual([]);
+    expect(decide(l2, { ...on, tradingDay: false }, none, NOW, all).map((a) => a.slot.id)).toEqual([
+      "ingest-batch1", // Batch 1 writes the non-trading marker (decision 5)
+    ]);
     expect(decide(L, { ...on, tradingDay: false }, none, NOW)).toHaveLength(2);
   });
   it("dispatched or in-flight slots are left alone; failed ones retry up to the cap", () => {
@@ -593,11 +601,11 @@ describe("runClock with a real SQLite database", () => {
     );
     // 2026-12-25 is a seeded holiday; 2026-12-24 is a seeded early close (still a trading day).
     const hol = await tick(at("2026-12-25", "17:30", 11), ENV, batch);
-    expect(hol.dispatched).toEqual([]);
+    expect(hol.dispatched).toEqual(["ingest-batch1"]); // M5 T10: Batch 1 also runs on holidays
     resetClockCache();
     const early = await tick(at("2026-12-24", "17:30", 11), ENV, batch);
     expect(early.dispatched).toEqual(["ingest-batch1"]);
-    expect(net.github).toHaveLength(1);
+    expect(net.github).toHaveLength(2);
   });
 
   it("market_mode off stops market-bound dispatch only", async () => {

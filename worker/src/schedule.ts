@@ -22,6 +22,16 @@ export type Slot = {
   runner: "actions" | "worker" | "route";
   /** App path for runner "route", else absent. */
   route?: string;
+  /** Runner "route": extra fields of the signed body (e.g. the pre-open attempt number). */
+  extra?: Record<string, string | number>;
+  /** Runner "route": only post when this worker_state condition holds (alert-flush: "alert_flush_due"). */
+  needs?: "alert_flush_due";
+  /** Runner "route", single-shot slots: fire only while the slot with this id is not "dispatched". */
+  after?: string;
+  /** Runner "route", single-shot slots: attempts per occurrence (default MAX_ROUTE_ATTEMPTS). */
+  maxAttempts?: number;
+  /** Runner "route": request timeout in ms (default ROUTE_TIMEOUT_MS). */
+  timeoutMs?: number;
   /** Workflow file under .github/workflows for runner "actions", else null. */
   workflow: string | null;
   tradingDaysOnly: boolean;
@@ -69,7 +79,7 @@ export const AU_SLOTS: readonly Slot[] = [
   }),
   // M5 T6 (D-101, design 4.1/4.3): the P0 batch flush. A `route` slot: odd minutes 07:01-20:59, one
   // read of `worker_state.alert_flush_due` and, when it has passed, a signed POST. DISABLED, and the
-  // dispatch clock never fires `route` slots (the route runner arrives with the other M5 route slots).
+  // dispatch clock never fires `route` slots (worker/src/routes.ts does).
   slot({
     id: "alert-flush",
     time: "07:01",
@@ -77,6 +87,7 @@ export const AU_SLOTS: readonly Slot[] = [
     everyMin: 2,
     runner: "route",
     route: "/api/internal/alert-flush",
+    needs: "alert_flush_due",
     workflow: null,
     tradingDaysOnly: true,
     marketBound: false,
@@ -88,17 +99,19 @@ export const AU_SLOTS: readonly Slot[] = [
   // M5 T8 (D-103, design 4.5): the pre-open re-check is a signed POST to the app route, not an ASX
   // request, so it needs no rate token; 09:54 stays on an even minute (D-061). Attempt 2 at 09:58
   // follows an error or timeout; a second failure raises the P1. Both DISABLED; the dispatch clock
-  // never fires `route` slots (the route runner arrives with the other M5 route slots).
+  // never fires `route` slots (worker/src/routes.ts does).
   slot({
     id: "pre-open",
     time: "09:54",
     runner: "route",
     route: "/api/internal/preopen",
+    extra: { attempt: 1 },
+    maxAttempts: 1,
     workflow: null,
     tradingDaysOnly: true,
     marketBound: true,
     priority: 2,
-    catchUpMin: 5,
+    catchUpMin: 3,
     enabled: false,
     note: "Pre-open re-check attempt 1 (M5 T8, ARN-020a); OFF until the Owner enables the arena",
   }),
@@ -107,6 +120,9 @@ export const AU_SLOTS: readonly Slot[] = [
     time: "09:58",
     runner: "route",
     route: "/api/internal/preopen",
+    extra: { attempt: 2 },
+    after: "pre-open",
+    maxAttempts: 1,
     workflow: null,
     tradingDaysOnly: true,
     marketBound: true,
@@ -114,6 +130,43 @@ export const AU_SLOTS: readonly Slot[] = [
     catchUpMin: 1,
     enabled: false,
     note: "Pre-open re-check attempt 2, only after an error or timeout of 09:54 (M5 T8); OFF with it",
+  }),
+  // M5 T10 (D-107, design 4.1/4.6): the Evening Review send. A `route` slot every 5 minutes from
+  // 20:00 to 20:45 and (second slot) every 15 minutes from 21:00 to 22:00 Melbourne/Sydney time,
+  // market-independent and every day (the review has a non-trading form). Each tick posts the signed
+  // `evening-review` route, which is idempotent per review date (waiting, partial, late, complete
+  // later). Both DISABLED like every M5 slot; the dispatch clock never fires `route` slots.
+  slot({
+    id: "evening-review",
+    time: "20:00",
+    until: "20:45",
+    everyMin: 5,
+    runner: "route",
+    route: "/api/internal/evening-review",
+    timeoutMs: 58_000,
+    workflow: null,
+    tradingDaysOnly: false,
+    marketBound: false,
+    priority: 5,
+    catchUpMin: 0,
+    enabled: false,
+    note: "Evening Review send 20:00-20:45 (M5 T10, EML-010/011); OFF until the Owner enables emails",
+  }),
+  slot({
+    id: "evening-review-late",
+    time: "21:00",
+    until: "22:00",
+    everyMin: 15,
+    runner: "route",
+    route: "/api/internal/evening-review",
+    timeoutMs: 58_000,
+    workflow: null,
+    tradingDaysOnly: false,
+    marketBound: false,
+    priority: 5,
+    catchUpMin: 0,
+    enabled: false,
+    note: "Evening Review retry and complete-version store 21:00-22:00 (M5 T10); OFF with the slot above",
   }),
   slot({
     id: "universe",
@@ -134,12 +187,15 @@ export const AU_SLOTS: readonly Slot[] = [
     time: "17:30",
     runner: "actions",
     workflow: "ingest-batch1.yml",
-    tradingDaysOnly: true,
+    // M5 T10 (D-107, decision 5): also on weekends and holidays, so the reduced pipeline writes the
+    // `non-trading` marker by 19:45 (DAT-022) and the Evening Review can send its non-trading form.
+    // Still inert while `dispatch_enabled` is off.
+    tradingDaysOnly: false,
     marketBound: true,
     priority: 10,
     catchUpMin: 40,
     enabled: true,
-    note: "Batch 1, stages 1..9 (DAT-020); complete by 18:10 so catch-up closes at the cut-off (T6)",
+    note: "Batch 1, stages 1..9 (DAT-020), every day incl. non-trading (marker by 19:45); complete by 18:10 so catch-up closes at the cut-off (T6)",
   }),
   // M3 T10 (D-077): batch 2a "close the books". The workflow exists and is allow-listed, but the
   // slot stays OFF until the Owner approves the [VERIFY] items and enables the arena (D-066: the

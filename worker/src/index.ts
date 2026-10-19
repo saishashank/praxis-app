@@ -1,9 +1,10 @@
 import { runAsx, type AsxEnv } from "./asx/slots";
 import { runUniverse, type UniverseEnv } from "./asx/universe";
 import { runClock } from "./clock";
+import { runRoutes, type RouteEnv } from "./routes";
 import { runSelfCheck, type SelfCheckEnv } from "./selfcheck";
 
-export type Env = SelfCheckEnv & AsxEnv & UniverseEnv;
+export type Env = SelfCheckEnv & AsxEnv & UniverseEnv & RouteEnv;
 
 export interface Heartbeat {
   kind: "heartbeat";
@@ -29,6 +30,16 @@ export default {
       });
     } catch {
       // runClock already contains its errors; nothing here may disturb the self-check.
+    }
+    // Signed route slots (M5 T10, decision 41): alert flush, pre-open, Evening Review. All slots are
+    // disabled; no work and no database request unless one is enabled and due. Never throws.
+    try {
+      await runRoutes(env, controller.scheduledTime, {
+        fetch: (i, init) => fetch(i, init),
+        nowMs: () => Date.now(),
+      });
+    } catch {
+      // runRoutes already contains its errors.
     }
     // ASX poll (DAT-122): zero database work unless ASX_LIVE is on, a poll slot is due and the
     // environment is production; the token and kill switch decide the rest. Never throws.

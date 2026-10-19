@@ -33,6 +33,13 @@
         "tests/security/hmac.test.ts"
       ]
     },
+    "POST /api/internal/evening-review": {
+      "tests": [
+        "tests/review/send.test.ts",
+        "tests/review/route.test.ts",
+        "tests/security/hmac.test.ts"
+      ]
+    },
     "POST /api/internal/incident": {
       "tests": ["tests/alerts/routes.test.ts", "tests/security/hmac.test.ts"]
     },
