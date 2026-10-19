@@ -33,9 +33,11 @@ export const runKeys = {
   close: (market: string, d: string): string => `arena-2a:${market}:${d}`,
   signals: (market: string, d: string): string => `arena-2b:${market}:${d}`,
   review: (market: string, d: string): string => `arena-3:${market}:${d}`,
+  learn: (market: string, d: string): string => `arena-learn:${market}:${d}`,
+  words: (market: string, d: string): string => `arena-words:${market}:${d}`,
 };
 
-/** replay_stat scope of the R5 narrative row: written by batch 3, read by the review. */
+/** replay_stat scope of the R5 narrative row: written by the `words` phase (M6 T11), read by the review. */
 export const narrativeScope = (market: string, d: string): string => `review:${market}:${d}`;
 export const NARRATIVE_METRIC = "narrative";
 
@@ -48,12 +50,15 @@ export type Availability = {
   closeOk: boolean;
   signalsOk: boolean;
   reviewOk: boolean;
+  /** The `learn` phase (A6) ran for the date: the input of sections 4-6 (M6 T11, D-123). */
+  learnOk: boolean;
 };
 
 /**
  * The partial map (design 2.6): the sections whose expected input is missing for the date. An
  * input is expected only on a trading day of a market in `full` mode. A missing marker takes
- * sections 1-7 with it (EML-035: never yesterday's numbers). Sections 8-10 need nothing.
+ * sections 1-7 with it (EML-035: never yesterday's numbers). Sections 4-6 read the A6 `learn` run
+ * (M6 T11: missing -> 4-6) and section 7 batch 3. Sections 8-10 need nothing.
  */
 export function missingSections(a: Availability): Missing[] {
   if (!a.arenaActive || !a.tradingDay) return [];
@@ -61,7 +66,8 @@ export function missingSections(a: Availability): Missing[] {
   if (!a.marker) for (let n = 1; n <= 7; n += 1) gone.add(n);
   if (!a.closeOk) for (const n of [1, 2, 3]) gone.add(n);
   if (!a.signalsOk) gone.add(2);
-  if (!a.reviewOk) for (const n of [4, 5, 6, 7]) gone.add(n);
+  if (!a.learnOk) for (const n of [4, 5, 6]) gone.add(n);
+  if (!a.reviewOk) gone.add(7);
   return [...gone].sort((x, y) => x - y).map((n) => ({ n, name: REVIEW_SECTION_NAMES[n - 1]! }));
 }
 

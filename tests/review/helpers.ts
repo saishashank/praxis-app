@@ -101,6 +101,7 @@ export async function tradingDay(db: Client): Promise<{ e01: string; e02: string
   await addRun(db, `arena-2a:${MARKET}:${D}`, "success", "arena-close");
   await addRun(db, `arena-2b:${MARKET}:${D}`, "success", "arena-signals");
   await addRun(db, `arena-3:${MARKET}:${D}`, "success", "arena-review");
+  await addRun(db, `arena-learn:${MARKET}:${D}`, "success", "arena-learn");
   return { e01, e02 };
 }
 

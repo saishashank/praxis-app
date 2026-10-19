@@ -88,6 +88,32 @@ test("signals.mjs: not configured -> exit 1; --replay on a remote database -> ex
   assert.doesNotMatch(lines.join("\n"), /example\.turso\.io/);
 });
 
+test("signals.mjs: --phase learn and --phase words on a data_only database record a skip each (M6 T11)", async () => {
+  const { dir, url, db } = await freshDb();
+  try {
+    const lines = [];
+    const env = { TURSO_MAIN_URL: url, TURSO_MAIN_TOKEN: "secret-token-do-not-print" };
+    const deps = { nowMs: () => NOW, out: (s) => lines.push(s) };
+    assert.equal(await signals(["--date", "2026-10-13", "--phase", "learn"], env, deps), 0);
+    assert.equal(await signals(["--date", "2026-10-13", "--phase", "words"], env, deps), 0);
+    assert.match(lines[0], /^arena-learn AU 2026-10-13: skipped \(data_only_guard\)/);
+    assert.match(lines[1], /^arena-words AU 2026-10-13: skipped \(data_only_guard\)/);
+    assert.doesNotMatch(lines.join("\n"), /secret|file:/);
+    const rs = await db.execute("SELECT job, status FROM run_record ORDER BY id");
+    assert.deepEqual(
+      rs.rows.map((r) => [r.job, r.status]),
+      [
+        ["arena-learn", "skipped"],
+        ["arena-words", "skipped"],
+      ],
+    );
+    assert.equal(await signals(["--phase", "reports"], env, deps), 2);
+  } finally {
+    db.close();
+    cleanup(dir);
+  }
+});
+
 test("signals.mjs: a replay without a closed 2a fails visibly, after the (zero) wait", async () => {
   const { dir, url, db } = await freshDb();
   try {

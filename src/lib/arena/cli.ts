@@ -4,8 +4,8 @@
 // tests can call it directly.
 //
 //   close-books [--date YYYY-MM-DD] [--wait-minutes N] [--max-sessions N] [--replay]
-//   signals [--date YYYY-MM-DD] [--wait-minutes N] [--replay] [--phase 2b|3|all]
-//                                                                  (batch 2b, M4 T8; then batch 3, T15)
+//   signals [--date YYYY-MM-DD] [--wait-minutes N] [--replay] [--phase 2b|3|learn|words|all]
+//                (batch 2b, M4 T8; batch 3, T15; then A6 `learn` and the `words` text, M6 T11; all = in that order)
 //   replay --db file:<path> --from YYYY-MM-DD --to YYYY-MM-DD [--market AU]
 //
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, COMMIT_SHA (optional), GITHUB_OUTPUT (optional).
@@ -21,6 +21,11 @@ import { createClient, type Client } from "@libsql/client";
 import { addDays, marketDate, sessionsBetween } from "@/lib/data/calendar";
 import { signalsDay, type SignalsResult } from "@/lib/agents/batch2b";
 import { reviewDay, type ReviewResult } from "@/lib/agents/batch3";
+import type { AgentParams } from "@/lib/agents/params";
+import { learnDay, type LearnResult } from "@/lib/learning/learnStage";
+import { wordsDay, type WordsLlm, type WordsResult } from "@/lib/learning/wordsStage";
+import { createRouter, type LlmRouter } from "@/lib/llm/router";
+import { DbStore } from "@/lib/llm/store";
 import {
   ARENA_JOB,
   closeBooksDay,
@@ -44,6 +49,8 @@ function flag(args: readonly string[], name: string): string | null {
 }
 
 export type CliDeps = {
+  /** Test seam: the routers of the `words` phase (default: rules-only, no provider; LLM-040). */
+  readonly wordsLlm?: (ctx: { db: Client; params: AgentParams; kbVersion: string }) => WordsLlm;
   readonly openDb?: (url: string, token: string | undefined) => Client;
   readonly nowMs?: () => number;
   readonly sleep?: (ms: number) => Promise<void>;
@@ -248,6 +255,40 @@ function reviewSummary(r: ReviewResult): string {
   );
 }
 
+function learnSummary(r: LearnResult): string {
+  const why = r.reason === null ? "" : ` (${r.reason})`;
+  const s = r.stats;
+  return (
+    `arena-learn ${r.market} ${r.d}: ${r.status}${why} variant=${s.variant ?? "none"}` +
+    ` comparisons=${s.comparisons} lessonsChanged=${s.lessonsChanged}` +
+    ` playbookChanges=${s.laneA?.changes ?? 0} injectionEvents=${s.laneA?.injectionEvents ?? 0}` +
+    ` planItems=${s.planItems} planReviewed=${s.planReviewed} stepsFailed=${s.stepsFailed.length}`
+  );
+}
+
+function wordsSummary(r: WordsResult): string {
+  const why = r.reason === null ? "" : ` (${r.reason})`;
+  const s = r.stats;
+  return (
+    `arena-words ${r.market} ${r.d}: ${r.status}${why} subjects=${s.subjects} worded=${s.worded}` +
+    ` deferred=${s.deferred} reserved=${s.reservedTokens} narrative=${s.narrative ?? "none"}`
+  );
+}
+
+/** Rules-only routers over the database call log: the default until the bake-off (LLM-040). */
+function rulesOnlyLlm(ctx: { db: Client; params: AgentParams; kbVersion: string }): WordsLlm {
+  const store = new DbStore(ctx.db);
+  const make = (): LlmRouter =>
+    createRouter({
+      mode: "rules-only",
+      params: ctx.params.llm,
+      kbVersion: ctx.kbVersion,
+      store,
+      providers: [],
+    });
+  return { r5Router: make(), providers: [], routerFor: () => make(), store };
+}
+
 async function hasClosedBooks(db: Client, d: string): Promise<boolean> {
   const rs = await db.execute({
     sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND status IN ('success', 'degraded')`,
@@ -280,8 +321,8 @@ export async function signalsMain(
     return 2;
   }
   const phase = flag(argv, "--phase") ?? "all";
-  if (phase !== "2b" && phase !== "3" && phase !== "all") {
-    out("arena-2b: refused (--phase must be 2b, 3 or all)");
+  if (!["2b", "3", "learn", "words", "all"].includes(phase)) {
+    out("arena-2b: refused (--phase must be 2b, 3, learn, words or all)");
     return 2;
   }
   const waitMinutes = Number.parseInt(flag(argv, "--wait-minutes") ?? "", 10);
@@ -297,6 +338,8 @@ export async function signalsMain(
   let exit = 0;
   let last = "";
   let lastReview = "";
+  let lastLearn = "";
+  let lastWords = "";
   try {
     const d = flag(argv, "--date") ?? marketDate(new Date(nowMs()), MARKET_TZ);
     const calendar = await loadCalendar(db, MARKET);
@@ -306,7 +349,7 @@ export async function signalsMain(
     });
     const writes = mode.rows.length > 0 && (String(mode.rows[0].mode) === "full" || replay);
     let runReview = phase === "3";
-    if (phase !== "3") {
+    if (phase === "2b" || phase === "all") {
       if (writes) {
         const deadline = nowMs() + wait * 60_000;
         while (!(await hasClosedBooks(db, d)) && nowMs() < deadline) await sleep(POLL_MS);
@@ -346,14 +389,48 @@ export async function signalsMain(
       // 2b missing (phase 3 alone): a visible failure, never numbers on a day without signals
       if (review.status === "skipped" && review.reason === "no_2b_success") exit = 1;
     }
+    // A6 `learn` and the `words` text follow back-to-back (M6 T11, design 4.1). In `all` they run
+    // whatever became of the phases before (a missing predecessor makes their output partial, AGT-050),
+    // but not at all in data-only mode: there is nothing to learn and the guard would only add noise.
+    const nowIso = (): string => new Date(nowMs()).toISOString();
+    const commitSha = has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined;
+    if (phase === "learn" || (phase === "all" && writes)) {
+      const learn = await learnDay(db, {
+        market: MARKET,
+        d,
+        replay,
+        calendar,
+        now: nowIso,
+        commitSha,
+        clockMs: nowMs,
+      });
+      out(learnSummary(learn));
+      lastLearn = `learn=${learn.status}`;
+      if (learn.status === "failed") exit = 1;
+    }
+    if (phase === "words" || (phase === "all" && writes)) {
+      const llm = deps.wordsLlm ?? rulesOnlyLlm;
+      const words = await wordsDay(db, {
+        market: MARKET,
+        d,
+        replay,
+        calendar,
+        now: nowIso,
+        commitSha,
+        llm: (ctx) => llm({ db, ...ctx }),
+      });
+      out(wordsSummary(words));
+      lastWords = `words=${words.status}`;
+      if (words.status === "failed") exit = 1;
+    }
   } catch (error) {
     out(`arena-2b: failed (unexpected error ${error instanceof Error ? error.name : "unknown"})`);
     exit = 1;
   } finally {
     db.close();
   }
-  if (has(env.GITHUB_OUTPUT) && (last !== "" || lastReview !== "")) {
-    const lines = [last, lastReview].filter((x) => x !== "");
+  if (has(env.GITHUB_OUTPUT) && [last, lastReview, lastLearn, lastWords].some((x) => x !== "")) {
+    const lines = [last, lastReview, lastLearn, lastWords].filter((x) => x !== "");
     appendFileSync(env.GITHUB_OUTPUT, `${lines.join("\n")}\n`);
   }
   return exit;

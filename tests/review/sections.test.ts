@@ -53,6 +53,7 @@ describe("partial map", () => {
     closeOk: true,
     signalsOk: true,
     reviewOk: true,
+    learnOk: true,
   };
   it("is empty when every input is there, in data-only mode and on a non-trading day", () => {
     expect(missingSections(base)).toEqual([]);
@@ -67,9 +68,11 @@ describe("partial map", () => {
   it("maps each missing run to its sections, with names", () => {
     expect(missingSections({ ...base, closeOk: false }).map((m) => m.n)).toEqual([1, 2, 3]);
     expect(missingSections({ ...base, signalsOk: false }).map((m) => m.n)).toEqual([2]);
-    const m = missingSections({ ...base, reviewOk: false });
-    expect(m.map((x) => x.n)).toEqual([4, 5, 6, 7]);
+    // sections 4-6 read the A6 `learn` run (M6 T11); section 7 reads batch 3
+    const m = missingSections({ ...base, learnOk: false });
+    expect(m.map((x) => x.n)).toEqual([4, 5, 6]);
     expect(m[0]!.name).toBe("What was learned today");
+    expect(missingSections({ ...base, reviewOk: false }).map((x) => x.n)).toEqual([7]);
   });
 });
 
@@ -151,7 +154,9 @@ describe("sections 4-6: narrative facts and the no-AI fallback", () => {
     const { facts, narrative } = await buildFacts(db, opts());
     expect(narrative).toBe("rules");
     expect(facts.narrative?.kind).toBe("rules");
-    expect(facts.narrative!.s4.join(" ")).toMatch(/No attribution observations/);
+    expect(facts.narrative!.s4.join(" ")).toMatch(/No lesson was graded or changed/);
+    expect(facts.narrative!.s5.join(" ")).toMatch(/No position finished today/);
+    expect(facts.narrative!.s6.join(" ")).toMatch(/No plan items for the next session/);
     expect(facts.narrative!.s5[0]).toMatch(/^Best day: E01 AUD \+3\.50/);
     expect(facts.narrative!.s6).toContain("Next trading session: 2026-10-20.");
     expect(facts.narrative!.s6).toContain("1 order queued for the next session.");

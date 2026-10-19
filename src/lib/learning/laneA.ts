@@ -142,8 +142,16 @@ export async function forcedLessonIds(db: Client, market: string): Promise<Set<s
   return out;
 }
 
-/** Every lesson of the market with its current grade, latest Critic result and force flag. */
-export async function loadStandings(db: Client, market: string): Promise<LessonStanding[]> {
+/**
+ * Every lesson of the market with its current grade, latest Critic result and force flag. `asOf` bounds
+ * the grade and Critic rows by their date (the nightly run passes its own date, M6 T11: a replay or a
+ * perturbation test with rows after D cannot reach them); without it the latest rows are read.
+ */
+export async function loadStandings(
+  db: Client,
+  market: string,
+  asOf?: string,
+): Promise<LessonStanding[]> {
   const lessons = await db.execute({
     sql: `SELECT * FROM lesson WHERE market = ? ORDER BY id`,
     args: [market],
@@ -153,14 +161,15 @@ export async function loadStandings(db: Client, market: string): Promise<LessonS
   for (const lr of lessons.rows) {
     const lesson = lessonOf(lr as Row);
     const g = await db.execute({
-      sql: `SELECT * FROM lesson_grade WHERE lesson_id = ? ORDER BY seq DESC LIMIT 1`,
-      args: [lesson.id],
+      sql: `SELECT * FROM lesson_grade WHERE lesson_id = ? AND (? IS NULL OR d <= ?)
+            ORDER BY seq DESC LIMIT 1`,
+      args: [lesson.id, asOf ?? null, asOf ?? null],
     });
     if (g.rows.length === 0) continue;
     const c = await db.execute({
       sql: `SELECT passed FROM critique WHERE subject_kind = 'lesson' AND subject_id = ?
-            ORDER BY d DESC, run_id DESC LIMIT 1`,
-      args: [lesson.id],
+            AND (? IS NULL OR d <= ?) ORDER BY d DESC, run_id DESC LIMIT 1`,
+      args: [lesson.id, asOf ?? null, asOf ?? null],
     });
     out.push({
       lesson,
@@ -273,7 +282,7 @@ function idsOfContent(content: string): string[] {
  * playbook text and writes nothing. The write is one atomic batch.
  */
 export async function runLaneA(db: Client, input: LaneAInput): Promise<LaneAResult> {
-  const standings = await loadStandings(db, input.market);
+  const standings = await loadStandings(db, input.market, input.d);
   const rendered: RenderedPlaybook[] = [];
   const events: InjectionEvent[] = [];
   const stmts: { sql: string; args: (string | number | null)[] }[] = [];

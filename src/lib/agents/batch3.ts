@@ -53,6 +53,7 @@ import {
 } from "@/lib/review/sections";
 import { syncForwardLedger, type ForwardResult } from "./forwardLedger";
 import { loadAgentParams, type AgentParams } from "./params";
+import { wordsKey } from "@/lib/learning/learnFacts";
 import { signalsKey } from "./batch2b";
 import type { Family } from "./families";
 
@@ -83,8 +84,6 @@ export type ReviewOptions = {
   readonly masterSeed?: bigint;
   readonly calendar?: CalendarRow[];
   readonly params?: AgentParams;
-  /** M5 T9: the LLM router for the R5 narrative row; absent = no narrative row (rules fallback). */
-  readonly router?: LlmRouter;
 };
 
 export type ReviewStatus = "success" | "degraded" | "failed" | "skipped" | "already_done";
@@ -100,8 +99,6 @@ export type ReviewStats = {
   killTriggered: number;
   killLooksPerYear: number | null;
   evidenceRows: number;
-  /** R5 narrative row: "llm" (router answer), "rules" (fallback text) or null (not run). */
-  narrative: "llm" | "rules" | null;
 };
 
 export type ReviewResult = {
@@ -129,7 +126,6 @@ function emptyStats(): ReviewStats {
     killTriggered: 0,
     killLooksPerYear: null,
     evidenceRows: 0,
-    narrative: null,
   };
 }
 
@@ -829,27 +825,6 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
       ),
     );
 
-    stage = "narrative";
-    if (o.router !== undefined) {
-      try {
-        stats.narrative = await narrativeStage(db, o, o.router);
-        stats.statRows += 1;
-      } catch (error) {
-        await db.execute({
-          sql: "INSERT INTO app_log (at, level, source, message, run_id) VALUES (?, 'warn', ?, ?, ?)",
-          args: [
-            o.now(),
-            REVIEW_JOB,
-            `R5 narrative on ${o.d} failed (${error instanceof Error ? error.name : "error"}): facts-only fallback`.slice(
-              0,
-              LOG_MESSAGE_MAX,
-            ),
-            runId,
-          ],
-        });
-      }
-    }
-
     const status: ReviewStatus = rc.violations > 0 ? "degraded" : "success";
     await finishRun(db, runId, {
       status,
@@ -892,7 +867,7 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
   }
 }
 
-// ---- stage 6: R5 narrative row (M5 T9) ----------------------------------------------------------------------------
+// ---- the R5 narrative row (M5 T9; moved to the `words` phase after `learn` in M6 T11, D-123) ----------------------------------------------------------------------------
 
 /**
  * The Evening Review narrative (sections 4-6). The router is the only way to a model; an answer
@@ -901,7 +876,7 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
  */
 export async function narrativeStage(
   db: Client,
-  o: ReviewOptions,
+  o: Pick<ReviewOptions, "market" | "d" | "now">,
   router: LlmRouter,
 ): Promise<"llm" | "rules"> {
   const c = await loadCtx(db, {
@@ -924,7 +899,7 @@ export async function narrativeStage(
     s6: used ? r.value.s6 : narrativeRequest(o.market, pack, false).rules.s6,
   };
   await putStats(db, [
-    jsonRow(reviewKey(o.market, o.d), o.d, narrativeScope(o.market, o.d), NARRATIVE_METRIC, value),
+    jsonRow(wordsKey(o.market, o.d), o.d, narrativeScope(o.market, o.d), NARRATIVE_METRIC, value),
   ]);
   return value.kind;
 }

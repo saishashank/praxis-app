@@ -26,6 +26,7 @@ import type { EnvName } from "@/lib/email/templates/core";
 import { melbourneDate } from "@/lib/email/keys";
 import { getMeters, usageEnvironment, worstMeter } from "@/lib/usage/meters";
 import { HEALTH_COMPONENTS } from "@/lib/sentinel/schema";
+import { learnLines, readLearnFacts, type LearnFacts } from "@/lib/learning/learnFacts";
 import {
   NARRATIVE_METRIC,
   big,
@@ -111,6 +112,7 @@ export async function readAvailability(c: Ctx): Promise<Availability> {
     closeOk: await hasRun(c.db, runKeys.close(c.market, c.d)),
     signalsOk: await hasRun(c.db, runKeys.signals(c.market, c.d)),
     reviewOk: await hasRun(c.db, runKeys.review(c.market, c.d)),
+    learnOk: await hasRun(c.db, runKeys.learn(c.market, c.d)),
   };
 }
 
@@ -858,6 +860,8 @@ export type NarrativePack = {
   labelsToday: { id: string; label: string; n: number }[];
   invariantViolations: number | null;
   asxFeed: string | null;
+  /** The A6 `learn` output of D (M6 T11); null when the phase has no run for the date. */
+  learning: LearnFacts | null;
 };
 
 export type NarrativeLists = { s4: string[]; s5: string[]; s6: string[] };
@@ -925,6 +929,7 @@ export async function readNarrativePack(c: Ctx): Promise<NarrativePack> {
       ? num((JSON.parse(str(inv.rows[0]!.value_json)) as { violations?: number }).violations)
       : null,
     asxFeed: asx.rows.length ? str(asx.rows[0]!.mode) : null,
+    learning: await readLearnFacts(c.db, { market: c.market, d: c.d, calendar: c.calendar }),
   };
 }
 
@@ -942,7 +947,12 @@ export function rulesNarrative(p: NarrativePack, nonTrading: boolean): Narrative
         : `The ledger re-check found ${p.invariantViolations} ${plural(p.invariantViolations, "violation")}.`,
     );
   }
-  s4.push("No attribution observations are recorded yet; they start in a later release.");
+  const learn = p.learning === null ? null : learnLines(p.learning);
+  if (learn === null) {
+    s4.push("No attribution observations are recorded yet; they start in a later release.");
+  } else {
+    s4.push(...learn.s4);
+  }
   if (!nonTrading && p.executions.length > 0) {
     const sorted = [...p.executions].sort(
       (a, b) => b.dayPlCents - a.dayPlCents || (a.id < b.id ? -1 : 1),
@@ -953,9 +963,13 @@ export function rulesNarrative(p: NarrativePack, nonTrading: boolean): Narrative
     if (worst.id !== best.id) {
       s5.push(`Weakest day: ${worst.id} ${worst.dayPl} (single-day result, noise).`);
     }
-    s5.push("Reasons for results are not analysed yet; attribution starts in a later release.");
+    if (learn === null) {
+      s5.push("Reasons for results are not analysed yet; attribution starts in a later release.");
+    }
   }
+  if (learn !== null) s5.push(...learn.s5);
   if (p.nextSession !== null) s6.push(`Next trading session: ${p.nextSession}.`);
+  if (learn !== null) s6.push(...learn.s6);
   if (!nonTrading) {
     s6.push(
       p.ordersCreated === 0
@@ -1021,7 +1035,7 @@ export async function readNarrativeRow(
 ): Promise<NarrativeRow | null> {
   const r = await db.execute({
     sql: "SELECT value_json FROM replay_stat WHERE run_id = ? AND scope = ? AND metric = ?",
-    args: [runKeys.review(market, d), narrativeScope(market, d), NARRATIVE_METRIC],
+    args: [runKeys.words(market, d), narrativeScope(market, d), NARRATIVE_METRIC],
   });
   if (r.rows.length === 0) return null;
   try {

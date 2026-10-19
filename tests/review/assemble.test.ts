@@ -282,7 +282,7 @@ describe("R5 narrative (batch 3) through the router", () => {
       db,
       "INSERT INTO replay_stat (run_id, scope, metric, d, value_json) VALUES (?, ?, 'narrative', ?, ?)",
       [
-        `arena-3:${MARKET}:${D}`,
+        `arena-words:${MARKET}:${D}`,
         `review:${MARKET}:${D}`,
         D,
         JSON.stringify({ kind: "llm", s4: "x" }),
