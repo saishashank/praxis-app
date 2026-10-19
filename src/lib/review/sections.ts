@@ -10,6 +10,7 @@ import { parseCohortParams } from "@/lib/arena/cohort";
 import { terminalThresholds } from "@/lib/arena/terminal";
 import { loadCalendar } from "@/lib/arena/closeBooks";
 import { addDays, isTradingDay, type CalendarRow } from "@/lib/data/calendar";
+import { parseOn } from "@/lib/data/controls";
 import type {
   AgentSuccess,
   AlertFact,
@@ -667,19 +668,28 @@ export async function readHealth(
       ? `Completion marker present for ${c.d}.`
       : `No completion marker for ${c.d} yet.`,
   });
-  // ASX switch (DAT-123, AT-21)
+  // ASX switch (DAT-123, AT-21): off when the Owner switch (worker_state.asx_enabled) is off, or the
+  // source is off or tripped. The Worker reads the same switch, so the review states what it does.
   const asx = await c.db.execute({
     sql: "SELECT mode, reason FROM source_status WHERE source = 'asx_announcements'",
     args: [],
   });
+  const sw = await c.db.execute({
+    sql: "SELECT value_json FROM worker_state WHERE key = 'asx_enabled'",
+    args: [],
+  });
+  const swRaw = sw.rows[0]?.value_json;
+  const switchOn = parseOn(swRaw); // same parsing as the Worker and the System Health control
   if (asx.rows.length) {
     const mode = str(asx.rows[0]!.mode);
+    const on = mode === "on" && switchOn;
     lines.push({
       label: "ASX feed",
-      status: mode === "on" ? "ok" : "attention",
-      detail:
-        mode === "on"
-          ? "ASX announcements feed is on."
+      status: on ? "ok" : "attention",
+      detail: on
+        ? "ASX announcements feed is on."
+        : mode === "on"
+          ? "ASX announcements feed is off: the ASX contact switch is off."
           : `ASX announcements feed is ${mode === "tripped" ? "stopped by a safety trip" : "off"}${asx.rows[0]!.reason === null ? "" : `: ${str(asx.rows[0]!.reason)}`}.`,
     });
   }
