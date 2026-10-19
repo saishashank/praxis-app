@@ -140,6 +140,9 @@
     "action src/app/(app)/review/actions.ts#rejectCorporateActionAction": {
       "tests": ["tests/corporateActions/admin.test.ts"]
     },
+    "action src/app/(app)/reviews/[date]/actions.ts#markReviewReadAction": {
+      "tests": ["tests/review/pages.test.tsx"]
+    },
     "action src/app/(app)/config/actions.ts#updateConfigAction": {
       "tests": ["tests/config/actions.test.ts"]
     },
