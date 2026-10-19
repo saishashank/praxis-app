@@ -36,11 +36,7 @@ import type { CohortBooks } from "@/lib/arena/nav";
 import { loadSleeveStates, loadSleeveTrades } from "@/lib/arena/sleeveWriter";
 import type { Mark } from "@/lib/arena/nav";
 import { cifProportions } from "@/lib/replay/cif";
-import {
-  PROGRESS_SESSIONS,
-  type CohortOutcome,
-  type CohortReplayResult,
-} from "@/lib/replay/cohortReplay";
+import { type CohortOutcome, type CohortReplayResult } from "@/lib/replay/cohortReplay";
 import type { LedgerEntry, LedgerResult } from "@/lib/replay/ledger";
 import { buildReplayStats, tradeScorecards, type ReplayStatRow } from "@/lib/replay/scorecards";
 import { SESSIONS_PER_YEAR, ensureLooksPerYear, evaluateKillSwitch } from "@/lib/stats/killSwitch";
@@ -214,6 +210,7 @@ export async function liveCohortOutcomes(
   db: Client,
   d: string,
   sessions: readonly string[],
+  progressSessions: readonly number[],
 ): Promise<CohortOutcome[]> {
   const executions = new Map((await loadExecutions(db)).map((e) => [e.id, e]));
   const cs = await db.execute({
@@ -267,7 +264,7 @@ export async function liveCohortOutcomes(
     const atEnd = days.find((x) => x.d === endD) ?? lastDay;
     const cfg = await loadSleeveConfig(db, c.id);
     const checkpoints: [number, number][] = [];
-    for (const s of PROGRESS_SESSIONS) {
+    for (const s of progressSessions) {
       const x = days.find((p) => (index.get(p.d) ?? -1) - startIdx + 1 === s);
       if (x !== undefined) {
         checkpoints.push([s, Number((x.liq * 1_000_000n) / c.seedMicro)]); // threshold-ok: ppm of the seed
@@ -385,7 +382,7 @@ async function scorecardStage(
   sessions: readonly string[],
 ): Promise<{ rows: ReplayStatRow[]; cohorts: number }> {
   const runId = reviewKey(o.market, o.d);
-  const outcomes = await liveCohortOutcomes(db, o.d, sessions);
+  const outcomes = await liveCohortOutcomes(db, o.d, sessions, params.progress.sessionsEdges);
   const starts = [...new Set(outcomes.map((c) => c.startD))].sort(cmp);
   const idx = new Map<string, number>();
   sessions.forEach((s, i) => idx.set(s, i));

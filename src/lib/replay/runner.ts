@@ -77,7 +77,6 @@ import {
   fewBlocksCheck,
   INJECTED_EDGE,
   INJECTED_SPEC,
-  LINEAGES_FLOOR_MIN,
   matchedQ,
   realNullBatch,
   sizeReport,
@@ -442,7 +441,7 @@ function runChecks(
   const { params, mode } = o;
   const budget = o.budgetMinutes ?? budgetFor(mode, params);
   const stop = (): boolean => tm.elapsed() > budget;
-  const L = Math.max(params.stats.activeLineagesFloor, LINEAGES_FLOOR_MIN);
+  const L = params.stats.activeLineagesFloor;
   const m = params.stats.trialBudgetPerLineage;
   const rec = (
     test: ValidationResultRecord["test"],
@@ -662,7 +661,8 @@ function evidence(
       if (daily.length > 2) devSharpes.push(returnMoments(daily).sharpe);
     }
   }
-  const defaultSrVariance = devSharpes.length > 1 ? sampleVariance(devSharpes) : 1e-4; // threshold-ok: fallback when fewer than 2 families have development rows
+  const defaultSrVariance =
+    devSharpes.length > 1 ? sampleVariance(devSharpes) : params.stats.dsrDefaultSrVariance;
 
   // Survivorship (DAT-125): the missing-share series, only when the snapshot carries announcements.
   const survivorship: SurvivorshipYear[] | null =

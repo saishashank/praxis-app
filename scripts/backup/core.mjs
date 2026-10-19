@@ -114,6 +114,31 @@ export const FOREVER_TABLES = Object.freeze([
   "credential_expiry",
   "credential_expiry_history",
   "alert_user_state",
+  // M6 learning and knowledge (migration 0010). Forever tables only; the retention-pruned ones
+  // (comparison_result, kb_archive_run) are not. lesson, change_ledger and document are listed above.
+  // The auth-DB annotation tables (auth 0005) are forever tables of the auth backup.
+  "rule_version",
+  "rule_version_status",
+  "lesson_window",
+  "lesson_grade",
+  "alpha_wealth",
+  "attribution",
+  "blocked_trade",
+  "comparison_finding",
+  "critique",
+  "critique_note",
+  "challenger",
+  "challenger_event",
+  "promotion",
+  "playbook_version",
+  "plan_item",
+  "plan_review",
+  "factor_bucket_stat",
+  "pick",
+  "pick_outcome",
+  "bakeoff_result",
+  "annotation",
+  "annotation_history",
 ]);
 
 const MAX_PLAINTEXT_BYTES = 2 ** 30; // gunzip output cap (decompression-bomb guard)

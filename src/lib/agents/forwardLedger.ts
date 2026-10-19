@@ -43,7 +43,6 @@ import {
   buildCodeFacts,
   eventFactFromRow,
   runFamilies,
-  SPEC_CONSTANTS_V1,
   type Candidate,
   type CodeFacts,
   type EventFact,
@@ -320,7 +319,7 @@ export class LiveWorld implements LedgerSource, PathSource {
     const raw = s.bars.slice(Math.max(0, i + 1 - this.need), i + 1);
     const known = (this.splits.get(code) ?? []).filter((a) => a.exDate <= d);
     const volumes = adjustBars(raw, known).map((b) => b.volume);
-    const tail = SPEC_CONSTANTS_V1.f5DryUpSessions;
+    const tail = this.o.params.specConstants.f5DryUpSessions;
     const ratios = [];
     for (let j = tail - 1; j >= 0; j -= 1) {
       ratios.push(

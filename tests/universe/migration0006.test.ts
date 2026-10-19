@@ -72,7 +72,7 @@ describe("main migration 0006_universe_import", () => {
     const regBefore = (await db.execute("SELECT * FROM source_register ORDER BY source")).rows.map(
       (r) => ({ ...r }),
     );
-    expect(await migrateDown(db, ms, 4)).toEqual({ rolledBack: 4, version: 5 });
+    expect(await migrateDown(db, ms, 5)).toEqual({ rolledBack: 5, version: 5 });
     expect(await cols(db)).not.toContain("industry");
     expect(await cols(db)).not.toContain("missing_count");
     expect(
@@ -91,14 +91,14 @@ describe("main migration 0006_universe_import", () => {
     await expect(db.execute("DELETE FROM source_register")).rejects.toThrow(/forever table/);
     await expect(db.execute("DELETE FROM source_register_history")).rejects.toThrow(/append-only/);
 
-    expect(await migrateUp(db, ms)).toEqual({ applied: 4, version: 9 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 5, version: 10 });
     expect(await schemaOf(db)).toEqual(before);
     expect(
       (await db.execute("SELECT * FROM source_register ORDER BY source")).rows.map((r) => ({
         ...r,
       })),
     ).toEqual(regBefore);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 9 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 10 });
   });
 
   it("down keeps instruments that were already imported (only the two columns go)", async () => {
@@ -107,7 +107,7 @@ describe("main migration 0006_universe_import", () => {
     await db.execute(
       "INSERT INTO instrument (market, code, name, industry) VALUES ('AU', 'ZZAA', 'Synthetic', 'Banks')",
     );
-    await migrateDown(db, ms, 4); // 0009, 0008, 0007 then 0006
+    await migrateDown(db, ms, 5); // 0010, 0009, 0008, 0007 then 0006
     expect(await one(db, "SELECT code, name FROM instrument")).toMatchObject({
       code: "ZZAA",
       name: "Synthetic",

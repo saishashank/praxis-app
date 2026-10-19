@@ -1,6 +1,7 @@
 // @vitest-environment node
 // Typed agent parameters (M4 T2): exact conversion, defaults equal ch.15, fallback on bad values,
 // reading the config store, the parameter hash.
+import { DEFAULT_INJECTION_PHRASES } from "@/lib/llm/injection";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   agentParamKeys,
@@ -197,6 +198,8 @@ describe("defaultAgentParams equals ch.15", () => {
       marketShare: { AU: r(1n) },
       cacheTtlHours: 24,
       r2MaterialityMin: 2,
+      injectionPhrases: DEFAULT_INJECTION_PHRASES,
+      injectionPhrasesVersion: "v1",
     });
   });
 

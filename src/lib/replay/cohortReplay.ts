@@ -34,6 +34,7 @@
 //
 // Determinism (2.8): no clock, no Math.random; every iteration over codes, cohorts and orders is
 // sorted; the PRNG is the arena SplitMix64 seeded by `deriveRngSeed(master, <scope>)`.
+import { PROGRESS_SESSIONS_DEFAULT } from "@/lib/config/keys";
 import {
   evaluateExit,
   runFamilies,
@@ -170,7 +171,7 @@ import type { LedgerSource } from "./ledger";
 import type { PositionFacts } from "./returns";
 
 /** Session counts at which a live cohort's liquidation NAV is sampled for the progress table (ARN-071). */
-export const PROGRESS_SESSIONS: readonly number[] = [21, 63, 126, 189]; // threshold-ok: progress sessions buckets (ch15 l.77, no registry key yet, D-091)
+export const PROGRESS_SESSIONS: readonly number[] = PROGRESS_SESSIONS_DEFAULT; // key progress_sessions_edges (D-111)
 
 /**
  * Same source as the signal ledger: bars, position facts, family inputs and the control universe,
@@ -528,7 +529,7 @@ export function replayCohorts(
   const leverage = opts.leverage ?? params.replay.sleeveLeverage;
   const realityLeverage =
     opts.realityLeverage === undefined ? params.replay.realityCap : opts.realityLeverage;
-  const checkpoints = opts.checkpoints ?? PROGRESS_SESSIONS;
+  const checkpoints = opts.checkpoints ?? params.progress.sessionsEdges;
   const c1Code = opts.c1EtfCode ?? C1_ETF_PLACEHOLDER;
   const c1Active = c1Code !== C1_ETF_PLACEHOLDER;
   const registry = buildExecutionRegistry({ ruleVersion: opts.ruleVersion });

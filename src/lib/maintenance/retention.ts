@@ -44,6 +44,7 @@ import {
 import { readState } from "@/lib/data/backfill/engine.mjs";
 import { appendAuditTx, auditKey, hashUserPii, nullAuditPii } from "@/lib/db/audit";
 import { finishRun, hasSuccess, pruneRuns, startRun } from "@/lib/runs/runRecord";
+import { LEARNING_PRUNED_TABLES } from "@/lib/learning/schema";
 import { SENTINEL_PRUNED_TABLES } from "@/lib/sentinel/schema";
 
 export const MAINTENANCE_JOB = "maintenance-nightly";
@@ -59,6 +60,7 @@ export type MaintenanceCounts = {
   prunedFlags: number;
   prunedAnnouncements: number;
   prunedSentinel: number;
+  prunedLearning: number;
   hashedUsers: number;
 };
 
@@ -179,6 +181,20 @@ export async function pruneSentinelTables(db: Client, nowIso: string): Promise<n
   return results.reduce((n, x) => n + x.rowsAffected, 0);
 }
 
+// M6 (migration 0010, DAT-142): comparison_result (2 years) and kb_archive_run (180 days) lose rows
+// older than their floor; the triggers refuse anything younger. Strictly older rows only.
+export async function pruneLearningTables(db: Client, nowIso: string): Promise<number> {
+  const stmts = Object.entries(LEARNING_PRUNED_TABLES).map(([table, def]) => {
+    const cutoff = cutoffIso(nowIso, def.days);
+    return {
+      sql: `DELETE FROM ${table} WHERE ${def.column} < ?`,
+      args: [def.kind === "date" ? cutoff.slice(0, 10) : cutoff],
+    };
+  });
+  const results = await db.batch(stmts, "write");
+  return results.reduce((n, x) => n + x.rowsAffected, 0);
+}
+
 export async function pruneNonces(db: Client, nowSec: number): Promise<number> {
   const res = await db.execute({
     sql: "DELETE FROM request_nonce WHERE expires_at < ?",
@@ -288,6 +304,7 @@ export async function runMaintenance(
     prunedFlags: 0,
     prunedAnnouncements: 0,
     prunedSentinel: 0,
+    prunedLearning: 0,
     hashedUsers: 0,
   };
   const failedSteps: string[] = [];
@@ -354,6 +371,13 @@ export async function runMaintenance(
   } catch {
     failedSteps.push("prune_sentinel");
   }
+  // M6 learning tables with a retention (comparison_result, kb_archive_run).
+  try {
+    counts.prunedLearning = await pruneLearningTables(mainDb, nowIso);
+    rowsWritten += counts.prunedLearning;
+  } catch {
+    failedSteps.push("prune_learning");
+  }
   // NFR-030: the 90-day value is fixed (no stored override).
   try {
     const r = await hashRevokedUsers(
@@ -377,6 +401,7 @@ export async function runMaintenance(
     counts.prunedFlags +
     counts.prunedAnnouncements +
     counts.prunedSentinel +
+    counts.prunedLearning +
     counts.hashedUsers;
   const ok = failedSteps.length === 0;
   const finish = (status: "success" | "failed") =>

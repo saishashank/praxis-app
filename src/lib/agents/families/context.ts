@@ -3,7 +3,6 @@
 import { cmpRat, makeRational, type Rational } from "@/lib/money/rational";
 import { ratFromNumber, type AgentParams } from "../params";
 import { tierPercentile } from "../indicators";
-import { ARN011_V1, SPEC_CONSTANTS_V1 } from "./constants";
 import type {
   Arn011Thresholds,
   Candidate,
@@ -133,8 +132,8 @@ export function createContext(
   return {
     inputs,
     p,
-    arn011: opts.arn011 ?? ARN011_V1,
-    constants: opts.constants ?? SPEC_CONSTANTS_V1,
+    arn011: opts.arn011 ?? p.arn011,
+    constants: opts.constants ?? p.specConstants,
     u2OptInF1: opts.u2OptInF1 === true,
     restrictToU1: opts.restrictToU1 === true,
     f6Disabled: new Set(opts.f6DisabledClasses ?? []),

@@ -13,7 +13,7 @@
 // corporate-action engines do); this module never throws on bad configuration.
 import { createHash } from "node:crypto";
 import type { Client } from "@libsql/client";
-import { CONFIG_KEYS, type ConfigKey } from "@/lib/config/keys";
+import { CONFIG_KEYS, injectionPhrasesOf, type ConfigKey } from "@/lib/config/keys";
 import { parseRational, type Rational } from "@/lib/money/rational";
 
 export type ConfigSource = (key: ConfigKey) => unknown;
@@ -122,6 +122,81 @@ export type RegimeParams = {
   exitHysteresis: number;
 };
 
+/** ARN-011 filter thresholds (spec 05 l.41; keys arn011_*, D-085, D-111). */
+export type Arn011Params = {
+  gainSessions: number;
+  gainMax: Rational;
+  oneDayGain: Rational;
+  volumeRatioMax: Rational;
+  placementWindow: number;
+  placementsMax: number;
+  raiseWindow: number;
+  queryWindow: number;
+  consolidationWindow: number;
+  rangeFraction: Rational;
+  rangeDaysWindow: number;
+  rangeDaysMin: number;
+};
+
+/** F5 volume exit (spec 07 l.56; keys f5_dry_up_*, D-085, D-111). */
+export type SpecConstantParams = {
+  f5DryUpRatio: Rational;
+  f5DryUpSessions: number;
+};
+
+/** CIF horizons, interval confidence and the progress table buckets (D-091, D-111). */
+export type CifParams = {
+  horizons: readonly number[];
+  confidence: number;
+};
+export type ProgressParams = {
+  navEdgesPpm: readonly number[];
+  sessionsEdges: readonly number[];
+};
+
+/** Learning and knowledge (M6 design 4.12, D-110, D-111). */
+export type LearningParams = {
+  maxChallengers: number;
+  maxPromotionsPerWeek: number;
+  shakedownSessions: number;
+  criticLlmCallsPerNight: number;
+  lessonL0MinN: number;
+  lessonL1MinN: number;
+  lessonBootstrapLevel: number;
+  l2AlphaW0: number;
+  l2AlphaPayout: number;
+  comparisonsFdrQ: number;
+  comparisonLookAlpha: number;
+  comparisonLockoutSessions: number;
+  comparisonMinRows: number;
+  playbookMaxTokens: number;
+  learningLoopMinutes: number;
+  challengerGeneratorPerWeek: number;
+  /** "HH:MM" Melbourne time of the knowledge archive run. */
+  kbArchiveTime: string;
+  /** `none` or provider:model. */
+  classifierModel: string;
+};
+
+export type PickProfileParams = {
+  tiers: readonly string[];
+  maxPctPerPick: number;
+  riskPctPerPick: number;
+};
+
+/** Ch.16 factor data and picks (AGT-112, AGT-113, ARN-095). */
+export type PicksParams = {
+  factorMinBucketN: number;
+  factorBuckets: "terciles" | "quintiles";
+  picksPerProfile: number;
+  picksMaxPerFamily: number;
+  pickValidSessions: number;
+  pickSuccessMinN: number;
+  profiles: Readonly<Record<string, PickProfileParams>>;
+  /** A$ per profile (sizing examples only). */
+  portfolioAmounts: Readonly<Record<string, number>>;
+};
+
 export type StatsParams = {
   alpha: number;
   bootstrapReplicationsMin: number;
@@ -162,6 +237,10 @@ export type StatsParams = {
   barrierKDown: Rational;
   barrierHorizonSessions: number;
   eventCoverageMin: Rational;
+  /** D-090: a gap of this many sessions with a name change flags a reused code. */
+  codeReuseGapSessions: number;
+  /** VAL-110 (vi): variance of the daily Sharpe when fewer than 2 families have development rows. */
+  dsrDefaultSrVariance: number;
 };
 
 export type KillswitchParams = {
@@ -196,6 +275,9 @@ export type LlmParams = {
   marketShare: Readonly<Record<string, Rational>>;
   cacheTtlHours: number;
   r2MaterialityMin: number;
+  /** The phrases of llm_injection_phrases and their list version (LLM-035). */
+  injectionPhrases: readonly string[];
+  injectionPhrasesVersion: string;
 };
 
 export type AgentParams = {
@@ -224,7 +306,13 @@ export type AgentParams = {
   thesisAmberFraction: Rational;
   /** D-096 #16: nights a keyword breaker waits for its confirmation before it reads green again. */
   tbKwConfirmSessions: number;
+  arn011: Arn011Params;
+  specConstants: SpecConstantParams;
+  cif: CifParams;
+  progress: ProgressParams;
   stats: StatsParams;
+  learning: LearningParams;
+  picks: PicksParams;
   killswitch: KillswitchParams;
   replay: ReplayParams;
   llm: LlmParams;
@@ -243,6 +331,12 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
   const regime = obj("regime_params");
   const weights = obj("insider_score_weights");
   const share = obj("llm_market_share");
+  const list = (k: ConfigKey): number[] => value(k) as number[];
+  const profiles = value("pick_profiles") as Record<
+    string,
+    { tiers: string[]; max_pct_per_pick: number; risk_pct_per_pick: number }
+  >;
+  const injection = value("llm_injection_phrases") as { version: string };
   const MICRO_PER_AUD = 1_000_000n; // threshold-ok: unit conversion A$ -> micro-AUD, not a rule
 
   return {
@@ -331,6 +425,72 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
     thesisBreakersMax: num("thesis_breakers_max"),
     thesisAmberFraction: rat("thesis_amber_fraction"),
     tbKwConfirmSessions: num("tb_kw_confirm_sessions"),
+    arn011: {
+      gainSessions: num("arn011_gain_sessions"),
+      gainMax: rat("arn011_gain_max"),
+      oneDayGain: rat("arn011_one_day_gain"),
+      volumeRatioMax: rat("arn011_volume_ratio_max"),
+      placementWindow: num("arn011_placement_window"),
+      placementsMax: num("arn011_placements_max"),
+      raiseWindow: num("arn011_raise_window"),
+      queryWindow: num("arn011_query_window"),
+      consolidationWindow: num("arn011_consolidation_window"),
+      rangeFraction: rat("arn011_range_fraction"),
+      rangeDaysWindow: num("arn011_range_days_window"),
+      rangeDaysMin: num("arn011_range_days_min"),
+    },
+    specConstants: {
+      f5DryUpRatio: rat("f5_dry_up_ratio"),
+      f5DryUpSessions: num("f5_dry_up_sessions"),
+    },
+    cif: { horizons: list("cif_horizons_sessions"), confidence: num("cif_confidence") },
+    progress: {
+      navEdgesPpm: list("progress_nav_edges_ppm"),
+      sessionsEdges: list("progress_sessions_edges"),
+    },
+    learning: {
+      maxChallengers: num("max_challengers"),
+      maxPromotionsPerWeek: num("max_promotions_per_week"),
+      shakedownSessions: num("shakedown_sessions"),
+      criticLlmCallsPerNight: num("critic_llm_calls_per_night"),
+      lessonL0MinN: num("lesson_L0_min_n"),
+      lessonL1MinN: num("lesson_L1_min_n"),
+      lessonBootstrapLevel: num("lesson_bootstrap_level"),
+      l2AlphaW0: num("l2_alpha_w0"),
+      l2AlphaPayout: num("l2_alpha_payout"),
+      comparisonsFdrQ: num("comparisons_fdr_q"),
+      comparisonLookAlpha: num("comparison_look_alpha"),
+      comparisonLockoutSessions: num("comparison_lockout_sessions"),
+      comparisonMinRows: num("comparison_min_rows"),
+      playbookMaxTokens: num("playbook_max_tokens"),
+      learningLoopMinutes: num("learning_loop_minutes"),
+      challengerGeneratorPerWeek: num("challenger_generator_per_week"),
+      kbArchiveTime: str("kb_archive_time"),
+      classifierModel: str("llm_classifier_model"),
+    },
+    picks: {
+      factorMinBucketN: num("factor_min_bucket_n"),
+      factorBuckets: str("factor_buckets") as "terciles" | "quintiles",
+      picksPerProfile: num("picks_per_profile"),
+      picksMaxPerFamily: num("picks_max_per_family"),
+      pickValidSessions: num("pick_valid_sessions"),
+      pickSuccessMinN: num("pick_success_min_n"),
+      profiles: Object.fromEntries(
+        Object.keys(profiles)
+          .sort()
+          .map((n) => [
+            n,
+            {
+              tiers: profiles[n].tiers,
+              maxPctPerPick: profiles[n].max_pct_per_pick,
+              riskPctPerPick: profiles[n].risk_pct_per_pick,
+            },
+          ]),
+      ),
+      portfolioAmounts: Object.fromEntries(
+        Object.entries(obj("profile_portfolio_amount")).sort(([a], [b]) => (a < b ? -1 : 1)),
+      ),
+    },
     stats: {
       alpha: num("alpha"),
       bootstrapReplicationsMin: num("bootstrap_replications_min"),
@@ -371,6 +531,8 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       barrierKDown: rat("barrier_k_down"),
       barrierHorizonSessions: num("barrier_horizon_sessions"),
       eventCoverageMin: pct("event_coverage_min_pct"),
+      codeReuseGapSessions: num("code_reuse_gap_sessions"),
+      dsrDefaultSrVariance: num("dsr_default_sr_variance"),
     },
     killswitch: {
       tradesPerLook: num("killswitch_trades_per_look"),
@@ -409,6 +571,8 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       ),
       cacheTtlHours: num("llm_cache_ttl_hours"),
       r2MaterialityMin: num("r2_materiality_min"),
+      injectionPhrases: injectionPhrasesOf(value("llm_injection_phrases")),
+      injectionPhrasesVersion: injection.version,
     },
   };
 }

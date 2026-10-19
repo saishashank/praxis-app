@@ -207,6 +207,7 @@ describe("run record and concurrency (PLT-017, PLT-076)", () => {
         prunedFlags: 0,
         prunedAnnouncements: 0,
         prunedSentinel: 0,
+        prunedLearning: 0,
         hashedUsers: 0,
       },
     });
@@ -226,6 +227,7 @@ describe("run record and concurrency (PLT-017, PLT-076)", () => {
       prunedFlags: 0,
       prunedAnnouncements: 0,
       prunedSentinel: 0,
+      prunedLearning: 0,
       hashedUsers: 0,
     });
     expect(r.error_summary).toBeNull();
@@ -465,6 +467,7 @@ describe("failure path (PLT-017)", () => {
       prunedFlags: 0,
       prunedAnnouncements: 0,
       prunedSentinel: 0,
+      prunedLearning: 0,
       hashedUsers: 0,
       failedSteps: ["prune_nonces"],
     });

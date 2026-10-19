@@ -21,8 +21,6 @@ import {
   aalenJohansen,
   cifBootstrap,
   cifProportions,
-  CIF_HORIZONS,
-  INTERVAL_CONFIDENCE,
   type BootstrapCif,
   type Cause,
   type CifEstimate,
@@ -30,7 +28,6 @@ import {
   type CifProportion,
 } from "./cif";
 import type { CohortOutcome, CohortReplayResult } from "./cohortReplay";
-import { PROGRESS_SESSIONS } from "./cohortReplay";
 import type { LedgerEntry, LedgerResult } from "./ledger";
 import { costSetupFrom, type CostSetup, type PathSource } from "./returns";
 import { zeroEdge, type ZeroEdgeResult } from "./zeroEdge";
@@ -63,15 +60,6 @@ const frac = (f: { readonly num: bigint; readonly den: bigint }): number =>
   Number(f.num) / Number(f.den);
 const ratNum = (r: Rational): number => Number(r.num) / Number(r.den);
 
-/** Progress table edges: liquidation NAV as ppm of the seed (ch15 l.76 has no registry key yet, D-091). */
-export const PROGRESS_NAV_EDGES_PPM: readonly number[] = [
-  600_000, // threshold-ok: progress NAV bucket edge (ch15 l.76, no registry key yet, D-091)
-  800_000, // threshold-ok: progress NAV bucket edge (ch15 l.76, no registry key yet, D-091)
-  1_000_000, // threshold-ok: progress NAV bucket edge (ch15 l.76, no registry key yet, D-091)
-  1_200_000, // threshold-ok: progress NAV bucket edge (ch15 l.76, no registry key yet, D-091)
-  1_500_000, // threshold-ok: progress NAV bucket edge (ch15 l.76, no registry key yet, D-091)
-  1_800_000, // threshold-ok: progress NAV bucket edge (ch15 l.76, no registry key yet, D-091)
-];
 /** Candle patterns of ARN-074 (AGT-031 v1 candidates). */
 export const PATTERN_NAMES = ["bullishEngulfing", "hammer", "morningStar", "piercingLine"] as const;
 
@@ -184,7 +172,11 @@ export function cohortFigure(
   const sorted = [...outcomes].sort((a, b) => cmp(a.startD, b.startD) || cmp(a.id, b.id));
   const chosen = countedCohorts(sorted);
   const eff = effectiveN(sorted.map(asEffective)).n;
-  const proportions = cifProportions(chosen.map(asEffective), CIF_HORIZONS, INTERVAL_CONFIDENCE);
+  const proportions = cifProportions(
+    chosen.map(asEffective),
+    o.params.cif.horizons,
+    o.params.cif.confidence,
+  );
   const obs: CifObservation[] = sorted.map((c) => ({
     time: c.sessions,
     cause: c.terminalKind as Cause | null,
@@ -194,7 +186,7 @@ export function cohortFigure(
     o.intervals && obs.length > 0
       ? cifBootstrap(
           obs,
-          CIF_HORIZONS,
+          o.params.cif.horizons,
           block,
           o.params.stats.bootstrapSizeCheckReplications,
           `cifboot:${scope}`,
@@ -213,7 +205,7 @@ export function cohortFigure(
       for (let k = 0; k < vals.length; k += 1) s += vals[belowInt(rng, vals.length)]!;
       means[b] = s / vals.length;
     }
-    const lowQ = (1 - INTERVAL_CONFIDENCE) / 2;
+    const lowQ = (1 - o.params.cif.confidence) / 2;
     nav = {
       n: vals.length,
       meanMicro: mean(vals),
@@ -231,7 +223,7 @@ export function cohortFigure(
     resolved: sorted.filter((c) => !c.censored).length,
     censored: sorted.filter((c) => c.censored).length,
     proportions,
-    aalenJohansen: aalenJohansen(obs, CIF_HORIZONS),
+    aalenJohansen: aalenJohansen(obs, o.params.cif.horizons),
     aalenJohansenBootstrap: boot,
     navMinusSeed: nav,
   };
@@ -254,15 +246,15 @@ export function headlines(
   families: readonly string[],
 ): Headline[] {
   const out: Headline[] = [];
-  const last = CIF_HORIZONS.length - 1;
+  const lastOf = (f: CohortFigure): number => f.proportions.length - 1;
   for (const [scope, f] of [...figures.entries()].sort((a, b) => cmp(a[0], b[0]))) {
     if (!/^E\d+/.test(f.executionId)) continue;
     const idx = Number(f.executionId.slice(1));
     const family = families[Math.floor((idx - 1) / 2)];
     if (family === undefined) continue;
     const c2 = figures.get(`C2-${family}`);
-    const target = f.proportions[last]?.cif.target ?? null;
-    const c2Target = c2?.proportions[last]?.cif.target ?? null;
+    const target = f.proportions[lastOf(f)]?.cif.target ?? null;
+    const c2Target = c2?.proportions[c2 === undefined ? 0 : lastOf(c2)]?.cif.target ?? null;
     out.push({
       scope,
       comparator: `C2-${family}`,
@@ -301,9 +293,9 @@ export type ProgressCell = {
   readonly interval: Interval | null;
 };
 
-function navBucket(ppm: number): number | null {
+function navBucket(ppm: number, edges: readonly number[]): number | null {
   let lower: number | null = null;
-  for (const e of PROGRESS_NAV_EDGES_PPM) if (ppm >= e) lower = e;
+  for (const e of edges) if (ppm >= e) lower = e;
   return lower;
 }
 
@@ -311,7 +303,7 @@ function navBucket(ppm: number): number | null {
 export function progressTable(
   outcomes: readonly CohortOutcome[],
   params: AgentParams,
-  sessionsEdges: readonly number[] = PROGRESS_SESSIONS,
+  sessionsEdges: readonly number[] = params.progress.sessionsEdges,
 ): ProgressCell[] {
   const byScope = new Map<string, CohortOutcome[]>();
   for (const c of outcomes) {
@@ -326,7 +318,7 @@ export function progressTable(
       for (const c of list) {
         const point = c.checkpoints.find((p) => p[0] === s);
         if (point === undefined) continue;
-        const b = navBucket(point[1]);
+        const b = navBucket(point[1], params.progress.navEdgesPpm);
         const key = b === null ? "-" : String(b);
         groups.set(key, [...(groups.get(key) ?? []), c]);
       }
@@ -343,7 +335,7 @@ export function progressTable(
           cohorts: members.length,
           effectiveN: eff.n,
           pTarget: enough ? hits / eff.n : null,
-          interval: enough ? wilsonInterval(hits, eff.n, INTERVAL_CONFIDENCE) : null,
+          interval: enough ? wilsonInterval(hits, eff.n, params.cif.confidence) : null,
         });
       }
     }
@@ -535,7 +527,7 @@ export type TradeInput = {
   readonly scope: string;
 };
 
-function intervalOf(values: ArrayLike<number>, confidence = INTERVAL_CONFIDENCE): Interval {
+function intervalOf(values: ArrayLike<number>, confidence: number): Interval {
   const lowQ = (1 - confidence) / 2;
   return { lower: percentile(values, lowQ), upper: percentile(values, 1 - lowQ) };
 }
@@ -606,7 +598,8 @@ export function tradeScorecard(input: TradeInput): TradeScorecard {
   }
   const est = (value: number | null, series: number[]): Estimate => ({
     value,
-    interval: value === null || series.length === 0 ? null : intervalOf(series),
+    interval:
+      value === null || series.length === 0 ? null : intervalOf(series, params.cif.confidence),
   });
   const openDays = new Set<string>();
   for (const e of closed) {
@@ -619,14 +612,14 @@ export function tradeScorecard(input: TradeInput): TradeScorecard {
     scope,
     n,
     insufficient: false,
-    winRate: { value: winCount / n, interval: wilsonInterval(winCount, n, INTERVAL_CONFIDENCE) },
+    winRate: { value: winCount / n, interval: wilsonInterval(winCount, n, params.cif.confidence) },
     avgWin: est(avgWin, aw),
     avgLoss: est(avgLoss, al),
     payoff: est(
       avgWin !== null && avgLoss !== null && avgLoss !== 0 ? avgWin / Math.abs(avgLoss) : null,
       po,
     ),
-    expectancy: { value: mean(r), interval: intervalOf(mR) },
+    expectancy: { value: mean(r), interval: intervalOf(mR, params.cif.confidence) },
     profitFactor: est(
       losses.length > 0 && sum(losses) !== 0 ? sum(wins) / Math.abs(sum(losses)) : null,
       pf,
@@ -815,7 +808,7 @@ function liftCard(
     meanNet: mean(rows.map((r) => r.net)),
     meanControl: mean(rows.map((r) => r.control)),
     lift: mean(lifts),
-    liftInterval: intervalOf(boot.replicateMeans[0]!),
+    liftInterval: intervalOf(boot.replicateMeans[0]!, params.cif.confidence),
     share: { up: share("up"), down: share("down"), time: share("time") },
     block,
     blocks: boot.blocks,
@@ -1056,7 +1049,7 @@ export function leaveOneClassOut(
     if (fullBoot !== null && wBoot !== null) {
       const diff = new Float64Array(B);
       for (let b = 0; b < B; b += 1) diff[b] = fullBoot[b]! - wBoot[b]!;
-      interval = intervalOf(diff);
+      interval = intervalOf(diff, params.cif.confidence);
     }
     classes.push({
       class: cls,

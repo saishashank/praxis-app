@@ -80,6 +80,7 @@ describe("configuration page", () => {
       "Validation statistics",
       "Replay and compute",
       "Sentinel and email",
+      "Learning and knowledge",
       "Other",
       "Recent changes",
     ]);

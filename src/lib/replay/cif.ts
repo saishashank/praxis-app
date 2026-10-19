@@ -11,6 +11,7 @@
 //                      percentile as every other interval in the app;
 //   nonOverlapping     the greedy effective-N selection, reported next to every figure.
 // Pure and deterministic: no clock, no Math.random; sorted iteration, fixed summation order.
+import { CIF_HORIZONS_DEFAULT, CONFIG_KEYS } from "@/lib/config/keys";
 import { effectiveN, type EffectiveNCohort } from "@/lib/arena/cohort";
 import {
   belowInt,
@@ -24,10 +25,10 @@ import {
 export const CAUSES = ["target", "bust", "stalled", "timeout"] as const;
 export type Cause = (typeof CAUSES)[number];
 
-/** ARN-071: the CIF is shown at 3, 6 and 12 months = 63, 126 and 252 sessions. */
-export const CIF_HORIZONS: readonly number[] = [63, 126, 252]; // threshold-ok: ARN-071 3/6/12 months (no registry key yet, D-091)
-/** "All intervals in the app are 90 %" (ARN-070). */
-export const INTERVAL_CONFIDENCE = 0.9; // threshold-ok: ARN-070 all intervals are 90 %
+/** ARN-071: the CIF is shown at 3, 6 and 12 months = 63, 126 and 252 sessions (key cif_horizons_sessions, D-111). */
+export const CIF_HORIZONS: readonly number[] = CIF_HORIZONS_DEFAULT;
+/** "All intervals in the app are 90 %" (ARN-070; key cif_confidence, D-111). */
+export const INTERVAL_CONFIDENCE: number = CONFIG_KEYS.cif_confidence.default as number;
 
 /** One cohort as the estimator sees it: time in sessions, the cause, or null = censored there. */
 export type CifObservation = { readonly time: number; readonly cause: Cause | null };

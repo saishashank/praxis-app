@@ -29,7 +29,7 @@ import {
 } from "./decisionView";
 import { eventFactFromRow } from "./families/facts";
 import { buildCodeFacts } from "./families/facts";
-import { ARN011_V1, FAMILY_AGENT_VERSION } from "./families/constants";
+import { FAMILY_AGENT_VERSION } from "./families/constants";
 import { compareCandidates } from "./families/context";
 import { evaluatePositions } from "./families/exits";
 import type {
@@ -247,7 +247,7 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
   const partialReasons: string[] = [];
 
   // sessions: enough for the longest event window (ARN-011) and the consolidation window
-  const lookback = Math.max(ARN011_V1.placementWindow, ARN011_V1.consolidationWindow); // money-float-ok: window sizes in sessions
+  const lookback = Math.max(p.arn011.placementWindow, p.arn011.consolidationWindow); // money-float-ok: window sizes in sessions
   const sessions = sessionsBetween(addDays(d, -lookback * 2), d, req.calendar);
   const sources = await sourcesOf(db);
   const { byCode: splitsByCode, bad } = splitActionsByCode(req.actions);

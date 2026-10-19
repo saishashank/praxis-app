@@ -184,8 +184,6 @@ export function syntheticBatch(kind: "null" | "injected", o: BatchOptions): Batc
 export const SIZE_LEVELS: readonly number[] = [0.05, 0.01]; // threshold-ok: AT-17 size-check levels
 const ACCEPT_ALPHA = 0.01; // threshold-ok: 99 % binomial acceptance bounds (AT-17)
 export const UNIFORM_ALPHA = 0.01; // threshold-ok: KS uniformity level (decision 27)
-/** Minimum active lineages assumed by the validation level (spec ch.15 active-lineages floor). */
-export const LINEAGES_FLOOR_MIN = 6; // threshold-ok: validation-level lineage floor, ch.15 active_lineages_floor — no separate key yet (D-095)
 const LOWER_TAIL = 0.1; // threshold-ok: lower-tail window of the uniformity check
 
 export type SizeLevel = {
@@ -233,7 +231,7 @@ export function sizeReport(tests: readonly RunTest[], params: AgentParams): Size
   const lower = ps.filter((p) => p <= LOWER_TAIL).map((p) => p / LOWER_TAIL);
   const ks = lower.length === 0 ? { n: 0, d: 0, p: 0 } : ksUniformityTest(lower);
   const uniformity = { ...ks, pass: lower.length > 0 && ks.p >= UNIFORM_ALPHA };
-  const L = Math.max(params.stats.activeLineagesFloor, LINEAGES_FLOOR_MIN);
+  const L = params.stats.activeLineagesFloor;
   const working = [
     params.stats.alpha / params.stats.trialBudgetPerLineage,
     validationLevel(params.stats.alpha, params.stats.trialBudgetPerLineage, L),
@@ -306,7 +304,7 @@ export function fewBlocksCheck(spec: SyntheticSpec = DEFAULT_SPEC): RunTest {
 
 /** The validation level and replicate count of the committed-seed injected run (0.000417, 48,000). */
 export function workingLevel(params: AgentParams): { level: number; B: number } {
-  const L = Math.max(params.stats.activeLineagesFloor, LINEAGES_FLOOR_MIN);
+  const L = params.stats.activeLineagesFloor;
   const level = validationLevel(params.stats.alpha, params.stats.trialBudgetPerLineage, L);
   return { level, B: bootstrapReplications(level) };
 }

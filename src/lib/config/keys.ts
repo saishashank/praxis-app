@@ -1,4 +1,5 @@
 import { COST_PROFILE_CODES } from "@/lib/arena/costs";
+import { DEFAULT_INJECTION_PHRASES } from "@/lib/llm/injection";
 
 // Typed registry of configuration keys (spec ch.15). Values are stored as JSON in config_version.
 // Spec refs cite spec/15_configuration_reference.md line numbers.
@@ -498,11 +499,340 @@ async function validateMarketShare(v: unknown): Promise<string | null> {
   return null;
 }
 
+// ---- M6 keys (learning and knowledge; docs/M6_design.md 4.12, decisions D-110 and D-111) ----
+// Defaults and bounds are those of ch.15 where the spec gives them (ch.15 l.40-75, 124, 170, 182,
+// 207-215). "D-111" marks bounds and keys chosen by the builder (docs/M6_design.md 4.12
+// "agent-chosen") and the reviewed constants that now have a key (D-085, D-090, D-091, D-095).
+// Fixed keys are spec constants no screen edits; the editable ones are Owner-editable (O).
+
+const LRN: ConfigArea = "Learning and knowledge";
+
+// prettier-ignore
+const M6_RANGED = [
+  // Challengers (ARN-005, ARN-065, KB-042)
+  ["max_challengers", "int", 8, 1, 8, "challengers", "O", LRN, "ARN-005, KB-042; ch.15 l.66", "Most challengers per market in proposed ... approved"],
+  ["max_promotions_per_week", "int", 3, 0, 3, "promotions/week", "O", LRN, "ARN-065, KB-042; ch.15 l.67", "Most promotions applied per market per week"],
+  ["shakedown_sessions", "int", 10, 5, 20, "sessions", "O", LRN, "ARN-065; ch.15 l.68", "Live-feed sessions a challenger runs before review"],
+  // Critic wording (LLM-021)
+  ["critic_llm_calls_per_night", "int", 10, 0, 20, "calls/night", "O", LRN, "LLM-021; ch.15 l.124 (bounds 0-20 agent-chosen, D-111)", "Critic wording calls per night per market"],
+  // Ch.16 factor data and picks (AGT-112, AGT-113, ARN-095)
+  ["factor_min_bucket_n", "int", 30, 20, 100, "trades", "O", LRN, "AGT-112; ch.15 l.207", "Trades a factor bucket needs to be shown"],
+  ["picks_per_profile", "int", 5, 0, 10, "picks", "O", LRN, "AGT-113; ch.15 l.208", "Picks per profile per night"],
+  ["picks_max_per_family", "int", 2, 1, 5, "picks", "O", LRN, "AGT-113; ch.15 l.211", "Most picks per profile per night from one family"],
+  ["pick_valid_sessions", "int", 2, 1, 5, "sessions", "O", LRN, "UXN-040, AGT-113; ch.15 l.212", "Sessions a pick's buy zone stays valid"],
+  ["pick_success_min_n", "int", 30, 10, 200, "picks", "O", LRN, "UXN-041; ch.15 l.213 (bounds 'as ch. 16' not given, 10-200 agent-chosen, D-111)", "Closed picks needed before model success is shown"],
+] as const satisfies readonly RangedRow[];
+
+// prettier-ignore
+const M6_FIXED = [
+  // Lessons (ARN-063, KB-020)
+  ["lesson_L0_min_n", "int", 10, "rows", LRN, "ARN-063, M6 decision 42 (D-110); not in ch.15", "Rows a cell needs to be stored as an L0 observation"],
+  ["lesson_L1_min_n", "int", 30, "rows", LRN, "ARN-063; ch.15 l.69", "Rows a lesson needs for L1 and for the L2 test"],
+  ["lesson_bootstrap_level", "num", 0.1, "level", LRN, "ARN-063, M6 decision 13 (D-110): two-sided 90 % interval", "Level of the L1 block-bootstrap interval"],
+  ["l2_alpha_w0", "num", 0.1, "level", LRN, "ARN-063 l2_alpha_investing; ch.15 l.49", "Alpha-investing starting wealth per pool"],
+  ["l2_alpha_payout", "num", 0.05, "level", LRN, "ARN-063 l2_alpha_investing; ch.15 l.49", "Alpha-investing payout on a rejection"],
+  // Comparisons (ARN-062)
+  ["comparisons_fdr_q", "num", 0.1, "level", LRN, "ARN-062; ch.15 l.51, l.70", "Benjamini-Hochberg level of the weekly comparisons"],
+  ["comparison_look_alpha", "num", 0.05, "level", LRN, "ARN-062; ch.15 l.51", "One-sided level of the confirmation look"],
+  ["comparison_lockout_sessions", "int", 60, "sessions", LRN, "ARN-062; ch.15 l.51", "Sessions a pair is locked out after a failed look"],
+  ["comparison_min_rows", "int", 30, "rows", LRN, "ARN-062; ch.15 l.51", "Rows per side a comparison needs"],
+  // Playbooks, loop, generator (KB-002, NFR-011, ARN-065) - not keyed in ch.15
+  ["playbook_max_tokens", "int", 1500, "tokens", LRN, "KB-002, M6 decision 28 (D-110); not in ch.15", "Largest agent playbook"],
+  ["learning_loop_minutes", "int", 5, "min", LRN, "NFR-011, M6 decision 27 (D-110); not in ch.15", "Target length of the nightly learning loop"],
+  ["challenger_generator_per_week", "int", 1, "challengers", LRN, "ARN-065, M6 decision 20 (D-110); not in ch.15", "Challengers the generator proposes per lineage per week"],
+  // Statistics that were reviewed constants (D-090, D-091)
+  ["code_reuse_gap_sessions", "int", 120, "sessions", VAL, "ARN-082 code reuse; D-090 (key added, D-111)", "Gap that, with a name change, flags a reused code"],
+  ["dsr_default_sr_variance", "num", 0.0001, "variance", VAL, "VAL-110 (vi); ch.15 l.47: computed at the first evidence run and frozen per split (a computed config version like K, D-093); this default is the fallback when fewer than 2 families have development rows (D-111)", "Default variance of the daily Sharpe across variants (DSR)"],
+  ["cif_confidence", "num", 0.9, "level", VAL, "ARN-070 all intervals are 90 %; D-091 (key added, D-111)", "Confidence level of every interval in the app"],
+  // ARN-011 filter thresholds (spec 05 l.41, Owner-only; fixed until the Owner confirms them, D-085, D-111)
+  ["arn011_gain_sessions", "int", 5, "sessions", FAM, "ARN-011 +100 % in 5 sessions; D-085 (key added, D-111)", "ARN-011: window of the large-gain filter"],
+  ["arn011_gain_max", "num", 1, "fraction", FAM, "ARN-011 +100 % (a gain of 1.00); D-085 (key added, D-111)", "ARN-011: gain over the window that blocks an entry"],
+  ["arn011_one_day_gain", "num", 0.3, "fraction", FAM, "ARN-011 +30 % in one session; D-085 (key added, D-111)", "ARN-011: one-session gain that blocks an entry"],
+  ["arn011_volume_ratio_max", "num", 10, "x", FAM, "ARN-011 volume ratio above 10; D-085 (key added, D-111)", "ARN-011: volume ratio that blocks an entry"],
+  ["arn011_placement_window", "int", 120, "sessions", FAM, "ARN-011 placements in 120 sessions; D-085 (key added, D-111)", "ARN-011: window of the placements filter"],
+  ["arn011_placements_max", "int", 2, "placements", FAM, "ARN-011 two or more placements block; D-085 (key added, D-111)", "ARN-011: placements in the window that block an entry"],
+  ["arn011_raise_window", "int", 60, "sessions", FAM, "ARN-011 deep-discount raise in 60 sessions; D-085 (key added, D-111)", "ARN-011: window of the discount-raise filter"],
+  ["arn011_query_window", "int", 2, "sessions", FAM, "ARN-011 exchange query on D or D-1; D-085 (key added, D-111)", "ARN-011: window of the exchange-query filter"],
+  ["arn011_consolidation_window", "int", 90, "sessions", FAM, "ARN-011 consolidation in 90 sessions; D-085 (key added, D-111)", "ARN-011: window of the consolidation filter"],
+  ["arn011_range_fraction", "num", 0.25, "fraction", FAM, "ARN-011 range above 25 % of price; D-085 (key added, D-111)", "ARN-011: day range, as a share of price, that counts as wide"],
+  ["arn011_range_days_window", "int", 5, "sessions", FAM, "ARN-011 last 5 sessions; D-085 (key added, D-111)", "ARN-011: window of the wide-range filter"],
+  ["arn011_range_days_min", "int", 3, "sessions", FAM, "ARN-011 at least 3 of them; D-085 (key added, D-111)", "ARN-011: wide-range sessions in the window that block an entry"],
+  // F5 volume exit (spec 07 l.56, D-085)
+  ["f5_dry_up_ratio", "num", 0.5, "x", FAM, "F5 CS: volume ratio below 0.5 (spec 07 l.56); D-085 (key added, D-111)", "F5: volume ratio under which volume has dried up"],
+  ["f5_dry_up_sessions", "int", 3, "sessions", FAM, "F5 CS: for 3 sessions (spec 07 l.56); D-085 (key added, D-111)", "F5: sessions of dried-up volume that exit"],
+] as const satisfies readonly FixedRow[];
+
+type M6RangedKey = (typeof M6_RANGED)[number][0];
+type M6FixedKey = (typeof M6_FIXED)[number][0];
+
+const M6_RANGED_KEYS = Object.fromEntries(
+  M6_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M6RangedKey, ConfigKeyDef>;
+
+const M6_FIXED_KEYS = Object.fromEntries(
+  M6_FIXED.map(([key, , def, unit, , ref]) => [
+    key,
+    { default: def, unit, editable: "fixed", ref, validate: never } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M6FixedKey, ConfigKeyDef>;
+
+const M6_META_TABLES: Record<M6RangedKey | M6FixedKey, ConfigMeta> = {
+  ...(Object.fromEntries(
+    M6_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+      key,
+      {
+        label,
+        area,
+        bounds: boundsText(kind, min, max, unit),
+        input: kind === "int" ? "int" : "number",
+      },
+    ]),
+  ) as Record<M6RangedKey, ConfigMeta>),
+  ...(Object.fromEntries(
+    M6_FIXED.map(([key, kind, , , area, , label]) => [
+      key,
+      { label, area, bounds: "fixed", input: kind === "num" ? "number" : "int" },
+    ]),
+  ) as Record<M6FixedKey, ConfigMeta>),
+};
+
+/** CIF horizons 3, 6 and 12 months in sessions (ARN-071; D-091, key added D-111). */
+export const CIF_HORIZONS_DEFAULT: readonly number[] = [63, 126, 252]; // threshold-ok: ARN-071 3/6/12 months
+/** Progress table NAV bucket lower edges, ppm of the seed (ch.15 l.76; D-091, key added D-111). */
+export const PROGRESS_NAV_EDGES_DEFAULT: readonly number[] = [
+  600_000, 800_000, 1_000_000, 1_200_000, 1_500_000, 1_800_000,
+]; // threshold-ok: progress NAV bucket edges
+/** Progress table session checkpoints (ch.15 l.77; D-091, key added D-111). */
+export const PROGRESS_SESSIONS_DEFAULT: readonly number[] = [21, 63, 126, 189]; // threshold-ok: progress sessions buckets
+
+/** Names allowed for a pick profile (the Owner may rename them, AGT-113). */
+const PROFILE_NAME_RE = /^[a-z][a-z0-9_]{0,23}$/;
+const PICK_TIERS = ["U1", "U2", "U3"] as const;
+export const PICK_PROFILE_FIELDS = ["tiers", "max_pct_per_pick", "risk_pct_per_pick"] as const;
+
+/** pick_profiles (ch.15 l.209): per profile the tiers and the two caps, each cap 0-100 %. */
+async function validatePickProfiles(v: unknown): Promise<string | null> {
+  if (!isObj(v) || Object.keys(v).length < 1 || Object.keys(v).length > 6) {
+    return "must list 1 to 6 profiles";
+  }
+  for (const [name, p] of Object.entries(v)) {
+    if (!PROFILE_NAME_RE.test(name)) {
+      return `profile name ${name} must be lower-case letters, digits or _`;
+    }
+    if (!exactKeys(p, [...PICK_PROFILE_FIELDS])) {
+      return `${name} needs ${PICK_PROFILE_FIELDS.join(", ")}`;
+    }
+    const { tiers, max_pct_per_pick: max, risk_pct_per_pick: risk } = p;
+    if (
+      !Array.isArray(tiers) ||
+      tiers.length < 1 ||
+      !tiers.every((t) => (PICK_TIERS as readonly unknown[]).includes(t)) ||
+      new Set(tiers).size !== tiers.length
+    ) {
+      return `${name}: tiers must be distinct values from ${PICK_TIERS.join(", ")}`;
+    }
+    if (!isNum(max) || max < 0 || max > 100) return `${name}: max_pct_per_pick must be 0 to 100`;
+    if (!isNum(risk) || risk < 0 || risk > 100) {
+      return `${name}: risk_pct_per_pick must be 0 to 100`;
+    }
+  }
+  return null;
+}
+
+/** profile_portfolio_amount (ch.15 l.210): A$1,000-1,000,000 per profile, sizing examples only. */
+async function validateProfileAmounts(v: unknown): Promise<string | null> {
+  if (!isObj(v) || Object.keys(v).length < 1 || Object.keys(v).length > 6) {
+    return "must list 1 to 6 profiles";
+  }
+  for (const [name, x] of Object.entries(v)) {
+    if (!PROFILE_NAME_RE.test(name)) {
+      return `profile name ${name} must be lower-case letters, digits or _`;
+    }
+    if (!isInt(x) || x < 1000 || x > 1_000_000) {
+      return `${name}: must be a whole A$ amount from 1000 to 1000000`;
+    }
+  }
+  return null;
+}
+
+export const INJECTION_PHRASES_KEY_VERSION = "v1";
+/** llm_injection_phrases (ch.15 l.182, LLM-035): a versioned phrase list the Owner can extend. */
+async function validateInjectionPhrases(v: unknown): Promise<string | null> {
+  if (!exactKeys(v, ["version", "phrases"])) return "needs version and phrases";
+  const { version, phrases } = v;
+  if (typeof version !== "string" || !/^[A-Za-z0-9._-]{1,16}$/.test(version)) {
+    return "version must be 1 to 16 letters, digits, . _ or -";
+  }
+  if (!Array.isArray(phrases) || phrases.length < 1 || phrases.length > 200) {
+    return "phrases must be a list of 1 to 200 phrases";
+  }
+  const seen = new Set<string>();
+  for (const p of phrases) {
+    if (typeof p !== "string" || p.trim().length < 3 || p.length > 120) {
+      return "every phrase must be 3 to 120 characters";
+    }
+    const k = p.trim().toLowerCase();
+    if (seen.has(k)) return "phrases must be distinct (ignoring case)";
+    seen.add(k);
+  }
+  return null;
+}
+
+/** The phrase list inside a stored llm_injection_phrases value (anything invalid gives the built-in v1 list). */
+export function injectionPhrasesOf(v: unknown): readonly string[] {
+  if (isObj(v) && Array.isArray(v.phrases) && v.phrases.every((p) => typeof p === "string")) {
+    return v.phrases as string[];
+  }
+  return DEFAULT_INJECTION_PHRASES;
+}
+
+const M6_EXPLICIT_KEYS = {
+  // ch.15 l.170: selected by the LLM-040 bake-off; none until one passes (M6 decision 9, D-110).
+  llm_classifier_model: {
+    default: "none",
+    unit: "provider:model",
+    editable: "O",
+    ref: "KB-032, LLM-040; ch.15 l.170 (default none until a bake-off passes, D-110; provider list [VERIFY])",
+    validate: async (v: unknown) =>
+      v === "none" ||
+      (typeof v === "string" && /^[a-z][a-z0-9_-]{1,30}:[A-Za-z0-9._/-]{1,80}$/.test(v))
+        ? null
+        : "must be none or provider:model (set only after a passing bake-off)",
+  },
+  llm_injection_phrases: {
+    default: { version: INJECTION_PHRASES_KEY_VERSION, phrases: [...DEFAULT_INJECTION_PHRASES] },
+    unit: "phrases",
+    editable: "O",
+    ref: "LLM-035, KB-061; ch.15 l.182 (default = the built-in v1 list, D-084, D-111)",
+    validate: async (v: unknown) => validateInjectionPhrases(v),
+  },
+  // ch.15 l.214: terciles (default) or quintiles of the development distribution.
+  factor_buckets: {
+    default: "terciles",
+    unit: "buckets",
+    editable: "O",
+    ref: "AGT-112; ch.15 l.214 (terciles / quintiles)",
+    validate: oneOf(["terciles", "quintiles"]),
+  },
+  // M6 decision 29 (D-110): the archive time, after the late review store; not in ch.15.
+  kb_archive_time: {
+    default: "22:15",
+    unit: "Melbourne time",
+    editable: "O",
+    ref: "PLT-022a, M6 decision 29 (D-110); bounds 21:00-23:00 agent-chosen (D-111)",
+    validate: timeIn("21:00", "23:00"),
+  },
+  pick_profiles: {
+    default: {
+      aggressive: { tiers: ["U1", "U2", "U3"], max_pct_per_pick: 20, risk_pct_per_pick: 2 },
+      balanced: { tiers: ["U1", "U2"], max_pct_per_pick: 10, risk_pct_per_pick: 1 },
+      conservative: { tiers: ["U1"], max_pct_per_pick: 5, risk_pct_per_pick: 0.5 },
+    },
+    unit: "mixed",
+    editable: "O",
+    ref: "AGT-113; ch.15 l.209 (each cap 0-100 %)",
+    validate: async (v: unknown) => validatePickProfiles(v),
+  },
+  profile_portfolio_amount: {
+    default: { aggressive: 10000, balanced: 10000, conservative: 10000 },
+    unit: "A$",
+    editable: "O",
+    ref: "AGT-113, UXN-040; ch.15 l.210 (A$1,000-1,000,000)",
+    validate: async (v: unknown) => validateProfileAmounts(v),
+  },
+  cif_horizons_sessions: {
+    default: [...CIF_HORIZONS_DEFAULT],
+    unit: "sessions",
+    editable: "fixed",
+    ref: "ARN-071 3, 6 and 12 months; D-091 (key added, D-111)",
+    validate: never,
+  },
+  progress_nav_edges_ppm: {
+    default: [...PROGRESS_NAV_EDGES_DEFAULT],
+    unit: "ppm of seed",
+    editable: "fixed",
+    ref: "ARN-071; ch.15 l.76; D-091 (key added, D-111)",
+    validate: never,
+  },
+  progress_sessions_edges: {
+    default: [...PROGRESS_SESSIONS_DEFAULT],
+    unit: "sessions",
+    editable: "fixed",
+    ref: "ARN-071; ch.15 l.77; D-091 (key added, D-111)",
+    validate: never,
+  },
+} satisfies Record<string, ConfigKeyDef>;
+
+const M6_EXPLICIT_META: Record<keyof typeof M6_EXPLICIT_KEYS, ConfigMeta> = {
+  llm_classifier_model: {
+    label: "Injection classifier model (none until a bake-off passes)",
+    area: LRN,
+    bounds: "none, or provider:model",
+    input: "text",
+  },
+  llm_injection_phrases: {
+    label: "Prompt-injection phrase list (versioned)",
+    area: LRN,
+    bounds: 'JSON {"version": "v1", "phrases": [...]}, 3 to 120 characters each, up to 200',
+    input: "object",
+  },
+  factor_buckets: {
+    label: "Factor buckets",
+    area: LRN,
+    bounds: "terciles or quintiles",
+    input: "text",
+  },
+  kb_archive_time: {
+    label: "Knowledge archive time",
+    area: LRN,
+    bounds: "HH:MM, 21:00 to 23:00",
+    input: "text",
+  },
+  pick_profiles: {
+    label: "Pick profiles: tiers and caps",
+    area: LRN,
+    bounds: "1 to 6 profiles of tiers, max % per pick and risk % per pick, each cap 0 to 100",
+    input: "object",
+  },
+  profile_portfolio_amount: {
+    label: "Pick profile portfolio amount (sizing examples only)",
+    area: LRN,
+    bounds: "A$1,000 to A$1,000,000 per profile",
+    input: "object",
+  },
+  cif_horizons_sessions: { label: "CIF horizons", area: VAL, bounds: "fixed", input: "list" },
+  progress_nav_edges_ppm: {
+    label: "Progress table NAV bucket edges",
+    area: VAL,
+    bounds: "fixed",
+    input: "list",
+  },
+  progress_sessions_edges: {
+    label: "Progress table session checkpoints",
+    area: VAL,
+    bounds: "fixed",
+    input: "list",
+  },
+};
+
 export const CONFIG_KEYS = {
   ...M4_RANGED_KEYS,
   ...M4_FIXED_KEYS,
   ...M5_RANGED_KEYS,
   ...M5_FIXED_KEYS,
+  ...M6_RANGED_KEYS,
+  ...M6_FIXED_KEYS,
+  ...M6_EXPLICIT_KEYS,
   // ch.15 l.163: evening_review_time / partial_at / send_by 20:00 / 20:30 / 20:45, O; EML-010/011.
   evening_review_time: {
     default: "20:00",
@@ -974,6 +1304,7 @@ export type ConfigArea =
   | "Validation statistics"
   | "Replay and compute"
   | "Sentinel and email"
+  | "Learning and knowledge"
   | "Other";
 export type ConfigInput = "int" | "number" | "list" | "object" | "text";
 export type ConfigMeta = { label: string; area: ConfigArea; bounds: string; input: ConfigInput };
@@ -988,12 +1319,15 @@ export const CONFIG_AREAS: ConfigArea[] = [
   "Validation statistics",
   "Replay and compute",
   "Sentinel and email",
+  "Learning and knowledge",
   "Other",
 ];
 
 export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   ...M4_META,
   ...M5_META_TABLES,
+  ...M6_META_TABLES,
+  ...M6_EXPLICIT_META,
   evening_review_time: {
     label: "Evening Review send time",
     area: SEM,
@@ -1299,4 +1633,11 @@ export const M5_KEY_NAMES: readonly ConfigKey[] = [
   "morning_brief_time",
   "evening_review_paused",
   "email_retry_policy",
+];
+
+/** Every key added in M6 (docs/M6_design.md 4.12 and D-111): the tables above plus the explicit entries. */
+export const M6_KEY_NAMES: readonly ConfigKey[] = [
+  ...M6_RANGED.map((r) => r[0]),
+  ...M6_FIXED.map((r) => r[0]),
+  ...(Object.keys(M6_EXPLICIT_KEYS) as ConfigKey[]),
 ];

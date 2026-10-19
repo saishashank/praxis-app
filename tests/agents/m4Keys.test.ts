@@ -9,6 +9,7 @@ import {
   CONFIG_KEYS,
   CONFIG_META,
   M5_KEY_NAMES,
+  M6_KEY_NAMES,
   type ConfigKey,
 } from "@/lib/config/keys";
 import { getConfig, setConfig } from "@/lib/config/store";
@@ -252,6 +253,7 @@ describe("M4 keys: defaults and bounds equal ch.15", () => {
       "c1_etf_code",
       "pii_hash_after_revocation_days",
       ...M5_KEY_NAMES, // the M5 keys have their own table in tests/sentinel/m5Keys.test.ts
+      ...M6_KEY_NAMES, // the M6 keys have their own table in tests/learning/m6Keys.test.ts
     ]);
     const listed = new Set<string>([
       ...RANGED.map((r) => r[0]),

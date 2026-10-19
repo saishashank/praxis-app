@@ -20,6 +20,7 @@ import {
   type ConfigKey,
 } from "./keys";
 import { invalidateConfigCache } from "./runtime";
+import { configEditRefusal, ruleVersionsSeeded } from "@/lib/learning/bKeyLock";
 import { getConfig, setConfig } from "./store";
 
 export type ConfigRow = {
@@ -35,6 +36,8 @@ export type ConfigRow = {
   value: unknown;
   source: "default" | "stored";
   lastChange: { at: string; versionId: number } | null;
+  /** A Lane-B key after the v1 seed: changes only as a new rule version (D-110 decision 45). */
+  locked: boolean;
 };
 
 export type ConfigHistoryRow = {
@@ -84,6 +87,7 @@ export async function listConfig(mainDb: Client, scope = "global"): Promise<Conf
     const target = String(r.scope) === scope ? own : global;
     if (!target.has(k)) target.set(k, r);
   }
+  const seeded = await ruleVersionsSeeded(mainDb);
   return keysOf.map((key) => {
     const def = CONFIG_KEYS[key];
     const meta = CONFIG_META[key];
@@ -101,6 +105,7 @@ export async function listConfig(mainDb: Client, scope = "global"): Promise<Conf
       value: row ? JSON.parse(String(row.value_json)) : def.default,
       source: row ? "stored" : "default",
       lastChange: row ? { at: String(row.changed_at), versionId: Number(row.id) } : null,
+      locked: seeded && def.editable === "B",
     };
   });
 }
@@ -218,6 +223,8 @@ export async function updateConfig(p: UpdateInput): Promise<UpdateResult> {
   const key = p.key;
   const def = CONFIG_KEYS[key];
   if (def.editable === "fixed") return fail("fixed", "This setting is fixed by the spec.");
+  const locked = await configEditRefusal(p.mainDb, key);
+  if (locked !== null) return fail("fixed", locked);
   const scope = p.scope === undefined ? "global" : p.scope;
   if (typeof scope !== "string" || !SCOPE_RE.test(scope)) return fail("invalid", "Invalid scope.");
   const reason = typeof p.reason === "string" ? p.reason.trim() : "";

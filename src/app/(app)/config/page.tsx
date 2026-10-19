@@ -40,7 +40,9 @@ function Row({ r, tf }: { r: ConfigRow; tf: TimeFormat }) {
       <td className="py-2 pr-4">{r.bounds}</td>
       <td className="py-2 pr-4">{r.ref}</td>
       <td className="py-2">
-        {r.editable === "fixed" ? (
+        {r.locked ? (
+          <span>Changes only as a new rule version (Lane B)</span>
+        ) : r.editable === "fixed" ? (
           <span>
             {r.key === "market_mode" ? "Set on System Health (Data controls)" : "Fixed by the spec"}
           </span>

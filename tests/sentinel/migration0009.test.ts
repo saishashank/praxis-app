@@ -1190,6 +1190,8 @@ describe("main migration 0009_sentinel_email: up / down / up and backup", () => 
   it("down removes every table, trigger and index of 0009 and touches nothing else; up restores an identical schema", async () => {
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
+    const full = await schemaOf(db);
+    await migrateDown(db, ms, 1); // 0010 (learning) sits on top: take the schema as of 0009
     const before = await schemaOf(db);
     expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 8 });
     const mid = await schemaOf(db);
@@ -1208,9 +1210,9 @@ describe("main migration 0009_sentinel_email: up / down / up and backup", () => 
       );
     });
     expect(mid).toEqual(rest);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 1, version: 9 });
-    expect(await schemaOf(db)).toEqual(before);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 9 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 2, version: 10 }); // 0009, then 0010
+    expect(await schemaOf(db)).toEqual(full);
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 10 });
   });
 
   it("dump and restore round-trip rows, triggers and the history log (no double log)", async () => {
@@ -1229,7 +1231,7 @@ describe("main migration 0009_sentinel_email: up / down / up and backup", () => 
       /append-only/,
     );
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 9 });
+    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 10 });
   });
 
   it("the backup meta line lists the forever tables and not the pruned ones", async () => {
