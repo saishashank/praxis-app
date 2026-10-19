@@ -1,0 +1,142 @@
+[
+  {
+    "id": "ZZ-TRI-01",
+    "category": "triage",
+    "facts": {
+      "ref": "ZZ-TRI-01",
+      "code": "ZZA"
+    },
+    "untrusted": [
+      "Zenith Zinc wins a supply contract worth 48 million over three years."
+    ],
+    "reference": {
+      "label": "price_sensitive"
+    }
+  },
+  {
+    "id": "ZZ-TRI-02",
+    "category": "triage",
+    "facts": {
+      "ref": "ZZ-TRI-02",
+      "code": "ZZB"
+    },
+    "untrusted": [
+      "Zephyr Foods upgrades full year earnings guidance by 12 percent."
+    ],
+    "reference": {
+      "label": "price_sensitive"
+    }
+  },
+  {
+    "id": "ZZ-TRI-03",
+    "category": "triage",
+    "facts": {
+      "ref": "ZZ-TRI-03",
+      "code": "ZZC"
+    },
+    "untrusted": [
+      "Zircon Rail announces a 30 million placement at a discount to the last close."
+    ],
+    "reference": {
+      "label": "price_sensitive"
+    }
+  },
+  {
+    "id": "ZZ-TRI-04",
+    "category": "triage",
+    "facts": {
+      "ref": "ZZ-TRI-04",
+      "code": "ZZD"
+    },
+    "untrusted": [
+      "Zodiac Labs receives a non-binding takeover proposal."
+    ],
+    "reference": {
+      "label": "price_sensitive"
+    }
+  },
+  {
+    "id": "ZZ-TRI-05",
+    "category": "triage",
+    "facts": {
+      "ref": "ZZ-TRI-05",
+      "code": "ZZE"
+    },
+    "untrusted": [
+      "Zulu Freight requests a trading halt pending a material announcement."
+    ],
+    "reference": {
+      "label": "price_sensitive"
+    }
+  },
+  {
+    "id": "ZZ-TRI-06",
+    "category": "triage",
+    "facts": {
+      "ref": "ZZ-TRI-06",
+      "code": "ZZF"
+    },
+    "untrusted": [
+      "Zebra Water lodges Appendix 3Y, change of director interest."
+    ],
+    "reference": {
+      "label": "routine"
+    }
+  },
+  {
+    "id": "ZZ-TRI-07",
+    "category": "triage",
+    "facts": {
+      "ref": "ZZ-TRI-07",
+      "code": "ZZG"
+    },
+    "untrusted": [
+      "Zion Mining gives notice of its annual general meeting."
+    ],
+    "reference": {
+      "label": "routine"
+    }
+  },
+  {
+    "id": "ZZ-TRI-08",
+    "category": "triage",
+    "facts": {
+      "ref": "ZZ-TRI-08",
+      "code": "ZZH"
+    },
+    "untrusted": [
+      "Zigzag Media advises a change of share registry address."
+    ],
+    "reference": {
+      "label": "routine"
+    }
+  },
+  {
+    "id": "ZZ-TRI-09",
+    "category": "triage",
+    "facts": {
+      "ref": "ZZ-TRI-09",
+      "code": "ZZJ"
+    },
+    "untrusted": [
+      "Zoom Retail lodges the quarterly cash flow report, no change to outlook."
+    ],
+    "reference": {
+      "label": "routine"
+    }
+  },
+  {
+    "id": "ZZ-TRI-10",
+    "category": "triage",
+    "facts": {
+      "ref": "ZZ-TRI-10",
+      "code": "ZZK"
+    },
+    "untrusted": [
+      "Zesty Farms issues a cleansing notice for shares issued on option exercise."
+    ],
+    "reference": {
+      "label": "routine"
+    }
+  }
+]
