@@ -17,7 +17,34 @@
   --color-negative: #f08a4b;
   --color-warning: #e8b339;
   --color-focus: #8fd3ff;
+  --color-regime-shock: #ff7a90;
+  --color-regime-riskoff: #c9a0ff;
+  --color-regime-riskon: #7fb4ff;
+  --color-regime-neutral: #aeb8c8;
+  --color-label-unvalidated: #b4bccb;
+  --color-label-passed: #8ad7a0;
+  --color-label-consistent: #9fb8ff;
+  --color-label-failed: #ff8a8a;
+  --color-label-notdemo: #e6c86e;
+  --color-label-unvalidatable: #b9a8d9;
+  --color-breaker-green: #6fd08c;
+  --color-breaker-amber: #f0b94a;
+  --color-breaker-red: #ff6b6b;
+  --color-chart-1: #8fd3ff;
+  --color-chart-2: #c3a6ff;
+  --color-chart-3: #f0c36a;
+  --color-chart-4: #7fe0a8;
+  --color-grid: #66758c;
+  --color-surface-2: #1b2431;
+  --color-danger: #ff7b72;
   --font-sans: var(--font-inter), system-ui, sans-serif;
+  /* Numbers use font-mono with tabular figures (UXN-002). */
+  --font-mono:
+    var(--font-jetbrains-mono), ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  /* Breakpoints (M7 design 4.5): sm = tables become cards below it; lg = desktop header. */
+  --breakpoint-sm: 600px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
 }
 
 *,
@@ -30,6 +57,15 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
+}
+
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* WCAG 2.4.11: focused elements are not hidden by the sticky header or bottom bar. */
+html {
+  scroll-padding-block: 4rem;
 }
 
 /* UXN-015: always-visible 2px keyboard focus ring on every interactive element. */

@@ -14,7 +14,7 @@ describe("theme tokens (UXN-001, UXN-280)", () => {
   });
 
   it("every themed token is registered for Tailwind in globals.css", () => {
-    const tokens = [...themesCss.matchAll(/^\s+(--color-[a-z-]+):/gm)].map((m) => m[1]);
+    const tokens = [...themesCss.matchAll(/^\s+(--color-[a-z0-9-]+):/gm)].map((m) => m[1]);
     expect(tokens.length).toBeGreaterThan(8);
     for (const t of new Set(tokens)) expect(globalsCss).toContain(`${t}:`);
   });

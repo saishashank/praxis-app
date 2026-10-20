@@ -32,7 +32,10 @@
  *   tokens, and dark tokens under prefers-color-scheme: dark. The dark values in the media block
  *   MUST equal the dark theme block (checked by the contrast checker).
  * - Gain/loss = --color-positive / --color-negative (teal / burnt orange). Always pair with sign,
- *   arrow and label; never colour alone. Regime / validation families get their own tokens later.
+ *   arrow and label; never colour alone. Regime, validation-label and breaker families have their
+ *   own tokens (--color-regime-*, --color-label-*, --color-breaker-*), never the gain/loss pair.
+ *   Chart series are --color-chart-1..4, grid lines --color-grid, raised panels --color-surface-2,
+ *   destructive buttons --color-danger (M7 T1, D-130).
  */
 
 /* Dark (default) */
@@ -48,6 +51,26 @@
   --color-positive: #2db5a3;
   --color-negative: #f08a4b;
   --color-warning: #e8b339;
+  --color-regime-shock: #ff7a90;
+  --color-regime-riskoff: #c9a0ff;
+  --color-regime-riskon: #7fb4ff;
+  --color-regime-neutral: #aeb8c8;
+  --color-label-unvalidated: #b4bccb;
+  --color-label-passed: #8ad7a0;
+  --color-label-consistent: #9fb8ff;
+  --color-label-failed: #ff8a8a;
+  --color-label-notdemo: #e6c86e;
+  --color-label-unvalidatable: #b9a8d9;
+  --color-breaker-green: #6fd08c;
+  --color-breaker-amber: #f0b94a;
+  --color-breaker-red: #ff6b6b;
+  --color-chart-1: #8fd3ff;
+  --color-chart-2: #c3a6ff;
+  --color-chart-3: #f0c36a;
+  --color-chart-4: #7fe0a8;
+  --color-grid: #66758c;
+  --color-surface-2: #1b2431;
+  --color-danger: #ff7b72;
   --color-focus: #8fd3ff;
   --logo-light-display: none;
   --logo-dark-display: block;
@@ -68,6 +91,26 @@
   --color-positive: #0b7a6c;
   --color-negative: #b0440c;
   --color-warning: #85560a;
+  --color-regime-shock: #b3153d;
+  --color-regime-riskoff: #6b3fb8;
+  --color-regime-riskon: #1f5fb3;
+  --color-regime-neutral: #4a5568;
+  --color-label-unvalidated: #4f5a6b;
+  --color-label-passed: #17663a;
+  --color-label-consistent: #3a4fb0;
+  --color-label-failed: #a8231f;
+  --color-label-notdemo: #7a5a00;
+  --color-label-unvalidatable: #6a4a96;
+  --color-breaker-green: #1a6e35;
+  --color-breaker-amber: #85560a;
+  --color-breaker-red: #b3261e;
+  --color-chart-1: #1b6aa5;
+  --color-chart-2: #7a4fc4;
+  --color-chart-3: #9a6a00;
+  --color-chart-4: #1e8a55;
+  --color-grid: #788296;
+  --color-surface-2: #e6eaf0;
+  --color-danger: #b42318;
   --color-focus: #1b6aa5;
   --logo-light-display: block;
   --logo-dark-display: none;
@@ -88,6 +131,26 @@
     --color-positive: #2db5a3;
     --color-negative: #f08a4b;
     --color-warning: #e8b339;
+    --color-regime-shock: #ff7a90;
+    --color-regime-riskoff: #c9a0ff;
+    --color-regime-riskon: #7fb4ff;
+    --color-regime-neutral: #aeb8c8;
+    --color-label-unvalidated: #b4bccb;
+    --color-label-passed: #8ad7a0;
+    --color-label-consistent: #9fb8ff;
+    --color-label-failed: #ff8a8a;
+    --color-label-notdemo: #e6c86e;
+    --color-label-unvalidatable: #b9a8d9;
+    --color-breaker-green: #6fd08c;
+    --color-breaker-amber: #f0b94a;
+    --color-breaker-red: #ff6b6b;
+    --color-chart-1: #8fd3ff;
+    --color-chart-2: #c3a6ff;
+    --color-chart-3: #f0c36a;
+    --color-chart-4: #7fe0a8;
+    --color-grid: #66758c;
+    --color-surface-2: #1b2431;
+    --color-danger: #ff7b72;
     --color-focus: #8fd3ff;
     --logo-light-display: none;
     --logo-dark-display: block;
@@ -107,6 +170,26 @@
   --color-positive: #2db5a3;
   --color-negative: #f08a4b;
   --color-warning: #e8b339;
+  --color-regime-shock: #ff7a90;
+  --color-regime-riskoff: #c9a0ff;
+  --color-regime-riskon: #7fb4ff;
+  --color-regime-neutral: #aeb8c8;
+  --color-label-unvalidated: #b4bccb;
+  --color-label-passed: #8ad7a0;
+  --color-label-consistent: #9fb8ff;
+  --color-label-failed: #ff8a8a;
+  --color-label-notdemo: #e6c86e;
+  --color-label-unvalidatable: #b9a8d9;
+  --color-breaker-green: #6fd08c;
+  --color-breaker-amber: #f0b94a;
+  --color-breaker-red: #ff6b6b;
+  --color-chart-1: #8fd3ff;
+  --color-chart-2: #c3a6ff;
+  --color-chart-3: #f0c36a;
+  --color-chart-4: #7fe0a8;
+  --color-grid: #5f6d83;
+  --color-surface-2: #141922;
+  --color-danger: #ff7b72;
   --color-focus: #8fd3ff;
   --logo-light-display: none;
   --logo-dark-display: block;
@@ -125,6 +208,26 @@
   --color-positive: #3cc4b2;
   --color-negative: #f2935a;
   --color-warning: #ecbb48;
+  --color-regime-shock: #ff7a90;
+  --color-regime-riskoff: #c9a0ff;
+  --color-regime-riskon: #7fb4ff;
+  --color-regime-neutral: #aeb8c8;
+  --color-label-unvalidated: #b4bccb;
+  --color-label-passed: #8ad7a0;
+  --color-label-consistent: #9fb8ff;
+  --color-label-failed: #ff8a8a;
+  --color-label-notdemo: #e6c86e;
+  --color-label-unvalidatable: #b9a8d9;
+  --color-breaker-green: #6fd08c;
+  --color-breaker-amber: #f0b94a;
+  --color-breaker-red: #ff8080;
+  --color-chart-1: #8fd3ff;
+  --color-chart-2: #c3a6ff;
+  --color-chart-3: #f0c36a;
+  --color-chart-4: #7fe0a8;
+  --color-grid: #8693a9;
+  --color-surface-2: #2c384d;
+  --color-danger: #ff7b72;
   --color-focus: #9bd8ff;
   --logo-light-display: none;
   --logo-dark-display: block;
@@ -143,6 +246,26 @@
   --color-positive: #4de6d0;
   --color-negative: #ffa866;
   --color-warning: #ffd23f;
+  --color-regime-shock: #ff9bb0;
+  --color-regime-riskoff: #dcbcff;
+  --color-regime-riskon: #a6cdff;
+  --color-regime-neutral: #e0e0e0;
+  --color-label-unvalidated: #e0e0e0;
+  --color-label-passed: #a6f0b8;
+  --color-label-consistent: #bccdff;
+  --color-label-failed: #ffadad;
+  --color-label-notdemo: #ffe08a;
+  --color-label-unvalidatable: #d8c8f0;
+  --color-breaker-green: #8ff0a8;
+  --color-breaker-amber: #ffd23f;
+  --color-breaker-red: #ff8a8a;
+  --color-chart-1: #9fdcff;
+  --color-chart-2: #d6bcff;
+  --color-chart-3: #ffd98a;
+  --color-chart-4: #98f0bc;
+  --color-grid: #9a9a9a;
+  --color-surface-2: #1a1a1a;
+  --color-danger: #ff9a92;
   --color-focus: #ffe14d;
   --logo-light-display: none;
   --logo-dark-display: block;
