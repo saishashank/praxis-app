@@ -408,8 +408,9 @@ export async function grantUnmask(
   return atomically(c, async (tx) => {
     const got = await mutableTarget(tx, c, rawUserId, { allowOwner: false });
     if ("ok" in got) return got; // invalid, forbidden, not_found, owner_protected, revoked
-    const now = iso(c);
-    const expiresAt = new Date((c.now ?? new Date()).getTime() + days * DAY_MS).toISOString();
+    const at = c.now ?? new Date(); // one clock read: expiry is exactly `days` after the grant
+    const now = at.toISOString();
+    const expiresAt = new Date(at.getTime() + days * DAY_MS).toISOString();
     const live = await tx.execute({
       sql: "SELECT 1 FROM unmask_grant WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?",
       args: [got.target.id, now],
