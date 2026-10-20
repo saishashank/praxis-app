@@ -7,7 +7,7 @@
 // stored row that differs from the recomputed one raises (ARN-102). No clock, no randomness.
 import type { Client } from "@libsql/client";
 import type { AgentParams } from "@/lib/agents/params";
-import { numericValue } from "@/lib/picks/factors";
+import { numericValue } from "./factorValue";
 
 export type FactorObs = {
   readonly family: string;

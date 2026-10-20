@@ -42,16 +42,9 @@ export async function readFactorRows(
 }
 
 /** A stored rule value (`a/b`, a decimal, a flag) as a number; null when it is not numeric. */
-export function numericValue(text: string): number | null {
-  const m = /^(-?\d+)\/(\d+)$/.exec(text);
-  if (m) {
-    const den = BigInt(m[2]!);
-    if (den === 0n) return null;
-    return Number(m[1]) / Number(m[2]); // money-float-ok: descriptive bucket assignment
-  }
-  if (!/^-?\d+(\.\d+)?$/.test(text)) return null;
-  return Number(text); // money-float-ok: descriptive bucket assignment
-}
+import { numericValue } from "@/lib/learning/factorValue";
+
+export { numericValue };
 
 /** Bucket number of a value: 1 + the number of edges below it (edges ascending). */
 export function bucketOf(value: number, edges: readonly number[]): number {
