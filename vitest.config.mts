@@ -4,7 +4,17 @@ import path from "node:path";
 
 export default defineConfig({
   plugins: [react()],
-  resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
+  resolve: {
+    alias: {
+      "@": path.resolve(import.meta.dirname, "src"),
+      // Next swaps "server-only" for its own marker module when it bundles; outside Next (tests) the
+      // empty module stands in, so server-only loaders can be imported by unit tests (M7 T7).
+      "server-only": path.resolve(
+        import.meta.dirname,
+        "node_modules/next/dist/compiled/server-only/empty.js",
+      ),
+    },
+  },
   test: {
     environment: "jsdom",
     include: ["tests/**/*.test.{ts,tsx}", "src/**/*.test.{ts,tsx}"],
