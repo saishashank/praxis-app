@@ -4,6 +4,9 @@ node_modules
 .next
 out
 coverage
+# test folders named coverage hold tests, not reports (M8 T3)
+!tests/coverage/
+!worker/test/coverage/
 worker/node_modules
 worker/dist
 .wrangler
