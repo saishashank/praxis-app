@@ -251,6 +251,11 @@ describe("mapping completeness", () => {
     expect(routeChange({ target: "A6", challengerId: null, lessonIds: [] })).toEqual([
       { kind: "playbook", agent: "A6" },
     ]);
+    // the target Lane A really writes (D-118): `playbook/<agent>`
+    expect(routeChange({ target: "playbook/A2", challengerId: null, lessonIds: ["L-1"] })).toEqual([
+      { kind: "lesson", id: "L-1" },
+      { kind: "playbook", agent: "A2" },
+    ]);
     expect(routeChange({ target: "F3", challengerId: null, lessonIds: [] })).toEqual([
       { kind: "family", family: "F3" },
     ]);

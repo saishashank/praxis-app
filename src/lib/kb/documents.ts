@@ -49,7 +49,13 @@ function parseObj(text: string): Record<string, unknown> {
 function parseStrings(text: string): string[] {
   try {
     const v: unknown = JSON.parse(text);
-    return Array.isArray(v) ? v.map(String) : [];
+    if (Array.isArray(v)) return v.map(String);
+    // Lane A writes {added, removed} (D-118): both lists name lessons the change concerns
+    if (v !== null && typeof v === "object") {
+      const o = v as { added?: unknown; removed?: unknown };
+      return [o.added, o.removed].flatMap((l) => (Array.isArray(l) ? l.map(String) : []));
+    }
+    return [];
   } catch {
     return [];
   }
@@ -88,8 +94,10 @@ export function routeChange(row: {
   const out: ChangeRoute[] = [];
   if (row.challengerId !== null) out.push({ kind: "challenger", id: row.challengerId });
   for (const id of row.lessonIds) out.push({ kind: "lesson", id });
+  // Lane A names its target `playbook/<agent>` (D-118); other writers use the bare agent
+  const target = row.target.replace(/^playbook\//, "");
   const agent = (PLAYBOOK_AGENTS as readonly string[]).find(
-    (a) => row.target === a || row.target.startsWith(`${a}:`) || row.target.startsWith(`${a}/`),
+    (a) => target === a || target.startsWith(`${a}:`) || target.startsWith(`${a}/`),
   );
   if (agent !== undefined) out.push({ kind: "playbook", agent });
   const fam = FAMILY_ID.exec(row.target);
