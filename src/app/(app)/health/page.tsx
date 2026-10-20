@@ -443,7 +443,7 @@ export default async function HealthPage() {
     : null;
 
   return (
-    <div className="mx-auto flex min-w-0 max-w-5xl flex-col gap-8 px-4 py-6 sm:px-6">
+    <main className="mx-auto flex min-w-0 max-w-5xl flex-col gap-8 px-4 py-6 sm:px-6">
       <header className="flex flex-col gap-1">
         <h1 className="text-3xl font-semibold tracking-tight">System Health</h1>
         <p className="m-0 text-sm text-text-muted">
@@ -638,6 +638,6 @@ export default async function HealthPage() {
           </div>
         </dl>
       </section>
-    </div>
+    </main>
   );
 }
