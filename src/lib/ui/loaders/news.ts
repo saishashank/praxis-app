@@ -218,3 +218,18 @@ export async function loadNewsItem(env: LoaderEnv, id: number): Promise<NewsItem
     today: todayD(env),
   };
 }
+
+/**
+ * The stored id of an announcement addressed by its source's `ann_id` (the `/news?item=<ann_id>` link
+ * of a Decision Card, UXN-038). Unmasked viewers only: a masked viewer never gets this link, so for
+ * them the answer is always null (no existence oracle).
+ */
+export async function resolveNewsItemRef(env: LoaderEnv, annId: string): Promise<number | null> {
+  if (env.mask.masked || annId.length === 0 || annId.length > 200) return null; // threshold-ok: id length cap
+  const r = await env.main.execute({
+    sql: "SELECT id FROM announcement WHERE market = ? AND ann_id = ? ORDER BY id LIMIT 1",
+    args: [marketOf(env), annId],
+  });
+  const x = r.rows[0];
+  return x ? Number(x.id) : null; // money-float-ok: SQL integer key
+}
