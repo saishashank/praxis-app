@@ -1,5 +1,7 @@
 # M1 exit evidence (AT-01, AT-02, AT-03, AT-04, AT-05a, AT-05b)
 
+> This file is a dated record (2026-10-10). The current status per AT is in [docs/test-reports/](test-reports/).
+
 Status date: 2026-10-10. Branch `build`. Source rows: [spec/14_system_acceptance.md](../spec/14_system_acceptance.md) section 14.1. Test homes come from [TST-115](../spec/10_nfr_testing.md). Test files come from [test-map.md](test-map.md). "Unit" means the test runs in CI with no real services. Quoted check text has markdown bold removed and is trimmed with "…".
 
 Overall: M1 exit is **not yet met**. Every AT row is partial or blocked. The automated parts that need no deployment are mostly in place. The real proofs need the deploy decision and the Owner's actions.
