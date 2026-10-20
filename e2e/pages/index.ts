@@ -3,11 +3,12 @@
 // differs from what the page's server guard enforces. Add new areas as e2e/pages/<area>.ts.
 import { ROLES, can, type Role } from "../../src/lib/auth/permissions";
 import { CORE_PAGES } from "./core";
+import { PICKS_PAGES } from "./picks";
 import type { PageEntry } from "./types";
 
 export type { PageEntry } from "./types";
 
-export const PAGES: PageEntry[] = [...CORE_PAGES];
+export const PAGES: PageEntry[] = [...CORE_PAGES, ...PICKS_PAGES];
 
 /** Roles that may open the page (derived from the guard action unless the entry lists them). */
 export function allowedRoles(entry: PageEntry): readonly Role[] {

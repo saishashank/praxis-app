@@ -7,6 +7,7 @@ import { modelSuccess, successLine, type ModelSuccess } from "@/lib/picks/succes
 import { formatPpm, isoWeek, MISSING } from "@/lib/view/format";
 import { dateStaleness } from "@/lib/view/staleness";
 import { maskText } from "@/lib/view/mask";
+import { soft, strategyNames } from "./common";
 import {
   isDateParam,
   marketOf,
@@ -51,9 +52,47 @@ export async function parsePicksQuery(
   return { profile, d: d || undefined };
 }
 
+/** Level against the reference price in ppm: exact integer arithmetic, rounded half away from zero. */
+function ppmOf(level: unknown, reference: unknown): number | null {
+  try {
+    const ref = BigInt(String(reference));
+    if (ref <= 0n) return null;
+    const diff = (BigInt(String(level)) - ref) * 1_000_000n; // threshold-ok: ppm
+    const half = ref / 2n;
+    return Number(diff >= 0n ? (diff + half) / ref : -((-diff + half) / ref)); // money-float-ok: small ppm integer
+  } catch {
+    return null;
+  }
+}
+
+/** Where a closed result sits against the range published with the pick (UXN-043). */
+export function rangePosition(
+  netPpm: number | null,
+  badPpm: number | null,
+  goodPpm: number | null,
+): "inside" | "below" | "above" | null {
+  if (netPpm === null || badPpm === null || goodPpm === null) return null;
+  return netPpm < badPpm ? "below" : netPpm > goodPpm ? "above" : "inside";
+}
+
 export type PickRowView = {
   id: string;
   rank: number;
+  /** Friendly strategy name of the family (UXN-039), or the family code when no name is stored. */
+  familyName: string;
+  /** Stop and aim as ppm of the reference price (the "-8%" and "+10%" of UXN-040). */
+  stopPpm: number | null;
+  aimPpm: number | null;
+  /** Suggested size and the loss if the stop is hit (before fees); null for a masked user. */
+  size: MoneyView | null;
+  riskAtStop: MoneyView | null;
+  /** Tracked state of the pick (UXN-043); null before tracking starts. */
+  outcome: {
+    state: string;
+    entry: MoneyView | null;
+    exitReason: string | null;
+    netPpm: number | null;
+  } | null;
   /** The code, or "Stock A" for a masked user. */
   stock: string;
   company: string | null;
@@ -153,14 +192,19 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
   const rows = await env.main.execute({
     sql: `SELECT p.rank, p.code, p.family, p.tier, p.label, p.buy_max_micro, p.stop_micro, p.aim_micro,
                  p.valid_until_d, p.bad_ppm, p.typical_ppm, p.good_ppm, p.n_similar, p.aim_reach_ppm,
-                 p.time_frame_sessions, p.based_on_json, p.card_id, i.name
+                 p.time_frame_sessions, p.based_on_json, p.card_id, i.name, p.reference_micro,
+                 p.size_micro, p.risk_micro, o.state AS o_state, o.entry_micro AS o_entry,
+                 o.exit_reason AS o_reason, o.net_ppm AS o_net
           FROM pick p LEFT JOIN instrument i ON i.market = p.market AND i.code = p.code
+            LEFT JOIN pick_outcome o ON o.market = p.market AND o.d = p.d AND o.profile = p.profile
+              AND o.rank = p.rank AND o.kind = 'pick'
           WHERE p.market = ? AND p.d = ? AND p.profile = ? ORDER BY p.rank LIMIT 10`,
     args: [market, d, q.profile],
   });
   const masked = env.mask.masked;
   const kit = masked ? await maskKit(env, d, await pickCodes(env, d)) : null;
   const t = (s: string): string => (kit ? maskText(s, kit.aliases, kit.lookup) : s);
+  const names = await soft(() => strategyNames(env.main), {});
   const picks: PickRowView[] = rows.rows.map((x) => {
     const code = String(x.code);
     const scenario =
@@ -176,6 +220,20 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
     return {
       id: `${d}.${q.profile}.${Number(x.rank)}`,
       rank: Number(x.rank), // money-float-ok: SQL integer column
+      familyName: names[String(x.family)]?.name ?? String(x.family),
+      stopPpm: ppmOf(x.stop_micro, x.reference_micro),
+      aimPpm: ppmOf(x.aim_micro, x.reference_micro),
+      size: masked ? null : money(String(x.size_micro)),
+      riskAtStop: masked ? null : money(String(x.risk_micro)),
+      outcome:
+        x.o_state === null
+          ? null
+          : {
+              state: String(x.o_state),
+              entry: masked || x.o_entry === null ? null : money(String(x.o_entry)),
+              exitReason: x.o_reason === null ? null : String(x.o_reason),
+              netPpm: toNum(x.o_net),
+            },
       stock: kit ? kit.aliases.label(code) : code,
       company: masked ? null : x.name === null ? null : String(x.name),
       family: String(x.family),
@@ -207,6 +265,9 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
 
 export type PickDetailModel = {
   masked: boolean;
+  profile: string;
+  /** The live record beats the luck check (drops "Model not proven yet" from the honesty line). */
+  beatsLuck: boolean;
   pick: PickRowView;
   factors: Array<{
     factor: string;
@@ -274,6 +335,8 @@ export async function loadPickDetail(env: LoaderEnv, id: string): Promise<PickDe
   const net = toNum(x.net_ppm);
   return {
     masked,
+    profile: key.profile,
+    beatsLuck: model.success?.beatsLuck ?? false,
     pick,
     factors,
     outcome:
@@ -301,6 +364,16 @@ export type TrackRow = {
   netPpm: number | null;
   entry: MoneyView | null;
   exit: MoneyView | null;
+  /** The levels and range published with the pick (UXN-043); prices are null for a masked user. */
+  published: {
+    buyUpTo: MoneyView | null;
+    stop: MoneyView | null;
+    aim: MoneyView | null;
+    badPpm: number | null;
+    goodPpm: number | null;
+  };
+  /** A closed result against the published range. */
+  position: "inside" | "below" | "above" | null;
 };
 export type TrackModel = {
   state: LoaderState;
@@ -314,8 +387,11 @@ export type TrackModel = {
 export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): Promise<TrackModel> {
   const market = marketOf(env);
   const r = await env.main.execute({
-    sql: `SELECT o.d, o.rank, o.code, o.state, o.exit_reason, o.net_ppm, o.entry_micro, o.exit_micro
-          FROM pick_outcome o WHERE o.market = ? AND o.profile = ? AND o.kind = 'pick'
+    sql: `SELECT o.d, o.rank, o.code, o.state, o.exit_reason, o.net_ppm, o.entry_micro, o.exit_micro,
+                 p.buy_max_micro, p.stop_micro, p.aim_micro, p.bad_ppm, p.good_ppm
+          FROM pick_outcome o JOIN pick p ON p.market = o.market AND p.d = o.d
+            AND p.profile = o.profile AND p.rank = o.rank
+          WHERE o.market = ? AND o.profile = ? AND o.kind = 'pick'
           ORDER BY o.d DESC, o.rank LIMIT ?`,
     args: [market, q.profile, TRACK_ROWS],
   });
@@ -335,6 +411,17 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
     netPpm: toNum(x.net_ppm),
     entry: masked || x.entry_micro === null ? null : money(String(x.entry_micro)),
     exit: masked || x.exit_micro === null ? null : money(String(x.exit_micro)),
+    published: {
+      buyUpTo: masked ? null : money(String(x.buy_max_micro)),
+      stop: masked ? null : money(String(x.stop_micro)),
+      aim: masked ? null : money(String(x.aim_micro)),
+      badPpm: toNum(x.bad_ppm),
+      goodPpm: toNum(x.good_ppm),
+    },
+    position:
+      String(x.state) === "closed"
+        ? rangePosition(toNum(x.net_ppm), toNum(x.bad_ppm), toNum(x.good_ppm))
+        : null,
   }));
   return {
     state: rows.length === 0 ? "empty" : "ok",
