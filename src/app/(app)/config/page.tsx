@@ -13,7 +13,7 @@ import {
   listConfigHistory,
   type ConfigRow,
 } from "@/lib/config/admin";
-import { CONFIG_AREAS } from "@/lib/config/keys";
+import { CONFIG_AREAS, CONFIG_AREA_LABEL } from "@/lib/config/keys";
 import { mainDb } from "@/lib/db/client";
 import { formatMelbourne, type TimeFormat } from "@/lib/health/format";
 import { userPreferences } from "@/lib/preferences/read";
@@ -107,8 +107,8 @@ export default async function ConfigPage() {
         const inArea = rows.filter((r) => r.area === area);
         if (!inArea.length) return null;
         return (
-          <Card key={area} aria-label={area} title={area}>
-            <RTable caption={`${area} settings`} headers={HEADERS}>
+          <Card key={area} aria-label={CONFIG_AREA_LABEL[area]} title={CONFIG_AREA_LABEL[area]}>
+            <RTable caption={`${CONFIG_AREA_LABEL[area]} settings`} headers={HEADERS}>
               {inArea.map((r) => (
                 <Row key={r.key} r={r} tf={tf} />
               ))}

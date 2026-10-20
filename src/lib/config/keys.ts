@@ -1489,6 +1489,21 @@ export type ConfigArea =
 export type ConfigInput = "int" | "number" | "list" | "object" | "text";
 export type ConfigMeta = { label: string; area: ConfigArea; bounds: string; input: ConfigInput };
 
+/** Plain-English headings for the Configuration page (UXN-030); the area ids above stay stable. */
+export const CONFIG_AREA_LABEL: Record<ConfigArea, string> = {
+  Retention: "How long we keep data",
+  Quotas: "Quotas",
+  "Sessions & limits": "Sessions and limits",
+  Backups: "Backups",
+  "Strategy families": "Strategy families",
+  "Regime and events": "Regime and events",
+  "Validation statistics": "Checking results",
+  "Replay and compute": "Replay and compute",
+  "Sentinel and email": "Sentinel and email",
+  "Learning and knowledge": "Learning and knowledge",
+  Other: "Other",
+};
+
 export const CONFIG_AREAS: ConfigArea[] = [
   "Retention",
   "Quotas",

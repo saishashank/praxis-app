@@ -282,7 +282,7 @@ describe("the company page for the Owner", () => {
         .map((b) => b.textContent),
     ).toEqual(["1M", "3M", "6M", "1Y", "2Y"]);
     expect(screen.getByRole("button", { name: "Show as table" })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: /end-of-day bars from/ })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /end-of-day bars from/ })).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "TradingView Lightweight Charts" }),
     ).toBeInTheDocument();

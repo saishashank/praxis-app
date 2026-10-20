@@ -111,3 +111,47 @@ export async function axeAllThemes(
   }
   return out;
 }
+
+// ---- AT-25 / AT-26 / AT-27 shared helpers (M7 T20c) ----
+
+/** Sample values that make the dynamic registry paths concrete on the populated seed (else null). */
+const SAMPLES: Record<string, string> = { "/market/[code]": "/market/ZZAA" };
+
+/** The URL to open for a registry path; null when it needs a seeded row the E2E seed lacks. */
+export function concretePath(path: string, role: Role = "owner"): string | null {
+  if (!path.includes("[")) return path;
+  // Editors and Viewers never see a stock code, so they cannot open a company by code.
+  if (process.env.E2E_SCENARIO !== "populated" || role !== "owner") return null;
+  return SAMPLES[path] ?? null;
+}
+
+/** Fixture instrument codes (ZZAA...) and names ("ZZ Synthetic n Ltd"). */
+export const CODE_RE = /\bZZ[A-Z]{2}\b/;
+export const NAME_RE = /ZZ Synthetic/i;
+/** Exact calendar dates (UX-009 masks trade dates for Editors and Viewers). */
+export const EXACT_DATE_RE = /\b\d{4}-\d{2}-\d{2}\b/;
+
+/** Visible text of the page's main region. */
+export async function mainText(page: Page): Promise<string> {
+  return page.locator("main").first().innerText();
+}
+
+/** Money values whose card, row or section has no "Simulated" label (AT-27); returns snippets. */
+export async function moneyWithoutSimulated(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const bad: string[] = [];
+    for (const el of Array.from(document.querySelectorAll("[data-money]"))) {
+      let node: Element | null = el.parentElement;
+      let ok = false;
+      while (node && node.tagName !== "MAIN" && node.tagName !== "BODY") {
+        if (/simulated/i.test(node.textContent ?? "")) {
+          ok = true;
+          break;
+        }
+        node = node.parentElement;
+      }
+      if (!ok) bad.push((el.textContent ?? "").trim().slice(0, 40));
+    }
+    return bad;
+  });
+}

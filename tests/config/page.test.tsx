@@ -71,13 +71,13 @@ describe("configuration page", () => {
     render(await ConfigPage());
     const heads = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     expect(heads).toEqual([
-      "Retention",
+      "How long we keep data",
       "Quotas",
-      "Sessions & limits",
+      "Sessions and limits",
       "Backups",
       "Strategy families",
       "Regime and events",
-      "Validation statistics",
+      "Checking results",
       "Replay and compute",
       "Sentinel and email",
       "Learning and knowledge",
@@ -88,7 +88,7 @@ describe("configuration page", () => {
 
   it("shows value, default, bounds and spec ref; editable keys have value, reason and Save", async () => {
     render(await ConfigPage());
-    const retention = screen.getByRole("region", { name: "Retention" });
+    const retention = screen.getByRole("region", { name: "How long we keep data" });
     const row = within(retention).getByRole("row", { name: /retention_logs_days/ });
     expect(within(row).getByText("Keep application logs for")).toBeInTheDocument();
     expect(within(row).getAllByText("30 days")).toHaveLength(2); // current and default
