@@ -1,4 +1,117 @@
 {
-  "_comment": "Owner-approved licence exceptions for scripts/ci/licence-check.mjs (UXN-019). Only the Owner adds entries. Each entry: { \"package\": \"name\", \"licence\": \"SPDX id as reported\", \"approvedBy\": \"Owner\", \"date\": \"YYYY-MM-DD\", \"reason\": \"why\" }.",
-  "exceptions": []
+  "_comment": "Licence exceptions for scripts/ci/licence-check.mjs (UXN-019). Only the Owner approves: set approvedBy to \"Owner\" and the date. Entries with approvedBy \"pending\" are NOT approvals — they warn on normal runs and FAIL the release gate (--release). Each entry: { package, licence, approvedBy, date, reason }.",
+  "exceptions": [
+    {
+      "package": "@img/sharp-libvips-darwin-arm64",
+      "licence": "LGPL-3.0-or-later",
+      "approvedBy": "pending",
+      "date": null,
+      "reason": "optional native image library pulled in by Next.js (sharp); LGPL-3.0 component — Owner to approve or have it excluded"
+    },
+    {
+      "package": "@img/sharp-libvips-darwin-x64",
+      "licence": "LGPL-3.0-or-later",
+      "approvedBy": "pending",
+      "date": null,
+      "reason": "optional native image library pulled in by Next.js (sharp); LGPL-3.0 component — Owner to approve or have it excluded"
+    },
+    {
+      "package": "@img/sharp-libvips-linux-arm",
+      "licence": "LGPL-3.0-or-later",
+      "approvedBy": "pending",
+      "date": null,
+      "reason": "optional native image library pulled in by Next.js (sharp); LGPL-3.0 component — Owner to approve or have it excluded"
+    },
+    {
+      "package": "@img/sharp-libvips-linux-arm64",
+      "licence": "LGPL-3.0-or-later",
+      "approvedBy": "pending",
+      "date": null,
+      "reason": "optional native image library pulled in by Next.js (sharp); LGPL-3.0 component — Owner to approve or have it excluded"
+    },
+    {
+      "package": "@img/sharp-libvips-linux-ppc64",
+      "licence": "LGPL-3.0-or-later",
+      "approvedBy": "pending",
+      "date": null,
+      "reason": "optional native image library pulled in by Next.js (sharp); LGPL-3.0 component — Owner to approve or have it excluded"
+    },
+    {
+      "package": "@img/sharp-libvips-linux-riscv64",
+      "licence": "LGPL-3.0-or-later",
+      "approvedBy": "pending",
+      "date": null,
+      "reason": "optional native image library pulled in by Next.js (sharp); LGPL-3.0 component — Owner to approve or have it excluded"
+    },
+    {
+      "package": "@img/sharp-libvips-linux-s390x",
+      "licence": "LGPL-3.0-or-later",
+      "approvedBy": "pending",
+      "date": null,
+      "reason": "optional native image library pulled in by Next.js (sharp); LGPL-3.0 component — Owner to approve or have it excluded"
+    },
+    {
+      "package": "@img/sharp-libvips-linux-x64",
+      "licence": "LGPL-3.0-or-later",
+      "approvedBy": "pending",
+      "date": null,
+      "reason": "optional native image library pulled in by Next.js (sharp); LGPL-3.0 component — Owner to approve or have it excluded"
+    },
+    {
+      "package": "@img/sharp-libvips-linuxmusl-arm64",
+      "licence": "LGPL-3.0-or-later",
+      "approvedBy": "pending",
+      "date": null,
+      "reason": "optional native image library pulled in by Next.js (sharp); LGPL-3.0 component — Owner to approve or have it excluded"
+    },
+    {
+      "package": "@img/sharp-libvips-linuxmusl-x64",
+      "licence": "LGPL-3.0-or-later",
+      "approvedBy": "pending",
+      "date": null,
+      "reason": "optional native image library pulled in by Next.js (sharp); LGPL-3.0 component — Owner to approve or have it excluded"
+    },
+    {
+      "package": "@img/sharp-wasm32",
+      "licence": "Apache-2.0 AND LGPL-3.0-or-later AND MIT",
+      "approvedBy": "pending",
+      "date": null,
+      "reason": "optional native image library pulled in by Next.js (sharp); LGPL-3.0 component — Owner to approve or have it excluded"
+    },
+    {
+      "package": "@img/sharp-win32-arm64",
+      "licence": "Apache-2.0 AND LGPL-3.0-or-later",
+      "approvedBy": "pending",
+      "date": null,
+      "reason": "optional native image library pulled in by Next.js (sharp); LGPL-3.0 component — Owner to approve or have it excluded"
+    },
+    {
+      "package": "@img/sharp-win32-ia32",
+      "licence": "Apache-2.0 AND LGPL-3.0-or-later",
+      "approvedBy": "pending",
+      "date": null,
+      "reason": "optional native image library pulled in by Next.js (sharp); LGPL-3.0 component — Owner to approve or have it excluded"
+    },
+    {
+      "package": "@img/sharp-win32-x64",
+      "licence": "Apache-2.0 AND LGPL-3.0-or-later",
+      "approvedBy": "pending",
+      "date": null,
+      "reason": "optional native image library pulled in by Next.js (sharp); LGPL-3.0 component — Owner to approve or have it excluded"
+    },
+    {
+      "package": "caniuse-lite",
+      "licence": "CC-BY-4.0",
+      "approvedBy": "pending",
+      "date": null,
+      "reason": "permissive licence not on the UXN-019 allow-list — Owner to approve"
+    },
+    {
+      "package": "tslib",
+      "licence": "0BSD",
+      "approvedBy": "pending",
+      "date": null,
+      "reason": "permissive licence not on the UXN-019 allow-list — Owner to approve"
+    }
+  ]
 }

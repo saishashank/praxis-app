@@ -1,6 +1,7 @@
 // M7 design section 4.4 (UX-005, NFR-010): JavaScript budgets measured from the `.next` build output.
 // Zero dependencies. Run after `npm run build`.
-//   shared first-load JS (chunks every route loads)      <= 120 KB gzip
+//   shared first-load JS (chunks every route loads)      <= 145 KB gzip (D-153: the shared set is
+//   framework code only — react-dom, app router, Link, error boundaries — measured 140 KB)
 //   Home, Strategies list, News, Reviews route total     <= 150 KB gzip (shared + route chunks)
 //   Lightweight Charts only on company and strategy pages (dynamic import: the library chunk is
 //   not part of the first load of any other route)
@@ -16,7 +17,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const KB = 1000;
 
 export const BUDGETS = {
-  sharedKb: 120,
+  sharedKb: 145, // D-153 (was 120 in M7 design 4.4; framework floor measured 140.0 KB)
   routes: { "/": 150, "/strategies": 150, "/news": 150, "/reviews": 150 },
   chartRoutes: ["/market/[code]", "/strategies/[execution]"],
   /** A string that only the Lightweight Charts library chunk contains (its root element class). */

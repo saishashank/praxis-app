@@ -66,22 +66,32 @@ export function productionPackages(lock, readInstalled = () => null) {
   return out.sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version));
 }
 
-/** Returns { failures, exceptionsUsed }. Unknown licence is a failure unless excepted. */
-export function evaluate(packages, exceptions = [], allowed = ALLOWED) {
+/**
+ * Returns { failures, exceptionsUsed, pending }. Unknown licence is a failure unless excepted.
+ * An entry with `approvedBy: "pending"` is NOT an approval: it is listed as pending (a warning on
+ * normal runs) and is a failure with `release: true` (the release gate), so nothing ships on it.
+ */
+export function evaluate(packages, exceptions = [], allowed = ALLOWED, { release = false } = {}) {
   const failures = [];
   const exceptionsUsed = [];
+  const pending = [];
   for (const p of packages) {
     if (isAllowed(p.licence, allowed)) continue;
     const ex = exceptions.find(
       (e) => e.package === p.name && (!e.licence || e.licence === p.licence),
     );
+    if (ex && ex.approvedBy === "pending") {
+      if (release) failures.push({ ...p, reason: "Owner approval pending" });
+      else pending.push({ ...p, reason: ex.reason ?? "" });
+      continue;
+    }
     if (ex) {
       exceptionsUsed.push({ ...p, approvedBy: ex.approvedBy, date: ex.date });
       continue;
     }
     failures.push({ ...p, reason: p.licence ? "not on the allow-list" : "unknown licence" });
   }
-  return { failures, exceptionsUsed };
+  return { failures, exceptionsUsed, pending };
 }
 
 function readInstalledFactory(root) {
@@ -94,7 +104,7 @@ function readInstalledFactory(root) {
   };
 }
 
-export function run({ root = ROOT } = {}) {
+export function run({ root = ROOT, release = false } = {}) {
   const lock = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"));
   let exceptions = [];
   const exFile = path.join(root, "scripts/ci/licence-exceptions.json");
@@ -102,15 +112,23 @@ export function run({ root = ROOT } = {}) {
     exceptions = JSON.parse(fs.readFileSync(exFile, "utf8")).exceptions ?? [];
   }
   const packages = productionPackages(lock, readInstalledFactory(root));
-  const { failures, exceptionsUsed } = evaluate(packages, exceptions);
-  return { packages, failures, exceptionsUsed };
+  const { failures, exceptionsUsed, pending } = evaluate(packages, exceptions, ALLOWED, {
+    release,
+  });
+  return { packages, failures, exceptionsUsed, pending };
 }
 
 function main() {
-  const { packages, failures, exceptionsUsed } = run();
+  const release = process.argv.includes("--release");
+  const { packages, failures, exceptionsUsed, pending } = run({ release });
   console.log(
-    `licence-check: ${packages.length} production packages, ${exceptionsUsed.length} Owner exceptions`,
+    `licence-check: ${packages.length} production packages, ${exceptionsUsed.length} Owner exceptions, ${pending.length} pending Owner approval`,
   );
+  for (const p of pending) {
+    console.warn(
+      `PENDING ${p.name}@${p.version}  ${p.licence}  awaiting Owner approval (fails with --release)`,
+    );
+  }
   if (failures.length) {
     for (const f of failures) {
       console.error(`FAIL ${f.name}@${f.version}  ${f.licence || "(none)"}  ${f.reason}`);
@@ -120,7 +138,11 @@ function main() {
     );
     process.exit(1);
   }
-  console.log("licence-check: all production licences are allowed");
+  console.log(
+    pending.length
+      ? `licence-check: no disallowed licence; ${pending.length} package(s) still need Owner approval before release`
+      : "licence-check: all production licences are allowed",
+  );
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

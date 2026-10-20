@@ -101,6 +101,23 @@ test("evaluate: disallowed and unknown fail; an Owner exception passes", () => {
   );
 });
 
+test("evaluate: a pending entry is not an approval — warning normally, failure in release mode", () => {
+  const pk = productionPackages(LOCK);
+  const ex = [{ package: "bad", licence: "GPL-3.0", approvedBy: "pending", date: null }];
+  const normal = evaluate(pk, ex);
+  assert.deepEqual(
+    normal.pending.map((p) => p.name),
+    ["bad"],
+  );
+  assert.equal(normal.exceptionsUsed.length, 0, "pending is never counted as an Owner exception");
+  assert.ok(!normal.failures.some((f) => f.name === "bad"));
+  const release = evaluate(pk, ex, undefined, { release: true });
+  assert.ok(
+    release.failures.some((f) => f.name === "bad" && f.reason === "Owner approval pending"),
+  );
+  assert.equal(release.pending.length, 0);
+});
+
 test("run: reads a temp project, installed licence wins, nothing is generated", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "licence-"));
   try {
