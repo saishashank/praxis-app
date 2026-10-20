@@ -12,6 +12,19 @@ export default defineConfig({
     // Database-backed tests (migrations, replays) need more than the 5 s default on CI runners;
     // one limit for local and CI runs so a slow test cannot pass locally and fail in CI.
     testTimeout: 30_000,
-    coverage: { provider: "v8", include: ["src/**"] },
+    coverage: {
+      provider: "v8",
+      include: ["src/**"],
+      // TST-121 (M6 T16): 90 % on the lesson engine, set only under --coverage (npm run test:coverage),
+      // so the default run stays fast. Weekly mutation testing (TST-130) is a CI job, not a dev dependency here.
+      thresholds: {
+        "src/lib/learning/{lessons,alphaInvesting,comparisons,critic}.ts": {
+          statements: 90,
+          branches: 90,
+          functions: 90,
+          lines: 90,
+        },
+      },
+    },
   },
 });

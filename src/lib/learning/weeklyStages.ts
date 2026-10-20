@@ -151,9 +151,9 @@ export async function comparisonsStage(c: WeeklyContext): Promise<StageOutput> {
   let looks = 0;
   let confirmed = 0;
   let discarded = 0;
-  const open = (await readFindings(db)).filter(
-    (f) => f.state === "candidate" && f.look_due_d <= friday,
-  );
+  // TST-109 (D-126): a finding detected after the run date does not exist for this run
+  const known = (await readFindings(db)).filter((f) => f.detected_d <= c.d);
+  const open = known.filter((f) => f.state === "candidate" && f.look_due_d <= friday);
   for (const f of open) {
     const pairs = await comparisonPairs(db, {
       market,
@@ -172,7 +172,7 @@ export async function comparisonsStage(c: WeeklyContext): Promise<StageOutput> {
     else discarded += 1;
   }
   const pairs = await comparisonPairs(db, { market, d: friday, calendar: cal, params });
-  const week = weeklyComparisons(params, pairs, c.d, await readFindings(db), advance);
+  const week = weeklyComparisons(params, pairs, c.d, known, advance);
   await writeWeekly(db, week);
   return {
     stats: [
