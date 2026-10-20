@@ -145,6 +145,8 @@ function safeJson(text: string): unknown {
   }
 }
 
+const OBJECT_INPUT_MAX = 12_000; // threshold-ok: form input guard for JSON object values
+
 // Turns the text typed in the form into a value of the key's shape. Returns an error text for
 // text that is not of that shape; range checks stay with the registry validators.
 export function parseConfigInput(
@@ -153,7 +155,9 @@ export function parseConfigInput(
 ): { value: unknown } | { error: string } {
   if (typeof raw !== "string") return { error: "is missing" };
   const text = raw.trim();
-  if (text === "" || text.length > 500) return { error: "is missing or too long" };
+  // Object values (the strategy-name table, D-129) are longer than a scalar; every other kind keeps 500.
+  const max = input === "object" ? OBJECT_INPUT_MAX : 500; // threshold-ok: form input guard
+  if (text === "" || text.length > max) return { error: "is missing or too long" };
   if (input === "int") {
     return INT_RE.test(text) ? { value: Number(text) } : { error: "must be a whole number" };
   }

@@ -9,6 +9,7 @@ export const ERROR_TEXT: Record<string, string> = {
   not_found: "That user no longer exists.",
   owner_protected: "The Owner cannot be changed here.",
   revoked: "That user's access is already revoked.",
+  grant_exists: "That user already has an unmask grant that has not expired.",
   risk_not_acknowledged: "Tick the box to accept the risk first.",
   source_pending:
     "That source has not been accepted yet. Accept its risk first (the source must show Enabled).",

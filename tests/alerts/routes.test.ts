@@ -379,6 +379,132 @@ describe("/api/alerts routes (session, own rows, audit)", () => {
     ).toBe(400);
   });
 
+  // DAT-124 / ROL-107 / UX-009: GET /api/alerts never carries a code, a code-bearing key, a price or a
+  // link to a user who is masked; the Owner and a user with a live grant get the real values.
+  describe("GET /api/alerts masking", () => {
+    const PROXY = "proxy:AU:ZZHLT:2026-10-19";
+    const TB = "tb:sig-ZZHLT-E01:TB-NEG:2026-10-19";
+    const CODES = ["ZZAA", "ZZHLT", "ZZWHY"];
+    let owner: CurrentUser;
+    const get = async (user: CurrentUser | null, q = "") => {
+      mem.user = user;
+      const r = await listRoute.GET(new Request(`${BASE}/api/alerts${q}`), undefined);
+      return { status: r.status, text: await r.text() };
+    };
+    const clean = (text: string) => {
+      for (const c of CODES)
+        expect(text, c).not.toMatch(new RegExp(`(?<![A-Za-z0-9])${c}(?![A-Za-z0-9])`));
+      expect(text).not.toContain("://");
+      expect(text).not.toContain("Zed Halt Holdings");
+    };
+
+    beforeEach(async () => {
+      const o = await addUser(auth, { email: "o@example.test", role: "owner" });
+      owner = { id: o, email: "o@example.test", name: null, role: "owner" };
+      const at = new Date().toISOString();
+      await main.execute({
+        sql: "INSERT INTO instrument (market, code, name) VALUES ('AU', 'ZZHLT', 'Zed Halt Holdings'), ('AU', 'ZZAA', 'Zed Alpha Holdings'), ('AU', 'ZZWHY', 'Zed Why Holdings')",
+        args: [],
+      });
+      for (const [k, kind, code, text] of [
+        [PROXY, "halt_proxy", "ZZHLT", null],
+        [TB, "thesis_breaker", "ZZHLT", null],
+      ] as const) {
+        await main.execute({
+          sql: `INSERT INTO alert (alert_key, market, code, kind, tier, detected_at, facts_json, text_llm)
+                VALUES (?, 'AU', ?, ?, 'P1', ?, ?, ?)`,
+          args: [
+            k,
+            code,
+            kind,
+            at,
+            JSON.stringify({
+              rule: "r",
+              why: "ZZWHY moved; see https://news.example.test/x for Zed Halt Holdings",
+              executions: [{ id: "E01", label: "F1 U", weightPct: 12 }],
+            }),
+            text,
+          ],
+        });
+      }
+    });
+
+    it("an Owner gets the real codes, keys and text", async () => {
+      const { status, text } = await get(owner);
+      expect(status).toBe(200);
+      expect(text).toContain("ZZHLT");
+      expect(text).toContain(PROXY);
+      expect(text).toContain("https://news.example.test/x");
+    });
+
+    it.each(["viewer", "editor"] as const)("a %s gets no code, key, name or link", async (role) => {
+      const { status, text } = await get(role === "viewer" ? viewer : editor);
+      expect(status).toBe(200);
+      clean(text);
+      expect(text).not.toContain(PROXY);
+      expect(text).not.toContain(TB);
+      expect(text).toContain("Stock ");
+      expect(text).toContain("[link hidden]");
+      expect(text).toContain("mk:");
+      const body = JSON.parse(text) as {
+        alerts: Array<{ code: string | null; key: string }>;
+        badge: number;
+      };
+      expect(typeof body.badge).toBe("number");
+      for (const a of body.alerts) {
+        if (a.code !== null) expect(a.code).toMatch(/^(Stock [A-Z]+|Another stock)$/);
+        expect(a.key).not.toMatch(/ZZ/);
+      }
+    });
+
+    it("an Editor with a live grant sees real codes; an expired grant masks again", async () => {
+      await auth.execute({
+        sql: "INSERT INTO unmask_grant (user_id, granted_by, granted_at, expires_at) VALUES (?, ?, '2019-01-01T00:00:00.000Z', '2020-01-01T00:00:00.000Z')",
+        args: [editor.id, owner.id],
+      });
+      clean((await get(editor)).text);
+      await auth.execute({
+        sql: "INSERT INTO unmask_grant (user_id, granted_by, granted_at, expires_at) VALUES (?, ?, '2019-01-01T00:00:00.000Z', '2099-01-01T00:00:00.000Z')",
+        args: [editor.id, owner.id],
+      });
+      expect((await get(editor)).text).toContain("ZZHLT");
+    });
+
+    it("a missing user table (lookup failure) keeps the response masked", async () => {
+      await auth.execute("DROP TABLE unmask_grant");
+      const { status, text } = await get(editor);
+      expect(status).toBe(200);
+      clean(text);
+    });
+
+    it("a masked user can acknowledge and snooze through the opaque key; the stored key is used", async () => {
+      const body = JSON.parse((await get(viewer)).text) as {
+        alerts: Array<{ key: string; kind: string }>;
+      };
+      const opaque = body.alerts.find((a) => a.kind === "halt_proxy")!.key;
+      expect(opaque).toMatch(/^mk:[0-9a-f]{16}$/);
+      const ack = await ackRoute.POST(asJson(`${BASE}/api/alerts/x/ack`), ctxFor(opaque));
+      expect(ack.status).toBe(200);
+      const row = await auth.execute({
+        sql: "SELECT alert_key, acked_at FROM alert_user_state WHERE user_id = ?",
+        args: [viewer.id],
+      });
+      expect(row.rows[0]!.alert_key).toBe(PROXY);
+      const sn = await snoozeRoute.POST(
+        asJson(`${BASE}/api/alerts/x/snooze`, {
+          until: new Date(Date.now() + 3_600_000).toISOString(),
+        }),
+        ctxFor(opaque),
+      );
+      expect(sn.status).toBe(200);
+      const unknown = await ackRoute.POST(
+        asJson(`${BASE}/api/alerts/x/ack`),
+        ctxFor("mk:0123456789abcdef"),
+      );
+      expect(unknown.status).toBe(404);
+    });
+  });
+
   it("POST api/alerts/[key]/ack: every role may acknowledge its own state; audited; 404/400", async () => {
     mem.user = null;
     expect((await ackRoute.POST(asJson(`${BASE}/api/alerts/x/ack`), ctxFor(P1))).status).toBe(401);

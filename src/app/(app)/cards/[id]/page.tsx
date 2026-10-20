@@ -1,21 +1,21 @@
 // Decision Card, read-only (AGT-110, decision 29: a minimal read-only page for review links).
-// All signed-in roles may read it. The card is the stored canonical JSON (no free text); the note
-// beside it is the wording stored by batch 2b (template or LLM). Nothing here writes.
+// All signed-in roles may read it, but the page renders only the view model of @/lib/view/cards,
+// which masks the stock code, company names, prices, amounts and exact dates for every user without
+// the Owner role or a live unmask grant (DAT-124, ROL-107, UX-009; D-128). The card is the stored
+// canonical JSON (no free text); the note beside it is the wording stored by batch 2b (template or
+// LLM). Nothing here writes.
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { DecisionCard } from "@/lib/agents/cards";
 import { requireUser } from "@/lib/auth/guard";
-import { mainDb } from "@/lib/db/client";
+import { authDb, mainDb } from "@/lib/db/client";
+import { activeCodesForDate } from "@/lib/view/active";
+import { cardViewModel } from "@/lib/view/cards";
+import { EMPTY_LOOKUP, loadMaskLookup, maskContextFor, StockAliases } from "@/lib/view/mask";
 
 export const dynamic = "force-dynamic";
 
 const MAX_ID = 300; // threshold-ok: id length guard
-const PPM_PER_PERCENT = 10_000; // threshold-ok: unit conversion
-const MICRO_PER_UNIT = 1_000_000; // threshold-ok: unit conversion
-const ppm = (v: number | null): string =>
-  v === null ? "n/a" : `${(v / PPM_PER_PERCENT).toFixed(2)}%`;
-const micro = (v: string | null): string =>
-  v === null ? "n/a" : `A$${(Number(v) / MICRO_PER_UNIT).toFixed(2)}`;
 
 export default async function CardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: raw } = await params;
@@ -26,7 +26,7 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
     notFound();
   }
   if (id.length === 0 || id.length > MAX_ID) notFound();
-  await requireUser("read", `/cards/${encodeURIComponent(id)}`);
+  const user = await requireUser("read", `/cards/${encodeURIComponent(id)}`);
   const db = mainDb();
   const r = await db.execute({
     sql: "SELECT card_json FROM decision_card WHERE id = ?",
@@ -38,19 +38,32 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
     sql: "SELECT text, provider FROM card_note WHERE card_id = ? AND kind = 'summary'",
     args: [id],
   });
-  const s = card.scenario;
+  // Masking decision and active set are made on the server before anything is rendered.
+  const ctx = await maskContextFor(user, authDb());
+  let aliases = new StockAliases([card.code]);
+  let lookup = EMPTY_LOOKUP;
+  if (ctx.masked) {
+    const active = await activeCodesForDate(db, card.market, card.d);
+    aliases = new StockAliases([...active, card.code]);
+    lookup = await loadMaskLookup(db, card.market);
+  }
+  const v = cardViewModel(
+    card,
+    note.rows.length > 0
+      ? {
+          text: String(note.rows[0]!.text),
+          provider: note.rows[0]!.provider === null ? null : String(note.rows[0]!.provider),
+        }
+      : null,
+    ctx,
+    aliases,
+    lookup,
+  );
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-6 py-10">
       <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Decision Card: {card.code} ({card.execution})
-        </h1>
-        <p className="text-sm text-text-muted">
-          {card.d}, {card.family} {card.rule_version}, regime {card.regime}.{" "}
-          {card.taken
-            ? "Order placed."
-            : `Not taken: ${card.not_taken_reason ?? "reason not recorded"}.`}
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">{v.title}</h1>
+        <p className="text-sm text-text-muted">{v.subtitle}</p>
         <Link href="/" className="text-sm text-accent underline">
           Home
         </Link>
@@ -59,11 +72,10 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
         <h2 id="thesis-h" className="text-xl font-semibold">
           Thesis
         </h2>
-        <p>{card.thesis}</p>
-        {note.rows.length > 0 && (
+        <p>{v.thesis}</p>
+        {v.note && (
           <p className="text-sm text-text-muted">
-            {String(note.rows[0]!.text)}{" "}
-            {note.rows[0]!.provider === null ? "(Written without AI.)" : "(AI wording.)"}
+            {v.note.text} {v.note.wording}
           </p>
         )}
       </section>
@@ -72,10 +84,8 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
           Rules fired
         </h2>
         <ul className="list-disc pl-5 text-sm">
-          {card.rules_fired.map((x) => (
-            <li key={x.rule}>
-              {x.rule}: {x.value} (threshold {x.threshold}) {x.pass ? "passed" : "not met"}
-            </li>
+          {v.rules.map((x, i) => (
+            <li key={`${i}:${x}`}>{x}</li>
           ))}
         </ul>
       </section>
@@ -84,10 +94,8 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
           Thesis-breakers
         </h2>
         <ul className="list-disc pl-5 text-sm">
-          {card.thesis_breakers.map((b) => (
-            <li key={b.id}>
-              {b.id}: {b.check}
-            </li>
+          {v.breakers.map((x, i) => (
+            <li key={`${i}:${x}`}>{x}</li>
           ))}
         </ul>
       </section>
@@ -96,10 +104,8 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
           Exit plan
         </h2>
         <ul className="list-disc pl-5 text-sm">
-          {card.exit_plan.map((x) => (
-            <li key={`${x.tag}:${x.rule}`}>
-              {x.tag} {x.rule} ({x.kind})
-            </li>
+          {v.exits.map((x, i) => (
+            <li key={`${i}:${x}`}>{x}</li>
           ))}
         </ul>
       </section>
@@ -107,26 +113,15 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
         <h2 id="size-h" className="text-xl font-semibold">
           Size and cost
         </h2>
-        <p className="text-sm">
-          {card.sizing.available
-            ? `Quantity ${card.sizing.qty ?? "n/a"} at ${micro(card.sizing.fill_price_micro)}, order value ${micro(card.sizing.order_value_micro)}${card.sizing.half_size ? " (half size)" : ""}.`
-            : "Sizing was not available."}{" "}
-          {card.cost.available
-            ? `Round-trip cost ${micro(card.cost.cost_estimate_micro)}, break-even ${ppm(card.cost.break_even_ppm)}.`
-            : `Cost not available${card.cost.reason ? ` (${card.cost.reason})` : ""}.`}
-        </p>
+        <p className="text-sm">{v.sizing}</p>
       </section>
       <section aria-labelledby="scenario-h" className="flex flex-col gap-2">
         <h2 id="scenario-h" className="text-xl font-semibold">
           Scenario
         </h2>
-        <p className="text-sm">
-          {s.insufficient_history
-            ? `Insufficient history (${s.reason ?? "n/a"}).`
-            : `Net return p10 ${ppm(s.p10_ppm)}, p50 ${ppm(s.p50_ppm)}, p90 ${ppm(s.p90_ppm)} (n = ${s.n}).`}
-        </p>
+        <p className="text-sm">{v.scenario}</p>
       </section>
-      <p className="text-xs text-text-muted">{card.footnote}</p>
+      <p className="text-xs text-text-muted">{v.footnote}</p>
     </main>
   );
 }

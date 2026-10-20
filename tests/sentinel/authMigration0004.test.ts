@@ -133,13 +133,13 @@ describe("auth migration 0004_alert_user_state", () => {
     const ms = await loadMigrations(MIGRATIONS("auth"));
     await migrateUp(db, ms);
     const full = await schemaOf(db);
-    await migrateDown(db, ms, 1); // 0005 (annotation) sits on top: take the schema as of 0004
+    await migrateDown(db, ms, 2); // 0006 (ui) and 0005 (annotation) sit on top: take the schema as of 0004
     expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 3 });
     const mid = (await schemaOf(db)).join("\n");
     expect(mid).not.toContain("alert_user_state");
     expect(mid).toContain("user_preference");
-    expect(await migrateUp(db, ms)).toEqual({ applied: 2, version: 5 }); // 0004, then 0005
+    expect(await migrateUp(db, ms)).toEqual({ applied: 3, version: 6 }); // 0004, 0005, then 0006
     expect(await schemaOf(db)).toEqual(full);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 5 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 6 });
   });
 });

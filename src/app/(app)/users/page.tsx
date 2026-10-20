@@ -2,7 +2,8 @@
 // acknowledgement, add / change role / revoke / sign-out-everywhere, and the audit log.
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
-import { authDb } from "@/lib/db/client";
+import { getConfig } from "@/lib/config/store";
+import { authDb, mainDb } from "@/lib/db/client";
 import { formatMelbourne } from "@/lib/health/format";
 import { userPreferences } from "@/lib/preferences/read";
 import { ACK_TEXT } from "@/lib/users/ack";
@@ -10,15 +11,20 @@ import {
   DEFAULT_MARKET,
   getSharingAck,
   listAudit,
+  listGrants,
   listUsers,
   type AuditRow,
+  type GrantRow,
 } from "@/lib/users/service";
+import { isGrantLive } from "@/lib/view/mask";
 import { ActionForm } from "./ActionForm";
 import { RevokeButton } from "./RevokeButton";
 import {
   addUserAction,
   changeRoleAction,
+  grantUnmaskAction,
   recordSharingAckAction,
+  revokeUnmaskAction,
   revokeUserAction,
   signOutEverywhereAction,
 } from "./actions";
@@ -32,6 +38,13 @@ function who(id: number | null, names: Map<number, string>): string {
   return names.get(id) ?? `User #${id}`;
 }
 
+const DEFAULT_UNMASK_DAYS = 30; // threshold-ok: shown only if the key cannot be read; the key default is 30
+
+function grantStatus(g: GrantRow, now: Date): "Live" | "Expired" | "Revoked" {
+  if (g.revokedAt !== null) return "Revoked";
+  return isGrantLive(g, now) ? "Live" : "Expired";
+}
+
 function target(a: AuditRow, names: Map<number, string>): string {
   if (a.targetId === null) return "";
   if (a.targetType === "app_user") return who(Number(a.targetId), names);
@@ -42,12 +55,22 @@ export default async function UsersPage() {
   const user = await requireUser("admin", "/users");
   const tf = (await userPreferences(user.id)).time_format;
   const db = authDb();
-  const [users, ack, events] = await Promise.all([
+  const [users, ack, events, grants] = await Promise.all([
     listUsers(db),
     getSharingAck(db, DEFAULT_MARKET),
     listAudit(db, 100),
+    listGrants(db),
   ]);
   const names = new Map<number, string>(users.map((u) => [u.id, u.email]));
+  let defaultDays = DEFAULT_UNMASK_DAYS;
+  try {
+    const v = Number(await getConfig(mainDb(), "unmask_expiry"));
+    if (Number.isInteger(v) && v > 0) defaultDays = v;
+  } catch {
+    // keep the default; the action reads the key again and validates it
+  }
+  const now = new Date();
+  const grantable = users.filter((u) => u.role !== "owner" && u.status !== "revoked");
 
   return (
     <main className="mx-auto flex min-h-screen max-w-4xl flex-col gap-8 px-6 py-10">
@@ -160,6 +183,100 @@ export default async function UsersPage() {
             ))}
           </tbody>
         </table>
+      </section>
+
+      <section aria-labelledby="unmask-h" className="flex flex-col gap-3">
+        <h2 id="unmask-h" className="text-xl font-semibold">
+          Unmask grants
+        </h2>
+        <p className="text-sm text-text-muted">
+          Editors and Viewers see stock codes and company names as &ldquo;Stock A&rdquo;,
+          &ldquo;Stock B&rdquo; and so on. A grant lets one person see the real codes until it
+          expires or you revoke it. You always see the real codes.
+        </p>
+        {grantable.length > 0 && (
+          <ActionForm action={grantUnmaskAction} className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-sm">
+              User
+              <select name="userId" required className="rounded border px-2 py-1">
+                {grantable.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.email}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              Days
+              <input
+                type="number"
+                name="days"
+                min={1}
+                max={365}
+                defaultValue={defaultDays}
+                className="w-24 rounded border px-2 py-1"
+              />
+            </label>
+            <button type="submit" className="rounded border px-3 py-1 font-medium">
+              Grant unmask
+            </button>
+          </ActionForm>
+        )}
+        {grants.length === 0 ? (
+          <p className="text-sm">No grants yet.</p>
+        ) : (
+          <table className="w-full border-collapse text-left text-sm">
+            <caption className="sr-only">Unmask grants</caption>
+            <thead>
+              <tr>
+                <th scope="col" className="py-2 pr-4">
+                  User
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Granted
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Expires
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Status
+                </th>
+                <th scope="col" className="py-2">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {grants.map((g) => {
+                const status = grantStatus(g, now);
+                return (
+                  <tr key={g.id} className="border-t border-border align-top">
+                    <th scope="row" className="py-2 pr-4 font-medium">
+                      {who(g.userId, names)}
+                    </th>
+                    <td className="py-2 pr-4">{formatMelbourne(g.grantedAt, tf)}</td>
+                    <td className="py-2 pr-4">{formatMelbourne(g.expiresAt, tf)}</td>
+                    <td className="py-2 pr-4">{status}</td>
+                    <td className="py-2">
+                      {status === "Live" && (
+                        <ActionForm action={revokeUnmaskAction}>
+                          <input type="hidden" name="grantId" value={g.id} />
+                          <button
+                            type="submit"
+                            aria-label={`Revoke unmask grant: ${who(g.userId, names)}`}
+                            className="text-accent underline"
+                          >
+                            Revoke
+                          </button>
+                        </ActionForm>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </section>
 
       <section aria-labelledby="add-h" className="flex flex-col gap-3">

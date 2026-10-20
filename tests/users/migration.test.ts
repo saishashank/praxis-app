@@ -39,7 +39,7 @@ describe("auth migration 0002_sharing_ack", () => {
     const ms = await loadMigrations(MIGRATIONS("auth"));
     await migrateUp(db, ms);
     const before = await schemaOf(db);
-    expect(await migrateDown(db, ms, 4)).toEqual({ rolledBack: 4, version: 1 });
+    expect(await migrateDown(db, ms, 5)).toEqual({ rolledBack: 5, version: 1 });
     const mid = (await schemaOf(db)).join("\n");
     expect(mid).not.toContain("sharing_ack");
     expect(mid).toContain("app_user");

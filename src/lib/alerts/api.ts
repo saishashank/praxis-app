@@ -14,6 +14,8 @@ import type { Client, Transaction } from "@libsql/client";
 import { auditTx, NO_META, type RequestMeta } from "@/lib/auth/audit";
 import type { AuthEnv } from "@/lib/auth/env";
 import { getPreferences } from "@/lib/preferences/service";
+import { isOpaqueAlertKey, maskAlertViews, resolveAlertKey } from "@/lib/view/alerts";
+import { maskContextFor } from "@/lib/view/mask";
 import type { AlertKind, AlertRow, AlertTier } from "@/lib/sentinel/schema";
 import { ALERT_TIERS } from "@/lib/sentinel/schema";
 import { parseFacts } from "./deliver";
@@ -278,11 +280,24 @@ async function findAlert(
   return { tier: tier as AlertTier, kind: String(r.rows[0].kind) as AlertKind };
 }
 
+// The inbox shows a masked user an opaque `mk:` key where the stored key would carry a stock code or
+// a trade id (view/alerts.ts); the own-row actions accept either form and work on the stored key.
+async function storedKey(deps: ActionDeps, given: string): Promise<string | null> {
+  if (!isOpaqueAlertKey(given)) return given;
+  try {
+    return await resolveAlertKey(deps.mainDb, given, (deps.now ?? (() => new Date()))());
+  } catch {
+    return null;
+  }
+}
+
 export async function ackAlert(
   deps: ActionDeps,
   actor: { id: number },
-  key: string,
+  given: string,
 ): Promise<ActionResult<{ ackedAt: string; changed: boolean }>> {
+  const key = await storedKey(deps, given);
+  if (key === null) return { ok: false, error: "not_found" };
   if (alertKeyKind(key) === null || key.length > 300) return { ok: false, error: "invalid" };
   let found;
   try {
@@ -323,9 +338,11 @@ export async function ackAlert(
 export async function snoozeAlert(
   deps: ActionDeps,
   actor: { id: number },
-  key: string,
+  given: string,
   until: string | null,
 ): Promise<ActionResult<{ snoozedUntil: string | null }>> {
+  const key = await storedKey(deps, given);
+  if (key === null) return { ok: false, error: "not_found" };
   if (alertKeyKind(key) === null || key.length > 300) return { ok: false, error: "invalid" };
   const now = (deps.now ?? (() => new Date()))();
   let untilIso: string | null = null;
@@ -435,7 +452,7 @@ export function errorResponse(e: ActionError): Response {
 
 export async function handleList(
   deps: InboxDeps,
-  user: { id: number },
+  user: { id: number; role?: string | null },
   url: URL,
   now?: Date,
 ): Promise<Response> {
@@ -454,7 +471,15 @@ export async function handleList(
       { tier: (tier as AlertTier | null) ?? undefined, unacked: un === "1" || un === "true" },
       now,
     );
-    return json(200, r);
+    // DAT-124 / ROL-107: codes, names, prices and links never leave the server for a masked user. A
+    // missing role masks; a failure while masking is an error, never an unmasked body.
+    const ctx = await maskContextFor(
+      user.role ? { id: user.id, role: user.role } : null,
+      deps.authDb,
+      now,
+    );
+    if (!ctx.masked) return json(200, r);
+    return json(200, { ...r, alerts: await maskAlertViews(deps.mainDb, r.alerts) });
   } catch {
     return errorResponse("unavailable");
   }

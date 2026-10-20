@@ -825,6 +825,183 @@ const M6_EXPLICIT_META: Record<keyof typeof M6_EXPLICIT_KEYS, ConfigMeta> = {
   },
 };
 
+// ---- M7 keys (the UI; docs/M7_design.md 2.11, decision 29, D-128) -------------------------------
+// Defaults and bounds are those of ch.15 section 15.8 and l.171 where the spec gives them. "D-129"
+// marks bounds and keys chosen by the builder: `unmask_expiry` has no bounds in ch.15, and
+// `attention_near_limit_pct` / `market_list_page_size` / `strategy_names` are named in ch.16 only.
+
+const OTH: ConfigArea = "Other";
+
+// prettier-ignore
+const M7_RANGED = [
+  ["unmask_expiry", "int", 30, 1, 365, "days", "O", OTH, "UX-009; ch.15 l.171 (bounds 1-365 agent-chosen, D-129)", "Days an Owner's unmask grant lasts"],
+  ["overview_max_per_night", "int", 20, 0, 60, "companies/night", "O", OTH, "UXN-272; ch.15 l.203", "Company overviews written per night"],
+  ["overview_refresh_days", "int", 7, 1, 30, "days", "O", OTH, "UXN-272; ch.15 l.204", "Days before a company overview is refreshed"],
+  ["intraday_codes_max", "int", 150, 0, 300, "codes", "O", OTH, "UXN-048; ch.15 l.205", "Most codes given delayed intraday prices"],
+  ["intraday_refresh_min", "int", 5, 2, 15, "min", "O", OTH, "UXN-048; ch.15 l.206", "Minutes between delayed price refreshes"],
+  ["watchlist_max", "int", 50, 10, 200, "codes", "O", OTH, "UXN-047; ch.15 l.207", "Most codes on one personal watchlist"],
+  ["attention_near_limit_pct", "int", 15, 5, 30, "%", "O", OTH, "UXN-046 (16 l.291); named in ch.16, not in ch.15 (D-128, D-129)", "Share of a limit at which a strategy is shown as near it"],
+] as const satisfies readonly RangedRow[];
+
+// prettier-ignore
+const M7_FIXED = [
+  ["market_list_page_size", "int", 50, "rows", OTH, "UXN-270 (16 l.308); named in ch.16, not in ch.15 (D-128, D-129)", "Rows on one page of the Market all-companies table"],
+] as const satisfies readonly FixedRow[];
+
+type M7RangedKey = (typeof M7_RANGED)[number][0];
+type M7FixedKey = (typeof M7_FIXED)[number][0];
+
+const M7_RANGED_KEYS = Object.fromEntries(
+  M7_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M7RangedKey, ConfigKeyDef>;
+
+const M7_FIXED_KEYS = Object.fromEntries(
+  M7_FIXED.map(([key, , def, unit, , ref]) => [
+    key,
+    { default: def, unit, editable: "fixed", ref, validate: never } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M7FixedKey, ConfigKeyDef>;
+
+/** The strategy-name table (UXN-039): one entry per family, Owner-editable, versioned by config_version. */
+export const STRATEGY_NAME_FIELDS = [
+  "name",
+  "one_liner",
+  "buys",
+  "sells",
+  "works_best",
+  "main_risk",
+] as const;
+export const STRATEGY_NAME_FAMILIES = ["F1", "F2", "F3", "F4", "F5", "F6"] as const;
+const STRATEGY_TEXT_MAX = 300; // threshold-ok: text length guard for an Owner-edited table
+const STRATEGY_NAME_MAX = 40; // threshold-ok: text length guard for a short name
+
+export const STRATEGY_NAMES_DEFAULT = {
+  F1: {
+    name: "Follow the trend",
+    one_liner: "Buys shares that just hit a 1-year high with strong buying, and rides the rise.",
+    buys: "Price at its highest in a year, trading busier than usual, among the best performers of the last 6 months.",
+    sells:
+      "A trailing stop-loss that rises with the price; gives up if it hasn't gained 5% in about 2 months.",
+    works_best: "The market is calm and rising.",
+    main_risk: "Sharp reversals: a new high can be the top.",
+  },
+  F2: {
+    name: "Good company, good news",
+    one_liner: "Buys solid, fairly priced companies right after good results.",
+    buys: "Profitable, low debt, cheaper than similar companies, and just reported better-than-expected results.",
+    sells: "Stop-loss below the buy price; sells on bad news or after about 3 months.",
+    works_best: "Company results season.",
+    main_risk: "Good results already in the price.",
+  },
+  F3: {
+    name: "News jump",
+    one_liner: "Buys shares that jump on big good news, hoping the rise continues for a few weeks.",
+    buys: "Price-moving good news with a big jump and very heavy trading that day.",
+    sells:
+      "Sells if the price falls below the news-day low; locks in gains after +10%; exits after about 4 weeks.",
+    works_best: "Busy news periods.",
+    main_risk: "The jump fades quickly.",
+  },
+  F4: {
+    name: "Buy the dip",
+    one_liner: "Buys strong companies after a short, sharp fall, and sells when they bounce back.",
+    buys: "Long-term uptrend, but the last few days fell hard; no bad news behind the fall.",
+    sells: "Sells on the first recovery or after 2 weeks; stop-loss below the buy price.",
+    works_best: "Mixed, choppy markets.",
+    main_risk: "The fall was the start of a bigger drop.",
+  },
+  F5: {
+    name: "Small-company spotter",
+    one_liner: "Looks for small companies with unusual buying and good news. Higher risk.",
+    buys: "Small or mid-size company, trading 3x busier than usual, with good news and a strong close.",
+    sells:
+      "Stop-loss (never more than -20%); sells when trading goes quiet, on bad news or after about 6 weeks.",
+    works_best: "Calm, rising markets.",
+    main_risk: "Small companies can be illiquid or hyped; biggest swings of all strategies.",
+  },
+  F6: {
+    name: "Signals agree",
+    one_liner: "Buys only when at least 3 different kinds of evidence point the same way.",
+    buys: "At least 3 of: a price signal, a news signal, company insiders buying, fewer investors betting against the share.",
+    sells:
+      "Stop-loss below the buy price; after about 4 weeks or when the first signal's own exit triggers.",
+    works_best: "Clear, calm markets.",
+    main_risk: "Rare signals, so few trades to learn from.",
+  },
+} as const;
+
+async function validateStrategyNames(v: unknown): Promise<string | null> {
+  if (!exactKeys(v, [...STRATEGY_NAME_FAMILIES])) {
+    return `must have exactly one entry for each of ${STRATEGY_NAME_FAMILIES.join(", ")}`;
+  }
+  for (const fam of STRATEGY_NAME_FAMILIES) {
+    const row = v[fam];
+    if (!exactKeys(row, [...STRATEGY_NAME_FIELDS])) {
+      return `${fam} needs ${STRATEGY_NAME_FIELDS.join(", ")}`;
+    }
+    for (const f of STRATEGY_NAME_FIELDS) {
+      const t = row[f];
+      const max = f === "name" ? STRATEGY_NAME_MAX : STRATEGY_TEXT_MAX;
+      if (typeof t !== "string" || t.trim().length < 1 || t.length > max) {
+        return `${fam} ${f} must be text of 1 to ${max} characters`;
+      }
+    }
+    // UXN-039: no numbers in names ("Strategy 1" is not allowed).
+    if (/^\s*(strategy\s*)?#?\d/i.test(String(row.name))) {
+      return `${fam} name must not start with a number`;
+    }
+  }
+  return null;
+}
+
+const M7_EXPLICIT_KEYS = {
+  strategy_names: {
+    default: STRATEGY_NAMES_DEFAULT,
+    unit: "table",
+    editable: "O",
+    ref: "UXN-039 (16 l.268-277); not in ch.15 (D-128, D-129)",
+    validate: async (v: unknown) => validateStrategyNames(v),
+  },
+} satisfies Record<string, ConfigKeyDef>;
+
+const M7_META_TABLES: Record<M7RangedKey | M7FixedKey | keyof typeof M7_EXPLICIT_KEYS, ConfigMeta> =
+  {
+    ...(Object.fromEntries(
+      M7_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+        key,
+        {
+          label,
+          area,
+          bounds: boundsText(kind, min, max, unit),
+          input: kind === "int" ? "int" : "number",
+        },
+      ]),
+    ) as Record<M7RangedKey, ConfigMeta>),
+    ...(Object.fromEntries(
+      M7_FIXED.map(([key, , , , area, , label]) => [
+        key,
+        { label, area, bounds: "fixed", input: "int" },
+      ]),
+    ) as Record<M7FixedKey, ConfigMeta>),
+    strategy_names: {
+      label: "Strategy names, one-liners and hover cards (one entry per family F1 to F6)",
+      area: OTH,
+      bounds:
+        "F1 to F6, each with name, one_liner, buys, sells, works_best, main_risk; no numbers in names",
+      input: "object",
+    },
+  };
+
 export const CONFIG_KEYS = {
   ...M4_RANGED_KEYS,
   ...M4_FIXED_KEYS,
@@ -833,6 +1010,9 @@ export const CONFIG_KEYS = {
   ...M6_RANGED_KEYS,
   ...M6_FIXED_KEYS,
   ...M6_EXPLICIT_KEYS,
+  ...M7_RANGED_KEYS,
+  ...M7_FIXED_KEYS,
+  ...M7_EXPLICIT_KEYS,
   // ch.15 l.163: evening_review_time / partial_at / send_by 20:00 / 20:30 / 20:45, O; EML-010/011.
   evening_review_time: {
     default: "20:00",
@@ -1328,6 +1508,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   ...M5_META_TABLES,
   ...M6_META_TABLES,
   ...M6_EXPLICIT_META,
+  ...M7_META_TABLES,
   evening_review_time: {
     label: "Evening Review send time",
     area: SEM,
@@ -1640,4 +1821,11 @@ export const M6_KEY_NAMES: readonly ConfigKey[] = [
   ...M6_RANGED.map((r) => r[0]),
   ...M6_FIXED.map((r) => r[0]),
   ...(Object.keys(M6_EXPLICIT_KEYS) as ConfigKey[]),
+];
+
+/** Every key added in M7 (docs/M7_design.md 2.11, D-128): the tables above plus the strategy-name table. */
+export const M7_KEY_NAMES: readonly ConfigKey[] = [
+  ...M7_RANGED.map((r) => r[0]),
+  ...M7_FIXED.map((r) => r[0]),
+  ...(Object.keys(M7_EXPLICIT_KEYS) as ConfigKey[]),
 ];

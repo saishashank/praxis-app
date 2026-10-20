@@ -6,6 +6,7 @@ const svc = vi.hoisted(() => ({
   listUsers: vi.fn(),
   getSharingAck: vi.fn(),
   listAudit: vi.fn(),
+  listGrants: vi.fn(),
 }));
 vi.mock("@/lib/auth/guard", () => ({ requireUser: (...a: unknown[]) => requireUser(...a) }));
 vi.mock("@/lib/db/client", () => ({ authDb: () => ({}) }));
@@ -21,6 +22,8 @@ const actions = vi.hoisted(() => ({
   })),
   revokeUserAction: vi.fn(async () => ({ ok: true })),
   signOutEverywhereAction: vi.fn(async () => ({ ok: true })),
+  grantUnmaskAction: vi.fn(async () => ({ ok: true })),
+  revokeUnmaskAction: vi.fn(async () => ({ ok: true })),
 }));
 vi.mock("@/app/(app)/users/actions", () => actions);
 
@@ -81,6 +84,7 @@ beforeEach(() => {
   svc.listUsers.mockResolvedValue(users);
   svc.listAudit.mockResolvedValue(events);
   svc.getSharingAck.mockResolvedValue(null);
+  svc.listGrants.mockResolvedValue([]);
 });
 
 describe("users page", () => {
@@ -260,5 +264,55 @@ describe("RevokeButton dialog", () => {
     await submit(screen.getByRole("button", { name: "Confirm" }));
     expect(screen.getByRole("alert")).toHaveTextContent("The Owner cannot be changed here.");
     expect(HTMLDialogElement.prototype.close).not.toHaveBeenCalled();
+  });
+});
+
+describe("unmask grants section (UX-009, ROL-107)", () => {
+  const FAR = "2099-01-01T00:00:00.000Z";
+  const grant = (id: number, userId: number, expiresAt: string, revokedAt: string | null) => ({
+    id,
+    userId,
+    grantedBy: 1,
+    grantedAt: T,
+    expiresAt,
+    revokedAt,
+    revokedBy: revokedAt === null ? null : 1,
+  });
+
+  it("lists grantable users (not the Owner, not revoked) and says No grants yet", async () => {
+    render(await UsersPage());
+    const sec = screen.getByRole("heading", { name: "Unmask grants" }).closest("section")!;
+    const options = within(sec)
+      .getAllByRole("option")
+      .map((o) => o.textContent);
+    expect(options).toEqual(["ed@example.test", "inv@example.test"]);
+    expect(within(sec).getByText("No grants yet.")).toBeInTheDocument();
+    expect(within(sec).getByRole("button", { name: "Grant unmask" })).toBeEnabled();
+  });
+
+  it("shows Live (with Revoke), Expired and Revoked rows; only a live grant can be revoked", async () => {
+    svc.listGrants.mockResolvedValue([
+      grant(3, 2, FAR, null),
+      grant(2, 3, "2020-01-01T00:00:00.000Z", null),
+      grant(1, 2, FAR, "2026-10-01T00:00:00.000Z"),
+    ]);
+    render(await UsersPage());
+    const sec = screen.getByRole("heading", { name: "Unmask grants" }).closest("section")!;
+    const rows = within(sec).getAllByRole("row").slice(1);
+    expect(rows.map((r) => within(r).getAllByRole("cell")[2]!.textContent)).toEqual([
+      "Live",
+      "Expired",
+      "Revoked",
+    ]);
+    expect(within(sec).getAllByRole("button", { name: /Revoke unmask grant/ })).toHaveLength(1);
+  });
+
+  it("submits the grant form to grantUnmaskAction and a revoke to revokeUnmaskAction", async () => {
+    svc.listGrants.mockResolvedValue([grant(3, 2, FAR, null)]);
+    render(await UsersPage());
+    await submit(screen.getByRole("button", { name: "Grant unmask" }));
+    expect(actions.grantUnmaskAction).toHaveBeenCalledTimes(1);
+    await submit(screen.getByRole("button", { name: /Revoke unmask grant/ }));
+    expect(actions.revokeUnmaskAction).toHaveBeenCalledTimes(1);
   });
 });

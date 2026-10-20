@@ -1077,6 +1077,8 @@ describe("main migration 0010_learning: up / down / up and backup", () => {
   it("down removes every table, trigger and index of 0010 and touches nothing else; up restores an identical schema", async () => {
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
+    const full = await schemaOf(db);
+    await migrateDown(db, ms, 1); // 0011 (ui) sits on top: take the schema as of 0010
     const before = await schemaOf(db);
     expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 9 });
     const mid = await schemaOf(db);
@@ -1095,9 +1097,9 @@ describe("main migration 0010_learning: up / down / up and backup", () => {
       );
     });
     expect(mid).toEqual(rest);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 1, version: 10 });
-    expect(await schemaOf(db)).toEqual(before);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 10 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 2, version: 11 }); // 0010, then 0011
+    expect(await schemaOf(db)).toEqual(full);
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 11 });
   });
 
   it("every forever table of the migration is in the backup list; pruned tables are not", async () => {
@@ -1119,7 +1121,7 @@ describe("main migration 0010_learning: up / down / up and backup", () => {
     await expect(run(target, "DELETE FROM challenger")).rejects.toThrow(/forever table/);
     await expect(set(target, "challenger", "state = 'approved'")).rejects.toThrow(/KB-040 edges/);
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 10 });
+    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 11 });
   });
 });
 
@@ -1271,12 +1273,13 @@ describe("auth migration 0005_annotation", () => {
     const db = track(createClient({ url: tempDbUrl() }));
     const ms = await loadMigrations(MIGRATIONS("auth"));
     await migrateUp(db, ms);
-    const before = await schemaOf(db);
+    const full = await schemaOf(db);
+    await migrateDown(db, ms, 1); // 0006 (ui) sits on top: take the schema as of 0005
     expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 4 });
     const mid = (await schemaOf(db)).join("\n");
     expect(mid).not.toContain("annotation");
     expect(mid).toContain("alert_user_state");
-    expect(await migrateUp(db, ms)).toEqual({ applied: 1, version: 5 });
-    expect(await schemaOf(db)).toEqual(before);
+    expect(await migrateUp(db, ms)).toEqual({ applied: 2, version: 6 }); // 0005, then 0006
+    expect(await schemaOf(db)).toEqual(full);
   });
 });
