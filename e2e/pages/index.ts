@@ -11,6 +11,7 @@ import { NEWS_PAGES } from "./news";
 import { REVIEWS_PAGES } from "./reviews";
 import { LEARNED_PAGES } from "./learned";
 import { SETTINGS_PAGES } from "./settings";
+import { OPS_PAGES } from "./ops";
 import type { PageEntry } from "./types";
 
 export type { PageEntry } from "./types";
@@ -25,6 +26,7 @@ export const PAGES: PageEntry[] = [
   ...REVIEWS_PAGES,
   ...LEARNED_PAGES,
   ...SETTINGS_PAGES,
+  ...OPS_PAGES,
 ];
 
 /** Roles that may open the page (derived from the guard action unless the entry lists them). */

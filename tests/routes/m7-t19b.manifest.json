@@ -1,0 +1,11 @@
+{
+  "$comment": "M7 T19b (D-131 fragment): the Owner Ops tick and the What-if run. A test file must mention the action name.",
+  "routes": {
+    "action src/app/(app)/ops/actions.ts#tickOpsTaskAction": {
+      "tests": ["tests/ops/tickAction.test.ts"]
+    },
+    "action src/app/(app)/what-if/actions.ts#runWhatIfAction": {
+      "tests": ["tests/whatif/runAction.test.ts"]
+    }
+  }
+}
