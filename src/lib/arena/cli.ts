@@ -382,6 +382,9 @@ export async function signalsMain(
         calendar,
         now: () => new Date(nowMs()).toISOString(),
         commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
+        // D-105 / M8 T5: a ledger-invariant violation opens an S1 incident; with the Resend
+        // variables in the job env it is also emailed, without them it is recorded only.
+        notify: { env },
       });
       out(reviewSummary(review));
       lastReview = `review=${review.status}`;

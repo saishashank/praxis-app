@@ -88,7 +88,7 @@ describe("usage page", () => {
     guard.requireUser.mockResolvedValueOnce(owner);
     metersMock.mockRejectedValueOnce(new Error("db down: secret detail"));
     render(await UsagePage());
-    expect(screen.getByRole("status")).toHaveTextContent("Usage data unavailable");
+    expect(screen.getByText("Usage data unavailable")).toHaveAttribute("role", "status");
     expect(screen.queryByText(/secret detail/)).toBeNull();
   });
 });

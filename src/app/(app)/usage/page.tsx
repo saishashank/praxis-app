@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
 import { formatMelbourne } from "@/lib/health/format";
 import { userPreferences } from "@/lib/preferences/read";
+import { loadBakeoffResults, type BakeoffView } from "@/lib/ui/loaders/usageBakeoff";
 import { loadLlmUsage, type LlmCounts, type LlmUsage } from "@/lib/ui/loaders/usageLlm";
 import {
   getMeters,
@@ -45,6 +46,12 @@ export default async function UsagePage() {
     llm = await loadLlmUsage(mainDb(), user.role, now);
   } catch {
     llm = null; // neutral message below; no error details
+  }
+  let bakeoff: BakeoffView | null | "unavailable" = null;
+  try {
+    bakeoff = await loadBakeoffResults(mainDb(), user.role);
+  } catch {
+    bakeoff = "unavailable"; // neutral message below; no error details
   }
 
   return (
@@ -120,6 +127,8 @@ export default async function UsagePage() {
       )}
 
       <LlmSection llm={llm} />
+
+      <BakeoffSection bakeoff={bakeoff} />
 
       <footer className="text-xs text-text-muted">
         Simulation for personal information only — not financial advice
@@ -226,6 +235,73 @@ function LlmSection({ llm }: { llm: LlmUsage | null }) {
               </tbody>
             </table>
           </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** LLM-042: the stored results of the latest bake-off run (Owner only; the loader checks the role). */
+function BakeoffSection({ bakeoff }: { bakeoff: BakeoffView | null | "unavailable" }) {
+  return (
+    <section aria-labelledby="bakeoff-h" className="flex flex-col gap-3">
+      <h2 id="bakeoff-h" className="text-xl font-semibold">
+        Model bake-off
+      </h2>
+      {bakeoff === "unavailable" ? (
+        <p role="status">Bake-off results unavailable</p>
+      ) : bakeoff === null ? (
+        <p className="text-sm text-text-muted">No bake-off has run yet.</p>
+      ) : (
+        <>
+          <p className="text-sm text-text-muted">
+            Run <span className="font-mono">{bakeoff.runId}</span>, report{" "}
+            <span className="font-mono">{bakeoff.reportSha.slice(0, 12)}</span>. A model passes only
+            when it meets every threshold on the golden set.
+          </p>
+          <table className="w-full border-collapse text-left text-sm">
+            <caption className="sr-only">Bake-off results per model and category</caption>
+            <thead>
+              <tr>
+                <th scope="col" className="py-2 pr-4">
+                  Model
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Category
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Valid JSON
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Invented numbers
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Injection resisted
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Result
+                </th>
+                <th scope="col" className="py-2">
+                  Training policy checked
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {bakeoff.lines.map((l) => (
+                <tr key={`${l.modelId}|${l.category}`} className="border-t border-border align-top">
+                  <th scope="row" className="py-2 pr-4 font-mono font-medium">
+                    {l.modelId}
+                  </th>
+                  <td className="py-2 pr-4">{l.category}</td>
+                  <td className="py-2 pr-4">{pctText(l.jsonValidPct)}</td>
+                  <td className="py-2 pr-4">{whole.format(l.inventedNumbers)}</td>
+                  <td className="py-2 pr-4">{pctText(l.injectionResistancePct)}</td>
+                  <td className="py-2 pr-4">{l.passes ? "Passes" : "Does not pass"}</td>
+                  <td className="py-2">{l.trainsOnPromptsCheckedD ?? "Not checked"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </>
       )}
     </section>
