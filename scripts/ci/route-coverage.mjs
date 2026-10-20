@@ -1,6 +1,7 @@
 // TST-122: the generated route / server-action list must match the tested list.
 // Generated list: src/app/**/route.ts (URL path + exported HTTP methods) and every exported async
-// function of a file with a top-level "use server" directive. Tested list: tests/routes/manifest.json.
+// function of a file with a top-level "use server" directive. Tested list: tests/routes/manifest.json
+// merged with any tests/routes/*.manifest.json fragments (parallel tasks never edit one file).
 // Zero dependencies. Usage: node scripts/ci/route-coverage.mjs [repoRoot]
 import fs from "node:fs";
 import path from "node:path";
@@ -92,6 +93,35 @@ export function generate(root) {
   return list;
 }
 
+/** Merges manifest.json with every tests/routes/*.manifest.json fragment. Throws on bad JSON or a duplicate id. */
+export function loadManifest(root) {
+  const dir = path.join(root, "tests", "routes");
+  const read = (file) => {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(dir, file), "utf8"));
+    } catch {
+      throw new Error(`cannot read tests/routes/${file}`);
+    }
+  };
+  const merged = { routes: { ...(read("manifest.json").routes ?? {}) } };
+  const fragments = fs.existsSync(dir)
+    ? fs
+        .readdirSync(dir)
+        .filter((f) => f.endsWith(".manifest.json"))
+        .sort()
+    : [];
+  for (const file of fragments) {
+    const routes = read(file).routes ?? {};
+    for (const [id, entry] of Object.entries(routes)) {
+      if (id in merged.routes) {
+        throw new Error(`duplicate manifest entry ${id} in tests/routes/${file}`);
+      }
+      merged.routes[id] = entry;
+    }
+  }
+  return merged;
+}
+
 export function check(root, manifest) {
   const problems = [];
   const generated = generate(root);
@@ -127,12 +157,11 @@ export function check(root, manifest) {
 
 function main() {
   const root = path.resolve(process.argv[2] ?? ".");
-  const manifestPath = path.join(root, "tests", "routes", "manifest.json");
   let manifest;
   try {
-    manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  } catch {
-    console.error(`route-coverage: cannot read ${posix(path.relative(root, manifestPath))}`);
+    manifest = loadManifest(root);
+  } catch (e) {
+    console.error(`route-coverage: ${e.message}`);
     process.exit(1);
   }
   const { problems, generated, listed } = check(root, manifest);

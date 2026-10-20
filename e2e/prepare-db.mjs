@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { applyScenario } from "./seed/index.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const need = (k) => {
@@ -40,5 +41,16 @@ try {
   }
 } finally {
   client.close();
+}
+// E2E_SCENARIO: empty (default, production-like data-only) | populated | stale (synthetic ZZ data).
+const scenario = process.env.E2E_SCENARIO ?? "empty";
+const main = createClient({ url: need("TURSO_MAIN_URL") });
+try {
+  const seeded = await applyScenario(main, scenario);
+  console.log(
+    `e2e: scenario ${seeded.scenario} (${seeded.instruments} instruments, ${seeded.bars} bars)`,
+  );
+} finally {
+  main.close();
 }
 console.log("e2e: databases ready");

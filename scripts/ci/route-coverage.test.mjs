@@ -8,6 +8,7 @@ import {
   check,
   generate,
   hasUseServer,
+  loadManifest,
   routeMethods,
   urlPathFor,
 } from "./route-coverage.mjs";
@@ -104,4 +105,23 @@ test("a new server action without tests fails", () => {
   const files = { ...BASE, "src/lib/x.ts": '"use server";\nexport async function danger() {}' };
   const text = check(fixture(files), GOOD).problems.join("\n");
   assert.match(text, /untested: action src\/lib\/x\.ts#danger/);
+});
+
+test("fragments (*.manifest.json) merge with the main manifest", () => {
+  const files = {
+    "tests/routes/manifest.json": JSON.stringify({ routes: { "GET /a": { tests: ["x"] } } }),
+    "tests/routes/news.manifest.json": JSON.stringify({ routes: { "POST /b": { tests: ["y"] } } }),
+  };
+  const merged = loadManifest(fixture(files));
+  assert.deepEqual(Object.keys(merged.routes).sort(), ["GET /a", "POST /b"]);
+});
+
+test("a duplicate id across fragments, or a bad fragment, is an error", () => {
+  const dup = {
+    "tests/routes/manifest.json": JSON.stringify({ routes: { "GET /a": { tests: ["x"] } } }),
+    "tests/routes/b.manifest.json": JSON.stringify({ routes: { "GET /a": { tests: ["x"] } } }),
+  };
+  assert.throws(() => loadManifest(fixture(dup)), /duplicate manifest entry GET \/a/);
+  const bad = { "tests/routes/manifest.json": "{}", "tests/routes/c.manifest.json": "{ nope" };
+  assert.throws(() => loadManifest(fixture(bad)), /cannot read tests\/routes\/c\.manifest\.json/);
 });

@@ -72,3 +72,36 @@ export async function axeViolations(page: Page) {
     nodes: v.nodes.map((n) => n.target.join(" ")),
   }));
 }
+
+export const THEMES = ["dark", "light", "system", "midnight", "dim", "high_contrast"] as const;
+
+export const ROLE_LIST: readonly Role[] = ["owner", "editor", "viewer"];
+
+/** UXN-017 / AT-26: no horizontal page scroll (call at phone width). */
+export async function expectNoHorizontalScroll(page: Page): Promise<void> {
+  const { scrollWidth, innerWidth } = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    innerWidth: window.innerWidth,
+  }));
+  if (scrollWidth > innerWidth) {
+    throw new Error(`horizontal scroll: scrollWidth ${scrollWidth} > innerWidth ${innerWidth}`);
+  }
+}
+
+/** axe (WCAG 2.2 AA) on one path as `role` in every theme; returns violations per theme. */
+export async function axeAllThemes(
+  page: Page,
+  context: BrowserContext,
+  role: Role,
+  path: string,
+  themes: readonly string[] = THEMES,
+): Promise<Record<string, Awaited<ReturnType<typeof axeViolations>>>> {
+  await signIn(context, role);
+  const out: Record<string, Awaited<ReturnType<typeof axeViolations>>> = {};
+  for (const theme of themes) {
+    await setTheme(role, theme);
+    await page.goto(path);
+    out[theme] = await axeViolations(page);
+  }
+  return out;
+}
