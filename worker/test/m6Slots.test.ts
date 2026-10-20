@@ -15,7 +15,9 @@ const ENV: ClockEnv = {
   TURSO_MAIN_URL: TURSO_URL,
   TURSO_MAIN_TOKEN: TURSO_TOKEN,
 };
-const ON: Slot[] = AU_SLOTS.map((s) => (s.id === "kb-archive" ? { ...s, enabled: true } : s));
+const ON: Slot[] = AU_SLOTS.map((s) =>
+  s.id === "kb-archive" ? { ...s, enabled: true, requiresListing: false } : s,
+);
 
 const utc = (date: string, time: string, offset: number): number => {
   const [y, mo, d] = date.split("-").map(Number);

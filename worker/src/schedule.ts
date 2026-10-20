@@ -41,7 +41,22 @@ export type Slot = {
   priority: number;
   /** A missed slot may still be dispatched this many minutes after its time (catch-up). */
   catchUpMin: number;
+  /**
+   * "Available in this build" (M8 T8, decision 32). A slot with `requiresListing` is available but
+   * runs only when its id is in the runtime list `worker_state.slots_enabled`; with no list it is
+   * skipped (so an absent list behaves exactly as when these slots were disabled).
+   */
   enabled: boolean;
+  requiresListing?: boolean;
+  /** Runner "actions": run only on the first Saturday of the local month (M8 T8, decision 46). */
+  monthly?: "first-saturday";
+  /**
+   * Runner "actions": workflow inputs come from this `worker_state` key (a JSON object of strings,
+   * read in the same single read as the switches). Missing, malformed or lacking one of
+   * `requiredInputs` -> the slot is skipped, never dispatched with a guess.
+   */
+  inputsKey?: string;
+  requiredInputs?: readonly string[];
   note: string;
 };
 
@@ -57,6 +72,7 @@ export const DISPATCHABLE_WORKFLOWS: readonly string[] = [
   "backup.yml",
   "ingest-batch1.yml",
   "kb-archive.yml",
+  "llm-bakeoff.yml",
   "maintenance.yml",
   "replay.yml",
 ];
@@ -94,7 +110,8 @@ export const AU_SLOTS: readonly Slot[] = [
     marketBound: false,
     priority: 4,
     catchUpMin: 0,
-    enabled: false,
+    enabled: true,
+    requiresListing: true,
     note: "P0 batch flush and missing alerts (M5 T6, decision 40); OFF until the Owner enables alerts",
   }),
   // M5 T8 (D-103, design 4.5): the pre-open re-check is a signed POST to the app route, not an ASX
@@ -113,7 +130,8 @@ export const AU_SLOTS: readonly Slot[] = [
     marketBound: true,
     priority: 2,
     catchUpMin: 3,
-    enabled: false,
+    enabled: true,
+    requiresListing: true,
     note: "Pre-open re-check attempt 1 (M5 T8, ARN-020a); OFF until the Owner enables the arena",
   }),
   slot({
@@ -129,7 +147,8 @@ export const AU_SLOTS: readonly Slot[] = [
     marketBound: true,
     priority: 2,
     catchUpMin: 1,
-    enabled: false,
+    enabled: true,
+    requiresListing: true,
     note: "Pre-open re-check attempt 2, only after an error or timeout of 09:54 (M5 T8); OFF with it",
   }),
   // M5 T10 (D-107, design 4.1/4.6): the Evening Review send. A `route` slot every 5 minutes from
@@ -150,7 +169,8 @@ export const AU_SLOTS: readonly Slot[] = [
     marketBound: false,
     priority: 5,
     catchUpMin: 0,
-    enabled: false,
+    enabled: true,
+    requiresListing: true,
     note: "Evening Review send 20:00-20:45 (M5 T10, EML-010/011); OFF until the Owner enables emails",
   }),
   slot({
@@ -166,7 +186,8 @@ export const AU_SLOTS: readonly Slot[] = [
     marketBound: false,
     priority: 5,
     catchUpMin: 0,
-    enabled: false,
+    enabled: true,
+    requiresListing: true,
     note: "Evening Review retry and complete-version store 21:00-22:00 (M5 T10); OFF with the slot above",
   }),
   // M5 T13 (D-108): health snapshot, attention reminder and Morning Brief. DISABLED like every M5
@@ -182,7 +203,8 @@ export const AU_SLOTS: readonly Slot[] = [
     marketBound: false,
     priority: 5,
     catchUpMin: 30,
-    enabled: false,
+    enabled: true,
+    requiresListing: true,
     note: "Morning health snapshot, attention reminder and Morning Brief (M5 T13, PLT-061); OFF until the Owner enables emails",
   }),
   slot({
@@ -227,7 +249,8 @@ export const AU_SLOTS: readonly Slot[] = [
     marketBound: true,
     priority: 15,
     catchUpMin: 20,
-    enabled: false,
+    enabled: true,
+    requiresListing: true,
     note: "Batch 2a close the books (T10, ARN-060): fills, stops, settlement, NAV, invariants; OFF until the Owner enables the arena",
   }),
   // M4 T8 (D-087): batch 2b "signals and orders". Allow-listed, slot OFF like arena-close: the
@@ -242,7 +265,8 @@ export const AU_SLOTS: readonly Slot[] = [
     marketBound: true,
     priority: 16,
     catchUpMin: 30,
-    enabled: false,
+    enabled: true,
+    requiresListing: true,
     note: "Batch 2b signals and orders (M4 T8, ARN-060/020): A4/A3/A2, family rules, exits, FAM-001 entries, C2/C3 controls; OFF until the Owner enables the arena",
   }),
   slot({
@@ -317,7 +341,8 @@ export const AU_SLOTS: readonly Slot[] = [
     marketBound: false,
     priority: 22,
     catchUpMin: DEFAULT_CATCH_UP_MIN,
-    enabled: false,
+    enabled: true,
+    requiresListing: true,
     note: "History backfill (T9, DAT-125/125a): ASIC files and announcement exports; OFF until the Owner enables it",
   }),
   slot({
@@ -329,7 +354,8 @@ export const AU_SLOTS: readonly Slot[] = [
     marketBound: false,
     priority: 23,
     catchUpMin: DEFAULT_CATCH_UP_MIN,
-    enabled: false,
+    enabled: true,
+    requiresListing: true,
     note: "Yahoo price-history backfill (T16a, D-086/D-092): one month per run; OFF until the Owner accepts the source (O-26) and enables it",
   }),
   // M4 T16 (D-095): the replay workflow (default mode light). Allow-listed, slot OFF until the Owner
@@ -343,7 +369,8 @@ export const AU_SLOTS: readonly Slot[] = [
     marketBound: false,
     priority: 24,
     catchUpMin: DEFAULT_CATCH_UP_MIN,
-    enabled: false,
+    enabled: true,
+    requiresListing: true,
     note: "Replay light/full/evidence/null/injected (T16, ARN-080/100, AT-17); OFF until the Owner enables it",
   }),
   // M6 T13 (D-116 draft): the knowledge-base archive to the private data repo (KB-001, PLT-022a).
@@ -357,7 +384,28 @@ export const AU_SLOTS: readonly Slot[] = [
     marketBound: false,
     priority: 25,
     catchUpMin: DEFAULT_CATCH_UP_MIN,
-    enabled: false,
+    enabled: true,
+    requiresListing: true,
     note: "KB document archive to the data repo (M6 T13, KB-001); OFF until the Owner enables it",
+  }),
+  // M8 T8 (decision 46, LLM-040): the monthly LLM bake-off, first Saturday of the Sydney month, 10:00
+  // (the run takes up to two hours; a Saturday keeps it clear of every weekday pipeline). Available but
+  // listed-only like every go-live slot. The candidates are the Owner's choice, so the inputs are read
+  // from `worker_state.bakeoff_inputs` ({"candidates": "KIND:MODEL ...", optional trains/checked/store}).
+  slot({
+    id: "llm-bakeoff",
+    time: "10:00",
+    runner: "actions",
+    workflow: "llm-bakeoff.yml",
+    monthly: "first-saturday",
+    inputsKey: "bakeoff_inputs",
+    requiredInputs: ["candidates"],
+    tradingDaysOnly: false,
+    marketBound: false,
+    priority: 26,
+    catchUpMin: DEFAULT_CATCH_UP_MIN,
+    enabled: true,
+    requiresListing: true,
+    note: "Monthly LLM bake-off (M8 T8, decision 46): first Saturday 10:00; OFF until the Owner lists it and sets the candidates",
   }),
 ];

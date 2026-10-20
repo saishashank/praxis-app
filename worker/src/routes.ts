@@ -18,7 +18,17 @@
 //   4. the body is `{ purpose, env, d, slot, ...extra }`, signed with the timestamp and a single-use
 //      nonce (D-029), `redirect: "manual"`, `AbortSignal.timeout`. HTTP 200 = done.
 // Logs carry slot ids and fixed words only; never a URL, header, secret or body.
-import { CLAIM_STALE_MS, MAX_ATTEMPTS, parseEnabled, parseState, slotKey } from "./clock";
+import {
+  CLAIM_STALE_MS,
+  MAX_ATTEMPTS,
+  SLOTS_ENABLED_KEY,
+  listSkip,
+  parseEnabled,
+  parseSlotsEnabled,
+  parseState,
+  slotKey,
+  type SlotList,
+} from "./clock";
 import { dbConfigured, pipeline, type Arg, type DbEnv, type Stmt, type StmtResult } from "./db";
 import { isWeekend, sydneyLocal, type Local } from "./localtime";
 import { AU_SLOTS, type Slot } from "./schedule";
@@ -45,6 +55,8 @@ export type RouteFacts = {
   tradingDay: boolean;
   /** `alert_flush_due` is set and has passed. */
   flushDue: boolean;
+  /** The runtime slot list (M8 T8, decision 32); default absent = as configured. */
+  slotsEnabled?: SlotList;
 };
 
 export type RouteAction = {
@@ -93,6 +105,7 @@ export function decideRoutes(
   if (!facts.dispatchEnabled) return [];
   const out: RouteAction[] = [];
   for (const slot of routeSlotsDue(local, slots)) {
+    if (listSkip(slot, facts.slotsEnabled) !== null) continue; // not listed / list unreadable
     if (slot.marketBound && (facts.marketMode === null || facts.marketMode === "off")) continue;
     if (slot.tradingDaysOnly && !facts.tradingDay) continue;
     if (slot.needs === "alert_flush_due" && !facts.flushDue) continue;
@@ -207,7 +220,7 @@ export async function runRoutes(
 
     // ---- request 1: switch, mode, calendar, flush marker, single-shot states -----------------
     const nowMs = deps.nowMs();
-    const keys: string[] = [DISPATCH_ENABLED_KEY];
+    const keys: string[] = [DISPATCH_ENABLED_KEY, SLOTS_ENABLED_KEY];
     if (due.some((s) => s.needs === "alert_flush_due")) keys.push(FLUSH_DUE_KEY);
     for (const s of due) {
       if (s.everyMin !== undefined) continue;
@@ -244,10 +257,12 @@ export async function runRoutes(
     const states = new Map<string, StoredState>();
     let enabledRaw: string | undefined;
     let flushRaw: string | undefined;
+    let listRaw: string | null | undefined;
     for (const row of r1[0].rows) {
       const k = String(row[0]);
       const raw = String(row[1]);
       if (k === DISPATCH_ENABLED_KEY) enabledRaw = raw;
+      else if (k === SLOTS_ENABLED_KEY) listRaw = row[1] === null ? null : raw;
       else if (k === FLUSH_DUE_KEY) flushRaw = raw;
       else states.set(k, { raw, state: parseState(raw) });
     }
@@ -258,7 +273,11 @@ export async function runRoutes(
       marketMode: typeof mode === "string" ? mode : null,
       tradingDay: !isWeekend(local) && calKind !== "holiday",
       flushDue: flushDue(flushRaw, nowMs),
+      slotsEnabled: parseSlotsEnabled(listRaw),
     };
+    if (facts.dispatchEnabled && facts.slotsEnabled?.kind === "malformed") {
+      console.log("routes: skipped all list-malformed");
+    }
     const actions = decideRoutes(local, facts, states, nowMs, slots);
     if (actions.length === 0) return summary;
 

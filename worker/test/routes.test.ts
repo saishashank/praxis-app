@@ -27,7 +27,9 @@ const ENV: RouteEnv = {
   APP_BASE_URL: APP,
   WORKER_HMAC_SECRET: SECRET,
 };
-const on: Slot[] = AU_SLOTS.map((s) => (s.runner === "route" ? { ...s, enabled: true } : s));
+const on: Slot[] = AU_SLOTS.map((s) =>
+  s.runner === "route" ? { ...s, enabled: true, requiresListing: false } : s,
+);
 
 // Local Sydney time to a UTC instant for a fixed offset (10 = AEST, 11 = AEDT).
 const at = (date: string, hm: string, offset = 11) => {
@@ -98,7 +100,8 @@ describe("the route slots in the table", () => {
       "pre-open",
       "pre-open-retry",
     ]);
-    for (const s of route) expect(s.enabled).toBe(false);
+    // M8 T8: available in the build, but listed-only (they post only when `slots_enabled` names them)
+    for (const s of route) expect([s.enabled, s.requiresListing]).toEqual([true, true]);
   });
 
   it("evening-review: 20:00-20:45 every 5 min and 21:00-22:00 every 15 min, every day, not market-bound", () => {
@@ -113,7 +116,7 @@ describe("the route slots in the table", () => {
       marketBound: false,
       workflow: null,
     });
-    expect(b).toMatchObject({ time: "21:00", until: "22:00", everyMin: 15, enabled: false });
+    expect(b).toMatchObject({ time: "21:00", until: "22:00", everyMin: 15, enabled: true });
     const times = (date: string, offset: number) => {
       const out: string[] = [];
       for (let m = 19 * 60; m <= 23 * 60; m += 1) {
@@ -168,9 +171,10 @@ describe("routeSlotsDue and decideRoutes (pure)", () => {
   const L = (date: string, t: string) => sydneyLocal(at(date, t));
   const facts = { dispatchEnabled: true, marketMode: "full", tradingDay: true, flushDue: false };
 
-  it("a disabled table has nothing due at 20:00, 09:54 or 07:01", () => {
+  it("the shipped table has slots due at 20:00, 09:54 and 07:01 but decides to post none without a list", () => {
     for (const t of ["20:00", "09:54", "07:01"]) {
-      expect(routeSlotsDue(L(MON, t), AU_SLOTS)).toEqual([]);
+      expect(routeSlotsDue(L(MON, t), AU_SLOTS).length).toBeGreaterThan(0);
+      expect(decideRoutes(L(MON, t), facts, new Map(), 0, AU_SLOTS)).toEqual([]);
     }
   });
   it("evening-review is due on a Saturday too; 20:50 is between the two windows", () => {
@@ -232,24 +236,29 @@ describe("routeSlotsDue and decideRoutes (pure)", () => {
 });
 
 describe("runRoutes", () => {
-  it("does nothing with the shipped (disabled) table: no request, no log", async () => {
+  it("posts nothing with the shipped table and no list: one read (for the list), no post, no log", async () => {
     dispatchOn();
     net.pipelines = 0;
     const s = await runRoutes(ENV, at(MON, "20:00"), deps(at(MON, "20:00")));
-    expect(s).toEqual({ requests: 0, posted: [], failed: [] });
-    expect(net.pipelines).toBe(0);
+    expect(s).toEqual({ requests: 1, posted: [], failed: [] });
+    expect(net.pipelines).toBe(1);
     expect(app.calls).toHaveLength(0);
     expect(logs()).toEqual([]);
   });
 
   it("the scheduled handler runs it without throwing or posting while disabled", async () => {
     dispatchOn();
-    await worker.scheduled(
-      { scheduledTime: at(MON, "20:00") } as ScheduledController,
-      {
-        ...ENV,
-      } as never,
-    );
+    vi.stubGlobal("fetch", net.f);
+    try {
+      await worker.scheduled(
+        { scheduledTime: at(MON, "20:00") } as ScheduledController,
+        {
+          ...ENV,
+        } as never,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
     expect(app.calls).toHaveLength(0);
   });
 

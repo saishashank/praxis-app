@@ -1,6 +1,7 @@
 import { runAsx, type AsxEnv } from "./asx/slots";
 import { runUniverse, type UniverseEnv } from "./asx/universe";
 import { runClock } from "./clock";
+import { runReenable } from "./reenable";
 import { runRoutes, type RouteEnv } from "./routes";
 import { runSelfCheck, type SelfCheckEnv } from "./selfcheck";
 
@@ -30,6 +31,16 @@ export default {
       });
     } catch {
       // runClock already contains its errors; nothing here may disturb the self-check.
+    }
+    // PLT-015: once a day (02:40-02:44 UTC) re-enable scheduled workflows GitHub disabled after 60 idle
+    // days. No work on any other minute. Never throws.
+    try {
+      await runReenable(env, controller.scheduledTime, {
+        fetch: (i, init) => fetch(i, init),
+        nowMs: () => Date.now(),
+      });
+    } catch {
+      // runReenable already contains its errors.
     }
     // Signed route slots (M5 T10, decision 41): alert flush, pre-open, Evening Review. All slots are
     // disabled; no work and no database request unless one is enabled and due. Never throws.

@@ -26,7 +26,9 @@ const ENV: RouteEnv = {
   APP_BASE_URL: APP,
   WORKER_HMAC_SECRET: SECRET,
 };
-const on: Slot[] = AU_SLOTS.map((s) => (s.runner === "route" ? { ...s, enabled: true } : s));
+const on: Slot[] = AU_SLOTS.map((s) =>
+  s.runner === "route" ? { ...s, enabled: true, requiresListing: false } : s,
+);
 
 const hm = (m: number) =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -197,6 +199,7 @@ describe("no double fire across the fall-back hour, no miss across spring-forwar
     minute: 150,
     catchUpMin: 60,
     enabled: true,
+    requiresListing: false,
     ...over,
   });
 
@@ -444,6 +447,7 @@ describe("TST-124: the scheduled handler with every slot enabled stays inside th
   type Saved = {
     s: Slot;
     enabled: boolean;
+    requiresListing?: boolean;
     time: string;
     minute: number;
     until?: string;
@@ -453,6 +457,7 @@ describe("TST-124: the scheduled handler with every slot enabled stays inside th
   const mutable = (s: Slot) =>
     s as unknown as {
       enabled: boolean;
+      requiresListing?: boolean;
       time: string;
       minute: number;
       until?: string;
@@ -462,12 +467,16 @@ describe("TST-124: the scheduled handler with every slot enabled stays inside th
     saved = AU_SLOTS.map((s) => ({
       s,
       enabled: s.enabled,
+      requiresListing: s.requiresListing,
       time: s.time,
       minute: s.minute,
       until: s.until,
       catchUpMin: s.catchUpMin,
     }));
-    for (const s of AU_SLOTS) mutable(s).enabled = true;
+    for (const s of AU_SLOTS) {
+      mutable(s).enabled = true;
+      mutable(s).requiresListing = false; // M8 T8: no list in these tests, so nothing may hold a slot back
+    }
   };
   /** Move every non-polling slot to 10:00 so they are all due in one minute. */
   const pileUp = () => {
@@ -484,6 +493,7 @@ describe("TST-124: the scheduled handler with every slot enabled stays inside th
     for (const x of saved) {
       const m = mutable(x.s);
       m.enabled = x.enabled;
+      m.requiresListing = x.requiresListing;
       m.time = x.time;
       m.minute = x.minute;
       m.until = x.until;
@@ -500,7 +510,10 @@ describe("TST-124: the scheduled handler with every slot enabled stays inside th
   };
 
   it("restores the shipped table after the tests (no slot leaks as enabled)", () => {
-    expect(AU_SLOTS.filter((s) => s.runner === "route").every((s) => !s.enabled)).toBe(true);
+    // M8 T8: the route slots are available but listed-only
+    expect(
+      AU_SLOTS.filter((s) => s.runner === "route").every((s) => s.enabled === s.requiresListing),
+    ).toBe(true);
   });
 
   async function measure(t: number, runs: number) {
