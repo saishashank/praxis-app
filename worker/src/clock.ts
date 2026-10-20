@@ -191,10 +191,16 @@ export function parseSlotsEnabled(raw: string | null | undefined): SlotList {
   return { kind: "malformed" };
 }
 
-/** null = the runtime list lets the slot run; else the reason it must not start. Pure. */
+/**
+ * null = the runtime list lets the slot run; else the reason it must not start. Pure.
+ * The list gates ONLY go-live slots (`requiresListing`): the always-on slots (ingest-batch1,
+ * maintenance, backup) run as today whatever the list says, so a list that forgets "backup" or is
+ * unreadable can never stop backups.
+ */
 export function listSkip(slot: Slot, list: SlotList = { kind: "absent" }): SkipReason | null {
+  if (!slot.requiresListing) return null;
   if (list.kind === "malformed") return "list-malformed";
-  if (list.kind === "absent") return slot.requiresListing ? "not-released" : null;
+  if (list.kind === "absent") return "not-released";
   return list.ids.has(slot.id) ? null : "not-listed";
 }
 

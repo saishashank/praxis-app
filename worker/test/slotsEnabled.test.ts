@@ -90,14 +90,18 @@ describe("parseSlotsEnabled / listSkip (pure)", () => {
       expect(parseSlotsEnabled(raw), raw).toEqual({ kind: "malformed" });
     }
   });
-  it("listSkip: absent keeps non-listed slots running and holds listed-only ones", () => {
+  it("listSkip gates only go-live slots; always-on slots ignore the list, even a malformed one", () => {
     const kb = AU_SLOTS.find((s) => s.id === "kb-archive")!;
     const backup = AU_SLOTS.find((s) => s.id === "backup")!;
+    const other = { kind: "list", ids: new Set(["replay"]) } as const;
     expect(listSkip(backup)).toBeNull();
+    expect(listSkip(backup, other)).toBeNull();
+    expect(listSkip(backup, { kind: "list", ids: new Set() })).toBeNull();
+    expect(listSkip(backup, { kind: "malformed" })).toBeNull();
     expect(listSkip(kb)).toBe("not-released");
     expect(listSkip(kb, { kind: "list", ids: new Set(["kb-archive"]) })).toBeNull();
-    expect(listSkip(backup, { kind: "list", ids: new Set(["kb-archive"]) })).toBe("not-listed");
-    expect(listSkip(backup, { kind: "malformed" })).toBe("list-malformed");
+    expect(listSkip(kb, other)).toBe("not-listed");
+    expect(listSkip(kb, { kind: "malformed" })).toBe("list-malformed");
   });
   it("parseInputs accepts a small object of strings only", () => {
     expect(parseInputs('{"candidates":"google:m"}')).toEqual({ candidates: "google:m" });
@@ -132,35 +136,47 @@ describe("the clock with the runtime list", () => {
     }
   });
 
-  it("a listed slot runs; the same list holds back a slot that is not in it, with a recorded reason", async () => {
+  it("a listed go-live slot runs; one that is not in the list is held back, with a recorded reason", async () => {
     on();
-    list(["kb-archive"]);
-    expect((await tick(T_ARCHIVE)).dispatched).toEqual(["kb-archive"]);
-    resetClockCache();
-    const s = await tick(T_BACKUP);
+    list(["replay"]);
+    const s = await tick(T_ARCHIVE);
     expect(s.dispatched).toEqual([]);
-    expect(s.skipped).toContainEqual({ id: "backup", reason: "not-listed" });
-    expect(logs).toContain("clock: skipped backup not-listed");
-    expect(dispatched()).toEqual(["kb-archive.yml"]);
+    expect(s.skipped).toEqual([{ id: "kb-archive", reason: "not-listed" }]);
+    expect(logs).toContain("clock: skipped kb-archive not-listed");
     // skipped means no claim either: nothing was written for the slot
-    expect(rows(db, "SELECT key FROM worker_state WHERE key = 'slot:backup:" + MON + "'")).toEqual(
-      [],
-    );
+    expect(rows(db, "SELECT key FROM worker_state WHERE key LIKE 'slot:kb-archive:%'")).toEqual([]);
+    list(["kb-archive"]);
+    resetClockCache();
+    expect((await tick(T_ARCHIVE + 60_000)).dispatched).toEqual(["kb-archive"]);
+    expect(dispatched()).toEqual(["kb-archive.yml"]);
   });
 
-  it("an empty list runs nothing; adding the id later runs the slot in its window", async () => {
+  it("a list that does not name backup, maintenance or ingest-batch1 still runs them", async () => {
+    on();
+    for (const l of [["kb-archive"], [], ["no-such-slot"]]) {
+      list(l);
+      db.prepare("DELETE FROM worker_state WHERE key LIKE 'slot:%'").run();
+      resetClockCache();
+      const a = await tick(T_INGEST);
+      expect(a.dispatched, JSON.stringify(l)).toEqual(["ingest-batch1"]);
+      resetClockCache();
+      const b = await tick(T_BACKUP);
+      expect(
+        b.dispatched.filter((x) => x !== "kb-archive"),
+        JSON.stringify(l),
+      ).toEqual(["maintenance", "backup"]);
+      expect(
+        b.skipped.map((x) => x.id).filter((x) => x === "backup" || x === "maintenance"),
+      ).toEqual([]);
+    }
+  });
+
+  it("an empty list holds every go-live slot but not the always-on ones", async () => {
     on();
     list([]);
-    expect((await tick(T_BACKUP)).dispatched).toEqual([]);
-    list(["backup"]);
-    resetClockCache();
-    expect((await tick(T_BACKUP + 60_000)).dispatched).toEqual(["backup"]);
-  });
-
-  it("an unknown id in the list is harmless", async () => {
-    on();
-    list(["no-such-slot", "backup"]);
-    expect((await tick(T_BACKUP)).dispatched).toEqual(["backup"]);
+    const s = await tick(T_BACKUP);
+    expect(s.dispatched).toEqual(["maintenance", "backup"]);
+    expect(s.skipped).toContainEqual({ id: "kb-archive", reason: "not-listed" });
   });
 
   it("the dispatch kill switch still wins over a list", async () => {
@@ -205,18 +221,22 @@ describe("the clock with the runtime list", () => {
     expect(net.pipelines).toBe(before);
   });
 
-  describe("a malformed list fails safe", () => {
+  describe("a malformed list fails safe: go-live slots held, always-on slots unaffected", () => {
     for (const raw of ["not json", "{}", '"backup"', "[1]", ""]) {
-      it(`${JSON.stringify(raw)}: nothing new is dispatched, why is recorded`, async () => {
+      it(`${JSON.stringify(raw)}: backup and maintenance still run, kb-archive is held and why is recorded`, async () => {
         on();
         setState("slots_enabled", raw);
         const s = await tick(T_BACKUP);
-        expect(s.dispatched).toEqual([]);
+        expect(s.dispatched).toEqual(["maintenance", "backup"]);
         expect(s.failed).toEqual([]);
-        expect(s.skipped).toContainEqual({ id: "backup", reason: "list-malformed" });
-        expect(net.github).toHaveLength(0);
-        expect(logs).toContain("clock: skipped backup list-malformed");
-        expect(rows(db, "SELECT key FROM worker_state WHERE key LIKE 'slot:%'")).toEqual([]);
+        expect(s.skipped).toEqual([{ id: "kb-archive", reason: "list-malformed" }]);
+        expect(dispatched()).toEqual(["maintenance.yml", "backup.yml"]);
+        expect(logs).toContain("clock: skipped kb-archive list-malformed");
+        expect(
+          rows(db, "SELECT key FROM worker_state WHERE key LIKE 'slot:%' ORDER BY key").map(
+            (r) => r.key,
+          ),
+        ).toEqual([`slot:backup:${MON}`, `slot:maintenance:${MON}`]);
         const rec = rows(
           db,
           "SELECT status, error_summary FROM run_record WHERE job = 'worker-clock' AND status = 'failed'",
@@ -233,27 +253,26 @@ describe("the clock with the runtime list", () => {
       expect(
         rows(db, "SELECT id FROM run_record WHERE concurrency_key = ?", `slots-malformed:${MON}`),
       ).toHaveLength(1);
-      expect(net.github).toHaveLength(0);
+      expect(dispatched()).toEqual(["maintenance.yml", "backup.yml"]); // once each, no go-live slot
     });
 
-    it("also stops retries of an earlier failed attempt", async () => {
+    it("retries of a failed always-on dispatch continue; a held go-live slot never starts", async () => {
       on();
       net.githubPlan.push(500);
       expect((await tick(T_BACKUP)).failed).toEqual(["maintenance"]);
-      const sent = net.github.length;
       setState("slots_enabled", "oops");
       resetClockCache();
-      expect((await tick(T_BACKUP + 60_000)).dispatched).toEqual([]);
-      expect(net.github).toHaveLength(sent);
+      expect((await tick(T_BACKUP + 60_000)).dispatched).toEqual(["maintenance"]);
+      expect(dispatched()).not.toContain("kb-archive.yml");
     });
 
-    it("fixing the list resumes dispatch", async () => {
+    it("fixing the list releases the held go-live slot", async () => {
       on();
       setState("slots_enabled", "oops");
       await tick(T_BACKUP);
-      list(["backup"]);
+      list(["kb-archive"]);
       resetClockCache();
-      expect((await tick(T_BACKUP + 60_000)).dispatched).toEqual(["backup"]);
+      expect((await tick(T_BACKUP + 60_000)).dispatched).toEqual(["kb-archive"]);
     });
 
     it("with the kill switch off nothing is even recorded", async () => {
