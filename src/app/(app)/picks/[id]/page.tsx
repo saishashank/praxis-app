@@ -152,6 +152,13 @@ export default async function WhyThisPickPage({ params }: { params: Promise<{ id
             {o.state === "closed" ? `; result after costs ${pct(o.netPpm)}` : ""}.
           </p>
         )}
+        {pick.cardHref ? (
+          <p className="m-0 mt-2 text-sm">
+            <Link href={pick.cardHref} className="text-accent underline">
+              Open the Decision Card
+            </Link>
+          </p>
+        ) : null}
         <p className="m-0 mt-2 text-sm">
           <Link
             href={`/picks/track-record?profile=${encodeURIComponent(profile)}`}

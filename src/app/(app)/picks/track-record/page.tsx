@@ -95,8 +95,8 @@ export default async function TrackRecordPage({ searchParams }: { searchParams: 
       <header className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Track record</h1>
         <p className="m-0 text-sm text-text-muted">
-          Every pick as published, next to what happened. Nothing shown here can be changed
-          afterwards. {NOT_REAL_ORDERS}
+          Every pick as published, next to what happened. Price only — dividends not included.
+          Nothing shown here can be changed afterwards. {NOT_REAL_ORDERS}
         </p>
       </header>
 

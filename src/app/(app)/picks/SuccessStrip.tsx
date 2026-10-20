@@ -4,7 +4,7 @@
 import Link from "next/link";
 import type { PicksModel } from "@/lib/ui/loaders/picks";
 import { Term } from "@/components/ui/Overlays";
-import { honestyLine, profileLabel, SELECTION_LINE } from "./text";
+import { honestyLine, PRICE_ONLY_LABEL, profileLabel, SELECTION_LINE } from "./text";
 
 export type StripModel = NonNullable<PicksModel["success"]>;
 
@@ -61,7 +61,7 @@ export function SuccessStrip({
         {success.missed > 0
           ? `${success.missed} missed (price ran away) — not counted as a win or a loss. `
           : ""}
-        {SELECTION_LINE}
+        {SELECTION_LINE} {PRICE_ONLY_LABEL}
       </p>
       <p className="m-0 mt-1 text-text-muted">
         {success.insidePct !== null

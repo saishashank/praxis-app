@@ -108,9 +108,16 @@ export function PickCard({
       </ul>
 
       <p className="m-0 mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
-        <Link href={`/picks/${pick.id}`} className="text-accent underline">
-          Why this pick →
-        </Link>
+        <span className="inline-flex flex-wrap gap-3">
+          <Link href={`/picks/${encodeURIComponent(pick.id)}`} className="text-accent underline">
+            Why this pick →
+          </Link>
+          {pick.cardHref ? (
+            <Link href={pick.cardHref} className="text-accent underline">
+              Decision Card
+            </Link>
+          ) : null}
+        </span>
         {masked ? null : <SimulatedLabel />}
       </p>
       <p data-testid="honesty-line" className="m-0 mt-2 text-xs text-text-muted">

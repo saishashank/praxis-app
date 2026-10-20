@@ -14,6 +14,7 @@ import WhyPage from "@/app/(app)/picks/[id]/page";
 import TrackRecordPage from "@/app/(app)/picks/track-record/page";
 import { SuccessStrip } from "@/app/(app)/picks/SuccessStrip";
 import { capPerFamily, honestyLine, timeFrameText } from "@/app/(app)/picks/text";
+import { loadPicks } from "@/lib/ui/loaders/picks";
 import { successLine, type ModelSuccess } from "@/lib/picks/success";
 
 let current: LoaderEnv;
@@ -134,6 +135,8 @@ describe("Picks list", () => {
       for (const leak of ["ZZUP", "ZZDN", "ZZOTH", "Zed ", "A$", D])
         expect(text).not.toContain(leak);
       expect(text).toContain("Stock");
+      expect(container.innerHTML).not.toMatch(/d{4}-d{2}-d{2}/); // hrefs included
+      expect(container.querySelector('a[href^="/picks/pk%3A"]')).not.toBeNull();
       expect(text).toContain("Hidden for your role");
       expect(container.querySelector("[data-money]")).toBeNull();
       cleanup();
@@ -325,14 +328,26 @@ describe("Why this pick", () => {
     expect(r.violations.map((v) => `${v.id}: ${v.nodes[0]?.html}`)).toEqual([]);
   });
 
-  it("masks the detail for an Editor", async () => {
+  it("masks the detail for an Editor and resolves only the opaque pk: reference", async () => {
     as(w, "editor");
+    const list = await loadPicks(current, { profile: "balanced" });
+    const ref = list.picks[0]!.id;
+    expect(ref).toMatch(/^pk:[0-9a-f]{16}$/);
     const { container } = render(
-      await WhyPage({ params: Promise.resolve({ id: `${D}.balanced.1` }) }),
+      await WhyPage({ params: Promise.resolve({ id: encodeURIComponent(ref) }) }),
     );
     const text = container.textContent ?? "";
     for (const leak of ["ZZUP", "Zed ", "A$", "10050000"]) expect(text).not.toContain(leak);
     expect(text).toContain("Stock");
+    expect(container.innerHTML).not.toMatch(/d{4}-d{2}-d{2}/);
+    cleanup();
+    // A real date.profile.rank id gives the same 404 as an unknown one.
+    for (const id of [`${D}.balanced.1`, "pk:0000000000000000"]) {
+      await expect(WhyPage({ params: Promise.resolve({ id }) })).rejects.toThrow("NEXT_NOT_FOUND");
+    }
+    as(w, "owner");
+    render(await WhyPage({ params: Promise.resolve({ id: encodeURIComponent(ref) }) }));
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("ZZUP");
   });
 
   it("is a 404 for a bad or unknown id", async () => {
@@ -419,6 +434,8 @@ describe("Track record", () => {
       for (const leak of ["ZZUP", "ZZOTH", "Zed ", "A$", D]) expect(text).not.toContain(leak);
       expect(text).toContain("Stock");
       expect(text).toContain("2026-W43");
+      expect(container.innerHTML).not.toMatch(/d{4}-d{2}-d{2}/);
+      expect(text).toContain("Price only — dividends not included.");
       expect(text).toContain("+5% after costs"); // percentages carry no price
       expect(container.querySelector("[data-money]")).toBeNull();
       cleanup();

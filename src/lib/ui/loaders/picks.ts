@@ -7,7 +7,9 @@ import { modelSuccess, successLine, type ModelSuccess } from "@/lib/picks/succes
 import { formatPpm, isoWeek, MISSING } from "@/lib/view/format";
 import { dateStaleness } from "@/lib/view/staleness";
 import { maskText } from "@/lib/view/mask";
+import { createHash } from "node:crypto";
 import { soft, strategyNames } from "./common";
+import { cardHref } from "./cards";
 import {
   isDateParam,
   marketOf,
@@ -24,7 +26,30 @@ const STALE_DAYS = 4; // threshold-ok: nightly picks; a long weekend is 3 days, 
 const TRACK_ROWS = 200; // threshold-ok: bounded list, newest first
 const DEFAULT_PROFILE = "balanced";
 const PROFILE_RE = /^[a-z][a-z_]{0,23}$/;
+const PK_RE = /^pk:([0-9a-f]{16})$/;
+const HEX_LENGTH = 16; // threshold-ok: key digest length
+const MAX_REF_ROWS = 5000; // threshold-ok: bound of the reference resolve scan
 const ID_RE = /^(\d{4}-\d{2}-\d{2})\.([a-z][a-z_]{0,23})\.(\d{1,2})$/;
+
+/** `pk:` plus 16 hex of SHA-256 of the readable id (date.profile.rank). */
+export const pickRef = (realId: string): string =>
+  "pk:" + createHash("sha256").update(realId).digest("hex").slice(0, HEX_LENGTH);
+
+/** The id shown in links: readable for an unmasked viewer, opaque for a masked one (no date in the URL). */
+const publicPickId = (realId: string, masked: boolean): string =>
+  masked ? pickRef(realId) : realId;
+
+async function resolvePickRef(env: LoaderEnv, ref: string): Promise<string | null> {
+  const r = await env.main.execute({
+    sql: "SELECT d, profile, rank FROM pick WHERE market = ? ORDER BY d DESC, profile, rank LIMIT ?",
+    args: [marketOf(env), MAX_REF_ROWS],
+  });
+  for (const x of r.rows) {
+    const real = `${String(x.d)}.${String(x.profile)}.${Number(x.rank)}`; // money-float-ok: SQL integer column
+    if (pickRef(real) === ref) return real;
+  }
+  return null;
+}
 
 export type PicksQuery = { profile: string; d?: string };
 
@@ -108,7 +133,8 @@ export type PickRowView = {
   aimReachPpm: number | null;
   timeFrameSessions: number | null;
   basedOn: string[];
-  cardId: string | null;
+  /** Link to the Decision Card; opaque `ck:` reference for a masked user. */
+  cardHref: string | null;
 };
 
 export type PicksModel = {
@@ -218,7 +244,7 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
           }; // money-float-ok: SQL integer columns
     const valid = String(x.valid_until_d);
     return {
-      id: `${d}.${q.profile}.${Number(x.rank)}`,
+      id: publicPickId(`${d}.${q.profile}.${Number(x.rank)}`, masked),
       rank: Number(x.rank), // money-float-ok: SQL integer column
       familyName: names[String(x.family)]?.name ?? String(x.family),
       stopPpm: ppmOf(x.stop_micro, x.reference_micro),
@@ -247,7 +273,7 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
       aimReachPpm: toNum(x.aim_reach_ppm),
       timeFrameSessions: toNum(x.time_frame_sessions),
       basedOn: parseList(x.based_on_json).map(t),
-      cardId: x.card_id === null ? null : String(x.card_id),
+      cardHref: x.card_id === null ? null : cardHref(String(x.card_id), masked),
     };
   });
   const stale = dateStaleness(d, todayD(env), STALE_DAYS);
@@ -295,11 +321,13 @@ export const parsePickId = (id: string): { d: string; profile: string; rank: num
 
 /** One pick with its factors and tracked outcome; null when the id is malformed or not stored. */
 export async function loadPickDetail(env: LoaderEnv, id: string): Promise<PickDetailModel | null> {
-  const key = parsePickId(id);
+  // A masked viewer can only follow an opaque reference: a readable id gives the same null as an unknown one.
+  const real = PK_RE.test(id) ? await resolvePickRef(env, id) : env.mask.masked ? null : id;
+  const key = real === null ? null : parsePickId(real);
   if (key === null) return null;
   const market = marketOf(env);
   const model = await loadPicks(env, { profile: key.profile, d: key.d });
-  const pick = model.picks.find((p) => p.rank === key.rank && p.id === id);
+  const pick = model.picks.find((p) => p.rank === key.rank);
   if (!pick) return null;
   const r = await env.main.execute({
     sql: `SELECT p.code, p.factors_json, o.state, o.entry_micro, o.exit_micro, o.exit_reason, o.net_ppm
@@ -403,7 +431,7 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
     ? await maskKitByDate(env, [...raw, ...(await pickCodesInRange(env, raw))])
     : null;
   const rows: TrackRow[] = raw.map(({ d, code, x }) => ({
-    id: `${d}.${q.profile}.${Number(x.rank)}`,
+    id: publicPickId(`${d}.${q.profile}.${Number(x.rank)}`, masked),
     d: masked ? (isoWeek(d) ?? MISSING) : d,
     stock: kit ? kit.aliasOf(d).label(code) : code,
     state: String(x.state),

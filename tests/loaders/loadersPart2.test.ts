@@ -150,7 +150,10 @@ describe("populated loaders", () => {
           aim: null,
         });
         expect(list.d).toBe("2026-W43");
-        const detail = await loadPickDetail(env, `${D}.balanced.1`);
+        // A readable id (with the exact date) is refused like an unknown one; only the opaque ref works.
+        expect(await loadPickDetail(env, `${D}.balanced.1`)).toBeNull();
+        expect(list.picks[0]!.id).toMatch(/^pk:[0-9a-f]{16}$/);
+        const detail = await loadPickDetail(env, list.picks[0]!.id);
         expect(detail?.pick.stock).toBe("Stock C");
         expect(detail?.outcome).toMatchObject({
           state: "closed",
@@ -168,8 +171,8 @@ describe("populated loaders", () => {
         for (const model of [list, detail, track]) {
           noLeak(model);
           expect(JSON.stringify(model)).not.toMatch(priceish);
-          // The pick id is the address of the page (date.profile.rank); every other date is a week.
-          expect(JSON.stringify(model).replace(/"id":"[^"]*"/g, "")).not.toContain(D);
+          // No exact date anywhere, ids and links included (D-129/D-136): ids are opaque `pk:` references.
+          expect(JSON.stringify(model)).not.toMatch(/d{4}-d{2}-d{2}/);
         }
       }
     });
