@@ -24,7 +24,8 @@ test("workflow_dispatch only, with a choice input `mode`; no schedule, push or p
   assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"]);
   const mode = wf.on.workflow_dispatch.inputs.mode;
   assert.equal(mode.type, "choice");
-  assert.deepEqual(mode.options, ["light", "full", "evidence", "null", "injected"]);
+  assert.deepEqual(mode.options, ["light", "full", "evidence", "null", "injected", "learning"]);
+  assert.equal(mode.default, "light");
   assert.deepEqual(wf.permissions, {});
   assert.doesNotMatch(read(FILE), /^\s*(schedule|push|pull_request\w*):/m);
 });
@@ -66,6 +67,23 @@ test("secrets appear only in env of the replay step, which is last; the mode goe
   assert.equal(wf.env, undefined);
   assert.equal(job.env, undefined);
   assert.equal(JSON.stringify(wf).match(/secrets\./g).length, 3);
+});
+
+test("mode learning (M6 T12): still dispatch-only, same single secrets step, slot still disabled", () => {
+  const mode = wf.on.workflow_dispatch.inputs.mode;
+  assert.ok(mode.options.includes("learning"));
+  // no new trigger, no new job, no new step: the mode reaches the script through the same env variable
+  assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"]);
+  assert.deepEqual(Object.keys(wf.jobs), ["production"]);
+  const run = steps[steps.length - 1];
+  assert.equal(run.run, 'node scripts/replay/run.mjs --mode "$REPLAY_MODE"');
+  assert.equal(JSON.stringify(wf).match(/secrets./g).length, 3);
+  // the CLI accepts the mode the workflow offers
+  assert.match(read("scripts/replay/run.mjs"), /light|full|null|injected|evidence|learning/);
+  // the Worker still has no Saturday dispatch of the replay: its slot stays disabled
+  const sched = read("worker/src/schedule.ts");
+  const slot = sched.slice(sched.indexOf('id: "replay"'));
+  assert.match(slot.slice(0, slot.indexOf("}),")), /enabled: false/);
 });
 
 test("no artifact upload, no cache, no expression inside a script (SEC-110)", () => {

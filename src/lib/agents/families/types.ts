@@ -117,6 +117,11 @@ export type FamilyOptions = {
    */
   readonly f6DisabledClasses?: readonly string[];
   /**
+   * ARN-076 for F4: the "no negative event" entry filter is switched off (weekly with/without comparison).
+   * Never set by the live batch.
+   */
+  readonly f4EventFilterOff?: boolean;
+  /**
    * Rule-version id stamped on the candidates of a family (default `<family>.v1`). The caller runs the
    * family with that version's parameters (M6 T8, D-110 #44); never changes a rule, only the label.
    */

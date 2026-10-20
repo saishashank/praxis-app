@@ -577,7 +577,7 @@ END;
 -- One row per replay / null / injected / evidence run: enough to reproduce it (ARN-102).
 CREATE TABLE replay_run (
   id TEXT PRIMARY KEY,
-  kind TEXT NOT NULL CHECK (kind IN ('light','full','null','injected','evidence')),
+  kind TEXT NOT NULL CHECK (kind IN ('light','full','null','injected','evidence','learning')),
   market TEXT NOT NULL,
   snapshot_sha TEXT NOT NULL,
   commit_sha TEXT NOT NULL,

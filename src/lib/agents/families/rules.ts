@@ -364,7 +364,7 @@ export function evaluateF4(ctx: EvalContext): Evaluated[] {
       ),
       trace(
         "no_negative_event",
-        !covered || !negEvent,
+        ctx.f4EventFilterOff === true || !covered || !negEvent,
         covered ? String(negEvent) : "not applicable: no event coverage",
         `no - polarity event in last ${p.windows.f4EventWindow} sessions`,
       ),

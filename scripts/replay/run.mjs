@@ -1,6 +1,6 @@
 // Replay workflow CLI (M4 T16; D-095 draft). Runs in the `production` GitHub environment on the
 // approved commit (SEC-108 c) from the dispatch-only workflow replay.yml.
-//   node scripts/replay/run.mjs --mode light|full|null|injected|evidence [--date D] [--since D]
+//   node scripts/replay/run.mjs --mode light|full|null|injected|evidence|learning [--date D] [--since D]
 //        [--runs N] [--synthetic] [--budget-minutes N]
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, DATA_REPO (`<owner>/<repo>-data`), DATA_REPO_TOKEN,
 //      COMMIT_SHA (optional). The history files are downloaded from the data repo, the snapshot is

@@ -275,9 +275,18 @@ async function frozenBlock(
  */
 export async function comparisonPairs(
   db: Client,
-  o: { market: string; d: string; calendar: readonly CalendarRow[]; params: AgentParams },
+  o: {
+    market: string;
+    d: string;
+    calendar: readonly CalendarRow[];
+    params: AgentParams;
+    /** Only rows entered after this date (the NEW data of a confirmation look). */
+    since?: string;
+  },
 ): Promise<PairData[]> {
-  const rows = await excessRows(db, o.market, o.d);
+  const rows = (await excessRows(db, o.market, o.d)).filter(
+    (r) => o.since === undefined || r.entryD > o.since,
+  );
   if (rows.length === 0) return [];
   const first = rows.map((r) => r.entryD).sort(cmp)[0]!;
   const sessions = sessionsBetween(first, o.d, o.calendar);

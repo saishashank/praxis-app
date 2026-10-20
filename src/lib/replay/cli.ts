@@ -2,7 +2,7 @@
 // scripts/replay/run.mjs (the GitHub Actions job `replay.yml`, `production` environment, approved
 // commit). All logic lives here so the tests can call it with fakes.
 //
-//   replay --mode light|full|null|injected|evidence [--date YYYY-MM-DD] [--since YYYY-MM-DD]
+//   replay --mode light|full|null|injected|evidence|learning [--date YYYY-MM-DD] [--since YYYY-MM-DD]
 //          [--runs N] [--synthetic] [--budget-minutes N]
 //
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, DATA_REPO, DATA_REPO_TOKEN, COMMIT_SHA (optional)
@@ -13,6 +13,7 @@ import { createClient, type Client, type InStatement } from "@libsql/client";
 import { defaultAgentParams, loadAgentParams, type AgentParams } from "@/lib/agents/params";
 import { marketDate } from "@/lib/data/calendar";
 import type { TrialLedgerRow } from "@/lib/stats/splits";
+import { learningDone, learningWeek, runLearning } from "./learningMode";
 import {
   RUN_MODES,
   budgetFor,
@@ -320,6 +321,10 @@ export async function replayMain(
   const db = open(url, has(token) ? token : undefined);
   try {
     const params = deps.params ?? (await loadAgentParams(db).catch(() => defaultAgentParams()));
+    if (m === "learning" && (await learningDone(db, MARKET, learningWeek(date)))) {
+      out("replay learning: already recorded");
+      return 0;
+    }
     const commitSha = has(env.COMMIT_SHA)
       ? env.COMMIT_SHA
       : "0000000000000000000000000000000000000000";
@@ -333,24 +338,42 @@ export async function replayMain(
       const from = addYears(to, -(params.replay.eventBackfillYears + 1));
       bytes = await deps.prepareSnapshot({ from, to });
     }
-    const o = runReplay({
-      mode: m,
-      d: date,
-      params,
-      commitSha,
-      nodeVersion: deps.nodeVersion ?? process.version,
-      snapshotBytes: bytes,
-      since,
-      existingTrials: m === "evidence" ? await existingTrials(db) : [],
-      nullRuns: runs,
-      synthetic,
-      now: nowMs,
-      budgetMinutes: budgetText === null ? undefined : Number(budgetText),
-    });
-    const seen = await db.execute({
-      sql: "SELECT 1 FROM replay_run WHERE id = ?",
-      args: [o.run.id],
-    });
+    const o =
+      m === "learning"
+        ? await runLearning({
+            db,
+            market: MARKET,
+            d: date,
+            params,
+            commitSha,
+            nodeVersion: deps.nodeVersion ?? process.version,
+            snapshotBytes: bytes!,
+            now: nowMs,
+            budgetMinutes: budgetText === null ? undefined : Number(budgetText),
+          })
+        : runReplay({
+            mode: m,
+            d: date,
+            params,
+            commitSha,
+            nodeVersion: deps.nodeVersion ?? process.version,
+            snapshotBytes: bytes,
+            since,
+            existingTrials: m === "evidence" ? await existingTrials(db) : [],
+            nullRuns: runs,
+            synthetic,
+            now: nowMs,
+            budgetMinutes: budgetText === null ? undefined : Number(budgetText),
+          });
+    if (o === null) {
+      out("replay learning: already recorded");
+      return 0;
+    }
+    // a paused learning run resumes under the same run id: its rows are INSERT OR IGNORE
+    const seen =
+      m === "learning"
+        ? { rows: [] }
+        : await db.execute({ sql: "SELECT 1 FROM replay_run WHERE id = ?", args: [o.run.id] });
     if (seen.rows.length > 0) {
       out(`replay ${m}: already recorded`);
       return 0;

@@ -67,6 +67,19 @@ export type LedgerOptions = {
   /** Draw controls (default true); false for ledger-only runs. */
   readonly controls?: boolean;
   readonly cost?: CostSetup;
+  /**
+   * Optional sink filled with the facts of each ledger row (tier, regime, evidence classes, rule values)
+   * keyed by row id. Not part of the result or its digest (M6 T12: lessons and factor buckets).
+   */
+  readonly factsSink?: Map<string, EntryFacts>;
+};
+
+/** What the weekly learning run reads of a row beyond the ledger columns. */
+export type EntryFacts = {
+  readonly tier: string;
+  readonly regime: string;
+  readonly classes: readonly string[];
+  readonly rules: readonly { readonly rule: string; readonly value: string }[];
 };
 
 /** Default master seed: the arena's (closeBooks ARENA_MASTER_SEED), repeated to avoid a DB import. */
@@ -342,6 +355,12 @@ export function replayLedger(src: LedgerSource, opts: LedgerOptions): LedgerResu
               controls.controls.map((k) => fractionToRational({ num: k.net_num, den: k.net_den })),
             )
           : null;
+      opts.factsSink?.set(rowId, {
+        tier: c.tier,
+        regime: c.regime,
+        classes: c.classes ?? [],
+        rules: c.rules.map((r) => ({ rule: r.id, value: r.value })),
+      });
       entries.push({
         row,
         lineage,

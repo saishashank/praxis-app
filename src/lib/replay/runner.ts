@@ -10,7 +10,9 @@
 //   evidence  full, then VAL-110 on the validation split and one holdout confirmation per rule
 //             version (each access is written to the trial ledger first), survivorship, delisting
 //             and labels (the AT-17 evidence run, Owner-approved, after the DAT-125 backfill);
-//   null / injected  the AT-17 size and power checks (nullRuns.ts).
+//   null / injected  the AT-17 size and power checks (nullRuns.ts);
+//   learning  the weekly learning run (M6 T12, D-124 draft): asynchronous (it reads and writes the learning
+//             tables), so it lives in learningMode.ts; `runReplay` refuses it.
 // Every stage is timed against the replay budget keys (replay_light_minutes, replay_full_minutes);
 // when a stage ends over budget the run stops cleanly, writes only its run row, the compute report and
 // a `paused_budget` status, and no partial statistics.
@@ -88,8 +90,15 @@ import {
   type SizeReport,
 } from "./nullRuns";
 
-export type RunMode = "light" | "full" | "null" | "injected" | "evidence";
-export const RUN_MODES: readonly RunMode[] = ["light", "full", "null", "injected", "evidence"];
+export type RunMode = "light" | "full" | "null" | "injected" | "evidence" | "learning";
+export const RUN_MODES: readonly RunMode[] = [
+  "light",
+  "full",
+  "null",
+  "injected",
+  "evidence",
+  "learning",
+];
 
 const MARKET = "AU";
 const MS_PER_MINUTE = 60_000; // threshold-ok: ms per minute
@@ -97,7 +106,22 @@ const NULL_RUNS_DEFAULT = 2000; // threshold-ok: AT-17 null runs (design 4.9)
 const SIZE_B = 2000; // threshold-ok: decision 24 size-check replicates (bootstrap_size_check_replications)
 
 /** Stage names in order (the budget report lists each with its minutes). */
-export type Stage = "world" | "ledger" | "cohorts" | "stats" | "validation" | "null" | "injected";
+export type Stage =
+  | "world"
+  | "ledger"
+  | "cohorts"
+  | "stats"
+  | "validation"
+  | "null"
+  | "injected"
+  // weekly learning run (learningMode.ts)
+  | "forward"
+  | "comparisons"
+  | "lessons"
+  | "challengers"
+  | "rolls"
+  | "arn076"
+  | "factors";
 
 export type StageTime = { readonly stage: Stage; readonly minutes: number };
 
@@ -162,9 +186,11 @@ class OverBudget extends Error {
   }
 }
 
-/** The budget key for a mode: light uses replay_light_minutes, everything else replay_full_minutes. */
+/** The budget key for a mode: light and learning use replay_light_minutes, everything else replay_full_minutes. */
 export function budgetFor(mode: RunMode, params: AgentParams): number {
-  return mode === "light" ? params.replay.lightMinutes : params.replay.fullMinutes;
+  return mode === "light" || mode === "learning"
+    ? params.replay.lightMinutes
+    : params.replay.fullMinutes;
 }
 
 export function runIdOf(mode: RunMode, d: string, snapshotSha: string, commitSha: string): string {
@@ -273,6 +299,7 @@ function emptyReport(mode: RunMode, budget: number): ComputeReport {
 /** Run one replay mode end to end. Deterministic given the snapshot, parameters and commit. */
 export function runReplay(o: RunOptions): ReplayOutput {
   const { params, mode } = o;
+  if (mode === "learning") throw new RangeError("learning mode runs through runLearning");
   const budget = o.budgetMinutes ?? budgetFor(mode, params);
   const tm = timer(o.now, budget);
   const paramsSha = agentParamsSha(params);

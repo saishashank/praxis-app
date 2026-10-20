@@ -1202,7 +1202,7 @@ export type ReplayStatRow = {
 /** `replay_run` (migration 0008). */
 export type ReplayRunRow = {
   readonly id: string;
-  readonly kind: "light" | "full" | "null" | "injected" | "evidence";
+  readonly kind: "light" | "full" | "null" | "injected" | "evidence" | "learning";
   readonly market: string;
   readonly snapshot_sha: string;
   readonly commit_sha: string;

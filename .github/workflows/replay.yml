@@ -1,7 +1,9 @@
 # Replay workflow, M4 T16 (ARN-080/081/100, AT-17, D-065, D-077 pattern, D-095 draft).
 # workflow_dispatch ONLY with a `mode` input: light (weekly, new rows and controls), full (monthly),
 # evidence (VAL-110 on validation + one holdout confirmation, labels), null (AT-17 random-signal size
-# check on the real snapshot, decision 31) and injected (AT-17 injected-edge power check). The Worker's
+# check on the real snapshot, decision 31), injected (AT-17 injected-edge power check) and learning (the
+# weekly learning run, M6 T12: comparisons, lessons, challengers, promotion rolls, ARN-076 and AGT-112
+# buckets; once per ISO week, resumes after a budget stop). The Worker's
 # per-minute cron may dispatch it with `ref: release` (default mode light); its slot is DISABLED until
 # the Owner enables the replay. It has no `schedule:` trigger (PLT-015).
 # SEC-108 c: the job checks out the latest approved deploy-production commit, not the release head.
@@ -28,6 +30,7 @@ on:
           - evidence
           - "null"
           - injected
+          - learning
 
 permissions: {}
 

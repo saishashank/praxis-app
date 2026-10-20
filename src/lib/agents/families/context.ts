@@ -38,6 +38,8 @@ export type EvalContext = {
   readonly restrictToU1: boolean;
   /** F6 evidence classes treated as unavailable (ARN-076 leave-one-class-out; empty live). */
   readonly f6Disabled: ReadonlySet<string>;
+  /** F4 event filter switched off (ARN-076 weekly with/without; false live). */
+  readonly f4EventFilterOff?: boolean;
   /** Rule-version id stamped on each family's candidates (default: the v1 id, M6 T8). */
   readonly ruleVersions: Readonly<Partial<Record<Family, string>>>;
   /** Codes sorted ascending (determinism). */
@@ -140,6 +142,7 @@ export function createContext(
     u2OptInF1: opts.u2OptInF1 === true,
     restrictToU1: opts.restrictToU1 === true,
     f6Disabled: new Set(opts.f6DisabledClasses ?? []),
+    f4EventFilterOff: opts.f4EventFilterOff === true,
     ruleVersions: opts.ruleVersions ?? {},
     codes,
     groupsByCode,
