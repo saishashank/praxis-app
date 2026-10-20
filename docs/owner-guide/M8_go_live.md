@@ -151,7 +151,7 @@ Keep a list of results as you go: pass or fail per item, and the run number. Tel
 7. Let the Worker run the evening pipeline on a real AU trading day.
 8. After 20:45, go to your code repository, **Actions**, and run the workflow whose file is `staging-e2e-day.yml`. Use branch `main`. [VERIFY name]
 9. Open the run summary. Every row of the deadline table must say pass. The table has times and step names only.
-10. The System Health page also has a **Day timeline check** block with the same table. [VERIFY]
+10. The System Health page also has a **Day timeline check** block with the same table.
 
 **C3. AT-28, the cold-start day.** This day uses an empty database. It is also your rehearsal of the database swap in OPS-040 step 3. [OPS-040, M8 design decision 8]
 
@@ -179,7 +179,7 @@ Keep a list of results as you go: pass or fail per item, and the run number. Tel
 
 1. In Turso, create a short-lived platform token with the narrowest scope that can create a database. Choose the shortest expiry.
 2. In your code repository open **Settings → Environments → `staging`**. Add it as the secret `TURSO_PLATFORM_TOKEN_TEMP`.
-3. Go to **Actions → Restore drill → Run workflow**. Branch `release`. Set **mode** to `drill`, **environment** to `staging` and **key** to `throwaway`. [VERIFY]
+3. Go to **Actions → Restore drill → Run workflow**. Branch `release`. Set **mode** to `drill`, **environment** to `staging` and **key** to `throwaway`.
 4. When the run finishes, delete `TURSO_PLATFORM_TOKEN_TEMP` from the environment and revoke the token in Turso. The last step of the run stays red until you do.
 5. Run it once more with **mode** `verify-removed`. It must end green.
 
@@ -293,7 +293,7 @@ Secrets, in the order you work through them:
 | 15 | (m) | GitHub read token for release detection (fine-grained, code repo, read only) | Rotate | GitHub, your account (fine-grained token, code repo only; contents, actions and deployments read) | production: Vercel project `praxis-app`, environment variables (Production): `GITHUB_READ_TOKEN` (step 4) | production: GITHUB_READ_TOKEN (Stage 2 table and System Health) | Yes, up to 1 year |
 | 16 | (b) | Worker dispatch token (fine-grained, code repo, Actions read and write) | Rotate | GitHub, your account (fine-grained token, code repo only) | production: Cloudflare Worker `praxis-sentinel` (production): `GITHUB_DISPATCH_TOKEN` (step 5) | production: GITHUB_DISPATCH_TOKEN (System Health, Worker secrets) | Yes, up to 1 year |
 | 17 | (b-s) | Staging Worker dispatch token (separate value, same scope) | Rotate | GitHub, your account (fine-grained token, code repo only) | staging: Cloudflare Worker `praxis-sentinel-staging`: `GITHUB_DISPATCH_TOKEN` (step 7) | Listed, no automatic check: The staging Worker has no schedule outside a test window, so its self-check runs only then. Proof: the next staging test window shows GITHUB_DISPATCH_TOKEN as PASS on the staging System Health, or turn the staging slots on for a few minutes and read it there. | Yes, up to 1 year |
-| 18 | (c4) | Staging test-identity signing secret (SEC-109) | Rotate | You, with your password manager's generator (64 hex characters) | staging: Vercel project `praxis-app-staging`, environment variables (Production): `TEST_IDENTITY_SECRET` (step 7) | staging: TEST_IDENTITY_SECRET format (Stage 2 table and System Health) | Yes, up to 1 year |
+| 18 | (c4) | Staging test-identity signing secret (SEC-109) | Rotate | You, with your password manager's generator (64 hex characters) | staging: GitHub environment `staging`: `TEST_IDENTITY_SECRET_STAGING` (step 7); staging: Vercel project `praxis-app-staging`, environment variables (Production): `TEST_IDENTITY_SECRET` (step 7) | staging: TEST_IDENTITY_SECRET format (Stage 2 table and System Health) | Yes, up to 1 year |
 | 19 | (h-s) extra row | Resend API key, staging (the key that can email you from the whitelisted sender) | Rotate | You, in Resend (a separate key for staging) | staging: GitHub environment `staging`: `RESEND_API_KEY_STAGING` (step 7); staging: Vercel project `praxis-app-staging`, environment variables (Production): `RESEND_API_KEY` (step 7) | staging: Resend test email (job staging (one [TEST] email)); staging: RESEND_API_KEY format (Stage 2 table and System Health) | Yes, up to 1 year |
 | none | (k) | Backup key pair (age): public key in two stores, private key offline only | Keep (not rotated) | You, offline (only on suspicion, OPS-037a) | production: GitHub environment `production`: `BACKUP_PUBLIC_KEY`; production: Vercel project `praxis-app`, environment variables (Production): `BACKUP_PUBLIC_KEY`; production: Your offline safe place (never on GitHub, Vercel or Cloudflare): `BACKUP_PRIVATE_KEY` | production: BACKUP_PUBLIC_KEY format (job production); production: BACKUP_PUBLIC_KEY format (Stage 2 table and System Health) | No: A key pair does not expire. It is replaced only if you suspect the private key was exposed (OPS-037a). |
 | none | (l) | Temporary restore secrets: Turso platform token and the private backup key | Absent (delete after use) | You, in Turso (narrowest create-database scope, shortest expiry), only for a drill or restore | production: GitHub environment `production` (temporary): `TURSO_PLATFORM_TOKEN_TEMP`, `BACKUP_PRIVATE_KEY` | Listed, no automatic check: A secret that must NOT exist after use. Proof of removal: a Restore drill run with mode verify-removed ends green, and the nightly watchdog stays green (it fails while either secret is present). | No: Short-lived by design; delete both secrets and revoke the token the same day. |
@@ -391,7 +391,7 @@ The bot is gone, so the key can safely sit in GitHub for a short time. Do the wh
 1. In Turso, create a new platform token. Choose the narrowest scope that can create a database. Choose the shortest expiry. [SEC-017 (l)]
 2. In your code repository open **Settings → Environments → `production`**.
 3. Add two secrets: `TURSO_PLATFORM_TOKEN_TEMP` (the new Turso token) and `BACKUP_PRIVATE_KEY` (your offline private key). Open your offline copy only for this step and copy straight across. [PLT-022b]
-4. Go to **Actions → Restore drill → Run workflow**. Branch `release`. Set **mode** `drill`, **environment** `production`, **key** `real`, **backup** empty (latest), **targets** `both`. [VERIFY]
+4. Go to **Actions → Restore drill → Run workflow**. Branch `release`. Set **mode** `drill`, **environment** `production`, **key** `real`, **backup** empty (latest), **targets** `both`.
 5. Wait. The target is under 4 hours. It decrypts in memory, creates two throwaway databases, restores both, checks counts and checksums, replays the check cohort, deletes both databases and prints PASS or FAIL. [NFR-004]
 6. Read the summary. It shows table names, counts, PASS or FAIL and the elapsed time. It must show PASS for main and auth, and the check-cohort NAV must match.
 7. Now **delete both secrets**: `TURSO_PLATFORM_TOKEN_TEMP` and `BACKUP_PRIVATE_KEY`, in the `production` environment.
@@ -600,7 +600,7 @@ The steps are the same for every secret: **revoke at the issuer, replace in ever
 
 1. Revoke or delete the old value at the issuer: You, with your password manager's generator (64 hex characters).
 2. Create the new value there. Never paste it into chat, email, notes or a ticket.
-3. Enter it in every store, one by one: Vercel project `praxis-app-staging`, environment variables (Production): `TEST_IDENTITY_SECRET`.
+3. Enter it in every store, one by one: GitHub environment `staging`: `TEST_IDENTITY_SECRET_STAGING`; Vercel project `praxis-app-staging`, environment variables (Production): `TEST_IDENTITY_SECRET`.
 4. If a Vercel or Cloudflare store changed, redeploy the app and the Worker (same approved commit).
 5. Run the smoke test and read: TEST_IDENTITY_SECRET format.
 6. Write the new expiry date on System Health and note the incident (date and row letter, no value).

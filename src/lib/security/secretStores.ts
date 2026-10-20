@@ -286,6 +286,14 @@ export const SECRET_ROWS: readonly SecretRow[] = [
     issuer: "You, with your password manager's generator (64 hex characters)",
     slots: [
       {
+        // the same value, for the staging E2E, ZAP and nightly jobs that sign in as the test identity (M8 T12)
+        env: "staging",
+        store: G,
+        holder: GH("staging"),
+        names: ["TEST_IDENTITY_SECRET_STAGING"],
+        step: 7,
+      },
+      {
         env: "staging",
         store: V,
         holder: VERCEL_STG,
