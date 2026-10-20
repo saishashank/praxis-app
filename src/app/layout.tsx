@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Inter, JetBrains_Mono } from "next/font/google";
-import { currentTheme } from "@/lib/preferences/current";
+import { currentLook } from "@/lib/preferences/current";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
@@ -21,9 +21,14 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   await connection();
   // UXN-280: the signed-in user's theme, read server-side (no inline script, CSP).
-  const theme = await currentTheme();
+  const { theme, motion } = await currentLook();
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} data-theme={theme}>
+    <html
+      lang="en"
+      className={`${inter.variable} ${jetbrainsMono.variable}`}
+      data-theme={theme}
+      data-motion={motion === "off" ? "off" : undefined}
+    >
       <body className="min-h-screen antialiased">{children}</body>
     </html>
   );

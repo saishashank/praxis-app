@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "db:migrate": "node scripts/db/migrate.mjs",
+    "prebuild": "node scripts/gen-notices.mjs",
     "build": "node scripts/db/migrate.mjs --if-vercel && next build",
     "start": "next start",
     "build:e2e": "next build",

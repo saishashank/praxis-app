@@ -17,7 +17,9 @@ vi.mock("@/lib/preferences/service", async (orig) => ({
 }));
 vi.mock("@/app/(app)/settings/actions", () => ({
   updatePreferencesAction: (fd: FormData) => action(fd),
+  setQuietHoursAction: vi.fn(),
 }));
+vi.mock("@/lib/alerts/api", () => ({ getQuietHours: async () => null }));
 vi.mock("next/font/google", () => ({
   Inter: () => ({ variable: "inter-var" }),
   JetBrains_Mono: () => ({ variable: "mono-var" }),
@@ -50,11 +52,8 @@ describe("settings page", () => {
       expect(getPrefs).toHaveBeenCalledWith({}, 7);
       expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
       expect(screen.getByLabelText("Your role")).toHaveTextContent(r);
-      expect(screen.getByLabelText("Theme")).toHaveValue("dark");
-      expect(
-        screen.getAllByRole("option").filter((o) => o.closest("select")?.name === "theme"),
-      ).toHaveLength(6);
-      expect(screen.getByLabelText("Default market")).toHaveValue("AU");
+      expect(screen.queryByLabelText("Theme")).toBeNull(); // theme moved to Appearance
+      expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeInTheDocument();
       expect(screen.getByLabelText("Time format")).toHaveValue("24h");
       expect(screen.getByLabelText("P1 alerts")).toHaveValue("immediate");
       expect(screen.getByLabelText("P2 alerts")).toHaveValue("digest");
@@ -74,9 +73,8 @@ describe("settings page", () => {
 
   it("shows stored values", async () => {
     as("viewer");
-    getPrefs.mockResolvedValue({ ...DEFAULT_PREFERENCES, theme: "dim", time_format: "12h" });
+    getPrefs.mockResolvedValue({ ...DEFAULT_PREFERENCES, time_format: "12h" });
     render(await SettingsPage());
-    expect(screen.getByLabelText("Theme")).toHaveValue("dim");
     expect(screen.getByLabelText("Time format")).toHaveValue("12h");
   });
 
@@ -86,7 +84,7 @@ describe("settings page", () => {
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
     expect(action).toHaveBeenCalledTimes(1);
     const fd = action.mock.calls[0][0];
-    expect(fd.get("theme")).toBe("dark");
+    expect(fd.has("theme")).toBe(false);
     expect(fd.get("time_format")).toBe("24h");
     expect(fd.get("alert_p2")).toBe("digest");
     expect(fd.has("alert_p0")).toBe(false);

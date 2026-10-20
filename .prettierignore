@@ -13,3 +13,4 @@ scripts/smoke
 vercel.json
 tests/fixtures
 .claude
+src/generated

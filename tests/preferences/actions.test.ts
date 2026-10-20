@@ -46,19 +46,19 @@ describe("updatePreferencesAction", () => {
       const id = await addUser(db, { email: `${role}@example.test`, role });
       asUser(id, role);
       const r = await updatePreferencesAction(
-        form({ theme: "midnight", time_format: "12h", alert_p2: "immediate" }),
+        form({ time_format: "12h", alert_p1: "digest", alert_p2: "immediate" }),
       );
       expect(r).toEqual({ ok: true });
       expect(requireUser).toHaveBeenCalledWith("own_preferences", "/settings");
       expect(revalidatePath).toHaveBeenCalledWith("/", "layout");
       expect(await getPreferences(db, id)).toMatchObject({
-        theme: "midnight",
         time_format: "12h",
+        alert_p1: "digest",
         alert_p2: "immediate",
       });
       const audits = await auditRows(db);
       expect(audits.at(-1)).toMatchObject({ action: "user.preferences_update", actor_user_id: id });
-      expect(audits.at(-1)?.detail).toEqual({ changed: ["theme", "time_format", "alert_p2"] });
+      expect(audits.at(-1)?.detail).toEqual({ changed: ["time_format", "alert_p1", "alert_p2"] });
       expect(audits.at(-1)).toMatchObject({ ip: "9.9.9.9", user_agent: "agent" });
     },
   );
@@ -67,15 +67,17 @@ describe("updatePreferencesAction", () => {
     const me = await addUser(db, { email: "me@example.test", role: "viewer" });
     const other = await addUser(db, { email: "o@example.test", role: "owner" });
     asUser(me, "viewer");
-    await updatePreferencesAction(form({ theme: "light", userId: String(other), user_id: "1" }));
-    expect((await getPreferences(db, me)).theme).toBe("light");
-    expect((await getPreferences(db, other)).theme).toBe("dark");
+    await updatePreferencesAction(
+      form({ time_format: "12h", userId: String(other), user_id: "1" }),
+    );
+    expect((await getPreferences(db, me)).time_format).toBe("12h");
+    expect((await getPreferences(db, other)).time_format).toBe("24h");
     expect((await db.execute("SELECT user_id FROM user_preference")).rows).toHaveLength(1);
   });
 
   it("an unauthenticated or refused caller stops at the guard and writes nothing", async () => {
     requireUser.mockRejectedValue(new Error("NEXT_REDIRECT"));
-    await expect(updatePreferencesAction(form({ theme: "light" }))).rejects.toThrow(/REDIRECT/);
+    await expect(updatePreferencesAction(form({ time_format: "12h" }))).rejects.toThrow(/REDIRECT/);
     expect(revalidatePath).not.toHaveBeenCalled();
     expect((await db.execute("SELECT 1 FROM user_preference")).rows).toEqual([]);
     expect(await auditRows(db)).toEqual([]);
@@ -84,12 +86,14 @@ describe("updatePreferencesAction", () => {
   it("returns invalid for bad values and does not revalidate", async () => {
     const id = await addUser(db, { email: "v@example.test" });
     asUser(id, "viewer");
-    expect(await updatePreferencesAction(form({ theme: "neon" }))).toEqual({ error: "invalid" });
-    expect(await updatePreferencesAction(form({ default_market: "US" }))).toEqual({
+    expect(await updatePreferencesAction(form({ time_format: "neon" }))).toEqual({
+      error: "invalid",
+    });
+    expect(await updatePreferencesAction(form({ alert_p1: "never" }))).toEqual({
       error: "invalid",
     });
     const f = new FormData();
-    f.set("theme", new File(["x"], "x.txt"));
+    f.set("alert_p2", new File(["x"], "x.txt"));
     expect(await updatePreferencesAction(f)).toEqual({ error: "invalid" });
     expect(revalidatePath).not.toHaveBeenCalled();
   });
@@ -100,7 +104,7 @@ describe("updatePreferencesAction", () => {
     dbMock.mockImplementation(() => {
       throw new Error("secret connection string");
     });
-    expect(await updatePreferencesAction(form({ theme: "light" }))).toEqual({
+    expect(await updatePreferencesAction(form({ time_format: "12h" }))).toEqual({
       error: "unavailable",
     });
     expect(revalidatePath).not.toHaveBeenCalled();
@@ -109,8 +113,19 @@ describe("updatePreferencesAction", () => {
   it("returns the service error code (inactive actor)", async () => {
     const id = await addUser(db, { email: "g@example.test", status: "revoked" });
     asUser(id, "viewer");
-    expect(await updatePreferencesAction(form({ theme: "light" }))).toEqual({
+    expect(await updatePreferencesAction(form({ time_format: "12h" }))).toEqual({
       error: "forbidden",
     });
+  });
+});
+
+describe("field scoping", () => {
+  it("ignores theme, motion and market fields (they belong to other Settings pages)", async () => {
+    const id = await addUser(db, { email: "s@example.test", role: "viewer" });
+    asUser(id, "viewer");
+    expect(
+      await updatePreferencesAction(form({ theme: "light", motion: "off", default_market: "AU" })),
+    ).toEqual({ ok: true });
+    expect(await getPreferences(db, id)).toMatchObject({ theme: "dark", motion: "on" });
   });
 });

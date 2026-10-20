@@ -31,12 +31,17 @@ import type { AuthEnv } from "@/lib/auth/env";
 export const THEMES = ["dark", "light", "system", "midnight", "dim", "high_contrast"] as const;
 export const TIME_FORMATS = ["24h", "12h"] as const;
 export const ALERT_DELIVERY = ["immediate", "digest"] as const;
+// UXN-281 "Motion" switch; UXN-282 "whether times show in Melbourne or exchange-local time".
+export const MOTIONS = ["on", "off"] as const;
+export const TIME_ZONES = ["melbourne", "exchange"] as const;
 // Only active markets are selectable: AU until a second market activates (ROL-107).
 export const SELECTABLE_MARKETS = ["AU"] as const;
 
 export type Theme = (typeof THEMES)[number];
 export type TimeFormat = (typeof TIME_FORMATS)[number];
 export type AlertDelivery = (typeof ALERT_DELIVERY)[number];
+export type Motion = (typeof MOTIONS)[number];
+export type TimeZoneChoice = (typeof TIME_ZONES)[number];
 
 export type Preferences = {
   theme: Theme;
@@ -44,6 +49,8 @@ export type Preferences = {
   time_format: TimeFormat;
   alert_p1: AlertDelivery;
   alert_p2: AlertDelivery;
+  motion: Motion;
+  times_in: TimeZoneChoice;
 };
 
 export const DEFAULT_PREFERENCES: Readonly<Preferences> = Object.freeze({
@@ -52,6 +59,8 @@ export const DEFAULT_PREFERENCES: Readonly<Preferences> = Object.freeze({
   time_format: "24h",
   alert_p1: "immediate",
   alert_p2: "digest",
+  motion: "on",
+  times_in: "melbourne",
 });
 
 const ALLOWED: { [K in keyof Preferences]: readonly string[] } = {
@@ -60,6 +69,8 @@ const ALLOWED: { [K in keyof Preferences]: readonly string[] } = {
   time_format: TIME_FORMATS,
   alert_p1: ALERT_DELIVERY,
   alert_p2: ALERT_DELIVERY,
+  motion: MOTIONS,
+  times_in: TIME_ZONES,
 };
 const FIELDS = Object.keys(ALLOWED) as Array<keyof Preferences>;
 
