@@ -135,13 +135,31 @@ test("DST edges: the switch days still map the right line to the right slot", ()
   assert.equal(slotForSchedule("40 10 * * *", Date.parse("2027-04-04T10:40:00Z")), "2040");
 });
 
-test("the Worker may dispatch this file only if its slots stay disabled (T12 worker edit is separate)", () => {
+test("the Worker dispatches this file only through listed-only slots at 20:40 and 21:50 (M8 T13, PLT-071)", () => {
   const sched = read("worker/src/schedule.ts");
-  // Not edited by this task: if the slots exist they must be disabled.
-  const i = sched.indexOf('"watchdog.yml"');
-  if (i >= 0)
-    assert.match(
-      sched.slice(i, i + 400),
-      /enabled: false|requiresListing: true/ /* M8 T8 (D-155): a go-live slot runs only once the Owner lists it */,
-    );
+  assert.match(sched, /"watchdog\.yml",\n\];/, "watchdog.yml is in DISPATCHABLE_WORKFLOWS");
+  const wd = [];
+  for (const m of sched.matchAll(/slot\(\{\n([\s\S]*?)\n  \}\),/g))
+    if (m[1].includes('workflow: "watchdog.yml"')) wd.push(m[1]);
+  assert.equal(wd.length, 2);
+  const want = [
+    ["watchdog-2040", "20:40", "2040"],
+    ["watchdog-2150", "21:50", "2150"],
+  ];
+  wd.forEach((body, i) => {
+    const [id, time, input] = want[i];
+    assert.ok(body.includes(`id: "${id}"`), id);
+    assert.ok(body.includes(`time: "${time}"`), id);
+    assert.ok(body.includes(`fixedInputs: { slot: "${input}" }`), id);
+    for (const line of [
+      'runner: "actions"',
+      "requiresListing: true",
+      "enabled: true",
+      "tradingDaysOnly: false",
+    ])
+      assert.ok(body.includes(line), `${id} ${line}`);
+  });
+  // the dispatch input exists in the workflow with exactly these values
+  const inp = yaml.load(read(FILE)).on.workflow_dispatch.inputs.slot;
+  assert.ok(inp.options.includes("2040") && inp.options.includes("2150"));
 });

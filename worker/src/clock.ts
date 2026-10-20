@@ -259,7 +259,7 @@ export function decideWithSkips(
       skipped.push({ id: slot.id, reason: why });
       continue;
     }
-    let inputs: Record<string, string> | undefined;
+    let inputs: Record<string, string> | undefined = slot.fixedInputs;
     if (slot.inputsKey !== undefined) {
       const got = facts.slotInputs?.[slot.inputsKey] ?? null;
       if (got === null || (slot.requiredInputs ?? []).some((k) => (got[k] ?? "").trim() === "")) {

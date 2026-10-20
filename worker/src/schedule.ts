@@ -57,6 +57,8 @@ export type Slot = {
    */
   inputsKey?: string;
   requiredInputs?: readonly string[];
+  /** Runner "actions": constant workflow inputs sent with every dispatch (watchdog `slot`). */
+  fixedInputs?: Record<string, string>;
   note: string;
 };
 
@@ -75,6 +77,7 @@ export const DISPATCHABLE_WORKFLOWS: readonly string[] = [
   "llm-bakeoff.yml",
   "maintenance.yml",
   "replay.yml",
+  "watchdog.yml",
 ];
 
 export const DEFAULT_CATCH_UP_MIN = 60;
@@ -407,5 +410,38 @@ export const AU_SLOTS: readonly Slot[] = [
     enabled: true,
     requiresListing: true,
     note: "Monthly LLM bake-off (M8 T8, decision 46): first Saturday 10:00; OFF until the Owner lists it and sets the candidates",
+  }),
+  // M8 T13 (PLT-071, NFR-006, D-106, D-155): the YAML watchdog runs at 20:40 and 21:50 Melbourne,
+  // every day (it checks the Evening Review, which also has a non-trading form). watchdog.yml is
+  // dispatch-only (no `schedule:`), so these Worker slots are its only trigger; the `slot` input
+  // stands for the time. Listed-only like every go-live slot. Catch-up 30 min for 20:40 (a late run still
+  // closes before the 21:00 review retry) and 20 min for 21:50 (ends before the 22:15 archive tick).
+  slot({
+    id: "watchdog-2040",
+    time: "20:40",
+    runner: "actions",
+    workflow: "watchdog.yml",
+    fixedInputs: { slot: "2040" },
+    tradingDaysOnly: false,
+    marketBound: false,
+    priority: 27,
+    catchUpMin: 30,
+    enabled: true,
+    requiresListing: true,
+    note: "YAML watchdog 20:40 (M8 T13, PLT-071, NFR-006): sends the review if none went out; OFF until the Owner lists it",
+  }),
+  slot({
+    id: "watchdog-2150",
+    time: "21:50",
+    runner: "actions",
+    workflow: "watchdog.yml",
+    fixedInputs: { slot: "2150" },
+    tradingDaysOnly: false,
+    marketBound: false,
+    priority: 28,
+    catchUpMin: 20,
+    enabled: true,
+    requiresListing: true,
+    note: "YAML watchdog 21:50 (M8 T13, PLT-071, NFR-006): last check of the worker poll and the review; OFF until the Owner lists it",
   }),
 ];

@@ -61,6 +61,8 @@ const GO_LIVE_ACTIONS = [
   "replay",
   "kb-archive",
   "llm-bakeoff",
+  "watchdog-2040",
+  "watchdog-2150",
 ];
 const GO_LIVE_ROUTES = [
   "alert-flush",
@@ -122,6 +124,114 @@ describe("the shipped table (decision 32)", () => {
     }
     expect(fired.sort()).toEqual(["backup", "ingest-batch1", "maintenance"]);
     expect(posts).toEqual([]);
+  });
+});
+
+describe("the watchdog slots (M8 T13, PLT-071, D-106)", () => {
+  const WD: [string, string, string][] = [
+    ["watchdog-2040", "20:40", "2040"],
+    ["watchdog-2150", "21:50", "2150"],
+  ];
+  const watchdogCalls = () => net.github.filter((c) => c.url.includes("/watchdog.yml/dispatches"));
+  // Days around both clock changes (2026-10-04 AEDT starts, 2027-04-04 AEST starts) and ordinary ones.
+  const DAYS: [string, 10 | 11][] = [
+    ["2026-10-02", 10],
+    ["2026-10-03", 10],
+    ["2026-10-04", 11],
+    ["2026-10-05", 11],
+    ["2026-11-07", 11], // a Saturday: every day, not trading days only
+    ["2026-11-08", 11], // a Sunday
+    ["2027-04-02", 11],
+    ["2027-04-03", 11],
+    ["2027-04-04", 10],
+    ["2027-04-05", 10],
+  ];
+
+  it("are dispatch slots of the allow-listed watchdog.yml, every day, listed-only, with a fixed slot input", () => {
+    expect(DISPATCHABLE_WORKFLOWS).toContain("watchdog.yml");
+    expect(isDispatchable("watchdog.yml")).toBe(true);
+    for (const [id, time, input] of WD) {
+      const s = AU_SLOTS.find((x) => x.id === id)!;
+      expect(s, id).toBeDefined();
+      expect([s.runner, s.workflow, s.time, s.requiresListing, s.enabled], id).toEqual([
+        "actions",
+        "watchdog.yml",
+        time,
+        true,
+        true,
+      ]);
+      expect([s.tradingDaysOnly, s.marketBound, s.monthly], id).toEqual([false, false, undefined]);
+      expect(s.fixedInputs, id).toEqual({ slot: input });
+      expect(s.catchUpMin, id).toBe(id === "watchdog-2040" ? 30 : 20);
+    }
+  });
+
+  it("held without a list or with a list lacking them; the kill switch off holds all", async () => {
+    const t = utc("2026-11-04", "20:40", 11);
+    expect((await tick(t)).dispatched).toEqual([]); // kill switch off
+    setState("dispatch_enabled", '"1"');
+    resetClockCache();
+    const absent = await tick(t);
+    expect(absent.dispatched).toEqual([]);
+    expect(absent.skipped).toContainEqual({ id: "watchdog-2040", reason: "not-released" });
+    setState("slots_enabled", JSON.stringify(["backup", "watchdog-2150"]));
+    resetClockCache();
+    const other = await tick(t);
+    expect(other.skipped).toContainEqual({ id: "watchdog-2040", reason: "not-listed" });
+    expect(other.dispatched).toEqual([]);
+    expect(watchdogCalls()).toHaveLength(0);
+  });
+
+  it("listed: each fires exactly once per day across both DST changes, with ref release and its slot input", async () => {
+    setState("dispatch_enabled", '"1"');
+    setState("slots_enabled", JSON.stringify(["watchdog-2040", "watchdog-2150"]));
+    for (const [d, off] of DAYS) {
+      for (const [id, time, input] of WD) {
+        const before = watchdogCalls().length;
+        resetClockCache();
+        expect((await tick(utc(d, time, off))).dispatched, `${d} ${id}`).toEqual([id]);
+        // the same minute again and the next minutes: still once
+        for (const extra of [0, 1, 5, 19]) {
+          resetClockCache();
+          const [h, m] = time.split(":").map(Number);
+          const at = utc(d, hm(h * 60 + m + extra), off);
+          expect((await tick(at)).dispatched, `${d} ${id} +${extra}`).toEqual([]);
+        }
+        const mine = watchdogCalls().slice(before);
+        expect(mine, `${d} ${id}`).toHaveLength(1);
+        expect(JSON.parse(mine[0]!.body)).toEqual({ ref: "release", inputs: { slot: input } });
+      }
+    }
+    expect(watchdogCalls()).toHaveLength(DAYS.length * 2);
+    // never at any other minute of a whole day, and the catch-up window closes after 30 minutes
+    resetClockCache();
+    expect((await tick(utc("2026-12-01", "21:11", 11))).dispatched).toEqual([]);
+    resetClockCache();
+    expect((await tick(utc("2026-12-01", "22:11", 11))).dispatched).toEqual([]);
+  });
+
+  it("a missed minute is caught up within the window (Worker restarted at 20:55)", async () => {
+    setState("dispatch_enabled", '"1"');
+    setState("slots_enabled", JSON.stringify(["watchdog-2040"]));
+    resetClockCache();
+    expect((await tick(utc("2026-11-04", "20:55", 11))).dispatched).toEqual(["watchdog-2040"]);
+  });
+
+  it("one database read per tick is unchanged: a held watchdog tick is one request, a dispatching one three", async () => {
+    setState("dispatch_enabled", '"1"');
+    setState("slots_enabled", JSON.stringify(["backup"]));
+    const t = utc("2026-11-04", "20:40", 11);
+    const before = net.pipelines;
+    await tick(t); // watchdog-2040 due but not listed
+    expect(net.pipelines - before).toBe(1);
+    const read = net.calls.filter((c) => c.url.endsWith("/v2/pipeline")).at(-1)!;
+    const reqs = JSON.parse(read.body).requests as { stmt?: { sql: string } }[];
+    expect(reqs.filter((r) => /^s*select/i.test(r.stmt?.sql ?? ""))).toHaveLength(1);
+    setState("slots_enabled", JSON.stringify(["watchdog-2040"]));
+    resetClockCache();
+    const b2 = net.pipelines;
+    await tick(t);
+    expect(net.pipelines - b2).toBe(3); // read + claim + record
   });
 });
 

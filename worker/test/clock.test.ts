@@ -163,6 +163,7 @@ describe("slot table (docs/M2_design.md section 3)", () => {
       "llm-bakeoff.yml",
       "maintenance.yml",
       "replay.yml",
+      "watchdog.yml",
     ]);
     for (const s of AU_SLOTS.filter((x) => x.enabled && x.runner === "actions")) {
       expect(s.runner).toBe("actions");
@@ -211,6 +212,8 @@ describe("slot table (docs/M2_design.md section 3)", () => {
         s.id === "replay" ||
         s.id === "kb-archive" ||
         s.id === "llm-bakeoff" ||
+        s.id === "watchdog-2040" || // M8 T13: both watchdog runs, every day
+        s.id === "watchdog-2150" ||
         s.id === "ingest-batch1" || // M5 T10, decision 5: also the non-trading marker
         s.id === "evening-review" ||
         s.id === "evening-review-late" ||
