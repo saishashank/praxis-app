@@ -25,7 +25,6 @@ vi.mock("next/font/google", () => ({
 vi.mock("next/server", () => ({ connection: async () => undefined }));
 
 import SettingsPage from "@/app/(app)/settings/page";
-import HomePage from "@/app/(app)/page";
 import RootLayout from "@/app/layout";
 import { currentTheme } from "@/lib/preferences/current";
 import { userPreferences } from "@/lib/preferences/read";
@@ -97,14 +96,6 @@ describe("settings page", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Please check the entries and try again.",
     );
-  });
-});
-
-describe("home page link", () => {
-  it.each(["owner", "editor", "viewer"])("%s sees Settings", async (r) => {
-    as(r);
-    render(await HomePage());
-    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
   });
 });
 

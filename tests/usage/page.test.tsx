@@ -2,7 +2,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import UsagePage from "@/app/(app)/usage/page";
-import HomePage from "@/app/(app)/page";
 import type { Meter } from "@/lib/usage/meters";
 
 const guard = vi.hoisted(() => ({ requireUser: vi.fn() }));
@@ -91,17 +90,5 @@ describe("usage page", () => {
     render(await UsagePage());
     expect(screen.getByRole("status")).toHaveTextContent("Usage data unavailable");
     expect(screen.queryByText(/secret detail/)).toBeNull();
-  });
-});
-
-describe("home page Usage link", () => {
-  it("is shown for the owner only", async () => {
-    guard.requireUser.mockResolvedValueOnce({ ...owner, role: "editor" });
-    render(await HomePage());
-    expect(screen.queryByRole("link", { name: "Usage" })).toBeNull();
-    cleanup();
-    guard.requireUser.mockResolvedValueOnce(owner);
-    render(await HomePage());
-    expect(screen.getByRole("link", { name: "Usage" })).toHaveAttribute("href", "/usage");
   });
 });

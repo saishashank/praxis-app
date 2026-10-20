@@ -63,6 +63,12 @@ export async function setTheme(role: Role, theme: string): Promise<void> {
 }
 
 export async function axeViolations(page: Page) {
+  // The Control Room boot fades its readouts in (<= 1.2 s, UXN-285 a); axe measures contrast through
+  // opacity, so check the settled page, not a frame mid-fade.
+  await page
+    .locator('[data-boot="on"]')
+    .waitFor({ state: "detached", timeout: 5_000 })
+    .catch(() => {});
   const r = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();

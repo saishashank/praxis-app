@@ -18,7 +18,7 @@ export const CORE_PAGES: PageEntry[] = [
     h1: "Privacy",
   },
   { file: "src/app/terms/page.tsx", path: "/terms", action: "public", roles: "all", h1: "Terms" },
-  { file: "src/app/(app)/page.tsx", path: "/", action: "read", h1: "Praxis" },
+  { file: "src/app/(app)/page.tsx", path: "/", action: "read", h1: "Today" },
   { file: "src/app/(app)/health/page.tsx", path: "/health", action: "read", h1: "System Health" },
   {
     file: "src/app/(app)/settings/page.tsx",

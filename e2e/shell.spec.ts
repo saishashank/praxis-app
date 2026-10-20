@@ -12,7 +12,7 @@ test("360 px: bottom bar shows all six labels unclipped, so no More menu is need
 }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await signIn(context, "owner");
-  await page.goto("/settings"); // Home is a placeholder with its own wide link row until T11
+  await page.goto("/settings");
   const bar = page.getByRole("navigation", { name: "Main (bottom bar)" });
   await expect(bar).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Main", exact: true })).toBeHidden();
@@ -30,6 +30,8 @@ test("360 px: bottom bar shows all six labels unclipped, so no More menu is need
     expect(m.fits, SIX[i]).toBe(true);
     expect(m.h).toBeGreaterThanOrEqual(48);
   }
+  await expectNoHorizontalScroll(page);
+  await page.goto("/"); // Home (T11) also fits at 360 px
   await expectNoHorizontalScroll(page);
   // the page content is not hidden behind the bar
   const footer = page.getByRole("contentinfo");

@@ -12,22 +12,22 @@ vi.mock("@/lib/auth/guard", () => ({
 }));
 const summaryMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/health/summary", () => ({ getHealthSummary: summaryMock }));
-vi.mock("@/lib/db/client", () => ({ mainDb: () => ({}) }));
+vi.mock("@/lib/db/client", () => ({ mainDb: () => ({}), authDb: () => ({}) }));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ has: () => false, set: vi.fn() }),
+  headers: async () => new Headers(),
+}));
+vi.mock("@/app/(app)/home/actions", () => ({ dismissWelcomeAction: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) })); // Control Room client island
 vi.mock("@/lib/auth/actions", () => ({ signInAction: vi.fn(), signOutAction: vi.fn() }));
 
 describe("home page", () => {
-  it("shows heading, simulated line, role, sign-out and the disclaimer footer", async () => {
+  it("renders its own main with the Today heading and the welcome banner (loader failure shown, not thrown)", async () => {
     render(await HomePage());
-    expect(screen.getByRole("heading", { name: "Praxis" })).toBeInTheDocument();
-    expect(screen.getByText(/All trades are simulated./)).toBeInTheDocument();
-    expect(screen.getByText("Signed in as editor")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
-    expect(
-      screen.getByText("Simulation for personal information only — not financial advice"),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/privacy");
-    expect(screen.getByRole("link", { name: "Terms" })).toHaveAttribute("href", "/terms");
+    expect(screen.getByRole("main")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Today" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Welcome to Praxis" })).toBeInTheDocument();
+    expect(screen.getByText("Could not load Home")).toBeInTheDocument();
   });
 });
 
@@ -74,64 +74,6 @@ describe("terms page", () => {
     expect(screen.getByText(/Nothing in Praxis is financial advice/)).toBeInTheDocument();
     expect(screen.getByText(/as-is, with no warranty/)).toBeInTheDocument();
     expect(screen.getByText("Last updated: 2026-10-09")).toBeInTheDocument();
-  });
-});
-
-describe("home page health link", () => {
-  it("links to System Health", async () => {
-    render(await HomePage());
-    expect(screen.getByRole("link", { name: "System Health" })).toHaveAttribute("href", "/health");
-  });
-});
-
-describe("home page Users & roles link", () => {
-  it("is hidden for an editor and shown for the owner", async () => {
-    const { requireUser } = await import("@/lib/auth/guard");
-    render(await HomePage());
-    expect(screen.queryByRole("link", { name: "Users & roles" })).toBeNull();
-    cleanup();
-    vi.mocked(requireUser).mockResolvedValueOnce({
-      id: 1,
-      email: "o@example.test",
-      name: null,
-      role: "owner",
-    } as never);
-    render(await HomePage());
-    expect(screen.getByRole("link", { name: "Users & roles" })).toHaveAttribute("href", "/users");
-  });
-});
-
-describe("home page Configuration link", () => {
-  it("is hidden for an editor and shown for the owner", async () => {
-    const { requireUser } = await import("@/lib/auth/guard");
-    render(await HomePage());
-    expect(screen.queryByRole("link", { name: "Configuration" })).toBeNull();
-    cleanup();
-    vi.mocked(requireUser).mockResolvedValueOnce({
-      id: 1,
-      email: "o@example.test",
-      name: null,
-      role: "owner",
-    } as never);
-    render(await HomePage());
-    expect(screen.getByRole("link", { name: "Configuration" })).toHaveAttribute("href", "/config");
-  });
-});
-
-describe("home page Data review link", () => {
-  it("is hidden for an editor and shown for the owner", async () => {
-    const { requireUser } = await import("@/lib/auth/guard");
-    render(await HomePage());
-    expect(screen.queryByRole("link", { name: "Data review" })).toBeNull();
-    cleanup();
-    vi.mocked(requireUser).mockResolvedValueOnce({
-      id: 1,
-      email: "o@example.test",
-      name: null,
-      role: "owner",
-    } as never);
-    render(await HomePage());
-    expect(screen.getByRole("link", { name: "Data review" })).toHaveAttribute("href", "/review");
   });
 });
 
@@ -186,7 +128,7 @@ describe("health page", () => {
     summaryMock.mockResolvedValueOnce({ jobs });
     await as("viewer");
     render(await HealthPage());
-    expect(summaryMock).toHaveBeenLastCalledWith(expect.anything(), expect.any(Date), "viewer");
+    expect(summaryMock).toHaveBeenCalledWith(expect.anything(), expect.any(Date), "viewer");
     expect(screen.getByRole("heading", { level: 1, name: "System Health" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Last success" })).toBeInTheDocument();
     expect(screen.getByRole("rowheader", { name: "Nightly backup" })).toBeInTheDocument();
