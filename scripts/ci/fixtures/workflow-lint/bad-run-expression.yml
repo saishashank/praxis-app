@@ -1,0 +1,11 @@
+name: Bad
+on: workflow_dispatch
+permissions: {}
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "${{ secrets.X }}"
+      - run: echo "${{ inputs.day }}"
+      - run: echo "${{ github.event.pull_request.title }}"
+      - run: echo "${{ github.sha }}"

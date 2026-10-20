@@ -1,0 +1,41 @@
+name: Good
+on:
+  push:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: good
+  cancel-in-progress: false
+jobs:
+  plain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      - uses: actions/setup-node@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        with:
+          cache: npm
+      - run: npm ci
+      - run: pip install --require-hashes -r requirements.txt
+  secret-job:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      deployment: false
+    permissions:
+      contents: read
+    concurrency:
+      group: secret-job
+    steps:
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      - run: node run.mjs "$VALUE"
+        env:
+          VALUE: ${{ secrets.SOME_SECRET }}
+          DAY: ${{ inputs.day }}
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/upload-artifact@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        if: ${{ failure() }}

@@ -1,0 +1,9 @@
+name: Bad
+on: workflow_dispatch
+permissions: {}
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: echo ok

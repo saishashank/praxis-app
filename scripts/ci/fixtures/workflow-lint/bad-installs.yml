@@ -1,0 +1,11 @@
+name: Bad
+on: push
+permissions: {}
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm install
+      - run: |
+          cd x && npm i left-pad
+          pip install requests
