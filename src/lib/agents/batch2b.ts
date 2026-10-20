@@ -1426,7 +1426,8 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
     // signals and starts new cohorts on the NEXT trading day, so they are not in tonight's
     // `loadUnresolvedCohorts(d)` and first trade from the next session (BLD-030, no special path).
     // Any other mode is a no-op that writes nothing, so those nights are unchanged. An explicit
-    // REPLAY (D-066 / BLD-024) runs against cohorts the caller started itself and never opens any.
+    // REPLAY (D-066 / BLD-024) skips it: replayed nights already hold their cohort rows, and history
+    // replays create cohorts through their own path (D-077 / D-091), never through this stage.
     const started =
       o.replay === true
         ? null
