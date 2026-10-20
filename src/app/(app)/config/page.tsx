@@ -18,7 +18,7 @@ import { mainDb } from "@/lib/db/client";
 import { formatMelbourne, type TimeFormat } from "@/lib/health/format";
 import { userPreferences } from "@/lib/preferences/read";
 import { ConfigForm } from "./ConfigForm";
-import { RCell, RHead, RRow, RTable } from "./ResponsiveTable";
+import { RCell, RHead, RRow, RTable } from "@/components/ui/ResponsiveTable";
 import { updateConfigAction } from "./actions";
 
 export const dynamic = "force-dynamic";

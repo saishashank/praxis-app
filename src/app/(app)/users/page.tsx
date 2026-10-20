@@ -22,7 +22,7 @@ import {
 } from "@/lib/users/service";
 import { isGrantLive } from "@/lib/view/mask";
 import { ActionForm } from "./ActionForm";
-import { RCell, RHead, RRow, RTable } from "./ResponsiveTable";
+import { RCell, RHead, RRow, RTable } from "@/components/ui/ResponsiveTable";
 import { RevokeButton } from "./RevokeButton";
 import {
   addUserAction,
