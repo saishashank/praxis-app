@@ -1,6 +1,6 @@
 // TST-131 (M8 T3): flaky-test quarantine record. `tests/quarantine.json` lists tests that are
 // quarantined (still run nightly, listed in the job summary). Each entry needs a reason, an owner and
-// an expiry no more than 30 days after it was added; an expired entry fails the check, so a
+// an expiry no more than 2 days after it was added (TST-131); an expired entry fails the check, so a
 // quarantine can never become a silent skip (AGENT_PLAN section 6).
 // Shape: { "quarantined": [{ "test": "tests/x.test.ts::name", "reason": "...", "owner": "...",
 //                            "added": "YYYY-MM-DD", "expires": "YYYY-MM-DD" }] }
@@ -10,7 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const MAX_DAYS = 30;
+export const MAX_DAYS = 2; // TST-131: fixed or quarantined within 2 days
 const DAY_MS = 86_400_000;
 
 function parseDate(s) {

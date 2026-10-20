@@ -2642,6 +2642,7 @@
       "tests/coverage/candidatesPure.test.ts",
       "tests/coverage/paramsEdges.test.ts",
       "tests/coverage/replayCli.test.ts",
+      "tests/coverage/replayStatistics.test.ts",
       "tests/coverage/snapshotWorld.test.ts",
       "tests/coverage/statsGuards.test.ts"
     ],

@@ -48,7 +48,12 @@ export default defineConfig({
           },
         // Validation statistics and replay statistics.
         "src/lib/stats/**": { lines: 90, branches: 90 },
-        "src/lib/replay/**": { lines: 90, branches: 90 },
+        // Decision 12: "the replay statistics in src/lib/replay/**" = the modules that compute figures:
+        // scorecards (trade, barrier, headline, CIF and zero-edge rows), returns (per-position and period
+        // returns, paired excess, brokerage), cif (Aalen-Johansen and bootstrap intervals), zeroEdge (the
+        // zero-edge Monte Carlo) and nullRuns (size and power of the validation tests). The orchestration
+        // (cli, runner, learningMode, snapshot*, cohortReplay, ledger, controlLibrary) stays under the 80 % overall floor.
+        "src/lib/replay/{scorecards,returns,cif,zeroEdge,nullRuns}.ts": { lines: 90, branches: 90 },
         // Rule interpreter.
         "src/lib/agents/families/**": { lines: 90, branches: 90 },
         "src/lib/agents/{candidates,params}.ts": { lines: 90, branches: 90 },
