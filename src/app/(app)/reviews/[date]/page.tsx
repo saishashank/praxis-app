@@ -1,38 +1,25 @@
-// Evening Review in the app (EML-010/015/036, design 4.6 step 5; decision 29 minimal read-only page).
+// Evening Review in the app (UX-080, UXN-113, EML-010/015/036, design 4.6 step 5; M7 T17).
 // All signed-in roles read the stored review; only the Owner gets "Mark as read" (ROL-102a). The
 // page shows the stored HTML (rendered once by the T4 template and frozen in `evening_review`) in a
 // sandboxed frame, so what is read is exactly what was sent. Opening it never writes: an email-link
-// arrival marks read through the POST action after load (decision 34).
+// arrival marks read through the POST action after load (decision 34). Beside it: the AI / no-AI
+// badge (UXN-113), the partial marker, the delivery status and section 7a "New picks".
 // Masking (DAT-124, ROL-107, UX-009; D-128): the stored HTML holds stock codes, prices and links, so
 // only the Owner and users with a live unmask grant get it. Everyone else gets the masked view model
-// built from the stored facts (@/lib/view/reviews): "Stock A", no prices, no links, no raw HTML.
+// built from the stored facts (@/lib/view/reviews): "Stock A", no prices, no links, no raw HTML, and
+// ISO weeks in place of timestamps. The list and the calendar link a masked user by the opaque
+// `rv-` reference (D-144); a typed date still opens, as before.
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Banner } from "@/components/ui/States";
 import { requireUser } from "@/lib/auth/guard";
-import { can } from "@/lib/auth/permissions";
-import { authDb, mainDb } from "@/lib/db/client";
-import { listVersions, loadReview, readState } from "@/lib/review/assemble";
-import { activeCodesForDate } from "@/lib/view/active";
-import { loadMaskLookup, maskContextFor, StockAliases } from "@/lib/view/mask";
-import {
-  factCodes,
-  maskedReview,
-  parseFacts,
-  reviewLeaks,
-  type MaskedReview,
-} from "@/lib/view/reviews";
+import { envFor, isDateParam } from "@/lib/ui/loaders/shell";
+import { isReviewRef, loadReviewPage } from "@/lib/ui/loaders/reviews";
+import type { MaskedReview } from "@/lib/view/reviews";
 import { MarkRead } from "./MarkRead";
+import { NewPicks } from "./NewPicks";
 
 export const dynamic = "force-dynamic";
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const MARKET = "AU"; // the only market until a second one activates (ROL-107)
-const KIND_TEXT: Record<string, string> = {
-  full: "complete",
-  partial: "partial",
-  minimal: "minimal",
-  non_trading: "non-trading day",
-};
 
 export default async function ReviewDatePage({
   params,
@@ -41,77 +28,93 @@ export default async function ReviewDatePage({
   params: Promise<{ date: string }>;
   searchParams: Promise<{ v?: string; src?: string }>;
 }) {
-  const { date } = await params;
-  if (!DATE_RE.test(date)) notFound();
+  const { date: raw } = await params;
+  const date = safeDecode(raw);
+  if (!isDateParam(date) && !isReviewRef(date)) notFound();
   const user = await requireUser("read", `/reviews/${date}`);
   const sp = await searchParams;
-  const db = mainDb();
-  const versions = await listVersions(db, date);
   const wanted = sp.v !== undefined && /^\d{1,4}$/.test(sp.v) ? Number(sp.v) : undefined;
-  const review = versions.length ? await loadReview(db, date, wanted) : null;
-  const read = await readState(db, date);
-  const owner = can(user.role, "admin");
-  const ctx = await maskContextFor(user, authDb());
-  // Masked users: build the view model on the server; null means "unavailable" (fail closed).
-  let masked: MaskedReview | null = null;
-  if (ctx.masked && review !== null) {
-    const row = await db.execute({
-      sql: "SELECT facts_json FROM evening_review WHERE d = ? AND version = ?",
-      args: [date, review.version],
-    });
-    const facts = row.rows.length ? parseFacts(String(row.rows[0]!.facts_json)) : null;
-    if (facts !== null) {
-      const active = await activeCodesForDate(db, MARKET, date);
-      const aliases = new StockAliases([...active, ...factCodes(facts)]);
-      const lookup = await loadMaskLookup(db, MARKET);
-      const view = maskedReview(facts, aliases, lookup);
-      const names = aliases.codes().map((c) => lookup.names.get(c) ?? "");
-      masked = reviewLeaks(view, aliases.codes(), names) ? null : view;
-    }
-  }
+  const env = await envFor(user);
+  const model = await loadReviewPage(env, date, wanted);
+  if (model === null && isReviewRef(date)) notFound();
+  const base = `/reviews/${encodeURIComponent(date)}`;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-4 px-6 py-10">
+    <main className="mx-auto flex w-full max-w-3xl min-w-0 flex-col gap-4 px-4 py-6">
       <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Evening Review {date}</h1>
-        <Link href="/" className="text-sm text-accent underline">
-          Home
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {model === null ? `Evening Review ${date}` : model.title}
+        </h1>
+        <Link href="/reviews" className="text-sm text-accent underline">
+          All reviews
         </Link>
       </header>
-      {review === null ? (
+      {model === null ? (
         <p role="status">No review is stored for {date}.</p>
       ) : (
         <>
-          <p className="text-sm text-text-muted">
-            Version {review.version} ({KIND_TEXT[review.kind] ?? review.kind}), stored{" "}
-            {review.createdAt}. {read ? `Read ${read.readAt}.` : "Not marked as read yet."}
+          <ul
+            aria-label="About this review"
+            className="m-0 flex list-none flex-wrap gap-2 p-0 text-sm"
+          >
+            <li className="rounded-md bg-surface-2 px-2 py-1 font-semibold">{model.kindText}</li>
+            <li
+              className="rounded-md bg-surface-2 px-2 py-1 font-semibold"
+              data-provenance={model.ai ? "ai" : "no-ai"}
+            >
+              {model.aiText}
+            </li>
+            <li className="rounded-md bg-surface-2 px-2 py-1" data-delivery={model.delivery.status}>
+              {model.delivery.text}
+            </li>
+          </ul>
+          <p className="m-0 text-sm text-text-muted">
+            Version {model.version} ({model.kindText.toLowerCase()}), stored {model.createdAt}.{" "}
+            {model.read ? `Read ${model.read.readAt}.` : "Not marked as read yet."}
           </p>
-          {versions.length > 1 && (
-            <nav aria-label="Versions" className="flex gap-3 text-sm">
-              {versions.map((v) => (
+          {model.kind === "partial" ? (
+            <Banner tone="warning" title="Partial review">
+              {model.missing.length > 0
+                ? `This review was sent before everything was ready. Missing sections: ${model.missing
+                    .map((m) => `${m.n}. ${m.name}`)
+                    .join("; ")}. A complete version is stored later when the data arrives.`
+                : "This review was sent before everything was ready. A complete version is stored later when the data arrives."}
+            </Banner>
+          ) : null}
+          {model.versions.length > 1 && (
+            <nav aria-label="Versions" className="flex flex-wrap gap-3 text-sm">
+              {model.versions.map((v) => (
                 <Link
                   key={v.version}
-                  href={`/reviews/${date}?v=${v.version}`}
+                  href={`${base}?v=${v.version}`}
                   className="text-accent underline"
                 >
-                  v{v.version} ({KIND_TEXT[v.kind] ?? v.kind})
+                  v{v.version} ({v.kindText.toLowerCase()})
                 </Link>
               ))}
             </nav>
           )}
-          {owner && <MarkRead date={date} auto={sp.src === "email"} alreadyRead={read !== null} />}
-          {!ctx.masked ? (
+          {model.canMarkRead && (
+            <MarkRead date={model.d} auto={sp.src === "email"} alreadyRead={model.read !== null} />
+          )}
+          {model.html !== null ? (
             <iframe
-              title={`Evening Review ${date}`}
+              title={`Evening Review ${model.d}`}
               sandbox=""
-              srcDoc={review.html}
+              srcDoc={model.html}
               className="h-[80vh] w-full rounded border border-border bg-white"
             />
-          ) : masked === null ? (
+          ) : model.maskedView === null ? (
             <p role="status">This review cannot be shown at your access level.</p>
           ) : (
-            <MaskedBody view={masked} />
+            <MaskedBody view={model.maskedView} />
           )}
+          {model.newPicks ? <NewPicks picks={model.newPicks} masked={model.masked} /> : null}
+          {model.newPicksHidden ? (
+            <p role="note" className="m-0 text-sm text-text-muted">
+              New picks are not shown at your access level.
+            </p>
+          ) : null}
         </>
       )}
     </main>
@@ -125,7 +128,9 @@ function MaskedBody({ view }: { view: MaskedReview }) {
     ) : (
       <ul className="list-disc pl-5 text-sm">
         {items.map((x, i) => (
-          <li key={`${i}:${x}`}>{x}</li>
+          <li key={`${i}:${x}`} className="break-words">
+            {x}
+          </li>
         ))}
       </ul>
     );
@@ -166,4 +171,12 @@ function MaskedBody({ view }: { view: MaskedReview }) {
       </section>
     </div>
   );
+}
+
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return "";
+  }
 }

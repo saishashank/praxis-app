@@ -1,5 +1,5 @@
 // Keyed digest behind the opaque references masked viewers get in place of ids that carry a stock
-// code or an exact date (`ck:` cards, `pk:` picks, `mk:` alert keys; DAT-124, D-129, D-139). The ids
+// code or an exact date (`ck:` cards, `pk:` picks, `mk:` alert keys, `rv-` reviews; DAT-124, D-129, D-139). The ids
 // are guessable (code x date x family), so a plain SHA-256 could be reversed by trying them all; an
 // HMAC under the server's AUTH_SECRET cannot. Each kind has its own label, so a digest of one kind is
 // never valid for another. Server only: the secret never reaches a client bundle.
@@ -20,7 +20,7 @@ function refKey(env: Record<string, string | undefined>): string {
 
 /** 16 hex of HMAC-SHA-256(AUTH_SECRET, "<kind>:<id>"). */
 export function opaqueDigest(
-  kind: "ck" | "pk" | "mk",
+  kind: "ck" | "pk" | "mk" | "rv",
   id: string,
   env: Record<string, string | undefined> = process.env,
 ): string {

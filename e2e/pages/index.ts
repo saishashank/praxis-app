@@ -8,6 +8,7 @@ import { PICKS_PAGES } from "./picks";
 import { STRATEGIES_PAGES } from "./strategies";
 import { RISK_IDEAS_PAGES } from "./riskIdeas";
 import { NEWS_PAGES } from "./news";
+import { REVIEWS_PAGES } from "./reviews";
 import type { PageEntry } from "./types";
 
 export type { PageEntry } from "./types";
@@ -19,6 +20,7 @@ export const PAGES: PageEntry[] = [
   ...STRATEGIES_PAGES,
   ...RISK_IDEAS_PAGES,
   ...NEWS_PAGES,
+  ...REVIEWS_PAGES,
 ];
 
 /** Roles that may open the page (derived from the guard action unless the entry lists them). */

@@ -16,8 +16,8 @@ describe("opaqueDigest (D-139)", () => {
 
   it("separates kinds: the same id gives different card, pick and alert digests", () => {
     const env = { AUTH_SECRET: "s" };
-    const all = new Set(["ck", "pk", "mk"].map((k) => opaqueDigest(k as "ck", id, env)));
-    expect(all.size).toBe(3);
+    const all = new Set(["ck", "pk", "mk", "rv"].map((k) => opaqueDigest(k as "ck", id, env)));
+    expect(all.size).toBe(4);
   });
 
   it("fails closed in production without AUTH_SECRET", () => {
