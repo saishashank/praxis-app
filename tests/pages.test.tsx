@@ -13,6 +13,7 @@ vi.mock("@/lib/auth/guard", () => ({
 const summaryMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/health/summary", () => ({ getHealthSummary: summaryMock }));
 vi.mock("@/lib/db/client", () => ({ mainDb: () => ({}) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) })); // Control Room client island
 vi.mock("@/lib/auth/actions", () => ({ signInAction: vi.fn(), signOutAction: vi.fn() }));
 
 describe("home page", () => {
@@ -181,7 +182,7 @@ describe("health page", () => {
     } as never);
   };
 
-  it("viewer: table, Melbourne times, placeholders, footer, no secrets or error column", async () => {
+  it("viewer: table, Melbourne times, Control Room, no secrets or error column", async () => {
     summaryMock.mockResolvedValueOnce({ jobs });
     await as("viewer");
     render(await HealthPage());
@@ -194,20 +195,9 @@ describe("health page", () => {
     expect(screen.getByText("STALE")).toBeInTheDocument();
     expect(screen.getByText("Also stale")).toBeInTheDocument();
     expect(screen.getByText("Not reporting yet (M2)")).toBeInTheDocument();
-    for (const t of [
-      "Sentinel last poll",
-      "Data freshness (last bar date per feed)",
-      "LLM provider status",
-      "Quota usage",
-      "Last backup",
-      "Last restore test",
-      "Last email",
-    ]) {
-      expect(screen.getByText(t)).toBeInTheDocument();
-    }
+    expect(screen.getByText("Quota usage")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Secrets status" })).toBeNull();
     expect(screen.queryByText("Error details")).toBeNull();
-    expect(screen.getByText(/not financial advice/)).toBeInTheDocument();
   });
 
   it("quota line: worst level for viewers, meter and ratio for the owner", async () => {
@@ -386,6 +376,6 @@ describe("health page", () => {
     render(await HealthPage());
     expect(screen.getByRole("status")).toHaveTextContent(/^Health data unavailable$/);
     expect(document.body.textContent).not.toContain("secret-host");
-    expect(screen.getByText("Sentinel last poll")).toBeInTheDocument();
+    expect(screen.getByText("Quota usage")).toBeInTheDocument();
   });
 });

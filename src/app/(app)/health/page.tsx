@@ -1,10 +1,13 @@
 // System Health (PLT-061, PLT-017, UX-090/092/117). Every role may read status; secrets status,
 // error details are Owner-only (ROL-102a) and never show values (SEC-101).
-import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
 import { formatMelbourne, type TimeFormat } from "@/lib/health/format";
 import { userPreferences } from "@/lib/preferences/read";
+import { envFor } from "@/lib/ui/loaders/shell";
+import { loadControlRoom, type ControlRoomModel } from "@/lib/ui/loaders/controlRoom";
+import { Banner } from "@/components/ui/States";
+import { ControlRoom, type SnoozeInfo } from "./ControlRoom";
 import { CalendarConfirmForm } from "./CalendarConfirmForm";
 import { DataControlForm } from "./DataControlForm";
 import { EmailControlsSection } from "./EmailControlsSection";
@@ -32,15 +35,6 @@ import {
 import type { MeterLevel } from "@/lib/usage/meters";
 
 export const dynamic = "force-dynamic";
-
-const PLACEHOLDERS: { label: string; note: string }[] = [
-  { label: "Sentinel last poll", note: "M2" },
-  { label: "Data freshness (last bar date per feed)", note: "M2" },
-  { label: "LLM provider status", note: "M5" },
-  { label: "Last backup", note: "M2" },
-  { label: "Last restore test", note: "M2" },
-  { label: "Last email", note: "M5" },
-];
 
 const STATE_LABEL: Record<JobState, string> = {
   ok: "OK",
@@ -436,16 +430,34 @@ export default async function HealthPage() {
     }
   }
   const owner = user.role === "owner";
+  // The Control Room: ring, readouts, briefing, gauges, strip, ticker (UXN-283/285). A failed read
+  // shows a neutral line, never details; the older sections below keep working on their own.
+  let model: ControlRoomModel | null = null;
+  try {
+    model = await loadControlRoom(await envFor({ id: user.id, role: user.role }));
+  } catch {
+    model = null;
+  }
+  const snooze: SnoozeInfo | null = emailControls
+    ? { items: emailControls.attention, maxDays: emailControls.attentionSnoozeMaxDays }
+    : null;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-6 py-10">
-      <header className="flex flex-col gap-2">
+    <div className="mx-auto flex min-w-0 max-w-5xl flex-col gap-8 px-4 py-6 sm:px-6">
+      <header className="flex flex-col gap-1">
         <h1 className="text-3xl font-semibold tracking-tight">System Health</h1>
-        <p className="text-sm text-text-muted">Times are shown in Australia/Melbourne.</p>
-        <Link href="/" className="text-sm text-accent underline">
-          Home
-        </Link>
+        <p className="m-0 text-sm text-text-muted">
+          The Control Room. Times are shown in Australia/Melbourne.
+        </p>
       </header>
+
+      {model === null ? (
+        <Banner tone="warning" title="Control Room unavailable">
+          The health facts could not be read just now. The sections below may still be current.
+        </Banner>
+      ) : (
+        <ControlRoom model={model} owner={owner} tf={tf} snooze={snooze} />
+      )}
 
       {summary === null ? (
         <p role="status">Health data unavailable</p>
@@ -624,18 +636,8 @@ export default async function HealthPage() {
             <dt className="font-medium">Quota usage</dt>
             <dd className="text-text-muted">{quotaText(summary?.quota)}</dd>
           </div>
-          {PLACEHOLDERS.map((p) => (
-            <div key={p.label} className="flex flex-col">
-              <dt className="font-medium">{p.label}</dt>
-              <dd className="text-text-muted">Not available yet ({p.note})</dd>
-            </div>
-          ))}
         </dl>
       </section>
-
-      <footer className="text-xs text-text-muted">
-        Simulation for personal information only — not financial advice
-      </footer>
-    </main>
+    </div>
   );
 }

@@ -20,6 +20,7 @@ const emailActions = vi.hoisted(() => ({
 vi.mock("@/lib/auth/guard", () => ({ requireUser: (...a: unknown[]) => requireUser(...a) }));
 vi.mock("@/lib/health/summary", () => ({ getHealthSummary: summaryMock }));
 vi.mock("@/lib/db/client", () => ({ mainDb: () => ({}), authDb: () => ({}) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) })); // Control Room client island
 vi.mock("@/lib/health/attention", () => ({ loadAttentionItems: attentionMock }));
 vi.mock("@/lib/data/controls", async (orig) => ({
   ...(await orig<typeof import("@/lib/data/controls")>()),
