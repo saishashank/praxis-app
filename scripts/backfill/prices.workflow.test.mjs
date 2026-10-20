@@ -122,7 +122,10 @@ test("the Worker may dispatch this file, but its slot stays disabled", () => {
   assert.match(sched, /"backfill-prices\.yml"/);
   const slot = sched.slice(sched.indexOf('id: "backfill-prices"'));
   assert.match(slot, /workflow: "backfill-prices\.yml"/);
-  assert.match(slot.slice(0, slot.indexOf("}),")), /enabled: false/);
+  assert.match(
+    slot.slice(0, slot.indexOf("}),")),
+    /enabled: false|requiresListing: true/ /* M8 T8 (D-155): a go-live slot runs only once the Owner lists it */,
+  );
 });
 
 test("the CLI refuses an unknown command and a missing database without printing secrets", async () => {

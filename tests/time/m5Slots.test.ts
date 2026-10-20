@@ -24,7 +24,9 @@ afterEach(cleanupTempDbs);
 
 const MIN = 60_000;
 const TZ = "Australia/Sydney";
-const ALL: Slot[] = AU_SLOTS.map((s) => (s.runner === "route" ? { ...s, enabled: true } : s));
+const ALL: Slot[] = AU_SLOTS.map((s) =>
+  s.runner === "route" ? { ...s, enabled: true, requiresListing: false } : s,
+);
 // The table without the odd-minute alert-flush slot, for checks on the slots that sit on odd minutes.
 const NF: Slot[] = ALL.filter((s) => s.id !== "alert-flush");
 const M5 = [
@@ -73,7 +75,8 @@ describe("the shipped M5 slots (D-096 #41): all disabled, route runner, defined 
   it("the six M5 route slots exist, are disabled, and sit on the documented local times", () => {
     const route = AU_SLOTS.filter((s) => s.runner === "route");
     expect(route.map((s) => s.id).sort()).toEqual([...M5].sort());
-    for (const s of route) expect(s.enabled).toBe(false);
+    // M8 T8 (D-155): disabled, or a go-live slot that runs only once the Owner lists it
+    for (const s of route) expect(!s.enabled || s.requiresListing === true).toBe(true);
     const by = Object.fromEntries(route.map((s) => [s.id, s]));
     expect(by["alert-flush"]).toMatchObject({ time: "07:01", until: "20:59", everyMin: 2 });
     expect(by["pre-open"]).toMatchObject({ time: "09:54", catchUpMin: 3, maxAttempts: 1 });

@@ -139,5 +139,9 @@ test("the Worker may dispatch this file only if its slots stay disabled (T12 wor
   const sched = read("worker/src/schedule.ts");
   // Not edited by this task: if the slots exist they must be disabled.
   const i = sched.indexOf('"watchdog.yml"');
-  if (i >= 0) assert.match(sched.slice(i, i + 400), /enabled: false/);
+  if (i >= 0)
+    assert.match(
+      sched.slice(i, i + 400),
+      /enabled: false|requiresListing: true/ /* M8 T8 (D-155): a go-live slot runs only once the Owner lists it */,
+    );
 });

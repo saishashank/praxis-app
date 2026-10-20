@@ -83,7 +83,10 @@ test("mode learning (M6 T12): still dispatch-only, same single secrets step, slo
   // the Worker still has no Saturday dispatch of the replay: its slot stays disabled
   const sched = read("worker/src/schedule.ts");
   const slot = sched.slice(sched.indexOf('id: "replay"'));
-  assert.match(slot.slice(0, slot.indexOf("}),")), /enabled: false/);
+  assert.match(
+    slot.slice(0, slot.indexOf("}),")),
+    /enabled: false|requiresListing: true/ /* M8 T8 (D-155): a go-live slot runs only once the Owner lists it */,
+  );
 });
 
 test("no artifact upload, no cache, no expression inside a script (SEC-110)", () => {
@@ -97,7 +100,10 @@ test("the Worker may dispatch the file but its slot is disabled", () => {
   const slot = sched.slice(sched.indexOf('id: "replay"'));
   const body = slot.slice(0, slot.indexOf("}),"));
   assert.match(body, /workflow: "replay\.yml"/);
-  assert.match(body, /enabled: false/);
+  assert.match(
+    body,
+    /enabled: false|requiresListing: true/ /* M8 T8 (D-155): a go-live slot runs only once the Owner lists it */,
+  );
 });
 
 function fakeFetch(calls) {

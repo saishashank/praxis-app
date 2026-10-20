@@ -143,5 +143,8 @@ test("the Worker may dispatch this file, but its slot stays disabled until the O
   assert.match(sched, /"backfill-history\.yml"/);
   const slot = sched.slice(sched.indexOf('id: "backfill-history"'));
   assert.match(slot, /workflow: "backfill-history\.yml"/);
-  assert.match(slot, /enabled: false/);
+  assert.match(
+    slot,
+    /enabled: false|requiresListing: true/ /* M8 T8 (D-155): a go-live slot runs only once the Owner lists it */,
+  );
 });

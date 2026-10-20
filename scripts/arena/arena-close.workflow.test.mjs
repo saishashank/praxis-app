@@ -95,5 +95,8 @@ test("the Worker may dispatch this file but its slot is disabled (like backfill-
   assert.match(sched, /"arena-close\.yml"/);
   const slot = sched.slice(sched.indexOf('id: "arena-close"'));
   assert.match(slot.slice(0, slot.indexOf("}),")), /workflow: "arena-close\.yml"/);
-  assert.match(slot.slice(0, slot.indexOf("}),")), /enabled: false/);
+  assert.match(
+    slot.slice(0, slot.indexOf("}),")),
+    /enabled: false|requiresListing: true/ /* M8 T8 (D-155): a go-live slot runs only once the Owner lists it */,
+  );
 });

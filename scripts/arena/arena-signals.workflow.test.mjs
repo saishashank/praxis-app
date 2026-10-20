@@ -96,7 +96,10 @@ test("the Worker may dispatch this file but its slot is disabled, at 18:10 on tr
   assert.match(body, /time: "18:10"/);
   assert.match(body, /workflow: "arena-signals\.yml"/);
   assert.match(body, /tradingDaysOnly: true/);
-  assert.match(body, /enabled: false/);
+  assert.match(
+    body,
+    /enabled: false|requiresListing: true/ /* M8 T8 (D-155): a go-live slot runs only once the Owner lists it */,
+  );
 });
 
 test("the health page lists the job like arena-close", () => {

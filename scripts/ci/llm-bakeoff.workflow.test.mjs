@@ -31,8 +31,13 @@ test("workflow_dispatch only; no schedule, push or pull request; no permissions 
   assert.equal(inputs.store.default, false);
 });
 
-test("the Worker has no slot for it (it never runs automatically)", () => {
-  assert.doesNotMatch(read("worker/src/schedule.ts"), /llm-bakeoff/);
+test("the Worker slot is monthly and runs only once the Owner lists it (M8 T8, D-155)", () => {
+  const sched = read("worker/src/schedule.ts");
+  const slot = sched.slice(sched.indexOf('id: "llm-bakeoff"'));
+  const body = slot.slice(0, slot.indexOf("}),"));
+  assert.match(body, /workflow: "llm-bakeoff.yml"/);
+  assert.match(body, /monthly: "first-saturday"/);
+  assert.match(body, /requiresListing: true/);
 });
 
 test("one production job on release, production environment without a deployment record", () => {

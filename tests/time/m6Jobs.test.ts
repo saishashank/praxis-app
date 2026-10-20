@@ -62,6 +62,9 @@ function ticksOf(date: string) {
 }
 
 const KB = AU_SLOTS.find((s) => s.id === "kb-archive")!;
+// M8 T8 (D-155): "stays off until the Owner turns it on" = disabled, or a go-live slot that runs only once listed.
+const offUntilOwner = (s: { enabled: boolean; requiresListing?: boolean }) =>
+  !s.enabled || s.requiresListing === true;
 
 describe("the M6 slots as shipped (D-116)", () => {
   it("kb-archive is the only M6 slot: 22:15, dispatch-only workflow, disabled, every day, not market-bound", () => {
@@ -69,16 +72,17 @@ describe("the M6 slots as shipped (D-116)", () => {
       time: "22:15",
       runner: "actions",
       workflow: "kb-archive.yml",
-      enabled: false,
       tradingDaysOnly: false,
       marketBound: false,
       catchUpMin: 60,
     });
+    expect(offUntilOwner(KB)).toBe(true);
     // no slot for learn, words or the weekly learning run: A6 rides the batch-3 workflow and replay
     // mode `learning` is dispatched by hand (D-123, D-124)
     expect(AU_SLOTS.filter((s) => /learn|words|lesson|critic/i.test(s.id))).toEqual([]);
     const replay = AU_SLOTS.find((s) => s.id === "replay")!;
-    expect(replay).toMatchObject({ workflow: "replay.yml", enabled: false });
+    expect(replay).toMatchObject({ workflow: "replay.yml" });
+    expect(offUntilOwner(replay)).toBe(true);
   });
 });
 
@@ -96,18 +100,23 @@ describe("TST-103: kb-archive instants around both clock changes", () => {
       const fire = ticks.filter((x) => x.l.minute === KB.minute);
       expect(fire.map((x) => new Date(x.t).toISOString())).toEqual([expected]);
       // the open window (catch-up included) is 61 consecutive minutes, none repeated, on this date
-      const on = AU_SLOTS.map((s) => (s.id === "kb-archive" ? { ...s, enabled: true } : s));
+      const on = AU_SLOTS.map((s) =>
+        s.id === "kb-archive" ? { ...s, enabled: true, requiresListing: false } : s,
+      );
       const open = ticks.filter((x) => candidateSlots(x.l, on).some((s) => s.id === "kb-archive"));
       expect(open.length).toBe(KB.catchUpMin + 1);
       expect(new Date(open[0]!.t).toISOString()).toBe(expected);
       expect(new Date(open.at(-1)!.t).toISOString()).toBe(utc(day.date, "23:15", day.offset));
-      // the shipped (disabled) table never offers it
-      expect(ticks.some((x) => candidateSlots(x.l).some((s) => s.id === "kb-archive"))).toBe(false);
+      // the shipped table offers it only as a go-live slot: the clock holds it until the Owner
+      // lists it in `slots_enabled` (M8 T8, D-155; the hold itself is tested in the Worker suite)
+      expect(offUntilOwner(KB)).toBe(true);
     });
   }
 
   it("at 23:00 the nightly slots keep their order and the archive goes last (priority)", () => {
-    const on = AU_SLOTS.map((s) => (s.id === "kb-archive" ? { ...s, enabled: true } : s));
+    const on = AU_SLOTS.map((s) =>
+      s.id === "kb-archive" ? { ...s, enabled: true, requiresListing: false } : s,
+    );
     for (const day of DAYS) {
       const l = sydneyLocal(Date.parse(utc(day.date, "23:00", day.offset)));
       expect(candidateSlots(l, on).map((s) => s.id)).toEqual([

@@ -158,6 +158,8 @@ describe("AT-24 the archive goes to the private data repo only, with no deployme
     expect(code.match(/DATA_REPO_TOKEN_PROD/g)).toHaveLength(1);
     expect(code).toContain("DATA_REPO: ${{ github.repository }}-data");
     const slot = AU_SLOTS.find((s) => s.id === "kb-archive")!;
-    expect(slot).toMatchObject({ workflow: "kb-archive.yml", enabled: false });
+    expect(slot).toMatchObject({ workflow: "kb-archive.yml" });
+    // M8 T8 (D-155): disabled, or a go-live slot that runs only once the Owner lists it
+    expect(!slot.enabled || slot.requiresListing === true).toBe(true);
   });
 });

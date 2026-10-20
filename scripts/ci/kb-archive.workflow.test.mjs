@@ -74,9 +74,11 @@ test("no artifact upload, no cache, no step summary (SEC-110)", () => {
 test("the Worker slot exists, is allow-listed and stays disabled until the Owner enables it", () => {
   const sched = read("worker/src/schedule.ts");
   assert.match(sched, /"kb-archive\.yml",/);
-  const m = /id: "kb-archive",[\s\S]*?enabled: (true|false),/.exec(sched);
-  assert.ok(m, "slot present");
-  assert.equal(m[1], "false");
+  const start = sched.indexOf('id: "kb-archive"');
+  assert.ok(start >= 0, "slot present");
+  const body = sched.slice(start, sched.indexOf("}),", start));
+  // M8 T8 (D-155): disabled, or a go-live slot that runs only once the Owner lists it.
+  assert.match(body, /enabled: false|requiresListing: true/);
 });
 
 test("the client sends the token only to api.github.com and never follows a redirect", () => {
