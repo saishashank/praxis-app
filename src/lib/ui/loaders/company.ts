@@ -6,6 +6,7 @@
 // A real code from a masked user is "not found", like an unknown one (no oracle for which codes exist).
 // Unmasked users get the candles (integer micro prices), key numbers, markers and our activity.
 import { isoWeek, MISSING } from "@/lib/view/format";
+import { safeSourceUrl } from "@/lib/http/safeLink";
 import { dateStaleness } from "@/lib/view/staleness";
 import { maskText, normCode } from "@/lib/view/mask";
 import { strategyNames } from "./common";
@@ -186,7 +187,7 @@ export async function loadCompany(env: LoaderEnv, key: string): Promise<CompanyM
     published: masked
       ? (isoWeek(String(x.published_at).slice(0, 10)) ?? MISSING)
       : String(x.published_at),
-    url: masked || x.url === null ? null : String(x.url),
+    url: masked || x.url === null ? null : safeSourceUrl(x.url), // SEC-016: https + registered host, else text only
     priceSensitive: Number(x.price_sensitive) === 1,
   }));
 

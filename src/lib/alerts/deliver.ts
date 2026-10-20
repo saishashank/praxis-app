@@ -14,6 +14,7 @@
 //    tier, no materiality and no email byte (AGT-011a).
 // Nothing here logs; the facts are template fields only (no model text reaches an email).
 import type { Client, InStatement } from "@libsql/client";
+import { safeSourceUrl } from "@/lib/http/safeLink";
 import { getConfig } from "@/lib/config/store";
 import { ASX_SOURCE } from "@/lib/data/asxToken";
 import { emailKeys, melbourneDate } from "@/lib/email/keys";
@@ -142,7 +143,7 @@ export type RaiseResult = {
 };
 
 const safeUrl = (u: string | null | undefined): string =>
-  typeof u === "string" && /^https:\/\/[^\s]+$/.test(u) && u.length <= 500 ? u : ASX_FALLBACK_URL;
+  (typeof u === "string" && u.length <= 500 ? safeSourceUrl(u) : null) ?? ASX_FALLBACK_URL;
 
 export async function raiseAnnouncementAlerts(
   ctx: AlertCtx,

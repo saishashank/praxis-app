@@ -4,6 +4,7 @@
 // date's active set, as "Stock A", with a masked headline, the ISO week, no company name and no link.
 // A search term and a code filter are ignored for them (they would reveal which codes exist).
 import { isoWeek, MISSING } from "@/lib/view/format";
+import { safeSourceUrl } from "@/lib/http/safeLink";
 import { activeCodesByDate, melbourneDate } from "@/lib/view/active";
 import { maskText, normCode } from "@/lib/view/mask";
 import {
@@ -214,7 +215,7 @@ export async function loadNewsItem(env: LoaderEnv, id: number): Promise<NewsItem
     materiality: x.materiality === null ? null : Number(x.materiality), // money-float-ok: SQL integer column
     polarity: pol(x.polarity),
     assessment,
-    url: masked || x.url === null ? null : String(x.url),
+    url: masked || x.url === null ? null : safeSourceUrl(x.url), // SEC-016: https + registered host, else text only
     today: todayD(env),
   };
 }

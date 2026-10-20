@@ -7,6 +7,7 @@
 // The unmasked per-day aggregate is memoised per database, market and latest bar date (10-minute
 // ceiling, design 2.9); masking is applied AFTER the memo, per request.
 import { getConfig } from "@/lib/config/store";
+import { safeSourceUrl } from "@/lib/http/safeLink";
 import { AI_SUMMARY_NOTICE } from "@/lib/view/honesty";
 import { isoWeek, MISSING } from "@/lib/view/format";
 import { dateStaleness } from "@/lib/view/staleness";
@@ -403,7 +404,7 @@ export async function loadOverview(env: LoaderEnv, key: string): Promise<Overvie
       published: masked
         ? (isoWeek(String(x.published_at).slice(0, 10)) ?? MISSING)
         : String(x.published_at),
-      url: masked || x.url === null ? null : String(x.url),
+      url: masked || x.url === null ? null : safeSourceUrl(x.url), // SEC-016: https + registered host, else text only
     })),
     summary: SUMMARY_PENDING,
     notice: AI_SUMMARY_NOTICE,
