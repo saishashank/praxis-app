@@ -7,7 +7,7 @@ import { modelSuccess, successLine, type ModelSuccess } from "@/lib/picks/succes
 import { formatPpm, isoWeek, MISSING } from "@/lib/view/format";
 import { dateStaleness } from "@/lib/view/staleness";
 import { maskText } from "@/lib/view/mask";
-import { createHash } from "node:crypto";
+import { opaqueDigest } from "@/lib/view/opaqueRef";
 import { soft, strategyNames } from "./common";
 import { cardHref } from "./cards";
 import {
@@ -27,13 +27,11 @@ const TRACK_ROWS = 200; // threshold-ok: bounded list, newest first
 const DEFAULT_PROFILE = "balanced";
 const PROFILE_RE = /^[a-z][a-z_]{0,23}$/;
 const PK_RE = /^pk:([0-9a-f]{16})$/;
-const HEX_LENGTH = 16; // threshold-ok: key digest length
 const MAX_REF_ROWS = 5000; // threshold-ok: bound of the reference resolve scan
 const ID_RE = /^(\d{4}-\d{2}-\d{2})\.([a-z][a-z_]{0,23})\.(\d{1,2})$/;
 
-/** `pk:` plus 16 hex of SHA-256 of the readable id (date.profile.rank). */
-export const pickRef = (realId: string): string =>
-  "pk:" + createHash("sha256").update(realId).digest("hex").slice(0, HEX_LENGTH);
+/** `pk:` plus the keyed digest of the readable id (date.profile.rank). */
+export const pickRef = (realId: string): string => "pk:" + opaqueDigest("pk", realId);
 
 /** The id shown in links: readable for an unmasked viewer, opaque for a masked one (no date in the URL). */
 const publicPickId = (realId: string, masked: boolean): string =>

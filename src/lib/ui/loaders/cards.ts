@@ -9,8 +9,8 @@
 // parts (src/lib/ui/loaders/cardParts.ts: "Based on", past setups, factors, checklist, headwinds,
 // scenario rows, "Why?", afterwards) and the notes, all built from stored facts and masked here.
 import "server-only";
-import { createHash } from "node:crypto";
 import { loadScenarioInput, type DecisionCard } from "@/lib/agents/cards";
+import { opaqueDigest } from "@/lib/view/opaqueRef";
 import { getConfig } from "@/lib/config/store";
 import { wilsonInterval } from "@/lib/stats/binomial";
 import { cardViewModel, type CardView } from "@/lib/view/cards";
@@ -48,7 +48,6 @@ import {
 
 const OPAQUE_PREFIX = "ck:";
 const OPAQUE_RE = /^ck:([0-9a-f]{16})$/;
-const HEX_LENGTH = 16; // threshold-ok: key digest length
 const MAX_ID = 300; // threshold-ok: id length guard
 const WINDOW_DAYS = 120; // threshold-ok: how far back an opaque reference can still be resolved
 const DAY_MS = 86_400_000; // threshold-ok: unit conversion
@@ -59,9 +58,9 @@ const MAX_NOTES = 100; // threshold-ok: bound of the annotations read
 const DEFAULT_FACTOR_MIN_N = 30; // threshold-ok: registry default of factor_min_bucket_n
 const DEFAULT_CONFIDENCE = 0.9; // threshold-ok: registry default of cif_confidence
 
-/** `ck:` plus 16 hex of SHA-256 of the stored card id. */
+/** `ck:` plus the keyed digest of the stored card id. */
 export function cardRef(id: string): string {
-  return OPAQUE_PREFIX + createHash("sha256").update(id).digest("hex").slice(0, HEX_LENGTH);
+  return OPAQUE_PREFIX + opaqueDigest("ck", id);
 }
 
 export const isCardRef = (ref: string): boolean => OPAQUE_RE.test(ref);

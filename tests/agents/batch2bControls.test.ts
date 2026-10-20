@@ -99,9 +99,9 @@ describe("controlStates / effectiveControl (pure)", () => {
     expect(get([])).toBe("enabled");
   });
 
-  it("execution > family > market", () => {
+  it("execution > family > market for pauses", () => {
     const s = controlStates([
-      { scope: "market", scopeKey: "AU", state: "killed" },
+      { scope: "market", scopeKey: "AU", state: "paused" },
       { scope: "family", scopeKey: "F4", state: "paused" },
       { scope: "execution", scopeKey: "E07", state: "enabled" },
     ]);
@@ -109,7 +109,35 @@ describe("controlStates / effectiveControl (pure)", () => {
       effectiveControl(s, { market: "AU", family, execution });
     expect(at("F4", "E07")).toBe("enabled");
     expect(at("F4", "E08")).toBe("paused");
-    expect(at("F1", "E01")).toBe("killed");
+    expect(at("F1", "E01")).toBe("paused");
+  });
+
+  it("a kill at any covering scope wins over a narrower enabled row (D-139)", () => {
+    const at = (rows: [string, string, string][], family: string | null, execution: string) =>
+      effectiveControl(
+        controlStates(rows.map(([scope, scopeKey, state]) => ({ scope, scopeKey, state }))),
+        { market: "AU", family, execution },
+      );
+    // Owner resumed E07 earlier; the kill switch later trips family F4.
+    const famKill: [string, string, string][] = [
+      ["execution", "E07", "paused"],
+      ["execution", "E07", "enabled"],
+      ["family", "F4", "killed"],
+    ];
+    expect(at(famKill, "F4", "E07")).toBe("killed");
+    expect(at(famKill, "F1", "E01")).toBe("enabled");
+    expect(
+      at(
+        [
+          ["market", "AU", "killed"],
+          ["execution", "E07", "enabled"],
+        ],
+        "F4",
+        "E07",
+      ),
+    ).toBe("killed");
+    // Lifting the family kill (a later enabled row in the same scope) restores the resume.
+    expect(at([...famKill, ["family", "F4", "enabled"]], "F4", "E07")).toBe("enabled");
   });
 });
 
@@ -169,23 +197,20 @@ describe("batch 2b under arena_control", () => {
     expect(await ordering(db)).toEqual(["C2-F1", "C3-F4", "E01", "E07", "E08"]);
   });
 
-  it("precedence: execution enabled beats a family kill, which beats a market pause", async () => {
+  it("precedence: a family kill beats an execution enabled row (D-139); a market pause is overridden by nothing else here", async () => {
     const db = await world([
       ["market", MARKET, "paused"],
       ["family", "F4", "killed"],
       ["execution", "E07", "enabled"],
     ]);
-    // E07 trades although F4 is killed and the market paused; E08 (same family) is killed; E01 paused
-    expect(await ordering(db)).toEqual(["E07"]);
+    // The F4 kill wins over the E07 resume; E08 (same family) is killed; E01 paused by the market
+    expect(await ordering(db)).toEqual([]);
     const reasons = await cardReasons(db);
-    expect(reasons).toContain("E07:ZZD1:1:null");
+    expect(reasons).toContain("E07:ZZD1:0:control_killed");
     expect(reasons).toContain("E08:ZZD1:0:control_killed");
     expect(reasons).toContain("E01:ZZUP:0:control_paused");
-    // E07 was taken, so its F4 controls are asked and stopped by their own (family) state
-    expect(await selections(db)).toEqual([
-      "C2-F4#01:1:control_killed",
-      "C3-F4#01:1:control_killed",
-    ]);
+    // nothing was taken, so no control draw is asked
+    expect(await selections(db)).toEqual([]);
   });
 
   it("kill is sticky against a later pause, and a later enabled lifts it", async () => {

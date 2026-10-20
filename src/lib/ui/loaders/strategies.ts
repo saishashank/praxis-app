@@ -6,6 +6,7 @@
 // `{micro, currency, simulated}`. Bounded: the tiles take one query per table for all twelve strategies,
 // the detail takes at most 500 NAV rows and 50 trades.
 import "server-only";
+import { controlStates } from "@/lib/agents/controls";
 import { parseCohortParams } from "@/lib/arena/cohort";
 import { RECOST_KEYS } from "@/lib/arena/recost";
 import { terminalThresholds } from "@/lib/arena/terminal";
@@ -107,18 +108,22 @@ export type Controls = {
 };
 
 export async function loadControls(deps: LoaderDeps): Promise<Controls> {
+  // The same reading batch 2b uses (controlStates): latest row wins per scope, but a kill is sticky
+  // against a later pause, so the page never shows "paused" for a family the arena treats as killed.
   const r = await deps.mainDb.execute(
-    `SELECT scope, scope_key, state FROM (
-       SELECT scope, scope_key, state,
-              ROW_NUMBER() OVER (PARTITION BY scope, scope_key ORDER BY id DESC) AS rn
-       FROM arena_control) WHERE rn = 1 ORDER BY scope, scope_key`,
+    "SELECT scope, scope_key, state FROM arena_control ORDER BY id",
+  );
+  const states = controlStates(
+    r.rows.map((x) => ({ scope: str(x.scope), scopeKey: str(x.scope_key), state: str(x.state) })),
   );
   const out: Controls = { market: "enabled", family: new Map(), execution: new Map() };
-  for (const x of r.rows) {
-    const state = str(x.state) as ControlState;
-    if (str(x.scope) === "market") out.market = state;
-    else if (str(x.scope) === "family") out.family.set(str(x.scope_key), state);
-    else out.execution.set(str(x.scope_key), state);
+  for (const [k, state] of states) {
+    const i = k.indexOf("|");
+    const scope = k.slice(0, i);
+    const key = k.slice(i + 1);
+    if (scope === "market") out.market = state;
+    else if (scope === "family") out.family.set(key, state);
+    else out.execution.set(key, state);
   }
   return out;
 }

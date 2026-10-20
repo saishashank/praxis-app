@@ -173,17 +173,21 @@ export function controlStates(rows: readonly ControlRow[]): ControlStates {
   return out;
 }
 
-/** The effective state of one cohort: most specific scope with a row wins (execution > family > market). */
+/**
+ * The effective state of one cohort. A `killed` row at ANY scope that covers the cohort wins (the
+ * kill switch is a safety stop: a narrower `enabled` row, e.g. an Owner resume of one strategy,
+ * must never override a family or market kill; D-139). Otherwise the most specific scope with a row
+ * wins (execution > family > market), so the Owner can still resume one strategy under a pause.
+ */
 export function effectiveControl(
   states: ControlStates,
   scopes: { readonly market: string; readonly family: string | null; readonly execution: string },
 ): ControlState {
-  return (
-    states.get(`execution|${scopes.execution}`) ??
-    (scopes.family === null ? undefined : states.get(`family|${scopes.family}`)) ??
-    states.get(`market|${scopes.market}`) ??
-    "enabled"
-  );
+  const exec = states.get(`execution|${scopes.execution}`);
+  const fam = scopes.family === null ? undefined : states.get(`family|${scopes.family}`);
+  const market = states.get(`market|${scopes.market}`);
+  if (exec === "killed" || fam === "killed" || market === "killed") return "killed";
+  return exec ?? fam ?? market ?? "enabled";
 }
 
 /** The not-taken / skip reason for a non-enabled state, or null. */

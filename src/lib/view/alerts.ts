@@ -4,21 +4,20 @@
 // that date and never reuses a letter within it. Also: the alert text and "why" lines pass through
 // maskText, and a key that contains a code or a trade id (`proxy:`, `tb:`) is replaced by an opaque
 // `mk:` key that the ack and snooze routes resolve server-side.
-import { createHash } from "node:crypto";
 import type { Client } from "@libsql/client";
 import type { AlertView } from "@/lib/alerts/api";
 import { activeCodesByDate, melbourneDate } from "./active";
+import { opaqueDigest } from "./opaqueRef";
 import { loadMaskLookup, maskText, StockAliases, type MaskLookup } from "./mask";
 
 const OPAQUE_PREFIX = "mk:";
 const OPAQUE_RE = /^mk:([0-9a-f]{16})$/;
-const HEX_LENGTH = 16; // threshold-ok: key digest length
 const CODE_BEARING_KEY = /^(?:tb|proxy):/;
 
 /** `mk:` + 16 hex of SHA-256 for a key that would show a code or trade id; other keys are unchanged. */
 export function publicAlertKey(key: string): string {
   if (!CODE_BEARING_KEY.test(key)) return key;
-  return OPAQUE_PREFIX + createHash("sha256").update(key).digest("hex").slice(0, HEX_LENGTH);
+  return OPAQUE_PREFIX + opaqueDigest("mk", key);
 }
 
 export const isOpaqueAlertKey = (key: string): boolean => OPAQUE_RE.test(key);
