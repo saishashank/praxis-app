@@ -4,7 +4,8 @@
 // observation from the DecisionView inputs of D (bars <= D, announcements published before
 // cut-off(D)), runs the PURE evaluator (`breakerEval.ts`, shared with the replay) and appends one
 // `thesis_breaker_eval` row per breaker (phase nightly, seq 1; ON CONFLICT DO NOTHING, so a rerun
-// writes nothing new). It creates no order: batch 2b turns a red held position into an `exit_cs`.
+// writes nothing new). A red held position also reaches the alert table as a P0 (batch 2b breakers
+// stage, default sink; D-102). It creates no order: batch 2b turns a red held position into an `exit_cs`.
 // Controls (C1/C2/C3) have no thesis and are not evaluated.
 import type { Client } from "@libsql/client";
 import type { CalendarRow } from "@/lib/data/calendar";

@@ -6,7 +6,8 @@
 //   P0  held code with weight >= `alert_p0_weight` of that execution's NAV and materiality 3, or a
 //       halt / suspension of a held code (ASX type or title). The DAT-127 proxy is never P0.
 //   P1  held below the weight with materiality >= 2; watch-list code with materiality 3; a regime
-//       transition (UXN-251); a pre-open re-check failure; a halt proxy; a red thesis-breaker.
+//       transition (UXN-251); a pre-open re-check failure; a halt proxy. A red thesis-breaker on an open
+//       position is P0 and on a pending entry P2 (D-102, decision 44; set where the alert is written).
 //   P2  everything else with materiality >= 1 (materiality 0 raises no alert).
 // The weight is compared EXACTLY: value x 1,000,000 >= nav x threshold-ppm (BigInt), never as a float.
 import { classifyAnnouncement } from "@/lib/agents/events";
@@ -118,12 +119,11 @@ export function tierForAnnouncement(i: TierInput): TierDecision | null {
   return done("P2", "p2:other");
 }
 
-/** Fixed-tier alerts that are not announcements (design 2.2): regime, pre-open, proxy, breaker. */
+/** Fixed-tier alerts that are not announcements (design 2.2): regime, pre-open, proxy. */
 export const FIXED_P1_KINDS: readonly AlertKind[] = [
   "regime_shift",
   "preopen_failure",
   "halt_proxy",
-  "thesis_breaker",
 ];
 
 // ---- regime transition (UXN-251) ---------------------------------------------------------------

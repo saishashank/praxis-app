@@ -426,9 +426,14 @@ export interface BreakerAlertSink {
   record(alert: BreakerAlert): Promise<void>;
 }
 
+/** Tier of a red breaker alert: P0 for an open position, P2 for a pending entry (D-102). */
+export const breakerAlertTier = (subjectKind: "trade" | "order"): "P0" | "P2" =>
+  subjectKind === "trade" ? "P0" : "P2";
+
 /**
  * Default sink: writes the `alert` row of design 2.2 (kind thesis_breaker, `INSERT ... ON CONFLICT DO
- * NOTHING`, tier P1 for a held position, P2 for a pending order) when the table exists; a missing
+ * NOTHING`, tier P0 for a held position (D-102, decision 44), P2 for a pending order) when the table
+ * exists; a missing
  * table or any write failure is swallowed, because an alert must never fail an evaluation.
  */
 export function createAlertRowSink(db: Pick<Client, "execute">): BreakerAlertSink {
@@ -443,10 +448,16 @@ export function createAlertRowSink(db: Pick<Client, "execute">): BreakerAlertSin
             a.key,
             a.market,
             a.code,
-            a.subjectKind === "trade" ? "P1" : "P2",
+            breakerAlertTier(a.subjectKind),
             a.executionId,
             a.detectedAt,
             JSON.stringify({
+              // fields the P0 email and the inbox read (AlertFacts)
+              title: `Thesis breaker ${a.breakerId} is red`,
+              type: "Thesis breaker",
+              rule: "p0:thesis_breaker_red",
+              why: `A thesis breaker (${a.breakerId}) turned red on ${a.code}: ${a.triggerText}`,
+              executions: [],
               breaker: a.breakerId,
               card: a.cardId,
               d: a.d,

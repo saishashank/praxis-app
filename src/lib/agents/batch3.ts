@@ -58,6 +58,7 @@ import { syncForwardLedger, type ForwardResult } from "./forwardLedger";
 import { loadAgentParams, type AgentParams } from "./params";
 import { wordsKey } from "@/lib/learning/learnFacts";
 import { signalsKey } from "./batch2b";
+import { notifyIncident, type NotifyCtx } from "@/lib/incidents/notify";
 import type { Family } from "./families";
 
 export const REVIEW_JOB = "arena-review";
@@ -87,6 +88,8 @@ export type ReviewOptions = {
   readonly masterSeed?: bigint;
   readonly calendar?: CalendarRow[];
   readonly params?: AgentParams;
+  /** Email wiring for the ledger-invariant incident (D-105); absent = record only, no email. */
+  readonly notify?: Omit<NotifyCtx, "db" | "now">;
 };
 
 export type ReviewStatus = "success" | "degraded" | "failed" | "skipped" | "already_done";
@@ -467,6 +470,47 @@ export type RecheckSummary = {
   readonly cohortsWithViolations: readonly string[];
 };
 
+export const LEDGER_INVARIANT_KIND = "ledger_invariant";
+
+/**
+ * D-105: a violation found by the ARN-101 re-check opens one S1 `ledger_invariant` incident through
+ * `notifyIncident` (which also emails it once). At most one per kind per session date: a rerun, or a
+ * later night's finding while the first is still open, records nothing new. Never throws and never
+ * touches the ledger: the re-check itself stays report only.
+ */
+export async function raiseLedgerInvariantIncident(
+  db: Client,
+  o: { d: string; now: string; notify?: Omit<NotifyCtx, "db" | "now"> },
+  rc: RecheckSummary,
+): Promise<boolean> {
+  if (rc.violations === 0) return false;
+  try {
+    const seen = await db.execute({
+      sql: "SELECT 1 FROM incident WHERE kind = ? AND json_extract(detail_json, '$.d') = ? LIMIT 1",
+      args: [LEDGER_INVARIANT_KIND, o.d],
+    });
+    if (seen.rows.length > 0) return false;
+    const r = await notifyIncident(
+      { ...o.notify, db, now: () => new Date(o.now) },
+      LEDGER_INVARIANT_KIND,
+      "S1",
+      {
+        summary: `Ledger invariant: ${rc.violations} violations in ${rc.cohortsWithViolations.length} cohorts on ${o.d}`,
+        detail: {
+          d: o.d,
+          violations: rc.violations,
+          fatal: rc.fatal,
+          byCode: rc.byCode,
+          cohorts: rc.cohortsWithViolations,
+        },
+      },
+    );
+    return r.opened;
+  } catch {
+    return false; // the incident is a notice; it never fails the batch
+  }
+}
+
 /** Re-run the ARN-101 checks on the stored books of every cohort that has a NAV on `d`. Reads only. */
 export async function recheckInvariants(
   db: Client,
@@ -832,6 +876,7 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
           runId,
         ],
       });
+      await raiseLedgerInvariantIncident(db, { d: o.d, now: o.now(), notify: o.notify }, rc);
     }
 
     stage = "killswitch";

@@ -15,6 +15,7 @@ import {
   type DocType,
   type PlanView,
 } from "@/lib/learning/readers";
+import { isoWeek } from "@/lib/view/format";
 import { marketOf, textParam, type LoaderEnv, type LoaderState } from "./shell";
 
 const FAMILY_RE = /^F[1-6]$/;
@@ -62,6 +63,26 @@ export type KnowledgeModel = {
   plan: PlanView | null;
 };
 
+const DATE_IN_TEXT = /(?<![0-9])[0-9]{4}-[0-9]{2}-[0-9]{2}(?![0-9])/g; // threshold-ok: ISO date shape, not a rule
+
+/** Every exact `YYYY-MM-DD` in a string becomes its ISO week (D-147, DAT-124); an invalid one is dropped. */
+export function weekifyText(s: string): string {
+  return s.replace(DATE_IN_TEXT, (m) => isoWeek(m) ?? "a date");
+}
+
+/** Deep copy with every string value and object key weekified; numbers and booleans pass through. */
+export function weekify<T>(v: T): T {
+  const walk = (x: unknown): unknown => {
+    if (typeof x === "string") return weekifyText(x);
+    if (Array.isArray(x)) return x.map(walk);
+    if (typeof x === "object" && x !== null) {
+      return Object.fromEntries(Object.entries(x).map(([k, y]) => [weekifyText(k), walk(y)]));
+    }
+    return x;
+  };
+  return walk(v) as T;
+}
+
 export async function loadKnowledge(env: LoaderEnv, q: KnowledgeQuery): Promise<KnowledgeModel> {
   const market = marketOf(env);
   const masked = env.mask.masked;
@@ -107,6 +128,13 @@ export async function loadKnowledge(env: LoaderEnv, q: KnowledgeQuery): Promise<
   if (masked) {
     documents = await masker.documents(documents);
     plan = plan === null ? null : await masker.plan(plan);
+  }
+  // D-147: a masked model carries no exact date at all (ISO weeks instead), not only the page.
+  if (masked) {
+    for (const l of lessons) l.createdD = weekifyText(l.createdD);
+    for (const c of challengers) c.stateD = weekifyText(c.stateD);
+    documents = weekify(documents);
+    plan = plan === null ? null : weekify(plan);
   }
   const any = lessons.length + challengers.length + documents.length > 0 || plan !== null;
   return {

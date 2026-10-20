@@ -3,7 +3,8 @@
 // position or a pending E entry runs ONLY the event breakers of that position's card (TB-NEG,
 // TB-HALT, TB-RAISE, TB-KW) through the same pure evaluator as the nightly batch and the replay.
 // Effects: one `thesis_breaker_eval` row per breaker (phase intraday) and, for a red status, a call
-// to the `BreakerAlertSink`. Never an order: the Sentinel does not change orders (AGT-012); a held
+// to the `BreakerAlertSink` (default sink: tier P0 for a held position, P2 for a pending buy; D-102,
+// decision 44; one alert per breaker per day, key tb:<subject>:<breaker>:<d>). Never an order: the Sentinel does not change orders (AGT-012); a held
 // position exits through the nightly cycle (batch 2b), a pending buy is cancelled by the pre-open
 // re-check. Announcements published before the card's decision were known to it and are skipped.
 //

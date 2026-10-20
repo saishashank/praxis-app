@@ -183,7 +183,7 @@ describe("nightly evaluation (batch 2b)", () => {
     );
     expect(stored).toHaveLength(2);
     expect(stored[0]).toMatchObject({
-      tier: "P1",
+      tier: "P0",
       code: "ZZUP",
       execution_id: "E01",
       market: MARKET,

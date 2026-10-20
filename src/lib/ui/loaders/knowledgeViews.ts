@@ -39,9 +39,12 @@ const DIFF_CHARS = 300; // threshold-ok: characters of a ledger diff shown
 const ID_RE = /^[^\s\u0000-\u001f]+$/;
 const SIG = 4; // threshold-ok: significant digits of a reported statistic
 
+const WEEK_RE = /^[0-9]{4}-W[0-9]{2}$/; // threshold-ok: ISO week shape
+
 /** A calendar day for display: the exact date, or its ISO week for a masked user. */
 export function dayText(d: string | null | undefined, masked: boolean): string {
   if (d === null || d === undefined) return "n/a";
+  if (masked && WEEK_RE.test(d)) return d; // already an ISO week (the T8 model weekifies, D-147)
   return masked ? (isoWeek(d) ?? "n/a") : formatDate(d);
 }
 
