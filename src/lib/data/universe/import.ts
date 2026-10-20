@@ -75,6 +75,11 @@ async function reject(
   return { ok: false, error };
 }
 
+async function hasSectorColumn(db: Client): Promise<boolean> {
+  const rs = await db.execute("PRAGMA table_info(instrument)");
+  return rs.rows.some((r) => String(r.name) === "sector");
+}
+
 export async function importUniverse(i: ImportInput): Promise<ImportResult> {
   try {
     const key = universeKey(i.today);
@@ -146,6 +151,17 @@ export async function importUniverse(i: ImportInput): Promise<ImportResult> {
           "UPDATE instrument SET delisted_on = ?, delist_reason = ?, missing_count = missing_count + 1 " +
           "WHERE market = ? AND code = ? AND delisted_on IS NULL",
         args: [i.today, DELIST_REASON, UNIVERSE_MARKET, code],
+      });
+    }
+
+    // M7 T4 (decision 53): the sector is the CSV industry group. Written only when the column exists
+    // (main 0011 adds instrument.sector); one statement keeps new, changed and older rows in step.
+    if (await hasSectorColumn(i.db)) {
+      stmts.push({
+        sql:
+          "UPDATE instrument SET sector = industry " +
+          "WHERE market = ? AND delisted_on IS NULL AND sector IS NOT industry",
+        args: [UNIVERSE_MARKET],
       });
     }
 

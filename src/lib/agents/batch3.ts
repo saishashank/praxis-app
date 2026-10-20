@@ -7,6 +7,8 @@
 //   1. forward signal ledger (forwardLedger.ts): the day's new rows and closures, then final controls;
 //   2. nightly scorecards and CIFs on the live cohorts (T14 functions: buildReplayStats on the live
 //      cohort outcomes plus the forward trade scorecards) into `replay_stat` under this run's key;
+//   2b. cost-profile re-cost and uniform price-shock rows of every live cohort with a NAV on D
+//      (arena/recost.ts, M7 T4, D-132 draft): `replay_stat` scopes `cost:<cohort>` and `shock:<cohort>`;
 //   3. ARN-101 invariant re-check of every live cohort that has a NAV on D: REPORT ONLY (a
 //      `recheck` summary row and an app_log line); it never writes to or changes a cohort, a NAV row
 //      or a ledger row, and a violation does not stop the other stages;
@@ -27,6 +29,7 @@ import {
 import { hasSuccess, finishRun, startRun } from "@/lib/runs/runRecord";
 import { ARENA_MASTER_SEED, loadCalendar, loadSleeveConfig } from "@/lib/arena/closeBooks";
 import { COST_PROFILES } from "@/lib/arena/costs";
+import { recostRowsFor } from "@/lib/arena/recost";
 import { parseCohortParams } from "@/lib/arena/cohort";
 import { loadExecutions } from "@/lib/arena/cohortWriter";
 import { loadQtyAdjustments } from "@/lib/arena/corpActionWriter";
@@ -91,6 +94,7 @@ export type ReviewStatus = "success" | "degraded" | "failed" | "skipped" | "alre
 export type ReviewStats = {
   ledger: ForwardResult | null;
   statRows: number;
+  recostRows: number;
   cohorts: number;
   invariantCohorts: number;
   invariantViolations: number;
@@ -118,6 +122,7 @@ function emptyStats(): ReviewStats {
   return {
     ledger: null,
     statRows: 0,
+    recostRows: 0,
     cohorts: 0,
     invariantCohorts: 0,
     invariantViolations: 0,
@@ -418,6 +423,38 @@ async function scorecardStage(
     extra,
   });
   return { rows: [...built.rows], cohorts: outcomes.length };
+}
+
+// ---- stage 2b: re-cost and price-shock rows (M7 T4) ------------------------------------------------------------------
+
+/** The rows only read the stored books: no cohort, NAV or ledger row is changed. */
+async function recostStage(
+  db: Client,
+  o: ReviewOptions,
+  params: AgentParams,
+  calendar: readonly CalendarRow[],
+): Promise<ReplayStatRow[]> {
+  const runId = reviewKey(o.market, o.d);
+  const ids = await db.execute({
+    sql: `SELECT c.id FROM cohort c WHERE c.start_d <= ?
+            AND EXISTS (SELECT 1 FROM nav_daily n WHERE n.cohort_id = c.id AND n.d = ?) ORDER BY c.id`,
+    args: [o.d, o.d],
+  });
+  const out: ReplayStatRow[] = [];
+  for (const r of ids.rows) {
+    const rows = await recostRowsFor(db, {
+      market: o.market,
+      cohortId: text(r.id),
+      d: o.d,
+      calendar,
+      params: {
+        stressProfile: params.stats.stressCostProfile,
+        stressSlippageExtraPct: params.stats.stressSlippageExtraPct,
+      },
+    });
+    for (const x of rows) out.push(jsonRow(runId, o.d, x.scope, x.metric, x.value));
+  }
+  return out;
 }
 
 // ---- stage 3: ARN-101 re-check (report only) ---------------------------------------------------------------------
@@ -752,6 +789,29 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
     stats.statRows += await putStats(db, sc.rows);
     stats.cohorts = sc.cohorts;
 
+    stage = "recost";
+    let recostFailed = false;
+    try {
+      const rr = await recostStage(db, o, params, calendar);
+      stats.recostRows = rr.length;
+      stats.statRows += await putStats(db, rr);
+    } catch (error) {
+      // display-only rows: a failure here must not stop the kill switch (stage 4); the run is degraded
+      recostFailed = true;
+      await db.execute({
+        sql: "INSERT INTO app_log (at, level, source, message, run_id) VALUES (?, 'warn', ?, ?, ?)",
+        args: [
+          o.now(),
+          REVIEW_JOB,
+          `re-cost rows not written on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
+            0,
+            LOG_MESSAGE_MAX,
+          ),
+          runId,
+        ],
+      });
+    }
+
     stage = "invariants";
     const rc = await recheckInvariants(db, o.d, calendar);
     stats.invariantCohorts = rc.cohorts;
@@ -825,7 +885,7 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
       ),
     );
 
-    const status: ReviewStatus = rc.violations > 0 ? "degraded" : "success";
+    const status: ReviewStatus = rc.violations > 0 || recostFailed ? "degraded" : "success";
     await finishRun(db, runId, {
       status,
       itemsProcessed: stats.cohorts,
@@ -837,7 +897,13 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
       details: { ...stats },
       now: o.now(),
     });
-    return emptyResult(o, status, rc.violations > 0 ? "invariant_violations" : null, runId, stats);
+    return emptyResult(
+      o,
+      status,
+      rc.violations > 0 ? "invariant_violations" : recostFailed ? "recost_failed" : null,
+      runId,
+      stats,
+    );
   } catch (error) {
     const code =
       error instanceof ReviewError

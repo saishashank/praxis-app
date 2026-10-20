@@ -168,6 +168,12 @@
     "GET /api/learning/challengers": {
       "tests": ["tests/learning/routes.test.ts"]
     },
+    "GET /api/learning/plan": {
+      "tests": ["tests/learning/planDocsRoutes.test.ts"]
+    },
+    "GET /api/learning/documents": {
+      "tests": ["tests/learning/planDocsRoutes.test.ts"]
+    },
     "GET /api/learning/lessons": {
       "tests": ["tests/learning/routes.test.ts"]
     },

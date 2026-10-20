@@ -8,7 +8,11 @@
 // The simulation is a pure function of the published numbers and the bars after publication. The
 // database step recomputes it from scratch every night, so a re-run writes nothing new, and a
 // stored state the recomputation contradicts raises. A session without a stored bar is skipped.
-// Known limits (D-122): no corporate-action adjustment inside the window and no dividends.
+// Splits, consolidations and bonus issues inside the window are re-based (M7 T4, decision 33): from
+// the ex-date the levels are divided by the exact M3 quantity ratio and a held position's shares are
+// multiplied by it and rounded down (`rebaseQty`), cash unchanged, as the arena does. Known limit
+// (D-122): no dividends and no other corporate action (mergers, delistings); the Picks page says
+// "price only - dividends not included".
 import type { Client, InStatement } from "@libsql/client";
 import { priceMicro } from "@/lib/arena/marketData";
 import {
@@ -18,7 +22,10 @@ import {
   type Bar,
 } from "@/lib/arena/fills";
 import { feeFor, getCostProfile, type CostProfile } from "@/lib/arena/costs";
-import { divFloor, makeRational, mulRat } from "@/lib/money/rational";
+import { quantityRatio, type CorpActionRecord } from "@/lib/arena/corpActions";
+import { loadConfirmedActions } from "@/lib/arena/corpActionWriter";
+import { rebaseQty } from "@/lib/arena/ledger";
+import { divFloor, makeRational, mulRat, type Rational } from "@/lib/money/rational";
 import { roundHalfAwayFromZero } from "@/lib/money/round";
 import type { Micro } from "@/lib/money/micro";
 import { PicksError } from "./types";
@@ -79,15 +86,34 @@ export function scaleLevels(l: Levels, pickRef: Micro, twinRef: Micro): Levels {
   };
 }
 
-type SimEnv = { readonly advMicro: Micro; readonly profile: CostProfile; readonly asOfD: string };
+/** A confirmed quantity-changing action inside the window: shares x ratio, prices / ratio, from `exD`. */
+export type PickAction = { readonly exD: string; readonly ratio: Rational };
 
-export function simulateOutcome(levels: Levels, bars: readonly DatedBar[], env: SimEnv): Outcome {
-  let entry: { d: string; fill: Micro; qty: bigint; brokerage: Micro } | null = null;
+type SimEnv = {
+  readonly advMicro: Micro;
+  readonly profile: CostProfile;
+  readonly asOfD: string;
+  /** Confirmed splits, consolidations and bonus issues after publication, ordered by ex-date. */
+  readonly actions?: readonly PickAction[];
+};
+
+/** A published level in the terms of the session after the actions so far: level / factor, at least 1. */
+function levelAt(v: Micro, factor: Rational): Micro {
+  const r = roundHalfAwayFromZero(mulRat(makeRational(v), makeRational(factor.den, factor.num)));
+  return r < 1n ? 1n : r;
+}
+
+export function simulateOutcome(base: Levels, bars: readonly DatedBar[], env: SimEnv): Outcome {
+  let levels = base;
+  let factor: Rational = makeRational(1n);
+  let nextAction = 0;
+  const actions = env.actions ?? [];
+  let entry: { d: string; fill: Micro; qty: bigint; brokerage: Micro; cost: Micro } | null = null;
   let held = 0;
   const fillEnv = (bar: DatedBar) => ({ bar, advMicro: env.advMicro, profile: env.profile });
   const close = (d: string, exit: Micro, brokOut: Micro, reason: ExitReason): Outcome => {
     const e = entry!;
-    const cost = e.qty * e.fill + e.brokerage;
+    const cost = e.cost; // fixed at entry: a re-base changes shares, never what was paid
     const net = e.qty * exit - brokOut - cost;
     const netPpm = Number(roundHalfAwayFromZero(makeRational(net * PPM, cost))); // money-float-ok: ppm fits a safe integer
     return {
@@ -103,12 +129,40 @@ export function simulateOutcome(levels: Levels, bars: readonly DatedBar[], env: 
   };
   for (let i = 0; i < bars.length; i += 1) {
     const bar = bars[i]!;
+    // actions with ex-date on or before this session: levels move into post-event terms; a position
+    // bought BEFORE the ex-date has its shares re-based (a fill on the ex-date is already post-event)
+    let moved = false;
+    while (nextAction < actions.length && actions[nextAction]!.exD <= bar.d) {
+      const a = actions[nextAction]!;
+      nextAction += 1;
+      factor = mulRat(factor, a.ratio);
+      moved = true;
+      if (entry !== null && entry.d < a.exD) entry.qty = rebaseQty(entry.qty, a.ratio);
+    }
+    if (moved) {
+      levels = {
+        ...base,
+        buyMaxMicro: levelAt(base.buyMaxMicro, factor),
+        stopMicro: levelAt(base.stopMicro, factor),
+        aimMicro: levelAt(base.aimMicro, factor),
+      };
+    }
+    if (entry !== null && entry.qty === 0n) {
+      // a consolidation left no whole share: the position is written off (as M3), net = minus its cost
+      return close(bar.d, bar.openMicro, 0n, "time_frame");
+    }
     if (entry === null) {
       if (bar.d > levels.validUntilD) return { ...EMPTY, state: "missed" };
       if (bar.openMicro <= levels.buyMaxMicro) {
         const qty = divFloor(levels.sizeMicro, bar.openMicro) || 1n;
         const fill = fillEntryAtOpen(fillEnv(bar), qty);
-        entry = { d: bar.d, fill: fill.fillPriceMicro, qty, brokerage: fill.brokerageMicro };
+        entry = {
+          d: bar.d,
+          fill: fill.fillPriceMicro,
+          qty,
+          brokerage: fill.brokerageMicro,
+          cost: qty * fill.fillPriceMicro + fill.brokerageMicro,
+        };
         held = 0;
       } else {
         continue;
@@ -193,6 +247,23 @@ async function advAt(db: Db, market: string, code: string, d: string, window: nu
   return divFloor(v, BigInt(r.rows.length));
 }
 
+/** The confirmed split, consolidation and bonus-issue ratios of `code` with ex-date after `pubD`, by ex-date. */
+export function pickActions(
+  confirmed: readonly CorpActionRecord[],
+  code: string,
+  pubD: string,
+): PickAction[] {
+  return confirmed
+    .filter(
+      (a) =>
+        a.code === code &&
+        a.exDate > pubD &&
+        (a.type === "split" || a.type === "consolidation" || a.type === "bonus_issue"),
+    )
+    .map((a) => ({ exD: a.exDate, ratio: quantityRatio(a) }))
+    .sort((a, b) => (a.exD < b.exD ? -1 : a.exD > b.exD ? 1 : 0));
+}
+
 export type TrackOptions = {
   readonly market: string;
   /** The night: bars after publication up to and including D are used, nothing later. */
@@ -218,6 +289,7 @@ export async function trackPicks(db: Db, o: TrackOptions): Promise<TrackSummary>
     args: [o.market, o.d],
   });
   const sum: TrackSummary = { bought: 0, missed: 0, closed: 0, open: 0 };
+  const confirmed = await loadConfirmedActions(db, o.market, o.d);
   for (const r of rows.rows) {
     const pubD = text(r.pub_d);
     let levels: Levels = {
@@ -239,7 +311,8 @@ export async function trackPicks(db: Db, o: TrackOptions): Promise<TrackSummary>
     }
     const bars = await loadBars(db, o.market, code, pubD, o.d);
     const adv = await advAt(db, o.market, code, pubD, o.advWindow);
-    const sim = simulateOutcome(levels, bars, { advMicro: adv, profile, asOfD: o.d });
+    const actions = pickActions(confirmed, code, pubD);
+    const sim = simulateOutcome(levels, bars, { advMicro: adv, profile, asOfD: o.d, actions });
     const stored = text(r.state);
     if (stored === "bought") {
       if (
