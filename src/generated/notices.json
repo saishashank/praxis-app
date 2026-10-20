@@ -373,6 +373,12 @@
       "allowed": true
     },
     {
+      "name": "@opentelemetry/api",
+      "version": "1.9.1",
+      "license": "Apache-2.0",
+      "allowed": true
+    },
+    {
       "name": "@panva/hkdf",
       "version": "1.2.1",
       "license": "MIT",
