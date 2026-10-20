@@ -23,7 +23,7 @@ export function ActionForm({ action, children, className, onSuccess }: Props) {
     <form action={run} className={className}>
       {children}
       {state !== null && "error" in state && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="m-0 w-full text-sm text-danger">
           {errorText(state.error)}
         </p>
       )}
