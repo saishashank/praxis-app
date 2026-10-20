@@ -358,6 +358,30 @@ describe("the full-mode interlock (decision 33)", () => {
   });
 });
 
+describe("email cannot be switched off while a market is full (production)", () => {
+  const mode = (env: Record<string, string | undefined>, m: string) =>
+    setEmailMode({ ...base({ env }), mode: m } as never);
+  const setFull = () => main.execute("UPDATE market SET mode = 'full' WHERE code = 'AU'");
+
+  it("production: refused while AU is full, nothing written, no audit", async () => {
+    expect(await mode(PROD, "incidents")).toEqual({ ok: true, changed: true });
+    await setFull();
+    const before = await actions();
+    expect(await mode(PROD, "off")).toEqual({ ok: false, error: "market_full" });
+    const r = await main.execute("SELECT value_json FROM worker_state WHERE key = 'email_mode'");
+    expect(r.rows[0]!.value_json).toBe('"incidents"');
+    expect(await actions()).toEqual(before);
+  });
+
+  it("allowed when AU is data_only, and on staging even while full", async () => {
+    expect(await mode(PROD, "incidents")).toEqual({ ok: true, changed: true });
+    expect(await mode(PROD, "off")).toEqual({ ok: true, changed: true });
+    expect(await mode(STAGING, "incidents")).toEqual({ ok: true, changed: true });
+    await setFull();
+    expect(await mode(STAGING, "off")).toEqual({ ok: true, changed: true });
+  });
+});
+
 describe("setSlotsEnabledAction (guard first)", () => {
   const f = (o: Record<string, string | string[]> = {}) =>
     form({ slot: ["morning", "pre-open"], confirm: "yes", ...o });

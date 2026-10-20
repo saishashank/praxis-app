@@ -16,6 +16,15 @@ export function isProductionEnv(env: Record<string, string | undefined>): boolea
   return deriveEnv(env) !== "staging";
 }
 
+/** True when any market is in full mode (email cannot be switched off then, in production). */
+export async function anyMarketFull(db: Exec): Promise<boolean> {
+  const r = await db.execute({
+    sql: "SELECT 1 FROM market WHERE mode = 'full' LIMIT 1",
+    args: [],
+  });
+  return r.rows.length > 0;
+}
+
 export async function hasSignoff(db: Exec, market: string): Promise<boolean> {
   const r = await db.execute({
     sql: "SELECT 1 FROM go_live_signoff WHERE market = ? LIMIT 1",

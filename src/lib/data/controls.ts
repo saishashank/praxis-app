@@ -69,7 +69,7 @@ import {
   validateMarketModes,
 } from "@/lib/config/keys";
 import { getConfig } from "@/lib/config/store";
-import { fullModeRefusal } from "@/lib/golive/interlock";
+import { anyMarketFull, fullModeRefusal, isProductionEnv } from "@/lib/golive/interlock";
 import {
   EMAIL_MODE_KEY,
   EMAIL_MODES,
@@ -135,6 +135,7 @@ export type ControlError =
   | "email_mode_required"
   | "signoff_required"
   | "email_off"
+  | "market_full"
   | "confirm_required"
   | "items_missing"
   | "commit_unknown"
@@ -609,6 +610,8 @@ export async function setEmailMode(p: EmailModeInput): Promise<ControlResult> {
     const cur = await readEmailSwitch(p.mainDb, localDay(now));
     if (cur.mode === to) return NOOP;
     if (to === "full" && (await anyMarketDataOnly(p.mainDb))) return fail("data_only_market");
+    const guardOff = to === "off" && isProductionEnv(p.env);
+    if (guardOff && (await anyMarketFull(p.mainDb))) return fail("market_full");
     return await commit(p, now, {
       action: "controls.email_mode",
       targetType: "control",
@@ -618,6 +621,7 @@ export async function setEmailMode(p: EmailModeInput): Promise<ControlResult> {
         if (to === "full" && (await anyMarketDataOnly(tx))) {
           throw new Precondition("data_only_market");
         }
+        if (guardOff && (await anyMarketFull(tx))) throw new Precondition("market_full");
         await writeText(tx, EMAIL_MODE_KEY, to, now);
         if (to !== "incidents") {
           await tx.execute({

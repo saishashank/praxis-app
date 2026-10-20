@@ -21,6 +21,8 @@ export const ERROR_TEXT: Record<string, string> = {
   signoff_required:
     "Full mode needs the go-live sign-off first. Sign off on the Go-live page, then try again.",
   email_off: "Turn the email mode to incidents only before switching to full mode.",
+  market_full:
+    "Email cannot be switched off while a market is in full mode. Set the market back to data-only first.",
   confirm_required: "Confirm first: type the exact words or tick the confirmation box.",
   items_missing: "Tick every item on the checklist first.",
   commit_unknown: "The release commit could not be read. Enter it (7 to 64 letters and digits).",
