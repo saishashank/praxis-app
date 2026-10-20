@@ -142,7 +142,7 @@ Who may change a key: Owner (any valid value), Owner within bounds (Lane B, beco
 | `llm_injection_phrases` | `{"version":"v1","phrases":["ignore previous instructions","ignore all previous instructions","ignore your instructions","ignore the above","disregard previou...` | phrases | Owner | JSON {"version": "v1", "phrases": [...]}, 3 to 120 characters each, up to 200 | yes | LLM-035, KB-061; ch.15 l.182 (default = the built-in v1 list, D-084, D-111) |
 | `llm_market_share` | `{"AU":1}` | fraction | Owner | JSON such as {"AU": 1}, each share 0 to 1 | yes | design 4.6 llm_market_share [VERIFY against ch.15, D-079] |
 | `market_list_page_size` | `50` | rows | nobody (fixed) | fixed | no | UXN-270 (16 l.308); named in ch.16, not in ch.15 (D-128, D-129) |
-| `market_mode` | `{"AU":"data_only"}` | mode | nobody (fixed) | off or data_only per market; full from M3 | no | BLD-024 |
+| `market_mode` | `{"AU":"data_only"}` | mode | nobody (fixed) | off, data_only or full per market (full needs the go-live sign-off in production) | no | BLD-024 |
 | `max_challengers` | `8` | challengers | Owner | whole number, 1 to 8 | yes | ARN-005, KB-042; ch.15 l.66 |
 | `max_open_positions` | `2` | positions | Owner | whole number, 1 to 2 | yes | ARN-003; ch.15 l.17 |
 | `max_promotions_per_week` | `3` | promotions/week | Owner | whole number, 0 to 3 | yes | ARN-065, KB-042; ch.15 l.67 |

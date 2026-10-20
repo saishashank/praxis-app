@@ -24,6 +24,8 @@ export const NOT_CONFIG = new Set([
   "WRANGLER_SEND_METRICS",
   // GitHub Actions provided
   "GITHUB_OUTPUT",
+  "GITHUB_EVENT_NAME",
+  "GITHUB_API_URL",
   "GITHUB_STEP_SUMMARY",
   "GITHUB_RUN_ID",
   "GITHUB_RUN_ATTEMPT",
@@ -34,10 +36,18 @@ export const NOT_CONFIG = new Set([
   // Tool pins in workflows
   "GITLEAKS_SHA256",
   "GITLEAKS_VERSION",
+  "ZAP_IMAGE", // ZAP container pinned by digest in zap-baseline.yml (M8 T12)
   // Per-run workflow or script inputs
   "MODE",
   "KEY_MODE",
   "CONFIRM",
+  "STAGING_RESULT", // per-run result of the staging job inside nightly.yml (M8 T12)
+  "DEADLINES_OUTCOME", // per-run step outcomes and date input of staging-e2e-day.yml (M8 T12)
+  "E2E_OUTCOME",
+  "E2E_DAY_DATE",
+  "DIFF_COVERAGE_MIN", // CI thresholds of scripts/ci/diff-coverage.mjs (M8 T3)
+  "DIFF_BRANCH_MIN",
+  "ZAP_OUT", // per-run report folder of scripts/ci/zap-run.mjs (M8 T12), not configuration
   "TARGET",
   "TARGETS",
   "TRAINS",

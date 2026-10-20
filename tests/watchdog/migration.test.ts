@@ -28,7 +28,8 @@ describe("main migration 0003_incident", () => {
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
     const before = await schemaOf(db);
-    expect(await migrateDown(db, ms, 9)).toEqual({ rolledBack: 9, version: 2 });
+    // main is at v12 since M8 T11 (0012_golive): ten steps down reach v2, just before 0003_incident
+    expect(await migrateDown(db, ms, 10)).toEqual({ rolledBack: 10, version: 2 });
     expect((await schemaOf(db)).some((s) => s.includes("incident"))).toBe(false);
     await migrateUp(db, ms);
     expect(await schemaOf(db)).toEqual(before);
