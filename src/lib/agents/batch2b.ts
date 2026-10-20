@@ -45,6 +45,7 @@ import {
   parseCohortParams,
   type CohortParams,
 } from "@/lib/arena/cohort";
+import { ensureCohorts } from "@/lib/arena/cohortStart";
 import { loadExecutions, loadUnresolvedCohorts, type StoredCohort } from "@/lib/arena/cohortWriter";
 import { loadConfirmedActions, loadQtyAdjustments } from "@/lib/arena/corpActionWriter";
 import type { CorpActionRecord } from "@/lib/arena/corpActions";
@@ -1420,10 +1421,27 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
   });
   const stats = emptyStats();
   try {
+    const baseParams = o.params ?? (await loadAgentParams(db));
+    // Cohort start stage (M8 T10, decision 3): `full` only, idempotent. It runs BEFORE the night's
+    // signals and starts new cohorts on the NEXT trading day, so they are not in tonight's
+    // `loadUnresolvedCohorts(d)` and first trade from the next session (BLD-030, no special path).
+    // Any other mode is a no-op that writes nothing, so those nights are unchanged. An explicit
+    // REPLAY (D-066 / BLD-024) runs against cohorts the caller started itself and never opens any.
+    const started =
+      o.replay === true
+        ? null
+        : await ensureCohorts(db, {
+            market: o.market,
+            d: o.d,
+            now: o.now,
+            calendar,
+            masterSeed: o.masterSeed,
+            controlsPerFamily: baseParams.replay.c2LivePerFamily,
+          });
     const executionList = await loadExecutions(db);
     const versionSet = await loadVersionSet(db, o.market, executionList);
     // live parameters: the incumbent rule versions laid over the configuration (D-115)
-    const params = liveParams(o.params ?? (await loadAgentParams(db)), versionSet);
+    const params = liveParams(baseParams, versionSet);
     const nextD = nextTradingDay(o.d, calendar);
     const actions = await loadConfirmedActions(db, o.market, o.d);
     const actionsNext = await loadConfirmedActions(db, o.market, nextD);
@@ -1544,7 +1562,13 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
         stats.agentRows +
         stats.cards +
         stats.breakerEvals,
-      details: { ...stats, partial: day.partialReasons.length > 0 ? day.partialReasons : null },
+      details: {
+        ...stats,
+        partial: day.partialReasons.length > 0 ? day.partialReasons : null,
+        ...(started !== null && started.opened > 0
+          ? { cohortsOpened: started.opened, cohortStartD: started.startD }
+          : {}),
+      },
       now: o.now(),
     });
     return emptyResult(o, status, day.partial ? "partial_inputs" : null, runId, stats, day.partial);
