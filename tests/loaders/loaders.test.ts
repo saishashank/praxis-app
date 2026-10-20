@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Page loaders, part 1 (M7 T7; docs/M7_design.md 2.7; D-128, D-129, D-135 draft): shape, empty and
 // stale states, deterministic order, a bounded query count, and masking. The masking tests fail if a
 // stock code, a company name, a signal or card id, a link, a price of a single trade or an exact trade
@@ -351,5 +350,3 @@ describe("masking: Editor and Viewer never see a code, a name, a link, a trade p
     expect((await loadHome(broken)).masked).toBe(true);
     expect((await loadHome(deps(db, null))).masked).toBe(true);
     expect(leaks(await loadHome(deps(db, null)))).toEqual([]);
-  });
-});
