@@ -28,7 +28,7 @@ test("workflow_dispatch only, no inputs; no schedule, push or pull request; no t
 });
 
 test("one production job on release, production environment without a deployment record", () => {
-  assert.deepEqual(Object.keys(wf.jobs), ["production"]);
+  assert.deepEqual(Object.keys(wf.jobs), ["production", "staging"]); // M8 T9: the staging job is covered by staging-jobs.workflow.test.mjs
   assert.equal(job.if, "github.ref == 'refs/heads/release'");
   assert.deepEqual(job.environment, { name: "production", deployment: false });
   assert.deepEqual(job.permissions, { contents: "read", deployments: "read" });
@@ -62,7 +62,7 @@ test("secrets appear only in env of the archive step, which is last: database pa
   assert.equal(s.run, "node scripts/kb/archive.mjs");
   assert.equal(wf.env, undefined);
   assert.equal(job.env, undefined);
-  assert.equal(JSON.stringify(wf).match(/secrets\./g).length, 3);
+  assert.equal(JSON.stringify(job).match(/secrets\./g).length, 3);
   for (const x of steps) if (x.run) assert.ok(!String(x.run).includes("${{"), x.run);
 });
 

@@ -79,3 +79,24 @@ jobs:
           DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN_PROD }}
           DATA_REPO: ${{ github.repository }}-data
           COMMIT_SHA: ${{ steps.approved.outputs.sha }}
+
+  # M8 T9 (decision 30): the staging job. The staging Worker dispatches `ref: main`, so this file
+  # needs a job that is selected there. Nothing runs on staging for this workflow: History backfill (it fetches from the ASIC host and writes the data repo).
+  # The job references no secret and checks out nothing; it only prints a notice, so a staging
+  # dispatch ends green and visibly does nothing. PRAXIS_ENV=staging is fixed for the audit trail.
+  staging:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    concurrency:
+      group: backfill-history-staging
+      cancel-in-progress: false
+    environment:
+      name: staging
+      deployment: false
+    env:
+      PRAXIS_ENV: staging
+    steps:
+      - name: Nothing to run on staging
+        run: echo "backfill-history has no staging variant (NFR-040, SEC-017); nothing was run."

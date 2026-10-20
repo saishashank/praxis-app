@@ -1,0 +1,70 @@
+  production:
+    if: github.ref == 'refs/heads/release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      deployments: read
+    # PLT-076: one run per day at a time, never cancelling one in progress. The date-keyed
+    # "already succeeded" check is made by the script (run record `batch1:AU:<Sydney date>`).
+    concurrency:
+      group: ingest-batch1
+      cancel-in-progress: false
+    environment:
+      name: production
+      deployment: false
+    steps:
+      # SEC-108 c: run the commit of the latest APPROVED deploy-production deployment, not the
+      # release head. These two steps run only the tiny reviewed script, with github.token
+      # alone (contents/deployments: read), never an environment secret.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ci-tools
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - name: Find approved commit
+        id: approved
+        run: node ci-tools/scripts/ci/approved-commit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.approved.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - name: Plan the fetch (read-only)
+        id: plan
+        run: node scripts/ingest/batch1.mjs prepare --request request.json
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: steps.plan.outputs.fetch == 'true'
+        with:
+          python-version: "3.12"
+      - name: Install the fetcher (pinned)
+        if: steps.plan.outputs.fetch == 'true'
+        run: pip install --no-cache-dir -r scripts/ingest/requirements.txt
+      # No secrets here: this step only talks to the market-data source (DAT-103) and writes
+      # bars.json. The throttle values come from the plan step's outputs, which are not secret.
+      - name: Fetch bars (no secrets)
+        if: steps.plan.outputs.fetch == 'true'
+        run: python scripts/ingest/yahoo_fetch.py --request request.json --output bars.json --index-output index.json
+        env:
+          YAHOO_CHUNK_SIZE: ${{ steps.plan.outputs.chunk_size }}
+          YAHOO_MIN_GAP_S: ${{ steps.plan.outputs.min_gap_s }}
+      # M4 T3: ASIC daily short positions (public source). No secrets, no database; it reads only
+      # the date list of request.json. Runs even if the Yahoo fetch failed (independent source).
+      - name: Fetch ASIC short positions (no secrets)
+        if: ${{ !cancelled() && steps.plan.outputs.fetch == 'true' }}
+        run: node scripts/ingest/asic_fetch.mjs --request request.json --output short.json
+      - name: Ingest batch 1
+        if: ${{ !cancelled() && steps.plan.outcome == 'success' }}
+        run: node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+          COMMIT_SHA: ${{ steps.approved.outputs.sha }}

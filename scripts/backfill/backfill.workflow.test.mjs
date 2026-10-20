@@ -26,7 +26,7 @@ test("workflow_dispatch only: no schedule, push or pull request trigger (PLT-015
 });
 
 test("one production job on release, environment production without a deployment record", () => {
-  assert.deepEqual(Object.keys(wf.jobs), ["production"]);
+  assert.deepEqual(Object.keys(wf.jobs), ["production", "staging"]); // M8 T9: the staging job is covered by staging-jobs.workflow.test.mjs
   assert.equal(job.if, "github.ref == 'refs/heads/release'");
   assert.deepEqual(job.environment, { name: "production", deployment: false });
   assert.deepEqual(job.permissions, { contents: "read", deployments: "read" });
@@ -79,7 +79,7 @@ test("secrets appear only in env of the plan and commit steps, with exactly the 
   }
   assert.equal(wf.env, undefined);
   assert.equal(job.env, undefined);
-  const refs = JSON.stringify(wf).match(/secrets\.[A-Z_]+/g);
+  const refs = JSON.stringify(job).match(/secrets\.[A-Z_]+/g);
   assert.deepEqual(refs.sort(), [
     "secrets.DATA_REPO_TOKEN_PROD",
     "secrets.TURSO_MAIN_TOKEN_PROD",

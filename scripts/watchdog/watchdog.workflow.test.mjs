@@ -36,7 +36,7 @@ test("workflow_dispatch only: no schedule, push or pull request trigger (PLT-015
 });
 
 test("one production job on release, environment production without a deployment record", () => {
-  assert.deepEqual(Object.keys(wf.jobs), ["production"]);
+  assert.deepEqual(Object.keys(wf.jobs), ["production", "staging"]); // M8 T9: the staging job is covered by staging-jobs.workflow.test.mjs
   assert.equal(job.if, "github.ref == 'refs/heads/release'");
   assert.deepEqual(job.environment, { name: "production", deployment: false });
   assert.deepEqual(job.permissions, { contents: "read", deployments: "read" });
@@ -61,11 +61,11 @@ test("secrets appear only in env of the last step, the Watchdog run step", () =>
   const withSecrets = steps.filter((s) => JSON.stringify(s).includes("secrets."));
   assert.deepEqual(
     withSecrets.map((s) => s.name),
-    ["Watchdog"],
+    ["Watchdog", "Fail while a temporary restore secret is present"], // M8 T9: the second is the additive guard step
   );
   const s = withSecrets[0];
   assert.equal(s.run, "node scripts/watchdog/run.mjs");
-  assert.equal(s, steps[steps.length - 1]);
+  assert.equal(s, steps[steps.length - 2]); // the guard step (M8 T9) follows it
   assert.ok(!String(s.run).includes("secrets.") && !String(s.run).includes("${{"));
   assert.equal(s.with, undefined);
   assert.equal(wf.env, undefined);
@@ -82,7 +82,7 @@ test("secrets appear only in env of the last step, the Watchdog run step", () =>
     APP_BASE_URL: "${{ secrets.APP_BASE_URL_PROD }}",
     ACTIONS_HMAC_SECRET: "${{ secrets.ACTIONS_HMAC_SECRET_PROD }}",
   });
-  assert.equal(JSON.stringify(wf).match(/secrets\./g).length, 7);
+  assert.equal(JSON.stringify(job).match(/secrets\./g).length, 9); // + BACKUP_PRIVATE_KEY, TURSO_PLATFORM_TOKEN_TEMP
   assert.equal(s.env.PRAXIS_ENV, "production");
   assert.equal(s.env.EMAIL_PROVIDER, "resend");
 });

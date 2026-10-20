@@ -36,7 +36,7 @@ test("the Worker has no slot for it (it never runs automatically)", () => {
 });
 
 test("one production job on release, production environment without a deployment record", () => {
-  assert.deepEqual(Object.keys(wf.jobs), ["production"]);
+  assert.deepEqual(Object.keys(wf.jobs), ["production", "staging"]); // M8 T9: the staging job is covered by staging-jobs.workflow.test.mjs
   assert.equal(job.if, "github.ref == 'refs/heads/release'");
   assert.deepEqual(job.environment, { name: "production", deployment: false });
   assert.deepEqual(job.permissions, { contents: "read", deployments: "read" });
@@ -77,7 +77,7 @@ test("LLM keys and database secrets appear only in env of the bake-off step, whi
   assert.equal(steps[steps.length - 1], s);
   assert.equal(wf.env, undefined);
   assert.equal(job.env, undefined);
-  assert.equal(JSON.stringify(wf).match(/secrets\./g).length, 5);
+  assert.equal(JSON.stringify(job).match(/secrets\./g).length, 5);
 });
 
 test("dispatch inputs reach the script through env only, quoted; no expression inside a script", () => {

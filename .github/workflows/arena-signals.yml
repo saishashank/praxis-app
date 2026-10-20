@@ -70,3 +70,49 @@ jobs:
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
           COMMIT_SHA: ${{ steps.approved.outputs.sha }}
+          # M8 T9 / D-154: the Resend variables, so the batch 3 ledger-invariant S1 incident is
+          # emailed to the Owner (without them it is only recorded). Same names as the watchdog.
+          PRAXIS_ENV: production
+          EMAIL_PROVIDER: resend
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY_PROD }}
+          OWNER_EMAIL: ${{ secrets.OWNER_EMAIL_PROD }}
+          PII_HASH_KEY: ${{ secrets.PII_HASH_KEY_PROD }}
+
+  # M8 T9 (decision 30): the staging job. The staging Worker dispatches `ref: main`. Same step as
+  # production on the dispatched `main` commit (no approval record on staging) with the staging
+  # database and the staging Resend variables (D-154: the batch 3 ledger-invariant S1 incident is
+  # emailed to the Owner address; staging email is gated by email_mode). No network call to a
+  # market-data host.
+  staging:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    concurrency:
+      group: arena-signals-staging
+      cancel-in-progress: false
+    environment:
+      name: staging
+      deployment: false
+    env:
+      PRAXIS_ENV: staging
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      # The only step with secrets: database and the email variables.
+      - name: Decide the session
+        run: node scripts/arena/signals.mjs
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_STAGING }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_STAGING }}
+          COMMIT_SHA: ${{ github.sha }}
+          EMAIL_PROVIDER: resend
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY_STAGING }}
+          OWNER_EMAIL: ${{ secrets.OWNER_EMAIL_STAGING }}
+          PII_HASH_KEY: ${{ secrets.PII_HASH_KEY_STAGING }}

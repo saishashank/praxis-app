@@ -67,3 +67,36 @@ jobs:
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
           COMMIT_SHA: ${{ steps.approved.outputs.sha }}
+
+  # M8 T9 (decision 30): the staging job. The staging Worker dispatches `ref: main`. Same step as
+  # production on the dispatched `main` commit (no approval record on staging) with the staging
+  # database. It works on the data written by the recorded-day ingest; it makes no network call.
+  staging:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    concurrency:
+      group: arena-close-staging
+      cancel-in-progress: false
+    environment:
+      name: staging
+      deployment: false
+    env:
+      PRAXIS_ENV: staging
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      # The only step with database secrets.
+      - name: Close the books
+        run: node scripts/arena/close-books.mjs
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_STAGING }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_STAGING }}
+          COMMIT_SHA: ${{ github.sha }}

@@ -89,3 +89,70 @@ jobs:
           PII_HASH_KEY: ${{ secrets.PII_HASH_KEY_PROD }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL_PROD }}
           ACTIONS_HMAC_SECRET: ${{ secrets.ACTIONS_HMAC_SECRET_PROD }}
+      # M8 T9 (SEC-017 l, OPS-040, PLT-022b): the temporary restore secrets exist only during a
+      # restore or drill. This step runs even if the watchdog step failed and FAILS (so GitHub's
+      # failure email is the alert) while either is still present. It only tests for emptiness: the
+      # values are never printed.
+      - name: Fail while a temporary restore secret is present
+        if: ${{ always() }}
+        run: |
+          present=0
+          if [ -n "$BACKUP_PRIVATE_KEY" ]; then
+            echo "::error::temporary restore secret still present (BACKUP_PRIVATE_KEY)"
+            present=1
+          fi
+          if [ -n "$TURSO_PLATFORM_TOKEN_TEMP" ]; then
+            echo "::error::temporary restore secret still present (TURSO_PLATFORM_TOKEN_TEMP)"
+            present=1
+          fi
+          if [ "$present" -ne 0 ]; then
+            echo "temporary restore secret still present" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "No temporary restore secret is present."
+        env:
+          BACKUP_PRIVATE_KEY: ${{ secrets.BACKUP_PRIVATE_KEY }}
+          TURSO_PLATFORM_TOKEN_TEMP: ${{ secrets.TURSO_PLATFORM_TOKEN_TEMP }}
+
+  # M8 T9 (decision 30; PLT-073 20:40 step): the staging job. The staging Worker dispatches
+  # `ref: main`. Same step as production on the dispatched `main` commit with the staging database,
+  # the staging Resend key and owner address (email goes only to the Owner), the staging app URL and
+  # the staging HMAC secret. The temporary-restore-secret check is production-only (those secrets do
+  # not exist in staging).
+  staging:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    concurrency:
+      group: watchdog-staging
+      cancel-in-progress: false
+    environment:
+      name: staging
+      deployment: false
+    env:
+      PRAXIS_ENV: staging
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      # The only step with secrets.
+      - name: Watchdog
+        run: node scripts/watchdog/run.mjs
+        env:
+          WATCHDOG_SLOT: ${{ inputs.slot }}
+          WATCHDOG_DELIBERATE_FAILURE: ${{ inputs.deliberate_failure && '1' || '0' }}
+          PRAXIS_ENV: staging
+          EMAIL_PROVIDER: resend
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_STAGING }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_STAGING }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY_STAGING }}
+          OWNER_EMAIL: ${{ secrets.OWNER_EMAIL_STAGING }}
+          PII_HASH_KEY: ${{ secrets.PII_HASH_KEY_STAGING }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL_STAGING }}
+          ACTIONS_HMAC_SECRET: ${{ secrets.ACTIONS_HMAC_SECRET_STAGING }}

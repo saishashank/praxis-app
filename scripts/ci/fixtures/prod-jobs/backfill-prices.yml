@@ -1,0 +1,61 @@
+  production:
+    if: github.ref == 'refs/heads/release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      deployments: read
+    # PLT-076: one run at a time, never cancelling one in progress. Each month commit is
+    # write-once and its cursor move is atomic, so a repeat is a no-op.
+    concurrency:
+      group: backfill-prices
+      cancel-in-progress: false
+    environment:
+      name: production
+      deployment: false
+    steps:
+      # SEC-108 c: these two steps run only the tiny reviewed script, with github.token alone.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ci-tools
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - name: Find approved commit
+        id: approved
+        run: node ci-tools/scripts/ci/approved-commit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.approved.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Plan the fetch (read-only)
+        id: plan
+        run: node scripts/backfill/prices.mjs plan --out plan.json
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+      # No secrets here: this step only talks to Yahoo and writes prices.json on the runner. It
+      # stops at the first rate limit or error (no retry loop beyond the fetcher's own backoff).
+      - name: Fetch Yahoo prices (no secrets)
+        id: fetch
+        if: steps.plan.outputs.fetch == 'true'
+        run: |
+          pip install -r scripts/ingest/requirements.txt
+          python scripts/backfill/fetch_prices.py --plan plan.json --output prices.json
+      - name: Write the month file and move the cursor
+        if: steps.plan.outputs.fetch == 'true'
+        run: node scripts/backfill/prices.mjs commit --prices prices.json
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+          DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN_PROD }}
+          DATA_REPO: ${{ github.repository }}-data
+          COMMIT_SHA: ${{ steps.approved.outputs.sha }}

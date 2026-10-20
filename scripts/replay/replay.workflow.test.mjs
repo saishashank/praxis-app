@@ -31,7 +31,7 @@ test("workflow_dispatch only, with a choice input `mode`; no schedule, push or p
 });
 
 test("one production job on release, production environment without a deployment record", () => {
-  assert.deepEqual(Object.keys(wf.jobs), ["production"]);
+  assert.deepEqual(Object.keys(wf.jobs), ["production", "staging"]); // M8 T9: the staging job is covered by staging-jobs.workflow.test.mjs
   assert.equal(job.if, "github.ref == 'refs/heads/release'");
   assert.deepEqual(job.environment, { name: "production", deployment: false });
   assert.deepEqual(job.permissions, { contents: "read", deployments: "read" });
@@ -66,7 +66,7 @@ test("secrets appear only in env of the replay step, which is last; the mode goe
   assert.equal(steps[steps.length - 1], s);
   assert.equal(wf.env, undefined);
   assert.equal(job.env, undefined);
-  assert.equal(JSON.stringify(wf).match(/secrets\./g).length, 3);
+  assert.equal(JSON.stringify(job).match(/secrets\./g).length, 3);
 });
 
 test("mode learning (M6 T12): still dispatch-only, same single secrets step, slot still disabled", () => {
@@ -74,10 +74,10 @@ test("mode learning (M6 T12): still dispatch-only, same single secrets step, slo
   assert.ok(mode.options.includes("learning"));
   // no new trigger, no new job, no new step: the mode reaches the script through the same env variable
   assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"]);
-  assert.deepEqual(Object.keys(wf.jobs), ["production"]);
+  assert.deepEqual(Object.keys(wf.jobs), ["production", "staging"]); // M8 T9: the staging job is covered by staging-jobs.workflow.test.mjs
   const run = steps[steps.length - 1];
   assert.equal(run.run, 'node scripts/replay/run.mjs --mode "$REPLAY_MODE"');
-  assert.equal(JSON.stringify(wf).match(/secrets./g).length, 3);
+  assert.equal(JSON.stringify(job).match(/secrets./g).length, 3);
   // the CLI accepts the mode the workflow offers
   assert.match(read("scripts/replay/run.mjs"), /light|full|null|injected|evidence|learning/);
   // the Worker still has no Saturday dispatch of the replay: its slot stays disabled

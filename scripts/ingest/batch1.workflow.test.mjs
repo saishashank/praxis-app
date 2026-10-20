@@ -31,7 +31,7 @@ test("workflow_dispatch only: no schedule, push or pull request trigger (PLT-015
 });
 
 test("one production job on release, environment production without a deployment record", () => {
-  assert.deepEqual(Object.keys(wf.jobs), ["production"]);
+  assert.deepEqual(Object.keys(wf.jobs), ["production", "staging"]); // M8 T9: the staging job is covered by staging-jobs.workflow.test.mjs
   assert.equal(job.if, "github.ref == 'refs/heads/release'");
   assert.deepEqual(job.environment, { name: "production", deployment: false });
   assert.deepEqual(job.permissions, { contents: "read", deployments: "read" });
@@ -81,7 +81,7 @@ test("secrets appear only in env of the two database steps, only the prod Turso 
   }
   assert.equal(wf.env, undefined);
   assert.equal(job.env, undefined);
-  assert.equal(JSON.stringify(wf).match(/secrets\./g).length, 4);
+  assert.equal(JSON.stringify(job).match(/secrets\./g).length, 4);
 });
 
 test("the Python fetch step has no secrets and only the throttle values from the plan step", () => {
