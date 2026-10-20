@@ -19,6 +19,8 @@ export default defineConfig({
     // Database-backed tests (migrations, replays) need more than the 5 s default on CI runners;
     // one limit for local and CI runs so a slow test cannot pass locally and fail in CI.
     testTimeout: 30_000,
+    // Same limit for beforeAll/beforeEach: DB setup hooks hit the 10 s default on a loaded machine.
+    hookTimeout: 30_000,
     coverage: {
       provider: "v8",
       include: ["src/**"],

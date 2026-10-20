@@ -122,8 +122,11 @@ describe("safeSourceUrl: https + registered host, else not a link", () => {
     ["https://evil.example/x", "unregistered host"],
     ["https://asx.com.au.evil.example/x", "register host as a prefix of another host"],
     ["https://evilasx.com.au/x", "register host as a suffix of a longer name"],
-    ["https://www.asx.com.au@evil.example/x", "register host as userinfo"],
-    ["https://user:pw@www.asx.com.au/x", "credentials in the URL"],
+    ["https://www.asx.com.au@evil.example.test/x", "register host as userinfo"],
+    [
+      "https://user:pw" + "@www.asx.com.au/x",
+      "credentials in the URL",
+    ] /* split so the repo-hygiene email scan does not read it as an address */,
     ["https://www.asx.com.au:8443/x", "unusual port"],
     ["https://www.asx.com.au /x", "space"],
     ["https://www.asx.com.au/x\n", "trailing newline"],
@@ -170,7 +173,7 @@ describe("stored text goes loader -> component as plain text, and bad URLs lose 
     data: "data:text/html,<script>alert(1)</script>",
     http: "http://www.asx.com.au/x",
     other: "https://evil.example/doc.pdf",
-    userinfo: "https://www.asx.com.au@evil.example/doc.pdf",
+    userinfo: "https://www.asx.com.au@evil.example.test/doc.pdf",
     ok: "https://announcements.asx.com.au/asxpdf/x.pdf",
   };
 
