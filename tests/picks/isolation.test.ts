@@ -69,7 +69,9 @@ describe("picks are never read by ranking or sizing", () => {
   it("is imported only by the review sections and by pages", () => {
     const importers = importersOfPicks().filter((f) => !f.startsWith("src/lib/picks/"));
     const allowed = (f: string): boolean =>
-      f === "src/lib/review/sections.ts" || f.startsWith("src/app/");
+      f === "src/lib/review/sections.ts" ||
+      f === "src/lib/ui/loaders/picks.ts" || // the page data loader for the picks pages (M7 T8)
+      f.startsWith("src/app/");
     expect(importers.filter((f) => !allowed(f))).toEqual([]);
     // and the review import exists, so this guard is not vacuous
     expect(importers).toContain("src/lib/review/sections.ts");

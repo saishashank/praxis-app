@@ -1,5 +1,6 @@
 export { Sparkline } from "./Sparkline";
-export { GlyphBar, BustBar, HBar } from "./Bars";
+export { BustBar, HBar } from "./Bars";
+export { GlyphBar } from "./GlyphBar";
 export { Gauge, StatusRing } from "./Rings";
 export { HeatGrid, CalendarGrid } from "./Grids";
 export { CifCurve, CifTable } from "./Cif";

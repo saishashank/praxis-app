@@ -2,8 +2,9 @@
 // "stalled" floor and the goal marked and LABELLED IN TEXT (never colour alone). Amounts are integer
 // cents. A missing value draws no marker and says "Not measured yet". Pure CSS positioning, no client code.
 import { formatCents } from "@/lib/view/format";
-import { cn } from "./cn";
-import { NotMeasured } from "./Values";
+import { cn } from "../ui/cn";
+import { ChartTable } from "./ChartTable";
+import { NotMeasured } from "../ui/Values";
 
 export type GlyphBarProps = {
   valueCents: number | null | undefined;
@@ -35,10 +36,20 @@ export function GlyphBar({
   const known = typeof valueCents === "number" && Number.isFinite(valueCents);
   const max = Math.max(targetCents, known ? valueCents : 0, 1);
   const marks = [
-    { key: "bust", text: `Loss limit ${formatCents(bustCents)}`, at: bustCents },
-    { key: "stall", text: `Stalled below ${formatCents(stallCents)}`, at: stallCents },
-    { key: "seed", text: `Start ${formatCents(seedCents)}`, at: seedCents },
-    { key: "target", text: `Goal ${formatCents(targetCents)}`, at: targetCents },
+    {
+      key: "bust",
+      name: "Loss limit",
+      text: `Loss limit ${formatCents(bustCents)}`,
+      at: bustCents,
+    },
+    {
+      key: "stall",
+      name: "Stall floor",
+      text: `Stalled below ${formatCents(stallCents)}`,
+      at: stallCents,
+    },
+    { key: "seed", name: "Start", text: `Start ${formatCents(seedCents)}`, at: seedCents },
+    { key: "target", name: "Goal", text: `Goal ${formatCents(targetCents)}`, at: targetCents },
   ];
   const summary = known
     ? `${label}: ${formatCents(valueCents)}. ${marks.map((m) => m.text).join(", ")}.`
@@ -73,6 +84,14 @@ export function GlyphBar({
           </span>
         ))}
       </figcaption>
+      <ChartTable
+        caption={`${label}: value and marks`}
+        headers={["Level", "Value"]}
+        rows={[
+          ["Value", known ? formatCents(valueCents) : "Not measured yet"],
+          ...marks.map((m) => [m.name, formatCents(m.at)]),
+        ]}
+      />
     </figure>
   );
 }

@@ -1,3 +1,4 @@
+// @vitest-environment node
 // M7 T8 page data loaders, part 2 (D-136 draft): picks, market, news, alerts, reviews, knowledge, health,
 // usage, settings and shell. Per loader: empty state, populated state, query validation, role matrix
 // and masking leak tests (a masked user's model must hold no code, company name, price or link).
@@ -485,3 +486,5 @@ describe("populated loaders", () => {
       expect(m.bell.count).toBe(1);
       expect(m.bell.topTier).toBe("P1");
     });
+  });
+});

@@ -7,12 +7,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),
-      // Next swaps "server-only" for its own marker module when it bundles; outside Next (tests) the
-      // empty module stands in, so server-only loaders can be imported by unit tests (M7 T7).
-      "server-only": path.resolve(
-        import.meta.dirname,
-        "node_modules/next/dist/compiled/server-only/empty.js",
-      ),
+      // The real "server-only" package throws unless the bundler sets the react-server condition (Next does);
+      // tests import server-only loaders directly, so they get the package's own empty marker module.
+      "server-only": path.resolve(import.meta.dirname, "node_modules/server-only/empty.js"),
     },
   },
   test: {

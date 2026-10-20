@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, Skeleton } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import { DataTable, type Column } from "@/components/ui/DataTable";
-import { GlyphBar } from "@/components/ui/GlyphBar";
+import { GlyphBar } from "@/components/charts/GlyphBar";
 import { KpiRow, KpiTile } from "@/components/ui/Kpi";
 import {
   AlertTierBadge,
