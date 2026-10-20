@@ -34,6 +34,7 @@ const STALE_DAYS = 4; // threshold-ok: end-of-day bars; a long weekend is 3 days
 const PPM = 1_000_000; // threshold-ok: parts per million
 const TABS = ["movers", "sectors", "all"] as const;
 export type MarketTab = (typeof TABS)[number];
+const SIZE_GROUP: Record<string, string> = { U1: "Large", U2: "Mid", U3: "Small" };
 const CODE_RE = /^[A-Za-z0-9]{1,8}$/;
 const SLUG_RE = /^stock-([a-z]{1,4})$/;
 export const SUMMARY_PENDING = "Summary not written yet";
@@ -47,6 +48,10 @@ type DayRow = {
   close: number;
   prev: number;
   volume: number;
+  /** U1/U2/U3 of the latest universe snapshot, or null. */
+  tier: string | null;
+  /** Mean volume of the sessions in the 30 calendar days before this day, or null. */
+  usualVolume: number | null;
 };
 type Day = { d: string; rows: DayRow[]; builtAt: number };
 const MEMO = new WeakMap<Db, Map<string, Day>>();
@@ -67,13 +72,21 @@ async function loadDay(env: LoaderEnv): Promise<Day | null> {
     return hit;
   }
   const r = await env.main.execute({
-    sql: `SELECT b.code, i.name, i.sector, b.c, b.volume,
+    sql: `SELECT b.code, i.name, i.sector, b.c, b.volume, u.tier,
                  (SELECT p.c FROM price_bar p WHERE p.market = b.market AND p.code = b.code AND p.d < b.d
                   ORDER BY p.d DESC LIMIT 1) AS prev
           FROM price_bar b JOIN instrument i ON i.market = b.market AND i.code = b.code
+          LEFT JOIN universe_snapshot u ON u.market = b.market AND u.code = b.code
+            AND u.d = (SELECT MAX(d) FROM universe_snapshot WHERE market = b.market)
           WHERE b.market = ? AND b.d = ? AND i.delisted_on IS NULL ORDER BY b.code LIMIT ?`,
     args: [market, d, UNIVERSE_ROWS],
   });
+  const usual = await env.main.execute({
+    sql: `SELECT code, AVG(volume) AS v FROM price_bar
+          WHERE market = ? AND d < ? AND d >= date(?, '-30 days') GROUP BY code LIMIT ?`,
+    args: [market, d, d, UNIVERSE_ROWS],
+  });
+  const usualBy = new Map(usual.rows.map((x) => [String(x.code), Number(x.v)]));
   const rows: DayRow[] = r.rows
     .filter((x) => x.prev !== null && Number(x.prev) > 0)
     .map((x) => ({
@@ -83,6 +96,8 @@ async function loadDay(env: LoaderEnv): Promise<Day | null> {
       close: Number(x.c), // money-float-ok: stored REAL bar price
       prev: Number(x.prev), // money-float-ok: stored REAL bar price
       volume: Number(x.volume), // money-float-ok: stored volume
+      tier: x.tier === null ? null : String(x.tier),
+      usualVolume: usualBy.get(String(x.code)) ?? null,
     }));
   const day: Day = { d, rows, builtAt: env.now.getTime() };
   memo.set(key, day);
@@ -105,7 +120,7 @@ export function codeFromSlug(slug: string, aliases: StockAliases): string | null
 
 // ---- stars -----------------------------------------------------------------------------------------
 
-async function starredCodes(env: LoaderEnv): Promise<Set<string>> {
+export async function starredCodes(env: LoaderEnv): Promise<Set<string>> {
   const market = marketOf(env);
   try {
     if (env.user.role === "owner") {
@@ -151,6 +166,10 @@ export type MarketRow = {
   close: MoneyView | null;
   changePpm: number;
   volume: number;
+  /** Today's volume against the 30-day mean, in parts per million (1,000,000 = as usual); null = no history. */
+  volumeVsUsualPpm: number | null;
+  /** Large / Mid / Small from the universe tier; null for masked users or when unknown. */
+  sizeGroup: string | null;
   starred: boolean;
 };
 export type SectorRow = { sector: string; count: number; avgChangePpm: number };
@@ -163,6 +182,8 @@ export type MarketModel = {
   up: MarketRow[];
   down: MarketRow[];
   sectors: SectorRow[];
+  /** Most traded today (by volume). */
+  traded: MarketRow[];
   rows: MarketRow[];
   page: { number: number; size: number; total: number };
   /** Shown to masked users in place of search. */
@@ -183,6 +204,7 @@ export async function loadMarket(env: LoaderEnv, q: MarketQuery): Promise<Market
     up: [],
     down: [],
     sectors: [],
+    traded: [],
     rows: [],
     page: { number: q.page, size, total: 0 },
     note: masked ? MASKED_NOTE : null,
@@ -207,6 +229,11 @@ export async function loadMarket(env: LoaderEnv, q: MarketQuery): Promise<Market
     close: masked ? null : { micro: priceMicro(r.close), currency: "AUD", simulated: true },
     changePpm: changePpm(r),
     volume: r.volume,
+    volumeVsUsualPpm:
+      r.usualVolume !== null && r.usualVolume > 0
+        ? Math.round((r.volume / r.usualVolume) * PPM) // money-float-ok: derived ratio, not a price
+        : null,
+    sizeGroup: masked ? null : (SIZE_GROUP[r.tier ?? ""] ?? null),
     starred: stars.has(normCode(r.code)),
   });
   const sorted = [...pool].sort(
@@ -247,6 +274,13 @@ export async function loadMarket(env: LoaderEnv, q: MarketQuery): Promise<Market
       .reverse()
       .slice(0, MOVERS)
       .map(toRow),
+    traded:
+      q.tab === "movers"
+        ? [...pool]
+            .sort((a, b) => b.volume - a.volume || (a.code < b.code ? -1 : 1))
+            .slice(0, MOVERS)
+            .map(toRow)
+        : [],
     sectors: q.tab === "sectors" ? sectors : [],
     rows: q.tab === "all" ? filtered.slice(start, start + size).map(toRow) : [],
     page: { number: q.page, size, total },

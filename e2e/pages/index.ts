@@ -3,6 +3,7 @@
 // differs from what the page's server guard enforces. Add new areas as e2e/pages/<area>.ts.
 import { ROLES, can, type Role } from "../../src/lib/auth/permissions";
 import { CORE_PAGES } from "./core";
+import { MARKET_PAGES } from "./market";
 import { PICKS_PAGES } from "./picks";
 import { STRATEGIES_PAGES } from "./strategies";
 import { RISK_IDEAS_PAGES } from "./riskIdeas";
@@ -12,6 +13,7 @@ export type { PageEntry } from "./types";
 
 export const PAGES: PageEntry[] = [
   ...CORE_PAGES,
+  ...MARKET_PAGES,
   ...PICKS_PAGES,
   ...STRATEGIES_PAGES,
   ...RISK_IDEAS_PAGES,
