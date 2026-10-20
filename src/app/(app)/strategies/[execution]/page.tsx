@@ -457,7 +457,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
         <div className="flex min-w-0 flex-col gap-3">
           <p className="m-0 text-sm">
             Rule version in use: <span className="font-mono">{liveVersion ?? "n/a"}</span>.{" "}
-            <Link href="/learning" className="text-accent underline">
+            <Link href="/reviews/learned" className="text-accent underline">
               What the system learned
             </Link>
           </p>
@@ -471,7 +471,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
                 {ex.pendingChallengers.map((c) => (
                   <li key={c.id}>
                     <Link
-                      href={`/learning/challengers/${encodeURIComponent(c.id)}`}
+                      href={`/reviews/learned/challengers/${encodeURIComponent(c.id)}`}
                       className="text-accent underline"
                     >
                       {c.id}

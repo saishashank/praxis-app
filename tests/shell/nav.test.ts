@@ -186,7 +186,7 @@ describe("activeTab", () => {
     ["/news", "news"],
     ["/reviews/2026-10-20", "reviews"],
     ["/reviews/learned", "reviews"],
-    ["/learning", "reviews"],
+    ["/reviews/learned/compare", "reviews"],
     ["/picks/unknown/deeper/still", "picks"],
   ])("%s -> %s", (p, tab) => {
     expect(activeTab(p)).toBe(tab);

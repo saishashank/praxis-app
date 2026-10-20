@@ -35,19 +35,6 @@ export const CORE_PAGES: PageEntry[] = [
     action: "admin",
     h1: "Data review queue",
   },
-  { file: "src/app/(app)/learning/page.tsx", path: "/learning", action: "read", h1: "Learning" },
-  {
-    file: "src/app/(app)/learning/lessons/[id]/page.tsx",
-    path: "/learning/lessons/[id]",
-    action: "read",
-    needsData: true,
-  },
-  {
-    file: "src/app/(app)/learning/challengers/[id]/page.tsx",
-    path: "/learning/challengers/[id]",
-    action: "read",
-    needsData: true,
-  },
   {
     file: "src/app/(app)/cards/[id]/page.tsx",
     path: "/cards/[id]",

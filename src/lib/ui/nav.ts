@@ -136,15 +136,6 @@ export const ROUTES: readonly RouteNode[] = [
     tab: "reviews",
   },
   { pattern: "/reviews/glossary", label: "Glossary", parent: "/reviews", tab: "reviews" },
-  // Old learning pages (moved under Reviews by T18; still served until then).
-  { pattern: "/learning", label: "Learning", parent: "/reviews", tab: "reviews" },
-  { pattern: "/learning/lessons/[id]", label: "Lesson", parent: "/learning", tab: "reviews" },
-  {
-    pattern: "/learning/challengers/[id]",
-    label: "Challenger",
-    parent: "/learning",
-    tab: "reviews",
-  },
   // Gear and public pages.
   { pattern: "/settings", label: "Settings" },
   { pattern: "/settings/appearance", label: "Appearance", parent: "/settings" },

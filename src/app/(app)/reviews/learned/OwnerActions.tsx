@@ -1,16 +1,21 @@
 "use client";
-// Owner buttons of the minimal learning pages (M6 T14, decision 35; full screens are M7). Each button
-// asks for a confirmation, then posts to the Owner route; a killed family asks a second time.
+// Owner buttons of the learning pages (D-125 routes, unchanged). The server renders them for the Owner
+// only and the routes refuse everyone else. Each button asks for a confirmation, then posts to the
+// audited Owner route; a killed family asks a second time (second_confirmation_required).
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
 
 export type OwnerButton = {
   label: string;
   path: string;
   body?: Record<string, unknown>;
   prompt: string;
+  danger?: boolean;
 };
 
-export function OwnerActions({ buttons }: { buttons: OwnerButton[] }) {
+export function OwnerActions({ buttons, label }: { buttons: OwnerButton[]; label: string }) {
+  const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -22,15 +27,18 @@ export function OwnerActions({ buttons }: { buttons: OwnerButton[] }) {
     });
     const out = (await res.json().catch(() => ({}))) as { error?: string; family?: string };
     if (res.status === 409 && out.error === "second_confirmation_required") {
-      if (window.confirm(`The family ${out.family ?? ""} is killed. Really continue?`)) {
+      if (window.confirm(`The family ${out.family ?? ""} is switched off. Really continue?`)) {
         return post(b, { ...extra, confirm_killed: true });
       }
       setMessage("Cancelled.");
       return;
     }
-    setMessage(
-      res.ok ? "Done. Reload to see the new state." : `Refused: ${out.error ?? res.status}`,
-    );
+    if (res.ok) {
+      setMessage("Done.");
+      router.refresh();
+      return;
+    }
+    setMessage(`Refused: ${out.error ?? res.status}`);
   }
 
   async function run(b: OwnerButton): Promise<void> {
@@ -46,19 +54,22 @@ export function OwnerActions({ buttons }: { buttons: OwnerButton[] }) {
   }
 
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-2">
+    <div role="group" aria-label={label} className="mt-3 flex flex-wrap items-center gap-2">
       {buttons.map((b) => (
-        <button
+        <Button
           key={b.label}
-          type="button"
+          variant={b.danger ? "danger" : "secondary"}
           disabled={busy}
           onClick={() => void run(b)}
-          className="rounded border px-3 py-1 text-sm"
         >
           {b.label}
-        </button>
+        </Button>
       ))}
-      {message !== null && <p role="status">{message}</p>}
+      {message !== null && (
+        <p role="status" className="m-0 text-sm">
+          {message}
+        </p>
+      )}
     </div>
   );
 }
@@ -68,7 +79,7 @@ export function ShadowResults({ path, children }: { path: string; children: Reac
   const [sent, setSent] = useState(false);
   return (
     <details
-      className="mt-4"
+      className="mt-3"
       onToggle={(e) => {
         if ((e.currentTarget as HTMLDetailsElement).open && !sent) {
           setSent(true);
@@ -76,8 +87,10 @@ export function ShadowResults({ path, children }: { path: string; children: Reac
         }
       }}
     >
-      <summary className="cursor-pointer text-sm font-medium">Forward shadow results</summary>
-      {children}
+      <summary className="inline-flex min-h-6 cursor-pointer items-center py-1 text-accent underline">
+        Forward shadow results
+      </summary>
+      <div className="mt-2 text-sm">{children}</div>
     </details>
   );
 }
