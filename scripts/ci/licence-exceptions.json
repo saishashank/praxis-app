@@ -1,0 +1,4 @@
+{
+  "_comment": "Owner-approved licence exceptions for scripts/ci/licence-check.mjs (UXN-019). Only the Owner adds entries. Each entry: { \"package\": \"name\", \"licence\": \"SPDX id as reported\", \"approvedBy\": \"Owner\", \"date\": \"YYYY-MM-DD\", \"reason\": \"why\" }.",
+  "exceptions": []
+}

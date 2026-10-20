@@ -21,6 +21,9 @@
     "test:routes": "node scripts/ci/route-coverage.mjs",
     "test:hygiene": "node scripts/ci/repo-hygiene.mjs",
     "test:config-reference": "node scripts/ci/config-reference.mjs --check",
+    "test:licences": "node scripts/ci/licence-check.mjs",
+    "test:bundle": "node scripts/ci/bundle-budget.mjs",
+    "test:lighthouse": "node scripts/ci/lighthouse.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:e2e": "playwright test"
@@ -53,6 +56,7 @@
     "eslint-config-next": "16.4.0",
     "js-yaml": "4.3.2",
     "jsdom": "30.1.2",
+    "lighthouse": "13.5.0",
     "prettier": "3.9.9",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",

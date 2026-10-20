@@ -38,11 +38,15 @@ jobs:
       - run: npm run test:smoke
       - run: npm run test:routes
       - run: npm run test:hygiene
+      - name: Licence allow-list (UXN-019)
+        run: npm run test:licences
       - name: Backup restore drill (TST-108, synthetic data, throwaway key)
         run: node scripts/backup/drill.mjs
       - run: npm run build
       - name: Client bundle secret scan (AT-03)
         run: node scripts/ci/bundle-secret-scan.mjs
+      - name: Bundle budgets (M7 design 4.4, gzip)
+        run: npm run test:bundle
 
   e2e:
     needs: app
@@ -60,6 +64,12 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: E2E + accessibility (TST-126; local production build, throwaway databases)
         run: npx playwright test
+      - name: Readability grade 8 (UXN-030; populated seed)
+        run: npx playwright test e2e/readability.spec.ts --project=desktop
+        env:
+          E2E_SCENARIO: populated
+      - name: Lighthouse mobile on Home (AT-26; populated seed)
+        run: npm run test:lighthouse
       - name: Upload Playwright report (failure only)
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
