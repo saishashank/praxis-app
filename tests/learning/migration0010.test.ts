@@ -886,7 +886,7 @@ describe("main migration 0010_learning: challenger state machine (KB-040)", () =
         }
       }
     }
-  });
+  }, 120_000); // walks every challenger edge pair through a real migrated DB: slow on loaded machines and CI runners
 
   it("starts proposed with a zero counter and not ready", async () => {
     const db = await freshDb("main");

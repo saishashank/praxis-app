@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CurrentUser } from "@/lib/auth/session";
 import { addUser, KEY } from "../auth/helpers";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
+import { findLeaks } from "@/lib/view/mask";
 
 const mem = vi.hoisted(() => ({
   main: null as unknown,
@@ -177,5 +178,87 @@ describe("GET /api/learning/documents", () => {
         400,
       );
     }
+  });
+});
+
+describe("masking of the learning routes (DAT-124, ROL-107, D-129)", () => {
+  const CODES = ["ZZLK", "ZZMQ"];
+  const NAMES = ["Zed Leak Holdings", "Zed Mask Holdings"];
+
+  beforeEach(async () => {
+    await main.execute(
+      "INSERT INTO instrument (market, code, name) VALUES ('AU', 'ZZLK', 'Zed Leak Holdings'), ('AU', 'ZZMQ', 'Zed Mask Holdings')",
+    );
+    await main.execute({
+      sql: `INSERT INTO signal (id, market, d, family, rule_version, variant, code, regime, rank_score,
+              rules_json, evidence_json, classes, group_key, partial, schema_version, agent_version,
+              inputs_ref, decided_at)
+            VALUES ('sig-lk', 'AU', '2026-10-07', 'F1', 'rv1', 'F1', 'ZZLK', 'RISK-ON', '0.9', '[]', '{}',
+              NULL, NULL, 0, 1, 'a1', 'r1', '2026-10-07T07:00:00.000Z')`,
+      args: [],
+    });
+    await main.execute({
+      sql: `INSERT INTO plan_item (market, d, rank, kind, reason, lesson_id, lane, measure_json)
+            VALUES ('AU', '2026-10-07', 1, 'data_weakness', 'no-lesson:data_weakness ZZLK stalled; see Zed Mask Holdings at $12.50 https://x.test/ZZMQ', NULL, 'ops', ?)`,
+      args: [JSON.stringify({ metric: "flags", ref: { code: "ZZLK", list: ["ZZMQ"] }, ZZMQ: 1 })],
+    });
+    await main.execute(
+      `INSERT INTO plan_review (market, plan_d, rank, reviewed_d, outcome, evidence_json)
+       VALUES ('AU', '2026-10-07', 1, '2026-10-08', 'met', '{"note":"ZZLK recovered"}')`,
+    );
+    await main.execute({
+      sql: `INSERT INTO document (path, version, market, doc_type, front_json, body, body_sha, d, created_at)
+            VALUES ('knowledge/lessons/ZZLK-lesson.md', 1, 'AU', 'lesson', '{"title":"Zed Leak Holdings"}',
+                    'ZZLK and ZZMQ rose; Zed Leak Holdings', ?, '2026-10-07', '2026-10-07T00:00:00Z')`,
+      args: [SHA],
+    });
+  });
+
+  const bodies = async (): Promise<string[]> => {
+    const plan = await planRoute.GET(get("/api/learning/plan?d=2026-10-07"), undefined);
+    const list = await docsRoute.GET(get("/api/learning/documents?q=lesson"), undefined);
+    const one = await docsRoute.GET(
+      get("/api/learning/documents?path=knowledge/lessons/ZZLK-lesson.md"),
+      undefined,
+    );
+    for (const r of [plan, list, one]) expect(r.status).toBe(200);
+    return [await plan.text(), await list.text(), await one.text()];
+  };
+
+  it("an Editor and a Viewer never receive a stock code, a company name, a price or a link", async () => {
+    for (const role of ["editor", "viewer"] as const) {
+      mem.user = users[role];
+      for (const text of await bodies()) {
+        expect(findLeaks(text, CODES, NAMES)).toEqual([]);
+        expect(text).not.toMatch(/12\.50|https?:/);
+      }
+    }
+  });
+
+  it("masked output keeps the structure and uses letters for the active set", async () => {
+    mem.user = users.viewer;
+    const b = await json(await planRoute.GET(get("/api/learning/plan?d=2026-10-07"), undefined));
+    expect(b.d).toBe("2026-10-07");
+    expect(b.items[0].reason).toContain("Stock A");
+    expect(b.items[0].measure.metric).toBe("flags");
+    expect(b.reviews[0].reviewed_d).toBe("2026-10-08");
+  });
+
+  it("the Owner sees the codes", async () => {
+    mem.user = users.owner;
+    const [plan, list, one] = await bodies();
+    expect(plan).toContain("ZZLK");
+    expect(list).toContain("ZZLK");
+    expect(one).toContain("Zed Leak Holdings");
+  });
+
+  it("a masked user with a live unmask grant sees codes", async () => {
+    await (mem.auth as Client).execute({
+      sql: `INSERT INTO unmask_grant (user_id, granted_by, granted_at, expires_at) VALUES (?, ?, ?, ?)`,
+      args: [users.viewer.id, users.owner.id, "2026-10-01T00:00:00Z", "2999-01-01T00:00:00Z"],
+    });
+    mem.user = users.viewer;
+    const [plan] = await bodies();
+    expect(plan).toContain("ZZLK");
   });
 });

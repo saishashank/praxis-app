@@ -18,7 +18,10 @@ vi.mock("@/lib/preferences/service", async (orig) => ({
 vi.mock("@/app/(app)/settings/actions", () => ({
   updatePreferencesAction: (fd: FormData) => action(fd),
 }));
-vi.mock("next/font/google", () => ({ Inter: () => ({ variable: "inter-var" }) }));
+vi.mock("next/font/google", () => ({
+  Inter: () => ({ variable: "inter-var" }),
+  JetBrains_Mono: () => ({ variable: "mono-var" }),
+}));
 vi.mock("next/server", () => ({ connection: async () => undefined }));
 
 import SettingsPage from "@/app/(app)/settings/page";

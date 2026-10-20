@@ -1,10 +1,11 @@
 // GET knowledge documents (M7 T4; KB, D-132 draft; all signed-in roles).
 //   ?market=AU&type=&q=&limit=      the latest version of each document, no bodies
 //   ?market=AU&path=knowledge/...    one document with its body (&version=N for an older one)
-// TODO(M7 T2): pass bodies and lists through the masking module (src/lib/view/mask.ts) for masked
-// users once it exists; documents can name codes.
+// Masked users (non-Owner without a live unmask grant) get bodies and lists through the masking module.
 import { withAuth } from "@/lib/auth/guard";
-import { mainDb } from "@/lib/db/client";
+import { authDb, mainDb } from "@/lib/db/client";
+import { LearningMasker } from "@/lib/learning/mask";
+import { maskContextFor } from "@/lib/view/mask";
 import { isDocType, listDocuments, readDocument } from "@/lib/learning/readers";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export const runtime = "nodejs";
 const HEADERS = { "Cache-Control": "no-store" };
 const bad = (): Response => Response.json({ error: "invalid" }, { status: 400, headers: HEADERS });
 
-export const GET = withAuth("read", async (req) => {
+export const GET = withAuth("read", async (req, user) => {
   const p = new URL(req.url).searchParams;
   const market = p.get("market") ?? "AU";
   const type = p.get("type");
@@ -28,6 +29,8 @@ export const GET = withAuth("read", async (req) => {
   if (q !== undefined && q.length > 100) return bad(); // threshold-ok: search text length cap
   try {
     const db = mainDb();
+    const ctx = await maskContextFor(user.role ? { id: user.id, role: user.role } : null, authDb());
+    const masker = ctx.masked ? new LearningMasker(db, market) : null;
     if (path !== null) {
       if (!path.startsWith("knowledge/") || !path.endsWith(".md") || path.includes("..")) {
         return bad();
@@ -40,7 +43,10 @@ export const GET = withAuth("read", async (req) => {
       if (doc === null) {
         return Response.json({ error: "not_found" }, { status: 404, headers: HEADERS });
       }
-      return Response.json({ document: doc }, { headers: HEADERS });
+      return Response.json(
+        { document: masker ? await masker.document(doc) : doc },
+        { headers: HEADERS },
+      );
     }
     const documents = await listDocuments(db, {
       market,
@@ -48,7 +54,10 @@ export const GET = withAuth("read", async (req) => {
       q,
       limit: limitText === null ? undefined : Number(limitText),
     });
-    return Response.json({ documents }, { headers: HEADERS });
+    return Response.json(
+      { documents: masker ? await masker.documents(documents) : documents },
+      { headers: HEADERS },
+    );
   } catch {
     return Response.json({ error: "unavailable" }, { status: 503, headers: HEADERS });
   }

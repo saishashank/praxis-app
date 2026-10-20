@@ -156,6 +156,8 @@ export async function importUniverse(i: ImportInput): Promise<ImportResult> {
 
     // M7 T4 (decision 53): the sector is the CSV industry group. Written only when the column exists
     // (main 0011 adds instrument.sector); one statement keeps new, changed and older rows in step.
+    // The sector statement is a column sync, not a counted row write: rows_written stays the apply-rule writes.
+    const rowsWritten = stmts.length;
     if (await hasSectorColumn(i.db)) {
       stmts.push({
         sql:
@@ -184,7 +186,7 @@ export async function importUniverse(i: ImportInput): Promise<ImportResult> {
         Math.max(0, Date.parse(endedAt) - Date.parse(startedAt)),
         plan.counts.file,
         existing.length,
-        stmts.length,
+        rowsWritten,
         JSON.stringify({ counts: plan.counts, parsed: parsed.stats }),
         id,
       ],
