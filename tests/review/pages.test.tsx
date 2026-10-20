@@ -21,6 +21,7 @@ vi.mock("@/lib/db/client", () => ({ mainDb: () => dbRef.db, authDb: () => dbRef.
 import ReviewDatePage from "@/app/(app)/reviews/[date]/page";
 import { markReviewReadAction } from "@/app/(app)/reviews/[date]/actions";
 import CardPage from "@/app/(app)/cards/[id]/page";
+import { cardRef } from "@/lib/ui/loaders/cards";
 import { assembleReview, readState } from "@/lib/review/assemble";
 import {
   APP,
@@ -246,11 +247,22 @@ describe("markReviewReadAction", () => {
 describe("/cards/[id]", () => {
   const card = async (id: string) =>
     renderToStaticMarkup(await CardPage({ params: Promise.resolve({ id }) }));
+  // A masked user addresses a card by its opaque reference (D-135); the reference is resolved against
+  // the last 120 days, so the clock is pinned to the review date.
+  const REF = encodeURIComponent(cardRef(CARD_ID));
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
-  it("a Viewer sees a MASKED card: Stock A, no code, name, price, amount or exact date (encoded id)", async () => {
+  it("a Viewer sees a MASKED card: Stock A, no code, name, price, amount, exact date or id", async () => {
     as("viewer");
-    const html = await card(encodeURIComponent(CARD_ID));
-    expect(requireUser).toHaveBeenCalledWith("read", `/cards/${encodeURIComponent(CARD_ID)}`);
+    const html = await card(REF);
+    expect(requireUser).toHaveBeenCalledWith("read", `/cards/${REF}`);
+    expect(html).not.toContain("card:sig");
     expect(html).toContain("Decision Card: Stock C (E01)");
     expect(html).toContain("Guidance upgrade with a rising trend.");
     expect(html).toContain("TB-NEG: Negative announcement");
@@ -268,11 +280,28 @@ describe("/cards/[id]", () => {
     noLeak(html);
   });
 
-  it("an Editor sees the same masked card", async () => {
+  it("an Editor sees the same masked card; the note form carries the reference, never the id", async () => {
     as("editor");
-    const html = await card(encodeURIComponent(CARD_ID));
+    const html = await card(REF);
     expect(html).toContain("Decision Card: Stock C (E01)");
+    expect(html).toContain("<form");
+    expect(html).toContain(decodeURIComponent(REF));
+    expect(html).not.toContain("card:sig");
     noLeak(html);
+  });
+
+  it("a real card id from a masked user answers exactly like an unknown id (404)", async () => {
+    for (const role of ["viewer", "editor"]) {
+      as(role);
+      const real = await card(encodeURIComponent(CARD_ID)).catch((e: Error) => e.message);
+      const unknown = await card(encodeURIComponent("card:sig:nothing:E01")).catch(
+        (e: Error) => e.message,
+      );
+      const badRef = await card("ck:0000000000000000").catch((e: Error) => e.message);
+      expect(real).toBe("NEXT_HTTP_ERROR_FALLBACK;404");
+      expect(unknown).toBe(real);
+      expect(badRef).toBe(real);
+    }
   });
 
   it("the Owner and a user with a live grant see the real code and amounts", async () => {
@@ -288,16 +317,23 @@ describe("/cards/[id]", () => {
     expect(await card(encodeURIComponent(CARD_ID))).toContain("Decision Card: ZZUP (E01)");
   });
 
-  it("an expired grant leaves the card masked", async () => {
+  it("an expired grant leaves the card masked (a real id still 404s)", async () => {
     as("viewer");
     await grantTo("2020-01-01T00:00:00.000Z");
-    noLeak(await card(encodeURIComponent(CARD_ID)));
+    noLeak(await card(REF));
+    await expect(card(encodeURIComponent(CARD_ID))).rejects.toThrow(/404/);
+  });
+
+  it("the Owner can open a card by its opaque reference too", async () => {
+    as("owner");
+    expect(await card(REF)).toContain("Decision Card: ZZUP (E01)");
   });
 
   it("404s an unknown card and refuses when the guard refuses", async () => {
     as("viewer");
     await expect(card("card:missing")).rejects.toThrow();
     requireUser.mockRejectedValue(new Error("NEXT_HTTP_ERROR_FALLBACK;403"));
+    await expect(card(REF)).rejects.toThrow(/403/);
     await expect(card(encodeURIComponent(CARD_ID))).rejects.toThrow(/403/);
   });
 });

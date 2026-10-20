@@ -68,7 +68,8 @@ const idOk = (s: unknown): s is string =>
 
 // ---- the audit-first runner --------------------------------------------------------------------------
 
-type Outcome = { readonly ok: true; readonly body: Record<string, unknown> } | RefusedOutcome;
+export type Outcome =
+  { readonly ok: true; readonly body: Record<string, unknown> } | RefusedOutcome;
 type RefusedOutcome = {
   readonly ok: false;
   readonly reason: string;
@@ -81,7 +82,7 @@ async function marketMode(db: Client): Promise<string | null> {
   return r.rows.length === 0 ? null : String(r.rows[0]!.mode);
 }
 
-type Step = {
+export type Step = {
   readonly action: string;
   readonly targetType: string;
   readonly targetId: string;
@@ -90,7 +91,7 @@ type Step = {
 };
 
 /** Owner-only action: data-only refusal, audit event first, writer second, `_failed` on any failure. */
-async function audited(c: OwnerCtx, user: CurrentUser, step: Step): Promise<ActionResult> {
+export async function audited(c: OwnerCtx, user: CurrentUser, step: Step): Promise<ActionResult> {
   const now = nowOf(c);
   const at = now.toISOString();
   let mode: string | null;

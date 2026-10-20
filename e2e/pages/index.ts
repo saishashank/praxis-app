@@ -5,11 +5,17 @@ import { ROLES, can, type Role } from "../../src/lib/auth/permissions";
 import { CORE_PAGES } from "./core";
 import { PICKS_PAGES } from "./picks";
 import { STRATEGIES_PAGES } from "./strategies";
+import { RISK_IDEAS_PAGES } from "./riskIdeas";
 import type { PageEntry } from "./types";
 
 export type { PageEntry } from "./types";
 
-export const PAGES: PageEntry[] = [...CORE_PAGES, ...PICKS_PAGES, ...STRATEGIES_PAGES];
+export const PAGES: PageEntry[] = [
+  ...CORE_PAGES,
+  ...PICKS_PAGES,
+  ...STRATEGIES_PAGES,
+  ...RISK_IDEAS_PAGES,
+];
 
 /** Roles that may open the page (derived from the guard action unless the entry lists them). */
 export function allowedRoles(entry: PageEntry): readonly Role[] {
