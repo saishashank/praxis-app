@@ -41,8 +41,12 @@ const oneOf = (allowed: readonly string[]) => async (v: unknown) =>
 
 /** Markets that have a mode (MKT-102: IN and US do not exist before their build starts). */
 export const MODE_MARKETS = ["AU"] as const;
-/** Modes that can be selected now. `full` needs the Arena and agents (M3). */
-export const SELECTABLE_MODES = ["off", "data_only"] as const;
+/**
+ * Modes that can be selected. `full` is accepted here as a value; in PRODUCTION the Owner action
+ * (src/lib/data/controls.ts setMarketMode) refuses it unless a go_live_signoff row exists and
+ * email_mode is not off (src/lib/golive/interlock.ts, M8 decision 33). Staging is free.
+ */
+export const SELECTABLE_MODES = ["off", "data_only", "full"] as const;
 
 export function validateMarketModes(v: unknown): string | null {
   if (!isObj(v)) return "must list a mode for each market";
@@ -51,9 +55,8 @@ export function validateMarketModes(v: unknown): string | null {
     return "unknown market";
   }
   for (const x of Object.values(v)) {
-    if (x === "full") return "full is not available until M3";
     if (!(SELECTABLE_MODES as readonly unknown[]).includes(x))
-      return "mode must be off or data_only";
+      return "mode must be off, data_only or full";
   }
   return null;
 }
@@ -1768,7 +1771,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   market_mode: {
     label: "Market mode (changed only in System Health, Data controls)",
     area: "Other",
-    bounds: "off or data_only per market; full from M3",
+    bounds: "off, data_only or full per market (full needs the go-live sign-off in production)",
     input: "object",
   },
   cost_profile_default: {

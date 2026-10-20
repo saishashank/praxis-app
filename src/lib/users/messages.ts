@@ -18,6 +18,12 @@ export const ERROR_TEXT: Record<string, string> = {
   data_only_market:
     "Full email stays off while a market is in data-only mode (until go-live). Choose incidents only.",
   email_mode_required: "The review test date needs the email mode set to incidents only first.",
+  signoff_required:
+    "Full mode needs the go-live sign-off first. Sign off on the Go-live page, then try again.",
+  email_off: "Turn the email mode to incidents only before switching to full mode.",
+  confirm_required: "Confirm first: type the exact words or tick the confirmation box.",
+  items_missing: "Tick every item on the checklist first.",
+  commit_unknown: "The release commit could not be read. Enter it (7 to 64 letters and digits).",
   unknown_code: "That code is not a listed share of this market.",
   already_listed: "That code is already on your watch-list.",
   item_not_found: "That item is no longer listed. Reload the page.",

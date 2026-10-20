@@ -2,6 +2,7 @@
 // only. The OPS-020 tasks with their due dates (Melbourne calendar dates, DST-safe), a "Mark done" tick
 // per task (append-only, audited) and the token expiry dates. Nothing here is invented: a task shows
 // its date, its status and who/when only through the stored tick.
+import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/States";
 import { requireUser } from "@/lib/auth/guard";
@@ -80,6 +81,11 @@ export default async function OpsPage() {
         <p className="m-0 text-sm text-text-muted">
           The periodic Owner tasks, with due dates in Australia/Melbourne time.
           {ops ? ` Today is ${dateText(ops.today)}.` : ""}
+        </p>
+        <p className="m-0 text-sm">
+          <Link href="/ops/go-live" className="underline">
+            Go-live sign-off
+          </Link>
         </p>
       </header>
 

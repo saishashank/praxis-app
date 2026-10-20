@@ -125,7 +125,7 @@ describe("Owner controls", () => {
     expect(s.getByText("Accept the Yahoo risk (O-26) before turning this on.")).toBeInTheDocument();
     expect(s.getByText("Accept the ASX risk (O-23) before turning this on.")).toBeInTheDocument();
     expect(s.getByRole("button", { name: "Switch this market off" })).toBeInTheDocument();
-    expect(s.getByText("Full mode is not available until M3.")).toBeInTheDocument();
+    expect(s.getByRole("button", { name: "Switch to full mode" })).toBeInTheDocument();
     fireEvent.click(s.getByRole("button", { name: "Accept risk (O-23)" }));
     expect(s.getByText(SOURCE_CONTROLS.asx_announcements.riskText)).toBeInTheDocument();
   });

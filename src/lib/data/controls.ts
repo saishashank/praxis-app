@@ -69,6 +69,7 @@ import {
   validateMarketModes,
 } from "@/lib/config/keys";
 import { getConfig } from "@/lib/config/store";
+import { fullModeRefusal } from "@/lib/golive/interlock";
 import {
   EMAIL_MODE_KEY,
   EMAIL_MODES,
@@ -132,6 +133,11 @@ export type ControlError =
   | "not_available"
   | "data_only_market"
   | "email_mode_required"
+  | "signoff_required"
+  | "email_off"
+  | "confirm_required"
+  | "items_missing"
+  | "commit_unknown"
   | "unknown_code"
   | "already_listed"
   | "item_not_found"
@@ -149,11 +155,11 @@ export type ControlBase = {
   now?: Date;
 };
 
-const fail = (error: ControlError): ControlResult => ({ ok: false, error });
-const NOOP: ControlResult = { ok: true, changed: false };
+export const fail = (error: ControlError): ControlResult => ({ ok: false, error });
+export const NOOP: ControlResult = { ok: true, changed: false };
 
 /** A condition re-checked inside the write transaction failed (a race with another change). */
-class Precondition extends Error {
+export class Precondition extends Error {
   constructor(readonly code: ControlError) {
     super(code);
   }
@@ -216,7 +222,7 @@ async function calendarConfirmed(db: Exec, now: string): Promise<boolean> {
 }
 
 /** Defence in depth: the caller passed requireUser("admin"); the actor must be the active Owner. */
-async function ownerCheck(authDb: Client, actorId: number): Promise<ControlError | null> {
+export async function ownerCheck(authDb: Client, actorId: number): Promise<ControlError | null> {
   try {
     const r = await authDb.execute({
       sql: "SELECT 1 FROM app_user WHERE id = ? AND role = 'owner' AND status = 'active'",
@@ -228,16 +234,16 @@ async function ownerCheck(authDb: Client, actorId: number): Promise<ControlError
   }
 }
 
-type Step = {
+export type Step = {
   action: string;
   targetType: string;
   targetId: string;
   detail: Record<string, unknown>;
-  apply: (tx: Transaction) => Promise<void>;
+  apply: (tx: Transaction, auditRef: string) => Promise<void>;
 };
 
 /** Audit first, then ONE main-DB write transaction, then a `_failed` event if that fails. */
-async function commit(p: ControlBase, now: string, step: Step): Promise<ControlResult> {
+export async function commit(p: ControlBase, now: string, step: Step): Promise<ControlResult> {
   const meta = p.meta ?? NO_META;
   const base = {
     at: now,
@@ -245,15 +251,20 @@ async function commit(p: ControlBase, now: string, step: Step): Promise<ControlR
     targetType: step.targetType,
     targetId: step.targetId,
   };
+  let auditId: number;
   try {
-    await audit(p.authDb, p.env, meta, { ...base, action: step.action, detail: step.detail });
+    auditId = await audit(p.authDb, p.env, meta, {
+      ...base,
+      action: step.action,
+      detail: step.detail,
+    });
   } catch {
     return fail("unavailable"); // nothing has changed
   }
   let tx: Transaction | undefined;
   try {
     tx = await p.mainDb.transaction("write");
-    await step.apply(tx);
+    await step.apply(tx, `audit:${auditId}`);
     await tx.commit();
     return { ok: true, changed: true };
   } catch (e) {
@@ -464,7 +475,9 @@ async function readConfigModes(db: Exec): Promise<{ raw: string | null; map: Mod
 }
 
 /**
- * Sets a market's mode to `off` or `data_only`. `full` is refused (M3). Writes the versioned
+ * Sets a market's mode to `off`, `data_only` or `full`. In production `full` is refused with
+ * `signoff_required` (no go_live_signoff row) or `email_off` (email_mode is off), before any audit
+ * row and again inside the write transaction (M8 T11, decision 33); staging is free. Writes the versioned
  * `market_mode` config value AND `market.mode` in one transaction (see the header).
  */
 export async function setMarketMode(p: MarketModeInput): Promise<ControlResult> {
@@ -474,7 +487,6 @@ export async function setMarketMode(p: MarketModeInput): Promise<ControlResult> 
   if (typeof p.market !== "string" || !(MODE_MARKETS as readonly string[]).includes(p.market)) {
     return fail("invalid");
   }
-  if (p.mode === "full") return fail("not_available");
   if (typeof p.mode !== "string" || !(SELECTABLE_MODES as readonly string[]).includes(p.mode)) {
     return fail("invalid");
   }
@@ -489,12 +501,21 @@ export async function setMarketMode(p: MarketModeInput): Promise<ControlResult> 
     const columnMode = String(row.rows[0].mode);
     const { map } = await readConfigModes(p.mainDb);
     if (columnMode === to && map[market] === to) return NOOP;
+    const today = localDay(now);
+    if (to === "full") {
+      const refused = await fullModeRefusal(p.mainDb, p.env, market, today);
+      if (refused !== null) return fail(refused);
+    }
     return await commit(p, now, {
       action: "controls.market_mode",
       targetType: "market",
       targetId: market,
       detail: { market, from: columnMode, to },
       apply: async (tx) => {
+        if (to === "full") {
+          const refused = await fullModeRefusal(tx, p.env, market, today);
+          if (refused !== null) throw new Precondition(refused);
+        }
         const cur = await readConfigModes(tx);
         const next = { ...cur.map, [market]: to };
         if (validateMarketModes(next) !== null) throw new Precondition("invalid");

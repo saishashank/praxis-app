@@ -11,6 +11,8 @@ import { ControlRoom, type SnoozeInfo } from "./ControlRoom";
 import { CalendarConfirmForm } from "./CalendarConfirmForm";
 import { DataControlForm } from "./DataControlForm";
 import { EmailControlsSection } from "./EmailControlsSection";
+import { WorkerSlotsSection } from "./WorkerSlotsSection";
+import { loadSlotsView, type SlotsView } from "@/lib/golive/slots";
 import { loadAttentionItems } from "@/lib/health/attention";
 import {
   loadEmailControlsView,
@@ -227,14 +229,19 @@ function DataControlsSection(props: {
             {c.markets.map((m) => (
               <div key={m.market} className="flex flex-col gap-1 text-sm">
                 <h3 className="font-medium">{m.market} market mode</h3>
-                {m.mode === "off" ? (
+                {m.mode !== "data_only" && (
                   <DataControlForm
                     action={setMarketModeAction}
                     fields={{ market: m.market, mode: "data_only" }}
                     label="Set data-only mode"
-                    explain="The nightly data pipeline and the Worker work for this market again. Nothing else runs."
+                    explain={
+                      m.mode === "full"
+                        ? "Trading stops: the Arena, emails and decision agents switch off. The nightly data pipeline keeps running."
+                        : "The nightly data pipeline and the Worker work for this market again. Nothing else runs."
+                    }
                   />
-                ) : (
+                )}
+                {m.mode !== "off" && (
                   <DataControlForm
                     action={setMarketModeAction}
                     fields={{ market: m.market, mode: "off" }}
@@ -242,7 +249,15 @@ function DataControlsSection(props: {
                     explain="The pipeline and the Worker skip this market until you set it back to data-only."
                   />
                 )}
-                <p className="text-text-muted">Full mode is not available until M3.</p>
+                {m.mode !== "full" && (
+                  <DataControlForm
+                    action={setMarketModeAction}
+                    fields={{ market: m.market, mode: "full" }}
+                    label="Switch to full mode"
+                    explain="Starts real paper trading: the Arena, emails and decision agents run. In production this is refused until the go-live sign-off is recorded on the Go-live page and the email mode is not off. In staging it is allowed."
+                    confirmLabel="Switch to full"
+                  />
+                )}
               </div>
             ))}
           </div>
@@ -429,6 +444,15 @@ export default async function HealthPage() {
       emailControls = null;
     }
   }
+  // Worker slots (M8 T11): Owner only; unreadable data shows "unavailable".
+  let slotsView: SlotsView | null = null;
+  if (user.role === "owner") {
+    try {
+      slotsView = await loadSlotsView(mainDb());
+    } catch {
+      slotsView = null;
+    }
+  }
   const owner = user.role === "owner";
   // The Control Room: ring, readouts, briefing, gauges, strip, ticker (UXN-283/285). A failed read
   // shows a neutral line, never details; the older sections below keep working on their own.
@@ -591,6 +615,8 @@ export default async function HealthPage() {
           )}
 
           {owner && <EmailControlsSection v={emailControls} />}
+
+          {owner && <WorkerSlotsSection view={slotsView} />}
 
           {summary.quality && (
             <section aria-labelledby="quality-h" className="flex flex-col gap-3">

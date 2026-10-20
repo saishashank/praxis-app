@@ -1,0 +1,11 @@
+{
+  "$comment": "M8 T11 (D-131 fragment): the go-live sign-off and the Worker slots switch. A test file must mention the action name.",
+  "routes": {
+    "action src/app/(app)/ops/go-live/actions.ts#signOffGoLiveAction": {
+      "tests": ["tests/golive/signoff.test.ts", "tests/golive/pages.test.tsx"]
+    },
+    "action src/app/(app)/health/slotsActions.ts#setSlotsEnabledAction": {
+      "tests": ["tests/golive/signoff.test.ts", "tests/golive/slots.test.ts"]
+    }
+  }
+}

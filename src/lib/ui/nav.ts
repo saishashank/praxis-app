@@ -144,6 +144,7 @@ export const ROUTES: readonly RouteNode[] = [
   { pattern: "/health", label: "System health" },
   { pattern: "/usage", label: "Usage" },
   { pattern: "/ops", label: "Ops checklist" },
+  { pattern: "/ops/go-live", label: "Go-live", parent: "/ops" },
   { pattern: "/users", label: "Users & roles" },
   { pattern: "/config", label: "Configuration" },
   { pattern: "/review", label: "Data review" },
