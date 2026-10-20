@@ -1,8 +1,14 @@
 // Focus handling and keyboard behaviour of the Radix islands (M7 T5): Esc closes, focus moves into
 // the dialog and returns to the trigger, popover content is reachable, the confirm action submits.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { ConfirmDialog, InfoButton, limitWords, Sheet, Term } from "@/components/ui/Overlays";
+
+// The Radix half is a dynamic import (bundle budget). Load it once up front so the first test is not at
+// the mercy of a cold transform on a busy machine; the components still resolve it through import().
+beforeAll(async () => {
+  await import("@/components/ui/OverlayPanels");
+}, 60_000);
 
 describe("limitWords", () => {
   it("keeps short text and cuts long text at 40 words", () => {

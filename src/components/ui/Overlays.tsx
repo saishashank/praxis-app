@@ -2,12 +2,22 @@
 // Client islands on the two Radix packages (shadcn pattern, D-128): Term and InfoButton (Popover),
 // Sheet and ConfirmDialog (Dialog). Radix supplies Esc to close, a focus trap in dialogs, and focus
 // return to the trigger. The glossary link is a plain anchor so it works without client JS.
-import * as Dialog from "@radix-ui/react-dialog";
-import * as Popover from "@radix-ui/react-popover";
-import type { ReactNode } from "react";
-import { Button, buttonClass, type ButtonVariant } from "./Button";
-import { cn } from "./cn";
-import { CloseIcon, InfoIcon } from "./icons";
+//
+// Bundle budget (UX-005): the trigger button is rendered here with the same attributes Radix gives its
+// Trigger, and the Radix part (OverlayPanels.tsx) is loaded by a dynamic import the first time the
+// trigger is activated. So Radix Dialog and Popover cost no first-load JavaScript on any route, and the
+// trigger stays one DOM element for its whole life (focus returns to it on close).
+import { lazy, Suspense, useId, useRef, useState, type ReactNode } from "react";
+import { buttonClass, type ButtonVariant } from "./Button";
+import { InfoIcon } from "./icons";
+
+const PopoverPanel = lazy(() =>
+  import("./OverlayPanels").then((m) => ({ default: m.PopoverPanel })),
+);
+const SheetPanel = lazy(() => import("./OverlayPanels").then((m) => ({ default: m.SheetPanel })));
+const ConfirmPanel = lazy(() =>
+  import("./OverlayPanels").then((m) => ({ default: m.ConfirmPanel })),
+);
 
 const POPOVER_WORDS_MAX = 40; // threshold-ok: UXN-032 limit on a term popover
 
@@ -17,8 +27,46 @@ export function limitWords(text: string, max = POPOVER_WORDS_MAX): string {
   return words.length <= max ? words.join(" ") : `${words.slice(0, max).join(" ")}…`;
 }
 
-const POPOVER_CLASS =
-  "z-50 max-w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-border bg-surface p-3 text-sm text-text shadow-lg break-words";
+/** Open state plus "has been opened once" (the panel is mounted from then on and kept for focus return). */
+function useDisclosure(): {
+  open: boolean;
+  mounted: boolean;
+  setOpen: (open: boolean) => void;
+  toggle: () => void;
+  contentId: string;
+  triggerProps: {
+    type: "button";
+    "aria-haspopup": "dialog";
+    "aria-expanded": boolean;
+    "aria-controls": string | undefined;
+    "data-state": "open" | "closed";
+    onClick: () => void;
+  };
+} {
+  const [open, setOpenState] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const contentId = useId();
+  const setOpen = (next: boolean) => {
+    if (next) setMounted(true);
+    setOpenState(next);
+  };
+  const toggle = () => setOpen(!open);
+  return {
+    open,
+    mounted,
+    setOpen,
+    toggle,
+    contentId,
+    triggerProps: {
+      type: "button",
+      "aria-haspopup": "dialog",
+      "aria-expanded": open,
+      "aria-controls": open ? contentId : undefined,
+      "data-state": open ? "open" : "closed",
+      onClick: toggle,
+    },
+  };
+}
 
 export function Term({
   children,
@@ -33,54 +81,68 @@ export function Term({
   official?: string;
   moreHref?: string;
 }) {
+  const ref = useRef<HTMLButtonElement | null>(null);
+  const d = useDisclosure();
   return (
-    <Popover.Root>
-      <Popover.Trigger asChild>
-        <button
-          type="button"
-          className="inline min-h-6 cursor-help bg-transparent p-0 text-inherit underline decoration-dotted underline-offset-2"
-        >
-          {children}
-        </button>
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content sideOffset={6} collisionPadding={16} className={POPOVER_CLASS}>
-          {official ? (
-            <p className="m-0 mb-1 text-xs text-text-muted">Official term: {official}</p>
-          ) : null}
-          <p className="m-0">{limitWords(meaning)}</p>
-          <a href={moreHref} className="mt-2 inline-block text-accent underline">
-            More
-          </a>
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
+    <>
+      <button
+        {...d.triggerProps}
+        ref={ref}
+        className="inline min-h-6 cursor-help bg-transparent p-0 text-inherit underline decoration-dotted underline-offset-2"
+      >
+        {children}
+      </button>
+      {d.mounted ? (
+        <Suspense fallback={null}>
+          <PopoverPanel
+            open={d.open}
+            onOpenChange={d.setOpen}
+            triggerRef={ref}
+            contentId={d.contentId}
+          >
+            {official ? (
+              <p className="m-0 mb-1 text-xs text-text-muted">Official term: {official}</p>
+            ) : null}
+            <p className="m-0">{limitWords(meaning)}</p>
+            <a href={moreHref} className="mt-2 inline-block text-accent underline">
+              More
+            </a>
+          </PopoverPanel>
+        </Suspense>
+      ) : null}
+    </>
   );
 }
 
 /** The "i" button: a popover with a short explanation. */
 export function InfoButton({ label, children }: { label: string; children: ReactNode }) {
+  const ref = useRef<HTMLButtonElement | null>(null);
+  const d = useDisclosure();
   return (
-    <Popover.Root>
-      <Popover.Trigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          className="inline-flex size-6 items-center justify-center rounded-full bg-transparent p-0 text-accent"
-        >
-          <InfoIcon />
-        </button>
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content sideOffset={6} collisionPadding={16} className={POPOVER_CLASS}>
-          {children}
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
+    <>
+      <button
+        {...d.triggerProps}
+        ref={ref}
+        aria-label={label}
+        className="inline-flex size-6 items-center justify-center rounded-full bg-transparent p-0 text-accent"
+      >
+        <InfoIcon />
+      </button>
+      {d.mounted ? (
+        <Suspense fallback={null}>
+          <PopoverPanel
+            open={d.open}
+            onOpenChange={d.setOpen}
+            triggerRef={ref}
+            contentId={d.contentId}
+          >
+            {children}
+          </PopoverPanel>
+        </Suspense>
+      ) : null}
+    </>
   );
 }
-
-const OVERLAY = "fixed inset-0 z-40 bg-black/60";
 
 /** Side sheet on desktop (lg and up), bottom sheet on phones. */
 export function Sheet({
@@ -96,34 +158,28 @@ export function Sheet({
   children: ReactNode;
   triggerVariant?: ButtonVariant;
 }) {
+  const ref = useRef<HTMLButtonElement | null>(null);
+  const d = useDisclosure();
   return (
-    <Dialog.Root>
-      <Dialog.Trigger className={buttonClass(triggerVariant)}>{trigger}</Dialog.Trigger>
-      <Dialog.Portal>
-        <Dialog.Overlay className={OVERLAY} />
-        <Dialog.Content
-          className={cn(
-            "fixed z-50 overflow-y-auto border border-border bg-surface p-4 text-text break-words",
-            "inset-x-0 bottom-0 max-h-[85vh] rounded-t-xl",
-            "lg:inset-y-0 lg:right-0 lg:left-auto lg:bottom-auto lg:max-h-none lg:w-96 lg:rounded-none",
-          )}
-        >
-          <div className="flex items-start justify-between gap-2">
-            <Dialog.Title className="m-0 text-lg font-semibold">{title}</Dialog.Title>
-            <Dialog.Close
-              aria-label="Close"
-              className="inline-flex size-6 items-center justify-center bg-transparent p-0 text-text"
-            >
-              <CloseIcon />
-            </Dialog.Close>
-          </div>
-          <Dialog.Description className="mt-1 text-sm text-text-muted">
-            {description}
-          </Dialog.Description>
-          <div className="mt-3">{children}</div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <>
+      <button {...d.triggerProps} ref={ref} className={buttonClass(triggerVariant)}>
+        {trigger}
+      </button>
+      {d.mounted ? (
+        <Suspense fallback={null}>
+          <SheetPanel
+            open={d.open}
+            onOpenChange={d.setOpen}
+            triggerRef={ref}
+            contentId={d.contentId}
+            title={title}
+            description={description}
+          >
+            {children}
+          </SheetPanel>
+        </Suspense>
+      ) : null}
+    </>
   );
 }
 
@@ -146,27 +202,34 @@ export function ConfirmDialog({
   /** Hidden inputs the action needs. */
   children?: ReactNode;
 }) {
+  const ref = useRef<HTMLButtonElement | null>(null);
+  const d = useDisclosure();
   return (
-    <Dialog.Root>
-      <Dialog.Trigger className={buttonClass(danger ? "danger" : "secondary")}>
+    <>
+      <button
+        {...d.triggerProps}
+        ref={ref}
+        className={buttonClass(danger ? "danger" : "secondary")}
+      >
         {trigger}
-      </Dialog.Trigger>
-      <Dialog.Portal>
-        <Dialog.Overlay className={OVERLAY} />
-        <Dialog.Content className="fixed top-1/2 left-1/2 z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-surface p-4 text-text break-words">
-          <Dialog.Title className="m-0 text-lg font-semibold">{title}</Dialog.Title>
-          <Dialog.Description className="mt-1 text-sm text-text-muted">
-            {description}
-          </Dialog.Description>
-          <form action={action} className="mt-4 flex flex-wrap justify-end gap-2">
+      </button>
+      {d.mounted ? (
+        <Suspense fallback={null}>
+          <ConfirmPanel
+            open={d.open}
+            onOpenChange={d.setOpen}
+            triggerRef={ref}
+            contentId={d.contentId}
+            title={title}
+            description={description}
+            confirmLabel={confirmLabel}
+            action={action}
+            danger={danger}
+          >
             {children}
-            <Dialog.Close className={buttonClass("secondary")}>Cancel</Dialog.Close>
-            <Button type="submit" variant={danger ? "danger" : "default"}>
-              {confirmLabel}
-            </Button>
-          </form>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+          </ConfirmPanel>
+        </Suspense>
+      ) : null}
+    </>
   );
 }

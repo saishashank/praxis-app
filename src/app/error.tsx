@@ -2,7 +2,9 @@
 // Generic error page (UX-122): a plain message and the correlation id (Next's error digest) so the
 // Owner can find the entry in the logs. Never the error message or stack: details are Owner-only,
 // written to app_log by src/instrumentation.ts.
-import Link from "next/link";
+// A plain anchor, not next/link: this boundary is loaded on every route, and a client-side Link here
+// costs a separate ~3 KB gzip copy of the Link runtime in every first load (bundle budget, UX-005). After
+// an error a full page load of the home page is also the safer recovery.
 
 export default function ErrorPage({
   error,
@@ -29,9 +31,10 @@ export default function ErrorPage({
         >
           Try again
         </button>
-        <Link href="/" className="inline-flex min-h-10 items-center text-accent underline">
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- see the note at the top of this file */}
+        <a href="/" className="inline-flex min-h-10 items-center text-accent underline">
           Go to the home page
-        </Link>
+        </a>
       </div>
     </main>
   );
