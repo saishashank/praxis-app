@@ -110,7 +110,12 @@ async function storedExtras(
     args: [userId],
   });
   const v = r.rows.length ? parseStored(r.rows[0].prefs_json) : null;
-  return isRecord(v) && isRecord(v.quiet_hours) ? { quiet_hours: v.quiet_hours } : {};
+  if (!isRecord(v)) return {};
+  // Everything that is not one of the D-048 fields stays as stored: quiet hours, the remembered
+  // Strategies sort (M7 T12) and later per-user keys.
+  const keep: Record<string, unknown> = {};
+  for (const k of Object.keys(v)) if (!(FIELDS as string[]).includes(k)) keep[k] = v[k];
+  return keep;
 }
 
 // Whole-patch validation: any unknown key or invalid value rejects everything.
