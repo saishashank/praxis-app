@@ -33,6 +33,9 @@ const ID_RE = /^(\d{4}-\d{2}-\d{2})\.([a-z][a-z_]{0,23})\.(\d{1,2})$/;
 /** `pk:` plus the keyed digest of the readable id (date.profile.rank). */
 export const pickRef = (realId: string): string => "pk:" + opaqueDigest("pk", realId);
 
+/** Re-exported for the reviews loader (section 7a), so this file stays the one page-side importer of src/lib/picks (D-136). */
+export { modelSuccess, successLine };
+
 /** The id shown in links: readable for an unmasked viewer, opaque for a masked one (no date in the URL). */
 const publicPickId = (realId: string, masked: boolean): string =>
   masked ? pickRef(realId) : realId;

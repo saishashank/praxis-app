@@ -7,7 +7,6 @@
 // reference (keyed digest, like `ck-`/`pk:`). Section 7a "New picks" is read from the stored picks with
 // the review's own letters, so "Stock A" is the same stock in every section of the page.
 import { getConfig } from "@/lib/config/store";
-import { modelSuccess, successLine } from "@/lib/picks/success";
 import { listVersions, loadReview, readState } from "@/lib/review/assemble";
 import type { Missing } from "@/lib/review/facts";
 import { activeCodesForDate } from "@/lib/view/active";
@@ -22,7 +21,7 @@ import {
   type MaskedReview,
 } from "@/lib/view/reviews";
 import { dateStaleness } from "@/lib/view/staleness";
-import { pickRef } from "./picks";
+import { modelSuccess, pickRef, successLine } from "./picks";
 import {
   intParam,
   isDateParam,
