@@ -13,6 +13,7 @@ vi.mock("@/lib/auth/guard", () => ({
 const summaryMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/health/summary", () => ({ getHealthSummary: summaryMock }));
 vi.mock("@/lib/db/client", () => ({ mainDb: () => ({}), authDb: () => ({}) }));
+vi.mock("@/app/(app)/health/DayTimelineCheck", () => ({ DayTimelineCheck: () => null })); // M8 T12: async server card, tested on its own
 vi.mock("next/headers", () => ({
   cookies: async () => ({ has: () => false, set: vi.fn() }),
   headers: async () => new Headers(),

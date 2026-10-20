@@ -18,3 +18,7 @@ test-results
 
 # Claude Code agent worktrees (local only)
 .claude/
+
+# StrykerJS (weekly mutation run; nothing is committed)
+.stryker-tmp
+/reports/

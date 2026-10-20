@@ -1,0 +1,4 @@
+{
+  "_comment": "Owner-approved dependency-audit exceptions for the DEVELOPMENT tree only (decision 38); a production high or critical finding can never be excepted. Each entry: package, optional advisory (GHSA id), reason, added and expires (YYYY-MM-DD, at most 30 days apart). An expired or malformed entry FAILS the gate.",
+  "exceptions": []
+}

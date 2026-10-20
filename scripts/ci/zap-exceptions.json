@@ -1,0 +1,4 @@
+{
+  "_comment": "Owner-approved ZAP baseline exceptions (decision 38). Each entry: rule (ZAP rule id), reason (why it is accepted), added and expires (YYYY-MM-DD, at most 30 days apart). An expired or malformed entry FAILS the gate. Never put a URL, header value or cookie in a reason.",
+  "exceptions": []
+}

@@ -13,6 +13,7 @@ import { DataControlForm } from "./DataControlForm";
 import { EmailControlsSection } from "./EmailControlsSection";
 import { WorkerSlotsSection } from "./WorkerSlotsSection";
 import { loadSlotsView, type SlotsView } from "@/lib/golive/slots";
+import { DayTimelineCheck } from "./DayTimelineCheck";
 import { loadAttentionItems } from "@/lib/health/attention";
 import {
   loadEmailControlsView,
@@ -615,6 +616,7 @@ export default async function HealthPage() {
           )}
 
           {owner && <EmailControlsSection v={emailControls} />}
+          <DayTimelineCheck owner={owner} />
 
           {owner && <WorkerSlotsSection view={slotsView} />}
 
