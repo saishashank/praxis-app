@@ -176,14 +176,20 @@ test.describe("security headers on the production build (SEC-012, PLT-036)", () 
       if (/Content Security Policy/i.test(m.text())) violations.push(m.text());
     });
     await page.goto("/signin");
-    const ran = await page.evaluate(() => {
-      const s = document.createElement("script");
-      s.textContent = "window.__injected = true";
-      document.head.appendChild(s);
-      return (window as unknown as { __injected?: boolean }).__injected === true;
+    // Injected MARKUP is the threat (stored or reflected HTML): an inline event handler. With a
+    // nonce and no 'unsafe-inline' / 'unsafe-hashes' the browser must refuse to run it. (A script
+    // element created by already-running code is trusted on purpose under 'strict-dynamic', and
+    // Playwright's evaluate counts as running code, so that is not a meaningful check.)
+    await page.evaluate(() => {
+      const holder = document.createElement("div");
+      holder.innerHTML = '<img src="/does-not-exist.png" onerror="window.__injected = true">';
+      document.body.appendChild(holder);
     });
-    expect(ran).toBe(false);
     await expect.poll(() => violations.length).toBeGreaterThan(0);
+    const ran = await page.evaluate(
+      () => (window as unknown as { __injected?: boolean }).__injected === true,
+    );
+    expect(ran).toBe(false);
   });
 
   test("the page cannot be framed (frame-ancestors none, X-Frame-Options DENY)", async ({

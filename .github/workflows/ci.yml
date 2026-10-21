@@ -100,7 +100,14 @@ jobs:
           tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP/gitleaks" gitleaks
       - name: Scan full git history
         run: |
-          "$RUNNER_TEMP/gitleaks/gitleaks" git --redact --exit-code 1 --no-banner --log-opts="--all" .
+          # On a finding, print only where it is (commit, file, line, rule) so it can be reviewed and,
+          # if it is a test fixture, listed in .gitleaksignore. --redact keeps every value out of the
+          # report; the report file is never uploaded.
+          if ! "$RUNNER_TEMP/gitleaks/gitleaks" git --redact --exit-code 1 --no-banner --log-opts="--all" \
+            --report-format json --report-path "$RUNNER_TEMP/gitleaks-report.json" .; then
+            node -e 'for (const f of JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))) console.log(`${f.Fingerprint}  (rule ${f.RuleID})`)' "$RUNNER_TEMP/gitleaks-report.json"
+            exit 1
+          fi
 
   worker:
     runs-on: ubuntu-latest
