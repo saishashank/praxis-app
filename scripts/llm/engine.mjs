@@ -1,12 +1,20 @@
 // Loads the TypeScript bake-off entry (src/lib/llm/bakeoffCli.ts) from a plain .mjs script. Bundled like
 // scripts/arena/engine.mjs with Vite's SSR build into node_modules/.cache/praxis-bakeoff/ (never
 // committed). Nothing is downloaded; no secret is read here.
+import { randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const OUT_DIR = path.join(ROOT, "node_modules", ".cache", "praxis-bakeoff");
+// One folder per process, so parallel runs never empty each other's bundle (see scripts/arena/engine.mjs).
+const OUT_DIR = path.join(
+  ROOT,
+  "node_modules",
+  ".cache",
+  "praxis-bakeoff",
+  `${process.pid}-${randomBytes(4).toString("hex")}`,
+);
 
 /** Bundle src/lib/llm/bakeoffCli.ts and return its exports ({ bakeoffMain }). */
 export async function loadBakeoff() {
