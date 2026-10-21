@@ -260,7 +260,8 @@ jobs:
           if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
             base="$(git merge-base origin/main HEAD)"
           fi
-          cat coverage/lcov.info worker/coverage/lcov.info > coverage/lcov.merged.info
+          # the Worker report runs with --root worker, so its paths are relative to worker/ (SF:src/…)
+          { cat coverage/lcov.info; sed -E 's#^SF:src[/\]#SF:worker/src/#' worker/coverage/lcov.info; } > coverage/lcov.merged.info
           npm run test:diffcov -- --lcov coverage/lcov.merged.info --base "$base"
       - name: Test map (TST-133; the summary lists the covered IDs)
         run: npm run test:map

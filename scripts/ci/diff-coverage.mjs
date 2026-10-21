@@ -108,7 +108,8 @@ export function measure(changed, cov, { include = DEFAULT_INCLUDE } = {}) {
     missing: [],
   };
   for (const [file, set] of [...changed].sort(([a], [b]) => a.localeCompare(b))) {
-    if (!SOURCE_EXT.test(file) || file.endsWith(".d.ts") || /\.(?:test|spec)\./.test(file))
+    // type-declaration files (.d.ts, .d.mts, .d.cts) hold no runtime code, so no test can cover them
+    if (!SOURCE_EXT.test(file) || /\.d\.[cm]?ts$/.test(file) || /\.(?:test|spec)\./.test(file))
       continue;
     if (!include.some((p) => file.startsWith(p))) continue;
     const c = cov.get(file);

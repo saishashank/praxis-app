@@ -101,3 +101,14 @@ test("CLI: a later option overrides an earlier one (npm run test:diffcov -- --ba
   );
   assert.doesNotThrow(() => run("--lcov", dir("partial.lcov"), "--lcov", dir("full.lcov")));
 });
+
+test("type-declaration files (.d.ts, .d.mts, .d.cts) are never required to have coverage", () => {
+  const changed = new Map([
+    ["src/lib/a.d.ts", new Set([1])],
+    ["src/lib/b.d.mts", new Set([1, 2])],
+    ["worker/src/c.d.cts", new Set([3])],
+  ]);
+  const m = measure(changed, new Map());
+  assert.deepEqual(m.missing, []);
+  assert.equal(evaluate(m).ok, true);
+});
