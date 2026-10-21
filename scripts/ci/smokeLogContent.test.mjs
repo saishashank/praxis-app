@@ -18,7 +18,7 @@ const VALUES = {
   TURSO_MAIN_TOKEN: "turso-token-VALUE-0123456789abcdef0123456789",
   RESEND_API_KEY: "re_RESENDKEYVALUE0123456789",
   OWNER_EMAIL: "owner.person@example.com",
-  OWNER_RECOVERY_EMAIL: "recovery.person@example.org",
+  OWNER_RECOVERY_EMAIL: "recovery.person@example.invalid",
   ACTIONS_HMAC_SECRET: HEX,
   PII_HASH_KEY: "cd".repeat(32),
   BACKUP_PUBLIC_KEY: AGE,

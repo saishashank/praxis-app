@@ -116,7 +116,7 @@ test("missing configuration names the variable, never a value", async () => {
 test("the log scanner itself catches each kind of leak (so the checks above mean something)", () => {
   assert.deepEqual(leaks("see https://x.test/a"), ["url"]);
   assert.ok(leaks("host foo.vercel.app").includes("hostname"));
-  assert.ok(leaks("mail a.b@c.org").includes("email"));
+  assert.ok(leaks("mail a.b@c.invalid").includes("email"));
   assert.ok(leaks(`key ${"a1".repeat(20)}`).includes("token-like string"));
   assert.deepEqual(leaks("row ROWCONTENT-1", ["ROWCONTENT-1"]), ["seeded value #1"]);
   assert.deepEqual(leaks("maintenance: ok (HTTP 200) prunedRuns=1"), []);
