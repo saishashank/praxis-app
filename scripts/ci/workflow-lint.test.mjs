@@ -287,11 +287,11 @@ test("the real .github/workflows: no open finding once the recorded exceptions a
   assert.deepEqual(r.problems, []);
   assert.deepEqual(r.stale, []);
   assert.deepEqual(r.open.map(format), []);
-  // The two Owner-only deploy files keep their npm cache until the Owner decides (D-153 style).
-  assert.deepEqual(r.pending.map((f) => f.file).sort(), [
-    "deploy-production.yml",
-    "deploy-staging.yml",
-  ]);
+  // The deploy files lost their npm cache (Owner request 2026-10-21, D-165): nothing is pending.
+  assert.deepEqual(
+    r.pending.map((f) => f.file),
+    [],
+  );
   // Rules that could leak a secret or admit a fork must never even need an exception.
   const never = new Set([
     "yaml-parse",

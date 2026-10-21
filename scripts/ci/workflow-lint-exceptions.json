@@ -1,23 +1,4 @@
 {
   "_comment": "Known findings of scripts/ci/workflow-lint.mjs, by file, job, step (1-based step number) and rule. An entry with approvedBy \"pending\" is NOT an approval: the lint warns on normal runs and FAILS with --release (the release gate), exactly like licence-exceptions.json (D-153). The Owner either fixes the workflow (then deletes the entry) or approves it: set approvedBy to a name and add a date (YYYY-MM-DD). Each entry: { file, job, step, rule, reason, approvedBy, date }.",
-  "exceptions": [
-    {
-      "file": "deploy-production.yml",
-      "job": "deploy",
-      "step": 2,
-      "rule": "secret-job-storage",
-      "reason": "Owner-only file; Owner to decide at the M8 review point. The deploy job holds an environment and its setup-node step uses cache: npm (worker/package-lock.json).",
-      "approvedBy": "pending",
-      "date": null
-    },
-    {
-      "file": "deploy-staging.yml",
-      "job": "deploy",
-      "step": 2,
-      "rule": "secret-job-storage",
-      "reason": "Owner-only file; Owner to decide at the M8 review point. The deploy job holds an environment and its setup-node step uses cache: npm (worker/package-lock.json).",
-      "approvedBy": "pending",
-      "date": null
-    }
-  ]
+  "exceptions": []
 }
