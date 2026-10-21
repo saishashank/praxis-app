@@ -301,8 +301,12 @@ export const asicUrl = (date) => ASIC_URL_TEMPLATE.replace("{yyyymmdd}", date.re
 export const asicPublishedAt = (/** @type {string} */ asOf) =>
   `${addWeekdays(asOf, ASIC_PUBLISH_LAG_WEEKDAYS)}T23:59:59.000Z`;
 
-/** Minimal RFC 4180 record splitter; quoted fields may hold commas. @param {string} line */
-function splitCsv(line) {
+/**
+ * Minimal RFC 4180 record splitter; quoted fields may hold the delimiter. ASIC files up to mid-2022
+ * are tab-separated (and UTF-16, decoded by the fetcher), later ones comma-separated.
+ * @param {string} line @param {string} [delim]
+ */
+function splitCsv(line, delim = ",") {
   const out = [];
   let cur = "";
   let q = false;
@@ -315,7 +319,7 @@ function splitCsv(line) {
       } else if (c === '"') q = false;
       else cur += c;
     } else if (c === '"') q = true;
-    else if (c === ",") {
+    else if (c === delim) {
       out.push(cur);
       cur = "";
     } else cur += c;
@@ -354,7 +358,9 @@ export function parseAsicCsv(text, asOf) {
     .replace(/^﻿/, "")
     .split(/\r?\n/)
     .filter((l) => l.trim() !== "");
-  const head = lines.length ? splitCsv(lines[0]).map(normHeader) : [];
+  // Tab-separated when the header line has tabs and no comma (the older ASIC layout).
+  const delim = lines.length && lines[0].includes("	") && !lines[0].includes(",") ? "	" : ",";
+  const head = lines.length ? splitCsv(lines[0], delim).map(normHeader) : [];
   const col = Object.fromEntries(Object.entries(HEADERS).map(([k, n]) => [k, findCol(head, n)]));
   if (col.code < 0 || col.short < 0 || col.total < 0) return { error: "no_header" };
   const published = asicPublishedAt(asOf);
@@ -362,7 +368,7 @@ export function parseAsicCsv(text, asOf) {
   const seen = new Set();
   let skipped = 0;
   for (const line of lines.slice(1)) {
-    const c = splitCsv(line);
+    const c = splitCsv(line, delim);
     const code = (c[col.code] ?? "").trim();
     const short = num(c[col.short]);
     const total = num(c[col.total]);

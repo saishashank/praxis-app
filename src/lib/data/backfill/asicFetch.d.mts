@@ -17,3 +17,4 @@ export function fetchAsicMonths(o: {
   sleep?: (ms: number) => Promise<void>;
   minGapMs?: number;
 }): Promise<{ months: AsicMonth[]; stopped: AsicStop }>;
+export function decodeText(buf: Uint8Array): string;
