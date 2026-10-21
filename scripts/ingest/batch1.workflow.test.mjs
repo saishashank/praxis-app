@@ -98,8 +98,14 @@ test("the Python fetch step has no secrets and only the throttle values from the
   assert.ok(!JSON.stringify(f).includes("secrets."));
   assert.ok(!JSON.stringify(f).includes("TURSO"));
   const install = byName("Install the fetcher (pinned)");
-  assert.equal(install.run, "pip install --no-cache-dir -r scripts/ingest/requirements.txt");
-  assert.match(read("scripts/ingest/requirements.txt"), /^yfinance==\d+\.\d+\.\d+$/m);
+  assert.equal(
+    install.run,
+    "pip install --no-cache-dir --require-hashes -r scripts/ingest/requirements.txt",
+  );
+  // M8 T17: the install set is hashed (SEC-107); the direct requirement stays an exact pin.
+  const req = read("scripts/ingest/requirements.txt");
+  assert.match(req, /^yfinance==\d+\.\d+\.\d+ \\\r?$/m);
+  assert.match(req, /--hash=sha256:[0-9a-f]{64}/);
 });
 
 test("the ASIC fetch step has no secrets and runs between the fetch and the ingest (M4 T3)", () => {

@@ -1,10 +1,12 @@
 // M8 T6 (decision 40, AT-05a): workflow lint rules on fixture YAML, plus the real workflows.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { lintDir, lintWorkflow, format } from "./workflow-lint.mjs";
+import { applyExceptions, lintDir, lintWorkflow, format } from "./workflow-lint.mjs";
+import { spawnSync } from "node:child_process";
+import os from "node:os";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dir = path.join(here, "fixtures/workflow-lint");
@@ -154,11 +156,143 @@ test("findings print file, rule and place only: never a command or a value", () 
   assert.ok(!line.includes("TOKEN_VALUE_9") && !line.includes("s3cr3t"));
 });
 
-test("the real .github/workflows: no finding of a rule that could leak a secret or admit a fork", () => {
+test("checkout token: actions/checkout with: token: a single secret is allowed, nothing else is", () => {
+  const head = "on: push\npermissions: {}\njobs:\n  a:\n    steps:\n";
+  const expr = (name) => "$" + `{{ secrets.${name} }}`;
+  const ok = `${head}      - uses: actions/checkout@${SHA}\n        with:\n          token: ${expr("READ_TOKEN")}\n`;
+  assert.deepEqual(lintWorkflow("x.yml", ok), []);
+  // another action, another key, or an expression that mixes in other text is still a finding
+  const other = ok.replace("actions/checkout@", "actions/github-script@");
+  assert.deepEqual(ruleList(lintWorkflow("x.yml", other)), ["secret-placement"]);
+  const key = ok.replace("token:", "repository:");
+  assert.deepEqual(ruleList(lintWorkflow("x.yml", key)), ["secret-placement"]);
+  const mixed = ok.replace("READ_TOKEN }}", "READ_TOKEN }}-x");
+  assert.deepEqual(ruleList(lintWorkflow("x.yml", mixed)), ["secret-placement"]);
+  const nested = `${head}      - uses: actions/checkout@${SHA}\n        with:\n          path: x\n        env:\n          token: ${expr("T")}\n`;
+  assert.deepEqual(lintWorkflow("x.yml", nested), []); // a step env: stays allowed
+});
+
+const finding = (file, rule, where) => ({ file, rule, where, message: "m" });
+const exc = (o = {}) => ({
+  file: "deploy-x.yml",
+  job: "deploy",
+  step: 2,
+  rule: "secret-job-storage",
+  reason: "Owner-only file; Owner to decide",
+  approvedBy: "pending",
+  date: null,
+  ...o,
+});
+const F1 = finding("deploy-x.yml", "secret-job-storage", "job deploy, step 2 (Setup)");
+const counts = (r) => [r.open.length, r.pending.length, r.approved.length];
+
+test("exceptions: a pending entry moves the finding from open to pending", () => {
+  const r = applyExceptions([F1], { exceptions: [exc()] });
+  assert.deepEqual(counts(r), [0, 1, 0]);
+  assert.deepEqual(r.problems, []);
+});
+
+test("exceptions: an Owner-approved entry with a date is approved; one without a date is a problem", () => {
+  const ok = applyExceptions([F1], {
+    exceptions: [exc({ approvedBy: "Owner", date: "2026-10-22" })],
+  });
+  assert.deepEqual(counts(ok), [0, 0, 1]);
+  const bad = applyExceptions([F1], { exceptions: [exc({ approvedBy: "Owner", date: null })] });
+  assert.equal(bad.problems.length, 1);
+  assert.equal(bad.open.length, 1);
+});
+
+test("exceptions: file, job, step and rule must all match; unmatched entries are stale", () => {
+  for (const change of [
+    { file: "other.yml" },
+    { job: "other" },
+    { step: 3 },
+    { rule: "npm-install" },
+  ]) {
+    const r = applyExceptions([F1], { exceptions: [exc(change)] });
+    assert.equal(r.open.length, 1, JSON.stringify(change));
+    assert.equal(r.stale.length, 1, JSON.stringify(change));
+  }
+});
+
+test("exceptions: malformed entries and a missing list are problems, never a silent pass", () => {
+  assert.equal(applyExceptions([F1], {}).problems.length, 1);
+  assert.equal(applyExceptions([F1], null).open.length, 1);
+  for (const bad of [
+    { reason: "short" },
+    { step: "2" },
+    { step: 0 },
+    { file: "x.txt" },
+    { approvedBy: "" },
+  ]) {
+    const r = applyExceptions([F1], { exceptions: [exc(bad)] });
+    assert.equal(r.problems.length, 1, JSON.stringify(bad));
+    assert.equal(r.open.length, 1, JSON.stringify(bad));
+  }
+});
+
+test("exceptions: the reason text is never printed", () => {
+  const r = applyExceptions([F1], { exceptions: [exc({ reason: "SECRET-LOOKING-REASON-TEXT" })] });
+  assert.ok(!JSON.stringify([r.stale, r.problems]).includes("SECRET-LOOKING"));
+});
+
+test("CLI: pending exceptions warn and pass on a normal run, and fail with --release", () => {
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "wflint-"));
+  const wfDir = path.join(tmp, "wf");
+  mkdirSync(wfDir);
+  writeFileSync(
+    path.join(wfDir, "deploy-x.yml"),
+    readFileSync(path.join(dir, "bad-secret-storage.yml"), "utf8"),
+  );
+  const raw = lintWorkflow("deploy-x.yml", readFileSync(path.join(wfDir, "deploy-x.yml"), "utf8"));
+  assert.ok(raw.length > 0);
+  const all = raw.map((x) => ({
+    file: x.file,
+    job: /^job (\S+?)(?:,|$)/.exec(x.where)[1],
+    step: Number(/step (\d+)/.exec(x.where)[1]),
+    rule: x.rule,
+    reason: "Test fixture entry for the lint",
+    approvedBy: "pending",
+    date: null,
+  }));
+  const excFile = path.join(tmp, "exc.json");
+  writeFileSync(excFile, JSON.stringify({ exceptions: all }));
+  const script = path.join(here, "workflow-lint.mjs");
+  const run = (...a) =>
+    spawnSync(process.execPath, [script, "--dir", wfDir, "--exceptions", excFile, ...a], {
+      encoding: "utf8",
+    });
+  const normal = run();
+  assert.equal(normal.status, 0, normal.stdout + normal.stderr);
+  assert.match(normal.stderr, /PENDING deploy-x\.yml: \[secret-job-storage\]/);
+  const release = run("--release");
+  assert.equal(release.status, 1);
+  assert.match(release.stderr, /fails with --release/);
+  // no exceptions entries at all: the findings are open and the run fails
+  const emptyFile = path.join(tmp, "empty.json");
+  writeFileSync(emptyFile, JSON.stringify({ exceptions: [] }));
+  const none = spawnSync(process.execPath, [script, "--dir", wfDir, "--exceptions", emptyFile], {
+    encoding: "utf8",
+  });
+  assert.equal(none.status, 1);
+});
+
+test("the real .github/workflows: no open finding once the recorded exceptions are applied", () => {
   const { files, findings } = lintDir(path.resolve(here, "../../.github/workflows"));
   assert.ok(files.length >= 20);
-  // Pip hashes, the fixtures-job cache and its checkout token and the deploy-job npm cache are
-  // known and reported to the Owner (M8 T6 report); everything below must stay at zero.
+  const exceptions = JSON.parse(
+    readFileSync(path.join(here, "workflow-lint-exceptions.json"), "utf8"),
+  );
+  const r = applyExceptions(findings, exceptions);
+  assert.deepEqual(r.problems, []);
+  assert.deepEqual(r.stale, []);
+  assert.deepEqual(r.open.map(format), []);
+  // The two Owner-only deploy files keep their npm cache until the Owner decides (D-153 style).
+  assert.deepEqual(r.pending.map((f) => f.file).sort(), [
+    "deploy-production.yml",
+    "deploy-staging.yml",
+  ]);
+  // Rules that could leak a secret or admit a fork must never even need an exception.
   const never = new Set([
     "yaml-parse",
     "permissions-missing",
@@ -171,6 +305,17 @@ test("the real .github/workflows: no finding of a rule that could leak a secret 
     "schedule-trigger",
     "artifact-upload",
     "npm-install",
+    "secret-placement",
+    "pip-hashes",
   ]);
   assert.deepEqual(findings.filter((f) => never.has(f.rule)).map(format), []);
+});
+
+test("the exceptions file lists only pending deploy-file entries (Owner-only files)", () => {
+  const e = JSON.parse(readFileSync(path.join(here, "workflow-lint-exceptions.json"), "utf8"));
+  for (const x of e.exceptions) {
+    assert.match(x.file, /^deploy-(staging|production)\.yml$/);
+    assert.equal(x.approvedBy, "pending");
+    assert.match(x.reason, /Owner to decide at the M8 review point/);
+  }
 });

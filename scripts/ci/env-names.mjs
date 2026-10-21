@@ -47,6 +47,10 @@ export const NOT_CONFIG = new Set([
   "E2E_DAY_DATE",
   "DIFF_COVERAGE_MIN", // CI thresholds of scripts/ci/diff-coverage.mjs (M8 T3)
   "DIFF_BRANCH_MIN",
+  "HEAD_SHA", // per-run commit ids passed to scripts/ci in ci.yml (M8 T17), not configuration
+  "PR_BASE_SHA",
+  "PUSH_BEFORE_SHA",
+  "PRAXIS_COVERAGE_RUN", // timing slack for two tests under coverage (M8 T17), set only by the coverage job
   "ZAP_OUT", // per-run report folder of scripts/ci/zap-run.mjs (M8 T12), not configuration
   "TARGET",
   "TARGETS",

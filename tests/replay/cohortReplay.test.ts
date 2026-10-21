@@ -254,6 +254,8 @@ describe("replayCohorts on three synthetic years", () => {
     // per start: 12 E + 6 x slots C2 + 6 x slots C3 (base) and 6 E-L + 6 x slots C3 (reality)
     expect(r.cohorts.length).toBe(starts * (12 + 6 * slots + 6 * slots + 6 + 6 * slots));
     // the replay itself (no database, no scorecards) stays inside the 60 s of the task
-    expect(seconds).toBeLessThan(60);
+    // M8 T17: v8 coverage instrumentation slows this loop; the coverage job sets PRAXIS_COVERAGE_RUN=1.
+    const slack = process.env.PRAXIS_COVERAGE_RUN === "1" ? 3 : 1;
+    expect(seconds).toBeLessThan(60 * slack);
   }, 180000);
 });

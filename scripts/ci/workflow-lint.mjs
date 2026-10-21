@@ -13,7 +13,9 @@
 //   [pull-request-target]   the `pull_request_target` trigger
 //   [run-expression]        `${{ secrets.* }}`, `${{ inputs.* }}`, `${{ github.event.* }}` or
 //                           `${{ github.head_ref }}` inside `run:` text (script injection / leak)
-//   [secret-placement]      `secrets.*` anywhere except a step's `env:` (also `secrets: inherit`)
+//   [secret-placement]      `secrets.*` anywhere except a step's `env:` (also `secrets: inherit`).
+//                           One exception: `actions/checkout` `with: token: ${{ secrets.NAME }}` (the
+//                           only way to give a checkout a token; the value must be that one expression)
 //   [secret-job-storage]    a job that holds secrets (references `secrets.*` or has an
 //                           `environment:`) uses actions/upload-artifact, actions/cache or a
 //                           setup action with `cache:`
@@ -28,7 +30,15 @@
 //   [npm-install]           `npm install` / `npm i` (only `npm ci`)
 //   [pip-hashes]            `pip install` without `--require-hashes`
 //
-// Usage: node scripts/ci/workflow-lint.mjs [--dir <workflows dir>]   exit 1 on any finding.
+// Exceptions: scripts/ci/workflow-lint-exceptions.json lists known findings by file, job, step (the
+// 1-based step number) and rule, each with a reason. An entry with approvedBy "pending" is NOT an
+// approval: the finding is printed as PENDING and is a warning on normal runs, a failure with
+// --release (as for licence-exceptions.json, D-153). An entry approved by the Owner (with a date)
+// hides exactly that finding. An entry that matches nothing is reported as stale (a warning).
+//
+// Usage: node scripts/ci/workflow-lint.mjs [--dir <workflows dir>] [--exceptions <file>] [--release]
+//   exit 1 on any finding that has no exception, on a malformed exceptions file, and with
+//   --release also on any pending exception.
 // Output: one line per finding, `file: [rule] where: sentence`. It never prints a step's command
 // text or any value, only file, job and step names/positions.
 import { readdirSync, readFileSync } from "node:fs";
@@ -77,6 +87,24 @@ function* leaves(value, p = []) {
     for (let i = 0; i < value.length; i++) yield* leaves(value[i], [...p, i]);
   else if (isObj(value)) for (const k of Object.keys(value)) yield* leaves(value[k], [...p, k]);
   else yield [p, value];
+}
+
+// `actions/checkout` takes its token only through `with: token:`; allow that one place, and only
+// when the value is exactly one `${{ secrets.NAME }}` expression.
+const SINGLE_SECRET = /^\s*\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*\s*\}\}\s*$/;
+function isCheckoutToken(wf, p, value) {
+  if (
+    p[0] !== "jobs" ||
+    p[2] !== "steps" ||
+    p[4] !== "with" ||
+    p[5] !== "token" ||
+    p.length !== 6
+  ) {
+    return false;
+  }
+  const step = wf.jobs?.[p[1]]?.steps?.[p[3]];
+  const uses = isObj(step) && typeof step.uses === "string" ? step.uses.split("@")[0] : "";
+  return uses === "actions/checkout" && SINGLE_SECRET.test(value);
 }
 
 const stepLabel = (job, i, s) => `job ${job}, step ${i + 1}${s?.name ? ` (${s.name})` : ""}`;
@@ -175,7 +203,7 @@ export function lintWorkflow(file, text, opts = {}) {
   for (const [p, v] of leaves(wf)) {
     if (typeof v !== "string" || !SECRET_REF.test(v)) continue;
     const inStepEnv = p[0] === "jobs" && p[2] === "steps" && p[4] === "env";
-    if (!inStepEnv) {
+    if (!inStepEnv && !isCheckoutToken(wf, p, v)) {
       add(
         "secret-placement",
         p[0] === "jobs" ? `job ${p[1]}, ${p.slice(2).join(".")}` : `workflow, ${p.join(".")}`,
@@ -293,19 +321,125 @@ export function lintDir(dir, opts) {
   return { files, findings };
 }
 
+const EXC_RULE = /^[a-z][a-z-]*$/;
+const EXC_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Splits findings into the ones still open, the ones with a pending exception and the ones the
+ * Owner approved; also reports malformed and stale exception entries. Pure.
+ * @param {{ file: string, rule: string, where: string, message: string }[]} findings
+ * @param {unknown} exceptionsFile parsed workflow-lint-exceptions.json
+ */
+export function applyExceptions(findings, exceptionsFile) {
+  const problems = [];
+  const list =
+    exceptionsFile && typeof exceptionsFile === "object" && Array.isArray(exceptionsFile.exceptions)
+      ? exceptionsFile.exceptions
+      : null;
+  if (!list) {
+    return {
+      open: findings,
+      pending: [],
+      approved: [],
+      stale: [],
+      problems: ["the exceptions file has no exceptions list"],
+    };
+  }
+  const entries = [];
+  list.forEach((e, i) => {
+    const at = `exception ${i + 1}`;
+    const ok =
+      isObj(e) &&
+      typeof e.file === "string" &&
+      /\.ya?ml$/.test(e.file) &&
+      typeof e.job === "string" &&
+      e.job !== "" &&
+      Number.isInteger(e.step) &&
+      e.step >= 1 &&
+      typeof e.rule === "string" &&
+      EXC_RULE.test(e.rule);
+    if (!ok) {
+      problems.push(`${at}: needs file (.yml), job, step (a number from 1) and rule`);
+      return;
+    }
+    if (typeof e.reason !== "string" || e.reason.trim().length < 10) {
+      problems.push(`${at}: needs a reason (at least 10 characters)`);
+      return;
+    }
+    if (e.approvedBy === "pending") {
+      entries.push({ ...e, used: false });
+    } else if (
+      typeof e.approvedBy === "string" &&
+      e.approvedBy.trim() !== "" &&
+      EXC_DATE.test(e.date ?? "")
+    ) {
+      entries.push({ ...e, used: false });
+    } else {
+      problems.push(`${at}: approvedBy must be "pending", or a name with a YYYY-MM-DD date`);
+    }
+  });
+  const open = [];
+  const pending = [];
+  const approved = [];
+  for (const f of findings) {
+    const job = /^job (\S+?)(?:,|$)/.exec(f.where)?.[1];
+    const step = Number(/step (\d+)/.exec(f.where)?.[1]);
+    const hit = entries.find(
+      (e) => e.file === f.file && e.rule === f.rule && e.job === job && e.step === step,
+    );
+    if (!hit) open.push(f);
+    else {
+      hit.used = true;
+      (hit.approvedBy === "pending" ? pending : approved).push(f);
+    }
+  }
+  const stale = entries
+    .filter((e) => !e.used)
+    .map((e) => `${e.file} job ${e.job} step ${e.step} [${e.rule}]`);
+  return { open, pending, approved, stale, problems };
+}
+
 export function format(f) {
   return `${f.file}: [${f.rule}] ${f.where}: ${f.message}`;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const i = process.argv.indexOf("--dir");
-  const dir = i > 0 ? path.resolve(process.argv[i + 1]) : path.join(ROOT, ".github/workflows");
+  const arg = (name) => {
+    const i = process.argv.indexOf(name);
+    return i > 0 ? process.argv[i + 1] : undefined;
+  };
+  const dir = arg("--dir") ? path.resolve(arg("--dir")) : path.join(ROOT, ".github/workflows");
+  const excFile = arg("--exceptions")
+    ? path.resolve(arg("--exceptions"))
+    : path.join(ROOT, "scripts/ci/workflow-lint-exceptions.json");
+  const release = process.argv.includes("--release");
   const { files, findings } = lintDir(dir);
-  for (const f of findings) console.log(format(f));
+  let exceptions = { exceptions: [] };
+  try {
+    exceptions = JSON.parse(readFileSync(excFile, "utf8"));
+  } catch (e) {
+    if (e?.code !== "ENOENT") exceptions = null; // unreadable or not JSON: reported below
+  }
+  const r = exceptions
+    ? applyExceptions(findings, exceptions)
+    : {
+        open: findings,
+        pending: [],
+        approved: [],
+        stale: [],
+        problems: ["the exceptions file is not valid JSON"],
+      };
+  for (const f of r.open) console.log(format(f));
+  for (const f of r.pending) {
+    console.warn(
+      `PENDING ${format(f)} (Owner approval pending${release ? "; fails with --release" : ""})`,
+    );
+  }
+  for (const s of r.stale) console.warn(`STALE exception matches no finding: ${s}`);
+  for (const p of r.problems) console.log(`workflow-lint exceptions: ${p}`);
+  const failures = r.open.length + r.problems.length + (release ? r.pending.length : 0);
   console.log(
-    findings.length === 0
-      ? `workflow-lint: ${files.length} workflow(s), no findings`
-      : `workflow-lint: ${files.length} workflow(s), ${findings.length} finding(s)`,
+    `workflow-lint: ${files.length} workflow(s), ${r.open.length} finding(s), ${r.pending.length} pending Owner approval, ${r.approved.length} approved exception(s)`,
   );
-  process.exit(findings.length === 0 ? 0 : 1);
+  process.exit(failures === 0 ? 0 : 1);
 }

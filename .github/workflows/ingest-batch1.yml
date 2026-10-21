@@ -70,7 +70,7 @@ jobs:
           python-version: "3.12"
       - name: Install the fetcher (pinned)
         if: steps.plan.outputs.fetch == 'true'
-        run: pip install --no-cache-dir -r scripts/ingest/requirements.txt
+        run: pip install --no-cache-dir --require-hashes -r scripts/ingest/requirements.txt
       # No secrets here: this step only talks to the market-data source (DAT-103) and writes
       # bars.json. The throttle values come from the plan step's outputs, which are not secret.
       - name: Fetch bars (no secrets)

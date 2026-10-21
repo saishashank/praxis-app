@@ -19,6 +19,8 @@ const SECRET = "7".repeat(64);
 const APP = "https://praxis-app.example.test";
 const UA = "praxis-sentinel-test (contact: owner@example.test)";
 const MIN = 60_000;
+// M8 T17: v8 coverage instrumentation slows the CPU measurements; the coverage job sets PRAXIS_COVERAGE_RUN=1.
+const COVERAGE_SLACK = process.env.PRAXIS_COVERAGE_RUN === "1" ? 4 : 1;
 const ENV: RouteEnv = {
   PRAXIS_ENV: "production",
   TURSO_MAIN_URL: TURSO_URL,
@@ -572,7 +574,7 @@ describe("TST-124: the scheduled handler with every slot enabled stays inside th
     await measure(at(date, hm(best.m), 11), 3); // warm-up (module and JIT)
     const r = await measure(at(date, hm(best.m), 11), 9);
     expect(r.subs).toBeLessThanOrEqual(50 - 10); // PLT-070: 50 subrequests, margin of 10
-    expect(r.median).toBeLessThan(10 * 0.5); // PLT-070: 10 ms CPU; assert half with margin
+    expect(r.median).toBeLessThan(10 * 0.5 * COVERAGE_SLACK); // PLT-070: 10 ms CPU; assert half with margin
   });
 
   it("a simulated pile-up: every M5 route slot, the clock, the ASX poll and the self-check due in the same minute", async () => {
@@ -596,7 +598,7 @@ describe("TST-124: the scheduled handler with every slot enabled stays inside th
     await measure(t, 3);
     const r = await measure(t, 9);
     expect(r.subs).toBeLessThanOrEqual(50);
-    expect(r.median).toBeLessThan(10 * 0.8);
+    expect(r.median).toBeLessThan(10 * 0.8 * COVERAGE_SLACK);
     // and the work really happened: app posts, GitHub dispatches and the ASX poll all ran
     expect(appCalls.length).toBeGreaterThanOrEqual(3);
     expect(net.github.length).toBeGreaterThanOrEqual(5);

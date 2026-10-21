@@ -155,8 +155,9 @@ export function evaluate(m, { lines = DEFAULT_LINES, branches = DEFAULT_BRANCHES
 }
 
 function main(argv) {
+  // The LAST occurrence wins, so `npm run test:diffcov -- --base <ref>` overrides the script defaults.
   const arg = (n) => {
-    const i = argv.indexOf(n);
+    const i = argv.lastIndexOf(n);
     return i >= 0 ? argv[i + 1] : undefined;
   };
   const root = path.resolve(arg("--root") ?? process.cwd());

@@ -48,7 +48,7 @@
         id: fetch
         if: steps.plan.outputs.fetch == 'true'
         run: |
-          pip install -r scripts/ingest/requirements.txt
+          pip install --require-hashes -r scripts/ingest/requirements.txt
           python scripts/backfill/fetch_prices.py --plan plan.json --output prices.json
       - name: Write the month file and move the cursor
         if: steps.plan.outputs.fetch == 'true'

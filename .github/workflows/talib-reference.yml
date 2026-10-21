@@ -25,6 +25,6 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install TA-Lib (pinned)
-        run: pip install TA-Lib==0.6.4 numpy==2.2.6
+        run: pip install --require-hashes -r scripts/agents/requirements-talib.txt
       - name: Print the reference fixture
         run: python scripts/agents/talib_reference.py

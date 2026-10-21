@@ -37,8 +37,12 @@ test("actions are pinned to full SHAs; TA-Lib and numpy are pinned versions", ()
     assert.match(s.uses, /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/, s.uses);
   }
   const install = job.steps.find((s) => String(s.run).includes("pip install"));
-  assert.match(install.run, /TA-Lib==\d+\.\d+\.\d+/);
-  assert.match(install.run, /numpy==\d+\.\d+\.\d+/);
+  // M8 T17: the install set is a hashed requirements file (SEC-107).
+  assert.match(install.run, /--require-hashes -r scripts\/agents\/requirements-talib\.txt/);
+  const req = readFileSync(path.join(root, "scripts/agents/requirements-talib.txt"), "utf8");
+  assert.match(req, /^ta-lib==\d+\.\d+\.\d+ \\\r?$/m);
+  assert.match(req, /^numpy==\d+\.\d+\.\d+ \\\r?$/m);
+  assert.match(req, /--hash=sha256:[0-9a-f]{64}/);
   assert.ok(job.steps.some((s) => s.run === "python scripts/agents/talib_reference.py"));
 });
 

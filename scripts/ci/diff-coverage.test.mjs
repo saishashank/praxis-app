@@ -88,3 +88,16 @@ test("CLI: exit codes follow the verdict", () => {
     (e) => e.status === 1,
   );
 });
+
+test("CLI: a later option overrides an earlier one (npm run test:diffcov -- --base <ref>)", () => {
+  const script = fileURLToPath(new URL("./diff-coverage.mjs", import.meta.url));
+  const dir = (n) => fileURLToPath(new URL(`./fixtures/diffcov/${n}`, import.meta.url));
+  // the defaults point at the failing report; the override at the passing one
+  const run = (...a) =>
+    execFileSync(process.execPath, [script, "--diff", dir("change.diff"), ...a], { stdio: "pipe" });
+  assert.throws(
+    () => run("--lcov", dir("partial.lcov")),
+    (e) => e.status === 1,
+  );
+  assert.doesNotThrow(() => run("--lcov", dir("partial.lcov"), "--lcov", dir("full.lcov")));
+});
