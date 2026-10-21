@@ -3,12 +3,21 @@
 // bundled first with Vite's SSR build (already a dev dependency through Vitest) into
 // node_modules/.cache/praxis-arena/, a folder that is never committed and that resolves
 // "@libsql/client" from the repo's node_modules. Nothing is downloaded; no secret is read here.
+import { randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const OUT_DIR = path.join(ROOT, "node_modules", ".cache", "praxis-arena");
+// One folder per process: parallel test files (signals, close-books) used to share one folder,
+// and `emptyOutDir` of one build deleted the bundle the other was about to import.
+const OUT_DIR = path.join(
+  ROOT,
+  "node_modules",
+  ".cache",
+  "praxis-arena",
+  `${process.pid}-${randomBytes(4).toString("hex")}`,
+);
 
 /** Bundle src/lib/arena/cli.ts and return its exports ({ closeBooksMain, replayMain }). */
 export async function loadEngine() {

@@ -2,12 +2,20 @@
 // bundled with Vite's SSR build exactly like scripts/watchdog/lib.mjs: into
 // node_modules/.cache/praxis-e2e-day/ (never committed), "@libsql/client" resolved from the repo's
 // node_modules. Nothing is downloaded; no secret is read here.
+import { randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const OUT_DIR = path.join(ROOT, "node_modules", ".cache", "praxis-e2e-day");
+// One folder per process, so parallel runs never empty each other's bundle (see scripts/arena/engine.mjs).
+const OUT_DIR = path.join(
+  ROOT,
+  "node_modules",
+  ".cache",
+  "praxis-e2e-day",
+  `${process.pid}-${randomBytes(4).toString("hex")}`,
+);
 
 export async function loadDeadlines() {
   const { build } = await import("vite");
