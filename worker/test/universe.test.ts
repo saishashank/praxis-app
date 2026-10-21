@@ -101,11 +101,11 @@ beforeEach(() => {
   };
   f = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
-    if (url.startsWith("https://www.asx.com.au/")) {
+    if (new URL(url).origin === "https://www.asx.com.au") {
       asx.calls.push({ url, init: init ?? {} });
       return asx.reply();
     }
-    if (url.startsWith(APP)) {
+    if (new URL(url).origin === APP) {
       app.calls.push({ url, init: init ?? {} });
       return app.reply();
     }
@@ -179,7 +179,7 @@ describe("request building", () => {
   it("identifying User-Agent, plain GET, no cookies, no redirects, https, fixed URL", () => {
     const r = buildListedCompaniesRequest(UA)!;
     expect(r.url).toBe(ASX_LISTED_COMPANIES_URL);
-    expect(r.url.startsWith("https://www.asx.com.au/")).toBe(true);
+    expect(new URL(r.url).origin).toBe("https://www.asx.com.au");
     expect(r.init.method).toBe("GET");
     expect(r.init.redirect).toBe("manual");
     expect(r.init.headers["User-Agent"]).toBe(UA);

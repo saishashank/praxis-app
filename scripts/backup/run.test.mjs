@@ -389,7 +389,7 @@ test("GitHub network errors and malformed responses fail with a generic summary"
     };
     const lines = [];
     const code = await run(env(), {
-      fetchImpl: async (url, init) => (url.startsWith(HOST) ? world.f(url, init) : boom()),
+      fetchImpl: async (url, init) => (new URL(url).origin === HOST ? world.f(url, init) : boom()),
       openDb: s.openDb,
       nowMs: () => NOW_MS,
       out: (l) => lines.push(l),

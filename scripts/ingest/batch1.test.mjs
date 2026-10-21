@@ -214,7 +214,7 @@ test("bad usage and missing configuration fail with fixed messages", async () =>
   assert.equal(await run(["prepare"], { TURSO_MAIN_URL: URL_MARK }, { out }), 1); // no token, not a file URL
   assert.equal(await run(["prepare", "--request", "x"], { TURSO_MAIN_URL: "  " }, { out }), 1);
   assert.ok(lines.every((l) => l.startsWith("ingest-batch1")));
-  assert.ok(!lines.join("\n").includes(URL_MARK));
+  assert.equal(lines.join("\n").split(URL_MARK).length, 1);
 });
 
 test("prepare needs --request", async () => {
@@ -252,5 +252,5 @@ test("a database failure prints a fixed message, never the driver error, URL or 
   const text = lines.join("\n");
   assert.match(text, /unexpected error/);
   assert.match(text, /cannot open database/);
-  assert.ok(!text.includes(URL_MARK) && !text.includes(TOKEN));
+  assert.ok(text.split(URL_MARK).length === 1 && !text.includes(TOKEN));
 });
