@@ -39,9 +39,7 @@ test("data-like extensions, .env files and *.local.* are flagged", () => {
   const names = ["a.csv", "a.tsv", "a.parquet", "a.xlsx", "a.xls", "a.db", "a.sqlite", "a.sqlite3"];
   names.push("a.ndjson", "a.jsonl", "a.gz", "a.zip", "a.age", "a.pem", "a.key", "a.p12", "a.pfx");
   names.push("a.env", ".env", ".env.production", "app.local.json", ".env.local");
-  const dir = repo(
-    Object.fromEntries(names.map((n) => [`data/${n}`.replace("/.env", "/.env"), "x"])),
-  );
+  const dir = repo(Object.fromEntries(names.map((n) => [`data/${n}`, "x"])));
   const found = rules(dir);
   assert.equal(found.length, names.length);
   assert.ok(found.every((f) => f.startsWith("HYG-DATA ")));

@@ -155,7 +155,7 @@ test('production: test identity login must return 404 (SEC-109)', async () => {
   for (const status of [401, 200, 500]) {
     const b = await exec(env({ SMOKE_ENV: 'production' }), fakeFetch(200, prod, status));
     assert.equal(b.code, 1);
-    assert.match(b.text, new RegExp(`Test identity login disabled\s+\| FAIL\s+\| HTTP ${status}`));
+    assert.match(b.text, new RegExp(String.raw`Test identity login disabled\s+\| FAIL\s+\| HTTP ${status}`));
   }
 });
 

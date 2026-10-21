@@ -232,7 +232,7 @@ function routerFetch(failHost) {
   return async (url, init) => {
     if (failHost && url.includes(failHost)) return json(401, { error: 'body with SECRET-VALUE-123' });
     if (url.includes('/v2/pipeline')) return tursoFake()(url, init);
-    if (url.includes('resend.com')) return json(200, { id: 'e1' });
+    if (new URL(url).hostname === 'api.resend.com') return json(200, { id: 'e1' });
     return json(200, {});
   };
 }
