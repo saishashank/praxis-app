@@ -8,18 +8,18 @@ export type GoLiveItem = { readonly id: string; readonly label: string; readonly
 export const GO_LIVE_ITEMS: readonly GoLiveItem[] = [
   {
     id: "pat_revoked",
-    label: "The build access token is revoked and the build bot is removed",
-    help: "AT-30, SEC-108 e: after this no code change is possible until a new short-lived token is issued.",
+    label: "The build bot and its key are gone",
+    help: "AT-30, SEC-108 e. No one can change the code now. A new key is needed for that.",
   },
   {
     id: "tokens_rotated",
-    label: "Every production secret is rotated and its smoke test passed",
-    help: "AT-30, SEC-021: the rotation order and the smoke runs are in the go-live Owner guide.",
+    label: "Every live secret is new and tested",
+    help: "AT-30, SEC-021. The steps are in the go-live guide.",
   },
   {
     id: "restore_drill",
-    label: "The real-key restore drill is green and both of its secrets are deleted",
-    help: "AT-30, TST-108: run the restore drill with the real key; the last step is green only after the secrets are removed.",
+    label: "The restore test passed and its two keys are deleted",
+    help: "AT-30, TST-108. Use the real key. The last step turns green once the keys are gone.",
   },
   {
     id: "zero_cost",
@@ -28,18 +28,18 @@ export const GO_LIVE_ITEMS: readonly GoLiveItem[] = [
   },
   {
     id: "walkthrough",
-    label: "The walkthrough of the six tabs and every gear-menu page is done",
-    help: "AT-30: you opened each page once as the Owner and nothing looked wrong.",
+    label: "You looked at every page",
+    help: "AT-30. You opened each page once. Nothing looked wrong.",
   },
   {
     id: "at26_manual",
-    label: "The AT-26 manual keyboard and screen-reader check is done",
-    help: "AT-26: the manual accessibility check that no automated test can replace.",
+    label: "You checked the site by keyboard and screen reader",
+    help: "AT-26. A person must do this check. Tests can not.",
   },
   {
     id: "backup_codes",
-    label: "The Google backup codes are stored offline and were tested once",
-    help: "BLD-010 row 13a: the recovery path must work before the bot and the token are gone.",
+    label: "Your Google backup codes are safe and work",
+    help: "BLD-010 row 13a. Keep them offline. Test one before the bot is gone.",
   },
 ];
 

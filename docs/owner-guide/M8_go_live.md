@@ -242,7 +242,7 @@ Choose a time between 10:00 and 16:00 Melbourne time on a weekday, or any time o
 5. Sign in as yourself. Go to your code repository, **Settings → Collaborators**.
 6. Remove the bot. Confirm.
 7. Open the private data repository and the private fixtures repository. Check the bot is not listed in either. [SEC-017 note, PLT-022a]
-8. Open the sign-off page tick later: "The build access token is revoked and the build bot is removed". [AT-30]
+8. Open the sign-off page tick later: "The build bot and its key are gone". [AT-30]
 
 ---
 
@@ -476,13 +476,13 @@ Do the walkthrough on **production**, after the rotation and the drill. Producti
 
 1. Open the production app as Owner. Go to `/ops/go-live`. [VERIFY: reachable from System health]
 2. The page lists seven items. Tick each one only if it is true:
-   - The build access token is revoked and the build bot is removed.
-   - Every production secret is rotated and its smoke test passed.
-   - The real-key restore drill is green and both of its secrets are deleted.
+   - The build bot and its key are gone.
+   - Every live secret is new and tested.
+   - The restore test passed and its two keys are deleted.
    - The $0 check is done on every provider.
-   - The walkthrough of the six tabs and every gear-menu page is done.
-   - The AT-26 manual keyboard and screen-reader check is done.
-   - The Google backup codes are stored offline and were tested once.
+   - You looked at every page.
+   - You checked the site by keyboard and screen reader.
+   - Your Google backup codes are safe and work.
 3. The page also shows the release-gate result for the deployed commit. It must be a pass. [D-152 decision 25]
 4. Type the exact phrase `SIGN OFF GO-LIVE`. Add a short note with no names or emails. Select to record the sign-off.
 5. The page stores no secret, no name and no email. The sign-off changes no mode by itself. [D-157]

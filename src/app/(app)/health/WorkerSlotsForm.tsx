@@ -32,9 +32,8 @@ export function WorkerSlotsForm({ action, slots, initial }: Props) {
               value={s.id}
               defaultChecked={initial.includes(s.id)}
             />
-            <span>
-              <span className="font-mono text-xs">{s.time}</span> {s.label}{" "}
-              <span className="font-mono text-xs text-text-muted">({s.id})</span>
+            <span title={s.id}>
+              <span className="font-mono text-xs">{s.time}</span> {s.label}
             </span>
           </label>
         ))}
@@ -48,8 +47,7 @@ export function WorkerSlotsForm({ action, slots, initial }: Props) {
           onChange={(e) => setTicked(e.target.checked)}
         />
         <span>
-          I confirm: save exactly the ticked slots as the list the Worker may start. This is written
-          to the audit log.
+          Save only the ticked slots. The Worker may start just these. This goes in the audit log.
         </span>
       </label>
       <button

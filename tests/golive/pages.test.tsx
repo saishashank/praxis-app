@@ -165,9 +165,12 @@ describe("System Health Worker slots block", () => {
     await show();
     const b = block()!;
     expect(b).not.toBeNull();
-    expect(within(b).getAllByRole("checkbox", { name: /\(/ }).length).toBe(GO_LIVE_SLOTS.length);
+    // every go-live slot is one checkbox named "<HH:MM> <label>" (the slot id is in the tooltip)
+    expect(within(b).getAllByRole("checkbox", { name: /^\d{2}:\d{2} / }).length).toBe(
+      GO_LIVE_SLOTS.length,
+    );
     expect(within(b).getByRole("checkbox", { name: /Morning email/ })).toBeChecked();
-    expect(within(b).getByRole("checkbox", { name: /Evening review \(/ })).not.toBeChecked();
+    expect(within(b).getByRole("checkbox", { name: "20:00 Evening review" })).not.toBeChecked();
     expect(b).toHaveTextContent(/Backup, maintenance and the daily import/);
     expect(b).toHaveTextContent(/always run/);
     expect(b).toHaveTextContent(/Saved list: morning/);
@@ -195,7 +198,7 @@ describe("WorkerSlotsForm", () => {
     const save = screen.getByRole("button", { name: "Save the list" });
     expect(save).toBeDisabled();
     fireEvent.click(screen.getByRole("checkbox", { name: /Pre-open re-check, attempt 1/ }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /I confirm/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Save only the ticked slots/ }));
     expect(save).toBeEnabled();
     fireEvent.click(save);
     await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
