@@ -49,10 +49,8 @@ const PHONE_RES = [
   /(?<![\w.+])(?:\+61[\s-]?|0)4\d{2}[\s-]?\d{3}[\s-]?\d{3}(?!\d)/,
   /(?<![\w.+])(?:\+61[\s-]?\(?0?\)?[\s-]?|\(?0)[2378]\)?[\s-]?\d{4}[\s-]?\d{4}(?!\d)/,
 ];
-const BAR_HEADER_RE = new RegExp(
-  `^\s*"?date"?\s*,\s*"?open"?\s*,\s*"?high"?\s*,\s*"?low"?\s*,\s*"?close"?\s*(,|$)`,
-  "i",
-);
+const BAR_HEADER_RE =
+  /^\s*"?date"?\s*,\s*"?open"?\s*,\s*"?high"?\s*,\s*"?low"?\s*,\s*"?close"?\s*(,|$)/i;
 const TEXT_SCAN_SKIP = new Set(["package-lock.json"]);
 
 function emailAllowed(match, domain) {

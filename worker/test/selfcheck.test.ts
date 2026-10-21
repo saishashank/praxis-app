@@ -189,7 +189,7 @@ describe("runChecks", () => {
   it("the dispatch token is only ever used with GET against the workflow list", async () => {
     const { f, calls } = fakeFetch();
     await runChecks(ENV, f);
-    const gh = calls.filter((c) => c.url.includes("github.com"));
+    const gh = calls.filter((c) => new URL(c.url).hostname === "api.github.com");
     expect(gh).toHaveLength(1);
     expect(gh[0].method).toBe("GET");
     expect(gh[0].body).toBe("");

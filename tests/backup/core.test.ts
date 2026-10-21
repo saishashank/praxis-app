@@ -273,7 +273,7 @@ describe("restoreDatabase", () => {
     const t = '{"kind":"schema","type":"table","table":"t","sql":"CREATE TABLE t (a)"}';
     bad(ok([t, t]), /duplicate table/);
     bad(ok([t]), /table list differs/);
-    bad(ok([t.replace("}", ',"ephemeral":true}')]), /ephemeral flag/);
+    bad(ok([t.slice(0, -1) + ',"ephemeral":true}']), /ephemeral flag/);
     bad(ok([t]).replace('"tables":[]', '"tables":["t"]'), /row count mismatch/);
     bad(ok().replace('"counts":{}', '"counts":{"zz":1}'), /unknown tables/);
   });
