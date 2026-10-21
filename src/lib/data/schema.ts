@@ -47,6 +47,7 @@ export const AU_COLUMNS = {
     "last_price_d",
     "industry",
     "missing_count",
+    "sector",
   ],
   universe_snapshot: ["market", "d", "code", "status", "tier", "mcap_est", "adv", "halted"],
   price_bar: [

@@ -1,0 +1,10 @@
+name: Bad
+on: push
+permissions: write-all
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - run: echo hi

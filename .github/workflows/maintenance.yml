@@ -55,3 +55,33 @@ jobs:
         env:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL_PROD }}
           ACTIONS_HMAC_SECRET: ${{ secrets.ACTIONS_HMAC_SECRET_PROD }}
+
+  # M8 T9 (decision 30): the staging job. The staging Worker dispatches `ref: main`. Same step as
+  # production on the dispatched `main` commit (no approval record on staging), calling the staging
+  # app with the staging HMAC secret (c3: a separate value per environment).
+  staging:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    concurrency:
+      group: maintenance-staging
+      cancel-in-progress: false
+    environment:
+      name: staging
+      deployment: false
+    env:
+      PRAXIS_ENV: staging
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Run maintenance
+        run: node scripts/maintenance/run.mjs
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL_STAGING }}
+          ACTIONS_HMAC_SECRET: ${{ secrets.ACTIONS_HMAC_SECRET_STAGING }}

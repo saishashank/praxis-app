@@ -1,0 +1,22 @@
+Subject: Praxis P0: TST01 — Trading halt pending an announcement
+
+CRITICAL ALERT (P0)
+
+
+What happened: Trading halt: Trading halt pending an announcement (TST01)
+Why it matters: A held position with weight of at least 10% of NAV is halted (P0 rule).
+Held in: E03 Strategy 3 (12.5% of NAV); E07 Strategy 7 (10.4% of NAV)
+Time: Mon 19 Oct 2026 10:42 AEDT
+Source: https://asx.example.test/ann/1 (https://asx.example.test/ann/1)
+
+Open the alert in Praxis: https://praxis.example.test/alerts/alert%3ATST01%3Aann1
+
+--
+
+Template text only; no AI wording in alert emails.
+
+Simulation for personal information only; not financial advice.
+
+Open Praxis: https://praxis.example.test
+
+This is a transactional email sent to the account Owner only; there is no mailing list, so there is nothing to unsubscribe from. Reviews can be paused in Settings.

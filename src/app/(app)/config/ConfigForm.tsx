@@ -17,7 +17,7 @@ export function ConfigForm({ action, children, className }: Props) {
     <form action={run} className={className}>
       {children}
       {state !== null && "error" in state && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-danger">
           {state.message ?? errorText(state.error)}
         </p>
       )}

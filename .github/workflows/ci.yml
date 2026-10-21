@@ -38,11 +38,15 @@ jobs:
       - run: npm run test:smoke
       - run: npm run test:routes
       - run: npm run test:hygiene
+      - name: Licence allow-list (UXN-019)
+        run: npm run test:licences
       - name: Backup restore drill (TST-108, synthetic data, throwaway key)
         run: node scripts/backup/drill.mjs
       - run: npm run build
       - name: Client bundle secret scan (AT-03)
         run: node scripts/ci/bundle-secret-scan.mjs
+      - name: Bundle budgets (M7 design 4.4, gzip)
+        run: npm run test:bundle
 
   e2e:
     needs: app
@@ -60,6 +64,12 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: E2E + accessibility (TST-126; local production build, throwaway databases)
         run: npx playwright test
+      - name: Readability grade 8 (UXN-030; populated seed)
+        run: npx playwright test e2e/readability.spec.ts --project=desktop
+        env:
+          E2E_SCENARIO: populated
+      - name: Lighthouse mobile on Home (AT-26; populated seed)
+        run: npm run test:lighthouse
       - name: Upload Playwright report (failure only)
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -90,7 +100,14 @@ jobs:
           tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP/gitleaks" gitleaks
       - name: Scan full git history
         run: |
-          "$RUNNER_TEMP/gitleaks/gitleaks" git --redact --exit-code 1 --no-banner --log-opts="--all" .
+          # On a finding, print only where it is (commit, file, line, rule) so it can be reviewed and,
+          # if it is a test fixture, listed in .gitleaksignore. --redact keeps every value out of the
+          # report; the report file is never uploaded.
+          if ! "$RUNNER_TEMP/gitleaks/gitleaks" git --redact --exit-code 1 --no-banner --log-opts="--all" \
+            --report-format json --report-path "$RUNNER_TEMP/gitleaks-report.json" .; then
+            node -e 'for (const f of JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))) console.log(`${f.Fingerprint}  (rule ${f.RuleID})`)' "$RUNNER_TEMP/gitleaks-report.json"
+            exit 1
+          fi
 
   worker:
     runs-on: ubuntu-latest
@@ -126,10 +143,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # No cache: this job holds an environment and a token, and a job like that never uses a cache
+      # (workflow-lint rule secret-job-storage, SEC-110).
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
-          cache: npm
       - run: npm ci
       # An empty or missing fixtures repo must not fail the job: the tests then skip (see below).
       - name: Check out the private fixtures repo
@@ -162,5 +180,146 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: scripts/ingest/requirements-dev.txt
-      - run: pip install -r scripts/ingest/requirements-dev.txt
-      - run: python -m pytest scripts/ingest -q
+      - name: Install the pinned, hashed test set (SEC-107)
+        run: pip install --require-hashes -r scripts/ingest/requirements-dev.txt
+      - run: python -m pytest scripts/ingest scripts/backfill scripts/agents -q
+
+  # M8 T17 (decision 38, AT-29, SEC-107): dependency audit. No secret, no artifact. `npm audit`
+  # reads the lockfiles over the network (no install needed); scripts/ci/audit-summary.mjs turns
+  # each report into the job summary and decides: a production high/critical FAILS (never
+  # excepted); a development-tree high/critical fails unless scripts/ci/audit-exceptions.json
+  # names it with a reason and an expiry of at most 30 days. pip-audit has no severity, so any
+  # known vulnerability in the hashed Python sets fails. The tool itself is installed from the
+  # hashed scripts/ingest/requirements-audit.txt.
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: npm audit, app (production tree and whole tree)
+        run: |
+          set -uo pipefail
+          npm audit --omit=dev --json > "$RUNNER_TEMP/root-prod.json" || true
+          npm audit --json > "$RUNNER_TEMP/root-all.json" || true
+          # An unreachable registry gives an error report with no audit data: that must not pass.
+          for f in "$RUNNER_TEMP/root-prod.json" "$RUNNER_TEMP/root-all.json"; do grep -q '"auditReportVersion"' "$f" || { echo "::error::npm audit gave no report"; exit 1; }; done
+          node scripts/ci/audit-summary.mjs --label root --prod "$RUNNER_TEMP/root-prod.json" --all "$RUNNER_TEMP/root-all.json"
+      - name: npm audit, Worker (production tree and whole tree)
+        run: |
+          set -uo pipefail
+          npm --prefix worker audit --omit=dev --json > "$RUNNER_TEMP/worker-prod.json" || true
+          npm --prefix worker audit --json > "$RUNNER_TEMP/worker-all.json" || true
+          for f in "$RUNNER_TEMP/worker-prod.json" "$RUNNER_TEMP/worker-all.json"; do grep -q '"auditReportVersion"' "$f" || { echo "::error::npm audit gave no report"; exit 1; }; done
+          node scripts/ci/audit-summary.mjs --label worker --prod "$RUNNER_TEMP/worker-prod.json" --all "$RUNNER_TEMP/worker-all.json"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install pip-audit (pinned, hashed)
+        run: pip install --require-hashes -r scripts/ingest/requirements-audit.txt
+      - name: pip-audit (fetcher and test sets, and the audit tool's own set)
+        run: pip-audit --require-hashes --disable-pip --no-deps --progress-spinner off -r scripts/ingest/requirements-dev.txt -r scripts/ingest/requirements-audit.txt
+
+  # M8 T17 (decisions 12, 13, 20; TST-120, TST-121, TST-131, TST-133). No secret, no artifact.
+  # Coverage floors come from vitest.config.mts and worker/vitest.config.mts (80 % overall, 90 % on
+  # the named groups); the Worker run uses the root vitest and coverage packages, so it needs no
+  # install in worker/. Diff coverage joins the changed lines with both lcov reports: the base is
+  # the PR base, or the commit before a push (the long-lived build branch is measured per push),
+  # else the merge base with main. Full history (fetch-depth 0) is needed for that.
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Two timing tests (replay budget, Worker CPU) allow extra time under v8 instrumentation.
+      PRAXIS_COVERAGE_RUN: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Coverage floors, app (TST-121)
+        run: npm run test:coverage
+      - name: Coverage floors, Worker scheduling files (TST-121)
+        run: npm run test:coverage:worker
+      - name: Diff coverage (TST-120; changed lines 90 %, branches 80 %)
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          base="${PR_BASE_SHA:-${PUSH_BEFORE_SHA:-}}"
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="$(git merge-base origin/main HEAD)"
+          fi
+          # the Worker report runs with --root worker, so its paths are relative to worker/ (SF:src/…)
+          { cat coverage/lcov.info; sed -E 's#^SF:src[/\]#SF:worker/src/#' worker/coverage/lcov.info; } > coverage/lcov.merged.info
+          npm run test:diffcov -- --lcov coverage/lcov.merged.info --base "$base"
+      - name: Test map (TST-133; the summary lists the covered IDs)
+        run: npm run test:map
+      - name: Flaky-test quarantine record (TST-131)
+        run: npm run test:quarantine
+
+  # M8 T17 (decisions 40, 41; SEC-107, BLD-040). No secret, no artifact. The workflow lint reads
+  # every workflow as data; known findings sit in scripts/ci/workflow-lint-exceptions.json, where a
+  # "pending" entry only warns here and fails the release gate below.
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Workflow lint (decision 40)
+        run: npm run lint:workflows
+      - name: Environment names match .env.example (decision 41)
+        run: npm run test:env-names
+      - name: Configuration reference is current (BLD-040)
+        run: npm run test:config-reference
+
+  # M8 T17 (decision 25; TST-112): the release gate, only on a pull request into `release`. The
+  # Owner adds `release-gate` as a required status check. It runs even when a job it needs failed
+  # (a skipped required check would count as passed), reads those results through the Actions API
+  # with the job token (actions: read, contents: read; no secret), and also re-runs the licence
+  # check and the workflow lint in release mode, which fail while any Owner approval is pending.
+  # The first M8 release is data-only and uses the INFRASTRUCTURE gate (decision 25); every later
+  # release switches the --mode below to `full`.
+  release-gate:
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'release' }}
+    needs: [app, e2e, secrets, worker, fixtures, python, audit, coverage, checks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Release gate (infrastructure mode, first M8 release)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci/release-gate.mjs --mode infrastructure --sha "$HEAD_SHA" --ci-jobs app,e2e,secrets,worker,fixtures,python,audit,coverage,checks
+      - name: Licences, release mode (fails while an Owner approval is pending)
+        run: node scripts/ci/licence-check.mjs --release
+      - name: Workflow lint, release mode (fails while an Owner approval is pending)
+        run: node scripts/ci/workflow-lint.mjs --release

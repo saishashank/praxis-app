@@ -58,7 +58,7 @@
 // sets in Cloudflare; the Worker does not report them, so the page says "not known"), clear a
 // tripped ASX source (that is the separate reset button), or make `full` selectable (M3).
 import type { Client, Transaction } from "@libsql/client";
-import { marketDate } from "@/lib/data/calendar";
+import { addDays, marketDate } from "@/lib/data/calendar";
 import { audit, NO_META, type RequestMeta } from "@/lib/auth/audit";
 import type { AuthEnv } from "@/lib/auth/env";
 import { UNIVERSE_SOURCE } from "@/lib/data/schema";
@@ -68,6 +68,26 @@ import {
   SELECTABLE_MODES,
   validateMarketModes,
 } from "@/lib/config/keys";
+import { getConfig } from "@/lib/config/store";
+import { anyMarketFull, fullModeRefusal, isProductionEnv } from "@/lib/golive/interlock";
+import {
+  EMAIL_MODE_KEY,
+  EMAIL_MODES,
+  EMAIL_REVIEW_TEST_DATE_KEY,
+  isRealDate,
+  readEmailSwitch,
+  type EmailMode,
+} from "@/lib/email/switch";
+import type { AttentionItem } from "@/lib/health/attention";
+import {
+  ATTENTION_SNOOZE_DB_MAX_DAYS,
+  CREDENTIAL_NAMES,
+  CREDENTIAL_NAME_LIST,
+  HEALTH_COMPONENTS,
+  WATCH_LIST_MAX_DAYS,
+  type CredentialName,
+  type HealthComponent,
+} from "@/lib/sentinel/schema";
 
 export const DISPATCH_ENABLED_KEY = "dispatch_enabled";
 export const ASX_ENABLED_KEY = "asx_enabled";
@@ -111,6 +131,19 @@ export type ControlError =
   | "source_pending"
   | "calendar_unconfirmed"
   | "not_available"
+  | "data_only_market"
+  | "email_mode_required"
+  | "signoff_required"
+  | "email_off"
+  | "market_full"
+  | "confirm_required"
+  | "items_missing"
+  | "commit_unknown"
+  | "unknown_code"
+  | "already_listed"
+  | "item_not_found"
+  | "snooze_red"
+  | "snooze_deadline"
   | "unavailable";
 export type ControlResult = { ok: true; changed: boolean } | { ok: false; error: ControlError };
 
@@ -123,11 +156,11 @@ export type ControlBase = {
   now?: Date;
 };
 
-const fail = (error: ControlError): ControlResult => ({ ok: false, error });
-const NOOP: ControlResult = { ok: true, changed: false };
+export const fail = (error: ControlError): ControlResult => ({ ok: false, error });
+export const NOOP: ControlResult = { ok: true, changed: false };
 
 /** A condition re-checked inside the write transaction failed (a race with another change). */
-class Precondition extends Error {
+export class Precondition extends Error {
   constructor(readonly code: ControlError) {
     super(code);
   }
@@ -190,7 +223,7 @@ async function calendarConfirmed(db: Exec, now: string): Promise<boolean> {
 }
 
 /** Defence in depth: the caller passed requireUser("admin"); the actor must be the active Owner. */
-async function ownerCheck(authDb: Client, actorId: number): Promise<ControlError | null> {
+export async function ownerCheck(authDb: Client, actorId: number): Promise<ControlError | null> {
   try {
     const r = await authDb.execute({
       sql: "SELECT 1 FROM app_user WHERE id = ? AND role = 'owner' AND status = 'active'",
@@ -202,16 +235,16 @@ async function ownerCheck(authDb: Client, actorId: number): Promise<ControlError
   }
 }
 
-type Step = {
+export type Step = {
   action: string;
   targetType: string;
   targetId: string;
   detail: Record<string, unknown>;
-  apply: (tx: Transaction) => Promise<void>;
+  apply: (tx: Transaction, auditRef: string) => Promise<void>;
 };
 
 /** Audit first, then ONE main-DB write transaction, then a `_failed` event if that fails. */
-async function commit(p: ControlBase, now: string, step: Step): Promise<ControlResult> {
+export async function commit(p: ControlBase, now: string, step: Step): Promise<ControlResult> {
   const meta = p.meta ?? NO_META;
   const base = {
     at: now,
@@ -219,15 +252,20 @@ async function commit(p: ControlBase, now: string, step: Step): Promise<ControlR
     targetType: step.targetType,
     targetId: step.targetId,
   };
+  let auditId: number;
   try {
-    await audit(p.authDb, p.env, meta, { ...base, action: step.action, detail: step.detail });
+    auditId = await audit(p.authDb, p.env, meta, {
+      ...base,
+      action: step.action,
+      detail: step.detail,
+    });
   } catch {
     return fail("unavailable"); // nothing has changed
   }
   let tx: Transaction | undefined;
   try {
     tx = await p.mainDb.transaction("write");
-    await step.apply(tx);
+    await step.apply(tx, `audit:${auditId}`);
     await tx.commit();
     return { ok: true, changed: true };
   } catch (e) {
@@ -438,7 +476,9 @@ async function readConfigModes(db: Exec): Promise<{ raw: string | null; map: Mod
 }
 
 /**
- * Sets a market's mode to `off` or `data_only`. `full` is refused (M3). Writes the versioned
+ * Sets a market's mode to `off`, `data_only` or `full`. In production `full` is refused with
+ * `signoff_required` (no go_live_signoff row) or `email_off` (email_mode is off), before any audit
+ * row and again inside the write transaction (M8 T11, decision 33); staging is free. Writes the versioned
  * `market_mode` config value AND `market.mode` in one transaction (see the header).
  */
 export async function setMarketMode(p: MarketModeInput): Promise<ControlResult> {
@@ -448,7 +488,6 @@ export async function setMarketMode(p: MarketModeInput): Promise<ControlResult> 
   if (typeof p.market !== "string" || !(MODE_MARKETS as readonly string[]).includes(p.market)) {
     return fail("invalid");
   }
-  if (p.mode === "full") return fail("not_available");
   if (typeof p.mode !== "string" || !(SELECTABLE_MODES as readonly string[]).includes(p.mode)) {
     return fail("invalid");
   }
@@ -463,12 +502,21 @@ export async function setMarketMode(p: MarketModeInput): Promise<ControlResult> 
     const columnMode = String(row.rows[0].mode);
     const { map } = await readConfigModes(p.mainDb);
     if (columnMode === to && map[market] === to) return NOOP;
+    const today = localDay(now);
+    if (to === "full") {
+      const refused = await fullModeRefusal(p.mainDb, p.env, market, today);
+      if (refused !== null) return fail(refused);
+    }
     return await commit(p, now, {
       action: "controls.market_mode",
       targetType: "market",
       targetId: market,
       detail: { market, from: columnMode, to },
       apply: async (tx) => {
+        if (to === "full") {
+          const refused = await fullModeRefusal(tx, p.env, market, today);
+          if (refused !== null) throw new Precondition(refused);
+        }
         const cur = await readConfigModes(tx);
         const next = { ...cur.map, [market]: to };
         if (validateMarketModes(next) !== null) throw new Precondition("invalid");
@@ -486,6 +534,415 @@ export async function setMarketMode(p: MarketModeInput): Promise<ControlResult> 
           ],
         });
         await tx.execute({ sql: "UPDATE market SET mode = ? WHERE code = ?", args: [to, market] });
+      },
+    });
+  } catch {
+    return fail("unavailable");
+  }
+}
+
+// ---- e. M5 email and alert controls (docs/M5_design.md 4.12, 4.7, 3; D-096, D-097) ---------------
+//
+// Same rules as above: Owner only, audit event first, one main-DB write transaction, a `_failed`
+// event if that fails, and a request that changes nothing writes nothing. The confirmation step is
+// in the form (DataControlForm). Spec text these implement:
+//  - 04_email_and_notifications.md EML-023 (s13): the attention reminder is one email a day; the
+//    Owner can snooze an item; (design 4.7) "red items and items within 2 days of a deadline cannot
+//    be snoozed - the snooze action refuses them".
+//  - 06 AGT-014: "Watch-list = ... Owner-added codes (Owner only, with expiry <= 90 days)".
+//  - 02 PLT-074 / 10 NFR-006: token expiry dates per SEC-017; one combined "tokens due" email at
+//    14, 7 and 2 days. Only the secret NAME and the date are stored, never a value (EML-005).
+//  - 12 BLD-024: emails stay off in production data-only mode (the `email_mode` switch).
+
+const MELBOURNE = "Australia/Melbourne";
+const localDay = (nowIso: string): string => marketDate(new Date(nowIso), MELBOURNE);
+const daysBetween = (from: string, to: string): number =>
+  Math.round(
+    (Date.parse(`${to}T00:00:00.000Z`) - Date.parse(`${from}T00:00:00.000Z`)) / 86_400_000,
+  );
+
+/** Longest one-off review test date ahead of today (D-097). */
+export const REVIEW_TEST_DATE_MAX_AHEAD_DAYS = 31;
+/** Largest distance ahead of today a credential expiry may be entered (D-097: about five years). */
+export const CREDENTIAL_EXPIRY_MAX_AHEAD_DAYS = 1830;
+/** An attention item this close to its deadline (or past it) cannot be snoozed (EML-023). */
+export const SNOOZE_DEADLINE_GUARD_DAYS = 2;
+
+/** Registry default of attention_snooze_max_days (ch.15 l.198). */
+const DEFAULT_SNOOZE_MAX_DAYS = 7;
+const WATCH_CODE_RE = /^[A-Z0-9]{2,6}$/;
+const ITEM_KEY_RE = /^[a-z0-9_.:-]{1,80}$/;
+
+async function writeText(tx: Transaction, key: string, value: string, now: string): Promise<void> {
+  await tx.execute({
+    sql:
+      "INSERT INTO worker_state (key, value_json, updated_at) VALUES (?, ?, ?) " +
+      "ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json, " +
+      "updated_at = excluded.updated_at",
+    args: [key, JSON.stringify(value), now],
+  });
+}
+
+async function anyMarketDataOnly(db: Exec): Promise<boolean> {
+  const r = await db.execute({
+    sql: "SELECT COUNT(*) AS n FROM market WHERE mode = 'data_only'",
+    args: [],
+  });
+  return Number(r.rows[0].n) > 0;
+}
+
+export type EmailModeInput = ControlBase & { mode: unknown };
+
+/**
+ * Production email switch (`worker_state.email_mode`): off | incidents | full. `full` is refused
+ * while any market is data-only (BLD-024: until go-live). Leaving `incidents` also clears the
+ * one-off review test date in the same transaction, so a stale date can never re-arm the review.
+ */
+export async function setEmailMode(p: EmailModeInput): Promise<ControlResult> {
+  const now = (p.now ?? new Date()).toISOString();
+  const denied = await ownerCheck(p.authDb, p.actorId);
+  if (denied) return fail(denied);
+  if (typeof p.mode !== "string" || !(EMAIL_MODES as readonly string[]).includes(p.mode)) {
+    return fail("invalid");
+  }
+  const to = p.mode as EmailMode;
+  try {
+    const cur = await readEmailSwitch(p.mainDb, localDay(now));
+    if (cur.mode === to) return NOOP;
+    if (to === "full" && (await anyMarketDataOnly(p.mainDb))) return fail("data_only_market");
+    const guardOff = to === "off" && isProductionEnv(p.env);
+    if (guardOff && (await anyMarketFull(p.mainDb))) return fail("market_full");
+    return await commit(p, now, {
+      action: "controls.email_mode",
+      targetType: "control",
+      targetId: EMAIL_MODE_KEY,
+      detail: { from: cur.mode, to, clearsReviewTestDate: to !== "incidents" },
+      apply: async (tx) => {
+        if (to === "full" && (await anyMarketDataOnly(tx))) {
+          throw new Precondition("data_only_market");
+        }
+        if (guardOff && (await anyMarketFull(tx))) throw new Precondition("market_full");
+        await writeText(tx, EMAIL_MODE_KEY, to, now);
+        if (to !== "incidents") {
+          await tx.execute({
+            sql: "DELETE FROM worker_state WHERE key = ?",
+            args: [EMAIL_REVIEW_TEST_DATE_KEY],
+          });
+        }
+      },
+    });
+  } catch {
+    return fail("unavailable");
+  }
+}
+
+export type ReviewTestDateInput = ControlBase & { date: unknown };
+
+/**
+ * One-off review test date (`worker_state.email_review_test_date`, the TST-115 forced run): a
+ * Melbourne date from today to 31 days ahead, only while the mode is `incidents`. It expires on
+ * its own after that date. `null` clears it.
+ */
+export async function setEmailReviewTestDate(p: ReviewTestDateInput): Promise<ControlResult> {
+  const now = (p.now ?? new Date()).toISOString();
+  const denied = await ownerCheck(p.authDb, p.actorId);
+  if (denied) return fail(denied);
+  const today = localDay(now);
+  const to = p.date;
+  if (to !== null) {
+    if (!isRealDate(to)) return fail("invalid");
+    if (to < today || to > addDays(today, REVIEW_TEST_DATE_MAX_AHEAD_DAYS)) return fail("invalid");
+  }
+  try {
+    const cur = await readEmailSwitch(p.mainDb, today);
+    const stored = await p.mainDb.execute({
+      sql: "SELECT 1 FROM worker_state WHERE key = ?",
+      args: [EMAIL_REVIEW_TEST_DATE_KEY],
+    });
+    if (to === null) {
+      if (stored.rows.length === 0) return NOOP;
+    } else {
+      if (cur.mode !== "incidents") return fail("email_mode_required");
+      if (cur.reviewTestDate === to) return NOOP;
+    }
+    return await commit(p, now, {
+      action: "controls.email_review_test_date",
+      targetType: "control",
+      targetId: EMAIL_REVIEW_TEST_DATE_KEY,
+      detail: { from: cur.reviewTestDate, to },
+      apply: async (tx) => {
+        if (to === null) {
+          await tx.execute({
+            sql: "DELETE FROM worker_state WHERE key = ?",
+            args: [EMAIL_REVIEW_TEST_DATE_KEY],
+          });
+          return;
+        }
+        if ((await readEmailSwitch(tx, today)).mode !== "incidents") {
+          throw new Precondition("email_mode_required");
+        }
+        await writeText(tx, EMAIL_REVIEW_TEST_DATE_KEY, to, now);
+      },
+    });
+  } catch {
+    return fail("unavailable");
+  }
+}
+
+// ---- watch-list (AGT-014) ----
+
+export type WatchListAddInput = ControlBase & {
+  market: unknown;
+  code: unknown;
+  /** Days until the entry expires; defaults to the longest allowed (`owner_add_expiry_days`). */
+  days?: unknown;
+};
+
+async function ownerAddExpiryDays(db: Client): Promise<number> {
+  const v = await getConfig(db, "owner_add_expiry_days");
+  return typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= WATCH_LIST_MAX_DAYS
+    ? v
+    : WATCH_LIST_MAX_DAYS;
+}
+
+async function activeWatchRows(db: Exec, market: string, code: string, today: string) {
+  const r = await db.execute({
+    sql:
+      "SELECT id FROM watch_list_owner WHERE market = ? AND code = ? AND removed_at IS NULL " +
+      "AND expires_d >= ?",
+    args: [market, code, today],
+  });
+  return r.rows.map((x) => String(x.id));
+}
+
+/**
+ * Adds a code to the Owner watch-list with an expiry of at most 90 days (and at most the
+ * `owner_add_expiry_days` key). The code must be a listed instrument of the market. A code that is
+ * already on the list (not removed, not expired) changes nothing.
+ */
+export async function addWatchListCode(p: WatchListAddInput): Promise<ControlResult> {
+  const now = (p.now ?? new Date()).toISOString();
+  const denied = await ownerCheck(p.authDb, p.actorId);
+  if (denied) return fail(denied);
+  if (typeof p.market !== "string" || !(MODE_MARKETS as readonly string[]).includes(p.market)) {
+    return fail("invalid");
+  }
+  if (typeof p.code !== "string" || !WATCH_CODE_RE.test(p.code)) return fail("invalid");
+  if (p.days !== undefined && (typeof p.days !== "number" || !Number.isInteger(p.days))) {
+    return fail("invalid");
+  }
+  const market = p.market;
+  const code = p.code;
+  const today = localDay(now);
+  try {
+    const max = await ownerAddExpiryDays(p.mainDb);
+    const days = p.days === undefined ? max : p.days;
+    if (days < 1 || days > max) return fail("invalid");
+    const inst = await p.mainDb.execute({
+      sql: "SELECT 1 FROM instrument WHERE market = ? AND code = ? AND delisted_on IS NULL",
+      args: [market, code],
+    });
+    if (inst.rows.length !== 1) return fail("unknown_code");
+    if ((await activeWatchRows(p.mainDb, market, code, today)).length > 0) return NOOP;
+    const expiresD = addDays(today, days);
+    return await commit(p, now, {
+      action: "controls.watch_list_add",
+      targetType: "watch_list",
+      targetId: `${market}:${code}`,
+      detail: { market, code, days, expires_d: expiresD },
+      apply: async (tx) => {
+        const res = await tx.execute({
+          sql:
+            "INSERT INTO watch_list_owner (id, market, code, added_by, added_at, expires_d) " +
+            "SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM watch_list_owner " +
+            "WHERE market = ? AND code = ? AND removed_at IS NULL AND expires_d >= ?) " +
+            "ON CONFLICT DO NOTHING",
+          args: [
+            `wl:${market}:${code}:${now}`,
+            market,
+            code,
+            p.actorId,
+            now,
+            expiresD,
+            market,
+            code,
+            today,
+          ],
+        });
+        if (res.rowsAffected !== 1) throw new Precondition("already_listed");
+      },
+    });
+  } catch {
+    return fail("unavailable");
+  }
+}
+
+export type WatchListRemoveInput = ControlBase & { market: unknown; code: unknown };
+
+/** Removes an Owner watch-list code (sets `removed_at` once; the row stays for the audit trail). */
+export async function removeWatchListCode(p: WatchListRemoveInput): Promise<ControlResult> {
+  const now = (p.now ?? new Date()).toISOString();
+  const denied = await ownerCheck(p.authDb, p.actorId);
+  if (denied) return fail(denied);
+  if (typeof p.market !== "string" || !(MODE_MARKETS as readonly string[]).includes(p.market)) {
+    return fail("invalid");
+  }
+  if (typeof p.code !== "string" || !WATCH_CODE_RE.test(p.code)) return fail("invalid");
+  const market = p.market;
+  const code = p.code;
+  try {
+    const open = await p.mainDb.execute({
+      sql: "SELECT id FROM watch_list_owner WHERE market = ? AND code = ? AND removed_at IS NULL",
+      args: [market, code],
+    });
+    if (open.rows.length === 0) return NOOP;
+    return await commit(p, now, {
+      action: "controls.watch_list_remove",
+      targetType: "watch_list",
+      targetId: `${market}:${code}`,
+      detail: { market, code, entries: open.rows.length },
+      apply: async (tx) => {
+        await tx.execute({
+          sql:
+            "UPDATE watch_list_owner SET removed_at = ? " +
+            "WHERE market = ? AND code = ? AND removed_at IS NULL",
+          args: [now, market, code],
+        });
+      },
+    });
+  } catch {
+    return fail("unavailable");
+  }
+}
+
+// ---- credential expiry (SEC-017, PLT-074, NFR-006) ----
+
+export type CredentialExpiryInput = ControlBase & { name: unknown; expiresOn: unknown };
+
+/**
+ * Records when a SEC-017 secret expires (name from the fixed list, date from today to about five
+ * years ahead). Drives the combined tokens-due email at 14, 7 and 2 days. Stores no secret value.
+ * The table logs every change in its history.
+ */
+export async function setCredentialExpiry(p: CredentialExpiryInput): Promise<ControlResult> {
+  const now = (p.now ?? new Date()).toISOString();
+  const denied = await ownerCheck(p.authDb, p.actorId);
+  if (denied) return fail(denied);
+  if (typeof p.name !== "string" || !(CREDENTIAL_NAME_LIST as string[]).includes(p.name)) {
+    return fail("invalid");
+  }
+  if (!isRealDate(p.expiresOn)) return fail("invalid");
+  const name = p.name as CredentialName;
+  const to = p.expiresOn;
+  const today = localDay(now);
+  if (to < today || to > addDays(today, CREDENTIAL_EXPIRY_MAX_AHEAD_DAYS)) return fail("invalid");
+  try {
+    const cur = await p.mainDb.execute({
+      sql: "SELECT expires_on FROM credential_expiry WHERE name = ?",
+      args: [name],
+    });
+    const from = cur.rows.length ? String(cur.rows[0].expires_on) : null;
+    if (from === to) return NOOP;
+    return await commit(p, now, {
+      action: "controls.credential_expiry",
+      targetType: "credential",
+      targetId: name,
+      detail: { name, from, to },
+      apply: async (tx) => {
+        await tx.execute({
+          sql:
+            "INSERT INTO credential_expiry (name, expires_on, set_at, set_by) VALUES (?, ?, ?, ?) " +
+            "ON CONFLICT (name) DO UPDATE SET expires_on = excluded.expires_on, " +
+            "set_at = excluded.set_at, set_by = excluded.set_by",
+          args: [name, to, now, p.actorId],
+        });
+      },
+    });
+  } catch {
+    return fail("unavailable");
+  }
+}
+
+// ---- attention snooze (EML-023) ----
+
+export type AttentionSnoozeInput = ControlBase & {
+  component: unknown;
+  itemKey: unknown;
+  days: unknown;
+  /**
+   * The item as the SERVER knows it (latest health snapshot, src/lib/health/attention.ts), never
+   * taken from the form: its state and deadline decide whether it may be snoozed.
+   */
+  item: AttentionItem | null;
+};
+
+/**
+ * Snoozes one attention item for 1..`attention_snooze_max_days` days from today. Refused for a red
+ * item (state `down`) and for an item whose deadline is within 2 days or past (EML-023). A snooze
+ * already covering the same period changes nothing.
+ */
+export async function snoozeAttention(p: AttentionSnoozeInput): Promise<ControlResult> {
+  const now = (p.now ?? new Date()).toISOString();
+  const denied = await ownerCheck(p.authDb, p.actorId);
+  if (denied) return fail(denied);
+  if (
+    typeof p.component !== "string" ||
+    !(HEALTH_COMPONENTS as readonly string[]).includes(p.component)
+  ) {
+    return fail("invalid");
+  }
+  if (typeof p.itemKey !== "string" || !ITEM_KEY_RE.test(p.itemKey)) return fail("invalid");
+  if (typeof p.days !== "number" || !Number.isInteger(p.days) || p.days < 1) return fail("invalid");
+  const component = p.component as HealthComponent;
+  const itemKey = p.itemKey;
+  const days = p.days;
+  const item = p.item;
+  if (item === null) return fail("item_not_found");
+  if (item.component !== component || item.key !== itemKey) return fail("invalid");
+  const today = localDay(now);
+  try {
+    const cfg = await getConfig(p.mainDb, "attention_snooze_max_days");
+    const max =
+      typeof cfg === "number" && Number.isInteger(cfg) && cfg >= 1
+        ? Math.min(cfg, ATTENTION_SNOOZE_DB_MAX_DAYS)
+        : DEFAULT_SNOOZE_MAX_DAYS;
+    if (days > max) return fail("invalid");
+    if (item.state === "down") return fail("snooze_red");
+    if (
+      item.deadlineD !== null &&
+      daysBetween(today, item.deadlineD) <= SNOOZE_DEADLINE_GUARD_DAYS
+    ) {
+      return fail("snooze_deadline");
+    }
+    const untilD = addDays(today, days);
+    const covered = await p.mainDb.execute({
+      sql:
+        "SELECT 1 FROM attention_snooze WHERE component = ? AND item_key = ? " +
+        "AND from_d <= ? AND until_d >= ?",
+      args: [component, itemKey, today, untilD],
+    });
+    if (covered.rows.length > 0) return NOOP;
+    return await commit(p, now, {
+      action: "controls.attention_snooze",
+      targetType: "attention_item",
+      targetId: `${component}:${itemKey}`,
+      detail: { component, item_key: itemKey, days, from_d: today, until_d: untilD },
+      apply: async (tx) => {
+        const res = await tx.execute({
+          sql:
+            "INSERT INTO attention_snooze (id, component, item_key, from_d, until_d, created_at, " +
+            "created_by) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
+          args: [
+            `sn:${component}:${itemKey}:${untilD}:${now}`,
+            component,
+            itemKey,
+            today,
+            untilD,
+            now,
+            p.actorId,
+          ],
+        });
+        if (res.rowsAffected !== 1) throw new Precondition("already_listed");
       },
     });
   } catch {
@@ -599,4 +1056,73 @@ export async function loadControlsView(
       asxTripped && typeof st.rows[0]?.reason === "string" ? st.rows[0].reason : null;
   }
   return view;
+}
+
+// ---- read model for the M5 controls (System Health, Owner only) -------------------------------
+
+export type EmailControlsView = {
+  mode: EmailMode;
+  reviewTestDate: string | null;
+  /** True while a market is data-only: `full` stays unavailable (BLD-024). */
+  dataOnly: boolean;
+  watchList: { market: string; code: string; expiresD: string }[];
+  /** The longest an added code can stay (`owner_add_expiry_days`). */
+  watchListMaxDays: number;
+  credentials: { name: CredentialName; label: string; expiresOn: string | null }[];
+  attention: { item: AttentionItem; snoozedUntil: string | null }[];
+  attentionSnoozeMaxDays: number;
+};
+
+/** Throws on a database error (the caller shows "unavailable"). */
+export async function loadEmailControlsView(
+  db: Client,
+  attention: AttentionItem[],
+  now: Date = new Date(),
+): Promise<EmailControlsView> {
+  const nowIso = now.toISOString();
+  const today = localDay(nowIso);
+  const sw = await readEmailSwitch(db, today);
+  const wl = await db.execute({
+    sql:
+      "SELECT market, code, expires_d FROM watch_list_owner WHERE removed_at IS NULL " +
+      "AND expires_d >= ? ORDER BY market, code",
+    args: [today],
+  });
+  const exp = await db.execute({
+    sql: "SELECT name, expires_on FROM credential_expiry",
+    args: [],
+  });
+  const expiry = new Map(exp.rows.map((r) => [String(r.name), String(r.expires_on)]));
+  const sn = await db.execute({
+    sql:
+      "SELECT component, item_key, MAX(until_d) AS until_d FROM attention_snooze " +
+      "WHERE from_d <= ? AND until_d >= ? GROUP BY component, item_key",
+    args: [today, today],
+  });
+  const snoozed = new Map(sn.rows.map((r) => [`${r.component}:${r.item_key}`, String(r.until_d)]));
+  const cfg = await getConfig(db, "attention_snooze_max_days");
+  return {
+    mode: sw.mode,
+    reviewTestDate: sw.reviewTestDate,
+    dataOnly: await anyMarketDataOnly(db),
+    watchList: wl.rows.map((r) => ({
+      market: String(r.market),
+      code: String(r.code),
+      expiresD: String(r.expires_d),
+    })),
+    watchListMaxDays: await ownerAddExpiryDays(db),
+    credentials: CREDENTIAL_NAME_LIST.map((name) => ({
+      name,
+      label: CREDENTIAL_NAMES[name],
+      expiresOn: expiry.get(name) ?? null,
+    })),
+    attention: attention.map((item) => ({
+      item,
+      snoozedUntil: snoozed.get(`${item.component}:${item.key}`) ?? null,
+    })),
+    attentionSnoozeMaxDays:
+      typeof cfg === "number" && Number.isInteger(cfg) && cfg >= 1
+        ? Math.min(cfg, ATTENTION_SNOOZE_DB_MAX_DAYS)
+        : DEFAULT_SNOOZE_MAX_DAYS,
+  };
 }

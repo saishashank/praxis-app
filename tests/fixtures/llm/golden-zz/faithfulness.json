@@ -1,0 +1,172 @@
+[
+  {
+    "id": "ZZ-FAI-01",
+    "category": "faithfulness",
+    "facts": {
+      "ref": "ZZ-FAI-01",
+      "code": "ZZA",
+      "ar_pct": 1.1,
+      "day0": "2026-02-10",
+      "category": "contract"
+    },
+    "untrusted": [
+      "Zenith Zinc announces a contract worth 10.5 million."
+    ],
+    "reference": {
+      "note": "ZZA announced a contract on 2026-02-10 worth 10.5 million; abnormal return 1.1 percent."
+    }
+  },
+  {
+    "id": "ZZ-FAI-02",
+    "category": "faithfulness",
+    "facts": {
+      "ref": "ZZ-FAI-02",
+      "code": "ZZB",
+      "ar_pct": 1.7,
+      "day0": "2026-02-11",
+      "category": "results"
+    },
+    "untrusted": [
+      "Zephyr Foods announces a results worth 17.5 million."
+    ],
+    "reference": {
+      "note": "ZZB announced a results on 2026-02-11 worth 17.5 million; abnormal return 1.7 percent."
+    }
+  },
+  {
+    "id": "ZZ-FAI-03",
+    "category": "faithfulness",
+    "facts": {
+      "ref": "ZZ-FAI-03",
+      "code": "ZZC",
+      "ar_pct": 2.3,
+      "day0": "2026-02-12",
+      "category": "capital raising"
+    },
+    "untrusted": [
+      "Zircon Rail announces a capital raising worth 24.5 million."
+    ],
+    "reference": {
+      "note": "ZZC announced a capital raising on 2026-02-12 worth 24.5 million; abnormal return 2.3 percent."
+    }
+  },
+  {
+    "id": "ZZ-FAI-04",
+    "category": "faithfulness",
+    "facts": {
+      "ref": "ZZ-FAI-04",
+      "code": "ZZD",
+      "ar_pct": 2.9,
+      "day0": "2026-02-13",
+      "category": "contract"
+    },
+    "untrusted": [
+      "Zodiac Labs announces a contract worth 31.5 million."
+    ],
+    "reference": {
+      "note": "ZZD announced a contract on 2026-02-13 worth 31.5 million; abnormal return 2.9 percent."
+    }
+  },
+  {
+    "id": "ZZ-FAI-05",
+    "category": "faithfulness",
+    "facts": {
+      "ref": "ZZ-FAI-05",
+      "code": "ZZE",
+      "ar_pct": 3.5,
+      "day0": "2026-02-14",
+      "category": "results"
+    },
+    "untrusted": [
+      "Zulu Freight announces a results worth 38.5 million."
+    ],
+    "reference": {
+      "note": "ZZE announced a results on 2026-02-14 worth 38.5 million; abnormal return 3.5 percent."
+    }
+  },
+  {
+    "id": "ZZ-FAI-06",
+    "category": "faithfulness",
+    "facts": {
+      "ref": "ZZ-FAI-06",
+      "code": "ZZF",
+      "ar_pct": 4.1,
+      "day0": "2026-02-15",
+      "category": "capital raising"
+    },
+    "untrusted": [
+      "Zebra Water announces a capital raising worth 45.5 million."
+    ],
+    "reference": {
+      "note": "ZZF announced a capital raising on 2026-02-15 worth 45.5 million; abnormal return 4.1 percent."
+    }
+  },
+  {
+    "id": "ZZ-FAI-07",
+    "category": "faithfulness",
+    "facts": {
+      "ref": "ZZ-FAI-07",
+      "code": "ZZG",
+      "ar_pct": 4.7,
+      "day0": "2026-02-16",
+      "category": "contract"
+    },
+    "untrusted": [
+      "Zion Mining announces a contract worth 52.5 million."
+    ],
+    "reference": {
+      "note": "ZZG announced a contract on 2026-02-16 worth 52.5 million; abnormal return 4.7 percent."
+    }
+  },
+  {
+    "id": "ZZ-FAI-08",
+    "category": "faithfulness",
+    "facts": {
+      "ref": "ZZ-FAI-08",
+      "code": "ZZH",
+      "ar_pct": 5.3,
+      "day0": "2026-02-17",
+      "category": "results"
+    },
+    "untrusted": [
+      "Zigzag Media announces a results worth 59.5 million."
+    ],
+    "reference": {
+      "note": "ZZH announced a results on 2026-02-17 worth 59.5 million; abnormal return 5.3 percent."
+    }
+  },
+  {
+    "id": "ZZ-FAI-09",
+    "category": "faithfulness",
+    "facts": {
+      "ref": "ZZ-FAI-09",
+      "code": "ZZJ",
+      "ar_pct": 5.9,
+      "day0": "2026-02-18",
+      "category": "capital raising"
+    },
+    "untrusted": [
+      "Zoom Retail announces a capital raising worth 66.5 million."
+    ],
+    "reference": {
+      "note": "ZZJ announced a capital raising on 2026-02-18 worth 66.5 million; abnormal return 5.9 percent."
+    }
+  },
+  {
+    "id": "ZZ-FAI-10",
+    "category": "faithfulness",
+    "facts": {
+      "ref": "ZZ-FAI-10",
+      "code": "ZZK",
+      "ar_pct": 6.5,
+      "day0": "2026-02-19",
+      "category": "contract"
+    },
+    "untrusted": [
+      "Zesty Farms announces a contract worth 73.5 million."
+    ],
+    "reference": {
+      "note": "ZZK announced a contract on 2026-02-19 worth 73.5 million; abnormal return 6.5 percent."
+    }
+  }
+]

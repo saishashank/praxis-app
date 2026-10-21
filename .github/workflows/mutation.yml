@@ -1,0 +1,46 @@
+# Weekly mutation testing (M8 T12; docs/M8_design.md 2.8, decisions 12 and 22; TST-130, AT-31).
+# StrykerJS with the vitest runner over the money, statistics and rule-interpreter files listed in
+# stryker.config.mjs; the score floor is TST-130's 80 % (`thresholds.break`). The run is a weekly
+# report, never a PR gate. No secrets, no environment, no artifact: the result is the job summary
+# (scripts/ci/mutation-summary.mjs: file, killed, survived, score; no mutant source).
+# Needs @stryker-mutator/core and @stryker-mutator/vitest-runner in devDependencies (Owner approval,
+# decision 22). Until they are installed the check step fails with a plain message instead of
+# downloading an unpinned package. `schedule:` runs from the default branch (`release`) only.
+name: Mutation
+
+on:
+  schedule:
+    - cron: "23 16 * * 6"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    concurrency:
+      group: mutation
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - name: Check that Stryker is installed from the lockfile
+        run: |
+          if [ ! -x node_modules/.bin/stryker ]; then
+            echo "Stryker is not installed: the Owner has not approved the dev dependency yet (decision 22)." >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Stryker is not installed"
+            exit 1
+          fi
+      - name: Mutation run
+        run: node_modules/.bin/stryker run
+      - name: Summary
+        if: ${{ always() }}
+        run: node scripts/ci/mutation-summary.mjs reports/mutation/mutation.json

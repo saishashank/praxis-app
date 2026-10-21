@@ -9,6 +9,17 @@
 import type { Client } from "@libsql/client";
 import { finishRun, startRun } from "@/lib/runs/runRecord";
 import { bearerMatches, isProduction, melbourneDate, type Env } from "@/lib/watchdog/handler";
+import type { EmailProvider } from "@/lib/email/provider";
+import {
+  detectAsxTrip,
+  detectDataQualityTwoNights,
+  detectQuota,
+  detectReviewMissing,
+  type Detected,
+} from "@/lib/incidents/detectors";
+import { escalateIncidents } from "@/lib/incidents/escalate";
+import { notifyIncident, type NotifyCtx } from "@/lib/incidents/notify";
+import { sendTokensDue } from "@/lib/incidents/tokensDue";
 import { runChecks, type CheckResult } from "./checks";
 import { openS2Once } from "./incidents";
 import { heartbeatJob, type HeartbeatKind } from "./state";
@@ -17,6 +28,9 @@ export type Deps = {
   env: Env;
   mainDb: () => Client;
   now: () => Date;
+  /** Email provider and sleep for tests; production selects its own. */
+  provider?: EmailProvider;
+  sleep?: (ms: number) => Promise<void>;
 };
 
 const json = (status: number, body: unknown) =>
@@ -34,6 +48,56 @@ async function alreadyDone(db: Client, key: string): Promise<boolean> {
     args: [key],
   });
   return res.rows.length > 0;
+}
+
+async function runExtras(
+  kind: HeartbeatKind,
+  db: Client,
+  now: Date,
+  deps: Deps,
+  notify: Omit<NotifyCtx, "db" | "now">,
+): Promise<string[]> {
+  const found: Detected[] = [];
+  const safe = async (f: () => Promise<Detected[]>) => {
+    try {
+      found.push(...(await f()));
+    } catch {
+      // a detector that cannot read stays silent; the checks above still ran
+    }
+  };
+  await safe(() => detectAsxTrip(db));
+  await safe(() => detectQuota(db, now, deps.env));
+  if (kind === "evening") {
+    await safe(() => detectDataQualityTwoNights(db));
+    await safe(() => detectReviewMissing(db, now));
+  }
+  const opened: string[] = [];
+  for (const f of found) {
+    try {
+      const r = await notifyIncident(
+        { ...notify, db, now: () => now },
+        f.kind,
+        f.severity,
+        f.facts,
+      );
+      if (r.opened) opened.push(f.kind);
+    } catch {
+      // incident row could not be written; the next run finds the same condition
+    }
+  }
+  if (kind === "evening") {
+    try {
+      await escalateIncidents({ ...notify, db, now: () => now });
+    } catch {
+      // retried by the next evening run
+    }
+    try {
+      await sendTokensDue({ ...notify, db, now: () => now });
+    } catch {
+      // the key is per day; a manual re-run the same day sends it
+    }
+  }
+  return opened;
 }
 
 export function createHeartbeatHandler(kind: HeartbeatKind, deps: Deps) {
@@ -80,14 +144,25 @@ export function createHeartbeatHandler(kind: HeartbeatKind, deps: Deps) {
       }
 
       const opened: string[] = [];
+      const notifyCtx: Omit<NotifyCtx, "db" | "now"> = {
+        env: deps.env,
+        provider: deps.provider,
+        sleep: deps.sleep,
+      };
       let writeFailed = false;
       for (const p of checks.problems) {
         try {
-          if (await openS2Once(db, p.kind, p.detail, now.toISOString())) opened.push(p.kind);
+          if (await openS2Once(db, p.kind, p.detail, now.toISOString(), notifyCtx, p.text)) {
+            opened.push(p.kind);
+          }
         } catch {
           writeFailed = true;
         }
       }
+      // Detectors without a writer of their own, then (evening) the review record, escalation and
+      // tokens due. A failure in any of them never fails the heartbeat run (M5 T11).
+      const extra = await runExtras(kind, db, now, deps, notifyCtx);
+      opened.push(...extra);
       const ok = checks.problems.length === 0;
       await finishRun(db, runId, {
         status: ok ? "success" : "failed",

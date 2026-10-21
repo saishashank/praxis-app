@@ -1,0 +1,121 @@
+/* Control Room look (UXN-285 f, h): token colours only, SVG/CSS motion only, no layout shift.
+   The boot sequence (<= 1.2 s) runs while the root has data-boot="on". Motion stops for the OS
+   reduced-motion setting and for the Motion switch (data-motion="off" on <html>). */
+.root {
+  position: relative;
+  background-image:
+    linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-color: var(--color-bg);
+  background-blend-mode: soft-light;
+}
+.root:fullscreen {
+  overflow: auto;
+  padding: 1rem;
+}
+.ringWrap {
+  width: min(280px, 100%);
+  aspect-ratio: 1 / 1;
+  margin-inline: auto;
+}
+.ring {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+.seg {
+  transition: opacity 150ms linear;
+  transform-origin: 150px 150px;
+}
+.seg:focus-visible {
+  outline: none;
+}
+.seg:focus-visible path {
+  stroke-width: 30;
+}
+.ring:has(.seg:hover) .seg:not(:hover),
+.ring:has(.seg:focus-visible) .seg:not(:focus-visible) {
+  opacity: 0.35;
+}
+.track {
+  fill: none;
+  stroke: var(--color-chart-1);
+  stroke-width: 2;
+  opacity: 0.6;
+}
+.glow {
+  filter: drop-shadow(0 0 4px var(--color-chart-1));
+}
+:global([data-theme="high_contrast"]) .glow {
+  filter: none;
+}
+.readout {
+  border-radius: 0.5rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+.readout:target,
+.readout[open] {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 0;
+}
+.num {
+  font-family: var(--font-mono);
+}
+.tick {
+  scroll-margin-top: 5rem;
+}
+
+/* Boot: the ring track draws in, then each part checks in, in order. */
+.root[data-boot="on"] .track {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: draw 700ms ease-out forwards;
+}
+.root[data-boot="on"] .seg,
+.root[data-boot="on"] .checkin {
+  opacity: 0;
+  animation: checkin 100ms ease-out forwards;
+  animation-delay: calc(var(--i, 0) * 90ms + 200ms);
+}
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes checkin {
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root *,
+  .root *::before,
+  .root *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .root[data-boot="on"] .seg,
+  .root[data-boot="on"] .checkin {
+    opacity: 1;
+  }
+  .root[data-boot="on"] .track {
+    stroke-dashoffset: 0;
+  }
+}
+:global([data-motion="off"]) .root *,
+:global([data-motion="off"]) .root *::before,
+:global([data-motion="off"]) .root *::after {
+  animation: none !important;
+  transition: none !important;
+}
+:global([data-motion="off"]) .root[data-boot="on"] .seg,
+:global([data-motion="off"]) .root[data-boot="on"] .checkin {
+  opacity: 1;
+}
+:global([data-motion="off"]) .root[data-boot="on"] .track {
+  stroke-dashoffset: 0;
+}

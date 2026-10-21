@@ -1,0 +1,8 @@
+{
+  "$comment": "M7 T11 (D-131 fragment): the Home welcome-banner dismissal. A test file must mention the action name.",
+  "routes": {
+    "action src/app/(app)/home/actions.ts#dismissWelcomeAction": {
+      "tests": ["tests/home/welcomeAction.test.ts"]
+    }
+  }
+}

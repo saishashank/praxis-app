@@ -70,6 +70,8 @@ export const MAX_ATTEMPTS = 3;
 /** A claim with no recorded result after this long is treated as a crashed attempt. */
 export const CLAIM_STALE_MS = 3 * MINUTE_MS;
 export const DISPATCH_ENABLED_KEY = "dispatch_enabled";
+/** M8 T8 (decision 32): JSON array of slot ids the Owner has switched on; absent = as configured. */
+export const SLOTS_ENABLED_KEY = "slots_enabled";
 
 export type ClockEnv = DbEnv &
   DispatchEnv & {
@@ -81,14 +83,37 @@ export type SlotState = { s: "claimed" | "dispatched" | "failed"; n: number; at:
 /** `state` is null when the stored text is not a valid state (never dispatched over). */
 export type StoredState = { raw: string; state: SlotState | null };
 
-export type Action = { slot: Slot; key: string; attempt: number; prev: string | null };
+export type Action = {
+  slot: Slot;
+  key: string;
+  attempt: number;
+  prev: string | null;
+  /** Workflow inputs for slots with `inputsKey`. */
+  inputs?: Record<string, string>;
+};
 
 export type Facts = {
   dispatchEnabled: boolean;
   /** market.mode for AU, or null when unreadable (treated like "off" for market-bound slots). */
   marketMode: string | null;
   tradingDay: boolean;
+  /** The runtime slot list (default: absent, i.e. today's behaviour). */
+  slotsEnabled?: SlotList;
+  /** Parsed workflow inputs by `worker_state` key; null = present but invalid (default: none). */
+  slotInputs?: Readonly<Record<string, Record<string, string> | null>>;
 };
+
+/** The runtime list `worker_state.slots_enabled`: absent, a valid list, or unreadable (fail safe). */
+export type SlotList =
+  { kind: "absent" } | { kind: "malformed" } | { kind: "list"; ids: ReadonlySet<string> };
+
+/** Why a slot that was due was not started (recorded in the tick summary; never a secret). */
+export type SkipReason =
+  | "not-released" // available in this build but no list yet: stays off
+  | "not-listed" // a list exists and the slot is not in it
+  | "list-malformed" // the list is unreadable: nothing new is dispatched
+  | "inputs-missing"; // the slot's workflow inputs are absent or invalid
+export type Skipped = { id: string; reason: SkipReason };
 
 export const slotKey = (id: string, date: string): string => `slot:${id}:${date}`;
 const rollupKey = (date: string): string => `${CLOCK_JOB}:${MARKET}:${date}`;
@@ -105,6 +130,7 @@ export function candidateSlots(local: Local, slots: readonly Slot[] = AU_SLOTS):
         s.workflow !== null &&
         s.everyMin === undefined &&
         (!s.tradingDaysOnly || !isWeekend(local)) &&
+        (s.monthly !== "first-saturday" || isFirstSaturday(local)) &&
         local.minute >= s.minute &&
         local.minute <= Math.min(s.minute + s.catchUpMin, 1439),
     )
@@ -142,6 +168,67 @@ export function parseEnabled(raw: string | undefined): boolean {
   }
 }
 
+/**
+ * Parses `slots_enabled`. No row, SQL NULL or JSON null = absent (today's behaviour). A JSON array
+ * of slot-id strings (possibly empty = nothing runs) is a list. ANYTHING else is malformed and fails
+ * safe: the clock dispatches nothing new until the value is fixed.
+ */
+export function parseSlotsEnabled(raw: string | null | undefined): SlotList {
+  if (raw === undefined || raw === null) return { kind: "absent" };
+  try {
+    const v: unknown = JSON.parse(raw);
+    if (v === null) return { kind: "absent" };
+    if (
+      Array.isArray(v) &&
+      v.length <= 100 &&
+      v.every((x) => typeof x === "string" && x.length > 0 && x.length <= 64)
+    ) {
+      return { kind: "list", ids: new Set(v as string[]) };
+    }
+  } catch {
+    // fall through
+  }
+  return { kind: "malformed" };
+}
+
+/**
+ * null = the runtime list lets the slot run; else the reason it must not start. Pure.
+ * The list gates ONLY go-live slots (`requiresListing`): the always-on slots (ingest-batch1,
+ * maintenance, backup) run as today whatever the list says, so a list that forgets "backup" or is
+ * unreadable can never stop backups.
+ */
+export function listSkip(slot: Slot, list: SlotList = { kind: "absent" }): SkipReason | null {
+  if (!slot.requiresListing) return null;
+  if (list.kind === "malformed") return "list-malformed";
+  if (list.kind === "absent") return "not-released";
+  return list.ids.has(slot.id) ? null : "not-listed";
+}
+
+const INPUT_NAME_RE = /^[a-z][a-z0-9_]{0,29}$/;
+
+/** A JSON object of short strings (workflow_dispatch inputs), else null. */
+export function parseInputs(raw: string | undefined): Record<string, string> | null {
+  if (raw === undefined) return null;
+  try {
+    const v: unknown = JSON.parse(raw);
+    if (v === null || typeof v !== "object" || Array.isArray(v)) return null;
+    const entries = Object.entries(v as Record<string, unknown>);
+    if (entries.length > 10) return null;
+    const out: Record<string, string> = {};
+    for (const [k, x] of entries) {
+      if (!INPUT_NAME_RE.test(k) || typeof x !== "string" || x.length > 500) return null;
+      out[k] = x;
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+/** True on the first Saturday of the local month. */
+export const isFirstSaturday = (local: Local): boolean =>
+  local.dow === 6 && Number(local.date.slice(8, 10)) <= 7;
+
 /** What to dispatch now, in dispatch order. Pure: no I/O. */
 export function decide(
   local: Local,
@@ -150,25 +237,51 @@ export function decide(
   nowMs: number,
   slots: readonly Slot[] = AU_SLOTS,
 ): Action[] {
-  if (!facts.dispatchEnabled) return [];
+  return decideWithSkips(local, facts, states, nowMs, slots).actions;
+}
+
+/** Like `decide`, plus every due slot that was held back by the runtime list or its inputs. */
+export function decideWithSkips(
+  local: Local,
+  facts: Facts,
+  states: ReadonlyMap<string, StoredState>,
+  nowMs: number,
+  slots: readonly Slot[] = AU_SLOTS,
+): { actions: Action[]; skipped: Skipped[] } {
   const out: Action[] = [];
+  const skipped: Skipped[] = [];
+  if (!facts.dispatchEnabled) return { actions: out, skipped };
   for (const slot of candidateSlots(local, slots)) {
     if (slot.marketBound && (facts.marketMode === null || facts.marketMode === "off")) continue;
     if (slot.tradingDaysOnly && !facts.tradingDay) continue;
+    const why = listSkip(slot, facts.slotsEnabled);
+    if (why !== null) {
+      skipped.push({ id: slot.id, reason: why });
+      continue;
+    }
+    let inputs: Record<string, string> | undefined = slot.fixedInputs;
+    if (slot.inputsKey !== undefined) {
+      const got = facts.slotInputs?.[slot.inputsKey] ?? null;
+      if (got === null || (slot.requiredInputs ?? []).some((k) => (got[k] ?? "").trim() === "")) {
+        skipped.push({ id: slot.id, reason: "inputs-missing" });
+        continue;
+      }
+      inputs = got;
+    }
     const key = slotKey(slot.id, local.date);
     const stored = states.get(key);
     if (stored === undefined) {
-      out.push({ slot, key, attempt: 1, prev: null });
+      out.push({ slot, key, attempt: 1, prev: null, inputs });
       continue;
     }
     const st = stored.state;
     if (st === null || st.s === "dispatched") continue; // unreadable state: never dispatch over it
     const stale = st.s === "claimed" && nowMs - Date.parse(st.at) >= CLAIM_STALE_MS;
     if ((st.s === "failed" || stale) && st.n < MAX_ATTEMPTS) {
-      out.push({ slot, key, attempt: st.n + 1, prev: stored.raw });
+      out.push({ slot, key, attempt: st.n + 1, prev: stored.raw, inputs });
     }
   }
-  return out;
+  return { actions: out, skipped };
 }
 
 // ---- I/O -------------------------------------------------------------------------------------
@@ -183,6 +296,8 @@ export type TickSummary = {
   requests: number;
   dispatched: string[];
   failed: string[];
+  /** Due slots held back by the runtime list or missing inputs, with the reason (M8 T8). */
+  skipped: Skipped[];
 };
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -208,6 +323,49 @@ function rollupInsert(env: ClockEnv, local: Local, nowMs: number): Stmt {
   };
 }
 
+/**
+ * A malformed `slots_enabled` is recorded once per local day as a failed `worker-clock` run record
+ * (the Owner sees it on System Health); the tick dispatches nothing. One extra request, only in this
+ * failure state. Never throws.
+ */
+async function recordMalformed(
+  env: ClockEnv,
+  local: Local,
+  deps: ClockDeps,
+  summary: TickSummary,
+): Promise<void> {
+  try {
+    const at = iso(deps.nowMs());
+    const key = `slots-malformed:${local.date}`;
+    summary.requests++;
+    await pipeline(
+      env,
+      [
+        {
+          sql:
+            "INSERT INTO run_record (job, market, concurrency_key, scheduled_for, started_at, " +
+            "ended_at, status, error_summary, details_json) SELECT ?, ?, ?, ?, ?, ?, 'failed', ?, ? " +
+            "WHERE NOT EXISTS (SELECT 1 FROM run_record WHERE concurrency_key = ?)",
+          args: [
+            CLOCK_JOB,
+            MARKET,
+            key,
+            local.date,
+            at,
+            at,
+            "slots_enabled unreadable: no new dispatch",
+            JSON.stringify({ kind: "slots-malformed" }),
+            key,
+          ],
+        },
+      ],
+      deps.fetch,
+    );
+  } catch (e) {
+    console.log(`clock: record error ${errName(e)}`);
+  }
+}
+
 const placeholders = (n: number) => Array.from({ length: n }, () => "?").join(", ");
 
 /** One clock tick. Never throws. See the header for the request budget. */
@@ -217,7 +375,7 @@ export async function runClock(
   deps: ClockDeps,
   slots: readonly Slot[] = AU_SLOTS,
 ): Promise<TickSummary> {
-  const summary: TickSummary = { requests: 0, dispatched: [], failed: [] };
+  const summary: TickSummary = { requests: 0, dispatched: [], failed: [], skipped: [] };
   try {
     if (!dbConfigured(env) || refFor(env.PRAXIS_ENV) === null) return summary;
     const local = sydneyLocal(scheduledTime);
@@ -230,14 +388,15 @@ export async function runClock(
     const first: Stmt[] = [];
     if (needRollup) first.push(rollupInsert(env, local, nowMs));
     const keys = cands.map((s) => slotKey(s.id, local.date));
+    const inputKeys = [...new Set(cands.flatMap((s) => (s.inputsKey ? [s.inputsKey] : [])))];
     let iState = -1;
     let iMode = -1;
     let iCal = -1;
     if (cands.length > 0) {
       iState = first.length;
       first.push({
-        sql: `SELECT key, value_json FROM worker_state WHERE key IN (${placeholders(keys.length + 1)})`,
-        args: [DISPATCH_ENABLED_KEY, ...keys],
+        sql: `SELECT key, value_json FROM worker_state WHERE key IN (${placeholders(keys.length + inputKeys.length + 2)})`,
+        args: [DISPATCH_ENABLED_KEY, SLOTS_ENABLED_KEY, ...inputKeys, ...keys],
       });
       if (cands.some((s) => s.marketBound)) {
         iMode = first.length;
@@ -264,10 +423,14 @@ export async function runClock(
 
     const states = new Map<string, StoredState>();
     let enabledRaw: string | undefined;
+    let listRaw: string | null | undefined;
+    const slotInputs: Record<string, Record<string, string> | null> = {};
     for (const row of r1[iState].rows) {
       const k = String(row[0]);
       const raw = String(row[1]);
       if (k === DISPATCH_ENABLED_KEY) enabledRaw = raw;
+      else if (k === SLOTS_ENABLED_KEY) listRaw = row[1] === null ? null : raw;
+      else if (inputKeys.includes(k)) slotInputs[k] = parseInputs(raw);
       else states.set(k, { raw, state: parseState(raw) });
     }
     const mode = iMode >= 0 ? r1[iMode].rows[0]?.[0] : undefined;
@@ -276,8 +439,18 @@ export async function runClock(
       dispatchEnabled: parseEnabled(enabledRaw),
       marketMode: typeof mode === "string" ? mode : null,
       tradingDay: !isWeekend(local) && calKind !== "holiday",
+      slotsEnabled: parseSlotsEnabled(listRaw),
+      slotInputs,
     };
-    const actions = decide(local, facts, states, nowMs, slots);
+    const { actions, skipped } = decideWithSkips(local, facts, states, nowMs, slots);
+    summary.skipped = skipped;
+    // "not-released" is the normal state before the Owner lists a slot: no log line for it.
+    for (const sk of skipped) {
+      if (sk.reason !== "not-released") console.log(`clock: skipped ${sk.id} ${sk.reason}`);
+    }
+    if (facts.dispatchEnabled && facts.slotsEnabled?.kind === "malformed") {
+      await recordMalformed(env, local, deps, summary);
+    }
     if (actions.length === 0) return summary;
 
     // ---- request 2: claim every action (conditional write; 1 changed row = we own it) --------
@@ -309,7 +482,7 @@ export async function runClock(
     // ---- dispatch (sequential, priority order), then request 3: record every outcome ---------
     const record: Stmt[] = [];
     for (const a of owned) {
-      const res = await dispatchWorkflow(env, a.slot.workflow ?? "", deps.fetch);
+      const res = await dispatchWorkflow(env, a.slot.workflow ?? "", deps.fetch, a.inputs);
       const at = iso(deps.nowMs());
       const st: SlotState = { s: res.ok ? "dispatched" : "failed", n: a.attempt, at };
       record.push({

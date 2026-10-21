@@ -21,6 +21,7 @@ export async function POST(req: Request): Promise<Response> {
         csv,
         today,
         now: () => new Date().toISOString(),
+        env,
       }),
   })(req);
 }

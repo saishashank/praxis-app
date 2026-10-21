@@ -89,6 +89,35 @@ export const JOBS: readonly JobDef[] = [
       "Not run yet (production, trading days at 07:30 Sydney once ASX contact and the listed-companies source are accepted)",
   },
   {
+    // M3 T10 (D-077, ARN-060): batch 2a "close the books", one run per trading day after Batch 1.
+    // Same gap logic as ingest-batch1: stale only after 6 days without a success. The slot is off
+    // until the Owner enables the arena; in data_only production the run is a skipped record.
+    job: "arena-close",
+    label: "Arena close the books (AU, batch 2a)",
+    expectedIntervalSec: 3 * 86_400,
+    noDataNote:
+      "Not run yet (off until the Owner enables the arena; records a skip while the market is data-only)",
+  },
+  {
+    // M4 T8 (D-087, ARN-060): batch 2b "signals and orders", one run per trading day after 2a.
+    // Same gap logic as arena-close; the slot is off until the Owner enables the arena, and in
+    // data_only production the run is a skipped record.
+    job: "arena-signals",
+    label: "Arena signals and orders (AU, batch 2b)",
+    expectedIntervalSec: 3 * 86_400,
+    noDataNote:
+      "Not run yet (off until the Owner enables the arena; records a skip while the market is data-only)",
+  },
+  {
+    // M4 T15 (D-093, ARN-093, ARN-101, VAL-102): batch 3 "deterministic review numbers", run back-to-back
+    // after 2b in the same job (scripts/arena/signals.mjs). Same gap logic as arena-signals; in
+    // data_only production no run is attempted (batch 2b is skipped first).
+    job: "arena-review",
+    label: "Arena review numbers (AU, batch 3)",
+    expectedIntervalSec: 3 * 86_400,
+    noDataNote: "Not run yet (follows batch 2b; off until the Owner enables the arena)",
+  },
+  {
     // M2 T9 (DAT-125, DAT-125a): runs on demand; the Worker slot is off until the Owner enables the
     // backfill, and a paused_cap or empty plan still ends in a success record or none at all.
     job: "backfill-history",

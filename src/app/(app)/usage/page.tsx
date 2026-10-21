@@ -5,6 +5,8 @@ import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
 import { formatMelbourne } from "@/lib/health/format";
 import { userPreferences } from "@/lib/preferences/read";
+import { loadBakeoffResults, type BakeoffView } from "@/lib/ui/loaders/usageBakeoff";
+import { loadLlmUsage, type LlmCounts, type LlmUsage } from "@/lib/ui/loaders/usageLlm";
 import {
   getMeters,
   usageEnvironment,
@@ -24,6 +26,8 @@ const LEVEL_LABEL: Record<MeterLevel, string> = {
 };
 
 const nf = new Intl.NumberFormat("en-AU", { maximumFractionDigits: 2 });
+const pctText = (v: number | null) => (v === null ? "n/a" : `${v}%`);
+const whole = new Intl.NumberFormat("en-AU", { maximumFractionDigits: 0 });
 const amount = (v: number | null, unit: string) => (v === null ? "n/a" : `${nf.format(v)} ${unit}`);
 
 export default async function UsagePage() {
@@ -37,6 +41,18 @@ export default async function UsagePage() {
     meters = null; // neutral message below; no error details
   }
   const worst = meters ? worstMeter(meters) : null;
+  let llm: LlmUsage | null = null;
+  try {
+    llm = await loadLlmUsage(mainDb(), user.role, now);
+  } catch {
+    llm = null; // neutral message below; no error details
+  }
+  let bakeoff: BakeoffView | null | "unavailable" = null;
+  try {
+    bakeoff = await loadBakeoffResults(mainDb(), user.role);
+  } catch {
+    bakeoff = "unavailable"; // neutral message below; no error details
+  }
 
   return (
     <main className="mx-auto flex min-h-screen max-w-4xl flex-col gap-8 px-6 py-10">
@@ -110,9 +126,184 @@ export default async function UsagePage() {
         </section>
       )}
 
+      <LlmSection llm={llm} />
+
+      <BakeoffSection bakeoff={bakeoff} />
+
       <footer className="text-xs text-text-muted">
         Simulation for personal information only — not financial advice
       </footer>
     </main>
+  );
+}
+
+function CountCells({ c }: { c: LlmCounts }) {
+  return (
+    <>
+      <td className="py-2 pr-4 text-right font-mono">{whole.format(c.calls)}</td>
+      <td className="py-2 pr-4 text-right font-mono">
+        {whole.format(c.tokensIn)} / {whole.format(c.tokensOut)}
+      </td>
+      <td className="py-2 pr-4 text-right font-mono">{pctText(c.cachePct)}</td>
+      <td className="py-2 pr-4 text-right font-mono">{pctText(c.fallbackPct)}</td>
+      <td className="py-2 text-right font-mono">{whole.format(c.failures)}</td>
+    </>
+  );
+}
+
+const COUNT_HEADS = ["Calls", "Tokens in / out", "Cache hits", "Fallbacks", "Failures"];
+
+function Heads({ first }: { first: string }) {
+  return (
+    <tr>
+      <th scope="col" className="py-2 pr-4">
+        {first}
+      </th>
+      <th scope="col" className="py-2 pr-4">
+        Provider
+      </th>
+      {COUNT_HEADS.map((h) => (
+        <th key={h} scope="col" className="py-2 pr-4 text-right">
+          {h}
+        </th>
+      ))}
+    </tr>
+  );
+}
+
+// LLM usage (LLM-051): tokens and requests per provider, role and day, cache hit rate, fallback rate
+// and failures. Counted from our own call log; no prompt or answer text is stored there.
+function LlmSection({ llm }: { llm: LlmUsage | null }) {
+  return (
+    <section aria-labelledby="llm-h" className="flex min-w-0 flex-col gap-3">
+      <h2 id="llm-h" className="text-xl font-semibold">
+        LLM usage
+      </h2>
+      {llm === null ? (
+        <p>LLM usage unavailable</p>
+      ) : llm.byRole.length === 0 ? (
+        <p>
+          No LLM calls recorded in the last 30 days. The system writes with fixed rules until a
+          model is switched on.
+        </p>
+      ) : (
+        <>
+          <p className="text-sm text-text-muted">
+            Counted from our own call log (estimates). A fallback means a later provider or the
+            fixed rules answered because an earlier one could not. A failure ended without a model
+            answer (for example the daily budget was used up).
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left text-sm">
+              <caption className="text-left font-medium">
+                By role and provider since {llm.sinceD}
+              </caption>
+              <thead>
+                <Heads first="Role" />
+              </thead>
+              <tbody>
+                {llm.byRole.map((r) => (
+                  <tr key={`${r.role}|${r.provider}`} className="border-t border-border">
+                    <th scope="row" className="py-2 pr-4 font-medium">
+                      {r.role}
+                    </th>
+                    <td className="py-2 pr-4">{r.provider}</td>
+                    <CountCells c={r} />
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left text-sm">
+              <caption className="text-left font-medium">
+                By day and provider (newest first)
+              </caption>
+              <thead>
+                <Heads first="Day (UTC)" />
+              </thead>
+              <tbody>
+                {llm.byDay.map((r) => (
+                  <tr key={`${r.d}|${r.provider}`} className="border-t border-border">
+                    <th scope="row" className="py-2 pr-4 font-medium">
+                      {r.d}
+                    </th>
+                    <td className="py-2 pr-4">{r.provider}</td>
+                    <CountCells c={r} />
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** LLM-042: the stored results of the latest bake-off run (Owner only; the loader checks the role). */
+function BakeoffSection({ bakeoff }: { bakeoff: BakeoffView | null | "unavailable" }) {
+  return (
+    <section aria-labelledby="bakeoff-h" className="flex flex-col gap-3">
+      <h2 id="bakeoff-h" className="text-xl font-semibold">
+        Model bake-off
+      </h2>
+      {bakeoff === "unavailable" ? (
+        <p role="status">Bake-off results unavailable</p>
+      ) : bakeoff === null ? (
+        <p className="text-sm text-text-muted">No bake-off has run yet.</p>
+      ) : (
+        <>
+          <p className="text-sm text-text-muted">
+            Run <span className="font-mono">{bakeoff.runId}</span>, report{" "}
+            <span className="font-mono">{bakeoff.reportSha.slice(0, 12)}</span>. A model passes only
+            when it meets every threshold on the golden set.
+          </p>
+          <table className="w-full border-collapse text-left text-sm">
+            <caption className="sr-only">Bake-off results per model and category</caption>
+            <thead>
+              <tr>
+                <th scope="col" className="py-2 pr-4">
+                  Model
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Category
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Valid JSON
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Invented numbers
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Injection resisted
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Result
+                </th>
+                <th scope="col" className="py-2">
+                  Training policy checked
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {bakeoff.lines.map((l) => (
+                <tr key={`${l.modelId}|${l.category}`} className="border-t border-border align-top">
+                  <th scope="row" className="py-2 pr-4 font-mono font-medium">
+                    {l.modelId}
+                  </th>
+                  <td className="py-2 pr-4">{l.category}</td>
+                  <td className="py-2 pr-4">{pctText(l.jsonValidPct)}</td>
+                  <td className="py-2 pr-4">{whole.format(l.inventedNumbers)}</td>
+                  <td className="py-2 pr-4">{pctText(l.injectionResistancePct)}</td>
+                  <td className="py-2 pr-4">{l.passes ? "Passes" : "Does not pass"}</td>
+                  <td className="py-2">{l.trainsOnPromptsCheckedD ?? "Not checked"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </section>
   );
 }

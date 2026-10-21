@@ -1,25 +1,27 @@
 // Heartbeat incidents (PLT-074, NFR-006): S2, one open incident per kind (an episode is not
-// repeated every day). Emailing the Owner is EML work (TODO below), not done here.
+// repeated every day). With a notify context the open goes through notifyIncident (M5 T11): one
+// incident email per incident; without it the row is recorded and nothing is sent.
 import type { Client } from "@libsql/client";
+import { notifyIncident, type NotifyCtx } from "@/lib/incidents/notify";
 
 /**
  * Opens an S2 incident unless one of the same kind is already open. Returns true when a new row
  * was inserted. detail_json holds short facts only (never a secret).
- * TODO (EML-021, NFR-006): send the incident email when this inserts (M5; none in data-only mode).
+ * One open incident per kind (any severity, so an escalated one is not opened again).
  */
 export async function openS2Once(
   db: Client,
   kind: string,
   detail: Record<string, unknown>,
   now: string,
+  notify?: Omit<NotifyCtx, "db" | "now">,
+  summary?: string,
 ): Promise<boolean> {
-  const res = await db.execute({
-    sql: `INSERT INTO incident (at, severity, kind, detail_json)
-          SELECT ?, 'S2', ?, ? WHERE NOT EXISTS
-            (SELECT 1 FROM incident WHERE kind = ? AND severity = 'S2' AND resolved_at IS NULL)`,
-    args: [now, kind, JSON.stringify(detail), kind],
+  const r = await notifyIncident({ ...notify, db, now: () => new Date(now) }, kind, "S2", {
+    summary: summary ?? `Heartbeat: ${kind}`,
+    detail,
   });
-  return res.rowsAffected > 0;
+  return r.opened;
 }
 
 export type OpenS2 = { id: number; at: string; kind: string };

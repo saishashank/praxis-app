@@ -1,0 +1,8 @@
+{
+  "$comment": "M7 T9 (D-131 fragment): the header theme-cycle server action. A test file must mention the action name.",
+  "routes": {
+    "action src/app/(app)/settings/themeActions.ts#cycleThemeAction": {
+      "tests": ["tests/shell/themeAction.test.ts"]
+    }
+  }
+}

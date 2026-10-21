@@ -1,0 +1,9 @@
+name: Bad
+on:
+  pull_request_target:
+permissions: {}
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hi

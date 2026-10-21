@@ -1,0 +1,23 @@
+Subject: Praxis incident S2: Sentinel blind for more than 15 minutes
+
+INCIDENT OPENED (S2)
+
+
+Component: Sentinel
+What: Sentinel blind for more than 15 minutes
+Since: Mon 19 Oct 2026 10:20 AEDT
+Impact: Announcements are not being read; P0 alerts may be late.
+What to do: Check the Worker poll and the announcement source in System Health.
+Incident: inc-0042
+
+Open System Health: https://praxis.example.test/system-health#sentinel
+
+--
+
+One email per incident open and one per escalation; later updates appear in the Evening Review section 9.
+
+Simulation for personal information only; not financial advice.
+
+Open Praxis: https://praxis.example.test
+
+This is a transactional email sent to the account Owner only; there is no mailing list, so there is nothing to unsubscribe from. Reviews can be paused in Settings.

@@ -1,0 +1,14 @@
+{
+  "$comment": "M7 T19a (D-131 fragment): the new Settings server actions. A test file must mention the action name.",
+  "routes": {
+    "action src/app/(app)/settings/actions.ts#updateAppearanceAction": {
+      "tests": ["tests/settings/settingsActions.test.ts"]
+    },
+    "action src/app/(app)/settings/actions.ts#updateRegionAction": {
+      "tests": ["tests/settings/settingsActions.test.ts"]
+    },
+    "action src/app/(app)/settings/actions.ts#setQuietHoursAction": {
+      "tests": ["tests/settings/settingsActions.test.ts"]
+    }
+  }
+}

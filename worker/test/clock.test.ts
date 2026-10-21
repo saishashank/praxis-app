@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import backfillYml from "../../.github/workflows/backfill-history.yml?raw";
 import backupYml from "../../.github/workflows/backup.yml?raw";
 import ingestYml from "../../.github/workflows/ingest-batch1.yml?raw";
+import arenaYml from "../../.github/workflows/arena-close.yml?raw";
+import signalsYml from "../../.github/workflows/arena-signals.yml?raw";
 import maintenanceYml from "../../.github/workflows/maintenance.yml?raw";
 import {
   CLAIM_STALE_MS,
   MAX_ATTEMPTS,
-  candidateSlots,
+  candidateSlots as candidateSlotsAll,
   decide,
   parseEnabled,
   parseState,
@@ -91,14 +93,79 @@ describe("slot table (docs/M2_design.md section 3)", () => {
       expect(s.minute).toBe(Number(s.time.slice(0, 2)) * 60 + Number(s.time.slice(3)));
   });
 
+  it("alert-flush (M5 T6, decision 41): a disabled route slot on odd minutes, never dispatched by the clock", () => {
+    const s = AU_SLOTS.find((x) => x.id === "alert-flush")!;
+    expect(s).toMatchObject({
+      time: "07:01",
+      until: "20:59",
+      everyMin: 2,
+      runner: "route",
+      route: "/api/internal/alert-flush",
+      workflow: null,
+      enabled: true, // M8 T8: available, but listed-only (requiresListing)
+      requiresListing: true,
+    });
+    expect(s.minute % 2).toBe(1); // odd minutes, away from the even-minute ASX poll
+    // even if someone enabled it, the dispatch clock does not fire a route slot
+    const on = AU_SLOTS.map((x) => ({ ...x, enabled: true, requiresListing: false }));
+    expect(candidateSlotsAll(sydneyLocal(at(MON, "07:01")), on).map((x) => x.id)).not.toContain(
+      "alert-flush",
+    );
+  });
+
+  it("pre-open (M5 T8, D-103): 09:54 and retry 09:58 are disabled route slots on even minutes, DST-safe, never dispatched by the clock", () => {
+    const a = AU_SLOTS.find((x) => x.id === "pre-open")!;
+    const b = AU_SLOTS.find((x) => x.id === "pre-open-retry")!;
+    for (const [s, time] of [
+      [a, "09:54"],
+      [b, "09:58"],
+    ] as const) {
+      expect(s).toMatchObject({
+        time,
+        runner: "route",
+        route: "/api/internal/preopen",
+        workflow: null,
+        tradingDaysOnly: true,
+        marketBound: true,
+        enabled: true, // M8 T8: available, but listed-only (requiresListing)
+        requiresListing: true,
+      });
+      expect(s.minute % 2).toBe(0); // D-061: every ASX-adjacent slot on an even minute
+    }
+    expect(b.minute - a.minute).toBe(4);
+    // the local minute is the same either side of both Sydney clock changes (AEST +10 / AEDT +11)
+    for (const [date, utc] of [
+      ["2026-10-02", "2026-10-01T23:54:00Z"], // Friday, AEST
+      ["2026-10-05", "2026-10-04T22:54:00Z"], // Monday, AEDT
+      ["2027-04-02", "2027-04-01T22:54:00Z"], // Friday, AEDT
+      ["2027-04-06", "2027-04-05T23:54:00Z"], // Tuesday, AEST
+    ] as const) {
+      const l = sydneyLocal(Date.parse(utc));
+      expect(l.date).toBe(date);
+      expect(l.minute).toBe(a.minute);
+      expect(sydneyLocal(Date.parse(utc) + 4 * 60_000).minute).toBe(b.minute);
+    }
+    const on = AU_SLOTS.map((x) => ({ ...x, enabled: true, requiresListing: false }));
+    for (const hm of ["09:54", "09:58"]) {
+      expect(candidateSlotsAll(sydneyLocal(at(MON, hm)), on).map((x) => x.id)).toEqual([]);
+    }
+  });
+
   it("only workflows that exist today are enabled and allow-listed; later slots are off", () => {
     expect([...DISPATCHABLE_WORKFLOWS].sort()).toEqual([
+      "arena-close.yml",
+      "arena-signals.yml",
       "backfill-history.yml",
+      "backfill-prices.yml",
       "backup.yml",
       "ingest-batch1.yml",
+      "kb-archive.yml",
+      "llm-bakeoff.yml",
       "maintenance.yml",
+      "replay.yml",
+      "watchdog.yml",
     ]);
-    for (const s of AU_SLOTS.filter((x) => x.enabled)) {
+    for (const s of AU_SLOTS.filter((x) => x.enabled && x.runner === "actions")) {
       expect(s.runner).toBe("actions");
       expect(DISPATCHABLE_WORKFLOWS).toContain(s.workflow);
     }
@@ -112,23 +179,46 @@ describe("slot table (docs/M2_design.md section 3)", () => {
     for (const id of [
       "asx-poll",
       "pre-open",
+      "pre-open-retry",
       "decision-cutoff",
       "late-sweep",
       "marker-check",
       "backfill-history",
+      "backfill-prices",
+      "arena-close",
+      "arena-signals",
+      "replay",
+      "kb-archive",
     ]) {
-      expect(AU_SLOTS.find((s) => s.id === id)?.enabled).toBe(false);
+      const s = AU_SLOTS.find((x) => x.id === id)!;
+      // M8 T8: slots a runner serves are available but listed-only; the rest (no runner reads them) stay off
+      if (s.runner === "worker") expect(s.enabled).toBe(false);
+      else expect([s.enabled, s.requiresListing]).toEqual([true, true]);
     }
     // The allow-listed files exist and are dispatch-only.
-    for (const y of [backupYml, backfillYml, ingestYml, maintenanceYml]) {
+    for (const y of [backupYml, backfillYml, ingestYml, maintenanceYml, arenaYml, signalsYml]) {
       expect(y).toMatch(/^on: workflow_dispatch$/m);
       expect(y).not.toMatch(/^\s*schedule:/m);
     }
   });
 
-  it("nightly slots run every day, ingest slots only on trading days", () => {
+  it("nightly slots and Batch 1 run every day, the arena and Sentinel slots only on trading days", () => {
     for (const s of AU_SLOTS) {
-      if (s.id === "backup" || s.id === "maintenance" || s.id === "backfill-history")
+      if (
+        s.id === "backup" ||
+        s.id === "maintenance" ||
+        s.id === "backfill-history" ||
+        s.id === "backfill-prices" ||
+        s.id === "replay" ||
+        s.id === "kb-archive" ||
+        s.id === "llm-bakeoff" ||
+        s.id === "watchdog-2040" || // M8 T13: both watchdog runs, every day
+        s.id === "watchdog-2150" ||
+        s.id === "ingest-batch1" || // M5 T10, decision 5: also the non-trading marker
+        s.id === "evening-review" ||
+        s.id === "evening-review-late" ||
+        s.id === "morning" // M5 T13: the reminder runs daily; the brief checks the trading day itself
+      )
         expect(s.tradingDaysOnly).toBe(false);
       else expect(s.tradingDaysOnly).toBe(true);
     }
@@ -137,6 +227,10 @@ describe("slot table (docs/M2_design.md section 3)", () => {
 
 describe("candidateSlots (pure)", () => {
   const L = (date: string, hm: string) => sydneyLocal(at(date, hm));
+  // M8 T8: listed-only go-live slots (kb-archive, ...) are candidates too (the list is read in the same
+  // request); these tests are about the slots that run without a list.
+  const candidateSlots = (l: ReturnType<typeof sydneyLocal>, slots?: readonly Slot[]) =>
+    candidateSlotsAll(l, slots).filter((s) => !s.requiresListing);
   it("nothing before the first slot window", () => {
     expect(candidateSlots(L(MON, "22:29"))).toEqual([]);
     expect(candidateSlots(L(MON, "03:00"))).toEqual([]);
@@ -152,21 +246,24 @@ describe("candidateSlots (pure)", () => {
     expect(candidateSlots(L(SAT, "23:00")).map((s) => s.id)).toEqual(["maintenance", "backup"]);
   });
   it("a disabled slot is never a candidate; recurring and Worker-run slots never are", () => {
-    const all = AU_SLOTS.map((s) => ({ ...s, enabled: true }));
+    const all = AU_SLOTS.map((s) => ({ ...s, enabled: true, requiresListing: false }));
     const ids = candidateSlots(L(MON, "17:30"), all).map((s) => s.id);
     expect(ids).toEqual(["ingest-batch1"]); // not asx-poll, pre-open, late-sweep (runner worker)
     const off = AU_SLOTS.map((s) => ({ ...s, enabled: false }));
     expect(candidateSlots(L(MON, "17:30"), off)).toEqual([]);
     expect(candidateSlots(L(MON, "17:30")).map((s) => s.id)).toEqual(["ingest-batch1"]);
   });
-  it("trading-day-only slots skip weekends", () => {
-    const all = AU_SLOTS.map((s) => ({ ...s, enabled: true }));
-    expect(candidateSlots(L(SAT, "17:30"), all)).toEqual([]);
-    expect(candidateSlots(L("2026-06-14", "17:35"), all)).toEqual([]); // Sunday
+  it("trading-day-only slots skip weekends; Batch 1 does not (non-trading marker, decision 5)", () => {
+    const all = AU_SLOTS.map((s) => ({ ...s, enabled: true, requiresListing: false }));
+    expect(candidateSlots(L(SAT, "17:30"), all).map((s) => s.id)).toEqual(["ingest-batch1"]);
+    expect(candidateSlots(L(SAT, "18:11"), all)).toEqual([]); // arena-close and signals stay trading-day only
+    expect(candidateSlots(L("2026-06-14", "17:35"), all).map((s) => s.id)).toEqual([
+      "ingest-batch1",
+    ]); // Sunday
     expect(candidateSlots(L(MON, "17:35"), all).map((s) => s.id)).toEqual(["ingest-batch1"]);
   });
   it("catch-up: a slot missed at 17:30 is still open until 18:10, then closed", () => {
-    const all = AU_SLOTS.map((s) => ({ ...s, enabled: true }));
+    const all = AU_SLOTS.map((s) => ({ ...s, enabled: true, requiresListing: false }));
     expect(candidateSlots(L(MON, "18:10"), all).map((s) => s.id)).toContain("ingest-batch1");
     expect(candidateSlots(L(MON, "18:11"), all).map((s) => s.id)).not.toContain("ingest-batch1");
   });
@@ -241,7 +338,7 @@ describe("decide (pure)", () => {
     const off: Facts = { ...on, marketMode: "off" };
     expect(decide(L, off, none, NOW)).toHaveLength(2);
     expect(decide(L, { ...on, marketMode: null }, none, NOW)).toHaveLength(2);
-    const all = AU_SLOTS.map((s) => ({ ...s, enabled: true }));
+    const all = AU_SLOTS.map((s) => ({ ...s, enabled: true, requiresListing: false }));
     const l2 = sydneyLocal(at(MON, "17:35"));
     expect(decide(l2, off, none, NOW, all)).toEqual([]);
     expect(decide(l2, { ...on, marketMode: null }, none, NOW, all)).toEqual([]);
@@ -249,9 +346,11 @@ describe("decide (pure)", () => {
     expect(decide(l2, { ...on, marketMode: "full" }, none, NOW, all)).toHaveLength(1);
   });
   it("holiday: trading-day-only slot skipped, nightly slots still run", () => {
-    const all = AU_SLOTS.map((s) => ({ ...s, enabled: true }));
+    const all = AU_SLOTS.map((s) => ({ ...s, enabled: true, requiresListing: false }));
     const l2 = sydneyLocal(at(MON, "17:35"));
-    expect(decide(l2, { ...on, tradingDay: false }, none, NOW, all)).toEqual([]);
+    expect(decide(l2, { ...on, tradingDay: false }, none, NOW, all).map((a) => a.slot.id)).toEqual([
+      "ingest-batch1", // Batch 1 writes the non-trading marker (decision 5)
+    ]);
     expect(decide(L, { ...on, tradingDay: false }, none, NOW)).toHaveLength(2);
   });
   it("dispatched or in-flight slots are left alone; failed ones retry up to the cap", () => {
@@ -520,11 +619,11 @@ describe("runClock with a real SQLite database", () => {
     );
     // 2026-12-25 is a seeded holiday; 2026-12-24 is a seeded early close (still a trading day).
     const hol = await tick(at("2026-12-25", "17:30", 11), ENV, batch);
-    expect(hol.dispatched).toEqual([]);
+    expect(hol.dispatched).toEqual(["ingest-batch1"]); // M5 T10: Batch 1 also runs on holidays
     resetClockCache();
     const early = await tick(at("2026-12-24", "17:30", 11), ENV, batch);
     expect(early.dispatched).toEqual(["ingest-batch1"]);
-    expect(net.github).toHaveLength(1);
+    expect(net.github).toHaveLength(2);
   });
 
   it("market_mode off stops market-bound dispatch only", async () => {
@@ -574,7 +673,7 @@ describe("runClock with a real SQLite database", () => {
     enable();
     net.failPipeline = true;
     const s = await tick(at(MON, "22:30"));
-    expect(s).toEqual({ requests: 1, dispatched: [], failed: [] });
+    expect(s).toEqual({ requests: 1, dispatched: [], failed: [], skipped: [] });
     expect(net.github).toHaveLength(0);
     expect(logs.join("\n")).toContain("clock: db error");
   });

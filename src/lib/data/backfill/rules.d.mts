@@ -31,6 +31,8 @@ export function monthFirstDay(month: string): string;
 export function monthLastDay(month: string): string;
 export function addMonths(month: string, n: number): string;
 export function lastCompleteMonth(today: string): string;
+export const EXPORT_SETTLE_DAYS: number;
+export function monthSettled(month: string, today: string): boolean;
 export function previousWeekday(date: string): string;
 export function addWeekdays(date: string, n: number): string;
 export function weekdaysOfMonth(month: string, upTo?: string): string[];

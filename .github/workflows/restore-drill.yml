@@ -1,0 +1,130 @@
+# Restore drill and "Restore database" workflow, M8 T7 (TST-108, OPS-040, NFR-004, AT-04, AT-30,
+# SEC-017 (l), PLT-022b). workflow_dispatch ONLY, started by the Owner by hand from the Actions
+# tab on the release branch. It has no `schedule:` trigger (PLT-015) and is never started by the
+# Worker.
+# Secrets are referenced ONLY in `env:` of the three steps that need them (guard, run, final
+# check), never in `run:` scripts. Inputs also reach scripts through `env:` only.
+# The backup PRIVATE key (PLT-022b) and the temporary Turso platform token (SEC-017 (l)) are
+# TEMPORARY secrets of the GitHub environment, added by the Owner for this run and deleted
+# afterwards. The key is read from the environment and decrypted in memory; no plaintext file is
+# written (the `always()` cleanup step still removes the plaintext temp folder, defence in depth).
+# The LAST step fails while either temporary secret still exists, so GitHub emails the Owner. After
+# deleting them, dispatch again with mode `verify-removed`: that run skips the drill and ends green.
+# Output (log and job summary): table names, counts, PASS/FAIL, elapsed time. No URL, token or row.
+# SEC-108 c: the job checks out the latest approved deploy-production commit, not the release head.
+# `deployment: false` gives the job the environment's secrets without a deployment record.
+name: Restore drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "drill = restore into throwaway databases and delete them; restore = real restore into NEW databases (needs confirm); verify-removed = only check that the temporary secrets are gone"
+        type: choice
+        options: [drill, restore, verify-removed]
+        default: drill
+      environment:
+        description: "GitHub environment that holds the temporary secrets (staging is for the synthetic build-phase drill only)"
+        type: choice
+        options: [production, staging]
+        default: production
+      key:
+        description: "real = your private backup key and the latest real backups; throwaway = build phase, synthetic data and a key made inside the run"
+        type: choice
+        options: [real, throwaway]
+        default: real
+      backup:
+        description: "Backup release tag backup-YYYY-MM-DD (empty = latest)"
+        type: string
+        required: false
+        default: ""
+      targets:
+        description: "Which database(s)"
+        type: choice
+        options: [both, main, auth]
+        default: both
+      confirm:
+        description: "restore mode only: type RESTORE to confirm (OPS-040 step 0: the build-agent PAT is revoked)"
+        type: string
+        required: false
+        default: ""
+
+permissions: {}
+
+jobs:
+  restore:
+    if: github.ref == 'refs/heads/release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      deployments: read
+    concurrency:
+      group: restore-drill
+      cancel-in-progress: false
+    environment:
+      name: ${{ inputs.environment }}
+      deployment: false
+    steps:
+      # SEC-108 c: these two steps run only the tiny reviewed script, with github.token alone
+      # (contents/deployments: read), never an environment secret.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ci-tools
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - name: Find approved commit
+        id: approved
+        run: node ci-tools/scripts/ci/approved-commit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.approved.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+
+      - name: Guard (temporary secrets present)
+        if: inputs.mode != 'verify-removed'
+        run: node scripts/restore/drill-turso.mjs guard
+        env:
+          MODE: ${{ inputs.mode }}
+          KEY_MODE: ${{ inputs.key }}
+          CONFIRM: ${{ inputs.confirm }}
+          BACKUP_PRIVATE_KEY: ${{ secrets.BACKUP_PRIVATE_KEY }}
+          TURSO_PLATFORM_TOKEN_TEMP: ${{ secrets.TURSO_PLATFORM_TOKEN_TEMP }}
+
+      - name: Drill or restore
+        if: inputs.mode != 'verify-removed'
+        run: node scripts/restore/drill-turso.mjs run
+        env:
+          MODE: ${{ inputs.mode }}
+          KEY_MODE: ${{ inputs.key }}
+          BACKUP_ENV: ${{ inputs.environment }}
+          BACKUP_TAG: ${{ inputs.backup }}
+          TARGETS: ${{ inputs.targets }}
+          CONFIRM: ${{ inputs.confirm }}
+          TURSO_ORG: ${{ vars.TURSO_ORG }}
+          TURSO_GROUP: ${{ vars.TURSO_GROUP }}
+          BACKUP_PRIVATE_KEY: ${{ secrets.BACKUP_PRIVATE_KEY }}
+          TURSO_PLATFORM_TOKEN_TEMP: ${{ secrets.TURSO_PLATFORM_TOKEN_TEMP }}
+          DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN_PROD }}
+          DATA_REPO: ${{ github.repository }}-data
+
+      - name: Remove plaintext temp files
+        if: always()
+        run: node scripts/restore/drill-turso.mjs cleanup
+        env:
+          RUNNER_TEMP: ${{ runner.temp }}
+
+      # TST-108, OPS-040 step 4, SEC-017 (l): fails while the temporary private-key secret or the
+      # temporary Turso token still exists. Must stay the LAST step.
+      - name: Fail while temporary secrets exist
+        if: always()
+        run: node scripts/restore/drill-turso.mjs final-check
+        env:
+          BACKUP_PRIVATE_KEY: ${{ secrets.BACKUP_PRIVATE_KEY }}
+          TURSO_PLATFORM_TOKEN_TEMP: ${{ secrets.TURSO_PLATFORM_TOKEN_TEMP }}

@@ -159,7 +159,7 @@ describe("main migration 0005_au_calendar_seed", () => {
   it("re-running migrations leaves the seed exactly once", async () => {
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 6 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 12 });
     expect(await loadCalendarRows(db, "AU")).toHaveLength(522);
   });
 
@@ -167,7 +167,7 @@ describe("main migration 0005_au_calendar_seed", () => {
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
     const before = await schemaOf(db);
-    expect(await migrateDown(db, ms, 2)).toEqual({ rolledBack: 2, version: 4 }); // 0006, then 0005
+    expect(await migrateDown(db, ms, 8)).toEqual({ rolledBack: 8, version: 4 }); // 0012, 0011, 0010, 0009, 0008, 0007, 0006, then 0005
     expect(await loadCalendarRows(db, "AU")).toHaveLength(0);
     const guard = (s: string[]) =>
       s.filter((x) => x.startsWith("trigger:trading_calendar_no_delete"));
@@ -177,7 +177,7 @@ describe("main migration 0005_au_calendar_seed", () => {
       "INSERT INTO trading_calendar (market, d, kind, confirmed, source) VALUES ('AU','2030-02-04','session',0,'x')",
     );
     await expect(db.execute("DELETE FROM trading_calendar")).rejects.toThrow(/forever table/);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 2, version: 6 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 8, version: 12 });
     expect(await loadCalendarRows(db, "AU")).toHaveLength(523);
     expect(await schemaOf(db)).toEqual(before);
   });

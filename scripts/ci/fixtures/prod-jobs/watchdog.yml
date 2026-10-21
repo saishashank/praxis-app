@@ -1,0 +1,77 @@
+  production:
+    if: github.ref == 'refs/heads/release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: read
+    # PLT-076: one run at a time, never cancelling one in progress. The review itself is de-duplicated
+    # by its email key (`review:<date>`), not by this group.
+    concurrency:
+      group: watchdog
+      cancel-in-progress: false
+    environment:
+      name: production
+      deployment: false
+    steps:
+      # SEC-108 c: these two steps run only the tiny reviewed script, with github.token alone
+      # (contents/deployments: read), never an environment secret.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ci-tools
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - name: Find approved commit
+        id: approved
+        run: node ci-tools/scripts/ci/approved-commit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.approved.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      # The only step with secrets: database (read, plus the email records the send core writes),
+      # Resend and the owner address (direct minimal review, incident and database-down emails), and
+      # the app URL and HMAC secret (signed route call).
+      - name: Watchdog
+        run: node scripts/watchdog/run.mjs
+        env:
+          WATCHDOG_SLOT: ${{ inputs.slot }}
+          WATCHDOG_DELIBERATE_FAILURE: ${{ inputs.deliberate_failure && '1' || '0' }}
+          PRAXIS_ENV: production
+          EMAIL_PROVIDER: resend
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY_PROD }}
+          OWNER_EMAIL: ${{ secrets.OWNER_EMAIL_PROD }}
+          PII_HASH_KEY: ${{ secrets.PII_HASH_KEY_PROD }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL_PROD }}
+          ACTIONS_HMAC_SECRET: ${{ secrets.ACTIONS_HMAC_SECRET_PROD }}
+      # M8 T9 (SEC-017 l, OPS-040, PLT-022b): the temporary restore secrets exist only during a
+      # restore or drill. This step runs even if the watchdog step failed and FAILS (so GitHub's
+      # failure email is the alert) while either is still present. It only tests for emptiness: the
+      # values are never printed.
+      - name: Fail while a temporary restore secret is present
+        if: ${{ always() }}
+        run: |
+          present=0
+          if [ -n "$BACKUP_PRIVATE_KEY" ]; then
+            echo "::error::temporary restore secret still present (BACKUP_PRIVATE_KEY)"
+            present=1
+          fi
+          if [ -n "$TURSO_PLATFORM_TOKEN_TEMP" ]; then
+            echo "::error::temporary restore secret still present (TURSO_PLATFORM_TOKEN_TEMP)"
+            present=1
+          fi
+          if [ "$present" -ne 0 ]; then
+            echo "temporary restore secret still present" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "No temporary restore secret is present."
+        env:
+          BACKUP_PRIVATE_KEY: ${{ secrets.BACKUP_PRIVATE_KEY }}
+          TURSO_PLATFORM_TOKEN_TEMP: ${{ secrets.TURSO_PLATFORM_TOKEN_TEMP }}

@@ -1,0 +1,105 @@
+# Nightly full suite on staging (M8 T12; docs/M8_design.md 2.8, decision 21; TST-132, TST-131, AT-31).
+# Every night, and on dispatch. A scheduled night does the work only if `main` has a commit newer
+# than the last green run (scripts/ci/nightly-gate.mjs); a dispatch always runs. AT-31 needs THREE
+# consecutive green nights with no red run between: the last job prints the streak.
+# Contents of the `staging` job (budget 25 min, TST-132): the whole unit, component, job, email and
+# Worker test suites on synthetic data, then the staging end-to-end checks as the viewer test
+# identity. The TST-127 visual comparison against the fixtures baselines is NOT in this file: no
+# comparison spec exists yet (e2e/screens.spec.ts only captures), see the M8 T12 report.
+# `schedule:` runs only from the default branch (`release`), so this file starts working with the
+# first approved release (TST-115); the staging job checks out `main`, the code staging runs.
+# The cron minute is off the hour and away from the 11:40 UTC pipeline window.
+# SEC-110: no artifact, no cache, no trace. Secrets only in `env:` of the one e2e step.
+name: Nightly
+
+on:
+  schedule:
+    - cron: "37 15 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Has main moved since the last green night?
+        id: gate
+        run: node scripts/ci/nightly-gate.mjs gate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  staging:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    concurrency:
+      group: nightly-staging
+      cancel-in-progress: false
+    environment:
+      name: staging
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - name: Unit, component, job and email tests
+        run: npx vitest run
+      - name: Script, workflow and pipeline tests
+        run: npm run test:smoke
+      - name: Install the Worker dependencies
+        working-directory: worker
+        run: npm ci
+      - name: Worker tests
+        working-directory: worker
+        run: npm test
+      - name: Install the test browser
+        run: npx playwright install --with-deps chromium
+      - name: Staging end-to-end checks (viewer test identity)
+        run: npx playwright test --config playwright.staging.config.ts
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL_STAGING }}
+          TEST_IDENTITY_SECRET: ${{ secrets.TEST_IDENTITY_SECRET_STAGING }}
+
+  streak:
+    needs: [gate, staging]
+    if: ${{ always() && needs.gate.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Green nights in a row (AT-31 needs 3)
+        run: node scripts/ci/nightly-gate.mjs streak "$STAGING_RESULT"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STAGING_RESULT: ${{ needs.staging.result }}

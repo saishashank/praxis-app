@@ -4,6 +4,9 @@ node_modules
 .next
 out
 coverage
+# test folders named coverage hold tests, not reports (M8 T3)
+!tests/coverage/
+!worker/test/coverage/
 worker/node_modules
 worker/dist
 .wrangler
@@ -15,3 +18,10 @@ test-results
 
 # Real recorded fixtures (private repo, checked out by CI job "fixtures"; SEC-110)
 /fixtures/
+
+# Claude Code agent worktrees (local only)
+.claude/
+
+# StrykerJS (weekly mutation run; nothing is committed)
+.stryker-tmp
+/reports/

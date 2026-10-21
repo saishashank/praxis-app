@@ -31,12 +31,17 @@ import type { AuthEnv } from "@/lib/auth/env";
 export const THEMES = ["dark", "light", "system", "midnight", "dim", "high_contrast"] as const;
 export const TIME_FORMATS = ["24h", "12h"] as const;
 export const ALERT_DELIVERY = ["immediate", "digest"] as const;
+// UXN-281 "Motion" switch; UXN-282 "whether times show in Melbourne or exchange-local time".
+export const MOTIONS = ["on", "off"] as const;
+export const TIME_ZONES = ["melbourne", "exchange"] as const;
 // Only active markets are selectable: AU until a second market activates (ROL-107).
 export const SELECTABLE_MARKETS = ["AU"] as const;
 
 export type Theme = (typeof THEMES)[number];
 export type TimeFormat = (typeof TIME_FORMATS)[number];
 export type AlertDelivery = (typeof ALERT_DELIVERY)[number];
+export type Motion = (typeof MOTIONS)[number];
+export type TimeZoneChoice = (typeof TIME_ZONES)[number];
 
 export type Preferences = {
   theme: Theme;
@@ -44,6 +49,8 @@ export type Preferences = {
   time_format: TimeFormat;
   alert_p1: AlertDelivery;
   alert_p2: AlertDelivery;
+  motion: Motion;
+  times_in: TimeZoneChoice;
 };
 
 export const DEFAULT_PREFERENCES: Readonly<Preferences> = Object.freeze({
@@ -52,6 +59,8 @@ export const DEFAULT_PREFERENCES: Readonly<Preferences> = Object.freeze({
   time_format: "24h",
   alert_p1: "immediate",
   alert_p2: "digest",
+  motion: "on",
+  times_in: "melbourne",
 });
 
 const ALLOWED: { [K in keyof Preferences]: readonly string[] } = {
@@ -60,6 +69,8 @@ const ALLOWED: { [K in keyof Preferences]: readonly string[] } = {
   time_format: TIME_FORMATS,
   alert_p1: ALERT_DELIVERY,
   alert_p2: ALERT_DELIVERY,
+  motion: MOTIONS,
+  times_in: TIME_ZONES,
 };
 const FIELDS = Object.keys(ALLOWED) as Array<keyof Preferences>;
 
@@ -98,6 +109,24 @@ export async function getPreferences(
     args: [userId],
   });
   return merge(r.rows.length ? parseStored(r.rows[0].prefs_json) : null);
+}
+
+// Quiet hours (alerts API, M5 T6) live in the same prefs_json; an update of the D-048 fields keeps them.
+async function storedExtras(
+  db: Pick<Client, "execute">,
+  userId: number,
+): Promise<Record<string, unknown>> {
+  const r = await db.execute({
+    sql: "SELECT prefs_json FROM user_preference WHERE user_id = ?",
+    args: [userId],
+  });
+  const v = r.rows.length ? parseStored(r.rows[0].prefs_json) : null;
+  if (!isRecord(v)) return {};
+  // Everything that is not one of the D-048 fields stays as stored: quiet hours, the remembered
+  // Strategies sort (M7 T12) and later per-user keys.
+  const keep: Record<string, unknown> = {};
+  for (const k of Object.keys(v)) if (!(FIELDS as string[]).includes(k)) keep[k] = v[k];
+  return keep;
 }
 
 // Whole-patch validation: any unknown key or invalid value rejects everything.
@@ -139,6 +168,7 @@ export async function updatePreferences(
       return { ok: false, error: "forbidden" };
     }
     const cur = await getPreferences(tx, actor.id);
+    const keep = await storedExtras(tx, actor.id);
     const next: Preferences = { ...cur, ...clean };
     const changed = FIELDS.filter((f) => next[f] !== cur[f]);
     if (!changed.length) {
@@ -149,7 +179,7 @@ export async function updatePreferences(
     await tx.execute({
       sql: `INSERT INTO user_preference (user_id, prefs_json, updated_at) VALUES (?, ?, ?)
             ON CONFLICT (user_id) DO UPDATE SET prefs_json = excluded.prefs_json, updated_at = excluded.updated_at`,
-      args: [actor.id, JSON.stringify(next), at],
+      args: [actor.id, JSON.stringify({ ...keep, ...next }), at],
     });
     await auditTx(tx, env, meta ?? NO_META, {
       at,

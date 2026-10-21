@@ -1,0 +1,12 @@
+# workflow_dispatch ONLY, no other trigger.
+name: Bad
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "5 4 * * *"
+permissions: {}
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok

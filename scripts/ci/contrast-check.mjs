@@ -29,6 +29,35 @@ export const PAIRS = [
   ["border", "bg", "ui"],
   ["focus", "bg", "ui"],
   ["focus", "surface", "ui"],
+  // M7 T1 (D-130): text-bearing families (badges, status text) on both surfaces, plus surface-2.
+  ...[
+    "regime-shock",
+    "regime-riskoff",
+    "regime-riskon",
+    "regime-neutral",
+    "label-unvalidated",
+    "label-passed",
+    "label-consistent",
+    "label-failed",
+    "label-notdemo",
+    "label-unvalidatable",
+    "breaker-green",
+    "breaker-amber",
+    "breaker-red",
+    "danger",
+  ].flatMap((t) => [
+    [t, "bg", "text"],
+    [t, "surface", "text"],
+    [t, "surface-2", "text"],
+  ]),
+  ["text", "surface-2", "text"],
+  ["text-muted", "surface-2", "text"],
+  ["accent-contrast", "danger", "text"], // destructive button label
+  // Graphics (3:1): chart series and grid lines against both surfaces.
+  ...["chart-1", "chart-2", "chart-3", "chart-4", "grid"].flatMap((t) => [
+    [t, "surface", "ui"],
+    [t, "surface-2", "ui"],
+  ]),
 ];
 
 export const THEME_NAMES = ["dark", "light", "midnight", "dim", "high_contrast"];
@@ -61,7 +90,7 @@ export function ratio(a, b) {
 
 function declarations(body) {
   const out = {};
-  for (const m of body.matchAll(/--color-([a-z-]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();
+  for (const m of body.matchAll(/--color-([a-z0-9-]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();
   return out;
 }
 

@@ -7,6 +7,7 @@ const TABLE: Array<[Action, boolean, boolean, boolean]> = [
   ["own_preferences", true, true, true],
   ["annotate", true, true, false],
   ["what_if", true, true, false],
+  ["watchlist", true, true, false],
   ["unmask", true, false, false],
   ["admin", true, false, false],
 ];

@@ -1,0 +1,8 @@
+{
+  "$comment": "M7 T15 (D-131 fragment): the watchlist star of the Market pages. A test file must mention the action name.",
+  "routes": {
+    "action src/app/(app)/market/actions.ts#toggleWatchlistAction": {
+      "tests": ["tests/market/watchlistAction.test.ts"]
+    }
+  }
+}

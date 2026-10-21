@@ -12,6 +12,7 @@ export default async function SignInPage({ searchParams }: Props) {
   const callbackUrl = safeCallbackUrl(sp.callbackUrl);
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col items-center justify-center gap-6 px-6 text-center">
+      <h1 className="sr-only">Sign in</h1>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/brand/praxis-logo-light.svg"

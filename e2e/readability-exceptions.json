@@ -1,0 +1,4 @@
+{
+  "_comment": "UXN-030 readability exceptions, reported for the Owner. Each entry drops one exact text from the Flesch-Kincaid check: { \"page\": \"/path (optional)\", \"text\": \"exact text\", \"reason\": \"why it cannot be simpler\" }.",
+  "exceptions": []
+}

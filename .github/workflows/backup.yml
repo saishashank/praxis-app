@@ -83,3 +83,33 @@ jobs:
       - run: npm ci
       - name: Restore drill (throwaway key, synthetic data)
         run: node scripts/backup/drill.mjs
+
+  # M8 T9 (decision 30): the staging job. The staging Worker dispatches `ref: main`. Staging has no
+  # data-repo token (SEC-017 f is held in `production` only) and must never write to the production
+  # data repo, so the staging job runs the synthetic restore drill (TST-108, D-046: a throwaway key,
+  # synthetic data, no environment secrets) on the dispatched `main` commit. The environment is
+  # `staging` for the audit trail only; no secret is referenced.
+  staging:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    concurrency:
+      group: backup-staging
+      cancel-in-progress: false
+    environment:
+      name: staging
+      deployment: false
+    env:
+      PRAXIS_ENV: staging
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - name: Restore drill (throwaway key, synthetic data)
+        run: node scripts/backup/drill.mjs

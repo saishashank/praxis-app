@@ -6,6 +6,7 @@ export default defineConfig([
   ...nextVitals,
   ...nextTs,
   globalIgnores([
+    ".claude/**",
     ".next/**",
     "out/**",
     "coverage/**",

@@ -1,4 +1,4 @@
-# Database restore (local script)
+# Database restore (workflow drill and local script)
 
 No personal data is in this file. Spec: OPS-040, NFR-004, TST-108, AT-04, SEC-017 (l), SEC-108 f, PLT-022b.
 
@@ -34,21 +34,51 @@ Order: OPS-040 (all steps), SEC-017 (l), TST-108, NFR-004 RTO, AT-04, SEC-108 f,
 
   > - **PLT-022b (s9)** Backups MUST be encrypted (e.g. `age`) to a public key (stored in the GitHub environment `production` and in the production Vercel env for the auth-DB export); the **private key is never stored on GitHub** except as a temporary secret during a restore or drill (then deleted, TST-108). Encrypted backups are stored as release assets of the data repo (not commits), retained 14 daily / 8 weekly / 12 monthly. Each month the Owner downloads the latest encrypted backup and history files to storage outside GitHub (OPS-020). Personal data in backups follows NFR-030 (identity fields of users revoked > 90 days are hashed).
 
-Note on a spec tension: OPS-040 step 1 adds the private key to GitHub as a temporary secret, while SEC-108 f and PLT-022b say the private key is never on GitHub except temporarily for a restore or drill. This script takes the stricter reading: the key is never on GitHub, decryption is local.
+Note on the spec tension (decision 4 of `docs/M8_design.md`, D-152, replaces the stricter reading of D-052): OPS-040 and TST-108 put the private key on GitHub as a **temporary** environment secret, and PLT-022b allows exactly that ("except as a temporary secret during a restore or drill"). So there are two paths: the workflow `.github/workflows/restore-drill.yml` (this folder's `drill-turso.mjs`) and the local script `restore.mjs` (the path when GitHub itself is unavailable, OPS-040 last sentence).
 
-## What this folder is
+## The workflow path: `restore-drill.yml` (TST-108, OPS-040, AT-04, AT-30)
 
-`restore.mjs` is a **local-only** restore script. It is run on the Owner's own computer (or by the build agent with the Owner present). **There is no restore workflow and no GitHub Action in this folder, and none is planned for the production restore**.
+Dispatch only (no schedule), from the release branch, in the GitHub environment you choose. Inputs: `mode` (`drill`, `restore`, `verify-removed`), `environment` (`production`, or `staging` for the synthetic build-phase drill only), `key` (`real` or `throwaway`), `backup` (a tag `backup-YYYY-MM-DD`, empty = latest), `targets` (`both`, `main`, `auth`), `confirm` (restore mode: must be exactly `RESTORE`).
 
-Why local: the backup is encrypted to the Owner's offline key, and the private key is never stored on GitHub (SEC-108 f, PLT-022b). A workflow could not decrypt it unless the key were added as a temporary secret, which this design avoids. The Owner decrypts on their own computer (owner guide, section I), then runs this script on the plaintext `.ndjson.gz`.
+- **drill, key=real** (quarterly after go-live; the first real-key drill is part of M8 / AT-30): downloads the latest encrypted main and auth backups from the data repo (token (f)), decrypts them **in memory** with the temporary private key, verifies every table checksum, creates **two throwaway Turso databases** with the temporary platform token (l), restores into them (the real import path; counts and SHA-256 are re-read and compared), replays the **check cohort** (`cohortCheck.mjs`: a fixed, seeded cohort is replayed over the bars in the backup and over the bars read back from the restored database; every NAV value must be identical), then deletes both databases. A database that cannot be deleted fails the run and is named so you can delete it by hand.
+- **drill, key=throwaway** (build phase M1 to M7, staging): the same pipeline on **synthetic data only**, with a key pair generated inside the run. No private key, no production data, no data-repo token. Only the temporary token (l) is needed.
+- **restore** (OPS-040 steps 2 and 3): refused unless `confirm` is exactly `RESTORE`, the key is the real key and the environment is `production`. It restores into **new** databases named `restore-<db>-<date>-<random>`, **keeps** them and prints only their names. Then you create their tokens in the Turso dashboard and enter them with the new URL into the stores of SEC-017 (never through a log). A failed restore deletes the half-made databases. Revoke any active build-agent PAT first (OPS-040 step 0).
+- **verify-removed**: skips the drill and only runs the last step, so a run can end green after you removed the temporary secrets.
+
+Secrets are used only in the steps that need them: the guard step (presence check), the drill/restore step and the last step; never in `run:` text. The private key is read from the environment and decrypted in memory. No plaintext file is written; an `always()` step still removes the plaintext temp folder. The **last step fails while** `BACKUP_PRIVATE_KEY` or `TURSO_PLATFORM_TOKEN_TEMP` still exists in the environment, so a drill or restore run ends **red on purpose** until you delete them (GitHub then emails you). The log and job summary hold table names, counts, PASS/FAIL, elapsed time (against the 4 hour RTO) and, only if a delete failed or after a restore, database names: no URL, token, key or row content (every line also passes through a scrubber that blanks any secret value the process holds).
+
+Owner steps for a drill: see "How to run a drill" below.
 
 ## The temporary Turso platform token (l)
 
-The SEC-017 row (l) says the restore/drill workflow fails while token (l) exists and the nightly watchdog checks it is gone. This restore path **does not need token (l)**: the Owner creates the empty target database in the Turso dashboard and a database token for it, which are then revoked after use. No workflow here holds (l), and no (l) check is added by this task.
+The SEC-017 row (l) says the restore/drill workflow fails while token (l) exists and the nightly watchdog checks it is gone.
 
-- The app cannot list GitHub environment secret names with the read token (m) (that needs admin rights), so the watchdog cannot check that (l) is absent without a new, broader credential. Not built.
-- Instead, the owner guide (section I) has a checklist line: "no `TURSO_PLATFORM_TOKEN_TEMP` in the GitHub `production` environment, and no restore token left at Turso".
-- The workflow-based drill (TST-108, which does use (l)) is a later task and will need the SEC-017 (l) behaviour above.
+- The **workflow** path uses (l) (`TURSO_PLATFORM_TOKEN_TEMP`) to create and delete the databases (`turso-platform.mjs`; endpoint names and the narrowest create-database scope are [VERIFY] against the Turso Platform API reference before the first real run).
+- The **local script** path (`restore.mjs`) does not need (l): you create the empty target database and its token in the Turso dashboard and revoke them after use.
+- **Correction (M8 design finding 5):** an earlier version of this file said the watchdog cannot see the temporary secrets and that no check was built. That was wrong. A workflow job that runs in the `production` environment can tell whether its **own** secrets are set (an unset secret reads as empty), so no broader credential is needed. The last step of this workflow does exactly that, and the production job of `watchdog.yml` gets the same check (M8 T9). Reading secret _names_ through the GitHub API would need admin rights; this does not.
+- The owner guide (section I) keeps the checklist line: "no `TURSO_PLATFORM_TOKEN_TEMP` and no `BACKUP_PRIVATE_KEY` in the GitHub `production` environment, and no restore token left at Turso".
+
+## How to run a drill (Owner)
+
+Build phase (staging, synthetic):
+
+1. In the GitHub environment `staging`: add the secret `TURSO_PLATFORM_TOKEN_TEMP` (narrowest create-database scope, shortest expiry). Add the repository or environment variable `TURSO_ORG` (your Turso organisation name; optional `TURSO_GROUP`).
+2. Actions, "Restore drill", Run workflow on `release`: `mode=drill`, `environment=staging`, `key=throwaway`.
+3. Read the summary: `verify`, `restore`, `cohort ... NAV identical`, `delete: 2/2`, `drill: PASS`. The last step is red because the token still exists.
+4. Revoke the token at Turso and delete the `TURSO_PLATFORM_TOKEN_TEMP` secret. Run the workflow again with `mode=verify-removed`: it must be green.
+
+Real key (production, after the build-agent PAT is revoked):
+
+1. Add `BACKUP_PRIVATE_KEY` (the offline private key text) and `TURSO_PLATFORM_TOKEN_TEMP` to the GitHub environment `production`. `TURSO_ORG` must be set as a variable.
+2. Run the workflow: `mode=drill`, `environment=production`, `key=real`, `targets=both`.
+3. Read the summary as above (it must say PASS and show elapsed time; RTO 4h within).
+4. Delete both secrets, revoke the token at Turso, run again with `mode=verify-removed` (green). The next nightly watchdog must stay green.
+
+Real restore: the same, with `mode=restore`, `confirm=RESTORE`; then OPS-040 steps 3 to 5.
+
+## Local script: `restore.mjs` (GitHub-down path)
+
+`restore.mjs` is a **local** restore script. It is run on the Owner's own computer (or by the build agent with the Owner present) when GitHub is unavailable, using the monthly offsite copy. The Owner decrypts on their own computer (owner guide, section I), then runs this script on the plaintext `.ndjson.gz`.
 
 ## Usage
 
@@ -81,8 +111,9 @@ The 4 hours count from when the Owner starts, not from when the script starts. N
 - Everything is held in memory (the same limit as the backup, see `scripts/backup/README.md`). Streaming is a later change.
 - The restore sends one batch to Turso. A database much larger than the M1 sizes may need chunking; the script then fails closed (nothing written) rather than partially restoring.
 - The dump format does not carry AUTOINCREMENT sequences or integers beyond 2^53 (see `core.mjs`).
+- The check cohort is the simple deterministic buy-and-hold check (`cohortCheck.mjs`), not the batch 2a/2b trading engine; a stored live cohort can be injected later. It needs the `price_bar` table, so an empty main backup fails the cohort step.
 - Restoring does not point the app at the new database. That is OPS-040 step 3 (owner guide, section I).
 
 ## Tests
 
-`scripts/restore/restore.test.mjs` (node:test, local temp libSQL files, no network, no credentials), part of `npm run test:smoke`.
+`restore.test.mjs` (local script), `turso-platform.test.mjs` (fake fetch), `cohortCheck.test.mjs`, `drill-turso.test.mjs` (fake Platform API, local libSQL files, synthetic throwaway key) and `restore-drill.workflow.test.mjs` (parses the YAML). node:test, no network, no credentials; all part of `npm run test:smoke`.

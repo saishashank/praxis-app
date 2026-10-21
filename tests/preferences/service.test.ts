@@ -31,6 +31,8 @@ describe("defaults and merge", () => {
       time_format: "24h",
       alert_p1: "immediate",
       alert_p2: "digest",
+      motion: "on",
+      times_in: "melbourne",
     });
     expect(DEFAULT_PREFERENCES.theme).toBe("dark");
   });
@@ -91,6 +93,8 @@ describe("updatePreferences", () => {
       time_format: "12h",
       alert_p1: "immediate",
       alert_p2: "digest",
+      motion: "on",
+      times_in: "melbourne",
     });
     const audits = await auditRows(db);
     expect(audits).toHaveLength(1);

@@ -12,3 +12,7 @@ docs
 scripts/smoke
 vercel.json
 tests/fixtures
+.claude
+src/generated
+# M8 T9: byte-exact stored copies of the production jobs (scripts/ci/prod-job-lock.mjs); never reformatted
+scripts/ci/fixtures/prod-jobs/

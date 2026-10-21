@@ -31,6 +31,14 @@ import {
 import { corporateActionsHook } from "../corporateActions/engine.mjs";
 import { qualityHook, readQualityConfig } from "../quality/engine.mjs";
 import { TIERS } from "../quality/rules.mjs";
+import { INDEX_YAHOO_SYMBOL, parseIndexText } from "../index/indexBars.mjs";
+import { inputsStage } from "../index/inputsStage.mjs";
+import {
+  parseShortText,
+  planShortDates,
+  shortModeAllowsFetch,
+  shortSourceMode,
+} from "../shortInterest.mjs";
 
 export const JOB = "ingest-batch1";
 export const STAGE_NAMES = [
@@ -44,8 +52,9 @@ export const STAGE_NAMES = [
   "quality",
   "marker",
 ];
-/** Stages 5..7 are not built in M2 (design section 1); they are recorded as stubs. */
-const STUB_STAGES = ["announcements", "macro_and_other", "fundamentals"];
+/** Stages 5 and 7 are not built (design section 1); they are recorded as stubs. Stage 6
+ * (macro_and_other) carries the index bars and the ASIC short positions since M4 T3. */
+const STUB_STAGES = ["announcements", "fundamentals"];
 const CALENDAR_BACK_DAYS = 90;
 const ROWS_PER_STATEMENT = 100;
 
@@ -247,6 +256,12 @@ export async function assess(db, o) {
     codes: uni.codes,
     start: previousTradingDay(oldest, calRows), // one session back: the D-1 re-fetch (DAT-002)
     end: newest,
+    // M4 T3: the benchmark index rides the same Yahoo fetch; the ASIC dates only when that source
+    // is on (the Node ASIC step has no secrets and skips an empty list).
+    indices: [INDEX_YAHOO_SYMBOL],
+    short_dates: shortModeAllowsFetch(await shortSourceMode(db))
+      ? await planShortDates(db, { target, market })
+      : [],
   };
   return { ...base, kind: "go", plan, calRows, codes: uni.codes, excluded: uni.excluded, request };
 }
@@ -277,6 +292,9 @@ export async function prepareBatch1(db, o) {
  * @typedef {object} RunOptions
  * @property {() => number} nowMs
  * @property {string | null} [barsText]  contents of bars.json, null when no file exists
+ * @property {string | null} [indexText]  contents of index.json (M4 T3), null when absent
+ * @property {string | null} [shortText]  contents of short.json (M4 T3), null when absent
+ * @property {(ctx: any) => Promise<object | void>} [inputsHook]  stage 6 override
  * @property {string} [commitSha]
  * @property {string} [market]
  * @property {number} [maxDates]
@@ -398,6 +416,13 @@ export async function runBatch1(db, o) {
       out_of_plan: parsed.rows.filter((r) => !inPlan.has(r.date)).length,
     };
   }
+  ctx.inputs = {
+    index: parseIndexText(
+      o.indexText,
+      a.request ? { from: a.request.start, to: a.request.end } : {},
+    ),
+    short: parseShortText(o.shortText),
+  };
   const { start, end } = monthBoundsUtc(o.nowMs());
   const used = await db.execute({
     sql: `SELECT COALESCE(SUM(rows_written), 0) AS w FROM run_record
@@ -588,6 +613,25 @@ async function processDate(ctx, item, isTarget) {
     stages.refetch = refetch.summary;
 
     for (const s of STUB_STAGES) stages[s] = "stub";
+
+    // Stage 6: index bars + ASIC short positions (M4 T3). Never fails the bars.
+    stage = "macro_and_other";
+    const inHook = ctx.o.inputsHook ?? inputsStage;
+    try {
+      stages.macro_and_other =
+        (await inHook({
+          db,
+          market,
+          d,
+          io,
+          now: iso(),
+          isTarget,
+          universe,
+          inputs: ctx.inputs,
+        })) ?? "done";
+    } catch {
+      stages.macro_and_other = "hook_failed";
+    }
 
     // Stage 4: corporate actions (T8, DAT-220..223). The default is the corporate action engine.
     stage = "corporate_actions";

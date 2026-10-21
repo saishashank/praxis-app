@@ -7,6 +7,17 @@ import { errorText } from "@/lib/users/messages";
 
 type Result = { ok: true; changed: boolean } | { error: string };
 
+export type ControlInput = {
+  name: string;
+  label: string;
+  type: "text" | "date" | "number" | "select";
+  options?: { value: string; label: string }[];
+  defaultValue?: string;
+  min?: number;
+  max?: number;
+  required?: boolean;
+};
+
 type Props = {
   action: (fd: FormData) => Promise<Result>;
   /** Hidden form fields sent with the action (for example enabled=1). */
@@ -18,6 +29,8 @@ type Props = {
   /** When set, a box with this text must be ticked before Confirm works (risk acceptance). */
   checkbox?: string;
   confirmLabel?: string;
+  /** Fields the Owner fills in inside the confirmation panel (M5 controls). */
+  inputs?: ControlInput[];
 };
 
 export function DataControlForm({
@@ -27,6 +40,7 @@ export function DataControlForm({
   explain,
   checkbox,
   confirmLabel = "Confirm",
+  inputs,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [ticked, setTicked] = useState(false);
@@ -55,6 +69,35 @@ export function DataControlForm({
       ) : (
         <div role="group" aria-label={`Confirm: ${label}`} className="rounded border p-3 text-sm">
           <p>{explain}</p>
+          {inputs?.map((i) => (
+            <label key={i.name} className="mt-2 flex flex-col gap-1">
+              <span>{i.label}</span>
+              {i.type === "select" ? (
+                <select
+                  name={i.name}
+                  defaultValue={i.defaultValue}
+                  required={i.required}
+                  className="w-fit rounded border px-2 py-0.5"
+                >
+                  {i.options?.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  name={i.name}
+                  type={i.type}
+                  defaultValue={i.defaultValue}
+                  min={i.min}
+                  max={i.max}
+                  required={i.required}
+                  className="w-fit rounded border px-2 py-0.5"
+                />
+              )}
+            </label>
+          ))}
           {checkbox !== undefined && (
             <label className="mt-2 flex items-start gap-2">
               <input

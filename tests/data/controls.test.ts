@@ -613,10 +613,10 @@ describe("c2. the listed-companies source follows O-23 (D-067)", () => {
 });
 
 describe("d. market mode (source of truth: market.mode; config value is the history)", () => {
-  it("full is refused (not available until M3) with no audit; bad input is invalid", async () => {
+  it("full in production is refused without a sign-off (M8 T11) with no audit; bad input is invalid", async () => {
     expect(await setMarketMode(base({ market: "AU", mode: "full" }) as never)).toEqual({
       ok: false,
-      error: "not_available",
+      error: "signoff_required",
     });
     for (const [market, mode] of [
       ["US", "off"],
@@ -733,16 +733,16 @@ describe("d. market mode (source of truth: market.mode; config value is the hist
     });
   });
 
-  it("the validator refuses full, unknown markets and bad shapes; the generic editor cannot write it", async () => {
+  it("the validator accepts full (the interlock is in the Owner action), refuses unknown markets and bad shapes; the generic editor cannot write it", async () => {
     expect(validateMarketModes({ AU: "data_only" })).toBeNull();
     expect(validateMarketModes({ AU: "off" })).toBeNull();
-    expect(validateMarketModes({ AU: "full" })).toMatch(/M3/);
-    expect(validateMarketModes({ AU: "on" })).toMatch(/off or data_only/);
+    expect(validateMarketModes({ AU: "full" })).toBeNull();
+    expect(validateMarketModes({ AU: "on" })).toMatch(/off, data_only or full/);
     expect(validateMarketModes({ US: "off" })).toMatch(/unknown market/);
     expect(validateMarketModes({})).toMatch(/unknown market/);
     expect(validateMarketModes("data_only")).toMatch(/each market/);
     expect(validateMarketModes([])).toMatch(/each market/);
-    expect(await CONFIG_KEYS.market_mode.validate({ AU: "full" })).toMatch(/M3/);
+    expect(await CONFIG_KEYS.market_mode.validate({ AU: "full" })).toBeNull();
     await expect(
       setConfig(main, {
         key: "market_mode",
@@ -866,7 +866,7 @@ describe("System Health actions (Owner only)", () => {
     expect(await setDispatchEnabledAction(form({}))).toEqual({ error: "invalid" });
     expect(await setAsxEnabledAction(form({ enabled: "yes" }))).toEqual({ error: "invalid" });
     expect(await setMarketModeAction(form({ market: "AU", mode: "full" }))).toEqual({
-      error: "not_available",
+      error: "signoff_required",
     });
     expect(await setMarketModeAction(form({}))).toEqual({ error: "invalid" });
     expect(await setSourceAcceptedAction(form({ source: "yahoo_eod", accept: "1" }))).toEqual({

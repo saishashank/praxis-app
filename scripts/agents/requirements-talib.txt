@@ -1,0 +1,11 @@
+# TA-Lib reference fixture install set (talib-reference.yml; M4 T16a, M8 T17): pinned and hashed for
+# `pip install --require-hashes` (CPython 3.12, Linux x86_64). TA-Lib 0.6.4 is published as a source
+# archive only, so pip builds it; setuptools and numpy are listed so the build tools are pinned too.
+numpy==2.2.6 \
+    --hash=sha256:e29554e2bef54a90aa5cc07da6ce955accb83f21ab5de01a62c8478897b264fd \
+    --hash=sha256:fd83c01228a688733f1ded5201c678f0c53ecc1006ffbc404db9f7a899ac6249
+setuptools==84.2.1 \
+    --hash=sha256:3ff8b3b5492a0aa66960f4419365a86b84e013070d4313e4d4a6894f5d64d6bc \
+    --hash=sha256:ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2
+ta-lib==0.6.4 \
+    --hash=sha256:08f55bc5771a6d1ceb1a2b713aad7b05f04eb0061e980c9113571c532d32e9cb

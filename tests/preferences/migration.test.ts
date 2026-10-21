@@ -28,7 +28,7 @@ describe("auth migration 0003_user_preference", () => {
     const ms = await loadMigrations(MIGRATIONS("auth"));
     await migrateUp(db, ms);
     const before = await schemaOf(db);
-    expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 2 });
+    expect(await migrateDown(db, ms, 4)).toEqual({ rolledBack: 4, version: 2 }); // 0006, 0005 and 0004 sit on top
     expect((await schemaOf(db)).some((s) => s.includes("user_preference"))).toBe(false);
     await migrateUp(db, ms);
     expect(await schemaOf(db)).toEqual(before);

@@ -13,6 +13,54 @@
     "POST /api/internal/universe-import": {
       "tests": ["tests/universe/route.test.ts", "tests/security/hmac.test.ts"]
     },
+    "POST /api/email/test": {
+      "tests": ["tests/email/testRoute.test.ts", "tests/email/send.test.ts"]
+    },
+    "POST /api/internal/sentinel-ingest": {
+      "tests": ["tests/sentinel/ingestRoute.test.ts", "tests/security/hmac.test.ts"]
+    },
+    "POST /api/internal/alert-flush": {
+      "tests": [
+        "tests/alerts/routes.test.ts",
+        "tests/alerts/deliver.test.ts",
+        "tests/security/hmac.test.ts"
+      ]
+    },
+    "POST /api/internal/preopen": {
+      "tests": [
+        "tests/arena/preopenRoute.test.ts",
+        "tests/arena/preopen.test.ts",
+        "tests/security/hmac.test.ts"
+      ]
+    },
+    "POST /api/internal/evening-review": {
+      "tests": [
+        "tests/review/send.test.ts",
+        "tests/review/route.test.ts",
+        "tests/security/hmac.test.ts"
+      ]
+    },
+    "POST /api/internal/morning": {
+      "tests": ["tests/health/morningRoute.test.ts", "tests/security/hmac.test.ts"]
+    },
+    "POST /api/internal/incident": {
+      "tests": ["tests/alerts/routes.test.ts", "tests/security/hmac.test.ts"]
+    },
+    "GET /api/alerts": {
+      "tests": ["tests/alerts/routes.test.ts", "tests/alerts/api.test.ts"]
+    },
+    "POST /api/alerts/[key]/ack": {
+      "tests": ["tests/alerts/routes.test.ts", "tests/alerts/api.test.ts"]
+    },
+    "POST /api/alerts/[key]/snooze": {
+      "tests": ["tests/alerts/routes.test.ts", "tests/alerts/api.test.ts"]
+    },
+    "GET /api/alerts/quiet-hours": {
+      "tests": ["tests/alerts/routes.test.ts", "tests/alerts/api.test.ts"]
+    },
+    "POST /api/alerts/quiet-hours": {
+      "tests": ["tests/alerts/routes.test.ts", "tests/alerts/api.test.ts"]
+    },
     "POST /api/internal/maintenance": {
       "tests": ["tests/maintenance/route.test.ts", "tests/maintenance/retention.test.ts"]
     },
@@ -60,6 +108,12 @@
     "action src/app/(app)/users/actions.ts#signOutEverywhereAction": {
       "tests": ["tests/users/actions.test.ts"]
     },
+    "action src/app/(app)/users/actions.ts#grantUnmaskAction": {
+      "tests": ["tests/users/actions.test.ts", "tests/view/grants.test.ts"]
+    },
+    "action src/app/(app)/users/actions.ts#revokeUnmaskAction": {
+      "tests": ["tests/users/actions.test.ts", "tests/view/grants.test.ts"]
+    },
     "action src/app/(app)/health/actions.ts#confirmCalendarAction": {
       "tests": ["tests/data/calendarConfirm.test.ts"]
     },
@@ -78,17 +132,89 @@
     "action src/app/(app)/health/actions.ts#resetAsxTripAction": {
       "tests": ["tests/data/controls.test.ts"]
     },
+    "action src/app/(app)/health/emailActions.ts#addWatchListCodeAction": {
+      "tests": ["tests/sentinel/emailControls.test.ts"]
+    },
+    "action src/app/(app)/health/emailActions.ts#removeWatchListCodeAction": {
+      "tests": ["tests/sentinel/emailControls.test.ts"]
+    },
+    "action src/app/(app)/health/emailActions.ts#setCredentialExpiryAction": {
+      "tests": ["tests/sentinel/emailControls.test.ts"]
+    },
+    "action src/app/(app)/health/emailActions.ts#setEmailModeAction": {
+      "tests": ["tests/sentinel/emailControls.test.ts"]
+    },
+    "action src/app/(app)/health/emailActions.ts#setEmailReviewTestDateAction": {
+      "tests": ["tests/sentinel/emailControls.test.ts"]
+    },
+    "action src/app/(app)/health/emailActions.ts#snoozeAttentionAction": {
+      "tests": ["tests/sentinel/emailControls.test.ts"]
+    },
     "action src/app/(app)/review/actions.ts#confirmCorporateActionAction": {
       "tests": ["tests/corporateActions/admin.test.ts"]
     },
     "action src/app/(app)/review/actions.ts#rejectCorporateActionAction": {
       "tests": ["tests/corporateActions/admin.test.ts"]
     },
+    "action src/app/(app)/reviews/[date]/actions.ts#markReviewReadAction": {
+      "tests": ["tests/review/pages.test.tsx"]
+    },
     "action src/app/(app)/config/actions.ts#updateConfigAction": {
       "tests": ["tests/config/actions.test.ts"]
     },
     "action src/app/(app)/settings/actions.ts#updatePreferencesAction": {
       "tests": ["tests/preferences/actions.test.ts"]
+    },
+    "GET /api/learning/challengers": {
+      "tests": ["tests/learning/routes.test.ts"]
+    },
+    "GET /api/learning/plan": {
+      "tests": ["tests/learning/planDocsRoutes.test.ts"]
+    },
+    "GET /api/learning/documents": {
+      "tests": ["tests/learning/planDocsRoutes.test.ts"]
+    },
+    "GET /api/learning/lessons": {
+      "tests": ["tests/learning/routes.test.ts"]
+    },
+    "GET /api/learning/annotations": {
+      "tests": ["tests/learning/routes.test.ts"]
+    },
+    "POST /api/learning/annotations": {
+      "tests": ["tests/learning/routes.test.ts"]
+    },
+    "PATCH /api/learning/annotations": {
+      "tests": ["tests/learning/routes.test.ts"]
+    },
+    "DELETE /api/learning/annotations": {
+      "tests": ["tests/learning/routes.test.ts"]
+    },
+    "POST /api/learning/challengers/[id]/approve": {
+      "tests": ["tests/learning/routes.test.ts", "tests/learning/promotion.test.ts"]
+    },
+    "POST /api/learning/challengers/[id]/reject": {
+      "tests": ["tests/learning/routes.test.ts", "tests/learning/promotion.test.ts"]
+    },
+    "POST /api/learning/challengers/[id]/force-apply": {
+      "tests": ["tests/learning/routes.test.ts", "tests/learning/promotion.test.ts"]
+    },
+    "POST /api/learning/challengers/[id]/retire": {
+      "tests": ["tests/learning/routes.test.ts", "tests/learning/promotion.test.ts"]
+    },
+    "POST /api/learning/challengers/[id]/shadow-viewed": {
+      "tests": ["tests/learning/routes.test.ts"]
+    },
+    "POST /api/learning/families/[family]/rollback": {
+      "tests": ["tests/learning/routes.test.ts", "tests/learning/promotion.test.ts"]
+    },
+    "POST /api/learning/families/[family]/versions": {
+      "tests": ["tests/learning/routes.test.ts"]
+    },
+    "POST /api/learning/lessons/[id]/force-apply": {
+      "tests": ["tests/learning/routes.test.ts", "tests/learning/promotion.test.ts"]
+    },
+    "POST /api/learning/lessons/[id]/retire": {
+      "tests": ["tests/learning/routes.test.ts"]
     }
   }
 }

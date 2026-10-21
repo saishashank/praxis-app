@@ -1,0 +1,39 @@
+Subject: Praxis Morning Brief — Mon 19 Oct 2026
+
+MORNING BRIEF
+
+
+Mon 19 Oct 2026
+
+
+Overnight announcements
+-----------------------
+
+Code | Announcement | Time
+TST01 | Capital raising announced (https://asx.example.test/ann/9) | 07:45 AEDT
+
+
+Today's known events
+--------------------
+
+- Ex-dividend: TST05 today
+- RBA: minutes released 11:30
+
+
+Tonight's plan
+--------------
+
+- 2 orders pending at the open
+- E03 thesis-breaker amber (TB-REGIME)
+
+Open Praxis: https://praxis.example.test
+
+--
+
+Optional brief, template text only; trading days of the active market.
+
+Simulation for personal information only; not financial advice.
+
+Open Praxis: https://praxis.example.test
+
+This is a transactional email sent to the account Owner only; there is no mailing list, so there is nothing to unsubscribe from. Reviews can be paused in Settings.
