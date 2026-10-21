@@ -1204,6 +1204,10 @@ _Spec: AGT-030, Ch. 07 §7.4, UXN-122_
 
 _Terms used in the Owner guide (BLD-012)._
 
+### $0 check
+A look at each provider's billing page to confirm there is no charge and no card on a paid plan.
+_Spec: PRD-007, AT-30_
+
 ### 2-step verification
 A second sign-in check (a code or phone prompt) on top of your password; required on every account the build uses.
 _Spec: SEC-020_
@@ -1211,6 +1215,14 @@ _Spec: SEC-020_
 ### age key pair
 Two linked keys made with the free `age` tool: the public key locks backups, and only the offline private key can unlock them.
 _Spec: PLT-022b, SEC-017 k_
+
+### Build token
+The short-lived GitHub token (a classic personal access token of the bot account) that the build agent works with; you revoke it at go-live.
+_Spec: SEC-017 a, SEC-102_
+
+### Check cohort
+A fixed test cohort that the restore drill replays over the restored data to prove the numbers come back identical.
+_Spec: TST-108, AT-30_
 
 ### Cloudflare
 The free service that runs Praxis's small always-on timer program (the Worker); production and staging use separate accounts.
@@ -1220,6 +1232,22 @@ _Spec: BLD-010 r7, O-32_
 A small program on Cloudflare that wakes on a schedule to keep time and start jobs; it has no public web page.
 _Spec: PLT-071, BLD-012_
 
+### Cold start
+A first trading day run on an empty database; the staging test proves every job copes with no history.
+_Spec: AT-28, BLD-030_
+
+### Data-only mode
+The production state before sign-off: the real nightly data pipeline runs, but the Arena, emails and decision agents are off.
+_Spec: BLD-024_
+
+### Emergency rotation checklist
+A short list for one secret: revoke it, replace it in every store, run the smoke test, record it; the Owner guide has one for each secret.
+_Spec: OPS-037, SEC-017_
+
+### Full mode
+The market mode in which the Arena trades; in production it needs the sign-off record first.
+_Spec: MKT-102, BLD-030_
+
 ### GitHub
 The website that holds the app's code, runs its automatic tests and deployments, and stores most of its secrets.
 _Spec: BLD-010 r1_
@@ -1227,6 +1255,10 @@ _Spec: BLD-010 r1_
 ### GitHub environment
 A named, locked box of secrets in GitHub (such as `production`) that only approved jobs on set branches can open.
 _Spec: SEC-017, SEC-108_
+
+### Go-live sign-off
+The record you make on the go-live page after every checklist item is ticked; production cannot switch to full mode without it.
+_Spec: AT-30, BLD-030_
 
 ### Google Cloud
 Google's console where the sign-in clients ("Sign in with Google") for production and staging are created.
@@ -1239,3 +1271,23 @@ _Spec: BLD-010, BLD-011_
 ### OAuth client
 The registration that lets Praxis offer "Sign in with Google"; it has a public ID and a secret kept in Vercel.
 _Spec: PLT-035, SEC-017 j_
+
+### Release gate
+A check that a release has passed the tests, a staging day, a recent restore drill, a security scan and a nightly run before production may take it.
+_Spec: TST-112_
+
+### Restore drill
+A practice restore of a real backup into two throwaway databases, which are then deleted; the temporary key and token must be removed afterwards.
+_Spec: TST-108, OPS-040_
+
+### Rotation
+Replacing a secret with a new one in every store that holds it, then proving it with the smoke test.
+_Spec: SEC-021, OPS-037_
+
+### Smoke test
+A manual check that each secret works, which prints only pass or fail and never a value.
+_Spec: SEC-101, BLD-011_
+
+### Worker slot
+One scheduled job of the Cloudflare Worker (for example the 20:00 evening review); you list the slots that may run on System health.
+_Spec: PLT-071, D-155_

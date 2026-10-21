@@ -1,0 +1,32 @@
+{
+  "format": "praxis-event-rules-cases/1",
+  "note": "Synthetic announcement titles; no vendor text.",
+  "cases": [
+    { "type": "Trading Halt", "title": "Trading Halt", "category": "halt_suspension" },
+    { "type": null, "title": "Request for voluntary suspension from quotation", "category": "halt_suspension" },
+    { "type": "Price Query", "title": "Response to ASX price query", "category": "exchange_query" },
+    { "type": null, "title": "ASX Aware Letter", "category": "exchange_query" },
+    { "type": null, "title": "Becoming a substantial holder from ABC", "category": "substantial_holder" },
+    { "type": null, "title": "Appendix 3Y - Change of Director's Interest Notice", "category": "director_trade" },
+    { "type": null, "title": "Receipt of takeover proposal", "category": "takeover_target" },
+    { "type": null, "title": "Scheme Implementation Deed signed", "category": "takeover_target" },
+    { "type": null, "title": "Bidder's Statement lodged", "category": "takeover_bidder" },
+    { "type": null, "title": "FY guidance downgrade", "category": "guidance_down" },
+    { "type": null, "title": "Company lowers earnings guidance", "category": "guidance_down" },
+    { "type": null, "title": "Profit warning", "category": "guidance_down" },
+    { "type": null, "title": "Company upgrades FY earnings guidance", "category": "guidance_up" },
+    { "type": null, "title": "Trading update ahead of market expectations", "category": "guidance_up" },
+    { "type": null, "title": "Successful placement and entitlement offer", "category": "capital_raising" },
+    { "type": "Proposed issue of securities", "title": "Proposed issue of securities - ABC", "category": "capital_raising" },
+    { "type": null, "title": "Company wins major contract", "category": "contract_win" },
+    { "type": null, "title": "Contract awarded by state government", "category": "contract_win" },
+    { "type": null, "title": "Half Year Results announcement", "category": "results" },
+    { "type": null, "title": "Appendix 4E and annual report", "category": "results" },
+    { "type": null, "title": "Declaration of final dividend", "category": "dividend_change" },
+    { "type": null, "title": "Resignation of Chief Executive Officer", "category": "management_change" },
+    { "type": null, "title": "Appointment of new director", "category": "management_change" },
+    { "type": null, "title": "Investor presentation", "category": "other" },
+    { "type": null, "title": "Withdraws guidance for FY", "category": "guidance_down" },
+    { "type": null, "title": "Notice of general meeting", "category": "other" }
+  ]
+}

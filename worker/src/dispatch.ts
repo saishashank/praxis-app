@@ -29,6 +29,7 @@ export async function dispatchWorkflow(
   env: DispatchEnv,
   workflow: string,
   f: typeof fetch,
+  inputs?: Record<string, string>,
 ): Promise<DispatchResult> {
   if (!isDispatchable(workflow)) return { ok: false, detail: "workflow-not-allowed" };
   const ref = refFor(env.PRAXIS_ENV);
@@ -47,7 +48,7 @@ export async function dispatchWorkflow(
           "X-GitHub-Api-Version": GITHUB_API_VERSION,
           "User-Agent": "praxis-sentinel-clock",
         },
-        body: JSON.stringify({ ref }),
+        body: JSON.stringify(inputs === undefined ? { ref } : { ref, inputs }),
         redirect: "manual",
         signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS),
       },

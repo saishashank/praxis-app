@@ -9,6 +9,8 @@ const summaryMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/auth/guard", () => ({ requireUser: (...a: unknown[]) => requireUser(...a) }));
 vi.mock("@/lib/health/summary", () => ({ getHealthSummary: summaryMock }));
 vi.mock("@/lib/db/client", () => ({ mainDb: () => ({}), authDb: () => ({}) }));
+vi.mock("@/app/(app)/health/DayTimelineCheck", () => ({ DayTimelineCheck: () => null })); // M8 T12: async server card, tested on its own
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) })); // Control Room client island
 vi.mock("@/app/(app)/health/actions", () => ({ confirmCalendarAction: vi.fn() }));
 
 afterEach(cleanup);

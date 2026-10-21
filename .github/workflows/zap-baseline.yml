@@ -1,0 +1,88 @@
+# OWASP ZAP baseline (M8 T12; docs/M8_design.md 2.3, decisions 7, 37, 38; AT-29, SEC-107, SEC-110).
+# Two runs of the same passive baseline scan:
+#   local    on every push to `build` and `main`: the production build of this commit, started on
+#            the runner with throwaway databases and per-run random secrets (no real service, no
+#            repository secret), unauthenticated.
+#   staging  on dispatch, from `main`: the staging deployment as the viewer test identity (TST-113).
+#            Required by the release gate.
+# Output is ONLY the job summary, produced by scripts/ci/zap-summary.mjs: rule id, rule name, risk
+# and finding count per rule. No URL, header value, cookie or evidence; ZAP's own output is
+# discarded and the report file (which does hold URLs) is deleted at the end and never uploaded.
+# High findings fail the job unless scripts/ci/zap-exceptions.json lists the rule with a reason and
+# an expiry of at most 30 days (decision 38). The container is pinned by digest (Apache-2.0).
+# Secrets: only the staging job, only in `env:` of the one step that logs in and scans.
+name: ZAP baseline
+
+on:
+  push:
+    branches: [build, main]
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  # OWNER/OPUS ACTION: replace the zeros with the digest of the reviewed ZAP release
+  # (`docker buildx imagetools inspect ghcr.io/zaproxy/zaproxy:<release>`). Until then the pull
+  # fails, which is the safe state; scripts/ci/zap-baseline.workflow.test.mjs lists it as a todo.
+  ZAP_IMAGE: ghcr.io/zaproxy/zaproxy@sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+jobs:
+  local:
+    # Skipped (green) until the ZAP image digest above is pinned and the repo variable
+    # ZAP_IMAGE_PINNED is set to true (D-158), so a push never fails on the placeholder digest.
+    if: github.event_name == 'push' && vars.ZAP_IMAGE_PINNED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    concurrency:
+      group: zap-local-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - name: Scan the local production build
+        run: node scripts/ci/zap-run.mjs local
+      - name: Summary (rule, risk, count only)
+        run: node scripts/ci/zap-summary.mjs "$RUNNER_TEMP/zap/zap.json" --label "local build"
+      - name: Delete the report
+        if: ${{ always() }}
+        run: rm -rf "$RUNNER_TEMP/zap"
+
+  staging:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    concurrency:
+      group: zap-staging
+      cancel-in-progress: false
+    environment:
+      name: staging
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      # The only step with secrets: the masked staging address and the test-identity secret.
+      - name: Scan staging as the viewer test identity
+        run: node scripts/ci/zap-run.mjs staging
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL_STAGING }}
+          TEST_IDENTITY_SECRET: ${{ secrets.TEST_IDENTITY_SECRET_STAGING }}
+      - name: Summary (rule, risk, count only)
+        run: node scripts/ci/zap-summary.mjs "$RUNNER_TEMP/zap/zap.json" --label "staging, authenticated"
+      - name: Delete the report
+        if: ${{ always() }}
+        run: rm -rf "$RUNNER_TEMP/zap"

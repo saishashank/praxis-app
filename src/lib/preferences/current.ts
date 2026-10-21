@@ -12,3 +12,14 @@ export async function currentTheme(): Promise<Preferences["theme"]> {
     return DEFAULT_PREFERENCES.theme;
   }
 }
+
+// The look of the page for the root layout: theme (UXN-280) and the Motion switch (UXN-281).
+export async function currentLook(): Promise<Pick<Preferences, "theme" | "motion">> {
+  try {
+    const user = await getCurrentUser();
+    const p = user ? await userPreferences(user.id) : DEFAULT_PREFERENCES;
+    return { theme: p.theme, motion: p.motion };
+  } catch {
+    return { theme: DEFAULT_PREFERENCES.theme, motion: DEFAULT_PREFERENCES.motion };
+  }
+}

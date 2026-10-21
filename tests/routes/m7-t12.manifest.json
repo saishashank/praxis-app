@@ -1,0 +1,8 @@
+{
+  "$comment": "M7 T12 (D-131 fragment): the Strategies sort-preference server action. A test file must mention the action name.",
+  "routes": {
+    "action src/app/(app)/strategies/actions.ts#setSortPreferenceAction": {
+      "tests": ["tests/strategies/sortAction.test.ts"]
+    }
+  }
+}

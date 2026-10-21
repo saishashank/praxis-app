@@ -1,0 +1,14 @@
+{
+  "$comment": "M7 T8 (D-131 fragment): the three JSON routes of the page data layer. A test file must mention the route path (without the leading slash).",
+  "routes": {
+    "GET /api/news/[id]": {
+      "tests": ["tests/loaders/jsonRoutes.test.ts"]
+    },
+    "GET /api/market/[code]/overview": {
+      "tests": ["tests/loaders/jsonRoutes.test.ts"]
+    },
+    "GET /api/market/search": {
+      "tests": ["tests/loaders/jsonRoutes.test.ts"]
+    }
+  }
+}

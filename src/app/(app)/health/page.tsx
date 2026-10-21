@@ -1,13 +1,25 @@
 // System Health (PLT-061, PLT-017, UX-090/092/117). Every role may read status; secrets status,
 // error details are Owner-only (ROL-102a) and never show values (SEC-101).
-import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
 import { formatMelbourne, type TimeFormat } from "@/lib/health/format";
 import { userPreferences } from "@/lib/preferences/read";
-import { SOURCE_CONTROLS } from "@/lib/data/controls";
+import { envFor } from "@/lib/ui/loaders/shell";
+import { loadControlRoom, type ControlRoomModel } from "@/lib/ui/loaders/controlRoom";
+import { Banner } from "@/components/ui/States";
+import { ControlRoom, type SnoozeInfo } from "./ControlRoom";
 import { CalendarConfirmForm } from "./CalendarConfirmForm";
 import { DataControlForm } from "./DataControlForm";
+import { EmailControlsSection } from "./EmailControlsSection";
+import { WorkerSlotsSection } from "./WorkerSlotsSection";
+import { loadSlotsView, type SlotsView } from "@/lib/golive/slots";
+import { DayTimelineCheck } from "./DayTimelineCheck";
+import { loadAttentionItems } from "@/lib/health/attention";
+import {
+  loadEmailControlsView,
+  SOURCE_CONTROLS,
+  type EmailControlsView,
+} from "@/lib/data/controls";
 import {
   confirmCalendarAction,
   resetAsxTripAction,
@@ -26,15 +38,6 @@ import {
 import type { MeterLevel } from "@/lib/usage/meters";
 
 export const dynamic = "force-dynamic";
-
-const PLACEHOLDERS: { label: string; note: string }[] = [
-  { label: "Sentinel last poll", note: "M2" },
-  { label: "Data freshness (last bar date per feed)", note: "M2" },
-  { label: "LLM provider status", note: "M5" },
-  { label: "Last backup", note: "M2" },
-  { label: "Last restore test", note: "M2" },
-  { label: "Last email", note: "M5" },
-];
 
 const STATE_LABEL: Record<JobState, string> = {
   ok: "OK",
@@ -227,14 +230,19 @@ function DataControlsSection(props: {
             {c.markets.map((m) => (
               <div key={m.market} className="flex flex-col gap-1 text-sm">
                 <h3 className="font-medium">{m.market} market mode</h3>
-                {m.mode === "off" ? (
+                {m.mode !== "data_only" && (
                   <DataControlForm
                     action={setMarketModeAction}
                     fields={{ market: m.market, mode: "data_only" }}
                     label="Set data-only mode"
-                    explain="The nightly data pipeline and the Worker work for this market again. Nothing else runs."
+                    explain={
+                      m.mode === "full"
+                        ? "Trading stops: the Arena, emails and decision agents switch off. The nightly data pipeline keeps running."
+                        : "The nightly data pipeline and the Worker work for this market again. Nothing else runs."
+                    }
                   />
-                ) : (
+                )}
+                {m.mode !== "off" && (
                   <DataControlForm
                     action={setMarketModeAction}
                     fields={{ market: m.market, mode: "off" }}
@@ -242,7 +250,15 @@ function DataControlsSection(props: {
                     explain="The pipeline and the Worker skip this market until you set it back to data-only."
                   />
                 )}
-                <p className="text-text-muted">Full mode is not available until M3.</p>
+                {m.mode !== "full" && (
+                  <DataControlForm
+                    action={setMarketModeAction}
+                    fields={{ market: m.market, mode: "full" }}
+                    label="Switch to full mode"
+                    explain="Starts real paper trading: the Arena, emails and decision agents run. In production this is refused until the go-live sign-off is recorded on the Go-live page and the email mode is not off. In staging it is allowed."
+                    confirmLabel="Switch to full"
+                  />
+                )}
               </div>
             ))}
           </div>
@@ -419,17 +435,54 @@ export default async function HealthPage() {
   } catch {
     summary = null; // neutral message below; no error details
   }
+  // M5 email and alert controls: Owner only; unreadable data shows "unavailable", never details.
+  let emailControls: EmailControlsView | null = null;
+  if (user.role === "owner") {
+    try {
+      const db = mainDb();
+      emailControls = await loadEmailControlsView(db, await loadAttentionItems(db));
+    } catch {
+      emailControls = null;
+    }
+  }
+  // Worker slots (M8 T11): Owner only; unreadable data shows "unavailable".
+  let slotsView: SlotsView | null = null;
+  if (user.role === "owner") {
+    try {
+      slotsView = await loadSlotsView(mainDb());
+    } catch {
+      slotsView = null;
+    }
+  }
   const owner = user.role === "owner";
+  // The Control Room: ring, readouts, briefing, gauges, strip, ticker (UXN-283/285). A failed read
+  // shows a neutral line, never details; the older sections below keep working on their own.
+  let model: ControlRoomModel | null = null;
+  try {
+    model = await loadControlRoom(await envFor({ id: user.id, role: user.role }));
+  } catch {
+    model = null;
+  }
+  const snooze: SnoozeInfo | null = emailControls
+    ? { items: emailControls.attention, maxDays: emailControls.attentionSnoozeMaxDays }
+    : null;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-6 py-10">
-      <header className="flex flex-col gap-2">
+    <main className="mx-auto flex min-w-0 max-w-5xl flex-col gap-8 px-4 py-6 sm:px-6">
+      <header className="flex flex-col gap-1">
         <h1 className="text-3xl font-semibold tracking-tight">System Health</h1>
-        <p className="text-sm text-text-muted">Times are shown in Australia/Melbourne.</p>
-        <Link href="/" className="text-sm text-accent underline">
-          Home
-        </Link>
+        <p className="m-0 text-sm text-text-muted">
+          The Control Room. Times are shown in Australia/Melbourne.
+        </p>
       </header>
+
+      {model === null ? (
+        <Banner tone="warning" title="Control Room unavailable">
+          The health facts could not be read just now. The sections below may still be current.
+        </Banner>
+      ) : (
+        <ControlRoom model={model} owner={owner} tf={tf} snooze={snooze} />
+      )}
 
       {summary === null ? (
         <p role="status">Health data unavailable</p>
@@ -562,6 +615,11 @@ export default async function HealthPage() {
             />
           )}
 
+          {owner && <EmailControlsSection v={emailControls} />}
+          <DayTimelineCheck owner={owner} />
+
+          {owner && <WorkerSlotsSection view={slotsView} />}
+
           {summary.quality && (
             <section aria-labelledby="quality-h" className="flex flex-col gap-3">
               <h2 id="quality-h" className="text-xl font-semibold">
@@ -606,18 +664,8 @@ export default async function HealthPage() {
             <dt className="font-medium">Quota usage</dt>
             <dd className="text-text-muted">{quotaText(summary?.quota)}</dd>
           </div>
-          {PLACEHOLDERS.map((p) => (
-            <div key={p.label} className="flex flex-col">
-              <dt className="font-medium">{p.label}</dt>
-              <dd className="text-text-muted">Not available yet ({p.note})</dd>
-            </div>
-          ))}
         </dl>
       </section>
-
-      <footer className="text-xs text-text-muted">
-        Simulation for personal information only — not financial advice
-      </footer>
     </main>
   );
 }

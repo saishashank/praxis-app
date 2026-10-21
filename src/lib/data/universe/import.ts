@@ -38,6 +38,8 @@ export type ImportInput = {
   /** ISO timestamp source (injected so tests are deterministic). */
   now: () => string;
   commit?: string;
+  /** Email environment: present = the shrink incident is also emailed (M5 T11). */
+  env?: Record<string, string | undefined>;
 };
 
 /** Records a rejected import: failed run record, plus the S2 incident for a shrink. */
@@ -61,9 +63,21 @@ async function reject(
     now: i.now(),
   });
   if (error === "suspicious_shrink") {
-    await openS2Once(i.db, UNIVERSE_INCIDENT, { rule: "universe_shrink", ...details }, i.now());
+    await openS2Once(
+      i.db,
+      UNIVERSE_INCIDENT,
+      { rule: "universe_shrink", ...details },
+      i.now(),
+      i.env ? { env: i.env } : undefined,
+      "The listed-companies import was rejected as a suspicious shrink",
+    );
   }
   return { ok: false, error };
+}
+
+async function hasSectorColumn(db: Client): Promise<boolean> {
+  const rs = await db.execute("PRAGMA table_info(instrument)");
+  return rs.rows.some((r) => String(r.name) === "sector");
 }
 
 export async function importUniverse(i: ImportInput): Promise<ImportResult> {
@@ -140,6 +154,19 @@ export async function importUniverse(i: ImportInput): Promise<ImportResult> {
       });
     }
 
+    // M7 T4 (decision 53): the sector is the CSV industry group. Written only when the column exists
+    // (main 0011 adds instrument.sector); one statement keeps new, changed and older rows in step.
+    // The sector statement is a column sync, not a counted row write: rows_written stays the apply-rule writes.
+    const rowsWritten = stmts.length;
+    if (await hasSectorColumn(i.db)) {
+      stmts.push({
+        sql:
+          "UPDATE instrument SET sector = industry " +
+          "WHERE market = ? AND delisted_on IS NULL AND sector IS NOT industry",
+        args: [UNIVERSE_MARKET],
+      });
+    }
+
     const startedAt = i.now();
     const id = await startRun(i.db, {
       job: UNIVERSE_JOB,
@@ -159,7 +186,7 @@ export async function importUniverse(i: ImportInput): Promise<ImportResult> {
         Math.max(0, Date.parse(endedAt) - Date.parse(startedAt)),
         plan.counts.file,
         existing.length,
-        stmts.length,
+        rowsWritten,
         JSON.stringify({ counts: plan.counts, parsed: parsed.stats }),
         id,
       ],

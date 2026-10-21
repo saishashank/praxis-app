@@ -71,10 +71,16 @@ describe("configuration page", () => {
     render(await ConfigPage());
     const heads = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     expect(heads).toEqual([
-      "Retention",
+      "How long we keep data",
       "Quotas",
-      "Sessions & limits",
+      "Sessions and limits",
       "Backups",
+      "Strategy families",
+      "Regime and events",
+      "Checking results",
+      "Replay and compute",
+      "Sentinel and email",
+      "Learning and knowledge",
       "Other",
       "Recent changes",
     ]);
@@ -82,7 +88,7 @@ describe("configuration page", () => {
 
   it("shows value, default, bounds and spec ref; editable keys have value, reason and Save", async () => {
     render(await ConfigPage());
-    const retention = screen.getByRole("region", { name: "Retention" });
+    const retention = screen.getByRole("region", { name: "How long we keep data" });
     const row = within(retention).getByRole("row", { name: /retention_logs_days/ });
     expect(within(row).getByText("Keep application logs for")).toBeInTheDocument();
     expect(within(row).getAllByText("30 days")).toHaveLength(2); // current and default
@@ -102,7 +108,11 @@ describe("configuration page", () => {
     expect(within(row).getByText("Fixed by the spec")).toBeInTheDocument();
     expect(within(row).queryByRole("button")).toBeNull();
     expect(within(row).queryByRole("textbox")).toBeNull();
-    expect(screen.getAllByText("Fixed by the spec")).toHaveLength(2);
+    // hmac_max_age_s, pii_hash_after_revocation_days, stall_floor_bps (M3 T2) and the M4 fixed
+    // spec constants; market_mode is fixed in the registry but has its own text.
+    const fixed = Object.values(CONFIG_KEYS).filter((k) => k.editable === "fixed").length;
+    expect(screen.getAllByText("Fixed by the spec")).toHaveLength(fixed - 1);
+    expect(fixed).toBeGreaterThan(3);
     // market_mode is not editable here: its only writer also updates market.mode (M2 T10).
     const mode = screen.getByRole("row", { name: /market_mode/ });
     expect(within(mode).getByText("Set on System Health (Data controls)")).toBeInTheDocument();

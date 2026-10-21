@@ -1,0 +1,12 @@
+{
+  "format": "praxis-regime-segments/1",
+  "note": "Synthetic index path (no market data). Each segment: days, drift and noise in basis points per day; noise is a deterministic LCG in [-noise, +noise].",
+  "start": 6000000000,
+  "seed": 12345,
+  "segments": [
+    { "name": "stormy history", "days": 900, "driftBps": 0, "noiseBps": 200 },
+    { "name": "calm uptrend", "days": 420, "driftBps": 8, "noiseBps": 15 },
+    { "name": "choppy decline", "days": 60, "driftBps": -35, "noiseBps": 120 },
+    { "name": "calm recovery", "days": 80, "driftBps": 20, "noiseBps": 10 }
+  ]
+}

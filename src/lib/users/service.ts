@@ -17,6 +17,7 @@ export type ErrorCode =
   | "not_found"
   | "owner_protected"
   | "revoked"
+  | "grant_exists"
   | "unavailable";
 export type Fail = { ok: false; error: ErrorCode };
 export type Done<T = object> = ({ ok: true } & T) | Fail;
@@ -345,6 +346,116 @@ export async function signOutEverywhere(c: Ctx, rawId: unknown): Promise<Done> {
       type: "app_user",
       id: String(got.target.id),
     });
+    return { ok: true as const };
+  });
+}
+
+// ---- unmask grants (UX-009, ROL-107, DAT-124; docs/M7_design.md 2.4; D-128) -------------------------
+// The Owner lets one Editor or Viewer see real stock codes for a limited time. The grant and its audit
+// event commit in one transaction, the audit event first (audit-first, D-047). A grant is never edited;
+// revoking sets revoked_at once (database trigger). The mask module reads live grants.
+
+/** Bounds of a grant length in days (the `unmask_expiry` key, 1-365). */
+export const UNMASK_DAYS = { min: 1, max: 365 } as const; // threshold-ok: same bounds as the key
+
+const DAY_MS = 86_400_000; // threshold-ok: unit conversion
+
+export type GrantRow = {
+  id: number;
+  userId: number;
+  grantedBy: number;
+  grantedAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  revokedBy: number | null;
+};
+
+function parseDays(v: unknown): number | null {
+  return typeof v === "number" &&
+    Number.isInteger(v) &&
+    v >= UNMASK_DAYS.min &&
+    v <= UNMASK_DAYS.max
+    ? v
+    : null;
+}
+
+/** Newest first. Includes expired and revoked rows so the Owner sees the history. */
+export async function listGrants(db: Exec, limit = 100): Promise<GrantRow[]> {
+  const n = Number.isFinite(limit) ? Math.min(500, Math.max(1, Math.trunc(limit))) : 100;
+  const r = await db.execute({
+    sql: `SELECT id, user_id, granted_by, granted_at, expires_at, revoked_at, revoked_by
+          FROM unmask_grant ORDER BY id DESC LIMIT ?`,
+    args: [n],
+  });
+  return r.rows.map((x) => ({
+    id: Number(x.id),
+    userId: Number(x.user_id),
+    grantedBy: Number(x.granted_by),
+    grantedAt: String(x.granted_at),
+    expiresAt: String(x.expires_at),
+    revokedAt: x.revoked_at === null ? null : String(x.revoked_at),
+    revokedBy: x.revoked_by === null ? null : Number(x.revoked_by),
+  }));
+}
+
+export async function grantUnmask(
+  c: Ctx,
+  rawUserId: unknown,
+  rawDays: unknown,
+): Promise<Done<{ grantId: number; expiresAt: string }>> {
+  const days = parseDays(rawDays);
+  if (days === null) return fail("invalid");
+  return atomically(c, async (tx) => {
+    const got = await mutableTarget(tx, c, rawUserId, { allowOwner: false });
+    if ("ok" in got) return got; // invalid, forbidden, not_found, owner_protected, revoked
+    const at = c.now ?? new Date(); // one clock read: expiry is exactly `days` after the grant
+    const now = at.toISOString();
+    const expiresAt = new Date(at.getTime() + days * DAY_MS).toISOString();
+    const live = await tx.execute({
+      sql: "SELECT 1 FROM unmask_grant WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?",
+      args: [got.target.id, now],
+    });
+    if (live.rows.length) return fail("grant_exists");
+    await record(
+      tx,
+      c,
+      "unmask.grant",
+      { type: "app_user", id: String(got.target.id) },
+      { days, expires_at: expiresAt },
+    );
+    const ins = await tx.execute({
+      sql: `INSERT INTO unmask_grant (user_id, granted_by, granted_at, expires_at)
+            VALUES (?, ?, ?, ?)`,
+      args: [got.target.id, c.actorId, now, expiresAt],
+    });
+    return { ok: true as const, grantId: Number(ins.lastInsertRowid), expiresAt };
+  });
+}
+
+export async function revokeUnmask(c: Ctx, rawGrantId: unknown): Promise<Done> {
+  const id = parseId(rawGrantId);
+  if (id === null) return fail("invalid");
+  return atomically(c, async (tx) => {
+    if (!(await actorIsOwner(tx, c.actorId))) return fail("forbidden");
+    const g = await tx.execute({
+      sql: "SELECT user_id, revoked_at FROM unmask_grant WHERE id = ?",
+      args: [id],
+    });
+    if (!g.rows.length) return fail("not_found");
+    if (g.rows[0].revoked_at !== null) return fail("revoked");
+    const userId = Number(g.rows[0].user_id);
+    await record(
+      tx,
+      c,
+      "unmask.revoke",
+      { type: "app_user", id: String(userId) },
+      { grant_id: id },
+    );
+    const upd = await tx.execute({
+      sql: "UPDATE unmask_grant SET revoked_at = ?, revoked_by = ? WHERE id = ? AND revoked_at IS NULL",
+      args: [iso(c), c.actorId, id],
+    });
+    if (upd.rowsAffected !== 1) return fail("revoked");
     return { ok: true as const };
   });
 }

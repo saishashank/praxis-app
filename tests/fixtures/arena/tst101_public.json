@@ -1,0 +1,783 @@
+[
+  {
+    "id": "TST101-001",
+    "description": "P5 at A$1,000.00 (inclusive upper bound of the A$5.00 tier)",
+    "inputs": {
+      "profile": "P5",
+      "code": "ZZA",
+      "order_value_micro": "1000000000"
+    },
+    "expected": {
+      "brokerage_micro": "5000000"
+    },
+    "spec_ref": "ARN-031 P5; 10_nfr_testing TST-101 (A$1,000.00)"
+  },
+  {
+    "id": "TST101-002",
+    "description": "P5 at A$1,000.01 (first value in the A$10.00 tier)",
+    "inputs": {
+      "profile": "P5",
+      "code": "ZZA",
+      "order_value_micro": "1000010000"
+    },
+    "expected": {
+      "brokerage_micro": "10000000"
+    },
+    "spec_ref": "ARN-031 P5; TST-101 (A$1,000.01)"
+  },
+  {
+    "id": "TST101-003",
+    "description": "P5 at A$3,000.00 (inclusive upper bound of the A$10.00 tier)",
+    "inputs": {
+      "profile": "P5",
+      "code": "ZZB",
+      "order_value_micro": "3000000000"
+    },
+    "expected": {
+      "brokerage_micro": "10000000"
+    },
+    "spec_ref": "ARN-031 P5; TST-101 (A$3,000.00)"
+  },
+  {
+    "id": "TST101-004",
+    "description": "P5 at A$3,000.01 (first value in the A$19.95 tier)",
+    "inputs": {
+      "profile": "P5",
+      "code": "ZZB",
+      "order_value_micro": "3000010000"
+    },
+    "expected": {
+      "brokerage_micro": "19950000"
+    },
+    "spec_ref": "ARN-031 P5; TST-101 (A$3,000.01)"
+  },
+  {
+    "id": "TST101-005",
+    "description": "P5 at A$10,000.00 (inclusive upper bound of the A$19.95 tier)",
+    "inputs": {
+      "profile": "P5",
+      "code": "ZZC",
+      "order_value_micro": "10000000000"
+    },
+    "expected": {
+      "brokerage_micro": "19950000"
+    },
+    "spec_ref": "ARN-031 P5; TST-101 (A$10,000.00)"
+  },
+  {
+    "id": "TST101-006",
+    "description": "P5 at A$10,000.01 (first value in the A$29.95 tier)",
+    "inputs": {
+      "profile": "P5",
+      "code": "ZZC",
+      "order_value_micro": "10000010000"
+    },
+    "expected": {
+      "brokerage_micro": "29950000"
+    },
+    "spec_ref": "ARN-031 P5; TST-101 (A$10,000.01)"
+  },
+  {
+    "id": "TST101-007",
+    "description": "P5 at A$25,000.00 (inclusive upper bound of the A$29.95 tier)",
+    "inputs": {
+      "profile": "P5",
+      "code": "ZZD",
+      "order_value_micro": "25000000000"
+    },
+    "expected": {
+      "brokerage_micro": "29950000"
+    },
+    "spec_ref": "ARN-031 P5; TST-101 (A$25,000.00)"
+  },
+  {
+    "id": "TST101-008",
+    "description": "P5 at A$25,000.01 (first value in the 0.12% tier); fee is exact A$30.000012, not A$30.00012",
+    "inputs": {
+      "profile": "P5",
+      "code": "ZZD",
+      "order_value_micro": "25000010000"
+    },
+    "expected": {
+      "brokerage_micro": "30000012"
+    },
+    "spec_ref": "ARN-031 P5; TST-101 (A$25,000.01); design decision 17"
+  },
+  {
+    "id": "TST101-009",
+    "description": "P0 zero-fee list is empty, so a code not on the list falls back to P1 (A$3.00)",
+    "inputs": {
+      "profile": "P0",
+      "zero_fee_list": [],
+      "code": "ZZE",
+      "order_value_micro": "1000000000"
+    },
+    "expected": {
+      "brokerage_micro": "3000000"
+    },
+    "spec_ref": "ARN-031 P0 (list else P1); design decision 10"
+  },
+  {
+    "id": "TST101-010",
+    "description": "P2 first buy of a security in the day below A$1,000.00 pays A$0",
+    "inputs": {
+      "profile": "P2",
+      "code": "ZZF",
+      "buy_number_same_security_same_day": 1,
+      "order_value_micro": "999990000"
+    },
+    "expected": {
+      "brokerage_micro": "0"
+    },
+    "spec_ref": "ARN-031 P2 (first buy < A$1,000 per security per day)"
+  },
+  {
+    "id": "TST101-011",
+    "description": "P3 stress profile is a flat A$6.50 at any order value",
+    "inputs": {
+      "profile": "P3",
+      "code": "ZZG",
+      "order_value_micro": "5000000000"
+    },
+    "expected": {
+      "brokerage_micro": "6500000"
+    },
+    "spec_ref": "ARN-031 P3; ARN-033 stress column"
+  },
+  {
+    "id": "TST101-012",
+    "description": "P4 percentage fee (0.03%) is below the A$3.00 minimum, so the minimum applies",
+    "inputs": {
+      "profile": "P4",
+      "code": "ZZH",
+      "order_value_micro": "5000000000"
+    },
+    "expected": {
+      "percent_fee_before_clamp_micro": "1500000",
+      "brokerage_micro": "3000000"
+    },
+    "spec_ref": "ARN-031 P4 (0.03%, min A$3, max A$9.99); design section 4.4"
+  },
+  {
+    "id": "TST101-013",
+    "description": "P5b above A$1,000.00 is a flat 0.20 percent with no minimum",
+    "inputs": {
+      "profile": "P5b",
+      "code": "ZZI",
+      "order_value_micro": "1000010000"
+    },
+    "expected": {
+      "brokerage_micro": "2000020"
+    },
+    "spec_ref": "ARN-031 P5b"
+  },
+  {
+    "id": "TST101-014",
+    "description": "Buy at A$50.00 on ADV >= A$5M: 10 bps bucket (A$0.05) beats one tick (tick-bps 2, A$0.01), so fill is A$50.05",
+    "inputs": {
+      "side": "buy",
+      "code": "ZZJ",
+      "reference_price_micro": "50000000",
+      "adv20_value_micro": "5000000000000",
+      "tick_micro": "10000",
+      "tick_cross_factor": "1",
+      "adv_bucket_bps": "10"
+    },
+    "expected": {
+      "slippage_micro": "50000",
+      "fill_micro": "50050000"
+    },
+    "spec_ref": "ARN-032 slippage = max(bucket bps, tick-bps x factor); TST-101 tick-based slippage"
+  },
+  {
+    "id": "TST101-015",
+    "description": "Buy on ADV A$1-5M: 25 bps bucket wins at A$12.34; fill rounds up to the next cent (adverse to trader)",
+    "inputs": {
+      "side": "buy",
+      "code": "ZZK",
+      "reference_price_micro": "12340000",
+      "adv20_value_micro": "2000000000000",
+      "tick_micro": "10000",
+      "tick_cross_factor": "1",
+      "adv_bucket_bps": "25"
+    },
+    "expected": {
+      "slippage_micro": "30850",
+      "raw_before_grid_micro": "12370850",
+      "fill_micro": "12380000"
+    },
+    "spec_ref": "ARN-032; design R1 (buy ceil to tick)"
+  },
+  {
+    "id": "TST101-016",
+    "description": "Sell on ADV A$1-5M: same slippage at A$12.34; exit rounds down to the cent (adverse to trader)",
+    "inputs": {
+      "side": "sell",
+      "code": "ZZK",
+      "reference_price_micro": "12340000",
+      "adv20_value_micro": "2000000000000",
+      "tick_micro": "10000",
+      "tick_cross_factor": "1",
+      "adv_bucket_bps": "25"
+    },
+    "expected": {
+      "slippage_micro": "30850",
+      "raw_before_grid_micro": "12309150",
+      "fill_micro": "12300000"
+    },
+    "spec_ref": "ARN-021 CS exit = open - slippage; design R1 (sell floor to tick)"
+  },
+  {
+    "id": "TST101-017",
+    "description": "Sell on ADV A$250k-1M: 60 bps bucket wins at A$15.00",
+    "inputs": {
+      "side": "sell",
+      "code": "ZZL",
+      "reference_price_micro": "15000000",
+      "adv20_value_micro": "500000000000",
+      "tick_micro": "10000",
+      "tick_cross_factor": "1",
+      "adv_bucket_bps": "60"
+    },
+    "expected": {
+      "slippage_micro": "90000",
+      "raw_before_grid_micro": "14910000",
+      "fill_micro": "14910000"
+    },
+    "spec_ref": "ARN-032 bucket 60 bps; ARN-021 CS exit"
+  },
+  {
+    "id": "TST101-018",
+    "description": "Buy on ADV A$100-250k at A$2.50: 120 bps bucket (30,000 micro) beats one tick (40 bps equivalent, 10,000 micro)",
+    "inputs": {
+      "side": "buy",
+      "code": "ZZM",
+      "reference_price_micro": "2500000",
+      "adv20_value_micro": "150000000000",
+      "tick_micro": "10000",
+      "tick_cross_factor": "1",
+      "adv_bucket_bps": "120"
+    },
+    "expected": {
+      "slippage_micro": "30000",
+      "fill_micro": "2530000"
+    },
+    "spec_ref": "ARN-032 bucket 120 bps (A$100-250k)"
+  },
+  {
+    "id": "TST101-019",
+    "description": "U3 at A$0.20: tick-bps is 250, which beats the 120 bps bucket; spec quotes 250 bps and fill A$0.205",
+    "inputs": {
+      "side": "buy",
+      "code": "ZZN",
+      "reference_price_micro": "200000",
+      "adv20_value_micro": "150000000000",
+      "tick_micro": "5000",
+      "tick_cross_factor": "1",
+      "adv_bucket_bps": "120"
+    },
+    "expected": {
+      "tick_bps": "250",
+      "slippage_micro": "5000",
+      "fill_micro": "205000"
+    },
+    "spec_ref": "ARN-032 (U3 A$0.20 = 250 bps); spec 05 acceptance (U3 at A$0.20, l.141)"
+  },
+  {
+    "id": "TST101-020",
+    "description": "Tick band edge just below A$0.10 (A$0.0999 uses A$0.001 tick); slipped fill A$0.1009 lands in the coarser band",
+    "inputs": {
+      "side": "buy",
+      "code": "ZZO",
+      "reference_price_micro": "99900",
+      "adv20_value_micro": "5000000000000",
+      "tick_micro": "1000",
+      "tick_cross_factor": "1",
+      "adv_bucket_bps": "10"
+    },
+    "expected": {
+      "slippage_micro": "1000",
+      "raw_before_grid_micro": "100900",
+      "fill_micro": "105000"
+    },
+    "ambiguous": "Spec ARN-032 does not say what happens when the slipped fill crosses into a coarser tick band. Design section 2.4 re-rounds on the new band (ceil to A$0.005 gives 105000). The alternative keeps the reference band grid and gives 101000. Opus to confirm.",
+    "spec_ref": "ARN-032 tick table (A$0.10 lower-inclusive); design section 2.4"
+  },
+  {
+    "id": "TST101-021",
+    "description": "Tick band top edge: A$1.995 uses A$0.005 tick; slipped fill is exactly A$2.00, which is on both grids",
+    "inputs": {
+      "side": "buy",
+      "code": "ZZP",
+      "reference_price_micro": "1995000",
+      "adv20_value_micro": "5000000000000",
+      "tick_micro": "5000",
+      "tick_cross_factor": "1",
+      "adv_bucket_bps": "10"
+    },
+    "expected": {
+      "slippage_micro": "5000",
+      "raw_before_grid_micro": "2000000",
+      "fill_micro": "2000000"
+    },
+    "spec_ref": "ARN-032 tick table (A$2.00 band edge)"
+  },
+  {
+    "id": "TST101-022",
+    "description": "Sizing at A$9.80 with A$600 cash: deployable A$589.00, 60 shares, A$588.60 plus A$5.00 brokerage = A$593.60 <= A$594.00",
+    "inputs": {
+      "code": "ZZQ",
+      "settled_cash_micro": "600000000",
+      "nav_micro": "600000000",
+      "buffer_pct": "0.01",
+      "reference_price_micro": "9800000",
+      "adv20_value_micro": "5000000000000",
+      "tick_micro": "10000",
+      "adv_bucket_bps": "10",
+      "profile": "P5"
+    },
+    "expected": {
+      "buffer_micro": "6000000",
+      "est_brokerage_micro": "5000000",
+      "deployable_micro": "589000000",
+      "fill_micro": "9810000",
+      "shares": "60",
+      "order_value_micro": "588600000",
+      "actual_brokerage_micro": "5000000",
+      "total_cost_micro": "593600000",
+      "cash_remaining_micro": "6400000",
+      "status": "filled"
+    },
+    "spec_ref": "ARN-024a; ARN-023; spec acceptance (ch.05 l.137); design section 2.3"
+  },
+  {
+    "id": "TST101-023",
+    "description": "Marketable-parcel rejection: deployable A$391.00 buys 39 shares worth A$382.59, below the A$500.00 minimum, so the order is rejected",
+    "inputs": {
+      "code": "ZZR",
+      "settled_cash_micro": "400000000",
+      "nav_micro": "400000000",
+      "buffer_pct": "0.01",
+      "reference_price_micro": "9800000",
+      "adv20_value_micro": "5000000000000",
+      "tick_micro": "10000",
+      "adv_bucket_bps": "10",
+      "profile": "P5",
+      "min_marketable_parcel_micro": "500000000"
+    },
+    "expected": {
+      "buffer_micro": "4000000",
+      "est_brokerage_micro": "5000000",
+      "deployable_micro": "391000000",
+      "fill_micro": "9810000",
+      "shares": "39",
+      "order_value_micro": "382590000",
+      "status": "rejected_min_marketable_parcel"
+    },
+    "spec_ref": "ARN-024 (minimum parcel, rejected and logged); TST-101 parcel rejection"
+  },
+  {
+    "id": "TST101-024",
+    "description": "Minimum parcel boundary: 50 shares at A$10.00 = A$500.00 exactly passes (>= A$500.00)",
+    "inputs": {
+      "code": "ZZS",
+      "settled_cash_micro": "516000000",
+      "nav_micro": "516000000",
+      "buffer_pct": "0.01",
+      "reference_price_micro": "9990000",
+      "adv20_value_micro": "5000000000000",
+      "tick_micro": "10000",
+      "adv_bucket_bps": "10",
+      "profile": "P5",
+      "min_marketable_parcel_micro": "500000000"
+    },
+    "expected": {
+      "buffer_micro": "5160000",
+      "est_brokerage_micro": "5000000",
+      "deployable_micro": "505840000",
+      "fill_micro": "10000000",
+      "shares": "50",
+      "order_value_micro": "500000000",
+      "actual_brokerage_micro": "5000000",
+      "total_cost_micro": "505000000",
+      "cash_remaining_micro": "11000000",
+      "status": "filled"
+    },
+    "spec_ref": "ARN-024 (minimum parcel); ARN-024a; TST-101 minimum order"
+  },
+  {
+    "id": "TST101-025",
+    "description": "Participation cap: sized 10,079 shares exceed 1% of a 1,000,000-share 20-session ADV (10,000 shares), so the buy is rejected",
+    "inputs": {
+      "code": "ZZT",
+      "settled_cash_micro": "100000000000",
+      "nav_micro": "100000000000",
+      "buffer_pct": "0.01",
+      "reference_price_micro": "9800000",
+      "adv20_value_micro": "9800000000000",
+      "adv20_shares": "1000000",
+      "participation_pct": "0.01",
+      "tick_micro": "10000",
+      "adv_bucket_bps": "10",
+      "profile": "P5"
+    },
+    "expected": {
+      "buffer_micro": "1000000000",
+      "est_brokerage_micro": "118800000",
+      "deployable_micro": "98881200000",
+      "fill_micro": "9810000",
+      "shares_sized": "10079",
+      "cap_shares": "10000",
+      "status": "rejected_participation"
+    },
+    "spec_ref": "ARN-024 (participation cap 1% of 20-session ADV; failing buys rejected); TST-101 minimum order and participation cap"
+  },
+  {
+    "id": "TST101-026",
+    "description": "T+2 settlement: sale of 10 shares at A$9.99 nets A$94.90 after A$5.00 brokerage; matched mode funds buys the same day, conservative mode only after settlement",
+    "inputs": {
+      "held_shares": "10",
+      "reference_open_micro": "10000000",
+      "adv20_value_micro": "5000000000000",
+      "tick_micro": "10000",
+      "adv_bucket_bps": "10",
+      "profile": "P5",
+      "settled_cash_before_micro": "100000000"
+    },
+    "expected": {
+      "sale_fill_micro": "9990000",
+      "sale_value_micro": "99900000",
+      "brokerage_micro": "5000000",
+      "net_proceeds_micro": "94900000",
+      "matched_cash_available_same_day_micro": "194900000",
+      "conservative_cash_available_same_day_micro": "100000000",
+      "conservative_cash_available_settlement_session_micro": "194900000"
+    },
+    "ambiguous": "ARN-025 gives the mode names only. Design decision 15 makes conservative proceeds available from settlement (T+2). It does not say whether they can fund a buy on the settlement session itself or only the next session. Expected value shown is the settlement-session reading.",
+    "spec_ref": "ARN-025 (matched default, conservative variant); ARN-051 unsettled receivables; TST-101 T+2 settlement"
+  },
+  {
+    "id": "TST101-027",
+    "description": "Dividend: 60 shares held at the prior close are entitled to A$0.25 per share; receivable from ex-date, cash on pay date; franking recorded separately and excluded from NAV",
+    "inputs": {
+      "shares_at_prior_close": "60",
+      "dps_micro": "250000",
+      "franking_pct": "1",
+      "franking_credit_micro": "6428571"
+    },
+    "expected": {
+      "receivable_micro": "15000000",
+      "cash_on_pay_date_micro": "15000000",
+      "franking_in_nav_micro": "0",
+      "franking_recorded_micro": "6428571"
+    },
+    "spec_ref": "ARN-036 (entitlement at close before ex-date; cash on pay date; franking excluded); TST-101 dividend receivable and franking separate"
+  },
+  {
+    "id": "TST101-028",
+    "description": "2-for-1 split re-bases 60 shares at A$10.00 to 120 shares at A$5.00; cash unchanged and P/L zero",
+    "inputs": {
+      "shares_before": "60",
+      "raw_close_before_micro": "10000000",
+      "split_ratio_new_per_old": "2",
+      "cash_before_micro": "100000000"
+    },
+    "expected": {
+      "shares_after": "120",
+      "raw_close_after_micro": "5000000",
+      "nav_before_micro": "600000000",
+      "nav_after_micro": "600000000",
+      "cash_delta_micro": "0",
+      "price_pl_micro": "0"
+    },
+    "spec_ref": "ARN-043 (split with no artificial P/L); ARN-021 (IS levels re-based); design decision 14"
+  },
+  {
+    "id": "TST101-029",
+    "description": "Renounceable offer 1-for-4 on 60 shares: 15 rights valued at last traded A$0.30 = A$4.50 credit; non-renounceable offer gives nothing",
+    "inputs": {
+      "shares": "60",
+      "ratio_rights_per_share": "0.25",
+      "rights_last_traded_micro": "300000",
+      "cash_before_micro": "0"
+    },
+    "expected": {
+      "rights_count": "15",
+      "renounceable_comp_micro": "4500000",
+      "non_renounceable_comp_micro": "0"
+    },
+    "spec_ref": "DAT-223 (non-renounceable: no compensation; renounceable: last traded price or zero); TST-101 non-renounceable offer"
+  },
+  {
+    "id": "TST101-030",
+    "description": "Suspension: 60 shares frozen at A$10.00 are marked at the 1/2 haircut once 20 sessions have elapsed, giving A$300.00",
+    "inputs": {
+      "shares": "60",
+      "frozen_price_micro": "10000000",
+      "haircut": "0.5",
+      "halt_sessions_elapsed": "20"
+    },
+    "expected": {
+      "marked_value_micro": "300000000"
+    },
+    "ambiguous": "ARN-026 says 'after 20 sessions'. Read as 20 sessions elapsed, the haircut applies at count 20 (300000000). If it means the 21st session onward, the value at count 20 is 600000000 and the haircut starts at count 21. Opus to confirm.",
+    "spec_ref": "ARN-026 (suspension haircut default 50%, after 20 sessions); TST-101 suspension haircut"
+  },
+  {
+    "id": "TST101-031",
+    "description": "Initial stop is set from the actual entry fill: open A$10.00 buy fills at A$10.01, then A$0.50 below the fill gives A$9.51 (not A$9.50 from the open)",
+    "inputs": {
+      "side": "buy",
+      "code": "ZZU",
+      "reference_open_micro": "10000000",
+      "adv20_value_micro": "5000000000000",
+      "tick_micro": "10000",
+      "adv_bucket_bps": "10",
+      "stop_distance_micro": "500000"
+    },
+    "expected": {
+      "entry_fill_micro": "10010000",
+      "initial_stop_level_micro": "9510000"
+    },
+    "spec_ref": "ARN-021 (initial stop computed from the actual entry fill); TST-101 initial stop set from actual fill"
+  },
+  {
+    "id": "TST101-032",
+    "description": "IS gap-through: stop A$1.00, session opens at A$0.95 (at or below the level), fill = open - slippage (spec example)",
+    "inputs": {
+      "exit": "intraday_stop",
+      "code": "ZZV",
+      "stop_level_micro": "1000000",
+      "session_open_micro": "950000",
+      "session_low_micro": "950000",
+      "adv20_value_micro": "5000000000000",
+      "tick_micro": "5000",
+      "adv_bucket_bps": "10"
+    },
+    "expected": {
+      "slippage_micro": "5000",
+      "raw_before_grid_micro": "945000",
+      "fill_micro": "945000"
+    },
+    "spec_ref": "ARN-021 IS fill (open <= level -> open - slippage); spec acceptance (ch.05 l.143); TST-101 gap through stop fills at open"
+  },
+  {
+    "id": "TST101-033",
+    "description": "IS stop inside range: stop A$1.00, open A$1.02, low A$0.98 reaches the level, fill = level - slippage - 1 tick (spec example)",
+    "inputs": {
+      "exit": "intraday_stop",
+      "code": "ZZW",
+      "stop_level_micro": "1000000",
+      "session_open_micro": "1020000",
+      "session_low_micro": "980000",
+      "adv20_value_micro": "5000000000000",
+      "tick_micro": "5000",
+      "adv_bucket_bps": "10"
+    },
+    "expected": {
+      "slippage_micro": "5000",
+      "raw_before_grid_micro": "990000",
+      "fill_micro": "990000"
+    },
+    "spec_ref": "ARN-021 IS fill (level - slippage - 1 tick); spec acceptance (ch.05 l.143); TST-101 stop hit inside range"
+  },
+  {
+    "id": "TST101-034",
+    "description": "Stop and close signal both apply on D+1: IS level A$9.51 (intraday low A$9.50) and CS filled at the A$9.80 open; worse-case ordering gives the IS fill A$9.49",
+    "inputs": {
+      "stop_level_micro": "9510000",
+      "cs_open_micro": "9800000",
+      "session_open_micro": "9800000",
+      "session_low_micro": "9500000",
+      "adv20_value_micro": "5000000000000",
+      "tick_micro": "10000",
+      "adv_bucket_bps": "10"
+    },
+    "expected": {
+      "cs_fill_micro": "9790000",
+      "is_fill_micro": "9490000",
+      "selected_fill_micro": "9790000"
+    },
+    "spec_ref": "ARN-021 (earlier fill wins; ambiguous ordering -> worse outcome); TST-101 worse-case ordering; ARN-022 (spec/05:53: the earlier fill wins; worse outcome only for ambiguous intrabar ordering)"
+  },
+  {
+    "id": "TST101-035",
+    "description": "Sleeve financing at 9% p.a. on A$200.00 exposure, divided by 365 and charged cumulatively: 1 day A$0.049315, 3 days A$0.147945 (each day A$0.049315)",
+    "inputs": {
+      "exposure_micro": "200000000",
+      "rate": "0.09",
+      "day_count_basis": "365",
+      "days_1": "1",
+      "days_3": "3"
+    },
+    "expected": {
+      "financing_1_day_micro": "49315",
+      "financing_3_days_cumulative_micro": "147945",
+      "daily_charge_day1_micro": "49315",
+      "daily_charge_day2_micro": "49315",
+      "daily_charge_day3_micro": "49315"
+    },
+    "spec_ref": "ARN-045 (9% p.a. per calendar day, VERIFY); FIX-042 (divisor 365); design R5 and decision 8"
+  },
+  {
+    "id": "TST101-036",
+    "description": "Sleeve close-out at -50% of margin: margin A$20.00 x 10 = A$200.00 notional, entry A$10.00 fill, zero financing; the -50% trigger is A$9.50; IS fill at A$9.48; P5 A$5.00 exit brokerage",
+    "inputs": {
+      "margin_micro": "20000000",
+      "leverage": "10",
+      "entry_fill_micro": "10000000",
+      "financing_micro": "0",
+      "trigger_pct_of_margin": "-0.5",
+      "session_open_micro": "9800000",
+      "session_low_micro": "9500000",
+      "tick_micro": "10000",
+      "adv_bucket_bps": "10",
+      "profile": "P5"
+    },
+    "expected": {
+      "trigger_price_micro": "9500000",
+      "trigger_pl_micro": "-10000000",
+      "is_fill_micro": "9480000",
+      "sleeve_pl_micro": "-10400000",
+      "exit_brokerage_micro": "5000000",
+      "margin_returned_plus_pl_minus_brokerage_micro": "4600000"
+    },
+    "ambiguous": "ARN-044 says brokerage and slippage are charged in addition to the price P/L. Design R4 takes P/L on fills, so the slippage inside the A$9.48 fill is not charged again. If slippage is also charged separately, the sleeve loss is larger. Opus to confirm.",
+    "spec_ref": "ARN-043, ARN-044 (close-out at -50% margin); ARN-045 (P5 A$5 per side); TST-101 sleeve close-out at 50% margin"
+  },
+  {
+    "id": "TST101-037",
+    "description": "Sleeve loss capped at margin: gap-through to A$8.49 gives P/L -A$30.20, capped at -A$20.00; margin fully consumed and A$5.00 exit brokerage is charged in addition",
+    "inputs": {
+      "margin_micro": "20000000",
+      "leverage": "10",
+      "entry_fill_micro": "10000000",
+      "financing_micro": "0",
+      "stop_level_micro": "9500000",
+      "session_open_micro": "8500000",
+      "session_low_micro": "8400000",
+      "tick_micro": "10000",
+      "adv_bucket_bps": "10",
+      "profile": "P5"
+    },
+    "expected": {
+      "is_fill_micro": "8490000",
+      "uncapped_pl_micro": "-30200000",
+      "sleeve_pl_micro": "-20000000",
+      "margin_returned_micro": "0",
+      "cash_delta_at_close_micro": "-5000000"
+    },
+    "ambiguous": "ARN-044 caps price P/L plus financing at the margin and charges brokerage in addition. The spec does not say where the A$5.00 beyond the margin comes from (settled cash or stock proceeds). Expected shows it charged to cash, which would drive cash negative in a fully deployed cohort.",
+    "spec_ref": "ARN-044 (loss capped at margin); TST-101 loss cap at margin; ARN-101 cash >= 0"
+  },
+  {
+    "id": "TST101-038",
+    "description": "NAV for one day: cash net of sleeve margin, unsettled receivable, holdings at raw close, dividend receivable, sleeve margin counted once, sleeve unrealised P/L, accrued unpaid financing; franking excluded",
+    "inputs": {
+      "settled_cash_micro": "100000000",
+      "unsettled_receivable_micro": "94900000",
+      "holding_shares": "60",
+      "raw_close_micro": "9500000",
+      "dividend_receivable_micro": "15000000",
+      "sleeve_margin_micro": "20000000",
+      "sleeve_notional_micro": "200000000",
+      "sleeve_entry_fill_micro": "10000000",
+      "sleeve_mark_micro": "9600000",
+      "accrued_unpaid_financing_micro": "49315",
+      "franking_micro": "6428571"
+    },
+    "expected": {
+      "holdings_value_micro": "570000000",
+      "sleeve_unrealised_pl_micro": "-8000000",
+      "nav_micro": "791850685"
+    },
+    "spec_ref": "ARN-051 (NAV formula; franking excluded); ARN-041 (margin counted once); spec acceptance (ch.05 l.145)"
+  },
+  {
+    "id": "TST101-039",
+    "description": "Liquidation-NAV target check: NAV is A$1,200.00 (target) but liquidation NAV after exit slippage and P5 exit brokerage is A$1,188.80, so target is not met",
+    "inputs": {
+      "cash_micro": "0",
+      "holding_shares": "120",
+      "raw_close_micro": "10000000",
+      "adv20_value_micro": "5000000000000",
+      "tick_micro": "10000",
+      "adv_bucket_bps": "10",
+      "profile": "P5",
+      "target_liquidation_micro": "1200000000"
+    },
+    "expected": {
+      "nav_micro": "1200000000",
+      "exit_value_micro": "1198800000",
+      "exit_slippage_cost_micro": "1200000",
+      "exit_brokerage_micro": "10000000",
+      "liquidation_nav_micro": "1188800000",
+      "target_reached": "false"
+    },
+    "spec_ref": "ARN-052 and section 5.1 (target judged on liquidation NAV); TST-101 liquidation-NAV terminal checks"
+  },
+  {
+    "id": "TST101-040",
+    "description": "Stall via NAV floor: no open position at NAV A$505.00 for 5 sessions is stalled; the L cohort at A$520.00 is not stalled",
+    "inputs": {
+      "stall_sessions": "5",
+      "stall_floor_range_micro": "510606061 to 511000000",
+      "u_nav_micro": "505000000",
+      "l_nav_micro": "520000000",
+      "open_positions": "0"
+    },
+    "expected": {
+      "u_stalled_at_session_5": "true",
+      "l_stalled": "false"
+    },
+    "spec_ref": "section 5.1 (stall: NAV < stall_floor for 5 consecutive sessions); spec acceptance (ch.05 l.141); TST-101 stalled at floor"
+  },
+  {
+    "id": "TST101-041",
+    "description": "Stall via parcel rejections: 20 consecutive sessions with a family signal, every one rejected only for parcel reasons (A$400 cash buys 39 shares of A$382.59), no open position",
+    "inputs": {
+      "stall_parcel_sessions": "20",
+      "cash_micro": "400000000",
+      "nav_micro": "400000000",
+      "reference_price_micro": "9800000",
+      "open_positions": "0"
+    },
+    "expected": {
+      "stalled_at_session_20": "true",
+      "rejection_value_micro": "382590000"
+    },
+    "spec_ref": "section 5.1 stall (b) (20 consecutive parcel-only rejections); TST-101 stalled via 20 sessions of parcel-only rejections"
+  },
+  {
+    "id": "TST101-042",
+    "description": "C2 exit mapping in ATR units: F3 event low is 1.3 ATR below the entry-day open, so the control's stop is 1.3 ATR below its own entry-day open",
+    "inputs": {
+      "atr20_micro": "400000",
+      "atr_multiple": "1.3",
+      "control_entry_day_open_micro": "10000000"
+    },
+    "expected": {
+      "stop_offset_micro": "520000",
+      "control_stop_level_micro": "9480000"
+    },
+    "spec_ref": "ARN-004 C2 exit mapping; spec 05 acceptance (F3 event, 1.3 ATR below entry-day open); TST-101 C2 exit mapping in ATR units"
+  },
+  {
+    "id": "TST101-043",
+    "description": "REC-2 unlock at loss_to_recover: sleeve trade net loss is A$20.40 (P/L -A$10.40 plus A$5.00 + A$5.00 brokerage); unlocks at A$20.40 realised net stock P/L, stays locked at A$20.39",
+    "inputs": {
+      "sleeve_pl_micro": "-10400000",
+      "entry_brokerage_micro": "5000000",
+      "exit_brokerage_micro": "5000000",
+      "realised_unlevered_net_pl_at_test_a_micro": "20400000",
+      "realised_unlevered_net_pl_at_test_b_micro": "20390000"
+    },
+    "expected": {
+      "loss_to_recover_micro": "20400000",
+      "unlocked_at_test_a": "true",
+      "unlocked_at_test_b": "false"
+    },
+    "ambiguous": "ARN-046 records loss_to_recover but does not define it. Design decision 5 (D-069) defines it as the total net loss of the locking trade (price P/L plus financing, brokerage and slippage). Used here as the decision. Opus to confirm before the case is treated as spec-backed.",
+    "spec_ref": "ARN-046, ARN-047 (REC-2); TST-101 REC-2 unlock; design decision 5"
+  }
+]

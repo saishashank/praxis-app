@@ -1,2 +1,6 @@
 # Fake test token committed in 2112d3b (scripts/restore/restore.test.mjs), replaced by a runtime value in the next commit. Not a real secret.
 2112d3b441b30b516e27432a5d78179a06b820a1:scripts/restore/restore.test.mjs:generic-api-key:193
+# Fake session cookie (truncated JWT header + "abc_def-123") in the ZAP summary test, M8 T12: it proves the summary never prints cookies. Not a real secret.
+eafb5c934a2fc5fe0e55d06e3f2b7b3816d60b7b:scripts/ci/zap-run.test.mjs:generic-api-key:7
+# Marker annotation text in the KB-051 test, M8 T5: it proves note text never reaches an LLM context pack. Not a secret.
+003bc04463ca249ab6831060b95a7f0137042161:tests/kb/m8contextPack.test.ts:generic-api-key:15

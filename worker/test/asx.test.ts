@@ -41,6 +41,8 @@ const ENV: AsxEnv = {
   TURSO_MAIN_TOKEN: TURSO_TOKEN,
   ASX_LIVE: "1",
   ASX_USER_AGENT: UA,
+  APP_BASE_URL: "https://praxis-app.example.test",
+  WORKER_HMAC_SECRET: "7".repeat(64),
 };
 
 // Tuesday 2026-10-13 10:00 AEDT (UTC+11): a poll minute (600 - 420 = 180, divisible by 4).
@@ -50,6 +52,7 @@ const S = 1000;
 let db: DatabaseSync;
 let net: Net;
 let live: { calls: { url: string; init: RequestInit }[]; reply: () => Response };
+let handoff: { calls: { url: string; init: RequestInit }[]; reply: () => Response };
 let f: typeof fetch;
 
 const setState = (key: string, v: string) =>
@@ -82,6 +85,7 @@ const setToken = (date: string, count: number, last: string | null = null) =>
 beforeEach(() => {
   db = makeDb();
   net = makeNet(db);
+  handoff = { calls: [], reply: () => Response.json({ result: "ingested" }, { status: 200 }) };
   live = {
     calls: [],
     reply: () =>
@@ -95,6 +99,10 @@ beforeEach(() => {
     if (url.startsWith("https://www.asx.com.au/")) {
       live.calls.push({ url, init: init ?? {} });
       return live.reply();
+    }
+    if (url.startsWith("https://praxis-app.example.test/")) {
+      handoff.calls.push({ url, init: init ?? {} });
+      return handoff.reply();
     }
     return net.f(input, init);
   }) as typeof fetch;

@@ -1,0 +1,24 @@
+diff --git a/src/lib/demo/calc.ts b/src/lib/demo/calc.ts
+--- a/src/lib/demo/calc.ts
++++ b/src/lib/demo/calc.ts
+@@ -3,0 +4,10 @@ export const x = 1;
++export function calc(a: number): number {
++  if (a > 0) {
++    return a * 2;
++  }
++  if (a < 0) {
++    return a * 3;
++  }
++  return 0;
++}
++// end
+diff --git a/docs/notes.md b/docs/notes.md
+--- a/docs/notes.md
++++ b/docs/notes.md
+@@ -1,0 +2 @@
++Only prose changed here.
+diff --git a/src/lib/demo/calc.test.ts b/src/lib/demo/calc.test.ts
+--- a/src/lib/demo/calc.test.ts
++++ b/src/lib/demo/calc.test.ts
+@@ -1,0 +2 @@
++it("x", () => {});

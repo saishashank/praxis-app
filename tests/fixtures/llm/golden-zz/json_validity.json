@@ -1,0 +1,142 @@
+[
+  {
+    "id": "ZZ-JSN-01",
+    "category": "json_validity",
+    "facts": {
+      "ref": "ZZ-JSN-01",
+      "code": "ZZA"
+    },
+    "untrusted": [
+      "Zenith Zinc signs a five year services contract."
+    ],
+    "reference": {
+      "category": "contract"
+    }
+  },
+  {
+    "id": "ZZ-JSN-02",
+    "category": "json_validity",
+    "facts": {
+      "ref": "ZZ-JSN-02",
+      "code": "ZZB"
+    },
+    "untrusted": [
+      "Zephyr Foods reports half year results."
+    ],
+    "reference": {
+      "category": "results"
+    }
+  },
+  {
+    "id": "ZZ-JSN-03",
+    "category": "json_validity",
+    "facts": {
+      "ref": "ZZ-JSN-03",
+      "code": "ZZC"
+    },
+    "untrusted": [
+      "Zircon Rail launches a share purchase plan."
+    ],
+    "reference": {
+      "category": "capital"
+    }
+  },
+  {
+    "id": "ZZ-JSN-04",
+    "category": "json_validity",
+    "facts": {
+      "ref": "ZZ-JSN-04",
+      "code": "ZZD"
+    },
+    "untrusted": [
+      "Zodiac Labs appoints a new company secretary."
+    ],
+    "reference": {
+      "category": "other"
+    }
+  },
+  {
+    "id": "ZZ-JSN-05",
+    "category": "json_validity",
+    "facts": {
+      "ref": "ZZ-JSN-05",
+      "code": "ZZE"
+    },
+    "untrusted": [
+      "Zulu Freight signs a five year services contract."
+    ],
+    "reference": {
+      "category": "contract"
+    }
+  },
+  {
+    "id": "ZZ-JSN-06",
+    "category": "json_validity",
+    "facts": {
+      "ref": "ZZ-JSN-06",
+      "code": "ZZF"
+    },
+    "untrusted": [
+      "Zebra Water reports half year results."
+    ],
+    "reference": {
+      "category": "results"
+    }
+  },
+  {
+    "id": "ZZ-JSN-07",
+    "category": "json_validity",
+    "facts": {
+      "ref": "ZZ-JSN-07",
+      "code": "ZZG"
+    },
+    "untrusted": [
+      "Zion Mining launches a share purchase plan."
+    ],
+    "reference": {
+      "category": "capital"
+    }
+  },
+  {
+    "id": "ZZ-JSN-08",
+    "category": "json_validity",
+    "facts": {
+      "ref": "ZZ-JSN-08",
+      "code": "ZZH"
+    },
+    "untrusted": [
+      "Zigzag Media appoints a new company secretary."
+    ],
+    "reference": {
+      "category": "other"
+    }
+  },
+  {
+    "id": "ZZ-JSN-09",
+    "category": "json_validity",
+    "facts": {
+      "ref": "ZZ-JSN-09",
+      "code": "ZZJ"
+    },
+    "untrusted": [
+      "Zoom Retail signs a five year services contract."
+    ],
+    "reference": {
+      "category": "contract"
+    }
+  },
+  {
+    "id": "ZZ-JSN-10",
+    "category": "json_validity",
+    "facts": {
+      "ref": "ZZ-JSN-10",
+      "code": "ZZK"
+    },
+    "untrusted": [
+      "Zesty Farms reports half year results."
+    ],
+    "reference": {
+      "category": "results"
+    }
+  }
+]

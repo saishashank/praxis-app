@@ -360,3 +360,44 @@ def test_main_exit_codes(tmp_path, monkeypatch, capsys):
     assert yf_fetch.main(["--request", "r", "--output", "o"]) == 3
     monkeypatch.setattr(yf_fetch, "run", raiser(yf_fetch.FetchError("failed")))
     assert yf_fetch.main(["--request", "r", "--output", "o"]) == 2
+
+
+def index_frame(symbol="^AXJO", days=3):
+    idx = pd.date_range("2020-01-06", periods=days, freq="B")
+    cols = pd.MultiIndex.from_product([[symbol], ["Open", "High", "Low", "Close", "Adj Close", "Volume"]])
+    data = {}
+    for i in range(days):
+        base = 6000 + i * 10
+        for k, v in (("Open", base), ("High", base + 20), ("Low", base - 20), ("Close", base + 5),
+                     ("Adj Close", base + 5), ("Volume", 0)):
+            data.setdefault((symbol, k), []).append(v)
+    return pd.DataFrame(data, index=idx, columns=cols)
+
+
+def test_parse_indices_validates_symbols():
+    assert yf_fetch.parse_indices({"indices": ["^AXJO", "^AXJO"]}) == ["^AXJO"]
+    assert yf_fetch.parse_indices({}) == []
+    with pytest.raises(yf_fetch.InputError):
+        yf_fetch.parse_indices({"indices": ["AXJO"]})
+
+
+def test_fetch_indices_strips_the_caret_and_keeps_the_gap():
+    sleeps = []
+    calls = []
+
+    def download(**kw):
+        calls.append(kw)
+        return index_frame()
+
+    rows = yf_fetch.fetch_indices(["^AXJO"], "2020-01-06", "2020-01-08", 5, download, sleep=sleeps.append)
+    assert [r["code"] for r in rows] == ["AXJO"] * 3
+    assert rows[0]["close"] == 6005 and rows[0]["published_at"] is None
+    assert calls[0]["tickers"] == ["^AXJO"] and sleeps == [5]
+
+
+def test_fetch_indices_rate_limit_is_bounded():
+    def download(**kw):
+        raise FakeRateLimit("429 Too Many Requests")
+
+    with pytest.raises(yf_fetch.RateLimited):
+        yf_fetch.fetch_indices(["^AXJO"], "2020-01-06", "2020-01-08", 1, download, sleep=lambda s: None)

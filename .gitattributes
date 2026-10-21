@@ -1,0 +1,7 @@
+# Always check out text files with LF line endings (Windows clones included), matching
+# Prettier and the Linux CI runners. CRLF checkouts broke comment-aware and byte-exact checks.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.gz binary
+*.ico binary

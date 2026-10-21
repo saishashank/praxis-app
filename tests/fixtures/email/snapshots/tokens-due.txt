@@ -1,0 +1,23 @@
+Subject: Praxis: 3 tokens due — GitHub bot token (2 days)
+
+TOKENS AND CREDENTIALS DUE
+
+
+Warning for Mon 19 Oct 2026. Renew before the date shown; names only, no values.
+
+Name | Expires | Days left | Where to renew
+GitHub bot token | 2026-10-21 | 2 | GitHub developer settings
+Turso database token | 2026-10-26 | 7 | Turso dashboard
+Cloudflare API token | 2026-11-02 | 14 | Cloudflare dashboard
+
+Open System Health: https://praxis.example.test/system-health
+
+--
+
+One combined email per warning day (14, 7 and 2 days ahead).
+
+Simulation for personal information only; not financial advice.
+
+Open Praxis: https://praxis.example.test
+
+This is a transactional email sent to the account Owner only; there is no mailing list, so there is nothing to unsubscribe from. Reviews can be paused in Settings.

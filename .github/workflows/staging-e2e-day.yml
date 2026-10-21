@@ -1,0 +1,78 @@
+# Staging E2E day (M8 T12; docs/M8_design.md 2.2, decision 45; TST-106, TST-115, AT-28, PLT-073).
+# Dispatched by the Owner on `main` AFTER the 20:45 email window of a staging trading day (the
+# Worker's staging slots run the day itself with `ref: main`). Two read-only checks, neither of
+# which changes staging:
+#   1. scripts/e2e-day/check.mjs reads the run records of the Melbourne date from the staging
+#      database and prints, per PLT-073 step, pass / LATE / MISSING / not due. Step names and
+#      HH:MM times only; the table is the job summary (the release gate reads that run).
+#   2. the staging end-to-end checks (playwright.staging.config.ts) as the viewer test identity.
+# workflow_dispatch ONLY (PLT-015: dispatched workflows carry no `schedule:`), no inputs beyond an
+# optional date. The file must be on the default branch before it can run (TST-115).
+# SEC-110: no artifact, no cache, no trace or screenshot. Secrets (the staging database, the staging
+# address - a masked secret, decision 7 - and the test-identity secret) appear only in `env:` of the
+# steps that use them and never inside a `run:` script.
+name: Staging E2E day
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Melbourne date to check, YYYY-MM-DD (empty = today)"
+        type: string
+        required: false
+        default: ""
+
+permissions: {}
+
+jobs:
+  staging:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    concurrency:
+      group: staging-e2e-day
+      cancel-in-progress: false
+    environment:
+      name: staging
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      # Read-only: the staging database is only queried. The date is validated by the script.
+      - name: PLT-073 deadline check
+        id: deadlines
+        run: node scripts/e2e-day/check.mjs ${E2E_DAY_DATE:+--date "$E2E_DAY_DATE"}
+        env:
+          E2E_DAY_DATE: ${{ inputs.date }}
+          PRAXIS_ENV: staging
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_STAGING }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_STAGING }}
+      - name: Install the test browser
+        if: ${{ !cancelled() }}
+        run: npx playwright install --with-deps chromium
+      - name: Staging end-to-end checks (viewer test identity)
+        id: e2e
+        if: ${{ !cancelled() }}
+        run: npx playwright test --config playwright.staging.config.ts
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL_STAGING }}
+          TEST_IDENTITY_SECRET: ${{ secrets.TEST_IDENTITY_SECRET_STAGING }}
+      - name: Summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo "### Staging E2E day"
+            echo ""
+            echo "- PLT-073 deadline check: ${DEADLINES_OUTCOME}"
+            echo "- Staging end-to-end checks: ${E2E_OUTCOME}"
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          DEADLINES_OUTCOME: ${{ steps.deadlines.outcome }}
+          E2E_OUTCOME: ${{ steps.e2e.outcome }}

@@ -118,7 +118,7 @@ describe("dumpDatabase", () => {
       kind: "meta",
       format: 1,
       db: "main",
-      schema_version: 6,
+      schema_version: 12,
       created_at: AT,
       ephemeral: ["request_nonce"],
     });
@@ -141,8 +141,14 @@ describe("dumpDatabase", () => {
     const d = await dumpDatabase(auth, { name: "auth", createdAt: AT });
     expect(d.meta.ephemeral).toEqual(["rate_limit"]);
     expect(d.meta.tables).not.toContain("rate_limit");
-    expect(d.meta.forever).toEqual(["audit_event"]);
+    expect(d.meta.forever).toEqual([
+      "alert_user_state",
+      "annotation",
+      "annotation_history",
+      "audit_event",
+    ]);
     expect(FOREVER_TABLES).toContain("audit_event");
+    expect(FOREVER_TABLES).toContain("alert_user_state");
     expect(d.text).not.toContain('"table":"rate_limit","values"');
   });
 
@@ -195,7 +201,7 @@ describe("restoreDatabase", () => {
     expect(idx.rows.length).toBe(1);
     // And the migration table says the same version, so later migrations continue from it.
     const v = await target.execute("SELECT MAX(version) v FROM schema_migrations");
-    expect(Number(v.rows[0].v)).toBe(6);
+    expect(Number(v.rows[0].v)).toBe(12);
   });
 
   it("round-trips the auth DB (NULL name, unique indexes, audit trigger)", async () => {
@@ -306,7 +312,7 @@ describe("encryption (age)", () => {
     const r = await restoreDatabase(target, text);
     expect(r.sha256).toEqual(exp.sha256);
     expect(exp.tables).toContain("app_log");
-    expect(exp.schemaVersion).toBe(6);
+    expect(exp.schemaVersion).toBe(12);
   });
 
   it("another key cannot decrypt; tampered ciphertext is refused", async () => {

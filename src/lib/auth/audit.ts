@@ -34,8 +34,8 @@ export async function audit(
   env: AuthEnv,
   meta: RequestMeta,
   event: Omit<AuditEvent, "ip" | "userAgent">,
-): Promise<void> {
-  await appendAudit(db, auditKey(requireKey(env)), {
+): Promise<number> {
+  return appendAudit(db, auditKey(requireKey(env)), {
     ...event,
     ip: meta.ip,
     userAgent: meta.userAgent,

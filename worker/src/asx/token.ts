@@ -183,6 +183,11 @@ export type OutcomeInfo = {
   retryAfterS?: number | null;
   /** ETag of a 200, kept for the next conditional request. */
   etag?: string | null;
+  /**
+   * Further statements for the same batched write (M5 T5: Sentinel poll counters, last-hash and
+   * incident rows, PLT-075). They run before the trip evaluation, which stays the last statement.
+   */
+  extra?: Stmt[];
 };
 
 export type RecordResult = { recorded: boolean; tripped: boolean };
@@ -219,6 +224,7 @@ export function outcomeStmts(nowMs: number, outcome: Outcome, info: OutcomeInfo 
       args: [ETAG_KEY, q(info.etag.slice(0, 200)), now],
     });
   }
+  if (info.extra !== undefined) out.push(...info.extra);
   out.push({
     sql: "DELETE FROM worker_state WHERE key >= ? AND key < ? AND key < ?",
     args: [

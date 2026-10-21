@@ -1,0 +1,11 @@
+{
+  "$comment": "M7 T13 (D-131 fragment): the Owner pause / kill action of the Risk overview and the Decision Card note action. A test file must mention the action name.",
+  "routes": {
+    "action src/app/(app)/strategies/risk/actions.ts#setArenaControlAction": {
+      "tests": ["tests/risk/controlAction.test.ts"]
+    },
+    "action src/app/(app)/cards/[id]/actions.ts#addCardNoteAction": {
+      "tests": ["tests/risk/cardNoteAction.test.ts"]
+    }
+  }
+}

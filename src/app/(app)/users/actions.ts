@@ -8,14 +8,17 @@ import { headers } from "next/headers";
 import { requireUser } from "@/lib/auth/guard";
 import { requestMeta } from "@/lib/auth/audit";
 import type { CurrentUser } from "@/lib/auth/session";
-import { authDb } from "@/lib/db/client";
+import { getConfig } from "@/lib/config/store";
+import { authDb, mainDb } from "@/lib/db/client";
 import { ACK_TEXT_VERSION } from "@/lib/users/ack";
 import type { ActionResult } from "@/lib/users/messages";
 import {
   addUser,
   changeRole,
   DEFAULT_MARKET,
+  grantUnmask,
   recordSharingAck,
+  revokeUnmask,
   revokeUser,
   signOutEverywhere,
   type Ctx,
@@ -74,4 +77,23 @@ export async function revokeUserAction(fd: FormData): Promise<ActionResult> {
 export async function signOutEverywhereAction(fd: FormData): Promise<ActionResult> {
   const user = await requireUser("admin", PATH);
   return run(user, (c) => signOutEverywhere(c, id(fd, "userId")));
+}
+
+// Unmask grants (UX-009, ROL-107). The length is the form's `days` (whole days, validated again in
+// the service) or, when the field is empty, the `unmask_expiry` configuration key (30 days).
+async function grantDays(fd: FormData): Promise<number> {
+  const v = text(fd, "days");
+  if (v !== undefined && v.trim() !== "")
+    return /^[0-9]{1,3}$/.test(v.trim()) ? Number(v.trim()) : 0;
+  return Number(await getConfig(mainDb(), "unmask_expiry"));
+}
+
+export async function grantUnmaskAction(fd: FormData): Promise<ActionResult> {
+  const user = await requireUser("admin", PATH);
+  return run(user, async (c) => grantUnmask(c, id(fd, "userId"), await grantDays(fd)));
+}
+
+export async function revokeUnmaskAction(fd: FormData): Promise<ActionResult> {
+  const user = await requireUser("admin", PATH);
+  return run(user, (c) => revokeUnmask(c, id(fd, "grantId")));
 }

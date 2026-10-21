@@ -97,7 +97,7 @@ describe("recordSharingAckAction", () => {
     expect(await recordSharingAckAction(form({ acknowledge: "on" }))).toEqual({ ok: true });
     expect(revalidatePath).toHaveBeenCalledWith("/users");
     const r = await db.execute("SELECT market, text_version, acknowledged_by FROM sharing_ack");
-    expect(r.rows[0]).toMatchObject({ market: "AU", text_version: "v1", acknowledged_by: ownerId });
+    expect(r.rows[0]).toMatchObject({ market: "AU", text_version: "v2", acknowledged_by: ownerId });
     expect((await auditRows(db))[0]).toMatchObject({
       action: "sharing.ack",
       ip: "9.9.9.9",
@@ -107,7 +107,7 @@ describe("recordSharingAckAction", () => {
   it("ignores a market or version sent by the client", async () => {
     await recordSharingAckAction(form({ acknowledge: "on", market: "US", textVersion: "evil" }));
     const r = await db.execute("SELECT market, text_version FROM sharing_ack");
-    expect(r.rows[0]).toMatchObject({ market: "AU", text_version: "v1" });
+    expect(r.rows[0]).toMatchObject({ market: "AU", text_version: "v2" });
   });
 });
 

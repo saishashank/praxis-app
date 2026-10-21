@@ -7,6 +7,7 @@ export type Action =
   | "own_preferences" // own user_preference + own alert ack
   | "annotate"
   | "what_if"
+  | "watchlist" // personal watchlist (decision 9): Owner and Editor
   | "unmask"
   | "admin"; // users, markets, sources, config, review queue, rules, challengers, kill switches, secrets status, Usage, Ops, logs
 
@@ -15,6 +16,7 @@ const MATRIX: Record<Action, readonly Role[]> = {
   own_preferences: ["owner", "editor", "viewer"],
   annotate: ["owner", "editor"],
   what_if: ["owner", "editor"],
+  watchlist: ["owner", "editor"],
   unmask: ["owner"],
   admin: ["owner"],
 };

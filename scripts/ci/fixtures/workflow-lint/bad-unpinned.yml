@@ -1,0 +1,11 @@
+name: Bad
+on: push
+permissions: {}
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    container: node:22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker://alpine:3
+      - uses: actions/setup-node@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

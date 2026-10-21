@@ -1,0 +1,96 @@
+Subject: Praxis Evening Review — Mon 19 Oct 2026
+
+PRAXIS EVENING REVIEW
+
+
+Mon 19 Oct 2026
+
+* Arena: Not active (data-only mode)
+* Carried NAV AUD: AUD 1,296,295.68
+* P0 alerts: 1
+* P0 alerts: 1
+
+
+1. Headline scorecard
+---------------------
+
+Arena not active (data-only mode).
+
+System health: 8 of 9 components healthy.
+
+- Backups (needs attention, day 2): Re-run the backup workflow
+
+
+2. Investments made today
+-------------------------
+
+Arena not active (data-only mode).
+
+
+3. Profit / loss
+----------------
+
+Arena not active (data-only mode).
+
+
+4. What was learned today
+-------------------------
+
+Arena not active (data-only mode).
+
+
+5. What worked better and why
+-----------------------------
+
+Arena not active (data-only mode).
+
+
+6. What needs improving for tomorrow
+------------------------------------
+
+Arena not active (data-only mode).
+
+
+7. Overall picture — success %
+------------------------------
+
+Arena not active (data-only mode).
+
+
+8. Sentinel recap
+-----------------
+
+[Regime notice]
+  Regime changed from calm to stressed; 4 executions gated.
+
+Tier | Code | What | Time | Effect
+P0 | TST01 | Trading halt pending an announcement (https://asx.example.test/ann/1) | 10:42 AEDT | E03 holds 12.5% of NAV; stop review queued
+P1 | TST07 | Quarterly activities report | 11:05 AEDT | Watch-list item, materiality 3
+P2 | TST09 | Appendix 3Y | 12:30 AEDT | No effect
+
+Thesis-breaker hits
+
+- E03: TB-REGIME — exit queued for next open
+
+
+9. System & quota health
+------------------------
+
+Check | Status | Detail
+Jobs | OK | all fresh
+Data | OK | ASX bars to 2026-10-19
+ASX switch | OK | on
+LLM budget | Needs attention | estimate 72% of quota
+Last backup | Down | failed 2026-10-18
+
+Read this review in the app: https://praxis.example.test/reviews/2026-10-19
+
+--
+
+10. Footer
+
+Simulation for personal information only; not financial advice.
+
+Open Praxis: https://praxis.example.test
+
+This is a transactional email sent to the account Owner only; there is no mailing list, so there is nothing to unsubscribe from. Reviews can be paused in Settings.

@@ -157,6 +157,16 @@ export function addMonths(month, n) {
 /** The newest fully past Sydney month relative to `today`. @param {string} today */
 export const lastCompleteMonth = (today) => addMonths(monthOf(today), -1);
 
+/** Days after a month's last day before its history file is written (late corrections settle). */
+export const EXPORT_SETTLE_DAYS = 7;
+
+/**
+ * A month is settled (forward export may write its history file) when today (Sydney) is more than
+ * EXPORT_SETTLE_DAYS past the month's last day: last day Sep 30 -> settled from Oct 8.
+ */
+export const monthSettled = (month, today) =>
+  today > addDays(monthLastDay(month), EXPORT_SETTLE_DAYS);
+
 /** @param {string} date */
 function isWeekday(date) {
   const [y, m, d] = date.split("-").map(Number);

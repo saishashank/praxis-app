@@ -1,0 +1,36 @@
+{
+  "_comment": "Owner-approved dependency-audit exceptions for the DEVELOPMENT tree only (decision 38); a production high or critical finding can never be excepted. Each entry: package, optional advisory (GHSA id), reason, added and expires (YYYY-MM-DD, at most 30 days apart). An expired or malformed entry FAILS the gate.",
+  "exceptions": [
+    {
+      "package": "braces",
+      "advisory": "GHSA-VFJ7-8CJW-P6XM",
+      "reason": "Development tree only (eslint-config-next, a lint-time tool; nothing ships). The advisory is a stack-exhaustion denial of service on deeply nested brace patterns in braces, and no fixed braces release exists (npm audit offers only a downgrade to eslint-config-next 14). Added by the build agent in M8 T17 so CI can pass; the Owner reviews it at the M8 review point and it expires in 30 days.",
+      "added": "2026-10-21",
+      "expires": "2026-11-20"
+    },
+    {
+      "package": "micromatch",
+      "reason": "Development tree only (eslint-config-next, a lint-time tool; nothing ships). The advisory is a stack-exhaustion denial of service on deeply nested brace patterns in braces, and no fixed braces release exists (npm audit offers only a downgrade to eslint-config-next 14). Added by the build agent in M8 T17 so CI can pass; the Owner reviews it at the M8 review point and it expires in 30 days.",
+      "added": "2026-10-21",
+      "expires": "2026-11-20"
+    },
+    {
+      "package": "fast-glob",
+      "reason": "Development tree only (eslint-config-next, a lint-time tool; nothing ships). The advisory is a stack-exhaustion denial of service on deeply nested brace patterns in braces, and no fixed braces release exists (npm audit offers only a downgrade to eslint-config-next 14). Added by the build agent in M8 T17 so CI can pass; the Owner reviews it at the M8 review point and it expires in 30 days.",
+      "added": "2026-10-21",
+      "expires": "2026-11-20"
+    },
+    {
+      "package": "@next/eslint-plugin-next",
+      "reason": "Development tree only (eslint-config-next, a lint-time tool; nothing ships). The advisory is a stack-exhaustion denial of service on deeply nested brace patterns in braces, and no fixed braces release exists (npm audit offers only a downgrade to eslint-config-next 14). Added by the build agent in M8 T17 so CI can pass; the Owner reviews it at the M8 review point and it expires in 30 days.",
+      "added": "2026-10-21",
+      "expires": "2026-11-20"
+    },
+    {
+      "package": "eslint-config-next",
+      "reason": "Development tree only (eslint-config-next, a lint-time tool; nothing ships). The advisory is a stack-exhaustion denial of service on deeply nested brace patterns in braces, and no fixed braces release exists (npm audit offers only a downgrade to eslint-config-next 14). Added by the build agent in M8 T17 so CI can pass; the Owner reviews it at the M8 review point and it expires in 30 days.",
+      "added": "2026-10-21",
+      "expires": "2026-11-20"
+    }
+  ]
+}

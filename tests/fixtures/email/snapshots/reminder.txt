@@ -1,0 +1,26 @@
+Subject: Praxis: 2 items need attention — Backups (day 2)
+
+NEEDS ATTENTION
+
+
+Mon 19 Oct 2026: 2 items in the Control Room are amber or red.
+
+Item | State | Days open | Deadline | Fix
+Backups (https://praxis.example.test/system-health#backups) | Down | 2 | 2026-10-21 | Re-run the backup workflow and check the data repository token.
+Free-tier limits (https://praxis.example.test/system-health#limits) | Needs attention | 1 | - | Quota at 72%; no action needed yet.
+
+Resolved since yesterday
+
+- AI models
+
+Open the Control Room: https://praxis.example.test/system-health
+
+--
+
+Sent daily at the reminder time while an item is amber or red; amber items can be snoozed in the Control Room.
+
+Simulation for personal information only; not financial advice.
+
+Open Praxis: https://praxis.example.test
+
+This is a transactional email sent to the account Owner only; there is no mailing list, so there is nothing to unsubscribe from. Reviews can be paused in Settings.

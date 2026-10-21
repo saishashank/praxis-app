@@ -2,7 +2,8 @@
 // `production` GitHub environment on the approved commit (SEC-108 c), right after the Python
 // fetch step. No TS build: it imports the shared plain-ESM core.
 //   node scripts/ingest/batch1.mjs prepare --request request.json   (read-only)
-//   node scripts/ingest/batch1.mjs run --bars bars.json
+//   node scripts/ingest/batch1.mjs run --bars bars.json [--index index.json] [--short short.json]
+// (M4 T3: index.json = the python step's `^AXJO` bars, short.json = the no-secrets ASIC step)
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, COMMIT_SHA (optional), GITHUB_OUTPUT (prepare, optional)
 // `prepare` reads the database only: it decides whether to fetch, writes request.json for the
 // Python step (codes from the DB universe, one session back for the D-1 re-fetch) and reports
@@ -84,7 +85,9 @@ async function prepare(db, args, env, nowMs, out) {
       `chunk_size=${r.throttle.chunkSize}`,
       `min_gap_s=${r.throttle.minGapS}`,
     );
-    out(`ingest-batch1 prepare: fetch dates=${r.dates} codes=${r.codes} excluded=${r.excluded}`);
+    out(
+      `ingest-batch1 prepare: fetch dates=${r.dates} codes=${r.codes} excluded=${r.excluded} short_dates=${r.request.short_dates?.length ?? 0}`,
+    );
   } else {
     lines.push("fetch=false");
     out(
@@ -97,19 +100,24 @@ async function prepare(db, args, env, nowMs, out) {
   return 0;
 }
 
-async function ingest(db, args, env, nowMs, out, runOptions) {
-  const barsPath = flag(args, "--bars");
-  let barsText = null;
-  if (barsPath !== null) {
-    try {
-      barsText = readFileSync(barsPath, "utf8");
-    } catch {
-      barsText = null; // the pipeline records a visible failure if it needed the file
-    }
+function readOptional(path) {
+  if (path === null) return null;
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return null; // the pipeline records a visible failure if it needed the file
   }
+}
+
+async function ingest(db, args, env, nowMs, out, runOptions) {
+  const barsText = readOptional(flag(args, "--bars"));
+  const indexText = readOptional(flag(args, "--index"));
+  const shortText = readOptional(flag(args, "--short"));
   const res = await runBatch1(db, {
     nowMs,
     barsText,
+    indexText,
+    shortText,
     commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
     ...runOptions,
   });

@@ -1,0 +1,551 @@
+{
+  "about": "Known-answer rows for src/lib/stats (M4 T12). Each row cites its source and states how the value was derived independently of the library.",
+  "rows": [
+    {
+      "id": "phi_1.96",
+      "fn": "normalCdf",
+      "args": [
+        1.96
+      ],
+      "expected": 0.9750021048517795,
+      "tol": 1e-12,
+      "source": "Abramowitz & Stegun Table 26.1 / R pnorm(1.96)",
+      "method": "published value; Simpson integration of the density (20,000 steps) = 0.9750021048517801 agrees to 1e-12"
+    },
+    {
+      "id": "phi_0",
+      "fn": "normalCdf",
+      "args": [
+        0
+      ],
+      "expected": 0.5,
+      "tol": 1e-12,
+      "source": "symmetry",
+      "method": "published value; Simpson integration of the density (20,000 steps) = 0.5 agrees to 1e-12"
+    },
+    {
+      "id": "phi_1",
+      "fn": "normalCdf",
+      "args": [
+        1
+      ],
+      "expected": 0.8413447460685429,
+      "tol": 1e-12,
+      "source": "R pnorm(1)",
+      "method": "published value; Simpson integration of the density (20,000 steps) = 0.8413447460685453 agrees to 1e-12"
+    },
+    {
+      "id": "phi_-3",
+      "fn": "normalCdf",
+      "args": [
+        -3
+      ],
+      "expected": 0.0013498980316301,
+      "tol": 1e-12,
+      "source": "R pnorm(-3)",
+      "method": "published value; Simpson integration of the density (20,000 steps) = 0.0013498980316295484 agrees to 1e-12"
+    },
+    {
+      "id": "phi_2.5",
+      "fn": "normalCdf",
+      "args": [
+        2.5
+      ],
+      "expected": 0.9937903346742238,
+      "tol": 1e-12,
+      "source": "R pnorm(2.5)",
+      "method": "published value; Simpson integration of the density (20,000 steps) = 0.9937903346742207 agrees to 1e-12"
+    },
+    {
+      "id": "phiinv_0.975",
+      "fn": "normalQuantile",
+      "args": [
+        0.975
+      ],
+      "expected": 1.959963984540054,
+      "tol": 1e-9,
+      "source": "standard (NIST/R qnorm(0.975)); task brief",
+      "method": "published value; bisection on Simpson-integrated Phi = 1.9599639845400043 agrees to 1e-10"
+    },
+    {
+      "id": "phiinv_0.95",
+      "fn": "normalQuantile",
+      "args": [
+        0.95
+      ],
+      "expected": 1.6448536269514722,
+      "tol": 1e-9,
+      "source": "R qnorm(0.95)",
+      "method": "published value; bisection on Simpson-integrated Phi = 1.64485362695148 agrees to 1e-10"
+    },
+    {
+      "id": "phiinv_0.99",
+      "fn": "normalQuantile",
+      "args": [
+        0.99
+      ],
+      "expected": 2.3263478740408408,
+      "tol": 1e-9,
+      "source": "R qnorm(0.99)",
+      "method": "published value; bisection on Simpson-integrated Phi = 2.3263478740408186 agrees to 1e-10"
+    },
+    {
+      "id": "phiinv_0.995",
+      "fn": "normalQuantile",
+      "args": [
+        0.995
+      ],
+      "expected": 2.5758293035489004,
+      "tol": 1e-9,
+      "source": "R qnorm(0.995)",
+      "method": "published value; bisection on Simpson-integrated Phi = 2.5758293035488533 agrees to 1e-10"
+    },
+    {
+      "id": "phiinv_0.9",
+      "fn": "normalQuantile",
+      "args": [
+        0.9
+      ],
+      "expected": 1.2815515655446004,
+      "tol": 1e-9,
+      "source": "R qnorm(0.9)",
+      "method": "published value; bisection on Simpson-integrated Phi = 1.2815515655445981 agrees to 1e-10"
+    },
+    {
+      "id": "phiinv_0.8",
+      "fn": "normalQuantile",
+      "args": [
+        0.8
+      ],
+      "expected": 0.8416212335729143,
+      "tol": 1e-9,
+      "source": "R qnorm(0.8)",
+      "method": "published value; bisection on Simpson-integrated Phi = 0.8416212335729152 agrees to 1e-10"
+    },
+    {
+      "id": "phiinv_0.9995",
+      "fn": "normalQuantile",
+      "args": [
+        0.9995
+      ],
+      "expected": 3.2905267314919255,
+      "tol": 1e-9,
+      "source": "R qnorm(0.9995)",
+      "method": "published value; bisection on Simpson-integrated Phi = 3.290526731488967 agrees to 1e-10"
+    },
+    {
+      "id": "phiinv_0.025",
+      "fn": "normalQuantile",
+      "args": [
+        0.025
+      ],
+      "expected": -1.959963984540054,
+      "tol": 1e-9,
+      "source": "symmetry",
+      "method": "published value; bisection on Simpson-integrated Phi = -1.9599639845400043 agrees to 1e-10"
+    },
+    {
+      "id": "wilson_8_10_0.95",
+      "fn": "wilsonInterval",
+      "args": [
+        8,
+        10,
+        0.95
+      ],
+      "expected": {
+        "lower": 0.4901624715366417,
+        "upper": 0.9433178485456248
+      },
+      "tol": 1e-9,
+      "source": "Wilson 1927; 8/10 at 95 % = (0.4902, 0.9433) (Brown, Cai, DasGupta 2001 style tables)",
+      "method": "roots of (phat - p)^2 = z^2 p(1-p)/n by 200-step bisection on the score equation"
+    },
+    {
+      "id": "wilson_8_10_0.9",
+      "fn": "wilsonInterval",
+      "args": [
+        8,
+        10,
+        0.9
+      ],
+      "expected": {
+        "lower": 0.540792805687488,
+        "upper": 0.931442012262468
+      },
+      "tol": 1e-9,
+      "source": "Wilson 1927",
+      "method": "roots of (phat - p)^2 = z^2 p(1-p)/n by 200-step bisection on the score equation"
+    },
+    {
+      "id": "wilson_30_100_0.9",
+      "fn": "wilsonInterval",
+      "args": [
+        30,
+        100,
+        0.9
+      ],
+      "expected": {
+        "lower": 0.2307049543691453,
+        "upper": 0.3798321339441244
+      },
+      "tol": 1e-9,
+      "source": "Wilson 1927",
+      "method": "roots of (phat - p)^2 = z^2 p(1-p)/n by 200-step bisection on the score equation"
+    },
+    {
+      "id": "wilson_0_20_0.95",
+      "fn": "wilsonInterval",
+      "args": [
+        0,
+        20,
+        0.95
+      ],
+      "expected": {
+        "lower": 0,
+        "upper": 0.1611251580528194
+      },
+      "tol": 1e-9,
+      "source": "Wilson 1927 (k = 0)",
+      "method": "roots of (phat - p)^2 = z^2 p(1-p)/n by 200-step bisection on the score equation"
+    },
+    {
+      "id": "cp_8_10_95",
+      "fn": "clopperPearson",
+      "args": [
+        8,
+        10,
+        0.05
+      ],
+      "expected": {
+        "lower": 0.4439045376923585,
+        "upper": 0.9747892736731667
+      },
+      "tol": 1e-9,
+      "source": "R binom.test(8,10)$conf.int = (0.4439045, 0.9747893)",
+      "method": "bisection on direct product-form pmf sums; matches the published 7-digit values"
+    },
+    {
+      "id": "cp_0_10_95",
+      "fn": "clopperPearson",
+      "args": [
+        0,
+        10,
+        0.05
+      ],
+      "expected": {
+        "lower": 0,
+        "upper": 0.30849710781876083
+      },
+      "tol": 1e-9,
+      "source": "closed form 1 - (alpha/2)^(1/n) (Clopper & Pearson 1934)",
+      "method": "closed form"
+    },
+    {
+      "id": "cp_10_10_95",
+      "fn": "clopperPearson",
+      "args": [
+        10,
+        10,
+        0.05
+      ],
+      "expected": {
+        "lower": 0.6915028921812392,
+        "upper": 1
+      },
+      "tol": 1e-9,
+      "source": "closed form (alpha/2)^(1/n)",
+      "method": "closed form"
+    },
+    {
+      "id": "upper_0_30_one_sided_05",
+      "fn": "exactUpperBound",
+      "args": [
+        0,
+        30,
+        0.05
+      ],
+      "expected": 0.09503385285530419,
+      "tol": 1e-9,
+      "source": "rule of three, exact form 1 - alpha^(1/n)",
+      "method": "closed form"
+    },
+    {
+      "id": "lower_20_20_one_sided_05",
+      "fn": "exactLowerBound",
+      "args": [
+        20,
+        20,
+        0.05
+      ],
+      "expected": 0.8608916593317348,
+      "tol": 1e-9,
+      "source": "closed form alpha^(1/n)",
+      "method": "closed form"
+    },
+    {
+      "id": "accept_2000_5_100_99",
+      "fn": "binomialAcceptanceRegion",
+      "args": [
+        2000,
+        0.05,
+        0.01
+      ],
+      "expected": {
+        "lo": 76,
+        "hi": 126
+      },
+      "tol": 0,
+      "source": "AT-17 size check; exact two-sided 99 % acceptance region, design 4.9",
+      "method": "BigInt exact integer arithmetic (no floating point), smallest/largest k with each tail > alpha/2"
+    },
+    {
+      "id": "accept_2000_1_100_99",
+      "fn": "binomialAcceptanceRegion",
+      "args": [
+        2000,
+        0.01,
+        0.01
+      ],
+      "expected": {
+        "lo": 10,
+        "hi": 32
+      },
+      "tol": 0,
+      "source": "AT-17 size check; exact two-sided 99 % acceptance region, design 4.9",
+      "method": "BigInt exact integer arithmetic (no floating point), smallest/largest k with each tail > alpha/2"
+    },
+    {
+      "id": "ks_p_n1_d0.9",
+      "fn": "ksPValue",
+      "args": [
+        1,
+        0.9
+      ],
+      "expected": 0.19999999999999996,
+      "tol": 1e-12,
+      "source": "closed form P(D_n >= d) = 2 (1-d)^n for d >= 1 - 1/n (Birnbaum & Tingey 1951)",
+      "method": "closed form"
+    },
+    {
+      "id": "ks_p_n5_d0.85",
+      "fn": "ksPValue",
+      "args": [
+        5,
+        0.85
+      ],
+      "expected": 0.00015187499999999996,
+      "tol": 1e-12,
+      "source": "same closed form",
+      "method": "closed form"
+    },
+    {
+      "id": "ks_p_n3_d0.7",
+      "fn": "ksPValue",
+      "args": [
+        3,
+        0.7
+      ],
+      "expected": 0.05399999999999999,
+      "tol": 1e-12,
+      "source": "same closed form",
+      "method": "closed form"
+    },
+    {
+      "id": "ks_crit_10_0.05",
+      "fn": "ksPValue",
+      "args": [
+        10,
+        0.409
+      ],
+      "expected": 0.05,
+      "tol": 0.006,
+      "source": "Massey 1951 table: critical D for n=10, alpha=0.05 (3-digit table, so tolerance reflects rounding)",
+      "method": "published critical value"
+    },
+    {
+      "id": "ks_crit_20_0.05",
+      "fn": "ksPValue",
+      "args": [
+        20,
+        0.294
+      ],
+      "expected": 0.05,
+      "tol": 0.004,
+      "source": "Massey 1951 table: critical D for n=20, alpha=0.05 (3-digit table, so tolerance reflects rounding)",
+      "method": "published critical value"
+    },
+    {
+      "id": "ks_crit_30_0.05",
+      "fn": "ksPValue",
+      "args": [
+        30,
+        0.242
+      ],
+      "expected": 0.05,
+      "tol": 0.004,
+      "source": "Massey 1951 table: critical D for n=30, alpha=0.05 (3-digit table, so tolerance reflects rounding)",
+      "method": "published critical value"
+    },
+    {
+      "id": "ks_crit_50_0.05",
+      "fn": "ksPValue",
+      "args": [
+        50,
+        0.188
+      ],
+      "expected": 0.05,
+      "tol": 0.004,
+      "source": "Massey 1951 table: critical D for n=50, alpha=0.05 (3-digit table, so tolerance reflects rounding)",
+      "method": "published critical value"
+    },
+    {
+      "id": "ks_crit_10_0.01",
+      "fn": "ksPValue",
+      "args": [
+        10,
+        0.489
+      ],
+      "expected": 0.01,
+      "tol": 0.006,
+      "source": "Massey 1951 table: critical D for n=10, alpha=0.01 (3-digit table, so tolerance reflects rounding)",
+      "method": "published critical value"
+    },
+    {
+      "id": "ks_crit_20_0.01",
+      "fn": "ksPValue",
+      "args": [
+        20,
+        0.352
+      ],
+      "expected": 0.01,
+      "tol": 0.004,
+      "source": "Massey 1951 table: critical D for n=20, alpha=0.01 (3-digit table, so tolerance reflects rounding)",
+      "method": "published critical value"
+    },
+    {
+      "id": "ks_crit_50_0.01",
+      "fn": "ksPValue",
+      "args": [
+        50,
+        0.226
+      ],
+      "expected": 0.01,
+      "tol": 0.004,
+      "source": "Massey 1951 table: critical D for n=50, alpha=0.01 (3-digit table, so tolerance reflects rounding)",
+      "method": "published critical value"
+    },
+    {
+      "id": "ks_asymptotic_1.358",
+      "fn": "ksPValue",
+      "args": [
+        400,
+        0.0679
+      ],
+      "expected": 0.05,
+      "tol": 0.003,
+      "source": "Kolmogorov limit: D sqrt(n) = 1.358 at alpha 0.05 (Smirnov 1948)",
+      "method": "published asymptotic critical value (n = 400 > 140, so the asymptotic branch)"
+    },
+    {
+      "id": "emax_10",
+      "fn": "expectedMaxSharpe",
+      "args": [
+        10,
+        1
+      ],
+      "expected": 1.5387527308351159,
+      "tol": 0.04616258192505347,
+      "source": "Bailey & Lopez de Prado 2014 eq. 6 approximates E[max of N standard normals]; exact value is 1.5387527308 (Blom/David tables)",
+      "method": "numerical integration of N x phi(x) Phi(x)^(N-1) (Simpson, 4,000 steps); approximation error is the paper's (about 1 %)"
+    },
+    {
+      "id": "emax_100",
+      "fn": "expectedMaxSharpe",
+      "args": [
+        100,
+        1
+      ],
+      "expected": 2.507593636441157,
+      "tol": 0.03761390454661735,
+      "source": "Bailey & Lopez de Prado 2014 eq. 6 approximates E[max of N standard normals]; exact value is 2.5075927 (Blom/David tables)",
+      "method": "numerical integration of N x phi(x) Phi(x)^(N-1) (Simpson, 4,000 steps); approximation error is the paper's (about 1 %)"
+    },
+    {
+      "id": "dsr_example_N20",
+      "fn": "deflatedSharpeRatio",
+      "args": [
+        {
+          "sharpe": 0.1,
+          "skew": -0.5,
+          "kurtosis": 4,
+          "observations": 250,
+          "trials": 20,
+          "srVariance": 0.0004
+        }
+      ],
+      "expected": {
+        "sr0": 0.03801415902361002,
+        "dsr": 0.8292375333293855
+      },
+      "tol": 1e-9,
+      "source": "Bailey & Lopez de Prado 2014, eqs. 2 and 8 (hand evaluation); the paper's printed example was not available offline and is NOT reproduced",
+      "method": "formula evaluated with Phi and Phi^-1 from Simpson integration/bisection (independent of the library)"
+    },
+    {
+      "id": "dsr_N1_equals_psr0",
+      "fn": "deflatedSharpeRatio",
+      "args": [
+        {
+          "sharpe": 0.1,
+          "skew": -0.5,
+          "kurtosis": 4,
+          "observations": 250,
+          "trials": 1,
+          "srVariance": 0.0004
+        }
+      ],
+      "expected": {
+        "sr0": 0,
+        "dsr": 0.9375434364545425
+      },
+      "tol": 1e-9,
+      "source": "decision 27: N = 1 gives SR0 = 0, so DSR = PSR(0) (eq. 2 with SR* = 0)",
+      "method": "formula evaluated with Simpson-integrated Phi"
+    },
+    {
+      "id": "level_default",
+      "fn": "validationLevel",
+      "args": [
+        0.05,
+        20,
+        6
+      ],
+      "expected": 0.0004166666666666667,
+      "tol": 1e-15,
+      "source": "design 4.8 item 3 / decision 24: 0.05/(20*6) = 0.000416667",
+      "method": "arithmetic"
+    },
+    {
+      "id": "b_at_default_level",
+      "fn": "bootstrapReplications",
+      "args": [
+        0.0004166666666666667
+      ],
+      "expected": 48000,
+      "tol": 0,
+      "source": "design 4.8 item 3: B = max(1000, ceil(20/level)) = 48,000",
+      "method": "arithmetic: 20 / (0.05/120) = 48,000"
+    },
+    {
+      "id": "b_at_005",
+      "fn": "bootstrapReplications",
+      "args": [
+        0.05
+      ],
+      "expected": 1000,
+      "tol": 0,
+      "source": "20/0.05 = 400 < 1000 floor",
+      "method": "arithmetic"
+    }
+  ]
+}

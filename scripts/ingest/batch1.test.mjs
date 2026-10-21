@@ -85,6 +85,17 @@ test("prepare writes request.json and the step outputs, and changes nothing", as
       codes: ["ZZA", "ZZB"],
       start: "2026-10-12",
       end: "2026-10-13",
+      indices: ["^AXJO"],
+      short_dates: [
+        "2026-10-02",
+        "2026-10-05",
+        "2026-10-06",
+        "2026-10-07",
+        "2026-10-08",
+        "2026-10-09",
+        "2026-10-12",
+        "2026-10-13",
+      ],
     });
     assert.equal(readFileSync(gh, "utf8"), "fetch=true\nchunk_size=100\nmin_gap_s=5\n");
     assert.equal(await count(s.db, "SELECT COUNT(*) AS c FROM run_record"), before);

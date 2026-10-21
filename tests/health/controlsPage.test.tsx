@@ -19,6 +19,8 @@ const actionMocks = vi.hoisted(() => ({
 vi.mock("@/lib/auth/guard", () => ({ requireUser: (...a: unknown[]) => requireUser(...a) }));
 vi.mock("@/lib/health/summary", () => ({ getHealthSummary: summaryMock }));
 vi.mock("@/lib/db/client", () => ({ mainDb: () => ({}), authDb: () => ({}) }));
+vi.mock("@/app/(app)/health/DayTimelineCheck", () => ({ DayTimelineCheck: () => null })); // M8 T12: async server card, tested on its own
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) })); // Control Room client island
 vi.mock("@/app/(app)/health/actions", () => actionMocks);
 
 afterEach(cleanup);
@@ -124,7 +126,7 @@ describe("Owner controls", () => {
     expect(s.getByText("Accept the Yahoo risk (O-26) before turning this on.")).toBeInTheDocument();
     expect(s.getByText("Accept the ASX risk (O-23) before turning this on.")).toBeInTheDocument();
     expect(s.getByRole("button", { name: "Switch this market off" })).toBeInTheDocument();
-    expect(s.getByText("Full mode is not available until M3.")).toBeInTheDocument();
+    expect(s.getByRole("button", { name: "Switch to full mode" })).toBeInTheDocument();
     fireEvent.click(s.getByRole("button", { name: "Accept risk (O-23)" }));
     expect(s.getByText(SOURCE_CONTROLS.asx_announcements.riskText)).toBeInTheDocument();
   });

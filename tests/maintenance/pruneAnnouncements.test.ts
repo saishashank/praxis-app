@@ -283,3 +283,19 @@ describe("pruneAnnouncements in the nightly maintenance run", () => {
     expect(out.status === "failed" && out.counts.prunedLogs).toBe(1);
   });
 });
+
+describe("pruneAnnouncements with forward-exported months (D-066 follow-up)", () => {
+  it("prunes a month exported by the forward run (newer than the first export) after 400 days", async () => {
+    // First export: 2024-05 downwards. Forward runs later exported 2024-06 and 2024-07.
+    await cursor({ exported_down_to: "2024-05", exported_up_to: "2024-07" });
+    for (const m of ["2024-05", "2024-06", "2024-07"]) await exported(m);
+    const gone = [await ann("2024-06-20T00:00:00.000Z"), await ann("2024-07-03T00:00:00.000Z")];
+    const keep = [
+      await ann("2024-08-02T00:00:00.000Z"), // not exported yet (and inside 400 days)
+      await ann("2024-07-20T00:00:00.000Z", { ingested: "2025-02-01T00:00:00.000Z" }), // after export
+    ];
+    expect(await pruneAnnouncements(main, NOW_ISO, 400)).toBe(2);
+    expect(await left()).toEqual(keep);
+    expect(gone).toHaveLength(2);
+  });
+});

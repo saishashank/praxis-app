@@ -11,7 +11,8 @@
 # cached. Logs carry counts and statuses only.
 # Flow: (1) `prepare` reads the DB (market mode, success record for today's key, catch-up plan,
 # source gate, universe) and writes request.json; (2) Python/yfinance fetches into bars.json;
-# (3) the Node writer validates and writes market data only (BLD-024). Step 3 also runs when the
+# (2b) M4 T3: the same python step also fetches the S&P/ASX 200 into index.json, and a Node step
+# fetches the ASIC short positions into short.json (both secret-free); (3) the Node writer validates and writes market data only (BLD-024). Step 3 also runs when the
 # fetch failed or was not needed, so a skip or a failure is always recorded in a run record.
 name: Ingest batch 1 (AU EOD)
 
@@ -69,19 +70,78 @@ jobs:
           python-version: "3.12"
       - name: Install the fetcher (pinned)
         if: steps.plan.outputs.fetch == 'true'
-        run: pip install --no-cache-dir -r scripts/ingest/requirements.txt
+        run: pip install --no-cache-dir --require-hashes -r scripts/ingest/requirements.txt
       # No secrets here: this step only talks to the market-data source (DAT-103) and writes
       # bars.json. The throttle values come from the plan step's outputs, which are not secret.
       - name: Fetch bars (no secrets)
         if: steps.plan.outputs.fetch == 'true'
-        run: python scripts/ingest/yahoo_fetch.py --request request.json --output bars.json
+        run: python scripts/ingest/yahoo_fetch.py --request request.json --output bars.json --index-output index.json
         env:
           YAHOO_CHUNK_SIZE: ${{ steps.plan.outputs.chunk_size }}
           YAHOO_MIN_GAP_S: ${{ steps.plan.outputs.min_gap_s }}
+      # M4 T3: ASIC daily short positions (public source). No secrets, no database; it reads only
+      # the date list of request.json. Runs even if the Yahoo fetch failed (independent source).
+      - name: Fetch ASIC short positions (no secrets)
+        if: ${{ !cancelled() && steps.plan.outputs.fetch == 'true' }}
+        run: node scripts/ingest/asic_fetch.mjs --request request.json --output short.json
       - name: Ingest batch 1
         if: ${{ !cancelled() && steps.plan.outcome == 'success' }}
-        run: node scripts/ingest/batch1.mjs run --bars bars.json
+        run: node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json
         env:
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
           COMMIT_SHA: ${{ steps.approved.outputs.sha }}
+
+  # M8 T9 (decision 30, 31; NFR-040): the staging job. The staging Worker dispatches `ref: main`
+  # (SEC-017 b-s). Same flow as production, but: it checks out the dispatched `main` commit (staging
+  # has no approval record; SEC-108 c applies to production only), uses the staging database, and
+  # NEVER calls Yahoo, ASX or ASIC: one recorded AU trading day is read from the private fixtures
+  # repo with the read-only token (f-r) and re-dated to the run's dates (scripts/ingest/recorded_day.mjs).
+  # PRAXIS_ENV=staging is fixed here and the recorded-day script refuses to run without it.
+  staging:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    concurrency:
+      group: ingest-batch1-staging
+      cancel-in-progress: false
+    environment:
+      name: staging
+      deployment: false
+    env:
+      PRAXIS_ENV: staging
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - name: Plan the fetch (read-only)
+        id: plan
+        run: node scripts/ingest/batch1.mjs prepare --request request.json
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_STAGING }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_STAGING }}
+      - name: Check out the private fixtures repo (read-only)
+        if: steps.plan.outputs.fetch == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}-fixtures
+          token: ${{ secrets.FIXTURES_READ_TOKEN }}
+          path: fixtures
+          persist-credentials: false
+      # No secrets and no network here: the recorded day replaces the Yahoo and ASIC fetch steps.
+      - name: Read the recorded day (no secrets, no network)
+        if: steps.plan.outputs.fetch == 'true'
+        run: node scripts/ingest/recorded_day.mjs --request request.json --fixtures fixtures --output bars.json --index-output index.json --short-output short.json
+      - name: Ingest batch 1
+        if: ${{ !cancelled() && steps.plan.outcome == 'success' }}
+        run: node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_STAGING }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_STAGING }}
+          COMMIT_SHA: ${{ github.sha }}

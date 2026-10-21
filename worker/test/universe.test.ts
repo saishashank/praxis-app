@@ -345,7 +345,7 @@ describe("runUniverse: nothing happens unless everything is on", () => {
     let fetched = 0;
     for (let mask = 0; mask < 1 << names.length; mask++) {
       const on = (n: (typeof names)[number]) => (mask & (1 << names.indexOf(n))) !== 0;
-      db = makeDb();
+      db = makeDb({ sentinel: false }); // 256 databases: the poll tables are not needed here
       net = makeNet(db);
       asx.calls.length = 0;
       app.calls.length = 0;
@@ -637,7 +637,8 @@ describe("worker entry wiring", () => {
     await worker.scheduled({ scheduledTime: poll } as ScheduledController, ENV as never);
     expect(asx.calls).toHaveLength(1);
     expect(asx.calls[0].url).not.toBe(ASX_LISTED_COMPANIES_URL);
-    expect(app.calls).toHaveLength(0);
+    // the only app call is the Sentinel hand-off of the changed feed body (M5 T5), never the universe import
+    expect(app.calls.map((c) => c.url)).toEqual([`${APP}/api/internal/sentinel-ingest`]);
     vi.unstubAllGlobals();
   });
 });

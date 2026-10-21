@@ -1,5 +1,6 @@
 // Versioned configuration store (ch.15). Append-only: every change is a new config_version row.
 import type { Client } from "@libsql/client";
+import { configEditRefusal } from "@/lib/learning/bKeyLock";
 import { CONFIG_KEYS, isConfigKey, type ConfigKey, type ConfigKeyDef } from "./keys";
 
 export class ConfigError extends Error {
@@ -43,6 +44,8 @@ export async function setConfig(
   if (!isConfigKey(p.key)) throw new ConfigError("unknown setting");
   const def: ConfigKeyDef = CONFIG_KEYS[p.key];
   if (def.editable === "fixed") throw new ConfigError("this setting is fixed");
+  const locked = await configEditRefusal(db, p.key);
+  if (locked !== null) throw new ConfigError(locked);
   if (!/^(global|[A-Z]{2,5})$/.test(scope)) throw new ConfigError("invalid scope");
   const problem = await def.validate(p.value, (k) => getConfig(db, k, scope));
   if (problem) throw new ConfigError(`invalid value: ${problem}`);

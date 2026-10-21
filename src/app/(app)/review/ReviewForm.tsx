@@ -2,6 +2,7 @@
 // Confirm / Reject buttons for one queued corporate action (UX-114). Shown to the Owner only; the
 // actions re-check the role.
 import { useActionState } from "react";
+import { Button } from "@/components/ui/Button";
 
 type Result = { ok: true } | { error: string };
 type Props = {
@@ -27,24 +28,14 @@ export function ReviewForm({ id, confirm, reject }: Props) {
   return (
     <form action={run} className="flex flex-wrap items-center gap-2">
       <input type="hidden" name="id" value={id} />
-      <button
-        type="submit"
-        name="decision"
-        value="confirm"
-        className="rounded border px-2 py-0.5 text-sm"
-      >
+      <Button type="submit" name="decision" value="confirm">
         Confirm
-      </button>
-      <button
-        type="submit"
-        name="decision"
-        value="reject"
-        className="rounded border px-2 py-0.5 text-sm"
-      >
+      </Button>
+      <Button type="submit" name="decision" value="reject" variant="secondary">
         Reject
-      </button>
+      </Button>
       {state !== null && "error" in state && (
-        <span role="alert" className="text-sm text-red-700">
+        <span role="alert" className="min-w-0 text-sm text-danger">
           {TEXT[state.error] ?? TEXT.unavailable}
         </span>
       )}
