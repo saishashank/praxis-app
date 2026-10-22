@@ -7,6 +7,8 @@ import {
   commitPriceMonth,
   cumulativeFactor,
   ensurePriceJob,
+  excludedSummary,
+  partitionBars,
   planPrices,
   priceHistoryLocation,
   reconstructRaw,
@@ -144,25 +146,75 @@ describe("raw reconstruction (DAT-126)", () => {
     expect(bad.findings).toEqual([{ code: "ZZA", kind: "title_mismatch", exDate: EX }]);
   });
 
-  it("a rejected month writes nothing and marks the job failed", async () => {
+  it("a factor finding sets only that company's month aside (D-168)", async () => {
     const db = await ready();
     await seedAction(db, { id: 1, code: "ZZA", type: "split", exDate: EX, factor: 0.5 });
     const store = fakeStore();
     const r = await commitPriceMonth(db, {
       month: MONTH,
-      bars: splitVendor(),
+      bars: [...splitVendor(), ...series("ZZB", days, 3, 500)],
       vendorSplits: [{ code: "ZZA", exDate: EX, ratio: 4 }],
       store,
       nowMs: NOW,
     });
     expect(r).toMatchObject({
-      status: "rejected",
-      reason: "factor_check",
-      rejected: { vendor_factor_conflict: 1 },
+      status: "ok",
+      rows: days.length,
+      excluded: 1,
+      excludedReasons: { vendor_factor_conflict: 1 },
     });
-    expect(store.files.size).toBe(0);
-    expect((await stateOf(db, JOB_YAHOO)).status).toBe("failed");
-    expect((await jobRow(db, JOB_YAHOO)).next_date).toBe("2026-09-30");
+    const rows = fromJsonlGz(
+      store.files.get("history-yahoo_prices-2026/yahoo_prices-2026-09.jsonl.gz")!,
+    ) as Record<string, unknown>[];
+    expect(new Set(rows.map((x) => x.code))).toEqual(new Set(["ZZB"]));
+    expect((await stateOf(db, JOB_YAHOO)).status).toBe("active");
+    const details = JSON.parse(String((await runs(db))[0].details_json));
+    expect(details.excluded).toEqual({
+      count: 1,
+      reasons: { vendor_factor_conflict: 1 },
+      codes: ["ZZA"],
+    });
+  });
+
+  it("a company with a bad bar is set aside; the others are saved (D-168)", async () => {
+    const db = await ready();
+    const store = fakeStore();
+    const good = series("ZZB", days, 3, 500);
+    const bad = [...series("ZZC", days, 2, 100)];
+    bad[1] = { ...bad[1], volume: null as unknown as number };
+    const r = await commitPriceMonth(db, {
+      month: MONTH,
+      bars: [...good, ...bad],
+      store,
+      nowMs: NOW,
+    });
+    expect(r).toMatchObject({ status: "ok", rows: days.length, excluded: 1 });
+    expect(r.excludedReasons).toEqual({ bad_bar: 1 });
+  });
+
+  it("partitions bars by company and still rejects a corrupt file whole", () => {
+    const b = bar("ZZA", "2026-09-01", 5, 1);
+    const p = partitionBars(
+      [b, bar("ZZA", "2026-09-02", 5, 1), { ...bar("ZZB", "2026-09-01", 5, 1), c: 0 }, b],
+      MONTH,
+    );
+    if (typeof p === "string") throw new Error(p);
+    expect(p.bars).toEqual([]);
+    expect([...p.excluded]).toEqual([
+      ["ZZB", "bad_bar"],
+      ["ZZA", "duplicate_bar"],
+    ]);
+    const q = partitionBars([b, bar("zz", "2026-09-01", 5, 1)], MONTH);
+    if (typeof q === "string") throw new Error(q);
+    expect(q.bars).toHaveLength(1);
+    expect(q.excluded.get("zz")).toBe("bad_bar");
+    expect(partitionBars([b, null], MONTH)).toBe("bad_bar");
+    expect(partitionBars("x", MONTH)).toBe("bad_input");
+    expect(excludedSummary(p.excluded)).toEqual({
+      count: 2,
+      reasons: { bad_bar: 1, duplicate_bar: 1 },
+      codes: ["ZZA", "ZZB"],
+    });
   });
 
   it("validates bars (bad numbers, wrong month, duplicates are rejected whole)", () => {
