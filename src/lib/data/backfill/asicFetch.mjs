@@ -30,6 +30,20 @@ export function validUserAgent(ua) {
  * @returns {Promise<{ months: { month: string, complete: boolean, dates: number, absent: number,
  *   skipped: number, rows: object[] }[], stopped: null | "blocked" | "rate_limited" | "http_error" | "malformed" | "network" }>}
  */
+/**
+ * Decode by byte-order mark: ASIC files up to mid-2022 are UTF-16LE with a BOM, later ones UTF-8.
+ * @param {Uint8Array} buf
+ */
+export function decodeText(buf) {
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
+    return new TextDecoder("utf-16le").decode(buf.subarray(2));
+  }
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
+    return new TextDecoder("utf-16be").decode(buf.subarray(2));
+  }
+  return new TextDecoder("utf-8").decode(buf);
+}
+
 export async function fetchAsicMonths(o) {
   const ua = validUserAgent(o.userAgent);
   if (ua === null) throw new Error("an identifying User-Agent is required");
@@ -77,7 +91,7 @@ export async function fetchAsicMonths(o) {
       try {
         const buf = new Uint8Array(await res.arrayBuffer());
         if (buf.length > MAX_BODY_BYTES) return { months: out, stopped: "malformed" };
-        text = new TextDecoder("utf-8").decode(buf);
+        text = decodeText(buf);
       } catch {
         return { months: out, stopped: "network" };
       }
