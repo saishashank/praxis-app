@@ -42,13 +42,14 @@ describe("tabs (UXN-270)", () => {
 });
 
 describe("gear menu per role (UX-004)", () => {
-  it("Owner sees all seven items", () => {
+  it("Owner sees all eight items", () => {
     expect(gearFor("owner").map((g) => g.label)).toEqual([
       "Settings",
       "System health",
       "Usage",
       "Ops checklist",
       "Users & roles",
+      "Audit log",
       "Configuration",
       "Data review",
     ]);

@@ -31,7 +31,71 @@ type Props = {
   confirmLabel?: string;
   /** Fields the Owner fills in inside the confirmation panel (M5 controls). */
   inputs?: ControlInput[];
+  /**
+   * How the opener looks (D-174): a small button (default), an on/off switch showing the current
+   * state (`on`), or one segment of a segmented control. Either way it only opens the panel.
+   */
+  variant?: "button" | "switch" | "segment";
+  /** Current state for the switch variant. */
+  on?: boolean;
 };
+
+function Opener({
+  variant,
+  on,
+  label,
+  onClick,
+}: {
+  variant: "button" | "switch" | "segment";
+  on: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  if (variant === "switch") {
+    return (
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label={label}
+        onClick={onClick}
+        className={`ui-switch inline-flex min-h-10 items-center gap-2 rounded-full border px-1.5 pr-3 text-sm font-semibold ${
+          on ? "border-accent text-text" : "border-border text-text-muted"
+        }`}
+      >
+        <span
+          aria-hidden="true"
+          className={`relative inline-block h-6 w-11 rounded-full transition-colors ${
+            on ? "bg-accent" : "bg-surface-2"
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 h-5 w-5 rounded-full bg-text shadow transition-all ${
+              on ? "left-[1.375rem]" : "left-0.5"
+            }`}
+          />
+        </span>
+        {on ? "On" : "Off"}
+      </button>
+    );
+  }
+  if (variant === "segment") {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="min-h-10 rounded-md px-3 text-sm text-text-muted hover:bg-surface-2 hover:text-text"
+      >
+        {label}
+      </button>
+    );
+  }
+  return (
+    <button type="button" onClick={onClick} className="w-fit rounded border px-2 py-0.5 text-xs">
+      {label}
+    </button>
+  );
+}
 
 export function DataControlForm({
   action,
@@ -41,6 +105,8 @@ export function DataControlForm({
   checkbox,
   confirmLabel = "Confirm",
   inputs,
+  variant = "button",
+  on = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [ticked, setTicked] = useState(false);
@@ -59,15 +125,13 @@ export function DataControlForm({
         <input key={name} type="hidden" name={name} value={value} />
       ))}
       {!open ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="w-fit rounded border px-2 py-0.5 text-xs"
-        >
-          {label}
-        </button>
+        <Opener variant={variant} on={on} label={label} onClick={() => setOpen(true)} />
       ) : (
-        <div role="group" aria-label={`Confirm: ${label}`} className="rounded border p-3 text-sm">
+        <div
+          role="group"
+          aria-label={`Confirm: ${label}`}
+          className="max-w-xl rounded-lg border border-accent bg-surface-2 p-3 text-sm"
+        >
           <p>{explain}</p>
           {inputs?.map((i) => (
             <label key={i.name} className="mt-2 flex flex-col gap-1">
@@ -113,7 +177,7 @@ export function DataControlForm({
             <button
               type="submit"
               disabled={checkbox !== undefined && !ticked}
-              className="rounded border px-2 py-0.5 text-xs"
+              className="min-h-9 rounded-md bg-accent px-3 text-sm font-semibold text-accent-contrast disabled:opacity-50"
             >
               {confirmLabel}
             </button>
@@ -123,7 +187,7 @@ export function DataControlForm({
                 setOpen(false);
                 setTicked(false);
               }}
-              className="rounded border px-2 py-0.5 text-xs"
+              className="min-h-9 rounded-md border border-border px-3 text-sm"
             >
               Cancel
             </button>

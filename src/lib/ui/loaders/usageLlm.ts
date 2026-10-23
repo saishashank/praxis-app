@@ -31,7 +31,20 @@ export type LlmCounts = {
 };
 export type LlmRoleRow = LlmCounts & { role: string; provider: string };
 export type LlmDayRow = LlmCounts & { d: string; provider: string };
-export type LlmUsage = { sinceD: string; byRole: LlmRoleRow[]; byDay: LlmDayRow[] };
+/** One model that actually answered (D-174): read-only, from the call log; no prompt or answer. */
+export type LlmModelRow = {
+  role: string;
+  provider: string;
+  model: string;
+  calls: number;
+  lastD: string;
+};
+export type LlmUsage = {
+  sinceD: string;
+  byRole: LlmRoleRow[];
+  byDay: LlmDayRow[];
+  models: LlmModelRow[];
+};
 
 export function pct(part: number, whole: number): number | null {
   return whole > 0 ? Math.floor((part * PERCENT * 2 + whole) / (whole * 2)) : null;
@@ -83,8 +96,21 @@ export async function loadLlmUsage(
           GROUP BY d, provider ORDER BY d DESC, provider LIMIT ?`,
     args: [...NORMAL_OUTCOMES, market, dayFrom, MAX_ROWS],
   });
+  const models = await db.execute({
+    sql: `SELECT role, provider, model_id, COUNT(*) AS calls, MAX(d) AS last_d FROM llm_call
+          WHERE market = ? AND d >= ? AND model_id IS NOT NULL AND model_id != ''
+          GROUP BY role, provider, model_id ORDER BY role, calls DESC LIMIT ?`,
+    args: [market, sinceD, MAX_ROWS],
+  });
   return {
     sinceD,
+    models: models.rows.map((r) => ({
+      role: String(r.role),
+      provider: String(r.provider),
+      model: String(r.model_id),
+      calls: Number(r.calls),
+      lastD: String(r.last_d),
+    })),
     byRole: byRole.rows.map((r) => ({
       role: String(r.role),
       provider: String(r.provider),

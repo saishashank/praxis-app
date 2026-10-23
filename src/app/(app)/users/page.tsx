@@ -1,5 +1,5 @@
 // Users & roles (UX-111, ROL-101..107). Owner only. Shows the allowlist, the sharing
-// acknowledgement, add / change role / revoke / sign-out-everywhere, and the audit log.
+// acknowledgement, add / change role / revoke / sign-out-everywhere. The audit log has its own page (/audit, D-174).
 // M7 T19c: restyled to the design system (cards, rows that become cards below 600 px).
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -14,10 +14,8 @@ import { ACK_TEXT } from "@/lib/users/ack";
 import {
   DEFAULT_MARKET,
   getSharingAck,
-  listAudit,
   listGrants,
   listUsers,
-  type AuditRow,
   type GrantRow,
 } from "@/lib/users/service";
 import { isGrantLive } from "@/lib/view/mask";
@@ -53,20 +51,13 @@ function grantStatus(g: GrantRow, now: Date): "Live" | "Expired" | "Revoked" {
   return isGrantLive(g, now) ? "Live" : "Expired";
 }
 
-function target(a: AuditRow, names: Map<number, string>): string {
-  if (a.targetId === null) return "";
-  if (a.targetType === "app_user") return who(Number(a.targetId), names);
-  return a.targetId;
-}
-
 export default async function UsersPage() {
   const user = await requireUser("admin", "/users");
   const tf = (await userPreferences(user.id)).time_format;
   const db = authDb();
-  const [users, ack, events, grants] = await Promise.all([
+  const [users, ack, grants] = await Promise.all([
     listUsers(db),
     getSharingAck(db, DEFAULT_MARKET),
-    listAudit(db, 100),
     listGrants(db),
   ]);
   const names = new Map<number, string>(users.map((u) => [u.id, u.email]));
@@ -272,28 +263,13 @@ export default async function UsersPage() {
         </ActionForm>
       </Card>
 
-      <Card aria-label="Audit log" title="Audit log">
-        <div className="flex flex-col gap-3">
-          <p className="m-0 text-sm text-text-muted">Latest 100 events, newest first.</p>
-          <RTable caption="Audit log" headers={["When", "Event", "Actor", "Target", "Detail"]}>
-            {events.map((a) => (
-              <RRow key={a.id}>
-                <RHead>
-                  <span className="sm:whitespace-nowrap">{formatMelbourne(a.at, tf)}</span>
-                </RHead>
-                <RCell label="Event">
-                  <span className="font-mono text-xs">{a.action}</span>
-                </RCell>
-                <RCell label="Actor">{who(a.actorUserId, names)}</RCell>
-                <RCell label="Target">{target(a, names)}</RCell>
-                <RCell label="Detail">
-                  <span className="font-mono text-xs break-all">{a.detailJson ?? ""}</span>
-                </RCell>
-              </RRow>
-            ))}
-          </RTable>
-        </div>
-      </Card>
+      <p className="m-0 text-sm text-text-muted">
+        Every change made here is recorded in the{" "}
+        <Link href="/audit" className="text-accent underline">
+          Audit log
+        </Link>
+        .
+      </p>
 
       <footer className="text-xs text-text-muted">
         Simulation for personal information only — not financial advice
