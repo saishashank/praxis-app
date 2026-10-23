@@ -42,3 +42,14 @@ describe("account menu", () => {
     expect(order).toContain("System health");
   });
 });
+
+describe("account menu without account details", () => {
+  it("still shows the role line and Sign out (header read failed)", () => {
+    render(<GearMenu role="viewer" signOut={async () => {}} />);
+    const button = screen.getByRole("button", { name: "Account and settings menu" });
+    expect(button).toHaveTextContent("?");
+    fireEvent.click(button);
+    expect(screen.getByText(/Signed in as/)).toHaveTextContent("Signed in as Viewer");
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+  });
+});

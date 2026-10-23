@@ -22,12 +22,17 @@ vi.mock("@/app/(app)/settings/actions", () => ({
   setQuietHoursAction: vi.fn(),
 }));
 // The market list for "Open the app in" (falls back to the stored market when it cannot be read).
-vi.mock("@/lib/ui/loaders/shell", () => ({
-  envFor: async () => {
-    throw new Error("no env in this test");
-  },
+const envFor = vi.hoisted(() => vi.fn());
+const marketRows = vi.hoisted(() => vi.fn());
+const quietHours = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/ui/loaders/shell", () => ({ envFor: (...a: unknown[]) => envFor(...a) }));
+vi.mock("@/lib/ui/loaders/settings", () => ({ loadSettings: async () => ({}) }));
+vi.mock("@/app/(app)/settings/region", () => ({
+  marketRows: (...a: unknown[]) => marketRows(...a),
+  readProfiles: async () => ({}),
+  readSharedMarkets: async () => new Set<string>(),
 }));
-vi.mock("@/lib/alerts/api", () => ({ getQuietHours: async () => null }));
+vi.mock("@/lib/alerts/api", () => ({ getQuietHours: (...a: unknown[]) => quietHours(...a) }));
 vi.mock("next/font/google", () => ({
   Inter: () => ({ variable: "inter-var" }),
   JetBrains_Mono: () => ({ variable: "mono-var" }),
@@ -46,6 +51,8 @@ beforeEach(() => {
   authDbMock.mockReturnValue({});
   getPrefs.mockResolvedValue({ ...DEFAULT_PREFERENCES });
   action.mockResolvedValue({ ok: true });
+  envFor.mockRejectedValue(new Error("no env in this test"));
+  quietHours.mockResolvedValue(null);
 });
 const as = (role: string) =>
   requireUser.mockResolvedValue({ id: 7, email: `${role}@example.test`, name: null, role });
@@ -128,6 +135,54 @@ describe("settings page (UXR-027: one page, rows with current values)", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Please check the entries and try again.",
     );
+  });
+});
+
+describe("settings page values (UXR-003)", () => {
+  const selectOptions = (label: string) =>
+    [...(screen.getByLabelText(label) as HTMLSelectElement).options].map((o) => [
+      o.value,
+      o.textContent,
+    ]);
+
+  it("lists only the markets the user may open, and shows quiet hours when set", async () => {
+    as("owner");
+    envFor.mockResolvedValue({ main: {}, auth: {}, now: new Date("2026-10-23T00:00:00Z") });
+    marketRows.mockReturnValue([
+      { code: "AU", exchange: "ASX", selectable: true },
+      { code: "US", exchange: "NYSE", selectable: true },
+      { code: "UK", exchange: "LSE", selectable: false },
+    ]);
+    quietHours.mockResolvedValue({ start: "22:00", end: "07:00" });
+    render(await SettingsPage());
+    expect(selectOptions("Open the app in")).toEqual([
+      ["AU", "AU (ASX)"],
+      ["US", "US (NYSE)"],
+    ]);
+    expect(marketRows.mock.calls[0][3]).toBe(true); // the Owner's view of the markets
+    expect(screen.getByText("22:00–07:00", { selector: "span" })).toBeInTheDocument();
+  });
+
+  it("keeps a stored market that is no longer choosable, and shows unknown values as stored", async () => {
+    as("viewer");
+    envFor.mockResolvedValue({ main: {}, auth: {}, now: new Date("2026-10-23T00:00:00Z") });
+    marketRows.mockReturnValue([{ code: "AU", exchange: "ASX", selectable: true }]);
+    getPrefs.mockResolvedValue({
+      ...DEFAULT_PREFERENCES,
+      default_market: "JP",
+      times_in: "exchange",
+      motion: "off",
+      theme: "midnight",
+    });
+    render(await SettingsPage());
+    expect(selectOptions("Open the app in")).toEqual([
+      ["JP", "JP"],
+      ["AU", "AU (ASX)"],
+    ]);
+    expect(marketRows.mock.calls[0][3]).toBe(false);
+    expect(screen.getByText("Exchange-local time", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("Off (no animation)", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("Midnight", { selector: "span" })).toBeInTheDocument();
   });
 });
 

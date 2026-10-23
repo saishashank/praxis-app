@@ -6,18 +6,18 @@ export const SETTINGS_PAGES: PageEntry[] = [
     file: "src/app/(app)/settings/appearance/page.tsx",
     path: "/settings/appearance",
     action: "own_preferences",
-    h1: "Settings",
+    h1: "Appearance",
   },
   {
     file: "src/app/(app)/settings/region/page.tsx",
     path: "/settings/region",
     action: "own_preferences",
-    h1: "Settings",
+    h1: "Region & markets",
   },
   {
     file: "src/app/(app)/settings/about/page.tsx",
     path: "/settings/about",
     action: "read",
-    h1: "Settings",
+    h1: "About",
   },
 ];
