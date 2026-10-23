@@ -51,6 +51,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       banners={shell.banners}
       themeAction={themeAction}
       signOut={signOutAction}
+      account={{ email: user.email, name: user.name }}
     >
       {children}
     </AppShell>

@@ -508,3 +508,23 @@ body::before {
     opacity: 1;
   }
 }
+
+/* ---- account avatar (UXR-004) and the brand mark ------------------------------------------ */
+
+.ui-avatar {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  box-shadow:
+    0 0 0 2px var(--color-bg),
+    0 0 0 3px color-mix(in srgb, var(--color-accent) 60%, transparent),
+    var(--glow-accent);
+}
+.app-mark {
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--color-accent) 45%, transparent));
+}
+:root[data-theme="high_contrast"] .ui-avatar {
+  box-shadow: 0 0 0 2px var(--color-text);
+}
+:root[data-theme="high_contrast"] .app-mark {
+  filter: none;
+}

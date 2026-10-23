@@ -5,7 +5,7 @@ import type { Role } from "@/lib/auth/permissions";
 import type { Theme } from "@/lib/preferences/service";
 import { tabsFor } from "@/lib/ui/nav";
 import { AlertBell, type BellView } from "./AlertBell";
-import { GearMenu } from "./GearMenu";
+import { GearMenu, type Account } from "./GearMenu";
 import { RegionMenu, type RegionMarket } from "./RegionMenu";
 import { TabBar, type TabView } from "./TabBar";
 import { ThemeCycle } from "./ThemeCycle";
@@ -19,6 +19,8 @@ export type HeaderProps = {
   badges?: Partial<Record<string, number>>;
   themeAction: () => Promise<void>;
   signOut: () => Promise<void>;
+  /** Who is signed in, for the avatar and the identity row of the account menu (UXR-004). */
+  account?: Account;
 };
 
 export function AppHeader({
@@ -29,6 +31,7 @@ export function AppHeader({
   badges = {},
   themeAction,
   signOut,
+  account,
 }: HeaderProps) {
   const tabs: TabView[] = tabsFor(role).map((t) => ({
     id: t.id,
@@ -41,16 +44,33 @@ export function AppHeader({
       <div className="page-frame flex min-h-14 items-center gap-2">
         <Link
           href="/"
-          className="app-brand mr-2 inline-flex min-h-10 items-center text-lg font-semibold tracking-tight text-text"
+          className="mr-2 inline-flex min-h-10 items-center gap-2 text-lg font-semibold tracking-tight text-text"
         >
-          Praxis
+          {/* The "Signal P" mark (docs/brand/BRAND.md); the theme picks the dark or light file. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/brand/praxis-mark-dark.svg"
+            alt=""
+            width={30}
+            height={24}
+            className="logo-dark app-mark h-6 w-auto"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/brand/praxis-mark-light.svg"
+            alt=""
+            width={30}
+            height={24}
+            className="logo-light app-mark h-6 w-auto"
+          />
+          <span className="app-brand">Praxis</span>
         </Link>
         <TabBar tabs={tabs} />
         <div className="ml-auto flex items-center gap-1">
           <RegionMenu market={market} />
           <AlertBell bell={bell} />
           <ThemeCycle theme={theme} action={themeAction} />
-          <GearMenu role={role} signOut={signOut} />
+          <GearMenu role={role} account={account} signOut={signOut} />
         </div>
       </div>
     </header>
