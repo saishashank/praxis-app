@@ -149,7 +149,7 @@ async function commit(db, store, args, env, nowMs, out, options) {
     ...options,
   });
   out(
-    `prices commit: ${doc.month} ${r.status}${r.reason ? ` reason=${String(r.reason).replace(/[^a-z_]/g, "")}` : ""}${r.file ? ` file=${r.file}` : ""}${r.rows !== undefined ? ` rows=${r.rows}` : ""}`,
+    `prices commit: ${doc.month} ${r.status}${r.reason ? ` reason=${String(r.reason).replace(/[^a-z_]/g, "")}` : ""}${r.file ? ` file=${r.file}` : ""}${r.rows !== undefined ? ` rows=${r.rows}` : ""}${r.excluded ? ` excluded=${r.excluded}` : ""}`,
   );
   return ["ok", "already_done", "done", "source_off", "paused_cap"].includes(r.status) ? 0 : 1;
 }

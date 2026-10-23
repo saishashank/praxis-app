@@ -49,6 +49,15 @@ export function reconstructRaw(
   reversed: number;
 };
 export function validateBars(bars: unknown, month: string): VendorBar[] | string;
+export function partitionBars(
+  bars: unknown,
+  month: string,
+): { bars: VendorBar[]; excluded: Map<string, string> } | string;
+export function excludedSummary(excluded: Map<string, string>): {
+  count: number;
+  reasons: Record<string, number>;
+  codes: string[];
+};
 export function initialPriceCursor(nowMs: number): string;
 export function ensurePriceJob(db: Client, nowMs: number): Promise<void>;
 export function readPriceState(db: Client): Promise<Record<string, unknown> & { status: string }>;
@@ -82,8 +91,9 @@ export function commitPriceMonth(
   reason?: string;
   expected?: string;
   rows?: number;
+  excluded?: number;
+  excludedReasons?: Record<string, number>;
   reversed?: number;
-  rejected?: Record<string, number>;
   file?: string;
   nextDate?: string | null;
   done?: boolean;

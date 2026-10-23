@@ -245,6 +245,42 @@ export function validateBars(bars, month) {
   return out;
 }
 
+/**
+ * Bars of one month, split by company (DAT-004, D-168): a company with any bad or duplicate bar is
+ * set aside for the month with its reason, and the other companies go ahead. Nothing is repaired.
+ * A file that is not a list, is too big, or holds a non-object row is still rejected whole.
+ * @returns {{ bars: object[], excluded: Map<string, string> } | string}
+ */
+export function partitionBars(bars, month) {
+  if (!Array.isArray(bars) || bars.length > MAX_BARS_PER_MONTH) return "bad_input";
+  const seen = new Set();
+  const excluded = new Map();
+  const ok = [];
+  for (const b of bars) {
+    if (b === null || typeof b !== "object") return "bad_bar";
+    const code = typeof b.code === "string" ? b.code : "?";
+    const one = validateBars([b], month);
+    const k = `${code}|${b.d}`;
+    if (typeof one === "string") {
+      if (!excluded.has(code)) excluded.set(code, one);
+    } else if (seen.has(k)) {
+      if (!excluded.has(code)) excluded.set(code, "duplicate_bar");
+    } else {
+      seen.add(k);
+      ok.push(one[0]);
+    }
+  }
+  return { bars: ok.filter((b) => !excluded.has(b.code)), excluded };
+}
+
+/** Count by reason and the first codes (for run details; codes are public tickers, no values). */
+export function excludedSummary(excluded) {
+  const reasons = {};
+  for (const r of excluded.values()) reasons[r] = (reasons[r] ?? 0) + 1;
+  const codes = [...excluded.keys()].sort().slice(0, 50);
+  return { count: excluded.size, reasons, codes };
+}
+
 // ---- job state (backfill_job + ingest_cursor, same tables as the D-065 jobs) ----------------------
 
 const stateStmt = (state, nowIso) => ({
@@ -420,8 +456,9 @@ export async function commitPriceMonth(db, o) {
   if (o.month > expected) return { status: "already_done" };
   if (o.month < expected) return { status: "out_of_order", expected };
 
-  const bars = validateBars(o.bars, o.month);
-  if (typeof bars === "string") return { status: "rejected", reason: bars };
+  const split = partitionBars(o.bars, o.month);
+  if (typeof split === "string") return { status: "rejected", reason: split };
+  const { bars, excluded } = split;
 
   const used = await monthUsage(db, o.nowMs);
   if (!capDecision({ used, cap, needed: ADMIN_WRITES }).ok) {
@@ -439,12 +476,10 @@ export async function commitPriceMonth(db, o) {
     vendor: o.vendor,
     tolerancePct: o.tolerancePct,
   });
-  if (rec.findings.length > 0) {
-    const kinds = {};
-    for (const f of rec.findings) kinds[f.kind] = (kinds[f.kind] ?? 0) + 1;
-    job.state = await setStatus(db, job.state, "failed", "factor_check", nowIso);
-    return { status: "rejected", reason: "factor_check", rejected: kinds };
-  }
+  // A split-factor finding sets that company's month aside (D-168); its bars are not saved.
+  for (const f of rec.findings) if (!excluded.has(f.code)) excluded.set(f.code, f.kind);
+  if (rec.findings.length > 0) rec.rows = rec.rows.filter((r) => !excluded.has(r.code));
+  const set = excludedSummary(excluded);
 
   let file = null;
   if (rec.rows.length > 0) {
@@ -498,6 +533,7 @@ export async function commitPriceMonth(db, o) {
           rows: rec.rows.length,
           reversed: rec.reversed,
           vendor_only_factors: rec.usedFactors.filter((x) => x.from === "vendor_only").length,
+          excluded: set,
           file: file === null ? null : { result: file.result, sha256: file.sha256 },
         }),
         o.commitSha ?? null,
@@ -516,6 +552,8 @@ export async function commitPriceMonth(db, o) {
   return {
     status: "ok",
     rows: rec.rows.length,
+    excluded: set.count,
+    excludedReasons: set.reasons,
     reversed: rec.reversed,
     file: file === null ? "none" : file.result,
     nextDate: done ? null : nextDate,

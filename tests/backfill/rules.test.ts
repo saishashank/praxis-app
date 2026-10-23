@@ -312,3 +312,26 @@ describe("point in time view (AT-09 Part A, TST-109)", () => {
     expect(visibleAt(rows, "2000-01-01T00:00:00.000Z")).toEqual([]);
   });
 });
+
+describe("ASIC files before mid-2022: UTF-16LE with a BOM, tab-separated", () => {
+  const header =
+    "Product\tProduct Code\tReported Short Positions\tTotal Product in Issue\t% of Total Product in Issue Reported as Short Positions";
+  const body = `${header}\r\nACME LTD\tACM\t1000\t100000\t1.00\r\nBETA GROUP\tBTA\t500\t50000\t1.00\r\n`;
+
+  it("decodeText turns a UTF-16LE file with a BOM into text, and leaves UTF-8 alone", async () => {
+    const { decodeText } = await import("@/lib/data/backfill/asicFetch.mjs");
+    const le = new Uint8Array([0xff, 0xfe, ...new Uint8Array(Buffer.from(body, "utf16le"))]);
+    expect(decodeText(le)).toBe(body);
+    expect(decodeText(new TextEncoder().encode(body))).toBe(body);
+  });
+
+  it("parseAsicCsv reads the tab-separated layout like the comma one", () => {
+    const r = parseAsicCsv(body, "2022-05-16");
+    if ("error" in r) throw new Error(r.error);
+    expect(r.skipped).toBe(0);
+    expect(r.rows.map((x) => [x.code, x.short_positions, x.total_in_issue])).toEqual([
+      ["ACM", 1000, 100000],
+      ["BTA", 500, 50000],
+    ]);
+  });
+});

@@ -5,6 +5,8 @@
   "workers_dev": false,
   "preview_urls": false,
   "triggers": { "crons": ["* * * * *"] },
+  // D-167: ASX_LIVE and ASX_USER_AGENT are set in the Cloudflare dashboard; deploys keep them.
+  "keep_vars": true,
   "vars": { "PRAXIS_ENV": "production", "APP_BASE_URL": "https://praxis-app-ssbn.vercel.app" },
   "env": {
     "staging": {
