@@ -87,13 +87,13 @@ describe("snapshot builder", () => {
     );
   });
 
-  it("keeps only the range (corporate actions up to the end of it) and counts rows", () => {
+  it("keeps only the range (corporate actions and index bars up to the end of it) and counts rows", () => {
     const s = buildSnapshot({ from: "2026-09-10", to: "2026-09-14", inputs: inputs() });
     expect(s.counts).toMatchObject({
       calendar: 3,
       bars: 6,
       universe: 6,
-      index_bars: 3,
+      index_bars: 10, // every index bar up to the end of the range: the regime warm-up (D-175)
       corporate_actions: 0,
     });
     const t = buildSnapshot({ from: "2026-09-10", to: "2026-09-30", inputs: inputs() });

@@ -91,7 +91,10 @@ function readDump(file) {
  * @returns {Promise<number>} exit code
  */
 export async function run(argv, env, deps = {}) {
-  const openDb = deps.openDb ?? ((url, authToken) => createClient({ url, authToken }));
+  const openDb =
+    deps.openDb ??
+    // Lossless integers (D-175): the restore re-dumps to verify, and cohort.rng_seed is 64-bit.
+    ((url, authToken) => createClient({ url, authToken, intMode: "bigint" }));
   const now = deps.now ?? (() => Date.now());
   const out = deps.out ?? ((s) => console.log(s));
   const started = now();

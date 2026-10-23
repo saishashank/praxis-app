@@ -19,8 +19,8 @@
 // Plaintext never touches disk: dump -> gzip -> encrypt all happen in memory (small at M1).
 // TODO(streaming): stream rows through gzip and age (Encrypter accepts a ReadableStream) once a
 // database no longer fits comfortably in memory; the Vercel route also has a response size limit.
-// Known limits (documented, not silent): integers beyond 2^53 make the dump fail (libsql
-// intMode "number" throws); a REAL that is a whole number (1.0) is stored as 1 (JSON) and takes
+// Known limits (documented, not silent): integers beyond 2^53 are carried exactly as {"$int"}
+// when the dump client uses intMode "bigint" (D-175; the nightly job and the drill do); a REAL that is a whole number (1.0) is stored as 1 (JSON) and takes
 // the column's affinity on restore; AUTOINCREMENT sequences are not carried (none used at M1).
 import { createHash } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
@@ -159,7 +159,13 @@ export function encodeValue(v) {
   if (v === null || v === undefined) return null;
   if (typeof v === "string") return v;
   if (typeof v === "number") return Number.isFinite(v) ? v : { $f: String(v) };
-  if (typeof v === "bigint") return { $int: v.toString() };
+  // The dump reads integers losslessly (intMode "bigint", D-175): a value that fits a JS number
+  // is written as before; only one beyond 2^53 (cohort.rng_seed) needs the exact $int form.
+  if (typeof v === "bigint") {
+    return v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER)
+      ? Number(v)
+      : { $int: v.toString() };
+  }
   if (v instanceof ArrayBuffer) return { $b64: Buffer.from(v).toString("base64") };
   if (ArrayBuffer.isView(v)) {
     return { $b64: Buffer.from(v.buffer, v.byteOffset, v.byteLength).toString("base64") };

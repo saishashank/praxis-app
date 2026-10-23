@@ -80,7 +80,11 @@ export const TABLES = [
     name: "index_bars",
     fields: ["index_code", "d", "o_micro", "h_micro", "l_micro", "c_micro"],
     key: ["index_code", "d"],
+    // Everything up to the end of the range (D-175): the regime needs a warm-up before the first
+    // replayed day (1,260-session volatility percentile, 200-session SMA; AGT-101, ARN-080), and
+    // the replay classifies each day from bars <= that day only, so this adds no look-ahead.
     day: (r) => r.d,
+    upTo: true,
     ok: {
       index_code: isStr,
       d: isRealDate,
@@ -168,7 +172,9 @@ export function buildSnapshot(o) {
     for (const r of kept) body.push(JSON.stringify([spec.name, spec.fields.map((f) => r[f])]));
   }
   lines.push(JSON.stringify({ format: SNAPSHOT_FORMAT, from: o.from, to: o.to, counts }));
-  lines.push(...body);
+  // A loop, never push(...body): a full-universe snapshot has ~1M lines, more than a call can take
+  // as arguments (RangeError: Maximum call stack size exceeded, production 2026-10-23, D-175).
+  for (const line of body) lines.push(line);
   const text = `${lines.join("\n")}\n`;
   const bytes = gzipDeterministic(text);
   return {

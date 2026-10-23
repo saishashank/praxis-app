@@ -113,8 +113,10 @@ export async function loadInputs(o) {
   }));
   const index = (
     await q(
-      "SELECT index_code, d, o_micro, h_micro, l_micro, c_micro FROM index_bar WHERE market = ? AND d >= ? AND d <= ?",
-      [MARKET, o.from, o.to],
+      // All index bars up to `to` (D-175): the regime warm-up lies before `from`; the table is
+      // one row per session, so this is a few thousand rows.
+      "SELECT index_code, d, o_micro, h_micro, l_micro, c_micro FROM index_bar WHERE market = ? AND d <= ?",
+      [MARKET, o.to],
     )
   ).map((r) => ({
     index_code: String(r.index_code),

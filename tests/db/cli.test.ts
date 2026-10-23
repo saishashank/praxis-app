@@ -56,9 +56,9 @@ describe("migrate CLI", () => {
     const url = tempDbUrl();
     const r = run(["--db", "main"], { TURSO_MAIN_URL: url });
     expect(r.code).toBe(0);
-    expect(r.out).toContain("migrate main: applied 12 (now at v12)");
+    expect(r.out).toContain("migrate main: applied 13 (now at v13)");
     const again = run(["--db", "main"], { TURSO_MAIN_URL: url });
-    expect(again.out).toContain("applied 0 (now at v12)");
+    expect(again.out).toContain("applied 0 (now at v13)");
     const db = track(createClient({ url }));
     const t = await db.execute("SELECT name FROM sqlite_master WHERE name = 'run_record'");
     expect(t.rows.length).toBe(1);
@@ -71,7 +71,7 @@ describe("migrate CLI", () => {
       TURSO_AUTH_URL: tempDbUrl(),
     });
     expect(r.code).toBe(0);
-    expect(r.out).toContain("migrate main: applied 12");
+    expect(r.out).toContain("migrate main: applied 13");
     expect(r.out).toContain("migrate auth: applied 6");
   });
 });
