@@ -144,11 +144,23 @@ body {
 
 /* ---- header: glass bar with the brand line under it ------------------------------------- */
 
+/* The blur sits on a pseudo-element, never on the header itself: a backdrop-filter on the header
+   would become the containing block of the phone bottom bar (position: fixed, rendered inside the
+   header) and pin it to the header instead of the screen bottom. */
 .app-header {
+  background: transparent;
+  isolation: isolate;
+  border-bottom-color: color-mix(in srgb, var(--color-border) 55%, transparent);
+}
+.app-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   background: var(--surface-glass);
   -webkit-backdrop-filter: blur(14px) saturate(150%);
   backdrop-filter: blur(14px) saturate(150%);
-  border-bottom-color: color-mix(in srgb, var(--color-border) 55%, transparent);
+  pointer-events: none;
 }
 .app-header::after {
   content: "";
