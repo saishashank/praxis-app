@@ -67,16 +67,16 @@ describe("Appearance page", () => {
       as(r);
       render(await AppearancePage());
       expect(requireUser).toHaveBeenCalledWith("own_preferences", "/settings/appearance");
-      expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Appearance" })).toBeInTheDocument();
       expect(screen.getAllByRole("radio")).toHaveLength(6);
       expect(screen.getByRole("radio", { name: "Dark (default)" })).toBeChecked();
       expect(screen.getByLabelText("Animation")).toHaveValue("on");
       // The shell's "Appearance: X. Switch to Y." button must stay the only control with that name.
       expect(screen.queryByLabelText("Theme")).toBeNull();
-      expect(screen.getByRole("link", { name: "Appearance" })).toHaveAttribute(
-        "aria-current",
-        "page",
-      );
+      // UXR-002: the selected option is marked by text too, and the stored one says so
+      expect(screen.getByText("Current setting")).toBeInTheDocument();
+      // the sub-page tabs are gone (UXR-027); the shell breadcrumb leads back to Settings
+      expect(screen.queryByRole("navigation", { name: "Settings sections" })).toBeNull();
     },
   );
 

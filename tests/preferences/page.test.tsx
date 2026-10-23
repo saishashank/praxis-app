@@ -1,5 +1,5 @@
 // UX-110, UX-004, SEC-016, ROL-106, ROL-102a: Settings > Personal page, home link, layout theme.
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const requireUser = vi.hoisted(() => vi.fn());
@@ -17,9 +17,22 @@ vi.mock("@/lib/preferences/service", async (orig) => ({
 }));
 vi.mock("@/app/(app)/settings/actions", () => ({
   updatePreferencesAction: (fd: FormData) => action(fd),
+  updateAppearanceAction: vi.fn(),
+  updateRegionAction: vi.fn(),
   setQuietHoursAction: vi.fn(),
 }));
-vi.mock("@/lib/alerts/api", () => ({ getQuietHours: async () => null }));
+// The market list for "Open the app in" (falls back to the stored market when it cannot be read).
+const envFor = vi.hoisted(() => vi.fn());
+const marketRows = vi.hoisted(() => vi.fn());
+const quietHours = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/ui/loaders/shell", () => ({ envFor: (...a: unknown[]) => envFor(...a) }));
+vi.mock("@/lib/ui/loaders/settings", () => ({ loadSettings: async () => ({}) }));
+vi.mock("@/app/(app)/settings/region", () => ({
+  marketRows: (...a: unknown[]) => marketRows(...a),
+  readProfiles: async () => ({}),
+  readSharedMarkets: async () => new Set<string>(),
+}));
+vi.mock("@/lib/alerts/api", () => ({ getQuietHours: (...a: unknown[]) => quietHours(...a) }));
 vi.mock("next/font/google", () => ({
   Inter: () => ({ variable: "inter-var" }),
   JetBrains_Mono: () => ({ variable: "mono-var" }),
@@ -38,22 +51,47 @@ beforeEach(() => {
   authDbMock.mockReturnValue({});
   getPrefs.mockResolvedValue({ ...DEFAULT_PREFERENCES });
   action.mockResolvedValue({ ok: true });
+  envFor.mockRejectedValue(new Error("no env in this test"));
+  quietHours.mockResolvedValue(null);
 });
 const as = (role: string) =>
   requireUser.mockResolvedValue({ id: 7, email: `${role}@example.test`, name: null, role });
 
-describe("settings page", () => {
+const timeForm = () => screen.getByLabelText("Time format").closest("form") as HTMLFormElement;
+
+describe("settings page (UXR-027: one page, rows with current values)", () => {
   it.each(["owner", "editor", "viewer"])(
-    "renders for %s with badge, form and footers",
+    "renders for %s with account, sign out, rows, forms and footers",
     async (r) => {
       as(r);
       render(await SettingsPage());
       expect(requireUser).toHaveBeenCalledWith("own_preferences", "/settings");
       expect(getPrefs).toHaveBeenCalledWith({}, 7);
       expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
-      expect(screen.getByLabelText("Your role")).toHaveTextContent(r);
-      expect(screen.queryByLabelText("Theme")).toBeNull(); // theme moved to Appearance
-      expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeInTheDocument();
+      expect(screen.getByLabelText("Your role")).toHaveTextContent(
+        r.charAt(0).toUpperCase() + r.slice(1),
+      );
+      // UXR-004: identity and a visible Sign out, without opening a menu
+      expect(screen.getByText(`${r}@example.test`)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+      // the four sub-page tabs are gone; groups take their place
+      expect(screen.queryByRole("navigation", { name: "Settings sections" })).toBeNull();
+      for (const g of ["Account", "Appearance", "Time and alerts", "Region and markets", "About"]) {
+        expect(screen.getByRole("heading", { name: g })).toBeInTheDocument();
+      }
+      // UXR-003: current values are visible before editing
+      expect(screen.getByText("Dark (default)", { selector: "span" })).toBeInTheDocument();
+      expect(screen.getByText("24-hour (13:30)", { selector: "span" })).toBeInTheDocument();
+      expect(screen.getAllByText("Immediately", { selector: "span" }).length).toBeGreaterThan(0);
+      expect(screen.getByText("Off", { selector: "span" })).toBeInTheDocument(); // quiet hours
+      expect(screen.getByRole("link", { name: /Markets/ })).toHaveAttribute(
+        "href",
+        "/settings/region",
+      );
+      expect(screen.getByRole("link", { name: /About Praxis/ })).toHaveAttribute(
+        "href",
+        "/settings/about",
+      );
       expect(screen.getByLabelText("Time format")).toHaveValue("24h");
       expect(screen.getByLabelText("P1 alerts")).toHaveValue("immediate");
       expect(screen.getByLabelText("P2 alerts")).toHaveValue("digest");
@@ -67,7 +105,9 @@ describe("settings page", () => {
       expect(
         screen.getByText("Simulation for personal information only — not financial advice"),
       ).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+      // one Save per form (Appearance, Time and alerts, Region; quiet hours has its own "Save quiet hours")
+      expect(within(timeForm()).getByRole("button", { name: "Save" })).toBeEnabled();
+      expect(screen.getAllByRole("button", { name: "Save" }).length).toBe(3);
     },
   );
 
@@ -81,7 +121,8 @@ describe("settings page", () => {
   it("submits the form and shows Saved, then an error text", async () => {
     as("viewer");
     render(await SettingsPage());
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+    const save = () => within(timeForm()).getByRole("button", { name: "Save" });
+    await act(async () => fireEvent.click(save()));
     expect(action).toHaveBeenCalledTimes(1);
     const fd = action.mock.calls[0][0];
     expect(fd.has("theme")).toBe(false);
@@ -90,10 +131,58 @@ describe("settings page", () => {
     expect(fd.has("alert_p0")).toBe(false);
     expect(await screen.findByRole("status")).toHaveTextContent("Saved.");
     action.mockResolvedValue({ error: "invalid" });
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+    await act(async () => fireEvent.click(save()));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Please check the entries and try again.",
     );
+  });
+});
+
+describe("settings page values (UXR-003)", () => {
+  const selectOptions = (label: string) =>
+    [...(screen.getByLabelText(label) as HTMLSelectElement).options].map((o) => [
+      o.value,
+      o.textContent,
+    ]);
+
+  it("lists only the markets the user may open, and shows quiet hours when set", async () => {
+    as("owner");
+    envFor.mockResolvedValue({ main: {}, auth: {}, now: new Date("2026-10-23T00:00:00Z") });
+    marketRows.mockReturnValue([
+      { code: "AU", exchange: "ASX", selectable: true },
+      { code: "US", exchange: "NYSE", selectable: true },
+      { code: "UK", exchange: "LSE", selectable: false },
+    ]);
+    quietHours.mockResolvedValue({ start: "22:00", end: "07:00" });
+    render(await SettingsPage());
+    expect(selectOptions("Open the app in")).toEqual([
+      ["AU", "AU (ASX)"],
+      ["US", "US (NYSE)"],
+    ]);
+    expect(marketRows.mock.calls[0][3]).toBe(true); // the Owner's view of the markets
+    expect(screen.getByText("22:00–07:00", { selector: "span" })).toBeInTheDocument();
+  });
+
+  it("keeps a stored market that is no longer choosable, and shows unknown values as stored", async () => {
+    as("viewer");
+    envFor.mockResolvedValue({ main: {}, auth: {}, now: new Date("2026-10-23T00:00:00Z") });
+    marketRows.mockReturnValue([{ code: "AU", exchange: "ASX", selectable: true }]);
+    getPrefs.mockResolvedValue({
+      ...DEFAULT_PREFERENCES,
+      default_market: "JP",
+      times_in: "exchange",
+      motion: "off",
+      theme: "midnight",
+    });
+    render(await SettingsPage());
+    expect(selectOptions("Open the app in")).toEqual([
+      ["JP", "JP"],
+      ["AU", "AU (ASX)"],
+    ]);
+    expect(marketRows.mock.calls[0][3]).toBe(false);
+    expect(screen.getByText("Exchange-local time", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("Off (no animation)", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("Midnight", { selector: "span" })).toBeInTheDocument();
   });
 });
 

@@ -15,7 +15,7 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-surface p-6 text-center break-words">
+    <div className="ui-empty min-w-0 rounded-lg border border-border bg-surface p-6 text-center break-words">
       <p className="m-0 font-semibold">{title}</p>
       {children ? (
         <p className="mx-auto mt-2 max-w-prose text-sm text-text-muted">{children}</p>

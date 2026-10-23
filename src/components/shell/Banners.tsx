@@ -8,10 +8,7 @@ export type BannerView = { id: string; text: string };
 export function Banners({ banners }: { banners: BannerView[] }) {
   if (banners.length === 0) return null;
   return (
-    <section
-      aria-label="Notices"
-      className="mx-auto flex w-full max-w-[1200px] flex-col gap-2 px-4 pt-3"
-    >
+    <section aria-label="Notices" className="page-frame flex flex-col gap-2 pt-3">
       {banners.map((b) => {
         const warn = b.id.endsWith(":unavailable");
         return (

@@ -76,6 +76,7 @@ export function ControlRoomRing({
                 d={arc(i * sweep + GAP / 2, (i + 1) * sweep - GAP / 2)}
                 fill="none"
                 stroke={s.color}
+                color={s.color}
                 strokeWidth={24}
                 strokeDasharray={s.dash}
               />

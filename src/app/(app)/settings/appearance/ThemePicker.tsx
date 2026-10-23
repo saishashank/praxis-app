@@ -29,7 +29,7 @@ export function ThemePicker({ value }: { value: Theme }) {
         {THEMES.map((t) => (
           <div
             key={t}
-            className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-surface p-3"
+            className="group flex min-h-14 min-w-0 items-start gap-2 rounded-lg border border-border bg-surface p-3 has-[:checked]:border-accent has-[:checked]:bg-surface-2 has-[:checked]:shadow-[0_0_0_1px_var(--color-accent)]"
           >
             <input
               type="radio"
@@ -40,10 +40,22 @@ export function ThemePicker({ value }: { value: Theme }) {
               aria-describedby={`theme-${t}-note`}
               className="mt-1"
             />
-            <div className="min-w-0">
-              <label htmlFor={`theme-${t}`} className="block text-sm font-medium">
+            <div className="min-w-0 flex-1">
+              <label
+                htmlFor={`theme-${t}`}
+                className="flex flex-wrap items-center gap-2 text-sm font-medium"
+              >
                 {THEME_LABEL[t]}
+                <span
+                  aria-hidden="true"
+                  className="hidden rounded-full bg-accent px-2 py-0.5 text-[0.7rem] font-semibold text-accent-contrast group-has-[:checked]:inline"
+                >
+                  ✓ Selected
+                </span>
               </label>
+              {t === value ? (
+                <span className="text-[0.7rem] text-text-muted">Current setting</span>
+              ) : null}
               <p id={`theme-${t}-note`} className="m-0 text-xs text-text-muted">
                 {THEME_NOTE[t]}
               </p>

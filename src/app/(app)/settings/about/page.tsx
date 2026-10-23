@@ -26,8 +26,7 @@ export default async function AboutPage() {
   const flagged = notices.packages.filter((p) => !p.allowed).length;
   return (
     <SettingsFrame
-      tab="about"
-      role={user.role}
+      title="About"
       intro="Praxis is a practice-only research tool. All trades are simulated. It is built on the open-source libraries and fonts listed here."
     >
       <Card title="Fonts" headingLevel={2}>

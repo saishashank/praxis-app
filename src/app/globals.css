@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "../styles/themes.css";
+@import "../styles/effects.css";
 
 /*
  * Tailwind utilities read the --color-* tokens. The values below are only the fallback (dark);
@@ -54,7 +55,7 @@
 }
 
 body {
-  background: var(--color-bg);
+  /* background (colour, aura and grid) comes from src/styles/effects.css */
   color: var(--color-text);
   font-family: var(--font-sans);
 }

@@ -20,7 +20,7 @@ export function KpiTile({
 }) {
   const missing = value === null || value === undefined || value === "";
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-surface p-3">
+    <div className="ui-card min-w-0 rounded-lg border border-border bg-surface p-3">
       <dt className="break-words text-xs text-text-muted">
         {label}
         {currency ? <span className="ml-1">({currency})</span> : null}
@@ -31,7 +31,7 @@ export function KpiTile({
         ) : missing ? (
           <NotMeasured />
         ) : (
-          <span className="font-mono">{value}</span>
+          <span className="ui-kpi-value font-mono">{value}</span>
         )}
       </dd>
       {note ? <dd className="mt-1 break-words text-xs text-text-muted">{note}</dd> : null}

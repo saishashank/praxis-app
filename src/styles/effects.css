@@ -1,0 +1,530 @@
+/*
+ * Depth and glow layer (UXN-285 f: "layered depth (subtle grid, glow on the accent, thin technical
+ * type in JetBrains Mono for readouts) consistent with the Praxis brand kit; works in all six
+ * themes, with High contrast removing glows"), applied app-wide at the Owner's request (D-170,
+ * 2026-10-23: "the UI is very dull", "make the width as per the resolution").
+ *
+ * Rules for this file:
+ * - Decorative only. No colour here carries meaning, so the contrast-checked tokens stay in
+ *   themes.css; effects are mixed from those tokens or from the brand line colours (BRAND.md).
+ * - High contrast turns every glow, aura and gradient text off.
+ * - Motion stops for the OS reduced-motion setting and the Motion switch (data-motion="off").
+ */
+
+/* ---- effect tokens ---------------------------------------------------------------------- */
+
+/* Dark family (dark, midnight, dim; Match device / signed-out pages on a dark OS). */
+:root {
+  --page-max: 1760px;
+  --page-gutter: clamp(1rem, 2.4vw, 3rem);
+  --brand-line: linear-gradient(90deg, #8fd3ff 0%, #a7b4ff 100%);
+  --aura-1: color-mix(in srgb, #8fd3ff 24%, transparent);
+  --aura-2: color-mix(in srgb, #a7b4ff 20%, transparent);
+  --aura-3: color-mix(in srgb, #2db5a3 11%, transparent);
+  --grid-line: color-mix(in srgb, var(--color-text) 4%, transparent);
+  --surface-glass: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  --surface-lift: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-surface) 92%, #ffffff 8%) 0%,
+    var(--color-surface) 55%
+  );
+  --edge-light: inset 0 1px 0 color-mix(in srgb, #ffffff 7%, transparent);
+  --glow-accent: 0 0 22px color-mix(in srgb, var(--color-accent) 45%, transparent);
+  --glow-card:
+    0 0 0 1px color-mix(in srgb, var(--color-accent) 22%, transparent),
+    0 12px 40px -14px color-mix(in srgb, var(--color-accent) 45%, transparent);
+  --glow-text: drop-shadow(0 0 18px color-mix(in srgb, var(--color-accent) 40%, transparent));
+  --glow-value: 0 0 18px color-mix(in srgb, var(--color-accent) 30%, transparent);
+  --glow-seg: 10px;
+}
+
+:root[data-theme="light"],
+:root[data-theme="system"],
+:root:not([data-theme]) {
+  --brand-line: linear-gradient(90deg, #2a8fd0 0%, #4453c9 100%);
+  --aura-1: color-mix(in srgb, #2a8fd0 10%, transparent);
+  --aura-2: color-mix(in srgb, #4453c9 8%, transparent);
+  --aura-3: color-mix(in srgb, #0e8a7a 5%, transparent);
+  --grid-line: color-mix(in srgb, var(--color-text) 5%, transparent);
+  --surface-glass: color-mix(in srgb, var(--color-bg) 78%, transparent);
+  --surface-lift: linear-gradient(180deg, #ffffff 0%, var(--color-surface) 100%);
+  --edge-light: inset 0 1px 0 #ffffff;
+  --glow-accent: 0 6px 20px -6px color-mix(in srgb, var(--color-accent) 55%, transparent);
+  --glow-card:
+    0 0 0 1px color-mix(in srgb, var(--color-accent) 25%, transparent),
+    0 14px 36px -16px color-mix(in srgb, var(--color-accent) 40%, transparent);
+  --glow-text: drop-shadow(0 2px 10px color-mix(in srgb, var(--color-accent) 22%, transparent));
+  --glow-value: none;
+  --glow-seg: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"],
+  :root:not([data-theme]) {
+    --brand-line: linear-gradient(90deg, #8fd3ff 0%, #a7b4ff 100%);
+    --aura-1: color-mix(in srgb, #8fd3ff 24%, transparent);
+    --aura-2: color-mix(in srgb, #a7b4ff 20%, transparent);
+    --aura-3: color-mix(in srgb, #2db5a3 11%, transparent);
+    --grid-line: color-mix(in srgb, var(--color-text) 4%, transparent);
+    --surface-glass: color-mix(in srgb, var(--color-surface) 72%, transparent);
+    --surface-lift: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-surface) 92%, #ffffff 8%) 0%,
+      var(--color-surface) 55%
+    );
+    --edge-light: inset 0 1px 0 color-mix(in srgb, #ffffff 7%, transparent);
+    --glow-accent: 0 0 22px color-mix(in srgb, var(--color-accent) 45%, transparent);
+    --glow-card:
+      0 0 0 1px color-mix(in srgb, var(--color-accent) 22%, transparent),
+      0 12px 40px -14px color-mix(in srgb, var(--color-accent) 45%, transparent);
+    --glow-text: drop-shadow(0 0 18px color-mix(in srgb, var(--color-accent) 40%, transparent));
+    --glow-value: 0 0 18px color-mix(in srgb, var(--color-accent) 30%, transparent);
+    --glow-seg: 10px;
+  }
+}
+
+:root[data-theme="midnight"] {
+  --aura-1: color-mix(in srgb, #8fd3ff 11%, transparent);
+  --aura-2: color-mix(in srgb, #a7b4ff 9%, transparent);
+  --grid-line: color-mix(in srgb, var(--color-text) 3%, transparent);
+}
+
+/* High contrast: no glow, no aura, no gradient text (UXN-285 f). */
+:root[data-theme="high_contrast"] {
+  --brand-line: linear-gradient(90deg, var(--color-text), var(--color-text));
+  --aura-1: transparent;
+  --aura-2: transparent;
+  --aura-3: transparent;
+  --grid-line: transparent;
+  --surface-glass: var(--color-surface);
+  --surface-lift: var(--color-surface);
+  --edge-light: none;
+  --glow-accent: none;
+  --glow-card: none;
+  --glow-text: none;
+  --glow-value: none;
+  --glow-seg: 0px;
+}
+
+/* ---- page frame: width follows the screen ------------------------------------------------- */
+
+/* Every page renders its own <main>; this one rule replaces the per-page caps (max-w-2xl … 6xl).
+   An id selector outranks the Tailwind utilities, so no page needs editing. */
+#content > main {
+  width: 100%;
+  max-width: var(--page-max);
+  padding-inline: var(--page-gutter);
+}
+
+.page-frame {
+  width: 100%;
+  max-width: var(--page-max);
+  margin-inline: auto;
+  padding-inline: var(--page-gutter);
+}
+
+/* ---- background: aura + faint grid ------------------------------------------------------ */
+
+body {
+  background-color: var(--color-bg);
+  /* The aura is the drifting body::before layer (bold layer below); the body keeps the grid. */
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size:
+    56px 56px,
+    56px 56px;
+  background-attachment: fixed;
+}
+
+/* ---- header: glass bar with the brand line under it ------------------------------------- */
+
+/* The blur sits on a pseudo-element, never on the header itself: a backdrop-filter on the header
+   would become the containing block of the phone bottom bar (position: fixed, rendered inside the
+   header) and pin it to the header instead of the screen bottom. */
+.app-header {
+  background: transparent;
+  isolation: isolate;
+  border-bottom-color: color-mix(in srgb, var(--color-border) 55%, transparent);
+}
+.app-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--surface-glass);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+  pointer-events: none;
+}
+.app-header::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: -1px;
+  height: 1px;
+  background: var(--brand-line);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.app-tabbar {
+  background: var(--surface-glass);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+}
+
+/* Active tab: brand line under the label, softly lit. */
+.app-tab[aria-current="page"] {
+  position: relative;
+  color: var(--color-text);
+}
+.app-tab[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0.6rem;
+  bottom: -0.15rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--brand-line);
+  box-shadow: var(--glow-accent);
+}
+
+/* ---- headings: the page title carries the brand line -------------------------------------- */
+
+#content main h1 {
+  background: var(--brand-line);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: var(--glow-text);
+  font-size: clamp(1.75rem, 1.2rem + 1.4vw, 2.6rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  width: fit-content;
+  max-width: 100%;
+}
+:root[data-theme="high_contrast"] #content main h1 {
+  background: none;
+  color: var(--color-text);
+  filter: none;
+}
+
+/* ---- surfaces: lifted cards that light up on hover ---------------------------------------- */
+
+.ui-card,
+#content .rounded-lg.border.bg-surface {
+  background: var(--surface-lift);
+  box-shadow: var(--edge-light);
+  transition:
+    box-shadow 200ms ease,
+    border-color 200ms ease,
+    transform 200ms ease;
+}
+.ui-card:hover,
+#content .rounded-lg.border.bg-surface:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  box-shadow: var(--edge-light), var(--glow-card);
+}
+
+/* KPI readouts: technical type, softly lit (UXN-285 f). */
+.ui-kpi-value {
+  text-shadow: var(--glow-value);
+  letter-spacing: -0.01em;
+}
+
+/* Primary buttons and accent links glow on hover. */
+#content .bg-accent {
+  background-image: var(--brand-line);
+  transition: box-shadow 200ms ease;
+}
+#content .bg-accent:hover,
+#content .bg-accent:focus-visible {
+  box-shadow: var(--glow-accent);
+}
+:root[data-theme="high_contrast"] #content .bg-accent {
+  background-image: none;
+}
+
+/* ---- status dots: a slow pulse on live states -------------------------------------------- */
+
+.ui-live-dot {
+  box-shadow: 0 0 0 0 currentColor;
+  animation: ui-pulse 2.4s ease-out infinite;
+}
+@keyframes ui-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+[data-motion="off"] .ui-card,
+[data-motion="off"] #content .rounded-lg.border.bg-surface,
+[data-motion="off"] .ui-live-dot {
+  transition: none;
+  animation: none;
+}
+
+/* ---- bold layer (D-170, round 2: "the UI is too dull, make it good") ---------------------- */
+
+:root {
+  /* Gradient card edge, built from themed tokens so every theme gets its own version. */
+  --edge-gradient: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-accent) 85%, transparent) 0%,
+    color-mix(in srgb, var(--color-border) 45%, transparent) 38%,
+    color-mix(in srgb, var(--color-border) 45%, transparent) 62%,
+    color-mix(in srgb, var(--color-chart-2) 80%, transparent) 100%
+  );
+  --orb: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--color-accent) 95%, #ffffff 5%) 0%,
+    var(--color-chart-2) 55%,
+    transparent 72%
+  );
+}
+
+/* Slow-drifting aurora behind every page (GPU transform only, stops for reduced motion). */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -20vmax;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(38vmax 26vmax at 22% 18%, var(--aura-1), transparent 70%),
+    radial-gradient(34vmax 24vmax at 82% 12%, var(--aura-2), transparent 70%),
+    radial-gradient(40vmax 28vmax at 55% 92%, var(--aura-3), transparent 70%);
+  animation: ui-aurora 48s ease-in-out infinite alternate;
+}
+@keyframes ui-aurora {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(3vmax, 2vmax, 0) scale(1.06);
+  }
+  100% {
+    transform: translate3d(-2vmax, 3vmax, 0) scale(1.02);
+  }
+}
+
+/* The wordmark carries the brand line. */
+.app-brand {
+  background: var(--brand-line);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 800;
+  font-size: 1.3rem;
+  letter-spacing: -0.03em;
+  filter: var(--glow-text);
+}
+
+/* Cards: a gradient edge (accent to violet) that brightens and glows on hover. */
+.ui-card,
+#content .rounded-lg.border.bg-surface {
+  border-color: transparent;
+  background:
+    var(--surface-lift) padding-box,
+    var(--edge-gradient) border-box;
+}
+
+/* Section titles: a small lit marker before each h2. */
+#content main h2:not(.sr-only)::before {
+  content: "";
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.6rem;
+  border-radius: 999px;
+  vertical-align: 0.12em;
+  background: var(--brand-line);
+  box-shadow: var(--glow-accent);
+}
+
+/* Secondary buttons: glass with an accent edge on hover. */
+.ui-btn-secondary {
+  background: var(--surface-glass);
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+.ui-btn-secondary:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 65%, var(--color-border));
+  box-shadow: var(--glow-accent);
+}
+
+/* Empty states: a lit orb above the message. */
+.ui-empty::before {
+  content: "";
+  display: block;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin: 0 auto 0.85rem;
+  border-radius: 999px;
+  background: var(--orb);
+  box-shadow: 0 0 34px color-mix(in srgb, var(--color-accent) 45%, transparent);
+  animation: ui-orb 4s ease-in-out infinite;
+}
+@keyframes ui-orb {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+/* Tables: header row tinted, a lit rule under it, rows light up on hover. */
+#content thead th {
+  background: color-mix(in srgb, var(--color-accent) 7%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+}
+#content tbody tr {
+  transition: background-color 150ms ease;
+}
+#content tbody tr:hover {
+  background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+}
+
+/* Links in the content glow softly on hover. */
+#content main a:hover {
+  text-shadow: 0 0 14px color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+
+/* High contrast: plain borders, no aurora, no orb, no markers' glow. */
+:root[data-theme="high_contrast"] body::before,
+:root[data-theme="high_contrast"] .ui-empty::before {
+  display: none;
+}
+:root[data-theme="high_contrast"] .ui-card,
+:root[data-theme="high_contrast"] #content .rounded-lg.border.bg-surface {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+:root[data-theme="high_contrast"] .app-brand {
+  background: none;
+  color: var(--color-text);
+  filter: none;
+}
+:root[data-theme="high_contrast"] #content main a:hover {
+  text-shadow: none;
+}
+
+/* Motion switch off: everything stands still (the OS setting is handled in globals.css). */
+[data-motion="off"] body::before,
+[data-motion="off"] .ui-empty::before {
+  animation: none;
+}
+
+/* ---- round 3: halo behind page titles, brighter edges, lit active tab ---------------------- */
+
+#content main h1 {
+  position: relative;
+  isolation: isolate;
+}
+#content main h1::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: -1.5rem;
+  top: 50%;
+  width: min(36rem, 90vw);
+  height: 7rem;
+  transform: translateY(-50%);
+  background: radial-gradient(
+    ellipse at 20% 50%,
+    color-mix(in srgb, var(--color-accent) 26%, transparent),
+    color-mix(in srgb, var(--color-chart-2) 12%, transparent) 45%,
+    transparent 72%
+  );
+  filter: blur(18px);
+  pointer-events: none;
+}
+
+.ui-card,
+#content .rounded-lg.border.bg-surface {
+  position: relative;
+}
+.ui-card::after,
+#content .rounded-lg.border.bg-surface::after {
+  content: "";
+  position: absolute;
+  inset-inline: 12%;
+  top: -1px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-accent) 85%, transparent),
+    transparent
+  );
+  pointer-events: none;
+}
+
+.app-tab[aria-current="page"] {
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 35%, transparent),
+    0 0 18px -4px color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+
+#content main h2 {
+  text-shadow: 0 0 22px color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+
+:root[data-theme="high_contrast"] #content main h1::after,
+:root[data-theme="high_contrast"] .ui-card::after,
+:root[data-theme="high_contrast"] #content .rounded-lg.border.bg-surface::after {
+  display: none;
+}
+:root[data-theme="high_contrast"] .app-tab[aria-current="page"] {
+  background: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+:root[data-theme="high_contrast"] #content main h2 {
+  text-shadow: none;
+}
+
+/* Light family: a quieter title halo (a strong blur reads as a smudge on white). */
+:root[data-theme="light"] #content main h1::after,
+:root[data-theme="system"] #content main h1::after,
+:root:not([data-theme]) #content main h1::after {
+  opacity: 0.4;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] #content main h1::after,
+  :root:not([data-theme]) #content main h1::after {
+    opacity: 1;
+  }
+}
+
+/* ---- account avatar (UXR-004) and the brand mark ------------------------------------------ */
+
+.ui-avatar {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  box-shadow:
+    0 0 0 2px var(--color-bg),
+    0 0 0 3px color-mix(in srgb, var(--color-accent) 60%, transparent),
+    var(--glow-accent);
+}
+.app-mark {
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--color-accent) 45%, transparent));
+}
+:root[data-theme="high_contrast"] .ui-avatar {
+  box-shadow: 0 0 0 2px var(--color-text);
+}
+:root[data-theme="high_contrast"] .app-mark {
+  filter: none;
+}

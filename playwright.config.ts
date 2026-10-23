@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const PORT = 3100;
+// E2E_PORT lets a local run avoid a port that is already taken (default 3100, as in CI).
+const PORT = Number(process.env.E2E_PORT ?? 3100);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 // Config is evaluated in the main process first; workers inherit these values from its env.
@@ -65,7 +66,7 @@ export default defineConfig({
   use: { baseURL: BASE_URL, trace: "retain-on-failure" },
   projects,
   webServer: {
-    command: "node e2e/prepare-db.mjs && npm run build:e2e && npm run start:e2e",
+    command: `node e2e/prepare-db.mjs && npm run build:e2e && npm run start:e2e -- -p ${PORT}`,
     url: `${BASE_URL}/api/health`,
     reuseExistingServer: false,
     timeout: 300_000,
