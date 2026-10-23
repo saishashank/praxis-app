@@ -386,8 +386,10 @@ export function ledgerTestRows(
   const idx = new Map(sessions.map((d, i) => [d, i]));
   const closed = result.entries.filter((e) => e.excess !== null && e.row.exit_d !== null);
   if (closed.length === 0) return { rows: [], sessionCount: 1, holds: [] };
-  const first = Math.min(...closed.map((e) => idx.get(e.row.entry_d)!));
-  const last = Math.max(...closed.map((e) => idx.get(e.row.entry_d)!));
+  // reduce, not Math.min(...xs): a full replay can close more trades than a call can take (D-175)
+  const entryIdx = closed.map((e) => idx.get(e.row.entry_d)!);
+  const first = entryIdx.reduce((m, v) => (v < m ? v : m), Infinity);
+  const last = entryIdx.reduce((m, v) => (v > m ? v : m), -Infinity);
   const rows = closed.map((e) => ({
     session: idx.get(e.row.entry_d)! - first,
     excess: Number(e.excess!.num) / Number(e.excess!.den),

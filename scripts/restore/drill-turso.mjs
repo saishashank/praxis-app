@@ -208,7 +208,10 @@ export async function run(env, deps = {}) {
     platform =
       deps.platform ??
       createTursoPlatform({ org: cfg.org, token: cfg.platformToken, group: cfg.group });
-    const openDb = deps.openDb ?? ((url, authToken) => createClient({ url, authToken }));
+    const openDb =
+      deps.openDb ??
+      // Lossless integers (D-175): the restore re-dumps to verify, and cohort.rng_seed is 64-bit.
+      ((url, authToken) => createClient({ url, authToken, intMode: "bigint" }));
     const suffix = deps.suffix ?? (() => randomBytes(4).toString("hex"));
 
     // Phase A: obtain, decrypt and VERIFY everything before any database is created.

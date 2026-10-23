@@ -146,7 +146,10 @@ async function fetchAuthExport(env, fetchImpl, nowMs, date) {
  */
 export async function run(env, deps = {}) {
   const fetchImpl = deps.fetchImpl ?? fetch;
-  const openDb = deps.openDb ?? ((url, authToken) => createClient({ url, authToken }));
+  const openDb =
+    deps.openDb ??
+    ((url, authToken, intMode) =>
+      createClient({ url, authToken, ...(intMode ? { intMode } : {}) }));
   const nowMs = deps.nowMs ?? (() => Date.now());
   const out = deps.out ?? ((s) => console.log(s));
 
@@ -171,11 +174,19 @@ export async function run(env, deps = {}) {
     runId = await startRun(db, key, date, new Date(startedMs).toISOString(), env.COMMIT_SHA);
 
     stage = "main_dump";
-    const main = await exportEncrypted(db, {
-      name: "main",
-      createdAt: new Date(startedMs).toISOString(),
-      recipient,
-    });
+    // A lossless client for the dump only (D-175): cohort.rng_seed is a full 64-bit integer, which
+    // the default number mode refuses to read. The run record keeps the normal client.
+    const dumpDb = openDb(env.TURSO_MAIN_URL, env.TURSO_MAIN_TOKEN, "bigint");
+    let main;
+    try {
+      main = await exportEncrypted(dumpDb, {
+        name: "main",
+        createdAt: new Date(startedMs).toISOString(),
+        recipient,
+      });
+    } finally {
+      if (dumpDb !== db) dumpDb.close();
+    }
     const files = [{ name: assetName("main", date), bytes: main.data }];
 
     // A failed auth export does not stop the main backup from being uploaded (RPO); the run is

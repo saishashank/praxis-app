@@ -369,7 +369,7 @@ export function runReplay(o: RunOptions): ReplayOutput {
           timeoutSessions: CONFIG_KEYS.timeout_sessions.default,
         }),
       );
-      stats.push(...built.rows);
+      for (const r of built.rows) stats.push(r); // a loop: a full replay can have many rows (D-175)
       if (mode === "evidence") {
         tm.stage("validation", () =>
           evidence(o, world, ledger, runId, {
@@ -531,7 +531,7 @@ function runChecks(
         value: { ...report, requested: batch.requested, completed: batch.tests.length },
       },
     ];
-    stats.push(...statRows(runId, o.d, items));
+    for (const r of statRows(runId, o.d, items)) stats.push(r);
     for (const l of report.levels) {
       validation.push(
         rec(
@@ -846,7 +846,7 @@ function evidence(
         dsr:
           dailyVal.length > 2 ? { daily: dailyVal, variantDailySr: [], defaultSrVariance } : null,
       });
-      sinks.validation.push(...val.results);
+      for (const r of val.results) sinks.validation.push(r);
       if (val.passes) {
         if (accessed("holdout_access")) skipped.push("holdout already used for this rule version");
         else {
