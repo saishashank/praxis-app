@@ -43,6 +43,7 @@ export const GEAR_ITEMS: readonly GearItem[] = [
   { id: "usage", label: "Usage", href: "/usage", action: "admin" },
   { id: "ops", label: "Ops checklist", href: "/ops", action: "admin" },
   { id: "users", label: "Users & roles", href: "/users", action: "admin" },
+  { id: "audit", label: "Audit log", href: "/audit", action: "admin" },
   { id: "config", label: "Configuration", href: "/config", action: "admin" },
   { id: "review", label: "Data review", href: "/review", action: "admin" },
 ];
@@ -144,7 +145,8 @@ export const ROUTES: readonly RouteNode[] = [
   { pattern: "/health", label: "System health" },
   { pattern: "/usage", label: "Usage" },
   { pattern: "/ops", label: "Ops checklist" },
-  { pattern: "/ops/go-live", label: "Go-live", parent: "/ops" },
+  { pattern: "/ops/go-live", label: "Go-live record", parent: "/health" },
+  { pattern: "/audit", label: "Audit log" },
   { pattern: "/users", label: "Users & roles" },
   { pattern: "/config", label: "Configuration" },
   { pattern: "/review", label: "Data review" },

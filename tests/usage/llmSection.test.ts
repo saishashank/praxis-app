@@ -19,17 +19,19 @@ type Call = {
   outcome: string;
   d: string;
   market?: string;
+  model?: string;
 };
 let n = 0;
 async function insert(db: Awaited<ReturnType<typeof freshDb>>, c: Call) {
   n += 1;
   await db.execute({
     sql: `INSERT INTO llm_call (id, role, provider, model_id, fallback_depth, tokens_in, tokens_out, cached,
-            outcome, injection_filtered, market, d) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, 0, ?, ?)`,
+            outcome, injection_filtered, market, d) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
     args: [
       `c${n}`,
       c.role,
       c.provider,
+      c.model ?? null,
       c.depth,
       c.tin,
       c.tout,
@@ -55,7 +57,46 @@ describe("loadLlmUsage", () => {
       sinceD: "2026-09-20",
       byRole: [],
       byDay: [],
+      models: [],
     });
+  });
+
+  it("lists the models that answered, by role, with calls and last day (D-174)", async () => {
+    const db = await freshDb("main");
+    const base = { tin: 1, tout: 1, cached: 0, depth: "0", outcome: "ok" };
+    await insert(db, {
+      ...base,
+      role: "narrator",
+      provider: "groq",
+      model: "llama-3.3-70b",
+      d: "2026-10-18",
+    });
+    await insert(db, {
+      ...base,
+      role: "narrator",
+      provider: "groq",
+      model: "llama-3.3-70b",
+      d: "2026-10-19",
+    });
+    await insert(db, {
+      ...base,
+      role: "critic",
+      provider: "google",
+      model: "gemini-2.5-flash",
+      d: "2026-10-19",
+    });
+    await insert(db, { ...base, role: "critic", provider: "rules", d: "2026-10-19" }); // no model
+    const out = await loadLlmUsage(db, "owner", NOW);
+    expect(out?.models).toEqual([
+      {
+        role: "critic",
+        provider: "google",
+        model: "gemini-2.5-flash",
+        calls: 1,
+        lastD: "2026-10-19",
+      },
+      { role: "narrator", provider: "groq", model: "llama-3.3-70b", calls: 2, lastD: "2026-10-19" },
+    ]);
   });
 
   it("counts calls, tokens, cache hits, fallbacks and failures per role/provider and per day", async () => {

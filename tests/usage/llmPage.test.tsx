@@ -40,6 +40,15 @@ const llm: LlmUsage = {
   sinceD: "2026-09-20",
   byRole: [{ role: "narrator", provider: "gemini", ...counts }],
   byDay: [{ d: "2026-10-19", provider: "gemini", ...counts, cachePct: null, fallbackPct: null }],
+  models: [
+    {
+      role: "narrator",
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      calls: 1234,
+      lastD: "2026-10-19",
+    },
+  ],
 };
 
 async function renderOwner(l: LlmUsage | null | Error) {
@@ -72,12 +81,20 @@ describe("LLM usage section", () => {
     const byDay = within(s).getByRole("table", { name: /By day and provider/ });
     const dayRow = within(byDay).getByRole("row", { name: /2026-10-19/ });
     expect(within(dayRow).getAllByText("n/a")).toHaveLength(2); // rates over no calls are not invented
+    // D-174: the exact model, read-only
+    const models = within(s).getByRole("table", { name: /Models that answered/ });
+    const m = within(models).getByRole("row", { name: /narrator/ });
+    expect(within(m).getByText("gemini-2.5-flash")).toBeInTheDocument();
+    expect(within(s).queryAllByRole("button")).toHaveLength(0);
   });
 
   it("says plainly when nothing has been logged yet", async () => {
-    const s = await renderOwner({ sinceD: "2026-09-20", byRole: [], byDay: [] });
+    const s = await renderOwner({ sinceD: "2026-09-20", byRole: [], byDay: [], models: [] });
     expect(s).toHaveTextContent("No LLM calls recorded in the last 30 days");
     expect(within(s).queryByRole("table")).toBeNull();
+    // D-174: the models list says plainly that none is in use
+    expect(s).toHaveTextContent("Models in use");
+    expect(s).toHaveTextContent(/None. No AI model has answered since 2026-09-20/);
   });
 
   it("shows a neutral message when the call log cannot be read", async () => {

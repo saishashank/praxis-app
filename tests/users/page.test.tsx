@@ -154,19 +154,11 @@ describe("users page", () => {
     expect(screen.getAllByText("2026-10-10 23:00 AEDT").length).toBeGreaterThan(0);
   });
 
-  it("audit log: Melbourne time, names, no network data", async () => {
+  it("the audit log is no longer here; it links to its own page (D-174)", async () => {
     render(await UsersPage());
-    expect(svc.listAudit).toHaveBeenCalledWith(expect.anything(), 100);
-    const log = within(screen.getByRole("region", { name: "Audit log" }));
-    expect(log.getByText("user.add")).toBeInTheDocument();
-    expect(log.getAllByText("owner@example.test").length).toBeGreaterThan(0);
-    expect(log.getAllByText("ed@example.test").length).toBeGreaterThan(0);
-    expect(log.getByText("System")).toBeInTheDocument();
-    expect(log.getByText("User #77")).toBeInTheDocument();
-    expect(log.getByText("User #88")).toBeInTheDocument();
-    expect(log.getByText("AU")).toBeInTheDocument();
-    expect(log.getByText('{"role":"editor"}')).toBeInTheDocument();
-    expect(log.queryByText(/IP|agent/i)).toBeNull();
+    expect(svc.listAudit).not.toHaveBeenCalled();
+    expect(screen.queryByRole("region", { name: "Audit log" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Audit log" })).toHaveAttribute("href", "/audit");
   });
 
   it("shows the simulation footer", async () => {

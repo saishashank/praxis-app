@@ -86,7 +86,7 @@ describe("configuration page", () => {
     ]);
   });
 
-  it("shows value, default, bounds and spec ref; editable keys have value, reason and Save", async () => {
+  it("shows value, default, bounds and spec ref, read-only (D-174)", async () => {
     render(await ConfigPage());
     const retention = screen.getByRole("region", { name: "How long we keep data" });
     const row = within(retention).getByRole("row", { name: /retention_logs_days/ });
@@ -95,31 +95,21 @@ describe("configuration page", () => {
     expect(within(row).getByText("whole days, at least 1")).toBeInTheDocument();
     expect(within(row).getByText("DAT-142")).toBeInTheDocument();
     expect(within(row).getByText("Default")).toBeInTheDocument();
-    expect(within(row).getByLabelText("New value for Keep application logs for")).toHaveValue("30");
-    expect(
-      within(row).getByLabelText("Reason for changing Keep application logs for"),
-    ).toBeRequired();
-    expect(within(row).getByRole("button", { name: "Save" })).toBeEnabled();
-  });
-
-  it("fixed keys show 'Fixed by the spec' and no form", async () => {
-    render(await ConfigPage());
-    const row = screen.getByRole("row", { name: /hmac_max_age_s/ });
-    expect(within(row).getByText("Fixed by the spec")).toBeInTheDocument();
-    expect(within(row).queryByRole("button")).toBeNull();
     expect(within(row).queryByRole("textbox")).toBeNull();
-    // hmac_max_age_s, pii_hash_after_revocation_days, stall_floor_bps (M3 T2) and the M4 fixed
-    // spec constants; market_mode is fixed in the registry but has its own text.
-    const fixed = Object.values(CONFIG_KEYS).filter((k) => k.editable === "fixed").length;
-    expect(screen.getAllByText("Fixed by the spec")).toHaveLength(fixed - 1);
-    expect(fixed).toBeGreaterThan(3);
-    // market_mode is not editable here: its only writer also updates market.mode (M2 T10).
-    const mode = screen.getByRole("row", { name: /market_mode/ });
-    expect(within(mode).getByText("Set on System Health (Data controls)")).toBeInTheDocument();
-    expect(within(mode).queryByRole("button")).toBeNull();
+    expect(within(row).queryByRole("button")).toBeNull();
   });
 
-  it("a stored value shows when it changed and prefills the edit field", async () => {
+  it("no row on the page offers a way to change a value (Owner: just show it)", async () => {
+    render(await ConfigPage());
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    expect(screen.queryAllByRole("button", { name: "Save" })).toHaveLength(0);
+    expect(screen.queryByText("Fixed by the spec")).toBeNull();
+    expect(screen.getByText(/Read-only/)).toBeInTheDocument();
+    expect(action.updateConfigAction).not.toHaveBeenCalled();
+    expect(Object.values(CONFIG_KEYS).length).toBeGreaterThan(3);
+  });
+
+  it("a stored value shows when it changed", async () => {
     svc.listConfig.mockResolvedValue(
       rows({
         token_warning_days: {
@@ -133,7 +123,6 @@ describe("configuration page", () => {
     const row = screen.getByRole("row", { name: /token_warning_days/ });
     expect(within(row).getByText("21, 7 days")).toBeInTheDocument();
     expect(within(row).getByText("Changed 2026-10-10 23:00 AEDT (version 12)")).toBeInTheDocument();
-    expect(within(row).getByLabelText(/New value for/)).toHaveValue("21, 7");
   });
 
   it("history lists at, key, before -> after and reason", async () => {
@@ -181,19 +170,6 @@ describe("ConfigForm", () => {
       fireEvent.submit(el.closest("form")!);
     });
   };
-
-  it("submits the form data, then shows Saved", async () => {
-    render(await ConfigPage());
-    const row = screen.getByRole("row", { name: /retention_logs_days/ });
-    fireEvent.change(within(row).getByLabelText(/New value for/), { target: { value: "21" } });
-    fireEvent.change(within(row).getByLabelText(/Reason for/), { target: { value: "tidy" } });
-    await submit(within(row).getByRole("button", { name: "Save" }));
-    const fd = action.updateConfigAction.mock.calls[0][0];
-    expect(fd.get("key")).toBe("retention_logs_days");
-    expect(fd.get("value")).toBe("21");
-    expect(fd.get("reason")).toBe("tidy");
-    expect(within(row).getByRole("status")).toHaveTextContent("Saved.");
-  });
 
   it("shows the message for an error, else the text for the code", async () => {
     render(

@@ -30,6 +30,7 @@ export function WorkerSlotsSection({ view }: { view: SlotsView | null }) {
             action={setSlotsEnabledAction}
             slots={GO_LIVE_SLOTS.map((s) => ({ ...s }))}
             initial={view.listed ?? []}
+            alwaysOn={ALWAYS_ON_SLOTS}
           />
         </>
       )}
