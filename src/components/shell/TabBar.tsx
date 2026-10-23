@@ -51,7 +51,7 @@ export function TabBar({ tabs }: { tabs: TabView[] }) {
                 href={t.href}
                 aria-current={t.id === current ? "page" : undefined}
                 className={cn(
-                  "inline-flex min-h-10 items-center gap-1.5 rounded-md px-3 text-sm",
+                  "app-tab inline-flex min-h-10 items-center gap-1.5 rounded-md px-3 text-sm",
                   t.id === current
                     ? "bg-surface-2 font-semibold text-text"
                     : "text-text-muted hover:bg-surface-2 hover:text-text",
@@ -66,7 +66,7 @@ export function TabBar({ tabs }: { tabs: TabView[] }) {
       </nav>
       <nav
         aria-label="Main (bottom bar)"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
+        className="app-tabbar fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
       >
         <ul className="m-0 grid list-none grid-cols-6 p-0">
           {tabs.map((t) => (

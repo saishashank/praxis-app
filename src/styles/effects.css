@@ -1,0 +1,265 @@
+/*
+ * Depth and glow layer (UXN-285 f: "layered depth (subtle grid, glow on the accent, thin technical
+ * type in JetBrains Mono for readouts) consistent with the Praxis brand kit; works in all six
+ * themes, with High contrast removing glows"), applied app-wide at the Owner's request (D-170,
+ * 2026-10-23: "the UI is very dull", "make the width as per the resolution").
+ *
+ * Rules for this file:
+ * - Decorative only. No colour here carries meaning, so the contrast-checked tokens stay in
+ *   themes.css; effects are mixed from those tokens or from the brand line colours (BRAND.md).
+ * - High contrast turns every glow, aura and gradient text off.
+ * - Motion stops for the OS reduced-motion setting and the Motion switch (data-motion="off").
+ */
+
+/* ---- effect tokens ---------------------------------------------------------------------- */
+
+/* Dark family (dark, midnight, dim; Match device / signed-out pages on a dark OS). */
+:root {
+  --page-max: 1760px;
+  --page-gutter: clamp(1rem, 2.4vw, 3rem);
+  --brand-line: linear-gradient(90deg, #8fd3ff 0%, #a7b4ff 100%);
+  --aura-1: color-mix(in srgb, #8fd3ff 15%, transparent);
+  --aura-2: color-mix(in srgb, #a7b4ff 13%, transparent);
+  --aura-3: color-mix(in srgb, #2db5a3 7%, transparent);
+  --grid-line: color-mix(in srgb, var(--color-text) 4%, transparent);
+  --surface-glass: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  --surface-lift: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-surface) 92%, #ffffff 8%) 0%,
+    var(--color-surface) 55%
+  );
+  --edge-light: inset 0 1px 0 color-mix(in srgb, #ffffff 7%, transparent);
+  --glow-accent: 0 0 22px color-mix(in srgb, var(--color-accent) 45%, transparent);
+  --glow-card:
+    0 0 0 1px color-mix(in srgb, var(--color-accent) 22%, transparent),
+    0 12px 40px -14px color-mix(in srgb, var(--color-accent) 45%, transparent);
+  --glow-text: drop-shadow(0 0 18px color-mix(in srgb, var(--color-accent) 40%, transparent));
+  --glow-value: 0 0 18px color-mix(in srgb, var(--color-accent) 30%, transparent);
+  --glow-seg: 10px;
+}
+
+:root[data-theme="light"],
+:root[data-theme="system"],
+:root:not([data-theme]) {
+  --brand-line: linear-gradient(90deg, #2a8fd0 0%, #4453c9 100%);
+  --aura-1: color-mix(in srgb, #2a8fd0 10%, transparent);
+  --aura-2: color-mix(in srgb, #4453c9 8%, transparent);
+  --aura-3: color-mix(in srgb, #0e8a7a 5%, transparent);
+  --grid-line: color-mix(in srgb, var(--color-text) 5%, transparent);
+  --surface-glass: color-mix(in srgb, var(--color-bg) 78%, transparent);
+  --surface-lift: linear-gradient(180deg, #ffffff 0%, var(--color-surface) 100%);
+  --edge-light: inset 0 1px 0 #ffffff;
+  --glow-accent: 0 6px 20px -6px color-mix(in srgb, var(--color-accent) 55%, transparent);
+  --glow-card:
+    0 0 0 1px color-mix(in srgb, var(--color-accent) 25%, transparent),
+    0 14px 36px -16px color-mix(in srgb, var(--color-accent) 40%, transparent);
+  --glow-text: drop-shadow(0 2px 10px color-mix(in srgb, var(--color-accent) 22%, transparent));
+  --glow-value: none;
+  --glow-seg: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"],
+  :root:not([data-theme]) {
+    --brand-line: linear-gradient(90deg, #8fd3ff 0%, #a7b4ff 100%);
+    --aura-1: color-mix(in srgb, #8fd3ff 15%, transparent);
+    --aura-2: color-mix(in srgb, #a7b4ff 13%, transparent);
+    --aura-3: color-mix(in srgb, #2db5a3 7%, transparent);
+    --grid-line: color-mix(in srgb, var(--color-text) 4%, transparent);
+    --surface-glass: color-mix(in srgb, var(--color-surface) 72%, transparent);
+    --surface-lift: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-surface) 92%, #ffffff 8%) 0%,
+      var(--color-surface) 55%
+    );
+    --edge-light: inset 0 1px 0 color-mix(in srgb, #ffffff 7%, transparent);
+    --glow-accent: 0 0 22px color-mix(in srgb, var(--color-accent) 45%, transparent);
+    --glow-card:
+      0 0 0 1px color-mix(in srgb, var(--color-accent) 22%, transparent),
+      0 12px 40px -14px color-mix(in srgb, var(--color-accent) 45%, transparent);
+    --glow-text: drop-shadow(0 0 18px color-mix(in srgb, var(--color-accent) 40%, transparent));
+    --glow-value: 0 0 18px color-mix(in srgb, var(--color-accent) 30%, transparent);
+    --glow-seg: 10px;
+  }
+}
+
+:root[data-theme="midnight"] {
+  --aura-1: color-mix(in srgb, #8fd3ff 11%, transparent);
+  --aura-2: color-mix(in srgb, #a7b4ff 9%, transparent);
+  --grid-line: color-mix(in srgb, var(--color-text) 3%, transparent);
+}
+
+/* High contrast: no glow, no aura, no gradient text (UXN-285 f). */
+:root[data-theme="high_contrast"] {
+  --brand-line: linear-gradient(90deg, var(--color-text), var(--color-text));
+  --aura-1: transparent;
+  --aura-2: transparent;
+  --aura-3: transparent;
+  --grid-line: transparent;
+  --surface-glass: var(--color-surface);
+  --surface-lift: var(--color-surface);
+  --edge-light: none;
+  --glow-accent: none;
+  --glow-card: none;
+  --glow-text: none;
+  --glow-value: none;
+  --glow-seg: 0px;
+}
+
+/* ---- page frame: width follows the screen ------------------------------------------------- */
+
+/* Every page renders its own <main>; this one rule replaces the per-page caps (max-w-2xl … 6xl).
+   An id selector outranks the Tailwind utilities, so no page needs editing. */
+#content > main {
+  width: 100%;
+  max-width: var(--page-max);
+  padding-inline: var(--page-gutter);
+}
+
+.page-frame {
+  width: 100%;
+  max-width: var(--page-max);
+  margin-inline: auto;
+  padding-inline: var(--page-gutter);
+}
+
+/* ---- background: aura + faint grid ------------------------------------------------------ */
+
+body {
+  background-color: var(--color-bg);
+  background-image:
+    radial-gradient(1100px 620px at 8% -8%, var(--aura-1), transparent 62%),
+    radial-gradient(900px 560px at 96% -4%, var(--aura-2), transparent 60%),
+    radial-gradient(1000px 700px at 50% 115%, var(--aura-3), transparent 60%),
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    auto,
+    56px 56px,
+    56px 56px;
+  background-attachment: fixed;
+}
+
+/* ---- header: glass bar with the brand line under it ------------------------------------- */
+
+.app-header {
+  background: var(--surface-glass);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+  border-bottom-color: color-mix(in srgb, var(--color-border) 55%, transparent);
+}
+.app-header::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: -1px;
+  height: 1px;
+  background: var(--brand-line);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.app-tabbar {
+  background: var(--surface-glass);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+}
+
+/* Active tab: brand line under the label, softly lit. */
+.app-tab[aria-current="page"] {
+  position: relative;
+  color: var(--color-text);
+}
+.app-tab[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0.6rem;
+  bottom: -0.15rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--brand-line);
+  box-shadow: var(--glow-accent);
+}
+
+/* ---- headings: the page title carries the brand line -------------------------------------- */
+
+#content main h1 {
+  background: var(--brand-line);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: var(--glow-text);
+  font-size: clamp(1.75rem, 1.2rem + 1.4vw, 2.6rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  width: fit-content;
+  max-width: 100%;
+}
+:root[data-theme="high_contrast"] #content main h1 {
+  background: none;
+  color: var(--color-text);
+  filter: none;
+}
+
+/* ---- surfaces: lifted cards that light up on hover ---------------------------------------- */
+
+.ui-card,
+#content .rounded-lg.border.bg-surface {
+  background: var(--surface-lift);
+  box-shadow: var(--edge-light);
+  transition:
+    box-shadow 200ms ease,
+    border-color 200ms ease,
+    transform 200ms ease;
+}
+.ui-card:hover,
+#content .rounded-lg.border.bg-surface:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  box-shadow: var(--edge-light), var(--glow-card);
+}
+
+/* KPI readouts: technical type, softly lit (UXN-285 f). */
+.ui-kpi-value {
+  text-shadow: var(--glow-value);
+  letter-spacing: -0.01em;
+}
+
+/* Primary buttons and accent links glow on hover. */
+#content .bg-accent {
+  background-image: var(--brand-line);
+  transition: box-shadow 200ms ease;
+}
+#content .bg-accent:hover,
+#content .bg-accent:focus-visible {
+  box-shadow: var(--glow-accent);
+}
+:root[data-theme="high_contrast"] #content .bg-accent {
+  background-image: none;
+}
+
+/* ---- status dots: a slow pulse on live states -------------------------------------------- */
+
+.ui-live-dot {
+  box-shadow: 0 0 0 0 currentColor;
+  animation: ui-pulse 2.4s ease-out infinite;
+}
+@keyframes ui-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+[data-motion="off"] .ui-card,
+[data-motion="off"] #content .rounded-lg.border.bg-surface,
+[data-motion="off"] .ui-live-dot {
+  transition: none;
+  animation: none;
+}

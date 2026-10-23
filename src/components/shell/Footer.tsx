@@ -7,7 +7,7 @@ export const DISCLAIMER = "Simulation for personal information only — not fina
 
 export function Footer() {
   return (
-    <footer className="mx-auto mt-8 w-full max-w-[1200px] px-4 pb-6 text-xs text-text-muted">
+    <footer className="page-frame mt-8 pb-6 text-xs text-text-muted">
       <p className="m-0">{DISCLAIMER}</p>
       <ul className="m-0 mt-2 flex list-none flex-wrap gap-x-4 gap-y-1 p-0">
         <li>

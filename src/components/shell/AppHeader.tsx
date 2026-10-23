@@ -37,8 +37,8 @@ export function AppHeader({
     badge: t.badge ? badges[t.id] : undefined,
   }));
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-surface">
-      <div className="mx-auto flex min-h-14 w-full max-w-[1200px] items-center gap-2 px-4">
+    <header className="app-header sticky top-0 z-40 border-b border-border bg-surface">
+      <div className="page-frame flex min-h-14 items-center gap-2">
         <Link
           href="/"
           className="mr-2 inline-flex min-h-10 items-center text-lg font-semibold tracking-tight text-text"

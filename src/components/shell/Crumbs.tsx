@@ -10,7 +10,7 @@ export function Crumbs() {
   const { crumbs, backHref } = breadcrumbFor(usePathname() ?? "/");
   if (crumbs.length === 0) return null;
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-4 pt-3">
+    <div className="page-frame pt-3">
       <Breadcrumb items={crumbs} backHref={backHref} />
     </div>
   );

@@ -20,7 +20,7 @@ export function Card({
     <section
       {...rest}
       className={cn(
-        "min-w-0 break-words rounded-lg border border-border bg-surface p-4",
+        "ui-card min-w-0 break-words rounded-lg border border-border bg-surface p-4",
         className,
       )}
     >
