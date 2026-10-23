@@ -21,6 +21,9 @@ test("owner records sharing acknowledgement and adds a viewer (ROL-104, ROL-107)
   const users = page.getByRole("table", { name: "Allowlisted users" });
   await expect(users.getByRole("rowheader", { name: "new.viewer@praxis.test" })).toBeVisible();
 
+  // D-174: the audit log has its own page, linked from Users & roles
+  await page.getByRole("link", { name: "Audit log" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Audit log" })).toBeVisible();
   const audit = page.getByRole("table", { name: "Audit log" });
   await expect(
     audit.getByRole("row").filter({ hasText: "owner@praxis.test" }).first(),
