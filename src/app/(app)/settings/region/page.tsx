@@ -55,8 +55,7 @@ export default async function RegionPage() {
   const blocked = rows.filter((r) => !r.selectable);
   return (
     <SettingsFrame
-      tab="region"
-      role={user.role}
+      title="Region & markets"
       intro="Where the app opens and which clock it uses. Each market keeps its own currency; totals are never converted between currencies."
     >
       <SettingsForm action={updateRegionAction}>

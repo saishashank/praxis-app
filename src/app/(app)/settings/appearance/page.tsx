@@ -16,8 +16,7 @@ export default async function AppearancePage() {
   const prefs = await getPreferences(authDb(), user.id);
   return (
     <SettingsFrame
-      tab="appearance"
-      role={user.role}
+      title="Appearance"
       intro="How the app looks for you. It applies to your account on every device."
     >
       <SettingsForm action={updateAppearanceAction}>

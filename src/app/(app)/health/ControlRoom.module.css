@@ -3,19 +3,24 @@
    reduced-motion setting and for the Motion switch (data-motion="off" on <html>). */
 .root {
   position: relative;
+  /* A faint technical grid lit from behind the ring (UXN-285 f "subtle grid"). */
   background-image:
-    linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px);
-  background-size: 32px 32px;
-  background-color: var(--color-bg);
-  background-blend-mode: soft-light;
+    radial-gradient(ellipse at 22% 40%, var(--aura-1, transparent), transparent 55%),
+    linear-gradient(to right, var(--grid-line, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line, transparent) 1px, transparent 1px);
+  background-size:
+    auto,
+    32px 32px,
+    32px 32px;
+  background-color: transparent;
+  border-radius: 1rem;
 }
 .root:fullscreen {
   overflow: auto;
   padding: 1rem;
 }
 .ringWrap {
-  width: min(280px, 100%);
+  width: min(340px, 100%);
   aspect-ratio: 1 / 1;
   margin-inline: auto;
 }
@@ -46,15 +51,28 @@
   opacity: 0.6;
 }
 .glow {
-  filter: drop-shadow(0 0 4px var(--color-chart-1));
+  filter: drop-shadow(0 0 var(--glow-seg, 4px) var(--color-chart-1));
 }
-:global([data-theme="high_contrast"]) .glow {
+/* Each segment glows in its own state colour (the path's `color` mirrors its stroke). */
+.seg path {
+  filter: drop-shadow(0 0 calc(var(--glow-seg, 4px) * 0.8) currentColor);
+}
+:global([data-theme="high_contrast"]) .glow,
+:global([data-theme="high_contrast"]) .seg path {
   filter: none;
 }
 .readout {
   border-radius: 0.5rem;
-  background: var(--color-surface);
+  background: var(--surface-lift, var(--color-surface));
   border: 1px solid var(--color-border);
+  box-shadow: var(--edge-light, none);
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+.readout:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  box-shadow: var(--edge-light, none), var(--glow-card, none);
 }
 .readout:target,
 .readout[open] {
