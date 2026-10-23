@@ -7,6 +7,7 @@ import {
   parseDecimalParts,
   trimTrailingZeros,
 } from "./rational";
+import { float32Decimal } from "@/lib/data/vendorDecimal";
 import { roundHalfAwayFromZero } from "./round";
 
 export type Micro = bigint;
@@ -39,11 +40,20 @@ export function toMicro(text: string, options: ToMicroOptions = {}): Micro {
 /**
  * The single place a vendor REAL (price_bar column) becomes money. Goes through the shortest
  * decimal string of the double, so there is no float arithmetic; a value with more than 6 dp
- * (or one printed in exponent form) is rejected, never silently rounded.
+ * (or one printed in exponent form) is rejected, never silently rounded. One exception (D-172): a
+ * value that is exactly a float32 encoding of a short decimal (0.119999997317791 = 0.12 as float32)
+ * is read as that decimal; it must then fit in 6 dp like any other price.
  */
 export function toMicroFromVendor(value: number): Micro {
   if (!Number.isFinite(value)) throw new RangeError("vendor price is not finite");
-  return toMicro(String(value));
+  try {
+    return toMicro(String(value));
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+    const decimal = float32Decimal(value);
+    if (decimal === null) throw error;
+    return toMicro(decimal);
+  }
 }
 
 /** Share counts only: a bigint, or a JS number that is a safe integer. */

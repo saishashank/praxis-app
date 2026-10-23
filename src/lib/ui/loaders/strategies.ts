@@ -61,6 +61,14 @@ type CohortRow = {
   live: boolean;
 };
 
+/**
+ * The cohort columns this page reads. Never `SELECT *`: cohort.rng_seed is a full 64-bit integer and
+ * the UI client reads integers as JS numbers, so selecting it throws a RangeError (production
+ * 2026-10-23, D-172).
+ */
+const COHORT_COLS =
+  "id, execution_id, start_d, seed_micro, params_json, terminal_kind, terminal_d, live";
+
 const cohortFrom = (r: Record<string, unknown>): CohortRow => ({
   id: str(r.id),
   execution: str(r.execution_id),
@@ -194,7 +202,7 @@ export async function loadStrategies(
   if (ids.length > 0) {
     const inList = placeholders(ids.length);
     const cs = await deps.mainDb.execute({
-      sql: `SELECT c.* FROM cohort c WHERE c.control_idx IS NULL AND c.execution_id IN (${inList})
+      sql: `SELECT ${COHORT_COLS} FROM cohort c WHERE c.control_idx IS NULL AND c.execution_id IN (${inList})
               AND c.id = (SELECT c2.id FROM cohort c2 WHERE c2.execution_id = c.execution_id
                           AND c2.control_idx IS NULL ORDER BY c2.start_d DESC, c2.id DESC LIMIT 1)
             ORDER BY c.execution_id`,
@@ -428,7 +436,7 @@ export async function loadStrategyDetail(
   const tile = list.data.tiles.find((t) => t.execution === executionId) ?? null;
 
   const cs = await deps.mainDb.execute({
-    sql: `SELECT * FROM cohort WHERE execution_id = ? AND control_idx IS NULL
+    sql: `SELECT ${COHORT_COLS} FROM cohort WHERE execution_id = ? AND control_idx IS NULL
           ORDER BY start_d DESC, id DESC LIMIT ?`,
     args: [executionId, MAX_ROUNDS],
   });

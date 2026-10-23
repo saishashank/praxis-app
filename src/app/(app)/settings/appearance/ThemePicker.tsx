@@ -29,7 +29,7 @@ export function ThemePicker({ value }: { value: Theme }) {
         {THEMES.map((t) => (
           <div
             key={t}
-            className="group flex min-h-14 min-w-0 items-start gap-2 rounded-lg border border-border bg-surface p-3 has-[:checked]:border-accent has-[:checked]:bg-surface-2 has-[:checked]:shadow-[0_0_0_1px_var(--color-accent)]"
+            className="group/option flex min-h-14 min-w-0 items-start gap-2 rounded-lg border border-border bg-surface p-3 has-[:checked]:border-accent has-[:checked]:bg-surface-2 has-[:checked]:shadow-[0_0_0_1px_var(--color-accent)]"
           >
             <input
               type="radio"
@@ -48,7 +48,7 @@ export function ThemePicker({ value }: { value: Theme }) {
                 {THEME_LABEL[t]}
                 <span
                   aria-hidden="true"
-                  className="hidden rounded-full bg-accent px-2 py-0.5 text-[0.7rem] font-semibold text-accent-contrast group-has-[:checked]:inline"
+                  className="hidden rounded-full bg-accent px-2 py-0.5 text-[0.7rem] font-semibold text-accent-contrast group-has-[:checked]/option:inline"
                 >
                   ✓ Selected
                 </span>

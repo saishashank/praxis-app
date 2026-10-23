@@ -166,7 +166,7 @@ export async function seedPopulated(db: Both): Promise<void> {
     await run(
       m,
       `INSERT INTO cohort (id, execution_id, control_idx, start_d, seed_micro, rule_version, params_json,
-         cost_profile_version, rng_seed) VALUES (?,?,${ex === "C2-F1" ? 1 : "NULL"},?,600000000,'v1',?,1,1)`,
+         cost_profile_version, rng_seed) VALUES (?,?,${ex === "C2-F1" ? 1 : "NULL"},?,600000000,'v1',?,1,1948686321533620142)`,
       [id, ex, start, params],
     );
   };

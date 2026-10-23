@@ -13,6 +13,7 @@ import {
   toMicro,
   toMicroFromVendor,
 } from "@/lib/money/micro";
+import { float32Decimal } from "@/lib/data/vendorDecimal";
 import {
   addRat,
   cmpRat,
@@ -229,6 +230,23 @@ describe("micro", () => {
     expect(() => toMicroFromVendor(1e21)).toThrow(SyntaxError);
     expect(() => toMicroFromVendor(Number.NaN)).toThrow(RangeError);
     expect(() => toMicroFromVendor(Number.POSITIVE_INFINITY)).toThrow(RangeError);
+  });
+
+  it("reads a float32-encoded vendor price as the decimal it encodes (D-172)", () => {
+    // Production 2026-10-23: Yahoo's A$0.12 stored as 0.119999997317791 crashed batch 2b.
+    expect(toMicroFromVendor(0.119999997317791)).toBe(120_000n);
+    expect(toMicroFromVendor(Math.fround(0.12))).toBe(120_000n);
+    expect(toMicroFromVendor(Math.fround(1.235))).toBe(1_235_000n);
+    expect(toMicroFromVendor(Math.fround(0.005))).toBe(5_000n);
+    expect(toMicroFromVendor(Math.fround(43.21))).toBe(43_210_000n);
+    expect(float32Decimal(0.119999997317791)).toBe("0.12");
+    // not a float32 artefact: still rejected, never rounded
+    expect(float32Decimal(0.1 + 0.2)).toBeNull();
+    expect(float32Decimal(1.0000001)).toBeNull();
+    expect(float32Decimal(0)).toBeNull();
+    expect(float32Decimal(Number.NaN)).toBeNull();
+    // a float32 whose shortest decimal needs more than 6 dp is still rejected
+    expect(() => toMicroFromVendor(Math.fround(0.0012345))).toThrow(RangeError);
   });
 
   it("accepts only integer share counts", () => {

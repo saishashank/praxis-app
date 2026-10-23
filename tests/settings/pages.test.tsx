@@ -40,7 +40,7 @@ import RootLayout from "@/app/layout";
 import { currentLook } from "@/lib/preferences/current";
 import { DEFAULT_PREFERENCES } from "@/lib/preferences/service";
 // @ts-expect-error plain ESM script without types
-import { buildNotices, licenceAllowed } from "../../scripts/gen-notices.mjs";
+import { approvedExceptions, buildNotices, licenceAllowed } from "../../scripts/gen-notices.mjs";
 
 afterEach(cleanup);
 beforeEach(() => {
@@ -192,8 +192,48 @@ describe("About page and notices", () => {
         "https://www.tradingview.com/",
       );
       expect(screen.getByTestId("notices-count")).toHaveTextContent(/\d+ packages/);
+      // D-173: a short summary first, the package list collapsed, approved exceptions labelled
+      for (const h of ["This build", "Data sources", "Fonts and attribution"]) {
+        expect(screen.getByRole("heading", { name: h })).toBeInTheDocument();
+      }
+      expect(screen.getByText("Open-source licences").closest("details")).not.toHaveAttribute(
+        "open",
+      );
+      expect(screen.queryAllByText(/needs Owner approval/)).toHaveLength(0);
+      expect(screen.getAllByText(/approved by the Owner, 2026-10-21/).length).toBeGreaterThan(0);
       unmount();
     }
+  });
+
+  it("marks an exception approved only when the Owner approved it (not pending)", () => {
+    const approved = approvedExceptions({
+      exceptions: [
+        { package: "alpha", approvedBy: "Owner", date: "2026-10-21" },
+        { package: "gamma", approvedBy: "pending", date: "2026-10-21" },
+      ],
+    });
+    const out = buildNotices(
+      {
+        packages: {
+          "node_modules/alpha": { version: "1.0.0", license: "GPL-3.0" },
+          "node_modules/gamma": { version: "1.0.0", license: "GPL-3.0" },
+          "node_modules/zeta": { version: "1.0.0", license: "MIT" },
+        },
+      },
+      approved,
+    );
+    expect(out.packages).toEqual([
+      {
+        name: "alpha",
+        version: "1.0.0",
+        license: "GPL-3.0",
+        allowed: false,
+        approved: "2026-10-21",
+      },
+      { name: "gamma", version: "1.0.0", license: "GPL-3.0", allowed: false },
+      { name: "zeta", version: "1.0.0", license: "MIT", allowed: true },
+    ]);
+    expect(approvedExceptions(undefined).size).toBe(0);
   });
 
   it("the committed notices file covers every direct dependency with a licence", async () => {
