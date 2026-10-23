@@ -299,7 +299,13 @@ async function finishList(
   return {
     state: rows.length === 0 ? "empty" : stale.state === "stale" ? "stale" : "ok",
     masked,
-    staleText: stale.state === "stale" ? stale.text : null,
+    // A masked user sees ISO weeks only (UX-009), the stale note included (D-175: it leaked the date).
+    staleText:
+      stale.state !== "stale"
+        ? null
+        : masked && newest !== null
+          ? `Showing data from week ${isoWeek(newest) ?? MISSING}. It has not updated since.`
+          : stale.text,
     pending: !todayStored,
     pendingState: await pendingStateOf(env, todayStored),
     rows,

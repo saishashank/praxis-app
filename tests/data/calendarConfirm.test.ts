@@ -100,7 +100,9 @@ describe("confirmCalendar (service)", () => {
   });
 
   it("only confirms the remaining rows when some were confirmed already", async () => {
-    await main.execute("UPDATE trading_calendar SET confirmed = 1 WHERE d < '2026-07-01'");
+    await main.execute(
+      "UPDATE trading_calendar SET confirmed = 1 WHERE d >= '2026-01-01' AND d < '2026-07-01'",
+    );
     const left = await unconfirmed(2026);
     expect(await svc()).toEqual({ ok: true, rows: left });
     expect((await auditRows(auth))[0].detail).toMatchObject({ rows: left });

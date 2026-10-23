@@ -103,7 +103,7 @@ export async function fetchAsicMonths(o) {
       const parsed = parseAsicCsv(text, date);
       if ("error" in parsed) return { months: out, stopped: "malformed" };
       rec.skipped += parsed.skipped;
-      rec.rows.push(...parsed.rows);
+      for (const r of parsed.rows) rec.rows.push(r);
     }
     rec.complete = true;
   }
