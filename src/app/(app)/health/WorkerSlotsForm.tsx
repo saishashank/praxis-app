@@ -43,14 +43,12 @@ export function WorkerSlotsForm({ action, slots, initial, alwaysOn = [] }: Props
               />
               <span title={s.id} className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-base font-semibold">{s.time}</span>
+                  <span className="font-mono text-base font-semibold">{s.time} </span>
+                  {/* The On/Off tag is drawn by CSS, so it is never part of the label text. */}
                   <span
                     aria-hidden="true"
-                    className="rounded-full border border-border px-2 text-[0.7rem] font-semibold text-text-muted group-has-[:checked]/slot:border-accent group-has-[:checked]/slot:text-text"
-                  >
-                    <span className="group-has-[:checked]/slot:hidden">Off</span>
-                    <span className="hidden group-has-[:checked]/slot:inline">✓ On</span>
-                  </span>
+                    className="rounded-full border border-border px-2 text-[0.7rem] font-semibold text-text-muted after:content-['Off'] group-has-[:checked]/slot:border-accent group-has-[:checked]/slot:text-text group-has-[:checked]/slot:after:content-['✓_On']"
+                  />
                 </span>
                 <span className="text-text">{s.label}</span>
               </span>
