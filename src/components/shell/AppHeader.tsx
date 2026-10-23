@@ -41,7 +41,7 @@ export function AppHeader({
       <div className="page-frame flex min-h-14 items-center gap-2">
         <Link
           href="/"
-          className="mr-2 inline-flex min-h-10 items-center text-lg font-semibold tracking-tight text-text"
+          className="app-brand mr-2 inline-flex min-h-10 items-center text-lg font-semibold tracking-tight text-text"
         >
           Praxis
         </Link>
