@@ -61,15 +61,23 @@ export default async function GoLivePage() {
   return (
     <main className="mx-auto flex max-w-4xl min-w-0 flex-col gap-6 px-4 py-6">
       <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Go-live sign-off</h1>
-        <p className="m-0 text-sm text-text-muted">
-          Only you can use this page. Signing off records that every go-live check is done. It does
-          not switch anything on. After it, set the {GO_LIVE_MARKET} market to full mode in{" "}
-          <Link href="/health" className="underline">
-            System Health
-          </Link>
-          .
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {signed ? "Go-live record" : "Go-live sign-off"}
+        </h1>
+        {signed ? (
+          <p className="m-0 text-sm text-text-muted">
+            Praxis is live. This page keeps the sign-off record; there is nothing more to do here.
+          </p>
+        ) : (
+          <p className="m-0 text-sm text-text-muted">
+            Only you can use this page. Signing off records that every go-live check is done. It
+            does not switch anything on. After it, set the {GO_LIVE_MARKET} market to full mode in{" "}
+            <Link href="/health" className="underline">
+              System Health
+            </Link>
+            .
+          </p>
+        )}
       </header>
 
       {view === null ? (
@@ -112,18 +120,21 @@ export default async function GoLivePage() {
             </ul>
           </Card>
 
-          <section aria-labelledby="signoff-h" className="flex flex-col gap-3">
-            <h2 id="signoff-h" className="text-lg font-semibold">
-              Checklist and sign-off
-            </h2>
-            <GoLiveForm
-              action={signOffGoLiveAction}
-              items={GO_LIVE_ITEMS.map((i) => ({ ...i }))}
-              phrase={SIGNOFF_CONFIRM_PHRASE}
-              noteMax={SIGNOFF_NOTE_MAX}
-              askCommit={commit === null}
-            />
-          </section>
+          {/* D-174: once signed off, the checklist and the form are gone; only the record stays. */}
+          {!signed && (
+            <section aria-labelledby="signoff-h" className="flex flex-col gap-3">
+              <h2 id="signoff-h" className="text-lg font-semibold">
+                Checklist and sign-off
+              </h2>
+              <GoLiveForm
+                action={signOffGoLiveAction}
+                items={GO_LIVE_ITEMS.map((i) => ({ ...i }))}
+                phrase={SIGNOFF_CONFIRM_PHRASE}
+                noteMax={SIGNOFF_NOTE_MAX}
+                askCommit={commit === null}
+              />
+            </section>
+          )}
 
           <section aria-labelledby="history-h" className="flex flex-col gap-3">
             <h2 id="history-h" className="text-lg font-semibold">

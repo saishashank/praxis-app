@@ -45,8 +45,8 @@ const as = (role: string) =>
   requireUser.mockResolvedValue({ id: 1, email: "e@example.test", name: null, role });
 
 describe("/ops/go-live page", () => {
-  it("is a route under Ops, guard first, and a non-Owner never reaches the data", async () => {
-    expect(ROUTES.find((r) => r.pattern === "/ops/go-live")).toMatchObject({ parent: "/ops" });
+  it("is reached from System Health (D-174), guard first, and a non-Owner never reaches the data", async () => {
+    expect(ROUTES.find((r) => r.pattern === "/ops/go-live")).toMatchObject({ parent: "/health" });
     requireUser.mockRejectedValueOnce(new Error("NEXT_HTTP_ERROR_FALLBACK;403"));
     await expect(GoLivePage()).rejects.toThrow(/403/);
     expect(requireUser).toHaveBeenCalledWith("admin", "/ops/go-live");

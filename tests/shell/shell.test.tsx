@@ -110,7 +110,7 @@ describe("gear menu (role-aware, UX-004)", () => {
   const menuLinks = () =>
     document.getElementById(gear().getAttribute("aria-controls")!)!.querySelectorAll("a");
 
-  it("Owner: seven pages, role line and Sign out", () => {
+  it("Owner: eight pages, role line and Sign out", () => {
     shell("owner");
     expect(gear()).toHaveAttribute("aria-expanded", "false");
     open();
@@ -121,6 +121,7 @@ describe("gear menu (role-aware, UX-004)", () => {
       "Usage",
       "Ops checklist",
       "Users & roles",
+      "Audit log",
       "Configuration",
       "Data review",
     ]);

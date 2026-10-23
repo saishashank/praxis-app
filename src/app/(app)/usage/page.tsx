@@ -171,6 +171,62 @@ function Heads({ first }: { first: string }) {
   );
 }
 
+/**
+ * The models that actually answered, by role (D-174, Owner: "LLM info read-only and specific, like
+ * the LLM name"). Read-only, from the call log; nothing here can be changed from the UI.
+ */
+function ModelsInUse({ llm }: { llm: LlmUsage }) {
+  return (
+    <div className="ui-card min-w-0 rounded-lg border border-border bg-surface p-4">
+      <h3 className="m-0 text-base font-semibold">Models in use</h3>
+      {llm.models.length === 0 ? (
+        <p className="m-0 mt-2 text-sm text-text-muted">
+          None. No AI model has answered since {llm.sinceD}; every text is written by the fixed
+          rules. A model is used only after it passes the bake-off and is switched on.
+        </p>
+      ) : (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full border-collapse text-left text-sm">
+            <caption className="sr-only">Models that answered since {llm.sinceD}</caption>
+            <thead>
+              <tr>
+                <th scope="col" className="py-2 pr-4">
+                  Role
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Provider
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Model
+                </th>
+                <th scope="col" className="py-2 pr-4">
+                  Calls
+                </th>
+                <th scope="col" className="py-2">
+                  Last used
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {llm.models.map((m) => (
+                <tr key={`${m.role}|${m.provider}|${m.model}`} className="border-t border-border">
+                  <th scope="row" className="py-2 pr-4 font-medium">
+                    {m.role}
+                  </th>
+                  <td className="py-2 pr-4">{m.provider}</td>
+                  <td className="py-2 pr-4 font-mono text-xs">{m.model}</td>
+                  <td className="py-2 pr-4">{m.calls}</td>
+                  <td className="py-2">{m.lastD}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // LLM usage (LLM-051): tokens and requests per provider, role and day, cache hit rate, fallback rate
 // and failures. Counted from our own call log; no prompt or answer text is stored there.
 function LlmSection({ llm }: { llm: LlmUsage | null }) {
@@ -179,6 +235,7 @@ function LlmSection({ llm }: { llm: LlmUsage | null }) {
       <h2 id="llm-h" className="text-xl font-semibold">
         LLM usage
       </h2>
+      {llm !== null && <ModelsInUse llm={llm} />}
       {llm === null ? (
         <p>LLM usage unavailable</p>
       ) : llm.byRole.length === 0 ? (

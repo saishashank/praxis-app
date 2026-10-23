@@ -103,14 +103,14 @@ export function EditRow({
   open?: boolean;
 }) {
   return (
-    <details className="group min-w-0" open={open}>
+    <details className="group/row min-w-0" open={open}>
       <summary className="flex min-h-14 cursor-pointer list-none items-center gap-4 px-4 py-3 hover:bg-surface-2 [&::-webkit-details-marker]:hidden">
         <span className="w-32 shrink-0 font-medium sm:w-44">{name}</span>
         <Values values={values} />
         <span className="ml-1 inline-flex items-center gap-1 text-xs text-accent">
-          <span className="group-open:hidden">Change</span>
-          <span className="hidden group-open:inline">Close</span>
-          <Chevron className="group-open:rotate-90" />
+          <span className="group-open/row:hidden">Change</span>
+          <span className="hidden group-open/row:inline">Close</span>
+          <Chevron className="group-open/row:rotate-90" />
         </span>
       </summary>
       <div className="border-t border-border bg-surface-2/40 px-4 py-4">{children}</div>

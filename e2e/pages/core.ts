@@ -27,6 +27,7 @@ export const CORE_PAGES: PageEntry[] = [
     h1: "Settings",
   },
   { file: "src/app/(app)/users/page.tsx", path: "/users", action: "admin", h1: "Users & roles" },
+  { file: "src/app/(app)/audit/page.tsx", path: "/audit", action: "admin", h1: "Audit log" },
   { file: "src/app/(app)/usage/page.tsx", path: "/usage", action: "admin", h1: "Usage" },
   { file: "src/app/(app)/config/page.tsx", path: "/config", action: "admin", h1: "Configuration" },
   {

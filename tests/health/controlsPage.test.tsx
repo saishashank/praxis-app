@@ -54,10 +54,9 @@ const show = async (controls: ControlsView | null | undefined, extra: object = {
   summaryMock.mockResolvedValue({ jobs: [], controls, ...extra });
   render(await HealthPage());
 };
-const dd = (label: string) =>
-  within(section())
-    .getAllByText(label)
-    .find((e) => e.tagName === "DT")?.nextSibling;
+/** One setting row (D-174): the row holding the h3 with this title. */
+const row = (title: string) =>
+  within(section()).getByRole("heading", { level: 3, name: title }).parentElement!.parentElement!;
 const section = () => screen.getByRole("region", { name: "Data controls" });
 
 describe("status text (every role)", () => {
@@ -67,11 +66,11 @@ describe("status text (every role)", () => {
       as(role);
       await show(view({ dispatchEnabled: true, asxEnabled: true }));
       const s = within(section());
-      expect(s.getByText("Production data-only mode (BLD-024)")).toBeInTheDocument();
-      expect(dd("Nightly dispatch")).toHaveTextContent("ON");
-      expect(dd("ASX contact")).toHaveTextContent("ON");
-      expect(dd("ASX announcements (O-23)")).toHaveTextContent("Not accepted yet");
-      expect(dd("AU market mode")).toHaveTextContent("Data only");
+      expect(s.getByText(/Production data-only mode \(BLD-024\)/)).toBeInTheDocument();
+      expect(row("Nightly dispatch")).toHaveTextContent("On");
+      expect(row("ASX contact")).toHaveTextContent("On");
+      expect(row("ASX announcements (O-23)")).toHaveTextContent("Not accepted yet");
+      expect(row("AU market mode")).toHaveTextContent("✓ Data only");
     },
   );
 
@@ -97,8 +96,8 @@ describe("status text (every role)", () => {
         markets: [{ market: "AU", mode: "off", configMode: "off", inSync: true }],
       }),
     );
-    expect(screen.queryByText("Production data-only mode (BLD-024)")).toBeNull();
-    expect(dd("AU market mode")).toHaveTextContent("Off");
+    expect(screen.queryByText(/Production data-only mode \(BLD-024\)/)).toBeNull();
+    expect(row("AU market mode")).toHaveTextContent("✓ Off");
   });
 
   it("hides the section when controls are missing or unreadable", async () => {
@@ -119,15 +118,20 @@ describe("Owner controls", () => {
     expect(
       s.getByText(/Last Worker report: ASX_LIVE not known, ASX_USER_AGENT not known/),
     ).toBeInTheDocument();
-    expect(s.getByRole("button", { name: "Accept risk (O-23)" })).toBeInTheDocument();
-    expect(s.getByRole("button", { name: "Accept risk (O-26)" })).toBeInTheDocument();
-    expect(s.queryByRole("button", { name: "Turn dispatch on" })).toBeNull();
-    expect(s.queryByRole("button", { name: "Turn ASX contact on" })).toBeNull();
-    expect(s.getByText("Accept the Yahoo risk (O-26) before turning this on.")).toBeInTheDocument();
-    expect(s.getByText("Accept the ASX risk (O-23) before turning this on.")).toBeInTheDocument();
-    expect(s.getByRole("button", { name: "Switch this market off" })).toBeInTheDocument();
-    expect(s.getByRole("button", { name: "Switch to full mode" })).toBeInTheDocument();
-    fireEvent.click(s.getByRole("button", { name: "Accept risk (O-23)" }));
+    expect(s.getByRole("switch", { name: "Accept risk (O-23)" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(s.getByRole("switch", { name: "Accept risk (O-26)" })).toBeInTheDocument();
+    expect(s.queryByRole("switch", { name: "Turn dispatch on" })).toBeNull();
+    expect(s.queryByRole("switch", { name: "Turn ASX contact on" })).toBeNull();
+    expect(s.getByText("Accept the Yahoo source (O-26) first.")).toBeInTheDocument();
+    expect(s.getByText("Accept the ASX source (O-23) first.")).toBeInTheDocument();
+    // market mode is a segmented control: the current mode is marked, the others are buttons
+    expect(within(row("AU market mode")).getByRole("button", { name: "Off" })).toBeInTheDocument();
+    expect(within(row("AU market mode")).getByRole("button", { name: "Full" })).toBeInTheDocument();
+    expect(within(row("AU market mode")).queryByRole("button", { name: "Data only" })).toBeNull();
+    fireEvent.click(s.getByRole("switch", { name: "Accept risk (O-23)" }));
     expect(s.getByText(SOURCE_CONTROLS.asx_announcements.riskText)).toBeInTheDocument();
   });
 
@@ -151,7 +155,7 @@ describe("Owner controls", () => {
     );
     const s = within(section());
     expect(s.getByText(/ASX_LIVE set, ASX_USER_AGENT not set/)).toBeInTheDocument();
-    expect(s.queryByRole("button", { name: "Turn dispatch on" })).toBeNull();
+    expect(s.queryByRole("switch", { name: "Turn dispatch on" })).toBeNull();
     expect(s.getByText("Confirm the AU trading calendar first.")).toBeInTheDocument();
   });
 
@@ -176,10 +180,16 @@ describe("Owner controls", () => {
       }),
     );
     const s = within(section());
-    expect(s.getByRole("button", { name: "Turn dispatch on" })).toBeInTheDocument();
-    expect(s.getByRole("button", { name: "Turn ASX contact on" })).toBeInTheDocument();
-    expect(s.getByRole("button", { name: "Disable ASX announcements" })).toBeInTheDocument();
-    expect(s.queryByRole("button", { name: /Accept risk/ })).toBeNull();
+    expect(s.getByRole("switch", { name: "Turn dispatch on" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(s.getByRole("switch", { name: "Turn ASX contact on" })).toBeInTheDocument();
+    expect(s.getByRole("switch", { name: "Disable ASX announcements" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(s.queryByRole("switch", { name: /Accept risk/ })).toBeNull();
   });
 
   it("offers 'off' buttons when the switches are on, and data-only when the market is off", async () => {
@@ -193,10 +203,15 @@ describe("Owner controls", () => {
       }),
     );
     const s = within(section());
-    expect(s.getByRole("button", { name: "Turn dispatch off" })).toBeInTheDocument();
-    expect(s.getByRole("button", { name: "Turn ASX contact off" })).toBeInTheDocument();
-    expect(s.getByRole("button", { name: "Set data-only mode" })).toBeInTheDocument();
-    expect(s.getByText(/out of sync with the saved setting/)).toBeInTheDocument();
+    expect(s.getByRole("switch", { name: "Turn dispatch off" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(s.getByRole("switch", { name: "Turn ASX contact off" })).toBeInTheDocument();
+    expect(
+      within(row("AU market mode")).getByRole("button", { name: "Data only" }),
+    ).toBeInTheDocument();
+    expect(s.getByText(/out of sync with the saved setting/i)).toBeInTheDocument();
   });
 
   it("shows the trip reset button only when tripped, with the reason, and the open S2 incidents", async () => {
@@ -205,7 +220,7 @@ describe("Owner controls", () => {
       heartbeatIncidents: [{ id: 3, at: "2026-10-12T00:31:00.000Z", kind: "worker_blind" }],
     });
     const s = within(section());
-    expect(s.getByText(/stopped by the safety trip: blocked 8 of 10/)).toBeInTheDocument();
+    expect(s.getByText(/Stopped by the safety trip: blocked 8 of 10/)).toBeInTheDocument();
     expect(s.getByRole("button", { name: "Reset ASX trip" })).toBeInTheDocument();
     expect(s.getByText(/worker blind — opened/)).toBeInTheDocument();
     cleanup();

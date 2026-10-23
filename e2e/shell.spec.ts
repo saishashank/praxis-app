@@ -69,6 +69,7 @@ for (const role of ROLE_LIST) {
             "Usage",
             "Ops checklist",
             "Users & roles",
+            "Audit log",
             "Configuration",
             "Data review",
           ]
