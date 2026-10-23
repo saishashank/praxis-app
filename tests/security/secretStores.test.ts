@@ -284,3 +284,36 @@ describe("the Owner guide is generated from the table", () => {
     for (const s of ROTATION_STEPS) expect(doc, s.title).toContain(s.title);
   });
 });
+
+describe("the secrets tool reads a copy of the table (scripts/secrets/rows.json)", () => {
+  const file = "scripts/secrets/rows.json";
+  const rowsJson = (): string =>
+    `${JSON.stringify(
+      SECRET_ROWS.map((r) => ({
+        id: r.id,
+        title: r.title,
+        handling: r.handling,
+        issuer: r.issuer,
+        expiry: r.expiry.tracked ? { tracked: true, key: r.expiry.key } : { tracked: false },
+        slots: r.slots.map((s) => ({
+          env: s.env,
+          store: s.store,
+          holder: s.holder,
+          names: s.names,
+        })),
+      })),
+      null,
+      2,
+    )}\n`;
+
+  // Compared as data, so prettier's layout of the file does not matter.
+  it("the copy equals the table (PRAXIS_UPDATE_GUIDE=1 rewrites it)", () => {
+    const wanted = rowsJson();
+    const full = path.join(root, file);
+    const same = (): boolean =>
+      fs.existsSync(full) &&
+      JSON.stringify(JSON.parse(read(file))) === JSON.stringify(JSON.parse(wanted));
+    if (process.env.PRAXIS_UPDATE_GUIDE === "1" && !same()) fs.writeFileSync(full, wanted);
+    expect(JSON.parse(read(file))).toEqual(JSON.parse(wanted));
+  });
+});
