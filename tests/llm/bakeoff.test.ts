@@ -24,7 +24,7 @@ import {
   type OracleOptions,
 } from "@/lib/llm/bakeoff";
 import { bakeoffMain } from "@/lib/llm/bakeoffCli";
-import type { LlmProvider } from "@/lib/llm/providers";
+import { RateLimitError, type LlmProvider } from "@/lib/llm/providers";
 
 const fetchSpy = vi.fn();
 beforeEach(() => {
@@ -467,5 +467,58 @@ describe("CLI", () => {
     );
     expect(code).toBe(0);
     expect(lines.join("\n")).toContain("FAIL");
+  });
+});
+
+describe("rate limits during a run", () => {
+  const limited = (limitedCalls: number[]): LlmProvider => {
+    const oracle = createOracleProvider(items, { id: "groq", model: "m" });
+    let calls = 0;
+    return {
+      ...oracle,
+      call(req, signal) {
+        calls += 1;
+        if (limitedCalls.includes(calls)) return Promise.reject(new RateLimitError("groq"));
+        return oracle.call(req, signal);
+      },
+    };
+  };
+  const go = (provider: LlmProvider, sleep?: (ms: number) => Promise<void>) =>
+    runBakeoff({
+      runId: "r",
+      date: "2026-10-20",
+      items,
+      candidates: [{ provider, trainsOnPromptsCheckedD: "2026-10-01" }],
+      mode: "mock",
+      now: NOW,
+      sleep,
+      rateLimitWaitMs: 1,
+    });
+
+  it("one 429 is waited out and asked again; it does not fail every later item", async () => {
+    const waits: number[] = [];
+    const r = await go(limited([1]), async (ms) => {
+      waits.push(ms);
+    });
+    const res = r.results[0]!;
+    expect(res.errors).toBe(0);
+    expect(res.rateLimitWaits).toBe(1);
+    expect(res.passes).toBe(true);
+    expect(waits).toContain(1);
+    expect(r.report).toContain("Unanswered items by cause: none; rate-limit waits: 1");
+  });
+
+  it("without a sleep the item counts as rate-limited, and the report says so", async () => {
+    const r = await go(limited([1]));
+    const res = r.results[0]!;
+    expect(res.failures["rate-limited"]).toBeGreaterThan(0);
+    expect(r.report).toMatch(/Unanswered items by cause: rate-limited \d+/);
+  });
+
+  it("an item limited on every ask gives up after three waits", async () => {
+    const r = await go(limited([1, 2, 3, 4]), async () => {});
+    const res = r.results[0]!;
+    expect(res.rateLimitWaits).toBe(3);
+    expect(res.failures).toEqual({ "rate-limited": 1 });
   });
 });

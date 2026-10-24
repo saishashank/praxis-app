@@ -174,10 +174,15 @@ export type ItemScore = {
 
 type Outcome = "ok" | "invalid" | "invented" | "error";
 
+/** The outcome of the last provider attempt ("unavailable" when none was made). */
+function lastAttempt(r: Pick<RouteResult<unknown>, "attempts">): string {
+  const a = r.attempts.filter((x) => x.provider !== "rules-only");
+  return a.length > 0 ? a[a.length - 1].outcome : "unavailable";
+}
+
 /** The final outcome of the (single) provider attempt, from the router's attempt log. */
 export function outcomeOf(r: Pick<RouteResult<unknown>, "attempts" | "source">): Outcome {
-  const a = r.attempts.filter((x) => x.provider !== "rules-only");
-  const last = a.length > 0 ? a[a.length - 1].outcome : "unavailable";
+  const last = lastAttempt(r);
   if (last === "ok" || last === "cache-hit") return "ok";
   if (last === "invalid-output") return "invalid";
   if (last === "grounding-rejected") return "invented";
@@ -391,6 +396,8 @@ export type BakeoffOptions = {
   /** Pause between calls (free-tier rate limits); only used with `sleep`. */
   pauseMs?: number;
   sleep?: (ms: number) => Promise<void>;
+  /** Wait after a rate-limit answer before the item is asked again; only used with `sleep`. */
+  rateLimitWaitMs?: number;
   params?: LlmParams;
   now?: () => Date;
 };
@@ -418,6 +425,10 @@ export type CandidateResult = {
   invented: number;
   errors: number;
   tokens: number;
+  /** Final failure kind per item that got no answer (rate-limited, provider-error, ...). */
+  failures: Readonly<Record<string, number>>;
+  /** Times the run waited out a rate limit and asked the item again. */
+  rateLimitWaits: number;
   /** Every check of every category passed. */
   thresholdsMet: boolean;
   /** thresholdsMet and the trains_on_prompts value is dated and the provider sees DATA text. */
@@ -453,6 +464,16 @@ export type BakeoffRun = {
 
 const DATE_RE = new RegExp("^\\d{4}-\\d{2}-\\d{2}$");
 
+const RATE_LIMIT_RETRIES = 3; // threshold-ok: asks per item after a 429 before it counts as an error
+const RATE_LIMIT_WAIT_MS = 65_000; // threshold-ok: free tiers reset their limits per minute
+
+function failureText(f: Readonly<Record<string, number>>): string {
+  const parts = Object.keys(f)
+    .sort()
+    .map((k) => `${k} ${f[k]}`);
+  return parts.length > 0 ? parts.join(", ") : "none";
+}
+
 function modelOf(p: LlmProvider): string {
   for (const r of ["R1", "R2", "R3", "R5"] as const) {
     const m = p.modelFor(r);
@@ -470,31 +491,53 @@ export async function runBakeoff(opts: BakeoffOptions): Promise<BakeoffRun> {
     if (cand.trainsOnPromptsCheckedD !== null && !DATE_RE.test(cand.trainsOnPromptsCheckedD))
       throw new Error("bakeoff: trains_on_prompts date must be YYYY-MM-DD");
     let n = 0;
-    const router = createRouter({
-      mode: opts.mode,
-      params,
-      kbVersion: "bakeoff",
-      store: new MemoryStore(),
-      providers: [cand.provider],
-      idFactory: () => `${opts.runId}-${(n += 1)}`,
-      now: opts.now,
-    });
+    const store = new MemoryStore();
+    // A new router forgets the day-long cool-down a rate limit sets: right in production, where the
+    // chain moves on, but in a measurement one 429 would turn every later item into an error.
+    const makeRouter = () =>
+      createRouter({
+        mode: opts.mode,
+        params,
+        kbVersion: "bakeoff",
+        store,
+        providers: [cand.provider],
+        idFactory: () => `${opts.runId}-${(n += 1)}`,
+        now: opts.now,
+      });
+    let router = makeRouter();
     const scores: ItemScore[] = [];
+    const failures: Record<string, number> = {};
+    let rateLimitWaits = 0;
     for (const item of opts.items) {
       const parse = PARSERS[item.category];
-      const r = await router.route<Answer>({
-        role: CATEGORY_ROLE[item.category],
-        market: "AU",
-        d: opts.date,
-        templateVersion: `bakeoff-v1-${item.category}`,
-        task: TASKS[item.category],
-        facts: item.facts,
-        untrusted: item.untrusted,
-        parse,
-        rules: { __failed: true },
-        maxOutputTokens: maxOut,
-      });
+      const ask = () =>
+        router.route<Answer>({
+          role: CATEGORY_ROLE[item.category],
+          market: "AU",
+          d: opts.date,
+          templateVersion: `bakeoff-v1-${item.category}`,
+          task: TASKS[item.category],
+          facts: item.facts,
+          untrusted: item.untrusted,
+          parse,
+          rules: { __failed: true },
+          maxOutputTokens: maxOut,
+        });
+      let r = await ask();
+      for (let tries = 0; tries < RATE_LIMIT_RETRIES; tries += 1) {
+        if (lastAttempt(r) !== "rate-limited" || !opts.sleep) break;
+        rateLimitWaits += 1;
+        await opts.sleep(opts.rateLimitWaitMs ?? RATE_LIMIT_WAIT_MS);
+        router = makeRouter();
+        r = await ask();
+      }
       const outcome = outcomeOf(r);
+      if (outcome !== "ok") {
+        const kind = lastAttempt(r);
+        failures[kind] = (failures[kind] ?? 0) + 1;
+        // Gave up on this item: the next one starts without the cool-down.
+        if (kind === "rate-limited" && opts.sleep) router = makeRouter();
+      }
       const answer = outcome === "ok" && r.source !== "rules-only" ? r.value : null;
       scores.push(scoreItem(item, outcome, answer, r.call.tokensIn + r.call.tokensOut));
       if (opts.sleep && opts.pauseMs) await opts.sleep(opts.pauseMs);
@@ -514,6 +557,8 @@ export async function runBakeoff(opts: BakeoffOptions): Promise<BakeoffRun> {
       invented: sum((c) => c.invented),
       errors: sum((c) => c.errors),
       tokens: sum((c) => c.tokens),
+      failures,
+      rateLimitWaits,
       thresholdsMet,
       passes:
         thresholdsMet && cand.trainsOnPromptsCheckedD !== null && !cand.provider.trainsOnPrompts,
@@ -631,6 +676,7 @@ export function renderReport(input: {
     L.push(
       `- trains_on_prompts: ${r.trainsOnPrompts ? "yes (facts only)" : "no"}; checked ${r.trainsOnPromptsCheckedD ?? "NOT DATED"}`,
       `- Thresholds met: ${r.thresholdsMet ? "yes" : "no"}; assignable: ${r.passes ? "yes" : "no"}`,
+      `- Unanswered items by cause: ${failureText(r.failures)}; rate-limit waits: ${r.rateLimitWaits}`,
       "",
       "| Category | Items | Metric | Value | Threshold | Check |",
       "| --- | ---: | --- | ---: | --- | --- |",
