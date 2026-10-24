@@ -52,6 +52,7 @@ export const NOT_CONFIG = new Set([
   "PUSH_BEFORE_SHA",
   "PRAXIS_COVERAGE_RUN", // timing slack for two tests under coverage (M8 T17), set only by the coverage job
   "ZAP_OUT", // per-run report folder of scripts/ci/zap-run.mjs (M8 T12), not configuration
+  "FROM", // backfill-index.yml: the first-date input of a one-off dispatch (D-175), not configuration
   "TARGET",
   "TARGETS",
   "TRAINS",

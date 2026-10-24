@@ -1,0 +1,52 @@
+  production:
+    if: github.ref == 'refs/heads/release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      deployments: read
+    # PLT-076: one run at a time, never cancelling one in progress. Inserts are first-seen only.
+    concurrency:
+      group: backfill-index
+      cancel-in-progress: false
+    environment:
+      name: production
+      deployment: false
+    steps:
+      # SEC-108 c: these two steps run only the tiny reviewed script, with github.token alone.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ci-tools
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - name: Find approved commit
+        id: approved
+        run: node ci-tools/scripts/ci/approved-commit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.approved.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Write the fetch request (no secrets)
+        run: node scripts/backfill/index.mjs request --from "$FROM" --out request.json
+        env:
+          FROM: ${{ inputs.from }}
+      # No secrets here: this step only talks to Yahoo and writes the files on the runner.
+      - name: Fetch Yahoo index bars (no secrets)
+        run: |
+          pip install --require-hashes -r scripts/ingest/requirements.txt
+          python scripts/ingest/yahoo_fetch.py --request request.json --output bars.json --index-output index.json
+      - name: Write the index bars (first-seen only)
+        run: node scripts/backfill/index.mjs commit --index index.json --from "$FROM"
+        env:
+          FROM: ${{ inputs.from }}
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}

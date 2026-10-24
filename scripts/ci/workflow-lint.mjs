@@ -56,6 +56,7 @@ export const PIPELINE_WORKFLOWS = [
   "arena-signals.yml",
   "backfill-history.yml",
   "backfill-prices.yml",
+  "backfill-index.yml",
   "backup.yml",
   "ingest-batch1.yml",
   "kb-archive.yml",

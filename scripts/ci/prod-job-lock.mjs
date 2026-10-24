@@ -21,6 +21,7 @@ export const LOCKED_WORKFLOWS = Object.freeze([
   "llm-bakeoff",
   "backfill-history",
   "backfill-prices",
+  "backfill-index",
 ]);
 
 /**
