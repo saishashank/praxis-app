@@ -73,6 +73,32 @@ describe("live adapters (fake fetch only)", () => {
     expect((init.headers as Record<string, string>).authorization).toBe("Bearer k-test");
   });
 
+  it("groq: GPT-OSS models get low reasoning effort and no returned reasoning (D-182)", async () => {
+    const fetchImpl = vi.fn(async () =>
+      json({ choices: [{ message: { content: "{}" } }], usage: {} }),
+    );
+    const p = createLiveProvider({
+      kind: "groq",
+      models: { R2: "openai/gpt-oss-120b" },
+      trainsOnPrompts: false,
+      timeoutMs: 1000,
+      env: { [KEY_ENV.groq]: "k-test" },
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await p.call({ ...req, model: "openai/gpt-oss-120b" });
+    await p.call({ ...req, model: "m1" });
+    const bodies = fetchImpl.mock.calls.map(
+      (c) =>
+        JSON.parse(String((c as unknown as [string, RequestInit])[1].body)) as Record<
+          string,
+          unknown
+        >,
+    );
+    expect(bodies[0]).toMatchObject({ reasoning_effort: "low", include_reasoning: false });
+    expect(bodies[1]).not.toHaveProperty("reasoning_effort");
+    expect(bodies[1]).not.toHaveProperty("include_reasoning");
+  });
+
   it("google: uses the key header, not the URL", async () => {
     const fetchImpl = vi.fn(async () =>
       json({

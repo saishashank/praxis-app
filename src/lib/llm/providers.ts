@@ -135,6 +135,8 @@ export type LiveOptions = {
 };
 
 type Json = Record<string, unknown>;
+/** Groq model ids of the GPT-OSS reasoning family (D-182). */
+const GROQ_REASONING_PREFIX = "openai/gpt-oss";
 
 function num(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) ? v : 0;
@@ -190,6 +192,13 @@ export function createLiveProvider(opts: LiveOptions): LlmProvider {
             temperature: 0,
             response_format: { type: "json_object" },
           };
+          // D-182: Groq's GPT-OSS models reason before answering, and the reasoning shares the
+          // output budget; at the default effort a short JSON answer was cut off and Groq refused it
+          // (HTTP 400). Low effort, reasoning not returned.
+          if (opts.kind === "groq" && req.model.startsWith(GROQ_REASONING_PREFIX)) {
+            body.reasoning_effort = "low";
+            body.include_reasoning = false;
+          }
         }
         const res = await doFetch(url, {
           method: "POST",

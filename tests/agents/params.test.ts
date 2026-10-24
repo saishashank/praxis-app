@@ -185,7 +185,7 @@ describe("defaultAgentParams equals ch.15", () => {
       sleeveLeverage: 10,
       realityCap: 5,
       lightMinutes: 30,
-      fullMinutes: 90,
+      fullMinutes: 300, // D-186: ch.15 default 90 raised for the 2020-2026 history
       nightlyMinutes: 10,
       tursoRecentSessions: 500,
       eventBackfillYears: 6,

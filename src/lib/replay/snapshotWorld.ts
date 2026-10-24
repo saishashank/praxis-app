@@ -69,6 +69,33 @@ export function corpRecordsOf(snap: LoadedSnapshot): CorpActionRecord[] {
 
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
+/**
+ * D-185: facts memoised per session, keeping only the most recent sessions. Every pass (ledger,
+ * cohorts, controls) walks forward day by day, so recent days hold almost every hit. An unbounded
+ * memo held about 2,000 codes x 1,800 sessions of facts and ran the heap out on the 2020-2026
+ * history. A miss only recomputes the same pure facts; results never change.
+ */
+const MEMO_SESSIONS = 8; // threshold-ok: memo window in sessions (memory bound, not a rule)
+
+class DayMemo<T> {
+  private readonly days = new Map<string, Map<string, T>>();
+  get(d: string, code: string): T | undefined {
+    return this.days.get(d)?.get(code);
+  }
+  set(d: string, code: string, value: T): void {
+    let day = this.days.get(d);
+    if (day === undefined) {
+      if (this.days.size >= MEMO_SESSIONS) {
+        const oldest = this.days.keys().next().value as string;
+        this.days.delete(oldest);
+      }
+      day = new Map();
+      this.days.set(d, day);
+    }
+    day.set(code, value);
+  }
+}
+
 export type SnapshotWorldOptions = {
   readonly params: AgentParams;
   readonly market?: string;
@@ -88,8 +115,8 @@ export class SnapshotWorld implements CohortReplaySource {
   private readonly splits: ReturnType<typeof splitActionsByCode>["byCode"];
   private readonly actions: CorpActionRecord[];
   private readonly regime = new Map<string, RegimeLabel>();
-  private readonly memo = new Map<string, CodeFacts>();
-  private readonly pfMemo = new Map<string, PositionFacts | null>();
+  private readonly memo = new DayMemo<CodeFacts>();
+  private readonly pfMemo = new DayMemo<PositionFacts | null>();
   private readonly need: number;
   readonly codes: readonly string[];
   /** Announcement days of the snapshot (DAT-125 list input). */
@@ -187,18 +214,17 @@ export class SnapshotWorld implements CohortReplaySource {
   }
 
   private factsAt(code: string, i: number): CodeFacts {
-    const key = `${code}|${i}`;
-    let f = this.memo.get(key);
+    const d = this.bars.get(code)![i]!.d;
+    let f = this.memo.get(d, code);
     if (f === undefined) {
       const raw = this.bars.get(code)!.slice(Math.max(0, i + 1 - this.need), i + 1);
-      const d = raw[raw.length - 1]!.d;
       const known = (this.splits.get(code) ?? []).filter((a) => a.exDate <= d);
       const { tier, halted } = this.tierOn(code, d);
       f = buildCodeFacts(
         { code, tier, adjusted: adjustBars(raw, known), raw, halted },
         this.o.params,
       );
-      this.memo.set(key, f);
+      this.memo.set(d, code, f);
     }
     return f;
   }
@@ -214,8 +240,7 @@ export class SnapshotWorld implements CohortReplaySource {
   }
 
   positionFacts(code: string, d: string): PositionFacts | null {
-    const key = `${code}|${d}`;
-    const hit = this.pfMemo.get(key);
+    const hit = this.pfMemo.get(d, code);
     if (hit !== undefined) return hit;
     const i = this.barIdx.get(code)?.get(d);
     if (i === undefined) return null;
@@ -235,7 +260,7 @@ export class SnapshotWorld implements CohortReplaySource {
       volumeRatios: ratios,
       events: [],
     };
-    this.pfMemo.set(key, facts);
+    this.pfMemo.set(d, code, facts);
     return facts;
   }
 

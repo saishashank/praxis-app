@@ -183,7 +183,7 @@ Who may change a key: Owner (any valid value), Owner within bounds (Lane B, beco
 | `regime_fall_window_sessions` | `5` | sessions | nobody (fixed) | fixed | no | AGT-101 5-session fall |
 | `regime_params` | `{"sma_sessions":200,"vol_pct_riskoff":70,"vol_pct_shock":95,"vol_pct_riskon":50,"fall5_pct":7,"exit_hysteresis":3}` | mixed | Owner | JSON with sma_sessions 50-400, vol_pct_riskon < vol_pct_riskoff < vol_pct_shock (0-100), fall5_pct above 0 to 50, exit_hysteresis 1-10 | no | AGT-101; ch.15 l.115 (bounds not in the extract, D-079) |
 | `regime_vol_lookback_sessions` | `1260` | sessions | nobody (fixed) | fixed | no | AGT-101 trailing 1,260 sessions; ARN-080 warm-up |
-| `replay_full_minutes` | `90` | min | Owner | whole number, 15 to 360 | no | ARN-100; ch.15 l.61 (bounds not in the extract, D-079) |
+| `replay_full_minutes` | `300` | min | Owner | whole number, 15 to 360 | no | ARN-100; ch.15 l.61 (bounds not in the extract, D-079) |
 | `replay_light_minutes` | `30` | min | Owner | whole number, 5 to 120 | no | ARN-100; ch.15 l.61 (bounds not in the extract, D-079) |
 | `retention_flag_days` | `180` | days | Owner | whole days, at least 180 | no | DAT-142 |
 | `retention_logs_days` | `30` | days | Owner | whole days, at least 1 | no | DAT-142 |

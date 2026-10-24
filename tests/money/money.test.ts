@@ -397,8 +397,8 @@ describe("tick table (ARN-032, spec 05 l.65) [VERIFY]", () => {
     expect(slippedFill(2_000_000n, "sell", r("10"), r("1.0"))).toBe(1_990_000n);
     // sell off-grid rounds down
     expect(slippedFill(100_000n, "sell", r("120"), r("1.0"))).toBe(95_000n);
-    // sell that would go to zero is rejected
-    expect(() => slippedFill(1_000n, "sell", r("10"), r("1.0"))).toThrow(RangeError);
+    // sell that would go to zero fills at the lowest price on the grid (D-184)
+    expect(slippedFill(1_000n, "sell", r("10"), r("1.0"))).toBe(1_000n);
   });
 
   it("slippage amount uses the larger of bucket bps and tick x factor, non-integer factor", () => {

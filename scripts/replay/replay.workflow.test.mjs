@@ -36,7 +36,8 @@ test("one production job on release, production environment without a deployment
   assert.deepEqual(job.environment, { name: "production", deployment: false });
   assert.deepEqual(job.permissions, { contents: "read", deployments: "read" });
   assert.deepEqual(job.concurrency, { group: "replay", "cancel-in-progress": false });
-  assert.ok(job["timeout-minutes"] > 0 && job["timeout-minutes"] <= 180);
+  // D-186: the full replay of the 2020-2026 history needs about 2.5 h; 360 is the hosted-runner job maximum
+  assert.ok(job["timeout-minutes"] > 0 && job["timeout-minutes"] <= 360);
 });
 
 test("the approved-commit steps and node setup are copied exactly from arena-close", () => {
@@ -61,7 +62,10 @@ test("secrets appear only in env of the replay step, which is last; the mode goe
     ["DATA_REPO_TOKEN", "TURSO_MAIN_TOKEN", "TURSO_MAIN_URL"],
   );
   assert.equal(s.env.DATA_REPO, "${{ github.repository }}-data");
-  assert.equal(s.run, 'node scripts/replay/run.mjs --mode "$REPLAY_MODE"');
+  assert.equal(
+    s.run,
+    'node --max-old-space-size=12288 scripts/replay/run.mjs --mode "$REPLAY_MODE"',
+  );
   assert.match(s.env.REPLAY_MODE, /inputs\.mode/);
   assert.equal(steps[steps.length - 1], s);
   assert.equal(wf.env, undefined);
@@ -76,7 +80,10 @@ test("mode learning (M6 T12): still dispatch-only, same single secrets step, slo
   assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"]);
   assert.deepEqual(Object.keys(wf.jobs), ["production", "staging"]); // M8 T9: the staging job is covered by staging-jobs.workflow.test.mjs
   const run = steps[steps.length - 1];
-  assert.equal(run.run, 'node scripts/replay/run.mjs --mode "$REPLAY_MODE"');
+  assert.equal(
+    run.run,
+    'node --max-old-space-size=12288 scripts/replay/run.mjs --mode "$REPLAY_MODE"',
+  );
   assert.equal(JSON.stringify(job).match(/secrets./g).length, 3);
   // the CLI accepts the mode the workflow offers
   assert.match(read("scripts/replay/run.mjs"), /light|full|null|injected|evidence|learning/);
