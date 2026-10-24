@@ -63,6 +63,14 @@
 //   recorded; the tier ranking arrives with the universe work (T9/T10).
 // - The corporate-action / price-sensitive-announcement exemption covers the window from the
 //   previous session's date to the bar date, both ends included.
+// - D-178, market facts are not data faults (severity "info"; they still block entries):
+//   * no_trade: a zero-volume bar identical to a zero-volume previous bar on a non-U1 code is a run
+//     of no-trade days (Yahoo repeats the last close), not stale data. DAT-200 suspects zero volume
+//     only on U1, so on U1 the identical-OHLCV suspect flag still applies.
+//   * no_price_source: an expected code with no bar today and none ever stored has never been
+//     priced by the vendor (debt securitisation trusts, some ETFs and dormant listings in the ASX
+//     companies file). It is not an expected bar: it leaves the tier score and is reported as a
+//     count, never filled (DAT-004).
 
 export const DEFAULT_SUSPECT_MOVE_PCT = 40;
 export const DEFAULT_U1_GATE_PCT = 95;
@@ -87,7 +95,11 @@ export const RULES = {
   refetch_diff: { id: "DAT-200:refetch_diff", severity: "warning", blocks: false },
   missing_bar: { id: "DAT-210:missing_bar", severity: "error", blocks: true },
   u1_gate: { id: "DAT-210:u1_gate", severity: "critical", blocks: true },
+  no_trade: { id: "DAT-200:no_trade", severity: "info", blocks: true },
+  no_price_source: { id: "DAT-210:no_price_source", severity: "info", blocks: true },
 };
+/** Severities that record a market fact, not a data fault (System Health does not count them). */
+export const FACT_SEVERITIES = ["info"];
 export const RULE_IDS = Object.values(RULES).map((r) => r.id);
 /** Flags a re-run may clear. The re-fetch flag belongs to the previous date and is kept. */
 export const REEVALUATED_IDS = RULE_IDS.filter((id) => id !== RULES.refetch_diff.id);
@@ -152,8 +164,19 @@ export function evaluateBar(i) {
   if (bar.volume === 0 && i.tier === "U1" && i.halted !== true) {
     out.push(flag(RULES.zero_volume_u1, {}));
   }
-  if (prev && sameOhlcv(bar, prev)) out.push(flag(RULES.identical_ohlcv, {}));
+  if (prev && sameOhlcv(bar, prev)) {
+    const noTrade = bar.volume === 0 && i.tier !== "U1";
+    out.push(flag(noTrade ? RULES.no_trade : RULES.identical_ohlcv, {}));
+  }
   return out;
+}
+
+/**
+ * D-178: an expected code with no bar today that the vendor has never priced.
+ * @returns {Finding[]}
+ */
+export function evaluateNoSource() {
+  return [flag(RULES.no_price_source, {})];
 }
 
 /**

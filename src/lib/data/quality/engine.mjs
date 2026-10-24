@@ -12,6 +12,7 @@ import { addDays, isValidCode } from "../pipeline/rules.mjs";
 import {
   evaluateBar,
   evaluateMissing,
+  evaluateNoSource,
   evaluateRefetch,
   evaluateRejects,
   gateFinding,
@@ -23,6 +24,8 @@ import {
 } from "./rules.mjs";
 
 const STATEMENTS_PER_BATCH = 100;
+const NO_SOURCE_PROBE_CHUNK = 500; // codes per json_each probe (one bound parameter)
+const NO_SOURCE_HISTORY_DAYS = 30; // calendar days of market price history before "never priced" is judged
 const CONFIG_KEYS = ["refetch_diff_flag", "suspect_move", "u1_quality_gate"];
 
 /**
@@ -231,15 +234,46 @@ export async function runQuality(ctx) {
     rejectedBy.set(r.code, [...(rejectedBy.get(r.code) ?? []), r.reason]);
   }
 
+  // D-178: a code with no bar and no rejected row today that has never had a stored bar has no
+  // price source. Only judged once the market has NO_SOURCE_HISTORY_DAYS of history: without it
+  // (a new database, a first day) every code is simply missing and the gate fails (DAT-127).
+  // One primary-key probe per such code.
+  const unpriced = expected.map((e) => e.code).filter((c) => !bars.has(c) && !rejectedBy.has(c));
+  const first = await sel(
+    db,
+    io,
+    "SELECT d FROM price_bar WHERE market = ? AND d < ? ORDER BY d LIMIT 1",
+    [market, d],
+  );
+  const judged = first.length > 0 && String(first[0].d) <= addDays(d, -NO_SOURCE_HISTORY_DAYS);
+  const priced = new Set();
+  for (let i = 0; judged && i < unpriced.length; i += NO_SOURCE_PROBE_CHUNK) {
+    const rows = await sel(
+      db,
+      io,
+      `SELECT j.value AS code FROM json_each(?) j WHERE EXISTS (
+         SELECT 1 FROM price_bar p WHERE p.market = ? AND p.code = j.value AND p.d < ?)`,
+      [JSON.stringify(unpriced.slice(i, i + NO_SOURCE_PROBE_CHUNK)), market, d],
+    );
+    for (const r of rows) priced.add(String(r.code));
+  }
+  const neverPriced = new Set(judged ? unpriced.filter((c) => !priced.has(c)) : []);
+
   /** @type {{ code: string | null, d: string, finding: import("./rules.mjs").Finding }[]} */
   const wanted = [];
   const invalid = new Set();
   let suspect = 0;
   let missing = 0;
+  let noSource = 0;
   for (const e of expected) {
     const bar = bars.get(e.code);
     const reasons = rejectedBy.get(e.code) ?? [];
     let findings;
+    if (neverPriced.has(e.code)) {
+      for (const finding of evaluateNoSource()) wanted.push({ code: e.code, d, finding });
+      noSource += 1;
+      continue; // not an expected bar: outside the tier score (D-178)
+    }
     if (bar) {
       findings = [
         ...evaluateBar({
@@ -278,7 +312,11 @@ export async function runQuality(ctx) {
     }
   }
 
-  const day = scoreDay({ expected, invalid, gatePct: cfg.u1GatePct });
+  const day = scoreDay({
+    expected: expected.filter((e) => !neverPriced.has(e.code)),
+    invalid,
+    gatePct: cfg.u1GatePct,
+  });
   if (day.gateFailed) {
     wanted.push({
       code: null,
@@ -389,6 +427,7 @@ export async function runQuality(ctx) {
       counts: {
         suspect,
         missing,
+        no_price_source: noSource,
         cross_source_disagreements: 0, // DAT-102 needs a second source (none in M2)
         unresolved_corporate_actions: unresolvedActions,
       },
@@ -410,4 +449,5 @@ export const qualityHook = async (c) =>
     tradingDay: true,
     rejected: c.rejected,
     refetchDiffs: c.refetchDiffs,
+    clearOnly: c.clearOnly,
   });

@@ -483,3 +483,111 @@ describe("write surface", () => {
     expect(src).toContain("ON CONFLICT DO NOTHING");
   });
 });
+
+describe("D-178: market facts are not data faults", () => {
+  const OLD = "2026-08-03"; // more than 30 days before MON: the market has history
+  /** A stored bar on OLD for every code but `skip`, as the price backfill leaves it. */
+  async function withHistory(db: Client, skip: string[]) {
+    for (const code of CODES.filter((c) => !skip.includes(c))) {
+      const b = bar(code, OLD); // same prices as the test bars, another volume (nothing identical)
+      await db.execute({
+        sql: `INSERT INTO price_bar (market, code, d, o, h, l, c, volume, source, published_at, ingested_at)
+              VALUES ('AU', ?, ?, ?, ?, ?, ?, 999, 'yahoo_eod', ?, ?)`,
+        args: [code, OLD, b.open, b.high, b.low, b.close, NOW, NOW],
+      });
+    }
+  }
+
+  it("a code the vendor has never priced is reported apart and leaves the score", async () => {
+    const db = await u1Db();
+    await withHistory(db, ["ZZT"]);
+    const others = CODES.filter((c) => c !== "ZZT");
+    await go(db, MON, barsFor([MON], others));
+    const res = await go(db, TUE, tue({}, ["ZZT"]));
+    expect(res).toMatchObject({ exit: 0 });
+    const f = await flagsOf(db);
+    expect(f.map((x) => [x.code, x.check_id, x.severity, x.blocks_entries])).toEqual([
+      ["ZZT", RULES.no_price_source.id, "info", 1],
+    ]);
+    const sc = await rows(
+      db,
+      "SELECT valid, expected, gate_pass FROM quality_score WHERE d = ? AND tier = 'U1'",
+      [TUE],
+    );
+    expect(sc[0]).toMatchObject({ valid: 19, expected: 19, gate_pass: 1 });
+    // still no entries on it, and nothing was filled
+    expect(await entriesAllowed(db, "ZZT", TUE)).toMatchObject({ allowed: false });
+    expect(await count(db, "price_bar", "code = 'ZZT'")).toBe(0);
+  });
+
+  it("a code with history but no bar today is still missing (a fault)", async () => {
+    const db = await u1Db();
+    await withHistory(db, []);
+    await go(db, MON, barsFor([MON], CODES));
+    await go(db, TUE, tue({}, ["ZZT"]));
+    expect((await flagsOf(db)).map((x) => [x.code, x.check_id])).toEqual([
+      ["ZZT", RULES.missing_bar.id],
+    ]);
+  });
+
+  it("without 30 days of market history nothing is judged never-priced: the gate still fails", async () => {
+    const db = await u1Db();
+    await go(
+      db,
+      MON,
+      barsFor(
+        [MON],
+        CODES.filter((c) => c !== "ZZT"),
+      ),
+    );
+    expect((await flagsOf(db, MON)).map((x) => [x.code, x.check_id])).toEqual([
+      ["ZZT", RULES.missing_bar.id],
+    ]);
+  });
+
+  it("a late bar from the next night's re-fetch is stored first-seen and clears its missing flag", async () => {
+    const db = await u1Db();
+    await withHistory(db, []);
+    await go(
+      db,
+      MON,
+      barsFor(
+        [MON],
+        CODES.filter((c) => c !== "ZZT"),
+      ),
+    );
+    expect((await flagsOf(db, MON)).map((x) => x.check_id)).toEqual([RULES.missing_bar.id]);
+    // Tuesday's file re-fetches Monday: ZZT's no-trade row is there now, and ZZA differs a little
+    const monFetch = [
+      ...barsFor(
+        [MON],
+        CODES.filter((c) => c !== "ZZT"),
+      ),
+      bar("ZZT", MON, { open: 29.5, high: 29.5, low: 29.5, close: 29.5, volume: 0 }),
+    ];
+    await go(db, TUE, [...monFetch, ...tue()]);
+    const stored = await rows(db, "SELECT volume FROM price_bar WHERE code = 'ZZT' AND d = ?", [
+      MON,
+    ]);
+    expect(stored).toEqual([{ volume: 0 }]);
+    const mon = await flagsOf(db, MON);
+    // the missing flag is cleared; the stored bar is then checked like any other (ZZT is U1 here,
+    // so its zero volume is suspect under DAT-200)
+    expect(mon.map((x) => [x.code, x.check_id, x.cleared_at === null])).toEqual([
+      ["ZZT", RULES.zero_volume_u1.id, true],
+      ["ZZT", RULES.missing_bar.id, false],
+    ]);
+    const rec = (await runs(db)).find((r) => r.scheduled_for === TUE)!;
+    expect(details(rec).stages.late_bars).toMatchObject({ d: MON, bars: 1 });
+    expect(details(rec).refetch).toMatchObject({ late_bars: 1 });
+  });
+
+  it("a re-fetched row is never stored for a code that was not flagged missing", async () => {
+    const db = await u1Db();
+    await withHistory(db, []);
+    await go(db, MON, barsFor([MON], CODES));
+    // a code outside the universe in Monday's re-fetch: no flag, so nothing is stored
+    await go(db, TUE, [bar("ZZZ", MON), ...tue()]);
+    expect(await count(db, "price_bar", "code = 'ZZZ'")).toBe(0);
+  });
+});

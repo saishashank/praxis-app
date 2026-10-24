@@ -24,7 +24,7 @@ import {
   type OracleOptions,
 } from "@/lib/llm/bakeoff";
 import { bakeoffMain } from "@/lib/llm/bakeoffCli";
-import { RateLimitError, type LlmProvider } from "@/lib/llm/providers";
+import { ProviderHttpError, RateLimitError, type LlmProvider } from "@/lib/llm/providers";
 
 const fetchSpy = vi.fn();
 beforeEach(() => {
@@ -513,6 +513,19 @@ describe("rate limits during a run", () => {
     const res = r.results[0]!;
     expect(res.failures["rate-limited"]).toBeGreaterThan(0);
     expect(r.report).toMatch(/Unanswered items by cause: rate-limited \d+/);
+  });
+
+  it("a provider error is reported with its HTTP status (status only)", async () => {
+    const oracle = createOracleProvider(items, { id: "groq", model: "m" });
+    const failing: LlmProvider = {
+      ...oracle,
+      call: () => Promise.reject(new ProviderHttpError("groq: http 400")),
+    };
+    const r = await go(failing);
+    expect(r.results[0]!.failures).toEqual({ "provider-error (http 400)": items.length });
+    expect(r.report).toContain(
+      `Unanswered items by cause: provider-error (http 400) ${items.length}`,
+    );
   });
 
   it("an item limited on every ask gives up after three waits", async () => {

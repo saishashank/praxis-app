@@ -492,6 +492,23 @@ export async function runBakeoff(opts: BakeoffOptions): Promise<BakeoffRun> {
       throw new Error("bakeoff: trains_on_prompts date must be YYYY-MM-DD");
     let n = 0;
     const store = new MemoryStore();
+    // The router keeps only "provider-error"; the report names the cause (an HTTP status, a
+    // timeout). Our own adapter messages only: never a response body, header or prompt.
+    let lastError: string | null = null;
+    const provider: LlmProvider = {
+      ...cand.provider,
+      modelFor: (role) => cand.provider.modelFor(role),
+      available: () => cand.provider.available(),
+      call: async (req, signal) => {
+        try {
+          return await cand.provider.call(req, signal);
+        } catch (e) {
+          const m = /: (http \d+|timeout|request failed)$/.exec(String((e as Error).message));
+          lastError = m ? m[1] : "other";
+          throw e;
+        }
+      },
+    };
     // A new router forgets the day-long cool-down a rate limit sets: right in production, where the
     // chain moves on, but in a measurement one 429 would turn every later item into an error.
     const makeRouter = () =>
@@ -500,7 +517,7 @@ export async function runBakeoff(opts: BakeoffOptions): Promise<BakeoffRun> {
         params,
         kbVersion: "bakeoff",
         store,
-        providers: [cand.provider],
+        providers: [provider],
         idFactory: () => `${opts.runId}-${(n += 1)}`,
         now: opts.now,
       });
@@ -523,6 +540,7 @@ export async function runBakeoff(opts: BakeoffOptions): Promise<BakeoffRun> {
           rules: { __failed: true },
           maxOutputTokens: maxOut,
         });
+      lastError = null;
       let r = await ask();
       for (let tries = 0; tries < RATE_LIMIT_RETRIES; tries += 1) {
         if (lastAttempt(r) !== "rate-limited" || !opts.sleep) break;
@@ -533,7 +551,8 @@ export async function runBakeoff(opts: BakeoffOptions): Promise<BakeoffRun> {
       }
       const outcome = outcomeOf(r);
       if (outcome !== "ok") {
-        const kind = lastAttempt(r);
+        const last = lastAttempt(r);
+        const kind = last === "provider-error" && lastError ? `${last} (${lastError})` : last;
         failures[kind] = (failures[kind] ?? 0) + 1;
         // Gave up on this item: the next one starts without the cool-down.
         if (kind === "rate-limited" && opts.sleep) router = makeRouter();
