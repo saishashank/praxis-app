@@ -6,6 +6,7 @@
 // Health and in review section 9."
 import type { Client } from "@libsql/client";
 import type { Role } from "@/lib/auth/permissions";
+import { FACT_SEVERITIES } from "@/lib/data/quality/rules.mjs";
 
 export const TOP_CODES_PER_RULE = 5;
 
@@ -14,6 +15,8 @@ export type QualityRuleCount = {
   severity: string;
   count: number;
   blocksEntries: boolean;
+  /** A market fact (no trade, no price source; D-178), not a data fault. */
+  fact: boolean;
   topCodes?: string[]; // Owner only
 };
 export type QualityTier = {
@@ -68,6 +71,7 @@ export async function getQualitySummary(
       severity: String(g.severity),
       count: Number(g.n),
       blocksEntries: Number(g.blocks) === 1,
+      fact: FACT_SEVERITIES.includes(String(g.severity)),
     };
     if (role === "owner") {
       const top = await db.execute({

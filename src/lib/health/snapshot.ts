@@ -84,7 +84,9 @@ export async function gatherHealthFacts(
     f.quality = q
       ? {
           gateFails: q.tiers.filter((t) => !t.gatePass).length,
-          blockingFlags: q.rules.filter((x) => x.blocksEntries).reduce((n, x) => n + x.count, 0),
+          blockingFlags: q.rules
+            .filter((x) => x.blocksEntries && !x.fact)
+            .reduce((n, x) => n + x.count, 0),
         }
       : null;
     for (const set of [sum.secrets, sum.workerSecrets]) {

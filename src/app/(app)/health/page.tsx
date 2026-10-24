@@ -455,7 +455,9 @@ function QualitySection(props: { q: NonNullable<HealthSummary["quality"]>; owner
                 <th scope="row" className="py-2 pr-4 font-mono text-xs font-medium">
                   {r.checkId}
                 </th>
-                <td className="py-2 pr-4">{r.severity}</td>
+                <td className="py-2 pr-4">
+                  {r.fact ? "info (a market fact, not a fault)" : r.severity}
+                </td>
                 <td className="py-2 pr-4">{r.count}</td>
                 <td className="py-2 pr-4">{r.blocksEntries ? "Yes" : "No"}</td>
                 {owner && (

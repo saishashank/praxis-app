@@ -7,8 +7,10 @@ import {
   DEFAULT_REFETCH_DIFF_PCT,
   DEFAULT_SUSPECT_MOVE_PCT,
   DEFAULT_U1_GATE_PCT,
+  FACT_SEVERITIES,
   evaluateBar,
   evaluateMissing,
+  evaluateNoSource,
   evaluateRefetch,
   evaluateRejects,
   gateFails,
@@ -117,6 +119,23 @@ describe("DAT-200 per-bar checks", () => {
   it("identical OHLCV to the previous day flags; any one field different passes", () => {
     expect(ids(evaluateBar({ bar: good, prev: { ...good } }))).toEqual([RULES.identical_ohlcv.id]);
     expect(evaluateBar({ bar: good, prev: { ...good, volume: 1001 } })).toEqual([]);
+  });
+  it("D-178: identical zero-volume days on a non-U1 code are a no-trade run (a fact that still blocks)", () => {
+    const quiet = { ...good, volume: 0 };
+    const f = evaluateBar({ bar: quiet, prev: { ...quiet }, tier: "U3" });
+    expect(ids(f)).toEqual([RULES.no_trade.id]);
+    expect(f[0]).toMatchObject({ severity: "info", blocks_entries: true });
+    // on U1 zero volume stays suspect, and the identical check stays as it was
+    expect(ids(evaluateBar({ bar: quiet, prev: { ...quiet }, tier: "U1" }))).toEqual([
+      RULES.zero_volume_u1.id,
+      RULES.identical_ohlcv.id,
+    ]);
+    // a traded day repeating exactly is still suspect, whatever the tier
+    expect(ids(evaluateBar({ bar: good, prev: { ...good }, tier: "U3" }))).toEqual([
+      RULES.identical_ohlcv.id,
+    ]);
+    expect(ids(evaluateNoSource())).toEqual([RULES.no_price_source.id]);
+    expect(FACT_SEVERITIES).toEqual(["info"]);
   });
   it("re-fetch: above 0.1% flags without blocking; exactly 0.1% and below do not", () => {
     expect(evaluateRefetch(0.1)).toEqual([]);

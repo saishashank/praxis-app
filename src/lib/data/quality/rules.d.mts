@@ -3,7 +3,7 @@ export const DEFAULT_U1_GATE_PCT: number;
 export const DEFAULT_REFETCH_DIFF_PCT: number;
 export const TIERS: readonly ["U1", "U2", "U3"];
 
-export type Severity = "warning" | "error" | "critical";
+export type Severity = "info" | "warning" | "error" | "critical";
 export type RuleDef = { id: string; severity: Severity; blocks: boolean };
 export type Finding = {
   rule: string;
@@ -25,7 +25,10 @@ export const RULES: {
   refetch_diff: RuleDef;
   missing_bar: RuleDef;
   u1_gate: RuleDef;
+  no_trade: RuleDef;
+  no_price_source: RuleDef;
 };
+export const FACT_SEVERITIES: string[];
 export const RULE_IDS: string[];
 export const REEVALUATED_IDS: string[];
 export const REJECT_RULE: Record<string, RuleDef>;
@@ -45,6 +48,7 @@ export function evaluateBar(i: {
   suspectMovePct?: number;
 }): Finding[];
 export function evaluateRefetch(maxDiffPct: number, thresholdPct?: number): Finding[];
+export function evaluateNoSource(): Finding[];
 export function evaluateMissing(i?: { rejectReasons?: string[] }): Finding[];
 export function evaluateRejects(reasons: string[]): Finding[];
 export type TierScore = { expected: number; valid: number; score: number; empty: boolean };
