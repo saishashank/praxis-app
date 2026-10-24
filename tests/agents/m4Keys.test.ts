@@ -78,7 +78,7 @@ const OTHER_RANGED: readonly Ranged[] = [
   ["delta_bust_tolerance", 0.05, 0, 0.25, "O"],
   ["killswitch_max_looks_per_year", 1, 1, 52, "O"],
   ["replay_light_minutes", 30, 5, 120, "O"],
-  ["replay_full_minutes", 90, 15, 360, "O"],
+  ["replay_full_minutes", 300, 15, 360, "O"],
   ["nightly_compute_minutes", 10, 2, 60, "O"],
   ["turso_recent_sessions", 500, 260, 1000, "O"],
   ["event_backfill_years", 6, 1, 15, "O"],

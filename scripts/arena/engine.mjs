@@ -19,18 +19,20 @@ const OUT_DIR = path.join(
   `${process.pid}-${randomBytes(4).toString("hex")}`,
 );
 
-/** Bundle src/lib/arena/cli.ts and return its exports ({ closeBooksMain, replayMain }). */
-export async function loadEngine() {
+/** Bundle the arena engine (default src/lib/arena/cli.ts) or another entry and return its exports. */
+export async function loadEngine(entryPath = path.join("src", "lib", "arena", "cli.ts")) {
   const { build } = await import("vite");
-  mkdirSync(OUT_DIR, { recursive: true });
+  // One folder per entry: two bundles both named cli.js in one folder would share an import URL.
+  const outDir = path.join(OUT_DIR, entryPath.replace(/[\\/.]+/g, "-"));
+  mkdirSync(outDir, { recursive: true });
   const built = await build({
     root: ROOT,
     configFile: false,
     logLevel: "error",
     resolve: { alias: { "@": path.join(ROOT, "src") } },
     build: {
-      ssr: path.join(ROOT, "src", "lib", "arena", "cli.ts"),
-      outDir: OUT_DIR,
+      ssr: path.join(ROOT, entryPath),
+      outDir,
       emptyOutDir: true,
       minify: false,
       sourcemap: false,
@@ -42,5 +44,5 @@ export async function loadEngine() {
   const result = Array.isArray(built) ? built[0] : built;
   const entry = result.output.find((o) => o.type === "chunk" && o.isEntry);
   if (!entry) throw new Error("arena engine bundle has no entry chunk");
-  return import(pathToFileURL(path.join(OUT_DIR, entry.fileName)).href);
+  return import(pathToFileURL(path.join(outDir, entry.fileName)).href);
 }

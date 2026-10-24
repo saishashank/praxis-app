@@ -18,6 +18,7 @@ import {
   type SimulatedFill,
 } from "@/lib/arena/fills";
 import { makeRational } from "@/lib/money/rational";
+import { MIN_PRICE_MICRO } from "@/lib/money/tick";
 
 const ADV = 5_000_000_000_000n;
 const bar = (open: bigint, low: bigint, high = open, close = open): Bar => ({
@@ -100,9 +101,9 @@ describe("entry and close-signal fills happen at the open (ARN-020, ARN-021)", (
     expect(() => fillEntryAtOpen(env(bar(10_000_000n, 11_000_000n)), 1n)).toThrow(/invalid bar/);
   });
 
-  it("a slipped sell price of zero or less is refused", () => {
-    // A$0.001 open: slippage is one tick (A$0.001) -> fill 0.
-    expect(() => fillCloseSignalExit(env(bar(1_000n, 1_000n)), 1n)).toThrow(RangeError);
+  it("D-184: a slipped sell price of zero or less fills at the lowest price on the grid", () => {
+    // A$0.001 open: slippage is one tick (A$0.001) -> 0, floored to A$0.001.
+    expect(fillCloseSignalExit(env(bar(1_000n, 1_000n)), 1n).fillPriceMicro).toBe(1_000n);
   });
 });
 
@@ -161,6 +162,20 @@ describe("IS exit fills (ARN-021)", () => {
     expect(fillIntradayStop(env(bar(1_020_000n, 1_000_001n)), 1n, 1_000_000n)).toBeNull();
   });
 
+  it("D-184: a sell never fills below the lowest price on the grid (A$0.001)", () => {
+    // level 2_000 (A$0.002, tick 1_000): slip one tick -> 1_000, minus one tick = 0 -> floor 1_000
+    const level = fillIntradayStop(env(bar(3_000n, 1_000n, 3_000n)), 1_000n, 2_000n);
+    expect(level?.rule).toBe("level");
+    expect(level?.fillPriceMicro).toBe(MIN_PRICE_MICRO);
+    // a gap open at A$0.001: open minus a tick would be zero -> floor
+    const gap = fillIntradayStop(env(bar(1_000n, 1_000n)), 1_000n, 2_000n);
+    expect(gap?.rule).toBe("gap_open");
+    expect(gap?.fillPriceMicro).toBe(MIN_PRICE_MICRO);
+    const cs = fillCloseSignalExit(env(bar(1_000n, 1_000n)), 1_000n);
+    expect(cs.fillPriceMicro).toBe(MIN_PRICE_MICRO);
+    expect(MIN_PRICE_MICRO).toBe(1_000n);
+  });
+
   it("a stop at the A$2.00 band edge uses the level's own tick (A$0.01)", () => {
     // level 2_000_000 (A$2.00, tick 10_000): slip max(2_000, 10_000) = 10_000 -> 1_990_000,
     // minus one tick (10_000) = 1_980_000.
@@ -201,8 +216,8 @@ describe("IS exit fills (ARN-021)", () => {
     expect(() => fillIntradayStop(env(bar(10_000_000n, 9_000_000n)), 0n, 9_500_000n)).toThrow(
       RangeError,
     );
-    // level A$0.002 (tick 1_000): slip 1_000 -> 1_000, minus a tick -> 0.
-    expect(() => fillIntradayStop(env(bar(5_000n, 1_500n)), 1n, 2_000n)).toThrow(RangeError);
+    // level A$0.002 (tick 1_000): slip 1_000 -> 1_000, minus a tick -> 0, floored to A$0.001 (D-184).
+    expect(fillIntradayStop(env(bar(5_000n, 1_500n)), 1n, 2_000n)?.fillPriceMicro).toBe(1_000n);
   });
 });
 

@@ -456,9 +456,49 @@ type Cohort = {
   locks: number;
   closeouts: number;
   checkpoints: [number, number][];
+  /** D-183: the sleeve summary kept when a finished cohort drops its working state. */
+  sleeveSummary?: SleeveSummary | null;
 };
 
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+function sleeveSummaryOf(c: Cohort): SleeveSummary | null {
+  if (c.cfg === null) return null;
+  const closedReal = c.sleeveTrades.filter((t) => !t.shadow && t.closed !== null);
+  return {
+    trades: c.sleeveTrades.filter((t) => !t.shadow).length,
+    shadowTrades: c.sleeveTrades.filter((t) => t.shadow).length,
+    closeouts: c.closeouts,
+    locks: c.locks,
+    netPlMicro: closedReal.reduce((s, t) => s + netPlMicro(t.closed!), 0n),
+  };
+}
+
+/**
+ * D-183: a cohort that has left the live set is never touched again by the session loop; only its
+ * outcome is read. Keep the outcome fields and drop the working state (ledger rows, NAV series,
+ * history, positions, orders), which otherwise grows with cohorts x sessions until the end of the
+ * replay (it ran a 12 GB heap out on the 2020-2026 history).
+ */
+function retire(c: Cohort): void {
+  c.sleeveSummary = sleeveSummaryOf(c);
+  c.sleeveTrades = [];
+  c.sleeveStates = [];
+  c.navs = [];
+  c.history = [];
+  c.pending = [];
+  c.orders = [];
+  c.filledToday = [];
+  c.lastPos = [];
+  c.recRows.length = 0;
+  c.caRows.length = 0;
+  c.adjustments.length = 0;
+  c.positions.clear();
+  c.lastIs.clear();
+  c.stockExits.clear();
+  c.unpaid.clear();
+  c.sleeveEntryFee.clear();
+}
 
 function apply(c: Cohort, txn: LedgerTxn): void {
   for (const p of txn.postings) c.bal[p.account] += p.deltaMicro;
@@ -1659,12 +1699,17 @@ export function replayCohorts(
       }
     }
     // a resolved cohort stays until it is wound down (and its real sleeve trade, if any, is closed)
-    live = live.filter(
+    const stillLive = live.filter(
       (c) =>
         !c.done ||
         c.liquidatedIdx < 0 ||
         c.sleeveTrades.some((t) => !t.shadow && t.closed === null),
     );
+    if (stillLive.length < live.length) {
+      const keep = new Set(stillLive);
+      for (const c of live) if (!keep.has(c)) retire(c);
+    }
+    live = stillLive;
     advPrev = advNow;
     prevClose = closeNow;
     opts.progress?.({
@@ -1683,17 +1728,7 @@ export function replayCohorts(
     .map((c): CohortOutcome => {
       const v = c.verdict;
       const lev = c.cfg === null ? null : Number(c.cfg.leverage);
-      const closedReal = c.sleeveTrades.filter((t) => !t.shadow && t.closed !== null);
-      const sleeve: SleeveSummary | null =
-        c.cfg === null
-          ? null
-          : {
-              trades: c.sleeveTrades.filter((t) => !t.shadow).length,
-              shadowTrades: c.sleeveTrades.filter((t) => t.shadow).length,
-              closeouts: c.closeouts,
-              locks: c.locks,
-              netPlMicro: closedReal.reduce((s, t) => s + netPlMicro(t.closed!), 0n),
-            };
+      const sleeve = c.sleeveSummary !== undefined ? c.sleeveSummary : sleeveSummaryOf(c);
       return {
         id: c.id,
         executionId: c.execution.id,
