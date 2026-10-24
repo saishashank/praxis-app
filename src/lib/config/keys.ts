@@ -155,7 +155,7 @@ const M4_RANGED = [
   ["c2_live_per_family", "int", 20, 10, 50, "controls", "O", REP, "ARN-004; ch.15 l.38", "Live C2 controls per family"],
   ["zero_edge_trials", "int", 20000, 5000, 100000, "paths", "O", REP, "ARN-071, PRD-020; ch.15 l.180", "Zero-edge Monte-Carlo paths"],
   ["replay_light_minutes", "int", 30, 5, 120, "min", "O", REP, "ARN-100; ch.15 l.61 (bounds not in the extract, D-079)", "Weekly light replay budget"],
-  ["replay_full_minutes", "int", 90, 15, 360, "min", "O", REP, "ARN-100; ch.15 l.61 (bounds not in the extract, D-079)", "Monthly full replay budget"],
+  ["replay_full_minutes", "int", 300, 15, 360, "min", "O", REP, "ARN-100; ch.15 l.61 (bounds not in the extract, D-079)", "Monthly full replay budget"],
   ["nightly_compute_minutes", "int", 10, 2, 60, "min", "O", REP, "ARN-100 (bounds not in the extract, D-079)", "Nightly deterministic compute budget per market"],
   ["turso_recent_sessions", "int", 500, 260, 1000, "sessions", "O", REP, "DAT-142; ch.15 l.141 (bounds not in the extract, D-079)", "Sessions of bars kept in the database"],
   ["event_backfill_years", "int", 6, 1, 15, "years", "O", REP, "DAT-125; ch.15 l.147 (bounds not in the extract, D-079)", "Announcement metadata backfill depth"],
