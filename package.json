@@ -19,7 +19,7 @@
     "test:coverage": "vitest run --coverage",
     "test:coverage:worker": "vitest run --root worker --coverage",
     "test:diffcov": "node scripts/ci/diff-coverage.mjs --lcov coverage/lcov.info --base origin/main",
-    "test:smoke": "node --test \"scripts/smoke/*.test.mjs\" \"scripts/e2e/*.test.mjs\" \"scripts/maintenance/*.test.mjs\" \"scripts/backup/*.test.mjs\" \"scripts/backfill/*.test.mjs\" \"scripts/ingest/*.test.mjs\" \"scripts/arena/*.test.mjs\" \"scripts/replay/*.test.mjs\" \"scripts/restore/*.test.mjs\" \"scripts/watchdog/*.test.mjs\" \"scripts/ci/*.test.mjs\"",
+    "test:smoke": "node --test \"scripts/smoke/*.test.mjs\" \"scripts/e2e/*.test.mjs\" \"scripts/maintenance/*.test.mjs\" \"scripts/backup/*.test.mjs\" \"scripts/backfill/*.test.mjs\" \"scripts/ingest/*.test.mjs\" \"scripts/arena/*.test.mjs\" \"scripts/replay/*.test.mjs\" \"scripts/restore/*.test.mjs\" \"scripts/watchdog/*.test.mjs\" \"scripts/ci/*.test.mjs\" \"scripts/secrets/*.test.mjs\"",
     "test:routes": "node scripts/ci/route-coverage.mjs",
     "test:hygiene": "node scripts/ci/repo-hygiene.mjs",
     "test:config-reference": "node scripts/ci/config-reference.mjs --check",
@@ -34,7 +34,8 @@
     "format:check": "prettier --check .",
     "test:e2e": "playwright test",
     "lint:workflows": "node scripts/ci/workflow-lint.mjs",
-    "release-gate": "node scripts/ci/release-gate.mjs"
+    "release-gate": "node scripts/ci/release-gate.mjs",
+    "secrets": "node scripts/secrets/secrets.mjs"
   },
   "dependencies": {
     "@libsql/client": "0.18.0",

@@ -27,7 +27,14 @@ const LIVE_FETCHERS =
 const BLOCKED_HOSTS = /yahoo|yimg|asx\.com\.au|asxonline|asic\.gov\.au/i;
 // Workflows whose staging job mirrors production; the others only print a notice (no staging store).
 const FULL = ["ingest-batch1", "arena-signals", "arena-close", "maintenance", "watchdog"];
-const NOTICE = ["replay", "kb-archive", "llm-bakeoff", "backfill-history", "backfill-prices"];
+const NOTICE = [
+  "replay",
+  "kb-archive",
+  "llm-bakeoff",
+  "backfill-history",
+  "backfill-prices",
+  "backfill-index",
+];
 
 test("every workflow with a production job is in the locked list, and the lists are complete", () => {
   const withProduction = readdirSync(path.join(root, ".github/workflows"))
