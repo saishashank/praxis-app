@@ -429,7 +429,7 @@ export function codeFrames(e: unknown): string {
         line,
       );
     if (m === null) continue;
-    frames.push(`${m[1] ?? "?"}@${m[2]}:${m[3]}`);
+    frames.push(`${m[1] ?? "?"}:${m[2]}:${m[3]}`);
     if (frames.length === 3) break; // threshold-ok: enough frames to place the error
   }
   return frames.length === 0 ? "" : ` at=${frames.join(",")}`;

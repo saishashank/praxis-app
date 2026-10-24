@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { codeFrames } from "@/lib/replay/cli";
 
 describe("codeFrames", () => {
-  it("keeps our bundle's frames (function@file:line), skips other packages and Node", () => {
+  it("keeps our bundle's frames (function:file:line), skips other packages and Node", () => {
     const e = new TypeError("fetch failed for https://secret.example/db?token=abc");
     e.stack = [
       "TypeError: fetch failed for https://secret.example/db?token=abc",
@@ -16,7 +16,7 @@ describe("codeFrames", () => {
       "    at another (src/lib/replay/runner.ts:300:2)",
     ].join("\n");
     const out = codeFrames(e);
-    expect(out).toBe(" at=putAsset@cli.js:4652,replayMain@cli.js:9001,?@dbg.mjs:12");
+    expect(out).toBe(" at=putAsset:cli.js:4652,replayMain:cli.js:9001,?:dbg.mjs:12");
     expect(out).not.toMatch(/secret|token|https/);
   });
 
