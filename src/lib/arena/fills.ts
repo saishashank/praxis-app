@@ -8,7 +8,7 @@
 // The U1 quality gate blocks ENTRIES only (DAT-210): checked at creation and again here at fill;
 // exits are never blocked by it. A halted code gets no fill (ARN-026).
 import { type Micro } from "@/lib/money/micro";
-import { tickFor, type Side } from "@/lib/money/tick";
+import { MIN_PRICE_MICRO, tickFor, type Side } from "@/lib/money/tick";
 import type { EntryDecision } from "@/lib/data/quality/gate";
 import { feeFor, type CostProfile, type FeeContext } from "./costs";
 import type { FillRule } from "./schema";
@@ -136,7 +136,9 @@ export function fillIntradayStop(
     return build(env, "gap_open", "sell", qty, openMicro, slipOf(env, openMicro, "sell"));
   }
   if (lowMicro <= levelMicro) {
-    const fill = slipOf(env, levelMicro, "sell") - tickFor(levelMicro);
+    // D-184: never below the lowest price on the grid (a A$0.001-0.002 stop would go to zero)
+    const below = slipOf(env, levelMicro, "sell") - tickFor(levelMicro);
+    const fill = below < MIN_PRICE_MICRO ? MIN_PRICE_MICRO : below;
     return build(env, "level", "sell", qty, levelMicro, fill);
   }
   return null;

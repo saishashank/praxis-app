@@ -13,13 +13,21 @@
 // `market.mode != 'full'` it only records a skipped run record and writes nothing to the arena or
 // agent tables (D-066, BLD-024). It waits for batch 2a of the same session and never decides a past
 // session. Exit 0 success or expected skip, 1 failed, 2 usage.
+// D-181: after a night that includes batch 3, the published picks (AGT-113, ARN-095) follow from their
+// own bundle (src/lib/picks/cli.ts): this script passes the same arguments and nothing comes back but
+// an exit code, so no arena module reads picks (tests/picks/isolation.test.ts).
 import { fileURLToPath } from "node:url";
 import { loadEngine } from "./engine.mjs";
+
+const PICKS_ENTRY = "src/lib/picks/cli.ts";
 
 /** @param {string[]} argv @param {Record<string, string | undefined>} env */
 export async function run(argv, env, deps = {}) {
   const { signalsMain } = await loadEngine();
-  return signalsMain(argv, env, deps);
+  const code = await signalsMain(argv, env, deps);
+  if (code === 2) return code;
+  const { picksMain } = await loadEngine(PICKS_ENTRY);
+  return Math.max(code, await picksMain(argv, env, deps));
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

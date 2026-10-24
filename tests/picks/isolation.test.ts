@@ -83,6 +83,18 @@ describe("picks are never read by ranking or sizing", () => {
     expect(allCode.filter(inTrading).length).toBeGreaterThan(50); // the scan really looked
   });
 
+  it("D-181: only the nightly orchestrator names the picks entry, by path, to start it", () => {
+    // scripts/arena/signals.mjs bundles src/lib/picks/cli.ts after the night and gets back only an
+    // exit code; no other trading file may even mention the picks folder.
+    const bad = allCode
+      .filter(inTrading)
+      .filter((f) => /["'`]src\/lib\/picks/.test(readFileSync(f, "utf8"))) // quoted, not a comment
+      .map(rel);
+    expect(bad).toEqual(["scripts/arena/signals.mjs"]);
+    const text = readFileSync(path.join(ROOT, "scripts/arena/signals.mjs"), "utf8");
+    expect(text).toContain('const PICKS_ENTRY = "src/lib/picks/cli.ts";');
+  });
+
   it("reads and writes the pick tables from no trading module", () => {
     const re = /\b(?:FROM|JOIN|INTO|UPDATE)\s+pick(?:_outcome)?\b/i;
     const bad = allCode

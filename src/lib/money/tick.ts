@@ -16,6 +16,13 @@ export const TICK_TABLE: readonly TickBand[] = [
 ];
 export const TICK_TABLE_VERIFIED = false;
 
+/**
+ * D-184: the lowest price on the grid (one tick of the bottom band). A sell cannot execute below
+ * it, so an adverse sell fill that slippage would push to zero or below fills here instead (the
+ * worst real price), rather than failing the night on a A$0.001-0.002 stock.
+ */
+export const MIN_PRICE_MICRO = TICK_TABLE[0].tickMicro;
+
 /** Tick size (micro) for a reference price (micro per share); price must be positive. */
 export function tickFor(priceMicro: bigint): bigint {
   if (priceMicro <= 0n) throw new RangeError("price must be positive");
@@ -77,7 +84,10 @@ export function slippedFill(
   const direction = side === "buy" ? "up" : "down";
   let tick = tickFor(refPriceMicro);
   let fill = roundToTick(raw, tick, direction);
-  if (fill <= 0n) throw new RangeError("slippage consumes the whole price");
+  if (fill <= 0n) {
+    if (side === "sell") return MIN_PRICE_MICRO;
+    throw new RangeError("slippage consumes the whole price");
+  }
   for (;;) {
     const next = tickFor(fill);
     if (next <= tick) return fill;
