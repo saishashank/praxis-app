@@ -74,7 +74,9 @@ jobs:
       - run: npm ci
       # The only step with secrets.
       - name: Replay
-        run: node scripts/replay/run.mjs --mode "$REPLAY_MODE"
+        # D-179: the full-universe snapshot (2.5 M bars since 2020) needs more than the default
+        # 4 GB heap; the hosted runner has 16 GB.
+        run: node --max-old-space-size=12288 scripts/replay/run.mjs --mode "$REPLAY_MODE"
         env:
           REPLAY_MODE: ${{ inputs.mode || 'light' }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}

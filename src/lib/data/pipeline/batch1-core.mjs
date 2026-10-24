@@ -30,7 +30,7 @@ import {
 } from "./rules.mjs";
 import { corporateActionsHook } from "../corporateActions/engine.mjs";
 import { qualityHook, readQualityConfig } from "../quality/engine.mjs";
-import { TIERS } from "../quality/rules.mjs";
+import { RULES, TIERS } from "../quality/rules.mjs";
 import { INDEX_YAHOO_SYMBOL, parseIndexText } from "../index/indexBars.mjs";
 import { inputsStage } from "../index/inputsStage.mjs";
 import {
@@ -668,6 +668,22 @@ async function processDate(ctx, item, isTarget) {
           ? { flags: q.flags, ...(q.summary ? q.summary : {}) }
           : "done";
 
+    // D-178: late bars of the previous session answer its missing flags. Only missing flags may be
+    // cleared: this re-run has no reject list or re-fetch diffs for that session.
+    if (refetch.late && hook !== noopQualityHook) {
+      const lq = await hook({
+        db,
+        market,
+        d: refetch.late.d,
+        io,
+        now: iso(),
+        rejected: [],
+        refetchDiffs: [],
+        clearOnly: [RULES.missing_bar.id],
+      });
+      stages.late_bars = { d: refetch.late.d, bars: refetch.late.bars, ...(lq?.summary ?? {}) };
+    }
+
     // Stage 9: completion marker (insert once).
     stage = "marker";
     const covered = valid.length;
@@ -801,9 +817,13 @@ async function refetchCompare(ctx, io, d) {
   const compared = [];
   const diffs = [];
   const rows = [];
+  const unseen = [];
   for (const f of fetched) {
     const s = by.get(f.code);
-    if (!s) continue;
+    if (!s) {
+      unseen.push(f);
+      continue;
+    }
     compared.push(f);
     const cmp = compareBar(
       { o: Number(s.o), h: Number(s.h), l: Number(s.l), c: Number(s.c), volume: Number(s.volume) },
@@ -845,9 +865,47 @@ async function refetchCompare(ctx, io, d) {
       ],
     );
   }
+  const late = await storeLateBars(ctx, io, prev, unseen);
+  written += late;
   return {
     written,
     diffs,
-    summary: { compared: compared.length, differing: diffs.length, fetched: fetched.length },
+    late: late > 0 ? { d: prev, bars: late } : null,
+    summary: {
+      compared: compared.length,
+      differing: diffs.length,
+      fetched: fetched.length,
+      ...(late > 0 ? { late_bars: late } : {}),
+    },
   };
+}
+
+/**
+ * D-178: a bar the vendor publishes only after the evening fetch (an illiquid code's no-trade day
+ * arrives later as a zero-volume row). The next run's re-fetch of the previous session brings it;
+ * it is stored first-seen, and only for a code whose bar that session is still flagged missing, so
+ * nothing already decided is replaced and nothing is filled (DAT-002, DAT-004). The caller then
+ * re-evaluates that session, which clears the missing flags the stored bars answer.
+ */
+async function storeLateBars(ctx, io, prev, unseen) {
+  if (unseen.length === 0) return 0;
+  const { db, market } = ctx;
+  const open = await sel(
+    db,
+    io,
+    `SELECT code FROM data_quality_flag WHERE market = ? AND d = ? AND check_id = ?
+     AND cleared_at IS NULL AND code IS NOT NULL`,
+    [market, prev, RULES.missing_bar.id],
+  );
+  const flagged = new Set(open.map((r) => String(r.code)));
+  const now = new Date(ctx.o.nowMs()).toISOString();
+  const rows = unseen
+    .filter((f) => flagged.has(f.code))
+    .map((f) => [market, f.code, prev, f.open, f.high, f.low, f.close, f.volume, SOURCE, now, now]);
+  return insertRows(
+    db,
+    "price_bar",
+    ["market", "code", "d", "o", "h", "l", "c", "volume", "source", "published_at", "ingested_at"],
+    rows,
+  );
 }
