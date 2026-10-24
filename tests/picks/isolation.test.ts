@@ -104,13 +104,13 @@ describe("picks are never read by ranking or sizing", () => {
     expect(bad).toEqual([]);
   });
 
-  it("writes only to its own two tables", () => {
+  it("writes only to its own three tables (pick_check: D-187)", () => {
     const re = /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)/gi;
     const targets = new Set<string>();
     for (const file of walk(path.join(ROOT, "src/lib/picks"))) {
       for (const m of readFileSync(file, "utf8").matchAll(re)) targets.add(m[1]!.toLowerCase());
     }
-    expect([...targets].sort()).toEqual(["pick", "pick_outcome"]);
+    expect([...targets].sort()).toEqual(["pick", "pick_check", "pick_outcome"]);
   });
 });
 

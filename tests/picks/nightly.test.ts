@@ -5,7 +5,8 @@ import type { Client } from "@libsql/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runPicksNight } from "@/lib/picks/nightly";
 import { writePicks } from "@/lib/picks/store";
-import { trackPicks } from "@/lib/picks/track";
+import { trackPicks, type TrackSummary } from "@/lib/picks/track";
+import { checkWaitingPicks } from "@/lib/picks/validity";
 import { PicksError } from "@/lib/picks/types";
 import { loadCtx, readPicksSection } from "@/lib/review/sections";
 import { cleanupTempDbs } from "../db/helpers";
@@ -194,7 +195,7 @@ describe("AGT-113 publication", () => {
 });
 
 describe("ARN-095 tracking", () => {
-  it("follows the picks to closed (aim), missed (price ran away) and the twin to its own end", async () => {
+  it("follows the picks to closed (aim), withdrawn (edge eroded, D-187) and the twin to its own end", async () => {
     const [top] = await rows(
       "SELECT aim_micro FROM pick WHERE profile = 'aggressive' AND rank = 1",
     );
@@ -214,8 +215,17 @@ describe("ARN-095 tracking", () => {
     const none = await trackPicks(db, { market: MARKET, d: D, advWindow: params.windows.adv });
     expect(none).toEqual({ bought: 0, missed: 0, closed: 0, open: 0 });
 
-    const sum = await trackPicks(db, { market: MARKET, d: last, advWindow: params.windows.adv });
+    // the nights in order, as the job runs them: track with the bars up to the night, then check
+    // the picks still waiting against that night's information (D-187)
+    const sum: TrackSummary = { bought: 0, missed: 0, closed: 0, open: 0 };
+    for (let i = 60; i <= 79; i += 1) {
+      const night = SESSIONS[i]!;
+      const t = await trackPicks(db, { market: MARKET, d: night, advWindow: params.windows.adv });
+      sum.closed += t.closed;
+      await checkWaitingPicks(db, { market: MARKET, d: night, calendar: [], now: NOW });
+    }
     expect(sum.closed).toBeGreaterThan(0);
+    expect(last).toBe(SESSIONS[79]);
 
     const [a] = await rows(
       "SELECT * FROM pick_outcome WHERE profile = 'aggressive' AND rank = 1 AND kind = 'pick'",
@@ -233,16 +243,31 @@ describe("ARN-095 tracking", () => {
       "SELECT * FROM pick_outcome WHERE profile = 'aggressive' AND rank = 2 AND kind = 'pick'",
     );
     expect(b).toMatchObject({ state: "missed", entry_d: null, net_micro: null, net_ppm: null });
+    // withdrawn by its first night's check, which says why: at a close of 11.00, just under the aim,
+    // what is left to gain is far less than half of the published reward for the risk
+    const checks = await rows(
+      "SELECT night_d, valid, reason FROM pick_check WHERE profile = 'aggressive' AND rank = 2",
+    );
+    expect(checks).toEqual([{ night_d: SESSIONS[60], valid: 0, reason: "edge_eroded" }]);
+    await expect(db.execute("UPDATE pick_check SET valid = 1, reason = NULL")).rejects.toThrow(
+      /append-only/,
+    );
+    await expect(db.execute("DELETE FROM pick_check")).rejects.toThrow(/append-only/);
 
-    // the twin of the first pick follows the same rules on its own prices: flat prices mean it is
-    // bought at the first open and closed at the time frame (sold at the next open); a twin that
-    // is ZZB1 sees the price run away and is missed
+    // the twin of the first pick follows its pick's verdicts (that pick was bought on its first
+    // session, so never withdrawn) on its own prices: flat prices mean it is bought at the first
+    // open in its zone and closed at the time frame (sold at the next open); a twin that is ZZB1
+    // waits out the run-away and is bought when the price comes back
     const [t] = await rows(
       "SELECT * FROM pick_outcome WHERE profile = 'aggressive' AND rank = 1 AND kind = 'luck'",
     );
     expect(t!.code).not.toBe("ZZA1");
     if (t!.code === "ZZB1") {
-      expect(t!.state).toBe("missed");
+      expect(t).toMatchObject({
+        state: "closed",
+        exit_reason: "time_frame",
+        entry_d: SESSIONS[62],
+      });
     } else {
       expect(t).toMatchObject({ state: "closed", exit_reason: "time_frame", exit_d: SESSIONS[64] });
       expect(BigInt(String(t!.net_micro))).toBeLessThan(0n); // flat price: only costs

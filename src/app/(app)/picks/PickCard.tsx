@@ -63,8 +63,8 @@ export function PickCard({
           <Term meaning="The highest price at which this pick counts as bought: tonight's closing price plus a small allowance for price slip.">
             Buy up to
           </Term>{" "}
-          {masked || !pick.buyUpTo ? <Masked /> : <Money micro={pick.buyUpTo.micro} />} (valid until{" "}
-          {masked ? pick.validUntil : formatDate(pick.validUntil)})
+          {masked || !pick.buyUpTo ? <Masked /> : <Money micro={pick.buyUpTo.micro} />} (from{" "}
+          {masked ? pick.validUntil : formatDate(pick.validUntil)}, checked again each night)
         </li>
         <li>
           <Term meaning={STOP_GAP_HOVER}>Stop-loss</Term>{" "}

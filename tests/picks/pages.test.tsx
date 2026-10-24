@@ -161,15 +161,25 @@ describe("Picks list", () => {
       sql: `UPDATE pick_outcome SET state = 'missed', updated_d = ? WHERE rank = 5 AND kind = 'pick'`,
       args: [D],
     });
+    // D-187: the nightly check that withdrew it, and why
+    await w.main.execute({
+      sql: `INSERT INTO pick_check (market, d, profile, rank, night_d, valid, reason, checked_at)
+            VALUES ('AU', ?, 'balanced', 5, '2099-01-02', 0, 'regime', ?)`,
+      args: [D, `${D}T08:00:00.000Z`],
+    });
     as(w, "owner");
     render(await PicksPage({ searchParams: sp() }));
     expect(
-      screen.getAllByTestId("state-badge").some((b) => b.textContent === "Missed — price ran away"),
+      screen
+        .getAllByTestId("state-badge")
+        .some((b) => b.textContent === "Withdrawn — the market turned against this strategy"),
     ).toBe(true);
     cleanup();
     render(await TrackRecordPage({ searchParams: sp() }));
     expect(
-      screen.getAllByText(/Missed — price ran away \(not a win or a loss\)/).length,
+      screen.getAllByText(
+        /Withdrawn — the market turned against this strategy \(not a win or a loss\)/,
+      ).length,
     ).toBeGreaterThan(0);
   });
 
@@ -253,7 +263,7 @@ describe("Success strip (UXN-041)", () => {
     expect(
       screen.getByText(/Picks are chosen by strength of evidence, then signal score/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/2 missed/)).toBeInTheDocument();
+    expect(screen.getByText(/2 withdrawn before buying/)).toBeInTheDocument();
     expect(screen.getByRole("link")).toHaveAttribute(
       "href",
       "/picks/track-record?profile=balanced",

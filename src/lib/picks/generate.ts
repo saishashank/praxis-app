@@ -228,7 +228,9 @@ function build(
     label: inp.label,
     referenceMicro: ref,
     buyMaxMicro: buyMax,
-    validUntilD: nthSessionAfter(ctx.d, ctx.picks.pickValidSessions, ctx.calendar),
+    // D-187: no session window; the stored date is the first session it can be bought, and the
+    // pick then stands while its nightly check passes (./validity.ts)
+    validUntilD: nthSessionAfter(ctx.d, 1, ctx.calendar),
     stopMicro: stop,
     aimMicro: aimRaw,
     aimReachPpm: inp.aimReachPpm,

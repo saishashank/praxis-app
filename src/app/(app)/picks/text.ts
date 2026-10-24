@@ -85,14 +85,30 @@ export const POSITION_WORDS = {
   above: "above the expected range",
 } as const;
 
-export function stateText(o: PickRowView["outcome"] | { state: string } | null): string {
+/** D-187: why a nightly check withdrew a waiting pick, in plain words. */
+export const WITHDRAWN_WORDS: Record<string, string> = {
+  data: "a data problem or a trading halt",
+  below_stop: "the price fell to the stop-loss",
+  aim_reached: "the price reached the aim before it could be bought",
+  negative_news: "negative company news",
+  regime: "the market turned against this strategy",
+  evidence: "the strategy's track record failed",
+  edge_eroded: "the price moved up and too little gain was left for the risk",
+  horizon: "it waited longer than similar trades usually last",
+};
+
+export function stateText(
+  o: PickRowView["outcome"] | { state: string; withdrawnReason?: string | null } | null,
+): string {
   switch (o?.state) {
     case "waiting":
       return "Waiting to buy";
     case "bought":
       return "Bought";
-    case "missed":
-      return "Missed — price ran away";
+    case "missed": {
+      const r = o && "withdrawnReason" in o ? (o.withdrawnReason ?? null) : null;
+      return r === null ? "Withdrawn" : `Withdrawn — ${WITHDRAWN_WORDS[r] ?? r}`;
+    }
     case "closed":
       return "Closed";
     default:

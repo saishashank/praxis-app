@@ -66,7 +66,7 @@ describe("picks entry", () => {
       expect(r.code, phase).toBe(0);
       expect(r.lines, phase).toHaveLength(1);
       expect(r.lines[0]).toMatch(
-        /^arena-picks AU 2026-10-20: published=\d+ candidates=\d+ bought=\d+ missed=\d+ closed=\d+ open=\d+$/,
+        /^arena-picks AU 2026-10-20: published=\d+ candidates=\d+ bought=\d+ missed=\d+ closed=\d+ open=\d+ checked=\d+ withdrawn=\d+$/,
       );
       expect(r.lines.join("\n")).not.toMatch(/secret|file:/);
     }

@@ -1,6 +1,7 @@
 // The nightly picks phase (AGT-113 + ARN-095). Runs after batch 3 and after AGT-112 (the factor
 // buckets are READ here), before the Evening Review. It first follows the open picks through the
-// bars up to D (tracking), then publishes tonight's picks. Idempotent for the same night: the same
+// bars up to D (tracking), checks the picks still waiting against tonight's information (D-187,
+// ./validity.ts), then publishes tonight's picks. Idempotent for the same night: the same
 // state writes nothing new. Wiring it into the batch 3 phase list is T11/T18's task; nothing in
 // the trading path calls it.
 import type { Client } from "@libsql/client";
@@ -11,11 +12,13 @@ import { generatePicks } from "./generate";
 import { loadPickInputs } from "./inputs";
 import { writePicks } from "./store";
 import { trackPicks, type TrackSummary } from "./track";
+import { checkWaitingPicks, type CheckSummary } from "./validity";
 
 export type PicksNightResult = {
   readonly published: number;
   readonly candidates: number;
   readonly tracking: TrackSummary;
+  readonly checks: CheckSummary;
 };
 
 export async function runPicksNight(
@@ -36,8 +39,14 @@ export async function runPicksNight(
     costProfile: o.costProfile,
     advWindow: o.params.windows.adv,
   });
+  const checks = await checkWaitingPicks(db, {
+    market: o.market,
+    d: o.d,
+    calendar: o.calendar,
+    now: o.now,
+  });
   if (!isTradingDay(o.d, o.calendar) || o.params.picks.picksPerProfile === 0) {
-    return { published: 0, candidates: 0, tracking };
+    return { published: 0, candidates: 0, tracking, checks };
   }
   const { inputs, universe } = await loadPickInputs(db, {
     market: o.market,
@@ -54,5 +63,5 @@ export async function runPicksNight(
     createdAt: o.now,
   });
   const published = await writePicks(db, picks);
-  return { published, candidates: inputs.length, tracking };
+  return { published, candidates: inputs.length, tracking, checks };
 }

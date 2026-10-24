@@ -93,14 +93,15 @@ describe("AGT-113 acceptance (ch.16 section 16.21)", () => {
     expect(picks.filter((p) => p.profile === "aggressive").length).toBeGreaterThan(0);
   });
 
-  it("derives the buy zone, aim and valid-until from stored numbers only", () => {
+  it("derives the buy zone, aim and first buy session from stored numbers only", () => {
     const [p] = generatePicks([mk({ code: "ZZ01" })], ctx()).filter(
       (x) => x.profile === "balanced",
     );
     expect(p!.buyMaxMicro).toBe(slippageFill(REF, "buy", 5_000_000_000n).fillMicro);
     expect(p!.aimMicro).toBe(REF + (REF * 110_000n) / 1_000_000n);
-    // D is a Friday: the second session after it is Tuesday
-    expect(p!.validUntilD).toBe("2030-03-26");
+    // D-187: D is a Friday; the stored date is the first session it can be bought (Monday), then
+    // the pick stands while its nightly check passes (no session window)
+    expect(p!.validUntilD).toBe("2030-03-25");
     expect(p!.aimReachPpm).toBe(400_000);
     expect(p!.nSimilar).toBe(87);
   });
