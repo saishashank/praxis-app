@@ -295,6 +295,8 @@ describe("idempotency and guards", () => {
 
   it("a finished night is not run again", async () => {
     const again = await signalsDay(idb, {
+      withLeverage: true, // D-191: the full engine, sleeve included
+
       market: MARKET,
       d: d(D),
       replay: true,
@@ -325,6 +327,8 @@ describe("idempotency and guards", () => {
     expect(before[0]).not.toBe("[]");
     await fail();
     const again = await signalsDay(idb, {
+      withLeverage: true, // D-191: the full engine, sleeve included
+
       market: MARKET,
       d: d(D),
       replay: true,
@@ -351,6 +355,8 @@ describe("idempotency and guards", () => {
     // a different stop multiple changes the plan stored on an order: same ids, other content
     const other = testParams({ f4_stop_atr: 3, f1_initial_stop_atr: 3 });
     const bad = await signalsDay(idb, {
+      withLeverage: true, // D-191: the full engine, sleeve included
+
       market: MARKET,
       d: d(D),
       replay: true,
@@ -368,7 +374,13 @@ describe("idempotency and guards", () => {
     const g = await freshReplayDb();
     await buildGolden(g, { through: D });
     await startCohortsAt(g, 295, ["E07"]);
-    const r = await signalsDay(g, { market: MARKET, d: d(D), now: NOW, params });
+    const r = await signalsDay(g, {
+      withLeverage: true, // D-191: the full engine, sleeve included
+      market: MARKET,
+      d: d(D),
+      now: NOW,
+      params,
+    });
     expect(r).toMatchObject({ status: "skipped", reason: "data_only_guard" });
     for (const t of [
       "signal",
@@ -392,15 +404,37 @@ describe("idempotency and guards", () => {
     await buildGolden(g, { through: D });
     await startCohortsAt(g, 295, ["E07"]);
     await setMode(g, "full");
-    expect(await signalsDay(g, { market: MARKET, d: d(D), now: NOW, params })).toMatchObject({
+    expect(
+      await signalsDay(g, {
+        withLeverage: true, // D-191: the full engine, sleeve included
+        market: MARKET,
+        d: d(D),
+        now: NOW,
+        params,
+      }),
+    ).toMatchObject({
       status: "skipped",
       reason: "no_2a_success",
     });
     expect(
-      await signalsDay(g, { market: MARKET, d: "2031-03-01", now: NOW, params }),
+      await signalsDay(g, {
+        withLeverage: true, // D-191: the full engine, sleeve included
+        market: MARKET,
+        d: "2031-03-01",
+        now: NOW,
+        params,
+      }),
     ).toMatchObject({ status: "skipped", reason: "non_trading_day" }); // a Saturday
     await setMode(g, "off");
-    expect(await signalsDay(g, { market: MARKET, d: d(D), now: NOW, params })).toMatchObject({
+    expect(
+      await signalsDay(g, {
+        withLeverage: true, // D-191: the full engine, sleeve included
+        market: MARKET,
+        d: d(D),
+        now: NOW,
+        params,
+      }),
+    ).toMatchObject({
       status: "skipped",
       reason: "market_off",
     });

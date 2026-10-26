@@ -155,7 +155,13 @@ export async function seedPopulated(db: Both): Promise<void> {
   );
   await run(
     m,
-    "INSERT INTO execution (id, market, kind, family, variant, rule_version, cost_profile) VALUES ('E02','AU','E','F2','L','v1','P5')",
+    "INSERT INTO execution (id, market, kind, family, variant, rule_version, cost_profile) VALUES ('E02','AU','E','F2','U','v1','P5')",
+  );
+  // D-191: an L twin (leverage sleeve) is in the registry but runs no cohort and is listed nowhere;
+  // its own page still reads the hypothetical sleeve figures
+  await run(
+    m,
+    "INSERT INTO execution (id, market, kind, family, variant, rule_version, cost_profile) VALUES ('E04','AU','E','F2','L','v1','P5')",
   );
   await run(
     m,

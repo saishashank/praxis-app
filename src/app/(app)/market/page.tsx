@@ -47,6 +47,15 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
   const search = term ? await searchInstruments(env, term) : null;
   const mode = watchModeOf(user.role, model.masked);
 
+  // D-193: one size group at a time (Large by default), kept across the views
+  const sizes = [
+    { id: "large", label: "Large" },
+    { id: "mid", label: "Mid" },
+    { id: "small", label: "Small" },
+  ] as const;
+  const withSize = (tab: string, extra: Record<string, string | number | undefined> = {}) =>
+    href(tab, model.size === "large" ? extra : { ...extra, size: model.size });
+
   const tabs = [
     { id: "movers", label: "Top movers" },
     { id: "sectors", label: "Sectors" },
@@ -103,10 +112,31 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
         )}
       </section>
 
+      {model.sized ? (
+        <div className="flex flex-col gap-1">
+          <Tabs
+            label="Company size"
+            items={sizes.map((z) => ({
+              href: href(model.tab, z.id === "large" ? {} : { size: z.id }),
+              label: z.label,
+              current: z.id === model.size,
+            }))}
+          />
+          <p className="m-0 text-xs text-text-muted">
+            Grouped by how much is traded each day (median of the last 60 sessions): Large is the
+            300 most traded, Mid and Small are smaller. Penny and barely traded stocks are left out.
+          </p>
+        </div>
+      ) : (
+        <p className="m-0 text-sm text-text-muted">
+          Size groups need 60 sessions of price history. Until then every company is listed.
+        </p>
+      )}
+
       <Tabs
         label="Market views"
         items={tabs.map((t) => ({
-          href: href(t.id),
+          href: withSize(t.id),
           label: t.label,
           current: t.id === model.tab,
         }))}
@@ -125,8 +155,21 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
               ["Most traded", model.traded, "No trading was recorded at the last close."],
             ] as const
           ).map(([title, rows, empty]) => (
-            <section key={title} aria-label={title} className="flex min-w-0 flex-col gap-2">
-              <h2 className="m-0 text-lg font-semibold">{title}</h2>
+            // D-193: each list folds away, so the page needs less scrolling
+            <details
+              key={title}
+              open
+              aria-label={title}
+              className="group/fold flex min-w-0 flex-col gap-2 rounded-lg border border-border p-3"
+            >
+              <summary className="cursor-pointer list-none">
+                <h2 className="m-0 inline text-lg font-semibold">
+                  <span aria-hidden="true" className="mr-2 inline-block group-open/fold:rotate-90">
+                    ›
+                  </span>
+                  {title}
+                </h2>
+              </summary>
               <MarketTable
                 caption={title}
                 rows={rows}
@@ -136,7 +179,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
                 showVolume={false}
                 empty={empty}
               />
-            </section>
+            </details>
           ))}
         </div>
       ) : model.tab === "sectors" ? (
@@ -163,7 +206,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
               <Chips
                 label="Open a sector"
                 items={model.sectors.map((s) => ({
-                  href: href("all", { sector: s.sector }),
+                  href: withSize("all", { sector: s.sector }),
                   label: `${s.sector} (${s.count})`,
                 }))}
               />
@@ -176,7 +219,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
           {query.sector ? (
             <p className="m-0 text-sm">
               Sector: {query.sector}.{" "}
-              <Link href={href("all")} className="text-accent underline">
+              <Link href={withSize("all")} className="text-accent underline">
                 Show all sectors
               </Link>
             </p>
@@ -193,7 +236,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
             <nav aria-label="Pages" className="flex items-center justify-between gap-3 text-sm">
               {model.page.number > 1 ? (
                 <Link
-                  href={href("all", { sector: query.sector, page: model.page.number - 1 })}
+                  href={withSize("all", { sector: query.sector, page: model.page.number - 1 })}
                   className="text-accent underline"
                 >
                   Previous page
@@ -206,7 +249,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
               </span>
               {model.page.number < last ? (
                 <Link
-                  href={href("all", { sector: query.sector, page: model.page.number + 1 })}
+                  href={withSize("all", { sector: query.sector, page: model.page.number + 1 })}
                   className="text-accent underline"
                 >
                   Next page

@@ -44,7 +44,13 @@ describe("a real night of batch 2b in full mode (M8 T10)", () => {
   it("opens the first cohorts for the next session, once", async () => {
     const db = await world();
     const params = testParams();
-    const r = await signalsDay(db, { market: "AU", d: D, now: NOW, params });
+    const r = await signalsDay(db, {
+      withLeverage: true, // D-191: the full engine, sleeve included
+      market: "AU",
+      d: D,
+      now: NOW,
+      params,
+    });
     expect(["success", "degraded"]).toContain(r.status);
 
     // default controls per family (20): 12 E + C1 + 6 x 20 C2 + 6 x 20 C3
@@ -76,10 +82,17 @@ describe("a real night of batch 2b in full mode (M8 T10)", () => {
 
     // a second identical run opens nothing and writes no engine row (only a new run_record)
     const before = await one(db, COUNTS);
-    const again = await signalsDay(db, { market: "AU", d: D, now: NOW, params });
+    const again = await signalsDay(db, {
+      withLeverage: true, // D-191: the full engine, sleeve included
+      market: "AU",
+      d: D,
+      now: NOW,
+      params,
+    });
     expect(again.status).toBe(r.status); // a degraded night is not a success, so it really re-runs
     expect(again.stats.signals + again.stats.orders).toBe(0);
     const stage = await ensureCohorts(db, {
+      withLeverage: true,
       market: "AU",
       d: D,
       controlsPerFamily: params.replay.c2LivePerFamily,

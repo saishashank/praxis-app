@@ -19,7 +19,12 @@
 import { FAMILIES, type Family } from "@/lib/agents/schema";
 import type { AgentParams } from "@/lib/agents/params";
 import { agentParamsSha } from "@/lib/agents/params";
-import { canonicalJson, sha256Hex } from "@/lib/arena/cohort";
+import {
+  buildExecutionRegistry,
+  canonicalJson,
+  sha256Hex,
+  unleveredExecutionIds,
+} from "@/lib/arena/cohort";
 import { bucketBpsFor } from "@/lib/arena/slippage";
 import { CONFIG_KEYS } from "@/lib/config/keys";
 import { gzipDeterministic, sha256Hex as fileSha } from "@/lib/data/backfill/rules.mjs";
@@ -333,7 +338,10 @@ export function runReplay(o: RunOptions): ReplayOutput {
     } else {
       if (o.snapshotBytes === null) throw new RangeError("this mode needs a snapshot");
       const snap = loadSnapshot(o.snapshotBytes);
-      const world = tm.stage("world", () => new SnapshotWorld(snap, { params }));
+      const world = tm.stage(
+        "world",
+        () => new SnapshotWorld(snap, { params, tierSource: "bars" }),
+      );
       sessions = world.sessions.length;
       const first = world.sessions[0] ?? "";
       const lastIdx = world.sessions.length - 1;
@@ -350,6 +358,7 @@ export function runReplay(o: RunOptions): ReplayOutput {
         replayCohorts(world, {
           params,
           from: fromD > first ? fromD : undefined,
+          executions: unleveredExecutionIds(buildExecutionRegistry()), // D-191: no leverage
           progress: () => {
             if (tm.elapsed() > budget) throw new OverBudget("cohorts");
           },
@@ -506,7 +515,7 @@ function runChecks(
     } else {
       const world = tm.stage(
         "world",
-        () => new SnapshotWorld(loadSnapshot(o.snapshotBytes!), { params }),
+        () => new SnapshotWorld(loadSnapshot(o.snapshotBytes!), { params, tierSource: "bars" }),
       );
       batch = tm.stage("null", () => {
         // q so the expected row count matches F1's measured rate on the real snapshot.

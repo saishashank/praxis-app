@@ -206,6 +206,8 @@ describe("nightly evaluation (batch 2b)", () => {
 
   it("is idempotent: a finished night is not run again; re-writing a night's rows adds none", async () => {
     const again = await signalsDay(red.db, {
+      withLeverage: true, // D-191: the full engine, sleeve included
+
       market: MARKET,
       d: d(302),
       replay: true,

@@ -120,7 +120,7 @@ export async function runLearning(o: LearningRunOptions): Promise<LearningOutput
       f(need());
   const forward: StageFn = async () => {
     const snap = loadSnapshot(o.snapshotBytes);
-    const world = new SnapshotWorld(snap, { params: o.params });
+    const world = new SnapshotWorld(snap, { params: o.params, tierSource: "bars" });
     const set = await loadVersionSet(o.db, market, []);
     const live = liveParams(o.params, set);
     const ruleVersions: Partial<Record<Family, string>> = {};

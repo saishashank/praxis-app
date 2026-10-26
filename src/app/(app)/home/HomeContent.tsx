@@ -65,42 +65,53 @@ export function daySentence(v: HomeView): string {
   return parts.join(" ");
 }
 
+/** D-192: one tile per strategy, each with its own pretend money; nothing is added across them. */
 function SummaryCard({ v }: { v: HomeView }) {
   const s = v.summary;
   return (
-    <Card title="Pretend value today" aria-label="Pretend value today">
-      <dl className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
-        <div className="min-w-0">
-          <dt className="text-xs text-text-muted">Total value (AUD)</dt>
-          <dd className="mt-1 text-2xl font-semibold">
-            {s.value ? <Money micro={s.value.micro} /> : <NotMeasured />}
-          </dd>
-        </div>
-        <div className="min-w-0">
-          <dt className="text-xs text-text-muted">Change since the last session</dt>
-          <dd className="mt-1 text-lg font-semibold">
-            {s.dayChange ? (
-              <span className="flex flex-wrap items-baseline gap-2">
-                <GainLoss value={s.dayChange.micro}>
-                  {formatMicro(s.dayChange.micro, { sign: "always" })}
-                </GainLoss>
-                {s.dayChangePpm !== null ? (
-                  <span className="text-sm text-text-muted">
-                    {formatPpm(s.dayChangePpm, { sign: "always" })}
-                  </span>
-                ) : null}
-              </span>
-            ) : (
-              <NotMeasured />
-            )}
-          </dd>
-        </div>
-      </dl>
+    <Card title="Strategies today" aria-label="Strategies today">
+      {s.tiles.length === 0 ? (
+        <p className="text-sm text-text-muted">No strategy is running yet.</p>
+      ) : (
+        <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 min-[480px]:grid-cols-2 xl:grid-cols-3">
+          {s.tiles.map((t) => (
+            <li
+              key={`${t.id}-${t.startD}`}
+              className="min-w-0 rounded-lg border border-border p-3"
+              data-strategy-tile={t.id}
+            >
+              <p className="m-0 truncate text-sm font-semibold">{t.name}</p>
+              <p className="m-0 mt-1 text-xl font-semibold">
+                <Money micro={t.value.micro} />
+              </p>
+              <p className="m-0 mt-1 text-xs text-text-muted">
+                Started with <Money micro={t.seed.micro} /> on {formatDate(t.startD)}
+              </p>
+              <p className="m-0 mt-1 text-sm">
+                <GainLoss value={t.sinceStart.micro}>
+                  {`${formatMicro(t.sinceStart.micro, { sign: "always" })}${
+                    t.sinceStartPpm !== null
+                      ? ` (${formatPpm(t.sinceStartPpm, { sign: "always" })})`
+                      : ""
+                  }`}
+                </GainLoss>{" "}
+                <span className="text-text-muted">since the start</span>
+              </p>
+              {t.dayChange ? (
+                <p className="m-0 mt-1 text-xs text-text-muted">
+                  Last session:{" "}
+                  <GainLoss value={t.dayChange.micro}>
+                    {formatMicro(t.dayChange.micro, { sign: "always" })}
+                  </GainLoss>
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
       <p className="mt-2 text-xs text-text-muted">
-        {s.strategies > 0
-          ? `${s.strategies} ${plural(s.strategies, "strategy", "strategies")}${s.d ? `, as of ${formatDate(s.d)}` : ""}. `
-          : ""}
-        Amounts are per currency and are never added across currencies.
+        {s.d ? `As of ${formatDate(s.d)}. ` : ""}Each strategy invests its own pretend money, with
+        no borrowing. The amounts are never added together.
       </p>
       <p className="mt-1">
         <SimulatedLabel />

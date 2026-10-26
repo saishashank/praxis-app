@@ -1,0 +1,97 @@
+# ASX announcements and listed companies (D-194). asx.com.au blocks the Cloudflare Worker
+# (asx_block_trip, 403/challenge) but answers GitHub's runners, so the fetch runs here: the Worker's
+# clock dispatches this file every 30 minutes on trading days, and the post-deploy run dispatches it
+# once with `history` to fill each company's latest announcements. workflow_dispatch ONLY, no
+# `schedule:` (PLT-015). Same security pattern as backfill-prices.yml: the ASX fetch step has NO
+# secrets and no database access; secrets are referenced ONLY in `env:` of the store step.
+# SEC-108 c: the job checks out the latest approved deploy-production commit, not the release
+# head. `deployment: false` gives the job the environment's secrets without creating a deployment
+# record, so a data run never counts as an approved deploy (D-023).
+# SEC-110: the fetched files stay on the runner; nothing is uploaded or cached. Logs carry counts
+# and statuses only. DAT-122: one request at a time with spacing, an identifying User-Agent,
+# metadata and links only.
+name: ASX fetch (AU)
+
+on:
+  workflow_dispatch:
+    inputs:
+      history:
+        description: Also fetch every listed company's latest announcements (a one-off fill)
+        type: boolean
+        required: false
+        default: false
+
+  # D-195: once after every successful production deploy, so a release fills its data at once
+  workflow_run:
+    workflows: ["Deploy production"]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  production:
+    # dispatched on release, or the run after a successful production deploy (D-195)
+    if: github.ref == 'refs/heads/release' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'release')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      deployments: read
+    # PLT-076: one run at a time, never cancelling one in progress. Inserts are first-seen only.
+    concurrency:
+      group: asx-fetch
+      cancel-in-progress: false
+    environment:
+      name: production
+      deployment: false
+    steps:
+      # SEC-108 c: these two steps run only the tiny reviewed script, with github.token alone.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ci-tools
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - name: Find approved commit
+        id: approved
+        run: node ci-tools/scripts/ci/approved-commit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.approved.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      # No secrets here: this step only talks to the ASX and writes the files on the runner.
+      - name: Fetch from the ASX (no secrets)
+        run: node scripts/asx/fetch.mjs --out-dir asx $HISTORY_FLAG
+        env:
+          HISTORY_FLAG: ${{ (inputs.history || github.event_name == 'workflow_run') && '--history' || '' }}
+          ASX_USER_AGENT: ${{ vars.ASX_USER_AGENT }}
+      - name: Store announcements and the company list
+        run: node scripts/asx/ingest.mjs --dir asx
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+
+  # The staging Worker dispatches `ref: main`, so this file needs a job that is selected there.
+  # Nothing runs on staging for this workflow: staging never contacts asx.com.au (DAT-122, NFR-040).
+  # The job references no secret and checks out nothing; it only prints a notice.
+  staging:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    concurrency:
+      group: asx-fetch-staging
+      cancel-in-progress: false
+    environment:
+      name: staging
+      deployment: false
+    env:
+      PRAXIS_ENV: staging
+    steps:
+      - name: Nothing to run on staging
+        run: echo "asx-fetch has no staging variant (DAT-122, NFR-040); nothing was run."

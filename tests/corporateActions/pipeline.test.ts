@@ -4,7 +4,12 @@
 // Synthetic ZZ* codes only (SEC-110).
 import type { Client } from "@libsql/client";
 import { afterEach, describe, expect, it } from "vitest";
-import { noopCorporateActionsHook, runBatch1, type RunOptions } from "@/lib/data/pipeline/batch1";
+import {
+  carryTiers,
+  noopCorporateActionsHook,
+  runBatch1,
+  type RunOptions,
+} from "@/lib/data/pipeline/batch1";
 import { RULES } from "@/lib/data/quality/rules.mjs";
 import { cleanupTempDbs } from "../db/helpers";
 import { at1730, bar, barsFor, count, pipelineDb, runs, text } from "../pipeline/helpers";
@@ -20,6 +25,7 @@ const go = (db: Client, date: string, bars: unknown[], o: Partial<RunOptions> = 
     nowMs: () => at1730(date),
     barsText: text(bars),
     commitSha: "a".repeat(40),
+    tiersHook: carryTiers, // tiering (D-189) has its own tests (tests/universe/tiers.test.ts)
     ...o,
   });
 const details = (r: Record<string, unknown>) => JSON.parse(String(r.details_json));

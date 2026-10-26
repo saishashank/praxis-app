@@ -155,6 +155,7 @@ describe("slot table (docs/M2_design.md section 3)", () => {
     expect([...DISPATCHABLE_WORKFLOWS].sort()).toEqual([
       "arena-close.yml",
       "arena-signals.yml",
+      "asx-fetch.yml", // D-194
       "backfill-history.yml",
       "backfill-prices.yml",
       "backup.yml",

@@ -45,7 +45,7 @@ describe("empty state (data-only mode)", () => {
       expect(home.state).toBe("empty");
       expect(home.data.picks.items).toEqual([]);
       expect(home.data.ideas.items).toEqual([]);
-      expect(home.data.summary.value).toBeNull();
+      expect(home.data.summary.tiles).toEqual([]);
       expect((await loadIdeas(d)).data.groups).toEqual([]);
       const s = await loadStrategies(d);
       expect(s.state).toBe("empty");
@@ -83,9 +83,16 @@ describe("Home", () => {
     expect(h.state).toBe("ok");
     expect(h.masked).toBe(false);
     const d = h.data;
-    expect(d.summary.value).toEqual({ micro: 940_000_000, currency: "AUD", simulated: true });
-    expect(d.summary.dayChange?.micro).toBe(20_000_000 - 5_000_000); // E01 +20 M, E02 -5 M
+    // D-192: one tile per strategy, each its own money; nothing is added across strategies (the L
+    // twin E04 runs nothing and is not shown, D-191)
     expect(d.summary.strategies).toBe(2);
+    const [t, t2] = d.summary.tiles;
+    expect(t).toMatchObject({ id: "E01", startD: "2026-10-12" });
+    expect(t!.dayChange?.micro).toBe(20_000_000); // E01 +20 M
+    expect(t2).toMatchObject({ id: "E02", startD: "2026-10-12" });
+    expect(t2!.dayChange?.micro).toBe(-5_000_000); // E02 -5 M
+    expect(t!.value.micro - t!.seed.micro).toBe(t!.sinceStart.micro);
+    expect(t!.value).toMatchObject({ currency: "AUD", simulated: true });
     expect(d.day.regime).toBe("NEUTRAL");
     expect(d.day.quality).toEqual([{ tier: "U1", score: 1, gatePass: true }]);
     expect(d.picks.items).toHaveLength(1);
@@ -121,7 +128,7 @@ describe("Strategies list", () => {
     expect(e01.label).toBe("UNVALIDATED");
     const e02 = s.data.tiles.find((t) => t.execution === "E02")!;
     expect(e02.round).toBe(2);
-    expect(e02.moneyType).toBe("With leverage sleeve");
+    expect(e02.moneyType).toBe("Plain shares"); // D-191: the L twins are not listed
   });
 
   it("puts what needs attention first and orders deterministically", async () => {
@@ -145,7 +152,7 @@ describe("Strategies list", () => {
     expect(two).toBeLessThanOrEqual(14);
     const more = await emptyDbs();
     await seedPopulated(more);
-    for (let i = 3; i <= 12; i += 1) {
+    for (let i = 5; i <= 14; i += 1) {
       const id = `E${String(i).padStart(2, "0")}`;
       await more.main.execute({
         sql: "INSERT INTO execution (id, market, kind, family, variant, rule_version, cost_profile) VALUES (?, 'AU', 'E', 'F3', 'U', 'v1', 'P5')",

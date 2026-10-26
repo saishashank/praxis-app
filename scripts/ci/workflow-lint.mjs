@@ -57,6 +57,7 @@ export const PIPELINE_WORKFLOWS = [
   "backfill-history.yml",
   "backfill-prices.yml",
   "backfill-index.yml",
+  "asx-fetch.yml",
   "backup.yml",
   "ingest-batch1.yml",
   "kb-archive.yml",

@@ -779,7 +779,8 @@ export async function loadLeaderEvidence(
 
   const zeroEdge: Record<string, ZeroEdgeView> = {};
   const ex = await deps.mainDb.execute(
-    "SELECT id, family, rule_version FROM execution WHERE kind = 'E' ORDER BY id",
+    // D-191: no leverage: the L twins are not shown
+    "SELECT id, family, rule_version FROM execution WHERE kind = 'E' AND variant = 'U' ORDER BY id",
   );
   for (const r of ex.rows) {
     const z = await deps.mainDb.execute({

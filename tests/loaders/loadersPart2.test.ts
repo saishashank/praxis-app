@@ -193,7 +193,14 @@ describe("populated loaders", () => {
 
   describe("market", () => {
     it("validates the query", () => {
-      expect(parseMarketQuery(sp(""))).toEqual({ tab: "movers", sector: undefined, page: 1 });
+      expect(parseMarketQuery(sp(""))).toEqual({
+        tab: "movers",
+        sector: undefined,
+        page: 1,
+        size: "large",
+      });
+      expect(parseMarketQuery(sp("size=mid"))?.size).toBe("mid");
+      expect(parseMarketQuery(sp("size=huge"))).toBeNull();
       expect(parseMarketQuery(sp("tab=all&page=2&sector=Technology"))?.page).toBe(2);
       for (const bad of ["tab=nope", "page=0", "page=x", `sector=${"a".repeat(61)}`]) {
         expect(parseMarketQuery(sp(bad))).toBeNull();
@@ -277,7 +284,8 @@ describe("populated loaders", () => {
       expect(own).toMatchObject({
         stock: "ZZUP",
         name: "Zed Upward Holdings",
-        summary: "Summary not written yet",
+        summary:
+          "A description of the business needs a company-profile source the app does not have yet.",
       });
       expect(own?.announcements.length).toBe(1);
       expect(await loadOverview(envOf(w, "owner"), "bad code")).toBeNull();

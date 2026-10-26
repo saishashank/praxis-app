@@ -24,7 +24,7 @@ const action = (code: string, type: string, factor: number, id: number, exDate =
   factor,
 });
 
-function world(opts: { indexCode?: string } = {}) {
+function world(opts: { indexCode?: string; tierSource?: "bars" | "snapshot"; extra?: boolean } = {}) {
   const calendar = [
     ...days.map((d, i) => ({ d, kind: i === 3 ? "early_close" : "session", close_time: null, confirmed: 1 })),
     { d: "2026-04-25", kind: "holiday", close_time: null, confirmed: 1 },
@@ -59,13 +59,19 @@ function world(opts: { indexCode?: string } = {}) {
     ...series("ZZA", days, 3, 500_000),
     ...series("ZZB", days.slice(10), 1, 900_000),
     ...series("ZZC", days.slice(20), 2, 400_000),
+    // ZZD trades every day but only ~A$10 a day: below every ARN-010 floor (D-189)
+    ...(opts.extra ? series("ZZD", days, 1, 10) : []),
   ];
   const snap = buildSnapshot({
     from: days[0]!,
     to: last,
     inputs: { bars, calendar, universe, index_bars, corporate_actions, announcements },
   });
-  return new SnapshotWorld(loadSnapshot(snap.bytes), { params, indexCode: opts.indexCode });
+  return new SnapshotWorld(loadSnapshot(snap.bytes), {
+    params,
+    indexCode: opts.indexCode,
+    tierSource: opts.tierSource,
+  });
 }
 
 describe("ratioPayload", () => {
@@ -256,5 +262,32 @@ describe("random-signal null on a snapshot world", () => {
     expect(matchedQ(5, -1)).toBe(0);
     expect(matchedQ(5, 50)).toBe(0.1);
     expect(matchedQ(80, 50)).toBe(1);
+  });
+});
+
+describe("SnapshotWorld with tiers from bars (D-189, ARN-010)", () => {
+  const w = world({ tierSource: "bars", extra: true });
+  const tierOf = (d: string, code: string) =>
+    w.familyInputs(d).codes.find((c) => c.code === code)?.tier ?? null;
+
+  it("computes each session's tier from the bars before it, not from the universe rows", () => {
+    // ZZA trades ~A$1.5M a day at ~A$3: U1 once it has 60 sessions; before that U3 (not 12 months listed)
+    expect(tierOf(last, "ZZA")).toBe("U1");
+    expect(tierOf(days[30]!, "ZZA")).toBe("U3");
+    // ZZB's universe rows say U2; its bars say otherwise: its price drifts up from A$1 at 900,000
+    // shares a day, so by the end its median traded value passes A$1M (U1)
+    expect(tierOf(last, "ZZB")).toBe("U1");
+  });
+
+  it("hides a code below the U3 floor from the families and the control pool, never from positions", () => {
+    expect(tierOf(last, "ZZD")).toBeNull();
+    expect(w.controlUniverse(last).some((p) => p.code === "ZZD")).toBe(false);
+    expect(w.positionFacts("ZZD", last)).not.toBeNull();
+  });
+
+  it("the snapshot tier source (the default) still reads the universe rows", () => {
+    const s = world({ extra: true });
+    expect(s.familyInputs(last).codes.find((c) => c.code === "ZZB")?.tier).toBe("U2");
+    expect(s.familyInputs(last).codes.some((c) => c.code === "ZZD")).toBe(true);
   });
 });

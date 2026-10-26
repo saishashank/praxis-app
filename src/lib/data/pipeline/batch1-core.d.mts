@@ -107,6 +107,8 @@ export type RunOptions = {
   writeCap?: number;
   refetchPct?: number;
   qualityHook?: QualityHook;
+  /** D-189: stage 2 tiers; default `computeTiers` (ARN-010 from stored bars). */
+  tiersHook?: TiersHook;
   corporateActionsHook?: CorporateActionsHook;
   /** Structured announcement / vendor candidates for a date (none exist in the pipeline yet). */
   corporateActionCandidates?: (d: string) => object[];
@@ -136,3 +138,16 @@ export type RunResult = {
   dates: DateResult[];
 };
 export function runBatch1(db: Client, o: RunOptions): Promise<RunResult>;
+
+/** D-189: a code's tier, snapshot status and ADV (A$) for the night. */
+export type TierRow = { tier: string; status: string; adv: number | null };
+/** What a tiers hook reads: the database, the market and the calendar rows of the plan. */
+export type TiersContext = { db: Client; market: string; calRows: readonly CalendarLike[] };
+export type TiersHook = (
+  ctx: TiersContext,
+  io: { read: number; written: number },
+  d: string,
+  universe: string[],
+) => Promise<Map<string, TierRow>>;
+export const computeTiers: TiersHook;
+export const carryTiers: TiersHook;
