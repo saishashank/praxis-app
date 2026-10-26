@@ -30,6 +30,30 @@ beforeAll(async () => {
       [d, c, c + 0.05, c - 0.05, c, `${d}T06:00:00.000Z`, `${d}T06:05:00.000Z`],
     );
   }
+  // D-193: ZZBIG trades A$2M a day at A$10 for 210 sessions: Large (ARN-010 U1). The other codes
+  // trade a few thousand dollars a day, below every floor, so the size groups leave them out.
+  await run(
+    "INSERT INTO instrument (market, code, name, sector) VALUES ('AU','ZZBIG','Zed Big Ltd','Materials')",
+  );
+  await w.main.batch(
+    Array.from({ length: 211 }, (_, n) => {
+      const d = n === 0 ? D : before(n);
+      const c = n === 0 ? 10.2 : 10;
+      return {
+        sql: `INSERT INTO price_bar (market, code, d, o, h, l, c, volume, source, published_at, ingested_at)
+              VALUES ('AU','ZZBIG', ?, ?, ?, ?, ?, 200000, 'test', ?, ?)`,
+        args: [d, c, c, c, c, `${d}T06:00:00.000Z`, `${d}T06:05:00.000Z`],
+      };
+    }),
+    "write",
+  );
+  // and on every other date of the world, so its 60-session window is full
+  await run(
+    `INSERT INTO price_bar (market, code, d, o, h, l, c, volume, source, published_at, ingested_at)
+     SELECT 'AU', 'ZZBIG', d, 10, 10, 10, 10, 200000, 'test', d || 'T06:00:00.000Z', d || 'T06:05:00.000Z'
+     FROM (SELECT DISTINCT d FROM price_bar WHERE market = 'AU')
+     WHERE d NOT IN (SELECT d FROM price_bar WHERE code = 'ZZBIG')`,
+  );
   await run(
     `INSERT INTO universe_snapshot (market, d, code, status, tier) VALUES
        ('AU', ?, 'ZZUP', 'active', 'U1'), ('AU', ?, 'ZZDN', 'active', 'U2')`,
@@ -193,15 +217,21 @@ describe("the index strip", () => {
 });
 
 describe("the Market list additions", () => {
-  it("lists the most traded and adds size group and volume against usual", async () => {
+  it("D-193: one size group at a time (Large by default), from the bars, without penny stocks", async () => {
     const m = await loadMarket(envOf(w, "owner"), { tab: "movers", page: 1 });
-    expect(m.traded.map((r) => r.stock)).toEqual(["ZZUP", "ZZDN", "ZZOTH"]);
-    const up = m.up.find((r) => r.stock === "ZZUP")!;
-    expect(up.sizeGroup).toBe("Large");
-    expect(up.volumeVsUsualPpm).toBe(1_200_000);
-    const all = await loadMarket(envOf(w, "owner"), { tab: "all", page: 1 });
-    expect(all.rows.find((r) => r.stock === "ZZDN")!.sizeGroup).toBe("Mid");
-    expect(all.rows.find((r) => r.stock === "ZZOTH")!.sizeGroup).toBeNull();
+    expect(m).toMatchObject({ size: "large", sized: true });
+    expect(m.traded.map((r) => r.stock)).toEqual(["ZZBIG"]);
+    const big = m.up.find((r) => r.stock === "ZZBIG")!;
+    expect(big.sizeGroup).toBe("Large");
+    expect(big.volumeVsUsualPpm).toBe(1_000_000); // as usual
+    // the barely traded codes are in no group
+    for (const size of ["large", "mid", "small"] as const) {
+      const all = await loadMarket(envOf(w, "owner"), { tab: "all", page: 1, size });
+      expect(all.rows.map((r) => r.stock).filter((c) => c !== "ZZBIG")).toEqual([]);
+    }
+    expect(
+      (await loadMarket(envOf(w, "owner"), { tab: "all", page: 1, size: "mid" })).rows,
+    ).toEqual([]);
   });
 
   it("gives a masked user the derived fields only, as Stock A and Stock B", async () => {
@@ -216,6 +246,14 @@ describe("the Market list additions", () => {
       expect(r.name).toBeNull();
     }
     expect(findLeaks(m, CODES, NAMES)).toEqual([]);
+  });
+
+  it("D-196: the overview carries a rules-based SWOT once a company has a year of history", async () => {
+    const big = await loadOverview(envOf(w, "owner"), "ZZBIG");
+    expect(big!.swot!.strengths).toContain("Heavily traded: easy to buy and sell (Large).");
+    expect(big!.notice).toMatch(/fixed rules/);
+    // ZZUP's 212 bars are enough; ZZOTH has only a few, so it says so instead
+    expect((await loadOverview(envOf(w, "owner"), "ZZOTH"))!.swot).toBeNull();
   });
 
   it("the overview of the same company agrees with the company page", async () => {

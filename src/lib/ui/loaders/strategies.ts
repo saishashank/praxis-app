@@ -189,7 +189,8 @@ export async function loadStrategies(
   const v = await openViewer(deps);
   const sort = parseSort(params.sort);
   const execs = await deps.mainDb.execute(
-    "SELECT id, family, variant FROM execution WHERE kind = 'E' ORDER BY id",
+    // D-191: no leverage: the L twins are not shown
+    "SELECT id, family, variant FROM execution WHERE kind = 'E' AND variant = 'U' ORDER BY id",
   );
   const ids = execs.rows.map((r) => str(r.id));
   const names = await strategyNames(deps.mainDb);
@@ -606,6 +607,8 @@ export async function loadLeaderboard(
     `SELECT e.id, e.kind, e.family, e.variant, c.terminal_kind AS tk, COUNT(*) AS n,
             SUM(c.outcome_micro) AS out_sum, SUM(c.seed_micro) AS seed_sum
      FROM cohort c JOIN execution e ON e.id = c.execution_id
+     -- D-191: no leverage: the L twins and the leveraged C3 controls are not ranked
+     WHERE NOT ((e.kind = 'E' AND e.variant = 'L') OR e.kind = 'C3')
      GROUP BY e.id, e.kind, e.family, e.variant, c.terminal_kind ORDER BY e.id, c.terminal_kind`,
   );
   type Acc = {

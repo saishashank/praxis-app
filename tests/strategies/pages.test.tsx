@@ -328,6 +328,10 @@ describe("one strategy", () => {
     expect(
       within(rounds).getAllByText(/Hit the loss limit, Sun 20 Sep 2026/).length,
     ).toBeGreaterThan(0);
+    // D-191: the L twin (E04) runs nothing and is listed nowhere; its own page still explains the
+    // hypothetical sleeve
+    cleanup();
+    await one("E04");
     const sleeve = screen.getByRole("heading", { name: "Leverage sleeve" }).closest("section")!;
     expect(within(sleeve).getByText(/Hypothetical leverage/)).toBeInTheDocument();
     expect(
@@ -466,7 +470,7 @@ describe("the leaderboard", () => {
     expect(within(group).getByText(/listed A to Z and not put in order/)).toBeInTheDocument();
     const table = within(group).getAllByRole("table")[0]!;
     const names = [...table.querySelectorAll(":scope > tbody > tr > th")].map((c) => c.textContent);
-    expect(names).toEqual(["Follow the trend", "Good company, good news (with leverage sleeve)"]);
+    expect(names).toEqual(["Follow the trend", "Good company, good news"]); // D-191: no L twins
     // E01 has the higher estimate, E02 sorts later by name: the order is by name only.
     expect(names).toEqual([...names].sort());
   });

@@ -13,6 +13,7 @@ import {
   noopQualityHook,
   type QualityHookContext,
   type RunOptions,
+  carryTiers,
 } from "@/lib/data/pipeline/batch1";
 import { cleanupTempDbs } from "../db/helpers";
 import { at1730, bar, barsFor, CODES, count, pipelineDb, runs, tableCounts, text } from "./helpers";
@@ -32,6 +33,7 @@ const go = (db: Client, date: string, rows: unknown[] | null, o: Partial<RunOpti
     barsText: rows === null ? null : text(rows),
     commitSha: "a".repeat(40),
     qualityHook: noopQualityHook, // the quality engine has its own tests (tests/quality)
+    tiersHook: carryTiers, // tiering (D-189) has its own tests (tests/universe/tiers.test.ts)
     ...o,
   });
 

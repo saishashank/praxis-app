@@ -31,6 +31,7 @@ import {
 import { corporateActionsHook } from "../corporateActions/engine.mjs";
 import { qualityHook, readQualityConfig } from "../quality/engine.mjs";
 import { RULES, TIERS } from "../quality/rules.mjs";
+import { TIER_RULES, assignTiers, medianMicro } from "../universe/tiers.mjs";
 import { INDEX_YAHOO_SYMBOL, parseIndexText } from "../index/indexBars.mjs";
 import { inputsStage } from "../index/inputsStage.mjs";
 import {
@@ -302,6 +303,7 @@ export async function prepareBatch1(db, o) {
  * @property {number} [writeCap]  decision 13 cap on catch-up writes per UTC month
  * @property {number} [refetchPct]
  * @property {(ctx: any) => Promise<{ flags?: number } | void>} [qualityHook]
+ * @property {(ctx: any, io: any, d: string, universe: string[]) => Promise<Map<string, { tier: string, status: string, adv: number | null }>>} [tiersHook] stage 2 tiers (D-189)
  * @property {(ctx: any) => Promise<object | void>} [corporateActionsHook] stage 4 (T8)
  * @property {(d: string) => object[]} [corporateActionCandidates] structured candidates for date d
  * @property {(code: string) => boolean} [corporateActionRelevant] held or candidate codes (DAT-221)
@@ -755,29 +757,115 @@ async function processDate(ctx, item, isTarget) {
   }
 }
 
-/** Stage 2 write: carry tier, market cap and ADV forward from the last snapshot (T7/T9 refine). */
+/**
+ * The ARN-010 tiers of the night (D-189), from the stored bars of the last 60 sessions BEFORE `d`
+ * (tonight's bars are stored in stage 3, so the tier is known before the close it is used on). A
+ * code below the U3 floor gets status `below_floor`, which no family reads. The default tiers hook.
+ * @returns {Promise<Map<string, { tier: string, status: string, adv: number | null }>>}
+ */
+export async function computeTiers(ctx, io, d, universe) {
+  const { db, market } = ctx;
+  let from = d;
+  for (let i = 0; i < TIER_RULES.windowSessions; i += 1) {
+    try {
+      from = previousTradingDay(from, ctx.calRows);
+    } catch {
+      break; // the calendar rows end: a shorter window, never an invented one
+    }
+  }
+  const bars = await sel(
+    db,
+    io,
+    `SELECT code, d, c, volume FROM price_bar WHERE market = ? AND d >= ? AND d < ? ORDER BY code, d`,
+    [market, from, d],
+  );
+  const traded = new Map();
+  const last = new Map();
+  for (const b of bars) {
+    const code = String(b.code);
+    const price = BigInt(Math.round(Number(b.c) * 1e6)); // money-float-ok: vendor price to micro
+    let list = traded.get(code);
+    if (list === undefined) traded.set(code, (list = []));
+    list.push(price * BigInt(Number(b.volume))); // money-float-ok: SQL integer column
+    last.set(code, price);
+  }
+  // listing age only matters for U2 candidates: one primary-key probe each
+  const listed = new Map();
+  for (const code of universe) {
+    const t = traded.get(code);
+    if (t === undefined || medianMicro(t) < TIER_RULES.u2.advMicro) continue;
+    const first = await sel(
+      db,
+      io,
+      "SELECT d FROM price_bar WHERE market = ? AND code = ? ORDER BY d LIMIT 1",
+      [market, code],
+    );
+    listed.set(code, first.length === 0 ? null : String(first[0].d));
+  }
+  const tiers = assignTiers(
+    universe.map((code) => ({
+      code,
+      priceMicro: last.get(code) ?? 0n,
+      tradedMicro: traded.get(code) ?? [],
+      listedSince: listed.get(code) ?? null,
+      mcapMicro: null,
+    })),
+    d,
+  );
+  const out = new Map();
+  for (const [code, t] of tiers) {
+    out.set(code, {
+      tier: t.tier,
+      status: t.status,
+      adv: t.advMicro === null ? null : Number(t.advMicro / 1_000_000n), // money-float-ok: A$ in a REAL column
+    });
+  }
+  return out;
+}
+
+/**
+ * A tiers hook that carries each code's tier, status and ADV forward from the last snapshot (U3 and
+ * active when there is none): the behaviour before D-189, kept for tests whose subject is not tiering.
+ */
+export async function carryTiers(ctx, io, d, universe) {
+  const prev = await sel(
+    ctx.db,
+    io,
+    `SELECT code, tier, status, adv FROM universe_snapshot
+     WHERE market = ? AND d = (SELECT MAX(d) FROM universe_snapshot WHERE market = ? AND d < ?)`,
+    [ctx.market, ctx.market, d],
+  );
+  const by = new Map(prev.map((r) => [String(r.code), r]));
+  return new Map(
+    universe.map((code) => {
+      const p = by.get(code);
+      return [
+        code,
+        {
+          tier: p ? String(p.tier) : "U3",
+          status: p ? String(p.status) : "active",
+          adv: p?.adv ?? null,
+        },
+      ];
+    }),
+  );
+}
+
+/** Stage 2 write: the night's tiers (the tiers hook, default ARN-010) and the carried market cap. */
 async function writeSnapshot(ctx, io, d, universe) {
   const { db, market } = ctx;
   const prev = await sel(
     db,
     io,
-    `SELECT code, tier, mcap_est, adv FROM universe_snapshot
+    `SELECT code, mcap_est FROM universe_snapshot
      WHERE market = ? AND d = (SELECT MAX(d) FROM universe_snapshot WHERE market = ? AND d < ?)`,
     [market, market, d],
   );
-  const by = new Map(prev.map((r) => [String(r.code), r]));
+  const mcap = new Map(prev.map((r) => [String(r.code), r.mcap_est ?? null]));
+  const tiers = await (ctx.o.tiersHook ?? computeTiers)(ctx, io, d, universe);
   const rows = universe.map((code) => {
-    const p = by.get(code);
-    return [
-      market,
-      d,
-      code,
-      "active",
-      p ? String(p.tier) : "U3",
-      p?.mcap_est ?? null,
-      p?.adv ?? null,
-      0,
-    ];
+    const t = tiers.get(code);
+    return [market, d, code, t.status, t.tier, mcap.get(code) ?? null, t.adv, 0];
   });
   const n = await insertRows(
     db,

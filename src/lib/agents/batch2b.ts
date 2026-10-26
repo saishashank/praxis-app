@@ -40,6 +40,7 @@ import { lockStatus, sleeveEligibility, sleeveMarginMicro } from "@/lib/arena/sl
 import { loadSleeveStates, loadSleeveTrades } from "@/lib/arena/sleeveWriter";
 import {
   canonicalJson,
+  carriesSleeve,
   createPrng,
   deriveRngSeed,
   parseCohortParams,
@@ -152,6 +153,11 @@ export type SignalsOptions = {
   readonly llm?: LlmRouter;
   /** Receives every red thesis-breaker (M5 T7); default: writes the `alert` row when the table exists. */
   readonly breakerSink?: BreakerAlertSink;
+  /**
+   * D-191: the leverage-sleeve executions (L twins, C3) trade too. Off in every live and replay
+   * path (the Owner runs no leverage); the sleeve engine's own tests switch it on.
+   */
+  readonly withLeverage?: boolean;
 };
 
 export type SignalsStatus = "success" | "degraded" | "failed" | "skipped" | "already_done";
@@ -1438,6 +1444,7 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
             calendar,
             masterSeed: o.masterSeed,
             controlsPerFamily: baseParams.replay.c2LivePerFamily,
+            withLeverage: o.withLeverage,
           });
     const executionList = await loadExecutions(db);
     const versionSet = await loadVersionSet(db, o.market, executionList);
@@ -1504,7 +1511,9 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       );
     for (const cohort of live) {
       const exec = executions.get(cohort.executionId);
+      // D-191: no leverage: the L twins make no new entry (exits still run in the exit stage)
       if (exec === undefined || exec.kind !== "E" || exec.family === null) continue;
+      if (o.withLeverage !== true && carriesSleeve(exec)) continue;
       const books = await booksOf(db, cohort, calendar, o.d);
       if (books === null) continue;
       stats.cohorts += 1;
@@ -1524,7 +1533,8 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       if (
         exec === undefined ||
         (exec.kind !== "C2" && exec.kind !== "C3") ||
-        exec.family === null
+        exec.family === null ||
+        (o.withLeverage !== true && carriesSleeve(exec)) // D-191: the C3 controls follow the L twins out
       ) {
         continue;
       }

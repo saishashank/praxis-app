@@ -246,7 +246,7 @@ describe("strategy extras", () => {
   });
 
   it("reads the sleeve at 10 times and at 5 times, labelled hypothetical, for the L version only", async () => {
-    const l = await loadStrategyExtras(deps(w, OWNER), "E02", []);
+    const l = await loadStrategyExtras(deps(w, OWNER), "E04", []); // the L twin (D-191: unlisted)
     expect(l.sleeve?.hypotheticalLabel).toBe("hypothetical leverage");
     expect(l.sleeve?.levered).toMatchObject({
       leverage: 10,

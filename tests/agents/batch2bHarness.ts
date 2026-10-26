@@ -220,6 +220,8 @@ export async function runNights(
     masterSeed: MASTER_SEED,
     afterClose: async (d, closed) => {
       const decided = await signalsDay(db, {
+        withLeverage: true, // D-191: the full engine, sleeve included
+
         market: MARKET,
         d,
         replay: true,

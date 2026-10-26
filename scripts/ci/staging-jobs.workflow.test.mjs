@@ -34,6 +34,7 @@ const NOTICE = [
   "backfill-history",
   "backfill-prices",
   "backfill-index",
+  "asx-fetch",
 ];
 
 test("every workflow with a production job is in the locked list, and the lists are complete", () => {
@@ -45,6 +46,14 @@ test("every workflow with a production job is in the locked list, and the lists 
   assert.deepEqual([...withProduction].sort(), [...LOCKED_WORKFLOWS].sort());
   assert.deepEqual([...FULL, ...NOTICE, "backup"].sort(), [...LOCKED_WORKFLOWS].sort());
 });
+
+/**
+ * D-195: these also run once after a successful production deploy (workflow_run on "Deploy
+ * production"), with exactly this production guard; their staging job never runs on it.
+ */
+const POST_DEPLOY = ["asx-fetch", "replay"];
+const POST_DEPLOY_IF =
+  "github.ref == 'refs/heads/release' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'release')";
 
 for (const name of LOCKED_WORKFLOWS) {
   const wf = load(name);
@@ -59,14 +68,30 @@ for (const name of LOCKED_WORKFLOWS) {
 
   test(`${name}: trigger stays workflow_dispatch only; no schedule, push or pull request`, () => {
     assert.deepEqual(wf.permissions, {});
-    assert.doesNotMatch(
-      text(name),
-      /^\s*(schedule|push|pull_request\w*|workflow_run|repository_dispatch):/m,
-    );
+    if (POST_DEPLOY.includes(name)) {
+      // D-195: plus exactly one run after a successful production deploy, with this guard
+      assert.deepEqual(Object.keys(wf.on).sort(), ["workflow_dispatch", "workflow_run"]);
+      assert.deepEqual(wf.on.workflow_run, {
+        workflows: ["Deploy production"],
+        types: ["completed"],
+      });
+      assert.equal(wf.jobs.production.if, POST_DEPLOY_IF);
+      assert.doesNotMatch(text(name), /^\s*(schedule|push|pull_request\w*|repository_dispatch):/m);
+    } else {
+      assert.doesNotMatch(
+        text(name),
+        /^\s*(schedule|push|pull_request\w*|workflow_run|repository_dispatch):/m,
+      );
+    }
   });
 
   test(`${name}: staging job shape (main only, environment staging, minimal permissions)`, () => {
-    assert.equal(staging.if, "github.ref == 'refs/heads/main'");
+    assert.equal(
+      staging.if,
+      POST_DEPLOY.includes(name)
+        ? "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'"
+        : "github.ref == 'refs/heads/main'",
+    );
     assert.deepEqual(staging.environment, { name: "staging", deployment: false });
     assert.ok(
       JSON.stringify(staging.permissions) === "{}" ||

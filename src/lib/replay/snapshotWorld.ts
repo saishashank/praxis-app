@@ -19,6 +19,7 @@ import { logReturns, microToFloat, stdevFloat, volumeRatio } from "@/lib/agents/
 import type { AgentParams } from "@/lib/agents/params";
 import { regimeSeries, type RegimeLabel } from "@/lib/agents/regime";
 import type { CorpActionRecord } from "@/lib/arena/corpActions";
+import { assignTiers, TIER_RULES } from "@/lib/data/universe/tiers.mjs";
 import { toMicroFromVendor } from "@/lib/money/micro";
 import { floorRat } from "@/lib/money/round";
 import type { PoolCode } from "./controlLibrary";
@@ -101,6 +102,11 @@ export type SnapshotWorldOptions = {
   readonly market?: string;
   /** Benchmark index code of the regime classifier (default: the first index in the snapshot). */
   readonly indexCode?: string;
+  /**
+   * D-189: "bars" computes the ARN-010 tiers of every session from the bars before it (the replay
+   * runner); "snapshot" (default) reads them from the universe rows (test worlds set them directly).
+   */
+  readonly tierSource?: "bars" | "snapshot";
 };
 
 export class SnapshotWorld implements CohortReplaySource {
@@ -117,6 +123,10 @@ export class SnapshotWorld implements CohortReplaySource {
   private readonly regime = new Map<string, RegimeLabel>();
   private readonly memo = new DayMemo<CodeFacts>();
   private readonly pfMemo = new DayMemo<PositionFacts | null>();
+  private readonly tierDays = new Map<
+    string,
+    ReadonlyMap<string, { tier: Tier; active: boolean }>
+  >();
   private readonly need: number;
   readonly codes: readonly string[];
   /** Announcement days of the snapshot (DAT-125 list input). */
@@ -187,7 +197,56 @@ export class SnapshotWorld implements CohortReplaySource {
     mine.forEach((r, i) => this.regime.set(r.d, res[i]!.state));
   }
 
+  /** D-189: the ARN-010 tiers of session `d` from the bars of the 60 sessions before it. */
+  private tiersAt(d: string): ReadonlyMap<string, { tier: Tier; active: boolean }> {
+    const hit = this.tierDays.get(d);
+    if (hit !== undefined) return hit;
+    const idx = this.index.get(d);
+    const from =
+      idx === undefined ? d : this.sessions[Math.max(0, idx - TIER_RULES.windowSessions)]!;
+    const rows = this.codes.map((code) => {
+      const list = this.bars.get(code)!;
+      // bars strictly before d, from the window start
+      let lo = 0;
+      let hi = list.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (list[mid]!.d < d) lo = mid + 1;
+        else hi = mid;
+      }
+      const traded: bigint[] = [];
+      for (let j = lo - 1; j >= 0 && list[j]!.d >= from; j -= 1) {
+        traded.push(list[j]!.close * list[j]!.volume);
+      }
+      return {
+        code,
+        priceMicro: lo > 0 ? list[lo - 1]!.close : 0n,
+        tradedMicro: traded,
+        listedSince: list.length > 0 ? list[0]!.d : null,
+        mcapMicro: null,
+      };
+    });
+    const out = new Map<string, { tier: Tier; active: boolean }>();
+    for (const [code, t] of assignTiers(rows, d)) {
+      out.set(code, { tier: t.tier as Tier, active: t.status === "active" });
+    }
+    if (this.tierDays.size >= MEMO_SESSIONS) {
+      this.tierDays.delete(this.tierDays.keys().next().value as string);
+    }
+    this.tierDays.set(d, out);
+    return out;
+  }
+
+  /** False for a code below the U3 floor on `d` (bars tier source only): no family sees it. */
+  private activeOn(code: string, d: string): boolean {
+    return this.o.tierSource !== "bars" || (this.tiersAt(d).get(code)?.active ?? false);
+  }
+
   private tierOn(code: string, d: string): { tier: Tier; halted: boolean } {
+    if (this.o.tierSource === "bars") {
+      const row = this.tiers.get(code)?.find((x) => x.d === d);
+      return { tier: this.tiersAt(d).get(code)?.tier ?? "U3", halted: row?.halted === 1 };
+    }
     const list = this.tiers.get(code);
     if (list === undefined) return { tier: "U1", halted: false };
     let lo = 0;
@@ -274,7 +333,9 @@ export class SnapshotWorld implements CohortReplaySource {
       sessions: this.sessions.slice(0, idx + 1),
       sources: { asx: "off", asic: "off" },
       eventCoverage: false,
-      codes: this.tradedOn(d).map(({ code, i }) => this.factsAt(code, i)),
+      codes: this.tradedOn(d)
+        .filter(({ code }) => this.activeOn(code, d))
+        .map(({ code, i }) => this.factsAt(code, i)),
       events: [],
     };
   }
@@ -286,7 +347,8 @@ export class SnapshotWorld implements CohortReplaySource {
   }
 
   controlUniverse(d: string): readonly PoolCode[] {
-    return this.tradedOn(d).map(({ code, i }): PoolCode => {
+    const traded = this.tradedOn(d).filter(({ code }) => this.activeOn(code, d));
+    return traded.map(({ code, i }): PoolCode => {
       const f = this.factsAt(code, i);
       const closes = this.bars
         .get(code)!

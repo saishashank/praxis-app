@@ -127,7 +127,9 @@ describe("GET /api/market/[code]/overview", () => {
     const b = await body(await callOverview("zzup"));
     expect(b).toMatchObject({ stock: "ZZUP", name: "Zed Upward Holdings", sector: "Technology" });
     expect(b.close).toEqual({ micro: "10500000", currency: "AUD", simulated: true });
-    expect(b.summary).toBe("Summary not written yet");
+    expect(b.summary).toBe(
+      "A description of the business needs a company-profile source the app does not have yet.",
+    );
     expect(b.announcements.length).toBeLessThanOrEqual(5);
     expect((await callOverview("NOSUCH")).status).toBe(404);
   });

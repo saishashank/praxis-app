@@ -24,7 +24,7 @@ async function freshDb(mode: string = "full"): Promise<Client> {
 }
 
 const run = (db: Client, d = D) =>
-  ensureCohorts(db, { market: "AU", d, controlsPerFamily: CONTROLS });
+  ensureCohorts(db, { market: "AU", d, controlsPerFamily: CONTROLS, withLeverage: true });
 
 async function count(db: Client, table: string): Promise<number> {
   const rs = await db.execute(`SELECT COUNT(*) AS n FROM ${table}`);
@@ -38,6 +38,21 @@ async function control(db: Client, scope: string, key: string, state: string): P
     args: [scope, key, state],
   });
 }
+
+describe("D-191: no leverage by default", () => {
+  it("opens no cohort for an L twin or a C3 control", async () => {
+    const db = await freshDb();
+    const r = await ensureCohorts(db, { market: "AU", d: D, controlsPerFamily: CONTROLS });
+    expect(r.opened).toBe(19); // 6 U + C1 + 6 x 2 C2
+    const ids = (await db.execute("SELECT execution_id FROM cohort")).rows.map((x) =>
+      String(x.execution_id),
+    );
+    expect(ids.some((e) => e.startsWith("C3-"))).toBe(false);
+    for (const n of [2, 4, 6, 8, 10, 12]) {
+      expect(ids).not.toContain(`E${String(n).padStart(2, "0")}`);
+    }
+  });
+});
 
 describe("ensureCohorts (M8 T10)", () => {
   it("opens the first cohort of every execution and control with the A$600 seed", async () => {

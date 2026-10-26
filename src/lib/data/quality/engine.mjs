@@ -65,17 +65,21 @@ export async function readQualityConfig(db, io = { read: 0, written: 0 }) {
   return qualityConfigFrom(raw);
 }
 
-/** Expected codes for date `d`: the snapshot of `d`, else active instruments with the last known tier. */
+/**
+ * Expected codes for date `d`: the snapshot of `d`, else active instruments with the last known tier.
+ * D-190: only the tradeable universe (status `active`): a code below the ARN-010 floor (D-189) is
+ * in no family's universe, so its bar decides nothing and its absence is not a data fault.
+ */
 async function loadExpected(db, io, market, d) {
   const snap = await sel(
     db,
     io,
-    "SELECT code, tier, halted FROM universe_snapshot WHERE market = ? AND d = ? ORDER BY code",
+    "SELECT code, tier, halted, status FROM universe_snapshot WHERE market = ? AND d = ? ORDER BY code",
     [market, d],
   );
   if (snap.length > 0) {
     return snap
-      .filter((r) => isValidCode(String(r.code)))
+      .filter((r) => isValidCode(String(r.code)) && String(r.status) === "active")
       .map((r) => ({ code: String(r.code), tier: String(r.tier), halted: Number(r.halted) === 1 }));
   }
   const inst = await sel(

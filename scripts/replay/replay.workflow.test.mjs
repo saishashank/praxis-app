@@ -20,8 +20,9 @@ const job = wf.jobs.production;
 const steps = job.steps;
 const SHA_USES = /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/;
 
-test("workflow_dispatch only, with a choice input `mode`; no schedule, push or pull request", () => {
-  assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"]);
+test("workflow_dispatch with a choice input `mode`, plus the post-deploy run; no schedule, push or pull request", () => {
+  // D-195: and once after a successful production deploy (mode full)
+  assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch", "workflow_run"]);
   const mode = wf.on.workflow_dispatch.inputs.mode;
   assert.equal(mode.type, "choice");
   assert.deepEqual(mode.options, ["light", "full", "evidence", "null", "injected", "learning"]);
@@ -32,7 +33,10 @@ test("workflow_dispatch only, with a choice input `mode`; no schedule, push or p
 
 test("one production job on release, production environment without a deployment record", () => {
   assert.deepEqual(Object.keys(wf.jobs), ["production", "staging"]); // M8 T9: the staging job is covered by staging-jobs.workflow.test.mjs
-  assert.equal(job.if, "github.ref == 'refs/heads/release'");
+  assert.equal(
+    job.if,
+    "github.ref == 'refs/heads/release' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'release')",
+  );
   assert.deepEqual(job.environment, { name: "production", deployment: false });
   assert.deepEqual(job.permissions, { contents: "read", deployments: "read" });
   assert.deepEqual(job.concurrency, { group: "replay", "cancel-in-progress": false });
@@ -77,7 +81,8 @@ test("mode learning (M6 T12): still dispatch-only, same single secrets step, slo
   const mode = wf.on.workflow_dispatch.inputs.mode;
   assert.ok(mode.options.includes("learning"));
   // no new trigger, no new job, no new step: the mode reaches the script through the same env variable
-  assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"]);
+  // D-195: and once after a successful production deploy (mode full)
+  assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch", "workflow_run"]);
   assert.deepEqual(Object.keys(wf.jobs), ["production", "staging"]); // M8 T9: the staging job is covered by staging-jobs.workflow.test.mjs
   const run = steps[steps.length - 1];
   assert.equal(

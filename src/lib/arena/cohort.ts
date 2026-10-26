@@ -142,6 +142,16 @@ export function carriesSleeve(execution: Pick<ExecutionRow, "kind" | "variant">)
   return execution.kind === "C3" || (execution.kind === "E" && execution.variant === "L");
 }
 
+/**
+ * D-191 (Owner 2026-10-26: "lets not use [leverage]. Lets use our money to invest"): the executions
+ * that run, every one without a leverage sleeve (the U twins, C1 and the C2 controls). The L twins and
+ * the C3 controls stay in the registry (their history keeps its meaning) but start no cohort and make
+ * no new entry.
+ */
+export function unleveredExecutionIds(registry: readonly ExecutionRow[]): string[] {
+  return registry.filter((e) => !carriesSleeve(e)).map((e) => e.id);
+}
+
 export type CohortSlot = {
   readonly executionId: string;
   /** 1..n for C2 / C3, null for E and C1. */

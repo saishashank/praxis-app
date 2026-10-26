@@ -6,7 +6,12 @@ import path from "node:path";
 import type { Client } from "@libsql/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { setConfig } from "@/lib/config/store";
-import { noopCorporateActionsHook, runBatch1, type RunOptions } from "@/lib/data/pipeline/batch1";
+import {
+  carryTiers,
+  noopCorporateActionsHook,
+  runBatch1,
+  type RunOptions,
+} from "@/lib/data/pipeline/batch1";
 import { readQualityConfig, runQuality } from "@/lib/data/quality/engine.mjs";
 import { entriesAllowed, exitsAllowed } from "@/lib/data/quality/gate";
 import { RULES } from "@/lib/data/quality/rules.mjs";
@@ -33,6 +38,7 @@ const go = (db: Client, date: string, bars: unknown[], o: Partial<RunOptions> = 
     barsText: text(bars),
     commitSha: "a".repeat(40),
     corporateActionsHook: noopCorporateActionsHook, // T7 tests isolate stage 8 (T8 has its own)
+    tiersHook: carryTiers, // tiering (D-189) has its own tests (tests/universe/tiers.test.ts)
     ...o,
   });
 
@@ -589,5 +595,28 @@ describe("D-178: market facts are not data faults", () => {
     // a code outside the universe in Monday's re-fetch: no flag, so nothing is stored
     await go(db, TUE, [bar("ZZZ", MON), ...tue()]);
     expect(await count(db, "price_bar", "code = 'ZZZ'")).toBe(0);
+  });
+});
+
+describe("D-190: only the tradeable universe is expected", () => {
+  it("a code below the ARN-010 floor raises no flag and leaves the score", async () => {
+    const db = await pipelineDb({ codes: CODES });
+    for (const code of CODES) {
+      await db.execute({
+        sql: `INSERT INTO universe_snapshot (market, d, code, status, tier, halted)
+              VALUES ('AU', ?, ?, ?, 'U1', 0)`,
+        args: [FRI0, code, code === "ZZT" ? "below_floor" : "active"],
+      });
+    }
+    const others = CODES.filter((c) => c !== "ZZT");
+    await go(db, MON, barsFor([MON], others));
+    await go(db, TUE, tue({}, ["ZZT"]));
+    expect(await flagsOf(db)).toEqual([]);
+    const sc = await rows(
+      db,
+      "SELECT valid, expected FROM quality_score WHERE d = ? AND tier = 'U1'",
+      [TUE],
+    );
+    expect(sc[0]).toMatchObject({ valid: 19, expected: 19 });
   });
 });
