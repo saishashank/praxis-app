@@ -41,7 +41,7 @@ function levels(r: TrackRow, masked: boolean) {
 }
 
 function result(r: TrackRow) {
-  if (r.state === "missed") return <span>Missed — price ran away (not a win or a loss)</span>;
+  if (r.state === "missed") return <span>{trackStateText(r)} (not a win or a loss)</span>;
   if (r.state === "closed") {
     return (
       <span>

@@ -96,6 +96,8 @@ export {
   STAGE_NAMES,
   StageError,
   assess,
+  carryTiers,
+  computeTiers,
   noopCorporateActionsHook,
   noopQualityHook,
   prepareBatch1,
@@ -108,6 +110,7 @@ export type {
   QualityHookContext,
   RunOptions,
   RunResult,
+  TiersHook,
 } from "./batch1-core.mjs";
 
 /** The nine stages of DAT-020 in order (stage 4 is the corporate action engine since M2 T8; stages 5..7 are stubs). */

@@ -118,6 +118,8 @@ export type PickRowView = {
     entry: MoneyView | null;
     exitReason: string | null;
     netPpm: number | null;
+    /** D-187: why a nightly check withdrew it (state missed), else null. */
+    withdrawnReason: string | null;
   } | null;
   /** The code, or "Stock A" for a masked user. */
   stock: string;
@@ -221,7 +223,9 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
                  p.valid_until_d, p.bad_ppm, p.typical_ppm, p.good_ppm, p.n_similar, p.aim_reach_ppm,
                  p.time_frame_sessions, p.based_on_json, p.card_id, i.name, p.reference_micro,
                  p.size_micro, p.risk_micro, o.state AS o_state, o.entry_micro AS o_entry,
-                 o.exit_reason AS o_reason, o.net_ppm AS o_net
+                 o.exit_reason AS o_reason, o.net_ppm AS o_net,
+                 (SELECT c.reason FROM pick_check c WHERE c.market = p.market AND c.d = p.d
+                   AND c.profile = p.profile AND c.rank = p.rank AND c.valid = 0 LIMIT 1) AS o_withdrawn
           FROM pick p LEFT JOIN instrument i ON i.market = p.market AND i.code = p.code
             LEFT JOIN pick_outcome o ON o.market = p.market AND o.d = p.d AND o.profile = p.profile
               AND o.rank = p.rank AND o.kind = 'pick'
@@ -260,6 +264,7 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
               entry: masked || x.o_entry === null ? null : money(String(x.o_entry)),
               exitReason: x.o_reason === null ? null : String(x.o_reason),
               netPpm: toNum(x.o_net),
+              withdrawnReason: x.o_withdrawn === null ? null : String(x.o_withdrawn),
             },
       stock: kit ? kit.aliases.label(code) : code,
       company: masked ? null : x.name === null ? null : String(x.name),
@@ -390,6 +395,8 @@ export type TrackRow = {
   stock: string;
   state: string;
   exitReason: string | null;
+  /** D-187: why a nightly check withdrew it (state missed), else null. */
+  withdrawnReason: string | null;
   netPpm: number | null;
   entry: MoneyView | null;
   exit: MoneyView | null;
@@ -417,7 +424,9 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
   const market = marketOf(env);
   const r = await env.main.execute({
     sql: `SELECT o.d, o.rank, o.code, o.state, o.exit_reason, o.net_ppm, o.entry_micro, o.exit_micro,
-                 p.buy_max_micro, p.stop_micro, p.aim_micro, p.bad_ppm, p.good_ppm
+                 p.buy_max_micro, p.stop_micro, p.aim_micro, p.bad_ppm, p.good_ppm,
+                 (SELECT c.reason FROM pick_check c WHERE c.market = p.market AND c.d = p.d
+                   AND c.profile = p.profile AND c.rank = p.rank AND c.valid = 0 LIMIT 1) AS withdrawn
           FROM pick_outcome o JOIN pick p ON p.market = o.market AND p.d = o.d
             AND p.profile = o.profile AND p.rank = o.rank
           WHERE o.market = ? AND o.profile = ? AND o.kind = 'pick'
@@ -437,6 +446,7 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
     stock: kit ? kit.aliasOf(d).label(code) : code,
     state: String(x.state),
     exitReason: x.exit_reason === null ? null : String(x.exit_reason),
+    withdrawnReason: x.withdrawn === null ? null : String(x.withdrawn),
     netPpm: toNum(x.net_ppm),
     entry: masked || x.entry_micro === null ? null : money(String(x.entry_micro)),
     exit: masked || x.exit_micro === null ? null : money(String(x.exit_micro)),

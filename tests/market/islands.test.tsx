@@ -110,7 +110,9 @@ describe("OverviewSheet", () => {
         url: "https://news.example.test/doc.pdf",
       },
     ],
-    summary: "Summary not written yet",
+    summary:
+      "A description of the business needs a company-profile source the app does not have yet.",
+    swot: null,
     notice:
       "AI summary of public information — may be incomplete or out of date. Not financial advice.",
   };
@@ -125,7 +127,11 @@ describe("OverviewSheet", () => {
     const dialog = await screen.findByRole("dialog", { name: "Overview: ZZUP" });
     await within(dialog).findByText("Zed Upward Holdings");
     expect(calls).toEqual(["/api/market/ZZUP/overview"]);
-    expect(within(dialog).getByText("Summary not written yet")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        "A description of the business needs a company-profile source the app does not have yet.",
+      ),
+    ).toBeInTheDocument();
     expect(within(dialog).getByText(/AI summary of public information/)).toBeInTheDocument();
     expect(within(dialog).getByText("A$10.50")).toBeInTheDocument();
     expect(within(dialog).getByText("+5.00%")).toBeInTheDocument();

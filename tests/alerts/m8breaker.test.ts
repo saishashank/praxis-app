@@ -77,6 +77,8 @@ describe("red breaker -> P0 alert (D-102)", () => {
   it("a rerun of the night raises nothing new", async () => {
     const before = await rows(red, "SELECT alert_key FROM alert");
     const again = await signalsDay(red, {
+      withLeverage: true, // D-191: the full engine, sleeve included
+
       market: MARKET,
       d: d(302),
       replay: true,

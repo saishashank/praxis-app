@@ -153,7 +153,7 @@ export async function loadRisk(deps: LoaderDeps): Promise<Loaded<RiskView>> {
   const worstOf = (...s: ControlState[]): ControlState =>
     s.includes("killed") ? "killed" : s.includes("paused") ? "paused" : "enabled";
   const execRows = await deps.mainDb.execute({
-    sql: "SELECT id, family FROM execution WHERE market = ? AND kind = 'E' ORDER BY id",
+    sql: "SELECT id, family FROM execution WHERE market = ? AND kind = 'E' AND variant = 'U' ORDER BY id", // D-191
     args: [v.market],
   });
   const executions: RiskView["executions"] = execRows.rows.map((r) => {

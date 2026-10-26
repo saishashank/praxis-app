@@ -52,7 +52,7 @@ describe("Home page content", () => {
     const { result } = await view(pop, OWNER);
     expect(result.masked).toBe(false);
     expect(screen.getByRole("heading", { level: 1, name: "Today" })).toBeInTheDocument();
-    expect(screen.getByText("Pretend value today")).toBeInTheDocument();
+    expect(screen.getByText("Strategies today")).toBeInTheDocument();
     expect(screen.getAllByText("Simulated").length).toBeGreaterThan(0);
     expect(screen.getByText("Today's picks")).toBeInTheDocument();
     expect(screen.getByText("Tonight's trade ideas")).toBeInTheDocument();
@@ -133,7 +133,7 @@ describe("states", () => {
     expect(screen.getAllByText(/No trade ideas yet/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/SAMPLE DATA/)).toBeNull();
     expect(document.querySelectorAll("[data-money]")).toHaveLength(0);
-    expect(screen.getAllByText("Not measured yet").length).toBeGreaterThan(0);
+    expect(screen.getByText("No strategy is running yet.")).toBeInTheDocument();
   });
 
   it("stale: banner with the last good date", async () => {

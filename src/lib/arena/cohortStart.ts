@@ -24,6 +24,7 @@ import { controlStates, effectiveControl } from "@/lib/agents/controls";
 import { nextTradingDay, type CalendarRow } from "@/lib/data/calendar";
 import {
   buildExecutionRegistry,
+  carriesSleeve,
   cohortSlots,
   planCohortStart,
   resolveCohortParams,
@@ -45,6 +46,8 @@ export type EnsureCohortsOptions = {
   readonly controlsPerFamily?: number;
   /** Overrides for the resolved cohort parameters (the default seed is the ARN-001 A$600). */
   readonly params?: CohortParams;
+  /** D-191: also open cohorts for the leverage-sleeve executions (tests of the sleeve only). */
+  readonly withLeverage?: boolean;
 };
 
 export type EnsureCohortsStatus = "opened" | "nothing_to_do" | "noop";
@@ -90,7 +93,11 @@ export async function ensureCohorts(
     buildExecutionRegistry({ market: o.market }).filter((e) => e.market === o.market),
   );
   const executions = (await loadExecutions(db)).filter(
-    (e) => e.market === o.market && e.status === "active",
+    // D-191: no leverage: executions with a sleeve start no cohort
+    (e) =>
+      e.market === o.market &&
+      e.status === "active" &&
+      (o.withLeverage === true || !carriesSleeve(e)),
   );
   const states = controlStates(
     (await db.execute("SELECT scope, scope_key, state FROM arena_control ORDER BY id")).rows.map(

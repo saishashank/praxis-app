@@ -21,7 +21,7 @@ for (const role of ROLE_LIST) {
     expect(res?.status()).toBe(200);
     await expect(page.getByRole("main")).toHaveCount(1);
     await expect(page.getByRole("heading", { level: 1, name: "Today" })).toBeVisible();
-    await expect(page.getByText("Pretend value today")).toBeVisible();
+    await expect(page.getByText("Strategies today")).toBeVisible(); // D-192
     await expect(page.getByText("Simulated").first()).toBeVisible();
     await expect(page.getByRole("button", { name: /buy|sell|place order/i })).toHaveCount(0);
   });

@@ -1,6 +1,7 @@
 import { runAsx, type AsxEnv } from "./asx/slots";
 import { runUniverse, type UniverseEnv } from "./asx/universe";
 import { runClock } from "./clock";
+import { runPostDeploy } from "./postdeploy";
 import { runReenable } from "./reenable";
 import { runRoutes, type RouteEnv } from "./routes";
 import { runSelfCheck, type SelfCheckEnv } from "./selfcheck";
@@ -31,6 +32,13 @@ export default {
       });
     } catch {
       // runClock already contains its errors; nothing here may disturb the self-check.
+    }
+    // D-195: the first tick of a newly deployed commit dispatches the post-deploy fill once (ASX
+    // fetch with history, full replay). No request at all once that commit is done. Never throws.
+    try {
+      await runPostDeploy(env, { fetch: (i, init) => fetch(i, init), nowMs: () => Date.now() });
+    } catch {
+      // runPostDeploy already contains its errors.
     }
     // PLT-015: once a day (02:40-02:44 UTC) re-enable scheduled workflows GitHub disabled after 60 idle
     // days. No work on any other minute. Never throws.

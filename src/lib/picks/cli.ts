@@ -82,7 +82,8 @@ export async function picksMain(
     const t = p.tracking;
     out(
       `arena-picks ${MARKET} ${d}: published=${p.published} candidates=${p.candidates}` +
-        ` bought=${t.bought} missed=${t.missed} closed=${t.closed} open=${t.open}`,
+        ` bought=${t.bought} missed=${t.missed} closed=${t.closed} open=${t.open}` +
+        ` checked=${p.checks.checked} withdrawn=${p.checks.withdrawn}`,
     );
     return 0;
   } catch (error) {

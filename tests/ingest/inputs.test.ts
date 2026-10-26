@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Client } from "@libsql/client";
 import { afterEach, describe, expect, it } from "vitest";
-import { noopQualityHook, prepareBatch1, runBatch1 } from "@/lib/data/pipeline/batch1";
+import { carryTiers, noopQualityHook, prepareBatch1, runBatch1 } from "@/lib/data/pipeline/batch1";
 import {
   parseIndexText,
   readIndexBars,
@@ -47,6 +47,7 @@ const go = (db: Client, o: Record<string, unknown> = {}) =>
     nowMs: () => at1730(TUE),
     barsText: text(barsFor(["2026-10-12", TUE])),
     qualityHook: noopQualityHook,
+    tiersHook: carryTiers, // tiering (D-189) has its own tests (tests/universe/tiers.test.ts)
     ...o,
   } as never);
 

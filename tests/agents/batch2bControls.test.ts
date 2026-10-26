@@ -289,6 +289,8 @@ describe("batch 2b under arena_control", () => {
       );
     const before = await count();
     const again = await signalsDay(db, {
+      withLeverage: true, // D-191: the full engine, sleeve included
+
       market: MARKET,
       d: d(D),
       replay: true,

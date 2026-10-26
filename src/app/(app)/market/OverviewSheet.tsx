@@ -3,6 +3,7 @@
 // phones, filled from GET /api/market/[code]/overview (facts only until the summary writer is live).
 // Radix Dialog supplies Esc to close, the focus trap and focus return to the "i" button. The row it
 // sits in links to the company page, which is the no-JavaScript fallback.
+import type { Swot } from "@/lib/view/swot";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useState } from "react";
 import { formatCount, formatMicro, formatPpm } from "@/lib/view/format";
@@ -20,6 +21,8 @@ type Overview = {
   announcements: Array<{ id: number; title: string; published: string; url: string | null }>;
   summary: string;
   notice: string;
+  /** D-196: the rules-based SWOT, null with too little history. */
+  swot: Swot | null;
 };
 type Load = { state: "loading" } | { state: "error" } | { state: "ok"; data: Overview };
 
@@ -84,8 +87,37 @@ function Body({ slug }: { slug: string }) {
         <h3 id={`ov-sum-${slug}`} className="m-0 text-base font-semibold">
           What the company does and SWOT
         </h3>
-        <p className="m-0 mt-1">{o.summary}</p>
-        <p className="m-0 mt-1 text-text-muted">{o.notice}</p>
+        <p className="m-0 mt-1 text-text-muted">{o.summary}</p>
+        {o.swot ? (
+          <div className="mt-2 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2" data-swot="">
+            {(
+              [
+                ["Strengths", o.swot.strengths],
+                ["Weaknesses", o.swot.weaknesses],
+                ["Opportunities", o.swot.opportunities],
+                ["Threats", o.swot.threats],
+              ] as const
+            ).map(([title, lines]) => (
+              <div key={title} className="min-w-0 rounded-lg border border-border p-2">
+                <h4 className="m-0 text-sm font-semibold">{title}</h4>
+                {lines.length === 0 ? (
+                  <p className="m-0 mt-1 text-sm text-text-muted">Nothing stands out.</p>
+                ) : (
+                  <ul className="m-0 mt-1 list-disc space-y-1 pl-4 text-sm">
+                    {lines.map((l) => (
+                      <li key={l}>{l}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="m-0 mt-1 text-sm text-text-muted">
+            A SWOT needs about a year of price history for this company.
+          </p>
+        )}
+        <p className="m-0 mt-2 text-xs text-text-muted">{o.notice}</p>
       </section>
       <section aria-labelledby={`ov-news-${slug}`}>
         <h3 id={`ov-news-${slug}`} className="m-0 text-base font-semibold">

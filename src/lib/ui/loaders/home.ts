@@ -25,9 +25,11 @@ import {
   soft,
   str,
   strOrNull,
+  strategyNames,
   type Loaded,
   type LoaderDeps,
   type Money,
+  type StrategyName,
 } from "./common";
 
 const PICKS_PER_PROFILE = 3; // threshold-ok: picks shown per profile on Home
@@ -70,14 +72,28 @@ export type HomeWatch = {
   changePpm: number | null;
 };
 
+export type StrategyTile = {
+  /** Execution id (E01, E03, ...). */
+  id: string;
+  name: string;
+  /** What it started with and what it is worth now (liquidation value). */
+  seed: Money;
+  value: Money;
+  sinceStart: Money;
+  sinceStartPpm: number | null;
+  dayChange: Money | null;
+  startD: string;
+};
+
 export type HomeView = {
-  /** Total liquidation value of the live strategies, with the change since the previous session. */
+  /**
+   * D-192: one tile per live strategy (its own pretend money, never added up across strategies,
+   * Owner 2026-10-26), unlevered strategies only (D-191).
+   */
   summary: {
-    value: Money | null;
-    dayChange: Money | null;
-    dayChangePpm: number | null;
     strategies: number;
     d: string | null;
+    tiles: StrategyTile[];
   };
   day: {
     regime: string | null;
@@ -99,7 +115,7 @@ export type HomeView = {
 
 function emptyView(): HomeView {
   return {
-    summary: { value: null, dayChange: null, dayChangePpm: null, strategies: 0, d: null },
+    summary: { strategies: 0, d: null, tiles: [] },
     day: { regime: null, regimeD: null, quality: [], openFlags: 0 },
     picks: { d: null, items: [] },
     ideas: { d: null, items: [], signals: 0 },
@@ -117,34 +133,40 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
 
   const dataD = await latestDataDate(deps.mainDb, v.market);
 
-  // Summary: live strategies only, latest liquidation value against the one before it.
+  // Summary (D-192): one tile per live unlevered strategy, latest liquidation value against its
+  // seed and against the session before; nothing is added across strategies.
   const nav = await deps.mainDb.execute(
-    `SELECT n.cohort_id, n.d, n.liq_nav_micro,
+    `SELECT c.execution_id, e.family, c.seed_micro, c.start_d, n.d, n.liq_nav_micro,
             (SELECT p.liq_nav_micro FROM nav_daily p WHERE p.cohort_id = n.cohort_id AND p.d < n.d
              ORDER BY p.d DESC LIMIT 1) AS prev
-     FROM nav_daily n
-     WHERE n.cohort_id IN (SELECT c.id FROM cohort c JOIN execution e ON e.id = c.execution_id
-                           WHERE e.kind = 'E' AND c.terminal_kind IS NULL AND c.control_idx IS NULL)
-       AND n.d = (SELECT MAX(x.d) FROM nav_daily x WHERE x.cohort_id = n.cohort_id)`,
+     FROM nav_daily n JOIN cohort c ON c.id = n.cohort_id JOIN execution e ON e.id = c.execution_id
+     WHERE e.kind = 'E' AND e.variant = 'U' AND c.terminal_kind IS NULL AND c.control_idx IS NULL
+       AND n.d = (SELECT MAX(x.d) FROM nav_daily x WHERE x.cohort_id = n.cohort_id)
+     ORDER BY c.execution_id, c.start_d`,
   );
-  let value = 0;
-  let before = 0;
-  let withPrev = 0;
-  for (const r of nav.rows) {
-    value += num(r.liq_nav_micro);
-    if (r.prev !== null && r.prev !== undefined) {
-      before += num(r.prev);
-      withPrev += num(r.liq_nav_micro);
-    }
-  }
-  const navD = maxDate(...nav.rows.map((r) => str(r.d)));
-  if (nav.rows.length > 0) {
-    view.summary = {
+  const names = await soft(() => strategyNames(deps.mainDb), {} as Record<string, StrategyName>);
+  const tiles: StrategyTile[] = nav.rows.map((r) => {
+    const seed = num(r.seed_micro);
+    const value = num(r.liq_nav_micro);
+    const prev = r.prev === null || r.prev === undefined ? null : num(r.prev);
+    const family = str(r.family);
+    return {
+      id: str(r.execution_id),
+      name: names[family]?.name ?? family,
+      seed: money(seed),
       value: money(value),
-      dayChange: before > 0 ? money(withPrev - before) : null,
-      dayChangePpm: before > 0 ? ratioPpm(withPrev - before, before) : null,
-      strategies: nav.rows.length,
+      sinceStart: money(value - seed),
+      sinceStartPpm: ratioPpm(value - seed, seed),
+      dayChange: prev === null ? null : money(value - prev),
+      startD: str(r.start_d),
+    };
+  });
+  const navD = maxDate(...nav.rows.map((r) => str(r.d)));
+  if (tiles.length > 0) {
+    view.summary = {
+      strategies: tiles.length,
       d: navD,
+      tiles,
     };
   }
 

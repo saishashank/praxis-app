@@ -209,6 +209,8 @@ describe("idempotency", () => {
       args: [signalsKey(MARKET, d(D))],
     });
     const again = await signalsDay(idb, {
+      withLeverage: true, // D-191: the full engine, sleeve included
+
       market: MARKET,
       d: d(D),
       replay: true,
@@ -228,6 +230,8 @@ describe("idempotency", () => {
       args: [signalsKey(MARKET, d(D))],
     });
     const bad = await signalsDay(idb, {
+      withLeverage: true, // D-191: the full engine, sleeve included
+
       market: MARKET,
       d: d(D),
       replay: true,

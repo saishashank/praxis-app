@@ -69,6 +69,7 @@ const slot = (s: SlotInput): Slot => ({ ...s, minute: hhmm(s.time) });
 export const DISPATCHABLE_WORKFLOWS: readonly string[] = [
   "arena-close.yml",
   "arena-signals.yml",
+  "asx-fetch.yml",
   "backfill-history.yml",
   "backfill-prices.yml",
   "backup.yml",
@@ -223,6 +224,23 @@ export const AU_SLOTS: readonly Slot[] = [
     note:
       "ASX listed-companies file, DAT-122 priority 3 (T11, D-067): once per trading day, " +
       "even minute, never within 65 s of a poll (polls 07:28 and 07:32)",
+  }),
+  // D-194: asx.com.au blocks this Worker's requests (asx_block_trip, 403/challenge) but answers
+  // GitHub's runners, so the announcements and the company list are fetched there. Every 30 minutes
+  // on trading days, one request at a time with spacing (DAT-122); runs whenever dispatch is on.
+  slot({
+    id: "asx-fetch",
+    time: "08:00",
+    until: "19:00",
+    everyMin: 30,
+    runner: "actions",
+    workflow: "asx-fetch.yml",
+    tradingDaysOnly: true,
+    marketBound: true,
+    priority: 9,
+    catchUpMin: 25,
+    enabled: true,
+    note: "ASX announcements and listed companies via GitHub (D-194): the Worker is blocked by asx.com.au",
   }),
   slot({
     id: "ingest-batch1",

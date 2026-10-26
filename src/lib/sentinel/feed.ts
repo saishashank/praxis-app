@@ -8,6 +8,7 @@
 // `ACTIVE_FEED_PARSER`; nothing else in the Sentinel changes (the route, the classification and
 // the tables only see `FeedItem`).
 import { parseAnnouncementList } from "@/lib/data/sources/asx";
+import { parseMarkitFeed } from "@/lib/data/sources/asxMarkit.mjs";
 
 export type FeedItem = {
   annId: string;
@@ -60,5 +61,21 @@ export const asxFeedV1: FeedParser = {
   },
 };
 
-/** The adapter seam: change this one line when a recorded real format arrives. */
-export const ACTIVE_FEED_PARSER: FeedParser = asxFeedV1;
+/**
+ * D-194: the real ASX format, recorded 2026-10-26 (the JSON the ASX website reads from
+ * asx.api.markitdigital.com, market-wide and per company). See src/lib/data/sources/asxMarkit.mjs.
+ */
+export const asxMarkitV1: FeedParser = {
+  id: "asxMarkitV1",
+  parse(body) {
+    const r = parseMarkitFeed(body);
+    if (r === null || r.items.length > MAX_FEED_ITEMS) return null;
+    return r;
+  },
+};
+
+/** The adapter seam: the real ASX format first, the documented synthetic shape as the fallback. */
+export const ACTIVE_FEED_PARSER: FeedParser = {
+  id: "asxMarkitV1|asxFeedV1",
+  parse: (body) => asxMarkitV1.parse(body) ?? asxFeedV1.parse(body),
+};
