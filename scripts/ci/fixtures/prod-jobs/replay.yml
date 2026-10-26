@@ -1,6 +1,5 @@
   production:
-    # dispatched on release, or the run after a successful production deploy (D-195)
-    if: github.ref == 'refs/heads/release' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'release')
+    if: github.ref == 'refs/heads/release'
     runs-on: ubuntu-latest
     timeout-minutes: 330
     permissions:
@@ -42,7 +41,7 @@
         # 4 GB heap; the hosted runner has 16 GB.
         run: node --max-old-space-size=12288 scripts/replay/run.mjs --mode "$REPLAY_MODE"
         env:
-          REPLAY_MODE: ${{ inputs.mode || (github.event_name == 'workflow_run' && 'full') || 'light' }}
+          REPLAY_MODE: ${{ inputs.mode || 'light' }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
           DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN_PROD }}

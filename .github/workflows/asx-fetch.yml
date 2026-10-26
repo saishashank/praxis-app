@@ -1,6 +1,6 @@
 # ASX announcements and listed companies (D-194). asx.com.au blocks the Cloudflare Worker
 # (asx_block_trip, 403/challenge) but answers GitHub's runners, so the fetch runs here: the Worker's
-# clock dispatches this file every 30 minutes on trading days, and the post-deploy run dispatches it
+# clock dispatches this file every 30 minutes on trading days, and its post-deploy step dispatches it
 # once with `history` to fill each company's latest announcements. workflow_dispatch ONLY, no
 # `schedule:` (PLT-015). Same security pattern as backfill-prices.yml: the ASX fetch step has NO
 # secrets and no database access; secrets are referenced ONLY in `env:` of the store step.
@@ -21,17 +21,11 @@ on:
         required: false
         default: false
 
-  # D-195: once after every successful production deploy, so a release fills its data at once
-  workflow_run:
-    workflows: ["Deploy production"]
-    types: [completed]
-
 permissions: {}
 
 jobs:
   production:
-    # dispatched on release, or the run after a successful production deploy (D-195)
-    if: github.ref == 'refs/heads/release' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'release')
+    if: github.ref == 'refs/heads/release'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -68,7 +62,7 @@ jobs:
       - name: Fetch from the ASX (no secrets)
         run: node scripts/asx/fetch.mjs --out-dir asx $HISTORY_FLAG
         env:
-          HISTORY_FLAG: ${{ (inputs.history || github.event_name == 'workflow_run') && '--history' || '' }}
+          HISTORY_FLAG: ${{ inputs.history && '--history' || '' }}
           ASX_USER_AGENT: ${{ vars.ASX_USER_AGENT }}
       - name: Store announcements and the company list
         run: node scripts/asx/ingest.mjs --dir asx
@@ -80,7 +74,7 @@ jobs:
   # Nothing runs on staging for this workflow: staging never contacts asx.com.au (DAT-122, NFR-040).
   # The job references no secret and checks out nothing; it only prints a notice.
   staging:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}

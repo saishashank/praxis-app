@@ -32,17 +32,11 @@ on:
           - injected
           - learning
 
-  # D-195: once after every successful production deploy, so a release fills its data at once
-  workflow_run:
-    workflows: ["Deploy production"]
-    types: [completed]
-
 permissions: {}
 
 jobs:
   production:
-    # dispatched on release, or the run after a successful production deploy (D-195)
-    if: github.ref == 'refs/heads/release' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'release')
+    if: github.ref == 'refs/heads/release'
     runs-on: ubuntu-latest
     timeout-minutes: 330
     permissions:
@@ -84,7 +78,7 @@ jobs:
         # 4 GB heap; the hosted runner has 16 GB.
         run: node --max-old-space-size=12288 scripts/replay/run.mjs --mode "$REPLAY_MODE"
         env:
-          REPLAY_MODE: ${{ inputs.mode || (github.event_name == 'workflow_run' && 'full') || 'light' }}
+          REPLAY_MODE: ${{ inputs.mode || 'light' }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
           DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN_PROD }}
@@ -96,7 +90,7 @@ jobs:
   # The job references no secret and checks out nothing; it only prints a notice, so a staging
   # dispatch ends green and visibly does nothing. PRAXIS_ENV=staging is fixed for the audit trail.
   staging:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
