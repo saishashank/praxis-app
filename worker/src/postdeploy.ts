@@ -98,7 +98,9 @@ export async function runPostDeploy(
     if (claimed!.affected !== 1) return "not-owner";
     let ok = true;
     for (const job of POSTDEPLOY_JOBS) {
-      const res = await dispatchWorkflow(env, job.workflow, deps.fetch, job.inputs);
+      // `commit`: the job waits until this commit is the approved deploy (D-197). The Worker is
+      // deployed inside the deploy job, before GitHub marks the deployment a success.
+      const res = await dispatchWorkflow(env, job.workflow, deps.fetch, { ...job.inputs, commit });
       console.log(`postdeploy: ${job.workflow} ${res.ok ? "dispatched" : `failed ${res.detail}`}`);
       ok &&= res.ok;
     }

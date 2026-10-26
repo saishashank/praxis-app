@@ -67,6 +67,7 @@ export const NOT_CONFIG = new Set([
   "WATCHDOG_SLOT",
   "WATCHDOG_DELIBERATE_FAILURE",
   "ALLOW_BOOTSTRAP",
+  "EXPECT_COMMIT",
   "SMOKE_ENV",
   // Local test and audit tooling
   "E2E_SCENARIO",
