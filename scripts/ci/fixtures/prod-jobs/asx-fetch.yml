@@ -1,6 +1,5 @@
   production:
-    # dispatched on release, or the run after a successful production deploy (D-195)
-    if: github.ref == 'refs/heads/release' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'release')
+    if: github.ref == 'refs/heads/release'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -37,7 +36,7 @@
       - name: Fetch from the ASX (no secrets)
         run: node scripts/asx/fetch.mjs --out-dir asx $HISTORY_FLAG
         env:
-          HISTORY_FLAG: ${{ (inputs.history || github.event_name == 'workflow_run') && '--history' || '' }}
+          HISTORY_FLAG: ${{ inputs.history && '--history' || '' }}
           ASX_USER_AGENT: ${{ vars.ASX_USER_AGENT }}
       - name: Store announcements and the company list
         run: node scripts/asx/ingest.mjs --dir asx
