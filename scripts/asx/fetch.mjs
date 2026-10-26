@@ -2,7 +2,8 @@
 // runners but blocks the Cloudflare Worker (asx_block_trip, 403/challenge). Writes into --out-dir:
 //   feed.json      the market-wide announcements of the last ~48 h (paged, newest first)
 //   companies.csv  the ASX listed-companies file (the universe import reads it once a day)
-//   history.json   with --history: each listed company's latest announcements (a one-off fill)
+//   history-NNN.json with --history: each listed company's latest announcements (a one-off
+//                  fill), in chunks of HISTORY_CHUNK items
 // Politeness (DAT-122): one request at a time, MIN_GAP_MS between requests, an identifying
 // User-Agent (vars.ASX_USER_AGENT), metadata only (no PDF is fetched). A failed request is counted,
 // never retried in a loop; the commit step stores what arrived. Output: counts only.
@@ -16,6 +17,7 @@ export const COMPANIES_URL = "https://www.asx.com.au/asx/research/ASXListedCompa
 const MIN_GAP_MS = 700;
 const PER_PAGE = 100;
 const MAX_PAGES = 20;
+export const HISTORY_CHUNK = 2000;
 const WINDOW_MS = 48 * 3_600_000;
 const TIMEOUT_MS = 20_000;
 const DEFAULT_UA = "praxis-research/1.0 (personal, non-commercial; end-of-day research)";
@@ -97,7 +99,11 @@ export async function fetchAll(o) {
       }
     }
     stats.historyItems = hist.length;
-    files["history.json"] = JSON.stringify({ data: { items: hist } });
+    // Chunks: the feed parser takes at most MAX_FEED_ITEMS (5000) per file (D-197).
+    for (let i = 0; i * HISTORY_CHUNK < hist.length; i++) {
+      const items = hist.slice(i * HISTORY_CHUNK, (i + 1) * HISTORY_CHUNK);
+      files[`history-${String(i + 1).padStart(3, "0")}.json`] = JSON.stringify({ data: { items } });
+    }
   }
   return { files, stats };
 }
