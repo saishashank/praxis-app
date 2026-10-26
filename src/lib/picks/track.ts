@@ -1,6 +1,8 @@
 // ARN-095 pick tracking. Every published pick (and its luck-check twin) is followed on paper,
-// separately from the 12 Strategies: "bought" at the open of a session inside its validity window
-// only if that open is inside the buy zone (otherwise "missed", recorded, never a win or a loss),
+// separately from the 12 Strategies: "bought" at the open of a session only if that open is inside
+// the buy zone and the pick still stood on the night before (D-187: its nightly check in
+// `pick_check`, ./validity.ts); a pick withdrawn by a failing check is "missed", recorded, never a
+// win or a loss,
 // then closed at the stop-loss (the gap rule of ARN-021: an open at or below the stop fills at the
 // open), the aim, or the end of the time frame (a close-signal exit at the next open), with the same
 // fills, slippage and brokerage as the arena (ARN-031/032, `src/lib/arena/fills.ts`).
@@ -93,9 +95,27 @@ type SimEnv = {
   readonly advMicro: Micro;
   readonly profile: CostProfile;
   readonly asOfD: string;
+  /** D-187: the night of the pick's first failing check (no purchase after it), null while it stands. */
+  readonly withdrawnNight?: string | null;
   /** Confirmed splits, consolidations and bonus issues after publication, ordered by ex-date. */
   readonly actions?: readonly PickAction[];
 };
+
+/** The buy, stop and aim levels in the terms of night `d`, after the actions with ex-date up to it. */
+export function levelsAfter<L extends { buyMaxMicro: Micro; stopMicro: Micro; aimMicro: Micro }>(
+  base: L,
+  actions: readonly PickAction[],
+  d: string,
+): L {
+  let factor: Rational = makeRational(1n);
+  for (const a of actions) if (a.exD <= d) factor = mulRat(factor, a.ratio);
+  return {
+    ...base,
+    buyMaxMicro: levelAt(base.buyMaxMicro, factor),
+    stopMicro: levelAt(base.stopMicro, factor),
+    aimMicro: levelAt(base.aimMicro, factor),
+  };
+}
 
 /** A published level in the terms of the session after the actions so far: level / factor, at least 1. */
 function levelAt(v: Micro, factor: Rational): Micro {
@@ -152,7 +172,8 @@ export function simulateOutcome(base: Levels, bars: readonly DatedBar[], env: Si
       return close(bar.d, bar.openMicro, 0n, "time_frame");
     }
     if (entry === null) {
-      if (bar.d > levels.validUntilD) return { ...EMPTY, state: "missed" };
+      const w = env.withdrawnNight ?? null;
+      if (w !== null && bar.d > w) return { ...EMPTY, state: "missed" };
       if (bar.openMicro <= levels.buyMaxMicro) {
         const qty = divFloor(levels.sizeMicro, bar.openMicro) || 1n;
         const fill = fillEntryAtOpen(fillEnv(bar), qty);
@@ -200,8 +221,9 @@ export function simulateOutcome(base: Levels, bars: readonly DatedBar[], env: Si
       entryMicro: entry.fill,
     };
   }
-  // never bought: missed once the whole validity window has passed
-  return env.asOfD >= levels.validUntilD ? { ...EMPTY, state: "missed" } : EMPTY;
+  // never bought: missed once a nightly check has withdrawn it (D-187); no fixed window
+  const w = env.withdrawnNight ?? null;
+  return w !== null && env.asOfD >= w ? { ...EMPTY, state: "missed" } : EMPTY;
 }
 
 // ---- database step -------------------------------------------------------------------------------------
@@ -312,7 +334,19 @@ export async function trackPicks(db: Db, o: TrackOptions): Promise<TrackSummary>
     const bars = await loadBars(db, o.market, code, pubD, o.d);
     const adv = await advAt(db, o.market, code, pubD, o.advWindow);
     const actions = pickActions(confirmed, code, pubD);
-    const sim = simulateOutcome(levels, bars, { advMicro: adv, profile, asOfD: o.d, actions });
+    const failed = await db.execute({
+      sql: `SELECT night_d FROM pick_check WHERE market = ? AND d = ? AND profile = ? AND rank = ?
+              AND valid = 0 AND night_d < ? ORDER BY night_d LIMIT 1`,
+      args: [o.market, pubD, text(r.profile), Number(r.rank), o.d], // money-float-ok: SQL integer column
+    });
+    const withdrawnNight = failed.rows.length === 0 ? null : text(failed.rows[0]!.night_d);
+    const sim = simulateOutcome(levels, bars, {
+      advMicro: adv,
+      profile,
+      asOfD: o.d,
+      actions,
+      withdrawnNight,
+    });
     const stored = text(r.state);
     if (stored === "bought") {
       if (

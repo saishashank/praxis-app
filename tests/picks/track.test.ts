@@ -1,5 +1,6 @@
 // @vitest-environment node
-// ARN-095 tracking (pure simulation): bought only inside the buy zone and window, missed otherwise,
+// ARN-095 tracking (pure simulation): bought only inside the buy zone while the pick stands (D-187:
+// no fixed window; a failing nightly check withdraws it), missed once withdrawn,
 // closed at the stop (with the gap rule), the aim or the end of the time frame, costs included.
 import { describe, expect, it } from "vitest";
 import { feeFor, getCostProfile } from "@/lib/arena/costs";
@@ -49,26 +50,31 @@ describe("entry", () => {
     expect(out.entryD).toBe(TUE);
   });
 
-  it("is missed (not a win, not a loss) when every open in the window is above the zone", () => {
+  it("D-187: no session limit; a pick withdrawn on a night is missed (not a win, not a loss)", () => {
     const bars = [
       bar(MON, 10.5, 10.6, 10.4, 10.5),
       bar(TUE, 10.6, 10.7, 10.5, 10.6),
-      bar(WED, 9.9, 10.0, 9.8, 9.9), // back inside the zone, but the window has closed
+      bar(WED, 9.9, 10.0, 9.8, 9.9), // back inside the zone on the third session
     ];
-    const out = simulateOutcome(L, bars, env(WED));
+    // still standing: bought on Wednesday, however many sessions have passed
+    expect(simulateOutcome(L, bars, env(WED)).entryD).toBe(WED);
+    // withdrawn on Tuesday night: Wednesday's open is not taken
+    const out = simulateOutcome(L, bars, { ...env(WED), withdrawnNight: TUE });
     expect(out.state).toBe("missed");
     expect(out.netMicro).toBeNull();
     expect(out.netPpm).toBeNull();
     expect(out.entryD).toBeNull();
   });
 
-  it("stays waiting while the window is still open", () => {
+  it("stays waiting while it stands", () => {
     expect(simulateOutcome(L, [bar(MON, 10.5, 10.6, 10.4, 10.5)], env(MON)).state).toBe("waiting");
     expect(simulateOutcome(L, [], env(MON)).state).toBe("waiting");
   });
 
-  it("is missed once the window has passed even with no later bar", () => {
-    expect(simulateOutcome(L, [bar(MON, 10.5, 10.6, 10.4, 10.5)], env(TUE)).state).toBe("missed");
+  it("is missed once withdrawn even with no later bar, and waits otherwise", () => {
+    const b = [bar(MON, 10.5, 10.6, 10.4, 10.5)];
+    expect(simulateOutcome(L, b, { ...env(TUE), withdrawnNight: MON }).state).toBe("missed");
+    expect(simulateOutcome(L, b, env(TUE)).state).toBe("waiting");
   });
 });
 

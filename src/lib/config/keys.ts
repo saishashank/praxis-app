@@ -522,7 +522,7 @@ const M6_RANGED = [
   ["factor_min_bucket_n", "int", 30, 20, 100, "trades", "O", LRN, "AGT-112; ch.15 l.207", "Trades a factor bucket needs to be shown"],
   ["picks_per_profile", "int", 5, 0, 10, "picks", "O", LRN, "AGT-113; ch.15 l.208", "Picks per profile per night"],
   ["picks_max_per_family", "int", 2, 1, 5, "picks", "O", LRN, "AGT-113; ch.15 l.211", "Most picks per profile per night from one family"],
-  ["pick_valid_sessions", "int", 2, 1, 5, "sessions", "O", LRN, "UXN-040, AGT-113; ch.15 l.212", "Sessions a pick's buy zone stays valid"],
+  ["pick_valid_sessions", "int", 2, 1, 5, "sessions", "O", LRN, "UXN-040, AGT-113; ch.15 l.212", "Not used since D-187: a waiting pick is checked each night against information instead of a session count"],
   ["pick_success_min_n", "int", 30, 10, 200, "picks", "O", LRN, "UXN-041; ch.15 l.213 (bounds 'as ch. 16' not given, 10-200 agent-chosen, D-111)", "Closed picks needed before model success is shown"],
 ] as const satisfies readonly RangedRow[];
 

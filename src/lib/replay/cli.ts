@@ -319,6 +319,7 @@ export async function replayMain(
   }
   const open = deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t }));
   const db = open(url, has(token) ? token : undefined);
+  let stage = "setup";
   try {
     const params = deps.params ?? (await loadAgentParams(db).catch(() => defaultAgentParams()));
     if (m === "learning" && (await learningDone(db, MARKET, learningWeek(date)))) {
@@ -336,8 +337,10 @@ export async function replayMain(
       }
       const to = date;
       const from = addYears(to, -(params.replay.eventBackfillYears + 1));
+      stage = "snapshot";
       bytes = await deps.prepareSnapshot({ from, to });
     }
+    stage = "compute";
     const o =
       m === "learning"
         ? await runLearning({
@@ -379,6 +382,7 @@ export async function replayMain(
       return 0;
     }
     let stored = 0;
+    stage = "upload";
     if (o.files.length > 0 && has(env.DATA_REPO) && has(env.DATA_REPO_TOKEN) && deps.makeStore) {
       const store = deps.makeStore(env.DATA_REPO, env.DATA_REPO_TOKEN);
       const tag = `replay-${date.slice(0, 7)}`;
@@ -387,6 +391,7 @@ export async function replayMain(
         stored += 1;
       }
     }
+    stage = "persist";
     const rows = await persistOutput(db, o);
     const r = o.report;
     out(
@@ -400,11 +405,34 @@ export async function replayMain(
   } catch (e) {
     // Never print a driver or store error: it can carry the database URL or the repository name.
     const name = e instanceof Error ? e.name : "Error";
-    out(`replay ${m}: failed (${name})`);
+    out(`replay ${m}: failed (${name}) stage=${stage}${codeFrames(e)}`);
     return 1;
   } finally {
     db.close();
   }
+}
+
+/**
+ * D-188: where an error came from, without its message (which can carry a URL or row data): the
+ * function names and file:line of our own code in the stack (the replay bundle lives under
+ * node_modules/.cache/praxis-*; other packages and Node internals are skipped), at most three.
+ */
+export function codeFrames(e: unknown): string {
+  if (!(e instanceof Error) || typeof e.stack !== "string") return "";
+  const frames: string[] = [];
+  for (const raw of e.stack.split("\n").slice(1)) {
+    const line = raw.trim();
+    const ours = !line.includes("node_modules") || /[\\/]\.cache[\\/]praxis-/.test(line);
+    if (!ours || line.includes("node:")) continue;
+    const m =
+      /^at (?:async )?(?:([\w$.<>]+) )?\(?(?:.*[\\/])?([\w.-]+\.(?:ts|mjs|js)):(\d+):\d+\)?$/.exec(
+        line,
+      );
+    if (m === null) continue;
+    frames.push(`${m[1] ?? "?"}:${m[2]}:${m[3]}`);
+    if (frames.length === 3) break; // threshold-ok: enough frames to place the error
+  }
+  return frames.length === 0 ? "" : ` at=${frames.join(",")}`;
 }
 
 export { budgetFor, runIdOf };

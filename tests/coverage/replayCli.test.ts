@@ -112,7 +112,9 @@ describe("replayMain refusals", () => {
       },
     );
     expect(code).toBe(1);
-    expect(c.lines).toEqual(["replay full: failed (RangeError)"]);
+    // D-188: the stage and our code locations, never the message
+    expect(c.lines).toHaveLength(1);
+    expect(c.lines[0]).toMatch(/^replay full: failed \(RangeError\) stage=snapshot at=\S+$/);
     expect(c.lines.join()).not.toContain("secret-host");
   });
 
@@ -131,7 +133,7 @@ describe("replayMain refusals", () => {
       },
     );
     expect(code).toBe(1);
-    expect(c.lines).toEqual(["replay full: failed (Error)"]);
+    expect(c.lines).toEqual(["replay full: failed (Error) stage=snapshot"]);
   });
 
   it("the snapshot range is the event back-fill window ending on the run date", async () => {

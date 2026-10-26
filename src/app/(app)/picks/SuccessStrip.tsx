@@ -59,7 +59,7 @@ export function SuccessStrip({
       ) : null}
       <p className="m-0 mt-2 text-text-muted">
         {success.missed > 0
-          ? `${success.missed} missed (price ran away) — not counted as a win or a loss. `
+          ? `${success.missed} withdrawn before buying — not counted as a win or a loss. `
           : ""}
         {SELECTION_LINE} {PRICE_ONLY_LABEL}
       </p>
