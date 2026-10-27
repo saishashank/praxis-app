@@ -1,5 +1,5 @@
 // News and alert inbox (UX-060..062; UXN-035, UXN-038, UXN-157, UXN-158, UXN-160, UXN-161; D-136 draft).
-// One tab, three chips: "My companies", "All news", "Alerts". The Alerts chip and the header bell open
+// One tab, three chips: "All news" (the default), "My companies", "Alerts". The Alerts chip and the header bell open
 // the same inbox: P0 always open at the top, P1 and P2 in collapsible sections with unread counts, and
 // an "Archived" section for acknowledged alerts. Everything is read through the loaders, which mask for
 // Editors and Viewers without a grant ("Stock A", no names, links or exact dates, DAT-124). Ack and
@@ -35,7 +35,8 @@ export const dynamic = "force-dynamic";
 type SP = Record<string, string | string[] | undefined>;
 type AlertRow = AlertsModel["groups"][number]["alerts"][number];
 
-const CHIP_LABEL = { mine: "My companies", all: "All news", alerts: "Alerts" } as const;
+// Owner 2026-10-27: All news first and the default
+const CHIP_LABEL = { all: "All news", mine: "My companies", alerts: "Alerts" } as const;
 const TIER_TITLE = { P0: "Urgent (P0)", P1: "Important (P1)", P2: "For information (P2)" } as const;
 
 function href(params: Record<string, string | undefined>): string {
@@ -215,14 +216,14 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
     itemMissing = sheet === null;
   }
   const closeHref = href({
-    chip: chip === "mine" ? undefined : chip,
+    chip: chip === "all" ? undefined : chip,
     q: query.q,
     code: query.code,
     from: query.from,
     to: query.to,
   });
 
-  const chipHref = (c: keyof typeof CHIP_LABEL) => href({ chip: c === "mine" ? undefined : c });
+  const chipHref = (c: keyof typeof CHIP_LABEL) => href({ chip: c === "all" ? undefined : c });
   const unread = shell.bell.count;
   const hasFilter = [query.q, query.code, query.from, query.to].some((v) => v !== undefined);
 
@@ -253,7 +254,7 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
       <details open={hasFilter} className="rounded-lg border border-border bg-surface p-3">
         <summary className="cursor-pointer text-sm font-medium">Filter and search</summary>
         <form method="get" action="/news" className="mt-3 flex flex-wrap items-end gap-3 text-sm">
-          {chip !== "mine" ? <input type="hidden" name="chip" value={chip} /> : null}
+          {chip !== "all" ? <input type="hidden" name="chip" value={chip} /> : null}
           {masked && chip !== "alerts" ? null : (
             <label className="flex flex-col gap-1">
               Search
@@ -369,17 +370,37 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
             <ul className="m-0 flex list-none flex-col gap-3 p-0" aria-label="News">
               {news.items.map((n) => (
                 <li key={n.id}>
-                  <Card className="p-3" data-testid="news-card">
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
-                      <span className="font-medium text-text">{n.stock}</span>
-                      <span>{whenText(n.published)}</span>
-                      {n.priceSensitive ? <span>Price-sensitive</span> : null}
-                      <span>{materialityLabel(n.materiality)}</span>
-                    </div>
-                    <p className="mt-1 mb-2 text-sm">
+                  <Card className="flex flex-col gap-2 p-3" data-testid="news-card">
+                    {/* Owner 2026-10-27: the headline first, then a short text, then who and when */}
+                    <p className="m-0 text-base font-semibold leading-snug">
                       <NewsItemButton id={n.id} headline={n.title} />
                     </p>
+                    {n.summary || n.type ? (
+                      <p
+                        className="m-0 line-clamp-3 text-sm text-text-muted"
+                        data-testid="news-short"
+                      >
+                        {n.summary ?? n.type}
+                      </p>
+                    ) : null}
+                    <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-muted">
+                      <span className="font-medium text-text">
+                        {n.company ? `${n.company} (${n.stock})` : n.stock}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span>{whenText(n.published)}</span>
+                      {n.priceSensitive ? (
+                        <span className="rounded-md bg-surface-2 px-2 py-0.5 font-medium text-text">
+                          Price-sensitive
+                        </span>
+                      ) : null}
+                    </p>
                     <div className="flex flex-wrap items-center gap-2">
+                      {n.materiality !== null ? (
+                        <span className="text-xs text-text-muted">
+                          {materialityLabel(n.materiality)}
+                        </span>
+                      ) : null}
                       <PolarityTag row={n} />
                       {n.heldByUs ? (
                         <span className="text-xs font-medium" data-testid="held-tag">
@@ -398,7 +419,7 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
                 <Link
                   className="text-accent underline"
                   href={href({
-                    chip: chip === "mine" ? undefined : chip,
+                    chip: chip === "all" ? undefined : chip,
                     q: query.q,
                     code: query.code,
                     from: query.from,
@@ -413,7 +434,7 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
                 <Link
                   className="text-accent underline"
                   href={href({
-                    chip: chip === "mine" ? undefined : chip,
+                    chip: chip === "all" ? undefined : chip,
                     q: query.q,
                     code: query.code,
                     from: query.from,

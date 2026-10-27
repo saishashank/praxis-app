@@ -24,7 +24,15 @@ test("workflow_dispatch only, with a choice input `mode`; no schedule, push or p
   assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"]);
   const mode = wf.on.workflow_dispatch.inputs.mode;
   assert.equal(mode.type, "choice");
-  assert.deepEqual(mode.options, ["light", "full", "evidence", "null", "injected", "learning"]);
+  assert.deepEqual(mode.options, [
+    "light",
+    "full",
+    "evidence",
+    "null",
+    "injected",
+    "learning",
+    "seed-recent",
+  ]);
   assert.equal(mode.default, "light");
   assert.deepEqual(wf.permissions, {});
   assert.doesNotMatch(read(FILE), /^\s*(schedule|push|pull_request\w*):/m);
