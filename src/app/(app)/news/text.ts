@@ -89,3 +89,15 @@ export function snoozeUntil(choice: SnoozeChoice, now: Date): string {
   }
   return new Date(now.getTime() + 24 * HOUR_MS).toISOString(); // threshold-ok: fallback, one day
 }
+
+/** D-200: the short text under a headline; nothing when it would only repeat the headline. */
+export function shortText(n: {
+  summary: string | null;
+  type: string | null;
+  title: string;
+}): string | null {
+  const t = n.summary ?? n.type;
+  if (!t) return null;
+  const same = (a: string) => a.trim().toLowerCase();
+  return same(t) === same(n.title) ? null : t;
+}

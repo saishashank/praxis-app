@@ -28,7 +28,14 @@ import { isoWeek } from "@/lib/view/format";
 import { NOT_ADVICE_FOOTER } from "@/lib/view/honesty";
 import { AlertActions } from "./AlertActions";
 import { NewsAutoSheet, NewsItemButton } from "./NewsSheet";
-import { HELD_TAG, materialityLabel, POLARITY_HOW, polarityLabel, whenText } from "./text";
+import {
+  HELD_TAG,
+  materialityLabel,
+  POLARITY_HOW,
+  polarityLabel,
+  shortText,
+  whenText,
+} from "./text";
 
 export const dynamic = "force-dynamic";
 
@@ -51,14 +58,6 @@ const alertWhen = (a: AlertRow, masked: boolean): string => {
   const d = melbourneDate(a.detectedAt);
   return d === null ? "n/a" : `Week ${isoWeek(d) ?? "n/a"}`;
 };
-
-/** D-200: the short text under the headline; nothing when it would only repeat the headline. */
-function shortText(n: Pick<NewsItemRow, "summary" | "type" | "title">): string | null {
-  const t = n.summary ?? n.type;
-  if (!t) return null;
-  const same = (a: string) => a.trim().toLowerCase();
-  return same(t) === same(n.title) ? null : t;
-}
 
 function PolarityTag({ row }: { row: Pick<NewsItemRow, "polarity" | "materiality"> }) {
   return (
