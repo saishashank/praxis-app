@@ -176,6 +176,36 @@ describe("replayMain refusals", () => {
   }, 120_000);
 });
 
+describe("replayMain recording (D-198)", () => {
+  it("records over a fresh connection: the one used before the hours of computing may be gone", async () => {
+    const c = collect();
+    const opened: string[] = [];
+    let closed = 0;
+    const deps = {
+      out: c.out,
+      params,
+      openDb: () => {
+        const n = opened.push("db");
+        return {
+          execute: async () => {
+            if (n === 1) throw new TypeError("stale");
+            const e = new TypeError("fetch failed");
+            e.cause = { code: "ECONNRESET" };
+            throw e;
+          },
+          batch: async () => [],
+          close: () => void (closed += 1),
+        } as unknown as Client;
+      },
+    };
+    const code = await replayMain(["--mode", "injected", "--date", "2029-06-29", "--runs", "1"], { TURSO_MAIN_URL: "file:x.db" }, deps);
+    expect(code).toBe(1);
+    expect(opened).toHaveLength(2);
+    expect(closed).toBe(2);
+    expect(c.lines.at(-1)).toMatch(/^replay injected: failed \(TypeError\) stage=record at=\S+ cause=ECONNRESET$/);
+  }, 120_000);
+});
+
 describe("nullRunsMain", () => {
   it("usage and bad arguments exit 2", async () => {
     const c = collect();
