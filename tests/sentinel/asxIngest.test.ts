@@ -120,6 +120,15 @@ describe("asx-ingest", () => {
     expect(await count(db, "SELECT COUNT(*) AS n FROM announcement")).toBe(7);
   });
 
+  it("a missing folder stores nothing and records a failed poll", async () => {
+    const { url, db, dir } = await setup();
+    const lines: string[] = [];
+    expect(await run(url, path.join(dir, "absent"), lines)).toBe(0);
+    expect(lines).toEqual([]);
+    expect(await count(db, "SELECT COUNT(*) AS n FROM announcement")).toBe(0);
+    expect((await db.execute("SELECT failed FROM sentinel_poll_day")).rows[0]!.failed).toBe(1);
+  });
+
   it("without a directory or a database it says so", async () => {
     const l: string[] = [];
     expect(await asxIngestMain([], {}, { out: (s) => l.push(s) })).toBe(2);
