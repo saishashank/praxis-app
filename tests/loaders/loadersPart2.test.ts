@@ -311,7 +311,7 @@ describe("populated loaders", () => {
 
   describe("news and alerts", () => {
     it("validates the query", () => {
-      expect(parseNewsQuery(sp(""))?.chip).toBe("mine");
+      expect(parseNewsQuery(sp(""))?.chip).toBe("all");
       expect(parseNewsQuery(sp("chip=all&code=zzup&from=2026-10-01&to=2026-10-31"))).toMatchObject({
         chip: "all",
         code: "zzup",
