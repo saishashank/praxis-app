@@ -48,6 +48,8 @@ export type CliDeps = {
   readonly makeStore?: (repo: string, token: string) => { put: HistoryPut };
   readonly params?: AgentParams;
   readonly nodeVersion?: string;
+  /** Wait between reconnect attempts (tests pass a no-op). */
+  readonly sleep?: (ms: number) => Promise<void>;
 };
 
 const isRealDate = (s: unknown): s is string =>
@@ -378,6 +380,9 @@ export async function replayMain(
     if (m !== "learning") {
       db.close();
       db = open(url, has(token) ? token : undefined);
+      // D-198: a fresh client can still be handed a pooled socket that died meanwhile (EPIPE); the
+      // failed request drops it, so a short ping with retries makes the connection live again
+      await ping(db, deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))));
     }
     // a paused learning run resumes under the same run id: its rows are INSERT OR IGNORE
     const seen =
@@ -440,6 +445,20 @@ export function codeFrames(e: unknown): string {
     if (frames.length === 3) break; // threshold-ok: enough frames to place the error
   }
   return frames.length === 0 ? "" : ` at=${frames.join(",")}`;
+}
+
+/** D-198: `SELECT 1` until it answers, at most PING_TRIES times; the last error is thrown. */
+export const PING_TRIES = 4; // threshold-ok: reconnect attempts after a long compute
+async function ping(db: Client, sleep: (ms: number) => Promise<void>): Promise<void> {
+  for (let i = 1; ; i += 1) {
+    try {
+      await db.execute("SELECT 1");
+      return;
+    } catch (e) {
+      if (i >= PING_TRIES) throw e;
+      await sleep(1000 * i); // threshold-ok: back-off between reconnect attempts
+    }
+  }
 }
 
 /**

@@ -184,6 +184,7 @@ describe("replayMain recording (D-198)", () => {
     const deps = {
       out: c.out,
       params,
+      sleep: async () => undefined,
       openDb: () => {
         const n = opened.push("db");
         return {
@@ -203,6 +204,43 @@ describe("replayMain recording (D-198)", () => {
     expect(opened).toHaveLength(2);
     expect(closed).toBe(2);
     expect(c.lines.at(-1)).toMatch(/^replay injected: failed \(TypeError\) stage=record at=\S+ cause=ECONNRESET$/);
+  }, 120_000);
+});
+
+describe("replayMain reconnect (D-198)", () => {
+  it("retries the fresh connection until it answers, then records", async () => {
+    const c = collect();
+    const sql: string[] = [];
+    let pings = 0;
+    const waits: number[] = [];
+    const code = await replayMain(
+      ["--mode", "injected", "--date", "2029-06-29", "--runs", "1"],
+      { TURSO_MAIN_URL: "file:x.db" },
+      {
+        out: c.out,
+        params,
+        sleep: async (ms) => void waits.push(ms),
+        openDb: () =>
+          ({
+            execute: async (q: string | { sql: string }) => {
+              const text = typeof q === "string" ? q : q.sql;
+              sql.push(text);
+              if (text === "SELECT 1") {
+                if (++pings < 3) throw new TypeError("fetch failed", { cause: { code: "EPIPE" } });
+                return { rows: [] };
+              }
+              throw new Error("stop after the ping");
+            },
+            batch: async () => [],
+            close: () => undefined,
+          }) as unknown as Client,
+      },
+    );
+    expect(code).toBe(1);
+    expect(pings).toBe(3);
+    expect(waits).toEqual([1000, 2000]);
+    expect(sql.at(-1)).toMatch(/FROM replay_run/);
+    expect(c.lines.at(-1)).toMatch(/^replay injected: failed \(Error\) stage=record/);
   }, 120_000);
 });
 
