@@ -1,7 +1,7 @@
 // @vitest-environment node
 // D-188: a failed replay names its stage and the code locations, never the error message.
 import { describe, expect, it } from "vitest";
-import { codeFrames } from "@/lib/replay/cli";
+import { causeCode, codeFrames } from "@/lib/replay/cli";
 
 describe("codeFrames", () => {
   it("keeps our bundle's frames (function:file:line), skips other packages and Node", () => {
@@ -25,5 +25,24 @@ describe("codeFrames", () => {
     e.stack = undefined;
     expect(codeFrames(e)).toBe("");
     expect(codeFrames("boom")).toBe("");
+  });
+});
+
+describe("causeCode (D-198)", () => {
+  it("names a network cause by its fixed code only", () => {
+    const e = new TypeError("fetch failed", {
+      cause: { code: "UND_ERR_SOCKET", host: "secret.example" },
+    });
+    expect(causeCode(e)).toBe(" cause=UND_ERR_SOCKET");
+  });
+
+  it("says nothing for a missing, odd or free-text code", () => {
+    expect(causeCode(new TypeError("x"))).toBe("");
+    expect(causeCode(new TypeError("x", { cause: "ECONNRESET" }))).toBe("");
+    expect(causeCode(new TypeError("x", { cause: { code: "connect to https://secret" } }))).toBe(
+      "",
+    );
+    expect(causeCode(new TypeError("x", { cause: { code: 54 } }))).toBe("");
+    expect(causeCode("boom")).toBe("");
   });
 });
