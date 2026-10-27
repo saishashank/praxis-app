@@ -318,7 +318,7 @@ export async function replayMain(
     return 1;
   }
   const open = deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t }));
-  const db = open(url, has(token) ? token : undefined);
+  let db = open(url, has(token) ? token : undefined);
   let stage = "setup";
   try {
     const params = deps.params ?? (await loadAgentParams(db).catch(() => defaultAgentParams()));
@@ -372,6 +372,13 @@ export async function replayMain(
       out("replay learning: already recorded");
       return 0;
     }
+    // D-198: a full replay computes for hours without touching the database, and the server drops the
+    // idle connection meanwhile; record the results over a fresh one.
+    stage = "record";
+    if (m !== "learning") {
+      db.close();
+      db = open(url, has(token) ? token : undefined);
+    }
     // a paused learning run resumes under the same run id: its rows are INSERT OR IGNORE
     const seen =
       m === "learning"
@@ -405,7 +412,7 @@ export async function replayMain(
   } catch (e) {
     // Never print a driver or store error: it can carry the database URL or the repository name.
     const name = e instanceof Error ? e.name : "Error";
-    out(`replay ${m}: failed (${name}) stage=${stage}${codeFrames(e)}`);
+    out(`replay ${m}: failed (${name}) stage=${stage}${codeFrames(e)}${causeCode(e)}`);
     return 1;
   } finally {
     db.close();
@@ -433,6 +440,16 @@ export function codeFrames(e: unknown): string {
     if (frames.length === 3) break; // threshold-ok: enough frames to place the error
   }
   return frames.length === 0 ? "" : ` at=${frames.join(",")}`;
+}
+
+/**
+ * D-198: a network error (fetch failed, a dropped socket) has only Node frames; its cause carries a
+ * fixed code such as ECONNRESET or UND_ERR_SOCKET, which says what happened without any data.
+ */
+export function causeCode(e: unknown): string {
+  const cause = e instanceof Error ? (e.cause as { code?: unknown } | undefined) : undefined;
+  const code = typeof cause === "object" && cause !== null ? cause.code : undefined;
+  return typeof code === "string" && /^[A-Z][A-Z0-9_]{1,39}$/.test(code) ? ` cause=${code}` : ""; // threshold-ok: code width
 }
 
 export { budgetFor, runIdOf };
