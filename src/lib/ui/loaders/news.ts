@@ -36,7 +36,7 @@ export type NewsQuery = {
 
 /** `?chip=&q=&code=&from=&to=&page=`: null when a value is not allowed. */
 export function parseNewsQuery(sp: URLSearchParams): NewsQuery | null {
-  const chip = sp.get("chip") ?? "mine";
+  const chip = sp.get("chip") ?? "all"; // Owner 2026-10-27: All news first
   if (!(CHIPS as readonly string[]).includes(chip)) return null;
   const q = textParam(sp.get("q"), 60);
   const code = textParam(sp.get("code"), 8);
@@ -55,7 +55,13 @@ export function parseNewsQuery(sp: URLSearchParams): NewsQuery | null {
 export type NewsItemRow = {
   id: number;
   stock: string;
+  /** Company name (null when masked or unknown). */
+  company: string | null;
   title: string;
+  /** Exchange announcement type, for example "Quarterly" (null when masked or unknown). */
+  type: string | null;
+  /** Our short text when a summary exists (masked like the title); otherwise null. */
+  summary: string | null;
   published: string;
   priceSensitive: boolean;
   materiality: number | null;
@@ -73,10 +79,11 @@ export type NewsModel = {
   note: string | null;
 };
 
-const ROW_SQL = `SELECT a.id, a.code, a.title, a.published_at, a.price_sensitive,
-                        i.materiality, i.polarity, i.held, i.watch
+const ROW_SQL = `SELECT a.id, a.code, a.title, a.type, a.published_at, a.price_sensitive,
+                        i.materiality, i.polarity, i.held, i.watch, i.text_llm, n.name
                  FROM announcement a
-                 LEFT JOIN item_assessment i ON i.source = a.source AND i.ann_id = a.ann_id`;
+                 LEFT JOIN item_assessment i ON i.source = a.source AND i.ann_id = a.ann_id
+                 LEFT JOIN instrument n ON n.market = a.market AND n.code = a.code`;
 
 const pol = (v: unknown): -1 | 0 | 1 | null =>
   v === null || v === undefined ? null : Number(v) > 0 ? 1 : Number(v) < 0 ? -1 : 0; // money-float-ok: SQL integer column
@@ -147,7 +154,17 @@ export async function loadNews(env: LoaderEnv, q: NewsQuery): Promise<NewsModel>
     return {
       id: Number(x.id), // money-float-ok: SQL integer key
       stock: aliases ? aliases.label(code) : code,
+      company: masked || x.name == null ? null : String(x.name),
       title: aliases && kit ? maskText(String(x.title), aliases, kit.lookup) : String(x.title),
+      type: masked || x.type == null ? null : String(x.type),
+      summary:
+        x.text_llm == null
+          ? null
+          : aliases && kit
+            ? maskText(String(x.text_llm), aliases, kit.lookup)
+            : masked
+              ? null
+              : String(x.text_llm),
       published: masked ? (isoWeek(d) ?? MISSING) : String(x.published_at),
       priceSensitive: Number(x.price_sensitive) === 1,
       materiality: x.materiality === null ? null : Number(x.materiality), // money-float-ok: SQL integer column

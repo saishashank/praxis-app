@@ -105,16 +105,31 @@ beforeAll(async () => {
 });
 
 describe("News chips and cards (UXN-035, UXN-158)", () => {
-  it("shows the three chips; My companies is the default and lists held or watched items", async () => {
+  it("shows the three chips, All news first and the default (Owner 2026-10-27)", async () => {
     as(w, "owner");
     render(await NewsPage({ searchParams: sp() }));
     expect(screen.getByRole("heading", { level: 1, name: "News" })).toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: "News view" });
-    expect(within(nav).getAllByRole("link").length).toBe(3);
-    expect(within(nav).getByRole("link", { name: "My companies" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    const links = within(nav).getAllByRole("link");
+    expect(links.map((l) => l.textContent)).toEqual([
+      "All news",
+      "My companies",
+      expect.stringMatching(/^Alerts/),
+    ]);
+    expect(links[0]).toHaveAttribute("aria-current", "page");
+    expect(links[0]).toHaveAttribute("href", "/news");
+    const cards = screen.getAllByTestId("news-card");
+    expect(cards).toHaveLength(2);
+    // the headline comes first, then who (company name and code) and when
+    const first = cards[0]!.textContent ?? "";
+    const title = within(cards[0]!).getAllByRole("button")[0]!.textContent ?? "";
+    expect(first.startsWith(title)).toBe(true);
+    expect(first).toContain("ResultsZed Other Group (ZZOTH)·");
+  });
+
+  it("My companies lists held or watched items", async () => {
+    as(w, "owner");
+    render(await NewsPage({ searchParams: sp({ chip: "mine" }) }));
     const cards = screen.getAllByTestId("news-card");
     expect(cards).toHaveLength(1);
     expect(cards[0]!.textContent).toContain("ZZUP");

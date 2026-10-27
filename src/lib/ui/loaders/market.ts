@@ -166,6 +166,10 @@ async function tiersBefore(env: LoaderEnv, market: string, d: string) {
   );
 }
 
+/** D-199: traded on the day at or above the ARN-010 U3 price floor (A$0.10), with a real previous close. */
+const aboveFloor = (r: DayRow): boolean =>
+  r.prev > 0 && r.volume > 0 && BigInt(priceMicro(r.close)) >= TIER_RULES.u3.priceMicro;
+
 const changePpm = (r: DayRow): number => Math.round(((r.close - r.prev) / r.prev) * PPM); // money-float-ok: derived ratio, not a price
 
 // ---- slugs for masked users ------------------------------------------------------------------------
@@ -308,7 +312,10 @@ export async function loadMarket(env: LoaderEnv, q: MarketQuery): Promise<Market
     sizeGroup: masked ? null : (SIZE_GROUP[r.tier ?? ""] ?? null),
     starred: stars.has(normCode(r.code)),
   });
-  const sorted = [...pool].sort(
+  // D-199 (Owner 2026-10-27): while the history is too short for sizes, the movers lists still
+  // apply the ARN-010 U3 price floor, so an A$0.00 stock never tops a list
+  const movers = day.sized || masked ? pool : pool.filter(aboveFloor);
+  const sorted = [...movers].sort(
     (a, b) => changePpm(b) - changePpm(a) || (a.code < b.code ? -1 : 1),
   );
   const bySector = new Map<string, DayRow[]>();
@@ -349,7 +356,7 @@ export async function loadMarket(env: LoaderEnv, q: MarketQuery): Promise<Market
       .map(toRow),
     traded:
       q.tab === "movers"
-        ? [...pool]
+        ? [...movers]
             // by traded value (price x volume): a million shares at A$0.01 is not "most traded"
             .sort(
               (a, b) => b.volume * b.close - a.volume * a.close || (a.code < b.code ? -1 : 1), // money-float-ok: ordering only

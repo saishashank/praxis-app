@@ -3,7 +3,8 @@
 # evidence (VAL-110 on validation + one holdout confirmation, labels), null (AT-17 random-signal size
 # check on the real snapshot, decision 31), injected (AT-17 injected-edge power check) and learning (the
 # weekly learning run, M6 T12: comparisons, lessons, challengers, promotion rolls, ARN-076 and AGT-112
-# buckets; once per ISO week, resumes after a budget stop). The Worker's
+# buckets; once per ISO week, resumes after a budget stop) and seed-recent (D-199: no replay; copies the
+# recent price window from the history files into the database). The Worker's
 # per-minute cron may dispatch it with `ref: release` (default mode light); its slot is DISABLED until
 # the Owner enables the replay. It has no `schedule:` trigger (PLT-015).
 # SEC-108 c: the job checks out the latest approved deploy-production commit, not the release head.
@@ -31,6 +32,7 @@ on:
           - "null"
           - injected
           - learning
+          - seed-recent
       commit:
         description: Wait until this commit is the approved deploy (set by the Worker post-deploy step)
         type: string
