@@ -19,6 +19,21 @@ import type { MaskedReview } from "@/lib/view/reviews";
 import { MarkRead } from "./MarkRead";
 import { NewPicks } from "./NewPicks";
 
+/** D-200: a stored UTC timestamp reads as Melbourne time; an ISO week (masked) stays as it is. */
+const STAMP_RE = /^d{4}-d{2}-d{2}T/;
+const localTime = (v: string): string =>
+  STAMP_RE.test(v) && !Number.isNaN(Date.parse(v))
+    ? new Intl.DateTimeFormat("en-AU", {
+        timeZone: "Australia/Melbourne",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZoneName: "short",
+      }).format(new Date(v))
+    : v;
+
 export const dynamic = "force-dynamic";
 
 export default async function ReviewDatePage({
@@ -69,8 +84,9 @@ export default async function ReviewDatePage({
             </li>
           </ul>
           <p className="m-0 text-sm text-text-muted">
-            Version {model.version} ({model.kindText.toLowerCase()}), stored {model.createdAt}.{" "}
-            {model.read ? `Read ${model.read.readAt}.` : "Not marked as read yet."}
+            Version {model.version} ({model.kindText.toLowerCase()}), stored{" "}
+            {localTime(model.createdAt)}.{" "}
+            {model.read ? `Read ${localTime(model.read.readAt)}.` : "Not marked as read yet."}
           </p>
           {model.kind === "partial" ? (
             <Banner tone="warning" title="Partial review">

@@ -20,6 +20,7 @@ import {
   shockScope,
 } from "@/lib/arena/recost";
 import { parseCohortParams } from "@/lib/arena/cohort";
+import { COST_PROFILES } from "@/lib/arena/costs";
 import { requireKey, type RequestMeta } from "@/lib/auth/audit";
 import type { AuthEnv } from "@/lib/auth/env";
 import { can } from "@/lib/auth/permissions";
@@ -109,11 +110,13 @@ export type LiveCohort = {
   cohortId: string;
   family: string;
   ownProfile: string;
+  /** "U" plain shares or "L" with the leverage sleeve (D-191: L is not offered). */
+  variant: string;
 };
 
 async function liveCohorts(db: Client): Promise<LiveCohort[]> {
   const r = await db.execute(
-    `SELECT c.id, c.execution_id, e.family, c.params_json
+    `SELECT c.id, c.execution_id, e.family, e.variant, c.params_json
      FROM cohort c JOIN execution e ON e.id = c.execution_id
      WHERE e.kind = 'E' AND c.terminal_kind IS NULL AND c.control_idx IS NULL
      ORDER BY c.execution_id, c.id`,
@@ -132,6 +135,7 @@ async function liveCohorts(db: Client): Promise<LiveCohort[]> {
       cohortId: str(x.id),
       family: str(x.family),
       ownProfile,
+      variant: str(x.variant),
     });
   }
   return [...out.values()];
@@ -140,8 +144,14 @@ async function liveCohorts(db: Client): Promise<LiveCohort[]> {
 export async function loadOptions(db: Client): Promise<WhatIfOptions> {
   const [cohorts, names] = await Promise.all([liveCohorts(db), strategyNames(db)]);
   return {
-    strategies: cohorts.map((c) => ({ id: c.execution, name: names[c.family]?.name ?? c.family })),
+    // D-191/D-200: only the six strategies that use their own money are offered
+    strategies: cohorts
+      .filter((c) => c.variant !== "L")
+      .map((c) => ({ id: c.execution, name: names[c.family]?.name ?? c.family })),
     profiles: [...PROFILE_KEYS],
+    profileNames: Object.fromEntries(
+      Object.values(COST_PROFILES).map((p) => [p.code, p.name] as const),
+    ),
     shocks: [...SHOCK_STEPS],
   };
 }

@@ -18,6 +18,7 @@ const PROFILE_NAME: Record<string, string> = {
   balanced: "Balanced",
   conservative: "Conservative",
 };
+const SIZE_NAME: Record<string, string> = { U1: "Large", U2: "Mid", U3: "Small" };
 
 const linkCls = "text-accent underline";
 
@@ -77,10 +78,18 @@ function SummaryCard({ v }: { v: HomeView }) {
           {s.tiles.map((t) => (
             <li
               key={`${t.id}-${t.startD}`}
-              className="min-w-0 rounded-lg border border-border p-3"
+              className="relative min-w-0 rounded-lg border border-border p-3 hover:border-accent focus-within:border-accent"
               data-strategy-tile={t.id}
             >
-              <p className="m-0 truncate text-sm font-semibold">{t.name}</p>
+              {/* D-200: the whole tile opens the strategy (the link covers the tile) */}
+              <p className="m-0 truncate text-sm font-semibold">
+                <Link
+                  href={`/strategies/${t.id}`}
+                  className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
+                >
+                  {t.name}
+                </Link>
+              </p>
               <p className="m-0 mt-1 text-xl font-semibold">
                 <Money micro={t.value.micro} />
               </p>
@@ -126,23 +135,17 @@ function DayLine({ v }: { v: HomeView }) {
     <Card title="The market today" aria-label="The market today">
       <div className="flex flex-wrap items-start gap-3">
         <RegimeBadge regime={day.regime} />
+        {/* D-200: one plain sentence; the per-tier checks and open flags live on System Health */}
         {day.quality.length > 0 ? (
-          <ul className="m-0 flex list-none flex-wrap gap-2 p-0 text-sm">
-            {day.quality.map((q) => (
-              <li key={q.tier} className="rounded-md bg-surface-2 px-2 py-1">
-                Data {q.tier}: {q.gatePass ? "ready" : "not ready"}
-              </li>
-            ))}
-          </ul>
+          <p className="m-0 text-sm">
+            {day.quality.every((q) => q.gatePass)
+              ? "Today's prices passed their checks."
+              : "Some of today's prices are still being checked."}
+          </p>
         ) : (
-          <NotMeasured>Data quality not measured yet</NotMeasured>
+          <NotMeasured>Price checks not run yet</NotMeasured>
         )}
       </div>
-      {day.openFlags > 0 ? (
-        <p className="mt-2 text-sm">
-          {day.openFlags} data {plural(day.openFlags, "flag")} still open.
-        </p>
-      ) : null}
     </Card>
   );
 }
@@ -152,7 +155,8 @@ function PickLine({ p, masked }: { p: HomePick; masked: boolean }) {
     <li className="min-w-0 break-words border-b border-border py-2 last:border-b-0">
       <span className="font-semibold">{p.stock}</span>{" "}
       <span className="text-text-muted">
-        {PROFILE_NAME[p.profile] ?? p.profile} #{p.rank} · {p.family} · {p.tier}
+        {PROFILE_NAME[p.profile] ?? p.profile} #{p.rank} · {p.family}
+        {SIZE_NAME[p.tier] ? ` · ${SIZE_NAME[p.tier]} company` : ""}
       </span>
       {p.referenceMicro !== null ? (
         <span className="block text-sm">
@@ -228,8 +232,8 @@ export function HomeContent({
 
       {empty ? (
         <EmptyState title="No data yet">
-          {result.text} The twelve strategies show A$600, Starting, once they exist. First trade
-          ideas come after tonight&apos;s run; the first Evening Review arrives at 20:00.
+          {result.text} The six strategies show A$600, Starting, once they exist. First trade ideas
+          come after tonight&apos;s run; the first Evening Review arrives at 20:00.
         </EmptyState>
       ) : null}
 
@@ -344,7 +348,15 @@ export function HomeContent({
           <ul className="m-0 list-none p-0">
             {v.news.items.map((n, i) => (
               <li key={`${n.stock}-${i}`} className="min-w-0 break-words py-1 text-sm">
-                <span className="font-semibold">{n.stock}</span> — {n.title}
+                {masked ? (
+                  <>
+                    <span className="font-semibold">{n.stock}</span> — {n.title}
+                  </>
+                ) : (
+                  <Link href={`/market/${n.stock}`} className="hover:underline">
+                    <span className="font-semibold">{n.stock}</span> — {n.title}
+                  </Link>
+                )}
               </li>
             ))}
           </ul>

@@ -188,7 +188,8 @@ describe("/reviews list", () => {
     expect(html).toContain("<h1");
     expect(html).toContain(D);
     expect(html).toContain(PARTIAL_D);
-    expect(html).toContain("Partial (partial)");
+    expect(html).toContain(">Partial<"); // D-200: not "Partial (partial)"
+    expect(html).not.toContain("(partial)");
     expect(html).toContain("Non-trading day");
     expect(html).toContain("Written with AI"); // the partial review has an llm narrative
     expect(html).toContain("Written without AI today");
@@ -231,7 +232,7 @@ describe("/reviews list", () => {
     const week = await list({ q: "W43" });
     expect(week).toContain("Week 2026-W43");
     const kind = await list({ q: "partial" });
-    expect(kind).toContain("Partial (partial)");
+    expect(kind).toContain(">Partial<");
   });
 
   it("refuses a bad query with not found", async () => {

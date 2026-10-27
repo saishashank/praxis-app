@@ -9,7 +9,7 @@ export const TERMS: readonly Term[] = [
   {
     official: "Execution / Arena",
     shown: "Strategy / My strategies",
-    hover: "One of 12 practice strategies, each starting with A$600 of pretend money.",
+    hover: "One of 6 practice strategies, each starting with A$600 of pretend money.",
   },
   {
     official: "NAV",

@@ -152,10 +152,10 @@ describe("states", () => {
 });
 
 describe("welcome banner (UX-012a)", () => {
-  it("shows the 12 strategies, the A$1,200 goal, the A$300 loss line and Simulated, with a dismiss button", async () => {
+  it("shows the six strategies (D-191), the A$1,200 goal, the A$300 loss line and Simulated, with a dismiss button", async () => {
     await view(empty, VIEWER, true);
     const w = screen.getByRole("region", { name: "Welcome to Praxis" });
-    expect(w).toHaveTextContent(/Twelve/);
+    expect(w).toHaveTextContent(/Six practice strategies/);
     expect(w).toHaveTextContent("A$1,200");
     expect(w).toHaveTextContent("A$300");
     expect(w).toHaveTextContent(/Simulated/);

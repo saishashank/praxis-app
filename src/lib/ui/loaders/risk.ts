@@ -195,7 +195,7 @@ export async function loadRisk(deps: LoaderDeps): Promise<Loaded<RiskView>> {
       v.now,
       masked,
       { ...EMPTY, controls: controlRows, executions, families },
-      "No positions yet — the strategies start when the market is switched on.",
+      "No positions yet — the strategies make their first trades after tonight's run.",
     );
   }
   const ids = cohorts.map((c) => c.id);

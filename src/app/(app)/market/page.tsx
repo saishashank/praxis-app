@@ -130,7 +130,8 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
       ) : (
         <p className="m-0 text-sm text-text-muted">
           Size groups need 60 sessions of price history. Until then all sizes are listed together,
-          without penny and barely traded stocks.
+          and the rises and falls show only companies of at least one dollar a share with a million
+          dollars traded that day.
         </p>
       )}
 

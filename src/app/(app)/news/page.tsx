@@ -52,6 +52,14 @@ const alertWhen = (a: AlertRow, masked: boolean): string => {
   return d === null ? "n/a" : `Week ${isoWeek(d) ?? "n/a"}`;
 };
 
+/** D-200: the short text under the headline; nothing when it would only repeat the headline. */
+function shortText(n: Pick<NewsItemRow, "summary" | "type" | "title">): string | null {
+  const t = n.summary ?? n.type;
+  if (!t) return null;
+  const same = (a: string) => a.trim().toLowerCase();
+  return same(t) === same(n.title) ? null : t;
+}
+
 function PolarityTag({ row }: { row: Pick<NewsItemRow, "polarity" | "materiality"> }) {
   return (
     <span className="inline-flex flex-wrap items-center gap-1 text-xs" data-testid="polarity-tag">
@@ -375,12 +383,12 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
                     <p className="m-0 text-base font-semibold leading-snug">
                       <NewsItemButton id={n.id} headline={n.title} />
                     </p>
-                    {n.summary || n.type ? (
+                    {shortText(n) ? (
                       <p
                         className="m-0 line-clamp-3 text-sm text-text-muted"
                         data-testid="news-short"
                       >
-                        {n.summary ?? n.type}
+                        {shortText(n)}
                       </p>
                     ) : null}
                     <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-muted">
@@ -401,7 +409,8 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
                           {materialityLabel(n.materiality)}
                         </span>
                       ) : null}
-                      <PolarityTag row={n} />
+                      {/* D-200: an unassessed item shows no tag rather than "Not assessed yet" on every card */}
+                      {n.polarity !== null ? <PolarityTag row={n} /> : null}
                       {n.heldByUs ? (
                         <span className="text-xs font-medium" data-testid="held-tag">
                           {HELD_TAG}

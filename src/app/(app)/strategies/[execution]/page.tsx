@@ -118,6 +118,8 @@ function Leg({ title, leg }: { title: string; leg: SleeveLegView | null }) {
   );
 }
 
+const MIN_ROUNDS = 3; // threshold-ok: the card text names 3 separate finished rounds
+
 export default async function StrategyPage({ params }: { params: Promise<{ execution: string }> }) {
   const { execution: raw } = await params;
   let id = "";
@@ -182,7 +184,9 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
   const isOwner = user.role === "owner";
   const isEditor = user.role === "editor";
   const liveVersion = ex.versions.find((v) => v.live)?.id ?? d.ruleVersion;
-  const ev = ex.evidence;
+  // D-200: with fewer than 3 separate finished rounds the chances are not shown (0% with a 0-100%
+  // range looks like a result); the card says what is needed instead
+  const ev = ex.evidence && (ex.evidence.effectiveN ?? 0) >= MIN_ROUNDS ? ex.evidence : null;
   const cifRows = cifRowsOf(ev);
   const last12 = cifRows[cifRows.length - 1];
 

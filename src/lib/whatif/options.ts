@@ -3,6 +3,8 @@
 export type WhatIfOptions = {
   strategies: Array<{ id: string; name: string }>;
   profiles: string[];
+  /** Plain description of each brokerage profile code (D-200), e.g. "A$3.00 flat". */
+  profileNames?: Record<string, string>;
   shocks: number[];
 };
 
