@@ -94,6 +94,41 @@ describe("asx-ingest", () => {
     });
   });
 
+  it("stores every history chunk in order, after the feed (D-197)", async () => {
+    const { url, db, dir } = await setup();
+    const chunk = (code: string, n: number) =>
+      JSON.stringify({
+        data: {
+          items: Array.from({ length: n }, (_, i) => ({
+            symbol: code,
+            date: "2026-10-20T09:00:00.000Z",
+            documentKey: `2924-0${code}${i}-A`,
+            headline: "Update",
+          })),
+        },
+      });
+    writeFileSync(path.join(dir, "history-002.json"), chunk("ZZD", 2));
+    writeFileSync(path.join(dir, "history-001.json"), chunk("ZZC", 3));
+    writeFileSync(path.join(dir, "history.json"), "ignored: not a chunk name");
+    const lines: string[] = [];
+    expect(await run(url, dir, lines)).toBe(0);
+    expect(lines.slice(0, 3)).toEqual([
+      expect.stringMatching(/^asx-ingest feed\.json: ok seen=2 new=2/),
+      expect.stringMatching(/^asx-ingest history-001\.json: ok seen=3 new=3/),
+      expect.stringMatching(/^asx-ingest history-002\.json: ok seen=2 new=2/),
+    ]);
+    expect(await count(db, "SELECT COUNT(*) AS n FROM announcement")).toBe(7);
+  });
+
+  it("a missing folder stores nothing and records a failed poll", async () => {
+    const { url, db, dir } = await setup();
+    const lines: string[] = [];
+    expect(await run(url, path.join(dir, "absent"), lines)).toBe(0);
+    expect(lines).toEqual([]);
+    expect(await count(db, "SELECT COUNT(*) AS n FROM announcement")).toBe(0);
+    expect((await db.execute("SELECT failed FROM sentinel_poll_day")).rows[0]!.failed).toBe(1);
+  });
+
   it("without a directory or a database it says so", async () => {
     const l: string[] = [];
     expect(await asxIngestMain([], {}, { out: (s) => l.push(s) })).toBe(2);
