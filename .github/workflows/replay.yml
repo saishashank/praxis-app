@@ -31,6 +31,11 @@ on:
           - "null"
           - injected
           - learning
+      commit:
+        description: Wait until this commit is the approved deploy (set by the Worker post-deploy step)
+        type: string
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -64,6 +69,7 @@ jobs:
         run: node ci-tools/scripts/ci/approved-commit.mjs
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          EXPECT_COMMIT: ${{ inputs.commit }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.approved.outputs.sha }}

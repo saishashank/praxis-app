@@ -2,7 +2,7 @@
 // the company list, fills each company's history on request, and never retries in a loop.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { codesOf, fetchAll } from "./fetch.mjs";
+import { codesOf, fetchAll, HISTORY_CHUNK } from "./fetch.mjs";
 
 const NOW = Date.parse("2026-10-26T10:00:00Z");
 const CSV =
@@ -52,7 +52,7 @@ test("pages the market feed until the 48 h window is covered, then the company l
   );
   assert.ok(f.calls.every((c) => c.ua === "test-agent"));
   assert.equal(JSON.parse(r.files["feed.json"]).data.items.length, 4);
-  assert.equal(r.files["history.json"], undefined);
+  assert.equal(r.files["history-001.json"], undefined);
 });
 
 test("with history, each company's list is fetched and tagged with its code; a refusal is counted", async () => {
@@ -71,5 +71,23 @@ test("with history, each company's list is fetched and tagged with its code; a r
   const r = await fetchAll({ nowMs: NOW, history: true, fetchImpl: f.impl, sleep: async () => {} });
   assert.equal(r.stats.historyItems, 1);
   assert.equal(r.stats.failed, 1);
-  assert.equal(JSON.parse(r.files["history.json"]).data.items[0].symbol, "ZZA");
+  assert.equal(JSON.parse(r.files["history-001.json"]).data.items[0].symbol, "ZZA");
+});
+
+test("history is written in chunks the feed parser accepts (D-197)", async () => {
+  const many = Array.from({ length: HISTORY_CHUNK + 1 }, (_, i) => ({
+    documentKey: `2924-${i}`,
+    date: "2026-10-20T00:00:00Z",
+    headline: "x",
+  }));
+  const f = fakeFetch((url) => {
+    if (url.includes("/markets/")) return JSON.stringify({ data: { items: [] } });
+    if (url.endsWith(".csv")) return CSV;
+    if (url.includes("/companies/ZZA/")) return JSON.stringify({ data: { items: many } });
+    return null;
+  });
+  const r = await fetchAll({ nowMs: NOW, history: true, fetchImpl: f.impl, sleep: async () => {} });
+  assert.equal(JSON.parse(r.files["history-001.json"]).data.items.length, HISTORY_CHUNK);
+  assert.equal(JSON.parse(r.files["history-002.json"]).data.items.length, 1);
+  assert.equal(r.files["history-003.json"], undefined);
 });

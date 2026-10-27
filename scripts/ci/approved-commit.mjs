@@ -3,19 +3,40 @@
 // the required reviewer approves); the lookup lives in approved-commit-core.mjs (shared with the
 // production watchdog). Zero dependencies. Never prints the token.
 // Writes `sha=<40 hex>` to $GITHUB_OUTPUT.
+// EXPECT_COMMIT (optional, D-197): the commit the Worker's post-deploy step was started for. The
+// Worker comes up inside the deploy job, before GitHub marks that deployment a success, so the
+// lookup waits until the approved commit is that one, and fails if it never becomes it.
 import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { Fail, findApprovedSha, SHA } from "./approved-commit-core.mjs";
 
+export const EXPECT_WAIT_MS = 30_000;
+export const EXPECT_TRIES = 40; // 20 minutes; a deploy job takes about two
+
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
 /** Returns the process exit code. `out(line)` prints a line; env supplies the inputs. */
-export async function run(env, fetchImpl, out = console.log) {
+export async function run(env, fetchImpl, out = console.log, sleep = pause) {
   const token = env.GITHUB_TOKEN;
   const repo = env.GITHUB_REPOSITORY;
   try {
     if (!token || !repo || !/^[\w.-]+\/[\w.-]+$/.test(repo)) {
       throw new Fail("GITHUB_TOKEN and GITHUB_REPOSITORY are required.");
     }
+    const expect = (env.EXPECT_COMMIT ?? "").trim();
+    if (expect !== "" && !SHA.test(expect)) {
+      throw new Fail("EXPECT_COMMIT is not a 40-character hex value.");
+    }
     let sha = await findApprovedSha(fetchImpl, token, repo);
+    for (let i = 1; expect !== "" && sha !== expect; i++) {
+      if (i >= EXPECT_TRIES) {
+        out(`::error::The approved commit is ${sha ?? "none"}, not the expected ${expect}.`);
+        return 1;
+      }
+      out(`Waiting for the deploy of ${expect} to be approved (now ${sha ?? "none"}).`);
+      await sleep(EXPECT_WAIT_MS);
+      sha = await findApprovedSha(fetchImpl, token, repo);
+    }
     if (sha === null) {
       if (env.ALLOW_BOOTSTRAP === "true") {
         sha = env.GITHUB_SHA;

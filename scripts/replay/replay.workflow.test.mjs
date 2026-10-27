@@ -41,7 +41,11 @@ test("one production job on release, production environment without a deployment
 });
 
 test("the approved-commit steps and node setup are copied exactly from arena-close", () => {
-  assert.deepEqual(steps.slice(0, 5), close.jobs.production.steps.slice(0, 5));
+  // D-197: the one difference is EXPECT_COMMIT, so a post-deploy run waits for its own deploy.
+  const ours = structuredClone(steps.slice(0, 5));
+  assert.equal(ours[1].env.EXPECT_COMMIT, "${{ inputs.commit }}");
+  delete ours[1].env.EXPECT_COMMIT;
+  assert.deepEqual(ours, close.jobs.production.steps.slice(0, 5));
 });
 
 test("every action is pinned to a full commit SHA", () => {

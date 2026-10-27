@@ -44,8 +44,8 @@ describe("runPostDeploy", () => {
       "replay.yml/dispatches",
     ]);
     expect(net.github.map((c) => JSON.parse(c.body))).toEqual([
-      { ref: "release", inputs: { history: "true" } },
-      { ref: "release", inputs: { mode: "full" } },
+      { ref: "release", inputs: { history: "true", commit: COMMIT } },
+      { ref: "release", inputs: { mode: "full", commit: COMMIT } },
     ]);
     expect(JSON.parse(state()[0]!.value_json)).toMatchObject({ s: "dispatched", n: 1 });
     // the same isolate: no request at all

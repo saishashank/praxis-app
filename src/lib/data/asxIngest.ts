@@ -1,6 +1,6 @@
 // ASX store step (D-194): the commit half of the GitHub ASX fetch. Reads what scripts/asx/fetch.mjs
 // wrote (no secret was involved in fetching) and stores it with the app's own code paths:
-//   feed.json / history.json -> ingestFeed (first-seen announcements, then the Sentinel queue)
+//   feed.json / history-NNN.json -> ingestFeed (first-seen announcements, then the Sentinel queue)
 //   companies.csv            -> importUniverse (once per trading day; a repeat is "already applied")
 // and records the poll in `sentinel_poll_day` with the Worker's own statement, so System Health
 // sees the Sentinel polling. Bundled and run by scripts/asx/ingest.mjs. Output: counts only, never
@@ -8,7 +8,7 @@
 //   asx-ingest --dir <dir>
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { createClient, type Client } from "@libsql/client";
 import { getConfig } from "@/lib/config/store";
@@ -72,7 +72,12 @@ export async function asxIngestMain(
   try {
     const cap = await getConfig(db, "sentinel_max_items_per_run").catch(() => undefined);
     let feedOk = false;
-    for (const name of ["feed.json", "history.json"]) {
+    const history = existsSync(dir)
+      ? readdirSync(dir)
+          .filter((n) => /^history-\d{3}\.json$/.test(n))
+          .sort()
+      : [];
+    for (const name of ["feed.json", ...history]) {
       const body = read(name);
       if (body === null) continue;
       const sha = createHash("sha256").update(body).digest("hex");

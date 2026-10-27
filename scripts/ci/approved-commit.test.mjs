@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { run } from "./approved-commit.mjs";
+import { EXPECT_TRIES, run } from "./approved-commit.mjs";
 
 const A = "a".repeat(40);
 const B = "b".repeat(40);
@@ -122,4 +122,35 @@ test("output never contains the token", async () => {
   const t = setup([], {});
   await run(t.env, throwing, t.out);
   for (const l of [...s.lines, ...bad.lines, ...t.lines]) assert.ok(!l.includes(TOKEN));
+});
+
+test("EXPECT_COMMIT: waits until the expected deploy is approved (D-197)", async () => {
+  const statuses = { 2: [{ state: "in_progress" }], 1: [{ state: "success" }] };
+  const s = setup([dep(2, A), dep(1, B)], statuses);
+  s.env.EXPECT_COMMIT = A;
+  let slept = 0;
+  const sleep = async () => {
+    slept++;
+    if (slept === 2) statuses[2] = [{ state: "success" }];
+  };
+  assert.equal(await run(s.env, s.fetchImpl, s.out, sleep), 0);
+  assert.equal(slept, 2);
+  assert.equal(readFileSync(s.file, "utf8"), `sha=${A}\n`);
+});
+
+test("EXPECT_COMMIT: fails, writing nothing, when the deploy never becomes approved", async () => {
+  const s = setup([dep(1, B)], { 1: [{ state: "success" }] });
+  s.env.EXPECT_COMMIT = A;
+  let slept = 0;
+  assert.equal(await run(s.env, s.fetchImpl, s.out, async () => void slept++), 1);
+  assert.equal(slept, EXPECT_TRIES - 1);
+  assert.equal(readFileSync(s.file, "utf8"), "");
+  assert.ok(s.lines.some((l) => l.startsWith("::error::") && l.includes(`expected ${A}`)));
+});
+
+test("EXPECT_COMMIT: rejects a value that is not a commit", async () => {
+  const s = setup([dep(1, A)], { 1: [{ state: "success" }] });
+  s.env.EXPECT_COMMIT = "main; echo";
+  assert.equal(await run(s.env, s.fetchImpl, s.out, async () => {}), 1);
+  assert.equal(s.calls.length, 0);
 });
