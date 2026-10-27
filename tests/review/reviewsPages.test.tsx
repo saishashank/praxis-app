@@ -535,3 +535,18 @@ describe("/reviews/glossary", () => {
     await expect(glossary({ q: "a\u0000b" })).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });
+
+describe("/reviews list wording (D-200)", () => {
+  it("says once that email is switched off instead of on every row", async () => {
+    await db.execute({
+      sql: `INSERT INTO email_message (email_key, env, kind, d, slot, status, created_at)
+            VALUES ('review:c', 'production', 'review', ?, 'reserved_review', 'suppressed_off', ?)`,
+      args: [NONTRADING_D, `${NONTRADING_D}T09:30:00.000Z`],
+    });
+    as("owner");
+    const html = await list();
+    expect(html).toContain("Email is switched off, so these reviews were not emailed.");
+    expect(html).not.toContain('data-delivery="suppressed_off"');
+    expect(html).toContain('data-delivery="sent"');
+  });
+});
