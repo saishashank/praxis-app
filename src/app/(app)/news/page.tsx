@@ -28,7 +28,14 @@ import { isoWeek } from "@/lib/view/format";
 import { NOT_ADVICE_FOOTER } from "@/lib/view/honesty";
 import { AlertActions } from "./AlertActions";
 import { NewsAutoSheet, NewsItemButton } from "./NewsSheet";
-import { HELD_TAG, materialityLabel, POLARITY_HOW, polarityLabel, whenText } from "./text";
+import {
+  HELD_TAG,
+  materialityLabel,
+  POLARITY_HOW,
+  polarityLabel,
+  shortText,
+  whenText,
+} from "./text";
 
 export const dynamic = "force-dynamic";
 
@@ -375,12 +382,12 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
                     <p className="m-0 text-base font-semibold leading-snug">
                       <NewsItemButton id={n.id} headline={n.title} />
                     </p>
-                    {n.summary || n.type ? (
+                    {shortText(n) ? (
                       <p
                         className="m-0 line-clamp-3 text-sm text-text-muted"
                         data-testid="news-short"
                       >
-                        {n.summary ?? n.type}
+                        {shortText(n)}
                       </p>
                     ) : null}
                     <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-muted">
@@ -401,7 +408,8 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
                           {materialityLabel(n.materiality)}
                         </span>
                       ) : null}
-                      <PolarityTag row={n} />
+                      {/* D-200: an unassessed item shows no tag rather than "Not assessed yet" on every card */}
+                      {n.polarity !== null ? <PolarityTag row={n} /> : null}
                       {n.heldByUs ? (
                         <span className="text-xs font-medium" data-testid="held-tag">
                           {HELD_TAG}

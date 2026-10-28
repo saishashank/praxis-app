@@ -342,7 +342,7 @@ export async function loadStrategies(
       attentionCount: tiles.filter((t) => t.needsAttention).length,
       market: { control: controls.market },
     },
-    "No rounds yet — the strategies start when the market is switched on.",
+    "No rounds yet — the strategies make their first trades after tonight's run.",
   );
 }
 
@@ -560,7 +560,7 @@ export async function loadStrategyDetail(
       pastRounds,
       sleeve,
     },
-    "No rounds yet — this strategy starts when the market is switched on.",
+    "No rounds yet — this strategy makes its first trades after tonight's run.",
   );
 }
 

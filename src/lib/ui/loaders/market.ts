@@ -65,6 +65,8 @@ type DayRow = {
   active: boolean;
   /** Mean volume of the sessions in the 30 calendar days before this day, or null. */
   usualVolume: number | null;
+  /** A split, consolidation or bonus issue goes ex on this day: the price move is not a real one. */
+  reshaped: boolean;
 };
 /** `sized`: false while the history is too short for the ARN-010 size groups (D-193). */
 type Day = { d: string; rows: DayRow[]; builtAt: number; sized: boolean };
@@ -100,18 +102,30 @@ async function loadDay(env: LoaderEnv): Promise<Day | null> {
   });
   const usualBy = new Map(usual.rows.map((x) => [String(x.code), Number(x.v)]));
   const tiers = await tiersBefore(env, market, d);
+  const reshaped = new Set<string>();
+  try {
+    const ca = await env.main.execute({
+      sql: `SELECT DISTINCT code FROM corporate_action
+            WHERE market = ? AND ex_date = ? AND type IN ('split', 'consolidation', 'bonus_issue')`,
+      args: [market, d],
+    });
+    for (const x of ca.rows) reshaped.add(normCode(String(x.code)));
+  } catch {
+    // an unreadable table leaves the lists as they are
+  }
   const rows: DayRow[] = r.rows
     .filter((x) => x.prev !== null && Number(x.prev) > 0)
     .map((x) => ({
       code: String(x.code),
       name: String(x.name),
-      sector: x.sector === null ? null : String(x.sector),
+      sector: sectorName(x.sector),
       close: Number(x.c), // money-float-ok: stored REAL bar price
       prev: Number(x.prev), // money-float-ok: stored REAL bar price
       volume: Number(x.volume), // money-float-ok: stored volume
       tier: tiers === null ? null : (tiers.get(String(x.code))?.tier ?? null),
       active: tiers === null || tiers.get(String(x.code))?.status === "active",
       usualVolume: usualBy.get(String(x.code)) ?? null,
+      reshaped: reshaped.has(normCode(String(x.code))),
     }));
   const day: Day = { d, rows, builtAt: env.now.getTime(), sized: tiers !== null };
   memo.set(key, day);
@@ -166,9 +180,30 @@ async function tiersBefore(env: LoaderEnv, market: string, d: string) {
   );
 }
 
-/** D-199: traded on the day at or above the ARN-010 U3 price floor (A$0.10), with a real previous close. */
-const aboveFloor = (r: DayRow): boolean =>
-  r.prev > 0 && r.volume > 0 && BigInt(priceMicro(r.close)) >= TIER_RULES.u3.priceMicro;
+/**
+ * D-200 (Owner 2026-10-28: "show real stocks"): while the history is too short for the size groups,
+ * the movers lists keep to established companies, at least A$1 a share and A$1m traded on the day
+ * (stricter than the U3 floor of D-199). Once sized, the Large/Mid/Small groups do this job.
+ */
+const INTERIM_PRICE_MICRO = 1_000_000n; // threshold-ok: A$1 a share
+const INTERIM_TRADED_MICRO = 1_000_000_000_000n; // threshold-ok: A$1m traded on the day
+const mainstream = (r: DayRow): boolean => {
+  if (!(r.prev > 0 && r.volume > 0)) return false;
+  const price = BigInt(priceMicro(r.close));
+  return (
+    price >= INTERIM_PRICE_MICRO && price * BigInt(Math.round(r.volume)) >= INTERIM_TRADED_MICRO // money-float-ok: stored volume
+  );
+};
+
+/** ASX placeholders for "no sector yet" ("Class Pend", "Not Applic") read as one plain label. */
+const SECTOR_PLACEHOLDER = /^(class pend|not applic)/i;
+export const UNCLASSIFIED = "Not classified yet";
+export const sectorName = (v: unknown): string | null =>
+  v === null || v === undefined
+    ? null
+    : SECTOR_PLACEHOLDER.test(String(v))
+      ? UNCLASSIFIED
+      : String(v);
 
 const changePpm = (r: DayRow): number => Math.round(((r.close - r.prev) / r.prev) * PPM); // money-float-ok: derived ratio, not a price
 
@@ -312,9 +347,10 @@ export async function loadMarket(env: LoaderEnv, q: MarketQuery): Promise<Market
     sizeGroup: masked ? null : (SIZE_GROUP[r.tier ?? ""] ?? null),
     starred: stars.has(normCode(r.code)),
   });
-  // D-199 (Owner 2026-10-27): while the history is too short for sizes, the movers lists still
-  // apply the ARN-010 U3 price floor, so an A$0.00 stock never tops a list
-  const movers = day.sized || masked ? pool : pool.filter(aboveFloor);
+  // D-200: a split or consolidation is not a rise or fall; while the history is too short for sizes,
+  // the movers lists keep to established companies (A$1 a share, A$1m traded)
+  const real = pool.filter((r) => !r.reshaped);
+  const movers = day.sized || masked ? real : real.filter(mainstream);
   const sorted = [...movers].sort(
     (a, b) => changePpm(b) - changePpm(a) || (a.code < b.code ? -1 : 1),
   );
@@ -408,7 +444,7 @@ export async function searchInstruments(env: LoaderEnv, q: string): Promise<Sear
   const results = r.rows.map((x) => ({
     code: String(x.code),
     name: String(x.name),
-    sector: x.sector === null ? null : String(x.sector),
+    sector: sectorName(x.sector),
     starred: stars.has(normCode(String(x.code))),
   }));
   return { state: results.length === 0 ? "empty" : "ok", masked, q, results, note: null };

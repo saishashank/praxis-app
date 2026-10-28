@@ -16,8 +16,13 @@ type Props = {
   action: (fd: FormData) => Promise<WhatIfActionResult>;
 };
 
-const PROFILE_WORDS: Record<string, string> = { stress: "Stress (wider slippage, profile P3)" };
-const profileText = (p: string): string => PROFILE_WORDS[p] ?? `Cost profile ${p}`;
+// D-200: the fees in words, never a bare profile code
+const PROFILE_WORDS: Record<string, string> = {
+  stress: "Stress test: A$6.50 a trade and wider price gaps",
+  P0: "No fee on the zero-fee list, else A$3.00 a trade",
+};
+const profileText = (p: string, names: Record<string, string> = {}): string =>
+  PROFILE_WORDS[p] ?? (names[p] ? `Fees: ${names[p]}` : "Its own trading costs");
 
 const FIELD = "rounded-md border border-border bg-bg px-2 py-2 text-text";
 
@@ -53,7 +58,7 @@ export function WhatIfForm({ options, remaining, limit, action }: Props) {
             <select name="key" required className={FIELD}>
               {options.strategies.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name} ({s.id})
+                  {s.name}
                 </option>
               ))}
             </select>
@@ -65,7 +70,7 @@ export function WhatIfForm({ options, remaining, limit, action }: Props) {
             <select name="profile" className={FIELD}>
               {options.profiles.map((p) => (
                 <option key={p} value={p}>
-                  {profileText(p)}
+                  {profileText(p, options.profileNames)}
                 </option>
               ))}
             </select>
@@ -99,7 +104,7 @@ export function WhatIfForm({ options, remaining, limit, action }: Props) {
         </p>
       ) : null}
       {out ? (
-        <Card title={`${out.name} (${out.execution})`} headingLevel={2} aria-live="polite">
+        <Card title={out.name} headingLevel={2} aria-live="polite">
           <p className="mt-0 text-sm text-text-muted">
             From the nightly result of {out.d}. <SimulatedLabel />
           </p>
@@ -107,7 +112,7 @@ export function WhatIfForm({ options, remaining, limit, action }: Props) {
             <dl className="m-0 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-text-muted">
-                  Value if sold today, {profileText(out.result.profile)}
+                  Value if sold today, {profileText(out.result.profile, options.profileNames)}
                 </dt>
                 <dd className="m-0">
                   <Money micro={out.result.liqNavMicro} />
@@ -115,7 +120,8 @@ export function WhatIfForm({ options, remaining, limit, action }: Props) {
               </div>
               <div>
                 <dt className="text-text-muted">
-                  Value if sold today, its own costs ({out.result.ownProfile})
+                  Value if sold today, its own costs (
+                  {profileText(out.result.ownProfile, options.profileNames)})
                 </dt>
                 <dd className="m-0">
                   <Money micro={out.result.ownLiqNavMicro} />

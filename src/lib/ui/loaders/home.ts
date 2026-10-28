@@ -332,6 +332,6 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     v.now,
     masked,
     view,
-    "No data yet — the strategies start when the market is switched on.",
+    "No data yet — the strategies make their first trades after tonight's run.",
   );
 }

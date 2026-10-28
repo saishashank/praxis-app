@@ -34,13 +34,18 @@ export function profileRules(cfg: unknown, name: string): ProfileRules | null {
   return { tiers, maxPct: o.max_pct_per_pick, riskPct: o.risk_pct_per_pick };
 }
 
-const TIER_WORDS: Record<string, string> = { U1: "largest", U2: "mid-size", U3: "smaller" };
+const TIER_WORDS: Record<string, string> = { U1: "large", U2: "mid-size", U3: "small" };
 
 /** The one-sentence rule of a profile (UXN-040 hover), from the stored caps. */
 export function profileSentence(rules: ProfileRules | null): string {
   if (rules === null) return "Rules for this profile are not available.";
-  const sizes = rules.tiers.map((t) => TIER_WORDS[t] ?? t).join(", ");
-  return `Picks from ${sizes} companies; no more than ${rules.maxPct}% of the portfolio in one company and no more than ${rules.riskPct}% at risk.`;
+  // D-200: "large and mid-size companies", not "largest, mid-size companies"
+  const words = rules.tiers.map((t) => TIER_WORDS[t] ?? t);
+  const sizes =
+    words.length > 1
+      ? `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`
+      : words.join("");
+  return `Picks from ${sizes} companies. No more than ${rules.maxPct}% of the portfolio goes into one company, and no more than ${rules.riskPct}% of it is at risk on one pick.`;
 }
 
 /** At most `max` picks per family, in the loader's order (rank). */

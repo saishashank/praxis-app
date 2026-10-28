@@ -152,10 +152,10 @@ describe("states", () => {
 });
 
 describe("welcome banner (UX-012a)", () => {
-  it("shows the 12 strategies, the A$1,200 goal, the A$300 loss line and Simulated, with a dismiss button", async () => {
+  it("shows the six strategies (D-191), the A$1,200 goal, the A$300 loss line and Simulated, with a dismiss button", async () => {
     await view(empty, VIEWER, true);
     const w = screen.getByRole("region", { name: "Welcome to Praxis" });
-    expect(w).toHaveTextContent(/Twelve/);
+    expect(w).toHaveTextContent(/Six practice strategies/);
     expect(w).toHaveTextContent("A$1,200");
     expect(w).toHaveTextContent("A$300");
     expect(w).toHaveTextContent(/Simulated/);
@@ -198,5 +198,72 @@ describe("accessibility and layout", () => {
   it("the day sentence never names a stock", async () => {
     const result = await loadHome(deps(pop, OWNER));
     expect(daySentence(result.data)).not.toMatch(new RegExp(CODES.join("|")));
+  });
+});
+
+describe("Home for a first-time user (D-200)", () => {
+  const tile = {
+    id: "E01",
+    name: "Follow the trend",
+    seed: { micro: "600000000", currency: "AUD", simulated: true },
+    value: { micro: "600000000", currency: "AUD", simulated: true },
+    startD: "2026-10-19",
+    sinceStart: { micro: "0", currency: "AUD", simulated: true },
+    sinceStartPpm: 0,
+    dayChange: null,
+  };
+  const news = { stock: "ZZUP", title: "Half year results", publishedAt: "x", materiality: 2 };
+
+  async function withView(u: typeof OWNER, patch: (v: Record<string, unknown>) => void) {
+    const result = await loadHome(deps(pop, u));
+    const data = structuredClone(result.data) as unknown as Record<string, unknown>;
+    patch(data);
+    render(
+      <HomeContent
+        result={{ ...result, data: data as unknown as typeof result.data }}
+        role={u.role}
+        showWelcome={false}
+      />,
+    );
+  }
+
+  it("says the data checks in one sentence, opens a strategy from its tile and a company from news", async () => {
+    await withView(OWNER, (v) => {
+      v.day = {
+        regime: null,
+        regimeD: null,
+        quality: [{ tier: "U1", score: 1, gatePass: true }],
+        openFlags: 7,
+      };
+      (v.summary as { tiles: unknown[] }).tiles = [tile];
+      v.news = { hidden: false, items: [news] };
+    });
+    expect(screen.getByText("Today's prices passed their checks.")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/Data U1|data flags? still open/);
+    expect(screen.getByRole("link", { name: "Follow the trend" })).toHaveAttribute(
+      "href",
+      "/strategies/E01",
+    );
+    expect(screen.getByRole("link", { name: /ZZUP — Half year results/ })).toHaveAttribute(
+      "href",
+      "/market/ZZUP",
+    );
+  });
+
+  it("says when prices are still being checked, and a masked user's news is not a link", async () => {
+    await withView(EDITOR, (v) => {
+      v.day = {
+        regime: null,
+        regimeD: null,
+        quality: [
+          { tier: "U1", score: 1, gatePass: true },
+          { tier: "U2", score: 0, gatePass: false },
+        ],
+        openFlags: 0,
+      };
+      v.news = { hidden: false, items: [{ ...news, stock: "Stock A" }] };
+    });
+    expect(screen.getByText("Some of today's prices are still being checked.")).toBeInTheDocument();
+    expect(screen.getByText(/Half year results/).closest("a")).toBeNull();
   });
 });
