@@ -226,7 +226,17 @@ export async function assess(db, o) {
     [market],
   );
   const firstMarker = first[0]?.d == null ? null : String(first[0].d);
+  // D-202: the newest bar before the pipeline started (the end of the seeded history)
+  const before =
+    firstMarker === null
+      ? []
+      : await sel(db, io, "SELECT MAX(d) AS d FROM price_bar WHERE market = ? AND d < ?", [
+          market,
+          firstMarker,
+        ]);
+  const lastBarBefore = before[0]?.d == null ? null : String(before[0].d);
   const plan = planDates({
+    lastBarBefore,
     target,
     markers: new Set(markerRows.map((r) => String(r.d))),
     firstMarker,

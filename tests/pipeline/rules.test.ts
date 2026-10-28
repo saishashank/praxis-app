@@ -200,6 +200,26 @@ describe("planDates (catch-up)", () => {
     expect(p.dates.map((x) => x.d)).toEqual(["2026-10-13", "2026-10-15", "2026-10-16"]);
   });
 
+  it("D-202: days between the end of the history and the first marker are caught up", () => {
+    // history ends 2026-10-08, the pipeline started 2026-10-15: 9, 12, 13 are missed (14 a holiday)
+    const p = mk(["2026-10-15"], "2026-10-15", "2026-10-16", { lastBarBefore: "2026-10-08" });
+    expect(p.dates.map((x) => x.d)).toEqual([
+      "2026-10-09",
+      "2026-10-12",
+      "2026-10-13",
+      "2026-10-16",
+    ]);
+    // history right up to the first marker: nothing extra; still bounded by the look-back
+    expect(
+      mk(["2026-10-15"], "2026-10-15", "2026-10-16", { lastBarBefore: "2026-10-14" }).dates,
+    ).toEqual([{ d: "2026-10-16", trading: true }]);
+    const far = mk(["2026-10-15"], "2026-10-15", "2026-10-16", {
+      lastBarBefore: "2026-09-01",
+      lookbackDays: 4,
+    });
+    expect(far.dates.map((x) => x.d)).toEqual(["2026-10-13", "2026-10-16"]);
+  });
+
   it("the target with a marker is not planned; a non-trading target is planned as such", () => {
     expect(mk(["2026-10-13"], "2026-10-13", "2026-10-13").dates).toEqual([]);
     expect(mk(["2026-10-16"], "2026-10-16", "2026-10-17").dates).toEqual([
