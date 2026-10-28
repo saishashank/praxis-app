@@ -188,7 +188,8 @@ describe("/reviews list", () => {
     expect(html).toContain("<h1");
     expect(html).toContain(D);
     expect(html).toContain(PARTIAL_D);
-    expect(html).toContain("Partial (partial)");
+    expect(html).toContain(">Partial<"); // D-200: not "Partial (partial)"
+    expect(html).not.toContain("(partial)");
     expect(html).toContain("Non-trading day");
     expect(html).toContain("Written with AI"); // the partial review has an llm narrative
     expect(html).toContain("Written without AI today");
@@ -231,7 +232,7 @@ describe("/reviews list", () => {
     const week = await list({ q: "W43" });
     expect(week).toContain("Week 2026-W43");
     const kind = await list({ q: "partial" });
-    expect(kind).toContain("Partial (partial)");
+    expect(kind).toContain(">Partial<");
   });
 
   it("refuses a bad query with not found", async () => {
@@ -532,5 +533,20 @@ describe("/reviews/glossary", () => {
     expect(html).not.toContain("Cost drag");
     expect(await glossary({ q: "zzqq" })).toContain("No terms match");
     await expect(glossary({ q: "a\u0000b" })).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+});
+
+describe("/reviews list wording (D-200)", () => {
+  it("says once that email is switched off instead of on every row", async () => {
+    await db.execute({
+      sql: `INSERT INTO email_message (email_key, env, kind, d, slot, status, created_at)
+            VALUES ('review:c', 'production', 'review', ?, 'reserved_review', 'suppressed_off', ?)`,
+      args: [NONTRADING_D, `${NONTRADING_D}T09:30:00.000Z`],
+    });
+    as("owner");
+    const html = await list();
+    expect(html).toContain("Email is switched off, so these reviews were not emailed.");
+    expect(html).not.toContain('data-delivery="suppressed_off"');
+    expect(html).toContain('data-delivery="sent"');
   });
 });

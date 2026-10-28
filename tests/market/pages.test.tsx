@@ -145,10 +145,15 @@ describe("the Market tab for the Owner", () => {
     expect(screen.getByRole("heading", { name: "Biggest rises" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Biggest falls" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Most traded" })).toBeInTheDocument();
-    expect(container.textContent).toContain("▲");
-    expect(container.textContent).toContain("▼");
-    expect(container.textContent).toContain("+5.00%");
-    expect(container.textContent).toContain("-10.00%");
+    // D-200: this world's thinly traded codes stay out of the movers before size groups exist,
+    // so the day change, arrow and sign are checked on All companies
+    expect(container.textContent).toContain("No company rose at the last close.");
+    cleanup();
+    const all = (await market({ tab: "all" })).container;
+    expect(all.textContent).toContain("▲");
+    expect(all.textContent).toContain("▼");
+    expect(all.textContent).toContain("+5.00%");
+    expect(all.textContent).toContain("-10.00%");
   });
 
   it("All companies shows name, code, price label, size and sector, and pages with links", async () => {

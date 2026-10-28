@@ -10,7 +10,8 @@ import { safeSourceUrl } from "@/lib/http/safeLink";
 import { dateStaleness } from "@/lib/view/staleness";
 import { maskText, normCode } from "@/lib/view/mask";
 import { strategyNames } from "./common";
-import { codeFromSlug, slugOf, starredCodes } from "./market";
+import { TIER_RULES } from "@/lib/data/universe/tiers.mjs";
+import { codeFromSlug, sectorName, slugOf, starredCodes } from "./market";
 import { marketOf, maskKit, priceMicro, todayD, type LoaderEnv, type LoaderState } from "./shell";
 
 const PPM = 1_000_000; // threshold-ok: parts per million
@@ -164,6 +165,13 @@ export async function loadCompany(env: LoaderEnv, key: string): Promise<CompanyM
   const stale = dateStaleness(last?.d ?? null, today, STALE_DAYS);
 
   const tier = await soft(async () => {
+    // D-200: a night with under 60 sessions of history stores every code as U3, which would call
+    // BHP a small company; the size is shown only once the history can support it (as on Market)
+    const sessions = await env.main.execute({
+      sql: "SELECT COUNT(*) AS n FROM (SELECT DISTINCT d FROM price_bar WHERE market = ? LIMIT ?)",
+      args: [market, TIER_RULES.windowSessions],
+    });
+    if (Number(sessions.rows[0]?.n ?? 0) < TIER_RULES.windowSessions) return null; // money-float-ok: SQL count
     const r = await env.main.execute({
       sql: `SELECT tier FROM universe_snapshot WHERE market = ? AND code = ?
             ORDER BY d DESC LIMIT 1`,
@@ -235,7 +243,7 @@ export async function loadCompany(env: LoaderEnv, key: string): Promise<CompanyM
     ...base,
     starred: (await soft(() => starredCodes(env), new Set<string>())).has(normCode(code)),
     name: String(i.name),
-    sector: i.sector === null ? null : String(i.sector),
+    sector: sectorName(i.sector),
     sizeGroup: SIZE_GROUP[tier ?? ""] ?? null,
     listedOn: i.listed_on === null ? null : String(i.listed_on),
     delisted:

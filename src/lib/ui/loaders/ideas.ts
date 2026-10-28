@@ -149,7 +149,7 @@ export async function loadIdeas(
       v.now,
       masked,
       emptyView(market),
-      "No trade ideas yet: the strategies start when the market is switched on.",
+      "No trade ideas yet: the strategies make their first trades after tonight's run.",
     );
   }
 

@@ -132,36 +132,49 @@ function ListView({ model, q }: { model: ReviewListModel; q: string | undefined 
             : "The first review appears after the evening run has stored one."}
         </EmptyState>
       ) : (
-        <ul aria-label="Evening reviews" className="m-0 flex list-none flex-col gap-2 p-0">
-          {model.rows.map((r) => (
-            <li
-              key={r.href}
-              className="min-w-0 rounded-lg border border-border bg-surface p-3 text-sm break-words"
-            >
-              <Link href={r.href} className="text-base font-semibold text-accent underline">
-                {r.label}
-              </Link>
-              <ul className="m-0 mt-2 flex list-none flex-wrap gap-2 p-0">
-                <li className="rounded-md bg-surface-2 px-2 py-1 font-semibold">
-                  {r.kindText}
-                  {r.partial ? " (partial)" : ""}
-                </li>
-                <li
-                  className="rounded-md bg-surface-2 px-2 py-1"
-                  data-provenance={r.ai ? "ai" : "no-ai"}
-                >
-                  {r.aiText}
-                </li>
-                <li className="rounded-md bg-surface-2 px-2 py-1" data-delivery={r.delivery.status}>
-                  {r.delivery.text}
-                </li>
-                <li className="rounded-md bg-surface-2 px-2 py-1">
-                  {r.read ? "Read" : "Not read yet"}
-                </li>
-              </ul>
-            </li>
-          ))}
-        </ul>
+        <>
+          {model.rows.some((r) => r.delivery.status === "suppressed_off") ? (
+            <p className="m-0 text-sm text-text-muted">
+              Email is switched off, so these reviews were not emailed. They are all here.
+            </p>
+          ) : null}
+          <ul aria-label="Evening reviews" className="m-0 flex list-none flex-col gap-2 p-0">
+            {model.rows.map((r) => (
+              <li
+                key={r.href}
+                className="min-w-0 rounded-lg border border-border bg-surface p-3 text-sm break-words"
+              >
+                <Link href={r.href} className="text-base font-semibold text-accent underline">
+                  {r.label}
+                </Link>
+                <ul className="m-0 mt-2 flex list-none flex-wrap gap-2 p-0">
+                  <li className="rounded-md bg-surface-2 px-2 py-1 font-semibold">
+                    {r.kindText}
+                    {r.partial && !/partial/i.test(r.kindText) ? " (partial)" : ""}
+                  </li>
+                  <li
+                    className="rounded-md bg-surface-2 px-2 py-1"
+                    data-provenance={r.ai ? "ai" : "no-ai"}
+                  >
+                    {r.aiText}
+                  </li>
+                  {/* D-200: "email is switched off" is said once above the list, not on every row */}
+                  {r.delivery.status === "suppressed_off" ? null : (
+                    <li
+                      className="rounded-md bg-surface-2 px-2 py-1"
+                      data-delivery={r.delivery.status}
+                    >
+                      {r.delivery.text}
+                    </li>
+                  )}
+                  <li className="rounded-md bg-surface-2 px-2 py-1">
+                    {r.read ? "Read" : "Not read yet"}
+                  </li>
+                </ul>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       {model.page > 1 || model.hasMore ? (

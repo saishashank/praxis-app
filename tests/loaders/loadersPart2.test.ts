@@ -214,10 +214,29 @@ describe("populated loaders", () => {
       const env = envOf(w, "owner");
       const movers = await loadMarket(env, { tab: "movers", page: 1 });
       expect(movers.state).toBe("ok");
-      expect(movers.up.map((r) => r.stock)).toEqual(["ZZOTH", "ZZUP"]); // +10 %, +5 %
-      expect(movers.down.map((r) => r.stock)).toEqual(["ZZDN"]);
-      expect(movers.up[1]).toMatchObject({ name: "Zed Upward Holdings", changePpm: 50000 });
-      expect(movers.up[1]!.close).toEqual({ micro: "10500000", currency: "AUD", simulated: true });
+      // D-200: before size groups exist, the movers keep to A$1+ shares with A$1m traded on the
+      // day; every code of this world trades a few thousand dollars, so the lists are empty ...
+      expect(movers.up).toEqual([]);
+      expect(movers.down).toEqual([]);
+      // ... and a liquid code is listed with its name, change and price
+      const liquid = await fullWorld();
+      await liquid.main.execute(
+        "INSERT INTO instrument (market, code, name, sector) VALUES ('AU','ZZLIQ','Zed Liquid Ltd','Technology')",
+      );
+      for (const [d, c] of [
+        ["2026-10-16", 20],
+        [D, 21],
+      ] as const) {
+        await liquid.main.execute({
+          sql: `INSERT INTO price_bar (market, code, d, o, h, l, c, volume, source, published_at, ingested_at)
+                VALUES ('AU', 'ZZLIQ', ?, ?, ?, ?, ?, 100000, 'test', ?, ?)`,
+          args: [d, c, c, c, c, `${d}T06:00:00.000Z`, `${d}T06:05:00.000Z`],
+        });
+      }
+      const live = await loadMarket(envOf(liquid, "owner"), { tab: "movers", page: 1 });
+      expect(live.up.map((r) => r.stock)).toEqual(["ZZLIQ"]);
+      expect(live.up[0]).toMatchObject({ name: "Zed Liquid Ltd", changePpm: 50000 });
+      expect(live.up[0]!.close).toEqual({ micro: "21000000", currency: "AUD", simulated: true });
       const sectors = await loadMarket(env, { tab: "sectors", page: 1 });
       expect(sectors.sectors.map((s) => s.sector)).toEqual(["Materials", "Other", "Technology"]);
       const all = await loadMarket(env, { tab: "all", sector: "Technology", page: 1 });

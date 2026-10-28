@@ -72,7 +72,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ code: 
           <p className="m-0 text-sm text-text-muted break-words">
             {c.name ? <span className="font-mono">{c.stock}</span> : null}
             {c.sector ? ` · ${c.sector}` : ""}
-            {c.sizeGroup ? ` · ${c.sizeGroup} company` : ""}
+            {c.sizeGroup ? ` · ${c.sizeGroup} company` : c.name ? " · Size not known yet" : ""}
           </p>
         </div>
         <RowActions
