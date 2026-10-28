@@ -492,15 +492,20 @@ describe("write surface", () => {
 
 describe("D-178: market facts are not data faults", () => {
   const OLD = "2026-08-03"; // more than 30 days before MON: the market has history
-  /** A stored bar on OLD for every code but `skip`, as the price backfill leaves it. */
+  /**
+   * A stored bar on OLD for every code but `skip`, as the price backfill leaves it, and on the
+   * session before MON, so the history ends where the pipeline starts (no D-202 catch-up).
+   */
   async function withHistory(db: Client, skip: string[]) {
     for (const code of CODES.filter((c) => !skip.includes(c))) {
-      const b = bar(code, OLD); // same prices as the test bars, another volume (nothing identical)
-      await db.execute({
-        sql: `INSERT INTO price_bar (market, code, d, o, h, l, c, volume, source, published_at, ingested_at)
-              VALUES ('AU', ?, ?, ?, ?, ?, ?, 999, 'yahoo_eod', ?, ?)`,
-        args: [code, OLD, b.open, b.high, b.low, b.close, NOW, NOW],
-      });
+      for (const d of [OLD, "2026-10-09"]) {
+        const b = bar(code, d); // same prices as the test bars, another volume (nothing identical)
+        await db.execute({
+          sql: `INSERT INTO price_bar (market, code, d, o, h, l, c, volume, source, published_at, ingested_at)
+                VALUES ('AU', ?, ?, ?, ?, ?, ?, 999, 'yahoo_eod', ?, ?)`,
+          args: [code, d, b.open, b.high, b.low, b.close, NOW, NOW],
+        });
+      }
     }
   }
 
