@@ -217,7 +217,7 @@ describe("planDates (catch-up)", () => {
       lastBarBefore: "2026-09-01",
       lookbackDays: 4,
     });
-    expect(far.dates.map((x) => x.d)).toEqual(["2026-10-13", "2026-10-16"]);
+    expect(far.dates.map((x) => x.d)).toEqual(["2026-10-12", "2026-10-13", "2026-10-16"]);
   });
 
   it("the target with a marker is not planned; a non-trading target is planned as such", () => {
