@@ -109,11 +109,11 @@ async function loadDay(env: LoaderEnv): Promise<Day | null> {
               WHERE market = ? AND ex_date = ? AND type IN ('split', 'consolidation', 'bonus_issue')`,
         args: [market, d],
       })
-      .catch(() => null), // an unreadable table leaves the lists as they are
+      .catch(() => ({ rows: [] as Record<string, unknown>[] })), // an unreadable table leaves the lists as they are
   ]);
   const usualBy = new Map(usual.rows.map((x) => [String(x.code), Number(x.v)]));
   const reshaped = new Set<string>();
-  for (const x of ca?.rows ?? []) reshaped.add(normCode(String(x.code)));
+  for (const x of ca.rows) reshaped.add(normCode(String(x.code)));
   const rows: DayRow[] = r.rows
     .filter((x) => x.prev !== null && Number(x.prev) > 0)
     .map((x) => ({
@@ -163,16 +163,14 @@ async function tiersBefore(env: LoaderEnv, market: string, d: string) {
   // D-201: the first bar of every candidate in ONE round trip (one query per code took seconds)
   const candidates = [...traded].filter(([, t]) => medianMicro(t) >= TIER_RULES.u2.advMicro);
   const listed = new Map<string, string | null>();
-  if (candidates.length > 0) {
-    const first = await env.main.execute({
-      sql: `SELECT j.value AS code,
-                   (SELECT p.d FROM price_bar p WHERE p.market = ? AND p.code = j.value
-                    ORDER BY p.d LIMIT 1) AS d
-              FROM json_each(?) j`,
-      args: [market, JSON.stringify(candidates.map(([code]) => code))],
-    });
-    for (const x of first.rows) listed.set(String(x.code), x.d === null ? null : String(x.d));
-  }
+  const first = await env.main.execute({
+    sql: `SELECT j.value AS code,
+                 (SELECT p.d FROM price_bar p WHERE p.market = ? AND p.code = j.value
+                  ORDER BY p.d LIMIT 1) AS d
+            FROM json_each(?) j`,
+    args: [market, JSON.stringify(candidates.map(([code]) => code))],
+  });
+  for (const x of first.rows) listed.set(String(x.code), String(x.d)); // every candidate has a bar
   return assignTiers(
     [...traded.keys()].map((code) => ({
       code,
