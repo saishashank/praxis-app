@@ -38,6 +38,11 @@ export function inferRatio(
   tolerancePct: number,
 ): { type: "split" | "consolidation"; payload: { new: number; old: number } } | null;
 
+export function isPriceOnly(sources: readonly string[]): boolean;
+export function adjCloseDisagrees(
+  adj: { prevAdj: number; exAdj: number } | null | undefined,
+  tolerancePct: number,
+): boolean;
 export function evidenceScore(sources: readonly string[], consistent: boolean): number;
 export type GroupAction = { id: number; type: string; payload: unknown; sources: string[] };
 export type Decision = {
@@ -51,6 +56,7 @@ export function evaluateGroup(i: {
   price: { prevClose: number; exClose: number } | null;
   tolerancePct?: number;
   hasEffective?: boolean;
+  adj?: { prevAdj: number; exAdj: number } | null;
 }): { pending: true } | { pending: false; observed: number | null; decisions: Decision[] };
 
 export type State =

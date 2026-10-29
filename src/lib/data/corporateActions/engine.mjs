@@ -25,6 +25,7 @@ import {
   factorFor,
   inferRatio,
   isEffective,
+  isPriceOnly,
   isUnresolved,
   parseNote,
   pickBestEvidence,
@@ -365,7 +366,8 @@ async function priceEvidence(db, io, market, code, exDate) {
  * Decide every pending action whose evidence is available: auto-confirm, or queue as a conflict
  * (Owner queue for relevant codes, blocked-only otherwise).
  * @param {Client} db @param {{ market: string, d: string, now: string, io: Io, actions: Action[],
- *   relevant: (code: string) => boolean }} c
+ *   relevant: (code: string) => boolean,
+ *   adjClose?: Record<string, { prevAdj: number, exAdj: number }> }} c
  * @param {{ priceTolerancePct: number }} cfg
  */
 export async function evaluatePending(db, c, cfg) {
@@ -397,6 +399,8 @@ export async function evaluatePending(db, c, cfg) {
       price,
       tolerancePct: cfg.priceTolerancePct,
       hasEffective: members.some((a) => a.state === "confirmed"),
+      // GL-01: optional Yahoo adjusted closes (code -> { prevAdj, exAdj }); absent = no veto.
+      adj: c.adjClose?.[first.code] ?? null,
     });
     if (res.pending) {
       out.still_pending += pending.length;
@@ -517,7 +521,10 @@ export async function applyDue(db, c, cfg) {
       [c.market, from, c.d],
     )
   ).map((r) => ({ d: String(r.d), kind: String(r.kind) }));
-  const due = owner.filter((a) => autoApplyDue(a.stateSince, c.d, cal, cfg.autoApplySessions));
+  // GL-01: a price-only inferred action is never auto-applied; it waits for the Owner.
+  const due = owner.filter(
+    (a) => !isPriceOnly(a.sources) && autoApplyDue(a.stateSince, c.d, cal, cfg.autoApplySessions),
+  );
   const done = new Set();
   for (const a of due) {
     const k = groupKey(a);
@@ -526,13 +533,12 @@ export async function applyDue(db, c, cfg) {
     const members = c.actions.filter((x) => groupKey(x) === k);
     const hasEffective = members.some((x) => x.state === "confirmed");
     const openMembers = members.filter((x) => ["owner", "blocked", "pending"].includes(x.state));
+    const eligible = openMembers.filter((x) => x.state !== "pending" && !isPriceOnly(x.sources));
+    // Nothing but vetoed price-only readings left: they stay queued (and entries stay blocked).
+    if (!hasEffective && !eligible.length) continue;
     const best = hasEffective
       ? null
-      : pickBestEvidence(
-          openMembers
-            .filter((x) => x.state !== "pending")
-            .map((x) => ({ id: x.id, score: Number(x.note.score ?? 0) })),
-        );
+      : pickBestEvidence(eligible.map((x) => ({ id: x.id, score: Number(x.note.score ?? 0) })));
     for (const x of openMembers) {
       const now = after(c.now, x.latest?.at);
       if (best && x.id === best.id) {
@@ -814,7 +820,8 @@ export async function resolveAction(db, c) {
  * Stage 4 for one trading date: capture, decide, queue, apply due items, recompute factors, raise
  * and clear entry blocks, re-run quality for earlier affected dates.
  * @param {{ db: Client, market: string, d: string, io: Io, now?: string,
- *   candidates?: Candidate[], relevant?: (code: string) => boolean }} ctx
+ *   candidates?: Candidate[], relevant?: (code: string) => boolean,
+ *   adjClose?: Record<string, { prevAdj: number, exAdj: number }> }} ctx
  */
 export async function runCorporateActions(ctx) {
   const { db, market, d, io } = ctx;
@@ -843,7 +850,7 @@ export async function runCorporateActions(ctx) {
     actions,
   });
   captured.inserted += capturedJumps.inserted;
-  const base = { market, d, now, io, actions, relevant };
+  const base = { market, d, now, io, actions, relevant, adjClose: ctx.adjClose };
   const evaluated = await evaluatePending(db, base, cfg);
   const promoted = await promoteBlocked(db, base);
   const applied = await applyDue(db, base, cfg);
@@ -888,4 +895,5 @@ export const corporateActionsHook = async (c) =>
     now: c.now,
     candidates: c.candidates,
     relevant: c.relevant,
+    adjClose: c.adjClose,
   });
