@@ -4,6 +4,8 @@
 //   1. parse with the active `FeedParser` (the format is TODO(fixtures) [VERIFY]);
 //   2. first-seen insert of every item into `announcement` (ON CONFLICT DO NOTHING, so a repeated
 //      body or a repeated item changes nothing and `items_new` counts only the rows really added);
+//      (M14 DAT-237) each row carries `content_hash`; an item whose hash an earlier row of the same
+//      code already holds is an exact repeat and is assessed at materiality 0: no alert, no breaker;
 //   3. take at most `maxItems` (<= 40, `sentinel_max_items_per_run`) UNASSESSED announcements of
 //      the carry window, OLDEST FIRST, so nothing starves; the `announcement` table is the queue,
 //      the rest are "carried" and are picked up by the next call (or by alert-flush, T6);
@@ -13,7 +15,9 @@
 //      and a sink call for a red one (`breakers.ts`).
 // No order is written here (AGT-012: the Sentinel never changes orders); the alert and e-mail path
 // is T6. Nothing the feed says reaches a log or a response body.
+import { createHash } from "node:crypto";
 import type { Client, InStatement } from "@libsql/client";
+import { normaliseTitle } from "@/lib/agents/announcementDedup";
 import { ASX_SOURCE } from "@/lib/data/asxToken";
 import { ACTIVE_FEED_PARSER, type FeedItem, type FeedParser } from "./feed";
 import { assess, MATERIALITY_RULE_VERSION } from "./materiality";
@@ -54,6 +58,18 @@ const clampItems = (n: number | undefined): number =>
     ? Math.min(n, MAX_ITEMS_PER_RUN)
     : MAX_ITEMS_PER_RUN;
 
+/** DAT-237 (D-240): sha256(market | code | normalised title | published date), lower-case hex. */
+export function announcementContentHash(
+  market: string,
+  code: string,
+  title: string,
+  publishedAt: string,
+): string {
+  return createHash("sha256")
+    .update([market, code, normaliseTitle(title), publishedAt.slice(0, 10)].join("|"), "utf8")
+    .digest("hex");
+}
+
 function insertAnnouncements(
   items: readonly FeedItem[],
   market: string,
@@ -66,7 +82,7 @@ function insertAnnouncements(
       sql:
         "INSERT INTO announcement (market, code, ann_id, published_at, ingested_at, type, " +
         // GL-05: first_ingested_at = the instant this system first stored the row (live: now)
-        `price_sensitive, title, url, source, first_ingested_at) VALUES ${slice.map(() => "(?,?,?,?,?,?,?,?,?,?,?)").join(",")} ` +
+        `price_sensitive, title, url, source, first_ingested_at, content_hash) VALUES ${slice.map(() => "(?,?,?,?,?,?,?,?,?,?,?,?)").join(",")} ` +
         "ON CONFLICT DO NOTHING",
       args: slice.flatMap((r) => [
         market,
@@ -80,6 +96,7 @@ function insertAnnouncements(
         r.url,
         ASX_SOURCE,
         now,
+        announcementContentHash(market, r.code, r.title, r.publishedAt),
       ]),
     });
   }
@@ -112,7 +129,9 @@ export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
         {
           sql:
             "SELECT a.ann_id AS ann_id, a.code AS code, a.type AS type, a.published_at AS published_at, " +
-            "a.price_sensitive AS price_sensitive, a.title AS title " +
+            "a.price_sensitive AS price_sensitive, a.title AS title, " +
+            "(a.content_hash IS NOT NULL AND EXISTS (SELECT 1 FROM announcement b WHERE b.market = a.market " +
+            "AND b.code = a.code AND b.content_hash = a.content_hash AND b.id < a.id)) AS dup " +
             `${where} ORDER BY a.published_at ASC, a.id ASC LIMIT ?`,
           args: [...qargs, max],
         },
@@ -129,7 +148,8 @@ export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
     for (const r of queue.rows) {
       const code = String(r.code);
       const m = membershipOf(code, sets);
-      const a = assess(
+      const dup = Number(r.dup) === 1;
+      const assessed1 = assess(
         {
           type: r.type === null ? null : String(r.type),
           title: String(r.title),
@@ -137,7 +157,9 @@ export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
         },
         m,
       );
-      if (m.held || m.candidate) {
+      // An exact repeat is stored and marked assessed, but never alerts (materiality 0, polarity 0).
+      const a = dup ? { ...assessed1, materiality: 0 as const, polarity: 0 as const } : assessed1;
+      if (!dup && (m.held || m.candidate)) {
         affected.push({
           annId: String(r.ann_id),
           code,
