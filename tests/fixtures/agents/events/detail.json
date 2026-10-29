@@ -1,0 +1,18 @@
+{
+  "format": "praxis-event-detail-cases/1",
+  "note": "Synthetic announcement titles; no vendor text. AGT-135 / AGT-138 (events-v2).",
+  "cases": [
+    { "type": "Price Query", "title": "Response to ASX price query", "category": "exchange_query", "detail": "query_response" },
+    { "type": null, "title": "Response to ASX Aware Letter", "category": "exchange_query", "detail": "query_response" },
+    { "type": null, "title": "Aware letter response", "category": "exchange_query", "detail": "query_response" },
+    { "type": "Price Query", "title": "Price query", "category": "exchange_query", "detail": null },
+    { "type": null, "title": "ASX Aware Letter", "category": "exchange_query", "detail": null },
+    { "type": null, "title": "Company reaffirms FY guidance", "category": "other", "detail": "guidance_maintained" },
+    { "type": null, "title": "FY26 outlook unchanged", "category": "other", "detail": "guidance_maintained" },
+    { "type": null, "title": "Guidance reiterated at AGM", "category": "other", "detail": "guidance_maintained" },
+    { "type": null, "title": "Maintains earnings guidance", "category": "other", "detail": "guidance_maintained" },
+    { "type": null, "title": "Company lowers earnings guidance", "category": "guidance_down", "detail": null },
+    { "type": null, "title": "Company upgrades FY earnings guidance", "category": "guidance_up", "detail": null },
+    { "type": null, "title": "Full Year Results", "category": "results", "detail": null }
+  ]
+}

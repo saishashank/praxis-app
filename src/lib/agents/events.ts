@@ -13,17 +13,21 @@ import {
   type MarketHours,
 } from "@/lib/data/calendar";
 import { makeRational, mulRat, subRat, cmpRat, type Rational } from "@/lib/money/rational";
-import type { EventCategory, EventRow, Polarity } from "./schema";
+import type { EventCategory, EventDetail, EventRow, Polarity } from "./schema";
 import type { AgentParams } from "./params";
 import type { AnnouncementRow, DecisionView } from "./decisionView";
+import { dedupAnnouncements, type DedupItem } from "./announcementDedup";
 import { volumeRatio } from "./indicators";
 import { roundHalfAway } from "./regime";
 
-export const EVENT_RULE_VERSION = "events-v1";
+/** events-v2 (M14, D-241): adds `category_detail` (AGT-135, AGT-138); categories and polarity are as v1. */
+export const EVENT_RULE_VERSION = "events-v2";
 
 export type EventRule = {
   readonly id: string;
   readonly category: EventCategory;
+  /** AGT-138: a finer label stored beside the category (NULL when absent). */
+  readonly detail?: EventDetail;
   /** Lower-case ASX announcement type codes matched exactly (pass one). */
   readonly types: readonly string[];
   /** Case-insensitive, word-bounded title patterns (pass two). */
@@ -92,6 +96,18 @@ export const EVENT_RULES_V1: readonly EventRule[] = [
       "\\bbidder'?s statement\\b",
       "\\bproposed acquisition of\\b",
       "\\boffer to acquire\\b",
+    ],
+  },
+  {
+    // AGT-138 (D-241): reaffirmed / maintained / unchanged guidance; category other, AR polarity.
+    id: "guidance-maintained",
+    category: "other",
+    detail: "guidance_maintained",
+    types: [],
+    titles: [
+      "\\b(reaffirm(s|ed)?|reiterat(es?|ed)|maintain(s|ed)?)\\b.{0,40}\\b(guidance|outlook|forecasts?)\\b",
+      "\\b(guidance|outlook|forecasts?)\\b.{0,40}\\b(reaffirmed|reiterated|maintained|unchanged)\\b",
+      "\\bunchanged\\b.{0,20}\\b(guidance|outlook|forecasts?)\\b",
     ],
   },
   {
@@ -176,22 +192,44 @@ function patternsOf(rule: EventRule): RegExp[] {
   return c;
 }
 
-export type Classified = { category: EventCategory; rule: string };
+export type Classified = { category: EventCategory; rule: string; detail: EventDetail | null };
+
+/** AGT-135 (D-241): an exchange-query category whose title is the company's response. */
+const QUERY_RESPONSE_PATTERNS = [
+  /\bresponse to (asx )?(price( and volume)? )?query\b/i,
+  /\bresponse to (asx )?aware letter\b/i,
+  /\baware letter response\b/i,
+  /\bresponse to asx\b/i,
+];
+const queryDetail = (category: EventCategory, title: string): EventDetail | null =>
+  category === "exchange_query" && QUERY_RESPONSE_PATTERNS.some((re) => re.test(title))
+    ? "query_response"
+    : null;
 
 /** Category of one announcement: type code pass, then title pass, else `other`. */
 export function classifyAnnouncement(type: string | null, title: string): Classified {
   const t = type === null ? "" : type.trim().toLowerCase();
   if (t.length > 0) {
     for (const rule of EVENT_RULES_V1) {
-      if (rule.types.includes(t)) return { category: rule.category, rule: `type:${rule.id}` };
+      if (rule.types.includes(t)) {
+        return {
+          category: rule.category,
+          rule: `type:${rule.id}`,
+          detail: rule.detail ?? queryDetail(rule.category, title),
+        };
+      }
     }
   }
   for (const rule of EVENT_RULES_V1) {
     if (patternsOf(rule).some((re) => re.test(title))) {
-      return { category: rule.category, rule: `title:${rule.id}` };
+      return {
+        category: rule.category,
+        rule: `title:${rule.id}`,
+        detail: rule.detail ?? queryDetail(rule.category, title),
+      };
     }
   }
-  return { category: "other", rule: "none" };
+  return { category: "other", rule: "none", detail: null };
 }
 
 /** Fixed polarity categories (AGT-020); the rest take the sign of the day-0 abnormal return. */
@@ -317,6 +355,7 @@ export function buildEventRow(
     rule_version: EVENT_RULE_VERSION,
     category_llm: null,
     polarity_llm: null,
+    category_detail: cls.detail,
   };
 }
 
@@ -366,7 +405,28 @@ export type EventContext = {
    * (DAT-126, ex-date <= D); null/absent = no adjustment.
    */
   readonly prevCloseFactor?: (code: string, day0: string) => Rational | null;
+  /**
+   * DAT-232 (D-236): the split / consolidation actions of a code with ex-date <= day 0 (the same
+   * known-by-cut-off rule as `splitsKnownOn`). Volumes before an ex-date are multiplied by the
+   * later ratios so the day-0 volume ratio compares like with like; absent = raw volumes.
+   */
+  readonly splitsFor?: (code: string, day0: string) => readonly VolumeSplit[];
 };
+
+/** A quantity-changing action: shares after per share before (`ratio`), from `exDate`. */
+export type VolumeSplit = { readonly exDate: string; readonly ratio: Rational };
+
+/** Volume on the basis of day 0: x the ratios of the splits with ex-date after the bar date. */
+export function splitAdjustedVolumes(
+  bars: readonly { readonly d: string; readonly volume: bigint }[],
+  splits: readonly VolumeSplit[],
+): bigint[] {
+  return bars.map((b) => {
+    let r = makeRational(1n);
+    for (const s of splits) if (s.exDate > b.d) r = mulRat(r, s.ratio);
+    return r.num === r.den ? b.volume : roundHalfAway(mulRat(makeRational(b.volume, 1n), r));
+  });
+}
 
 /**
  * Event rows for the decision of D (design 4.2 step 3): announcements published before cut-off(D)
@@ -384,9 +444,31 @@ export async function eventsForDecision(
   const idxCache = new Map<string, Awaited<ReturnType<DecisionView["indexBars"]>>>();
   const need = p.windows.volumeRatio + 2;
   const out: EventRow[] = [];
-  for (const a of [...anns].sort(byAnnouncement)) {
-    if (recorded.has(`${a.source}|${a.ann_id}`)) continue;
-    const day0 = day0Of(a.published_at, ctx.calendar, ctx.hours, p.windows.day0CloseOffsetMin);
+  const sorted = [...anns].sort(byAnnouncement);
+  // DAT-237 (D-240): a repost or near-duplicate title of the same code within the window gives no event.
+  const day0s = new Map<string, Day0>();
+  const dedupItems: DedupItem[] = [];
+  for (const a of sorted) {
+    const key = `${a.source}|${a.ann_id}`;
+    let d0: Day0;
+    try {
+      d0 = day0Of(a.published_at, ctx.calendar, ctx.hours, p.windows.day0CloseOffsetMin);
+    } catch (error) {
+      if (!recorded.has(key)) throw error;
+      d0 = { day0: a.published_at.slice(0, 10), timed: false }; // threshold-ok: length of a YYYY-MM-DD date prefix
+    }
+    day0s.set(key, d0);
+    dedupItems.push({ ...a, session: d0.day0 });
+  }
+  const { duplicates } = dedupAnnouncements(dedupItems, {
+    calendar: ctx.calendar,
+    windowSessions: p.entry.dedupWindowSessions,
+    threshold: p.entry.dedupMinhashThreshold,
+  });
+  for (const a of sorted) {
+    const key = `${a.source}|${a.ann_id}`;
+    if (recorded.has(key) || duplicates.has(key)) continue;
+    const day0 = day0s.get(key)!;
     if (day0.day0 > view.guardD) continue;
     const bk = `${a.code}|${day0.day0}`;
     let bars = barCache.get(bk);
@@ -420,7 +502,7 @@ export async function eventsForDecision(
         closePrev,
         index0: i0.close,
         indexPrev: iPrev.close,
-        volumes: bars.map((b) => b.volume),
+        volumes: splitAdjustedVolumes(bars, ctx.splitsFor?.(a.code, day0.day0) ?? []),
       };
     }
     out.push(buildEventRow(view.market, a, day0, dayZero, p));

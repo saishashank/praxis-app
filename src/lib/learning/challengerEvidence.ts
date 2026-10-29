@@ -300,12 +300,18 @@ export async function runChallengerEvidence(db: Client, run: EvidenceRun): Promi
 
   // only now are the validation rows read
   const data = await run.loadRows();
-  const trials = trialCounts(
-    await loadTrialRows(db, ch.lineage_id, run.split.version),
-    ch.lineage_id,
-    run.split.version,
-  );
+  const ledgerRows = await loadTrialRows(db, ch.lineage_id, run.split.version);
+  const trials = trialCounts(ledgerRows, ch.lineage_id, run.split.version);
+  // VAL-112 (D-226): k = validation and pattern tests spent on this split version BEFORE this access,
+  // ordered by (d, id) so that a repeat of the same run gets the same level (a pure function of the
+  // trial ledger).
+  const priorTests = ledgerRows.filter(
+    (r) =>
+      (r.kind === "validation_access" || r.kind === "pattern_test") &&
+      (r.d < access.d || (r.d === access.d && r.id < access.id)),
+  ).length;
   const result = evaluateVal110({
+    priorTests,
     runId: run.runId,
     lineageId: ch.lineage_id,
     ruleVersion: ch.rule_version_id,

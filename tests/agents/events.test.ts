@@ -194,7 +194,7 @@ describe("A2 events: row and groups", () => {
       ar_ppm: 45000,
       vol_ratio_ppm: 3_000_000,
       polarity: 1,
-      rule_version: "events-v1",
+      rule_version: "events-v2",
       category_llm: null,
       polarity_llm: null,
     });
