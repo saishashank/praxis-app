@@ -22,6 +22,10 @@ How to read this page:
 | `abs` | Australian Bureau of Statistics | public data | low | enabled | none | not needed | yes |
 | `asic_short` | ASIC daily aggregate short positions | public data | low | enabled | none | not needed | yes |
 | `asx_listed_companies` | ASX listed-companies file | personal use only (DAT-124); covered by the ASX entry O-23 | high | pending | O-23 | pending Owner (O-23) | no |
+| `wikidata_asx` | Wikidata ASX companies (alternative, disabled) | CC0 universe alternative; no fetcher; terms [VERIFY] (DAT-236) | low | disabled | none | not needed | no |
+| `wikipedia_asx200` | Wikipedia S&P/ASX 200 list (alternative, disabled) | CC BY-SA 4.0 S&P/ASX 200 list, about 200 codes; no fetcher; terms [VERIFY] (DAT-236) | low | disabled | none | not needed | no |
+| `index_changes_manual` | Index changes (manual CSV) | manual CSV upload by the Owner (DAT-234) | low | enabled | none | not needed | no |
+| `industry_map_manual` | Industry classes (manual CSV) | manual CSV upload by the Owner (FAM-006) | low | enabled | none | not needed | no |
 
 ## Terms, display rule and code
 
@@ -33,6 +37,10 @@ How to read this page:
 | `abs` | Public economic statistics. | Public data. The register row exists; no fetcher is built in this release. Terms URL: not recorded yet (to be filled by the source evaluation, DAT-101). Last checked: not recorded. | Public data. May be shown with its source named. | no fetcher yet | none |
 | `asic_short` | Daily short-position totals for each ASX code, published with a lag. | Public data published by the regulator. Terms URL: not recorded yet (to be filled by the source evaluation, DAT-101). Last checked: not recorded. | Public data. May be shown with its source named. | `scripts/ingest/asic_fetch.mjs`, `src/lib/data/shortInterest.mjs` | download.asic.gov.au |
 | `asx_listed_companies` | Company name and industry group for each ASX code (the instrument universe). | A second ASX request type. It is covered by the same Owner risk acceptance as the announcements (O-23). Terms URL: not recorded yet (to be filled by the source evaluation, DAT-101). Last checked: not recorded. | Shown to Editors and Viewers as derived numbers, headlines, links and our own summaries only (DAT-124). | `worker/src/asx/universe.ts` | asx.com.au |
+| `wikidata_asx` | Company names and industry for ASX codes, as a universe alternative. | CC0. No fetcher is built; terms to be verified before it is ever enabled. Terms URL: not recorded yet (to be filled by the source evaluation, DAT-101). Last checked: not recorded. | Public data. May be shown with its source named. | no fetcher yet | none |
+| `wikipedia_asx200` | About 200 ASX codes, as a universe alternative. | CC BY-SA 4.0. No fetcher is built; terms to be verified before it is ever enabled. Terms URL: not recorded yet (to be filled by the source evaluation, DAT-101). Last checked: not recorded. | Public data. May be shown with its source named. | no fetcher yet | none |
+| `index_changes_manual` | Index adds and deletes for the F3 exclusion, uploaded by the Owner. | A file the Owner uploads; no automated fetch. Terms URL: not recorded yet (to be filled by the source evaluation, DAT-101). Last checked: not recorded. | Public data. May be shown with its source named. | no fetcher yet | none |
+| `industry_map_manual` | Finer industry classes for the second-position limit, uploaded by the Owner. | A file the Owner uploads; no automated fetch. Terms URL: not recorded yet (to be filled by the source evaluation, DAT-101). Last checked: not recorded. | Public data. May be shown with its source named. | no fetcher yet | none |
 
 ## Owner dependencies
 
