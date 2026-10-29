@@ -514,6 +514,16 @@ describe("runClock with a real SQLite database", () => {
     await tick(t + 60_000);
     await tick(t + 120_000);
     expect(failures()).toHaveLength(3);
+    // GL-06: the HTTP status and a short reason are structured fields in the run record.
+    expect(
+      failures()
+        .map((r) => JSON.parse(String(r.details_json)))
+        .sort((a, b) => a.attempt - b.attempt),
+    ).toMatchObject([
+      { status: 500, reason: "HTTP 500" },
+      { status: 403, reason: "HTTP 403" },
+      { status: 422, reason: "HTTP 422" },
+    ]);
     expect(JSON.parse(stateRow(slotKey("maintenance", MON))!)).toMatchObject({ s: "failed", n: 3 });
     // no fourth attempt
     await tick(t + 180_000);
