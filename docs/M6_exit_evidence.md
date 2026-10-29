@@ -64,7 +64,7 @@ D-110 (design, 48 decisions), D-111 (migrations, keys), D-112 (bake-off), D-113 
   - the staging run of AT-22 to AT-24 once a release carries the workflows.
 - (b) **Migrations main 0007, 0008, 0009 and 0010 and auth 0004 and 0005 are not applied anywhere.** They reach staging and production at the next review point (D-022); the staging runs of AT-14 to AT-24 wait for it.
 - (c) **Known limits and follow-ups:**
-  - D-113: arena trades exclude dividends; legacy trades are final with net NULL; corporate-action exits use the stored proceeds;
+  - D-113 (corrected 2026-10-30, GL-10 / O-51: arena trades credit cash dividends, `corpActions.ts` ex-date `div_accrue`, `ledger.ts`; the old "exclude" wording was wrong); legacy trades are final with net NULL; corporate-action exits use the stored proceeds;
   - D-121: holdout dates beyond the data end are weekday estimates; `rollAfterPromotion` runs inside the weekly learning run only;
   - D-122: the Conservative and Balanced picks filters are constants without ch.15 keys, Balanced is empty until attribution history exists, pick tracking ignores corporate actions and dividends, section 7a is read but not rendered, `beatsLuck` is a Wilson-bound draft;
   - D-123: no A6 notes, no twin, filter or cost comparison pairs, no coverage-below-90 % weakness, no health rows for the new phases; ARN-075 still has no definition;

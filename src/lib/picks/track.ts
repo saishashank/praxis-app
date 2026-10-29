@@ -14,7 +14,8 @@
 // the ex-date the levels are divided by the exact M3 quantity ratio and a held position's shares are
 // multiplied by it and rounded down (`rebaseQty`), cash unchanged, as the arena does. Known limit
 // (D-122): no dividends and no other corporate action (mergers, delistings); the Picks page says
-// "price only - dividends not included".
+// "price only - dividends not included". GL-10 (O-51): the market benchmark of a comparison is a total-return
+// series (./benchmark.ts), labelled "Price only" until vendor dividends cover the window.
 import type { Client, InStatement } from "@libsql/client";
 import { priceMicro } from "@/lib/arena/marketData";
 import {
