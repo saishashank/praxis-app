@@ -185,7 +185,7 @@ function Inbox({ model, q, nowMs }: { model: AlertsModel; q: string | undefined;
         </summary>
         <div className="mt-2">
           {archived.length === 0 ? (
-            <p className="m-0 text-sm text-text-muted">Nothing archived yet.</p>
+            <EmptyState compact motif="alerts" hue="news" title="Nothing archived yet." />
           ) : (
             <AlertList alerts={archived} masked={model.masked} nowMs={nowMs} />
           )}
@@ -353,7 +353,7 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
       {chip === "alerts" && alerts ? (
         alerts.state === "empty" && alertsQuery.tier === undefined && !alertsQuery.unacked ? (
           <>
-            <EmptyState title="No alerts">
+            <EmptyState motif="news" hue="news" title="No alerts">
               Nothing has been raised in the last two weeks. Urgent alerts will appear here first.
             </EmptyState>
           </>
@@ -366,7 +366,7 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
         <>
           {news.note ? <Banner tone="info">{news.note}</Banner> : null}
           {news.state === "empty" ? (
-            <EmptyState title="No news yet">
+            <EmptyState motif="news" hue="news" title="No news yet">
               {hasFilter
                 ? "Nothing matches these filters."
                 : chip === "mine"

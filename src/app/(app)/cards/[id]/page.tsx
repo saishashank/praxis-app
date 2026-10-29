@@ -10,7 +10,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BreakerStatus, RegimeBadge, ValidationBadge } from "@/components/ui/Badges";
 import { Card } from "@/components/ui/Card";
-import { ShowDetails, Banner } from "@/components/ui/States";
+import { ShowDetails, Banner, EmptyState } from "@/components/ui/States";
 import { SimulatedLabel } from "@/components/ui/Values";
 import { can } from "@/lib/auth/permissions";
 import { requireUser } from "@/lib/auth/guard";
@@ -292,7 +292,7 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
 
       <Card title="Notes">
         {c.notes.length === 0 ? (
-          <p className="m-0 text-sm text-text-muted">No notes yet.</p>
+          <EmptyState compact motif="list" hue="home" title="No notes yet." />
         ) : (
           <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
             {c.notes.map((n) => (

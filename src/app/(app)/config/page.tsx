@@ -80,7 +80,7 @@ export default async function ConfigPage() {
 
       <Card aria-label="Recent changes" title="Recent changes">
         {history.length === 0 ? (
-          <EmptyState title="No changes yet." />
+          <EmptyState motif="list" hue="home" title="No changes yet." />
         ) : (
           <RTable
             caption="Latest configuration versions"

@@ -90,7 +90,9 @@ export default async function StrategiesPage({
       ) : null}
 
       {tiles.length === 0 ? (
-        <EmptyState title="No strategies yet">{list.text}</EmptyState>
+        <EmptyState motif="strategies" hue="strategies" title="No strategies yet">
+          {list.text}
+        </EmptyState>
       ) : (
         <>
           {list.state === "empty" ? <Banner>{list.text}</Banner> : null}
@@ -100,7 +102,12 @@ export default async function StrategiesPage({
               Needs attention{attention.length > 0 ? ` (${attention.length})` : ""}
             </h2>
             {attention.length === 0 ? (
-              <p className="m-0 text-sm text-text-muted">Nothing needs a look right now.</p>
+              <EmptyState
+                compact
+                motif="strategies"
+                hue="strategies"
+                title="Nothing needs a look right now."
+              />
             ) : (
               <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {attention.map((t) => (

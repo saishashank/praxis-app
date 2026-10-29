@@ -9,7 +9,7 @@ import { userPreferences } from "@/lib/preferences/read";
 import { envFor } from "@/lib/ui/loaders/shell";
 import { loadControlRoom, type ControlRoomModel } from "@/lib/ui/loaders/controlRoom";
 import { HealthNav, type HealthNavItem } from "./HealthNav";
-import { Banner } from "@/components/ui/States";
+import { Banner, EmptyState } from "@/components/ui/States";
 import { ControlRoom, type SnoozeInfo } from "./ControlRoom";
 import { CalendarConfirmForm } from "./CalendarConfirmForm";
 import { DataControlForm } from "./DataControlForm";
@@ -424,7 +424,7 @@ function QualitySection(props: { q: NonNullable<HealthSummary["quality"]>; owner
         </tbody>
       </table>
       {q.rules.length === 0 ? (
-        <p className="text-sm text-text-muted">No open flags for this date.</p>
+        <EmptyState compact motif="check" hue="home" title="No open flags for this date." />
       ) : (
         <table className="w-full border-collapse text-left text-sm">
           <caption className="sr-only">Open flags by rule</caption>
@@ -694,7 +694,12 @@ export default async function HealthPage() {
                   Data quality
                 </h2>
                 {summary.quality.date === null ? (
-                  <p className="text-sm text-text-muted">No quality checks have run yet.</p>
+                  <EmptyState
+                    compact
+                    motif="check"
+                    hue="home"
+                    title="No quality checks have run yet."
+                  />
                 ) : (
                   <QualitySection q={summary.quality} owner={owner} />
                 )}

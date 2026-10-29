@@ -151,7 +151,11 @@ export function MarketTable({
       columns={visible}
       rows={rows}
       rowKey={(r) => r.slug}
-      empty={<EmptyState title="Nothing to show">{empty}</EmptyState>}
+      empty={
+        <EmptyState motif="market" hue="market" title="Nothing to show">
+          {empty}
+        </EmptyState>
+      }
     />
   );
 }

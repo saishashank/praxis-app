@@ -129,7 +129,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ code: 
       ) : null}
 
       {c.state === "empty" ? (
-        <EmptyState title="No prices stored yet">
+        <EmptyState motif="market" hue="market" title="No prices stored yet">
           This company has no stored prices. They appear after a nightly data run.
         </EmptyState>
       ) : null}

@@ -1,5 +1,6 @@
 // Usage (PLT-050, PLT-051, UX-100). Owner-only (ROL-102a): every figure is self-counted from our
 // own run records and labelled as an estimate.
+import { EmptyState } from "@/components/ui/States";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
@@ -308,7 +309,7 @@ function BakeoffSection({ bakeoff }: { bakeoff: BakeoffView | null | "unavailabl
       {bakeoff === "unavailable" ? (
         <p role="status">Bake-off results unavailable</p>
       ) : bakeoff === null ? (
-        <p className="text-sm text-text-muted">No bake-off has run yet.</p>
+        <EmptyState compact motif="list" hue="home" title="No bake-off has run yet." />
       ) : (
         <>
           <p className="text-sm text-text-muted">

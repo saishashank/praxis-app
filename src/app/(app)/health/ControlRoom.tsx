@@ -402,7 +402,7 @@ export function ControlRoom({
               : "A free-tier limit needs the Owner. The numbers are shown to the Owner."}
           </p>
         ) : model.gauges.length === 0 ? (
-          <EmptyState title="No usage numbers yet">
+          <EmptyState motif="check" hue="home" title="No usage numbers yet">
             The meters fill in as the system runs.
           </EmptyState>
         ) : (

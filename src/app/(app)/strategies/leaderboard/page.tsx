@@ -391,7 +391,9 @@ export default async function LeaderboardPage({
       ) : null}
 
       {rows.size === 0 ? (
-        <EmptyState title="No strategies yet">{lb.text}</EmptyState>
+        <EmptyState motif="strategies" hue="strategies" title="No strategies yet">
+          {lb.text}
+        </EmptyState>
       ) : (
         <>
           {lb.state === "empty" ? <Banner>{lb.text}</Banner> : null}
@@ -464,7 +466,14 @@ export default async function LeaderboardPage({
               columns={ctl}
               rows={lb.data.controls}
               rowKey={(c) => c.execution}
-              empty={<p className="m-0 text-sm text-text-muted">No control rounds yet.</p>}
+              empty={
+                <EmptyState
+                  compact
+                  motif="strategies"
+                  hue="strategies"
+                  title="No control rounds yet."
+                />
+              }
             />
           </section>
         </>

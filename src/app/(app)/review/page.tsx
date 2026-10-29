@@ -32,7 +32,7 @@ export default async function ReviewPage() {
         </p>
       </header>
       {cards.length === 0 ? (
-        <EmptyState title="Nothing is waiting for review." />
+        <EmptyState motif="check" hue="home" title="Nothing is waiting for review." />
       ) : (
         <ul className="m-0 flex list-none flex-col gap-4 p-0">
           {cards.map((c) => (

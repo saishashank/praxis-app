@@ -92,7 +92,7 @@ export default async function OpsPage() {
               Needs doing
             </h2>
             {attention.length === 0 ? (
-              <EmptyState title="Nothing is due">
+              <EmptyState motif="check" hue="home" title="Nothing is due">
                 Every task that is due has been ticked. The next ones are listed below.
               </EmptyState>
             ) : (
@@ -117,7 +117,12 @@ export default async function OpsPage() {
 
           <Card title="Token expiry dates" className="min-w-0">
             {ops.tokens.length === 0 ? (
-              <p className="m-0 text-sm text-text-muted">No token expiry dates are recorded yet.</p>
+              <EmptyState
+                compact
+                motif="check"
+                hue="home"
+                title="No token expiry dates are recorded yet."
+              />
             ) : (
               <>
                 <p className="mt-0 text-sm text-text-muted">
