@@ -95,6 +95,7 @@ import {
   fillOrder,
   selectExit,
   type FillEnv,
+  type FillOutcome,
   type SimulatedFill,
 } from "@/lib/arena/fills";
 import {
@@ -114,7 +115,7 @@ import {
 } from "@/lib/arena/ledger";
 import { computeNavDay, type Mark, type NavPosRow } from "@/lib/arena/nav";
 import type { ExecutionRow, LedgerAccount, TerminalKind } from "@/lib/arena/schema";
-import { isParcelOnlyRejection } from "@/lib/arena/sizing";
+import { isParcelOnlyRejection, resizeEntryAtFill } from "@/lib/arena/sizing";
 import {
   defaultSleeveConfig,
   evaluateUnlock,
@@ -771,13 +772,13 @@ export function replayCohorts(
     }
   };
 
-  const fundedFor = (c: Cohort, needed: bigint, env: DayEnv): boolean =>
+  const cashNow = (c: Cohort, env: DayEnv): bigint =>
     availableCash({
       mode: c.params.settlementMode,
       balances: c.bal as LedgerBalances,
       pending: c.pending,
       sessionD: env.d,
-    }) >= needed;
+    });
 
   // ---- 2a stages -----------------------------------------------------------------------------------------------
   const applyActions = (c: Cohort, env: DayEnv): void => {
@@ -866,24 +867,40 @@ export function replayCohorts(
       if (bar === null) continue; // cancelled: no bar
       if (c.positions.has(o.code)) continue;
       const fe = fillEnv(c, bar, env, o.code);
-      const outcome = fillOrder(
-        {
-          kind: "entry",
-          qty: o.qty,
-          stopFrom: (fillMicro) => initialStopAtFill(o.plan, fillMicro),
-        },
-        {
-          ...fe,
-          halted: env.halted(o.code),
-          // the gate result of the fill session; without quality data every code passes (flagged)
-          gate:
-            gateSource === undefined ? { allowed: true, reason: "ok" } : gateSource(o.code, env.d),
-        },
-      );
+      const fillEntry = (qty: bigint): FillOutcome =>
+        fillOrder(
+          {
+            kind: "entry",
+            qty,
+            stopFrom: (fillMicro) => initialStopAtFill(o.plan, fillMicro),
+          },
+          {
+            ...fe,
+            halted: env.halted(o.code),
+            // the gate result of the fill session; without quality data every code passes (flagged)
+            gate:
+              gateSource === undefined
+                ? { allowed: true, reason: "ok" }
+                : gateSource(o.code, env.d),
+          },
+        );
+      let outcome = fillEntry(o.qty);
       if (outcome.status !== "filled") continue;
-      const fill = outcome.fill;
       if (o.maxOpen !== null && bar.open >= o.maxOpen) continue; // F3 gap cap: cancelled at the fill
-      if (!fundedFor(c, fill.valueMicro + fill.brokerageMicro, env)) continue; // cancelled: cash
+      // GL-03: the same resize rule as closeBooks (resizeEntryAtFill); cancelled only for cash
+      const sized = resizeEntryAtFill({
+        plannedQty: outcome.fill.qty,
+        fillPriceMicro: outcome.fill.fillPriceMicro,
+        availableCashMicro: cashNow(c, env),
+        profile: c.profile,
+        feeContext: fe.feeContext,
+      });
+      if (sized.status === "cancel") continue; // cancelled: cash
+      if (sized.status === "resized") {
+        outcome = fillEntry(sized.qty);
+        if (outcome.status !== "filled") continue;
+      }
+      const fill = outcome.fill;
       const ledgerFill: LedgerFill = {
         id: `${c.id}|buy|${o.id}`,
         d: env.d,
@@ -976,7 +993,7 @@ export function replayCohorts(
       }
       if (c.sleeveTrades.some((t) => !t.shadow && t.closed === null)) continue;
       const need = margin + quote.entryBrokerageMicro;
-      if (c.bal.cash_settled < need || !fundedFor(c, need, env)) continue; // ARN-003: sleeve skipped
+      if (c.bal.cash_settled < need || cashNow(c, env) < need) continue; // ARN-003: sleeve skipped
       const trade = openTrade({
         id,
         cohortId: c.id,

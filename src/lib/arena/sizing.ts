@@ -237,3 +237,55 @@ export function stallFloorMicro(input: StallFloorInput): Micro {
   const net = subRat(makeRational(1n), buffer);
   return roundHalfAwayFromZero(mulRat(total, makeRational(net.den, net.num)));
 }
+
+export type FillResizeInput = {
+  /** Quantity the order was planned with (already within the participation cap). */
+  readonly plannedQty: bigint;
+  /** Actual fill price per share at the open, slippage included (ARN-021), > 0. */
+  readonly fillPriceMicro: Micro;
+  /** Cash available now (ARN-025, by settlement mode), micro-AUD. */
+  readonly availableCashMicro: Micro;
+  readonly profile: CostProfile;
+  readonly feeContext?: FeeContext;
+  readonly minParcelMicro?: Micro;
+};
+
+export type FillResize =
+  | { readonly status: "keep"; readonly qty: bigint }
+  | { readonly status: "resized"; readonly qty: bigint }
+  | { readonly status: "cancel"; readonly reason: "cash" };
+
+/**
+ * Entry quantity at the fill (V2 GL-03, D-207 item 3). The plan was sized on the decision-day
+ * reference price; the actual open can gap up. At the fill:
+ *   - the planned quantity is kept when value plus brokerage is covered by the available cash
+ *     (a gap down never enlarges an order: the plan's cap and risk sizing stand);
+ *   - otherwise the quantity is cut to the largest whole number of shares whose value plus
+ *     brokerage fits the cash (brokerage is monotone in value, so an exact search is used);
+ *   - if that parcel is worth less than one marketable parcel (A$500, ARN-024) the order is
+ *     cancelled as `cash`.
+ * Pure; integer micro-AUD only. Used by closeBooks (live) and the replay glue (same rule).
+ */
+export function resizeEntryAtFill(input: FillResizeInput): FillResize {
+  const { plannedQty, fillPriceMicro: price, availableCashMicro: cash } = input;
+  if (plannedQty <= 0n) throw new RangeError("planned quantity must be positive");
+  if (price <= 0n) throw new RangeError("fill price must be positive");
+  const fits = (q: bigint): boolean => {
+    const value = q * price;
+    return value + feeFor(input.profile, value, "buy", input.feeContext) <= cash;
+  };
+  if (fits(plannedQty)) return { status: "keep", qty: plannedQty };
+  // fits() is monotone in q (non-decreasing fee): binary search the largest q below plannedQty
+  let lo = 0n; // fits(0) holds trivially (nothing to buy)
+  let hi = plannedQty - 1n;
+  const byCash = cash > 0n ? divFloor(cash, price) : 0n;
+  if (byCash < hi) hi = byCash;
+  while (lo < hi) {
+    const mid = (lo + hi + 1n) / 2n;
+    if (fits(mid)) lo = mid;
+    else hi = mid - 1n;
+  }
+  const minParcel = input.minParcelMicro ?? MIN_MARKETABLE_PARCEL_MICRO;
+  if (lo < 1n || lo * price < minParcel) return { status: "cancel", reason: "cash" };
+  return { status: "resized", qty: lo };
+}

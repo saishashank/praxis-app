@@ -386,7 +386,7 @@ describe("fills, stops and the quality gate", () => {
     expect(["CS", "IS"]).toContain(String(trade.exit_type));
   });
 
-  it("an entry the cash cannot cover at the actual open is cancelled with reason cash (ARN-101)", async () => {
+  it("an entry the cash cannot cover at the actual open is resized, not cancelled (GL-03, ARN-101)", async () => {
     const s = await setupReplay({ ...BASE, keep: ["E01"] });
     await placeOrder(s.db, {
       id: "O1",
@@ -400,8 +400,36 @@ describe("fills, stops and the quality gate", () => {
     const results = await closeThrough(s, 3);
     expect(results.every((r) => r.status === "success")).toBe(true);
     const o = await one(s.db, "SELECT status, reject_reason FROM arena_order WHERE id = 'O1'");
-    expect(String(o.status)).toBe("cancelled");
-    expect(String(o.reject_reason)).toBe("cash");
+    expect(String(o.status)).toBe("filled");
+    const f = await one(s.db, "SELECT qty FROM fill WHERE order_id = 'O1'");
+    expect(BigInt(String(f.qty))).toBeGreaterThan(0n);
+    expect(BigInt(String(f.qty))).toBeLessThan(400n);
+    expect(await n(s.db, "SELECT COUNT(*) AS n FROM nav_daily WHERE invariants_ok = 0")).toBe(0n);
+  });
+
+  it("an entry is cancelled with reason cash only when one marketable parcel is unaffordable (GL-03)", async () => {
+    const s = await setupReplay({ ...BASE, keep: ["E01"] });
+    const cohort = E01(s);
+    const mk = (id: string, code: string) =>
+      placeOrder(s.db, {
+        id,
+        cohortId: cohort,
+        decidedD: s.ds.dates[1],
+        code,
+        kind: "entry",
+        qty: 400,
+        stop: 500_000n,
+      });
+    await mk("O1", "ZZC"); // takes the cash down to less than one share (resized)
+    await mk("O2", "ZZD"); // nothing left for a marketable parcel: cancelled cash
+    const results = await closeThrough(s, 3);
+    expect(results.every((r) => r.status === "success")).toBe(true);
+    const o1 = await one(s.db, "SELECT status FROM arena_order WHERE id = 'O1'");
+    expect(String(o1.status)).toBe("filled");
+    const o2 = await one(s.db, "SELECT status, reject_reason FROM arena_order WHERE id = 'O2'");
+    expect(String(o2.status)).toBe("cancelled");
+    expect(String(o2.reject_reason)).toBe("cash");
+    expect(await n(s.db, "SELECT COUNT(*) AS n FROM fill WHERE order_id = 'O2'")).toBe(0n);
     expect(await n(s.db, "SELECT COUNT(*) AS n FROM nav_daily WHERE invariants_ok = 0")).toBe(0n);
   });
 });
