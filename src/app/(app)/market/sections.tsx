@@ -58,12 +58,12 @@ export function MarketSectionFrame({
       aria-labelledby={`${id}-h`}
       className="flex min-w-0 flex-col gap-3 rounded-lg border border-border p-3"
     >
-      <h2 id={`${id}-h`} className="m-0 text-lg font-semibold">
+      <h2 id={`${id}-h`} className="m-0 flex items-center text-lg font-semibold">
         <Link
           href={marketHref(q, { open: toggled })}
           aria-expanded={open}
           scroll={false}
-          className="flex min-h-10 items-center gap-2"
+          className="flex min-h-10 min-w-0 flex-1 items-center gap-2"
         >
           <span aria-hidden="true" className={open ? "inline-block rotate-90" : "inline-block"}>
             ›

@@ -11,7 +11,7 @@ import { CheckIcon } from "./icons";
 export type SegmentedItem = { value: string; label: ReactNode; href?: string };
 
 const SEG =
-  "ui-motion inline-flex min-h-11 flex-1 items-center justify-center gap-1 px-3 py-2 text-sm break-words";
+  "ui-motion inline-flex min-h-11 flex-1 shrink-0 items-center justify-center gap-1 px-3 py-2 text-sm break-words";
 const ON = "bg-accent text-accent-contrast font-semibold";
 const OFF = "bg-surface text-text hover:bg-bg";
 
@@ -33,7 +33,7 @@ export function Segmented({
   const refs = useRef<Array<HTMLElement | null>>([]);
   const linkMode = items.length > 0 && items.every((i) => i.href !== undefined);
   const wrap = cn(
-    "flex w-full divide-x divide-border overflow-hidden rounded-lg border border-border sm:inline-flex sm:w-auto",
+    "flex w-full divide-x divide-border overflow-x-auto rounded-lg border border-border sm:inline-flex sm:w-auto",
     className,
   );
 
