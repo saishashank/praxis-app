@@ -116,7 +116,17 @@ export const TABLES = [
   },
   {
     name: "announcements",
-    fields: ["code", "ann_id", "published_at", "type", "price_sensitive", "title"],
+    fields: [
+      "code",
+      "ann_id",
+      "published_at",
+      "type",
+      "price_sensitive",
+      "title",
+      "first_ingested_at",
+    ],
+    // GL-05: added last; a row or an older snapshot without it reads as null (stored before the column)
+    optional: ["first_ingested_at"],
     key: ["published_at", "code", "ann_id"],
     day: (r) => sydneyDate(Date.parse(r.published_at)),
     ok: {
@@ -126,7 +136,18 @@ export const TABLES = [
       type: isNullableStr,
       price_sensitive: isBool01,
       title: (v) => typeof v === "string",
+      first_ingested_at: (v) =>
+        v === null || v === undefined || (isStr(v) && Number.isFinite(Date.parse(v))),
     },
+  },
+  {
+    // GL-05: the stored "first completed poll after the cut-off" instant of each session (the live
+    // marker worker_state cutoff_poll:AU:<d>), so an offline replay uses the bound live used.
+    name: "cutoff_polls",
+    fields: ["d", "at"],
+    key: ["d"],
+    day: (r) => r.d,
+    ok: { d: isRealDate, at: (v) => isStr(v) && Number.isFinite(Date.parse(v)) },
   },
 ];
 
@@ -213,7 +234,9 @@ export function parseSnapshot(bytes) {
     tables[name].push(Object.fromEntries(spec.fields.map((f, i) => [f, values[i]])));
   }
   for (const t of TABLES) {
-    if (tables[t.name].length !== manifest.counts[t.name]) throw new SnapshotError("bad_counts");
+    // a snapshot written before a table existed has no count for it: it reads as empty (GL-05)
+    if (tables[t.name].length !== (manifest.counts[t.name] ?? 0))
+      throw new SnapshotError("bad_counts");
   }
   return { manifest, tables, sha: sha256Hex(new Uint8Array(raw)) };
 }

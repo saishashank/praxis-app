@@ -35,6 +35,14 @@ export type SnapshotCorporateAction = {
   known_at?: string | null;
 };
 
+export type SnapshotAnnouncement = {
+  code: string;
+  ann_id: string;
+  published_at: string;
+  /** GL-05: when the row was first stored; null/absent = stored before the column (always visible). */
+  first_ingested_at?: string | null;
+};
+
 /** A loaded snapshot: tables as rows, the manifest and the content sha. */
 export function loadSnapshot(bytes: Uint8Array) {
   const s = parseSnapshot(bytes);
