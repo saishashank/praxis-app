@@ -16,7 +16,18 @@ import { world as learningWorld } from "../learning/challengerFixtures";
 const params = defaultAgentParams();
 const CODES = Array.from({ length: 12 }, (_, i) => `ZZ${String.fromCharCode(65 + i)}`);
 const SESSIONS = 640;
-const STAGES = ["forward", "comparisons", "lessons", "challengers", "rolls", "arn076", "factors"];
+const STAGES = [
+  "forward",
+  "comparisons",
+  "lessons",
+  "preregistered",
+  "challengers",
+  "rolls",
+  "arn076",
+  "factors",
+  "robustness",
+  "rankIc",
+];
 
 function snapshotBytes(): Uint8Array {
   const cal = weekdayCalendar(SESSIONS, "2027-01-04");
@@ -234,17 +245,20 @@ describe("weekly learning run", () => {
     expect(stageOrder(lines2[0]!)).toEqual([
       "forward",
       "lessons",
+      "preregistered",
       "challengers",
       "rolls",
       "arn076",
       "factors",
+      "robustness",
+      "rankIc",
     ]);
     expect(
       await rows(
         db,
         "SELECT metric FROM replay_stat WHERE scope = 'learning' AND metric LIKE 'stage:%'",
       ),
-    ).toHaveLength(6);
+    ).toHaveLength(9);
     expect(
       await rows(db, "SELECT 1 FROM replay_stat WHERE scope = 'learning' AND metric = 'status'"),
     ).toHaveLength(1);

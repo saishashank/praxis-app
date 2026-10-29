@@ -64,7 +64,16 @@ export const AU_COLUMNS = {
     "ingested_at",
   ],
   bar_refetch: ["market", "code", "d", "fetched_at", "ohlcv_json", "max_diff_pct"],
-  adjustment_factor: ["market", "code", "ex_date", "factor", "corporate_action_id", "computed_at"],
+  adjustment_factor: [
+    "market",
+    "code",
+    "ex_date",
+    "factor",
+    "corporate_action_id",
+    "computed_at",
+    "factor_kind",
+    "ref_close_micro",
+  ],
   corporate_action: [
     "id",
     "market",
@@ -90,6 +99,7 @@ export const AU_COLUMNS = {
     "url",
     "source",
     "first_ingested_at",
+    "content_hash",
   ],
   source_register: [
     "source",
@@ -145,6 +155,16 @@ export type AuSource = (typeof AU_SOURCES)[number];
  * announcements entry O-23. It has no source_status row; the rate token uses `asx_announcements`.
  */
 export const UNIVERSE_SOURCE = "asx_listed_companies";
+/**
+ * M14 reference sources (DAT-236, D-239; migration 0018): two disabled universe alternatives (no
+ * fetcher) and the two manual CSV uploads. Register rows only: no source_status row.
+ */
+export const REFERENCE_SOURCES = [
+  "wikidata_asx",
+  "wikipedia_asx200",
+  "index_changes_manual",
+  "industry_map_manual",
+] as const;
 
 export type MarketMode = "off" | "data_only" | "full";
 export type CalendarKind = "session" | "holiday" | "early_close";

@@ -123,10 +123,13 @@ export type Stage =
   | "forward"
   | "comparisons"
   | "lessons"
+  | "preregistered"
   | "challengers"
   | "rolls"
   | "arn076"
-  | "factors";
+  | "factors"
+  | "robustness"
+  | "rankIc";
 
 export type StageTime = { readonly stage: Stage; readonly minutes: number };
 

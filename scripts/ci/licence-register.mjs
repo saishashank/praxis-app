@@ -69,6 +69,35 @@ export const SOURCE_FACTS = {
     hosts: ["download.asic.gov.au"],
     terms: "Public data published by the regulator.",
   },
+  // M14 (DAT-236, D-239): disabled alternatives and manual uploads. WP8 completes the wording.
+  wikidata_asx: {
+    label: "Wikidata ASX companies (alternative, disabled)",
+    provides: "Company names and industry for ASX codes, as a universe alternative.",
+    code: [],
+    hosts: [],
+    terms: "CC0. No fetcher is built; terms to be verified before it is ever enabled.",
+  },
+  wikipedia_asx200: {
+    label: "Wikipedia S&P/ASX 200 list (alternative, disabled)",
+    provides: "About 200 ASX codes, as a universe alternative.",
+    code: [],
+    hosts: [],
+    terms: "CC BY-SA 4.0. No fetcher is built; terms to be verified before it is ever enabled.",
+  },
+  index_changes_manual: {
+    label: "Index changes (manual CSV)",
+    provides: "Index adds and deletes for the F3 exclusion, uploaded by the Owner.",
+    code: [],
+    hosts: [],
+    terms: "A file the Owner uploads; no automated fetch.",
+  },
+  industry_map_manual: {
+    label: "Industry classes (manual CSV)",
+    provides: "Finer industry classes for the second-position limit, uploaded by the Owner.",
+    code: [],
+    hosts: [],
+    terms: "A file the Owner uploads; no automated fetch.",
+  },
 };
 
 /** DAT-124 display rule for personal-use-only content (spec 06). */
@@ -188,14 +217,16 @@ export function loadSeed(root = ROOT) {
   return [...bySource.values()];
 }
 
-/** The source ids the code declares: AU_SOURCES plus UNIVERSE_SOURCE (src/lib/data/schema.ts). */
+/** The source ids the code declares: AU_SOURCES, UNIVERSE_SOURCE and REFERENCE_SOURCES (src/lib/data/schema.ts). */
 export function declaredSources(root = ROOT) {
   const text = fs.readFileSync(path.join(root, SCHEMA_PATH), "utf8");
   const list = /AU_SOURCES\s*=\s*\[([^\]]*)\]/.exec(text);
   const uni = /UNIVERSE_SOURCE\s*=\s*"([^"]+)"/.exec(text);
   if (!list || !uni) throw new Error("source ids not found in schema.ts");
   const ids = [...list[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  return [...ids, uni[1]];
+  const ref = /REFERENCE_SOURCES\s*=\s*\[([^\]]*)\]/.exec(text); // M14 (DAT-236); absent in older trees
+  const refIds = ref ? [...ref[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]) : [];
+  return [...ids, uni[1], ...refIds];
 }
 
 // ---- rendering ----

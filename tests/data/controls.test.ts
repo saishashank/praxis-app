@@ -608,7 +608,7 @@ describe("c2. the listed-companies source follows O-23 (D-067)", () => {
       await count(
         "SELECT COUNT(*) AS n FROM source_register_history WHERE source = 'asx_listed_companies'",
       ),
-    ).toBe(4); // insert (0006), enabled, disabled, enabled
+    ).toBe(5); // insert (0006), update (0018, O-23b), enabled, disabled, enabled
   });
 });
 

@@ -40,7 +40,7 @@ describe("main migration 0006_universe_import", () => {
     ).toMatchObject({
       status: "pending",
       risk: "high",
-      owner_ref: "O-23",
+      owner_ref: "O-23b", // 0018 (DAT-236) re-cites the file under its own terms
       summarisation_permitted: 0,
     });
     expect(
@@ -48,7 +48,7 @@ describe("main migration 0006_universe_import", () => {
         db,
         `SELECT COUNT(*) AS n FROM source_register_history WHERE source = '${UNIVERSE_SOURCE}'`,
       ),
-    ).toMatchObject({ n: 1 });
+    ).toMatchObject({ n: 2 }); // the insert (0006) and the 0018 update
     // No kill-switch row: the rate token uses asx_announcements.
     expect(
       await one(db, `SELECT COUNT(*) AS n FROM source_status WHERE source = '${UNIVERSE_SOURCE}'`),
@@ -72,7 +72,7 @@ describe("main migration 0006_universe_import", () => {
     const regBefore = (await db.execute("SELECT * FROM source_register ORDER BY source")).rows.map(
       (r) => ({ ...r }),
     );
-    expect(await migrateDown(db, ms, 12)).toEqual({ rolledBack: 12, version: 5 });
+    expect(await migrateDown(db, ms, 13)).toEqual({ rolledBack: 13, version: 5 });
     expect(await cols(db)).not.toContain("industry");
     expect(await cols(db)).not.toContain("missing_count");
     expect(
@@ -91,14 +91,14 @@ describe("main migration 0006_universe_import", () => {
     await expect(db.execute("DELETE FROM source_register")).rejects.toThrow(/forever table/);
     await expect(db.execute("DELETE FROM source_register_history")).rejects.toThrow(/append-only/);
 
-    expect(await migrateUp(db, ms)).toEqual({ applied: 12, version: 17 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 13, version: 18 });
     expect(await schemaOf(db)).toEqual(before);
     expect(
       (await db.execute("SELECT * FROM source_register ORDER BY source")).rows.map((r) => ({
         ...r,
       })),
     ).toEqual(regBefore);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 17 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 18 });
   });
 
   it("down keeps instruments that were already imported (only the two columns go)", async () => {

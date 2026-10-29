@@ -6,11 +6,14 @@
 //   forward       the replay of the live rule versions over the snapshot (always runs, it is in memory);
 //   comparisons   weekly Benjamini-Hochberg tests and the confirmation looks that are due;
 //   lessons       windows, L0/L1, L2 by alpha-investing, retirement;
+//   preregistered M14 (KB-081, O-46): releases the pre-registered challengers as slots free up;
 //   challengers   the weekly generator, proposed -> replay, VAL-110 evidence (holdout confirmations due
 //                 are listed, not run);
 //   rolls         `rollAfterPromotion` for every promotion applied since the last run (D-121);
 //   arn076        leave-one-class-out (F6 classes, F4 event filter);
-//   factors       AGT-112 development factor buckets.
+//   factors       AGT-112 development factor buckets;
+//   robustness    M14 (ARN-106/107/108, VAL-115): exit ablation, one-tick slip, neighbourhood, MinBTL;
+//   rankIc        M14 (VAL-114): backfill of the daily rank quality from the replay.
 // A stage that ends over the budget stops the run at that boundary (`paused_budget`) and its output is
 // dropped: no partial statistics are kept (D-095). Stages that finished in an earlier run of the same
 // ISO week are skipped (`done`), so a paused week resumes from the first unfinished stage and a finished
@@ -21,10 +24,13 @@ export const LEARNING_STAGES = [
   "forward",
   "comparisons",
   "lessons",
+  "preregistered",
   "challengers",
   "rolls",
   "arn076",
   "factors",
+  "robustness",
+  "rankIc",
 ] as const;
 export type LearningStage = (typeof LEARNING_STAGES)[number];
 /** The stages that are recorded as done and can be skipped (forward is always rebuilt). */
@@ -36,6 +42,9 @@ export type StageOutput = {
   readonly file?: StageFile | null;
 };
 export type StageFn = () => Promise<StageOutput>;
+
+/** A registered stage with nothing to do yet (M14 WP0): marks itself done and writes no statistic. */
+export const noopStage: StageFn = async () => ({ stats: [] });
 
 export type StageTiming = { readonly stage: LearningStage; readonly minutes: number };
 

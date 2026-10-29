@@ -122,12 +122,15 @@ export function fillCloseSignalExit(env: FillEnv, qty: bigint): SimulatedFill {
  *   else low <= level        -> fill at level - slippage - 1 tick (rule level)
  * `afterOpen` is for a stop that becomes active only after the open (the initial stop in the
  * entry session, ARN-021): the open cannot gap through it, so only the low test applies.
+ * `exDividendMicro` (FAM-007, D-219; M14 WP2) is the cash dividend per share going ex on this session.
+ * It is accepted and IGNORED until WP2 fills it in: the trigger tests will then use open + dividend and
+ * low + dividend against the level. Absent or 0n = v1 behaviour.
  */
 export function fillIntradayStop(
   env: FillEnv,
   qty: bigint,
   levelMicro: Micro,
-  options: { readonly afterOpen?: boolean } = {},
+  options: { readonly afterOpen?: boolean; readonly exDividendMicro?: Micro } = {},
 ): SimulatedFill | null {
   assertBar(env.bar);
   if (levelMicro <= 0n) throw new RangeError("stop level must be positive");
