@@ -9,6 +9,7 @@
 import type { Client, Transaction } from "@libsql/client";
 import { controlStates } from "@/lib/agents/controls";
 import {
+  FAMILY_OPTIONAL_KEYS,
   FAMILY_PARAM_KEYS,
   FAMILY_SPECS,
   ruleSpecJson,
@@ -154,7 +155,8 @@ export type RefusalReason =
   | "no_change"
   | "no_incumbent"
   | "no_split"
-  | "duplicate_version";
+  | "duplicate_version"
+  | "variant_quarter_cap";
 
 export type CreateResult =
   | { readonly status: "created"; readonly id: string; readonly ruleVersionId: string }
@@ -178,7 +180,72 @@ export type NewChallenger = {
   readonly budgetTotal?: number;
   /** Default: the family's incumbent (live, highest n). */
   readonly incumbentVersionId?: string;
+  /** Free text added to the first status reason and the first event (the pre-registered list cites KB-081 / O-46). */
+  readonly note?: string;
 };
+
+// ---- O-46 variant cap (D-234) ---------------------------------------------------------------------------
+
+/** At most this many stop, trail or sizing variants per family per calendar quarter (O-46). */
+export const VARIANT_QUARTER_CAP = 3; // threshold-ok: Owner decision O-46 (3 variants per family per quarter)
+
+/** A stop, trail or sizing key (the price stops and the trail; the time exits are not stops). */
+const STOP_SIZING_KEY = /(^|_)(stop_atr|stop_cap_pct|trail_atr|trail_after_pct|size|sizing)(_|$)/;
+export const isStopOrSizingKey = (key: string): boolean => STOP_SIZING_KEY.test(key);
+
+/** True when `params` differ from `base` on any stop, trail or sizing key (a key missing on one side counts). */
+export function changesStopOrSizing(
+  base: Readonly<Record<string, unknown>>,
+  params: Readonly<Record<string, unknown>>,
+): boolean {
+  const keys = new Set([...Object.keys(base), ...Object.keys(params)]);
+  for (const k of [...keys].sort()) {
+    if (isStopOrSizingKey(k) && JSON.stringify(base[k]) !== JSON.stringify(params[k])) return true;
+  }
+  return false;
+}
+
+/** First and last day (YYYY-MM-DD) of the calendar quarter holding `d`. */
+export function quarterBounds(d: string): { readonly start: string; readonly end: string } {
+  const year = d.slice(0, "YYYY".length);
+  const month = Number(d.slice("YYYY-".length, "YYYY-MM".length));
+  if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(d) || month < 1 || month > 12) {
+    throw new ChallengerError(`not a date: ${d}`);
+  }
+  const q = Math.floor((month - 1) / 3); // threshold-ok: three months per quarter
+  const first = q * 3 + 1; // threshold-ok: three months per quarter
+  const last = first + 2; // threshold-ok: three months per quarter
+  const mm = (m: number): string => String(m).padStart(2, "0");
+  const endDay = last === 3 || last === 12 ? "31" : "30"; // threshold-ok: Mar / Dec 31 days, Jun / Sep 30
+  return { start: `${year}-${mm(first)}-01`, end: `${year}-${mm(last)}-${endDay}` };
+}
+
+/**
+ * Challengers of the family registered in the calendar quarter of `d` that change a stop, trail or
+ * sizing key against their parent version (the O-46 variant count).
+ */
+export async function stopVariantsThisQuarter(
+  db: Exec,
+  market: string,
+  family: Family,
+  d: string,
+): Promise<number> {
+  const { start, end } = quarterBounds(d);
+  const rs = await db.execute({
+    sql: `SELECT r.params_json AS params, p.params_json AS base FROM rule_version r
+          JOIN rule_version p ON p.id = r.parent
+          WHERE r.market = ? AND r.family = ? AND r.origin IN ('challenger','owner')
+            AND r.registered_d >= ? AND r.registered_d <= ?`,
+    args: [market, family, start, end],
+  });
+  let n = 0;
+  for (const row of rs.rows) {
+    const params = JSON.parse(text(row.params)) as Record<string, unknown>;
+    const base = JSON.parse(text(row.base)) as Record<string, unknown>;
+    if (changesStopOrSizing(base, params)) n += 1;
+  }
+  return n;
+}
 
 /** The incumbent of a family: the version whose latest status is `live`, highest n. */
 export async function incumbentOf(
@@ -283,13 +350,18 @@ export async function createChallenger(db: Client, input: NewChallenger): Promis
     reason,
     detail,
   });
-  // the FULL canonical key set, nothing more and nothing less (the loader checks values, not the key set)
-  const want = [...FAMILY_PARAM_KEYS[family]].sort().join(",");
-  const got = Object.keys(input.params).sort().join(",");
-  const problems =
-    want === got
-      ? validateRuleSpec(FAMILY_SPECS[family], input.params)
-      : [`params must be exactly the ${family} Lane-B keys`];
+  // the FULL canonical key set, plus any of the family's optional structural keys (KB-081, D-235);
+  // nothing else (the loader checks values, not the key set)
+  const optional = FAMILY_OPTIONAL_KEYS[family].map((s) => s.key);
+  const got = Object.keys(input.params);
+  const keysOk =
+    FAMILY_PARAM_KEYS[family].every((k) => got.includes(k)) &&
+    got.every((k) => FAMILY_PARAM_KEYS[family].includes(k) || optional.includes(k));
+  const problems = keysOk
+    ? validateRuleSpec(FAMILY_SPECS[family], input.params)
+    : [
+        `params must be the ${family} Lane-B keys (and optionally ${optional.join(", ") || "no other key"})`,
+      ];
   if (problems.length > 0) return refuse("invalid_params", problems.join("; "));
   const sha = paramsSha(input.params);
 
@@ -344,6 +416,18 @@ export async function createChallenger(db: Client, input: NewChallenger): Promis
           `the generator already proposed for ${family} this week`,
         );
       }
+    }
+    // O-46 (D-234): at most VARIANT_QUARTER_CAP stop, trail or sizing variants per family per quarter
+    const incParams = JSON.parse(text(inc.rows[0]!.params_json)) as Record<string, unknown>;
+    if (
+      changesStopOrSizing(incParams, input.params) &&
+      (await stopVariantsThisQuarter(tx, market, family, input.d)) >= VARIANT_QUARTER_CAP
+    ) {
+      await tx.rollback();
+      return refuse(
+        "variant_quarter_cap",
+        `${family} already has ${VARIANT_QUARTER_CAP} stop, trail or sizing variants this quarter`,
+      );
     }
     const slots = await challengerSlots(tx, market, input.learning);
     if (!slots.free) {
@@ -407,7 +491,11 @@ export async function createChallenger(db: Client, input: NewChallenger): Promis
     await tx.execute({
       sql: `INSERT INTO rule_version_status (rule_version_id, seq, status, d, reason)
             VALUES (?, 1, 'registered', ?, ?)`,
-      args: [ruleVersionId, input.d, `${input.origin} challenger ${id}`],
+      args: [
+        ruleVersionId,
+        input.d,
+        `${input.origin} challenger ${id}${input.note === undefined ? "" : ` (${input.note})`}`,
+      ],
     });
     await tx.execute({
       sql: `INSERT INTO trial_ledger (id, market, lineage_id, split_version, kind, rule_version,
@@ -446,7 +534,7 @@ export async function createChallenger(db: Client, input: NewChallenger): Promis
         id,
         input.d,
         input.actor,
-        `${input.origin} version ${ruleVersionId}`,
+        `${input.origin} version ${ruleVersionId}${input.note === undefined ? "" : ` (${input.note})`}`,
         JSON.stringify({ trial_id: trial.id, rule_version: ruleVersionId }),
       ],
     });

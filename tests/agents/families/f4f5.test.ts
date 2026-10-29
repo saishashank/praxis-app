@@ -193,7 +193,7 @@ describe("F4 mean reversion", () => {
 function f5Bars(
   over: Parameters<typeof makeBars>[0]["last"] = {},
   tierCode = "ZZS",
-  tier: "U2" | "U3" = "U3",
+  tier: "U2" | "U3" = "U2",
 ) {
   return factsOf(
     tierCode,
@@ -249,7 +249,7 @@ describe("F5 small/mid-cap discovery", () => {
     const vol = (last: bigint) =>
       factsOf(
         "ZZS",
-        "U3",
+        "U2",
         makeBars({
           close: () => DOLLAR,
           volume: volumes(1_000_000n, last),
@@ -290,7 +290,7 @@ describe("F5 small/mid-cap discovery", () => {
     expect(run(f5Event({ polarity: 0 }))).toBe(false);
   });
 
-  it("universe U2-U3 only; regime gate blocks RISK-OFF and SHOCK", () => {
+  it("universe U2 only (O-49); regime gate blocks RISK-OFF and SHOCK", () => {
     const world = (
       tier: "U1" | "U2" | "U3",
       regime: "RISK-ON" | "RISK-OFF" | "SHOCK" | "NEUTRAL",
@@ -319,9 +319,10 @@ describe("F5 small/mid-cap discovery", () => {
       );
     expect(world("U1", "RISK-ON").candidates.some((x) => x.family === "F5")).toBe(false);
     expect(world("U2", "RISK-ON").candidates.some((x) => x.family === "F5")).toBe(true);
-    expect(world("U3", "NEUTRAL").candidates.some((x) => x.family === "F5")).toBe(true);
+    // O-49 (D-221): U3 is no longer traded
+    expect(world("U3", "NEUTRAL").candidates.some((x) => x.family === "F5")).toBe(false);
     for (const regime of ["RISK-OFF", "SHOCK"] as const) {
-      const out = world("U3", regime);
+      const out = world("U2", regime);
       expect(out.candidates.some((x) => x.family === "F5")).toBe(false);
       expect(out.blocked.find((x) => x.family === "F5")?.reasons).toEqual([`regime_${regime}`]);
     }
@@ -390,7 +391,7 @@ describe("ARN-011 filters on U2/U3 entries", () => {
   it("+100% in 5 sessions without a price-sensitive item blocks", () => {
     const run = factsOf(
       "ZZS",
-      "U3",
+      "U2",
       makeBars({ close: (i) => (i < 296 ? DOLLAR : DOLLAR + BigInt(i - 295) * 250_000n) }),
       p,
     );
@@ -402,7 +403,7 @@ describe("ARN-011 filters on U2/U3 entries", () => {
   it("volume ratio > 10 without an announcement blocks", () => {
     const spike = factsOf(
       "ZZS",
-      "U3",
+      "U2",
       makeBars({ close: () => DOLLAR, volume: volumes(1_000_000n, 10_000_001n) }),
       p,
     );
@@ -411,7 +412,7 @@ describe("ARN-011 filters on U2/U3 entries", () => {
     expect(failed(spike, [note])).not.toContain("volume_spike_without_announcement");
     const ten = factsOf(
       "ZZS",
-      "U3",
+      "U2",
       makeBars({ close: () => DOLLAR, volume: volumes(1_000_000n, 10_000_000n) }),
       p,
     );
@@ -446,7 +447,7 @@ describe("ARN-011 filters on U2/U3 entries", () => {
     const wide = (days: number) =>
       factsOf(
         "ZZS",
-        "U3",
+        "U2",
         makeBars({
           close: () => DOLLAR,
           spread: 100n * CENT,

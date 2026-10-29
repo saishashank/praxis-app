@@ -10,11 +10,18 @@
 import { AU_TIME_ZONE, decisionCutoffUtc, type ViewBar } from "@/lib/agents/decisionView";
 import { addDays, marketDate } from "@/lib/data/calendar";
 import { announcementIngestBound } from "@/lib/sentinel/cutoffPoll";
-import { adjustBars, barsNeeded, splitActionsByCode, splitsKnownOn } from "@/lib/agents/candidates";
+import {
+  adjustBars,
+  barsNeeded,
+  splitActionsByCode,
+  splitsKnownOn,
+  withReferenceData,
+} from "@/lib/agents/candidates";
 import {
   buildCodeFacts,
   type CodeFacts,
   type FamilyInputs,
+  type IndexChangeFact,
   type Tier,
 } from "@/lib/agents/families";
 import { logReturns, microToFloat, stdevFloat, volumeRatio } from "@/lib/agents/indicators";
@@ -37,6 +44,14 @@ const RATIO_LOOKBACK = 4; // threshold-ok: last five sessions of volume ratios, 
 
 type UniverseRow = { d: string; code: string; tier: Tier; halted: number };
 type IndexRow = { index_code: string; d: string; c_micro: number };
+type IndustryRow = { code: string; industry: string; source: string; as_of: string };
+type IndexChangeRow = {
+  code: string;
+  index_name: string;
+  kind: "add" | "delete";
+  announced: string | null;
+  effective: string;
+};
 
 /** price factor (<1 for a split) -> shares-per-share ratio as a small integer pair, or null. */
 export function ratioPayload(type: string, factor: number): { new: number; old: number } | null {
@@ -152,6 +167,10 @@ export class SnapshotWorld implements CohortReplaySource {
     ReadonlyMap<string, { tier: Tier; active: boolean }>
   >();
   private readonly need: number;
+  /** FAM-006: industry rows by code (finer manual class and the ASX group), oldest as_of first. */
+  private readonly industries = new Map<string, IndustryRow[]>();
+  /** DAT-234: index changes by code, oldest effective date first. */
+  private readonly indexChanges = new Map<string, IndexChangeFact[]>();
   readonly codes: readonly string[];
   /** Announcement days of the snapshot (DAT-125 list input). */
   readonly announcements: readonly { readonly code: string; readonly d: string }[];
@@ -215,6 +234,27 @@ export class SnapshotWorld implements CohortReplaySource {
     this.actions = corpRecordsOf(snap);
     this.splits = splitActionsByCode(this.actions).byCode;
     this.need = barsNeeded(o.params);
+    // reference data (older snapshots have neither table: they read as empty, v1 behaviour)
+    for (const r of (snap.tables.industry ?? []) as unknown as IndustryRow[]) {
+      const list = this.industries.get(r.code);
+      if (list === undefined) this.industries.set(r.code, [r]);
+      else list.push(r);
+    }
+    for (const list of this.industries.values()) list.sort((a, b) => cmp(a.as_of, b.as_of));
+    for (const r of (snap.tables.index_changes ?? []) as unknown as IndexChangeRow[]) {
+      const fact: IndexChangeFact = {
+        indexName: r.index_name,
+        kind: r.kind,
+        announced: r.announced,
+        effective: r.effective,
+      };
+      const list = this.indexChanges.get(r.code);
+      if (list === undefined) this.indexChanges.set(r.code, [fact]);
+      else list.push(fact);
+    }
+    for (const list of this.indexChanges.values()) {
+      list.sort((a, b) => cmp(a.effective, b.effective) || cmp(a.indexName, b.indexName));
+    }
     this.buildRegime(snap.tables.index_bars as unknown as IndexRow[]);
   }
 
@@ -304,6 +344,19 @@ export class SnapshotWorld implements CohortReplaySource {
     return i === undefined ? null : this.bars.get(code)![i]!;
   }
 
+  /** The code's industry as of `d`: the newest manual class, else the ASX industry group. */
+  private industryOn(code: string, d: string): string | null {
+    const list = this.industries.get(code);
+    if (list === undefined) return null;
+    let cls: string | null = null;
+    let grp: string | null = null;
+    for (const r of list) {
+      if (r.source === "class" && r.as_of <= d) cls = r.industry;
+      if (r.source === "instrument") grp = r.industry;
+    }
+    return cls ?? grp;
+  }
+
   private factsAt(code: string, i: number): CodeFacts {
     const d = this.bars.get(code)![i]!.d;
     let f = this.memo.get(d, code);
@@ -311,9 +364,13 @@ export class SnapshotWorld implements CohortReplaySource {
       const raw = this.bars.get(code)!.slice(Math.max(0, i + 1 - this.need), i + 1);
       const known = splitsKnownOn(this.splits.get(code) ?? [], d, this.o.params.decisionCutoff);
       const { tier, halted } = this.tierOn(code, d);
-      f = buildCodeFacts(
-        { code, tier, adjusted: adjustBars(raw, known), raw, halted },
-        this.o.params,
+      f = withReferenceData(
+        buildCodeFacts(
+          { code, tier, adjusted: adjustBars(raw, known), raw, halted },
+          this.o.params,
+        ),
+        this.industryOn(code, d),
+        this.indexChanges.get(code),
       );
       this.memo.set(d, code, f);
     }

@@ -20,6 +20,7 @@ import {
   type CalendarRow,
   type MarketHours,
 } from "@/lib/data/calendar";
+import { loadIndexChanges, loadIndustryMap } from "@/lib/data/referenceData";
 import { divFloor, makeRational, mulRat, type Rational } from "@/lib/money/rational";
 import { loadIngestBound } from "@/lib/sentinel/cutoffPoll";
 import {
@@ -31,7 +32,7 @@ import {
 import { eventFactFromRow } from "./families/facts";
 import { buildCodeFacts } from "./families/facts";
 import { FAMILY_AGENT_VERSION } from "./families/constants";
-import { compareCandidates } from "./families/context";
+import { compareCandidates, SKIP_MONTH_SESSIONS } from "./families/context";
 import { evaluatePositions } from "./families/exits";
 import type {
   Candidate,
@@ -39,6 +40,7 @@ import type {
   EventFact,
   ExitEvaluation,
   FamilyInputs,
+  IndexChangeFact,
   PositionState,
   Sources,
   Tier,
@@ -199,6 +201,10 @@ export function barsNeeded(p: AgentParams): number {
     p.f1.highLookback,
     p.windows.smaTrend,
     p.windows.returnWindow + 1,
+    // KB-081: the F1 variants read a longer window / skip the last month (v1: no change)
+    p.f1.returnWindowSessions +
+      1 +
+      (p.f1.momentumVariant === "skip_month_u2" ? SKIP_MONTH_SESSIONS : 0),
     p.windows.adv + 1,
     p.windows.vol + 1,
     p.windows.volumeRatio + 1,
@@ -268,6 +274,19 @@ function consolidationAgo(
   return best;
 }
 
+/** Adds the reference-data facts only when known, so a code without them is exactly the v1 facts. */
+export function withReferenceData(
+  facts: CodeFacts,
+  industry: string | null | undefined,
+  indexChanges: readonly IndexChangeFact[] | undefined,
+): CodeFacts {
+  return {
+    ...facts,
+    ...(industry === undefined || industry === null ? {} : { industry }),
+    ...(indexChanges === undefined || indexChanges.length === 0 ? {} : { indexChanges }),
+  };
+}
+
 /**
  * A4 -> A3 -> A2 for D. Failures of A2/A3 are caught per agent and make the outputs partial
  * (AGT-004, decision 22); a look-ahead is a bug and always propagates.
@@ -305,6 +324,16 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
     tier: String(r.tier) as Tier,
     halted: bigintCol(r.halted) === 1n,
   }));
+
+  // FAM-006 / DAT-234 reference data: the finer industry class (manual CSV) else the ASX industry
+  // group, and the index changes, both read as of D through the reference-data readers
+  const classMap = await loadIndustryMap(db, market, d);
+  const indexChangeMap = await loadIndexChanges(db, market, d);
+  const groupRows = await db.execute({
+    sql: "SELECT code, industry FROM instrument WHERE market = ? AND industry IS NOT NULL",
+    args: [market],
+  });
+  const groupOf = new Map(groupRows.rows.map((r) => [String(r.code), String(r.industry)]));
 
   // A3: regime
   let regime: DayInputs["regime"] = null;
@@ -397,21 +426,27 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
         partialReasons.push("a2_score_failed");
       }
     }
+    const industry = classMap.get(code) ?? groupOf.get(code);
+    const changes = indexChangeMap.get(code);
     facts.set(
       code,
-      buildCodeFacts(
-        {
-          code,
-          tier: w.tier,
-          adjusted: adj,
-          raw,
-          halted: w.halted,
-          insiderScoreQ: score === null ? null : score.score_q,
-          shortDrop,
-          consolidationSessionsAgo: consolidationAgo(code, actions, sessions),
-          promotional: false,
-        },
-        p,
+      withReferenceData(
+        buildCodeFacts(
+          {
+            code,
+            tier: w.tier,
+            adjusted: adj,
+            raw,
+            halted: w.halted,
+            insiderScoreQ: score === null ? null : score.score_q,
+            shortDrop,
+            consolidationSessionsAgo: consolidationAgo(code, actions, sessions),
+            promotional: false,
+          },
+          p,
+        ),
+        industry,
+        changes,
       ),
     );
     adjusted.set(code, adj);
