@@ -335,11 +335,16 @@ export function fitLadder(
   return { ...out, sizeHtml: size, ladderLevel: level, oversize: size > maxBytes };
 }
 
+export const SEC_016_FOOTER =
+  "Emails from this system never ask for keys or passwords. Sign in and do rotations only via your own bookmark.";
+
 /** Footer used by every template (no unsubscribe: Owner-only transactional mail, D-098 draft). */
 export function standardFooter(appUrl: string, env: EnvName, note?: string): Block[] {
   const out: Block[] = [];
   if (note) out.push({ t: "small", text: note });
   out.push({ t: "small", text: "Simulation for personal information only; not financial advice." });
+  // SEC-016 / GL-08: the fixed anti-phishing footer on every email.
+  out.push({ t: "small", text: SEC_016_FOOTER });
   out.push({ t: "link", label: "Open Praxis", href: appUrl });
   out.push({
     t: "small",

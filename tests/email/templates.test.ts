@@ -142,6 +142,7 @@ describe("Evening Review variants", () => {
     expect(text).toContain("Written without AI today");
     expect(text).toContain("single-day result — noise");
     expect(text).toContain("Simulation for personal information only; not financial advice");
+    expect(text).toContain("never ask for keys or passwords");
     expect(text).toContain("n/a");
   });
 
