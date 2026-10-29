@@ -622,7 +622,7 @@ export async function syncFactors(db, c) {
 }
 
 /**
- * GL-02: stamp `known_at` on every effective action that has none yet, with the instant of the event
+ * GL-02: stamp `known_at` on every action confirmed in this run that has none yet, with the instant of the event
  * that made it effective (announcement-backed auto-confirm, Owner resolve, or the 5-session
  * auto-apply). Set once (the table trigger allows only NULL -> value) and never moved, so a later
  * reversal or recompute cannot re-date it; replays use an action only when known_at <= cut-off(D).
@@ -632,10 +632,12 @@ export async function syncKnownAt(db, c) {
   let stamped = 0;
   for (const a of c.actions) {
     if (!isEffective(a.state)) continue;
+    // only a confirmation made in THIS run is stamped; older effective rows stay NULL (legacy: known)
+    if (a.latest === null || a.latest.at < c.now) continue;
     // not counted in io.written: a stamp is bookkeeping on an existing row, run records stay as before
     const r = await db.execute({
       sql: "UPDATE corporate_action SET known_at = ? WHERE id = ? AND market = ? AND known_at IS NULL",
-      args: [a.latest?.at ?? c.now, a.id, c.market],
+      args: [a.latest.at, a.id, c.market],
     });
     stamped += r.rowsAffected;
   }

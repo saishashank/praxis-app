@@ -88,6 +88,9 @@ export function splitsKnownOn(
   d: string,
   hhmm: string,
 ): SplitAction[] {
+  if (!splits.some((a) => a.knownAt !== null && a.knownAt !== undefined)) {
+    return splits.filter((a) => a.exDate <= d); // legacy rows: always known
+  }
   const key = `${d}|${hhmm}`;
   let cut = cutoffCache.get(key);
   if (cut === undefined) {

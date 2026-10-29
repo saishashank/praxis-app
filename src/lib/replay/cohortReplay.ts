@@ -604,6 +604,7 @@ export function replayCohorts(
   let actionsAll: CorpActionRecord[] = [];
   let actionsAllCodes = -1;
   // GL-02: what a decision on session d may use is the actions confirmed by the decision cut-off of d
+  let anyKnownAt = false;
   let actionsKnownD = "";
   let actionsKnown: CorpActionRecord[] = [];
   const allActions = (d: string): CorpActionRecord[] => {
@@ -613,7 +614,10 @@ export function replayCohorts(
         .flatMap((k) => [...(actionsByCode.get(k) ?? [])]);
       actionsAllCodes = actionsByCode.size;
       actionsKnownD = "";
+      anyKnownAt = actionsAll.some((x) => x.knownAt !== null && x.knownAt !== undefined);
     }
+    // legacy rows (known_at null) are always known: skip the per-day cut-off work entirely
+    if (!anyKnownAt) return actionsAll;
     if (actionsKnownD !== d) {
       actionsKnown = knownBy(actionsAll, decisionCutoffUtc(d, params.decisionCutoff));
       actionsKnownD = d;

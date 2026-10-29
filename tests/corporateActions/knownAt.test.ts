@@ -45,7 +45,7 @@ const knownAtOf = async (db: Awaited<ReturnType<typeof caDb>>, id: number) =>
   (await rows(db, "SELECT known_at FROM corporate_action WHERE id = ?", [id]))[0]!.known_at;
 
 describe("migration 0016_known_at", () => {
-  it("backfills left-queue actions with the start of the ex-date, leaves queued ones null, sets once", async () => {
+  it("adds the column without a backfill (legacy rows stay NULL) and sets it once", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(db, ms);
@@ -70,9 +70,9 @@ describe("migration 0016_known_at", () => {
     await ins(3, "2024-08-02", "resolved");
     await migrateUp(db, ms);
     expect(await rows(db, "SELECT id, known_at FROM corporate_action ORDER BY id")).toEqual([
-      { id: 1, known_at: "2024-03-04T13:00:00.000Z" },
+      { id: 1, known_at: null },
       { id: 2, known_at: null },
-      { id: 3, known_at: "2024-08-01T13:00:00.000Z" },
+      { id: 3, known_at: null },
     ]);
     // known_at may be set once from NULL; nothing else on the row changes, and it never moves
     await db.execute(
@@ -197,7 +197,39 @@ describe("readers use only actions known at the cut-off", () => {
     expect(adjustBars(raw, splitsKnownOn(splits, D6, HHMM))[0]!.close).not.toBe(10_000_000n);
   });
 
-  it("legacy rows (known_at null or backfilled to the ex-date) behave as before", () => {
+  it("legacy NULL rows are known at every cut-off, as before the column existed", async () => {
+    // a pre-0016 row: known_at NULL
+    const legacy = await caDb();
+    for (const d of [D0, D1, D2]) await putBar(legacy, "ZZA", d, d === D0 ? 10 : 5.1);
+    await legacy.batch([
+      {
+        sql: "INSERT INTO corporate_action (id, market, code, type, ex_date, payload_json) VALUES (1, 'AU', 'ZZA', 'split', ?, '{\"new\":2,\"old\":1}')",
+        args: [D1],
+      },
+      {
+        sql: "INSERT INTO corporate_action_event (action_id, at, status, by) VALUES (1, ?, 'auto_confirmed', 'x')",
+        args: [nowOf(D1)],
+      },
+      {
+        sql: "INSERT INTO adjustment_factor (market, code, ex_date, factor, corporate_action_id, computed_at) VALUES ('AU', 'ZZA', ?, 0.5, 1, ?)",
+        args: [D1, nowOf(D1)],
+      },
+    ]);
+    expect(await knownAtOf(legacy, 1)).toBe(null);
+    // known at the cut-off of the evening BEFORE its ex-date, exactly as today
+    const bars = await adjustedBars(legacy, "ZZA", D0, D0, {
+      asOf: D1,
+      knownBy: decisionCutoffUtc(D0, HHMM),
+    });
+    expect(bars[0]!.c).toBe(5);
+    const actions = await loadConfirmedActions(legacy, "AU", D1);
+    expect(knownBy(actions, decisionCutoffUtc(D0, HHMM))).toHaveLength(1);
+    // a later run (settle) does not stamp an old confirmation either
+    await runCorporateActions({ db: legacy, market: "AU", d: D2, io: io(), now: nowOf(D2) });
+    expect(await knownAtOf(legacy, 1)).toBe(null);
+  });
+
+  it("legacy records (known_at null or absent) behave as before", () => {
     const rec = [
       { id: "1", code: "ZZA", type: "split", exDate: D1, payload: split21, knownAt: null },
       { id: "2", code: "ZZA", type: "split", exDate: D2, payload: split21 },
@@ -207,7 +239,7 @@ describe("readers use only actions known at the cut-off", () => {
         type: "split",
         exDate: D3,
         payload: split21,
-        knownAt: "2026-10-14T13:00:00.000Z", // start of D3 (Melbourne), 15 Oct
+        knownAt: "2026-10-14T13:00:00.000Z",
       },
     ];
     const splits = splitActionsByCode(rec).byCode.get("ZZA")!;
