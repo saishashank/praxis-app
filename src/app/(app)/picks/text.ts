@@ -3,17 +3,17 @@
 import type { PickRowView, TrackRow } from "@/lib/ui/loaders/picks";
 import { formatPpm } from "@/lib/view/format";
 
-export const HONESTY_BASE = "Personal use only Â· Not financial advice";
+export const HONESTY_BASE = "Personal use only · Not financial advice";
 export const HONESTY_NOT_PROVEN = "Model not proven yet";
 export const STOP_GAP_HOVER =
   "Prices can gap past a stop-loss (open far below it), so the loss can be bigger than shown.";
 export const SELECTION_LINE = "Picks are chosen by strength of evidence, then signal score.";
-export const PRICE_ONLY_LABEL = "Price only â€” dividends not included.";
+export const PRICE_ONLY_LABEL = "Price only — dividends not included.";
 export const NOT_REAL_ORDERS = "Simulated tracking only. Nothing here places an order.";
 
 /** UXN-045: the last part is shown only until the live record beats the luck check. */
 export const honestyLine = (beatsLuck: boolean): string =>
-  beatsLuck ? HONESTY_BASE : `${HONESTY_BASE} Â· ${HONESTY_NOT_PROVEN}`;
+  beatsLuck ? HONESTY_BASE : `${HONESTY_BASE} · ${HONESTY_NOT_PROVEN}`;
 
 export const profileLabel = (name: string): string =>
   name.length === 0 ? name : name.charAt(0).toUpperCase() + name.slice(1).replace(/_/g, " ");
@@ -112,7 +112,7 @@ export function stateText(
       return "Bought";
     case "missed": {
       const r = o && "withdrawnReason" in o ? (o.withdrawnReason ?? null) : null;
-      return r === null ? "Withdrawn" : `Withdrawn â€” ${WITHDRAWN_WORDS[r] ?? r}`;
+      return r === null ? "Withdrawn" : `Withdrawn — ${WITHDRAWN_WORDS[r] ?? r}`;
     }
     case "closed":
       return "Closed";
