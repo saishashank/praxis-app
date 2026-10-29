@@ -27,6 +27,16 @@ describe("db client", () => {
     expect(authDb()).toBeDefined();
   });
 
+  it("reuses one client per database and replaces a closed one (D-204)", () => {
+    vi.stubEnv("TURSO_MAIN_URL", ":memory:");
+    const a = mainDb();
+    expect(mainDb()).toBe(a);
+    a.close();
+    const b = mainDb();
+    expect(b).not.toBe(a);
+    expect(b.closed).toBe(false);
+  });
+
   it("nowIso is ISO UTC with milliseconds", () => {
     expect(nowIso()).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
   });

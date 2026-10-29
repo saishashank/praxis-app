@@ -8,8 +8,10 @@ import { findLeaks } from "@/lib/view/mask";
 import { loadAlerts, parseAlertsQuery } from "@/lib/ui/loaders/alerts";
 import { loadHealth } from "@/lib/ui/loaders/health";
 import { loadKnowledge, parseKnowledgeQuery } from "@/lib/ui/loaders/knowledge";
+import { mq } from "../market/query";
 import {
   loadMarket,
+  marketHref,
   loadOverview,
   parseMarketQuery,
   parseSearchQuery,
@@ -61,7 +63,7 @@ describe("empty state (no data at all)", () => {
       const env = envOf(w, who);
       expect((await loadPicks(env, { profile: "balanced" })).state).toBe("empty");
       expect((await loadTrackRecord(env, { profile: "balanced" })).state).toBe("empty");
-      expect((await loadMarket(env, { tab: "movers", page: 1 })).state).toBe("empty");
+      expect((await loadMarket(env, mq())).state).toBe("empty");
       expect((await loadNews(env, { chip: "all", page: 1 })).state).toBe("empty");
       expect((await loadAlerts(env, { unacked: false })).state).toBe("empty");
       const reviews = await loadReviewList(env, { page: 1 });
@@ -194,11 +196,30 @@ describe("populated loaders", () => {
   describe("market", () => {
     it("validates the query", () => {
       expect(parseMarketQuery(sp(""))).toEqual({
-        tab: "movers",
+        open: ["movers"],
+        size: "all",
         sector: undefined,
         page: 1,
-        size: "large",
+        upPage: 1,
+        downPage: 1,
+        tradedPage: 1,
       });
+      // D-205: sections, the old tab links, movers pages and the link back
+      expect(parseMarketQuery(sp("open=sectors,all"))?.open).toEqual(["sectors", "all"]);
+      expect(parseMarketQuery(sp("open="))?.open).toEqual([]);
+      expect(parseMarketQuery(sp("tab=sectors"))?.open).toEqual(["sectors"]);
+      expect(parseMarketQuery(sp("up=3&down=2&traded=4"))).toMatchObject({
+        upPage: 3,
+        downPage: 2,
+        tradedPage: 4,
+      });
+      const q = parseMarketQuery(sp("open=movers,all&size=mid&up=2&page=3&sector=Tech"))!;
+      expect(marketHref(q)).toBe("/market?open=movers%2Call&size=mid&sector=Tech&up=2&page=3");
+      expect(marketHref(parseMarketQuery(sp(""))!)).toBe("/market");
+      expect(marketHref(q, { downPage: 2, tradedPage: 5 })).toContain("down=2&traded=5");
+      for (const bad of ["open=nope", "up=0", "traded=x"]) {
+        expect(parseMarketQuery(sp(bad))).toBeNull();
+      }
       expect(parseMarketQuery(sp("size=mid"))?.size).toBe("mid");
       expect(parseMarketQuery(sp("size=huge"))).toBeNull();
       expect(parseMarketQuery(sp("tab=all&page=2&sector=Technology"))?.page).toBe(2);
@@ -212,12 +233,12 @@ describe("populated loaders", () => {
     });
     it("the Owner sees movers, sectors and the table with prices", async () => {
       const env = envOf(w, "owner");
-      const movers = await loadMarket(env, { tab: "movers", page: 1 });
+      const movers = await loadMarket(env, mq());
       expect(movers.state).toBe("ok");
       // D-200: before size groups exist, the movers keep to A$1+ shares with A$1m traded on the
       // day; every code of this world trades a few thousand dollars, so the lists are empty ...
-      expect(movers.up).toEqual([]);
-      expect(movers.down).toEqual([]);
+      expect(movers.up.rows).toEqual([]);
+      expect(movers.down.rows).toEqual([]);
       // ... and a liquid code is listed with its name, change and price
       const liquid = await fullWorld();
       await liquid.main.execute(
@@ -233,29 +254,33 @@ describe("populated loaders", () => {
           args: [d, c, c, c, c, `${d}T06:00:00.000Z`, `${d}T06:05:00.000Z`],
         });
       }
-      const live = await loadMarket(envOf(liquid, "owner"), { tab: "movers", page: 1 });
-      expect(live.up.map((r) => r.stock)).toEqual(["ZZLIQ"]);
-      expect(live.up[0]).toMatchObject({ name: "Zed Liquid Ltd", changePpm: 50000 });
-      expect(live.up[0]!.close).toEqual({ micro: "21000000", currency: "AUD", simulated: true });
-      const sectors = await loadMarket(env, { tab: "sectors", page: 1 });
+      const live = await loadMarket(envOf(liquid, "owner"), mq());
+      expect(live.up.rows.map((r) => r.stock)).toEqual(["ZZLIQ"]);
+      expect(live.up.rows[0]).toMatchObject({ name: "Zed Liquid Ltd", changePpm: 50000 });
+      expect(live.up.rows[0]!.close).toEqual({
+        micro: "21000000",
+        currency: "AUD",
+        simulated: true,
+      });
+      const sectors = await loadMarket(env, mq({ open: ["sectors"] }));
       expect(sectors.sectors.map((s) => s.sector)).toEqual(["Materials", "Other", "Technology"]);
-      const all = await loadMarket(env, { tab: "all", sector: "Technology", page: 1 });
-      expect(all.rows.map((r) => r.stock)).toEqual(["ZZUP"]);
-      expect(all.page.total).toBe(1);
+      const all = await loadMarket(env, mq({ open: ["all"], sector: "Technology" }));
+      expect(all.all.rows.map((r) => r.stock)).toEqual(["ZZUP"]);
+      expect(all.all.page.total).toBe(1);
     });
     it("masked users see only the active stocks, as letters, with derived numbers", async () => {
       for (const who of MASKED) {
         const env = envOf(w, who);
-        const all = await loadMarket(env, { tab: "all", page: 1 });
-        expect(all.rows.map((r) => r.stock)).toEqual(["Stock A", "Stock B"]); // ZZDN, ZZUP
-        expect(all.rows[1]).toMatchObject({
+        const all = await loadMarket(env, mq({ open: ["all"] }));
+        expect(all.all.rows.map((r) => r.stock)).toEqual(["Stock A", "Stock B"]); // ZZDN, ZZUP
+        expect(all.all.rows[1]).toMatchObject({
           slug: "stock-b",
           name: null,
           close: null,
           changePpm: 50000,
         });
-        const movers = await loadMarket(env, { tab: "movers", page: 1 });
-        const sectors = await loadMarket(env, { tab: "sectors", page: 1 });
+        const movers = await loadMarket(env, mq());
+        const sectors = await loadMarket(env, mq({ open: ["sectors"] }));
         expect(sectors.sectors).toEqual([]);
         for (const model of [all, movers, sectors]) {
           noLeak(model);
@@ -322,7 +347,7 @@ describe("populated loaders", () => {
     it("is stale when the newest bar is old", async () => {
       const m = await loadMarket(
         { ...envOf(w, "owner"), now: new Date("2026-11-20T03:00:00.000Z") },
-        { tab: "movers", page: 1 },
+        mq(),
       );
       expect(m.state).toBe("stale");
     });

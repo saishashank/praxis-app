@@ -354,35 +354,39 @@ export async function priceGate(db) {
   return st.rows.length && String(st.rows[0].mode) === "on" ? null : "source_off";
 }
 
-/** Confirmed factors of the codes (newest factor row per confirmed action; DAT-222 recomputes add rows). */
+/**
+ * Confirmed factors of the codes (newest factor row per confirmed action; DAT-222 recomputes add rows),
+ * ordered by code, ex-date and action. D-204: one query for all the codes (it was one per code).
+ */
 export async function loadConfirmedFactors(db, codes) {
+  const acts = await db.execute({
+    sql: `SELECT ca.code AS code, ca.id AS id, ca.ex_date AS ex_date, ca.type AS type,
+            (SELECT e.status FROM corporate_action_event e WHERE e.action_id = ca.id
+               ORDER BY e.id DESC LIMIT 1) AS status,
+            (SELECT e.note FROM corporate_action_event e WHERE e.action_id = ca.id
+               ORDER BY e.id DESC LIMIT 1) AS note,
+            (SELECT f.factor FROM adjustment_factor f WHERE f.market = ca.market
+               AND f.corporate_action_id = ca.id ORDER BY f.computed_at DESC LIMIT 1) AS factor
+          FROM corporate_action ca
+          WHERE ca.market = ? AND ca.code IN (SELECT value FROM json_each(?))
+          ORDER BY ca.code, ca.ex_date, ca.id`,
+    args: [MARKET, JSON.stringify([...new Set(codes)])],
+  });
   const out = [];
-  for (const code of [...codes].sort()) {
-    const acts = await db.execute({
-      sql: `SELECT ca.id AS id, ca.ex_date AS ex_date,
-              (SELECT e.status FROM corporate_action_event e WHERE e.action_id = ca.id
-                 ORDER BY e.id DESC LIMIT 1) AS status,
-              (SELECT e.note FROM corporate_action_event e WHERE e.action_id = ca.id
-                 ORDER BY e.id DESC LIMIT 1) AS note,
-              (SELECT f.factor FROM adjustment_factor f WHERE f.market = ca.market
-                 AND f.corporate_action_id = ca.id ORDER BY f.computed_at DESC LIMIT 1) AS factor
-            FROM corporate_action ca WHERE ca.market = ? AND ca.code = ? ORDER BY ca.ex_date, ca.id`,
-      args: [MARKET, code],
+  for (const r of acts.rows) {
+    if (r.status === null || r.factor === null) continue;
+    const st = stateOf({
+      status: String(r.status),
+      note: r.note === null ? null : String(r.note),
     });
-    for (const r of acts.rows) {
-      if (r.status === null || r.factor === null) continue;
-      const st = stateOf({
-        status: String(r.status),
-        note: r.note === null ? null : String(r.note),
+    if (isEffective(st.state)) {
+      out.push({
+        code: String(r.code),
+        exDate: String(r.ex_date),
+        factor: Number(r.factor),
+        actionId: Number(r.id),
+        type: String(r.type),
       });
-      if (isEffective(st.state)) {
-        out.push({
-          code,
-          exDate: String(r.ex_date),
-          factor: Number(r.factor),
-          actionId: Number(r.id),
-        });
-      }
     }
   }
   return out;

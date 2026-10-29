@@ -6,6 +6,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadCompany, loadIndexStrip } from "@/lib/ui/loaders/company";
 import { loadMarket, loadOverview } from "@/lib/ui/loaders/market";
+import { mq } from "./query";
 import { findLeaks } from "@/lib/view/mask";
 import { cleanupTempDbs } from "../db/helpers";
 import { CODES, D, envOf, fullWorld, NAMES, type World } from "../loaders/world";
@@ -217,27 +218,27 @@ describe("the index strip", () => {
 });
 
 describe("the Market list additions", () => {
-  it("D-193: one size group at a time (Large by default), from the bars, without penny stocks", async () => {
-    const m = await loadMarket(envOf(w, "owner"), { tab: "movers", page: 1 });
-    expect(m).toMatchObject({ size: "large", sized: true });
-    expect(m.traded.map((r) => r.stock)).toEqual(["ZZBIG"]);
-    const big = m.up.find((r) => r.stock === "ZZBIG")!;
+  it("D-193, D-205: All by default, one size group on request, from the bars, without penny stocks", async () => {
+    const m = await loadMarket(envOf(w, "owner"), mq());
+    expect(m).toMatchObject({ size: "all", sized: true });
+    expect(m.traded.rows.map((r) => r.stock)).toEqual(["ZZBIG"]);
+    const big = m.up.rows.find((r) => r.stock === "ZZBIG")!;
     expect(big.sizeGroup).toBe("Large");
     expect(big.volumeVsUsualPpm).toBe(1_000_000); // as usual
     // the barely traded codes are in no group
     for (const size of ["large", "mid", "small"] as const) {
-      const all = await loadMarket(envOf(w, "owner"), { tab: "all", page: 1, size });
-      expect(all.rows.map((r) => r.stock).filter((c) => c !== "ZZBIG")).toEqual([]);
+      const all = await loadMarket(envOf(w, "owner"), mq({ open: ["all"], size }));
+      expect(all.all.rows.map((r) => r.stock).filter((c) => c !== "ZZBIG")).toEqual([]);
     }
     expect(
-      (await loadMarket(envOf(w, "owner"), { tab: "all", page: 1, size: "mid" })).rows,
+      (await loadMarket(envOf(w, "owner"), mq({ open: ["all"], size: "mid" }))).all.rows,
     ).toEqual([]);
   });
 
   it("gives a masked user the derived fields only, as Stock A and Stock B", async () => {
-    const m = await loadMarket(envOf(w, "editor"), { tab: "movers", page: 1 });
+    const m = await loadMarket(envOf(w, "editor"), mq());
     expect(m.masked).toBe(true);
-    const all = [...m.up, ...m.down, ...m.traded];
+    const all = [...m.up.rows, ...m.down.rows, ...m.traded.rows];
     expect(all.length).toBeGreaterThan(0);
     for (const r of all) {
       expect(r.stock).toMatch(/^Stock [A-Z]+$/);

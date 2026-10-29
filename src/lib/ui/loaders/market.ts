@@ -34,13 +34,18 @@ const SEARCH_MAX = 20; // threshold-ok: decision 49
 const NEWS_ROWS = 5; // threshold-ok: UXN-272 last 5 announcements
 const STALE_DAYS = 4; // threshold-ok: end-of-day bars; a long weekend is 3 days
 const PPM = 1_000_000; // threshold-ok: parts per million
-const TABS = ["movers", "sectors", "all"] as const;
-export type MarketTab = (typeof TABS)[number];
+const SECTIONS = ["movers", "sectors", "all"] as const;
+/** D-205: the three Market sections; Top movers is the only one open by default. */
+export type MarketSection = (typeof SECTIONS)[number];
 const SIZE_GROUP: Record<string, string> = { U1: "Large", U2: "Mid", U3: "Small" };
-/** D-193: the size switch of the Market page (Owner 2026-10-26), Large by default. */
-export const SIZES = ["large", "mid", "small"] as const;
+/** D-193, D-205: the size switch of the Market page; All (every size, each row labelled) by default. */
+export const SIZES = ["all", "large", "mid", "small"] as const;
 export type MarketSize = (typeof SIZES)[number];
-const TIER_OF_SIZE: Record<MarketSize, string> = { large: "U1", mid: "U2", small: "U3" };
+const TIER_OF_SIZE: Record<Exclude<MarketSize, "all">, string> = {
+  large: "U1",
+  mid: "U2",
+  small: "U3",
+};
 const CODE_RE = /^[A-Za-z0-9]{1,8}$/;
 const SLUG_RE = /^stock-([a-z]{1,4})$/;
 export const SUMMARY_PENDING = "Summary not written yet";
@@ -70,7 +75,8 @@ type DayRow = {
 };
 /** `sized`: false while the history is too short for the ARN-010 size groups (D-193). */
 type Day = { d: string; rows: DayRow[]; builtAt: number; sized: boolean };
-const MEMO = new WeakMap<Db, Map<string, Day>>();
+// D-204: the memo holds the day being built too, so sections that load at the same time share one build
+const MEMO = new WeakMap<Db, Map<string, { at: number; day: Promise<Day> }>>();
 
 async function loadDay(env: LoaderEnv): Promise<Day | null> {
   const market = marketOf(env);
@@ -80,15 +86,21 @@ async function loadDay(env: LoaderEnv): Promise<Day | null> {
   });
   const d = last.rows[0]?.d ? String(last.rows[0].d) : null;
   if (d === null) return null;
-  const memo = MEMO.get(env.main) ?? new Map<string, Day>();
+  const memo = MEMO.get(env.main) ?? new Map<string, { at: number; day: Promise<Day> }>();
   MEMO.set(env.main, memo);
   const key = `${market}|${d}`;
+  const now = env.now.getTime();
   const hit = memo.get(key);
-  if (hit && env.now.getTime() - hit.builtAt < MEMO_MS && env.now.getTime() >= hit.builtAt) {
-    return hit;
-  }
+  if (hit && now - hit.at < MEMO_MS && now >= hit.at) return hit.day;
+  const day = buildDay(env, market, d);
+  memo.set(key, { at: now, day });
+  day.catch(() => memo.delete(key)); // a failed build is not remembered
+  return day;
+}
+
+async function buildDay(env: LoaderEnv, market: string, d: string): Promise<Day> {
   // D-201: the four reads do not depend on each other, so they run together
-  const [r, usual, tiers, ca] = await Promise.all([
+  const [r, usual, stored, ca] = await Promise.all([
     env.main.execute({
       sql: `SELECT b.code, i.name, i.sector, b.c, b.volume,
                    (SELECT p.c FROM price_bar p WHERE p.market = b.market AND p.code = b.code AND p.d < b.d
@@ -102,7 +114,7 @@ async function loadDay(env: LoaderEnv): Promise<Day | null> {
             WHERE market = ? AND d < ? AND d >= date(?, '-30 days') GROUP BY code LIMIT ?`,
       args: [market, d, d, UNIVERSE_ROWS],
     }),
-    tiersBefore(env, market, d),
+    storedTiers(env, market, d),
     env.main
       .execute({
         sql: `SELECT DISTINCT code FROM corporate_action
@@ -111,6 +123,11 @@ async function loadDay(env: LoaderEnv): Promise<Day | null> {
       })
       .catch(() => ({ rows: [] as Record<string, unknown>[] })), // an unreadable table leaves the lists as they are
   ]);
+  // D-204: the night's stored tiers when they cover every code of the day, else worked out here
+  const tiers =
+    stored !== null && r.rows.every((x) => stored.has(String(x.code)))
+      ? stored
+      : await tiersBefore(env, market, d);
   const usualBy = new Map(usual.rows.map((x) => [String(x.code), Number(x.v)]));
   const reshaped = new Set<string>();
   for (const x of ca.rows) reshaped.add(normCode(String(x.code)));
@@ -128,9 +145,24 @@ async function loadDay(env: LoaderEnv): Promise<Day | null> {
       usualVolume: usualBy.get(String(x.code)) ?? null,
       reshaped: reshaped.has(normCode(String(x.code))),
     }));
-  const day: Day = { d, rows, builtAt: env.now.getTime(), sized: tiers !== null };
-  memo.set(key, day);
-  return day;
+  return { d, rows, builtAt: env.now.getTime(), sized: tiers !== null };
+}
+
+/**
+ * D-204: the tiers the night stored for `d` (batch 1 computes them over every listed company with the
+ * same ARN-010 rule, from the 60 sessions before `d`). A night with too little history stores every
+ * code as U3; then there is no U1 row, and the page works the tiers out itself (tiersBefore), as it
+ * does when the stored night does not cover every code of the day.
+ */
+async function storedTiers(env: LoaderEnv, market: string, d: string) {
+  const r = await env.main.execute({
+    sql: "SELECT code, tier, status FROM universe_snapshot WHERE market = ? AND d = ?",
+    args: [market, d],
+  });
+  if (!r.rows.some((x) => String(x.tier) === "U1")) return null;
+  return new Map(
+    r.rows.map((x) => [String(x.code), { tier: String(x.tier), status: String(x.status) }]),
+  );
 }
 
 /**
@@ -249,16 +281,61 @@ export async function starredCodes(env: LoaderEnv): Promise<Set<string>> {
 
 // ---- the market page -------------------------------------------------------------------------------
 
-export type MarketQuery = { tab: MarketTab; sector?: string; page: number; size?: MarketSize };
+export type MarketQuery = {
+  /** D-205: the sections shown open; the others are only a heading and load nothing. */
+  open: MarketSection[];
+  size: MarketSize;
+  sector?: string;
+  /** All companies page. */
+  page: number;
+  /** D-205: the page of each movers list. */
+  upPage: number;
+  downPage: number;
+  tradedPage: number;
+};
 
+const MAX_PAGE = 1000; // threshold-ok: page numbers accepted in a link
+
+/**
+ * `?open=movers,sectors&size=mid&up=2&down=1&traded=1&page=3&sector=...`, or null when a value is not
+ * allowed. No `open` means Top movers only. The old `tab=` links (D-193) open that one section.
+ */
 export function parseMarketQuery(sp: URLSearchParams): MarketQuery | null {
-  const tab = sp.get("tab") ?? "movers";
-  if (!(TABS as readonly string[]).includes(tab)) return null;
+  const openRaw = sp.get("open") ?? sp.get("tab") ?? "movers";
+  const open = openRaw === "" ? [] : openRaw.split(",");
+  if (!open.every((s) => (SECTIONS as readonly string[]).includes(s))) return null;
   const sector = textParam(sp.get("sector"), 60);
-  const page = intParam(sp.get("page"), 1, 1000);
-  const size = sp.get("size") ?? "large";
-  if (sector === null || page === null || !(SIZES as readonly string[]).includes(size)) return null;
-  return { tab: tab as MarketTab, sector, page, size: size as MarketSize };
+  const size = sp.get("size") ?? "all";
+  const pages = ["page", "up", "down", "traded"].map((k) => intParam(sp.get(k), 1, MAX_PAGE));
+  if (sector === null || pages.includes(null) || !(SIZES as readonly string[]).includes(size)) {
+    return null;
+  }
+  const [page, upPage, downPage, tradedPage] = pages as number[];
+  return {
+    open: SECTIONS.filter((s) => open.includes(s)),
+    size: size as MarketSize,
+    sector,
+    page: page!,
+    upPage: upPage!,
+    downPage: downPage!,
+    tradedPage: tradedPage!,
+  };
+}
+
+/** The link of `q` with `change` applied (defaults left out), for size, section and page links. */
+export function marketHref(q: MarketQuery, change: Partial<MarketQuery> = {}): string {
+  const n = { ...q, ...change };
+  const sp = new URLSearchParams();
+  const open = n.open.join(",");
+  if (open !== "movers") sp.set("open", open);
+  if (n.size !== "all") sp.set("size", n.size);
+  if (n.sector !== undefined) sp.set("sector", n.sector);
+  if (n.upPage > 1) sp.set("up", String(n.upPage));
+  if (n.downPage > 1) sp.set("down", String(n.downPage));
+  if (n.tradedPage > 1) sp.set("traded", String(n.tradedPage));
+  if (n.page > 1) sp.set("page", String(n.page));
+  const s = sp.toString();
+  return s === "" ? "/market" : `/market?${s}`;
 }
 
 export type MarketRow = {
@@ -278,57 +355,67 @@ export type MarketRow = {
   starred: boolean;
 };
 export type SectorRow = { sector: string; count: number; avgChangePpm: number };
+/** One page of a list. */
+export type MarketList = {
+  rows: MarketRow[];
+  page: { number: number; size: number; total: number };
+};
 export type MarketModel = {
   state: LoaderState;
   masked: boolean;
-  tab: MarketTab;
-  /** D-193: the size group shown (one at a time); `sized` false while history is too short. */
+  /** D-193: the size group shown; `sized` false while history is too short. */
   size: MarketSize;
   sized: boolean;
   d: string | null;
   staleText: string | null;
-  up: MarketRow[];
-  down: MarketRow[];
+  up: MarketList;
+  down: MarketList;
+  /** Most traded today (by traded value). */
+  traded: MarketList;
   sectors: SectorRow[];
-  /** Most traded today (by volume). */
-  traded: MarketRow[];
-  rows: MarketRow[];
-  page: { number: number; size: number; total: number };
+  /** All companies (of the sector, when one is chosen). */
+  all: MarketList;
   /** Shown to masked users in place of search. */
   note: string | null;
 };
 
-const MASKED_NOTE = "Company names and prices are hidden for your access level.";
+export const MASKED_NOTE = "Company names and prices are hidden for your access level.";
+const emptyList = (number: number, size: number): MarketList => ({
+  rows: [],
+  page: { number, size, total: 0 },
+});
 
+/**
+ * The Market model of `q`. Each section of the page calls this for its own part; the day under it is
+ * built once and shared (memo, D-204), so the extra calls cost only the in-memory sorting.
+ */
 export async function loadMarket(env: LoaderEnv, q: MarketQuery): Promise<MarketModel> {
   const masked = env.mask.masked;
-  const size = Number(await getConfig(env.main, "market_list_page_size"));
+  const pageSize = Number(await getConfig(env.main, "market_list_page_size"));
   const empty: MarketModel = {
     state: "empty",
     masked,
-    tab: q.tab,
-    size: q.size ?? "large",
+    size: q.size,
     sized: false,
     d: null,
     staleText: null,
-    up: [],
-    down: [],
+    up: emptyList(q.upPage, MOVERS),
+    down: emptyList(q.downPage, MOVERS),
+    traded: emptyList(q.tradedPage, MOVERS),
     sectors: [],
-    traded: [],
-    rows: [],
-    page: { number: q.page, size, total: 0 },
+    all: emptyList(q.page, pageSize),
     note: masked ? MASKED_NOTE : null,
   };
   const day = await loadDay(env);
   if (day === null) return empty;
-  // D-193: one size group at a time, and never a code below the ARN-010 floor (penny or barely traded)
-  const wanted = TIER_OF_SIZE[q.size ?? "large"];
-  // a masked user sees only the day's active set, as letters and without sizes, so no size filter
+  // D-193/D-205: never a code below the ARN-010 floor once sized; All keeps every size, labelled.
+  // A masked user sees only the day's active set, as letters and without sizes, so no size filter.
   let pool =
-    day.sized && !masked ? day.rows.filter((r) => r.active && r.tier === wanted) : day.rows;
+    day.sized && !masked
+      ? day.rows.filter((r) => r.active && (q.size === "all" || r.tier === TIER_OF_SIZE[q.size]))
+      : day.rows;
   let label = (c: string): string => c;
   if (masked) {
-    // Only the stocks of the day's active set exist for a masked user.
     const kit = await maskKit(env, day.d);
     const set = new Set(kit.aliases.codes());
     pool = pool.filter((r) => set.has(normCode(r.code)));
@@ -349,6 +436,10 @@ export async function loadMarket(env: LoaderEnv, q: MarketQuery): Promise<Market
         : null,
     sizeGroup: masked ? null : (SIZE_GROUP[r.tier ?? ""] ?? null),
     starred: stars.has(normCode(r.code)),
+  });
+  const pageOf = (rows: DayRow[], number: number, size: number): MarketList => ({
+    rows: rows.slice((number - 1) * size, number * size).map(toRow),
+    page: { number, size, total: rows.length },
   });
   // D-200: a split or consolidation is not a rise or fall; while the history is too short for sizes,
   // the movers lists keep to established companies (A$1 a share, A$1m traded)
@@ -375,8 +466,6 @@ export async function loadMarket(env: LoaderEnv, q: MarketQuery): Promise<Market
     !masked && q.sector !== undefined
       ? pool.filter((r) => (r.sector ?? "Other") === q.sector)
       : pool;
-  const total = filtered.length;
-  const start = (q.page - 1) * size;
   const stale = dateStaleness(day.d, todayD(env), STALE_DAYS);
   return {
     ...empty,
@@ -384,28 +473,22 @@ export async function loadMarket(env: LoaderEnv, q: MarketQuery): Promise<Market
     d: day.d,
     sized: day.sized,
     staleText: stale.state === "stale" ? stale.text : null,
-    up: sorted
-      .filter((r) => changePpm(r) > 0)
-      .slice(0, MOVERS)
-      .map(toRow),
-    down: sorted
-      .filter((r) => changePpm(r) < 0)
-      .reverse()
-      .slice(0, MOVERS)
-      .map(toRow),
-    traded:
-      q.tab === "movers"
-        ? [...movers]
-            // by traded value (price x volume): a million shares at A$0.01 is not "most traded"
-            .sort(
-              (a, b) => b.volume * b.close - a.volume * a.close || (a.code < b.code ? -1 : 1), // money-float-ok: ordering only
-            )
-            .slice(0, MOVERS)
-            .map(toRow)
-        : [],
-    sectors: q.tab === "sectors" ? sectors : [],
-    rows: q.tab === "all" ? filtered.slice(start, start + size).map(toRow) : [],
-    page: { number: q.page, size, total },
+    up: pageOf(
+      sorted.filter((r) => changePpm(r) > 0),
+      q.upPage,
+      MOVERS,
+    ),
+    down: pageOf(sorted.filter((r) => changePpm(r) < 0).reverse(), q.downPage, MOVERS),
+    // by traded value (price x volume): a million shares at A$0.01 is not "most traded"
+    traded: pageOf(
+      [...movers].sort(
+        (a, b) => b.volume * b.close - a.volume * a.close || (a.code < b.code ? -1 : 1), // money-float-ok: ordering only
+      ),
+      q.tradedPage,
+      MOVERS,
+    ),
+    sectors,
+    all: pageOf(filtered, q.page, pageSize),
   };
 }
 
