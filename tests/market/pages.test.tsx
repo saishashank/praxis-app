@@ -4,7 +4,7 @@
 // pages contain no code, name, price or link (DAT-124, decision 21); the company page shows candles and
 // key numbers to the Owner and derived numbers only to masked users; honest labels (End-of-day price, no
 // order controls); not-found for a real code from a masked user; axe.
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { findLeaks } from "@/lib/view/mask";
@@ -82,8 +82,16 @@ beforeEach(() => {
   asId("owner");
 });
 
-const market = async (sp: Record<string, string> = {}) =>
-  render(await MarketPage({ searchParams: Promise.resolve(sp) }));
+/** D-205: the page streams its sections; wait until no section shows its spinner. */
+const market = async (sp: Record<string, string> = {}) => {
+  const el = await MarketPage({ searchParams: Promise.resolve(sp) });
+  let r!: ReturnType<typeof render>;
+  await act(async () => {
+    r = render(el);
+  });
+  await waitFor(() => expect(r.container.querySelector(".animate-spin")).toBeNull());
+  return r;
+};
 const company = async (code: string) =>
   render(await CompanyPage({ params: Promise.resolve({ code }) }));
 
@@ -104,16 +112,22 @@ describe("the Market tab for the Owner", () => {
     expect(screen.queryByRole("button", { name: /\b(buy|sell|order)\b/i })).toBeNull();
   });
 
-  it("shows the three tabs with the current one marked", async () => {
-    await market({ tab: "sectors" });
-    const nav = screen.getByRole("navigation", { name: "Market views" });
-    expect(within(nav).getByRole("link", { name: "Sectors" })).toHaveAttribute(
-      "aria-current",
-      "page",
+  it("D-205: only Top movers is open at first; a section heading opens or closes it", async () => {
+    await market();
+    const movers = screen.getByRole("link", { name: /^Top moverss*(Show|Hide)$/ });
+    const sectors = screen.getByRole("link", { name: /^Sectorss*(Show|Hide)$/ });
+    expect(movers).toHaveAttribute("aria-expanded", "true");
+    expect(movers).toHaveAttribute("href", "/market?open=");
+    expect(sectors).toHaveAttribute("aria-expanded", "false");
+    expect(sectors).toHaveAttribute("href", "/market?open=movers%2Csectors");
+    expect(screen.queryByText("Average day change by sector")).toBeNull();
+    cleanup();
+    await market({ open: "sectors" });
+    expect(screen.getByRole("link", { name: /^Sectorss*(Show|Hide)$/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
     );
-    expect(within(nav).getByRole("link", { name: "Top movers" })).not.toHaveAttribute(
-      "aria-current",
-    );
+    expect(screen.queryByRole("heading", { name: "Biggest rises" })).toBeNull();
   });
 
   it("search 'zz' lists matching companies, each with a star and an 'i' (UXN-270)", async () => {
@@ -170,7 +184,7 @@ describe("the Market tab for the Owner", () => {
     await market({ tab: "sectors" });
     expect(screen.getByRole("link", { name: "Technology (1)" })).toHaveAttribute(
       "href",
-      "/market?tab=all&sector=Technology",
+      "/market?open=sectors%2Call&sector=Technology",
     );
   });
 

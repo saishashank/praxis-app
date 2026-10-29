@@ -10,6 +10,7 @@ import path from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadCompany, loadIndexStrip } from "@/lib/ui/loaders/company";
 import { loadMarket, loadOverview, searchInstruments } from "@/lib/ui/loaders/market";
+import { mq } from "./query";
 import { cleanupTempDbs } from "../db/helpers";
 import { envOf, fullWorld, type Who, type World } from "../loaders/world";
 
@@ -43,10 +44,10 @@ describe("1,000 Market page views", () => {
       const env = envOf(w, roles[i % roles.length]!);
       switch (i % 5) {
         case 0:
-          await Promise.all([loadMarket(env, { tab: "movers", page: 1 }), loadIndexStrip(env)]);
+          await Promise.all([loadMarket(env, mq()), loadIndexStrip(env)]);
           break;
         case 1:
-          await Promise.all([loadMarket(env, { tab: "all", page: 1 }), loadIndexStrip(env)]);
+          await Promise.all([loadMarket(env, mq({ open: ["all"] })), loadIndexStrip(env)]);
           break;
         case 2:
           await loadCompany(env, env.mask.masked ? "stock-b" : "ZZUP");

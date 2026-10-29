@@ -11,6 +11,28 @@ import { RowActions, type WatchMode } from "./RowActions";
 import type { WatchResult } from "./messages";
 import { PRICE_LABEL, volumeVsUsual } from "./text";
 
+/** D-205: Large / Mid / Small as a small colour-coded letter; the word is there for screen readers. */
+const SIZE_STYLE: Record<string, { letter: string; dot: string }> = {
+  Large: { letter: "L", dot: "bg-chart-1" },
+  Mid: { letter: "M", dot: "bg-chart-2" },
+  Small: { letter: "S", dot: "bg-chart-3" },
+};
+
+export function SizeBadge({ size }: { size: string | null }) {
+  const s = size === null ? undefined : SIZE_STYLE[size];
+  if (!s) return null;
+  return (
+    <span
+      title={`${size} company`}
+      className="inline-flex items-center gap-1 rounded border border-border px-1 align-middle text-[11px] font-semibold text-text"
+    >
+      <span aria-hidden="true" className={`inline-block size-2 rounded-full ${s.dot}`} />
+      <span aria-hidden="true">{s.letter}</span>
+      <span className="sr-only">{size} company</span>
+    </span>
+  );
+}
+
 export function MarketTable({
   caption,
   rows,
@@ -25,7 +47,7 @@ export function MarketTable({
   masked: boolean;
   mode: WatchMode;
   starAction: (fd: FormData) => Promise<WatchResult>;
-  /** The All companies table adds size group, sector and volume against usual. */
+  /** The All companies table adds sector and volume against usual. */
   showVolume?: boolean;
   empty: string;
 }) {
@@ -44,6 +66,11 @@ export function MarketTable({
           )}
         </Link>
       ),
+    },
+    {
+      key: "sizeBadge",
+      header: "Size",
+      cell: (r) => <SizeBadge size={r.sizeGroup} />,
     },
     {
       key: "price",
@@ -79,10 +106,7 @@ export function MarketTable({
     },
   ];
   if (showVolume && !masked) {
-    columns.push(
-      { key: "size", header: "Size", cell: (r) => r.sizeGroup ?? "n/a" },
-      { key: "sector", header: "Sector", cell: (r) => r.sector ?? "n/a" },
-    );
+    columns.push({ key: "sector", header: "Sector", cell: (r) => r.sector ?? "n/a" });
   }
   columns.push({
     key: "watch",
@@ -97,7 +121,9 @@ export function MarketTable({
       />
     ),
   });
-  const visible = masked ? columns.filter((c) => c.key !== "price") : columns;
+  const visible = masked
+    ? columns.filter((c) => c.key !== "price" && c.key !== "sizeBadge")
+    : columns;
   return (
     <DataTable
       caption={caption}

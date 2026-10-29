@@ -5,6 +5,7 @@
 // every company. Synthetic ZZ data only.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadMarket } from "@/lib/ui/loaders/market";
+import { mq } from "./query";
 import { cleanupTempDbs } from "../db/helpers";
 import { D, envOf, fullWorld, type World } from "../loaders/world";
 
@@ -43,19 +44,19 @@ afterAll(cleanupTempDbs);
 
 describe("Top movers without size groups (D-199, D-200)", () => {
   it("keeps penny, thinly traded and reshaped codes out of the movers but not out of All companies", async () => {
-    const m = await loadMarket(envOf(w, "owner"), { tab: "movers", page: 1 });
+    const m = await loadMarket(envOf(w, "owner"), mq());
     expect(m.sized).toBe(false);
-    expect(m.up.map((r) => r.stock)).toEqual(["ZZLIQ"]);
-    const movers = [...m.up, ...m.down, ...m.traded].map((r) => r.stock);
+    expect(m.up.rows.map((r) => r.stock)).toEqual(["ZZLIQ"]);
+    const movers = [...m.up.rows, ...m.down.rows, ...m.traded.rows].map((r) => r.stock);
     for (const code of ["ZZPEN", "ZZTHN", "ZZCON"]) expect(movers).not.toContain(code);
-    const all = await loadMarket(envOf(w, "owner"), { tab: "all", page: 1 });
+    const all = await loadMarket(envOf(w, "owner"), mq({ open: ["all"] }));
     for (const code of ["ZZPEN", "ZZTHN", "ZZCON"]) {
-      expect(all.rows.map((r) => r.stock)).toContain(code);
+      expect(all.all.rows.map((r) => r.stock)).toContain(code);
     }
   });
 
   it("an ASX placeholder sector reads as not classified yet", async () => {
-    const s = await loadMarket(envOf(w, "owner"), { tab: "sectors", page: 1 });
+    const s = await loadMarket(envOf(w, "owner"), mq({ open: ["sectors"] }));
     const names = s.sectors.map((x) => x.sector);
     expect(names).toContain("Not classified yet");
     expect(names.join()).not.toMatch(/Class Pend/);
@@ -66,8 +67,34 @@ describe("Market without a readable corporate-action table (D-201)", () => {
   it("still lists the day, with nothing marked as reshaped", async () => {
     const bare = await fullWorld();
     await bare.main.execute("DROP TABLE corporate_action");
-    const m = await loadMarket(envOf(bare, "owner"), { tab: "all", page: 1 });
+    const m = await loadMarket(envOf(bare, "owner"), mq({ open: ["all"] }));
     expect(m.state).not.toBe("empty");
-    expect(m.rows.length).toBeGreaterThan(0);
+    expect(m.all.rows.length).toBeGreaterThan(0);
+  });
+});
+
+describe("Market reads the night's stored size groups (D-204)", () => {
+  it("uses them when they cover every code of the day, and labels each row", async () => {
+    const night = await fullWorld();
+    const codes = (
+      await night.main.execute({
+        sql: "SELECT DISTINCT code FROM price_bar WHERE d = ?",
+        args: [D],
+      })
+    ).rows.map((x) => String(x.code));
+    await night.main.batch(
+      codes.map((code, i) => ({
+        sql: "INSERT INTO universe_snapshot (market, d, code, status, tier) VALUES ('AU', ?, ?, 'active', ?)",
+        args: [D, code, i === 0 ? "U1" : "U2"],
+      })),
+      "write",
+    );
+    const m = await loadMarket(envOf(night, "owner"), mq({ open: ["all"] }));
+    expect(m.sized).toBe(true);
+    expect(m.all.rows.map((r) => r.sizeGroup).sort()).toEqual(
+      codes.map((_, i) => (i === 0 ? "Large" : "Mid")).sort(),
+    );
+    const large = await loadMarket(envOf(night, "owner"), mq({ open: ["all"], size: "large" }));
+    expect(large.all.rows.map((r) => r.stock)).toEqual([codes[0]]);
   });
 });

@@ -16,7 +16,7 @@
 //   horizon       it has waited longer than the typical holding time of past similar trades
 // A check without its information tonight (no bar, no regime row) does not fail: only information
 // withdraws a pick.
-import type { Client } from "@libsql/client";
+import type { Client, ResultSet } from "@libsql/client";
 import { REGIME_BLOCKS } from "@/lib/agents/families/constants";
 import type { Family } from "@/lib/agents/schema";
 import { isTradingDay, sessionsBetween, type CalendarRow } from "@/lib/data/calendar";
@@ -113,9 +113,43 @@ export async function checkWaitingPicks(
   });
   const regime = regimeRow.rows.length === 0 ? null : text(regimeRow.rows[0]!.state);
   const confirmed = await loadConfirmedActions(db, o.market, o.d);
+  // D-204: the five reads of every pick go to the database in ONE batch (they were five round trips
+  // per pick); the results come back in the same order
+  const per = 5; // threshold-ok: reads per pick, listed below
+  const reads = rows.rows.flatMap((r) => {
+    const code = text(r.code);
+    return [
+      {
+        sql: "SELECT c FROM price_bar WHERE market = ? AND code = ? AND d = ?",
+        args: [o.market, code, o.d],
+      },
+      {
+        sql: `SELECT 1 FROM event WHERE market = ? AND code = ? AND day0_d > ? AND day0_d <= ?
+                AND COALESCE(polarity_llm, polarity) = -1 LIMIT 1`,
+        args: [o.market, code, text(r.d), o.d],
+      },
+      {
+        sql: `SELECT l.label FROM label l JOIN execution e ON e.id = l.execution_id
+              WHERE e.family = ? AND l.rule_version = ? AND l.d <= ?
+              ORDER BY l.d DESC, l.id DESC LIMIT 1`,
+        args: [text(r.family), text(r.rule_version), o.d],
+      },
+      {
+        sql: `SELECT 1 FROM data_quality_flag WHERE market = ? AND code = ? AND d = ?
+                AND cleared_at IS NULL AND blocks_entries = 1 AND severity <> 'info'
+                AND check_id NOT IN (${NOT_A_FAULT.map(() => "?").join(",")}) LIMIT 1`,
+        args: [o.market, code, o.d, ...NOT_A_FAULT],
+      },
+      {
+        sql: "SELECT halted FROM universe_snapshot WHERE market = ? AND d = ? AND code = ?",
+        args: [o.market, o.d, code],
+      },
+    ];
+  });
+  const results = await db.batch(reads, "read");
   let withdrawn = 0;
   const stmts = [];
-  for (const r of rows.rows) {
+  for (const [i, r] of rows.rows.entries()) {
     const pubD = text(r.d);
     const code = text(r.code);
     const family = text(r.family) as Family;
@@ -128,31 +162,13 @@ export async function checkWaitingPicks(
       pickActions(confirmed, code, pubD),
       o.d,
     );
-    const bar = await db.execute({
-      sql: "SELECT c FROM price_bar WHERE market = ? AND code = ? AND d = ?",
-      args: [o.market, code, o.d],
-    });
-    const news = await db.execute({
-      sql: `SELECT 1 FROM event WHERE market = ? AND code = ? AND day0_d > ? AND day0_d <= ?
-              AND COALESCE(polarity_llm, polarity) = -1 LIMIT 1`,
-      args: [o.market, code, pubD, o.d],
-    });
-    const label = await db.execute({
-      sql: `SELECT l.label FROM label l JOIN execution e ON e.id = l.execution_id
-            WHERE e.family = ? AND l.rule_version = ? AND l.d <= ?
-            ORDER BY l.d DESC, l.id DESC LIMIT 1`,
-      args: [family, text(r.rule_version), o.d],
-    });
-    const fault = await db.execute({
-      sql: `SELECT 1 FROM data_quality_flag WHERE market = ? AND code = ? AND d = ?
-              AND cleared_at IS NULL AND blocks_entries = 1 AND severity <> 'info'
-              AND check_id NOT IN (${NOT_A_FAULT.map(() => "?").join(",")}) LIMIT 1`,
-      args: [o.market, code, o.d, ...NOT_A_FAULT],
-    });
-    const halt = await db.execute({
-      sql: "SELECT halted FROM universe_snapshot WHERE market = ? AND d = ? AND code = ?",
-      args: [o.market, o.d, code],
-    });
+    const [bar, news, label, fault, halt] = results.slice(i * per, (i + 1) * per) as [
+      ResultSet,
+      ResultSet,
+      ResultSet,
+      ResultSet,
+      ResultSet,
+    ];
     const reason = checkPickNight({
       closeMicro: bar.rows.length === 0 ? null : priceMicro(bar.rows[0]!.c),
       ...levels,
