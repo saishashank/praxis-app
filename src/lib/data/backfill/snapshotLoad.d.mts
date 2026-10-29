@@ -9,4 +9,5 @@ export function loadInputs(o: {
   from: string;
   to: string;
   recentFrom?: string;
+  pageRows?: number;
 }): Promise<SnapshotInputs>;

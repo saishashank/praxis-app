@@ -61,3 +61,13 @@ describe("Top movers without size groups (D-199, D-200)", () => {
     expect(names.join()).not.toMatch(/Class Pend/);
   });
 });
+
+describe("Market without a readable corporate-action table (D-201)", () => {
+  it("still lists the day, with nothing marked as reshaped", async () => {
+    const bare = await fullWorld();
+    await bare.main.execute("DROP TABLE corporate_action");
+    const m = await loadMarket(envOf(bare, "owner"), { tab: "all", page: 1 });
+    expect(m.state).not.toBe("empty");
+    expect(m.rows.length).toBeGreaterThan(0);
+  });
+});

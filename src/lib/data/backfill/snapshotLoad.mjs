@@ -24,12 +24,16 @@ export function monthsBetween(from, to) {
   }
 }
 
+/** D-202: rows per read. One read of the whole recent window (~490k bars) failed once the window
+ * was seeded (D-199); pages keep every response small. */
+export const PAGE_ROWS = 20_000; // threshold-ok: rows per database read
+
 const num = (v) => (v === null ? null : Number(v));
 
 /**
  * Load every table of the snapshot.
  * @param {{ db: import("@libsql/client").Client, readAsset: (name: string) => Uint8Array | null,
- *   from: string, to: string, recentFrom?: string }} o
+ *   from: string, to: string, recentFrom?: string, pageRows?: number }} o
  */
 export async function loadInputs(o) {
   const cut = addDays(o.to, -RECENT_DAYS);
@@ -58,9 +62,19 @@ export async function loadInputs(o) {
     }
   }
   const q = async (sql, args) => (await o.db.execute({ sql, args })).rows;
+  /** The rows of `sql` (which ends in a total ORDER BY) read page by page (D-202). */
+  const qPaged = async (sql, args) => {
+    const out = [];
+    const pageRows = o.pageRows ?? PAGE_ROWS;
+    for (let offset = 0; ; offset += pageRows) {
+      const page = await q(`${sql} LIMIT ? OFFSET ?`, [...args, pageRows, offset]);
+      out.push(...page);
+      if (page.length < pageRows) return out;
+    }
+  };
   const barsRecent = (
-    await q(
-      "SELECT code, d, o, h, l, c, volume FROM price_bar WHERE market = ? AND d >= ? AND d <= ?",
+    await qPaged(
+      "SELECT code, d, o, h, l, c, volume FROM price_bar WHERE market = ? AND d >= ? AND d <= ? ORDER BY code, d",
       [MARKET, recentFrom, o.to],
     )
   ).map((r) => ({
@@ -73,9 +87,9 @@ export async function loadInputs(o) {
     volume: Number(r.volume),
   }));
   const annRecent = (
-    await q(
+    await qPaged(
       `SELECT code, ann_id, published_at, type, price_sensitive, title FROM announcement
-       WHERE market = ? AND published_at >= ? AND published_at < ?`,
+       WHERE market = ? AND published_at >= ? AND published_at < ? ORDER BY id`,
       [MARKET, `${addDays(recentFrom, -1)}T00:00:00.000Z`, `${addDays(o.to, 2)}T00:00:00.000Z`],
     )
   ).map((r) => ({

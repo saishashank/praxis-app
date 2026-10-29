@@ -141,6 +141,8 @@ export const FOREVER_TABLES = Object.freeze([
   "annotation_history",
 ]);
 
+/** D-202: rows per dump read. */
+export const DUMP_PAGE_ROWS = 20_000; // threshold-ok: rows per database read
 const MAX_PLAINTEXT_BYTES = 2 ** 30; // gunzip output cap (decompression-bomb guard)
 const AGE_HEADER = "age-encryption.org/v1\n";
 const RECIPIENT_RE = /^age1[02-9ac-hj-np-z]{58}$/;
@@ -222,7 +224,7 @@ async function orderBy(tx, table, createSql) {
 /**
  * Dump one database to NDJSON text from a single read transaction (one consistent snapshot).
  * @param {Client} db
- * @param {{ name: DbName, createdAt: string, ephemeral?: readonly string[] }} opts
+ * @param {{ name: DbName, createdAt: string, ephemeral?: readonly string[], pageRows?: number }} opts
  * @returns {Promise<{ text: string, meta: Meta, counts: Record<string, number>, sha256: Record<string, string> }>}
  */
 export async function dumpDatabase(db, opts) {
@@ -279,17 +281,27 @@ export async function dumpDatabase(db, opts) {
         }),
       );
       if (isEphemeral) continue;
-      const res = await tx.execute(
-        `SELECT * FROM ${quote(t.name)} ORDER BY ${await orderBy(tx, t.name, t.sql)}`,
-      );
+      // D-202: page by page inside the one read transaction (still one consistent snapshot); a
+      // single SELECT of price_bar (~490k rows after D-199) failed the night's backup
+      const ob = await orderBy(tx, t.name, t.sql);
       const hash = createHash("sha256");
-      for (const row of res.rows) {
-        const values = res.columns.map((_, i) => encodeValue(row[i]));
-        const line = JSON.stringify({ kind: "row", table: t.name, values });
-        hash.update(`${line}\n`);
-        lines.push(line);
+      let n = 0;
+      const pageRows = opts.pageRows ?? DUMP_PAGE_ROWS;
+      for (let offset = 0; ; offset += pageRows) {
+        const res = await tx.execute({
+          sql: `SELECT * FROM ${quote(t.name)} ORDER BY ${ob} LIMIT ? OFFSET ?`,
+          args: [pageRows, offset],
+        });
+        for (const row of res.rows) {
+          const values = res.columns.map((_, i) => encodeValue(row[i]));
+          const line = JSON.stringify({ kind: "row", table: t.name, values });
+          hash.update(`${line}\n`);
+          lines.push(line);
+        }
+        n += res.rows.length;
+        if (res.rows.length < pageRows) break;
       }
-      counts[t.name] = res.rows.length;
+      counts[t.name] = n;
       sha256[t.name] = hash.digest("hex");
     }
     for (const o of others) {

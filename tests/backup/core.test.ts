@@ -159,6 +159,13 @@ describe("dumpDatabase", () => {
     expect(a.sha256).toEqual(b.sha256);
   });
 
+  it("reads big tables in pages and writes the same dump (D-202)", async () => {
+    const whole = await dumpDatabase(main, { name: "main", createdAt: AT });
+    const paged = await dumpDatabase(main, { name: "main", createdAt: AT, pageRows: 1 });
+    expect(paged.text).toBe(whole.text);
+    expect(paged.counts).toEqual(whole.counts);
+  });
+
   it("handles WITHOUT ROWID tables, and a database with no schema_migrations table", async () => {
     const db = emptyDb();
     await db.execute("CREATE TABLE w (a TEXT, b INTEGER, PRIMARY KEY (b, a)) WITHOUT ROWID");

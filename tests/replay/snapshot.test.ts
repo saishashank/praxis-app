@@ -238,6 +238,17 @@ describe("snapshot load (history files + database)", () => {
       }),
     });
     expect(again.sha).toBe(s.sha);
+    // D-202: read in pages of 3 rows, the same rows and the same snapshot
+    const paged = await loadInputs({
+      db,
+      readAsset,
+      from: "2026-09-01",
+      to: "2026-09-30",
+      recentFrom: days[10],
+      pageRows: 3,
+    });
+    expect(paged.bars_recent).toEqual(input.bars_recent);
+    expect(buildSnapshot({ from: "2026-09-01", to: "2026-09-30", inputs: paged }).sha).toBe(s.sha);
   });
 
   it("the CLI writes the snapshot and its sha, twice the same", async () => {

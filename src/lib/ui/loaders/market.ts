@@ -87,32 +87,33 @@ async function loadDay(env: LoaderEnv): Promise<Day | null> {
   if (hit && env.now.getTime() - hit.builtAt < MEMO_MS && env.now.getTime() >= hit.builtAt) {
     return hit;
   }
-  const r = await env.main.execute({
-    sql: `SELECT b.code, i.name, i.sector, b.c, b.volume,
-                 (SELECT p.c FROM price_bar p WHERE p.market = b.market AND p.code = b.code AND p.d < b.d
-                  ORDER BY p.d DESC LIMIT 1) AS prev
-          FROM price_bar b JOIN instrument i ON i.market = b.market AND i.code = b.code
-          WHERE b.market = ? AND b.d = ? AND i.delisted_on IS NULL ORDER BY b.code LIMIT ?`,
-    args: [market, d, UNIVERSE_ROWS],
-  });
-  const usual = await env.main.execute({
-    sql: `SELECT code, AVG(volume) AS v FROM price_bar
-          WHERE market = ? AND d < ? AND d >= date(?, '-30 days') GROUP BY code LIMIT ?`,
-    args: [market, d, d, UNIVERSE_ROWS],
-  });
+  // D-201: the four reads do not depend on each other, so they run together
+  const [r, usual, tiers, ca] = await Promise.all([
+    env.main.execute({
+      sql: `SELECT b.code, i.name, i.sector, b.c, b.volume,
+                   (SELECT p.c FROM price_bar p WHERE p.market = b.market AND p.code = b.code AND p.d < b.d
+                    ORDER BY p.d DESC LIMIT 1) AS prev
+            FROM price_bar b JOIN instrument i ON i.market = b.market AND i.code = b.code
+            WHERE b.market = ? AND b.d = ? AND i.delisted_on IS NULL ORDER BY b.code LIMIT ?`,
+      args: [market, d, UNIVERSE_ROWS],
+    }),
+    env.main.execute({
+      sql: `SELECT code, AVG(volume) AS v FROM price_bar
+            WHERE market = ? AND d < ? AND d >= date(?, '-30 days') GROUP BY code LIMIT ?`,
+      args: [market, d, d, UNIVERSE_ROWS],
+    }),
+    tiersBefore(env, market, d),
+    env.main
+      .execute({
+        sql: `SELECT DISTINCT code FROM corporate_action
+              WHERE market = ? AND ex_date = ? AND type IN ('split', 'consolidation', 'bonus_issue')`,
+        args: [market, d],
+      })
+      .catch(() => ({ rows: [] as Record<string, unknown>[] })), // an unreadable table leaves the lists as they are
+  ]);
   const usualBy = new Map(usual.rows.map((x) => [String(x.code), Number(x.v)]));
-  const tiers = await tiersBefore(env, market, d);
   const reshaped = new Set<string>();
-  try {
-    const ca = await env.main.execute({
-      sql: `SELECT DISTINCT code FROM corporate_action
-            WHERE market = ? AND ex_date = ? AND type IN ('split', 'consolidation', 'bonus_issue')`,
-      args: [market, d],
-    });
-    for (const x of ca.rows) reshaped.add(normCode(String(x.code)));
-  } catch {
-    // an unreadable table leaves the lists as they are
-  }
+  for (const x of ca.rows) reshaped.add(normCode(String(x.code)));
   const rows: DayRow[] = r.rows
     .filter((x) => x.prev !== null && Number(x.prev) > 0)
     .map((x) => ({
@@ -159,15 +160,17 @@ async function tiersBefore(env: LoaderEnv, market: string, d: string) {
     traded.set(code, list);
     last.set(code, price);
   }
+  // D-201: the first bar of every candidate in ONE round trip (one query per code took seconds)
+  const candidates = [...traded].filter(([, t]) => medianMicro(t) >= TIER_RULES.u2.advMicro);
   const listed = new Map<string, string | null>();
-  for (const [code, t] of traded) {
-    if (medianMicro(t) < TIER_RULES.u2.advMicro) continue;
-    const first = await env.main.execute({
-      sql: "SELECT d FROM price_bar WHERE market = ? AND code = ? ORDER BY d LIMIT 1",
-      args: [market, code],
-    });
-    listed.set(code, first.rows.length === 0 ? null : String(first.rows[0]!.d));
-  }
+  const first = await env.main.execute({
+    sql: `SELECT j.value AS code,
+                 (SELECT p.d FROM price_bar p WHERE p.market = ? AND p.code = j.value
+                  ORDER BY p.d LIMIT 1) AS d
+            FROM json_each(?) j`,
+    args: [market, JSON.stringify(candidates.map(([code]) => code))],
+  });
+  for (const x of first.rows) listed.set(String(x.code), String(x.d)); // every candidate has a bar
   return assignTiers(
     [...traded.keys()].map((code) => ({
       code,
