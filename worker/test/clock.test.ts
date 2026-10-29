@@ -197,10 +197,13 @@ describe("slot table (docs/M2_design.md section 3)", () => {
       else expect([s.enabled, s.requiresListing]).toEqual([true, true]);
     }
     // The allow-listed files exist and are dispatch-only.
-    for (const y of [backupYml, backfillYml, ingestYml, maintenanceYml, arenaYml, signalsYml]) {
+    for (const y of [backupYml, backfillYml, maintenanceYml, arenaYml, signalsYml]) {
       expect(y).toMatch(/^on: workflow_dispatch$/m);
       expect(y).not.toMatch(/^\s*schedule:/m);
     }
+    // GL-07 (D-209): the Batch-1 fallback has its own schedule beside the dispatch.
+    expect(ingestYml).toMatch(/^\s*workflow_dispatch:/m);
+    expect(ingestYml).toMatch(/^\s*schedule:/m);
   });
 
   it("nightly slots and Batch 1 run every day, the arena and Sentinel slots only on trading days", () => {
