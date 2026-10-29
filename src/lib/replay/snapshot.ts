@@ -31,6 +31,8 @@ export type SnapshotCorporateAction = {
   action_id: number;
   type: string;
   factor: number;
+  /** GL-02: when the action was first confirmed; null/absent = known since before the column. */
+  known_at?: string | null;
 };
 
 /** A loaded snapshot: tables as rows, the manifest and the content sha. */

@@ -25,7 +25,7 @@ export async function loadConfirmedActions(
   upToD: string,
 ): Promise<CorpActionRecord[]> {
   const actions = await db.execute({
-    sql: `SELECT id, code, type, ex_date, payload_json FROM corporate_action
+    sql: `SELECT id, code, type, ex_date, payload_json, known_at FROM corporate_action
           WHERE market = ? AND ex_date <= ? ORDER BY id`,
     args: [market, upToD],
   });
@@ -53,6 +53,7 @@ export async function loadConfirmedActions(
       type: text(a.type),
       exDate: text(a.ex_date),
       payload: payload !== null && typeof payload === "object" ? (payload as never) : {},
+      knownAt: a.known_at === null || a.known_at === undefined ? null : text(a.known_at),
     });
   }
   return out;

@@ -8,7 +8,7 @@
 // variant, and the event/short-interest families output BLOCKED-DATA until those inputs exist
 // (ARN-082 labels this). No clock, no randomness.
 import type { ViewBar } from "@/lib/agents/decisionView";
-import { adjustBars, barsNeeded, splitActionsByCode } from "@/lib/agents/candidates";
+import { adjustBars, barsNeeded, splitActionsByCode, splitsKnownOn } from "@/lib/agents/candidates";
 import {
   buildCodeFacts,
   type CodeFacts,
@@ -63,6 +63,7 @@ export function corpRecordsOf(snap: LoadedSnapshot): CorpActionRecord[] {
       type: a.type,
       exDate: a.ex_date,
       payload: p,
+      knownAt: a.known_at ?? null,
     });
   }
   return out;
@@ -277,7 +278,7 @@ export class SnapshotWorld implements CohortReplaySource {
     let f = this.memo.get(d, code);
     if (f === undefined) {
       const raw = this.bars.get(code)!.slice(Math.max(0, i + 1 - this.need), i + 1);
-      const known = (this.splits.get(code) ?? []).filter((a) => a.exDate <= d);
+      const known = splitsKnownOn(this.splits.get(code) ?? [], d, this.o.params.decisionCutoff);
       const { tier, halted } = this.tierOn(code, d);
       f = buildCodeFacts(
         { code, tier, adjusted: adjustBars(raw, known), raw, halted },
@@ -305,7 +306,7 @@ export class SnapshotWorld implements CohortReplaySource {
     if (i === undefined) return null;
     const f = this.factsAt(code, i);
     const raw = this.bars.get(code)!.slice(Math.max(0, i + 1 - this.need), i + 1);
-    const known = (this.splits.get(code) ?? []).filter((a) => a.exDate <= d);
+    const known = splitsKnownOn(this.splits.get(code) ?? [], d, this.o.params.decisionCutoff);
     const volumes = adjustBars(raw, known).map((b) => b.volume);
     const ratios = [];
     for (let j = RATIO_LOOKBACK; j >= 0; j -= 1) {

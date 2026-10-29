@@ -74,6 +74,7 @@ export const AU_COLUMNS = {
     "record_date",
     "payload_json",
     "evidence_json",
+    "known_at",
   ],
   corporate_action_event: ["id", "action_id", "at", "status", "by", "note"],
   announcement: [

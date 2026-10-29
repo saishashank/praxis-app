@@ -49,7 +49,8 @@ import {
 import { ensureCohorts } from "@/lib/arena/cohortStart";
 import { loadExecutions, loadUnresolvedCohorts, type StoredCohort } from "@/lib/arena/cohortWriter";
 import { loadConfirmedActions, loadQtyAdjustments } from "@/lib/arena/corpActionWriter";
-import type { CorpActionRecord } from "@/lib/arena/corpActions";
+import { knownBy, type CorpActionRecord } from "@/lib/arena/corpActions";
+import { decisionCutoffUtc } from "./decisionView";
 import {
   availableCash,
   balancesFromRows,
@@ -1451,8 +1452,10 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
     // live parameters: the incumbent rule versions laid over the configuration (D-115)
     const params = liveParams(baseParams, versionSet);
     const nextD = nextTradingDay(o.d, calendar);
-    const actions = await loadConfirmedActions(db, o.market, o.d);
-    const actionsNext = await loadConfirmedActions(db, o.market, nextD);
+    // GL-02: both lists hold only actions confirmed by the decision cut-off of D
+    const cutoffD = decisionCutoffUtc(o.d, params.decisionCutoff);
+    const actions = knownBy(await loadConfirmedActions(db, o.market, o.d), cutoffD);
+    const actionsNext = knownBy(await loadConfirmedActions(db, o.market, nextD), cutoffD);
     const trades = await loadOpenTrades(db);
     const day = await loadDayInputs(db, {
       market: o.market,

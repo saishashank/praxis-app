@@ -158,6 +158,7 @@ import {
   DEFAULT_SUSPENSION,
   planCorporateActions,
   suspensionMark,
+  knownBy,
   type CorpActionRecord,
   type PlannedAdjustment,
   type SuspensionConfig,
@@ -167,7 +168,7 @@ import { addDays, isWeekend, type CalendarRow } from "@/lib/data/calendar";
 import type { EntryDecision } from "@/lib/data/quality/gate";
 import { floorRat } from "@/lib/money/round";
 import { divFloor, type Rational } from "@/lib/money/rational";
-import type { ViewBar } from "@/lib/agents/decisionView";
+import { decisionCutoffUtc, type ViewBar } from "@/lib/agents/decisionView";
 import type { LedgerSource } from "./ledger";
 import type { PositionFacts } from "./returns";
 
@@ -602,14 +603,26 @@ export function replayCohorts(
   };
   let actionsAll: CorpActionRecord[] = [];
   let actionsAllCodes = -1;
-  const allActions = (): CorpActionRecord[] => {
+  // GL-02: what a decision on session d may use is the actions confirmed by the decision cut-off of d
+  let anyKnownAt = false;
+  let actionsKnownD = "";
+  let actionsKnown: CorpActionRecord[] = [];
+  const allActions = (d: string): CorpActionRecord[] => {
     if (actionsAllCodes !== actionsByCode.size) {
       actionsAll = [...actionsByCode.keys()]
         .sort()
         .flatMap((k) => [...(actionsByCode.get(k) ?? [])]);
       actionsAllCodes = actionsByCode.size;
+      actionsKnownD = "";
+      anyKnownAt = actionsAll.some((x) => x.knownAt !== null && x.knownAt !== undefined);
     }
-    return actionsAll;
+    // legacy rows (known_at null) are always known: skip the per-day cut-off work entirely
+    if (!anyKnownAt) return actionsAll;
+    if (actionsKnownD !== d) {
+      actionsKnown = knownBy(actionsAll, decisionCutoffUtc(d, params.decisionCutoff));
+      actionsKnownD = d;
+    }
+    return actionsKnown;
   };
 
   const cohorts: Cohort[] = [];
@@ -1309,7 +1322,7 @@ export function replayCohorts(
       });
       pos.trail = ev.isLevels.map((l) => l.levelMicro).filter((l) => l >= 1n);
       if (pos.pendingCs === null && ev.cs !== null) {
-        const cross = crossing(allActions(), pos.code, env.d, env.nextD);
+        const cross = crossing(allActions(env.d), pos.code, env.d, env.nextD);
         if (!cross.disposal) pos.pendingCs = ev.cs;
       }
       // thesis-breakers (AGT-111, M5 T7): the SAME pure evaluator as batch 2b; a red one on a held
@@ -1337,7 +1350,7 @@ export function replayCohorts(
         const verdict = evaluateBreakers(t.breakers, obs, params);
         const red = verdict.evaluations.find((e) => e.status === "red");
         if (red !== undefined) {
-          const cross = crossing(allActions(), pos.code, env.d, env.nextD);
+          const cross = crossing(allActions(env.d), pos.code, env.d, env.nextD);
           if (!cross.disposal) {
             pos.pendingCs = { rule: red.id, via: null, detail: red.valueText };
           }
@@ -1387,7 +1400,7 @@ export function replayCohorts(
     halfSize: boolean,
     key: string,
   ): { leg: Leg; priceFactor: Rational; ids: readonly string[] } | null => {
-    const cross = crossing(allActions(), facts.code, env.d, env.nextD!);
+    const cross = crossing(allActions(env.d), facts.code, env.d, env.nextD!);
     if (cross.disposal) return null;
     return {
       leg: { key, halfSize, sleeve: false, env: sizingEnvFor({ facts, cross, p: params }) },

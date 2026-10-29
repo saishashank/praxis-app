@@ -150,6 +150,7 @@ export async function loadInputs(o) {
     action_id: f.actionId,
     type: f.type,
     factor: f.factor,
+    known_at: f.knownAt ?? null,
   }));
   return {
     bars,
