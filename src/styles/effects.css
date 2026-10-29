@@ -528,3 +528,46 @@ body::before {
 :root[data-theme="high_contrast"] .app-mark {
   filter: none;
 }
+
+/* ---- V2 shared components (C1): motion <= 200 ms (UXR-056), marks in High contrast (UXR-057) ---- */
+
+.ui-motion {
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+.ui-toast {
+  animation: ui-toast-in 180ms ease-out;
+}
+@keyframes ui-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+[data-motion="off"] .ui-motion,
+[data-motion="off"] .ui-toast {
+  transition: none;
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-motion,
+  .ui-toast {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* The two-letter mark is shown only where hue alone is not enough. */
+.ui-mark {
+  display: none;
+}
+:root[data-theme="high_contrast"] .ui-mark {
+  display: inline;
+}
