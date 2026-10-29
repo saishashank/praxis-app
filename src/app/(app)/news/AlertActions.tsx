@@ -24,6 +24,7 @@ export function AlertActions({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const post = async (what: "ack" | "snooze", body?: unknown) => {
@@ -64,19 +65,26 @@ export function AlertActions({
           Acknowledge
         </Button>
       )}
-      {!acked && snoozable
-        ? SNOOZE_CHOICES.map((c: SnoozeChoice) => (
-            <Button
-              key={c}
-              variant="secondary"
-              disabled={busy}
-              aria-label={`${SNOOZE_LABEL[c]}: ${label}`}
-              onClick={() => void post("snooze", { until: snoozeUntil(c, new Date()) })}
-            >
-              {SNOOZE_LABEL[c]}
-            </Button>
-          ))
-        : null}
+      {!acked && snoozable ? (
+        <>
+          <Button variant="secondary" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+            Snooze…
+          </Button>
+          <div className={open ? "flex w-full flex-wrap gap-2" : "hidden"}>
+            {SNOOZE_CHOICES.map((c: SnoozeChoice) => (
+              <Button
+                key={c}
+                variant="secondary"
+                disabled={busy}
+                aria-label={`${SNOOZE_LABEL[c]}: ${label}`}
+                onClick={() => void post("snooze", { until: snoozeUntil(c, new Date()) })}
+              >
+                {SNOOZE_LABEL[c]}
+              </Button>
+            ))}
+          </div>
+        </>
+      ) : null}
       {!acked && snoozable && snoozed ? (
         <Button
           variant="ghost"
