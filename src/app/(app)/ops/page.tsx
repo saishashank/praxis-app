@@ -3,6 +3,7 @@
 // per task (append-only, audited) and the token expiry dates. Nothing here is invented: a task shows
 // its date, its status and who/when only through the stored tick.
 import { Card } from "@/components/ui/Card";
+import { Pill } from "@/components/ui/Pill";
 import { EmptyState } from "@/components/ui/States";
 import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
@@ -31,6 +32,13 @@ const STATUS_WORDS: Record<TaskStatus, string> = {
   upcoming: "Not due yet",
 };
 
+const STATUS_PILL: Record<TaskStatus, string> = {
+  done: "ok",
+  due: "warn",
+  overdue: "bad",
+  upcoming: "neutral",
+};
+
 function statusLine(t: TaskRow, tf: "24h" | "12h"): string {
   if (t.status === "done")
     return `Done${t.doneAt ? ` on ${formatMelbourne(t.doneAt, tf)}` : ""}${
@@ -47,8 +55,11 @@ function TaskItem({ t, tf }: { t: TaskRow; tf: "24h" | "12h" }) {
   return (
     <li className="flex min-w-0 flex-col gap-2 rounded-md bg-surface-2 p-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0">
-        <p className="m-0 font-semibold break-words">
-          {t.title} <span className="font-normal text-text-muted">({STATUS_WORDS[t.status]})</span>
+        <p className="m-0 font-semibold break-words">{t.title}</p>
+        <p className="m-0 mt-1">
+          <Pill kind="status" value={STATUS_PILL[t.status]}>
+            {STATUS_WORDS[t.status]}
+          </Pill>
         </p>
         <p className="m-0 text-sm text-text-muted">{t.when}</p>
         <p className="m-0 mt-1 text-sm break-words">{t.detail}</p>
@@ -61,6 +72,39 @@ function TaskItem({ t, tf }: { t: TaskRow; tf: "24h" | "12h" }) {
   );
 }
 
+function Group({
+  id,
+  title,
+  tasks,
+  tf,
+  empty,
+  children,
+}: {
+  id: string;
+  title: string;
+  tasks: TaskRow[];
+  tf: "24h" | "12h";
+  empty: string;
+  children: string;
+}) {
+  return (
+    <section aria-labelledby={id} className="flex flex-col gap-3">
+      <h2 id={id} className="text-lg font-semibold">
+        {title} <span className="font-normal text-text-muted">({tasks.length})</span>
+      </h2>
+      {tasks.length === 0 ? (
+        <EmptyState title={empty}>{children}</EmptyState>
+      ) : (
+        <ul className="m-0 flex list-none flex-col gap-2 p-0">
+          {tasks.map((t) => (
+            <TaskItem key={t.id} t={t} tf={tf} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export default async function OpsPage() {
   const user = await requireUser("admin", "/ops");
   const tf = (await userPreferences(user.id)).time_format;
@@ -70,15 +114,19 @@ export default async function OpsPage() {
   } catch {
     ops = null; // neutral message below; no error details
   }
-  const attention = ops?.tasks.filter((t) => t.status === "due" || t.status === "overdue") ?? [];
-  const rest = ops?.tasks.filter((t) => t.status === "done" || t.status === "upcoming") ?? [];
+  const tasks = ops?.tasks ?? [];
+  // UXR-029: three groups. "Due soon" holds what is due now and what is still coming up.
+  const overdue = tasks.filter((t) => t.status === "overdue");
+  const dueSoon = tasks.filter((t) => t.status === "due" || t.status === "upcoming");
+  const done = tasks.filter((t) => t.status === "done");
 
   return (
     <main className="mx-auto flex max-w-4xl min-w-0 flex-col gap-6 px-4 py-6">
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Ops checklist</h1>
         <p className="m-0 text-sm text-text-muted">
-          The periodic Owner tasks, with due dates in Australia/Melbourne time.
+          Your recurring checks, grouped by what needs you first. Due dates are in
+          Australia/Melbourne time.
           {ops ? ` Today is ${dateText(ops.today)}.` : ""}
         </p>
       </header>
@@ -87,33 +135,15 @@ export default async function OpsPage() {
         <p role="status">Ops checklist unavailable. Nothing was changed.</p>
       ) : (
         <>
-          <section aria-labelledby="attention-h" className="flex flex-col gap-3">
-            <h2 id="attention-h" className="text-lg font-semibold">
-              Needs doing
-            </h2>
-            {attention.length === 0 ? (
-              <EmptyState title="Nothing is due">
-                Every task that is due has been ticked. The next ones are listed below.
-              </EmptyState>
-            ) : (
-              <ul className="m-0 flex list-none flex-col gap-2 p-0">
-                {attention.map((t) => (
-                  <TaskItem key={t.id} t={t} tf={tf} />
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <section aria-labelledby="rest-h" className="flex flex-col gap-3">
-            <h2 id="rest-h" className="text-lg font-semibold">
-              Done and coming up
-            </h2>
-            <ul className="m-0 flex list-none flex-col gap-2 p-0">
-              {rest.map((t) => (
-                <TaskItem key={t.id} t={t} tf={tf} />
-              ))}
-            </ul>
-          </section>
+          <Group id="overdue-h" title="Overdue" tasks={overdue} tf={tf} empty="Nothing is overdue">
+            Every task past its date has been ticked.
+          </Group>
+          <Group id="soon-h" title="Due soon" tasks={dueSoon} tf={tf} empty="Nothing is coming up">
+            No task is due or coming up.
+          </Group>
+          <Group id="done-h" title="Done" tasks={done} tf={tf} empty="Nothing ticked yet">
+            Tasks you mark done appear here with the date.
+          </Group>
 
           <Card title="Token expiry dates" className="min-w-0">
             {ops.tokens.length === 0 ? (

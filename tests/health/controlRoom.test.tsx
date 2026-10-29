@@ -201,6 +201,23 @@ describe("ring and readouts (UXN-283)", () => {
     ).toContain("Backups is down: Last backup failed.");
   });
 
+  it("status briefing comes first; the ring sits inside the status strip; states are text pills (UXR-029, UXR-045)", () => {
+    const comps = IDS.map((id) => comp(id, id === "security" ? "attention" : "healthy"));
+    comps[7] = turso;
+    comps[6] = redBackup;
+    view(model({}, comps));
+    const brief = screen.getByRole("heading", { name: "Status briefing" }).closest("section")!;
+    const strip = screen.getByRole("region", { name: "Health overview" });
+    // briefing precedes the strip in the document
+    expect(brief.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(strip.contains(screen.getByTestId("status-ring"))).toBe(true);
+    expect(strip).toHaveTextContent("Needs attention");
+    // every readout carries a pill with the state word, never colour alone
+    const pills = document.querySelectorAll('[data-component] [data-kind="status"]');
+    expect(pills.length).toBe(9);
+    for (const p of Array.from(pills)) expect(p.textContent!.trim().length).toBeGreaterThan(2);
+  });
+
   it("all healthy: 'Nothing needs you today'", () => {
     view(model());
     expect(screen.getByTestId("status-ring").textContent).toContain("9 / 9");
