@@ -2,6 +2,7 @@
 // Shows the go-live checklist as tick boxes, the sign-off history and what is still needed before
 // production can be switched to full mode. The sign-off never switches the mode: afterwards the
 // Owner sets AU to full in the System Health data controls, which then passes the interlock.
+import { EmptyState } from "@/components/ui/States";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { requireUser } from "@/lib/auth/guard";
@@ -141,7 +142,12 @@ export default async function GoLivePage() {
               Sign-off record
             </h2>
             {view.signoffs.length === 0 ? (
-              <p className="m-0 text-sm text-text-muted">No sign-off has been recorded yet.</p>
+              <EmptyState
+                compact
+                motif="check"
+                hue="home"
+                title="No sign-off has been recorded yet."
+              />
             ) : (
               <ul className="m-0 flex list-none flex-col gap-2 p-0">
                 {view.signoffs.map((s) => (

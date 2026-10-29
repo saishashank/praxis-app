@@ -40,7 +40,7 @@ export default async function WhatIfPage() {
       {options === null || budget === null ? (
         <p role="status">What-if unavailable. Nothing was changed.</p>
       ) : options.strategies.length === 0 ? (
-        <EmptyState title="No strategies are running yet">
+        <EmptyState motif="strategies" hue="strategies" title="No strategies are running yet">
           What-ifs answer from nightly results, which exist once the strategies start.
         </EmptyState>
       ) : (

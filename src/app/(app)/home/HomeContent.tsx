@@ -431,7 +431,7 @@ export function HomeContent({
       ) : null}
 
       {empty ? (
-        <EmptyState title="No data yet">
+        <EmptyState motif="home" hue="home" title="No data yet">
           {result.text} The six strategies show A$600, Starting, once they exist. First trade ideas
           come after tonight&apos;s run; the first Evening Review arrives at 20:00.
         </EmptyState>

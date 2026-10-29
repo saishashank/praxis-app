@@ -3,19 +3,39 @@
 import type { ReactNode } from "react";
 import type { Staleness } from "@/lib/view/staleness";
 import { cn } from "./cn";
+import { Illustration, type Motif } from "./Illustration";
 import { AlertIcon, InfoIcon } from "./icons";
 
+/**
+ * Empty state (UXR-007, UXR-055): one sentence on what will appear, when, or what to do now, with a
+ * small illustration in the section colour. `title` is the sentence; `children` may add one more line.
+ */
 export function EmptyState({
   title,
   children,
   action,
+  motif = "list",
+  hue = "home",
+  compact = false,
 }: {
   title: string;
   children?: ReactNode;
   action?: ReactNode;
+  /** Illustration motif (default: a list). */
+  motif?: Motif;
+  /** Section name or hue stem for the illustration. */
+  hue?: string;
+  /** Smaller padding and illustration, for a panel inside a page. */
+  compact?: boolean;
 }) {
   return (
-    <div className="ui-empty min-w-0 rounded-lg border border-border bg-surface p-6 text-center break-words">
+    <div
+      className={cn(
+        "ui-empty min-w-0 rounded-lg border border-border bg-surface text-center break-words",
+        compact ? "p-4" : "p-6",
+      )}
+    >
+      <Illustration motif={motif} hue={hue} size={compact ? 64 : 96} className="mx-auto mb-2" />
       <p className="m-0 font-semibold">{title}</p>
       {children ? (
         <p className="mx-auto mt-2 max-w-prose text-sm text-text-muted">{children}</p>

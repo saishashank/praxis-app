@@ -178,7 +178,7 @@ export function MarketStatus({ model, q }: { model: Promise<MarketModel>; q: Mar
 }
 
 const NO_DATA = (
-  <EmptyState title="No market data yet">
+  <EmptyState motif="market" hue="market" title="No market data yet">
     Prices appear here after the first nightly data run. Nothing is shown until then.
   </EmptyState>
 );
@@ -231,7 +231,7 @@ export function SectorsSection({ model, q }: { model: Promise<MarketModel>; q: M
   if (m.state === "empty") return NO_DATA;
   if (m.masked) {
     return (
-      <EmptyState title="Sectors are hidden">
+      <EmptyState motif="market" hue="market" title="Sectors are hidden">
         Sector groups would reveal which companies are behind the letters, so they are hidden for
         your access level.
       </EmptyState>
@@ -239,7 +239,7 @@ export function SectorsSection({ model, q }: { model: Promise<MarketModel>; q: M
   }
   if (m.sectors.length === 0) {
     return (
-      <EmptyState title="No sector data yet">
+      <EmptyState motif="market" hue="market" title="No sector data yet">
         Sectors appear once the company list carries an industry group for each company.
       </EmptyState>
     );

@@ -117,7 +117,7 @@ export default async function ConfigPage({
       </header>
 
       {q && shown.length === 0 ? (
-        <EmptyState title="No setting matches that search">
+        <EmptyState motif="list" hue="home" title="No setting matches that search">
           Try part of a name, such as &ldquo;retention&rdquo;, or clear the search.
         </EmptyState>
       ) : null}
@@ -141,7 +141,7 @@ export default async function ConfigPage({
 
       <Card aria-label="Recent changes" title="Recent changes">
         {history.length === 0 ? (
-          <EmptyState title="No changes yet." />
+          <EmptyState motif="list" hue="home" title="No changes yet." />
         ) : (
           <RTable
             caption="Latest configuration versions"

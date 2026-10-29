@@ -69,7 +69,7 @@ function StrategyCard({ s, nearPct }: { s: RiskStrategy; nearPct: number }) {
         </div>
       )}
       {s.positions.length === 0 ? (
-        <p className="m-0 text-sm text-text-muted">No open positions.</p>
+        <EmptyState compact motif="strategies" hue="strategies" title="No open positions." />
       ) : (
         <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {s.positions.map((p) => (
@@ -272,7 +272,9 @@ export default async function RiskPage() {
           Positions and distance to the loss limit
         </h2>
         {d.strategies.length === 0 ? (
-          <EmptyState title="No positions yet">{r.text}</EmptyState>
+          <EmptyState motif="strategies" hue="strategies" title="No positions yet">
+            {r.text}
+          </EmptyState>
         ) : (
           <div className="grid min-w-0 gap-4 md:grid-cols-2">
             {d.strategies.map((s) => (
@@ -292,7 +294,12 @@ export default async function RiskPage() {
           Concentration
         </h2>
         {d.concentration.length === 0 ? (
-          <p className="m-0 text-sm text-text-muted">Nothing is held at the moment.</p>
+          <EmptyState
+            compact
+            motif="strategies"
+            hue="strategies"
+            title="Nothing is held at the moment."
+          />
         ) : (
           <Card>
             <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
@@ -330,7 +337,7 @@ export default async function RiskPage() {
           rows={d.stress}
           rowKey={(x) => String(x.pct)}
           empty={
-            <EmptyState title="No stress test yet">
+            <EmptyState motif="strategies" hue="strategies" title="No stress test yet">
               The shock table is written overnight once strategies hold positions.
             </EmptyState>
           }

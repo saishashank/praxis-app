@@ -59,7 +59,9 @@ export default async function IdeasPage({
       ) : null}
 
       {page.state === "empty" ? (
-        <EmptyState title="No trade ideas yet">{page.text}</EmptyState>
+        <EmptyState motif="strategies" hue="strategies" title="No trade ideas yet">
+          {page.text}
+        </EmptyState>
       ) : (
         <>
           <p className="m-0 text-sm" data-testid="ideas-tally">

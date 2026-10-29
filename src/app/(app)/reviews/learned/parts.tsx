@@ -1,4 +1,5 @@
 // Server components shared by the "What the system learned" pages (M7 T18). No state; links and text.
+import { EmptyState } from "@/components/ui/States";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Card } from "@/components/ui/Card";
@@ -106,7 +107,7 @@ export function ChallengerLine({
 /** The six Critic checks, one line each (state in words). */
 export function CritiqueBlock({ critique, masked }: { critique: CritiqueView; masked: boolean }) {
   if (critique === null) {
-    return <p className="m-0 text-sm text-text-muted">No Critic result yet.</p>;
+    return <EmptyState compact motif="reviews" hue="reviews" title="No Critic result yet." />;
   }
   return (
     <div className="flex flex-col gap-2">

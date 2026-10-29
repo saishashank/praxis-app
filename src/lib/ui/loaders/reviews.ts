@@ -7,6 +7,12 @@
 // reference (keyed digest, like `ck-`/`pk:`). Section 7a "New picks" is read from the stored picks with
 // the review's own letters, so "Stock A" is the same stock in every section of the page.
 import { getConfig } from "@/lib/config/store";
+import {
+  isTradingDay,
+  nextTradingDay,
+  type CalendarKind,
+  type CalendarRow,
+} from "@/lib/data/calendar";
 import { listVersions, loadReview, readState } from "@/lib/review/assemble";
 import type { Missing } from "@/lib/review/facts";
 import { activeCodesForDate } from "@/lib/view/active";
@@ -38,7 +44,9 @@ const LIST_ROWS = 30; // threshold-ok: one page of the review list
 const MASKED_SCAN = 400; // threshold-ok: reviews a masked list can reach (about 16 months of days)
 const MAX_REF_ROWS = 800; // threshold-ok: bound of the reference resolve scan
 const STALE_DAYS = 4; // threshold-ok: evening reviews; a long weekend is 3 days
-const WINDOW_START_MIN = 19 * 60 + 30; // threshold-ok: UX-080 "19:30–20:45" pending window starts
+const WINDOW_START_MIN = 19 * 60 + 45; // threshold-ok: UXR-026 pending window starts 19:45 (EML-011)
+const WINDOW_END_MIN = 21 * 60; // threshold-ok: UXR-026 pending window ends 21:00
+const REVIEW_AT_MIN = 20 * 60; // threshold-ok: the review is due at 20:00
 const SEND_BY_DEFAULT = "20:45"; // threshold-ok: ch.15 default of `send_by`, used only if the read fails
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const REF_RE = /^rv-([0-9a-f]{16})$/;
@@ -139,9 +147,30 @@ function melbourneMinutes(now: Date): number {
 
 export type PendingState = "window" | "late" | null;
 
-/** UX-080: no review stored for today and the clock is in 19:30 to `send_by` ("window") or after it ("late"). */
+async function calendarRows(env: LoaderEnv): Promise<CalendarRow[]> {
+  try {
+    const rs = await env.main.execute({
+      sql: "SELECT d, kind, close_time FROM trading_calendar WHERE market = ? ORDER BY d",
+      args: [marketOf(env)],
+    });
+    return rs.rows.map((r) => ({
+      d: String(r.d),
+      kind: String(r.kind) as CalendarKind,
+      close_time: r.close_time === null ? null : String(r.close_time),
+    }));
+  } catch {
+    return []; // no calendar rows: weekends only
+  }
+}
+
+/**
+ * UXR-026: the pending notice shows only on a trading day, with today's review not stored, between
+ * 19:45 and 21:00 Melbourne ("window" until `send_by`, then "late"). Never otherwise.
+ */
 async function pendingStateOf(env: LoaderEnv, todayStored: boolean): Promise<PendingState> {
   if (todayStored) return null;
+  const today = todayD(env);
+  if (today === "" || !isTradingDay(today, await calendarRows(env))) return null;
   let sendBy = SEND_BY_DEFAULT;
   try {
     const v = await getConfig(env.main, "send_by");
@@ -152,8 +181,32 @@ async function pendingStateOf(env: LoaderEnv, todayStored: boolean): Promise<Pen
   const m = hhmm.exec(sendBy)!;
   const end = Number(m[1]) * 60 + Number(m[2]); // threshold-ok: minutes per hour
   const now = melbourneMinutes(env.now);
-  if (now < WINDOW_START_MIN) return null;
+  if (now < WINDOW_START_MIN || now > WINDOW_END_MIN) return null;
   return now <= end ? "window" : "late";
+}
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** UXR-026: "Next review: tonight 20:00", or the next trading day's when tonight's is not due. */
+export async function loadNextReview(env: LoaderEnv): Promise<string> {
+  const today = todayD(env);
+  if (today === "") return "Next review: tonight 20:00";
+  const rows = await calendarRows(env);
+  const stored = await storedOn(env, today);
+  if (isTradingDay(today, rows) && !stored && melbourneMinutes(env.now) <= WINDOW_END_MIN) {
+    return "Next review: tonight 20:00";
+  }
+  const next = nextTradingDay(today, rows);
+  const [y, mo, d] = next.split("-").map(Number);
+  const dow = WEEKDAYS[new Date(Date.UTC(y!, mo! - 1, d!)).getUTCDay()]!;
+  const tomorrow = nextTradingDay(today, rows) === nextCalendarDay(today);
+  return `Next review: ${tomorrow ? "tomorrow" : dow} ${String(Math.floor(REVIEW_AT_MIN / 60))}:00`;
+}
+
+function nextCalendarDay(d: string): string {
+  const [y, mo, dd] = d.split("-").map(Number);
+  const t = new Date(Date.UTC(y!, mo! - 1, dd!) + 86_400_000); // threshold-ok: ms per day
+  return t.toISOString().slice(0, 10);
 }
 
 const aiOf = (narrative: string): boolean => narrative === "llm" || narrative === "mock";

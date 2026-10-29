@@ -207,7 +207,7 @@ export default async function UsersPage() {
             </ActionForm>
           )}
           {grants.length === 0 ? (
-            <EmptyState title="No grants yet." />
+            <EmptyState motif="list" hue="home" title="No grants yet." />
           ) : (
             <RTable
               caption="Unmask grants"

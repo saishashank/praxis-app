@@ -6,6 +6,7 @@
 // name or link, and a real card id gives the same "not found" as an unknown one. Every text is a
 // fixed template filled from stored numbers: no LLM, no probability, no "will" (UXN-102, VAL-101).
 // Owner and Editor can add a note; nothing here places an order (UX-042).
+import { EmptyState } from "@/components/ui/States";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { RegimeBadge, ValidationBadge } from "@/components/ui/Badges";
@@ -343,7 +344,7 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
 
       <Card title="Notes">
         {c.notes.length === 0 ? (
-          <p className="m-0 text-sm text-text-muted">No notes yet.</p>
+          <EmptyState compact motif="list" hue="home" title="No notes yet." />
         ) : (
           <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
             {c.notes.map((n) => (

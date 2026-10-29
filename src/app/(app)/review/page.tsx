@@ -32,7 +32,7 @@ export default async function ReviewPage() {
         </p>
       </header>
       {cards.length === 0 ? (
-        <EmptyState title="Nothing is waiting for review.">
+        <EmptyState motif="check" hue="home" title="Nothing is waiting for review.">
           Splits and dividends where the sources disagree will appear here.
         </EmptyState>
       ) : (

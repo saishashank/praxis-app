@@ -331,7 +331,9 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
       ) : null}
 
       {!tile?.hasCohort ? (
-        <EmptyState title="Nothing to chart yet">{detail.text}</EmptyState>
+        <EmptyState motif="strategies" hue="strategies" title="Nothing to chart yet">
+          {detail.text}
+        </EmptyState>
       ) : (
         <>
           <KpiRow label="Where this round stands">
@@ -381,7 +383,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
 
       <Card title="Open positions" headingLevel={2}>
         {openTrades.length === 0 ? (
-          <p className="m-0 text-sm text-text-muted">No open positions.</p>
+          <EmptyState compact motif="strategies" hue="strategies" title="No open positions." />
         ) : (
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {openTrades.map((t) => (
@@ -495,7 +497,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
           columns={roundCols}
           rows={d.pastRounds}
           rowKey={(r) => String(r.round)}
-          empty={<p className="m-0 text-sm text-text-muted">No rounds yet.</p>}
+          empty={<EmptyState compact motif="strategies" hue="strategies" title="No rounds yet." />}
         />
       </Card>
 
@@ -566,7 +568,12 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
               </ul>
             </div>
           ) : (
-            <p className="m-0 text-sm text-text-muted">No challengers are waiting.</p>
+            <EmptyState
+              compact
+              motif="strategies"
+              hue="strategies"
+              title="No challengers are waiting."
+            />
           )}
           <h3 className="m-0 text-base font-semibold">Version history</h3>
           <DataTable
@@ -574,7 +581,14 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
             columns={versionCols}
             rows={ex.versions}
             rowKey={(v) => v.id}
-            empty={<p className="m-0 text-sm text-text-muted">No versions are stored yet.</p>}
+            empty={
+              <EmptyState
+                compact
+                motif="strategies"
+                hue="strategies"
+                title="No versions are stored yet."
+              />
+            }
           />
           {isOwner ? (
             <p className="m-0 text-xs text-text-muted">

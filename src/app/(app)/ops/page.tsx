@@ -93,7 +93,9 @@ function Group({
         {title} <span className="font-normal text-text-muted">({tasks.length})</span>
       </h2>
       {tasks.length === 0 ? (
-        <EmptyState title={empty}>{children}</EmptyState>
+        <EmptyState motif="check" hue="home" title={empty}>
+          {children}
+        </EmptyState>
       ) : (
         <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {tasks.map((t) => (
@@ -147,7 +149,12 @@ export default async function OpsPage() {
 
           <Card title="Token expiry dates" className="min-w-0">
             {ops.tokens.length === 0 ? (
-              <p className="m-0 text-sm text-text-muted">No token expiry dates are recorded yet.</p>
+              <EmptyState
+                compact
+                motif="check"
+                hue="home"
+                title="No token expiry dates are recorded yet."
+              />
             ) : (
               <>
                 <p className="mt-0 text-sm text-text-muted">
