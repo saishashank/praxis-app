@@ -84,4 +84,10 @@ export function pickBestEvidence(
 
 export function typeLabel(type: string): string;
 export function describeTerms(type: string, payload: unknown): string;
+export type FactorKind = "price" | "split";
+export function factorKindOf(type: string): FactorKind;
+export function refCloseMatches(
+  stored: number | null | undefined,
+  current: number | null | undefined,
+): boolean;
 export function reasonText(reason: string): string;

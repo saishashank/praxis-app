@@ -38,6 +38,8 @@ export type ImportInput = {
   /** ISO timestamp source (injected so tests are deterministic). */
   now: () => string;
   commit?: string;
+  /** Where the file came from: the Worker (default) or the Owner's upload on Configuration (DAT-236). */
+  source?: "worker" | "manual";
   /** Email environment: present = the shrink incident is also emailed (M5 T11). */
   env?: Record<string, string | undefined>;
 };
@@ -187,7 +189,11 @@ export async function importUniverse(i: ImportInput): Promise<ImportResult> {
         plan.counts.file,
         existing.length,
         rowsWritten,
-        JSON.stringify({ counts: plan.counts, parsed: parsed.stats }),
+        JSON.stringify({
+          counts: plan.counts,
+          parsed: parsed.stats,
+          source: i.source ?? "worker",
+        }),
         id,
       ],
     });
