@@ -80,6 +80,7 @@ import {
   selectExit,
   type FillEnv,
 } from "./fills";
+import { resizeEntryAtFill } from "./sizing";
 import { writeFill } from "./fillWriter";
 import { isFatal, checkCohortBooks, type Violation } from "./invariants";
 import {
@@ -489,8 +490,8 @@ function fillEnvOf(cc: CohortCtx, bar: FillEnv["bar"], advMicro: Micro): FillEnv
   return { bar, advMicro, profile: cc.profile, tickCrossFactor: cc.params.tickCrossFactor };
 }
 
-/** True when the cohort's available cash (ARN-025, by settlement mode) covers `needed` right now. */
-async function entryFunded(ctx: DayCtx, cc: CohortCtx, needed: Micro): Promise<boolean> {
+/** The cohort's available cash right now (ARN-025, by settlement mode). */
+async function availableCashNow(ctx: DayCtx, cc: CohortCtx): Promise<Micro> {
   await postUnposted(ctx, cc);
   const id = cc.cohort.id;
   const [fills, rows] = await Promise.all([fillsOf(ctx, cc), loadLedgerRows(ctx.db, id)]);
@@ -503,7 +504,7 @@ async function entryFunded(ctx: DayCtx, cc: CohortCtx, needed: Micro): Promise<b
     pending: pendingSettlements(fills, settled, ctx.calendar),
     sessionD: ctx.d,
   });
-  return available >= needed;
+  return available;
 }
 
 /**
@@ -604,11 +605,40 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
         // F3 (spec 7.4): the order is cancelled at the fill when the open gaps to the cap or above
         await cancelOrder(ctx, orderId, "gap");
       } else if (outcome.status === "filled") {
-        // a gap above the expected price can leave the order unaffordable: like a broker, refuse it
-        // (cancelled 'cash') rather than overdraw the cohort (ARN-101 cash >= 0)
-        if (!(await entryFunded(ctx, cc, outcome.fill.valueMicro + outcome.fill.brokerageMicro))) {
-          await cancelOrder(ctx, orderId, "cash");
+        // GL-03 (D-207): a gap above the expected price can leave the planned quantity unaffordable.
+        // Resize to the largest affordable whole parcel; cancel 'cash' only when one marketable
+        // parcel (A$500) is unaffordable (ARN-101 cash >= 0 holds either way).
+        const sized = resizeEntryAtFill({
+          plannedQty: outcome.fill.qty,
+          fillPriceMicro: outcome.fill.fillPriceMicro,
+          availableCashMicro: await availableCashNow(ctx, cc),
+          profile: cc.profile,
+          feeContext: { code, firstBuyOfSecurityToday: first },
+        });
+        if (sized.status === "cancel") {
+          await cancelOrder(ctx, orderId, sized.reason);
           continue;
+        }
+        if (sized.status === "resized") {
+          outcome = fillOrder(
+            plan !== null
+              ? {
+                  kind: "entry",
+                  qty: sized.qty,
+                  stopFrom: (fillMicro) => initialStopAtFill(plan, fillMicro, crossed.priceFactor),
+                }
+              : { kind: "entry", qty: sized.qty, stopDistanceMicro: toBig(o.ref_stop_micro) },
+            {
+              ...fillEnvOf(cc, bar, advMicro),
+              feeContext: { code, firstBuyOfSecurityToday: first },
+              halted,
+              gate,
+            },
+          );
+          if (outcome.status !== "filled") {
+            await cancelOrder(ctx, orderId, "unfillable");
+            continue;
+          }
         }
         // ARN-020a: an entry that was never re-checked fills flagged `not_rechecked` (AT-18 part B)
         await markNotRechecked(ctx.db, {
