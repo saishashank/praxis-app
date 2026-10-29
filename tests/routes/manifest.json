@@ -165,6 +165,9 @@
     "action src/app/(app)/settings/actions.ts#updatePreferencesAction": {
       "tests": ["tests/preferences/actions.test.ts"]
     },
+    "action src/app/(app)/settings/actions.ts#signOutEverywhereSelfAction": {
+      "tests": ["tests/settings/settingsActions.test.ts", "tests/security/validation.test.ts"]
+    },
     "GET /api/learning/challengers": {
       "tests": ["tests/learning/routes.test.ts"]
     },

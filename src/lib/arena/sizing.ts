@@ -281,7 +281,7 @@ export function resizeEntryAtFill(input: FillResizeInput): FillResize {
   const byCash = cash > 0n ? divFloor(cash, price) : 0n;
   if (byCash < hi) hi = byCash;
   while (lo < hi) {
-    const mid = (lo + hi + 1n) / 2n;
+    const mid = divFloor(lo + hi + 1n, 2n);
     if (fits(mid)) lo = mid;
     else hi = mid - 1n;
   }

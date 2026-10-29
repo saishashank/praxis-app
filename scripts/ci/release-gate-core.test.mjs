@@ -123,7 +123,7 @@ const CASES = [
       ),
     },
     "ci",
-    /fixtures (passed with fixtures skipped or unchecked: strict step skipped/,
+    /fixtures \(passed with fixtures skipped or unchecked: strict step skipped/,
   ],
   [
     "ci: fixtures job has no strict step at all (old workflow)",

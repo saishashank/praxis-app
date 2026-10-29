@@ -8,12 +8,17 @@ export const dynamic = "force-dynamic";
 
 export default async function SignOutEverywherePage() {
   await requireUser("admin", "/settings/sign-out-everywhere");
+  async function confirmSignOut(fd: FormData): Promise<void> {
+    "use server";
+    await signOutEverywhereSelfAction(fd);
+  }
   return (
     <SettingsFrame
       title="Sign out everywhere"
       intro="This ends your sessions on every device, including this one. You will need to sign in again."
     >
-      <form action={signOutEverywhereSelfAction}>
+      <form action={confirmSignOut}>
+        <input type="hidden" name="confirm" value="sign_out_everywhere" />
         <button
           type="submit"
           className="min-h-11 rounded-md bg-danger px-4 text-sm font-semibold text-accent-contrast"

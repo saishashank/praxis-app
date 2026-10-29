@@ -20,6 +20,8 @@ const PATH = "/settings";
 // Anything else in a form is ignored here; the service itself rejects unknown fields for any other caller.
 const PERSONAL_FIELDS = ["time_format", "alert_p1", "alert_p2"] as const;
 const APPEARANCE_FIELDS = ["theme", "motion"] as const;
+const SIGN_OUT_CONFIRM_FIELD = "confirm";
+const SIGN_OUT_CONFIRM_VALUE = "sign_out_everywhere";
 const REGION_FIELDS = ["default_market", "times_in"] as const;
 
 async function save(path: string, fields: readonly string[], fd: FormData): Promise<ActionResult> {
@@ -91,8 +93,12 @@ export async function setQuietHoursAction(fd: FormData): Promise<ActionResult> {
  * Settings > Account: "Sign out everywhere" (admin only, PLT-033). Bumps the signed-in admin's own
  * session version (audited) so every session fails its next check, then signs this one out.
  */
-export async function signOutEverywhereSelfAction(): Promise<void> {
+export async function signOutEverywhereSelfAction(fd: FormData): Promise<ActionResult> {
   const user = await requireUser("admin", PATH);
+  // The confirm form posts exactly this token; anything else (empty, oversized, a file) is refused
+  // before anything is written (SEC-013).
+  if (fd.get(SIGN_OUT_CONFIRM_FIELD) !== SIGN_OUT_CONFIRM_VALUE) return { error: "invalid" };
   await signOutEverywhere(authDb(), process.env, user.id, requestMeta(await headers()));
-  await signOut({ redirectTo: "/signin" });
+  await signOut({ redirectTo: "/signin" }); // redirects; a result is only returned on refusal
+  return { ok: true };
 }

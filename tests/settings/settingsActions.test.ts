@@ -203,7 +203,7 @@ describe("signOutEverywhereSelfAction (UXR-027, PLT-033)", () => {
     const { signOutEverywhereSelfAction } = await import("@/app/(app)/settings/actions");
     const id = await addUser(db, { email: "owner@example.test", role: "owner" });
     asUser(id, "owner");
-    await signOutEverywhereSelfAction();
+    await signOutEverywhereSelfAction(form({ confirm: "sign_out_everywhere" }));
     expect(requireUser).toHaveBeenCalledWith("admin", "/settings");
     const r = await db.execute({
       sql: "SELECT session_version FROM app_user WHERE id = ?",
