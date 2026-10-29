@@ -58,7 +58,26 @@ export type CorpActionRecord = {
   readonly type: string;
   readonly exDate: string;
   readonly payload: Readonly<Record<string, unknown>>;
+  /** GL-02: instant the action was first confirmed (ISO UTC); null/absent = known since before. */
+  readonly knownAt?: string | null;
 };
+
+/**
+ * GL-02: the actions known at a cut-off. An action counts only when it was confirmed at or before the
+ * instant (known_at <= cutoff); a null/absent known_at means it predates the column and always counts.
+ * Compared as instants, not as text, so a differing ISO form cannot mis-order two times.
+ */
+export function knownBy<T extends { readonly knownAt?: string | null }>(
+  actions: readonly T[],
+  cutoffIso: string,
+): T[] {
+  const cut = Date.parse(cutoffIso);
+  return actions.filter((a) => {
+    if (a.knownAt === null || a.knownAt === undefined) return true;
+    const k = Date.parse(a.knownAt);
+    return Number.isFinite(k) && k <= cut;
+  });
+}
 
 // ---- payload readers (exact; a JSON number goes through its decimal text, never arithmetic) -----
 

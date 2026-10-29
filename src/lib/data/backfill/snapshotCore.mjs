@@ -96,7 +96,9 @@ export const TABLES = [
   },
   {
     name: "corporate_actions",
-    fields: ["code", "ex_date", "action_id", "type", "factor"],
+    fields: ["code", "ex_date", "action_id", "type", "factor", "known_at"],
+    // GL-02: added last; a row or an older snapshot without it reads as null (known since before)
+    optional: ["known_at"],
     key: ["code", "ex_date", "action_id"],
     // Everything up to the end of the range: a bar before the range still needs a later factor
     // to be adjusted, and the replay filters by its own decision date (DAT-126).
@@ -108,6 +110,8 @@ export const TABLES = [
       action_id: isInt,
       type: isStr,
       factor: (v) => isNum(v) && v > 0,
+      known_at: (v) =>
+        v === null || v === undefined || (isStr(v) && Number.isFinite(Date.parse(v))),
     },
   },
   {
@@ -155,6 +159,7 @@ export function buildSnapshot(o) {
     const kept = [];
     for (const r of rows) {
       for (const f of spec.fields) {
+        if (spec.optional?.includes(f) && !(f in r)) continue;
         if (!(f in r) || !spec.ok[f](r[f])) throw new SnapshotError(`bad_row:${spec.name}.${f}`);
       }
       const day = spec.day(r);
@@ -169,7 +174,8 @@ export function buildSnapshot(o) {
       return 0;
     });
     counts[spec.name] = kept.length;
-    for (const r of kept) body.push(JSON.stringify([spec.name, spec.fields.map((f) => r[f])]));
+    for (const r of kept)
+      body.push(JSON.stringify([spec.name, spec.fields.map((f) => r[f] ?? null)]));
   }
   lines.push(JSON.stringify({ format: SNAPSHOT_FORMAT, from: o.from, to: o.to, counts }));
   // A loop, never push(...body): a full-universe snapshot has ~1M lines, more than a call can take

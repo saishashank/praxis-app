@@ -361,6 +361,7 @@ export async function priceGate(db) {
 export async function loadConfirmedFactors(db, codes) {
   const acts = await db.execute({
     sql: `SELECT ca.code AS code, ca.id AS id, ca.ex_date AS ex_date, ca.type AS type,
+            ca.known_at AS known_at,
             (SELECT e.status FROM corporate_action_event e WHERE e.action_id = ca.id
                ORDER BY e.id DESC LIMIT 1) AS status,
             (SELECT e.note FROM corporate_action_event e WHERE e.action_id = ca.id
@@ -386,6 +387,8 @@ export async function loadConfirmedFactors(db, codes) {
         factor: Number(r.factor),
         actionId: Number(r.id),
         type: String(r.type),
+        // GL-02: when the action was first confirmed (null = known since before the column)
+        knownAt: r.known_at === null ? null : String(r.known_at),
       });
     }
   }

@@ -10,6 +10,10 @@
 // each confirmed action the newest `adjustment_factor` row wins (a recompute adds rows). Volume is
 // divided by the same product so traded value stays continuous.
 //
+// GL-02: DAT-126 limits by ex-date; GL-02 adds the second bound. A reader that replays decision D
+// passes `knownBy` = the decision cut-off of D and an action confirmed after it is ignored, so a
+// split confirmed on D+5 changes nothing for D..D+4 (see corporate_action.known_at, migration 0015).
+//
 // Numeric: factors are stored as the nearest double to the exact fraction (see
 // corporateActions/rules.mjs); the product of a few such doubles is within a few ulps (1e-15
 // relative), far below a tick, and the reader does not round.
@@ -25,16 +29,30 @@ export type AdjustedBar = RawBar & {
   raw: RawBar;
 };
 
-export type EffectiveFactor = { actionId: number; exDate: string; factor: number };
+export type EffectiveFactor = {
+  actionId: number;
+  exDate: string;
+  factor: number;
+  /** GL-02: when the action was first confirmed; null = known since before the column. */
+  knownAt: string | null;
+};
+
+/** GL-02: true when the action was already known at the cut-off instant (null = always known). */
+export function isKnownBy(knownAt: string | null, cutoffIso: string | undefined): boolean {
+  if (cutoffIso === undefined || knownAt === null) return true;
+  const k = Date.parse(knownAt);
+  return Number.isFinite(k) && k <= Date.parse(cutoffIso);
+}
 
 /** The confirmed actions of a code with their newest factor. */
 export async function effectiveFactors(
   db: Pick<Client, "execute">,
   code: string,
   market = "AU",
+  knownBy?: string,
 ): Promise<EffectiveFactor[]> {
   const acts = await db.execute({
-    sql: `SELECT ca.id AS id, ca.ex_date AS ex_date,
+    sql: `SELECT ca.id AS id, ca.ex_date AS ex_date, ca.known_at AS known_at,
             (SELECT e.status FROM corporate_action_event e WHERE e.action_id = ca.id
                ORDER BY e.id DESC LIMIT 1) AS status,
             (SELECT e.note FROM corporate_action_event e WHERE e.action_id = ca.id
@@ -49,7 +67,14 @@ export async function effectiveFactors(
     if (r.status === null || r.factor === null) continue;
     const st = stateOf({ status: String(r.status), note: r.note === null ? null : String(r.note) });
     if (!isEffective(st.state)) continue;
-    out.push({ actionId: Number(r.id), exDate: String(r.ex_date), factor: Number(r.factor) });
+    const knownAt = r.known_at === null || r.known_at === undefined ? null : String(r.known_at);
+    if (!isKnownBy(knownAt, knownBy)) continue;
+    out.push({
+      actionId: Number(r.id),
+      exDate: String(r.ex_date),
+      factor: Number(r.factor),
+      knownAt,
+    });
   }
   return out;
 }
@@ -59,14 +84,17 @@ export async function adjustedBars(
   code: string,
   from: string,
   to: string,
-  opts: { market?: string; asOf?: string } = {},
+  opts: { market?: string; asOf?: string; knownBy?: string } = {},
 ): Promise<AdjustedBar[]> {
   const market = opts.market ?? "AU";
   if (!/^[A-Z0-9]{2,6}$/.test(code)) throw new RangeError("invalid code");
   if (!isRealDate(from) || !isRealDate(to) || from > to) throw new RangeError("invalid range");
   if (opts.asOf !== undefined && !isRealDate(opts.asOf)) throw new RangeError("invalid asOf");
   const asOf = opts.asOf ?? "9999-12-31";
-  const factors = (await effectiveFactors(db, code, market)).filter((x) => x.exDate <= asOf);
+  // GL-02: with `knownBy` (the decision cut-off of D) only actions confirmed by then count.
+  const factors = (await effectiveFactors(db, code, market, opts.knownBy)).filter(
+    (x) => x.exDate <= asOf,
+  );
   const bars = await db.execute({
     sql: `SELECT d, o, h, l, c, volume FROM price_bar
           WHERE market = ? AND code = ? AND d >= ? AND d <= ? ORDER BY d`,

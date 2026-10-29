@@ -9,7 +9,7 @@
 // and the Wilder indicators inside the A4 module (design 2.1).
 import type { Client } from "@libsql/client";
 import { LookAheadError } from "@/lib/arena/marketData";
-import { quantityRatio, type CorpActionRecord } from "@/lib/arena/corpActions";
+import { knownBy, quantityRatio, type CorpActionRecord } from "@/lib/arena/corpActions";
 import { COST_PROFILES } from "@/lib/arena/costs";
 import type { CohortParams } from "@/lib/arena/cohort";
 import { rejectReasonText, sizeEntry, type SizingResult } from "@/lib/arena/sizing";
@@ -70,7 +70,35 @@ const cmpStr = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 // ---- corporate-action helpers ----------------------------------------------------------------------
 
-export type SplitAction = { readonly exDate: string; readonly ratio: Rational };
+export type SplitAction = {
+  readonly exDate: string;
+  readonly ratio: Rational;
+  /** GL-02: when the action was first confirmed (null/absent = known since before the column). */
+  readonly knownAt?: string | null;
+};
+
+const cutoffCache = new Map<string, string>();
+/**
+ * GL-02: the splits a decision on session `d` may use: ex-date <= d (DAT-126) AND confirmed by the
+ * decision cut-off of d (known_at <= cut-off(d), `hhmm` is the decision_cut-off setting). The one
+ * rule every replay reader shares; the cut-off instant is memoised per session.
+ */
+export function splitsKnownOn(
+  splits: readonly SplitAction[],
+  d: string,
+  hhmm: string,
+): SplitAction[] {
+  const key = `${d}|${hhmm}`;
+  let cut = cutoffCache.get(key);
+  if (cut === undefined) {
+    cut = decisionCutoffUtc(d, hhmm);
+    cutoffCache.set(key, cut);
+  }
+  return knownBy(
+    splits.filter((a) => a.exDate <= d),
+    cut,
+  );
+}
 
 /** Quantity-changing actions per code, exact; a code with an unreadable payload is reported bad. */
 export function splitActionsByCode(actions: readonly CorpActionRecord[]): {
@@ -83,7 +111,7 @@ export function splitActionsByCode(actions: readonly CorpActionRecord[]): {
     if (a.type !== "split" && a.type !== "consolidation" && a.type !== "bonus_issue") continue;
     try {
       const list = byCode.get(a.code) ?? [];
-      list.push({ exDate: a.exDate, ratio: quantityRatio(a) });
+      list.push({ exDate: a.exDate, ratio: quantityRatio(a), knownAt: a.knownAt ?? null });
       byCode.set(a.code, list);
     } catch {
       bad.add(a.code);
@@ -250,7 +278,9 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
   const lookback = Math.max(p.arn011.placementWindow, p.arn011.consolidationWindow); // money-float-ok: window sizes in sessions
   const sessions = sessionsBetween(addDays(d, -lookback * 2), d, req.calendar);
   const sources = await sourcesOf(db);
-  const { byCode: splitsByCode, bad } = splitActionsByCode(req.actions);
+  // GL-02: only actions confirmed by the decision cut-off of D exist for this decision
+  const actions = knownBy(req.actions, cutoff);
+  const { byCode: splitsByCode, bad } = splitActionsByCode(actions);
 
   // universe rows of D
   const uni = await db.execute({
@@ -366,7 +396,7 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
           halted: w.halted,
           insiderScoreQ: score === null ? null : score.score_q,
           shortDrop,
-          consolidationSessionsAgo: consolidationAgo(code, req.actions, sessions),
+          consolidationSessionsAgo: consolidationAgo(code, actions, sessions),
           promotional: false,
         },
         p,
