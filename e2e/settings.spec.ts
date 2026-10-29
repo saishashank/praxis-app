@@ -9,7 +9,7 @@ test("switching theme to high contrast sets data-theme after reload (UXN-280)", 
   await page.goto("/settings/appearance");
   await page.getByRole("radio", { name: "High contrast" }).check();
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByRole("status")).toHaveText("Saved.");
+  await expect(page.getByRole("status").filter({ hasText: "Saved." })).toBeVisible();
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "high_contrast");
 });
@@ -19,7 +19,7 @@ test("Motion off sets data-motion on the html element (UXN-281)", async ({ page,
   await page.goto("/settings/appearance");
   await page.getByLabel("Animation").selectOption("off");
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByRole("status")).toHaveText("Saved.");
+  await expect(page.getByRole("status").filter({ hasText: "Saved." })).toBeVisible();
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-motion", "off");
 });

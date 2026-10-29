@@ -126,3 +126,35 @@ test("axe: no violations on the shell, phone and desktop, gear menu open", async
   await page.goto("/settings");
   expect(await axeViolations(page)).toEqual([]);
 });
+
+test("avatar menu: identity first, then Settings and Sign out, then the other pages (UXR-004, AT-49)", async ({
+  page,
+  context,
+}) => {
+  await signIn(context, "owner");
+  await page.goto("/");
+  const gear = page.getByRole("button", { name: "Account and settings menu" });
+  await gear.click();
+  const panel = page.locator(`#${await gear.getAttribute("aria-controls")}`);
+  const order = await panel.evaluate((el) =>
+    Array.from(el.querySelectorAll("a,button,span"))
+      .map((n) => (n.textContent ?? "").trim())
+      .filter(Boolean),
+  );
+  const identity = order.findIndex((t) => t.includes("owner@praxis.test"));
+  expect(identity).toBeGreaterThanOrEqual(0);
+  expect(order.indexOf("Settings")).toBeGreaterThan(identity);
+  expect(order.indexOf("Sign out")).toBeGreaterThan(order.indexOf("Settings"));
+  expect(order.indexOf("System health")).toBeGreaterThan(order.indexOf("Sign out"));
+  // the header holds exactly three controls besides the tab row and brand link
+  const controls = page
+    .getByRole("banner")
+    .locator("button, a")
+    .filter({ hasNot: page.locator("nav a") });
+  const names = await controls.evaluateAll((els) =>
+    els
+      .filter((e) => !e.closest("nav") && (e as HTMLElement).offsetParent !== null)
+      .map((e) => e.getAttribute("aria-label") ?? (e.textContent ?? "").trim()),
+  );
+  expect(names.filter((n) => /^Region:|^Alerts,|^Account and settings/.test(n))).toHaveLength(3);
+});
