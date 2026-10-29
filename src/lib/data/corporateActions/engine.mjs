@@ -23,6 +23,7 @@ import {
   DEFAULT_PRICE_TOLERANCE_PCT,
   evaluateGroup,
   factorFor,
+  factorKindOf,
   inferRatio,
   isEffective,
   isPriceOnly,
@@ -30,6 +31,7 @@ import {
   parseNote,
   pickBestEvidence,
   ratioToNumber,
+  refCloseMatches,
   stateOf,
   validateCandidate,
 } from "./rules.mjs";
@@ -590,20 +592,43 @@ export async function syncFactors(db, c) {
   const rows = await sel(
     db,
     c.io,
-    `SELECT corporate_action_id AS id, factor, computed_at FROM adjustment_factor
+    `SELECT corporate_action_id AS id, factor, computed_at, ref_close_micro FROM adjustment_factor
      WHERE market = ? ORDER BY computed_at`,
     [c.market],
   );
   const latest = new Map();
   for (const r of rows)
-    latest.set(Number(r.id), { factor: Number(r.factor), at: String(r.computed_at) });
+    latest.set(Number(r.id), {
+      factor: Number(r.factor),
+      at: String(r.computed_at),
+      ref: r.ref_close_micro === null ? null : Number(r.ref_close_micro),
+    });
   let written = 0;
   for (const a of c.actions) {
     const cur = latest.get(a.id);
+    const kind = factorKindOf(a.type);
     let want = null;
+    let ref = null;
     if (isEffective(a.state)) {
       const f = factorFor(a.type, a.payload);
       want = f === null ? 1 : ratioToNumber(f);
+      if (kind === "price") {
+        ref = await refCloseOf(db, c.io, c.market, a.code, a.ex_date);
+        // DAT-233 (D-237): a price factor other than 1 is used only while its stored reference close
+        // still equals the raw close before the ex-date; an Owner-resolved action is the Owner's call.
+        if (want !== 1 && a.latest?.by === SYSTEM && !refCloseMatches(cur?.ref ?? null, ref)) {
+          const now = after(c.now, a.latest?.at);
+          const d = c.now.slice(0, 10);
+          const note = { d, queue: "owner", reasons: ["ref_close_mismatch"], score: 0 };
+          await addEvent(db, c.io, { actionId: a.id, now, status: "queued", note });
+          a.state = "owner";
+          a.stateSince = d;
+          a.note = note;
+          a.latest = { id: 0, at: now, status: "queued", by: SYSTEM, note: JSON.stringify(note) };
+          want = 1;
+          ref = cur?.ref ?? null;
+        }
+      }
     } else if (cur) {
       want = 1;
     }
@@ -612,13 +637,26 @@ export async function syncFactors(db, c) {
       db,
       c.io,
       `INSERT INTO adjustment_factor
-         (market, code, ex_date, factor, corporate_action_id, computed_at)
-       VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
-      [c.market, a.code, a.ex_date, want, a.id, after(c.now, cur?.at)],
+         (market, code, ex_date, factor, corporate_action_id, computed_at, factor_kind,
+          ref_close_micro)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+      [c.market, a.code, a.ex_date, want, a.id, after(c.now, cur?.at), kind, ref],
     );
     written += r.rowsAffected;
   }
   return written;
+}
+
+/** DAT-233: the raw close before the ex-date in whole micro (null when no earlier bar is stored). */
+async function refCloseOf(db, io, market, code, exDate) {
+  const rows = await sel(
+    db,
+    io,
+    "SELECT c FROM price_bar WHERE market = ? AND code = ? AND d < ? ORDER BY d DESC LIMIT 1",
+    [market, code, exDate],
+  );
+  // money-float-ok: a stored dollar price rounded once to whole micro
+  return rows.length === 0 ? null : Math.round(Number(rows[0].c) * 1e6);
 }
 
 /**

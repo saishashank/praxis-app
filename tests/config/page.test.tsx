@@ -12,6 +12,9 @@ vi.mock("@/lib/config/admin", async (orig) => ({
 }));
 const action = vi.hoisted(() => ({
   updateConfigAction: vi.fn<(fd: FormData) => Promise<unknown>>(async () => ({ ok: true })),
+  uploadIndexChangesAction: vi.fn(),
+  uploadIndustryMapAction: vi.fn(),
+  uploadUniverseAction: vi.fn(),
 }));
 vi.mock("@/app/(app)/config/actions", () => action);
 
@@ -82,6 +85,7 @@ describe("configuration page", () => {
       "Sentinel and email",
       "Learning and knowledge",
       "Other",
+      "Data files",
       "Recent changes",
     ]);
   });
@@ -110,7 +114,9 @@ describe("configuration page", () => {
     expect(screen.queryAllByRole("textbox")).toHaveLength(0);
     // the only form is the search (UXR-028 search, D-174 no editor): one text field, one Search button
     expect(screen.getAllByRole("searchbox")).toHaveLength(1);
-    expect(screen.getAllByRole("button")).toHaveLength(1);
+    // plus the three Data files uploads (data, not settings)
+    expect(screen.getAllByRole("button")).toHaveLength(4);
+    expect(screen.getAllByRole("button", { name: "Upload" })).toHaveLength(3);
     expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
     expect(screen.queryAllByRole("button", { name: "Save" })).toHaveLength(0);
     expect(screen.queryByText("Fixed by the spec")).toBeNull();

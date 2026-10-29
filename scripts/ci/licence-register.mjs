@@ -38,7 +38,7 @@ export const SOURCE_FACTS = {
     code: ["worker/src/asx/universe.ts"],
     hosts: ["asx.com.au"],
     terms:
-      "A second ASX request type. It is covered by the same Owner risk acceptance as the announcements (O-23).",
+      "A second ASX request type with its own terms (Owner reference O-23b). It is enabled together with the ASX announcements entry (O-23); uploading the same file by hand is the fallback (Configuration, Data files).",
   },
   yahoo_eod: {
     label: "Yahoo Finance end-of-day prices",
@@ -53,7 +53,8 @@ export const SOURCE_FACTS = {
     provides: "Public interest-rate and macro data.",
     code: [],
     hosts: [],
-    terms: "Public data. The register row exists; no fetcher is built in this release.",
+    terms:
+      "Copyrighted by the RBA. Only derived numbers may be shown, with the source named. The register row exists; no fetcher is built in this release.",
   },
   abs: {
     label: "Australian Bureau of Statistics",
@@ -69,34 +70,38 @@ export const SOURCE_FACTS = {
     hosts: ["download.asic.gov.au"],
     terms: "Public data published by the regulator.",
   },
-  // M14 (DAT-236, D-239): disabled alternatives and manual uploads. WP8 completes the wording.
+  // M14 (DAT-236, D-239): disabled alternatives and manual uploads.
   wikidata_asx: {
     label: "Wikidata ASX companies (alternative, disabled)",
     provides: "Company names and industry for ASX codes, as a universe alternative.",
     code: [],
     hosts: [],
-    terms: "CC0. No fetcher is built; terms to be verified before it is ever enabled.",
+    terms:
+      "Wikidata structured data is CC0 (no conditions). No fetcher is built; a downloaded export can be turned into the listed-companies CSV offline (scripts/data/universe-from-wikidata.mjs) and uploaded by the Owner. The source stays disabled.",
   },
   wikipedia_asx200: {
     label: "Wikipedia S&P/ASX 200 list (alternative, disabled)",
     provides: "About 200 ASX codes, as a universe alternative.",
     code: [],
     hosts: [],
-    terms: "CC BY-SA 4.0. No fetcher is built; terms to be verified before it is ever enabled.",
+    terms:
+      "Wikipedia text is CC BY-SA 4.0: attribution and share-alike apply to anything copied from the list. No fetcher is built and the source stays disabled.",
   },
   index_changes_manual: {
     label: "Index changes (manual CSV)",
     provides: "Index adds and deletes for the F3 exclusion, uploaded by the Owner.",
     code: [],
     hosts: [],
-    terms: "A file the Owner uploads; no automated fetch.",
+    terms:
+      "Keyed by hand from the index-change announcements that S&P Dow Jones Indices publishes through the ASX (quarterly rebalance notices), so it sits under the ASX announcement terms (O-23). The licensed constituent files are not used. No automated fetch.",
   },
   industry_map_manual: {
     label: "Industry classes (manual CSV)",
     provides: "Finer industry classes for the second-position limit, uploaded by the Owner.",
     code: [],
     hosts: [],
-    terms: "A file the Owner uploads; no automated fetch.",
+    terms:
+      "A file the Owner prepares and uploads (for example classes taken from a Wikidata export, which is CC0). No automated fetch.",
   },
 };
 
@@ -201,6 +206,64 @@ export function parseRegisterInserts(sql) {
   return rows;
 }
 
+/**
+ * All `UPDATE source_register SET col = value, ... WHERE source = 'id';` statements in the `-- +up`
+ * part of one migration (M14 0018 changes the ASX and RBA rows that 0004 and 0006 seeded), in order.
+ */
+export function parseRegisterUpdates(sql) {
+  const up = sql.split(/^-- \+down/m)[0];
+  const text = up
+    .split("\n")
+    .filter((l) => !/^\s*--/.test(l))
+    .join("\n");
+  const out = [];
+  const head = /UPDATE\s+source_register\s+SET\s+/gi;
+  for (const m of text.matchAll(head)) {
+    let end = m.index + m[0].length;
+    let inStr = false;
+    while (end < text.length) {
+      const c = text[end];
+      if (c === "'") {
+        if (inStr && text[end + 1] === "'") end += 1;
+        else inStr = !inStr;
+      } else if (c === ";" && !inStr) break;
+      end += 1;
+    }
+    const body = text.slice(m.index + m[0].length, end);
+    const w = /\s+WHERE\s+source\s*=\s*'([^']+)'\s*$/i.exec(body);
+    if (!w) throw new Error("source_register update: unsupported WHERE");
+    const sets = body.slice(0, w.index);
+    // Split `col = value` pairs on commas outside quotes.
+    const pairs = [];
+    let cur = "";
+    let q = false;
+    for (let i = 0; i < sets.length; i += 1) {
+      const c = sets[i];
+      if (c === "'") {
+        if (q && sets[i + 1] === "'") {
+          cur += "''";
+          i += 1;
+          continue;
+        }
+        q = !q;
+      }
+      if (c === "," && !q) {
+        pairs.push(cur);
+        cur = "";
+      } else cur += c;
+    }
+    pairs.push(cur);
+    const values = {};
+    for (const pair of pairs) {
+      const eq = pair.indexOf("=");
+      if (eq < 0) throw new Error("source_register update: bad assignment");
+      values[pair.slice(0, eq).trim()] = parseTuple(pair.slice(eq + 1))[0];
+    }
+    out.push({ source: w[1], values });
+  }
+  return out;
+}
+
 export function loadSeed(root = ROOT) {
   const dir = path.join(root, MIGRATIONS_DIR);
   const files = fs
@@ -212,6 +275,12 @@ export function loadSeed(root = ROOT) {
     for (const r of parseRegisterInserts(fs.readFileSync(path.join(dir, f), "utf8"))) {
       if (bySource.has(r.source)) throw new Error(`duplicate source in seed: ${r.source}`);
       bySource.set(r.source, { ...r, migration: f });
+    }
+    // A later migration's UPDATEs change the seeded row (0018: ASX listed companies, RBA).
+    for (const u of parseRegisterUpdates(fs.readFileSync(path.join(dir, f), "utf8"))) {
+      const cur = bySource.get(u.source);
+      if (!cur) throw new Error(`update of an unseeded source: ${u.source}`);
+      bySource.set(u.source, { ...cur, ...u.values });
     }
   }
   return [...bySource.values()];

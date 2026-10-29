@@ -18,6 +18,8 @@ import { mainDb } from "@/lib/db/client";
 import { formatMelbourne, type TimeFormat } from "@/lib/health/format";
 import { userPreferences } from "@/lib/preferences/read";
 import { RCell, RHead, RRow, RTable } from "@/components/ui/ResponsiveTable";
+import { DataUploads } from "./DataUploads";
+import { uploadIndexChangesAction, uploadIndustryMapAction, uploadUniverseAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -92,8 +94,8 @@ export default async function ConfigPage({
         <h1 className="text-2xl font-semibold tracking-tight">Configuration</h1>
         <p className="m-0 text-sm text-text-muted">
           Every tunable value with its default and allowed range, so you can see what the system is
-          using. Read-only: changes are made in code and reviewed, never from this page. Times are
-          shown in Australia/Melbourne.
+          using. Read-only: changes are made in code and reviewed, never from this page. The Data
+          files card only loads reference files. Times are shown in Australia/Melbourne.
         </p>
         <form method="get" role="search" className="mt-2 flex flex-wrap items-center gap-2">
           <label className="flex min-w-0 grow flex-col gap-1 text-sm sm:max-w-sm">
@@ -138,6 +140,12 @@ export default async function ConfigPage({
           </Card>
         );
       })}
+
+      <DataUploads
+        uploadIndexChanges={uploadIndexChangesAction}
+        uploadIndustryMap={uploadIndustryMapAction}
+        uploadUniverse={uploadUniverseAction}
+      />
 
       <Card aria-label="Recent changes" title="Recent changes">
         {history.length === 0 ? (

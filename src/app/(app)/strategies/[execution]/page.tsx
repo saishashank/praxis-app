@@ -15,6 +15,7 @@ import {
   type SleeveLegView,
   type VersionRow,
 } from "@/lib/ui/loaders/strategyViews";
+import { loadRobustness } from "@/lib/ui/loaders/robustness";
 import { CifTable, type CifRow } from "@/components/charts/Cif";
 import { RegimeBadge, ValidationBadge } from "@/components/ui/Badges";
 import { Button } from "@/components/ui/Button";
@@ -31,6 +32,7 @@ import { OutcomeBars } from "../OutcomeBars";
 import { StrategyTabs } from "../StrategyTabs";
 import { tileState } from "../state";
 import { RevertVersion } from "./RevertVersion";
+import { Robustness } from "./Robustness";
 import { StrategyChart, type ChartControl, type ChartTrade } from "./StrategyChart";
 
 export const dynamic = "force-dynamic";
@@ -144,6 +146,9 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
     id,
     d.navSeries.map((p) => p.d),
   );
+
+  // M14 (D-251): Owner and Editor only; the loader reads nothing for any other role
+  const robustness = await loadRobustness(deps, id);
 
   const navPoints = d.navSeries.map((p) => ({ time: p.d, value: dollars(p.nav) }));
   const ddPpm = drawdownPpm(d.navSeries.map((p) => p.nav));
@@ -490,6 +495,8 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
           </p>
         )}
       </Card>
+
+      <Robustness view={robustness} />
 
       <Card title="Past rounds" headingLevel={2}>
         <DataTable
