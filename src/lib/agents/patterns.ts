@@ -196,6 +196,31 @@ export function isPiercingLine(
   );
 }
 
+/**
+ * TA-Lib CDLHARAMI, bullish side (VAL-113, D-229): a long black candle, then a short white candle
+ * whose real body lies strictly inside the first body. A pure detector only: it is NOT in
+ * `PatternName`/`PatternFlags`/`detectPatterns`, so no card, family or indicator changes until M15
+ * publishes the sample sizes for it.
+ */
+export function isBullishHarami(
+  bars: readonly CandleBar[],
+  i: number,
+  s: PatternSettings = DEFAULT_PATTERN_SETTINGS,
+): boolean | null {
+  const lookback = Math.max(s.bodyLong.period, s.bodyShort.period) + 1;
+  if (i < lookback) return null;
+  const first = bars[i - 1]!;
+  const second = bars[i]!;
+  return (
+    isBlack(first) &&
+    gt(bodyOf(first), candleAverage(bars, i - 1, s.bodyLong)) &&
+    isWhite(second) &&
+    lte(bodyOf(second), candleAverage(bars, i, s.bodyShort)) &&
+    bodyTop(second) < bodyTop(first) &&
+    bodyBottom(second) > bodyBottom(first)
+  );
+}
+
 /** All four pattern flags for the last candle of `bars` (session D). */
 export function detectPatterns(
   bars: readonly CandleBar[],
