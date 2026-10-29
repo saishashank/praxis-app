@@ -782,12 +782,17 @@ export async function loadLeaderEvidence(
     // D-191: no leverage: the L twins are not shown
     "SELECT id, family, rule_version FROM execution WHERE kind = 'E' AND variant = 'U' ORDER BY id",
   );
-  for (const r of ex.rows) {
-    const z = await deps.mainDb.execute({
+  // D-204: the newest zero-edge row of every strategy in one batch (it was one round trip each)
+  const scopes = ex.rows.map((r) => `${v.market}:${str(r.family)}:${str(r.rule_version)}`);
+  const zs = await deps.mainDb.batch(
+    scopes.map((scope) => ({
       sql: "SELECT value_json FROM replay_stat WHERE metric = 'zero_edge' AND scope = ? ORDER BY d DESC, run_id DESC LIMIT 1",
-      args: [`${v.market}:${str(r.family)}:${str(r.rule_version)}`],
-    });
-    const zv = zeroEdgeOf(json(z.rows[0]?.value_json));
+      args: [scope],
+    })),
+    "read",
+  );
+  for (const [i, r] of ex.rows.entries()) {
+    const zv = zeroEdgeOf(json(zs[i]?.rows[0]?.value_json));
     if (zv) zeroEdge[str(r.id)] = zv;
   }
 

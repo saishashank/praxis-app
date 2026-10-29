@@ -28,9 +28,9 @@ export function invalidateConfigCache(): void {
 
 async function load(key: ConfigKey, scope: string, deps: RuntimeDeps): Promise<unknown> {
   const now = deps.now ?? Date.now;
-  let db: Client | undefined;
   try {
-    db = (deps.db ?? mainDb)();
+    // D-204: the shared client is never closed here
+    const db = (deps.db ?? mainDb)();
     const value = await getConfig(db, key, scope);
     cache.set(cacheKey(key, scope), { value, expires: now() + CACHE_TTL_MS });
     return value;
@@ -38,9 +38,6 @@ async function load(key: ConfigKey, scope: string, deps: RuntimeDeps): Promise<u
     const value = CONFIG_KEYS[key].default;
     cache.set(cacheKey(key, scope), { value, expires: now() + FAILURE_TTL_MS });
     return value;
-  } finally {
-    // Only clients this module opened are closed; an injected client belongs to the caller.
-    if (db && !deps.db) db.close();
   }
 }
 

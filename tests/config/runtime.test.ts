@@ -115,7 +115,7 @@ describe("getConfigCached", () => {
     vi.unstubAllEnvs();
   });
 
-  it("closes a client it opened itself", async () => {
+  it("never closes the shared client (D-204)", async () => {
     const close = vi.fn();
     vi.resetModules();
     vi.doMock("@/lib/db/client", () => ({
@@ -126,7 +126,7 @@ describe("getConfigCached", () => {
     }));
     const fresh = await import("@/lib/config/runtime");
     expect(await fresh.getConfigCached("retention_logs_days")).toBe(5);
-    expect(close).toHaveBeenCalledTimes(1);
+    expect(close).not.toHaveBeenCalled();
     vi.doUnmock("@/lib/db/client");
     vi.resetModules();
   });

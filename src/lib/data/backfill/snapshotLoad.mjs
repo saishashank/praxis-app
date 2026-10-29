@@ -143,17 +143,14 @@ export async function loadInputs(o) {
   const codes = (
     await q("SELECT DISTINCT code FROM corporate_action WHERE market = ?", [MARKET])
   ).map((r) => String(r.code));
-  const actions = [];
-  for (const f of await loadConfirmedFactors(o.db, codes)) {
-    const t = await q("SELECT type FROM corporate_action WHERE id = ?", [f.actionId]);
-    actions.push({
-      code: f.code,
-      ex_date: f.exDate,
-      action_id: f.actionId,
-      type: String(t[0].type),
-      factor: f.factor,
-    });
-  }
+  // D-204: the action type comes with the factors (it was one more query per factor)
+  const actions = (await loadConfirmedFactors(o.db, codes)).map((f) => ({
+    code: f.code,
+    ex_date: f.exDate,
+    action_id: f.actionId,
+    type: f.type,
+    factor: f.factor,
+  }));
   return {
     bars,
     bars_recent: barsRecent,
