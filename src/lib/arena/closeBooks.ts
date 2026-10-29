@@ -72,6 +72,9 @@ import {
   loadQtyAdjustments,
 } from "./corpActionWriter";
 import { suspensionMark } from "./corpActions";
+import { exDividendOn, toExDividendActions, type ExDividendAction } from "./exDividend";
+import { decisionCutoffUtc } from "@/lib/agents/decisionView";
+import { getConfig } from "@/lib/config/store";
 import { COST_PROFILES, type CostProfile, type CostProfileCode } from "./costs";
 import {
   fillCloseSignalExit,
@@ -216,6 +219,9 @@ type DayCtx = {
   readonly stats: Stats;
   readonly actions: Awaited<ReturnType<typeof loadConfirmedActions>>;
   readonly lastCloses: Map<string, Micro>;
+  /** FAM-007: the dividends going ex today, and the decision cut-off of the previous session (GL-02). */
+  readonly exDividends: readonly ExDividendAction[];
+  readonly exDivCutoff: string;
   readonly gates: Map<string, EntryDecision>;
   /** Fills older than this are settled and posted (T+2 plus holidays fit well inside 14 days). */
   readonly recentFrom: string;
@@ -470,6 +476,11 @@ function effectiveStop(
   return best;
 }
 
+/** FAM-007 (D-219): the confirmed dividend per share going ex today, known by the previous cut-off. */
+function exDividendToday(ctx: DayCtx, code: string): Micro {
+  return exDividendOn(ctx.exDividends, code, ctx.d, ctx.exDivCutoff);
+}
+
 async function cancelOrder(ctx: DayCtx, orderId: string, reason: string): Promise<void> {
   await ctx.db.execute({
     sql: "UPDATE arena_order SET status = 'cancelled', reject_reason = ? WHERE id = ? AND status = 'pending'",
@@ -684,7 +695,9 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
     const sellQty = holding < qty ? holding : qty;
     const env = fillEnvOf(cc, bar, advMicro);
     const cs = fillCloseSignalExit(env, sellQty);
-    const stop = fillIntradayStop(env, sellQty, effectiveStop(trade, ctx.d, adjustments));
+    const stop = fillIntradayStop(env, sellQty, effectiveStop(trade, ctx.d, adjustments), {
+      exDividendMicro: exDividendToday(ctx, code),
+    });
     const chosen = selectExit(cs, stop);
     if (chosen === null) continue;
     const liquidation = orderId.startsWith("LQ:");
@@ -722,6 +735,7 @@ async function isStops(ctx: DayCtx, cc: CohortCtx): Promise<void> {
     const env = fillEnvOf(cc, bar, await ctx.data.adv(t.code, ctx.priorD));
     const fill = fillIntradayStop(env, qty, effectiveStop(t, ctx.d, adjustments), {
       afterOpen: t.entryD === ctx.d,
+      exDividendMicro: exDividendToday(ctx, t.code),
     });
     if (fill === null) continue;
     const orderId = `IS:${t.id}:${ctx.d}`;
@@ -1313,6 +1327,11 @@ export async function closeBooksDay(
       const last = await data.lastClose(a.code, priorD);
       if (last !== null) lastCloses.set(a.code, last);
     }
+    const cutoffHm = await getConfig(db, "decision_cutoff").catch(() => undefined);
+    const exDivCutoff = decisionCutoffUtc(
+      priorD,
+      typeof cutoffHm === "string" ? cutoffHm : "18:10",
+    );
     const ctx: DayCtx = {
       db,
       market: opts.market,
@@ -1325,6 +1344,8 @@ export async function closeBooksDay(
       stats,
       actions,
       lastCloses,
+      exDividends: toExDividendActions(actions.filter((x) => x.exDate === opts.d)),
+      exDivCutoff,
       gates: new Map(),
       recentFrom: addDays(opts.d, -14),
     };
