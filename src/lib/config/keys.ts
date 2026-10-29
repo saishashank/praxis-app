@@ -124,7 +124,7 @@ const M4_RANGED = [
   ["f3_max_gap_pct", "num", 8, 5, 12, "%", "B", FAM, "ch.15 15.3 F3 max_gap", "F3: cancel the order if the open gaps this far above the day-0 close"],
   ["f3_trail_after_pct", "num", 10, 5, 20, "%", "B", FAM, "ch.15 15.3 F3 trail_after", "F3: gain after which the trailing stop starts"],
   ["f3_trail_atr", "num", 2.5, 1.5, 4, "x ATR", "B", FAM, "ch.15 15.3 F3 trail_atr", "F3: trailing stop distance"],
-  ["f3_time_exit", "int", 20, 10, 40, "sessions", "B", FAM, "ch.15 15.3 F3 time_exit", "F3: time exit"],
+  ["f3_time_exit", "int", 20, 10, 60, "sessions", "B", FAM, "ch.15 15.3 F3 time_exit", "F3: time exit"],
   // F4 mean reversion (07 l.55)
   ["f4_rsi2_max", "num", 10, 5, 20, "RSI", "B", FAM, "ch.15 15.3 F4 rsi2_max", "F4: RSI(2) below"],
   ["f4_rsi14_max", "num", 30, 20, 35, "RSI", "B", FAM, "ch.15 15.3 F4 rsi14_max", "F4: RSI(14) below"],
@@ -486,7 +486,10 @@ export const INSIDER_WEIGHT_NAMES = [
   "holder_decrease",
 ] as const;
 async function validateInsiderWeights(v: unknown): Promise<string | null> {
-  if (!exactKeys(v, [...INSIDER_WEIGHT_NAMES])) return `needs ${INSIDER_WEIGHT_NAMES.join(", ")}`;
+  // director_sale is optional (AGT-136, D-242): absent means it follows director_net, as in v1.
+  const base = [...INSIDER_WEIGHT_NAMES];
+  if (!exactKeys(v, base) && !exactKeys(v, [...base, "director_sale"]))
+    return `needs ${INSIDER_WEIGHT_NAMES.join(", ")} (and optionally director_sale)`;
   return Object.values(v).every((x) => isNum(x) && x >= 0 && x <= 1)
     ? null
     : "every weight must be a number from 0 to 1";
@@ -1005,6 +1008,132 @@ const M7_META_TABLES: Record<M7RangedKey | M7FixedKey | keyof typeof M7_EXPLICIT
     },
   };
 
+// ---- M14 keys (returns and validation; docs/M14_design.md 2.7, decisions D-213 to D-252) ----
+// Every default is the spec default (ch.15 V2 keys, Owner decisions O-43 to O-50). The structural
+// switches (KB-081 / O-46) are enum or window keys of edit class B whose defaults reproduce v1
+// exactly: nothing changes until a pre-registered challenger sets one (D-235).
+
+// prettier-ignore
+const M14_RANGED = [
+  ["max_stop_distance_pct", "num", 12, 6, 20, "%", "O", FAM, "FAM-004, O-47 (D-216)", "Largest initial stop distance a new entry may have"],
+  ["cost_gate_k", "num", 2, 1.5, 3, "x", "O", FAM, "FAM-005 (same key as CTX-022a; D-214)", "Median gross return needed as a multiple of the round-trip cost"],
+  ["second_position_max_corr", "num", 0.6, 0.3, 0.9, "correlation", "O", FAM, "FAM-006 (D-217)", "Highest 60-session return correlation between two new positions"],
+  ["val_fwer_per_lineage", "num", 0.05, 0.01, 0.1, "level", "O", VAL, "VAL-112, O-43 (D-226)", "Family-wise error allowed per lineage and split version"],
+  ["l2_alpha_spend_fraction", "num", 0.1, 0.05, 0.25, "fraction", "O", VAL, "VAL-116, O-44 (D-231)", "Share of the lesson alpha pool spent on each lesson test"],
+  ["dedup_minhash_threshold", "num", 0.85, 0.7, 0.95, "similarity", "O", REG, "DAT-237 (D-240)", "Title similarity at which a later announcement counts as a repeat"],
+  ["f1_return_window_sessions", "int", 126, 126, 252, "sessions", "B", FAM, "KB-081, O-46 (D-235)", "F1: return window for the relative-strength rank"],
+] as const satisfies readonly RangedRow[];
+
+// prettier-ignore
+const M14_FIXED = [
+  ["cost_gate_min_rows", "int", 30, "rows", FAM, "FAM-005 (D-214)", "Signal-ledger rows needed before the cost gate applies"],
+  ["second_position_corr_sessions", "int", 60, "sessions", FAM, "FAM-006 (D-217)", "Sessions of returns in the second-position correlation"],
+  ["l2_alpha_exhausted_level", "num", 0.005, "level", VAL, "VAL-116 (D-231)", "Lesson alpha pool is exhausted below this test level"],
+  ["minbtl_target_sharpe", "num", 1, "Sharpe", VAL, "VAL-115 (D-230)", "Annual Sharpe ratio the minimum backtest length is computed for"],
+  ["rank_ic_min_codes", "int", 10, "codes", VAL, "VAL-114 (D-232)", "Scored codes needed for one day of rank quality"],
+  ["rank_ic_bootstrap_replicates", "int", 2000, "replications", VAL, "VAL-114", "Bootstrap replications for the rank quality interval"],
+  ["rank_ic_bootstrap_blocks", "text", "monthly", "blocks", VAL, "VAL-114 (monthly or weekly blocks; D-232)", "Block length of the rank quality bootstrap"],
+  ["dedup_window_sessions", "int", 5, "sessions", REG, "DAT-237 (D-240)", "Sessions in which a repeated announcement is a duplicate"],
+  ["index_change_window_sessions", "int", 1, "sessions", REG, "DAT-234 (D-238)", "Sessions around day 0 in which an index change excludes an F3 event"],
+] as const satisfies readonly FixedRow[];
+
+type M14RangedKey = (typeof M14_RANGED)[number][0];
+type M14FixedKey = (typeof M14_FIXED)[number][0];
+
+const M14_RANGED_KEYS = Object.fromEntries(
+  M14_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M14RangedKey, ConfigKeyDef>;
+
+const M14_FIXED_KEYS = Object.fromEntries(
+  M14_FIXED.map(([key, , def, unit, , ref]) => [
+    key,
+    { default: def, unit, editable: "fixed", ref, validate: never } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M14FixedKey, ConfigKeyDef>;
+
+/** VAL-112 error-budget modes. `bh_fdr` is refused in V2 (D-227). */
+export const VAL_ERROR_BUDGET_MODES = ["fixed", "alpha_spending"] as const;
+export const SETTLEMENT_STATS_MODES = ["conservative", "matched"] as const;
+export const F5_UNIVERSES = ["U1", "U2", "U3"] as const;
+export const F1_MOMENTUM_VARIANTS = ["v1", "skip_month_u2"] as const;
+export const RANK_VARIANTS = ["v1", "composite3", "vol_scaled"] as const;
+export const F4_ENTRY_VARIANTS = ["v1", "reversal5_u2"] as const;
+export const F3_SURPRISE_MODES = ["category", "day0_ar"] as const;
+
+// prettier-ignore
+const M14_ENUM_ROWS = [
+  ["val_error_budget_mode", "alpha_spending", VAL_ERROR_BUDGET_MODES, "O", VAL, "VAL-112, O-43 (D-226, D-227)", "How the validation error budget is spent"],
+  ["settlement_stats_mode", "conservative", SETTLEMENT_STATS_MODES, "O", REP, "ARN-109, O-48 (D-225)", "Settlement used for replay statistics"],
+  ["f5_default_universe", "U2", F5_UNIVERSES, "O", FAM, "O-49 (D-221)", "F5: universe it trades"],
+  ["f1_momentum_variant", "v1", F1_MOMENTUM_VARIANTS, "B", FAM, "KB-081, O-46 (D-235)", "F1: momentum variant"],
+  ["f1_rank_variant", "v1", RANK_VARIANTS, "B", FAM, "KB-081, O-46 (D-235)", "F1: rank variant"],
+  ["f4_rank_variant", "v1", RANK_VARIANTS, "B", FAM, "KB-081, O-46 (D-235)", "F4: rank variant"],
+  ["f4_entry_variant", "v1", F4_ENTRY_VARIANTS, "B", FAM, "KB-081, O-46 (D-235)", "F4: entry variant"],
+  ["f3_surprise_mode", "category", F3_SURPRISE_MODES, "B", FAM, "AGT-137, KB-081 (D-243)", "F3: how the surprise is read"],
+] as const;
+
+type M14EnumKey = (typeof M14_ENUM_ROWS)[number][0];
+
+const M14_ENUM_KEYS = Object.fromEntries(
+  M14_ENUM_ROWS.map(([key, def, allowed, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit: "choice",
+      editable: edit,
+      ref,
+      validate:
+        key === "val_error_budget_mode"
+          ? async (v: unknown) =>
+              v === "bh_fdr"
+                ? "bh_fdr is not available in V2 (no family-wise-safe sequential form, D-227)"
+                : oneOf(allowed)(v)
+          : oneOf(allowed),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M14EnumKey, ConfigKeyDef>;
+
+const M14_META_TABLES: Record<M14RangedKey | M14FixedKey | M14EnumKey, ConfigMeta> = {
+  ...(Object.fromEntries(
+    M14_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+      key,
+      {
+        label,
+        area,
+        bounds: boundsText(kind, min, max, unit),
+        input: kind === "int" ? "int" : "number",
+      },
+    ]),
+  ) as Record<M14RangedKey, ConfigMeta>),
+  ...(Object.fromEntries(
+    M14_FIXED.map(([key, kind, , , area, , label]) => [
+      key,
+      {
+        label,
+        area,
+        bounds: "fixed",
+        input: kind === "text" ? "text" : kind === "num" ? "number" : "int",
+      },
+    ]),
+  ) as Record<M14FixedKey, ConfigMeta>),
+  ...(Object.fromEntries(
+    M14_ENUM_ROWS.map(([key, , allowed, , area, , label]) => [
+      key,
+      { label, area, bounds: `one of ${allowed.join(", ")}`, input: "text" },
+    ]),
+  ) as Record<M14EnumKey, ConfigMeta>),
+};
+
 export const CONFIG_KEYS = {
   ...M4_RANGED_KEYS,
   ...M4_FIXED_KEYS,
@@ -1016,6 +1145,9 @@ export const CONFIG_KEYS = {
   ...M7_RANGED_KEYS,
   ...M7_FIXED_KEYS,
   ...M7_EXPLICIT_KEYS,
+  ...M14_RANGED_KEYS,
+  ...M14_FIXED_KEYS,
+  ...M14_ENUM_KEYS,
   // ch.15 l.163: evening_review_time / partial_at / send_by 20:00 / 20:30 / 20:45, O; EML-010/011.
   evening_review_time: {
     default: "20:00",
@@ -1527,6 +1659,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   ...M6_META_TABLES,
   ...M6_EXPLICIT_META,
   ...M7_META_TABLES,
+  ...M14_META_TABLES,
   evening_review_time: {
     label: "Evening Review send time",
     area: SEM,
@@ -1597,7 +1730,8 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   insider_score_weights: {
     label: "Insider and flow score weights",
     area: "Regime and events",
-    bounds: "JSON with director_net, holder_new_or_increase, holder_decrease, each 0 to 1",
+    bounds:
+      "JSON with director_net, holder_new_or_increase, holder_decrease and optionally director_sale, each 0 to 1",
     input: "object",
   },
   llm_market_share: {
@@ -1846,4 +1980,11 @@ export const M7_KEY_NAMES: readonly ConfigKey[] = [
   ...M7_RANGED.map((r) => r[0]),
   ...M7_FIXED.map((r) => r[0]),
   ...(Object.keys(M7_EXPLICIT_KEYS) as ConfigKey[]),
+];
+
+/** Every key added in M14 (docs/M14_design.md 2.7, D-250): the tables above plus the enum keys. */
+export const M14_KEY_NAMES: readonly ConfigKey[] = [
+  ...M14_RANGED.map((r) => r[0]),
+  ...M14_FIXED.map((r) => r[0]),
+  ...(Object.keys(M14_ENUM_KEYS) as ConfigKey[]),
 ];

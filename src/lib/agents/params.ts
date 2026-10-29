@@ -13,7 +13,18 @@
 // corporate-action engines do); this module never throws on bad configuration.
 import { createHash } from "node:crypto";
 import type { Client } from "@libsql/client";
-import { CONFIG_KEYS, injectionPhrasesOf, type ConfigKey } from "@/lib/config/keys";
+import {
+  CONFIG_KEYS,
+  injectionPhrasesOf,
+  type ConfigKey,
+  type F1_MOMENTUM_VARIANTS,
+  type F3_SURPRISE_MODES,
+  type F4_ENTRY_VARIANTS,
+  type F5_UNIVERSES,
+  type RANK_VARIANTS,
+  type SETTLEMENT_STATS_MODES,
+  type VAL_ERROR_BUDGET_MODES,
+} from "@/lib/config/keys";
 import { parseRational, type Rational } from "@/lib/money/rational";
 
 export type ConfigSource = (key: ConfigKey) => unknown;
@@ -69,6 +80,12 @@ export type F1Params = {
   minGain: Rational;
   maxHold: number;
   highLookback: number;
+  /** KB-081: sessions of the relative-strength return window (126 = v1). */
+  returnWindowSessions: number;
+  /** KB-081: momentum variant (`v1` = v1 rule). */
+  momentumVariant: (typeof F1_MOMENTUM_VARIANTS)[number];
+  /** KB-081: rank variant (`v1` = v1 rule). */
+  rankVariant: (typeof RANK_VARIANTS)[number];
 };
 export type F2Params = {
   eventArMin: Rational;
@@ -84,6 +101,8 @@ export type F3Params = {
   trailAfter: Rational;
   trailAtr: Rational;
   timeExit: number;
+  /** AGT-137: how the surprise is read (`category` = v1 rule). */
+  surpriseMode: (typeof F3_SURPRISE_MODES)[number];
 };
 export type F4Params = {
   /** Float64 thresholds: compared with Wilder RSI values. */
@@ -91,6 +110,10 @@ export type F4Params = {
   rsi14Max: number;
   timeExit: number;
   stopAtr: Rational;
+  /** KB-081: entry variant (`v1` = v1 rule). */
+  entryVariant: (typeof F4_ENTRY_VARIANTS)[number];
+  /** KB-081: rank variant (`v1` = v1 rule). */
+  rankVariant: (typeof RANK_VARIANTS)[number];
 };
 export type F5Params = {
   volumeRatioMin: Rational;
@@ -101,6 +124,8 @@ export type F5Params = {
   stopCap: Rational;
   trailAtr: Rational;
   timeStop: number;
+  /** O-49: the universe F5 trades (U2). U3 runs only as the replay stress variant. */
+  defaultUniverse: (typeof F5_UNIVERSES)[number];
 };
 export type F6Params = {
   minClasses: number;
@@ -138,6 +163,24 @@ export type Arn011Params = {
   rangeDaysMin: number;
 };
 
+/** M14 entry gates and data rules (FAM-004/005/006, DAT-234, DAT-237; keys in config/keys.ts M14). */
+export type EntryParams = {
+  /** FAM-004: largest initial stop distance, as a fraction of the reference price (12 % = 3/25). */
+  maxStopDistance: Rational;
+  /** FAM-005: median gross return must be at least this multiple of the round-trip cost. */
+  costGateK: Rational;
+  /** FAM-005: ledger rows needed before the gate applies. */
+  costGateMinRows: number;
+  /** FAM-006: highest correlation of daily returns between two new positions. */
+  secondPositionMaxCorr: number;
+  secondPositionCorrSessions: number;
+  /** DAT-237: duplicate announcement window and title similarity. */
+  dedupWindowSessions: number;
+  dedupMinhashThreshold: number;
+  /** DAT-234: sessions around day 0 in which an index change excludes an F3 event. */
+  indexChangeWindowSessions: number;
+};
+
 /** F5 volume exit (spec 07 l.56; keys f5_dry_up_*, D-085, D-111). */
 export type SpecConstantParams = {
   f5DryUpRatio: Rational;
@@ -165,6 +208,10 @@ export type LearningParams = {
   lessonBootstrapLevel: number;
   l2AlphaW0: number;
   l2AlphaPayout: number;
+  /** VAL-116: share of the pool wealth spent on each lesson test. */
+  l2AlphaSpendFraction: number;
+  /** VAL-116: the pool is exhausted when the next test level would be below this. */
+  l2AlphaExhaustedLevel: number;
   comparisonsFdrQ: number;
   comparisonLookAlpha: number;
   comparisonLockoutSessions: number;
@@ -241,6 +288,18 @@ export type StatsParams = {
   codeReuseGapSessions: number;
   /** VAL-110 (vi): variance of the daily Sharpe when fewer than 2 families have development rows. */
   dsrDefaultSrVariance: number;
+  /** VAL-112: how the validation error budget is spent (O-43). */
+  valErrorBudgetMode: (typeof VAL_ERROR_BUDGET_MODES)[number];
+  /** VAL-112: family-wise error per lineage and split version (W0). */
+  valFwerPerLineage: number;
+  /** ARN-109: settlement used for replay statistics (O-48). */
+  settlementStatsMode: (typeof SETTLEMENT_STATS_MODES)[number];
+  /** VAL-115: annual Sharpe the minimum backtest length is computed for. */
+  minbtlTargetSharpe: number;
+  /** VAL-114: daily rank quality. */
+  rankIcMinCodes: number;
+  rankIcBootstrapReplicates: number;
+  rankIcBootstrapBlocks: "monthly" | "weekly";
 };
 
 export type KillswitchParams = {
@@ -297,6 +356,8 @@ export type AgentParams = {
     directorNet: Rational;
     holderNewOrIncrease: Rational;
     holderDecrease: Rational;
+    /** AGT-136: weight of a net director sale; equals directorNet unless set (v1). */
+    directorSale: Rational;
   };
   regime: RegimeParams;
   /** "HH:MM" Melbourne time of the decision cut-off. */
@@ -307,6 +368,7 @@ export type AgentParams = {
   /** D-096 #16: nights a keyword breaker waits for its confirmation before it reads green again. */
   tbKwConfirmSessions: number;
   arn011: Arn011Params;
+  entry: EntryParams;
   specConstants: SpecConstantParams;
   cif: CifParams;
   progress: ProgressParams;
@@ -366,6 +428,9 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       minGain: pct("f1_min_gain_pct"),
       maxHold: num("f1_max_hold"),
       highLookback: num("f1_high_lookback"),
+      returnWindowSessions: num("f1_return_window_sessions"),
+      momentumVariant: str("f1_momentum_variant") as F1Params["momentumVariant"],
+      rankVariant: str("f1_rank_variant") as F1Params["rankVariant"],
     },
     f2: {
       eventArMin: pct("f2_event_ar_min_pct"),
@@ -380,12 +445,15 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       trailAfter: pct("f3_trail_after_pct"),
       trailAtr: rat("f3_trail_atr"),
       timeExit: num("f3_time_exit"),
+      surpriseMode: str("f3_surprise_mode") as F3Params["surpriseMode"],
     },
     f4: {
       rsi2Max: num("f4_rsi2_max"),
       rsi14Max: num("f4_rsi14_max"),
       timeExit: num("f4_time_exit"),
       stopAtr: rat("f4_stop_atr"),
+      entryVariant: str("f4_entry_variant") as F4Params["entryVariant"],
+      rankVariant: str("f4_rank_variant") as F4Params["rankVariant"],
     },
     f5: {
       volumeRatioMin: rat("f5_volume_ratio_min"),
@@ -395,6 +463,7 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       stopCap: pct("f5_stop_cap_pct"),
       trailAtr: rat("f5_trail_atr"),
       timeStop: num("f5_time_stop"),
+      defaultUniverse: str("f5_default_universe") as F5Params["defaultUniverse"],
     },
     f6: {
       minClasses: num("f6_min_classes"),
@@ -411,6 +480,8 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       directorNet: ratFromNumber(weights.director_net),
       holderNewOrIncrease: ratFromNumber(weights.holder_new_or_increase),
       holderDecrease: ratFromNumber(weights.holder_decrease),
+      // AGT-136: absent = follows director_net (v1 behaviour).
+      directorSale: ratFromNumber(weights.director_sale ?? weights.director_net),
     },
     regime: {
       smaSessions: regime.sma_sessions,
@@ -439,6 +510,16 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       rangeDaysWindow: num("arn011_range_days_window"),
       rangeDaysMin: num("arn011_range_days_min"),
     },
+    entry: {
+      maxStopDistance: pct("max_stop_distance_pct"),
+      costGateK: rat("cost_gate_k"),
+      costGateMinRows: num("cost_gate_min_rows"),
+      secondPositionMaxCorr: num("second_position_max_corr"),
+      secondPositionCorrSessions: num("second_position_corr_sessions"),
+      dedupWindowSessions: num("dedup_window_sessions"),
+      dedupMinhashThreshold: num("dedup_minhash_threshold"),
+      indexChangeWindowSessions: num("index_change_window_sessions"),
+    },
     specConstants: {
       f5DryUpRatio: rat("f5_dry_up_ratio"),
       f5DryUpSessions: num("f5_dry_up_sessions"),
@@ -458,6 +539,8 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       lessonBootstrapLevel: num("lesson_bootstrap_level"),
       l2AlphaW0: num("l2_alpha_w0"),
       l2AlphaPayout: num("l2_alpha_payout"),
+      l2AlphaSpendFraction: num("l2_alpha_spend_fraction"),
+      l2AlphaExhaustedLevel: num("l2_alpha_exhausted_level"),
       comparisonsFdrQ: num("comparisons_fdr_q"),
       comparisonLookAlpha: num("comparison_look_alpha"),
       comparisonLockoutSessions: num("comparison_lockout_sessions"),
@@ -533,6 +616,15 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       eventCoverageMin: pct("event_coverage_min_pct"),
       codeReuseGapSessions: num("code_reuse_gap_sessions"),
       dsrDefaultSrVariance: num("dsr_default_sr_variance"),
+      valErrorBudgetMode: str("val_error_budget_mode") as StatsParams["valErrorBudgetMode"],
+      valFwerPerLineage: num("val_fwer_per_lineage"),
+      settlementStatsMode: str("settlement_stats_mode") as StatsParams["settlementStatsMode"],
+      minbtlTargetSharpe: num("minbtl_target_sharpe"),
+      rankIcMinCodes: num("rank_ic_min_codes"),
+      rankIcBootstrapReplicates: num("rank_ic_bootstrap_replicates"),
+      rankIcBootstrapBlocks: str(
+        "rank_ic_bootstrap_blocks",
+      ) as StatsParams["rankIcBootstrapBlocks"],
     },
     killswitch: {
       tradesPerLook: num("killswitch_trades_per_look"),

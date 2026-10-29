@@ -23,6 +23,7 @@ import type { AgentParams } from "./params";
 import { initialStop } from "./families/exits";
 import type { Candidate, CsRule, EventFact, ExitPlan, Family, RegimeLabel } from "./families/types";
 import { roundHalfAway } from "./regime";
+import { ENTRY_SKIP_REASONS } from "./schema";
 import { cardBreakers, BREAKER_CATALOGUE, type CardBreaker } from "./thesisBreakers";
 
 export const CARD_SCHEMA_VERSION = 1;
@@ -56,8 +57,23 @@ export const FAMILY_THESIS: Readonly<Record<Family, string>> = {
   F6: "Consensus: several independent evidence classes agree on the same code.",
 };
 
-const NOT_TAKEN =
-  /^(rank|positions_full|holding|reentry_block|corporate_action|no_facts|gate|control_paused|control_killed|rejected:[a-z_,]+)$/;
+// The M14 skip words (ENTRY_SKIP_REASONS: stop distance, cost gate, second position, SHOCK abstain,
+// index change) join the v1 reasons.
+const NOT_TAKEN = new RegExp(
+  `^(rank|positions_full|holding|reentry_block|corporate_action|no_facts|gate|control_paused|control_killed|${ENTRY_SKIP_REASONS.join("|")}|rejected:[a-z_,]+)$`,
+);
+
+/**
+ * M14 vocabulary of `other_flags` on a card (free-form list, so this is documentation plus a
+ * single source for the card words in the UI): the cost gate had too few rows (D-214), the
+ * second-position test fell back to one leg (D-217), and the AGT-135 next-close reversal.
+ */
+export const M14_CARD_FLAGS = [
+  "cost_gate_unmeasured",
+  "industry_unknown",
+  "corr_unknown",
+  "event_reversed_next_close",
+] as const;
 
 // ---- types -------------------------------------------------------------------------------------
 

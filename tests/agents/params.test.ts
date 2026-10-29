@@ -56,6 +56,9 @@ describe("defaultAgentParams equals ch.15", () => {
       minGain: r(1n, 20n),
       maxHold: 120,
       highLookback: 250,
+      returnWindowSessions: 126, // M14 switches: v1 behaviour at the defaults
+      momentumVariant: "v1",
+      rankVariant: "v1",
     });
     expect(p.f2).toEqual({
       eventArMin: r(3n, 100n),
@@ -70,8 +73,16 @@ describe("defaultAgentParams equals ch.15", () => {
       trailAfter: r(1n, 10n),
       trailAtr: r(5n, 2n),
       timeExit: 20,
+      surpriseMode: "category",
     });
-    expect(p.f4).toEqual({ rsi2Max: 10, rsi14Max: 30, timeExit: 10, stopAtr: r(2n) });
+    expect(p.f4).toEqual({
+      rsi2Max: 10,
+      rsi14Max: 30,
+      timeExit: 10,
+      stopAtr: r(2n),
+      entryVariant: "v1",
+      rankVariant: "v1",
+    });
     expect(p.f5).toEqual({
       volumeRatioMin: r(3n),
       arMin: r(3n, 100n),
@@ -80,6 +91,7 @@ describe("defaultAgentParams equals ch.15", () => {
       stopCap: r(1n, 5n),
       trailAtr: r(3n),
       timeStop: 30,
+      defaultUniverse: "U2", // O-49 (D-221)
     });
     expect(p.f6).toEqual({
       minClasses: 3,
@@ -124,6 +136,7 @@ describe("defaultAgentParams equals ch.15", () => {
       directorNet: r(1n, 2n),
       holderNewOrIncrease: r(1n, 4n),
       holderDecrease: r(1n, 4n),
+      directorSale: r(1n, 2n), // follows director_net until a challenger sets it (AGT-136)
     });
     expect(p.decisionCutoff).toBe("18:10");
     expect(p.thesisBreakersMin).toBe(3);

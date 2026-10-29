@@ -4,7 +4,7 @@
 //
 // Idempotent per ISO week: a run id is `replay:learning:<market>:<week>:<snapshot>:<commit>`, finished
 // stages are recorded as `replay_stat` rows (scope `learning`, metric `stage:<name>`), and a run skips
-// every stage a run of the same week already finished. A week whose six stages are all recorded is a
+// every stage a run of the same week already finished. A week whose stages are all recorded is a
 // no-op (`learningDone`). A stage that ends over `replay_light_minutes` stops the run at that boundary
 // with `paused_budget`; its output is dropped and the next run resumes from it. Stage writers are
 // idempotent, so a stage cut off after its database writes simply runs again and writes nothing new.
@@ -27,6 +27,7 @@ import {
 } from "@/lib/learning/weeklyStages";
 import {
   LEARNING_SCOPE,
+  noopStage,
   RESUMABLE_STAGES,
   runWeekly,
   stageMetric,
@@ -161,10 +162,15 @@ export async function runLearning(o: LearningRunOptions): Promise<LearningOutput
       forward,
       comparisons: wrap(comparisonsStage),
       lessons: wrap(lessonsStage),
+      // M14 WP0: registered with no-op stubs; WP6 (preregistered), WP3 (robustness) and WP4 (rankIc)
+      // replace them with `wrap(...)` of their stage functions.
+      preregistered: noopStage,
       challengers: wrap(challengersStage),
       rolls: wrap(rollsStage),
       arn076: wrap(arn076Stage),
       factors: wrap(factorsStage),
+      robustness: noopStage,
+      rankIc: noopStage,
     },
   });
 
