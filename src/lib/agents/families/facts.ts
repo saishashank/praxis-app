@@ -11,7 +11,7 @@ import {
 } from "../indicators";
 import type { AgentParams } from "../params";
 import type { EventRow } from "../schema";
-import { makeRational } from "@/lib/money/rational";
+import { makeRational, type Rational } from "@/lib/money/rational";
 import type { CodeFacts, EventFact, Tier } from "./types";
 
 const PPM = 1_000_000n; // threshold-ok: parts-per-million storage unit of vol_ratio_ppm
@@ -86,8 +86,31 @@ export function buildCodeFacts(input: CodeFactsInput, p: AgentParams): CodeFacts
   };
 }
 
+/**
+ * AGT-135 display flag: the day0 -> day0+1 close return has the opposite sign to the day-0
+ * abnormal return. null when either sign is zero or unknown (day 0 + 1 has no bar yet). Never a
+ * rule input.
+ */
+export function reversedNextClose(
+  ar: Rational | null,
+  day0Close: bigint | null,
+  nextClose: bigint | null,
+): boolean | null {
+  if (ar === null || day0Close === null || nextClose === null) return null;
+  if (ar.num === 0n || nextClose === day0Close) return null;
+  return ar.num > 0n !== nextClose > day0Close;
+}
+
+/** The day-0 close and the close of the next session, when known (adjusted basis of one source). */
+export type NextCloses = { readonly day0Close: bigint | null; readonly nextClose: bigint | null };
+
 /** A stored event row as the rules read it (rule-derived fields only, AGT-011a). */
-export function eventFactFromRow(row: EventRow, day0LowMicro: bigint | null): EventFact {
+export function eventFactFromRow(
+  row: EventRow,
+  day0LowMicro: bigint | null,
+  closes?: NextCloses,
+): EventFact {
+  const ar = arOf(row);
   return {
     id: `${row.source}|${row.ann_id}`,
     code: row.code,
@@ -96,9 +119,13 @@ export function eventFactFromRow(row: EventRow, day0LowMicro: bigint | null): Ev
     category: row.category,
     priceSensitive: row.price_sensitive === 1,
     polarity: row.polarity,
-    ar: arOf(row),
+    ar,
     volRatio: row.vol_ratio_ppm === null ? null : makeRational(BigInt(row.vol_ratio_ppm), PPM),
     timed: row.timed === 1,
     day0LowMicro,
+    categoryDetail: row.category_detail ?? null,
+    ...(closes === undefined
+      ? {}
+      : { reversedNextClose: reversedNextClose(ar, closes.day0Close, closes.nextClose) }),
   };
 }
