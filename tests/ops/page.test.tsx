@@ -47,25 +47,37 @@ describe("ops page", () => {
     expect(ops.loadOps).not.toHaveBeenCalled();
   });
 
-  it("shows due and overdue tasks with a button, finished and future ones without", async () => {
+  it("groups tasks Overdue / Due soon / Done; one Mark done and a text status pill per tickable row", async () => {
     guard.requireUser.mockResolvedValueOnce(owner);
     ops.loadOps.mockResolvedValueOnce(model());
     render(await OpsPage());
     expect(screen.getByRole("heading", { level: 1, name: "Ops checklist" })).toBeInTheDocument();
     expect(screen.getByText(/Today is Mon, 5 Oct 2026/)).toBeInTheDocument();
-    const needs = screen.getByRole("region", { name: "Needs doing" });
+    const overdue = screen.getByRole("region", { name: /^Overdue/ });
+    const soon = screen.getByRole("region", { name: /^Due soon/ });
+    const done = screen.getByRole("region", { name: /^Done/ });
     // monthly (Sat 3 Oct), offsite (1 Oct), restore drill (1 Oct), calendar (1 Nov 2025), token rotation
-    expect(within(needs).getAllByText(/Monthly checks/).length).toBeGreaterThan(0);
+    expect(within(overdue).getAllByText(/Monthly checks/).length).toBeGreaterThan(0);
     expect(
-      within(needs).getByText(/Overdue by 2 days \(due Sat, 3 Oct 2026\)/),
+      within(overdue).getByText(/Overdue by 2 days \(due Sat, 3 Oct 2026\)/),
     ).toBeInTheDocument();
-    expect(within(needs).getAllByText(/Rotate turso_token/).length).toBeGreaterThan(0);
-    expect(within(needs).getAllByRole("button", { name: /Mark done/ }).length).toBe(5);
-    const rest = screen.getByRole("region", { name: "Done and coming up" });
-    expect(within(rest).getAllByText(/Weekly review/).length).toBeGreaterThan(0);
-    expect(within(rest).getByText(/Next due Sat, 10 Oct 2026/)).toBeInTheDocument();
-    expect(within(rest).getAllByText(/ASIC CFD leverage label/).length).toBeGreaterThan(0);
-    expect(within(rest).queryByRole("button")).toBeNull();
+    // exactly one Mark done per overdue row, each row with a status pill that carries text
+    const rows = within(overdue).getAllByRole("listitem");
+    expect(rows.length).toBe(4);
+    for (const r of rows) {
+      expect(within(r).getAllByRole("button", { name: /Mark done/ })).toHaveLength(1);
+      expect(r.querySelector('[data-kind="status"]')).toHaveTextContent("Overdue");
+    }
+    expect(within(done).getAllByText(/Weekly review/).length).toBeGreaterThan(0);
+    expect(within(done).getByText(/Next due Sat, 10 Oct 2026/)).toBeInTheDocument();
+    expect(within(done).queryByRole("button")).toBeNull();
+    expect(within(soon).getAllByText(/ASIC CFD leverage label/).length).toBeGreaterThan(0);
+    // the token rotation is due now (not yet overdue): one Mark done; the not-yet-due ones have none
+    expect(within(soon).getAllByText(/Rotate turso_token/).length).toBeGreaterThan(0);
+    expect(within(soon).getAllByRole("button", { name: /Mark done/ })).toHaveLength(1);
+    for (const r of within(soon).getAllByRole("listitem")) {
+      expect(r.querySelector('[data-kind="status"]')).toHaveTextContent(/^(Not due yet|Due)$/);
+    }
     const tokens = screen.getByRole("table", { name: "Token expiry dates" });
     expect(within(tokens).getByRole("rowheader", { name: "turso_token" })).toBeInTheDocument();
     expect(within(tokens).getByText("7")).toBeInTheDocument();

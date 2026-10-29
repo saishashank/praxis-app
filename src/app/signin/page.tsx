@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { buttonClass } from "@/components/ui/Button";
 import { signInAction } from "@/lib/auth/actions";
 import { safeCallbackUrl } from "@/lib/auth/callbackUrl";
 
@@ -27,6 +28,11 @@ export default async function SignInPage({ searchParams }: Props) {
         width={200}
         className="logo-dark h-auto"
       />
+      <p className="m-0 -mt-3 text-base font-medium text-text-muted">Learn. Earn. Repeat.</p>
+      <p className="m-0 text-sm text-text">
+        Praxis is a personal stock-learning simulator: it picks, tracks and reviews paper trades,
+        with no real money.
+      </p>
       {sp.error ? (
         <p role="alert" className="text-sm">
           This account is not authorised.
@@ -34,7 +40,7 @@ export default async function SignInPage({ searchParams }: Props) {
       ) : null}
       <form action={signInAction}>
         <input type="hidden" name="callbackUrl" value={callbackUrl} />
-        <button type="submit" className="rounded border border-current px-4 py-2">
+        <button type="submit" className={buttonClass("default", "min-h-11 px-6")}>
           Sign in with Google
         </button>
       </form>

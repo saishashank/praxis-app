@@ -21,7 +21,7 @@ import {
 import { isGrantLive } from "@/lib/view/mask";
 import { ActionForm } from "./ActionForm";
 import { RCell, RHead, RRow, RTable } from "@/components/ui/ResponsiveTable";
-import { RevokeButton } from "./RevokeButton";
+import { ActionSheet } from "./ActionSheet";
 import {
   addUserAction,
   changeRoleAction,
@@ -35,7 +35,6 @@ import {
 export const dynamic = "force-dynamic";
 
 const FIELD = "min-h-6 min-w-0 rounded-md border border-border bg-bg p-2 text-text";
-const LINK_BTN = "min-h-6 text-accent underline";
 
 const LABEL = (r: string) => r.charAt(0).toUpperCase() + r.slice(1);
 
@@ -76,6 +75,7 @@ export default async function UsersPage() {
       <header className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Users &amp; roles</h1>
         <p className="m-0 text-sm text-text-muted">
+          Who can sign in to Praxis, what each person can see, and the changes only you can make.
           Times are shown in Australia/Melbourne. Revocation takes effect on the next request.
         </p>
         <Link href="/" className="text-sm text-accent underline">
@@ -110,47 +110,58 @@ export default async function UsersPage() {
           {users.map((u) => (
             <RRow key={u.id}>
               <RHead>{u.email}</RHead>
-              <RCell label="Role">
-                {u.role === "owner" || u.status === "revoked" ? (
-                  LABEL(u.role)
-                ) : (
-                  <ActionForm
-                    action={changeRoleAction}
-                    className="flex flex-wrap items-center justify-end gap-2 sm:justify-start"
-                  >
-                    <input type="hidden" name="userId" value={u.id} />
-                    <select
-                      name="role"
-                      defaultValue={u.role}
-                      aria-label={`Role for ${u.email}`}
-                      className={FIELD}
-                    >
-                      <option value="viewer">Viewer</option>
-                      <option value="editor">Editor</option>
-                    </select>
-                    <Button type="submit" variant="secondary">
-                      Save
-                    </Button>
-                  </ActionForm>
-                )}
-              </RCell>
+              <RCell label="Role">{LABEL(u.role)}</RCell>
               <RCell label="Status">{LABEL(u.status)}</RCell>
               <RCell label="Last change">{formatMelbourne(u.updatedAt, tf)}</RCell>
               <RCell label="Actions">
                 {u.status === "revoked" ? null : (
-                  <div className="flex flex-wrap items-center justify-end gap-4 sm:justify-start">
-                    <ActionForm action={signOutEverywhereAction}>
-                      <input type="hidden" name="userId" value={u.id} />
-                      <button
-                        type="submit"
-                        aria-label={`Sign out everywhere: ${u.email}`}
-                        className={LINK_BTN}
-                      >
-                        Sign out everywhere
-                      </button>
-                    </ActionForm>
+                  <div className="flex flex-wrap items-center justify-end gap-2 sm:justify-start">
                     {u.role !== "owner" && (
-                      <RevokeButton userId={u.id} email={u.email} action={revokeUserAction} />
+                      <ActionSheet
+                        label="Change role"
+                        forWhom={u.email}
+                        title={`Change role for ${u.email}`}
+                        description="The new role applies on their next request."
+                        submitLabel="Save role"
+                        doneText="Role saved"
+                        action={changeRoleAction}
+                      >
+                        <input type="hidden" name="userId" value={u.id} />
+                        <select
+                          name="role"
+                          defaultValue={u.role}
+                          aria-label={`Role for ${u.email}`}
+                          className={FIELD}
+                        >
+                          <option value="viewer">Viewer</option>
+                          <option value="editor">Editor</option>
+                        </select>
+                      </ActionSheet>
+                    )}
+                    <ActionSheet
+                      label="Sign out everywhere"
+                      forWhom={u.email}
+                      title={`Sign ${u.email} out everywhere?`}
+                      description="Every device they are signed in on is signed out. They can sign in again."
+                      submitLabel="Sign out everywhere"
+                      doneText="Signed out everywhere"
+                      action={signOutEverywhereAction}
+                    >
+                      <input type="hidden" name="userId" value={u.id} />
+                    </ActionSheet>
+                    {u.role !== "owner" && (
+                      <ActionSheet
+                        label="Revoke"
+                        forWhom={u.email}
+                        title={`Revoke access for ${u.email}?`}
+                        description="They are not emailed. Revocation takes effect on their next request."
+                        submitLabel="Revoke access"
+                        danger
+                        doneText="Access revoked"
+                        action={revokeUserAction}
+                      >
+                        <input type="hidden" name="userId" value={u.id} />
+                      </ActionSheet>
                     )}
                   </div>
                 )}
@@ -212,16 +223,18 @@ export default async function UsersPage() {
                     <RCell label="Status">{status}</RCell>
                     <RCell label="Actions">
                       {status === "Live" && (
-                        <ActionForm action={revokeUnmaskAction}>
+                        <ActionSheet
+                          label="Revoke"
+                          forWhom={`unmask grant: ${who(g.userId, names)}`}
+                          title={`Revoke the unmask grant for ${who(g.userId, names)}?`}
+                          description="They go back to seeing Stock A, Stock B and so on."
+                          submitLabel="Revoke grant"
+                          danger
+                          doneText="Grant revoked"
+                          action={revokeUnmaskAction}
+                        >
                           <input type="hidden" name="grantId" value={g.id} />
-                          <button
-                            type="submit"
-                            aria-label={`Revoke unmask grant: ${who(g.userId, names)}`}
-                            className={LINK_BTN}
-                          >
-                            Revoke
-                          </button>
-                        </ActionForm>
+                        </ActionSheet>
                       )}
                     </RCell>
                   </RRow>
