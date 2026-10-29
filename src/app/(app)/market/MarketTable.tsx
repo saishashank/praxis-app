@@ -4,10 +4,14 @@
 import Link from "next/link";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/States";
-import { GainLoss, Masked } from "@/components/ui/Values";
+import { Pill } from "@/components/ui/Pill";
+import { hueStyle } from "@/components/ui/hue";
+import { Masked } from "@/components/ui/Values";
 import { formatCount, formatMicro } from "@/lib/view/format";
 import type { MarketRow } from "@/lib/ui/loaders/market";
+import { Change, FIG } from "./Figures";
 import { RowActions, type WatchMode } from "./RowActions";
+import { sectorHueOf, sectorKey } from "./sectorHue";
 import type { WatchResult } from "./messages";
 import { PRICE_LABEL, volumeVsUsual } from "./text";
 
@@ -55,17 +59,40 @@ export function MarketTable({
     {
       key: "company",
       header: "Company",
-      cell: (r) => (
-        <Link href={`/market/${encodeURIComponent(r.slug)}`} className="underline">
-          {r.name ? (
-            <>
-              {r.name} <span className="font-mono text-text-muted">{r.stock}</span>
-            </>
-          ) : (
-            r.stock
-          )}
-        </Link>
-      ),
+      cell: (r) => {
+        const hue = sectorHueOf(r.sector);
+        const key = sectorKey(r.sector);
+        return (
+          <div
+            data-sector-rail={key ?? "none"}
+            style={hueStyle(hue ?? "outcome-flat")}
+            className="flex min-w-0 items-stretch gap-2"
+          >
+            <span aria-hidden="true" className="w-1 shrink-0 rounded-full bg-[var(--h-fill)]" />
+            <span className="flex min-w-0 flex-col items-start gap-1">
+              <Link
+                href={`/market/${encodeURIComponent(r.slug)}`}
+                className="inline-flex min-h-6 items-center underline"
+              >
+                {r.name ? (
+                  <>
+                    {r.name} <span className="ml-1 text-text-muted">{r.stock}</span>
+                  </>
+                ) : (
+                  r.stock
+                )}
+              </Link>
+              {r.sector && key ? (
+                <Pill kind="sector" value={key}>
+                  {r.sector}
+                </Pill>
+              ) : r.sector ? (
+                <span className="text-xs text-text-muted">{r.sector}</span>
+              ) : null}
+            </span>
+          </div>
+        );
+      },
     },
     {
       key: "sizeBadge",
@@ -77,24 +104,20 @@ export function MarketTable({
       header: PRICE_LABEL,
       align: "right",
       cell: (r) =>
-        r.close === null ? (
-          <Masked />
-        ) : (
-          <span className="font-mono">{formatMicro(r.close.micro)}</span>
-        ),
+        r.close === null ? <Masked /> : <span className={FIG}>{formatMicro(r.close.micro)}</span>,
     },
     {
       key: "change",
       header: "Day change",
       align: "right",
-      cell: (r) => <GainLoss value={r.changePpm} kind="ppm" />,
+      cell: (r) => <Change ppm={r.changePpm} />,
     },
     {
       key: "volume",
       header: "Volume",
       align: "right",
       cell: (r) => (
-        <span className="font-mono">
+        <span className={FIG}>
           {formatCount(r.volume)}
           {showVolume ? (
             <span className="block text-xs text-text-muted">
@@ -105,12 +128,10 @@ export function MarketTable({
       ),
     },
   ];
-  if (showVolume && !masked) {
-    columns.push({ key: "sector", header: "Sector", cell: (r) => r.sector ?? "n/a" });
-  }
   columns.push({
     key: "watch",
     header: "Watch and overview",
+    align: "right",
     cell: (r) => (
       <RowActions
         slug={r.slug}

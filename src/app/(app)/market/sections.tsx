@@ -5,10 +5,10 @@
 import Link from "next/link";
 import { use, type ReactNode } from "react";
 import { Sparkline } from "@/components/charts/Sparkline";
-import { HeatGrid } from "@/components/charts/Grids";
+import { SectorHeatGrid } from "@/components/charts/Grids";
 import { Banner, EmptyState } from "@/components/ui/States";
-import { Chips, Tabs } from "@/components/ui/Nav";
-import { GainLoss } from "@/components/ui/Values";
+import { Chips } from "@/components/ui/Nav";
+import { Segmented } from "@/components/ui/Segmented";
 import type { IndexStrip } from "@/lib/ui/loaders/company";
 import {
   marketHref,
@@ -17,9 +17,11 @@ import {
   type MarketQuery,
   type MarketSection,
 } from "@/lib/ui/loaders/market";
+import { Change } from "./Figures";
 import { MarketTable } from "./MarketTable";
 import type { WatchResult } from "./messages";
 import type { WatchMode } from "./RowActions";
+import { sectorKey } from "./sectorHue";
 import { ppmToPercent } from "./text";
 
 type Star = (fd: FormData) => Promise<WatchResult>;
@@ -120,7 +122,7 @@ export function IndexSection({ index, masked }: { index: Promise<IndexStrip>; ma
       <span>
         {masked ? "Market index" : strip.code}, close of {strip.d}
       </span>
-      <GainLoss value={strip.changePpm} kind="ppm" />
+      <Change ppm={strip.changePpm} />
       <Sparkline values={strip.closes} label="Main index, last month" />
     </div>
   ) : (
@@ -149,13 +151,14 @@ export function MarketStatus({ model, q }: { model: Promise<MarketModel>; q: Mar
       ) : null}
       {m.sized && !m.masked ? (
         <div className="flex flex-col gap-1">
-          <Tabs
+          <Segmented
             label="Company size"
+            value={m.size}
             items={sizes.map((z) => ({
               // a new size starts every list on its first page
               href: marketHref(q, { size: z.id, upPage: 1, downPage: 1, tradedPage: 1, page: 1 }),
+              value: z.id,
               label: z.label,
-              current: z.id === m.size,
             }))}
           />
           <p className="m-0 text-xs text-text-muted">
@@ -244,9 +247,13 @@ export function SectorsSection({ model, q }: { model: Promise<MarketModel>; q: M
   const all: MarketSection[] = q.open.includes("all") ? q.open : [...q.open, "all"];
   return (
     <>
-      <HeatGrid
+      <SectorHeatGrid
         label="Average day change by sector"
-        cells={m.sectors.map((s) => ({ label: s.sector, value: ppmToPercent(s.avgChangePpm) }))}
+        cells={m.sectors.map((s) => ({
+          label: s.sector,
+          value: ppmToPercent(s.avgChangePpm),
+          hue: sectorKey(s.sector) === null ? null : `sector-${sectorKey(s.sector)}`,
+        }))}
       />
       <Chips
         label="Open a sector"
