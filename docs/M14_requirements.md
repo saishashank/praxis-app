@@ -4,7 +4,7 @@ Delta specification extract from `Requirement/v2/spec/` chapters 10–14; contin
 
 ## Scope
 
-M14 implements returns, validation and data enhancements needed before the arena simulator can certify the v1 rules and their pre-registered challengers. It touches the simulator, validation and data layers (not LLM features). M14 runs in parallel with M11 after M8.1 is pushed.
+M14 is the second V2 milestone in the order of value (BLD-046: M8.1 → M14 → M15 …). It touches the simulator, validation and data layers; its LLM items are router hardening only, not new LLM features (BLD-045 allows it to run beside M11). Already shipped in M8.1 and not repeated here: DAT-231, GL-02/03/05/10 and LLM-070. §10.V2.2 also holds FAM-008, FAM-009, the F5 liquidity floor (O-49) and §10.V2.8 the ARN-084 amendment (O-45); these are outside the ch. 12 ID ranges but are included in M14 (design D-213).
 
 **Parent chapters:**
 - ch. 10 V2 §10.V2.2 (Returns: sizing, costs and exits) — FAM-004…007, ARN-106…109
@@ -22,10 +22,19 @@ M14 implements returns, validation and data enhancements needed before the arena
 An entry is skipped when the initial stop distance exceeds `max_stop_distance_pct` (default 12%; bounds 6–20). Logged as `skipped_stop_distance`. This cap wins over any family-specific wider cap (e.g. F5 20%, CTX-013).
 
 #### FAM-005: Per-signal cost gate
-An entry requires the family's expected **gross** move — the development-split median price move of the setup **before** costs (ARN-071 outcomes with costs added back) — to be ≥ `cost_gate_k` (default 2.0; bounds 1.5–3.0) × the round-trip cost of its ADV bucket (fees + ARN-032 slippage). Costs are counted once, in the gate, never again in the compared figure. Reference figures at A$600 and A$5/side: 1.67% fees; 1.87–4.07% with slippage by bucket. Logged as `skipped_cost_gate`. This supersedes the direct ARN-071 threshold; the family-median form (≥ 30 matched setups) is the fallback when a family has fewer.
+An entry requires the family's expected **gross** move — the development-split median price move of the setup **before** costs (ARN-071 outcomes with costs added back) — to be ≥ `cost_gate_k` (default 2.0; bounds 1.5–3.0) × the round-trip cost of its ADV bucket (fees + ARN-032 slippage). Costs are counted once, in the gate, never again in the compared figure. Reference figures at A$600 and A$5/side: 1.67% fees; 1.87–4.07% with slippage by bucket. Logged as `skipped_cost_gate`. The spec marks this family-median form as superseded by CTX-022a (matched-setup gross move per signal, ch. 17, M15); the family-median form stays as the fallback for a family with fewer than 30 matched setups. Before the Cortex exists it is the only form (design D-214).
 
 #### FAM-006: Second-position limits
-When an execution can hold two positions, the second must be in a different GICS sub-industry and have ≤ `second_position_max_corr` (default 0.6; bounds 0.3–0.9) 60-session return correlation with the first; else the next-ranked candidate is taken. Needs the sector map (DAT-236 / O-23b, ASX listed-companies with GICS mapping).
+When an execution can hold two positions, the second must be in a different GICS sub-industry and have ≤ `second_position_max_corr` (default 0.6; bounds 0.3–0.9) 60-session return correlation with the first; else the next-ranked candidate is taken. Needs the sector map (the spec cites DAT-236 / O-23b). The ASX listed-companies file gives a GICS industry group, not a sub-industry (design D-218).
+
+#### FAM-008: Signal validity and order expiry (in §10.V2.2)
+A signal is valid for one session: its next-open order is filled, cancelled or expired at that open and never resubmitted; a fresh signal on a later night may signal the code again (FAM-002 cooling-off still applies).
+
+#### FAM-009: SHOCK sizing below two parcels (in §10.V2.2)
+Half size in SHOCK applies only when deployable cash is at least two marketable parcels; below that the execution makes no new entry, recorded as `abstain_shock`.
+
+#### F5 liquidity floor (in §10.V2.2, O-49)
+F5's default universe becomes U2 (ADV ≥ A$250k); U3 runs only as a labelled stress variant.
 
 #### FAM-007: Ex-date stop comparison
 On an ex-dividend session the stop is compared against close + cash dividend (needs DAT-231, vendor corporate actions).
@@ -48,13 +57,13 @@ Cohort and time-to-double statistics use the `conservative` settlement variant; 
 **Alpha-spending per lineage** (Foster–Stine, as already implemented for L2 lessons) with family-wise error 0.05 per lineage and the trial ledger unchanged. The absolute gate (ARN-081) and holdout confirmation (ARN-086) stay. Every generated hypothesis, Committee rating, sizing/stop variant and pattern test is counted (at most three sizing/stop variants per family per quarter). Owner decision O-43: alpha-spending per lineage.
 
 #### VAL-113: Power arithmetic
-All sample-size planning uses the actual per-test level (0.000417 under v1, or the VAL-112 level once chosen); the ch. 05 minimum of 100 trades is a floor, not a power target. Pattern tests (AGT-031) are planned at 80% power with α from the ledger and **effective N**. They start in the order: bullish engulfing, piercing, bullish harami, morning star, hammer. M15 computes and publishes the sample-size numbers.
+All sample-size planning uses the actual per-test level (0.000417 under v1, or the VAL-112 level once chosen); the ch. 05 minimum of 100 trades is a floor, not a power target. Pattern tests (AGT-031) are planned at 80% power with α from the ledger and **effective N**. They start in the order: bullish engulfing, piercing, bullish harami, morning star, hammer. The earlier sample-size figures are withdrawn; M15 computes and publishes the new numbers.
 
 #### VAL-114: Daily rank quality
 For each family's rank score, the nightly batch computes the cross-sectional rank correlation (IC) with the **D+1-close-to-D+2-close** excess return over the U1 median (no same-day leakage), with a monthly block bootstrap. About 250 cross-sections a year make ranking changes testable long before trade-level promotion. Descriptive; it feeds Lane B only as a screening statistic for rank challengers.
 
 #### VAL-115: Minimum backtest length
-Each lineage shows the MinBTL for its number of trials and is labelled "too short" until met.
+Each lineage shows the MinBTL for its number of trials and is labelled "too short" until met. The spec marks the formula [VERIFY] against the primary paper.
 
 #### VAL-116: Lesson alpha pool
 Fixed-fraction spend per test and an explicit "effectively exhausted" status below α = 0.005 instead of the halving rule (Owner decision O-44, default).
@@ -67,7 +76,10 @@ Lane B's first challengers per family are pre-registered from the research (iter
 - Equal-weight three-factor composite (126-session momentum, low volatility, volume trend) as one rank challenger
 - Vol-scaled rank **with** an unscaled control arm
 
-Each is a counted trial.
+Each is a counted trial. O-46: 2–3 pre-registered challengers per family, and at most three sizing/stop variants per family per quarter, all counted.
+
+#### ARN-084 amended (§10.V2.8, O-45)
+Sleeve comparisons are descriptive and not charged to the lineage's trial budget.
 
 ### Data (DAT-232…237)
 
@@ -129,9 +141,15 @@ Each model's knowledge cut-off is stored; no Committee or steelman test window m
 | **AT-45** | Data additions | Yahoo fixture with dividends and splits; a split day; an index-change event. DAT-231 vendor rows present without an extra request; split-adjusted volume ratio correct; index-change event excluded from F3 and tagged. |
 | **AT-46** | LLM hardening | Roster config; a schema with a citation enum; a datamarked hostile pack; a classifier returning "bullish-ish". Retired models absent from every route; out-of-enum citation impossible; hostile pack causes no instruction following; fuzzy label rejected (LLM-070…073). |
 
+AT-46 also checks the LLM-070 roster half (retired models absent), which M8.1 built; M14 reuses that test.
+
+## Configuration keys (ch. 15 V2, M14 rows)
+
+`max_stop_distance_pct` 12 (6–20), `cost_gate_k` 2.0 (1.5–3.0; the same key serves CTX-022a), `second_position_max_corr` 0.6 (0.3–0.9), `val_error_budget_mode` alpha_spending (fixed | alpha_spending | bh_fdr), `val_fwer_per_lineage` 0.05 (0.01–0.10), `l2_alpha_spend_fraction` 0.1 (0.05–0.25), `rank_ic_bootstrap_blocks` monthly (monthly | weekly, fixed), `f5_default_universe` U2 (U1 | U2 | U3), `settlement_stats_mode` conservative (conservative | matched), `dedup_minhash_threshold` 0.85 (0.7–0.95). Keys the design adds are listed in `docs/M14_design.md` §2.7.
+
 ## Decisions
 
-(to be recorded as D-nnn continuing from the v1 sequence)
+D-213…D-252, in `docs/M14_design.md` §4 and the decision log.
 
 ## Parent requirements
 
