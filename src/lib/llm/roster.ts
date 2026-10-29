@@ -13,6 +13,16 @@ export type RosterEntry = {
   roles: readonly string[];
   limits: { rpm: number | null; rpd: number | null; tpm: number | null };
   trainsOnPrompts: boolean | null;
+  /**
+   * LLM-071: true = the route supports the provider's strict JSON-schema mode for this model; null =
+   * not confirmed, so no strict mode is requested (app-side validation always runs).
+   */
+  strictSchema: boolean | null;
+  /**
+   * LLM-075: the model's training cut-off as YYYY-MM from its model card (null = not published or not
+   * read). [VERIFY] against the card on `checkedOn`. A test window must start after it.
+   */
+  knowledgeCutoff: string | null;
   checkedOn: string;
   status: RosterStatus;
   sourceUrl: string;
@@ -32,6 +42,8 @@ export const ROSTER: readonly RosterEntry[] = [
     roles: ["R3"],
     limits: NO_LIMITS,
     trainsOnPrompts: true,
+    strictSchema: true,
+    knowledgeCutoff: "2025-01",
     checkedOn: CHECKED,
     status: "unverified",
     sourceUrl: GOOGLE,
@@ -43,6 +55,8 @@ export const ROSTER: readonly RosterEntry[] = [
     roles: ["R2"],
     limits: NO_LIMITS,
     trainsOnPrompts: true,
+    strictSchema: true,
+    knowledgeCutoff: "2025-01",
     checkedOn: CHECKED,
     status: "unverified",
     sourceUrl: GOOGLE,
@@ -54,6 +68,8 @@ export const ROSTER: readonly RosterEntry[] = [
     roles: ["R1"],
     limits: NO_LIMITS,
     trainsOnPrompts: true,
+    strictSchema: null,
+    knowledgeCutoff: null,
     checkedOn: CHECKED,
     status: "unverified",
     sourceUrl: GOOGLE,
@@ -65,6 +81,8 @@ export const ROSTER: readonly RosterEntry[] = [
     roles: ["R2"],
     limits: NO_LIMITS,
     trainsOnPrompts: true,
+    strictSchema: null,
+    knowledgeCutoff: null,
     checkedOn: CHECKED,
     status: "unverified",
     sourceUrl: GOOGLE,
@@ -76,6 +94,8 @@ export const ROSTER: readonly RosterEntry[] = [
     roles: ["R2", "R3"],
     limits: { rpm: 30, rpd: 1000, tpm: 8000 }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: false,
+    strictSchema: true,
+    knowledgeCutoff: "2024-06",
     checkedOn: CHECKED,
     status: "verified",
     sourceUrl: GROQ,
@@ -87,6 +107,8 @@ export const ROSTER: readonly RosterEntry[] = [
     roles: ["R1", "R2"],
     limits: { rpm: 30, rpd: 1000, tpm: 8000 }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: false,
+    strictSchema: true,
+    knowledgeCutoff: "2024-06",
     checkedOn: CHECKED,
     status: "verified",
     sourceUrl: GROQ,
@@ -98,6 +120,8 @@ export const ROSTER: readonly RosterEntry[] = [
     roles: ["R2"],
     limits: { rpm: 30, rpd: 1000, tpm: 8000 }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: false,
+    strictSchema: null,
+    knowledgeCutoff: null,
     checkedOn: CHECKED,
     status: "verified",
     sourceUrl: GROQ,
@@ -109,6 +133,8 @@ export const ROSTER: readonly RosterEntry[] = [
     roles: ["R1"],
     limits: NO_LIMITS,
     trainsOnPrompts: false,
+    strictSchema: null,
+    knowledgeCutoff: null,
     checkedOn: CHECKED,
     status: "unverified",
     sourceUrl: GROQ,
@@ -120,6 +146,8 @@ export const ROSTER: readonly RosterEntry[] = [
     roles: ["R2"],
     limits: { rpm: 20, rpd: 50, tpm: null }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: null,
+    strictSchema: null,
+    knowledgeCutoff: null,
     checkedOn: CHECKED,
     status: "unverified",
     sourceUrl: OPENROUTER,
@@ -132,6 +160,8 @@ export const ROSTER: readonly RosterEntry[] = [
     roles: [],
     limits: NO_LIMITS,
     trainsOnPrompts: null,
+    strictSchema: null,
+    knowledgeCutoff: null,
     checkedOn: CHECKED,
     status: "retired",
     sourceUrl: GOOGLE,
@@ -143,6 +173,8 @@ export const ROSTER: readonly RosterEntry[] = [
     roles: [],
     limits: NO_LIMITS,
     trainsOnPrompts: null,
+    strictSchema: null,
+    knowledgeCutoff: null,
     checkedOn: CHECKED,
     status: "retired",
     sourceUrl: GOOGLE,
@@ -154,6 +186,8 @@ export const ROSTER: readonly RosterEntry[] = [
     roles: [],
     limits: NO_LIMITS,
     trainsOnPrompts: null,
+    strictSchema: null,
+    knowledgeCutoff: null,
     checkedOn: CHECKED,
     status: "retired",
     sourceUrl: "https://console.groq.com/docs/deprecations",
@@ -165,6 +199,8 @@ export const ROSTER: readonly RosterEntry[] = [
     roles: [],
     limits: NO_LIMITS,
     trainsOnPrompts: null,
+    strictSchema: null,
+    knowledgeCutoff: null,
     checkedOn: CHECKED,
     status: "retired",
     sourceUrl: "https://docs.github.com/en/github-models",
@@ -188,4 +224,50 @@ export function isRetired(provider: string, modelId: string): boolean {
       e.status === "retired" &&
       (e.modelId === "*" || e.modelId === modelId),
   );
+}
+
+/** LLM-071: does the roster say this model supports strict JSON-schema output? Unknown ids: no. */
+export function supportsStrictSchema(provider: string, modelId: string): boolean {
+  return ROSTER.some(
+    (e) =>
+      e.provider === provider &&
+      e.modelId === modelId &&
+      e.status !== "retired" &&
+      e.strictSchema === true,
+  );
+}
+
+const MONTH_RE = new RegExp("^\\d{4}-(0[1-9]|1[0-2])$");
+const DAY_RE = new RegExp("^\\d{4}-\\d{2}-\\d{2}$");
+
+/** The last day of a YYYY-MM cut-off month, as YYYY-MM-DD (UTC calendar arithmetic, no clock). */
+export function cutoffLastDay(cutoff: string): string {
+  if (!MONTH_RE.test(cutoff)) throw new Error(`cut-off must be YYYY-MM: ${cutoff}`);
+  const y = Number(cutoff.slice(0, 4));
+  const m = Number(cutoff.slice(5, 7));
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return `${cutoff}-${String(last).padStart(2, "0")}`;
+}
+
+/**
+ * LLM-075 / D-248: refuses a test window that starts on or before the model's knowledge cut-off (the
+ * model may have seen the window's data). A model with no recorded cut-off is refused too: the guard
+ * cannot clear it. Throws; returns nothing.
+ */
+export function assertWindowAfterCutoff(
+  provider: string,
+  modelId: string,
+  windowStartD: string,
+): void {
+  if (!DAY_RE.test(windowStartD))
+    throw new Error(`window start must be YYYY-MM-DD: ${windowStartD}`);
+  const hit = ROSTER.find((e) => e.provider === provider && e.modelId === modelId);
+  if (!hit) throw new Error(`${provider}/${modelId}: not in the roster`);
+  if (hit.knowledgeCutoff === null)
+    throw new Error(`${provider}/${modelId}: no knowledge cut-off recorded; window refused`);
+  const last = cutoffLastDay(hit.knowledgeCutoff);
+  if (windowStartD <= last)
+    throw new Error(
+      `${provider}/${modelId}: window starts ${windowStartD}, not after the knowledge cut-off ${hit.knowledgeCutoff}`,
+    );
 }
