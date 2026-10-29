@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { cn } from "@/components/ui/cn";
 import { activeTab, type TabId } from "@/lib/ui/nav";
+import { CheckIcon } from "@/components/ui/icons";
 import { HomeIcon, MarketIcon, NewsIcon, PicksIcon, ReviewsIcon, StrategiesIcon } from "./icons";
 
 export type TabView = { id: TabId; label: string; href: string; badge?: number };
@@ -78,6 +79,12 @@ export function TabBar({ tabs }: { tabs: TabView[] }) {
               >
                 {ICONS[t.id]}
                 {t.label}
+                {t.id === current ? (
+                  <>
+                    <CheckIcon aria-hidden="true" className="h-3.5 w-3.5" />
+                    <span className="sr-only"> (Selected)</span>
+                  </>
+                ) : null}
                 {badgeOf(t) !== null ? <Badge n={badgeOf(t)!} /> : null}
                 <TabPending />
               </Link>
@@ -97,12 +104,16 @@ export function TabBar({ tabs }: { tabs: TabView[] }) {
                 aria-current={t.id === current ? "page" : undefined}
                 className={cn(
                   "relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] leading-tight",
-                  t.id === current ? "font-semibold text-accent" : "text-text-muted",
+                  t.id === current ? "bg-surface-2 font-semibold text-accent" : "text-text-muted",
                 )}
               >
                 {ICONS[t.id]}
+                {t.id === current ? (
+                  <CheckIcon aria-hidden="true" className="absolute top-1 right-1 h-3 w-3" />
+                ) : null}
                 <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
                   {t.label}
+                  {t.id === current ? <span className="sr-only"> (Selected)</span> : null}
                   {badgeOf(t) !== null ? <Badge n={badgeOf(t)!} /> : null}
                 </span>
                 <TabPending />
