@@ -270,7 +270,11 @@ describe("F5 small/mid-cap discovery", () => {
 
   it("range position 0.75 passes, below fails", () => {
     const at = f5Bars({ high: 1_060_000n, low: DOLLAR, close: 1_045_000n }); // 0.75
-    expect(runFamilies(inputsOf([at], { events: [f5Event()] }), p).candidates).toHaveLength(1);
+    expect(
+      runFamilies(inputsOf([at], { events: [f5Event()] }), p).candidates.filter(
+        (x) => x.family === "F5",
+      ),
+    ).toHaveLength(1);
     const lower = f5Bars({ high: 1_060_000n, low: DOLLAR, close: 1_044_000n });
     expect(
       runFamilies(inputsOf([lower], { events: [f5Event()] }), p).candidates.some(

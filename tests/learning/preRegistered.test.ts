@@ -55,7 +55,12 @@ describe("releasePreRegistered", () => {
     const { db } = await world([...FAMILIES]);
     await releasePreRegistered(db, input);
     const v = async (id: string) =>
-      JSON.parse(String((await rows(db, "SELECT params_json FROM rule_version WHERE id = ?", [id]))[0]!.params_json)) as Record<string, unknown>;
+      JSON.parse(
+        String(
+          (await rows(db, "SELECT params_json FROM rule_version WHERE id = ?", [id]))[0]!
+            .params_json,
+        ),
+      ) as Record<string, unknown>;
     const f1 = await v("F1.v1");
     expect(await v("F1.v2")).toEqual({ ...f1, f1_return_window_sessions: 252 });
     expect(await v("F1.v3")).toEqual({ ...f1, f1_momentum_variant: "skip_month_u2" });
@@ -96,7 +101,9 @@ describe("releasePreRegistered", () => {
     const again = await releasePreRegistered(db, input);
     expect(again.created).toEqual([]);
     expect(again.alreadyRegistered).toHaveLength(10);
-    expect(await rows(db, "SELECT id FROM trial_ledger WHERE kind = 'challenger'")).toHaveLength(10);
+    expect(await rows(db, "SELECT id FROM trial_ledger WHERE kind = 'challenger'")).toHaveLength(
+      10,
+    );
   });
 
   it("skips a family without a lineage split and goes on with the others", async () => {

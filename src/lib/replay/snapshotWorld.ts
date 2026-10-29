@@ -335,6 +335,11 @@ export class SnapshotWorld implements CohortReplaySource {
     return { tier: r.tier, halted: list[hit >= 0 ? hit : 0]!.d === d && r.halted === 1 };
   }
 
+  /** GL-02: the decision cut-off (UTC) of session `d`, as batch 2b and the cohort replay derive it. */
+  decisionCutoffOf(d: string): string {
+    return decisionCutoffUtc(d, this.o.params.decisionCutoff);
+  }
+
   corpActions(code: string): readonly CorpActionRecord[] {
     return this.actions.filter((a) => a.code === code);
   }
