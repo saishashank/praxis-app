@@ -9,7 +9,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { AlertTierBadge } from "@/components/ui/Badges";
+import { Rail } from "@/components/ui/Family";
+import { Pill } from "@/components/ui/Pill";
+import { Segmented } from "@/components/ui/Segmented";
 import { InfoButton } from "@/components/ui/Overlays";
 import { Banner, EmptyState } from "@/components/ui/States";
 import { neverSuppressed } from "@/lib/alerts/tiers";
@@ -24,6 +26,7 @@ import {
 } from "@/lib/ui/loaders/news";
 import { envFor, loadShell } from "@/lib/ui/loaders/shell";
 import { melbourneDate } from "@/lib/view/active";
+import { alertTierLabel } from "@/lib/view/terms";
 import { isoWeek } from "@/lib/view/format";
 import { NOT_ADVICE_FOOTER } from "@/lib/view/honesty";
 import { AlertActions } from "./AlertActions";
@@ -34,6 +37,7 @@ import {
   POLARITY_HOW,
   polarityLabel,
   shortText,
+  SOURCE_LINE,
   whenText,
 } from "./text";
 
@@ -59,6 +63,24 @@ const alertWhen = (a: AlertRow, masked: boolean): string => {
   return d === null ? "n/a" : `Week ${isoWeek(d) ?? "n/a"}`;
 };
 
+/** Materiality 0..3 -> the P-level pill (UXR-045): 3 = P0, 2 = P1, 1 = P2; always carries text. */
+function MaterialityPill({ m }: { m: number | null }) {
+  if (m === null) return null;
+  const tier = m >= 3 ? "P0" : m === 2 ? "P1" : m === 1 ? "P2" : null;
+  if (tier === null) {
+    return (
+      <Pill kind="status" value="neutral">
+        Not important
+      </Pill>
+    );
+  }
+  return (
+    <Pill kind="tier" value={tier} title={materialityLabel(m)}>
+      {tier} {alertTierLabel(tier).shown}
+    </Pill>
+  );
+}
+
 function PolarityTag({ row }: { row: Pick<NewsItemRow, "polarity" | "materiality"> }) {
   return (
     <span className="inline-flex flex-wrap items-center gap-1 text-xs" data-testid="polarity-tag">
@@ -79,31 +101,35 @@ function AlertItem({ a, masked, nowMs }: { a: AlertRow; masked: boolean; nowMs: 
   const label = a.text.length > 60 ? `${a.text.slice(0, 57)}…` : a.text;
   return (
     <li
-      className={`min-w-0 break-words rounded-lg border border-border bg-surface p-3 ${snoozed ? "opacity-70" : ""}`}
+      className={`min-w-0 break-words ${snoozed ? "opacity-70" : ""}`}
       data-testid="alert-item"
       data-snoozed={snoozed ? "1" : undefined}
     >
-      <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
-        <AlertTierBadge tier={a.tier} />
-        {a.code ? <span className="font-medium text-text">{a.code}</span> : null}
-        <span>{alertWhen(a, masked)}</span>
-        {acked ? <span>Acknowledged</span> : null}
-        {snoozed ? <span>Snoozed (still listed)</span> : null}
-      </div>
-      <p className="mt-1 mb-0 text-sm font-medium">{a.text}</p>
-      {a.why ? <p className="mt-1 mb-0 text-sm text-text-muted">{a.why}</p> : null}
-      {a.executions.length > 0 ? (
-        <p className="mt-1 mb-0 text-xs text-text-muted" data-testid="held-by">
-          Held by: {a.executions.map((e) => e.label).join(", ")}
-        </p>
-      ) : null}
-      <AlertActions
-        alertKey={a.key}
-        label={label}
-        acked={acked}
-        snoozable={snoozable}
-        snoozed={snoozed}
-      />
+      <Rail hue={`tier-${a.tier.toLowerCase()}`} className="p-1">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+          <Pill kind="tier" value={a.tier} title={alertTierLabel(a.tier).hover}>
+            {a.tier} {alertTierLabel(a.tier).shown}
+          </Pill>
+          {a.code ? <span className="font-medium text-text">{a.code}</span> : null}
+          <span>{alertWhen(a, masked)}</span>
+          {acked ? <span>Acknowledged</span> : null}
+          {snoozed ? <span>Snoozed (still listed)</span> : null}
+        </div>
+        <p className="mt-1 mb-0 text-sm font-medium">{a.text}</p>
+        {a.why ? <p className="mt-1 mb-0 text-sm text-text-muted">{a.why}</p> : null}
+        {a.executions.length > 0 ? (
+          <p className="mt-1 mb-0 text-xs text-text-muted" data-testid="held-by">
+            Held by: {a.executions.map((e) => e.label).join(", ")}
+          </p>
+        ) : null}
+        <AlertActions
+          alertKey={a.key}
+          label={label}
+          acked={acked}
+          snoozable={snoozable}
+          snoozed={snoozed}
+        />
+      </Rail>
     </li>
   );
 }
@@ -169,29 +195,103 @@ function Inbox({ model, q, nowMs }: { model: AlertsModel; q: string | undefined;
         }
         if (rows.length === 0) return null;
         return (
-          <details key={tier} open className="flex flex-col gap-2" data-testid={`tier-${tier}`}>
-            <summary className="cursor-pointer text-lg font-semibold">
+          <section
+            key={tier}
+            aria-labelledby={`tier-${tier}`}
+            className="flex flex-col gap-2"
+            data-testid={`tier-${tier}`}
+          >
+            <h2 id={`tier-${tier}`} className="m-0 text-lg font-semibold">
               {TIER_TITLE[tier]} <span className="text-sm font-normal">({rows.length} unread)</span>
-            </summary>
-            <div className="mt-2">
-              <AlertList alerts={rows} masked={model.masked} nowMs={nowMs} />
-            </div>
-          </details>
+            </h2>
+            <AlertList alerts={rows} masked={model.masked} nowMs={nowMs} />
+          </section>
         );
       })}
-      <details data-testid="archived">
-        <summary className="cursor-pointer text-lg font-semibold">
+      <section aria-labelledby="archived-h" className="flex flex-col gap-2" data-testid="archived">
+        <h2 id="archived-h" className="m-0 text-lg font-semibold">
           Archived <span className="text-sm font-normal">({archived.length} acknowledged)</span>
-        </summary>
-        <div className="mt-2">
-          {archived.length === 0 ? (
-            <p className="m-0 text-sm text-text-muted">Nothing archived yet.</p>
-          ) : (
-            <AlertList alerts={archived} masked={model.masked} nowMs={nowMs} />
-          )}
-        </div>
-      </details>
+        </h2>
+        {archived.length === 0 ? (
+          <p className="m-0 text-sm text-text-muted">Nothing archived yet.</p>
+        ) : (
+          <AlertList alerts={archived} masked={model.masked} nowMs={nowMs} />
+        )}
+      </section>
     </div>
+  );
+}
+
+function FilterFields({
+  chip,
+  masked,
+  open,
+  query,
+  alertsQuery,
+  clearHref,
+}: {
+  chip: string;
+  masked: boolean;
+  open: boolean;
+  query: NonNullable<ReturnType<typeof parseNewsQuery>>;
+  alertsQuery: NonNullable<ReturnType<typeof parseAlertsQuery>>;
+  clearHref: string;
+}) {
+  const field = "min-h-6 rounded-md border border-border bg-bg px-2 py-1 text-text";
+  return (
+    <details open={open} className="rounded-lg border border-border bg-surface p-3">
+      <summary className="cursor-pointer text-sm font-medium">More filters</summary>
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        {chip === "alerts" ? (
+          <>
+            <label className="flex flex-col gap-1">
+              Tier
+              <select name="tier" defaultValue={alertsQuery.tier ?? ""} className={field}>
+                <option value="">All tiers</option>
+                <option value="P0">P0</option>
+                <option value="P1">P1</option>
+                <option value="P2">P2</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                name="unacked"
+                type="checkbox"
+                value="1"
+                defaultChecked={alertsQuery.unacked}
+              />
+              Unread only
+            </label>
+          </>
+        ) : (
+          <>
+            {masked ? null : (
+              <label className="flex flex-col gap-1">
+                Company code
+                <input
+                  name="code"
+                  maxLength={8}
+                  defaultValue={query.code ?? ""}
+                  className={`${field} w-28`}
+                />
+              </label>
+            )}
+            <label className="flex flex-col gap-1">
+              From
+              <input name="from" type="date" defaultValue={query.from ?? ""} className={field} />
+            </label>
+            <label className="flex flex-col gap-1">
+              To
+              <input name="to" type="date" defaultValue={query.to ?? ""} className={field} />
+            </label>
+          </>
+        )}
+        <Button type="submit">Apply</Button>
+        <Link href={clearHref} className="text-accent underline">
+          Clear
+        </Link>
+      </div>
+    </details>
   );
 }
 
@@ -244,105 +344,46 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
         </p>
       </header>
 
-      <nav aria-label="News view" className="flex flex-wrap gap-2">
-        {(Object.keys(CHIP_LABEL) as Array<keyof typeof CHIP_LABEL>).map((c) => (
-          <Link
-            key={c}
-            href={chipHref(c)}
-            aria-current={c === chip ? "page" : undefined}
-            className={`inline-flex min-h-6 items-center rounded-full border border-border px-3 py-2 text-sm ${c === chip ? "bg-accent text-accent-contrast" : "bg-surface text-text"}`}
-          >
-            {CHIP_LABEL[c]}
-            {c === "alerts" && unread > 0 ? ` (${unread} unread)` : ""}
-          </Link>
-        ))}
-      </nav>
+      <Segmented
+        label="News view"
+        value={chip}
+        items={(Object.keys(CHIP_LABEL) as Array<keyof typeof CHIP_LABEL>).map((c) => ({
+          value: c,
+          href: chipHref(c),
+          label: `${CHIP_LABEL[c]}${c === "alerts" && unread > 0 ? ` (${unread} unread)` : ""}`,
+        }))}
+      />
 
-      <details open={hasFilter} className="rounded-lg border border-border bg-surface p-3">
-        <summary className="cursor-pointer text-sm font-medium">Filter and search</summary>
-        <form method="get" action="/news" className="mt-3 flex flex-wrap items-end gap-3 text-sm">
-          {chip !== "all" ? <input type="hidden" name="chip" value={chip} /> : null}
-          {masked && chip !== "alerts" ? null : (
-            <label className="flex flex-col gap-1">
-              Search
-              <input
-                name="q"
-                type="search"
-                maxLength={60}
-                defaultValue={query.q ?? ""}
-                className="min-h-6 rounded-md border border-border bg-bg px-2 py-1 text-text"
-              />
-            </label>
-          )}
-          {chip === "alerts" ? (
-            <>
-              <label className="flex flex-col gap-1">
-                Tier
-                <select
-                  name="tier"
-                  defaultValue={alertsQuery.tier ?? ""}
-                  className="min-h-6 rounded-md border border-border bg-bg px-2 py-1 text-text"
-                >
-                  <option value="">All tiers</option>
-                  <option value="P0">P0</option>
-                  <option value="P1">P1</option>
-                  <option value="P2">P2</option>
-                </select>
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  name="unacked"
-                  type="checkbox"
-                  value="1"
-                  defaultChecked={alertsQuery.unacked}
-                />
-                Unread only
-              </label>
-            </>
-          ) : (
-            <>
-              {masked ? null : (
-                <label className="flex flex-col gap-1">
-                  Company code
-                  <input
-                    name="code"
-                    maxLength={8}
-                    defaultValue={query.code ?? ""}
-                    className="min-h-6 w-28 rounded-md border border-border bg-bg px-2 py-1 text-text"
-                  />
-                </label>
-              )}
-              <label className="flex flex-col gap-1">
-                From
-                <input
-                  name="from"
-                  type="date"
-                  defaultValue={query.from ?? ""}
-                  className="min-h-6 rounded-md border border-border bg-bg px-2 py-1 text-text"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                To
-                <input
-                  name="to"
-                  type="date"
-                  defaultValue={query.to ?? ""}
-                  className="min-h-6 rounded-md border border-border bg-bg px-2 py-1 text-text"
-                />
-              </label>
-            </>
-          )}
-          <Button type="submit">Apply</Button>
-          <Link href={chipHref(chip)} className="text-accent underline">
-            Clear
-          </Link>
-        </form>
+      <form method="get" action="/news" className="flex flex-col gap-3 text-sm" role="search">
+        {chip !== "all" ? <input type="hidden" name="chip" value={chip} /> : null}
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex min-w-0 flex-1 flex-col gap-1">
+            Search
+            <input
+              name="q"
+              type="search"
+              maxLength={60}
+              disabled={masked && chip !== "alerts"}
+              defaultValue={masked && chip !== "alerts" ? "" : (query.q ?? "")}
+              className="min-h-11 rounded-md border border-border bg-bg px-2 py-1 text-text disabled:opacity-60"
+            />
+          </label>
+          <Button type="submit">Search</Button>
+        </div>
         {masked && chip !== "alerts" ? (
-          <p className="mt-2 mb-0 text-xs text-text-muted">
+          <p className="m-0 text-xs text-text-muted">
             Search and company filters are not available for your access level.
           </p>
         ) : null}
-      </details>
+        <FilterFields
+          chip={chip}
+          masked={masked}
+          open={hasFilter}
+          query={query}
+          alertsQuery={alertsQuery}
+          clearHref={chipHref(chip)}
+        />
+      </form>
 
       {itemMissing ? (
         <Banner tone="warning" title="News item not found">
@@ -396,6 +437,8 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
                       </span>
                       <span aria-hidden="true">·</span>
                       <span>{whenText(n.published)}</span>
+                      <span aria-hidden="true">·</span>
+                      <span data-testid="news-source">{SOURCE_LINE}</span>
                       {n.priceSensitive ? (
                         <span className="rounded-md bg-surface-2 px-2 py-0.5 font-medium text-text">
                           Price-sensitive
@@ -403,11 +446,7 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
                       ) : null}
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
-                      {n.materiality !== null ? (
-                        <span className="text-xs text-text-muted">
-                          {materialityLabel(n.materiality)}
-                        </span>
-                      ) : null}
+                      <MaterialityPill m={n.materiality} />
                       {/* D-200: an unassessed item shows no tag rather than "Not assessed yet" on every card */}
                       {n.polarity !== null ? <PolarityTag row={n} /> : null}
                       {n.heldByUs ? (
