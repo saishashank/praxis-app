@@ -16,7 +16,13 @@ export type VendorBar = {
   c: number;
   volume: number;
 };
-export type Factor = { code: string; exDate: string; factor: number; actionId?: number; type?: string };
+export type Factor = {
+  code: string;
+  exDate: string;
+  factor: number;
+  actionId?: number;
+  type?: string;
+};
 export type VendorSplit = { code: string; exDate: string; ratio: number };
 export type Finding = { code: string; kind: string; exDate?: string };
 export type RawBarRow = VendorBar & { source: string; adj: "none" | "reversed"; flags?: string[] };
