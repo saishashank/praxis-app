@@ -1,4 +1,4 @@
-// M7 T9: the (app) layout wires the user, the shell loader and the theme into the shell, and is not a
+// M7 T9: the (app) layout wires the user, the shell loader into the shell, and is not a
 // guard (D-038): with no user it renders the page alone, and a failing loader gives a reduced header.
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,17 +6,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const getCurrentUser = vi.hoisted(() => vi.fn());
 const loadShell = vi.hoisted(() => vi.fn());
 const envFor = vi.hoisted(() => vi.fn());
-const currentTheme = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser: () => getCurrentUser() }));
 vi.mock("@/lib/auth/actions", () => ({ signOutAction: async () => {} }));
-vi.mock("@/lib/preferences/current", () => ({ currentTheme: () => currentTheme() }));
 vi.mock("@/lib/ui/loaders/shell", () => ({
   envFor: (...a: unknown[]) => envFor(...a),
   loadShell: (...a: unknown[]) => loadShell(...a),
-}));
-vi.mock("@/app/(app)/settings/themeActions", () => ({
-  cycleThemeAction: async () => ({ ok: true }),
 }));
 
 import AppLayout from "@/app/(app)/layout";
@@ -35,8 +30,6 @@ beforeEach(() => {
   getCurrentUser.mockReset();
   loadShell.mockReset();
   envFor.mockReset();
-  currentTheme.mockReset();
-  currentTheme.mockResolvedValue("light");
   envFor.mockResolvedValue({});
 });
 
@@ -52,9 +45,7 @@ describe("(app) layout", () => {
     expect(
       screen.getByRole("link", { name: /Alerts, 2 not yet acknowledged, highest P1/ }),
     ).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "Appearance: Light. Switch to Match device." }),
-    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Appearance/ })).toBeNull();
     expect(screen.getByText("Data only: the strategies are not running yet.")).toBeInTheDocument();
     expect(envFor).toHaveBeenCalledWith({ id: 3, role: "owner" });
   });

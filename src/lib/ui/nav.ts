@@ -279,3 +279,14 @@ export function nextTheme(theme: Theme): Theme {
   const i = THEME_ORDER.indexOf(theme);
   return THEME_ORDER[(i + 1) % THEME_ORDER.length]!;
 }
+
+// ---- region chip (UXR-005) ------------------------------------------------------------------------------
+
+/** The visible chip text, "AU · ASX" (the mode is a dot, not words: UXR-005). */
+export function regionChip(market: { code: string } | null): string {
+  if (!market) return "Region";
+  return [market.code, EXCHANGE[market.code]].filter(Boolean).join(" · ");
+}
+
+/** The dot of the chip: green only for an active market, grey in data-only and off mode. */
+export const regionDot = (mode: string): "active" | "grey" => (mode === "full" ? "active" : "grey");

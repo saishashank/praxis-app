@@ -1,6 +1,6 @@
 "use client";
-// The six tabs (UXN-270): a top tab row from 1024 px up and a fixed bottom bar with icons and short
-// labels below it (UXN-017). Both are plain links with aria-current on the active tab. The active tab
+// The six tabs (UXN-270): a top tab row from 1024 px up and a fixed bottom bar below it (UXN-017). Both
+// show a two-tone line icon and the label, always (UXR-055). Both are plain links with aria-current on the active tab. The active tab
 // comes from the pathname, so it is right after a client-side navigation too. Only one of the two
 // navs is displayed at a time (CSS), so assistive technology reads one.
 import Link, { useLinkStatus } from "next/link";
@@ -76,6 +76,7 @@ export function TabBar({ tabs }: { tabs: TabView[] }) {
                     : "text-text-muted hover:bg-surface-2 hover:text-text",
                 )}
               >
+                {ICONS[t.id]}
                 {t.label}
                 {badgeOf(t) !== null ? <Badge n={badgeOf(t)!} /> : null}
                 <TabPending />

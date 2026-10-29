@@ -1,38 +1,26 @@
-// The header (docs/M7_design.md 4.2): wordmark, six tabs (desktop), region menu, alert bell, theme
-// cycle and gear menu. On phones the tabs are the fixed bottom bar instead (TabBar).
+// The header (docs/M7_design.md 4.2; UXR-005): wordmark, six tabs (desktop) and exactly three controls:
+// the region/mode chip, the alert bell and the avatar (account menu). There is no theme toggle here;
+// Settings > Appearance owns the theme. On phones the tabs are the fixed bottom bar instead (TabBar).
 import Link from "next/link";
 import type { Role } from "@/lib/auth/permissions";
-import type { Theme } from "@/lib/preferences/service";
 import { tabsFor } from "@/lib/ui/nav";
 import { AlertBell, type BellView } from "./AlertBell";
 import { GearMenu, type Account } from "./GearMenu";
 import { RegionMenu, type RegionMarket } from "./RegionMenu";
 import { TabBar, type TabView } from "./TabBar";
-import { ThemeCycle } from "./ThemeCycle";
 
 export type HeaderProps = {
   role: Role;
-  theme: Theme;
   market: RegionMarket | null;
   bell: BellView;
   /** Badge counts by tab id (Strategies: attention count, UXN-046). */
   badges?: Partial<Record<string, number>>;
-  themeAction: () => Promise<void>;
   signOut: () => Promise<void>;
   /** Who is signed in, for the avatar and the identity row of the account menu (UXR-004). */
   account?: Account;
 };
 
-export function AppHeader({
-  role,
-  theme,
-  market,
-  bell,
-  badges = {},
-  themeAction,
-  signOut,
-  account,
-}: HeaderProps) {
+export function AppHeader({ role, market, bell, badges = {}, signOut, account }: HeaderProps) {
   const tabs: TabView[] = tabsFor(role).map((t) => ({
     id: t.id,
     label: t.label,
@@ -69,7 +57,6 @@ export function AppHeader({
         <div className="ml-auto flex items-center gap-1">
           <RegionMenu market={market} />
           <AlertBell bell={bell} />
-          <ThemeCycle theme={theme} action={themeAction} />
           <GearMenu role={role} account={account} signOut={signOut} />
         </div>
       </div>
