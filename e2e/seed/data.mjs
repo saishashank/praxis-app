@@ -1,7 +1,7 @@
 // Deterministic synthetic ZZ data for the E2E scenarios (M7 design section 5). Pure: the same
 // (scenario, now) always gives the same rows. Codes are ZZ-prefixed, so no real security, price or
 // vendor data is ever involved (HYG-MARKET: no price-bar CSV is committed, the bars are generated).
-export const SCENARIOS = ["empty", "populated", "stale"];
+export const SCENARIOS = ["empty", "populated", "stale", "rich"];
 export const MARKET = "AU";
 export const ZZ_COUNT = 24;
 export const BAR_DAYS = 60;

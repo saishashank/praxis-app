@@ -19,6 +19,7 @@ import {
   loadLedger,
   loadLessonCards,
 } from "@/lib/ui/loaders/knowledgeViews";
+import { familyBadge } from "../../home/familyMap";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
@@ -107,7 +108,7 @@ export default async function LearnedPage({ searchParams }: { searchParams: Prom
               <option value="">All</option>
               {FAMILIES.map((f) => (
                 <option key={f} value={f}>
-                  {f}
+                  {familyBadge(f).label}
                 </option>
               ))}
             </select>

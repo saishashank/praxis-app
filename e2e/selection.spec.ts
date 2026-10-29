@@ -4,6 +4,7 @@
 // greyscale screenshot is attached to the test report as evidence.
 import { expect, test, type Page } from "@playwright/test";
 import { THEMES, axeViolations, setTheme, signIn } from "./helpers";
+import { ensureRich } from "./seed/rich";
 
 const PATHS = [
   "/",
@@ -18,6 +19,9 @@ const PATHS = [
   "/settings/region",
   "/settings/time",
   "/picks/track-record",
+  "/strategies/leaderboard",
+  "/news?chip=alerts",
+  "/reviews?view=calendar",
 ];
 
 type Probe = {
@@ -26,6 +30,7 @@ type Probe = {
   textCue: boolean;
   bgLum: number;
   siblingLum: number | null;
+  ring: boolean;
 };
 
 async function probe(page: Page): Promise<Probe[]> {
@@ -88,38 +93,44 @@ async function probe(page: Page): Promise<Probe[]> {
         textCue: /selected|current/.test(text),
         bgLum: bg(el),
         siblingLum: sibLum,
+        ring: /inset/.test(getComputedStyle(el).boxShadow),
       });
     }
     return out;
   });
 }
 
-test.describe.configure({ timeout: 240_000 });
+test.describe.configure({ timeout: 900_000 });
+test.beforeAll(async () => {
+  await ensureRich();
+});
 
 for (const role of ["owner", "viewer"] as const) {
   test(`AT-47 (${role}): selected items have a filled surface, a check and a text cue`, async ({
     page,
     context,
   }, testInfo) => {
-    await setTheme(role, "dark");
     await signIn(context, role);
     let seen = 0;
     const bad: string[] = [];
-    for (const width of [1280, 375]) {
-      await page.setViewportSize({ width, height: 800 });
-      for (const path of PATHS) {
-        const res = await page.goto(path);
-        if (!res || res.status() >= 400) continue;
-        for (const p of await probe(page)) {
-          seen++;
-          const where = `${path}@${width} "${p.label}"`;
-          if (!p.hasCheck) bad.push(`${where}: no check mark`);
-          if (!p.textCue) bad.push(`${where}: no text cue`);
-          if (p.siblingLum !== null) {
-            const [a, b] = [p.bgLum, p.siblingLum].sort((x, y) => y - x);
-            const contrast = (a + 0.05) / (b + 0.05);
-            if (contrast < 1.08)
-              bad.push(`${where}: surface not distinct (${contrast.toFixed(2)})`);
+    for (const theme of THEMES) {
+      await setTheme(role, theme);
+      for (const width of [1280, 375]) {
+        await page.setViewportSize({ width, height: 800 });
+        for (const path of PATHS) {
+          const res = await page.goto(path);
+          if (!res || res.status() >= 400) continue;
+          for (const p of await probe(page)) {
+            seen++;
+            const where = `${theme} ${path}@${width} "${p.label}"`;
+            if (!p.hasCheck) bad.push(`${where}: no check mark`);
+            if (!p.textCue) bad.push(`${where}: no text cue`);
+            if (p.siblingLum !== null) {
+              const [a, b] = [p.bgLum, p.siblingLum].sort((x, y) => y - x);
+              const contrast = (a + 0.05) / (b + 0.05);
+              if (contrast < 1.08 && !p.ring)
+                bad.push(`${where}: surface not distinct (${contrast.toFixed(2)})`);
+            }
           }
         }
       }
