@@ -13,6 +13,7 @@ import type { Client } from "@libsql/client";
 import { defaultAgentParams, type LlmParams } from "@/lib/agents/params";
 import { estimateTokens, type Role } from "./budget";
 import { leafTexts } from "./grounding";
+import { enumLabel } from "./labels";
 import { canonicalJson, sha256Hex, type LlmProvider } from "./providers";
 import { createRouter, type RouteResult, type RouterMode } from "./router";
 import { MemoryStore } from "./store";
@@ -133,15 +134,17 @@ const TASKS: Readonly<Record<Category, string>> = {
 type Answer = Record<string, unknown>;
 
 const PARSERS: Readonly<Record<Category, (v: unknown) => Answer | null>> = {
-  triage: (v) =>
-    isObj(v) && (LABELS as readonly unknown[]).includes(v.label) ? { label: v.label } : null,
+  triage: (v) => {
+    const label = isObj(v) ? enumLabel(v.label, LABELS) : null;
+    return label !== null ? { label } : null;
+  },
   faithfulness: (v) => (isObj(v) && typeof v.note === "string" && v.note !== "" ? { ...v } : null),
-  json_validity: (v) =>
-    isObj(v) &&
-    typeof v.code === "string" &&
-    (DOC_CATEGORIES as readonly unknown[]).includes(v.category)
-      ? { code: v.code, category: v.category }
-      : null,
+  json_validity: (v) => {
+    const category = isObj(v) ? enumLabel(v.category, DOC_CATEGORIES) : null;
+    return isObj(v) && typeof v.code === "string" && category !== null
+      ? { code: v.code, category }
+      : null;
+  },
   refusal: (v) =>
     isObj(v) &&
     typeof v.refused === "boolean" &&

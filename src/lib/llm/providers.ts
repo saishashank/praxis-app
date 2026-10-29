@@ -4,6 +4,8 @@
 // call time only and never logged or put in error text. A missing key means "unavailable".
 import { createHash } from "node:crypto";
 import type { Role } from "./budget";
+import { toProviderSchema, type JsonSchema } from "./jsonSchema";
+import { supportsStrictSchema } from "./roster";
 
 /** Stable JSON: object keys sorted, so equal values hash equally on every machine. */
 export function canonicalJson(value: unknown): string {
@@ -34,6 +36,8 @@ export type ProviderRequest = {
   prompt: string;
   promptSha: string;
   maxOutputTokens: number;
+  /** LLM-071: the answer schema; sent in the provider's strict mode only when the roster allows it. */
+  responseSchema?: JsonSchema;
 };
 
 export type ProviderResult = { text: string; tokensIn: number; tokensOut: number };
@@ -182,6 +186,12 @@ export function createLiveProvider(opts: LiveOptions): LlmProvider {
               temperature: 0,
             },
           };
+          if (req.responseSchema && supportsStrictSchema("google", req.model)) {
+            (body.generationConfig as Json).responseSchema = toProviderSchema(
+              req.responseSchema,
+              "gemini",
+            );
+          }
         } else {
           url = ENDPOINTS[opts.kind];
           headers = { "content-type": "application/json", authorization: `Bearer ${apiKey}` };
@@ -192,6 +202,17 @@ export function createLiveProvider(opts: LiveOptions): LlmProvider {
             temperature: 0,
             response_format: { type: "json_object" },
           };
+          if (req.responseSchema && supportsStrictSchema(opts.kind, req.model)) {
+            // LLM-071: strict structured output; only Groq entries carry strictSchema in the roster.
+            body.response_format = {
+              type: "json_schema",
+              json_schema: {
+                name: "answer",
+                strict: true,
+                schema: toProviderSchema(req.responseSchema, "groq-strict"),
+              },
+            };
+          }
           // D-182: Groq's GPT-OSS models reason before answering, and the reasoning shares the
           // output budget; at the default effort a short JSON answer was cut off and Groq refused it
           // (HTTP 400). Low effort, reasoning not returned.
