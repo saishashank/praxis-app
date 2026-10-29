@@ -220,6 +220,25 @@ describe("planDates (catch-up)", () => {
     expect(far.dates.map((x) => x.d)).toEqual(["2026-10-12", "2026-10-13", "2026-10-16"]);
   });
 
+  it("D-203: the hole has its own bound beside maxDates; later missed days still fit", () => {
+    // hole 2026-10-01..09 (7 sessions), first marker 2026-10-12, 2026-10-13 missed after it
+    const p = mk(["2026-10-12"], "2026-10-12", "2026-10-16", {
+      lastBarBefore: "2026-09-30",
+      maxDates: 2,
+      gapMaxDates: 5,
+    });
+    expect(p.dates.map((x) => x.d)).toEqual([
+      "2026-10-01",
+      "2026-10-02",
+      "2026-10-05",
+      "2026-10-06",
+      "2026-10-07",
+      "2026-10-13",
+      "2026-10-16",
+    ]);
+    expect(p.remaining).toBe(3); // 08 and 09 of the hole, 15 after the marker
+  });
+
   it("the target with a marker is not planned; a non-trading target is planned as such", () => {
     expect(mk(["2026-10-13"], "2026-10-13", "2026-10-13").dates).toEqual([]);
     expect(mk(["2026-10-16"], "2026-10-16", "2026-10-17").dates).toEqual([

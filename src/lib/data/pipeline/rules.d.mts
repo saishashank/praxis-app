@@ -2,6 +2,7 @@ export const MARKET: "AU";
 export const TZ: "Australia/Sydney";
 export const SOURCE: "yahoo_eod";
 export const MAX_DATES_PER_RUN: number;
+export const GAP_MAX_DATES: number;
 export const LOOKBACK_DAYS: number;
 export const BACKFILL_WRITE_CAP_MONTH: number;
 export const REFETCH_DIFF_PCT: number;
@@ -50,6 +51,8 @@ export function planDates(p: {
   rows: readonly CalendarLike[];
   maxDates?: number;
   lookbackDays?: number;
+  lastBarBefore?: string | null;
+  gapMaxDates?: number;
 }): { dates: PlannedDate[]; remaining: number };
 export function validateBar(raw: unknown, opts?: ParseOpts): { row: BarRowIn } | { reason: string };
 export class BarsFormatError extends Error {}
