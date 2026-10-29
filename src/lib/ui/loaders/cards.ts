@@ -131,6 +131,9 @@ export type CardPage = {
   /** The rules-only "Why?" lines (UXN-102). */
   why: string[];
   afterwards: Afterwards | null;
+  /** Steelman (V2 ch. 07, UXR-024): the strongest case against the card. No source stores it yet, so it is
+   * always null and the page draws no heading; set it here once ch. 07 data exists. */
+  steelman: { text: string } | null;
   notes: CardNote[];
   /** Back-links; none contains a code. */
   links: { home: string; strategy: string | null };
@@ -154,6 +157,7 @@ const NOT_FOUND: CardPage = {
   scenarioRows: null,
   why: [],
   afterwards: null,
+  steelman: null,
   notes: [],
   links: { home: "/", strategy: null },
 };
@@ -349,6 +353,7 @@ export async function loadCardPage(deps: LoaderDeps, idOrRef: string): Promise<L
       scenarioRows: scenarioRows(card),
       why: whyLines(card, rows, warnings, t),
       afterwards: afterwards(card, closed, led !== null),
+      steelman: null,
       notes,
       links: { home: "/", strategy: `/strategies/${encodeURIComponent(card.execution)}` },
     },
