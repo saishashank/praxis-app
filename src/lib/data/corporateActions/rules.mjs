@@ -310,6 +310,26 @@ export function inferRatio(observed, tolerancePct) {
 // ---------------------------------------------------------------------------------------------
 // DAT-221 evaluation of one (code, ex-date, class) group.
 
+/**
+ * GL-01: a candidate seen only in prices (no announcement, no vendor record) is an inference. It
+ * is never auto-applied, also not by the 5-session rule; the Owner resolves it.
+ * @param {readonly string[]} sources
+ */
+export const isPriceOnly = (sources) => sources.length > 0 && sources.every((s) => s === "price");
+
+/**
+ * GL-01 Yahoo adjusted-close veto: a genuine split or consolidation is back-adjusted by the vendor,
+ * so the adjusted close does not jump across the ex-date (ratio near 1). A ratio that is not near
+ * 1 means the vendor sees a real price move and disagrees with the inferred factor. No data
+ * (null/absent/unusable) never vetoes.
+ * @param {{ prevAdj: number, exAdj: number } | null | undefined} adj @param {number} tolerancePct
+ */
+export function adjCloseDisagrees(adj, tolerancePct) {
+  if (!adj || !(adj.prevAdj > 0) || !(adj.exAdj > 0)) return false;
+  if (!Number.isFinite(adj.prevAdj) || !Number.isFinite(adj.exAdj)) return false;
+  return Math.abs(adj.exAdj / adj.prevAdj - 1) > tolerancePct / 100;
+}
+
 /** @param {string[]} sources @param {boolean} consistent */
 export function evidenceScore(sources, consistent) {
   let s = consistent ? PRICE_CONSISTENT_BONUS : 0;
@@ -330,7 +350,8 @@ export function evidenceScore(sources, consistent) {
  * - `hasEffective`: another action of the group is already confirmed, so this one can only be a
  *   conflict.
  * @param {{ actions: GroupAction[], price: { prevClose: number, exClose: number } | null,
- *   tolerancePct?: number, hasEffective?: boolean }} i
+ *   tolerancePct?: number, hasEffective?: boolean,
+ *   adj?: { prevAdj: number, exAdj: number } | null }} i
  * @returns {{ pending: true } | { pending: false, observed: number | null, decisions: Decision[] }}
  */
 export function evaluateGroup(i) {
@@ -345,7 +366,16 @@ export function evaluateGroup(i) {
     const consistent =
       observed !== null && factor !== null && priceConsistent(observed, factor, tol);
     if (several) reasons.push(i.hasEffective ? "conflicts_with_confirmed" : "sources_disagree");
-    if (a.sources.length === 1 && a.sources[0] === "price") reasons.push("unexplained_jump");
+    if (isPriceOnly(a.sources)) {
+      reasons.push("unexplained_jump");
+      // GL-01 vetoes: a vendor record for the same date with other terms, or a Yahoo adjusted
+      // close that does not show a back-adjusted jump. Both are no-ops when the evidence is absent.
+      const vendorOther = i.actions.some(
+        (o) => o.id !== a.id && o.sources.includes("vendor") && isPriceType(o.type),
+      );
+      if (vendorOther) reasons.push("vendor_disagrees");
+      if (adjCloseDisagrees(i.adj, tol)) reasons.push("adj_close_disagrees");
+    }
     if (factor === null) reasons.push("factor_unknown");
     if (priceClass && factor !== null && !consistent) reasons.push("price_mismatch");
     return {
@@ -476,7 +506,10 @@ export function describeTerms(type, p) {
 const REASON_TEXT = {
   sources_disagree: "the sources disagree about the terms",
   conflicts_with_confirmed: "it conflicts with an action already confirmed for this date",
-  unexplained_jump: "only a price jump was seen; no announcement or vendor record",
+  unexplained_jump:
+    "only a price jump was seen; no announcement or vendor record, so it is never applied automatically",
+  vendor_disagrees: "a vendor split record for this date has different terms",
+  adj_close_disagrees: "the vendor adjusted close does not show a split on this date",
   factor_unknown: "the terms needed to compute the adjustment are missing",
   price_mismatch: "the price move does not match the terms",
 };
