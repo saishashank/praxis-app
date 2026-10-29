@@ -345,12 +345,9 @@ describe("breadcrumb, banners, footer", () => {
     shell();
     expect(document.body.textContent).not.toContain("BHP");
   });
-  it("shows the data-only line on Home only, never on another page (UXR-006)", () => {
+  it("renders no mode banner on any page; the Home status strip carries the data-only line (UXR-006)", () => {
     const data = [{ id: "mode:data_only", text: "Data only: the strategies are not running yet." }];
-    const { unmount } = shell("owner", { banners: data });
-    expect(screen.getByText(data[0]!.text)).toBeInTheDocument();
-    unmount();
-    for (const p of ["/picks", "/market", "/strategies", "/news", "/reviews", "/settings"]) {
+    for (const p of ["/", "/picks", "/market", "/strategies", "/news", "/reviews", "/settings"]) {
       pathname.value = p;
       const r = shell("owner", { banners: data });
       expect(screen.queryByText(data[0]!.text), p).toBeNull();
@@ -369,9 +366,9 @@ describe("breadcrumb, banners, footer", () => {
   });
   it("renders banners from the loader and none when empty", () => {
     const { unmount } = shell("owner", {
-      banners: [{ id: "mode:data_only", text: "Data only: the strategies are not running yet." }],
+      banners: [{ id: "shell:unavailable", text: "Some header information is unavailable." }],
     });
-    expect(screen.getAllByText("Data only: the strategies are not running yet.").length).toBe(1);
+    expect(screen.getAllByText("Some header information is unavailable.").length).toBe(1);
     expect(screen.getByRole("region", { name: "Notices" })).toBeInTheDocument();
     unmount();
     shell();
