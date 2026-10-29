@@ -34,7 +34,7 @@ const THREE_YEARS = {
 };
 
 // A deliberate engine change updates this value in the same commit (it is the golden replay).
-const GOLDEN_DIGEST = "77cc9b9923eb4495c8811f443748e70f37ffafd57e5aa6974ba77f4efb6ef8d9";
+const GOLDEN_DIGEST = "243a3cd1084399c90835f875afc0adc03f01a8294764e270c07498b4608fde50";
 
 async function runReplay(): Promise<FullSetup & { statuses: string[] }> {
   const setup = await setupReplay(THREE_YEARS);

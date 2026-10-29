@@ -632,12 +632,11 @@ export async function syncKnownAt(db, c) {
   let stamped = 0;
   for (const a of c.actions) {
     if (!isEffective(a.state)) continue;
-    const r = await run(
-      db,
-      c.io,
-      "UPDATE corporate_action SET known_at = ? WHERE id = ? AND market = ? AND known_at IS NULL",
-      [a.latest?.at ?? c.now, a.id, c.market],
-    );
+    // not counted in io.written: a stamp is bookkeeping on an existing row, run records stay as before
+    const r = await db.execute({
+      sql: "UPDATE corporate_action SET known_at = ? WHERE id = ? AND market = ? AND known_at IS NULL",
+      args: [a.latest?.at ?? c.now, a.id, c.market],
+    });
     stamped += r.rowsAffected;
   }
   return stamped;
@@ -823,7 +822,7 @@ export async function resolveAction(db, c) {
         sql: "UPDATE corporate_action SET known_at = ? WHERE id = ? AND known_at IS NULL",
         args: [after(c.now, me.at), c.actionId],
       });
-      written += stamp.rowsAffected;
+      void stamp; // not counted: bookkeeping on the existing row
     }
     if (c.decision === "confirm") {
       for (const s of sib) {

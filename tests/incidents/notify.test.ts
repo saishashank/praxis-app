@@ -15,6 +15,7 @@ import { openS2Once } from "@/lib/heartbeat/incidents";
 import { openIncident } from "@/lib/alerts/incident";
 import {
   detectAsxTrip,
+  detectDispatchAuth,
   detectDataQualityTwoNights,
   detectReviewMissing,
 } from "@/lib/incidents/detectors";
@@ -237,6 +238,33 @@ describe("detectors", () => {
     }
     expect(mock.outbox).toHaveLength(1);
     expect((await incidents())[0]).toMatchObject({ kind: "asx_trip", severity: "S2" });
+  });
+
+  it("GL-06: dispatch-failed with HTTP 401/403 -> one S2 incident; other statuses stay silent", async () => {
+    const put = (n: number, status: number | null) =>
+      db.execute({
+        sql: "INSERT INTO run_record (job, market, concurrency_key, scheduled_for, started_at, ended_at, status, error_summary, details_json) VALUES ('clock','AU',?,?,?,?,'failed','x',?)",
+        args: [
+          `dispatch-failed:backup:2026-10-19:${n}`,
+          "2026-10-19",
+          "2026-10-19T08:00:00.000Z",
+          "2026-10-19T08:00:00.000Z",
+          JSON.stringify({ slot: "backup", attempt: n, status }),
+        ],
+      });
+    await put(1, 500);
+    await put(2, null);
+    expect(await detectDispatchAuth(db, T0)).toHaveLength(0);
+    await put(3, 401);
+    await put(4, 403);
+    const found = await detectDispatchAuth(db, T0);
+    expect(found).toHaveLength(1);
+    for (let i = 0; i < 2; i++)
+      await notifyIncident(ctx(), found[0].kind, found[0].severity, found[0].facts);
+    expect(mock.outbox).toHaveLength(1);
+    expect((await incidents())[0]).toMatchObject({ kind: "dispatch_auth", severity: "S2" });
+    // older than 24 hours: not raised again
+    expect(await detectDispatchAuth(db, new Date("2026-10-21T09:00:00Z"))).toHaveLength(0);
   });
 
   it("data quality: only two consecutive failing nights raise it", async () => {

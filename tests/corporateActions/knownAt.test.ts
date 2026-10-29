@@ -1,5 +1,5 @@
 // @vitest-environment node
-// GL-02 (D-207 item 2): corporate_action.known_at. Migration 0015 (set once, backfill), the engine
+// GL-02 (D-207 item 2): corporate_action.known_at. Migration 0016 (set once, backfill), the engine
 // writer (auto-confirm, Owner resolve), and the readers: an action confirmed on D+5 changes nothing
 // for D..D+4 and applies from D+5. Synthetic ZZ* data only (SEC-110).
 import { createClient } from "@libsql/client";
@@ -44,7 +44,7 @@ const eventAt = async (db: Awaited<ReturnType<typeof caDb>>, id: number) =>
 const knownAtOf = async (db: Awaited<ReturnType<typeof caDb>>, id: number) =>
   (await rows(db, "SELECT known_at FROM corporate_action WHERE id = ?", [id]))[0]!.known_at;
 
-describe("migration 0015_known_at", () => {
+describe("migration 0016_known_at", () => {
   it("backfills left-queue actions with the start of the ex-date, leaves queued ones null, sets once", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
     const ms = await loadMigrations(MIGRATIONS("main"));

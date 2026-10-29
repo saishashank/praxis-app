@@ -1,5 +1,5 @@
 // M7 T9 app shell in a real browser (TST-126): the six tabs fit the bottom bar at 360 px (UXN-270 "More"
-// is only needed if they do not), no horizontal scroll, menus by keyboard, theme cycle without reload,
+// is only needed if they do not), no horizontal scroll, menus by keyboard, header controls (UXR-005, AT-49),
 // axe on the shell. Runs in the desktop project; the phone width is set per test.
 import { expect, test } from "@playwright/test";
 import { ROLE_LIST, axeViolations, expectNoHorizontalScroll, signIn } from "./helpers";
@@ -96,15 +96,21 @@ test("skip link is the first Tab stop and moves focus to the page content", asyn
   await expect(page.locator("#content")).toBeFocused();
 });
 
-test("theme shortcut changes the theme without a full reload", async ({ page, context }) => {
+test("header: only the region chip, the bell and the avatar; no theme toggle (UXR-004/005, AT-49)", async ({
+  page,
+  context,
+}) => {
   await signIn(context, "editor");
-  await page.goto("/");
-  const html = page.locator("html");
-  const before = await html.getAttribute("data-theme");
-  await page.evaluate(() => ((window as unknown as { __kept: boolean }).__kept = true));
-  await page.getByRole("button", { name: /^Appearance:/ }).click();
-  await expect(html).not.toHaveAttribute("data-theme", before!);
-  expect(await page.evaluate(() => (window as unknown as { __kept?: boolean }).__kept)).toBe(true);
+  await page.goto("/picks");
+  const header = page.getByRole("banner");
+  await expect(header.getByRole("button", { name: /^Region:/ })).toBeVisible();
+  await expect(header.getByRole("link", { name: /^Alerts,/ })).toBeVisible();
+  await expect(header.getByRole("button", { name: "Account and settings menu" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Appearance:/ })).toHaveCount(0);
+  await header.getByRole("button", { name: "Account and settings menu" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  // data-only state is a chip dot; no banner on a page other than Home (UXR-006)
+  await expect(page.getByRole("region", { name: "Notices" })).toHaveCount(0);
 });
 
 test("axe: no violations on the shell, phone and desktop, gear menu open", async ({

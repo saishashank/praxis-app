@@ -368,6 +368,12 @@ async function recordMalformed(
 
 const placeholders = (n: number) => Array.from({ length: n }, () => "?").join(", ");
 
+/** GL-06: the HTTP status (null when none) and a short fixed reason; never a response body or token. */
+export function dispatchFailure(detail: string): { status: number | null; reason: string } {
+  const m = /^HTTP ([0-9]{3})$/.exec(detail);
+  return { status: m ? Number(m[1]) : null, reason: detail.slice(0, 40) };
+}
+
 /** One clock tick. Never throws. See the header for the request budget. */
 export async function runClock(
   env: ClockEnv,
@@ -508,7 +514,12 @@ export async function runClock(
           at,
           at,
           `dispatch ${a.slot.id} ${res.detail}`.slice(0, 120),
-          JSON.stringify({ slot: a.slot.id, attempt: a.attempt, ref: refFor(env.PRAXIS_ENV) }),
+          JSON.stringify({
+            slot: a.slot.id,
+            attempt: a.attempt,
+            ref: refFor(env.PRAXIS_ENV),
+            ...dispatchFailure(res.detail),
+          }),
         ];
         record.push({
           sql:

@@ -147,12 +147,20 @@ describe("the stage inside a Batch 1 run", () => {
     const db = await pipelineDb();
     const res = await go(db, { indexText: null, shortText: null });
     expect(res.exit).toBe(0);
-    expect(await stage6(db)).toEqual({ index: "no_file", short_interest: "no_file" });
+    expect(await stage6(db)).toEqual({
+      index: "no_file",
+      short_interest: "no_file",
+      vendor_actions: "no_file",
+    });
     expect(await count(db, "index_bar")).toBe(0);
 
     const db2 = await pipelineDb();
     await go(db2, { indexText: "not json", shortText: "[1]" });
-    expect(await stage6(db2)).toEqual({ index: "file_invalid", short_interest: "file_invalid" });
+    expect(await stage6(db2)).toEqual({
+      index: "file_invalid",
+      short_interest: "file_invalid",
+      vendor_actions: "no_file",
+    });
     expect(await count(db2, "price_bar")).toBe(3);
   });
 

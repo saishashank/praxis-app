@@ -197,10 +197,13 @@ describe("slot table (docs/M2_design.md section 3)", () => {
       else expect([s.enabled, s.requiresListing]).toEqual([true, true]);
     }
     // The allow-listed files exist and are dispatch-only.
-    for (const y of [backupYml, backfillYml, ingestYml, maintenanceYml, arenaYml, signalsYml]) {
+    for (const y of [backupYml, backfillYml, maintenanceYml, arenaYml, signalsYml]) {
       expect(y).toMatch(/^on: workflow_dispatch$/m);
       expect(y).not.toMatch(/^\s*schedule:/m);
     }
+    // GL-07 (D-209): the Batch-1 fallback has its own schedule beside the dispatch.
+    expect(ingestYml).toMatch(/^\s*workflow_dispatch:/m);
+    expect(ingestYml).toMatch(/^\s*schedule:/m);
   });
 
   it("nightly slots and Batch 1 run every day, the arena and Sentinel slots only on trading days", () => {
@@ -514,6 +517,16 @@ describe("runClock with a real SQLite database", () => {
     await tick(t + 60_000);
     await tick(t + 120_000);
     expect(failures()).toHaveLength(3);
+    // GL-06: the HTTP status and a short reason are structured fields in the run record.
+    expect(
+      failures()
+        .map((r) => JSON.parse(String(r.details_json)))
+        .sort((a, b) => a.attempt - b.attempt),
+    ).toMatchObject([
+      { status: 500, reason: "HTTP 500" },
+      { status: 403, reason: "HTTP 403" },
+      { status: 422, reason: "HTTP 422" },
+    ]);
     expect(JSON.parse(stateRow(slotKey("maintenance", MON))!)).toMatchObject({ s: "failed", n: 3 });
     // no fourth attempt
     await tick(t + 180_000);

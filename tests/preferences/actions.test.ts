@@ -13,6 +13,7 @@ vi.mock("next/cache", () => ({ revalidatePath: (...a: unknown[]) => revalidatePa
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ "x-real-ip": "9.9.9.9", "user-agent": "agent" }),
 }));
+vi.mock("@/auth", () => ({ signOut: vi.fn() }));
 vi.mock("@/lib/db/client", () => ({ authDb: () => dbMock() }));
 
 import { updatePreferencesAction } from "@/app/(app)/settings/actions";

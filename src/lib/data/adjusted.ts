@@ -12,7 +12,7 @@
 //
 // GL-02: DAT-126 limits by ex-date; GL-02 adds the second bound. A reader that replays decision D
 // passes `knownBy` = the decision cut-off of D and an action confirmed after it is ignored, so a
-// split confirmed on D+5 changes nothing for D..D+4 (see corporate_action.known_at, migration 0015).
+// split confirmed on D+5 changes nothing for D..D+4 (see corporate_action.known_at, migration 0016).
 //
 // Numeric: factors are stored as the nearest double to the exact fraction (see
 // corporateActions/rules.mjs); the product of a few such doubles is within a few ulps (1e-15
