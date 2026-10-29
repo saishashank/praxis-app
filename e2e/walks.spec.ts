@@ -79,6 +79,14 @@ async function metrics(page: Page) {
       wide: wide.slice(0, 5),
       sticky,
       h1: document.querySelector("h1")?.textContent?.trim() ?? null,
+      widest: Array.from(document.querySelectorAll("body *"))
+        .map((e) => ({ e, r: e.getBoundingClientRect().right }))
+        .sort((a, b) => b.r - a.r)
+        .slice(0, 4)
+        .map(
+          ({ e, r }) =>
+            `${e.tagName.toLowerCase()}.${String(e.className).slice(0, 50)} ${Math.round(r)} ${getComputedStyle(e).position}`,
+        ),
       leaks: Array.from(
         new Set(
           document.body.innerText.match(

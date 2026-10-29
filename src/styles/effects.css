@@ -584,3 +584,9 @@ body::before {
     transform: none;
   }
 }
+
+/* The title halo of a centred h1 (404 page) can reach past the viewport on a phone: clip it without
+   making #content a scroll container (so sticky headers inside keep working). */
+#content {
+  overflow-x: clip;
+}
