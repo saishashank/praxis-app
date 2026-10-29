@@ -14,6 +14,7 @@ vi.mock("next/cache", () => ({ revalidatePath: (...a: unknown[]) => revalidatePa
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ "x-real-ip": "9.9.9.9", "user-agent": "agent" }),
 }));
+vi.mock("@/auth", () => ({ signOut: vi.fn() }));
 vi.mock("@/lib/db/client", () => ({ authDb: () => dbMock() }));
 
 import {
@@ -194,5 +195,21 @@ describe("setQuietHoursAction", () => {
     expect(await setQuietHoursAction(form({ quiet_start: "22:00", quiet_end: "07:00" }))).toEqual({
       error: "unavailable",
     });
+  });
+});
+
+describe("signOutEverywhereSelfAction (UXR-027, PLT-033)", () => {
+  it("requires admin, bumps the session version and audits it", async () => {
+    const { signOutEverywhereSelfAction } = await import("@/app/(app)/settings/actions");
+    const id = await addUser(db, { email: "owner@example.test", role: "owner" });
+    asUser(id, "owner");
+    await signOutEverywhereSelfAction();
+    expect(requireUser).toHaveBeenCalledWith("admin", "/settings");
+    const r = await db.execute({
+      sql: "SELECT session_version FROM app_user WHERE id = ?",
+      args: [id],
+    });
+    expect(Number(r.rows[0].session_version)).toBeGreaterThanOrEqual(2);
+    expect((await auditRows(db)).at(-1)).toMatchObject({ action: "auth.signout_everywhere" });
   });
 });

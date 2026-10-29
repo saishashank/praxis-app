@@ -8,8 +8,10 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { setQuietHours } from "@/lib/alerts/api";
+import { signOut } from "@/auth";
 import { requestMeta } from "@/lib/auth/audit";
 import { requireUser } from "@/lib/auth/guard";
+import { signOutEverywhere } from "@/lib/auth/signout";
 import { authDb } from "@/lib/db/client";
 import { updatePreferences } from "@/lib/preferences/service";
 import type { ActionResult } from "@/lib/users/messages";
@@ -83,4 +85,14 @@ export async function setQuietHoursAction(fd: FormData): Promise<ActionResult> {
   }
   revalidatePath("/", "layout"); // the alert bell badge honours quiet hours
   return { ok: true };
+}
+
+/**
+ * Settings > Account: "Sign out everywhere" (admin only, PLT-033). Bumps the signed-in admin's own
+ * session version (audited) so every session fails its next check, then signs this one out.
+ */
+export async function signOutEverywhereSelfAction(): Promise<void> {
+  const user = await requireUser("admin", PATH);
+  await signOutEverywhere(authDb(), process.env, user.id, requestMeta(await headers()));
+  await signOut({ redirectTo: "/signin" });
 }
