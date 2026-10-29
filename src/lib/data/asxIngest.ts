@@ -8,12 +8,14 @@
 //   asx-ingest --dir <dir>
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { createClient, type Client } from "@libsql/client";
 import { getConfig } from "@/lib/config/store";
 import { ASX_SOURCE } from "@/lib/data/asxToken";
 import { sydneyDate } from "@/lib/data/pipeline/rules.mjs";
+import { decisionCutoffUtc } from "@/lib/agents/decisionView";
+import { cutoffPollStatement } from "@/lib/sentinel/cutoffPoll";
 import { importUniverse } from "@/lib/data/universe/import";
 import { ingestFeed } from "@/lib/sentinel/ingest";
 
@@ -98,6 +100,24 @@ export async function asxIngestMain(
       }
     }
     await db.execute(pollDayStatement(now, today, feedOk));
+    // GL-05: the first poll that was fetched at or after the cut-off and fully stored is the marker
+    // batch 2b waits for. The fetch step wrote feed.json just before this step, so its mtime is the
+    // fetch time; the marker instant is the time the store finished (never before an ingested_at).
+    if (feedOk) {
+      try {
+        const cutoffHm = await getConfig(db, "decision_cutoff").catch(() => undefined);
+        const cutoffMs = Date.parse(
+          decisionCutoffUtc(today, typeof cutoffHm === "string" ? cutoffHm : "18:10"),
+        );
+        const fetchedMs = statSync(path.join(dir, "feed.json")).mtimeMs;
+        if (fetchedMs >= cutoffMs) {
+          const s = cutoffPollStatement(MARKET, today, new Date(nowMs()).toISOString());
+          await db.execute(s);
+        }
+      } catch {
+        // the marker is best effort: batch 2b falls back to cut-off + 4 minutes
+      }
+    }
     const csv = read("companies.csv");
     if (csv !== null) {
       const u = await importUniverse({ db, csv, today, now: () => now, env });

@@ -21,6 +21,7 @@ import {
   type MarketHours,
 } from "@/lib/data/calendar";
 import { divFloor, makeRational, mulRat, type Rational } from "@/lib/money/rational";
+import { loadIngestBound } from "@/lib/sentinel/cutoffPoll";
 import {
   createDecisionView,
   decisionCutoffUtc,
@@ -274,7 +275,15 @@ function consolidationAgo(
 export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInputs> {
   const { market, d, params: p } = req;
   const cutoff = decisionCutoffUtc(d, p.decisionCutoff);
-  const view = createDecisionView(db, { market, d, cutoff, liveIngestBound: !req.replay });
+  // GL-05: announcements first stored after the cut-off poll marker (or cut-off + 4 min) are invisible
+  const annBound = await loadIngestBound(db, market, d, cutoff);
+  const view = createDecisionView(db, {
+    market,
+    d,
+    cutoff,
+    liveIngestBound: !req.replay,
+    announcementIngestBound: annBound.bound,
+  });
   const partialReasons: string[] = [];
 
   // sessions: enough for the longest event window (ARN-011) and the consolidation window

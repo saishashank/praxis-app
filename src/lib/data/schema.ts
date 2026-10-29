@@ -89,6 +89,7 @@ export const AU_COLUMNS = {
     "title",
     "url",
     "source",
+    "first_ingested_at",
   ],
   source_register: [
     "source",

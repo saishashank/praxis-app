@@ -158,6 +158,9 @@ describe("ASX announcements by date (DAT-125)", () => {
       title: "Synthetic announcement 0",
     });
     expect(a.ann_id).toBe(items(MON, 1)[0].annId);
+    // GL-05: a backfilled row stores the time of the backfill, so a replay of its own day drops it
+    expect(a.first_ingested_at).toBe(new Date(NOW).toISOString());
+    expect(a.first_ingested_at).toBe(a.ingested_at);
   });
 
   it("counts rejected items by reason and stores nothing for them", async () => {

@@ -86,7 +86,14 @@ describe("the shipped table (decision 32)", () => {
       const s = AU_SLOTS.find((x) => x.id === id)!;
       expect([s.enabled, s.requiresListing === true], id).toEqual([true, false]);
     }
-    for (const id of ["asx-poll", "universe", "decision-cutoff", "late-sweep", "marker-check"]) {
+    // GL-05: decision-cutoff now dispatches the 18:10 announcement fetch (actions), not listed-only
+    expect(AU_SLOTS.find((x) => x.id === "decision-cutoff")).toMatchObject({
+      enabled: true,
+      runner: "actions",
+      workflow: "asx-fetch.yml",
+    });
+    expect(AU_SLOTS.find((x) => x.id === "decision-cutoff")!.requiresListing).toBeUndefined();
+    for (const id of ["asx-poll", "universe", "late-sweep", "marker-check"]) {
       expect(AU_SLOTS.find((x) => x.id === id)!.enabled, id).toBe(false);
     }
   });
@@ -122,7 +129,7 @@ describe("the shipped table (decision 32)", () => {
       fired.push(...s.dispatched);
       await runRoutes(rEnv, t, { fetch: f, nowMs: () => t });
     }
-    expect(fired.sort()).toEqual(["backup", "ingest-batch1", "maintenance"]);
+    expect(fired.sort()).toEqual(["backup", "decision-cutoff", "ingest-batch1", "maintenance"]);
     expect(posts).toEqual([]);
   });
 });
