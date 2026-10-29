@@ -343,6 +343,51 @@ export function factorItems(
   };
 }
 
+// ---- M14 wording: skip reasons, flags and event details (D-241) ------------------------------------
+
+const NOT_TAKEN_WORDS: Readonly<Record<string, string>> = {
+  skipped_stop_distance: "the stop would have been too far below the entry price",
+  skipped_cost_gate:
+    "trading costs would have eaten the usual gain of this kind of setup (cost gate)",
+  second_position:
+    "the first position of the night is in the same industry or moves too much like this one",
+  abstain_shock: "the market was in a sharp shock and the order would have been below two parcels",
+  index_change: "the share was joining or leaving a stock-market index around the news",
+};
+
+/** Plain words for a reason an order was not placed; an older reason is returned unchanged. */
+export function notTakenText(reason: string): string {
+  return Object.hasOwn(NOT_TAKEN_WORDS, reason) ? NOT_TAKEN_WORDS[reason]! : reason;
+}
+
+const FLAG_WORDS: Readonly<Record<string, string>> = {
+  cost_gate_unmeasured:
+    "Too few past results to check whether costs would eat the gain, so the cost check was not applied",
+  industry_unknown:
+    "The industry of this share is not known, so only how it moves with the other position was checked",
+  corr_unknown:
+    "Not enough price history to compare its moves with the other position, so only the industry was checked",
+  event_reversed_next_close:
+    "The share price reversed at the next close after the news (shown for information)",
+};
+
+/** Plain words for a card flag; an older flag is shown with spaces, as before. */
+export function flagText(flag: string): string {
+  return Object.hasOwn(FLAG_WORDS, flag) ? FLAG_WORDS[flag]! : flag.replaceAll("_", " ");
+}
+
+const EVENT_DETAIL_WORDS: Readonly<Record<string, string>> = {
+  query_response: "Response to an ASX query",
+  guidance_maintained: "Guidance maintained",
+};
+
+/** Plain words for an event detail (the nullable `event.category_detail`); null when none. */
+export function eventDetailText(detail: string | null | undefined): string | null {
+  return detail !== null && detail !== undefined && Object.hasOwn(EVENT_DETAIL_WORDS, detail)
+    ? EVENT_DETAIL_WORDS[detail]!
+    : null;
+}
+
 // ---- "What could hurt this" (UXN-123) ------------------------------------------------------------------
 
 export type Headwind = { kind: string; text: string };
@@ -377,7 +422,7 @@ export function headwinds(
     });
   }
   for (const f of [...card.evidence.data_quality_flags, ...card.evidence.other_flags]) {
-    out.push({ kind: "Data flag", text: t(f.replaceAll("_", " ")) });
+    out.push({ kind: "Data flag", text: t(flagText(f)) });
   }
   if (card.scenario.insufficient_history) {
     out.push({
@@ -416,7 +461,7 @@ export function whyLines(
   lines.push(
     card.taken
       ? "The strategy placed a practice order."
-      : `The strategy did not place an order: ${t(card.not_taken_reason ?? "reason not recorded")}.`,
+      : `The strategy did not place an order: ${t(notTakenText(card.not_taken_reason ?? "reason not recorded"))}.`,
   );
   return lines;
 }
