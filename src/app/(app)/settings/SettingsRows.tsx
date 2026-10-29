@@ -244,7 +244,7 @@ export function SignOutEverywhereRow({
   action,
   href,
 }: {
-  action: (fd: FormData) => Promise<void>;
+  action: (fd: FormData) => Promise<unknown>;
   href: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -274,7 +274,14 @@ export function SignOutEverywhereRow({
           </button>
         }
       >
-        <form id="signout-everywhere-form" action={action} />
+        <form
+          id="signout-everywhere-form"
+          action={async (fd: FormData) => {
+            await action(fd);
+          }}
+        >
+          <input type="hidden" name="confirm" value="sign_out_everywhere" />
+        </form>
         <p className="m-0 text-sm">
           Only do this if you lost a device or suspect someone else has access.
         </p>

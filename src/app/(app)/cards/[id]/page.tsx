@@ -91,7 +91,7 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
       {/* Sticky bar on phones (UXR-024): the code (already masked by the loader) and the state. */}
       <div
         data-testid="card-sticky"
-        className="sticky top-0 z-10 -mx-4 flex items-center justify-between gap-2 border-b border-border bg-surface px-4 py-2 text-sm sm:hidden"
+        className="sticky top-14 z-30 -mx-4 flex items-center justify-between gap-2 border-b border-border bg-surface px-4 py-2 text-sm sm:hidden"
       >
         <span className="min-w-0 font-semibold break-words">{v.stock}</span>
         <span className="shrink-0 text-text-muted">{state}</span>

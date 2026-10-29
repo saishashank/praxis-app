@@ -264,7 +264,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
       <StrategyTabs current="overview" />
       <header
         data-sticky-header=""
-        className="sticky top-0 z-20 -mx-4 flex min-w-0 flex-col gap-2 border-b border-border bg-bg px-4 py-3"
+        className="sticky top-14 z-20 -mx-4 flex min-w-0 flex-col gap-2 border-b border-border bg-bg px-4 py-3"
       >
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <h1 className="m-0 text-2xl font-semibold">{d.name}</h1>
