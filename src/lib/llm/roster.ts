@@ -120,7 +120,7 @@ export const ROSTER: readonly RosterEntry[] = [
     roles: ["R2"],
     limits: { rpm: 30, rpd: 1000, tpm: 8000 }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: false,
-    strictSchema: null,
+    strictSchema: true, // Groq structured-outputs page lists it under strict mode (checked M14)
     knowledgeCutoff: null,
     checkedOn: CHECKED,
     status: "verified",
