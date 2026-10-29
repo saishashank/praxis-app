@@ -46,7 +46,8 @@ describe("(app) layout", () => {
       screen.getByRole("link", { name: /Alerts, 2 not yet acknowledged, highest P1/ }),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Appearance/ })).toBeNull();
-    expect(screen.getByText("Data only: the strategies are not running yet.")).toBeInTheDocument();
+    // the mode line is Home's own status strip now; the shell renders no mode banner (UXR-006)
+    expect(screen.queryByText("Data only: the strategies are not running yet.")).toBeNull();
     expect(envFor).toHaveBeenCalledWith({ id: 3, role: "owner" });
   });
 
