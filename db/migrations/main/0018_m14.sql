@@ -100,7 +100,7 @@ END;
 -- 7. DAT-236 (D-239): licence register. The ASX listed-companies file now cites O-23b and states its
 -- own terms; RBA is copyrighted (derived numbers, source named). The enabling code keys on the
 -- source id, not on owner_ref, so accepting the ASX source still enables both rows. Two alternative
--- universe sources are recorded as disabled (no fetcher, terms [VERIFY]); two manual files get
+-- universe sources are recorded as disabled (no fetcher; terms checked in M14); two manual files get
 -- register rows. The history triggers log every change.
 UPDATE source_register
 SET owner_ref = 'O-23b',
@@ -112,8 +112,8 @@ SET permitted_use = 'copyrighted by the RBA: derived numbers only, source named 
 WHERE source = 'rba';
 INSERT INTO source_register (source, permitted_use, risk, status, owner_ref, summarisation_permitted)
 VALUES
-  ('wikidata_asx', 'CC0 universe alternative; no fetcher; terms [VERIFY] (DAT-236)', 'low', 'disabled', NULL, 0),
-  ('wikipedia_asx200', 'CC BY-SA 4.0 S&P/ASX 200 list, about 200 codes; no fetcher; terms [VERIFY] (DAT-236)', 'low', 'disabled', NULL, 0),
+  ('wikidata_asx', 'CC0 universe alternative (structured data CC0, terms checked in M14); no fetcher (DAT-236)', 'low', 'disabled', NULL, 0),
+  ('wikipedia_asx200', 'CC BY-SA 4.0 S&P/ASX 200 list (attribution, share-alike; terms checked in M14), about 200 codes; no fetcher (DAT-236)', 'low', 'disabled', NULL, 0),
   ('index_changes_manual', 'manual CSV upload by the Owner (DAT-234)', 'low', 'enabled', NULL, 0),
   ('industry_map_manual', 'manual CSV upload by the Owner (FAM-006)', 'low', 'enabled', NULL, 0);
 

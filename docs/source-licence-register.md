@@ -22,8 +22,8 @@ How to read this page:
 | `abs` | Australian Bureau of Statistics | public data | low | enabled | none | not needed | yes |
 | `asic_short` | ASIC daily aggregate short positions | public data | low | enabled | none | not needed | yes |
 | `asx_listed_companies` | ASX listed-companies file | personal use only (DAT-124); covered by the ASX entry O-23 | high | pending | O-23 | pending Owner (O-23) | no |
-| `wikidata_asx` | Wikidata ASX companies (alternative, disabled) | CC0 universe alternative; no fetcher; terms [VERIFY] (DAT-236) | low | disabled | none | not needed | no |
-| `wikipedia_asx200` | Wikipedia S&P/ASX 200 list (alternative, disabled) | CC BY-SA 4.0 S&P/ASX 200 list, about 200 codes; no fetcher; terms [VERIFY] (DAT-236) | low | disabled | none | not needed | no |
+| `wikidata_asx` | Wikidata ASX companies (alternative, disabled) | CC0 universe alternative (structured data CC0, terms checked in M14); no fetcher (DAT-236) | low | disabled | none | not needed | no |
+| `wikipedia_asx200` | Wikipedia S&P/ASX 200 list (alternative, disabled) | CC BY-SA 4.0 S&P/ASX 200 list (attribution, share-alike; terms checked in M14), about 200 codes; no fetcher (DAT-236) | low | disabled | none | not needed | no |
 | `index_changes_manual` | Index changes (manual CSV) | manual CSV upload by the Owner (DAT-234) | low | enabled | none | not needed | no |
 | `industry_map_manual` | Industry classes (manual CSV) | manual CSV upload by the Owner (FAM-006) | low | enabled | none | not needed | no |
 
