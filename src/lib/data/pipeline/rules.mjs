@@ -15,6 +15,9 @@ export const SOURCE = "yahoo_eod";
 /** Catch-up bounds (design section 3: "bounded, for example 5"). The target date always counts. */
 export const MAX_DATES_PER_RUN = 5;
 export const LOOKBACK_DAYS = 30;
+/** D-203: days of the hole between the stored history and the first marker taken per night, on top
+ * of the bound above (a one-off fill; 10 keeps the night inside the arena's 20-minute wait). */
+export const GAP_MAX_DATES = 10;
 /** Decision 13 (D-057): backfill and catch-up writes stay under 2M rows per UTC month. */
 export const BACKFILL_WRITE_CAP_MONTH = 2_000_000;
 /** DAT-002 / ch.15 refetch_diff_flag: a difference above 0.1 % on any field is recorded. */
@@ -111,13 +114,14 @@ export function tradingDaysBetween(from, to, rows) {
  * window are processed oldest first; the window starts at the first marker ever written (nothing
  * before the pipeline existed is "missed"; history is the backfill's job, T9). D-202: when the history
  * ends before the first marker (`lastBarBefore`, the newest stored bar older than it), the trading days
- * in between are missed too and join the catch-up (still inside the look-back). With no marker at
+ * in between are missed too and join the catch-up (still inside the look-back), up to
+ * `GAP_MAX_DATES` of them a night beside the usual bound (D-203). With no marker at
  * all only the target date is planned. The target date always makes the plan (a live day is never
  * pushed back by old backlog), so at most `maxDates - 1` older dates join it. A target that is not
  * a trading day gets a `non-trading` marker.
  * @param {{ target: string, markers: ReadonlySet<string>, firstMarker: string | null,
  *   rows: readonly { d: string, kind: string }[], maxDates?: number, lookbackDays?: number,
- *   lastBarBefore?: string | null }} p
+ *   lastBarBefore?: string | null, gapMaxDates?: number }} p
  * @returns {{ dates: { d: string, trading: boolean }[], remaining: number }}
  */
 export function planDates(p) {
@@ -126,21 +130,23 @@ export function planDates(p) {
   const lookback = p.lookbackDays ?? LOOKBACK_DAYS;
   const targetTrading = isTradingDay(target, rows);
   const older = [];
+  const gapDays = [];
   if (firstMarker !== null) {
     const floor = addDays(target, -lookback);
     const gap = p.lastBarBefore ? addDays(p.lastBarBefore, 1) : null;
     const start = gap !== null && gap < firstMarker ? gap : firstMarker;
     const from = start > floor ? start : floor;
     for (const d of tradingDaysBetween(from, addDays(target, -1), rows)) {
-      if (!markers.has(d)) older.push(d);
+      if (!markers.has(d)) (d < firstMarker ? gapDays : older).push(d);
     }
   }
   const targetMissing = !markers.has(target);
   const room = Math.max(0, maxDates - (targetMissing ? 1 : 0));
+  const gap = gapDays.slice(0, p.gapMaxDates ?? GAP_MAX_DATES);
   const picked = older.slice(0, room);
-  const dates = picked.map((d) => ({ d, trading: true }));
+  const dates = [...gap, ...picked].map((d) => ({ d, trading: true }));
   if (targetMissing) dates.push({ d: target, trading: targetTrading });
-  return { dates, remaining: older.length - picked.length };
+  return { dates, remaining: gapDays.length - gap.length + older.length - picked.length };
 }
 
 /**
