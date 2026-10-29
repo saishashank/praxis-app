@@ -112,10 +112,15 @@ describe("News chips and cards (UXN-035, UXN-158)", () => {
     const nav = screen.getByRole("navigation", { name: "News view" });
     const links = within(nav).getAllByRole("link");
     expect(links.map((l) => l.textContent)).toEqual([
-      "All news",
+      "All news (Selected)",
       "My companies",
       expect.stringMatching(/^Alerts/),
     ]);
+    // UXR-002 cues: check icon, filled surface and aria-current on the selected segment only
+    expect(links[0]!.querySelector("svg")).not.toBeNull();
+    expect(links[0]!.className).toContain("bg-accent");
+    expect(links[1]!.querySelector("svg")).toBeNull();
+    expect(links[1]).not.toHaveAttribute("aria-current");
     expect(links[0]).toHaveAttribute("aria-current", "page");
     expect(links[0]).toHaveAttribute("href", "/news");
     const cards = screen.getAllByTestId("news-card");
@@ -193,7 +198,8 @@ describe("masking per role (DAT-124, UX-009)", () => {
       expect(screen.getAllByTestId("news-card")[0]!.textContent).toMatch(/Stock [A-Z]/);
       expect(screen.getAllByTestId("news-card")[0]!.textContent).toContain("Week 2026-W43");
       expect(screen.queryByLabelText("Company code")).toBeNull();
-      expect(screen.queryByLabelText("Search")).toBeNull();
+      // the search field stays visible but is switched off (it would reveal which codes exist)
+      expect(screen.getByLabelText("Search")).toBeDisabled();
       expect(screen.queryByTestId("held-tag")).toBeNull();
       cleanup();
     }
@@ -245,9 +251,10 @@ describe("Alert inbox (UXN-157, UXN-160, UXN-161)", () => {
     expect(within(sections[0] as HTMLElement).getAllByTestId("alert-item")).toHaveLength(1);
     for (const t of ["P1", "P2"]) {
       const d = screen.getByTestId(`tier-${t}`);
-      expect(d.tagName).toBe("DETAILS");
+      expect(d.tagName).toBe("SECTION"); // no accordion (UXR-025)
       expect(d.textContent).toMatch(/unread/);
     }
+    expect(screen.getByTestId("alert-inbox").querySelector("details")).toBeNull();
     const archived = screen.getByTestId("archived");
     expect(archived.textContent).toContain("1 acknowledged");
     expect(archived.textContent).toContain("An old note");
@@ -430,5 +437,57 @@ describe("axe (AT-26)", () => {
         cleanup();
       }
     }
+  });
+});
+
+describe("C9 redesign (UXR-025, UXR-045, UXR-052)", () => {
+  it("keeps ?chip=alerts working for the Home link and marks Alerts as the selected segment", async () => {
+    as(w, "owner");
+    render(await NewsPage({ searchParams: sp({ chip: "alerts" }) }));
+    const nav = screen.getByRole("navigation", { name: "News view" });
+    const alertsLink = within(nav).getByRole("link", { name: /^Alerts/ });
+    expect(alertsLink).toHaveAttribute("href", "/news?chip=alerts");
+    expect(alertsLink).toHaveAttribute("aria-current", "page");
+    expect(alertsLink.textContent).toContain("(Selected)");
+    expect(alertsLink.querySelector("svg")).not.toBeNull();
+    expect(within(nav).getByRole("link", { name: "All news" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("shows the search field on every chip", async () => {
+    as(w, "owner");
+    for (const chip of ["all", "mine", "alerts"]) {
+      render(await NewsPage({ searchParams: sp({ chip }) }));
+      expect(screen.getByLabelText("Search")).toBeEnabled();
+      cleanup();
+    }
+  });
+
+  it("news rows carry headline, source, time and a text materiality pill, with no accordion", async () => {
+    as(w, "owner");
+    const { container } = render(await NewsPage({ searchParams: sp({ chip: "all" }) }));
+    for (const card of screen.getAllByTestId("news-card")) {
+      expect(within(card).getByTestId("news-source").textContent).toBe(
+        "Source: exchange announcement",
+      );
+      const pill = card.querySelector('[data-kind="tier"], [data-kind="status"]');
+      expect(pill).not.toBeNull();
+      expect(pill!.textContent).toMatch(/P[012] (Urgent|Important|FYI)|Not important/);
+    }
+    expect(container.querySelector("ul[aria-label='News'] details")).toBeNull();
+  });
+
+  it("alerts show a tier-coloured P-level pill with text, a tier rail and the action", async () => {
+    as(w, "owner");
+    render(await NewsPage({ searchParams: sp({ chip: "alerts" }) }));
+    const items = screen.getAllByTestId("alert-item");
+    for (const item of items) {
+      const pill = item.querySelector('[data-kind="tier"]')!;
+      expect(pill.textContent).toMatch(/P[012] (Urgent|Important|FYI)/);
+      expect(item.querySelector("[data-hue^='tier-']")).not.toBeNull();
+    }
+    const p0 = items.find((i) => i.textContent?.includes("Trading halt on"))!;
+    expect(p0.querySelector('[data-kind="tier"]')!.textContent).toBe("P0 Urgent");
+    expect(p0.querySelector("[data-hue]")!.getAttribute("data-hue")).toBe("tier-p0");
+    expect(within(p0).getByRole("button", { name: /^Acknowledge/ })).toBeVisible();
   });
 });

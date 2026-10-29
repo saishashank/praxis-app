@@ -37,6 +37,7 @@ vi.mock("@/lib/db/client", () => ({
 }));
 
 import CardPage from "@/app/(app)/cards/[id]/page";
+import { Steelman } from "@/app/(app)/cards/[id]/Steelman";
 import IdeasPage from "@/app/(app)/strategies/ideas/page";
 import RiskPage from "@/app/(app)/strategies/risk/page";
 import { cardRef } from "@/lib/ui/loaders/cards";
@@ -305,19 +306,15 @@ describe("Decision Card page (UXN-037, 100, 102, 104, 120 to 123, 126)", () => {
   it("the Owner page has every section, in order, and the note form", async () => {
     as(OWNER);
     const html = await card(encodeURIComponent(CARD_UP));
+    // UXR-024 reading order: what and why, rules, thesis-breakers, exit plan, scenario, evidence
     const order = [
-      "Based on",
-      "Thesis",
-      "What past similar setups did",
-      "What pushes it up and what pulls it down",
+      "What and why",
       "Rules that fired",
-      "Warning signs",
-      "What could hurt this",
+      "Thesis-breakers",
       "Exit plan",
-      "Size and cost",
       "Scenario",
+      "Evidence",
       "Afterwards: how did it turn out?",
-      "Why?",
       "Notes",
     ];
     let at = -1;
@@ -330,10 +327,46 @@ describe("Decision Card page (UXN-037, 100, 102, 104, 120 to 123, 126)", () => {
     expect(html).toContain("Rules-only (AI unavailable today)");
     expect(html).toContain("Historical range, not a forecast");
     expect(html).toContain("Bad case");
-    expect(html).toContain("<details"); // the scenario table is collapsed behind a tap
+    expect(html).toMatch(/<table[^>]*>\s*<caption[^>]*>[^<]*<\/caption>/); // the scenario table is open
+    for (const h3 of ["Based on", "What past similar setups did", "What could hurt this", "Why?"]) {
+      expect(html, h3).toContain(`>${h3}</h3>`);
+    }
     expect(html).toContain("ZZUP looks cheap to me.");
     expect(html).toContain("Save note");
     expect(html).not.toMatch(/buy now|sell now|place order/i);
+  });
+
+  it("draws no steelman heading while there is no steelman data, and one when there is", async () => {
+    as(OWNER);
+    const html = await card(encodeURIComponent(CARD_UP));
+    expect(html).not.toMatch(/steelman|The case against/i);
+    expect(renderToStaticMarkup(<Steelman data={null} />)).toBe("");
+    expect(renderToStaticMarkup(<Steelman data={{ text: "  " }} />)).toBe("");
+    expect(renderToStaticMarkup(<Steelman data={{ text: "Margins are thin." }} />)).toContain(
+      ">The case against</h2>",
+    );
+  });
+
+  it("thesis-breaker pills always carry text and the monitored value", async () => {
+    as(OWNER);
+    const html = await card(encodeURIComponent(CARD_UP));
+    const pills = [...html.matchAll(/<span[^>]*data-kind="thesis"[^>]*>(.*?)<\/span><\/span>/g)];
+    expect(pills.length).toBeGreaterThan(0);
+    for (const m of pills) expect(m[1]).toMatch(/(Green|Amber|Red)$/);
+    expect(html).toMatch(/data-kind="thesis"[\s\S]*?<\/span><span class="break-words">[^<]+:/);
+  });
+
+  it("the header has a family-coloured rail and badge, and the sticky bar carries the masked code and state", async () => {
+    as(OWNER);
+    let html = await card(encodeURIComponent(CARD_UP));
+    expect(html).toMatch(/data-hue="family-[a-z]{2}"/);
+    expect(html).toMatch(/data-family="[a-z]{2}"/);
+    expect(html).toMatch(/data-testid="card-sticky"[^>]*>\s*<span[^>]*>ZZUP<\/span>/);
+    as(VIEWER);
+    html = await card(encodeURIComponent(cardRef(CARD_UP)));
+    expect(html).toMatch(/data-testid="card-sticky"[^>]*><span[^>]*>Stock [A-Z]<\/span>/);
+    expect(html).toContain("sm:hidden");
+    expect(leaks(html)).toEqual([]);
   });
 
   it("a Viewer addressing the opaque reference: no code, id or note text; 'Note added by' only", async () => {
