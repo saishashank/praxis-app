@@ -43,6 +43,11 @@ describe("sign-in page", () => {
     ]);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(document.querySelector("input[name=callbackUrl]")).toHaveValue("/markets");
+    // logo, tagline and one line on what Praxis is (UXR-030)
+    expect(screen.getAllByAltText("Praxis logo").length).toBeGreaterThan(0);
+    expect(screen.getByText("Learn. Earn. Repeat.")).toBeInTheDocument();
+    expect(screen.getByText(/personal stock-learning simulator/)).toBeInTheDocument();
+    expect(document.querySelectorAll("form")).toHaveLength(1);
   });
 
   it("shows only the neutral message on error and sanitises callbackUrl", async () => {

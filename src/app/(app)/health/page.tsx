@@ -540,7 +540,8 @@ export default async function HealthPage() {
         <header id="overview" className="flex scroll-mt-20 flex-col gap-1">
           <h1 className="text-3xl font-semibold tracking-tight">System Health</h1>
           <p className="m-0 text-sm text-text-muted">
-            The Control Room. Times are shown in Australia/Melbourne.
+            Is everything running as it should? The briefing comes first, then each part. Times are
+            shown in Australia/Melbourne.
           </p>
         </header>
 

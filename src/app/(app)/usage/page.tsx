@@ -2,6 +2,7 @@
 // own run records and labelled as an estimate.
 import { EmptyState } from "@/components/ui/States";
 import Link from "next/link";
+import { Pill } from "@/components/ui/Pill";
 import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
 import { formatMelbourne } from "@/lib/health/format";
@@ -26,10 +27,63 @@ const LEVEL_LABEL: Record<MeterLevel, string> = {
   "no data": "NO DATA",
 };
 
+// Level to pill kind and the colour of the bar (status colours, never the gain/loss pair).
+const LEVEL_PILL: Record<MeterLevel, string> = {
+  ok: "ok",
+  notice: "warn",
+  alert: "bad",
+  degrade: "bad",
+  "no data": "neutral",
+};
+const LEVEL_BAR: Record<MeterLevel, string> = {
+  ok: "var(--gradient-brand)",
+  notice: "var(--color-tier-p1-fill)",
+  alert: "var(--color-negative-fill)",
+  degrade: "var(--color-negative-fill)",
+  "no data": "var(--color-grid)",
+};
+
 const nf = new Intl.NumberFormat("en-AU", { maximumFractionDigits: 2 });
 const pctText = (v: number | null) => (v === null ? "n/a" : `${v}%`);
 const whole = new Intl.NumberFormat("en-AU", { maximumFractionDigits: 0 });
 const amount = (v: number | null, unit: string) => (v === null ? "n/a" : `${nf.format(v)} ${unit}`);
+
+/** One meter as a row (UXR-029): name, period, a progress bar, used / limit and the level pill. */
+function MeterRow({ m }: { m: Meter }) {
+  const pct = m.ratio === null ? null : Math.max(0, Math.min(100, m.ratio * 100));
+  return (
+    <li className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-surface p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="m-0 text-base font-semibold">{m.label}</h3>
+        <Pill kind="status" value={LEVEL_PILL[m.level]}>
+          {LEVEL_LABEL[m.level]}
+        </Pill>
+      </div>
+      <div
+        role="progressbar"
+        aria-label={`${m.label} used`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct === null ? undefined : Math.round(pct)}
+        aria-valuetext={pct === null ? "No data" : `${pct.toFixed(1)}% of the limit`}
+        className="h-2 w-full overflow-hidden rounded-full bg-surface-2"
+      >
+        <div
+          data-level={m.level}
+          className="h-full rounded-full"
+          style={{ width: `${pct ?? 0}%`, background: LEVEL_BAR[m.level] }}
+        />
+      </div>
+      <p className="m-0 text-sm">
+        {m.used === null ? "No data" : amount(m.used, m.unit)} / {amount(m.limit, m.unit)}
+        {m.ratio !== null && ` (${(m.ratio * 100).toFixed(1)}%)`}
+      </p>
+      <p className="m-0 text-xs text-text-muted">
+        <span>{m.periodLabel}</span>. {m.note}
+      </p>
+    </li>
+  );
+}
 
 export default async function UsagePage() {
   const user = await requireUser("admin", "/usage");
@@ -60,8 +114,9 @@ export default async function UsagePage() {
       <header className="flex flex-col gap-2">
         <h1 className="text-3xl font-semibold tracking-tight">Usage</h1>
         <p className="text-sm text-text-muted">
-          As of {formatMelbourne(now.toISOString(), tf)}. Quota periods are UTC calendar months
-          (days for LLM tokens). Times are shown in Australia/Melbourne.
+          How much of each free-tier allowance has been used, so nothing runs out unnoticed. As of{" "}
+          {formatMelbourne(now.toISOString(), tf)}. Quota periods are UTC calendar months (days for
+          LLM tokens). Times are shown in Australia/Melbourne.
         </p>
         <Link href="/" className="text-sm text-accent underline">
           Home
@@ -81,49 +136,11 @@ export default async function UsagePage() {
             traffic is not included), so compare them with the provider dashboards during the
             monthly $0 check.
           </p>
-          <table className="w-full border-collapse text-left text-sm">
-            <caption className="sr-only">Free-tier usage meters</caption>
-            <thead>
-              <tr>
-                <th scope="col" className="py-2 pr-4">
-                  Meter
-                </th>
-                <th scope="col" className="py-2 pr-4">
-                  Period
-                </th>
-                <th scope="col" className="py-2 pr-4">
-                  Used / limit
-                </th>
-                <th scope="col" className="py-2 pr-4">
-                  Level
-                </th>
-                <th scope="col" className="py-2">
-                  Source
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {meters.map((m) => (
-                <tr key={m.id} className="border-t border-border align-top">
-                  <th scope="row" className="py-2 pr-4 font-medium">
-                    {m.label}
-                  </th>
-                  <td className="py-2 pr-4">{m.periodLabel}</td>
-                  <td className="py-2 pr-4">
-                    {m.used === null ? "No data" : amount(m.used, m.unit)} /{" "}
-                    {amount(m.limit, m.unit)}
-                    {m.ratio !== null && ` (${(m.ratio * 100).toFixed(1)}%)`}
-                  </td>
-                  <td className="py-2 pr-4">
-                    <span className="rounded border px-2 py-0.5 font-mono text-xs">
-                      {LEVEL_LABEL[m.level]}
-                    </span>
-                  </td>
-                  <td className="py-2 text-text-muted">{m.note}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ul aria-label="Free-tier usage meters" className="m-0 flex list-none flex-col gap-3 p-0">
+            {meters.map((m) => (
+              <MeterRow key={m.id} m={m} />
+            ))}
+          </ul>
         </section>
       )}
 
