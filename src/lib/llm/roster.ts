@@ -74,7 +74,7 @@ export const ROSTER: readonly RosterEntry[] = [
     provider: "groq",
     modelId: "openai/gpt-oss-120b",
     roles: ["R2", "R3"],
-    limits: { rpm: 30, rpd: 1000, tpm: 8000 },
+    limits: { rpm: 30, rpd: 1000, tpm: 8000 }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: false,
     checkedOn: CHECKED,
     status: "verified",
@@ -85,7 +85,7 @@ export const ROSTER: readonly RosterEntry[] = [
     provider: "groq",
     modelId: "openai/gpt-oss-20b",
     roles: ["R1", "R2"],
-    limits: { rpm: 30, rpd: 1000, tpm: 8000 },
+    limits: { rpm: 30, rpd: 1000, tpm: 8000 }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: false,
     checkedOn: CHECKED,
     status: "verified",
@@ -96,7 +96,7 @@ export const ROSTER: readonly RosterEntry[] = [
     provider: "groq",
     modelId: "qwen/qwen3.8-27b",
     roles: ["R2"],
-    limits: { rpm: 30, rpd: 1000, tpm: 8000 },
+    limits: { rpm: 30, rpd: 1000, tpm: 8000 }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: false,
     checkedOn: CHECKED,
     status: "verified",
@@ -118,7 +118,7 @@ export const ROSTER: readonly RosterEntry[] = [
     provider: "openrouter",
     modelId: "qwen/qwen3.8-27b:free",
     roles: ["R2"],
-    limits: { rpm: 20, rpd: 50, tpm: null },
+    limits: { rpm: 20, rpd: 50, tpm: null }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: null,
     checkedOn: CHECKED,
     status: "unverified",
