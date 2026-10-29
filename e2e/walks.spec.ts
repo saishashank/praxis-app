@@ -9,8 +9,8 @@ import path from "node:path";
 import { setTheme, signIn, type Role } from "./helpers";
 
 const OUT = process.env.E2E_WALK ?? "";
-const THEME = process.env.E2E_WALK_THEME ?? "dark";
-const ROLE = (process.env.E2E_WALK_ROLE ?? "owner") as Role;
+const THEMES_ = (process.env.E2E_WALK_THEME ?? "dark").split(",");
+const ROLES_ = (process.env.E2E_WALK_ROLE ?? "owner").split(",") as Role[];
 test.skip(!OUT, "set E2E_WALK=<dir> to capture a walk");
 test.describe.configure({ timeout: 900_000 });
 
@@ -64,46 +64,48 @@ async function metrics(page: Page) {
   });
 }
 
-test(`walk ${ROLE} ${THEME}`, async ({ page, context }) => {
-  fs.mkdirSync(OUT, { recursive: true });
-  await setTheme(ROLE, THEME);
-  await signIn(context, ROLE);
-  const log: Record<string, unknown>[] = [];
-  for (const width of [375, 1280]) {
-    await page.setViewportSize({ width, height: 800 });
-    for (const [name, p] of PAGES) {
-      const res = await page.goto(p);
-      await page
-        .locator('[data-boot="on"]')
-        .waitFor({ state: "detached", timeout: 5000 })
-        .catch(() => {});
-      await page.waitForTimeout(300);
-      const rec: Record<string, unknown> = {
-        page: p,
-        width,
-        theme: THEME,
-        role: ROLE,
-        status: res?.status(),
-      };
-      try {
-        Object.assign(rec, await metrics(page));
-        const axe = await new AxeBuilder({ page })
-          .withRules(
-            THEME === "high_contrast"
-              ? ["color-contrast", "color-contrast-enhanced"]
-              : ["color-contrast"],
-          )
-          .analyze();
-        rec.contrast = axe.violations.map((v) => `${v.id} x${v.nodes.length}`);
-      } catch (e) {
-        rec.error = String(e).slice(0, 200);
+for (const ROLE of ROLES_)
+  for (const THEME of THEMES_)
+    test(`walk ${ROLE} ${THEME}`, async ({ page, context }) => {
+      fs.mkdirSync(OUT, { recursive: true });
+      await setTheme(ROLE, THEME);
+      await signIn(context, ROLE);
+      const log: Record<string, unknown>[] = [];
+      for (const width of [375, 1280]) {
+        await page.setViewportSize({ width, height: 800 });
+        for (const [name, p] of PAGES) {
+          const res = await page.goto(p);
+          await page
+            .locator('[data-boot="on"]')
+            .waitFor({ state: "detached", timeout: 5000 })
+            .catch(() => {});
+          await page.waitForTimeout(300);
+          const rec: Record<string, unknown> = {
+            page: p,
+            width,
+            theme: THEME,
+            role: ROLE,
+            status: res?.status(),
+          };
+          try {
+            Object.assign(rec, await metrics(page));
+            const axe = await new AxeBuilder({ page })
+              .withRules(
+                THEME === "high_contrast"
+                  ? ["color-contrast", "color-contrast-enhanced"]
+                  : ["color-contrast"],
+              )
+              .analyze();
+            rec.contrast = axe.violations.map((v) => `${v.id} x${v.nodes.length}`);
+          } catch (e) {
+            rec.error = String(e).slice(0, 200);
+          }
+          await page.screenshot({
+            path: path.join(OUT, `${ROLE}-${THEME}-${width}-${name}.png`),
+            fullPage: true,
+          });
+          log.push(rec);
+        }
       }
-      await page.screenshot({
-        path: path.join(OUT, `${ROLE}-${THEME}-${width}-${name}.png`),
-        fullPage: true,
-      });
-      log.push(rec);
-    }
-  }
-  fs.writeFileSync(path.join(OUT, `${ROLE}-${THEME}.json`), JSON.stringify(log, null, 1));
-});
+      fs.writeFileSync(path.join(OUT, `${ROLE}-${THEME}.json`), JSON.stringify(log, null, 1));
+    });
