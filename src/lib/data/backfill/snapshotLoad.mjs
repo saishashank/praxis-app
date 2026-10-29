@@ -88,7 +88,7 @@ export async function loadInputs(o) {
   }));
   const annRecent = (
     await qPaged(
-      `SELECT code, ann_id, published_at, type, price_sensitive, title FROM announcement
+      `SELECT code, ann_id, published_at, type, price_sensitive, title, first_ingested_at FROM announcement
        WHERE market = ? AND published_at >= ? AND published_at < ? ORDER BY id`,
       [MARKET, `${addDays(recentFrom, -1)}T00:00:00.000Z`, `${addDays(o.to, 2)}T00:00:00.000Z`],
     )
@@ -99,7 +99,25 @@ export async function loadInputs(o) {
     type: r.type === null ? null : String(r.type),
     price_sensitive: Number(r.price_sensitive),
     title: String(r.title),
+    first_ingested_at: r.first_ingested_at === null ? null : String(r.first_ingested_at),
   }));
+  // GL-05: the live cut-off poll markers of the range (worker_state cutoff_poll:AU:<d>)
+  const cutoffPolls = (
+    await q("SELECT key, value_json FROM worker_state WHERE key LIKE ? ORDER BY key", [
+      `cutoff_poll:${MARKET}:%`,
+    ])
+  )
+    .map((r) => {
+      try {
+        return {
+          d: String(r.key).slice(`cutoff_poll:${MARKET}:`.length),
+          at: JSON.parse(String(r.value_json)),
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter((m) => m !== null && typeof m.at === "string" && m.d >= o.from && m.d <= o.to);
   const calendar = (
     await q(
       "SELECT d, kind, close_time, confirmed FROM trading_calendar WHERE market = ? AND d >= ? AND d <= ?",
@@ -157,6 +175,7 @@ export async function loadInputs(o) {
     bars_recent: barsRecent,
     announcements,
     announcements_recent: annRecent,
+    cutoff_polls: cutoffPolls,
     calendar,
     universe,
     index_bars: index,

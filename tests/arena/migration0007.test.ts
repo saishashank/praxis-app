@@ -180,7 +180,7 @@ describe("main migration 0007_arena: up / down / up", () => {
     const db = await arenaDb();
     const ms = await loadMigrations(MIGRATIONS("main"));
     const full = await schemaOf(db);
-    await migrateDown(db, ms, 9); // 0016, 0015, 0014, 0013, 0012, 0011, 0010, 0009 and 0008 sit on top: take the schema as of 0007
+    await migrateDown(db, ms, 10); // 0017, 0016, 0015, 0014, 0013, 0012, 0011, 0010, 0009 and 0008 sit on top: take the schema as of 0007
     const before = await schemaOf(db);
     expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 6 });
     const mid = await schemaOf(db);
@@ -200,9 +200,9 @@ describe("main migration 0007_arena: up / down / up", () => {
       );
     });
     expect(mid).toEqual(nonArena);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 10, version: 16 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 11, version: 17 });
     expect(await schemaOf(db)).toEqual(full);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 16 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 17 });
   });
 
   it("a fresh database and a down/up database have the same schema (up/down/up identical)", async () => {
@@ -1091,7 +1091,7 @@ describe("main migration 0007_arena: forever retention and backup", () => {
     await expect(run(target, "UPDATE trade SET stop_micro = 1")).rejects.toThrow(/trade:/);
     // The restored database is at version 8 (0008 agents on top of 0007): nothing more to apply.
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 16 });
+    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 17 });
   });
 });
 

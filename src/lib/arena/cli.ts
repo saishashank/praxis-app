@@ -21,7 +21,9 @@ import { createClient, type Client } from "@libsql/client";
 import { addDays, marketDate, sessionsBetween } from "@/lib/data/calendar";
 import { signalsDay, type SignalsResult } from "@/lib/agents/batch2b";
 import { reviewDay, type ReviewResult } from "@/lib/agents/batch3";
-import type { AgentParams } from "@/lib/agents/params";
+import { loadAgentParams, type AgentParams } from "@/lib/agents/params";
+import { decisionCutoffUtc } from "@/lib/agents/decisionView";
+import { waitForCutoffPoll } from "@/lib/sentinel/cutoffPoll";
 import { learnDay, type LearnResult } from "@/lib/learning/learnStage";
 import { wordsDay, type WordsLlm, type WordsResult } from "@/lib/learning/wordsStage";
 import { createRouter, type LlmRouter } from "@/lib/llm/router";
@@ -353,6 +355,24 @@ export async function signalsMain(
       if (writes) {
         const deadline = nowMs() + wait * 60_000;
         while (!(await hasClosedBooks(db, d)) && nowMs() < deadline) await sleep(POLL_MS);
+        // GL-05: then the "first completed poll after the cut-off" marker, at most 4 minutes (bounded,
+        // never past cut-off + 4 min). A missing marker never stalls the night: signalsDay records
+        // `cutoff_poll_missing` on the run and the announcements are bounded at cut-off + 4 min.
+        if (!replay) {
+          let found = false;
+          try {
+            found = await waitForCutoffPoll(db, {
+              market: MARKET,
+              d,
+              cutoffIso: decisionCutoffUtc(d, (await loadAgentParams(db)).decisionCutoff),
+              nowMs,
+              sleep,
+            });
+          } catch {
+            // the wait is best effort: never a reason to stop the night
+          }
+          if (!found) out("arena-2b: cut-off poll marker missing after the wait; going on");
+        }
       }
       const result = await signalsDay(db, {
         market: MARKET,

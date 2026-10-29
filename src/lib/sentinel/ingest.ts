@@ -65,7 +65,8 @@ function insertAnnouncements(
     stmts.push({
       sql:
         "INSERT INTO announcement (market, code, ann_id, published_at, ingested_at, type, " +
-        `price_sensitive, title, url, source) VALUES ${slice.map(() => "(?,?,?,?,?,?,?,?,?,?)").join(",")} ` +
+        // GL-05: first_ingested_at = the instant this system first stored the row (live: now)
+        `price_sensitive, title, url, source, first_ingested_at) VALUES ${slice.map(() => "(?,?,?,?,?,?,?,?,?,?,?)").join(",")} ` +
         "ON CONFLICT DO NOTHING",
       args: slice.flatMap((r) => [
         market,
@@ -78,6 +79,7 @@ function insertAnnouncements(
         r.title,
         r.url,
         ASX_SOURCE,
+        now,
       ]),
     });
   }

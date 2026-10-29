@@ -50,6 +50,7 @@ import { ensureCohorts } from "@/lib/arena/cohortStart";
 import { loadExecutions, loadUnresolvedCohorts, type StoredCohort } from "@/lib/arena/cohortWriter";
 import { loadConfirmedActions, loadQtyAdjustments } from "@/lib/arena/corpActionWriter";
 import { knownBy, type CorpActionRecord } from "@/lib/arena/corpActions";
+import { loadIngestBound } from "@/lib/sentinel/cutoffPoll";
 import { decisionCutoffUtc } from "./decisionView";
 import {
   availableCash,
@@ -1454,6 +1455,9 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
     const nextD = nextTradingDay(o.d, calendar);
     // GL-02: both lists hold only actions confirmed by the decision cut-off of D
     const cutoffD = decisionCutoffUtc(o.d, params.decisionCutoff);
+    // GL-05: a live night without the "first completed poll after the cut-off" marker is recorded
+    const cutoffPollMissing =
+      o.replay === true ? false : (await loadIngestBound(db, o.market, o.d, cutoffD)).missing;
     const actions = knownBy(await loadConfirmedActions(db, o.market, o.d), cutoffD);
     const actionsNext = knownBy(await loadConfirmedActions(db, o.market, nextD), cutoffD);
     const trades = await loadOpenTrades(db);
@@ -1579,6 +1583,7 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       details: {
         ...stats,
         partial: day.partialReasons.length > 0 ? day.partialReasons : null,
+        ...(cutoffPollMissing ? { cutoff_poll_missing: true } : {}),
         ...(started !== null && started.opened > 0
           ? { cohortsOpened: started.opened, cohortStartD: started.startD }
           : {}),

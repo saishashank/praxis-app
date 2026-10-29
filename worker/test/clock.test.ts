@@ -193,7 +193,9 @@ describe("slot table (docs/M2_design.md section 3)", () => {
     ]) {
       const s = AU_SLOTS.find((x) => x.id === id)!;
       // M8 T8: slots a runner serves are available but listed-only; the rest (no runner reads them) stay off
-      if (s.runner === "worker") expect(s.enabled).toBe(false);
+      if (id === "decision-cutoff")
+        expect([s.enabled, s.requiresListing]).toEqual([true, undefined]);
+      else if (s.runner === "worker") expect(s.enabled).toBe(false);
       else expect([s.enabled, s.requiresListing]).toEqual([true, true]);
     }
     // The allow-listed files exist and are dispatch-only.

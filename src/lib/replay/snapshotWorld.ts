@@ -7,7 +7,9 @@
 // the world reports no event coverage and both sources off: F4 runs as its "no event filter"
 // variant, and the event/short-interest families output BLOCKED-DATA until those inputs exist
 // (ARN-082 labels this). No clock, no randomness.
-import type { ViewBar } from "@/lib/agents/decisionView";
+import { AU_TIME_ZONE, decisionCutoffUtc, type ViewBar } from "@/lib/agents/decisionView";
+import { addDays, marketDate } from "@/lib/data/calendar";
+import { announcementIngestBound } from "@/lib/sentinel/cutoffPoll";
 import { adjustBars, barsNeeded, splitActionsByCode, splitsKnownOn } from "@/lib/agents/candidates";
 import {
   buildCodeFacts,
@@ -25,7 +27,7 @@ import { floorRat } from "@/lib/money/round";
 import type { PoolCode } from "./controlLibrary";
 import type { CohortReplaySource } from "./cohortReplay";
 import type { PositionFacts } from "./returns";
-import { loadSnapshot } from "./snapshot";
+import { loadSnapshot, type SnapshotAnnouncement } from "./snapshot";
 
 type LoadedSnapshot = ReturnType<typeof loadSnapshot>;
 
@@ -67,6 +69,27 @@ export function corpRecordsOf(snap: LoadedSnapshot): CorpActionRecord[] {
     });
   }
   return out;
+}
+
+/**
+ * GL-05: is the announcement usable by the decision it belongs to? That is the session whose cut-off
+ * follows its publication (the same day before the cut-off, else the next day). A row without
+ * first_ingested_at is legacy and always visible. The bound is the live rule: the day's stored marker
+ * when it lies in [cut-off, cut-off + 4 min], else cut-off + 4 min.
+ */
+export function snapshotAnnouncementVisible(
+  a: SnapshotAnnouncement,
+  markers: ReadonlyMap<string, string>,
+  decisionCutoffHhmm: string,
+): boolean {
+  if (a.first_ingested_at === null || a.first_ingested_at === undefined) return true;
+  let day = marketDate(new Date(a.published_at), AU_TIME_ZONE);
+  if (a.published_at >= decisionCutoffUtc(day, decisionCutoffHhmm)) day = addDays(day, 1);
+  const bound = announcementIngestBound(
+    markers.get(day) ?? null,
+    decisionCutoffUtc(day, decisionCutoffHhmm),
+  );
+  return a.first_ingested_at <= bound;
 }
 
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -172,9 +195,17 @@ export class SnapshotWorld implements CohortReplaySource {
       list.push(r);
     }
     for (const l of this.tiers.values()) l.sort((a, b) => cmp(a.d, b.d));
-    this.announcements = (
-      snap.tables.announcements as unknown as { code: string; published_at: string }[]
-    ).map((a) => ({ code: a.code, d: a.published_at.slice(0, 10) })); // threshold-ok: ISO date prefix length
+    // GL-05: an announcement first stored after the bound live had for its deciding session is not
+    // used (the stored marker of that day, else cut-off + 4 min); rows without first_ingested_at stay.
+    const markers = new Map(
+      ((snap.tables.cutoff_polls ?? []) as unknown as { d: string; at: string }[]).map((m) => [
+        m.d,
+        m.at,
+      ]),
+    );
+    this.announcements = (snap.tables.announcements as unknown as SnapshotAnnouncement[])
+      .filter((a) => snapshotAnnouncementVisible(a, markers, o.params.decisionCutoff))
+      .map((a) => ({ code: a.code, d: a.published_at.slice(0, 10) })); // threshold-ok: ISO date prefix length
     const dl = new Map<string, string>();
     for (const a of snap.corporateActions) {
       if (a.type === "delisting" && (dl.get(a.code) ?? "9999") > a.ex_date)

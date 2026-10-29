@@ -75,6 +75,21 @@ export const inMapHours = (minute: number): boolean =>
   minute >= MAP_START_MIN && minute <= MAP_END_MIN;
 
 /**
+ * GL-05: the "first completed announcement poll after the decision cut-off" marker. One insert-once
+ * `worker_state` row per session day, the same key and text as src/lib/sentinel/cutoffPoll.ts, so
+ * the app reads what the Worker (or the GitHub store step) wrote. It rides in the poll's own batched
+ * write: no extra subrequest.
+ */
+export function cutoffPollStmt(date: string, nowMs: number): Stmt {
+  return {
+    sql:
+      "INSERT INTO worker_state (key, value_json, updated_at) VALUES (?, ?, ?) " +
+      "ON CONFLICT (key) DO NOTHING",
+    args: [`cutoff_poll:${MARKET}:${date}`, JSON.stringify(iso(nowMs)), iso(nowMs)],
+  };
+}
+
+/**
  * Pure: is the Sentinel blind at `nowMs`? `localMinute` is the Sydney minute of the day of `nowMs`,
  * `lastOkMs` the last successful poll (null: none ever). Outside MAP hours never blind. The
  * reference is the later of the last success and today's 07:00 local, so overnight silence does not

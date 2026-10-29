@@ -290,17 +290,23 @@ export const AU_SLOTS: readonly Slot[] = [
     requiresListing: true,
     note: "Batch 2b signals and orders (M4 T8, ARN-060/020): A4/A3/A2, family rules, exits, FAM-001 entries, C2/C3 controls; OFF until the Owner enables the arena",
   }),
+  // GL-05 (D-207 item 5): the decision cut-off poll. A trading-day announcement fetch starts at 18:10
+  // (the 30-minute `asx-fetch` cadence has no run between 18:00 and 18:30). The first poll that
+  // started at or after 18:10 and stored its items writes the insert-once marker `cutoff_poll:AU:<d>`
+  // (src/lib/data/asxIngest.ts, and the Worker's own poll in worker/src/asx/slots.ts, which keys on
+  // this slot being enabled). Batch 2b waits for the marker for at most 4 minutes and then goes on,
+  // recording `cutoff_poll_missing`. A single try (no catch-up): a poll later than 18:14 is too late.
   slot({
     id: "decision-cutoff",
     time: "18:10",
-    runner: "worker",
-    workflow: null,
+    runner: "actions",
+    workflow: "asx-fetch.yml",
     tradingDaysOnly: true,
     marketBound: true,
     priority: 11,
-    catchUpMin: 0,
-    enabled: false,
-    note: "Decision cut-off: M2 records only the first completed poll after 18:10 (T4)",
+    catchUpMin: 2,
+    enabled: true,
+    note: "Decision cut-off poll (GL-05): the first completed announcement poll after 18:10 is the marker batch 2b waits for (4 min)",
   }),
   slot({
     id: "late-sweep",
