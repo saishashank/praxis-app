@@ -24,7 +24,7 @@ export function decodeValue(v: unknown): null | string | number | bigint | Array
 
 export function dumpDatabase(
   db: Client,
-  opts: { name: DbName; createdAt: string; ephemeral?: readonly string[] },
+  opts: { name: DbName; createdAt: string; ephemeral?: readonly string[]; pageRows?: number },
 ): Promise<{
   text: string;
   meta: Meta;

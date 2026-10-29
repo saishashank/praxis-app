@@ -109,12 +109,15 @@ export function tradingDaysBetween(from, to, rows) {
  * Which dates this run processes (PLT-016 catch-up). `markers` is the set of dates that already
  * have a `data` or `non-trading` completion marker. Missing trading dates inside the look-back
  * window are processed oldest first; the window starts at the first marker ever written (nothing
- * before the pipeline existed is "missed"; history is the backfill's job, T9). With no marker at
+ * before the pipeline existed is "missed"; history is the backfill's job, T9). D-202: when the history
+ * ends before the first marker (`lastBarBefore`, the newest stored bar older than it), the trading days
+ * in between are missed too and join the catch-up (still inside the look-back). With no marker at
  * all only the target date is planned. The target date always makes the plan (a live day is never
  * pushed back by old backlog), so at most `maxDates - 1` older dates join it. A target that is not
  * a trading day gets a `non-trading` marker.
  * @param {{ target: string, markers: ReadonlySet<string>, firstMarker: string | null,
- *   rows: readonly { d: string, kind: string }[], maxDates?: number, lookbackDays?: number }} p
+ *   rows: readonly { d: string, kind: string }[], maxDates?: number, lookbackDays?: number,
+ *   lastBarBefore?: string | null }} p
  * @returns {{ dates: { d: string, trading: boolean }[], remaining: number }}
  */
 export function planDates(p) {
@@ -125,7 +128,9 @@ export function planDates(p) {
   const older = [];
   if (firstMarker !== null) {
     const floor = addDays(target, -lookback);
-    const from = firstMarker > floor ? firstMarker : floor;
+    const gap = p.lastBarBefore ? addDays(p.lastBarBefore, 1) : null;
+    const start = gap !== null && gap < firstMarker ? gap : firstMarker;
+    const from = start > floor ? start : floor;
     for (const d of tradingDaysBetween(from, addDays(target, -1), rows)) {
       if (!markers.has(d)) older.push(d);
     }
