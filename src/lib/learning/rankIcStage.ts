@@ -82,9 +82,9 @@ export function icRowsForDay(
 
 const lineageOf = (market: string, family: string): string => `${market}:${family}`;
 
-/** `replay_stat` scope of a summary: the lineage, with `|<variant>` for the KB-081 variants. */
+/** `replay_stat` scope of a rank_ic summary: `<market>:<family>:<rank_variant>` (WP8 loader contract). */
 export function rankIcScope(market: string, family: string, variant: string): string {
-  return variant === "v1" ? lineageOf(market, family) : `${lineageOf(market, family)}|${variant}`;
+  return `${lineageOf(market, family)}:${variant}`;
 }
 
 /** Bootstrap summary of an IC series (oldest first), seeded by `rank_ic:<lineage>[:variant]`. */
