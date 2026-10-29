@@ -106,6 +106,14 @@ export type PickRowView = {
   rank: number;
   /** Friendly strategy name of the family (UXN-039), or the family code when no name is stored. */
   familyName: string;
+  /** Plain-words description of the family for the badge sheet (same text as the Strategies tab, UXN-311). */
+  familyInfo: {
+    oneLiner: string;
+    buys: string;
+    sells: string;
+    worksBest: string;
+    mainRisk: string;
+  } | null;
   /** Stop and aim as ppm of the reference price (the "-8%" and "+10%" of UXN-040). */
   stopPpm: number | null;
   aimPpm: number | null;
@@ -252,6 +260,15 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
       id: publicPickId(`${d}.${q.profile}.${Number(x.rank)}`, masked),
       rank: Number(x.rank), // money-float-ok: SQL integer column
       familyName: names[String(x.family)]?.name ?? String(x.family),
+      familyInfo: names[String(x.family)]
+        ? {
+            oneLiner: names[String(x.family)]!.one_liner,
+            buys: names[String(x.family)]!.buys,
+            sells: names[String(x.family)]!.sells,
+            worksBest: names[String(x.family)]!.works_best,
+            mainRisk: names[String(x.family)]!.main_risk,
+          }
+        : null,
       stopPpm: ppmOf(x.stop_micro, x.reference_micro),
       aimPpm: ppmOf(x.aim_micro, x.reference_micro),
       size: masked ? null : money(String(x.size_micro)),
