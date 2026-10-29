@@ -4,6 +4,7 @@
 // re-run writes nothing. A problem here is recorded in the stage summary and never fails the bars
 // (the bars are the primary product of the date). Counts and statuses only, no rows.
 import { INDEX_CODE, INDEX_MARKET, writeIndexBars } from "./indexBars.mjs";
+import { writeVendorActions } from "../vendorActions/vendorActions.mjs";
 import { shortModeAllowsFetch, shortSourceMode, writeShortInterest } from "../shortInterest.mjs";
 
 /**
@@ -69,6 +70,29 @@ export async function inputsStage(ctx) {
     }
   } catch {
     out.short_interest = "write_failed";
+  }
+
+  // (c) DAT-231: vendor split and dividend rows from the same Yahoo request. The file covers the
+  // whole request window, so it is upserted once, on the live target date (idempotent).
+  try {
+    const va = inputs?.actions;
+    if (!ctx.isTarget) out.vendor_actions = "not_target_date";
+    else if (!va || va.status === "no_file") out.vendor_actions = "no_file";
+    else if (va.status === "invalid") out.vendor_actions = "file_invalid";
+    else {
+      const set = new Set(ctx.universe);
+      const rows = va.rows.filter((r) => set.has(r.code));
+      const n = await writeVendorActions(db, { rows });
+      io.written += n;
+      out.vendor_actions = {
+        rows: rows.length,
+        written: n,
+        not_in_universe: va.rows.length - rows.length,
+        rejected: va.rejected,
+      };
+    }
+  } catch {
+    out.vendor_actions = "write_failed";
   }
   return out;
 }

@@ -109,7 +109,7 @@ jobs:
       # bars.json. The throttle values come from the plan step's outputs, which are not secret.
       - name: Fetch bars (no secrets)
         if: steps.plan.outputs.fetch == 'true'
-        run: python scripts/ingest/yahoo_fetch.py --request request.json --output bars.json --index-output index.json
+        run: python scripts/ingest/yahoo_fetch.py --request request.json --output bars.json --index-output index.json --actions-output actions.json
         env:
           YAHOO_CHUNK_SIZE: ${{ steps.plan.outputs.chunk_size }}
           YAHOO_MIN_GAP_S: ${{ steps.plan.outputs.min_gap_s }}
@@ -120,7 +120,7 @@ jobs:
         run: node scripts/ingest/asic_fetch.mjs --request request.json --output short.json
       - name: Ingest batch 1
         if: ${{ !cancelled() && steps.plan.outcome == 'success' }}
-        run: node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json
+        run: node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json --actions actions.json
         env:
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
@@ -174,7 +174,7 @@ jobs:
         run: node scripts/ingest/recorded_day.mjs --request request.json --fixtures fixtures --output bars.json --index-output index.json --short-output short.json
       - name: Ingest batch 1
         if: ${{ !cancelled() && steps.plan.outcome == 'success' }}
-        run: node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json
+        run: node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json --actions actions.json
         env:
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_STAGING }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_STAGING }}
