@@ -25,7 +25,7 @@ function StarShape({ filled }: { filled: boolean }) {
 }
 
 const BUTTON =
-  "inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-surface p-0 text-text hover:bg-bg disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex min-h-8 shrink-0 items-center justify-center gap-1 rounded-md px-2 text-xs font-semibold border border-border bg-surface text-text hover:bg-bg disabled:cursor-not-allowed disabled:opacity-60";
 
 export function StarButton({
   code,
@@ -54,6 +54,7 @@ export function StarButton({
         className={BUTTON}
       >
         <StarShape filled={on} />
+        <span aria-hidden="true">{on ? "Watching" : "Watch"}</span>
       </button>
       {result !== null && "error" in result ? (
         <span role="alert" className="max-w-48 text-xs text-danger">
@@ -69,6 +70,7 @@ export function StarDisabled({ label, reason }: { label: string; reason: string 
   return (
     <button type="button" disabled aria-label={`${label}: ${reason}`} className={BUTTON}>
       <StarShape filled={false} />
+      <span aria-hidden="true">Watch</span>
     </button>
   );
 }

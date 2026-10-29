@@ -95,8 +95,11 @@ describe("Market sections (D-205)", () => {
     await show(<MarketStatus model={Promise.resolve(model({ size: "mid" }))} q={mq()} />);
     const nav = screen.getByRole("navigation", { name: "Company size" });
     const links = within(nav).getAllByRole("link");
-    expect(links.map((l) => l.textContent)).toEqual(["All", "Large", "Mid", "Small"]);
-    expect(within(nav).getByRole("link", { name: "Mid" })).toHaveAttribute("aria-current", "page");
+    // UXR-002: the current size has three cues (fill, check icon, aria-current plus a hidden "Selected")
+    expect(links.map((l) => l.textContent)).toEqual(["All", "Large", "Mid (Selected)", "Small"]);
+    expect(within(nav).getByRole("link", { name: /Mid/ }).querySelector("svg")).not.toBeNull();
+    expect(within(nav).getByRole("link", { name: "All" }).querySelector("svg")).toBeNull();
+    expect(within(nav).getByRole("link", { name: /Mid/ })).toHaveAttribute("aria-current", "page");
     expect(within(nav).getByRole("link", { name: "All" })).toHaveAttribute("href", "/market");
     expect(screen.getByText("Latest data: 2026-10-28.")).toBeInTheDocument();
   });
@@ -147,5 +150,49 @@ describe("Market sections (D-205)", () => {
   it("the spinner is one status with words", async () => {
     await show(<SectionLoading label="Loading the sectors" />);
     expect(screen.getByRole("status")).toHaveTextContent("Loading the sectors");
+  });
+
+  it("UXR-051: a row carries its sector hue (rail and chip), an outcome-coloured change, a Watch label", async () => {
+    const { container } = await show(
+      <MoversSection model={Promise.resolve(model())} q={mq()} mode="star" starAction={star} />,
+    );
+    const rail = container.querySelector('[data-sector-rail="tech"]') as HTMLElement;
+    expect(rail).not.toBeNull();
+    expect(rail.getAttribute("style")).toContain("--color-sector-tech-fill");
+    expect(container.querySelector('[data-kind="sector"]')?.textContent).toContain("Technology");
+    const up = container.querySelector('[data-outcome="up"]') as HTMLElement;
+    expect(up).toHaveClass("text-positive", "tabular-nums");
+    expect(up.className).not.toContain("font-mono");
+    expect(up.textContent).toContain("▲");
+    expect(container.textContent).toContain("Watch");
+  });
+
+  it("UXR-051: the sector heat grid tints each tile with its hue and shows arrow and number as text", async () => {
+    const { container } = await show(
+      <SectorsSection
+        model={Promise.resolve(
+          model({
+            sectors: [
+              { sector: "Technology", count: 2, avgChangePpm: 20_000 },
+              { sector: "Banks", count: 3, avgChangePpm: -10_000 },
+              { sector: "Mystery", count: 1, avgChangePpm: 0 },
+            ],
+          }),
+        )}
+        q={mq()}
+      />,
+    );
+    const tiles = [...container.querySelectorAll("[data-sector-hue]")] as HTMLElement[];
+    expect(tiles.map((t) => t.dataset.sectorHue)).toEqual([
+      "sector-tech",
+      "sector-financials",
+      "none",
+    ]);
+    expect(tiles[0]!.getAttribute("style")).toContain("--color-sector-tech-fill");
+    expect(tiles[2]!.getAttribute("style")).toContain("--color-outcome-flat-fill");
+    expect(tiles[0]!.textContent).toContain("▲ +2.0%");
+    expect(tiles[1]!.textContent).toContain("▼ −1.0%");
+    // the text sits on the tint as body text, not a fill colour
+    expect(tiles[0]).toHaveClass("text-text");
   });
 });
