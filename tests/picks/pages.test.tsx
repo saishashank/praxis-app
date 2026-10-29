@@ -1,6 +1,6 @@
 // M7 T14 Picks pages (UXN-040..045, ch.16 16.21 acceptance, AT-25/AT-27): list, Why this pick and
 // Track record, rendered from a real (temporary) database through the page components.
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import axe from "axe-core";
 import fs from "node:fs";
 import path from "node:path";
@@ -13,7 +13,12 @@ import PicksPage from "@/app/(app)/picks/page";
 import WhyPage from "@/app/(app)/picks/[id]/page";
 import TrackRecordPage from "@/app/(app)/picks/track-record/page";
 import { SuccessStrip } from "@/app/(app)/picks/SuccessStrip";
-import { capPerFamily, honestyLine, timeFrameText } from "@/app/(app)/picks/text";
+import {
+  capPerFamily,
+  EMPTY_PICKS_SENTENCE,
+  honestyLine,
+  timeFrameText,
+} from "@/app/(app)/picks/text";
 import { loadPicks } from "@/lib/ui/loaders/picks";
 import { successLine, type ModelSuccess } from "@/lib/picks/success";
 
@@ -56,6 +61,55 @@ describe("Picks list", () => {
     w = await fullWorld();
   });
 
+  it("shows the family badge with plain words, an info sheet and the Today / Track record tabs (UXR-021, UXN-311)", async () => {
+    as(w, "owner");
+    render(await PicksPage({ searchParams: sp() }));
+    const card = screen.getAllByTestId("pick-card")[0]!;
+    const badge = card.querySelector("[data-family]")!;
+    expect(badge.getAttribute("data-family")).toBe("br");
+    expect(badge.textContent).toContain("Breakout");
+    expect(card.querySelector("[data-hue=family-br]")).not.toBeNull();
+    fireEvent.click(within(card).getByRole("link", { name: "About Breakout" }));
+    const sheet = await screen.findByTestId("family-sheet");
+    expect(sheet.textContent).toContain("Buys when");
+    expect(sheet.textContent).toContain("Usually breaks when");
+    cleanup();
+    render(await PicksPage({ searchParams: sp() }));
+    const tabs = screen.getByRole("navigation", { name: "Picks view" });
+    expect(within(tabs).getByRole("link", { name: /Today/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(within(tabs).getByRole("link", { name: "Track record" })).toHaveAttribute(
+      "href",
+      "/picks?profile=balanced&view=track",
+    );
+  });
+
+  it("renders the Track record tab on /picks?view=track and keeps the old route", async () => {
+    as(w, "owner");
+    render(await PicksPage({ searchParams: sp({ view: "track" }) }));
+    const tabs = screen.getByRole("navigation", { name: "Picks view" });
+    expect(within(tabs).getByRole("link", { name: /Track record/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.queryByTestId("pick-card")).toBeNull();
+    cleanup();
+    render(await TrackRecordPage({ searchParams: sp() }));
+    expect(screen.getByRole("heading", { level: 1, name: "Track record" })).toBeInTheDocument();
+    expect(screen.getByRole("table")).toBeInTheDocument();
+  });
+
+  it("masked roles still see the family badge but no code, company or price", async () => {
+    as(w, "viewer");
+    const { container } = render(await PicksPage({ searchParams: sp() }));
+    expect(container.querySelector("[data-family]")?.textContent).toContain("Breakout");
+    expect(container.textContent).not.toContain("ZZUP");
+    expect(container.textContent).not.toContain("A$");
+  });
+
   it("shows the profile switch, success strip, cards and the honesty line to the Owner", async () => {
     as(w, "owner");
     render(await PicksPage({ searchParams: sp() }));
@@ -64,12 +118,19 @@ describe("Picks list", () => {
     expect(
       within(chips)
         .getAllByRole("link")
-        .map((a) => a.textContent),
+        .map((a) => a.textContent?.replace(" (Selected)", "")),
     ).toEqual(["Aggressive", "Balanced", "Conservative"]);
-    expect(within(chips).getByRole("link", { name: "Balanced" })).toHaveAttribute(
+    // UXR-002: fill + check + the word "Selected" on the chosen profile only.
+    const on = within(chips).getByRole("link", { name: /Balanced/ });
+    expect(on).toHaveAttribute("aria-current", "page");
+    expect(on.textContent).toContain("(Selected)");
+    expect(on.querySelector("svg")).not.toBeNull();
+    expect(on.className).toContain("bg-accent");
+    expect(within(chips).getByRole("link", { name: "Aggressive" })).not.toHaveAttribute(
       "aria-current",
-      "page",
     );
+    // The profile sentence sits directly under the control.
+    expect(chips.parentElement?.querySelector("p")?.textContent).toContain("Balanced: Picks from");
     expect(screen.getByTestId("success-line").textContent).toBe(
       "Model success: not measured yet — 1 of 30 picks closed",
     );
@@ -215,6 +276,8 @@ describe("empty and stale states", () => {
     as(w, "owner");
     render(await PicksPage({ searchParams: sp() }));
     expect(screen.getByText("No picks yet")).toBeInTheDocument();
+    expect(screen.getByText(EMPTY_PICKS_SENTENCE)).toBeInTheDocument();
+    expect(screen.getByTestId("picks-empty").querySelector("svg")).not.toBeNull();
     expect(screen.queryAllByTestId("pick-card")).toHaveLength(0);
     cleanup();
     render(await TrackRecordPage({ searchParams: sp() }));
