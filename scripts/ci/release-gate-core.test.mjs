@@ -18,8 +18,17 @@ const iso = (msAgo) => new Date(NOW - msAgo).toISOString();
 const H = 3_600_000;
 const D = 86_400_000;
 
-const job = (name, conclusion = "success", steps = []) => ({ name, conclusion, steps });
 const step = (name, conclusion = "success") => ({ name, conclusion });
+// GL-09: the fixtures job carries its strict step by default (a release PR ran it).
+const job = (
+  name,
+  conclusion = "success",
+  steps = name === "fixtures" ? [step(STEP.fixturesStrict)] : [],
+) => ({
+  name,
+  conclusion,
+  steps,
+});
 const run = (createdAgo, jobs, over = {}) => ({
   headSha: SHA,
   createdAt: iso(createdAgo),
@@ -105,6 +114,34 @@ const CASES = [
     { ci: CI_REQUIRED_JOBS.map((n) => job(n, n === "app" ? null : "success")) },
     "ci",
     /app \(still running\)/,
+  ],
+  [
+    "ci: fixtures passed with a warning only (checkout failed, strict step skipped or failed)",
+    {
+      ci: CI_REQUIRED_JOBS.map((n) =>
+        job(n, "success", n === "fixtures" ? [step(STEP.fixturesStrict, "skipped")] : undefined),
+      ),
+    },
+    "ci",
+    /fixtures (passed with fixtures skipped or unchecked: strict step skipped/,
+  ],
+  [
+    "ci: fixtures job has no strict step at all (old workflow)",
+    {
+      ci: CI_REQUIRED_JOBS.map((n) => job(n, "success", n === "fixtures" ? [] : undefined)),
+    },
+    "ci",
+    /strict step missing/,
+  ],
+  [
+    "ci: fixtures strict step failed",
+    {
+      ci: CI_REQUIRED_JOBS.map((n) =>
+        job(n, "success", n === "fixtures" ? [step(STEP.fixturesStrict, "failure")] : undefined),
+      ),
+    },
+    "ci",
+    /strict step failure/,
   ],
   [
     "licence: pending Owner approval (D-153)",

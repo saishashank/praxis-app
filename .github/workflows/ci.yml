@@ -149,7 +149,9 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: npm ci
-      # An empty or missing fixtures repo must not fail the job: the tests then skip (see below).
+      # An empty or missing fixtures repo must not fail the job on a normal PR or push: the tests then
+      # skip (see below). GL-09: on a PR into `release` the strict step further down fails the job
+      # instead, and the release gate also requires that step to have succeeded.
       - name: Check out the private fixtures repo
         id: fixtures_checkout
         continue-on-error: true
@@ -165,7 +167,12 @@ jobs:
       - name: Fixture-backed tests (skipped when PRAXIS_FIXTURES_DIR has no content)
         env:
           PRAXIS_FIXTURES_DIR: ${{ github.workspace }}/fixtures
-        run: npx vitest run tests/sources/realFixtures.test.ts --reporter=verbose
+        run: npx vitest run tests/sources/realFixtures.test.ts --reporter=verbose --reporter=json --outputFile.json=fixtures-report.json
+      - name: Release PR fixtures strict check (checked out, none skipped)
+        if: github.event_name == 'pull_request' && github.base_ref == 'release'
+        run: node scripts/ci/fixtures-skip-check.mjs fixtures-report.json
+        env:
+          FIXTURES_CHECKOUT_OUTCOME: ${{ steps.fixtures_checkout.outcome }}
 
   # PLT-072: the Yahoo fetcher is Python; its tests mock yfinance and never touch the network.
   python:

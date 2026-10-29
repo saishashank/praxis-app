@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
+import { cronLines } from "../time/genWatchdogCron.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const read = (f) => readFileSync(path.join(root, f), "utf8");
@@ -20,19 +21,35 @@ const steps = job.steps;
 const byName = (n) => steps.find((s) => s.name === n);
 const SHA_USES = /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/;
 
-test("workflow_dispatch only: no schedule, push or pull request trigger (PLT-015)", () => {
+test("Worker dispatch plus the GL-07 fallback schedule at 18:15 Melbourne (both DST offsets)", () => {
   assert.equal(wf.name, "Ingest batch 1 (AU EOD)");
-  assert.equal(wf.on, "workflow_dispatch");
-  assert.deepEqual(wf.permissions, {});
-  assert.doesNotMatch(
-    read(".github/workflows/ingest-batch1.yml"),
-    /^\s*(schedule|push|pull_request\w*):/m,
+  assert.deepEqual(Object.keys(wf.on), ["schedule", "workflow_dispatch"]);
+  assert.deepEqual(
+    wf.on.schedule.map((s) => s.cron),
+    cronLines(["18:15"]),
   );
+  assert.deepEqual(cronLines(["18:15"]), ["15 7 * * *", "15 8 * * *"]);
+  assert.deepEqual(wf.permissions, {});
+  assert.doesNotMatch(read(".github/workflows/ingest-batch1.yml"), /^s*(push|pull_requestw*):/m);
+});
+
+test("the fallback gate skips the other DST line and cannot double-ingest (completion marker)", () => {
+  const g = wf.jobs.gate;
+  assert.doesNotMatch(JSON.stringify(g), /secrets./);
+  assert.equal(
+    g.steps.find((x) => x.id === "gate").run,
+    "node scripts/time/scheduleGate.mjs 18:15",
+  );
+  assert.equal(job.needs, "gate");
+  assert.equal(job.if, "github.ref == 'refs/heads/release' && needs.gate.outputs.run == 'true'");
+  // the script's own "done" check (run record batch1:AU:<date>) is what stops a second ingest
+  assert.match(read("src/lib/data/pipeline/batch1-core.mjs"), /a.kind === "done"/);
+  assert.deepEqual(job.concurrency, { group: "ingest-batch1", "cancel-in-progress": false });
 });
 
 test("one production job on release, environment production without a deployment record", () => {
-  assert.deepEqual(Object.keys(wf.jobs), ["production", "staging"]); // M8 T9: the staging job is covered by staging-jobs.workflow.test.mjs
-  assert.equal(job.if, "github.ref == 'refs/heads/release'");
+  assert.deepEqual(Object.keys(wf.jobs), ["gate", "production", "staging"]); // M8 T9: the staging job is covered by staging-jobs.workflow.test.mjs
+  assert.ok(job.if.startsWith("github.ref == 'refs/heads/release'"));
   assert.deepEqual(job.environment, { name: "production", deployment: false });
   assert.deepEqual(job.permissions, { contents: "read", deployments: "read" });
   assert.deepEqual(job.concurrency, { group: "ingest-batch1", "cancel-in-progress": false });
