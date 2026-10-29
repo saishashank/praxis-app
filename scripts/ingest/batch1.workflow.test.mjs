@@ -89,7 +89,7 @@ test("the Python fetch step has no secrets and only the throttle values from the
   assert.equal(f.if, "steps.plan.outputs.fetch == 'true'");
   assert.equal(
     f.run,
-    "python scripts/ingest/yahoo_fetch.py --request request.json --output bars.json --index-output index.json",
+    "python scripts/ingest/yahoo_fetch.py --request request.json --output bars.json --index-output index.json --actions-output actions.json",
   );
   assert.deepEqual(f.env, {
     YAHOO_CHUNK_SIZE: "${{ steps.plan.outputs.chunk_size }}",
@@ -130,7 +130,7 @@ test("steps run in order: plan, fetch, ingest; ingest also records a failed or s
   assert.equal(steps[plan].run, "node scripts/ingest/batch1.mjs prepare --request request.json");
   assert.equal(
     steps[ingest].run,
-    "node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json",
+    "node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json --actions actions.json",
   );
   assert.match(
     steps[ingest].if,

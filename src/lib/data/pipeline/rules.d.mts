@@ -19,7 +19,7 @@ export type BarRowIn = {
   low: number;
   close: number;
   volume: number;
-  adj_close: number;
+  adj_close: number | null;
   source: "yahoo";
   published_at: null;
   fetched_at: string;

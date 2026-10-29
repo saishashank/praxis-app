@@ -33,6 +33,7 @@ import { qualityHook, readQualityConfig } from "../quality/engine.mjs";
 import { RULES, TIERS } from "../quality/rules.mjs";
 import { TIER_RULES, assignTiers, medianMicro } from "../universe/tiers.mjs";
 import { INDEX_YAHOO_SYMBOL, parseIndexText } from "../index/indexBars.mjs";
+import { parseVendorActionsText } from "../vendorActions/vendorActions.mjs";
 import { inputsStage } from "../index/inputsStage.mjs";
 import {
   parseShortText,
@@ -143,6 +144,35 @@ async function finishRun(db, id, nowIso, r) {
       id,
     ],
   });
+}
+
+/**
+ * GL-01: per code, the previous session's and the day's Yahoo adj_close from the fetched bars,
+ * only where both are present and finite and positive (a null adj_close, GL-04, is skipped).
+ * @param {{ code: string, date: string, adj_close?: number | null }[]} rows validated bars
+ * @param {string} prev previous trading day @param {string} d the day
+ * @returns {Record<string, { prevAdj: number, exAdj: number }>}
+ */
+export function buildAdjClose(rows, prev, d) {
+  const ok = (v) => typeof v === "number" && Number.isFinite(v) && v > 0;
+  const prevBy = new Map();
+  for (const r of rows) if (r.date === prev && ok(r.adj_close)) prevBy.set(r.code, r.adj_close);
+  /** @type {Record<string, { prevAdj: number, exAdj: number }>} */
+  const out = {};
+  for (const r of rows) {
+    if (r.date !== d || !ok(r.adj_close) || !prevBy.has(r.code)) continue;
+    out[r.code] = { prevAdj: prevBy.get(r.code), exAdj: r.adj_close };
+  }
+  return out;
+}
+
+function adjCloseFor(ctx, d) {
+  if (!ctx.parsed) return {};
+  try {
+    return buildAdjClose(ctx.parsed.rows, previousTradingDay(d, ctx.calRows), d);
+  } catch {
+    return {};
+  }
 }
 
 /** Active codes on date `d` from `instrument` (the only universe source in T6). */
@@ -304,6 +334,7 @@ export async function prepareBatch1(db, o) {
  * @property {() => number} nowMs
  * @property {string | null} [barsText]  contents of bars.json, null when no file exists
  * @property {string | null} [indexText]  contents of index.json (M4 T3), null when absent
+ * @property {string | null} [actionsText]  contents of actions.json (DAT-231), null when absent
  * @property {string | null} [shortText]  contents of short.json (M4 T3), null when absent
  * @property {(ctx: any) => Promise<object | void>} [inputsHook]  stage 6 override
  * @property {string} [commitSha]
@@ -434,6 +465,10 @@ export async function runBatch1(db, o) {
       a.request ? { from: a.request.start, to: a.request.end } : {},
     ),
     short: parseShortText(o.shortText),
+    actions: parseVendorActionsText(
+      o.actionsText,
+      a.request ? { from: a.request.start, to: a.request.end } : {},
+    ),
   };
   const { start, end } = monthBoundsUtc(o.nowMs());
   const used = await db.execute({
@@ -654,6 +689,7 @@ async function processDate(ctx, item, isTarget) {
       d,
       io,
       now: iso(),
+      adjClose: adjCloseFor(ctx, d),
       candidates: ctx.o.corporateActionCandidates ? ctx.o.corporateActionCandidates(d) : [],
       relevant: ctx.o.corporateActionRelevant,
     });

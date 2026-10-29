@@ -401,3 +401,75 @@ def test_fetch_indices_rate_limit_is_bounded():
 
     with pytest.raises(yf_fetch.RateLimited):
         yf_fetch.fetch_indices(["^AXJO"], "2020-01-06", "2020-01-08", 1, download, sleep=lambda s: None)
+
+
+# --- DAT-231: vendor splits and dividends in the same request ---------------------------------
+
+
+def action_frame(codes=("ZZZ",), days=3):
+    """frame() plus the Dividends and Stock Splits columns that actions=True adds."""
+    df = frame(list(codes), days=days)
+    for c in codes:
+        df[(f"{c}.AX", "Dividends")] = 0.0
+        df[(f"{c}.AX", "Stock Splits")] = 0.0
+    return df
+
+
+def test_actions_from_frame_extracts_splits_and_dividends():
+    df = action_frame(("ZZZ", "ZZY"))
+    df.loc[df.index[1], ("ZZZ.AX", "Stock Splits")] = 2.0
+    df.loc[df.index[2], ("ZZZ.AX", "Dividends")] = 0.35
+    df.loc[df.index[0], ("ZZY.AX", "Stock Splits")] = 1.0  # a ratio of 1 is no action
+    df.loc[df.index[0], ("ZZY.AX", "Dividends")] = float("nan")
+    rows = yf_fetch.actions_from_frame(df, ["ZZZ", "ZZY"], FETCHED)
+    assert rows == [
+        {"code": "ZZZ", "ex_date": "2020-01-07", "currency": "AUD", "source": "yahoo",
+         "fetched_at": FETCHED, "kind": "split", "ratio": 2.0},
+        {"code": "ZZZ", "ex_date": "2020-01-08", "currency": "AUD", "source": "yahoo",
+         "fetched_at": FETCHED, "kind": "dividend", "amount": 0.35},
+    ]
+
+
+def test_actions_from_frame_without_action_columns_or_empty_gives_nothing():
+    assert yf_fetch.actions_from_frame(frame(["ZZZ"]), ["ZZZ"], FETCHED) == []
+    assert yf_fetch.actions_from_frame(None, ["ZZZ"], FETCHED) == []
+
+
+def test_fetch_all_requests_actions_in_the_same_call_and_collects_them():
+    def serve(n, kw):
+        df = action_frame(tuple(t[:-3] for t in kw["tickers"]))
+        df.loc[df.index[0], (kw["tickers"][0], "Dividends")] = 0.1
+        return df
+
+    dl = Recorder(serve)
+    clock, sleep, _ = make_clock()
+    actions = []
+    rows, report = yf_fetch.fetch_all(
+        ["ZZ0", "ZZ1", "ZZ2"], "2020-01-06", "2020-01-10", 2, 5, dl, sleep=sleep, clock=clock,
+        actions_out=actions,
+    )
+    assert report["requests"] == len(dl.calls) == 2  # no extra request for the actions
+    assert all(c["actions"] is True for c in dl.calls)
+    assert [a["code"] for a in actions] == ["ZZ0", "ZZ2"]
+    assert len(rows) == 9
+
+
+def test_run_writes_actions_json_only_when_asked(tmp_path):
+    def serve(n, kw):
+        df = action_frame(("ZZZ", "ZZY"))
+        df.loc[df.index[0], ("ZZZ.AX", "Stock Splits")] = 0.1
+        return df
+
+    out, acts = tmp_path / "bars.json", tmp_path / "actions.json"
+    report = yf_fetch.run(
+        write_request(tmp_path), str(out), env={}, download=Recorder(serve), sleep=lambda s: None,
+        actions_output_path=str(acts),
+    )
+    data = json.loads(acts.read_text())
+    assert report["action_rows"] == len(data) == 1
+    assert data[0]["kind"] == "split" and data[0]["ratio"] == 0.1 and data[0]["code"] == "ZZZ"
+    assert not (tmp_path / "actions.json.tmp").exists()
+    # without the option no actions file is written
+    out2 = tmp_path / "bars2.json"
+    r2 = yf_fetch.run(write_request(tmp_path), str(out2), env={}, download=Recorder(serve), sleep=lambda s: None)
+    assert "action_rows" not in r2 and len(json.loads(out2.read_text())) == 6
