@@ -139,7 +139,7 @@ export default async function LearnedPage({ searchParams }: { searchParams: Prom
       </Card>
 
       {empty ? (
-        <EmptyState title="Nothing learned yet">
+        <EmptyState motif="reviews" hue="reviews" title="Nothing learned yet">
           Lessons and rule changes appear here after the weekly learning run finds a pattern that
           holds up. Until then the strategies keep their starting rules.
         </EmptyState>
@@ -185,7 +185,7 @@ export default async function LearnedPage({ searchParams }: { searchParams: Prom
 
           <Card title="Challengers">
             {challengers.length === 0 ? (
-              <p className="m-0 text-sm text-text-muted">No challengers yet.</p>
+              <EmptyState compact motif="reviews" hue="reviews" title="No challengers yet." />
             ) : isOwner ? (
               <form
                 method="get"
@@ -214,7 +214,7 @@ export default async function LearnedPage({ searchParams }: { searchParams: Prom
 
           <Card title="Hypotheses">
             {hypotheses.length === 0 ? (
-              <p className="m-0 text-sm text-text-muted">No hypotheses yet.</p>
+              <EmptyState compact motif="reviews" hue="reviews" title="No hypotheses yet." />
             ) : (
               <ul className="m-0 flex list-none flex-col gap-3 p-0">
                 {hypotheses.map((h) => (
@@ -237,7 +237,7 @@ export default async function LearnedPage({ searchParams }: { searchParams: Prom
               caption="Changes the system made to its own rules"
               rows={ledger}
               rowKey={(r) => String(r.id)}
-              empty={<p className="m-0 text-sm text-text-muted">No changes yet.</p>}
+              empty={<EmptyState compact motif="reviews" hue="reviews" title="No changes yet." />}
               columns={[
                 { key: "day", header: "When", cell: (r) => r.day },
                 { key: "kind", header: "What", cell: (r) => r.kind },
@@ -258,7 +258,12 @@ export default async function LearnedPage({ searchParams }: { searchParams: Prom
 
           <Card title="Learning plan">
             {model.plan === null ? (
-              <p className="m-0 text-sm text-text-muted">No plan has been written yet.</p>
+              <EmptyState
+                compact
+                motif="reviews"
+                hue="reviews"
+                title="No plan has been written yet."
+              />
             ) : (
               <div className="flex flex-col gap-3 text-sm">
                 <p className="m-0 text-text-muted">Plan of {dayText(model.plan.d, model.masked)}</p>

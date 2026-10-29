@@ -59,7 +59,9 @@ export default async function GlossaryPage({ searchParams }: { searchParams: Pro
       </form>
 
       {entries.length === 0 ? (
-        <EmptyState title="No terms match">Try a shorter or different word.</EmptyState>
+        <EmptyState motif="reviews" hue="reviews" title="No terms match">
+          Try a shorter or different word.
+        </EmptyState>
       ) : (
         groups.map((g, i) => (
           <section key={g} aria-labelledby={`gl-g${i}`} className="flex min-w-0 flex-col gap-2">
