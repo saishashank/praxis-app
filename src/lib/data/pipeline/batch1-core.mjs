@@ -799,19 +799,22 @@ export async function computeTiers(ctx, io, d, universe) {
     list.push(price * BigInt(Number(b.volume))); // money-float-ok: SQL integer column
     last.set(code, price);
   }
-  // listing age only matters for U2 candidates: one primary-key probe each
-  const listed = new Map();
-  for (const code of universe) {
+  // listing age only matters for U2 candidates: one primary-key probe each, all in ONE round trip
+  // (D-203: one query per code took about two minutes a date)
+  const candidates = universe.filter((code) => {
     const t = traded.get(code);
-    if (t === undefined || medianMicro(t) < TIER_RULES.u2.advMicro) continue;
-    const first = await sel(
-      db,
-      io,
-      "SELECT d FROM price_bar WHERE market = ? AND code = ? ORDER BY d LIMIT 1",
-      [market, code],
-    );
-    listed.set(code, first.length === 0 ? null : String(first[0].d));
-  }
+    return t !== undefined && medianMicro(t) >= TIER_RULES.u2.advMicro;
+  });
+  const listed = new Map();
+  const firsts = await sel(
+    db,
+    io,
+    `SELECT j.value AS code,
+            (SELECT p.d FROM price_bar p WHERE p.market = ? AND p.code = j.value ORDER BY p.d LIMIT 1) AS d
+       FROM json_each(?) j`,
+    [market, JSON.stringify(candidates)],
+  );
+  for (const r of firsts) listed.set(String(r.code), String(r.d)); // every candidate has a bar
   const tiers = assignTiers(
     universe.map((code) => ({
       code,
