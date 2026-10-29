@@ -10,8 +10,12 @@ import AxeBuilder from "@axe-core/playwright";
 import fs from "node:fs";
 import path from "node:path";
 import { THEMES, setTheme, signIn } from "./helpers";
+import { ensureRich } from "./seed/rich";
 
 test.describe.configure({ timeout: 480_000 });
+test.beforeAll(async () => {
+  await ensureRich();
+});
 const TABS = ["/", "/picks", "/market", "/strategies", "/news", "/reviews"];
 const GROUP =
   /^--color-(family|sector|status|tier|section|positive|negative|warning|brand)[a-z0-9-]*$/;
