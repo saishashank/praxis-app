@@ -84,6 +84,7 @@ export const STEP: {
   e2eDeadlines: string;
   e2eStaging: string;
   zapScan: string;
+  fixturesStrict: string;
   drill: string;
 };
 export const JOB: { stagingE2eDay: string; nightly: string; zap: string };

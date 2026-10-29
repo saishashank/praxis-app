@@ -34,6 +34,9 @@ export const STEP = {
   e2eStaging: "Staging end-to-end checks (viewer test identity)",
   zapScan: "Scan staging as the viewer test identity",
   drill: "Drill or restore",
+  // GL-09: the strict step of the ci.yml fixtures job (release PRs only): real fixtures checked out,
+  // no fixture-backed test skipped. A skipped step is NOT a pass here.
+  fixturesStrict: "Release PR fixtures strict check (checked out, none skipped)",
 };
 export const JOB = { stagingE2eDay: "staging", nightly: "staging", zap: "staging" };
 
@@ -75,8 +78,17 @@ function ciCondition(input) {
   for (const name of required) {
     const j = jobs.find((x) => x?.name === name);
     if (!j) bad.push(`${name} (not found)`);
-    else if (j.conclusion === "success") continue;
-    else if (j.conclusion === null || j.conclusion === undefined)
+    else if (j.conclusion === "success") {
+      // GL-09: the soft PR-time path lets the fixtures job pass with only a warning; a release
+      // must have run the strict step (it fails on a failed checkout or any skipped test).
+      if (name === "fixtures" && stepOf(j, STEP.fixturesStrict)?.conclusion !== "success") {
+        const c = stepOf(j, STEP.fixturesStrict)?.conclusion ?? "missing";
+        bad.push(
+          `fixtures (passed with fixtures skipped or unchecked: strict step ${c}; the private fixtures repo must be checked out and no fixture test skipped)`,
+        );
+      }
+      continue;
+    } else if (j.conclusion === null || j.conclusion === undefined)
       bad.push(`${name} (still running)`);
     else bad.push(`${name} (${j.conclusion})`);
   }

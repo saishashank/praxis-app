@@ -22,8 +22,17 @@ const env = (over = {}) => ({
   GITHUB_RUN_ID: "500",
   ...over,
 });
-const J = (name, conclusion = "success", steps = []) => ({ name, conclusion, steps });
 const S = (name, conclusion = "success") => ({ name, conclusion });
+// GL-09: the fixtures job carries its strict step by default.
+const J = (
+  name,
+  conclusion = "success",
+  steps = name === "fixtures" ? [S(STEP.fixturesStrict)] : [],
+) => ({
+  name,
+  conclusion,
+  steps,
+});
 const R = (id, sha, created, conclusion = "success") => ({
   id,
   head_sha: sha,

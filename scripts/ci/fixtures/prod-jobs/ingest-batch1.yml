@@ -1,5 +1,6 @@
   production:
-    if: github.ref == 'refs/heads/release'
+    needs: gate
+    if: github.ref == 'refs/heads/release' && needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
