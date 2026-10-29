@@ -28,6 +28,7 @@ import { Banner, EmptyState, ShowDetails } from "@/components/ui/States";
 import { GainLoss, Money, NotMeasured, SimulatedLabel } from "@/components/ui/Values";
 import { regimeLabel } from "@/lib/view/terms";
 import { formatMicro } from "@/lib/view/format";
+import { StrategyTabs } from "../StrategyTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -357,6 +358,7 @@ export default async function LeaderboardPage({
 
   return (
     <main className="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-6 px-4 py-6">
+      <StrategyTabs current="leaderboard" />
       <header className="flex min-w-0 flex-col gap-2">
         <h1 className="m-0 text-2xl font-semibold">Leaderboard</h1>
         <p className="m-0 text-sm text-text-muted">

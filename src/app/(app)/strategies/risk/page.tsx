@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Banner, EmptyState } from "@/components/ui/States";
+import { Pill } from "@/components/ui/Pill";
 import { Masked, Money, SimulatedLabel } from "@/components/ui/Values";
 import { BustBar } from "@/components/charts";
 import { can } from "@/lib/auth/permissions";
@@ -22,6 +23,7 @@ import {
   type StressRow,
 } from "@/lib/ui/loaders/risk";
 import { formatMicro, formatPpm } from "@/lib/view/format";
+import { StrategyTabs } from "../StrategyTabs";
 import { setArenaControlAction } from "./actions";
 import { ControlButton } from "./ControlButton";
 
@@ -36,6 +38,7 @@ const FLAG_WORDS = {
   caution: "Caution: close to the loss limit",
   bust: "Would reach the loss limit",
 } as const;
+const PILL_STATE = { enabled: "running", paused: "paused", killed: "stopped" } as const;
 const OWNER_ONLY = "Only the Owner can pause or switch off a strategy.";
 
 function StrategyCard({ s, nearPct }: { s: RiskStrategy; nearPct: number }) {
@@ -126,7 +129,10 @@ function SwitchRow({
   return (
     <li className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm">
       <span className="min-w-0 break-words">
-        <strong>{sw.name}</strong> ({sw.key}): {STATE_WORDS[sw.state]}
+        <strong>{sw.name}</strong> ({sw.key}){" "}
+        <Pill kind="state" value={PILL_STATE[sw.state]}>
+          {STATE_WORDS[sw.state]}
+        </Pill>
         {sw.state === "enabled" && sw.effective !== "enabled"
           ? ` (${STATE_WORDS[sw.effective].toLowerCase()} by a wider switch)`
           : ""}
@@ -194,6 +200,7 @@ export default async function RiskPage() {
 
   return (
     <main className="mx-auto flex max-w-5xl min-w-0 flex-col gap-6 px-4 py-6">
+      <StrategyTabs current="risk" />
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Risk overview</h1>
         <p className="m-0 text-sm text-text-muted">
