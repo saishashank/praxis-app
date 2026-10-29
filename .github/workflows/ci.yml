@@ -33,6 +33,8 @@ jobs:
       - run: npm run lint
       - name: Theme contrast (UXN-280, WCAG 2.2 AA / AAA)
         run: node scripts/ci/contrast-check.mjs
+      - name: Theme tokens match the palette (generator drift, UXR-058)
+        run: npm run test:tokens
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:smoke
