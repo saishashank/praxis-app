@@ -6,15 +6,7 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/shell";
 import { signOutAction } from "@/lib/auth/actions";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/session";
-import { currentTheme } from "@/lib/preferences/current";
 import { envFor, loadShell, type ShellModel } from "@/lib/ui/loaders/shell";
-import { cycleThemeAction } from "./settings/themeActions";
-
-async function themeAction(): Promise<void> {
-  "use server";
-  await cycleThemeAction();
-}
-
 async function userOrNull(): Promise<CurrentUser | null> {
   try {
     return await getCurrentUser();
@@ -41,15 +33,13 @@ async function shellFor(user: CurrentUser): Promise<ShellModel> {
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const user = await userOrNull();
   if (!user) return <>{children}</>;
-  const [shell, theme] = await Promise.all([shellFor(user), currentTheme()]);
+  const shell = await shellFor(user);
   return (
     <AppShell
       role={user.role}
-      theme={theme}
       market={shell.market}
       bell={shell.bell}
       banners={shell.banners}
-      themeAction={themeAction}
       signOut={signOutAction}
       account={{ email: user.email, name: user.name }}
     >

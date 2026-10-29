@@ -512,8 +512,8 @@ body::before {
 /* ---- account avatar (UXR-004) and the brand mark ------------------------------------------ */
 
 .ui-avatar {
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
+  background: var(--gradient-brand);
+  color: var(--color-brand-a-on-fill);
   box-shadow:
     0 0 0 2px var(--color-bg),
     0 0 0 3px color-mix(in srgb, var(--color-accent) 60%, transparent),
