@@ -12,6 +12,7 @@ import { bearerMatches, isProduction, melbourneDate, type Env } from "@/lib/watc
 import type { EmailProvider } from "@/lib/email/provider";
 import {
   detectAsxTrip,
+  detectDispatchAuth,
   detectDataQualityTwoNights,
   detectQuota,
   detectReviewMissing,
@@ -67,6 +68,7 @@ async function runExtras(
   };
   await safe(() => detectAsxTrip(db));
   await safe(() => detectQuota(db, now, deps.env));
+  await safe(() => detectDispatchAuth(db, now));
   if (kind === "evening") {
     await safe(() => detectDataQualityTwoNights(db));
     await safe(() => detectReviewMissing(db, now));

@@ -111,6 +111,13 @@ export const INCIDENT_SPECS: Readonly<Record<string, Spec>> = {
     fix: "Open the Control Room and follow the ledger runbook.",
     fixPath: "/health",
   },
+  dispatch_auth: {
+    component: "Worker dispatch",
+    impact:
+      "GitHub refused the Worker's dispatch token (401/403); scheduled jobs are not starting.",
+    fix: "Check and rotate the dispatch token in the Worker secrets, then update the expiry date.",
+    fixPath: "/health",
+  },
   provider_auth: {
     component: "Provider",
     impact: "A provider refused our key (401/403); calls to it fail.",

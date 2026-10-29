@@ -117,3 +117,34 @@ export async function detectReviewMissing(db: Client, now: Date): Promise<Detect
     },
   ];
 }
+
+/**
+ * GL-06: a `dispatch-failed` run record of the last 24 hours whose HTTP status is 401 or 403 (the
+ * Worker's GitHub dispatch token was refused) is a credential problem: S2 the same night, from the
+ * next heartbeat. One incident while open (notifyIncident); other statuses stay with the
+ * heartbeat checks. Reads the structured `status` the Worker records; details hold no secrets.
+ */
+export async function detectDispatchAuth(db: Client, now: Date): Promise<Detected[]> {
+  const since = new Date(now.getTime() - 24 * 3_600_000).toISOString();
+  const r = await db.execute({
+    sql: `SELECT concurrency_key, json_extract(details_json, '$.slot') AS slot,
+                 json_extract(details_json, '$.status') AS status
+          FROM run_record
+          WHERE status = 'failed' AND concurrency_key LIKE 'dispatch-failed:%' AND started_at >= ?
+            AND json_extract(details_json, '$.status') IN (401, 403)
+          ORDER BY started_at DESC LIMIT 20`,
+    args: [since],
+  });
+  if (r.rows.length === 0) return [];
+  const slots = [...new Set(r.rows.map((x) => String(x.slot)))].sort();
+  return [
+    {
+      kind: "dispatch_auth",
+      severity: "S2",
+      facts: {
+        summary: `The Worker's GitHub dispatch was refused (HTTP ${Number(r.rows[0].status)}) for ${slots.join(", ")}`,
+        detail: { slots, status: Number(r.rows[0].status), key: String(r.rows[0].concurrency_key) },
+      },
+    },
+  ];
+}
