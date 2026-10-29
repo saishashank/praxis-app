@@ -123,8 +123,10 @@ export function fillCloseSignalExit(env: FillEnv, qty: bigint): SimulatedFill {
  * `afterOpen` is for a stop that becomes active only after the open (the initial stop in the
  * entry session, ARN-021): the open cannot gap through it, so only the low test applies.
  * `exDividendMicro` (FAM-007, D-219; M14 WP2) is the cash dividend per share going ex on this session.
- * It is accepted and IGNORED until WP2 fills it in: the trigger tests will then use open + dividend and
- * low + dividend against the level. Absent or 0n = v1 behaviour.
+ * Only on that session, the trigger tests use open + dividend and low + dividend against the level (the
+ * share is worth the dividend less after the ex-date open); the raw level is not re-based and stays in
+ * force unchanged from the next session. A gap fill stays at open - slippage. A level fill is at
+ * (level - dividend) - slippage - 1 tick, floored as in D-184. Absent or 0n = v1 behaviour.
  */
 export function fillIntradayStop(
   env: FillEnv,
@@ -135,14 +137,18 @@ export function fillIntradayStop(
   assertBar(env.bar);
   if (levelMicro <= 0n) throw new RangeError("stop level must be positive");
   const { openMicro, lowMicro } = env.bar;
-  if (options.afterOpen !== true && openMicro <= levelMicro) {
+  const div = options.exDividendMicro ?? 0n;
+  if (div < 0n) throw new RangeError("ex-date dividend must not be negative");
+  if (options.afterOpen !== true && openMicro + div <= levelMicro) {
     return build(env, "gap_open", "sell", qty, openMicro, slipOf(env, openMicro, "sell"));
   }
-  if (lowMicro <= levelMicro) {
+  if (lowMicro + div <= levelMicro) {
+    // FAM-007: the level in the ex-date price terms; 0n dividend = the raw level (v1)
+    const eff = levelMicro - div; // >= the low, so positive
     // D-184: never below the lowest price on the grid (a A$0.001-0.002 stop would go to zero)
-    const below = slipOf(env, levelMicro, "sell") - tickFor(levelMicro);
+    const below = slipOf(env, eff, "sell") - tickFor(eff);
     const fill = below < MIN_PRICE_MICRO ? MIN_PRICE_MICRO : below;
-    return build(env, "level", "sell", qty, levelMicro, fill);
+    return build(env, "level", "sell", qty, eff, fill);
   }
   return null;
 }

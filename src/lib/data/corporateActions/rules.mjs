@@ -132,6 +132,24 @@ const MAX_RATIO_PART = 1_000_000;
 const MAX_PAYLOAD_CHARS = 2000;
 
 export const isPriceType = (type) => PRICE_TYPES.includes(type);
+
+/**
+ * DAT-233 (D-237) kind of an adjustment factor: `split` changes the share count (split,
+ * consolidation, bonus issue); every other factor is a `price` factor (dividends, spin-off, ...).
+ * A legacy row with no stored kind takes its kind from the action type.
+ * @param {string} type @returns {"price" | "split"}
+ */
+export const factorKindOf = (type) => (isPriceType(type) ? "split" : "price");
+
+/**
+ * DAT-233: a price factor is used only when the reference close it was computed from still equals the
+ * raw close of the session before the ex-date. A missing stored reference (legacy row) matches.
+ * @param {number | null | undefined} stored @param {number | null | undefined} current
+ */
+export const refCloseMatches = (stored, current) =>
+  stored === null || stored === undefined || current === null || current === undefined
+    ? true
+    : stored === current;
 /** Group class: split, consolidation and bonus issue share one class (they cannot co-occur). */
 export const classOf = (type) => (isPriceType(type) ? "price" : type);
 
@@ -512,5 +530,7 @@ const REASON_TEXT = {
   adj_close_disagrees: "the vendor adjusted close does not show a split on this date",
   factor_unknown: "the terms needed to compute the adjustment are missing",
   price_mismatch: "the price move does not match the terms",
+  ref_close_mismatch:
+    "the reference close of the price factor no longer equals the close before the ex-date",
 };
 export const reasonText = (r) => REASON_TEXT[r] ?? r;
