@@ -6,6 +6,7 @@ import {
   autoApplyDate,
   classOf,
   describeTerms,
+  isPriceOnly,
   reasonText,
   typeLabel,
 } from "./rules.mjs";
@@ -73,7 +74,8 @@ export async function loadReviewQueue(db: Client, market = "AU"): Promise<Review
       ),
       observed: typeof a.note.observed === "number" ? a.note.observed : null,
       queuedOn: a.stateSince,
-      neverAuto: (Array.isArray(a.note.reasons) ? a.note.reasons : []).includes("unexplained_jump"),
+      // GL-01: the same rule applyDue uses, so the card and the engine never disagree.
+      neverAuto: isPriceOnly(a.sources),
       applyOn: a.stateSince ? autoApplyDate(a.stateSince, cal, sessions) : null,
     };
   });
