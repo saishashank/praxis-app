@@ -62,7 +62,8 @@ describe("landmarks and tabs", () => {
 
   it.each(["owner", "editor", "viewer"] as const)("%s sees the six tabs in both bars", (role) => {
     shell(role);
-    const six = ["Home", "Picks", "Market", "Strategies", "News", "Reviews"];
+    // UXR-002 / AT-47: the current tab carries a screen-reader "(Selected)" cue beside aria-current.
+    const six = ["Home (Selected)", "Picks", "Market", "Strategies", "News", "Reviews"];
     expect(names(top())).toEqual(six);
     expect(names(bottom())).toEqual(six);
   });
@@ -74,13 +75,13 @@ describe("landmarks and tabs", () => {
       const current = within(nav)
         .getAllByRole("link")
         .filter((a) => a.getAttribute("aria-current") === "page");
-      expect(current.map((a) => a.textContent?.trim())).toEqual(["Strategies"]);
+      expect(current.map((a) => a.textContent?.trim())).toEqual(["Strategies (Selected)"]);
     }
   });
 
   it("marks Home on the root and no tab on a gear page", () => {
     shell();
-    expect(within(top()).getByRole("link", { name: "Home" })).toHaveAttribute(
+    expect(within(top()).getByRole("link", { name: /^Home\s*\(Selected\)$/ })).toHaveAttribute(
       "aria-current",
       "page",
     );
@@ -407,7 +408,7 @@ describe("keyboard order", () => {
     expect(order).toEqual([
       "Skip to main content",
       "Praxis",
-      "Home",
+      "Home (Selected)",
       "Picks",
       "Market",
       "Strategies",
