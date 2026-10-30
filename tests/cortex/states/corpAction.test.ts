@@ -9,6 +9,7 @@ import {
   CORP_ACTION_NONE,
   corpActionStateAt,
   LedgerInvariantError,
+  provenanceOf,
   ratchetStop,
   rebaseStop,
   reconcileExit,
@@ -17,6 +18,7 @@ import {
   type CorpActionState,
   type CorpActionStep,
 } from "@/lib/cortex/states/corpAction";
+import type { CandidateSource, CorpActionStatus } from "@/lib/cortex/states/types";
 import { makeRational } from "@/lib/money/rational";
 import { CENT, noticeAction, path, SESSIONS, statesWorld, type FixtureSpec } from "./zzStates";
 
@@ -37,20 +39,27 @@ function walk(spec: FixtureSpec, upTo: number): CorpActionStep[] {
   return out;
 }
 
-const split21 = (code: string, sources: readonly string[] = ["announcement"], knownD = KNOWN) =>
-  noticeAction(code, "split", EX, { new: 2, old: 1 }, knownD, sources);
+const split21 = (
+  code: string,
+  sources: readonly CandidateSource[] | null = ["announcement"],
+  knownD = KNOWN,
+  status: CorpActionStatus = "pending",
+) => noticeAction(code, "split", EX, { new: 2, old: 1 }, knownD, sources, status);
 
 describe("fixture 3b: a 2-for-1 candidate whose price does not follow the ratio is disconfirmed", () => {
-  // Raw -40 % on the break (the notice explains -50 %: 20 % off the explained level, 16.7 % off
-  // the stated ratio, so neither confirmed nor within the 10 % band), then -8 % on each of the next
-  // two sessions. The explained-move test fails on the break and on D+1: disconfirmed on D+1.
+  // The chapter's literal numbers (-50 % on the break, then -8 %, -8 %) cannot disconfirm under its
+  // own rule: -50 % IS the stated ratio and confirms by notice + price on the break (OWNER: flagged
+  // for review). Here raw -30 % on the break (observed 1.43 against a stated 2: not confirmed; the
+  // break session itself is not a deviation test, D-322), then -8 % on each of the next two
+  // sessions: the explained-move test fails on D+1 (28.8 % off) and D+2 (18.5 % off): disconfirmed
+  // on D+2, the raw stop runs from the next open.
   const spec: FixtureSpec = {
     code: "ZZD",
     tier: "U1",
-    bars: { closesCents: path(1000, BREAK, [-0.4, -0.08, -0.08]) },
+    bars: { closesCents: path(1000, BREAK, [-0.3, -0.08, -0.08]) },
     corpActions: [split21("ZZD")],
   };
-  const steps = walk(spec, BREAK + 3);
+  const steps = walk(spec, BREAK + 4);
 
   it("enters the candidate state when the notice is known, with no entries", () => {
     expect(steps[8]!.next.state).toBe("none");
@@ -68,32 +77,48 @@ describe("fixture 3b: a 2-for-1 candidate whose price does not follow the ratio 
     expect(s9.effects.stopBasis).toBe("raw"); // the ratio is never applied before the break
   });
 
-  it("runs the two-basis freeze on the break session and disconfirms on the second failing session", () => {
+  it("runs the two-basis freeze from the break and disconfirms on the second failing post-break session", () => {
     const brk = steps[BREAK]!;
-    expect(brk.next.state).toBe("candidate");
+    expect(brk.next).toMatchObject({ state: "candidate", deviationRun: 0, priceTested: true });
     expect(brk.effects.stopBasis).toBe("two_basis");
     expect(brk.effects.priceFactor).toEqual(makeRational(2n, 1n));
     expect(brk.reason).toBe("candidate_frozen");
     const d1 = steps[BREAK + 1]!;
-    expect(d1.next.state).toBe("disconfirmed");
-    expect(d1.label).toBe(
+    expect(d1.next).toMatchObject({ state: "candidate", deviationRun: 1 });
+    expect(d1.effects.stopBasis).toBe("two_basis");
+    const d2 = steps[BREAK + 2]!;
+    expect(d2.next.state).toBe("disconfirmed");
+    expect(d2.label).toBe(
       "the price did not move as the announced ratio said: the action is disconfirmed",
     );
-    expect(d1.row).toMatchObject({
+    expect(d2.row).toMatchObject({
       state: "disconfirmed",
-      fromD: SESSIONS[BREAK + 1],
+      fromD: SESSIONS[BREAK + 2],
       sourceRef: split21("ZZD").id,
+      basis: { run: 2 },
     });
-    expect(d1.effects.stopBasis).toBe("raw");
-    expect(d1.effects.reverseBookings).toBe(true);
-    expect(d1.effects.entriesBlocked).toBe(false);
+    expect(d2.effects.stopBasis).toBe("raw");
+    expect(d2.effects.reverseBookings).toBe(true);
+    expect(d2.effects.entriesBlocked).toBe(false);
   });
 
   it("closes the state with a 'none' row the next session (append-only)", () => {
-    const d2 = steps[BREAK + 2]!;
-    expect(d2.next.state).toBe("none");
-    expect(d2.row).toMatchObject({ state: "none", basis: { after: "disconfirmed" } });
-    expect(steps[BREAK + 3]!.row).toBeNull();
+    const d3 = steps[BREAK + 3]!;
+    expect(d3.next.state).toBe("none");
+    expect(d3.row).toMatchObject({ state: "none", basis: { after: "disconfirmed" } });
+    expect(steps[BREAK + 4]!.row).toBeNull();
+  });
+
+  it("one deviating session followed by a recovery does not disconfirm (D-322: two consecutive)", () => {
+    const bounce: FixtureSpec = {
+      ...spec,
+      code: "ZZD2",
+      bars: { closesCents: path(1000, BREAK, [-0.3, -0.08, -0.22]) },
+      corpActions: [split21("ZZD2")],
+    };
+    const s = walk(bounce, BREAK + 2);
+    expect(s[BREAK + 1]!.next).toMatchObject({ state: "candidate", deviationRun: 1 });
+    expect(s[BREAK + 2]!.next).toMatchObject({ state: "candidate", deviationRun: 0 });
   });
 });
 
@@ -258,19 +283,164 @@ describe("other confirmation paths and non-candidates", () => {
     });
   });
 
-  it("a row the data layer already confirmed (no source) enters as confirmed and re-bases at the break", () => {
-    const rec = { ...split21("ZZJ"), payload: { new: 2, old: 1 } };
+  it("D-321: a notice-sourced row the data layer confirmed enters as confirmed and re-bases at the break", () => {
     const spec: FixtureSpec = {
       code: "ZZJ",
       tier: "U1",
       bars: { closesCents: path(1000, BREAK, [-0.5]) },
-      corpActions: [rec],
+      corpActions: [split21("ZZJ", ["announcement", "vendor"], KNOWN, "confirmed")],
     };
     const s = walk(spec, BREAK + 1);
-    expect(s[9]!.next).toMatchObject({ state: "confirmed", by: "data_layer" });
-    expect(s[9]!.row).toMatchObject({ state: "confirmed", basis: { by: "data_layer" } });
+    expect(s[9]!.next).toMatchObject({ state: "confirmed", by: "notice_data_layer" });
+    expect(s[9]!.row).toMatchObject({ state: "confirmed", basis: { by: "notice_data_layer" } });
     expect(s[BREAK]!.effects.rebase?.qtyRatio).toEqual(makeRational(2n));
     expect(s[BREAK + 1]!.row).toMatchObject({ state: "none" });
+  });
+
+  it("D-321: a vendor-only row the data layer auto-confirmed never re-bases a Cortex stop", () => {
+    const spec: FixtureSpec = {
+      code: "ZZJ2",
+      tier: "U1",
+      bars: { closesCents: path(1000, BREAK, [-0.5]) },
+      corpActions: [split21("ZZJ2", ["vendor", "price"], KNOWN, "confirmed")],
+    };
+    const view = buildAsOfView(statesWorld([spec]));
+    expect(candidateGroups(view, "ZZJ2", BREAK)).toEqual([]);
+    const s = walk(spec, BREAK + 1);
+    expect(s[9]!.next.state).toBe("none");
+    expect(s[9]!.row).toBeNull();
+    // the -50 % break is an unexplained jump for the Cortex: block, raw stop, no re-base
+    expect(s[BREAK]!.next.state).toBe("jump_block");
+    expect(s[BREAK]!.effects.rebase).toBeNull();
+    expect(s[BREAK]!.effects.stopBasis).toBe("raw");
+    const stop = c(900);
+    expect(ratchetStop(stop, c(430), s[BREAK]!.effects.rebase?.priceFactor ?? null)).toBe(stop);
+  });
+
+  it("D-321: a row with no provenance fails closed: one unknown_provenance row, Owner alert, no re-base", () => {
+    const spec: FixtureSpec = {
+      code: "ZZJ3",
+      tier: "U1",
+      bars: { closesCents: path(1000, BREAK, []) },
+      corpActions: [split21("ZZJ3", null, KNOWN)],
+    };
+    const s = walk(spec, BREAK + 2);
+    const k = s[9]!;
+    expect(k.next).toEqual({ state: "none", seen: [`${EX}|quantity`] });
+    expect(k.reason).toBe("unknown_provenance");
+    expect(k.label).toBe(
+      "Owner alert: a corporate action has no recorded source; entries are blocked today",
+    );
+    expect(k.row).toMatchObject({
+      state: "unknown_provenance",
+      fromD: KNOWN,
+      basis: { exD: EX, actionIds: [split21("ZZJ3", null).id], types: ["split"] },
+      sourceRef: split21("ZZJ3", null).id,
+    });
+    expect(k.effects).toMatchObject({ entriesBlocked: true, ownerAlert: true, rebase: null });
+    for (let t = BREAK; t <= BREAK + 2; t += 1) {
+      expect(s[t]!.next.state).toBe("none");
+      expect(s[t]!.row).toBeNull();
+      expect(s[t]!.effects.rebase).toBeNull();
+    }
+  });
+
+  it("D-321: provenance may come as a map by action id instead of on the record", () => {
+    const rec = split21("ZZJ4", null, KNOWN);
+    const spec: FixtureSpec = {
+      code: "ZZJ4",
+      tier: "U1",
+      bars: { closesCents: path(1000, BREAK, [-0.5]) },
+      corpActions: [rec],
+    };
+    const view = buildAsOfView(statesWorld([spec]));
+    const prov = new Map([
+      [rec.id, { sources: ["announcement" as const], status: "pending" as const }],
+    ]);
+    expect(stepCorpAction(view, "ZZJ4", 9, null, undefined, prov).next.state).toBe("candidate");
+    expect(corpActionStateAt(view, "ZZJ4", BREAK, undefined, prov).next).toMatchObject({
+      state: "confirmed",
+      by: "notice_price",
+    });
+    expect(provenanceOf(rec)).toBeNull();
+    expect(provenanceOf(rec, prov)).toEqual({ sources: ["announcement"], status: "pending" });
+  });
+
+  it("SF-3: a TERP offer the data layer confirmed waits as a candidate and confirms at the break", () => {
+    // cum close 1000c, TERP 800c -> factor 5/4; the offer does not change the share count
+    const rights = noticeAction(
+      "ZZT",
+      "rights_renounceable",
+      EX,
+      { rights: { new: 1, old: 4 }, terp_micro: c(800).toString() },
+      KNOWN,
+      ["announcement"],
+      "confirmed",
+    );
+    const spec: FixtureSpec = {
+      code: "ZZT",
+      tier: "U1",
+      bars: { closesCents: path(1000, BREAK, [-0.2]) },
+      corpActions: [rights],
+    };
+    const s = walk(spec, BREAK + 1);
+    expect(s[9]!.next).toMatchObject({ state: "candidate", terpMicro: c(800), noticeFactor: null });
+    expect(s[9]!.reason).toBe("candidate_terp_pending");
+    expect(s[9]!.row).toMatchObject({
+      state: "candidate",
+      basis: { terpMicro: c(800).toString() },
+    });
+    const brk = s[BREAK]!;
+    expect(brk.next).toMatchObject({
+      state: "confirmed",
+      by: "notice_data_layer",
+      priceFactor: makeRational(5n, 4n),
+      qtyRatio: makeRational(1n),
+      rebased: true,
+    });
+    expect(brk.effects.rebase).toEqual({
+      priceFactor: makeRational(5n, 4n),
+      qtyRatio: makeRational(1n),
+    });
+    expect(rebaseStop(c(900), brk.effects.rebase!.priceFactor)).toBe(c(720));
+    expect(s[BREAK + 1]!.row).toMatchObject({ state: "none", basis: { after: "confirmed" } });
+  });
+
+  it("SF-5: a notice first known after the break is tested against the break-day close", () => {
+    const late = split21("ZZL2", ["announcement"], SESSIONS[BREAK + 2]!);
+    const agree: FixtureSpec = {
+      code: "ZZL2",
+      tier: "U1",
+      bars: { closesCents: path(1000, BREAK, [-0.5, 0.03, 0.03]) },
+      corpActions: [late],
+    };
+    const s = walk(agree, BREAK + 3);
+    expect(s[BREAK]!.next.state).toBe("jump_block"); // nothing known yet: the -50 % is a jump
+    const k = s[BREAK + 2]!;
+    expect(k.next).toMatchObject({ state: "confirmed", by: "notice_price", rebased: true });
+    expect(k.effects.rebase?.priceFactor).toEqual(makeRational(2n));
+    expect(k.row).toMatchObject({ state: "confirmed", fromD: SESSIONS[BREAK + 2] });
+    // the same late notice against a break that did not follow the ratio: a candidate whose freeze
+    // count already runs from the break (break = 1, so session 3 on arrival), today's close tested
+    const off: FixtureSpec = {
+      ...agree,
+      code: "ZZL3",
+      bars: { closesCents: path(1000, BREAK, [-0.4737, 0, 0]) },
+      corpActions: [split21("ZZL3", ["announcement"], SESSIONS[BREAK + 2]!)],
+    };
+    const o = walk(off, BREAK + 4);
+    expect(o[BREAK + 2]!.next).toMatchObject({
+      state: "candidate",
+      freezeSessions: 3,
+      priceTested: true,
+      deviationRun: 0,
+    });
+    expect(o[BREAK + 2]!.effects.stopBasis).toBe("two_basis");
+    expect(o[BREAK + 4]!.next).toMatchObject({
+      state: "candidate",
+      freezeSessions: 5,
+      ownerAlert: true,
+    });
   });
 
   it("a 15 % jump with no candidate blocks entries for two sessions and then ends with a 'none' row", () => {

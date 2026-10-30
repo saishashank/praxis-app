@@ -4,10 +4,32 @@
 // store, no clock, no random source. Each step returns the next state, a plain label the card and
 // the abstain line can show, and the `cortex_state` row to append when the state changed (P1 writes
 // it; a state that ends is a new row with `state = 'none'`, never an update).
+import type { CorpActionRecord } from "@/lib/arena/corpActions";
 import { makeRational, type Rational } from "@/lib/money/rational";
 
 /** `cortex_state.kind`. */
 export type StateKind = "corp_action" | "halt" | "promotion";
+
+/** DAT-221 evidence sources (`data/corporateActions/rules.mjs` SOURCES). */
+export type CandidateSource = "announcement" | "vendor" | "price";
+
+/** `corporate_action_event` status as the CTX-015 machine reads it (rules.mjs `State`, reduced). */
+export type CorpActionStatus = "pending" | "confirmed" | "rejected" | "reversed";
+
+/**
+ * Provenance of one corporate-action row (D-321). `CorpActionRecord` carries `payload_json` only;
+ * the sources live in `corporate_action.evidence_json` (plus `add_source` notes, engine.mjs) and
+ * the status in `corporate_action_event`. The Cortex producer (P2 live store, P3 replay, O1
+ * offline) must supply both for every record it hands the view: pending rows are known at their
+ * `first_ingested_at`, confirmed rows at their `known_at`. Either the record itself is a
+ * `CortexCorpAction` (the extra fields ride on the object) or a map keyed by action id is passed
+ * to the machine. A record with neither fails closed (no candidate, no re-base, Owner alert).
+ */
+export type CorpActionProvenance = {
+  readonly sources: readonly CandidateSource[];
+  readonly status: CorpActionStatus;
+};
+export type CortexCorpAction = CorpActionRecord & CorpActionProvenance;
 
 /**
  * One `cortex_state` row as the writer wants it (market is the view's). `basis` is `basis_json`:

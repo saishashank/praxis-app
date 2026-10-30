@@ -8,6 +8,11 @@ import type { EventCategory, Polarity } from "@/lib/agents/schema";
 import type { CorpActionRecord } from "@/lib/arena/corpActions";
 import type { CalendarRow } from "@/lib/data/calendar";
 import type { AsOfWorld, EventRow, HaltRow, TierRow } from "@/lib/cortex/pit/types";
+import type {
+  CandidateSource,
+  CorpActionStatus,
+  CortexCorpAction,
+} from "@/lib/cortex/states/types";
 import type { Tier } from "@/lib/agents/families/types";
 import { makeRational, type Rational } from "@/lib/money/rational";
 
@@ -88,24 +93,32 @@ export function tierRows(d: string, tier: Tier): TierRow[] {
   return [{ d, tier }];
 }
 
-/** A notice-sourced corporate action known at 16:00 Melbourne (05:00Z) of `knownD`. */
+/**
+ * A corporate action with its provenance riding on the record (`CortexCorpAction`, D-321), known
+ * at 16:00 Melbourne (05:00Z) of `knownD`. Default: a pending ASX notice. `sources: null` builds a
+ * record with no provenance at all (what `loadConfirmedActions` yields today).
+ */
 export function noticeAction(
   code: string,
   type: string,
   exDate: string,
   payload: Record<string, unknown>,
   knownD: string,
-  sources: readonly string[] = ["announcement"],
-  id = `ca-${code}-${type}-${exDate}-${sources.join("+")}`,
+  sources: readonly CandidateSource[] | null = ["announcement"],
+  status: CorpActionStatus = "pending",
+  id = `ca-${code}-${type}-${exDate}-${sources === null ? "nosrc" : sources.join("+")}-${status}`,
 ): CorpActionRecord {
-  return {
+  const base: CorpActionRecord = {
     id,
     code,
     type,
     exDate,
-    payload: { ...payload, sources: [...sources] },
+    payload,
     knownAt: `${knownD}T05:00:00.000Z`,
   };
+  if (sources === null) return base;
+  const withProvenance: CortexCorpAction = { ...base, sources, status };
+  return withProvenance;
 }
 
 export function eventAt(

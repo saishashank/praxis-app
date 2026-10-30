@@ -1,11 +1,14 @@
 // Corporate-action state machine (M15 C3b; CTX-015, CTX-024 re-base; AT-52 ratchet; AT-56 fixtures
-// 3b and 5; D-261 forward-measured). One code, one session at a time, over the as-of view:
+// 3b and 5; D-261 forward-measured; D-321 provenance; D-322 post-break test). One code, one session
+// at a time, over the as-of view:
 //
-//   none ──notice with a ratio──> candidate ──agree (notice+vendor, notice+price, or at the
-//        unresolved limit)──> confirmed ──break session re-base──> none
-//   candidate ──explained-move test fails twice──> disconfirmed ──next session──> none
+//   none ──pending ASX notice with a ratio──> candidate ──agree (notice+vendor, notice+break price,
+//        the data layer, or at the unresolved limit)──> confirmed ──break session re-base──> none
+//   candidate ──explained-move test fails on two consecutive post-break sessions──> disconfirmed
+//        ──next session──> none
 //   candidate ──unresolved after N sessions, ratios disagree──> candidate + Owner alert
 //   none ──|raw move| >= 15 % with no candidate──> jump_block (2 sessions) ──> none
+//   none ──row without provenance──> none (+ `unknown_provenance` row and Owner alert; fail closed)
 //
 // A ratio is never applied before its break session (a crash before the break is a crash). While a
 // candidate is unconfirmed: no entries; a held stop is read on both bases (`twoBasisStop`) and the
@@ -14,13 +17,16 @@
 // invariant). On confirmation the stop is re-based by the ratio before the ratchet (`rebaseStop`,
 // `ratchetStop`): the only way a stop ever moves down.
 //
-// Which records are candidates: a `CorpActionRecord` whose payload carries `sources` (string[]) or
-// `source` (string) from the DAT-221 evidence (`data/corporateActions/rules.mjs` SOURCES:
-// "announcement" | "vendor" | "price"). A record with "announcement" among its sources is a notice
-// candidate; "vendor" and "price" alone are never candidates (CTX-015, pass 22). A record with no
-// source field at all is a row the data layer already confirmed (DAT-221 auto-confirm or the Owner
-// queue): it enters as `confirmed` and is re-based at its break like any other confirmation.
-// Money and ratios are exact (bigint micro, Rational); the only float is nothing.
+// Provenance (D-321): the machine reads each record's `sources` and `status` (`CorpActionProvenance`,
+// types.ts: from `corporate_action.evidence_json` and `corporate_action_event`, supplied by the
+// producer on the record or in `provenance` by action id). Rules:
+//   pending   + announcement in sources            -> notice candidate (two-basis freeze)
+//   confirmed + announcement in sources            -> confirmed by the data layer: re-base at the break
+//   any       + sources within {vendor, price}     -> vendor evidence only: corroborates a notice,
+//                                                     never a candidate, never re-bases a Cortex stop
+//   rejected / reversed                            -> ignored
+//   no provenance                                  -> fail closed: `unknown_provenance` row + alert
+// Money and ratios are exact (bigint micro, Rational).
 import { quantityRatio, type CorpActionRecord } from "@/lib/arena/corpActions";
 import { rebaseQty } from "@/lib/arena/ledger";
 import { roundHalfAwayFromZero } from "@/lib/money/round";
@@ -39,10 +45,14 @@ import {
   basisRat,
   DEFAULT_STATES_PARAMS,
   pctRat,
+  type CandidateSource,
+  type CorpActionProvenance,
   type StatesParams,
   type StateRow,
   type StepOutcome,
 } from "./types";
+
+export type { CandidateSource } from "./types";
 
 export type CorpActionParams = Pick<
   StatesParams,
@@ -55,19 +65,33 @@ export type CorpActionParams = Pick<
   | "jumpBlockSessions"
 >;
 
+/** Provenance by action id when the records themselves do not carry it. */
+export type ProvenanceMap = ReadonlyMap<string, CorpActionProvenance>;
+
+/** Sessions a resolved group key stays in `seen` after its break (bounds the state). */
+export const SEEN_HORIZON_SESSIONS = 60;
+
 /** Types that carry a stated ratio (quantity-changing) or a TERP (entitlement offers). */
 const QUANTITY_TYPES: readonly string[] = ["split", "consolidation", "bonus_issue"];
 const TERP_TYPES: readonly string[] = ["rights_renounceable", "rights_non_renounceable"];
 
-export type CandidateSource = "announcement" | "vendor" | "price";
+const isSource = (s: unknown): s is CandidateSource =>
+  s === "announcement" || s === "vendor" || s === "price";
+const isStatus = (s: unknown): s is CorpActionProvenance["status"] =>
+  s === "pending" || s === "confirmed" || s === "rejected" || s === "reversed";
 
-/** The evidence sources of a record; empty when the payload has none (data-layer confirmed). */
-export function sourcesOf(rec: CorpActionRecord): readonly CandidateSource[] {
-  const raw = rec.payload.sources ?? rec.payload.source;
-  const list = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
-  return list.filter(
-    (s): s is CandidateSource => s === "announcement" || s === "vendor" || s === "price",
-  );
+/** The record's provenance: the map entry, else the fields riding on the record; null = unknown. */
+export function provenanceOf(
+  rec: CorpActionRecord,
+  provenance?: ProvenanceMap,
+): CorpActionProvenance | null {
+  const m = provenance?.get(rec.id);
+  if (m !== undefined) return m;
+  const r = rec as Partial<CorpActionProvenance>;
+  if (Array.isArray(r.sources) && r.sources.every(isSource) && isStatus(r.status)) {
+    return { sources: r.sources, status: r.status };
+  }
+  return null;
 }
 
 export type ActionTerms = {
@@ -96,20 +120,35 @@ export function actionTerms(rec: CorpActionRecord): ActionTerms | null {
   return null;
 }
 
+export type GroupEntry = { readonly rec: CorpActionRecord; readonly terms: ActionTerms };
+
 /** Records of one code grouped by break session (ex-date) and class, each with its stated terms. */
 export type CandidateGroup = {
   readonly key: string; // `${exD}|${class}`
   readonly exD: string;
-  readonly notice: { readonly rec: CorpActionRecord; readonly terms: ActionTerms } | null;
-  readonly vendor: { readonly rec: CorpActionRecord; readonly terms: ActionTerms } | null;
-  /** A row the data layer confirmed (no source field): enters as confirmed. */
-  readonly confirmedRow: { readonly rec: CorpActionRecord; readonly terms: ActionTerms } | null;
+  /** Pending ASX notice with a ratio: the candidate. */
+  readonly notice: GroupEntry | null;
+  /** Vendor (or price) evidence: corroborates a notice only. */
+  readonly vendor: GroupEntry | null;
+  /** A notice-sourced row the data layer confirmed: re-base at the break (D-321). */
+  readonly confirmedRow: GroupEntry | null;
+  /** Records with a ratio but no provenance: fail closed. */
+  readonly unknown: readonly CorpActionRecord[];
 };
 
 const classOf = (type: string): string => (QUANTITY_TYPES.includes(type) ? "quantity" : "terp");
 
-/** Groups known by the cut-off of sessions[t], oldest break first; vendor-only groups are dropped. */
-export function candidateGroups(view: AsOfView, code: string, t: number): CandidateGroup[] {
+/**
+ * Groups known by the cut-off of sessions[t], oldest break first. Groups holding only vendor or
+ * price evidence are dropped (never candidates, never a re-base); groups with an unknown-provenance
+ * record are kept so the machine can fail closed on them.
+ */
+export function candidateGroups(
+  view: AsOfView,
+  code: string,
+  t: number,
+  provenance?: ProvenanceMap,
+): CandidateGroup[] {
   const byKey = new Map<string, CandidateGroup>();
   for (const rec of view.corpActions(code, t)) {
     const terms = actionTerms(rec);
@@ -121,28 +160,34 @@ export function candidateGroups(view: AsOfView, code: string, t: number): Candid
       notice: null,
       vendor: null,
       confirmedRow: null,
+      unknown: [],
     };
-    const src = sourcesOf(rec);
-    const entry = { rec, terms };
+    const p = provenanceOf(rec, provenance);
+    const entry: GroupEntry = { rec, terms };
     let next: CandidateGroup = g;
-    if (src.length === 0) next = { ...g, confirmedRow: g.confirmedRow ?? entry };
-    else if (src.includes("announcement")) next = { ...g, notice: g.notice ?? entry };
-    else if (src.includes("vendor")) next = { ...g, vendor: g.vendor ?? entry };
+    if (p === null) next = { ...g, unknown: [...g.unknown, rec] };
+    else if (p.status === "rejected" || p.status === "reversed") next = g;
+    else if (p.sources.includes("announcement")) {
+      next =
+        p.status === "confirmed"
+          ? { ...g, confirmedRow: g.confirmedRow ?? entry }
+          : { ...g, notice: g.notice ?? entry };
+    } else if (p.sources.length > 0) next = { ...g, vendor: g.vendor ?? entry };
+    else next = { ...g, unknown: [...g.unknown, rec] }; // provenance without a source: unknown
     byKey.set(key, next);
   }
   return [...byKey.values()]
-    .filter((g) => g.notice !== null || g.confirmedRow !== null)
+    .filter((g) => g.notice !== null || g.confirmedRow !== null || g.unknown.length > 0)
     .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 }
 
 // ---- state -----------------------------------------------------------------------------------------------
 
-export type ConfirmedBy = "notice_vendor" | "notice_price" | "unresolved_agree" | "data_layer";
-
-export type ConfirmedState = Extract<CorpActionState, { state: "confirmed" }>;
+export type ConfirmedBy =
+  "notice_vendor" | "notice_price" | "unresolved_agree" | "notice_data_layer";
 
 type Common = {
-  /** Group keys already resolved (confirmed, disconfirmed or past) so they are not re-entered. */
+  /** Group keys already resolved (confirmed, disconfirmed, unknown) so they are not re-entered. */
   readonly seen: readonly string[];
 };
 
@@ -164,8 +209,10 @@ export type CorpActionState =
       readonly lastCleanCloseMicro: bigint | null;
       /** 1-based session count from the break session; 0 before the break. */
       readonly freezeSessions: number;
-      /** Consecutive sessions on which the explained-move test failed. */
+      /** Consecutive post-break sessions on which the explained-move test failed. */
       readonly deviationRun: number;
+      /** The notice-vs-break-price agreement test has run (first session both were known). */
+      readonly priceTested: boolean;
       readonly ownerAlert: boolean;
     })
   | (Common & {
@@ -194,11 +241,15 @@ export type CorpActionState =
       readonly jumpPct: Rational;
     });
 
+export type ConfirmedState = Extract<CorpActionState, { state: "confirmed" }>;
+type CandidateState = Extract<CorpActionState, { state: "candidate" }>;
+type NoneState = Extract<CorpActionState, { state: "none" }>;
+
 export const CORP_ACTION_NONE: CorpActionState = { state: "none", seen: [] };
 
 /** What the caller applies this session on top of the state (stops, entries, ledger). */
 export type CorpActionEffects = {
-  /** G08 `8d_unresolved_action` and the jump block: no new entries this session. */
+  /** G08 `8d_unresolved_action`, the jump block and the fail-closed row: no new entries this session. */
   readonly entriesBlocked: boolean;
   /** "raw": stops on raw prices; "two_basis": exit only when both bases breach; "rebased": after re-base. */
   readonly stopBasis: "raw" | "two_basis" | "rebased";
@@ -209,7 +260,7 @@ export type CorpActionEffects = {
   readonly rebase: { readonly priceFactor: Rational; readonly qtyRatio: Rational } | null;
   /** Freeze loss limit breached on adjusted prices: exit regardless, booked on the adjusted basis. */
   readonly freezeExit: boolean;
-  /** Unresolved past the limit and the ratios disagree: raise an Owner alert before any exit. */
+  /** Owner alert: unresolved past the limit with disagreeing ratios, or a row without provenance. */
   readonly ownerAlert: boolean;
   /** Disconfirmed this session: the stop runs on raw prices from the next open; reverse bookings. */
   readonly reverseBookings: boolean;
@@ -230,6 +281,9 @@ const NO_EFFECTS: CorpActionEffects = {
   reverseBookings: false,
   volumeTestNeeded: false,
 };
+
+const LABEL_UNCONFIRMED = "a corporate action with a stated ratio is not yet confirmed";
+const LABEL_NONE = "no corporate action in the way";
 
 const abs = (r: Rational): Rational => (r.num < 0n ? makeRational(-r.num, r.den) : r);
 const ONE = makeRational(1n);
@@ -259,22 +313,45 @@ function row(
   return { kind: "corp_action", code, fromD, state, basis, sourceRef };
 }
 
+/** The raw close of sessions[t] when the code traded that session. */
 function closeOn(view: AsOfView, code: string, t: number, d: string): bigint | null {
-  const bars = view.bars(code, t, 1);
-  const b = bars[0];
+  const b = view.bars(code, t, 1)[0];
   return b !== undefined && b.d === d ? b.close : null;
 }
 
 /** The raw close of the last session strictly before `d` that is known at t. */
 function closeBefore(view: AsOfView, code: string, t: number, d: string): bigint | null {
-  const bars = view.bars(code, t, 2);
+  const n = Math.max(2, t - firstSessionAtOrAfter(view, d) + 2);
+  const bars = view.bars(code, t, n);
   for (let i = bars.length - 1; i >= 0; i -= 1) if (bars[i]!.d < d) return bars[i]!.close;
   return null;
 }
 
+/** The index of the first session on or after `d` (sessions.length when none). */
+function firstSessionAtOrAfter(view: AsOfView, d: string): number {
+  let i = 0;
+  while (i < view.sessions.length && view.sessions[i]! < d) i += 1;
+  return i;
+}
+
+/** The raw close of the break session (the first traded session on or after `exD`) known at t. */
+function breakClose(view: AsOfView, code: string, t: number, exD: string): bigint | null {
+  const from = firstSessionAtOrAfter(view, exD);
+  if (from > t) return null;
+  const bars = view.bars(code, t, t - from + 1);
+  const b = bars.find((x) => x.d >= exD);
+  return b === undefined ? null : b.close;
+}
+
+/** `seen` keys whose break is within the horizon (bounds the carried state; D-324). */
+function pruneSeen(seen: readonly string[], view: AsOfView, t: number): readonly string[] {
+  const floor = view.sessions[Math.max(0, t - SEEN_HORIZON_SESSIONS)]!;
+  return seen.filter((k) => k.slice(0, 10) >= floor);
+}
+
 function enterConfirmed(
   g: CandidateGroup,
-  entry: { rec: CorpActionRecord; terms: ActionTerms },
+  entry: GroupEntry,
   priceFactor: Rational,
   by: ConfirmedBy,
   d: string,
@@ -294,7 +371,7 @@ function enterConfirmed(
   };
 }
 
-function confirmedRow(code: string, s: CorpActionState & { state: "confirmed" }): StateRow {
+function confirmedRow(code: string, s: ConfirmedState): StateRow {
   return row(
     code,
     s.confirmedD,
@@ -309,250 +386,10 @@ function confirmedRow(code: string, s: CorpActionState & { state: "confirmed" })
   );
 }
 
-/**
- * One session of the machine. `prev` null = nothing known before. The step reads only
- * `view.corpActions` and `view.bars` at `t` (pure; TST-109 holds by construction).
- */
-export function stepCorpAction(
-  view: AsOfView,
-  code: string,
-  t: number,
-  prev: CorpActionState | null,
-  params: CorpActionParams = DEFAULT_STATES_PARAMS,
-): CorpActionStep {
-  const d = view.sessions[t]!;
-  const s = prev ?? CORP_ACTION_NONE;
-  const groups = candidateGroups(view, code, t);
-  const byKey = new Map(groups.map((g) => [g.key, g] as const));
-
-  // ---- a running candidate ------------------------------------------------------------------------------
-  if (s.state === "candidate") {
-    const g = byKey.get(s.key);
-    const seenPlus = [...s.seen, s.key];
-    // The data layer confirmed it meanwhile (a sourceless row with the same break): confirmed.
-    if (g?.confirmedRow && g.confirmedRow.terms.priceFactor !== null) {
-      const next = enterConfirmed(
-        g,
-        g.confirmedRow,
-        g.confirmedRow.terms.priceFactor,
-        "data_layer",
-        d,
-        seenPlus,
-      );
-      return finishConfirmed(view, code, t, next, "data layer confirmed the action");
-    }
-    const vendorFactor = s.vendorFactor ?? g?.vendor?.terms.priceFactor ?? null;
-    const noticeFactor = s.noticeFactor;
-    const beforeBreak = d < s.exD;
-    const atOrAfterBreak = !beforeBreak;
-    const lastClean =
-      s.lastCleanCloseMicro ?? (atOrAfterBreak ? closeBefore(view, code, t, s.exD) : null);
-    // Notice + vendor agree (any time, both stated).
-    if (
-      noticeFactor !== null &&
-      vendorFactor !== null &&
-      factorsAgree(noticeFactor, vendorFactor, params.confirmTolerancePct)
-    ) {
-      const next = enterConfirmed(g!, g!.notice!, noticeFactor, "notice_vendor", d, seenPlus);
-      return finishConfirmed(view, code, t, next, "notice and vendor ratios agree");
-    }
-    if (beforeBreak) {
-      const next: CorpActionState = { ...s, vendorFactor };
-      return {
-        next,
-        label: "a corporate action with a stated ratio is not yet confirmed",
-        reason: "candidate_before_break",
-        row: null,
-        effects: { ...NO_EFFECTS, entriesBlocked: true },
-      };
-    }
-    // At or after the break: the factor in force, the observed ratio, the tests.
-    let priceFactor = s.priceFactor;
-    if (priceFactor === null && s.terpMicro !== null && lastClean !== null) {
-      priceFactor = makeRational(lastClean, s.terpMicro);
-    }
-    if (priceFactor === null) priceFactor = noticeFactor;
-    const raw = closeOn(view, code, t, d);
-    const freezeSessions = s.freezeSessions + 1;
-    const basisCommon = {
-      exD: s.exD,
-      priceFactor: basisRat(priceFactor),
-      qtyRatio: basisRat(s.qtyRatio),
-      lastCleanCloseMicro: basisMicro(lastClean),
-    };
-    if (raw === null || lastClean === null || priceFactor === null) {
-      // No bar on this session (halted through the break) or no prior bar: freeze without tests.
-      const next: CorpActionState = {
-        ...s,
-        vendorFactor,
-        lastCleanCloseMicro: lastClean,
-        priceFactor,
-        freezeSessions,
-      };
-      return {
-        next,
-        label: "a corporate action with a stated ratio is not yet confirmed",
-        reason: "candidate_no_bar",
-        row: null,
-        effects: {
-          ...NO_EFFECTS,
-          entriesBlocked: true,
-          stopBasis: "two_basis",
-          priceFactor,
-          qtyRatio: s.qtyRatio,
-        },
-      };
-    }
-    const observed = makeRational(lastClean, raw); // old price / new price on the break basis
-    // Notice + observed price on the break session agree: confirmed, re-based now.
-    if (
-      freezeSessions === 1 &&
-      noticeFactor !== null &&
-      factorsAgree(noticeFactor, observed, params.confirmTolerancePct)
-    ) {
-      const next = enterConfirmed(g!, g!.notice!, noticeFactor, "notice_price", d, seenPlus);
-      return finishConfirmed(view, code, t, next, "notice ratio and the break-session price agree");
-    }
-    // Explained-move test (break session included: a crash on the break is a crash).
-    const dev = explainedDeviation(raw, lastClean, priceFactor);
-    const deviationRun = cmpRat(dev, pctRat(params.disconfirmDevPct)) > 0 ? s.deviationRun + 1 : 0;
-    if (deviationRun >= params.disconfirmSessions) {
-      const next: CorpActionState = {
-        state: "disconfirmed",
-        seen: seenPlus,
-        key: s.key,
-        actionId: s.actionId,
-        exD: s.exD,
-        disconfirmedD: d,
-      };
-      return {
-        next,
-        label: "the price did not move as the announced ratio said: the action is disconfirmed",
-        reason: "disconfirmed_explained_move",
-        row: row(
-          code,
-          d,
-          "disconfirmed",
-          { ...basisCommon, deviation: basisRat(dev), run: deviationRun },
-          s.actionId,
-        ),
-        effects: { ...NO_EFFECTS, stopBasis: "raw", reverseBookings: true },
-      };
-    }
-    // Freeze loss limit on adjusted prices from the last clean close.
-    const adjClose = mulRat(makeRational(raw), priceFactor);
-    const loss = subRat(ONE, divRat(adjClose, makeRational(lastClean)));
-    const freezeExit = cmpRat(loss, pctRat(params.freezeMaxLossPct)) > 0;
-    // Unresolved at the limit: confirmed when the observed ratio now agrees, else Owner alert.
-    let ownerAlert = s.ownerAlert;
-    if (freezeSessions >= params.unresolvedFreezeSessions) {
-      if (
-        noticeFactor !== null &&
-        factorsAgree(noticeFactor, observed, params.confirmTolerancePct)
-      ) {
-        const next = enterConfirmed(g!, g!.notice!, noticeFactor, "unresolved_agree", d, seenPlus);
-        return finishConfirmed(
-          view,
-          code,
-          t,
-          next,
-          "unresolved at the limit; notice and observed ratio agree",
-        );
-      }
-      ownerAlert = true;
-    }
-    const next: CorpActionState = {
-      ...s,
-      vendorFactor,
-      priceFactor,
-      lastCleanCloseMicro: lastClean,
-      freezeSessions,
-      deviationRun,
-      ownerAlert,
-    };
-    const alertNow = ownerAlert && !s.ownerAlert;
-    return {
-      next,
-      label: ownerAlert
-        ? "Owner alert: a corporate action is unresolved and the prices do not agree with the notice"
-        : freezeExit
-          ? "the loss during the unconfirmed corporate action passed the freeze limit"
-          : "a corporate action with a stated ratio is not yet confirmed",
-      reason: alertNow ? "owner_alert" : freezeExit ? "freeze_loss_exit" : "candidate_frozen",
-      row: alertNow
-        ? row(code, d, "candidate_owner_alert", { ...basisCommon, freezeSessions }, s.actionId)
-        : null,
-      effects: {
-        ...NO_EFFECTS,
-        entriesBlocked: true,
-        stopBasis: "two_basis",
-        priceFactor,
-        qtyRatio: s.qtyRatio,
-        freezeExit,
-        ownerAlert: alertNow,
-      },
-    };
-  }
-
-  // ---- confirmed: re-base at the break, then end ---------------------------------------------------------
-  if (s.state === "confirmed") {
-    if (s.rebased || d > s.exD) {
-      const next: CorpActionState = { state: "none", seen: s.seen };
-      return {
-        next,
-        label: "no corporate action in the way",
-        reason: "confirmed_done",
-        row: row(code, d, "none", { after: "confirmed", key: s.key }, s.actionId),
-        effects: NO_EFFECTS,
-      };
-    }
-    if (d === s.exD)
-      return rebaseNow(code, d, s, "break session: stops re-based before the ratchet", null);
-    return {
-      next: s,
-      label: "a confirmed corporate action takes effect at its break session",
-      reason: "confirmed_before_break",
-      row: null,
-      effects: NO_EFFECTS,
-    };
-  }
-
-  if (s.state === "disconfirmed") {
-    const next: CorpActionState = { state: "none", seen: s.seen };
-    return {
-      next,
-      label: "no corporate action in the way",
-      reason: "disconfirmed_done",
-      row: row(code, d, "none", { after: "disconfirmed", key: s.key }, s.actionId),
-      effects: NO_EFFECTS,
-    };
-  }
-
-  if (s.state === "jump_block") {
-    if (s.sessionsLeft > 1) {
-      const next: CorpActionState = { ...s, sessionsLeft: s.sessionsLeft - 1 };
-      return {
-        next,
-        label: "a large unexplained price jump blocks entries for now",
-        reason: "jump_block",
-        row: null,
-        effects: { ...NO_EFFECTS, entriesBlocked: true, volumeTestNeeded: true },
-      };
-    }
-    const next: CorpActionState = { state: "none", seen: s.seen };
-    const out = startFromNone(view, code, t, next, groups, params);
-    return out.row === null
-      ? { ...out, row: row(code, d, "none", { after: "jump_block" }, null) }
-      : out;
-  }
-
-  return startFromNone(view, code, t, s, groups, params);
-}
-
 function rebaseNow(
   code: string,
   d: string,
-  s: CorpActionState & { state: "confirmed" },
+  s: ConfirmedState,
   reason: string,
   rowOut: StateRow | null,
 ): CorpActionStep {
@@ -577,7 +414,7 @@ function finishConfirmed(
   view: AsOfView,
   code: string,
   t: number,
-  next: CorpActionState & { state: "confirmed" },
+  next: ConfirmedState,
   reason: string,
 ): CorpActionStep {
   const d = view.sessions[t]!;
@@ -592,20 +429,329 @@ function finishConfirmed(
   };
 }
 
-function startFromNone(
+/**
+ * One session of the machine. `prev` null = nothing known before. The step reads only
+ * `view.corpActions` and `view.bars` at `t` (pure; TST-109 holds by construction).
+ */
+export function stepCorpAction(
   view: AsOfView,
   code: string,
   t: number,
-  s: CorpActionState & { state: "none" },
+  prev: CorpActionState | null,
+  params: CorpActionParams = DEFAULT_STATES_PARAMS,
+  provenance?: ProvenanceMap,
+): CorpActionStep {
+  const d = view.sessions[t]!;
+  const s = prev ?? CORP_ACTION_NONE;
+  const groups = candidateGroups(view, code, t, provenance);
+
+  if (s.state === "candidate") return stepCandidate(view, code, t, s, groups, params);
+
+  // ---- confirmed: re-base at the break, then end ---------------------------------------------------------
+  if (s.state === "confirmed") {
+    if (s.rebased || d > s.exD) {
+      const next: CorpActionState = { state: "none", seen: s.seen };
+      return {
+        next,
+        label: LABEL_NONE,
+        reason: "confirmed_done",
+        row: row(code, d, "none", { after: "confirmed", key: s.key }, s.actionId),
+        effects: NO_EFFECTS,
+      };
+    }
+    if (d === s.exD)
+      return rebaseNow(code, d, s, "break session: stops re-based before the ratchet", null);
+    return {
+      next: s,
+      label: "a confirmed corporate action takes effect at its break session",
+      reason: "confirmed_before_break",
+      row: null,
+      effects: NO_EFFECTS,
+    };
+  }
+
+  if (s.state === "disconfirmed") {
+    const next: CorpActionState = { state: "none", seen: s.seen };
+    return {
+      next,
+      label: LABEL_NONE,
+      reason: "disconfirmed_done",
+      row: row(code, d, "none", { after: "disconfirmed", key: s.key }, s.actionId),
+      effects: NO_EFFECTS,
+    };
+  }
+
+  if (s.state === "jump_block") {
+    if (s.sessionsLeft > 1) {
+      const next: CorpActionState = { ...s, sessionsLeft: s.sessionsLeft - 1 };
+      return {
+        next,
+        label: "a large unexplained price jump blocks entries for now",
+        reason: "jump_block",
+        row: null,
+        effects: { ...NO_EFFECTS, entriesBlocked: true, volumeTestNeeded: true },
+      };
+    }
+    const next: NoneState = { state: "none", seen: s.seen };
+    const out = startFromNone(view, code, t, next, groups, params);
+    return out.row === null
+      ? { ...out, row: row(code, d, "none", { after: "jump_block" }, null) }
+      : out;
+  }
+
+  return startFromNone(view, code, t, s, groups, params);
+}
+
+function stepCandidate(
+  view: AsOfView,
+  code: string,
+  t: number,
+  s: CandidateState,
   groups: readonly CandidateGroup[],
   params: CorpActionParams,
 ): CorpActionStep {
   const d = view.sessions[t]!;
-  const fresh = groups.find((g) => !s.seen.includes(g.key));
+  const g = groups.find((x) => x.key === s.key);
+  const seenPlus = [...s.seen, s.key];
+  const beforeBreak = d < s.exD;
+  const lastClean =
+    s.lastCleanCloseMicro ?? (beforeBreak ? null : closeBefore(view, code, t, s.exD));
+  const vendorFactor = s.vendorFactor ?? g?.vendor?.terms.priceFactor ?? null;
+  const noticeFactor = s.noticeFactor;
+
+  // The data layer confirmed a notice-sourced row for this break: confirmed (TERP: from the break).
+  if (g?.confirmedRow) {
+    const c = g.confirmedRow;
+    const factor =
+      c.terms.priceFactor ??
+      (lastClean !== null && c.terms.terpMicro !== null && !beforeBreak
+        ? makeRational(lastClean, c.terms.terpMicro)
+        : null);
+    if (factor !== null) {
+      const next = enterConfirmed(g, c, factor, "notice_data_layer", d, seenPlus);
+      return finishConfirmed(view, code, t, next, "data layer confirmed the notice");
+    }
+  }
+  // Notice + vendor agree (any time, both stated).
+  if (
+    g?.notice &&
+    noticeFactor !== null &&
+    vendorFactor !== null &&
+    factorsAgree(noticeFactor, vendorFactor, params.confirmTolerancePct)
+  ) {
+    const next = enterConfirmed(g, g.notice, noticeFactor, "notice_vendor", d, seenPlus);
+    return finishConfirmed(view, code, t, next, "notice and vendor ratios agree");
+  }
+  if (beforeBreak) {
+    const next: CorpActionState = { ...s, vendorFactor };
+    return {
+      next,
+      label: LABEL_UNCONFIRMED,
+      reason: "candidate_before_break",
+      row: null,
+      effects: { ...NO_EFFECTS, entriesBlocked: true },
+    };
+  }
+  // At or after the break: the factor in force, the observed ratio, the tests.
+  let priceFactor = s.priceFactor;
+  if (priceFactor === null && s.terpMicro !== null && lastClean !== null) {
+    priceFactor = makeRational(lastClean, s.terpMicro);
+  }
+  if (priceFactor === null) priceFactor = noticeFactor;
+  const raw = closeOn(view, code, t, d);
+  const freezeSessions = s.freezeSessions + 1;
+  const basisCommon = {
+    exD: s.exD,
+    priceFactor: basisRat(priceFactor),
+    qtyRatio: basisRat(s.qtyRatio),
+    lastCleanCloseMicro: basisMicro(lastClean),
+  };
+  if (raw === null || lastClean === null || priceFactor === null) {
+    // No bar on this session (halted through the break) or no prior bar: freeze without tests.
+    const next: CorpActionState = {
+      ...s,
+      vendorFactor,
+      lastCleanCloseMicro: lastClean,
+      priceFactor,
+      freezeSessions,
+    };
+    return {
+      next,
+      label: LABEL_UNCONFIRMED,
+      reason: "candidate_no_bar",
+      row: null,
+      effects: {
+        ...NO_EFFECTS,
+        entriesBlocked: true,
+        stopBasis: "two_basis",
+        priceFactor,
+        qtyRatio: s.qtyRatio,
+      },
+    };
+  }
+  // Notice + observed break-session ratio agree, tested on the first session both are known
+  // (a notice first known after the break still reads the break-day close; D-322/SF-5).
+  const brk = breakClose(view, code, t, s.exD);
+  if (
+    !s.priceTested &&
+    g?.notice &&
+    noticeFactor !== null &&
+    brk !== null &&
+    factorsAgree(noticeFactor, makeRational(lastClean, brk), params.confirmTolerancePct)
+  ) {
+    const next = enterConfirmed(g, g.notice, noticeFactor, "notice_price", d, seenPlus);
+    return finishConfirmed(view, code, t, next, "notice ratio and the break-session price agree");
+  }
+  // Explained-move test on the sessions after the break (D-322): two consecutive failures disconfirm.
+  const dev = explainedDeviation(raw, lastClean, priceFactor);
+  const deviationRun =
+    freezeSessions >= 2 && cmpRat(dev, pctRat(params.disconfirmDevPct)) > 0
+      ? s.deviationRun + 1
+      : 0;
+  if (deviationRun >= params.disconfirmSessions) {
+    const next: CorpActionState = {
+      state: "disconfirmed",
+      seen: seenPlus,
+      key: s.key,
+      actionId: s.actionId,
+      exD: s.exD,
+      disconfirmedD: d,
+    };
+    return {
+      next,
+      label: "the price did not move as the announced ratio said: the action is disconfirmed",
+      reason: "disconfirmed_explained_move",
+      row: row(
+        code,
+        d,
+        "disconfirmed",
+        { ...basisCommon, deviation: basisRat(dev), run: deviationRun },
+        s.actionId,
+      ),
+      effects: { ...NO_EFFECTS, stopBasis: "raw", reverseBookings: true },
+    };
+  }
+  // Freeze loss limit on adjusted prices from the last clean close (the break session included).
+  const adjClose = mulRat(makeRational(raw), priceFactor);
+  const loss = subRat(ONE, divRat(adjClose, makeRational(lastClean)));
+  const freezeExit = cmpRat(loss, pctRat(params.freezeMaxLossPct)) > 0;
+  // Unresolved at the limit: confirmed when today's observed ratio agrees, else Owner alert.
+  let ownerAlert = s.ownerAlert;
+  if (freezeSessions >= params.unresolvedFreezeSessions) {
+    if (
+      g?.notice &&
+      noticeFactor !== null &&
+      factorsAgree(noticeFactor, makeRational(lastClean, raw), params.confirmTolerancePct)
+    ) {
+      const next = enterConfirmed(g, g.notice, noticeFactor, "unresolved_agree", d, seenPlus);
+      return finishConfirmed(
+        view,
+        code,
+        t,
+        next,
+        "unresolved at the limit; notice and observed ratio agree",
+      );
+    }
+    ownerAlert = true;
+  }
+  const next: CorpActionState = {
+    ...s,
+    vendorFactor,
+    priceFactor,
+    lastCleanCloseMicro: lastClean,
+    freezeSessions,
+    deviationRun,
+    priceTested: brk !== null,
+    ownerAlert,
+  };
+  const alertNow = ownerAlert && !s.ownerAlert;
+  return {
+    next,
+    label: ownerAlert
+      ? "Owner alert: a corporate action is unresolved and the prices do not agree with the notice"
+      : freezeExit
+        ? "the loss during the unconfirmed corporate action passed the freeze limit"
+        : LABEL_UNCONFIRMED,
+    reason: alertNow ? "owner_alert" : freezeExit ? "freeze_loss_exit" : "candidate_frozen",
+    row: alertNow
+      ? row(code, d, "candidate_owner_alert", { ...basisCommon, freezeSessions }, s.actionId)
+      : null,
+    effects: {
+      ...NO_EFFECTS,
+      entriesBlocked: true,
+      stopBasis: "two_basis",
+      priceFactor,
+      qtyRatio: s.qtyRatio,
+      freezeExit,
+      ownerAlert: alertNow,
+    },
+  };
+}
+
+function newCandidate(
+  view: AsOfView,
+  t: number,
+  g: CandidateGroup,
+  entry: GroupEntry,
+  noticeFactor: Rational | null,
+  vendorFactor: Rational | null,
+  seen: readonly string[],
+): CandidateState {
+  const d = view.sessions[t]!;
+  // A notice first known after the break: the freeze already ran that long (break session = 1).
+  const brkIdx = firstSessionAtOrAfter(view, g.exD);
+  return {
+    state: "candidate",
+    seen,
+    key: g.key,
+    actionId: entry.rec.id,
+    exD: g.exD,
+    noticeFactor,
+    vendorFactor,
+    terpMicro: entry.terms.terpMicro,
+    qtyRatio: entry.terms.qtyRatio,
+    priceFactor: null,
+    sinceD: d,
+    lastCleanCloseMicro: null,
+    freezeSessions: d >= g.exD ? Math.max(0, t - brkIdx) : 0,
+    deviationRun: 0,
+    priceTested: false,
+    ownerAlert: false,
+  };
+}
+
+function startFromNone(
+  view: AsOfView,
+  code: string,
+  t: number,
+  s: NoneState,
+  groups: readonly CandidateGroup[],
+  params: CorpActionParams,
+): CorpActionStep {
+  const d = view.sessions[t]!;
+  const seen = pruneSeen(s.seen, view, t);
+  const fresh = groups.find((g) => !seen.includes(g.key));
   if (fresh !== undefined) {
-    const seen = s.seen;
+    // Fail closed on a row without provenance (D-321): no candidate, no re-base, Owner alert.
+    if (fresh.notice === null && fresh.confirmedRow === null) {
+      const ids = fresh.unknown.map((r) => r.id);
+      const next: CorpActionState = { state: "none", seen: [...seen, fresh.key] };
+      return {
+        next,
+        label: "Owner alert: a corporate action has no recorded source; entries are blocked today",
+        reason: "unknown_provenance",
+        row: row(
+          code,
+          d,
+          "unknown_provenance",
+          { exD: fresh.exD, actionIds: ids, types: fresh.unknown.map((r) => r.type) },
+          ids[0] ?? null,
+        ),
+        effects: { ...NO_EFFECTS, entriesBlocked: true, ownerAlert: true },
+      };
+    }
     if (fresh.notice === null) {
-      // data-layer confirmed row (no notice ever seen here)
+      // A notice-sourced row the data layer confirmed, never seen pending here.
       const c = fresh.confirmedRow!;
       const factor =
         c.terms.priceFactor ??
@@ -616,27 +762,11 @@ function startFromNone(
             : null;
         })();
       if (factor === null) {
-        // a TERP row before its break: wait as a candidate that is already confirmed by the data layer
-        const next: CorpActionState = {
-          state: "candidate",
-          seen,
-          key: fresh.key,
-          actionId: c.rec.id,
-          exD: fresh.exD,
-          noticeFactor: null,
-          vendorFactor: null,
-          terpMicro: c.terms.terpMicro,
-          qtyRatio: c.terms.qtyRatio,
-          priceFactor: null,
-          sinceD: d,
-          lastCleanCloseMicro: null,
-          freezeSessions: 0,
-          deviationRun: 0,
-          ownerAlert: false,
-        };
+        // a TERP row before its break: wait as a candidate; it confirms at the break (SF-3)
+        const next = newCandidate(view, t, fresh, c, null, null, seen);
         return {
           next,
-          label: "a corporate action with a stated ratio is not yet confirmed",
+          label: LABEL_UNCONFIRMED,
           reason: "candidate_terp_pending",
           row: row(
             code,
@@ -648,29 +778,21 @@ function startFromNone(
           effects: { ...NO_EFFECTS, entriesBlocked: true },
         };
       }
-      const next = enterConfirmed(fresh, c, factor, "data_layer", d, [...seen, fresh.key]);
-      return finishConfirmed(view, code, t, next, "data layer confirmed the action");
+      const next = enterConfirmed(fresh, c, factor, "notice_data_layer", d, [...seen, fresh.key]);
+      return finishConfirmed(view, code, t, next, "data layer confirmed the notice");
     }
     const n = fresh.notice;
-    const next: CorpActionState = {
-      state: "candidate",
+    const next = newCandidate(
+      view,
+      t,
+      fresh,
+      n,
+      n.terms.priceFactor,
+      fresh.vendor?.terms.priceFactor ?? null,
       seen,
-      key: fresh.key,
-      actionId: n.rec.id,
-      exD: fresh.exD,
-      noticeFactor: n.terms.priceFactor,
-      vendorFactor: fresh.vendor?.terms.priceFactor ?? null,
-      terpMicro: n.terms.terpMicro,
-      qtyRatio: n.terms.qtyRatio,
-      priceFactor: null,
-      sinceD: d,
-      lastCleanCloseMicro: null,
-      freezeSessions: 0,
-      deviationRun: 0,
-      ownerAlert: false,
-    };
-    // Run the candidate step at once so a notice known on its break session is tested today.
-    const out = stepCorpAction(view, code, t, next, params);
+    );
+    // Run the candidate step at once so a notice known on or after its break is tested today.
+    const out = stepCandidate(view, code, t, next, groups, params);
     const entered = row(
       code,
       d,
@@ -692,7 +814,7 @@ function startFromNone(
     if (cmpRat(abs(move), pctRat(params.jumpBlockPct)) >= 0) {
       const next: CorpActionState = {
         state: "jump_block",
-        seen: s.seen,
+        seen,
         fromD: d,
         sessionsLeft: params.jumpBlockSessions,
         jumpPct: move,
@@ -713,8 +835,8 @@ function startFromNone(
     }
   }
   return {
-    next: s,
-    label: "no corporate action in the way",
+    next: seen.length === s.seen.length ? s : { state: "none", seen },
+    label: LABEL_NONE,
     reason: "none",
     row: null,
     effects: NO_EFFECTS,
@@ -727,11 +849,12 @@ export function corpActionStateAt(
   code: string,
   t: number,
   params: CorpActionParams = DEFAULT_STATES_PARAMS,
+  provenance?: ProvenanceMap,
 ): CorpActionStep {
   let s: CorpActionState | null = null;
   let last: CorpActionStep | null = null;
   for (let i = 0; i <= t; i += 1) {
-    last = stepCorpAction(view, code, i, s, params);
+    last = stepCorpAction(view, code, i, s, params, provenance);
     s = last.next;
   }
   return last!;
