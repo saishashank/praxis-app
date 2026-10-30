@@ -246,6 +246,10 @@ export function eventRowOf(r: Record<string, unknown>): EventRow {
     polarity: Number(r.polarity) as EventRow["polarity"], // money-float-ok: SQL integer column read as a version/flag
     rule_version: String(r.rule_version),
     category_llm: r.category_llm === null ? null : String(r.category_llm),
+    category_detail:
+      r.category_detail === null || r.category_detail === undefined
+        ? null
+        : (String(r.category_detail) as EventRow["category_detail"]),
     polarity_llm: r.polarity_llm === null ? null : (Number(r.polarity_llm) as never), // money-float-ok: SQL integer column read as a version/flag
   };
 }
@@ -376,6 +380,11 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
           }
           return f;
         },
+        // DAT-232: day-0 volume ratios on the split-adjusted basis (ex-date <= day 0)
+        splitsFor: (code, day0) =>
+          (splitsByCode.get(code) ?? [])
+            .filter((s) => s.exDate <= day0)
+            .map((s) => ({ exDate: s.exDate, ratio: makeRational(s.ratio.num, s.ratio.den) })),
       });
     } catch (error) {
       if (error instanceof LookAheadError) throw error;
@@ -469,7 +478,17 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
       const b = await view.bars(row.code, 1, row.day0_d);
       day0Low.set(key, b.length > 0 && b[0]!.d === row.day0_d ? b[0]!.low : null);
     }
-    const fact = eventFactFromRow(row, day0Low.get(key) ?? null);
+    // AGT-135 display flag: the day-0 and next-session closes on the adjusted basis, when both exist
+    const adjBars = adjusted.get(row.code);
+    const at = adjBars === undefined ? -1 : adjBars.findIndex((b) => b.d === row.day0_d);
+    const closes =
+      adjBars === undefined || at < 0
+        ? undefined
+        : {
+            day0Close: adjBars[at]!.close,
+            nextClose: at + 1 < adjBars.length ? adjBars[at + 1]!.close : null,
+          };
+    const fact = eventFactFromRow(row, day0Low.get(key) ?? null, closes);
     allEvents.push(fact);
     const list = eventsByCode.get(row.code) ?? [];
     list.push(fact);
