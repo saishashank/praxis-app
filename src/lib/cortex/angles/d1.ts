@@ -28,6 +28,12 @@ export const ATR_PERIOD = 20;
 export const SMA_LONG = 200;
 /** Bars an ATR(20) needs before its value is used. */
 export const ATR_WARMUP = wilderWarmupBars(ATR_PERIOD, WILDER_WARMUP_MULTIPLE);
+/**
+ * D-317: one ATR(20) per code per session. ATR_i is the Wilder fold over exactly the ATR_HISTORY
+ * bars ending at i, for every angle and every session an angle looks back to, so tonight's ATR is
+ * the same number in A-D1-03/04/06/07/08/09 and a past session's ATR is the one that session had.
+ */
+export const ATR_HISTORY = 250;
 
 /**
  * The last `count` adjusted bars of `code` ending on sessions[t]; undefined when the code has fewer
@@ -49,25 +55,28 @@ export function floats(values: readonly bigint[]): number[] {
   return values.map(microToFloat);
 }
 
-/** Wilder ATR(period) values over the series (null until seeded). */
-export function atrOf(s: CodeSeries, period = ATR_PERIOD): (number | null)[] {
-  return atrSeries(
-    s.adj.map((b) => microToFloat(b.high)),
-    s.adj.map((b) => microToFloat(b.low)),
-    floats(s.adjClose),
-    period,
+/**
+ * ATR(20) of session index `i` of the series: the Wilder fold over the ATR_HISTORY bars ending at
+ * i (D-317). Undefined when fewer bars precede i or the value is not positive (a dead series).
+ * Cost O(ATR_HISTORY) per session asked.
+ */
+export function atrAt(s: CodeSeries, i: number): number | undefined {
+  const from = i + 1 - ATR_HISTORY;
+  if (from < 0 || i >= s.adj.length) return undefined;
+  const bars = s.adj.slice(from, i + 1);
+  const atr = atrSeries(
+    bars.map((b) => microToFloat(b.high)),
+    bars.map((b) => microToFloat(b.low)),
+    bars.map((b) => microToFloat(b.close)),
+    ATR_PERIOD,
   );
+  const v = atr[atr.length - 1];
+  return v === null || v === undefined || !(v > 0) ? undefined : v;
 }
 
-/** The ATR at index `i` when at least the Wilder warm-up of bars precede it; else undefined. */
-export function atrAt(
-  atr: readonly (number | null)[],
-  i: number,
-  period = ATR_PERIOD,
-): number | undefined {
-  if (i + 1 < wilderWarmupBars(period, WILDER_WARMUP_MULTIPLE)) return undefined;
-  const v = atr[i];
-  return v === null || v === undefined || !(v > 0) ? undefined : v;
+/** Tonight's ATR(20): the fold over the last ATR_HISTORY bars of the series. */
+export function atrOf(s: CodeSeries): number | undefined {
+  return atrAt(s, s.adj.length - 1);
 }
 
 export function sumOf(values: readonly bigint[], from: number, to: number): bigint {
@@ -165,17 +174,18 @@ function highProximity(view: AsOfView, code: string, t: number, g: GridPoint): A
 
 function breakoutQuality(view: AsOfView, code: string, t: number, g: GridPoint): AngleValue {
   const l = int(g, "lookback");
-  const need = Math.max(l + 1, ATR_WARMUP);
+  const need = Math.max(l + 1, ATR_HISTORY);
   const s = seriesAt(view, code, t, need);
   if (!s) return undefined;
   const n = s.adjClose.length;
-  const atr = atrAt(atrOf(s), n - 1);
+  const atr = atrOf(s);
   if (atr === undefined) return undefined;
   const c = s.adjClose;
   const prevClose = c[n - 2]!;
   if (prevClose <= 0n) return undefined;
   const pivot = maxOf(c, n - 1 - l, n - 1); // the prior l closes, today excluded
-  const ext = Math.max(0, microToFloat(c[n - 1]! - pivot)) / atr;
+  if (!(c[n - 1]! > pivot)) return 0; // not a breakout night
+  const ext = microToFloat(c[n - 1]! - pivot) / atr;
   const gapPct = (ratio(s.adj[n - 1]!.open, prevClose) - 1) * 100;
   if (ext > g.ext_veto! || gapPct >= g.gap_cap_pct!) return { flag: "veto" };
   return noNegZero(1 - Math.min(ext, 1));
@@ -189,12 +199,12 @@ const PULLBACK_HIGH_WINDOW = 20;
 const PULLBACK_LOW_WINDOW = 10;
 
 function pullbackResumption(view: AsOfView, code: string, t: number, g: GridPoint): AngleValue {
-  const need = Math.max(SMA_MID + SMA_MID_AGO, ATR_WARMUP);
+  const need = Math.max(SMA_MID + SMA_MID_AGO, ATR_HISTORY);
   const s = seriesAt(view, code, t, need);
   if (!s) return undefined;
   const c = s.adjClose;
   const n = c.length;
-  const atr = atrAt(atrOf(s), n - 1);
+  const atr = atrOf(s);
   if (atr === undefined) return undefined;
   const smaNow = sumOf(c, n - SMA_MID, n);
   const smaAgo = sumOf(c, n - SMA_MID_AGO - SMA_MID, n - SMA_MID_AGO);
@@ -241,25 +251,27 @@ function meanReversion(view: AsOfView, code: string, t: number, g: GridPoint): A
 
 function volatilityRegime(view: AsOfView, code: string, t: number, g: GridPoint): AngleValue {
   const l = int(g, "lookback");
-  const need = ATR_WARMUP + l;
+  const need = ATR_HISTORY + l;
   const s = seriesAt(view, code, t, need);
   if (!s) return undefined;
   const n = s.adjClose.length;
-  const atr = atrOf(s);
   const pct = (i: number): number | undefined => {
-    const a = atrAt(atr, i);
+    const a = atrAt(s, i);
     const c = s.adjClose[i]!;
     return a === undefined || c <= 0n ? undefined : a / microToFloat(c);
   };
   const today = pct(n - 1);
   if (today === undefined) return undefined;
-  let below = 0;
+  // AGT-030 tierPercentile convention: (lower + 0.5 x ties) / count.
+  let lower = 0;
+  let ties = 0;
   for (let i = n - 1 - l; i < n - 1; i += 1) {
     const p = pct(i);
     if (p === undefined) return undefined;
-    if (p < today) below += 1;
+    if (p < today) lower += 1;
+    else if (p === today) ties += 1;
   }
-  return noNegZero(1 - (2 * below) / l);
+  return noNegZero(1 - (2 * lower + ties) / l);
 }
 
 // ---- A-D1-07 ---------------------------------------------------------------------------------------------------
@@ -275,14 +287,13 @@ function medianFloat(values: readonly number[]): number {
 
 function rangeContraction(view: AsOfView, code: string, t: number, g: GridPoint): AngleValue {
   const pivotWindow = int(g, "pivot");
-  const need = Math.max(ATR_WARMUP - 1 + MEDIAN_WINDOW, 2 * CONTRACTION_SESSIONS, pivotWindow);
+  const need = Math.max(ATR_HISTORY - 1 + MEDIAN_WINDOW, 2 * CONTRACTION_SESSIONS, pivotWindow);
   const s = seriesAt(view, code, t, need);
   if (!s) return undefined;
   const n = s.adjClose.length;
-  const atr = atrOf(s);
   const pcts: number[] = [];
   for (let i = n - MEDIAN_WINDOW; i < n; i += 1) {
-    const a = atrAt(atr, i);
+    const a = atrAt(s, i);
     const c = s.adjClose[i]!;
     if (a === undefined || c <= 0n) return undefined;
     pcts.push(a / microToFloat(c));
@@ -320,12 +331,12 @@ const PIVOT_LOW_WINDOW = 60;
 const PATTERN_CONTEXT = 15; // bars the TA-Lib candle averages read (10) plus the three-bar patterns
 
 function candleReversal(view: AsOfView, code: string, t: number, g: GridPoint): AngleValue {
-  const need = Math.max(SMA_LONG + 1, ATR_WARMUP + 1, PIVOT_LOW_WINDOW + 1);
+  const need = Math.max(SMA_LONG + 1, ATR_HISTORY + 1, PIVOT_LOW_WINDOW + 1);
   const s = seriesAt(view, code, t, need);
   if (!s) return undefined;
   const n = s.adjClose.length;
   const sig = n - 2; // the signal bar is D-1; D confirms it
-  const atr = atrAt(atrOf(s), sig);
+  const atr = atrAt(s, sig);
   if (atr === undefined) return undefined;
   const bar = s.adj[sig]!;
   const flags = detectPatterns(s.adj.slice(sig + 1 - PATTERN_CONTEXT, sig + 1));
@@ -349,11 +360,11 @@ function candleReversal(view: AsOfView, code: string, t: number, g: GridPoint): 
 const RESISTANCE_WINDOW = 250;
 
 function resistanceRoom(view: AsOfView, code: string, t: number, g: GridPoint): AngleValue {
-  const need = Math.max(RESISTANCE_WINDOW, ATR_WARMUP);
+  const need = Math.max(RESISTANCE_WINDOW, ATR_HISTORY);
   const s = seriesAt(view, code, t, need);
   if (!s) return undefined;
   const n = s.adjClose.length;
-  const atr = atrAt(atrOf(s), n - 1);
+  const atr = atrOf(s);
   if (atr === undefined) return undefined;
   const close = s.adjClose[n - 1]!;
   const highs = s.adj.map((b) => b.high);
@@ -440,7 +451,7 @@ export const D1_ANGLES: readonly AngleDef[] = [
     domain: 1,
     title: "Multi-horizon trend and momentum state",
     definition:
-      "Mean of three horizon signs: +1 when the lookback return (mid, long, and mid with a skip) is positive and the close is above SMA(200), else -1; in {-1, -1/3, 1/3, 1}. Exact bigint comparisons on adjusted closes.",
+      "Mean of three horizon signs: +1 when the lookback return (mid, long, and mid with a skip) is positive and the close is above SMA(200), else -1; in {-1, -1/3, 1/3, 1}. Exact bigint comparisons on adjusted closes. With skip 0 the skipped sign duplicates the mid sign (two of three votes).",
     kind: "score",
     cluster: "momentum",
     orientation: 1,
@@ -456,14 +467,15 @@ export const D1_ANGLES: readonly AngleDef[] = [
     domain: 1,
     title: "52-week-high proximity",
     definition:
-      "Close divided by the highest adjusted close of the last `lookback` sessions including today, in (0, 1]; `at_high` is the card flag at or above the grid threshold (rank-standardised, so the flag does not change the score).",
+      "Close divided by the highest adjusted close of the last `lookback` sessions including today, in (0, 1].",
     kind: "score",
     cluster: "momentum",
     orientation: 1,
     horizonSessions: 20,
     warmupSessions: 250,
     inputs: ["bar_au"],
-    grid: { lookback: [250, 200, 225], at_high: [0.98, 0.95, 1] },
+    grid: { lookback: [250, 200, 225] },
+    historyFields: ["card threshold: at_high when the ratio is >= 0.98 (file range 0.95-1.00)"],
     compute: highProximity,
   },
   {
@@ -472,7 +484,7 @@ export const D1_ANGLES: readonly AngleDef[] = [
     domain: 1,
     title: "Breakout quality and gap behaviour",
     definition:
-      "quality = 1 - min(ext, 1) with ext = max(0, close - prior `lookback`-session close high) / ATR(20); the veto flag when ext > ext_veto or the open gap over the prior close is at or above gap_cap_pct (CTX-022b). Close location is logged by the card, not scored (R-06).",
+      "On a breakout night (close above the prior `lookback`-session close high): quality = 1 - min(ext, 1) with ext = (close - that high) / ATR(20); 0 on other nights. The veto flag (ext > ext_veto, or an open gap over the prior close at or above gap_cap_pct, CTX-022b) is a null feature for the night: the code is ineligible (CTX-012, D-316), not neutral. Close location is logged by the card, not scored (R-06).",
     kind: "score",
     cluster: "momentum",
     orientation: 1,
@@ -488,12 +500,12 @@ export const D1_ANGLES: readonly AngleDef[] = [
     domain: 1,
     title: "Pullback-in-trend resumption",
     definition:
-      "1 when close > SMA(50), SMA(50) is above its value 20 sessions ago, the pullback depth (20-session close high minus 10-session close low, in ATR(20) units) is inside [depth_min, depth_max] and the close is above the prior bar's high (H1 resumption); else 0.",
+      "1 when close > SMA(50), SMA(50) is above its value 20 sessions ago, the pullback depth (20-session close high minus 10-session close low, in ATR(20) units) is inside [depth_min, depth_max] and the close is above the prior bar's high; else 0. Resumption is H1 only (the prior bar's high); the file's H2 and SMA(20) options are not computed.",
     kind: "score",
     cluster: "momentum",
     orientation: 1,
     horizonSessions: 20,
-    warmupSessions: 70,
+    warmupSessions: 250,
     inputs: ["bar_au"],
     grid: { depth_min: [1, 1.5], depth_max: [3, 2, 2.5] },
     compute: pullbackResumption,
@@ -504,7 +516,7 @@ export const D1_ANGLES: readonly AngleDef[] = [
     domain: 1,
     title: "Mean-reversion extremes (RSI(2), RSI(14), distance from SMA)",
     definition:
-      "-(close / SMA(20) - 1) / stdev20 of log returns when the close is above SMA(200) and RSI(2) < rsi2_max or RSI(14) < rsi14_max (oversold inside an uptrend, the F4 gate); 0 otherwise. Positive = stretched below its short average.",
+      "-(close / SMA(20) - 1) / stdev20 when the close is above SMA(200) and RSI(2) < rsi2_max or RSI(14) < rsi14_max (oversold inside an uptrend, the F4 gate); 0 otherwise. stdev20 is the sample (ddof 1) standard deviation of the last 20 log returns, as v1 vol20; -dist is returned only inside the gate. Positive = stretched below its short average.",
     kind: "score",
     cluster: "sentiment",
     orientation: 1,
@@ -520,11 +532,11 @@ export const D1_ANGLES: readonly AngleDef[] = [
     domain: 1,
     title: "Stock volatility regime (ATR percentile)",
     definition:
-      "1 - 2 x percentile of ATR(20) / close against its own prior `lookback` sessions (share of those strictly below today), in [-1, 1]; low volatility against its own history scores high. The LOW / MID / HIGH / EXTREME bucket is the card's reading of the same percentile.",
+      "1 - 2 x percentile of ATR(20) / close against its own prior `lookback` sessions ((lower + 0.5 x ties) / lookback, the AGT-030 convention), in [-1, 1]; low volatility against its own history scores high. Each session's ATR is that session's 250-bar fold (D-317). The LOW / MID / HIGH / EXTREME bucket is the card's reading of the same percentile.",
     kind: "score",
     cluster: "low_volatility",
     orientation: 1,
-    warmupSessions: 312,
+    warmupSessions: 502,
     horizonSessions: 20,
     inputs: ["bar_au"],
     grid: { lookback: [252, 504, 1260] },
@@ -541,7 +553,7 @@ export const D1_ANGLES: readonly AngleDef[] = [
     cluster: "low_volatility",
     orientation: 1,
     horizonSessions: 20,
-    warmupSessions: 309,
+    warmupSessions: 499,
     inputs: ["bar_au"],
     grid: { contraction: [0.7, 0.6, 0.8], range_ratio: [0.8, 0.6, 0.9], pivot: [20, 10, 30] },
     compute: rangeContraction,
@@ -557,7 +569,7 @@ export const D1_ANGLES: readonly AngleDef[] = [
     cluster: "sentiment",
     orientation: 1,
     horizonSessions: 5,
-    warmupSessions: 201,
+    warmupSessions: 251,
     inputs: ["bar_au"],
     grid: { body_min: [0.6, 0.5, 0.7], level: [0.5, 0.25, 1] },
     historyFields: [

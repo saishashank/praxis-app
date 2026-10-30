@@ -46,18 +46,17 @@ function liquidityRatioAt(tv: readonly bigint[], idx: number): number | undefine
 
 // ---- A-D2-01 ---------------------------------------------------------------------------------------------------
 
-const VOL_SHORT = 5;
-const VOL_LONG = 20;
-
-function volumeTrend(view: AsOfView, code: string, t: number): AngleValue {
-  const s = seriesAt(view, code, t, VOL_LONG);
+function volumeTrend(view: AsOfView, code: string, t: number, g: GridPoint): AngleValue {
+  const short = int(g, "short");
+  const long = int(g, "long");
+  const s = seriesAt(view, code, t, long);
   if (!s) return undefined;
   const v = s.adjVolume;
   const n = v.length;
-  const sumLong = sumOf(v, n - VOL_LONG, n);
+  const sumLong = sumOf(v, n - long, n);
   if (sumLong <= 0n) return undefined;
-  const sumShort = sumOf(v, n - VOL_SHORT, n);
-  const r = ratio(sumShort * BigInt(VOL_LONG), sumLong * BigInt(VOL_SHORT));
+  const sumShort = sumOf(v, n - short, n);
+  const r = ratio(sumShort * BigInt(long), sumLong * BigInt(short));
   return noNegZero(clamp(Math.log2(r), -1, 1));
 }
 
@@ -76,7 +75,9 @@ function upDownVolume(view: AsOfView, code: string, t: number, g: GridPoint): An
     if (c[i]! > c[i - 1]!) up += v[i]!;
     else if (c[i]! < c[i - 1]!) down += v[i]!;
   }
-  if (down <= 0n || up <= 0n) return undefined;
+  if (up <= 0n && down <= 0n) return undefined; // no move either way in the window
+  if (down <= 0n) return 1; // one-sided: the tanh limit
+  if (up <= 0n) return -1;
   return noNegZero(Math.tanh(Math.log(ratio(up, down))));
 }
 
@@ -135,11 +136,10 @@ function amihud(view: AsOfView, code: string, t: number, g: GridPoint): AngleVal
 // ---- A-D2-06 ---------------------------------------------------------------------------------------------------
 
 const BREAKOUT_HIGH_WINDOW = 250;
-const REFERENCE_VOLUME_WINDOW = 120;
 
 function breakoutVolume(view: AsOfView, code: string, t: number, g: GridPoint): AngleValue {
   const base = int(g, "base");
-  const need = Math.max(BREAKOUT_HIGH_WINDOW + 1, base + REFERENCE_VOLUME_WINDOW + 1);
+  const need = Math.max(BREAKOUT_HIGH_WINDOW + 1, base + 1);
   const s = seriesAt(view, code, t, need);
   if (!s) return undefined;
   const c = s.adjClose;
@@ -179,14 +179,18 @@ export const D2_ANGLES: readonly AngleDef[] = [
     domain: 2,
     title: "Volume ratio and volume trend",
     definition:
-      "clip(log2(mean split-adjusted volume of the last 5 sessions / mean of the last 20), -1, 1); positive = expanding volume. The vr20 / vr5_20 grid thresholds are the card buckets of the same ratios.",
+      "clip(log2(mean split-adjusted volume of the last `short` sessions / mean of the last `long`), -1, 1); positive = expanding volume.",
     kind: "score",
     cluster: "liquidity",
     orientation: 1,
     horizonSessions: 20,
     warmupSessions: 20,
     inputs: ["bar_au"],
-    grid: { vr20_min: [1.5, 1, 2, 3], vr5_20_min: [1, 0.8, 1.2, 1.5] },
+    grid: { short: [5], long: [20] },
+    historyFields: [
+      "card threshold: vr20 bucket at 1.5 (file range 1.0-3.0; F1 1.5, F3 2, F5 3)",
+      "card threshold: vr5_20 bucket at 1.0 (file range 0.8-1.5)",
+    ],
     compute: volumeTrend,
   },
   {
@@ -195,14 +199,17 @@ export const D2_ANGLES: readonly AngleDef[] = [
     domain: 2,
     title: "Up-volume vs down-volume (pocket-pivot style)",
     definition:
-      "tanh(ln(sum of volume on up-close sessions / sum on down-close sessions over the last `udv` sessions)); undefined when either side is zero (unstable). The pocket-pivot flag over `pp` sessions is a card flag.",
+      "tanh(ln(sum of volume on up-close sessions / sum on down-close sessions over the last `udv` sessions)); +1 / -1 at the one-sided limits (no down- / no up-volume), undefined only when neither side traded a move.",
     kind: "score",
     cluster: "liquidity",
     orientation: 1,
     horizonSessions: 20,
     warmupSessions: 51,
     inputs: ["bar_au"],
-    grid: { udv: [50, 20, 60], pp: [10, 5, 20] },
+    grid: { udv: [50, 20, 60] },
+    historyFields: [
+      "card flag: pocket pivot (close up, volume above every down-day volume of the last 10 sessions, close >= SMA(50); file range 5-20)",
+    ],
     compute: upDownVolume,
   },
   {
@@ -211,7 +218,7 @@ export const D2_ANGLES: readonly AngleDef[] = [
     domain: 2,
     title: "Average daily value and liquidity tier",
     definition:
-      "log10 of the 60-session median traded value (close x split-adjusted volume, A$); the `unstable` flag when ADV20 (previous 20 sessions) / ADV60med is below stability_lo or above stability_hi. The tier bucket is ARN-010's.",
+      "log10 of the 60-session median traded value (close x split-adjusted volume, A$). The `unstable` flag, when ADV20 (the previous 20 sessions, today excluded) / ADV60med is below stability_lo or above stability_hi, is a null feature for the night: the code is ineligible (CTX-012, D-316), not neutral. The tier bucket is ARN-010's.",
     kind: "score",
     cluster: "liquidity",
     orientation: 1,
@@ -259,14 +266,18 @@ export const D2_ANGLES: readonly AngleDef[] = [
     domain: 2,
     title: "Volume at breakout vs base",
     definition:
-      "On a night whose close is above the prior 250-session close high: tanh(bvr - 1) with bvr = volume / mean volume of the `base` sessions before it (confirmation sign fixed, CTX-011; the Bulkowski reading is a separate counted trial); 0 on other nights. Dry-up over 120 sessions is a card diagnostic.",
+      "On a night whose close is above the prior 250-session close high: tanh(bvr - 1) with bvr = volume / mean volume of the `base` sessions before it (confirmation sign fixed, CTX-011; the Bulkowski reading is a separate counted trial); 0 on other nights.",
     kind: "score",
     cluster: "liquidity",
     orientation: 1,
     horizonSessions: 20,
     warmupSessions: 251,
     inputs: ["bar_au"],
-    grid: { base: [20, 10, 30], bvr_min: [1, 2, 3], dryup_max: [1, 0.5, 0.75] },
+    grid: { base: [20, 10, 30] },
+    historyFields: [
+      "card threshold: bvr bucket at 1.0 (file range 1.0-3.0)",
+      "card diagnostic: dry-up = base mean volume / prior 120-session mean, bucket at 1.0 (file range 0.5-1.0)",
+    ],
     compute: breakoutVolume,
   },
   {
@@ -282,9 +293,12 @@ export const D2_ANGLES: readonly AngleDef[] = [
     horizonSessions: 5,
     warmupSessions: 20,
     inputs: ["bar_au", "announcement"],
-    grid: { vr20_min: [3], ar_min_pct: [2] },
+    grid: {},
     needsData: "announcement archive",
-    historyFields: ["the extract has no announcement rows: no history value until CTX-051 is met"],
+    historyFields: [
+      "the extract has no announcement rows: no history value until CTX-051 is met",
+      "card thresholds (no compute yet): vr20 >= 3, |AR| >= 2 %",
+    ],
   },
   {
     id: "A-D2-08",
@@ -309,21 +323,18 @@ export const D2_ANGLES: readonly AngleDef[] = [
     domain: 2,
     title: "Price-impact estimate for a A$600 order",
     definition:
-      "Gate: all-in round-trip cost of the A$600 parcel (2 x (brokerage + the ARN-032 bucket slippage of its ADV20 bucket), participation <= 1 % of ADV20) and its break-even move; infeasible when the cost is above 2 x the expected gross move. The existing cost model (C3a economics) computes it; a diagnostic on the card, the binding test is the economic gate (CTX-021).",
+      "Gate: all-in round-trip cost of the A$600 parcel (2 x (brokerage + the ARN-032 bucket slippage of its ADV20 bucket), participation <= 1 % of ADV20) and its break-even move; infeasible when the cost is above cost_gate_k x the expected gross move. The existing v1 cost gate computes it; a diagnostic on the card, the binding test is the economic gate (CTX-021).",
     kind: "gate",
     cluster: "risk",
     orientation: 1,
     horizonSessions: 0,
     warmupSessions: 20,
     inputs: ["bar_au"],
-    grid: { cost_gate_k: [2, 1.5, 2.5] },
-    existing: [
-      "ARN-032",
-      "ARN-024",
-      "CTX-022a",
-      "src/lib/agents/costGate.ts",
-      "src/lib/cortex/economics",
-      "G05_cost",
+    grid: {},
+    existing: ["ARN-032", "ARN-024", "CTX-022a", "src/lib/agents/costGate.ts", "G05_cost"],
+    historyFields: [
+      "card threshold: cost_gate_k = 2 (file range 1.5-2.5), the A-D7-01 grid",
+      "src/lib/cortex/economics (C3a, planned) supersedes costGate.ts for the per-tier cost (CTX-022a)",
     ],
   },
   {
