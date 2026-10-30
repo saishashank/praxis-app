@@ -118,7 +118,7 @@ describe("dumpDatabase", () => {
       kind: "meta",
       format: 1,
       db: "main",
-      schema_version: 18,
+      schema_version: 19,
       created_at: AT,
       ephemeral: ["request_nonce"],
     });
