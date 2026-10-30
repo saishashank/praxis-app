@@ -3,6 +3,7 @@ import type { Client } from "@libsql/client";
 export const INDEX_MARKET: "AU";
 export const INDEX_CODE: "AXJO";
 export const INDEX_YAHOO_SYMBOL: "^AXJO";
+export const US_INDEX_YAHOO_SYMBOLS: { GSPC: "^GSPC"; VIX: "^VIX" };
 export const INDEX_CODES: string[];
 export const INDEX_SOURCE: "yahoo_eod";
 export function toMicro(x: number): number;

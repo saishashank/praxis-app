@@ -157,13 +157,14 @@ export type AuSource = (typeof AU_SOURCES)[number];
 export const UNIVERSE_SOURCE = "asx_listed_companies";
 /**
  * M14 reference sources (DAT-236, D-239; migration 0018): two disabled universe alternatives (no
- * fetcher) and the two manual CSV uploads. Register rows only: no source_status row.
+ * fetcher) and the two manual CSV uploads; M15 adds the pending FRED row (migration 0019). Register rows only: no source_status row.
  */
 export const REFERENCE_SOURCES = [
   "wikidata_asx",
   "wikipedia_asx200",
   "index_changes_manual",
   "industry_map_manual",
+  "fred", // M15 (DAT-101, D-291; migration 0019): pending, no fetcher
 ] as const;
 
 export type MarketMode = "off" | "data_only" | "full";
