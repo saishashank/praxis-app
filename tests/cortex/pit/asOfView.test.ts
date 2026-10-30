@@ -10,7 +10,7 @@ import {
   valueKey,
 } from "@/lib/cortex/pit/truncation";
 import type { AsOfView } from "@/lib/cortex/pit/types";
-import { barsFor, CUTOFF_HHMM, regimeWorld, SESSIONS, zzWorld } from "./zzWorld";
+import { barsFor, CUTOFF_HHMM, eventRow, regimeWorld, SESSIONS, zzWorld } from "./zzWorld";
 
 const world = zzWorld();
 const view = buildAsOfView(world);
@@ -106,9 +106,28 @@ describe("accessors return only what the cut-off of sessions[t] has made known",
     expect(view.events("ZZA", T("2026-03-04"))).toEqual([]); // published 23:30Z on the 4th, after the cut-off
     const zza = view.events("ZZA", T("2026-03-05"));
     expect(zza.map((e) => e.day0)).toEqual(["2026-03-05"]);
-    expect("publishedAt" in zza[0]!).toBe(false);
+    expect(zza[0]!.publishedAt).toBe("2026-03-04T23:30:00.000Z"); // kept: it is <= the cut-off
     expect(view.events("ZZB", T("2026-03-06"))).toEqual([]);
     expect(view.events("ZZB", T("2026-03-10")).map((e) => e.day0)).toEqual(["2026-03-06"]);
+  });
+
+  it("events: reversedNextClose (known at day 0 + 1) is null until the session after day 0", () => {
+    const row = {
+      ...eventRow("ZZA", "2026-03-05", "2026-03-04T23:30:00.000Z", true),
+      reversedNextClose: true,
+    };
+    const w = zzWorld({ events: new Map([["ZZA", [row]]]) });
+    const v = buildAsOfView(w);
+    expect(v.events("ZZA", T("2026-03-05"))[0]!.reversedNextClose).toBeNull();
+    expect(v.events("ZZA", T("2026-03-06"))[0]!.reversedNextClose).toBe(true);
+    // A row that never carried the field keeps undefined (nothing invented).
+    expect(view.events("ZZA", T("2026-03-05"))[0]!.reversedNextClose).toBeUndefined();
+    // Read at day 0, the field is nulled on both sides, so the truncation helper sees no mismatch;
+    // a feature that reads it at day 0 therefore gets null, never the day-0 + 1 fact.
+    const feature = (vv: AsOfView, code: string, t: number) =>
+      vv.events(code, t).map((e) => e.reversedNextClose ?? null);
+    expect(truncationMismatches(w, feature, { codes: ["ZZA"] })).toEqual([]);
+    expect(feature(v, "ZZA", T("2026-03-05"))).toEqual([null]);
   });
 
   it("corpActions: by known_at (confirmed) or ex-date - 1 session (vendor)", () => {
@@ -118,10 +137,10 @@ describe("accessors return only what the cut-off of sessions[t] has made known",
     expect(view.corpActions("ZZA", T("2026-03-04")).map((a) => a.id)).toEqual(["ca-zza-div"]);
   });
 
-  it("indexChanges: from the announced date; a missing list is reported, not silently empty", () => {
+  it("indexChanges: from the session after the announced date (D-302); a missing list is reported", () => {
     expect(view.indexChangesLoaded).toBe(true);
-    expect(view.indexChanges("ZZB", T("2026-03-03"))).toEqual([]);
-    expect(view.indexChanges("ZZB", T("2026-03-04"))).toEqual([
+    expect(view.indexChanges("ZZB", T("2026-03-04"))).toEqual([]);
+    expect(view.indexChanges("ZZB", T("2026-03-05"))).toEqual([
       { indexName: "ZZ200", kind: "add", announced: "2026-03-04", effective: "2026-03-12" },
     ]);
     const missing = buildAsOfView(zzWorld({ indexChanges: null }));
@@ -138,6 +157,59 @@ describe("accessors return only what the cut-off of sessions[t] has made known",
     expect(view.halted("ZZB", T("2026-03-11"))).toBe(true);
     expect(view.halted("ZZB", T("2026-03-13"))).toBe(false);
     expect(view.halted("ZZA", 5)).toBeNull();
+  });
+
+  it("haltSince: the first session of the current halted run; null when not halted", () => {
+    const w = zzWorld({
+      halts: new Map([
+        [
+          "ZZB",
+          [
+            { d: "2026-03-03", halted: true },
+            { d: "2026-03-04", halted: false },
+            { d: "2026-03-10", halted: true },
+            { d: "2026-03-11", halted: true },
+            { d: "2026-03-13", halted: false },
+          ],
+        ],
+      ]),
+    });
+    const v = buildAsOfView(w);
+    expect(v.haltSince("ZZB", T("2026-03-02"))).toBeNull();
+    expect(v.haltSince("ZZB", T("2026-03-03"))).toBe("2026-03-03");
+    expect(v.haltSince("ZZB", T("2026-03-05"))).toBeNull();
+    expect(v.haltSince("ZZB", T("2026-03-10"))).toBe("2026-03-10");
+    expect(v.haltSince("ZZB", T("2026-03-12"))).toBe("2026-03-10");
+    expect(v.haltSince("ZZB", T("2026-03-13"))).toBeNull();
+    expect(v.haltSince("ZZA", 5)).toBeNull();
+    expect(() => v.haltSince("ZZB", 99)).toThrow(AsOfError);
+  });
+
+  it("barCount: bars with d <= sessions[t], bounded like every accessor", () => {
+    expect(view.barCount("ZZA", 0)).toBe(1);
+    expect(view.barCount("ZZA", T("2026-03-10"))).toBe(6);
+    expect(view.barCount("ZZX", 3)).toBe(0);
+    expect(() => view.barCount("ZZA", 99)).toThrow(AsOfError);
+    expect(() => view.barCount("ZZX", 99)).toThrow(AsOfError);
+  });
+
+  it("adj is served from one cached series per basis, shared by truncated handles, and stays exact", () => {
+    const w = zzWorld();
+    const v = buildAsOfView(w);
+    const h = v.truncated(T("2026-03-11"));
+    const a = v.adj("ZZC", T("2026-03-11"), 3);
+    const b = h.adj("ZZC", T("2026-03-11"), 3);
+    expect(b).toEqual(a);
+    // Before the split's ex-date the basis differs, so the series differs; after it, the basis is shared.
+    expect(v.adj("ZZC", T("2026-03-10"), 1).adjClose[0]).toBe(barsFor("ZZC")[5]!.close);
+    expect(v.adj("ZZC", T("2026-03-12"), 2).adjClose).toEqual([
+      barsFor("ZZC")[6]!.close,
+      barsFor("ZZC")[7]!.close,
+    ]);
+    expect(v.adj("ZZC", T("2026-03-12"), 10).adjClose[0]).toBe(barsFor("ZZC")[0]!.close / 2n);
+    // The full series at the last t is the cached object itself; a count below n is a fresh slice.
+    expect(v.adj("ZZC", v.maxT, 100)).toBe(v.adj("ZZC", v.maxT, 100));
+    expect(v.adj("ZZC", v.maxT, 2).d.length).toBe(2);
   });
 
   it("adj: split-adjusted on the basis known at the cut-off; the dividend factor is separate", () => {
@@ -259,5 +331,29 @@ describe("cutWorld and the TST-109 helper", () => {
     expect(valueKey(undefined)).toBe("undefined");
     expect(valueKey(new Map([["x", 2]]))).toBe('[["x",2]]');
     expect(valueKey([1, "a", null])).toBe('[1,"a",null]');
+  });
+
+  it("valueKey: NaN and the infinities are named (not null)", () => {
+    expect(valueKey(Number.NaN)).toBe("NaN");
+    expect(valueKey(Number.POSITIVE_INFINITY)).toBe("Infinity");
+    expect(valueKey(Number.NEGATIVE_INFINITY)).toBe("-Infinity");
+    expect(valueKey(null)).toBe("null");
+    expect(valueKey(1.5)).toBe("1.5");
+    expect(valueKey(Number.NaN)).not.toBe(valueKey(null));
+  });
+
+  it("valueKey: a Set is order-free", () => {
+    expect(valueKey(new Set([3, 1, 2]))).toBe("Set[1,2,3]");
+    expect(valueKey(new Set(["b", "a"]))).toBe(valueKey(new Set(["a", "b"])));
+  });
+
+  it("valueKey: a Date by its ISO text", () => {
+    expect(valueKey(new Date("2026-03-05T07:10:00.000Z"))).toBe("Date(2026-03-05T07:10:00.000Z)");
+    expect(valueKey(new Date("nope"))).toBe("Date(invalid)");
+  });
+
+  it("valueKey: a function is opaque", () => {
+    expect(valueKey(() => 1)).toBe("function");
+    expect(valueKey({ f: Math.max })).toBe('{"f":function}');
   });
 });

@@ -21,7 +21,7 @@ export type InputKind =
   | "macro" // RBA/FRED: publication instant when stamped, else the MACRO_SERIES lag in sessions
   | "announcement" // published_at; an untimed (date-only) backfill row = +1 session (OI-46)
   | "corp_action" // known_at (0016) else ex-date - 1 session for vendor rows
-  | "index_change" // DAT-234 manual list: known_at else the announced date (else the effective date)
+  | "index_change" // DAT-234 manual list: known_at else announced date (else effective date) + 1 session (D-302)
   | "calendar" // trading_calendar rows: known at load
   | "sector_map"; // instrument_class / ASX list: as_of (D-271: current map offline, labelled)
 
@@ -136,6 +136,11 @@ export type HaltRow = { readonly d: string; readonly halted: boolean };
  * this and call `buildAsOfView`. Every per-code array is oldest first. Absent optional maps mean
  * "source not loaded": the accessors return empty and the manifest counts zero rows for that kind.
  * `indexChanges: null` means the DAT-234 list is missing (G08 fails closed on `indexChangesLoaded`).
+ *
+ * Every field of a row must be known at that row's known time: the view bounds rows, it cannot see
+ * inside a row. The producer owns that (an event's `ar` / `volRatio` from day-0 bars only, a tier
+ * from the snapshot of its own session); the one field the view nulls itself is
+ * `EventFact.reversedNextClose`, which is known at day 0 + 1.
  */
 export type AsOfWorld = {
   readonly market: string;
@@ -144,7 +149,9 @@ export type AsOfWorld = {
   readonly calendar: readonly CalendarRow[];
   readonly schemaSha: string;
   readonly bars: ReadonlyMap<string, readonly ViewBar[]>;
+  /** Universe membership per session; required for a universe (`codes(t)`), absent only in fixtures. */
   readonly tiers?: ReadonlyMap<string, readonly TierRow[]>;
+  /** ^AXJO must span `regimeWarmupCloses(regimeParams)` closes before the first t that reads `regime`. */
   readonly index?: Partial<Readonly<Record<IndexCode, readonly IndexViewBar[]>>>;
   readonly shorts?: ReadonlyMap<string, readonly ShortPoint[]>;
   readonly macro?: ReadonlyMap<string, readonly MacroRow[]>;
@@ -180,6 +187,8 @@ export type AsOfView = {
   /** Universe codes with a bar on sessions[t] (and a tier at t when tiers are loaded), sorted. */
   codes(t: number): readonly string[];
   tier(code: string, t: number): Tier | null;
+  /** Number of raw bars with d <= sessions[t] (the warm-up check without a slice). */
+  barCount(code: string, t: number): number;
   /** The last `count` raw bars with d <= sessions[t], oldest first. */
   bars(code: string, t: number, count: number): readonly ViewBar[];
   /** The last `count` sessions adjusted on the basis known at cutoffUtc(t). */
@@ -189,13 +198,19 @@ export type AsOfView = {
   shorts(code: string, t: number, limit: number): readonly ShortPoint[];
   /** The last `count` macro observations published by the cut-off, oldest first. */
   macro(series: string, t: number, count: number): readonly MacroPoint[];
-  /** Events with day 0 <= sessions[t] whose announcement was published by the cut-off. */
-  events(code: string, t: number): readonly EventFact[];
+  /**
+   * Events with day 0 <= sessions[t] whose announcement was published by the cut-off, with that
+   * publication instant (it is <= the cut-off, so a rule may read it). `reversedNextClose` is null
+   * until the session after day 0 is at or before sessions[t].
+   */
+  events(code: string, t: number): readonly EventRow[];
   /** Actions known by the cut-off (known_at <= cutoffUtc(t)), including ones with a later ex-date. */
   corpActions(code: string, t: number): readonly CorpActionRecord[];
   indexChanges(code: string, t: number): readonly IndexChangeFact[];
   industry(code: string, t: number): string | null;
   halted(code: string, t: number): boolean | null;
+  /** First session date of the halted run that is current at t; null when not halted (or unknown). */
+  haltSince(code: string, t: number): string | null;
   /** regimeSeries over index(AXJO) up to t (regime.ts); "unknown" with no benchmark bar. */
   regime(t: number): RegimeLabel;
   manifest(t: number): InputManifest;

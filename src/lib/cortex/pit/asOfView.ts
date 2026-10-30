@@ -1,16 +1,18 @@
 // The as-of view builder (M15 C1a; docs/M15_design.md 3a; CTX-010; TST-109). `buildAsOfView` takes
 // the plain arrays of one world and returns a view whose every accessor is bounded by the session
 // index `t` it is given: rows are stored sorted by their KNOWN_TIME instant and sliced at the
-// cut-off of sessions[t], so an angle cannot see t + 1 by construction. `cutWorld(world, t)` builds
-// the physically truncated world that the TST-109 helper rebuilds the view from.
+// cut-off of sessions[t], so an angle cannot see t + 1 by construction. `partitionWorld` does the
+// sorting once; `cutPartitioned(stores, t)` builds the physically truncated world that the TST-109
+// helper rebuilds the view from, without sorting the whole world again per t.
 // Pure: no clock, no store, no random source; the only instants are the rows' own and the session
-// cut-offs (decisionCutoffUtc). Money stays bigint; the adjusted series comes from adjust.ts.
-import { splitActionsByCode, splitsKnownOn } from "@/lib/agents/candidates";
+// cut-offs (decisionCutoffUtc). Money stays bigint; the adjusted series comes from adjust.ts and is
+// cached per (code, adjustment basis) on the partition, so every handle of the world shares it.
+import { splitActionsByCode, splitsKnownOn, type SplitAction } from "@/lib/agents/candidates";
 import type { IndexViewBar, ViewBar } from "@/lib/agents/decisionView";
-import type { EventFact, IndexChangeFact, RegimeLabel } from "@/lib/agents/families/types";
+import type { IndexChangeFact, RegimeLabel } from "@/lib/agents/families/types";
 import { regimeSeries } from "@/lib/agents/regime";
 import type { CorpActionRecord } from "@/lib/arena/corpActions";
-import { buildCodeSeries, dividendTermsOf } from "./adjust";
+import { buildCodeSeries, dividendTermsOf, type DividendTerm } from "./adjust";
 import { instantMs, knownTimeOf, makeSessionClock } from "./knownTime";
 import { buildManifest } from "./manifest";
 import {
@@ -74,6 +76,12 @@ function knownCount<T>(store: Store<T>, cutoffMs: number): number {
   return lo;
 }
 
+/** The last `count` of the first `n` rows, in one slice. */
+function lastOf<T>(rows: readonly T[], n: number, count: number): readonly T[] {
+  if (count >= n) return n === rows.length ? rows : rows.slice(0, n);
+  return rows.slice(n - count, n);
+}
+
 /** A copy of `obj` without `key` (the view returns the fact without its known-time stamp). */
 function stripKey<T extends object, K extends keyof T>(obj: T, key: K): Omit<T, K> {
   const out: Record<string, unknown> = {};
@@ -115,11 +123,14 @@ function indexChangeRow(r: IndexChangeRow): KnownTimeRow {
 
 /** A macro row with its series id attached, so the known-time rule can look the series up. */
 type MacroRowS = MacroRow & { readonly series: string };
-type WorldS = Omit<AsOfWorld, "macro"> & {
-  readonly macro?: ReadonlyMap<string, readonly MacroRowS[]>;
-};
 
-type Stores = {
+/**
+ * A world sorted by known time: the stores every handle of the view reads, plus the per-code
+ * adjusted-series cache. Opaque to callers; built by `partitionWorld`, consumed by `buildAsOfView`
+ * (through `buildAsOfViewFrom`) and `cutPartitioned`.
+ */
+export type PartitionedWorld = {
+  readonly world: AsOfWorld;
   readonly clock: SessionClock;
   readonly cutoffMs: readonly number[];
   readonly bars: ReadonlyMap<string, Store<ViewBar>>;
@@ -135,6 +146,10 @@ type Stores = {
   readonly calendarStore: Store<{ readonly d: string }>;
   /** Every store, for the manifest counts. */
   readonly all: readonly Store<unknown>[];
+  /** Regime state per ^AXJO bar (full series; the state at i depends only on closes <= i). */
+  readonly regimeStates: readonly RegimeLabel[];
+  /** code -> adjustment-basis key -> the CodeSeries over every bar of the code on that basis. */
+  readonly adjCache: Map<string, Map<string, CodeSeries>>;
 };
 
 function mapStores<T>(
@@ -154,7 +169,24 @@ function mapStores<T>(
   return out;
 }
 
-function partition(world: WorldS): Stores {
+// The macro store needs the series id on each row for the rule; `toRow` cannot see the map key,
+// so the series is attached before the store is built.
+function withSeries(
+  macro: ReadonlyMap<string, readonly MacroRow[]> | undefined,
+): Map<string, readonly MacroRowS[]> | undefined {
+  if (!macro) return undefined;
+  const out = new Map<string, readonly MacroRowS[]>();
+  for (const [series, rows] of macro)
+    out.set(
+      series,
+      rows.map((r) => ({ ...r, series })),
+    );
+  return out;
+}
+
+/** Sorts every source of the world by known time, once. Throws on unsorted inputs or bad stamps. */
+export function partitionWorld(world: AsOfWorld): PartitionedWorld {
+  if (world.sessions.length === 0) throw new RangeError("a world needs at least one session");
   const clock = makeSessionClock(world.sessions, world.cutoffHhmm);
   const cutoffMs = world.sessions.map((d) => instantMs(clock.cutoffUtc(d)));
   const all: Store<unknown>[] = [];
@@ -191,7 +223,17 @@ function partition(world: WorldS): Stores {
     clock,
   );
   all.push(calendarStore);
+  // Regime over the whole benchmark series once: the value at index i depends only on closes <= i
+  // (hysteresis carried forward), so the full-series state at i equals the truncated-series state.
+  const axjo = index.get("AXJO");
+  const regimeStates: readonly RegimeLabel[] = axjo
+    ? regimeSeries(
+        axjo.rows.map((b) => b.close),
+        world.regimeParams,
+      ).map((r) => r.state)
+    : [];
   return {
+    world,
     clock,
     cutoffMs,
     bars,
@@ -200,7 +242,7 @@ function partition(world: WorldS): Stores {
     shorts: mapStores("asic_short", world.shorts, (p) => ({ asOf: p.asOf }), clock, all),
     macro: mapStores(
       "macro",
-      world.macro,
+      withSeries(world.macro),
       (m) => ({ d: m.obsD, publishedAt: m.publishedAt ?? null, series: m.series }),
       clock,
       all,
@@ -227,44 +269,69 @@ function partition(world: WorldS): Stores {
     halts,
     calendarStore,
     all,
+    regimeStates,
+    adjCache: new Map(),
   };
 }
 
-// The macro store needs the series id on each row for the rule; partition() cannot see the map key
-// inside `toRow`, so the series is attached before the store is built.
-function withSeries(
-  macro: ReadonlyMap<string, readonly MacroRow[]> | undefined,
-): ReadonlyMap<string, readonly MacroRowS[]> | undefined {
-  if (!macro) return undefined;
-  const out = new Map<string, MacroRowS[]>();
-  for (const [series, rows] of macro)
-    out.set(
-      series,
-      rows.map((r) => ({ ...r, series })),
-    );
-  return out;
+// ---- adjustment cache ------------------------------------------------------------------------------------------
+
+/** The adjustment basis of (code, t): the splits and dividends known at the cut-off with ex-date <= d. */
+function basisAt(
+  stores: PartitionedWorld,
+  code: string,
+  t: number,
+): { readonly key: string; readonly splits: SplitAction[]; readonly dividends: DividendTerm[] } {
+  const d = stores.world.sessions[t]!;
+  const store = stores.corpActions.get(code);
+  const actions = store ? store.rows.slice(0, knownCount(store, stores.cutoffMs[t]!)) : [];
+  const splits = splitsKnownOn(
+    splitActionsByCode(actions).byCode.get(code) ?? [],
+    d,
+    stores.world.cutoffHhmm,
+  );
+  const dividends = dividendTermsOf(actions).filter((dv) => dv.exDate <= d);
+  const key =
+    splits.map((s) => `${s.exDate}:${s.ratio.num}/${s.ratio.den}`).join(",") +
+    "|" +
+    dividends.map((dv) => `${dv.exDate}:${dv.dpsMicro.num}/${dv.dpsMicro.den}`).join(",");
+  return { key, splits, dividends };
+}
+
+/**
+ * The series of `code` over every bar of the code on the basis of (code, t), from the cache. Valid
+ * because `adjustBars` scales a bar by the splits with a later ex-date only, and the dividend factor
+ * of a bar reads only bars before each ex-date <= d: both are the same whether the series is built
+ * over all bars or over the bars known at t, so one full series per basis serves every t.
+ */
+function seriesOnBasis(stores: PartitionedWorld, code: string, t: number): CodeSeries {
+  const { key, splits, dividends } = basisAt(stores, code, t);
+  let perCode = stores.adjCache.get(code);
+  if (!perCode) {
+    perCode = new Map();
+    stores.adjCache.set(code, perCode);
+  }
+  let series = perCode.get(key);
+  if (!series) {
+    series = buildCodeSeries(code, stores.bars.get(code)?.rows ?? [], splits, dividends);
+    perCode.set(key, series);
+  }
+  return series;
 }
 
 // ---- the view -----------------------------------------------------------------------------------------------------
 
-/** Builds the view of a world; `maxT` = the last session. Throws on unsorted inputs or bad stamps. */
+/** Builds the view of a world; `maxT` = the last session. */
 export function buildAsOfView(world: AsOfWorld): AsOfView {
-  if (world.sessions.length === 0) throw new RangeError("a world needs at least one session");
-  const stores = partition({ ...world, macro: withSeries(world.macro) });
-  const { clock, cutoffMs } = stores;
+  return buildAsOfViewFrom(partitionWorld(world));
+}
+
+/** Builds the view over an existing partition (shares its stores and caches). */
+export function buildAsOfViewFrom(stores: PartitionedWorld): AsOfView {
+  const { world, clock, cutoffMs } = stores;
   const sessions = world.sessions;
   const lastT = sessions.length - 1;
-
-  // Regime over the whole benchmark series once: the value at index i depends only on closes <= i
-  // (hysteresis carried forward), so the full-series state at i equals the truncated-series state.
   const axjo = stores.index.get("AXJO");
-  const regimeStates: readonly RegimeLabel[] = axjo
-    ? regimeSeries(
-        axjo.rows.map((b) => b.close),
-        world.regimeParams,
-      ).map((r) => r.state)
-    : [];
-
   const codesCache = new Map<number, readonly string[]>();
 
   function makeView(maxT: number): AsOfView {
@@ -277,11 +344,18 @@ export function buildAsOfView(world: AsOfWorld): AsOfView {
       return cutoffMs[t]!;
     };
     const known = <T>(store: Store<T> | undefined, t: number): readonly T[] =>
-      store ? store.rows.slice(0, knownCount(store, cut(t))) : [];
-    const barsUpTo = (code: string, t: number): readonly ViewBar[] =>
-      known(stores.bars.get(code), t);
+      store ? lastOf(store.rows, knownCount(store, cut(t)), Number.POSITIVE_INFINITY) : [];
     const corpActionsAt = (code: string, t: number): readonly CorpActionRecord[] =>
       known(stores.corpActions.get(code), t);
+    const haltRowsAt = (
+      code: string,
+      t: number,
+    ): { rows: readonly HaltRow[]; n: number } | null => {
+      checkT(t);
+      const rows = stores.halts.get(code);
+      if (!rows) return null;
+      return { rows, n: countUpToDate(rows, sessions[t]!) };
+    };
 
     const view: AsOfView = {
       market: world.market,
@@ -318,52 +392,68 @@ export function buildAsOfView(world: AsOfWorld): AsOfView {
         const n = countUpToDate(rows, sessions[t]!);
         return n === 0 ? null : rows[n - 1]!.tier;
       },
+      barCount(code, t) {
+        const store = stores.bars.get(code);
+        return store ? knownCount(store, cut(t)) : (checkT(t), 0);
+      },
       bars(code, t, count) {
-        const all = barsUpTo(code, t);
-        return count >= all.length ? all : all.slice(all.length - count);
+        const store = stores.bars.get(code);
+        return store ? lastOf(store.rows, knownCount(store, cut(t)), count) : (checkT(t), []);
       },
       adj(code, t, count): CodeSeries {
-        const d = sessions[t]!;
-        const all = barsUpTo(code, t);
-        const actions = corpActionsAt(code, t);
-        const splits = splitsKnownOn(
-          splitActionsByCode(actions).byCode.get(code) ?? [],
-          d,
-          world.cutoffHhmm,
-        );
-        const dividends = dividendTermsOf(actions).filter((dv) => dv.exDate <= d);
-        const full = buildCodeSeries(code, all, splits, dividends);
-        if (count >= full.d.length) return full;
-        const from = full.d.length - count;
+        const store = stores.bars.get(code);
+        if (!store) {
+          checkT(t);
+          return { code, d: [], raw: [], adj: [], adjClose: [], adjVolume: [], divFactor: [] };
+        }
+        const n = knownCount(store, cut(t));
+        const full = seriesOnBasis(stores, code, t);
+        if (count >= n && n === full.d.length) return full;
+        const from = count >= n ? 0 : n - count;
         return {
           code,
-          d: full.d.slice(from),
-          raw: full.raw.slice(from),
-          adj: full.adj.slice(from),
-          adjClose: full.adjClose.slice(from),
-          adjVolume: full.adjVolume.slice(from),
-          divFactor: full.divFactor.slice(from),
+          d: full.d.slice(from, n),
+          raw: full.raw.slice(from, n),
+          adj: full.adj.slice(from, n),
+          adjClose: full.adjClose.slice(from, n),
+          adjVolume: full.adjVolume.slice(from, n),
+          divFactor: full.divFactor.slice(from, n),
         };
       },
       index(indexCode, t, count) {
-        const all = known(stores.index.get(indexCode), t);
-        return count >= all.length ? all : all.slice(all.length - count);
+        const store = stores.index.get(indexCode);
+        return store ? lastOf(store.rows, knownCount(store, cut(t)), count) : (checkT(t), []);
       },
       shorts(code, t, limit) {
-        const all = known(stores.shorts.get(code), t);
-        const newest = [...all].reverse();
-        return limit >= newest.length ? newest : newest.slice(0, limit);
+        const store = stores.shorts.get(code);
+        if (!store) {
+          checkT(t);
+          return [];
+        }
+        return [...lastOf(store.rows, knownCount(store, cut(t)), limit)].reverse();
       },
       macro(series, t, count): readonly MacroPoint[] {
-        const all = known(stores.macro.get(series), t);
-        const pts = all.map((m) => ({ obsD: m.obsD, value: m.value }));
-        return count >= pts.length ? pts : pts.slice(pts.length - count);
+        const store = stores.macro.get(series);
+        if (!store) {
+          checkT(t);
+          return [];
+        }
+        return lastOf(store.rows, knownCount(store, cut(t)), count).map((m) => ({
+          obsD: m.obsD,
+          value: m.value,
+        }));
       },
-      events(code, t): readonly EventFact[] {
+      events(code, t): readonly EventRow[] {
         const d = sessions[t]!;
         return known(stores.events.get(code), t)
           .filter((e) => e.day0 <= d)
-          .map((e) => stripKey(e, "publishedAt"));
+          .map((e) => {
+            // reversedNextClose is known at day 0 + 1 (families/types.ts), not at the row's known
+            // time: null until the session after day 0 is at or before sessions[t].
+            if (e.reversedNextClose === undefined) return e;
+            const next = clock.nextSession(e.day0);
+            return next !== null && next <= d ? e : { ...e, reversedNextClose: null };
+          });
       },
       corpActions: corpActionsAt,
       indexChanges(code, t): readonly IndexChangeFact[] {
@@ -378,11 +468,15 @@ export function buildAsOfView(world: AsOfWorld): AsOfView {
         return rows.length === 0 ? null : rows[rows.length - 1]!.industry;
       },
       halted(code, t) {
-        checkT(t);
-        const rows = stores.halts.get(code);
-        if (!rows) return null;
-        const n = countUpToDate(rows, sessions[t]!);
-        return n === 0 ? null : rows[n - 1]!.halted;
+        const h = haltRowsAt(code, t);
+        return h === null || h.n === 0 ? null : h.rows[h.n - 1]!.halted;
+      },
+      haltSince(code, t) {
+        const h = haltRowsAt(code, t);
+        if (h === null || h.n === 0 || !h.rows[h.n - 1]!.halted) return null;
+        let i = h.n - 1;
+        while (i > 0 && h.rows[i - 1]!.halted) i -= 1;
+        return h.rows[i]!.d;
       },
       regime(t) {
         if (!axjo) {
@@ -390,7 +484,7 @@ export function buildAsOfView(world: AsOfWorld): AsOfView {
           return "unknown";
         }
         const n = knownCount(axjo, cut(t));
-        return n === 0 ? "unknown" : regimeStates[n - 1]!;
+        return n === 0 ? "unknown" : stores.regimeStates[n - 1]!;
       },
       manifest(t): InputManifest {
         const c = cut(t);
@@ -437,14 +531,15 @@ export function sessionIndexOf(sessions: readonly string[], d: string): number {
 }
 
 /**
- * The world physically cut at session index `t`: sessions up to t and, per source, only the rows
- * whose known time is at or before cutoffUtc(sessions[t]). Building a view from this world and
- * asking it about t must give the same answers as the full view (TST-109, truncation.ts).
+ * The world physically cut at session index `t` from an existing partition: sessions up to t and,
+ * per source, only the rows whose known time is at or before cutoffUtc(sessions[t]). Building a
+ * view from this world and asking it about t must give the same answers as the full view
+ * (TST-109, truncation.ts). Row order inside each source is the known-time order.
  */
-export function cutWorld(world: AsOfWorld, t: number): AsOfWorld {
+export function cutPartitioned(stores: PartitionedWorld, t: number): AsOfWorld {
+  const { world } = stores;
   if (!Number.isInteger(t) || t < 0 || t >= world.sessions.length)
     throw new RangeError(`cut index ${t} outside 0..${world.sessions.length - 1}`);
-  const stores = partition({ ...world, macro: withSeries(world.macro) });
   const c = stores.cutoffMs[t]!;
   const d = world.sessions[t]!;
   const cutMap = <T>(m: ReadonlyMap<string, Store<T>>): Map<string, readonly T[]> =>
@@ -479,4 +574,9 @@ export function cutWorld(world: AsOfWorld, t: number): AsOfWorld {
     ),
     regimeParams: world.regimeParams,
   };
+}
+
+/** `cutPartitioned(partitionWorld(world), t)`: one cut of a world that is not partitioned yet. */
+export function cutWorld(world: AsOfWorld, t: number): AsOfWorld {
+  return cutPartitioned(partitionWorld(world), t);
 }
