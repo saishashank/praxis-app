@@ -31,7 +31,7 @@ The four files together: 61 of 61 pass in 69.2 s (local, 2026-10-30, `build` at 
 ## 3. Gates (local, Windows build machine, 2026-10-30)
 - Earlier run, before the review fixes: vitest 6,811 pass + 2 load-only timing failures (`cohortReplay` full default-size 62.6 s against a 60 s budget; the picks pages), both pass alone.
 - Full gate on build 55cc7d9 (after all M14 fixes): vitest 6,888 passed, 4 failed, 2 skipped. The 4 failures (`tests/coverage/replayCli.test.ts` x2, `tests/coverage/snapshotWorld.test.ts` x2) were real regressions from review fix 1/2 work: the random-signal source spread lost `decisionCutoffOf`, and the replay CLI read stored splits on null and injected runs. Fixed in 48ed5c8; the two files then passed (45/45).
-- Full vitest re-run after 48ed5c8: pending (filled in by the orchestrator).
+- Full vitest re-run after 48ed5c8 (2026-10-30 evening, machine shared with builders): 6,890 passed, 2 failed, 2 skipped, 2,267 s. The 2 failures are load-only UI timing (`tests/news/newsPage.test.tsx` dialog, `tests/picks/pages.test.tsx` family sheet); both files pass alone (53/53).
 - Worker vitest 469/469. Smoke 674 pass, 0 fail.
 - e2e (local production build): 242 passed, 8 skipped (populated/rich-only specs), 0 failed, 15.4 min; the rich-scenario M14 specs 7/7 passed.
 
