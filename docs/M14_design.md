@@ -306,6 +306,9 @@ Waves: WP0 → {WP2, WP4, WP5, WP7, WP8} in parallel, with WP1, WP3 and WP6 star
 - **D-254** AT-44's trial-ledger lineage carries 3 KB-081 pre-registered challengers, the most any one family has (F1, F3, F4 three each, F6 one; D-233), and 10 others, so the 13 / 9 / 3 = 25 counts hold (corrects §5 "4").
 - **D-255** No family has a separate sizing parameter (sizing is an Owner key), so the AT-44 "sizing variant" is a stop variant (`f1_initial_stop_atr`); the quarter cap counts stop and sizing changes together (`STOP_SIZING_KEY`), and the 4th is refused.
 - **D-256** A code that cannot open tonight (a disposal across the next session; in live also a quality-gate `code_blocked`) stays eligible for its own reason but is not the FAM-006 first leg, in batch 2b and in the cohort replay alike.
+- **D-285** Reference data is point-in-time by its `loaded_at` (DAT-234, FAM-006): `loadIndexChanges` and `loadIndustryMap` add `loaded_at <= the decision cut-off of d`; the snapshot's `index_changes` and `industry` rows carry `loaded_at` (optional, null = always known) and `SnapshotWorld` applies it per night, so a CSV uploaded later never changes a past night. Known limit: `instrument.industry` (the ASX group) has no time column and no history, so it is read as the current value on every night; migration 0018 is not extended for it.
+- **D-286** One replay memo per weekly run (key `family|version|canonicalJson(params)`, `replayOf` in `weeklyStages.ts`) serves the challenger generator, the challenger entries and the robustness stability neighbours; the `rankIc` stage computes only the sessions without `rank_ic_daily` rows and summarises the stored series.
+- **D-287** The exact-hash announcement dedup (D-240) counts a same-hash earlier row only within `dedup_window_sessions` (5) sessions of the later one, so a yearly repeated announcement is assessed normally.
 
 ## 5. Acceptance mapping (reports in `docs/test-reports/AT-4x.md`)
 

@@ -109,6 +109,88 @@ describe("SnapshotWorld", () => {
   });
 });
 
+describe("SnapshotWorld point-in-time reference rows (D-285)", () => {
+  const params = defaultAgentParams();
+  const loadedLate = "2026-10-14T05:00:00.000Z"; // after the cut-off of the night 2026-10-13
+  const world = () =>
+    new SnapshotWorld(
+      loadSnapshot(
+        buildSnapshot({
+          ...range,
+          inputs: {
+            ...base,
+            calendar: [{ d: "2026-10-13", kind: "session", close_time: null, confirmed: 1 }],
+            index_changes: [
+              {
+                code: "AAA",
+                index_name: "ASX 200",
+                kind: "add",
+                announced: "2026-10-02",
+                effective: "2026-10-19",
+                loaded_at: "2026-10-01T00:00:00.000Z",
+              },
+              {
+                code: "BBB",
+                index_name: "ASX 200",
+                kind: "add",
+                announced: "2026-10-02",
+                effective: "2026-10-19",
+                loaded_at: loadedLate,
+              },
+            ],
+            industry: [
+              { code: "AAA", industry: "Banks", source: "instrument", as_of: "2026-10-01" },
+              {
+                code: "AAA",
+                industry: "Major Banks",
+                source: "class",
+                as_of: "2026-10-01",
+                loaded_at: loadedLate,
+              },
+            ],
+          },
+        }).bytes,
+      ),
+      { params },
+    );
+  // the private lookups the facts are built from
+  type Peek = {
+    indexChangesOn(code: string, d: string): unknown[] | undefined;
+    industryOn(code: string, d: string): string | null;
+  };
+
+  it("the snapshot rows carry loaded_at", () => {
+    const snap = loadSnapshot(
+      buildSnapshot({
+        ...range,
+        inputs: {
+          ...base,
+          index_changes: [
+            {
+              code: "AAA",
+              index_name: "ASX 200",
+              kind: "add",
+              announced: "2026-10-02",
+              effective: "2026-10-19",
+              loaded_at: loadedLate,
+            },
+          ],
+        },
+      }).bytes,
+    );
+    expect((snap.tables.index_changes as { loaded_at: string }[])[0]!.loaded_at).toBe(loadedLate);
+  });
+
+  it("a row loaded after the night is invisible to that night, visible to the next", () => {
+    const w = world() as unknown as Peek;
+    expect(w.indexChangesOn("AAA", "2026-10-13")).toHaveLength(1);
+    expect(w.indexChangesOn("BBB", "2026-10-13")).toHaveLength(0);
+    expect(w.indexChangesOn("BBB", "2026-10-15")).toHaveLength(1);
+    expect(w.industryOn("AAA", "2026-10-13")).toBe("Banks"); // the late class row is not yet known
+    expect(w.industryOn("AAA", "2026-10-15")).toBe("Major Banks");
+  });
+});
+
 describe("snapshotLoad reference queries", () => {
   it("reads index changes known by the end of the range and the two industry sources", async () => {
     const { freshDb, cleanupTempDbs } = await import("../db/helpers");
@@ -134,10 +216,17 @@ describe("snapshotLoad reference queries", () => {
           kind: "add",
           announced: "2026-10-02",
           effective: "2026-10-19",
+          loaded_at: "2026-10-03T00:00:00Z",
         },
       ]);
       expect(inputs.industry).toEqual([
-        { code: "AAA", industry: "Major Banks", source: "class", as_of: "2026-10-10" },
+        {
+          code: "AAA",
+          industry: "Major Banks",
+          source: "class",
+          as_of: "2026-10-10",
+          loaded_at: "2026-10-11T00:00:00Z",
+        },
         { code: "AAA", industry: "Banks", source: "instrument", as_of: range.from },
       ]);
       // and the builder accepts them

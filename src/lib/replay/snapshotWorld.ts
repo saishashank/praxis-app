@@ -44,13 +44,27 @@ const RATIO_LOOKBACK = 4; // threshold-ok: last five sessions of volume ratios, 
 
 type UniverseRow = { d: string; code: string; tier: Tier; halted: number };
 type IndexRow = { index_code: string; d: string; c_micro: number };
-type IndustryRow = { code: string; industry: string; source: string; as_of: string };
+type IndustryRow = {
+  code: string;
+  industry: string;
+  source: string;
+  as_of: string;
+  loaded_at?: string | null;
+};
 type IndexChangeRow = {
   code: string;
   index_name: string;
   kind: "add" | "delete";
   announced: string | null;
   effective: string;
+  loaded_at?: string | null;
+};
+
+/** D-285: a reference row is known by a cut-off when it carries no load time or was loaded by then. */
+const loadedBy = (loadedAt: string | null | undefined, cutMs: number): boolean => {
+  if (loadedAt === null || loadedAt === undefined) return true;
+  const t = Date.parse(loadedAt);
+  return Number.isFinite(t) && t <= cutMs;
 };
 
 /** price factor (<1 for a split) -> shares-per-share ratio as a small integer pair, or null. */
@@ -170,7 +184,10 @@ export class SnapshotWorld implements CohortReplaySource {
   /** FAM-006: industry rows by code (finer manual class and the ASX group), oldest as_of first. */
   private readonly industries = new Map<string, IndustryRow[]>();
   /** DAT-234: index changes by code, oldest effective date first. */
-  private readonly indexChanges = new Map<string, IndexChangeFact[]>();
+  private readonly indexChanges = new Map<
+    string,
+    { fact: IndexChangeFact; loaded: string | null }[]
+  >();
   readonly codes: readonly string[];
   /** Announcement days of the snapshot (DAT-125 list input). */
   readonly announcements: readonly { readonly code: string; readonly d: string }[];
@@ -248,12 +265,16 @@ export class SnapshotWorld implements CohortReplaySource {
         announced: r.announced,
         effective: r.effective,
       };
+      const entry = { fact, loaded: r.loaded_at ?? null };
       const list = this.indexChanges.get(r.code);
-      if (list === undefined) this.indexChanges.set(r.code, [fact]);
-      else list.push(fact);
+      if (list === undefined) this.indexChanges.set(r.code, [entry]);
+      else list.push(entry);
     }
     for (const list of this.indexChanges.values()) {
-      list.sort((a, b) => cmp(a.effective, b.effective) || cmp(a.indexName, b.indexName));
+      list.sort(
+        (a, b) =>
+          cmp(a.fact.effective, b.fact.effective) || cmp(a.fact.indexName, b.fact.indexName),
+      );
     }
     this.buildRegime(snap.tables.index_bars as unknown as IndexRow[]);
   }
@@ -353,13 +374,22 @@ export class SnapshotWorld implements CohortReplaySource {
   private industryOn(code: string, d: string): string | null {
     const list = this.industries.get(code);
     if (list === undefined) return null;
+    const cutMs = Date.parse(this.decisionCutoffOf(d));
     let cls: string | null = null;
     let grp: string | null = null;
     for (const r of list) {
-      if (r.source === "class" && r.as_of <= d) cls = r.industry;
+      if (r.source === "class" && r.as_of <= d && loadedBy(r.loaded_at, cutMs)) cls = r.industry;
       if (r.source === "instrument") grp = r.industry;
     }
     return cls ?? grp;
+  }
+
+  /** DAT-234 index changes of the code that were loaded by the decision cut-off of `d` (D-285). */
+  private indexChangesOn(code: string, d: string): IndexChangeFact[] | undefined {
+    const list = this.indexChanges.get(code);
+    if (list === undefined) return undefined;
+    const cutMs = Date.parse(this.decisionCutoffOf(d));
+    return list.filter((e) => loadedBy(e.loaded, cutMs)).map((e) => e.fact);
   }
 
   private factsAt(code: string, i: number): CodeFacts {
@@ -375,7 +405,7 @@ export class SnapshotWorld implements CohortReplaySource {
           this.o.params,
         ),
         this.industryOn(code, d),
-        this.indexChanges.get(code),
+        this.indexChangesOn(code, d),
       );
       this.memo.set(d, code, f);
     }

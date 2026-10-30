@@ -244,18 +244,22 @@ export async function importIndustryMap(
  * Index changes by code, oldest effective date first, as known on `d`: a change counts once its
  * announcement date (or, when none was keyed, its effective date) is on or before `d`. A change
  * announced after `d` is invisible, so replay at `d` sees what the live night saw (no look-ahead).
+ * D-285: `loaded_at` is the time the row became known, so a row loaded after the decision cut-off of
+ * `d` (`cutoffUtc`) is invisible too: a CSV uploaded later never changes a past night.
  */
 export async function loadIndexChanges(
   db: Client,
   market: string,
   d: string,
+  cutoffUtc: string,
 ): Promise<ReadonlyMap<string, readonly IndexChangeFact[]>> {
   const res = await db.execute({
     sql:
       "SELECT code, index_name, kind, announced_d, effective_d FROM index_change " +
       "WHERE market = ? AND COALESCE(announced_d, effective_d) <= ? " +
+      "AND strftime('%Y-%m-%dT%H:%M:%fZ', loaded_at) <= ? " +
       "ORDER BY code, effective_d, index_name, kind",
-    args: [market, d],
+    args: [market, d, cutoffUtc],
   });
   const out = new Map<string, IndexChangeFact[]>();
   for (const r of res.rows) {
@@ -272,17 +276,21 @@ export async function loadIndexChanges(
   return out;
 }
 
-/** Finer industry class by code: the newest row with as_of on or before `d`. */
+/**
+ * Finer industry class by code: the newest row with as_of on or before `d` that was loaded by the
+ * decision cut-off of `d` (D-285).
+ */
 export async function loadIndustryMap(
   db: Client,
   market: string,
   d: string,
+  cutoffUtc: string,
 ): Promise<ReadonlyMap<string, string>> {
   const res = await db.execute({
     sql:
       "SELECT code, industry FROM instrument_class WHERE market = ? AND as_of <= ? " +
-      "ORDER BY code, as_of",
-    args: [market, d],
+      "AND strftime('%Y-%m-%dT%H:%M:%fZ', loaded_at) <= ? ORDER BY code, as_of",
+    args: [market, d, cutoffUtc],
   });
   const out = new Map<string, string>();
   for (const r of res.rows) out.set(String(r.code), String(r.industry)); // a later as_of overwrites
