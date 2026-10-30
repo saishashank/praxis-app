@@ -31,7 +31,12 @@ export type PolarityParams = Pick<
   | "persistAdvSessions"
 >;
 
-/** What the producer knows about a notice beyond the event row (all default to false). */
+/**
+ * What the producer knows about a notice beyond the event row (all default to false). D-324: every
+ * fact is derived from the notice record itself at ingest (title, type, parsed statements) and is
+ * fixed from then on; no later knowledge (a follow-up notice, a price move, a label produced after
+ * day 0) may feed it. That is the event producer's (P5) duty; the view bounds rows, not fields.
+ */
 export type NoticeFacts = {
   readonly hasValue?: boolean;
   readonly hasCounterparty?: boolean;
@@ -230,10 +235,21 @@ export function eventEntryCheck(
       reason: "u23_missing_bars",
     };
   }
-  const ret = subRat(
+  // D-324: the D+1 return is index-adjusted (return - ^AXJO return over the same span), the same
+  // basis as AR0, so a market move neither fakes nor hides persistence.
+  let ret = subRat(
     divRat(makeRational(series.adjClose[d1]!), makeRational(series.adjClose[pre]!)),
     makeRational(1n),
   );
+  const axjo = view.index("AXJO", i0 + 1, t - i0 + 2);
+  const iPre = axjo.find((b) => b.d === view.sessions[i0 - 1]);
+  const iD1 = axjo.find((b) => b.d === view.sessions[i0 + 1]);
+  if (iPre !== undefined && iD1 !== undefined && iPre.close !== 0n) {
+    ret = subRat(
+      ret,
+      subRat(divRat(makeRational(iD1.close), makeRational(iPre.close)), makeRational(1n)),
+    );
+  }
   const half = divRat(event.ar!, makeRational(2n));
   const keeps = pol.polarity === 1 ? cmpRat(ret, half) >= 0 : cmpRat(ret, half) <= 0;
   if (!keeps) {

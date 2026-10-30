@@ -184,6 +184,31 @@ describe("U2/U3 entries: results or guidance with parsed figures, on D+2, with E
     });
   });
 
+  it("D-324: persistence is index-adjusted, the same basis as AR0", () => {
+    // the market itself rises 9 % from the pre-event close to D+1: the stock's +10 % is only +1 %
+    // abnormal, below half of a 10 % AR0, so the move did not persist
+    const axjo = SESSIONS.map((d, i) => ({
+      d,
+      close: (i >= DAY0 ? 7_630n : 7_000n) * 1_000_000n,
+    }));
+    const view = buildAsOfView(statesWorld([good], { index: { AXJO: axjo } }));
+    expect(eventEntryCheck(view, "ZZU", DAY0 + 2, ev, facts)).toMatchObject({
+      eligible: false,
+      reason: "u23_no_persistence",
+    });
+    // a falling market makes a flat D+1 count as persistence of a positive AR0 (+6 % abnormal)
+    const down = SESSIONS.map((d, i) => ({
+      d,
+      close: (i >= DAY0 ? 6_580n : 7_000n) * 1_000_000n,
+    }));
+    const flatStock: FixtureSpec = {
+      ...good,
+      bars: { closesCents: path(1000, DAY0, [0.1, -0.1]), volumes },
+    };
+    const v2 = buildAsOfView(statesWorld([flatStock], { index: { AXJO: down } }));
+    expect(eventEntryCheck(v2, "ZZU", DAY0 + 2, ev, facts).eligible).toBe(true);
+  });
+
   it("no volume: D+1 notional under 2 x ADV20", () => {
     const thin: FixtureSpec = { ...good, bars: { closesCents: path(1000, DAY0, [0.1, 0]) } };
     const view = buildAsOfView(statesWorld([thin]));

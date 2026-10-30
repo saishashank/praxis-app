@@ -121,6 +121,8 @@ export function coldStartAt(
     psi = populationStabilityIndex(input.population.baseline, input.population.tonight);
     populationStable = psi <= params.psiMax;
   }
+  // D-324: a candidate with an undefined angle is "warming up" in every phase (before go-live, cold
+  // and warm alike); the phase changes families and refits, never the eligibility rule.
   return { state, eligible: !undefinedAngles, abstainAlarm, populationStable, psi };
 }
 
