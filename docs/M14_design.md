@@ -302,6 +302,10 @@ Waves: WP0 → {WP2, WP4, WP5, WP7, WP8} in parallel, with WP1, WP3 and WP6 star
 - **D-250** Migration 0018 holds only the additive and nullable changes in §2.6.
 - **D-251** The Strategies "Robustness" section is descriptive, visible to Owner and Editor, and masked per O-54.
 - **D-252** LLM-076 (optional local classifier) is not built in M14.
+- **D-253** FAM-004 "logged as `skipped_stop_distance`" is met by the night's stored day candidates, written by batch 3's forward-ledger sync (`forwardLedger.ts` `putDayCandidates`, `blocked` with its reason), as for every family block since v1; a blocked candidate gets no card (corrects §2.1).
+- **D-254** AT-44's trial-ledger lineage carries 3 KB-081 pre-registered challengers, the most any one family has (F1, F3, F4 three each, F6 one; D-233), and 10 others, so the 13 / 9 / 3 = 25 counts hold (corrects §5 "4").
+- **D-255** No family has a separate sizing parameter (sizing is an Owner key), so the AT-44 "sizing variant" is a stop variant (`f1_initial_stop_atr`); the quarter cap counts stop and sizing changes together (`STOP_SIZING_KEY`), and the 4th is refused.
+- **D-256** A code that cannot open tonight (a disposal across the next session; in live also a quality-gate `code_blocked`) stays eligible for its own reason but is not the FAM-006 first leg, in batch 2b and in the cohort replay alike.
 
 ## 5. Acceptance mapping (reports in `docs/test-reports/AT-4x.md`)
 
