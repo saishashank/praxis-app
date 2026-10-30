@@ -48,6 +48,8 @@ test("owner loads an index-change file; a bad file is refused with its line", as
     mimeType: "text/csv",
     buffer: Buffer.from(GOOD),
   });
+  // React resets an uncontrolled form after each action, so the box is ticked again.
+  await form.locator('input[name="confirm"]').check();
   await form.getByRole("button", { name: "Upload" }).click();
   await expect(form.getByRole("status")).toContainText(/Loaded \d+ new rows?/);
 });
