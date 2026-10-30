@@ -1,6 +1,7 @@
 // @vitest-environment node
 // Stationary block bootstrap, per-statistic n_eff and purge/embargo (M15 C2; CTX-012 intervals, OI-15).
 import { describe, expect, it } from "vitest";
+import { mean } from "@/lib/stats/bootstrap";
 import {
   bootstrapCi,
   bootstrapCiMany,
@@ -48,14 +49,76 @@ describe("effectiveN (R·u / D_s)", () => {
     expect(de.nEff).toBeCloseTo(24 / 2, 12);
   });
 
-  it("purges the embargo tail of each block from D_s and floors D_s at 1", () => {
-    // block 2 + hold 1: period 3; sessions 2, 5, 8 ... are embargo and do not count.
+  it("D-299: blocks are contiguous (period = max(block, maxHold)), every row counted, floor 1", () => {
+    // block 2, hold 3 → L = 3: blocks {0,1,2}, {3,4,5}; sums 0 and 0 → ratio 0 → floor 1.
     const sessions = [0, 1, 2, 3, 4, 5];
-    const psi = [1, -1, 100, 1, -1, 100];
-    const de = effectiveN({ sessions, sessionCount: 6 }, psi, { expectedBlock: 2, maxHold: 1 });
-    // Block sums: (1 − 1) = 0 twice → Σ T² = 0 → ratio 0 → floor 1.
+    const psi = [1, -1, 0, 1, -1, 0];
+    const de = effectiveN({ sessions, sessionCount: 6 }, psi, { expectedBlock: 2, maxHold: 3 });
     expect(de.designEffect).toBe(1);
     expect(de.blocks).toBe(2);
+  });
+
+  it("seeded AR(1) with φ = 0.5 over 1,000 blocks gives D_s ≈ 3 and a bootstrap SE near √(D_s·var/S)", () => {
+    // Block sums of an AR(1) have variance ≈ L σ² (1 + φ)/(1 − φ) for L ≫ 1/(1 − φ): D_s → 3 (finite-L
+    // term −2φ/((1 − φ)² L) ≈ −0.04 at L = 100). The block-variance estimate has relative SD ≈ √(2/blocks),
+    // so 1,000 blocks keep the ±0.3 band at > 2 σ; at 200 blocks seeds of this family range 2.6–3.0.
+    const prng = prngFor("ar1-100-1000-0");
+    const L = 100;
+    const S = 1000 * L;
+    const x: number[] = [];
+    let prev = 0;
+    for (let t = 0; t < S; t += 1) {
+      prev = 0.5 * prev + normal(prng);
+      x.push(prev);
+    }
+    const layout = { sessions: x.map((_, i) => i), sessionCount: S };
+    const de = effectiveN(layout, meanInfluence(x), { expectedBlock: L });
+    expect(de.blocks).toBe(1000);
+    expect(de.designEffect).toBeGreaterThan(2.7);
+    expect(de.designEffect).toBeLessThan(3.3);
+    expect(de.nEff).toBeCloseTo(S / de.designEffect, 9);
+    const r = stationaryBlockBootstrap(layout, meanStatistic(x), prngFor("ar1-boot"), {
+      expectedBlock: L,
+      replicates: 300,
+    });
+    let m = 0;
+    for (const v of r.values) m += v;
+    m /= r.values.length;
+    let ss = 0;
+    for (const v of r.values) ss += (v - m) ** 2;
+    const se = Math.sqrt(ss / (r.values.length - 1));
+    let varX = 0;
+    const mx = mean(x);
+    for (const v of x) varX += (v - mx) ** 2;
+    varX /= S - 1;
+    const expected = Math.sqrt((de.designEffect * varX) / S);
+    expect(Math.abs(se / expected - 1)).toBeLessThan(0.15);
+  });
+
+  it("D-298: u_s is the inverse same-code design effect of the influence values", () => {
+    // 3 codes × 4 rows. Identical ψ within a code (+1 for A, −1 for B, +1 for C): Σψ² = 12,
+    // T_c = ±4 → Σ T_c² = 48 → u = 12/48 = 1/4 = codes / rows.
+    const codes = ["A", "A", "A", "A", "B", "B", "B", "B", "C", "C", "C", "C"];
+    const sessions = Array.from({ length: 12 }, (_, i) => i);
+    const same = effectiveN(
+      { sessions, sessionCount: 12, codes },
+      [1, 1, 1, 1, -1, -1, -1, -1, 1, 1, 1, 1],
+      { expectedBlock: 1 },
+    );
+    expect(same.uniqueShare).toBeCloseTo(0.25, 12);
+    // Alternating ψ within every code: T_c = 0 → ratio ∞ → capped at 1.
+    const alt = effectiveN(
+      { sessions, sessionCount: 12, codes },
+      [1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1],
+      { expectedBlock: 1 },
+    );
+    expect(alt.uniqueShare).toBe(1);
+    // Without codes u = 1; n_eff = R·u / D_s.
+    expect(
+      effectiveN({ sessions, sessionCount: 12 }, new Array(12).fill(1), { expectedBlock: 1 })
+        .uniqueShare,
+    ).toBe(1);
+    expect(same.nEff).toBeCloseTo((12 * 0.25) / same.designEffect, 12);
   });
 
   it(`n_eff is undefined below ${MIN_BLOCKS_FOR_NEFF} populated blocks and defined at it`, () => {
@@ -164,6 +227,40 @@ describe("bootstrapMean / bootstrapCi", () => {
     expect(ci.nEff).toBeUndefined();
     expect(ci.blocks).toBe(4);
     expect(ci.point).toBe(4.5);
+  });
+
+  it("pins the nearest-rank bounds on 20 known replicate values", () => {
+    // The first call is the full-sample point (0); the 20 replicates then return 1..20 in draw order.
+    let call = 0;
+    const ci = bootstrapCi(layoutOf(5), () => call++, [0, 0, 0, 0, 0], prngFor("pin"), {
+      expectedBlock: 1,
+      replicates: 20,
+    });
+    if (isUndefined(ci)) throw new Error(ci.undefined);
+    expect(ci.point).toBe(0);
+    expect(ci.lo).toBe(1); // sorted[ceil(0.05 × 20) − 1] = sorted[0]
+    expect(ci.oneSidedLo).toBe(2); // sorted[ceil(2) − 1]
+    expect(ci.oneSidedHi).toBe(18); // sorted[ceil(18) − 1]
+    expect(ci.hi).toBe(19); // sorted[ceil(19) − 1]
+  });
+
+  it("coverage: over 200 seeds the one-sided 90 % lower bound exceeds a true mean of 0 about 10 % of the time", () => {
+    const n = 200;
+    let above = 0;
+    for (let seed = 0; seed < 200; seed += 1) {
+      // Seeded: 200 seeds give an SE of about 2 pp on the 10 % target, so the band is seed-dependent
+      // (another seed family of the same settings lands at 15 %); the scope is pinned, not tuned per run.
+      const prng = prngFor(`cov-${n}-${seed}`);
+      const values = Array.from({ length: n }, () => normal(prng));
+      const ci = bootstrapMean(layoutOf(n), values, prngFor(`covb-${n}-${seed}`), {
+        expectedBlock: 5,
+        replicates: 200,
+      });
+      if (isUndefined(ci)) throw new Error(ci.undefined);
+      if (ci.oneSidedLo > 0) above += 1;
+    }
+    expect(above / 200).toBeGreaterThanOrEqual(0.08);
+    expect(above / 200).toBeLessThanOrEqual(0.13);
   });
 
   it("returns a reason when the statistic is not finite", () => {

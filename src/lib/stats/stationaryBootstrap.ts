@@ -2,20 +2,24 @@
 // n_eff", OI-15; docs/M15_design.md §3a, §3c "Bootstrap"). Sits beside `circularBlockBootstrap`
 // (bootstrap.ts, v1 ARN-081) and reuses its CSR row layout, `percentile` and `mean`.
 //
-//   Replicate (Politis–Romano 1994): a start session is drawn uniformly; each following session continues
-//   the block with probability 1 − 1/L or starts a new block at a fresh uniform start, until S sessions
-//   have been drawn (circular wrap). The rows whose entry session was drawn are collected, with
-//   multiplicity, and the statistic is evaluated on them. A replicate with no rows is redrawn and counted.
-//   Expected block length L = max(`expectedBlock`, `maxHold`): the embargo is the block floor, so a
-//   block is never shorter than the longest outcome window it must contain.
+//   Replicate (Politis–Romano 1994): blocks of geometric length (mean L, p = 1/L) starting at uniform
+//   sessions, concatenated with circular wrap until S sessions have been drawn — drawn as block lengths
+//   directly, len = 1 + floor(log(u) / log(1 − p)), the same distribution as one coin per session at
+//   a fraction of the draws. The rows whose entry session was drawn are collected, with multiplicity,
+//   and the statistic is evaluated on them. A replicate with no rows is redrawn and counted. Expected
+//   block length L = max(`expectedBlock`, `maxHold`): the embargo is the block floor, so a block is
+//   never shorter than the longest outcome window it must contain.
 //
-//   n_eff per statistic (OI-15): n_eff,s = R·u / D_s with R = rows, u = share of unique codes and D_s the
-//   block-variance ratio of the statistic's influence values ψ_i (floor 1):
-//       D_s = Σ_b (Σ_{i∈b} ψ_i)² / Σ_i ψ_i²
-//   over fixed, non-overlapping calendar blocks of L sessions, each followed by an embargo of `maxHold`
-//   sessions whose rows are purged from the ratio (so an outcome that straddles two blocks is not counted
-//   in both). Only blocks that hold a row count; with fewer than `MIN_BLOCKS_FOR_NEFF` (10) such blocks
-//   n_eff is undefined and the caller reports "not enough history".
+//   n_eff per statistic (OI-15, D-298, D-299): n_eff,s = R·u_s / D_s from the statistic's influence
+//   values ψ_i, with R = rows and
+//       D_s = max(1, Σ_b T_b² / Σ_i ψ_i²),  T_b = Σ_{i in block b} ψ_i      (same-date correlation)
+//       u_s = min(1, Σ_i ψ_i² / Σ_c T_c²),  T_c = Σ_{i: code_i = c} ψ_i    (same-code correlation)
+//   over contiguous fixed calendar blocks of L sessions (period = L, every row counted once in both
+//   sums; D-299 — the out-of-fold purge/embargo lives in `purgeEmbargo` only). u_s is the inverse of
+//   the same-code design effect, so a family whose codes carry no shared component has u ≈ 1 and one
+//   whose outcomes repeat within a code has u ≈ codes / rows (D-298; the literal "share of unique
+//   codes" would cap n_eff at the code count). Only blocks that hold a row count; with fewer than
+//   `MIN_BLOCKS_FOR_NEFF` (10) such blocks n_eff is undefined ("not enough history").
 //
 //   Intervals: two-sided 90 % = 5th and 95th percentiles of the uncentred replicate statistics; the
 //   one-sided 90 % bounds are the 10th and 90th percentiles (the economic gate reads `oneSidedLo`,
@@ -58,9 +62,9 @@ export type BootCi = Ci & {
   /** One-sided 90 % upper bound (90th percentile of the replicates). */
   readonly oneSidedHi: number;
   readonly rows: number;
-  /** Share of unique codes among the rows (u). */
+  /** u_s = min(1, Σψ² / Σ_c T_c²): the inverse same-code design effect of the influence values (D-298). */
   readonly uniqueShare: number;
-  /** Block-variance ratio D_s (floor 1). */
+  /** Block-variance ratio D_s (floor 1): same-date correlation on contiguous L-session blocks (D-299). */
   readonly designEffect: number;
   /** Populated calendar blocks used for D_s. */
   readonly blocks: number;
@@ -80,7 +84,7 @@ export type BlockLayout = {
 export type BootstrapOptions = {
   /** Expected block length in sessions; default `DEFAULT_BLOCK_SESSIONS`. */
   readonly expectedBlock?: number;
-  /** Longest hold in sessions: purge/embargo width and the block floor. Default 0. */
+  /** Longest hold in sessions: the block floor (embargo). Default 0. */
   readonly maxHold?: number;
   readonly replicates?: number;
 };
@@ -148,7 +152,9 @@ export function stationaryBlockBootstrapMany(
   const S = layout.sessionCount;
   const { offsets, rowAt } = csr(layout);
   const n = layout.sessions.length;
-  const pNew = 1 / block;
+  // Geometric block length with mean `block`: len = 1 + floor(log(u) / log(1 − p)), p = 1 / block
+  // (block 1 → every length is 1).
+  const logQ = block > 1 ? Math.log(1 - 1 / block) : -Infinity;
   const values = Array.from({ length: count }, () => new Float64Array(B));
   // Rows per drawn session vary, so the collected row list is grown as needed.
   let buf = new Int32Array(Math.max(16, 2 * n));
@@ -156,19 +162,30 @@ export function stationaryBlockBootstrapMany(
   for (let b = 0; b < B; b += 1) {
     for (;;) {
       let got = 0;
-      let sess = belowInt(prng, S);
-      for (let drawn = 0; drawn < S; drawn += 1) {
-        if (drawn > 0) {
-          sess = uniform01(prng) < pNew ? belowInt(prng, S) : (sess + 1) % S;
+      let drawn = 0;
+      while (drawn < S) {
+        let len = 1;
+        if (block > 1) {
+          const u = Math.max(uniform01(prng), Number.MIN_VALUE);
+          len = 1 + Math.floor(Math.log(u) / logQ);
         }
-        const from = offsets[sess]!;
-        const to = offsets[sess + 1]!;
-        if (got + (to - from) > buf.length) {
-          const grown = new Int32Array(Math.max(2 * buf.length, got + (to - from)));
-          grown.set(buf);
-          buf = grown;
+        if (len > S - drawn) len = S - drawn; // the last block is trimmed to S sessions
+        let sess = belowInt(prng, S);
+        for (let o = 0; o < len; o += 1) {
+          const from = offsets[sess]!;
+          const to = offsets[sess + 1]!;
+          if (to > from) {
+            if (got + (to - from) > buf.length) {
+              const grown = new Int32Array(Math.max(2 * buf.length, got + (to - from)));
+              grown.set(buf);
+              buf = grown;
+            }
+            for (let p = from; p < to; p += 1) buf[got++] = rowAt[p]!;
+          }
+          sess += 1;
+          if (sess === S) sess = 0;
         }
-        for (let p = from; p < to; p += 1) buf[got++] = rowAt[p]!;
+        drawn += len;
       }
       if (got > 0) {
         const v = statistics(buf.subarray(0, got));
@@ -203,34 +220,40 @@ export type DesignEffect = {
 };
 
 /**
- * n_eff of a statistic from its influence values (one per row, aligned with `layout.sessions`), on
- * fixed calendar blocks of `block` sessions each followed by a purged embargo of `maxHold` sessions.
+ * n_eff of a statistic from its influence values (one per row, aligned with `layout.sessions`):
+ * D_s on contiguous fixed calendar blocks of `block` = max(expectedBlock, maxHold) sessions (D-299),
+ * u_s from the same influence values summed per code (D-298). Without `layout.codes` u_s = 1.
  */
 export function effectiveN(
   layout: BlockLayout,
   influence: ArrayLike<number>,
   opts: BootstrapOptions = {},
 ): DesignEffect {
-  const { block, maxHold } = resolve(opts);
+  const { block } = resolve(opts);
   const n = layout.sessions.length;
   if (influence.length !== n) throw new RangeError("influence must have one value per row");
-  const period = block + maxHold;
+  if (layout.codes && layout.codes.length !== n)
+    throw new RangeError("codes must have one entry per row");
   const blockSums = new Map<number, number>();
+  const codeSums = new Map<string, number>();
   let sumSq = 0;
   for (let i = 0; i < n; i += 1) {
     const psi = influence[i]!;
     sumSq += psi * psi;
-    const s = layout.sessions[i]!;
-    const within = s % period;
-    if (within >= block) continue; // purged: the embargo tail of the block
-    const b = Math.floor(s / period);
+    const b = Math.floor(layout.sessions[i]! / block);
     blockSums.set(b, (blockSums.get(b) ?? 0) + psi);
+    if (layout.codes) {
+      const c = layout.codes[i]!;
+      codeSums.set(c, (codeSums.get(c) ?? 0) + psi);
+    }
   }
   let sumBlockSq = 0;
   for (const t of blockSums.values()) sumBlockSq += t * t;
+  let sumCodeSq = 0;
+  for (const t of codeSums.values()) sumCodeSq += t * t;
   const designEffect = sumSq > 0 ? Math.max(1, sumBlockSq / sumSq) : 1;
+  const uniqueShare = layout.codes && sumCodeSq > 0 ? Math.min(1, sumSq / sumCodeSq) : 1;
   const blocks = blockSums.size;
-  const uniqueShare = layout.codes ? new Set(layout.codes).size / n : 1;
   const nEff = blocks >= MIN_BLOCKS_FOR_NEFF ? (n * uniqueShare) / designEffect : undefined;
   return { designEffect, blocks, uniqueShare, rows: n, nEff };
 }

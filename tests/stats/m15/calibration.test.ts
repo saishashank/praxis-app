@@ -24,7 +24,7 @@ import {
   solveLinear,
   standardise,
 } from "@/lib/stats/calibration";
-import { isUndefined } from "@/lib/stats/stationaryBootstrap";
+import { effectiveN, isUndefined } from "@/lib/stats/stationaryBootstrap";
 import { layoutOf, plantedOutcomes, prngFor, TEST_BOOT } from "./helpers";
 
 describe("linear algebra and logistic fit", () => {
@@ -135,19 +135,36 @@ describe("Platt map", () => {
   });
 
   it("pooled fit with a layout reports the pool n_eff and refuses a pool below 100", () => {
+    // 25 codes, 12 rows each, outcomes uncorrelated within a code: u_s ≈ 1 → n_eff ≈ 300 / D_s (D-298).
     const a = plantedOutcomes(300, 1.0, prngFor("pool-neff"));
-    // Every row its own code (u = 1): n_eff = 300 / D_s.
-    const ok = plattFitPooled([{ family: "F1", s: a.z, y: a.y }], layoutOf(300, 300), {
+    const ok = plattFitPooled([{ family: "F1", s: a.z, y: a.y }], layoutOf(300, 25), {
       expectedBlock: 10,
     });
     if (isUndefined(ok)) throw new Error(ok.undefined);
     expect(ok.poolNEff).toBeGreaterThanOrEqual(100);
-    // Same rows but 25 codes: u = 25/300 → n_eff ≤ 25 (R·u counts unique codes, OI-15).
-    const oneCode = layoutOf(300, 25);
-    const small = plattFitPooled([{ family: "F1", s: a.z, y: a.y }], oneCode, {
-      expectedBlock: 10,
-    });
+    expect(ok.poolNEff).toBeLessThanOrEqual(300);
+    // The same 25 codes with identical outcomes within each code (12 copies of one row): the slope
+    // influence values repeat within a code → u_s = 25/300 exactly → n_eff ≈ 25 / D_s < 100.
+    const base = plantedOutcomes(25, 1.0, prngFor("pool-neff-copies"));
+    const s: number[] = [];
+    const y: (0 | 1)[] = [];
+    const codes: string[] = [];
+    for (let i = 0; i < 300; i += 1) {
+      const c = i % 25;
+      s.push(base.z[c]!);
+      y.push(base.y[c]!);
+      codes.push(`ZZ${String(c).padStart(2, "0")}`);
+    }
+    const copies = { ...layoutOf(300, 25), codes };
+    const small = plattFitPooled([{ family: "F1", s, y }], copies, { expectedBlock: 10 });
     expect(isUndefined(small) && small.undefined).toMatch(/pool n_eff below 100/);
+    expect(
+      effectiveN(
+        copies,
+        new Array(300).fill(0).map((_, i) => (i % 25) - 12),
+        { expectedBlock: 10 },
+      ).uniqueShare,
+    ).toBeCloseTo(25 / 300, 12);
   });
 });
 
