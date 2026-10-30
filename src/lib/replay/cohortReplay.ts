@@ -158,7 +158,6 @@ import {
 } from "@/lib/arena/terminal";
 import {
   DEFAULT_SUSPENSION,
-  parseDividend,
   planCorporateActions,
   suspensionMark,
   knownBy,
@@ -169,8 +168,8 @@ import {
 import { planLegacy, planLiquidation } from "@/lib/arena/terminal";
 import { addDays, isWeekend, type CalendarRow } from "@/lib/data/calendar";
 import type { EntryDecision } from "@/lib/data/quality/gate";
-import { exDividendOn, type ExDividendAction } from "@/lib/arena/exDividend";
-import { floorRat, roundHalfAwayFromZero } from "@/lib/money/round";
+import { exDividendOn, toExDividendActions } from "@/lib/arena/exDividend";
+import { floorRat } from "@/lib/money/round";
 import { divFloor, type Rational } from "@/lib/money/rational";
 import { decisionCutoffUtc, type ViewBar } from "@/lib/agents/decisionView";
 import type { LedgerSource } from "./ledger";
@@ -637,26 +636,16 @@ export function replayCohorts(
   // FAM-007 (D-219): the dividend per share going ex on session env.d, known by the cut-off of the
   // previous session (the same records that credit the dividend)
   const exDividendFor = (env: DayEnv, code: string): bigint => {
-    const raw: ExDividendAction[] = [];
-    for (const a of actionsOf(code)) {
-      if (a.exDate !== env.d) continue;
-      if (a.type !== "cash_dividend" && a.type !== "special_dividend") continue;
-      try {
-        raw.push({
-          code: a.code,
-          type: a.type,
-          exDate: a.exDate,
-          knownAt: a.knownAt ?? null,
-          amountMicro: roundHalfAwayFromZero(parseDividend(a).dpsMicro),
-        });
-      } catch {
-        continue; // a malformed dividend credits nothing either
-      }
-    }
-    if (raw.length === 0) return 0n;
+    const today = actionsOf(code).filter((a) => a.exDate === env.d);
+    if (today.length === 0) return 0n;
     const prev = sessions[env.i - 1];
     if (prev === undefined) return 0n;
-    return exDividendOn(raw, code, env.d, decisionCutoffUtc(prev, params.decisionCutoff));
+    return exDividendOn(
+      toExDividendActions(today),
+      code,
+      env.d,
+      decisionCutoffUtc(prev, params.decisionCutoff),
+    );
   };
 
   const cohorts: Cohort[] = [];
