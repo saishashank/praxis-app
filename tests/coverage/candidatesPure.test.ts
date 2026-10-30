@@ -61,6 +61,7 @@ describe("eventRowOf", () => {
       day0_d: "2030-02-01",
       group_key: "g",
       category: "contract",
+      category_detail: null,
       price_sensitive: 1,
       ar_ppm: 1200,
       ar_num: "3",

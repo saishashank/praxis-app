@@ -1,0 +1,13 @@
+{
+  "routes": {
+    "action src/app/(app)/config/actions.ts#uploadIndexChangesAction": {
+      "tests": ["tests/config/dataUploads.test.ts"]
+    },
+    "action src/app/(app)/config/actions.ts#uploadIndustryMapAction": {
+      "tests": ["tests/config/dataUploads.test.ts"]
+    },
+    "action src/app/(app)/config/actions.ts#uploadUniverseAction": {
+      "tests": ["tests/config/dataUploads.test.ts"]
+    }
+  }
+}
