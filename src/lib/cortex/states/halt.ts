@@ -84,6 +84,8 @@ export type HaltEffects = {
   /** "suspended since ..." the loss is reported against this date. */
   readonly suspendedSince: string | null;
   readonly outcome: SuspensionOutcome | null;
+  /** D-323: the suspension ended in a delisting; book the position at this final policy value. */
+  readonly delistExit: { readonly markMicro: bigint } | null;
 };
 
 export type HaltStep = StepOutcome<HaltState> & { readonly effects: HaltEffects };
@@ -96,6 +98,7 @@ const NO_EFFECTS: HaltEffects = {
   reopenGapExit: false,
   suspendedSince: null,
   outcome: null,
+  delistExit: null,
 };
 
 /**
@@ -137,6 +140,18 @@ function closeBefore(view: AsOfView, code: string, t: number, d: string): bigint
 }
 
 /** The outcome class from the actions and events known at t (delisting wins; a raising = recapitalised). */
+/** Delisting reasons that book zero (ARN-026). */
+const ZERO_VALUE_REASONS: readonly string[] = ["administration", "liquidation"];
+
+/** The delisting record of this suspension whose ex-date is on or before `d`, if any. */
+function delistingAt(view: AsOfView, code: string, t: number, sinceD: string, d: string) {
+  return (
+    view
+      .corpActions(code, t)
+      .find((a) => a.type === "delisting" && a.exDate >= sinceD && a.exDate <= d) ?? null
+  );
+}
+
 function outcomeAt(view: AsOfView, code: string, t: number, sinceD: string): SuspensionOutcome {
   if (view.corpActions(code, t).some((a) => a.type === "delisting" && a.exDate >= sinceD))
     return "delisted";
@@ -171,10 +186,39 @@ export function stepHalt(
     haltedInWindow >= params.suspensionHaltCount && haltedInWindow > run;
 
   if (s.state === "suspension") {
-    const traded = !haltedNow;
+    // D-324: an unknown halt flag reads as untraded (fail closed; the traded run does not grow).
+    const traded = view.halted(code, t) === false;
     const tradedRun = traded ? s.tradedRun + 1 : 0;
     const untraded = traded ? s.untradedSessions : s.untradedSessions + 1;
     const outcome = outcomeAt(view, code, t, s.sinceD);
+    // D-323: a delisting ends the suspension on the first session at or after its ex-date; the
+    // position is booked at the final policy value (zero for administration / liquidation, ARN-026).
+    const delisting = delistingAt(view, code, t, s.sinceD, d);
+    if (delisting !== null) {
+      const pct = suspensionMarkPct(Math.max(1, untraded), params.suspensionMark);
+      const zero = ZERO_VALUE_REASONS.includes(String(delisting.payload.reason ?? ""));
+      const markMicro = s.lastTradeMicro === null || zero ? 0n : markAtPct(s.lastTradeMicro, pct);
+      return {
+        next: HALT_NONE,
+        label: `delisted while suspended since ${s.sinceD}: the position is booked at its final value`,
+        reason: "suspension_delisted",
+        row: row(code, d, "none", {
+          after: "suspension",
+          since: s.sinceD,
+          outcome: "delisted",
+          delistingId: delisting.id,
+          markMicro: markMicro.toString(),
+        }),
+        effects: {
+          ...NO_EFFECTS,
+          entriesBlocked: true,
+          exitFillsBlocked: true,
+          suspendedSince: s.sinceD,
+          outcome: "delisted",
+          delistExit: { markMicro },
+        },
+      };
+    }
     if (tradedRun >= params.suspensionEndTradedSessions) {
       const final: SuspensionOutcome = outcome === "unknown" ? "reinstated" : outcome;
       return {
@@ -286,6 +330,16 @@ export function stepHalt(
       reason: "none",
       row: null,
       effects: NO_EFFECTS,
+    };
+  }
+  // A delisted code stays flagged as not trading; it never re-enters a halt or suspension (D-323).
+  if (delistingAt(view, code, t, "", d) !== null) {
+    return {
+      next: HALT_NONE,
+      label: "this company has been delisted",
+      reason: "delisted",
+      row: null,
+      effects: { ...NO_EFFECTS, entriesBlocked: true, exitFillsBlocked: true },
     };
   }
   const sinceD = view.haltSince(code, t) ?? d;

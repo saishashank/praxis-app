@@ -168,7 +168,7 @@ describe("fixture 8b: a suspension is marked on the declining policy and counted
     expect(steps.slice(6).every((s) => s.row === null && s.next.state === "suspension")).toBe(true);
   });
 
-  it("a delisting during the suspension sets the outcome class", () => {
+  it("D-323: a delisting ends the suspension on its ex-date; administration books zero", () => {
     const del: FixtureSpec = {
       ...spec,
       code: "ZZR",
@@ -179,14 +179,69 @@ describe("fixture 8b: a suspension is marked on the declining policy and counted
           SESSIONS[12]!,
           { reason: "administration" },
           SESSIONS[11]!,
-          [],
+          ["announcement"],
+          "confirmed",
+        ),
+      ],
+    };
+    const s = walk(del, 13, { notices: new Map([[SESSIONS[5]!, "suspension"]]) });
+    expect(s[10]!.effects.outcome).toBe("unknown");
+    expect(s[11]!.effects.outcome).toBe("delisted"); // known, not yet effective: still suspended
+    expect(s[11]!.next.state).toBe("suspension");
+    const x = s[12]!;
+    expect(x.next).toEqual(HALT_NONE);
+    expect(x.reason).toBe("suspension_delisted");
+    expect(x.label).toBe(
+      `delisted while suspended since ${SESSIONS[5]}: the position is booked at its final value`,
+    );
+    expect(x.row).toMatchObject({
+      state: "none",
+      fromD: SESSIONS[12],
+      basis: { after: "suspension", outcome: "delisted", markMicro: "0" },
+    });
+    expect(x.effects).toMatchObject({ outcome: "delisted", delistExit: { markMicro: 0n } });
+    expect(s[13]!.next).toEqual(HALT_NONE);
+    expect(s[13]!.row).toBeNull();
+  });
+
+  it("D-323: a voluntary delisting books the final policy value (90 % on untraded session 8)", () => {
+    const del: FixtureSpec = {
+      ...spec,
+      code: "ZZR2",
+      corpActions: [
+        noticeAction(
+          "ZZR2",
+          "delisting",
+          SESSIONS[12]!,
+          { reason: "voluntary" },
+          SESSIONS[11]!,
+          ["announcement"],
+          "confirmed",
         ),
       ],
     };
     const s = walk(del, 12, { notices: new Map([[SESSIONS[5]!, "suspension"]]) });
-    expect(s[10]!.effects.outcome).toBe("unknown");
-    expect(s[11]!.effects.outcome).toBe("delisted");
-    expect(s[12]!.next).toMatchObject({ state: "suspension", outcome: "delisted" });
+    // sessions 5..12 untraded = 8 -> 90 % of the 1000c last trade
+    expect(s[12]!.effects.delistExit).toEqual({ markMicro: c(900) });
+    expect(s[12]!.row).toMatchObject({ basis: { markMicro: c(900).toString() } });
+  });
+
+  it("D-324: an unknown halt flag during a suspension reads as untraded", () => {
+    // halt rows end at session 10 with no later row: `halted` is false from 11 (known), so the
+    // traded run grows; a code with no halt table at all reads null -> untraded, run stays 0
+    const noTable: FixtureSpec = { ...spec, code: "ZZR3", halts: undefined };
+    const view = buildAsOfView(statesWorld([noTable]));
+    const start: HaltState = {
+      state: "suspension",
+      sinceD: SESSIONS[5]!,
+      lastTradeMicro: c(1000),
+      untradedSessions: 1,
+      tradedRun: 0,
+      outcome: "unknown",
+    };
+    const step = stepHalt(view, "ZZR3", 6, start);
+    expect(step.next).toMatchObject({ state: "suspension", tradedRun: 0, untradedSessions: 2 });
+    expect(step.effects.markPct).toBe(100);
   });
 });
 
