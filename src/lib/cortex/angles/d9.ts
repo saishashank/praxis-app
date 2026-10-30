@@ -128,6 +128,9 @@ export const D9_ANGLES: readonly AngleDef[] = [
       "sector_map",
     ],
     grid: {},
+    historyFields: [
+      "macro omitted from inputs: no live reader (D-291); the offline guard applies KNOWN_TIME.macro to the extract",
+    ],
     existing: [
       "DAT-001",
       "TST-109",

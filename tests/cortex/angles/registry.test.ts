@@ -289,7 +289,8 @@ describe("rankStandardise", () => {
       ]),
       -1,
     );
-    expect([...r.values()]).toEqual([1, -0, -1]);
+    expect([...r.values()]).toEqual([1, 0, -1]);
+    expect(Object.is(r.get("ZZB"), -0)).toBe(false); // never -0 (same bytes in every store)
   });
 
   it("drops non-finite values; one code maps to 0; empty stays empty", () => {

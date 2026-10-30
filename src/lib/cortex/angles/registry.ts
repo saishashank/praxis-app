@@ -195,7 +195,7 @@ export function rankStandardise(
   const ranks = averageRanks(codes.map((c) => values.get(c)!));
   for (let i = 0; i < n; i += 1) {
     const s = n === 1 ? 0 : (2 * (ranks[i]! - 1)) / (n - 1) - 1;
-    out.set(codes[i]!, orientation * s);
+    out.set(codes[i]!, s === 0 ? 0 : orientation * s); // never -0: same bytes either way
   }
   return out;
 }
