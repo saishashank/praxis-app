@@ -205,11 +205,14 @@ export function changesStopOrSizing(
   return false;
 }
 
+const ISO_DATE = new RegExp("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"); // threshold-ok: date shape
+
 /** First and last day (YYYY-MM-DD) of the calendar quarter holding `d`. */
 export function quarterBounds(d: string): { readonly start: string; readonly end: string } {
   const year = d.slice(0, "YYYY".length);
   const month = Number(d.slice("YYYY-".length, "YYYY-MM".length));
-  if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(d) || month < 1 || month > 12) {
+  const monthOk = month >= 1 && month <= 12; // threshold-ok: calendar month bounds
+  if (!ISO_DATE.test(d) || !monthOk) {
     throw new ChallengerError(`not a date: ${d}`);
   }
   const q = Math.floor((month - 1) / 3); // threshold-ok: three months per quarter

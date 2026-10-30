@@ -1068,6 +1068,16 @@ async function entriesFor(
     else if (blocked.has(c.code)) notTaken.set(c, "reentry_block");
     else pool.push(c);
   }
+  // codes that cannot open tonight do not count as the first leg of FAM-006
+  const noPosition = new Set<string>();
+  for (const c of pool) {
+    if (
+      crossing(ctx.actionsNext, c.code, ctx.d, ctx.nextD).disposal ||
+      (await gateOf(ctx, c.code)).reason === "code_blocked"
+    ) {
+      noPosition.add(c.code);
+    }
+  }
   // M14 entry gates (cost gate, second position, SHOCK abstain; the same function the replay calls)
   const selection = selectEntries(pool, {
     entry: ctx.params.entry,
@@ -1077,6 +1087,7 @@ async function entriesFor(
     factsOf: (code) => ctx.day.facts.get(code),
     heldCodes: [...open].sort(),
     cashMicro: books.cashMicro,
+    noPosition,
   });
   for (const [c, reason] of selection.skipped) notTaken.set(c, reason);
   const gated = selection.eligible;

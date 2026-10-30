@@ -35,6 +35,12 @@ export type EntryGateContext = {
   readonly heldCodes: readonly string[];
   /** Settled cash available for the entries (FAM-009). */
   readonly cashMicro: bigint;
+  /**
+   * Codes that cannot open a position tonight (a blocked code at the quality gate, a disposal across
+   * the next session). They stay eligible, so the later gate gives their own reason, but they do not
+   * become the first leg that FAM-006 measures the next candidate against.
+   */
+  readonly noPosition?: ReadonlySet<string>;
 };
 
 export type EntrySelection = {
@@ -160,8 +166,9 @@ export function selectEntries(ranked: readonly Candidate[], ctx: EntryGateContex
       }
       if (verdict === "unmeasured") own.push("cost_gate_unmeasured");
     }
-    // FAM-006 second position (D-217)
-    if (firsts.length > 0) {
+    // FAM-006 second position (D-217); a code that cannot open is neither tested nor a first leg
+    const opens = ctx.noPosition?.has(c.code) !== true;
+    if (opens && firsts.length > 0) {
       let blockedBy = false;
       const seen = new Set<string>();
       for (const code of firsts) {
@@ -190,7 +197,7 @@ export function selectEntries(ranked: readonly Candidate[], ctx: EntryGateContex
     }
     if (own.length > 0) flags.set(c, own);
     eligible.push(c);
-    if (firsts.length === 0) firsts.push(c.code);
+    if (opens && firsts.length === 0) firsts.push(c.code);
   }
   return { eligible, skipped, flags };
 }

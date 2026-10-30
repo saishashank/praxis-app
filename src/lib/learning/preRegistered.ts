@@ -47,7 +47,7 @@ export const PRE_REGISTERED: readonly PreRegistered[] = [
     id: "KB081-F1-window252",
     family: "F1",
     label: "F1: 252-session return window for the relative-strength rank",
-    ...set("f1_return_window_sessions", 252),
+    ...set("f1_return_window_sessions", 252), // threshold-ok: KB-081 pre-registered value
   },
   {
     id: "KB081-F1-skip-month-u2",
@@ -65,13 +65,13 @@ export const PRE_REGISTERED: readonly PreRegistered[] = [
     id: "KB081-F3-drift40",
     family: "F3",
     label: "F3: 40-session drift window",
-    ...set("f3_time_exit", 40),
+    ...set("f3_time_exit", 40), // threshold-ok: KB-081 pre-registered value
   },
   {
     id: "KB081-F3-drift60",
     family: "F3",
     label: "F3: 60-session drift window",
-    ...set("f3_time_exit", 60),
+    ...set("f3_time_exit", 60), // threshold-ok: KB-081 pre-registered value
   },
   {
     id: "KB081-F3-day0-ar",
@@ -105,9 +105,9 @@ export const PRE_REGISTERED: readonly PreRegistered[] = [
     label: "F6: director sale weight 0.25 (AGT-136)",
     apply: (inc) => ({
       ...inc,
-      insider_score_weights: { ...weights(inc), director_sale: 0.25 },
+      insider_score_weights: { ...weights(inc), director_sale: 0.25 }, // threshold-ok: KB-081 pre-registered value
     }),
-    matches: (p) => weights(p).director_sale === 0.25,
+    matches: (p) => weights(p).director_sale === 0.25, // threshold-ok: KB-081 pre-registered value
   },
 ];
 

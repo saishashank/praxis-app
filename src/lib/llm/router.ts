@@ -131,6 +131,17 @@ export function buildPrompt(
   return parts.join("\n\n");
 }
 
+/** LLM-074: the reservation for one request: the first call plus one repair call (field name at its longest). */
+export function requestReservation(
+  req: { readonly task: string; readonly facts: unknown; readonly maxOutputTokens: number },
+  untrusted: readonly string[] | undefined,
+  prompt?: string,
+): number {
+  const first = prompt ?? buildPrompt(req.task, req.facts, untrusted, false);
+  const repair = buildPrompt(req.task, req.facts, untrusted, true, "x".repeat(MAX_FIELD_CHARS));
+  return reservedTokens(first, repair, req.maxOutputTokens);
+}
+
 /** LLM-074: tokens to reserve before the first call: the first call plus one repair call. */
 export function reservedTokens(prompt: string, repairPrompt: string, maxOutput: number): number {
   return estimateTokens(prompt) + maxOutput + estimateTokens(repairPrompt) + maxOutput;
@@ -260,8 +271,7 @@ export function createRouter(cfg: RouterConfig) {
       const allow = allowance(cfg.params, req.role, req.market, req.nightly === true, usage);
       const schema =
         req.schema && req.citationIds ? withCitationEnum(req.schema, req.citationIds) : req.schema;
-      const repairProbe = buildPrompt(req.task, req.facts, text, true, "x".repeat(MAX_FIELD_CHARS));
-      if (!fits(allow, reservedTokens(prompt, repairProbe, req.maxOutputTokens))) {
+      if (!fits(allow, requestReservation(req, text, prompt))) {
         // Role and total budgets are shared by every provider, so exhaustion ends the chain (LLM-050).
         budgetExhausted = true;
         attempts.push({ provider: p.id, outcome: `budget-exhausted:${allow.binding}` });
