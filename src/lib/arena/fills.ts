@@ -18,7 +18,18 @@ import {
   slippageFill,
   type SlippageBucket,
 } from "./slippage";
-import type { Rational } from "@/lib/money/rational";
+import {
+  addRat,
+  cmpRat,
+  divRat,
+  makeRational,
+  mulRat,
+  subRat,
+  type Rational,
+} from "@/lib/money/rational";
+import { floorRat, roundToTick } from "@/lib/money/round";
+
+const ONE: Rational = makeRational(1n);
 
 /** A raw (unadjusted) session bar, micro-AUD per share. */
 export type Bar = {
@@ -101,6 +112,74 @@ function build(
 export function fillEntryAtOpen(env: FillEnv, qty: bigint): SimulatedFill {
   assertBar(env.bar);
   return build(env, "open", "buy", qty, env.bar.openMicro, slipOf(env, env.bar.openMicro, "buy"));
+}
+
+// ---- Cortex limit entry (M15 C3a; spec ch. 17 CTX-028; docs/M15_design.md 3c, D-288) ----------
+// Additive only: nothing above changes. v1 orders (`arena_order.limit_micro` NULL) never reach here.
+
+/** The rule of a trade-through fill at the limit (CTX-028). Not in `FILL_RULES` / the 0007 CHECK. */
+export const LIMIT_FILL_RULE = "limit" as const;
+export type LimitFillRule = FillRule | typeof LIMIT_FILL_RULE;
+
+/** A `SimulatedFill` that may carry the `limit` rule (D-288 trade-through). */
+export type SimulatedLimitFill = Omit<SimulatedFill, "rule"> & { readonly rule: LimitFillRule };
+
+export type LimitFillOutcome =
+  | { readonly status: "filled"; readonly fill: SimulatedLimitFill }
+  | { readonly status: "unfilled"; readonly reason: "limit_not_reached" };
+
+/**
+ * The CTX-028 pre-order limit: min(close × (1 + gapCapPct), stop ÷ (1 − stopCapPct)), exact, then
+ * rounded DOWN onto the tick grid of the band the raw limit falls in (a limit buy never rounds up:
+ * it would admit a worse fill than the caps allow). `gapCapPct` and `stopCapPct` are fractions
+ * (8 % = 8/100). A band edge is a whole number of its own ticks, so rounding down never leaves the band.
+ */
+export function limitPriceMicro(
+  closeMicro: Micro,
+  stopMicro: Micro,
+  gapCapPct: Rational,
+  stopCapPct: Rational,
+  tickMicro?: bigint,
+): Micro {
+  if (closeMicro <= 0n) throw new RangeError("close must be positive");
+  if (stopMicro <= 0n || stopMicro >= closeMicro)
+    throw new RangeError("stop must be positive and below the close");
+  if (gapCapPct.num < 0n) throw new RangeError("gap cap must not be negative");
+  if (stopCapPct.num < 0n || cmpRat(stopCapPct, ONE) >= 0)
+    throw new RangeError("stop cap must be in [0, 1)");
+  const byGap = mulRat(makeRational(closeMicro), addRat(ONE, gapCapPct));
+  const byStop = divRat(makeRational(stopMicro), subRat(ONE, stopCapPct));
+  const raw = cmpRat(byGap, byStop) <= 0 ? byGap : byStop;
+  const tick = tickMicro ?? tickFor(floorRat(raw));
+  const limit = roundToTick(raw, tick, "down");
+  if (limit <= 0n) throw new RangeError("limit rounds to zero");
+  return limit;
+}
+
+/**
+ * D-288 limit-order entry fill on the session after the decision night:
+ *   open ≤ limit  → v1 fill (open + slippage, `fillEntryAtOpen`) capped at the limit, rule `open`;
+ *   low ≤ limit   → a trade-through: filled at the limit EXACTLY, rule `limit`, no slippage beyond it;
+ *   otherwise     → unfilled (`limit_not_reached`), recorded as unfilled in both arms by the caller.
+ * A limit order cannot fill worse than its limit; the limit must be on the tick grid (`limitPriceMicro`).
+ */
+export function fillEntryLimit(env: FillEnv, qty: bigint, limitMicro: Micro): LimitFillOutcome {
+  assertBar(env.bar);
+  if (limitMicro <= 0n) throw new RangeError("limit must be positive");
+  const { openMicro, lowMicro } = env.bar;
+  if (openMicro <= limitMicro) {
+    const atOpen = fillEntryAtOpen(env, qty);
+    if (atOpen.fillPriceMicro <= limitMicro) return { status: "filled", fill: atOpen };
+    return { status: "filled", fill: build(env, "open", "buy", qty, openMicro, limitMicro) };
+  }
+  if (lowMicro <= limitMicro) {
+    const fill: SimulatedLimitFill = {
+      ...build(env, "open", "buy", qty, limitMicro, limitMicro),
+      rule: LIMIT_FILL_RULE,
+    };
+    return { status: "filled", fill };
+  }
+  return { status: "unfilled", reason: "limit_not_reached" };
 }
 
 /** CS exit (sell): evaluated at the close, filled at the next open - slippage (ARN-021). */
