@@ -15,7 +15,7 @@
 //   5 DAT-237  an exact repost and a near-duplicate title on the next day give one event
 //   6 AGT-135/138  `category_detail` on the row and the fact, the plain words, the reversal flag
 //
-// Fixtures: tests/fixtures/m14/split-day.json and index_change.csv (new), the M8.1 vendor-action
+// Fixtures: tests/fixtures/m14/split-day.json and indexChange.ts (new), the M8.1 vendor-action
 // shapes of tests/ingest/ and the corporate-action helpers (reused). Synthetic ZZ codes only (SEC-110).
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -68,6 +68,7 @@ import {
   wobble,
   D as FAMILY_D,
 } from "../../fixtures/agents/families/builders";
+import { INDEX_CHANGE_CSV } from "../../fixtures/m14/indexChange";
 import { at1730, barsFor, count, pipelineDb, runs, text } from "../../pipeline/helpers";
 
 vi.setConfig({ testTimeout: 120000, hookTimeout: 120000 });
@@ -91,7 +92,7 @@ type SplitDay = {
   bars: { d: string; close: number; volume: number }[];
 };
 const SPLIT_DAY = JSON.parse(readFileSync(fx("split-day.json"), "utf8")) as SplitDay;
-const INDEX_CSV = readFileSync(fx("index_change.csv"), "utf8");
+const INDEX_CSV = INDEX_CHANGE_CSV;
 const NOW = "2026-10-30T00:00:00.000Z";
 
 // ---- 1 DAT-231 vendor rows without an extra request --------------------------------------------------------
