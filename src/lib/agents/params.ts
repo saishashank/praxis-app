@@ -339,6 +339,62 @@ export type LlmParams = {
   injectionPhrasesVersion: string;
 };
 
+/**
+ * M15 Cortex parameters (CTX rows, docs/M15_requirements.md; keys in config/keys.ts M15). Shares of
+ * money and loss caps are exact Rationals; counts, multiples and statistical levels are numbers.
+ */
+export type CortexParams = {
+  /** CTX-021: fewest matched setups a cell needs. */
+  cellMinSetups: number;
+  /** CTX-012: fewest independent time blocks. */
+  cellMinBlocks: number;
+  /** CTX-053: effective sample size a family needs before it may trade. */
+  minNeffTrade: number;
+  /** CTX-022: shrinkage pseudo-sample of the ranking. */
+  rankShrinkN0: number;
+  /** CTX-022b: largest loss (stop distance plus overnight gap), fraction of the reference price. */
+  maxLoss: Rational;
+  /** CTX-022b / CTX-028: highest open above the close at which a limit order still buys, fraction. */
+  entryGapCap: Rational;
+  /** CTX-023: evidence disagreement above which a candidate is not taken. */
+  disagreementMax: number;
+  /** CTX-012: largest score share of one angle cluster. */
+  clusterWeightMax: number;
+  /** CTX-025: sector tilt margin (shadow), percentage points. */
+  sectorTiltMarginPp: number;
+  /** CTX-026 caps across the 12 books. */
+  maxBooksSameCode: number;
+  maxBooksSameIndustry: number;
+  maxCodeNavShare: Rational;
+  maxIndustryNavShare: Rational;
+  /** CTX-015: loss at which a frozen position is sold (fraction) and sessions of the freeze. */
+  freezeMaxLoss: Rational;
+  unresolvedFreezeSessions: number;
+  /** CTX-043 / CTX-044. */
+  persistVolumeMult: number;
+  pumpVolumeMult: number;
+  pumpAr: Rational;
+  promotionFlagSessions: number;
+  /** CTX-023: sessions of abstaining in a row that raise the alarm. */
+  abstainAlarmSessions: number;
+  /** CTX-028 / D-289: share of the universe without a fresh bar above which the night abstains. */
+  staleUniverseMaxShare: number;
+  /** CTX-060: settled opinions needed. */
+  opinionMinN: number;
+  /** CTX-031: BH false-discovery rate (PRDS). */
+  ledgerFdrQ: number;
+  /** CTX-012: expected block length of the stationary bootstrap, sessions. */
+  bootstrapBlockSessions: number;
+  /** CTX-053 / D-257: p is hidden when the slope's upper bound is below this. */
+  slopeHideUb: number;
+  /** D-289: minutes the nightly stage may run before it abstains. */
+  stageMinutes: number;
+  /** CTX-050: survivorship haircut, percentage points per holding year (fixed). */
+  survivorshipHaircutPp: number;
+  /** CTX-016: suspension mark policy (fixed text). */
+  suspensionMarkPolicy: string;
+};
+
 export type AgentParams = {
   windows: Windows;
   f1: F1Params;
@@ -378,6 +434,7 @@ export type AgentParams = {
   killswitch: KillswitchParams;
   replay: ReplayParams;
   llm: LlmParams;
+  cortex: CortexParams;
 };
 
 // ---- building ----
@@ -646,6 +703,36 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       tursoRecentSessions: num("turso_recent_sessions"),
       eventBackfillYears: num("event_backfill_years"),
       ledgerNotionalMicro: BigInt(num("ledger_notional_aud")) * MICRO_PER_AUD,
+    },
+    cortex: {
+      cellMinSetups: num("cell_min_setups"),
+      cellMinBlocks: num("cell_min_blocks"),
+      minNeffTrade: num("cortex_min_neff_trade"),
+      rankShrinkN0: num("rank_shrink_n0"),
+      maxLoss: pct("max_loss_pct"),
+      entryGapCap: pct("entry_gap_cap_pct"),
+      disagreementMax: num("cortex_disagreement_max"),
+      clusterWeightMax: num("cluster_weight_max"),
+      sectorTiltMarginPp: num("sector_tilt_margin_pp"),
+      maxBooksSameCode: num("max_books_same_code"),
+      maxBooksSameIndustry: num("max_books_same_industry"),
+      maxCodeNavShare: rat("max_code_nav_share"),
+      maxIndustryNavShare: rat("max_industry_nav_share"),
+      freezeMaxLoss: pct("freeze_max_loss_pct"),
+      unresolvedFreezeSessions: num("unresolved_freeze_sessions"),
+      persistVolumeMult: num("persist_volume_mult"),
+      pumpVolumeMult: num("pump_volume_mult"),
+      pumpAr: pct("pump_ar_pct"),
+      promotionFlagSessions: num("promotion_flag_sessions"),
+      abstainAlarmSessions: num("abstain_alarm_sessions"),
+      staleUniverseMaxShare: num("stale_universe_max_share"),
+      opinionMinN: num("opinion_min_n"),
+      ledgerFdrQ: num("ledger_fdr_q"),
+      bootstrapBlockSessions: num("bootstrap_block_sessions"),
+      slopeHideUb: num("cortex_slope_hide_ub"),
+      stageMinutes: num("cortex_stage_minutes"),
+      survivorshipHaircutPp: num("survivorship_haircut_pp"),
+      suspensionMarkPolicy: str("suspension_mark_policy"),
     },
     llm: {
       roleDailyTokens: {
