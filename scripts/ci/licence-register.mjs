@@ -42,7 +42,8 @@ export const SOURCE_FACTS = {
   },
   yahoo_eod: {
     label: "Yahoo Finance end-of-day prices",
-    provides: "Daily price bars (and the market index) for ASX codes.",
+    provides:
+      "Daily price bars for ASX codes, the ASX 200 index, and the US S&P 500 and VIX index closes (M15).",
     code: ["scripts/ingest/yahoo_fetch.py", "src/lib/data/sources/yahoo.ts"],
     hosts: ["Yahoo Finance, through the yfinance library"],
     terms:
@@ -94,6 +95,15 @@ export const SOURCE_FACTS = {
     hosts: [],
     terms:
       "Keyed by hand from the index-change announcements that S&P Dow Jones Indices publishes through the ASX (quarterly rebalance notices), so it sits under the ASX announcement terms (O-23). The licensed constituent files are not used. No automated fetch.",
+  },
+  // M15 (DAT-101, D-291): recorded as pending; no fetcher is built.
+  fred: {
+    label: "FRED economic series (pending)",
+    provides: "Macro series, used in offline calibration only.",
+    code: [],
+    hosts: [],
+    terms:
+      "Each FRED series carries its own terms, checked per series before any use. No fetcher is built and the row stays pending.",
   },
   industry_map_manual: {
     label: "Industry classes (manual CSV)",

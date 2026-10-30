@@ -1134,6 +1134,96 @@ const M14_META_TABLES: Record<M14RangedKey | M14FixedKey | M14EnumKey, ConfigMet
   ) as Record<M14EnumKey, ConfigMeta>),
 };
 
+// ---- M15 keys (Cortex calibration; docs/M15_requirements.md "Configuration keys", D-257 to D-306) ----
+// Every default is the chapter 17 / ch.15 V2 default. An Owner edit of one of these keys is a charged
+// trial and marks the map for a refit (CTX-072; src/lib/cortex/store/keyEdit.ts). `cost_gate_k`
+// (CTX-022a) already exists from M14 and is reused unchanged.
+
+// prettier-ignore
+const M15_RANGED = [
+  ["cell_min_setups", "int", 60, 30, 200, "setups", "O", VAL, "CTX-021", "Fewest matched setups a cell needs before it can trade"],
+  ["cell_min_blocks", "int", 20, 6, 60, "blocks", "O", VAL, "CTX-012", "Fewest independent time blocks a cell or map needs"],
+  ["cortex_min_neff_trade", "int", 200, 150, 400, "setups", "O", VAL, "CTX-053", "Effective sample size needed before a family may trade"],
+  ["rank_shrink_n0", "int", 60, 20, 200, "setups", "O", FAM, "CTX-022", "Pseudo-sample that pulls a thin cell towards its family average when ranking"],
+  ["max_loss_pct", "num", 18, 12, 25, "%", "O", FAM, "CTX-022b", "Largest loss a new entry may risk, stop distance plus overnight gap"],
+  ["entry_gap_cap_pct", "num", 8, 4, 12, "%", "O", FAM, "CTX-022b, CTX-028", "Highest open above the close at which a limit order still buys"],
+  ["cortex_disagreement_max", "num", 0.4, 0.25, 0.6, "score", "O", FAM, "CTX-023", "Evidence disagreement above which a candidate is not taken"],
+  ["cluster_weight_max", "num", 0.35, 0.2, 0.35, "fraction", "O", FAM, "CTX-012", "Largest share of the score one angle cluster may carry"],
+  ["sector_tilt_margin_pp", "num", 5, 0, 15, "pp", "O", FAM, "CTX-025", "Sector tilt margin (shadow only)"],
+  ["max_books_same_code", "int", 2, 1, 3, "books", "O", FAM, "CTX-026", "Most books that may hold the same code"],
+  ["max_books_same_industry", "int", 3, 2, 6, "books", "O", FAM, "CTX-026", "Most books that may hold the same industry (reporting only)"],
+  ["max_code_nav_share", "num", 0.2, 0.1, 0.35, "fraction", "O", FAM, "CTX-026, O-61", "Largest share of a book's value in one code"],
+  ["max_industry_nav_share", "num", 0.35, 0.2, 0.5, "fraction", "O", FAM, "CTX-026", "Largest share of a book's value in one industry"],
+  ["freeze_max_loss_pct", "num", 25, 15, 40, "%", "O", REG, "CTX-015, O-63", "Loss at which a position frozen by an unresolved corporate action is sold"],
+  ["unresolved_freeze_sessions", "int", 5, 2, 10, "sessions", "O", REG, "CTX-015", "Sessions an unresolved corporate action freezes a position"],
+  ["persist_volume_mult", "num", 2, 1, 5, "x", "O", REG, "CTX-043", "Volume multiple that confirms an event on day two"],
+  ["pump_volume_mult", "num", 4, 3, 6, "x", "O", REG, "CTX-044", "Volume multiple that raises a promotion flag"],
+  ["pump_ar_pct", "num", 8, 5, 12, "%", "O", REG, "CTX-044", "Abnormal return that raises a promotion flag"],
+  ["promotion_flag_sessions", "int", 20, 10, 40, "sessions", "O", REG, "CTX-044", "Sessions a promotion flag stays on"],
+  ["abstain_alarm_sessions", "int", 40, 20, 120, "sessions", "O", FAM, "CTX-023", "Sessions of abstaining in a row that raise an alarm"],
+  ["stale_universe_max_share", "num", 0.1, 0.02, 0.25, "fraction", "O", FAM, "CTX-028, D-289", "Share of the universe without a fresh bar above which the night abstains"],
+  ["opinion_min_n", "int", 150, 100, 500, "opinions", "O", VAL, "CTX-060", "Settled opinions needed before an opinion track is read"],
+  ["ledger_fdr_q", "num", 0.1, 0.05, 0.2, "level", "O", VAL, "CTX-031 (BH under PRDS)", "False-discovery rate allowed across the angle ledger"],
+  ["bootstrap_block_sessions", "int", 120, 60, 250, "sessions", "O", VAL, "CTX-012", "Expected block length of the stationary bootstrap"],
+  ["cortex_slope_hide_ub", "num", 1, 0.5, 1, "slope", "O", VAL, "CTX-053, D-257", "A probability is hidden when the calibration slope upper bound is below this"],
+  ["cortex_stage_minutes", "int", 20, 5, 60, "minutes", "O", REP, "CTX-050, D-289", "Minutes the nightly Cortex stage may run before it abstains for the night"],
+] as const satisfies readonly RangedRow[];
+
+// prettier-ignore
+const M15_FIXED = [
+  ["survivorship_haircut_pp", "num", 1.5, "pp per holding year", VAL, "CTX-050, D-262 (freeze record)", "Survivorship haircut shown beside every result"],
+  ["suspension_mark_policy", "text", "100% x5, -10pts per 5, floor 50%", "policy", REG, "CTX-016, D-272", "Mark of a suspended position (full for 5 sessions, then 10 points per 5, floor 50 %)"],
+] as const satisfies readonly FixedRow[];
+
+type M15RangedKey = (typeof M15_RANGED)[number][0];
+type M15FixedKey = (typeof M15_FIXED)[number][0];
+
+const M15_RANGED_KEYS = Object.fromEntries(
+  M15_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M15RangedKey, ConfigKeyDef>;
+
+const M15_FIXED_KEYS = Object.fromEntries(
+  M15_FIXED.map(([key, , def, unit, , ref]) => [
+    key,
+    { default: def, unit, editable: "fixed", ref, validate: never } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M15FixedKey, ConfigKeyDef>;
+
+const M15_META_TABLES: Record<M15RangedKey | M15FixedKey, ConfigMeta> = {
+  ...(Object.fromEntries(
+    M15_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+      key,
+      {
+        label,
+        area,
+        bounds: boundsText(kind, min, max, unit),
+        input: kind === "int" ? "int" : "number",
+      },
+    ]),
+  ) as Record<M15RangedKey, ConfigMeta>),
+  ...(Object.fromEntries(
+    M15_FIXED.map(([key, kind, , , area, , label]) => [
+      key,
+      {
+        label,
+        area,
+        bounds: "fixed",
+        input: kind === "text" ? "text" : "number",
+      },
+    ]),
+  ) as Record<M15FixedKey, ConfigMeta>),
+};
+
 export const CONFIG_KEYS = {
   ...M4_RANGED_KEYS,
   ...M4_FIXED_KEYS,
@@ -1148,6 +1238,8 @@ export const CONFIG_KEYS = {
   ...M14_RANGED_KEYS,
   ...M14_FIXED_KEYS,
   ...M14_ENUM_KEYS,
+  ...M15_RANGED_KEYS,
+  ...M15_FIXED_KEYS,
   // ch.15 l.163: evening_review_time / partial_at / send_by 20:00 / 20:30 / 20:45, O; EML-010/011.
   evening_review_time: {
     default: "20:00",
@@ -1660,6 +1752,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   ...M6_EXPLICIT_META,
   ...M7_META_TABLES,
   ...M14_META_TABLES,
+  ...M15_META_TABLES,
   evening_review_time: {
     label: "Evening Review send time",
     area: SEM,
@@ -1988,3 +2081,15 @@ export const M14_KEY_NAMES: readonly ConfigKey[] = [
   ...M14_FIXED.map((r) => r[0]),
   ...(Object.keys(M14_ENUM_KEYS) as ConfigKey[]),
 ];
+
+/** Every key added in M15 (docs/M15_requirements.md, D-257 to D-306): the tables above. */
+export const M15_KEY_NAMES: readonly ConfigKey[] = [
+  ...M15_RANGED.map((r) => r[0]),
+  ...M15_FIXED.map((r) => r[0]),
+];
+
+/**
+ * The Cortex keys whose Owner edit is a charged trial and refits the map (CTX-072): every editable
+ * M15 key. The fixed pair never changes, so it is not listed.
+ */
+export const CORTEX_REFIT_KEYS: readonly ConfigKey[] = M15_RANGED.map((r) => r[0]);
