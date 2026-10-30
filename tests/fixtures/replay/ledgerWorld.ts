@@ -46,6 +46,7 @@ export function handSource(
   return {
     sessions,
     corpActions: (code) => actions.filter((a) => a.code === code),
+    decisionCutoffOf: (d) => `${d}T07:00:00.000Z`,
     bar(code, d) {
       spy?.bar.push(d);
       const i = sessions.indexOf(d);
@@ -105,6 +106,7 @@ export function buildWorld(codes: readonly WorldCode[], p: AgentParams, o: World
   const source: LedgerSource & { inputsCalls: string[] } = {
     sessions,
     inputsCalls: [],
+    decisionCutoffOf: (d) => `${d}T07:00:00.000Z`,
     bar: (code, d) => barAt(code, idxOf(d)),
     positionFacts(code, d) {
       const i = idxOf(d);
