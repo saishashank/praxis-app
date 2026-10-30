@@ -292,6 +292,10 @@ D-257…D-277 adopt Q1–Q21 of `docs/M15_requirements.md` as recommended there 
 - **D-308** The nightly index fetch adds `^GSPC` and `^VIX` (D-290) in P2's data-stage wiring; P1 only widened `INDEX_CODES`.
 - **D-309** The CTX-072 charged-trial hook (`recordCortexKeyEdit`) is called from `updateConfig` in `src/lib/config/admin.ts`, wired by P4 with the Configuration rows. Until then an Owner edit of a CTX key is not charged; no CTX key is edited before M15 merges.
 - **D-310** P1 schema choices accepted: refit marker = the newest `key_edit` ledger cell vs the newest `cortex_map.fitted_at`; extra CHECKs (abstain-all iff a reason; an Owner kill only suspends; F7 never allowed or live; a filled outcome needs price and date; result columns set once and together; a text label needs its validation row); per-night writers are insert-or-ignore, history tables insert strictly.
+- **D-311** (C3a review) Cost per order = Σ over buy and sell of (fee + max(ARN-032 slippage per fill, tier half-spread floor)); the D-294 half-spread is a floor inside the per-fill slippage, not an added term, so the gate's cost equals what the simulator charges. A$0.20 U2 at A$500 → 7.0 % (CTX-022a "about 7 %"); A$10 U1 → 2.2–2.5 %. §3c's "bucket bps only" row is superseded.
+- **D-312** AT-52's "≈ 4.5–5 %" is a pre-slippage figure left stale by the spec's pass 30; the test asserts the CTX-022a formula and records the band as superseded.
+- **D-313** Angles in `watch` keep their weight in S (CTX-032 wins over CTX-012's "all its angles watching" wording); a cluster is empty only when it has no active or watch angle.
+- **D-314** Rank keys, L_real and gap95 are floats (C2 statistics); §3a's `Rational` rank key and `CellStat` money fields are superseded by `number`.
 - Orchestrator (2026-10-30): the review's open points D-288 (no slippage beyond the limit), D-290 (GSPC/VIX under the existing Yahoo row) and D-294 are confirmed as written; the original review numbers D-282…D-287 were moved to D-288…D-293 because D-282…D-287 are M14 review fixes.
 
 ## 5. Acceptance mapping
