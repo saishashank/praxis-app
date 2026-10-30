@@ -44,7 +44,9 @@ function base(over: Partial<Val110Input> = {}): Val110Input {
     variant: "primary",
     split,
     access: accessRow("validation_access", split),
-    params: FAST,
+    // fixed mode keeps the v1 level alpha / (m L) the goldens below were pinned with; k is required (D-283)
+    params: { ...FAST, valErrorBudgetMode: "fixed" },
+    priorTests: 0,
     activeLineages: 6,
     rows: makeRows({ n: 400, S, edge: 0.02 }),
     sessionCount: S,
@@ -61,7 +63,7 @@ function base(over: Partial<Val110Input> = {}): Val110Input {
 
 describe("levels and replications (decision 24)", () => {
   it("level = 0.05 / (20 x 6) and B = 48,000 at the default", () => {
-    const r = evaluateVal110(base({ params: PARAMS }));
+    const r = evaluateVal110(base({ params: { ...PARAMS, valErrorBudgetMode: "fixed" } }));
     expect(r.level).toBeCloseTo(0.05 / 120, 12);
     expect(r.B).toBe(48000);
     expect(r.L).toBe(6);
@@ -70,7 +72,11 @@ describe("levels and replications (decision 24)", () => {
   });
   it("L follows the active lineages above the floor; every result stores level, B, n, blocks, L, m", () => {
     const r = evaluateVal110(
-      base({ params: PARAMS, activeLineages: 8, rows: makeRows({ n: 120, S, edge: 0.02 }) }),
+      base({
+        params: { ...PARAMS, valErrorBudgetMode: "fixed" },
+        activeLineages: 8,
+        rows: makeRows({ n: 120, S, edge: 0.02 }),
+      }),
     );
     expect(r.L).toBe(8);
     expect(r.level).toBeCloseTo(validationLevel(0.05, 20, 8), 12);
