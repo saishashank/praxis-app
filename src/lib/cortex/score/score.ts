@@ -35,10 +35,12 @@ export function clusterMeans(
   scored: readonly ScoredAngle[],
   clusters: readonly AngleCluster[],
 ): readonly ClusterMean[] {
+  // Sorted by id once so S is the same bytes whatever order the scored set arrives in (AT-50, review S2).
+  const ordered = [...scored].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return clusters.map((cluster) => {
     let n = 0;
     let sum = 0;
-    for (const a of scored) {
+    for (const a of ordered) {
       if (a.cluster !== cluster) continue;
       const v = features.get(a.id);
       if (v === undefined) throw new RangeError(`${a.id} is undefined: run eligibility first`);

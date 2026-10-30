@@ -142,3 +142,30 @@ describe("disagreement (CTX-023)", () => {
     expect(() => disagreementTest(scoreOf(base, scored, K4), 1.5)).toThrow(RangeError);
   });
 });
+
+describe("order independence (AT-50 bytes, review S2)", () => {
+  it("the scored set in any order gives the identical S bytes", () => {
+    const f = feats([
+      ["A-D1-01", 0.1],
+      ["A-D1-02", 0.2],
+      ["A-D1-03", 0.3],
+      ["A-D2-01", 0.7],
+    ]);
+    // Three float additions in different orders can differ in the last bit; sorting by id fixes one order.
+    const many: ScoredAngle[] = [
+      ...scored,
+      { id: "A-D1-04", version: 1, cluster: "momentum" },
+      { id: "A-D1-05", version: 1, cluster: "momentum" },
+    ];
+    const f2 = new Map([...f, ["A-D1-04", 0.123456789], ["A-D1-05", 0.987654321]] as [
+      string,
+      AngleValue,
+    ][]);
+    const a = scoreOf(f2, many, K4);
+    const b = scoreOf(f2, [...many].reverse(), K4);
+    const c = scoreOf(f2, [many[4]!, many[1]!, many[5]!, many[0]!, many[3]!, many[2]!], K4);
+    expect(JSON.stringify(b)).toBe(JSON.stringify(a));
+    expect(JSON.stringify(c)).toBe(JSON.stringify(a));
+    expect(Object.is(b.s, a.s)).toBe(true);
+  });
+});
