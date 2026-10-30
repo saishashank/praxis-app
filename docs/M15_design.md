@@ -296,6 +296,12 @@ D-257…D-277 adopt Q1–Q21 of `docs/M15_requirements.md` as recommended there 
 - **D-312** AT-52's "≈ 4.5–5 %" is a pre-slippage figure left stale by the spec's pass 30; the test asserts the CTX-022a formula and records the band as superseded.
 - **D-313** Angles in `watch` keep their weight in S (CTX-032 wins over CTX-012's "all its angles watching" wording); a cluster is empty only when it has no active or watch angle.
 - **D-314** Rank keys, L_real and gap95 are floats (C2 statistics); §3a's `Rational` rank key and `CellStat` money fields are superseded by `number`.
+- **D-315** (C1b review) A score angle returns 0 on nights its setup is absent (no breakout, not contracted, no event); `undefined` is reserved for warm-up and missing input, because CTX-012 makes an undefined score angle a night-long ineligibility.
+- **D-316** A flag returned by a score angle (e.g. A-D1-03 `veto`, A-D2-03 `unstable`) is a null feature for the night: the code is ineligible (CTX-012); the flag is a veto, never a neutral drop from the rank.
+- **D-317** One ATR(20) per code per night: every angle folds Wilder ATR over the same 250 bars (`ATR_HISTORY`); warm-ups follow.
+- **D-318** Grid dimensions are the ones the compute reads; card-only thresholds are passport text, not charged ledger cells (CTX-031).
+- **D-319** Flag-only angles (A-D1-04, A-D1-08) enter their cluster as rank-standardised 1/0 dummies at the cluster's equal weight (CTX-011). A-D1-01 horizon states are ±1; A-D1-04 uses H1 resumption only; A-D1-05 scores −dist inside the F4 gate and 0 outside; A-D1-10 is rs_sector over ≥ 5 universe members; A-D2-02 is ±1 at its one-sided limits; A-D2-09 is a cited gate with no compute; A-D2-10 is a risk gate; A-D2-07/08 stay candidate (needsData). Percentiles use v1's half-tie convention.
+- **D-320** CTX-044 promotion zeroing is applied in the score layer to the positive event and volume contributions, never inside an angle.
 - Orchestrator (2026-10-30): the review's open points D-288 (no slippage beyond the limit), D-290 (GSPC/VIX under the existing Yahoo row) and D-294 are confirmed as written; the original review numbers D-282…D-287 were moved to D-288…D-293 because D-282…D-287 are M14 review fixes.
 
 ## 5. Acceptance mapping
