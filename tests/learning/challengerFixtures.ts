@@ -32,6 +32,12 @@ export async function addLineage(db: Client, family: Family): Promise<LineageSpl
     primaryRows: [],
     params: BASE.stats,
   });
+  await insertSplit(db, s);
+  return s;
+}
+
+/** Stores a split record (a first split or a roll) as the production writer does. */
+export async function insertSplit(db: Client, s: LineageSplitRecord): Promise<void> {
   await db.execute({
     sql: `INSERT INTO lineage_split (lineage_id, version, block_sessions, holdout_len, validation_len,
             purge, data_end_d, holdout_start_d, holdout_end_d, validation_start_d, validation_end_d,
@@ -55,7 +61,6 @@ export async function addLineage(db: Client, family: Family): Promise<LineageSpl
       s.measured_on_run,
     ],
   });
-  return s;
 }
 
 export async function world(families: readonly Family[] = ["F1"]): Promise<World> {
