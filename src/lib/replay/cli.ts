@@ -372,7 +372,8 @@ export async function replayMain(
             nodeVersion: deps.nodeVersion ?? process.version,
             snapshotBytes: bytes,
             since,
-            existingSplits: await existingSplits(db),
+            // D-282: the cost gate reads the stored split; null and injected runs have no cost gate
+            existingSplits: m === "null" || m === "injected" ? [] : await existingSplits(db),
             existingTrials: m === "evidence" ? await existingTrials(db) : [],
             nullRuns: runs,
             synthetic,
