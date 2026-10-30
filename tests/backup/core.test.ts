@@ -208,7 +208,7 @@ describe("restoreDatabase", () => {
     expect(idx.rows.length).toBe(1);
     // And the migration table says the same version, so later migrations continue from it.
     const v = await target.execute("SELECT MAX(version) v FROM schema_migrations");
-    expect(Number(v.rows[0].v)).toBe(18);
+    expect(Number(v.rows[0].v)).toBe(19);
   });
 
   it("round-trips the auth DB (NULL name, unique indexes, audit trigger)", async () => {
@@ -319,7 +319,7 @@ describe("encryption (age)", () => {
     const r = await restoreDatabase(target, text);
     expect(r.sha256).toEqual(exp.sha256);
     expect(exp.tables).toContain("app_log");
-    expect(exp.schemaVersion).toBe(18);
+    expect(exp.schemaVersion).toBe(19);
   });
 
   it("another key cannot decrypt; tampered ciphertext is refused", async () => {
