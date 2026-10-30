@@ -283,6 +283,11 @@ D-257…D-277 adopt Q1–Q21 of `docs/M15_requirements.md` as recommended there 
 - **D-299** (C2 review B2) `D_s` uses contiguous fixed blocks of `L = max(bootstrap_block_sessions, max hold)` over all rows; the purge and embargo at the maximum hold apply to the out-of-fold evaluation (`purgeEmbargo`), not to the batch-means ratio.
 - **D-300** (C2 review S3) Logistic fits use step-halving; a slope interval with more than 0.5 % non-finite replicates is undefined, and an undefined slope interval counts as "p hidden" (CTX-053 fail-closed).
 - **D-301** Break-even counts a gross return of exactly 0 as a loss (CTX-021 diagnostic; exact zeros are rare in micro-dollar nets).
+- **D-302** (C1a review S2, CTX-010/OI-46) A manual DAT-234 index-change row without a `known_at` stamp is known one session after its announced date (effective date when no announced date): S&P/ASX announcements come after the close.
+- **D-303** A-D10-06 (red team) is a `meta` entry until a counted challenger adds a red-team step to the CTX-013 list (the frozen chapter's list has none; OI-61).
+- **D-304** The angle status word is `watch` (CTX-032 and this design); CTX-030's "watching" reads as the same state.
+- **D-305** The D-290 rule "A-D5-08 at most `measured` until 60 live sessions" is enforced by the P6 status evaluator, not by the registry.
+- **D-306** (C1a review) The purity test walks the transitive import closure; the split helpers in `candidates.ts` and `asicPublishedAt` in `rules.mjs` are reused by import and move to pure modules the day that scan fails. Offline TST-109 runs on a deterministic sample of about 20 cut-offs per year over a once-partitioned world; CI runs every cut-off on ZZ worlds. `adj()` is served from a per-code cache keyed by the split basis.
 - Orchestrator (2026-10-30): the review's open points D-288 (no slippage beyond the limit), D-290 (GSPC/VIX under the existing Yahoo row) and D-294 are confirmed as written; the original review numbers D-282…D-287 were moved to D-288…D-293 because D-282…D-287 are M14 review fixes.
 
 ## 5. Acceptance mapping
