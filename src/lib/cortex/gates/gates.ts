@@ -59,6 +59,8 @@ export type L0CodeInput = {
   readonly adjClose: bigint | null | undefined;
   /** Flags raised by D9 gate angles (A-D9-01 stale input, A-D9-06 known_at guard, …), sorted. */
   readonly vetoFlags: readonly string[];
+  /** ARN-011 reasons of a U2/U3 code (v1 `applyArn011`, D-332); empty / absent = passes. */
+  readonly arn011Failed?: readonly string[];
 };
 
 /** A bar whose prices are positive and ordered (low <= open, close <= high). */
@@ -77,6 +79,9 @@ export function gateL0Code(input: L0CodeInput): GateResult {
   if (!barWellFormed(input.bar)) return fail("G01_l0_veto", L0_CODE_LABEL, "malformed_bar");
   if (input.vetoFlags.length > 0) {
     return fail("G01_l0_veto", L0_CODE_LABEL, `flag:${[...input.vetoFlags].sort().join(",")}`);
+  }
+  if (input.arn011Failed !== undefined && input.arn011Failed.length > 0) {
+    return fail("G01_l0_veto", L0_CODE_LABEL, `arn011:${[...input.arn011Failed].sort().join(",")}`);
   }
   return pass();
 }
@@ -116,20 +121,14 @@ export function gateFamilyStatus(input: FamilyStatusInput): GateResult {
 // ---- G04 economic gate --------------------------------------------------------------------------------
 
 export type EconomicInput = {
-  /**
-   * The family's map under the refit guard; a missing or stale map is "not enough history" (D-281).
-   * null = not applied (the shadow arm scores without a p so shadow rows exist on a map-less night).
-   */
-  readonly map: MapGuard | null;
+  /** The family's map under the refit guard; a missing or stale map is "not enough history" (D-281, D-335). */
+  readonly map: MapGuard;
   /** The matched pooled top-3 cell `family|top3|volBucket|liqTier`; undefined = no such cell. */
   readonly cell: CellStatistic | undefined;
   /** The night's regime (CTX-021 fail-closed regime check). */
   readonly regime: RegimeLabel;
-  /**
-   * The candidate's S is in the pooled top-3 band (cut on the development quantiles); null when the
-   * rule version states no band edge, in which case every scored candidate is matched.
-   */
-  readonly inBand: boolean | null;
+  /** The candidate's S is in the pooled top-3 band (cut on the development quantiles, D-334). */
+  readonly inBand: boolean;
   readonly opts?: GateOptions;
 };
 
@@ -142,10 +141,10 @@ export function economicLabel(
 
 /** G04 (CTX-021): map present, candidate matched, cell big enough, bound > 0, regime fail-closed. */
 export function gateEconomic(input: EconomicInput): GateResult {
-  if (input.map !== null && !input.map.ok) {
+  if (!input.map.ok) {
     return fail("G04_economic", NOT_ENOUGH_HISTORY_LABEL, input.map.reason);
   }
-  if (input.inBand === false) return fail("G04_economic", ECONOMIC_LABEL, "not_matched");
+  if (!input.inBand) return fail("G04_economic", ECONOMIC_LABEL, "not_matched");
   if (input.cell === undefined) {
     return fail("G04_economic", NOT_ENOUGH_HISTORY_LABEL, "no_cell");
   }
@@ -215,6 +214,8 @@ export function gateGapCap(input: GapCapGateInput): GateResult {
 
 export type EventStateInput = {
   readonly d: string;
+  /** The fill session (next trading day): an event dated the fill session vetoes too (D-338). */
+  readonly fillD: string;
   /** DAT-234 list loaded (false = 8a fails closed). */
   readonly indexChangesLoaded: boolean;
   readonly indexChanges: readonly IndexChangeFact[];
@@ -276,7 +277,10 @@ export function eventStateSubFail(input: EventStateInput): { sub: G08SubId; valu
     return { sub: "8d_unresolved_action", value: input.corpActionState };
   }
   const veto = [...input.events]
-    .filter((e) => e.day0 === input.d && EVENT_VETO_CATEGORIES.has(e.category))
+    .filter(
+      (e) =>
+        (e.day0 === input.d || e.day0 === input.fillD) && EVENT_VETO_CATEGORIES.has(e.category),
+    )
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
   if (veto !== undefined)
     return { sub: "8e_event_date_veto", value: `${veto.category}:${veto.id}` };

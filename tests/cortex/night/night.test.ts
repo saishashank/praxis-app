@@ -4,7 +4,12 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Family } from "@/lib/agents/families/types";
 import { cutWorld } from "@/lib/cortex/pit/asOfView";
-import { FAMILY_STATUS_LABEL, NOT_ENOUGH_HISTORY_LABEL, L0_NIGHT_LABEL } from "@/lib/cortex/gates";
+import {
+  FAMILY_STATUS_LABEL,
+  L0_CODE_LABEL,
+  L0_NIGHT_LABEL,
+  NOT_ENOUGH_HISTORY_LABEL,
+} from "@/lib/cortex/gates";
 import { featuresAt, nightOutputJson, runNight, type NightOutput } from "@/lib/cortex/night";
 import type { CortexMap } from "@/lib/cortex/score/types";
 import {
@@ -16,6 +21,7 @@ import {
   nightInputs,
   nightView,
   nightWorld,
+  ruleFor,
 } from "./zzNight";
 
 const T = SESSIONS.length - 1;
@@ -77,7 +83,7 @@ describe("runNight: a full night on the ZZ world", () => {
   });
 
   it("shadow families get shadow decisions only, with G03 not applied, and an abstain at G03", () => {
-    for (const bookId of ["E04", "E05"]) {
+    for (const bookId of ["E04"]) {
       expect(out.decisions.filter((d) => d.bookId === bookId)).toHaveLength(0);
       const sh = out.shadow.filter((d) => d.bookId === bookId);
       expect(sh).toHaveLength(1);
@@ -95,6 +101,79 @@ describe("runNight: a full night on the ZZ world", () => {
       expect(new Set(blockedLive.map((b) => b.firstFail))).toEqual(new Set(["G03_family_status"]));
     }
     expect(out.abstains.find((x) => x.bookId === "E01")).toBeUndefined();
+  });
+
+  it("D-332: an F5 book (U2/U3 universe) sees no U1 candidate at all — no rows, abstain 'no candidates'", () => {
+    expect(out.decisions.filter((d) => d.bookId === "E05")).toEqual([]);
+    expect(out.shadow.filter((d) => d.bookId === "E05")).toEqual([]);
+    expect(out.blocked.filter((d) => d.bookId === "E05")).toEqual([]);
+    expect(out.abstains.find((a) => a.bookId === "E05")).toEqual({
+      bookId: "E05",
+      gateId: "G01_l0_veto",
+      label: L0_NIGHT_LABEL,
+      detail: { reason: "no_candidates" },
+    });
+  });
+
+  it("D-332: a U2 code failing ARN-011 is blocked at G01 with the reasons", () => {
+    const world = nightWorld({
+      tiers: new Map([
+        ["ZZA", [{ d: SESSIONS[0]!, tier: "U1" as const }]],
+        ["ZZB", [{ d: SESSIONS[0]!, tier: "U2" as const }]],
+        ["ZZC", [{ d: SESSIONS[0]!, tier: "U1" as const }]],
+        ["ZZD", [{ d: SESSIONS[0]!, tier: "U1" as const }]],
+      ]),
+    });
+    const o = runNight(
+      nightInputs(
+        T,
+        {
+          rules: new Map([["F1", ruleFor("F1", { tiers: ["U1", "U2"] })]]),
+          arn011Failed: new Map([["ZZB", ["gain_5s_without_price_sensitive_item"]]]),
+        },
+        nightView(world),
+      ),
+    );
+    const zzb = o.blocked.find((b) => b.bookId === "E01" && b.arm === "live" && b.code === "ZZB");
+    expect(zzb?.firstFail).toBe("G01_l0_veto");
+    expect(zzb?.trace[0]).toEqual({
+      gateId: "G01_l0_veto",
+      pass: false,
+      label: L0_CODE_LABEL,
+      value: "arn011:gain_5s_without_price_sensitive_item",
+    });
+  });
+
+  it("D-333: the decision carries the family's v1 exit plan (F1: trail, time stop, max hold)", () => {
+    const d = out.decisions[0]!;
+    expect(d.plan.trails.map((r) => r.id)).toEqual(["trail"]);
+    expect(d.plan.cs.map((r) => r.id)).toEqual(["time_stop", "max_hold"]);
+    expect(d.stopSpec).toEqual(d.plan.initialStops[0]!.spec);
+    expect(d.card.similar).toEqual({ p: d.p, lo: null, hi: null, n: 100 });
+  });
+
+  it("D-334: a rule without a band edge fails G04 'band_missing'; D-339: pHidden hides p on the card", () => {
+    const o = runNight(
+      nightInputs(T, {
+        rules: new Map([
+          ["F1", ruleFor("F1", { top3MinS: undefined })],
+          ["F4", ruleFor("F4", { pHidden: true })],
+        ]),
+        status: { F1: "allowed", F4: "allowed" },
+      }),
+    );
+    const e01 = o.blocked.filter((b) => b.bookId === "E01" && b.arm === "live");
+    expect(e01.length).toBe(4);
+    for (const b of e01) {
+      expect(b.firstFail).toBe("G04_economic");
+      expect(b.trace[b.trace.length - 1]).toMatchObject({
+        label: NOT_ENOUGH_HISTORY_LABEL,
+        value: "band_missing",
+      });
+    }
+    const f4 = o.decisions.find((d) => d.bookId === "E04")!;
+    expect(f4.p).not.toBeNull();
+    expect(f4.card.similar).toBeNull();
   });
 
   it("the sector tilt shadow log covers the taken decision's industry", () => {
@@ -115,20 +194,25 @@ describe("runNight: a full night on the ZZ world", () => {
 describe("runNight: map missing (D-281)", () => {
   const out = runNight(nightInputs(T, { maps: new Map<Family, CortexMap>() }));
 
-  it("abstains every book with map_missing and writes shadow rows only", () => {
+  it("D-335: abstains every book; every row of both arms is a G04 map_missing blocked row", () => {
     expect(out.status).toBe("abstain_all");
     expect(out.reason).toBe("map_missing");
     expect(out.decisions).toEqual([]);
     expect(out.queued).toEqual([]);
-    expect(out.shadow.length).toBe(BOOKS.length);
-    for (const s of out.shadow) expect(s.p).toBeNull();
+    expect(out.shadow).toEqual([]);
     expect(out.abstains.map((a) => a.bookId)).toEqual(["E01", "E04", "E05"]);
-    for (const a of out.abstains) {
+    expect(out.abstains.find((a) => a.bookId === "E04")?.gateId).toBe("G03_family_status");
+    for (const a of out.abstains.filter((x) => x.bookId === "E01")) {
       expect(a.gateId).toBe("G04_economic");
       expect(a.label).toBe(NOT_ENOUGH_HISTORY_LABEL);
-      expect(a.detail).toEqual({ reason: "map_missing" });
+      expect(a.detail).toMatchObject({ value: "map_missing" });
     }
-    expect(out.blocked.every((b) => b.arm === "shadow")).toBe(true);
+    const shadowRows = out.blocked.filter((b) => b.arm === "shadow" && b.bookId !== "E05");
+    expect(shadowRows.length).toBe(8);
+    for (const b of shadowRows) {
+      expect(b.firstFail).toBe("G04_economic");
+      expect(b.trace[b.trace.length - 1]).toMatchObject({ value: "map_missing" });
+    }
   });
 });
 
@@ -153,14 +237,18 @@ describe("runNight: L0 night integrity (CTX-010, D-289)", () => {
     );
   });
 
-  it("the quota-degrade predicate (wall-clock, stale share) abstains with its reason", () => {
-    const quota = runNight(nightInputs(T, { degrade: { elapsedMinutes: 21, staleShare: 0 } }));
+  it("D-336: the wall-clock budget comes from the caller; the stale share is the core's own figure", () => {
+    const quota = runNight(nightInputs(T, { degrade: { elapsedMinutes: 21 } }));
     expect(quota.status).toBe("abstain_all");
     expect(quota.reason).toBe("quota");
-    const stale = runNight(nightInputs(T, { degrade: { elapsedMinutes: 1, staleShare: 0.5 } }));
+    expect(runNight(nightInputs(T, { degrade: { elapsedMinutes: 20 } })).status).toBe("ran");
+    // one of four universe codes without a D bar → stale share 25 % > 10 %
+    const world = nightWorld();
+    const bars = new Map(world.bars);
+    bars.set("ZZD", world.bars.get("ZZD")!.slice(0, -1));
+    const stale = runNight(nightInputs(T, {}, nightView(nightWorld({ bars }))));
+    expect(stale.status).toBe("abstain_all");
     expect(stale.reason).toBe("universe_incomplete");
-    const fine = runNight(nightInputs(T, { degrade: { elapsedMinutes: 1, staleShare: 0.01 } }));
-    expect(fine.status).toBe("ran");
   });
 
   it("a book with no cash gets no abstain record (CTX-014: per cash-holding book)", () => {

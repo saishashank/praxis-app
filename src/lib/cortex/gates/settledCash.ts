@@ -14,7 +14,7 @@ import {
   type SettlementItem,
 } from "@/lib/arena/ledger";
 import type { Micro } from "@/lib/money/micro";
-import { SETTLED_CASH_LABEL } from "./list";
+import { PARCEL_LABEL, PARTICIPATION_LABEL, SETTLED_CASH_LABEL } from "./list";
 import { fail, pass, type GateResult } from "./types";
 
 export { MIN_MARKETABLE_PARCEL_MICRO, settlementDate };
@@ -84,9 +84,17 @@ export function gateSettledCash(input: SettledCashInput): GateResult {
   }
   if (input.sizing && !input.sizing.accepted) {
     const reasons: readonly SizingReason[] = input.sizing.reasons;
-    return fail("G12_settled_cash", SETTLED_CASH_LABEL, `sizing:${reasons.join(",")}`);
+    return fail("G12_settled_cash", sizingLabel(reasons), `sizing:${reasons.join(",")}`);
   }
   return pass(`deployable_net:${net}`);
+}
+
+/** The plain label of a sizing rejection: cash → settled cash, parcel / whole share → parcel, participation. */
+export function sizingLabel(reasons: readonly SizingReason[]): string {
+  if (reasons.includes("cash")) return SETTLED_CASH_LABEL;
+  if (reasons.includes("parcel") || reasons.includes("whole_share")) return PARCEL_LABEL;
+  if (reasons.includes("participation")) return PARTICIPATION_LABEL;
+  return SETTLED_CASH_LABEL;
 }
 
 export type StallInput = {

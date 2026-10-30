@@ -6,6 +6,8 @@ import type { SettlementItem } from "@/lib/arena/ledger";
 import type { CalendarRow } from "@/lib/data/calendar";
 import {
   MIN_MARKETABLE_PARCEL_MICRO,
+  PARCEL_LABEL,
+  PARTICIPATION_LABEL,
   SETTLED_CASH_LABEL,
   STALL_SESSIONS,
   deployableCash,
@@ -108,6 +110,22 @@ describe("G12_settled_cash", () => {
       gateSettledCash({ deployableMicro: 1_000n * M, entryFeeMicro: 0n, halfSize: true }).pass,
     ).toBe(true);
   });
+  it("D-337: the label follows the sizing reason (cash, parcel / whole share, participation)", () => {
+    const ok = { deployableMicro: 5_000n * M, entryFeeMicro: 3n * M, halfSize: false };
+    expect(
+      gateSettledCash({ ...ok, sizing: { accepted: false, reasons: ["cash"] } }),
+    ).toMatchObject({ label: SETTLED_CASH_LABEL });
+    expect(
+      gateSettledCash({ ...ok, sizing: { accepted: false, reasons: ["parcel"] } }),
+    ).toMatchObject({ label: PARCEL_LABEL });
+    expect(
+      gateSettledCash({ ...ok, sizing: { accepted: false, reasons: ["whole_share"] } }),
+    ).toMatchObject({ label: PARCEL_LABEL });
+    expect(
+      gateSettledCash({ ...ok, sizing: { accepted: false, reasons: ["participation"] } }),
+    ).toMatchObject({ label: PARTICIPATION_LABEL });
+  });
+
   it("a sizing rejection fails the gate with the engine's reasons", () => {
     expect(
       gateSettledCash({
@@ -119,7 +137,7 @@ describe("G12_settled_cash", () => {
     ).toEqual({
       pass: false,
       gateId: "G12_settled_cash",
-      label: SETTLED_CASH_LABEL,
+      label: PARTICIPATION_LABEL,
       value: "sizing:participation",
     });
     expect(

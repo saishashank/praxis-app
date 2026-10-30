@@ -46,6 +46,10 @@ export const PORTFOLIO_INDUSTRY_LABEL = "we already hold enough of this industry
 
 // ---- G12 -----------------------------------------------------------------------------------------
 export const SETTLED_CASH_LABEL = "the cash from the last sale has not settled yet";
+/** The sizing engine refused the parcel (below A$500 or no whole share). */
+export const PARCEL_LABEL = "the position would be too small to be worth placing";
+/** The sizing engine refused on the participation cap (ARN-024). */
+export const PARTICIPATION_LABEL = "this company does not trade enough for the size we would need";
 
 /** The default plain label of each gate (variants above are chosen by the gate from its reason). */
 export const GATE_LABELS: Readonly<Record<GateId, string>> = {

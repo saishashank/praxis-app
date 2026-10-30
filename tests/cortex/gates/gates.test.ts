@@ -80,6 +80,14 @@ describe("G01_l0_veto", () => {
     ).toMatchObject({
       value: "malformed_bar",
     });
+    expect(
+      gateL0Code({ bar, adjClose: 20n * M, vetoFlags: [], arn011Failed: ["placements", "halted"] }),
+    ).toEqual({
+      pass: false,
+      gateId: "G01_l0_veto",
+      label: L0_CODE_LABEL,
+      value: "arn011:halted,placements",
+    });
     expect(barWellFormed({ ...bar, open: 0n })).toBe(false);
     expect(
       gateL0Code({ bar, adjClose: 20n * M, vetoFlags: ["A-D9-06:known_at", "A-D9-01:stale"] }),
@@ -143,14 +151,14 @@ describe("G03_family_status", () => {
 describe("G04_economic (CTX-021)", () => {
   const cell = cellStat("F1|top3|v1|U1");
   it("a healthy cell under a guarded map passes with the bound as value", () => {
-    expect(gateEconomic({ map: okMap, cell, regime: "NEUTRAL", inBand: null })).toEqual({
+    expect(gateEconomic({ map: okMap, cell, regime: "NEUTRAL", inBand: true })).toEqual({
       pass: true,
       value: "lower90=0.010000",
     });
   });
   it("AT-52: the 40/60 cell (40 setups, 60 needed) fails with 'not enough history'", () => {
     const forty = cellStat("F1|top3|v1|U1", { n: 40 });
-    expect(gateEconomic({ map: okMap, cell: forty, regime: "NEUTRAL", inBand: null })).toEqual({
+    expect(gateEconomic({ map: okMap, cell: forty, regime: "NEUTRAL", inBand: true })).toEqual({
       pass: false,
       gateId: "G04_economic",
       label: NOT_ENOUGH_HISTORY_LABEL,
@@ -159,7 +167,7 @@ describe("G04_economic (CTX-021)", () => {
   });
   it("a non-positive bound fails with the economic label; a thin regime fails closed", () => {
     const flat = cellStat("k", { lower90: -0.001 });
-    expect(gateEconomic({ map: okMap, cell: flat, regime: "NEUTRAL", inBand: null })).toMatchObject(
+    expect(gateEconomic({ map: okMap, cell: flat, regime: "NEUTRAL", inBand: true })).toMatchObject(
       {
         pass: false,
         gateId: "G04_economic",
@@ -167,26 +175,26 @@ describe("G04_economic (CTX-021)", () => {
       },
     );
     const thin = cellStat("k", { byRegime: { NEUTRAL: { n: 10, meanNet: 0.02 } } });
-    expect(gateEconomic({ map: okMap, cell: thin, regime: "NEUTRAL", inBand: null })).toMatchObject(
+    expect(gateEconomic({ map: okMap, cell: thin, regime: "NEUTRAL", inBand: true })).toMatchObject(
       {
         label: ECONOMIC_LABEL,
         value: "regime_blocked: NEUTRAL: 10 setups, mean net 0.020000",
       },
     );
-    expect(gateEconomic({ map: okMap, cell: thin, regime: "SHOCK", inBand: null })).toMatchObject({
+    expect(gateEconomic({ map: okMap, cell: thin, regime: "SHOCK", inBand: true })).toMatchObject({
       value: "regime_blocked: SHOCK: no setups",
     });
   });
   it("no map / stale map, no cell and an unmatched candidate fail before the cell statistic", () => {
     const missing: MapGuard = { ok: false, reason: "map_missing", detail: "no map loaded" };
-    expect(gateEconomic({ map: missing, cell, regime: "NEUTRAL", inBand: null })).toEqual({
+    expect(gateEconomic({ map: missing, cell, regime: "NEUTRAL", inBand: true })).toEqual({
       pass: false,
       gateId: "G04_economic",
       label: NOT_ENOUGH_HISTORY_LABEL,
       value: "map_missing",
     });
     expect(
-      gateEconomic({ map: okMap, cell: undefined, regime: "NEUTRAL", inBand: null }),
+      gateEconomic({ map: okMap, cell: undefined, regime: "NEUTRAL", inBand: true }),
     ).toMatchObject({
       label: NOT_ENOUGH_HISTORY_LABEL,
       value: "no_cell",
@@ -195,8 +203,6 @@ describe("G04_economic (CTX-021)", () => {
       label: ECONOMIC_LABEL,
       value: "not_matched",
     });
-    // the shadow arm passes `null`: no map needed for a shadow row
-    expect(gateEconomic({ map: null, cell, regime: "NEUTRAL", inBand: null }).pass).toBe(true);
   });
 });
 
@@ -277,6 +283,7 @@ describe("G08_event_state", () => {
   const sessions = ["2026-03-02", "2026-03-03", "2026-03-04", "2026-03-05", "2026-03-06"];
   const clear: EventStateInput = {
     d: "2026-03-06",
+    fillD: "2026-03-09",
     indexChangesLoaded: true,
     indexChanges: [],
     sessions,
@@ -359,6 +366,12 @@ describe("G08_event_state", () => {
     expect(gateEventState({ ...clear, events: [ev("capital_raising", "2026-03-05")] }).pass).toBe(
       true,
     );
+    // D-338: an event dated the fill session vetoes too
+    expect(
+      gateEventState({ ...clear, events: [ev("exchange_query", "2026-03-09")] }),
+    ).toMatchObject({
+      value: "8e_event_date_veto:exchange_query:asx|ZZA-2026-03-09-exchange_query",
+    });
   });
   it("sub-checks are tested in order: the first failing sub-id names the failure", () => {
     expect(

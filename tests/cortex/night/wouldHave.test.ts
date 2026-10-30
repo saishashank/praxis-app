@@ -3,7 +3,9 @@
 // D-301; AT-52 "+9 % open vs 8 % cap → unfilled in both arms").
 import { describe, expect, it } from "vitest";
 import type { ViewBar } from "@/lib/agents/decisionView";
-import type { StopSpec } from "@/lib/agents/families/types";
+import { f1Plan } from "@/lib/agents/families/exits";
+import type { ExitPlan, StopSpec } from "@/lib/agents/families/types";
+import { defaultAgentParams } from "@/lib/agents/params";
 import { COST_PROFILES } from "@/lib/arena/costs";
 import { limitPriceMicro } from "@/lib/arena/fills";
 import { wouldHaveOutcome, type WouldHaveInput } from "@/lib/cortex/night";
@@ -24,6 +26,12 @@ const stopSpec: StopSpec = {
   cap: null,
   level_micro: null,
 };
+/** A plan with the initial stop and a three-session max hold (fill session = 1 → fires at the third close). */
+const plan: ExitPlan = {
+  initialStops: [{ id: "initial", via: null, spec: stopSpec }],
+  trails: [],
+  cs: [{ id: "max_hold", via: null, kind: "time_stop", sessions: 3, minReturn: null }],
+};
 const limit = limitPriceMicro(
   2_000n * C,
   1_800n * C,
@@ -31,10 +39,12 @@ const limit = limitPriceMicro(
   makeRational(12n, 100n),
 ); // 20.45
 const base: Omit<WouldHaveInput, "bars"> = {
+  code: "ZZA",
+  family: "F1",
   qty: 100n,
   limitMicro: limit,
-  stopSpec,
-  horizonSessions: 3,
+  plan,
+  atrMicro: 1_000_000n,
   profile: COST_PROFILES.P1,
   advMicro: 2_000_000n * 1_000_000n,
 };
@@ -51,6 +61,7 @@ describe("wouldHaveOutcome", () => {
       fillD: "2026-03-03",
       exitD: null,
       exitRule: null,
+      csRule: null,
       grossMicro: null,
       netMicro: null,
       outcomeClass: null,
@@ -97,23 +108,34 @@ describe("wouldHaveOutcome", () => {
       ],
     });
     expect(held!.exitRule).toBe("close_signal");
+    expect(held!.csRule).toBe("max_hold");
     expect(held!.exitD).toBe("2026-03-06");
     expect(held!.grossMicro! > 0n).toBe(true);
     expect(held!.outcomeClass).toBe("win");
   });
 
-  it("returns null while the hold is open (not enough later bars) and refuses a bad horizon", () => {
+  it("returns null while the hold is open (not enough later bars)", () => {
     expect(wouldHaveOutcome({ ...base, bars: [] })).toBeNull();
     expect(
       wouldHaveOutcome({ ...base, bars: [bar("2026-03-03", 2_000, 2_020, 1_990, 2_010)] }),
     ).toBeNull();
-    expect(() =>
-      wouldHaveOutcome({
-        ...base,
-        horizonSessions: 0,
-        bars: [bar("2026-03-03", 2_000, 2_020, 1_990, 2_010)],
-      }),
-    ).toThrow(RangeError);
+  });
+
+  it("D-333: the F1 plan's trail ratchets the stop through evaluateExit and fills at the level", () => {
+    const f1 = f1Plan(defaultAgentParams(), 1_000_000n);
+    const out = wouldHaveOutcome({
+      ...base,
+      plan: f1,
+      bars: [
+        bar("2026-03-03", 2_000, 2_020, 1_990, 2_010),
+        bar("2026-03-04", 2_400, 2_450, 2_390, 2_440), // +22 %: the trail moves the stop up
+        bar("2026-03-05", 2_430, 2_440, 2_100, 2_150), // falls through the trailed stop, not the initial one
+      ],
+    });
+    expect(out!.exitRule).toBe("level");
+    expect(out!.exitD).toBe("2026-03-05");
+    expect(out!.csRule).toBeNull();
+    expect(out!.grossMicro! > 0n).toBe(true); // stopped above the entry: the trail locked a gain
   });
 
   it("D-301: a net of exactly zero is a loss", () => {

@@ -17,7 +17,6 @@ import type { BookState, FamilyNightRule, NightInputs } from "@/lib/cortex/night
 import { VOL_BUCKETS } from "@/lib/cortex/night";
 import { cellKey, TOP3_BAND_KEY, type CellStatistic } from "@/lib/stats/cells";
 import { scopedPrng } from "@/lib/stats/rng";
-import { makeRational } from "@/lib/money/rational";
 
 export const CUTOFF_HHMM = "18:10";
 export const CENT = 10_000n;
@@ -213,7 +212,8 @@ export function ruleFor(family: Family, extra: Partial<FamilyNightRule> = {}): F
     ruleVersion: `${family}.zz.1`,
     clusters: [...CLUSTERS],
     familyMeanNet: 0.01,
-    stopK: makeRational(2n),
+    tiers: ["U1"],
+    top3MinS: -1,
     gainLoss: { gain: 0.1, loss: 0.06 },
     ...extra,
   };
@@ -316,7 +316,7 @@ export function nightInputs(
     rules: new Map<Family, FamilyNightRule>([
       ["F1", ruleFor("F1")],
       ["F4", ruleFor("F4")],
-      ["F5", ruleFor("F5")],
+      ["F5", ruleFor("F5", { tiers: ["U2", "U3"] })],
     ]),
     states: [],
     passports: PASSPORTS,

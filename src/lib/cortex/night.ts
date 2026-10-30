@@ -23,8 +23,15 @@
 // Money is integer micro-dollars / Rational, statistics are floats, every list is in a fixed order
 // (sorted codes, books, families, angle ids). Nothing reads `view.sessions[t + 1]`: the fill
 // session comes from the trading calendar (known at load).
-import { initialStop } from "@/lib/agents/families/exits";
-import type { ExitPlan, Family, RegimeLabel, StopSpec, Tier } from "@/lib/agents/families/types";
+import { evaluateExit, f1Plan, f4Plan, initialStop } from "@/lib/agents/families/exits";
+import type {
+  ExitPlan,
+  Family,
+  PositionState,
+  RegimeLabel,
+  StopSpec,
+  Tier,
+} from "@/lib/agents/families/types";
 import type { ViewBar } from "@/lib/agents/decisionView";
 import { atrSeries, atrToMicro } from "@/lib/agents/indicators";
 import type { AgentParams } from "@/lib/agents/params";
@@ -34,6 +41,7 @@ import {
   fillEntryLimit,
   fillIntradayStop,
   limitPriceMicro,
+  selectExit,
   type Bar,
   type FillEnv,
   type SimulatedFill,
@@ -68,6 +76,7 @@ import {
   deployableCash,
   gateIndex,
   L0_CODE_LABEL,
+  STOP_CAP_LABEL,
   L0_NIGHT_LABEL,
   MIN_MARKETABLE_PARCEL_MICRO,
   NOT_ENOUGH_HISTORY_LABEL,
@@ -119,17 +128,20 @@ export type BookState = {
 
 /**
  * What a family's rule version declares (data of the import, D-281): the K clusters S runs over,
- * the development mean net the ranking shrinks towards, the stop multiple of ATR(20) (FAM-004 stop
- * spec), the development band edge of the pooled top-3 cell, the card's gain / loss figures.
+ * the development mean net the ranking shrinks towards, the family's universe tiers (D-332), the
+ * development band edge of the pooled top-3 cell (D-334), the card's gain / loss figures. The exit
+ * plan is the family's v1 plan (`f1Plan` / `f4Plan`, D-333), not a field here.
  */
 export type FamilyNightRule = {
   readonly ruleVersion: string;
   readonly clusters: readonly AngleCluster[];
   readonly familyMeanNet: number;
-  /** Initial stop = close − stopK × ATR(20) (the v1 "entry − 2 × ATR20"). */
-  readonly stopK: Rational;
-  /** S at the lower edge of the pooled top-3 band on the development split; undefined = every scored candidate matched. */
+  /** The family's v1 universe tiers: a code outside them is not a candidate (no row). */
+  readonly tiers: readonly Tier[];
+  /** S at the lower edge of the pooled top-3 band on the development split; absent → G04 `band_missing`. */
   readonly top3MinS?: number;
+  /** CTX-053 over-confidence monitor: the family's p is hidden from cards (`similar: null`). */
+  readonly pHidden?: boolean;
   /** Conditional mean gross gain and loss of the family's matched setups (card break-even line). */
   readonly gainLoss?: { readonly gain: number; readonly loss: number };
   /** Entries a book may open on one night (default 1). */
@@ -171,8 +183,10 @@ export type NightInputs = {
     readonly families: ReadonlySet<Family>;
     readonly sourcesOff: ReadonlySet<InputKind>;
   };
-  /** D-289: measured by the caller (the core never reads a clock); absent = no degrade check. */
-  readonly degrade?: { readonly elapsedMinutes: number; readonly staleShare: number };
+  /** D-289: wall-clock minutes the stage has used (the core never reads a clock); absent = 0. */
+  readonly degrade?: { readonly elapsedMinutes: number };
+  /** ARN-011 reasons per U2/U3 code from the v1 `applyArn011` (D-332); absent = all pass. */
+  readonly arn011Failed?: ReadonlyMap<string, readonly string[]>;
   /** CTX-055 go-live date; absent = cold-start rules off (replay before go-live, offline). */
   readonly goLiveD?: string | null;
   readonly prng: (scope: string) => Prng;
@@ -181,11 +195,11 @@ export type NightInputs = {
 export type NightReason = "late_bar" | "quota" | "map_missing" | "universe_incomplete";
 
 export type CardFields = {
-  /** p of similar setups; the interval needs the map's stored Platt CI (lo = hi = p until the import carries it). */
+  /** p of similar setups; lo / hi are null until the import carries the map's Platt interval (D-339); null when p is hidden. */
   readonly similar: {
     readonly p: number;
-    readonly lo: number;
-    readonly hi: number;
+    readonly lo: number | null;
+    readonly hi: number | null;
     readonly n: number;
   } | null;
   readonly breakEven: readonly { readonly c: number; readonly pBe: number }[];
@@ -275,8 +289,6 @@ export const ATR_HISTORY = 250;
 /** Volatility buckets of the matched-setup key: ATR(20) ÷ close, pre-registered edges 2 % and 4 %. */
 export const VOL_BUCKET_EDGES: readonly number[] = [0.02, 0.04]; // threshold-ok: pre-registered bucket edges
 export const VOL_BUCKETS: readonly string[] = ["v1", "v2", "v3"];
-/** Default stop multiple (FAM-004 "entry − 2 × ATR20"). */
-export const DEFAULT_STOP_K: Rational = makeRational(2n);
 const DEFAULT_SLOTS = 1;
 const HALF = makeRational(1n, 2n);
 
@@ -308,14 +320,28 @@ export function atr20Micro(bars: readonly ViewBar[]): Micro | null {
   return atrToMicro(last);
 }
 
-/** FAM-004 stop spec of the Cortex entry: k × ATR(20), no cap, no level. */
-export function stopSpecOf(atrMicro: Micro, stopK: Rational): StopSpec {
-  return { atr_micro: atrMicro, k: stopK, cap: null, level_micro: null };
+/**
+ * D-333: the entry carries the family's v1 exit plan (stops, trails, time stops). F1 and F4 have
+ * plans from params and ATR alone; F2/F3/F5/F6 need event or constant inputs not wired yet → null
+ * (their candidates fail G04 `rule_missing`).
+ */
+export function familyPlan(
+  family: Family,
+  params: AgentParams,
+  atrMicro: Micro | null,
+): ExitPlan | null {
+  if (family === "F1") return f1Plan(params, atrMicro);
+  if (family === "F4") return f4Plan(params, atrMicro);
+  return null;
 }
 
-/** The exit plan of a Cortex entry: the initial stop only (trails and CS exits stay the family's v1 rules). */
-export function exitPlanOf(spec: StopSpec): ExitPlan {
-  return { initialStops: [{ id: "IS-cortex", via: null, spec }], trails: [], cs: [] };
+const EMPTY_PLAN: ExitPlan = { initialStops: [], trails: [], cs: [] };
+
+/** The initial stop spec of a plan (its first initial-stop rule). */
+export function planStopSpec(plan: ExitPlan, atrMicro: Micro | null): StopSpec {
+  return (
+    plan.initialStops[0]?.spec ?? { atr_micro: atrMicro, k: null, cap: null, level_micro: null }
+  );
 }
 
 function scaleHalf(v: Micro): Micro {
@@ -436,6 +462,7 @@ type Eval = {
   readonly cell: CellStatistic | undefined;
   readonly volBucket: string;
   readonly halfSize: boolean;
+  readonly plan: ExitPlan | null;
   readonly stopSpec: StopSpec | null;
   readonly stopMicro: Micro | null;
   readonly limitMicro: Micro | null;
@@ -519,6 +546,7 @@ function evaluateCandidate(
   let cell: CellStatistic | undefined = undefined;
   let volBucket = "";
   let halfSize = false;
+  let plan: ExitPlan | null = null;
   let stopSpec: StopSpec | null = null;
   let stopMicro: Micro | null = null;
   let limitMicro: Micro | null = null;
@@ -535,6 +563,7 @@ function evaluateCandidate(
     cell,
     volBucket,
     halfSize,
+    plan,
     stopSpec,
     stopMicro,
     limitMicro,
@@ -557,7 +586,12 @@ function evaluateCandidate(
   const l0 =
     f.tier === null
       ? ({ pass: false, gateId: "G01_l0_veto", label: L0_CODE_LABEL, value: "no_tier" } as const)
-      : gateL0Code({ bar: f.bar, adjClose: f.adjClose, vetoFlags: f.vetoFlags });
+      : gateL0Code({
+          bar: f.bar,
+          adjClose: f.adjClose,
+          vetoFlags: f.vetoFlags,
+          arn011Failed: f.tier === "U1" ? [] : (inputs.arn011Failed?.get(code) ?? []),
+        });
   if (!step("G01_l0_veto", l0)) return done("G01_l0_veto");
   const tier = f.tier!;
   const bar = f.bar!;
@@ -582,7 +616,7 @@ function evaluateCandidate(
     });
     return done("G02_eligibility");
   }
-  step("G02_eligibility", { pass: true });
+  if (score !== null) step("G02_eligibility", { pass: true }); // no score → no eligibility verdict (N2)
 
   // 3. family status
   if (skipStatus) {
@@ -599,7 +633,8 @@ function evaluateCandidate(
   // 4. economic gate
   volBucket = volBucketOf(f.atrMicro, bar.close);
   cell = inputs.cells.get(cellKey(book.family, TOP3_BAND_KEY, volBucket, tier));
-  if (rule === undefined || score === null || score.status !== "scored") {
+  plan = familyPlan(book.family, params, f.atrMicro);
+  if (rule === undefined || score === null || score.status !== "scored" || plan === null) {
     step("G04_economic", {
       pass: false,
       gateId: "G04_economic",
@@ -608,11 +643,20 @@ function evaluateCandidate(
     });
     return done("G04_economic");
   }
+  if (rule.top3MinS === undefined) {
+    step("G04_economic", {
+      pass: false,
+      gateId: "G04_economic",
+      label: NOT_ENOUGH_HISTORY_LABEL,
+      value: "band_missing",
+    });
+    return done("G04_economic");
+  }
   const econ = gateEconomic({
-    map: arm === "shadow" ? null : score.guard,
+    map: score.guard,
     cell,
     regime: ctx.regime,
-    inBand: rule.top3MinS === undefined ? null : score.score.s >= rule.top3MinS,
+    inBand: score.score.s >= rule.top3MinS,
     opts: {
       cellMinSetups: params.cortex.cellMinSetups,
       cellMinBlocks: params.cortex.cellMinBlocks,
@@ -622,8 +666,17 @@ function evaluateCandidate(
   const theCell = cell!;
 
   // sizing hand-off data (needed by 5, 11 and 12): stop at the D close, limit, qty
-  stopSpec = stopSpecOf(f.atrMicro, rule.stopK);
+  stopSpec = planStopSpec(plan, f.atrMicro);
   stopMicro = initialStop(stopSpec, bar.close);
+  if (stopMicro <= 0n || stopMicro >= bar.close) {
+    step("G06_stop_cap", {
+      pass: false,
+      gateId: "G06_stop_cap",
+      label: STOP_CAP_LABEL,
+      value: `stop:${stopMicro}`,
+    });
+    return done("G06_stop_cap");
+  }
 
   // 5. cost (informational)
   const regimeGate = gateRegime(book.family, ctx.regime);
@@ -682,6 +735,7 @@ function evaluateCandidate(
   // 8. event and state vetoes
   const ev = gateEventState({
     d: inputs.d,
+    fillD: ctx.fillD,
     indexChangesLoaded: inputs.view.indexChangesLoaded,
     indexChanges: inputs.view.indexChanges(code, inputs.t),
     sessions: inputs.view.sessions.slice(0, inputs.t + 1),
@@ -749,7 +803,10 @@ function cardOf(
     b: { mean: number; cluster: AngleCluster },
   ): number => Math.abs(b.mean) - Math.abs(a.mean) || byText(a.cluster, b.cluster);
   return {
-    similar: p === null || cell === undefined ? null : { p, lo: p, hi: p, n: cell.n },
+    similar:
+      p === null || cell === undefined || rule?.pHidden === true
+        ? null
+        : { p, lo: null, hi: null, n: cell.n },
     breakEven:
       rule?.gainLoss === undefined
         ? []
@@ -784,9 +841,8 @@ function blockedOf(
 ): BlockedDecision {
   const f = ctx.facts.get(code)!;
   const score = e.score !== null && e.score.status === "scored" ? e.score : null;
-  const spec =
-    e.stopSpec ??
-    stopSpecOf(f.atrMicro ?? 0n, ctx.inputs.rules.get(book.family)?.stopK ?? DEFAULT_STOP_K);
+  const plan = e.plan ?? familyPlan(book.family, ctx.inputs.params, f.atrMicro) ?? EMPTY_PLAN;
+  const spec = e.stopSpec ?? planStopSpec(plan, f.atrMicro);
   return {
     bookId: book.bookId,
     family: book.family,
@@ -805,7 +861,7 @@ function blockedOf(
     qty: e.sizing?.qty ?? null,
     orderValueMicro: e.sizing?.orderValueMicro ?? null,
     halfSize: e.halfSize,
-    plan: exitPlanOf(spec),
+    plan,
     stopSpec: spec,
     trace: e.trace,
     card: cardOf(ctx, e, e.cell, ctx.inputs.rules.get(book.family)),
@@ -845,7 +901,7 @@ function decisionOf(
     qty: e.sizing!.qty,
     orderValueMicro: e.sizing!.orderValueMicro,
     halfSize: e.halfSize,
-    plan: exitPlanOf(e.stopSpec!),
+    plan: e.plan!,
     stopSpec: e.stopSpec!,
     trace: e.trace,
     card: cardOf(ctx, e, e.cell, ctx.inputs.rules.get(book.family)),
@@ -939,21 +995,21 @@ export function runNight(inputs: NightInputs): NightOutput {
   const fillD = nextTradingDay(d, view.calendar);
   const codes = view.codes(t);
 
-  // L0 night
+  // L0 night (D-336: bars dated D counted here; the stale share is the core's figure)
   const axjo = view.index("AXJO", t, 1);
   const benchmarkBarD = axjo[axjo.length - 1]?.d ?? null;
-  let reason: NightReason | null = isLateBarNight({
-    d,
-    benchmarkBarD,
-    universeBarsOnD: codes.length,
-  })
+  const barsOnD = codes.filter((c) => closeAt(view, t, d, c) !== null).length;
+  // stale share: members of the previous session's universe (or tonight's) without a bar dated D
+  const members = new Set<string>([...(t > 0 ? view.codes(t - 1) : []), ...codes]);
+  const staleShare = members.size === 0 ? 0 : 1 - barsOnD / members.size;
+  let reason: NightReason | null = isLateBarNight({ d, benchmarkBarD, universeBarsOnD: barsOnD })
     ? "late_bar"
     : null;
-  if (reason === null && inputs.degrade !== undefined) {
+  if (reason === null) {
     reason = quotaDegrade({
-      elapsedMinutes: inputs.degrade.elapsedMinutes,
+      elapsedMinutes: inputs.degrade?.elapsedMinutes ?? 0,
       stageMinutes: params.cortex.stageMinutes,
-      staleShare: inputs.degrade.staleShare,
+      staleShare,
       staleUniverseMaxShare: params.cortex.staleUniverseMaxShare,
     });
   }
@@ -1035,6 +1091,9 @@ export function runNight(inputs: NightInputs): NightOutput {
     const passers: Passer[] = [];
     const armBlocked: BlockedDecision[] = [];
     for (const code of codes) {
+      // D-332: the candidate set is the family's v1 universe tiers (no row for a code outside them)
+      const tier = facts.get(code)!.tier;
+      if (rule === undefined || tier === null || !rule.tiers.includes(tier)) continue;
       const e = evaluateCandidate(
         ctx,
         book,
@@ -1123,30 +1182,15 @@ export function runNight(inputs: NightInputs): NightOutput {
   for (const book of books) {
     const allowed = (inputs.status[book.family] ?? "shadow") === "allowed";
     const deployable = deployableOf(book);
-    let liveTaken: Decision[] = [];
-    if (!mapMissing) {
-      const live = runArm(book, "live", allowed, deployable);
-      liveTaken = live.taken;
-      decisions.push(...live.taken);
-      queued.push(...live.queued);
-      blocked.push(...live.blocked);
-    }
+    const live = runArm(book, "live", allowed, deployable);
+    decisions.push(...live.taken);
+    queued.push(...live.queued);
+    blocked.push(...live.blocked);
     const sh = runArm(book, "shadow", allowed, deployable);
     shadow.push(...sh.taken);
     blocked.push(...sh.blocked);
-    if (liveTaken.length === 0 && cashHolding(book)) {
-      const liveBlocked = mapMissing
-        ? []
-        : blocked.filter((b) => b.bookId === book.bookId && b.arm === "live");
-      const a = mapMissing
-        ? {
-            bookId: book.bookId,
-            gateId: "G04_economic" as const,
-            label: NOT_ENOUGH_HISTORY_LABEL,
-            detail: { reason: "map_missing" },
-          }
-        : abstainOf(book.bookId, ctx.night, liveBlocked);
-      abstains.push(a);
+    if (live.taken.length === 0 && cashHolding(book)) {
+      abstains.push(abstainOf(book.bookId, ctx.night, live.blocked));
     }
   }
 
@@ -1169,11 +1213,14 @@ export function runNight(inputs: NightInputs): NightOutput {
 // ---- would-have scoring (batch 3 helper) -----------------------------------------------------------------------------
 
 export type WouldHaveInput = {
+  readonly code: string;
+  readonly family: Family;
   readonly qty: bigint;
   readonly limitMicro: Micro;
-  readonly stopSpec: StopSpec;
-  /** Sessions the position is held before the time exit (the family's hold). */
-  readonly horizonSessions: number;
+  /** The decision's exit plan (D-333): initial stop, trails, time stops, CS levels. */
+  readonly plan: ExitPlan;
+  /** ATR(20) at the decision (the trails read it). */
+  readonly atrMicro: Micro | null;
   /** Raw bars of the sessions AFTER the decision night, oldest first (the first is the fill session). */
   readonly bars: readonly ViewBar[];
   readonly profile: CostProfile;
@@ -1186,8 +1233,9 @@ export type WouldHaveOutcome = {
   readonly fillMicro: Micro | null;
   readonly fillD: string | null;
   readonly exitD: string | null;
-  /** The exit fill's rule (`gap_open`, `level`, `close_signal` = time exit). */
+  /** The exit fill's rule (`gap_open`, `level`, `close_signal`) and the plan rule behind a CS exit. */
   readonly exitRule: string | null;
+  readonly csRule: string | null;
   readonly grossMicro: Micro | null;
   readonly netMicro: Micro | null;
   /** D-301: a net of exactly 0 is a loss. */
@@ -1197,16 +1245,15 @@ export type WouldHaveOutcome = {
 
 /**
  * One decision scored as a would-have trade (CTX-023, CTX-054; FAM-008 fill model): the limit fill
- * on the first later bar (`fillEntryLimit`, D-288), the stop referenced to the fill, ARN-021 exits
- * (gap through → open, else at the stop), a time exit at the open after `horizonSessions`. Unfilled
- * = no trade in both arms. Returns null while the hold is still open (not enough later bars).
+ * on the first later bar (`fillEntryLimit`, D-288), the initial stop referenced to the fill, then
+ * the family's v1 plan walked through `evaluateExit` at every close (trail levels active from the
+ * next session; CS rules — time stop, max hold, SMA, levels — fill at the next open; ARN-021
+ * `selectExit` when both apply on one session). Unfilled = no trade in both arms. Returns null
+ * while the hold is still open (not enough later bars).
  */
 export function wouldHaveOutcome(input: WouldHaveInput): WouldHaveOutcome | null {
   const first = input.bars[0];
   if (first === undefined) return null;
-  if (!Number.isInteger(input.horizonSessions) || input.horizonSessions < 1) {
-    throw new RangeError("horizon must be a positive integer");
-  }
   const env = (b: ViewBar): FillEnv => ({
     bar: toBar(b),
     advMicro: input.advMicro,
@@ -1221,6 +1268,7 @@ export function wouldHaveOutcome(input: WouldHaveInput): WouldHaveOutcome | null
       fillD: first.d,
       exitD: null,
       exitRule: null,
+      csRule: null,
       grossMicro: null,
       netMicro: null,
       outcomeClass: null,
@@ -1228,23 +1276,44 @@ export function wouldHaveOutcome(input: WouldHaveInput): WouldHaveOutcome | null
     };
   }
   const fill = entry.fill;
-  const stop = initialStop(input.stopSpec, fill.fillPriceMicro);
+  const stop = initialStop(planStopSpec(input.plan, input.atrMicro), fill.fillPriceMicro);
+  let level = stop;
+  let highest = fill.fillPriceMicro;
+  let pendingCs: string | null = null;
   let exit: SimulatedFill | null = null;
   let exitD: string | null = null;
+  let csRule: string | null = null;
   for (let i = 0; i < input.bars.length; i += 1) {
     const b = input.bars[i]!;
-    if (i >= input.horizonSessions) {
-      exit = fillCloseSignalExit(env(b), input.qty);
+    const cs = pendingCs === null ? null : fillCloseSignalExit(env(b), input.qty);
+    const is =
+      level > 0n ? fillIntradayStop(env(b), input.qty, level, { afterOpen: i === 0 }) : null;
+    const chosen = selectExit(cs, is);
+    if (chosen !== null) {
+      exit = chosen;
       exitD = b.d;
+      csRule = chosen === cs ? pendingCs : null;
       break;
     }
-    const hit =
-      stop > 0n ? fillIntradayStop(env(b), input.qty, stop, { afterOpen: i === 0 }) : null;
-    if (hit !== null) {
-      exit = hit;
-      exitD = b.d;
-      break;
-    }
+    if (b.close > highest) highest = b.close;
+    const pos: PositionState = {
+      tradeId: `wh:${input.code}:${first.d}`,
+      code: input.code,
+      family: input.family,
+      plan: input.plan,
+      fillDay: first.d,
+      fillMicro: fill.fillPriceMicro,
+      sessionsHeld: i + 1,
+      closeMicro: b.close,
+      highestCloseMicro: highest,
+      atrMicro: input.atrMicro,
+      closeAboveExitSma: null,
+      volumeRatios: [],
+      events: [],
+    };
+    const ev = evaluateExit(pos);
+    for (const l of ev.isLevels) if (l.levelMicro > level) level = l.levelMicro;
+    pendingCs = ev.cs?.rule ?? null;
   }
   if (exit === null) return null;
   const gross = exit.valueMicro - fill.valueMicro;
@@ -1255,6 +1324,7 @@ export function wouldHaveOutcome(input: WouldHaveInput): WouldHaveOutcome | null
     fillD: first.d,
     exitD,
     exitRule: exit.rule,
+    csRule,
     grossMicro: gross,
     netMicro: net,
     outcomeClass: net > 0n ? "win" : "loss",
