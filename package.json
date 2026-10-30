@@ -19,7 +19,7 @@
     "test:coverage": "vitest run --coverage",
     "test:coverage:worker": "vitest run --root worker --coverage",
     "test:diffcov": "node scripts/ci/diff-coverage.mjs --lcov coverage/lcov.info --base origin/main",
-    "test:smoke": "node --test \"scripts/smoke/*.test.mjs\" \"scripts/e2e/*.test.mjs\" \"scripts/maintenance/*.test.mjs\" \"scripts/backup/*.test.mjs\" \"scripts/backfill/*.test.mjs\" \"scripts/ingest/*.test.mjs\" \"scripts/arena/*.test.mjs\" \"scripts/replay/*.test.mjs\" \"scripts/restore/*.test.mjs\" \"scripts/watchdog/*.test.mjs\" \"scripts/ci/*.test.mjs\" \"scripts/secrets/*.test.mjs\" \"scripts/asx/*.test.mjs\" \"scripts/ui/*.test.mjs\"",
+    "test:smoke": "node scripts/test/with-run-temp.mjs node --test \"scripts/smoke/*.test.mjs\" \"scripts/e2e/*.test.mjs\" \"scripts/maintenance/*.test.mjs\" \"scripts/backup/*.test.mjs\" \"scripts/backfill/*.test.mjs\" \"scripts/ingest/*.test.mjs\" \"scripts/arena/*.test.mjs\" \"scripts/replay/*.test.mjs\" \"scripts/restore/*.test.mjs\" \"scripts/watchdog/*.test.mjs\" \"scripts/ci/*.test.mjs\" \"scripts/secrets/*.test.mjs\" \"scripts/asx/*.test.mjs\" \"scripts/ui/*.test.mjs\" \"scripts/test/*.test.mjs\"",
     "test:tokens": "node scripts/ui/gen-tokens.mjs src/styles/palette.tokens.json --check",
     "test:routes": "node scripts/ci/route-coverage.mjs",
     "test:hygiene": "node scripts/ci/repo-hygiene.mjs",
