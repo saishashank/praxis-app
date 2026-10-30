@@ -360,9 +360,7 @@ export function runReplay(o: RunOptions): ReplayOutput {
       ledgerRows = ledger.entries.length;
       controlPaths = ledger.controlPaths;
       // FAM-005 (D-214): the cost-gate table from this run's own ledger, development rows only
-      const gateOpt: { costGate?: CostGateTable } = {
-        costGate: costGateTableOf(ledger, world.sessions, params, runId),
-      };
+      const costGate = costGateTableOf(ledger, world.sessions, params, runId);
       const cohortsFor = (settlementMode: SettlementMode): CohortReplayResult =>
         replayCohorts(world, {
           params,
@@ -370,7 +368,7 @@ export function runReplay(o: RunOptions): ReplayOutput {
           executions: unleveredExecutionIds(buildExecutionRegistry()), // D-191: no leverage
           // ARN-109 (D-225): replay statistics use `settlement_stats_mode` (default conservative)
           cohortParams: () => ({ settlementMode }),
-          ...gateOpt,
+          costGate,
           progress: () => {
             if (tm.elapsed() > budget) throw new OverBudget("cohorts");
           },

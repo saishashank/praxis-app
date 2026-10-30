@@ -64,6 +64,7 @@ import {
   promotionsAwaitingRoll,
   rollAfterPromotion,
 } from "./promotion";
+import { releasePreRegistered } from "./preRegistered";
 import type { LessonObs } from "./templates";
 import type { StageOutput } from "./weeklyRun";
 import {
@@ -380,6 +381,40 @@ async function paramHints(db: Client, lineage: string): Promise<ParamHint[]> {
 }
 
 const entryKey = (e: LedgerEntry): string => `${e.code}|${e.row.entry_d}`;
+
+/**
+ * M14 KB-081 / O-46: releases the pre-registered challengers family by family, in list order, as slots
+ * free up. A family with no split yet is left alone (nothing to charge a trial to); each family uses its
+ * own cumulative trial budget. Idempotent: a change already carried by a stored version is not created
+ * again. The F5-U3-stress variant is a replay-descriptive variant (D-221), not in this list.
+ */
+export async function preRegisteredStage(c: WeeklyContext): Promise<StageOutput> {
+  const { db, market, params } = c;
+  const perFamily: Record<string, unknown>[] = [];
+  for (const family of FAMILY_ORDER) {
+    const split = await loadSplit(db, lineageId(market, family));
+    if (split === null || split.deferred_until_d !== null) continue;
+    const budgetTotal = await budgetTotalFor(
+      db,
+      market,
+      family,
+      split.version,
+      params.stats.trialBudgetPerLineage,
+    );
+    const r = await releasePreRegistered(db, {
+      market,
+      d: c.d,
+      learning: params.learning,
+      stats: params.stats,
+      budgetTotal,
+      families: [family],
+    });
+    if (r.created.length + r.alreadyRegistered.length + r.skipped.length > 0 || r.stoppedBy) {
+      perFamily.push({ family, ...r });
+    }
+  }
+  return { stats: [stat(market, "preregistered", { families: perFamily })] };
+}
 
 export async function challengersStage(c: WeeklyContext): Promise<StageOutput> {
   const { db, market, world, params } = c;

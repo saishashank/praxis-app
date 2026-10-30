@@ -6,6 +6,7 @@
 //   stability      the generator's +-1 grid steps of every numeric key: n, mean net, the one-sided 90 %
 //                  lower bound under P5 and the absolute-gate result; "fragile" when the version passes
 //                  and a neighbour fails (ARN-108). Weekly for the incumbent, once per challenger in replay.
+//   min_btl, error_budget  per lineage `<market>:<family>` (VAL-115, VAL-112/116; stats/minBtl.ts, errorBudget.ts).
 // Nothing here is a trial and nothing is a finding. Net returns are fractions (0.012 = 1.2 %).
 import { FAMILY_ORDER, FAMILY_RULE_VERSION } from "@/lib/agents/families/constants";
 import { paramsWithVersion } from "@/lib/agents/params";
@@ -14,15 +15,20 @@ import { replayLedger, type LedgerEntry } from "@/lib/replay/ledger";
 import { costSetupFrom } from "@/lib/replay/returns";
 import { developmentNet, oneTickAdverse } from "@/lib/replay/sensitivity";
 import type {
+  ErrorBudgetStat,
   ExitAblationStat,
+  MinBtlStat,
   ReturnSummary,
   SlipOneTickStat,
   StabilityNeighbour,
   StabilityStat,
 } from "@/lib/stats/robustnessTypes";
+import { validationLevelFor } from "@/lib/stats/errorBudget";
+import { minBtlLabel } from "@/lib/stats/minBtl";
 import { lineageId } from "@/lib/stats/splits";
 import type { ReplayStatInput } from "@/lib/replay/scorecards";
 import { candidateSteps } from "./challengerGenerator";
+import { poolId, readPoolState } from "./alphaInvesting";
 import { incumbentOf } from "./challengerLifecycle";
 import type { StageOutput } from "./weeklyRun";
 import {
@@ -63,6 +69,56 @@ export function summarise(
 }
 
 const key = (e: LedgerEntry): string => `${e.code}|${e.row.entry_d}`;
+
+/**
+ * VAL-115 `min_btl` and VAL-112/116 `error_budget` of one lineage (scope `<market>:<family>`): N is the
+ * lineage's trials over all its split versions, k the validation and pattern tests on the current one.
+ * Both are descriptive and read only the trial ledger, the alpha pool and the session count.
+ */
+async function lineageStatus(
+  c: WeeklyContext,
+  family: Family,
+  lineage: string,
+  split: NonNullable<Awaited<ReturnType<typeof loadSplit>>>,
+  stats: ReplayStatInput[],
+): Promise<void> {
+  const { db, market, world, params } = c;
+  const s = params.stats;
+  const rs = await db.execute({
+    sql: "SELECT split_version, kind FROM trial_ledger WHERE lineage_id = ?",
+    args: [lineage],
+  });
+  const spent = rs.rows.filter(
+    (r) =>
+      Number(r.split_version) === split.version &&
+      (String(r.kind) === "validation_access" || String(r.kind) === "pattern_test"),
+  ).length;
+  const sessions = developmentSessions(world, split).sessions.length;
+  const btl = minBtlLabel(rs.rows.length, s.minbtlTargetSharpe, sessions);
+  const btlValue: MinBtlStat = {
+    lineage,
+    trials: rs.rows.length,
+    target_sharpe: s.minbtlTargetSharpe,
+    min_years: btl.minYears,
+    available_years: btl.availableYears,
+    label: btl.label,
+  };
+  stats.push({ scope: lineage, metric: "min_btl", value: btlValue });
+  const pool = await readPoolState(db, poolId(market, family), params);
+  const budgetValue: ErrorBudgetStat = {
+    lineage,
+    mode: s.valErrorBudgetMode,
+    tests_so_far: spent,
+    next_level: validationLevelFor({
+      mode: s.valErrorBudgetMode,
+      w0: s.valFwerPerLineage,
+      priorTests: spent,
+      legacy: { alpha: s.alpha, m: s.trialBudgetPerLineage, lineages: s.activeLineagesFloor },
+    }),
+    lesson_pool: pool.exhausted ? "exhausted" : "open",
+  };
+  stats.push({ scope: lineage, metric: "error_budget", value: budgetValue });
+}
 
 export async function robustnessStage(c: WeeklyContext): Promise<StageOutput> {
   const { db, market, world, params } = c;
@@ -131,6 +187,7 @@ export async function robustnessStage(c: WeeklyContext): Promise<StageOutput> {
       skipped.push({ family, reason: "no_split" });
       continue;
     }
+    await lineageStatus(c, family, lineage, split, stats);
     const incumbentId = (await incumbentOf(db, market, family)) ?? FAMILY_RULE_VERSION[family];
     const devWin = developmentSessions(world, split);
     const inDev = (e: LedgerEntry): boolean => e.net !== null && devWin.index.has(e.row.entry_d);
