@@ -20,9 +20,9 @@ import { hasSuccess, finishRun, startRun } from "@/lib/runs/runRecord";
 import { loadCalendar } from "@/lib/arena/closeBooks";
 import { loadAgentParams, type AgentParams } from "@/lib/agents/params";
 import { narrativeStage } from "@/lib/agents/batch3";
-import { allowance, estimateTokens, fits } from "@/lib/llm/budget";
+import { allowance, fits } from "@/lib/llm/budget";
 import type { LlmProvider } from "@/lib/llm/providers";
-import { BUDGET_EXHAUSTED, buildPrompt, type LlmRouter } from "@/lib/llm/router";
+import { BUDGET_EXHAUSTED, requestReservation, type LlmRouter } from "@/lib/llm/router";
 import type { LlmStore } from "@/lib/llm/store";
 import { loadCtx, narrativeRequest, readNarrativePack } from "@/lib/review/sections";
 import { CRITIC_CHECK_NAMES, type Evaluation } from "./critic";
@@ -141,7 +141,7 @@ export function narrativeReserve(req: {
   readonly facts: unknown;
   readonly maxOutputTokens: number;
 }): number {
-  return estimateTokens(buildPrompt(req.task, req.facts, undefined, false)) + req.maxOutputTokens;
+  return requestReservation(req, undefined);
 }
 
 /**
@@ -175,9 +175,7 @@ export function reservingRouter(
         totalDay: usage.totalDay + args.reserve,
         marketNight: usage.marketNight + args.reserve,
       });
-      const projected =
-        estimateTokens(buildPrompt(req.task, req.facts, req.untrusted, false)) +
-        req.maxOutputTokens;
+      const projected = requestReservation(req, req.untrusted);
       if (fits(allow, projected)) return base.route(req);
       args.onBlocked();
       return {

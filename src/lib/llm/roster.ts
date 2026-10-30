@@ -243,8 +243,8 @@ const DAY_RE = new RegExp("^\\d{4}-\\d{2}-\\d{2}$");
 /** The last day of a YYYY-MM cut-off month, as YYYY-MM-DD (UTC calendar arithmetic, no clock). */
 export function cutoffLastDay(cutoff: string): string {
   if (!MONTH_RE.test(cutoff)) throw new Error(`cut-off must be YYYY-MM: ${cutoff}`);
-  const y = Number(cutoff.slice(0, 4));
-  const m = Number(cutoff.slice(5, 7));
+  const y = Number(cutoff.slice(0, 4)); // threshold-ok: YYYY-MM string offsets
+  const m = Number(cutoff.slice(5, 7)); // threshold-ok: YYYY-MM string offsets
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   return `${cutoff}-${String(last).padStart(2, "0")}`;
 }

@@ -81,6 +81,8 @@ import {
   type OpenTrade,
   type SizingContext,
 } from "./candidates";
+import { loadCostGateTable, type CostGateTable } from "./costGate";
+import { selectEntries } from "./entryGates";
 import {
   cardIdOf,
   CardError,
@@ -597,6 +599,8 @@ type Ctx = {
   readonly llm: LlmRouter | undefined;
   /** Scenario inputs per family|rule version|variant (one ledger read each per night). */
   readonly scenarios: Map<string, ScenarioInput>;
+  /** FAM-005 development-split medians (D-214); loaded once per run. */
+  readonly costTable: CostGateTable;
   /** arena_control as of the start of the run (D-094). */
   readonly control: ControlStates;
 };
@@ -958,6 +962,8 @@ type CardStatus = {
   readonly reason: string | null;
   /** The sizing result when the candidate was sized (accepted or rejected). */
   readonly sized: LegResult | null;
+  /** M14 card flags of the entry gates (`cost_gate_unmeasured`, `industry_unknown`, `corr_unknown`). */
+  readonly flags?: readonly string[];
 };
 
 type PreparedCard = {
@@ -994,7 +1000,7 @@ async function prepareCard(
     market: ctx.market,
     d: ctx.d,
     executionId: exec.id,
-    candidate: c,
+    candidate: status.flags === undefined ? c : { ...c, flags: [...c.flags, ...status.flags] },
     taken: status.taken,
     notTakenReason: status.reason,
     closeMicro: scaleMicro(facts.bar.close, cross.priceFactor),
@@ -1062,12 +1068,35 @@ async function entriesFor(
     else if (blocked.has(c.code)) notTaken.set(c, "reentry_block");
     else pool.push(c);
   }
+  // codes that cannot open tonight do not count as the first leg of FAM-006
+  const noPosition = new Set<string>();
+  for (const c of pool) {
+    if (
+      crossing(ctx.actionsNext, c.code, ctx.d, ctx.nextD).disposal ||
+      (await gateOf(ctx, c.code)).reason === "code_blocked"
+    ) {
+      noPosition.add(c.code);
+    }
+  }
+  // M14 entry gates (cost gate, second position, SHOCK abstain; the same function the replay calls)
+  const selection = selectEntries(pool, {
+    entry: ctx.params.entry,
+    advWindow: ctx.params.windows.adv,
+    costProfile: COST_PROFILES[books.params.costProfile],
+    costTable: ctx.costTable,
+    factsOf: (code) => ctx.day.facts.get(code),
+    heldCodes: [...open].sort(),
+    cashMicro: books.cashMicro,
+    noPosition,
+  });
+  for (const [c, reason] of selection.skipped) notTaken.set(c, reason);
+  const gated = selection.eligible;
   // the quality gate at creation: a global refusal rejects the top-ranked once, a blocked code
   // is rejected and the next candidate takes its place (entries only; exits are never gated)
   const eligible: Candidate[] = [];
   const gateRejects: { c: Candidate; reason: string }[] = [];
-  let stoppedAt = pool.length;
-  for (const [i, c] of pool.entries()) {
+  let stoppedAt = gated.length;
+  for (const [i, c] of gated.entries()) {
     if (eligible.length >= slots) {
       stoppedAt = i;
       break;
@@ -1087,7 +1116,7 @@ async function entriesFor(
       break;
     }
   }
-  for (const c of pool.slice(stoppedAt)) notTaken.set(c, "rank");
+  for (const c of gated.slice(stoppedAt)) notTaken.set(c, "rank");
   const legs: Leg[] = [];
   const byKey = new Map<string, Candidate>();
   for (const c of eligible) {
@@ -1128,6 +1157,10 @@ async function entriesFor(
     }
   }
   for (const [c, reason] of notTaken) status.set(c, { taken: false, reason, sized: null });
+  for (const [c, flags] of selection.flags) {
+    const st = status.get(c);
+    if (st !== undefined) status.set(c, { ...st, flags });
+  }
   // cards and notes first (the router call must not sit inside the write transaction)
   const prepared = new Map<Candidate, PreparedCard>();
   for (const c of ranked) {
@@ -1489,6 +1522,7 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       gates: new Map(),
       llm: o.llm,
       scenarios: new Map(),
+      costTable: await loadCostGateTable(db, o.market, params.entry.costGateMinRows),
       control: await loadControl(db),
     };
     const signalIds = new Map<Candidate, string>();

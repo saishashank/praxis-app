@@ -15,6 +15,7 @@ import { agentParamsSha } from "@/lib/agents/params";
 import { canonicalJson, sha256Hex } from "@/lib/arena/cohort";
 import { gzipDeterministic, sha256Hex as fileSha } from "@/lib/data/backfill/rules.mjs";
 import type { Family } from "@/lib/agents/schema";
+import type { FamilyOutput } from "@/lib/agents/families";
 import {
   arn076Stage,
   challengersStage,
@@ -22,13 +23,14 @@ import {
   factorsStage,
   lessonsStage,
   loadMarketCalendar,
+  preRegisteredStage,
   rollsStage,
   type WeeklyContext,
 } from "@/lib/learning/weeklyStages";
 import { rankIcStage } from "@/lib/learning/rankIcStage";
+import { robustnessStage } from "@/lib/learning/robustnessStage";
 import {
   LEARNING_SCOPE,
-  noopStage,
   RESUMABLE_STAGES,
   runWeekly,
   stageMetric,
@@ -128,10 +130,12 @@ export async function runLearning(o: LearningRunOptions): Promise<LearningOutput
     const ruleVersions: Partial<Record<Family, string>> = {};
     for (const [family, v] of set === null ? [] : [...set.live]) ruleVersions[family] = v.id;
     const facts = new Map<string, EntryFacts>();
+    const familyOutputs = new Map<string, Pick<FamilyOutput, "candidates" | "blocked">>();
     const ledger: LedgerResult = replayLedger(world, {
       params: live,
       familyOptions: { ruleVersions },
       factsSink: facts,
+      outputSink: familyOutputs,
     });
     ctx = {
       db: o.db,
@@ -142,6 +146,7 @@ export async function runLearning(o: LearningRunOptions): Promise<LearningOutput
       world,
       ledger,
       facts,
+      familyOutputs,
       calendar: await loadMarketCalendar(o.db, market),
     };
     return {
@@ -163,14 +168,12 @@ export async function runLearning(o: LearningRunOptions): Promise<LearningOutput
       forward,
       comparisons: wrap(comparisonsStage),
       lessons: wrap(lessonsStage),
-      // M14 WP0: registered with no-op stubs; WP6 (preregistered) and WP3 (robustness) replace them
-      // with `wrap(...)` of their stage functions.
-      preregistered: noopStage,
+      preregistered: wrap(preRegisteredStage),
       challengers: wrap(challengersStage),
       rolls: wrap(rollsStage),
       arn076: wrap(arn076Stage),
       factors: wrap(factorsStage),
-      robustness: noopStage,
+      robustness: wrap(robustnessStage),
       rankIc: wrap(rankIcStage),
     },
   });

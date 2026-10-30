@@ -16,6 +16,7 @@ import {
   type FamilyOutput,
   type FamilyInputs,
   type FamilyOptions,
+  type ExitPlan,
 } from "@/lib/agents/families";
 import type { AgentParams } from "@/lib/agents/params";
 import { canonicalJson, sha256Hex } from "@/lib/arena/cohort";
@@ -72,6 +73,17 @@ export type LedgerOptions = {
    * keyed by row id. Not part of the result or its digest (M6 T12: lessons and factor buckets).
    */
   readonly factsSink?: Map<string, EntryFacts>;
+  /**
+   * ARN-106 (D-222): applied to each candidate's exit plan before `walkPosition` (the comparator keeps
+   * only the family's time exit). Entries, ranks and control anchors are the family output's own.
+   */
+  readonly exitTransform?: (plan: ExitPlan) => ExitPlan;
+  /**
+   * Optional sink filled with the family output of each decision session this run computed itself (not
+   * those supplied by `familyOutput`). A second pass reuses it through the `familyOutput` hook, so
+   * `runFamilies` is not run twice (ARN-106). Not part of the result or its digest.
+   */
+  readonly outputSink?: Map<string, Pick<FamilyOutput, "candidates" | "blocked">>;
 };
 
 /** What the weekly learning run reads of a row beyond the ledger columns. */
@@ -236,6 +248,7 @@ export function replayLedger(src: LedgerSource, opts: LedgerOptions): LedgerResu
       }
       market = inputs.market;
       out = runFamilies(inputs, params, opts.familyOptions);
+      opts.outputSink?.set(d, { candidates: out.candidates, blocked: out.blocked });
     }
     const sameDay = new Map<string, Set<string>>();
     for (const c of [...out.candidates, ...out.blocked]) {
@@ -265,11 +278,12 @@ export function replayLedger(src: LedgerSource, opts: LedgerOptions): LedgerResu
         continue;
       }
       const advMicro = c.adv === null ? 0n : floorRat(c.adv);
+      const plan = opts.exitTransform === undefined ? c.plan : opts.exitTransform(c.plan);
       const w = walkPosition(
         src,
         {
           code: c.code,
-          plan: c.plan,
+          plan,
           entryIdx: idx + 1,
           endIdx,
           advMicro,
@@ -340,7 +354,7 @@ export function replayLedger(src: LedgerSource, opts: LedgerOptions): LedgerResu
             decisionIdx: idx,
             entryIdx: idx + 1,
             endIdx,
-            plan: c.plan,
+            plan,
             anchors,
             excludeCodes: sameDay.get(c.family) ?? new Set<string>(),
             count: params.stats.c2ControlsPerRow,

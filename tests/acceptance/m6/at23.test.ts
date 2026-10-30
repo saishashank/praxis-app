@@ -35,6 +35,7 @@ import {
   FAST,
   LEARNING,
   MARKET,
+  f1With,
   ownerChallenger,
   rows,
   world,
@@ -387,22 +388,28 @@ describe("AT-23 a passing challenger promotes only at the group restart", () => 
 
 // ---- limits ---------------------------------------------------------------------------------------------------
 
+// O-46 caps stop, trail and sizing variants per quarter, so the slot tests use a non-stop key
+const slotChallenger = async (db: Parameters<typeof ownerChallenger>[0], i: number) =>
+  ownerChallenger(db, i, undefined, {
+    params: await f1With(db, { f1_volume_ratio_min: 1.5 + 0.05 * (i + 1) }),
+  });
+
 describe("AT-23 limits (KB-042, ARN-005, ARN-085, KB-043)", () => {
   it("at most 8 concurrent challengers; a decided one frees its slot", async () => {
     const { db } = await world();
     const ids: string[] = [];
     for (let i = 0; i < LEARNING.maxChallengers; i += 1) {
-      const r = await ownerChallenger(db, i);
+      const r = await slotChallenger(db, i);
       if (r.status !== "created") throw new Error(JSON.stringify(r));
       ids.push(r.id);
     }
-    expect(await ownerChallenger(db, 8)).toMatchObject({ reason: "max_challengers" });
+    expect(await slotChallenger(db, 8)).toMatchObject({ reason: "max_challengers" });
     await transitionChallenger(
       db,
       { id: ids[0]!, to: "rejected", d: CH0, actor: "A6", reason: "x" },
       LEARNING,
     );
-    expect(await ownerChallenger(db, 8)).toMatchObject({ status: "created" });
+    expect(await slotChallenger(db, 8)).toMatchObject({ status: "created" });
   });
 
   it("an exhausted trial budget and a killed family give no new generated challenger", async () => {

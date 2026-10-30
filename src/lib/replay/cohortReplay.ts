@@ -68,6 +68,8 @@ import {
   type SizingContext,
 } from "@/lib/agents/candidates";
 import { controlPlan, controlPool } from "@/lib/agents/controls";
+import type { CostGateTable } from "@/lib/agents/costGate";
+import { ABSTAIN_SHOCK_REASON, selectEntries } from "@/lib/agents/entryGates";
 import {
   crossing,
   initialStopAtFill,
@@ -166,6 +168,7 @@ import {
 import { planLegacy, planLiquidation } from "@/lib/arena/terminal";
 import { addDays, isWeekend, type CalendarRow } from "@/lib/data/calendar";
 import type { EntryDecision } from "@/lib/data/quality/gate";
+import { exDividendOn, toExDividendActions } from "@/lib/arena/exDividend";
 import { floorRat } from "@/lib/money/round";
 import { divFloor, type Rational } from "@/lib/money/rational";
 import { decisionCutoffUtc, type ViewBar } from "@/lib/agents/decisionView";
@@ -249,6 +252,11 @@ export type CohortReplayOptions = {
   /** Restrict the registry to these execution ids (default: all). */
   readonly executions?: readonly string[];
   readonly ruleVersion?: string;
+  /**
+   * FAM-005 (D-214): development-split medians the E cohorts' entries are gated by. Absent: every
+   * signal is unmeasured and passes (the no-split goldens stay as they are).
+   */
+  readonly costGate?: CostGateTable;
 };
 
 export type SleeveSummary = {
@@ -625,6 +633,21 @@ export function replayCohorts(
     return actionsKnown;
   };
 
+  // FAM-007 (D-219): the dividend per share going ex on session env.d, known by the cut-off of the
+  // previous session (the same records that credit the dividend)
+  const exDividendFor = (env: DayEnv, code: string): bigint => {
+    const today = actionsOf(code).filter((a) => a.exDate === env.d);
+    if (today.length === 0) return 0n;
+    const prev = sessions[env.i - 1];
+    if (prev === undefined) return 0n;
+    return exDividendOn(
+      toExDividendActions(today),
+      code,
+      env.d,
+      decisionCutoffUtc(prev, params.decisionCutoff),
+    );
+  };
+
   const cohorts: Cohort[] = [];
   let live: Cohort[] = [];
   const startsSeen: string[] = [];
@@ -868,7 +891,9 @@ export function replayCohorts(
       const fe = fillEnv(c, bar, env, pos.code);
       const cs = fillCloseSignalExit(fe, pos.qty);
       const level = effLevel(pos);
-      const stop = fillIntradayStop(fe, pos.qty, level);
+      const stop = fillIntradayStop(fe, pos.qty, level, {
+        exDividendMicro: exDividendFor(env, pos.code),
+      });
       const chosen = selectExit(cs, stop);
       if (chosen === null) continue;
       closePosition(c, pos, chosen, chosen.rule === "close_signal" ? "CS" : "IS", env, level);
@@ -968,6 +993,7 @@ export function replayCohorts(
       const level = effLevel(pos);
       const fill = fillIntradayStop(fillEnv(c, bar, env, pos.code), pos.qty, level, {
         afterOpen: pos.entryIdx === env.i,
+        exDividendMicro: exDividendFor(env, pos.code),
       });
       if (fill !== null) closePosition(c, pos, fill, "IS", env, level);
     }
@@ -1213,7 +1239,7 @@ export function replayCohorts(
       const level = effLevel(pos);
       const chosen = selectExit(
         fillCloseSignalExit(fe, pos.qty),
-        fillIntradayStop(fe, pos.qty, level),
+        fillIntradayStop(fe, pos.qty, level, { exDividendMicro: exDividendFor(env, code) }),
       );
       if (chosen === null) continue;
       closePosition(c, pos, chosen, "CS", env, null, true);
@@ -1468,11 +1494,32 @@ export function replayCohorts(
       string,
       { cand: Candidate; plan: OrderPlan; maxOpen: bigint | null; thesis: Thesis | undefined }
     >();
-    for (const cand of ranked) {
-      if (legs.length >= slotsLeft) break;
-      if (c.positions.has(cand.code)) continue;
+    const pool = ranked.filter((cand) => {
+      if (c.positions.has(cand.code)) return false;
       const last = c.lastIs.get(cand.code);
-      if (last !== undefined && last >= blockFrom) continue; // re-entry block (FAM-002)
+      return last === undefined || last < blockFrom; // re-entry block (FAM-002)
+    });
+    // M14 entry gates: the same function as the live night (cost gate, second position, abstain)
+    const sizing = sizingOf(c, env);
+    // a disposal across the next session cannot open, so it is not the FAM-006 first leg (as batch 2b)
+    const noPosition = new Set(
+      pool
+        .filter((cand) => crossing(allActions(env.d), cand.code, env.d, env.nextD!).disposal)
+        .map((cand) => cand.code),
+    );
+    const gated = selectEntries(pool, {
+      entry: params.entry,
+      advWindow: params.windows.adv,
+      costProfile: c.profile,
+      costTable: opts.costGate,
+      factsOf: (code) => env.facts.get(code),
+      heldCodes: [...c.positions.keys()].sort(),
+      cashMicro: sizing.cashMicro,
+      noPosition,
+    });
+    const abstained = [...gated.skipped.values()].some((r) => r === ABSTAIN_SHOCK_REASON);
+    for (const cand of gated.eligible) {
+      if (legs.length >= slotsLeft) break;
       const facts = env.facts.get(cand.code);
       if (facts === undefined) continue;
       const made = legFor(env, facts, cand.halfSize, cand.code);
@@ -1496,7 +1543,12 @@ export function replayCohorts(
       };
       meta.set(cand.code, { cand, thesis, ...entryPlanOf(cand, env, made) });
     }
-    const results = planLegs(sizingOf(c, env), markSleeve(legs, sleeveReserve(c)), slotsLeft);
+    const results = planLegs(sizing, markSleeve(legs, sleeveReserve(c)), slotsLeft);
+    if (abstained && results.length === 0) {
+      // the abstain replaces the below-two-parcels rejection one for one (stall counters unchanged)
+      c.todaySignals += 1;
+      c.todayParcel += 1;
+    }
     placeOrders(c, env, results, (leg) => {
       const m = meta.get(leg.key)!;
       return { plan: m.plan, maxOpen: m.maxOpen, tier: m.cand.tier, thesis: m.thesis };

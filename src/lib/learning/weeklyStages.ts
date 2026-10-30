@@ -20,6 +20,8 @@ import {
   type LedgerEntry,
   type LedgerResult,
 } from "@/lib/replay/ledger";
+import { comparatorLedger, type FamilyOutputs } from "@/lib/replay/exitAblation";
+import { developmentNet, type NetRow } from "@/lib/replay/sensitivity";
 import { periodReturns, costSetupFrom } from "@/lib/replay/returns";
 import type { SnapshotWorld } from "@/lib/replay/snapshotWorld";
 import type { ReplayStatInput } from "@/lib/replay/scorecards";
@@ -62,6 +64,7 @@ import {
   promotionsAwaitingRoll,
   rollAfterPromotion,
 } from "./promotion";
+import { releasePreRegistered } from "./preRegistered";
 import type { LessonObs } from "./templates";
 import type { StageOutput } from "./weeklyRun";
 import {
@@ -83,6 +86,8 @@ export type WeeklyContext = {
   readonly ledger: LedgerResult;
   readonly facts: ReadonlyMap<string, EntryFacts>;
   readonly calendar: readonly CalendarRow[];
+  /** Family outputs of the forward pass (ARN-106: the comparator pass reuses them); absent = no comparator. */
+  readonly familyOutputs?: FamilyOutputs;
 };
 
 const stat = (scope: string, metric: string, value: unknown): ReplayStatInput => ({
@@ -137,6 +142,41 @@ const primary = (res: LedgerResult, family: Family, version?: string): LedgerEnt
 
 const indexOf = (sessions: readonly string[]): Map<string, number> =>
   new Map(sessions.map((d, i) => [d, i]));
+
+/** ARN-106: the time-stop-only ledger of the forward pass, computed once per context. */
+const comparators = new WeakMap<WeeklyContext, LedgerResult | null>();
+export function comparatorOf(c: WeeklyContext): LedgerResult | null {
+  if (c.familyOutputs === undefined) return null;
+  let r = comparators.get(c);
+  if (r === undefined) {
+    r = comparatorLedger(c.world, c.market, c.params, c.familyOutputs);
+    comparators.set(c, r);
+  }
+  return r;
+}
+
+/** The development sessions of a split and the index of each (entry sessions of the bootstrap). */
+export function developmentSessions(
+  world: SnapshotWorld,
+  split: LineageSplitRecord,
+): { sessions: string[]; index: Map<string, number> } {
+  const sessions = world.sessions.filter((d) => isDevelopment(split, d));
+  return { sessions, index: indexOf(sessions) };
+}
+
+/** Closed development rows as bootstrap input (float net, entry-session index in the development window). */
+export function netRowsOf(
+  entries: readonly LedgerEntry[],
+  index: ReadonlyMap<string, number>,
+): NetRow[] {
+  const out: NetRow[] = [];
+  for (const e of entries) {
+    const s = index.get(e.row.entry_d);
+    if (e.net === null || s === undefined) continue;
+    out.push({ session: s, net: ratNumber(e.net) });
+  }
+  return out;
+}
 
 const isDevelopment = (split: LineageSplitRecord, entryD: string): boolean =>
   split.deferred_until_d !== null ? true : splitOf(split, entryD) === "development";
@@ -319,7 +359,7 @@ export async function lessonsStage(c: WeeklyContext): Promise<StageOutput> {
 
 // ---- challengers ----------------------------------------------------------------------------------------------------
 
-async function versionParams(db: Client, id: string): Promise<Record<string, unknown>> {
+export async function versionParams(db: Client, id: string): Promise<Record<string, unknown>> {
   const rs = await db.execute({
     sql: "SELECT params_json FROM rule_version WHERE id = ?",
     args: [id],
@@ -341,6 +381,40 @@ async function paramHints(db: Client, lineage: string): Promise<ParamHint[]> {
 }
 
 const entryKey = (e: LedgerEntry): string => `${e.code}|${e.row.entry_d}`;
+
+/**
+ * M14 KB-081 / O-46: releases the pre-registered challengers family by family, in list order, as slots
+ * free up. A family with no split yet is left alone (nothing to charge a trial to); each family uses its
+ * own cumulative trial budget. Idempotent: a change already carried by a stored version is not created
+ * again. The F5-U3-stress variant is a replay-descriptive variant (D-221), not in this list.
+ */
+export async function preRegisteredStage(c: WeeklyContext): Promise<StageOutput> {
+  const { db, market, params } = c;
+  const perFamily: Record<string, unknown>[] = [];
+  for (const family of FAMILY_ORDER) {
+    const split = await loadSplit(db, lineageId(market, family));
+    if (split === null || split.deferred_until_d !== null) continue;
+    const budgetTotal = await budgetTotalFor(
+      db,
+      market,
+      family,
+      split.version,
+      params.stats.trialBudgetPerLineage,
+    );
+    const r = await releasePreRegistered(db, {
+      market,
+      d: c.d,
+      learning: params.learning,
+      stats: params.stats,
+      budgetTotal,
+      families: [family],
+    });
+    if (r.created.length + r.alreadyRegistered.length + r.skipped.length > 0 || r.stoppedBy) {
+      perFamily.push({ family, ...r });
+    }
+  }
+  return { stats: [stat(market, "preregistered", { families: perFamily })] };
+}
 
 export async function challengersStage(c: WeeklyContext): Promise<StageOutput> {
   const { db, market, world, params } = c;
@@ -393,6 +467,19 @@ export async function challengersStage(c: WeeklyContext): Promise<StageOutput> {
       continue;
     }
     const incumbentParams = await versionParams(db, incumbentId);
+    const devWin = developmentSessions(world, split);
+    const comparator = comparatorOf(c);
+    const comparatorDev =
+      comparator === null
+        ? []
+        : primary(comparator, family, incumbentId).filter(
+            (x) => x.net !== null && isDevelopment(split, x.row.entry_d),
+          );
+    const comparatorMeanNet =
+      comparatorDev.length === 0
+        ? null
+        : netRowsOf(comparatorDev, devWin.index).reduce((a, r) => a + r.net, 0) /
+          comparatorDev.length;
     const budgetTotal = await budgetTotalFor(
       db,
       market,
@@ -415,11 +502,20 @@ export async function challengersStage(c: WeeklyContext): Promise<StageOutput> {
           const blocks = new Set(
             dev.map((x) => Math.floor((index.get(x.row.entry_d) ?? 0) / split.block_sessions)),
           );
+          const dn = developmentNet(
+            netRowsOf(dev, devWin.index),
+            devWin.sessions.length,
+            split.block_sessions,
+            params.stats,
+            `${lineage}:${k}`,
+          );
           e = {
             split: "development",
             rows: dev.length,
             blocks: blocks.size,
             meanExcess: ex.length === 0 ? null : ex.reduce((a, b) => a + b, 0) / ex.length,
+            meanNet: dn.meanNet,
+            netLower90: dn.netLower90,
           };
           devEval.set(k, e);
         }
@@ -434,6 +530,7 @@ export async function challengersStage(c: WeeklyContext): Promise<StageOutput> {
       learning: params.learning,
       stats: params.stats,
       budgetTotal,
+      comparatorMeanNet,
     });
     row.generator =
       gen.status === "blocked" || gen.status === "refused"

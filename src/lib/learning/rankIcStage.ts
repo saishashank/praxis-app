@@ -130,7 +130,7 @@ async function insertDay(
 }
 
 /** Rows per write batch: one round trip per chunk instead of one per row (replay backfills years). */
-const INSERT_CHUNK = 500;
+const INSERT_CHUNK = 500; // threshold-ok: insert chunk size
 
 async function insertRows(
   db: Client,
