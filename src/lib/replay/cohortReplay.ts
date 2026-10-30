@@ -1501,6 +1501,12 @@ export function replayCohorts(
     });
     // M14 entry gates: the same function as the live night (cost gate, second position, abstain)
     const sizing = sizingOf(c, env);
+    // a disposal across the next session cannot open, so it is not the FAM-006 first leg (as batch 2b)
+    const noPosition = new Set(
+      pool
+        .filter((cand) => crossing(allActions(env.d), cand.code, env.d, env.nextD!).disposal)
+        .map((cand) => cand.code),
+    );
     const gated = selectEntries(pool, {
       entry: params.entry,
       advWindow: params.windows.adv,
@@ -1509,6 +1515,7 @@ export function replayCohorts(
       factsOf: (code) => env.facts.get(code),
       heldCodes: [...c.positions.keys()].sort(),
       cashMicro: sizing.cashMicro,
+      noPosition,
     });
     const abstained = [...gated.skipped.values()].some((r) => r === ABSTAIN_SHOCK_REASON);
     for (const cand of gated.eligible) {

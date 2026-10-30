@@ -105,6 +105,13 @@ describe("second position (FAM-006)", () => {
     expect([...r.skipped.values()]).toEqual(["second_position"]);
   });
 
+  it("a code that cannot open stays eligible but is not the first leg", () => {
+    const f = [withIndustry("ZZA", "Banks", zig(0)), withIndustry("ZZB", "Banks", zig(1))];
+    const r = selectEntries([cand("ZZA"), cand("ZZB")], ctx(f, { noPosition: new Set(["ZZA"]) }));
+    expect(r.eligible.map((c) => c.code)).toEqual(["ZZA", "ZZB"]);
+    expect(r.skipped.size).toBe(0);
+  });
+
   it("a held position counts as the first", () => {
     const f = [withIndustry("ZZH", "Banks", zig(0)), withIndustry("ZZB", "Banks", zig(1))];
     const r = selectEntries([cand("ZZB")], ctx(f, { heldCodes: ["ZZH"] }));
