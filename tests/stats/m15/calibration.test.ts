@@ -21,6 +21,9 @@ import {
   plattFitPooled,
   plattPoolGroup,
   plattTargets,
+  SEPARATION_COEF_LIMIT,
+  SLOPE_MAX_NON_FINITE_SHARE,
+  slopeHidden,
   solveLinear,
   standardise,
 } from "@/lib/stats/calibration";
@@ -63,6 +66,43 @@ describe("linear algebra and logistic fit", () => {
     expect(fit.converged).toBe(true);
     expect(fit.coef[1]).toBeCloseTo(Math.log(1.5), 8);
     expect(fit.coef[0]).toBeCloseTo(Math.log(4 / 1.5), 8);
+  });
+
+  it("D-300: a separated sample returns null, a steep but separable-free fit converges by step-halving", () => {
+    // Perfect separation: y = 1 exactly when x > 0 → the MLE diverges → null.
+    const sep = logisticFit(
+      [-3, -2, -1, 1, 2, 3].map((v) => [v, 1]),
+      [0, 0, 0, 1, 1, 1],
+    );
+    expect(sep).toBeNull();
+    // Steep inputs (x scaled by 200) with noisy outcomes: the first Newton step overshoots; the fit
+    // still converges with a finite slope about 1/200 of the unit-scale answer.
+    const d = plantedOutcomes(400, 1.0, prngFor("steep"));
+    const unit = logisticFit(
+      d.z.map((v) => [v, 1]),
+      d.y,
+    )!;
+    const steep = logisticFit(
+      d.z.map((v) => [200 * v, 1]),
+      d.y,
+    )!;
+    expect(unit.converged && steep.converged).toBe(true);
+    expect(steep.coef[0]! * 200).toBeCloseTo(unit.coef[0]!, 6);
+    expect(SEPARATION_COEF_LIMIT).toBe(50);
+  });
+
+  it("slopeHidden: hidden when the monitor says so and when the slope is undefined", () => {
+    expect(slopeHidden({ undefined: "calibration fit did not converge" })).toBe(true);
+    const n = 300;
+    const d = plantedOutcomes(n, 1.0, prngFor("hidden"));
+    const ci = calibrationSlopeCi(d.pTrue, d.y, layoutOf(n), prngFor("hidden-boot"), {
+      expectedBlock: 10,
+      replicates: 40,
+    });
+    if (isUndefined(ci)) throw new Error(ci.undefined);
+    expect(slopeHidden(ci)).toBe(ci.pHidden);
+    expect(ci.nonFiniteReplicates).toBe(0);
+    expect(SLOPE_MAX_NON_FINITE_SHARE).toBe(0.005);
   });
 
   it("logit and logistic are inverses and logit clips the ends", () => {

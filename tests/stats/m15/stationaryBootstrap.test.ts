@@ -263,6 +263,28 @@ describe("bootstrapMean / bootstrapCi", () => {
     expect(above / 200).toBeLessThanOrEqual(0.13);
   });
 
+  it("tolerates non-finite replicates only up to maxNonFiniteShare and counts them (D-300)", () => {
+    const values = Array.from({ length: 100 }, (_, i) => i);
+    let call = 0;
+    // The full-sample call is finite; replicate 7 returns NaN (1 of 400 = 0.25 %).
+    const flaky = (rows: Int32Array) => (call++ === 8 ? NaN : meanStatistic(values)(rows));
+    const strict = bootstrapCi(layoutOf(100), flaky, meanInfluence(values), prngFor("nf"), {
+      expectedBlock: 5,
+      replicates: 400,
+    });
+    expect(isUndefined(strict) && strict.undefined).toMatch(/1 of 400 replicates not finite/);
+    call = 0;
+    const lax = bootstrapCi(layoutOf(100), flaky, meanInfluence(values), prngFor("nf"), {
+      expectedBlock: 5,
+      replicates: 400,
+      maxNonFiniteShare: 0.005,
+    });
+    if (isUndefined(lax)) throw new Error(lax.undefined);
+    expect(lax.nonFinite).toBe(1);
+    expect(lax.replicates).toBe(400);
+    expect(Number.isFinite(lax.lo) && Number.isFinite(lax.hi)).toBe(true);
+  });
+
   it("returns a reason when the statistic is not finite", () => {
     const ci = bootstrapCi(layoutOf(4), () => NaN, [0, 0, 0, 0], prngFor("nan"), {
       expectedBlock: 1,

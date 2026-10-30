@@ -69,6 +69,8 @@ export type BootCi = Ci & {
   /** Populated calendar blocks used for D_s. */
   readonly blocks: number;
   readonly replicates: number;
+  /** Replicates with a non-finite statistic, dropped from the percentiles (≤ `maxNonFiniteShare`). */
+  readonly nonFinite: number;
   readonly redraws: number;
 };
 
@@ -87,6 +89,8 @@ export type BootstrapOptions = {
   /** Longest hold in sessions: the block floor (embargo). Default 0. */
   readonly maxHold?: number;
   readonly replicates?: number;
+  /** Share of replicates a statistic may lose to non-finite values before it is undefined. Default 0. */
+  readonly maxNonFiniteShare?: number;
 };
 
 /** A statistic over a multiset of row indexes (with repeats). */
@@ -294,11 +298,11 @@ export function bootstrapCiMany(
   const { values, redraws } = stationaryBlockBootstrapMany(layout, statistics, K, prng, opts);
   return points.map((point, k) => {
     if (!Number.isFinite(point)) return { undefined: "statistic not finite on the full sample" };
-    const v = values[k]!;
-    let finite = 0;
-    for (let b = 0; b < v.length; b += 1) if (Number.isFinite(v[b]!)) finite += 1;
-    if (finite < v.length) {
-      return { undefined: `${v.length - finite} of ${v.length} replicates not finite` };
+    const all = values[k]!;
+    const v = all.filter((x) => Number.isFinite(x));
+    const nonFinite = all.length - v.length;
+    if (nonFinite > (opts.maxNonFiniteShare ?? 0) * all.length) {
+      return { undefined: `${nonFinite} of ${all.length} replicates not finite` };
     }
     const de = effectiveN(layout, influences[k]!, opts);
     return {
@@ -313,7 +317,8 @@ export function bootstrapCiMany(
       uniqueShare: de.uniqueShare,
       designEffect: de.designEffect,
       blocks: de.blocks,
-      replicates: v.length,
+      replicates: all.length,
+      nonFinite,
       redraws,
     };
   });

@@ -102,10 +102,36 @@ export type LogisticFit = {
   readonly converged: boolean;
 };
 
+/** Coefficient magnitude beyond which a logistic fit is treated as (quasi-)separated (D-300). */
+export const SEPARATION_COEF_LIMIT = 50;
+const STEP_HALVINGS = 30;
+
+/** Weighted log-likelihood Σ w (t log p + (1 − t) log(1 − p)) at `coef`. */
+function logLikelihood(
+  X: readonly (readonly number[])[],
+  t: readonly number[],
+  weights: readonly number[] | undefined,
+  coef: readonly number[],
+): number {
+  let ll = 0;
+  for (let i = 0; i < X.length; i += 1) {
+    const x = X[i]!;
+    let eta = 0;
+    for (let j = 0; j < coef.length; j += 1) eta += coef[j]! * x[j]!;
+    // log p = −log(1 + e^−η), log(1 − p) = −log(1 + e^η), both stable
+    const logP = -Math.log1p(Math.exp(-eta));
+    const log1mP = -Math.log1p(Math.exp(eta));
+    ll += (weights?.[i] ?? 1) * (t[i]! * logP + (1 - t[i]!) * log1mP);
+  }
+  return ll;
+}
+
 /**
  * Maximum-likelihood logistic regression of targets `t` (in [0, 1]; fractional targets allowed, as
  * Platt's smoothing needs) on rows `X` (each with its own intercept column if wanted). Newton–Raphson
- * from zero; returns null when the information matrix is singular (separation or a constant column).
+ * from zero with step-halving (the step is halved while the log-likelihood would decrease, D-300).
+ * Returns null when the information matrix is singular (a constant column) or the fit separates
+ * (a coefficient beyond `SEPARATION_COEF_LIMIT`, or no ascent direction).
  */
 export function logisticFit(
   X: readonly (readonly number[])[],
@@ -116,6 +142,7 @@ export function logisticFit(
   if (n === 0 || t.length !== n) throw new RangeError("X and t must have the same positive length");
   const k = X[0]!.length;
   let coef = new Array<number>(k).fill(0);
+  let ll = logLikelihood(X, t, weights, coef);
   let converged = false;
   let it = 0;
   let cov: number[][] | null = null;
@@ -136,11 +163,24 @@ export function logisticFit(
     }
     const step = solveLinear(info, grad);
     if (step === null) return null;
+    // Step-halving: shrink the Newton step until the log-likelihood does not decrease.
+    let scale = 1;
+    let next = coef.map((c, j) => c + scale * step[j]!);
+    let nextLl = logLikelihood(X, t, weights, next);
+    let halvings = 0;
+    while (!(nextLl >= ll - 1e-12) && halvings < STEP_HALVINGS) {
+      scale /= 2;
+      next = coef.map((c, j) => c + scale * step[j]!);
+      nextLl = logLikelihood(X, t, weights, next);
+      halvings += 1;
+    }
+    if (!(nextLl >= ll - 1e-12)) return null; // no ascent direction: separated or degenerate
     let maxStep = 0;
-    coef = coef.map((c, j) => {
-      maxStep = Math.max(maxStep, Math.abs(step[j]!));
-      return c + step[j]!;
-    });
+    for (let j = 0; j < k; j += 1) maxStep = Math.max(maxStep, Math.abs(next[j]! - coef[j]!));
+    coef = next;
+    ll = nextLl;
+    for (const c of coef)
+      if (!Number.isFinite(c) || Math.abs(c) > SEPARATION_COEF_LIMIT) return null;
     if (maxStep < NEWTON_TOL) {
       converged = true;
       // covariance = inverse of the information at the solution
@@ -406,11 +446,18 @@ export type CalibrationCi = {
   readonly intercept: BootCi;
   /** The over-confidence monitor: the slope's one-sided 90 % upper bound is below `hideUb`. */
   readonly pHidden: boolean;
+  /** Replicates whose fit failed (separated / not converged), dropped from the percentiles. */
+  readonly nonFiniteReplicates: number;
 };
 
+/** Share of replicates a slope interval may lose to failed fits before it is undefined (D-300). */
+export const SLOPE_MAX_NON_FINITE_SHARE = 0.005;
+
 /**
- * Slope and intercept with bootstrap intervals. A replicate whose fit fails contributes NaN and makes
- * the statistic undefined (reported, not silently dropped).
+ * Slope and intercept with bootstrap intervals. A replicate whose fit fails (separation, no
+ * convergence) contributes NaN; up to `SLOPE_MAX_NON_FINITE_SHARE` of R such replicates are dropped
+ * from the percentiles and counted in `nonFiniteReplicates`; beyond that the statistic is undefined.
+ * The CTX-053 evaluator treats an undefined slope as hidden p: use `slopeHidden(result)`.
  */
 export function calibrationSlopeCi(
   p: readonly number[],
@@ -439,12 +486,26 @@ export function calibrationSlopeCi(
     both,
     [logisticInfluence(X, y, full, 0), logisticInfluence(X, y, full, 1)],
     prng,
-    opts,
+    { ...opts, maxNonFiniteShare: opts.maxNonFiniteShare ?? SLOPE_MAX_NON_FINITE_SHARE },
   );
   if (isUndefined(slope!)) return slope;
   if (isUndefined(intercept!)) return intercept;
   const hideUb = opts.hideUb ?? DEFAULT_SLOPE_HIDE_UB;
-  return { slope, intercept, pHidden: slope.oneSidedHi < hideUb };
+  return {
+    slope,
+    intercept,
+    pHidden: slope.oneSidedHi < hideUb,
+    nonFiniteReplicates: slope.nonFinite,
+  };
+}
+
+/**
+ * The over-confidence monitor as the CTX-053 evaluator applies it: p is hidden when the slope's
+ * one-sided 90 % upper bound is below the threshold, and also when the slope could not be computed
+ * (an undefined slope is treated as hidden, fail-closed; D-300).
+ */
+export function slopeHidden(result: CalibrationCi | StatUndefined): boolean {
+  return isUndefined(result) ? true : result.pHidden;
 }
 
 export type EceResult = {
