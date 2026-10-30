@@ -154,7 +154,7 @@ export function cellStatistic(
       excludedUnfilledShare,
     };
   }
-  const sessionCount = opts.sessionCount ?? Math.max(...filled.map((s) => s.session)) + 1;
+  const sessionCount = opts.sessionCount ?? maxSession(filled) + 1;
   const bound = bootstrapMean(
     {
       sessions: filled.map((s) => s.session),
@@ -181,6 +181,13 @@ export function cellStatistic(
     byRegime,
     excludedUnfilledShare,
   };
+}
+
+/** Largest session index by a plain loop (`Math.max(...arr)` overflows the stack above ~125k setups). */
+function maxSession(setups: readonly CellSetup[]): number {
+  let m = -Infinity;
+  for (const s of setups) if (s.session > m) m = s.session;
+  return m;
 }
 
 /** Nearest-rank percentile of a plain array (local to keep `percentile`'s Float64 sort semantics). */
@@ -210,8 +217,7 @@ export function buildCells(
     add(cellKey(s.family, s.band, s.volBucket, s.liqTier), s);
     if (isTop3Band(s.band)) add(cellKey(s.family, TOP3_BAND_KEY, s.volBucket, s.liqTier), s);
   }
-  const sessionCount =
-    opts.sessionCount ?? (setups.length > 0 ? Math.max(...setups.map((s) => s.session)) + 1 : 1);
+  const sessionCount = opts.sessionCount ?? (setups.length > 0 ? maxSession(setups) + 1 : 1);
   const out = new Map<string, CellStatistic>();
   for (const key of [...groups.keys()].sort()) {
     out.set(key, cellStatistic(key, groups.get(key)!, prngFor(key), { ...opts, sessionCount }));
