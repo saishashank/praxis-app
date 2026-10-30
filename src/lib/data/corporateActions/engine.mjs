@@ -655,8 +655,27 @@ async function refCloseOf(db, io, market, code, exDate) {
     "SELECT c FROM price_bar WHERE market = ? AND code = ? AND d < ? ORDER BY d DESC LIMIT 1",
     [market, code, exDate],
   );
-  // money-float-ok: a stored dollar price rounded once to whole micro
-  return rows.length === 0 ? null : Math.round(Number(rows[0].c) * 1e6);
+  return rows.length === 0 ? null : microOfDollars(rows[0].c);
+}
+
+/**
+ * A stored dollar price (REAL) in whole micro, by its shortest decimal text, never float arithmetic
+ * (the .mjs twin of money/micro.ts toMicroFromVendor, which a plain-node CLI cannot import). More than
+ * six decimals, or exponent form, rounds half away from zero once on the decimal digits.
+ * @param {unknown} value
+ * @returns {number | null}
+ */
+export function microOfDollars(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const text =
+    Math.abs(n) < 1e21 && Math.abs(n) >= 1e-6 ? String(Math.abs(n)) : Math.abs(n).toFixed(12);
+  const m = /^(\d+)(?:\.(\d+))?$/.exec(text);
+  if (m === null) return null;
+  const frac = (m[2] ?? "").padEnd(7, "0");
+  let micro = BigInt(m[1] + frac.slice(0, 6));
+  if (frac.charCodeAt(6) >= 53) micro += 1n; // first dropped digit >= "5"
+  return Number(n < 0 ? -micro : micro);
 }
 
 /**
