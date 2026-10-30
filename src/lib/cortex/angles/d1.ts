@@ -74,6 +74,34 @@ export function atrAt(s: CodeSeries, i: number): number | undefined {
   return v === null || v === undefined || !(v > 0) ? undefined : v;
 }
 
+/**
+ * D-325: the historical comparison series of A-D1-06 / A-D1-07. One Wilder fold over the bars from
+ * ATR_WARMUP - 1 before `from` (3 x 20 seasoning) to `to` (exclusive); the value for index i is
+ * read from that single series. Tonight's own point is never taken from here: it is `atrOf`
+ * (D-317). Undefined when the seasoning bars do not exist. Cost O(to - from + ATR_WARMUP).
+ */
+export function atrComparison(
+  s: CodeSeries,
+  from: number,
+  to: number,
+): readonly (number | undefined)[] | undefined {
+  const start = from - (ATR_WARMUP - 1);
+  if (start < 0 || to > s.adj.length) return undefined;
+  const bars = s.adj.slice(start, to);
+  const atr = atrSeries(
+    bars.map((b) => microToFloat(b.high)),
+    bars.map((b) => microToFloat(b.low)),
+    bars.map((b) => microToFloat(b.close)),
+    ATR_PERIOD,
+  );
+  const out: (number | undefined)[] = [];
+  for (let i = from; i < to; i += 1) {
+    const v = atr[i - start];
+    out.push(v === null || v === undefined || !(v > 0) ? undefined : v);
+  }
+  return out;
+}
+
 /** Tonight's ATR(20): the fold over the last ATR_HISTORY bars of the series. */
 export function atrOf(s: CodeSeries): number | undefined {
   return atrAt(s, s.adj.length - 1);
@@ -251,12 +279,15 @@ function meanReversion(view: AsOfView, code: string, t: number, g: GridPoint): A
 
 function volatilityRegime(view: AsOfView, code: string, t: number, g: GridPoint): AngleValue {
   const l = int(g, "lookback");
-  const need = ATR_HISTORY + l;
+  const need = Math.max(l + ATR_WARMUP, ATR_HISTORY);
   const s = seriesAt(view, code, t, need);
   if (!s) return undefined;
   const n = s.adjClose.length;
+  const hist = atrComparison(s, n - 1 - l, n - 1); // D-325: one fold for the prior sessions
+  const tonight = atrOf(s); // D-317: the 250-bar value
+  if (hist === undefined || tonight === undefined) return undefined;
   const pct = (i: number): number | undefined => {
-    const a = atrAt(s, i);
+    const a = i === n - 1 ? tonight : hist[i - (n - 1 - l)];
     const c = s.adjClose[i]!;
     return a === undefined || c <= 0n ? undefined : a / microToFloat(c);
   };
@@ -287,13 +318,21 @@ function medianFloat(values: readonly number[]): number {
 
 function rangeContraction(view: AsOfView, code: string, t: number, g: GridPoint): AngleValue {
   const pivotWindow = int(g, "pivot");
-  const need = Math.max(ATR_HISTORY - 1 + MEDIAN_WINDOW, 2 * CONTRACTION_SESSIONS, pivotWindow);
+  const need = Math.max(
+    MEDIAN_WINDOW - 1 + ATR_WARMUP,
+    ATR_HISTORY,
+    2 * CONTRACTION_SESSIONS,
+    pivotWindow,
+  );
   const s = seriesAt(view, code, t, need);
   if (!s) return undefined;
   const n = s.adjClose.length;
+  const hist = atrComparison(s, n - MEDIAN_WINDOW, n - 1); // D-325: one fold for the prior sessions
+  const tonight = atrOf(s); // D-317
+  if (hist === undefined || tonight === undefined) return undefined;
   const pcts: number[] = [];
   for (let i = n - MEDIAN_WINDOW; i < n; i += 1) {
-    const a = atrAt(s, i);
+    const a = i === n - 1 ? tonight : hist[i - (n - MEDIAN_WINDOW)];
     const c = s.adjClose[i]!;
     if (a === undefined || c <= 0n) return undefined;
     pcts.push(a / microToFloat(c));
@@ -532,11 +571,11 @@ export const D1_ANGLES: readonly AngleDef[] = [
     domain: 1,
     title: "Stock volatility regime (ATR percentile)",
     definition:
-      "1 - 2 x percentile of ATR(20) / close against its own prior `lookback` sessions ((lower + 0.5 x ties) / lookback, the AGT-030 convention), in [-1, 1]; low volatility against its own history scores high. Each session's ATR is that session's 250-bar fold (D-317). The LOW / MID / HIGH / EXTREME bucket is the card's reading of the same percentile.",
+      "1 - 2 x percentile of ATR(20) / close against its own prior `lookback` sessions ((lower + 0.5 x ties) / lookback, the AGT-030 convention), in [-1, 1]; low volatility against its own history scores high. Tonight's point is the 250-bar ATR (D-317); the prior sessions' ATRs are read from one Wilder fold that starts 60 bars (3 x 20 seasoning) before the window (D-325). The LOW / MID / HIGH / EXTREME bucket is the card's reading of the same percentile.",
     kind: "score",
     cluster: "low_volatility",
     orientation: 1,
-    warmupSessions: 502,
+    warmupSessions: 312,
     horizonSessions: 20,
     inputs: ["bar_au"],
     grid: { lookback: [252, 504, 1260] },
@@ -548,12 +587,12 @@ export const D1_ANGLES: readonly AngleDef[] = [
     domain: 1,
     title: "Range contraction before breakout (VCP-style, proxy only)",
     definition:
-      "When ATR(20) / close is below `contraction` x its 250-session median on each of the last 10 sessions and the 10-session high-low range is below `range_ratio` x the prior 10 sessions' range: 1 - min(distance, 2) / 2 with distance = (highest high of the last `pivot` sessions - close) / ATR(20); else 0.",
+      "When ATR(20) / close is below `contraction` x its 250-session median on each of the last 10 sessions and the 10-session high-low range is below `range_ratio` x the prior 10 sessions' range: 1 - min(distance, 2) / 2 with distance = (highest high of the last `pivot` sessions - close) / ATR(20); else 0. Tonight's ATR is the 250-bar fold (D-317); the 249 prior ratios read one Wilder fold that starts 60 bars before the median window (D-325).",
     kind: "score",
     cluster: "low_volatility",
     orientation: 1,
     horizonSessions: 20,
-    warmupSessions: 499,
+    warmupSessions: 309,
     inputs: ["bar_au"],
     grid: { contraction: [0.7, 0.6, 0.8], range_ratio: [0.8, 0.6, 0.9], pivot: [20, 10, 30] },
     compute: rangeContraction,

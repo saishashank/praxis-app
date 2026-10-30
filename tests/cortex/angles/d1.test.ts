@@ -14,7 +14,7 @@ import { assertTruncationInvariant, valueKey } from "@/lib/cortex/pit/truncation
 import type { AsOfWorld } from "@/lib/cortex/pit/types";
 import { synthWorld, weekdaySessions, wobble, type PathSpec } from "./d1d2World";
 
-const N = 520; // A-D1-06 warms up at 502 bars (252 + the 250-bar ATR history)
+const N = 520; // room for the 312-bar A-D1-06 warm-up plus a long run of cut-offs
 const LAST = N - 1;
 const SESSIONS = weekdaySessions(N);
 
@@ -359,15 +359,23 @@ describe("A-D1-06 volatility regime", () => {
     expect(run("A-D1-06", view, "ZZF")).toBe(0);
   });
 
-  it("each session's ratio is that session's 250-bar ATR / close; the lookback is exact (D-317)", () => {
-    const pct = (i: number): number =>
-      atrRef(view, "ZZW", i) / (Number(view.adj("ZZW", i, 1).adjClose[0]!) / 1e6);
+  it("tonight = the 250-bar ATR; prior sessions read one fold seasoned 60 bars before the window (D-325); the lookback is exact", () => {
+    const close = (i: number): number => Number(view.adj("ZZW", i, 1).adjClose[0]!) / 1e6;
     const expected = (l: number): number => {
-      const today = pct(LAST);
+      // One Wilder fold over bars LAST - l - 59 .. LAST - 1, read at the window's indices.
+      const s = seriesAt(view, "ZZW", LAST - 1, l + 59)!;
+      const f = (x: bigint): number => Number(x) / 1e6;
+      const fold = atrSeries(
+        s.adj.map((b) => f(b.high)),
+        s.adj.map((b) => f(b.low)),
+        s.adjClose.map(f),
+        20,
+      );
+      const today = atrRef(view, "ZZW", LAST) / close(LAST);
       let lower = 0;
       let ties = 0;
       for (let i = LAST - l; i < LAST; i += 1) {
-        const p = pct(i);
+        const p = fold[i - (LAST - l - 59)]! / close(i);
         if (p < today) lower += 1;
         else if (p === today) ties += 1;
       }
