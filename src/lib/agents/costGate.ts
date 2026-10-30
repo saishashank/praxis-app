@@ -24,6 +24,7 @@ import {
   ratFromInt,
   type Rational,
 } from "@/lib/money/rational";
+import { lineageId, splitFromRow, splitOf, type LineageSplitRecord } from "@/lib/stats/splits";
 import type { Family } from "./schema";
 
 /** One closed development-split ledger row, reduced to what the gate reads. */
@@ -121,10 +122,46 @@ export function costGateVerdict(
   return passesCostGate(entry.median, cost, k) ? "pass" : "skip";
 }
 
+/** A closed or open ledger row of one lineage, reduced to what the development filter reads. */
+export type CostGateLedgerRow = {
+  readonly family: Family;
+  readonly ruleVersion: string;
+  readonly variant: string;
+  readonly entryD: string;
+  readonly exitD: string | null;
+  readonly grossNum: bigint | null;
+  readonly grossDen: bigint | null;
+};
+
 /**
- * The live loader of the table for a market: the closed development-split rows behind the AGT-110
- * scenario table (same join and split rule as `loadScenarioInput`), with the gross columns. A
- * lineage without a split or without a development end contributes nothing (unmeasured).
+ * D-282: the one rule for which ledger rows feed the cost-gate table, live and replay. Rows of ONE
+ * lineage, with that lineage's split: closed rows with a gross return whose ENTRY date falls in the
+ * development split (the ledger's split rule, `splitOf`); no rows at all while the split is deferred
+ * or missing (the signal is then `cost_gate_unmeasured`).
+ */
+export function costGateRowsOf(
+  rows: readonly CostGateLedgerRow[],
+  split: LineageSplitRecord | null,
+): CostGateRow[] {
+  if (split === null || split.deferred_until_d !== null) return [];
+  const out: CostGateRow[] = [];
+  for (const r of rows) {
+    if (r.exitD === null || r.grossNum === null || r.grossDen === null) continue;
+    if (splitOf(split, r.entryD) !== "development") continue;
+    out.push({
+      family: r.family,
+      ruleVersion: r.ruleVersion,
+      variant: r.variant,
+      grossNum: r.grossNum,
+      grossDen: r.grossDen,
+    });
+  }
+  return out;
+}
+
+/**
+ * The live loader of the table for a market: the stored (newest) split of each lineage and its
+ * ledger rows through `costGateRowsOf`, the same function the replay runner uses (D-282).
  */
 export async function loadCostGateTable(
   db: Client,
@@ -132,23 +169,37 @@ export async function loadCostGateTable(
   minRows = 30, // threshold-ok: `cost_gate_min_rows` default; callers pass the key
 ): Promise<CostGateTable> {
   const res = await db.execute({
-    sql: `SELECT s.family, s.rule_version, s.variant, l.gross_num, l.gross_den
-          FROM ledger_row l
-            JOIN signal s ON s.id = l.signal_id
-            JOIN lineage_split ls ON ls.lineage_id = s.market || ':' || s.family
-              AND ls.version = (SELECT MAX(version) FROM lineage_split x WHERE x.lineage_id = ls.lineage_id)
-          WHERE s.market = ? AND ls.dev_end_d IS NOT NULL
-            AND l.exit_d IS NOT NULL AND l.entry_d <= ls.dev_end_d AND l.exit_d <= ls.dev_end_d
-            AND l.gross_num IS NOT NULL AND l.gross_den IS NOT NULL
-          ORDER BY l.id`,
+    sql: `SELECT s.family, s.rule_version, s.variant, l.entry_d, l.exit_d, l.gross_num, l.gross_den
+          FROM ledger_row l JOIN signal s ON s.id = l.signal_id
+          WHERE s.market = ? ORDER BY l.id`,
     args: [market],
   });
-  const rows: CostGateRow[] = res.rows.map((r) => ({
-    family: String(r.family) as Family,
-    ruleVersion: String(r.rule_version),
-    variant: String(r.variant),
-    grossNum: BigInt(String(r.gross_num)),
-    grossDen: BigInt(String(r.gross_den)),
-  }));
+  const byFamily = new Map<Family, CostGateLedgerRow[]>();
+  for (const r of res.rows) {
+    const family = String(r.family) as Family;
+    const list = byFamily.get(family) ?? [];
+    const big = (v: unknown): bigint | null =>
+      v === null || v === undefined ? null : BigInt(String(v));
+    list.push({
+      family,
+      ruleVersion: String(r.rule_version),
+      variant: String(r.variant),
+      entryD: String(r.entry_d),
+      exitD: r.exit_d === null ? null : String(r.exit_d),
+      grossNum: big(r.gross_num),
+      grossDen: big(r.gross_den),
+    });
+    byFamily.set(family, list);
+  }
+  const rows: CostGateRow[] = [];
+  for (const family of [...byFamily.keys()].sort()) {
+    const sp = await db.execute({
+      sql: "SELECT * FROM lineage_split WHERE lineage_id = ? ORDER BY version DESC LIMIT 1",
+      args: [lineageId(market, family)],
+    });
+    const split =
+      sp.rows.length === 0 ? null : splitFromRow(sp.rows[0]! as Record<string, unknown>);
+    rows.push(...costGateRowsOf(byFamily.get(family)!, split));
+  }
   return costGateTable(rows, minRows);
 }

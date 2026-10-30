@@ -69,7 +69,7 @@ import {
 } from "@/lib/agents/candidates";
 import { controlPlan, controlPool } from "@/lib/agents/controls";
 import type { CostGateTable } from "@/lib/agents/costGate";
-import { ABSTAIN_SHOCK_REASON, selectEntries } from "@/lib/agents/entryGates";
+import { ABSTAIN_SHOCK_REASON, firstLegRetryCode, selectEntries } from "@/lib/agents/entryGates";
 import {
   crossing,
   initialStopAtFill,
@@ -1489,11 +1489,6 @@ export function replayCohorts(
     const slotsLeft = c.params.maxOpenPositions - c.positions.size;
     if (slotsLeft < 1) return [];
     const blockFrom = env.i - params.reentryBlock;
-    const legs: Leg[] = [];
-    const meta = new Map<
-      string,
-      { cand: Candidate; plan: OrderPlan; maxOpen: bigint | null; thesis: Thesis | undefined }
-    >();
     const pool = ranked.filter((cand) => {
       if (c.positions.has(cand.code)) return false;
       const last = c.lastIs.get(cand.code);
@@ -1507,43 +1502,66 @@ export function replayCohorts(
         .filter((cand) => crossing(allActions(env.d), cand.code, env.d, env.nextD!).disposal)
         .map((cand) => cand.code),
     );
-    const gated = selectEntries(pool, {
-      entry: params.entry,
-      advWindow: params.windows.adv,
-      costProfile: c.profile,
-      costTable: opts.costGate,
-      factsOf: (code) => env.facts.get(code),
-      heldCodes: [...c.positions.keys()].sort(),
-      cashMicro: sizing.cashMicro,
-      noPosition,
-    });
-    const abstained = [...gated.skipped.values()].some((r) => r === ABSTAIN_SHOCK_REASON);
-    for (const cand of gated.eligible) {
-      if (legs.length >= slotsLeft) break;
-      const facts = env.facts.get(cand.code);
-      if (facts === undefined) continue;
-      const made = legFor(env, facts, cand.halfSize, cand.code);
-      if (made === null) continue;
-      legs.push(made.leg);
-      // the thesis-breakers the live card would carry (cards.ts: same function, same levels)
-      const codeEvents = env.inputs.events.filter((e) => e.code === cand.code);
-      const low = eventLowOf(codeEvents, cand.groupKey);
-      const cross = made.priceFactor;
-      const thesis: Thesis = {
-        breakers: cardBreakers(
-          { family: cand.family, shortInterestAvailable: facts.shortDrop !== "unknown" },
-          params,
-          {
-            closeMicro: scaleMicro(facts.bar.close, cross),
-            eventLowMicro: low === null ? null : scaleMicro(low, cross),
-          },
-        ),
-        known: new Set(codeEvents.map((e) => e.id)),
-        refCloseMicro: facts.bar.close,
+    // D-284 (FAM-006): a rejected first leg is dropped and the gates run once more (as batch 2b)
+    const attempt = (rejected: ReadonlySet<string>) => {
+      const legs: Leg[] = [];
+      const meta = new Map<
+        string,
+        { cand: Candidate; plan: OrderPlan; maxOpen: bigint | null; thesis: Thesis | undefined }
+      >();
+      const poolA = pool.filter((cand) => !rejected.has(cand.code));
+      const noPositionA = new Set([...noPosition, ...rejected]);
+      const gated = selectEntries(poolA, {
+        entry: params.entry,
+        advWindow: params.windows.adv,
+        costProfile: c.profile,
+        costTable: opts.costGate,
+        factsOf: (code) => env.facts.get(code),
+        heldCodes: [...c.positions.keys()].sort(),
+        cashMicro: sizing.cashMicro,
+        noPosition: noPositionA,
+      });
+      for (const cand of gated.eligible) {
+        if (legs.length >= slotsLeft) break;
+        const facts = env.facts.get(cand.code);
+        if (facts === undefined) continue;
+        const made = legFor(env, facts, cand.halfSize, cand.code);
+        if (made === null) continue;
+        legs.push(made.leg);
+        // the thesis-breakers the live card would carry (cards.ts: same function, same levels)
+        const codeEvents = env.inputs.events.filter((e) => e.code === cand.code);
+        const low = eventLowOf(codeEvents, cand.groupKey);
+        const cross = made.priceFactor;
+        const thesis: Thesis = {
+          breakers: cardBreakers(
+            { family: cand.family, shortInterestAvailable: facts.shortDrop !== "unknown" },
+            params,
+            {
+              closeMicro: scaleMicro(facts.bar.close, cross),
+              eventLowMicro: low === null ? null : scaleMicro(low, cross),
+            },
+          ),
+          known: new Set(codeEvents.map((e) => e.id)),
+          refCloseMicro: facts.bar.close,
+        };
+        meta.set(cand.code, { cand, thesis, ...entryPlanOf(cand, env, made) });
+      }
+      const results = planLegs(sizing, markSleeve(legs, sleeveReserve(c)), slotsLeft);
+      const abstained = [...gated.skipped.values()].some((r) => r === ABSTAIN_SHOCK_REASON);
+      return { meta, results, abstained };
+    };
+    let att = attempt(new Set());
+    const rejectedFirst = firstLegRetryCode(att.results);
+    if (rejectedFirst !== null) {
+      const retry = attempt(new Set([rejectedFirst]));
+      att = {
+        ...retry,
+        meta: new Map([...att.meta, ...retry.meta]),
+        results: [att.results[0]!, ...retry.results],
+        abstained: retry.abstained,
       };
-      meta.set(cand.code, { cand, thesis, ...entryPlanOf(cand, env, made) });
     }
-    const results = planLegs(sizing, markSleeve(legs, sleeveReserve(c)), slotsLeft);
+    const { meta, results, abstained } = att;
     if (abstained && results.length === 0) {
       // the abstain replaces the below-two-parcels rejection one for one (stall counters unchanged)
       c.todaySignals += 1;

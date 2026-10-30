@@ -77,10 +77,10 @@ export interface PathSource {
   corpActions?(code: string): readonly CorpActionRecord[];
   /**
    * FAM-007 (GL-02): the decision cut-off instant (ISO) of session `d`. A dividend going ex on the
-   * next session counts for the stop only when confirmed by it. A source without it applies only
+   * next session counts for the stop only when confirmed by it. Required (D-282b), so a source cannot silently skip dated dividends; before: applied only
    * dividends with no `known_at` (conservative: nothing is assumed known).
    */
-  decisionCutoffOf?(d: string): string;
+  decisionCutoffOf(d: string): string;
   /** Trading sessions, oldest first (the snapshot calendar). */
   readonly sessions: readonly string[];
   bar(code: string, d: string): ViewBar | null;
@@ -314,7 +314,7 @@ export function walkPosition(src: PathSource, spec: PositionSpec, cost: CostSetu
     (src.corpActions?.(spec.code) ?? []).filter((a) => a.exDate > entryD),
   );
   const exDivAt = (i: number, d: string): bigint =>
-    exDividendOn(exDivs, spec.code, d, src.decisionCutoffOf?.(sessions[i - 1] ?? "") ?? "");
+    exDividendOn(exDivs, spec.code, d, src.decisionCutoffOf(sessions[i - 1] ?? ""));
   const rebase = (price: bigint, ratio: Rational): bigint => divFloor(price * ratio.den, ratio.num);
 
   const closeOut = (

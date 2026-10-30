@@ -26,6 +26,7 @@ import {
 import {
   addWeekdays,
   trialBudget,
+  spentTestsBefore,
   trialCounts,
   trialLedgerRow,
   type LineageSplitRecord,
@@ -305,11 +306,7 @@ export async function runChallengerEvidence(db: Client, run: EvidenceRun): Promi
   // VAL-112 (D-226): k = validation and pattern tests spent on this split version BEFORE this access,
   // ordered by (d, id) so that a repeat of the same run gets the same level (a pure function of the
   // trial ledger).
-  const priorTests = ledgerRows.filter(
-    (r) =>
-      (r.kind === "validation_access" || r.kind === "pattern_test") &&
-      (r.d < access.d || (r.d === access.d && r.id < access.id)),
-  ).length;
+  const priorTests = spentTestsBefore(ledgerRows, ch.lineage_id, run.split.version, access);
   const result = evaluateVal110({
     priorTests,
     runId: run.runId,

@@ -82,7 +82,7 @@ import {
   type SizingContext,
 } from "./candidates";
 import { loadCostGateTable, type CostGateTable } from "./costGate";
-import { selectEntries } from "./entryGates";
+import { firstLegRetryCode, selectEntries } from "./entryGates";
 import {
   cardIdOf,
   CardError,
@@ -1078,68 +1078,88 @@ async function entriesFor(
       noPosition.add(c.code);
     }
   }
-  // M14 entry gates (cost gate, second position, SHOCK abstain; the same function the replay calls)
-  const selection = selectEntries(pool, {
-    entry: ctx.params.entry,
-    advWindow: ctx.params.windows.adv,
-    costProfile: COST_PROFILES[books.params.costProfile],
-    costTable: ctx.costTable,
-    factsOf: (code) => ctx.day.facts.get(code),
-    heldCodes: [...open].sort(),
-    cashMicro: books.cashMicro,
-    noPosition,
-  });
-  for (const [c, reason] of selection.skipped) notTaken.set(c, reason);
-  const gated = selection.eligible;
-  // the quality gate at creation: a global refusal rejects the top-ranked once, a blocked code
-  // is rejected and the next candidate takes its place (entries only; exits are never gated)
-  const eligible: Candidate[] = [];
-  const gateRejects: { c: Candidate; reason: string }[] = [];
-  let stoppedAt = gated.length;
-  for (const [i, c] of gated.entries()) {
-    if (eligible.length >= slots) {
-      stoppedAt = i;
-      break;
+  // M14 entry gates (cost gate, second position, SHOCK abstain; the same function the replay calls).
+  // D-284 (FAM-006): when the first leg is then rejected at sizing, the gates run once more with that
+  // code out of the pool, so the same-industry second it blocked and the next candidate get a turn.
+  const attempt = async (rejected: ReadonlySet<string>) => {
+    const nt = new Map<Candidate, string>();
+    const poolA = pool.filter((c) => !rejected.has(c.code));
+    const noPositionA = new Set([...noPosition, ...rejected]);
+    const selection = selectEntries(poolA, {
+      entry: ctx.params.entry,
+      advWindow: ctx.params.windows.adv,
+      costProfile: COST_PROFILES[books.params.costProfile],
+      costTable: ctx.costTable,
+      factsOf: (code) => ctx.day.facts.get(code),
+      heldCodes: [...open].sort(),
+      cashMicro: books.cashMicro,
+      noPosition: noPositionA,
+    });
+    for (const [c, reason] of selection.skipped) nt.set(c, reason);
+    const gated = selection.eligible;
+    // the quality gate at creation: a global refusal rejects the top-ranked once, a blocked code
+    // is rejected and the next candidate takes its place (entries only; exits are never gated)
+    const eligible: Candidate[] = [];
+    const gateRejects: { c: Candidate; reason: string }[] = [];
+    let stoppedAt = gated.length;
+    for (const [i, c] of gated.entries()) {
+      if (eligible.length >= slots) {
+        stoppedAt = i;
+        break;
+      }
+      if (crossing(ctx.actionsNext, c.code, ctx.d, ctx.nextD).disposal) {
+        nt.set(c, "corporate_action");
+        continue;
+      }
+      const g = await gateOf(ctx, c.code);
+      if (g.allowed) {
+        eligible.push(c);
+        continue;
+      }
+      gateRejects.push({ c, reason: g.reason });
+      if (g.reason !== "code_blocked") {
+        stoppedAt = i + 1;
+        break;
+      }
     }
-    if (crossing(ctx.actionsNext, c.code, ctx.d, ctx.nextD).disposal) {
-      notTaken.set(c, "corporate_action");
-      continue;
+    for (const c of gated.slice(stoppedAt)) nt.set(c, "rank");
+    const legs: Leg[] = [];
+    const byKey = new Map<string, Candidate>();
+    for (const c of eligible) {
+      const facts = ctx.day.facts.get(c.code);
+      if (facts === undefined) {
+        nt.set(c, "no_facts");
+        continue;
+      }
+      const leg = legFor(ctx, facts, c.halfSize, c.code);
+      if (leg === null) {
+        nt.set(c, "corporate_action");
+        continue;
+      }
+      legs.push(leg);
+      byKey.set(c.code, c);
     }
-    const g = await gateOf(ctx, c.code);
-    if (g.allowed) {
-      eligible.push(c);
-      continue;
-    }
-    gateRejects.push({ c, reason: g.reason });
-    if (g.reason !== "code_blocked") {
-      stoppedAt = i + 1;
-      break;
-    }
-  }
-  for (const c of gated.slice(stoppedAt)) notTaken.set(c, "rank");
-  const legs: Leg[] = [];
-  const byKey = new Map<string, Candidate>();
-  for (const c of eligible) {
-    const facts = ctx.day.facts.get(c.code);
-    if (facts === undefined) {
-      notTaken.set(c, "no_facts");
-      continue;
-    }
-    const leg = legFor(ctx, facts, c.halfSize, c.code);
-    if (leg === null) {
-      notTaken.set(c, "corporate_action");
-      continue;
-    }
-    legs.push(leg);
-    byKey.set(c.code, c);
-  }
-  const sizing: SizingContext = {
-    params: books.params,
-    cashMicro: books.cashMicro,
-    navMicro: books.navMicro,
-    sleeveReserveMicro: books.sleeveReserveMicro,
+    const sizing: SizingContext = {
+      params: books.params,
+      cashMicro: books.cashMicro,
+      navMicro: books.navMicro,
+      sleeveReserveMicro: books.sleeveReserveMicro,
+    };
+    const results = planLegs(sizing, markSleeve(legs, books), slots);
+    return { selection, gateRejects, byKey, results, nt };
   };
-  const results = planLegs(sizing, markSleeve(legs, books), slots);
+  let att = await attempt(new Set());
+  const rejectedFirst = firstLegRetryCode(att.results);
+  if (rejectedFirst !== null) {
+    const retry = await attempt(new Set([rejectedFirst]));
+    att = {
+      ...retry,
+      byKey: new Map([[rejectedFirst, att.byKey.get(rejectedFirst)!], ...retry.byKey]),
+      results: [att.results[0]!, ...retry.results],
+    };
+  }
+  const { selection, gateRejects, byKey, results } = att;
+  for (const [c, reason] of att.nt) notTaken.set(c, reason);
   const sizedOf = new Map(results.map((r) => [r.leg.key, r] as const));
   const status = new Map<Candidate, CardStatus>();
   for (const g of gateRejects) status.set(g.c, { taken: false, reason: "gate", sized: null });

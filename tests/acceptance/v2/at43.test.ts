@@ -420,6 +420,12 @@ const industryOf = new Map(NIGHT_SPECS.map((s) => [s.code, s.industry]));
 const specOf = new Map(NIGHT_SPECS.map((s) => [s.code, s]));
 const closesOf = new Map(NIGHT_SPECS.map((s) => [s.code, nightCloses(s)]));
 
+/** Closes of a night code; the scenario's `expensive` codes start at A$4,000 (one share exceeds the cash). */
+const closesFor = (code: string, scn: NightScenario): bigint[] =>
+  scn.expensive?.includes(code) === true
+    ? nightCloses({ ...specOf.get(code)!, startPrice: 4000 })
+    : closesOf.get(code)!;
+
 type Row = Record<string, unknown>;
 const rowsOf = async (db: Client, sql: string, args: (string | number)[] = []): Promise<Row[]> =>
   (await db.execute({ sql, args })).rows.map((r) => ({ ...r }));
@@ -431,7 +437,7 @@ async function liveNight(scn: NightScenario, seed: bigint = SEED_TWO_LEGS): Prom
   await buildNight(db, {
     codes: NIGHT_SPECS.map((s) => ({
       code: s.code,
-      close: (i: number) => closesOf.get(s.code)![i]!,
+      close: (i: number) => closesFor(s.code, scn)[i]!,
       volume: () => s.volume,
     })),
   });
@@ -720,6 +726,20 @@ describe("AT-43 clause 2: batch 2b live and the cohort replay place the same ord
     const orders = await entryOrders(n);
     expect(orders.length).toBeGreaterThan(0);
     scanOrders(orders, AT43_NIGHT);
+    const stored = await storedPositions(n);
+    const { positions } = await replayNight(n);
+    expectParity(stored, positions);
+    expect(heldOn(positions, AT43_NIGHT + 1)).toEqual(orders.map((o) => String(o.code)));
+  });
+
+  it("FAM-006 retry (D-284): a first leg rejected at sizing is not the first leg; the next candidate is tried, live = replay", async () => {
+    const n = await liveNight({ expensive: ["ZZQ1"] });
+    const cards = await cardsOf(n);
+    expect(cards.get("ZZQ1")).toMatch(/^rejected:/);
+    expect(cards.get("ZZQ2")).toBe("taken"); // before the fix: second_position behind the rejected ZZQ1
+    const orders = (await entryOrders(n)).filter((o) => o.status === "filled");
+    expect(orders.map((o) => o.code)).not.toContain("ZZQ1");
+    expect(orders.map((o) => o.code)).toContain("ZZQ2");
     const stored = await storedPositions(n);
     const { positions } = await replayNight(n);
     expectParity(stored, positions);

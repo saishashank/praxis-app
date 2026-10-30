@@ -25,7 +25,7 @@ import type {
 } from "@/lib/stats/robustnessTypes";
 import { validationLevelFor } from "@/lib/stats/errorBudget";
 import { minBtlLabel } from "@/lib/stats/minBtl";
-import { lineageId } from "@/lib/stats/splits";
+import { lineageId, spentTestsBefore, type TrialKind } from "@/lib/stats/splits";
 import type { ReplayStatInput } from "@/lib/replay/scorecards";
 import { candidateSteps } from "./challengerGenerator";
 import { poolId, readPoolState } from "./alphaInvesting";
@@ -85,14 +85,20 @@ async function lineageStatus(
   const { db, market, world, params } = c;
   const s = params.stats;
   const rs = await db.execute({
-    sql: "SELECT split_version, kind FROM trial_ledger WHERE lineage_id = ?",
+    sql: "SELECT id, d, lineage_id, split_version, kind FROM trial_ledger WHERE lineage_id = ?",
     args: [lineage],
   });
-  const spent = rs.rows.filter(
-    (r) =>
-      Number(r.split_version) === split.version &&
-      (String(r.kind) === "validation_access" || String(r.kind) === "pattern_test"),
-  ).length;
+  const spent = spentTestsBefore(
+    rs.rows.map((r) => ({
+      id: String(r.id),
+      d: String(r.d),
+      lineage_id: String(r.lineage_id),
+      split_version: Number(r.split_version),
+      kind: String(r.kind) as TrialKind,
+    })),
+    lineage,
+    split.version,
+  );
   const sessions = developmentSessions(world, split).sessions.length;
   const btl = minBtlLabel(rs.rows.length, s.minbtlTargetSharpe, sessions);
   const btlValue: MinBtlStat = {

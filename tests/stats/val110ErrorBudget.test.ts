@@ -1,6 +1,6 @@
 // @vitest-environment node
 // VAL-112 wired into VAL-110 (M14 WP4, D-226, D-228): the level of (i)/(ii) follows the error budget
-// when the caller passes k; without k it is the v1 fixed level; the leverage test is descriptive.
+// from k, which the caller must pass (no v1 fallback); the leverage test is descriptive.
 import { describe, expect, it } from "vitest";
 import {
   evaluateLeverage,
@@ -45,6 +45,7 @@ function input(over: Partial<Val110Input> = {}): Val110Input {
     block: 5,
     windowEndD: split.validation_end_d!,
     trialsOnSplit: 1,
+    priorTests: 0,
     costInfeasible: false,
     safety: { effectiveN: 10, delta: 0.01, firstBlockD: null },
     pboWeekly: null,
@@ -66,9 +67,10 @@ describe("VAL-110 level from the error budget", () => {
     }
   });
 
-  it("without k the level is the v1 fixed level alpha / (m L), whatever the mode", () => {
-    const r = evaluateVal110(input());
-    expect(r.level).toBeCloseTo(validationLevel(0.05, 20, 6), 12);
+  it("a missing k is an error, not the v1 fixed level (D-283)", () => {
+    expect(() => evaluateVal110(input({ priorTests: undefined as unknown as number }))).toThrow(
+      RangeError,
+    );
   });
 
   it("fixed mode ignores k", () => {

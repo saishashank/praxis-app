@@ -283,6 +283,8 @@ export type NightSpec = {
   readonly scale?: number;
   /** Daily drift (default 0.15 %). */
   readonly drift?: number;
+  /** Start price in dollars (default 10); a high one makes a one-share parcel unaffordable. */
+  readonly startPrice?: number;
 };
 
 /**
@@ -292,7 +294,7 @@ export type NightSpec = {
 export function nightCloses(spec: NightSpec, sessions = 330): bigint[] {
   const s = spec.scale ?? 0.012;
   const out: bigint[] = [];
-  let level = 10 * Number(DOLLAR);
+  let level = (spec.startPrice ?? 10) * Number(DOLLAR);
   for (let j = 0; j < sessions; j += 1) {
     const alt = j % 2 === 0 ? 1 : -1;
     const quad = j % 4 < 2 ? 1 : -1;
@@ -344,6 +346,8 @@ export type NightScenario = {
   readonly shock?: boolean;
   /** A delisting with this ex-session index (a disposal across the next session) on `code`. */
   readonly delisting?: { readonly code: string; readonly exIndex: number };
+  /** Codes whose price level is set so high that sizing rejects them at the parcel (FAM-006 retry). */
+  readonly expensive?: readonly string[];
 };
 
 /** Rows of the harness databases that this night adds on top of `buildNight` (industry, halt, shock). */

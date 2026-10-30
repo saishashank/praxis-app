@@ -39,6 +39,7 @@ import {
   lineageId,
   maxHoldingUpperBound,
   splitOf,
+  spentTestsBefore,
   trialCounts,
   trialLedgerRow,
   validationSessions,
@@ -60,7 +61,12 @@ import {
   type SignalRow,
   type ValidationResultRecord,
 } from "@/lib/stats/val110";
-import { costGateTable, type CostGateRow, type CostGateTable } from "@/lib/agents/costGate";
+import {
+  costGateRowsOf,
+  costGateTable,
+  type CostGateRow,
+  type CostGateTable,
+} from "@/lib/agents/costGate";
 import type { SettlementMode } from "@/lib/arena/ledger";
 import { replayCohorts, type CohortReplayResult } from "./cohortReplay";
 import {
@@ -177,6 +183,8 @@ export type RunOptions = {
   readonly since?: string;
   /** Trial-ledger rows already recorded (to count the budget and keep each access to once). */
   readonly existingTrials?: readonly TrialLedgerRow[];
+  /** Stored lineage splits (newest version wins); the cost-gate table uses them as live does (D-282). */
+  readonly existingSplits?: readonly LineageSplitRecord[];
   readonly nullRuns?: number;
   /** Null/injected runs on synthetic rows only (CI and local checks; decision 31 runs real data). */
   readonly synthetic?: boolean;
@@ -360,7 +368,13 @@ export function runReplay(o: RunOptions): ReplayOutput {
       ledgerRows = ledger.entries.length;
       controlPaths = ledger.controlPaths;
       // FAM-005 (D-214): the cost-gate table from this run's own ledger, development rows only
-      const costGate = costGateTableOf(ledger, world.sessions, params, runId);
+      const costGate = costGateTableOf(
+        ledger,
+        world.sessions,
+        params,
+        runId,
+        o.existingSplits ?? [],
+      );
       const cohortsFor = (settlementMode: SettlementMode): CohortReplayResult =>
         replayCohorts(world, {
           params,
@@ -690,37 +704,52 @@ function delistRows(entries: readonly LedgerEntry[]): DelistRow[] {
 
 const EVENT_FAMILIES: ReadonlySet<Family> = new Set<Family>(["F2", "F3", "F5", "F6"]);
 
-/** FAM-005: medians of gross return per (family, rule version, variant) on each lineage's development rows. */
-function costGateTableOf(
+/**
+ * FAM-005 (D-282): medians of gross return per (family, rule version, variant), through the same
+ * `costGateRowsOf` as the live loader. The stored split of the lineage is used when one exists
+ * (`existingSplits`); only without one is it recomputed from this run's ledger.
+ */
+export function costGateTableOf(
   ledger: LedgerResult,
   calendar: readonly string[],
   params: AgentParams,
   runId: string,
+  existingSplits: readonly LineageSplitRecord[],
 ): CostGateTable {
   const rows: CostGateRow[] = [];
   for (const g of groupsOf(ledger)) {
-    const split = createLineageSplit({
-      market: MARKET,
-      family: g.family,
-      calendar,
-      maxHoldingUpper: maxHoldingUpperBound(g.family),
-      primaryRows: g.entries.map((e) => ({ entryD: e.row.entry_d, exitD: e.row.exit_d })),
-      params: params.stats,
-      measuredOnRun: runId,
-    });
-    for (const e of g.entries) {
-      if (e.row.gross_num === null || e.row.gross_den === null) continue;
-      if (split.deferred_until_d === null && splitOf(split, e.row.entry_d) !== "development") {
-        continue;
-      }
-      rows.push({
+    const lineage = lineageId(MARKET, g.family);
+    const stored = existingSplits
+      .filter((x) => x.lineage_id === lineage)
+      .reduce<LineageSplitRecord | null>(
+        (m, x) => (m === null || x.version > m.version ? x : m),
+        null,
+      );
+    const split =
+      stored ??
+      createLineageSplit({
+        market: MARKET,
         family: g.family,
-        ruleVersion: g.ruleVersion,
-        variant: g.variant,
-        grossNum: e.row.gross_num,
-        grossDen: e.row.gross_den,
+        calendar,
+        maxHoldingUpper: maxHoldingUpperBound(g.family),
+        primaryRows: g.entries.map((e) => ({ entryD: e.row.entry_d, exitD: e.row.exit_d })),
+        params: params.stats,
+        measuredOnRun: runId,
       });
-    }
+    rows.push(
+      ...costGateRowsOf(
+        g.entries.map((e) => ({
+          family: g.family,
+          ruleVersion: g.ruleVersion,
+          variant: g.variant,
+          entryD: e.row.entry_d,
+          exitD: e.row.exit_d,
+          grossNum: e.row.gross_num,
+          grossDen: e.row.gross_den,
+        })),
+        split,
+      ),
+    );
   }
   return costGateTable(rows, params.entry.costGateMinRows);
 }
@@ -884,8 +913,7 @@ function evidence(
     if (accessed("validation_access")) skipped.push("validation already accessed on this split");
     else {
       // VAL-112 (D-226): tests already spent on this split version (validation and pattern tests)
-      const spent = trialCounts(all, lineage, split.version);
-      const level112 = { priorTests: spent.byKind.validation_access + spent.byKind.pattern_test };
+      const level112 = { priorTests: spentTestsBefore(all, lineage, split.version) };
       const access = trialLedgerRow({
         market: MARKET,
         lineage_id: lineage,

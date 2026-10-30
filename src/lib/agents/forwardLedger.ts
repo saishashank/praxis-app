@@ -230,6 +230,11 @@ export class LiveWorld implements LedgerSource, PathSource {
     o.sessions.forEach((s, i) => this.index.set(s, i));
   }
 
+  /** FAM-007: decision cut-off instant (ISO UTC) of session `d`, as SnapshotWorld. */
+  decisionCutoffOf(d: string): string {
+    return decisionCutoffUtc(d, this.o.params.decisionCutoff);
+  }
+
   /** Fetch bars (back to `need` bars before the first session) and events of codes not yet loaded. */
   async load(codes: readonly string[]): Promise<void> {
     const todo = [...new Set(codes)].filter((c) => !this.series.has(c)).sort(cmp);
