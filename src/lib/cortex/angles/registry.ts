@@ -9,8 +9,15 @@
 // Pure and deterministic: no clock, no store, no random source.
 import { averageRanks } from "@/lib/stats/rankIc";
 import type { InputKind } from "../pit/types";
+import { D1_ANGLES } from "./d1";
 import { D10_ANGLES } from "./d10";
+import { D2_ANGLES } from "./d2";
+import { D3_ANGLES } from "./d3";
+import { D4_ANGLES } from "./d4";
+import { D5_ANGLES } from "./d5";
+import { D6_ANGLES } from "./d6";
 import { D7_ANGLES } from "./d7";
+import { D8_ANGLES } from "./d8";
 import { D9_ANGLES } from "./d9";
 import {
   ANGLE_CLUSTERS,
@@ -93,9 +100,16 @@ function cmpId(a: string, b: string): number {
   return da - db || (a < b ? -1 : a > b ? 1 : 0);
 }
 
-/** The registry: D7/D9/D10 (C1a); C1b adds d1, d2 and C1c adds d3...d6, d8 here. 100 ids when complete. */
+/** The registry: all 100 angles, D1...D10 (C1a, C1b, C1c; D-331). */
 export const ANGLES: readonly AngleDef[] = defineAngles([
+  ...D1_ANGLES,
+  ...D2_ANGLES,
+  ...D3_ANGLES,
+  ...D4_ANGLES,
+  ...D5_ANGLES,
+  ...D6_ANGLES,
   ...D7_ANGLES,
+  ...D8_ANGLES,
   ...D9_ANGLES,
   ...D10_ANGLES,
 ]);

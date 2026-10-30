@@ -9,6 +9,7 @@ import { D9_ANGLES } from "@/lib/cortex/angles/d9";
 import {
   ANGLE_ID_RE,
   ANGLES,
+  ANGLE_COUNT,
   ANGLES_PER_DOMAIN,
   angleById,
   canActivate,
@@ -53,13 +54,26 @@ const noView = new Proxy({} as AsOfView, {
   },
 });
 
-describe("the C1a registry: D7, D9, D10", () => {
-  it("holds the 30 gate and meta entries, sorted by id, none scored, none with a compute (D-292)", () => {
-    expect(ANGLES.length).toBe(3 * ANGLES_PER_DOMAIN);
-    expect(ANGLES.map((a) => a.id)).toEqual(
+describe("the full registry (D-331)", () => {
+  it("holds exactly the 100 ids A-D1-01…A-D10-10, sorted by domain then id", () => {
+    expect(ANGLES.length).toBe(ANGLE_COUNT);
+    const want: string[] = [];
+    for (let d = 1; d <= 10; d++) {
+      for (let i = 1; i <= ANGLES_PER_DOMAIN; i++)
+        want.push(`A-D${d}-${String(i).padStart(2, "0")}`);
+    }
+    expect(ANGLES.map((a) => a.id)).toEqual(want);
+    expect(angleById("A-D1-01")?.domain).toBe(1);
+  });
+});
+
+describe("the C1a entries: D7, D9, D10", () => {
+  it("are the 30 gate and meta entries, none scored, none with a compute (D-292)", () => {
+    const c1a = ANGLES.filter((a) => [7, 9, 10].includes(a.domain));
+    expect(c1a.map((a) => a.id)).toEqual(
       [...D7_ANGLES, ...D9_ANGLES, ...D10_ANGLES].map((a) => a.id),
     );
-    for (const a of ANGLES) {
+    for (const a of c1a) {
       expect(a.id).toMatch(ANGLE_ID_RE);
       expect([7, 9, 10]).toContain(a.domain);
       expect(a.kind).not.toBe("score");
@@ -72,13 +86,13 @@ describe("the C1a registry: D7, D9, D10", () => {
     expect(angleById("A-D7-02")?.existing).toContain("src/lib/agents/families/stopCap.ts");
     expect(angleById("A-D7-10")?.existing).toContain("src/lib/stats/killSwitch.ts");
     expect(angleById("A-D9-07")?.existing).toContain("ARN-108");
-    expect(angleById("A-D1-01")).toBeUndefined();
   });
 
   it("the announcement-dependent entries are candidates (CTX-051) and nothing else needs data", () => {
-    const needs = ANGLES.filter((a) => a.needsData).map((a) => a.id);
+    const c1a = ANGLES.filter((a) => [7, 9, 10].includes(a.domain));
+    const needs = c1a.filter((a) => a.needsData).map((a) => a.id);
     expect(needs).toEqual(["A-D9-02", "A-D9-03", "A-D10-05", "A-D10-06"]);
-    for (const a of ANGLES) {
+    for (const a of c1a) {
       const s = resolveStatus(a, "active");
       expect(s).toBe(a.needsData ? "candidate" : "active");
       expect(evaluateAngle(a, s, noView, "ZZA", 0)).toBeUndefined(); // no compute -> undefined
@@ -88,7 +102,9 @@ describe("the C1a registry: D7, D9, D10", () => {
   it("every D7 entry is risk or regime; D9 risk/regime/meta; D10 meta; gates are gates", () => {
     for (const a of D7_ANGLES) expect(["risk", "regime"]).toContain(a.cluster);
     for (const a of D10_ANGLES) expect(a.cluster).toBe("meta");
-    const gates = ANGLES.filter((a) => a.kind === "gate").map((a) => a.id);
+    const gates = ANGLES.filter((a) => [7, 9, 10].includes(a.domain) && a.kind === "gate").map(
+      (a) => a.id,
+    );
     expect(gates).toEqual([
       "A-D7-01",
       "A-D7-02",

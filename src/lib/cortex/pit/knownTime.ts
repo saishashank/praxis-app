@@ -109,6 +109,7 @@ export const MACRO_DEFAULT: MacroPublishRule = { kind: "sessions", lag: 1 };
 export const MACRO_SERIES: Readonly<Record<string, MacroPublishRule>> = {
   RBA_CASH_RATE: { kind: "same_day", localTime: "14:30" },
   RBA_F1: MACRO_DEFAULT,
+  RBA_F2_10Y: MACRO_DEFAULT, // D-330: AU 10-year yield (F2 table), [VERIFY] until a fetcher exists
   DGS2: MACRO_DEFAULT,
   DGS10: MACRO_DEFAULT,
   T10Y2Y: MACRO_DEFAULT,
