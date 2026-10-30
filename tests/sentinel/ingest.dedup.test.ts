@@ -76,4 +76,33 @@ describe("announcement.content_hash (DAT-237)", () => {
     expect(byCode[1]).toEqual(["ZZAA", 0]); // the repost
     expect(byCode[2]![1]).toBeGreaterThan(0); // another code is not a repeat
   });
+
+  // D-287: an exact-hash repeat only counts within the 5-session window of the earlier row
+  it("a same-hash row older than the 5-session window is not a repeat (yearly Appendix 4C)", async () => {
+    await db.execute(
+      "INSERT INTO universe_snapshot (market, d, code, status, tier) VALUES ('AU', '2026-10-12', 'ZZAA', 'active', 'U1'), ('AU', '2026-10-12', 'ZZBB', 'active', 'U1')",
+    );
+    const items = [
+      { id: "1", code: "ZZAA", time: T(30), title: "Trading Halt" },
+      { id: "2", code: "ZZBB", time: T(20), title: "Trading Halt" },
+    ];
+    const forge = (code: string, id: string, time: string, hashOf: string) =>
+      db.execute({
+        sql: "INSERT INTO announcement (market, code, ann_id, published_at, ingested_at, type, price_sensitive, title, source, first_ingested_at, content_hash) VALUES ('AU', ?, ?, ?, ?, 'x', 1, 'Trading Halt', 'asx_announcements', ?, ?)",
+        args: [code, id, time, "2026-09-01T00:00:00.000Z", "2026-09-01T00:00:00.000Z", hashOf],
+      });
+    const hash = (code: string, time: string) =>
+      announcementContentHash("AU", code, "Trading Halt", time);
+    // ZZAA: the same hash on a row published 40 days ago; ZZBB: one session ago (inside the window)
+    await forge("ZZAA", "old", "2026-09-03T01:00:00.000Z", hash("ZZAA", T(30)));
+    await forge("ZZBB", "recent", "2026-10-12T01:00:00.000Z", hash("ZZBB", T(20)));
+    const r = await go(feed(items), "c".repeat(64));
+    expect(r).toMatchObject({ ok: true, new: 2, assessed: 2 });
+    const a = await db.execute(
+      "SELECT s.code AS code, s.materiality AS materiality FROM item_assessment s ORDER BY s.code",
+    );
+    const m = Object.fromEntries(a.rows.map((x) => [String(x.code), Number(x.materiality)]));
+    expect(m.ZZAA).toBeGreaterThan(0); // outside the window: assessed normally
+    expect(m.ZZBB).toBe(0); // inside the window: a repeat
+  });
 });
