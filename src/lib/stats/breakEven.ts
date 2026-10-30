@@ -39,7 +39,8 @@ export type GainLoss = {
 
 /**
  * G and L from gross outcomes (fractions of entry notional) over all realised outcomes: gains are the
- * outcomes > 0, losses the outcomes ≤ 0 (a flat exit counts on the loss side with magnitude 0).
+ * outcomes > 0, losses the outcomes ≤ 0 — a flat exit (gross = 0) counts on the loss side with
+ * magnitude 0 (D-301; it lowers L and so p_be slightly, the conservative side for a diagnostic).
  */
 export function conditionalGainLoss(gross: readonly number[]): GainLoss {
   let sg = 0;

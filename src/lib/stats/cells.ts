@@ -56,7 +56,11 @@ export type CellSetup = {
   readonly adverseGap: number;
 };
 
-/** Deciles of S within one family: band 1 (lowest) … `bands` (highest), ties by average rank. */
+/**
+ * Deciles of S within one family: band 1 (lowest) … `bands` (highest), ties by average rank. This is
+ * the development-split banding; LIVE score bands must be cut on the frozen development S quantiles
+ * (the band edges stored with the map), not re-ranked within a night's candidates — C3a's job.
+ */
 export function scoreBands(s: readonly number[], bands: number = SCORE_BANDS): number[] {
   if (!Number.isInteger(bands) || bands < 1)
     throw new RangeError("bands must be a positive integer");

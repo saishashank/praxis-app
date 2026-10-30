@@ -545,7 +545,9 @@ export function ece(p: readonly number[], y: readonly (0 | 1)[], bins = ECE_BINS
 
 /**
  * ECE with a two-sided 90 % bootstrap interval. Reported on the statement rows only (CTX-082); the
- * influence values are the within-bin linearisation sign_b·((p_i − y_i) − (p̄_b − ȳ_b)).
+ * influence values are the within-bin linearisation sign_b·((p_i − y_i) − (p̄_b − ȳ_b)), which omits
+ * the bin-weight term (n_b / n varies across replicates), so the n_eff and the interval are slightly
+ * narrow. Acceptable because ECE is reported, never gated (AT-51).
  */
 export function eceCi(
   p: readonly number[],
