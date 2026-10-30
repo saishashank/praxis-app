@@ -131,7 +131,7 @@ export const MAX_INFERRED_RATIO = 100;
 const MAX_RATIO_PART = 1_000_000;
 const MAX_PAYLOAD_CHARS = 2000;
 
-export const isPriceType = (type) => PRICE_TYPES.includes(type);
+export const isQuantityType = (type) => PRICE_TYPES.includes(type);
 
 /**
  * DAT-233 (D-237) kind of an adjustment factor: `split` changes the share count (split,
@@ -139,7 +139,7 @@ export const isPriceType = (type) => PRICE_TYPES.includes(type);
  * A legacy row with no stored kind takes its kind from the action type.
  * @param {string} type @returns {"price" | "split"}
  */
-export const factorKindOf = (type) => (isPriceType(type) ? "split" : "price");
+export const factorKindOf = (type) => (isQuantityType(type) ? "split" : "price");
 
 /**
  * DAT-233: a price factor is used only when the reference close it was computed from still equals the
@@ -151,7 +151,7 @@ export const refCloseMatches = (stored, current) =>
     ? true
     : stored === current;
 /** Group class: split, consolidation and bonus issue share one class (they cannot co-occur). */
-export const classOf = (type) => (isPriceType(type) ? "price" : type);
+export const classOf = (type) => (isQuantityType(type) ? "price" : type);
 
 // ---------------------------------------------------------------------------------------------
 // Exact rationals (BigInt). Positive, normalised.
@@ -209,7 +209,7 @@ export function canonicalJson(v) {
 export function payloadProblem(type, p) {
   if (p === null || typeof p !== "object" || Array.isArray(p)) return "payload_not_object";
   if (canonicalJson(p).length > MAX_PAYLOAD_CHARS) return "payload_too_large";
-  if (isPriceType(type)) {
+  if (isQuantityType(type)) {
     if (!isPosInt(p.new) || !isPosInt(p.old)) return "ratio_invalid";
     if (type === "split" && !(p.new > p.old)) return "split_needs_more_shares";
     if (type === "consolidation" && !(p.new < p.old)) return "consolidation_needs_fewer_shares";
@@ -374,7 +374,7 @@ export function evidenceScore(sources, consistent) {
  */
 export function evaluateGroup(i) {
   const tol = i.tolerancePct ?? DEFAULT_PRICE_TOLERANCE_PCT;
-  const priceClass = i.actions.some((a) => isPriceType(a.type));
+  const priceClass = i.actions.some((a) => isQuantityType(a.type));
   if (priceClass && !i.price) return { pending: true };
   const observed = priceClass && i.price ? observedRatio(i.price) : null;
   const several = i.actions.length > 1 || i.hasEffective === true;
@@ -389,7 +389,7 @@ export function evaluateGroup(i) {
       // GL-01 vetoes: a vendor record for the same date with other terms, or a Yahoo adjusted
       // close that does not show a back-adjusted jump. Both are no-ops when the evidence is absent.
       const vendorOther = i.actions.some(
-        (o) => o.id !== a.id && o.sources.includes("vendor") && isPriceType(o.type),
+        (o) => o.id !== a.id && o.sources.includes("vendor") && isQuantityType(o.type),
       );
       if (vendorOther) reasons.push("vendor_disagrees");
       if (adjCloseDisagrees(i.adj, tol)) reasons.push("adj_close_disagrees");
@@ -514,7 +514,7 @@ export const typeLabel = (type) => TYPE_LABEL[type] ?? type;
 
 /** @param {string} type @param {any} p */
 export function describeTerms(type, p) {
-  if (isPriceType(type) && p && p.new && p.old) {
+  if (isQuantityType(type) && p && p.new && p.old) {
     if (type === "bonus_issue") return `${p.new} new share(s) free for every ${p.old} held`;
     return `${p.old} old share(s) become ${p.new} new share(s)`;
   }

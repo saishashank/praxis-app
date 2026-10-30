@@ -4,7 +4,7 @@ export const TYPES: readonly string[];
 export const PRICE_TYPES: readonly string[];
 export const SOURCES: readonly string[];
 export const MAX_INFERRED_RATIO: number;
-export function isPriceType(type: string): boolean;
+export function isQuantityType(type: string): boolean;
 export function classOf(type: string): string;
 
 export type Ratio = { n: bigint; d: bigint };
