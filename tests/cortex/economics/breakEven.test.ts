@@ -22,18 +22,18 @@ describe("breakEvenCard", () => {
   });
 
   it("with the order's own cost per order: p_be at C from CTX-022a", () => {
-    // A$10 U1 on P5 at A$600, ADV A$5M: 19_667 ppm (cost.test.ts) → (0.06 + 0.019667)/0.16
+    // A$10 U1 on P5 at A$500, ADV A$5M: 22_000 ppm (cost.test.ts) → (0.06 + 0.022)/0.16
     const cost = costPerOrder({
       profile: COST_PROFILES.P5,
-      notionalMicro: 600_000_000n,
+      notionalMicro: 500_000_000n,
       priceMicro: 10_000_000n,
       tier: "U1",
       advMicro: 5_000_000_000_000n,
     });
     const card = breakEvenCard(0.1, 0.06, cost);
     expect(card.atOrderCost).not.toBeNull();
-    expect(card.atOrderCost!.c).toBeCloseTo(0.019667, 9);
-    expect(card.atOrderCost!.pBe).toBeCloseTo(0.079667 / 0.16, 9);
+    expect(card.atOrderCost!.c).toBeCloseTo(0.022, 12);
+    expect(card.atOrderCost!.pBe).toBeCloseTo(0.082 / 0.16, 12);
   });
 
   it("from gross outcomes through C2 conditionalGainLoss (flat exits on the loss side, D-301)", () => {

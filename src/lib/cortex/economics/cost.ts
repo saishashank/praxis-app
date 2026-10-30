@@ -1,14 +1,18 @@
 // Cost per order by liquidity tier (M15 C3a; spec ch. 17 CTX-022a; design 3c "Cost per order", D-259,
 // D-260, D-273, D-294).
 //
-//   C = 2 × (fee + half-spread by tier + ARN-032 slippage per fill)
+//   C = Σ_{buy, sell} ( fee + max(ARN-032 slippage per fill, half-spread floor by tier) )     (D-311)
 //
 // as a fraction of the order notional, exact (Rational over micro-dollars) until the ppm figure for the
 // card. The fee is the cost profile's brokerage on each side (`feeFor`, no GST: D-273). Slippage is
 // charged on EACH fill as v1 does: the buy fill's and the sell fill's `slippageFill` amount at the
-// reference price (grid-rounded, adverse), as a fraction of the price. The half-spread has no intraday
-// source at $0 (D-294): it is max(half a tick ÷ price, the tier floor) — the floors below are stated
-// here, marked "to verify" in the V2 PR, and shown in the CTX-071 tick/cost table.
+// reference price (grid-rounded, adverse), as a fraction of the price; ARN-032's tick term already
+// models paying through the touch, so the spread is not added on top (review D-311: the simulator
+// charges fee + ARN-032 per fill only). The half-spread has no intraday source at $0 (D-294): it is
+// max(half a tick ÷ price, the tier floor) and acts as a FLOOR on each fill's cost — the floors below
+// are stated here, marked "to verify" in the V2 PR, and shown in the CTX-071 tick/cost table.
+// AT-52's "≈ 4.5–5 %" for a A$0.20 U2 stock is a stale pre-slippage figure superseded by CTX-022a's
+// "about 7 %" (D-312); the formula gives 7.0 % at the A$500 spec parcel.
 //
 // `roundTripCost` (agents/costGate.ts, FAM-005 at the fixed A$600) stays for the v1 path (D-260): once a
 // family is allowed, CTX-021 binds and this figure × `cost_gate_k` is a card diagnostic (G05, informational).
@@ -20,7 +24,7 @@ import {
   type SlippageBucket,
 } from "@/lib/arena/slippage";
 import type { Micro } from "@/lib/money/micro";
-import { addRat, makeRational, maxRat, mulRat, type Rational } from "@/lib/money/rational";
+import { addRat, cmpRat, makeRational, maxRat, mulRat, type Rational } from "@/lib/money/rational";
 import { roundHalfAwayFromZero } from "@/lib/money/round";
 import { tickFor } from "@/lib/money/tick";
 
@@ -89,16 +93,22 @@ export type CostPerOrder = {
   readonly parts: {
     /** (buy fee + sell fee) ÷ notional. */
     readonly fees: Rational;
-    /** 2 × half-spread ÷ price. */
-    readonly halfSpread: Rational;
-    /** Buy-fill slippage ÷ price (grid-rounded, adverse). */
+    /** Buy-fill cost ÷ price: max(ARN-032 slippage, grid-rounded adverse, tier half-spread floor). */
     readonly slipBuy: Rational;
-    /** Sell-fill slippage ÷ price (grid-rounded, adverse). */
+    /** Sell-fill cost ÷ price: the same max on the sell fill. */
     readonly slipSell: Rational;
+    /** True when the tier half-spread floor exceeded the ARN-032 slippage on at least one fill. */
+    readonly halfSpreadFloorApplied: boolean;
   };
 };
 
-/** CTX-022a round-trip cost per order, exact. */
+/**
+ * CTX-022a round-trip cost per order, exact (D-311):
+ *   C = Σ_{buy, sell} ( fee(notional) + max(ARN-032 slippage per fill, tier half-spread floor) ) ÷ base
+ * ARN-032's tick term (`tick_cross_factor`) already models paying through the touch, so the D-294
+ * half-spread is a FLOOR inside the per-fill max, never an additive term (the simulator charges
+ * fee + ARN-032 per fill only; adding the spread would double-count it).
+ */
 export function costPerOrder(input: CostPerOrderInput): CostPerOrder {
   const { profile, notionalMicro, priceMicro, tier, advMicro } = input;
   if (notionalMicro <= 0n) throw new RangeError("notional must be positive");
@@ -109,18 +119,24 @@ export function costPerOrder(input: CostPerOrderInput): CostPerOrder {
     feeFor(profile, notionalMicro, "buy", input.feeContext) +
     feeFor(profile, notionalMicro, "sell", input.feeContext);
   const fees = makeRational(feeMicro, notionalMicro);
-  const halfSpread = mulRat(makeRational(2n), halfSpreadFraction(tier, priceMicro));
-  const slipBuy = makeRational(
-    slippageFill(priceMicro, "buy", advMicro, factor, buckets).slipMicro,
-    priceMicro,
-  );
-  const slipSell = makeRational(
-    slippageFill(priceMicro, "sell", advMicro, factor, buckets).slipMicro,
-    priceMicro,
-  );
-  const fraction = addRat(addRat(fees, halfSpread), addRat(slipBuy, slipSell));
+  const floor = halfSpreadFraction(tier, priceMicro);
+  let halfSpreadFloorApplied = false;
+  const perFill = (side: "buy" | "sell"): Rational => {
+    const slip = makeRational(
+      slippageFill(priceMicro, side, advMicro, factor, buckets).slipMicro,
+      priceMicro,
+    );
+    if (cmpRat(floor, slip) > 0) {
+      halfSpreadFloorApplied = true;
+      return floor;
+    }
+    return slip;
+  };
+  const slipBuy = perFill("buy");
+  const slipSell = perFill("sell");
+  const fraction = addRat(fees, addRat(slipBuy, slipSell));
   const ppm = Number(roundHalfAwayFromZero(mulRat(fraction, makeRational(PPM))));
-  return { fraction, ppm, parts: { fees, halfSpread, slipBuy, slipSell } };
+  return { fraction, ppm, parts: { fees, slipBuy, slipSell, halfSpreadFloorApplied } };
 }
 
 /** The float view of C for the statistics (p_be, the `cost_gate_k` diagnostic): ppm ÷ 10⁶. */

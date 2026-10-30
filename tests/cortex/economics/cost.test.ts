@@ -57,80 +57,92 @@ describe("half-spread by tier (D-294)", () => {
   });
 });
 
-describe("costPerOrder = 2 × (fee + half-spread + slippage per fill)", () => {
-  it("AT-52: a A$0.20 U2 stock, A$600 round trip, P5, ADV A$300k", () => {
-    // fees: P5 A$5.00 each side → 10_000_000 / 600_000_000 = 1/60 (1.6667 %)
-    // half-spread: 1/80 each side → 2/80 = 1/40 (2.5 %)
-    // slippage: ARN-032 max(60 bps × 200_000 = 1_200, one tick 5_000) = 5_000 per fill;
-    //           buy 205_000, sell 195_000 → 5_000 / 200_000 = 1/40 each (2.5 % + 2.5 %)
-    // C = 1/60 + 1/40 + 1/40 + 1/40 = 2/120 + 9/120 = 11/120 = 9.1667 % → 91_667 ppm.
+describe("costPerOrder = Σ_{buy,sell} (fee + max(ARN-032 slippage per fill, tier half-spread floor)) (D-311)", () => {
+  it("AT-52: a A$0.20 U2 stock, A$500 spec parcel, P5, ADV A$300k → 7.0 % (CTX-022a 'about 7 %')", () => {
+    // fees: P5 A$5.00 each side → 10_000_000 / 500_000_000 = 1/50 (2 %)
+    // per fill: ARN-032 max(60 bps × 200_000 = 1_200, one tick 5_000) = 5_000 → 5_000 / 200_000 = 1/40
+    //           (2.5 %) vs the half-spread floor half a tick ÷ price = 1/80 (1.25 %) → 1/40 wins;
+    //           buy 205_000 and sell 195_000 both slip 5_000.
+    // C = 1/50 + 1/40 + 1/40 = 4/200 + 10/200 = 14/200 = 7/100 = 7.0 % → 70_000 ppm.
     //
-    // Computed figure: 9.17 % round trip. The chapter text says "about 7 %" (CTX-022a) and AT-52 says
-    // "≈ 4.5–5 %"; D-259 makes the formula the requirement and the band informational. The gap is the
-    // one-tick slippage floor charged on each fill (2 × 2.5 %) on top of the half tick each side: at
-    // A$0.20 a tick is 2.5 % of the price. The economic gate (CTX-021) nets this cost, so such a
-    // candidate is mostly rejected — the honest answer at this account size (spec wording).
+    // The spread is NOT added on top of the ARN-032 tick term (D-311: the tick term already models
+    // paying through the touch; the simulator charges fee + ARN-032 per fill only). AT-52's "≈ 4.5–5 %"
+    // is a stale pre-slippage figure superseded by CTX-022a's "about 7 %" (D-312); D-259 keeps the
+    // formula as the requirement. The economic gate (CTX-021) nets this cost, so such a candidate is
+    // mostly rejected — the honest answer at this account size (spec wording).
     const c = costPerOrder({
       profile: COST_PROFILES.P5,
-      notionalMicro: A$(600),
+      notionalMicro: A$(500),
       priceMicro: 200_000n,
       tier: "U2",
       advMicro: A$(300_000),
     });
-    expect(c.parts.fees).toEqual(makeRational(1n, 60n));
-    expect(c.parts.halfSpread).toEqual(makeRational(1n, 40n));
+    expect(c.parts.fees).toEqual(makeRational(1n, 50n));
     expect(c.parts.slipBuy).toEqual(makeRational(1n, 40n));
     expect(c.parts.slipSell).toEqual(makeRational(1n, 40n));
-    expect(c.fraction).toEqual(makeRational(11n, 120n));
-    expect(c.ppm).toBe(91_667);
-    expect(costFraction(c)).toBeCloseTo(0.091667, 6);
-    // Informational comparison with the AT-52 band (D-259): the formula figure is above it.
-    expect(c.ppm).toBeGreaterThan(50_000);
+    expect(c.parts.halfSpreadFloorApplied).toBe(false);
+    expect(c.fraction).toEqual(makeRational(7n, 100n));
+    expect(c.ppm).toBe(70_000);
+    expect(costFraction(c)).toBeCloseTo(0.07, 12);
   });
 
-  it("the same stock on P1 (A$3 flat) is 8.5 %: only the fee term moves", () => {
-    // fees 6_000_000 / 600_000_000 = 1/100; C = 1/100 + 3/40 = 2/200 + 15/200 = 17/200 = 8.5 %.
+  it("the same stock on P1 (A$3 flat) is 6.2 %: only the fee term moves", () => {
+    // fees 6_000_000 / 500_000_000 = 3/250 (1.2 %); C = 3/250 + 1/20 = 6/500 + 25/500 = 31/500 = 6.2 %.
     const c = costPerOrder({
       profile: COST_PROFILES.P1,
-      notionalMicro: A$(600),
+      notionalMicro: A$(500),
       priceMicro: 200_000n,
       tier: "U2",
       advMicro: A$(300_000),
     });
-    expect(c.fraction).toEqual(makeRational(17n, 200n));
-    expect(c.ppm).toBe(85_000);
+    expect(c.fraction).toEqual(makeRational(31n, 500n));
+    expect(c.ppm).toBe(62_000);
   });
 
-  it("a A$10 U1 stock, A$5M ADV, A$600 on P5: 1/60 + 2 × 500 ppm + 2 × 10 bps = 2.0667 %", () => {
-    // half-spread: half tick 5_000 / 10_000_000 = 1/2000 = 500 ppm = the U1 floor (tie) → 2/2000
-    // slippage: max(10 bps × 10_000_000 = 10_000, tick 10_000) = 10_000 → 1/1000 each fill
-    // C = 1/60 + 1/1000 + 2/1000 = 1/60 + 3/1000 = (50 + 9)/3000 = 59/3000 → 19_666.67 → 19_667 ppm
-    const c = costPerOrder({
+  it("a A$10 U1 stock, A$500 on P5: 22_000 ppm at ADV ≥ A$5M and 25_000 ppm at A$1–5M", () => {
+    // fees 1/50 (2 %). ADV A$5M: slip max(10 bps × 10_000_000 = 10_000, tick 10_000) = 10_000 → 1/1000
+    // each fill; the U1 floor is 500 ppm = half a tick → the slippage wins. C = 1/50 + 2/1000 = 22/1000.
+    const liquid = costPerOrder({
       profile: COST_PROFILES.P5,
-      notionalMicro: A$(600),
+      notionalMicro: A$(500),
       priceMicro: A$(10),
       tier: "U1",
       advMicro: A$(5_000_000),
     });
-    expect(c.fraction).toEqual(makeRational(59n, 3000n));
-    expect(c.ppm).toBe(19_667);
+    expect(liquid.fraction).toEqual(makeRational(11n, 500n));
+    expect(liquid.ppm).toBe(22_000);
+    expect(liquid.parts.halfSpreadFloorApplied).toBe(false);
+    // ADV A$2M: 25 bps × 10_000_000 = 25_000 (2.5 ticks → buy 10_030_000, sell 9_970_000: 30_000 each,
+    // the adverse grid rounding) → 3/1000 each fill. C = 1/50 + 6/1000 = 26/1000 → 26_000 ppm.
+    // (The reviewer's 25_000 is the pre-rounding figure; the fills pay the grid-rounded amount, as v1.)
+    const mid = costPerOrder({
+      profile: COST_PROFILES.P5,
+      notionalMicro: A$(500),
+      priceMicro: A$(10),
+      tier: "U1",
+      advMicro: A$(2_000_000),
+    });
+    expect(mid.fraction).toEqual(makeRational(13n, 500n));
+    expect(mid.ppm).toBe(26_000);
   });
 
-  it("the U3 floor raises a A$10 stock's half-spread term to 2 × 7_500 ppm", () => {
-    // C = 1/60 + 15/1000 + 2/1000 = 1/60 + 17/1000 = (50 + 51)/3000 = 101/3000 = 33_666.67 → 33_667
+  it("the U3 floor (7_500 ppm) applies when it exceeds the ARN-032 slippage on a A$10 stock", () => {
+    // per fill max(1/1000, 7_500/1_000_000 = 3/400) = 3/400; C = 1/50 + 6/400 = 8/400 + 6/400 = 7/200.
     const c = costPerOrder({
       profile: COST_PROFILES.P5,
-      notionalMicro: A$(600),
+      notionalMicro: A$(500),
       priceMicro: A$(10),
       tier: "U3",
       advMicro: A$(5_000_000),
     });
-    expect(c.fraction).toEqual(makeRational(101n, 3000n));
-    expect(c.ppm).toBe(33_667);
+    expect(c.parts.halfSpreadFloorApplied).toBe(true);
+    expect(c.parts.slipBuy).toEqual(makeRational(3n, 400n));
+    expect(c.fraction).toEqual(makeRational(7n, 200n));
+    expect(c.ppm).toBe(35_000);
   });
 
   it("the fee follows the notional (P5 A$10 above A$1,000.00), the rest the price", () => {
-    // A$2,000 on P5: 2 × 10_000_000 / 2_000_000_000 = 1/100; C = 1/100 + 3/1000 = 13/1000.
+    // A$2,000 on P5: 2 × 10_000_000 / 2_000_000_000 = 1/100; C = 1/100 + 2/1000 = 12/1000.
     const c = costPerOrder({
       profile: COST_PROFILES.P5,
       notionalMicro: A$(2_000),
@@ -138,8 +150,8 @@ describe("costPerOrder = 2 × (fee + half-spread + slippage per fill)", () => {
       tier: "U1",
       advMicro: A$(5_000_000),
     });
-    expect(c.fraction).toEqual(makeRational(13n, 1000n));
-    expect(c.ppm).toBe(13_000);
+    expect(c.fraction).toEqual(makeRational(3n, 250n));
+    expect(c.ppm).toBe(12_000);
   });
 
   it("rejects a non-positive notional or price", () => {
