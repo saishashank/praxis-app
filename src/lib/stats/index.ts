@@ -7,3 +7,11 @@ export * from "./ks";
 export * from "./normal";
 export * from "./pbo";
 export * from "./rng";
+// M15 C2 (Cortex statistics); rankIc, power and the other M14 modules stay imported by path.
+export * from "./stationaryBootstrap";
+export * from "./calibration";
+export * from "./multiplicity";
+export * from "./distinctness";
+export * from "./nulls";
+export * from "./cells";
+export * from "./breakEven";
