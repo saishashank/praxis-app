@@ -93,6 +93,7 @@ import {
 import { COST_PROFILES, feeFor, type CostProfile } from "@/lib/arena/costs";
 import {
   fillCloseSignalExit,
+  fillEntryLimit,
   fillIntradayStop,
   fillOrder,
   selectExit,
@@ -172,6 +173,8 @@ import { exDividendOn, toExDividendActions } from "@/lib/arena/exDividend";
 import { floorRat } from "@/lib/money/round";
 import { divFloor, type Rational } from "@/lib/money/rational";
 import { decisionCutoffUtc, type ViewBar } from "@/lib/agents/decisionView";
+import { fillRowRule, type FillRowRule } from "@/lib/cortex/economics/fillRow";
+import type { BookState as CortexBook, FamilyStatusMap, NightOutput } from "@/lib/cortex/night";
 import type { LedgerSource } from "./ledger";
 import type { PositionFacts } from "./returns";
 
@@ -257,6 +260,23 @@ export type CohortReplayOptions = {
    * signal is unmeasured and passes (the no-split goldens stay as they are).
    */
   readonly costGate?: CostGateTable;
+  /**
+   * M15 P3 (design 3c): Cortex-governed entries. Absent = the v1 path, byte for byte. When set, the
+   * E cohort of a family whose status is `allowed` takes the night's `decisions` of its own book
+   * (book id = cohort id; already ranked and sized, with `limitMicro`) in place of
+   * `rankedCandidates`; every other family runs the v1 path. `night` runs once per session.
+   */
+  readonly cortex?: CortexReplayHook;
+};
+
+/** The Cortex hook of `replayCohorts`; `cortexReplay.ts` builds it over a SnapshotWorld. */
+export type CortexReplayHook = {
+  night(d: string, books: readonly CortexBook[]): NightOutput;
+  readonly status: FamilyStatusMap;
+  /** Every night's full output (shadow rows, blocked candidates, abstains) as it is produced. */
+  sink?(d: string, out: NightOutput): void;
+  /** Every Cortex entry fill with the `fill.rule` the row would carry (D-307). */
+  onFill?(e: { d: string; cohortId: string; code: string; rule: FillRowRule }): void;
 };
 
 export type SleeveSummary = {
@@ -399,7 +419,11 @@ type EntryOrder = {
   readonly tier: Tier;
   readonly id: string;
   readonly thesis: Thesis | null;
+  /** M15: the limit of a Cortex entry (D-288); absent = a v1 market-at-open entry. */
+  readonly limitMicro?: bigint;
 };
+
+type FillOutcomeFill = Extract<FillOutcome, { status: "filled" }>["fill"];
 
 type StockExit = {
   readonly type: "IS" | "CS";
@@ -905,7 +929,7 @@ export function replayCohorts(
       if (bar === null) continue; // cancelled: no bar
       if (c.positions.has(o.code)) continue;
       const fe = fillEnv(c, bar, env, o.code);
-      const fillEntry = (qty: bigint): FillOutcome =>
+      const fillEntryV1 = (qty: bigint): FillOutcome =>
         fillOrder(
           {
             kind: "entry",
@@ -922,6 +946,21 @@ export function replayCohorts(
                 : gateSource(o.code, env.d),
           },
         );
+      const limitMicro = o.limitMicro;
+      let limitRule: FillRowRule | null = null;
+      // M15: a Cortex entry fills through `fillEntryLimit` (D-288) after the same gate and halt checks
+      const fillEntry = (qty: bigint): FillOutcome | { readonly status: "unfilled" } => {
+        const v1 = fillEntryV1(qty);
+        if (limitMicro === undefined || v1.status !== "filled") return v1;
+        const lim = fillEntryLimit(fe, qty, limitMicro);
+        if (lim.status !== "filled") return { status: "unfilled" };
+        limitRule = fillRowRule(lim);
+        return {
+          status: "filled",
+          fill: lim.fill as FillOutcomeFill,
+          initialStopMicro: initialStopAtFill(o.plan, lim.fill.fillPriceMicro),
+        };
+      };
       let outcome = fillEntry(o.qty);
       if (outcome.status !== "filled") continue;
       if (o.maxOpen !== null && bar.open >= o.maxOpen) continue; // F3 gap cap: cancelled at the fill
@@ -939,6 +978,9 @@ export function replayCohorts(
         if (outcome.status !== "filled") continue;
       }
       const fill = outcome.fill;
+      if (limitRule !== null) {
+        opts.cortex?.onFill?.({ d: env.d, cohortId: c.id, code: o.code, rule: limitRule });
+      }
       const ledgerFill: LedgerFill = {
         id: `${c.id}|buy|${o.id}`,
         d: env.d,
@@ -1482,8 +1524,83 @@ export function replayCohorts(
     maxOpen: c.maxOpenMicro === null ? null : scaleMicro(c.maxOpenMicro, cross.priceFactor),
   });
 
+  /** The night of the session when the Cortex hook is set (run once, before the entries stage). */
+  let cortexNight: NightOutput | null = null;
+
+  /** M15: the book each E cohort is to the night (book id = cohort id; design 3c). */
+  const cortexBooks = (cohortsNow: readonly Cohort[], env: DayEnv): CortexBook[] =>
+    cohortsNow
+      .filter(
+        (c) =>
+          c.execution.kind === "E" &&
+          c.execution.family !== null &&
+          c.group === "base" &&
+          c.startIdx <= env.i,
+      )
+      .map((c) => ({
+        bookId: c.id,
+        family: c.execution.family as Family,
+        executionId: c.execution.id,
+        positions: [...c.positions.values()]
+          .sort((a, b) => cmp(a.code, b.code))
+          .map((p) => ({
+            code: p.code,
+            qty: p.qty,
+            costMicro: p.costMicro,
+            stopMicro: effLevel(p),
+            entryD: p.entryD,
+          })),
+        // the replay ledger's own deployable cash (as the v1 sizing reads it): no separate pending list
+        settledCashMicro: cashNow(c, env),
+        navMicro: c.lastNav,
+        costProfile: c.profile,
+        sessionsSinceGoLive: env.i - c.startIdx,
+      }));
+
+  /** M15: the cohort's own Cortex decisions become limit orders (design 3c); no controls match them. */
+  const cortexEntries = (c: Cohort, env: DayEnv, family: Family): Taken[] => {
+    if (cortexNight === null || env.nextD === null) return [];
+    const slotsLeft = c.params.maxOpenPositions - c.positions.size;
+    const blockFrom = env.i - params.reentryBlock;
+    let placed = 0;
+    for (const dec of cortexNight.decisions) {
+      if (placed >= slotsLeft) break;
+      if (dec.bookId !== c.id || dec.family !== family) continue;
+      if (c.positions.has(dec.code)) continue;
+      const last = c.lastIs.get(dec.code);
+      if (last !== undefined && last >= blockFrom) continue; // re-entry block (FAM-002)
+      const cross = crossing(allActions(env.d), dec.code, env.d, env.nextD);
+      // the night sized in today's share terms: a quantity change across the fill is not placed
+      if (cross.disposal || cross.priceFactor.num !== cross.priceFactor.den) continue;
+      c.todaySignals += 1;
+      placed += 1;
+      c.orders.push({
+        code: dec.code,
+        qty: dec.qty,
+        plan: {
+          family: dec.family,
+          variant: "cortex",
+          ruleVersion: "cortex",
+          caThrough: env.d,
+          caApplied: cross.ids,
+          plan: dec.plan,
+          rel: [],
+        },
+        maxOpen: null,
+        tier: dec.tier,
+        id: `EN:${c.id}:${env.d}:${dec.code}`,
+        thesis: null,
+        limitMicro: dec.limitMicro,
+      });
+    }
+    return [];
+  };
+
   const entriesFor = (c: Cohort, env: DayEnv, family: Family): Taken[] => {
     if (env.nextD === null) return [];
+    if (opts.cortex !== undefined && opts.cortex.status[family] === "allowed") {
+      return cortexEntries(c, env, family);
+    }
     const ranked = rankedCandidates(env.out.candidates.filter((x) => x.family === family));
     if (ranked.length === 0) return [];
     const slotsLeft = c.params.maxOpenPositions - c.positions.size;
@@ -1762,6 +1879,10 @@ export function replayCohorts(
       const liveNow = live.filter((c) => !c.done);
       const matched = new Map<Family, Taken[]>();
       for (const c of liveNow) exitsStage(c, env);
+      if (opts.cortex !== undefined) {
+        cortexNight = opts.cortex.night(d, cortexBooks(liveNow, env));
+        opts.cortex.sink?.(d, cortexNight);
+      }
       for (const c of liveNow) {
         if (c.execution.kind === "C1") {
           if (c1Active) c1Entry(c, env);
