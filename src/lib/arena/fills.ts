@@ -162,6 +162,9 @@ export function limitPriceMicro(
  *   low ≤ limit   → a trade-through: filled at the limit EXACTLY, rule `limit`, no slippage beyond it;
  *   otherwise     → unfilled (`limit_not_reached`), recorded as unfilled in both arms by the caller.
  * A limit order cannot fill worse than its limit; the limit must be on the tick grid (`limitPriceMicro`).
+ * Persistence (D-307): the 0007 `fill.rule` CHECK has no `limit`, so a trade-through is written as
+ * rule `level` with `arena_order.limit_micro` set and an open fill stays `open` — see
+ * `fillRowRule` in src/lib/cortex/economics/fillRow.ts; the in-memory fill keeps `limit`.
  */
 export function fillEntryLimit(env: FillEnv, qty: bigint, limitMicro: Micro): LimitFillOutcome {
   assertBar(env.bar);

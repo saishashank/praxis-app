@@ -6,6 +6,7 @@ export * from "./cost";
 export * from "./gapCap";
 export * from "./rank";
 export * from "./breakEven";
+export * from "./fillRow";
 export {
   fillEntryLimit,
   LIMIT_FILL_RULE,
