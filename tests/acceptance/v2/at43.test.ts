@@ -20,6 +20,8 @@ import {
   type EntryGateContext,
 } from "@/lib/agents/entryGates";
 import { withReferenceData } from "@/lib/agents/candidates";
+import { loadDayCandidates, syncForwardLedger } from "@/lib/agents/forwardLedger";
+import { loadCalendar } from "@/lib/arena/closeBooks";
 import { runFamilies } from "@/lib/agents/families";
 import { exceedsStopCap, STOP_DISTANCE_REASON } from "@/lib/agents/families/stopCap";
 import type { CodeFacts, FamilyInputs } from "@/lib/agents/families/types";
@@ -46,6 +48,7 @@ import {
   addAction,
   buildNight,
   freshReplayDb,
+  MARKET,
   runNights,
   setMode,
   startCohortsAt,
@@ -636,6 +639,23 @@ describe("AT-43 clause 2: batch 2b live and the cohort replay place the same ord
     // ZZQ6 (a 13 % stop) is blocked inside runFamilies: no signal, no card, no order, no position
     expect(await rowsOf(n.db, "SELECT 1 FROM signal WHERE code = 'ZZQ6'")).toEqual([]);
     expect(await rowsOf(n.db, "SELECT 1 FROM arena_order WHERE code = 'ZZQ6'")).toEqual([]);
+    // ...but the block is logged: batch 3's ledger sync stores the night's candidates and blocked
+    // candidates (D-253: no card for a blocked candidate), read back with the production reader
+    await syncForwardLedger(n.db, {
+      market: MARKET,
+      d: NIGHT_D,
+      calendar: await loadCalendar(n.db, MARKET),
+      hours: { tz: "Australia/Melbourne", open_time: "10:00", close_time: "16:00" },
+      params: live,
+      replay: true,
+      masterSeed: MASTER_SEED,
+      maxCatchUp: 0, // tonight only
+    });
+    const day = (await loadDayCandidates(n.db, MARKET, [NIGHT_D])).get(NIGHT_D)!;
+    expect(day.blocked.filter((b) => b.code === "ZZQ6").map((b) => [b.family, b.reasons])).toEqual([
+      ["F4", [STOP_DISTANCE_REASON]],
+    ]);
+    expect(day.candidates.map((c) => c.code)).not.toContain("ZZQ6");
 
     const stored = await storedPositions(n);
     const { result, positions } = await replayNight(n);
