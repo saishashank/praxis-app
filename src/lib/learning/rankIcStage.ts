@@ -120,14 +120,36 @@ async function insertDay(
   source: "live" | "replay",
   computedAt: string,
 ): Promise<number> {
+  return insertRows(
+    db,
+    rows.map((r) => ({ ...r, d })),
+    market,
+    source,
+    computedAt,
+  );
+}
+
+/** Rows per write batch: one round trip per chunk instead of one per row (replay backfills years). */
+const INSERT_CHUNK = 500;
+
+async function insertRows(
+  db: Client,
+  rows: readonly (DayIc & { d: string })[],
+  market: string,
+  source: "live" | "replay",
+  computedAt: string,
+): Promise<number> {
   let written = 0;
-  for (const r of rows) {
-    const res = await db.execute({
-      sql: `INSERT INTO rank_ic_daily (market, family, rank_variant, d, n, ic, source, computed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
-      args: [market, r.family, r.rankVariant, d, r.n, r.ic, source, computedAt],
-    });
-    written += res.rowsAffected;
+  for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+    const res = await db.batch(
+      rows.slice(i, i + INSERT_CHUNK).map((r) => ({
+        sql: `INSERT INTO rank_ic_daily (market, family, rank_variant, d, n, ic, source, computed_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+        args: [market, r.family, r.rankVariant, r.d, r.n, r.ic, source, computedAt],
+      })),
+      "write",
+    );
+    for (const x of res) written += x.rowsAffected;
   }
   return written;
 }
@@ -242,24 +264,32 @@ export async function rankIcStage(c: WeeklyContext): Promise<StageOutput> {
   const sessions = world.sessions;
   const series = new Map<string, number[]>();
   const computedAt = `${c.d}T00:00:00Z`;
+  // A code's split list does not depend on the session: build it once per run.
+  const splitsOf = new Map<string, ReturnType<typeof forwardSplits>>();
+  const forwardSplits = (code: string) =>
+    splitActionsByCode(world.corpActions(code) as readonly CorpActionRecord[]).byCode.get(code) ??
+    [];
+  const pending: (DayIc & { d: string })[] = [];
   for (let i = 0; i + 2 < sessions.length; i += 1) {
     const d = sessions[i]!;
     const inputs = world.familyInputs(d);
     if (inputs.codes.length === 0) continue;
     const forward = new Map<string, number>();
     for (const code of inputs.codes.map((x) => x.code)) {
-      const splits = splitActionsByCode(
-        world.corpActions(code) as readonly CorpActionRecord[],
-      ).byCode.get(code);
+      let splits = splitsOf.get(code);
+      if (splits === undefined) {
+        splits = forwardSplits(code);
+        splitsOf.set(code, splits);
+      }
       const f = forwardReturn(
         world.bar(code, sessions[i + 1]!),
         world.bar(code, sessions[i + 2]!),
-        splits ?? [],
+        splits,
       );
       if (f !== null) forward.set(code, f);
     }
     const rows = icRowsForDay(inputs, params, forward);
-    await insertDay(db, market, d, rows, "replay", computedAt);
+    for (const r of rows) pending.push({ ...r, d });
     for (const r of rows) {
       if (r.ic === null) continue;
       const key = `${r.family}|${r.rankVariant}`;
@@ -268,6 +298,7 @@ export async function rankIcStage(c: WeeklyContext): Promise<StageOutput> {
       else list.push(r.ic);
     }
   }
+  await insertRows(db, pending, market, "replay", computedAt);
   const stats = RANK_SPECS.flatMap(({ family, variant }) => {
     const ics = series.get(`${family}|${variant}`);
     if (ics === undefined) return [];

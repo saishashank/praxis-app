@@ -25,6 +25,7 @@ import {
   rollsStage,
   type WeeklyContext,
 } from "@/lib/learning/weeklyStages";
+import { rankIcStage } from "@/lib/learning/rankIcStage";
 import {
   LEARNING_SCOPE,
   noopStage,
@@ -162,15 +163,15 @@ export async function runLearning(o: LearningRunOptions): Promise<LearningOutput
       forward,
       comparisons: wrap(comparisonsStage),
       lessons: wrap(lessonsStage),
-      // M14 WP0: registered with no-op stubs; WP6 (preregistered), WP3 (robustness) and WP4 (rankIc)
-      // replace them with `wrap(...)` of their stage functions.
+      // M14 WP0: registered with no-op stubs; WP6 (preregistered) and WP3 (robustness) replace them
+      // with `wrap(...)` of their stage functions.
       preregistered: noopStage,
       challengers: wrap(challengersStage),
       rolls: wrap(rollsStage),
       arn076: wrap(arn076Stage),
       factors: wrap(factorsStage),
       robustness: noopStage,
-      rankIc: noopStage,
+      rankIc: wrap(rankIcStage),
     },
   });
 
