@@ -165,11 +165,12 @@ export const KNOWN_TIME: Readonly<Record<InputKind, KnownTimeRule>> = {
     const prev = clock.previousSession(need(row.exDate, "exDate"));
     return prev === null ? ALWAYS_KNOWN : dayStartUtc(prev);
   },
-  // The manual DAT-234 list: a stamp when the row has one, else usable from the announced date's
-  // cut-off (the effective date when no announcement date is recorded; row.d carries that date).
-  index_change: (row) => {
+  // The manual DAT-234 list: a stamp when the row has one, else the announced date + 1 session
+  // (the effective date when no announcement date is recorded; row.d carries that date): the CSV
+  // has no publication time, so it is treated as an untimed row (D-302, same as OI-46).
+  index_change: (row, clock) => {
     if (typeof row.knownAt === "string" && row.knownAt.length > 0) return instantText(row.knownAt);
-    return dayStartUtc(need(row.d, "d"));
+    return sessionsAfterUtc(clock, need(row.d, "d"), 1);
   },
   calendar: () => ALWAYS_KNOWN,
   // The instrument-class list is dated by its as_of; usable from that day's cut-off.

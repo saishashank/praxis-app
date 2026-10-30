@@ -128,10 +128,14 @@ describe("KNOWN_TIME has one rule per InputKind", () => {
     expect(knownTimeOf("corp_action", { exDate: "2026-03-02" }, clock)).toBe(ALWAYS_KNOWN);
   });
 
-  it("index_change: known_at when stamped, else the announced (or effective) date's start", () => {
+  it("index_change: known_at when stamped, else the announced (or effective) date + 1 session (D-302)", () => {
     expect(knownTimeOf("index_change", { d: "2026-03-04" }, clock)).toBe(
-      "2026-03-04T00:00:00.000Z",
+      "2026-03-05T00:00:00.000Z",
     );
+    expect(knownTimeOf("index_change", { d: "2026-03-06" }, clock)).toBe(
+      "2026-03-10T00:00:00.000Z",
+    );
+    expect(knownTimeOf("index_change", { d: "2026-03-18" }, clock)).toBe(NEVER_KNOWN);
     expect(
       knownTimeOf("index_change", { knownAt: "2026-03-04T06:00:00Z", d: "2026-03-04" }, clock),
     ).toBe("2026-03-04T06:00:00.000Z");
