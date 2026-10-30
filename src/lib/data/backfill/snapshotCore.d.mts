@@ -10,7 +10,9 @@ export type SnapshotTableName =
   | "index_bars"
   | "corporate_actions"
   | "announcements"
-  | "cutoff_polls";
+  | "cutoff_polls"
+  | "index_changes"
+  | "industry";
 export const TABLES: readonly { name: SnapshotTableName; fields: readonly string[] }[];
 export type SnapshotInputs = Partial<
   Record<SnapshotTableName | `${SnapshotTableName}_recent`, Record<string, unknown>[]>

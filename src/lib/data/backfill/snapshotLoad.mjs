@@ -158,6 +158,46 @@ export async function loadInputs(o) {
     l_micro: Number(r.l_micro),
     c_micro: Number(r.c_micro),
   }));
+  // DAT-234 / FAM-006: reference data known by the end of the range (manual CSV tables, migration 0018)
+  const indexChanges = (
+    await q(
+      `SELECT code, index_name, kind, announced_d, effective_d FROM index_change
+       WHERE market = ? AND COALESCE(announced_d, effective_d) <= ?
+       ORDER BY code, index_name, kind, effective_d`,
+      [MARKET, o.to],
+    )
+  ).map((r) => ({
+    code: String(r.code),
+    index_name: String(r.index_name),
+    kind: String(r.kind),
+    announced: r.announced_d === null ? null : String(r.announced_d),
+    effective: String(r.effective_d),
+  }));
+  const industry = [
+    ...(
+      await q(
+        "SELECT code, industry, as_of FROM instrument_class WHERE market = ? AND as_of <= ? ORDER BY code, as_of",
+        [MARKET, o.to],
+      )
+    ).map((r) => ({
+      code: String(r.code),
+      industry: String(r.industry),
+      source: "class",
+      as_of: String(r.as_of),
+    })),
+    // the ASX industry group is the current one (no history is kept): dated at the range start
+    ...(
+      await q(
+        "SELECT code, industry FROM instrument WHERE market = ? AND industry IS NOT NULL ORDER BY code",
+        [MARKET],
+      )
+    ).map((r) => ({
+      code: String(r.code),
+      industry: String(r.industry),
+      source: "instrument",
+      as_of: o.from,
+    })),
+  ];
   const codes = (
     await q("SELECT DISTINCT code FROM corporate_action WHERE market = ?", [MARKET])
   ).map((r) => String(r.code));
@@ -180,5 +220,7 @@ export async function loadInputs(o) {
     universe,
     index_bars: index,
     corporate_actions: actions,
+    index_changes: indexChanges,
+    industry,
   };
 }
