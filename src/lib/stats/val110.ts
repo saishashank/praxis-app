@@ -330,15 +330,12 @@ export function evaluateVal110(input: Val110Input): Val110Result {
   const master = input.masterSeed ?? STATS_MASTER_SEED;
   const L = Math.max(params.activeLineagesFloor, input.activeLineages);
   const m = params.trialBudgetPerLineage;
-  const level =
-    input.priorTests === undefined
-      ? validationLevel(params.alpha, m, L)
-      : validationLevelFor({
-          mode: params.valErrorBudgetMode,
-          w0: params.valFwerPerLineage,
-          priorTests: input.priorTests,
-          legacy: { alpha: params.alpha, m, lineages: L },
-        });
+  const level = validationLevelFor({
+    mode: params.valErrorBudgetMode,
+    w0: params.valFwerPerLineage,
+    priorTests: input.priorTests,
+    legacy: { alpha: params.alpha, m, lineages: L },
+  });
   const B = replicationsFor(level, params);
   const results: ValidationResultRecord[] = [];
   const base = (extra: {

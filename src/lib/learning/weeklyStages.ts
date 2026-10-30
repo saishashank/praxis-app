@@ -27,6 +27,7 @@ import type { SnapshotWorld } from "@/lib/replay/snapshotWorld";
 import type { ReplayStatInput } from "@/lib/replay/scorecards";
 import {
   lineageId,
+  splitFromRow,
   splitOf,
   validationSessions,
   type LineageSplitRecord,
@@ -110,25 +111,7 @@ export async function loadSplit(db: Client, lineage: string): Promise<LineageSpl
     args: [lineage],
   });
   if (rs.rows.length === 0) return null;
-  const r = rs.rows[0]!;
-  const opt = (v: unknown): string | null => (v === null || v === undefined ? null : text(v));
-  return {
-    lineage_id: text(r.lineage_id),
-    version: Number(r.version),
-    block_sessions: Number(r.block_sessions),
-    holdout_len: Number(r.holdout_len),
-    validation_len: Number(r.validation_len),
-    purge: Number(r.purge),
-    data_end_d: text(r.data_end_d),
-    holdout_start_d: opt(r.holdout_start_d),
-    holdout_end_d: opt(r.holdout_end_d),
-    validation_start_d: opt(r.validation_start_d),
-    validation_end_d: opt(r.validation_end_d),
-    dev_end_d: opt(r.dev_end_d),
-    deferred_until_d: opt(r.deferred_until_d),
-    reason: text(r.reason) as "create" | "roll",
-    measured_on_run: opt(r.measured_on_run),
-  };
+  return splitFromRow(rs.rows[0]! as Record<string, unknown>);
 }
 
 /** The family's own variant, optionally of one rule version. */
