@@ -16,6 +16,7 @@ import {
   symmetricEigenvalues,
   vif,
 } from "@/lib/stats/distinctness";
+import { spearman } from "@/lib/stats/rankIc";
 import { normal, prngFor } from "./helpers";
 
 const N = 400;
@@ -147,6 +148,12 @@ describe("partial IC", () => {
     expect(redundant.ratio).toBeLessThan(MIN_PARTIAL_IC_RATIO);
     expect(redundant.pass).toBe(false);
     expect(partialIc([1, 1, 1], [], [1, 2, 3]).raw).toBeNull();
+    // S4: the raw IC is taken on the RAW feature when one is given; the partial on the residual.
+    const raw = x.map((v, i) => v + 2 * z[i]!);
+    const withRaw = partialIc(x, [], forward, MIN_PARTIAL_IC_RATIO, raw);
+    expect(withRaw.raw).toBe(spearman(raw, forward));
+    expect(withRaw.partial).toBe(spearman(x, forward));
+    expect(withRaw.raw).not.toBe(withRaw.partial);
   });
 });
 

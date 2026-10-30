@@ -165,8 +165,10 @@ export function partialIc(
   others: readonly (readonly number[])[],
   forward: readonly number[],
   minRatio: number = MIN_PARTIAL_IC_RATIO,
+  /** The RAW feature for the raw IC (CTX-033 "partial IC ≥ 0.5 × raw IC"); default = `feature`. */
+  rawFeature: readonly number[] = feature,
 ): PartialIc {
-  const raw = spearman(feature, forward);
+  const raw = spearman(rawFeature, forward);
   let residual = feature;
   if (others.length > 0) {
     const X = feature.map((_, i) => others.map((o) => o[i]!));
@@ -284,11 +286,15 @@ export function distinctnessReport(input: DistinctnessInput): DistinctnessReport
   const maxRank = maxOffDiagonal(rankCorrelation);
   const cmc = clusterMeanCorrelation(input.features, input.clusters).max;
   const v = vif(residuals);
+  // Raw IC on the raw feature; partial IC on the factor-residualised feature, residualised again on
+  // the other residualised features of the set.
   const pics = residuals.map((r, a) =>
     partialIc(
       r,
       residuals.filter((_, b) => b !== a),
       input.forward,
+      MIN_PARTIAL_IC_RATIO,
+      input.features[a]!,
     ),
   );
   const checks = {
