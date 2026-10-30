@@ -9,10 +9,14 @@ import {
   breadthAbove,
   completedMonthEnds,
   D5_ANGLES,
-  percentileOf,
+  halfTieShare,
+  MACRO_IDS,
+  nightMemo,
+  priorPercentile,
   sectorRank,
   sectorReturns,
 } from "@/lib/cortex/angles/d5";
+import { MACRO_DEFAULT, macroRuleFor } from "@/lib/cortex/pit/knownTime";
 import {
   ANGLES_PER_DOMAIN,
   canActivate,
@@ -83,15 +87,67 @@ describe("D5 passports", () => {
     });
     expect(LIVE_READERS.has("macro")).toBe(false);
     expect(byId("A-D5-08").inputs).toEqual(["index_us"]);
+    expect(byId("A-D5-01").grid).toEqual({}); // D-318 / D-327: challengers are history text
+    expect(Object.keys(byId("A-D5-02").grid)).toEqual(["min_universe"]);
     for (const id of ["A-D5-03", "A-D5-04"]) expect(byId(id).needsData).toMatch(/sector map/);
     for (const a of defs) expect(a.orientation).toBe(1);
   });
 });
 
 describe("helpers", () => {
-  it("percentile, month-ends and sector ranks", () => {
-    expect(percentileOf([1, 2, 3, 4], 3)).toBe(75);
-    expect(percentileOf([5, 5, 5], 5)).toBe(100);
+  it("the two percentile conventions (D-326): AGT-030 half-tie against the others, AGT-101 count <= over the prior values", () => {
+    expect(halfTieShare([1, 2, 4, 5], 3)).toBe(0.5);
+    expect(halfTieShare([1, 3, 3, 5], 3)).toBe(0.5); // one lower + half of two ties over four
+    expect(halfTieShare([5, 5, 5], 5)).toBe(0.5);
+    expect(halfTieShare([1, 2], 3)).toBe(1);
+    expect(halfTieShare([], 3)).toBeUndefined();
+    expect(priorPercentile([1, 2, 3, 4], 3)).toBe(75);
+    expect(priorPercentile([5, 5, 5], 5)).toBe(100);
+    expect(priorPercentile([5, 5, 5], 4)).toBe(0);
+    expect(priorPercentile([], 1)).toBeUndefined();
+  });
+
+  it("the macro ids the computes read fall to the +1-session default rule until MACRO_SERIES names them (D-330)", () => {
+    expect(MACRO_IDS).toEqual([AU_10Y_SERIES]);
+    for (const id of MACRO_IDS) expect(macroRuleFor(id)).toEqual(MACRO_DEFAULT);
+    expect(MACRO_DEFAULT).toEqual({ kind: "sessions", lag: 1 });
+  });
+
+  it("nightMemo computes once per (view, key) and never crosses views (D-328)", () => {
+    let calls = 0;
+    const make = () => {
+      calls += 1;
+      return { n: calls };
+    };
+    const a = nightMemo(view, "test|1", make);
+    expect(nightMemo(view, "test|1", make)).toBe(a);
+    expect(calls).toBe(1);
+    nightMemo(view, "test|2", make);
+    expect(calls).toBe(2);
+    const other = buildAsOfView(world);
+    expect(nightMemo(other, "test|1", make)).not.toBe(a);
+    expect(calls).toBe(3);
+  });
+
+  it("breadthAbove runs the universe loop once a night: a second code reuses the memo", () => {
+    let codesCalls = 0;
+    const counted = new Proxy(view, {
+      get(target, prop, receiver) {
+        if (prop === "codes") codesCalls += 1;
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    const def = byId("A-D5-02");
+    const g = { ...defaultGrid(def), min_universe: 1 };
+    const first = def.compute!(counted, "ZZA", T, g);
+    const second = def.compute!(counted, "ZZB", T, g);
+    expect(second).toBe(first);
+    expect(codesCalls).toBe(1);
+    def.compute!(counted, "ZZA", T - 1, g); // another night: one more universe pass
+    expect(codesCalls).toBe(2);
+  });
+
+  it("month-ends and sector ranks", () => {
     const ends = completedMonthEnds(world.sessions, 30);
     expect(ends.map((i) => world.sessions[i])).toEqual(["2020-01-31"]);
     expect(completedMonthEnds(world.sessions, 18)).toEqual([]);
@@ -260,14 +316,16 @@ describe("D5 computes", () => {
   it("A-D5-08 US risk state from the last known US session (D-1), the VIX percentile over 1,260 sessions", () => {
     // The bar dated sessions[T] is known at T+1 09:00 Melbourne: the view holds up to sessions[T-1].
     const last = T - 1;
-    const values: number[] = [];
-    for (let i = last - 1259; i <= last; i += 1) values.push(vixLevel(i));
-    const pct = percentileOf(values, vixLevel(last));
+    const prior: number[] = [];
+    for (let i = last - 1260; i < last; i += 1) prior.push(vixLevel(i)); // the 1,260 before it
+    const pct = priorPercentile(prior, vixLevel(last))!;
+    expect(pct).toBe((prior.filter((v) => v <= vixLevel(last)).length * 100) / 1260);
     expect(pct).toBeLessThan(50);
     expect(run("A-D5-08", T)).toEqual({ bucket: "risk_on" }); // GSPC rises above its SMA200
     expect(run("A-D5-08", T, { vix_pct_on: Math.floor(pct) })).toEqual({ bucket: "neutral" });
-    expect(run("A-D5-08", 1259)).toBeUndefined(); // 1,259 known VIX bars
-    expect(run("A-D5-08", 1260)).toBeDefined();
+    expect(run("A-D5-08", T, { vix_pct_on: Math.floor(pct) + 1 })).toEqual({ bucket: "risk_on" });
+    expect(run("A-D5-08", 1260)).toBeUndefined(); // 1,260 known VIX bars: no prior window of 1,260
+    expect(run("A-D5-08", 1261)).toBeDefined();
     // A VIX spike dated tonight must be invisible (D-290): same state as without it.
     const spiked = buildAsOfView({
       ...world,

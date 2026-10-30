@@ -14,17 +14,42 @@ import { eventsWithin } from "./d3";
 import type { AngleDef, AsOfView } from "./types";
 
 export const SECTOR_MAP_HISTORY = "point-in-time sector map (D-271, CTX-025)";
-/** RBA F1 cash rate target and the F2 10-year government bond yield (series ids [VERIFY], DAT-101). */
-export const AU_CASH_RATE_SERIES = "RBA_CASH_RATE";
+/**
+ * Macro series ids the D5 computes read (RBA F2 10-year government bond yield; id [VERIFY],
+ * DAT-101). Not in MACRO_SERIES yet, so the default +1-session publication rule applies (D-330: the
+ * orchestrator adds the explicit rows at merge).
+ */
 export const AU_10Y_SERIES = "RBA_F2_10Y";
+export const MACRO_IDS: readonly string[] = [AU_10Y_SERIES];
 
 const PERCENT = 100; // threshold-ok: percent scale of a percentile
 const BP_PER_PCT = 100; // threshold-ok: basis points per percentage point
 const SECTOR_HORIZONS = [21, 63, 126] as const;
 
+// ---- per-night memo (D-328) -------------------------------------------------------------------------------
+// Market-wide inputs (breadth, the benchmark volatility series, the VIX window, the yield map, the
+// holiday set) are the same for every code on one night. They are memoised per (view, key) in a
+// WeakMap so the view's own lifetime bounds the cache; nothing here reads a clock or a store, and a
+// cut view (TST-109) is a different key, so the memo never crosses a truncation.
+const MEMO = new WeakMap<AsOfView, Map<string, unknown>>();
+
+/** The memoised value of `key` on `view`, computed once by `make`. */
+export function nightMemo<T>(view: AsOfView, key: string, make: () => T): T {
+  let m = MEMO.get(view);
+  if (m === undefined) {
+    m = new Map();
+    MEMO.set(view, m);
+  }
+  if (m.has(key)) return m.get(key) as T;
+  const v = make();
+  m.set(key, v);
+  return v;
+}
+
 /**
  * Share of universe codes whose adjusted close is above its `window`-session SMA, over the codes
  * with at least `window` bars (exact bigint compare); undefined below `minUniverse` such codes.
+ * Memoised per (view, t, window): the universe loop runs once a night.
  */
 export function breadthAbove(
   view: AsOfView,
@@ -32,16 +57,19 @@ export function breadthAbove(
   window: number,
   minUniverse: number,
 ): number | undefined {
-  let withData = 0;
-  let above = 0;
-  for (const code of view.codes(t)) {
-    if (view.barCount(code, t) < window) continue;
-    const closes = view.adj(code, t, window).adjClose;
-    let sum = 0n;
-    for (const c of closes) sum += c;
-    withData += 1;
-    if (closes[closes.length - 1]! * BigInt(window) > sum) above += 1;
-  }
+  const { withData, above } = nightMemo(view, `breadth|${t}|${window}`, () => {
+    let withData = 0;
+    let above = 0;
+    for (const code of view.codes(t)) {
+      if (view.barCount(code, t) < window) continue;
+      const closes = view.adj(code, t, window).adjClose;
+      let sum = 0n;
+      for (const c of closes) sum += c;
+      withData += 1;
+      if (closes[closes.length - 1]! * BigInt(window) > sum) above += 1;
+    }
+    return { withData, above };
+  });
   return withData < minUniverse ? undefined : above / withData;
 }
 
@@ -62,7 +90,8 @@ export function lookbackReturnAt(
 
 /**
  * Equal-weight return per sector over `lookback` sessions at t from the universe codes with a known
- * industry and enough bars; sectors with fewer than `minCodes` such codes are left out.
+ * industry and enough bars; sectors with fewer than `minCodes` such codes are left out. Memoised
+ * per (view, t, lookback, minCodes).
  */
 export function sectorReturns(
   view: AsOfView,
@@ -70,22 +99,24 @@ export function sectorReturns(
   lookback: number,
   minCodes: number,
 ): ReadonlyMap<string, number> {
-  const bySector = new Map<string, number[]>();
-  for (const code of view.codes(t)) {
-    const sector = view.industry(code, t);
-    if (sector === null) continue;
-    const r = lookbackReturnAt(view, code, t, lookback);
-    if (r === undefined) continue;
-    const list = bySector.get(sector) ?? [];
-    list.push(r);
-    bySector.set(sector, list);
-  }
-  const out = new Map<string, number>();
-  for (const sector of [...bySector.keys()].sort()) {
-    const rs = bySector.get(sector)!;
-    if (rs.length >= minCodes) out.set(sector, mean(rs));
-  }
-  return out;
+  return nightMemo(view, `sector|${t}|${lookback}|${minCodes}`, () => {
+    const bySector = new Map<string, number[]>();
+    for (const code of view.codes(t)) {
+      const sector = view.industry(code, t);
+      if (sector === null) continue;
+      const r = lookbackReturnAt(view, code, t, lookback);
+      if (r === undefined) continue;
+      const list = bySector.get(sector) ?? [];
+      list.push(r);
+      bySector.set(sector, list);
+    }
+    const out = new Map<string, number>();
+    for (const sector of [...bySector.keys()].sort()) {
+      const rs = bySector.get(sector)!;
+      if (rs.length >= minCodes) out.set(sector, mean(rs));
+    }
+    return out;
+  });
 }
 
 /** 1-based rank of `sector` by descending return (ties by name), over `returns`; undefined when absent. */
@@ -109,11 +140,33 @@ export function completedMonthEnds(sessions: readonly string[], t: number): numb
   return out;
 }
 
-/** Share (0..100) of `values` at or below `x`. */
-export function percentileOf(values: readonly number[], x: number): number {
+// ---- the two percentile conventions (D-326) ---------------------------------------------------------------
+
+/**
+ * AGT-030 cross-sectional share in [0, 1] of `x` against the OTHER points (half credit for ties):
+ * (lower + 0.5 x ties) / n, as tierPercentile (indicators.ts) does on rationals; `others` must not
+ * contain `x` itself. undefined with no others.
+ */
+export function halfTieShare(others: readonly number[], x: number): number | undefined {
+  if (others.length === 0) return undefined;
+  let lower = 0;
+  let ties = 0;
+  for (const v of others) {
+    if (v < x) lower += 1;
+    else if (v === x) ties += 1;
+  }
+  return (lower + 0.5 * ties) / others.length;
+}
+
+/**
+ * AGT-101 time-series percentile (0..100) of tonight's `x` against the `prior` values that exclude
+ * it: count of prior values <= x, x 100 / prior.length (regime.ts rawAt). undefined with no prior.
+ */
+export function priorPercentile(prior: readonly number[], x: number): number | undefined {
+  if (prior.length === 0) return undefined;
   let n = 0;
-  for (const v of values) if (v <= x) n += 1;
-  return (n * PERCENT) / values.length;
+  for (const v of prior) if (v <= x) n += 1;
+  return (n * PERCENT) / prior.length;
 }
 
 function pearson(x: readonly number[], y: readonly number[]): number | undefined {
@@ -136,6 +189,7 @@ function pearson(x: readonly number[], y: readonly number[]): number | undefined
 }
 
 const MACRO_FETCH = 400; // threshold-ok: observations read to align 60 session pairs with a lag
+const VIX_LOOKBACK = 1260; // threshold-ok: AGT-101 percentile lookback, mirrored for the VIX
 
 function ratesBucket(level: number, changeBp: number, g: Readonly<Record<string, number>>): string {
   const levelVote = level < g.level_lo! ? 1 : level > g.level_hi! ? -1 : 0;
@@ -151,15 +205,17 @@ export const D5_ANGLES: readonly AngleDef[] = [
     domain: 5,
     title: "Market regime (AGT-101, unchanged for v1)",
     definition:
-      "The AGT-101 state of the benchmark at the cut-off: close vs SMA200, 20-session volatility percentile over 1,260 sessions, SHOCK on a 5-session fall > shock_fall_pct or volatility percentile > shock_vol_pct, 3-session exit hysteresis; applied only through the CTX-017 table. The grid names the challengers; the compute returns the incumbent's state.",
+      "The AGT-101 state of the benchmark at the cut-off: close vs SMA200, 20-session volatility percentile over 1,260 sessions, SHOCK on a 5-session fall > 7 % or volatility percentile > 95, 3-session exit hysteresis; applied only through the CTX-017 table. The compute returns the incumbent's state; no grid (D-318, D-327).",
     kind: "gate",
     cluster: "regime",
     orientation: 1,
     horizonSessions: 0,
     warmupSessions: 1281,
     inputs: ["index_au"],
-    grid: { shock_fall_pct: [7, 5, 6, 8, 9], shock_vol_pct: [95, 90, 92, 98] },
-    historyFields: ["the O'Neil follow-through challenger needs ASX 200 index volume (needs_data)"],
+    grid: {},
+    historyFields: [
+      "challengers (not pre-registered cells): SHOCK fall 5-9 % and SHOCK volatility percentile 90-98; the O'Neil follow-through variant needs ASX 200 index volume (needs_data); the regime-age bucket",
+    ],
     existing: ["AGT-101", "CTX-017", "src/lib/agents/regime.ts", "G07_regime"],
     compute: (view, _code, t) => {
       const r = view.regime(t);
@@ -172,14 +228,14 @@ export const D5_ANGLES: readonly AngleDef[] = [
     domain: 5,
     title: "Market breadth confirmation (point-in-time universe)",
     definition:
-      "breadth200 = share of universe codes with an adjusted close above their SMA200, over codes with 200 bars; a logged gate input (narrow flag when the index is at a 250-session high but breadth200 < narrow_threshold); undefined below min_universe codes with data.",
+      "breadth200 = share of universe codes with an adjusted close above their SMA200, over codes with 200 bars; a logged gate input, never a score feature; undefined below min_universe codes with data.",
     kind: "gate",
     cluster: "regime",
     orientation: 1,
     horizonSessions: 0,
     warmupSessions: 250,
-    inputs: ["bar_au", "index_au"],
-    grid: { min_universe: [300, 200, 400, 500], narrow_threshold: [0.4, 0.3, 0.5] },
+    inputs: ["bar_au"],
+    grid: { min_universe: [300, 200, 400, 500] },
     historyFields: ["offline universe = the point-in-time tier rows of the extract (DAT-130)"],
     existing: ["K-044", "AGT-030"],
     compute: (view, _code, t, grid) => breadthAbove(view, t, 200, grid.min_universe!),
@@ -319,12 +375,12 @@ export const D5_ANGLES: readonly AngleDef[] = [
     domain: 5,
     title: "Global risk-on/off (S&P 500 trend and VIX percentile)",
     definition:
-      "state {risk_off, neutral, risk_on} from the last US session known at the cut-off (the bar dated D-1; D's bar is known D+1 09:00 Melbourne): risk_off = GSPC close < SMA200 and VIX percentile over 1,260 sessions > vix_pct_off; risk_on = close > SMA200 and VIX percentile < vix_pct_on.",
+      "state {risk_off, neutral, risk_on} from the last US session known at the cut-off (the bar dated D-1; D's bar is known D+1 09:00 Melbourne): risk_off = GSPC close < SMA200 and VIX percentile > vix_pct_off; risk_on = close > SMA200 and VIX percentile < vix_pct_on. The VIX percentile is AGT-101's: count of the prior 1,260 VIX closes at or below the last one, x 100 / 1,260 (D-326).",
     kind: "gate",
     cluster: "regime",
     orientation: 1,
     horizonSessions: 0,
-    warmupSessions: 1260,
+    warmupSessions: 1261,
     inputs: ["index_us"],
     grid: { vix_pct_off: [70, 60, 80], vix_pct_on: [50, 40, 60] },
     historyFields: [
@@ -333,14 +389,17 @@ export const D5_ANGLES: readonly AngleDef[] = [
     ],
     existing: ["K-041", "K-044", "AGT-101"],
     compute: (view, _code, t, grid) => {
+      const pct = nightMemo(view, `vixPct|${t}`, () => {
+        const vix = view.index("VIX", t, VIX_LOOKBACK + 1);
+        if (vix.length < VIX_LOOKBACK + 1) return undefined;
+        const values = vix.map((b) => microToFloat(b.close));
+        return priorPercentile(values.slice(0, VIX_LOOKBACK), values[VIX_LOOKBACK]!);
+      });
       const gspc = view.index("GSPC", t, 200);
-      const vix = view.index("VIX", t, 1260);
-      if (gspc.length < 200 || vix.length < 1260) return undefined;
+      if (pct === undefined || gspc.length < 200) return undefined;
       let sum = 0n;
       for (const b of gspc) sum += b.close;
       const last = gspc[gspc.length - 1]!.close * 200n;
-      const vixValues = vix.map((b) => microToFloat(b.close));
-      const pct = percentileOf(vixValues, vixValues[vixValues.length - 1]!);
       if (last < sum && pct > grid.vix_pct_off!) return { bucket: "risk_off" };
       if (last > sum && pct < grid.vix_pct_on!) return { bucket: "risk_on" };
       return { bucket: "neutral" };
@@ -364,8 +423,11 @@ export const D5_ANGLES: readonly AngleDef[] = [
     existing: ["K-039", "K-044", "P-07-5"],
     compute: (view, _code, t, grid) => {
       const w = grid.window!;
-      const yields = new Map<string, number>();
-      for (const p of view.macro(AU_10Y_SERIES, t, MACRO_FETCH)) yields.set(p.obsD, p.value);
+      const yields = nightMemo(view, `yield10y|${t}`, () => {
+        const m = new Map<string, number>();
+        for (const p of view.macro(AU_10Y_SERIES, t, MACRO_FETCH)) m.set(p.obsD, p.value);
+        return m;
+      });
       const bars = view.index("AXJO", t, MACRO_FETCH);
       const x: number[] = [];
       const y: number[] = [];

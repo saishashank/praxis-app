@@ -4,7 +4,14 @@
 // candidates with forward computes; the dividend-capture and contrarian gates are computed from
 // the vendor actions, the calendar and the universe.
 import { describe, expect, it } from "vitest";
-import { D6_ANGLES, MIN_SHORT_POINTS, shortChange, shortsWithin } from "@/lib/cortex/angles/d6";
+import {
+  benchmarkVolPct,
+  D6_ANGLES,
+  MIN_SHORT_POINTS,
+  shortChange,
+  shortsWithin,
+} from "@/lib/cortex/angles/d6";
+import { regimeSeries } from "@/lib/agents/regime";
 import { breadthAbove } from "@/lib/cortex/angles/d5";
 import {
   ANGLES_PER_DOMAIN,
@@ -86,7 +93,9 @@ describe("A-D6-01 short interest through the ASIC publication lag", () => {
   });
 
   it("scores -(p - 0.5) x 2 with p the share of reports at or below the latest: 11 of 12 -> -0.8333", () => {
-    expect(run("A-D6-01", ST, {}, sv)).toBeCloseTo(-(11 / 12 - 0.5) * 2, 12);
+    // Twelve reports, latest 11,000: ten of the eleven PRIOR reports are lower (AGT-030 half-tie, D-326).
+    expect(run("A-D6-01", ST, {}, sv)).toBeCloseTo(-(10 / 11 - 0.5) * 2, 12);
+    expect(byId("A-D6-01").grid).toEqual({});
     // Before the last report is published (as_of + 5 weekdays, end of day) the latest is 12,000 (the maximum of 11): p = 1 -> -1.
     expect(run("A-D6-01", 260, {}, sv)).toBe(-1);
     // Fewer than MIN_SHORT_POINTS reports: undefined (unknown, not zero).
@@ -153,8 +162,16 @@ describe("D6 computes on the long world", () => {
     const rets = new Map<string, number>(
       LONG_CODES.map((c) => [c, closeCents(c, T) / closeCents(c, T - 126) - 1]),
     );
-    const pct = (c: string) => [...rets.values()].filter((r) => r <= rets.get(c)!).length / 5;
+    // AGT-030 half-tie share against the other four codes of the tier (D-326).
+    const pct = (c: string) => {
+      const mine = rets.get(c)!;
+      const others = [...rets].filter(([k]) => k !== c).map(([, r]) => r);
+      return (
+        (others.filter((r) => r < mine).length + 0.5 * others.filter((r) => r === mine).length) / 4
+      );
+    };
     expect(pct("ZZB")).toBe(1);
+    expect(pct("ZZA")).toBe(0.25); // only ZZC is lower
     expect(pct("ZZA")).toBeLessThan(0.8);
     expect(run("A-D6-08", T)).toBe(2); // volume surge on the last five sessions
     expect(run("A-D6-08", T - 5)).toBe(3); // no surge yet
@@ -184,8 +201,27 @@ describe("D6 computes on the long world", () => {
       flag: "none",
     });
     expect(run("A-D6-10", T)).toBeUndefined(); // 5 codes < 300
-    expect(run("A-D6-10", 1279, { min_universe: 1 })).toBeUndefined();
-    expect(run("A-D6-10", 1280, { min_universe: 1 })).toBeDefined();
+    expect(run("A-D6-10", 1280, { min_universe: 1 })).toBeUndefined(); // 1,281 closes: no prior 1,260 vols
+    expect(run("A-D6-10", 1281, { min_universe: 1 })).toBeDefined();
+  });
+
+  it("benchmarkVolPct equals AGT-101 vol_pct on the same night (regimeSeries, default params) and is memoised", () => {
+    const closes = view.index("AXJO", T, T + 1).map((b) => b.close);
+    const regime = regimeSeries(closes, world.regimeParams);
+    const want = regime[regime.length - 1]!.vol_pct;
+    expect(want).not.toBeNull();
+    expect(benchmarkVolPct(view, T)).toBe(want);
+    expect(benchmarkVolPct(view, T - 7)).toBe(regime[T - 7]!.vol_pct);
+    let indexCalls = 0;
+    const counted = new Proxy(view, {
+      get(target, prop, receiver) {
+        if (prop === "index") indexCalls += 1;
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    expect(benchmarkVolPct(counted, T)).toBe(want);
+    expect(benchmarkVolPct(counted, T)).toBe(want);
+    expect(indexCalls).toBe(1);
   });
 
   it("every compute passes TST-109 on the long and short worlds (one cut per t, every angle on both grids)", () => {

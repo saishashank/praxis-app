@@ -5,7 +5,8 @@
 // polarity, day-0 AR and volume ratio, director and holder notices) a pure compute is kept so the
 // forward-measured passport (staging, CTX-051) and the live app share one implementation (D-278).
 // Every compute reads only `view.events(code, t)`: rows whose announcement was published by the
-// cut-off, with day 0 <= sessions[t].
+// cut-off, with day 0 <= sessions[t]. D-329 (D-315 for event angles): no event inside the window is
+// a known 0, not a gap; undefined is kept for an event whose day-0 fact (AR, volume ratio) is missing.
 import type { EventRow } from "../pit/types";
 import type { AngleDef, AsOfView } from "./types";
 
@@ -73,7 +74,7 @@ export const D3_ANGLES: readonly AngleDef[] = [
     domain: 3,
     title: "Announcement category and polarity (refines AGT-020)",
     definition:
-      "Polarity in {-1, 0, +1} of the latest announcement with day 0 inside event_window sessions, from the AGT-020 category table under the CTX-043 same-sign day-0 AR rule (keyword without the price reaction = 0 and `claimed`); placements and rights at a discount >= d are -1 on day 0.",
+      "Polarity in {-1, 0, +1} of the latest announcement with day 0 inside event_window sessions, from the AGT-020 category table under the CTX-043 same-sign day-0 AR rule (keyword without the price reaction = 0 and `claimed`); placements and rights at a discount >= d are -1 on day 0; no event in the window = 0.",
     kind: "score",
     cluster: "event",
     orientation: 1,
@@ -89,7 +90,7 @@ export const D3_ANGLES: readonly AngleDef[] = [
     existing: ["AGT-020", "CTX-043", "CTX-044", "src/lib/agents/events.ts"],
     compute: (view, code, t, grid) => {
       const e = latest(view, code, t, grid.event_window!);
-      return e === undefined ? undefined : e.polarity;
+      return e === undefined ? 0 : e.polarity;
     },
   },
   {
@@ -98,7 +99,7 @@ export const D3_ANGLES: readonly AngleDef[] = [
     domain: 3,
     title: "Price-sensitive flag as materiality weight",
     definition:
-      "Weight 1 when the latest announcement inside event_window sessions carries the ASX price-sensitive flag, else w_lo; applied to the event magnitude only, no sign; a missing flag is unknown, never 0.",
+      "Weight 1 when the latest announcement inside event_window sessions carries the ASX price-sensitive flag, else w_lo; applied to the event magnitude only, no sign; no event in the window = 0; a missing flag is unknown, never 0.",
     kind: "score",
     cluster: "event",
     orientation: 1,
@@ -111,7 +112,7 @@ export const D3_ANGLES: readonly AngleDef[] = [
     existing: ["AGT-011", "AGT-020"],
     compute: (view, code, t, grid) => {
       const e = latest(view, code, t, grid.event_window!);
-      return e === undefined ? undefined : e.priceSensitive ? 1 : grid.w_lo!;
+      return e === undefined ? 0 : e.priceSensitive ? 1 : grid.w_lo!;
     },
   },
   {
@@ -120,7 +121,7 @@ export const D3_ANGLES: readonly AngleDef[] = [
     domain: 3,
     title: "Day-0 abnormal return as a price-based surprise (refines AGT-020 AR)",
     definition:
-      "clip(AR0 / theta, -1, 1) of the latest announcement inside event_window sessions, AR0 = the day-0 close-to-close return minus the benchmark return (ARN-020 day 0); undefined when day 0 has no bar.",
+      "clip(AR0 / theta, -1, 1) of the latest announcement inside event_window sessions, AR0 = the day-0 close-to-close return minus the benchmark return (ARN-020 day 0); no event in the window = 0; undefined when the event's day 0 has no bar.",
     kind: "score",
     cluster: "event",
     orientation: 1,
@@ -136,7 +137,8 @@ export const D3_ANGLES: readonly AngleDef[] = [
     existing: ["AGT-020", "ARN-020", "src/lib/agents/events.ts"],
     compute: (view, code, t, grid) => {
       const e = latest(view, code, t, grid.event_window!);
-      if (e === undefined || e.ar === null) return undefined;
+      if (e === undefined) return 0;
+      if (e.ar === null) return undefined;
       return clip1(rationalToFloat(e.ar) / grid.theta!);
     },
   },
@@ -146,7 +148,7 @@ export const D3_ANGLES: readonly AngleDef[] = [
     domain: 3,
     title: "Day-0 volume shock",
     definition:
-      "sign(AR0) x min(VR0, cap) / cap of the latest announcement inside event_window sessions, VR0 = day-0 volume over the mean of the prior 20 sessions (AGT-030); undefined without a day-0 bar.",
+      "sign(AR0) x min(VR0, cap) / cap of the latest announcement inside event_window sessions, VR0 = day-0 volume over the mean of the prior 20 sessions (AGT-030); no event in the window = 0; undefined when the event's day 0 has no bar.",
     kind: "score",
     cluster: "liquidity",
     orientation: 1,
@@ -161,7 +163,8 @@ export const D3_ANGLES: readonly AngleDef[] = [
     existing: ["AGT-030", "CTX-043"],
     compute: (view, code, t, grid) => {
       const e = latest(view, code, t, grid.event_window!);
-      if (e === undefined || e.ar === null || e.volRatio === null) return undefined;
+      if (e === undefined) return 0;
+      if (e.ar === null || e.volRatio === null) return undefined;
       const ar = rationalToFloat(e.ar);
       const sign = ar > 0 ? 1 : ar < 0 ? -1 : 0;
       const shock = Math.min(rationalToFloat(e.volRatio), grid.cap!) / grid.cap!;
@@ -251,7 +254,7 @@ export const D3_ANGLES: readonly AngleDef[] = [
     domain: 3,
     title: "Director and substantial-holder flow (refines AGT-105)",
     definition:
-      "Sum over notices with day 0 inside window sessions of +0.5 per director purchase, -0.25 per director sale (P-08-3), +0.25 / -0.25 per substantial-holder increase / decrease, clipped to [-1, 1]; publication time only; a PDF backlog over two days is unknown, not 0.",
+      "Sum over notices with day 0 inside window sessions of +0.5 per director purchase, -0.25 per director sale (P-08-3), +0.25 / -0.25 per substantial-holder increase / decrease, clipped to [-1, 1] (no notice in the window = 0); publication time only; a PDF backlog over two days is unknown, not 0.",
     kind: "score",
     cluster: "sentiment",
     orientation: 1,
@@ -268,7 +271,7 @@ export const D3_ANGLES: readonly AngleDef[] = [
       const rows = eventsWithin(view, code, t, grid.window!).filter(
         (e) => e.category === "director_trade" || e.category === "substantial_holder",
       );
-      if (rows.length === 0) return undefined;
+      if (rows.length === 0) return 0;
       let s = 0;
       for (const e of rows) {
         if (e.polarity === 0) continue;

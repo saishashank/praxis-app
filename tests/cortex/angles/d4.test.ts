@@ -81,8 +81,8 @@ describe("D4 computes", () => {
     const down = Math.exp(-39 / 60);
     expect(run("A-D4-04", "ZZA", T)).toBeCloseTo((up - down) / Math.max(1, up + down), 12);
     expect(run("A-D4-04", "ZZA", T - 50)).toBeCloseTo(Math.exp(-49 / 60) / 1, 12); // only the up event
-    expect(run("A-D4-04", "ZZA", T - 101)).toBeUndefined();
-    expect(run("A-D4-04", "ZZB", T)).toBeUndefined();
+    expect(run("A-D4-04", "ZZA", T - 101)).toBe(0); // no guidance event = a known 0 (D-329)
+    expect(run("A-D4-04", "ZZB", T)).toBe(0);
   });
 
   it("A-D4-05 trailing cash yield: both dividends inside 365 days over tonight's close; the ex-date session counts; warm-up undefined", () => {

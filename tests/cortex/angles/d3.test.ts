@@ -95,15 +95,15 @@ describe("D3 computes on the long ZZ world (forward-measured passports)", () => 
     expect(run("A-D3-01", T)).toBe(-1);
     expect(run("A-D3-01", T - 1)).toBe(0);
     expect(run("A-D3-01", T - 2)).toBe(1);
-    expect(run("A-D3-01", T - 101)).toBeUndefined(); // no event inside 20 sessions
-    expect(run("A-D3-01", 0)).toBeUndefined();
+    expect(run("A-D3-01", T - 101)).toBe(0); // no event inside 20 sessions = a known 0 (D-329)
+    expect(run("A-D3-01", 0)).toBe(0);
   });
 
   it("A-D3-02 price-sensitive weight: 1 for the raising, w_lo for the other notice", () => {
     expect(run("A-D3-02", T)).toBe(1);
     expect(run("A-D3-02", T - 1)).toBe(0.25);
     expect(run("A-D3-02", T - 1, { w_lo: 0.5 })).toBe(0.5);
-    expect(run("A-D3-02", 0)).toBeUndefined();
+    expect(run("A-D3-02", 0)).toBe(0);
   });
 
   it("A-D3-03 clip(AR0 / theta): -0.75 tonight, undefined on the untimed-facts notice, +1 (clipped) on results", () => {
@@ -112,14 +112,15 @@ describe("D3 computes on the long ZZ world (forward-measured passports)", () => 
     expect(run("A-D3-03", T - 1)).toBeUndefined(); // E6 has no day-0 bar facts
     expect(run("A-D3-03", T - 2)).toBe(1); // 0.05 / 0.04 clipped
     expect(run("A-D3-03", T - 2, { theta: 0.06 })).toBeCloseTo(0.05 / 0.06, 12);
-    expect(run("A-D3-03", 0)).toBeUndefined();
+    expect(run("A-D3-03", 0)).toBe(0); // no event: 0, not a gap (D-329)
   });
 
   it("A-D3-04 sign(AR0) x min(VR0, cap) / cap: -2/3 tonight, +1 on results (VR 3.5 capped at 3)", () => {
     expect(run("A-D3-04", T)).toBeCloseTo(-2 / 3, 12);
     expect(run("A-D3-04", T - 2)).toBe(1);
     expect(run("A-D3-04", T - 2, { cap: 5 })).toBeCloseTo(0.7, 12);
-    expect(run("A-D3-04", T - 1)).toBeUndefined();
+    expect(run("A-D3-04", T - 1)).toBeUndefined(); // an event without day-0 facts is a gap
+    expect(run("A-D3-04", T - 101)).toBe(0);
   });
 
   it("A-D3-06 distinct events in the window: 5 tonight, 0 with no events, 2 inside a 10-session window", () => {
@@ -133,7 +134,7 @@ describe("D3 computes on the long ZZ world (forward-measured passports)", () => 
     expect(run("A-D3-09", T)).toBe(0);
     expect(run("A-D3-09", T - 12)).toBe(0.25);
     expect(run("A-D3-09", T, { sale_weight: -0.5 })).toBe(-0.25);
-    expect(run("A-D3-09", T - 16)).toBeUndefined(); // no notice inside 30 sessions
+    expect(run("A-D3-09", T - 16)).toBe(0); // no notice inside 30 sessions = 0 (D-329)
   });
 
   it("every compute passes TST-109 on the long world", () => {

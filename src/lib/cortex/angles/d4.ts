@@ -86,7 +86,7 @@ export const D4_ANGLES: readonly AngleDef[] = [
     domain: 4,
     title: "Earnings-revision proxy from guidance events",
     definition:
-      "clip(rev, -1, 1) with rev = (sum of weights of guidance-up events - sum for guidance-down) / max(1, total weight) over the trailing window sessions, each event weighted exp(-age / decay); undefined with no guidance event (0 would mean 'no events'); U2/U3 entries count only guidance with parsed statements (CTX-043).",
+      "clip(rev, -1, 1) with rev = (sum of weights of guidance-up events - sum for guidance-down) / max(1, total weight) over the trailing window sessions, each event weighted exp(-age / decay); no guidance event in the window = 0 (D-329; the passport reports the share of codes with any event); U2/U3 entries count only guidance with parsed statements (CTX-043).",
     kind: "score",
     cluster: "event",
     orientation: 1,
@@ -104,7 +104,7 @@ export const D4_ANGLES: readonly AngleDef[] = [
       const rows = eventsWithin(view, code, t, grid.window!).filter(
         (e) => e.category === "guidance_up" || e.category === "guidance_down",
       );
-      if (rows.length === 0) return undefined;
+      if (rows.length === 0) return 0; // D-329: no guidance event in the window is a known 0
       let up = 0;
       let down = 0;
       for (const e of rows) {
@@ -122,7 +122,7 @@ export const D4_ANGLES: readonly AngleDef[] = [
     domain: 4,
     title: "Dividend yield with franking (AU)",
     definition:
-      "Trailing cash yield = sum of cash dividends per share (DAT-220 actions known at the cut-off) with ex-date inside the last 365 days up to tonight, divided by tonight's close; rank within sector happens at standardisation; franking is display only (unknown without the announcement text).",
+      "Trailing cash yield = sum of cash dividends per share (DAT-220 actions known at the cut-off) with ex-date inside the last 365 days up to tonight, divided by tonight's close (special dividends included: the vendor row does not distinguish them); rank-standardised universe-wide each night like every score angle, not within sector; franking is display only (unknown without the announcement text).",
     kind: "score",
     cluster: "quality",
     orientation: 1,

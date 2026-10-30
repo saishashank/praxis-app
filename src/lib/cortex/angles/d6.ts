@@ -10,7 +10,7 @@ import { volSeries } from "@/lib/agents/regime";
 import type { ShortPoint } from "../pit/types";
 import { ANNOUNCEMENT_ARCHIVE, eventsWithin, sessionIndexAtOrBefore } from "./d3";
 import { dpsOf } from "./d4";
-import { breadthAbove, lookbackReturnAt, percentileOf } from "./d5";
+import { breadthAbove, halfTieShare, lookbackReturnAt, nightMemo, priorPercentile } from "./d5";
 import type { AngleDef, AsOfView } from "./types";
 
 const PERCENT = 100; // threshold-ok: percent scale of a grid value
@@ -53,6 +53,23 @@ export function shortChange(
   return base === undefined ? undefined : latest.ppm - base.ppm;
 }
 
+/**
+ * AGT-101's volatility percentile of the benchmark tonight: the 20-session realised volatility
+ * (volSeries, regime.ts) of the last known ^AXJO close against the prior 1,260 values, count <= x 100
+ * / 1,260 (regime.ts rawAt). Memoised per (view, t); undefined before 1,282 closes.
+ */
+export function benchmarkVolPct(view: AsOfView, t: number): number | undefined {
+  return nightMemo(view, `axjoVolPct|${t}`, () => {
+    const need = VOL_LOOKBACK + VOL_WINDOW + 2;
+    const closes = view.index("AXJO", t, need).map((b) => b.close);
+    if (closes.length < need) return undefined;
+    const vols = volSeries(closes, VOL_WINDOW).filter((v): v is number => v !== null);
+    if (vols.length < VOL_LOOKBACK + 1) return undefined;
+    const recent = vols.slice(-(VOL_LOOKBACK + 1));
+    return priorPercentile(recent.slice(0, VOL_LOOKBACK), recent[VOL_LOOKBACK]!);
+  });
+}
+
 function forwardSessions(view: AsOfView, t: number, count: number): string[] {
   const d = view.sessions[t]!;
   const out: string[] = [];
@@ -78,21 +95,23 @@ export const D6_ANGLES: readonly AngleDef[] = [
     horizonSessions: 20,
     warmupSessions: 250,
     inputs: ["asic_short"],
-    grid: { crowded_pct: [0.9, 0.8, 0.85, 0.95] },
+    grid: {},
     historyFields: [
       "ppm = reported short shares per million shares on issue as ASIC publishes it (DAT-125a)",
       "archive depth may not cover the development split: unknown, not zero",
+      "a crowded-short-and-rising veto on new longs (percentile >= 0.8-0.95, change10 > 0) is a future counted challenger (CTX-031), not a cell here (D-327)",
     ],
     existing: ["F6 class d", "DAT-125a", "src/lib/data/backfill/rules.mjs asicPublishedAt"],
     compute: (view, code, t) => {
       const pts = shortsWithin(view, code, t, SHORT_WINDOW);
       if (pts.length < MIN_SHORT_POINTS) return undefined;
       const latest = pts[0]!.ppm;
-      const p = percentileOf(
-        pts.map((x) => x.ppm),
+      const p = halfTieShare(
+        pts.slice(1).map((x) => x.ppm),
         latest,
       );
-      const v = -(p / PERCENT - 0.5) * 2;
+      if (p === undefined) return undefined;
+      const v = -(p - 0.5) * 2;
       return v === 0 ? 0 : v;
     },
   },
@@ -141,7 +160,7 @@ export const D6_ANGLES: readonly AngleDef[] = [
     domain: 6,
     title: "Dividend-capture flows around ex-dates",
     definition:
-      "flag capture_candidate when a cash dividend known at the cut-off goes ex within the next entry_k sessions with yield = dividend / tonight's close >= yield_pct; a gate flag and yield bucket only (Lane B under FAM-101), never a score.",
+      "flag capture_candidate when a cash dividend known at the cut-off goes ex within the next entry_k sessions with yield = dividend / tonight's close >= yield_pct; a gate flag and yield bucket only (Lane B under FAM-101), never a score. A vendor row is known from the start of the session before its ex-date, so entry_k >= 2 fires only on rows with a GL-02 known_at stamp (D-327).",
     kind: "gate",
     cluster: "calendar",
     orientation: 1,
@@ -282,13 +301,13 @@ export const D6_ANGLES: readonly AngleDef[] = [
       const tier = view.tier(code, t);
       const peers: number[] = [];
       for (const c of view.codes(t)) {
-        if (view.tier(c, t) !== tier) continue;
+        if (c === code || view.tier(c, t) !== tier) continue;
         const r = lookbackReturnAt(view, c, t, 126);
         if (r !== undefined) peers.push(r);
       }
       let count = 0;
-      const cond1 = percentileOf(peers, mine) / PERCENT >= grid.ret_pct!;
-      if (cond1) count += 1;
+      const share = halfTieShare(peers, mine); // AGT-030 half-tie against the other codes of the tier
+      if (share !== undefined && share >= grid.ret_pct!) count += 1;
       const vols = view.adj(code, t, 25).adjVolume;
       if (vols.length === 25) {
         let s = 0;
@@ -333,27 +352,23 @@ export const D6_ANGLES: readonly AngleDef[] = [
     domain: 6,
     title: "Contrarian extremes (breadth and volatility percentiles)",
     definition:
-      "flag extreme_low when breadth200 (A-D5-02) <= breadth_low and the benchmark's 20-session realised volatility sits at or above vol_pct over the trailing 1,260 sessions; applies to the F4 row of the CTX-017 table only; none otherwise. The breadth leg is a level, not a percentile (a 1,260-session breadth history is not a nightly input).",
+      "flag extreme_low when breadth200 (A-D5-02) <= breadth_low and the benchmark's 20-session realised volatility percentile (AGT-101: count of the prior 1,260 values at or below tonight's, x 100 / 1,260) is >= vol_pct; applies to the F4 row of the CTX-017 table only; none otherwise. Cost choice (D-331): the breadth leg is a level, not a percentile, because a 1,260-session breadth history would cost a universe pass per prior night.",
     kind: "gate",
     cluster: "regime",
     orientation: 1,
     horizonSessions: 0,
-    warmupSessions: 1281,
+    warmupSessions: 1282,
     inputs: ["bar_au", "index_au"],
     grid: { breadth_low: [0.1, 0.05, 0.2], vol_pct: [90, 85, 95], min_universe: [300] },
     historyFields: [
-      "few independent episodes on the ASX; the breadth level stands in for its percentile",
+      "few independent episodes on the ASX; the breadth level stands in for its percentile (D-331)",
     ],
     existing: ["AGT-101", "CTX-017", "K-035", "K-038"],
     compute: (view, _code, t, grid) => {
-      const closes = view.index("AXJO", t, VOL_LOOKBACK + VOL_WINDOW + 1).map((b) => b.close);
-      if (closes.length < VOL_LOOKBACK + VOL_WINDOW + 1) return undefined;
-      const vols = volSeries(closes, VOL_WINDOW).filter((v): v is number => v !== null);
-      if (vols.length < VOL_LOOKBACK) return undefined;
-      const recent = vols.slice(-VOL_LOOKBACK);
+      const volPct = benchmarkVolPct(view, t);
+      if (volPct === undefined) return undefined;
       const breadth = breadthAbove(view, t, SMA200, grid.min_universe!);
       if (breadth === undefined) return undefined;
-      const volPct = percentileOf(recent, recent[recent.length - 1]!);
       return breadth <= grid.breadth_low! && volPct >= grid.vol_pct!
         ? { flag: "extreme_low" }
         : { flag: "none" };

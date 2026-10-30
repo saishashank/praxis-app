@@ -70,9 +70,13 @@ describe("C1c: D3, D4, D5, D6, D8", () => {
       "A-D6-07",
       "A-D6-08",
       "A-D8-04",
-      "A-D8-05",
       "A-D8-06",
     ]);
+    // A-D8-05 reads the DAT-234 list and the calendar only; the archive needsData keeps it candidate.
+    const d805 = C1C.find((x) => x.id === "A-D8-05")!;
+    expect(d805.inputs).toEqual(["index_change", "calendar"]);
+    expect(d805.needsData).toMatch(/announcement archive/);
+    expect(resolveStatus(d805, "active")).toBe("candidate");
     for (const id of announcement) {
       const a = C1C.find((x) => x.id === id)!;
       expect(a.needsData).toMatch(/announcement archive/);

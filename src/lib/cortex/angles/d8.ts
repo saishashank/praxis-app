@@ -6,6 +6,7 @@
 // that need results dates or the announcement archive carry `needsData` (CTX-051).
 import { addDays, isWeekend } from "@/lib/data/calendar";
 import { ANNOUNCEMENT_ARCHIVE } from "./d3";
+import { nightMemo } from "./d5";
 import type { AngleDef, AsOfView } from "./types";
 
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
@@ -23,7 +24,11 @@ function adjacentWeekday(d: string, step: 1 | -1): string {
   return x;
 }
 
-/** Session dates of the calendar (every row that is not a holiday) strictly after sessions[t], up to `count`. */
+/**
+ * Session dates of the calendar (every row that is not a holiday) strictly after sessions[t], up to
+ * `count`. The calendar is known at load, so reading forward dates is not look-ahead; when it ends
+ * early (a short forward calendar) fewer dates come back and the window is shorter than asked.
+ */
 function sessionsAfter(view: AsOfView, t: number, count: number): string[] {
   const d = view.sessions[t]!;
   const out: string[] = [];
@@ -81,7 +86,7 @@ export const D8_ANGLES: readonly AngleDef[] = [
     domain: 8,
     title: "Ex-dividend calendar and turn-of-month effects",
     definition:
-      "flag ex_date_adjusted when tonight's session is the ex-date of a cash dividend known at the cut-off (FAM-007: the stop is compared with close + the credited dividend, CTX-024), else none; day-of-month effects are descriptive only.",
+      "flag ex_date_adjusted when tonight's session is the ex-date of a cash dividend known at the cut-off (FAM-007: the stop is compared with close + the credited dividend, CTX-024), else none; day-of-month effects are descriptive only. A vendor row is known from the start of the session before its ex-date, so ex_offset >= 2 fires only on rows with a GL-02 known_at stamp (D-327).",
     kind: "gate",
     cluster: "calendar",
     orientation: 1,
@@ -134,7 +139,8 @@ export const D8_ANGLES: readonly AngleDef[] = [
     orientation: 1,
     horizonSessions: 0,
     warmupSessions: 1,
-    inputs: ["index_change", "announcement", "calendar"],
+    // Inputs = what the compute reads (N3); the archive needsData keeps the entry candidate (CTX-051).
+    inputs: ["index_change", "calendar"],
     grid: { review_veto: [1, 2] },
     needsData: ANNOUNCEMENT_ARCHIVE,
     historyFields: [
@@ -189,7 +195,11 @@ export const D8_ANGLES: readonly AngleDef[] = [
     existing: ["K-056", "R-06-4"],
     compute: (view, _code, t) => {
       const d = view.sessions[t]!;
-      const holidays = new Set(view.calendar.filter((r) => r.kind === "holiday").map((r) => r.d));
+      const holidays = nightMemo(
+        view,
+        "holidays",
+        () => new Set(view.calendar.filter((r) => r.kind === "holiday").map((r) => r.d)),
+      );
       if (holidays.has(adjacentWeekday(d, 1))) return { bucket: "pre_holiday" };
       if (holidays.has(adjacentWeekday(d, -1))) return { bucket: "post_holiday" };
       return { bucket: weekdayOf(d) };

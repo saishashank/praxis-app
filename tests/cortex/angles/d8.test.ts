@@ -69,7 +69,8 @@ describe("D8 passports", () => {
       "active",
     ]);
     for (const id of ["A-D8-04", "A-D8-05", "A-D8-06"]) {
-      expect(byId(id).inputs).toContain("announcement");
+      if (id !== "A-D8-05") expect(byId(id).inputs).toContain("announcement"); // N3: inputs = what the compute reads
+      expect(byId(id).needsData).toMatch(/announcement archive/);
       expect(canActivate(byId(id)).ok).toBe(false);
       expect(evaluateAngle(byId(id), "candidate", view, "ZZA", T)).toBeUndefined();
     }
