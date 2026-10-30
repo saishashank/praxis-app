@@ -15,6 +15,7 @@ import { agentParamsSha } from "@/lib/agents/params";
 import { canonicalJson, sha256Hex } from "@/lib/arena/cohort";
 import { gzipDeterministic, sha256Hex as fileSha } from "@/lib/data/backfill/rules.mjs";
 import type { Family } from "@/lib/agents/schema";
+import type { FamilyOutput } from "@/lib/agents/families";
 import {
   arn076Stage,
   challengersStage,
@@ -25,6 +26,7 @@ import {
   rollsStage,
   type WeeklyContext,
 } from "@/lib/learning/weeklyStages";
+import { robustnessStage } from "@/lib/learning/robustnessStage";
 import {
   LEARNING_SCOPE,
   noopStage,
@@ -127,10 +129,12 @@ export async function runLearning(o: LearningRunOptions): Promise<LearningOutput
     const ruleVersions: Partial<Record<Family, string>> = {};
     for (const [family, v] of set === null ? [] : [...set.live]) ruleVersions[family] = v.id;
     const facts = new Map<string, EntryFacts>();
+    const familyOutputs = new Map<string, Pick<FamilyOutput, "candidates" | "blocked">>();
     const ledger: LedgerResult = replayLedger(world, {
       params: live,
       familyOptions: { ruleVersions },
       factsSink: facts,
+      outputSink: familyOutputs,
     });
     ctx = {
       db: o.db,
@@ -141,6 +145,7 @@ export async function runLearning(o: LearningRunOptions): Promise<LearningOutput
       world,
       ledger,
       facts,
+      familyOutputs,
       calendar: await loadMarketCalendar(o.db, market),
     };
     return {
@@ -169,7 +174,7 @@ export async function runLearning(o: LearningRunOptions): Promise<LearningOutput
       rolls: wrap(rollsStage),
       arn076: wrap(arn076Stage),
       factors: wrap(factorsStage),
-      robustness: noopStage,
+      robustness: wrap(robustnessStage),
       rankIc: noopStage,
     },
   });
