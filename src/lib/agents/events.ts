@@ -411,6 +411,8 @@ export type EventContext = {
    * later ratios so the day-0 volume ratio compares like with like; absent = raw volumes.
    */
   readonly splitsFor?: (code: string, day0: string) => readonly VolumeSplit[];
+  /** CTX-040 (M15 P5): shadow text-label hook, called with each new event row; never changes the row. */
+  readonly labelHook?: (row: EventRow, ann: AnnouncementRow) => Promise<void>;
 };
 
 /** A quantity-changing action: shares after per share before (`ratio`), from `exDate`. */
@@ -505,7 +507,9 @@ export async function eventsForDecision(
         volumes: splitAdjustedVolumes(bars, ctx.splitsFor?.(a.code, day0.day0) ?? []),
       };
     }
-    out.push(buildEventRow(view.market, a, day0, dayZero, p));
+    const row = buildEventRow(view.market, a, day0, dayZero, p);
+    out.push(row);
+    await ctx.labelHook?.(row, a);
   }
   return out;
 }
