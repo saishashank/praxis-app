@@ -201,3 +201,18 @@ export function selectEntries(ranked: readonly Candidate[], ctx: EntryGateContex
   }
   return { eligible, skipped, flags };
 }
+
+/**
+ * D-284 (FAM-006): the code of the first leg when sizing rejected it, else null. The caller then runs
+ * the entry gates once more with that code removed from the pool (and in `noPosition`), so a
+ * same-industry second it had blocked and the next candidate are tried; its rejection stays as it is.
+ */
+export function firstLegRetryCode(
+  results: readonly {
+    readonly leg: { readonly key: string };
+    readonly sizing: { readonly accepted: boolean };
+  }[],
+): string | null {
+  const first = results[0];
+  return first === undefined || first.sizing.accepted ? null : first.leg.key;
+}

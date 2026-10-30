@@ -132,10 +132,10 @@ export type Val110Input = {
   readonly trialsOnSplit: number;
   /**
    * VAL-112 (D-226): validation_access + pattern_test rows already spent on this lineage's split
-   * version, not counting this access (k). Absent = the v1 fixed level alpha / (m L), so a caller that
-   * has not been moved to the error budget keeps v1 behaviour.
+   * version, not counting this access (k), from `spentTestsBefore`. Required (D-283): a missing k can
+   * no longer fall back to the v1 fixed level.
    */
-  readonly priorTests?: number;
+  readonly priorTests: number;
   readonly challenger?: {
     readonly challengerRows: readonly ChallengerRow[];
     readonly incumbentRows: readonly ChallengerRow[];
