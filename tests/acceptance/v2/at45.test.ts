@@ -93,7 +93,9 @@ type SplitDay = {
 };
 const SPLIT_DAY = JSON.parse(readFileSync(fx("split-day.json"), "utf8")) as SplitDay;
 const INDEX_CSV = INDEX_CHANGE_CSV;
-const NOW = "2026-10-30T00:00:00.000Z";
+// loaded before the night: a reference row is known only from its load time (D-285)
+const NOW = "2026-10-01T00:00:00.000Z";
+const CUT = `${FAMILY_D}T23:59:59.999Z`;
 
 // ---- 1 DAT-231 vendor rows without an extra request --------------------------------------------------------
 
@@ -358,7 +360,7 @@ describe("AT-45 3: DAT-234 index change excluded from F3 and tagged", () => {
         inserted: 2,
         ignored: 0,
       });
-    const changes = await loadIndexChanges(db, "AU", FAMILY_D);
+    const changes = await loadIndexChanges(db, "AU", FAMILY_D, CUT);
     const base = factsOf(CODE, "U1", makeBars({ close: wobble(2n * DOLLAR) }), p);
     const facts = changes.has(CODE) ? override(base, { indexChanges: changes.get(CODE)! }) : base;
     return runFamilies(inputsOf([facts], { events: [resultsEvent()] }), p);
@@ -367,7 +369,7 @@ describe("AT-45 3: DAT-234 index change excluded from F3 and tagged", () => {
   it("the CSV fixture loads: ZZE is added to the index effective on the decision day, announced 8 sessions before", async () => {
     const db = await freshDb("main");
     await importIndexChanges(db, INDEX_CSV, NOW);
-    const changes = await loadIndexChanges(db, "AU", FAMILY_D);
+    const changes = await loadIndexChanges(db, "AU", FAMILY_D, CUT);
     expect(changes.get("ZZE")).toEqual([
       { indexName: INDEX, kind: "add", announced: "2026-10-06", effective: FAMILY_D },
     ]);

@@ -153,7 +153,9 @@ export const TABLES = [
     // DAT-234 (D-238): the manual index adds and deletes known by the end of the range. An empty
     // table writes no manifest count, so a snapshot without index changes is byte-identical to before.
     name: "index_changes",
-    fields: ["code", "index_name", "kind", "announced", "effective"],
+    fields: ["code", "index_name", "kind", "announced", "effective", "loaded_at"],
+    // D-285: when the row became known; a row or an older snapshot without it reads as null (always known)
+    optional: ["loaded_at"],
     omitEmpty: true,
     key: ["code", "index_name", "kind", "effective"],
     day: (r) => r.announced ?? r.effective,
@@ -164,13 +166,16 @@ export const TABLES = [
       kind: (v) => v === "add" || v === "delete",
       announced: (v) => v === null || isRealDate(v),
       effective: isRealDate,
+      loaded_at: (v) =>
+        v === null || v === undefined || (isStr(v) && Number.isFinite(Date.parse(v))),
     },
   },
   {
     // FAM-006 (D-218): industry per code, the finer manual class ('class') or the ASX industry group
     // ('instrument'); the replay prefers 'class'. Same empty-table rule as index_changes.
     name: "industry",
-    fields: ["code", "industry", "source", "as_of"],
+    fields: ["code", "industry", "source", "as_of", "loaded_at"],
+    optional: ["loaded_at"], // D-285; null for the ASX group (no history is kept)
     omitEmpty: true,
     key: ["code", "source", "as_of"],
     day: (r) => r.as_of,
@@ -180,6 +185,8 @@ export const TABLES = [
       industry: isStr,
       source: (v) => v === "class" || v === "instrument",
       as_of: isRealDate,
+      loaded_at: (v) =>
+        v === null || v === undefined || (isStr(v) && Number.isFinite(Date.parse(v))),
     },
   },
 ];

@@ -256,13 +256,12 @@ export async function liveRankIc(
 
 /**
  * Weekly stage `rankIc`: backfill of the daily rank quality from the replay world. Every session with
- * two later sessions gets its rows (insert-or-ignore, source `replay`); the summaries are computed from
- * the replay series in memory, so they do not depend on what the live batch wrote.
+ * two later sessions and without rows yet gets them (insert-or-ignore, source `replay`); the summaries
+ * are computed from the stored series (D-286: missing days only are computed).
  */
 export async function rankIcStage(c: WeeklyContext): Promise<StageOutput> {
   const { world, db, market, params } = c;
   const sessions = world.sessions;
-  const series = new Map<string, number[]>();
   const computedAt = `${c.d}T00:00:00Z`;
   // A code's split list does not depend on the session: build it once per run.
   const splitsOf = new Map<string, ReturnType<typeof forwardSplits>>();
@@ -270,8 +269,19 @@ export async function rankIcStage(c: WeeklyContext): Promise<StageOutput> {
     splitActionsByCode(world.corpActions(code) as readonly CorpActionRecord[]).byCode.get(code) ??
     [];
   const pending: (DayIc & { d: string })[] = [];
+  // D-286: the days that already have rows (live batch or an earlier week) are not rebuilt; every spec of
+  // a day is written together, so one row of a day means the day is done.
+  const done = new Set(
+    (
+      await db.execute({
+        sql: "SELECT DISTINCT d FROM rank_ic_daily WHERE market = ?",
+        args: [market],
+      })
+    ).rows.map((r) => String(r.d)),
+  );
   for (let i = 0; i + 2 < sessions.length; i += 1) {
     const d = sessions[i]!;
+    if (done.has(d)) continue;
     const inputs = world.familyInputs(d);
     if (inputs.codes.length === 0) continue;
     const forward = new Map<string, number>();
@@ -290,25 +300,18 @@ export async function rankIcStage(c: WeeklyContext): Promise<StageOutput> {
     }
     const rows = icRowsForDay(inputs, params, forward);
     for (const r of rows) pending.push({ ...r, d });
-    for (const r of rows) {
-      if (r.ic === null) continue;
-      const key = `${r.family}|${r.rankVariant}`;
-      const list = series.get(key);
-      if (list === undefined) series.set(key, [r.ic]);
-      else list.push(r.ic);
-    }
   }
   await insertRows(db, pending, market, "replay", computedAt);
-  const stats = RANK_SPECS.flatMap(({ family, variant }) => {
-    const ics = series.get(`${family}|${variant}`);
-    if (ics === undefined) return [];
-    return [
-      {
-        scope: rankIcScope(market, family, variant),
-        metric: "rank_ic",
-        value: rankIcStat(market, family, variant, ics, params),
-      },
-    ];
-  });
+  // the summary reads the stored series (old and new days together), oldest first
+  const stats: { scope: string; metric: string; value: RankIcStat }[] = [];
+  for (const { family, variant } of RANK_SPECS) {
+    const ics = await storedSeries(db, market, family, variant);
+    if (ics.length === 0) continue;
+    stats.push({
+      scope: rankIcScope(market, family, variant),
+      metric: "rank_ic",
+      value: rankIcStat(market, family, variant, ics, params),
+    });
+  }
   return { stats };
 }

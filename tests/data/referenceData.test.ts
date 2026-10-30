@@ -17,6 +17,7 @@ afterEach(cleanupTempDbs);
 
 const IDX_HEAD = "code,index,change,announced,effective,source\n";
 const NOW = "2026-10-30T00:00:00.000Z";
+const ALL = "2026-12-31T00:00:00.000Z"; // a cut-off after every load in these tests
 
 describe("index-change CSV validation", () => {
   it("accepts a good file, sorts rows and reads empty announced as null", () => {
@@ -93,17 +94,17 @@ describe("import and as-of readers", () => {
         "ZZB,X,add,,2026-05-01,s\n",
       NOW,
     );
-    const early = await loadIndexChanges(db, "AU", "2026-03-10");
+    const early = await loadIndexChanges(db, "AU", "2026-03-10", ALL);
     expect([...early.keys()]).toEqual(["ZZA"]);
     // announced 03-06, effective after d: still returned, so the F3 window can see it
     expect(early.get("ZZA")).toEqual([
       { indexName: "X", kind: "add", announced: "2026-03-06", effective: "2026-03-23" },
     ]);
-    const late = await loadIndexChanges(db, "AU", "2026-06-30");
+    const late = await loadIndexChanges(db, "AU", "2026-06-30", ALL);
     expect(late.get("ZZA")?.map((c) => c.kind)).toEqual(["add", "delete"]);
     expect(late.get("ZZB")?.[0].announced).toBeNull();
-    expect((await loadIndexChanges(db, "AU", "2026-04-30")).has("ZZB")).toBe(false);
-    expect((await loadIndexChanges(db, "US", "2026-06-30")).size).toBe(0);
+    expect((await loadIndexChanges(db, "AU", "2026-04-30", ALL)).has("ZZB")).toBe(false);
+    expect((await loadIndexChanges(db, "US", "2026-06-30", ALL)).size).toBe(0);
   });
 
   it("loadIndustryMap returns the newest class on or before d", async () => {
@@ -113,9 +114,32 @@ describe("import and as-of readers", () => {
       "code,industry,as_of\nZZA,Gold,2026-01-01\nZZA,Lithium,2026-06-01\nZZB,Banks,2026-09-01\n",
       NOW,
     );
-    expect([...(await loadIndustryMap(db, "AU", "2026-03-01"))]).toEqual([["ZZA", "Gold"]]);
-    const later = await loadIndustryMap(db, "AU", "2026-10-01");
+    expect([...(await loadIndustryMap(db, "AU", "2026-03-01", ALL))]).toEqual([["ZZA", "Gold"]]);
+    const later = await loadIndustryMap(db, "AU", "2026-10-01", ALL);
     expect(later.get("ZZA")).toBe("Lithium");
     expect(later.get("ZZB")).toBe("Banks");
+  });
+
+  it("D-285: a row loaded after the night's cut-off is invisible to that night (live loaders)", async () => {
+    const db = await freshDb("main");
+    const early = "2026-03-01T00:00:00.000Z";
+    const late = "2026-04-15T00:00:00.000Z";
+    const cut = "2026-03-10T23:00:00.000Z"; // the cut-off of the night 2026-03-10
+    await importIndexChanges(db, IDX_HEAD + "ZZA,X,add,2026-03-06,2026-03-23,s\n", early);
+    await importIndexChanges(db, IDX_HEAD + "ZZB,X,add,2026-03-05,2026-03-24,s\n", late);
+    await importIndustryMap(db, "code,industry,as_of\nZZA,Gold,2026-01-01\n", early);
+    await importIndustryMap(db, "code,industry,as_of\nZZB,Banks,2026-01-01\n", late);
+    expect([...(await loadIndexChanges(db, "AU", "2026-03-10", cut)).keys()]).toEqual(["ZZA"]);
+    expect([...(await loadIndustryMap(db, "AU", "2026-03-10", cut)).keys()]).toEqual(["ZZA"]);
+    // the same rows are visible to a night after the upload
+    const after = "2026-04-16T00:00:00.000Z";
+    expect([...(await loadIndexChanges(db, "AU", "2026-04-16", after)).keys()]).toEqual([
+      "ZZA",
+      "ZZB",
+    ]);
+    expect([...(await loadIndustryMap(db, "AU", "2026-04-16", after)).keys()]).toEqual([
+      "ZZA",
+      "ZZB",
+    ]);
   });
 });

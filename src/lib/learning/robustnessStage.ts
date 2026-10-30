@@ -9,9 +9,8 @@
 //   min_btl, error_budget  per lineage `<market>:<family>` (VAL-115, VAL-112/116; stats/minBtl.ts, errorBudget.ts).
 // Nothing here is a trial and nothing is a finding. Net returns are fractions (0.012 = 1.2 %).
 import { FAMILY_ORDER, FAMILY_RULE_VERSION } from "@/lib/agents/families/constants";
-import { paramsWithVersion } from "@/lib/agents/params";
 import type { Family } from "@/lib/agents/schema";
-import { replayLedger, type LedgerEntry } from "@/lib/replay/ledger";
+import type { LedgerEntry } from "@/lib/replay/ledger";
 import { costSetupFrom } from "@/lib/replay/returns";
 import { developmentNet, oneTickAdverse } from "@/lib/replay/sensitivity";
 import type {
@@ -37,6 +36,7 @@ import {
   loadSplit,
   netRowsOf,
   versionParams,
+  replayOf,
   type WeeklyContext,
 } from "./weeklyStages";
 
@@ -151,11 +151,7 @@ export async function robustnessStage(c: WeeklyContext): Promise<StageOutput> {
     const lineage = lineageId(market, family);
     const neighbours: StabilityNeighbour[] = [];
     for (const cand of await candidateSteps(family, vparams, [])) {
-      const res = replayLedger(world, {
-        params: paramsWithVersion(params, family, cand.params),
-        familyOptions: { families: [family], ruleVersions: { [family]: `${family}.dev` } },
-        controls: false,
-      });
+      const res = replayOf(c, family, `${family}.dev`, cand.params, false);
       const dev = res.entries.filter(
         (e) => e.variant === family && e.net !== null && devWin.index.has(e.row.entry_d),
       );
@@ -271,11 +267,7 @@ export async function robustnessStage(c: WeeklyContext): Promise<StageOutput> {
       });
       if (seen.rows.length > 0) continue;
       const vp = await versionParams(db, vid);
-      const res = replayLedger(world, {
-        params: paramsWithVersion(params, family, vp),
-        familyOptions: { families: [family], ruleVersions: { [family]: vid } },
-        controls: false,
-      });
+      const res = replayOf(c, family, vid, vp, false);
       const mine = res.entries.filter((e) => e.variant === family && inDev(e));
       const bn = developmentNet(
         netRowsOf(mine, devWin.index),

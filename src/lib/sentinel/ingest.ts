@@ -24,6 +24,9 @@ import { assess, MATERIALITY_RULE_VERSION } from "./materiality";
 import type { BreakerAlertSink } from "@/lib/agents/breakerEval";
 import { loadAgentParams } from "@/lib/agents/params";
 import { evaluateIntraday, type IntradayAnnouncement } from "./breakers";
+import { loadCalendarRows } from "@/lib/data/calendarAdmin";
+import { marketDate, sessionsBetween } from "@/lib/data/calendar";
+import { AU_TIME_ZONE } from "@/lib/agents/decisionView";
 import { loadMembership, membershipOf } from "./membership";
 
 export const MAX_ITEMS_PER_RUN = 40; // AGT-010, PLT-075: a hard ceiling whatever the config says
@@ -130,8 +133,9 @@ export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
           sql:
             "SELECT a.ann_id AS ann_id, a.code AS code, a.type AS type, a.published_at AS published_at, " +
             "a.price_sensitive AS price_sensitive, a.title AS title, " +
-            "(a.content_hash IS NOT NULL AND EXISTS (SELECT 1 FROM announcement b WHERE b.market = a.market " +
-            "AND b.code = a.code AND b.content_hash = a.content_hash AND b.id < a.id)) AS dup " +
+            "(CASE WHEN a.content_hash IS NULL THEN NULL ELSE (SELECT MAX(b.published_at) FROM announcement b " +
+            "WHERE b.market = a.market AND b.code = a.code AND b.content_hash = a.content_hash " +
+            "AND b.id < a.id) END) AS dup_prev " +
             `${where} ORDER BY a.published_at ASC, a.id ASC LIMIT ?`,
           args: [...qargs, max],
         },
@@ -143,12 +147,22 @@ export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
 
     // 4. classify and write, one batch
     const sets = await loadMembership(i.db, market, i.today);
+    // D-287: an exact repeat only counts within `dedup_window_sessions` sessions of the earlier row
+    const windowSessions = (await loadAgentParams(i.db)).entry.dedupWindowSessions;
+    const calendar = await loadCalendarRows(i.db, market);
+    const sessionOf = (iso: string): string => marketDate(new Date(iso), AU_TIME_ZONE);
     const stmts: InStatement[] = [];
     const affected: IntradayAnnouncement[] = [];
     for (const r of queue.rows) {
       const code = String(r.code);
       const m = membershipOf(code, sets);
-      const dup = Number(r.dup) === 1;
+      const dup =
+        r.dup_prev !== null &&
+        r.dup_prev !== undefined &&
+        sessionsBetween(sessionOf(String(r.dup_prev)), sessionOf(String(r.published_at)), calendar)
+          .length -
+          1 <=
+          windowSessions;
       const assessed1 = assess(
         {
           type: r.type === null ? null : String(r.type),

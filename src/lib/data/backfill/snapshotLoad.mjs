@@ -161,7 +161,7 @@ export async function loadInputs(o) {
   // DAT-234 / FAM-006: reference data known by the end of the range (manual CSV tables, migration 0018)
   const indexChanges = (
     await q(
-      `SELECT code, index_name, kind, announced_d, effective_d FROM index_change
+      `SELECT code, index_name, kind, announced_d, effective_d, loaded_at FROM index_change
        WHERE market = ? AND COALESCE(announced_d, effective_d) <= ?
        ORDER BY code, index_name, kind, effective_d`,
       [MARKET, o.to],
@@ -172,11 +172,12 @@ export async function loadInputs(o) {
     kind: String(r.kind),
     announced: r.announced_d === null ? null : String(r.announced_d),
     effective: String(r.effective_d),
+    loaded_at: String(r.loaded_at),
   }));
   const industry = [
     ...(
       await q(
-        "SELECT code, industry, as_of FROM instrument_class WHERE market = ? AND as_of <= ? ORDER BY code, as_of",
+        "SELECT code, industry, as_of, loaded_at FROM instrument_class WHERE market = ? AND as_of <= ? ORDER BY code, as_of",
         [MARKET, o.to],
       )
     ).map((r) => ({
@@ -184,6 +185,7 @@ export async function loadInputs(o) {
       industry: String(r.industry),
       source: "class",
       as_of: String(r.as_of),
+      loaded_at: String(r.loaded_at),
     })),
     // the ASX industry group is the current one (no history is kept): dated at the range start
     ...(

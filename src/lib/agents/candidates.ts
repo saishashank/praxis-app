@@ -331,8 +331,8 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
 
   // FAM-006 / DAT-234 reference data: the finer industry class (manual CSV) else the ASX industry
   // group, and the index changes, both read as of D through the reference-data readers
-  const classMap = await loadIndustryMap(db, market, d);
-  const indexChangeMap = await loadIndexChanges(db, market, d);
+  const classMap = await loadIndustryMap(db, market, d, cutoff);
+  const indexChangeMap = await loadIndexChanges(db, market, d, cutoff);
   const groupRows = await db.execute({
     sql: "SELECT code, industry FROM instrument WHERE market = ? AND industry IS NOT NULL",
     args: [market],
