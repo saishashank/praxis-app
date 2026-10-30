@@ -87,6 +87,9 @@ describe("fillEntryLimit (D-288)", () => {
 
   it("AT-52: +9 % open against an 8 % cap, low above the limit → unfilled (both arms record unfilled)", () => {
     // open 1.09 × 10_000_000 = 10_900_000 > 10_800_000; low 10_850_000 > limit.
+    // NOTE for the AT-52 acceptance fixture (review S4): a +9 % open vs an 8 % cap is unfilled ONLY
+    // when the session low stays above the limit; with low ≤ limit it fills at the limit (the
+    // trade-through case below). Build the fixture bar with low > close × 1.08.
     const out = fillEntryLimit(env(bar(10_900_000n, 10_850_000n, 11_000_000n)), 60n, LIMIT);
     expect(out).toEqual({ status: "unfilled", reason: "limit_not_reached" });
   });
