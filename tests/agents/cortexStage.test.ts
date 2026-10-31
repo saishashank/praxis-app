@@ -66,7 +66,11 @@ const rows = async (db: Client, sql: string, args: (string | number)[] = []): Pr
   (await db.execute({ sql, args })).rows.map((r) => ({ ...r }));
 
 /** Passports, a map and generous cells for F1 and F4; F1's status as given (F4 stays shadow). */
-async function seedCortex(db: Client, f1: "shadow" | "allowed"): Promise<void> {
+async function seedCortex(
+  db: Client,
+  f1: "shadow" | "allowed",
+  sinceD = "2030-01-02",
+): Promise<void> {
   for (const a of NIGHT_ANGLES) {
     await insertPassport(db, {
       market: MARKET,
@@ -135,7 +139,7 @@ async function seedCortex(db: Client, f1: "shadow" | "allowed"): Promise<void> {
   await insertFamilyStatus(db, {
     market: MARKET,
     family: "F1",
-    sinceD: "2030-01-02",
+    sinceD,
     status: f1,
     evidence: {},
     statementId: null,
@@ -150,8 +154,11 @@ async function runNights(
   db: Client,
   from: number,
   to: number,
-  cortex: { enabled?: boolean; angles?: typeof NIGHT_ANGLES } = {},
+  cortex: { enabled?: boolean; angles?: typeof NIGHT_ANGLES; timeoutMs?: number } = {},
   nightParams = params,
+  /** Index of the first session whose batch 2b runs in live mode (replay: false, fixed now). */
+  liveFrom = Number.POSITIVE_INFINITY,
+  withPreopen = true,
 ): Promise<Run> {
   const signals = new Map<string, SignalsResult>();
   const stages = new Map<string, StageResult>();
@@ -161,7 +168,7 @@ async function runNights(
     to: d(to),
     now: NOW,
     masterSeed: MASTER_SEED,
-    preopen: true,
+    preopen: withPreopen,
     afterClose: async (day) => {
       signals.set(
         day,
@@ -169,7 +176,7 @@ async function runNights(
           withLeverage: true,
           market: MARKET,
           d: day,
-          replay: true,
+          replay: DATES.indexOf(day) < liveFrom,
           now: NOW,
           masterSeed: MASTER_SEED,
           params: nightParams,
@@ -188,6 +195,12 @@ const V1_TABLES = [
   "SELECT * FROM fill ORDER BY id",
   "SELECT * FROM trade ORDER BY id",
   "SELECT * FROM nav_daily ORDER BY cohort_id, d",
+  "SELECT * FROM cash_ledger ORDER BY 1, 2, 3, 4",
+  "SELECT * FROM stop_level ORDER BY trade_id, d, rule",
+  "SELECT * FROM card_note ORDER BY 1",
+  "SELECT * FROM preopen_result ORDER BY order_id",
+  "SELECT * FROM thesis_breaker_eval ORDER BY 1, 2, 3, 4, 5",
+  "SELECT * FROM run_record ORDER BY id",
 ];
 
 afterAll(cleanupTempDbs);
@@ -206,10 +219,11 @@ describe("shadow-only nights (D-280): the Cortex writes its tables and no order"
       await seedCortex(db, "shadow");
       if (enabled) {
         on = db;
-        run = await runNights(db, 297, 303, { angles: NIGHT_ANGLES }, loose);
+        // the last night runs in live mode (replay: false, fixed now) on both databases
+        run = await runNights(db, 297, 303, { angles: NIGHT_ANGLES }, loose, 303);
       } else {
         off = db;
-        await runNights(db, 297, 303, { enabled: false }, loose);
+        await runNights(db, 297, 303, { enabled: false }, loose, 303);
       }
     }
   });
@@ -277,12 +291,33 @@ describe("shadow-only nights (D-280): the Cortex writes its tables and no order"
               gate_trace_json, manifest_id) VALUES (?, ?, 'E01@x', 'ZZNOBAR', 'shadow', 'F1', 1000000, 900000, 10, '[]', ?)`,
       args: [MARKET, d(D), String(night[0]!.manifest_id)],
     });
+    // D-354: a code with no bar on D+1 but a bar on D+2 is no trade either
+    await on.execute({
+      sql: `INSERT INTO price_bar (market, code, d, o, h, l, c, volume, source, published_at, ingested_at)
+            VALUES (?, 'ZZGAP', ?, 1, 1.1, 0.9, 1, 1000000, 'synthetic', ?, ?)`,
+      args: [MARKET, d(D + 2), `${d(D + 2)}T06:30:00.000Z`, `${d(D + 2)}T07:00:00.000Z`],
+    });
+    await on.execute({
+      sql: `INSERT INTO cortex_decision (market, d, book_id, code, arm, family, limit_micro, stop_micro, qty,
+              gate_trace_json, manifest_id) VALUES (?, ?, 'E01@x', 'ZZGAP', 'shadow', 'F1', 1000000, 900000, 10, '[]', ?)`,
+      args: [MARKET, d(D), String(night[0]!.manifest_id)],
+    });
+    // and an unsized blocked row is cancelled by the set-based insert
+    await on.execute({
+      sql: `INSERT INTO cortex_decision (market, d, book_id, code, arm, family, gate_trace_json, first_fail_gate, manifest_id)
+            VALUES (?, ?, 'E01@x', 'ZZUNSIZED', 'live', 'F1', '[]', 'G04_economic', ?)`,
+      args: [MARKET, d(D), String(night[0]!.manifest_id)],
+    });
     await scoreOutcomes(on, { market: MARKET, d: d(303), params, now: NOW });
     const out = await rows(
       on,
-      "SELECT fill_status, exit_rule FROM cortex_outcome WHERE code = 'ZZNOBAR'",
+      "SELECT code, fill_status, exit_rule FROM cortex_outcome WHERE code IN ('ZZNOBAR', 'ZZGAP', 'ZZUNSIZED') ORDER BY code",
     );
-    expect(out).toEqual([{ fill_status: "cancelled", exit_rule: "no_fill_bar" }]);
+    expect(out).toEqual([
+      { code: "ZZGAP", fill_status: "cancelled", exit_rule: "no_fill_bar" },
+      { code: "ZZNOBAR", fill_status: "cancelled", exit_rule: "no_fill_bar" },
+      { code: "ZZUNSIZED", fill_status: "cancelled", exit_rule: null },
+    ]);
   });
 
   it("scores would-have outcomes in batch 3, once (idempotent)", async () => {
@@ -341,6 +376,9 @@ describe("an allowed F1 family trades the Cortex live arm (D-266)", () => {
 
   it("writes signal, card and a limit order for the live decision, and links the decision row", async () => {
     const { day, stage, pick } = first();
+    // D-352: the reads are bounded to the universe plus held codes; the counts of this night
+    expect(stage.readCounts.bars).toBeLessThanOrEqual(stage.readCounts.codes! * 420);
+    expect(stage.readCounts.codes).toBe(37); // the universe on D plus held codes, not the whole table
     expect([...stage.allowed]).toEqual(["F1"]);
     const id = await book();
     const rv = cortexRuleVersion("F1", "F1.zz.1");
@@ -445,11 +483,14 @@ describe("quota-degrade (D-289)", () => {
     await setMode(db, "full");
     await startCohortsAt(db, 298, KEEP);
     await seedCortex(db, "shadow");
-    // a wall clock that jumps 30 minutes per reading: the stage exceeds the 20-minute default
-    let t = 0;
+    // a wall clock that reads 30 minutes after the first reading: the stage exceeds the 20-minute default
+    // five readings per stage: start, after the reads, before and after runNight, runtime
+    let n = 0;
     const nowMs = (): number => {
-      t += 30 * 60_000;
-      return t;
+      const k = n % 5;
+      const base = Math.floor(n / 5) * 100 * 60_000;
+      n += 1;
+      return base + (k === 0 ? 0 : 30 * 60_000);
     };
     const signals = new Map<string, SignalsResult>();
     const stages = new Map<string, StageResult>();
@@ -478,5 +519,82 @@ describe("quota-degrade (D-289)", () => {
     const night = await rows(db, "SELECT status, reason FROM cortex_night WHERE d = ?", [d(D)]);
     expect(night).toEqual([{ status: "abstain_all", reason: "quota" }]);
     expect(stages.get(d(D))!.out.decisions).toHaveLength(0);
+  });
+});
+
+describe("a paused family cancels its Cortex order at 09:55 and v1 keeps its pre-open rows (D-351)", () => {
+  it("writes filter:open_O01_kill for the Cortex order and a pass row for the v1 orders", async () => {
+    const db = await freshReplayDb();
+    await buildNight(db, { codes: goldenCodes() });
+    await setMode(db, "full");
+    await startCohortsAt(db, 298, ALL_BOOKS);
+    // allowed from the decision night 300 on: E01 gets a Cortex order, E07 (F4, shadow) a v1 order
+    await seedCortex(db, "allowed", d(D));
+    await runNights(db, 299, D, { angles: NIGHT_ANGLES }, disagree);
+    const cortexOrders = await rows(
+      db,
+      "SELECT id FROM arena_order WHERE limit_micro IS NOT NULL AND status = 'pending'",
+    );
+    const v1Orders = await rows(
+      db,
+      "SELECT id FROM arena_order WHERE limit_micro IS NULL AND kind = 'entry' AND status = 'pending' AND decided_d = ?",
+      [d(D)],
+    );
+    expect(cortexOrders.length).toBeGreaterThan(0); // E01 and its leverage twin E02
+    expect(v1Orders.length).toBeGreaterThan(0);
+    await db.execute({
+      sql: "INSERT INTO arena_control (scope, scope_key, state, set_at, set_by, reason) VALUES ('family', 'F1', 'paused', ?, 'owner', 'test')",
+      args: [NOW()],
+    });
+    await replaySessions(db, {
+      market: MARKET,
+      from: d(D + 1),
+      to: d(D + 1),
+      now: NOW,
+      masterSeed: MASTER_SEED,
+      preopen: true,
+    });
+    const run = await rows(db, "SELECT status FROM preopen_run WHERE d = ?", [d(D + 1)]);
+    expect(run).toEqual([{ status: "ok" }]);
+    for (const c of cortexOrders) {
+      const cx = await rows(db, "SELECT outcome, reason FROM preopen_result WHERE order_id = ?", [
+        String(c.id),
+      ]);
+      expect(cx).toEqual([{ outcome: "cancel", reason: "filter:open_O01_kill" }]);
+      const ord = await rows(db, "SELECT status, reject_reason FROM arena_order WHERE id = ?", [
+        String(c.id),
+      ]);
+      expect(ord).toEqual([{ status: "cancelled", reject_reason: "preopen:filter:open_O01_kill" }]);
+    }
+    for (const o of v1Orders) {
+      const r = await rows(db, "SELECT outcome FROM preopen_result WHERE order_id = ?", [
+        String(o.id),
+      ]);
+      expect(r).toEqual([{ outcome: "pass" }]);
+    }
+  });
+});
+
+describe("the stage is time-boxed (D-353) and a failure holds cash (D-356)", () => {
+  it("an overrun logs a warning, the allowed family opens nothing and v1 families trade", async () => {
+    const db = await freshReplayDb();
+    await buildNight(db, { codes: goldenCodes() });
+    await setMode(db, "full");
+    await startCohortsAt(db, 298, ALL_BOOKS);
+    await seedCortex(db, "allowed", d(D));
+    await runNights(db, 299, D, { angles: NIGHT_ANGLES, timeoutMs: 1 }, disagree);
+    const warn = await rows(
+      db,
+      "SELECT message FROM app_log WHERE level = 'warn' AND message LIKE 'cortex stage failed%'",
+    );
+    expect(warn.length).toBeGreaterThan(0);
+    expect(await rows(db, "SELECT 1 FROM arena_order WHERE limit_micro IS NOT NULL")).toHaveLength(
+      0,
+    );
+    expect(await rows(db, "SELECT 1 FROM signal WHERE variant = 'cortex'")).toHaveLength(0);
+    expect(
+      (await rows(db, "SELECT 1 FROM arena_order WHERE kind = 'entry' AND decided_d = ?", [d(D)]))
+        .length,
+    ).toBeGreaterThan(0);
   });
 });

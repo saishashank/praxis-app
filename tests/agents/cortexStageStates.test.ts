@@ -5,7 +5,7 @@ import type { Client } from "@libsql/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildAsOfView } from "@/lib/cortex/pit/asOfView";
 import { advanceStates, corpActionsWithProvenance } from "@/lib/cortex/stage";
-import { statesInForce, stateHistory } from "@/lib/cortex/store";
+import { insertState, statesInForce, stateHistory } from "@/lib/cortex/store";
 import { cleanupTempDbs } from "../db/helpers";
 import { freshReplayDb, MARKET } from "./batch2bHarness";
 import { path, SESSIONS, statesWorld, type FixtureSpec } from "../cortex/states/zzStates";
@@ -29,6 +29,7 @@ async function night(spec: FixtureSpec, t: number) {
     view,
     t,
     prior: prior.map((s) => ({ code: s.code, kind: s.kind, state: s.state, basis: s.basis })),
+    priorFromD: prior.map((s) => ({ code: s.code, kind: s.kind, fromD: s.fromD })),
   });
 }
 
@@ -100,5 +101,28 @@ describe("a halt opens and closes", () => {
       [SESSIONS[7], "none"],
     ]);
     expect(closed.states.some((s) => s.code === "ZZH")).toBe(false);
+  });
+});
+
+describe("a stored state with nothing new (D-355)", () => {
+  it("a state stored long ago and no input of its own writes no folded none row", async () => {
+    const spec: FixtureSpec = {
+      code: "ZZQ",
+      tier: "U1",
+      bars: { closesCents: path(1000, SESSIONS.length, []) },
+    };
+    await insertState(db, {
+      market: MARKET,
+      code: "ZZQ",
+      kind: "halt",
+      fromD: SESSIONS[2]!,
+      state: "halt",
+      basis: { since: SESSIONS[2] },
+      sourceRef: null,
+    });
+    const n = await night(spec, 35);
+    expect(n.written).toBe(0);
+    expect(n.states.find((s) => s.code === "ZZQ")).toMatchObject({ kind: "halt", state: "halt" });
+    expect(await stateHistory(db, MARKET, "ZZQ", "halt")).toHaveLength(1);
   });
 });

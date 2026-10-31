@@ -595,7 +595,7 @@ async function cortexGuardAtFill(
     stopSpec: plan?.plan.initialStops[0]?.spec ?? null,
     rechecked: rechecked.rows.length > 0,
   });
-  return g.firstFail === null ? null : `open:${g.firstFail}`;
+  return g.firstFail === null ? null : `filter:open_${g.firstFail}`;
 }
 
 async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {

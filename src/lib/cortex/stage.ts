@@ -41,7 +41,7 @@ import { loadLedgerFills, loadLedgerRows, toBig } from "@/lib/arena/ledgerWriter
 import { loadQtyAdjustments } from "@/lib/arena/corpActionWriter";
 import { derivePositions } from "@/lib/arena/nav";
 import { priceMicro } from "@/lib/arena/marketData";
-import { addDays, sessionsBetween, type CalendarRow } from "@/lib/data/calendar";
+import { addDays, nextTradingDay, sessionsBetween, type CalendarRow } from "@/lib/data/calendar";
 import { parseNote, stateOf } from "@/lib/data/corporateActions/rules.mjs";
 import type { Micro } from "@/lib/money/micro";
 import { scopedPrng } from "@/lib/stats/rng";
@@ -243,6 +243,8 @@ export function corpActionsWithProvenance(
 // ---- rows read from the database ------------------------------------------------------------------------------
 
 export type StageRows = {
+  /** Rows the reads returned (bars, shorts, events, corporate actions, index closes, tier rows). */
+  readonly readCounts: Readonly<Record<string, number>>;
   readonly sessions: readonly string[];
   readonly bars: ReadonlyMap<string, readonly ViewBar[]>;
   readonly tiers: ReadonlyMap<string, readonly TierRow[]>;
@@ -297,6 +299,14 @@ export type LoadOptions = {
   readonly heldCodes: readonly string[];
 };
 
+/** Codes per IN list (well under the SQLite variable limit). */
+const IN_CHUNK = 400; // threshold-ok: query chunk size
+function chunksOf<T>(xs: readonly T[], n: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n));
+  return out;
+}
+
 const MIN_CALENDAR_SPAN_DAYS = 14; // threshold-ok: slack before the first session
 
 export async function loadStageRows(db: Client, o: LoadOptions): Promise<StageRows> {
@@ -335,18 +345,24 @@ export async function loadStageRows(db: Client, o: LoadOptions): Promise<StageRo
   const wanted = new Set<string>([...onD, ...o.heldCodes]);
 
   // bars
-  const barArgs: (string | number)[] = [market, first, d];
-  if (o.liveIngestBound) barArgs.push(cutoff);
-  const barRs = await db.execute({
-    sql: `SELECT code, d, o, h, l, c, volume FROM price_bar
-          WHERE market = ? AND d >= ? AND d <= ?${o.liveIngestBound ? " AND ingested_at <= ?" : ""}
-          ORDER BY code, d`,
-    args: barArgs,
-  });
+  const wantedList = [...wanted].sort(cmp);
+  const barRows: Record<string, unknown>[] = [];
+  for (const chunk of chunksOf(wantedList, IN_CHUNK)) {
+    const barArgs: (string | number)[] = [market, first, d];
+    if (o.liveIngestBound) barArgs.push(cutoff);
+    barArgs.push(...chunk);
+    const rs = await db.execute({
+      sql: `SELECT code, d, o, h, l, c, volume FROM price_bar
+            WHERE market = ? AND d >= ? AND d <= ?${o.liveIngestBound ? " AND ingested_at <= ?" : ""}
+              AND code IN (${chunk.map(() => "?").join(", ")})
+            ORDER BY code, d`,
+      args: barArgs,
+    });
+    for (const r of rs.rows) barRows.push(r as Record<string, unknown>);
+  }
   const bars = new Map<string, ViewBar[]>();
-  for (const r of barRs.rows) {
+  for (const r of barRows) {
     const code = text(r.code);
-    if (!wanted.has(code)) continue;
     const bar: ViewBar = {
       d: text(r.d),
       open: priceMicro(r.o),
@@ -383,14 +399,18 @@ export async function loadStageRows(db: Client, o: LoadOptions): Promise<StageRo
   }
 
   // ASIC short interest
-  const shortRs = await db.execute({
-    sql: `SELECT code, as_of, short_ppm FROM short_interest
-          WHERE market = ? AND as_of <= ? AND as_of >= ? AND published_at < ? ORDER BY code, as_of`,
-    args: [market, d, addDays(d, -STAGE_SHORT_DAYS), cutoff],
-  });
+  const shortRows: Record<string, unknown>[] = [];
+  for (const chunk of chunksOf(wantedList, IN_CHUNK)) {
+    const rs = await db.execute({
+      sql: `SELECT code, as_of, short_ppm FROM short_interest
+            WHERE market = ? AND as_of <= ? AND as_of >= ? AND published_at < ?
+              AND code IN (${chunk.map(() => "?").join(", ")}) ORDER BY code, as_of`,
+      args: [market, d, addDays(d, -STAGE_SHORT_DAYS), cutoff, ...chunk],
+    });
+    for (const r of rs.rows) shortRows.push(r as Record<string, unknown>);
+  }
   const shorts = new Map<string, ShortPoint[]>();
-  for (const r of shortRs.rows) {
-    if (!wanted.has(text(r.code))) continue;
+  for (const r of shortRows) {
     push(shorts, text(r.code), { asOf: text(r.as_of), ppm: Number(r.short_ppm) });
   }
 
@@ -419,8 +439,9 @@ export async function loadStageRows(db: Client, o: LoadOptions): Promise<StageRo
   });
   const evtRs = await db.execute({
     sql: `SELECT e.action_id, e.at, e.status, e.note FROM corporate_action_event e
-          JOIN corporate_action a ON a.id = e.action_id WHERE a.market = ? ORDER BY e.id`,
-    args: [market],
+          JOIN corporate_action a ON a.id = e.action_id
+          WHERE a.market = ? AND a.ex_date >= ? ORDER BY e.id`,
+    args: [market, addDays(first, -5)],
   });
   const actionRows: ActionRow[] = caRs.rows.map((a) => {
     let payload: unknown = {};
@@ -509,7 +530,22 @@ export async function loadStageRows(db: Client, o: LoadOptions): Promise<StageRo
   );
   const schemaSha = sha256Hex(names.rows.map((r) => text(r.name)).join(","));
 
+  const sum = <T>(m: ReadonlyMap<string, readonly T[]>): number => {
+    let n = 0;
+    for (const v of m.values()) n += v.length;
+    return n;
+  };
   return {
+    readCounts: {
+      universe_rows: uni.rows.length,
+      bars: barRows.length,
+      shorts: shortRows.length,
+      events: sum(events),
+      corporate_actions: caRs.rows.length,
+      corporate_action_events: evtRs.rows.length,
+      index_bars: idxRs.rows.length,
+      codes: wantedList.length,
+    },
     sessions,
     bars,
     tiers,
@@ -618,6 +654,7 @@ export type StoreReads = {
     state: string;
     basis: unknown;
   }[];
+  readonly statesFromD: readonly { code: string; kind: StateKind; fromD: string }[];
   readonly sourcesOff: ReadonlySet<InputKind>;
 };
 
@@ -652,12 +689,18 @@ export async function loadStoreReads(
     maps: await latestMaps(db, o.market),
     cellRows,
     passports: await latestPassports(db, o.market),
-    states: (await statesInForce(db, o.market, o.d)).map((s) => ({
-      code: s.code,
-      kind: s.kind,
-      state: s.state,
-      basis: s.basis,
-    })),
+    ...(await (async () => {
+      const inForce = await statesInForce(db, o.market, o.d);
+      return {
+        states: inForce.map((s) => ({
+          code: s.code,
+          kind: s.kind,
+          state: s.state,
+          basis: s.basis,
+        })),
+        statesFromD: inForce.map((s) => ({ code: s.code, kind: s.kind, fromD: s.fromD })),
+      };
+    })()),
     sourcesOff,
   };
 }
@@ -850,13 +893,18 @@ export async function advanceStates(
     view: AsOfView;
     t: number;
     prior: readonly StateWord[];
+    /** from_d of the stored states (the fold starts before it, D-355). */
+    priorFromD?: readonly { code: string; kind: StateKind; fromD: string }[];
     params?: StatesParams;
   },
 ): Promise<{ states: StateWord[]; written: number; alerts: number }> {
   const { view, t, d } = o;
   const params = o.params ?? DEFAULT_STATES_PARAMS;
-  const from = Math.max(0, t - STATE_FOLD_SESSIONS + 1);
+  const baseFrom = Math.max(0, t - STATE_FOLD_SESSIONS + 1);
   const prior = new Map(o.prior.map((s) => [`${s.code}|${s.kind}`, s] as const));
+  const priorFromD = new Map(
+    (o.priorFromD ?? []).map((s) => [`${s.code}|${s.kind}`, s.fromD] as const),
+  );
   const codes = new Set<string>(view.codes(t));
   // a halted code has no bar tonight: last night's universe carries it into the fold
   if (t > 0) for (const c of view.codes(t - 1)) codes.add(c);
@@ -869,7 +917,15 @@ export async function advanceStates(
     basis: unknown;
     ref: string | null;
   }[] = [];
+  /** The fold starts early enough to see the start of a stored state (D-355), within the window. */
+  const startOf = (code: string, kind: StateKind, fromD: string | undefined): number => {
+    const stored = prior.get(`${code}|${kind}`);
+    if (stored === undefined || fromD === undefined) return baseFrom;
+    const i = view.sessions.findIndex((x) => x >= fromD);
+    return i < 0 ? baseFrom : Math.max(0, Math.min(baseFrom, i - 5)); // threshold-ok: lead-in sessions
+  };
   for (const code of [...codes].sort(cmp)) {
+    const from = baseFrom;
     const haltedRecently = (): boolean => {
       for (let i = from; i <= t; i += 1) if (view.halted(code, i) === true) return true;
       return false;
@@ -879,13 +935,18 @@ export async function advanceStates(
       halt: haltedRecently() || prior.has(`${code}|halt`),
       promotion: view.events(code, t).length > 0 || prior.has(`${code}|promotion`),
     };
+    const fromOf = (kind: StateKind): number =>
+      startOf(code, kind, priorFromD.get(`${code}|${kind}`));
     const consider = (
       kind: StateKind,
       state: string,
       row: { basis: Record<string, unknown>; sourceRef: string | null } | null,
+      hasInput: boolean,
     ): void => {
       const was = prior.get(`${code}|${kind}`)?.state ?? "none";
       if (was === state) return;
+      // D-355: a fold that has no input of its own cannot close a stored state
+      if (state === "none" && !hasInput) return;
       changes.push({
         kind,
         code,
@@ -897,11 +958,11 @@ export async function advanceStates(
     if (wants.corp_action) {
       let s: CorpActionState | null = null;
       let last: CorpActionStep | null = null;
-      for (let i = from; i <= t; i += 1) {
+      for (let i = fromOf("corp_action"); i <= t; i += 1) {
         last = stepCorpAction(view, code, i, s, params);
         s = last.next;
       }
-      consider("corp_action", last!.next.state, last!.row);
+      consider("corp_action", last!.next.state, last!.row, view.corpActions(code, t).length > 0);
       if (last!.effects.ownerAlert) {
         alerts += 1;
         await db.execute({
@@ -920,15 +981,15 @@ export async function advanceStates(
     if (wants.halt) {
       let s: HaltState | null = null;
       let last: HaltStep | null = null;
-      for (let i = from; i <= t; i += 1) {
+      for (let i = fromOf("halt"); i <= t; i += 1) {
         last = stepHalt(view, code, i, s, params);
         s = last.next;
       }
-      consider("halt", last!.next.state, last!.row);
+      consider("halt", last!.next.state, last!.row, haltedRecently());
     }
     if (wants.promotion) {
       const step = stepPromotion(view, code, t, null, params);
-      consider("promotion", step.next.state, step.row);
+      consider("promotion", step.next.state, step.row, view.events(code, t).length > 0);
     }
   }
   let written = 0;
@@ -1161,6 +1222,10 @@ export type StageOptions = {
   readonly angles?: readonly AngleDef[];
   readonly goLiveD?: string | null;
   readonly includeLeverage?: boolean;
+  /** Set by the caller's time box (D-353); the stage checks it between phases and stops writing. */
+  readonly abort?: { aborted: boolean };
+  /** The same budget in ms, checked after `runNight` (a local database never yields to a timer). */
+  readonly timeBoxMs?: number;
 };
 
 export type StageResult = {
@@ -1173,7 +1238,24 @@ export type StageResult = {
   /** family -> signal.rule_version of the Cortex signals of tonight. */
   readonly signalRuleVersion: ReadonlyMap<Family, string>;
   readonly persisted: PersistResult;
+  /** Rows the reads returned (the bound test and the staging runtime budget read this). */
+  readonly readCounts: Readonly<Record<string, number>>;
 };
+
+/**
+ * The one definition of "this family trades the Cortex live arm tonight" (D-266, N3): status
+ * `allowed` and neither the arena nor the family paused or killed. Batch 2b and the stage both use it.
+ */
+export function allowedFamilies(
+  status: Readonly<Record<CortexFamily, "shadow" | "allowed" | "suspended">>,
+  killedArena: boolean,
+  killedFamilies: ReadonlySet<Family>,
+): Set<Family> {
+  const out = new Set<Family>();
+  if (killedArena) return out;
+  for (const f of V1_FAMILIES) if (status[f] === "allowed" && !killedFamilies.has(f)) out.add(f);
+  return out;
+}
 
 export async function cortexStage(db: Client, o: StageOptions): Promise<StageResult> {
   const nowMs = o.nowMs ?? (() => Date.now());
@@ -1186,6 +1268,10 @@ export async function cortexStage(db: Client, o: StageOptions): Promise<StageRes
   });
   const books = allBooks.filter((b) => b.governed);
   const contextBooks = allBooks.filter((b) => !b.governed);
+  const stop = (): void => {
+    if (o.abort?.aborted === true) throw new Error("cortex stage aborted (time box)");
+  };
+  stop();
   const rows = await loadStageRows(db, {
     market: o.market,
     d: o.d,
@@ -1203,6 +1289,7 @@ export async function cortexStage(db: Client, o: StageOptions): Promise<StageRes
     }),
   );
   const t = view.sessions.length - 1;
+  stop();
   const store0 = await loadStoreReads(db, { market: o.market, d: o.d });
   const advanced = await advanceStates(db, {
     market: o.market,
@@ -1210,6 +1297,7 @@ export async function cortexStage(db: Client, o: StageOptions): Promise<StageRes
     view,
     t,
     prior: store0.states,
+    priorFromD: store0.statesFromD,
   });
   const store = { ...store0, states: advanced.states };
   const inputs = buildNightInputs({
@@ -1230,7 +1318,15 @@ export async function cortexStage(db: Client, o: StageOptions): Promise<StageRes
     goLiveD: o.goLiveD,
     elapsedMinutes: (nowMs() - started) / 60_000, // threshold-ok: ms to minutes
   });
+  stop();
+  // reads that overran are caught by runNight itself (D-289 `quota`); the time box (D-353) guards
+  // the run and the writes: a night that took longer than the budget is not persisted
+  const runStart = nowMs();
   const out = runNight(inputs);
+  if (o.timeBoxMs !== undefined && nowMs() - runStart > o.timeBoxMs) {
+    throw new Error("cortex stage over its time box");
+  }
+  stop();
   const runtimeMs = Math.max(0, Math.round(nowMs() - started));
   const persisted = await persistNight(db, {
     market: o.market,
@@ -1240,8 +1336,11 @@ export async function cortexStage(db: Client, o: StageOptions): Promise<StageRes
     runtimeMs,
     createdAt: o.now(),
   });
-  const allowed = new Set<Family>();
-  for (const f of V1_FAMILIES) if (inputs.status[f] === "allowed") allowed.add(f);
+  const allowed = allowedFamilies(
+    store.status,
+    o.killedArena === true,
+    o.killedFamilies ?? new Set<Family>(),
+  );
   const signalRuleVersion = new Map<Family, string>();
   for (const [f, r] of inputs.rules) signalRuleVersion.set(f, cortexRuleVersion(f, r.ruleVersion));
   return {
@@ -1252,6 +1351,7 @@ export async function cortexStage(db: Client, o: StageOptions): Promise<StageRes
     allowed,
     signalRuleVersion,
     persisted,
+    readCounts: rows.readCounts,
   };
 }
 
@@ -1273,9 +1373,42 @@ export const SCORE_BATCH = 5000; // threshold-ok: rows per nightly scoring pass
  */
 export async function scoreOutcomes(
   db: Client,
-  o: { market: string; d: string; params: AgentParams; now: () => string; limit?: number },
+  o: {
+    market: string;
+    d: string;
+    params: AgentParams;
+    now: () => string;
+    limit?: number;
+    calendar?: readonly CalendarRow[];
+  },
 ): Promise<ScoreResult> {
+  const scoredAt = o.now();
+  // D-354: a decision that was never sized (blocked before sizing) or whose family has no exit plan
+  // wired cannot be walked; one set-based insert records it `cancelled` before any bar is read
+  const unsized = await db.execute({
+    sql: `INSERT INTO cortex_outcome (market, d, book_id, code, arm, fill_status, scored_at)
+          SELECT c.market, c.d, c.book_id, c.code, c.arm, 'cancelled', ? FROM cortex_decision c
+          WHERE c.market = ? AND c.d <= ?
+            AND (c.limit_micro IS NULL OR c.qty IS NULL OR c.qty <= 0
+                 OR c.family NOT IN ('F1', 'F4'))
+          ON CONFLICT DO NOTHING`,
+    args: [scoredAt, o.market, o.d],
+  });
+  // the bar-walking class only (LIMIT applies here): sized decisions of families with a plan
   const pending = await unscoredDecisions(db, o.market, o.d, o.limit ?? SCORE_BATCH);
+  const calendar =
+    o.calendar ??
+    (
+      await db.execute({
+        sql: "SELECT d, kind, close_time, confirmed FROM trading_calendar WHERE market = ? ORDER BY d",
+        args: [o.market],
+      })
+    ).rows.map((r): CalendarRow => ({
+      d: text(r.d),
+      kind: text(r.kind) as CalendarRow["kind"],
+      close_time: r.close_time === null ? null : text(r.close_time),
+      confirmed: toBig(r.confirmed) === 1n ? 1 : 0,
+    }));
   const barCache = new Map<string, ViewBar[]>();
   const barsOf = async (code: string): Promise<ViewBar[]> => {
     const hit = barCache.get(code);
@@ -1315,12 +1448,12 @@ export async function scoreOutcomes(
     profileCache.set(bookId, profile);
     return profile;
   };
-  const scoredAt = o.now();
   let scored = 0;
-  let unscorable = 0;
+  let unscorable = unsized.rowsAffected;
   let open = 0;
   for (const dec of pending) {
     const family = dec.family;
+    const fillD = nextTradingDay(dec.d, calendar);
     const all = await barsOf(dec.code);
     const upTo = all.filter((b) => b.d <= dec.d);
     const after = all.filter((b) => b.d > dec.d);
@@ -1352,8 +1485,9 @@ export async function scoreOutcomes(
       unscorable += 1;
       continue;
     }
-    if (after.length === 0 && o.d > dec.d) {
-      // the fill session has passed and the code has no bar there: no trade, no backlog
+    if (after[0]?.d !== fillD && (after.length > 0 || o.d >= fillD)) {
+      // D-354: an order fills only on the next trading day; no bar there (a gap, or only a later bar)
+      // means no trade, and no backlog
       await insertOutcome(db, {
         market: o.market,
         d: dec.d,

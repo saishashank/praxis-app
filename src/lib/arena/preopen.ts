@@ -584,7 +584,7 @@ export async function runPreopen(db: Client, o: PreopenOptions): Promise<Preopen
         if (guard.firstFail !== null) {
           decision = {
             outcome: "cancel",
-            reason: `open:${guard.firstFail}`,
+            reason: `filter:open_${guard.firstFail}`,
             evaluations: decision.evaluations,
           };
         }

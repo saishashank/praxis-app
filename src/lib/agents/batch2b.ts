@@ -126,6 +126,7 @@ import { loadAgentParams, type AgentParams } from "./params";
 import type { Tier } from "./families/types";
 import {
   cortexSignalId,
+  allowedFamilies,
   cortexStage,
   persistLiveDecisions,
   type LiveLink,
@@ -183,6 +184,8 @@ export type SignalsOptions = {
     readonly angles?: readonly AngleDef[];
     readonly nowMs?: StageOptions["nowMs"];
     readonly goLiveD?: string | null;
+    /** Overrides the cortex_stage_minutes time box (tests). */
+    readonly timeoutMs?: number;
     readonly onStage?: (r: StageResult) => void;
   };
 };
@@ -1351,11 +1354,11 @@ async function cortexEntriesFor(
         accepted: true,
         reasons: [],
         qty: dec.qty,
-        fillPriceMicro: dec.limitMicro,
+        fillPriceMicro: scaleMicro(dec.limitMicro, cross.priceFactor),
         slipMicro: 0n,
         brokerageMicro: 0n,
         orderValueMicro: dec.orderValueMicro,
-        refPriceMicro: dec.refMicro,
+        refPriceMicro: scaleMicro(dec.refMicro, cross.priceFactor),
         advValueMicro: leg === null ? 0n : leg.env.advValueMicro,
       },
       scenario: { split: null, nets: [] },
@@ -1379,7 +1382,7 @@ async function cortexEntriesFor(
       )?.gap95;
       const evidence = canonicalJson({
         gap95: gap95 ?? null,
-        limit_micro: String(dec.limitMicro),
+        limit_micro: String(scaleMicro(dec.limitMicro, cross.priceFactor)),
         manifest_id: cx.manifestId,
         map_rule_version: ruleVersion,
         p: dec.p,
@@ -1787,23 +1790,53 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
     await exitsStage(ctx, new Map(unresolved.map((c) => [c.id, c])));
     await breakersStage(ctx, o.breakerSink ?? createAlertRowSink(db), o.now());
 
-    // M15 P2 (D-265): the Cortex stage runs once, after the v1 rule interpreter and before the cohort
-    // loop. A failure never touches v1: the stage only writes cortex_* rows, and a family that is
-    // `allowed` then simply opens nothing tonight (it holds cash).
+    // M15 P2 (D-265, D-352): order of work: the v1 cohorts of every non-allowed family first, then the
+    // Cortex stage, then the Cortex entries of the allowed families. A stage failure or overrun never
+    // touches v1: the stage only writes cortex_* rows, and an allowed family then opens nothing
+    // tonight (it holds cash).
     const cortexOn = o.cortex?.enabled !== false;
-    const cortexAllowed = new Set<Family>();
+    let cortexAllowed = new Set<Family>();
     let cortex: StageResult | null = null;
     const offControl = (key: string): boolean => {
       const v = ctx.control.get(key);
       return v === "paused" || v === "killed";
     };
+    const killedArena = offControl(`market|${o.market}`);
+    const killedFamilies = new Set<Family>(
+      CORTEX_V1_FAMILIES.filter((f) => offControl(`family|${f}`)),
+    );
     if (cortexOn) {
-      const killedFamilies = new Set<Family>(
-        CORTEX_V1_FAMILIES.filter((f) => offControl(`family|${f}`)),
-      );
       try {
-        const st = await familyStatusMap(db, o.market, o.d);
-        for (const f of CORTEX_V1_FAMILIES) if (st[f] === "allowed") cortexAllowed.add(f);
+        cortexAllowed = allowedFamilies(
+          await familyStatusMap(db, o.market, o.d),
+          killedArena,
+          killedFamilies,
+        );
+      } catch {
+        cortexAllowed = new Set<Family>();
+      }
+    }
+    const cortexLinks = new Map<string, LiveLink>();
+    const warnCortex = async (what: string, error: unknown): Promise<void> => {
+      await db.execute({
+        sql: "INSERT INTO app_log (at, level, source, message, run_id) VALUES (?, 'warn', ?, ?, ?)",
+        args: [
+          o.now(),
+          SIGNALS_JOB,
+          `${what} on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
+            0,
+            LOG_MESSAGE_MAX,
+          ),
+          runId,
+        ],
+      });
+    };
+    /** The whole stage (reads, runNight, persist) against cortex_stage_minutes (D-353). */
+    const runStage = async (): Promise<StageResult | null> => {
+      const abort = { aborted: false };
+      const budgetMs = o.cortex?.timeoutMs ?? params.cortex.stageMinutes * 60_000; // threshold-ok: minutes to ms
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
         const arnCtx = createContext(day.inputs, params, {});
         const arn011Failed = new Map<string, readonly string[]>();
         for (const c of day.inputs.codes) {
@@ -1811,7 +1844,7 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
           const failed = applyArn011(c, arnCtx).failed;
           if (failed.length > 0) arn011Failed.set(c.code, failed);
         }
-        cortex = await cortexStage(db, {
+        const work = cortexStage(db, {
           market: o.market,
           d: o.d,
           params,
@@ -1819,31 +1852,38 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
           replay: o.replay === true,
           now: o.now,
           nowMs: o.cortex?.nowMs,
-          killedArena: offControl(`market|${o.market}`),
+          killedArena,
           killedFamilies,
           arn011Failed,
           angles: o.cortex?.angles,
           goLiveD: o.cortex?.goLiveD,
           includeLeverage: o.withLeverage,
+          abort,
+          timeBoxMs: budgetMs,
         });
-        o.cortex?.onStage?.(cortex);
+        const limit = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            abort.aborted = true;
+            reject(new Error(`over cortex_stage_minutes (${budgetMs} ms)`));
+          }, budgetMs);
+        });
+        work.catch(() => undefined); // a late failure after the time box is already handled
+        const result = await Promise.race([work, limit]);
+        o.cortex?.onStage?.(result);
+        return result;
       } catch (error) {
-        cortex = null;
-        await db.execute({
-          sql: "INSERT INTO app_log (at, level, source, message, run_id) VALUES (?, 'warn', ?, ?, ?)",
-          args: [
-            o.now(),
-            SIGNALS_JOB,
-            `cortex stage failed on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
-              0,
-              LOG_MESSAGE_MAX,
-            ),
-            runId,
-          ],
-        });
+        await warnCortex("cortex stage failed", error);
+        return null;
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
       }
-    }
-    const cortexLinks = new Map<string, LiveLink>();
+    };
+    const deferred: {
+      books: CohortBooks;
+      exec: ExecutionRow;
+      family: Family;
+      vctx: Ctx;
+    }[] = [];
 
     const live = unresolved.filter((c) => c.live).sort((a, b) => cmp(a.id, b.id));
     const matched = new Map<string, Taken[]>();
@@ -1865,19 +1905,11 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       stats.cohorts += 1;
       const family = exec.family as Family;
       const vid = versionOf(exec, family);
-      const vctx: Ctx = {
-        ...ctx,
-        params: paramsOf.get(vid) ?? params,
-        ...(cortex === null ? {} : { cortexCells: cortex.inputs.cells }),
-      };
+      const vctx: Ctx = { ...ctx, params: paramsOf.get(vid) ?? params };
       if (cortexOn && cortexAllowed.has(family)) {
-        // D-266/D-280: an allowed family trades the Cortex live arm in place of the v1 pool; with no
-        // stage result tonight it opens nothing
-        if (cortex !== null) {
-          for (const [k, v] of await cortexEntriesFor(vctx, books, exec, family, cortex)) {
-            cortexLinks.set(k, v);
-          }
-        }
+        // D-266/D-280: an allowed family trades the Cortex live arm in place of the v1 pool, after
+        // the stage (below); the cohort is not touched by the v1 path
+        deferred.push({ books, exec, family, vctx });
         continue;
       }
       const taken = await entriesFor(vctx, books, exec, family, forVersion(family, vid), signalIds);
@@ -1885,6 +1917,27 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       const list = matched.get(mkey) ?? [];
       for (const t of taken) if (!list.some((x) => x.signalId === t.signalId)) list.push(t);
       matched.set(mkey, list);
+    }
+
+    if (cortexOn) {
+      cortex = await runStage();
+      if (cortex !== null) {
+        // the one source of "allowed" is the stage's own (N3); a mismatch can only mean a status row
+        // changed during the run: the later reading wins and the family holds cash otherwise
+        cortexAllowed = new Set([...cortexAllowed].filter((f) => cortex!.allowed.has(f)));
+        for (const x of deferred) {
+          if (!cortexAllowed.has(x.family)) continue;
+          try {
+            const vctx: Ctx = { ...x.vctx, cortexCells: cortex.inputs.cells };
+            for (const [k, v] of await cortexEntriesFor(vctx, x.books, x.exec, x.family, cortex)) {
+              cortexLinks.set(k, v);
+            }
+          } catch (error) {
+            // S3 (D-356): this family holds cash tonight; the other families are not affected
+            await warnCortex(`cortex entries failed for ${x.family}`, error);
+          }
+        }
+      }
     }
 
     if (cortex !== null) {
