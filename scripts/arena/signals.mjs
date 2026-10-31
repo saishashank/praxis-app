@@ -16,10 +16,13 @@
 // D-181: after a night that includes batch 3, the published picks (AGT-113, ARN-095) follow from their
 // own bundle (src/lib/picks/cli.ts): this script passes the same arguments and nothing comes back but
 // an exit code, so no arena module reads picks (tests/picks/isolation.test.ts).
+// M11-lite (D-485): the steelman stage follows the same way from its own bundle
+// (src/lib/steelman/cli.ts) after the picks; it never fails the night (it exits 0 and says degraded).
 import { fileURLToPath } from "node:url";
 import { loadEngine } from "./engine.mjs";
 
 const PICKS_ENTRY = "src/lib/picks/cli.ts";
+const STEELMAN_ENTRY = "src/lib/steelman/cli.ts";
 
 /** @param {string[]} argv @param {Record<string, string | undefined>} env */
 export async function run(argv, env, deps = {}) {
@@ -27,7 +30,9 @@ export async function run(argv, env, deps = {}) {
   const code = await signalsMain(argv, env, deps);
   if (code === 2) return code;
   const { picksMain } = await loadEngine(PICKS_ENTRY);
-  return Math.max(code, await picksMain(argv, env, deps));
+  const afterPicks = Math.max(code, await picksMain(argv, env, deps));
+  const { steelmanMain } = await loadEngine(STEELMAN_ENTRY);
+  return Math.max(afterPicks, await steelmanMain(argv, env, deps));
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
