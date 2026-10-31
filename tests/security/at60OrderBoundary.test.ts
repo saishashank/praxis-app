@@ -385,3 +385,83 @@ describe("AT-60 order boundary (iv): replay hash with the poll and the scan on v
     expect(on.hash).toBe(off.hash);
   }, 120_000);
 });
+
+describe("AT-60 order boundary (v): WP4, WP6, WP8 and WP9 files", () => {
+  const EXTRA_DIRS = [
+    "src/app/(app)/alerts",
+    "src/app/(app)/settings/alerts",
+    "src/app/(app)/reviews/alerts",
+  ];
+  const EXTRA_FILES = [
+    "src/app/(app)/picks/IntradaySection.tsx",
+    "src/app/(app)/picks/AlertChip.tsx",
+    "src/lib/ui/loaders/pickAlerts.ts",
+    "src/lib/picks/streamCost.ts",
+    "src/lib/config/streamState.ts",
+  ];
+  const extra = [
+    ...EXTRA_DIRS.flatMap((d) => walk(path.join(ROOT, d))),
+    ...EXTRA_FILES.map((f) => path.join(ROOT, f)),
+  ].sort();
+  const rel = (f: string) => posix(path.relative(ROOT, f));
+  const ORDER_TABLES =
+    /\b(arena_order|fill|trade|cash_ledger|nav_daily|nav_daily_pos|sleeve_trade|lesson|cortex_decision|cortex_ledger_cell|arena_book|position)\b/i;
+  const stripComments = (src: string) =>
+    src
+      .split("\n")
+      .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
+      .join("\n");
+  const WRITE =
+    /(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|(?<!DO\s)UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+([A-Za-z_][A-Za-z0-9_]*)/gi;
+
+  it("the extra set exists (the UI, the cost helper, the stream-state writer)", () => {
+    const names = extra.map(rel);
+    expect(names).toContain("src/app/(app)/alerts/actions.ts");
+    expect(names).toContain("src/app/(app)/reviews/alerts/view.ts");
+    expect(names).toContain("src/lib/config/streamState.ts");
+    expect(names).toContain("src/lib/picks/streamCost.ts");
+    const sentinels = [
+      "src/lib/intraday/outcome.ts",
+      "src/lib/intraday/measure.ts",
+      "src/lib/intraday/evaluator.ts",
+      "src/lib/email/pickMail.ts",
+    ];
+    const guarded = guardedFiles().map(rel);
+    for (const f of sentinels) expect(guarded).toContain(f);
+  });
+
+  it("none of them imports an arena, night, decision-writer, pick-store, agent or LLM module", () => {
+    const bad: string[] = [];
+    for (const f of extra) {
+      for (const spec of specifiers(fs.readFileSync(f, "utf8"))) {
+        const r = resolveSpec(f, spec);
+        // the one vetted exception: the pure cost arithmetic (no database, no writer), D-464
+        if (rel(f) === "src/lib/picks/streamCost.ts" && r === "src/lib/arena/costs") continue;
+        for (const [name, re] of FORBIDDEN) {
+          if (re.test(r)) bad.push(`${rel(f)} imports ${spec} (${name})`);
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it("no write literal in them names an order, fill, book, ledger or lesson table", () => {
+    const bad: string[] = [];
+    for (const f of [...extra, ...guardedFiles()]) {
+      for (const m of stripComments(fs.readFileSync(f, "utf8")).matchAll(WRITE)) {
+        if (ORDER_TABLES.test(m[1])) bad.push(`${rel(f)}: ${m[0]}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it("the UI and the loader write nothing by SQL; the one config write is the stream state", () => {
+    const writers: string[] = [];
+    for (const f of extra) {
+      for (const m of stripComments(fs.readFileSync(f, "utf8")).matchAll(WRITE)) {
+        writers.push(`${rel(f)}: ${m[1]}`);
+      }
+    }
+    expect(writers).toEqual(["src/lib/config/streamState.ts: config_version"]);
+  });
+});

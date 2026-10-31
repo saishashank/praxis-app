@@ -45,6 +45,18 @@ rules:
     specIds: [ROL-101, ROL-102a]
     purpose: "User and role management (Owner only)."
     views: [security]
+  - match: "page:/alerts"
+    specIds: [UXN-303, ARN-115, EML-041]
+    purpose: "My alerts: the pick alerts armed, hit or cleared for this user, with a mute control. Delayed quotes only."
+    views: [email, agents]
+  - match: "page:/settings/alerts"
+    specIds: [UXN-304, EML-041, EML-042]
+    purpose: "Alert settings: pick alerts, candidate e-mails, quiet hours and the pick sort order."
+    views: [email, security]
+  - match: "page:/reviews/alerts"
+    specIds: [VAL-118, VAL-119, AGT-144]
+    purpose: "Monthly alerts report: the intraday stream measured against its pre-registered hypothesis."
+    views: [learning, agents]
   - match: "page:/settings*"
     specIds: [UX-052, ROL-102a]
     purpose: "Per-user preferences: appearance, region, time, quiet hours, sign-out."
@@ -129,6 +141,14 @@ rules:
   - match: "action:src/app/(app)/users/*"
     specIds: [ROL-101, ROL-102a]
     views: [security]
+  - match: "action:src/app/(app)/alerts/*"
+    specIds: [UXN-303, ARN-115, ROL-102a]
+    purpose: "Server action {name}: mutes or restores pick alerts for the signed-in user."
+    views: [email, security]
+  - match: "action:src/app/(app)/settings/alerts/*"
+    specIds: [UXN-304, EML-041, ROL-102a]
+    purpose: "Server action {name}: saves the signed-in user's alert and pick-sort preferences."
+    views: [email, security]
   - match: "action:src/app/(app)/settings/*"
     specIds: [UX-052, ROL-102a]
     views: [security]
@@ -646,6 +666,10 @@ elements:
     purpose: "ASX announcements feed."
     specIds: [DAT-122, DAT-124]
     views: [data, platform]
+  "host:query1.finance.yahoo.com":
+    purpose: "delayed quotes"
+    specIds: [DAT-238, NFR-041, PLT-077]
+    views: [data, agents, platform]
   "host:www.tradingview.com":
     purpose: "Chart links for the Owner (no data pulled)."
     specIds: [DAT-124]
