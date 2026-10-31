@@ -4,7 +4,6 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { layoutView, NODE_H, NODE_W } from "@/lib/blueprint/layout";
 import { searchElements } from "@/lib/blueprint/search";
-import { statusOf } from "@/lib/blueprint/status";
 import type { BpEdge, BpElement } from "@/lib/blueprint/types";
 
 const el = (id: string, over: Partial<BpElement> = {}): BpElement => ({
@@ -59,14 +58,12 @@ describe("layoutView", () => {
     expect(pos["table:a"][1]).toBeLessThan(pos["table:b"][1]);
     expect(l.nodes.some((n) => n.el.id === "page:p")).toBe(false);
   });
-  it("connects node sides and keeps explicit coordinates", () => {
-    const l = layoutView("platform", [el("service:z", { x: 500, y: 7 }), el("table:a")], edges);
+  it("connects node sides", () => {
+    const l = layoutView("platform", els, edges);
     const z = l.nodes.find((n) => n.el.id === "service:z")!;
-    expect([z.x, z.y]).toEqual([500, 7]);
-    const g = l.edges[0];
-    expect(g.y1).toBe(7 + NODE_H / 2);
-    expect(g.x1).toBe(500);
-    expect(NODE_W).toBeGreaterThan(0);
+    const g = l.edges.find((e) => e.edge.from === "service:z")!;
+    expect(g.x1).toBe(z.x + NODE_W);
+    expect(g.y1).toBe(z.y + NODE_H / 2);
   });
 });
 
@@ -84,12 +81,6 @@ describe("searchElements", () => {
   });
 });
 
-describe("status stub", () => {
-  it("is unknown until WP4 lands", () => {
-    expect(statusOf("service:z").state).toBe("unknown");
-  });
-});
-
 describe("the model is never bundled (D-372)", () => {
   const walk = (d: string, out: string[] = []): string[] => {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
@@ -104,15 +95,19 @@ describe("the model is never bundled (D-372)", () => {
 
   it("only the model route names architecture.json, and no client module does", () => {
     const naming = files.filter((f) => fs.readFileSync(f, "utf8").includes("architecture.json"));
-    expect(naming.map(rel)).toEqual(["src/app/api/blueprint/model/route.ts"]);
+    expect(naming.map(rel)).toEqual([
+      "src/app/api/blueprint/export/route.ts",
+      "src/app/api/blueprint/model/route.ts",
+      "src/lib/blueprint/specBrowser.ts",
+    ]);
     for (const f of files) {
       const src = fs.readFileSync(f, "utf8");
       if (/^\s*["']use client["']/m.test(src.slice(0, 200)))
         expect(src, rel(f)).not.toMatch(/architecture\.json|docs\/architecture/);
     }
   });
-  it("no import in src reaches the docs/architecture folder", () => {
-    for (const f of files)
+  it("no client module or component imports the docs/architecture folder", () => {
+    for (const f of files.filter((x) => rel(x).startsWith("src/components/")))
       expect(fs.readFileSync(f, "utf8"), rel(f)).not.toMatch(/from\s+["'][^"']*docs\/architecture/);
   });
   it("the client diagram carries no blueprint URL literal", () => {

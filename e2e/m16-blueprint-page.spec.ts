@@ -19,7 +19,7 @@ test("eight tabs, hover, panel, search and axe", async ({ browser, baseURL }) =>
   const page = await context.newPage();
   await page.goto("/blueprint");
   const tablist = page.getByRole("tablist", { name: "Blueprint views" });
-  await expect(tablist.getByRole("tab")).toHaveCount(8);
+  await expect(tablist.getByRole("tab")).toHaveCount(9);
   for (const name of TABS) {
     await tablist.getByRole("tab", { name, exact: true }).click();
     await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
@@ -33,13 +33,13 @@ test("eight tabs, hover, panel, search and axe", async ({ browser, baseURL }) =>
     (await node.getAttribute("aria-label"))!.split(",")[0],
   );
 
-  await page.getByTestId("bp-search").fill("PLT-031");
+  await page.getByTestId("bp-search").fill("AGT-105");
   const first = page.getByTestId("bp-results").getByRole("button").first();
   await expect(first).toBeVisible();
   await first.click();
   const panel = page.getByTestId("bp-panel");
   await expect(panel).toBeVisible();
-  await expect(page.getByTestId("bp-panel-specs")).toContainText("PLT-031");
+  await expect(page.getByTestId("bp-panel-specs")).toContainText("AGT-105");
   await expect(page.getByTestId("bp-panel-status")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(panel).toBeHidden();

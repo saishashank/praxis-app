@@ -10,7 +10,8 @@ import { Pill } from "@/components/ui/Pill";
 import { Sheet } from "@/components/ui/Sheet";
 import { layoutView, NODE_H, NODE_W } from "@/lib/blueprint/layout";
 import { searchElements } from "@/lib/blueprint/search";
-import { statusOf } from "@/lib/blueprint/status";
+import { useRouter } from "next/navigation";
+import type { BlueprintStatus, ElementStatus } from "@/lib/ui/loaders/blueprint";
 import type { BpEdge, BpElement, BpModel } from "@/lib/blueprint/types";
 
 type Tf = { x: number; y: number; k: number };
@@ -40,16 +41,27 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+const PILL: Record<string, string> = {
+  ok: "ok",
+  warn: "warn",
+  fail: "bad",
+  off: "neutral",
+  unknown: "neutral",
+};
+const UNKNOWN: ElementStatus = { state: "unknown", detail: "No live status is kept for this." };
+
 function ElementPanel({
   el,
   edges,
   names,
+  status,
 }: {
   el: BpElement;
   edges: BpEdge[];
   names: Map<string, string>;
+  status: BlueprintStatus;
 }) {
-  const st = statusOf(el.id);
+  const st = status.statuses[el.id] ?? UNKNOWN;
   const mine = edges.filter((g) => g.from === el.id || g.to === el.id);
   return (
     <div data-testid="bp-panel">
@@ -61,10 +73,11 @@ function ElementPanel({
         </Field>
         <Field label="Status">
           <span data-testid="bp-panel-status">
-            <Pill kind="status" value={st.state === "unknown" ? "neutral" : st.state}>
-              {st.state === "unknown" ? "Unknown" : st.state}
+            <Pill kind="status" value={PILL[st.state] ?? "neutral"}>
+              {st.state === "fail" ? "Failing" : st.state[0].toUpperCase() + st.state.slice(1)}
             </Pill>{" "}
-            {st.line}
+            {st.detail}
+            {st.lastRunAt ? ` Last run ${st.lastRunAt}.` : ""}
           </span>
         </Field>
         <Field label="Owner">{el.owner}</Field>
@@ -103,7 +116,14 @@ function ElementPanel({
   );
 }
 
-export function BlueprintDiagram({ modelUrl }: { modelUrl: string }) {
+export function BlueprintDiagram({
+  modelUrl,
+  status,
+}: {
+  modelUrl: string;
+  status: BlueprintStatus;
+}) {
+  const router = useRouter();
   const [model, setModel] = useState<BpModel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState("platform");
@@ -213,7 +233,10 @@ export function BlueprintDiagram({ modelUrl }: { modelUrl: string }) {
     );
 
   const hovered = hover ? byId.get(hover) : null;
-  const tabs = model.views.map((v) => ({ value: v.id, label: v.name }));
+  const tabs = [
+    ...model.views.map((v) => ({ value: v.id, label: v.name })),
+    { value: "spec", label: "Spec" },
+  ];
   const viewName = model.views.find((v) => v.id === view)?.name ?? view;
   const selectedEl = selected ? byId.get(selected) : null;
   const zoomButtons: Array<[string, () => void, string]> = [
@@ -224,7 +247,12 @@ export function BlueprintDiagram({ modelUrl }: { modelUrl: string }) {
 
   return (
     <div className="flex min-w-0 flex-col gap-3" data-testid="bp-root">
-      <Segmented label="Blueprint views" items={tabs} value={view} onChange={setView} />
+      <Segmented
+        label="Blueprint views"
+        items={tabs}
+        value={view}
+        onChange={(v) => (v === "spec" ? router.push("?tab=spec") : setView(v))}
+      />
       <Card
         title={viewName}
         actions={
@@ -413,7 +441,7 @@ export function BlueprintDiagram({ modelUrl }: { modelUrl: string }) {
           </svg>
         </div>
         <p className="mt-2 text-xs text-text-muted">
-          Live status is not connected yet. Config values are read-only.
+          {status.simulatedLine} {status.freshnessLine}. Config values are read-only.
         </p>
       </Card>
       <Sheet
@@ -422,7 +450,9 @@ export function BlueprintDiagram({ modelUrl }: { modelUrl: string }) {
         open={panelOpen}
         onOpenChange={setPanelOpen}
       >
-        {selectedEl ? <ElementPanel el={selectedEl} edges={model.edges} names={names} /> : null}
+        {selectedEl ? (
+          <ElementPanel el={selectedEl} edges={model.edges} names={names} status={status} />
+        ) : null}
       </Sheet>
     </div>
   );

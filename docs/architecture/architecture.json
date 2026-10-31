@@ -3382,6 +3382,31 @@
       }
     },
     {
+      "id": "route:GET:/api/blueprint/export",
+      "type": "route",
+      "name": "GET /api/blueprint/export",
+      "purpose": "HTTP endpoint GET /api/blueprint/export of the web app.",
+      "specIds": [
+        "PLT-020"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns an error status; the caller retries and the run record shows the failure.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/app/api/blueprint/export/route.ts",
+      "attrs": {
+        "method": "GET",
+        "path": "/api/blueprint/export"
+      }
+    },
+    {
       "id": "route:GET:/api/blueprint/model",
       "type": "route",
       "name": "GET /api/blueprint/model",
@@ -14676,6 +14701,16 @@
       "contract": "Runs or holds this element.",
       "views": [
         "security"
+      ]
+    },
+    {
+      "id": "service:app|contains|route:GET:/api/blueprint/export",
+      "from": "service:app",
+      "to": "route:GET:/api/blueprint/export",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform"
       ]
     },
     {
