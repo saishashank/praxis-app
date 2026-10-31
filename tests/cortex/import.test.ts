@@ -262,7 +262,7 @@ describe("kb_report.md (D-469: the calibration report as a KB item)", () => {
     expect(front.type).toBe("review");
     const bare = Object.fromEntries(
       Object.entries(front).filter(([k]) => k !== "version" && k !== "kind"),
-    );
+    ) as Parameters<typeof contentSha>[0];
     expect(row.body_sha).toBe(contentSha(bare, String(row.body)));
     await go([dir], db);
     expect(await count(db, "document")).toBe(1);

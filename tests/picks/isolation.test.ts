@@ -71,6 +71,10 @@ describe("picks are never read by ranking or sizing", () => {
     const allowed = (f: string): boolean =>
       f === "src/lib/review/sections.ts" ||
       f === "src/lib/ui/loaders/picks.ts" || // the page data loader for the picks pages (M7 T8)
+      // M17 WP9 (D-462, D-464): the alert-stream measurement reads the total-return benchmark and
+      // the stream cost helper; it ranks and sizes nothing and is outside the trading folders.
+      f === "src/lib/intraday/measure.ts" ||
+      f === "src/lib/intraday/evaluator.ts" ||
       f.startsWith("src/app/");
     expect(importers.filter((f) => !allowed(f))).toEqual([]);
     // and the review import exists, so this guard is not vacuous
