@@ -1379,12 +1379,10 @@ async function cortexEntriesFor(
       )?.gap95;
       const evidence = canonicalJson({
         gap95: gap95 ?? null,
-        half_size: dec.halfSize,
         limit_micro: String(dec.limitMicro),
         manifest_id: cx.manifestId,
         map_rule_version: ruleVersion,
         p: dec.p,
-        qty: String(dec.qty),
         s: dec.s,
         stop_micro: String(dec.stopMicro),
         tier: dec.tier,
@@ -1399,14 +1397,17 @@ async function cortexEntriesFor(
         CORTEX_SIGNAL_VARIANT,
         dec.code,
         dec.card.regime,
-        dec.rankKey.length === 0 ? "none" : JSON.stringify(dec.rankKey),
+        JSON.stringify([dec.s]),
+        // one signal per code (two books may take it): book-level gates (G11, G12) stay on the card
         canonicalJson(
-          dec.trace.map((t) => ({
-            rule: t.gateId,
-            value: t.value ?? "",
-            threshold: "",
-            pass: t.pass,
-          })),
+          dec.trace
+            .filter((t) => t.gateId !== "G11_portfolio" && t.gateId !== "G12_settled_cash")
+            .map((t) => ({
+              rule: t.gateId,
+              value: t.value ?? "",
+              threshold: "",
+              pass: t.pass,
+            })),
         ),
         evidence,
         null,

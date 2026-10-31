@@ -55,6 +55,10 @@ const loose = testParams({
   max_industry_nav_share: 1,
   cortex_disagreement_max: 1,
 });
+// the allowed-family test keeps the CTX-026 caps (D-347: they span all 12 A$600 books); only the
+// synthetic angles' disagreement is loosened
+const disagree = testParams({ cortex_disagreement_max: 1 });
+const ALL_BOOKS = Array.from({ length: 12 }, (_, i) => `E${String(i + 1).padStart(2, "0")}`);
 const d = (i: number): string => DATES[i]!;
 
 type Row = Record<string, unknown>;
@@ -266,14 +270,30 @@ describe("shadow-only nights (D-280): the Cortex writes its tables and no order"
     expect(await rows(off, "SELECT 1 FROM cortex_night")).toHaveLength(0);
   });
 
+  it("a decision whose fill session has no bar is cancelled (no_fill_bar), not left open", async () => {
+    const night = await rows(on, "SELECT manifest_id FROM cortex_night WHERE d = ?", [d(D)]);
+    await on.execute({
+      sql: `INSERT INTO cortex_decision (market, d, book_id, code, arm, family, limit_micro, stop_micro, qty,
+              gate_trace_json, manifest_id) VALUES (?, ?, 'E01@x', 'ZZNOBAR', 'shadow', 'F1', 1000000, 900000, 10, '[]', ?)`,
+      args: [MARKET, d(D), String(night[0]!.manifest_id)],
+    });
+    await scoreOutcomes(on, { market: MARKET, d: d(303), params, now: NOW });
+    const out = await rows(
+      on,
+      "SELECT fill_status, exit_rule FROM cortex_outcome WHERE code = 'ZZNOBAR'",
+    );
+    expect(out).toEqual([{ fill_status: "cancelled", exit_rule: "no_fill_bar" }]);
+  });
+
   it("scores would-have outcomes in batch 3, once (idempotent)", async () => {
     const first = await scoreOutcomes(on, { market: MARKET, d: d(303), params, now: NOW });
-    expect(first.scored + first.unscorable).toBeGreaterThan(0);
+    expect(first.scored + first.unscorable).toBeGreaterThanOrEqual(0);
     const n1 = await rows(on, "SELECT COUNT(*) AS n FROM cortex_outcome");
+    expect(Number(n1[0]!.n)).toBeGreaterThan(0);
     const again = await scoreOutcomes(on, { market: MARKET, d: d(303), params, now: NOW });
     const n2 = await rows(on, "SELECT COUNT(*) AS n FROM cortex_outcome");
     expect(n2[0]!.n).toBe(n1[0]!.n);
-    expect(again.scored + again.unscorable).toBeLessThan(first.scored + first.unscorable + 1);
+    expect(again.scored + again.unscorable).toBe(0);
     // batch 3 itself runs the same scoring without changing its status
     const review = await reviewDay(on, {
       market: MARKET,
@@ -299,7 +319,7 @@ describe("an allowed F1 family trades the Cortex live arm (D-266)", () => {
     pick: StageResult["out"]["decisions"][number];
   } => {
     for (const [day, stage] of [...run.stages.entries()].sort()) {
-      const pick = stage.out.decisions.find((x) => x.family === "F1");
+      const pick = stage.out.decisions.find((x) => x.family === "F1" && x.bookId.startsWith("E01"));
       if (pick !== undefined) return { day, stage, pick };
     }
     throw new Error("no live F1 decision on any night");
@@ -314,9 +334,9 @@ describe("an allowed F1 family trades the Cortex live arm (D-266)", () => {
     }));
     await buildNight(db, { codes });
     await setMode(db, "full");
-    await startCohortsAt(db, 296, KEEP);
+    await startCohortsAt(db, 296, ALL_BOOKS);
     await seedCortex(db, "allowed");
-    run = await runNights(db, 297, 303, { angles: NIGHT_ANGLES }, loose);
+    run = await runNights(db, 297, 303, { angles: NIGHT_ANGLES }, disagree);
   });
 
   it("writes signal, card and a limit order for the live decision, and links the decision row", async () => {

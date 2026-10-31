@@ -74,6 +74,10 @@ import type {
   TierRow,
 } from "./pit/types";
 import { openTimeChecks } from "./gates/openTime";
+import { stepCorpAction, type CorpActionState, type CorpActionStep } from "./states/corpAction";
+import { stepHalt, type HaltState, type HaltStep } from "./states/halt";
+import { stepPromotion } from "./states/promotion";
+import { DEFAULT_STATES_PARAMS, type StatesParams } from "./states/types";
 import type { OpenId, OpenTraceEntry } from "./gates/types";
 import type { CortexMap } from "./score/types";
 import type {
@@ -91,6 +95,7 @@ import {
   insertFeatureRows,
   insertManifest,
   insertNight,
+  insertState,
   insertOutcome,
   latestMaps,
   latestPassports,
@@ -101,6 +106,7 @@ import {
   type FeatureRow,
   type MapRow,
   type PassportRow,
+  type StateKind,
 } from "./store";
 
 // ---- constants --------------------------------------------------------------------------------------
@@ -520,20 +526,21 @@ export async function loadStageRows(db: Client, o: LoadOptions): Promise<StageRo
 
 // ---- books (the 12 E cohorts) ----------------------------------------------------------------------------------
 
+/** All E books with a sound NAV; `governed` = the Cortex decides for it (leverage twins only as context, D-347). */
 export async function loadBookStates(
   db: Client,
   o: { market: string; d: string; calendar: readonly CalendarRow[]; includeLeverage?: boolean },
-): Promise<BookState[]> {
+): Promise<(BookState & { readonly governed: boolean })[]> {
   const execs = new Map((await loadExecutions(db)).map((e) => [e.id, e] as const));
   const cohorts = (await loadUnresolvedCohorts(db, o.d))
     .filter((c) => c.live)
     .sort((a, b) => cmp(a.id, b.id));
-  const out: BookState[] = [];
+  const out: (BookState & { readonly governed: boolean })[] = [];
   for (const cohort of cohorts) {
     const exec = execs.get(cohort.executionId);
     if (exec === undefined || exec.kind !== "E" || exec.family === null) continue;
     if (!isV1Family(exec.family)) continue;
-    if (o.includeLeverage !== true && carriesSleeve(exec)) continue; // D-191
+    const governed = o.includeLeverage === true || !carriesSleeve(exec); // D-191
     const nav = await db.execute({
       sql: "SELECT nav_micro, invariants_ok FROM nav_daily WHERE cohort_id = ? AND d = ?",
       args: [cohort.id, o.d],
@@ -583,6 +590,7 @@ export async function loadBookStates(
       args: [cohort.id, o.d],
     });
     out.push({
+      governed,
       bookId: cohort.id,
       family: exec.family as Family,
       executionId: exec.id,
@@ -737,6 +745,7 @@ export type InputBuild = {
   readonly params: AgentParams;
   readonly store: StoreReads;
   readonly books: readonly BookState[];
+  readonly contextBooks?: readonly BookState[];
   readonly kills: NightInputs["kills"];
   readonly arn011Failed?: ReadonlyMap<string, readonly string[]>;
   readonly angles?: readonly AngleDef[];
@@ -798,6 +807,9 @@ export function buildNightInputs(b: InputBuild): NightInputs {
     maps,
     cells,
     books: b.books,
+    ...(b.contextBooks === undefined || b.contextBooks.length === 0
+      ? {}
+      : { contextBooks: b.contextBooks }),
     rules,
     states: b.store.states.map((s) => ({
       code: s.code,
@@ -812,6 +824,135 @@ export function buildNightInputs(b: InputBuild): NightInputs {
     ...(b.arn011Failed === undefined ? {} : { arn011Failed: b.arn011Failed }),
     ...(b.goLiveD === undefined ? {} : { goLiveD: b.goLiveD }),
     prng: (scope) => scopedPrng(scope),
+  };
+}
+
+// ---- state machines (D-348) ---------------------------------------------------------------------------
+
+/** Sessions folded to recover a machine's state (longer than every machine's memory, 60 sessions). */
+export const STATE_FOLD_SESSIONS = 70; // threshold-ok: fold window, not a rule
+
+type StateWord = { code: string; kind: StateKind; state: string; basis: unknown };
+
+/**
+ * Steps the corporate-action, halt and promotion machines for tonight and appends the rows of the
+ * ones that changed (the closing `none` row included; append-only). The machines are pure functions
+ * of the view, so the state is recovered by folding the last `STATE_FOLD_SESSIONS` sessions and
+ * compared with the stored word; a row is written only on a change, once per (code, kind, night).
+ * Only codes with something to step are folded (an action, a halt, an event, or a stored state).
+ * An Owner alert from a state goes to app_log (warn).
+ */
+export async function advanceStates(
+  db: Client,
+  o: {
+    market: string;
+    d: string;
+    view: AsOfView;
+    t: number;
+    prior: readonly StateWord[];
+    params?: StatesParams;
+  },
+): Promise<{ states: StateWord[]; written: number; alerts: number }> {
+  const { view, t, d } = o;
+  const params = o.params ?? DEFAULT_STATES_PARAMS;
+  const from = Math.max(0, t - STATE_FOLD_SESSIONS + 1);
+  const prior = new Map(o.prior.map((s) => [`${s.code}|${s.kind}`, s] as const));
+  const codes = new Set<string>(view.codes(t));
+  // a halted code has no bar tonight: last night's universe carries it into the fold
+  if (t > 0) for (const c of view.codes(t - 1)) codes.add(c);
+  for (const s of o.prior) codes.add(s.code);
+  let alerts = 0;
+  const changes: {
+    kind: StateKind;
+    code: string;
+    state: string;
+    basis: unknown;
+    ref: string | null;
+  }[] = [];
+  for (const code of [...codes].sort(cmp)) {
+    const haltedRecently = (): boolean => {
+      for (let i = from; i <= t; i += 1) if (view.halted(code, i) === true) return true;
+      return false;
+    };
+    const wants = {
+      corp_action: view.corpActions(code, t).length > 0 || prior.has(`${code}|corp_action`),
+      halt: haltedRecently() || prior.has(`${code}|halt`),
+      promotion: view.events(code, t).length > 0 || prior.has(`${code}|promotion`),
+    };
+    const consider = (
+      kind: StateKind,
+      state: string,
+      row: { basis: Record<string, unknown>; sourceRef: string | null } | null,
+    ): void => {
+      const was = prior.get(`${code}|${kind}`)?.state ?? "none";
+      if (was === state) return;
+      changes.push({
+        kind,
+        code,
+        state,
+        basis: row?.basis ?? { folded: true },
+        ref: row?.sourceRef ?? null,
+      });
+    };
+    if (wants.corp_action) {
+      let s: CorpActionState | null = null;
+      let last: CorpActionStep | null = null;
+      for (let i = from; i <= t; i += 1) {
+        last = stepCorpAction(view, code, i, s, params);
+        s = last.next;
+      }
+      consider("corp_action", last!.next.state, last!.row);
+      if (last!.effects.ownerAlert) {
+        alerts += 1;
+        await db.execute({
+          sql: "INSERT INTO app_log (at, level, source, message, run_id) VALUES (?, 'warn', ?, ?, NULL)",
+          args: [
+            `${d}T00:00:00.000Z`,
+            "cortex-states",
+            `owner item: ${code} corporate action needs a decision on ${d} (${last!.reason})`.slice(
+              0,
+              500,
+            ), // threshold-ok: log length
+          ],
+        });
+      }
+    }
+    if (wants.halt) {
+      let s: HaltState | null = null;
+      let last: HaltStep | null = null;
+      for (let i = from; i <= t; i += 1) {
+        last = stepHalt(view, code, i, s, params);
+        s = last.next;
+      }
+      consider("halt", last!.next.state, last!.row);
+    }
+    if (wants.promotion) {
+      const step = stepPromotion(view, code, t, null, params);
+      consider("promotion", step.next.state, step.row);
+    }
+  }
+  let written = 0;
+  for (const c of changes) {
+    try {
+      await insertState(db, {
+        market: o.market,
+        code: c.code,
+        kind: c.kind,
+        fromD: d,
+        state: c.state,
+        basis: c.basis,
+        sourceRef: c.ref,
+      });
+      written += 1;
+    } catch {
+      // a second run of the same night: the row of (code, kind, from_d) is already there
+    }
+  }
+  const now = await statesInForce(db, o.market, d);
+  return {
+    states: now.map((s) => ({ code: s.code, kind: s.kind, state: s.state, basis: s.basis })),
+    written,
+    alerts,
   };
 }
 
@@ -1037,19 +1178,21 @@ export type StageResult = {
 export async function cortexStage(db: Client, o: StageOptions): Promise<StageResult> {
   const nowMs = o.nowMs ?? (() => Date.now());
   const started = nowMs();
-  const books = await loadBookStates(db, {
+  const allBooks = await loadBookStates(db, {
     market: o.market,
     d: o.d,
     calendar: o.calendar,
     includeLeverage: o.includeLeverage,
   });
+  const books = allBooks.filter((b) => b.governed);
+  const contextBooks = allBooks.filter((b) => !b.governed);
   const rows = await loadStageRows(db, {
     market: o.market,
     d: o.d,
     params: o.params,
     calendar: o.calendar,
     liveIngestBound: o.replay !== true,
-    heldCodes: [...new Set(books.flatMap((b) => b.positions.map((p) => p.code)))].sort(cmp),
+    heldCodes: [...new Set(allBooks.flatMap((b) => b.positions.map((p) => p.code)))].sort(cmp),
   });
   const view = buildAsOfView(
     worldFromRows(rows, {
@@ -1059,7 +1202,16 @@ export async function cortexStage(db: Client, o: StageOptions): Promise<StageRes
       params: o.params,
     }),
   );
-  const store = await loadStoreReads(db, { market: o.market, d: o.d });
+  const t = view.sessions.length - 1;
+  const store0 = await loadStoreReads(db, { market: o.market, d: o.d });
+  const advanced = await advanceStates(db, {
+    market: o.market,
+    d: o.d,
+    view,
+    t,
+    prior: store0.states,
+  });
+  const store = { ...store0, states: advanced.states };
   const inputs = buildNightInputs({
     market: o.market,
     d: o.d,
@@ -1067,6 +1219,7 @@ export async function cortexStage(db: Client, o: StageOptions): Promise<StageRes
     params: o.params,
     store,
     books,
+    contextBooks,
     kills: {
       arena: o.killedArena === true,
       families: o.killedFamilies ?? new Set<Family>(),
@@ -1191,6 +1344,27 @@ export async function scoreOutcomes(
         fillD: null,
         exitD: null,
         exitRule: null,
+        grossMicro: null,
+        netMicro: null,
+        outcomeClass: null,
+        scoredAt,
+      });
+      unscorable += 1;
+      continue;
+    }
+    if (after.length === 0 && o.d > dec.d) {
+      // the fill session has passed and the code has no bar there: no trade, no backlog
+      await insertOutcome(db, {
+        market: o.market,
+        d: dec.d,
+        bookId: dec.bookId,
+        code: dec.code,
+        arm: dec.arm,
+        fillStatus: "cancelled",
+        fillMicro: null,
+        fillD: null,
+        exitD: null,
+        exitRule: "no_fill_bar",
         grossMicro: null,
         netMicro: null,
         outcomeClass: null,
