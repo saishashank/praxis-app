@@ -148,7 +148,7 @@ describe("main 0011_ui", () => {
   it("down drops the table and the column; up again restores the same schema", async () => {
     const { db, ms } = await fresh("main");
     const before = await schemaOf(db);
-    await migrateDown(db, ms, 10); // 0019, 0018 (m14), 0017 (first_ingested_at), 0016 (known_at), 0015 (vendor actions), 0014 (pick checks), 0013 (calendar history) and 0012 (golive) sit on top of 0011
+    await migrateDown(db, ms, 11); // 0019, 0018 (m14), 0017 (first_ingested_at), 0016 (known_at), 0015 (vendor actions), 0014 (pick checks), 0013 (calendar history) and 0012 (golive) sit on top of 0011
     expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 10 });
     const mid = (await schemaOf(db)).join("\n");
     expect(mid).not.toContain("ops_task_done");

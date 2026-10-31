@@ -1434,6 +1434,46 @@ export const M11L_KEY_NAMES: readonly ConfigKey[] = [
   ...M11L_ENUM_ROWS.map((r) => r[0]),
 ];
 
+// ---- M13-lite keys (expert screening; docs/M13L_design.md, D-510 to D-533) ----
+// prettier-ignore
+const M13L_RANGED = [
+  ["expert_min_scored", "int", 10, 5, 50, "claims", "O", LRN, "KB-074; ch.15 V2 l.25, D-528", "Tested claims an expert needs before a scorecard is shown"],
+  ["expert_screen_fdr", "num", 0.1, 0.05, 0.2, "q", "O", LRN, "KB-075; ch.15 V2 l.26, D-528", "False-discovery rate for the weekly expert-cluster screening"],
+  ["expert_challengers_per_week", "int", 2, 0, 4, "challengers/week", "O", LRN, "KB-077; ch.15 V2 l.27, D-528", "Most challengers proposed from expert clusters a week (0 turns proposals off)"],
+  ["f7_min_clusters", "int", 3, 2, 10, "clusters", "O", LRN, "KB-078; ch.15 V2 l.28, D-528", "Clusters from distinct experts that must pass before the F7 gate fires"],
+] as const satisfies readonly RangedRow[];
+
+type M13LRangedKey = (typeof M13L_RANGED)[number][0];
+
+const M13L_RANGED_KEYS = Object.fromEntries(
+  M13L_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M13LRangedKey, ConfigKeyDef>;
+
+const M13L_META_TABLES = Object.fromEntries(
+  M13L_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+    key,
+    {
+      label,
+      area,
+      bounds: boundsText(kind, min, max, unit),
+      input: kind === "int" ? "int" : "number",
+    },
+  ]),
+) as Record<M13LRangedKey, ConfigMeta>;
+
+/** Every key added in M13-lite (docs/M13L_design.md, D-528). */
+export const M13L_KEY_NAMES: readonly ConfigKey[] = M13L_RANGED.map((r) => r[0]);
+
 export const CONFIG_KEYS = {
   ...M4_RANGED_KEYS,
   ...M4_FIXED_KEYS,
@@ -1455,6 +1495,7 @@ export const CONFIG_KEYS = {
   ...M17_TIME_KEYS,
   ...M11L_RANGED_KEYS,
   ...M11L_ENUM_KEYS,
+  ...M13L_RANGED_KEYS,
   // ch.15 l.163: evening_review_time / partial_at / send_by 20:00 / 20:30 / 20:45, O; EML-010/011.
   evening_review_time: {
     default: "20:00",
@@ -1971,6 +2012,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   ...M15_META_TABLES,
   ...M17_META_TABLES,
   ...M11L_META_TABLES,
+  ...M13L_META_TABLES,
   evening_review_time: {
     label: "Evening Review send time",
     area: SEM,

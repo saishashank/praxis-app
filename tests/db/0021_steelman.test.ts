@@ -102,7 +102,12 @@ const fails = async (db: Client, sql: string): Promise<string> => {
 };
 
 /** A pick, its luck twin's outcome rows in the given states (edges taken through the real guards). */
-async function outcome(db: Client, profile: string, rank: number, state: "waiting" | "closed" | "missed") {
+async function outcome(
+  db: Client,
+  profile: string,
+  rank: number,
+  state: "waiting" | "closed" | "missed",
+) {
   await db.execute({
     sql: `INSERT INTO pick (market, d, profile, rank, code, family, tier, rule_version, signal_id, label,
        reference_micro, buy_max_micro, valid_until_d, stop_micro, aim_micro, n_similar, bad_ppm,
@@ -153,11 +158,11 @@ describe("migration 0021_steelman: apply, roll back, apply again", () => {
     const after = await schemaOf(db);
     for (const t of NEW_TABLES) expect(after.some((s) => s.startsWith(`table:${t}:`))).toBe(true);
 
-    expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 20 });
+    expect(await migrateDown(db, ms, 2)).toEqual({ rolledBack: 2, version: 20 });
     const mid = await schemaOf(db);
     for (const t of NEW_TABLES) expect(mid.some((s) => s.startsWith(`table:${t}:`))).toBe(false);
 
-    expect(await migrateUp(db, ms)).toEqual({ applied: 1, version: 21 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 2, version: 22 });
     expect(await schemaOf(db)).toEqual(after);
   });
 });
@@ -199,11 +204,15 @@ describe("steelman store and triggers", () => {
     };
     expect((await insertSuggestion(db, s)).inserted).toBe(true);
     expect((await insertSuggestion(db, s)).inserted).toBe(false);
-    expect((await readOpenSuggestions(db, "ZZ")).map((x) => x.suggestionId)).toEqual([bear.pointId]);
-    expect(await closeSuggestion(db, bear.pointId, "dismissed", "2030-03-06T00:00:00.000Z", "u1")).toBe(true);
-    expect(await closeSuggestion(db, bear.pointId, "expired", "2030-03-07T00:00:00.000Z", "system")).toBe(
-      false,
-    );
+    expect((await readOpenSuggestions(db, "ZZ")).map((x) => x.suggestionId)).toEqual([
+      bear.pointId,
+    ]);
+    expect(
+      await closeSuggestion(db, bear.pointId, "dismissed", "2030-03-06T00:00:00.000Z", "u1"),
+    ).toBe(true);
+    expect(
+      await closeSuggestion(db, bear.pointId, "expired", "2030-03-07T00:00:00.000Z", "system"),
+    ).toBe(false);
     expect(await readOpenSuggestions(db, "ZZ")).toHaveLength(0);
     expect(await readSuggestion(db, bear.pointId)).toMatchObject({
       status: "dismissed",
@@ -233,10 +242,17 @@ describe("steelman store and triggers", () => {
   it("checks: one pack per subject, bull is never monitorable, citations non-empty", async () => {
     const db = await freshDb("main");
     await insertPack(db, pack());
-    expect(await fails(db, `INSERT INTO steelman_pack SELECT '${"d".repeat(64)}', market, d, subject_kind, subject_id, code, card_id, cutoff_at, items_json, item_count, created_at FROM steelman_pack`)).toMatch(/UNIQUE/);
+    expect(
+      await fails(
+        db,
+        `INSERT INTO steelman_pack SELECT '${"d".repeat(64)}', market, d, subject_kind, subject_id, code, card_id, cutoff_at, items_json, item_count, created_at FROM steelman_pack`,
+      ),
+    ).toMatch(/UNIQUE/);
     await expect(insertPoint(db, point("bull", 1, { monitorable: true }))).rejects.toThrow(/CHECK/);
     await expect(insertPoint(db, point("bull", 1, { citations: [] }))).rejects.toThrow(/CHECK/);
-    await expect(insertPoint(db, point("bull", 1, { state: "weird" as never }))).rejects.toThrow(/CHECK/);
+    await expect(insertPoint(db, point("bull", 1, { state: "weird" as never }))).rejects.toThrow(
+      /CHECK/,
+    );
   });
 
   it("the suggestion insert guard needs a shown, monitorable bear point", async () => {
@@ -255,13 +271,25 @@ describe("steelman store and triggers", () => {
       family: "F1",
       createdAt: "t",
     });
-    for (const n of [pointIdOf(PACK_ID, "bull", 1), pointIdOf(PACK_ID, "bear", 1), pointIdOf(PACK_ID, "bear", 2), "nope"]) {
-      await expect(insertSuggestion(db, mk(n))).rejects.toThrow(/needs a shown monitorable bear point/);
+    for (const n of [
+      pointIdOf(PACK_ID, "bull", 1),
+      pointIdOf(PACK_ID, "bear", 1),
+      pointIdOf(PACK_ID, "bear", 2),
+      "nope",
+    ]) {
+      await expect(insertSuggestion(db, mk(n))).rejects.toThrow(
+        /needs a shown monitorable bear point/,
+      );
     }
     expect((await insertSuggestion(db, mk(pointIdOf(PACK_ID, "bear", 3)))).inserted).toBe(true);
-    expect(await fails(db, `INSERT INTO steelman_suggestion (suggestion_id, market, d, point_id, code, family,
+    expect(
+      await fails(
+        db,
+        `INSERT INTO steelman_suggestion (suggestion_id, market, d, point_id, code, family,
       status, created_at) VALUES ('other', 'ZZ', '2030-03-05', '${pointIdOf(PACK_ID, "bear", 3)}', 'ZZA', 'F1',
-      'open', 't')`)).toMatch(/CHECK/);
+      'open', 't')`,
+      ),
+    ).toMatch(/CHECK/);
   });
 
   it("the suggestion status guard: open moves once, only status/closed_*, never deleted", async () => {
@@ -287,8 +315,15 @@ describe("steelman store and triggers", () => {
       "UPDATE steelman_suggestion SET status = 'expired', closed_at = 't1', closed_by = 'system'",
     );
     // a closed row is frozen: no reopen, no second close, no column edit
-    expect(await fails(db, "UPDATE steelman_suggestion SET status = 'open', closed_at = NULL, closed_by = NULL")).toMatch(guard);
-    expect(await fails(db, "UPDATE steelman_suggestion SET status = 'dismissed', closed_by = 'u1'")).toMatch(guard);
+    expect(
+      await fails(
+        db,
+        "UPDATE steelman_suggestion SET status = 'open', closed_at = NULL, closed_by = NULL",
+      ),
+    ).toMatch(guard);
+    expect(
+      await fails(db, "UPDATE steelman_suggestion SET status = 'dismissed', closed_by = 'u1'"),
+    ).toMatch(guard);
     expect(await fails(db, "UPDATE steelman_suggestion SET family = 'F2'")).toMatch(guard);
     expect(await fails(db, "DELETE FROM steelman_suggestion")).toMatch(/append-only/);
     // an open row cannot close without closed_* (CHECK) and cannot carry them while open
@@ -304,7 +339,9 @@ describe("steelman store and triggers", () => {
       family: "F1",
       createdAt: "t0",
     });
-    expect(await fails(db2, "UPDATE steelman_suggestion SET status = 'dismissed'")).toMatch(/CHECK/);
+    expect(await fails(db2, "UPDATE steelman_suggestion SET status = 'dismissed'")).toMatch(
+      /CHECK/,
+    );
   });
 
   it("pick_market: insert guard needs a closed or missed outcome; update and delete are refused", async () => {
@@ -314,12 +351,14 @@ describe("steelman store and triggers", () => {
     await outcome(db, "balanced", 3, "waiting");
 
     // waiting outcome and no outcome at all: refused
-    expect(await fails(db, marketRow("balanced", 3))).toMatch(/needs a closed or missed pick_outcome/);
-    expect(await fails(db, marketRow("bold", 1))).toMatch(/needs a closed or missed pick_outcome/);
-    // the luck twin has no outcome row here: refused by the same key
-    expect(await fails(db, marketRow("balanced", 1).replace("'pick', '2030", "'luck', '2030"))).toMatch(
+    expect(await fails(db, marketRow("balanced", 3))).toMatch(
       /needs a closed or missed pick_outcome/,
     );
+    expect(await fails(db, marketRow("bold", 1))).toMatch(/needs a closed or missed pick_outcome/);
+    // the luck twin has no outcome row here: refused by the same key
+    expect(
+      await fails(db, marketRow("balanced", 1).replace("'pick', '2030", "'luck', '2030")),
+    ).toMatch(/needs a closed or missed pick_outcome/);
 
     await db.execute(marketRow("balanced", 1));
     await db.execute(`INSERT INTO pick_market (market, d, profile, rank, kind, window_from_d, window_to_d,
@@ -328,10 +367,15 @@ describe("steelman store and triggers", () => {
       'price_only', 100000000, 100500000, 5000, NULL, NULL, 1, '2030-03-06')`);
 
     // consistency: a missed row has no pick result, a settled row has one
-    expect(await fails(db, `INSERT INTO pick_market (market, d, profile, rank, kind, window_from_d, window_to_d,
+    expect(
+      await fails(
+        db,
+        `INSERT INTO pick_market (market, d, profile, rank, kind, window_from_d, window_to_d,
       index_code, basis, index_from_micro, index_to_micro, market_ret_ppm, pick_net_ppm, vs_market_ppm, missed,
       settled_d) VALUES ('ZZ', '2030-03-05', 'balanced', 2, 'luck', '2030-03-05', '2030-03-06', 'ZZIDX',
-      'price_only', 1, 1, 0, 1, 1, 1, '2030-03-06')`)).toMatch(/CHECK|needs a closed/);
+      'price_only', 1, 1, 0, 1, 1, 1, '2030-03-06')`,
+      ),
+    ).toMatch(/CHECK|needs a closed/);
     expect(await fails(db, "UPDATE pick_market SET vs_market_ppm = 0")).toMatch(/append-only/);
     expect(await fails(db, "UPDATE pick_market SET basis = 'price_only'")).toMatch(/append-only/);
     expect(await fails(db, "DELETE FROM pick_market")).toMatch(/append-only/);
@@ -344,7 +388,12 @@ describe("steelman store and triggers", () => {
       VALUES ('ZZ', '2030-03-05', 'balanced', 1, 'Looked back.', 'written', 't')`);
     expect(await fails(db, "UPDATE pick_reflection SET text = 'x'")).toMatch(/append-only/);
     expect(await fails(db, "DELETE FROM pick_reflection")).toMatch(/append-only/);
-    expect(await fails(db, `INSERT INTO pick_reflection (market, d, profile, rank, text, state, created_at)
-      VALUES ('ZZ', '2030-03-05', 'balanced', 2, '', 'written', 't')`)).toMatch(/CHECK/);
+    expect(
+      await fails(
+        db,
+        `INSERT INTO pick_reflection (market, d, profile, rank, text, state, created_at)
+      VALUES ('ZZ', '2030-03-05', 'balanced', 2, '', 'written', 't')`,
+      ),
+    ).toMatch(/CHECK/);
   });
 });
