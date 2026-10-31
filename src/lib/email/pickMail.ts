@@ -624,3 +624,106 @@ async function alertRows(db: Exec, alertIds: string[]): Promise<AlertRow[]> {
   }
   return out;
 }
+
+// ---- new intraday candidates (EML-040, D-450) ---------------------------------------------------------
+
+const pctText = (ppm: number): string =>
+  `${ppm >= 0 ? "+" : "-"}${(Math.abs(ppm) / 10_000).toFixed(1)}%`; // threshold-ok: ppm to percent
+
+/**
+ * Mails the session's candidates that passed every gate and have no `email_key` yet, to each
+ * recipient (preference `intraday_candidate_emails` honoured inside `sendPickMail`), then records
+ * the key on the candidate row (a follow-up column the 0020 trigger permits). Idempotent: a row with
+ * a key is never offered again, and the mail key itself is claimed once per code and session.
+ */
+export async function mailNewCandidates(
+  ctx: PickMailCtx,
+  c: { db: Exec; now: Date; market: string; sessionD: string; slot: string },
+  recipients: string[],
+): Promise<void> {
+  const r = await c.db.execute({
+    sql: `SELECT i.code, i.found_at, i.item_source, i.item_ann_id, i.move_ppm, i.rel_volume_ppm, i.gates_json,
+                 i.indicative_limit_micro, i.indicative_stop_micro, i.latest_quote_at,
+                 a.title, a.published_at
+          FROM intraday_candidate i
+          LEFT JOIN announcement a ON a.source = i.item_source AND a.ann_id = i.item_ann_id
+          WHERE i.market = ? AND i.session_d = ? AND i.email_key IS NULL
+            AND json_extract(i.gates_json, '$.failed') IS NULL
+          ORDER BY i.found_at, i.code`,
+    args: [c.market, c.sessionD],
+  });
+  if (r.rows.length === 0) return;
+  const latency = await latencyOf(c.db);
+  const items: PickItem[] = r.rows.map((x) => {
+    const code = String(x.code);
+    const gates = JSON.parse(String(x.gates_json)) as { passed?: string[]; stream_state?: string };
+    const quoteAt = String(x.latest_quote_at ?? x.found_at);
+    const facts: PickCandidateFacts = {
+      code,
+      name: code,
+      foundAt: melbourneHm(new Date(String(x.found_at))),
+      trigger: {
+        title: x.title === null ? String(x.item_ann_id) : String(x.title),
+        source: String(x.item_source),
+        publishedAt:
+          x.published_at === null ? "time not recorded" : melbourneStamp(String(x.published_at)),
+      },
+      movePct: pctText(Number(x.move_ppm)),
+      relVolume:
+        x.rel_volume_ppm === null ? null : `${(Number(x.rel_volume_ppm) / 1_000_000).toFixed(1)}x`, // threshold-ok: ppm to ratio
+      quoteTime: melbourneStamp(quoteAt),
+      gatesPassed: gates.passed ?? [],
+      limit:
+        x.indicative_limit_micro === null
+          ? null
+          : priceText(BigInt(x.indicative_limit_micro as number)),
+      stop:
+        x.indicative_stop_micro === null
+          ? null
+          : priceText(BigInt(x.indicative_stop_micro as number)),
+      unvalidated: gates.stream_state !== "live",
+    };
+    return {
+      alertId: `cand:${c.market}:${c.sessionD}:${code}`,
+      event: "candidate",
+      candidate: facts,
+      line: {
+        code,
+        what: `Intraday candidate (${facts.movePct})`,
+        price: "n/a",
+        quoteTime: facts.quoteTime,
+      },
+    };
+  });
+  const batchKey = emailKeys.pickBatch;
+  for (const userId of recipients) {
+    const res = await sendPickMail(
+      { ...ctx, db: c.db, now: () => c.now },
+      {
+        kind: "pick_candidate",
+        userId,
+        alertIds: items.map((i) => i.alertId),
+        facts: {
+          market: c.market,
+          sessionD: c.sessionD,
+          hhmm: c.slot.replace(":", ""),
+          items,
+          latency,
+        },
+      },
+    );
+    void res;
+  }
+  // The key is recorded whatever the outcome (sent, off, cap, held): the decision is final for the
+  // row, so a re-run never offers it again. `~<result>` marks the cases where no mail left.
+  const key =
+    items.length === 1
+      ? emailKeys.pickCandidate(c.market, c.sessionD, items[0].line.code)
+      : batchKey(recipients[0] ?? "none", c.sessionD, c.slot.replace(":", ""));
+  for (const i of items) {
+    await c.db.execute({
+      sql: "UPDATE intraday_candidate SET email_key = ? WHERE market = ? AND session_d = ? AND code = ? AND email_key IS NULL",
+      args: [items.length === 1 ? key : `${key}#${i.line.code}`, c.market, c.sessionD, i.line.code],
+    });
+  }
+}

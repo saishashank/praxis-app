@@ -13,6 +13,7 @@ import { createMockProvider, type MockProvider } from "@/lib/email/mock";
 import {
   createPickMailer,
   itemOf,
+  mailNewCandidates,
   pickCapRemaining,
   sendPickMail,
   type PickItem,
@@ -425,5 +426,48 @@ describe("preferences and staging (D-444)", () => {
     await createPickMailer(ctx({ env: { ...ENV, PRAXIS_ENV: "staging" } })).notify(mctx(), []);
     expect(mock.outbox).toHaveLength(0);
     expect(await mailRows()).toEqual(["pick_hit:off"]);
+  });
+});
+
+describe("new intraday candidates (EML-040)", () => {
+  const seed = async (code: string, failed: string | null = null) =>
+    db.execute({
+      sql: `INSERT INTO intraday_candidate (market, session_d, code, found_slot, found_at, item_source, item_ann_id,
+              item_category, materiality, move_ppm, rel_volume_ppm, gates_json, indicative_limit_micro,
+              indicative_stop_micro, latest_quote_at)
+            VALUES ('AU', ?, ?, '11:30', ?, 'asx', 'a1', 'Contract', 2, 62000, 2400000, ?, 3100000, 2850000, ?)`,
+      args: [
+        SESSION,
+        code,
+        clock.toISOString(),
+        JSON.stringify({ passed: ["G01", "G02"], failed, stream_state: "shadow" }),
+        clock.toISOString(),
+      ],
+    });
+  const run = () =>
+    mailNewCandidates(ctx(), { db, now: clock, market: "AU", sessionD: SESSION, slot: "10:30" }, [
+      "1",
+    ]);
+
+  it("two scan runs give one candidate mail, and the key is recorded", async () => {
+    await seed("ZY01");
+    await seed("ZY02", "G08"); // failed a gate: never mailed
+    await run();
+    await run();
+    expect(mock.outbox).toHaveLength(1);
+    expect(mock.outbox[0].subject).toMatch(/^[Praxis] Attention needed — ZY01 found /);
+    expect(mock.outbox[0].text).toContain("Unvalidated stream");
+    const k = await db.execute("SELECT code, email_key FROM intraday_candidate ORDER BY code");
+    expect(String(k.rows[0].email_key)).toBe(`pickcand:AU:${SESSION}:ZY01`);
+    expect(k.rows[1].email_key).toBeNull();
+  });
+
+  it("intraday_candidate_emails off sends none", async () => {
+    await setPrefs({ intraday_candidate_emails: "off" });
+    await seed("ZY01");
+    await run();
+    await run();
+    expect(mock.outbox).toHaveLength(0);
+    expect(await mailRows()).toEqual(["pick_candidate:off"]);
   });
 });
