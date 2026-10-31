@@ -455,7 +455,7 @@ describe("new intraday candidates (EML-040)", () => {
     await run();
     await run();
     expect(mock.outbox).toHaveLength(1);
-    expect(mock.outbox[0].subject).toMatch(/^[Praxis] Attention needed — ZY01 found /);
+    expect(mock.outbox[0].subject).toMatch(/^\[Praxis\] Attention needed — ZY01 found /);
     expect(mock.outbox[0].text).toContain("Unvalidated stream");
     const k = await db.execute("SELECT code, email_key FROM intraday_candidate ORDER BY code");
     expect(String(k.rows[0].email_key)).toBe(`pickcand:AU:${SESSION}:ZY01`);
