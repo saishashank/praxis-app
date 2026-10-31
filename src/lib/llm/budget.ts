@@ -4,8 +4,8 @@
 // threshold comes from LlmParams; nothing here is a literal rule value.
 import type { LlmParams } from "@/lib/agents/params";
 
-export type Role = "R1" | "R2" | "R3" | "R5";
-export const ROLES: readonly Role[] = ["R1", "R2", "R3", "R5"];
+export type Role = "R1" | "R2" | "R3" | "R5" | "R6";
+export const ROLES: readonly Role[] = ["R1", "R2", "R3", "R5", "R6"];
 
 /** Rough token estimate (characters per token) used only to size the pre-call reservation. */
 const CHARS_PER_TOKEN = 4; // threshold-ok: estimation heuristic, not a rule threshold

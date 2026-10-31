@@ -327,7 +327,7 @@ export type ReplayParams = {
 };
 
 export type LlmParams = {
-  roleDailyTokens: { R1: number; R2: number; R3: number; R5: number };
+  roleDailyTokens: { R1: number; R2: number; R3: number; R5: number; R6: number };
   dailyTotal: number;
   nightlyTokensPerMarket: number;
   /** Per market, as an exact fraction. */
@@ -740,6 +740,7 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
         R2: num("llm_budget_r2_daily"),
         R3: num("llm_budget_r3_daily"),
         R5: num("llm_budget_r5_daily"),
+        R6: num("llm_budget_r6_steelman_daily"),
       },
       dailyTotal: num("llm_daily_budget_total"),
       nightlyTokensPerMarket: num("nightly_tokens_per_market"),

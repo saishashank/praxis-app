@@ -205,8 +205,8 @@ describe("defaultAgentParams equals ch.15", () => {
     });
     expect(p.replay.ledgerNotionalMicro).toBe(600_000_000n);
     expect(p.llm).toEqual({
-      roleDailyTokens: { R1: 60000, R2: 50000, R3: 25000, R5: 10000 },
-      dailyTotal: 150000,
+      roleDailyTokens: { R1: 60000, R2: 50000, R3: 25000, R5: 10000, R6: 20000 },
+      dailyTotal: 240000,
       nightlyTokensPerMarket: 30000,
       marketShare: { AU: r(1n) },
       cacheTtlHours: 24,

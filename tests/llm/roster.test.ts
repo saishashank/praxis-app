@@ -28,6 +28,17 @@ describe("LLM roster", () => {
     expect(isRoutable("google", "unlisted-model")).toBe(false);
   });
 
+  it("R6 is a candidate only on strict-schema rows, with no status change (D-495)", () => {
+    const r6 = ROSTER.filter((x) => x.roles.includes("R6"));
+    expect(r6.map((x) => x.modelId).sort()).toEqual([
+      "gemini-2.5-pro",
+      "openai/gpt-oss-120b",
+      "openai/gpt-oss-20b",
+      "qwen/qwen3.8-27b",
+    ]);
+    for (const x of r6) expect(x.strictSchema).toBe(true);
+  });
+
   it("OpenRouter is a free-only fallback and no retired entry carries a role", () => {
     for (const e of ROSTER.filter((x) => x.provider === "openrouter"))
       expect(e.modelId.endsWith(":free")).toBe(true);

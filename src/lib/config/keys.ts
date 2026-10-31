@@ -1364,6 +1364,76 @@ export const M17_KEY_NAMES: readonly ConfigKey[] = [
   "intraday_scan_end",
 ];
 
+// ---- M11-lite keys (steelman; docs/M11L_design.md, D-480 to D-498) ----
+// prettier-ignore
+const M11L_RANGED = [
+  ["llm_budget_r6_steelman_daily", "int", 20000, 0, 40000, "tokens/day", "O", "Quotas", "LLM-061, D-481", "Daily LLM token budget, R6 steelman"],
+  ["evidence_pack_max_items", "int", 25, 10, 40, "items", "O", LRN, "AGT-131, D-486", "Most evidence items in one steelman pack"],
+  ["steelman_daily_cards", "int", 8, 0, 20, "cards", "O", LRN, "AGT-133, D-484", "Most steelman cards written a night (0 turns the steelman off)"],
+  ["steelman_suggestion_expiry_sessions", "int", 10, 5, 30, "sessions", "O", LRN, "AGT-133a, D-492", "Sessions an open steelman suggestion stays before it expires"],
+] as const satisfies readonly RangedRow[];
+
+// prettier-ignore
+const M11L_ENUM_ROWS = [
+  ["pick_reflection_enabled", "on", ON_OFF, "O", LRN, "AGT-134, D-496", "Write the optional AI-written pick reflection (on by default; needs a model)"],
+] as const;
+
+type M11LRangedKey = (typeof M11L_RANGED)[number][0];
+type M11LEnumKey = (typeof M11L_ENUM_ROWS)[number][0];
+
+const M11L_RANGED_KEYS = Object.fromEntries(
+  M11L_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M11LRangedKey, ConfigKeyDef>;
+
+const M11L_ENUM_KEYS = Object.fromEntries(
+  M11L_ENUM_ROWS.map(([key, def, allowed, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit: "choice",
+      editable: edit,
+      ref,
+      validate: oneOf(allowed),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M11LEnumKey, ConfigKeyDef>;
+
+const M11L_META_TABLES: Record<M11LRangedKey | M11LEnumKey, ConfigMeta> = {
+  ...(Object.fromEntries(
+    M11L_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+      key,
+      {
+        label,
+        area,
+        bounds: boundsText(kind, min, max, unit),
+        input: kind === "int" ? "int" : "number",
+      },
+    ]),
+  ) as Record<M11LRangedKey, ConfigMeta>),
+  ...(Object.fromEntries(
+    M11L_ENUM_ROWS.map(([key, , allowed, , area, , label]) => [
+      key,
+      { label, area, bounds: `one of ${allowed.join(", ")}`, input: "text" },
+    ]),
+  ) as Record<M11LEnumKey, ConfigMeta>),
+};
+
+/** Every key added in M11-lite (docs/M11L_design.md, D-480 to D-498); llm_daily_budget_total is re-based, not new. */
+export const M11L_KEY_NAMES: readonly ConfigKey[] = [
+  ...M11L_RANGED.map((r) => r[0]),
+  ...M11L_ENUM_ROWS.map((r) => r[0]),
+];
+
 export const CONFIG_KEYS = {
   ...M4_RANGED_KEYS,
   ...M4_FIXED_KEYS,
@@ -1383,6 +1453,8 @@ export const CONFIG_KEYS = {
   ...M17_RANGED_KEYS,
   ...M17_ENUM_KEYS,
   ...M17_TIME_KEYS,
+  ...M11L_RANGED_KEYS,
+  ...M11L_ENUM_KEYS,
   // ch.15 l.163: evening_review_time / partial_at / send_by 20:00 / 20:30 / 20:45, O; EML-010/011.
   evening_review_time: {
     default: "20:00",
@@ -1629,12 +1701,13 @@ export const CONFIG_KEYS = {
     validate: intRange(1),
   },
   // Line 187: llm_daily_budget_total 150,000 tokens, bounds 75,000-225,000, O; LLM-050.
+  // M11-lite (D-481): re-based to 240,000, bounds 150,000-300,000, to carry the R6 steelman cap.
   llm_daily_budget_total: {
-    default: 150_000,
+    default: 240_000,
     unit: "tokens/day",
     editable: "O",
-    ref: "LLM-050",
-    validate: intRange(75_000, 225_000),
+    ref: "LLM-050, D-481",
+    validate: intRange(150_000, 300_000),
   },
   // Architect decision 8 (D-057): ch.15 has no Yahoo throttle row (spec gap, M2_requirements s4);
   // Owner-editable, bounds 10-500. Used by scripts/ingest/yahoo_fetch.py (DAT-120, DAT-103).
@@ -1897,6 +1970,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   ...M14_META_TABLES,
   ...M15_META_TABLES,
   ...M17_META_TABLES,
+  ...M11L_META_TABLES,
   evening_review_time: {
     label: "Evening Review send time",
     area: SEM,
@@ -2052,7 +2126,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   llm_daily_budget_total: {
     label: "Daily LLM token budget",
     area: "Quotas",
-    bounds: "75,000 to 225,000",
+    bounds: "150,000 to 300,000",
     input: "int",
   },
   session_lifetime_days: {

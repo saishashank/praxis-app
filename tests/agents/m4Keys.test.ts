@@ -14,6 +14,7 @@ import {
   M14_KEY_NAMES,
   M15_KEY_NAMES,
   M17_KEY_NAMES,
+  M11L_KEY_NAMES,
   type ConfigKey,
 } from "@/lib/config/keys";
 import { getConfig, setConfig } from "@/lib/config/store";
@@ -269,6 +270,7 @@ describe("M4 keys: defaults and bounds equal ch.15", () => {
       ...M14_KEY_NAMES, // the M14 keys have their own table in tests/agents/m14Keys.test.ts
       ...M15_KEY_NAMES, // the M15 Cortex keys have their own table in tests/config/m15Keys.test.ts
       ...M17_KEY_NAMES, // the M17 keys have their own table in tests/config/m17Keys.test.ts
+      ...M11L_KEY_NAMES, // the M11-lite keys have their own table in tests/config/m11lKeys.test.ts
     ]);
     const listed = new Set<string>([
       ...RANGED.map((r) => r[0]),

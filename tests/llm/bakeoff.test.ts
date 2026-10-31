@@ -67,6 +67,8 @@ async function run(
 }
 
 const cat = (r: BakeoffRun, c: Category | "overall") => r.rows.find((x) => x.category === c)!;
+// Categories that have golden items (steelman joins with M11-lite WP3).
+const present = CATEGORIES.filter((c) => items.some((i) => i.category === c));
 const firstOf = (c: Category): GoldenItem => items.find((i) => i.category === c)!;
 
 describe("synthetic golden set", () => {
@@ -74,7 +76,7 @@ describe("synthetic golden set", () => {
     expect(items.length).toBeGreaterThanOrEqual(50);
     expect(goldenProblems(items)).toEqual([]);
     expect(new Set(items.map((i) => i.id)).size).toBe(items.length);
-    for (const c of CATEGORIES) {
+    for (const c of CATEGORIES.filter((k) => k !== "steelman")) {
       expect(items.filter((i) => i.category === c).length).toBeGreaterThanOrEqual(10);
     }
     for (const i of items) {
@@ -146,7 +148,7 @@ describe("runner with a perfect fake provider", () => {
     const r = await run();
     expect(r.results).toHaveLength(1);
     expect(r.results[0].passes).toBe(true);
-    expect(r.rows).toHaveLength(CATEGORIES.length + 1);
+    expect(r.rows).toHaveLength(present.length + 1);
     for (const row of r.rows) {
       expect(row.passes).toBe(1);
       expect(row.jsonValidPct).toBe(100);
@@ -450,7 +452,7 @@ describe("CLI", () => {
       },
     );
     expect(withDb).toBe(0);
-    expect(batches).toEqual([CATEGORIES.length + 1]);
+    expect(batches).toEqual([present.length + 1]);
     expect(close).toHaveBeenCalled();
     expect(lines.join("\n")).toContain("7 rows written");
   });
