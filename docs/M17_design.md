@@ -151,3 +151,7 @@ Q1–Q16 of the requirements are adopted at their recommended defaults. "Listed"
 
 - Orchestrator (2026-10-31): the review's open points are settled by the spec defaults and listed for the Owner in the V2 PR: D-398 everything stays off until the Owner accepts the `yahoo_delayed` source and lists the two slots; D-397 arming at the first 10:00 quote-poll tick (no edit to the arena pre-open writer); D-399 hand-over by reading the night's results after the run (no `night.ts` edit); D-400 the reviewer's constants (daily quote budget 2,000, concurrency 4, 250 ms spacing, 20 s call budget) are accepted; if the recorded quote contract carries no cumulative volume, D-382 leaves the intraday stream empty and the PR says so.
 
+
+- **D-441** (WP1 review) Quote freshness allows the feed's delay: fresh = age ≤ `intraday_quote_delay_min` (20, [VERIFY]) + 2 × refresh; a quote not in AUD or not for the requested `<code>.AX` symbol is refused. An intraday halt after the morning snapshot is not visible to the quote source (the chart data carries no halt flag); halts come from the snapshot and today's announcements — listed for the Owner.
+- **D-442** (WP1 review) After a paused run (rate-limited, server error or network) both routes skip for `quote_pause_cooldown_min` (30); `quote_run` is claimed before any request with the run's allowance as the reserved count, keyed by the Melbourne market date.
+

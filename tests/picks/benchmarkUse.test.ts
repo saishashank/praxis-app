@@ -35,6 +35,7 @@ const NON_COMPARISON_READERS = new Set([
   "lib/data/backfill/snapshotLoad.mjs",
   "lib/data/index/indexBars.mjs",
   "lib/replay/snapshotWorld.ts",
+  "lib/cortex/stage.ts", // M15: index levels into the Cortex as-of world (regime, US index known-time), not a comparison
   "lib/ui/loaders/company.ts",
 ]);
 
