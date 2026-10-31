@@ -10,6 +10,7 @@ import {
   strOrNull,
   type Arm,
   type CortexFamily,
+  type BatchExec,
   type Exec,
   type WriteResult,
 } from "./common";
@@ -70,6 +71,51 @@ export async function insertDecision(db: Exec, x: DecisionRow): Promise<WriteRes
       x.manifestId,
     ],
   });
+}
+
+const DECISIONS_PER_BATCH = 200;
+
+/** Writes many decisions in batches (insert-or-ignore); returns how many were new. */
+export async function insertDecisions(
+  db: BatchExec,
+  rows: readonly DecisionRow[],
+): Promise<{ inserted: number }> {
+  let inserted = 0;
+  for (let i = 0; i < rows.length; i += DECISIONS_PER_BATCH) {
+    const results = await db.batch(
+      rows.slice(i, i + DECISIONS_PER_BATCH).map((x) => ({
+        sql: `INSERT INTO cortex_decision (market, d, book_id, code, arm, family, s, p, expected_net_micro,
+                rank_key, limit_micro, stop_micro, qty, gate_trace_json, first_fail_gate, signal_id,
+                order_id, card_id, sector_tilt_json, manifest_id)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+        args: [
+          x.market,
+          x.d,
+          x.bookId,
+          x.code,
+          x.arm,
+          x.family,
+          x.s,
+          x.p,
+          x.expectedNetMicro,
+          x.rankKey,
+          x.limitMicro,
+          x.stopMicro,
+          x.qty,
+          jsonText(x.gateTrace),
+          x.firstFailGate,
+          x.signalId,
+          x.orderId,
+          x.cardId,
+          x.sectorTilt === null ? null : jsonText(x.sectorTilt),
+          x.manifestId,
+        ],
+      })),
+      "write",
+    );
+    inserted += results.reduce((n, r) => n + r.rowsAffected, 0);
+  }
+  return { inserted };
 }
 
 const toDecision = (r: Record<string, unknown>): DecisionRow => ({

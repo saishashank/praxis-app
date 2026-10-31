@@ -58,6 +58,7 @@ import {
   type NarrativeRow,
 } from "@/lib/review/sections";
 import { syncForwardLedger, type ForwardResult } from "./forwardLedger";
+import { scoreOutcomes } from "@/lib/cortex/stage";
 import { loadAgentParams, type AgentParams } from "./params";
 import { wordsKey } from "@/lib/learning/learnFacts";
 import { liveRankIc } from "@/lib/learning/rankIcStage";
@@ -962,6 +963,26 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
           o.now(),
           REVIEW_JOB,
           `rank IC not written on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
+            0,
+            LOG_MESSAGE_MAX,
+          ),
+          runId,
+        ],
+      });
+    }
+
+    // M15 P2 (CTX-023, CTX-054): would-have outcomes of every Cortex decision whose hold has closed.
+    // Descriptive and idempotent; a failure only logs (the run's status does not depend on it).
+    stage = "cortex_outcome";
+    try {
+      await scoreOutcomes(db, { market: o.market, d: o.d, params, now: o.now });
+    } catch (error) {
+      await db.execute({
+        sql: "INSERT INTO app_log (at, level, source, message, run_id) VALUES (?, 'warn', ?, ?, ?)",
+        args: [
+          o.now(),
+          REVIEW_JOB,
+          `cortex outcomes not scored on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
             0,
             LOG_MESSAGE_MAX,
           ),

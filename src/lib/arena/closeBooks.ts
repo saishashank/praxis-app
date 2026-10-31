@@ -78,11 +78,18 @@ import { getConfig } from "@/lib/config/store";
 import { COST_PROFILES, type CostProfile, type CostProfileCode } from "./costs";
 import {
   fillCloseSignalExit,
+  fillEntryLimit,
   fillIntradayStop,
   fillOrder,
   selectExit,
   type FillEnv,
+  type FillOrderEnv,
+  type LimitFillOutcome,
+  type OrderToFill,
+  type SimulatedFill,
 } from "./fills";
+import { fillRowRule } from "@/lib/cortex/economics/fillRow";
+import { cortexOpenGuard } from "@/lib/cortex/stage";
 import { resizeEntryAtFill } from "./sizing";
 import { writeFill } from "./fillWriter";
 import { isFatal, checkCohortBooks, type Violation } from "./invariants";
@@ -524,10 +531,78 @@ async function availableCashNow(ctx: DayCtx, cc: CohortCtx): Promise<Micro> {
  * IS stops after the open (F3:). So a position opened and stopped out in one session is bought
  * before it is sold, and an exit never follows a re-entry of the same code at the open.
  */
+/**
+ * The entry fill of one order. A v1 order (no `limit_micro`) goes through `fillOrder` exactly as
+ * before. A Cortex order (D-288) re-checks the gate and the halt, then fills through `fillEntryLimit`:
+ * at the open when the open is at or below the limit, else at the limit on a trade-through, else
+ * `unfilled`. The in-memory `limit` rule is written as the 0007-legal `level` (D-307).
+ */
+type EntryOutcome =
+  | ReturnType<typeof fillOrder>
+  | { readonly status: "unfilled"; readonly reason: "limit_not_reached" }
+  | {
+      readonly status: "filled";
+      readonly fill: SimulatedFill;
+      readonly initialStopMicro: bigint | null;
+      readonly limit: LimitFillOutcome;
+    };
+function fillEntry(
+  order: Extract<OrderToFill, { kind: "entry" }>,
+  env: FillOrderEnv,
+  limitMicro: bigint | null,
+): EntryOutcome {
+  if (limitMicro === null) return fillOrder(order, env);
+  if (env.gate === undefined || !env.gate.allowed) {
+    const detail = env.gate === undefined ? "no_gate_decision" : env.gate.reason;
+    return { status: "cancelled", reason: "gate", detail };
+  }
+  if (env.halted === true) return { status: "cancelled", reason: "halted", detail: "halted" };
+  const limit = fillEntryLimit(env, order.qty, limitMicro);
+  if (limit.status === "unfilled") return { status: "unfilled", reason: "limit_not_reached" };
+  if (order.stopFrom === undefined) throw new RangeError("a limit order needs a stop rule");
+  const fill: SimulatedFill = { ...limit.fill, rule: fillRowRule(limit) };
+  const stop = order.stopFrom(fill.fillPriceMicro);
+  if (stop <= 0n) throw new RangeError("initial stop must be positive");
+  return { status: "filled", fill, initialStopMicro: stop, limit };
+}
+
+/** The open-time checks of a Cortex entry at its fill; the cancel reason, or null when all pass. */
+async function cortexGuardAtFill(
+  ctx: DayCtx,
+  o: Record<string, unknown>,
+  cohortId: string,
+  plan: ReturnType<typeof parsePlan> | null,
+  limit: LimitFillOutcome,
+): Promise<string | null> {
+  const exec = await ctx.db.execute({
+    sql: "SELECT e.family AS family FROM cohort c JOIN execution e ON e.id = c.execution_id WHERE c.id = ?",
+    args: [cohortId],
+  });
+  const family = exec.rows.length === 0 ? null : exec.rows[0]!.family;
+  if (family === null || family === undefined) return null;
+  const rechecked = await ctx.db.execute({
+    sql: "SELECT 1 FROM preopen_result WHERE order_id = ? AND outcome IN ('pass', 'cancel')",
+    args: [text(o.id)],
+  });
+  const g = await cortexOpenGuard(ctx.db, {
+    market: ctx.market,
+    d: ctx.d,
+    barD: ctx.d,
+    orderId: text(o.id),
+    signalId: o.signal_id === null || o.signal_id === undefined ? null : text(o.signal_id),
+    family: text(family) as never,
+    fill: limit,
+    stopSpec: plan?.plan.initialStops[0]?.spec ?? null,
+    rechecked: rechecked.rows.length > 0,
+  });
+  return g.firstFail === null ? null : `open:${g.firstFail}`;
+}
+
 async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
   const id = cc.cohort.id;
   const rs = await ctx.db.execute({
-    sql: `SELECT id, code, kind, qty, ref_stop_micro, decided_d, stop_spec, max_open_micro, card_id
+    sql: `SELECT id, code, kind, qty, ref_stop_micro, decided_d, stop_spec, max_open_micro, card_id,
+                 limit_micro, signal_id
           FROM arena_order
           WHERE cohort_id = ? AND status = 'pending' AND decided_d < ? AND kind IN ('entry','exit_cs')
           ORDER BY id`,
@@ -584,9 +659,14 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
         const fills = await fillsOf(ctx, cc);
         first = !fills.some((f) => f.side === "buy" && f.code === code && f.d === ctx.d);
       }
-      let outcome: ReturnType<typeof fillOrder>;
+      // Cortex orders only (D-288): the limit, on the fill-session price basis
+      const limitMicro =
+        o.limit_micro === null || o.limit_micro === undefined
+          ? null
+          : scaleMicro(toBig(o.limit_micro), crossed.priceFactor);
+      let outcome: EntryOutcome;
       try {
-        outcome = fillOrder(
+        outcome = fillEntry(
           plan !== null
             ? {
                 kind: "entry",
@@ -600,13 +680,17 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
             halted,
             gate,
           },
+          limitMicro,
         );
       } catch (error) {
         if (!(error instanceof RangeError)) throw error;
         await cancelOrder(ctx, orderId, "unfillable");
         continue;
       }
-      if (outcome.status === "cancelled") {
+      if (outcome.status === "unfilled") {
+        // a limit order the session never reached (D-288): no trade in either arm
+        await cancelOrder(ctx, orderId, outcome.reason);
+      } else if (outcome.status === "cancelled") {
         await cancelOrder(ctx, orderId, outcome.reason);
       } else if (
         outcome.status === "filled" &&
@@ -631,7 +715,7 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
           continue;
         }
         if (sized.status === "resized") {
-          outcome = fillOrder(
+          outcome = fillEntry(
             plan !== null
               ? {
                   kind: "entry",
@@ -645,9 +729,19 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
               halted,
               gate,
             },
+            limitMicro,
           );
           if (outcome.status !== "filled") {
             await cancelOrder(ctx, orderId, "unfillable");
+            continue;
+          }
+        }
+        // CTX-028 open-time list (Cortex orders only): kills, sources, shock, stale universe, the limit
+        // at the fill, the stop plus gap95 re-check, and a missing 09:55 re-check (O07)
+        if (limitMicro !== null && "limit" in outcome) {
+          const guard = await cortexGuardAtFill(ctx, o, id, plan, outcome.limit);
+          if (guard !== null) {
+            await cancelOrder(ctx, orderId, guard);
             continue;
           }
         }

@@ -13,7 +13,7 @@ export const INDEX_YAHOO_SYMBOL = "^AXJO";
  * M15 (D-290): the US S&P 500 and VIX closes ride the same Yahoo source (no new register row). The
  * stored code is the bare name; the Yahoo symbol is listed for the fetch step. They are accepted
  * here so the rows validate and store; known-time rule `index_us` (D+1 09:00 Melbourne) applies when
- * the Cortex reads them. The nightly request still asks for ^AXJO only until the stage wires them.
+ * the Cortex reads them. The nightly request asks for all three (batch1-core, D-308).
  */
 export const US_INDEX_YAHOO_SYMBOLS = { GSPC: "^GSPC", VIX: "^VIX" };
 export const INDEX_CODES = [INDEX_CODE, ...Object.keys(US_INDEX_YAHOO_SYMBOLS)];
