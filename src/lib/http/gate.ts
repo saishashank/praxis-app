@@ -48,6 +48,12 @@ const MACHINE_ROUTES = new Set([
 ]);
 const PUBLIC_EXACT = new Set(["/signin", "/privacy", "/terms", "/api/health", "/robots.txt"]);
 
+// Paths that must be indistinguishable from a missing route for anyone but the pinned Owner.
+const ABSENT_PATH = "/_praxis-absent";
+export function isBlueprintPath(p: string): boolean {
+  return /^\/(?:api\/)?blueprint(?:\/|$)/.test(p);
+}
+
 export function isPublicPath(p: string): boolean {
   return (
     PUBLIC_EXACT.has(p) || p === "/api/auth" || p.startsWith("/api/auth/") || MACHINE_ROUTES.has(p)
@@ -123,6 +129,11 @@ export async function gate(req: NextRequest, deps: GateDeps): Promise<NextRespon
     if (!isPublicPath(path)) {
       claims = await deps.readClaims(req);
       if (!claims) {
+        // Q2/D-361: an anonymous Blueprint request is answered as a missing route (no sign-in tell).
+        // The rewrite to an absent path renders the app's real 404 page with a real 404 status.
+        if (isBlueprintPath(path)) {
+          return decorate(NextResponse.rewrite(new URL(ABSENT_PATH, req.nextUrl)));
+        }
         if (isApi) {
           return decorate(
             NextResponse.json(
