@@ -159,8 +159,15 @@ describe("Picks list", () => {
     await addPick(w, 3, "ZZDN", "F1");
     await addPick(w, 4, "ZZOTH", "F2");
     as(w, "owner");
+    // M17 (O-76) raised the default to 10 (no cap); the V1 value 2 is set here.
+    await setConfig(w.main, {
+      key: "picks_max_per_family",
+      value: 2,
+      userId: null,
+      now: "2026-10-19T00:00:00.000Z",
+    });
     render(await PicksPage({ searchParams: sp() }));
-    // Default 2: ranks 1, 2 (both F1) and 4 (F2); rank 3 is the third F1 pick.
+    // Cap 2: ranks 1, 2 (both F1) and 4 (F2); rank 3 is the third F1 pick.
     expect(screen.getAllByTestId("pick-card")).toHaveLength(3);
     cleanup();
     await setConfig(w.main, {

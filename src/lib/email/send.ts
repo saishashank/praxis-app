@@ -56,6 +56,12 @@ export interface FactsByKind {
   reminder: Facts<ReminderInput>;
   brief: Facts<BriefInput>;
   test: { requestedAt: string };
+  /** M17 placeholders: WP4 types these and adds the renderers (until then `render` throws). */
+  pick_hit: unknown;
+  pick_cleared: unknown;
+  pick_candidate: unknown;
+  pick_batch: unknown;
+  pick_digest: unknown;
 }
 
 export interface SendContext {

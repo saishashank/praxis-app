@@ -148,7 +148,14 @@ export const AU_COLUMNS = {
 } as const satisfies Record<AuTableName, readonly string[]>;
 
 /** The AU source keys seeded into source_register / source_status. */
-export const AU_SOURCES = ["asx_announcements", "yahoo_eod", "rba", "abs", "asic_short"] as const;
+export const AU_SOURCES = [
+  "asx_announcements",
+  "yahoo_eod",
+  "rba",
+  "abs",
+  "asic_short",
+  "yahoo_delayed", // M17 (D-398; migration 0020): pending until the Owner accepts it
+] as const;
 export type AuSource = (typeof AU_SOURCES)[number];
 /**
  * The ASX listed-companies file (D-067): a register row only (migration 0006), covered by the ASX

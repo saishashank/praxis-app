@@ -24,7 +24,12 @@ export function sessionList(n: number): string[] {
 /** 90 sessions: 0..59 history and tonight (D = index 59), 60.. are the sessions after publication. */
 export const SESSIONS = sessionList(90);
 export const D = SESSIONS[HISTORY - 1]!;
-export const params = defaultAgentParams();
+const base = defaultAgentParams();
+/**
+ * The fixtures were built for a family cap of 2 (the V1 default). M17 (O-76) raised the default to 10
+ * (no family cap); the cap is pinned here so these tests keep exercising it.
+ */
+export const params = { ...base, picks: { ...base.picks, picksMaxPerFamily: 2 } };
 
 export type Sql = (sql: string, args?: (string | number | bigint | null)[]) => Promise<unknown>;
 

@@ -111,7 +111,10 @@ describe("main migration 0007_arena: shape", () => {
     const tables = Object.values(ARENA_TABLES);
     expect(tables).toHaveLength(13);
     for (const t of tables) {
-      const cols = (await q(db, `PRAGMA table_info(${t})`)).map((r) => r.name);
+      // 0019 (M15) appends arena_order.limit_micro after the M4 columns; schema.ts lists the V1 columns
+      const cols = (await q(db, `PRAGMA table_info(${t})`))
+        .map((r) => r.name)
+        .filter((n) => !(t === "arena_order" && n === "limit_micro"));
       expect(cols, t).toEqual([...ARENA_COLUMNS[t]]);
     }
     const names = (await q(db, "SELECT name FROM sqlite_master WHERE type = 'table'")).map(
@@ -136,6 +139,7 @@ describe("main migration 0007_arena: shape", () => {
     for (const t of Object.values(ARENA_TABLES)) {
       const micro = (await q(db, `PRAGMA table_info(${t})`))
         .filter((c) => String(c.name).endsWith("_micro"))
+        .filter((c) => !(t === "arena_order" && c.name === "limit_micro")) // 0019, M15
         .map((c) => c.name);
       expect([...ARENA_MONEY_COLUMNS[t]], t).toEqual(micro);
       for (const c of micro) {
@@ -180,7 +184,7 @@ describe("main migration 0007_arena: up / down / up", () => {
     const db = await arenaDb();
     const ms = await loadMigrations(MIGRATIONS("main"));
     const full = await schemaOf(db);
-    await migrateDown(db, ms, 12); // 0019, 0018, 0017, 0016, 0015, 0014, 0013, 0012, 0011, 0010, 0009 and 0008 sit on top: take the schema as of 0007
+    await migrateDown(db, ms, 13); // 0019, 0018, 0017, 0016, 0015, 0014, 0013, 0012, 0011, 0010, 0009 and 0008 sit on top: take the schema as of 0007
     const before = await schemaOf(db);
     expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 6 });
     const mid = await schemaOf(db);
@@ -200,9 +204,9 @@ describe("main migration 0007_arena: up / down / up", () => {
       );
     });
     expect(mid).toEqual(nonArena);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 13, version: 19 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 14, version: 20 });
     expect(await schemaOf(db)).toEqual(full);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 19 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 20 });
   });
 
   it("a fresh database and a down/up database have the same schema (up/down/up identical)", async () => {
@@ -1091,7 +1095,7 @@ describe("main migration 0007_arena: forever retention and backup", () => {
     await expect(run(target, "UPDATE trade SET stop_micro = 1")).rejects.toThrow(/trade:/);
     // The restored database is at version 8 (0008 agents on top of 0007): nothing more to apply.
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 19 });
+    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 20 });
   });
 });
 

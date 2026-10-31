@@ -94,6 +94,7 @@ export const ASX_ENABLED_KEY = "asx_enabled";
 export const ASX_SOURCE_ID = "asx_announcements";
 export const YAHOO_SOURCE_ID = "yahoo_eod";
 export const MARKET_MODE_KEY = "market_mode";
+export const YAHOO_DELAYED_SOURCE_ID = "yahoo_delayed";
 
 /** The sources whose use needs an Owner risk acceptance (DAT-120). Nothing else can be switched. */
 export const SOURCE_CONTROLS = {
@@ -116,6 +117,17 @@ export const SOURCE_CONTROLS = {
       "not permit automated access. By accepting you take on the risk of automated personal-use " +
       "access (decision O-26): the data may be wrong, change shape or be blocked without notice. " +
       "A kill switch stops it, and the build keeps looking for a cleaner free source.",
+  },
+  [YAHOO_DELAYED_SOURCE_ID]: {
+    ref: "O-26",
+    label: "Yahoo Finance delayed intraday quotes",
+    riskText:
+      "Yahoo Finance delayed quotes are unofficial, meant for personal use and rate-limited. Its " +
+      "terms may not permit automated access, and this feed makes far more requests than the " +
+      "end-of-day prices: up to 2,000 a day, one per company (decision O-26, extended for M17). By " +
+      "accepting you take on the risk of automated personal-use access: the quotes may be late, " +
+      "wrong, change shape or be blocked without notice. Until you accept, no pick is armed and no " +
+      "intraday candidate is found. A kill switch stops the requests at once.",
   },
 } as const;
 export type ControlSource = keyof typeof SOURCE_CONTROLS;
@@ -211,6 +223,30 @@ async function readRegisterStatus(db: Exec, source: string): Promise<SourceStatu
 }
 
 /** True when the AU calendar for the current Sydney year has rows and none is unconfirmed. */
+/**
+ * What the quote routes need to decide whether `yahoo_delayed` may be called (M17 D-398): the register
+ * status, the kill-switch mode and the dispatch switch. Structurally the `QuoteSourceState` of
+ * src/lib/data/quotes/types.ts (declared here so this module has no dependency on that package).
+ */
+export type QuoteSourceState = {
+  register: SourceStatus | null;
+  mode: string | null;
+  dispatchEnabled: boolean;
+};
+
+export async function readQuoteSourceState(db: Exec): Promise<QuoteSourceState> {
+  const r = await db.execute({
+    sql: "SELECT mode FROM source_status WHERE source = ?",
+    args: [YAHOO_DELAYED_SOURCE_ID],
+  });
+  const mode = r.rows[0]?.mode;
+  return {
+    register: await readRegisterStatus(db, YAHOO_DELAYED_SOURCE_ID),
+    mode: typeof mode === "string" ? mode : null,
+    dispatchEnabled: await readSwitch(db, DISPATCH_ENABLED_KEY),
+  };
+}
+
 async function calendarConfirmed(db: Exec, now: string): Promise<boolean> {
   const year = marketDate(new Date(now), "Australia/Sydney").slice(0, 4);
   const r = await db.execute({

@@ -785,6 +785,7 @@ describe("read model for System Health", () => {
     expect(owner.sources.map((s) => [s.source, s.ref, s.status])).toEqual([
       ["asx_announcements", "O-23", "pending"],
       ["yahoo_eod", "O-26", "pending"],
+      ["yahoo_delayed", "O-26", "pending"],
     ]);
     expect("asxTrippedReason" in viewer).toBe(false);
     expect(viewer.asxTripped).toBe(true);
