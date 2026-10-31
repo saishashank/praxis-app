@@ -39,6 +39,8 @@
     "docs/M14_exit_evidence.md",
     "docs/M15_requirements.md",
     "docs/M15_design.md",
+    "docs/M16_requirements.md",
+    "docs/M16_design.md",
     "docs/llm-roster.md",
     "docs/rule_schema.md",
     "docs/owner-guide/",
