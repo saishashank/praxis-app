@@ -55,7 +55,7 @@ describe("Home page content", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Today" })).toBeInTheDocument();
     expect(screen.getByText("Strategies today")).toBeInTheDocument();
     expect(screen.getAllByText("Simulated").length).toBeGreaterThan(0);
-    expect(screen.getByText("Today's picks")).toBeInTheDocument();
+    expect(screen.getByText("Tonight's picks")).toBeInTheDocument();
     expect(screen.getByText("Tonight's trade ideas")).toBeInTheDocument();
     expect(screen.getByText("Your watchlist")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "See all tonight's ideas" })).toHaveAttribute(

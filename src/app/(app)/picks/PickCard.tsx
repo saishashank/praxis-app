@@ -5,6 +5,8 @@ import type { PickRowView } from "@/lib/ui/loaders/picks";
 import { formatDate } from "@/lib/view/format";
 import { Rail } from "@/components/ui/Family";
 import { buttonClass } from "@/components/ui/Button";
+import type { AlertChipView } from "@/lib/ui/loaders/pickAlerts";
+import { AlertChip } from "./AlertChip";
 import { PickFamily } from "./FamilyInfo";
 import { Term } from "@/components/ui/Overlays";
 import { ValidationBadge } from "@/components/ui/Badges";
@@ -36,10 +38,12 @@ export function PickCard({
   pick,
   masked,
   beatsLuck,
+  chip = null,
 }: {
   pick: PickRowView;
   masked: boolean;
   beatsLuck: boolean;
+  chip?: AlertChipView | null;
 }) {
   const frame = timeFrameText(pick.timeFrameSessions);
   const hue = FAMILY_BADGES[pick.family]?.code;
@@ -68,7 +72,21 @@ export function PickCard({
           </header>
         }
       >
+        <p data-testid="pick-stamp" className="m-0 mt-3 text-xs text-text-muted">
+          {pick.stamp}
+        </p>
+        {chip ? (
+          <p className="m-0 mt-2">
+            <AlertChip chip={chip} />
+          </p>
+        ) : null}
         <ul className="m-0 mt-3 list-none space-y-1 p-0 text-sm">
+          <li data-testid="chance-line">
+            {pick.chanceText}
+            {pick.expectedGainPpm !== null
+              ? ` · typical past result ${pct(pick.expectedGainPpm)}`
+              : null}
+          </li>
           <li>
             <Term meaning="The highest price at which this pick counts as bought: tonight's closing price plus a small allowance for price slip.">
               Buy up to

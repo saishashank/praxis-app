@@ -13,6 +13,9 @@ import { Breadcrumb } from "@/components/ui/Nav";
 import { BAND_BG, hueStyle } from "@/components/ui/hue";
 import { Masked } from "@/components/ui/Values";
 import { loadCompany } from "@/lib/ui/loaders/company";
+import { loadCandidateForCode, loadChipsForCode } from "@/lib/ui/loaders/pickAlerts";
+import { AlertChip } from "../../picks/AlertChip";
+import { INTRADAY_UNRATED } from "../../picks/text";
 import { envFor } from "@/lib/ui/loaders/shell";
 import { formatCount, formatDate, formatMicro } from "@/lib/view/format";
 import { toggleWatchlistAction } from "../actions";
@@ -60,6 +63,9 @@ export default async function CompanyPage({ params }: { params: Promise<{ code: 
   const env = await envFor(user);
   const c = await loadCompany(env, key);
   if (c === null) notFound();
+  // UXN-306: the alert chip and, for an intraday candidate, its catalyst line (unmasked callers: the code is known).
+  const chips = c.masked ? [] : await loadChipsForCode(env, c.stock);
+  const candidate = c.masked ? null : await loadCandidateForCode(env, c.stock);
   const mode = watchModeOf(user.role, c.masked);
   const title = c.name ?? c.stock;
   const hue = c.masked ? null : sectorHueOf(c.sector);
@@ -102,6 +108,27 @@ export default async function CompanyPage({ params }: { params: Promise<{ code: 
             </>
           )}
         </div>
+        {chips.length > 0 || candidate ? (
+          <div
+            data-testid="company-alerts"
+            className="flex min-w-0 basis-full flex-col gap-1 text-sm"
+          >
+            {chips.slice(0, 2).map((k) => (
+              <p key={k.alertId} className="m-0 flex flex-wrap items-center gap-2">
+                <AlertChip chip={k} />
+                <span className="text-xs text-text-muted">
+                  from the {k.profile} list of {formatDate(k.pickD)}, pick {k.rank}
+                </span>
+              </p>
+            ))}
+            {candidate ? (
+              <p data-testid="company-candidate" className="m-0 break-words">
+                Intraday candidate, found {candidate.foundTime} on {formatDate(candidate.session)}:{" "}
+                {candidate.catalyst}. <span className="text-text-muted">{INTRADAY_UNRATED}</span>
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <RowActions
           slug={c.slug}
           stock={c.stock}

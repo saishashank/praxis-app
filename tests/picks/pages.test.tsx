@@ -152,7 +152,10 @@ describe("Picks list", () => {
     );
     // Decision support only: nothing can place an order (UX-130, PRD-001).
     expect(screen.queryByRole("button", { name: /buy now|sell|place.*order/i })).toBeNull();
-    expect(document.querySelector("form, input")).toBeNull();
+    // The only form is the sort toggle (UXN-309, D-474): one hidden field, no order control.
+    expect(
+      document.querySelector("form:not([data-testid=sort-toggle]), input:not([type=hidden])"),
+    ).toBeNull();
   });
 
   it("shows at most picks_max_per_family picks per family, read from the config key", async () => {

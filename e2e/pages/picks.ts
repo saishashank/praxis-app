@@ -10,6 +10,12 @@ export const PICKS_PAGES: PageEntry[] = [
     h1: "Track record",
   },
   {
+    file: "src/app/(app)/alerts/page.tsx",
+    path: "/alerts",
+    action: "own_preferences",
+    h1: "My alerts",
+  },
+  {
     file: "src/app/(app)/picks/[id]/page.tsx",
     path: "/picks/[id]",
     action: "read",

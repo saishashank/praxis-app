@@ -314,6 +314,7 @@ const FIELD_OVERRIDE: Record<string, string[]> = {
   updatePreferencesAction: ["time_format", "alert_p1", "alert_p2"],
   updateAppearanceAction: ["theme", "motion"],
   updateRegionAction: ["default_market", "times_in"],
+  updateAlertSettingsAction: ["pick_alerts", "cleared_pick_emails", "intraday_candidate_emails"],
 };
 // Actions with no form input at all: nothing for a bad input to reach.
 const NO_INPUT = new Set([
@@ -330,6 +331,7 @@ const NOOP_ON_EMPTY = new Set([
   "updatePreferencesAction",
   "updateAppearanceAction",
   "updateRegionAction",
+  "updateAlertSettingsAction",
 ]);
 
 describe("SEC-013: server actions refuse bad form input with an error code and change nothing", () => {

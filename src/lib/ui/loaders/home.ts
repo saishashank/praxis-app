@@ -16,6 +16,8 @@ import { maskAlertViews } from "@/lib/view/alerts";
 import { formatDate, plural } from "@/lib/view/format";
 import { loadIdeas } from "./ideas";
 import { pickRef } from "./picks";
+import { loadAlertHomeFacts, loadIntraday, type IntradayModel } from "./pickAlerts";
+import type { LoaderEnv } from "./shell";
 import {
   latestDataDate,
   latestRegime,
@@ -83,7 +85,8 @@ export function nextRunLabel(now: Date): string {
   return `tonight ${RUN_HHMM}`;
 }
 
-export type SinceKind = "picks" | "ideas" | "fills" | "alerts" | "breakers" | "system";
+export type SinceKind =
+  "picks" | "ideas" | "fills" | "alerts" | "pickhits" | "candidates" | "breakers" | "system";
 export type HomeSinceRow = { key: SinceKind; text: string; href: string };
 export type HomeNeed = {
   key: string;
@@ -177,6 +180,8 @@ export type HomeView = {
     openFlags: number;
   };
   picks: { d: string | null; items: HomePick[] };
+  /** UXN-301: the Intraday watch section (shadow, unrated); null when it could not be read. */
+  intraday: IntradayModel | null;
   ideas: { d: string | null; items: HomeIdea[]; signals: number };
   watchlist: HomeWatch[];
   news: {
@@ -200,6 +205,7 @@ function emptyView(): HomeView {
     summary: { strategies: 0, d: null, tiles: [] },
     day: { regime: null, regimeD: null, quality: [], openFlags: 0 },
     picks: { d: null, items: [] },
+    intraday: null,
     ideas: { d: null, items: [], signals: 0 },
     watchlist: [],
     news: { hidden: false, items: [] },
@@ -515,6 +521,37 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
       href: "/news?chip=alerts",
     });
   }
+  // M17 (UXN-305): alert hits and intraday candidates, from the same env a Picks page would use.
+  const alertEnv: LoaderEnv = {
+    main: deps.mainDb,
+    auth: deps.authDb as LoaderEnv["auth"], // loaders only call execute()
+    user: {
+      id: typeof deps.user?.id === "number" ? deps.user.id : 0,
+      role: deps.user?.role ?? null,
+    },
+    mask: { masked },
+    now: v.now,
+    market: v.market,
+  };
+  const alertFacts = await loadAlertHomeFacts(
+    alertEnv,
+    new Date(v.now.getTime() - 2 * DAY_MS).toISOString(),
+  );
+  view.intraday = await soft(() => loadIntraday(alertEnv), null);
+  if (alertFacts.hits > 0) {
+    since.push({
+      key: "pickhits",
+      text: `${alertFacts.hits} buy-price ${plural(alertFacts.hits, "alert")} reached the limit`,
+      href: "/alerts",
+    });
+  }
+  if (alertFacts.candidates > 0) {
+    since.push({
+      key: "candidates",
+      text: `${alertFacts.candidates} intraday ${plural(alertFacts.candidates, "candidate")} found, unrated`,
+      href: "/picks#intraday-h",
+    });
+  }
   const moved = await count(
     `SELECT COUNT(DISTINCT t.subject_id || '/' || t.breaker_id) AS n FROM thesis_breaker_eval t
      WHERE t.market = ? AND t.d = (SELECT MAX(d) FROM thesis_breaker_eval WHERE market = ?)
@@ -544,7 +581,11 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
             : "Some of today's prices are still being checked",
     href: "/health",
   });
-  view.since = since.slice(0, 5); // threshold-ok: UXR-020 shows 3 to 5 rows
+  // threshold-ok: UXR-020 shows 3 to 5 rows; the system row always stays.
+  view.since = [
+    ...since.filter((r) => r.key !== "system").slice(0, 4),
+    ...since.filter((r) => r.key === "system"),
+  ];
 
   // ---- UXR-020 Needs you: open urgent and important alerts, then a health item for the Owner ----
   const needs: HomeNeed[] = [];
@@ -575,6 +616,15 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
         action: "Open alert",
       });
     }
+  }
+  if (alertFacts.suppressed > 0 && needs.length < MAX_NEEDS) {
+    needs.push({
+      key: "candidates-held",
+      tier: "P2",
+      text: `${alertFacts.suppressed} intraday ${plural(alertFacts.suppressed, "candidate")} found; the e-mail was held back by the daily limit`,
+      href: "/picks#intraday-h",
+      action: "Open Intraday watch",
+    });
   }
   if (attention > 0 && needs.length < MAX_NEEDS) {
     needs.push({

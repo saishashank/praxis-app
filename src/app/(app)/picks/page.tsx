@@ -4,17 +4,23 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/guard";
 import { envFor } from "@/lib/ui/loaders/shell";
-import { loadPicks, parsePicksQuery } from "@/lib/ui/loaders/picks";
+import { loadPicks, parsePicksQuery, sortPicks } from "@/lib/ui/loaders/picks";
 import { Banner } from "@/components/ui/States";
 import { PickCard } from "./PickCard";
 import { ProfileSwitch, ViewTabs } from "./PickTabs";
 import { PicksEmptyArt } from "./EmptyArt";
 import { TrackRecordBody } from "./TrackRecordBody";
 import { SuccessStrip } from "./SuccessStrip";
+import { IntradaySection } from "./IntradaySection";
+import { SortToggle } from "./SortToggle";
+import { setPicksSortAction } from "../settings/alerts/actions";
+import { loadAlertChips, loadIntraday, loadPicksSort } from "@/lib/ui/loaders/pickAlerts";
 import { maxPerFamily, pickProfilesConfig } from "./data";
 import {
   capPerFamily,
   EMPTY_PICKS_SENTENCE,
+  SORT_WORDS,
+  TONIGHT_TITLE,
   NOT_REAL_ORDERS,
   profileRules,
   profileSentence,
@@ -37,7 +43,10 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
   const model = await loadPicks(env, query);
   const max = await maxPerFamily(env.main);
   const rule = profileSentence(profileRules(await pickProfilesConfig(env.main), model.profile));
-  const picks = capPerFamily(model.picks, max);
+  const sort = await loadPicksSort(env);
+  const picks = sortPicks(capPerFamily(model.picks, max), sort);
+  const chips = model.realD ? await loadAlertChips(env, model.realD) : new Map();
+  const intraday = await loadIntraday(env);
 
   return (
     <main className="mx-auto flex w-full max-w-4xl min-w-0 flex-col gap-4 px-4 py-6">
@@ -66,21 +75,37 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
         </Banner>
       ) : null}
 
+      <h2 className="m-0 text-lg font-semibold" id="tonight-h">
+        {TONIGHT_TITLE}
+      </h2>
+      {picks.length > 0 ? (
+        <SortToggle
+          action={setPicksSortAction}
+          current={sort}
+          words={{
+            basis: sort === "chance" ? SORT_WORDS.chance : SORT_WORDS.expected_gain,
+            toggle: sort === "chance" ? SORT_WORDS.toGain : SORT_WORDS.toChance,
+          }}
+        />
+      ) : null}
       {picks.length === 0 ? (
         <PicksEmptyArt title="No picks yet">{EMPTY_PICKS_SENTENCE}</PicksEmptyArt>
       ) : (
-        <ul className="m-0 flex list-none flex-col gap-4 p-0" aria-label="Picks">
+        <ul className="m-0 flex list-none flex-col gap-4 p-0" aria-labelledby="tonight-h">
           {picks.map((p) => (
             <li key={p.id} className="min-w-0">
               <PickCard
                 pick={p}
                 masked={model.masked}
                 beatsLuck={model.success?.beatsLuck ?? false}
+                chip={chips.get(`${model.realD}.${model.profile}.${p.rank}`) ?? null}
               />
             </li>
           ))}
         </ul>
       )}
+
+      <IntradaySection model={intraday} />
     </main>
   );
 }
