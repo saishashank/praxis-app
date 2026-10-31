@@ -70,7 +70,7 @@ export type RawLabels = Record<LabelKind, RawLabel>;
 const labelSchema: JsonSchema = {
   type: "object",
   properties: {
-    value: { type: "string", maxLength: 40 },
+    value: { type: "string", maxLength: 40 }, // threshold-ok: schema bound on an enum label's length
     span: { type: "string", maxLength: MAX_SPAN_CHARS },
   },
   required: ["value"],
