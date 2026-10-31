@@ -3,6 +3,7 @@
 // is left out. Headline text is the only untrusted text and goes to the router as `untrusted`.
 import { decisionCutoffUtc } from "@/lib/agents/decisionView";
 import { canonicalJson, sha256Hex } from "@/lib/llm/providers";
+import { bucketOf, numericValue, readFactorRows } from "@/lib/picks/factors";
 import type { Subject } from "./subjects";
 import type { Exec } from "./store";
 
@@ -151,13 +152,38 @@ export async function loadPackInput(
 ): Promise<PackInput> {
   const cutoffAt = decisionCutoffUtc(d, params.decisionCutoff);
   const items: RawItem[] = [];
+  let card: Record<string, unknown> | null = null;
   if (subject.cardId !== null) {
     const r = await db.execute({
       sql: "SELECT card_json FROM decision_card WHERE id = ?",
       args: [subject.cardId],
     });
-    if (r.rows[0]) items.push(...cardItems(asRec(JSON.parse(String(r.rows[0].card_json)))));
+    if (r.rows[0]) card = asRec(JSON.parse(String(r.rows[0].card_json)));
   }
+  // Stored tables are the source for regime and insider flow; the card is the fallback (read, never recomputed).
+  const reg = await db.execute({
+    sql: "SELECT state FROM regime_daily WHERE market = ? AND d = ? ORDER BY version DESC LIMIT 1",
+    args: [market, d],
+  });
+  const ins = await db.execute({
+    sql: "SELECT score_q FROM insider_flow_score WHERE market = ? AND code = ? AND d = ?",
+    args: [market, subject.code, d],
+  });
+  const fromCard = card ? cardItems(card) : [];
+  const skip = new Set<PackKind>();
+  if (reg.rows[0]) skip.add("regime");
+  if (ins.rows[0]) skip.add("insider");
+  items.push(...fromCard.filter((i) => !skip.has(i.kind)));
+  if (reg.rows[0]) items.push({ kind: "regime", text: `Market regime ${s(reg.rows[0].state)}` });
+  if (ins.rows[0])
+    items.push({
+      kind: "insider",
+      text:
+        ins.rows[0].score_q === null
+          ? "Insider flow unknown"
+          : `Insider flow score ${s(ins.rows[0].score_q)}`,
+    });
+  if (card) items.push(...(await factorItems(db, market, card)));
   if (subject.kind === "pick" && subject.pickKey) {
     const r = await db.execute({
       sql: "SELECT label, reference_micro, buy_max_micro, stop_micro, aim_micro, valid_until_d, n_similar FROM pick WHERE market = ? AND d = ? AND profile = ? AND rank = ?",
@@ -177,4 +203,32 @@ export async function loadPackInput(
   for (const row of h.rows)
     items.push({ kind: "headline", text: s(row.title), at: s(row.published_at) });
   return { cutoffAt, maxItems: params.maxItems, items };
+}
+
+/** Stored factor buckets (factor_bucket_stat) the card's numeric rule values fall in. */
+async function factorItems(
+  db: Exec,
+  market: string,
+  card: Record<string, unknown>,
+): Promise<RawItem[]> {
+  const split = asRec(card.scenario).split_version;
+  if (typeof split !== "number" || typeof card.family !== "string") return [];
+  const rows = await readFactorRows(db as Parameters<typeof readFactorRows>[0], {
+    market,
+    family: card.family,
+    ruleVersion: s(card.rule_version),
+    splitVersion: split,
+  });
+  const out: RawItem[] = [];
+  for (const r of asArr(card.rules_fired)) {
+    const v = numericValue(s(r.value));
+    if (v === null) continue;
+    const row = rows.find((x) => x.factor === r.rule && x.bucket === bucketOf(v, x.edges));
+    if (!row) continue;
+    out.push({
+      kind: "factor",
+      text: `Factor ${row.factor} bucket ${row.bucket} n ${row.n} median net ${s(row.medianNetPpm)} ppm, family median ${s(row.familyMedianPpm)} ppm`,
+    });
+  }
+  return out;
 }
