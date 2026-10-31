@@ -63,13 +63,41 @@ describe("parseChartMeta (synthetic ZZ payloads)", () => {
   });
 
   it("a stale quote is never usable for a hit", () => {
-    const q = parseChartMeta(syntheticChart({ ...good, timeS: NOW_S - 30 * 60 }), "ZZ01", NOW);
+    const q = parseChartMeta(syntheticChart({ ...good, timeS: NOW_S - 35 * 60 }), "ZZ01", NOW);
     if (isRejected(q)) throw new Error("expected a quote");
     expect(isFresh(q, NOW, 10)).toBe(false);
     expect(isUsableForHit(q, NOW, 10)).toBe(false);
     const fresh = parseChartMeta(syntheticChart(good), "ZZ01", NOW);
     if (isRejected(fresh)) throw new Error("expected a quote");
     expect(isUsableForHit(fresh, NOW, 10)).toBe(true);
+  });
+
+  it("allows the feed delay: 22 min old is fresh, 35 min old is stale (D-441)", () => {
+    const at = (min: number) => {
+      const q = parseChartMeta(syntheticChart({ ...good, timeS: NOW_S - min * 60 }), "ZZ01", NOW);
+      if (isRejected(q)) throw new Error("expected a quote");
+      return q;
+    };
+    expect(isFresh(at(22), NOW, 10)).toBe(true);
+    expect(isFresh(at(35), NOW, 10)).toBe(false);
+    expect(isFresh(at(22), NOW, 10, 5)).toBe(false); // delay is a parameter
+  });
+
+  it("refuses wrong currency, wrong symbol and absent currency", () => {
+    const r = (m: object, c = "ZZ01") => parseChartMeta(syntheticChart({ ...good, ...m }), c, NOW);
+    expect(r({ currency: "USD" })).toEqual({ reject: "bad_currency" });
+    expect(r({ currency: null })).toEqual({ reject: "no_currency" });
+    expect(r({ symbol: "ZZ02.AX" })).toEqual({ reject: "symbol_mismatch" });
+    expect(isRejected(r({ symbol: "ZZ01.AX" }))).toBe(false);
+  });
+
+  it("converts float32-style and rejects over-precise prices", () => {
+    const q = parseChartMeta(syntheticChart({ ...good, price: 12.340000152587891 }), "ZZ01", NOW);
+    if (isRejected(q)) throw new Error("expected a quote");
+    expect(q.lastMicro).toBe(12_340_000n);
+    expect(parseChartMeta(syntheticChart({ ...good, price: 1.2345678 }), "ZZ01", NOW)).toEqual({
+      reject: "no_price",
+    });
   });
 });
 
@@ -168,6 +196,7 @@ describe("fetchDelayedQuotes", () => {
   it("stops at the run cap and at the day's remainder", async () => {
     const a = await fetchDelayedQuotes(harness().deps, codes(30), { ...BUDGET, perRunMax: 7 });
     expect(a.requests).toBe(7);
+    expect(a.unfetched).toEqual(codes(30).slice(7));
     expect(a.cut).toBe(true);
     const b = await fetchDelayedQuotes(harness().deps, codes(30), { ...BUDGET, usedToday: 1995 });
     expect(b.requests).toBe(5);
@@ -205,11 +234,16 @@ describe("fetchDelayedQuotes", () => {
     expect(r).toMatchObject({ refused: "gate_error", requests: 0 });
   });
 
-  it.each([429, 500, 503])("status %i pauses the run", async (status) => {
+  it.each([
+    [429, "rate_limited"],
+    [500, "server_error"],
+    [503, "server_error"],
+  ] as const)("status %i pauses the run", async (status, why) => {
     const { deps } = harness();
     deps.fetch = async () => ({ ok: false, status, json: async () => ({}) });
     const r = await fetchDelayedQuotes(deps, codes(20), BUDGET);
-    expect(r.paused).toBe(true);
+    expect(r.paused).toBe(why);
+    expect(r.unfetched.length).toBeGreaterThan(0);
     expect(r.quotes).toEqual([]);
     expect(r.requests).toBeLessThanOrEqual(QUOTE_CONCURRENCY);
   });
@@ -219,7 +253,7 @@ describe("fetchDelayedQuotes", () => {
     net.deps.fetch = async () => {
       throw new Error("network");
     };
-    expect((await fetchDelayedQuotes(net.deps, codes(8), BUDGET)).paused).toBe(true);
+    expect((await fetchDelayedQuotes(net.deps, codes(8), BUDGET)).paused).toBe("network");
 
     const bad = new Map<string, unknown>([
       ["ZZ00", syntheticChart({ price: 10, timeS: NOW_S - 30, volume: 5, prevClose: null })],

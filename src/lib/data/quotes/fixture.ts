@@ -5,6 +5,8 @@ export type SyntheticMeta = {
   timeS?: number | null;
   volume?: number | null;
   prevClose?: number | null;
+  currency?: string | null;
+  symbol?: string | null;
 };
 
 const CODE_MOD = 100; // threshold-ok: two-digit code suffix
@@ -13,7 +15,9 @@ const CODE_MOD = 100; // threshold-ok: two-digit code suffix
 export const zzCode = (n: number): string => `ZZ${String(n % CODE_MOD).padStart(2, "0")}`;
 
 export function syntheticChart(m: SyntheticMeta): unknown {
-  const meta: Record<string, unknown> = { currency: "AUD", exchangeName: "ASX" };
+  const meta: Record<string, unknown> = { exchangeName: "ASX" };
+  if (m.currency !== null) meta.currency = m.currency ?? "AUD";
+  if (m.symbol != null) meta.symbol = m.symbol;
   if (m.price != null) meta.regularMarketPrice = m.price;
   if (m.timeS != null) meta.regularMarketTime = m.timeS;
   if (m.volume != null) meta.regularMarketVolume = m.volume;

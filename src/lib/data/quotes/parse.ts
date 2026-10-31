@@ -10,6 +10,8 @@ import type { DelayedQuote, QuoteReject } from "./types";
 const CODE_RE = /^[A-Z0-9]{2,6}$/;
 const MS_PER_S = 1000; // threshold-ok: unit conversion
 const MS_PER_MIN = 60_000; // threshold-ok: unit conversion
+/** Feed delay: the snapshot trade time runs about this far behind the clock (D-441). */
+export const QUOTE_DELAY_MIN = 20; // threshold-ok: delayed-feed latency, D-441 [VERIFY at build]; key intraday_quote_delay_min (WP2)
 /** A quote time further ahead of the clock than this is a bad payload. */
 const FUTURE_SKEW_MS = 5 * MS_PER_MIN; // threshold-ok: clock-skew tolerance, D-400
 
@@ -35,6 +37,13 @@ export function parseChartMeta(json: unknown, code: string, now: Date): DelayedQ
   }
   const meta = result[0].meta;
   if (!isRecord(meta)) return { reject: "no_meta" };
+
+  if (meta.currency !== "AUD") {
+    return { reject: meta.currency === undefined ? "no_currency" : "bad_currency" };
+  }
+  if (meta.symbol !== undefined && meta.symbol !== `${code}.AX`) {
+    return { reject: "symbol_mismatch" };
+  }
 
   const last = positiveMicro(meta.regularMarketPrice);
   if (last === null) return { reject: "no_price" };
@@ -68,13 +77,26 @@ export function quoteAgeMin(q: Pick<DelayedQuote, "quoteAt">, now: Date): number
   return Math.max(0, (now.getTime() - Date.parse(q.quoteAt)) / MS_PER_MIN);
 }
 
-/** Fresh = not older than `maxAgeMin` (callers pass 2 x `intraday_refresh_min`). */
-export function isFresh(q: Pick<DelayedQuote, "quoteAt">, now: Date, maxAgeMin: number): boolean {
+/**
+ * Fresh = age <= delayMin + maxAgeMin (callers pass maxAgeMin = 2 x `intraday_refresh_min` and
+ * delayMin = `intraday_quote_delay_min`): the feed's own delay is allowed for (D-441).
+ */
+export function isFresh(
+  q: Pick<DelayedQuote, "quoteAt">,
+  now: Date,
+  maxAgeMin: number,
+  delayMin: number = QUOTE_DELAY_MIN,
+): boolean {
   const t = Date.parse(q.quoteAt);
-  return Number.isFinite(t) && quoteAgeMin(q, now) <= maxAgeMin;
+  return Number.isFinite(t) && quoteAgeMin(q, now) <= delayMin + maxAgeMin;
 }
 
 /** A quote may drive a hit or a price clear only if fresh and carrying cumulative volume. */
-export function isUsableForHit(q: DelayedQuote, now: Date, maxAgeMin: number): boolean {
-  return q.cumVolume !== null && isFresh(q, now, maxAgeMin);
+export function isUsableForHit(
+  q: DelayedQuote,
+  now: Date,
+  maxAgeMin: number,
+  delayMin: number = QUOTE_DELAY_MIN,
+): boolean {
+  return q.cumVolume !== null && isFresh(q, now, maxAgeMin, delayMin);
 }

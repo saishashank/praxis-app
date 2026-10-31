@@ -3,7 +3,7 @@
 // HARD RULE (D-398): nothing is requested unless `yahoo_delayed` is accepted (register 'enabled',
 // source mode 'on', dispatch on). Any gate error refuses (fail-closed).
 // Concurrency 4, 250 ms spacing per worker, 20 s per-call budget (D-400). 429/5xx/network error ->
-// `paused: true`, the run ends and remaining codes keep no quote.
+// `paused` set, the run ends and remaining codes keep no quote.
 import { requestsAllowed } from "./budget";
 import { isRejected, parseChartMeta } from "./parse";
 import type { DelayedQuote, QuoteBudget, QuoteRefusal, QuoteSourceState } from "./types";
@@ -28,17 +28,22 @@ export type QuoteFetchDeps = {
   sourceState: () => Promise<QuoteSourceState>;
 };
 
+export type QuotePause = false | "rate_limited" | "server_error" | "network";
+
 export type QuoteFetchResult = {
   quotes: DelayedQuote[];
   requests: number;
   rejected: number;
-  paused: boolean;
+  paused: QuotePause;
+  /** Codes not fetched (budget, time or pause), in input order. */
+  unfetched: string[];
   /** Set when nothing was requested because the source is not accepted/on. */
   refused: QuoteRefusal | null;
   /** True when codes were left unfetched for budget or time reasons. */
   cut: boolean;
 };
 
+/** `degraded` counts as off for this high-risk source (stricter than EOD on purpose). */
 export function refusalFor(s: QuoteSourceState): QuoteRefusal | null {
   if (s.register !== "enabled") return "source_not_accepted";
   if (s.mode !== "on") return "source_off";
@@ -46,6 +51,10 @@ export function refusalFor(s: QuoteSourceState): QuoteRefusal | null {
   return null;
 }
 
+/**
+ * Input order is priority order: callers pass armed picks first, then the watch list, then held
+ * codes (scan: tier 1 before tier 2). Codes cut by budget, time or a pause are in `unfetched`.
+ */
 export async function fetchDelayedQuotes(
   deps: QuoteFetchDeps,
   codes: readonly string[],
@@ -56,6 +65,7 @@ export async function fetchDelayedQuotes(
     requests: 0,
     rejected: 0,
     paused: false,
+    unfetched: [],
     refused: null,
     cut: false,
   };
@@ -98,11 +108,11 @@ export async function fetchDelayedQuotes(
           signal: AbortSignal.timeout(Math.max(1, deadline - deps.now().getTime())),
         });
       } catch {
-        out.paused = true;
+        out.paused ||= "network"; // includes the 20 s abort
         return;
       }
       if (res.status === TOO_MANY || res.status >= SERVER_ERROR_MIN) {
-        out.paused = true;
+        out.paused ||= res.status === TOO_MANY ? "rate_limited" : "server_error";
         return;
       }
       if (!res.ok) {
@@ -123,6 +133,7 @@ export async function fetchDelayedQuotes(
   };
 
   await Promise.all(Array.from({ length: QUOTE_CONCURRENCY }, worker));
+  out.unfetched = queue.slice(next);
   if (next < queue.length) out.cut = true;
   return out;
 }
