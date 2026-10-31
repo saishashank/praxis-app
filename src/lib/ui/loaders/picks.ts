@@ -6,6 +6,8 @@ import { getConfig } from "@/lib/config/store";
 import { chanceDisplay, chanceLine, type ChanceDisplay } from "@/lib/picks/chance";
 import { familyStatusMap } from "@/lib/cortex/store/status";
 import { modelSuccess, successLine, type ModelSuccess } from "@/lib/picks/success";
+import { benchmarkLabel, type BenchBasis } from "@/lib/picks/benchmark";
+import { vsMarketSummary, type VsMarketSummary } from "@/lib/picks/vsMarket";
 import { formatDate, formatPpm, isoWeek, MISSING } from "@/lib/view/format";
 import { dateStaleness } from "@/lib/view/staleness";
 import { maskText } from "@/lib/view/mask";
@@ -467,6 +469,17 @@ export type TrackRow = {
   };
   /** A closed result against the published range. */
   position: "inside" | "below" | "above" | null;
+  /** ARN-103/UXN-288: the stored market figures of a settled pick; null before settlement. */
+  vsMarket: {
+    marketRetPpm: number;
+    /** pick net minus market return; null for a missed pick. */
+    vsPpm: number | null;
+    missed: boolean;
+    basis: BenchBasis;
+    basisLabel: string;
+    windowFromD: string;
+    windowToD: string;
+  } | null;
 };
 export type TrackModel = {
   state: LoaderState;
@@ -475,6 +488,8 @@ export type TrackModel = {
   profiles: string[];
   success: (ModelSuccess & { line: string }) | null;
   rows: TrackRow[];
+  /** ARN-104: summary over filled, settled picks (missed excluded); null with no settled rows. */
+  vsMarket: (VsMarketSummary & { basisLabel: string }) | null;
 };
 
 export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): Promise<TrackModel> {
@@ -482,10 +497,14 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
   const r = await env.main.execute({
     sql: `SELECT o.d, o.rank, o.code, o.state, o.exit_reason, o.net_ppm, o.entry_micro, o.exit_micro,
                  p.buy_max_micro, p.stop_micro, p.aim_micro, p.bad_ppm, p.good_ppm,
+                 m.market_ret_ppm, m.vs_market_ppm, m.missed AS m_missed, m.basis AS m_basis,
+                 m.window_from_d, m.window_to_d,
                  (SELECT c.reason FROM pick_check c WHERE c.market = p.market AND c.d = p.d
                    AND c.profile = p.profile AND c.rank = p.rank AND c.valid = 0 LIMIT 1) AS withdrawn
           FROM pick_outcome o JOIN pick p ON p.market = o.market AND p.d = o.d
             AND p.profile = o.profile AND p.rank = o.rank
+          LEFT JOIN pick_market m ON m.market = o.market AND m.d = o.d AND m.profile = o.profile
+            AND m.rank = o.rank AND m.kind = o.kind
           WHERE o.market = ? AND o.profile = ? AND o.kind = 'pick'
           ORDER BY o.d DESC, o.rank LIMIT ?`,
     args: [market, q.profile, TRACK_ROWS],
@@ -518,7 +537,33 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
       String(x.state) === "closed"
         ? rangePosition(toNum(x.net_ppm), toNum(x.bad_ppm), toNum(x.good_ppm))
         : null,
+    vsMarket:
+      x.market_ret_ppm === null || x.market_ret_ppm === undefined
+        ? null
+        : {
+            marketRetPpm: Number(x.market_ret_ppm), // money-float-ok: ppm column
+            vsPpm: toNum(x.vs_market_ppm),
+            missed: Number(x.m_missed) === 1,
+            basis: String(x.m_basis) as BenchBasis,
+            basisLabel: benchmarkLabel(String(x.m_basis) as BenchBasis),
+            windowFromD: masked
+              ? (isoWeek(String(x.window_from_d)) ?? MISSING)
+              : String(x.window_from_d),
+            windowToD: masked ? (isoWeek(String(x.window_to_d)) ?? MISSING) : String(x.window_to_d),
+          },
   }));
+  const settled = rows.filter((x) => x.vsMarket !== null);
+  const vsMarket =
+    settled.length === 0
+      ? null
+      : {
+          ...vsMarketSummary(settled.map((x) => ({ vsMarketPpm: x.vsMarket!.vsPpm }))),
+          basisLabel: benchmarkLabel(
+            settled.every((x) => x.vsMarket!.basis === "total_return")
+              ? "total_return"
+              : "price_only",
+          ),
+        };
   return {
     state: rows.length === 0 ? "empty" : "ok",
     masked,
@@ -526,5 +571,6 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
     profiles,
     success: rows.length === 0 ? null : await successFor(env, q.profile, todayD(env)),
     rows,
+    vsMarket,
   };
 }

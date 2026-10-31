@@ -19,6 +19,10 @@ import {
   profileRules,
   profileSentence,
   trackStateText,
+  VS_MARKET_CAPTION,
+  VS_MARKET_HELP,
+  vsMarketRowText,
+  vsMarketSummaryLine,
 } from "./text";
 
 function levels(r: TrackRow, masked: boolean) {
@@ -33,14 +37,30 @@ function levels(r: TrackRow, masked: boolean) {
   );
 }
 
+function VsMarket({ v }: { v: NonNullable<TrackRow["vsMarket"]> }) {
+  return (
+    <span className="block text-text-muted" data-testid="vs-market">
+      {vsMarketRowText(v)} — {v.basisLabel}
+    </span>
+  );
+}
+
 function result(r: TrackRow) {
-  if (r.state === "missed") return <span>{trackStateText(r)} (not a win or a loss)</span>;
+  if (r.state === "missed") {
+    return (
+      <span>
+        {trackStateText(r)} (not a win or a loss)
+        {r.vsMarket ? <VsMarket v={r.vsMarket} /> : null}
+      </span>
+    );
+  }
   if (r.state === "closed") {
     return (
       <span>
         {pct(r.netPpm)} after costs
         {r.exitReason ? `; ${exitWords(r.exitReason)}` : ""}
         {r.position ? `; ${POSITION_WORDS[r.position]}` : ""}
+        {r.vsMarket ? <VsMarket v={r.vsMarket} /> : null}
       </span>
     );
   }
@@ -90,6 +110,21 @@ export async function TrackRecordBody({
 
       {model.success ? (
         <SuccessStrip success={model.success} profile={model.profile} linkToRecord={false} />
+      ) : null}
+
+      {model.vsMarket ? (
+        <section
+          aria-label="Picks against the market"
+          className="min-w-0 rounded-lg border border-border bg-surface p-3 text-sm"
+        >
+          <p className="m-0 font-semibold break-words" data-testid="vs-market-summary">
+            {vsMarketSummaryLine(model.vsMarket)}
+          </p>
+          <p className="m-0 mt-1 text-text-muted">
+            {model.vsMarket.basisLabel} {VS_MARKET_CAPTION}
+          </p>
+          <p className="m-0 mt-1 text-text-muted">{VS_MARKET_HELP}</p>
+        </section>
       ) : null}
 
       {!model.masked && model.rows.length > 0 ? <SimulatedLabel /> : null}
