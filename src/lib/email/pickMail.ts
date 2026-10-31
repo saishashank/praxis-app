@@ -268,6 +268,37 @@ async function deliver(
   d: string,
   env: EmailEnv,
 ): Promise<PickMailResult> {
+  // D-479: a batch claimed by an earlier tick that crashed before `mark()` keeps its own key. The
+  // items are in transition order, so that earlier set is a prefix of this one; it is delivered
+  // under its own key first (duplicate -> marked, or reclaimed with the same idempotency key) and
+  // only the new items form a new batch. Without this, a set change after such a crash re-mails
+  // the earlier items under a fresh key (the D-470 residual).
+  if (items.length > 1) {
+    const pending = await ctx.db.execute({
+      sql: `SELECT email_key FROM email_message
+            WHERE env = ? AND d = ? AND kind = 'pick_batch' AND email_key LIKE ?`,
+      args: [env, d, `pickb:${userId}:%`],
+    });
+    const known = new Set(pending.rows.map((r) => String(r.email_key)));
+    const claimedSingle = async (i: PickItem) =>
+      (
+        await ctx.db.execute({
+          sql: "SELECT 1 FROM email_message WHERE email_key = ?",
+          args: [itemKey(i, f)],
+        })
+      ).rows.length > 0;
+    for (let n = items.length - 1; n >= 1; n--) {
+      const head = items.slice(0, n);
+      const seen =
+        n > 1
+          ? known.has(pickBatchKey(userId, f.sessionD, head.map((i) => i.alertId)))
+          : await claimedSingle(head[0]);
+      if (!seen) continue;
+      const first = await deliver(ctx, userId, head, f, at, d, env);
+      const rest = await deliver(ctx, userId, items.slice(n), f, at, d, env);
+      return first === "off" ? rest : first;
+    }
+  }
   const batch = items.length > 1;
   const single = items[0];
   const candidate = !batch && single.event === "candidate";

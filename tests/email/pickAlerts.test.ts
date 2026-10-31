@@ -532,6 +532,43 @@ describe("batch crash safety and atomic cap (D-470)", () => {
     expect(await pickCapRemaining(db, "production", SESSION)).toBe(11);
   });
 
+  it("D-479: a crashed batch followed by a new hit mails only the new item (no re-mail under a new key)", async () => {
+    const ids = await ids3();
+    const res = await sendEmail(ctx(), "pick_batch", pickBatchKey("1", SESSION, ids), {
+      window: "10:45 Melbourne",
+      lines: [{ code: "ZZ01", what: "Hit", price: "1", quoteTime: "t" }],
+    });
+    expect(res.status).toBe("sent");
+    clock = T1105;
+    await transition(4, "hit"); // the item set changes before the next tick re-derives
+    await createPickMailer(ctx()).notify(mctx("1105"), []);
+    expect(mock.outbox).toHaveLength(2);
+    const second = mock.outbox[1];
+    expect(`${second.subject} ${second.text}`).toContain("ZZ04");
+    for (const c of ["ZZ01", "ZZ02", "ZZ03"]) expect(second.text).not.toContain(c);
+    expect(await mailRows()).toEqual([
+      "pick_batch:batched",
+      "pick_batch:batched",
+      "pick_batch:batched",
+      "pick_hit:sent",
+    ]);
+  });
+
+  it("D-479: a crashed single hit mail followed by a second hit is not re-mailed in the batch", async () => {
+    const id1 = await transition(1, "hit");
+    const res = await sendEmail(ctx(), "pick_hit", emailKeys.pickHit(id1, SESSION), {
+      facts: fx.PICK_HIT,
+    });
+    expect(res.status).toBe("sent");
+    clock = T1105;
+    await transition(2, "hit");
+    await createPickMailer(ctx()).notify(mctx("1105"), []);
+    expect(mock.outbox).toHaveLength(2);
+    expect(mock.outbox[1].text).toContain("ZZ02");
+    expect(mock.outbox[1].text).not.toContain("ZZ01");
+    expect(await mailRows()).toEqual(["pick_hit:sent", "pick_hit:sent"]);
+  });
+
   it("two concurrent sends at cap - 1 send exactly one", async () => {
     const caps = await loadCaps(db);
     const claim = (k: string) =>
