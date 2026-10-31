@@ -23,6 +23,7 @@ import { EmptyArt, Sparkline } from "./Art";
 import { familyBadge } from "./familyMap";
 import { CountUp, PopIn } from "./Motion";
 import { WelcomeBanner } from "./WelcomeBanner";
+import { IntradaySection } from "../picks/IntradaySection";
 
 const PROFILE_NAME: Record<string, string> = {
   aggressive: "Aggressive",
@@ -179,6 +180,8 @@ function Strip({ v, asOf }: { v: HomeView; asOf: string | null }) {
 }
 
 const SINCE_HUE: Record<HomeSinceRow["key"], string> = {
+  pickhits: "tier-p1",
+  candidates: "family-id",
   picks: "brand-a",
   ideas: "brand-b",
   fills: "status-running",
@@ -444,7 +447,7 @@ export function HomeContent({
 
       <Section
         id="home-picks"
-        title="Today's picks"
+        title="Tonight's picks"
         more={{ href: "/picks", label: "See all picks" }}
       >
         {cards.length > 0 ? (
@@ -469,6 +472,8 @@ export function HomeContent({
           </Empty>
         )}
       </Section>
+
+      {v.intraday ? <IntradaySection model={v.intraday} compact /> : null}
 
       <SummaryCard v={v} />
 

@@ -3,12 +3,15 @@
 // DAT-124) gets "Stock A" for the code, no company name, no prices, the ISO week instead of exact
 // dates and masked free text; the figures that carry no price (probabilities, counts) stay.
 import { getConfig } from "@/lib/config/store";
+import { chanceDisplay, chanceLine, type ChanceDisplay } from "@/lib/picks/chance";
+import { familyStatusMap } from "@/lib/cortex/store/status";
 import { modelSuccess, successLine, type ModelSuccess } from "@/lib/picks/success";
-import { formatPpm, isoWeek, MISSING } from "@/lib/view/format";
+import { formatDate, formatPpm, isoWeek, MISSING } from "@/lib/view/format";
 import { dateStaleness } from "@/lib/view/staleness";
 import { maskText } from "@/lib/view/mask";
 import { opaqueDigest } from "@/lib/view/opaqueRef";
 import { soft, strategyNames } from "./common";
+import { melTime } from "./pickAlerts";
 import { cardHref } from "./cards";
 import {
   isDateParam,
@@ -35,6 +38,8 @@ export const pickRef = (realId: string): string => "pk:" + opaqueDigest("pk", re
 
 /** Re-exported for the reviews loader (section 7a), so this file stays the one page-side importer of src/lib/picks (D-136). */
 export { modelSuccess, successLine };
+/** UXN-309 order, re-exported for the Picks page (D-136: only this loader imports src/lib/picks). */
+export { sortPicks } from "@/lib/picks/sort";
 
 /** The id shown in links: readable for an unmasked viewer, opaque for a masked one (no date in the URL). */
 const publicPickId = (realId: string, masked: boolean): string =>
@@ -50,6 +55,15 @@ async function resolvePickRef(env: LoaderEnv, ref: string): Promise<string | nul
     if (pickRef(real) === ref) return real;
   }
   return null;
+}
+
+/** UXN-302: when the list was published and which prices it is based on (the week for a masked user). */
+export function pickStamp(createdAt: string | null, d: string, masked: boolean): string {
+  const time = createdAt ? melTime(createdAt) : MISSING;
+  const day = masked ? (isoWeek(d) ?? MISSING) : formatDate(d);
+  return time === MISSING
+    ? `Published ${day} from closing prices`
+    : `Published ${time} on ${day} from closing prices`;
 }
 
 export type PicksQuery = { profile: string; d?: string };
@@ -146,6 +160,13 @@ export type PickRowView = {
   basedOn: string[];
   /** Link to the Decision Card; opaque `ck:` reference for a masked user. */
   cardHref: string | null;
+  /** UXN-308: "Chance of a net gain" or "Not enough history yet" (every family is in shadow today). */
+  chance: ChanceDisplay;
+  chanceText: string;
+  /** Typical past result in ppm (the expected-gain line and the sort key); null when not enough cases. */
+  expectedGainPpm: number | null;
+  /** UXN-302: published time and data basis, e.g. "Published 18:10 on 2026-11-01 from closing prices". */
+  stamp: string;
 };
 
 export type PicksModel = {
@@ -155,6 +176,8 @@ export type PicksModel = {
   profiles: string[];
   /** Publication date shown (exact for the Owner, ISO week for a masked user). */
   d: string | null;
+  /** The real list date, for server-side joins only (alert chips); never rendered. */
+  realD: string | null;
   staleText: string | null;
   success: (ModelSuccess & { line: string }) | null;
   picks: PickRowView[];
@@ -221,6 +244,7 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
     profile: q.profile,
     profiles,
     d: null,
+    realD: null,
     staleText: null,
     success: null,
     picks: [],
@@ -229,7 +253,7 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
   const rows = await env.main.execute({
     sql: `SELECT p.rank, p.code, p.family, p.tier, p.label, p.buy_max_micro, p.stop_micro, p.aim_micro,
                  p.valid_until_d, p.bad_ppm, p.typical_ppm, p.good_ppm, p.n_similar, p.aim_reach_ppm,
-                 p.time_frame_sessions, p.based_on_json, p.card_id, i.name, p.reference_micro,
+                 p.time_frame_sessions, p.based_on_json, p.card_id, p.created_at, i.name, p.reference_micro,
                  p.size_micro, p.risk_micro, o.state AS o_state, o.entry_micro AS o_entry,
                  o.exit_reason AS o_reason, o.net_ppm AS o_net,
                  (SELECT c.reason FROM pick_check c WHERE c.market = p.market AND c.d = p.d
@@ -244,6 +268,7 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
   const kit = masked ? await maskKit(env, d, await pickCodes(env, d)) : null;
   const t = (s: string): string => (kit ? maskText(s, kit.aliases, kit.lookup) : s);
   const names = await soft(() => strategyNames(env.main), {});
+  const statuses = await soft(() => familyStatusMap(env.main, market, d), null);
   const picks: PickRowView[] = rows.rows.map((x) => {
     const code = String(x.code);
     const scenario =
@@ -256,6 +281,16 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
             n: Number(x.n_similar),
           }; // money-float-ok: SQL integer columns
     const valid = String(x.valid_until_d);
+    // No stored p exists for a V1 pick, so the display is always "no_history" until a family is allowed.
+    const chance = chanceDisplay({
+      status: statuses?.[String(x.family) as keyof typeof statuses] ?? "shadow",
+      p: null,
+      lo: null,
+      hi: null,
+      nEff: null,
+      slopeUb: null,
+      hideBelow: 1,
+    });
     return {
       id: publicPickId(`${d}.${q.profile}.${Number(x.rank)}`, masked),
       rank: Number(x.rank), // money-float-ok: SQL integer column
@@ -297,6 +332,10 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
       timeFrameSessions: toNum(x.time_frame_sessions),
       basedOn: parseList(x.based_on_json).map(t),
       cardHref: x.card_id === null ? null : cardHref(String(x.card_id), masked),
+      chance,
+      chanceText: chanceLine(chance),
+      expectedGainPpm: scenario ? scenario.typicalPpm : null,
+      stamp: pickStamp(x.created_at === null ? null : String(x.created_at), d, masked),
     };
   });
   const stale = dateStaleness(d, todayD(env), STALE_DAYS);
@@ -304,6 +343,7 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
     ...base,
     state: picks.length === 0 ? "empty" : stale.state === "stale" ? "stale" : "ok",
     d: masked ? (isoWeek(d) ?? MISSING) : d,
+    realD: d,
     staleText: stale.state === "stale" ? stale.text : null,
     success: await successFor(env, q.profile, d),
     picks,

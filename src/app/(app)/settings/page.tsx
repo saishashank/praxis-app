@@ -16,7 +16,7 @@ import { envFor } from "@/lib/ui/loaders/shell";
 import { melbourneDate } from "@/lib/view/active";
 import { marketRows, readProfiles, readSharedMarkets, type MarketProfiles } from "./region";
 import { AboutIcon, ClockIcon, GlobeIcon, PaletteIcon, UserIcon } from "./GroupIcons";
-import { SettingsFrame } from "./SettingsNav";
+import { LinkRow, SettingsFrame } from "./SettingsNav";
 import { MotionRow, ThemeRow } from "./AppearanceRows";
 import {
   Group,
@@ -127,6 +127,11 @@ export default async function SettingsPage() {
             href="/settings/time"
             description="P0 alerts are always delivered immediately. They cannot be turned off or delayed."
             action={updatePreferencesAction}
+          />
+          <LinkRow
+            name="Pick alerts"
+            href="/settings/alerts"
+            hint="Buy-price alerts, their e-mails and the daily cap"
           />
           <QuietRow
             start={quiet?.start ?? null}

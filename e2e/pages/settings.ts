@@ -31,6 +31,12 @@ SETTINGS_PAGES.push(
     h1: "Time and alerts",
   },
   {
+    file: "src/app/(app)/settings/alerts/page.tsx",
+    path: "/settings/alerts",
+    action: "own_preferences",
+    h1: "Alerts",
+  },
+  {
     file: "src/app/(app)/settings/quiet-hours/page.tsx",
     path: "/settings/quiet-hours",
     action: "own_preferences",
