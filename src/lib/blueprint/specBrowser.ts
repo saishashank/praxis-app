@@ -57,24 +57,31 @@ export function listSpecDocs(root: string = process.cwd()): SpecDoc[] {
   return out;
 }
 
-// ---- rendering ---------------------------------------------------------------------------------
+// ---- parsing ----------------------------------------------------------------------------------
+// Markdown subset to a plain block list; the page turns the blocks into React elements, so every text
+// child is escaped by React and no HTML string exists anywhere (display-text rule).
 
-export function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+export type Inline = { k: "text" | "code" | "strong"; s: string };
+export type Block =
+  | { t: "h"; level: number; inl: Inline[] }
+  | { t: "p"; inl: Inline[] }
+  | { t: "list"; ordered: boolean; items: Inline[][] }
+  | { t: "code"; text: string }
+  | { t: "table"; head: Inline[][]; rows: Inline[][][] };
 
-function inline(s: string): string {
-  let h = escapeHtml(s);
-  h = h.replace(/`([^`]+)`/g, "<code>$1</code>");
-  h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  // Links render as their text; the target is dropped (no URL from a document reaches the page).
-  h = h.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
-  return h;
+export function parseInline(src: string): Inline[] {
+  // Links keep their text; the target is dropped (no URL from a document reaches the page).
+  const s = src.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+  const out: Inline[] = [];
+  const re = /`([^`]+)`|\*\*([^*]+)\*\*/g;
+  let last = 0;
+  for (const m of s.matchAll(re)) {
+    if (m.index > last) out.push({ k: "text", s: s.slice(last, m.index) });
+    out.push(m[1] !== undefined ? { k: "code", s: m[1] } : { k: "strong", s: m[2]! });
+    last = m.index + m[0].length;
+  }
+  if (last < s.length) out.push({ k: "text", s: s.slice(last) });
+  return out;
 }
 
 const cells = (line: string): string[] =>
@@ -86,13 +93,12 @@ const cells = (line: string): string[] =>
 
 const LIST_ITEM = /^\s*([-*]|\d+\.)\s+/;
 
-/** Markdown subset to HTML: headings, paragraphs, lists, fenced code, tables. Text is escaped. */
-export function renderMarkdown(md: string): string {
+export function parseMarkdown(md: string): Block[] {
   const lines = md
     .replace(/\r\n?/g, "\n")
     .replace(/^---\n[\s\S]*?\n---\n/, "")
     .split("\n");
-  const out: string[] = [];
+  const out: Block[] = [];
   let i = 0;
   while (i < lines.length) {
     const line = lines[i]!;
@@ -101,28 +107,26 @@ export function renderMarkdown(md: string): string {
       i++;
       while (i < lines.length && !/^```/.test(lines[i]!)) buf.push(lines[i++]!);
       i++;
-      out.push(`<pre><code>${escapeHtml(buf.join("\n"))}</code></pre>`);
+      out.push({ t: "code", text: buf.join("\n") });
     } else if (/^#{1,6}\s/.test(line)) {
-      const lvl = /^#+/.exec(line)![0].length;
-      out.push(`<h${lvl}>${inline(line.replace(/^#+\s+/, ""))}</h${lvl}>`);
+      const level = /^#+/.exec(line)![0].length;
+      out.push({ t: "h", level, inl: parseInline(line.replace(/^#+\s+/, "")) });
       i++;
     } else if (/^\s*\|/.test(line) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1] ?? "")) {
-      const head = cells(line);
+      const head = cells(line).map(parseInline);
       i += 2;
-      const rows: string[][] = [];
-      while (i < lines.length && /^\s*\|/.test(lines[i]!)) rows.push(cells(lines[i++]!));
-      out.push(
-        `<table><thead><tr>${head.map((c) => `<th>${inline(c)}</th>`).join("")}</tr></thead><tbody>` +
-          rows.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join("")}</tr>`).join("") +
-          "</tbody></table>",
-      );
+      const rows: Inline[][][] = [];
+      while (i < lines.length && /^\s*\|/.test(lines[i]!)) {
+        rows.push(cells(lines[i++]!).map(parseInline));
+      }
+      out.push({ t: "table", head, rows });
     } else if (LIST_ITEM.test(line)) {
       const ordered = /^\s*\d+\./.test(line);
-      const items: string[] = [];
+      const items: Inline[][] = [];
       while (i < lines.length && LIST_ITEM.test(lines[i]!)) {
-        items.push(`<li>${inline(lines[i++]!.replace(LIST_ITEM, ""))}</li>`);
+        items.push(parseInline(lines[i++]!.replace(LIST_ITEM, "")));
       }
-      out.push(ordered ? `<ol>${items.join("")}</ol>` : `<ul>${items.join("")}</ul>`);
+      out.push({ t: "list", ordered, items });
     } else if (line.trim() === "") {
       i++;
     } else {
@@ -136,20 +140,20 @@ export function renderMarkdown(md: string): string {
         buf.push(lines[i++]!);
       }
       if (buf.length === 0) buf.push(lines[i++]!);
-      out.push(`<p>${inline(buf.join(" "))}</p>`);
+      out.push({ t: "p", inl: parseInline(buf.join(" ")) });
     }
   }
-  return out.join("\n");
+  return out;
 }
 
-/** Render one listed document (by key) to sanitised HTML, or null when the key is not listed. */
+/** Parse one listed document (by key) into blocks, or null when the key is not listed. */
 export function renderSpecDoc(
   key: string,
   root: string = process.cwd(),
-): { doc: SpecDoc; html: string } | null {
+): { doc: SpecDoc; blocks: Block[] } | null {
   const doc = listSpecDocs(root).find((d) => d.key === key);
   if (!doc) return null;
-  return { doc, html: renderMarkdown(fs.readFileSync(path.join(root, doc.file), "utf8")) };
+  return { doc, blocks: parseMarkdown(fs.readFileSync(path.join(root, doc.file), "utf8")) };
 }
 
 // ---- requirement-ID index ------------------------------------------------------------------------

@@ -94,3 +94,31 @@ export async function snapshot(db: Client, skip: readonly string[] = []): Promis
   }
   return JSON.stringify(dump);
 }
+
+// SEC-011 / SEC-013 exemption (M16, ARC-003, D-370): the Blueprint data routes are GET handlers whose
+// ONLY write is the owner's audit row in audit_event (route and time, no body). The snapshot of those
+// URLs skips that table; auditAdded() then proves the only new rows are blueprint.* events.
+export const AUDIT_ONLY_GETS: readonly string[] = ["/api/blueprint/model", "/api/blueprint/export"];
+
+export const isAuditOnlyGet = (url: string): boolean =>
+  AUDIT_ONLY_GETS.some((u) => url === u || url.startsWith(`${u}?`));
+
+export async function auditActions(auth: Client): Promise<string[]> {
+  const r = await auth.execute("SELECT action FROM audit_event ORDER BY id");
+  return r.rows.map((x) => String(x.action));
+}
+
+/** Snapshot of both databases for a URL; the audit table is left out for audit-only GETs. */
+export async function stateFor(main: Client, auth: Client, url: string): Promise<string[]> {
+  const skip = isAuditOnlyGet(url) ? ["audit_event"] : [];
+  return [await snapshot(main), await snapshot(auth, skip)];
+}
+
+/** Rows the call added to audit_event; for audit-only GETs all must be blueprint.* events. */
+export function expectOnlyBlueprintAudit(before: string[], after: string[]): string[] {
+  const added = after.slice(before.length);
+  if (after.length < before.length || added.some((a) => !a.startsWith("blueprint."))) {
+    throw new Error(`unexpected audit rows: ${JSON.stringify(added)}`);
+  }
+  return added;
+}

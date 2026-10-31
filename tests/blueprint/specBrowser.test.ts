@@ -6,7 +6,7 @@ import {
   buildSpecIndex,
   listSpecDocs,
   loadModel,
-  renderMarkdown,
+  parseMarkdown,
   renderSpecDoc,
   searchSpecIndex,
 } from "@/lib/blueprint/specBrowser";
@@ -26,7 +26,7 @@ describe("spec browser", () => {
   it("renders a v1 chapter", () => {
     const r = renderSpecDoc("01_product_goals_and_scope");
     expect(r).not.toBeNull();
-    expect(r!.html).toMatch(/<h1>/);
+    expect(r!.blocks.some((b) => b.t === "h" && b.level === 1)).toBe(true);
   });
 
   it("refuses unlisted keys (path tricks, V2 chapters)", () => {
@@ -43,8 +43,8 @@ describe("spec browser", () => {
     expect(searchSpecIndex(idx, "").length).toBe(idx.size);
   });
 
-  it("sanitises: no script tag or link target passes", () => {
-    const html = renderMarkdown(
+  it("parses to plain blocks: markup stays text, link targets are dropped", () => {
+    const blocks = parseMarkdown(
       [
         "# <script>alert(1)</script>",
         "",
@@ -59,8 +59,10 @@ describe("spec browser", () => {
         "| <b>z</b> |",
       ].join("\n"),
     );
-    expect(html).not.toMatch(/<script|<img|<b>|javascript:/i);
-    expect(html).toContain("&lt;script&gt;");
+    expect(blocks.map((b) => b.t)).toEqual(["h", "p", "code", "table"]);
+    const json = JSON.stringify(blocks);
+    expect(json).not.toContain("javascript:");
+    expect(json).toContain("<script>alert(1)</script>"); // kept as text; React escapes it on render
   });
 
   it("publishes no V2 chapter text: loader reads only spec/ and allow-listed docs", () => {

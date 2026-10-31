@@ -18,6 +18,10 @@ import {
   ROOT,
   routesOf,
   snapshot,
+  auditActions,
+  expectOnlyBlueprintAudit,
+  isAuditOnlyGet,
+  stateFor,
   surfaces,
 } from "./support";
 
@@ -43,6 +47,9 @@ vi.mock("next/navigation", () => ({
   forbidden: vi.fn(() => {
     throw new Error("NEXT_FORBIDDEN");
   }),
+  notFound: vi.fn(() => {
+    throw new Error("NEXT_NOT_FOUND");
+  }),
 }));
 vi.mock("@/auth", () => ({ signIn: vi.fn(), signOut: vi.fn(), handlers: {}, auth: vi.fn() }));
 
@@ -65,6 +72,7 @@ const state = async () => [await snapshot(main), await snapshot(auth)];
 
 beforeAll(async () => {
   vi.stubEnv("PII_HASH_KEY", KEY);
+  vi.stubEnv("OWNER_EMAIL", "owner@example.test"); // the Blueprint routes pin the Owner (SEC-111)
   main = await freshDb("main");
   auth = await freshDb("auth");
   mem.main = main;
@@ -208,10 +216,13 @@ describe("SEC-013: read routes take hostile query strings without an error or a 
     it(`GET ${r.url} never answers 5xx or changes state`, async () => {
       const mod = await loadRoute(r.file);
       for (const q of QUERIES) {
-        const before = await state();
-        const res = await mod.GET(new Request(new URL(concreteUrl(r.url) + q, BASE)), ctxFor());
+        const url = concreteUrl(r.url);
+        const before = await stateFor(main, auth, url);
+        const audits = await auditActions(auth);
+        const res = await mod.GET(new Request(new URL(url + q, BASE)), ctxFor());
         expect(res.status, q.slice(0, 40)).toBeLessThan(500);
-        expect(await state()).toEqual(before);
+        expect(await stateFor(main, auth, url)).toEqual(before);
+        if (isAuditOnlyGet(url)) expectOnlyBlueprintAudit(audits, await auditActions(auth));
       }
     });
   }
