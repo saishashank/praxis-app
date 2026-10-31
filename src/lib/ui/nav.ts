@@ -103,6 +103,7 @@ export const ROUTES: readonly RouteNode[] = [
     tab: "strategies",
   },
   { pattern: "/what-if", label: "What-if", parent: "/strategies", tab: "strategies" },
+  { pattern: "/cortex", label: "Cortex", parent: "/strategies", tab: "strategies" },
   { pattern: "/news", label: "News", tab: "news" },
   { pattern: "/reviews", label: "Reviews", tab: "reviews" },
   { pattern: "/reviews/[date]", label: "Evening review", parent: "/reviews", tab: "reviews" },

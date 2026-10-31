@@ -21,6 +21,7 @@ import {
 } from "./keys";
 import { invalidateConfigCache } from "./runtime";
 import { configEditRefusal, ruleVersionsSeeded } from "@/lib/learning/bKeyLock";
+import { isCortexRefitKey, recordCortexKeyEdit } from "@/lib/cortex/store/keyEdit";
 import { getConfig, setConfig } from "./store";
 
 export type ConfigRow = {
@@ -269,6 +270,31 @@ export async function updateConfig(p: UpdateInput): Promise<UpdateResult> {
       now,
     });
     invalidateConfigCache();
+    if (isCortexRefitKey(key)) {
+      // D-309, CTX-072: an Owner edit of a Cortex key is a charged trial that marks the maps for a
+      // refit. The edit itself is done, so a failed charge is audited, not reported as a failed edit.
+      try {
+        await recordCortexKeyEdit(p.mainDb, {
+          market: "AU",
+          key,
+          before,
+          after: parsed.value,
+          versionId: res.versionId,
+          at: now,
+          d: now.slice(0, 10),
+        });
+      } catch {
+        try {
+          await audit(p.authDb, p.env, meta, {
+            ...base,
+            action: "config.cortex_charge_failed",
+            detail: { key, scope },
+          });
+        } catch {
+          // best effort
+        }
+      }
+    }
     return { ok: true, versionId: res.versionId };
   } catch {
     try {
