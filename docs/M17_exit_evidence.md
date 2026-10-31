@@ -41,10 +41,23 @@ Decisions: D-381…D-396 (design), D-397…D-400 (architect review), D-441…D-4
 3. **D-462: excess is measured against the market index, not a sector index.** No sector series is stored (only `^AXJO`), so the report says "beyond the market". Revisit when a sector series exists.
 4. **D-457 / D-459 labelling caveat.** A code the Cortex took in the shadow arm that is not a V1 pick records `rejected:rank` (AGT-144 has three outcomes only). No outcome is recorded before the night has run.
 5. **D-473: no per-alert unmute.** Mute is one final `cleared`/`muted` transition (the state machine is append-only); "alerts for all picks" is the way back.
-6. **D-470 residual.** If the batch item set changes within 10 minutes of a crash that came after the provider accepted the mail, the earlier items may be mailed again (the orphan release then lets the new set through).
+6. **D-470 residual: closed by D-479** (prefix split in `deliver`; an accepted or pending earlier batch keeps its own key). Remaining budget note: D-502 (watch/held codes spend poll budget; the 2,000 cap holds).
 7. **e2e not yet run.** `e2e/picks-sections.spec.ts` (AT-62 a, AT-65 theme walk) is written, not run.
-8. **AT-65 (b), (c)** have no dedicated evidence yet (contrast per badge x theme; "i" sheet DOM).
+8. **AT-65 (b), (c)**: evidenced by `tests/acceptance/v2/at65.test.tsx` (D-501); the six-theme e2e walk is still not run.
 9. **Push and remote CI.** `build` is not pushed; remote CI (gitleaks history, e2e, Linux jobs) has not run.
 
 ## 5. Final review (Fable)
-pending
+_2026-11-01 (Melbourne time), worktree `v2/m17-final` from `build` at 4dd9d7b. Decisions D-479 and D-500…D-502 in `docs/M17_design.md`._
+
+**Verdict: MERGE AFTER MY FIXES** (the fixes are on `v2/m17-final`).
+
+| Priority | Finding | State |
+|---|---|---|
+| 1 D-443 `email_message` rebuild | Table, index and trigger text identical to 0009 except the five added kinds; the copy names every column; the down path lifts only the two prune guards it needs and restores the 0009 text. No `REFERENCES` constraint exists in the main schema (the attempt link is a trigger), so `PRAGMA foreign_keys` has nothing to act on; one libsql `batch("write")` per file. Parity was not asserted by test. | fixed: parity test added to `tests/db/0020_intraday.test.ts` (D-500) |
+| 2 AT-60 order boundary | `tests/security/at60OrderBoundary.test.ts` is not vacuous: closure-based import guard with a self-test, SQL allowlist of the four M17 tables with a self-test, triggers, replay hash on vs off with alerts > 0 and candidates > 0, and the WP4/6/8/9 file set. | reviewed, no change |
+| 3 Alert delivery | Duplicates, cap, P0 headroom and quiet hours are covered. The D-470 residual was wider than stated: a crash after the provider accepted followed by any new hit before the next tick gave the changed set a fresh key and re-mailed the earlier items. | fixed: prefix split in `deliver` (D-479), two tests |
+| 4 Free quota and scheduler | Both routes skip before arming until `yahoo_delayed` is enabled, on and dispatch is on; the claim reserves the tick's count so 2,000/day cannot be exceeded; DST (both changes) and early close (2026-12-24 14:10) are tested. The poll spends budget on watch/held codes every tick, so a busy day can reach the 80 % band early and the 95 % stop before the close. | open for the Owner (D-502), cap holds |
+| 5 Shadow honesty | "Unrated", "Unvalidated", "Not enough history yet" and "delayed" everywhere; `intraday_stream_state` has one writer (`streamState.ts`, grep-pinned in AT-63); D-462 "beyond the market" is stated on the alerts report page; `streamCost.ts` uses `costPerOrder` (D-311) at the A$1,000 parcel. | reviewed, no change |
+| 6 WP10 gaps | No at62/at65 acceptance files; AT-65 (b) and (c) unevidenced; e2e not run. The CI contrast checker already covered the badge hues per theme. | fixed: `tests/acceptance/v2/at62.test.tsx` (4) and `at65.test.tsx` (12) added (D-501); e2e stays with the orchestrator's full gate |
+
+Gates on `v2/m17-final` (2026-11-01): `npx vitest run tests/acceptance/v2 tests/security tests/email tests/picks tests/intraday tests/db tests/review tests/worker tests/alerts tests/quotes` → 74 files, 1,463 tests pass; `npx tsc --noEmit -p .` clean; eslint clean on the touched files. Not run here: the full Vitest suite, smoke, e2e, remote CI.

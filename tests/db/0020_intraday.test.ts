@@ -198,6 +198,77 @@ describe("email_message rebuild", () => {
     ]);
   });
 
+  it("D-443 parity: the rebuilt table differs from 0019 only in the kind list; indexes, triggers and every row value are kept", async () => {
+    const db = track(createClient({ url: tempDbUrl() }));
+    const ms = await loadMigrations(MIGRATIONS("main"));
+    await migrateUp(db, ms.filter((m) => m.version <= 19));
+    // A fully populated row at 0019, plus a terminal one with an attempt, and a FK-style check on.
+    await db.execute("PRAGMA foreign_keys = ON");
+    await db.execute(
+      `INSERT INTO email_message (email_key, env, kind, d, slot, status, subject, size_html, size_text,
+         provider_id, attempts, recipient_sha, created_at, sent_at, ref_json)
+       VALUES ('rv:1', 'production', 'review', '2030-03-04', 'reserved_review', 'sent', 'Evening Review',
+         1234, 567, 'prov-1', 2, '${"ab".repeat(32)}', '2030-03-04T08:00:00.000Z',
+         '2030-03-04T08:00:03.000Z', '{"claim_at":"2030-03-04T08:00:00.000Z","claim_n":0}')`,
+    );
+    await db.execute(mail("p0:x", "p0", "p0"));
+    await db.execute(attempt("rv:1"));
+    const objects = (name: string) =>
+      db
+        .execute({
+          sql: "SELECT type, name, sql FROM sqlite_master WHERE tbl_name = ? ORDER BY type, name",
+          args: [name],
+        })
+        .then((r) => r.rows.map((x) => `${x.type}:${x.name}:${String(x.sql ?? "")}`));
+    const rowsOf = () =>
+      db
+        .execute("SELECT * FROM email_message ORDER BY email_key")
+        .then((r) => r.rows.map((x) => JSON.stringify({ ...x })));
+    const before = await objects("email_message");
+    const beforeAttempt = await objects("email_attempt");
+    const beforeRows = await rowsOf();
+    expect(beforeRows).toHaveLength(2);
+
+    expect(await migrateUp(db, ms)).toEqual({ applied: 1, version: 20 });
+    const after = await objects("email_message");
+    const afterAttempt = await objects("email_attempt");
+    // Same object names, in the same shape; the only textual change is the widened kind CHECK.
+    const PICK_KINDS = ", 'pick_hit','pick_cleared','pick_candidate','pick_batch','pick_digest'";
+    const norm = (s: string) =>
+      s
+        .replace(/\s+/g, " ")
+        .replace(/CREATE TABLE "?email_message(?:_new)?"? \(/, "CREATE TABLE email_message (")
+        .replace(PICK_KINDS, "");
+    expect(after.map(norm)).toEqual(before.map(norm));
+    expect(after.filter((s) => s.startsWith("table:"))[0]).toContain("'pick_digest'");
+    expect(afterAttempt).toEqual(beforeAttempt);
+    expect(await rowsOf()).toEqual(beforeRows);
+    expect((await db.execute("PRAGMA foreign_key_check")).rows).toEqual([]);
+    const cols = await db.execute("PRAGMA table_info(email_message)");
+    expect(cols.rows.map((c) => `${c.name}:${c.type}:${c.notnull}:${c.dflt_value ?? ""}:${c.pk}`)).toEqual([
+      "email_key:TEXT:1::1",
+      "env:TEXT:1::0",
+      "kind:TEXT:1::0",
+      "d:TEXT:1::0",
+      "slot:TEXT:1::0",
+      "status:TEXT:1::0",
+      "subject:TEXT:1:'':0",
+      "size_html:INTEGER:1:0:0",
+      "size_text:INTEGER:1:0:0",
+      "provider_id:TEXT:0::0",
+      "attempts:INTEGER:1:0:0",
+      "recipient_sha:TEXT:0::0",
+      "created_at:TEXT:1::0",
+      "sent_at:TEXT:0::0",
+      "ref_json:TEXT:1:'{}':0",
+    ]);
+    // The guards still fire on the copied rows, and the attempt link still holds.
+    await fails(db, "UPDATE email_message SET subject = 'x' WHERE email_key = 'rv:1'");
+    await fails(db, "DELETE FROM email_message WHERE email_key = 'rv:1'");
+    await fails(db, attempt("nope"));
+    await db.execute("UPDATE email_message SET status = 'failed' WHERE email_key = 'p0:x'");
+  });
+
   it("rolls back: old rows survive, pick rows go, the old CHECK is back", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
     const ms = await loadMigrations(MIGRATIONS("main"));
