@@ -16,6 +16,8 @@ import { isValidSecret, verifySignedRequest } from "@/lib/security/hmac";
 import type { NonceStore } from "@/lib/security/replay";
 import { appEnvironment } from "@/lib/workerReport/handler";
 import { recordOutcomes } from "@/lib/intraday/outcome";
+import { measureCandidates } from "@/lib/intraday/measure";
+import { evaluateIntradayStream } from "@/lib/intraday/evaluator";
 import { MARKET, runReviewSend, type ReviewSendResult } from "./send";
 
 export const EVENING_REVIEW_PURPOSE = "evening-review";
@@ -111,7 +113,14 @@ export function createEveningReviewHandler(deps: ReviewRouteDeps) {
       } catch {
         /* the review goes out without outcomes; the next run records them */
       }
-      // M17 WP9 (D-399): `measureCandidates(db, MARKET, d)` is called here, in its own try/catch.
+      // M17 WP9 (D-399, D-466): measure the candidates whose horizon has completed, then run the
+      // VAL-118 evaluator; own try/catch, a failure never blocks the review.
+      try {
+        await measureCandidates(db, MARKET, d);
+        await evaluateIntradayStream(db, MARKET, new Date(nowSec * 1000).toISOString());
+      } catch {
+        /* measurement is retried by the next evening run */
+      }
       const r: ReviewSendResult = await runReviewSend(
         {
           db,
