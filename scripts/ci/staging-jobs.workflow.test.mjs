@@ -35,6 +35,7 @@ const NOTICE = [
   "backfill-prices",
   "backfill-index",
   "asx-fetch",
+  "diagnose-signals",
 ];
 
 test("every workflow with a production job is in the locked list, and the lists are complete", () => {
