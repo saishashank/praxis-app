@@ -1,0 +1,7 @@
+{
+  "routes": {
+    "POST /api/internal/pick-alerts": {
+      "tests": ["tests/alerts/pickAlerts.test.ts", "tests/alerts/pickEvaluate.test.ts"]
+    }
+  }
+}

@@ -79,6 +79,14 @@ rules:
     purpose: "Internal endpoint called by the Worker or a workflow with a signed (HMAC) body; never by a browser."
     views: [agents, security]
     inputs: ["signed POST body"]
+  - match: "route:POST:/api/internal/pick-alerts"
+    specIds: [ARN-112, ARN-113, ARN-114, ARN-115, SEC-114, PLT-077]
+    purpose: "Signed five-minute tick: arms pick alerts, reads delayed quotes, records hit and clear transitions. Never touches an order, book or ledger."
+    views: [agents, security, email]
+  - match: "route:POST:/api/internal/intraday-scan"
+    specIds: [AGT-140, DAT-239, SEC-114, PLT-077]
+    purpose: "Signed half-hourly scan: finds movers with a news catalyst from delayed quotes and records shadow candidates. Never touches an order, book or ledger."
+    views: [agents, security, email]
   - match: "route:*:/api/cron/*"
     specIds: [PLT-074, PLT-015]
     purpose: "Heartbeat or watchdog endpoint on the platform cron, independent of the Worker."
@@ -273,6 +281,14 @@ rules:
     specIds: [EML-020, EML-004]
     purpose: "Outbound email record {name} (one email key per message)."
     views: [email]
+  - match: "table:main.{pick_alert,pick_alert_mail}"
+    specIds: [ARN-115, EML-041, SEC-114]
+    purpose: "Pick alert record {name}: append-only transitions or the fate of their e-mails."
+    views: [agents, data, email]
+  - match: "table:main.{intraday_candidate,quote_run}"
+    specIds: [DAT-240, NFR-042, SEC-114]
+    purpose: "Intraday watch record {name}: shadow candidates or the quote requests made by each run."
+    views: [agents, data]
   - match: "table:main.sentinel_*"
     specIds: [AGT-010, DAT-122]
     purpose: "Sentinel intake table {name}."
@@ -309,6 +325,12 @@ rules:
     views: [agents, email]
   - match: "slot:watchdog-*"
     specIds: [PLT-074, PLT-073]
+    views: [agents, platform, email]
+  - match: "slot:quote-poll"
+    specIds: [PLT-077, ARN-112]
+    views: [agents, platform, email]
+  - match: "slot:intraday-scan"
+    specIds: [PLT-077, AGT-140]
     views: [agents, platform, email]
   - match: "slot:asx-poll"
     specIds: [DAT-122, AGT-010]

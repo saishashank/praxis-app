@@ -78,7 +78,7 @@ const num = async (db: Client, key: Parameters<typeof getConfig>[1]): Promise<nu
 const hm = (m: number): string =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; // threshold-ok: time format
 
-async function readCalendar(db: Client, market: string): Promise<CalendarRow[]> {
+export async function readCalendar(db: Client, market: string): Promise<CalendarRow[]> {
   const r = await db.execute({
     sql: "SELECT d, kind, close_time, confirmed FROM trading_calendar WHERE market = ? ORDER BY d",
     args: [market],
