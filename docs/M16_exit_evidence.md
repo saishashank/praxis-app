@@ -31,12 +31,20 @@ Decisions: D-360 (no V2 chapter bodies in the spec browser), D-361 (404 for non-
 - e2e (local production build, `turbopack.root` set temporarily and reverted, never committed): walk and access specs 18 of 18 pass; the page spec 3 of 3 pass after the edge test was made reachability-aware.
 - The full Vitest, smoke and e2e suites were not re-run for this package; remote CI has not run.
 
+## 3a. Integration-review fixes (branch `v2/m16-fix`, 2026-10-31)
+- **B1 file tracing:** `next.config.ts` now sets `outputFileTracingIncludes` for `/blueprint` (model, `spec/*.md`, open questions, decision log, config reference) and `/api/blueprint/model`; `tests/blueprint/traceIncludes.test.ts` fails if the list drifts from `DOCS_ALLOW` or `SPEC_DIR`. **Staging confirmation is pending** (Vercel build after the Owner pushes `build`): open `/blueprint` and its spec tab on staging and confirm no 500.
+- **S1 side panel:** config keys with current read-only values (known keys only), the last 5 runs per job, the source licence row, and spec IDs as links to `?tab=spec&q=<id>`; loader and tests in `tests/blueprint/panelData.test.ts`.
+- **S2 spec map:** page, model and export routes carry their own spec IDs and generic purpose text; model regenerated.
+- **S3/S4:** the access spec now includes the export route pair; the walk spec scans the Owner's responses for secret shapes and test-environment secrets (AT-57, AT-58 reports updated). The access spec also tolerates `x-nextjs-rewritten-query` for a signed-in non-owner on an RSC request (same D-377 residual).
+- **S5:** the stale guard comment now states D-371. The route-handler guard's 404 is unit-tested only (AT-57).
+- Gates: vitest tests/blueprint 69 of 69; the three m16 e2e specs 20 of 20; tsc, eslint, prettier, test:routes, test:architecture, test:hygiene green.
+
 ## 4. Open items for the Owner
 - **draw.io desktop open check (D-369):** open an exported `.drawio` (and a view's SVG) in draw.io desktop and confirm the same elements and edges. Not automated; not blocking. Not done.
 - **RSC residual (D-377):** a signed-in editor or viewer can tell `/blueprint` from a missing route by sending an `RSC: 1` request, because Next adds `x-nextjs-rewritten-path` after the proxy. Anonymous and plain page requests show nothing. Removing it needs a custom server or another not-found mechanism. Asserted as the known residual in `e2e/m16-blueprint-access.spec.ts`.
 - **D-371 spec amendment:** ch. 18 says unauthenticated users receive 404; the governing clause "indistinguishable from a missing route" wins, so anonymous `/blueprint*` gets the ordinary sign-in redirect and `/api/blueprint*` the ordinary 401. Please approve the wording change in ch. 18 at merge.
 - **D-360 no V2 bodies:** the spec browser shows v1 chapters, the decision log, the config reference and the ID index only; V2 chapter bodies stay out (SEC-110).
-- **AT-58 (d) gap:** the rendered page and generated JSON are not run through `bundle-secret-scan` and no test compares them with test-environment values; only the generator's shape scan and the export scan exist.
+- **AT-58 (d):** the Owner's rendered responses are now scanned for secret shapes and the run's test secrets; `bundle-secret-scan` itself is still not run on them.
 - **Edge hover (AT-59 a):** edges are mouse-only; 114 of 136 Platform-view edges were hovered, 22 are wholly covered by other drawing.
 - Owner audit log (`/audit`) legitimately lists `blueprint.view` and `blueprint.export` rows; the walk allows "blueprint" there only.
 - Push of `build`, remote CI (gitleaks history, e2e and Linux jobs can differ from local).

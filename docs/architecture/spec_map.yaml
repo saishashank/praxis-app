@@ -360,6 +360,17 @@ rules:
     specIds: [SEC-017, NFR-006]
     views: [platform]
 
+  # ---- Blueprint (M16): generic purpose text only, D-372 ----
+  - match: "page:/blueprint"
+    specIds: [SEC-111, SEC-112, UXN-297, UXN-298, UXN-300, ARC-002, ARC-003]
+    purpose: "Architecture diagrams and spec browser for the pinned Owner."
+  - match: "route:GET:/api/blueprint/model"
+    specIds: [SEC-111, UXN-297]
+    purpose: "Serves the architecture model to the pinned Owner."
+  - match: "route:GET:/api/blueprint/export"
+    specIds: [SEC-111, UXN-299, ARC-003]
+    purpose: "Serves a diagram export to the pinned Owner."
+
 elements:
   # ---- services (hand-kept) ----
   "service:app":

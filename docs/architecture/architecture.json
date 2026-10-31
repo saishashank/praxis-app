@@ -2375,9 +2375,15 @@
       "id": "page:/blueprint",
       "type": "page",
       "name": "/blueprint",
-      "purpose": "Screen /blueprint of the web app.",
+      "purpose": "Architecture diagrams and spec browser for the pinned Owner.",
       "specIds": [
-        "UXN-001"
+        "ARC-002",
+        "ARC-003",
+        "SEC-111",
+        "SEC-112",
+        "UXN-297",
+        "UXN-298",
+        "UXN-300"
       ],
       "owner": "app",
       "schedule": null,
@@ -3385,9 +3391,11 @@
       "id": "route:GET:/api/blueprint/export",
       "type": "route",
       "name": "GET /api/blueprint/export",
-      "purpose": "HTTP endpoint GET /api/blueprint/export of the web app.",
+      "purpose": "Serves a diagram export to the pinned Owner.",
       "specIds": [
-        "PLT-020"
+        "ARC-003",
+        "SEC-111",
+        "UXN-299"
       ],
       "owner": "app",
       "schedule": null,
@@ -3410,9 +3418,10 @@
       "id": "route:GET:/api/blueprint/model",
       "type": "route",
       "name": "GET /api/blueprint/model",
-      "purpose": "HTTP endpoint GET /api/blueprint/model of the web app.",
+      "purpose": "Serves the architecture model to the pinned Owner.",
       "specIds": [
-        "PLT-020"
+        "SEC-111",
+        "UXN-297"
       ],
       "owner": "app",
       "schedule": null,

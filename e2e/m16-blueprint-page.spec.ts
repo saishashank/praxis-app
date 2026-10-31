@@ -39,7 +39,9 @@ test("eight tabs, hover, panel, search and axe", async ({ browser, baseURL }) =>
   await first.click();
   const panel = page.getByTestId("bp-panel");
   await expect(panel).toBeVisible();
-  await expect(page.getByTestId("bp-panel-specs")).toContainText("AGT-105");
+  await expect(
+    page.getByTestId("bp-panel-specs").getByRole("link", { name: "AGT-105" }),
+  ).toHaveAttribute("href", /tab=spec&q=AGT-105/);
   await expect(page.getByTestId("bp-panel-status")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(panel).toBeHidden();
