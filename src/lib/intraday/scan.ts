@@ -288,6 +288,24 @@ export async function evaluateQuotes(db: Exec, x: EvaluateInput): Promise<Evalua
     const h = hist.get(q.code);
     if (q.prevCloseMicro === null || q.prevCloseMicro <= 0n) continue;
     const movePpm = Number(((q.lastMicro - q.prevCloseMicro) * BigInt(PPM)) / q.prevCloseMicro);
+    // A later slot with a usable quote refreshes the follow-up columns of an existing row, whatever
+    // today's verdict is (the 0020 trigger allows exactly these columns). The row itself is never re-decided.
+    const have = await db.execute({
+      sql: "SELECT 1 FROM intraday_candidate WHERE market = ? AND session_d = ? AND code = ?",
+      args: [x.market, x.sessionD, q.code],
+    });
+    if (have.rows.length > 0) {
+      if (quoteAgeMin(q, x.now) <= x.params.maxAgeMin) {
+        await db.execute({
+          sql:
+            "UPDATE intraday_candidate SET latest_quote_at = ?, latest_move_ppm = ? " +
+            "WHERE market = ? AND session_d = ? AND code = ? " +
+            "AND (latest_quote_at IS NULL OR latest_quote_at < ?)",
+          args: [q.quoteAt, movePpm, x.market, x.sessionD, q.code, q.quoteAt],
+        });
+      }
+      continue;
+    }
     const avg = h === undefined ? null : avgVolume20(h.volumes);
     const frac = sessionFraction(new Date(q.quoteAt), x.open, x.close);
     const relVolumePpm =
@@ -316,7 +334,9 @@ export async function evaluateQuotes(db: Exec, x: EvaluateInput): Promise<Evalua
         "INSERT INTO intraday_candidate (market, session_d, code, found_slot, found_at, item_source, " +
         "item_ann_id, item_category, materiality, polarity, move_ppm, sector_adj_ppm, rel_volume_ppm, " +
         "gates_json, indicative_limit_micro, indicative_stop_micro, latest_quote_at, latest_move_ppm) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?) " +
+        "ON CONFLICT (market, session_d, code) DO UPDATE SET latest_quote_at = excluded.latest_quote_at, " +
+        "latest_move_ppm = excluded.latest_move_ppm",
       args: [
         x.market,
         x.sessionD,

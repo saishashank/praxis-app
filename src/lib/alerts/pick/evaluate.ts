@@ -27,7 +27,9 @@ export function evaluateAlert(
   if (ctx.filled) return { state: "cleared", reason: "filled" };
   if (!ctx.inList) return { state: "cleared", reason: "left_list" };
   if (ctx.halted) return { state: "cleared", reason: "halted" };
-  if (s.sessionsArmed > ctx.params.maxSessions) return { state: "cleared", reason: "expired" };
+  // expired only without a hit (ARN-114 e)
+  if (s.state !== "hit" && s.sessionsArmed > ctx.params.maxSessions)
+    return { state: "cleared", reason: "expired" };
 
   // After a hit in this session a later rise or fall changes nothing (ARN-113).
   if (s.hitThisSession) return null;
@@ -35,7 +37,9 @@ export function evaluateAlert(
   if (!isUsableForHit(q, ctx.now, ctx.params.maxAgeMin, ctx.params.delayMin)) return null;
 
   const p = q.lastMicro;
-  if (p < s.stopMicro) return { state: "cleared", reason: "below_stop", quoteAt: q.quoteAt };
+  // below_stop only before any hit (ARN-114 b); above_chase_cap applies in any state
+  if (s.state !== "hit" && p < s.stopMicro)
+    return { state: "cleared", reason: "below_stop", quoteAt: q.quoteAt };
   if (p > chaseCapMicro(s.limitMicro, ctx.params.chaseCapPct)) {
     return { state: "cleared", reason: "above_chase_cap", quoteAt: q.quoteAt };
   }

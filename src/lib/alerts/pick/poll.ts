@@ -12,6 +12,7 @@
 // Writes: `pick_alert` and `quote_run` only (the mail tables are WP4's, through its hook). Orders,
 // books and ledgers are never touched (ARN-111, SEC-114).
 import type { Client } from "@libsql/client";
+import type { Exec } from "@/lib/cortex/store/common";
 import { getConfig } from "@/lib/config/store";
 import { localToUtc, marketDate, sessionsBetween, sessionTimes } from "@/lib/data/calendar";
 import { readQuoteSourceState } from "@/lib/data/controls";
@@ -64,7 +65,7 @@ export type PollSkipReason =
   | "already_done";
 
 export type PollRunDeps = {
-  db: Client;
+  db: Exec;
   now: () => Date;
   fetch: QuoteFetchDeps["fetch"];
   sleep: (ms: number) => Promise<void>;
@@ -93,7 +94,7 @@ export type PollRunResult =
 
 const skip = (reason: PollSkipReason, armed?: number): PollRunResult =>
   armed === undefined ? { status: "skipped", reason } : { status: "skipped", reason, armed };
-const num = async (db: Client, key: Parameters<typeof getConfig>[1]): Promise<number> =>
+const num = async (db: Exec, key: Parameters<typeof getConfig>[1]): Promise<number> =>
   Number(await getConfig(db, key));
 const hm = (m: number): string =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; // threshold-ok: time format
@@ -141,7 +142,7 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
   // 3. Arm first (D-397), then the digest hook of quiet hours (WP4).
   const recipients = await deps.recipients();
   const arm = await armForSession(db, market, sessionD, recipients, now);
-  const mailCtx = { db, now, market, sessionD };
+  const mailCtx = { db, now, market, sessionD, slot: slot.replace(":", "") };
   await mailer.digest(mailCtx);
 
   // 4. Cool-down and budget.
@@ -299,7 +300,7 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
 
 /** System Health lines of the "pick alerts" series, derived on read. */
 export async function pickAlertsHealth(
-  db: Client,
+  db: Exec,
   now: Date,
   market: string = POLL_MARKET,
 ): Promise<string[]> {
@@ -327,12 +328,12 @@ export type PickAlertsHandlerDeps = Omit<MachineDeps, "ctx"> & {
   fetch: PollRunDeps["fetch"];
   sleep: PollRunDeps["sleep"];
   /** Reads the auth DB (injected so tests need none). */
-  recipients: (db: Client) => Promise<string[]>;
+  recipients: (db: Exec) => Promise<string[]>;
   mailer?: PickAlertMailer;
 };
 
 /** The default recipients reader: auth DB preference rows plus the Owner default (D-385). */
-export async function defaultRecipients(main: Client, auth: Client): Promise<string[]> {
+export async function defaultRecipients(main: Exec, auth: Exec): Promise<string[]> {
   return alertRecipients(auth, String(await getConfig(main, "pick_alerts_default_owner")) === "on");
 }
 

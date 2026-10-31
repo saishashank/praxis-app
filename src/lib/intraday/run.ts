@@ -9,7 +9,7 @@
 //   6. CLAIM `quote_run` (requests = allowed, session_d = Melbourne market date, D-442) before any request;
 //   7. fetch delayed quotes, evaluate, write shadow candidates; a pause is recorded as its own row.
 // Writes: `quote_run` and `intraday_candidate` only. Orders, books and ledgers are never touched.
-import type { Client } from "@libsql/client";
+import type { Exec } from "@/lib/cortex/store/common";
 import { getConfig } from "@/lib/config/store";
 import {
   type CalendarKind,
@@ -49,7 +49,7 @@ export type ScanSkipReason =
   | "already_done";
 
 export type ScanRunDeps = {
-  db: Client;
+  db: Exec;
   now: () => Date;
   fetch: QuoteFetchDeps["fetch"];
   sleep: (ms: number) => Promise<void>;
@@ -73,12 +73,12 @@ export type ScanRunResult =
     };
 
 const skip = (reason: ScanSkipReason): ScanRunResult => ({ status: "skipped", reason });
-const num = async (db: Client, key: Parameters<typeof getConfig>[1]): Promise<number> =>
+const num = async (db: Exec, key: Parameters<typeof getConfig>[1]): Promise<number> =>
   Number(await getConfig(db, key));
 const hm = (m: number): string =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; // threshold-ok: time format
 
-export async function readCalendar(db: Client, market: string): Promise<CalendarRow[]> {
+export async function readCalendar(db: Exec, market: string): Promise<CalendarRow[]> {
   const r = await db.execute({
     sql: "SELECT d, kind, close_time, confirmed FROM trading_calendar WHERE market = ? ORDER BY d",
     args: [market],
@@ -93,7 +93,7 @@ export async function readCalendar(db: Client, market: string): Promise<Calendar
 
 /** Minutes since the latest pause row of today, or null when none (shared by the poll and the scan). */
 export async function minutesSincePause(
-  db: Client,
+  db: Exec,
   market: string,
   sessionD: string,
   now: Date,
@@ -254,7 +254,7 @@ export async function runIntradayScan(deps: ScanRunDeps): Promise<ScanRunResult>
 
 /** System Health lines of the "intraday scan" series, derived on read (nothing is stored for them). */
 export async function intradayScanHealth(
-  db: Client,
+  db: Exec,
   now: Date,
   market: string = SCAN_MARKET,
 ): Promise<string[]> {

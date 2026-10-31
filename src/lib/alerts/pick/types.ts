@@ -91,11 +91,22 @@ export type AlertRow = {
 /** A transition that was just written and may be e-mailed (hit; below_stop; above_chase_cap). */
 export type MailableTransition = AlertRow;
 
-export type MailerCtx = { db: Exec; now: Date; market: string; sessionD: string };
+export type MailerCtx = {
+  db: Exec;
+  now: Date;
+  market: string;
+  sessionD: string;
+  /** Tick slot as HHMM (the `pickb:<user>:<d>:<HHMM>` key part). */
+  slot: string;
+};
 
 /**
  * Hook for WP4 (`sendPickMail`): called after the state rows are written, never before (state first,
  * mail second). The default does nothing, so no mail leaves until WP4 plugs in.
+ * Contract: `notify`'s list is a hint only. The mailer MUST derive the transitions to mail from
+ * `pick_alert` rows (hit; cleared below_stop / above_chase_cap) that have no `pick_alert_mail` row, so a
+ * crash between state and mail, or a lost tick, is repaired on the next tick. `digest` MUST be
+ * key-idempotent (a second call with the same key sends nothing).
  */
 export type PickAlertMailer = {
   /** One tick's mailable transitions (batched by the implementation). */

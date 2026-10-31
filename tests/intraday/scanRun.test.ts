@@ -14,7 +14,7 @@ afterEach(cleanupTempDbs);
 // Wed 2026-11-04 (AEDT, UTC+11). 10:45 Melbourne is 2026-11-03T23:45Z: the UTC date is yesterday.
 const SESSION = "2026-11-04";
 const NOW = new Date("2026-11-03T23:45:00.000Z");
-const QUOTE_S = (NOW.getTime() - 20 * 60_000) / 1000; // 20 minutes behind: fresh by D-441
+let quoteS = (NOW.getTime() - 20 * 60_000) / 1000; // 20 minutes behind: fresh by D-441
 const MIN = 60_000;
 
 let db: Client;
@@ -43,7 +43,7 @@ const fetchStub: ScanRunDeps["fetch"] = async (url) => {
         price: s.price,
         prevClose: s.prev,
         volume: s.volume,
-        timeS: QUOTE_S,
+        timeS: quoteS,
         symbol: `${code}.AX`,
       }),
   };
@@ -342,5 +342,21 @@ describe("shadow candidates", () => {
     expect(await intradayScanHealth(db, NOW)).toContain(
       "Intraday scan stopped for the day (request budget)",
     );
+  });
+
+  it("a later slot refreshes the follow-up columns of an existing row, whatever the new verdict (S5)", async () => {
+    await accept();
+    await runIntradayScan(deps());
+    const first = (await db.execute("SELECT * FROM intraday_candidate WHERE code = 'ZZ01'"))
+      .rows[0];
+    const later = new Date(NOW.getTime() + 30 * MIN);
+    quoteS = (later.getTime() - 20 * 60_000) / 1000;
+    specs.set("ZZ01", { price: 10.1, prev: 10, volume: 50_000 }); // +1 %: no longer a candidate
+    expect(await runIntradayScan(deps(later))).toMatchObject({ status: "ok", written: 0 });
+    const row = (await db.execute("SELECT * FROM intraday_candidate WHERE code = 'ZZ01'")).rows[0];
+    expect(row.move_ppm).toBe(first.move_ppm); // the finding itself is never re-decided
+    expect(row.latest_move_ppm).toBe(10_000); // +1 %
+    expect(String(row.latest_quote_at) > String(first.latest_quote_at)).toBe(true);
+    quoteS = (NOW.getTime() - 20 * 60_000) / 1000;
   });
 });

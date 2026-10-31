@@ -57,6 +57,8 @@ const IMPORT_RE =
 
 function specifiers(src: string): string[] {
   const out: string[] = [];
+  // a type-only import of the arena column types (sentinel/schema.ts) carries no code
+  src = src.replace(/import type [^;]*?from ["']@\/lib\/arena\/schema["'];?/g, "");
   for (const m of src.matchAll(IMPORT_RE)) out.push(m[1] ?? m[2] ?? m[3]);
   return out;
 }
@@ -80,8 +82,37 @@ const FORBIDDEN: Array<[string, RegExp]> = [
   ["anthropic sdk", /^@anthropic-ai\//],
 ];
 
+/**
+ * The guarded roots plus every src file they import, transitively (relative and @/ imports only).
+ * Descent stops at files outside the modules the new streams own or read directly (sentinel intake,
+ * data helpers, money): vetted read-only reuse such as the Cortex gate functions, the signed-route
+ * wrapper and the config store are leaves, so their own history of imports is not part of this guard.
+ */
+const DESCEND =
+  /^src\/lib\/(sentinel|data|money|intraday|alerts\/pick)\/|^src\/app\/api\/internal\/(pick-alerts|intraday-scan)\//;
+function closure(roots: string[]): string[] {
+  const seen = new Set<string>();
+  const stack = [...roots];
+  const exts = ["", ".ts", ".tsx", ".mjs", "/index.ts"];
+  while (stack.length > 0) {
+    const f = stack.pop()!;
+    if (seen.has(f)) continue;
+    seen.add(f);
+    if (!DESCEND.test(posix(path.relative(ROOT, f)))) continue; // a leaf: listed, not scanned
+    for (const spec of specifiers(fs.readFileSync(f, "utf8"))) {
+      if (!spec.startsWith("@/") && !spec.startsWith(".")) continue;
+      const base = path.join(ROOT, resolveSpec(f, spec));
+      const hit = exts
+        .map((e) => base + e)
+        .find((p) => fs.existsSync(p) && fs.statSync(p).isFile());
+      if (hit !== undefined && posix(hit).includes("/src/")) stack.push(hit);
+    }
+  }
+  return [...seen].sort();
+}
+
 describe("AT-60 order boundary (i): import guard", () => {
-  const files = guardedFiles();
+  const files = closure(guardedFiles()).filter((f) => DESCEND.test(posix(path.relative(ROOT, f))));
 
   it("guards the WP1, WP3 and WP5 modules", () => {
     const rel = files.map((f) => posix(path.relative(ROOT, f)));
@@ -89,6 +120,7 @@ describe("AT-60 order boundary (i): import guard", () => {
     expect(rel).toContain("src/lib/intraday/run.ts");
     expect(rel).toContain("src/lib/data/quotes/fetch.ts");
     expect(rel).toContain("src/app/api/internal/pick-alerts/route.ts");
+    expect(rel).toContain("src/lib/sentinel/todayItems.ts"); // reached through the closure
   });
 
   it("no guarded file imports an arena, night, decision-writer, pick-store, agent or LLM module", () => {
@@ -105,7 +137,7 @@ describe("AT-60 order boundary (i): import guard", () => {
   });
 
   it("the alert modules take no Cortex input at all (evaluateAlert is limit, stop and quote only)", () => {
-    for (const f of files.filter((x) => posix(x).includes("src/lib/alerts/pick/"))) {
+    for (const f of guardedFiles().filter((x) => posix(x).includes("src/lib/alerts/pick/"))) {
       for (const spec of specifiers(fs.readFileSync(f, "utf8"))) {
         const r = resolveSpec(f, spec);
         // the Cortex store `Exec` type is the only allowed neighbour (a type, no writer)
@@ -128,7 +160,12 @@ describe("AT-60 order boundary (i): import guard", () => {
 describe("AT-60 order boundary (ii): SQL write allowlist", () => {
   const ALLOWED = new Set(["pick_alert", "pick_alert_mail", "intraday_candidate", "quote_run"]);
   const WRITE_RE =
-    /\b(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+([A-Za-z_][A-Za-z0-9_]*)/gi;
+    /(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|(?<!DO\s)UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+([A-Za-z_][A-Za-z0-9_]*)/gi;
+  // a write keyword followed by anything but an identifier (interpolation, concatenation)
+  const DYNAMIC_RE =
+    /(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|(?<!DO\s)UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+(?![A-Za-z_])/gi;
+  // an execute( whose first argument is neither a string literal nor an object with a literal sql
+  const EXEC_RE = /\.execute\((?!\s*(?:["'\x60]|\{\s*sql:\s*["'\x60]))/g;
 
   it("every INSERT, UPDATE and DELETE literal names an allowed table", () => {
     const bad: string[] = [];
@@ -141,6 +178,26 @@ describe("AT-60 order boundary (ii): SQL write allowlist", () => {
         .join("\n");
       for (const m of src.matchAll(WRITE_RE)) {
         if (!ALLOWED.has(m[1])) bad.push(`${posix(path.relative(ROOT, f))}: ${m[0]}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it("no write keyword is followed by an interpolation, and execute takes only literals", () => {
+    const bad: string[] = [];
+    for (const f of closure(guardedFiles()).filter((x) =>
+      DESCEND.test(posix(path.relative(ROOT, x))),
+    )) {
+      const src = fs
+        .readFileSync(f, "utf8")
+        .split("\n")
+        .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
+        .join("\n");
+      const rel = posix(path.relative(ROOT, f));
+      for (const m of src.matchAll(DYNAMIC_RE)) bad.push(`${rel}: dynamic write ${m[0]}`);
+      for (const m of src.matchAll(EXEC_RE)) {
+        const tail = src.slice(m.index, m.index + 60).replace(/\s+/g, " ");
+        bad.push(`${rel}: non-literal execute ${tail}`);
       }
     }
     expect(bad).toEqual([]);

@@ -111,6 +111,17 @@ describe("evaluateAlert: the seven shapes", () => {
   });
 });
 
+describe("evaluateAlert: after a hit in an earlier session (ARN-114 b, e)", () => {
+  const old = state({ state: "hit", hitThisSession: false, sessionsArmed: 2 });
+  it("below the stop is no clear once a hit exists; above the cap still clears", () => {
+    expect(evaluateAlert(old, quote(STOP - 1n), ctx())).toBeNull();
+    expect(evaluateAlert(old, quote(11n * M), ctx())).toEqual(cleared("above_chase_cap"));
+  });
+  it("expired only without a hit", () => {
+    expect(evaluateAlert({ ...old, sessionsArmed: 9 }, null, ctx())).toBeNull();
+  });
+});
+
 describe("evaluateAlert: fail-closed on the quote", () => {
   it("no quote, a stale quote and a quote without volume never hit or clear", () => {
     expect(evaluateAlert(state(), null, ctx())).toBeNull();
