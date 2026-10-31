@@ -298,6 +298,8 @@ jobs:
         run: npm run test:env-names
       - name: Configuration reference is current (BLD-040)
         run: npm run test:config-reference
+      - name: Architecture model complete and current (ARC-001, AT-58)
+        run: npm run test:architecture
 
   # M8 T17 (decision 25; TST-112): the release gate, only on a pull request into `release`. The
   # Owner adds `release-gate` as a required status check. It runs even when a job it needs failed
