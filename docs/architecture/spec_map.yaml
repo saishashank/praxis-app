@@ -9,8 +9,20 @@
 #   testOnlyHosts: hosts that appear only in tests and are left out of the model.
 # NAMES AND STRUCTURE ONLY: never a secret value, a fingerprint, an email address or a real price.
 # Views: platform, data, cortex, agents, llm, email, security, learning.
+#   docHosts:      hosts that are documentation links only; their edges read "Documentation link."
+# Cortex passports are in the model only as the table angle_passport plus the hand-kept groups below;
+# their live status (family state, last run) is the live-status loader's job (WP4), not the generator's.
 version: 1
 testOnlyHosts: []
+docHosts:
+  - ai.google.dev
+  - console.groq.com
+  - developers.cloudflare.com
+  - docs.github.com
+  - github.com
+  - turso.tech
+  - vercel.com
+  - www.tradingview.com
 
 rules:
   # ---- pages, routes, actions (the app) ----
@@ -126,51 +138,51 @@ rules:
   - match: "workflow:*"
     purpose: "GitHub Actions workflow {name}."
     specIds: [PLT-015]
-    views: [platform]
+    views: [platform, security]
   - match: "workflow:ingest-batch1"
     specIds: [DAT-103, PLT-073]
     purpose: "Batch 1: AU end-of-day ingest into the main database."
-    views: [data, agents]
+    views: [data, agents, security]
   - match: "workflow:asx-fetch"
     specIds: [DAT-122, PLT-073]
     purpose: "ASX fetch: announcements and the listed-companies file within the slot rules."
-    views: [data, agents]
+    views: [data, agents, security]
   - match: "workflow:backfill-*"
     specIds: [DAT-125, DAT-126]
     purpose: "History backfill, off until the Owner enables it."
-    views: [data]
+    views: [data, security, agents]
   - match: "workflow:arena-*"
     specIds: [ARN-060, PLT-073]
     purpose: "Paper-trading arena batch (signals, orders, close of books)."
-    views: [agents, cortex]
+    views: [agents, cortex, security]
   - match: "workflow:replay"
     specIds: [ARN-001, VAL-110]
     purpose: "Replay of past days through the current rules."
-    views: [agents, learning]
+    views: [agents, learning, security]
   - match: "workflow:maintenance"
     specIds: [OPS-001, PLT-073]
     purpose: "Nightly maintenance: pruning, integrity and housekeeping."
-    views: [agents, data]
+    views: [agents, data, security]
   - match: "workflow:{backup,restore-drill}"
     specIds: [PLT-022a, OPS-045]
     purpose: "Encrypted backup to the private data repository, and the restore drill."
-    views: [data, security]
+    views: [data, security, agents]
   - match: "workflow:kb-archive"
     specIds: [KB-001, PLT-022a]
     purpose: "Knowledge-base archive to the private data repository."
-    views: [data, learning]
+    views: [data, learning, security, agents]
   - match: "workflow:llm-bakeoff"
     specIds: [LLM-070, LLM-010]
     purpose: "Bake-off of candidate models per role."
-    views: [llm]
+    views: [llm, security, agents]
   - match: "workflow:watchdog"
     specIds: [PLT-074, PLT-019]
     purpose: "Independent watchdog: evening-review check, direct email on failure, deliberate failed run."
-    views: [platform, agents, email]
+    views: [platform, agents, email, security]
   - match: "workflow:m0-failure-email-test"
     specIds: [PLT-019, EML-020]
     purpose: "Owner test of the failure email path."
-    views: [email]
+    views: [email, security]
   - match: "workflow:smoke-test"
     specIds: [SEC-017, OPS-037]
     purpose: "Stage 1 credential smoke test."
@@ -190,7 +202,7 @@ rules:
   - match: "workflow:{nightly,mutation,talib-reference,staging-e2e-day}"
     specIds: [TST-108, NFR-040]
     purpose: "Test workflow {name}: scheduled or manual quality checks."
-    views: [platform]
+    views: [platform, security]
 
   # ---- tables ----
   - match: "table:main.*"

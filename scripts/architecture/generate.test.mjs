@@ -40,6 +40,13 @@ elements:
     specIds: [PLT-020]
     owner: app
     views: [platform]
+  "service:actions":
+    type: service
+    name: Actions
+    purpose: Runs jobs.
+    specIds: [PLT-015]
+    owner: actions
+    views: [platform]
 `;
 
 const SMALL = {
@@ -270,4 +277,123 @@ test("real repo: routes and actions equal route-coverage's list; no secret-shape
   const text = fs.readFileSync(path.join(ROOT, MODEL_PATH), "utf8");
   assert.deepEqual(findSecretShapes(text), []);
   assert.equal(text, render(JSON.parse(text)));
+});
+
+// ---- review fixes ----
+
+const withMap = (extra, files = {}) =>
+  fixture({ ...SMALL, ...files, "docs/architecture/spec_map.yaml": MAP + extra });
+
+test("only service, agent and group may be hand-kept; other types must exist in the code", () => {
+  const ghost =
+    '  "page:/ghost":\n    type: page\n    purpose: x\n  "secret:GHOST_TOKEN":\n    type: secret\n    purpose: x\n  "agent:A1":\n    type: agent\n    purpose: x\n    specIds: [AGT-010]\n    owner: worker\n    views: [platform]\n';
+  const { problems } = buildModel(withMap(ghost));
+  assert.ok(problems.some((p) => /page:\/ghost.*not in the code/.test(p)));
+  assert.ok(problems.some((p) => /secret:GHOST_TOKEN.*not in the code/.test(p)));
+  assert.ok(!problems.some((p) => /agent:A1/.test(p)));
+});
+
+test("code-derived edges that cannot be drawn are reported, not dropped", () => {
+  const root = fixture({
+    ...SMALL,
+    "docs/architecture/spec_map.yaml": MAP.replace(
+      "elements:",
+      '  - match: "slot:night"\n    views: [agents]\nelements:',
+    ),
+  });
+  const a = buildModel(root);
+  assert.ok(
+    a.problems.some((p) => /slot:night -> workflow:nightly \(dispatch\) shares no view/.test(p)),
+  );
+  const missing = fixture({
+    ...SMALL,
+    "worker/src/schedule.ts": SMALL["worker/src/schedule.ts"].replace(
+      'workflow: "nightly.yml"',
+      'workflow: "gone.yml"',
+    ),
+  });
+  assert.ok(buildModel(missing).problems.some((p) => /workflow:gone.*does not exist/.test(p)));
+  const route = fixture({
+    ...SMALL,
+    "worker/src/schedule.ts":
+      'export const AU_SLOTS = [\n  slot({ id: "flush", time: "01:00", runner: "route", route: "/api/ping", note: "x" }),\n];\n',
+  });
+  assert.ok(
+    buildModel(route).problems.some((p) => /route:POST:\/api\/ping.*does not exist/.test(p)),
+  );
+});
+
+test("ALTER TABLE DROP COLUMN and RENAME COLUMN change the column list", () => {
+  const root = fixture({
+    ...SMALL,
+    "db/migrations/main/0002_alter.sql":
+      "-- +up\nALTER TABLE thing ADD COLUMN extra TEXT;\nALTER TABLE thing DROP COLUMN name;\nALTER TABLE thing RENAME COLUMN extra TO more;\n-- +down\nSELECT 1;\n",
+  });
+  const t = buildModel(root).model.elements.find((e) => e.id === "table:main.thing");
+  assert.deepEqual(t.attrs.columns, ["id", "more"]);
+});
+
+test("an unterminated flow collection throws instead of hanging", () => {
+  assert.throws(() => parseYaml("a: [1, 2"), /unterminated flow collection/);
+  assert.throws(() => parseYaml("a: { k: v"), /unterminated flow collection/);
+});
+
+test("secret holders written as templates are resolved", () => {
+  const root = fixture({
+    ...SMALL,
+    "src/lib/security/secretStores.ts":
+      'const G = "github-env" as const;\nexport const SECRET_ROWS = [\n  { id: "a", slots: [\n    { env: "production", store: G, holder: `${GH("production")} (temporary)`, names: ["TOKEN_ONE"], step: 2 },\n    { env: "production", store: "offline", holder: "Safe place", names: ["TOKEN_TWO"], step: 2 },\n  ] },\n];\n',
+  });
+  const { model, problems } = buildModel(root);
+  assert.deepEqual(problems, []);
+  const one = model.elements.find((e) => e.id === "secret:TOKEN_ONE");
+  assert.deepEqual(one.attrs.stores, [
+    "production: github-env (GitHub environment `production` (temporary))",
+  ]);
+  assert.ok(
+    model.elements.some((e) => e.id === "secret:TOKEN_TWO"),
+    "quoted store is read",
+  );
+});
+
+test("cross-checks fail the build when a reader drops a slot, a secret slot or a roster entry", () => {
+  const sched = fixture({
+    ...SMALL,
+    "worker/src/schedule.ts":
+      SMALL["worker/src/schedule.ts"] + '  slot({ time: "05:00", runner: "worker" }),\n',
+  });
+  assert.ok(
+    buildModel(sched).problems.some((p) => /slot\(\{\.\.\.\}\) entries but 1 read/.test(p)),
+  );
+  const sec = fixture({
+    ...SMALL,
+    "src/lib/security/secretStores.ts":
+      SMALL["src/lib/security/secretStores.ts"] +
+      '// extra\nconst x = { env: "staging", store: G, holder: H, step: 1 };\n',
+  });
+  assert.ok(buildModel(sec).problems.some((p) => /store slots but/.test(p)));
+  const ros = fixture({
+    ...SMALL,
+    "src/lib/llm/roster.ts":
+      'export const ROSTER = [\n  { modelId: "m1", roles: ["R1"], provider: "google" },\n  { provider: "groq" , roles: [] },\n];\n',
+  });
+  const r = buildModel(ros);
+  assert.ok(!r.problems.some((p) => /roster entries/.test(p)), "order-independent fields are read");
+  const cred = fixture({
+    ...SMALL,
+    "src/lib/sentinel/schema.ts": 'export const CREDENTIAL_NAMES = {\n  a_key: "x",\n} as const;\n',
+  });
+  assert.ok(buildModel(cred).problems.some((p) => /a_key.*no secret row tracks/.test(p)));
+});
+
+test("documentation hosts get a documentation edge text", () => {
+  const root = withMap("docHosts:\n  - example.org\n");
+  const g = buildModel(root).model.edges.find((e) => e.to === "host:example.org");
+  assert.equal(g.contract, "Documentation link.");
+});
+
+test("secret scan: long mixed tokens and Vercel tokens are caught", () => {
+  const cf = "Ab1" + "x".repeat(10) + "_" + "Qz9".repeat(9);
+  assert.ok(findSecretShapes(`t ${cf} t`).length > 0);
+  assert.ok(findSecretShapes("vcp_" + "a1B2".repeat(6)).length > 0);
 });

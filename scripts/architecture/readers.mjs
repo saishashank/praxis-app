@@ -153,6 +153,18 @@ export function readTables(root) {
         tables.get(key(m[1]))?.columns.push(m[2]);
       }
       for (const m of sql.matchAll(
+        /\bALTER\s+TABLE\s+["`]?(\w+)["`]?\s+DROP\s+COLUMN\s+["`]?(\w+)/gi,
+      )) {
+        const t = tables.get(key(m[1]));
+        if (t) t.columns = t.columns.filter((c) => c !== m[2]);
+      }
+      for (const m of sql.matchAll(
+        /\bALTER\s+TABLE\s+["`]?(\w+)["`]?\s+RENAME\s+COLUMN\s+["`]?(\w+)["`]?\s+TO\s+["`]?(\w+)/gi,
+      )) {
+        const t = tables.get(key(m[1]));
+        if (t) t.columns = t.columns.map((c) => (c === m[2] ? m[3] : c));
+      }
+      for (const m of sql.matchAll(
         /\bALTER\s+TABLE\s+["`]?(\w+)["`]?\s+RENAME\s+TO\s+["`]?(\w+)/gi,
       )) {
         const t = tables.get(key(m[1]));
@@ -253,14 +265,20 @@ export function readLlm(root) {
   if (exists(path.join(root, ros))) {
     const text = read(root, ros);
     const start = text.indexOf("export const ROSTER");
-    for (const m of text
-      .slice(start < 0 ? 0 : start)
-      .matchAll(/\bprovider:\s*"([^"]+)",\s*modelId:\s*"([^"]+)",\s*roles:\s*\[([^\]]*)\]/g)) {
+    const open = start < 0 ? -1 : text.indexOf("[", text.indexOf("=", start));
+    for (let i = open + 1; open >= 0 && i < text.length; i += 1) {
+      if (text[i] === "]") break;
+      if (text[i] !== "{") continue;
+      const close = matchingBrace(text, i);
+      if (close < 0) break;
+      const body = text.slice(i, close + 1);
+      const rolesM = /\broles:\s*\[([^\]]*)\]/.exec(body);
       roster.push({
-        provider: m[1],
-        modelId: m[2],
-        roles: [...m[3].matchAll(/"([^"]+)"/g)].map((x) => x[1]),
+        provider: strProp(body, "provider"),
+        modelId: strProp(body, "modelId"),
+        roles: rolesM ? [...rolesM[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]) : [],
       });
+      i = close;
     }
   }
   return { roles: [...new Set(roles)].sort(), roster };
@@ -293,6 +311,13 @@ export function readSecrets(root) {
   for (const m of text.matchAll(/^const\s+(\w+)\s*=\s*"(\w+)"\s+as\s+const/gm)) consts[m[1]] = m[2];
   const holder = (expr) => {
     const e = expr.trim();
+    if (e.startsWith("`") && e.endsWith("`")) {
+      // a template: ${GH("x")} and ${CONST} are resolved to their text
+      return e
+        .slice(1, -1)
+        .replace(/\$\{\s*GH\(\s*"([^"]+)"\s*\)\s*\}/g, (_, n) => `GitHub environment \`${n}\``)
+        .replace(/\$\{\s*(\w+)\s*\}/g, (_, n) => consts[n] ?? n);
+    }
     if (/^\w+$/.test(e)) return consts[e] ?? e;
     const gh = /^GH\(\s*"([^"]+)"\s*\)$/.exec(e);
     if (gh) return `GitHub environment \`${gh[1]}\``;
@@ -301,7 +326,7 @@ export function readSecrets(root) {
   const body = text.slice(text.indexOf("export const SECRET_ROWS"));
   const byName = new Map();
   const slotRe =
-    /env:\s*"(production|staging)",\s*store:\s*(\w+),\s*holder:\s*([^\n]+?),\s*names:\s*\[([^\]]*)\]/g;
+    /env:\s*"(production|staging)",\s*store:\s*"?(\w+)"?,\s*holder:\s*([^\n]+?),\s*names:\s*\[([^\]]*)\]/g;
   for (const m of body.matchAll(slotRe)) {
     const store = STORE_OF[m[2]] ?? consts[m[2]] ?? m[2];
     for (const n of m[4].matchAll(/"([A-Z][A-Z0-9_]*)"/g)) {

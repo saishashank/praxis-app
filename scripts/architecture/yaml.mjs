@@ -52,6 +52,7 @@ function flow(s, pos) {
     const out = [];
     for (;;) {
       ws();
+      if (i >= s.length) throw new Error("yaml: unterminated flow collection");
       if (s[i] === "]") return [out, i + 1];
       const [v, n] = flow(s, i);
       out.push(v);
@@ -65,6 +66,7 @@ function flow(s, pos) {
     const out = {};
     for (;;) {
       ws();
+      if (i >= s.length) throw new Error("yaml: unterminated flow collection");
       if (s[i] === "}") return [out, i + 1];
       const [k, n] = flowToken(s, i, ":");
       i = n;

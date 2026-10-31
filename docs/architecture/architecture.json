@@ -4605,7 +4605,8 @@
       "source": "src/lib/security/secretStores.ts",
       "attrs": {
         "stores": [
-          "production: github-env (`${GH(\"production\")} (temporary)`)"
+          "production: github-env (GitHub environment `production` (temporary))",
+          "production: offline (Your offline safe place (never on GitHub, Vercel or Cloudflare))"
         ]
       }
     },
@@ -5279,7 +5280,7 @@
       "source": "src/lib/security/secretStores.ts",
       "attrs": {
         "stores": [
-          "production: github-env (`${GH(\"production\")} (temporary)`)"
+          "production: github-env (GitHub environment `production` (temporary))"
         ]
       }
     },
@@ -11831,7 +11832,8 @@
       "runbook": null,
       "views": [
         "agents",
-        "cortex"
+        "cortex",
+        "security"
       ],
       "source": ".github/workflows/arena-close.yml",
       "attrs": {
@@ -11864,7 +11866,8 @@
       "runbook": null,
       "views": [
         "agents",
-        "cortex"
+        "cortex",
+        "security"
       ],
       "source": ".github/workflows/arena-signals.yml",
       "attrs": {
@@ -11897,7 +11900,8 @@
       "runbook": null,
       "views": [
         "agents",
-        "data"
+        "data",
+        "security"
       ],
       "source": ".github/workflows/asx-fetch.yml",
       "attrs": {
@@ -11929,7 +11933,9 @@
       "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
       "runbook": null,
       "views": [
-        "data"
+        "agents",
+        "data",
+        "security"
       ],
       "source": ".github/workflows/backfill-history.yml",
       "attrs": {
@@ -11961,7 +11967,9 @@
       "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
       "runbook": null,
       "views": [
-        "data"
+        "agents",
+        "data",
+        "security"
       ],
       "source": ".github/workflows/backfill-index.yml",
       "attrs": {
@@ -11993,7 +12001,9 @@
       "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
       "runbook": null,
       "views": [
-        "data"
+        "agents",
+        "data",
+        "security"
       ],
       "source": ".github/workflows/backfill-prices.yml",
       "attrs": {
@@ -12025,6 +12035,7 @@
       "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
       "runbook": null,
       "views": [
+        "agents",
         "data",
         "security"
       ],
@@ -12168,7 +12179,8 @@
       "runbook": null,
       "views": [
         "agents",
-        "data"
+        "data",
+        "security"
       ],
       "source": ".github/workflows/ingest-batch1.yml",
       "attrs": {
@@ -12202,8 +12214,10 @@
       "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
       "runbook": null,
       "views": [
+        "agents",
         "data",
-        "learning"
+        "learning",
+        "security"
       ],
       "source": ".github/workflows/kb-archive.yml",
       "attrs": {
@@ -12235,7 +12249,9 @@
       "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
       "runbook": null,
       "views": [
-        "llm"
+        "agents",
+        "llm",
+        "security"
       ],
       "source": ".github/workflows/llm-bakeoff.yml",
       "attrs": {
@@ -12267,7 +12283,8 @@
       "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
       "runbook": null,
       "views": [
-        "email"
+        "email",
+        "security"
       ],
       "source": ".github/workflows/m0-failure-email-test.yml",
       "attrs": {
@@ -12299,7 +12316,8 @@
       "runbook": null,
       "views": [
         "agents",
-        "data"
+        "data",
+        "security"
       ],
       "source": ".github/workflows/maintenance.yml",
       "attrs": {
@@ -12331,7 +12349,8 @@
       "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
       "runbook": null,
       "views": [
-        "platform"
+        "platform",
+        "security"
       ],
       "source": ".github/workflows/mutation.yml",
       "attrs": {
@@ -12363,7 +12382,8 @@
       "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
       "runbook": null,
       "views": [
-        "platform"
+        "platform",
+        "security"
       ],
       "source": ".github/workflows/nightly.yml",
       "attrs": {
@@ -12398,7 +12418,8 @@
       "runbook": null,
       "views": [
         "agents",
-        "learning"
+        "learning",
+        "security"
       ],
       "source": ".github/workflows/replay.yml",
       "attrs": {
@@ -12430,6 +12451,7 @@
       "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
       "runbook": null,
       "views": [
+        "agents",
         "data",
         "security"
       ],
@@ -12499,7 +12521,8 @@
       "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
       "runbook": null,
       "views": [
-        "platform"
+        "platform",
+        "security"
       ],
       "source": ".github/workflows/staging-e2e-day.yml",
       "attrs": {
@@ -12530,7 +12553,8 @@
       "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
       "runbook": null,
       "views": [
-        "platform"
+        "platform",
+        "security"
       ],
       "source": ".github/workflows/talib-reference.yml",
       "attrs": {
@@ -12563,7 +12587,8 @@
       "views": [
         "agents",
         "email",
-        "platform"
+        "platform",
+        "security"
       ],
       "source": ".github/workflows/watchdog.yml",
       "attrs": {
@@ -13363,7 +13388,8 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
-        "cortex"
+        "cortex",
+        "security"
       ]
     },
     {
@@ -13374,7 +13400,8 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
-        "cortex"
+        "cortex",
+        "security"
       ]
     },
     {
@@ -13385,7 +13412,8 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
-        "data"
+        "data",
+        "security"
       ]
     },
     {
@@ -13395,7 +13423,9 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "agents",
+        "data",
+        "security"
       ]
     },
     {
@@ -13405,7 +13435,9 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "agents",
+        "data",
+        "security"
       ]
     },
     {
@@ -13415,7 +13447,9 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "agents",
+        "data",
+        "security"
       ]
     },
     {
@@ -13425,6 +13459,7 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
+        "agents",
         "data",
         "security"
       ]
@@ -13470,7 +13505,8 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
-        "data"
+        "data",
+        "security"
       ]
     },
     {
@@ -13480,8 +13516,10 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
+        "agents",
         "data",
-        "learning"
+        "learning",
+        "security"
       ]
     },
     {
@@ -13491,7 +13529,9 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "llm"
+        "agents",
+        "llm",
+        "security"
       ]
     },
     {
@@ -13501,7 +13541,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "email"
+        "email",
+        "security"
       ]
     },
     {
@@ -13512,7 +13553,8 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
-        "data"
+        "data",
+        "security"
       ]
     },
     {
@@ -13522,7 +13564,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "platform"
+        "platform",
+        "security"
       ]
     },
     {
@@ -13532,7 +13575,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "platform"
+        "platform",
+        "security"
       ]
     },
     {
@@ -13543,7 +13587,8 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
-        "learning"
+        "learning",
+        "security"
       ]
     },
     {
@@ -13553,6 +13598,7 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
+        "agents",
         "data",
         "security"
       ]
@@ -13575,7 +13621,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "platform"
+        "platform",
+        "security"
       ]
     },
     {
@@ -13585,7 +13632,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "platform"
+        "platform",
+        "security"
       ]
     },
     {
@@ -13597,7 +13645,8 @@
       "views": [
         "agents",
         "email",
-        "platform"
+        "platform",
+        "security"
       ]
     },
     {
@@ -15043,7 +15092,7 @@
       "from": "service:app",
       "to": "host:ai.google.dev",
       "kind": "http",
-      "contract": "HTTPS request to an external host.",
+      "contract": "Documentation link.",
       "views": [
         "llm"
       ]
@@ -15098,7 +15147,7 @@
       "from": "service:app",
       "to": "host:console.groq.com",
       "kind": "http",
-      "contract": "HTTPS request to an external host.",
+      "contract": "Documentation link.",
       "views": [
         "llm"
       ]
@@ -15108,7 +15157,7 @@
       "from": "service:app",
       "to": "host:developers.cloudflare.com",
       "kind": "http",
-      "contract": "HTTPS request to an external host.",
+      "contract": "Documentation link.",
       "views": [
         "platform"
       ]
@@ -15118,7 +15167,7 @@
       "from": "service:app",
       "to": "host:docs.github.com",
       "kind": "http",
-      "contract": "HTTPS request to an external host.",
+      "contract": "Documentation link.",
       "views": [
         "platform"
       ]
@@ -15139,7 +15188,7 @@
       "from": "service:app",
       "to": "host:github.com",
       "kind": "http",
-      "contract": "HTTPS request to an external host.",
+      "contract": "Documentation link.",
       "views": [
         "platform"
       ]
@@ -15171,7 +15220,7 @@
       "from": "service:app",
       "to": "host:turso.tech",
       "kind": "http",
-      "contract": "HTTPS request to an external host.",
+      "contract": "Documentation link.",
       "views": [
         "platform"
       ]
@@ -15192,7 +15241,7 @@
       "from": "service:app",
       "to": "host:vercel.com",
       "kind": "http",
-      "contract": "HTTPS request to an external host.",
+      "contract": "Documentation link.",
       "views": [
         "platform"
       ]
@@ -15213,7 +15262,7 @@
       "from": "service:app",
       "to": "host:www.tradingview.com",
       "kind": "http",
-      "contract": "HTTPS request to an external host.",
+      "contract": "Documentation link.",
       "views": [
         "data",
         "platform"
@@ -17017,6 +17066,36 @@
       ]
     },
     {
+      "id": "slot:backfill-history|dispatch|workflow:backfill-history",
+      "from": "slot:backfill-history",
+      "to": "workflow:backfill-history",
+      "kind": "dispatch",
+      "contract": "workflow_dispatch from the Worker clock with the dispatch token (name only).",
+      "views": [
+        "agents"
+      ]
+    },
+    {
+      "id": "slot:backfill-prices|dispatch|workflow:backfill-prices",
+      "from": "slot:backfill-prices",
+      "to": "workflow:backfill-prices",
+      "kind": "dispatch",
+      "contract": "workflow_dispatch from the Worker clock with the dispatch token (name only).",
+      "views": [
+        "agents"
+      ]
+    },
+    {
+      "id": "slot:backup|dispatch|workflow:backup",
+      "from": "slot:backup",
+      "to": "workflow:backup",
+      "kind": "dispatch",
+      "contract": "workflow_dispatch from the Worker clock with the dispatch token (name only).",
+      "views": [
+        "agents"
+      ]
+    },
+    {
       "id": "slot:decision-cutoff|dispatch|workflow:asx-fetch",
       "from": "slot:decision-cutoff",
       "to": "workflow:asx-fetch",
@@ -17050,6 +17129,26 @@
       "id": "slot:ingest-batch1|dispatch|workflow:ingest-batch1",
       "from": "slot:ingest-batch1",
       "to": "workflow:ingest-batch1",
+      "kind": "dispatch",
+      "contract": "workflow_dispatch from the Worker clock with the dispatch token (name only).",
+      "views": [
+        "agents"
+      ]
+    },
+    {
+      "id": "slot:kb-archive|dispatch|workflow:kb-archive",
+      "from": "slot:kb-archive",
+      "to": "workflow:kb-archive",
+      "kind": "dispatch",
+      "contract": "workflow_dispatch from the Worker clock with the dispatch token (name only).",
+      "views": [
+        "agents"
+      ]
+    },
+    {
+      "id": "slot:llm-bakeoff|dispatch|workflow:llm-bakeoff",
+      "from": "slot:llm-bakeoff",
+      "to": "workflow:llm-bakeoff",
       "kind": "dispatch",
       "contract": "workflow_dispatch from the Worker clock with the dispatch token (name only).",
       "views": [
@@ -17128,6 +17227,146 @@
         "agents",
         "email",
         "platform"
+      ]
+    },
+    {
+      "id": "workflow:arena-close|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:arena-close",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:arena-close|uses|secret:TURSO_MAIN_TOKEN_STAGING",
+      "from": "workflow:arena-close",
+      "to": "secret:TURSO_MAIN_TOKEN_STAGING",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_STAGING from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:arena-signals|uses|secret:PII_HASH_KEY_PROD",
+      "from": "workflow:arena-signals",
+      "to": "secret:PII_HASH_KEY_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret PII_HASH_KEY_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:arena-signals|uses|secret:PII_HASH_KEY_STAGING",
+      "from": "workflow:arena-signals",
+      "to": "secret:PII_HASH_KEY_STAGING",
+      "kind": "uses",
+      "contract": "Reads the secret PII_HASH_KEY_STAGING from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:arena-signals|uses|secret:RESEND_API_KEY_PROD",
+      "from": "workflow:arena-signals",
+      "to": "secret:RESEND_API_KEY_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret RESEND_API_KEY_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:arena-signals|uses|secret:RESEND_API_KEY_STAGING",
+      "from": "workflow:arena-signals",
+      "to": "secret:RESEND_API_KEY_STAGING",
+      "kind": "uses",
+      "contract": "Reads the secret RESEND_API_KEY_STAGING from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:arena-signals|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:arena-signals",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:arena-signals|uses|secret:TURSO_MAIN_TOKEN_STAGING",
+      "from": "workflow:arena-signals",
+      "to": "secret:TURSO_MAIN_TOKEN_STAGING",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_STAGING from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:asx-fetch|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:asx-fetch",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:backfill-history|uses|secret:DATA_REPO_TOKEN_PROD",
+      "from": "workflow:backfill-history",
+      "to": "secret:DATA_REPO_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret DATA_REPO_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:backfill-history|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:backfill-history",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:backfill-index|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:backfill-index",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:backfill-prices|uses|secret:DATA_REPO_TOKEN_PROD",
+      "from": "workflow:backfill-prices",
+      "to": "secret:DATA_REPO_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret DATA_REPO_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:backfill-prices|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:backfill-prices",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
       ]
     },
     {
@@ -17221,13 +17460,64 @@
       ]
     },
     {
+      "id": "workflow:ingest-batch1|uses|secret:FIXTURES_READ_TOKEN",
+      "from": "workflow:ingest-batch1",
+      "to": "secret:FIXTURES_READ_TOKEN",
+      "kind": "uses",
+      "contract": "Reads the secret FIXTURES_READ_TOKEN from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:ingest-batch1|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:ingest-batch1",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:ingest-batch1|uses|secret:TURSO_MAIN_TOKEN_STAGING",
+      "from": "workflow:ingest-batch1",
+      "to": "secret:TURSO_MAIN_TOKEN_STAGING",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_STAGING from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:kb-archive|uses|secret:DATA_REPO_TOKEN_PROD",
+      "from": "workflow:kb-archive",
+      "to": "secret:DATA_REPO_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret DATA_REPO_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:kb-archive|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:kb-archive",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
       "id": "workflow:llm-bakeoff|uses|secret:GOOGLE_AI_API_KEY",
       "from": "workflow:llm-bakeoff",
       "to": "secret:GOOGLE_AI_API_KEY",
       "kind": "uses",
       "contract": "Reads the secret GOOGLE_AI_API_KEY from the GitHub environment (name only).",
       "views": [
-        "llm"
+        "llm",
+        "security"
       ]
     },
     {
@@ -17237,7 +17527,8 @@
       "kind": "uses",
       "contract": "Reads the secret GROQ_API_KEY from the GitHub environment (name only).",
       "views": [
-        "llm"
+        "llm",
+        "security"
       ]
     },
     {
@@ -17247,7 +17538,68 @@
       "kind": "uses",
       "contract": "Reads the secret OPENROUTER_API_KEY from the GitHub environment (name only).",
       "views": [
-        "llm"
+        "llm",
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:llm-bakeoff|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:llm-bakeoff",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:maintenance|uses|secret:ACTIONS_HMAC_SECRET_PROD",
+      "from": "workflow:maintenance",
+      "to": "secret:ACTIONS_HMAC_SECRET_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret ACTIONS_HMAC_SECRET_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:maintenance|uses|secret:ACTIONS_HMAC_SECRET_STAGING",
+      "from": "workflow:maintenance",
+      "to": "secret:ACTIONS_HMAC_SECRET_STAGING",
+      "kind": "uses",
+      "contract": "Reads the secret ACTIONS_HMAC_SECRET_STAGING from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:nightly|uses|secret:TEST_IDENTITY_SECRET_STAGING",
+      "from": "workflow:nightly",
+      "to": "secret:TEST_IDENTITY_SECRET_STAGING",
+      "kind": "uses",
+      "contract": "Reads the secret TEST_IDENTITY_SECRET_STAGING from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:replay|uses|secret:DATA_REPO_TOKEN_PROD",
+      "from": "workflow:replay",
+      "to": "secret:DATA_REPO_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret DATA_REPO_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:replay|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:replay",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
       ]
     },
     {
@@ -17453,13 +17805,34 @@
       ]
     },
     {
+      "id": "workflow:staging-e2e-day|uses|secret:TEST_IDENTITY_SECRET_STAGING",
+      "from": "workflow:staging-e2e-day",
+      "to": "secret:TEST_IDENTITY_SECRET_STAGING",
+      "kind": "uses",
+      "contract": "Reads the secret TEST_IDENTITY_SECRET_STAGING from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:staging-e2e-day|uses|secret:TURSO_MAIN_TOKEN_STAGING",
+      "from": "workflow:staging-e2e-day",
+      "to": "secret:TURSO_MAIN_TOKEN_STAGING",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_STAGING from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
       "id": "workflow:watchdog|uses|secret:ACTIONS_HMAC_SECRET_PROD",
       "from": "workflow:watchdog",
       "to": "secret:ACTIONS_HMAC_SECRET_PROD",
       "kind": "uses",
       "contract": "Reads the secret ACTIONS_HMAC_SECRET_PROD from the GitHub environment (name only).",
       "views": [
-        "platform"
+        "platform",
+        "security"
       ]
     },
     {
@@ -17469,7 +17842,38 @@
       "kind": "uses",
       "contract": "Reads the secret ACTIONS_HMAC_SECRET_STAGING from the GitHub environment (name only).",
       "views": [
-        "platform"
+        "platform",
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:watchdog|uses|secret:BACKUP_PRIVATE_KEY",
+      "from": "workflow:watchdog",
+      "to": "secret:BACKUP_PRIVATE_KEY",
+      "kind": "uses",
+      "contract": "Reads the secret BACKUP_PRIVATE_KEY from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:watchdog|uses|secret:PII_HASH_KEY_PROD",
+      "from": "workflow:watchdog",
+      "to": "secret:PII_HASH_KEY_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret PII_HASH_KEY_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:watchdog|uses|secret:PII_HASH_KEY_STAGING",
+      "from": "workflow:watchdog",
+      "to": "secret:PII_HASH_KEY_STAGING",
+      "kind": "uses",
+      "contract": "Reads the secret PII_HASH_KEY_STAGING from the GitHub environment (name only).",
+      "views": [
+        "security"
       ]
     },
     {
@@ -17479,7 +17883,8 @@
       "kind": "uses",
       "contract": "Reads the secret RESEND_API_KEY_PROD from the GitHub environment (name only).",
       "views": [
-        "email"
+        "email",
+        "security"
       ]
     },
     {
@@ -17489,7 +17894,38 @@
       "kind": "uses",
       "contract": "Reads the secret RESEND_API_KEY_STAGING from the GitHub environment (name only).",
       "views": [
-        "email"
+        "email",
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:watchdog|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:watchdog",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:watchdog|uses|secret:TURSO_MAIN_TOKEN_STAGING",
+      "from": "workflow:watchdog",
+      "to": "secret:TURSO_MAIN_TOKEN_STAGING",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_STAGING from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:watchdog|uses|secret:TURSO_PLATFORM_TOKEN_TEMP",
+      "from": "workflow:watchdog",
+      "to": "secret:TURSO_PLATFORM_TOKEN_TEMP",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_PLATFORM_TOKEN_TEMP from the GitHub environment (name only).",
+      "views": [
+        "security"
       ]
     },
     {

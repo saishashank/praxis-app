@@ -16,6 +16,7 @@ import {
   readTables,
   readWorkflows,
 } from "./readers.mjs";
+import { readerProblems } from "./checks.mjs";
 import { SCHEMA_VERSION, VIEWS, validateModel } from "./schema.mjs";
 import { parseYaml } from "./yaml.mjs";
 
@@ -76,6 +77,9 @@ const OWNER_OF_TYPE = {
   "llm-role": "app",
   "llm-provider": "external",
 };
+
+/** Only these element types may be defined by the spec map alone; the rest must exist in the code. */
+export const HAND_TYPES = ["service", "agent", "group"];
 
 const SERVICE_OF_OWNER = {
   app: "service:app",
@@ -282,7 +286,9 @@ export function readCode(root, specMap = {}) {
       if (owners?.length) owners.forEach((o) => callers.add(o));
       else callers.add(f.startsWith("worker/") ? "service:worker" : "service:app");
     }
-    for (const c of [...callers].sort()) edge(c, "http", id, "HTTPS request to an external host.");
+    const doc = (specMap.docHosts ?? []).includes(host);
+    for (const c of [...callers].sort())
+      edge(c, "http", id, doc ? "Documentation link." : "HTTPS request to an external host.");
   }
 
   return { elements, edges };
@@ -311,9 +317,9 @@ function applyMap(elements, edges, specMap) {
 
   for (const [id, entry] of Object.entries(explicit)) {
     if (!elements.has(id)) {
-      if (!entry?.type) {
+      if (!HAND_TYPES.includes(entry?.type)) {
         problems.push(
-          `spec_map names ${id}, which is not in the code (add a type to define a hand-kept element)`,
+          `spec_map names ${id}, which is not in the code (only ${HAND_TYPES.join(", ")} may be hand-kept)`,
         );
         continue;
       }
@@ -375,8 +381,11 @@ function applyMap(elements, edges, specMap) {
     const a = elements.get(g.from);
     const b = elements.get(g.to);
     if (!a || !b) {
-      if (g.hand)
-        problems.push(`spec_map edge ${g.from} -> ${g.to} names an element that does not exist`);
+      problems.push(
+        g.hand
+          ? `spec_map edge ${g.from} -> ${g.to} names an element that does not exist`
+          : `code-derived edge ${g.from} -> ${g.to} (${g.kind}) names an element that does not exist`,
+      );
       continue;
     }
     const common = a.views.filter((v) => b.views.includes(v));
@@ -386,7 +395,12 @@ function applyMap(elements, edges, specMap) {
         if (!common.includes(v))
           problems.push(`spec_map edge ${g.from} -> ${g.to}: view ${v} is not shared by both ends`);
     }
-    if (views.length === 0) continue;
+    if (views.length === 0) {
+      problems.push(
+        `code-derived edge ${g.from} -> ${g.to} (${g.kind}) shares no view; give both ends a common view in spec_map`,
+      );
+      continue;
+    }
     finalEdges.push({
       id: `${g.from}|${g.kind}|${g.to}`,
       from: g.from,
@@ -439,7 +453,7 @@ export function buildModel(root = ROOT) {
     elements: [...elements.values()].map(orderEl).sort((a, b) => cmp(a.id, b.id)),
     edges: finalEdges,
   };
-  const all = [...problems, ...validateModel(model)];
+  const all = [...readerProblems(root), ...problems, ...validateModel(model)];
   return { model, problems: all };
 }
 

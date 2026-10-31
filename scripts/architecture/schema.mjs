@@ -81,9 +81,10 @@ export const SECRET_SHAPES = [
   ["private key block", /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
   ["long hex run", /\b[0-9a-fA-F]{32,}\b/],
   [
-    "long opaque run",
-    /(?<![A-Za-z0-9_/.-])(?=[A-Za-z0-9+]*\d)(?=[A-Za-z0-9+]*[a-z])(?=[A-Za-z0-9+]*[A-Z])[A-Za-z0-9+]{40,}/,
+    "long opaque run (32+ mixed characters, e.g. a Cloudflare or Vercel token)",
+    /(?<![A-Za-z0-9_/.-])(?=[A-Za-z0-9+_-]*\d)(?=[A-Za-z0-9+_-]*[a-z])(?=[A-Za-z0-9+_-]*[A-Z])[A-Za-z0-9+_-]{32,}(?![A-Za-z0-9_/.-])/,
   ],
+  ["vercel token", /\bvc[a-z]_[A-Za-z0-9]{16,}/],
   ["email address", /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/],
   ["connection url with credentials", /\b[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^/\s@]+@/i],
   ["database url", /\b(?:libsql|postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\//i],
