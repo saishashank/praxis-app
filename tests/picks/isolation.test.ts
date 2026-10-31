@@ -75,6 +75,9 @@ describe("picks are never read by ranking or sizing", () => {
       // the stream cost helper; it ranks and sizes nothing and is outside the trading folders.
       f === "src/lib/intraday/measure.ts" ||
       f === "src/lib/intraday/evaluator.ts" ||
+      // M11-lite WP3 (AGT-131, D-499): the steelman evidence pack reads the stored factor rows; its
+      // output is an opinion only and never reaches ranking or sizing (PRD-033 boundary test).
+      f === "src/lib/steelman/pack.ts" ||
       f.startsWith("src/app/");
     expect(importers.filter((f) => !allowed(f))).toEqual([]);
     // and the review import exists, so this guard is not vacuous
