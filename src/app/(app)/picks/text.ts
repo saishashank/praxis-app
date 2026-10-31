@@ -183,3 +183,29 @@ export const SORT_WORDS = {
   toChance: "Sort by chance",
   toGain: "Sort by expected gain",
 } as const;
+
+// ARN-103/104, UXN-288, D-490/D-491: picks against the market.
+/** Percentage points with one decimal and a sign, from ppm (1 pp = 10 000 ppm). */
+export function ppText(ppm: number | null): string {
+  if (ppm === null) return "not measured";
+  const tenths = Math.round((Math.abs(ppm) / 10_000) * 10) / 10; // threshold-ok: ppm to pp
+  return `${ppm < 0 ? "-" : "+"}${tenths.toFixed(1)} pp`;
+}
+export const VS_MARKET_CAPTION = "Past paper picks, not a forecast.";
+export const VS_MARKET_INSUFFICIENT = "insufficient history";
+export const VS_MARKET_HELP =
+  "Market = S&P/ASX 200. The index has closes only, so each window runs from the close before the pick was bought to the close of the day it was sold. Vs market = the pick's result after costs minus the market's.";
+export const MISSED_NOT_BOUGHT = "missed, not bought";
+export const vsMarketRowText = (v: NonNullable<TrackRow["vsMarket"]>): string =>
+  v.missed
+    ? `market ${ppText(v.marketRetPpm)} over the window; ${MISSED_NOT_BOUGHT}`
+    : `vs market ${ppText(v.vsPpm)} (market ${ppText(v.marketRetPpm)})`;
+export function vsMarketSummaryLine(s: {
+  n: number;
+  medianPpm: number | null;
+  beatingPct: number | null;
+  insufficient: boolean;
+}): string {
+  if (s.insufficient) return `Vs market: ${VS_MARKET_INSUFFICIENT} (n = ${s.n}).`;
+  return `Median vs market ${ppText(s.medianPpm)}; ${s.beatingPct}% of picks beat the market; n = ${s.n}.`;
+}

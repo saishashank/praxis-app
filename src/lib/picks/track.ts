@@ -35,6 +35,8 @@ import { exDividendOn, toExDividendActions } from "@/lib/arena/exDividend";
 import { decisionCutoffUtc } from "@/lib/agents/decisionView";
 import { getConfig } from "@/lib/config/store";
 import { PicksError } from "./types";
+import { loadTotalReturnSeries } from "./benchmark";
+import { BENCH_INDEX, pickMarketStatement } from "./vsMarket";
 
 type Db = Client;
 const PPM = 1_000_000n; // threshold-ok: parts per million
@@ -429,6 +431,21 @@ export async function trackPicks(db: Db, o: TrackOptions): Promise<TrackSummary>
       sum.closed += 1;
     }
     if (sim.state === "bought" || sim.state === "waiting") sum.open += 1;
+    // ARN-103: the market side is fixed with the settlement, in the same batch (rows are never edited)
+    if (sim.state === "closed" || (sim.state === "missed" && stored === "waiting")) {
+      const end = sim.exitD ?? levels.validUntilD;
+      const m = await loadTotalReturnSeries(db, o.market, BENCH_INDEX, pubD, end);
+      const stmt = pickMarketStatement({
+        key,
+        sim,
+        basis: m.basis,
+        series: m.series,
+        validUntilD: levels.validUntilD,
+        withdrawnNight,
+        settledD: o.d,
+      });
+      if (stmt !== null) stmts.push(stmt);
+    }
     if (stmts.length > 0) await db.batch(stmts, "write");
   }
   return sum;
