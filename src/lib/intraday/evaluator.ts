@@ -10,18 +10,17 @@ import type { Client } from "@libsql/client";
 import { getConfig } from "@/lib/config/store";
 import { writeStreamState, type StreamState } from "@/lib/config/streamState";
 import { getCell, logCell, setCellResult } from "@/lib/cortex/store/ledger";
+import { streamCostPpm } from "@/lib/picks/streamCost";
 import { bootstrapMean, isUndefined } from "@/lib/stats/stationaryBootstrap";
 import { scopedPrng } from "@/lib/stats/rng";
 
 export const MIN_CANDIDATES = 60; // threshold-ok: VAL-118 pre-registered sample
 export const MIN_SESSIONS = 60; // threshold-ok: VAL-118 pre-registered sample
-/** Fixed round-trip cost of a trade in the stream, ppm of value (0.30 %; pre-registered, D-464). */
-export const ROUND_TRIP_COST_PPM = 3_000; // threshold-ok: pre-registered with the hypothesis
 const BLOCK = 5; // threshold-ok: the 5-session hold is the block floor
 
 export const HYPOTHESIS_TEXT =
   "Mean 5-session excess return of intraday candidates, from the next open against the market " +
-  "total-return index and net of a 0.30 % round-trip cost, is greater than 0, on at least 60 " +
+  "total-return index and net of the Cortex round-trip cost per order (fee plus slippage or half-spread, A$1,000 parcel), is greater than 0, on at least 60 " +
   "candidates over at least 60 sessions, with the one-sided 90 % block-bootstrap lower bound above 0.";
 
 export const cellIdOf = (market: string): string => `intraday_stream:${market}:v1`;
@@ -49,7 +48,7 @@ export async function ensureStreamLineage(db: Client, market: string, now: strin
       hypothesis: HYPOTHESIS_TEXT,
       minCandidates: MIN_CANDIDATES,
       minSessions: MIN_SESSIONS,
-      roundTripCostPpm: ROUND_TRIP_COST_PPM,
+      costRule: "costPerOrder (D-311) at the A$1,000 parcel, per candidate",
       horizon: "excess_open_5_ppm",
     },
     loggedAt: now,
@@ -72,7 +71,23 @@ export async function evaluateIntradayStream(
     })
   ).rows;
   const dates = [...new Set(rows.map((r) => String(r.session_d)))];
-  const net = rows.map((r) => Number(r.x) - ROUND_TRIP_COST_PPM);
+  const net: number[] = [];
+  for (const r of rows) {
+    const px = (
+      await db.execute({
+        sql: "SELECT c FROM price_bar WHERE market = ? AND code = ? AND d < ? ORDER BY d DESC LIMIT 1",
+        args: [market, String(r.code), String(r.session_d)],
+      })
+    ).rows[0];
+    const cost = await streamCostPpm(
+      db,
+      market,
+      String(r.code),
+      String(r.session_d),
+      Number(px?.c ?? 1),
+    );
+    net.push(Number(r.x) - cost);
+  }
   const sampleMet = rows.length >= MIN_CANDIDATES && dates.length >= MIN_SESSIONS;
   let meanNetPpm: number | null = null;
   let lowerPpm: number | null = null;

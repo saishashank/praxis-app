@@ -17,6 +17,7 @@ import {
   ownerSetShadow,
 } from "@/lib/intraday/evaluator";
 import { measureCandidates } from "@/lib/intraday/measure";
+import { streamCostPpm } from "@/lib/picks/streamCost";
 import { loadAlertsReport } from "@/lib/ui/loaders/alertsReport";
 import { alertsReportView, pctText } from "@/app/(app)/reviews/alerts/view";
 import { cleanupTempDbs, freshDb } from "../../db/helpers";
@@ -46,6 +47,10 @@ async function seed(meanExcess: number): Promise<{ db: Client; last: string }> {
         "item_ann_id, item_category, materiality, polarity, move_ppm, gates_json) " +
         "VALUES ('AU', ?, ?, 'scan-1030', ?, 'asx', ?, 'earnings', 2, 'positive', 0, '[]')",
       args: [sd, code, `${sd}T00:30:00Z`, `ann-${code}`],
+    });
+    stmts.push({
+      sql: "INSERT INTO universe_snapshot (market, d, code, status, tier, adv) VALUES ('AU', ?, ?, 'active', 'U1', 50000000)",
+      args: [addDays(START, -1), code],
     });
     const noise = ((i * 7) % 11) - 5; // -5..5 tenths of a percent, mean 0
     for (let k = 0; k <= 5; k += 1) {
@@ -144,6 +149,17 @@ describe("AT-63 (b)(c) lineage row, null set fails, +1.5 % passes", () => {
     const e = await evaluateIntradayStream(db, M, "2030-06-01T00:00:00.000Z");
     expect(e.sampleMet).toBe(false);
     expect(e.state).toBe("shadow");
+  });
+});
+
+describe("AT-63 cost (D-311, D-464)", () => {
+  it("uses the Cortex cost per order: dear for an unlisted/thin code, cheap for a liquid one", async () => {
+    const { db } = await seed(0);
+    const liquid = await streamCostPpm(db, M, "ZZ1", "2030-02-01", 100);
+    const thin = await streamCostPpm(db, M, "ZZNONE", "2030-02-01", 100);
+    expect(liquid).toBeGreaterThan(3_000);
+    expect(thin).toBeGreaterThan(liquid);
+    expect(thin).toBeGreaterThan(12_000);
   });
 });
 
