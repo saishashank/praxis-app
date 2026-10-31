@@ -12,7 +12,8 @@ import {
   type BlueprintDeps,
 } from "@/lib/auth/blueprintGuard";
 import { resolveUser, type CurrentUser } from "@/lib/auth/session";
-import { gate, isBlueprintPath, type GateDeps } from "@/lib/http/gate";
+import nextConfig, { BLUEPRINT_ABSENT_PATH, BLUEPRINT_HIDE_HEADER } from "../../next.config";
+import { ABSENT_PATH, HIDE_HEADER, gate, isBlueprintPath, type GateDeps } from "@/lib/http/gate";
 import { addUser, auditRows, authDb, ENV } from "../auth/helpers";
 import { freshDb } from "../db/helpers";
 
@@ -156,15 +157,20 @@ describe("AT-57 (b)(e) everyone else gets the same 404", () => {
   });
 });
 
-describe("proxy branch (Q2, D-361)", () => {
+describe("proxy branch (D-371)", () => {
   const BASE = "https://app.example.test";
-  async function deps(claims: GateDeps["readClaims"]): Promise<GateDeps> {
+  const claims = { uid: 5, sv: 1, si: 1, rec: false };
+  async function deps(
+    readClaims: GateDeps["readClaims"],
+    isPinnedOwner?: GateDeps["isPinnedOwner"],
+  ): Promise<GateDeps> {
     const db = await freshDb("auth");
     return {
       env: { APP_BASE_URL: BASE },
       dev: false,
       db: () => db,
-      readClaims: claims,
+      readClaims,
+      isPinnedOwner,
       limits: { signin_per_min_ip: 10, writes_per_min_user: 60, exports_per_hour_user: 5 },
       nowSec: () => 1_700_000_000,
       nonce: () => "N",
@@ -172,25 +178,61 @@ describe("proxy branch (Q2, D-361)", () => {
   }
   const req = (p: string) => new NextRequest(new URL(p, BASE));
   const anon = async () => null;
-  const authed = async () => ({ uid: 5, sv: 1, si: 1, rec: false });
+  const authed = async () => claims;
+  const sig = (r: Response) => [
+    r.status,
+    (r.headers.get("location") ?? "").replace(/callbackUrl=[^&]*/, ""),
+    r.headers.get("x-middleware-rewrite"),
+  ];
 
-  it("does not redirect an anonymous /blueprint* or /api/blueprint* request", async () => {
-    const paths = [
-      "/blueprint",
-      "/blueprint/",
-      "/blueprint/x?y=1",
-      "/api/blueprint/model",
-      "/api/blueprint/export",
+  it("anonymous /blueprint* is answered exactly like a missing path", async () => {
+    const pairs = [
+      ["/blueprint", "/zz-missing"],
+      ["/blueprint/x?y=1", "/zz-missing/x?y=1"],
+      ["/api/blueprint/model", "/api/zz-missing"],
+      ["/%62lueprint", "/zz-missing"],
+      ["/api//blueprint/model", "/api/zz-missing"],
     ];
-    for (const p of paths) {
-      const res = await gate(req(p), await deps(anon));
-      expect(res.status, p).not.toBe(307);
-      expect(res.headers.get("location"), p).toBeNull();
-      expect(res.headers.get("x-middleware-rewrite"), p).toMatch(/\/_praxis-absent$/);
+    for (const [hidden, missing] of pairs) {
+      const h = await gate(req(hidden), await deps(anon));
+      const m = await gate(req(missing), await deps(anon));
+      expect(sig(h), hidden).toEqual(sig(m));
+      expect([401, 307]).toContain(h.status);
     }
-    // other protected paths still redirect to sign-in
-    const other = await gate(req("/picks"), await deps(anon));
-    expect(other.headers.get("location")).toContain("/signin");
+  });
+
+  it("signed-in non-owner (or any error, or no dep) is rewritten to the absent path", async () => {
+    const cases: [string, GateDeps["isPinnedOwner"]][] = [
+      ["false", async () => false],
+      [
+        "throw",
+        async () => {
+          throw new Error("db");
+        },
+      ],
+      ["missing dep", undefined],
+    ];
+    const paths = ["/blueprint", "/%62lueprint", "/blueprint%2Fmodel", "/api//blueprint/model"];
+    for (const [name, dep] of cases) {
+      for (const p of paths) {
+        const res = await gate(req(p), await deps(authed, dep));
+        expect(res.status, name + p).toBe(200);
+        expect(res.headers.get("x-middleware-rewrite"), name + p).toBeNull();
+        expect(res.headers.get("x-middleware-request-" + HIDE_HEADER), name + p).toBe("1");
+        expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+      }
+    }
+  });
+
+  it("the pinned Owner passes through", async () => {
+    const res = await gate(req("/blueprint"), await deps(authed, async () => true));
+    expect(res.headers.get("x-middleware-request-" + HIDE_HEADER)).toBeNull();
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("other paths are untouched for signed-in users", async () => {
+    const res = await gate(req("/picks"), await deps(authed));
+    expect(res.headers.get("x-middleware-next")).toBe("1");
   });
 
   it("the rewrite target is a path no route serves, so the app 404 renders", () => {
@@ -202,20 +244,41 @@ describe("proxy branch (Q2, D-361)", () => {
     expect(fs.existsSync("src/app/not-found.tsx")).toBe(true);
   });
 
-  it("headers match a real missing route (authed request to an unknown path), apart from the rewrite marker", async () => {
-    const missing = await gate(req("/no-such-page"), await deps(authed));
-    const hidden = await gate(req("/blueprint"), await deps(anon));
-    const pick = (r: Response) =>
-      [...r.headers.entries()].filter(([k]) => !k.startsWith("x-middleware-")).sort();
-    expect(pick(hidden)).toEqual(pick(missing));
-    expect(hidden.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+  it("a client-sent hide header is not trusted and the config rewrite matches the gate", async () => {
+    expect(BLUEPRINT_ABSENT_PATH).toBe(ABSENT_PATH);
+    expect(BLUEPRINT_HIDE_HEADER).toBe(HIDE_HEADER);
+    const r = new NextRequest(new URL("/picks", BASE), { headers: { [HIDE_HEADER]: "1" } });
+    const res = await gate(r, await deps(authed, async () => true));
+    expect(res.headers.get("x-middleware-request-" + HIDE_HEADER)).toBeNull();
+    const rw = await nextConfig.rewrites!();
+    expect(JSON.stringify(rw)).toContain(ABSENT_PATH);
   });
 
-  it("isBlueprintPath is exact on the segment", () => {
+  it("isBlueprintPath decodes safely and collapses slashes", () => {
     expect(isBlueprintPath("/blueprint")).toBe(true);
     expect(isBlueprintPath("/blueprintx")).toBe(false);
     expect(isBlueprintPath("/api/blueprint/model")).toBe(true);
+    expect(isBlueprintPath("/%62lueprint")).toBe(true);
+    expect(isBlueprintPath("/blueprint%2Fmodel")).toBe(true);
+    expect(isBlueprintPath("//blueprint")).toBe(true);
+    expect(isBlueprintPath("/%E0%A4%A")).toBe(false);
     expect(isBlueprintPath("/picks")).toBe(false);
+  });
+
+  it("proxy pin check accepts only an active pinned owner with a matching session_version", async () => {
+    const { isPinnedOwnerClaims } = await import("@/lib/auth/pinnedOwnerClaims");
+    const w = await world();
+    const c = (uid: number, sv = 1) => ({ uid, sv, si: 1, rec: false });
+    expect(await isPinnedOwnerClaims(w.db, c(w.ids.owner), ENV)).toBe(true);
+    expect(await isPinnedOwnerClaims(w.db, c(w.ids.owner, 2), ENV)).toBe(false);
+    expect(await isPinnedOwnerClaims(w.db, c(w.ids.editor), ENV)).toBe(false);
+    expect(await isPinnedOwnerClaims(w.db, c(w.ids.viewer), ENV)).toBe(false);
+    expect(await isPinnedOwnerClaims(w.db, c(9999), ENV)).toBe(false);
+    await w.db.execute({
+      sql: "UPDATE app_user SET status='revoked' WHERE id=?",
+      args: [w.ids.owner],
+    });
+    expect(await isPinnedOwnerClaims(w.db, c(w.ids.owner), ENV)).toBe(false);
   });
 });
 

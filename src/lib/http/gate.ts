@@ -20,6 +20,8 @@ export type GateDeps = {
   limits: RateLimits;
   nowSec: () => number;
   nonce?: () => string;
+  // D-371: true only for the pinned Owner. Absent or throwing counts as false (fail closed).
+  isPinnedOwner?: (claims: Claims) => Promise<boolean>;
 };
 
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -49,8 +51,19 @@ const MACHINE_ROUTES = new Set([
 const PUBLIC_EXACT = new Set(["/signin", "/privacy", "/terms", "/api/health", "/robots.txt"]);
 
 // Paths that must be indistinguishable from a missing route for anyone but the pinned Owner.
-const ABSENT_PATH = "/_praxis-absent";
-export function isBlueprintPath(p: string): boolean {
+// A non-owner is not rewritten by the proxy (that leaks x-middleware-rewrite to the client). The
+// proxy marks the request and next.config.ts rewrites marked requests to ABSENT_PATH, which no
+// route serves, so Next renders its own 404.
+export const ABSENT_PATH = "/_praxis-absent";
+export const HIDE_HEADER = "x-praxis-hide";
+export function isBlueprintPath(raw: string): boolean {
+  let p: string;
+  try {
+    p = decodeURIComponent(raw);
+  } catch {
+    return false;
+  }
+  p = p.replace(/\/{2,}/g, "/");
   return /^\/(?:api\/)?blueprint(?:\/|$)/.test(p);
 }
 
@@ -129,11 +142,6 @@ export async function gate(req: NextRequest, deps: GateDeps): Promise<NextRespon
     if (!isPublicPath(path)) {
       claims = await deps.readClaims(req);
       if (!claims) {
-        // Q2/D-361: an anonymous Blueprint request is answered as a missing route (no sign-in tell).
-        // The rewrite to an absent path renders the app's real 404 page with a real 404 status.
-        if (isBlueprintPath(path)) {
-          return decorate(NextResponse.rewrite(new URL(ABSENT_PATH, req.nextUrl)));
-        }
         if (isApi) {
           return decorate(
             NextResponse.json(
@@ -145,6 +153,20 @@ export async function gate(req: NextRequest, deps: GateDeps): Promise<NextRespon
         const cb = encodeURIComponent(path + req.nextUrl.search);
         return decorate(NextResponse.redirect(new URL(`/signin?callbackUrl=${cb}`, req.nextUrl)));
       }
+    }
+
+    // D-371 (amends D-361): an anonymous Blueprint request gets exactly what any other missing
+    // path gets (sign-in redirect / 401). A signed-in user who is not the pinned Owner is
+    // marked for the config rewrite to an absent path, so Next renders its own 404, never a 503 or a 403.
+    let hide = false;
+    if (claims && isBlueprintPath(path)) {
+      let pinned = false;
+      try {
+        pinned = (await deps.isPinnedOwner?.(claims)) === true;
+      } catch {
+        pinned = false;
+      }
+      hide = !pinned;
     }
 
     // SEC-014: authenticated writes per user (public paths such as sign-out under /api/auth
@@ -162,6 +184,8 @@ export async function gate(req: NextRequest, deps: GateDeps): Promise<NextRespon
 
     // Next picks the nonce up from the request's CSP header and stamps its own scripts.
     const reqHeaders = new Headers(req.headers);
+    reqHeaders.delete(HIDE_HEADER); // never trust a client-sent copy
+    if (hide) reqHeaders.set(HIDE_HEADER, "1");
     reqHeaders.set("x-nonce", nonce);
     reqHeaders.set("Content-Security-Policy", csp);
     return decorate(NextResponse.next({ request: { headers: reqHeaders } }));
