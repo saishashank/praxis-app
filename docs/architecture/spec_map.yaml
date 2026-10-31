@@ -1,0 +1,658 @@
+# Hand-kept spec map for the architecture model (ARC-001, M16 WP2; first full draft).
+# scripts/architecture/generate.mjs reads the code (routes, workflows, migrations, Worker slots, LLM
+# roles, licence register, secret names, external hosts) and merges this file onto it:
+#   rules:     glob on the element id ("*" = anything, "{a,b}" = either); applied in order, a later
+#              match wins per field. "{name}" in a purpose is replaced by the element's name.
+#   elements:  per-id overrides; an entry with a `type` and no match in the code is a hand-kept
+#              element (service, agent, group).
+#   edges:     hand-kept flows; both ends must exist and share every listed view.
+#   testOnlyHosts: hosts that appear only in tests and are left out of the model.
+# NAMES AND STRUCTURE ONLY: never a secret value, a fingerprint, an email address or a real price.
+# Views: platform, data, cortex, agents, llm, email, security, learning.
+#   docHosts:      hosts that are documentation links only; their edges read "Documentation link."
+# Cortex passports are in the model only as the table angle_passport plus the hand-kept groups below;
+# their live status (family state, last run) is the live-status loader's job (WP4), not the generator's.
+version: 1
+testOnlyHosts: []
+docHosts:
+  - ai.google.dev
+  - console.groq.com
+  - developers.cloudflare.com
+  - docs.github.com
+  - github.com
+  - turso.tech
+  - vercel.com
+  - www.tradingview.com
+
+rules:
+  # ---- pages, routes, actions (the app) ----
+  - match: "page:*"
+    purpose: "Screen {name} of the web app."
+    specIds: [UXN-001]
+    views: [platform]
+  - match: "page:/health"
+    specIds: [PLT-061, PLT-074]
+    purpose: "System Health: checks, run records, credential expiry and slot status."
+  - match: "page:/ops*"
+    specIds: [OPS-001, OPS-037]
+    purpose: "Ops checklist and go-live sign-off for the Owner."
+    views: [platform, security]
+  - match: "page:/config"
+    specIds: [PLT-033, ROL-102a]
+    purpose: "Configuration values and uploads (Owner only), versioned."
+    views: [platform, security]
+  - match: "page:/users"
+    specIds: [ROL-101, ROL-102a]
+    purpose: "User and role management (Owner only)."
+    views: [security]
+  - match: "page:/settings*"
+    specIds: [UX-052, ROL-102a]
+    purpose: "Per-user preferences: appearance, region, time, quiet hours, sign-out."
+    views: [security]
+  - match: "page:{/signin,/privacy,/terms}"
+    specIds: [PLT-033, SEC-010]
+    purpose: "Public sign-in and notice page {name}."
+    views: [security]
+  - match: "page:/reviews/learned*"
+    specIds: [KB-040, VAL-110]
+    purpose: "Learned page: lessons, challengers and family history."
+    views: [learning]
+  - match: "page:/cortex*"
+    specIds: [CTX-010, CTX-011]
+    purpose: "Cortex page: family states and passports (status only)."
+    views: [cortex]
+  - match: "page:/audit"
+    specIds: [SEC-109, ROL-102a]
+    purpose: "Audit log of sensitive actions (Owner only)."
+    views: [security]
+  - match: "page:/usage"
+    specIds: [LLM-040, LLM-050]
+    purpose: "LLM token usage against the daily budget."
+    views: [llm, platform]
+
+  - match: "route:*"
+    purpose: "HTTP endpoint {name} of the web app."
+    specIds: [PLT-020]
+    views: [platform]
+  - match: "route:*:/api/internal/*"
+    specIds: [PLT-076, SEC-017]
+    purpose: "Internal endpoint called by the Worker or a workflow with a signed (HMAC) body; never by a browser."
+    views: [agents, security]
+    inputs: ["signed POST body"]
+  - match: "route:*:/api/cron/*"
+    specIds: [PLT-074, PLT-015]
+    purpose: "Heartbeat or watchdog endpoint on the platform cron, independent of the Worker."
+    views: [platform, agents]
+  - match: "route:*:/api/alerts*"
+    specIds: [UXN-160, EML-020]
+    purpose: "Alert list, acknowledge, snooze and quiet hours."
+    views: [email]
+  - match: "route:*:/api/email/*"
+    specIds: [EML-001, EML-020]
+    purpose: "Owner email test."
+    views: [email]
+  - match: "route:*:/api/auth/*"
+    specIds: [PLT-033, SEC-010]
+    purpose: "Sign-in and session endpoints (Google OAuth)."
+    views: [security]
+  - match: "route:*:/api/test-identity*"
+    specIds: [TST-113, ROL-101]
+    purpose: "Test-only sign-in for staging and CI; disabled in production."
+    views: [security]
+  - match: "route:*:/api/learning/*"
+    specIds: [KB-040, VAL-110]
+    purpose: "Learning loop endpoints: annotations, challengers, lessons, families."
+    views: [learning]
+  - match: "route:*:/api/health"
+    specIds: [PLT-061, PLT-074]
+    purpose: "Health probe."
+  - match: "route:*:/api/{market,news}/*"
+    specIds: [DAT-124, UXN-001]
+    purpose: "Market and news data endpoint for the screens."
+    views: [platform, data]
+
+  - match: "action:*"
+    purpose: "Server action {name}: a form write with a role check and an audit event."
+    specIds: [ROL-102a]
+    views: [platform, security]
+  - match: "action:src/lib/auth/*"
+    specIds: [PLT-033, ROL-101]
+    views: [security]
+  - match: "action:src/app/(app)/users/*"
+    specIds: [ROL-101, ROL-102a]
+    views: [security]
+  - match: "action:src/app/(app)/settings/*"
+    specIds: [UX-052, ROL-102a]
+    views: [security]
+  - match: "action:src/app/(app)/health/emailActions.ts#*"
+    specIds: [EML-020, ROL-102a]
+    views: [email, security]
+  - match: "action:src/app/(app)/review*/*"
+    specIds: [ARN-060, ROL-102a]
+    views: [platform, learning]
+  - match: "action:src/app/(app)/strategies/*"
+    specIds: [ARN-001, ROL-102a]
+    views: [platform, agents]
+
+  # ---- workflows ----
+  - match: "workflow:*"
+    purpose: "GitHub Actions workflow {name}."
+    specIds: [PLT-015]
+    views: [platform, security]
+  - match: "workflow:ingest-batch1"
+    specIds: [DAT-103, PLT-073]
+    purpose: "Batch 1: AU end-of-day ingest into the main database."
+    views: [data, agents, security]
+  - match: "workflow:asx-fetch"
+    specIds: [DAT-122, PLT-073]
+    purpose: "ASX fetch: announcements and the listed-companies file within the slot rules."
+    views: [data, agents, security]
+  - match: "workflow:backfill-*"
+    specIds: [DAT-125, DAT-126]
+    purpose: "History backfill, off until the Owner enables it."
+    views: [data, security, agents]
+  - match: "workflow:arena-*"
+    specIds: [ARN-060, PLT-073]
+    purpose: "Paper-trading arena batch (signals, orders, close of books)."
+    views: [agents, cortex, security]
+  - match: "workflow:replay"
+    specIds: [ARN-001, VAL-110]
+    purpose: "Replay of past days through the current rules."
+    views: [agents, learning, security]
+  - match: "workflow:maintenance"
+    specIds: [OPS-001, PLT-073]
+    purpose: "Nightly maintenance: pruning, integrity and housekeeping."
+    views: [agents, data, security]
+  - match: "workflow:{backup,restore-drill}"
+    specIds: [PLT-022a, OPS-045]
+    purpose: "Encrypted backup to the private data repository, and the restore drill."
+    views: [data, security, agents]
+  - match: "workflow:kb-archive"
+    specIds: [KB-001, PLT-022a]
+    purpose: "Knowledge-base archive to the private data repository."
+    views: [data, learning, security, agents]
+  - match: "workflow:llm-bakeoff"
+    specIds: [LLM-070, LLM-010]
+    purpose: "Bake-off of candidate models per role."
+    views: [llm, security, agents]
+  - match: "workflow:watchdog"
+    specIds: [PLT-074, PLT-019]
+    purpose: "Independent watchdog: evening-review check, direct email on failure, deliberate failed run."
+    views: [platform, agents, email, security]
+  - match: "workflow:m0-failure-email-test"
+    specIds: [PLT-019, EML-020]
+    purpose: "Owner test of the failure email path."
+    views: [email, security]
+  - match: "workflow:smoke-test"
+    specIds: [SEC-017, OPS-037]
+    purpose: "Stage 1 credential smoke test."
+    views: [security, platform]
+  - match: "workflow:zap-baseline"
+    specIds: [SEC-108, NFR-040]
+    purpose: "OWASP ZAP baseline scan of staging."
+    views: [security, platform]
+  - match: "workflow:deploy-*"
+    specIds: [SEC-108, PLT-015]
+    purpose: "Deploy {name}: approved commit only, secrets from the GitHub environment."
+    views: [platform, security]
+  - match: "workflow:ci"
+    specIds: [TST-108, SEC-110]
+    purpose: "CI gate: lint, types, tests, hygiene, licence and architecture checks."
+    views: [platform, security]
+  - match: "workflow:{nightly,mutation,talib-reference,staging-e2e-day}"
+    specIds: [TST-108, NFR-040]
+    purpose: "Test workflow {name}: scheduled or manual quality checks."
+    views: [platform, security]
+
+  # ---- tables ----
+  - match: "table:main.*"
+    purpose: "Table {name} in the main database."
+    specIds: [DAT-200]
+    views: [data]
+  - match: "table:auth.*"
+    purpose: "Table {name} in the auth database (users, roles, sharing, audit)."
+    specIds: [ROL-101, SEC-010]
+    views: [security]
+  - match: "table:main.cortex_*"
+    specIds: [CTX-010, CTX-011]
+    purpose: "Cortex table {name}: night results, ledger, features or outcomes (append-only)."
+    views: [cortex, data]
+  - match: "table:main.{angle_passport,c2_selection}"
+    specIds: [CTX-010, CTX-013]
+    purpose: "Cortex table {name}: angle passports and selections (status only)."
+    views: [cortex, data]
+  - match: "table:main.family_status"
+    specIds: [FAM-001, KB-040]
+    purpose: "State of each strategy family (shadow, allowed, live-tested)."
+    views: [cortex, learning]
+  - match: "table:main.{rule_version,rule_version_status,playbook_version,promotion}"
+    specIds: [KB-040, VAL-110]
+    purpose: "Versioned rule sets, playbooks and promotions."
+    views: [learning, agents]
+  - match: "table:main.challenger*"
+    specIds: [VAL-110, KB-081]
+    purpose: "Challenger rule candidates and their events."
+    views: [learning]
+  - match: "table:main.lesson*"
+    specIds: [ARN-063, KB-081]
+    purpose: "Lessons from the daily review and their grades."
+    views: [learning]
+  - match: "table:main.{cohort,cohort_event,comparison_finding,comparison_result,plan_item,plan_review}"
+    specIds: [ARN-085, VAL-116]
+    purpose: "Learning comparison table {name}."
+    views: [learning]
+  - match: "table:main.{critique,critique_note}"
+    specIds: [AGT-041, LLM-010]
+    purpose: "Critic output table {name}."
+    views: [learning, agents]
+  - match: "table:main.{attribution,label,label_validation,lineage,lineage_split,text_label,item_assessment,opinion_track,factor_bucket_stat,alpha_wealth,trial_ledger,validation_result}"
+    specIds: [VAL-110, VAL-116]
+    purpose: "Learning evidence table {name}: labels, attribution and validation."
+    views: [learning, data]
+  - match: "table:main.{document,kb_archive_run,review_read,evening_review}"
+    specIds: [KB-001, KB-020]
+    purpose: "Knowledge-base table {name}."
+    views: [learning]
+  - match: "table:main.arena_*"
+    specIds: [ARN-001, ARN-024a]
+    purpose: "Arena table {name}: paper orders and controls."
+    views: [agents, data]
+  - match: "table:main.{trade,fill,cash_ledger,nav_daily,nav_daily_pos,sleeve_state,sleeve_trade,execution,stop_level,blocked_trade,killswitch_look,ledger_row,ledger_control,cost_profile}"
+    specIds: [ARN-051, ARN-052]
+    purpose: "Simulated trading ledger table {name} (paper money only)."
+    views: [agents, data]
+  - match: "table:main.{signal,decision_card,card_note,pick,pick_check,pick_outcome,thesis_breaker_eval,preopen_result,preopen_run,rank_ic_daily,regime_daily,replay_run,replay_stat,input_manifest,pattern_daily,indicator_daily,insider_flow_score,quality_score,watch_list_owner,attention_snooze,go_live_signoff}"
+    specIds: [AGT-030, AGT-020]
+    purpose: "Agent output table {name}: signals, cards, picks and daily derived series."
+    views: [agents, data]
+  - match: "table:main.alert*"
+    specIds: [AGT-115, EML-020]
+    purpose: "Alert table {name}."
+    views: [email]
+  - match: "table:main.email_*"
+    specIds: [EML-020, EML-004]
+    purpose: "Outbound email record {name} (one email key per message)."
+    views: [email]
+  - match: "table:main.sentinel_*"
+    specIds: [AGT-010, DAT-122]
+    purpose: "Sentinel intake table {name}."
+    views: [agents, data]
+  - match: "table:main.{llm_cache,llm_call,bakeoff_result}"
+    specIds: [LLM-040, LLM-070]
+    purpose: "LLM router table {name}: cache, call log and bake-off results."
+    views: [llm]
+  - match: "table:main.{run_record,health_snapshot,incident,app_log,worker_state,completion_marker,ops_task_done}"
+    specIds: [PLT-061, PLT-074]
+    purpose: "Platform table {name}: run records, health, incidents and Worker state."
+    views: [platform, data]
+  - match: "table:main.{request_nonce,credential_expiry,credential_expiry_history}"
+    specIds: [SEC-017, SEC-021]
+    purpose: "Security table {name}: replay nonces and credential expiry dates (no values)."
+    views: [security, platform]
+  - match: "table:main.{source_register,source_register_history,source_status}"
+    specIds: [DAT-120, DAT-121]
+    purpose: "Licence and status of data sources."
+    views: [data]
+
+  # ---- Worker slots ----
+  - match: "slot:*"
+    specIds: [PLT-073, PLT-071]
+    views: [agents, platform]
+  - match: "slot:alert-flush"
+    specIds: [EML-020, PLT-071]
+    views: [agents, email]
+  - match: "slot:morning"
+    specIds: [EML-013, PLT-073]
+    views: [agents, email]
+  - match: "slot:evening-review*"
+    specIds: [EML-023, PLT-073]
+    views: [agents, email]
+  - match: "slot:watchdog-*"
+    specIds: [PLT-074, PLT-073]
+    views: [agents, platform, email]
+  - match: "slot:asx-poll"
+    specIds: [DAT-122, AGT-010]
+    views: [agents, data]
+
+  # ---- LLM ----
+  - match: "llm-role:R1"
+    purpose: "R1 Triage: classify announcements, materiality and affected tickers (small free models)."
+    specIds: [LLM-001, LLM-032]
+    views: [llm]
+  - match: "llm-role:R2"
+    purpose: "R2 Analyst: summarise material items and extract facts (text only)."
+    specIds: [LLM-001, LLM-032]
+    views: [llm]
+  - match: "llm-role:R3"
+    purpose: "R3 Strategist and Critic: theses, reviews and lessons wording."
+    specIds: [LLM-001, LLM-010]
+    views: [llm, learning]
+  - match: "llm-role:R5"
+    purpose: "R5 Writer: digest narrative from structured facts."
+    specIds: [LLM-001, LLM-032]
+    views: [llm, email]
+  - match: "llm-provider:*"
+    purpose: "Free-tier LLM provider {name} in the dated roster; used only after a bake-off passes."
+    specIds: [LLM-070, LLM-071]
+    views: [llm]
+
+  # ---- licence register, secrets, hosts ----
+  - match: "source:*"
+    purpose: "Data source {name} with its licence row (permitted use, risk, status)."
+    specIds: [DAT-120, DAT-121]
+    views: [data]
+  - match: "source:asx_*"
+    specIds: [DAT-122, DAT-124]
+  - match: "secret:*"
+    purpose: "Secret {name}: where it lives and what it is called. Never a value."
+    specIds: [SEC-017, SEC-113]
+    views: [security]
+  - match: "secret:RESEND_API_KEY*"
+    views: [security, email]
+  - match: "secret:{GROQ_API_KEY,GOOGLE_AI_API_KEY,OPENROUTER_API_KEY}"
+    specIds: [SEC-017, LLM-036, SEC-113]
+    views: [security, llm]
+  - match: "secret:{GITHUB_DISPATCH_TOKEN,WORKER_HMAC_SECRET,ACTIONS_HMAC_SECRET*,CRON_SECRET}"
+    specIds: [SEC-017, PLT-076, SEC-113]
+    views: [security, platform]
+  - match: "host:*"
+    purpose: "External host {name} called over HTTPS."
+    specIds: [SEC-017, NFR-006]
+    views: [platform]
+
+elements:
+  # ---- services (hand-kept) ----
+  "service:app":
+    type: service
+    name: "Web app (Vercel, Next.js)"
+    purpose: "The user interface, the signed internal routes, auth and the audit writer."
+    specIds: [PLT-001, PLT-020, PLT-021]
+    owner: app
+    views: [platform, data, cortex, agents, llm, email, security, learning]
+    failure: "Pages show the error state; the watchdog and System Health report an unreachable app."
+  "service:worker":
+    type: service
+    name: "Sentinel Worker (Cloudflare)"
+    purpose: "The master clock: per-minute cron that dispatches workflows and posts signed requests."
+    specIds: [PLT-070, PLT-071, PLT-076]
+    owner: worker
+    schedule: "every minute (Cloudflare cron)"
+    views: [platform, agents, email, security]
+    failure: "The independent watchdog sees the missed slots and emails the Owner."
+  "service:actions":
+    type: service
+    name: "GitHub Actions"
+    purpose: "Runs ingest, batch, backup and CI jobs with secrets from GitHub environments."
+    specIds: [PLT-015, PLT-073, SEC-108]
+    owner: actions
+    views: [platform, data, cortex, agents, llm, security, learning, email]
+    failure: "A failed run fails on purpose so GitHub's failure email reaches the Owner."
+  "service:turso-main":
+    type: service
+    name: "Main database (Turso)"
+    purpose: "Market data, agent output, the arena ledger, run records and the Cortex tables."
+    specIds: [PLT-040, DAT-200]
+    owner: database
+    views: [platform, data, cortex, agents, llm, email, learning]
+    failure: "Writers retry then fail visibly; System Health shows the database check."
+  "service:turso-auth":
+    type: service
+    name: "Auth database (Turso)"
+    purpose: "Users, roles, preferences, sharing and the audit log."
+    specIds: [PLT-041, ROL-101]
+    owner: database
+    views: [platform, security]
+    failure: "Sign-in fails closed; nobody gets in without a session."
+  "service:data-repo":
+    type: service
+    name: "Private data repository (GitHub)"
+    purpose: "Encrypted backups and knowledge archives; never public."
+    specIds: [PLT-022a, SEC-110]
+    owner: external
+    views: [platform, data, security, learning]
+    failure: "Backup and archive runs fail visibly; the next run retries."
+
+  # ---- agents (A1-A8 from spec ch. 07; A9 is the Cortex night stage) ----
+  "agent:A1":
+    type: agent
+    name: "A1 Sentinel"
+    purpose: "Polls enabled sources, rates materiality and polarity, raises alerts and thesis-breaker hits."
+    specIds: [AGT-010, AGT-115, DAT-122]
+    owner: worker
+    schedule: "every minute; ASX every 4 min in announcement hours"
+    inputs: [announcements, news]
+    outputs: [alerts, items]
+    views: [agents, data, email, llm]
+  "agent:A2":
+    type: agent
+    name: "A2 Company and sector research"
+    purpose: "Event records and insider and flow scores from the day's items."
+    specIds: [AGT-105, AGT-020]
+    owner: actions
+    schedule: "Batch 2 (18:10)"
+    inputs: [events, bars]
+    outputs: [event records, flow scores]
+    views: [agents, llm]
+  "agent:A3":
+    type: agent
+    name: "A3 Macro and regime"
+    purpose: "Daily regime label and the macro calendar."
+    specIds: [AGT-101, AGT-020]
+    owner: actions
+    schedule: "Batch 2"
+    inputs: [index bars, rates]
+    outputs: [regime]
+    views: [agents]
+  "agent:A4":
+    type: agent
+    name: "A4 Candle and pattern"
+    purpose: "Indicators and validated chart patterns."
+    specIds: [AGT-033, AGT-020]
+    owner: actions
+    schedule: "Batch 2"
+    inputs: [bars]
+    outputs: [indicators, patterns]
+    views: [agents]
+  "agent:A5":
+    type: agent
+    name: "A5 Strategy lab"
+    purpose: "Signals, decision cards and next-open paper orders after the books close."
+    specIds: [ARN-060, AGT-030]
+    owner: actions
+    schedule: "Batch 2, after books close"
+    inputs: [indicators, regime, events]
+    outputs: [signals, cards, orders]
+    views: [agents, cortex]
+  "agent:A6":
+    type: agent
+    name: "A6 Daily review and learning"
+    purpose: "Attribution, comparisons, lessons and the plan."
+    specIds: [ARN-063, ARN-085, KB-081]
+    owner: actions
+    schedule: "Batch 3 (18:40); wording 19:10"
+    inputs: [fills, signals]
+    outputs: [lessons, plan]
+    views: [agents, learning, llm]
+  "agent:A7":
+    type: agent
+    name: "A7 Critic"
+    purpose: "Deterministic checks and worded concerns on the day's output."
+    specIds: [AGT-041, LLM-010]
+    owner: actions
+    schedule: "19:10"
+    inputs: [cards, lessons]
+    outputs: [critiques]
+    views: [agents, learning, llm]
+  "agent:A8":
+    type: agent
+    name: "A8 Scribe"
+    purpose: "Assembles the Evening Review and dashboard summaries; the email job sends it."
+    specIds: [EML-023, AGT-001]
+    owner: actions
+    schedule: "assembles 19:10-19:45; email at 20:00"
+    inputs: [lessons, critiques]
+    outputs: [Evening Review]
+    views: [agents, email, llm, learning]
+  "agent:A9":
+    type: agent
+    name: "A9 Cortex night stage"
+    purpose: "Scores every angle each night in shadow and writes would-have decisions."
+    specIds: [CTX-010, CTX-011]
+    owner: actions
+    schedule: "Batch 2b, after the v1 rule interpreter"
+    inputs: [bars, events, index closes]
+    outputs: [cortex rows]
+    views: [agents, cortex]
+
+  # ---- Cortex pipeline (groups) ----
+  "group:cortex-angles":
+    type: group
+    name: "100 angles in ten domains (D1-D10)"
+    purpose: "Pure computes per angle: price action, volume, events, fundamentals, macro, sentiment, risk, timing, data quality, calibration."
+    specIds: [CTX-011, CTX-030, CTX-050]
+    owner: app
+    views: [cortex]
+  "group:cortex-gates":
+    type: group
+    name: "Ordered gates (L0 veto to portfolio)"
+    purpose: "Ordered list of gates that can veto or cap a candidate."
+    specIds: [CTX-013, CTX-023]
+    owner: app
+    views: [cortex]
+  "group:cortex-score":
+    type: group
+    name: "Score and disagreement"
+    purpose: "Eligibility, score map and disagreement between angles."
+    specIds: [CTX-012, CTX-028]
+    owner: app
+    views: [cortex]
+  "group:cortex-states":
+    type: group
+    name: "Family states and promotion"
+    purpose: "Shadow, allowed and live-tested states; cold start, halts and promotion."
+    specIds: [CTX-043, CTX-053]
+    owner: app
+    views: [cortex, learning]
+  "group:cortex-ledger":
+    type: group
+    name: "Ledger and calibration"
+    purpose: "Append-only decision ledger, outcomes and calibration cells."
+    specIds: [CTX-010, CTX-053]
+    owner: app
+    views: [cortex, data]
+
+  # ---- Learning loop (groups) ----
+  "group:lane-a":
+    type: group
+    name: "Lane A: lessons and parameter nudges"
+    purpose: "Daily lessons and bounded parameter changes graded against the baseline."
+    specIds: [KB-040, KB-081]
+    owner: app
+    views: [learning]
+  "group:lane-b":
+    type: group
+    name: "Lane B: challengers"
+    purpose: "Challenger rules generated, run in shadow and promoted by the Owner."
+    specIds: [VAL-110, VAL-116]
+    owner: app
+    views: [learning]
+  "group:kb-documents":
+    type: group
+    name: "Knowledge-base documents"
+    purpose: "Versioned lessons, playbooks and spec copies archived to the data repository."
+    specIds: [KB-001, KB-020]
+    owner: app
+    views: [learning, data]
+
+  # ---- hosts: view membership and spec IDs (purpose from the rules unless given) ----
+  "host:api.github.com":
+    purpose: "GitHub REST API: workflow dispatch and repository reads."
+    specIds: [PLT-076, SEC-017]
+    views: [platform, agents, security]
+  "host:uploads.github.com":
+    purpose: "GitHub uploads: release and archive files."
+    specIds: [PLT-022a, SEC-017]
+    views: [platform, data]
+  "host:api.resend.com":
+    purpose: "Resend email API: all outbound email."
+    specIds: [EML-001, EML-020, NFR-006]
+    views: [email, platform]
+  "host:accounts.google.com":
+    purpose: "Google sign-in (OAuth)."
+    specIds: [PLT-033, SEC-010]
+    views: [security, platform]
+  "host:oauth2.googleapis.com":
+    purpose: "Google OAuth token endpoint."
+    specIds: [PLT-033, SEC-010]
+    views: [security, platform]
+  "host:generativelanguage.googleapis.com":
+    purpose: "Gemini API (free tier)."
+    specIds: [LLM-070, LLM-036]
+    views: [llm, platform]
+  "host:ai.google.dev":
+    purpose: "Gemini rate-limit page (roster source link)."
+    specIds: [LLM-070]
+    views: [llm]
+  "host:api.groq.com":
+    purpose: "Groq API (free tier)."
+    specIds: [LLM-070, LLM-036]
+    views: [llm, platform]
+  "host:console.groq.com":
+    purpose: "Groq rate-limit page (roster source link)."
+    specIds: [LLM-070]
+    views: [llm]
+  "host:openrouter.ai":
+    purpose: "OpenRouter API and limits page (fallback models)."
+    specIds: [LLM-070, LLM-036]
+    views: [llm, platform]
+  "host:www.asx.com.au":
+    purpose: "ASX public site: announcements and listed-companies file."
+    specIds: [DAT-122, DAT-124]
+    views: [data, platform]
+  "host:asx.api.markitdigital.com":
+    purpose: "ASX announcements feed."
+    specIds: [DAT-122, DAT-124]
+    views: [data, platform]
+  "host:www.tradingview.com":
+    purpose: "Chart links for the Owner (no data pulled)."
+    specIds: [DAT-124]
+    views: [data, platform]
+
+edges:
+  - { from: "service:worker", to: "service:actions", kind: dispatch, contract: "workflow_dispatch via the GitHub API with the dispatch token (name only); idempotent per slot.", views: [platform, agents] }
+  - { from: "service:worker", to: "service:app", kind: http, contract: "Signed POST (HMAC) to the internal routes; a nonce stops replays.", views: [platform, agents, security] }
+  - { from: "service:worker", to: "service:turso-main", kind: data, contract: "Worker reads and writes worker_state and sentinel rows.", views: [platform, agents] }
+  - { from: "service:actions", to: "service:app", kind: http, contract: "Signed POST to the internal routes from batch jobs.", views: [platform, agents, security] }
+  - { from: "service:actions", to: "service:turso-main", kind: data, contract: "Ingest and batch jobs write with the main database token (name only).", views: [platform, data, cortex, agents, learning] }
+  - { from: "service:app", to: "service:turso-main", kind: data, contract: "Reads for pages; writes for server actions and internal routes.", views: [platform, data, cortex, agents, llm, email, learning] }
+  - { from: "service:app", to: "service:turso-auth", kind: data, contract: "Sessions, roles, preferences, sharing and audit.", views: [platform, security] }
+  - { from: "service:actions", to: "service:data-repo", kind: data, contract: "Encrypted backup and archive pushes with a repo-scoped token (name only).", views: [platform, data, security] }
+  - { from: "service:app", to: "host:accounts.google.com", kind: http, contract: "OAuth sign-in redirect.", views: [security, platform] }
+  - { from: "service:app", to: "host:api.resend.com", kind: email, contract: "One email per key through Resend; failures are recorded.", views: [email, platform] }
+  - { from: "service:actions", to: "host:api.resend.com", kind: email, contract: "Watchdog sends directly if the app route fails.", views: [email, platform] }
+  - { from: "agent:A1", to: "slot:asx-poll", kind: uses, contract: "The ASX poll slot drives A1.", views: [agents] }
+  - { from: "agent:A1", to: "table:main.announcement", kind: data, contract: "Writes new announcements.", views: [data] }
+  - { from: "agent:A1", to: "table:main.alert", kind: data, contract: "Writes alerts.", views: [email] }
+  - { from: "agent:A1", to: "llm-role:R1", kind: uses, contract: "Triage text through the Vercel route for material items.", views: [llm] }
+  - { from: "agent:A2", to: "llm-role:R2", kind: uses, contract: "Summaries, text only.", views: [llm] }
+  - { from: "agent:A3", to: "table:main.regime_daily", kind: data, contract: "Writes the daily regime.", views: [agents] }
+  - { from: "agent:A4", to: "table:main.indicator_daily", kind: data, contract: "Writes indicators.", views: [agents] }
+  - { from: "agent:A4", to: "table:main.pattern_daily", kind: data, contract: "Writes validated patterns.", views: [agents] }
+  - { from: "agent:A5", to: "table:main.signal", kind: data, contract: "Writes signals.", views: [agents] }
+  - { from: "agent:A5", to: "table:main.decision_card", kind: data, contract: "Writes decision cards.", views: [agents] }
+  - { from: "agent:A6", to: "table:main.lesson", kind: data, contract: "Writes lessons.", views: [learning] }
+  - { from: "agent:A6", to: "llm-role:R3", kind: uses, contract: "Wording of lessons.", views: [llm] }
+  - { from: "agent:A7", to: "table:main.critique", kind: data, contract: "Writes critiques.", views: [learning, agents] }
+  - { from: "agent:A7", to: "llm-role:R3", kind: uses, contract: "Concerns worded by a different provider.", views: [llm] }
+  - { from: "agent:A8", to: "llm-role:R5", kind: uses, contract: "Narrative from structured facts.", views: [llm, email] }
+  - { from: "agent:A8", to: "table:main.evening_review", kind: data, contract: "Stores the Evening Review.", views: [learning] }
+  - { from: "agent:A9", to: "group:cortex-angles", kind: data, contract: "Computes every angle on the as-of world.", views: [cortex] }
+  - { from: "group:cortex-angles", to: "group:cortex-gates", kind: data, contract: "Angle values enter the ordered gates.", views: [cortex] }
+  - { from: "group:cortex-gates", to: "group:cortex-score", kind: data, contract: "Candidates that pass the gates are scored.", views: [cortex] }
+  - { from: "group:cortex-score", to: "group:cortex-states", kind: data, contract: "Scores are applied per family state.", views: [cortex] }
+  - { from: "group:cortex-states", to: "group:cortex-ledger", kind: data, contract: "Decisions (shadow, blocked, live) are appended.", views: [cortex] }
+  - { from: "group:cortex-ledger", to: "table:main.cortex_ledger_cell", kind: data, contract: "Ledger cells.", views: [cortex, data] }
+  - { from: "group:lane-a", to: "table:main.lesson", kind: data, contract: "Lessons and nudges.", views: [learning] }
+  - { from: "group:lane-b", to: "table:main.challenger", kind: data, contract: "Challengers and their lifecycle.", views: [learning] }
+  - { from: "group:lane-b", to: "group:cortex-states", kind: data, contract: "Promoted challengers change family state.", views: [learning] }
+  - { from: "group:kb-documents", to: "service:data-repo", kind: data, contract: "Archived by the kb-archive workflow.", views: [learning, data] }
