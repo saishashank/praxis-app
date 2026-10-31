@@ -104,8 +104,6 @@ export function goldenProblems(items: readonly GoldenItem[]): string[] {
   if (items.length < MIN_ITEMS_TOTAL) out.push(`fewer than ${MIN_ITEMS_TOTAL} items`);
   for (const c of CATEGORIES) {
     const n = items.filter((i) => i.category === c).length;
-    // The R6 steelman set (D-495) arrives with M11-lite WP3; until its file exists the category is not required.
-    if (c === "steelman" && n === 0) continue;
     if (n < MIN_ITEMS_PER_CATEGORY) out.push(`${c}: ${n} items (< ${MIN_ITEMS_PER_CATEGORY})`);
   }
   return out;
