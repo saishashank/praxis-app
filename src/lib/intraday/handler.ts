@@ -12,6 +12,7 @@ export type ScanHandlerDeps = Omit<MachineDeps, "ctx"> & {
   db: () => Client;
   fetch: ScanRunDeps["fetch"];
   sleep: ScanRunDeps["sleep"];
+  mailCandidates?: ScanRunDeps["mailCandidates"];
 };
 
 export function createIntradayScanHandler(deps: ScanHandlerDeps) {
@@ -24,6 +25,7 @@ export function createIntradayScanHandler(deps: ScanHandlerDeps) {
         now: () => new Date(nowSec * 1000),
         fetch: deps.fetch,
         sleep: deps.sleep,
+        mailCandidates: deps.mailCandidates,
       });
       const body =
         r.status === "skipped"

@@ -31,6 +31,8 @@ export type ReviewRouteDeps = {
   store: NonceStore;
   nowSec: () => number;
   db: () => Client;
+  /** The auth database, for the Owner's `intraday_candidate_emails`; absent = default on. */
+  auth?: () => Client;
   provider?: EmailProvider;
   sleep?: (ms: number) => Promise<void>;
 };
@@ -39,6 +41,26 @@ const json = (status: number, body: unknown) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
 type Caller = "worker" | "watchdog";
+
+/** EML-042: the optional candidate section follows the Owner's `intraday_candidate_emails`
+ * (stored only once chosen, D-452; absent or unreadable = on). */
+export async function ownerCandidatesOn(auth: (() => Client) | undefined): Promise<boolean> {
+  if (!auth) return true;
+  try {
+    const r = await auth().execute(
+      "SELECT p.prefs_json AS prefs_json FROM app_user u JOIN user_preference p ON p.user_id = u.id WHERE u.role = 'owner' ORDER BY u.id LIMIT 1",
+    );
+    if (!r.rows.length || r.rows[0].prefs_json === null) return true;
+    const j: unknown = JSON.parse(String(r.rows[0].prefs_json));
+    return !(
+      typeof j === "object" &&
+      j !== null &&
+      (j as Record<string, unknown>).intraday_candidate_emails === "off"
+    );
+  } catch {
+    return true;
+  }
+}
 
 export function createEveningReviewHandler(deps: ReviewRouteDeps) {
   return async function handle(req: Request): Promise<Response> {
@@ -128,6 +150,7 @@ export function createEveningReviewHandler(deps: ReviewRouteDeps) {
           now: () => new Date(nowSec * 1000),
           provider: deps.provider,
           sleep: deps.sleep,
+          pickCandidatesOn: await ownerCandidatesOn(deps.auth),
         },
         d,
       );

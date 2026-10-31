@@ -19,6 +19,7 @@ import type {
   HealthLine,
   NarrativeFacts,
   OrderFact,
+  PickReviewFacts,
   StatRow,
 } from "@/lib/email/templates/review";
 import { money, pct, plural } from "@/lib/email/templates/format";
@@ -631,6 +632,76 @@ export async function readRecap(c: Ctx): Promise<Recap> {
   const out: Recap = { alerts, breakerHits };
   if (regimeNotice !== undefined) out.regimeNotice = regimeNotice;
   return out;
+}
+
+// ---- M17 EML-042: pick alerts in sections 8 and 9 ---------------------------------------------------
+
+const CLEAR_WORDS: Record<string, string> = {
+  left_list: "left the list",
+  below_stop: "fell under the stop",
+  above_chase_cap: "ran above the limit",
+  halted: "halted",
+  expired: "expired",
+  muted: "muted",
+  filled: "filled in the book",
+};
+
+/**
+ * Pick-alert facts of date D, or null when nothing happened (so a quiet day leaves the review facts,
+ * and their hash, unchanged). `candidatesOn` = the Owner's `intraday_candidate_emails`.
+ */
+export async function readPickReview(
+  c: Ctx,
+  candidatesOn: boolean,
+): Promise<PickReviewFacts | null> {
+  const a = await c.db.execute({
+    sql: `SELECT alert_id, state, clear_reason FROM pick_alert
+          WHERE market = ? AND session_d = ? AND state <> 'armed' ORDER BY alert_id, seq`,
+    args: [c.market, c.d],
+  });
+  const hits = new Set<string>();
+  const clears = new Map<string, number>();
+  for (const x of a.rows) {
+    if (str(x.state) === "hit") hits.add(str(x.alert_id));
+    else clears.set(str(x.clear_reason), (clears.get(str(x.clear_reason)) ?? 0) + 1);
+  }
+  const cand = await c.db.execute({
+    sql: `SELECT code, item_source, item_category, decision_outcome FROM intraday_candidate
+          WHERE market = ? AND session_d = ? ORDER BY found_at, code`,
+    args: [c.market, c.d],
+  });
+  const carried = cand.rows.filter((x) => text(x.decision_outcome) === "night_pick").length;
+  const mail = await c.db.execute({
+    sql: `SELECT m.status, m.kind, m.at, COALESCE(a.code, m.alert_id) AS code FROM pick_alert_mail m
+          LEFT JOIN pick_alert a ON a.alert_id = m.alert_id AND a.seq = 1
+          WHERE m.status IN ('suppressed_cap','held','held_to_review') AND m.at >= ? AND m.at < ?
+          ORDER BY m.id`,
+    args: [`${addDays(c.d, -1)}T00:00:00.000Z`, `${addDays(c.d, 2)}T00:00:00.000Z`],
+  });
+  const held = mail.rows
+    .filter((x) => melbourneDate(new Date(str(x.at))) === c.d)
+    .map((x) => {
+      const what = str(x.kind) === "pick_candidate" ? "intraday candidate" : "buy-price alert";
+      const why = str(x.status) === "suppressed_cap" ? "daily cap reached" : "held in quiet hours";
+      return `${str(x.code).replace(/^cand:[^:]*:[^:]*:/, "")}: ${what}, ${why}`;
+    });
+  if (hits.size === 0 && clears.size === 0 && cand.rows.length === 0 && held.length === 0)
+    return null;
+  const nClear = [...clears.values()].reduce((s, n) => s + n, 0);
+  const why = [...clears.entries()].map(([r, n]) => `${n} ${CLEAR_WORDS[r] ?? r}`).join(", ");
+  const lines = [
+    `Buy-price alerts today: ${hits.size} hit, ${nClear} cleared${why ? ` (${why})` : ""}.`,
+    `Intraday candidates today: ${cand.rows.length} found, ${carried} carried into tonight's decision.`,
+  ];
+  const candidates =
+    candidatesOn && cand.rows.length > 0
+      ? cand.rows.map((x) => ({
+          code: str(x.code),
+          trigger: text(x.item_category) ?? str(x.item_source),
+          outcome: text(x.decision_outcome) ?? "not yet decided",
+        }))
+      : null;
+  return { lines, candidates, held };
 }
 
 // ---- section 9: system and quota health ---------------------------------------------------------

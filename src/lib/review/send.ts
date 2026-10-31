@@ -59,6 +59,8 @@ export interface ReviewSendCtx {
   now?: () => Date;
   provider?: EmailProvider;
   sleep?: (ms: number) => Promise<void>;
+  /** The Owner's `intraday_candidate_emails` (EML-042 optional section); default on. */
+  pickCandidatesOn?: boolean;
 }
 
 export interface ReviewSendResult {
@@ -246,6 +248,7 @@ export async function runReviewSend(ctx: ReviewSendCtx, d: string): Promise<Revi
     env: templateEnv(emailEnvName(env)),
     appUrl,
     now,
+    pickCandidatesOn: ctx.pickCandidatesOn,
   };
   if (final) {
     // The email is decided. Later calls only keep the complete version in the app (EML-011) when

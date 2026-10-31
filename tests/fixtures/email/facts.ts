@@ -259,3 +259,61 @@ export const BRIEF: BriefInput = {
 };
 
 export const TEST_EMAIL: TestInput = { env: "production", appUrl: APP, requestedAt: "Mon 19 Oct 2026 09:00 AEDT" };
+
+// M17 WP4 (EML-038..041): pick-alert facts, all pre-formatted strings, synthetic codes.
+export const PICK_HIT = {
+  alertId: "a".repeat(64),
+  code: "ZZ01",
+  name: "Zed Zero Holdings",
+  publishedAt: "Tue 3 Nov 2026 18:10 AEDT",
+  limit: "A$10.000",
+  last: "A$9.950",
+  quoteTime: "Wed 4 Nov 2026 10:42 AEDT",
+  stop: "A$9.200",
+  stopDistancePct: "7.5%",
+  parcel: { amount: "A$2,000", shares: 200 },
+  timeFrame: "5 sessions",
+};
+export const PICK_CLEARED_BELOW = {
+  alertId: "b".repeat(64),
+  code: "ZZ02",
+  name: "Zed Two Limited",
+  variant: "below_stop" as const,
+  limit: "A$5.000",
+  stop: "A$4.600",
+  last: null,
+  quoteTime: "Wed 4 Nov 2026 11:05 AEDT",
+};
+export const PICK_CLEARED_CAP = {
+  alertId: "c".repeat(64),
+  code: "ZZ03",
+  name: "Zed Three Group",
+  variant: "above_chase_cap" as const,
+  limit: "A$8.000",
+  stop: "A$7.400",
+  last: null,
+  quoteTime: "Wed 4 Nov 2026 10:15 AEDT",
+  capText: "3% above the limit (A$8.240)",
+};
+export const PICK_CANDIDATE = {
+  code: "ZZ04",
+  name: "Zed Four Resources",
+  foundAt: "11:42",
+  trigger: {
+    title: "Contract award announced",
+    source: "ASX announcement",
+    publishedAt: "Wed 4 Nov 2026 11:20 AEDT",
+  },
+  movePct: "+6.2%",
+  relVolume: "2.4x",
+  quoteTime: "Wed 4 Nov 2026 11:40 AEDT",
+  gatesPassed: ["G01", "G02", "G08"],
+  limit: "A$3.100",
+  stop: "A$2.850",
+  unvalidated: true,
+};
+export const PICK_LINES = [
+  { code: "ZZ01", what: "Buy price hit", price: "A$9.950", quoteTime: "Wed 4 Nov 2026 10:42 AEDT" },
+  { code: "ZZ02", what: "Cleared: fell under the stop", price: "n/a", quoteTime: "Wed 4 Nov 2026 10:42 AEDT" },
+  { code: "ZZ03", what: "Cleared: ran above the limit", price: "n/a", quoteTime: "Wed 4 Nov 2026 10:42 AEDT" },
+];

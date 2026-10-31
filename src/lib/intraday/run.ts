@@ -54,6 +54,14 @@ export type ScanRunDeps = {
   fetch: QuoteFetchDeps["fetch"];
   sleep: (ms: number) => Promise<void>;
   market?: string;
+  /** WP4 hook (EML-040): mails the new candidates after they are written; default none. */
+  mailCandidates?: (c: {
+    db: Exec;
+    now: Date;
+    market: string;
+    sessionD: string;
+    slot: string;
+  }) => Promise<void>;
 };
 
 export type ScanRunResult =
@@ -242,6 +250,9 @@ export async function runIntradayScan(deps: ScanRunDeps): Promise<ScanRunResult>
       streamState: String(await getConfig(db, "intraday_stream_state")),
     },
   });
+  if (deps.mailCandidates && evaluated.written > 0) {
+    await deps.mailCandidates({ db, now: deps.now(), market, sessionD, slot });
+  }
   return {
     ...base,
     quotes: fetched.quotes.length,

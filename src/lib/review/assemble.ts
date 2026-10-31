@@ -35,6 +35,7 @@ import {
   readNarrativePack,
   readNarrativeRow,
   readOrders,
+  readPickReview,
   readRecap,
   readStats,
   rulesNarrative,
@@ -48,6 +49,8 @@ export type BuildOptions = {
   appUrl: string;
   /** Stamps the quota meter only. */
   now: Date;
+  /** `intraday_candidate_emails` of the Owner (EML-042 optional section); default on. */
+  pickCandidatesOn?: boolean;
   /** The watchdog / failure fallback: sections 1 (this date's data), 9 and 10 only. */
   minimal?: { reason: string };
 };
@@ -145,6 +148,8 @@ export async function buildFacts(db: Client, o: BuildOptions): Promise<BuiltFact
   if (unread > 0) facts.unreadDays = unread;
   if (variant === "partial") facts.missing = missing;
   if (recap.regimeNotice !== undefined) facts.regimeNotice = recap.regimeNotice;
+  const pickAlerts = await readPickReview(c, o.pickCandidatesOn ?? true);
+  if (pickAlerts !== null) facts.pickAlerts = pickAlerts;
   if (minimal) {
     const noData = executions.length === 0 ? ` No data for ${o.d}.` : "";
     facts.minimalReason = `${o.minimal!.reason}${noData}`;
