@@ -173,9 +173,10 @@ describe("getMeters", () => {
   it("LLM tokens are totalled for today (UTC) against the daily budget", async () => {
     await insert({ at: "2026-10-09T23:59:59.999Z", tokens: 999_999 });
     await insert({ at: "2026-10-10T00:00:00.000Z", tokens: 100_000 });
-    await insert({ at: "2026-10-10T11:00:00.000Z", tokens: 50_000 });
+    await insert({ at: "2026-10-10T11:00:00.000Z", tokens: 140_000 });
     const m = byId(await getMeters(db, NOW, "production"), "llm-tokens");
-    expect(m).toMatchObject({ used: 150_000, limit: 150_000, period: "daily", level: "alert" });
+    // M11-lite D-481: the daily total default is 240,000 (it carries the R6 steelman cap)
+    expect(m).toMatchObject({ used: 240_000, limit: 240_000, period: "daily", level: "alert" });
   });
 });
 

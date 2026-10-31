@@ -36,6 +36,9 @@ const M5 = [
   "evening-review",
   "evening-review-late",
   "morning",
+  // M17 (AGT-140, PLT-073): the two intraday route slots, go-live listed, trading days only
+  "quote-poll",
+  "intraday-scan",
 ];
 const hm = (m: number) =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -129,6 +132,10 @@ describe("TST-103: UTC instants of every M5 slot around both clock changes (2026
       ];
     }
     if (id === "evening-review-late") return ["21:00", "21:15", "21:30", "21:45", "22:00"];
+    const every = (from: number, to: number, step: number) =>
+      Array.from({ length: (to - from) / step + 1 }, (_, i) => hm(from + i * step));
+    if (id === "quote-poll") return every(10 * 60, 16 * 60, 5); // M17: 10:00-16:00 every 5 min
+    if (id === "intraday-scan") return every(10 * 60 + 30, 15 * 60 + 30, 30); // 10:30-15:30
     return Array.from({ length: 31 }, (_, i) => hm(8 * 60 + i)); // morning + 30 min catch-up
   };
 
@@ -215,7 +222,7 @@ describe("TST-103: UTC instants of every M5 slot around both clock changes (2026
     expect(open("09:57")).toEqual(["pre-open"]);
     expect(open("09:58")).toEqual(["pre-open-retry"]);
     expect(open("09:59")).toEqual(["pre-open-retry"]);
-    expect(open("10:00")).toEqual([]);
+    expect(open("10:00")).toEqual(["quote-poll"]); // M17: delayed quotes from 10:00 every 5 min
   });
 });
 
@@ -282,7 +289,7 @@ describe("trading-day vs every-day behaviour (pure, incl. holidays and half days
     return [...ids].sort();
   };
   const EVERY = ["evening-review", "evening-review-late", "morning"];
-  const TRADING = ["alert-flush", "pre-open", "pre-open-retry"];
+  const TRADING = ["alert-flush", "pre-open", "pre-open-retry", "quote-poll", "intraday-scan"];
   it.each([
     ["2026-10-05", "trading day", [...EVERY, ...TRADING]],
     ["2026-10-03", "Saturday", EVERY],
