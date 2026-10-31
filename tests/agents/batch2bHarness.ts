@@ -49,6 +49,8 @@ export type CodeDef = {
   readonly volume?: (i: number) => bigint;
   /** A 2-for-1 split with this ex-date session index: raw prices halve from it on. */
   readonly splitAt?: number;
+  /** Overrides the open of session i (default: the previous close); M15 P2 uses it for a gap-up. */
+  readonly open?: (i: number, prevClose: bigint) => bigint;
 };
 
 const CENT = 10_000n;
@@ -86,7 +88,8 @@ export async function buildNight(db: Client, o: NightOptions): Promise<void> {
       const split = c.splitAt !== undefined && i >= c.splitAt;
       const close = split ? c.close(i) / 2n : c.close(i);
       const first = prev.get(c.code);
-      const open = c.splitAt === i && first !== undefined ? first / 2n : (first ?? close);
+      const base = c.splitAt === i && first !== undefined ? first / 2n : (first ?? close);
+      const open = c.open === undefined ? base : c.open(i, base);
       prev.set(c.code, close);
       const hi = (open > close ? open : close) + CENT;
       const lo = (open < close ? open : close) - CENT;

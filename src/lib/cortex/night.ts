@@ -167,8 +167,13 @@ export type NightInputs = {
   readonly maps: ReadonlyMap<Family, CortexMap>;
   /** key = `family|top3|volBucket|liqTier` (stats/cells `cellKey`). */
   readonly cells: ReadonlyMap<string, CellStatistic>;
-  /** All 12 books (the CTX-026 caps span them). */
+  /** The Cortex-governed books of tonight. */
   readonly books: readonly BookState[];
+  /**
+   * D-347: the arena's other books (leverage twins): no decisions, but their NAV and holdings count in
+   * the CTX-026 caps, which span all 12 books.
+   */
+  readonly contextBooks?: readonly BookState[];
   readonly rules: ReadonlyMap<Family, FamilyNightRule>;
   /** Current `cortex_state` rows per code (the latest per kind). */
   readonly states: readonly StateRef[];
@@ -1047,9 +1052,10 @@ export function runNight(inputs: NightInputs): NightOutput {
     codes.map((c) => [c, codeFacts(view, t, d, c, params.windows.adv, gateAngles)]),
   );
   const regime = view.regime(t);
-  const exposures = bookExposures(books, view, t, d);
+  const context = [...(inputs.contextBooks ?? [])];
+  const exposures = bookExposures([...books, ...context], view, t, d);
   let arenaNav = 0n;
-  for (const b of books) arenaNav += b.navMicro;
+  for (const b of [...books, ...context]) arenaNav += b.navMicro;
   const cold =
     inputs.goLiveD === undefined || inputs.goLiveD === null
       ? null

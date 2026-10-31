@@ -32,7 +32,7 @@ import { corporateActionsHook } from "../corporateActions/engine.mjs";
 import { qualityHook, readQualityConfig } from "../quality/engine.mjs";
 import { RULES, TIERS } from "../quality/rules.mjs";
 import { TIER_RULES, assignTiers, medianMicro } from "../universe/tiers.mjs";
-import { INDEX_YAHOO_SYMBOL, parseIndexText } from "../index/indexBars.mjs";
+import { INDEX_YAHOO_SYMBOL, parseIndexText, US_INDEX_YAHOO_SYMBOLS } from "../index/indexBars.mjs";
 import { parseVendorActionsText } from "../vendorActions/vendorActions.mjs";
 import { inputsStage } from "../index/inputsStage.mjs";
 import {
@@ -299,7 +299,7 @@ export async function assess(db, o) {
     end: newest,
     // M4 T3: the benchmark index rides the same Yahoo fetch; the ASIC dates only when that source
     // is on (the Node ASIC step has no secrets and skips an empty list).
-    indices: [INDEX_YAHOO_SYMBOL],
+    indices: [INDEX_YAHOO_SYMBOL, ...Object.values(US_INDEX_YAHOO_SYMBOLS)], // D-308: + ^GSPC, ^VIX
     short_dates: shortModeAllowsFetch(await shortSourceMode(db))
       ? await planShortDates(db, { target, market })
       : [],

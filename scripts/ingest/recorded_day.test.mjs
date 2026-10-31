@@ -49,7 +49,7 @@ function setup() {
       codes: ["ZZA"],
       start: "2026-10-20",
       end: "2026-10-21",
-      indices: ["^AXJO"],
+      indices: ["^AXJO", "^GSPC", "^VIX"],
       short_dates: ["2026-10-19"],
     }),
   );

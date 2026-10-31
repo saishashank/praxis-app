@@ -184,7 +184,7 @@ describe("the stage inside a Batch 1 run", () => {
     const prep2 = await prepareBatch1(db, { nowMs: at1730(TUE) });
     expect(prep2).toMatchObject({
       action: "fetch",
-      request: { indices: ["^AXJO"], short_dates: [] },
+      request: { indices: ["^AXJO", "^GSPC", "^VIX"], short_dates: [] },
     });
     await go(db, { indexText: INDEX_TEXT, shortText: shortFile() });
     expect((await stage6(db)).short_interest).toBe("source_off");
