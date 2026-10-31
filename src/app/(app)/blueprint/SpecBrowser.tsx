@@ -7,7 +7,93 @@ import {
   loadModel,
   renderSpecDoc,
   searchSpecIndex,
+  type Block,
+  type Inline,
 } from "@/lib/blueprint/specBrowser";
+
+function Inl({ parts }: { parts: Inline[] }) {
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.k === "code" ? (
+          <code key={i}>{p.s}</code>
+        ) : p.k === "strong" ? (
+          <strong key={i}>{p.s}</strong>
+        ) : (
+          <span key={i}>{p.s}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+function Blocks({ blocks }: { blocks: Block[] }) {
+  return (
+    <>
+      {blocks.map((b, i) => {
+        switch (b.t) {
+          case "h": {
+            const H = `h${b.level}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+            return (
+              <H key={i}>
+                <Inl parts={b.inl} />
+              </H>
+            );
+          }
+          case "p":
+            return (
+              <p key={i}>
+                <Inl parts={b.inl} />
+              </p>
+            );
+          case "code":
+            return (
+              <pre key={i}>
+                <code>{b.text}</code>
+              </pre>
+            );
+          case "list": {
+            const L = b.ordered ? "ol" : "ul";
+            return (
+              <L key={i}>
+                {b.items.map((it, j) => (
+                  <li key={j}>
+                    <Inl parts={it} />
+                  </li>
+                ))}
+              </L>
+            );
+          }
+          case "table":
+            return (
+              <table key={i}>
+                <thead>
+                  <tr>
+                    {b.head.map((c, j) => (
+                      <th key={j}>
+                        <Inl parts={c} />
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {b.rows.map((r, j) => (
+                    <tr key={j}>
+                      {r.map((c, k) => (
+                        <td key={k}>
+                          <Inl parts={c} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            );
+        }
+      })}
+    </>
+  );
+}
 
 export type SpecBrowserProps = { doc?: string; q?: string };
 
@@ -21,7 +107,7 @@ export function SpecBrowser({ doc, q = "" }: SpecBrowserProps) {
         <ul>
           {docs.map((d) => (
             <li key={d.key}>
-              <a href={`?tab=spec&doc=${encodeURIComponent(d.key)}`}>{d.title}</a>
+              <a href={`/blueprint?tab=spec&doc=${encodeURIComponent(d.key)}`}>{d.title}</a>
             </li>
           ))}
         </ul>
@@ -41,11 +127,9 @@ export function SpecBrowser({ doc, q = "" }: SpecBrowserProps) {
         ))}
       </ul>
       {shown ? (
-        <article
-          data-testid="spec-doc"
-          // Safe: renderMarkdown HTML-escapes all document text.
-          dangerouslySetInnerHTML={{ __html: shown.html }}
-        />
+        <article data-testid="spec-doc">
+          <Blocks blocks={shown.blocks} />
+        </article>
       ) : null}
     </section>
   );

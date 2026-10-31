@@ -23,6 +23,10 @@ import {
   ROOT,
   routesOf,
   snapshot,
+  auditActions,
+  expectOnlyBlueprintAudit,
+  isAuditOnlyGet,
+  stateFor,
   surfaces,
   WRITE_METHODS,
 } from "./support";
@@ -38,7 +42,13 @@ vi.mock("@/lib/auth/session", async (orig) => ({
   getCurrentUser: async () => mem.user,
 }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
-vi.mock("next/navigation", () => ({ redirect: vi.fn(), forbidden: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  redirect: vi.fn(),
+  forbidden: vi.fn(),
+  notFound: vi.fn(() => {
+    throw new Error("NEXT_NOT_FOUND");
+  }),
+}));
 vi.mock("@/auth", () => ({ handlers: { GET: vi.fn(), POST: vi.fn() }, auth: vi.fn() }));
 
 const BASE = "https://app.example.test";
@@ -272,6 +282,7 @@ describe("SEC-011: no GET handler changes state when called (as the Owner, real 
 
   beforeAll(async () => {
     vi.stubEnv("PII_HASH_KEY", KEY);
+    vi.stubEnv("OWNER_EMAIL", "owner@example.test"); // the Blueprint routes pin the Owner (SEC-111)
     main = await freshDb("main");
     auth = await freshDb("auth");
     mem.main = main;
@@ -296,10 +307,14 @@ describe("SEC-011: no GET handler changes state when called (as the Owner, real 
         (req: Request, ctx?: unknown) => Promise<Response> | Response
       >;
       const ctx = { params: Promise.resolve({ key: "k", id: "sample-1", code: "ABC" }) };
-      const before = [await snapshot(main), await snapshot(auth)];
-      const res = await mod.GET(new Request(new URL(concreteUrl(r.url), BASE)), ctx);
+      const url = concreteUrl(r.url);
+      const before = await stateFor(main, auth, url);
+      const audits = await auditActions(auth);
+      const res = await mod.GET(new Request(new URL(url, BASE)), ctx);
       expect(res.status).toBeLessThan(600);
-      expect([await snapshot(main), await snapshot(auth)]).toEqual(before);
+      expect(await stateFor(main, auth, url)).toEqual(before);
+      if (isAuditOnlyGet(url))
+        expect(expectOnlyBlueprintAudit(audits, await auditActions(auth))).toHaveLength(1);
     });
   }
 });
