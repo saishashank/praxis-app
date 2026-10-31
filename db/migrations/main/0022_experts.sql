@@ -132,7 +132,8 @@ BEGIN
 END;
 
 -- 5. Claims (KB-073). The texts live in claim_revision, so an edit is a new version. cluster_id is the primary
--- cluster: set at insert or once from NULL (a merge, D-530); nothing else on the row ever changes.
+-- cluster: set at insert, once from NULL (a claim merge, D-530), or moved to the cluster its current cluster
+-- was merged into (a cluster merge re-links its claims, D-535); nothing else on the row ever changes.
 CREATE TABLE claim (
   id TEXT PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 32),
   type TEXT NOT NULL CHECK (type IN ('method','event_link','call','risk_rule')),
@@ -150,9 +151,12 @@ CREATE TRIGGER claim_guard_update BEFORE UPDATE ON claim
 WHEN NOT (NEW.id IS OLD.id AND NEW.type IS OLD.type AND NEW.testability IS OLD.testability
   AND NEW.created_at IS OLD.created_at
   AND (NEW.cluster_id IS OLD.cluster_id
-    OR (OLD.cluster_id IS NULL AND EXISTS (SELECT 1 FROM cluster c WHERE c.id = NEW.cluster_id))))
+    OR (NEW.cluster_id IS NOT NULL AND EXISTS (SELECT 1 FROM cluster c WHERE c.id = NEW.cluster_id)
+      AND (OLD.cluster_id IS NULL
+        OR COALESCE((SELECT s.merged_into FROM cluster_state s WHERE s.cluster_id = OLD.cluster_id
+          ORDER BY s.seq DESC LIMIT 1), '') = NEW.cluster_id))))
 BEGIN
-  SELECT RAISE(ABORT, 'claim: only cluster_id may be set, once, from NULL');
+  SELECT RAISE(ABORT, 'claim: cluster_id may be set once from NULL or follow a cluster merge');
 END;
 CREATE TRIGGER claim_no_delete BEFORE DELETE ON claim
 BEGIN
@@ -295,6 +299,13 @@ WHEN NEW.merged_into IS NOT NULL
   AND (NEW.merged_into = NEW.cluster_id OR NOT EXISTS (SELECT 1 FROM cluster c WHERE c.id = NEW.merged_into))
 BEGIN
   SELECT RAISE(ABORT, 'cluster_state: merged_into must be another existing cluster');
+END;
+-- A merged cluster is final (D-535): its claims move to merged_into and nothing may reopen it.
+CREATE TRIGGER cluster_state_final_guard BEFORE INSERT ON cluster_state
+WHEN COALESCE((SELECT s.state FROM cluster_state s WHERE s.cluster_id = NEW.cluster_id
+  ORDER BY s.seq DESC LIMIT 1), '') = 'merged'
+BEGIN
+  SELECT RAISE(ABORT, 'cluster_state: a merged cluster is final');
 END;
 CREATE TRIGGER cluster_state_no_update BEFORE UPDATE ON cluster_state
 BEGIN

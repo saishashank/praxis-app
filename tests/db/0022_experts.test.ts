@@ -374,23 +374,45 @@ describe("claims, revisions, links", () => {
     await cluster(db, "K-001");
     await cluster(db, "K-002");
     await claim(db, "C1");
+    const GUARD = "cluster_id may be set once from NULL or follow a cluster merge";
     expect(await fails(db, "UPDATE claim SET cluster_id = 'K-404' WHERE id = 'C1'")).toContain(
-      "only cluster_id",
+      GUARD,
     );
     await run(db, "UPDATE claim SET cluster_id = 'K-001' WHERE id = 'C1'");
     expect(await fails(db, "UPDATE claim SET cluster_id = 'K-002' WHERE id = 'C1'")).toContain(
-      "only cluster_id",
+      GUARD,
     );
-    expect(await fails(db, "UPDATE claim SET cluster_id = NULL WHERE id = 'C1'")).toContain(
-      "only cluster_id",
-    );
-    expect(await fails(db, "UPDATE claim SET type = 'call' WHERE id = 'C1'")).toContain(
-      "only cluster_id",
-    );
+    expect(await fails(db, "UPDATE claim SET cluster_id = NULL WHERE id = 'C1'")).toContain(GUARD);
+    expect(await fails(db, "UPDATE claim SET type = 'call' WHERE id = 'C1'")).toContain(GUARD);
     expect(
       await fails(db, "UPDATE claim SET testability = 'not_testable' WHERE id = 'C1'"),
-    ).toContain("only cluster_id");
+    ).toContain(GUARD);
     expect(await fails(db, "DELETE FROM claim")).toContain("append-only");
+
+    // D-535: after K-001 is merged into K-002, the claim may follow the merge, and only that merge.
+    await cluster(db, "K-003");
+    await run(
+      db,
+      `INSERT INTO cluster_state (cluster_id, seq, state, actor, at) VALUES ('K-001', 1, 'confirmed', 'seed', '${NOW}')`,
+    );
+    expect(await fails(db, "UPDATE claim SET cluster_id = 'K-002' WHERE id = 'C1'")).toContain(
+      GUARD,
+    );
+    await run(
+      db,
+      `INSERT INTO cluster_state (cluster_id, seq, state, merged_into, actor, at) VALUES ('K-001', 2, 'merged', 'K-002', 'seed', '${NOW}')`,
+    );
+    expect(await fails(db, "UPDATE claim SET cluster_id = 'K-003' WHERE id = 'C1'")).toContain(
+      GUARD,
+    );
+    expect(await fails(db, "UPDATE claim SET cluster_id = NULL WHERE id = 'C1'")).toContain(GUARD);
+    await run(db, "UPDATE claim SET cluster_id = 'K-002' WHERE id = 'C1'");
+    expect(await fails(db, "UPDATE claim SET cluster_id = 'K-001' WHERE id = 'C1'")).toContain(
+      GUARD,
+    );
+    expect(await fails(db, "UPDATE claim SET cluster_id = 'K-003' WHERE id = 'C1'")).toContain(
+      GUARD,
+    );
   });
 
   it("revisions are numbered 1, 2, 3 and never change", async () => {
@@ -605,6 +627,9 @@ describe("clusters and their state", () => {
     await expect(st("K-001", 3, "merged", "K-001")).rejects.toThrow(/another existing cluster/);
     await expect(st("K-001", 3, "merged", "K-404")).rejects.toThrow(/another existing cluster/);
     await st("K-001", 3, "merged", "K-002");
+    // D-535: merged is final
+    await expect(st("K-001", 4, "confirmed")).rejects.toThrow(/merged cluster is final/);
+    await expect(st("K-001", 4, "parked")).rejects.toThrow(/merged cluster is final/);
     expect(await fails(db, "UPDATE cluster_state SET reason = 'x'")).toContain("append-only");
     expect(await fails(db, "DELETE FROM cluster_state")).toContain("append-only");
   });
