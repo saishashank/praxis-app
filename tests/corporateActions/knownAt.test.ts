@@ -49,7 +49,7 @@ describe("migration 0016_known_at", () => {
     const db = track(createClient({ url: tempDbUrl() }));
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(db, ms);
-    await migrateDown(db, ms, 5); // 0019, 0018 and 0017 sit on top of 0016: the schema as of 0015
+    await migrateDown(db, ms, 6); // 0019, 0018 and 0017 sit on top of 0016: the schema as of 0015
     expect(
       (await rows(db, "PRAGMA table_info(corporate_action)")).map((c) => c.name),
     ).not.toContain("known_at");
@@ -88,7 +88,7 @@ describe("migration 0016_known_at", () => {
       /append-only/,
     );
     // down restores the strict trigger; up again works (0018 and 0017 first, then 0016)
-    await migrateDown(db, ms, 5);
+    await migrateDown(db, ms, 6);
     await expect(
       db.execute("UPDATE corporate_action SET code = 'ZZB' WHERE id = 1"),
     ).rejects.toThrow(/append-only/);
