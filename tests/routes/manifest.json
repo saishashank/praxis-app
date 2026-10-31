@@ -37,6 +37,7 @@
       "tests": [
         "tests/review/send.test.ts",
         "tests/review/route.test.ts",
+        "tests/acceptance/v2/at61.test.ts",
         "tests/security/hmac.test.ts"
       ]
     },
