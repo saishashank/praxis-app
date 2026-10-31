@@ -1,6 +1,7 @@
 // Next 16 proxy (formerly middleware), Node.js runtime. All logic lives in lib/http/gate.ts.
 import { getToken } from "next-auth/jwt";
 import type { NextRequest } from "next/server";
+import { isPinnedOwnerClaims } from "@/lib/auth/pinnedOwnerClaims";
 import { parseClaims } from "@/lib/auth/claims";
 import { authDb } from "@/lib/db/client";
 import { gate } from "@/lib/http/gate";
@@ -31,6 +32,7 @@ export function proxy(req: NextRequest) {
     db: authDb,
     readClaims,
     limits: getRateLimits(),
+    isPinnedOwner: (claims) => isPinnedOwnerClaims(authDb(), claims, process.env),
     nowSec: () => Math.floor(Date.now() / 1000),
   });
 }
