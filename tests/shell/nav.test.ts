@@ -108,7 +108,9 @@ describe("route model: at most three levels (UXN-033)", () => {
     };
     walk(root);
     expect(found.length).toBeGreaterThan(5);
-    for (const f of found)
+    // M16 D-361/D-371: the Blueprint page is invisible outside the Owner's own address bar, so it is
+    // deliberately absent from the route model (no breadcrumb, no menu entry).
+    for (const f of found.filter((p) => p !== "/blueprint"))
       expect(
         ROUTES.some((r) => r.pattern === f),
         f,
