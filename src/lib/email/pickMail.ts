@@ -20,8 +20,8 @@ import {
 import { getConfig } from "@/lib/config/store";
 import type { Exec } from "@/lib/cortex/store/common";
 import type { EmailEnv } from "@/lib/sentinel/schema";
-import { COUNTED, loadCaps, recordRow } from "./caps";
-import { emailKeys, melbourneDate, PICK_MAIL_KINDS } from "./keys";
+import { COUNTED, loadCaps, recordRow, releaseOrphanBatches } from "./caps";
+import { emailKeys, melbourneDate, PICK_MAIL_KINDS, pickBatchKey } from "./keys";
 import { emailEnvName, sendEmail, type SendContext } from "./send";
 import type {
   Latency,
@@ -272,7 +272,13 @@ async function deliver(
   const single = items[0];
   const candidate = !batch && single.event === "candidate";
   const mailKind: PickKind = batch ? "pick_batch" : pickKindOf(single.event);
-  const key = batch ? emailKeys.pickBatch(userId, f.sessionD, f.hhmm) : itemKey(single, f);
+  const key = batch
+    ? pickBatchKey(
+        userId,
+        f.sessionD,
+        items.map((i) => i.alertId),
+      )
+    : itemKey(single, f);
   const mark = async (status: MailStatus) => {
     for (const i of items) await writeMail(ctx.db, i.alertId, mailKind, key, status, at);
   };
@@ -291,19 +297,41 @@ async function deliver(
     return "suppressed_cap";
   }
   const latency = f.latency;
+  // D-470: the pick caps are re-checked inside the claim INSERT (atomic with the claim).
+  const opts = {
+    pickCap: {
+      own: await num(ctx.db, "pick_alert_emails_per_day"),
+      ...(candidate
+        ? { candidate: await num(ctx.db, "intraday_candidate_emails_per_day") }
+        : {}),
+    },
+  };
   let out;
   if (batch) {
-    out = await sendEmail(ctx, "pick_batch", key, {
-      window: `${melbourneHm(ctx.now?.() ?? new Date(at))} Melbourne`,
-      lines: items.map((i) => i.line),
-      latency,
-    });
+    await releaseOrphanBatches(ctx.db, env, d, userId, key, at);
+    out = await sendEmail(
+      ctx,
+      "pick_batch",
+      key,
+      {
+        window: `${melbourneHm(ctx.now?.() ?? new Date(at))} Melbourne`,
+        lines: items.map((i) => i.line),
+        latency,
+      },
+      opts,
+    );
   } else if (single.event === "hit") {
-    out = await sendEmail(ctx, "pick_hit", key, { facts: single.hit!, latency });
+    out = await sendEmail(ctx, "pick_hit", key, { facts: single.hit!, latency }, opts);
   } else if (single.event === "candidate") {
-    out = await sendEmail(ctx, "pick_candidate", key, { facts: single.candidate!, latency });
+    out = await sendEmail(
+      ctx,
+      "pick_candidate",
+      key,
+      { facts: single.candidate!, latency },
+      opts,
+    );
   } else {
-    out = await sendEmail(ctx, "pick_cleared", key, { facts: single.cleared!, latency });
+    out = await sendEmail(ctx, "pick_cleared", key, { facts: single.cleared!, latency }, opts);
   }
   switch (out.status) {
     case "sent":
@@ -697,7 +725,6 @@ export async function mailNewCandidates(
       },
     };
   });
-  const batchKey = emailKeys.pickBatch;
   for (const userId of recipients) {
     const res = await sendPickMail(
       { ...ctx, db: c.db, now: () => c.now },
@@ -721,7 +748,11 @@ export async function mailNewCandidates(
   const key =
     items.length === 1
       ? emailKeys.pickCandidate(c.market, c.sessionD, items[0].line.code)
-      : batchKey(recipients[0] ?? "none", c.sessionD, c.slot.replace(":", ""));
+      : pickBatchKey(
+          recipients[0] ?? "none",
+          c.sessionD,
+          items.map((i) => i.alertId),
+        );
   for (const i of items) {
     await c.db.execute({
       sql: "UPDATE intraday_candidate SET email_key = ? WHERE market = ? AND session_d = ? AND code = ? AND email_key IS NULL",

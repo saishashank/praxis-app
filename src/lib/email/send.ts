@@ -113,6 +113,8 @@ export interface SendOutcome {
 export interface SendOptions {
   /** The Evening Review sent by the watchdog's direct path (allowed in `incidents` mode). */
   watchdogFallback?: boolean;
+  /** M17 (D-470): pick caps enforced atomically inside the claim. */
+  pickCap?: { own: number; candidate?: number };
 }
 
 export const CLAIM_STALE_S = 180; // design 2.4 (as the Worker clock)
@@ -354,7 +356,7 @@ async function sendOne<K extends EmailKind>(
   const piiKey = env.PII_HASH_KEY;
   const recipientSha = piiKey ? createHmac("sha256", piiKey).update(owner).digest("hex") : null;
   const caps = await loadCaps(db);
-  const claim = await claimKey(db, { key, kind, env: envName, d, nowIso, recipientSha, caps });
+  const claim = await claimKey(db, { key, kind, env: envName, d, nowIso, recipientSha, caps, pickCap: opts.pickCap });
   let startAttempts = 0;
   let slot: EmailSlot | undefined;
   if (claim.kind === "capped") {
