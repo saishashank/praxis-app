@@ -3407,6 +3407,31 @@
       }
     },
     {
+      "id": "route:GET:/api/blueprint/model",
+      "type": "route",
+      "name": "GET /api/blueprint/model",
+      "purpose": "HTTP endpoint GET /api/blueprint/model of the web app.",
+      "specIds": [
+        "PLT-020"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns an error status; the caller retries and the run record shows the failure.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/app/api/blueprint/model/route.ts",
+      "attrs": {
+        "method": "GET",
+        "path": "/api/blueprint/model"
+      }
+    },
+    {
       "id": "route:GET:/api/cron/heartbeat-evening",
       "type": "route",
       "name": "GET /api/cron/heartbeat-evening",
@@ -14682,6 +14707,16 @@
       "id": "service:app|contains|route:GET:/api/blueprint/export",
       "from": "service:app",
       "to": "route:GET:/api/blueprint/export",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|route:GET:/api/blueprint/model",
+      "from": "service:app",
+      "to": "route:GET:/api/blueprint/model",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
