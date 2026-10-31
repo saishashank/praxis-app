@@ -155,3 +155,7 @@ Q1–Q16 of the requirements are adopted at their recommended defaults. "Listed"
 - **D-441** (WP1 review) Quote freshness allows the feed's delay: fresh = age ≤ `intraday_quote_delay_min` (20, [VERIFY]) + 2 × refresh; a quote not in AUD or not for the requested `<code>.AX` symbol is refused. An intraday halt after the morning snapshot is not visible to the quote source (the chart data carries no halt flag); halts come from the snapshot and today's announcements — listed for the Owner.
 - **D-442** (WP1 review) After a paused run (rate-limited, server error or network) both routes skip for `quote_pause_cooldown_min` (30); `quote_run` is claimed before any request with the run's allowance as the reserved count, keyed by the Melbourne market date.
 
+
+- **D-443** (WP2) Migration 0020 rebuilds `email_message` to widen its `kind` CHECK for the five pick e-mail kinds (copy all rows, recreate indexes and triggers as in 0009; the down path removes pick-kind rows first). A data-copying rebuild on the live table: checked in the WP10 final review and on the staging migration before the V2 PR. `intraday_stream_state` is a fixed key (default shadow) written only by the evaluator.
+- **D-444** The preference fields `pick_alerts`, `cleared_pick_emails`, `intraday_candidate_emails` and `picks_sort` move from WP2 to WP4 (e-mail delivery), which owns their use.
+
