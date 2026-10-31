@@ -27,6 +27,7 @@ How to read this page:
 | `index_changes_manual` | Index changes (manual CSV) | manual CSV upload by the Owner (DAT-234) | low | enabled | none | not needed | no |
 | `industry_map_manual` | Industry classes (manual CSV) | manual CSV upload by the Owner (FAM-006) | low | enabled | none | not needed | no |
 | `fred` | FRED economic series (pending) | FRED series carry their own terms, checked per series before any use; no fetcher (DAT-101) | low | pending | none | not needed | no |
+| `yahoo_delayed` | Yahoo Finance delayed intraday quotes | personal use only (DAT-124); intraday delayed quotes, chart endpoint per code | high | pending | O-26 | pending Owner (O-26) | no |
 
 ## Terms, display rule and code
 
@@ -43,10 +44,12 @@ How to read this page:
 | `index_changes_manual` | Index adds and deletes for the F3 exclusion, uploaded by the Owner. | Keyed by hand from the index-change announcements that S&P Dow Jones Indices publishes through the ASX (quarterly rebalance notices), so it sits under the ASX announcement terms (O-23). The licensed constituent files are not used. No automated fetch. Terms URL: not recorded yet (to be filled by the source evaluation, DAT-101). Last checked: not recorded. | Public data. May be shown with its source named. | no fetcher yet | none |
 | `industry_map_manual` | Finer industry classes for the second-position limit, uploaded by the Owner. | A file the Owner prepares and uploads (for example classes taken from a Wikidata export, which is CC0). No automated fetch. Terms URL: not recorded yet (to be filled by the source evaluation, DAT-101). Last checked: not recorded. | Public data. May be shown with its source named. | no fetcher yet | none |
 | `fred` | Macro series, used in offline calibration only. | Each FRED series carries its own terms, checked per series before any use. No fetcher is built and the row stays pending. Terms URL: not recorded yet (to be filled by the source evaluation, DAT-101). Last checked: not recorded. | Public data. May be shown with its source named. | no fetcher yet | none |
+| `yahoo_delayed` | Delayed quotes (last price, quote time, cumulative volume, previous close) for armed picks and the intraday scan (M17). | Unofficial data for personal use. Its terms may not permit automated access, and the request count is much higher than for end-of-day prices. Own budget: 2,000 requests a day. Used only under the Owner risk acceptance O-26, recorded separately in Settings, Data sources; until then no request is made. Terms URL: not recorded yet (to be filled by the source evaluation, DAT-101). Last checked: not recorded. | Shown to Editors and Viewers as derived numbers, headlines, links and our own summaries only (DAT-124). | `src/lib/data/quotes/fetch.ts` | Yahoo Finance chart endpoint (query1.finance.yahoo.com) |
 
 ## Owner dependencies
 
 - ASX announcements (O-23): the risk acceptance date is pending Owner. Until you accept, the source stays pending and nothing contacts it.
 - Yahoo Finance end-of-day prices (O-26): the risk acceptance date is pending Owner. Until you accept, the source stays pending and nothing contacts it.
 - ASX listed-companies file (O-23b): the risk acceptance date is pending Owner. Until you accept, the source stays pending and nothing contacts it.
+- Yahoo Finance delayed intraday quotes (O-26): the risk acceptance date is pending Owner. Until you accept, the source stays pending and nothing contacts it.
 - Terms URLs and last-checked dates are not recorded in the seed. The source evaluation and the monthly re-check fill them in the live register.

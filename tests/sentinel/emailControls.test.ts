@@ -229,6 +229,7 @@ describe("email switch: defaults and the kind matrix", () => {
     const full = { mode: "full", reviewTestDate: null } as const;
     const inc = { mode: "incidents", reviewTestDate: "2026-10-20" } as const;
     for (const kind of EMAIL_KINDS) {
+      // M17 pick kinds included: gating is kind-agnostic
       expect(emailKindAllowed(off, kind, { d: TODAY, watchdogFallback: true }), kind).toBe(false);
       expect(emailKindAllowed(full, kind, { d: TODAY }), kind).toBe(true);
     }

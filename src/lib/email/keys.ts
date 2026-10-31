@@ -16,6 +16,12 @@ const KEY_PATTERNS: Record<EmailKind, RegExp> = {
   brief: new RegExp(`^brief:${D}$`),
   test: new RegExp(`^test:${D}:[1-9]\\d?$`),
   dbdown: new RegExp(`^dbdown:${D}:[A-Za-z0-9_-]{1,20}$`),
+  // M17 (D-381..D-400): pick alerts. Patterns only here; builders and slots are WP4's.
+  pick_hit: new RegExp(`^pickhit:[0-9a-f]{8,64}:${D}$`),
+  pick_cleared: new RegExp(`^pickclr:[0-9a-f]{8,64}:${D}$`),
+  pick_candidate: new RegExp(`^pickcand:[A-Z]{2}:${D}:[A-Za-z0-9.-]{1,12}$`),
+  pick_batch: new RegExp(`^pickb:[^:\\s]{1,80}:${D}:\\d{4}$`),
+  pick_digest: new RegExp(`^pickdg:[^:\\s]{1,80}:${D}$`),
 };
 
 export const emailKeys = {

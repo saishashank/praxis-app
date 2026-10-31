@@ -49,6 +49,15 @@ export const SOURCE_FACTS = {
     terms:
       "Unofficial data for personal use. Its terms may not permit automated access. Used under the Owner risk acceptance O-26.",
   },
+  yahoo_delayed: {
+    label: "Yahoo Finance delayed intraday quotes",
+    provides:
+      "Delayed quotes (last price, quote time, cumulative volume, previous close) for armed picks and the intraday scan (M17).",
+    code: ["src/lib/data/quotes/fetch.ts"],
+    hosts: ["Yahoo Finance chart endpoint (query1.finance.yahoo.com)"],
+    terms:
+      "Unofficial data for personal use. Its terms may not permit automated access, and the request count is much higher than for end-of-day prices. Own budget: 2,000 requests a day. Used only under the Owner risk acceptance O-26, recorded separately in Settings, Data sources; until then no request is made.",
+  },
   rba: {
     label: "Reserve Bank of Australia",
     provides: "Public interest-rate and macro data.",

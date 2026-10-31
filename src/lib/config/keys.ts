@@ -523,8 +523,8 @@ const M6_RANGED = [
   ["critic_llm_calls_per_night", "int", 10, 0, 20, "calls/night", "O", LRN, "LLM-021; ch.15 l.124 (bounds 0-20 agent-chosen, D-111)", "Critic wording calls per night per market"],
   // Ch.16 factor data and picks (AGT-112, AGT-113, ARN-095)
   ["factor_min_bucket_n", "int", 30, 20, 100, "trades", "O", LRN, "AGT-112; ch.15 l.207", "Trades a factor bucket needs to be shown"],
-  ["picks_per_profile", "int", 5, 0, 10, "picks", "O", LRN, "AGT-113; ch.15 l.208", "Picks per profile per night"],
-  ["picks_max_per_family", "int", 2, 1, 5, "picks", "O", LRN, "AGT-113; ch.15 l.211", "Most picks per profile per night from one family"],
+  ["picks_per_profile", "int", 10, 0, 10, "picks", "O", LRN, "AGT-113; ch.15 l.208; M17 O-76 default 10", "Picks per profile per night"],
+  ["picks_max_per_family", "int", 10, 1, 10, "picks", "O", LRN, "AGT-113; ch.15 l.211; M17 O-76 default 10 = no family cap", "Most picks per profile per night from one family"],
   ["pick_valid_sessions", "int", 2, 1, 5, "sessions", "O", LRN, "UXN-040, AGT-113; ch.15 l.212", "Not used since D-187: a waiting pick is checked each night against information instead of a session count"],
   ["pick_success_min_n", "int", 30, 10, 200, "picks", "O", LRN, "UXN-041; ch.15 l.213 (bounds 'as ch. 16' not given, 10-200 agent-chosen, D-111)", "Closed picks needed before model success is shown"],
 ] as const satisfies readonly RangedRow[];
@@ -1224,6 +1224,146 @@ const M15_META_TABLES: Record<M15RangedKey | M15FixedKey, ConfigMeta> = {
   ) as Record<M15FixedKey, ConfigMeta>),
 };
 
+// ---- M17 keys (intraday watch and pick alerts; docs/M17_design.md, D-381 to D-400) ----
+// prettier-ignore
+const M17_RANGED = [
+  ["chase_cap_pct", "num", 3, 1, 8, "%", "O", OTH, "ARN-114", "Open or quote above the pick limit by this much clears its alert"],
+  ["pick_alert_max_sessions", "int", 3, 1, 10, "sessions", "O", OTH, "ARN-114", "Sessions a pick alert stays armed before it expires"],
+  ["pick_alert_emails_per_day", "int", 12, 0, 20, "emails", "O", SEM, "EML-041, D-389", "Most pick-alert e-mails a day, inside the daily e-mail budget"],
+  ["intraday_scan_min", "int", 30, 15, 60, "min", "O", OTH, "AGT-140", "Minutes between intraday scans"],
+  ["intraday_scan_codes_max", "int", 800, 0, 1500, "codes", "O", OTH, "DAT-239 (0 = scan off)", "Most codes the intraday scan looks at (0 turns the scan off)"],
+  ["intraday_scan_requests_max", "int", 40, 10, 100, "requests", "O", OTH, "AGT-140, D-400", "Most delayed-quote requests in one scan run"],
+  ["intraday_move_min_pct", "num", 4, 2, 10, "%", "O", OTH, "AGT-141", "Smallest sector-adjusted move that can make an intraday candidate"],
+  ["intraday_rel_volume_min", "num", 2, 1.2, 4, "x", "O", OTH, "AGT-141", "Smallest volume, against the pro-rated 20-session average, for a candidate"],
+  ["intraday_candidate_emails_per_day", "int", 3, 0, 8, "emails", "O", SEM, "EML-040, EML-041", "Most Attention-needed e-mails a day (inside the pick-alert budget)"],
+  ["quote_pause_cooldown_min", "int", 30, 10, 120, "min", "O", OTH, "D-442", "Minutes the quote routes wait after a rate-limit, server error or network pause"],
+  ["intraday_quote_delay_min", "int", 20, 0, 60, "min", "O", OTH, "UXN-048 [VERIFY at build], D-442", "Minutes the free quote feed is behind the market (shown as the delay)"],
+  ["home_picks_shown", "int", 3, 1, 5, "picks", "O", OTH, "UXN-307", "Night picks shown on Home"],
+  ["intraday_candidates_shown_max", "int", 5, 1, 20, "candidates", "O", OTH, "UXN-307", "Intraday candidates shown on Picks and Home"],
+  ["pick_min_chance", "num", 55, 50, 70, "%", "O", LRN, "UXN-307, D-383", "Lowest chance of a net gain a pick may show (applies only where a calibrated chance exists)"],
+] as const satisfies readonly RangedRow[];
+
+export const INTRADAY_STREAM_STATES = ["shadow", "allowed", "live-tested"] as const;
+export const PICKS_SORT_BASES = ["chance", "expected_gain"] as const;
+
+// prettier-ignore
+const M17_ENUM_ROWS = [
+  ["pick_alerts_default_owner", "on", ON_OFF, "O", OTH, "ARN-112", "Pick alerts on for the Owner by default"],
+  ["picks_default_sort", "chance", PICKS_SORT_BASES, "O", LRN, "UXN-309", "How the picks are ordered unless a person chooses otherwise"],
+  // Fixed: no UI or API writer; only the VAL-118 evaluator (and the Owner's kill) moves it (D-391).
+  ["intraday_stream_state", "shadow", INTRADAY_STREAM_STATES, "fixed", VAL, "VAL-118, D-391", "Validation state of the intraday stream (set only by the evaluator)"],
+] as const;
+
+type M17RangedKey = (typeof M17_RANGED)[number][0];
+type M17EnumKey = (typeof M17_ENUM_ROWS)[number][0];
+type M17TimeKey = "intraday_scan_start" | "intraday_scan_end";
+
+const M17_RANGED_KEYS = Object.fromEntries(
+  M17_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M17RangedKey, ConfigKeyDef>;
+
+const M17_ENUM_KEYS = Object.fromEntries(
+  M17_ENUM_ROWS.map(([key, def, allowed, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit: "choice",
+      editable: edit,
+      ref,
+      validate: edit === "fixed" ? never : oneOf(allowed),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M17EnumKey, ConfigKeyDef>;
+
+/** The scan window (AGT-140): inside the 10:00 to 16:00 session, start before end. */
+async function validateScanWindow(
+  key: M17TimeKey,
+  v: unknown,
+  get: (k: M17TimeKey) => Promise<unknown>,
+): Promise<string | null> {
+  const bad = await timeIn("10:00", "16:00")(v);
+  if (bad) return bad;
+  const t = clockMinutes(v)!;
+  const other = clockMinutes(
+    await get(key === "intraday_scan_start" ? "intraday_scan_end" : "intraday_scan_start"),
+  );
+  if (other === null) return null;
+  const [a, b] = key === "intraday_scan_start" ? [t, other] : [other, t];
+  return a < b ? null : "the scan start must be before the scan end";
+}
+
+const M17_TIME_KEYS: Record<M17TimeKey, ConfigKeyDef> = {
+  intraday_scan_start: {
+    default: "10:30",
+    unit: "Melbourne time",
+    editable: "O",
+    ref: "AGT-140",
+    validate: (v, get) => validateScanWindow("intraday_scan_start", v, (k) => get(k)),
+  },
+  intraday_scan_end: {
+    default: "15:30",
+    unit: "Melbourne time",
+    editable: "O",
+    ref: "AGT-140",
+    validate: (v, get) => validateScanWindow("intraday_scan_end", v, (k) => get(k)),
+  },
+};
+
+const M17_META_TABLES: Record<M17RangedKey | M17EnumKey | M17TimeKey, ConfigMeta> = {
+  ...(Object.fromEntries(
+    M17_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+      key,
+      {
+        label,
+        area,
+        bounds: boundsText(kind, min, max, unit),
+        input: kind === "int" ? "int" : "number",
+      },
+    ]),
+  ) as Record<M17RangedKey, ConfigMeta>),
+  ...(Object.fromEntries(
+    M17_ENUM_ROWS.map(([key, , allowed, edit, area, , label]) => [
+      key,
+      {
+        label,
+        area,
+        bounds: edit === "fixed" ? "fixed" : `one of ${allowed.join(", ")}`,
+        input: "text",
+      },
+    ]),
+  ) as Record<M17EnumKey, ConfigMeta>),
+  intraday_scan_start: {
+    label: "First intraday scan of the day",
+    area: OTH,
+    bounds: "HH:MM, 10:00 to 16:00, before the scan end",
+    input: "text",
+  },
+  intraday_scan_end: {
+    label: "Last intraday scan of the day",
+    area: OTH,
+    bounds: "HH:MM, 10:00 to 16:00, after the scan start",
+    input: "text",
+  },
+};
+
+/** Every key added in M17 (docs/M17_design.md, D-381 to D-400). */
+export const M17_KEY_NAMES: readonly ConfigKey[] = [
+  ...M17_RANGED.map((r) => r[0]),
+  ...M17_ENUM_ROWS.map((r) => r[0]),
+  "intraday_scan_start",
+  "intraday_scan_end",
+];
+
 export const CONFIG_KEYS = {
   ...M4_RANGED_KEYS,
   ...M4_FIXED_KEYS,
@@ -1240,6 +1380,9 @@ export const CONFIG_KEYS = {
   ...M14_ENUM_KEYS,
   ...M15_RANGED_KEYS,
   ...M15_FIXED_KEYS,
+  ...M17_RANGED_KEYS,
+  ...M17_ENUM_KEYS,
+  ...M17_TIME_KEYS,
   // ch.15 l.163: evening_review_time / partial_at / send_by 20:00 / 20:30 / 20:45, O; EML-010/011.
   evening_review_time: {
     default: "20:00",
@@ -1753,6 +1896,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   ...M7_META_TABLES,
   ...M14_META_TABLES,
   ...M15_META_TABLES,
+  ...M17_META_TABLES,
   evening_review_time: {
     label: "Evening Review send time",
     area: SEM,
