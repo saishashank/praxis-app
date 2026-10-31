@@ -4,6 +4,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { loadMigrations, migrateUp } from "@/lib/db/migrate-core.mjs";
 import { createClient } from "@libsql/client";
+import { writeFileSync } from "node:fs";
+import path from "node:path";
+import { contentSha } from "@/lib/kb/render";
 import { run } from "../../scripts/cortex/import.mjs";
 import { artefactFiles, writeArtefact, type ArtefactFiles } from "../acceptance/v2/zzP6";
 import { cleanupTempDbs, freshDb, MIGRATIONS, tempDbUrl, track } from "../db/helpers";
@@ -219,5 +222,72 @@ describe("database guards", () => {
       "SELECT status FROM family_status WHERE family = 'F1' ORDER BY since_d",
     );
     expect(r.rows.map((x) => String(x.status))).toEqual(["suspended"]);
+  });
+});
+
+describe("kb_report.md (D-469: the calibration report as a KB item)", () => {
+  const report = (o: { type?: string; body?: string; market?: string } = {}) =>
+    [
+      "---",
+      'id: "zz-calibration-report"',
+      `market: "${o.market ?? "AU"}"`,
+      `type: "${o.type ?? "cortex_report"}"`,
+      'created: "2026-11-01"',
+      'updated: "2026-11-01"',
+      "version: 1",
+      'related: ["family-F1"]',
+      "---",
+      o.body ?? "# Synthetic report\n\nSynthetic text only.\n",
+    ].join("\n");
+  const withReport = (text: string) => {
+    const dir = artefact();
+    writeFileSync(path.join(dir, "kb_report.md"), text);
+    return dir;
+  };
+
+  it("a valid report is planned, inserted once as a review document, and a re-run adds nothing", async () => {
+    const dir = withReport(report());
+    const dry = await go([dir, "--dry-run"]);
+    expect(dry.text).toContain('"documents":1');
+    const db = await freshDb("main");
+    const first = await go([dir], db);
+    expect(first.code).toBe(0);
+    expect(await count(db, "document")).toBe(1);
+    const row = (await db.execute("SELECT * FROM document")).rows[0]!;
+    expect(row.doc_type).toBe("review");
+    expect(row.version).toBe(1);
+    expect(String(row.path)).toMatch(/^knowledge\/[a-z]+\/cortex\/zz-calibration-report\.md$/);
+    const front = JSON.parse(String(row.front_json));
+    expect(front.kind).toBe("cortex_calibration");
+    expect(front.type).toBe("review");
+    const bare = Object.fromEntries(
+      Object.entries(front).filter(([k]) => k !== "version" && k !== "kind"),
+    );
+    expect(row.body_sha).toBe(contentSha(bare, String(row.body)));
+    await go([dir], db);
+    expect(await count(db, "document")).toBe(1);
+  });
+
+  it("no report file changes nothing", async () => {
+    const db = await freshDb("main");
+    const r = await go([artefact()], db);
+    expect(r.code).toBe(0);
+    expect(await count(db, "document")).toBe(0);
+    expect((await go([artefact(), "--dry-run"])).text).toContain('"documents":0');
+  });
+
+  it("an empty body, a wrong type or a wrong market is refused and nothing is written", async () => {
+    const db = await freshDb("main");
+    for (const [o, msg] of [
+      [{ body: "  \n" }, "kb_report.md: body: must not be empty"],
+      [{ type: "lesson" }, 'kb_report.md: type: must be "cortex_report" or "review"'],
+      [{ market: "ZZ" }, "kb_report.md: market: must equal the manifest market"],
+    ] as const) {
+      const r = await go([withReport(report(o))], db);
+      expect(r.code).toBe(1);
+      expect(r.text).toContain(msg);
+    }
+    expect(await count(db, "document")).toBe(0);
+    expect(await count(db, "angle_passport")).toBe(0);
   });
 });

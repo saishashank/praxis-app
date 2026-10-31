@@ -24,10 +24,17 @@
 //                      brier_skill_lo90|null, slope_ub90|null, gate_cell_key (a matched_cell cellKey),
 //                      mde: number|null, mde_rows: [ {n_eff, mde} for 100, 150 and 300 ],
 //                      n_eff_live_per_session|null } ] }
+// OPTIONAL kb_report.md (D-469): the calibration report as a KB item. Front matter (JSON-quoted
+//   scalars, as the KB renderer writes them) with id, market (= the manifest's), type
+//   "cortex_report" or "review", created and updated (YYYY-MM-DD), optional related: [...]; then a
+//   non-empty markdown body. Stored as ONE document row (version 1, doc_type 'review', front_json
+//   kind "cortex_calibration"), insert-or-ignore. The app's banned-word lists are TypeScript and
+//   cannot be imported here; the wording check is the report author's (tests/acceptance/v2/at55).
 // Every file is validated before anything is written (a failure names the file and the path, not the
 // value). Statuses are NOT in the artefact: each family's status comes from the CTX-053 rules in
 // src/lib/cortex/statusRules.mjs (CTX-072), recorded as the evaluator's row; the statement of an
 // allowed family is generated from the template. Re-running is safe (insert-or-ignore on every key).
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -449,6 +456,12 @@ export function loadArtefact(dir) {
     data[name] = r.v;
     errs.push(...fn(r.v));
   }
+  const kbFile = path.join(dir, "kb_report.md");
+  if (existsSync(kbFile) && isObj(data["manifest.json"])) {
+    const r = validateKbReport(readFileSync(kbFile, "utf8"), data["manifest.json"].market);
+    errs.push(...r.errors);
+    data.kbReport = r.report;
+  }
   if (errs.length > 0) return { ok: false, errors: errs, data };
   // cross-file checks
   const cells = data["cells.json"].cells;
@@ -479,6 +492,48 @@ export function loadArtefact(dir) {
     }
   }
   return { ok: errs.length === 0, errors: errs, data, decisions };
+}
+
+/** Parses and validates kb_report.md text; returns { errors, report }. */
+export function validateKbReport(text, market) {
+  const e = errors();
+  const f = "kb_report.md";
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
+  if (!m) {
+    check(e, f, "front matter", false, "missing the --- front matter block");
+    return { errors: e.list, report: null };
+  }
+  const front = {};
+  for (const line of m[1].split(/\r?\n/)) {
+    const kv = /^([a-z_]+):\s*(.*)$/.exec(line);
+    if (!kv) continue;
+    try {
+      front[kv[1]] = JSON.parse(kv[2]);
+    } catch {
+      check(e, f, kv[1], false, "value is not JSON-quoted");
+    }
+  }
+  check(e, f, "id", isStr(front.id) && /^[a-z0-9][a-z0-9-]*$/.test(front.id), "must be a slug");
+  check(e, f, "market", front.market === market, "must equal the manifest market");
+  check(
+    e,
+    f,
+    "type",
+    front.type === "cortex_report" || front.type === "review",
+    'must be "cortex_report" or "review"',
+  );
+  check(e, f, "created", isDay(front.created), "must be YYYY-MM-DD");
+  check(e, f, "updated", isDay(front.updated), "must be YYYY-MM-DD");
+  check(
+    e,
+    f,
+    "related",
+    front.related === undefined || isStrArr(front.related),
+    "must be a string array",
+  );
+  check(e, f, "body", m[2].trim().length > 0, "must not be empty");
+  if (e.list.length > 0) return { errors: e.list, report: null };
+  return { errors: [], report: { front, body: m[2] } };
 }
 
 /** True when `dir` lies inside the repository (private artefacts must not). */
@@ -631,11 +686,57 @@ function plan(data, decisions) {
     }
     statuses.push({ family: ev.family, statementId, decision });
   }
+  const kb = data.kbReport;
+  if (kb) {
+    const f = kb.front;
+    const bare = {
+      id: f.id,
+      market: f.market,
+      type: "review",
+      created: f.created,
+      updated: f.updated,
+      grade: null,
+      related: f.related ?? [],
+    };
+    const sha = createHash("sha256")
+      .update(JSON.stringify([bare, kb.body]))
+      .digest("hex");
+    stmts.push(
+      ins(
+        "document",
+        [
+          "path",
+          "version",
+          "market",
+          "doc_type",
+          "front_json",
+          "body",
+          "body_sha",
+          "source_ids_json",
+          "d",
+          "created_at",
+        ],
+        [
+          `knowledge/${market.toLowerCase()}/cortex/${f.id}.md`,
+          1,
+          market,
+          "review",
+          JSON.stringify({ ...bare, version: 1, kind: "cortex_calibration" }),
+          kb.body,
+          sha,
+          "[]",
+          f.created,
+          createdAt,
+        ],
+        "documents",
+      ),
+    );
+  }
   return { market, asOf, stmts, statuses };
 }
 
 function counts(stmts, statuses) {
-  const c = { passports: 0, cells: 0, maps: 0, statements: 0 };
+  const c = { passports: 0, cells: 0, maps: 0, statements: 0, documents: 0 };
   for (const s of stmts) c[s.tag] += 1;
   return {
     ...c,
@@ -730,7 +831,14 @@ export async function run(argv, env, deps = {}) {
       all.map((x) => ({ sql: x.sql, args: x.args })),
       "write",
     );
-    const written = { passports: 0, cells: 0, maps: 0, statements: 0, family_status: 0 };
+    const written = {
+      passports: 0,
+      cells: 0,
+      maps: 0,
+      statements: 0,
+      documents: 0,
+      family_status: 0,
+    };
     results.forEach((r, i) => {
       written[all[i].tag] += r.rowsAffected;
     });
@@ -739,6 +847,7 @@ export async function run(argv, env, deps = {}) {
       cells: planned.cells - written.cells,
       maps: planned.maps - written.maps,
       statements: planned.statements - written.statements,
+      documents: planned.documents - written.documents,
     };
     out(
       `cortex import (${market}): written ${JSON.stringify(written)}; already present ${JSON.stringify(skipped)}; families allowed ${planned.families_allowed}, shadow ${planned.families_shadow}`,
