@@ -155,6 +155,16 @@ export const AU_SOURCES = [
   "abs",
   "asic_short",
   "yahoo_delayed", // M17 (D-398; migration 0020): pending until the Owner accepts it
+  // M13-lite (DAT-227, D-522; migration 0022): expert channels. The first three are pending classes (no
+  // fetcher is built); the five platforms are manual-only and disabled.
+  "expert_rss",
+  "expert_youtube_feed",
+  "expert_own_site",
+  "expert_x",
+  "expert_instagram",
+  "expert_tiktok",
+  "expert_facebook",
+  "expert_linkedin",
 ] as const;
 export type AuSource = (typeof AU_SOURCES)[number];
 /**

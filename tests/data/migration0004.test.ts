@@ -56,21 +56,21 @@ describe("main migration 0004_au_data", () => {
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
     const before = await schemaOf(db);
-    expect(await migrateDown(db, ms, 18)).toEqual({ rolledBack: 18, version: 3 });
+    expect(await migrateDown(db, ms, 19)).toEqual({ rolledBack: 19, version: 3 });
     const mid = await schemaOf(db);
     for (const t of Object.values(AU_TABLES)) {
       expect(mid.some((s) => s.startsWith(`table:${t}:`))).toBe(false);
     }
     expect(mid.some((s) => s.startsWith("trigger:price_bar"))).toBe(false);
     expect(mid.some((s) => s.startsWith("index:idx_price_bar"))).toBe(false);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 18, version: 21 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 19, version: 22 });
     expect(await schemaOf(db)).toEqual(before);
   });
 
   it("migrate is idempotent: seeds are present exactly once after re-running", async () => {
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 21 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 22 });
     const market = (await db.execute("SELECT * FROM market")).rows;
     expect(market).toHaveLength(1);
     expect(market[0]).toMatchObject({
@@ -86,7 +86,9 @@ describe("main migration 0004_au_data", () => {
     ); // 0006 adds one, 0018 four
     const st = (await db.execute("SELECT source, mode FROM source_status ORDER BY source")).rows;
     expect(st.map((r) => r.source)).toEqual([...AU_SOURCES].sort());
-    expect(st.every((r) => r.mode === "on")).toBe(true);
+    expect(
+      st.every((r) => r.mode === (String(r.source).startsWith("expert_") ? "off" : "on")),
+    ).toBe(true); // 0022: the expert channels start off
     expect(await count(db, "source_register_history")).toBe(
       AU_SOURCES.length + 1 + M14_SOURCES.length + 2,
     ); // 0018: four inserts and two updates
@@ -97,7 +99,7 @@ describe("main migration 0004_au_data", () => {
   it("round trip down then up re-seeds exactly once", async () => {
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
-    await migrateDown(db, ms, 18); // 0019, 0018, 0017, 0016, 0015, 0014, 0013, 0012, 0011, 0010, 0009, 0008, 0007, 0006, 0005 then 0004
+    await migrateDown(db, ms, 19); // 0019, 0018, 0017, 0016, 0015, 0014, 0013, 0012, 0011, 0010, 0009, 0008, 0007, 0006, 0005 then 0004
     await migrateUp(db, ms);
     expect(await count(db, "market")).toBe(1);
     expect(await count(db, "source_register")).toBe(AU_SOURCES.length + 1 + M14_SOURCES.length); // + 0006, + 0018
@@ -441,6 +443,6 @@ describe("backup with the AU tables", () => {
     expect((await target.execute("SELECT c FROM price_bar")).rows[0].c).toBe(10);
     // And the restored DB is at version 8 (0005 seeds the calendar, 0006 the universe columns, 0007 the arena, 0008 the agents), so later migrations continue from it.
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 21 });
+    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 22 });
   });
 });

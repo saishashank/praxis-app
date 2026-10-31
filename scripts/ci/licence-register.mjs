@@ -58,6 +58,71 @@ export const SOURCE_FACTS = {
     terms:
       "Unofficial data for personal use. Its terms may not permit automated access, and the request count is much higher than for end-of-day prices. Own budget: 2,000 requests a day. Used only under the Owner risk acceptance O-26, recorded separately in Settings, Data sources; until then no request is made.",
   },
+  // M13-lite (DAT-227, D-522): expert channels; automated classes pending, platforms manual-only.
+  expert_rss: {
+    label: "Expert RSS and Atom feeds (pending)",
+    provides: "Titles, links and dates of expert posts from public feeds.",
+    code: [],
+    hosts: [],
+    terms:
+      "Public feed metadata and our own short summary only (PRD-036, DAT-227). Terms are not yet checked [VERIFY]. No fetcher is built in this release, so nothing is requested; the row stays pending until the Owner reviews the terms.",
+  },
+  expert_youtube_feed: {
+    label: "Expert YouTube channel feeds (pending)",
+    provides: "Titles, links and dates of expert videos from public channel feeds.",
+    code: [],
+    hosts: [],
+    terms:
+      "Public feed metadata and our own short summary only (PRD-036, DAT-227). Terms are not yet checked [VERIFY]. No fetcher is built in this release, so nothing is requested; the row stays pending until the Owner reviews the terms.",
+  },
+  expert_own_site: {
+    label: "Expert own websites (pending)",
+    provides: "Titles, links and dates of posts on an expert's own site.",
+    code: [],
+    hosts: [],
+    terms:
+      "Public feed metadata and our own short summary only (PRD-036, DAT-227). Terms are not yet checked [VERIFY]. No fetcher is built in this release, so nothing is requested; the row stays pending until the Owner reviews the terms.",
+  },
+  expert_x: {
+    label: "X (manual only, disabled)",
+    provides: "A link the Owner pastes by hand for an expert's post; public metadata only.",
+    code: [],
+    hosts: [],
+    terms:
+      "No automated reading; the Owner pastes a link (DAT-227). The platform's terms restrict automated access, so the row stays disabled and nothing is fetched.",
+  },
+  expert_instagram: {
+    label: "Instagram (manual only, disabled)",
+    provides: "A link the Owner pastes by hand for an expert's post; public metadata only.",
+    code: [],
+    hosts: [],
+    terms:
+      "No automated reading; the Owner pastes a link (DAT-227). The platform's terms restrict automated access, so the row stays disabled and nothing is fetched.",
+  },
+  expert_tiktok: {
+    label: "TikTok (manual only, disabled)",
+    provides: "A link the Owner pastes by hand for an expert's post; public metadata only.",
+    code: [],
+    hosts: [],
+    terms:
+      "No automated reading; the Owner pastes a link (DAT-227). The platform's terms restrict automated access, so the row stays disabled and nothing is fetched.",
+  },
+  expert_facebook: {
+    label: "Facebook (manual only, disabled)",
+    provides: "A link the Owner pastes by hand for an expert's post; public metadata only.",
+    code: [],
+    hosts: [],
+    terms:
+      "No automated reading; the Owner pastes a link (DAT-227). The platform's terms restrict automated access, so the row stays disabled and nothing is fetched.",
+  },
+  expert_linkedin: {
+    label: "LinkedIn (manual only, disabled)",
+    provides: "A link the Owner pastes by hand for an expert's post; public metadata only.",
+    code: [],
+    hosts: [],
+    terms:
+      "No automated reading; the Owner pastes a link (DAT-227). The platform's terms restrict automated access, so the row stays disabled and nothing is fetched.",
+  },
   rba: {
     label: "Reserve Bank of Australia",
     provides: "Public interest-rate and macro data.",

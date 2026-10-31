@@ -223,6 +223,14 @@ export type LearningParams = {
   kbArchiveTime: string;
   /** `none` or provider:model. */
   classifierModel: string;
+  /** M13-lite (D-528): tested claims an expert needs before a scorecard shows. */
+  expertMinScored: number;
+  /** M13-lite: BH false-discovery rate for the weekly expert-cluster screening. */
+  expertScreenFdr: number;
+  /** M13-lite: most challengers proposed from expert clusters a week. */
+  expertChallengersPerWeek: number;
+  /** M13-lite: distinct-expert L2 clusters needed for the dormant F7 gate. */
+  f7MinClusters: number;
 };
 
 export type PickProfileParams = {
@@ -607,6 +615,10 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       challengerGeneratorPerWeek: num("challenger_generator_per_week"),
       kbArchiveTime: str("kb_archive_time"),
       classifierModel: str("llm_classifier_model"),
+      expertMinScored: num("expert_min_scored"),
+      expertScreenFdr: num("expert_screen_fdr"),
+      expertChallengersPerWeek: num("expert_challengers_per_week"),
+      f7MinClusters: num("f7_min_clusters"),
     },
     picks: {
       factorMinBucketN: num("factor_min_bucket_n"),
