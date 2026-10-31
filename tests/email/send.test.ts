@@ -107,7 +107,7 @@ const KEY: { [K in EmailKind]: string } = {
   pick_batch: `pickb:u1:${D}:1005`,
   pick_digest: `pickdg:u1:${D}`,
 };
-/** Kinds that have a renderer today (the M17 pick kinds get theirs in WP4). */
+/** Every kind has a renderer (the M17 pick kinds since WP4). */
 const SENDABLE_KINDS = EMAIL_KINDS;
 const send = <K extends EmailKind>(kind: K, key = KEY[kind], c = ctx(), o = {}) =>
   sendEmail(c, kind, key, FACTS[kind], o);

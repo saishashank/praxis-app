@@ -237,9 +237,11 @@ export async function sendPickMail(
   if (wanted.length === 0) return "off";
 
   // 3. Quiet hours: nothing claimed; a `held` row (D-388). A window ending after the last tick
-  //    (16:00), and every candidate, goes straight to Evening Review section 9 (`held_to_review`).
+  //    (16:00, or past midnight when it wraps), and every candidate, goes straight to Evening Review
+  //    section 9 (`held_to_review`): no tick of this session could digest it.
   if (inQuietHours(now, prefs.quiet)) {
-    const toReview = prefs.quiet !== null && prefs.quiet.end > SESSION_END;
+    const q = prefs.quiet;
+    const toReview = q !== null && (q.end > SESSION_END || q.start > q.end);
     for (const i of wanted) {
       await writeMail(
         ctx.db,

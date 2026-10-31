@@ -1,6 +1,6 @@
 // Pick-alert emails (M17 WP4; EML-038/039/040, EML-041 batch and digest, NFR-041, SEC-016).
 // Template text only: no LLM wording anywhere, no broker links. Every mail says the prices are
-// "delayed" and carries the quote time and the latency line; the words "real-time" never appear.
+// "delayed" and carries the quote time and the latency line; no wording claims a live quote (NFR-041).
 // All numbers arrive pre-formatted from pickMail.ts (no clock reads, no locale APIs here).
 
 import {

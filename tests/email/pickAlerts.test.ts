@@ -379,6 +379,15 @@ describe("quiet hours, digest and Evening Review (D-388)", () => {
     expect(rv?.lines[0]).toBe("Buy-price alerts today: 1 hit, 0 cleared.");
   });
 
+  it("a window wrapping midnight (start > end) is held_to_review: no tick today can digest it", async () => {
+    await setQuiet("10:30", "02:00");
+    await transition(1, "hit");
+    const mailer = createPickMailer(ctx());
+    await mailer.notify(mctx(), []);
+    expect(mock.outbox).toHaveLength(0);
+    expect(await mailRows()).toEqual(["pick_hit:held_to_review"]);
+  });
+
   it("a day without pick activity adds nothing to the review", async () => {
     expect(await readPickReview({ db, market: "AU", d: SESSION } as Ctx, true)).toBeNull();
   });
