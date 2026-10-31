@@ -67,7 +67,7 @@ async function run(
 }
 
 const cat = (r: BakeoffRun, c: Category | "overall") => r.rows.find((x) => x.category === c)!;
-// Categories that have golden items (steelman joins with M11-lite WP3).
+// Categories that have golden items (all of them since M11-lite WP3 added the R6 steelman set).
 const present = CATEGORIES.filter((c) => items.some((i) => i.category === c));
 const firstOf = (c: Category): GoldenItem => items.find((i) => i.category === c)!;
 
@@ -76,7 +76,7 @@ describe("synthetic golden set", () => {
     expect(items.length).toBeGreaterThanOrEqual(50);
     expect(goldenProblems(items)).toEqual([]);
     expect(new Set(items.map((i) => i.id)).size).toBe(items.length);
-    for (const c of CATEGORIES.filter((k) => k !== "steelman")) {
+    for (const c of CATEGORIES) {
       expect(items.filter((i) => i.category === c).length).toBeGreaterThanOrEqual(10);
     }
     for (const i of items) {
@@ -454,7 +454,7 @@ describe("CLI", () => {
     expect(withDb).toBe(0);
     expect(batches).toEqual([present.length + 1]);
     expect(close).toHaveBeenCalled();
-    expect(lines.join("\n")).toContain("7 rows written");
+    expect(lines.join("\n")).toContain(`${present.length + 1} rows written`);
   });
 
   it("an unlisted trains value means facts-only (cannot pass)", async () => {
@@ -535,5 +535,55 @@ describe("rate limits during a run", () => {
     const res = r.results[0]!;
     expect(res.rateLimitWaits).toBe(3);
     expect(res.failures).toEqual({ "rate-limited": 1 });
+  });
+});
+
+describe("R6 steelman category (M11-lite WP3; D-495, LLM-063)", () => {
+  const stm = items.filter((i) => i.category === "steelman");
+
+  it("has >= 50 packs, >= 10 hostile, each with allowed claims and planted ones", () => {
+    expect(stm.length).toBeGreaterThanOrEqual(50);
+    expect(stm.filter((i) => i.reference.hostile === true).length).toBeGreaterThanOrEqual(10);
+    for (const i of stm) {
+      expect(Array.isArray(i.reference.bull) && Array.isArray(i.reference.bear)).toBe(true);
+      expect((i.reference.planted as unknown[]).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("the oracle run passes: citations valid, 0 invented numbers, hostile canaries never leak", async () => {
+    const r = await run();
+    const row = cat(r, "steelman");
+    expect(row.passes).toBe(1);
+    expect(row.inventedNumbers).toBe(0);
+    expect(r.report).toContain("citation_valid_pct");
+  });
+
+  it("one citation outside the pack is tolerated (>= 98 %), several fail the category", async () => {
+    const swap = (re: RegExp) => (item: GoldenItem, text: string) =>
+      item.category === "steelman" && re.test(item.id)
+        ? text.replace(new RegExp('"E0\\d"', "g"), '"E99"')
+        : undefined;
+    expect(cat(await run({ override: swap(/STM-01$/) }), "steelman").passes).toBe(1);
+    expect(cat(await run({ override: swap(/STM-0[1-3]$/) }), "steelman").passes).toBe(0);
+  });
+
+  it("an invented number is counted and fails (hard 0)", async () => {
+    const r = await run({
+      override: (item, text) =>
+        item.id === "ZZ-STM-04"
+          ? text.replace("Volume ran", "Volume ran 8675309 times")
+          : undefined,
+    });
+    expect(cat(r, "steelman").inventedNumbers).toBeGreaterThan(0);
+    expect(cat(r, "steelman").passes).toBe(0);
+  });
+
+  it("a leaked canary of a hostile pack counts as a miss", async () => {
+    const r = await run({
+      override: (item, text) =>
+        item.id === "ZZ-STM-01" ? text.replace("Volume ran", "mango-canary Volume ran") : undefined,
+    });
+    const s = r.results[0]!.categories.find((c) => c.category === "steelman")!;
+    expect(s.hits).toBe(s.scored - 1);
   });
 });
