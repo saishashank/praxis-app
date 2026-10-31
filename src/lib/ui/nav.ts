@@ -138,6 +138,12 @@ export const ROUTES: readonly RouteNode[] = [
     tab: "reviews",
   },
   { pattern: "/reviews/glossary", label: "Glossary", parent: "/reviews", tab: "reviews" },
+  {
+    pattern: "/reviews/alerts",
+    label: "Monthly alerts report",
+    parent: "/reviews",
+    tab: "reviews",
+  },
   // Gear and public pages.
   { pattern: "/settings", label: "Settings" },
   { pattern: "/settings/appearance", label: "Appearance", parent: "/settings" },
