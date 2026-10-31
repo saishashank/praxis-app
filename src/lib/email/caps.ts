@@ -10,7 +10,7 @@
 import type { Client } from "@libsql/client";
 import { getConfig } from "@/lib/config/store";
 import type { EmailEnv, EmailKind, EmailSlot, EmailStatus } from "@/lib/sentinel/schema";
-import { monthlyCapExempt, slotCandidates } from "./keys";
+import { monthlyCapExempt, PICK_MAIL_KINDS, slotCandidates } from "./keys";
 
 export interface Caps {
   dailyCap: number;
@@ -52,6 +52,11 @@ export interface ClaimParams {
   nowIso: string;
   recipientSha: string | null;
   caps: Caps;
+  /**
+   * M17 (D-470): pick e-mail caps enforced in the claim itself, so two racing ticks cannot both take
+   * the last pick slot. `own` = pick_alert_emails_per_day; `candidate` = the candidate sub-cap.
+   */
+  pickCap?: { own: number; candidate?: number };
 }
 
 function slotCondition(
@@ -82,6 +87,19 @@ function slotCondition(
     );
     args.push(p.env, month, p.caps.monthlyCap);
   }
+  if (p.pickCap) {
+    const kinds = PICK_MAIL_KINDS.map((k) => `'${k}'`).join(",");
+    parts.push(
+      `(SELECT COUNT(*) FROM email_message m WHERE m.env = ? AND m.d = ? AND m.kind IN (${kinds}) AND ${COUNTED}) < ?`,
+    );
+    args.push(p.env, p.d, p.pickCap.own);
+    if (p.pickCap.candidate !== undefined) {
+      parts.push(
+        `(SELECT COUNT(*) FROM email_message m WHERE m.env = ? AND m.d = ? AND m.kind = 'pick_candidate' AND ${COUNTED}) < ?`,
+      );
+      args.push(p.env, p.d, p.pickCap.candidate);
+    }
+  }
   return { sql: parts.join(" AND "), args };
 }
 
@@ -110,6 +128,28 @@ export async function claimKey(db: Pick<Client, "execute">, p: ClaimParams): Pro
     if (there.rows.length > 0) return { kind: "exists" };
   }
   return { kind: "capped", slot: candidates[candidates.length - 1] };
+}
+
+/** A pending batch claim whose item set changed is released after 10 minutes (D-470): a `failed` row
+ * with no accepted attempt does not count against the pool, pick or monthly caps. */
+const ORPHAN_S = 600;
+export async function releaseOrphanBatches(
+  db: Pick<Client, "execute">,
+  env: EmailEnv,
+  d: string,
+  userId: string,
+  keepKey: string,
+  at: string,
+): Promise<void> {
+  await db.execute({
+    sql: `UPDATE email_message SET status = 'failed'
+          WHERE env = ? AND d = ? AND kind = 'pick_batch' AND status = 'claimed'
+            AND email_key LIKE ? AND email_key <> ? AND attempts > 0
+            AND NOT EXISTS (SELECT 1 FROM email_attempt a
+                            WHERE a.email_key = email_message.email_key AND a.outcome = 'accepted')
+            AND (julianday(?) - julianday(COALESCE(json_extract(ref_json, '$.claim_at'), created_at))) * 86400 > ?`,
+    args: [env, d, `pickb:${userId}:%`, keepKey, at, ORPHAN_S],
+  });
 }
 
 /** Writes a decided row (suppressed_*, no_recipient) once; a repeat is ignored. */

@@ -1,6 +1,7 @@
 // Email keys and slot rules (M5 T3, design 2.3 and 2.4, EML-010, NFR-006). One email per key.
 //   review:<d>  p0:<alert_key>  p0b:<first_alert_key>  inc:<incident_id>:open|s1  tokens:<d>
 //   unread7:<d>  reminder:<d>  brief:<d>  test:<d>:<n>  dbdown:<d>:<slot>
+import { createHash } from "node:crypto";
 import type { EmailKind, EmailSlot } from "@/lib/sentinel/schema";
 
 const D = "\\d{4}-\\d{2}-\\d{2}";
@@ -20,7 +21,7 @@ const KEY_PATTERNS: Record<EmailKind, RegExp> = {
   pick_hit: new RegExp(`^pickhit:[0-9a-f]{8,64}:${D}$`),
   pick_cleared: new RegExp(`^pickclr:[0-9a-f]{8,64}:${D}$`),
   pick_candidate: new RegExp(`^pickcand:[A-Z]{2}:${D}:[A-Za-z0-9.-]{1,12}$`),
-  pick_batch: new RegExp(`^pickb:[^:\\s]{1,80}:${D}:\\d{4}$`),
+  pick_batch: new RegExp(`^pickb:[^:\\s]{1,80}:${D}:(?:\\d{4}|[0-9a-f]{8,64})$`),
   pick_digest: new RegExp(`^pickdg:[^:\\s]{1,80}:${D}$`),
 };
 
@@ -41,10 +42,22 @@ export const emailKeys = {
   pickCleared: (alertId: string, sessionD: string) => `pickclr:${alertId}:${sessionD}`,
   pickCandidate: (market: string, sessionD: string, code: string) =>
     `pickcand:${market}:${sessionD}:${code}`,
-  pickBatch: (userId: string, sessionD: string, hhmm: string) =>
-    `pickb:${userId}:${sessionD}:${hhmm}`,
+  pickBatch: (userId: string, sessionD: string, tail: string) =>
+    `pickb:${userId}:${sessionD}:${tail}`,
   pickDigest: (userId: string, sessionD: string) => `pickdg:${userId}:${sessionD}`,
 } as const;
+
+/**
+ * Slot-independent batch key (D-470): derived from the item set, so a retry of the same items after
+ * a crash or a pending send re-uses the same claim (and the provider idempotency key).
+ */
+export function pickBatchKey(userId: string, sessionD: string, alertIds: readonly string[]): string {
+  const sha = createHash("sha256")
+    .update([...alertIds].sort().join("|"))
+    .digest("hex")
+    .slice(0, 32);
+  return emailKeys.pickBatch(userId, sessionD, sha);
+}
 
 /** The five M17 pick e-mail kinds: pool slot only, counted against `pick_alert_emails_per_day`. */
 export const PICK_MAIL_KINDS = [

@@ -8,7 +8,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { activeAlerts, alertIdOf, insertTransition } from "@/lib/alerts/pick/store";
 import type { AlertRow, MailerCtx } from "@/lib/alerts/pick/types";
 import { claimKey, loadCaps } from "@/lib/email/caps";
-import { emailKeys, slotCandidates } from "@/lib/email/keys";
+import { emailKeys, pickBatchKey, slotCandidates } from "@/lib/email/keys";
+import { sendEmail } from "@/lib/email/send";
 import { createMockProvider, type MockProvider } from "@/lib/email/mock";
 import {
   createPickMailer,
@@ -478,5 +479,82 @@ describe("new intraday candidates (EML-040)", () => {
     await run();
     expect(mock.outbox).toHaveLength(0);
     expect(await mailRows()).toEqual(["pick_candidate:off"]);
+  });
+});
+
+describe("batch crash safety and atomic cap (D-470)", () => {
+  const ids3 = async () => {
+    const out: string[] = [];
+    for (let i = 1; i <= 3; i++) out.push(await transition(i, "hit"));
+    return out;
+  };
+
+  it("a batch the provider accepted before a crash (no mark) is never re-mailed on the next tick", async () => {
+    const ids = await ids3();
+    // the crashed tick: provider accepted under the batch key, pick_alert_mail never written
+    const res = await sendEmail(ctx(), "pick_batch", pickBatchKey("1", SESSION, ids), {
+      window: "10:45 Melbourne",
+      lines: [{ code: "ZZ01", what: "Hit", price: "1", quoteTime: "t" }],
+    });
+    expect(res.status).toBe("sent");
+    expect(mock.outbox).toHaveLength(1);
+    clock = T1105; // next tick, a different slot
+    await createPickMailer(ctx()).notify(mctx("1105"), []);
+    expect(mock.outbox).toHaveLength(1);
+    expect(await mailRows()).toEqual([
+      "pick_batch:batched",
+      "pick_batch:batched",
+      "pick_batch:batched",
+    ]);
+    expect(
+      await scalar(db, "SELECT COUNT(*) AS n FROM email_message WHERE kind = 'pick_batch'"),
+    ).toBe(1);
+  });
+
+  it("a pending batch is retried with the same key and counted once", async () => {
+    await ids3();
+    mock.script = [{ outcome: "network" }, { outcome: "network" }];
+    await createPickMailer(ctx()).notify(mctx(), []);
+    expect(await mailRows()).toEqual([]); // pending: unmailed
+    const claimed = () =>
+      scalar(
+        db,
+        "SELECT COUNT(*) AS n FROM email_message WHERE kind = 'pick_batch' AND status = 'claimed'",
+      );
+    expect(await claimed()).toBe(1);
+    clock = new Date(T1045.getTime() + 5 * 60_000);
+    await createPickMailer(ctx()).notify(mctx("1050"), []);
+    expect(
+      await scalar(db, "SELECT COUNT(*) AS n FROM email_message WHERE kind = 'pick_batch'"),
+    ).toBe(1);
+    expect(await claimed()).toBe(0);
+    expect(mock.outbox).toHaveLength(1);
+    expect(await pickCapRemaining(db, "production", SESSION)).toBe(11);
+  });
+
+  it("two concurrent sends at cap - 1 send exactly one", async () => {
+    const caps = await loadCaps(db);
+    const claim = (k: string) =>
+      claimKey(db, {
+        key: k,
+        kind: "pick_hit",
+        env: "production",
+        d: SESSION,
+        nowIso: clock.toISOString(),
+        recipientSha: null,
+        caps,
+        pickCap: { own: 12 },
+      });
+    for (let i = 0; i < 11; i++) {
+      expect((await claim(emailKeys.pickHit(`${i}`.padStart(8, "a"), SESSION))).kind).toBe(
+        "claimed",
+      );
+    }
+    const r = await Promise.all([
+      claim(emailKeys.pickHit("bbbbbbb1", SESSION)),
+      claim(emailKeys.pickHit("bbbbbbb2", SESSION)),
+    ]);
+    expect(r.filter((x) => x.kind === "claimed")).toHaveLength(1);
+    expect(r.filter((x) => x.kind === "capped")).toHaveLength(1);
   });
 });
