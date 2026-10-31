@@ -116,6 +116,9 @@ describe("AT-61 (d): outcome per candidate", () => {
     await dec("ZZBL", "shadow", "G07");
     await dec("ZZNB", "live", "G03");
     await dec("ZZNB", "shadow", null);
+    // D-459: a night with candidates but neither picks nor decisions yet records nothing
+    await insertCandidate(db, "2030-03-02", "ZZRK");
+    expect(await recordOutcomes(db, MARKET, "2030-03-02")).toEqual({ written: 0 });
     for (const c of ["ZZPK", "ZZBL", "ZZRK", "ZZNB", "ZZOUT", "ZZU3X"])
       await insertCandidate(db, d, c);
     await dec("ZZPK", "shadow", "G05"); // a pick wins over a blocked row

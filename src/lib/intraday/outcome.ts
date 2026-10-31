@@ -69,6 +69,9 @@ export async function recordOutcomes(
     arm: String(r.arm),
     firstFailGate: r.first_fail_gate === null ? null : String(r.first_fail_gate),
   }));
+  // D-459: neither the 18:10 list nor the night's decisions exist yet, so record nothing; a later
+  // evening-review retry of the same night writes the outcomes once the batch has run.
+  if (picks.size === 0 && decisions.length === 0) return { written: 0 };
   const tiers = familyTiers();
   const snap = await db.execute({
     sql:
