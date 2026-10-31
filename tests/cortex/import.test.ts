@@ -260,7 +260,9 @@ describe("kb_report.md (D-469: the calibration report as a KB item)", () => {
     const front = JSON.parse(String(row.front_json));
     expect(front.kind).toBe("cortex_calibration");
     expect(front.type).toBe("review");
-    const { version: _v, kind: _k, ...bare } = front;
+    const bare = Object.fromEntries(
+      Object.entries(front).filter(([k]) => k !== "version" && k !== "kind"),
+    );
     expect(row.body_sha).toBe(contentSha(bare, String(row.body)));
     await go([dir], db);
     expect(await count(db, "document")).toBe(1);
