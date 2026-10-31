@@ -54,6 +54,7 @@ export const NOT_CONFIG = new Set([
   "ZAP_OUT", // per-run report folder of scripts/ci/zap-run.mjs (M8 T12), not configuration
   "FROM", // backfill-index.yml: the first-date input of a one-off dispatch (D-175), not configuration
   "HISTORY_FLAG", // asx-fetch.yml: the --history switch of a dispatch (D-194), not configuration
+  "DATES", // diagnose-signals.yml: the sessions input of a read-only dispatch, not configuration
   "TARGET",
   "TARGETS",
   "TRAINS",
