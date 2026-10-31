@@ -66,6 +66,7 @@ describe("tabs", () => {
       "/strategies/ideas",
       "/strategies/risk",
       "/what-if",
+      "/cortex",
     ]);
     const on = links.filter((l) => l.getAttribute("aria-current") === "page");
     expect(on).toHaveLength(1);

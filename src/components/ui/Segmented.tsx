@@ -33,7 +33,7 @@ export function Segmented({
   const refs = useRef<Array<HTMLElement | null>>([]);
   const linkMode = items.length > 0 && items.every((i) => i.href !== undefined);
   const wrap = cn(
-    "flex w-full divide-x divide-border overflow-x-auto rounded-lg border border-border sm:inline-flex sm:w-auto",
+    "relative flex w-full divide-x divide-border overflow-x-auto rounded-lg border border-border sm:inline-flex sm:w-auto",
     className,
   );
 

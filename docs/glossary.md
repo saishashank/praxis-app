@@ -1291,3 +1291,87 @@ _Spec: SEC-101, BLD-011_
 ### Worker slot
 One scheduled job of the Cloudflare Worker (for example the 20:00 evening review); you list the slots that may run on System health.
 _Spec: PLT-071, D-155_
+
+## Cortex terms
+
+_The words the Cortex page and the Decision Cards use (CTX-073). Times are Melbourne time with the daylight offset shown._
+
+### Cortex
+The nightly engine that looks at every listed company, scores how promising each setup is from past cases like it, and picks at most one trade per book. It never places a real order.
+_Spec: CTX-001, CTX-073_
+
+### Book
+One practice portfolio with its own simulated cash. Each book follows one family and settles trades the way a live account would.
+_Spec: CTX-026, CTX-073_
+
+### Family
+A group of trade ideas that share one reason to buy, such as a trend breakout or a company result. Each family has its own status and its own track record.
+_Spec: CTX-053, CTX-073_
+
+### Cluster
+A group of angles that look at the same kind of thing, such as recent price strength or company news. A reason on a card is always named by its cluster.
+_Spec: CTX-011, CTX-073_
+
+### Angle
+One measured fact about a company on a given night, for example how far its price is from its recent high. Angles are the building blocks of a score.
+_Spec: CTX-011, CTX-073_
+
+### Matched setups
+Past cases that looked like tonight's setup in the ways that matter: same family, same group of angles, similar price swings and similar ease of trading.
+_Spec: CTX-021, CTX-073_
+
+### Comparable cases
+The matched setups that are far enough apart in time to count as separate evidence. Many cases bunched together count as fewer.
+_Spec: CTX-021, CTX-073_
+
+### Break-even (Cortex)
+How often a trade of this kind must come out ahead to pay for its costs. A card shows it at three levels of cost.
+_Spec: CTX-022a, CTX-073_
+
+### Allowed to trade
+A family may place practice orders only after enough independent evidence says it comes out ahead after costs. Until then it runs as shadow.
+_Spec: CTX-053, CTX-073_
+
+### Live-tested
+A family whose results on new nights, after it was allowed to trade, support the earlier evidence. Until then the page says live testing is pending.
+_Spec: CTX-053, CTX-082, CTX-073_
+
+### Shadow
+Recording what a family would have done, without placing any order. Shadow results are scored later so they can be compared with real practice trades.
+_Spec: CTX-023, CTX-073_
+
+### Warming up
+A company or family that has not been watched long enough to be judged. It is skipped, and the card says so, rather than guessed at.
+_Spec: CTX-055, CTX-073_
+
+### Parcel
+The smallest order worth placing. A position below the parcel floor would lose too much to fees, so it is not placed.
+_Spec: CTX-027, CTX-073_
+
+### Settled cash
+Cash from a sale that has finished settling and can be used again. A new buy waits until the cash from the last sale has settled.
+_Spec: CTX-026, CTX-073_
+
+### Stall
+A run of exits at the stop limit, one after another, which makes a family pause until it is reviewed.
+_Spec: CTX-024, CTX-073_
+
+### Halt (Cortex)
+A short stop to trading in one company, usually while news is released. A halted company is not bought and the card says why.
+_Spec: CTX-015, CTX-073_
+
+### Suspension
+A longer stop to trading in one company, set by the exchange. It is treated more strictly than a halt and blocks new buying.
+_Spec: CTX-015, CTX-073_
+
+### Regime (Cortex)
+The mood of the whole market tonight: a sudden shock, cautious, neutral or confident. Some families do not trade in some moods.
+_Spec: CTX-017, CTX-073_
+
+### ATR (Cortex)
+Average true range: how far a share price usually moves in a day. Stops and the size of a position are set from it.
+_Spec: CTX-022, CTX-073_
+
+### Gap (Cortex)
+The difference between yesterday's close and the next open. If the open is too far above the planned price, the buy is cancelled.
+_Spec: CTX-028, CTX-073_
