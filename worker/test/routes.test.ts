@@ -27,7 +27,9 @@ const ENV: RouteEnv = {
   APP_BASE_URL: APP,
   WORKER_HMAC_SECRET: SECRET,
 };
-const on: Slot[] = AU_SLOTS.map((s) =>
+// M17 slots (quote-poll, intraday-scan) have their own tests (m17Slots.test.ts); these suites cover the M5 table.
+const M17_SLOTS = new Set(["quote-poll", "intraday-scan"]);
+const on: Slot[] = AU_SLOTS.filter((s) => !M17_SLOTS.has(s.id)).map((s) =>
   s.runner === "route" ? { ...s, enabled: true, requiresListing: false } : s,
 );
 
@@ -91,7 +93,7 @@ const hm = (m: number) =>
 
 describe("the route slots in the table", () => {
   it("every route slot is disabled", () => {
-    const route = AU_SLOTS.filter((s) => s.runner === "route");
+    const route = AU_SLOTS.filter((s) => s.runner === "route" && !M17_SLOTS.has(s.id));
     expect(route.map((s) => s.id).sort()).toEqual([
       "alert-flush",
       "evening-review",

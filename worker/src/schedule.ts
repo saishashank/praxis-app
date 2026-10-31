@@ -468,4 +468,40 @@ export const AU_SLOTS: readonly Slot[] = [
     requiresListing: true,
     note: "YAML watchdog 21:50 (M8 T13, PLT-071, NFR-006): last check of the worker poll and the review; OFF until the Owner lists it",
   }),
+  // M17 WP5 (D-387, D-397, PLT-077): delayed-quote slots. Recurring route slots: one signed POST per
+  // matching minute, no slot state; the routes are idempotent per (market, session, slot minute, purpose)
+  // through quote_run and enforce the early close from the calendar. Available but listed-only (an absent
+  // list skips them) and the routes themselves refuse until the Owner accepts the yahoo_delayed source.
+  slot({
+    id: "quote-poll",
+    time: "10:00",
+    until: "16:00",
+    everyMin: 5,
+    runner: "route",
+    route: "/api/internal/pick-alerts",
+    workflow: null,
+    tradingDaysOnly: true,
+    marketBound: true,
+    priority: 5,
+    catchUpMin: 0,
+    enabled: true,
+    requiresListing: true,
+    note: "Pick-alert quote poll 10:00-16:00 every 5 min (M17, PLT-077); OFF until the Owner lists it and accepts the quote source",
+  }),
+  slot({
+    id: "intraday-scan",
+    time: "10:30",
+    until: "15:30",
+    everyMin: 30,
+    runner: "route",
+    route: "/api/internal/intraday-scan",
+    workflow: null,
+    tradingDaysOnly: true,
+    marketBound: true,
+    priority: 6,
+    catchUpMin: 0,
+    enabled: true,
+    requiresListing: true,
+    note: "Intraday scan 10:30-15:30 every 30 min (M17, AGT-140); OFF until the Owner lists it and accepts the quote source",
+  }),
 ];

@@ -71,6 +71,8 @@ const GO_LIVE_ROUTES = [
   "evening-review",
   "evening-review-late",
   "morning",
+  "quote-poll", // M17
+  "intraday-scan", // M17
 ];
 
 describe("the shipped table (decision 32)", () => {

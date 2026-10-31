@@ -3,7 +3,9 @@
 //
 // A `route` slot is a signed POST to a Vercel route. The slots (schedule.ts) are: alert-flush (odd
 // minutes, only when `alert_flush_due` has passed), pre-open / pre-open-retry (09:54, 09:58) and
-// evening-review / evening-review-late (20:00-22:00). All are DISABLED; the dispatch clock
+// evening-review / evening-review-late (20:00-22:00), and the M17 quote-poll (10:00-16:00 every 5 min)
+// and intraday-scan (10:30-15:30 every 30 min) recurring slots (listed-only; the routes refuse until the
+// quote source is accepted). All are DISABLED; the dispatch clock
 // (clock.ts) never fires them, this runner does.
 //
 // Per tick, nothing happens (no database request, no log) unless an enabled route slot is due at
