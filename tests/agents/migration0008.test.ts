@@ -542,7 +542,10 @@ describe("main migration 0008_agents: shape", () => {
 describe("main migration 0008_agents: arena_order M4 columns (edited into 0007)", () => {
   it("arena_order has signal_id, card_id, max_open_micro, stop_spec after untradeable_flag", async () => {
     const db = await freshDb("main");
-    const cols = (await q(db, "PRAGMA table_info(arena_order)")).map((r) => r.name);
+    // 0019 (M15) appends limit_micro after the M4 columns
+    const all = (await q(db, "PRAGMA table_info(arena_order)")).map((r) => r.name);
+    expect(all.at(-1)).toBe("limit_micro");
+    const cols = all.slice(0, -1);
     expect(cols).toEqual([...ARENA_COLUMNS.arena_order]);
     expect(cols.slice(-4)).toEqual(["signal_id", "card_id", "max_open_micro", "stop_spec"]);
     const info = await q(db, "PRAGMA table_info(arena_order)");
