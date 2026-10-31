@@ -7,8 +7,21 @@
 // the world reports no event coverage and both sources off: F4 runs as its "no event filter"
 // variant, and the event/short-interest families output BLOCKED-DATA until those inputs exist
 // (ARN-082 labels this). No clock, no randomness.
-import { AU_TIME_ZONE, decisionCutoffUtc, type ViewBar } from "@/lib/agents/decisionView";
-import { addDays, marketDate } from "@/lib/data/calendar";
+import {
+  AU_TIME_ZONE,
+  decisionCutoffUtc,
+  type IndexViewBar,
+  type ViewBar,
+} from "@/lib/agents/decisionView";
+import { addDays, marketDate, type CalendarRow } from "@/lib/data/calendar";
+import type {
+  HaltRow,
+  IndexChangeRow as PitIndexChangeRow,
+  IndustryRow as PitIndustryRow,
+  MacroRow,
+  ShortPoint,
+  TierRow,
+} from "@/lib/cortex/pit/types";
 import { announcementIngestBound } from "@/lib/sentinel/cutoffPoll";
 import {
   adjustBars,
@@ -193,6 +206,13 @@ export class SnapshotWorld implements CohortReplaySource {
   readonly announcements: readonly { readonly code: string; readonly d: string }[];
   /** Delisting dates by code, from the confirmed corporate actions of type `delisting`. */
   readonly delistings: ReadonlyMap<string, string>;
+  /** M15 P3: the snapshot's raw tables the Cortex replay world is built from (read-only views). */
+  private readonly calendarAll: CalendarRow[];
+  private readonly indexBarsBy = new Map<string, IndexViewBar[]>();
+  private readonly shortsBy = new Map<string, ShortPoint[]>();
+  private readonly macroBy = new Map<string, MacroRow[]>();
+  private readonly cortexActions = new Map<string, CorpActionRecord[]>();
+  private readonly hasIndexChanges: boolean;
 
   constructor(
     snap: LoadedSnapshot,
@@ -277,6 +297,125 @@ export class SnapshotWorld implements CohortReplaySource {
       );
     }
     this.buildRegime(snap.tables.index_bars as unknown as IndexRow[]);
+    // M15 P3: tables for the Cortex as-of world (all additive; an older snapshot reads as empty)
+    this.calendarAll = (
+      snap.tables.calendar as unknown as {
+        d: string;
+        kind: CalendarRow["kind"];
+        close_time: string | null;
+        confirmed: 0 | 1;
+      }[]
+    )
+      .map((r) => ({ d: r.d, kind: r.kind, close_time: r.close_time, confirmed: r.confirmed }))
+      .sort((a, b) => cmp(a.d, b.d));
+    for (const r of snap.indexBars) {
+      const list = this.indexBarsBy.get(r.index_code);
+      const bar = { d: r.d, close: BigInt(r.c_micro) };
+      if (list === undefined) this.indexBarsBy.set(r.index_code, [bar]);
+      else list.push(bar);
+    }
+    for (const list of this.indexBarsBy.values()) list.sort((a, b) => cmp(a.d, b.d));
+    for (const r of snap.shortInterest) {
+      const list = this.shortsBy.get(r.code);
+      const pt = { asOf: r.as_of, ppm: r.ppm };
+      if (list === undefined) this.shortsBy.set(r.code, [pt]);
+      else list.push(pt);
+    }
+    for (const list of this.shortsBy.values()) list.sort((a, b) => cmp(a.asOf, b.asOf));
+    for (const r of snap.macroSeries) {
+      const list = this.macroBy.get(r.series);
+      const row: MacroRow =
+        r.published_at === null || r.published_at === undefined
+          ? { obsD: r.obs_d, value: r.value }
+          : { obsD: r.obs_d, value: r.value, publishedAt: r.published_at };
+      if (list === undefined) this.macroBy.set(r.series, [row]);
+      else list.push(row);
+    }
+    for (const list of this.macroBy.values()) list.sort((a, b) => cmp(a.obsD, b.obsD));
+    // D-321: provenance from the snapshot's corporate-action evidence. A row without the columns is a
+    // legacy vendor row (confirmed, vendor-only): it adjusts prices (CTX-050) but is never a candidate
+    // and never re-bases a Cortex stop. Rows are in file order (code, ex_date, action_id).
+    const provenanceBy = new Map<string, { sources: string[]; status: string }>();
+    for (const a of snap.corporateActions) {
+      provenanceBy.set(`snap:${a.code}:${a.ex_date}:${a.action_id}`, {
+        sources:
+          a.sources === null || a.sources === undefined || a.sources === ""
+            ? ["vendor"]
+            : a.sources.split(","),
+        status: a.status ?? "confirmed",
+      });
+    }
+    for (const rec of this.actions) {
+      const prov = provenanceBy.get(rec.id)!;
+      const list = this.cortexActions.get(rec.code);
+      const withProv = { ...rec, ...prov } as CorpActionRecord;
+      if (list === undefined) this.cortexActions.set(rec.code, [withProv]);
+      else list.push(withProv);
+    }
+    this.hasIndexChanges = this.indexChanges.size > 0;
+  }
+
+  // ---- M15 P3: the Cortex as-of world's inputs (cortexReplay.ts assembles them) -----------------------------
+
+  /** Calendar rows of the snapshot (sessions, holidays, early closes), oldest first. */
+  calendarRows(): readonly CalendarRow[] {
+    return this.calendarAll;
+  }
+
+  /** Raw bars of the code, oldest first (empty when unknown). */
+  barsOf(code: string): readonly ViewBar[] {
+    return this.bars.get(code) ?? [];
+  }
+
+  /** Tier rows of the code (universe snapshots), oldest first. */
+  tierRowsOf(code: string): readonly TierRow[] {
+    return (this.tiers.get(code) ?? []).map((r) => ({ d: r.d, tier: r.tier }));
+  }
+
+  /** Halted flags of the code per universe row. */
+  haltRowsOf(code: string): readonly HaltRow[] {
+    return (this.tiers.get(code) ?? []).map((r) => ({ d: r.d, halted: r.halted === 1 }));
+  }
+
+  /** Index closes of one index (AXJO, GSPC, VIX), oldest first; empty when absent. */
+  indexBarsOf(indexCode: string): readonly IndexViewBar[] {
+    return this.indexBarsBy.get(indexCode) ?? [];
+  }
+
+  /** ASIC short-interest points by code, oldest first (empty map: the table is absent). */
+  shortInterest(): ReadonlyMap<string, readonly ShortPoint[]> {
+    return this.shortsBy;
+  }
+
+  /** Macro observations by series, oldest first (empty map: the table is absent). */
+  macroSeries(): ReadonlyMap<string, readonly MacroRow[]> {
+    return this.macroBy;
+  }
+
+  /** Quantity-changing actions by code with their provenance (D-321), for the Cortex corporate-action state. */
+  cortexCorpActions(): ReadonlyMap<string, readonly CorpActionRecord[]> {
+    return this.cortexActions;
+  }
+
+  /** Industry rows of the code as the Cortex view reads them (the newest manual class, else the group). */
+  industryRowsOf(code: string): readonly PitIndustryRow[] {
+    return (this.industries.get(code) ?? []).map((r) => ({
+      asOf: r.as_of,
+      industry: r.industry,
+    }));
+  }
+
+  /** The DAT-234 list per code with its load stamp; null when the snapshot carries none (G08 fails closed). */
+  indexChangeRowsOf(): ReadonlyMap<string, readonly PitIndexChangeRow[]> | null {
+    if (!this.hasIndexChanges) return null;
+    const out = new Map<string, PitIndexChangeRow[]>();
+    for (const [code, list] of this.indexChanges) {
+      out.set(
+        code,
+        list.map((e) => ({ ...e.fact, knownAt: e.loaded })),
+      );
+    }
+    return out;
   }
 
   private buildRegime(rows: IndexRow[]): void {

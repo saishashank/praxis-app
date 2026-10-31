@@ -12,6 +12,8 @@ export type SnapshotTableName =
   | "announcements"
   | "cutoff_polls"
   | "index_changes"
+  | "short_interest"
+  | "macro_series"
   | "industry";
 export const TABLES: readonly { name: SnapshotTableName; fields: readonly string[] }[];
 export type SnapshotInputs = Partial<
