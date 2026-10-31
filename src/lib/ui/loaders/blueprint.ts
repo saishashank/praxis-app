@@ -6,6 +6,8 @@
 // Details are plain words with counts and times only: no money, no data rows, no error text.
 import "server-only";
 import type { Client } from "@libsql/client";
+import { CONFIG_KEYS, type ConfigKey } from "@/lib/config/keys";
+import { getConfig } from "@/lib/config/store";
 import { JOBS, isStale } from "@/lib/health/jobs";
 import { latestPerJob, type RunRow } from "@/lib/runs/runRecord";
 import { WATCHDOG_JOB } from "@/lib/watchdog/state";
@@ -13,10 +15,33 @@ import { melbourneStamp } from "./cortex";
 
 export type BlueprintState = "ok" | "warn" | "fail" | "off" | "unknown";
 export type ElementStatus = { state: BlueprintState; lastRunAt?: string; detail: string };
-export type ModelElement = { id: string; type: string; attrs?: Record<string, unknown> | null };
+export type ModelElement = {
+  id: string;
+  type: string;
+  attrs?: Record<string, unknown> | null;
+  configKeys?: readonly string[];
+};
+/** One recent run: time, outcome and counts only (no error text). */
+export type RunLine = { at: string; status: string; items: number; durationMs: number | null };
+/** The source_register row for an external source (UXN-298 "licence row"). */
+export type LicenceRow = {
+  status: string;
+  risk: string;
+  permittedUse: string | null;
+  rateLimits: string | null;
+  lastChecked: string | null;
+  summarisationPermitted: boolean;
+};
+export type ConfigLine = { key: string; value: string };
 export type BlueprintModelLike = { elements: readonly ModelElement[] };
 export type BlueprintStatus = {
   statuses: Record<string, ElementStatus>;
+  /** Last 5 run_record rows per workflow or slot element (newest first). */
+  runs: Record<string, RunLine[]>;
+  /** Licence row per source element. */
+  licences: Record<string, LicenceRow>;
+  /** Current config values (read-only) for the keys each element lists, known keys only. */
+  config: Record<string, ConfigLine[]>;
   /** Page-level line: paper trading only (the standard "Simulated" line). */
   simulatedLine: string;
   /** "Status as of <Melbourne time>" (ARC-002). */
@@ -92,17 +117,93 @@ async function runStatuses(
   }
 }
 
+export const RUNS_SHOWN = 5;
+
+async function recentRuns(
+  db: Client,
+  els: readonly ModelElement[],
+): Promise<Record<string, RunLine[]>> {
+  const out: Record<string, RunLine[]> = {};
+  const byJob = new Map<string, RunLine[]>();
+  for (const e of els) {
+    if (e.type !== "workflow" && e.type !== "slot") continue;
+    const key = keyOf(e.id);
+    const job = JOB_ALIAS[key] ?? key;
+    try {
+      if (!byJob.has(job)) {
+        const r = await db.execute({
+          sql: `SELECT started_at, status, items_processed, duration_ms FROM run_record
+                WHERE job = ? ORDER BY started_at DESC, id DESC LIMIT ${RUNS_SHOWN}`,
+          args: [job],
+        });
+        byJob.set(
+          job,
+          r.rows.map((x) => ({
+            at: when(String(x.started_at)),
+            status: String(x.status),
+            items: Number(x.items_processed),
+            durationMs: x.duration_ms === null ? null : Number(x.duration_ms),
+          })),
+        );
+      }
+      out[e.id] = byJob.get(job)!;
+    } catch {
+      return out;
+    }
+  }
+  return out;
+}
+
+const SHOWN_MAX = 200;
+
+async function configLines(
+  db: Client,
+  els: readonly ModelElement[],
+): Promise<Record<string, ConfigLine[]>> {
+  const out: Record<string, ConfigLine[]> = {};
+  for (const e of els) {
+    const keys = (e.configKeys ?? []).filter((k) => k in CONFIG_KEYS);
+    if (keys.length === 0) continue;
+    const lines: ConfigLine[] = [];
+    for (const key of keys) {
+      try {
+        const v = JSON.stringify(await getConfig(db, key as ConfigKey)) ?? "null";
+        lines.push({ key, value: v.length > SHOWN_MAX ? `${v.slice(0, SHOWN_MAX)}...` : v });
+      } catch {
+        /* value not readable: the key is listed without a value by the panel */
+      }
+    }
+    out[e.id] = lines;
+  }
+  return out;
+}
+
 async function sourceStatuses(
   db: Client,
   els: readonly ModelElement[],
   out: Record<string, ElementStatus>,
+  licences: Record<string, LicenceRow>,
 ): Promise<void> {
   let rows: Map<string, { mode: string; reg: string | null; since: string | null }>;
+  const lic = new Map<string, LicenceRow>();
   try {
     const r = await db.execute(
-      `SELECT g.source AS source, g.status AS reg, s.mode AS mode, s.since AS since
+      `SELECT g.source AS source, g.status AS reg, s.mode AS mode, s.since AS since,
+              g.risk AS risk, g.permitted_use AS permitted_use, g.rate_limits AS rate_limits,
+              g.last_checked AS last_checked, g.summarisation_permitted AS summ
        FROM source_register g LEFT JOIN source_status s ON s.source = g.source`,
     );
+    for (const x of r.rows) {
+      const t = (v: unknown) => (v === null || v === undefined ? null : String(v));
+      lic.set(String(x.source), {
+        status: String(x.reg),
+        risk: String(x.risk),
+        permittedUse: t(x.permitted_use),
+        rateLimits: t(x.rate_limits),
+        lastChecked: t(x.last_checked),
+        summarisationPermitted: Number(x.summ) === 1,
+      });
+    }
     rows = new Map(
       r.rows.map((x) => [
         String(x.source),
@@ -118,6 +219,8 @@ async function sourceStatuses(
   }
   for (const e of els) {
     if (e.type !== "source") continue;
+    const l = lic.get(keyOf(e.id));
+    if (l) licences[e.id] = l;
     const s = rows.get(keyOf(e.id));
     if (!s) continue;
     if (s.reg === "pending") {
@@ -197,7 +300,10 @@ export async function loadBlueprintStatus(
   const { mainDb, now } = deps;
   const out: Record<string, ElementStatus> = {};
   await runStatuses(mainDb, model.elements, now, out);
-  await sourceStatuses(mainDb, model.elements, out);
+  const licences: Record<string, LicenceRow> = {};
+  await sourceStatuses(mainDb, model.elements, out, licences);
+  const runs = await recentRuns(mainDb, model.elements);
+  const config = await configLines(mainDb, model.elements);
   await cortexGroups(mainDb, deps.market ?? "AU", now, out);
   // Tables: a row-count freshness check is not cheap on every table, so they stay unknown.
   const statuses: Record<string, ElementStatus> = {};
@@ -205,6 +311,9 @@ export async function loadBlueprintStatus(
   const asOf = now.toISOString();
   return {
     statuses,
+    runs,
+    licences,
+    config,
     simulatedLine: SIMULATED_LINE,
     freshnessLine: `Status as of ${melbourneStamp(asOf) ?? asOf}`,
     asOf,

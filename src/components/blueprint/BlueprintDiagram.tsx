@@ -10,6 +10,7 @@ import { Pill } from "@/components/ui/Pill";
 import { Sheet } from "@/components/ui/Sheet";
 import { layoutView, NODE_H, NODE_W } from "@/lib/blueprint/layout";
 import { searchElements } from "@/lib/blueprint/search";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { BlueprintStatus, ElementStatus } from "@/lib/ui/loaders/blueprint";
 import type { BpEdge, BpElement, BpModel } from "@/lib/blueprint/types";
@@ -69,7 +70,16 @@ function ElementPanel({
         <Field label="Type">{el.type}</Field>
         <Field label="Purpose">{el.purpose}</Field>
         <Field label="Spec IDs">
-          <span data-testid="bp-panel-specs">{el.specIds.join(", ")}</span>
+          <span data-testid="bp-panel-specs">
+            {el.specIds.map((id, i) => (
+              <span key={id}>
+                {i > 0 ? ", " : ""}
+                <Link href={`?tab=spec&q=${encodeURIComponent(id)}`} className="underline">
+                  {id}
+                </Link>
+              </span>
+            ))}
+          </span>
         </Field>
         <Field label="Status">
           <span data-testid="bp-panel-status">
@@ -88,9 +98,54 @@ function ElementPanel({
         <Field label="Outputs">
           <List items={el.outputs} />
         </Field>
-        <Field label="Config keys (read-only)">
-          <List items={el.configKeys} />
+        <Field label="Config keys and current values (read-only)">
+          {el.configKeys.length === 0 ? (
+            <span className="text-text-muted">None</span>
+          ) : (
+            <ul className="m-0 list-none p-0" data-testid="bp-panel-config">
+              {el.configKeys.map((k) => {
+                const v = status.config[el.id]?.find((c) => c.key === k);
+                return (
+                  <li key={k} className="break-all">
+                    {k}:{" "}
+                    {v ? <code>{v.value}</code> : <span className="text-text-muted">no value</span>}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </Field>
+        {status.runs[el.id] ? (
+          <Field label="Recent runs (last 5)">
+            {status.runs[el.id].length === 0 ? (
+              <span className="text-text-muted">No run recorded yet.</span>
+            ) : (
+              <ul className="m-0 list-none p-0" data-testid="bp-panel-runs">
+                {status.runs[el.id].map((r, i) => (
+                  <li key={i}>
+                    {r.at}: {r.status}, {r.items} items
+                    {r.durationMs === null ? "" : `, ${r.durationMs} ms`}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Field>
+        ) : null}
+        {status.licences[el.id] ? (
+          <Field label="Licence (source register)">
+            <ul className="m-0 list-none p-0" data-testid="bp-panel-licence">
+              <li>Status: {status.licences[el.id].status}</li>
+              <li>Risk: {status.licences[el.id].risk}</li>
+              <li>Permitted use: {status.licences[el.id].permittedUse ?? "not recorded"}</li>
+              <li>Rate limits: {status.licences[el.id].rateLimits ?? "not recorded"}</li>
+              <li>Last checked: {status.licences[el.id].lastChecked ?? "never"}</li>
+              <li>
+                Summarisation:{" "}
+                {status.licences[el.id].summarisationPermitted ? "permitted" : "not permitted"}
+              </li>
+            </ul>
+          </Field>
+        ) : null}
         <Field label="Tables">
           <List items={el.tables} />
         </Field>

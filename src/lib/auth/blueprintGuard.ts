@@ -1,9 +1,10 @@
 // Blueprint access guard (SEC-111, AT-57, D-361, D-367, D-370). Opus reviews every line.
 // Only a session whose role is owner AND whose email is the pinned OWNER_EMAIL passes. Everyone else
-// (editor, viewer, a second owner-role row, anonymous, auth outage, audit failure) gets the app's
-// ordinary 404 through notFound(): the same mechanism and the same rendered not-found page a missing
-// route produces, never a 403 and never a redirect to sign-in. The proxy answers the anonymous case
-// earlier with a rewrite to an absent path (gate.ts); this guard re-checks on every request.
+// (editor, viewer, a second owner-role row, auth outage, audit failure) gets the app's ordinary 404
+// through notFound(): the same mechanism and the same rendered not-found page a missing route
+// produces, never a 403. D-371: an anonymous request gets the app's ordinary sign-in redirect (pages)
+// or 401 (data routes), the same as any protected route; only a signed-in non-owner is rewritten by
+// the proxy to an absent path (gate.ts). This guard re-checks on every request.
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { authDb } from "@/lib/db/client";

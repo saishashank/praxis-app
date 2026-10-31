@@ -7,7 +7,9 @@ import { expect, test, type BrowserContext } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { PAGES } from "./pages";
-import { ROLE_LIST, concretePath, signIn, type Role } from "./helpers";
+// @ts-expect-error plain .mjs without types
+import { findSecretShapes } from "../scripts/architecture/schema.mjs";
+import { EMAIL, ROLE_LIST, concretePath, signIn, type Role } from "./helpers";
 
 const ROOT = process.cwd();
 const MODEL = JSON.parse(
@@ -138,4 +140,40 @@ test("nav model, robots, sitemap and email sources never say blueprint (AT-57 d)
   expect(fs.existsSync(path.join(ROOT, "src/lib/email/templates"))).toBe(true);
   const bad = files.filter((f) => BLUEPRINT.test(fs.readFileSync(path.join(ROOT, f), "utf8")));
   expect(bad).toEqual([]);
+});
+
+// AT-58 (d): what the pinned Owner is served holds no secret-shaped value and none of this run's
+// secrets (the test environment's values from playwright.config.ts).
+test("the Owner's responses hold no secret shape and no test-environment secret", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({ baseURL });
+  await signIn(context, "owner");
+  const secrets = ["AUTH_SECRET", "ACTIONS_HMAC_SECRET", "PII_HASH_KEY", "TEST_IDENTITY_SECRET"]
+    .map((k) => [k, process.env[k]] as const)
+    .filter((kv): kv is readonly [string, string] => Boolean(kv[1]));
+  expect(secrets.length).toBeGreaterThan(0);
+  const paths = [
+    "/blueprint",
+    "/blueprint?tab=spec",
+    "/api/blueprint/model",
+    "/api/blueprint/export?view=platform&format=drawio",
+    "/api/blueprint/export?view=platform&format=svg",
+  ];
+  for (const p of paths) {
+    const res = await context.request.get(p);
+    expect(res.status(), p).toBe(200);
+    const raw = (await res.text()).split(EMAIL.owner).join("");
+    // HTML carries framework scripts and styles (build ids, nonces, colour hashes) that look like
+    // keys; the shape scan reads the visible markup, the secret-value check below reads everything.
+    const body = raw
+      .replace(/<script[\s\S]*?<\/script>/g, "")
+      .replace(/<style[\s\S]*?<\/style>/g, "")
+      .replace(/<(?:link|meta|noscript)\b[^>]*>/g, "");
+    expect(findSecretShapes(body), p).toEqual([]);
+    for (const [name, value] of secrets)
+      expect(raw.includes(value), `${p} holds ${name}`).toBe(false);
+  }
+  await context.close();
 });

@@ -46,6 +46,10 @@ for (const role of [null, "editor", "viewer"] as const) {
       for (const [h, m] of [
         ["/blueprint", "/zz-missing"],
         ["/api/blueprint/model", "/api/zz-missing/model"],
+        [
+          "/api/blueprint/export?view=platform&format=svg",
+          "/api/zz-missing/export?view=platform&format=svg",
+        ],
       ]) {
         const hidden = await shot(await context.request.get(h, opts));
         const missing = await shot(await context.request.get(m, opts));
@@ -56,6 +60,10 @@ for (const role of [null, "editor", "viewer"] as const) {
         if (role && name === "rsc") expect(leak).toBe("/_praxis-absent");
         else expect(leak).toBeUndefined();
         delete hidden.headers["x-nextjs-rewritten-path"];
+        // Same residual (D-377): for a URL with a query string Next also adds x-nextjs-rewritten-query.
+        const qleak = hidden.headers["x-nextjs-rewritten-query"];
+        if (!(role && name === "rsc")) expect(qleak).toBeUndefined();
+        delete hidden.headers["x-nextjs-rewritten-query"];
         expect(hidden, `${role ?? "anonymous"} ${name} ${h}`).toEqual(missing);
       }
     }

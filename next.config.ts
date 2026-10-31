@@ -31,8 +31,23 @@ export const learningRedirects = [
   { source: "/learning/:path*", destination: "/reviews/learned/:path*", permanent: true },
 ];
 
+// The Blueprint reads these files at request time (specBrowser.ts, the model route); Next's file tracer
+// cannot see paths built with process.cwd(), so they are listed here (B1). Keep equal to DOCS_ALLOW,
+// SPEC_DIR and the model path (a unit test checks this).
+export const BLUEPRINT_TRACE_INCLUDES = {
+  "/blueprint": [
+    "./docs/architecture/architecture.json",
+    "./spec/*.md",
+    "./docs/06_open_questions.md",
+    "./docs/07_decision_log.md",
+    "./docs/config-reference.md",
+  ],
+  "/api/blueprint/model": ["./docs/architecture/architecture.json"],
+};
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  outputFileTracingIncludes: BLUEPRINT_TRACE_INCLUDES,
   experimental: { authInterrupts: true }, // forbidden() / unauthorized() (D-038)
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
