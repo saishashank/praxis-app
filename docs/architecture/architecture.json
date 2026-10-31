@@ -36,6 +36,60 @@
   ],
   "elements": [
     {
+      "id": "action:src/app/(app)/alerts/actions.ts#muteAlertAction",
+      "type": "action",
+      "name": "muteAlertAction",
+      "purpose": "Server action muteAlertAction: mutes or restores pick alerts for the signed-in user.",
+      "specIds": [
+        "ARN-115",
+        "ROL-102a",
+        "UXN-303"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "email",
+        "security"
+      ],
+      "source": "src/app/(app)/alerts/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/alerts/actions.ts"
+      }
+    },
+    {
+      "id": "action:src/app/(app)/alerts/actions.ts#setAlertsForAllAction",
+      "type": "action",
+      "name": "setAlertsForAllAction",
+      "purpose": "Server action setAlertsForAllAction: mutes or restores pick alerts for the signed-in user.",
+      "specIds": [
+        "ARN-115",
+        "ROL-102a",
+        "UXN-303"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "email",
+        "security"
+      ],
+      "source": "src/app/(app)/alerts/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/alerts/actions.ts"
+      }
+    },
+    {
       "id": "action:src/app/(app)/cards/[id]/actions.ts#addCardNoteAction",
       "type": "action",
       "name": "addCardNoteAction",
@@ -792,6 +846,56 @@
       "source": "src/app/(app)/settings/actions.ts",
       "attrs": {
         "file": "src/app/(app)/settings/actions.ts"
+      }
+    },
+    {
+      "id": "action:src/app/(app)/settings/alerts/actions.ts#setPicksSortAction",
+      "type": "action",
+      "name": "setPicksSortAction",
+      "purpose": "Server action setPicksSortAction: saves the signed-in user's alert and pick-sort preferences.",
+      "specIds": [
+        "ROL-102a",
+        "UX-052"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "security"
+      ],
+      "source": "src/app/(app)/settings/alerts/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/settings/alerts/actions.ts"
+      }
+    },
+    {
+      "id": "action:src/app/(app)/settings/alerts/actions.ts#updateAlertSettingsAction",
+      "type": "action",
+      "name": "updateAlertSettingsAction",
+      "purpose": "Server action updateAlertSettingsAction: saves the signed-in user's alert and pick-sort preferences.",
+      "specIds": [
+        "ROL-102a",
+        "UX-052"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "security"
+      ],
+      "source": "src/app/(app)/settings/alerts/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/settings/alerts/actions.ts"
       }
     },
     {
@@ -1955,10 +2059,11 @@
       "id": "host:query1.finance.yahoo.com",
       "type": "host",
       "name": "query1.finance.yahoo.com",
-      "purpose": "External host query1.finance.yahoo.com called over HTTPS.",
+      "purpose": "delayed quotes",
       "specIds": [
-        "NFR-006",
-        "SEC-017"
+        "DAT-238",
+        "NFR-041",
+        "PLT-077"
       ],
       "owner": "external",
       "schedule": null,
@@ -1969,6 +2074,8 @@
       "failure": "The calling job retries, then records a failed fetch; no data is invented.",
       "runbook": null,
       "views": [
+        "agents",
+        "data",
         "platform"
       ],
       "source": "src/lib/data/quotes/fetch.ts",
@@ -2373,6 +2480,31 @@
         "platform"
       ],
       "source": "src/app/(app)/page.tsx",
+      "attrs": {}
+    },
+    {
+      "id": "page:/alerts",
+      "type": "page",
+      "name": "/alerts",
+      "purpose": "My alerts: the pick alerts armed, hit or cleared for this user, with a mute control. Delayed quotes only.",
+      "specIds": [
+        "ARN-115",
+        "EML-041",
+        "UXN-303"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "email"
+      ],
+      "source": "src/app/(app)/alerts/page.tsx",
       "attrs": {}
     },
     {
@@ -2788,6 +2920,31 @@
       "attrs": {}
     },
     {
+      "id": "page:/reviews/alerts",
+      "type": "page",
+      "name": "/reviews/alerts",
+      "purpose": "Monthly alerts report: the intraday stream measured against its pre-registered hypothesis.",
+      "specIds": [
+        "AGT-144",
+        "VAL-118",
+        "VAL-119"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "learning"
+      ],
+      "source": "src/app/(app)/reviews/alerts/page.tsx",
+      "attrs": {}
+    },
+    {
       "id": "page:/reviews/glossary",
       "type": "page",
       "name": "/reviews/glossary",
@@ -2968,6 +3125,29 @@
         "security"
       ],
       "source": "src/app/(app)/settings/about/page.tsx",
+      "attrs": {}
+    },
+    {
+      "id": "page:/settings/alerts",
+      "type": "page",
+      "name": "/settings/alerts",
+      "purpose": "Per-user preferences: appearance, region, time, quiet hours, sign-out.",
+      "specIds": [
+        "ROL-102a",
+        "UX-052"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "security"
+      ],
+      "source": "src/app/(app)/settings/alerts/page.tsx",
       "attrs": {}
     },
     {
@@ -14111,6 +14291,28 @@
       ]
     },
     {
+      "id": "service:app|contains|action:src/app/(app)/alerts/actions.ts#muteAlertAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/alerts/actions.ts#muteAlertAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "email",
+        "security"
+      ]
+    },
+    {
+      "id": "service:app|contains|action:src/app/(app)/alerts/actions.ts#setAlertsForAllAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/alerts/actions.ts#setAlertsForAllAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "email",
+        "security"
+      ]
+    },
+    {
       "id": "service:app|contains|action:src/app/(app)/cards/[id]/actions.ts#addCardNoteAction",
       "from": "service:app",
       "to": "action:src/app/(app)/cards/[id]/actions.ts#addCardNoteAction",
@@ -14436,6 +14638,26 @@
       ]
     },
     {
+      "id": "service:app|contains|action:src/app/(app)/settings/alerts/actions.ts#setPicksSortAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/settings/alerts/actions.ts#setPicksSortAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "service:app|contains|action:src/app/(app)/settings/alerts/actions.ts#updateAlertSettingsAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/settings/alerts/actions.ts#updateAlertSettingsAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "security"
+      ]
+    },
+    {
       "id": "service:app|contains|action:src/app/(app)/settings/themeActions.ts#cycleThemeAction",
       "from": "service:app",
       "to": "action:src/app/(app)/settings/themeActions.ts#cycleThemeAction",
@@ -14576,6 +14798,17 @@
       "contract": "Runs or holds this element.",
       "views": [
         "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|page:/alerts",
+      "from": "service:app",
+      "to": "page:/alerts",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "email"
       ]
     },
     {
@@ -14762,6 +14995,17 @@
       ]
     },
     {
+      "id": "service:app|contains|page:/reviews/alerts",
+      "from": "service:app",
+      "to": "page:/reviews/alerts",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "learning"
+      ]
+    },
+    {
       "id": "service:app|contains|page:/reviews/glossary",
       "from": "service:app",
       "to": "page:/reviews/glossary",
@@ -14835,6 +15079,16 @@
       "id": "service:app|contains|page:/settings/about",
       "from": "service:app",
       "to": "page:/settings/about",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "service:app|contains|page:/settings/alerts",
+      "from": "service:app",
+      "to": "page:/settings/alerts",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
@@ -15677,6 +15931,8 @@
       "kind": "http",
       "contract": "HTTPS request to an external host.",
       "views": [
+        "agents",
+        "data",
         "platform"
       ]
     },
