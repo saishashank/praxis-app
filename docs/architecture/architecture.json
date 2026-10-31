@@ -1952,6 +1952,33 @@
       }
     },
     {
+      "id": "host:query1.finance.yahoo.com",
+      "type": "host",
+      "name": "query1.finance.yahoo.com",
+      "purpose": "External host query1.finance.yahoo.com called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/data/quotes/fetch.ts",
+      "attrs": {
+        "files": [
+          "src/lib/data/quotes/fetch.ts"
+        ]
+      }
+    },
+    {
       "id": "host:turso.tech",
       "type": "host",
       "name": "turso.tech",
@@ -4031,6 +4058,38 @@
       }
     },
     {
+      "id": "route:POST:/api/internal/intraday-scan",
+      "type": "route",
+      "name": "POST /api/internal/intraday-scan",
+      "purpose": "Signed half-hourly scan: finds movers with a news catalyst from delayed quotes and records shadow candidates. Never touches an order, book or ledger.",
+      "specIds": [
+        "AGT-140",
+        "DAT-239",
+        "PLT-077",
+        "SEC-114"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [
+        "signed POST body"
+      ],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns an error status; the caller retries and the run record shows the failure.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "email",
+        "security"
+      ],
+      "source": "src/app/api/internal/intraday-scan/route.ts",
+      "attrs": {
+        "method": "POST",
+        "path": "/api/internal/intraday-scan"
+      }
+    },
+    {
       "id": "route:POST:/api/internal/maintenance",
       "type": "route",
       "name": "POST /api/internal/maintenance",
@@ -4086,6 +4145,40 @@
       "attrs": {
         "method": "POST",
         "path": "/api/internal/morning"
+      }
+    },
+    {
+      "id": "route:POST:/api/internal/pick-alerts",
+      "type": "route",
+      "name": "POST /api/internal/pick-alerts",
+      "purpose": "Signed five-minute tick: arms pick alerts, reads delayed quotes, records hit and clear transitions. Never touches an order, book or ledger.",
+      "specIds": [
+        "ARN-112",
+        "ARN-113",
+        "ARN-114",
+        "ARN-115",
+        "PLT-077",
+        "SEC-114"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [
+        "signed POST body"
+      ],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns an error status; the caller retries and the run record shows the failure.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "email",
+        "security"
+      ],
+      "source": "src/app/api/internal/pick-alerts/route.ts",
+      "attrs": {
+        "method": "POST",
+        "path": "/api/internal/pick-alerts"
       }
     },
     {
@@ -5967,6 +6060,36 @@
       }
     },
     {
+      "id": "slot:intraday-scan",
+      "type": "slot",
+      "name": "intraday-scan",
+      "purpose": "Intraday scan 10:30-15:30 every 30 min (M17, AGT-140); OFF until the Owner lists it and accepts the quote source",
+      "specIds": [
+        "AGT-140",
+        "PLT-077"
+      ],
+      "owner": "worker",
+      "schedule": "10:30-15:30 every 30 min Australia/Sydney local",
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A missed slot is caught up by the Worker clock or reported by the watchdog.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "email",
+        "platform"
+      ],
+      "source": "worker/src/schedule.ts",
+      "attrs": {
+        "dispatchable": false,
+        "enabled": true,
+        "route": "/api/internal/intraday-scan",
+        "runner": "route"
+      }
+    },
+    {
       "id": "slot:kb-archive",
       "type": "slot",
       "name": "kb-archive",
@@ -6193,6 +6316,36 @@
         "dispatchable": false,
         "enabled": true,
         "route": "/api/internal/preopen",
+        "runner": "route"
+      }
+    },
+    {
+      "id": "slot:quote-poll",
+      "type": "slot",
+      "name": "quote-poll",
+      "purpose": "Pick-alert quote poll 10:00-16:00 every 5 min (M17, PLT-077); OFF until the Owner lists it and accepts the quote source",
+      "specIds": [
+        "ARN-112",
+        "PLT-077"
+      ],
+      "owner": "worker",
+      "schedule": "10:00-16:00 every 5 min Australia/Sydney local",
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A missed slot is caught up by the Worker clock or reported by the watchdog.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "email",
+        "platform"
+      ],
+      "source": "worker/src/schedule.ts",
+      "attrs": {
+        "dispatchable": false,
+        "enabled": true,
+        "route": "/api/internal/pick-alerts",
         "runner": "route"
       }
     },
@@ -6581,6 +6734,33 @@
         "permittedUse": "CC BY-SA 4.0 S&P/ASX 200 list (attribution, share-alike; terms checked in M14), about 200 codes; no fetcher (DAT-236)",
         "risk": "low",
         "status": "disabled"
+      }
+    },
+    {
+      "id": "source:yahoo_delayed",
+      "type": "source",
+      "name": "yahoo_delayed",
+      "purpose": "Data source yahoo_delayed with its licence row (permitted use, risk, status).",
+      "specIds": [
+        "DAT-120",
+        "DAT-121"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A disabled or pending source is not fetched; its status is shown on the Data page.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main",
+      "attrs": {
+        "permittedUse": "personal use only (DAT-124); intraday delayed quotes, chart endpoint per code",
+        "risk": "high",
+        "status": "pending"
       }
     },
     {
@@ -8804,52 +8984,6 @@
       }
     },
     {
-      "id": "table:main.email_message",
-      "type": "table",
-      "name": "email_message",
-      "purpose": "Outbound email record email_message (one email key per message).",
-      "specIds": [
-        "EML-004",
-        "EML-020"
-      ],
-      "owner": "database",
-      "schedule": null,
-      "inputs": [],
-      "outputs": [],
-      "configKeys": [],
-      "tables": [],
-      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
-      "runbook": null,
-      "views": [
-        "email"
-      ],
-      "source": "db/migrations/main/0009_sentinel_email.sql",
-      "attrs": {
-        "columns": [
-          "email_key",
-          "env",
-          "kind",
-          "d",
-          "slot",
-          "status",
-          "subject",
-          "size_html",
-          "size_text",
-          "provider_id",
-          "attempts",
-          "recipient_sha",
-          "created_at",
-          "sent_at",
-          "ref_json"
-        ],
-        "database": "main",
-        "indexes": [
-          "idx_email_message_created",
-          "idx_email_message_d"
-        ]
-      }
-    },
-    {
       "id": "table:main.evening_review",
       "type": "table",
       "name": "evening_review",
@@ -9541,6 +9675,63 @@
           "source",
           "as_of",
           "loaded_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.intraday_candidate",
+      "type": "table",
+      "name": "intraday_candidate",
+      "purpose": "Intraday watch record intraday_candidate: shadow candidates or the quote requests made by each run.",
+      "specIds": [
+        "DAT-240",
+        "NFR-042",
+        "SEC-114"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "data"
+      ],
+      "source": "db/migrations/main/0020_intraday.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "session_d",
+          "code",
+          "found_slot",
+          "found_at",
+          "item_source",
+          "item_ann_id",
+          "item_category",
+          "materiality",
+          "polarity",
+          "move_ppm",
+          "sector_adj_ppm",
+          "rel_volume_ppm",
+          "gates_json",
+          "indicative_limit_micro",
+          "indicative_stop_micro",
+          "email_key",
+          "latest_quote_at",
+          "latest_move_ppm",
+          "decision_outcome",
+          "excess_open_1_ppm",
+          "excess_open_3_ppm",
+          "excess_open_5_ppm",
+          "excess_found_1_ppm",
+          "excess_found_3_ppm",
+          "excess_found_5_ppm",
+          "measured_at"
         ],
         "database": "main",
         "indexes": []
@@ -10391,6 +10582,95 @@
       }
     },
     {
+      "id": "table:main.pick_alert",
+      "type": "table",
+      "name": "pick_alert",
+      "purpose": "Pick alert record pick_alert: append-only transitions or the fate of their e-mails.",
+      "specIds": [
+        "ARN-115",
+        "EML-041",
+        "SEC-114"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "data",
+        "email"
+      ],
+      "source": "db/migrations/main/0020_intraday.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "alert_id",
+          "seq",
+          "user_id",
+          "market",
+          "pick_d",
+          "profile",
+          "rank",
+          "code",
+          "session_d",
+          "state",
+          "limit_micro",
+          "stop_micro",
+          "at",
+          "hit_micro",
+          "quote_at",
+          "clear_reason"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_pick_alert_session"
+        ]
+      }
+    },
+    {
+      "id": "table:main.pick_alert_mail",
+      "type": "table",
+      "name": "pick_alert_mail",
+      "purpose": "Pick alert record pick_alert_mail: append-only transitions or the fate of their e-mails.",
+      "specIds": [
+        "ARN-115",
+        "EML-041",
+        "SEC-114"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "data",
+        "email"
+      ],
+      "source": "db/migrations/main/0020_intraday.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "alert_id",
+          "kind",
+          "email_key",
+          "status",
+          "at"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_pick_alert_mail_alert"
+        ]
+      }
+    },
+    {
       "id": "table:main.pick_check",
       "type": "table",
       "name": "pick_check",
@@ -10767,6 +11047,46 @@
           "expected",
           "score",
           "gate_pass"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.quote_run",
+      "type": "table",
+      "name": "quote_run",
+      "purpose": "Intraday watch record quote_run: shadow candidates or the quote requests made by each run.",
+      "specIds": [
+        "DAT-240",
+        "NFR-042",
+        "SEC-114"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "data"
+      ],
+      "source": "db/migrations/main/0020_intraday.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "session_d",
+          "slot_minute",
+          "purpose",
+          "started_at",
+          "requests",
+          "rejected",
+          "paused",
+          "narrowed",
+          "codes"
         ],
         "database": "main",
         "indexes": []
@@ -14963,6 +15283,18 @@
       ]
     },
     {
+      "id": "service:app|contains|route:POST:/api/internal/intraday-scan",
+      "from": "service:app",
+      "to": "route:POST:/api/internal/intraday-scan",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "email",
+        "security"
+      ]
+    },
+    {
       "id": "service:app|contains|route:POST:/api/internal/maintenance",
       "from": "service:app",
       "to": "route:POST:/api/internal/maintenance",
@@ -14981,6 +15313,18 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
+        "security"
+      ]
+    },
+    {
+      "id": "service:app|contains|route:POST:/api/internal/pick-alerts",
+      "from": "service:app",
+      "to": "route:POST:/api/internal/pick-alerts",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "email",
         "security"
       ]
     },
@@ -15323,6 +15667,16 @@
       "contract": "HTTPS request to an external host.",
       "views": [
         "llm",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|http|host:query1.finance.yahoo.com",
+      "from": "service:app",
+      "to": "host:query1.finance.yahoo.com",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
         "platform"
       ]
     },
@@ -15975,16 +16329,6 @@
       ]
     },
     {
-      "id": "service:turso-main|contains|table:main.email_message",
-      "from": "service:turso-main",
-      "to": "table:main.email_message",
-      "kind": "contains",
-      "contract": "Runs or holds this element.",
-      "views": [
-        "email"
-      ]
-    },
-    {
       "id": "service:turso-main|contains|table:main.evening_review",
       "from": "service:turso-main",
       "to": "table:main.evening_review",
@@ -16171,6 +16515,17 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.intraday_candidate",
+      "from": "service:turso-main",
+      "to": "table:main.intraday_candidate",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
         "data"
       ]
     },
@@ -16399,6 +16754,30 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.pick_alert",
+      "from": "service:turso-main",
+      "to": "table:main.pick_alert",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "data",
+        "email"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.pick_alert_mail",
+      "from": "service:turso-main",
+      "to": "table:main.pick_alert_mail",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "data",
+        "email"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.pick_check",
       "from": "service:turso-main",
       "to": "table:main.pick_check",
@@ -16498,6 +16877,17 @@
       "id": "service:turso-main|contains|table:main.quality_score",
       "from": "service:turso-main",
       "to": "table:main.quality_score",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.quote_run",
+      "from": "service:turso-main",
+      "to": "table:main.quote_run",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
@@ -16947,6 +17337,18 @@
       ]
     },
     {
+      "id": "service:worker|contains|slot:intraday-scan",
+      "from": "service:worker",
+      "to": "slot:intraday-scan",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "email",
+        "platform"
+      ]
+    },
+    {
       "id": "service:worker|contains|slot:kb-archive",
       "from": "service:worker",
       "to": "slot:kb-archive",
@@ -17031,6 +17433,18 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:worker|contains|slot:quote-poll",
+      "from": "service:worker",
+      "to": "slot:quote-poll",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "email",
         "platform"
       ]
     },
@@ -17247,6 +17661,17 @@
       ]
     },
     {
+      "id": "slot:intraday-scan|http|route:POST:/api/internal/intraday-scan",
+      "from": "slot:intraday-scan",
+      "to": "route:POST:/api/internal/intraday-scan",
+      "kind": "http",
+      "contract": "Signed POST (HMAC) from the Worker to the app.",
+      "views": [
+        "agents",
+        "email"
+      ]
+    },
+    {
       "id": "slot:kb-archive|dispatch|workflow:kb-archive",
       "from": "slot:kb-archive",
       "to": "workflow:kb-archive",
@@ -17304,6 +17729,17 @@
       "contract": "Signed POST (HMAC) from the Worker to the app.",
       "views": [
         "agents"
+      ]
+    },
+    {
+      "id": "slot:quote-poll|http|route:POST:/api/internal/pick-alerts",
+      "from": "slot:quote-poll",
+      "to": "route:POST:/api/internal/pick-alerts",
+      "kind": "http",
+      "contract": "Signed POST (HMAC) from the Worker to the app.",
+      "views": [
+        "agents",
+        "email"
       ]
     },
     {
