@@ -36,7 +36,24 @@ export const emailKeys = {
   brief: (d: string) => `brief:${d}`,
   test: (d: string, n: number) => `test:${d}:${n}`,
   dbdown: (d: string, slot: string) => `dbdown:${d}:${slot}`,
+  // M17 WP4 (D-388/D-389): one key per pick per session (alertId = the 64-hex sha of `pick_alert`).
+  pickHit: (alertId: string, sessionD: string) => `pickhit:${alertId}:${sessionD}`,
+  pickCleared: (alertId: string, sessionD: string) => `pickclr:${alertId}:${sessionD}`,
+  pickCandidate: (market: string, sessionD: string, code: string) =>
+    `pickcand:${market}:${sessionD}:${code}`,
+  pickBatch: (userId: string, sessionD: string, hhmm: string) =>
+    `pickb:${userId}:${sessionD}:${hhmm}`,
+  pickDigest: (userId: string, sessionD: string) => `pickdg:${userId}:${sessionD}`,
 } as const;
+
+/** The five M17 pick e-mail kinds: pool slot only, counted against `pick_alert_emails_per_day`. */
+export const PICK_MAIL_KINDS = [
+  "pick_hit",
+  "pick_cleared",
+  "pick_candidate",
+  "pick_batch",
+  "pick_digest",
+] as const satisfies readonly EmailKind[];
 
 /** True when `key` is a well-formed key of that kind (a typo can never claim another kind's slot). */
 export function keyMatchesKind(kind: EmailKind, key: string): boolean {
@@ -60,6 +77,12 @@ export function slotCandidates(kind: EmailKind): readonly EmailSlot[] {
     case "p0":
     case "p0_batch":
       return ["p0"];
+    case "pick_hit":
+    case "pick_cleared":
+    case "pick_candidate":
+    case "pick_batch":
+    case "pick_digest":
+      return ["pool"]; // M17: never p0, never a reserved slot
     default:
       return ["pool"];
   }

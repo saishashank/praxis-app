@@ -37,7 +37,7 @@ export async function loadCaps(db: Pick<Client, "execute">): Promise<Caps> {
 }
 
 /** Rows that use up a slot (design 2.3). `m` is the email_message alias. */
-const COUNTED = `(m.status IN ('claimed','sent') OR (m.status = 'failed' AND EXISTS
+export const COUNTED = `(m.status IN ('claimed','sent') OR (m.status = 'failed' AND EXISTS
   (SELECT 1 FROM email_attempt a WHERE a.email_key = m.email_key AND a.outcome = 'accepted')))`;
 
 export type ClaimOutcome =

@@ -102,6 +102,16 @@ export interface NarrativeFacts {
   s6: string[];
 }
 
+/** M17 EML-042: pick-alert lines of section 8, the optional candidate list, section 9's held/suppressed mail. */
+export interface PickReviewFacts {
+  /** "Buy-price alerts today: ..." and "Intraday candidates today: ..." */
+  lines: string[];
+  /** Null = the candidate list is switched off (`intraday_candidate_emails`) or empty. */
+  candidates: { code: string; trigger: string; outcome: string }[] | null;
+  /** Pick mail the cap suppressed or quiet hours held (EML-041), one line each. */
+  held: string[];
+}
+
 export interface ReviewFacts {
   variant: ReviewVariant;
   env: EnvName;
@@ -134,6 +144,7 @@ export interface ReviewFacts {
   health: HealthLine[];
   suppressedEmails: number;
   nextTradingNote?: string;
+  pickAlerts?: PickReviewFacts;
 }
 
 const SECTION_NAMES = [
@@ -483,6 +494,20 @@ function section8(f: ReviewFacts): Block[] {
       items: f.breakerHits.map((b) => `${b.execution}: ${b.breaker} — ${b.effect}`),
     });
   }
+  const pa = f.pickAlerts;
+  if (pa && pa.lines.length) out.push({ t: "ul", items: pa.lines });
+  if (pa?.candidates && pa.candidates.length) {
+    out.push({
+      t: "p",
+      text: "Intraday candidates (delayed prices, unvalidated stream)",
+      bold: true,
+    });
+    out.push({
+      t: "table",
+      head: ["Code", "Trigger", "18:10 outcome"],
+      rows: pa.candidates.map((c) => [c.code, truncate(c.trigger, 100), c.outcome]),
+    });
+  }
   return out;
 }
 
@@ -497,6 +522,10 @@ function section9(f: ReviewFacts): Block[] {
       h.detail,
     ]),
   });
+  if (f.pickAlerts && f.pickAlerts.held.length) {
+    out.push({ t: "p", text: "Pick alerts not e-mailed today", bold: true });
+    out.push({ t: "ul", items: f.pickAlerts.held });
+  }
   if (f.suppressedEmails > 0) {
     out.push({
       t: "p",

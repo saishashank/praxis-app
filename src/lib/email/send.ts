@@ -36,6 +36,21 @@ import { renderIncident, renderTest, renderTokensDue, renderUnread7 } from "./te
 import type { IncidentInput, TokensDueInput, UnreadInput } from "./templates/notices";
 import { renderBrief, renderReminder } from "./templates/reminder";
 import type { BriefInput, ReminderInput } from "./templates/reminder";
+import {
+  renderPickBatch,
+  renderPickCandidate,
+  renderPickCleared,
+  renderPickDigest,
+  renderPickHit,
+} from "./templates/pickAlerts";
+import type {
+  PickBatchInput,
+  PickCandidateFacts,
+  PickClearedFacts,
+  PickDigestInput,
+  PickHitFacts,
+  PickInput,
+} from "./templates/pickAlerts";
 import { renderReview } from "./templates/review";
 import type { ReviewFacts } from "./templates/review";
 
@@ -56,12 +71,12 @@ export interface FactsByKind {
   reminder: Facts<ReminderInput>;
   brief: Facts<BriefInput>;
   test: { requestedAt: string };
-  /** M17 placeholders: WP4 types these and adds the renderers (until then `render` throws). */
-  pick_hit: unknown;
-  pick_cleared: unknown;
-  pick_candidate: unknown;
-  pick_batch: unknown;
-  pick_digest: unknown;
+  /** M17 pick-alert mail (WP4); numbers are pre-formatted by pickMail.ts. */
+  pick_hit: Facts<PickInput<PickHitFacts>>;
+  pick_cleared: Facts<PickInput<PickClearedFacts>>;
+  pick_candidate: Facts<PickInput<PickCandidateFacts>>;
+  pick_batch: Facts<PickBatchInput>;
+  pick_digest: Facts<PickDigestInput>;
 }
 
 export interface SendContext {
@@ -163,6 +178,16 @@ function render<K extends EmailKind>(
       return renderBrief({ ...(f as FactsByKind["brief"]), ...base });
     case "test":
       return renderTest({ ...(f as FactsByKind["test"]), ...base });
+    case "pick_hit":
+      return renderPickHit({ ...(f as FactsByKind["pick_hit"]), ...base });
+    case "pick_cleared":
+      return renderPickCleared({ ...(f as FactsByKind["pick_cleared"]), ...base });
+    case "pick_candidate":
+      return renderPickCandidate({ ...(f as FactsByKind["pick_candidate"]), ...base });
+    case "pick_batch":
+      return renderPickBatch({ ...(f as FactsByKind["pick_batch"]), ...base });
+    case "pick_digest":
+      return renderPickDigest({ ...(f as FactsByKind["pick_digest"]), ...base });
     default:
       throw new Error("unknown email kind");
   }

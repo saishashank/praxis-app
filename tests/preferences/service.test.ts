@@ -33,6 +33,10 @@ describe("defaults and merge", () => {
       alert_p2: "digest",
       motion: "on",
       times_in: "melbourne",
+      pick_alerts: "off",
+      cleared_pick_emails: "on",
+      intraday_candidate_emails: "on",
+      picks_sort: "chance",
     });
     expect(DEFAULT_PREFERENCES.theme).toBe("dark");
   });
@@ -195,5 +199,39 @@ describe("updatePreferences", () => {
     expect(
       await updatePreferences(broken, ENV, META, { id: uid }, { theme: "light" }, NOW),
     ).toEqual({ ok: false, error: "unavailable" });
+  });
+});
+
+// M17 WP4 (D-444): pick alert fields.
+describe("pick alert preferences (D-444)", () => {
+  const raw = async (id: number) => JSON.parse(String((await stored(id))[0]?.prefs_json ?? "{}"));
+
+  it("round-trips pick_alerts, cleared_pick_emails, intraday_candidate_emails and picks_sort", async () => {
+    const patch = {
+      pick_alerts: "on",
+      cleared_pick_emails: "off",
+      intraday_candidate_emails: "off",
+      picks_sort: "expected_gain",
+    };
+    expect(await upd(patch)).toEqual({ ok: true, changed: Object.keys(patch) });
+    expect(await getPreferences(db, uid)).toMatchObject(patch);
+  });
+
+  it("rejects values outside the allowed sets", async () => {
+    expect(await upd({ picks_sort: "gain" })).toEqual({ ok: false, error: "invalid" });
+    expect(await upd({ pick_alerts: "yes" })).toEqual({ ok: false, error: "invalid" });
+  });
+
+  it("stores a pick field only once chosen, so an unrelated save never turns alerts off or on", async () => {
+    await upd({ theme: "light" });
+    expect(await raw(uid)).not.toHaveProperty("pick_alerts");
+    expect(await raw(uid)).not.toHaveProperty("picks_sort");
+  });
+
+  it("choosing the role-blind default (off) is still stored, so an Owner can switch alerts off", async () => {
+    expect(await upd({ pick_alerts: "off" })).toEqual({ ok: true, changed: ["pick_alerts"] });
+    expect((await raw(uid)).pick_alerts).toBe("off");
+    await upd({ theme: "dim" });
+    expect((await raw(uid)).pick_alerts).toBe("off");
   });
 });

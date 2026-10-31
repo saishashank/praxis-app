@@ -83,12 +83,11 @@ const FACTS: { [K in EmailKind]: FactsByKind[K] } = {
   reminder: fx.REMINDER,
   brief: fx.BRIEF,
   test: { requestedAt: "Mon 19 Oct 2026 20:00 AEDT" },
-  // M17 (WP2): placeholders; WP4 adds the renderers and moves these kinds into SENDABLE_KINDS.
-  pick_hit: {},
-  pick_cleared: {},
-  pick_candidate: {},
-  pick_batch: {},
-  pick_digest: {},
+  pick_hit: { facts: fx.PICK_HIT },
+  pick_cleared: { facts: fx.PICK_CLEARED_BELOW },
+  pick_candidate: { facts: fx.PICK_CANDIDATE },
+  pick_batch: { window: "10:45 Melbourne", lines: fx.PICK_LINES },
+  pick_digest: { quietWindow: "22:00-07:00", lines: fx.PICK_LINES },
 };
 const KEY: { [K in EmailKind]: string } = {
   review: emailKeys.review(D),
@@ -109,7 +108,7 @@ const KEY: { [K in EmailKind]: string } = {
   pick_digest: `pickdg:u1:${D}`,
 };
 /** Kinds that have a renderer today (the M17 pick kinds get theirs in WP4). */
-const SENDABLE_KINDS = EMAIL_KINDS.filter((k) => !k.startsWith("pick_"));
+const SENDABLE_KINDS = EMAIL_KINDS;
 const send = <K extends EmailKind>(kind: K, key = KEY[kind], c = ctx(), o = {}) =>
   sendEmail(c, kind, key, FACTS[kind], o);
 

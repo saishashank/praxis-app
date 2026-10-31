@@ -4,6 +4,7 @@ import { TursoNonceStore } from "@/lib/security/replay";
 import { authDb, mainDb } from "@/lib/db/client";
 import { sydneyDate } from "@/lib/data/pipeline/rules.mjs";
 import { createPickAlertsHandler, defaultRecipients } from "@/lib/alerts/pick/poll";
+import { createPickMailer } from "@/lib/email/pickMail";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,5 +21,7 @@ export async function POST(req: Request): Promise<Response> {
     fetch: (url, init) => fetch(url, init),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     recipients: (main) => defaultRecipients(main, authDb()),
+    // WP4: mail is the last step of the tick (state first); the digest runs at step 3.
+    mailer: createPickMailer({ db: mainDb(), env, auth: authDb() }),
   })(req);
 }
