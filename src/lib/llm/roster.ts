@@ -39,7 +39,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "google",
     modelId: "gemini-2.5-pro",
-    roles: ["R3"],
+    roles: ["R3", "R6"],
     limits: NO_LIMITS,
     trainsOnPrompts: true,
     strictSchema: true,
@@ -47,7 +47,7 @@ export const ROSTER: readonly RosterEntry[] = [
     checkedOn: CHECKED,
     status: "unverified",
     sourceUrl: GOOGLE,
-    note: "R3 candidate; free daily quota is shown only in AI Studio (VERIFY there). Facts only (LLM-036).",
+    note: "R3 and R6 candidate; free daily quota is shown only in AI Studio (VERIFY there). Facts only (LLM-036).",
   },
   {
     provider: "google",
@@ -91,7 +91,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "groq",
     modelId: "openai/gpt-oss-120b",
-    roles: ["R2", "R3"],
+    roles: ["R2", "R3", "R6"],
     limits: { rpm: 30, rpd: 1000, tpm: 8000 }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: false,
     strictSchema: true,
@@ -104,7 +104,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "groq",
     modelId: "openai/gpt-oss-20b",
-    roles: ["R1", "R2"],
+    roles: ["R1", "R2", "R6"],
     limits: { rpm: 30, rpd: 1000, tpm: 8000 }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: false,
     strictSchema: true,
@@ -117,7 +117,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "groq",
     modelId: "qwen/qwen3.8-27b",
-    roles: ["R2"],
+    roles: ["R2", "R6"],
     limits: { rpm: 30, rpd: 1000, tpm: 8000 }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: false,
     strictSchema: true, // Groq structured-outputs page lists it under strict mode (checked M14)
