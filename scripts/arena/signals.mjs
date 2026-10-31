@@ -31,8 +31,16 @@ export async function run(argv, env, deps = {}) {
   if (code === 2) return code;
   const { picksMain } = await loadEngine(PICKS_ENTRY);
   const afterPicks = Math.max(code, await picksMain(argv, env, deps));
-  const { steelmanMain } = await loadEngine(STEELMAN_ENTRY);
-  return Math.max(afterPicks, await steelmanMain(argv, env, deps));
+  // D-504: the steelman is an opinion only. A bundle that fails to build or a stage that throws past
+  // its own guard is logged in one line and changes neither the exit code nor anything above.
+  try {
+    const { steelmanMain } = await loadEngine(STEELMAN_ENTRY);
+    await steelmanMain(argv, env, deps);
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "unknown";
+    (deps.out ?? console.log)(`arena-steelman: degraded (stage not run: ${name})`);
+  }
+  return afterPicks;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

@@ -88,7 +88,10 @@ export async function settleDue(db: Exec, market: string, d: string): Promise<nu
                WHERE market = ? AND d = ? AND code = ? ORDER BY subject_kind`,
         args: [market, o.d, o.code],
       });
-      for (const p of packs.rows) {
+      // D-508: an order subject decides when one exists for the code and night (the opinion was
+      // written for the order first, AGT-133); a pick decides only when no order was taken.
+      const orders = packs.rows.filter((p) => p.subject_kind === "order");
+      for (const p of orders.length > 0 ? orders : packs.rows) {
         const out =
           p.subject_kind === "order"
             ? p.card_id === null

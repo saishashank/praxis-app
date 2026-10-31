@@ -334,6 +334,39 @@ describe("the reservation keeps the later stages' share (D-481, D-482)", () => {
     expect(allowance(lp, "R5", MARKET, true, u).allowed).toBeGreaterThanOrEqual(r5);
   });
 
+  it("the nightly cap keeps the R5 share too (D-505)", async () => {
+    // Nightly cap smaller than the daily total: the Evening Review is a nightly call as well.
+    const np = { ...params.llm, nightlyTokensPerMarket: 2 * r5 + 1000 };
+    const store = new MemoryStore();
+    await spend(store, r5); // nightly spend by an earlier stage: 2 * r5 + 1000 - r5 - r5 = 1000 left
+    const base = { params: np, store, market: MARKET, d: D };
+    expect(await hasRoom(base, 1000)).toBe(true);
+    expect(await hasRoom(base, 1001)).toBe(false);
+  });
+
+  it("an R5 share already spent tonight is not reserved for twice (D-505)", async () => {
+    const store = new MemoryStore();
+    await spend(store, total - r5 - 1000);
+    await store.recordCall({
+      id: "r5-done",
+      role: "R5",
+      provider: "p",
+      modelId: "m",
+      fallbackDepth: "0",
+      tokensIn: r5,
+      tokensOut: 0,
+      cached: 0,
+      outcome: "ok",
+      injectionFiltered: 0,
+      market: MARKET,
+      d: D,
+    });
+    // total - r5 - 1000 - r5 spent; the R5 reserve is now 0, so 1000 is left
+    const base = { params: lp, store, market: MARKET, d: D };
+    expect(await hasRoom(base, 1000)).toBe(true);
+    expect(await hasRoom(base, 1001)).toBe(false);
+  });
+
   it("with only the R5 share left the subject is skipped as budget", async () => {
     const db = await freshDb("main");
     const store = new MemoryStore();

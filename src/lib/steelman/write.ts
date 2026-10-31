@@ -7,7 +7,7 @@
 // `opinion_track`.
 import type { LlmParams } from "@/lib/agents/params";
 import { allowance, scaledCap, type Role } from "@/lib/llm/budget";
-import { reserveAfter } from "@/lib/llm/dropOrder";
+import { reserveAfterLeft } from "@/lib/llm/dropOrder";
 import type { LlmProvider } from "@/lib/llm/providers";
 import { requestReservation, type LlmRouter, type RouteRequest } from "@/lib/llm/router";
 import type { LlmStore } from "@/lib/llm/store";
@@ -111,9 +111,10 @@ const triedAndFailed = (attempts: readonly { outcome: string }[]): boolean =>
   attempts.some((a) => a.outcome === "invalid-output" || a.outcome === "grounding-rejected");
 
 /**
- * D-481, D-482: one reservation covers author and critic before the author call. The stage may spend
- * only what is left of the role, total and nightly caps after the caps of the stages that come after it
- * (the Evening Review keeps its share). False = not enough room: the subject is skipped (`budget`).
+ * D-481, D-482, D-505: one reservation covers author and critic before the author call. The stage may
+ * spend only what is left of the role, total and nightly caps after what the stages that come after it
+ * still have to spend (the Evening Review keeps its share, under the daily total and under the nightly
+ * cap alike). False = not enough room: the subject is skipped (`budget`).
  */
 export async function hasRoom(
   deps: Pick<WriteDeps, "params" | "store" | "market" | "d">,
@@ -123,8 +124,11 @@ export async function hasRoom(
   const allow = allowance(deps.params, ROLE, deps.market, true, usage);
   const share = deps.params.marketShare[deps.market];
   const totalLeft = scaledCap(deps.params.dailyTotal, share) - usage.totalDay;
-  const later = scaledCap(reserveAfter("steelman", deps.params), share);
-  return reservation <= Math.min(allow.allowed, totalLeft - later);
+  const nightLeft = deps.params.nightlyTokensPerMarket - usage.marketNight;
+  const later = await reserveAfterLeft("steelman", deps.params, deps.market, (role) =>
+    deps.store.usage(role, deps.market, deps.d),
+  );
+  return reservation <= Math.min(allow.allowed, totalLeft - later, nightLeft - later);
 }
 
 function authorRequest(
@@ -354,13 +358,18 @@ async function writeInner(
 
   const shown = stored.filter((s) => s.state === "shown");
   if (shown.length === 0) return none("rejected", claims);
-  await recordOpinion(deps.db, {
-    market: deps.market,
-    kind: "steelman",
-    code: subject.code,
-    d: deps.d,
-    value: opinionValue(shown),
-  });
+  try {
+    await recordOpinion(deps.db, {
+      market: deps.market,
+      kind: "steelman",
+      code: subject.code,
+      d: deps.d,
+      value: opinionValue(shown),
+    });
+  } catch {
+    // D-507: the points are on file and shown; the opinion row (CTX-041, a side track) is recorded
+    // again by the night stage when it resumes, never at the cost of counting this subject as failed.
+  }
   return {
     state: "written",
     shown: shown.length,

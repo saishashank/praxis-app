@@ -9,7 +9,8 @@ import type { CalendarRow } from "@/lib/data/calendar";
 import type { LlmProvider } from "@/lib/llm/providers";
 import type { LlmRouter } from "@/lib/llm/router";
 import type { LlmStore } from "@/lib/llm/store";
-import { settleDue } from "./opinion";
+import { recordOpinion } from "@/lib/llm/textLabels";
+import { opinionValue, settleDue } from "./opinion";
 import { buildPack, loadPackInput, type EvidencePack, type PackItem } from "./pack";
 import {
   insertNight,
@@ -149,9 +150,17 @@ async function subjectPack(
     decisionCutoff: o.keys.decisionCutoff,
   });
   // The subject line comes first so two subjects with the same evidence still get different packs
-  // (pack_id is the hash of the items, and the card thesis is a fixed per-family line).
-  const head = { kind: "card" as const, text: `Subject ${subject.kind} ${subject.code}` };
+  // (pack_id is the hash of the items, and the card thesis is a fixed per-family line). It names the
+  // subject itself, not only the code: two profiles may pick one code on the same night (D-506).
+  const head = { kind: "card" as const, text: subjectLine(subject) };
   return { pack: buildPack({ ...input, items: [head, ...input.items] }), points: [] };
+}
+
+/** The first pack item: "Subject order ZZA, card <id>" or "Subject pick ZZA, profile <p>, rank <n>". */
+export function subjectLine(subject: Subject): string {
+  if (subject.kind === "pick" && subject.pickKey)
+    return `Subject pick ${subject.code}, profile ${subject.pickKey.profile}, rank ${subject.pickKey.rank}`;
+  return `Subject ${subject.kind} ${subject.code}, card ${subject.cardId ?? subject.id}`;
 }
 
 export async function steelmanNight(db: Exec, o: NightOptions): Promise<NightResult> {
@@ -196,6 +205,21 @@ export async function steelmanNight(db: Exec, o: NightOptions): Promise<NightRes
       const { pack, points } = await subjectPack(db, o, subject);
       packId = pack.packId;
       const prior = outcomeFromPoints(points);
+      if (prior !== null) {
+        // A run that stopped between the points and the opinion row (D-507): the insert is idempotent
+        // (same value, same id), so a subject written tonight gets its opinion at most once.
+        try {
+          await recordOpinion(db, {
+            market: o.market,
+            kind: "steelman",
+            code: subject.code,
+            d: o.d,
+            value: opinionValue(points.filter((p) => p.state === "shown")),
+          });
+        } catch {
+          // the points stand; the opinion is tried again on the next resume
+        }
+      }
       const failedBefore: WriteOutcome = {
         state: "not_written",
         reason: "rejected",

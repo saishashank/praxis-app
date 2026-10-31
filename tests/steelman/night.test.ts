@@ -106,6 +106,60 @@ describe("steelmanNight with a model (mock providers)", () => {
     expect((await db.execute("SELECT 1 FROM steelman_point")).rows).toHaveLength(12);
   });
 
+  it("two profiles picking one code with the same levels get two packs, both written (D-506)", async () => {
+    const db = await seedNight();
+    await db.execute({
+      sql: `INSERT INTO pick (market, d, profile, rank, code, family, tier, rule_version, signal_id, label,
+              reference_micro, buy_max_micro, valid_until_d, stop_micro, aim_micro, n_similar, bad_ppm,
+              typical_ppm, good_ppm, time_frame_sessions, size_micro, risk_micro, factors_json, based_on_json,
+              pick_sha, created_at)
+            SELECT market, d, 'bold', rank, code, family, tier, rule_version, signal_id, label,
+              reference_micro, buy_max_micro, valid_until_d, stop_micro, aim_micro, n_similar, bad_ppm,
+              typical_ppm, good_ppm, time_frame_sessions, size_micro, risk_micro, factors_json, based_on_json,
+              pick_sha, created_at FROM pick WHERE profile = 'balanced'`,
+    });
+    const r = await steelmanNight(db, opts(db));
+    expect(r).toMatchObject({ requested: 4, written: 4 });
+    expect(r.notWritten).toEqual({ limit: 0, budget: 0, noModel: 0, critic: 0 });
+    const packs = (await listPacks(db, MARKET, D)).filter((p) => p.subjectKind === "pick");
+    expect(packs.map((p) => p.subjectId).sort()).toEqual([
+      `${MARKET}|${D}|balanced|1`,
+      `${MARKET}|${D}|bold|1`,
+    ]);
+    expect(new Set(packs.map((p) => p.packId)).size).toBe(2);
+  });
+
+  it("resume after a crash between the points and the opinion row records the opinion (D-507)", async () => {
+    const db = await seedNight();
+    const crashing = new Proxy(db, {
+      get(t, k, r) {
+        if (k === "execute")
+          return (q: { sql?: string } | string) =>
+            typeof q === "object" &&
+            (q.sql?.includes("INSERT INTO opinion_track") ||
+              q.sql?.includes("INSERT INTO steelman_night"))
+              ? Promise.reject(new Error("crash"))
+              : t.execute(q as never);
+        const v = Reflect.get(t, k, r);
+        return typeof v === "function" ? v.bind(t) : v;
+      },
+    });
+    // the first run stores every point; the opinion rows and the night row fail. The subjects still
+    // count as written: their points are shown (the opinion is a side track).
+    const first = await steelmanNight(crashing, opts(db));
+    expect(first).toMatchObject({ status: "failed", written: 3 });
+    expect((await db.execute("SELECT 1 FROM steelman_point")).rows).toHaveLength(12);
+    expect((await db.execute("SELECT 1 FROM opinion_track")).rows).toHaveLength(0);
+    const author = scripted("alpha", genericAuthor());
+    const r = await steelmanNight(
+      db,
+      opts(db, { llm: llmOf([author], [scripted("beta", criticAnswer())]) }),
+    );
+    expect(r).toMatchObject({ status: "done", written: 3 });
+    expect(author.calls).toHaveLength(0);
+    expect((await db.execute("SELECT 1 FROM opinion_track")).rows).toHaveLength(3);
+  });
+
   it("writes at most steelman_daily_cards, best rank first, and counts the rest as limit", async () => {
     const db = await seedNight();
     const r = await steelmanNight(db, opts(db, { keys: { ...KEYS, dailyCards: 1 } }));
