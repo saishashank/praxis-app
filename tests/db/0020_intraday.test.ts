@@ -201,7 +201,10 @@ describe("email_message rebuild", () => {
   it("D-443 parity: the rebuilt table differs from 0019 only in the kind list; indexes, triggers and every row value are kept", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
     const ms = await loadMigrations(MIGRATIONS("main"));
-    await migrateUp(db, ms.filter((m) => m.version <= 19));
+    await migrateUp(
+      db,
+      ms.filter((m) => m.version <= 19),
+    );
     // A fully populated row at 0019, plus a terminal one with an attempt, and a FK-style check on.
     await db.execute("PRAGMA foreign_keys = ON");
     await db.execute(
@@ -229,7 +232,12 @@ describe("email_message rebuild", () => {
     const beforeRows = await rowsOf();
     expect(beforeRows).toHaveLength(2);
 
-    expect(await migrateUp(db, ms)).toEqual({ applied: 1, version: 20 });
+    expect(
+      await migrateUp(
+        db,
+        ms.filter((m) => m.version <= 20),
+      ),
+    ).toEqual({ applied: 1, version: 20 });
     const after = await objects("email_message");
     const afterAttempt = await objects("email_attempt");
     // Same object names, in the same shape; the only textual change is the widened kind CHECK.
@@ -245,7 +253,9 @@ describe("email_message rebuild", () => {
     expect(await rowsOf()).toEqual(beforeRows);
     expect((await db.execute("PRAGMA foreign_key_check")).rows).toEqual([]);
     const cols = await db.execute("PRAGMA table_info(email_message)");
-    expect(cols.rows.map((c) => `${c.name}:${c.type}:${c.notnull}:${c.dflt_value ?? ""}:${c.pk}`)).toEqual([
+    expect(
+      cols.rows.map((c) => `${c.name}:${c.type}:${c.notnull}:${c.dflt_value ?? ""}:${c.pk}`),
+    ).toEqual([
       "email_key:TEXT:1::1",
       "env:TEXT:1::0",
       "kind:TEXT:1::0",
