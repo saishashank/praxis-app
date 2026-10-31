@@ -4,6 +4,7 @@
 // Stages that do not exist in code yet (experts, Committee, overviews, news summaries) are listed
 // with no cap. Every figure comes from LlmParams; nothing here is a literal rule value.
 import type { LlmParams } from "@/lib/agents/params";
+import { scaledCap, type BudgetUsage, type Role } from "./budget";
 
 export const DROP_ORDER = [
   "expert_ingest",
@@ -35,5 +36,41 @@ export function reserveAfter(stage: DropStage, params: LlmParams): number {
   const i = DROP_ORDER.indexOf(stage);
   let sum = 0;
   for (const s of DROP_ORDER.slice(i + 1)) sum += stageCap(s, params);
+  return sum;
+}
+
+/** The role whose daily cap a stage spends from, when it has one. */
+function stageRole(stage: DropStage): Role | null {
+  switch (stage) {
+    case "evening_review":
+      return "R5";
+    case "steelman":
+      return "R6";
+    default:
+      return null;
+  }
+}
+
+/**
+ * D-505: what the stages after `stage` still have to spend tonight in one market: the sum over those
+ * stages of their market-scaled cap minus what their role has already used today (never below zero).
+ * A later stage that has already run (the Evening Review text is written in batch 3, before the
+ * steelman) is not reserved for twice.
+ */
+export async function reserveAfterLeft(
+  stage: DropStage,
+  params: LlmParams,
+  market: string,
+  usage: (role: Role) => Promise<BudgetUsage>,
+): Promise<number> {
+  const i = DROP_ORDER.indexOf(stage);
+  const share = params.marketShare[market];
+  let sum = 0;
+  for (const s of DROP_ORDER.slice(i + 1)) {
+    const role = stageRole(s);
+    if (role === null) continue;
+    const cap = scaledCap(stageCap(s, params), share);
+    sum += Math.max(0, cap - (await usage(role)).roleDay);
+  }
   return sum;
 }
