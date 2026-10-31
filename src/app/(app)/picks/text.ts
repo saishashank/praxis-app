@@ -123,18 +123,8 @@ export function stateText(
 
 export const trackStateText = (r: TrackRow): string => stateText(r);
 
-/** UXN-311: family code -> badge code (token stem) and the plain-words badge label. */
-export const FAMILY_BADGES: Record<
-  string,
-  { code: "br" | "vc" | "nd" | "bo" | "sc" | "co"; label: string }
-> = {
-  F1: { code: "br", label: "Breakout" },
-  F2: { code: "vc", label: "Value + catalyst" },
-  F3: { code: "nd", label: "News drift" },
-  F4: { code: "bo", label: "Bounce" },
-  F5: { code: "sc", label: "Small-cap discovery" },
-  F6: { code: "co", label: "Consensus" },
-};
+/** UXN-311: the one badge table lives in src/lib/ui/familyBadge.ts (D-393). */
+export { FAMILY_BADGE as FAMILY_BADGES } from "@/lib/ui/familyBadge";
 
 /** UXR-007: one sentence on what will appear and when. */
 export const EMPTY_PICKS_SENTENCE =
