@@ -15,6 +15,7 @@ const TEXT: Record<string, string> = {
   illegal_edge: "That claim has already moved on, so this step is not allowed now.",
   not_confirmed: "Only a confirmed group can be used here.",
   final: "That group was merged away and cannot change.",
+  masked: "Editing is switched off while text is hidden from you.",
   unavailable: "Something went wrong. Please try again.",
 };
 const FIELD = "min-h-6 w-full rounded-md border border-border bg-bg p-2 text-text";

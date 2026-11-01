@@ -35,15 +35,19 @@ test("detail: Owner and Editor read the red flag and its source; a Viewer sees a
   page,
   context,
 }) => {
-  for (const role of ["owner", "editor"] as const) {
-    await signIn(context, role);
-    await page.goto(DETAIL);
-    await expect(page.getByText(FLAG_TEXT)).toBeVisible();
-    await expect(page.locator('a[href="https://zz-e2e.example.test/caveat"]')).toHaveAttribute(
-      "rel",
-      /nofollow/,
-    );
-  }
+  // the Owner sees the source as a link; the Editor (masked, ROL-107) reads the text but no outside link (D-631)
+  await signIn(context, "owner");
+  await page.goto(DETAIL);
+  await expect(page.getByText(FLAG_TEXT)).toBeVisible();
+  await expect(page.locator('a[href="https://zz-e2e.example.test/caveat"]')).toHaveAttribute(
+    "rel",
+    /noopener noreferrer/,
+  );
+  await signIn(context, "editor");
+  await page.goto(DETAIL);
+  await expect(page.getByText(FLAG_TEXT)).toBeVisible();
+  await expect(page.locator('a[href="https://zz-e2e.example.test/caveat"]')).toHaveCount(0);
+  await expect(page.locator("[data-red-flag-card] [data-link-hidden]")).toHaveCount(1);
   await signIn(context, "viewer");
   await page.goto(DETAIL);
   await expect(page.getByText(FLAG_TEXT)).toHaveCount(0);

@@ -6,7 +6,7 @@
 import type { Client } from "@libsql/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { insertClaim } from "@/lib/experts/store";
+import { currentClaimStatus, insertClaim } from "@/lib/experts/store";
 import { auditRows, ENV } from "../auth/helpers";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
 import { addRun, importSeed, usersIn, zzWorld, type World } from "../experts/uiWorld";
@@ -38,6 +38,7 @@ vi.mock("next/navigation", () => ({
 
 import ExpertsPage from "@/app/(app)/reviews/experts/page";
 import ExpertPage from "@/app/(app)/reviews/experts/[id]/page";
+import { editClaimAction } from "@/app/(app)/reviews/experts/queue/actions";
 import QueuePage from "@/app/(app)/reviews/experts/queue/page";
 import TechniquesPage from "@/app/(app)/reviews/techniques/page";
 import {
@@ -182,16 +183,41 @@ describe("expert detail and red flags (D-521)", () => {
     w = await zzWorld();
   });
 
-  it("Owner and Editor see the red-flag text and its source; the link goes out with nofollow", async () => {
-    for (const who of ["owner", "editor"] as const) {
-      as(w, who);
-      const html = renderToStaticMarkup(
-        await ExpertPage({ params: Promise.resolve({ id: "X-ZZ2" }) }),
-      );
-      expect(text(html)).toContain("ZZ synthetic caveat");
-      expect(html).toContain("https://zz2.example.test/caveat");
-      expect(html).toMatch(/rel="noopener nofollow noreferrer"/);
-    }
+  it("the Owner sees the red-flag text and its source as a link out (noopener noreferrer, SEC-016)", async () => {
+    as(w, "owner");
+    const html = renderToStaticMarkup(
+      await ExpertPage({ params: Promise.resolve({ id: "X-ZZ2" }) }),
+    );
+    expect(text(html)).toContain("ZZ synthetic caveat");
+    expect(html).toContain('href="https://zz2.example.test/caveat"');
+    expect(html).toMatch(/rel="noopener noreferrer"/);
+    expect(html).not.toMatch(/nofollow/);
+  });
+
+  it("a masked Editor reads the red-flag text but no outside link; an unregistered host is text, not a link (D-631)", async () => {
+    as(w, "editor"); // no unmask grant: masked (ROL-107)
+    const html = renderToStaticMarkup(
+      await ExpertPage({ params: Promise.resolve({ id: "X-ZZ2" }) }),
+    );
+    expect(text(html)).toContain("ZZ synthetic caveat");
+    expect(html).not.toContain("zz2.example.test/caveat");
+    expect(html).toContain('data-link-hidden=""');
+    // the expert's own home link is profile and stays
+    expect(html).toContain('href="https://zz2.example.test/home"');
+    // the Owner sees a flag on an unregistered host as text with no href (own world: the shared one keeps 1 flag)
+    const w2 = await zzWorld();
+    await exec(
+      w2.main,
+      `INSERT INTO expert_red_flag (id, expert_id, text, source_url, noted_d, created_at)
+       VALUES ('X-ZZ2:rf-unreg', 'X-ZZ2', 'ZZ second caveat.', 'https://unregistered.invalid/warn', '2026-10-02', '2026-10-02T00:00:00.000Z')`,
+    );
+    as(w2, "owner");
+    const own = renderToStaticMarkup(
+      await ExpertPage({ params: Promise.resolve({ id: "X-ZZ2" }) }),
+    );
+    expect(text(own)).toContain("https://unregistered.invalid/warn");
+    expect(own).not.toContain('href="https://unregistered.invalid/warn"');
+    expect(own).toContain('data-unlinked=""');
   });
 
   it("a Viewer sees an icon and a count and never the text or the source (page and loader)", async () => {
@@ -334,6 +360,22 @@ describe("masking (ROL-107)", () => {
       now: NOW,
     });
     expect(viewer.rows.map((r) => r.name)).toContain("ZZ Expert 1");
+  });
+
+  it("an edit by a masked Editor is refused by the server action too, with no audit row and no write (D-633)", async () => {
+    const w = await zzWorld();
+    as(w, "editor");
+    const fd = new FormData();
+    fd.set("claim", "C-ZZ-001");
+    fd.set("statement", "ZZ edited by a masked editor");
+    expect(await editClaimAction(fd)).toEqual({ error: "masked" });
+    expect(await currentClaimStatus(w.main, "C-ZZ-001")).toBe("extracted");
+    expect((await auditRows(w.auth)).filter((a) => String(a.action).startsWith("expert_"))).toEqual(
+      [],
+    );
+    as(w, "owner");
+    expect(await editClaimAction(fd)).toEqual({ ok: true });
+    expect(await currentClaimStatus(w.main, "C-ZZ-001")).toBe("owner_checked");
   });
 
   it("editing is switched off in the queue while text is masked", async () => {

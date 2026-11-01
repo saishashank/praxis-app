@@ -26,7 +26,7 @@ import {
   mergeClusterRows,
   type Exec,
 } from "./store";
-import type { ClaimStatus, ClusterRole } from "./types";
+import type { ClaimStatus, ClusterRole, ClusterState } from "./types";
 
 export type ReviewCtx = {
   mainDb: Client;
@@ -101,16 +101,28 @@ async function audited<T>(c: ReviewCtx, step: Step<T>): Promise<ReviewResult<T>>
   } catch {
     return { error: "unavailable" };
   }
-  try {
-    return await step.write(at, actor);
-  } catch {
+  const failed = async (reason: string): Promise<void> => {
     try {
-      await audit(c.authDb, c.env, meta, { ...base, action: `${step.action}_failed` });
+      await audit(c.authDb, c.env, meta, {
+        ...base,
+        action: `${step.action}_failed`,
+        detail: { ...step.detail, reason },
+      });
     } catch {
       // best effort: the change did not happen either way
     }
+  };
+  let out: ReviewResult<T>;
+  try {
+    out = await step.write(at, actor);
+  } catch {
+    await failed("write_failed");
     return { error: "unavailable" };
   }
+  // The write re-checked the row inside its transaction and refused (a concurrent action moved it after
+  // the pre-check): the audit row says the action was attempted, so a `_failed` row says it did not land.
+  if ("error" in out) await failed(out.error);
+  return out;
 }
 
 async function inTransaction<T>(db: Client, fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -269,10 +281,18 @@ export async function mergeClaimToCluster(
     targetType: "expert_claim",
     targetId: claimId,
     detail: { cluster: clusterId, role },
-    write: async () => {
-      const r = await mergeClaimIntoCluster(c.mainDb, { claimId, clusterId, role });
-      return { ok: true, linked: r.linked, primarySet: r.primarySet };
-    },
+    // Two rows change (claim_cluster, claim.cluster_id): one transaction, with the checks repeated inside.
+    write: async () =>
+      inTransaction(c.mainDb, async (tx) => {
+        const now = await currentClaimStatus(tx, claimId);
+        if (now === null) return { error: "not_found" } as const;
+        if (now === "rejected" || now === "parked") return { error: "illegal_edge" } as const;
+        const st = await currentClusterState(tx, clusterId);
+        if (st === null) return { error: "not_found" } as const;
+        if (st.state !== "confirmed") return { error: "not_confirmed" } as const;
+        const r = await mergeClaimIntoCluster(tx, { claimId, clusterId, role });
+        return { ok: true, linked: r.linked, primarySet: r.primarySet } as const;
+      }),
   });
 }
 
@@ -340,11 +360,13 @@ export async function confirmCluster(
   clusterId: unknown,
 ): Promise<ReviewResult<{ formalised: number }>> {
   if (!validId(clusterId)) return { error: "invalid" };
+  let from: ClusterState;
   try {
     const st = await currentClusterState(c.mainDb, clusterId);
     if (st === null) return { error: "not_found" };
     if (st.state === "merged") return { error: "final" };
     if (st.state === "confirmed") return { error: "illegal_edge" };
+    from = st.state;
   } catch {
     return { error: "unavailable" };
   }
@@ -352,7 +374,7 @@ export async function confirmCluster(
     action: "expert_cluster_confirm",
     targetType: "expert_cluster",
     targetId: clusterId,
-    detail: {},
+    detail: { from, to: "confirmed" },
     write: async (at, actor) =>
       inTransaction(c.mainDb, async (tx) => {
         const st = await currentClusterState(tx, clusterId);
@@ -391,7 +413,9 @@ export async function confirmCluster(
 /**
  * Cluster merge (D-535): `from` is folded into `into`. cluster_state 'merged' first, then the claims'
  * cluster_id moves, then the claim_cluster rows for `into` are appended; one transaction. A merged cluster
- * is final. `into` must exist, differ from `from`, and not itself be merged or parked.
+ * is final. `into` must exist, differ from `from`, and be CONFIRMED (D-632): the claims that move keep
+ * the person's confirmation of the group they land in, and a merge never lets a claim reach a group a
+ * person has not confirmed (same rule as a single claim joining a cluster).
  */
 export async function mergeCluster(
   c: ReviewCtx,
@@ -399,24 +423,32 @@ export async function mergeCluster(
 ): Promise<ReviewResult<{ claimsMoved: number }>> {
   if (!validId(x.from) || !validId(x.into) || x.from === x.into) return { error: "invalid" };
   const { from, into } = x;
-  try {
-    const a = await currentClusterState(c.mainDb, from);
-    const b = await currentClusterState(c.mainDb, into);
+  const check = async (
+    db: Exec,
+  ): Promise<{ ok: true; from: ClusterState } | { error: ReviewError }> => {
+    const a = await currentClusterState(db, from);
+    const b = await currentClusterState(db, into);
     if (a === null || b === null) return { error: "not_found" };
     if (a.state === "merged") return { error: "final" };
-    if (b.state === "merged" || b.state === "parked") return { error: "not_confirmed" };
+    if (b.state !== "confirmed") return { error: "not_confirmed" };
+    return { ok: true, from: a.state };
+  };
+  let pre: Awaited<ReturnType<typeof check>>;
+  try {
+    pre = await check(c.mainDb);
   } catch {
     return { error: "unavailable" };
   }
+  if ("error" in pre) return pre;
   return audited<{ claimsMoved: number }>(c, {
     action: "expert_cluster_merge",
     targetType: "expert_cluster",
     targetId: from,
-    detail: { into },
+    detail: { from: pre.from, into },
     write: async (at, actor) =>
       inTransaction(c.mainDb, async (tx) => {
-        const a = await currentClusterState(tx, from);
-        if (a === null || a.state === "merged") return { error: "final" } as const;
+        const again = await check(tx);
+        if ("error" in again) return again;
         const r = await mergeClusterRows(tx, { from, into, actor, at });
         return { ok: true, claimsMoved: r.claimsMoved } as const;
       }),

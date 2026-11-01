@@ -13,7 +13,7 @@ import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
 import { loadTechniques, parseTechniqueQuery, type TechniqueRow } from "@/lib/ui/loaders/experts";
 import { PageHead, Shell } from "../learned/parts";
-import { challengerLink, detailHref, OutLink, pct, TECHNIQUES } from "../experts/parts";
+import { challengerLink, detailHref, Out, pct, TECHNIQUES } from "../experts/parts";
 
 export const dynamic = "force-dynamic";
 
@@ -123,9 +123,9 @@ function Technique({ t, caption }: { t: TechniqueRow; caption: string }) {
         {GRADE_WORD[t.externalGrade] ?? t.externalGrade}
         {t.evidenceLinks.length > 0 ? ": " : "."}
         {t.evidenceLinks.map((l, i) => (
-          <span key={l.url}>
+          <span key={i}>
             {i > 0 ? ", " : ""}
-            <OutLink href={l.url}>{l.note || l.url}</OutLink>
+            <Out link={l} label={l.note || null} />
           </span>
         ))}
       </p>
@@ -178,7 +178,8 @@ export default async function TechniquesPage({ searchParams }: { searchParams: P
       </PageHead>
       {m.masked ? (
         <Banner tone="info">
-          Your access hides stock names and codes in the text below, and shows dates as weeks.
+          Your access hides stock names and codes in the text below, shows dates as weeks, and hides
+          links to outside pages (a web address can carry a code).
         </Banner>
       ) : null}
       <nav aria-label="Expert pages" className="flex flex-wrap gap-x-4 gap-y-1 text-sm">

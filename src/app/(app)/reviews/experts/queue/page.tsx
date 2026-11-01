@@ -10,7 +10,7 @@ import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
 import { loadQueue } from "@/lib/ui/loaders/experts";
 import { PageHead, Shell } from "../../learned/parts";
-import { EXPERTS, OutLink } from "../parts";
+import { EXPERTS, Out } from "../parts";
 import {
   bulkConfirmExpertAction,
   confirmClaimAction,
@@ -58,8 +58,10 @@ export default async function QueuePage() {
       </nav>
       {q.masked ? (
         <Banner tone="info">
-          Your access hides stock names and codes in the text below. Editing is switched off while
-          text is hidden, so a hidden word is never saved over the real one.
+          Your access hides stock names and codes in the text below, and the links to the sources
+          (a web address can carry a code). Editing is switched off while text is hidden, so a hidden
+          word is never saved over the real one. Ask the Owner to unmask your access to check claims
+          against their sources.
         </Banner>
       ) : null}
 
@@ -157,9 +159,9 @@ export default async function QueuePage() {
                       <NotMeasured />
                     ) : (
                       c.sources.map((s, i) => (
-                        <span key={s.url}>
+                        <span key={i}>
                           {i > 0 ? ", " : ""}
-                          <OutLink href={s.url}>{s.title ?? s.url}</OutLink>
+                          <Out link={s} label={s.title} />
                         </span>
                       ))
                     )}

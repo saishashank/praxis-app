@@ -8,6 +8,7 @@ import { headers } from "next/headers";
 import { requestMeta } from "@/lib/auth/audit";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
+import { maskContextFor } from "@/lib/view/mask";
 import {
   bulkConfirmExpert,
   confirmCluster,
@@ -30,9 +31,18 @@ const field = (fd: FormData, name: string): string | undefined => {
   return typeof v === "string" ? v : undefined;
 };
 
-async function run(fn: (ctx: ReviewCtx) => Promise<ReviewResult<object>>): Promise<QueueResult> {
+async function run(
+  fn: (ctx: ReviewCtx) => Promise<ReviewResult<object>>,
+  opts: { unmaskedOnly?: boolean } = {},
+): Promise<QueueResult> {
   const user = await requireUser("review_claims", PATH);
   try {
+    // D-633: an edit saves text, and a masked Editor only ever saw masked text ("Stock A"), so the edit
+    // is refused here too, not only hidden on the page (UX-004: every control is refused server-side).
+    if (opts.unmaskedOnly) {
+      const m = await maskContextFor({ id: user.id, role: user.role }, authDb());
+      if (m.masked) return { error: "masked" };
+    }
     const result = await fn({
       mainDb: mainDb(),
       authDb: authDb(),
@@ -55,12 +65,14 @@ export async function confirmClaimAction(fd: FormData): Promise<QueueResult> {
 }
 
 export async function editClaimAction(fd: FormData): Promise<QueueResult> {
-  return run((c) =>
-    editClaim(c, {
-      claimId: field(fd, "claim"),
-      statement: field(fd, "statement"),
-      formalisationText: field(fd, "formalisation"),
-    }),
+  return run(
+    (c) =>
+      editClaim(c, {
+        claimId: field(fd, "claim"),
+        statement: field(fd, "statement"),
+        formalisationText: field(fd, "formalisation"),
+      }),
+    { unmaskedOnly: true },
   );
 }
 

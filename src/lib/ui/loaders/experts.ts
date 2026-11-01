@@ -6,6 +6,8 @@
 //    count and nothing else (D-521), so the text cannot reach a Viewer's page by mistake;
 //  - every free text and every code goes through the masker (ROL-107): a masked user gets "Stock A" and
 //    "[reference hidden]" in claims, summaries, red flags and call codes; names of experts are not codes;
+//  - a stored third-party URL is a link only through safeSourceUrl (SEC-016: https, registered host or one of
+//    the expert's own home hosts), text otherwise, and withheld from a masked viewer (a URL can carry a code);
 //  - results are percentages (ppm in the model), never money; wording is descriptive (ARN-062, VAL-101);
 //  - "why no result" (D-599): no screening_run for the week -> "not screened this week"; a run without a result
 //    for a confirmed, screenable cluster -> "skipped (no lane or too few rows/controls/blocks)".
@@ -14,6 +16,7 @@ import { getConfig } from "@/lib/config/store";
 import { fitCheck, parkReason, type ParkReason } from "@/lib/experts/fit";
 import { compareEvidence, NOT_ENOUGH_TESTED, scorecard } from "@/lib/experts/scorecard";
 import { gapReport, gapSentence, type GapInput } from "@/lib/experts/vocabularyGaps";
+import { safeSourceUrl } from "@/lib/http/safeLink";
 import {
   CATEGORIES,
   type CallOutcomeView,
@@ -107,6 +110,32 @@ const jsonObj = (v: unknown): Record<string, string> => {
     return {};
   }
 };
+
+/**
+ * A stored third-party URL as a page may show it (SEC-016, ROL-107, D-631): `url` is the href when the URL is
+ * https and its host is registered or one of the expert's own home hosts, else null (the page shows `urlText`
+ * as text). A masked viewer gets neither for content links (a URL can carry a code or a company name); an
+ * expert's own home link is profile, like the name, and stays.
+ */
+export type OutLinkView = { url: string | null; urlText: string | null };
+const hostOf = (u: string): string | null => {
+  try {
+    return new URL(u).hostname;
+  } catch {
+    return null;
+  }
+};
+const hostsOf = (urls: readonly string[]): string[] =>
+  urls.map(hostOf).filter((h): h is string => h !== null);
+function outLink(
+  scope: MaskScope,
+  raw: string,
+  hosts: readonly string[],
+  profile = false,
+): OutLinkView {
+  if (scope.masked && !profile) return { url: null, urlText: null };
+  return { url: safeSourceUrl(raw, hosts), urlText: raw };
+}
 
 // ---- shared reads --------------------------------------------------------------------------------------
 
@@ -256,7 +285,7 @@ export function parseExpertQuery(sp: URLSearchParams): ExpertQuery | null {
   const platform = wordsParam(sp.get("platform"));
   const status = sp.get("status") || undefined;
   if (focus === null || market === null || platform === null) return null;
-  if (status !== undefined && !(status in STATUS_WORD)) return null;
+  if (status !== undefined && !Object.hasOwn(STATUS_WORD, status)) return null;
   return { focus, market, status, platform };
 }
 
@@ -416,25 +445,24 @@ export type ExpertDetail = {
   licence: string;
   platforms: string[];
   handles: Record<string, string>;
-  homeUrls: string[];
+  homeUrls: OutLinkView[];
   markets: string[];
   focus: string[];
   /** Text and link only for a role that holds review_claims; a Viewer gets the count (D-521). */
   redFlags: {
     count: number;
-    items: { text: string; sourceUrl: string; notedDay: string | null }[];
+    items: ({ text: string; notedDay: string | null } & OutLinkView)[];
   };
   redFlagsVisible: boolean;
   reach: { audienceSize: number | null; audienceDay: string | null };
-  items: {
+  items: ({
     id: string;
     title: string | null;
-    url: string;
     platform: string;
     day: string | null;
     summary: string | null;
     kind: string;
-  }[];
+  } & OutLinkView)[];
   claims: ExpertClaimView[];
   scoreText: string;
   scored: boolean;
@@ -499,6 +527,8 @@ export async function loadExpertDetail(
   const callCodes = calls.rows.map((r) => str(r.code));
   const date = await maskDate(db, market, v.now);
   const scope: MaskScope = await v.masker.scope(date, callCodes);
+  const homeUrls = jsonArr(e.home_urls_json);
+  const ownHosts = hostsOf(homeUrls);
 
   const linkOf = new Map<string, { id: string; name: string; role: string }[]>();
   for (const r of memberships.rows) {
@@ -532,7 +562,7 @@ export async function loadExpertDetail(
   const redItems = canSeeFlags
     ? flags.rows.map((r) => ({
         text: scope.text(str(r.text)),
-        sourceUrl: str(r.source_url),
+        ...outLink(scope, str(r.source_url), ownHosts),
         notedDay: scope.day(str(r.noted_d)),
       }))
     : [];
@@ -546,7 +576,7 @@ export async function loadExpertDetail(
     licence: LICENCE_WORD[str(e.licence_status)] ?? str(e.licence_status),
     platforms: jsonArr(e.platforms_json),
     handles: jsonObj(e.handles_json),
-    homeUrls: jsonArr(e.home_urls_json),
+    homeUrls: homeUrls.map((u) => outLink(scope, u, ownHosts, true)),
     markets: jsonArr(e.markets_json),
     focus: jsonArr(e.focus_json),
     redFlags: { count: redCount, items: redItems },
@@ -558,7 +588,7 @@ export async function loadExpertDetail(
     items: items.rows.map((r) => ({
       id: str(r.id),
       title: r.title === null ? null : scope.text(str(r.title)),
-      url: str(r.url),
+      ...outLink(scope, str(r.url), ownHosts),
       platform: str(r.platform),
       day: scope.day(strOrNull(r.published_at)),
       summary: r.summary === null ? null : scope.text(str(r.summary)),
@@ -628,7 +658,7 @@ export type TechniqueRow = {
   state: ClusterState;
   testability: Testability;
   externalGrade: ExternalGrade;
-  evidenceLinks: { url: string; note: string }[];
+  evidenceLinks: ({ note: string } & OutLinkView)[];
   closestFamily: string | null;
   fitFamily: string | null;
   expertsFor: { id: string; name: string }[];
@@ -753,7 +783,7 @@ export async function loadTechniques(
                   x !== null &&
                   typeof (x as { url?: unknown }).url === "string",
               )
-              .map((x) => ({ url: x.url, note: scope.text(x.note ?? "") }))
+              .map((x) => ({ ...outLink(scope, x.url, []), note: scope.text(x.note ?? "") }))
           : [];
       } catch {
         return [];
@@ -854,7 +884,7 @@ export type QueueClaim = {
   formalisation: string | null;
   claimedEdge: string | null;
   vocabularyGap: string | null;
-  sources: { url: string; title: string | null }[];
+  sources: ({ title: string | null } & OutLinkView)[];
   clusterId: string | null;
 };
 export type QueueExpert = { id: string; name: string; claims: QueueClaim[] };
@@ -887,7 +917,7 @@ export async function loadQueue(deps: LoaderDeps): Promise<Queue> {
   const scope = await v.masker.scope(date);
   const [claims, experts, sources, clusters, states, supporters] = await Promise.all([
     allClaims(db),
-    db.execute("SELECT id, name FROM expert ORDER BY name, id"),
+    db.execute("SELECT id, name, home_urls_json FROM expert ORDER BY name, id"),
     db.execute(
       `SELECT ci.claim_id, s.url, s.title FROM claim_item ci JOIN source_item s ON s.id = ci.item_id
         ORDER BY ci.claim_id, s.url`,
@@ -907,6 +937,8 @@ export async function loadQueue(deps: LoaderDeps): Promise<Queue> {
     a.push({ url: str(r.url), title: r.title === null ? null : scope.text(str(r.title)) });
     srcOf.set(str(r.claim_id), a);
   }
+  const linksOf = (claimId: string, hosts: readonly string[]) =>
+    (srcOf.get(claimId) ?? []).map((x) => ({ title: x.title, ...outLink(scope, x.url, hosts) }));
   const stateOf = new Map(
     states.rows.map((r) => [str(r.cluster_id), str(r.state) as ClusterState]),
   );
@@ -914,6 +946,7 @@ export async function loadQueue(deps: LoaderDeps): Promise<Queue> {
   const out: QueueExpert[] = [];
   let total = 0;
   for (const e of experts.rows) {
+    const ownHosts = hostsOf(jsonArr(e.home_urls_json));
     const mine = claims
       .filter((c) => c.expertId === str(e.id) && c.status === "extracted")
       .map<QueueClaim>((c) => ({
@@ -923,7 +956,7 @@ export async function loadQueue(deps: LoaderDeps): Promise<Queue> {
         formalisation: c.formalisationText === null ? null : scope.text(c.formalisationText),
         claimedEdge: c.claimedEdgeText === null ? null : scope.text(c.claimedEdgeText),
         vocabularyGap: c.vocabularyGapText === null ? null : scope.text(c.vocabularyGapText),
-        sources: srcOf.get(c.id) ?? [],
+        sources: linksOf(c.id, ownHosts),
         clusterId: c.clusterId,
       }));
     if (mine.length === 0) continue;

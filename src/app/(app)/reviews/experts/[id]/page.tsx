@@ -19,7 +19,7 @@ import {
   type ExpertClaimView,
 } from "@/lib/ui/loaders/experts";
 import { PageHead, Shell } from "../../learned/parts";
-import { EXPERTS, OutLink, PageLink, TECHNIQUES, pct } from "../parts";
+import { EXPERTS, Out, PageLink, TECHNIQUES, pct } from "../parts";
 
 export const dynamic = "force-dynamic";
 
@@ -117,7 +117,8 @@ export default async function ExpertPage({ params }: { params: Promise<{ id: str
       </PageHead>
       {out.masked ? (
         <Banner tone="info">
-          Your access hides stock names and codes in the text below, and shows dates as weeks.
+          Your access hides stock names and codes in the text below, shows dates as weeks, and hides
+          links to outside pages (a web address can carry a code).
         </Banner>
       ) : null}
 
@@ -138,11 +139,7 @@ export default async function ExpertPage({ params }: { params: Promise<{ id: str
             {e.homeUrls.length === 0 ? (
               <NotMeasured />
             ) : (
-              e.homeUrls.map((u) => (
-                <OutLink key={u} href={u}>
-                  {u}
-                </OutLink>
-              ))
+              e.homeUrls.map((u, i) => <Out key={u.urlText ?? i} link={u} />)
             )}
           </dd>
         </dl>
@@ -153,15 +150,14 @@ export default async function ExpertPage({ params }: { params: Promise<{ id: str
           <p className="m-0 text-sm text-text-muted">None noted.</p>
         ) : e.redFlagsVisible ? (
           <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
-            {e.redFlags.items.map((f) => (
-              <li key={f.sourceUrl + f.text} className="flex min-w-0 flex-col gap-1">
+            {e.redFlags.items.map((f, i) => (
+              <li key={i} className="flex min-w-0 flex-col gap-1">
                 <span className="inline-flex items-start gap-2">
                   <AlertIcon aria-hidden="true" className="mt-0.5 shrink-0 text-warning" />
                   <span>{f.text}</span>
                 </span>
                 <span className="text-xs text-text-muted">
-                  Noted {f.notedDay ?? "on an unknown date"}. Source:{" "}
-                  <OutLink href={f.sourceUrl}>{f.sourceUrl}</OutLink>
+                  Noted {f.notedDay ?? "on an unknown date"}. Source: <Out link={f} />
                 </span>
               </li>
             ))}
@@ -242,7 +238,7 @@ export default async function ExpertPage({ params }: { params: Promise<{ id: str
             {e.items.map((i) => (
               <li key={i.id} className="flex min-w-0 flex-col gap-1">
                 <span>
-                  <OutLink href={i.url}>{i.title ?? i.url}</OutLink>
+                  <Out link={i} label={i.title} />
                   <span className="text-text-muted">
                     {" "}
                     ({i.platform}

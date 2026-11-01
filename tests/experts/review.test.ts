@@ -311,6 +311,38 @@ describe("clusters", () => {
       "expert_cluster_merge",
     ]);
   });
+
+  it("merge lands only in a CONFIRMED group (D-632); a group that moved after the pre-check leaves a _failed row", async () => {
+    // K-ZZ4 is still proposed: no merge into it, no audit row
+    expect(await mergeCluster(ctx(w.owner), { from: "K-ZZ3", into: "K-ZZ4" })).toEqual({
+      error: "not_confirmed",
+    });
+    expect(await audits("expert_cluster")).toEqual([]);
+    // a client whose pre-check reads K-ZZ4 as confirmed while the transaction sees the truth (a race)
+    const lying = new Proxy(w.main, {
+      get(t, p, r) {
+        if (p === "execute")
+          return (s: { sql?: string; args?: unknown[] } | string) => {
+            const sql = typeof s === "string" ? s : (s.sql ?? "");
+            const args = typeof s === "string" ? [] : (s.args ?? []);
+            if (sql.includes("FROM cluster_state WHERE cluster_id = ?") && args[0] === "K-ZZ4")
+              return Promise.resolve({ rows: [{ state: "confirmed", merged_into: null }] });
+            return t.execute(s as never);
+          };
+        const v = Reflect.get(t, p, r);
+        return typeof v === "function" ? v.bind(t) : v;
+      },
+    }) as Client;
+    expect(
+      await mergeCluster(ctx(w.owner, { mainDb: lying }), { from: "K-ZZ3", into: "K-ZZ4" }),
+    ).toEqual({
+      error: "not_confirmed",
+    });
+    const a = await audits("expert_cluster");
+    expect(a.map((x) => x.action)).toEqual(["expert_cluster_merge", "expert_cluster_merge_failed"]);
+    expect(a[1]!.detail).toMatchObject({ into: "K-ZZ4", reason: "not_confirmed" });
+    expect((await currentClusterState(w.main, "K-ZZ3"))?.state).toBe("proposed");
+  });
 });
 
 describe("bulk confirm", () => {

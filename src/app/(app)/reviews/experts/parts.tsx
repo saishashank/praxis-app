@@ -8,17 +8,45 @@ export const detailHref = (id: string): string => `${EXPERTS}/${encodeURICompone
 export const challengerLink = (id: string): string =>
   `/reviews/learned/challengers/${encodeURIComponent(id)}`;
 
-/** A link out to a page that is not ours: no referrer, no ranking hint (UXN-293). */
+/** A link out to a page that is not ours: new tab, no opener, no referrer (UXN-293, SEC-016). */
 export function OutLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <a
       href={href}
       target="_blank"
-      rel="noopener nofollow noreferrer"
+      rel="noopener noreferrer"
       className="min-w-0 break-all text-accent underline"
     >
       {children}
     </a>
+  );
+}
+
+/**
+ * A stored third-party URL (SEC-016, D-631): a link when the loader passed it (`url`), its text when the host
+ * is not registered (`urlText`), and "link hidden" for a masked viewer (neither). `label` is the link text
+ * when there is one (an item title); the URL itself otherwise.
+ */
+export function Out({
+  link,
+  label,
+}: {
+  link: { url: string | null; urlText: string | null };
+  label?: string | null;
+}) {
+  const words = label ?? link.urlText;
+  if (link.url !== null) return <OutLink href={link.url}>{words}</OutLink>;
+  if (link.urlText !== null)
+    return (
+      <span className="min-w-0 break-all" data-unlinked="">
+        {words}
+        {label ? ` (${link.urlText})` : ""}
+      </span>
+    );
+  return (
+    <span className="text-text-muted" data-link-hidden="">
+      {label ?? "link hidden"}
+    </span>
   );
 }
 
