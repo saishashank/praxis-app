@@ -78,6 +78,10 @@ describe("picks are never read by ranking or sizing", () => {
       // M11-lite WP3 (AGT-131, D-499): the steelman evidence pack reads the stored factor rows; its
       // output is an opinion only and never reaches ranking or sizing (PRD-033 boundary test).
       f === "src/lib/steelman/pack.ts" ||
+      // M13-lite WP7 (KB-080, D-524, D-640): the paper tracker for expert calls reads the total-return
+      // benchmark and the window helper so a call is set against the market on the same basis as a pick;
+      // it writes only expert_call_outcome, never a pick, order or rank (PRD-035 boundary test).
+      f === "src/lib/experts/calls.ts" ||
       f.startsWith("src/app/");
     expect(importers.filter((f) => !allowed(f))).toEqual([]);
     // and the review import exists, so this guard is not vacuous
