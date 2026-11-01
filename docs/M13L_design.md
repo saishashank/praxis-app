@@ -349,9 +349,12 @@ the V1 spec. No migration, no change to any money value, replay goldens untouche
   is `missing`. Five copies replaced: `calendar.ts` (weekend test from the core, adds `calendarDayStatus`
   and `gateDayStatus`), `worker/src/clock.ts` and `routes.ts` (relative import of the core, bundled by
   wrangler), `heartbeat/checks.ts`, `pipeline/rules.mjs` (gate and batch 1 plan). Gates that now skip a
-  missing day: `closeBooksDay`, `runPreopen`, batch 2b, batch 3 (`calendar_missing` skip), batch 1
-  (`calendar_missing`, no `non-trading` marker so the day can still run once the row exists), Worker
-  market-bound slots and quote routes. Deliberately NOT changed: the arithmetic walkers (`isTradingDay`,
+  missing day: batch 1 (`calendar_missing`, no `non-trading` marker so the day can still run once the row
+  exists), Worker market-bound slots and quote routes, the heartbeat, and `closeBooksDay`, `runPreopen`,
+  batch 2b and batch 3 (`calendar_missing` skip) when the caller sets the new `strictCalendar` option, which
+  the live entry points do (`arena/cli.ts` unless `--replay`, `preopenRoute.ts`). The library default stays
+  the looser walk because ~15 suites run these entry points non-replay on synthetic 2030 dates with
+  holiday-only calendars; making the default strict would have meant rewriting them. Deliberately NOT changed: the arithmetic walkers (`isTradingDay`,
   `nextTradingDay`, `previousTradingDay`, `sessionsBetween`, `tradingDaysBetween`) and any run flagged
   `replay`, which keep "weekday and not a holiday row" (`isWalkDay` in the core): replay worlds and the
   harness calendars hold holiday rows only and the goldens depend on it; the live gates check the day before
