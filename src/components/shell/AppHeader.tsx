@@ -34,24 +34,45 @@ export function AppHeader({ role, market, bell, badges = {}, signOut, account }:
           href="/"
           className="mr-2 inline-flex min-h-10 items-center gap-2 text-lg font-semibold tracking-tight text-text"
         >
-          {/* The "Signal P" mark (docs/brand/BRAND.md); the theme picks the dark or light file. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/brand/praxis-mark-dark.svg"
-            alt=""
-            width={30}
-            height={24}
-            className="logo-dark app-mark h-6 w-auto"
-          />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/brand/praxis-mark-light.svg"
-            alt=""
-            width={30}
-            height={24}
-            className="logo-light app-mark h-6 w-auto"
-          />
-          <span className="app-brand">Praxis</span>
+          {/* From 600 px (sm) the full logo with its tagline (Owner 2026-11-01, D-730): 40 px high, well
+              above the 96 px minimum width. On phones the "Signal P" mark and wordmark (docs/brand/BRAND.md). */}
+          <span className="hidden items-center sm:inline-flex">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand/praxis-logo-tagline-dark.svg"
+              alt="Praxis — Learn. Earn. Repeat."
+              width={121}
+              height={40}
+              className="logo-dark h-10 w-auto"
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand/praxis-logo-tagline-light.svg"
+              alt="Praxis — Learn. Earn. Repeat."
+              width={121}
+              height={40}
+              className="logo-light h-10 w-auto"
+            />
+          </span>
+          <span className="inline-flex items-center gap-2 sm:hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand/praxis-mark-dark.svg"
+              alt=""
+              width={30}
+              height={24}
+              className="logo-dark app-mark h-6 w-auto"
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand/praxis-mark-light.svg"
+              alt=""
+              width={30}
+              height={24}
+              className="logo-light app-mark h-6 w-auto"
+            />
+            <span className="app-brand">Praxis</span>
+          </span>
         </Link>
         <TabBar tabs={tabs} />
         <div className="ml-auto flex items-center gap-1">
