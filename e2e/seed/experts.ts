@@ -8,7 +8,7 @@ export const EXPERT_A = "X-E2E1";
 export const EXPERT_B = "X-E2E2";
 export const NAME_A = "ZZ Quiet Author";
 export const NAME_B = "ZZ Loud Author";
-export const FLAG_TEXT = "ZZ synthetic caveat: results are the author's own sample.";
+export const FLAG_TEXT = "ZZ fixture caveat: results are the author's own sample.";
 export const CLAIM_A = "C-E2E-1";
 
 export async function ensureExperts(): Promise<void> {
@@ -34,8 +34,8 @@ export async function ensureExperts(): Promise<void> {
     stmts.push({
       sql: `INSERT INTO cluster (id, name, category, statement, canonical_text, testability, external_grade,
               closest_family, created_at)
-            VALUES ('K-E2E1', 'ZZ breakout group', 'trend_momentum', 'ZZ synthetic statement of a breakout method.',
-              'ZZ synthetic rule.', 'testable_eod', 'not_searched', 'new', ?)`,
+            VALUES ('K-E2E1', 'ZZ breakout group', 'trend_momentum', 'ZZ fixture statement of a breakout method.',
+              'ZZ fixture rule.', 'testable_eod', 'not_searched', 'new', ?)`,
       args: [AT],
     });
     stmts.push({
@@ -56,7 +56,7 @@ export async function ensureExperts(): Promise<void> {
       stmts.push({
         sql: `INSERT INTO claim_revision (claim_id, seq, statement, claimed_edge_text, actor, at)
               VALUES (?, 1, ?, 'ZZ claimed result', 'seed', ?)`,
-        args: [id, `ZZ synthetic claim number ${i}.`, AT],
+        args: [id, `ZZ fixture claim number ${i}.`, AT],
       });
       stmts.push({
         sql: "INSERT INTO claim_status (claim_id, seq, status, actor, at) VALUES (?, 1, 'extracted', 'seed', ?)",
