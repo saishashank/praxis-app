@@ -122,10 +122,10 @@ export const V2_GO_LIVE_STEPS: readonly V2GoLiveStep[] = [
     after: ["v2_staging_migrations"],
   },
   {
-    id: "v2_blueprint",
+    id: "v2_architecture_page",
     phase: "staging",
-    label: "Open the Blueprint page and an exported .drawio",
-    help: "No error 500 on /blueprint and its spec tab; compare an export in draw.io desktop (D-369).",
+    label: "Open the hidden architecture page and an exported .drawio",
+    help: "Its address is in the owner guide (it is never linked or named in the app, D-361/D-371). No error 500 on it or its spec tab; compare an export in draw.io desktop (D-369).",
     after: ["v2_staging_migrations"],
   },
   {
