@@ -14,7 +14,7 @@ export const QUOTE_CALL_BUDGET_MS = 20_000; // threshold-ok: per-call time budge
 /** Whole-run deadline of a route (maxDuration 30 s): no request starts after it (V2-S7, D-696). */
 export const QUOTE_RUN_DEADLINE_MS = 22_000; // threshold-ok: leaves 8 s of the 30 s for evaluate and mail
 export const QUOTE_USER_AGENT = "Mozilla/5.0 (compatible; praxis-quotes/1.0)";
-/** [VERIFY at build] same chart endpoint as scripts/fixtures/record-day.mjs. */
+/** Unofficial chart endpoint, same host family as scripts/fixtures/record-day.mjs. Facts and fallback (none): docs/source-licence-register.md, D-792. */
 export const QUOTE_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/";
 const SERVER_ERROR_MIN = 500; // threshold-ok: HTTP status class
 const TOO_MANY = 429; // threshold-ok: HTTP status

@@ -165,11 +165,6 @@ function holidaySet(rows: readonly CalendarRow[]): Set<string> {
   return new Set(rows.filter((r) => r.kind === "holiday").map((r) => r.d));
 }
 
-// True when the calendar has a row for the date (weekends carry no rows).
-export function calendarCovers(date: string, rows: readonly CalendarRow[]): boolean {
-  return rows.some((r) => r.d === date);
-}
-
 // Arithmetic / replay form: a weekday that is not a holiday row. NOT a gate (see the header).
 export function isTradingDay(date: string, rows: readonly CalendarRow[]): boolean {
   return isWalkDay(date, rows);

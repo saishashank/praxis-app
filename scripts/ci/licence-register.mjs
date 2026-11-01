@@ -481,6 +481,13 @@ export function render(rows) {
       : ["- None."]),
     "- Terms URLs and last-checked dates are not recorded in the seed. The source evaluation and the monthly re-check fill them in the live register.",
     "",
+    "## Delayed-quote endpoint: facts and fallback (V2-I3, D-792)",
+    "",
+    "- Request pattern (one per code): `GET https://query1.finance.yahoo.com/v8/finance/chart/{CODE}.AX?interval=1m&range=1d`. The same host and path family as the end-of-day fetch (`scripts/fixtures/record-day.mjs` uses `/v8/finance/chart/` with `interval=1d`). The two scripts share the host but not the code; the fixture recorder is the reference for the payload shape.",
+    "- Status of the endpoint: unofficial, undocumented, no API key, no service-level promise, terms not recorded (see the Yahoo rows). The [VERIFY at build] marker is closed: the pattern above is the one the code uses and the parser tests (`tests/quotes`) pin the payload shape. It can change or be blocked without notice.",
+    "- Failure behaviour: HTTP 429 pauses both quote routes for `quote_pause_cooldown_min`; 5xx and network errors end the run. Nothing else contacts the host, and nothing is requested unless the source is accepted (D-398).",
+    "- Named fallback: none. The ASX delayed quote page is scrape-only, its terms forbid automated access, and it is not zero-cost-safe, so it is not a fallback and no second source is added. If the endpoint stops working the intraday watch and pick alerts go quiet and System Health shows the source as paused; the Owner can leave the source off. Any paid or licensed feed would be a new Owner decision with its own register row.",
+    "",
   ];
   return lines.join("\n");
 }

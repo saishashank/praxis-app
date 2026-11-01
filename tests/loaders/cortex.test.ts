@@ -81,6 +81,9 @@ describe("empty world", () => {
     expect(v.shadowOnlyText).toMatch(/shadow only/);
     expect(v.passports.total).toBe(0);
     expect(v.ledger.luckText).toBe("Not measured yet");
+    // V2-I10 / D-795: the 0.05 (strategies, O-43) and the 0.1 (lesson pool, VAL-116) are named apart
+    expect(v.ledger.errorLevelsText).toContain("family-wise level of 0.05");
+    expect(v.ledger.errorLevelsText).toContain("their own pool, which starts at 0.1");
     expect(v.families).toHaveLength(7);
     expect(
       v.families.every((f) => f.status === "shadow" && f.nEff === null && f.mde === null),

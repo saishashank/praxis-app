@@ -25,7 +25,7 @@
     "test:routes": "node scripts/ci/route-coverage.mjs",
     "test:hygiene": "node scripts/ci/repo-hygiene.mjs",
     "test:config-reference": "node scripts/ci/config-reference.mjs --check",
-    "test:architecture": "node scripts/ci/architecture-check.mjs",
+    "test:architecture": "node scripts/ci/architecture-check.mjs && node scripts/ci/decision-index.mjs --check",
     "test:env-names": "node scripts/ci/env-names.mjs",
     "test:map": "node scripts/ci/test-map.mjs --summary",
     "test:map:update": "node scripts/ci/test-map.mjs --update",

@@ -35,7 +35,7 @@ const RANGED: readonly (readonly [ConfigKey, number, number, number, string])[] 
   ["factor_min_bucket_n", 30, 20, 100, "AGT-112"],
   // M17 O-76 (c3a942e): 10 picks per profile and no family cap by default
   ["picks_per_profile", 10, 0, 10, "AGT-113"],
-  ["picks_max_per_family", 10, 1, 10, "AGT-113"],
+  ["picks_max_per_family", 10, 10, 10, "AGT-113"],
   ["pick_valid_sessions", 2, 1, 5, "AGT-113"],
   ["pick_success_min_n", 30, 10, 200, "D-111"],
 ];

@@ -4,7 +4,7 @@
 // DAT-220..223, DAT-126, DAT-003, AT-08. Synthetic ZZ* codes only (SEC-110).
 import { afterEach, describe, expect, it } from "vitest";
 import { setConfig } from "@/lib/config/store";
-import { adjustedBars } from "@/lib/data/adjusted";
+import { adjustedBars, UNBOUNDED } from "@/lib/data/adjusted";
 import {
   BEST_EVIDENCE_CHECK,
   BLOCK_CHECK,
@@ -480,7 +480,7 @@ describe("Owner decisions and reversal (DAT-126 reading: new rows, never edits)"
     const t = await rows(db, "SELECT computed_at FROM adjustment_factor ORDER BY computed_at");
     expect(String(t[1].computed_at) > String(t[0].computed_at)).toBe(true);
     // the reader no longer adjusts
-    const bars = await adjustedBars(db, "ZZA", D0, D1);
+    const bars = await adjustedBars(db, "ZZA", D0, D1, { knownBy: UNBOUNDED });
     expect(bars.map((b) => b.c)).toEqual([10, 5.1]);
   });
 

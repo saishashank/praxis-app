@@ -10,6 +10,7 @@ import { stateOf } from "@/lib/data/corporateActions/rules.mjs";
 import {
   planCorporateActions,
   type CorpActionPlan,
+  boundedKnownAt,
   type CorpActionRecord,
   type PlannedAdjustment,
 } from "./corpActions";
@@ -30,17 +31,21 @@ export async function loadConfirmedActions(
     args: [market, upToD],
   });
   const events = await db.execute({
-    sql: `SELECT e.action_id, e.status, e.note FROM corporate_action_event e
+    sql: `SELECT e.action_id, e.status, e.note, e.at FROM corporate_action_event e
           JOIN corporate_action a ON a.id = e.action_id
           WHERE a.market = ? ORDER BY e.id`,
     args: [market],
   });
   const newest = new Map<string, { status: string; note: string | null }>();
+  const firstAt = new Map<string, string>();
+  const newestAt = new Map<string, string>();
   for (const e of events.rows) {
     newest.set(text(e.action_id), {
       status: text(e.status),
       note: e.note === null ? null : text(e.note),
     });
+    if (!firstAt.has(text(e.action_id))) firstAt.set(text(e.action_id), text(e.at));
+    newestAt.set(text(e.action_id), text(e.at));
   }
   const out: CorpActionRecord[] = [];
   for (const a of actions.rows) {
@@ -53,7 +58,11 @@ export async function loadConfirmedActions(
       type: text(a.type),
       exDate: text(a.ex_date),
       payload: payload !== null && typeof payload === "object" ? (payload as never) : {},
-      knownAt: a.known_at === null || a.known_at === undefined ? null : text(a.known_at),
+      knownAt: boundedKnownAt(
+        a.known_at === null || a.known_at === undefined ? null : text(a.known_at),
+        firstAt.get(id) ?? null,
+        newestAt.get(id) ?? null,
+      ),
     });
   }
   return out;

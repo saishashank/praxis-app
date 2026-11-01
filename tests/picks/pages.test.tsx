@@ -161,38 +161,23 @@ describe("Picks list", () => {
     ).toBeNull();
   });
 
-  it("shows at most picks_max_per_family picks per family, read from the config key", async () => {
+  it("O-76/D-791: picks_max_per_family is pinned to 10, so no per-family cap reaches the page", async () => {
     await addPick(w, 3, "ZZDN", "F1");
     await addPick(w, 4, "ZZOTH", "F2");
     as(w, "owner");
-    // M17 (O-76) raised the default to 10 (no cap); the V1 value 2 is set here.
-    await setConfig(w.main, {
-      key: "picks_max_per_family",
-      value: 2,
-      userId: null,
-      now: "2026-10-19T00:00:00.000Z",
-    });
+    // A value below 10 is refused (the V1 values 1..5 can no longer re-introduce the cap).
+    for (const value of [1, 2, 3, 9]) {
+      await expect(
+        setConfig(w.main, {
+          key: "picks_max_per_family",
+          value,
+          userId: null,
+          now: "2026-10-19T00:00:00.000Z",
+        }),
+      ).rejects.toThrow();
+    }
     render(await PicksPage({ searchParams: sp() }));
-    // Cap 2: ranks 1, 2 (both F1) and 4 (F2); rank 3 is the third F1 pick.
-    expect(screen.getAllByTestId("pick-card")).toHaveLength(3);
-    cleanup();
-    await setConfig(w.main, {
-      key: "picks_max_per_family",
-      value: 1,
-      userId: null,
-      now: "2026-10-20T00:00:00.000Z",
-    });
-    render(await PicksPage({ searchParams: sp() }));
-    expect(screen.getAllByTestId("pick-card")).toHaveLength(2); // one F1, one F2
-    cleanup();
-    await setConfig(w.main, {
-      key: "picks_max_per_family",
-      value: 3,
-      userId: null,
-      now: "2026-10-20T00:01:00.000Z",
-    });
-    render(await PicksPage({ searchParams: sp() }));
-    expect(screen.getAllByTestId("pick-card")).toHaveLength(4);
+    expect(screen.getAllByTestId("pick-card")).toHaveLength(4); // all of F1 and F2 shown
   });
 
   it("capPerFamily keeps order and never exceeds the cap", () => {

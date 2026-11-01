@@ -167,6 +167,9 @@ export default async function CortexPage() {
         <p className="m-0" data-luck="">
           {v.ledger.cells === 0 && v.ledger.keyEdits === 0 ? <NotMeasured /> : v.ledger.luckText}
         </p>
+        <p className="m-0 text-text-muted" data-error-levels="">
+          {v.ledger.errorLevelsText}
+        </p>
         <p className="m-0 text-text-muted">
           {formatCount(v.ledger.cells)} cells logged, {formatCount(v.ledger.keyEdits)} Owner setting
           edits counted as trials.

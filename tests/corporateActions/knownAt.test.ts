@@ -6,9 +6,9 @@ import { createClient } from "@libsql/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { adjustBars, splitActionsByCode, splitsKnownOn } from "@/lib/agents/candidates";
 import { decisionCutoffUtc } from "@/lib/agents/decisionView";
-import { knownBy } from "@/lib/arena/corpActions";
+import { boundedKnownAt, knownBy } from "@/lib/arena/corpActions";
 import { loadConfirmedActions } from "@/lib/arena/corpActionWriter";
-import { adjustedBars, effectiveFactors } from "@/lib/data/adjusted";
+import { adjustedBars, effectiveFactors, UNBOUNDED } from "@/lib/data/adjusted";
 import { resolveAction, runCorporateActions } from "@/lib/data/corporateActions/engine.mjs";
 import { loadMigrations, migrateDown, migrateUp } from "@/lib/db/migrate-core.mjs";
 import { corpRecordsOf } from "@/lib/replay/snapshotWorld";
@@ -167,7 +167,7 @@ describe("readers use only actions known at the cut-off", () => {
     });
     expect(d6[0]!.c).toBe(5);
     // without a cut-off the reader is unchanged (the DAT-126 ex-date bound only)
-    expect((await adjustedBars(db, "ZZA", D0, D5))[0]!.c).toBe(5);
+    expect((await adjustedBars(db, "ZZA", D0, D5, { knownBy: UNBOUNDED }))[0]!.c).toBe(5);
     expect(await effectiveFactors(db, "ZZA", "AU", decisionCutoffUtc(D4, HHMM))).toEqual([]);
     expect(await effectiveFactors(db, "ZZA", "AU", decisionCutoffUtc(D6, HHMM))).toHaveLength(1);
   });
@@ -227,6 +227,37 @@ describe("readers use only actions known at the cut-off", () => {
     // a later run (settle) does not stamp an old confirmation either
     await runCorporateActions({ db: legacy, market: "AU", d: D2, io: io(), now: nowOf(D2) });
     expect(await knownAtOf(legacy, 1)).toBe(null);
+  });
+
+  it("V2-I7/D-793: a NULL known_at on a row born after the bound is NOT always known", async () => {
+    const db = await caDb();
+    for (const d of [D0, D1, D2]) await putBar(db, "ZZA", d, d === D0 ? 10 : 5.1);
+    const late = "2026-11-05T00:00:00.000Z"; // after LEGACY_NULL_KNOWN_AT_BEFORE, known_at never stamped
+    await db.batch([
+      {
+        sql: "INSERT INTO corporate_action (id, market, code, type, ex_date, payload_json) VALUES (1, 'AU', 'ZZA', 'split', ?, '{\"new\":2,\"old\":1}')",
+        args: [D1],
+      },
+      {
+        sql: "INSERT INTO corporate_action_event (action_id, at, status, by) VALUES (1, ?, 'auto_confirmed', 'x')",
+        args: [late],
+      },
+      {
+        sql: "INSERT INTO adjustment_factor (market, code, ex_date, factor, corporate_action_id, computed_at) VALUES ('AU', 'ZZA', ?, 0.5, 1, ?)",
+        args: [D1, late],
+      },
+    ]);
+    expect(boundedKnownAt(null, late, late)).toBe(late);
+    expect(boundedKnownAt(null, "2026-10-20T00:00:00.000Z", late)).toBe(null);
+    expect(boundedKnownAt("2026-10-01T00:00:00.000Z", late, late)).toBe("2026-10-01T00:00:00.000Z");
+    const actions = await loadConfirmedActions(db, "AU", D1);
+    expect(actions[0]!.knownAt).toBe(late);
+    expect(knownBy(actions, decisionCutoffUtc(D0, HHMM))).toHaveLength(0);
+    const bars = await adjustedBars(db, "ZZA", D0, D0, {
+      asOf: D1,
+      knownBy: decisionCutoffUtc(D0, HHMM),
+    });
+    expect(bars[0]!.c).toBe(10);
   });
 
   it("legacy records (known_at null or absent) behave as before", () => {

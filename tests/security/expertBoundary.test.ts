@@ -479,3 +479,53 @@ describe("expert boundary (v): the database and the fixtures", () => {
     }
   });
 });
+
+describe("expert boundary (vi): expert names and red flags never reach e-mail or the KB (V2-I8, D-794)", () => {
+  // Outbound text: the e-mail layer and the Evening Review that feeds it.
+  const OUTBOUND_DIRS = ["src/lib/email", "src/lib/review"];
+  // The KB mirror may read the expert store through exactly these two files (see (i)); the mirrored
+  // documents carry names but never red-flag text (tests/experts/kbDocs.test.ts).
+  const KB_READERS = new Set(["src/lib/kb/documents.ts", "src/lib/kb/mapping.ts"]);
+  const outbound = OUTBOUND_DIRS.flatMap((d) => walk(path.join(ROOT, d))).sort();
+  const kbFiles = walk(path.join(ROOT, "src/lib/kb")).sort();
+  const EXPERT_TABLE_RE = /\b(?:FROM|JOIN|INTO|UPDATE)\s+(expert[a-z_]*)\b/gi;
+  const tablesRead = (f: string): string[] =>
+    [...stripComments(fs.readFileSync(f, "utf8")).matchAll(EXPERT_TABLE_RE)].map((m) =>
+      m[1]!.toLowerCase(),
+    );
+
+  it("finds the files (the scan is not vacuous)", () => {
+    expect(outbound.map(rel)).toContain("src/lib/email/send.ts");
+    expect(outbound.map(rel)).toContain("src/lib/review/assemble.ts");
+    expect(kbFiles.map(rel)).toContain("src/lib/kb/render.ts");
+    expect(EXPERT_TABLES).toContain("expert_red_flag");
+  });
+
+  it("no e-mail, template or review module imports src/lib/experts", () => {
+    expect(outbound.filter(importsExperts).map(rel)).toEqual([]);
+  });
+
+  it("no e-mail, template or review module reads an expert table", () => {
+    expect(outbound.filter((f) => tablesRead(f).length > 0).map(rel)).toEqual([]);
+  });
+
+  it("only the two KB readers import src/lib/experts", () => {
+    expect(
+      kbFiles
+        .filter(importsExperts)
+        .map(rel)
+        .filter((f) => !KB_READERS.has(f)),
+    ).toEqual([]);
+  });
+
+  it("the KB never reads expert_red_flag, and only mapping.ts reads the expert table", () => {
+    const reads = kbFiles.map((f) => [rel(f), tablesRead(f)] as const).filter(([, t]) => t.length);
+    expect(reads.filter(([, t]) => t.includes("expert_red_flag"))).toEqual([]);
+    expect(reads.map(([f]) => f).filter((f) => f !== "src/lib/kb/mapping.ts")).toEqual([]);
+  });
+
+  it("the scan catches a read (self-test)", () => {
+    const sample = 'const q = "SELECT name FROM expert_red_flag WHERE x";';
+    expect([...sample.matchAll(EXPERT_TABLE_RE)].map((m) => m[1])).toEqual(["expert_red_flag"]);
+  });
+});

@@ -439,13 +439,13 @@ test("malformed time or commit id fails closed", () => {
 });
 
 test("the final CI job list can be overridden, and a job outside it is not required", () => {
-  const ci = [...CI_REQUIRED_JOBS.map((n) => job(n)), job("coverage", "failure")];
+  const ci = [...CI_REQUIRED_JOBS.map((n) => job(n)), job("extra-job", "failure")];
   assert.equal(evaluateReleaseGate(goodInput({ ci })).pass, true);
   const r = evaluateReleaseGate(
-    goodInput({ ci, ciRequiredJobs: [...CI_REQUIRED_JOBS, "coverage"] }),
+    goodInput({ ci, ciRequiredJobs: [...CI_REQUIRED_JOBS, "extra-job"] }),
   );
   assert.deepEqual(failing(r), ["ci"]);
-  assert.match(r.conditions.find((c) => c.id === "ci").reason, /coverage \(failure\)/);
+  assert.match(r.conditions.find((c) => c.id === "ci").reason, /extra-job \(failure\)/);
 });
 
 test("future-dated runs are ignored (clock skew cannot satisfy a window)", () => {

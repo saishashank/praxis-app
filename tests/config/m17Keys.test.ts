@@ -27,7 +27,7 @@ const RANGED: ReadonlyArray<readonly [ConfigKey, number, number, number, "int" |
   ["pick_min_chance", 55, 50, 70, "num"],
   // changed by M17 (O-76)
   ["picks_per_profile", 10, 0, 10, "int"],
-  ["picks_max_per_family", 10, 1, 10, "int"],
+  ["picks_max_per_family", 10, 10, 10, "int"], // D-791: pinned, O-76 removed the cap
 ];
 
 describe("M17 keys", () => {
