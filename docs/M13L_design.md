@@ -325,6 +325,8 @@ Verdict: merge after the fixes below (applied in this branch). Replay/golden sui
 
 ## Should-fix fixes
 
+Fixes for the should-fix findings of `docs/V2_architecture_review.md`, one batch per builder (A money path D-680…689, B calendar/data D-710…719, C email/quotes D-690…699, D security D-720…729, E Cortex/ops D-700…709).
+
 ### Batch C
 
 - **D-690 Scope.** Batch C closes V1-S8, V1-S9, V1-S10 (e-mail delivery) and V2-S3, V2-S5, V2-S7 (quote-poll / scan budget and
