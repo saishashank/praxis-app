@@ -118,6 +118,25 @@ describe("route model: at most three levels (UXN-033)", () => {
   });
 });
 
+describe("expert routes (M13-lite D-511)", () => {
+  it("sit under Reviews, three levels at most, queue wins over the id route", () => {
+    expect(levelOf("/reviews/experts")).toBe(2);
+    expect(levelOf("/reviews/experts/[id]")).toBe(3);
+    expect(levelOf("/reviews/experts/queue")).toBe(3);
+    expect(levelOf("/reviews/techniques")).toBe(2);
+    expect(matchRoute("/reviews/experts/queue")?.label).toBe("Claims to check");
+    expect(matchRoute("/reviews/experts/X-001")?.label).toBe("Expert");
+    expect(breadcrumbFor("/reviews/experts/queue").crumbs.map((c) => c.label)).toEqual([
+      "Reviews",
+      "Experts",
+      "Claims to check",
+    ]);
+  });
+  it("adds no tab", () => {
+    expect(TABS.map((t) => t.label)).toEqual(SIX);
+  });
+});
+
 describe("matchRoute", () => {
   it("prefers static segments over bracketed ones", () => {
     expect(matchRoute("/strategies/leaderboard")?.label).toBe("Leaderboard");
@@ -190,6 +209,9 @@ describe("activeTab", () => {
     ["/reviews/2026-10-20", "reviews"],
     ["/reviews/learned", "reviews"],
     ["/reviews/learned/compare", "reviews"],
+    ["/reviews/experts", "reviews"],
+    ["/reviews/experts/queue", "reviews"],
+    ["/reviews/techniques", "reviews"],
     ["/picks/unknown/deeper/still", "picks"],
   ])("%s -> %s", (p, tab) => {
     expect(activeTab(p)).toBe(tab);

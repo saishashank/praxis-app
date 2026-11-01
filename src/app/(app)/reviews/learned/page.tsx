@@ -73,6 +73,14 @@ export default async function LearnedPage({ searchParams }: { searchParams: Prom
         Lessons, strategy families and rule changes, with the evidence behind each. A lesson is
         never described as stronger than its grade.
       </PageHead>
+      <nav aria-label="Experts and techniques" className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        <Link href="/reviews/experts" className="text-accent underline">
+          Experts
+        </Link>
+        <Link href="/reviews/techniques" className="text-accent underline">
+          Techniques
+        </Link>
+      </nav>
       {model.masked ? (
         <Banner tone="info">
           Your access shows the rules only: no stock names or codes, and dates are shown as weeks.
