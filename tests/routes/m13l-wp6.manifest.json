@@ -1,0 +1,28 @@
+{
+  "routes": {
+    "action src/app/(app)/reviews/experts/queue/actions.ts#bulkConfirmExpertAction": {
+      "tests": ["tests/experts/review.test.ts"]
+    },
+    "action src/app/(app)/reviews/experts/queue/actions.ts#confirmClaimAction": {
+      "tests": ["tests/experts/review.test.ts"]
+    },
+    "action src/app/(app)/reviews/experts/queue/actions.ts#confirmClusterAction": {
+      "tests": ["tests/experts/review.test.ts"]
+    },
+    "action src/app/(app)/reviews/experts/queue/actions.ts#editClaimAction": {
+      "tests": ["tests/experts/review.test.ts"]
+    },
+    "action src/app/(app)/reviews/experts/queue/actions.ts#mergeClaimAction": {
+      "tests": ["tests/experts/review.test.ts"]
+    },
+    "action src/app/(app)/reviews/experts/queue/actions.ts#mergeClusterAction": {
+      "tests": ["tests/experts/review.test.ts"]
+    },
+    "action src/app/(app)/reviews/experts/queue/actions.ts#parkClaimAction": {
+      "tests": ["tests/experts/review.test.ts"]
+    },
+    "action src/app/(app)/reviews/experts/queue/actions.ts#rejectClaimAction": {
+      "tests": ["tests/experts/review.test.ts"]
+    }
+  }
+}

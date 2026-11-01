@@ -93,6 +93,7 @@ describe("no code path turns stored text into markup", () => {
       .filter((f) => /\burl:\s*(?:string|masked)/.test(read(f)));
     expect(loadersWithUrl.map(rel).sort()).toEqual([
       "src/lib/ui/loaders/company.ts",
+      "src/lib/ui/loaders/experts.ts",
       "src/lib/ui/loaders/market.ts",
       "src/lib/ui/loaders/news.ts",
     ]);

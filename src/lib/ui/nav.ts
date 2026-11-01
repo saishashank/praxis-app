@@ -138,6 +138,20 @@ export const ROUTES: readonly RouteNode[] = [
     parent: "/reviews/learned",
     tab: "reviews",
   },
+  { pattern: "/reviews/experts", label: "Experts", parent: "/reviews", tab: "reviews" },
+  {
+    pattern: "/reviews/experts/[id]",
+    label: "Expert",
+    parent: "/reviews/experts",
+    tab: "reviews",
+  },
+  {
+    pattern: "/reviews/experts/queue",
+    label: "Claims to check",
+    parent: "/reviews/experts",
+    tab: "reviews",
+  },
+  { pattern: "/reviews/techniques", label: "Techniques", parent: "/reviews", tab: "reviews" },
   { pattern: "/reviews/glossary", label: "Glossary", parent: "/reviews", tab: "reviews" },
   {
     pattern: "/reviews/alerts",
