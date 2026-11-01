@@ -35,6 +35,7 @@ const NOTICE = [
   "backfill-prices",
   "backfill-index",
   "asx-fetch",
+  "diagnose-signals",
 ];
 
 // GL-07 (O-52): these two carry their own schedule lines (watchdog, Batch-1 fallback).

@@ -23,6 +23,7 @@ export const LOCKED_WORKFLOWS = Object.freeze([
   "backfill-prices",
   "backfill-index",
   "asx-fetch",
+  "diagnose-signals",
 ]);
 
 /**

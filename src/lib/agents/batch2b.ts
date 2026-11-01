@@ -109,7 +109,7 @@ import { applyArn011 } from "./families/arn011";
 import { createContext } from "./families/context";
 import { FAMILY_RULE_VERSION } from "./families";
 import { liveParams, loadVersionSet, runVersions, versionIdOf } from "./versionRuns";
-import type { Candidate, CodeFacts, Family } from "./families/types";
+import type { Candidate, CodeFacts, Family, FamilyInputs } from "./families/types";
 import {
   crossing,
   exitOrderSpec,
@@ -1673,6 +1673,20 @@ async function closedOk(db: Client, market: string, d: string): Promise<boolean>
 }
 
 /**
+ * Inputs that leave the families nothing to decide although no input failed (live defect, October
+ * 2026: an incomplete 60-session window gave no U1 code, the ASX source was off, and every night
+ * recorded `success` with no signal). In the live run F1 and F4 trade U1 only and F2, F3, F5 and F6
+ * need the ASX source. Either gap makes the night `degraded`; the signal rows are unchanged.
+ */
+export function coverageGaps(inputs: Pick<FamilyInputs, "codes" | "sources">): string[] {
+  const gaps: string[] = [];
+  const u1 = inputs.codes.some((c) => c.tier === "U1");
+  if (!u1) gaps.push("no_u1_codes");
+  if (!u1 && inputs.sources.asx === "off") gaps.push("no_family_can_run");
+  return gaps;
+}
+
+/**
  * Decide session `o.d` (batch 2b). Never throws for a data problem: the outcome is the run record
  * and the returned status (`failed` carries the code).
  */
@@ -2006,7 +2020,8 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       await controlsFor({ ...ctx, params: vp }, books, exec, family, list, qualifying, evalCtx);
     }
 
-    const status: SignalsStatus = day.partial ? "degraded" : "success";
+    const gaps = coverageGaps(day.inputs);
+    const status: SignalsStatus = day.partial || gaps.length > 0 ? "degraded" : "success";
     await finishRun(db, runId, {
       status,
       itemsProcessed: stats.cohorts,
@@ -2023,13 +2038,15 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
         ...stats,
         partial: day.partialReasons.length > 0 ? day.partialReasons : null,
         ...(cutoffPollMissing ? { cutoff_poll_missing: true } : {}),
+        coverage: gaps.length > 0 ? gaps : null,
         ...(started !== null && started.opened > 0
           ? { cohortsOpened: started.opened, cohortStartD: started.startD }
           : {}),
       },
       now: o.now(),
     });
-    return emptyResult(o, status, day.partial ? "partial_inputs" : null, runId, stats, day.partial);
+    const reason = day.partial ? "partial_inputs" : gaps.length > 0 ? gaps.join("+") : null;
+    return emptyResult(o, status, reason, runId, stats, day.partial);
   } catch (error) {
     const code =
       error instanceof SignalsError
