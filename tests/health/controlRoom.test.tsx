@@ -69,6 +69,7 @@ function model(
       components,
       strip: [],
       details: true,
+      steelman: { state: "ok", nights: 0, qualifying: 0, text: "Steelman: pending production." },
     },
     checkedAt: "2026-10-20T03:00:00.000Z",
     gauges: null,
@@ -222,6 +223,7 @@ describe("ring and readouts (UXN-283)", () => {
     view(model());
     expect(screen.getByTestId("status-ring").textContent).toContain("9 / 9");
     expect(screen.getByText("Everything is healthy. Nothing needs you today.")).toBeInTheDocument();
+    expect(screen.getByTestId("steelman-health").textContent).toBe("Steelman: pending production.");
   });
 
   it("Editors and Viewers get one plain line per part: no fix, no snooze, no secret detail", () => {

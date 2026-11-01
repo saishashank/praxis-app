@@ -27,6 +27,7 @@ import type { EnvName } from "@/lib/email/templates/core";
 import { melbourneDate } from "@/lib/email/keys";
 import type { PicksParams } from "@/lib/agents/params";
 import { readSection7a } from "@/lib/picks/section7a";
+import { readNight } from "@/lib/steelman/store";
 import { getMeters, usageEnvironment, worstMeter } from "@/lib/usage/meters";
 import { HEALTH_COMPONENTS } from "@/lib/sentinel/schema";
 import { learnLines, readLearnFacts, type LearnFacts } from "@/lib/learning/learnFacts";
@@ -787,6 +788,24 @@ export async function readHealth(
         ? "No model calls today (rules-only)."
         : `${calls} ${plural(calls, "call")}, ${rulesOnly} answered by rules${budget > 0 ? `; budget exhausted ${budget}x` : ""}.`,
   });
+  // Steelman (D-484, D-493): one LLM-free line from the night counters, only on a night that has a row.
+  try {
+    const n = await readNight(c.db, c.market, c.d);
+    if (n !== null) {
+      const parts = [`${n.written} of ${n.requested} written`];
+      if (n.notWrittenNoModel > 0) parts.push(`${n.notWrittenNoModel} with no model available`);
+      if (n.notWrittenBudget > 0) parts.push(`${n.notWrittenBudget} stopped by the AI budget`);
+      if (n.notWrittenLimit > 0) parts.push(`${n.notWrittenLimit} over the daily limit`);
+      if (n.notWrittenCritic > 0) parts.push(`${n.notWrittenCritic} not passed by the checks`);
+      lines.push({
+        label: "Steelman",
+        status: n.notWrittenBudget > 0 ? "attention" : "ok",
+        detail: `${parts.join("; ")}. Informational only; it never changes a pick or an order.`,
+      });
+    }
+  } catch {
+    // an unreadable counter table must not break the review
+  }
   // quota (estimate)
   try {
     const worst = worstMeter(await getMeters(c.db, c.now, usageEnvironment(process.env)));

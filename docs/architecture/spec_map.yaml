@@ -301,6 +301,14 @@ rules:
     specIds: [EML-020, EML-004]
     purpose: "Outbound email record {name} (one email key per message)."
     views: [email]
+  - match: "table:main.{steelman_pack,steelman_point,steelman_night,steelman_suggestion,pick_reflection}"
+    specIds: [PRD-029, AGT-131, AGT-133, SEC-114]
+    purpose: "Steelman record {name}: evidence pack, points, night counters, Owner suggestions or reflection. Written only by the steelman stage; no trading or learning module reads it."
+    views: [agents, data, llm]
+  - match: "table:main.pick_market"
+    specIds: [PRD-030, ARN-103, ARN-104]
+    purpose: "Pick versus market {name}: one immutable row per settled or missed pick, deterministic data."
+    views: [agents, data]
   - match: "table:main.{pick_alert,pick_alert_mail}"
     specIds: [ARN-115, EML-041, SEC-114]
     purpose: "Pick alert record {name}: append-only transitions or the fate of their e-mails."
@@ -373,6 +381,10 @@ rules:
     purpose: "R5 Writer: digest narrative from structured facts."
     specIds: [LLM-001, LLM-032]
     views: [llm, email]
+  - match: "llm-role:R6"
+    purpose: "R6 Steelman author: bull and bear points that cite evidence-pack items; text only, never a decision."
+    specIds: [LLM-001, LLM-061, LLM-063]
+    views: [llm, agents]
   - match: "llm-provider:*"
     purpose: "Free-tier LLM provider {name} in the dated roster; used only after a bake-off passes."
     specIds: [LLM-070, LLM-071]

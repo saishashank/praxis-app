@@ -672,6 +672,32 @@
       }
     },
     {
+      "id": "action:src/app/(app)/review/actions.ts#dismissSuggestionAction",
+      "type": "action",
+      "name": "dismissSuggestionAction",
+      "purpose": "Server action dismissSuggestionAction: a form write with a role check and an audit event.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/review/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/review/actions.ts"
+      }
+    },
+    {
       "id": "action:src/app/(app)/review/actions.ts#rejectCorporateActionAction",
       "type": "action",
       "name": "rejectCorporateActionAction",
@@ -2458,6 +2484,38 @@
       "source": "src/lib/llm/budget.ts",
       "attrs": {
         "candidates": []
+      }
+    },
+    {
+      "id": "llm-role:R6",
+      "type": "llm-role",
+      "name": "R6",
+      "purpose": "R6 Steelman author: bull and bear points that cite evidence-pack items; text only, never a decision.",
+      "specIds": [
+        "LLM-001",
+        "LLM-061",
+        "LLM-063"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Falls back to rules-only output; no free text is ever required.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "llm"
+      ],
+      "source": "src/lib/llm/budget.ts",
+      "attrs": {
+        "candidates": [
+          "google/gemini-2.5-pro",
+          "groq/openai/gpt-oss-120b",
+          "groq/openai/gpt-oss-20b",
+          "groq/qwen/qwen3.8-27b"
+        ]
       }
     },
     {
@@ -6755,6 +6813,222 @@
       }
     },
     {
+      "id": "source:expert_facebook",
+      "type": "source",
+      "name": "expert_facebook",
+      "purpose": "Data source expert_facebook with its licence row (permitted use, risk, status).",
+      "specIds": [
+        "DAT-120",
+        "DAT-121"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A disabled or pending source is not fetched; its status is shown on the Data page.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main",
+      "attrs": {
+        "permittedUse": "manual-only: Owner pastes a link, public metadata only (DAT-227)",
+        "risk": "high",
+        "status": "disabled"
+      }
+    },
+    {
+      "id": "source:expert_instagram",
+      "type": "source",
+      "name": "expert_instagram",
+      "purpose": "Data source expert_instagram with its licence row (permitted use, risk, status).",
+      "specIds": [
+        "DAT-120",
+        "DAT-121"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A disabled or pending source is not fetched; its status is shown on the Data page.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main",
+      "attrs": {
+        "permittedUse": "manual-only: Owner pastes a link, public metadata only (DAT-227)",
+        "risk": "high",
+        "status": "disabled"
+      }
+    },
+    {
+      "id": "source:expert_linkedin",
+      "type": "source",
+      "name": "expert_linkedin",
+      "purpose": "Data source expert_linkedin with its licence row (permitted use, risk, status).",
+      "specIds": [
+        "DAT-120",
+        "DAT-121"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A disabled or pending source is not fetched; its status is shown on the Data page.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main",
+      "attrs": {
+        "permittedUse": "manual-only: Owner pastes a link, public metadata only (DAT-227)",
+        "risk": "high",
+        "status": "disabled"
+      }
+    },
+    {
+      "id": "source:expert_own_site",
+      "type": "source",
+      "name": "expert_own_site",
+      "purpose": "Data source expert_own_site with its licence row (permitted use, risk, status).",
+      "specIds": [
+        "DAT-120",
+        "DAT-121"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A disabled or pending source is not fetched; its status is shown on the Data page.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main",
+      "attrs": {
+        "permittedUse": "public feed metadata and own summary only (PRD-036, DAT-227); terms [VERIFY]",
+        "risk": "medium",
+        "status": "pending"
+      }
+    },
+    {
+      "id": "source:expert_rss",
+      "type": "source",
+      "name": "expert_rss",
+      "purpose": "Data source expert_rss with its licence row (permitted use, risk, status).",
+      "specIds": [
+        "DAT-120",
+        "DAT-121"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A disabled or pending source is not fetched; its status is shown on the Data page.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main",
+      "attrs": {
+        "permittedUse": "public feed metadata and own summary only (PRD-036, DAT-227); terms [VERIFY]",
+        "risk": "medium",
+        "status": "pending"
+      }
+    },
+    {
+      "id": "source:expert_tiktok",
+      "type": "source",
+      "name": "expert_tiktok",
+      "purpose": "Data source expert_tiktok with its licence row (permitted use, risk, status).",
+      "specIds": [
+        "DAT-120",
+        "DAT-121"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A disabled or pending source is not fetched; its status is shown on the Data page.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main",
+      "attrs": {
+        "permittedUse": "manual-only: Owner pastes a link, public metadata only (DAT-227)",
+        "risk": "high",
+        "status": "disabled"
+      }
+    },
+    {
+      "id": "source:expert_x",
+      "type": "source",
+      "name": "expert_x",
+      "purpose": "Data source expert_x with its licence row (permitted use, risk, status).",
+      "specIds": [
+        "DAT-120",
+        "DAT-121"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A disabled or pending source is not fetched; its status is shown on the Data page.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main",
+      "attrs": {
+        "permittedUse": "manual-only: Owner pastes a link, public metadata only (DAT-227)",
+        "risk": "high",
+        "status": "disabled"
+      }
+    },
+    {
+      "id": "source:expert_youtube_feed",
+      "type": "source",
+      "name": "expert_youtube_feed",
+      "purpose": "Data source expert_youtube_feed with its licence row (permitted use, risk, status).",
+      "specIds": [
+        "DAT-120",
+        "DAT-121"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A disabled or pending source is not fetched; its status is shown on the Data page.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main",
+      "attrs": {
+        "permittedUse": "public feed metadata and own summary only (PRD-036, DAT-227); terms [VERIFY]",
+        "risk": "medium",
+        "status": "pending"
+      }
+    },
+    {
       "id": "source:fred",
       "type": "source",
       "name": "fred",
@@ -8156,6 +8430,275 @@
       }
     },
     {
+      "id": "table:main.claim",
+      "type": "table",
+      "name": "claim",
+      "purpose": "Table claim in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0022_experts.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "type",
+          "testability",
+          "cluster_id",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_claim_cluster"
+        ]
+      }
+    },
+    {
+      "id": "table:main.claim_cluster",
+      "type": "table",
+      "name": "claim_cluster",
+      "purpose": "Table claim_cluster in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0022_experts.sql",
+      "attrs": {
+        "columns": [
+          "claim_id",
+          "cluster_id",
+          "role"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_claim_cluster_cluster"
+        ]
+      }
+    },
+    {
+      "id": "table:main.claim_expert",
+      "type": "table",
+      "name": "claim_expert",
+      "purpose": "Table claim_expert in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0022_experts.sql",
+      "attrs": {
+        "columns": [
+          "claim_id",
+          "expert_id"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_claim_expert_expert"
+        ]
+      }
+    },
+    {
+      "id": "table:main.claim_item",
+      "type": "table",
+      "name": "claim_item",
+      "purpose": "Table claim_item in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0022_experts.sql",
+      "attrs": {
+        "columns": [
+          "claim_id",
+          "item_id"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_claim_item_item"
+        ]
+      }
+    },
+    {
+      "id": "table:main.claim_revision",
+      "type": "table",
+      "name": "claim_revision",
+      "purpose": "Table claim_revision in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0022_experts.sql",
+      "attrs": {
+        "columns": [
+          "claim_id",
+          "seq",
+          "statement",
+          "formalisation_text",
+          "vocabulary_gap_text",
+          "claimed_edge_text",
+          "actor",
+          "at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.claim_status",
+      "type": "table",
+      "name": "claim_status",
+      "purpose": "Table claim_status in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0022_experts.sql",
+      "attrs": {
+        "columns": [
+          "claim_id",
+          "seq",
+          "status",
+          "reason",
+          "actor",
+          "at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.cluster",
+      "type": "table",
+      "name": "cluster",
+      "purpose": "Table cluster in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0022_experts.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "name",
+          "category",
+          "statement",
+          "canonical_text",
+          "testability",
+          "external_grade",
+          "evidence_links_json",
+          "vocabulary_gaps",
+          "closest_family",
+          "family_fit_json",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.cluster_state",
+      "type": "table",
+      "name": "cluster_state",
+      "purpose": "Table cluster_state in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0022_experts.sql",
+      "attrs": {
+        "columns": [
+          "cluster_id",
+          "seq",
+          "state",
+          "merged_into",
+          "reason",
+          "actor",
+          "at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.cohort",
       "type": "table",
       "name": "cohort",
@@ -9285,6 +9828,194 @@
           "rule_version",
           "cost_profile",
           "status"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.expert",
+      "type": "table",
+      "name": "expert",
+      "purpose": "Table expert in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0022_experts.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "name",
+          "platforms_json",
+          "handles_json",
+          "home_urls_json",
+          "markets_json",
+          "focus_json",
+          "licence_status",
+          "status",
+          "tier",
+          "no_feed",
+          "audience_size",
+          "audience_d",
+          "poll_json",
+          "created_at",
+          "updated_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.expert_call",
+      "type": "table",
+      "name": "expert_call",
+      "purpose": "Table expert_call in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0022_experts.sql",
+      "attrs": {
+        "columns": [
+          "claim_id",
+          "market",
+          "code",
+          "direction",
+          "call_d",
+          "horizon_sessions",
+          "target_micro",
+          "stop_micro",
+          "tracked",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.expert_call_outcome",
+      "type": "table",
+      "name": "expert_call_outcome",
+      "purpose": "Table expert_call_outcome in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0022_experts.sql",
+      "attrs": {
+        "columns": [
+          "claim_id",
+          "state",
+          "entry_d",
+          "exit_d",
+          "net_ppm",
+          "index_code",
+          "basis",
+          "market_ret_ppm",
+          "vs_market_ppm",
+          "luck_pct",
+          "settled_d"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.expert_proposal",
+      "type": "table",
+      "name": "expert_proposal",
+      "purpose": "Table expert_proposal in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0022_experts.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "market",
+          "d",
+          "cluster_id",
+          "kind",
+          "family",
+          "challenger_id",
+          "status",
+          "reason",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.expert_red_flag",
+      "type": "table",
+      "name": "expert_red_flag",
+      "purpose": "Table expert_red_flag in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0022_experts.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "expert_id",
+          "text",
+          "source_url",
+          "noted_d",
+          "created_at"
         ],
         "database": "main",
         "indexes": []
@@ -10888,6 +11619,52 @@
       }
     },
     {
+      "id": "table:main.pick_market",
+      "type": "table",
+      "name": "pick_market",
+      "purpose": "Pick versus market pick_market: one immutable row per settled or missed pick, deterministic data.",
+      "specIds": [
+        "ARN-103",
+        "ARN-104",
+        "PRD-030"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "data"
+      ],
+      "source": "db/migrations/main/0021_steelman.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "profile",
+          "rank",
+          "kind",
+          "window_from_d",
+          "window_to_d",
+          "index_code",
+          "basis",
+          "index_from_micro",
+          "index_to_micro",
+          "market_ret_ppm",
+          "pick_net_ppm",
+          "vs_market_ppm",
+          "missed",
+          "settled_d"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.pick_outcome",
       "type": "table",
       "name": "pick_outcome",
@@ -10927,6 +11704,49 @@
           "net_micro",
           "net_ppm",
           "updated_d"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.pick_reflection",
+      "type": "table",
+      "name": "pick_reflection",
+      "purpose": "Steelman record pick_reflection: evidence pack, points, night counters, Owner suggestions or reflection. Written only by the steelman stage; no trading or learning module reads it.",
+      "specIds": [
+        "AGT-131",
+        "AGT-133",
+        "PRD-029",
+        "SEC-114"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "data",
+        "llm"
+      ],
+      "source": "db/migrations/main/0021_steelman.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "profile",
+          "rank",
+          "text",
+          "agreed_point_ids_json",
+          "provider",
+          "model",
+          "state",
+          "reason",
+          "created_at"
         ],
         "database": "main",
         "indexes": []
@@ -11611,6 +12431,86 @@
       }
     },
     {
+      "id": "table:main.screening_result",
+      "type": "table",
+      "name": "screening_result",
+      "purpose": "Table screening_result in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0022_experts.sql",
+      "attrs": {
+        "columns": [
+          "run_id",
+          "cluster_id",
+          "family",
+          "params_sha",
+          "rows",
+          "blocks",
+          "mean_net_ppm",
+          "mean_excess_ppm",
+          "lower90_ppm",
+          "p",
+          "adjusted_p",
+          "bh_rejected",
+          "sign_agrees",
+          "survived",
+          "rank",
+          "grade"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.screening_run",
+      "type": "table",
+      "name": "screening_run",
+      "purpose": "Table screening_run in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0022_experts.sql",
+      "attrs": {
+        "columns": [
+          "run_id",
+          "market",
+          "d",
+          "q",
+          "considered",
+          "eligible",
+          "screened",
+          "survivors",
+          "splits_json",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.sentinel_ingest",
       "type": "table",
       "name": "sentinel_ingest",
@@ -11856,6 +12756,47 @@
       }
     },
     {
+      "id": "table:main.source_item",
+      "type": "table",
+      "name": "source_item",
+      "purpose": "Table source_item in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0022_experts.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "expert_id",
+          "url",
+          "platform",
+          "title",
+          "published_at",
+          "ingested_at",
+          "content_hash",
+          "summary",
+          "quote",
+          "kind",
+          "extraction_status"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_source_item_expert"
+        ]
+      }
+    },
+    {
       "id": "table:main.source_register",
       "type": "table",
       "name": "source_register",
@@ -11965,6 +12906,185 @@
         ],
         "database": "main",
         "indexes": []
+      }
+    },
+    {
+      "id": "table:main.steelman_night",
+      "type": "table",
+      "name": "steelman_night",
+      "purpose": "Steelman record steelman_night: evidence pack, points, night counters, Owner suggestions or reflection. Written only by the steelman stage; no trading or learning module reads it.",
+      "specIds": [
+        "AGT-131",
+        "AGT-133",
+        "PRD-029",
+        "SEC-114"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "data",
+        "llm"
+      ],
+      "source": "db/migrations/main/0021_steelman.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "requested",
+          "written",
+          "not_written_limit",
+          "not_written_budget",
+          "not_written_no_model",
+          "not_written_critic",
+          "claims_total",
+          "claims_valid",
+          "validity_ppm",
+          "critic_hidden",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.steelman_pack",
+      "type": "table",
+      "name": "steelman_pack",
+      "purpose": "Steelman record steelman_pack: evidence pack, points, night counters, Owner suggestions or reflection. Written only by the steelman stage; no trading or learning module reads it.",
+      "specIds": [
+        "AGT-131",
+        "AGT-133",
+        "PRD-029",
+        "SEC-114"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "data",
+        "llm"
+      ],
+      "source": "db/migrations/main/0021_steelman.sql",
+      "attrs": {
+        "columns": [
+          "pack_id",
+          "market",
+          "d",
+          "subject_kind",
+          "subject_id",
+          "code",
+          "card_id",
+          "cutoff_at",
+          "items_json",
+          "item_count",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.steelman_point",
+      "type": "table",
+      "name": "steelman_point",
+      "purpose": "Steelman record steelman_point: evidence pack, points, night counters, Owner suggestions or reflection. Written only by the steelman stage; no trading or learning module reads it.",
+      "specIds": [
+        "AGT-131",
+        "AGT-133",
+        "PRD-029",
+        "SEC-114"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "data",
+        "llm"
+      ],
+      "source": "db/migrations/main/0021_steelman.sql",
+      "attrs": {
+        "columns": [
+          "point_id",
+          "pack_id",
+          "side",
+          "n",
+          "text",
+          "citations_json",
+          "monitorable",
+          "state",
+          "author_provider",
+          "author_model",
+          "critic_provider",
+          "critic_model",
+          "critic_note",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.steelman_suggestion",
+      "type": "table",
+      "name": "steelman_suggestion",
+      "purpose": "Steelman record steelman_suggestion: evidence pack, points, night counters, Owner suggestions or reflection. Written only by the steelman stage; no trading or learning module reads it.",
+      "specIds": [
+        "AGT-131",
+        "AGT-133",
+        "PRD-029",
+        "SEC-114"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "data",
+        "llm"
+      ],
+      "source": "db/migrations/main/0021_steelman.sql",
+      "attrs": {
+        "columns": [
+          "suggestion_id",
+          "market",
+          "d",
+          "point_id",
+          "card_id",
+          "code",
+          "family",
+          "status",
+          "created_at",
+          "closed_at",
+          "closed_by"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_steelman_suggestion_open"
+        ]
       }
     },
     {
@@ -13556,6 +14676,26 @@
       ]
     },
     {
+      "id": "llm-role:R6|http|llm-provider:google",
+      "from": "llm-role:R6",
+      "to": "llm-provider:google",
+      "kind": "http",
+      "contract": "Role candidate in the roster; called only after a bake-off passes.",
+      "views": [
+        "llm"
+      ]
+    },
+    {
+      "id": "llm-role:R6|http|llm-provider:groq",
+      "from": "llm-role:R6",
+      "to": "llm-provider:groq",
+      "kind": "http",
+      "contract": "Role candidate in the roster; called only after a bake-off passes.",
+      "views": [
+        "llm"
+      ]
+    },
+    {
       "id": "secret:ACTIONS_HMAC_SECRET_PROD|stored-in|service:actions",
       "from": "secret:ACTIONS_HMAC_SECRET_PROD",
       "to": "service:actions",
@@ -14558,6 +15698,17 @@
       "id": "service:app|contains|action:src/app/(app)/review/actions.ts#confirmCorporateActionAction",
       "from": "service:app",
       "to": "action:src/app/(app)/review/actions.ts#confirmCorporateActionAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|action:src/app/(app)/review/actions.ts#dismissSuggestionAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/review/actions.ts#dismissSuggestionAction",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
@@ -16311,6 +17462,86 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.claim",
+      "from": "service:turso-main",
+      "to": "table:main.claim",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.claim_cluster",
+      "from": "service:turso-main",
+      "to": "table:main.claim_cluster",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.claim_expert",
+      "from": "service:turso-main",
+      "to": "table:main.claim_expert",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.claim_item",
+      "from": "service:turso-main",
+      "to": "table:main.claim_item",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.claim_revision",
+      "from": "service:turso-main",
+      "to": "table:main.claim_revision",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.claim_status",
+      "from": "service:turso-main",
+      "to": "table:main.claim_status",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.cluster",
+      "from": "service:turso-main",
+      "to": "table:main.cluster",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.cluster_state",
+      "from": "service:turso-main",
+      "to": "table:main.cluster_state",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.cohort",
       "from": "service:turso-main",
       "to": "table:main.cohort",
@@ -16612,6 +17843,56 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.expert",
+      "from": "service:turso-main",
+      "to": "table:main.expert",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.expert_call",
+      "from": "service:turso-main",
+      "to": "table:main.expert_call",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.expert_call_outcome",
+      "from": "service:turso-main",
+      "to": "table:main.expert_call_outcome",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.expert_proposal",
+      "from": "service:turso-main",
+      "to": "table:main.expert_proposal",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.expert_red_flag",
+      "from": "service:turso-main",
+      "to": "table:main.expert_red_flag",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
         "data"
       ]
     },
@@ -17045,6 +18326,17 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.pick_market",
+      "from": "service:turso-main",
+      "to": "table:main.pick_market",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.pick_outcome",
       "from": "service:turso-main",
       "to": "table:main.pick_outcome",
@@ -17053,6 +18345,18 @@
       "views": [
         "agents",
         "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.pick_reflection",
+      "from": "service:turso-main",
+      "to": "table:main.pick_reflection",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "data",
+        "llm"
       ]
     },
     {
@@ -17249,6 +18553,26 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.screening_result",
+      "from": "service:turso-main",
+      "to": "table:main.screening_result",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.screening_run",
+      "from": "service:turso-main",
+      "to": "table:main.screening_run",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.sentinel_ingest",
       "from": "service:turso-main",
       "to": "table:main.sentinel_ingest",
@@ -17314,6 +18638,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.source_item",
+      "from": "service:turso-main",
+      "to": "table:main.source_item",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.source_register",
       "from": "service:turso-main",
       "to": "table:main.source_register",
@@ -17341,6 +18675,54 @@
       "contract": "Runs or holds this element.",
       "views": [
         "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.steelman_night",
+      "from": "service:turso-main",
+      "to": "table:main.steelman_night",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "data",
+        "llm"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.steelman_pack",
+      "from": "service:turso-main",
+      "to": "table:main.steelman_pack",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "data",
+        "llm"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.steelman_point",
+      "from": "service:turso-main",
+      "to": "table:main.steelman_point",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "data",
+        "llm"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.steelman_suggestion",
+      "from": "service:turso-main",
+      "to": "table:main.steelman_suggestion",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "data",
+        "llm"
       ]
     },
     {

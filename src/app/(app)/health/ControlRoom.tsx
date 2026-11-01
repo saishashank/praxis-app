@@ -403,6 +403,10 @@ export function ControlRoom({
         ))}
       </ol>
 
+      <p className="m-0 text-sm text-text-muted" data-testid="steelman-health">
+        {h.steelman.text}
+      </p>
+
       <Card title="Free-tier limits">
         {model.gauges === null ? (
           <p className="m-0 text-sm text-text-muted">

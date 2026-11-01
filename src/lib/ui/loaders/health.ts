@@ -5,6 +5,7 @@
 // reasons pass through maskText with an empty active set, so no code or company name can appear.
 import { computeComponents, type ComponentResult } from "@/lib/health/components";
 import { gatherHealthFacts } from "@/lib/health/snapshot";
+import { loadSteelmanHealth, type SteelmanHealth } from "@/lib/health/steelman";
 import { loadMaskLookup, maskText, StockAliases } from "@/lib/view/mask";
 import { marketOf, todayD, type LoaderEnv, type LoaderState } from "./shell";
 
@@ -35,6 +36,8 @@ export type HealthModel = {
   /** One entry per stored day, oldest first: healthy components that day. */
   strip: Array<{ d: string; healthy: number; total: number }>;
   details: boolean;
+  /** BLD-041 evidence line (D-493); text only, no code or name, so it needs no masking. */
+  steelman: SteelmanHealth;
 };
 
 export async function loadHealth(
@@ -100,5 +103,6 @@ export async function loadHealth(
     components,
     strip,
     details: owner,
+    steelman: await loadSteelmanHealth(env.main, marketOf(env)),
   };
 }

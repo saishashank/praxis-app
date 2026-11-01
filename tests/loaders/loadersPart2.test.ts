@@ -496,6 +496,7 @@ describe("populated loaders", () => {
       const own = await loadHealth(envOf(w, "owner"), {});
       expect(own.total).toBe(9);
       expect(own.headline).toBe(`${own.healthy} / 9 healthy`);
+      expect(own.steelman.text).toContain("pending production"); // BLD-041, D-480
       expect(own.details).toBe(true);
       expect(own.components.some((c) => c.items.length > 0)).toBe(true);
       for (const who of ["editor", "viewer"] as Who[]) {
