@@ -101,6 +101,11 @@ export type Facts = {
   slotsEnabled?: SlotList;
   /** Parsed workflow inputs by `worker_state` key; null = present but invalid (default: none). */
   slotInputs?: Readonly<Record<string, Record<string, string> | null>>;
+  /**
+   * V1-B1: run-record keys (`Slot.recheck`) that are closed or running. Absent = unknown, so a
+   * dispatched slot is never dispatched again (fail safe).
+   */
+  closedKeys?: ReadonlySet<string>;
 };
 
 /** The runtime list `worker_state.slots_enabled`: absent, a valid list, or unreadable (fail safe). */
@@ -116,6 +121,16 @@ export type SkipReason =
 export type Skipped = { id: string; reason: SkipReason };
 
 export const slotKey = (id: string, date: string): string => `slot:${id}:${date}`;
+export const RECHECK_RUNNING_MAX_MS = 45 * MINUTE_MS; // a `running` record older than this is a lost runner
+/**
+ * "The record closed its session" (D-675): the same predicate as `CLOSED_2A_SQL` in
+ * `src/lib/arena/closeBooks.ts`. An invariant freeze (`failed` with `navDays`) completed the night
+ * and is not dispatched again; a `failed` without it (crash, provider error) is retried.
+ */
+export const RECHECK_CLOSED_SQL =
+  "(status IN ('success', 'degraded') " +
+  "OR (status = 'failed' AND json_extract(details_json, '$.navDays') IS NOT NULL) " +
+  "OR (status = 'skipped' AND json_extract(details_json, '$.reason') IS NOT 'no_completion_marker'))";
 const rollupKey = (date: string): string => `${CLOCK_JOB}:${MARKET}:${date}`;
 
 // ---- pure decision ---------------------------------------------------------------------------
@@ -132,7 +147,7 @@ export function candidateSlots(local: Local, slots: readonly Slot[] = AU_SLOTS):
         (!s.tradingDaysOnly || !isWeekend(local)) &&
         (s.monthly !== "first-saturday" || isFirstSaturday(local)) &&
         local.minute >= s.minute &&
-        local.minute <= Math.min(s.minute + s.catchUpMin, 1439),
+        local.minute <= Math.min(s.minute + (s.recheck?.untilMin ?? s.catchUpMin), 1439),
     )
     .sort((a, b) => a.priority - b.priority);
 }
@@ -271,11 +286,27 @@ export function decideWithSkips(
     const key = slotKey(slot.id, local.date);
     const stored = states.get(key);
     if (stored === undefined) {
+      // the window of a `recheck` slot is longer than its catch-up: a first dispatch stays within catch-up
+      if (local.minute > slot.minute + slot.catchUpMin) continue;
       out.push({ slot, key, attempt: 1, prev: null, inputs });
       continue;
     }
     const st = stored.state;
-    if (st === null || st.s === "dispatched") continue; // unreadable state: never dispatch over it
+    if (st === null) continue; // unreadable state: never dispatch over it
+    if (st.s === "dispatched") {
+      // 204 means accepted, not ran (V1-B1): dispatch again when the night's record is missing
+      const rc = slot.recheck;
+      if (
+        rc !== undefined &&
+        facts.closedKeys !== undefined &&
+        st.n < MAX_ATTEMPTS &&
+        nowMs - Date.parse(st.at) >= rc.afterMin * MINUTE_MS &&
+        !facts.closedKeys.has(`${rc.keyPrefix}${local.date}`)
+      ) {
+        out.push({ slot, key, attempt: st.n + 1, prev: stored.raw, inputs });
+      }
+      continue;
+    }
     const stale = st.s === "claimed" && nowMs - Date.parse(st.at) >= CLAIM_STALE_MS;
     if ((st.s === "failed" || stale) && st.n < MAX_ATTEMPTS) {
       out.push({ slot, key, attempt: st.n + 1, prev: stored.raw, inputs });
@@ -398,6 +429,7 @@ export async function runClock(
     let iState = -1;
     let iMode = -1;
     let iCal = -1;
+    let iClosed = -1;
     if (cands.length > 0) {
       iState = first.length;
       first.push({
@@ -415,6 +447,18 @@ export async function runClock(
           args: [MARKET, local.date],
         });
       }
+    }
+    const recheckKeys = [
+      ...new Set(cands.flatMap((s) => (s.recheck ? [`${s.recheck.keyPrefix}${local.date}`] : []))),
+    ];
+    if (recheckKeys.length > 0) {
+      iClosed = first.length;
+      first.push({
+        sql:
+          `SELECT DISTINCT concurrency_key FROM run_record WHERE concurrency_key IN (${placeholders(recheckKeys.length)}) ` +
+          `AND (${RECHECK_CLOSED_SQL} OR (status = 'running' AND started_at > ?))`,
+        args: [...recheckKeys, iso(nowMs - RECHECK_RUNNING_MAX_MS)],
+      });
     }
     let r1: StmtResult[];
     try {
@@ -447,6 +491,7 @@ export async function runClock(
       tradingDay: !isWeekend(local) && calKind !== "holiday",
       slotsEnabled: parseSlotsEnabled(listRaw),
       slotInputs,
+      closedKeys: iClosed >= 0 ? new Set(r1[iClosed].rows.map((r) => String(r[0]))) : undefined,
     };
     const { actions, skipped } = decideWithSkips(local, facts, states, nowMs, slots);
     summary.skipped = skipped;

@@ -323,7 +323,32 @@ export async function runRoutes(
       if (res.ok) summary.posted.push(a.slot.id);
       else summary.failed.push(a.slot.id);
       console.log(`routes: ${res.ok ? "posted" : "failed"} ${a.slot.id} attempt ${a.attempt}`);
-      if (a.key === null) continue;
+      if (a.key === null) {
+        // V2-B1 (D-668): a recurring slot has no state row, so its failure is recorded once per slot
+        // and local day (first failure wins; the guarded insert is idempotent) for System Health.
+        if (!res.ok) {
+          const at = iso(deps.nowMs());
+          const key = `route-failed:${a.slot.id}:${local.date}:recurring`;
+          record.push({
+            sql:
+              "INSERT INTO run_record (job, market, concurrency_key, scheduled_for, started_at, " +
+              "ended_at, status, error_summary, details_json) SELECT ?, ?, ?, ?, ?, ?, 'failed', ?, ? " +
+              "WHERE NOT EXISTS (SELECT 1 FROM run_record WHERE concurrency_key = ?)",
+            args: [
+              ROUTE_JOB,
+              MARKET,
+              key,
+              local.date,
+              at,
+              at,
+              `route ${a.slot.id} ${res.detail}`.slice(0, 120),
+              JSON.stringify({ slot: a.slot.id, recurring: true }),
+              key,
+            ],
+          });
+        }
+        continue;
+      }
       const at = iso(deps.nowMs());
       record.push({
         sql: "UPDATE worker_state SET value_json = ?, updated_at = ? WHERE key = ?",

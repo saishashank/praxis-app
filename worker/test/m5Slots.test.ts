@@ -314,7 +314,7 @@ describe("catch-up windows and retries (D-103, D-108)", () => {
     appStatus = 200;
     await tick(at(MON, "20:05", 11));
     expect(appCalls.map((c) => hm(sydneyLocal(c.t).minute))).toEqual(["20:00", "20:05"]);
-    expect(rows(db, "SELECT 1 FROM run_record WHERE job = 'worker-route'")).toEqual([]);
+    expect(rows(db, "SELECT 1 FROM run_record WHERE job = 'worker-route'")).toHaveLength(1); // V2-B1: one failure record per recurring slot and day
   });
 });
 

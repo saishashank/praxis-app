@@ -118,6 +118,13 @@ export const INCIDENT_SPECS: Readonly<Record<string, Spec>> = {
     fix: "Check and rotate the dispatch token in the Worker secrets, then update the expiry date.",
     fixPath: "/health",
   },
+  arena_close_gap: {
+    component: "Arena close",
+    impact:
+      "A trading session was not closed, so the next night refused to run: orders would fill at the wrong open and stops would be skipped.",
+    fix: "Dispatch Arena close again (it closes the missed sessions in order; or run close-books.mjs --date for the missed day) before the next session's close.",
+    fixPath: "/health",
+  },
   provider_auth: {
     component: "Provider",
     impact: "A provider refused our key (401/403); calls to it fail.",

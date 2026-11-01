@@ -148,6 +148,8 @@ import {
 } from "./sleeveWriter";
 import { markNotRechecked } from "./preopen";
 import { planLegacy } from "./terminal";
+import { openS2Once } from "@/lib/heartbeat/incidents";
+import type { NotifyCtx } from "@/lib/incidents/notify";
 
 export const ARENA_JOB = "arena-close";
 export const ARENA_MASTER_SEED = 20_261_011n;
@@ -183,6 +185,8 @@ export type CloseBooksOptions = {
   readonly restartParams?: (executionId: string) => ParamOverrides;
   /** ch.15 max_promotions_per_week for a pending promotion at a restart (default: the registry value). */
   readonly maxPromotionsPerWeek?: number;
+  /** Email context for the P1 "previous session not closed" incident (V1-B1); absent = recorded only. */
+  readonly notify?: Omit<NotifyCtx, "db" | "now">;
 };
 
 export type CloseBooksStatus = "success" | "degraded" | "failed" | "skipped" | "already_done";
@@ -1355,6 +1359,80 @@ async function recordSkip(
 }
 
 /**
+ * V1-B1 / D-661: is the session before `d` closed? True when its 2a run record is `success` or
+ * `degraded` (books written), `failed` for invariants (the day completed, the cohort is frozen), or `skipped` for a reason that is not a missing Batch 1 marker
+ * (market off, data only, non-trading). The first night is exempt: with no earlier closed
+ * session for the market (go-live, fresh start, replay start) there is nothing to be late for.
+ */
+export async function previousSessionClosed(
+  db: Client,
+  market: string,
+  d: string,
+  calendar: CalendarRow[],
+): Promise<{ ok: true } | { ok: false; priorD: string }> {
+  let priorD: string;
+  try {
+    priorD = previousTradingDay(d, calendar);
+  } catch {
+    return { ok: true };
+  }
+  const prior = await db.execute({
+    sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND ${CLOSED_2A_SQL} LIMIT 1`,
+    args: [closeBooksKey(market, priorD)],
+  });
+  if (prior.rows.length > 0) return { ok: true };
+  // D-675: the exemption uses the same "closed" predicate as the check, so a market whose only
+  // earlier nights ended in an invariant freeze (`failed` + navDays) is not a first night.
+  const earlier = await db.execute({
+    sql: `SELECT 1 FROM run_record WHERE job = ? AND market = ? AND scheduled_for < ?
+          AND ${CLOSED_2A_SQL} LIMIT 1`,
+    args: [ARENA_JOB, market, d],
+  });
+  return earlier.rows.length === 0 ? { ok: true } : { ok: false, priorD };
+}
+
+/**
+ * SQL predicate "this arena-2a run record closed its session" (D-661, D-675). The Worker's
+ * re-dispatch check (`worker/src/clock.ts`, `RECHECK_CLOSED_SQL`) mirrors it, plus `running`.
+ */
+export const CLOSED_2A_SQL =
+  "(status IN ('success', 'degraded') " +
+  "OR (status = 'failed' AND json_extract(details_json, '$.navDays') IS NOT NULL) " +
+  "OR (status = 'skipped' AND json_extract(details_json, '$.reason') IS NOT 'no_completion_marker'))";
+
+/** Refuse session d: a `failed` record (never `skipped`, which the next night would read as closed) + a P1 incident. */
+async function refuseGap(
+  db: Client,
+  opts: CloseBooksOptions,
+  priorD: string,
+): Promise<CloseBooksResult> {
+  const reason = "previous_session_not_closed";
+  const runId = await startRun(db, {
+    job: ARENA_JOB,
+    market: opts.market,
+    concurrencyKey: closeBooksKey(opts.market, opts.d),
+    scheduledFor: opts.d,
+    commitSha: opts.commitSha ?? undefined,
+    now: opts.now(),
+  });
+  await finishRun(db, runId, {
+    status: "failed",
+    errorSummary: `${reason}: ${priorD} has no closed arena-2a record`,
+    details: { reason, priorD },
+    now: opts.now(),
+  });
+  await openS2Once(
+    db,
+    "arena_close_gap",
+    { market: opts.market, d: opts.d, priorD },
+    opts.now(),
+    opts.notify,
+    `Arena close refused for ${opts.d}: session ${priorD} is not closed`,
+  );
+  return emptyResult(opts, "failed", reason, runId);
+}
+
+/**
  * Close the books for session `opts.d` (batch 2a). Never throws for a data or invariant problem:
  * the outcome is the run record and the returned status (`failed` carries the code).
  */
@@ -1387,6 +1465,9 @@ export async function closeBooksDay(
       marker.rows.length > 0 ? "non_trading_day" : "no_completion_marker",
     );
   }
+
+  const gap = await previousSessionClosed(db, opts.market, opts.d, calendar);
+  if (!gap.ok) return refuseGap(db, opts, gap.priorD);
 
   const stale = await db.execute({
     sql: "SELECT 1 FROM run_record WHERE concurrency_key = ? AND status = 'running' LIMIT 1",
