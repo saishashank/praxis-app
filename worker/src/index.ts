@@ -24,63 +24,39 @@ export default {
   },
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     console.log(JSON.stringify(heartbeat(controller.scheduledTime, env.PRAXIS_ENV)));
-    // Master clock (PLT-071): dispatches due workflows. Never throws; no work on idle minutes.
-    try {
-      await runClock(env, controller.scheduledTime, {
-        fetch: (i, init) => fetch(i, init),
-        nowMs: () => Date.now(),
-      });
-    } catch {
-      // runClock already contains its errors; nothing here may disturb the self-check.
-    }
-    // D-195: the first tick of a newly deployed commit dispatches the post-deploy fill once (ASX
-    // fetch with history, full replay). No request at all once that commit is done. Never throws.
-    try {
-      await runPostDeploy(env, { fetch: (i, init) => fetch(i, init), nowMs: () => Date.now() });
-    } catch {
-      // runPostDeploy already contains its errors.
-    }
-    // PLT-015: once a day (02:40-02:44 UTC) re-enable scheduled workflows GitHub disabled after 60 idle
-    // days. No work on any other minute. Never throws.
-    try {
-      await runReenable(env, controller.scheduledTime, {
-        fetch: (i, init) => fetch(i, init),
-        nowMs: () => Date.now(),
-      });
-    } catch {
-      // runReenable already contains its errors.
-    }
-    // Signed route slots (M5 T10, decision 41): alert flush, pre-open, Evening Review. All slots are
-    // disabled; no work and no database request unless one is enabled and due. Never throws.
-    try {
-      await runRoutes(env, controller.scheduledTime, {
-        fetch: (i, init) => fetch(i, init),
-        nowMs: () => Date.now(),
-      });
-    } catch {
-      // runRoutes already contains its errors.
-    }
-    // ASX poll (DAT-122): zero database work unless ASX_LIVE is on, a poll slot is due and the
-    // environment is production; the token and kill switch decide the rest. Never throws.
-    try {
-      await runAsx(env, controller.scheduledTime, {
-        fetch: (i, init) => fetch(i, init),
-        nowMs: () => Date.now(),
-      });
-    } catch {
-      // runAsx already contains its errors.
-    }
-    // ASX listed-companies import (D-067): one trading-day slot at 07:30 Sydney; the same
-    // switches as the poll and the same rate token (priority 3). Never throws.
-    try {
-      await runUniverse(env, controller.scheduledTime, {
-        fetch: (i, init) => fetch(i, init),
-        nowMs: () => Date.now(),
-      });
-    } catch {
-      // runUniverse already contains its errors.
-    }
-    // Credential self-check (SEC-101): never throws; I/O waits only (PLT-070 CPU budget).
-    await runSelfCheck(env, controller.scheduledTime);
+    const deps = {
+      fetch: (i: RequestInfo | URL, init?: RequestInit) => fetch(i, init),
+      nowMs: () => Date.now(),
+    };
+    // V1-I8 (D-774): the runners are independent (each reads and claims its own rows, every one is
+    // idempotent and never throws), so they run as concurrent chains instead of one after another:
+    // the worst minute is the slowest chain (one route post, up to 28 s) rather than the sum, which
+    // could pass 60 s. The ASX poll and the listed-companies import share ONE rate token (priority
+    // 3), so they stay in one serial chain. CPU time and the subrequest count are unchanged (the same
+    // work); at most five requests are in flight, inside the six-connection limit.
+    const guarded = async (run: () => Promise<unknown>): Promise<void> => {
+      try {
+        await run();
+      } catch {
+        // every runner already contains its own errors; nothing here may disturb the others.
+      }
+    };
+    await Promise.all([
+      // Master clock (PLT-071): dispatches due workflows. Never throws; no work on idle minutes.
+      guarded(() => runClock(env, controller.scheduledTime, deps)),
+      // D-195: the first tick of a newly deployed commit dispatches the post-deploy fill once.
+      guarded(() => runPostDeploy(env, deps)),
+      // PLT-015: once a day (02:40-02:44 UTC) re-enable scheduled workflows GitHub disabled.
+      guarded(() => runReenable(env, controller.scheduledTime, deps)),
+      // Signed route slots (M5 T10, decision 41): no work and no database request unless one is due.
+      guarded(() => runRoutes(env, controller.scheduledTime, deps)),
+      // ASX poll (DAT-122), then the listed-companies import (D-067): serial, they share the token.
+      guarded(async () => {
+        await guarded(() => runAsx(env, controller.scheduledTime, deps));
+        await guarded(() => runUniverse(env, controller.scheduledTime, deps));
+      }),
+      // Credential self-check (SEC-101): I/O waits only (PLT-070 CPU budget).
+      guarded(() => runSelfCheck(env, controller.scheduledTime)),
+    ]);
   },
 } satisfies ExportedHandler<Env>;

@@ -48,7 +48,7 @@ describe("AgentParams.cortex", () => {
       ledgerFdrQ: 0.1,
       bootstrapBlockSessions: 120,
       slopeHideUb: 1,
-      stageMinutes: 20,
+      stageMinutes: 15,
       survivorshipHaircutPp: 1.5,
       suspensionMarkPolicy: "100% x5, -10pts per 5, floor 50%",
     });

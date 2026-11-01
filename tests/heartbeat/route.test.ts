@@ -290,3 +290,44 @@ describe("failure handling", () => {
     expect(body).toBe('{"error":"unavailable"}');
   });
 });
+
+describe("V1-I2 / V1-I7: DST-aware evening window and the same-day retry", () => {
+  const cronGet = (path: string) =>
+    new Request(`https://praxis-host.vercel.app${path}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${CRON}`, "user-agent": "vercel-cron/1.0" },
+    });
+  const AEDT_2110 = new Date("2026-10-12T10:10:00.000Z"); // 21:10 Melbourne (AEDT)
+  const AEST_2110 = new Date("2026-06-15T11:10:00.000Z"); // 21:10 Melbourne (AEST)
+  const AEST_2010 = new Date("2026-06-15T10:10:00.000Z"); // 20:10 Melbourne: the AEDT line in winter
+
+  it("a scheduled call runs at 21:10 local in both regimes and is a no-op at the other regime's time", async () => {
+    for (const [now, runsIt] of [
+      [AEDT_2110, true],
+      [AEST_2110, true],
+      [EVENING_NOW, false], // 22:10 AEDT: the AEST line in summer
+      [AEST_2010, false],
+    ] as const) {
+      const res = await make("evening", now)(cronGet(EP));
+      const body = (await res.json()) as { skipped?: string };
+      expect(res.status).toBe(200);
+      expect(body.skipped === "outside local window").toBe(!runsIt);
+    }
+    // two real runs (two different Melbourne dates), nothing for the two skipped calls
+    expect(await runs()).toHaveLength(2);
+  });
+
+  it("a manual call (no cron agent) is never window-gated", async () => {
+    const res = await make("evening", EVENING_NOW)(get(EP));
+    expect(((await res.json()) as { skipped?: string }).skipped).toBeUndefined();
+  });
+
+  it("the retry call finishes a non-final day and skips a final one", async () => {
+    await db.execute("DROP TABLE market");
+    const first = await make("evening", AEDT_2110)(cronGet(EP));
+    expect(await first.json()).toMatchObject({ status: "unknown" });
+    const retry = await make("evening", AEDT_2110)(cronGet(`${EP}?try=2`));
+    expect(((await retry.json()) as { skipped?: string }).skipped).toBeUndefined();
+    expect(await runs()).toHaveLength(2);
+  });
+});

@@ -498,8 +498,9 @@ export const AU_SLOTS: readonly Slot[] = [
   }),
   slot({
     id: "intraday-scan",
-    time: "10:30",
-    until: "15:30",
+    // V2-I1 (D-770): offset 2 minutes so the scan never shares a tick with quote-poll (multiples of 5).
+    time: "10:32",
+    until: "15:32",
     everyMin: 30,
     runner: "route",
     route: "/api/internal/intraday-scan",
@@ -510,6 +511,6 @@ export const AU_SLOTS: readonly Slot[] = [
     catchUpMin: 0,
     enabled: true,
     requiresListing: true,
-    note: "Intraday scan 10:30-15:30 every 30 min (M17, AGT-140); OFF until the Owner lists it and accepts the quote source",
+    note: "Intraday scan 10:32-15:32 every 30 min (M17, AGT-140); OFF until the Owner lists it and accepts the quote source",
   }),
 ];

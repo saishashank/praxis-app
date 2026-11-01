@@ -608,3 +608,65 @@ Auth and security: V1-I3 (signer half), I6, I9, I10, I11, I12, I13, I14. Decisio
 - **D-789** Not changed: no `PRAXIS_ENV` was added to `.env.example`/the secrets registry (it is a plain variable already in the env
   names list); the review's `tests/http/headers.test.ts` assertion for the cookie flags is placed in `tests/auth/config.test.ts`
   next to the existing Auth.js cookie-table test, which is where the old default-cookie assertion lived.
+
+### Batch I-1
+
+Operations and Worker (branch `v2/imp-1`; findings V1-I1, V1-I2, V1-I7, V1-I8, V2-I1, V2-I4, V2-I6, V2-I9).
+
+- **D-770** V1-I1 / V2-I4: System Health gets ONE "Last 7 nights" table (`NightsCheck`, `src/lib/health/routePosts.ts`
+  `loadNights`/`buildNights`): a row per PLT-073 step from `evaluateDay` (the same function as the Day timeline
+  check, run for each of the last 7 Melbourne dates) and, below them, a row per Worker route slot that had a failed
+  post in the window (`worker-route` run records, D-668); a column per night. The "Day timeline check" card
+  (today, with deadlines and notes) and the Worker-slots form (the Owner switch) stay as they are: the form is a
+  control, not a status table. A route row shows failures only, because a recurring slot writes no success
+  record; a dash means "no failure recorded", and the card says so.
+- **D-771** V1-I1 `JOBS`: added `maintenance-nightly` (86 400 s; the privacy-relevant retention and hashing run),
+  `arena-learn`, `arena-words` (3-day trading-day gap logic) and `worker-reenable` (daily). Checked against the
+  code: `kb-archive`, `replay`, `asx-fetch`, `backfill-prices`, `llm-bakeoff` and `decision-cutoff` write NO
+  `run_record` today (the review's "latestPerJob returns them" does not hold), so a job line would show "no
+  data" for ever and is not added; their health is the workflow result. `worker-route` is deliberately not a job
+  line either (D-679: it writes failures only, the line would read FAILED for ever); it is the D-773 lines and
+  the table rows above.
+- **D-772** V1-I2: (a) the YAML watchdog's problems go through `notifyIncident` with the stable kinds it
+  already shared with the heartbeat (`worker_blind`, `review_missing`): one open incident per kind, escalation
+  and the incident email `inc:<id>:open`, no more per-slot `wd-<d>-<slot>-<kind>` mails. `incident_open` ("an
+  incident opened today is still open") is not an incident: it only fails the 21:50 run, GitHub's failure mail is
+  its alert. (b) The Worker's ASX trip incident now uses the heartbeat's kind `asx_trip` with the same
+  one-open-row guard, so a trip is one row (an older open `asx_block_trip` row stays until resolved). (c) DST: Vercel
+  crons are fixed UTC, so the evening heartbeat has a line per regime (10:10 and 10:40 UTC = 21:10/21:40 AEDT;
+  11:10 and 11:40 UTC = 21:10/21:40 AEST) and a scheduled call (user agent `vercel-cron`) outside 21:00-21:55
+  Melbourne is a 200 no-op; a manual call always runs. The check is now before the 21:50 watchdog in both regimes.
+  (d) NOT done: `watchdog.yml` stays both scheduled and Worker-dispatchable. The Worker slots `watchdog-2040` and
+  `watchdog-2150` are listed-only and default off (O-52 keeps the YAML schedule as the independent trigger); the
+  Owner should leave them unticked. Removing them needs a production-job-lock and slot-table change.
+- **D-773** V2-I4: Owner-only "Worker route posts" section on `/health` (`HealthSummary.routeLines`): per slot,
+  "Worker route <slot>: N failed posts today (<last summary>)", from the `worker-route` failure records; nothing
+  when the day is clean. Read failure shows nothing (never hides job status).
+- **D-774** V1-I8: the Worker tick runs its runners as concurrent chains (`Promise.all`): clock, post-deploy,
+  re-enable, routes, [ASX poll then universe import, serial because they share one rate token], self-check. Route
+  posts within a tick run with `mapBounded` at most 3 at a time; records are written in priority order from the
+  collected results. Same work, so CPU and subrequest budgets are unchanged (TST-124 tests green); the worst
+  minute is the slowest chain instead of the sum.
+- **D-775** V2-I1: `intraday-scan` moves to 10:32..15:32 every 30 minutes (11 runs, never on a multiple of 5, so
+  never in the `quote-poll` tick). `GO_LIVE_SLOTS`, the Worker table and the tests move together. The scan
+  route's own slot key still floors to the config grid (`intraday_scan_start` 10:30, step 30), and its window
+  check allows 3 minutes after `intraday_scan_end` (`SCAN_END_GRACE_MIN`), so the 15:32 call is the 15:30 slot.
+- **D-776** V2-I6: NOT changed. The empty-plan claim row (requests 0) is the only per-tick heartbeat of the poll:
+  `recurringRunHealth` (D-698) reads the latest non-paused claim, so skipping it on an empty plan would report "no
+  successful run today" on every quiet day. It adds no requests to the budget (the claim reserves
+  `planned.length`, 0). The 73 zero-request rows a quiet day writes are accepted; a lighter alternative (one
+  "idle" row per hour) is left for the Owner.
+- **D-777** V2-I9: `cortex_stage_minutes` default 20 -> 15 (bounds unchanged; an Owner-stored value stays). With
+  the batch-2a wait (at most 4 minutes), batch 2b/3, the picks and the steelman after it, the job keeps about 21
+  minutes of margin inside its 40-minute timeout. The workflow timeout was NOT raised (the production job text is
+  locked, `scripts/ci/prod-job-lock.mjs`). A per-phase time in the signals run record was NOT added: the
+  D-280 test requires every v1 row to be byte-identical with the stage on or off; the stage already measures its own
+  `elapsedMinutes` (StageResult) against the budget. D-504 isolation is unchanged: an overrun still
+  abstains for the night and only the allowed families hold cash.
+- **D-778** V1-I7: the heartbeat and watchdog crons each get a same-day retry (`?try=2`: morning 00:50 UTC,
+  evening +30 minutes in each regime, watchdog 12:40 UTC). Both handlers are idempotent per Melbourne date and
+  only a `final` record stops them, so a DB blip that left `final:false` (or no record) is repaired by the
+  retry and a finished day is a skip. The review's alternative (the Worker's morning slot re-POSTs) is not used:
+  those routes authenticate with the Vercel cron secret, not the Worker HMAC. Reviewer: the cron count rises
+  from 3 to 8 entries (distinct paths through query strings); confirm the Vercel plan accepts it before the PR
+  merge.

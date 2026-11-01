@@ -41,7 +41,7 @@ const RANGED: ReadonlyArray<readonly [ConfigKey, number, number, number, "int" |
   ["ledger_fdr_q", 0.1, 0.05, 0.2, "num"],
   ["bootstrap_block_sessions", 120, 60, 250, "int"],
   ["cortex_slope_hide_ub", 1, 0.5, 1, "num"],
-  ["cortex_stage_minutes", 20, 5, 60, "int"],
+  ["cortex_stage_minutes", 15, 5, 60, "int"],
 ];
 
 describe("M15 keys", () => {

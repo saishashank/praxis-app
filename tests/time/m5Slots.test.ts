@@ -135,7 +135,7 @@ describe("TST-103: UTC instants of every M5 slot around both clock changes (2026
     const every = (from: number, to: number, step: number) =>
       Array.from({ length: (to - from) / step + 1 }, (_, i) => hm(from + i * step));
     if (id === "quote-poll") return every(10 * 60, 16 * 60, 5); // M17: 10:00-16:00 every 5 min
-    if (id === "intraday-scan") return every(10 * 60 + 30, 15 * 60 + 30, 30); // 10:30-15:30
+    if (id === "intraday-scan") return every(10 * 60 + 32, 15 * 60 + 32, 30); // 10:32-15:32 (V2-I1)
     return Array.from({ length: 31 }, (_, i) => hm(8 * 60 + i)); // morning + 30 min catch-up
   };
 

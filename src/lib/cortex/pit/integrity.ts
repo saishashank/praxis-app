@@ -41,7 +41,7 @@ export function isLateBarNight(i: LateBarInputs): boolean {
 export type QuotaInputs = {
   /** Wall-clock minutes the stage has used so far (the caller measures; the core never reads a clock). */
   readonly elapsedMinutes: number;
-  /** `cortex_stage_minutes` (default 20, bounds 5-60). */
+  /** `cortex_stage_minutes` (default 15, bounds 5-60; V2-I9). */
   readonly stageMinutes: number;
   /** Share in [0, 1] of universe codes without a D bar. */
   readonly staleShare: number;

@@ -19,6 +19,7 @@ import { loadControlsView, type ControlsView } from "@/lib/data/controls";
 import { pickAlertsHealth } from "@/lib/alerts/pick/poll";
 import { intradayScanHealth } from "@/lib/intraday/run";
 import { isStale, JOBS } from "./jobs";
+import { workerRouteLines } from "./routePosts";
 import { getQualitySummary, type QualitySummary } from "./quality";
 
 export const SELFCHECK_JOB = "credential-selfcheck-vercel";
@@ -62,6 +63,7 @@ export type HealthSummary = {
   openIncidents?: IncidentRow[] | null; // Owner only; null = could not be read
   heartbeatIncidents?: OpenS2[] | null; // Owner only; open S2 incidents (PLT-074)
   intradayLines?: string[] | null; // Owner only; pick-alert poll and intraday scan lines (V2-S3)
+  routeLines?: string[] | null; // Owner only; failed Worker route posts today per slot (V2-I4, D-773)
   moneyUnverified?: string[]; // Owner only; [VERIFY] money constants not yet approved (D-710)
   secrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only (Vercel)
   workerSecrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only (Worker)
@@ -189,6 +191,11 @@ export async function getHealthSummary(
       summary.intradayLines = lines;
     } catch {
       summary.intradayLines = null; // intraday trouble never hides job status
+    }
+    try {
+      summary.routeLines = await workerRouteLines(mainDb, now);
+    } catch {
+      summary.routeLines = null; // route trouble never hides job status
     }
     try {
       summary.openIncidents = await listOpenS1(mainDb);

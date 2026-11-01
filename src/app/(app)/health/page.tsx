@@ -17,6 +17,7 @@ import { EmailControlsSection } from "./EmailControlsSection";
 import { WorkerSlotsSection } from "./WorkerSlotsSection";
 import { loadSlotsView, type SlotsView } from "@/lib/golive/slots";
 import { DayTimelineCheck } from "./DayTimelineCheck";
+import { NightsCheck } from "./NightsCheck";
 import { loadAttentionItems } from "@/lib/health/attention";
 import {
   loadEmailControlsView,
@@ -527,6 +528,10 @@ export default async function HealthPage() {
     if (summary.controls) nav.push({ id: "controls-h", label: "Data controls" });
     if (owner) nav.push({ id: "email-controls-h", label: "Email and alerts" });
     nav.push({ id: "day-timeline-h", label: "Day timeline" });
+    if (owner) nav.push({ id: "nights-h", label: "Last 7 nights" });
+    if (owner && summary.routeLines && summary.routeLines.length > 0) {
+      nav.push({ id: "route-posts-h", label: "Worker route posts" });
+    }
     if (owner) nav.push({ id: "worker-slots-h", label: "Worker slots" });
     if (owner && summary.intradayLines && summary.intradayLines.length > 0) {
       nav.push({ id: "intraday-h", label: "Intraday polling" });
@@ -708,6 +713,20 @@ export default async function HealthPage() {
 
             {owner && <EmailControlsSection v={emailControls} />}
             <DayTimelineCheck owner={owner} />
+            <NightsCheck owner={owner} />
+
+            {owner && summary.routeLines && summary.routeLines.length > 0 && (
+              <section aria-labelledby="route-posts-h" className="flex flex-col gap-3">
+                <h2 id="route-posts-h" className="text-xl font-semibold">
+                  Worker route posts
+                </h2>
+                <ul className="list-disc pl-6 text-sm">
+                  {summary.routeLines.map((l) => (
+                    <li key={l}>{l}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
             {owner && <WorkerSlotsSection view={slotsView} />}
 

@@ -4,7 +4,7 @@
 // A `route` slot is a signed POST to a Vercel route. The slots (schedule.ts) are: alert-flush (odd
 // minutes, only when `alert_flush_due` has passed), pre-open / pre-open-retry (09:54, 09:58) and
 // evening-review / evening-review-late (20:00-22:00), and the M17 quote-poll (10:00-16:00 every 5 min)
-// and intraday-scan (10:30-15:30 every 30 min) recurring slots (disabled or listed-only; the routes refuse until the
+// and intraday-scan (10:32-15:32 every 30 min) recurring slots (disabled or listed-only; the routes refuse until the
 // quote source is accepted). All are DISABLED; the dispatch clock
 // (clock.ts) never fires them, this runner does.
 //
@@ -188,6 +188,27 @@ export async function postSigned(
   }
 }
 
+/** Concurrent signed posts in one tick (the Workers limit is six simultaneous connections). */
+export const POST_CONCURRENCY = 3;
+
+/** Runs `fn` over `items` with at most `limit` in flight; results keep the input order. */
+export async function mapBounded<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const lane = async (): Promise<void> => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
+  return out;
+}
+
 export type RouteSummary = { requests: number; posted: string[]; failed: string[] };
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -317,11 +338,17 @@ export async function runRoutes(
       });
     }
 
-    // ---- post (sequential, priority order), then request 3: record single-shot outcomes -----
+    // ---- post (bounded parallel, results in priority order), then request 3: record outcomes -----
+    // V1-I8 (D-774): the posts are independent signed requests to idempotent routes; one tick used to
+    // wait for each in turn (up to 28 s apiece). At most POST_CONCURRENCY are in flight; the records
+    // below are still written in priority order from the collected results.
     const record: Stmt[] = [];
-    for (const a of actions) {
-      if (!owned.has(a)) continue;
-      const res = await postSigned(env, a.slot, local.date, deps);
+    const todo = actions.filter((a) => owned.has(a));
+    const results = await mapBounded(todo, POST_CONCURRENCY, (a) =>
+      postSigned(env, a.slot, local.date, deps),
+    );
+    for (const [i, a] of todo.entries()) {
+      const res = results[i];
       if (res.ok) summary.posted.push(a.slot.id);
       else summary.failed.push(a.slot.id);
       console.log(`routes: ${res.ok ? "posted" : "failed"} ${a.slot.id} attempt ${a.attempt}`);

@@ -6673,13 +6673,13 @@
       "id": "slot:intraday-scan",
       "type": "slot",
       "name": "intraday-scan",
-      "purpose": "Intraday scan 10:30-15:30 every 30 min (M17, AGT-140); OFF until the Owner lists it and accepts the quote source",
+      "purpose": "Intraday scan 10:32-15:32 every 30 min (M17, AGT-140); OFF until the Owner lists it and accepts the quote source",
       "specIds": [
         "AGT-140",
         "PLT-077"
       ],
       "owner": "worker",
-      "schedule": "10:30-15:30 every 30 min Australia/Sydney local",
+      "schedule": "10:32-15:32 every 30 min Australia/Sydney local",
       "inputs": [],
       "outputs": [],
       "configKeys": [],

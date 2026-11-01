@@ -58,8 +58,8 @@ describe("the shipped quote slots", () => {
       requiresListing: true,
     });
     expect(scan).toMatchObject({
-      time: "10:30",
-      until: "15:30",
+      time: "10:32",
+      until: "15:32",
       everyMin: 30,
       runner: "route",
       route: "/api/internal/intraday-scan",
@@ -76,7 +76,7 @@ describe("the shipped quote slots", () => {
   });
 
   it("post nothing without a list, nothing when unlisted, and only the listed slot when listed", () => {
-    const l = sydneyLocal(utc("2026-11-02", "10:30", 11));
+    const l = sydneyLocal(utc("2026-11-02", "10:32", 11));
     const ids = (f: RouteFacts) => decideRoutes(l, f, new Map(), 0, AU_SLOTS).map((a) => a.slot.id);
     expect(ids(FACTS)).toEqual([]); // absent list = not released
     expect(
@@ -85,12 +85,15 @@ describe("the shipped quote slots", () => {
     expect(
       ids({ ...FACTS, slotsEnabled: { kind: "list", ids: new Set(["intraday-scan"]) } }),
     ).toEqual(["intraday-scan"]);
-    expect(
-      ids({
-        ...FACTS,
-        slotsEnabled: { kind: "list", ids: new Set(["quote-poll", "intraday-scan"]) },
-      }),
-    ).toEqual(["quote-poll", "intraday-scan"]); // priority 5 before 6
+    const both = {
+      ...FACTS,
+      slotsEnabled: { kind: "list", ids: new Set(["quote-poll", "intraday-scan"]) },
+    } as RouteFacts;
+    expect(ids(both)).toEqual(["intraday-scan"]); // 10:32: the scan alone
+    const l30 = sydneyLocal(utc("2026-11-02", "10:30", 11));
+    expect(decideRoutes(l30, both, new Map(), 0, AU_SLOTS).map((a) => a.slot.id)).toEqual([
+      "quote-poll",
+    ]); // 10:30: the poll alone (V2-I1)
     expect(
       ids({
         ...FACTS,
@@ -118,22 +121,24 @@ describe("the shipped quote slots", () => {
   );
 
   it.each(DAYS)(
-    "intraday-scan fires 10:30 to 15:30 every 30 minutes on %s (offset %i), 11 times",
+    "intraday-scan fires 10:32 to 15:32 every 30 minutes on %s (offset %i), 11 times, never at a quote-poll minute (V2-I1)",
     (d, off) => {
       const t = due("intraday-scan", d, off);
       expect(t).toEqual([
-        "10:30",
-        "11:00",
-        "11:30",
-        "12:00",
-        "12:30",
-        "13:00",
-        "13:30",
-        "14:00",
-        "14:30",
-        "15:00",
-        "15:30",
+        "10:32",
+        "11:02",
+        "11:32",
+        "12:02",
+        "12:32",
+        "13:02",
+        "13:32",
+        "14:02",
+        "14:32",
+        "15:02",
+        "15:32",
       ]);
+      const poll = new Set(due("quote-poll", d, off));
+      expect(t.filter((x) => poll.has(x))).toEqual([]);
     },
   );
 

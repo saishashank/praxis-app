@@ -238,10 +238,10 @@ describe("runNight: L0 night integrity (CTX-010, D-289)", () => {
   });
 
   it("D-336: the wall-clock budget comes from the caller; the stale share is the core's own figure", () => {
-    const quota = runNight(nightInputs(T, { degrade: { elapsedMinutes: 21 } }));
+    const quota = runNight(nightInputs(T, { degrade: { elapsedMinutes: 16 } }));
     expect(quota.status).toBe("abstain_all");
     expect(quota.reason).toBe("quota");
-    expect(runNight(nightInputs(T, { degrade: { elapsedMinutes: 20 } })).status).toBe("ran");
+    expect(runNight(nightInputs(T, { degrade: { elapsedMinutes: 15 } })).status).toBe("ran");
     // one of four universe codes without a D bar → stale share 25 % > 10 %
     const world = nightWorld();
     const bars = new Map(world.bars);
