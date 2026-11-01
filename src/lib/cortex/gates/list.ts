@@ -35,6 +35,9 @@ export const G08_LABELS: Readonly<Record<G08SubId, string>> = {
   "8c_halt_suspension": "a trading halt is in the way",
   "8d_unresolved_action": "an unresolved corporate action is in the way",
   "8e_event_date_veto": "a scheduled event is in the way",
+  "8f_halt_resume": "this company has only just come back from a trading halt",
+  "8g_known_date": "this company is about to report its results",
+  "8h_short_risk": "this company is heavily shorted",
 };
 
 // ---- G09 -----------------------------------------------------------------------------------------

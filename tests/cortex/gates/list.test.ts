@@ -52,6 +52,9 @@ describe("GATE_LIST (CTX-013)", () => {
       "8c_halt_suspension",
       "8d_unresolved_action",
       "8e_event_date_veto",
+      "8f_halt_resume",
+      "8g_known_date",
+      "8h_short_risk",
     ]);
   });
 

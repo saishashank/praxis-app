@@ -1474,6 +1474,58 @@ const M13L_META_TABLES = Object.fromEntries(
 /** Every key added in M13-lite (docs/M13L_design.md, D-528). */
 export const M13L_KEY_NAMES: readonly ConfigKey[] = M13L_RANGED.map((r) => r[0]);
 
+// ---- Movers gap additions (A1-A8; docs/M15_design.md "Movers gap additions", D-740 to D-759) ----
+// Gates, states and facts outside the score; none is a Cortex refit key (D-752): editing one does not
+// change the map or a family's status. Every addition starts in shadow.
+// prettier-ignore
+const MOVERS_RANGED = [
+  ["halt_resume_arm_minute", "int", 600, 570, 720, "min after midnight", "O", OTH, "CR-MOV-A1, D-744", "Local minute from which a code resuming after a halt is given delayed prices (600 = 10:00)"],
+  ["halt_resume_block_sessions", "int", 1, 0, 5, "sessions", "O", REG, "CR-MOV-A1, D-743", "Sessions after a halt resume with a negative expectation in which a dip-buy or short-cover entry is not taken (0 = only while halted)"],
+  ["halt_watch_expiry_sessions", "int", 5, 2, 20, "sessions", "O", REG, "CR-MOV-A1, D-742", "Sessions after which an unresolved halt watch stops arming and blocking (a long halt is a suspension)"],
+  ["results_window_start_day", "int", 1, 1, 15, "day of month", "O", REG, "CR-MOV-A2, D-745", "First day of the February and August reporting windows"],
+  ["results_window_end_day", "int", 31, 16, 31, "day of month", "O", REG, "CR-MOV-A2, D-745", "Last day of the February and August reporting windows (cut at the month end)"],
+  ["results_pre_window_sessions", "int", 2, 0, 10, "sessions", "O", REG, "CR-MOV-A2, D-745", "Sessions before a known results date in which a dip-buy entry is not taken (0 = off)"],
+  ["known_date_min_history_days", "int", 365, 330, 730, "days", "O", REG, "CR-MOV-A2, D-745", "Days of announcement history needed before a company's own results date is predicted"],
+  ["volume_creep_vr_min", "num", 3, 2, 6, "x", "O", REG, "CR-MOV-A3, D-746", "Volume against the 20-session average that counts as creep when no news is out"],
+  ["volume_creep_ar_min_pct", "num", 2, 1, 6, "%", "O", REG, "CR-MOV-A3, D-746", "Smallest abnormal return that counts with the volume creep"],
+  ["intraday_arm_codes_max", "int", 20, 0, 60, "codes", "O", OTH, "CR-MOV-A1, CR-MOV-A3, D-744", "Most armed codes (halt resumes, volume creep) added to a day's intraday scan (0 = none)"],
+  ["short_risk_pct_min", "num", 5, 3, 12, "%", "O", REG, "CR-MOV-A4, D-747", "Short interest at or above which a name counts as heavily shorted (risk marker, not a signal)"],
+  ["short_risk_change_pp_min", "num", 2, 1, 6, "pp", "O", REG, "CR-MOV-A4, D-747", "Rise in short interest over 20 reports that counts as a short-risk marker"],
+  ["short_risk_f4_veto", "int", 0, 0, 1, "0 or 1", "O", REG, "CR-MOV-A4, D-747", "1 = no dip-buy entry in a heavily shorted name (0 = only the smaller parcel)"],
+  ["sector_composite_min_members", "int", 5, 3, 30, "codes", "O", OTH, "CR-MOV-A8, D-750", "Fewest codes an industry needs before its end-of-day composite adjusts an intraday move"],
+] as const satisfies readonly RangedRow[];
+
+type MoversRangedKey = (typeof MOVERS_RANGED)[number][0];
+
+const MOVERS_RANGED_KEYS = Object.fromEntries(
+  MOVERS_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<MoversRangedKey, ConfigKeyDef>;
+
+const MOVERS_META_TABLES = Object.fromEntries(
+  MOVERS_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+    key,
+    {
+      label,
+      area,
+      bounds: boundsText(kind, min, max, unit),
+      input: kind === "int" ? "int" : "number",
+    },
+  ]),
+) as Record<MoversRangedKey, ConfigMeta>;
+
+/** Every key added by the movers gap additions (D-740 to D-759). */
+export const MOVERS_KEY_NAMES: readonly ConfigKey[] = MOVERS_RANGED.map((r) => r[0]);
+
 export const CONFIG_KEYS = {
   ...M4_RANGED_KEYS,
   ...M4_FIXED_KEYS,
@@ -1496,6 +1548,7 @@ export const CONFIG_KEYS = {
   ...M11L_RANGED_KEYS,
   ...M11L_ENUM_KEYS,
   ...M13L_RANGED_KEYS,
+  ...MOVERS_RANGED_KEYS,
   // ch.15 l.163: evening_review_time / partial_at / send_by 20:00 / 20:30 / 20:45, O; EML-010/011.
   evening_review_time: {
     default: "20:00",
@@ -2013,6 +2066,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   ...M17_META_TABLES,
   ...M11L_META_TABLES,
   ...M13L_META_TABLES,
+  ...MOVERS_META_TABLES,
   evening_review_time: {
     label: "Evening Review send time",
     area: SEM,

@@ -9,7 +9,7 @@ import type { InputKind } from "./pit/types";
 export const CARD_BANNED: readonly RegExp[] = [
   /\bG\d{2}_[a-z_0-9]+/i, // CTX-013 gate ids
   /\bO\d{2}_[a-z_0-9]+/i, // CTX-028 open-time ids
-  /\b8[a-e]_[a-z_]+/i, // gate 8 sub-ids
+  /\b8[a-h]_[a-z_]+/i, // gate 8 sub-ids
   /n[_ ]?eff/i,
   /effective sample/i,
   /lower[ -]bound/i,

@@ -44,6 +44,45 @@ function liquidityRatioAt(tv: readonly bigint[], idx: number): number | undefine
   return ratio(sum20, median * BigInt(ADV_WINDOW));
 }
 
+// ---- A-D2-07 (version 2, A3: measured live, D-746) --------------------------------------------------------------
+
+const CREEP_WINDOW = 20; // threshold-ok: vr20, the registered 20-session volume ratio
+
+/**
+ * 1 when today's volume is at least `vr_min` times the mean of the 20 sessions before it and the
+ * market-adjusted return is at least `ar_min_pct` in size, with no announcement-event of the code on
+ * D-1 or D; 0 otherwise. Undefined in warm-up and when no event row was loaded at all (an extract
+ * without announcements must not read "no news" as a fact). The next-5-session label stays outside.
+ */
+function volumeCreep(view: AsOfView, code: string, t: number, g: GridPoint): AngleValue {
+  if (!view.eventsLoaded) return undefined;
+  const s = seriesAt(view, code, t, CREEP_WINDOW + 1);
+  if (!s) return undefined;
+  const v = s.adjVolume;
+  const n = v.length;
+  const prior = sumOf(v, n - 1 - CREEP_WINDOW, n - 1);
+  if (prior <= 0n) return undefined;
+  const vr = ratio(v[n - 1]! * BigInt(CREEP_WINDOW), prior);
+  const c = s.adjClose;
+  if (c[n - 2]! <= 0n) return undefined;
+  let ar = ratio(c[n - 1]!, c[n - 2]!) - 1;
+  const idx = view.index("AXJO", t, 2);
+  if (
+    idx.length === 2 &&
+    idx[1]!.d === s.d[n - 1] &&
+    idx[0]!.d === s.d[n - 2] &&
+    idx[0]!.close > 0n
+  ) {
+    ar -= ratio(idx[1]!.close, idx[0]!.close) - 1;
+  }
+  const flagged = vr >= g.vr_min! && Math.abs(ar) * 100 >= g.ar_min_pct!; // threshold-ok: percent
+  if (!flagged) return 0;
+  const today = view.sessions[t]!;
+  const yesterday = t > 0 ? view.sessions[t - 1]! : today;
+  const news = view.events(code, t).some((e) => e.day0 === today || e.day0 === yesterday);
+  return news ? 0 : 1;
+}
+
 // ---- A-D2-01 ---------------------------------------------------------------------------------------------------
 
 function volumeTrend(view: AsOfView, code: string, t: number, g: GridPoint): AngleValue {
@@ -282,23 +321,24 @@ export const D2_ANGLES: readonly AngleDef[] = [
   },
   {
     id: "A-D2-07",
-    version: 1,
+    version: 2,
     domain: 2,
     title: "Abnormal volume without news (information leakage)",
     definition:
-      "Flag when vr20 >= 3, |AR| >= 2 % and no announcement of the code was published on D-1 to D (known at the close of D); the next-5-session price-sensitive label is evaluation-only. Candidate until the announcement archive is registered (CTX-051).",
+      "Flag when vr20 >= vr_min (3), |AR| >= ar_min_pct (2 %) and no announcement-event of the code was published on D-1 to D (known at the close of D); value 1 flagged, 0 not; the next-5-session price-sensitive label is evaluation-only. Version 2 (A3, D-746): computed live from the day the forward passport starts (CTX-051), so it can be measured on staging now instead of waiting for an archive; the offline history has no announcements and yields no value.",
     kind: "score",
     cluster: "event",
     orientation: 1,
     horizonSessions: 5,
-    warmupSessions: 20,
-    inputs: ["bar_au", "announcement"],
-    grid: {},
-    needsData: "announcement archive",
+    warmupSessions: 21,
+    inputs: ["bar_au", "index_au", "announcement"],
+    grid: { vr_min: [3, 2], ar_min_pct: [2] },
     historyFields: [
-      "the extract has no announcement rows: no history value until CTX-051 is met",
-      "card thresholds (no compute yet): vr20 >= 3, |AR| >= 2 %",
+      "card thresholds live in the grid (vr_min 3, ar_min_pct 2 %); vr_min 2 is the second pre-registered point",
+      "the extract has no announcement rows: no history value, forward evidence only (CTX-051)",
+      "vr_min 2 is the pre-registered second point (the shape seen in the movers gap study); calibration on the development split only, which has no announcements: n counts from the forward start",
     ],
+    compute: volumeCreep,
   },
   {
     id: "A-D2-08",

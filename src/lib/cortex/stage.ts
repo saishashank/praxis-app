@@ -74,6 +74,16 @@ import type {
   TierRow,
 } from "./pit/types";
 import { openTimeChecks } from "./gates/openTime";
+import type { MoversNight } from "./moversNight";
+import {
+  advanceHaltWatch,
+  armHaltResumes,
+  loadMoversNight,
+  loadMoversParams,
+  marketHoursOf,
+  recordCreepFlags,
+  writeSectorComposite,
+} from "./store/movers";
 import { stepCorpAction, type CorpActionState, type CorpActionStep } from "./states/corpAction";
 import { stepHalt, type HaltState, type HaltStep } from "./states/halt";
 import { stepPromotion } from "./states/promotion";
@@ -793,6 +803,7 @@ export type InputBuild = {
   readonly arn011Failed?: ReadonlyMap<string, readonly string[]>;
   readonly angles?: readonly AngleDef[];
   readonly goLiveD?: string | null;
+  readonly movers?: MoversNight;
   readonly elapsedMinutes: number;
 };
 
@@ -866,6 +877,7 @@ export function buildNightInputs(b: InputBuild): NightInputs {
     degrade: { elapsedMinutes: b.elapsedMinutes },
     ...(b.arn011Failed === undefined ? {} : { arn011Failed: b.arn011Failed }),
     ...(b.goLiveD === undefined ? {} : { goLiveD: b.goLiveD }),
+    ...(b.movers === undefined ? {} : { movers: b.movers }),
     prng: (scope) => scopedPrng(scope),
   };
 }
@@ -1257,6 +1269,79 @@ export function allowedFamilies(
   return out;
 }
 
+/**
+ * Movers gap additions, before the night (A1, A2, A4; D-742…D-747): advances the halt watch, then reads
+ * the watch, the predicted result dates and the parameters. Any fault returns undefined: the night then
+ * runs with the five original gate checks (the additions are shadow-grade and never block the stage).
+ */
+async function prepareMovers(
+  db: Client,
+  o: StageOptions,
+  view: AsOfView,
+  t: number,
+  now: string,
+): Promise<MoversNight | undefined> {
+  try {
+    const params = await loadMoversParams(db);
+    await advanceHaltWatch(db, {
+      market: o.market,
+      d: o.d,
+      view,
+      t,
+      now,
+      calendar: o.calendar,
+      hours: await marketHoursOf(db, o.market),
+    });
+    return await loadMoversNight(db, { market: o.market, d: o.d, params });
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Movers gap writes after the night (A1, A3, A8; D-744, D-746, D-750): arms the next session's intraday
+ * scan for open halts, records the live volume-creep flags (and arms those), and writes the end-of-day
+ * sector composite. Each part is independent and a fault in one never reaches the stage result.
+ */
+async function recordMovers(
+  db: Client,
+  o: StageOptions,
+  view: AsOfView,
+  t: number,
+  now: string,
+): Promise<void> {
+  try {
+    const params = await loadMoversParams(db);
+    const hours = await marketHoursOf(db, o.market);
+    const next = nextTradingDay(o.d, o.calendar);
+    await armHaltResumes(db, {
+      market: o.market,
+      sessionD: next,
+      now,
+      params,
+      calendar: o.calendar,
+      hours,
+    });
+    await recordCreepFlags(db, {
+      market: o.market,
+      d: o.d,
+      view,
+      t,
+      now,
+      params,
+      calendar: o.calendar,
+      hours,
+    });
+  } catch {
+    // shadow-grade: the stage result does not depend on it
+  }
+  try {
+    await writeSectorComposite(db, { market: o.market, d: o.d, now });
+  } catch {
+    // shadow-grade
+  }
+}
+
 export async function cortexStage(db: Client, o: StageOptions): Promise<StageResult> {
   const nowMs = o.nowMs ?? (() => Date.now());
   const started = nowMs();
@@ -1300,6 +1385,8 @@ export async function cortexStage(db: Client, o: StageOptions): Promise<StageRes
     priorFromD: store0.statesFromD,
   });
   const store = { ...store0, states: advanced.states };
+  const moversNow = o.now();
+  const movers = o.replay === true ? undefined : await prepareMovers(db, o, view, t, moversNow);
   const inputs = buildNightInputs({
     market: o.market,
     d: o.d,
@@ -1316,6 +1403,7 @@ export async function cortexStage(db: Client, o: StageOptions): Promise<StageRes
     arn011Failed: o.arn011Failed,
     angles: o.angles,
     goLiveD: o.goLiveD,
+    ...(movers === undefined ? {} : { movers }),
     elapsedMinutes: (nowMs() - started) / 60_000, // threshold-ok: ms to minutes
   });
   stop();
@@ -1336,6 +1424,7 @@ export async function cortexStage(db: Client, o: StageOptions): Promise<StageRes
     runtimeMs,
     createdAt: o.now(),
   });
+  if (o.replay !== true) await recordMovers(db, o, view, t, moversNow);
   const allowed = allowedFamilies(
     store.status,
     o.killedArena === true,

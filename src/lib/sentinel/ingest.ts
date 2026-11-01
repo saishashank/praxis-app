@@ -28,6 +28,7 @@ import { loadCalendarRows } from "@/lib/data/calendarAdmin";
 import { marketDate, sessionsBetween } from "@/lib/data/calendar";
 import { AU_TIME_ZONE } from "@/lib/agents/decisionView";
 import { loadMembership, membershipOf } from "./membership";
+import { archiveStatements, DEFAULT_HOURS, type MarketHoursLocal } from "./archive";
 
 export const MAX_ITEMS_PER_RUN = 40; // AGT-010, PLT-075: a hard ceiling whatever the config says
 /** Only announcements first seen and published within this window are assessed (not the backfill). */
@@ -118,6 +119,34 @@ export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
     if (inserts.length > 0) {
       const res = await i.db.batch(inserts, "write");
       added = res.reduce((n, r) => n + r.rowsAffected, 0);
+    }
+
+    // 2b. (A7, D-749) the append-only archive: every item, forever, with its timing class. A fault here
+    // never fails the ingest (the `announcement` rows above are the queue).
+    try {
+      const mk = await i.db.execute({
+        sql: "SELECT tz, open_time, close_time FROM market WHERE code = ?",
+        args: [market],
+      });
+      const hours: MarketHoursLocal =
+        mk.rows.length === 0
+          ? DEFAULT_HOURS
+          : {
+              tz: String(mk.rows[0]!.tz),
+              open_time: String(mk.rows[0]!.open_time),
+              close_time: String(mk.rows[0]!.close_time),
+            };
+      const arch = archiveStatements(
+        parsed.items,
+        market,
+        ASX_SOURCE,
+        i.now,
+        hours,
+        await loadCalendarRows(i.db, market),
+      );
+      if (arch.length > 0) await i.db.batch(arch, "write");
+    } catch {
+      // swallowed on purpose
     }
 
     // 3. the queue: unassessed announcements of the carry window, oldest first

@@ -8070,6 +8070,40 @@
       }
     },
     {
+      "id": "table:main.angle_forward_flag",
+      "type": "table",
+      "name": "angle_forward_flag",
+      "purpose": "Table angle_forward_flag in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0024_movers.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "code",
+          "angle_id",
+          "grid_key",
+          "angle_version",
+          "known_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.angle_passport",
       "type": "table",
       "name": "angle_passport",
@@ -8153,6 +8187,49 @@
           "idx_announcement_code",
           "idx_announcement_content_hash",
           "idx_announcement_published"
+        ]
+      }
+    },
+    {
+      "id": "table:main.announcement_archive",
+      "type": "table",
+      "name": "announcement_archive",
+      "purpose": "Table announcement_archive in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0024_movers.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "market",
+          "code",
+          "source",
+          "ann_id",
+          "published_at",
+          "known_at",
+          "session_d",
+          "timing",
+          "type",
+          "price_sensitive",
+          "halt_kind",
+          "title"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_announcement_archive_code",
+          "idx_announcement_archive_session"
         ]
       }
     },
@@ -10583,6 +10660,47 @@
       }
     },
     {
+      "id": "table:main.halt_watch",
+      "type": "table",
+      "name": "halt_watch",
+      "purpose": "Table halt_watch in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0024_movers.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "market",
+          "code",
+          "since_d",
+          "seq",
+          "status",
+          "reason_class",
+          "expected_sign",
+          "notice_source",
+          "notice_ann_id",
+          "resume_d",
+          "known_at"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_halt_watch_code"
+        ]
+      }
+    },
+    {
       "id": "table:main.health_snapshot",
       "type": "table",
       "name": "health_snapshot",
@@ -10984,6 +11102,41 @@
           "source",
           "as_of",
           "loaded_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.intraday_arm",
+      "type": "table",
+      "name": "intraday_arm",
+      "purpose": "Table intraday_arm in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0024_movers.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "session_d",
+          "code",
+          "reason",
+          "expected_sign",
+          "armed_from",
+          "ref",
+          "created_at"
         ],
         "database": "main",
         "indexes": []
@@ -12910,6 +13063,40 @@
           "screened",
           "survivors",
           "splits_json",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.sector_composite_daily",
+      "type": "table",
+      "name": "sector_composite_daily",
+      "purpose": "Table sector_composite_daily in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0024_movers.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "industry",
+          "ret_ppm",
+          "n_members",
+          "map_as_of",
           "created_at"
         ],
         "database": "main",
@@ -17864,6 +18051,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.angle_forward_flag",
+      "from": "service:turso-main",
+      "to": "table:main.angle_forward_flag",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.angle_passport",
       "from": "service:turso-main",
       "to": "table:main.angle_passport",
@@ -17878,6 +18075,16 @@
       "id": "service:turso-main|contains|table:main.announcement",
       "from": "service:turso-main",
       "to": "table:main.announcement",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.announcement_archive",
+      "from": "service:turso-main",
+      "to": "table:main.announcement_archive",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
@@ -18546,6 +18753,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.halt_watch",
+      "from": "service:turso-main",
+      "to": "table:main.halt_watch",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.health_snapshot",
       "from": "service:turso-main",
       "to": "table:main.health_snapshot",
@@ -18654,6 +18871,16 @@
       "id": "service:turso-main|contains|table:main.instrument_class",
       "from": "service:turso-main",
       "to": "table:main.instrument_class",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.intraday_arm",
+      "from": "service:turso-main",
+      "to": "table:main.intraday_arm",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
@@ -19177,6 +19404,16 @@
       "views": [
         "data",
         "learning"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.sector_composite_daily",
+      "from": "service:turso-main",
+      "to": "table:main.sector_composite_daily",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
       ]
     },
     {
