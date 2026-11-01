@@ -11,7 +11,12 @@ import {
   type CloseBooksResult,
 } from "@/lib/arena/closeBooks";
 import { toBig } from "@/lib/arena/ledgerWriter";
-import { clearCohortInvariants, frozenState } from "@/lib/arena/unfreeze";
+import {
+  clearCohortInvariants,
+  frozenState,
+  GAP_TOO_LONG_STEPS,
+  MAX_CATCH_UP_SESSIONS,
+} from "@/lib/arena/unfreeze";
 import { INVARIANTS_CLEARED, parseClearInput } from "@/lib/arena/unfreezeCore";
 import type { CurrentUser } from "@/lib/auth/session";
 import { addUser, auditRows, KEY } from "../auth/helpers";
@@ -177,30 +182,80 @@ describe("V1-S1: Owner recovery of a frozen cohort", () => {
     expect((await closeDay(s.db, s.ds.dates[7])).frozen).toEqual([c1]);
   });
 
-  it("a cohort that holds nothing may resume after sessions were skipped; the gap is recorded", async () => {
+  const navDays = async (cohort: string) =>
+    (
+      await rowsOf(s.db, "SELECT d, invariants_ok FROM nav_daily WHERE cohort_id = ? ORDER BY d", [
+        cohort,
+      ])
+    ).map((r) => [String(r.d), toBig(r.invariants_ok)] as const);
+
+  it("the sessions it sat out are replayed for that cohort only, oldest first, before the event is written", async () => {
     await freeze(false);
     await closeDay(s.db, s.ds.dates[5]);
     await closeDay(s.db, s.ds.dates[6]);
+    const c2Before = await navDays(c2);
     await fixCause();
     const out = await clear();
     expect(out.status).toBe(200);
     expect(out.body.gapSessions).toBe(2);
     const detail = JSON.parse(String((await events())[0]!.detail_json)) as Record<string, unknown>;
-    expect(detail.gap_sessions).toBe(2);
+    expect(detail).toMatchObject({
+      gap_sessions: 2,
+      catch_up_days: [s.ds.dates[5], s.ds.dates[6]],
+    });
+    const days = (await navDays(c1)).map(([d]) => d);
+    expect(days).toEqual(expect.arrayContaining([s.ds.dates[5], s.ds.dates[6]]));
+    expect(
+      (await navDays(c1)).filter(([d]) => d > s.ds.dates[4]).every(([, ok]) => ok === 1n),
+    ).toBe(true);
+    expect(await navDays(c2)).toEqual(c2Before); // the other cohort is untouched
     const next = await closeDay(s.db, s.ds.dates[7]);
+    expect(next.frozen).toEqual([]);
     expect(next.closed).toContain(c1);
+    expect(next.status).toBe("success");
   });
 
-  it("a cohort with a pending order is refused once a session was skipped (gap_unsafe), with no audit row", async () => {
+  it("a cohort with a pending order catches up too (its order fills on the first skipped session)", async () => {
     await freeze(true);
-    await closeDay(s.db, s.ds.dates[5]); // c1 sits this one out
+    await closeDay(s.db, s.ds.dates[5]);
+    await fixCause();
+    const out = await clear();
+    expect(out.status).toBe(200);
+    const o9 = await one(s.db, "SELECT status, fill_d FROM arena_order WHERE id = 'O9'");
+    expect(["filled", "cancelled"]).toContain(String(o9.status));
+    expect((await navDays(c1)).some(([d, ok]) => d === s.ds.dates[5] && ok === 1n)).toBe(true);
+    expect((await closeDay(s.db, s.ds.dates[6])).closed).toContain(c1);
+  });
+
+  it("if a replayed session fails the ledger check again nothing is cleared and the cohort stays frozen", async () => {
+    await freeze(false);
+    await closeDay(s.db, s.ds.dates[5]);
+    // the cause is NOT fixed
+    const out = await clear();
+    expect(out.status).toBe(409);
+    expect(out.body).toMatchObject({ error: "catch_up_invariants_failed" });
+    expect(await events()).toEqual([]);
+    const audit = await auditRows(auth);
+    expect(audit.map((a) => a.action)).toEqual([
+      "arena.cohort_unfreeze",
+      "arena.cohort_unfreeze_failed",
+    ]);
+    expect((await closeDay(s.db, s.ds.dates[6])).frozen).toEqual([c1]);
+  });
+
+  it("more skipped sessions than MAX_CATCH_UP_SESSIONS are refused with the exact steps, and no audit row", async () => {
+    await freeze(false);
+    for (let i = 5; i <= 5 + MAX_CATCH_UP_SESSIONS; i++) await closeDay(s.db, s.ds.dates[i]);
     await fixCause();
     const out = await clear();
     expect(out.status).toBe(409);
-    expect(out.body).toMatchObject({ error: "gap_unsafe", gapSessions: 1 });
+    expect(out.body).toMatchObject({
+      error: "gap_too_long",
+      gapSessions: MAX_CATCH_UP_SESSIONS + 1,
+      steps: GAP_TOO_LONG_STEPS,
+    });
     expect(await events()).toEqual([]);
-    expect((await auditRows(auth)).filter((a) => a.action === "arena.cohort_unfreeze")).toEqual([]);
-    expect((await closeDay(s.db, s.ds.dates[6])).frozen).toEqual([c1]);
+    expect(await auditRows(auth)).toEqual([]);
   });
 
   it("refuses: a non-Owner, a missing confirmation, bad input, an unknown cohort, a cohort that is not frozen", async () => {

@@ -31,6 +31,8 @@ export const REUSE_GAP_DAYS = 365;
 export const RENAME_GAP_DAYS = 30;
 export const REUSE_SUSPECTED = "code_reuse_suspected";
 export const RELIST_CONFIRMED = "relist_confirmed";
+/** The Owner decided that the reused code is a DIFFERENT company: reactivate it with a new listing (0025). */
+export const REUSE_CONFIRMED = "reuse_confirmed";
 
 const NAME_NOISE = new Set([
   "LIMITED",
@@ -59,6 +61,7 @@ const dayNumber = (d) => Math.floor(Date.parse(`${d}T00:00:00Z`) / 86_400_000);
 export function reuseSuspicion(e, row, today) {
   const reason = e.delistReason ?? null;
   if (reason !== null && reason.startsWith(RELIST_CONFIRMED)) return null; // the Owner confirmed it
+  if (reason !== null && reason.startsWith(REUSE_CONFIRMED)) return null; // the Owner decided: new entity
   if (e.delistedOn === null) return null;
   const gap = dayNumber(today) - dayNumber(e.delistedOn);
   if (gap > REUSE_GAP_DAYS) return "long_gap";
@@ -95,6 +98,8 @@ export function planUniverse({ existing, file, today }) {
   /** @type {FileRow[]} */ const inserts = [];
   /** @type {FileRow[]} */ const updates = [];
   /** @type {FileRow[]} */ const reactivations = [];
+  /** @type {{ code: string, name: string, priorName: string, priorDelistedOn: string | null, decidedBy: string }[]} */
+  const newListings = [];
   /** @type {{ code: string, name: string, oldName: string, delistedOn: string | null, priorReason: string | null, why: string }[]} */
   const quarantined = [];
   /** @type {string[]} */ const seenAgain = [];
@@ -108,8 +113,19 @@ export function planUniverse({ existing, file, today }) {
       inserts.push(r);
     } else if (e.delistedOn !== null) {
       const why = reuseSuspicion(e, r, today);
-      if (why === null) reactivations.push(r);
-      else {
+      if (why === null) {
+        reactivations.push(r);
+        const reason = e.delistReason ?? "";
+        if (reason.startsWith(REUSE_CONFIRMED)) {
+          newListings.push({
+            code: r.code,
+            name: r.name,
+            priorName: e.name,
+            priorDelistedOn: e.delistedOn,
+            decidedBy: reason.split(":").slice(1, 3).join(":") || "owner",
+          });
+        }
+      } else {
         quarantined.push({
           code: r.code,
           name: r.name,
@@ -139,6 +155,7 @@ export function planUniverse({ existing, file, today }) {
     updates,
     reactivations,
     quarantined,
+    newListings,
     seenAgain,
     missing,
     delists,

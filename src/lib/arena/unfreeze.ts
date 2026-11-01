@@ -6,12 +6,14 @@
 // as the permanent record; `activityOf` (closeBooks.ts) simply counts only bad days dated after the
 // newest `through_d` of these events (unfreezeCore.ts).
 //
-// What a clear does NOT do: it does not re-run the sessions the cohort sat out (no cohort-day exists for
-// them). A cohort that holds nothing and has nothing pending loses nothing by that, so it may resume at
-// once. A cohort with an open trade, a pending order or an open sleeve trade would resume against a
-// stale book (orders filled at today's open, stops and corporate actions of the skipped sessions never
-// tested), so it is refused (`gap_unsafe`) once at least one session has been closed without it. The
-// Owner must clear it BEFORE the next close runs (gap 0), or restart it.
+// Catch-up (D-682): the sessions the cohort sat out have no cohort-day, and its orders, stops and
+// corporate actions of those sessions must not be skipped. So BEFORE the clearing event is written, each
+// closed session after the cohort's last nav day is closed again for THIS cohort only
+// (`closeBooksDay` with `catchUpCohort`, oldest first; the other cohorts closed those nights already).
+// If a catch-up day fails its invariants the cohort stays frozen (the new bad nav row counts) and the
+// Owner is told which day; if the process dies midway nothing is cleared and the same action can simply
+// be run again (it resumes after the cohort's newest nav day). Only after every day is ok is the single
+// clearing event appended. More than MAX_CATCH_UP_SESSIONS sessions are refused (`gap_too_long`).
 import type { Client } from "@libsql/client";
 import type { CurrentUser } from "@/lib/auth/session";
 import {
@@ -21,7 +23,7 @@ import {
   type ActionResult,
   type OwnerCtx,
 } from "@/lib/learning/ownerActions";
-import { ARENA_JOB } from "./closeBooks";
+import { ARENA_JOB, closeBooksDay } from "./closeBooks";
 import { toBig } from "./ledgerWriter";
 import { INVARIANTS_CLEARED, parseClearInput, type ClearInput } from "./unfreezeCore";
 
@@ -37,15 +39,16 @@ const bad = (error: string, status = HTTP_BAD): ActionResult => res(status, { er
 type Exec = Pick<Client, "execute">;
 const cnt = (v: unknown): number => Number.parseInt(String(v), 10);
 
+/** Longest run of skipped sessions that is replayed inside one Owner request (a request has a time limit). */
+export const MAX_CATCH_UP_SESSIONS = 10; // threshold-ok: decision D-682
+
 export type FrozenState = {
   /** Newest bad (invariants_ok = 0) day not yet cleared; null = not frozen. */
   readonly throughD: string | null;
   readonly badDays: number;
-  /** Close-the-books runs dated after `throughD` that this cohort sat out. */
+  /** Closed sessions after the cohort's newest nav day: what the catch-up would replay, oldest first. */
+  readonly gapDays: readonly string[];
   readonly gapSessions: number;
-  readonly openTrades: number;
-  readonly pendingOrders: number;
-  readonly openSleeveTrades: number;
 };
 
 async function clearedThrough(db: Exec, cohortId: string): Promise<string> {
@@ -66,34 +69,53 @@ export async function frozenState(db: Exec, cohortId: string): Promise<FrozenSta
     sql: `SELECT
       (SELECT MAX(d) FROM nav_daily WHERE cohort_id = ? AND invariants_ok = 0 AND d > ?) AS through_d,
       (SELECT COUNT(*) FROM nav_daily WHERE cohort_id = ? AND invariants_ok = 0 AND d > ?) AS bad_days,
-      (SELECT COUNT(*) FROM trade WHERE cohort_id = ? AND exit_type IS NULL) AS open_trades,
-      (SELECT COUNT(*) FROM arena_order WHERE cohort_id = ? AND status = 'pending') AS pending_orders,
-      (SELECT COUNT(*) FROM sleeve_trade WHERE cohort_id = ? AND closed_by IS NULL) AS sleeve_open`,
-    args: [cohortId, cleared, cohortId, cleared, cohortId, cohortId, cohortId],
+      (SELECT MAX(d) FROM nav_daily WHERE cohort_id = ?) AS last_nav`,
+    args: [cohortId, cleared, cohortId, cleared, cohortId],
   });
   const r = rs.rows[0]!;
   const throughD = r.through_d === null ? null : String(r.through_d);
-  let gap = 0;
+  let gapDays: string[] = [];
   if (throughD !== null) {
+    const after = r.last_nav === null ? throughD : String(r.last_nav);
+    // the same "closed" test as previousSessionClosed: books written for the night
     const g = await db.execute({
-      sql: `SELECT COUNT(*) AS n FROM run_record WHERE job = ? AND market = ? AND scheduled_for > ?
-            AND status IN ('success','degraded','failed') AND concurrency_key LIKE 'arena-2a:%'`,
-      args: [ARENA_JOB, MARKET, throughD],
+      sql: `SELECT DISTINCT scheduled_for AS d FROM run_record
+            WHERE job = ? AND market = ? AND concurrency_key LIKE 'arena-2a:%' AND scheduled_for > ?
+              AND (status IN ('success','degraded')
+                   OR (status = 'failed' AND json_extract(details_json, '$.navDays') IS NOT NULL))
+            ORDER BY scheduled_for`,
+      args: [ARENA_JOB, MARKET, after],
     });
-    gap = cnt(g.rows[0]!.n);
+    gapDays = g.rows.map((x) => String(x.d));
   }
-  return {
-    throughD,
-    badDays: cnt(r.bad_days),
-    gapSessions: gap,
-    openTrades: cnt(r.open_trades),
-    pendingOrders: cnt(r.pending_orders),
-    openSleeveTrades: cnt(r.sleeve_open),
-  };
+  return { throughD, badDays: cnt(r.bad_days), gapDays, gapSessions: gapDays.length };
 }
 
-const unsafe = (s: FrozenState): boolean =>
-  s.gapSessions > 0 && (s.openTrades > 0 || s.pendingOrders > 0 || s.openSleeveTrades > 0);
+/** The cohorts that are frozen right now (Owner page). */
+export async function listFrozenCohorts(
+  db: Exec,
+): Promise<{ cohortId: string; throughD: string; gapSessions: number }[]> {
+  const ids = await db.execute({
+    sql: "SELECT DISTINCT cohort_id FROM nav_daily WHERE invariants_ok = 0 ORDER BY cohort_id",
+    args: [],
+  });
+  const out: { cohortId: string; throughD: string; gapSessions: number }[] = [];
+  for (const row of ids.rows) {
+    const id = String(row.cohort_id);
+    const st = await frozenState(db, id);
+    if (st.throughD !== null)
+      out.push({ cohortId: id, throughD: st.throughD, gapSessions: st.gapSessions });
+  }
+  return out;
+}
+
+/** The exact Owner steps shown with a `gap_too_long` refusal. */
+export const GAP_TOO_LONG_STEPS =
+  "More than " +
+  String(MAX_CATCH_UP_SESSIONS) +
+  " sessions were closed without this cohort, too many to replay in one request. Leave it frozen: " +
+  "the other cohorts are not affected. Ask the builder to replay the skipped sessions for this " +
+  "cohort in smaller steps (closeBooksDay with catchUpCohort, oldest first), then clear it here.";
 
 /**
  * The Owner action. The caller has ALREADY passed the Owner guard (`requireUser("admin")`); the role is
@@ -120,13 +142,11 @@ export async function clearCohortInvariants(
     return bad("unavailable", HTTP_UNAVAILABLE);
   }
   if (before.throughD === null) return res(HTTP_CONFLICT, { error: "not_frozen" });
-  if (unsafe(before)) {
+  if (before.gapSessions > MAX_CATCH_UP_SESSIONS) {
     return res(HTTP_CONFLICT, {
-      error: "gap_unsafe",
+      error: "gap_too_long",
       gapSessions: before.gapSessions,
-      openTrades: before.openTrades,
-      pendingOrders: before.pendingOrders,
-      openSleeveTrades: before.openSleeveTrades,
+      steps: GAP_TOO_LONG_STEPS,
     });
   }
   return audited(c, user, {
@@ -141,12 +161,28 @@ export async function clearCohortInvariants(
       cause,
     },
     run: async (auditRef, d, now) => {
+      // 1. replay the skipped sessions for this cohort, oldest first; stop at the first problem
+      for (const day of before.gapDays) {
+        const r = await closeBooksDay(c.mainDb, {
+          market: MARKET,
+          d: day,
+          now: () => new Date().toISOString(),
+          catchUpCohort: cohortId,
+        });
+        if (r.failed.includes(cohortId)) {
+          return { ok: false, reason: "catch_up_invariants_failed", detail: day };
+        }
+        if (!r.closed.includes(cohortId)) {
+          return { ok: false, reason: "catch_up_blocked", detail: `${day}: ${r.status}` };
+        }
+      }
+      // 2. only now clear: one transaction, re-checking that the cohort is still frozen and fully caught up
       const tx = await c.mainDb.transaction("write");
       try {
         // re-read inside the write transaction: a close that ran meanwhile may have changed the picture
         const again = await frozenState(tx, cohortId);
         if (again.throughD === null) return { ok: false, reason: "not_frozen" };
-        if (unsafe(again)) return { ok: false, reason: "gap_unsafe" };
+        if (again.gapSessions > 0) return { ok: false, reason: "catch_up_incomplete" };
         const seq = await tx.execute({
           sql: "SELECT COALESCE(MAX(seq), 0) + 1 AS n FROM cohort_event WHERE cohort_id = ?",
           args: [cohortId],
@@ -155,7 +191,8 @@ export async function clearCohortInvariants(
           type: INVARIANTS_CLEARED,
           through_d: again.throughD,
           bad_days: again.badDays,
-          gap_sessions: again.gapSessions,
+          gap_sessions: before.gapSessions,
+          catch_up_days: before.gapDays,
           cause,
           by: actorOf(user),
           audit: auditRef,
@@ -169,7 +206,7 @@ export async function clearCohortInvariants(
         await tx.commit();
         return {
           ok: true,
-          body: { cohortId, throughD: again.throughD, gapSessions: again.gapSessions },
+          body: { cohortId, throughD: again.throughD, gapSessions: before.gapSessions },
         };
       } finally {
         tx.close();

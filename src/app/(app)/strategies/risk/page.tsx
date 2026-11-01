@@ -24,7 +24,9 @@ import {
 } from "@/lib/ui/loaders/risk";
 import { formatMicro, formatPpm } from "@/lib/view/format";
 import { StrategyTabs } from "../StrategyTabs";
-import { setArenaControlAction } from "./actions";
+import { listFrozenCohorts } from "@/lib/arena/unfreeze";
+import { clearCohortInvariantsAction, setArenaControlAction } from "./actions";
+import { ClearFrozenButton } from "./ClearFrozenButton";
 import { ControlButton } from "./ControlButton";
 
 export const dynamic = "force-dynamic";
@@ -164,6 +166,7 @@ export default async function RiskPage() {
   const r = await loadRisk({ mainDb: mainDb(), authDb: authDb(), user });
   const d = r.data;
   const owner = can(user.role, "admin");
+  const frozen = owner ? await listFrozenCohorts(mainDb()).catch(() => []) : [];
   const editor = user.role === "editor";
 
   const stressCols: Column<StressRow>[] = [
@@ -263,6 +266,29 @@ export default async function RiskPage() {
                 <SwitchRow key={f.key} sw={f} scope="family" role={owner ? "owner" : "editor"} />
               ))}
             </ul>
+            {frozen.length > 0 ? (
+              <>
+                <h4 className="m-0 mb-2 mt-4 text-sm font-semibold">Stopped by a ledger check</h4>
+                <ul className="m-0 flex list-none flex-col gap-3 p-0">
+                  {frozen.map((f) => (
+                    <li
+                      key={f.cohortId}
+                      className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"
+                    >
+                      <span className="min-w-0 break-words">
+                        <strong>{f.cohortId}</strong> stopped on {f.throughD}
+                      </span>
+                      <ClearFrozenButton
+                        cohortId={f.cohortId}
+                        throughD={f.throughD}
+                        gapSessions={f.gapSessions}
+                        action={clearCohortInvariantsAction}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
           </Card>
         ) : null}
       </section>

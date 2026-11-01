@@ -130,6 +130,28 @@ export async function importUniverse(i: ImportInput): Promise<ImportResult> {
         args: [r.name, r.industry, UNIVERSE_MARKET, r.code],
       });
     }
+    for (const nl of plan.newListings) {
+      // the new entity's history starts today (V1-S7): readers stop at this listed_on (src/lib/data/listing.ts)
+      stmts.push({
+        sql:
+          "INSERT INTO instrument_listing (market, code, listed_on, name, prior_name, prior_delisted_on, decided_by, created_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (market, code, listed_on) DO NOTHING",
+        args: [
+          UNIVERSE_MARKET,
+          nl.code,
+          i.today,
+          nl.name,
+          nl.priorName,
+          nl.priorDelistedOn,
+          nl.decidedBy,
+          i.now(),
+        ],
+      });
+      stmts.push({
+        sql: "UPDATE instrument SET listed_on = ? WHERE market = ? AND code = ?",
+        args: [i.today, UNIVERSE_MARKET, nl.code],
+      });
+    }
     for (const r of plan.reactivations) {
       stmts.push({
         sql:
@@ -205,6 +227,7 @@ export async function importUniverse(i: ImportInput): Promise<ImportResult> {
         JSON.stringify({
           counts: plan.counts,
           quarantined: plan.quarantined.length,
+          newListings: plan.newListings.length,
           parsed: parsed.stats,
           source: i.source ?? "worker",
         }),

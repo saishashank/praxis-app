@@ -357,7 +357,7 @@ async function priceEvidence(db, io, market, code, exDate) {
   const rows = await sel(
     db,
     io,
-    "SELECT d, c FROM price_bar WHERE market = ? AND code = ? AND d <= ? ORDER BY d DESC LIMIT 2",
+    "SELECT d, c FROM price_bar WHERE market = ? AND code = ? AND d <= ? AND d >= COALESCE((SELECT MAX(l.listed_on) FROM instrument_listing l WHERE l.market = price_bar.market AND l.code = price_bar.code), '') ORDER BY d DESC LIMIT 2",
     [market, code, exDate],
   );
   if (rows.length < 2 || String(rows[0].d) !== exDate) return null;
@@ -652,7 +652,7 @@ async function refCloseOf(db, io, market, code, exDate) {
   const rows = await sel(
     db,
     io,
-    "SELECT c FROM price_bar WHERE market = ? AND code = ? AND d < ? ORDER BY d DESC LIMIT 1",
+    "SELECT c FROM price_bar WHERE market = ? AND code = ? AND d < ? AND d >= COALESCE((SELECT MAX(l.listed_on) FROM instrument_listing l WHERE l.market = price_bar.market AND l.code = price_bar.code), '') ORDER BY d DESC LIMIT 1",
     [market, code, exDate],
   );
   return rows.length === 0 ? null : microOfDollars(rows[0].c);

@@ -188,9 +188,15 @@ export type CloseBooksOptions = {
   readonly maxPromotionsPerWeek?: number;
   /** Email context for the P1 "previous session not closed" incident (V1-B1); absent = recorded only. */
   readonly notify?: Omit<NotifyCtx, "db" | "now">;
+  /**
+   * V1-S1 catch-up (D-682, unfreeze.ts): close this already-closed session for THIS cohort only, and
+   * ignore its freeze for the run. The other cohorts are not touched (they closed that night), and the
+   * run's own `running` record is the only run_record written. Never set by the nightly job.
+   */
+  readonly catchUpCohort?: string;
 };
 
-/** V1-S15 (D-682): a held code with no bar on this many sessions in a row opens the S2 `stale_mark` incident. */
+/** V1-S15 (D-683): a held code with no bar on this many sessions in a row opens the S2 `stale_mark` incident. */
 export const STALE_MARK_ALERT_SESSIONS = 3; // threshold-ok: decision D-682, bounded wait before an alert
 export const STALE_MARK_INCIDENT = "stale_mark";
 
@@ -241,6 +247,8 @@ type DayCtx = {
   readonly gates: Map<string, EntryDecision>;
   /** Fills older than this are settled and posted (T+2 plus holidays fit well inside 14 days). */
   readonly recentFrom: string;
+  /** V1-S1 catch-up: the one cohort this run is for; its freeze is ignored (see CloseBooksOptions). */
+  readonly catchUpCohort?: string;
   /** V1-S15: email context for the "stale mark" incident; absent = recorded only. */
   readonly notify?: Omit<NotifyCtx, "db" | "now">;
 };
@@ -1277,7 +1285,7 @@ async function activityOf(ctx: DayCtx, cohortId: string) {
 
 async function closeCohortDay(ctx: DayCtx, cohortId: string): Promise<CohortResult> {
   const act = await activityOf(ctx, cohortId);
-  if (act.frozen) return { state: "frozen" };
+  if (act.frozen && ctx.catchUpCohort !== cohortId) return { state: "frozen" };
   const cohort = await loadCohort(ctx.db, cohortId);
   if (cohort === null) throw new CloseBooksError("cohort_missing", `no cohort ${cohortId}`);
   const params = parseCohortParams(cohort.paramsJson);
@@ -1582,9 +1590,11 @@ export async function closeBooksDay(
       gates: new Map(),
       recentFrom: addDays(opts.d, -14),
       notify: opts.notify,
+      catchUpCohort: opts.catchUpCohort,
     };
     const outcomes = new Map<string, Extract<CohortResult, { state: "ok" }>>();
     for (const cohortId of await activeCohortIds(db, opts.d, ctx.recentFrom)) {
+      if (opts.catchUpCohort !== undefined && cohortId !== opts.catchUpCohort) continue;
       const result = await closeCohortDay(ctx, cohortId);
       if (result.state === "frozen") frozenIds.push(cohortId);
       else if (result.state === "failed") failed.push(cohortId);
@@ -1627,6 +1637,7 @@ export async function closeBooksDay(
       errorSummary:
         failed.length > 0 ? `invariants failed for ${failed.length} cohort(s)` : undefined,
       details: {
+        ...(opts.catchUpCohort === undefined ? {} : { catchUp: opts.catchUpCohort }),
         cohorts: closed.length,
         failed: failed.length,
         frozen: frozenIds.length,

@@ -5,7 +5,9 @@
 // it is the same company, after which the next import reactivates it. A quick return is unchanged.
 import type { Client } from "@libsql/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { confirmRelisting } from "@/lib/data/relist";
+import { createMarketData } from "@/lib/arena/marketData";
+import { toBig } from "@/lib/arena/ledgerWriter";
+import { confirmCodeReuse, confirmRelisting } from "@/lib/data/relist";
 import {
   normaliseName,
   planUniverse,
@@ -142,8 +144,8 @@ describe("import and the Owner decision", () => {
     let auth: Client;
     let ownerId: number;
     let editorId: number;
-    const call = (over: Record<string, unknown> = {}) =>
-      confirmRelisting({
+    const args = (over: Record<string, unknown> = {}) =>
+      ({
         mainDb: db,
         authDb: auth,
         env: { PII_HASH_KEY: KEY } as Record<string, string | undefined>,
@@ -152,7 +154,11 @@ describe("import and the Owner decision", () => {
         code: "ZZ09",
         confirm: true,
         ...over,
-      } as never);
+      }) as never;
+    const call = Object.assign(
+      (over: Record<string, unknown> = {}) => confirmRelisting(args(over)),
+      { reuse: (over: Record<string, unknown> = {}) => confirmCodeReuse(args(over)) },
+    );
     const csv = () => csvOf([...cos(9), { code: "ZZ09", name: "A Different Business Ltd" }]);
 
     beforeEach(async () => {
@@ -178,6 +184,64 @@ describe("import and the Owner decision", () => {
         delist_reason: null,
       });
       expect(await call()).toEqual({ ok: false, error: "not_available" }); // nothing left to confirm
+    });
+
+    const count = async (sql: string) => Number((await db.execute(sql)).rows[0]!.n);
+    const bar = (code: string, d: string, c: number, volume: number) =>
+      db.execute({
+        sql: `INSERT INTO price_bar (market, code, d, o, h, l, c, volume, source, published_at, ingested_at)
+              VALUES ('AU', ?, ?, ?, ?, ?, ?, ?, 'yahoo_eod', 'x', 'x')`,
+        args: [code, d, c, c, c, c, volume],
+      });
+
+    it("a code the Owner calls a DIFFERENT company gets a new listing: lookbacks stop there, old bars stay", async () => {
+      await bar("ZZ09", "2025-05-30", 1.0, 1_000_000); // the old company
+      await bar("ZZ08", "2025-05-30", 1.0, 1_000_000); // an unrelated code: never bounded
+      expect(await call.reuse()).toEqual({ ok: true, changed: true });
+      const audit = (await auditRows(auth)).filter((a) => a.action === "data.code_reuse_confirmed");
+      expect(audit).toHaveLength(1);
+      // before the import nothing is bounded yet (no listing row), and the code is still delisted
+      expect(await count("SELECT COUNT(*) AS n FROM instrument_listing")).toBe(0);
+      await run(csv(), "2027-01-06");
+      const listing = (await db.execute("SELECT * FROM instrument_listing")).rows;
+      expect(listing).toHaveLength(1);
+      expect(listing[0]).toMatchObject({
+        code: "ZZ09",
+        listed_on: "2027-01-06",
+        name: "A Different Business Ltd",
+        prior_name: "Synthetic ZZ09 Ltd",
+        prior_delisted_on: "2025-06-01",
+        decided_by: `audit:${String(audit[0]!.id)}`,
+      });
+      expect(await row("ZZ09")).toMatchObject({
+        name: "A Different Business Ltd",
+        listed_on: "2027-01-06",
+        delisted_on: null,
+      });
+      // readers: ZZ09 starts again, ZZ08 keeps its whole history, the old bar is still stored
+      const data = createMarketData(db, "AU", "2027-01-06");
+      expect(await data.lastClose("ZZ09", "2027-01-06")).toBeNull();
+      expect(await data.adv("ZZ09", "2027-01-06")).toBe(0n);
+      expect(await data.lastClose("ZZ08", "2027-01-06")).toBe(1_000_000n);
+      expect(toBig(await data.adv("ZZ08", "2027-01-06"))).toBe(1_000_000_000_000n);
+      await bar("ZZ09", "2027-01-06", 9.0, 10);
+      const after = createMarketData(db, "AU", "2027-01-06");
+      expect(await after.lastClose("ZZ09", "2027-01-06")).toBe(9_000_000n);
+      expect(await after.adv("ZZ09", "2027-01-06")).toBe(90_000_000n); // 9.00 x 10, not blended with 1.00 x 1,000,000
+      expect(await count("SELECT COUNT(*) AS n FROM price_bar WHERE code = 'ZZ09'")).toBe(2);
+      // the same decision twice, a relisting decision on a reactivated code, and a second import change nothing
+      expect(await call.reuse()).toEqual({ ok: false, error: "not_available" });
+      await run(csv(), "2027-01-07");
+      expect(await count("SELECT COUNT(*) AS n FROM instrument_listing")).toBe(1);
+    });
+
+    it("a relisting (same company) writes no listing row and keeps the whole history", async () => {
+      await bar("ZZ09", "2025-05-30", 1.0, 1_000_000);
+      expect(await call()).toEqual({ ok: true, changed: true });
+      await run(csv(), "2027-01-06");
+      expect(await count("SELECT COUNT(*) AS n FROM instrument_listing")).toBe(0);
+      const data = createMarketData(db, "AU", "2027-01-06");
+      expect(await data.lastClose("ZZ09", "2027-01-06")).toBe(1_000_000n);
     });
 
     it("is idempotent while confirmed, and refuses a non-Owner, no confirmation, bad or unknown or untouched codes", async () => {
