@@ -12,6 +12,20 @@ import { toBig } from "@/lib/arena/ledgerWriter";
 import { cleanupTempDbs, track } from "../db/helpers";
 import { dbUrlOf, setMode, setupReplay, type FullSetup } from "./replayHarness";
 
+/**
+ * D-711: the CLI is the live entry point (no --replay), so it gates on the strict calendar rule: a
+ * weekday needs a calendar row. The harness seeds holidays and early closes only, so give the other
+ * synthetic weekdays the session rows the production seed carries.
+ */
+async function sessionRows(s: FullSetup): Promise<void> {
+  for (const d of s.ds.dates) {
+    await s.db.execute({
+      sql: "INSERT OR IGNORE INTO trading_calendar (market, d, kind, close_time, confirmed, source) VALUES ('AU', ?, 'session', NULL, 1, 'synthetic')",
+      args: [d],
+    });
+  }
+}
+
 afterEach(cleanupTempDbs);
 
 const SECRET_URL = "libsql://praxis-secret-host.turso.io";
@@ -76,6 +90,7 @@ describe("close-books command line", () => {
   it("closes the session when the market is full; a second run says already_done", async () => {
     const s = await setupReplay(SMALL);
     await setMode(s.db, "full");
+    await sessionRows(s);
     const h = harness(s);
     const env = {
       TURSO_MAIN_URL: SECRET_URL,
@@ -94,6 +109,7 @@ describe("close-books command line", () => {
   it("waits for Batch 1's marker: appears during the wait -> closes; never appears -> exit 1", async () => {
     const s = await setupReplay({ ...SMALL, stopAfter: 10 });
     await setMode(s.db, "full");
+    await sessionRows(s);
     const d = s.ds.dates[15];
     let clock = Date.parse("2030-02-20T06:00:00.000Z");
     let sleeps = 0;
@@ -129,6 +145,7 @@ describe("close-books command line", () => {
   it("catches up the sessions missed since the last success, oldest first", async () => {
     const s = await setupReplay(SMALL);
     await setMode(s.db, "full");
+    await sessionRows(s);
     const h = harness(s);
     const env = { TURSO_MAIN_URL: SECRET_URL, TURSO_MAIN_TOKEN: SECRET_TOKEN };
     expect(await closeBooksMain(["--date", s.ds.dates[3]], env, h.deps)).toBe(0);
@@ -141,6 +158,7 @@ describe("close-books command line", () => {
   it("a failed close exits 1 and stops", async () => {
     const s = await setupReplay({ ...SMALL, keep: ["E01"] });
     await setMode(s.db, "full");
+    await sessionRows(s);
     const h = harness(s);
     const env = { TURSO_MAIN_URL: SECRET_URL, TURSO_MAIN_TOKEN: SECRET_TOKEN };
     expect(await closeBooksMain(["--date", s.ds.dates[3]], env, h.deps)).toBe(0);
