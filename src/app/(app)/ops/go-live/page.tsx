@@ -11,6 +11,9 @@ import { readEmailSwitch } from "@/lib/email/switch";
 import { formatMelbourne } from "@/lib/health/format";
 import {
   GO_LIVE_ITEMS,
+  V2_GO_LIVE_STEPS,
+  V2_GUIDE_PATH,
+  V2_PHASE_LABELS,
   GO_LIVE_MARKET,
   SIGNOFF_CONFIRM_PHRASE,
   SIGNOFF_NOTE_MAX,
@@ -21,6 +24,7 @@ import { marketDate } from "@/lib/data/calendar";
 import { userPreferences } from "@/lib/preferences/read";
 import { signOffGoLiveAction } from "./actions";
 import { GoLiveForm } from "./GoLiveForm";
+import { V2Steps } from "./V2Steps";
 
 export const dynamic = "force-dynamic";
 
@@ -136,6 +140,22 @@ export default async function GoLivePage() {
               />
             </section>
           )}
+
+          {/* V2-S9 (D-706): shown before and after the V1 sign-off; V2 steps are not part of it. */}
+          <section aria-labelledby="v2-h" className="flex flex-col gap-3">
+            <h2 id="v2-h" className="text-lg font-semibold">
+              V2 steps
+            </h2>
+            <p className="m-0 text-sm text-text-muted">
+              What is left to do by hand before V2 is switched on, in the order to do it. These are
+              not part of the sign-off.
+            </p>
+            <V2Steps
+              phases={Object.entries(V2_PHASE_LABELS).map(([id, label]) => ({ id, label }))}
+              steps={V2_GO_LIVE_STEPS.map((x) => ({ ...x, after: [...x.after] }))}
+              guidePath={V2_GUIDE_PATH}
+            />
+          </section>
 
           <section aria-labelledby="history-h" className="flex flex-col gap-3">
             <h2 id="history-h" className="text-lg font-semibold">
