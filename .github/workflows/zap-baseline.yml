@@ -22,10 +22,11 @@ permissions: {}
 
 env:
   NEXT_TELEMETRY_DISABLED: "1"
-  # OWNER/OPUS ACTION: replace the zeros with the digest of the reviewed ZAP release
-  # (`docker buildx imagetools inspect ghcr.io/zaproxy/zaproxy:<release>`). Until then the pull
-  # fails, which is the safe state; scripts/ci/zap-baseline.workflow.test.mjs lists it as a todo.
-  ZAP_IMAGE: ghcr.io/zaproxy/zaproxy@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  # ZAP image pinned by digest (D-814): the multi-arch index of ghcr.io/zaproxy/zaproxy:stable read on
+  # 2026-11-02. To move to a newer release, read the new index digest (`docker buildx imagetools inspect
+  # ghcr.io/zaproxy/zaproxy:<release>`) and replace it here. The job still runs only once the repo
+  # variable ZAP_IMAGE_PINNED is true (D-158), an Owner setting.
+  ZAP_IMAGE: ghcr.io/zaproxy/zaproxy@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238
 
 jobs:
   local:
