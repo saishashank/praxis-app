@@ -23,6 +23,7 @@ import {
   type ReviewVariant,
   type StoredKind,
 } from "./facts";
+import { haltAttentionItems } from "./haltAttention";
 import {
   loadCtx,
   narrativeFacts,
@@ -108,6 +109,14 @@ export async function buildFacts(db: Client, o: BuildOptions): Promise<BuiltFact
   const recap = await readRecap(c);
   const health = await readHealth(c, av);
   const hs = await readHealthSummary(c, health.lines);
+  // A1 (D-744): a halted code that may resume is an attention line; a fault never breaks the review.
+  if (!minimal) {
+    try {
+      hs.attention.push(...(await haltAttentionItems(c)));
+    } catch {
+      // the line is optional
+    }
+  }
 
   const sorted = [...executions].sort(
     (a, b) => b.dayPlCents - a.dayPlCents || (a.id < b.id ? -1 : 1),

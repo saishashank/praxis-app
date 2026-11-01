@@ -151,7 +151,7 @@ describe("D1 registry entries", () => {
     expect(def("A-D1-07").cluster).toBe("low_volatility");
     expect(def("A-D1-10").inputs).toEqual(["bar_au", "sector_map"]);
     // D-318: card thresholds live in the passport text, not in the grid.
-    expect(def("A-D1-02").grid).toEqual({ lookback: [250, 200, 225] });
+    expect(def("A-D1-02").grid).toEqual({ lookback: [250, 200, 225], young_floor: [0, 60] });
     expect(def("A-D1-02").historyFields?.some((h) => h.startsWith("card threshold"))).toBe(true);
     // D-316: a flag from a score angle is a veto, and the passport says so.
     expect(def("A-D1-03").definition).toContain("ineligible");
@@ -182,8 +182,8 @@ describe("warm-up boundaries (warmupSessions is exact for the default grid)", ()
 describe("D-318: every grid key changes some value on the test world", () => {
   // One alternative point per key, chosen so that at least one (code, t) of the world flips.
   const ALT: Record<string, Record<string, number>> = {
-    "A-D1-01": { mid: 100, long: 200, skip: 21 },
-    "A-D1-02": { lookback: 200 },
+    "A-D1-01": { mid: 100, long: 200, skip: 21, young_floor: 60 },
+    "A-D1-02": { lookback: 200, young_floor: 60 },
     "A-D1-03": { lookback: 125, ext_veto: 0.75, gap_cap_pct: 4 },
     "A-D1-04": { depth_min: 1.5, depth_max: 2 },
     "A-D1-05": { rsi2_max: 5, rsi14_max: 35 },
@@ -201,7 +201,9 @@ describe("D-318: every grid key changes some value on the test world", () => {
       for (const [key, alt] of Object.entries(ALT[a.id]!)) {
         const grid = { ...base, [key]: alt };
         let flipped = false;
-        for (let t = a.warmupSessions - 1; t <= LAST && !flipped; t += 1)
+        // the young-listing point (A5) only differs while a code is younger than its lookback
+        const from = key === "young_floor" ? 59 : a.warmupSessions - 1;
+        for (let t = from; t <= LAST && !flipped; t += 1)
           for (const code of v.codes(t))
             if (valueKey(run(a.id, v, code, t)) !== valueKey(run(a.id, v, code, t, grid))) {
               flipped = true;
@@ -492,4 +494,49 @@ describe("TST-109: every D1 angle gives the same value on the truncated world", 
       assertTruncationInvariant(w, (v, c, t) => evaluateAngle(a, "active", v, c, t));
     });
   }
+});
+
+describe("A5 young-listing variant (version 2, young_floor grid point)", () => {
+  // Rises to 1,160 c at session 80, then falls 3 c a session: a code with 100 sessions of history.
+  const shape: PathSpec = { close: (i) => (i <= 80 ? 1_000 + 2 * i : 1_160 - 3 * (i - 80)) };
+  const young = (n: number): [AsOfView, number] => {
+    const sessions = weekdaySessions(n);
+    return [buildAsOfView(synthWorld({ sessions, codes: { ZZY: shape } })), n - 1];
+  };
+  const floor60 = (id: string): Record<string, number> => ({
+    ...defaultGrid(def(id)),
+    young_floor: 60,
+  });
+
+  it("both angles are version 2 and the young point is off by default (young_floor 0 = the version 1 value)", () => {
+    expect(def("A-D1-01").version).toBe(2);
+    expect(def("A-D1-02").version).toBe(2);
+    expect(defaultGrid(def("A-D1-02")).young_floor).toBe(0);
+    expect(defaultGrid(def("A-D1-01")).young_floor).toBe(0);
+  });
+
+  it("A-D1-02 uses the sessions a code has once it has 60: close / the high of all 100 sessions", () => {
+    const [v, t] = young(100);
+    expect(run("A-D1-02", v, "ZZY", t)).toBeUndefined(); // default: 250 sessions needed
+    const last = 1_160 - 3 * (t - 80);
+    expect(run("A-D1-02", v, "ZZY", t, floor60("A-D1-02"))).toBeCloseTo(last / 1_160, 12);
+  });
+
+  it("below the floor it stays undefined; with a full lookback the young point equals the default", () => {
+    const [v59, t59] = young(59);
+    expect(run("A-D1-02", v59, "ZZY", t59, floor60("A-D1-02"))).toBeUndefined();
+    expect(run("A-D1-01", v59, "ZZY", t59, floor60("A-D1-01"))).toBeUndefined();
+    const t = LAST;
+    expect(run("A-D1-02", view, "ZZU", t, floor60("A-D1-02"))).toBe(run("A-D1-02", view, "ZZU", t));
+    expect(run("A-D1-01", view, "ZZU", t, floor60("A-D1-01"))).toBe(run("A-D1-01", view, "ZZU", t));
+  });
+
+  it("A-D1-01 caps the horizons and the SMA at the history: a 100-session riser votes +1 on all three", () => {
+    const sessions = weekdaySessions(100);
+    const rise = buildAsOfView(synthWorld({ sessions, codes: { ZZR: up } }));
+    expect(run("A-D1-01", rise, "ZZR", 99)).toBeUndefined();
+    expect(run("A-D1-01", rise, "ZZR", 99, floor60("A-D1-01"))).toBe(1);
+    const fall = buildAsOfView(synthWorld({ sessions, codes: { ZZF: down } }));
+    expect(run("A-D1-01", fall, "ZZF", 99, floor60("A-D1-01"))).toBe(-1);
+  });
 });

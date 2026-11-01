@@ -167,19 +167,46 @@ export function fractalPivots(
 
 const int = (g: GridPoint, k: string): number => Math.trunc(g[k]!);
 
+// ---- A5 young-listing variant (CR-MOV-A5, D-748) ----------------------------------------------------------------
+
+/** The grid value of an optional dimension; an absent key reads as 0 (= the variant is off). */
+const intOr0 = (g: GridPoint, k: string): number => Math.trunc(g[k] ?? 0);
+
+/**
+ * The lookback a code with `bars` sessions of history can use: the grid lookback when it has that many
+ * bars; with `floor` > 0 and at least `floor` bars, the bars it has; undefined (warm-up) otherwise.
+ * `floor` 0 is the registered default and returns the lookback unchanged for every code that has it.
+ */
+export function youngLookback(lookback: number, bars: number, floor: number): number | undefined {
+  if (bars >= lookback) return lookback;
+  return floor > 0 && bars >= floor ? bars : undefined;
+}
+
 // ---- A-D1-01 ---------------------------------------------------------------------------------------------------
 
 function trendMomentum(view: AsOfView, code: string, t: number, g: GridPoint): AngleValue {
-  const lMid = int(g, "mid");
-  const lLong = int(g, "long");
+  let lMid = int(g, "mid");
+  let lLong = int(g, "long");
+  let smaN = SMA_LONG;
   const skip = int(g, "skip");
-  const need = Math.max(lLong, lMid + skip, SMA_LONG) + 1;
+  let need = Math.max(lLong, lMid + skip, smaN) + 1;
+  const floor = intOr0(g, "young_floor");
+  const bars = view.barCount(code, t);
+  if (floor > 0 && bars >= floor && bars < need) {
+    // A5: horizons and the SMA are capped at the history the code has (at least `floor` sessions)
+    const cap = bars - 1 - skip;
+    if (cap < 1) return undefined;
+    lMid = Math.min(lMid, cap);
+    lLong = Math.min(lLong, cap);
+    smaN = Math.min(smaN, bars - 1);
+    need = Math.max(lLong, lMid + skip, smaN) + 1;
+  }
   const s = seriesAt(view, code, t, need);
   if (!s) return undefined;
   const c = s.adjClose;
   const n = c.length;
   const last = c[n - 1]!;
-  const above = aboveSma(c, SMA_LONG) === true;
+  const above = aboveSma(c, smaN) === true;
   const state = (up: boolean): number => (up && above ? 1 : -1);
   const sMid = state(last > c[n - 1 - lMid]!);
   const sLong = state(last > c[n - 1 - lLong]!);
@@ -190,7 +217,8 @@ function trendMomentum(view: AsOfView, code: string, t: number, g: GridPoint): A
 // ---- A-D1-02 ---------------------------------------------------------------------------------------------------
 
 function highProximity(view: AsOfView, code: string, t: number, g: GridPoint): AngleValue {
-  const l = int(g, "lookback");
+  const l = youngLookback(int(g, "lookback"), view.barCount(code, t), intOr0(g, "young_floor"));
+  if (l === undefined) return undefined;
   const s = seriesAt(view, code, t, l);
   if (!s) return undefined;
   const top = highest(s.adjClose, l);
@@ -486,34 +514,34 @@ function relativeStrength(view: AsOfView, code: string, t: number, g: GridPoint)
 export const D1_ANGLES: readonly AngleDef[] = [
   {
     id: "A-D1-01",
-    version: 1,
+    version: 2,
     domain: 1,
     title: "Multi-horizon trend and momentum state",
     definition:
-      "Mean of three horizon signs: +1 when the lookback return (mid, long, and mid with a skip) is positive and the close is above SMA(200), else -1; in {-1, -1/3, 1/3, 1}. Exact bigint comparisons on adjusted closes. With skip 0 the skipped sign duplicates the mid sign (two of three votes).",
+      "Mean of three horizon signs: +1 when the lookback return (mid, long, and mid with a skip) is positive and the close is above SMA(200), else -1; in {-1, -1/3, 1/3, 1}. Exact bigint comparisons on adjusted closes. With skip 0 the skipped sign duplicates the mid sign (two of three votes). Version 2 (A5, D-748): the grid point young_floor > 0 caps the horizons and the SMA at the history of a code with at least young_floor sessions (0 = off, the version 1 value).",
     kind: "score",
     cluster: "momentum",
     orientation: 1,
     horizonSessions: 60,
     warmupSessions: 253,
     inputs: ["bar_au"],
-    grid: { mid: [126, 100, 140], long: [252, 200, 260], skip: [0, 21] },
+    grid: { mid: [126, 100, 140], long: [252, 200, 260], skip: [0, 21], young_floor: [0, 60] },
     compute: trendMomentum,
   },
   {
     id: "A-D1-02",
-    version: 1,
+    version: 2,
     domain: 1,
     title: "52-week-high proximity",
     definition:
-      "Close divided by the highest adjusted close of the last `lookback` sessions including today, in (0, 1].",
+      "Close divided by the highest adjusted close of the last `lookback` sessions including today, in (0, 1]. Version 2 (A5, D-748): the grid point young_floor > 0 lets a code with at least young_floor sessions use the sessions it has (0 = off, the version 1 value).",
     kind: "score",
     cluster: "momentum",
     orientation: 1,
     horizonSessions: 20,
     warmupSessions: 250,
     inputs: ["bar_au"],
-    grid: { lookback: [250, 200, 225] },
+    grid: { lookback: [250, 200, 225], young_floor: [0, 60] },
     historyFields: ["card threshold: at_high when the ratio is >= 0.98 (file range 0.95-1.00)"],
     compute: highProximity,
   },

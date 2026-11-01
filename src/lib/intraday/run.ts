@@ -35,6 +35,7 @@ import {
   requestsAllowed,
 } from "@/lib/data/quotes/budget";
 import type { QuoteRefusal } from "@/lib/data/quotes/types";
+import { armedCatalysts, armHaltResumes, loadMoversParams } from "@/lib/cortex/store/movers";
 import { todayCatalysts } from "@/lib/sentinel/todayItems";
 import { evaluateQuotes } from "./scan";
 import { scanUniverse, type ScanCode } from "./universe";
@@ -206,6 +207,31 @@ export async function runIntradayScan(deps: ScanRunDeps): Promise<ScanRunResult>
   // 5. Plan: universe ∩ today's catalysts, tier 1 first, cut at the allowance.
   const universe = await scanUniverse(db, market, sessionD, codesMax);
   const catalysts = await todayCatalysts(db, market, sessionD, now.toISOString());
+  // A1/A3 (D-744): halt resumes and volume-creep names are quoted although no catalyst of the day exists;
+  // they enter as synthetic catalysts from their arm time (10:00 by default). A real catalyst wins.
+  const movers = await loadMoversParams(db);
+  try {
+    await armHaltResumes(db, {
+      market,
+      sessionD,
+      now: now.toISOString(),
+      params: movers,
+      calendar: await readCalendar(db, market),
+      hours,
+    });
+  } catch {
+    // the scan does not depend on the arms
+  }
+  const nowMinute = Math.floor(
+    (now.getTime() - localToUtc(sessionD, "00:00", hours.tz).getTime()) / MS_PER_MIN,
+  );
+  const armed = await armedCatalysts(db, {
+    market,
+    sessionD,
+    nowLocalHhmm: hm(nowMinute),
+    cap: movers.intradayArmCodesMax,
+  });
+  for (const [code, c] of armed) if (!catalysts.has(code)) catalysts.set(code, c);
   const ordered = universe.filter((c) => catalysts.has(c.code));
   const narrowedBand = band === "narrow";
   const eligible = narrowedBand ? ordered.filter((c) => c.kind === "U1") : ordered;
@@ -294,6 +320,7 @@ export async function runIntradayScan(deps: ScanRunDeps): Promise<ScanRunResult>
       maxIndustryNavShare: await num(db, "max_industry_nav_share"),
       stopAtr: await num(db, "f1_initial_stop_atr"),
       streamState: String(await getConfig(db, "intraday_stream_state")),
+      sectorMinMembers: movers.sectorCompositeMinMembers,
     },
   });
   if (deps.mailCandidates && evaluated.written > 0) {

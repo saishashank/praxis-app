@@ -14,6 +14,7 @@ import {
 } from "@/lib/cortex/angles/registry";
 import type { AngleDef, AngleValue, AsOfView } from "@/lib/cortex/angles/types";
 import { buildAsOfView } from "@/lib/cortex/pit/asOfView";
+import type { EventRow } from "@/lib/cortex/pit/types";
 import { assertTruncationInvariant, valueKey } from "@/lib/cortex/pit/truncation";
 import { synthWorld, weekdaySessions, wobble, type PathSpec } from "./d1d2World";
 
@@ -41,9 +42,41 @@ const step: PathSpec = {
 /** Volume collapses to a tenth from 15 sessions back. */
 const fading: PathSpec = { ...up, volume: (i) => (i >= LAST - 14 ? 10_000 : 100_000) };
 
+/** A volume spike of 2.5x with a 30 % jump on the last session (flagged only at vr_min 2). */
+const jump: PathSpec = {
+  close: (i) => (i === LAST ? 1_300 : 1_000),
+  volume: (i) => (i === LAST ? 250_000 : 100_000),
+};
+/** A volume spike of 4x with a 3 % jump on the last session (flagged at the default point, not at ar_min_pct 5). */
+const modest: PathSpec = {
+  close: (i) => (i === LAST ? 1_030 : 1_000),
+  volume: (i) => (i === LAST ? 400_000 : 100_000),
+};
+
+/** An event of a ZZ code: day0 `day0`, published at 01:00 UTC that day (before the cut-off). */
+function evOf(code: string, day0: string): EventRow {
+  return {
+    id: `asx|${code}-${day0}`,
+    code,
+    day0,
+    groupKey: `${code}|${day0}`,
+    category: "results",
+    priceSensitive: true,
+    polarity: 1,
+    ar: null,
+    volRatio: null,
+    timed: true,
+    day0LowMicro: null,
+    publishedAt: `${day0}T01:00:00.000Z`,
+  };
+}
+
 const world = synthWorld({
   sessions: SESSIONS,
+  overrides: { events: new Map([["ZZW", [evOf("ZZW", SESSIONS[3]!)]]]) },
   codes: {
+    ZZC: jump,
+    ZZY: modest,
     ZZU: up,
     ZZD: down,
     ZZZ: zigzag,
@@ -70,7 +103,7 @@ const one = (code: string, spec: PathSpec): AsOfView =>
 const COMPUTABLE = D2_ANGLES.filter((a) => a.compute !== undefined);
 
 describe("D2 registry entries", () => {
-  it("ten ids A-D2-01..10, valid under defineAngles; 07 and 08 candidates; 09 and 10 gates", () => {
+  it("ten ids A-D2-01..10, valid under defineAngles; 08 candidate (07 measured live, A3); 09 and 10 gates", () => {
     expect(defineAngles(D2_ANGLES).map((a) => a.id)).toEqual(
       Array.from({ length: 10 }, (_, i) => `A-D2-${String(i + 1).padStart(2, "0")}`),
     );
@@ -85,6 +118,7 @@ describe("D2 registry entries", () => {
       "A-D2-04",
       "A-D2-05",
       "A-D2-06",
+      "A-D2-07",
       "A-D2-10",
     ]);
     expect(D2_ANGLES.filter((a) => a.kind === "gate").map((a) => a.id)).toEqual([
@@ -103,7 +137,8 @@ describe("D2 registry entries", () => {
     expect(def("A-D2-01").grid).toEqual({ short: [5], long: [20] });
     expect(def("A-D2-02").grid).toEqual({ udv: [50, 20, 60] });
     expect(def("A-D2-06").grid).toEqual({ base: [20, 10, 30] });
-    expect(def("A-D2-07").grid).toEqual({});
+    expect(def("A-D2-07").grid).toEqual({ vr_min: [3, 2], ar_min_pct: [2] });
+    expect(def("A-D2-07").version).toBe(2);
     expect(def("A-D2-09").grid).toEqual({});
     for (const id of ["A-D2-01", "A-D2-02", "A-D2-06", "A-D2-07", "A-D2-09"])
       expect(def(id).historyFields?.some((h) => h.startsWith("card "))).toBe(true);
@@ -111,8 +146,10 @@ describe("D2 registry entries", () => {
     expect(def("A-D2-03").definition).toContain("ineligible");
   });
 
-  it("A-D2-07 and A-D2-08 need data: candidate whatever the passport declares, and undefined", () => {
-    for (const id of ["A-D2-07", "A-D2-08"]) {
+  it("A-D2-08 needs data: candidate whatever the passport declares, and undefined; A-D2-07 no longer does (A3)", () => {
+    expect(def("A-D2-07").needsData).toBeUndefined();
+    expect(canActivate(def("A-D2-07"))).toEqual({ ok: true });
+    for (const id of ["A-D2-08"]) {
       expect(def(id).needsData).toBeTruthy();
       expect(def(id).compute).toBeUndefined();
       expect(canActivate(def(id))).toEqual({ ok: false, reason: "needs_data", missing: [] });
@@ -153,6 +190,7 @@ describe("D-318: every grid key changes some value on the test world", () => {
     "A-D2-04": { window: 10 },
     "A-D2-05": { window: 40 },
     "A-D2-06": { base: 21 },
+    "A-D2-07": { vr_min: 2, ar_min_pct: 5 },
     "A-D2-10": { ratio: 2, sessions: 3 },
   };
   for (const a of COMPUTABLE) {
@@ -360,4 +398,56 @@ describe("TST-109: every computable D2 angle gives the same value on the truncat
       assertTruncationInvariant(world, (v, c, t) => evaluateAngle(a, "active", v, c, t));
     });
   }
+});
+
+describe("A-D2-07 abnormal volume without news (version 2, measured live)", () => {
+  const at = (code: string, v: AsOfView = view, grid = defaultGrid(def("A-D2-07"))): AngleValue =>
+    run("A-D2-07", v, code, LAST, grid);
+
+  it("flags a 4x volume spike with a 3 % jump, not a 2.5x one at the default point; vr_min 2 and ar_min_pct 5 move the line", () => {
+    expect(at("ZZY")).toBe(1);
+    expect(at("ZZC")).toBe(0); // vr20 = 2.5 < 3
+    expect(at("ZZC", view, { vr_min: 2, ar_min_pct: 2 })).toBe(1);
+    expect(at("ZZY", view, { vr_min: 3, ar_min_pct: 5 })).toBe(0); // |AR| is 3 %
+    expect(at("ZZU")).toBe(0); // steady volume
+  });
+
+  it("an event on D or D-1 explains it (0); an older event does not", () => {
+    const withEvent = (day0: string): AsOfView =>
+      buildAsOfView(
+        synthWorld({
+          sessions: SESSIONS,
+          overrides: { events: new Map([["ZZY", [evOf("ZZY", day0)]]]) },
+          codes: { ZZY: modest },
+        }),
+      );
+    expect(at("ZZY", withEvent(SESSIONS[LAST]!))).toBe(0);
+    expect(at("ZZY", withEvent(SESSIONS[LAST - 1]!))).toBe(0);
+    expect(at("ZZY", withEvent(SESSIONS[LAST - 2]!))).toBe(1);
+  });
+
+  it("undefined when no event row was loaded at all (an extract without announcements)", () => {
+    const bare = one("ZZY", modest);
+    expect(bare.eventsLoaded).toBe(false);
+    expect(at("ZZY", bare)).toBeUndefined();
+  });
+
+  it("the market move is taken off the return (market-adjusted AR)", () => {
+    const flatIndex = buildAsOfView(
+      synthWorld({
+        sessions: SESSIONS,
+        overrides: {
+          events: new Map([["ZZQ", [evOf("ZZQ", SESSIONS[3]!)]]]),
+          index: {
+            AXJO: SESSIONS.map((d, i) => ({
+              d,
+              close: BigInt(i === LAST ? 7_210 : 7_000) * 1_000_000n, // the market is up 3 % too
+            })),
+          },
+        },
+        codes: { ZZQ: modest },
+      }),
+    );
+    expect(at("ZZQ", flatIndex)).toBe(0); // 3 % less 3 % = 0 < 2 %
+  });
 });

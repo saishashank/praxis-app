@@ -182,6 +182,8 @@ export type AsOfView = {
   readonly maxT: number;
   /** True when the DAT-234 index-change list was loaded (false = fail closed, CTX-013 step 8). */
   readonly indexChangesLoaded: boolean;
+  /** True when any event row was loaded (false = the announcement source is absent, e.g. an offline extract without events). */
+  readonly eventsLoaded: boolean;
   readonly calendar: readonly CalendarRow[];
   cutoffUtc(t: number): string;
   /** Universe codes with a bar on sessions[t] (and a tier at t when tiers are loaded), sorted. */

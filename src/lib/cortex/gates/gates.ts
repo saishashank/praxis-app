@@ -35,6 +35,7 @@ import {
   REGIME_LABEL,
   STOP_CAP_LABEL,
 } from "./list";
+import { moversSubFail, type MoversGateInput } from "./movers";
 import { fail, pass, type G08SubId, type GateResult } from "./types";
 
 const FLOAT_DP = 6;
@@ -233,6 +234,8 @@ export type EventStateInput = {
   readonly corpActionState: string | null;
   /** Events of the code usable at the cut-off. */
   readonly events: readonly EventRow[];
+  /** Movers gap additions (8f, 8g, 8h); absent = the five original checks only. */
+  readonly movers?: MoversGateInput;
 };
 
 /** Event categories whose day 0 on D vetoes a next-open entry (8e). */
@@ -284,6 +287,7 @@ export function eventStateSubFail(input: EventStateInput): { sub: G08SubId; valu
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
   if (veto !== undefined)
     return { sub: "8e_event_date_veto", value: `${veto.category}:${veto.id}` };
+  if (input.movers !== undefined) return moversSubFail(input.movers);
   return null;
 }
 
@@ -293,7 +297,7 @@ export function gateEventState(input: EventStateInput): GateResult {
     throw new RangeError("index_change_window_sessions must be a non-negative integer");
   }
   const f = eventStateSubFail(input);
-  if (f === null) return pass();
+  if (f === null) return input.movers?.inResultsWindow === true ? pass("results_window") : pass();
   return fail("G08_event_state", G08_LABELS[f.sub], `${f.sub}:${f.value}`);
 }
 

@@ -92,7 +92,9 @@ import type { AsOfView, InputKind, InputManifest } from "./pit/types";
 import { scoreCode, type CodeScore } from "./score";
 import { activeSetHash } from "./score/map";
 import type { CortexMap, ScoredAngle } from "./score/types";
+import { moversGateInput, type MoversNight } from "./moversNight";
 import { coldStartAt } from "./states/coldStart";
+import { NO_SHORT_RISK, SHORT_RISK_REPORTS, shortRisk } from "./states/shortRisk";
 
 // ---- shapes --------------------------------------------------------------------------------------------
 
@@ -194,6 +196,8 @@ export type NightInputs = {
   readonly arn011Failed?: ReadonlyMap<string, readonly string[]>;
   /** CTX-055 go-live date; absent = cold-start rules off (replay before go-live, offline). */
   readonly goLiveD?: string | null;
+  /** Movers gap additions (D-743…D-747): halt watch, known result dates, short risk. Absent = off. */
+  readonly movers?: MoversNight;
   readonly prng: (scope: string) => Prng;
 };
 
@@ -685,7 +689,11 @@ function evaluateCandidate(
 
   // 5. cost (informational)
   const regimeGate = gateRegime(book.family, ctx.regime);
-  halfSize = regimeGate.halfSize;
+  const risk =
+    inputs.movers === undefined
+      ? NO_SHORT_RISK
+      : shortRisk(inputs.view.shorts(code, inputs.t, SHORT_RISK_REPORTS + 1), inputs.movers.params);
+  halfSize = regimeGate.halfSize || risk.flag; // D7 sizing: a heavily shorted name gets the smaller parcel (D-747)
   const cashIn = halfSize ? scaleHalf(deployable) : deployable;
   const navIn = halfSize ? scaleHalf(book.navMicro) : book.navMicro;
   sizing = sizeEntry({
@@ -750,6 +758,19 @@ function evaluateCandidate(
     haltedNow: inputs.view.halted(code, inputs.t),
     corpActionState: stateOf(inputs.states, code, "corp_action"),
     events: inputs.view.events(code, inputs.t),
+    ...(inputs.movers === undefined
+      ? {}
+      : {
+          movers: moversGateInput({
+            d: inputs.d,
+            sessions: inputs.view.sessions.slice(0, inputs.t + 1),
+            calendar: inputs.view.calendar,
+            movers: inputs.movers,
+            code,
+            family: book.family,
+            shortRisk: risk.flag,
+          }),
+        }),
   });
   if (!step("G08_event_state", ev)) return done("G08_event_state");
 

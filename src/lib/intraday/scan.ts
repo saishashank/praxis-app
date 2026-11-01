@@ -12,6 +12,8 @@ import type { Catalyst } from "@/lib/sentinel/todayItems";
 import { isCandidate, type CandidateParams } from "./candidate";
 import { scanGates, type EodBar, type ScanGateInput } from "./gates";
 import { indicativeLevels, type FamilyStopRule } from "./levels";
+import { sectorReturns, type SectorReturn } from "@/lib/cortex/store/movers";
+import { DEFAULT_MOVERS_PARAMS } from "@/lib/cortex/moversParams";
 import { heldCodes, type ScanCode } from "./universe";
 
 const PPM = 1_000_000; // threshold-ok: unit
@@ -31,7 +33,25 @@ export type ScanParams = CandidateParams & {
   stopAtr: number;
   /** `intraday_stream_state`; recorded on every row, never written here. */
   streamState: string;
+  /** `sector_composite_min_members` (A8, D-750); absent = the registry default. */
+  sectorMinMembers?: number;
 };
+
+/**
+ * A8 (D-750): the move net of the industry's last completed end-of-day composite. There is no intraday
+ * sector series (D-445), so the composite of the previous session stands in: it is taken off only when
+ * it points the same way as the move (a continuing sector wave never inflates a candidate; an opposite
+ * sector never shrinks one). Null when the industry is unknown or has fewer than `minMembers` members:
+ * the raw move then stands (the market fallback).
+ */
+export function sectorAdjustedMove(
+  movePpm: number,
+  sector: SectorReturn | undefined,
+  minMembers: number,
+): number | null {
+  if (sector === undefined || sector.members < minMembers) return null;
+  return Math.sign(sector.retPpm) === Math.sign(movePpm) ? movePpm - sector.retPpm : movePpm;
+}
 
 export type EvaluateInput = {
   market: string;
@@ -282,6 +302,8 @@ export async function evaluateQuotes(db: Exec, x: EvaluateInput): Promise<Evalua
     withCatalyst.map((q) => q.code),
   );
   const world = await loadWorld(db, x.market, x.sessionD);
+  const sectors = await sectorReturns(db, x.market, x.sessionD);
+  const minMembers = x.params.sectorMinMembers ?? DEFAULT_MOVERS_PARAMS.sectorCompositeMinMembers;
   for (const q of withCatalyst) {
     res.considered += 1;
     const cat = x.catalysts.get(q.code)!;
@@ -313,10 +335,16 @@ export async function evaluateQuotes(db: Exec, x: EvaluateInput): Promise<Evalua
         ? null
         : Math.round((q.cumVolume / (avg * frac)) * PPM);
     if (q.cumVolume === null) res.volumeUnavailable += 1;
+    const industry = world.industryOf.get(q.code);
+    const sectorAdjPpm = sectorAdjustedMove(
+      movePpm,
+      industry === undefined ? undefined : sectors.get(industry),
+      minMembers,
+    );
     const verdict = isCandidate({
       catalyst: cat,
       movePpm,
-      sectorAdjPpm: null,
+      sectorAdjPpm,
       sd60Ppm: h === undefined ? null : sd60Ppm(h.closes),
       relVolumePpm,
       quoteAgeMin: quoteAgeMin(q, x.now),
@@ -334,7 +362,7 @@ export async function evaluateQuotes(db: Exec, x: EvaluateInput): Promise<Evalua
         "INSERT INTO intraday_candidate (market, session_d, code, found_slot, found_at, item_source, " +
         "item_ann_id, item_category, materiality, polarity, move_ppm, sector_adj_ppm, rel_volume_ppm, " +
         "gates_json, indicative_limit_micro, indicative_stop_micro, latest_quote_at, latest_move_ppm) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
         "ON CONFLICT (market, session_d, code) DO UPDATE SET latest_quote_at = excluded.latest_quote_at, " +
         "latest_move_ppm = excluded.latest_move_ppm",
       args: [
@@ -349,6 +377,7 @@ export async function evaluateQuotes(db: Exec, x: EvaluateInput): Promise<Evalua
         cat.materiality,
         polarityWord(cat.polarity),
         movePpm,
+        sectorAdjPpm,
         relVolumePpm,
         JSON.stringify({
           passed: gates.passed,

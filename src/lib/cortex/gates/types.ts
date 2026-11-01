@@ -26,6 +26,10 @@ export const G08_SUB_IDS = [
   "8c_halt_suspension",
   "8d_unresolved_action",
   "8e_event_date_veto",
+  // Movers gap additions (D-743, D-745, D-747): run after the five above, only when the night carries them.
+  "8f_halt_resume",
+  "8g_known_date",
+  "8h_short_risk",
 ] as const;
 export type G08SubId = (typeof G08_SUB_IDS)[number];
 

@@ -363,6 +363,7 @@ export function buildAsOfViewFrom(stores: PartitionedWorld): AsOfView {
       cutoffHhmm: world.cutoffHhmm,
       maxT,
       indexChangesLoaded: stores.indexChanges !== null,
+      eventsLoaded: stores.events.size > 0,
       calendar: world.calendar,
       cutoffUtc(t) {
         checkT(t);

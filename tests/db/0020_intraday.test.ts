@@ -59,14 +59,14 @@ describe("migration 0020_intraday: apply, roll back, apply again", () => {
     const after = await schemaOf(db);
     for (const t of NEW_TABLES) expect(after.some((s) => s.startsWith(`table:${t}:`))).toBe(true);
 
-    expect(await migrateDown(db, ms, 4)).toEqual({ rolledBack: 4, version: 19 });
+    expect(await migrateDown(db, ms, 5)).toEqual({ rolledBack: 5, version: 19 });
     const mid = await schemaOf(db);
     for (const t of NEW_TABLES) expect(mid.some((s) => s.startsWith(`table:${t}:`))).toBe(false);
     expect(mid.join("\n")).not.toContain("pick_hit");
     const reg = await db.execute("SELECT 1 FROM source_register WHERE source = 'yahoo_delayed'");
     expect(reg.rows).toHaveLength(0);
 
-    expect(await migrateUp(db, ms)).toEqual({ applied: 4, version: 23 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 5, version: 24 });
     expect(await schemaOf(db)).toEqual(after);
   });
 
@@ -287,7 +287,7 @@ describe("email_message rebuild", () => {
     await db.execute(mail("pick_hit:x", "pick_hit"));
     await db.execute(attempt("pick_hit:x"));
     await db.execute(attempt("brief:2030-03-05"));
-    await migrateDown(db, ms, 4);
+    await migrateDown(db, ms, 5);
     const k = await db.execute("SELECT email_key FROM email_message");
     expect(k.rows.map((x) => x.email_key)).toEqual(["brief:2030-03-05"]);
     const a = await db.execute("SELECT email_key FROM email_attempt");
