@@ -16,6 +16,7 @@ import {
   SIGNOFF_NOTE_MAX,
 } from "@/lib/golive/checklist";
 import { isProductionEnv } from "@/lib/golive/interlock";
+import { moneyConstants } from "@/lib/golive/moneyConstants";
 import { deployedCommit, loadSignoffs, type SignoffRow } from "@/lib/golive/signoff";
 import { marketDate } from "@/lib/data/calendar";
 import { userPreferences } from "@/lib/preferences/read";
@@ -58,6 +59,8 @@ export default async function GoLivePage() {
   const production = isProductionEnv(process.env);
   const commit = deployedCommit(process.env);
   const signed = view !== null && view.signoffs.length > 0;
+  const constants = moneyConstants();
+  const pending = constants.filter((c) => !c.verified);
 
   return (
     <main className="mx-auto flex max-w-4xl min-w-0 flex-col gap-6 px-4 py-6">
@@ -119,6 +122,28 @@ export default async function GoLivePage() {
                 )}
               </li>
             </ul>
+          </Card>
+
+          <Card title="Money figures waiting for your approval" className="min-w-0">
+            {pending.length === 0 ? (
+              <p className="m-0 text-sm">
+                Every cost, tick, slippage and parcel figure is approved.
+              </p>
+            ) : (
+              <>
+                <p className="m-0 mb-2 text-sm">
+                  {pending.length} of {constants.length} figures are not approved. Production stays
+                  out of full mode until they are.
+                </p>
+                <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+                  {pending.map((c) => (
+                    <li key={c.id}>
+                      {c.label} <span className="text-text-muted">({c.specRef})</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </Card>
 
           {/* D-174: once signed off, the checklist and the form are gone; only the record stays. */}

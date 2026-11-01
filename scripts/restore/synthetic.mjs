@@ -44,6 +44,12 @@ async function seedAuth(db) {
           VALUES (?, ?, 'owner', 'active', ?, ?)`,
     args: ["drill-owner@example.test", `${SYNTH_MARKER} owner`, SYNTH_NOW, SYNTH_NOW],
   });
+  // V1-S6 / D-714: child rows with a foreign key to app_user, so the drill proves the restore fills
+  // parents before children (the stream lists user_preference after app_user only by luck of name).
+  await db.execute({
+    sql: "INSERT INTO user_preference (user_id, prefs_json, updated_at) SELECT id, '{}', ? FROM app_user",
+    args: [SYNTH_NOW],
+  });
 }
 
 /** @returns {Promise<{ identity: string, cipher: { main: Uint8Array, auth: Uint8Array } }>} */

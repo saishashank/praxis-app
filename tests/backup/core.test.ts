@@ -298,7 +298,12 @@ describe("restoreDatabase", () => {
     s.sql = s.sql.replace("CREATE TABLE app_log (", "CREATE TABLE app_log (zzz DEFAULT 1, ");
     lines[i] = JSON.stringify(s); // extra column: INSERT with the original arity fails
     const target = emptyDb();
-    await expect(restoreDatabase(target, lines.join("\n") + "\n")).rejects.toThrow();
+    // the migrated main DB holds thousands of seed rows (calendar), so ask for the single-batch
+    // mode explicitly: a stream that fits one batch is atomic (V1-S5, D-715); a bigger one is
+    // chunked and leaves a resumable checkpoint instead (tests/backup/restoreChunks.test.ts)
+    await expect(
+      restoreDatabase(target, lines.join("\n") + "\n", { chunkStatements: 1_000_000 }),
+    ).rejects.toThrow();
     const n = await target.execute("SELECT COUNT(*) c FROM sqlite_master");
     expect(Number(n.rows[0].c)).toBe(0);
   });

@@ -57,6 +57,19 @@ export const INCIDENT_SPECS: Readonly<Record<string, Spec>> = {
     fix: "Check the Batch 1 run in System Health.",
     fixPath: "/health",
   },
+  calendar_missing: {
+    component: "Trading calendar",
+    impact:
+      "Today has no row in the trading calendar, so it is treated as NOT a trading day and the market jobs skip it.",
+    fix: "Add the missing calendar rows, confirm them on System Health, and re-run the day.",
+    fixPath: "/health",
+  },
+  calendar_horizon: {
+    component: "Trading calendar",
+    impact: "The trading calendar ends within 60 days; after that every weekday would be skipped.",
+    fix: "Draft next year's calendar rows from the ASX calendar and confirm them on System Health.",
+    fixPath: "/health",
+  },
   review_missing: {
     component: "Evening Review",
     impact: "No Evening Review email was sent for today.",

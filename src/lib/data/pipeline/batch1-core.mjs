@@ -271,10 +271,14 @@ export async function assess(db, o) {
     markers: new Set(markerRows.map((r) => String(r.d))),
     firstMarker,
     rows: calRows,
+    strictCalendar: true, // D-711: a weekday with no calendar row is not a session
     maxDates: o.maxDates ?? MAX_DATES_PER_RUN,
     lookbackDays: lookback,
   });
-  if (plan.dates.length === 0) return { ...base, kind: "done", reason: "complete" };
+  if (plan.dates.length === 0) {
+    if (plan.calendarMissing) return { ...base, kind: "skip", reason: "calendar_missing" };
+    return { ...base, kind: "done", reason: "complete" };
+  }
 
   const trading = plan.dates.filter((x) => x.trading);
   if (trading.length === 0) return { ...base, kind: "go", plan, calRows, codes: [], request: null };

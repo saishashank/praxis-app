@@ -33,6 +33,7 @@ import {
 } from "./clock";
 import { dbConfigured, pipeline, type Arg, type DbEnv, type Stmt, type StmtResult } from "./db";
 import { isWeekend, sydneyLocal, type Local } from "./localtime";
+import { isTradingDayKind } from "../../src/lib/data/calendarCore.mjs";
 import { AU_SLOTS, type Slot } from "./schedule";
 import { randomHex, signHeaders } from "./selfcheck";
 
@@ -273,7 +274,8 @@ export async function runRoutes(
     const facts: RouteFacts = {
       dispatchEnabled: parseEnabled(enabledRaw),
       marketMode: typeof mode === "string" ? mode : null,
-      tradingDay: !isWeekend(local) && calKind !== "holiday",
+      // V1-S3 / D-711: fail safe, a weekday with no calendar row is NOT a trading day.
+      tradingDay: isTradingDayKind(local.date, typeof calKind === "string" ? calKind : null),
       flushDue: flushDue(flushRaw, nowMs),
       slotsEnabled: parseSlotsEnabled(listRaw),
     };

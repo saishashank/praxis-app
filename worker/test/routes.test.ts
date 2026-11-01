@@ -434,6 +434,18 @@ describe("runRoutes", () => {
   });
 });
 
+describe("calendar fail safe (V1-S3, D-710)", () => {
+  it("a weekday after the seeded calendar (no row) is not a trading day: market-bound slots do not post", async () => {
+    dispatchOn();
+    marketFull();
+    const gap = "2028-03-15"; // a Wednesday beyond the 2027-12-31 seed
+    await runRoutes(ENV, at(gap, "09:54"), deps(at(gap, "09:54")), on);
+    expect(app.calls).toHaveLength(0);
+    await runRoutes(ENV, at(gap, "20:00"), deps(at(gap, "20:00")), on);
+    expect(app.calls).toHaveLength(1); // evening-review is not market-bound to a trading day
+  });
+});
+
 describe("helpers", () => {
   it("routeUrl accepts https origins only and keeps the path", () => {
     expect(routeUrl("https://a.example.test/", "/api/x")).toBe("https://a.example.test/api/x");

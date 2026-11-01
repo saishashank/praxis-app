@@ -521,6 +521,9 @@ export default async function HealthPage() {
     if (summary.calendar && summary.calendar.length > 0) {
       nav.push({ id: "calendar-h", label: "Trading calendar" });
     }
+    if (owner && summary.moneyUnverified && summary.moneyUnverified.length > 0) {
+      nav.push({ id: "money-h", label: "Money figures" });
+    }
     if (summary.controls) nav.push({ id: "controls-h", label: "Data controls" });
     if (owner) nav.push({ id: "email-controls-h", label: "Email and alerts" });
     nav.push({ id: "day-timeline-h", label: "Day timeline" });
@@ -672,6 +675,22 @@ export default async function HealthPage() {
                     </li>
                   ))}
                 </ul>
+              </section>
+            )}
+
+            {owner && summary.moneyUnverified && summary.moneyUnverified.length > 0 && (
+              <section aria-labelledby="money-h" className="flex flex-col gap-3">
+                <h2 id="money-h" className="text-xl font-semibold">
+                  Money figures
+                </h2>
+                <p className="m-0 text-sm" role="status">
+                  {summary.moneyUnverified.length} cost, tick, slippage or parcel figures are not
+                  approved yet. Production stays out of full mode until they are. The list is on the{" "}
+                  <Link href="/ops/go-live" className="underline">
+                    Go-live page
+                  </Link>
+                  .
+                </p>
               </section>
             )}
 

@@ -322,3 +322,89 @@ Verdict: merge after the fixes below (applied in this branch). Replay/golden sui
   stay FAILED for ever; the "no successful poll today" line from `quote_run` is V2-S3 (should-fix, PR
   list). Residual: a restore that drops `run_record` but keeps the arena tables makes the next night a
   "first night" (exempt); a full-database restore keeps both consistent.
+
+## Should-fix fixes
+
+### Batch B
+
+Review findings V1-S2, V1-S3, V1-S5, V1-S6 (docs/V2_architecture_review.md), verified against the code and
+the V1 spec. No migration, no change to any money value, replay goldens untouched.
+
+- **D-710** V1-S2, money constants gate (verified: every cost profile, `TICK_TABLE_VERIFIED`,
+  `SLIPPAGE_BUCKETS_VERIFIED` false; the parcel had no flag, `MIN_MARKETABLE_PARCEL_VERIFIED` added, also
+  false; no reader outside the modules). New `src/lib/golive/moneyConstants.ts` lists them (one id per cost
+  profile, `tick_table`, `slippage_buckets`, `min_parcel`) and `unverifiedMoneyConstants()`. The `full`
+  interlock (`fullModeRefusal`) now returns `constants_unverified` in production after the sign-off and email
+  checks (staging is free, as before); `setMarketMode` carries the code to the Owner action and the System
+  Health action (message in `users/messages.ts`). The go-live checklist gets the item `money_constants`
+  (Owner attests), the go-live page lists every unapproved figure with its spec reference, and System Health
+  (Owner) shows a "Money figures" line while any is unverified. Approval is NOT done here: it stays a code
+  change recorded as a D-nnn (flip the flag, add `cost_profile` rows at the next version, D-070 note 8).
+  Net effect today: production cannot go `full` until the Owner approves, which makes the code's own stated
+  safeguard ("data_only until approved") enforceable.
+- **D-711** V1-S3, one trading-day definition and fail safe. `src/lib/data/calendarCore.mjs` (+ `.d.mts`, no
+  imports) is the canonical rule: a date is a trading day only if it is a weekday AND the calendar has a
+  `session` or `early_close` row; a weekday with no row is `missing` (not a session). The seed carries a row
+  for every weekday 2019-01-01..2027-12-31 (asserted by a test), so only a real gap or the end of the horizon
+  is `missing`. Five copies replaced: `calendar.ts` (weekend test from the core, adds `calendarDayStatus`
+  and `gateDayStatus`), `worker/src/clock.ts` and `routes.ts` (relative import of the core, bundled by
+  wrangler), `heartbeat/checks.ts`, `pipeline/rules.mjs` (gate and batch 1 plan). Gates that now skip a
+  missing day: `closeBooksDay`, `runPreopen`, batch 2b, batch 3 (`calendar_missing` skip), batch 1
+  (`calendar_missing`, no `non-trading` marker so the day can still run once the row exists), Worker
+  market-bound slots and quote routes. Deliberately NOT changed: the arithmetic walkers (`isTradingDay`,
+  `nextTradingDay`, `previousTradingDay`, `sessionsBetween`, `tradingDaysBetween`) and any run flagged
+  `replay`, which keep "weekday and not a holiday row" (`isWalkDay` in the core): replay worlds and the
+  harness calendars hold holiday rows only and the goldens depend on it; the live gates check the day before
+  the walkers run. The batch-1 catch-up look-back therefore still walks leniently over older dates (a gap
+  inside the seed would be fetched as a session; harmless, the vendor returns no bar).
+- **D-712** V1-S3 horizon alarm. Heartbeat (morning and evening) raises S2 `calendar_horizon` when
+  `MAX(trading_calendar.d)` is less than 60 days after today (`CALENDAR_HORIZON_ALARM_DAYS`; exactly 60 days
+  left is quiet) or the table is empty, and S2 `calendar_missing` when today is a weekday without a row (it is
+  then treated as not a trading day). Both have incident texts in `INCIDENT_SPECS`. First alarm: 2027-11-02.
+  NOT done: a job that drafts next year's unconfirmed rows. The table is append-only with a `confirmed`
+  guard and the rows must come from ASX's published calendar (DAT-160 "[VERIFY] against the ASX
+  calendar"); the alarm tells the Owner to generate and confirm them (the existing
+  `scripts/data/make-au-calendar.mjs` generator plus a migration). Listed under reviewer notes.
+- **D-713** V1-S6 foreign-key policy: ON. Verified with `PRAGMA foreign_keys` on a fresh `@libsql/client`
+  connection: the driver (and Turso) opens every connection with enforcement ON and an orphan insert is
+  refused, so the auth schema's `REFERENCES app_user (id)` are real. Code never turns it off.
+  `src/lib/db/client.ts` exports `FOREIGN_KEYS_POLICY = "on"` and `foreignKeysEnabled()`;
+  `tests/db/foreignKeys.test.ts` asserts the state per connection, per transaction, and the orphan refusal in
+  the migrated auth schema.
+- **D-714** V1-S6 restore order. The restore previously inserted in `sqlite_master ORDER BY name`, which puts
+  `alert_user_state` and `annotation` before `app_user`: with enforcement ON that fails on the first child
+  row (the drill never saw it because it seeded only `app_user`). `foreignKeyOrder()` now fills parents
+  first (REFERENCES read from the stream's own CREATE TABLE text, so the plan is identical on a resumed run;
+  self references ignored; a true cycle keeps stream order) and every data batch starts with
+  `PRAGMA defer_foreign_keys = ON` as a safety net. The synthetic drill source now seeds a `user_preference`
+  child so the Turso drill exercises it.
+- **D-715** V1-S5 chunked, resumable restore. `restoreDatabase(db, text, {chunkStatements})`: a stream whose
+  row count fits `RESTORE_CHUNK_STATEMENTS` (1000) is still ONE atomic batch (a failure commits nothing); a
+  larger one creates the tables and a `_restore_checkpoint` table, writes rows in batches of at most that
+  many statements (each batch also advances the checkpoint, so data and checkpoint commit together), then
+  indexes, triggers and views and drops the checkpoint table in the last batch. A failed or killed restore
+  is resumed by calling it again with the SAME stream on the SAME target (stream identity = hash of the end
+  line); another stream or any other non-empty database is still refused ("target database is not empty").
+  The final count and sha256 comparison is unchanged. The atomic-failure test now asks for the single-batch
+  mode explicitly, because the migrated main DB already holds more than 1000 seed rows (the calendar).
+- **D-716** V1-S5 production-size drill. `scripts/restore/drill-size.mjs --rows N --chunk C --max-seconds S`
+  builds a main DB through the real migrations, seeds N synthetic `price_bar` rows (default 500,000, the
+  production size after D-199), dumps (paged), parses, restores in bounded batches and compares counts and
+  checksums; it prints the timings and PASS/FAIL against the limit (default 3,600 s, a quarter of the 4 h RTO
+  of NFR-004, leaving room for download, decrypt and the other database). Tested at 6,000 rows by
+  `drill-size.test.mjs` (part of `test:smoke`). The real-key drill (`restore-drill.yml`) stays
+  Owner-dispatched; scheduling it monthly needs the real key in a scheduled job, which the secret rules
+  reserve to the Owner (reviewer notes).
+- **D-717** V1-S5 DAT-142 price-bar pruning. `prunePriceBars()` runs in the nightly maintenance job (new
+  count `prunedBars`, failed step `prune_price_bars`): per market it finds the 500th most recent session in
+  `price_bar` and deletes bars (and their `bar_refetch` diffs, which "live and die with the bar") older than
+  the OLDER of that date and the 730-day floor of the `price_bar_prune_only` trigger (plus one day of clock
+  margin), in chunks of 5,000 rows with at most 40 chunks a run, so the first night on a big table cannot be
+  one huge write. 500 AU sessions are about 725 days, so in practice the trigger floor decides and the
+  effective retention is 730 days; no row the trigger would refuse is ever attempted. The other forever
+  tables are untouched. `rows_read` of a maintenance run is one higher.
+- **D-718** Spec figures kept as they are: no cost, tick, slippage or parcel value was changed, no
+  `cost_profile` row written, no migration added (sf-e owns 0023).
+- **D-719** Test seams: `MarketModeInput.unverifiedConstants` and `fullModeRefusal(..., unverified)` let tests
+  inject "all approved"; production callers never pass them, so the real flags decide. `planDates` takes
+  `strictCalendar` (batch 1 passes true; unit tests and replays leave it off).

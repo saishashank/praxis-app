@@ -22,13 +22,18 @@
 //  - Batch 1 finished when `completion_marker` has `data` or `non-trading` for the Sydney date.
 //    Only judged on a trading day, with the market on and dispatch enabled (otherwise nothing was
 //    dispatched and a missing marker is expected).
-// A weekday the calendar has no row for counts as a trading day (alert rather than stay silent).
+// V1-S3 / D-711 (replaces "a weekday with no row counts as a trading day"): a weekday the calendar
+// has no row for is NOT a trading day (fail safe) and raises a `calendar_missing` incident; a
+// calendar that ends within 60 days raises `calendar_horizon` (DAT-160: next year is drafted early).
 import type { Client } from "@libsql/client";
 import { CONFIG_KEYS } from "@/lib/config/keys";
 import { getConfig } from "@/lib/config/store";
-import { isWeekend, localToUtc, marketDate } from "@/lib/data/calendar";
+import { localToUtc, marketDate } from "@/lib/data/calendar";
+import { dayStatus, horizonAlarm } from "@/lib/data/calendarCore.mjs";
 import { ASX_ENABLED_KEY, ASX_SOURCE_ID, DISPATCH_ENABLED_KEY, parseOn } from "@/lib/data/controls";
 import {
+  KIND_CALENDAR_HORIZON,
+  KIND_CALENDAR_MISSING,
   KIND_MARKER_MISSING,
   KIND_SENTINEL_BLIND,
   KIND_WORKER_BLIND,
@@ -79,7 +84,28 @@ export async function runChecks(kind: HeartbeatKind, db: Client, now: Date): Pro
     sql: "SELECT kind FROM trading_calendar WHERE market = ? AND d = ?",
     args: [MARKET, date],
   });
-  const tradingDay = !isWeekend(date) && cal.rows[0]?.kind !== "holiday";
+  const dayKind = cal.rows.length === 1 ? String(cal.rows[0].kind) : null;
+  const status = dayStatus(date, dayKind);
+  const tradingDay = status === "open";
+  if (status === "missing") {
+    problems.push({
+      kind: KIND_CALENDAR_MISSING,
+      text: "Today has no row in the trading calendar; it is treated as not a trading day.",
+      detail: { check: kind, date },
+    });
+  }
+  const lastRow = await db.execute({
+    sql: "SELECT MAX(d) AS d FROM trading_calendar WHERE market = ?",
+    args: [MARKET],
+  });
+  const maxD = lastRow.rows[0]?.d ? String(lastRow.rows[0].d) : null;
+  if (horizonAlarm(maxD, date)) {
+    problems.push({
+      kind: KIND_CALENDAR_HORIZON,
+      text: "The trading calendar ends within 60 days; next year's rows are not drafted yet.",
+      detail: { check: kind, date, lastDate: maxD },
+    });
+  }
   if (!tradingDay) notes.push("not a trading day: poll and marker checks skipped");
   if (!marketOn) notes.push("market is off: poll and marker checks skipped");
 

@@ -28,3 +28,18 @@ export function mainDb(): Client {
 export function authDb(): Client {
   return make("TURSO_AUTH_URL", "TURSO_AUTH_TOKEN");
 }
+
+/**
+ * V1-S6 / D-713: the foreign-key policy is ON. SQLite itself defaults to OFF per connection, but
+ * the libSQL client and Turso open every connection with `foreign_keys = 1`, and the auth schema
+ * (db/migrations/auth/0003..0006) declares REFERENCES app_user(id) expecting it. The code relies on
+ * it being enforced and never turns it off; a restore therefore inserts parents before children
+ * (scripts/backup/core.mjs foreignKeyOrder). tests/db/foreignKeys.test.ts asserts the state per
+ * connection and per transaction so a driver change cannot silently make the keys decorative.
+ */
+export const FOREIGN_KEYS_POLICY = "on" as const;
+
+export async function foreignKeysEnabled(db: Pick<Client, "execute">): Promise<boolean> {
+  const r = await db.execute("PRAGMA foreign_keys");
+  return Number(r.rows[0]?.foreign_keys) === 1;
+}

@@ -24,7 +24,7 @@
 // violations or a stage had to be partial; `failed` carries the stage code.
 import type { Client } from "@libsql/client";
 import {
-  isTradingDay,
+  gateDayStatus,
   sessionsBetween,
   type CalendarRow,
   type MarketHours,
@@ -87,6 +87,12 @@ export type ReviewOptions = {
   readonly d: string;
   /** An explicit replay against a NON-production database (D-066 / BLD-024). */
   readonly replay?: boolean;
+  /**
+   * D-711: the live entry points set this so a weekday the calendar has no row for is skipped as
+   * `calendar_missing` (fail safe). Off (default): the looser "not a holiday row" rule that
+   * replays and the synthetic-date tests rely on.
+   */
+  readonly strictCalendar?: boolean;
   /** Stamps run_record, app_log and the arena_control row only; never a number. */
   readonly now: () => string;
   readonly commitSha?: string | null;
@@ -791,7 +797,9 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
   if (mode === "off") return recordSkip(db, o, "market_off");
   if (mode !== "full" && o.replay !== true) return recordSkip(db, o, "data_only_guard");
   const calendar = o.calendar ?? (await loadCalendar(db, o.market));
-  if (!isTradingDay(o.d, calendar)) return recordSkip(db, o, "non_trading_day");
+  const dayState = gateDayStatus(o.d, calendar, o.strictCalendar);
+  if (dayState === "missing") return recordSkip(db, o, "calendar_missing"); // D-711 fail safe
+  if (dayState !== "open") return recordSkip(db, o, "non_trading_day");
   if (!(await decidedOk(db, o.market, o.d))) return recordSkip(db, o, "no_2b_success");
   const hours: MarketHours = {
     tz: text(market.rows[0]!.tz),

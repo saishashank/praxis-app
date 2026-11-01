@@ -147,6 +147,7 @@ export type ControlError =
   | "email_mode_required"
   | "signoff_required"
   | "email_off"
+  | "constants_unverified"
   | "market_full"
   | "confirm_required"
   | "items_missing"
@@ -485,7 +486,12 @@ export async function setSourceAccepted(p: SourceInput): Promise<ControlResult> 
 
 // ---- d. market mode ---------------------------------------------------------------------------
 
-export type MarketModeInput = ControlBase & { market: unknown; mode: unknown };
+export type MarketModeInput = ControlBase & {
+  market: unknown;
+  mode: unknown;
+  /** Test seam for the money-constant gate (D-710); production callers never set it. */
+  unverifiedConstants?: readonly string[];
+};
 
 type ModeMap = Record<string, unknown>;
 
@@ -513,7 +519,8 @@ async function readConfigModes(db: Exec): Promise<{ raw: string | null; map: Mod
 
 /**
  * Sets a market's mode to `off`, `data_only` or `full`. In production `full` is refused with
- * `signoff_required` (no go_live_signoff row) or `email_off` (email_mode is off), before any audit
+ * `signoff_required` (no go_live_signoff row), `email_off` (email_mode is off) or
+ * `constants_unverified` (a [VERIFY] money constant is not approved, D-710), before any audit
  * row and again inside the write transaction (M8 T11, decision 33); staging is free. Writes the versioned
  * `market_mode` config value AND `market.mode` in one transaction (see the header).
  */
@@ -540,7 +547,7 @@ export async function setMarketMode(p: MarketModeInput): Promise<ControlResult> 
     if (columnMode === to && map[market] === to) return NOOP;
     const today = localDay(now);
     if (to === "full") {
-      const refused = await fullModeRefusal(p.mainDb, p.env, market, today);
+      const refused = await fullModeRefusal(p.mainDb, p.env, market, today, p.unverifiedConstants);
       if (refused !== null) return fail(refused);
     }
     return await commit(p, now, {
@@ -550,7 +557,7 @@ export async function setMarketMode(p: MarketModeInput): Promise<ControlResult> 
       detail: { market, from: columnMode, to },
       apply: async (tx) => {
         if (to === "full") {
-          const refused = await fullModeRefusal(tx, p.env, market, today);
+          const refused = await fullModeRefusal(tx, p.env, market, today, p.unverifiedConstants);
           if (refused !== null) throw new Precondition(refused);
         }
         const cur = await readConfigModes(tx);

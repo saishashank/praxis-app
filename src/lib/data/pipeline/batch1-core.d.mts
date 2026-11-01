@@ -67,7 +67,7 @@ export type Assessment =
       target: string;
       market: string;
       io: Io;
-      plan: { dates: PlannedDate[]; remaining: number };
+      plan: { dates: PlannedDate[]; remaining: number; calendarMissing?: boolean };
       calRows: (CalendarLike & { confirmed: number })[];
       codes: string[];
       excluded?: number;

@@ -31,7 +31,7 @@
 import type { Client } from "@libsql/client";
 import {
   addDays,
-  isTradingDay,
+  gateDayStatus,
   previousTradingDay,
   type CalendarKind,
   type CalendarRow,
@@ -175,6 +175,12 @@ export type CloseBooksOptions = {
    * processed (D-066 / BLD-024: production in data_only mode never writes arena tables).
    */
   readonly replay?: boolean;
+  /**
+   * D-711: the live entry points set this so a weekday the calendar has no row for is skipped as
+   * `calendar_missing` (fail safe). Off (default): the looser "not a holiday row" rule that
+   * replays and the synthetic-date tests rely on.
+   */
+  readonly strictCalendar?: boolean;
   /** Stamps run_record / app_log only; never an engine row. */
   readonly now: () => string;
   readonly commitSha?: string | null;
@@ -1453,7 +1459,9 @@ export async function closeBooksDay(
   if (mode === "off") return recordSkip(db, opts, "market_off");
   if (mode !== "full" && opts.replay !== true) return recordSkip(db, opts, "data_only_guard");
   const calendar = opts.calendar ?? (await loadCalendar(db, opts.market));
-  if (!isTradingDay(opts.d, calendar)) return recordSkip(db, opts, "non_trading_day");
+  const dayState = gateDayStatus(opts.d, calendar, opts.strictCalendar);
+  if (dayState === "missing") return recordSkip(db, opts, "calendar_missing"); // D-711 fail safe
+  if (dayState !== "open") return recordSkip(db, opts, "non_trading_day");
   const marker = await db.execute({
     sql: "SELECT kind FROM completion_marker WHERE market = ? AND d = ? AND kind IN ('data', 'non-trading')",
     args: [opts.market, opts.d],

@@ -37,6 +37,11 @@ export const GO_LIVE_ITEMS: readonly GoLiveItem[] = [
     help: "AT-26. A person must do this check. Tests can not.",
   },
   {
+    id: "money_constants",
+    label: "The cost, tick, slippage and parcel figures are approved",
+    help: "V1-S2, ARN-024, ARN-031, ARN-032. Production stays out of full mode until every figure shows approved below.",
+  },
+  {
     id: "backup_codes",
     label: "Your Google backup codes are safe and work",
     help: "BLD-010 row 13a. Keep them offline. Test one before the bot is gone.",
