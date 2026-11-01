@@ -8,6 +8,7 @@ import {
   closeBooksDay,
   closeBooksKey,
   previousSessionClosed,
+  recordCatchUpCapped,
   type CloseBooksResult,
 } from "@/lib/arena/closeBooks";
 import { cleanupTempDbs } from "../db/helpers";
@@ -91,6 +92,38 @@ describe("previous session not closed (V1-B1)", () => {
       ok: false,
       priorD: "unknown",
     });
+  });
+
+  it("R4-I3: a catch_up_capped record never counts as closing a session", async () => {
+    const s = await setupReplay(BASE);
+    const d = s.ds.dates;
+    await closeDay(s.db, d[0]);
+    // d[1] was only "capped" (a record under its key, nothing closed it): d[2] must still be refused
+    await recordCatchUpCapped(s.db, {
+      market: MARKET,
+      d: d[1],
+      closed: 1,
+      remaining: 2,
+      now: NOW(),
+    });
+    const rec = (
+      await s.db.execute({
+        sql: "SELECT status, details_json FROM run_record WHERE concurrency_key = ?",
+        args: [closeBooksKey(MARKET, d[1])],
+      })
+    ).rows[0];
+    expect(String(rec.status)).toBe("skipped");
+    expect(JSON.parse(String(rec.details_json))).toEqual({
+      reason: "catch_up_capped",
+      closed: 1,
+      remaining: 2,
+    });
+    expect(await closeDay(s.db, d[2])).toMatchObject({
+      status: "failed",
+      reason: "previous_session_not_closed",
+    });
+    expect((await closeDay(s.db, d[1])).status).toBe("success"); // the capped record does not block its own night
+    expect((await closeDay(s.db, d[2])).status).toBe("success");
   });
 
   it("the first night (no earlier closed session) is not blocked", async () => {

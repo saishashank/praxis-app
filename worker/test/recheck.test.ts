@@ -210,6 +210,11 @@ describe("runClock: re-dispatch against a real database", () => {
     await tick(at("18:21"));
     expect(arenaCalls()).toHaveLength(1);
   });
+  it("R4-I3: a catch_up_capped skipped record does not close the night: dispatch again", async () => {
+    record("skipped", '{"reason":"catch_up_capped","closed":10,"remaining":4}');
+    await tick(at("18:20"));
+    expect(arenaCalls()).toHaveLength(1);
+  });
   it("a failed record (the workflow ran and failed): dispatch again", async () => {
     record("failed", '{"code":"SqliteError","cohorts":0}');
     await tick(at("18:20"));

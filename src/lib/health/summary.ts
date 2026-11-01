@@ -36,6 +36,8 @@ export type JobSummary = {
   stale: boolean;
   state: JobState;
   note?: string; // shown when there is no data
+  /** R4-I3 (D-833): a capped arena catch-up is still open (shown whatever the state). */
+  attention?: string;
   errorSummary?: string | null; // Owner only
 };
 
@@ -137,6 +139,20 @@ async function getQuality(mainDb: Client, role: Role): Promise<QualitySummary | 
   }
 }
 
+/** R4-I3 (D-833): the text for a latest arena-close record left by a capped catch-up, else null. */
+export function cappedCatchUp(
+  job: string,
+  last: { status: RunStatus; details?: unknown } | undefined,
+): string | null {
+  if (job !== "arena-close" || last === undefined || last.status !== "skipped") return null;
+  const d = last.details;
+  if (typeof d !== "object" || d === null) return null;
+  const r = d as { reason?: unknown; closed?: unknown; remaining?: unknown };
+  if (r.reason !== "catch_up_capped") return null;
+  const n = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return `Catch-up capped: ${n(r.closed)} closed, ${n(r.remaining)} still to close. Dispatch Arena close again.`;
+}
+
 export async function getHealthSummary(
   mainDb: Client,
   now: Date,
@@ -160,6 +176,8 @@ export async function getHealthSummary(
     else state = "ok";
     const s: JobSummary = { job: def.job, label: def.label, lastRun, lastSuccessAt, stale, state };
     if (state === "no data") s.note = def.noDataNote;
+    const capped = cappedCatchUp(def.job, row?.last);
+    if (capped !== null) s.attention = capped;
     if (owner) s.errorSummary = row?.last.errorSummary ?? null;
     return s;
   });

@@ -1,7 +1,7 @@
 // V2-I5 / D-797: one index of the V2 decisions. Greps `- **D-nnn**` lines out of docs/M*_design.md
 // (from D-206 on; D-001 to D-252 live in docs/07_decision_log.md) and writes docs/V2_decisions.md with
 // one line per decision and the file that holds it. A duplicate id inside one file or across files is
-// an error unless it is listed in KNOWN_REUSE (ids that two milestones used for different decisions).
+// an error: there is no exception list (R4-I1, D-831: one id means one decision).
 //   node scripts/ci/decision-index.mjs          write the document
 //   node scripts/ci/decision-index.mjs --check  exit 1 when the document is stale or an id is duplicated
 import fs from "node:fs";
@@ -11,13 +11,6 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const FIRST = 206;
 const MAX_LINE = 160;
-/** Ids that more than one milestone design used for different decisions (recorded, not hidden). */
-export const KNOWN_REUSE = new Set(
-  /** @type {string[]} */ ([
-    "D-377", // M15 (O4 offline setup simulation) and M16 (WP1 rework, proxy header) both took 377; neither is renumbered because both are cited
-  ]),
-);
-
 const MILESTONE = (file) => file.replace(/^M/, "M").replace(/_design\.md$/, "");
 const order = (m) => {
   const n = /^M(\d+)(?:\.(\d+))?(L)?/.exec(m);
@@ -64,7 +57,7 @@ export function duplicates(rows) {
     if (seen.has(r.n)) dup.add(r.n);
     seen.set(r.n, r);
   }
-  return [...dup].filter((n) => !KNOWN_REUSE.has(`D-${n}`)).sort((a, b) => a - b);
+  return [...dup].sort((a, b) => a - b);
 }
 
 export function render(rows) {

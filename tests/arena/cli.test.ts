@@ -170,6 +170,19 @@ describe("close-books command line", () => {
     expect(await nav(s.db, s.ds.dates[5])).toBeGreaterThan(0n);
     expect(await nav(s.db, s.ds.dates[9])).toBe(0n);
     expect(h.lines.at(-1)).toContain("4 more still to close");
+    // R4-I3 (D-833): the capped run left a record Health can show; it did not close the target
+    const cap = (
+      await s.db.execute({
+        sql: "SELECT status, details_json FROM run_record WHERE concurrency_key = ? AND status = 'skipped'",
+        args: [`arena-2a:AU:${s.ds.dates[9]}`],
+      })
+    ).rows;
+    expect(cap).toHaveLength(1);
+    expect(JSON.parse(String(cap[0].details_json))).toEqual({
+      reason: "catch_up_capped",
+      closed: 2,
+      remaining: 4,
+    });
     // a plain re-dispatch keeps walking forward in order and reaches the target
     expect(await closeBooksMain(capArgs, env, h.deps)).toBe(1);
     expect(await closeBooksMain(capArgs, env, h.deps)).toBe(0);

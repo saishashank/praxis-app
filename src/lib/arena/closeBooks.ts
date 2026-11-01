@@ -1474,7 +1474,44 @@ export async function previousSessionClosed(
 export const CLOSED_2A_SQL =
   "(status IN ('success', 'degraded') " +
   "OR (status = 'failed' AND json_extract(details_json, '$.navDays') IS NOT NULL) " +
-  "OR (status = 'skipped' AND json_extract(details_json, '$.reason') IS NOT 'no_completion_marker'))";
+  "OR (status = 'skipped' AND json_extract(details_json, '$.reason') IS NOT 'no_completion_marker' " +
+  "AND json_extract(details_json, '$.reason') IS NOT 'catch_up_capped'))";
+
+/** R4-I3 (D-833): the reason of the record a capped catch-up writes; it never counts as closing a session. */
+export const CATCH_UP_CAPPED = "catch_up_capped";
+
+/**
+ * R4-I3 (D-833): a catch-up run that hit `--max-sessions` leaves a `skipped` record (reason
+ * `catch_up_capped`, details {closed, remaining}) under the target's key, so System Health shows the
+ * open target without GitHub. `CLOSED_2A_SQL` and `RECHECK_CLOSED_SQL` exclude the reason: the target
+ * stays open, the recheck dispatches again and the previous-session guard is unaffected.
+ */
+export async function recordCatchUpCapped(
+  db: Client,
+  p: {
+    market: string;
+    d: string;
+    closed: number;
+    remaining: number;
+    now: string;
+    commitSha?: string;
+  },
+): Promise<void> {
+  const runId = await startRun(db, {
+    job: ARENA_JOB,
+    market: p.market,
+    concurrencyKey: closeBooksKey(p.market, p.d),
+    scheduledFor: p.d,
+    commitSha: p.commitSha,
+    now: p.now,
+  });
+  await finishRun(db, runId, {
+    status: "skipped",
+    errorSummary: `${CATCH_UP_CAPPED}: ${p.closed} closed, ${p.remaining} still to close`,
+    details: { reason: CATCH_UP_CAPPED, closed: p.closed, remaining: p.remaining },
+    now: p.now,
+  });
+}
 
 /** Refuse session d: a `failed` record (never `skipped`, which the next night would read as closed) + a P1 incident. */
 async function refuseGap(
