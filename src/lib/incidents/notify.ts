@@ -148,7 +148,7 @@ export const INCIDENT_SPECS: Readonly<Record<string, Spec>> = {
     component: "Arena close",
     impact:
       "A trading session was not closed, so the next night refused to run: orders would fill at the wrong open and stops would be skipped.",
-    fix: "Dispatch Arena close again (it closes the missed sessions in order; or run close-books.mjs --date for the missed day) before the next session's close.",
+    fix: "Dispatch Arena close again: it closes the missed sessions oldest first, up to 10 per run (dispatch again if the log says more remain); or run close-books.mjs --date for each missed day, oldest first, before the next session's close.",
     fixPath: "/health",
   },
   provider_auth: {

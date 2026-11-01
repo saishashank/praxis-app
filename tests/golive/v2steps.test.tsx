@@ -2,7 +2,7 @@
 // step id is in docs/owner-guide/V2_go_live.md, the page guide keeps tick marks on the device only, and
 // the V1 sign-off set is untouched (V2 steps are not part of it).
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { V2Steps } from "@/app/(app)/ops/go-live/V2Steps";
 import {
@@ -54,6 +54,61 @@ describe("V2 go-live steps (data)", () => {
     expect(found).toEqual([...V2_GO_LIVE_STEP_IDS]);
     expect(guide).toContain("docs/runbooks/rollback-v2.md");
     expect(readFileSync("docs/runbooks/rollback-v2.md", "utf8")).toContain("--down-to 14");
+  });
+});
+
+describe("V2 go-live documents track the code (R3-S1, R3-S2)", () => {
+  const newest = (): string =>
+    readdirSync("db/migrations/main")
+      .filter((f) => /^[0-9]{4}_.*[.]sql$/.test(f))
+      .map((f) => f.slice(0, 4))
+      .sort()
+      .at(-1)!;
+
+  it("the rollback runbook names the newest migration version and the tables it deletes", () => {
+    const runbook = readFileSync("docs/runbooks/rollback-v2.md", "utf8");
+    const top = newest();
+    expect(top).toBe("0025");
+    expect(runbook).toContain(`0015 to ${top}`);
+    expect(runbook).toContain(`stays at ${top}`);
+    expect(runbook).toContain(`sections of ${top} to 0015`);
+    expect(runbook).toContain(`from ${top} and back up`);
+    for (const t of [
+      "announcement_archive",
+      "halt_watch",
+      "intraday_arm",
+      "sector_composite_daily",
+      "angle_forward_flag",
+      "instrument_listing",
+      "instrument_no_revive",
+    ]) {
+      expect(runbook, t).toContain(t);
+    }
+    expect(runbook).toContain("SELECT * FROM instrument_listing");
+    expect(runbook).toContain("code_reuse_suspected:%");
+  });
+
+  it("the guide and the steps cover the production path and both ZAP preconditions", () => {
+    const guide = readFileSync(V2_GUIDE_PATH, "utf8");
+    for (const needle of [
+      "ZAP_IMAGE_PINNED",
+      "zap-baseline.yml",
+      "staging-e2e-day.yml",
+      "rc/<sha>",
+      "deploy-production",
+      "release gate",
+    ]) {
+      expect(guide, needle).toContain(needle);
+    }
+    const text = JSON.stringify(V2_GO_LIVE_STEPS);
+    for (const needle of ["ZAP_IMAGE_PINNED", "Staging E2E day", "ZAP baseline", "rc/<sha>"]) {
+      expect(text, needle).toContain(needle);
+    }
+    const at = (id: string): number => V2_GO_LIVE_STEP_IDS.indexOf(id);
+    expect(at("v2_zap_pin")).toBeLessThan(at("v2_push_ci"));
+    expect(at("v2_merge_main")).toBeLessThan(at("v2_release_evidence"));
+    expect(at("v2_release_evidence")).toBeLessThan(at("v2_production"));
+    expect(V2_GO_LIVE_STEP_IDS.at(-1)).toBe("v2_production");
   });
 });
 

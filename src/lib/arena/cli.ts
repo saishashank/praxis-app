@@ -143,7 +143,11 @@ export async function closeBooksMain(
         ? [target]
         : sessionsBetween(addDays(done, 1), target, calendar);
     if (sessions.length === 0) sessions = [target];
-    if (sessions.length > cap) sessions = sessions.slice(sessions.length - cap);
+    // R3-I5 (D-821): the ledger closes in order, so a gap longer than the cap keeps the OLDEST sessions (the
+    // newest-first slice used before made the first kept session fail the previous-session guard). The rest
+    // wait for the next dispatch; the run says so and exits 1 so the Owner sees that the target is still open.
+    const capped = sessions.length > cap ? sessions.length - cap : 0;
+    if (capped > 0) sessions = sessions.slice(0, cap);
     const mode = await db.execute({
       sql: "SELECT mode FROM market WHERE code = ?",
       args: [MARKET],
@@ -177,6 +181,12 @@ export async function closeBooksMain(
         exit = 1;
         break;
       }
+    }
+    if (capped > 0 && exit === 0) {
+      out(
+        `arena-2a: capped at ${cap} sessions per run; ${capped} more still to close, oldest first: dispatch Arena close again`,
+      );
+      exit = 1;
     }
   } catch (error) {
     // Never print a driver error message: it can carry the database URL. The class name is safe.

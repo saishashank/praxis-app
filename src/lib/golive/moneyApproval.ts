@@ -15,7 +15,7 @@ import {
   type ControlBase,
   type ControlResult,
 } from "@/lib/data/controls";
-import { moneyConstants } from "./moneyConstants";
+import { moneyConstants, moneyValueHashes } from "./moneyConstants";
 import { MONEY_APPROVAL_KEY, readMoneyApproval } from "./moneyApprovalRead";
 
 export const MONEY_APPROVAL_PHRASE = "APPROVE MONEY FIGURES";
@@ -45,13 +45,16 @@ export async function approveMoneyConstants(p: ApproveInput): Promise<ControlRes
   }
   if (p.confirmation !== MONEY_APPROVAL_PHRASE) return fail("confirm_required");
   try {
+    // R3-I2: the attestation records id + value hash; a figure whose value changed is not covered.
+    const hashes = moneyValueHashes();
+    const items = current.map((id) => ({ id, valueHash: hashes[id]! }));
     const have = await readMoneyApproval(p.mainDb);
-    if (have !== null && current.every((id) => have.ids.includes(id))) return NOOP;
+    if (have !== null && items.every((it) => have.hashes[it.id] === it.valueHash)) return NOOP;
     return await commit(p, now, {
       action: "golive.money_constants_approved",
       targetType: "control",
       targetId: MONEY_APPROVAL_KEY,
-      detail: { ids: current },
+      detail: { ids: current, items },
       apply: async (tx, auditRef) => {
         const prev = await tx.execute({
           sql:
@@ -65,7 +68,7 @@ export async function approveMoneyConstants(p: ApproveInput): Promise<ControlRes
             "changed_by_user_id, changed_at, reason) VALUES (?, 'global', ?, ?, ?, ?, ?)",
           args: [
             MONEY_APPROVAL_KEY,
-            JSON.stringify({ ids: current }),
+            JSON.stringify({ ids: current, items }),
             prev.rows.length > 0 ? String(prev.rows[0]!.value_json) : null,
             p.actorId,
             now,

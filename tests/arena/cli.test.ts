@@ -155,6 +155,28 @@ describe("close-books command line", () => {
     for (let i = 3; i <= 7; i++) expect(await nav(s.db, s.ds.dates[i])).toBeGreaterThan(0n);
   });
 
+  it("R3-I5: a gap longer than --max-sessions closes the OLDEST sessions first and says to dispatch again", async () => {
+    const s = await setupReplay(SMALL);
+    await setMode(s.db, "full");
+    await sessionRows(s);
+    const h = harness(s);
+    const env = { TURSO_MAIN_URL: SECRET_URL, TURSO_MAIN_TOKEN: SECRET_TOKEN };
+    expect(await closeBooksMain(["--date", s.ds.dates[3]], env, h.deps)).toBe(0);
+    h.lines.length = 0;
+    // target is six sessions ahead, the cap is two: sessions 4 and 5 close, 6..9 remain
+    const capArgs = ["--date", s.ds.dates[9], "--max-sessions", "2"];
+    expect(await closeBooksMain(capArgs, env, h.deps)).toBe(1);
+    expect(await nav(s.db, s.ds.dates[4])).toBeGreaterThan(0n);
+    expect(await nav(s.db, s.ds.dates[5])).toBeGreaterThan(0n);
+    expect(await nav(s.db, s.ds.dates[9])).toBe(0n);
+    expect(h.lines.at(-1)).toContain("4 more still to close");
+    // a plain re-dispatch keeps walking forward in order and reaches the target
+    expect(await closeBooksMain(capArgs, env, h.deps)).toBe(1);
+    expect(await closeBooksMain(capArgs, env, h.deps)).toBe(0);
+    for (let i = 3; i <= 9; i++) expect(await nav(s.db, s.ds.dates[i])).toBeGreaterThan(0n);
+    expect(h.lines.filter((l) => l.includes(": failed")).length).toBe(0);
+  });
+
   it("a failed close exits 1 and stops", async () => {
     const s = await setupReplay({ ...SMALL, keep: ["E01"] });
     await setMode(s.db, "full");

@@ -21,6 +21,10 @@ const UA = "praxis-sentinel-test (contact: owner@example.test)";
 const MIN = 60_000;
 // M8 T17: v8 coverage instrumentation slows the CPU measurements; the coverage job sets PRAXIS_COVERAGE_RUN=1.
 const COVERAGE_SLACK = process.env.PRAXIS_COVERAGE_RUN === "1" ? 4 : 1;
+// R3-I4 (D-820): the two PLT-070 CPU-budget tests below are TIMING checks. Names carry "[timing]"; in CI only
+// (CI=true) each gets one retry, so a noisy shared runner does not turn the release gate red. The budget and
+// the margin are unchanged, and the measured median is logged on every run so a trend stays visible.
+const TIMING_RETRY = process.env.CI ? 1 : 0;
 const ENV: RouteEnv = {
   PRAXIS_ENV: "production",
   TURSO_MAIN_URL: TURSO_URL,
@@ -560,52 +564,64 @@ describe("TST-124: the scheduled handler with every slot enabled stays inside th
     };
   }
 
-  it("the busiest minute of a real trading day, with every slot enabled, is cheap", async () => {
-    enableAll();
-    const date = "2026-10-19";
-    let best = { n: -1, m: 0 };
-    for (let m = 0; m < 1440; m++) {
-      const l = sydneyLocal(at(date, hm(m), 11));
-      const n =
-        candidateSlots(l, AU_SLOTS).length +
-        routeSlotsDue(l, AU_SLOTS).length +
-        (pollDue(l) ? 1 : 0);
-      if (n > best.n) best = { n, m };
-    }
-    expect(best.n).toBeGreaterThanOrEqual(3);
-    await measure(at(date, hm(best.m), 11), 3); // warm-up (module and JIT)
-    const r = await measure(at(date, hm(best.m), 11), 9);
-    expect(r.subs).toBeLessThanOrEqual(50 - 10); // PLT-070: 50 subrequests, margin of 10
-    expect(r.median).toBeLessThan(10 * 0.5 * COVERAGE_SLACK); // PLT-070: 10 ms CPU; assert half with margin
-  });
+  it(
+    "[timing] the busiest minute of a real trading day, with every slot enabled, is cheap",
+    { retry: TIMING_RETRY },
+    async () => {
+      enableAll();
+      const date = "2026-10-19";
+      let best = { n: -1, m: 0 };
+      for (let m = 0; m < 1440; m++) {
+        const l = sydneyLocal(at(date, hm(m), 11));
+        const n =
+          candidateSlots(l, AU_SLOTS).length +
+          routeSlotsDue(l, AU_SLOTS).length +
+          (pollDue(l) ? 1 : 0);
+        if (n > best.n) best = { n, m };
+      }
+      expect(best.n).toBeGreaterThanOrEqual(3);
+      await measure(at(date, hm(best.m), 11), 3); // warm-up (module and JIT)
+      const r = await measure(at(date, hm(best.m), 11), 9);
+      console.info(
+        `[timing] busiest minute: median ${r.median.toFixed(2)} ms CPU, ${r.subs} subrequests`,
+      );
+      expect(r.subs).toBeLessThanOrEqual(50 - 10); // PLT-070: 50 subrequests, margin of 10
+      expect(r.median).toBeLessThan(10 * 0.5 * COVERAGE_SLACK); // PLT-070: 10 ms CPU; assert half with margin
+    },
+  );
 
-  it("a simulated pile-up: every M5 route slot, the clock, the ASX poll and the self-check due in the same minute", async () => {
-    enableAll();
-    pileUp();
-    const t = at("2026-10-19", "10:00", 11); // Monday, a poll minute
-    const l = sydneyLocal(t);
-    expect(pollDue(l)).toBe(true);
-    const routes = routeSlotsDue(l, AU_SLOTS).map((s) => s.id);
-    expect(routes).toEqual(
-      expect.arrayContaining([
-        "pre-open",
-        "morning",
-        "evening-review",
-        "evening-review-late",
-        "alert-flush",
-      ]),
-    );
-    // alert-flush needs an odd minute: 10:00 is even, so move it onto the same minute like the rest
-    expect(candidateSlots(l, AU_SLOTS).length).toBeGreaterThanOrEqual(5);
-    await measure(t, 3);
-    const r = await measure(t, 9);
-    expect(r.subs).toBeLessThanOrEqual(50);
-    expect(r.median).toBeLessThan(10 * 0.8 * COVERAGE_SLACK);
-    // and the work really happened: app posts, GitHub dispatches and the ASX poll all ran
-    expect(appCalls.length).toBeGreaterThanOrEqual(3);
-    expect(net.github.length).toBeGreaterThanOrEqual(5);
-    expect(asxCalls).toBeGreaterThanOrEqual(1);
-  });
+  it(
+    "[timing] a simulated pile-up: every M5 route slot, the clock, the ASX poll and the self-check due in the same minute",
+    { retry: TIMING_RETRY },
+    async () => {
+      enableAll();
+      pileUp();
+      const t = at("2026-10-19", "10:00", 11); // Monday, a poll minute
+      const l = sydneyLocal(t);
+      expect(pollDue(l)).toBe(true);
+      const routes = routeSlotsDue(l, AU_SLOTS).map((s) => s.id);
+      expect(routes).toEqual(
+        expect.arrayContaining([
+          "pre-open",
+          "morning",
+          "evening-review",
+          "evening-review-late",
+          "alert-flush",
+        ]),
+      );
+      // alert-flush needs an odd minute: 10:00 is even, so move it onto the same minute like the rest
+      expect(candidateSlots(l, AU_SLOTS).length).toBeGreaterThanOrEqual(5);
+      await measure(t, 3);
+      const r = await measure(t, 9);
+      console.info(`[timing] pile-up: median ${r.median.toFixed(2)} ms CPU, ${r.subs} subrequests`);
+      expect(r.subs).toBeLessThanOrEqual(50);
+      expect(r.median).toBeLessThan(10 * 0.8 * COVERAGE_SLACK);
+      // and the work really happened: app posts, GitHub dispatches and the ASX poll all ran
+      expect(appCalls.length).toBeGreaterThanOrEqual(3);
+      expect(net.github.length).toBeGreaterThanOrEqual(5);
+      expect(asxCalls).toBeGreaterThanOrEqual(1);
+    },
+  );
 
   it("a day of ticks with every slot enabled makes at most 720 ASX requests (TST-124) and one per poll slot", async () => {
     enableAll();
