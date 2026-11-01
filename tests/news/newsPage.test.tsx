@@ -69,6 +69,9 @@ const p0Ack = () =>
   within(
     screen.getAllByTestId("alert-item").find((i) => i.textContent?.includes("Trading halt on"))!,
   ).getByRole("button", { name: /^Acknowledge/ });
+// AlertActions is a lazy chunk (bundle budget): wait until the inbox buttons have loaded.
+const actionsLoaded = () =>
+  screen.findAllByRole("button", { name: /^(Acknowledge|Snooze|Clear snooze)/ });
 beforeAll(async () => {
   w = await fullWorld();
   await addAlert(w, "ann:AU:src:n9", "announcement", "P0", "ZZUP", {
@@ -271,6 +274,7 @@ describe("Alert inbox (UXN-157, UXN-160, UXN-161)", () => {
   it("snoozed alerts stay listed, dimmed and marked", async () => {
     as(w, "owner");
     render(await NewsPage({ searchParams: sp({ chip: "alerts" }) }));
+    await actionsLoaded();
     const snoozed = screen.getAllByTestId("alert-item").filter((x) => x.dataset.snoozed === "1");
     expect(snoozed).toHaveLength(1);
     expect(snoozed[0]!.textContent).toContain("Snoozed (still listed)");
@@ -280,6 +284,7 @@ describe("Alert inbox (UXN-157, UXN-160, UXN-161)", () => {
   it("P0 and the market-mood alert offer no snooze; others offer the three choices", async () => {
     as(w, "editor");
     render(await NewsPage({ searchParams: sp({ chip: "alerts" }) }));
+    await actionsLoaded();
     const items = screen.getAllByTestId("alert-item");
     const withSnooze = items.filter((i) => within(i).queryByText("Snooze 1 hour") !== null);
     const without = items.filter(
@@ -320,6 +325,7 @@ describe("Ack and snooze reuse the existing routes", () => {
     vi.stubGlobal("fetch", fetchMock);
     as(w, "owner");
     render(await NewsPage({ searchParams: sp({ chip: "alerts" }) }));
+    await actionsLoaded();
     fireEvent.click(p0Ack());
     await waitFor(() => expect(refresh).toHaveBeenCalled());
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
@@ -333,6 +339,7 @@ describe("Ack and snooze reuse the existing routes", () => {
     vi.stubGlobal("fetch", fetchMock);
     as(w, "viewer");
     render(await NewsPage({ searchParams: sp({ chip: "alerts" }) }));
+    await actionsLoaded();
     const btn = screen
       .getAllByRole("button", { name: /^Snooze 1 hour/ })
       .find((b) => /breaker/i.test(b.getAttribute("aria-label") ?? ""))!;
@@ -352,6 +359,7 @@ describe("Ack and snooze reuse the existing routes", () => {
     );
     as(w, "owner");
     render(await NewsPage({ searchParams: sp({ chip: "alerts" }) }));
+    await actionsLoaded();
     fireEvent.click(p0Ack());
     await waitFor(() => expect(screen.getAllByText("Could not save. Try again.").length).toBe(1));
     expect(refresh).not.toHaveBeenCalled();
@@ -479,6 +487,7 @@ describe("C9 redesign (UXR-025, UXR-045, UXR-052)", () => {
   it("alerts show a tier-coloured P-level pill with text, a tier rail and the action", async () => {
     as(w, "owner");
     render(await NewsPage({ searchParams: sp({ chip: "alerts" }) }));
+    await actionsLoaded();
     const items = screen.getAllByTestId("alert-item");
     for (const item of items) {
       const pill = item.querySelector('[data-kind="tier"]')!;

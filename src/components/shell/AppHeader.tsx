@@ -2,12 +2,23 @@
 // the region/mode chip, the alert bell and the avatar (account menu). There is no theme toggle here;
 // Settings > Appearance owns the theme. On phones the tabs are the fixed bottom bar instead (TabBar).
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { Role } from "@/lib/auth/permissions";
 import { tabsFor } from "@/lib/ui/nav";
 import { AlertBell, type BellView } from "./AlertBell";
 import { GearMenu, type Account } from "./GearMenu";
 import { RegionMenu, type RegionMarket } from "./RegionMenu";
+import { HomeIcon, MarketIcon, NewsIcon, PicksIcon, ReviewsIcon, StrategiesIcon } from "./icons";
 import { TabBar, type TabView } from "./TabBar";
+
+const ICONS: Record<TabView["id"], ReactNode> = {
+  home: <HomeIcon />,
+  picks: <PicksIcon />,
+  market: <MarketIcon />,
+  strategies: <StrategiesIcon />,
+  news: <NewsIcon />,
+  reviews: <ReviewsIcon />,
+};
 
 export type HeaderProps = {
   role: Role;
@@ -26,6 +37,7 @@ export function AppHeader({ role, market, bell, badges = {}, signOut, account }:
     label: t.label,
     href: t.href,
     badge: t.badge ? badges[t.id] : undefined,
+    icon: ICONS[t.id],
   }));
   return (
     <header className="app-header sticky top-0 z-40 border-b border-border bg-surface">

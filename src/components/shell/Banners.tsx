@@ -1,4 +1,3 @@
-"use client";
 // Banners under the header (UX-015): market mode, a reduced header. Text comes from the shell loader.
 // UXR-006 (one banner, once): the market-mode state ("data only", "off") is a dot in the region chip
 // everywhere and ONE line in the Home status strip (rendered by Home itself, C4); the shell never repeats it.
