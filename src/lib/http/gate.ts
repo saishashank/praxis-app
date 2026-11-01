@@ -1,6 +1,6 @@
 // Request gate used by src/proxy.ts (Next 16 proxy, Node runtime). Opus reviews every line.
 // Order: CSP headers -> same-origin check for writes (SEC-011) -> sign-in rate limit (SEC-014)
-// -> authentication (PLT-031) -> per-user write rate limit (SEC-014).
+// -> authentication (PLT-031) -> per-user write, API read and export rate limits (SEC-014).
 // The JWT is verified here; role / status / session_version are re-read from the DB by
 // requireUser / withAuth on every page, route and action (the proxy is the first line only).
 import type { Client } from "@libsql/client";
@@ -50,6 +50,9 @@ const MACHINE_ROUTES = new Set([
   "/api/cron/heartbeat-evening",
   TEST_LOGIN_ROUTE,
 ]);
+// SEC-014 exports (Content-Disposition attachments): ≤ exports_per_hour_user per user and hour.
+// Keep in step with the routes that set Content-Disposition (tests/http/gate.test.ts walks src/app/api).
+export const EXPORT_ROUTES = new Set(["/api/blueprint/export"]);
 const PUBLIC_EXACT = new Set(["/signin", "/privacy", "/terms", "/api/health", "/robots.txt"]);
 
 // Paths that must be indistinguishable from a missing route for anyone but the pinned Owner.
@@ -181,6 +184,22 @@ export async function gate(req: NextRequest, deps: GateDeps): Promise<NextRespon
         60,
         now,
       );
+      if (!r.allowed) return text(429, "too many requests");
+    }
+
+    // SEC-014 (V1-S12): authenticated API reads per user, exports per user and hour. Page
+    // navigations are not API reads. Same fail-closed rule: a DB failure answers 503 via the catch.
+    if (claims && isApi && !write && !machine) {
+      const isExport = EXPORT_ROUTES.has(path);
+      const r = isExport
+        ? await rateLimit(
+            deps.db(),
+            `export:${claims.uid}`,
+            deps.limits.exports_per_hour_user,
+            3600,
+            now,
+          )
+        : await rateLimit(deps.db(), `read:${claims.uid}`, deps.limits.reads_per_min_user, 60, now);
       if (!r.allowed) return text(429, "too many requests");
     }
 

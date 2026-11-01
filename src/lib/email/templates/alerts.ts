@@ -14,6 +14,7 @@ import {
   withEnvPrefix,
 } from "./core";
 import { pct, plural, truncate } from "./format";
+import { displayTitle } from "@/lib/view/displayText";
 
 export interface P0AlertFacts {
   alertKey: string;
@@ -49,7 +50,7 @@ function alertBlocks(a: P0AlertFacts, appUrl: string, heading?: string): Block[]
   blocks.push({
     t: "kv",
     rows: [
-      ["What happened", `${a.type}: ${a.title} (${a.code})`],
+      ["What happened", `${a.type}: ${displayTitle(a.title)} (${a.code})`],
       ["Why it matters", a.why],
       [
         "Held in",
@@ -71,7 +72,10 @@ function alertBlocks(a: P0AlertFacts, appUrl: string, heading?: string): Block[]
 
 export function renderP0(input: P0Input): SizedEmailOut {
   const a = input.alert;
-  const subject = withEnvPrefix(input.env, `Praxis P0: ${a.code} — ${truncate(a.title, 80)}`);
+  const subject = withEnvPrefix(
+    input.env,
+    `Praxis P0: ${a.code} — ${truncate(displayTitle(a.title), 80)}`,
+  );
   const doc = {
     title: subject,
     preheader: `${a.type} on ${a.code}. ${a.time}`,

@@ -12,6 +12,7 @@ import { bearerMatches, isProduction, melbourneDate, type Env } from "@/lib/watc
 import type { EmailProvider } from "@/lib/email/provider";
 import {
   detectAsxTrip,
+  detectAuditChain,
   detectDispatchAuth,
   detectDataQualityTwoNights,
   detectQuota,
@@ -28,6 +29,8 @@ import { heartbeatJob, type HeartbeatKind } from "./state";
 export type Deps = {
   env: Env;
   mainDb: () => Client;
+  /** Auth DB (audit_event, NFR-023). Absent = the chain check is skipped. */
+  authDb?: () => Client;
   now: () => Date;
   /** Email provider and sleep for tests; production selects its own. */
   provider?: EmailProvider;
@@ -72,6 +75,8 @@ async function runExtras(
   if (kind === "evening") {
     await safe(() => detectDataQualityTwoNights(db));
     await safe(() => detectReviewMissing(db, now));
+    // NFR-023: the nightly verification of the audit hash chain (V1-S4).
+    if (deps.authDb) await safe(() => detectAuditChain(deps.authDb!(), deps.env.PII_HASH_KEY));
   }
   const opened: string[] = [];
   for (const f of found) {

@@ -114,6 +114,38 @@ function make(
 
 const num = (v: unknown) => Number(v ?? 0);
 
+// V1-S11 (D-720): traffic that no job reports about itself is estimated, never silently left out.
+// Every signed machine call claims a nonce (one INSERT, plus a prune DELETE) and the Worker reads
+// config/state on each one-minute tick. Constants are estimates from the code paths, labelled so.
+export const NONCE_WRITES_PER_SIGNED_CALL = 2;
+export const WORKER_READS_PER_TICK = 6;
+const NOT_SIGNED_JOBS =
+  "job LIKE 'email-%' OR job LIKE 'actions-%' OR job LIKE 'heartbeat-%' OR job = 'watchdog' OR job = 'worker-clock'";
+
+export type TrafficEstimate = { signedCalls: number; nonceWrites: number; workerTickReads: number };
+
+export async function estimateUntrackedTraffic(
+  db: Client,
+  now: Date,
+  month: { start: string; end: string },
+): Promise<TrafficEstimate> {
+  const res = await db.execute({
+    sql: `SELECT SUM(NOT (${NOT_SIGNED_JOBS})) AS signed, SUM(job = 'worker-clock') AS clock
+          FROM run_record WHERE started_at >= ? AND started_at < ?`,
+    args: [month.start, month.end],
+  });
+  const signedCalls = num(res.rows[0]?.signed);
+  const ticks =
+    num(res.rows[0]?.clock) > 0
+      ? Math.max(0, Math.floor((now.getTime() - Date.parse(month.start)) / 60_000))
+      : 0;
+  return {
+    signedCalls,
+    nonceWrites: signedCalls * NONCE_WRITES_PER_SIGNED_CALL,
+    workerTickReads: ticks * WORKER_READS_PER_TICK,
+  };
+}
+
 export async function getMeters(
   db: Client,
   now: Date,
@@ -134,7 +166,7 @@ export async function getMeters(
   const factor = environment === "staging" ? share : 1;
   const scope = environment === "staging" ? "staging share of the " : "";
 
-  const [tursoRes, emailRes, actionsRes, llmRes] = await Promise.all([
+  const [tursoRes, emailRes, actionsRes, llmRes, traffic] = await Promise.all([
     db.execute({
       sql: `SELECT SUM(rows_read) AS r, SUM(rows_written) AS w FROM run_record
             WHERE started_at >= ? AND started_at < ?`,
@@ -154,23 +186,25 @@ export async function getMeters(
       sql: `SELECT SUM(llm_tokens) AS t FROM run_record WHERE started_at >= ? AND started_at < ?`,
       args: [day.start, day.end],
     }),
+    estimateUntrackedTraffic(db, now, month),
   ]);
 
   const turso = tursoRes.rows[0];
   const actions = actionsRes.rows[0];
-  const recorded = "Recorded by jobs (app traffic not included). Estimate.";
+  const recorded = (extra: string) =>
+    `Recorded by jobs plus an estimate of ${extra} (app page traffic not included). Estimate.`;
 
   return [
     make(
       {
         id: "turso-rows-written",
         label: "Turso rows written",
-        used: num(turso.w),
+        used: num(turso.w) + traffic.nonceWrites,
         limit: Math.round(writesCeil * factor),
         unit: "rows",
         period: "monthly",
         periodLabel: month.label,
-        note: `${recorded} Limit is the ${scope}writes ceiling (DAT-141).`,
+        note: `${recorded(`signed-call nonce writes (~${traffic.nonceWrites})`)} Limit is the ${scope}writes ceiling (DAT-141).`,
       },
       thresholds,
     ),
@@ -178,12 +212,12 @@ export async function getMeters(
       {
         id: "turso-rows-read",
         label: "Turso rows read",
-        used: num(turso.r),
+        used: num(turso.r) + traffic.workerTickReads,
         limit: Math.round(readsCeil * factor),
         unit: "rows",
         period: "monthly",
         periodLabel: month.label,
-        note: `${recorded} Limit is the ${scope}reads ceiling (DAT-141).`,
+        note: `${recorded(`Worker tick reads (~${traffic.workerTickReads})`)} Limit is the ${scope}reads ceiling (DAT-141).`,
       },
       thresholds,
     ),

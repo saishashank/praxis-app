@@ -171,7 +171,12 @@ describe("proxy branch (D-371)", () => {
       db: () => db,
       readClaims,
       isPinnedOwner,
-      limits: { signin_per_min_ip: 10, writes_per_min_user: 60, exports_per_hour_user: 5 },
+      limits: {
+        signin_per_min_ip: 10,
+        writes_per_min_user: 60,
+        exports_per_hour_user: 5,
+        reads_per_min_user: 60,
+      },
       nowSec: () => 1_700_000_000,
       nonce: () => "N",
     };

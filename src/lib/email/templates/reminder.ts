@@ -14,6 +14,7 @@ import {
   withEnvPrefix,
 } from "./core";
 import { dateLabel, plural, truncate } from "./format";
+import { displayTitle } from "@/lib/view/displayText";
 
 export interface ReminderItem {
   name: string;
@@ -125,7 +126,11 @@ export function renderBrief(i: BriefInput): SizedEmailOut {
             head: ["Code", "Announcement", "Time"],
             rows: i.overnight
               .slice(0, cap)
-              .map((a) => [a.code, { text: truncate(a.title, 110), href: a.url }, a.time]),
+              .map((a) => [
+                a.code,
+                { text: truncate(displayTitle(a.title), 110), href: a.url },
+                a.time,
+              ]),
           }
         : { t: "p", text: "Nothing overnight on held or watched codes.", tone: "muted" },
       { t: "h", text: "Today's known events" },

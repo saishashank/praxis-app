@@ -26,6 +26,7 @@ import {
   type LoaderState,
   type MoneyView,
 } from "./shell";
+import { displayTitle } from "@/lib/view/displayText";
 
 const MEMO_MS = 600_000; // threshold-ok: design 2.9, 10-minute ceiling
 const UNIVERSE_ROWS = 5000; // threshold-ok: bounded read of one day of bars
@@ -606,7 +607,9 @@ export async function loadOverview(env: LoaderEnv, key: string): Promise<Overvie
     volume: last ? Number(last.volume) : null, // money-float-ok: stored volume
     announcements: ann.rows.map((x) => ({
       id: Number(x.id), // money-float-ok: SQL integer key
-      title: kit ? maskText(String(x.title), kit.aliases, kit.lookup) : String(x.title),
+      title: displayTitle(
+        kit ? maskText(String(x.title), kit.aliases, kit.lookup) : String(x.title),
+      ),
       published: masked
         ? (isoWeek(String(x.published_at).slice(0, 10)) ?? MISSING)
         : String(x.published_at),

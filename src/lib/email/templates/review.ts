@@ -22,6 +22,7 @@ import {
   withEnvPrefix,
 } from "./core";
 import { dateLabel, glyphBar, money, pct, plural, toneOf, truncate } from "./format";
+import { displayTitle } from "@/lib/view/displayText";
 
 export type ReviewVariant = "full" | "partial" | "minimal" | "nonTrading";
 
@@ -481,7 +482,7 @@ function section8(f: ReviewFacts): Block[] {
           bold: true,
         },
         a.code,
-        { text: truncate(a.title, 100), href: a.url },
+        { text: truncate(displayTitle(a.title), 100), href: a.url },
         a.time,
         truncate(a.effect, 120),
       ]),
