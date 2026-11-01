@@ -298,11 +298,11 @@ export async function mergeClusterRows(
 export type EligibleCluster = Pick<ClusterRow, "id" | "name" | "familyFit" | "closestFamily">;
 
 /**
- * Clusters that may be screened: latest state `confirmed` or `proposed` (not merged or parked), testable at
- * the end of day, with a family_fit, and at least one SUPPORTING claim whose current status is
- * `owner_checked` or later and not `rejected`/`parked`. The LLM-069 guard lives in this one query (D-512).
- * `fitCheck` still judges the fit. Clusters are not market-bound; `market` is part of the contract for
- * callers that scope by market.
+ * Clusters that may be screened: latest state `confirmed` (a person confirmed the LLM's grouping, KB-075;
+ * `proposed`, `merged` and `parked` are out, D-594), testable at the end of day, with a family_fit, and at
+ * least one SUPPORTING claim whose current status is `owner_checked` or later and not `rejected`/`parked`.
+ * The LLM-069 guard lives in this one query (D-512). `fitCheck` still judges the fit. Clusters are not
+ * market-bound; `market` is part of the contract for callers that scope by market.
  */
 export async function eligibleClusters(db: Exec, market: string): Promise<EligibleCluster[]> {
   void market;
@@ -312,7 +312,7 @@ export async function eligibleClusters(db: Exec, market: string): Promise<Eligib
      WHERE k.testability = 'testable_eod'
        AND k.family_fit_json IS NOT NULL
        AND (SELECT s.state FROM cluster_state s WHERE s.cluster_id = k.id ORDER BY s.seq DESC LIMIT 1)
-           IN ('confirmed','proposed')
+           = 'confirmed'
        AND EXISTS (
          SELECT 1 FROM claim_cluster cc
            JOIN claim_status st ON st.claim_id = cc.claim_id

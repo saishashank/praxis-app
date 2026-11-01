@@ -1,7 +1,8 @@
-// Screening statistics (D-518). Pure and deterministic: a stationary block bootstrap of the mean excess over
-// matched controls (mean net when too few rows have a control), a one-sided p, split-half means, and one
-// Benjamini-Hochberg pass over all clusters of the run through measuredCells. Grade is at most L1 (KB-076).
-import { percentile } from "@/lib/stats/bootstrap";
+// Screening statistics (D-518, D-595). Pure and deterministic: a stationary block bootstrap of the mean
+// excess over matched C2 controls (never mean net: a cluster with too few controlled rows is insufficient),
+// a one-sided p, split-half means, and one Benjamini-Hochberg pass over all clusters of the run through
+// measuredCells. Grade is at most L1 (KB-076).
+import { percentile, studentisedTest } from "@/lib/stats/bootstrap";
 import { measuredCells } from "@/lib/stats/multiplicity";
 import { scopedPrng } from "@/lib/stats/rng";
 import { meanStatistic, stationaryBlockBootstrap } from "@/lib/stats/stationaryBootstrap";
@@ -16,21 +17,25 @@ export type StatOptions = {
 };
 
 export type ClusterStat = {
+  /** Tested rows: development rows that carry a matched C2 control (D-595). */
   readonly rows: number;
+  /** Populated blocks of `blockSessions` sessions among the tested rows. */
   readonly blocks: number;
-  /** True when the tested series is the excess over matched controls; false = mean net fallback. */
-  readonly controls: boolean;
+  /** Mean net of every closed development row (descriptive only; not tested). */
   readonly meanNet: number;
-  readonly meanExcess: number | null;
-  /** The tested series' mean, its one-sided 90 % lower bound and one-sided p (share of centred replicates at or above it). */
-  readonly mean: number;
+  /** The tested series: mean excess over matched controls, its 10th-percentile bootstrap bound and one-sided p. */
+  readonly meanExcess: number;
   readonly lower90: number;
   readonly p: number;
   readonly firstHalf: number;
   readonly secondHalf: number;
 };
 
-export type Insufficient = { readonly insufficient: "rows" | "blocks" };
+/**
+ * `rows`: fewer than `minRows` closed development rows; `controls`: fewer than `minRows` of them carry a
+ * matched control (the excess series is the only one tested, D-595); `blocks`: too few populated blocks.
+ */
+export type Insufficient = { readonly insufficient: "rows" | "controls" | "blocks" };
 export const isInsufficient = (x: ClusterStat | Insufficient): x is Insufficient =>
   "insufficient" in x;
 
@@ -40,6 +45,8 @@ const avg = (xs: readonly number[]): number =>
 /**
  * `seed` scopes the PRNG (same sample + seed + options = identical output, so a rerun is idempotent).
  * p = (1 + #{centred replicates >= observed}) / (R + 1): never exactly 0, one-sided toward a positive mean.
+ * Every insufficiency is a matter of data volume (row, control and block counts), never of the outcome, so
+ * leaving an insufficient cluster out of the run's BH family does not bias the correction (D-596).
  */
 export function clusterStatistic(
   sample: DevelopmentSample,
@@ -48,12 +55,11 @@ export function clusterStatistic(
 ): ClusterStat | Insufficient {
   const all = sample.rows;
   if (all.length < opts.minRows) return { insufficient: "rows" };
-  const withControl = all.filter((r) => r.excess !== null);
-  const controls = withControl.length >= opts.minRows;
-  const used = controls ? withControl : all;
-  if (sample.blocks < opts.minBlocks) return { insufficient: "blocks" };
-  const valueOf = (r: (typeof all)[number]): number => (controls ? r.excess! : r.net);
-  const values = used.map(valueOf);
+  const used = all.filter((r) => r.excess !== null);
+  if (used.length < opts.minRows) return { insufficient: "controls" };
+  const blocks = new Set(used.map((r) => Math.floor(r.session / sample.blockSessions))).size;
+  if (blocks < opts.minBlocks) return { insufficient: "blocks" };
+  const values = used.map((r) => r.excess!);
   const mean = avg(values);
   const boot = stationaryBlockBootstrap(
     { sessions: used.map((r) => r.session), sessionCount: sample.sessionCount },
@@ -61,21 +67,18 @@ export function clusterStatistic(
     scopedPrng(`expscreen:${seed}`),
     { expectedBlock: sample.blockSessions, replicates: opts.replicates },
   ).values;
-  const reps = Array.from(boot);
-  let atOrAbove = 0;
-  for (const v of reps) if (v - mean >= mean) atOrAbove += 1;
+  // ARN-081's test (as VAL-110 and the lessons use it): t* = centred replicate / se against t = mean / se,
+  // which is #{replicate - mean >= mean}; the se cancels, so this is the centred percentile p of D-593.
   const half = sample.sessionCount / 2;
   return {
-    rows: all.length,
-    blocks: sample.blocks,
-    controls,
+    rows: used.length,
+    blocks,
     meanNet: avg(all.map((r) => r.net)),
-    meanExcess: controls ? mean : null,
-    mean,
-    lower90: percentile(reps, 0.1),
-    p: (1 + atOrAbove) / (reps.length + 1),
-    firstHalf: avg(used.filter((r) => r.session < half).map(valueOf)),
-    secondHalf: avg(used.filter((r) => r.session >= half).map(valueOf)),
+    meanExcess: mean,
+    lower90: percentile(boot, 0.1),
+    p: studentisedTest(mean, boot).p,
+    firstHalf: avg(used.filter((r) => r.session < half).map((r) => r.excess!)),
+    secondHalf: avg(used.filter((r) => r.session >= half).map((r) => r.excess!)),
   };
 }
 

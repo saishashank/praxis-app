@@ -2,10 +2,9 @@
 // screenClusters lanes (D-514, D-515, D-534, D-536a, D-590...D-593) over a real migrated database with an
 // injected replay: nothing eligible, skipped lanes, insufficiency, determinism, device view filtering.
 import { afterAll, describe, expect, it } from "vitest";
-import { FAMILY_PARAM_KEYS } from "@/lib/agents/families/ruleSchema";
-import { CONFIG_KEYS } from "@/lib/config/keys";
 import { makeExpertDevView } from "@/lib/experts/devView";
 import { screenClusters } from "@/lib/experts/screen";
+import { clusterStatistic, isInsufficient } from "@/lib/experts/screenStats";
 import {
   appendClaimStatus,
   appendClusterState,
@@ -13,9 +12,20 @@ import {
   insertClaim,
   mergeClaimIntoCluster,
 } from "@/lib/experts/store";
-import { splitOf } from "@/lib/stats/splits";
+import { createLineageSplit, splitOf } from "@/lib/stats/splits";
 import { cleanupTempDbs } from "../db/helpers";
-import { addCluster, f1Fit, fakeReplay, NOW, SESSIONS, screenWorld } from "./zzScreen";
+import { weekdayCalendar } from "../fixtures/stats/t13";
+import { BASE, insertSplit, MARKET } from "../learning/challengerFixtures";
+import {
+  addCluster,
+  defaultFit,
+  f1Fit,
+  fakeReplay,
+  NOW,
+  RUN_D,
+  SESSIONS,
+  screenWorld,
+} from "./zzScreen";
 
 afterAll(cleanupTempDbs);
 
@@ -50,16 +60,23 @@ describe("screenClusters lanes", () => {
     expect(s.status).toBe("nothing_eligible");
   });
 
+  it("a proposed cluster is not screened until a person confirms it (KB-075, D-594)", async () => {
+    const w = await screenWorld();
+    await addCluster(w.db, "K-001", { state: "proposed" }); // checked claim, LLM grouping unconfirmed
+    const fake = fakeReplay(w.split, { "K-001": 0.03 });
+    expect((await screenClusters(w.ctx, { replay: fake.replay })).status).toBe("nothing_eligible");
+    expect(fake.calls).toEqual([]);
+    expect(await currentClaimStatus(w.db, "C-K-001")).toBe("owner_checked");
+    await appendClusterState(w.db, { clusterId: "K-001", state: "confirmed", actor: "u", at: NOW });
+    const s = await screenClusters(w.ctx, { replay: fake.replay });
+    expect(s).toMatchObject({ status: "ran", considered: 1, screened: 1 });
+    expect(await currentClaimStatus(w.db, "C-K-001")).toBe("screened");
+  });
+
   it("skips an invalid fit and a family without a split, and says why (D-515)", async () => {
     const w = await screenWorld(["F1"]);
     await addCluster(w.db, "K-001", { fit: { family: "F1", params: { f1_trail_atr: 3 } } }); // key set
-    const f6 = Object.fromEntries(
-      FAMILY_PARAM_KEYS.F6.map((k) => [
-        k,
-        (CONFIG_KEYS as unknown as Record<string, { default: unknown }>)[k]!.default,
-      ]),
-    );
-    await addCluster(w.db, "K-002", { fit: { family: "F6", params: f6 } }); // valid F6, no F6 lineage here
+    await addCluster(w.db, "K-002", { fit: defaultFit("F6") }); // valid F6, no F6 lineage here
     await addCluster(w.db, "K-003");
     const fake = fakeReplay(w.split, { "K-003": 0.02 });
     const s = await screenClusters(w.ctx, { replay: fake.replay });
@@ -76,6 +93,81 @@ describe("screenClusters lanes", () => {
     // a skipped cluster's claims do not move
     expect(await currentClaimStatus(w.db, "C-K-001")).toBe("owner_checked");
     expect(await currentClaimStatus(w.db, "C-K-002")).toBe("owner_checked");
+  });
+
+  it("skips a family whose split is deferred or whose incumbent is not live, per family lane", async () => {
+    const w = await screenWorld(["F1", "F2", "F3"]);
+    // F2: a rolled split that is deferred (too little history), the stored newest version
+    const deferred = createLineageSplit({
+      market: MARKET,
+      family: "F2",
+      calendar: weekdayCalendar(100),
+      maxHoldingUpper: 120,
+      primaryRows: [],
+      params: BASE.stats,
+      version: 2,
+      reason: "roll",
+    });
+    expect(deferred.deferred_until_d).not.toBeNull();
+    await insertSplit(w.db, deferred);
+    // F3: the seeded incumbent retired, nothing live
+    await w.db.execute(
+      `INSERT INTO rule_version_status (rule_version_id, seq, status, d, reason)
+       SELECT 'F3.v1', MAX(seq) + 1, 'retired', '${RUN_D}', 'ZZ test' FROM rule_version_status WHERE rule_version_id = 'F3.v1'`,
+    );
+    await addCluster(w.db, "K-001"); // F1: screened
+    await addCluster(w.db, "K-002", { fit: defaultFit("F2") });
+    await addCluster(w.db, "K-003", { fit: defaultFit("F3") });
+    const fake = fakeReplay(w.split, { "K-001": 0.02 });
+    const s = await screenClusters(w.ctx, { replay: fake.replay });
+    expect(s).toMatchObject({ status: "ran", considered: 3, eligible: 3, screened: 1 });
+    expect(s.skipped).toEqual([
+      { clusterId: "K-002", reason: "split_deferred" },
+      { clusterId: "K-003", reason: "no_incumbent" },
+    ]);
+    expect(fake.calls).toEqual(["F1.expert:K-001"]);
+    expect(await currentClaimStatus(w.db, "C-K-002")).toBe("owner_checked");
+    expect(await currentClaimStatus(w.db, "C-K-003")).toBe("owner_checked");
+    const run = (await w.db.execute("SELECT splits_json FROM screening_run")).rows[0]!;
+    expect(JSON.parse(String(run.splits_json))).toEqual({ F1: w.split.version });
+  });
+
+  it("a cluster whose rows carry too few matched controls is skipped, never tested on mean net (D-595)", async () => {
+    const w = await screenWorld();
+    await addCluster(w.db, "K-001");
+    await addCluster(w.db, "K-002");
+    const fake = fakeReplay(w.split, { "K-001": 0.03, "K-002": 0.03 }, { noControls: ["K-002"] });
+    const s = await screenClusters(w.ctx, { replay: fake.replay });
+    expect(s).toMatchObject({ status: "ran", considered: 2, eligible: 2, screened: 1 });
+    expect(s.skipped).toEqual([{ clusterId: "K-002", reason: "insufficient_controls" }]);
+    const rows = await rowsOf(w.db, "SELECT cluster_id, mean_excess_ppm FROM screening_result");
+    expect(rows.map((r) => r.cluster_id)).toEqual(["K-001"]);
+    expect(rows[0]!.mean_excess_ppm).not.toBeNull();
+    expect(await currentClaimStatus(w.db, "C-K-002")).toBe("owner_checked");
+  });
+
+  it("writes the run, its results and the claim moves in one transaction: a failed write leaves nothing and the day can be rerun", async () => {
+    const w = await screenWorld();
+    await addCluster(w.db, "K-001");
+    await addCluster(w.db, "K-002");
+    const fake = fakeReplay(w.split, { "K-001": 0.02 });
+    // the second cluster's result row violates CHECK (rows >= 0) after the run row and the first result went in
+    await expect(
+      screenClusters(w.ctx, {
+        replay: fake.replay,
+        statistic: (sample, seed, opts) => {
+          const st = clusterStatistic(sample, seed, opts);
+          return isInsufficient(st) || seed.includes(":K-001:") ? st : { ...st, rows: -1 };
+        },
+      }),
+    ).rejects.toThrow();
+    expect(await rowsOf(w.db, "SELECT * FROM screening_run")).toHaveLength(0);
+    expect(await rowsOf(w.db, "SELECT * FROM screening_result")).toHaveLength(0);
+    expect(await currentClaimStatus(w.db, "C-K-001")).toBe("owner_checked");
+    expect(await currentClaimStatus(w.db, "C-K-002")).toBe("owner_checked");
+    const again = await screenClusters(w.ctx, { replay: fake.replay });
+    expect(again).toMatchObject({ status: "ran", screened: 2 });
+    expect(await currentClaimStatus(w.db, "C-K-001")).toBe("screened");
   });
 
   it("a cluster with too few development rows is skipped, gets no result row and its claims stay put", async () => {

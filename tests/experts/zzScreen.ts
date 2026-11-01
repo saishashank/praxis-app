@@ -45,6 +45,19 @@ export const f1Fit = (i: number): { family: Family; params: Record<string, unkno
   params: f1Params(i),
 });
 
+/** A valid fit of any family at the registry defaults (F6 included: its weights object passes fitCheck, D-590). */
+export const defaultFit = (
+  family: Family,
+): { family: Family; params: Record<string, unknown> } => ({
+  family,
+  params: Object.fromEntries(
+    FAMILY_PARAM_KEYS[family].map((k) => [
+      k,
+      (CONFIG_KEYS as unknown as Record<string, Def>)[k]!.default,
+    ]),
+  ),
+});
+
 export async function screenWorld(
   families: readonly Family[] = ["F1"],
 ): Promise<{ db: Client; split: LineageSplitRecord; ctx: ScreenContext }> {
@@ -81,12 +94,10 @@ export async function addCluster(
       NOW,
     ],
   });
-  await appendClusterState(db, {
-    clusterId: id,
-    state: opts.state ?? "proposed",
-    actor: "seed",
-    at: NOW,
-  });
+  // every cluster starts `proposed` (seq 1, the importer's row); by default a person then confirms it (D-594)
+  await appendClusterState(db, { clusterId: id, state: "proposed", actor: "seed", at: NOW });
+  if ((opts.state ?? "confirmed") === "confirmed")
+    await appendClusterState(db, { clusterId: id, state: "confirmed", actor: "u1", at: NOW });
   const status = opts.claimStatus === undefined ? "owner_checked" : opts.claimStatus;
   if (status === null) return null;
   const claimId = `C-${id}`;
@@ -130,16 +141,22 @@ export type Plan = Readonly<Record<string, number>>;
 export type FakeReplay = { replay: ReplayFn; calls: string[] };
 
 /**
- * A fake replay: label `F1.expert:<cluster>` maps to a planted mean excess in `plan` (0 when absent). Rows sit
- * on every 4th session of the whole snapshot; outside the development split the excess is +0.5 (a leak would
- * make every cluster look like a winner).
+ * A fake replay: label `<family>.expert:<cluster>` maps to a planted mean excess in `plan` (0 when absent).
+ * Rows sit on every 4th session of the whole snapshot; outside the development split the excess is +0.5 (a
+ * leak would make every cluster look like a winner). Clusters named in `noControls` get rows without a
+ * matched control (`excess` null).
  */
-export function fakeReplay(split: LineageSplitRecord, plan: Plan): FakeReplay {
+export function fakeReplay(
+  split: LineageSplitRecord,
+  plan: Plan,
+  opts: { readonly noControls?: readonly string[] } = {},
+): FakeReplay {
   const calls: string[] = [];
   const replay: ReplayFn = (family, label) => {
     calls.push(label);
     const cluster = label.split(":")[1]!;
     const mean = plan[cluster] ?? 0;
+    const controls = !(opts.noControls ?? []).includes(cluster);
     const rng = scopedPrng(`zzscreen:${cluster}`);
     const entries = SESSIONS.flatMap((d, i) => {
       if (i % 4 !== 0) return [];
@@ -152,7 +169,7 @@ export function fakeReplay(split: LineageSplitRecord, plan: Plan): FakeReplay {
           ruleVersion: label,
           code: "ZZA",
           net: frac(x + 0.001),
-          excess: frac(x),
+          excess: controls ? frac(x) : null,
           row: { entry_d: d },
         },
       ];

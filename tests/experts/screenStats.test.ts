@@ -62,7 +62,7 @@ describe("clusterStatistic", () => {
 
   it("gives a small p and a positive lower bound to a planted edge, a large p to a negative mean", () => {
     const edge = must(clusterStatistic(sample("edge", 0.02), "e", OPTS));
-    expect(edge.controls).toBe(true);
+    expect(edge.rows).toBe(300);
     expect(edge.p).toBeLessThan(0.01);
     expect(edge.lower90).toBeGreaterThan(0);
     expect(edge.firstHalf).toBeGreaterThan(0);
@@ -77,11 +77,29 @@ describe("clusterStatistic", () => {
     expect(edge.p).toBeLessThanOrEqual(1);
   });
 
-  it("falls back to mean net, marked, when too few rows have a control", () => {
-    const st = must(clusterStatistic(sample("nc", 0.02, { withControls: false }), "n", OPTS));
-    expect(st.controls).toBe(false);
-    expect(st.meanExcess).toBeNull();
-    expect(st.mean).toBeCloseTo(st.meanNet, 12);
+  it("never tests mean net: too few controlled rows is insufficient, not a fallback (D-595)", () => {
+    expect(clusterStatistic(sample("nc", 0.02, { withControls: false }), "n", OPTS)).toEqual({
+      insufficient: "controls",
+    });
+    // 300 rows, only 19 with a control: still insufficient at minRows 20
+    const s = sample("mixed", 0.02);
+    const rows = s.rows.map((r, i) => (i < 19 ? r : { ...r, excess: null }));
+    expect(clusterStatistic({ ...s, rows }, "m", OPTS)).toEqual({ insufficient: "controls" });
+  });
+
+  it("counts rows and blocks on the controlled rows only; meanNet stays over every row", () => {
+    const s = sample("part", 0.02);
+    const rows = s.rows.map((r, i) => (i % 2 === 0 ? r : { ...r, excess: null }));
+    const st = must(clusterStatistic({ ...s, rows }, "p", OPTS));
+    expect(st.rows).toBe(150);
+    expect(st.blocks).toBe(
+      new Set(rows.filter((r) => r.excess !== null).map((r) => Math.floor(r.session / 100))).size,
+    );
+    expect(st.meanNet).toBeCloseTo(rows.reduce((a, r) => a + r.net, 0) / rows.length, 12);
+    expect(st.meanExcess).toBeCloseTo(
+      rows.filter((r) => r.excess !== null).reduce((a, r) => a + r.excess!, 0) / 150,
+      12,
+    );
   });
 
   it("reports insufficient rows and blocks instead of a statistic", () => {
@@ -91,6 +109,21 @@ describe("clusterStatistic", () => {
     expect(clusterStatistic(sample("blk", 0.02), "f", { ...OPTS, minBlocks: 999 })).toEqual({
       insufficient: "blocks",
     });
+  });
+
+  it("p is one-sided toward a positive mean: a mirrored series gets the mirror p (same draws, same seed)", () => {
+    const s = sample("mirror", 0.004);
+    const neg: DevelopmentSample = {
+      ...s,
+      rows: s.rows.map((r) => ({ ...r, excess: -r.excess! })),
+    };
+    const a = must(clusterStatistic(s, "m", OPTS));
+    const b = must(clusterStatistic(neg, "m", OPTS));
+    expect(b.meanExcess).toBeCloseTo(-a.meanExcess, 12);
+    // #{rep - m >= m} + #{-(rep - m) >= -m} = R + #{rep - m = m}, so p_a + p_b = 1 + (1 + ties) / (R + 1)
+    expect(a.p + b.p).toBeGreaterThanOrEqual(1 + 1 / (OPTS.replicates + 1) - 1e-12);
+    expect(a.p + b.p).toBeLessThan(1 + 3 / (OPTS.replicates + 1));
+    expect(a.p).toBeLessThan(b.p);
   });
 
   it("splits the sessions into halves", () => {
@@ -104,10 +137,8 @@ describe("screenRun", () => {
   const stat = (over: Partial<ClusterStat>): ClusterStat => ({
     rows: 100,
     blocks: 10,
-    controls: true,
     meanNet: 0,
     meanExcess: 0,
-    mean: 0,
     lower90: 0,
     p: 0.5,
     firstHalf: 0.01,

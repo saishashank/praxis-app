@@ -1,8 +1,10 @@
-// Weekly screening of expert clusters (D-514, D-516, D-518, D-534, D-536a, D-590...D-593).
-// Eligible clusters (a person has checked a supporting claim, LLM-069) are expressed as a parameter set of a
-// v1 family; the family is replayed through the one development accessor, the cluster statistic is computed
-// on development rows only, BH runs ONCE over all tested clusters of the run, and the run is stored insert-once
-// per (market, d). No trial is charged here: the trial ledger is written only by createChallenger (WP5).
+// Weekly screening of expert clusters (D-514, D-516, D-518, D-534, D-536a, D-590...D-596).
+// Eligible clusters (a person confirmed the cluster, KB-075, and checked a supporting claim, LLM-069) are
+// expressed as a parameter set of a v1 family; the family is replayed through the one development accessor,
+// the cluster statistic (excess over matched controls) is computed on development rows only, BH runs ONCE
+// over all tested clusters of the run, and the run is stored insert-once per (market, d) in one transaction
+// with its results and claim moves. No trial is charged here: the trial ledger is written only by
+// createChallenger (WP5).
 import type { Client } from "@libsql/client";
 import { FAMILY_ORDER } from "@/lib/agents/families/constants";
 import type { Family } from "@/lib/agents/schema";
@@ -29,6 +31,7 @@ export type SkipReason =
   | "split_deferred"
   | "no_incumbent"
   | "insufficient_rows"
+  | "insufficient_controls"
   | "insufficient_blocks";
 
 export type ScreeningSummary = {
@@ -83,9 +86,9 @@ async function supportingClaims(db: Exec, clusterId: string): Promise<string[]> 
 
 /**
  * The supporting claims of a tested cluster move `owner_checked -> formalised -> screened` (D-536a, D-591):
- * the cluster has a valid fit (that is what made it eligible), so the formalise step is taken here with
- * nextStatusFor and then the screened step. Claims at `extracted`, `parked`, `rejected` or already further are
- * left alone (nextStatusFor returns null for them).
+ * the cluster is confirmed by a person (D-594) and has a valid fit (that is what made it eligible), so the
+ * `cluster_confirmed` formalise step is taken here with nextStatusFor and then the screened step. Claims at
+ * `extracted`, `parked`, `rejected` or already further are left alone (nextStatusFor returns null for them).
  */
 async function advanceClaims(
   tx: Exec,
@@ -272,7 +275,7 @@ export async function screenClusters(
           t.stat.rows,
           t.stat.blocks,
           ppm(t.stat.meanNet),
-          t.stat.meanExcess === null ? null : ppm(t.stat.meanExcess),
+          ppm(t.stat.meanExcess),
           ppm(t.stat.lower90),
           r.p,
           r.adjustedP,
