@@ -346,6 +346,25 @@ describe("shadow candidates", () => {
     );
   });
 
+  it("R2-I5: with an armed pick the stop is reported as spent on pick alerts, not a bare budget stop", async () => {
+    await accept();
+    await db.execute({
+      sql: "INSERT INTO quote_run (market, session_d, slot_minute, purpose, started_at, requests) VALUES ('AU', ?, '10:05', 'poll', 't', 1900)",
+      args: [SESSION],
+    });
+    await db.execute({
+      sql: `INSERT INTO pick_alert (alert_id, seq, user_id, market, pick_d, profile, rank, code, session_d,
+            state, limit_micro, stop_micro, at) VALUES ('a1', 1, 'u1', 'AU', '2026-11-02', 'balanced', 1,
+            'ZZ01', ?, 'armed', 1000000, 900000, 't0')`,
+      args: [SESSION],
+    });
+    expect(await runIntradayScan(deps())).toEqual({
+      status: "skipped",
+      reason: "budget_pick_alerts",
+    });
+    expect((await intradayScanHealth(db, NOW)).join(" ")).toContain("spent on pick alerts");
+  });
+
   it("a later slot refreshes the follow-up columns of an existing row, whatever the new verdict (S5)", async () => {
     await accept();
     await runIntradayScan(deps());

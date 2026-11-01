@@ -6,6 +6,9 @@
     },
     "action src/app/(app)/health/slotsActions.ts#setSlotsEnabledAction": {
       "tests": ["tests/golive/signoff.test.ts", "tests/golive/slots.test.ts"]
+    },
+    "action src/app/(app)/ops/go-live/actions.ts#approveMoneyConstantsAction": {
+      "tests": ["tests/golive/moneyApproval.test.ts", "tests/golive/pages.test.tsx"]
     }
   }
 }

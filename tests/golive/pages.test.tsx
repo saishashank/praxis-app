@@ -28,7 +28,10 @@ vi.mock("@/lib/preferences/read", () => ({
   userPreferences: async () => ({ time_format: "24h" }),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
-vi.mock("@/app/(app)/ops/go-live/actions", () => ({ signOffGoLiveAction: vi.fn() }));
+vi.mock("@/app/(app)/ops/go-live/actions", () => ({
+  signOffGoLiveAction: vi.fn(),
+  approveMoneyConstantsAction: vi.fn(),
+}));
 vi.mock("@/app/(app)/health/slotsActions", () => ({ setSlotsEnabledAction: vi.fn() }));
 vi.mock("@/app/(app)/health/actions", () => ({
   confirmCalendarAction: vi.fn(),

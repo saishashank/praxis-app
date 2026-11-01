@@ -1442,17 +1442,19 @@ export async function previousSessionClosed(
   d: string,
   calendar: CalendarRow[],
 ): Promise<{ ok: true } | { ok: false; priorD: string }> {
-  let priorD: string;
+  let priorD: string | null;
   try {
     priorD = previousTradingDay(d, calendar);
   } catch {
-    return { ok: true };
+    priorD = null; // R2-I2 (D-807): the walk failed; decided below, never silently skipped
   }
-  const prior = await db.execute({
-    sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND ${CLOSED_2A_SQL} LIMIT 1`,
-    args: [closeBooksKey(market, priorD)],
-  });
-  if (prior.rows.length > 0) return { ok: true };
+  if (priorD !== null) {
+    const prior = await db.execute({
+      sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND ${CLOSED_2A_SQL} LIMIT 1`,
+      args: [closeBooksKey(market, priorD)],
+    });
+    if (prior.rows.length > 0) return { ok: true };
+  }
   // D-675: the exemption uses the same "closed" predicate as the check, so a market whose only
   // earlier nights ended in an invariant freeze (`failed` + navDays) is not a first night.
   const earlier = await db.execute({
@@ -1460,7 +1462,9 @@ export async function previousSessionClosed(
           AND ${CLOSED_2A_SQL} LIMIT 1`,
     args: [ARENA_JOB, market, d],
   });
-  return earlier.rows.length === 0 ? { ok: true } : { ok: false, priorD };
+  if (earlier.rows.length === 0) return { ok: true };
+  // R2-I2: a failed walk with earlier closed sessions on record fails CLOSED (refuse + incident).
+  return { ok: false, priorD: priorD ?? "unknown" };
 }
 
 /**

@@ -96,9 +96,16 @@ export const V2_GO_LIVE_STEPS: readonly V2GoLiveStep[] = [
   {
     id: "v2_staging_migrations",
     phase: "staging",
-    label: "Staging migrations 0015 to 0023, in order",
+    label: "Staging migrations 0015 to 0025, in order",
     help: "Check the 0020 e-mail rebuild (it copies every row) and the AT-42 recorded-day row. 0023 lets the nightly features be pruned after 400 days.",
     after: ["v2_push_ci"],
+  },
+  {
+    id: "v2_cron_accepted",
+    phase: "staging",
+    label: "Vercel accepted the cron entries (query-string paths)",
+    help: "After the first staging deploy: the project's Cron Jobs list shows all eight entries, each once, including the five with a query string (?try=2, ?dst=aedt). If any is missing or merged, tell the build before production (R2-I1, D-811).",
+    after: ["v2_staging_migrations"],
   },
   {
     id: "v2_e2e",
@@ -167,7 +174,7 @@ export const V2_GO_LIVE_STEPS: readonly V2GoLiveStep[] = [
     id: "v2_approvals",
     phase: "approvals",
     label: "Tick the warned decisions",
-    help: "D-371, D-443, D-445, D-462, D-481, D-490, D-510, D-527 and D-660, in the pull request description.",
+    help: "D-371, D-443, D-445, D-462, D-481, D-490, D-510, D-527 and D-660, plus D-750 (the sector-adjusted selection), D-740 to D-755 (the movers additions), D-710, D-718 and D-761 (the listing floor on lookbacks), in the pull request description.",
     after: [],
   },
   {
@@ -181,7 +188,14 @@ export const V2_GO_LIVE_STEPS: readonly V2GoLiveStep[] = [
     id: "v2_money_constants",
     phase: "approvals",
     label: "Approve the cost, tick, slippage and parcel figures",
-    help: "V1-S2, ARN-024, ARN-031, ARN-032 (D-710). Production stays out of full mode until every figure on the go-live page shows approved.",
+    help: "V1-S2, ARN-024, ARN-031, ARN-032 (D-710). Check them, then press Approve on the go-live page (Owner only, typed phrase, audited). Production stays out of full mode until you do; no code change is needed (D-804).",
+    after: [],
+  },
+  {
+    id: "v2_restore_size",
+    phase: "production",
+    label: "Time a production-size restore",
+    help: "node scripts/restore/drill-size.mjs --rows 500000 once (synthetic rows, nothing leaves your machine). Write down the date, PASS or FAIL and the time it took, so the recovery time (NFR-004) is measured before the merge (R2-I7, D-813).",
     after: [],
   },
   {
@@ -196,7 +210,7 @@ export const V2_GO_LIVE_STEPS: readonly V2GoLiveStep[] = [
     phase: "production",
     label: "Green checks on the final commit, then approve production",
     help: "Merge only when the remote checks are green. The Cortex stays in shadow and the steelman stays off in production until the Cortex import and the R6 model are done.",
-    after: ["v2_push_ci", "v2_cortex_import", "v2_rollback"],
+    after: ["v2_push_ci", "v2_cortex_import", "v2_restore_size", "v2_rollback"],
   },
 ];
 

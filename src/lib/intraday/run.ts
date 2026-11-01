@@ -57,6 +57,7 @@ export type ScanSkipReason =
   | "after_window"
   | "after_close"
   | "budget_stop"
+  | "budget_pick_alerts" // R2-I5 (D-810): the day's requests went to armed pick alerts
   | "already_done";
 
 export type ScanRunDeps = {
@@ -186,9 +187,11 @@ export async function runIntradayScan(deps: ScanRunDeps): Promise<ScanRunResult>
   const usedToday = await quoteRequestsToday(db, market, sessionD);
   const dayBudget = { dayMax: QUOTE_REQUESTS_PER_DAY, usedToday };
   const band = budgetBand(dayBudget);
-  if (band === "stop") return skip("budget_stop");
   // V2-S5 (D-694): the armed picks' requests to the end of the poll window are not the scan's to spend.
+  // R2-I5 (D-810): armed picks may spend even the last 5 % (poll.ts), so a stop with armed picks is
+  // reported as "budget spent on pick alerts" and not as a bare budget stop.
   const armedCount = new Set((await activeAlerts(db, market)).map((a) => a.latest.code)).size;
+  if (band === "stop") return skip(armedCount > 0 ? "budget_pick_alerts" : "budget_stop");
   const reserve =
     armedCount === 0
       ? 0
@@ -205,7 +208,7 @@ export async function runIntradayScan(deps: ScanRunDeps): Promise<ScanRunResult>
     dayMax: dayBudget.dayMax - reserve,
     usedToday,
   });
-  if (reserve > 0 && allowed <= 0) return skip("budget_stop");
+  if (reserve > 0 && allowed <= 0) return skip("budget_pick_alerts");
 
   // 5. Plan: universe ∩ today's catalysts, tier 1 first, cut at the allowance.
   const universe = await scanUniverse(db, market, sessionD, codesMax);
@@ -421,7 +424,14 @@ export async function intradayScanHealth(
   const d = marketDate(now, SESSION_TZ);
   const used = await quoteRequestsToday(db, market, d);
   const band = budgetBand({ dayMax: QUOTE_REQUESTS_PER_DAY, usedToday: used });
-  if (band === "stop") lines.push("Intraday scan stopped for the day (request budget)");
+  if (band === "stop") {
+    const armed = (await activeAlerts(db, market)).length > 0;
+    lines.push(
+      armed
+        ? "Intraday scan skipped: the request budget is spent on pick alerts"
+        : "Intraday scan stopped for the day (request budget)",
+    );
+  }
   const r = await db.execute({
     sql: "SELECT COUNT(*) AS n FROM quote_run WHERE market = ? AND session_d = ? AND purpose = 'scan' AND narrowed = 1",
     args: [market, d],

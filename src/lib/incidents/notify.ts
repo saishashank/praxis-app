@@ -64,6 +64,13 @@ export const INCIDENT_SPECS: Readonly<Record<string, Spec>> = {
     fix: "Add the missing calendar rows, confirm them on System Health, and re-run the day.",
     fixPath: "/health",
   },
+  evening_heartbeat_missing: {
+    component: "Heartbeat",
+    impact:
+      "Last night's evening heartbeat did not complete, so the data-quality, review and audit-chain checks did not run.",
+    fix: "Check the cron list on the production project, run the evening heartbeat once by hand, and look at System Health.",
+    fixPath: "/health",
+  },
   calendar_horizon: {
     component: "Trading calendar",
     impact: "The trading calendar ends within 60 days; after that every weekday would be skipped.",

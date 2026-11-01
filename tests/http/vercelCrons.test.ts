@@ -44,7 +44,7 @@ describe("vercel.json", () => {
     expect(byPath("/api/cron/heartbeat-morning?try=2")?.schedule).toBe("50 0 * * *");
     expect(byPath("/api/cron/watchdog?try=2")?.schedule).toBe("40 12 * * *");
     // V1-I2: the evening check is wanted at 21:10 and 21:40 Melbourne in both regimes: AEDT lines at
-    // 10:xx UTC, AEST lines at 11:xx UTC; the handler skips a cron call outside 21:00-21:55 local.
+    // 10:xx UTC, AEST lines at 11:xx UTC; the handler runs a cron call only on the line of the regime Melbourne is in (R2-S1, D-800).
     expect(byPath("/api/cron/heartbeat-evening?dst=aedt")?.schedule).toBe("10 10 * * *");
     expect(byPath("/api/cron/heartbeat-evening?try=2")?.schedule).toBe("40 11 * * *");
   });

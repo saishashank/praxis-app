@@ -34,6 +34,8 @@ import { ASX_ENABLED_KEY, ASX_SOURCE_ID, DISPATCH_ENABLED_KEY, parseOn } from "@
 import {
   KIND_CALENDAR_HORIZON,
   KIND_CALENDAR_MISSING,
+  KIND_EVENING_HEARTBEAT_MISSING,
+  HEARTBEAT_EVENING_JOB,
   KIND_MARKER_MISSING,
   KIND_SENTINEL_BLIND,
   KIND_WORKER_BLIND,
@@ -108,6 +110,32 @@ export async function runChecks(kind: HeartbeatKind, db: Client, now: Date): Pro
   }
   if (!tradingDay) notes.push("not a trading day: poll and marker checks skipped");
   if (!marketOn) notes.push("market is off: poll and marker checks skipped");
+
+  // 0. Morning only (R2-S1, D-802): a skipped evening heartbeat is never silent. Once the evening check has
+  // finished on some earlier night, a previous night with no final record raises an S2 the same morning.
+  if (kind === "morning") {
+    const prev = new Date(Date.parse(`${date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+    const key = `${HEARTBEAT_EVENING_JOB}:${prev}`;
+    const done = await db.execute({
+      sql: `SELECT 1 FROM run_record WHERE concurrency_key = ?
+            AND json_extract(details_json, '$.final') = 1 LIMIT 1`,
+      args: [key],
+    });
+    if (done.rows.length === 0) {
+      const ever = await db.execute({
+        sql: `SELECT 1 FROM run_record WHERE job = ? AND concurrency_key < ?
+              AND json_extract(details_json, '$.final') = 1 LIMIT 1`,
+        args: [HEARTBEAT_EVENING_JOB, key],
+      });
+      if (ever.rows.length > 0) {
+        problems.push({
+          kind: KIND_EVENING_HEARTBEAT_MISSING,
+          text: `The evening heartbeat of ${prev} did not complete.`,
+          detail: { check: kind, date, night: prev },
+        });
+      }
+    }
+  }
 
   // 1. The Worker is alive (both checks).
   const rollup = await db.execute({

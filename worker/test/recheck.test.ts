@@ -220,6 +220,12 @@ describe("runClock: re-dispatch against a real database", () => {
     await tick(at("18:20"));
     expect(arenaCalls()).toHaveLength(0);
   });
+  it("R2-I3: a night refused for previous_session_not_closed is not dispatched again", async () => {
+    record("failed", '{"reason":"previous_session_not_closed","priorD":"2026-10-16"}');
+    await tick(at("18:20"));
+    await tick(at("18:51"));
+    expect(arenaCalls()).toHaveLength(0);
+  });
   it("at most MAX_ATTEMPTS dispatches in all", async () => {
     for (const hm of ["18:20", "18:51", "19:22", "19:53", "20:15"]) await tick(at(hm));
     expect(arenaCalls()).toHaveLength(MAX_ATTEMPTS - 1); // attempt 1 was the original dispatch

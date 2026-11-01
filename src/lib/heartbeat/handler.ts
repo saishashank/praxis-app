@@ -41,22 +41,38 @@ const json = (status: number, body: unknown) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
 /**
- * V1-I2 (D-772): Vercel crons are fixed UTC, so the evening check has a line per DST regime and a
- * scheduled call (user agent `vercel-cron`) outside 21:00-21:55 Melbourne is a 200 no-op. A manual call
- * (no such agent) always runs. The window ends before the 21:50 watchdog's first look at the incidents.
+ * V1-I2 (D-772), R2-S1 (D-800): Vercel crons are fixed UTC and Hobby fires "anywhere within the scheduled
+ * hour" (+0..59 min), so the evening check has a line per DST regime and a scheduled call (user agent
+ * `vercel-cron`) is accepted by REGIME, not by a Melbourne clock window: the `?dst=aedt` lines run
+ * whenever Melbourne is at UTC+11, the plain lines whenever it is at UTC+10; the other regime's line is
+ * a 200 no-op. A manual call (no such agent) always runs. Exactly-once per night is `alreadyDone`.
+ * Ordering with the 21:50 watchdog (D-801): both open the SAME stable incident kinds through
+ * `notifyIncident` (one open incident per kind), so a heartbeat that fires after 21:50 only finds the
+ * condition already open; neither order loses or doubles an alert.
  */
-export const EVENING_WINDOW = { from: 21 * 60, to: 21 * 60 + 55 } as const; // threshold-ok: PLT-074 clock window
 const CRON_AGENT = /^vercel-cron\//i;
 
-export function melbourneMinuteOfDay(now: Date): number {
+/** Melbourne's UTC offset in minutes at `now` (660 in AEDT, 600 in AEST). */
+export function melbourneOffsetMinutes(now: Date): number {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Australia/Melbourne",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
+    timeZoneName: "shortOffset",
   }).formatToParts(now);
-  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
-  return get("hour") * 60 + get("minute");
+  const name = parts.find((p) => p.type === "timeZoneName")?.value ?? "GMT+10";
+  const m = /^GMT([+-])(\d{1,2})(?::(\d{2}))?$/.exec(name);
+  if (!m) return 600; // threshold-ok: fail to AEST
+  return (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3] ?? 0));
+}
+
+/** True when a scheduled evening call belongs to the regime Melbourne is in now (R2-S1). */
+export function eveningLineInRegime(url: string, now: Date): boolean {
+  let aedtLine = false;
+  try {
+    aedtLine = new URL(url).searchParams.get("dst") === "aedt";
+  } catch {
+    // an unparsable URL is the plain (AEST) line
+  }
+  return melbourneOffsetMinutes(now) === (aedtLine ? 660 : 600); // threshold-ok: UTC offsets
 }
 
 const has = (v: string | undefined): v is string => typeof v === "string" && v.trim() !== "";
@@ -140,11 +156,12 @@ export function createHeartbeatHandler(kind: HeartbeatKind, deps: Deps) {
       if (!isProduction(deps.env)) return json(200, { skipped: "not production" });
 
       const now = deps.now();
-      if (kind === "evening" && CRON_AGENT.test(req.headers.get("user-agent") ?? "")) {
-        const m = melbourneMinuteOfDay(now);
-        if (m < EVENING_WINDOW.from || m >= EVENING_WINDOW.to) {
-          return json(200, { skipped: "outside local window" });
-        }
+      if (
+        kind === "evening" &&
+        CRON_AGENT.test(req.headers.get("user-agent") ?? "") &&
+        !eveningLineInRegime(req.url, now)
+      ) {
+        return json(200, { skipped: "other regime" });
       }
       const date = melbourneDate(now);
       const key = `${job}:${date}`;
