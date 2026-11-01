@@ -209,6 +209,25 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-762 | Decisions on a quarantined code (D-686): confirmRelisting (same company, relist_confirmed) and the new confirmCodeReuse (different company, reuse_confirmed:<... |
 | D-763 | The revive guard: trigger instrument_no_revive aborts delisted_on going from set to NULL unless the old delist_reason is absent_from_listed_companies (the im... |
 | D-764 | Version pinning: the tree is at 25 (0024 belongs to the movers builder and is not in this branch; for the tests here a local no-op 0024 stands in, uncommitted). |
+| D-770 | V1-I1 / V2-I4: System Health gets ONE "Last 7 nights" table (NightsCheck, src/lib/health/routePosts.ts |
+| D-771 | V1-I1 JOBS: added maintenance-nightly (86 400 s; the privacy-relevant retention and hashing run), |
+| D-772 | V1-I2: (a) the YAML watchdog's problems go through notifyIncident with the stable kinds it |
+| D-773 | V2-I4: Owner-only "Worker route posts" section on /health (HealthSummary.routeLines): per slot, |
+| D-774 | V1-I8: the Worker tick runs its runners as concurrent chains (Promise.all): clock, post-deploy, |
+| D-775 | V2-I1: intraday-scan moves to 10:32..15:32 every 30 minutes (11 runs, never on a multiple of 5, so |
+| D-776 | V2-I6: NOT changed. The empty-plan claim row (requests 0) is the only per-tick heartbeat of the poll: |
+| D-777 | V2-I9: cortex_stage_minutes default 20 -> 15 (bounds unchanged; an Owner-stored value stays). |
+| D-778 | V1-I7: the heartbeat and watchdog crons each get a same-day retry (?try=2: morning 00:50 UTC, |
+| D-780 | (V1-I3) One definition of the Actions to Vercel signing scheme: src/lib/security/hmacCore.mjs (+ .d.mts) holds the |
+| D-781 | (V1-I3) The trading-day half of V1-I3 was done in batch B (D-710…); nothing further here. |
+| D-782 | (V1-I9) The test identity needs a POSITIVE staging signal, isStagingEnv (src/lib/security/envKind.ts): either |
+| D-783 | (V1-I10) Auth.js host and cookies are pinned from APP_BASE_URL (src/lib/auth/cookies.ts): the origin is handed to |
+| D-784 | (V1-I6) authDbBigint() (db/client.ts) is a separate cached client with intMode: "bigint", used only by the backup |
+| D-785 | (V1-I11) clientIp (sign-in rate limit and every audit row) prefers x-vercel-forwarded-for, then the RIGHT-most |
+| D-786 | (V1-I12) scripts/ci/bundle-secret-scan.mjs derives FORBIDDEN_NAMES from the secrets registry through the existing |
+| D-787 | (V1-I13) Break-glass recovery fails closed: |
+| D-788 | (V1-I14) tests/audit/ownerWritersAudit.test.ts finds every "admin"-gated server action (per exported function) and |
+| D-789 | Not changed: no PRAXIS_ENV was added to .env.example/the secrets registry (it is a plain variable already in the env |
 | D-790 | (V1-I4) knownBy is mandatory in adjustedBars and effectiveFactors (src/lib/data/adjusted.ts); |
 | D-791 | (V2-I2) picks_max_per_family has bounds 10 to 10 (default 10), so the Owner cannot reinstate the per-family cap that O-76 removed; with picks_per_profile at... |
 | D-792 | (V2-I3) The [VERIFY at build] on QUOTE_CHART_URL is closed: the request pattern is GET .../v8/finance/chart/{CODE}.AX?interval=1m&range=1d, the host family t... |
