@@ -109,7 +109,7 @@ describe("previous session not closed (V1-B1)", () => {
     const rec = (
       await s.db.execute({
         sql: "SELECT status, details_json FROM run_record WHERE concurrency_key = ?",
-        args: [closeBooksKey(MARKET, d[2])],
+        args: [closeBooksKey(MARKET, d[1])],
       })
     ).rows[0];
     expect(String(rec.status)).toBe("skipped");
