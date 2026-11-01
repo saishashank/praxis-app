@@ -1184,6 +1184,32 @@
       }
     },
     {
+      "id": "action:src/app/(app)/strategies/risk/actions.ts#clearCohortInvariantsAction",
+      "type": "action",
+      "name": "clearCohortInvariantsAction",
+      "purpose": "Server action clearCohortInvariantsAction: a form write with a role check and an audit event.",
+      "specIds": [
+        "ARN-001",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "platform"
+      ],
+      "source": "src/app/(app)/strategies/risk/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/strategies/risk/actions.ts"
+      }
+    },
+    {
       "id": "action:src/app/(app)/strategies/risk/actions.ts#setArenaControlAction",
       "type": "action",
       "name": "setArenaControlAction",
@@ -11108,6 +11134,44 @@
       }
     },
     {
+      "id": "table:main.instrument_listing",
+      "type": "table",
+      "name": "instrument_listing",
+      "purpose": "Table instrument_listing in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0025_instrument_listing.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "market",
+          "code",
+          "listed_on",
+          "name",
+          "prior_name",
+          "prior_delisted_on",
+          "decided_by",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_instrument_listing_code"
+        ]
+      }
+    },
+    {
       "id": "table:main.intraday_arm",
       "type": "table",
       "name": "intraday_arm",
@@ -16569,6 +16633,17 @@
       ]
     },
     {
+      "id": "service:app|contains|action:src/app/(app)/strategies/risk/actions.ts#clearCohortInvariantsAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/strategies/risk/actions.ts#clearCohortInvariantsAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "platform"
+      ]
+    },
+    {
       "id": "service:app|contains|action:src/app/(app)/strategies/risk/actions.ts#setArenaControlAction",
       "from": "service:app",
       "to": "action:src/app/(app)/strategies/risk/actions.ts#setArenaControlAction",
@@ -18871,6 +18946,16 @@
       "id": "service:turso-main|contains|table:main.instrument_class",
       "from": "service:turso-main",
       "to": "table:main.instrument_class",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.instrument_listing",
+      "from": "service:turso-main",
+      "to": "table:main.instrument_listing",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
