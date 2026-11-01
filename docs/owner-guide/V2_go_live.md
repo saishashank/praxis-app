@@ -26,8 +26,9 @@ Rules of thumb: do the steps in this order; a step that says "after" needs the e
 
 13. **Tick the warned decisions** [v2_approvals] in the pull request description: D-371, D-443, D-445, D-462, D-481, D-490, D-510, D-527, D-660.
 14. **Unmeasured items** [v2_unmeasured]: `node scripts/data/split-frequency.mjs --db ...` against staging (DAT-232), and the two free alternative universe sources in the licence register (O-53).
+15. **Approve the money figures** [v2_money_constants]: the cost, tick, slippage and parcel figures listed on the go-live page (V1-S2, D-710). Production cannot switch to full mode until each one is approved.
 
 ## Before production
 
-15. **Try the rollback once on staging** [v2_rollback]. Follow `docs/runbooks/rollback-v2.md`: instant rollback first, the schema stays, and what a V1 rebuild needs.
-16. **Green checks on the final commit, then approve production** [v2_production]. The Cortex stays in shadow and the steelman stays off in production until the Cortex import (step 6) and the R6 model (step 11) are done.
+16. **Try the rollback once on staging** [v2_rollback]. Follow `docs/runbooks/rollback-v2.md`: instant rollback first, the schema stays, and what a V1 rebuild needs.
+17. **Green checks on the final commit, then approve production** [v2_production]. The Cortex stays in shadow and the steelman stays off in production until the Cortex import (step 6) and the R6 model (step 11) are done.

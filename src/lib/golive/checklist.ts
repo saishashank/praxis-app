@@ -37,11 +37,6 @@ export const GO_LIVE_ITEMS: readonly GoLiveItem[] = [
     help: "AT-26. A person must do this check. Tests can not.",
   },
   {
-    id: "money_constants",
-    label: "The cost, tick, slippage and parcel figures are approved",
-    help: "V1-S2, ARN-024, ARN-031, ARN-032. Production stays out of full mode until every figure shows approved below.",
-  },
-  {
     id: "backup_codes",
     label: "Your Google backup codes are safe and work",
     help: "BLD-010 row 13a. Keep them offline. Test one before the bot is gone.",
@@ -181,6 +176,13 @@ export const V2_GO_LIVE_STEPS: readonly V2GoLiveStep[] = [
     label: "Measure the split-day frequency and read the universe note",
     help: "node scripts/data/split-frequency.mjs --db ... against staging (DAT-232), and the two free universe sources in the licence register (O-53).",
     after: ["v2_staging_migrations"],
+  },
+  {
+    id: "v2_money_constants",
+    phase: "approvals",
+    label: "Approve the cost, tick, slippage and parcel figures",
+    help: "V1-S2, ARN-024, ARN-031, ARN-032 (D-710). Production stays out of full mode until every figure on the go-live page shows approved.",
+    after: [],
   },
   {
     id: "v2_rollback",
