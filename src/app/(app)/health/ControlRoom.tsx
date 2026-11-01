@@ -407,6 +407,10 @@ export function ControlRoom({
         {h.steelman.text}
       </p>
 
+      <p className="m-0 text-sm text-text-muted" data-testid="experts-health">
+        {h.experts.text}
+      </p>
+
       <Card title="Free-tier limits">
         {model.gauges === null ? (
           <p className="m-0 text-sm text-text-muted">

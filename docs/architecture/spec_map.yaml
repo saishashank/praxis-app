@@ -305,6 +305,10 @@ rules:
     specIds: [PRD-029, AGT-131, AGT-133, SEC-114]
     purpose: "Steelman record {name}: evidence pack, points, night counters, Owner suggestions or reflection. Written only by the steelman stage; no trading or learning module reads it."
     views: [agents, data, llm]
+  - match: "table:main.{expert,expert_red_flag,source_item,claim,claim_revision,claim_expert,claim_item,claim_status,cluster,cluster_state,claim_cluster,screening_run,screening_result,expert_proposal,expert_call,expert_call_outcome}"
+    specIds: [PRD-034, PRD-035, KB-071, KB-073]
+    purpose: "Expert record {name}: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it."
+    views: [learning, data]
   - match: "table:main.pick_market"
     specIds: [PRD-030, ARN-103, ARN-104]
     purpose: "Pick versus market {name}: one immutable row per settled or missed pick, deterministic data."
@@ -629,6 +633,14 @@ elements:
     owner: app
     views: [learning, data]
 
+  "group:experts-stage":
+    type: group
+    name: "Weekly experts stage"
+    purpose: "Screens confirmed technique clusters on the development split, offers survivors to the challenger lifecycle, settles paper calls and mirrors the expert records into the knowledge base. Runs last in the weekly learning run and cannot block it."
+    specIds: [KB-075, KB-077, KB-080, PRD-035]
+    owner: app
+    views: [learning, data]
+
   # ---- hosts: view membership and spec IDs (purpose from the rules unless given) ----
   "host:api.github.com":
     purpose: "GitHub REST API: workflow dispatch and repository reads."
@@ -724,4 +736,9 @@ edges:
   - { from: "group:lane-a", to: "table:main.lesson", kind: data, contract: "Lessons and nudges.", views: [learning] }
   - { from: "group:lane-b", to: "table:main.challenger", kind: data, contract: "Challengers and their lifecycle.", views: [learning] }
   - { from: "group:lane-b", to: "group:cortex-states", kind: data, contract: "Promoted challengers change family state.", views: [learning] }
+  - { from: "group:experts-stage", to: "table:main.screening_run", kind: data, contract: "One screening run per week and market; results are append-only.", views: [learning, data] }
+  - { from: "group:experts-stage", to: "table:main.expert_proposal", kind: data, contract: "Every proposal outcome is a row; a dormant F7 gate is a row.", views: [learning, data] }
+  - { from: "group:experts-stage", to: "table:main.expert_call_outcome", kind: data, contract: "Paper-call outcomes versus the market, once per call.", views: [learning, data] }
+  - { from: "group:experts-stage", to: "group:lane-b", kind: data, contract: "The only path to trading: createChallenger, after which the v1 rules apply unchanged.", views: [learning] }
+  - { from: "group:experts-stage", to: "group:kb-documents", kind: data, contract: "Expert and technique documents under knowledge/common, no red-flag text.", views: [learning, data] }
   - { from: "group:kb-documents", to: "service:data-repo", kind: data, contract: "Archived by the kb-archive workflow.", views: [learning, data] }

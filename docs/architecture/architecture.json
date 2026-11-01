@@ -1644,6 +1644,32 @@
       "attrs": {}
     },
     {
+      "id": "group:experts-stage",
+      "type": "group",
+      "name": "Weekly experts stage",
+      "purpose": "Screens confirmed technique clusters on the development split, offers survivors to the challenger lifecycle, settles paper calls and mirrors the expert records into the knowledge base. Runs last in the weekly learning run and cannot block it.",
+      "specIds": [
+        "KB-075",
+        "KB-077",
+        "KB-080",
+        "PRD-035"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Marked stale in the Cortex state; shadow results are not promoted.",
+      "runbook": null,
+      "views": [
+        "data",
+        "learning"
+      ],
+      "source": null,
+      "attrs": {}
+    },
+    {
       "id": "group:kb-documents",
       "type": "group",
       "name": "Knowledge-base documents",
@@ -8433,9 +8459,12 @@
       "id": "table:main.claim",
       "type": "table",
       "name": "claim",
-      "purpose": "Table claim in the main database.",
+      "purpose": "Expert record claim: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it.",
       "specIds": [
-        "DAT-200"
+        "KB-071",
+        "KB-073",
+        "PRD-034",
+        "PRD-035"
       ],
       "owner": "database",
       "schedule": null,
@@ -8446,7 +8475,8 @@
       "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
       "runbook": null,
       "views": [
-        "data"
+        "data",
+        "learning"
       ],
       "source": "db/migrations/main/0022_experts.sql",
       "attrs": {
@@ -8467,9 +8497,12 @@
       "id": "table:main.claim_cluster",
       "type": "table",
       "name": "claim_cluster",
-      "purpose": "Table claim_cluster in the main database.",
+      "purpose": "Expert record claim_cluster: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it.",
       "specIds": [
-        "DAT-200"
+        "KB-071",
+        "KB-073",
+        "PRD-034",
+        "PRD-035"
       ],
       "owner": "database",
       "schedule": null,
@@ -8480,7 +8513,8 @@
       "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
       "runbook": null,
       "views": [
-        "data"
+        "data",
+        "learning"
       ],
       "source": "db/migrations/main/0022_experts.sql",
       "attrs": {
@@ -8499,9 +8533,12 @@
       "id": "table:main.claim_expert",
       "type": "table",
       "name": "claim_expert",
-      "purpose": "Table claim_expert in the main database.",
+      "purpose": "Expert record claim_expert: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it.",
       "specIds": [
-        "DAT-200"
+        "KB-071",
+        "KB-073",
+        "PRD-034",
+        "PRD-035"
       ],
       "owner": "database",
       "schedule": null,
@@ -8512,7 +8549,8 @@
       "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
       "runbook": null,
       "views": [
-        "data"
+        "data",
+        "learning"
       ],
       "source": "db/migrations/main/0022_experts.sql",
       "attrs": {
@@ -8530,9 +8568,12 @@
       "id": "table:main.claim_item",
       "type": "table",
       "name": "claim_item",
-      "purpose": "Table claim_item in the main database.",
+      "purpose": "Expert record claim_item: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it.",
       "specIds": [
-        "DAT-200"
+        "KB-071",
+        "KB-073",
+        "PRD-034",
+        "PRD-035"
       ],
       "owner": "database",
       "schedule": null,
@@ -8543,7 +8584,8 @@
       "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
       "runbook": null,
       "views": [
-        "data"
+        "data",
+        "learning"
       ],
       "source": "db/migrations/main/0022_experts.sql",
       "attrs": {
@@ -8561,9 +8603,12 @@
       "id": "table:main.claim_revision",
       "type": "table",
       "name": "claim_revision",
-      "purpose": "Table claim_revision in the main database.",
+      "purpose": "Expert record claim_revision: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it.",
       "specIds": [
-        "DAT-200"
+        "KB-071",
+        "KB-073",
+        "PRD-034",
+        "PRD-035"
       ],
       "owner": "database",
       "schedule": null,
@@ -8574,7 +8619,8 @@
       "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
       "runbook": null,
       "views": [
-        "data"
+        "data",
+        "learning"
       ],
       "source": "db/migrations/main/0022_experts.sql",
       "attrs": {
@@ -8596,9 +8642,12 @@
       "id": "table:main.claim_status",
       "type": "table",
       "name": "claim_status",
-      "purpose": "Table claim_status in the main database.",
+      "purpose": "Expert record claim_status: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it.",
       "specIds": [
-        "DAT-200"
+        "KB-071",
+        "KB-073",
+        "PRD-034",
+        "PRD-035"
       ],
       "owner": "database",
       "schedule": null,
@@ -8609,7 +8658,8 @@
       "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
       "runbook": null,
       "views": [
-        "data"
+        "data",
+        "learning"
       ],
       "source": "db/migrations/main/0022_experts.sql",
       "attrs": {
@@ -8629,9 +8679,12 @@
       "id": "table:main.cluster",
       "type": "table",
       "name": "cluster",
-      "purpose": "Table cluster in the main database.",
+      "purpose": "Expert record cluster: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it.",
       "specIds": [
-        "DAT-200"
+        "KB-071",
+        "KB-073",
+        "PRD-034",
+        "PRD-035"
       ],
       "owner": "database",
       "schedule": null,
@@ -8642,7 +8695,8 @@
       "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
       "runbook": null,
       "views": [
-        "data"
+        "data",
+        "learning"
       ],
       "source": "db/migrations/main/0022_experts.sql",
       "attrs": {
@@ -8668,9 +8722,12 @@
       "id": "table:main.cluster_state",
       "type": "table",
       "name": "cluster_state",
-      "purpose": "Table cluster_state in the main database.",
+      "purpose": "Expert record cluster_state: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it.",
       "specIds": [
-        "DAT-200"
+        "KB-071",
+        "KB-073",
+        "PRD-034",
+        "PRD-035"
       ],
       "owner": "database",
       "schedule": null,
@@ -8681,7 +8738,8 @@
       "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
       "runbook": null,
       "views": [
-        "data"
+        "data",
+        "learning"
       ],
       "source": "db/migrations/main/0022_experts.sql",
       "attrs": {
@@ -9837,9 +9895,12 @@
       "id": "table:main.expert",
       "type": "table",
       "name": "expert",
-      "purpose": "Table expert in the main database.",
+      "purpose": "Expert record expert: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it.",
       "specIds": [
-        "DAT-200"
+        "KB-071",
+        "KB-073",
+        "PRD-034",
+        "PRD-035"
       ],
       "owner": "database",
       "schedule": null,
@@ -9850,7 +9911,8 @@
       "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
       "runbook": null,
       "views": [
-        "data"
+        "data",
+        "learning"
       ],
       "source": "db/migrations/main/0022_experts.sql",
       "attrs": {
@@ -9880,9 +9942,12 @@
       "id": "table:main.expert_call",
       "type": "table",
       "name": "expert_call",
-      "purpose": "Table expert_call in the main database.",
+      "purpose": "Expert record expert_call: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it.",
       "specIds": [
-        "DAT-200"
+        "KB-071",
+        "KB-073",
+        "PRD-034",
+        "PRD-035"
       ],
       "owner": "database",
       "schedule": null,
@@ -9893,7 +9958,8 @@
       "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
       "runbook": null,
       "views": [
-        "data"
+        "data",
+        "learning"
       ],
       "source": "db/migrations/main/0022_experts.sql",
       "attrs": {
@@ -9917,9 +9983,12 @@
       "id": "table:main.expert_call_outcome",
       "type": "table",
       "name": "expert_call_outcome",
-      "purpose": "Table expert_call_outcome in the main database.",
+      "purpose": "Expert record expert_call_outcome: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it.",
       "specIds": [
-        "DAT-200"
+        "KB-071",
+        "KB-073",
+        "PRD-034",
+        "PRD-035"
       ],
       "owner": "database",
       "schedule": null,
@@ -9930,7 +9999,8 @@
       "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
       "runbook": null,
       "views": [
-        "data"
+        "data",
+        "learning"
       ],
       "source": "db/migrations/main/0022_experts.sql",
       "attrs": {
@@ -9955,9 +10025,12 @@
       "id": "table:main.expert_proposal",
       "type": "table",
       "name": "expert_proposal",
-      "purpose": "Table expert_proposal in the main database.",
+      "purpose": "Expert record expert_proposal: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it.",
       "specIds": [
-        "DAT-200"
+        "KB-071",
+        "KB-073",
+        "PRD-034",
+        "PRD-035"
       ],
       "owner": "database",
       "schedule": null,
@@ -9968,7 +10041,8 @@
       "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
       "runbook": null,
       "views": [
-        "data"
+        "data",
+        "learning"
       ],
       "source": "db/migrations/main/0022_experts.sql",
       "attrs": {
@@ -9992,9 +10066,12 @@
       "id": "table:main.expert_red_flag",
       "type": "table",
       "name": "expert_red_flag",
-      "purpose": "Table expert_red_flag in the main database.",
+      "purpose": "Expert record expert_red_flag: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it.",
       "specIds": [
-        "DAT-200"
+        "KB-071",
+        "KB-073",
+        "PRD-034",
+        "PRD-035"
       ],
       "owner": "database",
       "schedule": null,
@@ -10005,7 +10082,8 @@
       "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
       "runbook": null,
       "views": [
-        "data"
+        "data",
+        "learning"
       ],
       "source": "db/migrations/main/0022_experts.sql",
       "attrs": {
@@ -12434,9 +12512,12 @@
       "id": "table:main.screening_result",
       "type": "table",
       "name": "screening_result",
-      "purpose": "Table screening_result in the main database.",
+      "purpose": "Expert record screening_result: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it.",
       "specIds": [
-        "DAT-200"
+        "KB-071",
+        "KB-073",
+        "PRD-034",
+        "PRD-035"
       ],
       "owner": "database",
       "schedule": null,
@@ -12447,7 +12528,8 @@
       "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
       "runbook": null,
       "views": [
-        "data"
+        "data",
+        "learning"
       ],
       "source": "db/migrations/main/0022_experts.sql",
       "attrs": {
@@ -12477,9 +12559,12 @@
       "id": "table:main.screening_run",
       "type": "table",
       "name": "screening_run",
-      "purpose": "Table screening_run in the main database.",
+      "purpose": "Expert record screening_run: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it.",
       "specIds": [
-        "DAT-200"
+        "KB-071",
+        "KB-073",
+        "PRD-034",
+        "PRD-035"
       ],
       "owner": "database",
       "schedule": null,
@@ -12490,7 +12575,8 @@
       "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
       "runbook": null,
       "views": [
-        "data"
+        "data",
+        "learning"
       ],
       "source": "db/migrations/main/0022_experts.sql",
       "attrs": {
@@ -12759,9 +12845,12 @@
       "id": "table:main.source_item",
       "type": "table",
       "name": "source_item",
-      "purpose": "Table source_item in the main database.",
+      "purpose": "Expert record source_item: experts, their sourced claims, technique clusters, screening runs, proposals and paper calls. Hypothesis material only; written by the owner-run import, the claim queue and the weekly experts stage; no trading module reads it.",
       "specIds": [
-        "DAT-200"
+        "KB-071",
+        "KB-073",
+        "PRD-034",
+        "PRD-035"
       ],
       "owner": "database",
       "schedule": null,
@@ -12772,7 +12861,8 @@
       "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
       "runbook": null,
       "views": [
-        "data"
+        "data",
+        "learning"
       ],
       "source": "db/migrations/main/0022_experts.sql",
       "attrs": {
@@ -14562,6 +14652,60 @@
       "contract": "Decisions (shadow, blocked, live) are appended.",
       "views": [
         "cortex"
+      ]
+    },
+    {
+      "id": "group:experts-stage|data|group:kb-documents",
+      "from": "group:experts-stage",
+      "to": "group:kb-documents",
+      "kind": "data",
+      "contract": "Expert and technique documents under knowledge/common, no red-flag text.",
+      "views": [
+        "data",
+        "learning"
+      ]
+    },
+    {
+      "id": "group:experts-stage|data|group:lane-b",
+      "from": "group:experts-stage",
+      "to": "group:lane-b",
+      "kind": "data",
+      "contract": "The only path to trading: createChallenger, after which the v1 rules apply unchanged.",
+      "views": [
+        "learning"
+      ]
+    },
+    {
+      "id": "group:experts-stage|data|table:main.expert_call_outcome",
+      "from": "group:experts-stage",
+      "to": "table:main.expert_call_outcome",
+      "kind": "data",
+      "contract": "Paper-call outcomes versus the market, once per call.",
+      "views": [
+        "data",
+        "learning"
+      ]
+    },
+    {
+      "id": "group:experts-stage|data|table:main.expert_proposal",
+      "from": "group:experts-stage",
+      "to": "table:main.expert_proposal",
+      "kind": "data",
+      "contract": "Every proposal outcome is a row; a dormant F7 gate is a row.",
+      "views": [
+        "data",
+        "learning"
+      ]
+    },
+    {
+      "id": "group:experts-stage|data|table:main.screening_run",
+      "from": "group:experts-stage",
+      "to": "table:main.screening_run",
+      "kind": "data",
+      "contract": "One screening run per week and market; results are append-only.",
+      "views": [
+        "data",
+        "learning"
       ]
     },
     {
@@ -17468,7 +17612,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "data",
+        "learning"
       ]
     },
     {
@@ -17478,7 +17623,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "data",
+        "learning"
       ]
     },
     {
@@ -17488,7 +17634,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "data",
+        "learning"
       ]
     },
     {
@@ -17498,7 +17645,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "data",
+        "learning"
       ]
     },
     {
@@ -17508,7 +17656,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "data",
+        "learning"
       ]
     },
     {
@@ -17518,7 +17667,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "data",
+        "learning"
       ]
     },
     {
@@ -17528,7 +17678,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "data",
+        "learning"
       ]
     },
     {
@@ -17538,7 +17689,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "data",
+        "learning"
       ]
     },
     {
@@ -17853,7 +18005,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "data",
+        "learning"
       ]
     },
     {
@@ -17863,7 +18016,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "data",
+        "learning"
       ]
     },
     {
@@ -17873,7 +18027,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "data",
+        "learning"
       ]
     },
     {
@@ -17883,7 +18038,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "data",
+        "learning"
       ]
     },
     {
@@ -17893,7 +18049,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "data",
+        "learning"
       ]
     },
     {
@@ -18559,7 +18716,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "data",
+        "learning"
       ]
     },
     {
@@ -18569,7 +18727,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "data",
+        "learning"
       ]
     },
     {
@@ -18644,7 +18803,8 @@
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
-        "data"
+        "data",
+        "learning"
       ]
     },
     {

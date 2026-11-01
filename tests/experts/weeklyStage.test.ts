@@ -7,6 +7,7 @@ import type { WeeklyContext } from "@/lib/learning/weeklyStages";
 import { cleanupTempDbs } from "../db/helpers";
 import { addCluster, screenWorld } from "./zzScreen";
 import { cid, rows } from "./zzProposals";
+import { importZzSeed } from "./zzWorld";
 
 afterAll(cleanupTempDbs);
 
@@ -33,6 +34,8 @@ describe("expertsStage", () => {
     expect(Object.keys(SKIP_REASONS)).toHaveLength(7);
     expect(v.proposals).toEqual({});
     expect(v.f7).toMatchObject({ fires: false, l2_clusters: 0, recorded: false });
+    expect(v.settle).toEqual({ tracked: 0, settled: 0, skipped: 0 });
+    expect(v.docs).toEqual({ written: 0, unchanged: 0 });
     expect(await rows(w.db, "SELECT run_id FROM screening_run")).toHaveLength(0);
     expect(await rows(w.db, "SELECT id FROM expert_proposal")).toHaveLength(0);
   });
@@ -63,7 +66,45 @@ describe("expertsStage", () => {
     const w = await screenWorld();
     const broken = { ...w.ctx, db: { execute: () => Promise.reject(new Error("down")) } };
     const out = await expertsStage(asWeekly(broken));
-    expect(valueOf(out).degraded).toEqual(["degraded:parked", "degraded:screen", "degraded:f7"]);
+    expect(valueOf(out).degraded).toEqual([
+      "degraded:parked",
+      "degraded:screen",
+      "degraded:f7",
+      "degraded:settle",
+      "degraded:docs",
+    ]);
+  });
+});
+
+describe("expertsStage: call settlement and KB documents (D-624)", () => {
+  it("writes the documents once and reports them; a rerun writes nothing", async () => {
+    const w = await screenWorld();
+    await importZzSeed(w.db);
+    const first = valueOf(await expertsStage(asWeekly(w.ctx)));
+    expect(first.docs).toEqual({ written: 12, unchanged: 0 });
+    expect(first.settle).toEqual({ tracked: 1, settled: 0, skipped: 0 }); // the ZZ call is dated after the run
+    expect(first.degraded).toEqual([]);
+    const again = valueOf(await expertsStage(asWeekly(w.ctx)));
+    expect(again.docs).toEqual({ written: 0, unchanged: 12 });
+    expect(again.settle).toEqual({ tracked: 1, settled: 0, skipped: 0 });
+    expect(
+      await rows(w.db, "SELECT path FROM document WHERE path LIKE 'knowledge/common/%'"),
+    ).toHaveLength(12);
+  });
+
+  it("a failing settlement degrades only itself: the documents are still written", async () => {
+    const w = await screenWorld();
+    await importZzSeed(w.db);
+    const world = {
+      get sessions(): string[] {
+        throw new Error("no calendar");
+      },
+    };
+    const out = await expertsStage(asWeekly({ ...w.ctx, world }));
+    const v = valueOf(out);
+    expect(v.degraded).toEqual(["degraded:settle"]);
+    expect(v.settle).toBeNull();
+    expect(v.docs).toEqual({ written: 12, unchanged: 0 });
   });
 });
 

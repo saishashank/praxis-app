@@ -5,6 +5,7 @@
 import type { Client } from "@libsql/client";
 import { CONFIG_KEYS, type ConfigKey } from "@/lib/config/keys";
 import { FAMILY_ORDER } from "@/lib/agents/families/constants";
+import { buildExpertDocuments } from "@/lib/experts/kbDocs";
 import { PLAYBOOK_AGENTS } from "@/lib/learning/schema";
 import {
   contentSha,
@@ -622,11 +623,15 @@ export async function buildMarketDocuments(db: Client, market: string): Promise<
   return docs.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
-/** All documents (every market plus the common source register), sorted by path. */
+/**
+ * All documents (every market plus the common source register and the expert mirror, D-523), sorted by
+ * path.
+ */
 export async function buildAllDocuments(db: Client): Promise<RenderedDoc[]> {
   const docs: RenderedDoc[] = [];
   for (const m of await kbMarkets(db)) docs.push(...(await buildMarketDocuments(db, m)));
   docs.push(...(await buildSourceRegister(db)));
+  docs.push(...(await buildExpertDocuments(db)));
   return docs.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
