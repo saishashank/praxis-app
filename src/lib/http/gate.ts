@@ -43,6 +43,8 @@ const MACHINE_ROUTES = new Set([
   "/api/internal/incident",
   "/api/internal/maintenance",
   "/api/internal/backup-export",
+  "/api/internal/intraday-scan",
+  "/api/internal/pick-alerts",
   "/api/cron/watchdog",
   "/api/cron/heartbeat-morning",
   "/api/cron/heartbeat-evening",

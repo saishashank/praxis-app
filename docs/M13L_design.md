@@ -245,3 +245,41 @@ _Fable, 2026-11-01 (Melbourne time), worktree `v2/m13l-wp8` from `build` at 6fc2
 ## Build-order note after M13-lite
 
 - **D-660** M12 (Committee trial) is not built in this V2 build. BLD-041 lets M12 start only after the M11 steelman has run ≥ 10 production nights with citation validity ≥ 98 %, and BLD-046 puts M12 last "only if budget remains". The steelman has 0 production nights (no live R6 model, D-480; V2 not yet in production), so the gate cannot be met on `build`. M13-lite is therefore the last V2 milestone of this build; M12 is listed in the V2 PR as deferred by BLD-041, to start once the steelman has its 10 qualifying nights.
+
+## Architecture review fixes
+
+V1-B1 (a lost nightly close), V1-S13 and V2-B1 (two machine routes missing from the proxy list).
+
+- **D-661** `closeBooksDay` refuses session D when the previous trading session (`previousTradingDay`,
+  the one canonical helper in `src/lib/data/calendar.ts`) has no closed `arena-2a:<market>:<prev>`
+  record. Closed = `success`, `degraded`, `failed` with the completion details (`navDays`; invariant
+  freezes write the day), or `skipped` for any reason except `no_completion_marker`. The check sits
+  after the preconditions (mode, calendar, marker) and before `startRun`.
+- **D-662** First night: the guard passes when the market has no earlier `success`/`degraded` 2a record
+  (go-live, fresh start, replay start). Holidays and early closes need nothing special: only trading
+  days are compared. Replay and golden outputs are unchanged.
+- **D-663** Refusal = a `failed` run record (`previous_session_not_closed`, details `{reason, priorD}`),
+  never `skipped` (a skip would read as closed the next night), plus one open S2 ("P1") incident of kind
+  `arena_close_gap` through `openS2Once` (one per kind; emailed when the job env has the Resend variables,
+  `cli.ts` passes `notify: { env }`). The CLI already catches up in order (`--max-sessions`); the guard is
+  the safety net for a direct or dated run, a truncated catch-up and an unclosed middle night. Repeats are
+  idempotent; recovery = run the missed date, then the refused ones.
+- **D-664** No mirror rule in batch 2b: 2b(D) already needs 2a(D) success, which now needs 2a(D-1), so the
+  money path is covered transitively; a missed 2b only loses a night of decisions, and refusing on it
+  would turn one LLM hiccup into a trading halt. Reviewer to confirm.
+- **D-665** Recovery in the Worker, not a `schedule:` fallback: `arena-close.yml` and its production job are
+  locked (`scripts/ci/fixtures/prod-jobs`, workflow-lint allow-list), and a schedule would bypass the Owner's
+  slot list. `Slot.recheck` (arena-close only: key `arena-2a:AU:`, after 30 min, until 150 min after the slot)
+  re-dispatches a `dispatched` slot whose key is not closed or running; one extra read in the existing first
+  request; bounded by `MAX_ATTEMPTS`; a first dispatch is still limited to the catch-up window; the
+  script's own `hasSuccess` makes a duplicate a no-op. A `running` record older than 45 min is a lost runner.
+- **D-666** Known gap, out of scope: if 2a is recovered after the 18:10 2b slot, that night's 2b stays
+  skipped (`no_2a_success`); no wrong fills, a night without decisions.
+- **D-667** V1-S13 / V2-B1: `/api/internal/intraday-scan` and `/api/internal/pick-alerts` added to
+  `MACHINE_ROUTES`. `tests/http/gate.test.ts` walks `src/app/api` and asserts every `internal/**` and
+  `cron/**` route passes the gate without a session, every internal route imports signing code, and no
+  other route is public.
+- **D-668** A failing recurring route slot (no state row) now writes one `worker-route` run record per slot
+  and local day (`route-failed:<slot>:<date>:recurring`, guarded insert), readable by System Health.
+- **D-669** Owner runbook line: a missed `arena-2a` night is replayed by dispatching the workflow
+  (or `close-books.mjs --date`) for the missed date before the next session's close.

@@ -4,6 +4,8 @@ import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
 import type { Claims } from "@/lib/auth/claims";
 import { gate, isPublicPath, type GateDeps } from "@/lib/http/gate";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
 import { freshDb } from "../db/helpers";
 
 const BASE = "https://app.example.test";
@@ -117,6 +119,8 @@ describe("authentication (PLT-031)", () => {
     "/api/internal/incident",
     "/api/internal/maintenance",
     "/api/internal/backup-export",
+    "/api/internal/intraday-scan",
+    "/api/internal/pick-alerts",
     "/api/cron/watchdog",
     "/api/cron/heartbeat-morning",
     "/api/cron/heartbeat-evening",
@@ -347,5 +351,50 @@ describe("rate limits (SEC-014)", () => {
       },
     });
     expect((await gate(req("/"), d)).status).toBe(503);
+  });
+});
+
+// V1-S13 / V2-B1: the machine-route list is tied to the filesystem. Every internal or cron route
+// handler must be public to the proxy (it authenticates itself), and no other /api route may be.
+describe("MACHINE_ROUTES covers the filesystem", () => {
+  const apiRoot = path.join(process.cwd(), "src/app/api");
+  const routes = (dir: string): string[] =>
+    readdirSync(dir).flatMap((f) => {
+      const full = path.join(dir, f);
+      if (statSync(full).isDirectory()) return routes(full);
+      return f === "route.ts" ? [full] : [];
+    });
+  const urlOf = (file: string) =>
+    "/api/" + path.relative(apiRoot, path.dirname(file)).split(path.sep).join("/");
+  const all = routes(apiRoot);
+
+  it("every src/app/api/internal and src/app/api/cron route passes the gate without a session", async () => {
+    const machine = all.filter(
+      (f) => urlOf(f).startsWith("/api/internal/") || urlOf(f).startsWith("/api/cron/"),
+    );
+    expect(machine.length).toBeGreaterThanOrEqual(15);
+    for (const f of machine) {
+      const readClaims = vi.fn(async () => null);
+      const res = await gate(req(urlOf(f)), await mk({ readClaims }));
+      expect(res.status, urlOf(f)).toBe(200);
+      expect(readClaims, urlOf(f)).not.toHaveBeenCalled();
+    }
+  });
+
+  it("every internal route imports a signed (HMAC) handler; no other route is public to the gate", async () => {
+    for (const f of all.filter((x) => urlOf(x).startsWith("/api/internal/"))) {
+      expect(readFileSync(f, "utf8"), urlOf(f)).toMatch(/sign|hmac|Signed|verify/i);
+    }
+    for (const f of all.filter(
+      (x) =>
+        !["/api/internal/", "/api/cron/", "/api/auth/", "/api/test-identity/"].some((p) =>
+          urlOf(x).startsWith(p),
+        ),
+    )) {
+      if (urlOf(f) === "/api/health") continue;
+      const readClaims = vi.fn(async () => null);
+      const res = await gate(req(urlOf(f)), await mk({ readClaims }));
+      expect(res.status, urlOf(f)).not.toBe(200);
+    }
   });
 });

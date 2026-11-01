@@ -329,7 +329,7 @@ describe("runRoutes", () => {
     expect(net.pipelines).toBe(0);
   });
 
-  it("a failing recurring slot logs and is retried by the next tick; no state, no run record", async () => {
+  it("a failing recurring slot logs, is retried by the next tick, keeps no state and records ONE failure per slot and day (V2-B1)", async () => {
     dispatchOn();
     app.status = 503;
     const s = await runRoutes(ENV, at(MON, "20:00"), deps(at(MON, "20:00")), on);
@@ -338,7 +338,20 @@ describe("runRoutes", () => {
     app.status = 200;
     const s2 = await runRoutes(ENV, at(MON, "20:05"), deps(at(MON, "20:05")), on);
     expect(s2.posted).toEqual(["evening-review"]);
-    expect(rows(db, "SELECT 1 FROM run_record WHERE job = 'worker-route'")).toEqual([]);
+    const rec = rows(
+      db,
+      "SELECT concurrency_key, status, error_summary FROM run_record WHERE job = 'worker-route'",
+    );
+    expect(rec).toHaveLength(1);
+    expect(rec[0]).toMatchObject({
+      concurrency_key: `route-failed:evening-review:${MON}:recurring`,
+      status: "failed",
+    });
+    expect(String(rec[0]!.error_summary)).toContain("evening-review");
+    // a second failing tick the same day adds no second row
+    app.status = 503;
+    await runRoutes(ENV, at(MON, "20:10"), deps(at(MON, "20:10")), on);
+    expect(rows(db, "SELECT 1 FROM run_record WHERE job = 'worker-route'")).toHaveLength(1);
   });
 
   it("a network error is contained", async () => {

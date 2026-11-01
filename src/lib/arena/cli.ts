@@ -163,6 +163,7 @@ export async function closeBooksMain(
         calendar,
         now: () => new Date(nowMs()).toISOString(),
         commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
+        notify: { env },
       });
       out(summary(result));
       lines.push(`status=${result.status}`);

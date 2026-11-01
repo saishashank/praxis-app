@@ -59,6 +59,13 @@ export type Slot = {
   requiredInputs?: readonly string[];
   /** Runner "actions": constant workflow inputs sent with every dispatch (watchdog `slot`). */
   fixedInputs?: Record<string, string>;
+  /**
+   * Runner "actions": verify the night's outcome (V1-B1, D-662). A 204 from GitHub only means the
+   * workflow was accepted. From `afterMin` after the dispatch until `untilMin` after the slot time,
+   * a slot whose run record `<keyPrefix><local date>` is neither closed nor running is dispatched
+   * again (bounded by MAX_ATTEMPTS; the script's own success check makes a duplicate a no-op).
+   */
+  recheck?: { keyPrefix: string; afterMin: number; untilMin: number };
   note: string;
 };
 
@@ -270,6 +277,7 @@ export const AU_SLOTS: readonly Slot[] = [
     marketBound: true,
     priority: 15,
     catchUpMin: 20,
+    recheck: { keyPrefix: "arena-2a:AU:", afterMin: 30, untilMin: 150 },
     enabled: true,
     requiresListing: true,
     note: "Batch 2a close the books (T10, ARN-060): fills, stops, settlement, NAV, invariants; OFF until the Owner enables the arena",
