@@ -211,9 +211,14 @@ describe("runClock: re-dispatch against a real database", () => {
     expect(arenaCalls()).toHaveLength(1);
   });
   it("a failed record (the workflow ran and failed): dispatch again", async () => {
-    record("failed");
+    record("failed", '{"code":"SqliteError","cohorts":0}');
     await tick(at("18:20"));
     expect(arenaCalls()).toHaveLength(1);
+  });
+  it("an invariant freeze (failed with navDays) completed the night: no dispatch (D-675)", async () => {
+    record("failed", '{"cohorts":2,"failed":1,"frozen":0,"terminal":0,"fills":3,"navDays":2}');
+    await tick(at("18:20"));
+    expect(arenaCalls()).toHaveLength(0);
   });
   it("at most MAX_ATTEMPTS dispatches in all", async () => {
     for (const hm of ["18:20", "18:51", "19:22", "19:53", "20:15"]) await tick(at(hm));

@@ -122,6 +122,15 @@ export type Skipped = { id: string; reason: SkipReason };
 
 export const slotKey = (id: string, date: string): string => `slot:${id}:${date}`;
 export const RECHECK_RUNNING_MAX_MS = 45 * MINUTE_MS; // a `running` record older than this is a lost runner
+/**
+ * "The record closed its session" (D-675): the same predicate as `CLOSED_2A_SQL` in
+ * `src/lib/arena/closeBooks.ts`. An invariant freeze (`failed` with `navDays`) completed the night
+ * and is not dispatched again; a `failed` without it (crash, provider error) is retried.
+ */
+export const RECHECK_CLOSED_SQL =
+  "(status IN ('success', 'degraded') " +
+  "OR (status = 'failed' AND json_extract(details_json, '$.navDays') IS NOT NULL) " +
+  "OR (status = 'skipped' AND json_extract(details_json, '$.reason') IS NOT 'no_completion_marker'))";
 const rollupKey = (date: string): string => `${CLOCK_JOB}:${MARKET}:${date}`;
 
 // ---- pure decision ---------------------------------------------------------------------------
@@ -447,8 +456,7 @@ export async function runClock(
       first.push({
         sql:
           `SELECT DISTINCT concurrency_key FROM run_record WHERE concurrency_key IN (${placeholders(recheckKeys.length)}) ` +
-          "AND (status IN ('success', 'degraded') OR (status = 'running' AND started_at > ?) " +
-          "OR (status = 'skipped' AND COALESCE(details_json, '') NOT LIKE '%no_completion_marker%'))",
+          `AND (${RECHECK_CLOSED_SQL} OR (status = 'running' AND started_at > ?))`,
         args: [...recheckKeys, iso(nowMs - RECHECK_RUNNING_MAX_MS)],
       });
     }

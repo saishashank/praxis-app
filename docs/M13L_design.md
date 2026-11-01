@@ -281,5 +281,44 @@ V1-B1 (a lost nightly close), V1-S13 and V2-B1 (two machine routes missing from 
   other route is public.
 - **D-668** A failing recurring route slot (no state row) now writes one `worker-route` run record per slot
   and local day (`route-failed:<slot>:<date>:recurring`, guarded insert), readable by System Health.
-- **D-669** Owner runbook line: a missed `arena-2a` night is replayed by dispatching the workflow
-  (or `close-books.mjs --date`) for the missed date before the next session's close.
+- **D-669** Owner runbook line: a missed `arena-2a` night is replayed by dispatching the workflow again
+  (no date input: the CLI closes the missed sessions in order) or by `close-books.mjs --date <missed>`,
+  before the next session's close (wording per D-678).
+
+### Review of the fix (Fable, 2026-11-01)
+
+Verdict: merge after the fixes below (applied in this branch). Replay/golden suites, `tests/arena`,
+`tests/golive`, `tests/http`, `tests/security`, `tests/health` and the Worker suite are green.
+
+- **D-675** The guard's "closed" predicate is one exported SQL fragment (`CLOSED_2A_SQL`,
+  `json_extract` on `$.navDays` / `$.reason` instead of `LIKE` on the JSON text) and the first-night
+  exemption uses the **same** predicate: with only `success`/`degraded` it exempted a market whose
+  only earlier nights ended in an invariant freeze (`failed` + navDays), i.e. a lost night right after a
+  freeze was not caught. The Worker's re-dispatch read (`RECHECK_CLOSED_SQL`) mirrors it, so a frozen
+  night (completed, cohort frozen) is no longer dispatched up to two more times; a `failed` without
+  `navDays` (crash, provider error) still is. Tests added in `tests/arena/closeGap.test.ts` and
+  `worker/test/recheck.test.ts`.
+- **D-676** D-664 confirmed: no mirror guard on 2b. D-666 accepted as a residual: a 2a recovered after
+  18:10 leaves that night's 2b `skipped (no_2a_success)`; the cost is one night of delayed decisions
+  (entries and signal exits), never a wrong fill; stops still run in 2a. A 2b re-dispatch keyed on
+  "2a now closed" is listed in the PR as a should-fix.
+- **D-677** Double-dispatch analysis: `arena-close.yml` runs under `concurrency: group: arena-close,
+  cancel-in-progress: false` with `timeout-minutes: 40`, and the CLI waits up to 20 min for the Batch 1
+  marker before any run record exists. A re-dispatch at +30 min therefore queues behind a run still in
+  progress and ends `already_done` (or re-runs an unclosed night, which is the point); a `running` record
+  older than 45 min can only be a lost runner (the job is killed at 40). Go-live listing
+  (`requiresListing`, `listSkip`) and the market/trading-day checks run before the recheck, unchanged.
+  Side effect accepted: a `failed` dispatch (GitHub ≠ 204) of arena-close is now retried until 20:20
+  instead of 18:10 (the slot's candidate window is the recheck window); bounded by `MAX_ATTEMPTS`.
+- **D-678** Recovery wording: `arena-close.yml` has no `date` input; the incident fix text and D-669 now
+  say "dispatch Arena close again (the CLI closes the missed sessions in order, `lastClosed` + 1 to
+  today, up to `--max-sessions`) or run `close-books.mjs --date`". Note the CLI's own catch-up already
+  repairs a plain lost night on the next run; the guard is the net for a dated/direct run, a cut-off
+  catch-up (> 10 sessions) and a restore that lost run records.
+- **D-679** Health: the refusal is a `failed` `arena-close` run record, so the Arena close job line on
+  System Health reads FAILED with the error summary, and the open `arena_close_gap` S2 incident is listed
+  under "Open S2 incidents" (emailed when the job env has Resend). The `worker-route` failure records
+  (D-668) are written but have no health line: the job writes no success records, so a job line would
+  stay FAILED for ever; the "no successful poll today" line from `quote_run` is V2-S3 (should-fix, PR
+  list). Residual: a restore that drops `run_record` but keeps the arena tables makes the next night a
+  "first night" (exempt); a full-database restore keeps both consistent.

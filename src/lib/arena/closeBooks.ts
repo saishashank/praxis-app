@@ -1377,21 +1377,28 @@ export async function previousSessionClosed(
     return { ok: true };
   }
   const prior = await db.execute({
-    sql: `SELECT 1 FROM run_record WHERE concurrency_key = ?
-          AND (status IN ('success', 'degraded')
-               OR (status = 'failed' AND COALESCE(details_json, '') LIKE '%"navDays"%')
-               OR (status = 'skipped' AND COALESCE(details_json, '') NOT LIKE '%no_completion_marker%'))
-          LIMIT 1`,
+    sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND ${CLOSED_2A_SQL} LIMIT 1`,
     args: [closeBooksKey(market, priorD)],
   });
   if (prior.rows.length > 0) return { ok: true };
+  // D-675: the exemption uses the same "closed" predicate as the check, so a market whose only
+  // earlier nights ended in an invariant freeze (`failed` + navDays) is not a first night.
   const earlier = await db.execute({
-    sql: `SELECT 1 FROM run_record WHERE job = ? AND market = ? AND status IN ('success', 'degraded')
-          AND scheduled_for < ? LIMIT 1`,
+    sql: `SELECT 1 FROM run_record WHERE job = ? AND market = ? AND scheduled_for < ?
+          AND ${CLOSED_2A_SQL} LIMIT 1`,
     args: [ARENA_JOB, market, d],
   });
   return earlier.rows.length === 0 ? { ok: true } : { ok: false, priorD };
 }
+
+/**
+ * SQL predicate "this arena-2a run record closed its session" (D-661, D-675). The Worker's
+ * re-dispatch check (`worker/src/clock.ts`, `RECHECK_CLOSED_SQL`) mirrors it, plus `running`.
+ */
+export const CLOSED_2A_SQL =
+  "(status IN ('success', 'degraded') " +
+  "OR (status = 'failed' AND json_extract(details_json, '$.navDays') IS NOT NULL) " +
+  "OR (status = 'skipped' AND json_extract(details_json, '$.reason') IS NOT 'no_completion_marker'))";
 
 /** Refuse session d: a `failed` record (never `skipped`, which the next night would read as closed) + a P1 incident. */
 async function refuseGap(

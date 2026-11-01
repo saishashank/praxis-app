@@ -81,6 +81,20 @@ describe("previous session not closed (V1-B1)", () => {
     expect(r.status).toBe("success");
   });
 
+  it("a market whose only earlier night ended in an invariant freeze is not a first night (D-675)", async () => {
+    const s = await setupReplay(BASE);
+    const d = s.ds.dates;
+    expect((await closeDay(s.db, d[0])).status).toBe("success");
+    await s.db.execute({
+      sql: "UPDATE run_record SET status = 'failed', error_summary = 'invariants failed for 1 cohort(s)' WHERE concurrency_key = ?",
+      args: [closeBooksKey(MARKET, d[0])],
+    });
+    const r = await closeDay(s.db, d[2]); // d[1] was lost; d[0] is closed (frozen), so no exemption
+    expect(r).toMatchObject({ status: "failed", reason: "previous_session_not_closed" });
+    expect((await closeDay(s.db, d[1])).status).toBe("success"); // a frozen prior night counts as closed
+    expect((await closeDay(s.db, d[2])).status).toBe("success");
+  });
+
   it("a holiday in between is not a gap: the previous TRADING day is checked", async () => {
     const s = await setupReplay(BASE);
     const d = s.ds.dates;
