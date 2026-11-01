@@ -7,20 +7,12 @@ import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { cn } from "@/components/ui/cn";
-import { activeTab, type TabId } from "@/lib/ui/nav";
+import { activeTabOf } from "@/lib/ui/activeTab";
+import type { TabId } from "@/lib/ui/nav";
 import { CheckIcon } from "@/components/ui/icons";
-import { HomeIcon, MarketIcon, NewsIcon, PicksIcon, ReviewsIcon, StrategiesIcon } from "./icons";
 
-export type TabView = { id: TabId; label: string; href: string; badge?: number };
-
-const ICONS: Record<TabId, ReactNode> = {
-  home: <HomeIcon />,
-  picks: <PicksIcon />,
-  market: <MarketIcon />,
-  strategies: <StrategiesIcon />,
-  news: <NewsIcon />,
-  reviews: <ReviewsIcon />,
-};
+/** `icon` is rendered by the server (AppHeader), so the six icon components stay out of the client JS. */
+export type TabView = { id: TabId; label: string; href: string; badge?: number; icon: ReactNode };
 
 function badgeOf(t: TabView): number | null {
   return t.badge && t.badge > 0 ? t.badge : null;
@@ -60,7 +52,7 @@ export function TabPending() {
 }
 
 export function TabBar({ tabs }: { tabs: TabView[] }) {
-  const current = activeTab(usePathname() ?? "/");
+  const current = activeTabOf(usePathname() ?? "/");
   return (
     <>
       <nav aria-label="Main" className="hidden min-w-0 lg:block">
@@ -77,7 +69,7 @@ export function TabBar({ tabs }: { tabs: TabView[] }) {
                     : "text-text-muted hover:bg-surface-2 hover:text-text",
                 )}
               >
-                {ICONS[t.id]}
+                {t.icon}
                 {t.label}
                 {t.id === current ? (
                   <>
@@ -107,7 +99,7 @@ export function TabBar({ tabs }: { tabs: TabView[] }) {
                   t.id === current ? "bg-surface-2 font-semibold text-accent" : "text-text-muted",
                 )}
               >
-                {ICONS[t.id]}
+                {t.icon}
                 {t.id === current ? (
                   <CheckIcon aria-hidden="true" className="absolute top-1 right-1 h-3 w-3" />
                 ) : null}

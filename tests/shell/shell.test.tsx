@@ -330,10 +330,10 @@ describe("breadcrumb, banners, footer", () => {
     shell();
     expect(screen.queryByRole("navigation", { name: "Breadcrumb" })).toBeNull();
   });
-  it("a detail page gets a breadcrumb with the current page and a back link", () => {
+  it("a detail page gets a breadcrumb with the current page and a back link", async () => {
     pathname.value = "/strategies/leaderboard";
     shell();
-    const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
+    const crumbs = await screen.findByRole("navigation", { name: "Breadcrumb" });
     expect(within(crumbs).getByRole("link", { name: "Strategies" })).toHaveAttribute(
       "href",
       "/strategies",
@@ -341,9 +341,10 @@ describe("breadcrumb, banners, footer", () => {
     expect(within(crumbs).getByText("Leaderboard")).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: /Back/ })).toHaveAttribute("href", "/strategies");
   });
-  it("does not echo a code from the URL", () => {
+  it("does not echo a code from the URL", async () => {
     pathname.value = "/market/BHP";
     shell();
+    await screen.findByRole("navigation", { name: "Breadcrumb" });
     expect(document.body.textContent).not.toContain("BHP");
   });
   it("renders no mode banner on any page; the Home status strip carries the data-only line (UXR-006)", () => {
