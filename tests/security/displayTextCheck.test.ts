@@ -16,7 +16,7 @@ describe("fails", () => {
     ["See https://evil.test/login now", "url"],
     ["Go to www.bhp-update.com", "url"],
     ["Update at hxxp-free.net/path", "domain"],
-    ["Contact support@praxis-help.example", "email"],
+    ["Contact support@praxis-help.test", "email"],
     ["write to ceo @ firm.com.au", "email"],
     ["javascript:alert(1)", "url"],
     ["Please sign in to continue", "phrase"],
