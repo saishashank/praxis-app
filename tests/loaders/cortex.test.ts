@@ -126,4 +126,23 @@ describe("seeded world", () => {
       expect(p.data.controls.canEdit).toBe(false);
     }
   });
+
+  it("shows Editor and Viewer ISO weeks, never an exact date (UX-009)", async () => {
+    const w = await seeded();
+    for (const who of ["editor", "viewer"] as const) {
+      const p = await loadCortex(deps(w, who));
+      const shown = JSON.stringify([
+        p.text,
+        p.data.asOfMelbourne,
+        p.data.coldStart,
+        p.data.placebo,
+        p.data.navAtRisk,
+      ]);
+      expect(shown).not.toMatch(/d{4}-d{2}-d{2}/);
+      expect(p.data.asOfMelbourne).toBe("week 2026-W42");
+      expect(p.data.coldStart.firstD).toBe("week 2026-W42");
+    }
+    const owner = await loadCortex(deps(w, "owner"));
+    expect(owner.data.coldStart.firstD).toBe("2026-10-16");
+  });
 });

@@ -27,6 +27,7 @@ import {
 } from "@/lib/cortex/store";
 import { tickCostRow, LIQUIDITY_TIERS } from "@/lib/cortex/economics/cost";
 import { FAMILY_WORD, CLUSTER_WORD } from "@/lib/cortex/phrases";
+import { isoWeek, MISSING } from "@/lib/view/format";
 import {
   loaded,
   money,
@@ -200,6 +201,10 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
   const nights = await soft(() => recentNights(db, market, "9999-12-31", MAX_NIGHTS), []);
   const lastD = nights[0]?.d ?? null;
   const firstD = nights.length > 0 ? nights[nights.length - 1]!.d : null;
+  // A masked viewer sees ISO weeks, never an exact date (UX-009, D-175).
+  const weekOf = (d: string): string => `week ${isoWeek(d.slice(0, 10)) ?? MISSING}`;
+  const stampOf = (iso: string | null): string | null =>
+    masked && iso !== null ? weekOf(iso) : melbourneStamp(iso);
   const asOfIso = lastD === null ? null : `${lastD}T00:00:00Z`;
   const since = lastD === null ? "0000-00-00" : dayMinus(lastD, WINDOW_DAYS);
 
@@ -294,7 +299,7 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
             fin(placeboRow.result.null_pass_rate) === null
               ? null
               : Math.round((fin(placeboRow.result.null_pass_rate) ?? 0) * PPM),
-          at: melbourneStamp(placeboRow.at),
+          at: stampOf(placeboRow.at),
         };
   const navRow = await soft(() => newestResult(db, market, "nav_at_risk"), null);
   const navAtRisk =
@@ -303,7 +308,7 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
       : {
           loss95Pct: fin(navRow.result[NAV_LOSS_KEYS[0]]),
           lossWorstPct: fin(navRow.result[NAV_LOSS_KEYS[1]]),
-          at: melbourneStamp(navRow.at),
+          at: stampOf(navRow.at),
         };
 
   // abstentions by reason, shadow comparator, cash drag
@@ -401,7 +406,7 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
     masked,
     liveBooksLabel: LIVE_BOOKS_LABEL,
     asOf: lastD,
-    asOfMelbourne: melbourneStamp(asOfIso),
+    asOfMelbourne: stampOf(asOfIso),
     mapsLoaded,
     shadowOnly: mapsLoaded === 0,
     shadowOnlyText: SHADOW_ONLY_TEXT,
@@ -413,7 +418,12 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
     navAtRisk,
     abstains,
     sectorTilt,
-    coldStart: { nights: nights.length, firstD, lastD, warming: mapsLoaded === 0 },
+    coldStart: {
+      nights: nights.length,
+      firstD: masked && firstD !== null ? weekOf(firstD) : firstD,
+      lastD: masked && lastD !== null ? weekOf(lastD) : lastD,
+      warming: mapsLoaded === 0,
+    },
     opinions,
     tickCost,
     controls: {
@@ -422,7 +432,12 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
       killHref: "/strategies/risk",
     },
   };
-  return loaded(lastD, v.now, masked, view, "Cortex has not run yet.");
+  const page = loaded(lastD, v.now, masked, view, "Cortex has not run yet.");
+  // The stale note names the newest night: a masked viewer gets its ISO week (D-175).
+  if (masked && page.state === "stale" && lastD !== null) {
+    page.text = `Showing data from ${weekOf(lastD)}. It has not updated since.`;
+  }
+  return page;
 }
 
 function safeParse(s: unknown): unknown {
