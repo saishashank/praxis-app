@@ -3,14 +3,19 @@ import type { Client } from "@libsql/client";
 import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
 import type { Claims } from "@/lib/auth/claims";
-import { gate, isPublicPath, type GateDeps } from "@/lib/http/gate";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { EXPORT_ROUTES, gate, isPublicPath, type GateDeps } from "@/lib/http/gate";
+import fs, { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { freshDb } from "../db/helpers";
 
 const BASE = "https://app.example.test";
 const CLAIMS: Claims = { uid: 5, sv: 1, si: 1, rec: false };
-const LIMITS = { signin_per_min_ip: 10, writes_per_min_user: 60, exports_per_hour_user: 5 };
+const LIMITS = {
+  signin_per_min_ip: 10,
+  writes_per_min_user: 60,
+  exports_per_hour_user: 5,
+  reads_per_min_user: 60,
+};
 
 async function mk(over: Partial<GateDeps> = {}): Promise<GateDeps> {
   const db = await freshDb("auth");
@@ -335,6 +340,61 @@ describe("rate limits (SEC-014)", () => {
   it("authenticated GETs are not write-limited", async () => {
     const d = await mk({ limits: { ...LIMITS, writes_per_min_user: 1 } });
     for (let i = 0; i < 5; i++) expect((await gate(req("/"), d)).status).toBe(200);
+  });
+
+  // V1-S12 (D-722): SEC-014 reads (60/min/user) and exports (5/h/user) are enforced.
+  it("authenticated API reads: 61st in a minute -> 429, per user, window resets", async () => {
+    let t = 1_700_000_000;
+    const d = await mk({ nowSec: () => t });
+    const call = (uid = 5) =>
+      gate(req("/api/market/search?q=a"), { ...d, readClaims: async () => ({ ...CLAIMS, uid }) });
+    for (let i = 0; i < 60; i++) expect((await call()).status).toBe(200);
+    expect((await call()).status).toBe(429);
+    expect((await call(6)).status).toBe(200); // another user is unaffected
+    t += 60; // next fixed window
+    expect((await call()).status).toBe(200);
+  });
+
+  it("page GETs, machine routes and public paths are not read-limited", async () => {
+    const d = await mk({ limits: { ...LIMITS, reads_per_min_user: 1 } });
+    for (let i = 0; i < 4; i++) expect((await gate(req("/"), d)).status).toBe(200);
+    for (let i = 0; i < 4; i++) {
+      expect((await gate(req("/api/cron/watchdog"), d)).status).toBe(200);
+      expect((await gate(req("/api/health"), d)).status).toBe(200);
+    }
+  });
+
+  it("exports: 6th in an hour -> 429 even though reads allow it; resets next hour", async () => {
+    let t = 1_700_000_000;
+    const d = await mk({ nowSec: () => t });
+    const call = () => gate(req("/api/blueprint/export"), d);
+    for (let i = 0; i < 5; i++) expect((await call()).status).toBe(200);
+    expect((await call()).status).toBe(429);
+    // an ordinary read by the same user is still fine
+    expect((await gate(req("/api/market/search?q=a"), d)).status).toBe(200);
+    t += 3600;
+    expect((await call()).status).toBe(200);
+  });
+
+  it("every route that sets Content-Disposition is an export route (limit cannot be skipped)", () => {
+    const walkRoutes = (dir: string, out: string[] = []): string[] => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) walkRoutes(full, out);
+        else if (e.name === "route.ts") out.push(full);
+      }
+      return out;
+    };
+    const root = path.join(process.cwd(), "src/app/api");
+    const exporting = walkRoutes(root)
+      .filter((f) => /Content-Disposition/i.test(fs.readFileSync(f, "utf8")))
+      .map((f) => "/api/" + path.relative(root, path.dirname(f)).split(path.sep).join("/"));
+    expect(exporting.sort()).toEqual([...EXPORT_ROUTES].sort());
+  });
+
+  it("read rate-limit DB failure -> 503", async () => {
+    const d = await mk({ db: broken });
+    expect((await gate(req("/api/market/search"), d)).status).toBe(503);
   });
 
   it("write rate-limit DB failure -> 503", async () => {

@@ -11,6 +11,8 @@ export type RateLimits = {
   signin_per_min_ip: number;
   writes_per_min_user: number;
   exports_per_hour_user: number;
+  /** SEC-014 "reads ≤ 60/min per user": a fixed maximum, not a stored key (D-722). */
+  reads_per_min_user: number;
 };
 
 const positiveInt = (v: unknown, fallback: number): number =>
@@ -22,16 +24,19 @@ const SEC014_MAX: RateLimits = {
   signin_per_min_ip: 10,
   writes_per_min_user: 60,
   exports_per_hour_user: 5,
+  reads_per_min_user: 60,
 };
 
 export function getRateLimits(): RateLimits {
   const d = CONFIG_KEYS.rate_limits.default;
   const v = peekConfig("rate_limits") as Partial<Record<keyof RateLimits, unknown>> | null;
-  const pick = (k: keyof RateLimits) => Math.min(positiveInt(v?.[k], d[k]), SEC014_MAX[k]);
+  const pick = (k: Exclude<keyof RateLimits, "reads_per_min_user">) =>
+    Math.min(positiveInt(v?.[k], d[k]), SEC014_MAX[k]);
   return {
     signin_per_min_ip: pick("signin_per_min_ip"),
     writes_per_min_user: pick("writes_per_min_user"),
     exports_per_hour_user: pick("exports_per_hour_user"),
+    reads_per_min_user: SEC014_MAX.reads_per_min_user,
   };
 }
 

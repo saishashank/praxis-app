@@ -372,7 +372,6 @@ Fixes for the should-fix findings of `docs/V2_architecture_review.md`, one batch
 - **D-699 Residual.** The morning retry can reach the route inside the 60 s `RETRY_GAP` and be answered 503 again (an attempt of
   the Worker's three is spent); the next attempt after the gap succeeds. The Worker's retry timing was not changed.
 
-
 ### Batch E
 
 Findings V2-S1, V2-S2, V2-S4 and V2-S9. Migration 0023 (`0023_feature_retention.sql`).
@@ -387,3 +386,59 @@ Findings V2-S1, V2-S2, V2-S4 and V2-S9. Migration 0023 (`0023_feature_retention.
 - **D-707** (V2-S9) Tick marks on the V2 block are kept in the browser's local storage on that device (a per-viewer convenience, with the storage failure path covered), not on the server: a server record would need a new table and an audited control for a one-person checklist. Said on the page. If the Owner wants a server record later it is one append-only table and one runner call.
 - **D-708** (V2-S4) `docs/runbooks/rollback-v2.md` is new and `docs/runbooks/` is on the repo-hygiene allow-list. Level 1 instant rollback (no build, schema stays), level 2 rebuild or hotfix (tolerate newer schema, or step the schema down), what the down path deletes (0020: every `pick_*` e-mail row and attempt), and after-rollback checks (unlist the V2 Worker slots).
 - **D-709** Batch E migrations that pinned versions (`version: 22`, `rolledBack` counts, the backup schema version) were moved to 23 in the same commit, as M13-lite WP1 did for 0022.
+
+Decisions from the architecture-review should-fix batches (`docs/V2_architecture_review.md`).
+
+### Batch D
+
+- **D-720** V1-S11, metering. `getMeters` (`src/lib/usage/meters.ts`) still sums `run_record.rows_*`
+  but now adds two labelled **estimates** for traffic no job reports about itself: signed-call nonce
+  writes (`NONCE_WRITES_PER_SIGNED_CALL` = 2 per non-email/actions/heartbeat/watchdog/worker-clock run
+  record in the month: one INSERT, one prune DELETE) and Worker tick reads (`WORKER_READS_PER_TICK` = 6
+  per elapsed UTC minute of the month, only once a `worker-clock` record exists, so a Worker that never
+  ran adds nothing). The meter notes say "Recorded by jobs plus an estimate of ... Estimate."; Turso
+  platform usage (an admin-scope API, PRD-007) stays out. The constants are estimates from the code
+  paths, not measurements; exact counts need the daily Turso platform pull (a `usage_snapshot`, listed
+  for the Owner as a later improvement). App page traffic is still not included (stated in the note).
+- **D-721** V1-S11, nonce store. The reviewer proposed moving `request_nonce` into migration 0023; it
+  is already created by `db/migrations/main/0001_core.sql` (with an expiry index) and retention prunes
+  it, so no migration is needed. `TursoNonceStore` no longer sends `CREATE TABLE IF NOT EXISTS` on every
+  signed call (and the stale TODO is gone), and the expiry `DELETE` runs at most once a minute per
+  process instead of on every call: a signed call is now one INSERT (plus an occasional prune) in one
+  pipeline round trip. Replay safety is unchanged (the INSERT's `ON CONFLICT DO NOTHING` row count is
+  the claim; an expired-but-unpruned nonce cannot be replayed because the signature timestamp window,
+  `hmac_max_age_s`, rejects it first).
+- **D-722** V1-S12, SEC-014 limits. `gate.ts` enforces the two missing SEC-014 limits with the existing
+  `rateLimit()` helper (same fixed-window table, same fail-closed 503 on a DB error): authenticated
+  `GET`/`HEAD`/`OPTIONS` on `/api/*` (not machine, auth or public paths; page navigations are not API
+  reads) use `read:<uid>` at 60 per minute; routes in `EXPORT_ROUTES` (today `/api/blueprint/export`,
+  the only route setting `Content-Disposition`) use `export:<uid>` at `exports_per_hour_user` (5) per
+  hour instead. The read limit is a fixed SEC-014 maximum (`reads_per_min_user` in `RateLimits`), not a
+  new config key, so the `rate_limits` registry key and its validation are unchanged. A test walks
+  `src/app/api` and fails if a route sets `Content-Disposition` without being in `EXPORT_ROUTES`.
+- **D-723** V1-S4, NFR-023. `detectAuditChain` (`src/lib/incidents/detectors.ts`) walks the whole chain
+  with the existing `verifyAuditChain` and returns an **S1** `audit_chain_broken` incident naming only
+  the first broken row id. The evening heartbeat runs it (it has `PII_HASH_KEY`; the route now passes
+  `authDb`, where `audit_event` lives). Missing key or auth DB means "cannot verify": nothing is raised
+  and the heartbeat is unaffected. One open incident per kind (existing `notifyIncident` rule). The
+  reviewer's "store the verified head in `health_snapshot`" is not done (no schema change in this
+  batch); the incident is the alert. Owner CLI: `npm run audit:verify`
+  (`scripts/audit/verify-chain.mjs`, env `TURSO_AUTH_URL`, `TURSO_AUTH_TOKEN`, `PII_HASH_KEY`; exit 0
+  ok, 1 broken, 2 not configured; prints the row count or the first broken id only). NFR-023 says
+  "nightly watchdog"; the evening heartbeat is the nightly Vercel-side job that holds the auth DB token.
+- **D-724** V1-S14, SEC-016. The reviewer is right: `tests/security/displayText.test.ts` covers safe
+  links, HTML sinks and masking, but nothing implemented the deterministic display-text check. Added
+  `src/lib/view/displayText.ts` (`displayTextProblem`, `displayText`, `displayTitle`): fails text with a
+  URL or scheme, an e-mail address, a domain (host with a known TLD or a test/example TLD) or a
+  credential / account-action phrase (sign in, log in, verify your account, rotate/enter your key,
+  password, your token, API token, click here); NFKC-normalised first; market imperatives pass. Failing
+  titles become "[title withheld — see source]", failing LLM summaries / assessments "Summary withheld —
+  see source announcements" (the UXN-272 wording). Applied in the news list and item loaders, the market
+  overview and company announcement lists, and the P0 alert, pick alert, reminder and review e-mail
+  templates (subjects included). Residual: other LLM-text surfaces (Decision Card reasons, lessons,
+  strategy text) are not yet routed through it; they are enum / label-bound (`llm/textLabels.ts`) or
+  template text today, and `displayText()` is the one call to add when a free-text surface appears.
+- **D-725** The domain rule trades some false positives for safety: an ordinary headline containing a
+  token like "Inc.com" or a file name `report.net` is withheld. Withheld text is always replaced by the
+  rules-only wording and the source link (when registered) remains, so the cost is a less informative
+  title, never a hidden announcement.

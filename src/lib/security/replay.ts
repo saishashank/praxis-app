@@ -9,8 +9,12 @@ const TIMEOUT_MS = 15000;
 
 // Turso HTTP /v2/pipeline, same format as scripts/smoke/checks.mjs (tursoRoundTrip):
 // https://docs.turso.tech/sdk/http/reference
-// TODO(migrations): table moves to the first DB migration in the schema task (D-029)
+// D-721 (V1-S11): the table is created by main migration 0001_core.sql, so a signed call no longer
+// runs DDL; the expiry prune runs at most once a minute per process instead of on every call.
+const PRUNE_EVERY_SEC = 60;
 export class TursoNonceStore implements NonceStore {
+  private lastPruneSec = -Infinity;
+
   constructor(
     private readonly url: string | undefined,
     private readonly token: string | undefined,
@@ -21,20 +25,20 @@ export class TursoNonceStore implements NonceStore {
   async claim(nonce: string, expiresAtSec: number): Promise<boolean> {
     const m = /^(?:libsql|https):\/\/([^/\s]+)\/?$/.exec((this.url ?? "").trim());
     if (!m || !this.token) throw new Error("store misconfigured");
+    const now = this.nowSec();
+    const prune = now - this.lastPruneSec >= PRUNE_EVERY_SEC;
     const requests = [
-      {
-        type: "execute",
-        stmt: {
-          sql: "CREATE TABLE IF NOT EXISTS request_nonce (nonce TEXT PRIMARY KEY, expires_at INTEGER NOT NULL)",
-        },
-      },
-      {
-        type: "execute",
-        stmt: {
-          sql: "DELETE FROM request_nonce WHERE expires_at < ?",
-          args: [{ type: "integer", value: String(this.nowSec()) }],
-        },
-      },
+      ...(prune
+        ? [
+            {
+              type: "execute",
+              stmt: {
+                sql: "DELETE FROM request_nonce WHERE expires_at < ?",
+                args: [{ type: "integer", value: String(now) }],
+              },
+            },
+          ]
+        : []),
       {
         type: "execute",
         stmt: {
@@ -62,7 +66,8 @@ export class TursoNonceStore implements NonceStore {
       throw new Error("store error");
     }
     if (!results.every((r) => r && r.type === "ok")) throw new Error("store error");
-    const affected = results[2].response?.result?.affected_row_count;
+    if (prune) this.lastPruneSec = now;
+    const affected = results[requests.length - 2].response?.result?.affected_row_count;
     if (affected !== 0 && affected !== 1) throw new Error("store error");
     return affected === 1;
   }

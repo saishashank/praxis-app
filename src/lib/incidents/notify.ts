@@ -87,6 +87,12 @@ export const INCIDENT_SPECS: Readonly<Record<string, Spec>> = {
     fix: "Check the ASX source, then reset the trip in System Health.",
     fixPath: "/health#sentinel",
   },
+  audit_chain_broken: {
+    component: "Audit log",
+    impact: "The audit hash chain does not verify; an audit row was changed, removed or inserted.",
+    fix: "Run the audit verifier (npm run audit:verify) and compare the first broken row with the last backup.",
+    fixPath: "/health",
+  },
   quota_high: {
     component: "Quota",
     impact: "A free-tier quota is at 90 percent or more of its limit.",

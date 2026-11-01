@@ -15,6 +15,7 @@ import {
   withEnvPrefix,
 } from "./core";
 import { plural, truncate } from "./format";
+import { displayTitle } from "@/lib/view/displayText";
 
 /** Delay and refresh minutes shown in the latency line (config `intraday_quote_delay_min`, `intraday_refresh_min`). */
 export interface Latency {
@@ -212,7 +213,7 @@ export function renderPickCandidate(input: PickInput<PickCandidateFacts>): Sized
   const rows: [string, string][] = [
     [
       "Trigger",
-      `${truncate(f.trigger.title, 140)} (${f.trigger.source}, ${f.trigger.publishedAt})`,
+      `${truncate(displayTitle(f.trigger.title), 140)} (${f.trigger.source}, ${f.trigger.publishedAt})`,
     ],
     ["Move", `${f.movePct} at ${f.quoteTime} (delayed)`],
     ["Relative volume", f.relVolume ?? "volume unavailable"],
