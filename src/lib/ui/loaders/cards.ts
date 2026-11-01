@@ -12,6 +12,7 @@ import "server-only";
 import { loadScenarioInput, type DecisionCard } from "@/lib/agents/cards";
 import { opaqueDigest } from "@/lib/view/opaqueRef";
 import { getConfig } from "@/lib/config/store";
+import { readSteelmanForCard, type SteelmanView } from "@/lib/steelman/read";
 import { wilsonInterval } from "@/lib/stats/binomial";
 import { cardViewModel, type CardView } from "@/lib/view/cards";
 import {
@@ -131,9 +132,9 @@ export type CardPage = {
   /** The rules-only "Why?" lines (UXN-102). */
   why: string[];
   afterwards: Afterwards | null;
-  /** Steelman (V2 ch. 07, UXR-024): the strongest case against the card. No source stores it yet, so it is
-   * always null and the page draws no heading; set it here once ch. 07 data exists. */
-  steelman: { text: string } | null;
+  /** Steelman (V2 ch. 07, UXR-024; M11-lite D-497): AI-written strongest case for and against, read from
+   * the stored points and masked for a masked viewer. null = none stored, the page draws no heading. */
+  steelman: SteelmanView | null;
   notes: CardNote[];
   /** Back-links; none contains a code. */
   links: { home: string; strategy: string | null };
@@ -161,6 +162,17 @@ const NOT_FOUND: CardPage = {
   notes: [],
   links: { home: "/", strategy: null },
 };
+
+/** Every free text of the steelman through the viewer's scope (ROL-107, D-497); ids stay as they are. */
+function maskedSteelman(v: SteelmanView, t: (x: string) => string): SteelmanView {
+  const pt = (p: SteelmanView["bull"][number]) => ({ ...p, text: t(p.text) });
+  return {
+    ...v,
+    bull: v.bull.map(pt),
+    bear: v.bear.map(pt),
+    cited: v.cited.map((i) => ({ ...i, text: t(i.text) })),
+  };
+}
 
 type Config = Parameters<typeof getConfig>[0];
 
@@ -305,6 +317,12 @@ export async function loadCardPage(deps: LoaderDeps, idOrRef: string): Promise<L
     if (net !== null) closed = { net, day: scope.day(str(led.exit_d)) };
   }
 
+  // Steelman (M11-lite): a failed read draws no section; every point and cited item goes through the scope.
+  const steelman = await soft<SteelmanView | null>(
+    () => readSteelmanForCard(deps.mainDb, id),
+    null,
+  );
+
   // Notes (auth DB). A masked viewer sees who added one and when, never the text.
   const notes = await soft<CardNote[]>(async () => {
     const r = await deps.authDb.execute({
@@ -353,7 +371,7 @@ export async function loadCardPage(deps: LoaderDeps, idOrRef: string): Promise<L
       scenarioRows: scenarioRows(card),
       why: whyLines(card, rows, warnings, t),
       afterwards: afterwards(card, closed, led !== null),
-      steelman: null,
+      steelman: steelman === null ? null : maskedSteelman(steelman, t),
       notes,
       links: { home: "/", strategy: `/strategies/${encodeURIComponent(card.execution)}` },
     },

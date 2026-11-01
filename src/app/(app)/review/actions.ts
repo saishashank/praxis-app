@@ -8,6 +8,7 @@ import { requestMeta } from "@/lib/auth/audit";
 import { requireUser } from "@/lib/auth/guard";
 import { resolveCorporateAction } from "@/lib/data/corporateActions/admin";
 import { authDb, mainDb } from "@/lib/db/client";
+import { dismissSuggestion } from "@/lib/steelman/suggestions";
 
 const PATH = "/review";
 
@@ -41,4 +42,24 @@ export async function confirmCorporateActionAction(fd: FormData): Promise<Review
 
 export async function rejectCorporateActionAction(fd: FormData): Promise<ReviewResult> {
   return decide(fd, "reject");
+}
+
+/** Dismisses one steelman suggestion (D-492): Owner only, audited by the service, never touches a rule. */
+export async function dismissSuggestionAction(fd: FormData): Promise<ReviewResult> {
+  const user = await requireUser("admin", PATH);
+  try {
+    const result = await dismissSuggestion({
+      mainDb: mainDb(),
+      authDb: authDb(),
+      env: process.env,
+      meta: requestMeta(await headers()),
+      actorId: user.id,
+      id: fd.get("id"),
+    });
+    if ("error" in result) return { error: result.error };
+    revalidatePath(PATH);
+    return { ok: true };
+  } catch {
+    return { error: "unavailable" };
+  }
 }

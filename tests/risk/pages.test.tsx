@@ -339,11 +339,13 @@ describe("Decision Card page (UXN-037, 100, 102, 104, 120 to 123, 126)", () => {
   it("draws no steelman heading while there is no steelman data, and one when there is", async () => {
     as(OWNER);
     const html = await card(encodeURIComponent(CARD_UP));
-    expect(html).not.toMatch(/steelman|The case against/i);
+    expect(html).not.toMatch(/steelman|Strongest case/i);
     expect(renderToStaticMarkup(<Steelman data={null} />)).toBe("");
-    expect(renderToStaticMarkup(<Steelman data={{ text: "  " }} />)).toBe("");
-    expect(renderToStaticMarkup(<Steelman data={{ text: "Margins are thin." }} />)).toContain(
-      ">The case against</h2>",
+    const empty = { state: "written" as const, bull: [], bear: [], cited: [] };
+    expect(renderToStaticMarkup(<Steelman data={empty} />)).toBe("");
+    const pt = { text: "Margins are thin.", citations: ["E01"], monitorable: false };
+    expect(renderToStaticMarkup(<Steelman data={{ ...empty, bear: [pt] }} />)).toContain(
+      ">Strongest case for and against</h2>",
     );
   });
 
