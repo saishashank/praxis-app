@@ -77,9 +77,16 @@ describe("testIdentityEnabled (SEC-109)", () => {
   });
 
   it.each([
-    ["PRAXIS_ENV absent (no positive staging signal, V1-I9)", { PRAXIS_ENV: undefined }],
+    ["no staging signal at all (V1-I9)", { PRAXIS_ENV: undefined, APP_BASE_URL: undefined }],
+    [
+      "production-looking APP_BASE_URL, no PRAXIS_ENV",
+      { PRAXIS_ENV: undefined, APP_BASE_URL: "https://praxis-app.vercel.app" },
+    ],
     ["PRAXIS_ENV production", { PRAXIS_ENV: "production" }],
-    ["PRAXIS_ENV Staging (exact match only)", { PRAXIS_ENV: "Staging" }],
+    [
+      "PRAXIS_ENV production, even with a staging-looking host",
+      { PRAXIS_ENV: "production", APP_BASE_URL: "https://staging.example.test" },
+    ],
     ["no secret", { TEST_IDENTITY_SECRET: undefined }],
     ["empty secret", { TEST_IDENTITY_SECRET: "" }],
     ["short secret", { TEST_IDENTITY_SECRET: "ab12" }],
@@ -90,6 +97,16 @@ describe("testIdentityEnabled (SEC-109)", () => {
     ["NODE_ENV development", { NODE_ENV: "development" }],
   ])("each signal alone disables it: %s", (_n, over) => {
     expect(testIdentityEnabled({ ...STAGING, ...over })).toBe(false);
+  });
+
+  it("the host label also qualifies when PRAXIS_ENV is not set (separate staging Vercel project)", () => {
+    const env = {
+      ...STAGING,
+      PRAXIS_ENV: undefined,
+      APP_BASE_URL: "https://praxis-app-staging.vercel.app",
+    };
+    expect(testIdentityEnabled(env)).toBe(true);
+    expect(testIdentityEnabled({ ...STAGING, PRAXIS_ENV: "Staging" })).toBe(true);
   });
 
   it("blank production markers (whitespace) do not count as present", () => {

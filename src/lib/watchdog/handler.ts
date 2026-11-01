@@ -7,6 +7,7 @@
 //   5. runs the check, writes a run record, and on "mismatch" opens an S1 incident once.
 // Every failure body is generic: no secret, SHA, URL or upstream text is returned or logged.
 import { createHash, timingSafeEqual } from "node:crypto";
+import { isStagingEnv } from "@/lib/security/envKind";
 import type { Client } from "@libsql/client";
 import { finishRun, startRun } from "@/lib/runs/runRecord";
 import { CHECK_TIMEOUT_MS, CODE_REPO } from "@/lib/selfcheck/config";
@@ -34,12 +35,10 @@ const has = (v: string | undefined): v is string => typeof v === "string" && v.t
 
 /**
  * Production = BACKUP_PUBLIC_KEY present (only production holds it), no TEST_IDENTITY_SECRET, and
- * not explicitly PRAXIS_ENV=staging (V1-I9).
+ * not positively marked staging (isStagingEnv) (V1-I9).
  */
 export function isProduction(env: Env): boolean {
-  return (
-    has(env.BACKUP_PUBLIC_KEY) && !has(env.TEST_IDENTITY_SECRET) && env.PRAXIS_ENV !== "staging"
-  );
+  return has(env.BACKUP_PUBLIC_KEY) && !has(env.TEST_IDENTITY_SECRET) && !isStagingEnv(env);
 }
 
 const MIN_SECRET_LENGTH = 16;

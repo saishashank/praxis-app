@@ -568,12 +568,15 @@ Auth and security: V1-I3 (signer half), I6, I9, I10, I11, I12, I13, I14. Decisio
   "when touched"). It changes the wire format of every machine caller (Worker, five Actions scripts, smoke) and needs a coordinated
   deploy of Vercel and Worker; the nonce is single use and the route bound is in the signed body (`purpose`), so it is deferred.
 - **D-781** (V1-I3) The trading-day half of V1-I3 was done in batch B (D-710…); nothing further here.
-- **D-782** (V1-I9) The test identity needs a POSITIVE staging signal: `PRAXIS_ENV === "staging"` (exact) is now required in
-  `testIdentityEnabled`, on top of the valid secret and the absent production markers. `appEnvironment` (Worker report) and
-  `isProduction` (watchdog) treat an explicit `PRAXIS_ENV=staging` as staging even if `BACKUP_PUBLIC_KEY` is present. OWNER STEP:
-  the staging Vercel project must carry the plain variable `PRAXIS_ENV=staging` (not a secret); without it staging test login
-  answers 404 until it is set. Production is unaffected (it never held the secret). `selfcheck/checks.ts deriveEnv` and
-  `usage/meters.ts` keep their own derivation (they report, they do not enable anything).
+- **D-782** (V1-I9) The test identity needs a POSITIVE staging signal, `isStagingEnv` (`src/lib/security/envKind.ts`): either
+  `PRAXIS_ENV` equals "staging" (case-insensitive; any other non-empty value is an explicit veto that a host name cannot override) or the host of `APP_BASE_URL` has a hyphen-separated part "staging" in one of its
+  labels (`praxis-app-staging.vercel.app`, `staging.example.com`; `notstaging-ish.com` and a path "/staging" do not count).
+  Staging is a separate Vercel project, so `VERCEL_ENV` cannot tell; absent secrets never imply staging. `testIdentityEnabled`
+  requires it on top of the valid secret and the absent production markers; `appEnvironment` (Worker report) and `isProduction`
+  (watchdog) use the same helper, so an explicit staging signal wins over a present `BACKUP_PUBLIC_KEY`. `PRAXIS_ENV=staging` on the
+  staging Vercel project is OPTIONAL but recommended (it makes the signal independent of the project's domain name); no Owner step
+  is needed while the staging host name carries "staging". `selfcheck/checks.ts deriveEnv` and `usage/meters.ts` keep their own
+  derivation (they report, they do not enable anything).
 - **D-783** (V1-I10) Auth.js host and cookies are pinned from `APP_BASE_URL` (`src/lib/auth/cookies.ts`): the origin is handed to
   Auth.js as `AUTH_URL` (next-auth rewrites every request URL to it, an explicit `AUTH_URL` wins), `trustHost` is true only when the
   origin is pinned or `NODE_ENV !== "production"` (production without `APP_BASE_URL` fails closed; the self-check already requires

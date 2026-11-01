@@ -2,6 +2,7 @@
 // WORKER_HMAC_SECRET by signing the report; this route verifies it, checks the report is for this
 // environment, and records it. Dependencies are injected so tests need no network. Every failure
 // body is generic; no secret, request body or upstream text ever leaves here. Opus reviews every line.
+import { isStagingEnv } from "@/lib/security/envKind";
 import { isValidSecret, verifySignedRequest } from "@/lib/security/hmac";
 import type { NonceStore } from "@/lib/security/replay";
 import type { WorkerReport, WorkerResult } from "./record";
@@ -31,12 +32,10 @@ const badRequest = () => json(400, { error: "bad_request" });
 const has = (v: string | undefined): v is string => typeof v === "string" && v.trim() !== "";
 
 // Production iff it holds BACKUP_PUBLIC_KEY, not the staging-only TEST_IDENTITY_SECRET, and is not
-// explicitly marked PRAXIS_ENV=staging (V1-I9: an explicit staging mark always wins).
+// positively marked staging (isStagingEnv) (V1-I9: an explicit staging mark always wins).
 // Anything else is treated as staging; a Worker reporting "production" to it is then refused.
 export function appEnvironment(env: Deps["env"]): "production" | "staging" {
-  return has(env.BACKUP_PUBLIC_KEY) &&
-    !has(env.TEST_IDENTITY_SECRET) &&
-    env.PRAXIS_ENV !== "staging"
+  return has(env.BACKUP_PUBLIC_KEY) && !has(env.TEST_IDENTITY_SECRET) && !isStagingEnv(env)
     ? "production"
     : "staging";
 }
