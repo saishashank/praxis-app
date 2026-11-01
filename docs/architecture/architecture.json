@@ -14548,6 +14548,38 @@
       }
     },
     {
+      "id": "workflow:diagnose-signals",
+      "type": "workflow",
+      "name": "Diagnose signals (AU, read-only)",
+      "purpose": "GitHub Actions workflow Diagnose signals (AU, read-only).",
+      "specIds": [
+        "PLT-015"
+      ],
+      "owner": "actions",
+      "schedule": "dispatch only",
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
+      "runbook": null,
+      "views": [
+        "platform",
+        "security"
+      ],
+      "source": ".github/workflows/diagnose-signals.yml",
+      "attrs": {
+        "file": ".github/workflows/diagnose-signals.yml",
+        "jobs": [
+          "production",
+          "staging"
+        ],
+        "triggers": [
+          "workflow_dispatch"
+        ]
+      }
+    },
+    {
       "id": "workflow:ingest-batch1",
       "type": "workflow",
       "name": "Ingest batch 1 (AU EOD)",
@@ -15951,6 +15983,17 @@
       "id": "service:actions|contains|workflow:deploy-staging",
       "from": "service:actions",
       "to": "workflow:deploy-staging",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform",
+        "security"
+      ]
+    },
+    {
+      "id": "service:actions|contains|workflow:diagnose-signals",
+      "from": "service:actions",
+      "to": "workflow:diagnose-signals",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
@@ -20606,6 +20649,16 @@
       "to": "secret:VERCEL_TOKEN_STAGING",
       "kind": "uses",
       "contract": "Reads the secret VERCEL_TOKEN_STAGING from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:diagnose-signals|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:diagnose-signals",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
       "views": [
         "security"
       ]
