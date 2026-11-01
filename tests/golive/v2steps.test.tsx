@@ -132,6 +132,21 @@ describe("V2Steps component", () => {
     expect(screen.getAllByRole("checkbox")[0]).toBeChecked();
   });
 
+  it("names prerequisites by step number, and an unknown id by its id", () => {
+    const [first, second] = props.steps;
+    render(
+      <V2Steps
+        {...props}
+        steps={[
+          { ...first!, after: [] },
+          { ...second!, after: [first!.id, "v2_not_a_step"] },
+        ]}
+      />,
+    );
+    expect(screen.getByText("After step 1, v2_not_a_step.")).toBeInTheDocument();
+    expect(screen.getAllByText(/^After step/)).toHaveLength(1);
+  });
+
   it("works when storage is blocked", () => {
     const orig = Storage.prototype.getItem;
     Storage.prototype.getItem = () => {
