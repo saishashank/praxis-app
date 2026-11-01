@@ -29,6 +29,14 @@ const walk = (dir: string, out: string[] = []): string[] => {
 };
 
 const EXPERT_FILES = walk(path.join(ROOT, "src/lib/experts")).sort();
+/** The expert pages, their server actions and their loader (WP6): readers that write only through review.ts. */
+const APP_FILES = [
+  ...walk(path.join(ROOT, "src/app/(app)/reviews/experts")),
+  ...walk(path.join(ROOT, "src/app/(app)/reviews/techniques")),
+  path.join(ROOT, "src/lib/ui/loaders/experts.ts"),
+]
+  .filter((f) => fs.existsSync(f))
+  .sort();
 
 const stripComments = (t: string): string =>
   t
@@ -164,6 +172,10 @@ describe("expert boundary (ii): what src/lib/experts may import", () => {
     "src/lib/kb/documents",
     "src/lib/kb/render",
     "src/lib/config/store", // getConfig for expert_min_scored
+    // the review service (WP6, D-610, D-611): the audit writer, the auth env type and the actor hash
+    "src/lib/auth/audit",
+    "src/lib/auth/env",
+    "node:crypto",
   ]);
   const FORBIDDEN: Array<[string, RegExp]> = [
     ["arena orders and fills", /^src\/lib\/arena\/(?!cohort$)/],
@@ -243,12 +255,13 @@ describe("expert boundary (ii): what src/lib/experts may import", () => {
 describe("expert boundary (iii): SQL write allowlist", () => {
   const WRITES = new Set<string>(EXPERT_TABLES);
   // What the experts may read besides their own tables: the challenger event log (F7 gate), the bars and the
-  // universe snapshot (paper calls).
+  // universe snapshot (paper calls), and the user table (the review service re-checks the actor, D-610).
   const READS = new Set<string>([
     ...EXPERT_TABLES,
     "challenger_event",
     "price_bar",
     "universe_snapshot",
+    "app_user",
   ]);
   const WRITE_RE =
     /(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|(?<!DO\s)UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+([A-Za-z_][A-Za-z0-9_]*)/g;
@@ -284,7 +297,7 @@ describe("expert boundary (iii): SQL write allowlist", () => {
     expect(names.size).toBeGreaterThan(8);
   });
 
-  it("every FROM and JOIN names an expert table or one of three read-only tables", () => {
+  it("every FROM and JOIN names an expert table or one of four read-only tables", () => {
     const bad: string[] = [];
     for (const f of EXPERT_FILES) {
       const src = stripComments(fs.readFileSync(f, "utf8"));
@@ -300,6 +313,35 @@ describe("expert boundary (iii): SQL write allowlist", () => {
     for (const f of EXPERT_FILES) {
       for (const m of stripComments(fs.readFileSync(f, "utf8")).matchAll(DYNAMIC_RE)) {
         bad.push(`${rel(f)}: dynamic write ${m[0]}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  // D-651: the allowlist scan is case-sensitive (SQL keywords are upper-case in this repo), so a lower-case
+  // `insert into` would slip past it. Every write keyword found case-insensitively must be the upper-case one.
+  const LOWER_WRITE_RE =
+    /\b(?:insert\s+(?:or\s+\w+\s+)?into|delete\s+from|replace\s+into)\s+[A-Za-z_]/gi;
+  it("every write keyword is upper-case, so the case-sensitive scan sees it", () => {
+    const bad: string[] = [];
+    for (const f of [...EXPERT_FILES, ...APP_FILES]) {
+      for (const m of stripComments(fs.readFileSync(f, "utf8")).matchAll(LOWER_WRITE_RE)) {
+        const keyword = m[0].slice(0, -1).trimEnd(); // without the table's first letter
+        if (keyword !== keyword.toUpperCase()) bad.push(`${rel(f)}: ${m[0]}`);
+      }
+    }
+    expect(bad).toEqual([]);
+    expect([..."insert into x; DELETE FROM y".matchAll(LOWER_WRITE_RE)].length).toBe(2);
+  });
+
+  // D-651: the design (D-525) names the expert pages and their server actions in the write allowlist too;
+  // they are expected to write only through review.ts, so no write literal at all may appear in them.
+  it("the expert pages, actions and loader hold no SQL write literal (they write through review.ts)", () => {
+    expect(APP_FILES.length).toBeGreaterThan(3);
+    const bad: string[] = [];
+    for (const f of APP_FILES) {
+      for (const m of stripComments(fs.readFileSync(f, "utf8")).matchAll(WRITE_RE)) {
+        bad.push(`${rel(f)}: ${m[0]}`);
       }
     }
     expect(bad).toEqual([]);
@@ -324,7 +366,7 @@ describe("expert boundary (iii): SQL write allowlist", () => {
 describe("expert boundary (iv): no network and no model", () => {
   it("src/lib/experts has no fetch, no HTTP client, no model client", () => {
     const re =
-      /\bfetch\s*\(|\bXMLHttpRequest\b|node:https?["']|\baxios\b|\bWebSocket\b|@anthropic-ai|@\/lib\/llm|\bmessages\.create\b/;
+      /\bfetch\s*\(|\bXMLHttpRequest\b|node:https?["']|\baxios\b|\bundici\b|node-fetch|\bWebSocket\b|@anthropic-ai|@\/lib\/llm|\bmessages\.create\b/;
     const bad = EXPERT_FILES.filter((f) => re.test(stripComments(fs.readFileSync(f, "utf8")))).map(
       rel,
     );
@@ -418,13 +460,20 @@ describe("expert boundary (v): the database and the fixtures", () => {
     const names = [...seed.matchAll(/\bname:\s*`([^`]+)`/g)].map((m) => m[1]);
     expect(names.length).toBeGreaterThan(0);
     expect(names.filter((n) => !n.startsWith("ZZ "))).toEqual([]);
-    const e2e = walk(path.join(ROOT, "e2e")).filter((f) => /expert/i.test(rel(f)));
-    for (const f of e2e) {
-      const names2 = [...fs.readFileSync(f, "utf8").matchAll(/\bname:\s*["'`]([^"'`]+)["'`]/g)]
+    // The e2e seed (D-619) names its experts as `NAME_*` constants; a spec's `name: "Experts"` is a page
+    // heading or a link, not an expert (D-651).
+    const e2eSeed = fs.readFileSync(path.join(ROOT, "e2e/seed/experts.ts"), "utf8");
+    const names2 = [...e2eSeed.matchAll(/\bNAME_[A-Z0-9]+\s*=\s*["'`]([^"'`]+)["'`]/g)].map(
+      (m) => m[1],
+    );
+    expect(names2.length).toBeGreaterThan(0);
+    expect(names2.filter((n) => !n.startsWith("ZZ "))).toEqual([]);
+    for (const f of walk(path.join(ROOT, "e2e")).filter((f) => /expert/i.test(rel(f)))) {
+      const literal = [...fs.readFileSync(f, "utf8").matchAll(/\bname:\s*["'`]([^"'`]+)["'`]/g)]
         .map((m) => m[1])
-        .filter((n) => /expert/i.test(n));
+        .filter((n) => /\bauthor\b|\banalyst\b|\btrader\b/i.test(n)); // a person-like fixture name
       expect(
-        names2.filter((n) => !n.startsWith("ZZ ")),
+        literal.filter((n) => !n.startsWith("ZZ ")),
         rel(f),
       ).toEqual([]);
     }
