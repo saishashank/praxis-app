@@ -356,7 +356,16 @@ async function sendOne<K extends EmailKind>(
   const piiKey = env.PII_HASH_KEY;
   const recipientSha = piiKey ? createHmac("sha256", piiKey).update(owner).digest("hex") : null;
   const caps = await loadCaps(db);
-  const claim = await claimKey(db, { key, kind, env: envName, d, nowIso, recipientSha, caps, pickCap: opts.pickCap });
+  const claim = await claimKey(db, {
+    key,
+    kind,
+    env: envName,
+    d,
+    nowIso,
+    recipientSha,
+    caps,
+    pickCap: opts.pickCap,
+  });
   let startAttempts = 0;
   let slot: EmailSlot | undefined;
   if (claim.kind === "capped") {

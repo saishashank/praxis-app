@@ -68,8 +68,7 @@ export async function measureCandidates(
     ).rows[0];
     const idxEntry = level.get(sd);
     if (idxEntry === undefined) continue; // no index level for the session: nothing to compare with
-    const foundEntry =
-      prev === undefined ? null : Number(prev.c) * (1 + Number(c.move_ppm) / PPM); // money-float-ok
+    const foundEntry = prev === undefined ? null : Number(prev.c) * (1 + Number(c.move_ppm) / PPM); // money-float-ok
     const openEntry = bars[0]!.o;
     const vals: Record<string, number | null> = {};
     for (const h of HORIZONS) {

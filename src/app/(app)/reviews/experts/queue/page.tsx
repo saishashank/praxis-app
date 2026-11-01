@@ -58,8 +58,8 @@ export default async function QueuePage() {
       </nav>
       {q.masked ? (
         <Banner tone="info">
-          Your access hides stock names and codes in the text below, and the links to the sources
-          (a web address can carry a code). Editing is switched off while text is hidden, so a hidden
+          Your access hides stock names and codes in the text below, and the links to the sources (a
+          web address can carry a code). Editing is switched off while text is hidden, so a hidden
           word is never saved over the real one. Ask the Owner to unmask your access to check claims
           against their sources.
         </Banner>

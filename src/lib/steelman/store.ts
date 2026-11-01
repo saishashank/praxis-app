@@ -10,11 +10,7 @@ export type { Exec, WriteResult };
 export type SubjectKind = "order" | "pick";
 export type Side = "bull" | "bear";
 export type PointState =
-  | "shown"
-  | "hidden_critic"
-  | "dropped_citation"
-  | "dropped_number"
-  | "dropped_unsafe";
+  "shown" | "hidden_critic" | "dropped_citation" | "dropped_number" | "dropped_unsafe";
 export type SuggestionStatus = "open" | "dismissed" | "expired";
 
 export type PackItemRow = { id: string; kind: string; text: string; at?: string };
@@ -80,7 +76,8 @@ export type SuggestionRow = {
   closedBy: string | null;
 };
 
-export const pointIdOf = (packId: string, side: Side, n: number): string => `${packId}:${side}:${n}`;
+export const pointIdOf = (packId: string, side: Side, n: number): string =>
+  `${packId}:${side}:${n}`;
 
 type Row = Record<string, unknown>;
 
@@ -127,7 +124,10 @@ const packOf = (r: Row): PackRow => ({
 });
 
 export async function readPack(db: Exec, packId: string): Promise<PackRow | null> {
-  const r = await db.execute({ sql: `SELECT * FROM steelman_pack WHERE pack_id = ?`, args: [packId] });
+  const r = await db.execute({
+    sql: `SELECT * FROM steelman_pack WHERE pack_id = ?`,
+    args: [packId],
+  });
   return r.rows[0] ? packOf(r.rows[0] as Row) : null;
 }
 
@@ -218,7 +218,10 @@ export async function readPoints(db: Exec, packId: string): Promise<PointRow[]> 
 }
 
 export async function readPoint(db: Exec, pointId: string): Promise<PointRow | null> {
-  const r = await db.execute({ sql: `SELECT * FROM steelman_point WHERE point_id = ?`, args: [pointId] });
+  const r = await db.execute({
+    sql: `SELECT * FROM steelman_point WHERE point_id = ?`,
+    args: [pointId],
+  });
   return r.rows[0] ? pointOf(r.rows[0] as Row) : null;
 }
 
@@ -295,7 +298,10 @@ export async function readNights(db: Exec, market: string, limit: number): Promi
 
 // ---- suggestions --------------------------------------------------------------------------------
 
-export type NewSuggestion = Omit<SuggestionRow, "suggestionId" | "status" | "closedAt" | "closedBy">;
+export type NewSuggestion = Omit<
+  SuggestionRow,
+  "suggestionId" | "status" | "closedAt" | "closedBy"
+>;
 
 /** suggestion_id = point_id. The migration refuses a point that is not a shown monitorable bear point. */
 export async function insertSuggestion(db: Exec, s: NewSuggestion): Promise<WriteResult> {

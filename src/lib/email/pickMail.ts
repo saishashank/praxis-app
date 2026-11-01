@@ -291,7 +291,13 @@ async function deliver(
       const head = items.slice(0, n);
       const seen =
         n > 1
-          ? known.has(pickBatchKey(userId, f.sessionD, head.map((i) => i.alertId)))
+          ? known.has(
+              pickBatchKey(
+                userId,
+                f.sessionD,
+                head.map((i) => i.alertId),
+              ),
+            )
           : await claimedSingle(head[0]);
       if (!seen) continue;
       const first = await deliver(ctx, userId, head, f, at, d, env);
@@ -332,9 +338,7 @@ async function deliver(
   const opts = {
     pickCap: {
       own: await num(ctx.db, "pick_alert_emails_per_day"),
-      ...(candidate
-        ? { candidate: await num(ctx.db, "intraday_candidate_emails_per_day") }
-        : {}),
+      ...(candidate ? { candidate: await num(ctx.db, "intraday_candidate_emails_per_day") } : {}),
     },
   };
   let out;
@@ -354,13 +358,7 @@ async function deliver(
   } else if (single.event === "hit") {
     out = await sendEmail(ctx, "pick_hit", key, { facts: single.hit!, latency }, opts);
   } else if (single.event === "candidate") {
-    out = await sendEmail(
-      ctx,
-      "pick_candidate",
-      key,
-      { facts: single.candidate!, latency },
-      opts,
-    );
+    out = await sendEmail(ctx, "pick_candidate", key, { facts: single.candidate!, latency }, opts);
   } else {
     out = await sendEmail(ctx, "pick_cleared", key, { facts: single.cleared!, latency }, opts);
   }

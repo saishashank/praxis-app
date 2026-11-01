@@ -33,7 +33,8 @@ describe("AT-65 (b) badge contrast per family and theme", () => {
             `${h}-fill/surface`,
           ]),
         );
-        for (const r of got) expect(r.ok, `${theme} ${r.fg} on ${r.bg} ${r.ratio.toFixed(2)}`).toBe(true);
+        for (const r of got)
+          expect(r.ok, `${theme} ${r.fg} on ${r.bg} ${r.ratio.toFixed(2)}`).toBe(true);
       }
     }
   });
@@ -43,9 +44,10 @@ describe("AT-65 (b) badge contrast per family and theme", () => {
     for (const theme of THEME_NAMES) {
       for (const b of Object.values(FAMILY_BADGE)) {
         for (const suffix of ["fill", "text", "on-fill"]) {
-          expect(themes[theme]![`family-${b.code}-${suffix}`], `${theme} ${b.code} ${suffix}`).toMatch(
-            /^#[0-9a-f]{6}$/i,
-          );
+          expect(
+            themes[theme]![`family-${b.code}-${suffix}`],
+            `${theme} ${b.code} ${suffix}`,
+          ).toMatch(/^#[0-9a-f]{6}$/i);
         }
       }
     }
@@ -61,23 +63,27 @@ describe("AT-65 (c) the i sheet per family", () => {
     mainRisk: "when it breaks",
   };
   for (const [family, b] of Object.entries(FAMILY_BADGE)) {
-    it(`${family} ${b.label}: badge with mark, i trigger, four rows and the Strategies link`, { timeout: 15000 }, async () => {
-      render(<PickFamily pick={{ family, familyName: b.label, familyInfo: info }} />);
-      const badge = document.querySelector("[data-family]")!;
-      expect(badge.getAttribute("data-family")).toBe(b.code);
-      expect(badge.textContent).toContain(b.mark);
-      expect(badge.textContent).toContain(b.label);
-      fireEvent.click(screen.getByRole("link", { name: `About ${b.label}` }));
-      // the dialog chunk is lazy: the first open may take longer than the 1 s default
-      const sheet = await screen.findByTestId("family-sheet", {}, { timeout: 8000 });
-      const text = sheet.textContent ?? "";
-      for (const row of ["Buys when", "Sells when", "Works best when", "Usually breaks when"]) {
-        expect(text).toContain(row);
-      }
-      for (const v of Object.values(info)) expect(text).toContain(v);
-      expect(sheet.querySelector('a[href="/strategies"]')).not.toBeNull();
-      expect(text).not.toMatch(/real[- ]?time|buy now|guarantee/i);
-    });
+    it(
+      `${family} ${b.label}: badge with mark, i trigger, four rows and the Strategies link`,
+      { timeout: 15000 },
+      async () => {
+        render(<PickFamily pick={{ family, familyName: b.label, familyInfo: info }} />);
+        const badge = document.querySelector("[data-family]")!;
+        expect(badge.getAttribute("data-family")).toBe(b.code);
+        expect(badge.textContent).toContain(b.mark);
+        expect(badge.textContent).toContain(b.label);
+        fireEvent.click(screen.getByRole("link", { name: `About ${b.label}` }));
+        // the dialog chunk is lazy: the first open may take longer than the 1 s default
+        const sheet = await screen.findByTestId("family-sheet", {}, { timeout: 8000 });
+        const text = sheet.textContent ?? "";
+        for (const row of ["Buys when", "Sells when", "Works best when", "Usually breaks when"]) {
+          expect(text).toContain(row);
+        }
+        for (const v of Object.values(info)) expect(text).toContain(v);
+        expect(sheet.querySelector('a[href="/strategies"]')).not.toBeNull();
+        expect(text).not.toMatch(/real[- ]?time|buy now|guarantee/i);
+      },
+    );
   }
 
   it("a family without stored words still opens with a plain fallback", async () => {
@@ -90,7 +96,16 @@ describe("AT-65 (c) the i sheet per family", () => {
 
 describe("AT-65 (d) one badge table", () => {
   it("eight codes, each with a two-letter mark that is not a hue", () => {
-    expect(Object.keys(FAMILY_BADGE).sort()).toEqual(["F1", "F2", "F3", "F4", "F5", "F6", "F7", "ID"]);
+    expect(Object.keys(FAMILY_BADGE).sort()).toEqual([
+      "F1",
+      "F2",
+      "F3",
+      "F4",
+      "F5",
+      "F6",
+      "F7",
+      "ID",
+    ]);
     for (const b of Object.values(FAMILY_BADGE)) {
       expect(FAMILY_CODES).toContain(b.code);
       expect(b.mark).toMatch(/^[A-Z]{2}$/);

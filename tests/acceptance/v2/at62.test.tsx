@@ -87,7 +87,13 @@ describe("AT-62 (b) shadow honesty", () => {
   it("the section wording carries the shadow labels and never real-time", () => {
     expect(T.INTRADAY_UNRATED).toMatch(/Unrated/);
     expect(T.INTRADAY_UNVALIDATED).toMatch(/Unvalidated/);
-    for (const s of [T.TONIGHT_TITLE, T.INTRADAY_TITLE, T.INTRADAY_EXPLAINER, T.INTRADAY_UNRATED, T.INTRADAY_UNVALIDATED]) {
+    for (const s of [
+      T.TONIGHT_TITLE,
+      T.INTRADAY_TITLE,
+      T.INTRADAY_EXPLAINER,
+      T.INTRADAY_UNRATED,
+      T.INTRADAY_UNVALIDATED,
+    ]) {
       expect(s).not.toMatch(REAL_TIME);
     }
   });

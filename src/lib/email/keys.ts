@@ -51,7 +51,11 @@ export const emailKeys = {
  * Slot-independent batch key (D-470): derived from the item set, so a retry of the same items after
  * a crash or a pending send re-uses the same claim (and the provider idempotency key).
  */
-export function pickBatchKey(userId: string, sessionD: string, alertIds: readonly string[]): string {
+export function pickBatchKey(
+  userId: string,
+  sessionD: string,
+  alertIds: readonly string[],
+): string {
   const sha = createHash("sha256")
     .update([...alertIds].sort().join("|"))
     .digest("hex")
