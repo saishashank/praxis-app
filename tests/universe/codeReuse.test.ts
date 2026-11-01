@@ -129,6 +129,39 @@ describe("import and the Owner decision", () => {
     expect(await incidents()).toHaveLength(1);
   });
 
+  it("R2-I4: a delisted row the trigger would refuse (NULL or foreign reason) is quarantined, not a batch abort", async () => {
+    await db.execute(
+      "UPDATE instrument SET delist_reason = NULL, delisted_on = '2027-01-01' WHERE code = 'ZZ09'",
+    );
+    await db.execute({
+      sql: "UPDATE instrument SET delisted_on = '2027-01-01', delist_reason = 'hand_edited', missing_count = 2 WHERE code = 'ZZ08'",
+    });
+    const csv = csvOf(
+      [
+        ...cos(8).map((c) => (c.code === "ZZ00" ? { ...c, name: "Renamed Zero Ltd" } : c)),
+        { code: "ZZ09", name: "Synthetic ZZ09 Ltd" },
+        { code: "ZZ08", name: "Synthetic ZZ08 Ltd" },
+        { code: "ZZ00", name: "Renamed Zero Ltd" }, // an ordinary change in the same batch
+      ].filter((c, i, a) => a.findIndex((x) => x.code === c.code) === i),
+    );
+    const r = await run(csv, "2027-01-05");
+    expect(r).toMatchObject({ ok: true, status: "applied" });
+    expect(await row("ZZ09")).toMatchObject({
+      delisted_on: "2027-01-01",
+      delist_reason: `${REUSE_SUSPECTED}:none`,
+    });
+    expect(await row("ZZ08")).toMatchObject({
+      delisted_on: "2027-01-01",
+      delist_reason: `${REUSE_SUSPECTED}:hand_edited`,
+    });
+    expect((await row("ZZ00")).name).toBe("Renamed Zero Ltd"); // the rest of the batch was applied
+    const inc = await incidents();
+    expect(inc).toHaveLength(1);
+    expect(JSON.parse(String(inc[0]!.detail_json)).codes).toEqual(
+      expect.arrayContaining([{ code: "ZZ09", why: "revive_refused" }]),
+    );
+  });
+
   it("a quick return is still reactivated exactly as before", async () => {
     await db.execute("UPDATE instrument SET delisted_on = '2027-01-01' WHERE code = 'ZZ09'");
     await run(csvOf([...cos(9), { code: "ZZ09", name: "Synthetic Back Ltd" }]), "2027-01-05");

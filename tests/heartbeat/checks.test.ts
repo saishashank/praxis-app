@@ -52,6 +52,44 @@ async function healthyMorning() {
   await lastPoll(new Date(MORNING_MON.getTime() - 10 * MIN).toISOString());
 }
 
+describe("R2-S1: a skipped evening heartbeat is visible the next morning", () => {
+  const eveningFinal = (d: string) =>
+    db.execute({
+      sql: `INSERT INTO run_record (job, market, concurrency_key, scheduled_for, started_at, status, details_json)
+            VALUES ('heartbeat-evening', 'AU', ?, ?, ?, 'success', '{"final":true}')`,
+      args: [`heartbeat-evening:${d}`, d, `${d}T10:00:00.000Z`],
+    });
+
+  it("is quiet on a fresh system and when last night finished", async () => {
+    await healthyMorning();
+    expect(kinds(await runChecks("morning", db, MORNING_MON))).not.toContain(
+      "evening_heartbeat_missing",
+    );
+    await eveningFinal("2026-10-11");
+    expect(kinds(await runChecks("morning", db, MORNING_MON))).not.toContain(
+      "evening_heartbeat_missing",
+    );
+  });
+
+  it("raises an S2 kind when the evening check ran before but not last night", async () => {
+    await healthyMorning();
+    await eveningFinal("2026-10-09");
+    const r = await runChecks("morning", db, MORNING_MON);
+    expect(kinds(r)).toContain("evening_heartbeat_missing");
+    expect(r.problems.find((p) => p.kind === "evening_heartbeat_missing")!.detail).toMatchObject({
+      night: "2026-10-11",
+    });
+  });
+
+  it("the evening check itself never raises it", async () => {
+    await rollup();
+    await eveningFinal("2026-10-09");
+    expect(kinds(await runChecks("evening", db, EVENING_MON))).not.toContain(
+      "evening_heartbeat_missing",
+    );
+  });
+});
+
 describe("morning check", () => {
   it("is quiet when the Worker ticked today and the last ASX poll is recent", async () => {
     await healthyMorning();

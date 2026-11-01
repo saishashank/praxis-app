@@ -19,12 +19,15 @@ import {
   SIGNOFF_NOTE_MAX,
 } from "@/lib/golive/checklist";
 import { isProductionEnv } from "@/lib/golive/interlock";
+import { MONEY_APPROVAL_PHRASE } from "@/lib/golive/moneyApproval";
+import { readMoneyApproval, type MoneyApproval } from "@/lib/golive/moneyApprovalRead";
 import { moneyConstants } from "@/lib/golive/moneyConstants";
 import { deployedCommit, loadSignoffs, type SignoffRow } from "@/lib/golive/signoff";
 import { marketDate } from "@/lib/data/calendar";
 import { userPreferences } from "@/lib/preferences/read";
-import { signOffGoLiveAction } from "./actions";
+import { approveMoneyConstantsAction, signOffGoLiveAction } from "./actions";
 import { GoLiveForm } from "./GoLiveForm";
+import { MoneyApprovalForm } from "./MoneyApprovalForm";
 import { V2Steps } from "./V2Steps";
 
 export const dynamic = "force-dynamic";
@@ -33,18 +36,21 @@ type View = {
   signoffs: SignoffRow[];
   emailMode: string;
   marketMode: string;
+  approval: MoneyApproval | null;
 };
 
 async function load(now: Date): Promise<View> {
   const db = mainDb();
-  const [signoffs, email, market] = await Promise.all([
+  const [signoffs, email, market, approval] = await Promise.all([
     loadSignoffs(db),
     readEmailSwitch(db, marketDate(now, "Australia/Melbourne")),
     db.execute({ sql: "SELECT mode FROM market WHERE code = ?", args: [GO_LIVE_MARKET] }),
+    readMoneyApproval(db),
   ]);
   return {
     signoffs,
     emailMode: email.mode,
+    approval,
     marketMode: market.rows.length === 1 ? String(market.rows[0]!.mode) : "unknown",
   };
 }
@@ -64,7 +70,8 @@ export default async function GoLivePage() {
   const commit = deployedCommit(process.env);
   const signed = view !== null && view.signoffs.length > 0;
   const constants = moneyConstants();
-  const pending = constants.filter((c) => !c.verified);
+  const attested = new Set(view?.approval?.ids ?? []);
+  const pending = constants.filter((c) => !c.verified && !attested.has(c.id));
 
   return (
     <main className="mx-auto flex max-w-4xl min-w-0 flex-col gap-6 px-4 py-6">
@@ -131,13 +138,17 @@ export default async function GoLivePage() {
           <Card title="Money figures waiting for your approval" className="min-w-0">
             {pending.length === 0 ? (
               <p className="m-0 text-sm">
-                Every cost, tick, slippage and parcel figure is approved.
+                Every cost, tick, slippage and parcel figure is approved
+                {view.approval !== null
+                  ? ` (you approved them ${formatMelbourne(view.approval.approvedAt, tf)})`
+                  : ""}
+                .
               </p>
             ) : (
               <>
                 <p className="m-0 mb-2 text-sm">
                   {pending.length} of {constants.length} figures are not approved. Production stays
-                  out of full mode until they are.
+                  out of full mode until you approve them here.
                 </p>
                 <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
                   {pending.map((c) => (
@@ -146,6 +157,11 @@ export default async function GoLivePage() {
                     </li>
                   ))}
                 </ul>
+                <MoneyApprovalForm
+                  action={approveMoneyConstantsAction}
+                  ids={constants.map((c) => c.id)}
+                  phrase={MONEY_APPROVAL_PHRASE}
+                />
               </>
             )}
           </Card>

@@ -24,8 +24,14 @@ export const MIN_CANDIDATES = 60; // threshold-ok: VAL-118 pre-registered sample
 export const MIN_SESSIONS = 60; // threshold-ok: VAL-118 pre-registered sample
 const BLOCK = 5; // threshold-ok: the 5-session hold is the block floor
 
+// R2-S3 (D-806): the text now states the SELECTION rule, finalised before the first production look
+// (no sample existed; D-670's one look per cell is unaffected, so the cell stays `v1`).
 export const HYPOTHESIS_TEXT =
-  "Mean 5-session excess return of intraday candidates, from the next open against the market " +
+  "Candidates are intraday-flagged stocks with a catalyst of materiality 2 or more, relative volume at or above the set minimum and a fresh quote, " +
+  "whose move from the previous close is at least the larger of intraday_move_min_pct and 1.5 times the 60-session standard deviation; " +
+  "the move is the sector-adjusted move (the move less the previous session's equal-weight composite return of the stock's industry, " +
+  "when that industry has at least 5 members and the composite points the same way as the move), else the raw move (D-750). " +
+  "Mean 5-session excess return of those candidates, from the next open against the market " +
   "total-return index and net of the Cortex round-trip cost per order (fee plus slippage or half-spread, A$1,000 parcel), is greater than 0, on at least 60 " +
   "candidates over at least 60 sessions, with the one-sided 90 % block-bootstrap lower bound above 0.";
 

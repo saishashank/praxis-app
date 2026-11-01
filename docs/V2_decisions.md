@@ -237,6 +237,20 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-796 | (V1-I15) docs/runbooks/gates.md is the "what runs where" table; |
 | D-797 | (V2-I5) scripts/ci/decision-index.mjs writes docs/V2_decisions.md (D-206 on, by milestone, one line each, with the holding file) from the - D-nnn lines of do... |
 | D-798 | (V1-I5) Migration policy: production is forward-only; -- +down sections are for TST-125 and the Owner-run staged rollback of docs/runbooks/rollback-v2.md (D-... |
+| D-800 | (R2-S1) The evening heartbeat accepts a scheduled call by DST regime, not by a Melbourne clock window. |
+| D-801 | (R2-S1) Watchdog ordering needs no timing change. |
+| D-802 | (R2-S1) A night without an evening check is visible. |
+| D-803 | (R2-S1) vercel.json is unchanged (the same eight entries); only the handler's acceptance rule changed. tests/http/vercelCrons.test.ts keeps its shape asserti... |
+| D-804 | (R2-S2) The money-figure approval is DATA. src/lib/golive/moneyApproval.ts (writer) and moneyApprovalRead.ts (reader, no control imports, so the interlock ca... |
+| D-805 | (R2-S2) fullModeRefusal (D-710) now returns constants_unverified only for a figure that is still unverified in code AND not named in the latest attestation. |
+| D-806 | (R2-S3) The pre-registered VAL-118 hypothesis text (HYPOTHESIS_TEXT, cell intraday_stream:<market>:v1) now states the selection rule: candidates need a catal... |
+| D-807 | (R2-I2) previousSessionClosed fails closed when previousTradingDay throws: if any earlier session is on record as closed, the night is refused (previous_sess... |
+| D-808 | (R2-I3) A night refused with previous_session_not_closed counts as closed FOR THE RECHECK ONLY (RECHECK_CLOSED_SQL in worker/src/clock.ts): the Worker does n... |
+| D-809 | (R2-I4) planUniverse mirrors the instrument_no_revive trigger: a returning delisted code whose delist_reason is NULL or foreign (anything but absent_from_lis... |
+| D-810 | (R2-I5) Code and D-694 agree: armed pick alerts may spend the scan's last 5 % (that is D-694 as written); the scan now says so. |
+| D-811 | (R2-I1) V2 step v2_cron_accepted (staging): after the first staging deploy the Owner checks that the project's Cron Jobs list holds all eight entries, each o... |
+| D-812 | (R2-I6, R2-S3) The PR tick list (guide step 14, step v2_approvals) now also names D-750, D-740 to D-755, D-710, D-718 and D-761, as the review asked. |
+| D-813 | (R2-I7) V2 step v2_restore_size (before production): run node scripts/restore/drill-size.mjs --rows 500000 once and write down the date, PASS or FAIL and the... |
 
 ## M14 (M14_design.md)
 

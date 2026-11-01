@@ -4,7 +4,12 @@
 // the first night, holidays and a recovery run in order are unaffected.
 import { afterEach, describe, expect, it } from "vitest";
 import type { Client } from "@libsql/client";
-import { closeBooksDay, closeBooksKey, type CloseBooksResult } from "@/lib/arena/closeBooks";
+import {
+  closeBooksDay,
+  closeBooksKey,
+  previousSessionClosed,
+  type CloseBooksResult,
+} from "@/lib/arena/closeBooks";
 import { cleanupTempDbs } from "../db/helpers";
 import { MARKET, NOW, dumpTables, setupReplay } from "./replayHarness";
 
@@ -73,6 +78,19 @@ describe("previous session not closed (V1-B1)", () => {
     expect((await closeDay(b.db, b.ds.dates[4])).status).toBe("success"); // the refused night, re-run
     expect((await closeDay(b.db, b.ds.dates[5])).status).toBe("success");
     expect(await dumpTables(b.db)).toEqual(await dumpTables(a.db));
+  });
+
+  it("R2-I2: a failed calendar walk fails closed once an earlier session is on record, and keeps the first-night exemption", async () => {
+    const s = await setupReplay(BASE);
+    const [d0] = s.ds.dates;
+    // nothing closed yet: nothing to be late for, even when the walk cannot be done
+    expect(await previousSessionClosed(s.db, MARKET, "not-a-date", [])).toEqual({ ok: true });
+    expect((await closeDay(s.db, d0)).status).toBe("success");
+    // an earlier closed session exists and the walk throws: refuse, never skip the guard
+    expect(await previousSessionClosed(s.db, MARKET, "2030-13-45", [])).toEqual({
+      ok: false,
+      priorD: "unknown",
+    });
   });
 
   it("the first night (no earlier closed session) is not blocked", async () => {

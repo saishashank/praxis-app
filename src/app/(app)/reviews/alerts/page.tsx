@@ -55,8 +55,9 @@ export default async function AlertsReportPage() {
               <dd className="m-0">{pctText(m.meanFound5)}</dd>
             </dl>
             <p className="m-0 mt-2 text-xs text-text-muted">
-              Average gain or loss beyond the market, from the next open unless stated. Shadow,
-              unvalidated.
+              Average gain or loss beyond the market, from the next open unless stated. Stocks are
+              flagged on the move after taking off the sector&apos;s move where that is known (at
+              least 5 stocks in the industry), else on the raw move. Shadow, unvalidated.
             </p>
           </Card>
         ))

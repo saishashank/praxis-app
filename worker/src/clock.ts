@@ -126,12 +126,16 @@ export const RECHECK_RUNNING_MAX_MS = 45 * MINUTE_MS; // a `running` record olde
 /**
  * "The record closed its session" (D-675): the same predicate as `CLOSED_2A_SQL` in
  * `src/lib/arena/closeBooks.ts`. An invariant freeze (`failed` with `navDays`) completed the night
- * and is not dispatched again; a `failed` without it (crash, provider error) is retried.
+ * and is not dispatched again; a `failed` without it (crash, provider error) is retried. R2-I3: so is a
+ * refusal `previous_session_not_closed` (one run per night, the S2 `arena_close_gap` is the alarm).
  */
 export const RECHECK_CLOSED_SQL =
   "(status IN ('success', 'degraded') " +
   "OR (status = 'failed' AND json_extract(details_json, '$.navDays') IS NOT NULL) " +
-  "OR (status = 'skipped' AND json_extract(details_json, '$.reason') IS NOT 'no_completion_marker'))";
+  "OR (status = 'skipped' AND json_extract(details_json, '$.reason') IS NOT 'no_completion_marker') " +
+  // R2-I3 (D-808): a night REFUSED because the previous session is not closed is closed FOR THE RECHECK
+  // only (the guard in closeBooks.ts does not count it): a second run the same day refuses the same way.
+  "OR (status = 'failed' AND json_extract(details_json, '$.reason') = 'previous_session_not_closed'))";
 const rollupKey = (date: string): string => `${CLOCK_JOB}:${MARKET}:${date}`;
 
 // ---- pure decision ---------------------------------------------------------------------------

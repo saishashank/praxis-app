@@ -14,6 +14,7 @@ import {
 } from "@/lib/watchdog/state";
 import { marketDate, type CalendarSummary } from "@/lib/data/calendar";
 import { unverifiedMoneyConstants } from "@/lib/golive/moneyConstants";
+import { uncoveredByApproval } from "@/lib/golive/moneyApprovalRead";
 import { calendarYearSummary } from "@/lib/data/calendarAdmin";
 import { loadControlsView, type ControlsView } from "@/lib/data/controls";
 import { pickAlertsHealth } from "@/lib/alerts/pick/poll";
@@ -182,7 +183,12 @@ export async function getHealthSummary(
     quality: await getQuality(mainDb, role),
   };
   if (owner) {
-    summary.moneyUnverified = unverifiedMoneyConstants();
+    try {
+      // R2-S2: a figure the Owner attested on the go-live page no longer counts as waiting.
+      summary.moneyUnverified = await uncoveredByApproval(mainDb, unverifiedMoneyConstants());
+    } catch {
+      summary.moneyUnverified = unverifiedMoneyConstants();
+    }
     try {
       const lines = [
         ...(await pickAlertsHealth(mainDb, now)),

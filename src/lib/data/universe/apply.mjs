@@ -57,6 +57,18 @@ export function normaliseName(name) {
 
 const dayNumber = (d) => Math.floor(Date.parse(`${d}T00:00:00Z`) / 86_400_000);
 
+/**
+ * R2-I4 (D-809): the SQL trigger `instrument_no_revive` (0025) refuses delisted_on -> NULL unless the
+ * old reason is the import's own, or an Owner decision. The plan mirrors that test, so a row the
+ * trigger would refuse (a NULL or foreign reason, a hand-edited row) is quarantined here instead of
+ * aborting the whole import batch. `undefined` (field not supplied) is not judged; NULL is refused.
+ */
+export function revivable(reason) {
+  if (reason === undefined) return true; // not supplied (a pure caller); the import always supplies it
+  const r = reason ?? "";
+  return r === DELIST_REASON || r.startsWith(RELIST_CONFIRMED) || r.startsWith(REUSE_CONFIRMED);
+}
+
 /** Why a returning delisted code looks like a different company, or null (V1-S7). */
 export function reuseSuspicion(e, row, today) {
   const reason = e.delistReason ?? null;
@@ -112,7 +124,8 @@ export function planUniverse({ existing, file, today }) {
     if (e === undefined) {
       inserts.push(r);
     } else if (e.delistedOn !== null) {
-      const why = reuseSuspicion(e, r, today);
+      const why =
+        reuseSuspicion(e, r, today) ?? (revivable(e.delistReason) ? null : "revive_refused");
       if (why === null) {
         reactivations.push(r);
         const reason = e.delistReason ?? "";

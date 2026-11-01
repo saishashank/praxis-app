@@ -3,12 +3,15 @@
 // when (1) a `go_live_signoff` row exists for it (written by the Owner on /ops/go-live after every
 // checklist item) and (2) `email_mode` is not `off`. STAGING is free (AT-28 needs it). Anything that
 // is not positively identified as staging is treated as production (fail closed). V1-S2 / D-710:
-// (3) no money constant may still be unverified (moneyConstants.ts): the [VERIFY] brokerage, tick,
-// slippage and parcel figures need the Owner's approval before real paper trading starts.
+// (3) no money constant may be left without approval (moneyConstants.ts): the [VERIFY] brokerage, tick,
+// slippage and parcel figures need the Owner's approval before real paper trading starts. R2-S2: the
+// approval is DATA, an audited Owner attestation row (moneyApproval.ts) that covers every figure still
+// unverified in code; the code flags are informational only.
 import type { Client, Transaction } from "@libsql/client";
 import { readEmailSwitch } from "@/lib/email/switch";
 import { deriveEnv } from "@/lib/selfcheck/checks";
 import { unverifiedMoneyConstants } from "./moneyConstants";
+import { uncoveredByApproval } from "./moneyApprovalRead";
 
 type Exec = Pick<Client, "execute"> | Pick<Transaction, "execute">;
 
@@ -51,5 +54,6 @@ export async function fullModeRefusal(
   if (!(await hasSignoff(db, market))) return "signoff_required";
   const sw = await readEmailSwitch(db as Pick<Client, "execute">, today);
   if (sw.mode === "off") return "email_off";
-  return unverified.length > 0 ? "constants_unverified" : null;
+  // R2-S2: the code flags are informational; the Owner's attestation (moneyApproval.ts) lifts the gate.
+  return (await uncoveredByApproval(db, unverified)).length > 0 ? "constants_unverified" : null;
 }
