@@ -33,3 +33,11 @@ A V1 build runs `node scripts/db/migrate.mjs --if-vercel`. The V1 copy of that s
 ## Tested
 
 `tests/db/0023_feature_retention.test.ts` covers: an older tree failing by default and tolerating the newer database only on request; the checksum guard; `--down-to 14` from 0023 and back up to a schema identical to a fresh one; the CLI refusing `--down-to` without `--confirm-down`.
+
+## Migration "down" policy (V1-I5, D-798)
+
+- **Production is forward-only.** The deploy build runs `migrate.mjs` up only (`--if-vercel`); it never runs a down section. A bad migration is fixed by a new forward migration (expand, then contract), or by Level 1 above while the fix is built.
+- **`-- +down` sections exist for tests and for the staged rollback only.** TST-125 proves up, down and up again gives the same schema (`migrateDown` in `src/lib/db/migrate-core.mjs`). The one supported use outside tests is the Owner-run `--down-to <version> --confirm-down` of Level 2, option 2 (D-703), always after a backup, on a database where the loss of the newer tables' data is accepted.
+- **A down section is not a promise of data recovery.** It restores the schema shape, not deleted rows (see "This deletes data").
+- **Auth database:** no down path is used; never run `--db auth` down.
+- D-030 ("TST-125 needs up and down") is read this way: the down sections serve the test, not a production workflow.

@@ -9,6 +9,7 @@
     "docs/architecture/",
     "docs/config-reference.md",
     "docs/source-licence-register.md",
+    "docs/V2_decisions.md",
     "docs/M1_exit_evidence.md",
     "docs/M3_exit_evidence.md",
     "docs/M4_exit_evidence.md",

@@ -49,6 +49,8 @@ export const SHADOW_ONLY_TEXT =
 const WINDOW_DAYS = 60; // threshold-ok: look-back of the abstain and comparator figures
 const MAX_PASSPORTS = 80; // threshold-ok: passport rows listed
 const MAX_NIGHTS = 400; // threshold-ok: nights read for the cold-start count
+const DEFAULT_FWER = 0.05; // threshold-ok: registry default of val_fwer_per_lineage (O-43)
+const DEFAULT_LESSON_POOL = 0.1; // threshold-ok: registry default of l2_alpha_w0 (VAL-116)
 const DEFAULT_FDR_Q = 0.1; // threshold-ok: registry default of ledger_fdr_q
 const PPM = 1_000_000; // threshold-ok: parts per million
 const MS_DAY = 86_400_000; // threshold-ok: milliseconds per day
@@ -133,6 +135,8 @@ export type CortexView = {
     level: number;
     luckExpected: number;
     luckText: string;
+    /** V2-I10 / D-795: the two separate error levels, in words (strategies 0.05, lessons 0.1 pool). */
+    errorLevelsText: string;
   };
   families: FamilyView[];
   placebo: { passed: boolean; nullPassRatePpm: number | null; at: string | null } | null;
@@ -252,6 +256,13 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
     tried === 0
       ? NOT_MEASURED
       : `Of ${tried} ideas tried, about ${luckExpected} would look good by luck alone.`;
+
+  // V2-I10 (D-795): two separate error levels, each named exactly (O-43 for lineages, VAL-116 for lessons)
+  const fwer =
+    fin(await soft(() => getConfig(db, "val_fwer_per_lineage"), DEFAULT_FWER)) ?? DEFAULT_FWER;
+  const lessonPool =
+    fin(await soft(() => getConfig(db, "l2_alpha_w0"), DEFAULT_LESSON_POOL)) ?? DEFAULT_LESSON_POOL;
+  const errorLevelsText = `Two separate error levels apply. Each Cortex strategy is held to a family-wise level of ${fwer} across all the tests of that strategy (Owner decision O-43). Lessons are tested from their own pool, which starts at ${lessonPool} (VAL-116); that is a different pool, not the same level.`;
 
   // family status, numbers and MDEs
   const status = await soft(
@@ -412,7 +423,7 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
     shadowOnlyText: SHADOW_ONLY_TEXT,
     refitPending: pending,
     passports: { total: passports.length, byStatus, rows: passportRows },
-    ledger: { cells, keyEdits, level: q, luckExpected, luckText },
+    ledger: { cells, keyEdits, level: q, luckExpected, luckText, errorLevelsText },
     families,
     placebo,
     navAtRisk,

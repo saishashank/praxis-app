@@ -5,9 +5,9 @@
 import { describe, expect, it } from "vitest";
 import {
   addDays,
-  calendarCovers,
   displayMelbourne,
   isTradingDay,
+  calendarDayStatus,
   isWeekend,
   localToUtc,
   marketDate,
@@ -223,8 +223,8 @@ describe("weekdays, holidays and trading days", () => {
   });
   it("a weekday without a row is provisionally a trading day and is reported as uncovered", () => {
     expect(isTradingDay("2030-03-05", ROWS)).toBe(true);
-    expect(calendarCovers("2030-03-05", ROWS)).toBe(false);
-    expect(calendarCovers("2026-12-25", ROWS)).toBe(true);
+    expect(calendarDayStatus("2030-03-05", ROWS)).toBe("missing");
+    expect(calendarDayStatus("2026-12-25", ROWS)).toBe("closed");
   });
   it("addDays crosses month, year and leap-day boundaries", () => {
     expect(addDays("2026-12-31", 1)).toBe("2027-01-01");

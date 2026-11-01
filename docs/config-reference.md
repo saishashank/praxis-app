@@ -230,7 +230,7 @@ Who may change a key: Owner (any valid value), Owner within bounds (Lane B, beco
 | `pick_success_min_n` | `30` | picks | Owner | whole number, 10 to 200 | yes | UXN-041; ch.15 l.213 (bounds 'as ch. 16' not given, 10-200 agent-chosen, D-111) |
 | `pick_valid_sessions` | `2` | sessions | Owner | whole number, 1 to 5 | yes | UXN-040, AGT-113; ch.15 l.212 |
 | `picks_default_sort` | `"chance"` | choice | Owner | one of chance, expected_gain | no | UXN-309 |
-| `picks_max_per_family` | `10` | picks | Owner | whole number, 1 to 10 | yes | AGT-113; ch.15 l.211; M17 O-76 default 10 = no family cap |
+| `picks_max_per_family` | `10` | picks | Owner | whole number, 10 to 10 | yes | AGT-113; ch.15 l.211; M17 O-76: no per-family cap; bounds pinned to 10 by D-791 |
 | `picks_per_profile` | `10` | picks | Owner | whole number, 0 to 10 | yes | AGT-113; ch.15 l.208; M17 O-76 default 10 |
 | `pii_hash_after_revocation_days` | `90` | days | nobody (fixed) | fixed | no | NFR-030 |
 | `playbook_max_tokens` | `1500` | tokens | nobody (fixed) | fixed | no | KB-002, M6 decision 28 (D-110); not in ch.15 |

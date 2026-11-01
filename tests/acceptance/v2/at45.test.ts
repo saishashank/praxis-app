@@ -34,7 +34,7 @@ import { eventFactFromRow, reversedNextClose } from "@/lib/agents/families/facts
 import { volumeRatio } from "@/lib/agents/indicators";
 import { defaultAgentParams } from "@/lib/agents/params";
 import type { CorpActionRecord } from "@/lib/arena/corpActions";
-import { adjustedBars } from "@/lib/data/adjusted";
+import { adjustedBars, UNBOUNDED } from "@/lib/data/adjusted";
 import type { CalendarRow, MarketHours } from "@/lib/data/calendar";
 import { loadActions, runCorporateActions, settle } from "@/lib/data/corporateActions/engine.mjs";
 import { carryTiers, noopQualityHook, runBatch1 } from "@/lib/data/pipeline/batch1";
@@ -410,7 +410,7 @@ describe("AT-45 4: DAT-233 a price factor whose reference close changed is queue
     });
     const [a] = await loadActions(db, io(), "AU");
     expect(a?.state).toBe("confirmed");
-    const before = await adjustedBars(db, "ZZA", D0, D1);
+    const before = await adjustedBars(db, "ZZA", D0, D1, { knownBy: UNBOUNDED });
     expect([before[0]?.priceFactor, before[0]?.splitFactor]).toEqual([0.75, 1]);
     const f = await rows(
       db,
@@ -428,7 +428,7 @@ describe("AT-45 4: DAT-233 a price factor whose reference close changed is queue
     const [b] = await loadActions(db, io(), "AU");
     expect(b?.state).toBe("owner");
     expect(b?.note.reasons).toEqual(["ref_close_mismatch"]);
-    const after = await adjustedBars(db, "ZZA", D0, D1);
+    const after = await adjustedBars(db, "ZZA", D0, D1, { knownBy: UNBOUNDED });
     expect(after[0]?.priceFactor).toBe(1);
     expect(after[0]?.c).toBe(10);
   });

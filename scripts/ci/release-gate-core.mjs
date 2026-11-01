@@ -26,7 +26,18 @@ export const ZAP_MAX_DAYS = 7; // staging ZAP scan must be this fresh
 export const DRILL_MAX_DAYS = 120; // TST-112, TST-108, D-155
 
 /** CI jobs of ci.yml that must have succeeded on the commit (the PR gate, M7 and M8 checks). */
-export const CI_REQUIRED_JOBS = ["app", "e2e", "secrets", "worker", "fixtures", "python"];
+// V1-I15 / D-796: the default equals the ci.yml release-gate `needs` list (a test pins the two together).
+export const CI_REQUIRED_JOBS = [
+  "app",
+  "e2e",
+  "secrets",
+  "worker",
+  "fixtures",
+  "python",
+  "audit",
+  "coverage",
+  "checks",
+];
 
 /** Step names the gate reads (workflow text; a rename must be mirrored here and in the tests). */
 export const STEP = {

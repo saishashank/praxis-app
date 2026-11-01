@@ -3,7 +3,7 @@
 // only while its reference close still equals the close before the ex-date; adjustedBars returns the
 // price and split factors separately. Synthetic ZZ* data only (SEC-110).
 import { afterEach, describe, expect, it } from "vitest";
-import { adjustedBars, effectiveFactors } from "@/lib/data/adjusted";
+import { adjustedBars, effectiveFactors, UNBOUNDED } from "@/lib/data/adjusted";
 import { loadActions, runCorporateActions, settle } from "@/lib/data/corporateActions/engine.mjs";
 import { factorKindOf, refCloseMatches, reasonText } from "@/lib/data/corporateActions/rules.mjs";
 import { cleanupTempDbs } from "../db/helpers";
@@ -70,7 +70,9 @@ describe("a price factor with a changed reference close is queued, not applied",
     await run(db, D1, [announced("ZZA", "spin_off", D1, spin)]);
     const [a] = await loadActions(db, io(), "AU");
     expect(a?.state).toBe("confirmed");
-    expect((await adjustedBars(db, "ZZA", D0, D1))[0]?.priceFactor).toBe(0.75);
+    expect((await adjustedBars(db, "ZZA", D0, D1, { knownBy: UNBOUNDED }))[0]?.priceFactor).toBe(
+      0.75,
+    );
     // the stored reference close was recorded against a bar that has since been replaced: simulate it
     // by adding a newer factor row (append-only) with another reference, then settle again
     await db.execute({
@@ -83,7 +85,7 @@ describe("a price factor with a changed reference close is queued, not applied",
     const [b] = await loadActions(db, io(), "AU");
     expect(b?.state).toBe("owner");
     expect(b?.note.reasons).toEqual(["ref_close_mismatch"]);
-    const bars = await adjustedBars(db, "ZZA", D0, D1);
+    const bars = await adjustedBars(db, "ZZA", D0, D1, { knownBy: UNBOUNDED });
     expect(bars[0]?.priceFactor).toBe(1);
     expect(bars[0]?.c).toBe(10);
   });
@@ -97,11 +99,11 @@ describe("adjustedBars returns the factors separately", () => {
     await putBar(db, "ZZA", D2, 3.8);
     await run(db, D1, [announced("ZZA", "spin_off", D1, spin)]);
     await run(db, D2, [announced("ZZA", "split", D2, { new: 2, old: 1 }, "ann-2")]);
-    const [b0, b1, b2] = await adjustedBars(db, "ZZA", D0, D2);
+    const [b0, b1, b2] = await adjustedBars(db, "ZZA", D0, D2, { knownBy: UNBOUNDED });
     expect([b0?.priceFactor, b0?.splitFactor, b0?.factor]).toEqual([0.75, 0.5, 0.375]);
     expect([b1?.priceFactor, b1?.splitFactor]).toEqual([1, 0.5]);
     expect([b2?.priceFactor, b2?.splitFactor, b2?.factor]).toEqual([1, 1, 1]);
-    const f = await effectiveFactors(db, "ZZA");
+    const f = await effectiveFactors(db, "ZZA", "AU", UNBOUNDED);
     expect(f.map((x) => x.kind)).toEqual(["price", "split"]);
   });
 
@@ -120,8 +122,10 @@ describe("adjustedBars returns the factors separately", () => {
       sql: "INSERT INTO adjustment_factor (market, code, ex_date, factor, corporate_action_id, computed_at) VALUES ('AU','ZZA',?,0.9,1,?)",
       args: [D1, nowOf(D1)],
     });
-    expect((await effectiveFactors(legacy, "ZZA")).map((x) => x.kind)).toEqual(["price"]);
-    expect((await adjustedBars(legacy, "ZZA", D0, D0))[0]).toMatchObject({
+    expect((await effectiveFactors(legacy, "ZZA", "AU", UNBOUNDED)).map((x) => x.kind)).toEqual([
+      "price",
+    ]);
+    expect((await adjustedBars(legacy, "ZZA", D0, D0, { knownBy: UNBOUNDED }))[0]).toMatchObject({
       priceFactor: 0.9,
       splitFactor: 1,
     });

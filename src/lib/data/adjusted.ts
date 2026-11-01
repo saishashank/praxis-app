@@ -19,8 +19,19 @@
 // relative), far below a tick, and the reader does not round.
 import { listingFloor } from "@/lib/data/listing";
 import type { Client } from "@libsql/client";
+import { boundedKnownAt } from "@/lib/arena/corpActions";
 import { isRealDate } from "./pipeline/rules.mjs";
 import { factorKindOf, isEffective, stateOf } from "./corporateActions/rules.mjs";
+
+/**
+ * V1-I4 / D-790: `knownBy` is mandatory. A reader that omits the bound would see a split confirmed
+ * AFTER the decision (look-ahead). Pass the decision cut-off (`decisionCutoffUtc`) for a replay, or
+ * `UNBOUNDED` only for a reconstruction that is not a decision (a chart, an audit). Nothing in
+ * `src/` calls this reader today; `adjustment_factor` rows are reconstruction input only, and the
+ * live paths use `corpActions.ts` (as-of `known_at`).
+ */
+export const UNBOUNDED = "unbounded" as const;
+export type KnownBy = string | typeof UNBOUNDED;
 
 export type RawBar = { o: number; h: number; l: number; c: number; volume: number };
 export type AdjustedBar = RawBar & {
@@ -45,8 +56,8 @@ export type EffectiveFactor = {
 };
 
 /** GL-02: true when the action was already known at the cut-off instant (null = always known). */
-export function isKnownBy(knownAt: string | null, cutoffIso: string | undefined): boolean {
-  if (cutoffIso === undefined || knownAt === null) return true;
+export function isKnownBy(knownAt: string | null, cutoffIso: KnownBy): boolean {
+  if (cutoffIso === UNBOUNDED || knownAt === null) return true;
   const k = Date.parse(knownAt);
   return Number.isFinite(k) && k <= Date.parse(cutoffIso);
 }
@@ -55,8 +66,8 @@ export function isKnownBy(knownAt: string | null, cutoffIso: string | undefined)
 export async function effectiveFactors(
   db: Pick<Client, "execute">,
   code: string,
-  market = "AU",
-  knownBy?: string,
+  market: string,
+  knownBy: KnownBy,
 ): Promise<EffectiveFactor[]> {
   const acts = await db.execute({
     sql: `SELECT ca.id AS id, ca.ex_date AS ex_date, ca.known_at AS known_at,
@@ -64,6 +75,10 @@ export async function effectiveFactors(
                ORDER BY e.id DESC LIMIT 1) AS status,
             (SELECT e.note FROM corporate_action_event e WHERE e.action_id = ca.id
                ORDER BY e.id DESC LIMIT 1) AS note,
+            (SELECT e.at FROM corporate_action_event e WHERE e.action_id = ca.id
+               ORDER BY e.id ASC LIMIT 1) AS first_at,
+            (SELECT e.at FROM corporate_action_event e WHERE e.action_id = ca.id
+               ORDER BY e.id DESC LIMIT 1) AS last_at,
             ca.type AS type,
             (SELECT f.factor FROM adjustment_factor f WHERE f.market = ca.market
                AND f.corporate_action_id = ca.id ORDER BY f.computed_at DESC LIMIT 1) AS factor,
@@ -77,7 +92,12 @@ export async function effectiveFactors(
     if (r.status === null || r.factor === null) continue;
     const st = stateOf({ status: String(r.status), note: r.note === null ? null : String(r.note) });
     if (!isEffective(st.state)) continue;
-    const knownAt = r.known_at === null || r.known_at === undefined ? null : String(r.known_at);
+    // V2-I7: a NULL known_at is "always known" only for a legacy row (first event before 0016).
+    const knownAt = boundedKnownAt(
+      r.known_at === null || r.known_at === undefined ? null : String(r.known_at),
+      r.first_at === null || r.first_at === undefined ? null : String(r.first_at),
+      r.last_at === null || r.last_at === undefined ? null : String(r.last_at),
+    );
     if (!isKnownBy(knownAt, knownBy)) continue;
     out.push({
       actionId: Number(r.id),
@@ -95,7 +115,7 @@ export async function adjustedBars(
   code: string,
   from: string,
   to: string,
-  opts: { market?: string; asOf?: string; knownBy?: string } = {},
+  opts: { market?: string; asOf?: string; knownBy: KnownBy },
 ): Promise<AdjustedBar[]> {
   const market = opts.market ?? "AU";
   if (!/^[A-Z0-9]{2,6}$/.test(code)) throw new RangeError("invalid code");

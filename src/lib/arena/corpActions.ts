@@ -63,6 +63,27 @@ export type CorpActionRecord = {
 };
 
 /**
+ * V2-I7 / D-793: a NULL `known_at` means "known since before the column existed" only for an action
+ * whose FIRST event is older than this instant (migration 0016 was merged on 2026-10-30; the
+ * production database gets it later, so every legacy row's first event is earlier). A NULL row whose
+ * first event is on or after the bound came from a writer that did not stamp it; it is then treated
+ * as known from its newest event, never as "always known", so the look-ahead guard stays on.
+ */
+export const LEGACY_NULL_KNOWN_AT_BEFORE = "2026-10-30T00:00:00.000Z";
+
+export function boundedKnownAt(
+  knownAt: string | null,
+  firstEventAt: string | null,
+  newestEventAt: string | null,
+): string | null {
+  if (knownAt !== null) return knownAt;
+  if (firstEventAt === null || newestEventAt === null) return null;
+  const first = Date.parse(firstEventAt);
+  if (Number.isFinite(first) && first < Date.parse(LEGACY_NULL_KNOWN_AT_BEFORE)) return null;
+  return newestEventAt;
+}
+
+/**
  * GL-02: the actions known at a cut-off. An action counts only when it was confirmed at or before the
  * instant (known_at <= cutoff); a null/absent known_at means it predates the column and always counts.
  * Compared as instants, not as text, so a differing ISO form cannot mis-order two times.
