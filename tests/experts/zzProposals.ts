@@ -12,10 +12,10 @@ import {
 } from "./zzScreen";
 
 export const cid = (n: number): string => `K-${String(n).padStart(3, "0")}`;
-/** The generator may propose three per lineage a week, so the expert cap (2) is the binding one. */
+/** The v1 generator cap stays at its default (1 per lineage a week): expert proposals are exempt from it (D-620). */
 export const paramsWith = (learning: Partial<(typeof TEST_PARAMS)["learning"]> = {}) => ({
   ...TEST_PARAMS,
-  learning: { ...TEST_PARAMS.learning, challengerGeneratorPerWeek: 3, ...learning },
+  learning: { ...TEST_PARAMS.learning, ...learning },
 });
 
 export const addDays = (d: string, n: number): string =>

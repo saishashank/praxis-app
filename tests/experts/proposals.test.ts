@@ -5,7 +5,8 @@ import { afterAll, describe, expect, it } from "vitest";
 import { parkedProposals, proposeChallengers } from "@/lib/experts/proposals";
 import { currentClaimStatus } from "@/lib/experts/store";
 import { cleanupTempDbs } from "../db/helpers";
-import { addCluster } from "./zzScreen";
+import { createChallenger } from "@/lib/learning/challengerLifecycle";
+import { addCluster, f1Params } from "./zzScreen";
 import { addDays, cid, paramsWith, plantedWorld, RUN_D, rows } from "./zzProposals";
 
 afterAll(cleanupTempDbs);
@@ -86,6 +87,68 @@ describe("proposeChallengers", () => {
     expect(all).toHaveLength(6);
     expect(new Set(all.map((r) => String(r.id))).size).toBe(6);
     expect(all.filter((r) => String(r.status) === "refused")).toHaveLength(3); // old rows untouched
+  });
+
+  it("is exempt from the per-lineage generator cap the v1 search still obeys (D-620)", async () => {
+    const w = await plantedWorld(3);
+    expect(paramsWith().learning.challengerGeneratorPerWeek).toBe(1);
+    // the v1 generator already proposed for F1 this week (the challengers stage ran first, D-517)
+    const v1 = await createChallenger(w.db, {
+      market: "AU",
+      family: "F1",
+      origin: "generator",
+      params: f1Params(39),
+      lessonIds: [],
+      d: RUN_D,
+      actor: "A6",
+      learning: paramsWith().learning,
+      stats: paramsWith().stats,
+    });
+    expect(v1.status).toBe("created");
+    const again = await createChallenger(w.db, {
+      market: "AU",
+      family: "F1",
+      origin: "generator",
+      params: f1Params(38),
+      lessonIds: [],
+      d: RUN_D,
+      actor: "A6",
+      learning: paramsWith().learning,
+      stats: paramsWith().stats,
+    });
+    expect(again).toMatchObject({ status: "refused", reason: "weekly_generator_cap" });
+    // the expert survivors of the same family are still created, up to the expert cap
+    const run = await w.screen(RUN_D);
+    const out = await proposeChallengers(w.ctxAt(RUN_D), run);
+    expect(out.map((o) => o.status)).toEqual(["created", "created"]);
+    expect(await trials(w.db)).toBe(3);
+  });
+
+  it("an exists result (a challenger with these parameters is already there) moves the claims too (D-622)", async () => {
+    const w = await plantedWorld(1);
+    const run = await w.screen(RUN_D);
+    const k = run.ranked[0]!;
+    // the same parameter set created outside the proposal path (a crash after createChallenger looks the same)
+    const pre = await createChallenger(w.db, {
+      market: "AU",
+      family: k.family,
+      origin: "generator",
+      params: k.params,
+      lessonIds: [],
+      d: RUN_D,
+      actor: "A6",
+      learning: paramsWith().learning,
+      stats: paramsWith().stats,
+    });
+    expect(pre.status).toBe("created");
+    const out = await proposeChallengers(w.ctxAt(RUN_D), run);
+    expect(out.map((o) => o.status)).toEqual(["exists"]);
+    expect(out[0]!.reason).toContain(`exists as ${pre.status === "created" ? pre.id : ""}`);
+    expect(await trials(w.db)).toBe(1); // nothing charged twice
+    expect(await currentClaimStatus(w.db, `C-${k.clusterId}`)).toBe("challenger");
+    // a later week finds the exists row and never calls again
+    const d2 = addDays(RUN_D, 7);
+    expect(await proposeChallengers(w.ctxAt(d2), await w.screen(d2))).toEqual([]);
   });
 
   it("expert_challengers_per_week 0 turns proposals off", async () => {

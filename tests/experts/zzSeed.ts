@@ -4,13 +4,19 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+/**
+ * Seed rows are untyped on purpose: the import tests corrupt them (unknown keys, wrong value types, deleted
+ * fields) to prove the importer refuses them; the importer, not this helper, is the type boundary.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- deliberately malformed test input
+export type SeedRow = Record<string, any>;
 export type SeedFiles = {
   "manifest.json": { format: string; market: string; created_at: string };
-  "experts.json": { experts: any[] };
-  "items.json": { items: any[] };
-  "claims.json": { claims: any[] };
-  "clusters.json": { clusters: any[] };
-  "calls.json"?: { calls: any[] };
+  "experts.json": { experts: SeedRow[] };
+  "items.json": { items: SeedRow[] };
+  "claims.json": { claims: SeedRow[] };
+  "clusters.json": { clusters: SeedRow[] };
+  "calls.json"?: { calls: SeedRow[] };
 };
 
 const AT = "2030-02-01T00:00:00.000Z";

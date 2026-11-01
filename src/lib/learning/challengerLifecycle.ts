@@ -182,6 +182,13 @@ export type NewChallenger = {
   readonly incumbentVersionId?: string;
   /** Free text added to the first status reason and the first event (the pre-registered list cites KB-081 / O-46). */
   readonly note?: string;
+  /**
+   * Which weekly cap a `generator` challenger is held to. `lineage` (default): the v1 search's
+   * `challenger_generator_per_week` per lineage (M6 decision 20). `exempt`: an expert proposal (KB-077), which
+   * has its own weekly cap `expert_challengers_per_week` and obeys only KB-042, the lineage budget (ARN-085)
+   * and the O-46 variant cap here (D-620). The weekly run keeps v1's priority by running experts last (D-517).
+   */
+  readonly weeklyCap?: "lineage" | "exempt";
 };
 
 // ---- O-46 variant cap (D-234) ---------------------------------------------------------------------------
@@ -410,8 +417,9 @@ export async function createChallenger(db: Client, input: NewChallenger): Promis
         return refuse("family_frozen", `${family} has a killed arena_control row`);
       }
       if (
+        input.weeklyCap !== "exempt" &&
         (await generatedThisWeek(tx, market, family, input.d)) >=
-        input.learning.challengerGeneratorPerWeek
+          input.learning.challengerGeneratorPerWeek
       ) {
         await tx.rollback();
         return refuse(

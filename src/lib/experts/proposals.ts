@@ -3,7 +3,9 @@
 // weekly screening run is offered to the v1 challenger lifecycle as a Lane B challenger (origin generator,
 // actor A6), where KB-042 slots, the weekly generator cap, the trial budget and VAL-110 apply unchanged. Every
 // CreateResult is stored as an append-only `expert_proposal` row (created | exists | refused); a refused
-// survivor is retried the next ISO week as a NEW row. Clusters that need a new lineage get one
+// survivor is retried the next ISO week as a NEW row. Expert proposals are exempt from the v1 search's
+// per-lineage `challenger_generator_per_week` (KB-077 gives them their own cap, D-620) but never from the
+// KB-042 slots, the lineage trial budget (ARN-085) or the O-46 variant cap. Clusters that need a new lineage get one
 // `parked_build_change` row (D-515). Nothing here writes outside the expert tables except through
 // createChallenger.
 import { lineageId } from "@/lib/stats/splits";
@@ -124,7 +126,8 @@ function rowOf(res: CreateResult): { status: string; challengerId: string | null
  * Offers the run's survivors, in rank order, to createChallenger until `expert_challengers_per_week` rows were
  * `created` in this ISO week (0 turns proposals off). A survivor with a created/exists challenger from any
  * earlier week, or any challenger row in this week, is skipped without a call (insert-once per cluster and
- * week, D-536b). A `created` row moves the supporting claims `screened -> challenger` in the same transaction.
+ * week, D-536b). A `created` (or `exists`) row moves the supporting claims `screened -> challenger` in the
+ * same transaction (D-622).
  */
 export async function proposeChallengers(
   c: ProposeContext,
@@ -173,6 +176,7 @@ export async function proposeChallengers(
       stats: params.stats,
       ...(budgetTotal === undefined ? {} : { budgetTotal }),
       note: `expert cluster ${s.clusterId} (KB-077)`,
+      weeklyCap: "exempt", // KB-077 has its own weekly cap; KB-042, ARN-085 and O-46 still apply (D-620)
     });
     const row = rowOf(res);
     const id = proposalId(market, d, s.clusterId);
@@ -189,7 +193,9 @@ export async function proposeChallengers(
         status: row.status,
         reason: row.reason,
       });
-      if (res.status === "created") {
+      // `exists` too: the cluster's technique has a challenger (a crash after createChallenger, or a v1
+      // version with the same parameters); nextStatusFor is null for claims already there (D-622)
+      if (res.status === "created" || res.status === "exists") {
         for (const claimId of await supportingClaims(tx, s.clusterId)) {
           const cur = await currentClaimStatus(tx, claimId);
           const to = cur === null ? null : nextStatusFor(cur, { kind: "challenger_created" });

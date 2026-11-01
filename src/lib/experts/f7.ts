@@ -29,13 +29,15 @@ export type F7Verdict = {
   readonly fires: boolean;
   /** Experts in the union of the counted clusters. */
   readonly distinctExperts: number;
-  /** Clusters counted: one per distinct non-empty supporting-expert set. */
+  /** Clusters counted: the most L2 clusters each creditable to a different supporting expert (D-621). */
   readonly clusters: number;
 };
 
 /**
- * Clusters count once per distinct non-empty set of supporting experts, so two clusters that rest on the very
- * same people are one voice. Fires when the count reaches `min` (a `min` below 1 never fires).
+ * "Clusters from distinct experts" (KB-078): the largest number of L2 clusters that can each be credited to a
+ * DIFFERENT supporting expert (a maximum matching of clusters to experts), after clusters resting on the very
+ * same set of people were collapsed to one voice. Fires when that number reaches `min` (a `min` below 1 never
+ * fires). Sets {A}, {B}, {A,B} count 2, not 3: the third cluster has no expert of its own (D-621).
  */
 export function f7Gate(l2: readonly L2Cluster[], min: number): F7Verdict {
   const sets = new Map<string, readonly string[]>();
@@ -45,7 +47,28 @@ export function f7Gate(l2: readonly L2Cluster[], min: number): F7Verdict {
   }
   const union = new Set<string>();
   for (const ids of sets.values()) for (const x of ids) union.add(x);
-  return { fires: min >= 1 && sets.size >= min, distinctExperts: union.size, clusters: sets.size };
+  const clusters = maximumMatching([...sets.values()]);
+  return { fires: min >= 1 && clusters >= min, distinctExperts: union.size, clusters };
+}
+
+/** Size of a maximum bipartite matching of clusters (each a set of experts) to experts; augmenting paths. */
+export function maximumMatching(sets: readonly (readonly string[])[]): number {
+  const owner = new Map<string, number>(); // expert -> cluster index holding it
+  const augment = (i: number, seen: Set<string>): boolean => {
+    for (const e of sets[i]!) {
+      if (seen.has(e)) continue;
+      seen.add(e);
+      const j = owner.get(e);
+      if (j === undefined || augment(j, seen)) {
+        owner.set(e, i);
+        return true;
+      }
+    }
+    return false;
+  };
+  let n = 0;
+  for (let i = 0; i < sets.length; i += 1) if (augment(i, new Set())) n += 1;
+  return n;
 }
 
 async function evidenceOf(db: Exec, challengerId: string): Promise<ChallengerEvidence | null> {

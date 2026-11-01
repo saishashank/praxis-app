@@ -66,7 +66,6 @@ describe("AT-40 (f) F7 gate", () => {
     const p = paramsWith({
       expertChallengersPerWeek: 4,
       maxChallengers: 8,
-      challengerGeneratorPerWeek: 4,
     });
     const min = p.learning.f7MinClusters;
     expect(min).toBe(3);
