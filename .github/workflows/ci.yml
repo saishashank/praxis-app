@@ -19,7 +19,9 @@ env:
 jobs:
   app:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The V2 test suite (about 9,100 tests) plus the production build no longer fits in 15 minutes
+    # (D-830); a stuck job is still stopped.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

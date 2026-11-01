@@ -252,6 +252,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-812 | (R2-I6, R2-S3) The PR tick list (guide step 14, step v2_approvals) now also names D-750, D-740 to D-755, D-710, D-718 and D-761, as the review asked. |
 | D-813 | (R2-I7) V2 step v2_restore_size (before production): run node scripts/restore/drill-size.mjs --rows 500000 once and write down the date, PASS or FAIL and the... |
 | D-814 | The ZAP baseline image is pinned by digest to the multi-arch index of ghcr.io/zaproxy/zaproxy:stable, read on 2026-11-02 (sha256:030d3df5…384238), replacing... |
+| D-830 | CI app job timeout raised from 15 to 30 minutes: remote runs on build (7a2b8aa, 5f4ac60) were cancelled at the build step after 15 minutes because the V2 sui... |
 
 ## M14 (M14_design.md)
 
