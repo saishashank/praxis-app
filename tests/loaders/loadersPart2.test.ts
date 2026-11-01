@@ -499,11 +499,23 @@ describe("populated loaders", () => {
       expect(own.steelman.text).toContain("pending production"); // BLD-041, D-480
       expect(own.details).toBe(true);
       expect(own.components.some((c) => c.items.length > 0)).toBe(true);
+      // M13-lite (D-643, D-652): the experts line names the last screening date; a masked viewer sees the
+      // ISO week, as every date of a masked model (D-147)
+      await w.main.execute({
+        sql: `INSERT INTO screening_run (run_id, market, d, q, considered, eligible, screened, survivors, splits_json, created_at)
+              VALUES ('expscreen:AU:2026-10-16', 'AU', '2026-10-16', 0.1, 1, 1, 1, 0, '{}', '2026-10-16T00:00:00.000Z')`,
+        args: [],
+      });
+      const ownAgain = await loadHealth(envOf(w, "owner"), {});
+      expect(ownAgain.experts.text).toContain("last screening 2026-10-16");
       for (const who of ["editor", "viewer"] as Who[]) {
         const m = await loadHealth(envOf(w, who), {});
         expect(m.details).toBe(false);
         expect(m.components.every((c) => c.items.length === 0)).toBe(true);
         expect(m.healthy).toBe(own.healthy);
+        expect(m.experts.text).toContain("last screening 2026-W42");
+        expect(m.experts.lastScreening).toBe("2026-W42");
+        expect(m.experts.text).not.toMatch(/\d{4}-\d{2}-\d{2}/);
         noLeak(m);
       }
     });

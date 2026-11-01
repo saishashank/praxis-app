@@ -70,7 +70,7 @@ rules:
     purpose: "Learned page: lessons, challengers and family history."
     views: [learning]
   - match: "page:{/reviews/experts*,/reviews/techniques}"
-    specIds: [PRD-034, KB-074, KB-075, UXN-292]
+    specIds: [PRD-034, KB-074, KB-075, UXN-292, UXN-293, UXN-294, UXN-295]
     purpose: "Expert library page {name}: experts by tested evidence, the claim queue and technique clusters (hypotheses, not advice)."
     views: [learning]
   - match: "page:/cortex*"
@@ -146,7 +146,7 @@ rules:
     specIds: [ROL-101, ROL-102a]
     views: [security]
   - match: "action:src/app/(app)/reviews/experts/*"
-    specIds: [KB-073, KB-075, LLM-069, ROL-102a]
+    specIds: [KB-073, KB-075, LLM-069, ROL-102a, UXN-295]
     purpose: "Server action {name}: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited."
     views: [learning, security]
   - match: "action:src/app/(app)/alerts/*"
