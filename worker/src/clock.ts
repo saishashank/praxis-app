@@ -132,7 +132,9 @@ export const RECHECK_RUNNING_MAX_MS = 45 * MINUTE_MS; // a `running` record olde
 export const RECHECK_CLOSED_SQL =
   "(status IN ('success', 'degraded') " +
   "OR (status = 'failed' AND json_extract(details_json, '$.navDays') IS NOT NULL) " +
-  "OR (status = 'skipped' AND json_extract(details_json, '$.reason') IS NOT 'no_completion_marker') " +
+  "OR (status = 'skipped' AND json_extract(details_json, '$.reason') IS NOT 'no_completion_marker' " +
+  // R4-I3 (D-833): a capped catch-up leaves a `skipped` record that does NOT close the night
+  "AND json_extract(details_json, '$.reason') IS NOT 'catch_up_capped') " +
   // R2-I3 (D-808): a night REFUSED because the previous session is not closed is closed FOR THE RECHECK
   // only (the guard in closeBooks.ts does not count it): a second run the same day refuses the same way.
   "OR (status = 'failed' AND json_extract(details_json, '$.reason') = 'previous_session_not_closed'))";

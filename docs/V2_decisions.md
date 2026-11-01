@@ -261,6 +261,10 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-821 | (R3-I5) Verified in code: a plain arena-close.yml dispatch (no input) closes every session from lastClosed + 1 to today in order (the CLI test "catches up th... |
 | D-822 | (R3-S2) docs/runbooks/rollback-v2.md is at migration 0025: versions, --down-to 14 running 0025 to 0015, the cited tests (0023 down walk, 0024, 0025), and the... |
 | D-830 | CI app job timeout raised from 15 to 30 minutes: remote runs on build (7a2b8aa, 5f4ac60) were cancelled at the build step after 15 minutes because the V2 sui... |
+| D-832 | (R4-I1) The decision index has no exception list. |
+| D-833 | (R4-I3) A capped arena catch-up (D-821, --max-sessions) writes one run record for the target: job arena-close, key arena-2a:AU:<target>, status skipped, reas... |
+| D-834 | (R4-I3) The capped record never closes a night. |
+| D-835 | (R4-I3) System Health shows it: a JobSummary has an optional attention line, set by cappedCatchUp in src/lib/health/summary.ts when the latest arena-close re... |
 
 ## M14 (M14_design.md)
 
@@ -426,7 +430,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | --- | --- |
 | D-371 | (WP1 security review; amends D-361, listed for the Owner in the V2 PR) Ch. 18's "unauthenticated users receive 404" conflicts with its governing clause "indi... |
 | D-372 | (WP2 review) The committed architecture.json keeps the Blueprint's own page and routes (ARC-001 completeness): their existence is already public in the repo... |
-| D-377 | (WP1 rework, listed for the Owner in the V2 PR) The proxy marks a non-owner /blueprint* request with an internal header that a beforeFiles rewrite sends to a... |
+| D-831 | (WP1 rework, listed for the Owner in the V2 PR) The proxy marks a non-owner /blueprint* request with an internal header that a beforeFiles rewrite sends to a... |
 
 ## M17 (M17_design.md)
 

@@ -1,6 +1,6 @@
 # M17 design: intraday watch and pick alerts
 
-Inputs: `docs/M17_requirements.md` (ARN-110…115, EML-038…042, AGT-139…144, DAT-238…240, UXN-301…311, VAL-117…119, NFR-041/042, SEC-114, PLT-077; AT-60…AT-65; Q1–Q16), spec ch. 19 V2 (governs), ch. 14/15 V2. Decisions continue from M16 (D-377); this milestone uses D-381…D-400. Architect review 2026-10-31 (Fable): changes marked "(review)".
+Inputs: `docs/M17_requirements.md` (ARN-110…115, EML-038…042, AGT-139…144, DAT-238…240, UXN-301…311, VAL-117…119, NFR-041/042, SEC-114, PLT-077; AT-60…AT-65; Q1–Q16), spec ch. 19 V2 (governs), ch. 14/15 V2. Decisions continue from M16 (D-372; D-831 is the renumbered M16 WP1 rework); this milestone uses D-381…D-400. Architect review 2026-10-31 (Fable): changes marked "(review)".
 
 Roles: Opus orchestrates; Sonnet builds each work package; a Fable reviewer checks the packages marked **F** before they merge, and the integrated milestone at the end.
 

@@ -647,6 +647,7 @@ export default async function HealthPage() {
                           {STATE_LABEL[j.state]}
                         </span>
                         {j.note && <span className="ml-2 text-text-muted">{j.note}</span>}
+                        {j.attention && <span className="ml-2 font-medium">{j.attention}</span>}
                         {j.stale && j.state !== "stale" && (
                           <span className="ml-2 font-medium">Also stale</span>
                         )}

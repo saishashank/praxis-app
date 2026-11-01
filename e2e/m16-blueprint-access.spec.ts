@@ -60,7 +60,7 @@ for (const role of [null, "editor", "viewer"] as const) {
         if (role && name === "rsc") expect(leak).toBe("/_praxis-absent");
         else expect(leak).toBeUndefined();
         delete hidden.headers["x-nextjs-rewritten-path"];
-        // Same residual (D-377): for a URL with a query string Next also adds x-nextjs-rewritten-query.
+        // Same residual (D-831): for a URL with a query string Next also adds x-nextjs-rewritten-query.
         const qleak = hidden.headers["x-nextjs-rewritten-query"];
         if (!(role && name === "rsc")) expect(qleak).toBeUndefined();
         delete hidden.headers["x-nextjs-rewritten-query"];

@@ -33,6 +33,7 @@ import {
   closeBooksDay,
   closeBooksKey,
   loadCalendar,
+  recordCatchUpCapped,
   type CloseBooksResult,
 } from "./closeBooks";
 import { replaySessions } from "./replay";
@@ -186,6 +187,17 @@ export async function closeBooksMain(
       out(
         `arena-2a: capped at ${cap} sessions per run; ${capped} more still to close, oldest first: dispatch Arena close again`,
       );
+      // R4-I3 (D-833): a record, so System Health shows the open target without GitHub
+      if (!replay) {
+        await recordCatchUpCapped(db, {
+          market: MARKET,
+          d: target,
+          closed: sessions.length,
+          remaining: capped,
+          now: new Date(nowMs()).toISOString(),
+          commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
+        });
+      }
       exit = 1;
     }
   } catch (error) {

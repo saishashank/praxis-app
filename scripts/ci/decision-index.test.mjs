@@ -10,14 +10,15 @@ test("oneLine keeps balanced quotes and brackets and caps the length", () => {
   assert.ok(oneLine("x ".repeat(200)).length <= 160);
 });
 
-test("a duplicate id is reported, a listed reuse is not", () => {
+test("every duplicate id is reported, with no exception list (R4-I1)", () => {
   const rows = [
     { n: 900, file: "a", milestone: "a", text: "" },
     { n: 900, file: "b", milestone: "b", text: "" },
     { n: 377, file: "a", milestone: "a", text: "" },
     { n: 377, file: "b", milestone: "b", text: "" },
+    { n: 378, file: "a", milestone: "a", text: "" },
   ];
-  assert.deepEqual(duplicates(rows), [900]);
+  assert.deepEqual(duplicates(rows), [377, 900]);
 });
 
 test("the repository index covers the V2 decisions and is current", () => {
