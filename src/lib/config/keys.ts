@@ -1166,7 +1166,7 @@ const M15_RANGED = [
   ["ledger_fdr_q", "num", 0.1, 0.05, 0.2, "level", "O", VAL, "CTX-031 (BH under PRDS)", "False-discovery rate allowed across the angle ledger"],
   ["bootstrap_block_sessions", "int", 120, 60, 250, "sessions", "O", VAL, "CTX-012", "Expected block length of the stationary bootstrap"],
   ["cortex_slope_hide_ub", "num", 1, 0.5, 1, "slope", "O", VAL, "CTX-053, D-257", "A probability is hidden when the calibration slope upper bound is below this"],
-  ["cortex_stage_minutes", "int", 20, 5, 60, "minutes", "O", REP, "CTX-050, D-289", "Minutes the nightly Cortex stage may run before it abstains for the night"],
+  ["cortex_stage_minutes", "int", 15, 5, 60, "minutes", "O", REP, "CTX-050, D-289", "Minutes the nightly Cortex stage may run before it abstains for the night"],
 ] as const satisfies readonly RangedRow[];
 
 // prettier-ignore

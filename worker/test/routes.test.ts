@@ -461,3 +461,21 @@ describe("helpers", () => {
     expect(app.calls).toHaveLength(0);
   });
 });
+
+describe("V1-I8: mapBounded", () => {
+  it("never runs more than the limit at once and keeps the input order", async () => {
+    const { mapBounded } = await import("../src/routes");
+    let inFlight = 0;
+    let peak = 0;
+    const out = await mapBounded([1, 2, 3, 4, 5, 6, 7], 3, async (n) => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 5));
+      inFlight--;
+      return n * 2;
+    });
+    expect(out).toEqual([2, 4, 6, 8, 10, 12, 14]);
+    expect(peak).toBe(3);
+    expect(await mapBounded([], 3, async (n: number) => n)).toEqual([]);
+  });
+});

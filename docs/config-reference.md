@@ -63,7 +63,7 @@ Who may change a key: Owner (any valid value), Owner within bounds (Lane B, beco
 | `cortex_disagreement_max` | `0.4` | score | Owner | number, 0.25 to 0.6 | no | CTX-023 |
 | `cortex_min_neff_trade` | `200` | setups | Owner | whole number, 150 to 400 | no | CTX-053 |
 | `cortex_slope_hide_ub` | `1` | slope | Owner | number, 0.5 to 1 | no | CTX-053, D-257 |
-| `cortex_stage_minutes` | `20` | minutes | Owner | whole number, 5 to 60 | no | CTX-050, D-289 |
+| `cortex_stage_minutes` | `15` | minutes | Owner | whole number, 5 to 60 | no | CTX-050, D-289 |
 | `cost_feasibility_ratio` | `2` | x | nobody (fixed) | fixed | yes | ARN-094; ch.15 l.74 |
 | `cost_gate_k` | `2` | x | Owner | number, 1.5 to 3 | no | FAM-005 (same key as CTX-022a; D-214) |
 | `cost_gate_min_rows` | `30` | rows | nobody (fixed) | fixed | no | FAM-005 (D-214) |

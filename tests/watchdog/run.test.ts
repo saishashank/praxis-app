@@ -190,7 +190,11 @@ describe("watchdog run.mjs", () => {
     expect(code).toBe(1);
     expect(mock.outbox).toHaveLength(1);
     expect(mock.outbox[0]!.subject).toContain("The Worker has not run today");
-    expect(mock.outbox[0]!.idempotencyKey).toBe(`production:inc:wd-${D}-2040-worker_blind:open`);
+    // V1-I2 (D-772): through notifyIncident: the key is the incident id
+    expect(mock.outbox[0]!.idempotencyKey).toMatch(/^production:inc:[0-9]+:open$/);
+    expect((await db.execute("SELECT kind FROM incident")).rows.map((r) => r.kind)).toEqual([
+      "worker_blind",
+    ]);
     // Running again does not send a second email for the same problem and slot.
     await go(ENV, "ok");
     expect(mock.outbox).toHaveLength(1);

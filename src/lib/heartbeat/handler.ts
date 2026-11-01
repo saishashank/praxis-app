@@ -40,6 +40,25 @@ export type Deps = {
 const json = (status: number, body: unknown) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
+/**
+ * V1-I2 (D-772): Vercel crons are fixed UTC, so the evening check has a line per DST regime and a
+ * scheduled call (user agent `vercel-cron`) outside 21:00-21:55 Melbourne is a 200 no-op. A manual call
+ * (no such agent) always runs. The window ends before the 21:50 watchdog's first look at the incidents.
+ */
+export const EVENING_WINDOW = { from: 21 * 60, to: 21 * 60 + 55 } as const; // threshold-ok: PLT-074 clock window
+const CRON_AGENT = /^vercel-cron\//i;
+
+export function melbourneMinuteOfDay(now: Date): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Australia/Melbourne",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  return get("hour") * 60 + get("minute");
+}
+
 const has = (v: string | undefined): v is string => typeof v === "string" && v.trim() !== "";
 const MIN_SECRET_LENGTH = 16;
 
@@ -121,6 +140,12 @@ export function createHeartbeatHandler(kind: HeartbeatKind, deps: Deps) {
       if (!isProduction(deps.env)) return json(200, { skipped: "not production" });
 
       const now = deps.now();
+      if (kind === "evening" && CRON_AGENT.test(req.headers.get("user-agent") ?? "")) {
+        const m = melbourneMinuteOfDay(now);
+        if (m < EVENING_WINDOW.from || m >= EVENING_WINDOW.to) {
+          return json(200, { skipped: "outside local window" });
+        }
+      }
       const date = melbourneDate(now);
       const key = `${job}:${date}`;
       const db = deps.mainDb();

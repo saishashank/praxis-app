@@ -289,7 +289,11 @@ export async function recordOutcome(
         env,
         [
           {
-            sql: "INSERT INTO incident (at, severity, kind, detail_json) VALUES (?, 'S2', 'asx_block_trip', ?)",
+            // V1-I2 (D-772): the SAME kind the heartbeat detector uses (`asx_trip`) and the same
+            // one-open-row guard as notifyIncident, so a trip is one incident, not two.
+            sql:
+              "INSERT INTO incident (at, severity, kind, detail_json) SELECT ?, 'S2', 'asx_trip', ? " +
+              "WHERE NOT EXISTS (SELECT 1 FROM incident WHERE kind = 'asx_trip' AND resolved_at IS NULL)",
             args: [iso(nowMs), JSON.stringify({ source: ASX_SOURCE, rule: "asx_block_trip" })],
           },
         ],

@@ -45,6 +45,7 @@ export const SCAN_MARKET = "AU";
 const SCAN_POLL_END = "16:00"; // threshold-ok: end of the quote-poll window (poll.ts POLL_END)
 export const SESSION_TZ = "Australia/Melbourne";
 const MS_PER_MIN = 60_000; // threshold-ok: unit
+const SCAN_END_GRACE_MIN = 3; // threshold-ok: Worker offset 2 min + 1 min of tolerance (V2-I1)
 
 export type ScanSkipReason =
   | QuoteRefusal
@@ -171,7 +172,9 @@ export async function runIntradayScan(deps: ScanRunDeps): Promise<ScanRunResult>
   const end = localToUtc(sessionD, endText, hours.tz);
   if (now.getTime() > session.close.getTime()) return skip("after_close");
   if (now.getTime() < start.getTime()) return skip("before_window");
-  if (now.getTime() > end.getTime() + MS_PER_MIN) return skip("after_window");
+  // V2-I1 (D-770): the Worker fires the scan 2 minutes after the grid (10:32 .. 15:32), so the last call lands
+  // after the configured end; the grace covers it and the slot key still floors to the grid (15:30).
+  if (now.getTime() > end.getTime() + SCAN_END_GRACE_MIN * MS_PER_MIN) return skip("after_window");
 
   // Slot key: the scan grid from the window start, so a late retry of the same slot dedupes.
   const stepMin = await num(db, "intraday_scan_min");

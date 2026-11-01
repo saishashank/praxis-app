@@ -23,6 +23,7 @@ vi.mock("@/lib/auth/guard", () => ({ requireUser: (...a: unknown[]) => requireUs
 vi.mock("@/lib/health/summary", () => ({ getHealthSummary: summaryMock }));
 vi.mock("@/lib/db/client", () => ({ mainDb: () => db, authDb: () => ({}) }));
 vi.mock("@/app/(app)/health/DayTimelineCheck", () => ({ DayTimelineCheck: () => null })); // M8 T12: async server card, tested on its own
+vi.mock("@/app/(app)/health/NightsCheck", () => ({ NightsCheck: () => null })); // V1-I1: async server card
 vi.mock("@/lib/preferences/read", () => ({
   userPreferences: async () => ({ time_format: "24h" }),
 }));

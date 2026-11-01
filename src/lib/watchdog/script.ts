@@ -14,6 +14,7 @@ import {
 import { RESEND_FROM } from "@/lib/email/resend";
 import { selectProvider } from "@/lib/email/select";
 import { sendEmail, type SendOutcome } from "@/lib/email/send";
+import { notifyIncident } from "@/lib/incidents/notify";
 import { readEmailSwitch } from "@/lib/email/switch";
 import { renderIncident } from "@/lib/email/templates/notices";
 import type { ReviewFacts } from "@/lib/email/templates/review";
@@ -267,28 +268,34 @@ export async function runChecks(
   return problems;
 }
 
-/** One incident-layout email per problem and slot; the id keeps it to one email per run. */
-export function sendProblemEmail(
+/**
+ * V1-I2 (D-772): a problem goes through the one door every incident writer uses (`notifyIncident`):
+ * ONE open incident per stable kind (`worker_blind`, `review_missing`), the same rows the heartbeat
+ * opens, so the 20:40 run, the 21:50 run and the heartbeat page the Owner once, and a repeat is a
+ * duplicate that sends nothing. `incident_open` ("an incident opened today is still open") is NOT an
+ * incident of its own: it only fails the run (NFR-006), so GitHub's failure email is its one alert.
+ */
+export async function sendProblemEmail(
   deps: FallbackDeps,
   d: string,
   slot: WatchdogSlot,
   p: Problem,
   now: Date,
-): Promise<SendOutcome> {
-  const id = `wd-${d}-${slot}-${p.kind}`.slice(0, 80);
-  return sendEmail(
-    { db: deps.db, env: deps.env, now: deps.now, provider: deps.provider },
-    "incident_open",
-    emailKeys.incidentOpen(id),
+): Promise<{ status: string }> {
+  if (p.kind === "incident_open")
+    return { status: "not sent (the open incident is already paged)" };
+  const r = await notifyIncident(
+    { db: deps.db, env: deps.env, now: () => now, provider: deps.provider },
+    p.kind,
+    "S2",
     {
-      incidentId: id,
-      severity: "S2",
-      component: "Watchdog",
       summary: p.summary,
-      since: melbourneStamp(now),
       impact: p.impact,
       fix: p.fix,
-      fixPath: "/system-health",
+      fixPath: "/health",
+      component: "Watchdog",
+      detail: { source: "watchdog", slot, d },
     },
   );
+  return { status: r.email ?? (r.opened ? "recorded" : "already open") };
 }

@@ -34,7 +34,7 @@ export const GO_LIVE_SLOTS: readonly GoLiveSlot[] = [
     time: "10:00",
     label: "Pick alerts: delayed quotes every 5 minutes to 16:00",
   },
-  { id: "intraday-scan", time: "10:30", label: "Intraday watch scan every 30 minutes to 15:30" },
+  { id: "intraday-scan", time: "10:32", label: "Intraday watch scan every 30 minutes to 15:32" },
   { id: "arena-close", time: "17:50", label: "Arena close" },
   { id: "arena-signals", time: "18:10", label: "Arena signals" },
   { id: "evening-review", time: "20:00", label: "Evening review" },

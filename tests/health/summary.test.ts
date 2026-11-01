@@ -65,6 +65,10 @@ describe("getHealthSummary", () => {
       "arena-close",
       "arena-signals",
       "arena-review",
+      "maintenance-nightly",
+      "arena-learn",
+      "arena-words",
+      "worker-reenable",
       "backfill-history",
     ]);
     for (const j of s.jobs) {
