@@ -44,7 +44,7 @@ export function V2Steps({ phases, steps, guidePath }: Props) {
       // storage blocked: the marks last until the page closes
     }
   };
-  const label = new Map(steps.map((s) => [s.id, s.label]));
+  const number = new Map(steps.map((s, i) => [s.id, i + 1]));
   const count = steps.filter((s) => done[s.id] === true).length;
   return (
     <div className="flex flex-col gap-4">
@@ -74,7 +74,7 @@ export function V2Steps({ phases, steps, guidePath }: Props) {
                         <span className="block text-text-muted">{s.help}</span>
                         {s.after.length > 0 && (
                           <span className="block text-text-muted">
-                            After: {s.after.map((a) => label.get(a) ?? a).join("; ")}.
+                            After step {s.after.map((a) => number.get(a) ?? a).join(", ")}.
                           </span>
                         )}
                       </span>
