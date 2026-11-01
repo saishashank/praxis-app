@@ -244,18 +244,25 @@ describe("replayCohorts on three synthetic years", () => {
     expect(() => replayCohorts(tiny, { params: p })).toThrow(RangeError);
   });
 
-  it("the full default-size replay (every step and control slot) fits the time budget", () => {
-    const t0 = Date.now();
-    const r = replayCohorts(world(), { params: p, cohortParams: () => terminalOverrides() });
-    const seconds = (Date.now() - t0) / 1000;
-    const starts = Math.ceil((SESSIONS - 2) / p.replay.rollingStartStep);
-    const slots = p.replay.c2LivePerFamily;
-    expect(r.starts.length).toBe(starts);
-    // per start: 12 E + 6 x slots C2 + 6 x slots C3 (base) and 6 E-L + 6 x slots C3 (reality)
-    expect(r.cohorts.length).toBe(starts * (12 + 6 * slots + 6 * slots + 6 + 6 * slots));
-    // the replay itself (no database, no scorecards) stays inside the 60 s of the task
-    // M8 T17: v8 coverage instrumentation slows this loop; the coverage job sets PRAXIS_COVERAGE_RUN=1.
-    const slack = process.env.PRAXIS_COVERAGE_RUN === "1" ? 3 : 1;
-    expect(seconds).toBeLessThan(60 * slack);
-  }, 180000);
+  // R3-I4 (D-820): a TIMING check. One retry in CI only (CI=true); the 60 s budget is unchanged and the measured
+  // time is logged on every run.
+  it(
+    "[timing] the full default-size replay (every step and control slot) fits the time budget",
+    { retry: process.env.CI ? 1 : 0, timeout: 180000 },
+    () => {
+      const t0 = Date.now();
+      const r = replayCohorts(world(), { params: p, cohortParams: () => terminalOverrides() });
+      const seconds = (Date.now() - t0) / 1000;
+      console.info(`[timing] default-size replay: ${seconds.toFixed(1)} s (budget 60 s)`);
+      const starts = Math.ceil((SESSIONS - 2) / p.replay.rollingStartStep);
+      const slots = p.replay.c2LivePerFamily;
+      expect(r.starts.length).toBe(starts);
+      // per start: 12 E + 6 x slots C2 + 6 x slots C3 (base) and 6 E-L + 6 x slots C3 (reality)
+      expect(r.cohorts.length).toBe(starts * (12 + 6 * slots + 6 * slots + 6 + 6 * slots));
+      // the replay itself (no database, no scorecards) stays inside the 60 s of the task
+      // M8 T17: v8 coverage instrumentation slows this loop; the coverage job sets PRAXIS_COVERAGE_RUN=1.
+      const slack = process.env.PRAXIS_COVERAGE_RUN === "1" ? 3 : 1;
+      expect(seconds).toBeLessThan(60 * slack);
+    },
+  );
 });

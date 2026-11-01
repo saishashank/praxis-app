@@ -27,7 +27,12 @@ import {
   readMoneyApproval,
   uncoveredByApproval,
 } from "@/lib/golive/moneyApproval";
-import { moneyConstants, unverifiedMoneyConstants } from "@/lib/golive/moneyConstants";
+import {
+  canonicalJson,
+  moneyConstants,
+  moneyValueHashes,
+  unverifiedMoneyConstants,
+} from "@/lib/golive/moneyConstants";
 import { signOffGoLive } from "@/lib/golive/signoff";
 
 let main: Client;
@@ -144,6 +149,52 @@ describe("the interlock reads the attestation (the code flags stay informational
       "constants_unverified",
     );
     expect(await uncoveredByApproval(main, [...IDS(), "new_figure"])).toEqual(["new_figure"]);
+  });
+
+  it("R3-I2: the row stores id + value hash, and a changed value under the same id re-blocks full", async () => {
+    await signed();
+    await approveMoneyConstants(good() as never);
+    const stored = JSON.parse(String((await rows())[0]!.value_json)) as {
+      items: { id: string; valueHash: string }[];
+    };
+    const now = moneyValueHashes();
+    expect(stored.items.map((i) => i.id).sort()).toEqual([...IDS()].sort());
+    for (const it of stored.items) expect(it.valueHash).toBe(now[it.id]);
+    expect(Object.values(now).every((h) => /^[0-9a-f]{64}$/.test(h))).toBe(true);
+    expect(await uncoveredByApproval(main, IDS())).toEqual([]);
+    // the same id with a different value (a later code change) is no longer covered
+    const changed = { ...now, min_parcel: "0".repeat(64) };
+    expect(await uncoveredByApproval(main, IDS(), changed)).toEqual(["min_parcel"]);
+    expect(await fullModeRefusal(main, PROD, "AU", "2026-10-21")).toBeNull();
+    // a row written before hashes existed (ids only) covers nothing: fail closed
+    await main.execute({
+      sql: "INSERT INTO config_version (key, scope, value_json, changed_at) VALUES ('money_constants_approved', 'global', ?, 'x')",
+      args: [JSON.stringify({ ids: IDS() })],
+    });
+    expect(await fullModeRefusal(main, PROD, "AU", "2026-10-21")).toBe("constants_unverified");
+  });
+
+  it("R3-I2: re-approving after a value change writes a new row; an unchanged repeat does not", async () => {
+    await approveMoneyConstants(good() as never);
+    await main.execute({
+      sql: "INSERT INTO config_version (key, scope, value_json, changed_at) VALUES ('money_constants_approved', 'global', ?, 'x')",
+      args: [
+        JSON.stringify({
+          ids: IDS(),
+          items: IDS().map((id) => ({ id, valueHash: "f".repeat(64) })),
+        }),
+      ],
+    });
+    expect(await approveMoneyConstants(good() as never)).toEqual({ ok: true, changed: true });
+    expect(await rows()).toHaveLength(3);
+    expect(await approveMoneyConstants(good() as never)).toEqual({ ok: true, changed: false });
+  });
+
+  it("canonicalJson is key-order independent and writes bigint distinctly", () => {
+    expect(canonicalJson({ b: 1n, a: [2n, { d: 1, c: 2 }] })).toBe(
+      canonicalJson({ a: [2n, { c: 2, d: 1 }], b: 1n }),
+    );
+    expect(canonicalJson({ a: 1n })).not.toBe(canonicalJson({ a: 1 }));
   });
 
   it("an unreadable attestation row fails closed", async () => {

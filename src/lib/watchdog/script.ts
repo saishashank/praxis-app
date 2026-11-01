@@ -18,7 +18,12 @@ import { notifyIncident } from "@/lib/incidents/notify";
 import { readEmailSwitch } from "@/lib/email/switch";
 import { renderIncident } from "@/lib/email/templates/notices";
 import type { ReviewFacts } from "@/lib/email/templates/review";
-import { WORKER_CLOCK_JOB } from "@/lib/heartbeat/state";
+import {
+  HEARTBEAT_EVENING_JOB,
+  HEARTBEAT_MORNING_JOB,
+  KIND_EVENING_HEARTBEAT_MISSING,
+  WORKER_CLOCK_JOB,
+} from "@/lib/heartbeat/state";
 
 export { melbourneDate, emailKeys };
 
@@ -218,6 +223,40 @@ export async function sendDbDown(
 }
 
 /**
+ * R3-I3 (D-818): the GitHub watchdog's own "the heartbeat did not run" check, independent of Vercel. At 21:50
+ * there must be a finished (`final`) evening record for last night or a finished morning record for today;
+ * if there is neither, the Vercel cron has stopped (both heartbeats) and nothing in the app can say so. Opens
+ * the same stable kind as the morning look-back (D-802), so the incident is de-duplicated. Armed only once
+ * the system has history older than last night (a heartbeat or the Worker clock on an earlier date), so the
+ * first day after go-live is silent. Throws on a database error like the other checks.
+ */
+export async function heartbeatGone(
+  db: Pick<Client, "execute">,
+  d: string,
+): Promise<Problem | null> {
+  const prev = new Date(Date.parse(`${d}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  const recent = await db.execute({
+    sql: `SELECT 1 FROM run_record
+          WHERE concurrency_key IN (?, ?) AND json_extract(details_json, '$.final') = 1 LIMIT 1`,
+    args: [`${HEARTBEAT_EVENING_JOB}:${prev}`, `${HEARTBEAT_MORNING_JOB}:${d}`],
+  });
+  if (recent.rows.length > 0) return null;
+  const history = await db.execute({
+    sql: `SELECT 1 FROM run_record
+          WHERE (job IN (?, ?) OR job = ?) AND substr(concurrency_key, -10) < ? LIMIT 1`,
+    args: [HEARTBEAT_EVENING_JOB, HEARTBEAT_MORNING_JOB, WORKER_CLOCK_JOB, prev],
+  });
+  if (history.rows.length === 0) return null;
+  return {
+    kind: KIND_EVENING_HEARTBEAT_MISSING,
+    summary: `No heartbeat finished since the evening of ${prev}`,
+    impact:
+      "Neither the evening heartbeat of last night nor the morning heartbeat of today finished: the Vercel cron may have stopped, so the app's own checks are not running.",
+    fix: "Open the Vercel project, Cron Jobs, and check the entries and the last runs; then call the heartbeat route once by hand.",
+  };
+}
+
+/**
  * Checks after the review step. Read-only. `reviewExpected` follows the production switch: a
  * review is expected in `full` mode or on the one-off test date; otherwise its absence is by design.
  * Throws on a database error (the caller treats that as "database unreachable").
@@ -251,6 +290,8 @@ export async function runChecks(
     });
   }
   if (slot === "2150") {
+    const gone = await heartbeatGone(db, d);
+    if (gone) problems.push(gone);
     const open = await db.execute({
       sql: `SELECT COUNT(*) AS n FROM incident
             WHERE resolved_at IS NULL AND severity IN ('S1','S2') AND at >= ?`,

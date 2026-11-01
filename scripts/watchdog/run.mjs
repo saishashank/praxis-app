@@ -9,7 +9,8 @@
 // (3) route unreachable/not ok -> read the database; if `review:<d>` is not sent, send the minimal
 // review directly (same email key, so never a second email); (4) Worker and review checks, a
 // problem -> one incident email and exit 1; at 21:50 also exit 1 while an incident opened today is
-// open; (5) database unreachable -> one `dbdown:<d>:<slot>` email, exit 1.
+// open; at 21:50 also a heartbeat-presence check (R3-I3, D-818: no finished evening heartbeat of last night and
+// no finished morning heartbeat of today -> evening_heartbeat_missing); (5) database unreachable -> one `dbdown:<d>:<slot>` email, exit 1.
 // Output is statuses only: no URL, secret, address or body is ever printed.
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";

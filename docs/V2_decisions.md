@@ -252,6 +252,14 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-812 | (R2-I6, R2-S3) The PR tick list (guide step 14, step v2_approvals) now also names D-750, D-740 to D-755, D-710, D-718 and D-761, as the review asked. |
 | D-813 | (R2-I7) V2 step v2_restore_size (before production): run node scripts/restore/drill-size.mjs --rows 500000 once and write down the date, PASS or FAIL and the... |
 | D-814 | The ZAP baseline image is pinned by digest to the multi-arch index of ghcr.io/zaproxy/zaproxy:stable, read on 2026-11-02 (sha256:030d3df5…384238), replacing... |
+| D-815 | (R3-S1) Production is reached in two steps, and the guide now says so. |
+| D-816 | (R3-S1, completes D-814) The ZAP preconditions are steps. v2_zap_pin (before the first push): set the repository variable ZAP_IMAGE_PINNED=true, so the local... |
+| D-817 | (R3-I2) The money attestation stores { ids, items: [{ id, valueHash }] }: the hash is sha256 of the canonical JSON (sorted keys, bigint as "<n>n") of the fig... |
+| D-818 | (R3-I3) The GitHub watchdog (21:50 slot) checks heartbeat presence on its own, independent of Vercel (heartbeatGone in src/lib/watchdog/script.ts): neither a... |
+| D-819 | (R3-I1) docs/runbooks/rollback-v2.md has a pre-check "Before V1 runs on the V2 database": list instrument rows whose delist_reason starts code_reuse_suspected: |
+| D-820 | (R3-I4) The three timing checks (Worker CPU budget in worker/test/m5Slots.test.ts, default-size replay in tests/replay/cohortReplay.test.ts, the live look in... |
+| D-821 | (R3-I5) Verified in code: a plain arena-close.yml dispatch (no input) closes every session from lastClosed + 1 to today in order (the CLI test "catches up th... |
+| D-822 | (R3-S2) docs/runbooks/rollback-v2.md is at migration 0025: versions, --down-to 14 running 0025 to 0015, the cited tests (0023 down walk, 0024, 0025), and the... |
 
 ## M14 (M14_design.md)
 

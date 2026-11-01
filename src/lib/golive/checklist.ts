@@ -87,11 +87,18 @@ export const V2_GO_LIVE_STEPS: readonly V2GoLiveStep[] = [
     after: [],
   },
   {
+    id: "v2_zap_pin",
+    phase: "before_push",
+    label: "Set the repository variable ZAP_IMAGE_PINNED to true",
+    help: "GitHub repository Settings > Secrets and variables > Actions > Variables (D-814, D-158). The image is already pinned by digest; the variable lets the local ZAP scan run on the push in the next step, so the release gate later finds it run.",
+    after: ["v2_hygiene"],
+  },
+  {
     id: "v2_push_ci",
     phase: "before_push",
     label: "Push build and read the remote checks",
     help: "Secret scan of history, the browser tests and the Linux jobs can differ from local.",
-    after: ["v2_hygiene"],
+    after: ["v2_hygiene", "v2_zap_pin"],
   },
   {
     id: "v2_staging_migrations",
@@ -206,11 +213,25 @@ export const V2_GO_LIVE_STEPS: readonly V2GoLiveStep[] = [
     after: ["v2_staging_migrations"],
   },
   {
+    id: "v2_merge_main",
+    phase: "production",
+    label: "Green checks on the final commit, then merge build into main",
+    help: "This is the one V2 pull request (build into main), titled V2 build complete. Merge only when the remote checks are green. The merge deploys staging only; production stays on V1 (R3-S1, D-815).",
+    after: ["v2_push_ci", "v2_cortex_import", "v2_restore_size", "v2_rollback"],
+  },
+  {
+    id: "v2_release_evidence",
+    phase: "production",
+    label: "Collect the release-gate evidence on main",
+    help: "In GitHub Actions, on main: dispatch Staging E2E day (after a staging trading day, once the 20:45 email window has passed), dispatch ZAP baseline (staging job, green within 7 days), dispatch Nightly (3 green nights in a row, one within 24 hours of the commit) and have a restore drill with a later verify-removed run within 120 days (R3-S1, D-816).",
+    after: ["v2_merge_main"],
+  },
+  {
     id: "v2_production",
     phase: "production",
-    label: "Green checks on the final commit, then approve production",
-    help: "Merge only when the remote checks are green. The Cortex stays in shadow and the steelman stays off in production until the Cortex import and the R6 model are done.",
-    after: ["v2_push_ci", "v2_cortex_import", "v2_restore_size", "v2_rollback"],
+    label: "Release to production: the release pull request, then approve the deploy",
+    help: "The agent opens the release pull request rc/<sha> into release; the release gate must pass; you merge it, then in Actions open the Deploy production run and approve deploy-production. This is the V1 release mechanism, not a second V2 review. The Cortex stays in shadow and the steelman stays off in production until the Cortex import and the R6 model are done (R3-S1, D-815).",
+    after: ["v2_merge_main", "v2_release_evidence", "v2_cortex_import", "v2_r6_model"],
   },
 ];
 

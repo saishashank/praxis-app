@@ -220,6 +220,61 @@ describe("watchdog run.mjs", () => {
     expect((await go(ENV, "ok")).code).toBe(0); // 20:40 does not judge open incidents
   });
 
+  describe("R3-I3: heartbeat presence (21:50 only, independent of Vercel)", () => {
+    const hb = (job: string, d: string, final: boolean | null) =>
+      db.execute({
+        sql: `INSERT INTO run_record (job, market, concurrency_key, started_at, status, details_json)
+              VALUES (?, 'AU', ?, ?, 'success', ?)`,
+        args: [job, `${job}:${d}`, T_2040.toISOString(), JSON.stringify({ final })],
+      });
+    const env = { ...ENV, WATCHDOG_SLOT: "2150" };
+    // a system with history: the Worker clock of an earlier night
+    const aged = () =>
+      db.execute({
+        sql: `INSERT INTO run_record (job, market, concurrency_key, started_at, status)
+              VALUES ('worker-clock', 'AU', 'worker-clock:AU:2026-10-10', ?, 'success')`,
+        args: [T_2040.toISOString()],
+      });
+
+    it("neither last night's evening nor today's morning heartbeat: the same kind the morning look-back uses", async () => {
+      await setMode("incidents");
+      await aged();
+      const { code } = await go(env, "ok");
+      expect(code).toBe(1);
+      expect(lines.join(" ")).toContain("PROBLEM evening_heartbeat_missing");
+      expect((await db.execute("SELECT kind FROM incident")).rows.map((r) => r.kind)).toEqual([
+        "evening_heartbeat_missing",
+      ]);
+      expect(mock.outbox).toHaveLength(1);
+      await go(env, "ok"); // a repeat is de-duplicated (one open incident per kind)
+      expect(mock.outbox).toHaveLength(1);
+    });
+
+    it.each([
+      ["last night's evening", "heartbeat-evening", "2026-10-18"],
+      ["today's morning", "heartbeat-morning", D],
+    ])("a finished %s heartbeat is enough", async (_n, job, day) => {
+      await setMode("incidents");
+      await aged();
+      await hb(job, day, true);
+      expect(await lib.heartbeatGone(db, D)).toBeNull();
+      expect((await go(env, "ok")).code).toBe(0);
+    });
+
+    it("an unfinished record does not count; 20:40 and a young system stay silent", async () => {
+      await setMode("incidents");
+      await aged();
+      await hb("heartbeat-evening", "2026-10-18", false);
+      await hb("heartbeat-morning", D, null);
+      expect((await lib.heartbeatGone(db, D))?.kind).toBe("evening_heartbeat_missing");
+      expect((await go(ENV, "ok")).code).toBe(0); // the 20:40 slot never judges it
+      await db.execute(
+        "DELETE FROM run_record WHERE job IN ('heartbeat-evening','heartbeat-morning') OR concurrency_key = 'worker-clock:AU:2026-10-10'",
+      );
+      expect(await lib.heartbeatGone(db, D)).toBeNull(); // nothing older than last night: first day
+    });
+  });
+
   it("output carries statuses only: no address, secret or app URL", async () => {
     await setMode("incidents");
     await go(ENV, "down");

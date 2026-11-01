@@ -21,7 +21,7 @@ import {
 import { isProductionEnv } from "@/lib/golive/interlock";
 import { MONEY_APPROVAL_PHRASE } from "@/lib/golive/moneyApproval";
 import { readMoneyApproval, type MoneyApproval } from "@/lib/golive/moneyApprovalRead";
-import { moneyConstants } from "@/lib/golive/moneyConstants";
+import { moneyConstants, moneyValueHashes } from "@/lib/golive/moneyConstants";
 import { deployedCommit, loadSignoffs, type SignoffRow } from "@/lib/golive/signoff";
 import { marketDate } from "@/lib/data/calendar";
 import { userPreferences } from "@/lib/preferences/read";
@@ -70,7 +70,11 @@ export default async function GoLivePage() {
   const commit = deployedCommit(process.env);
   const signed = view !== null && view.signoffs.length > 0;
   const constants = moneyConstants();
-  const attested = new Set(view?.approval?.ids ?? []);
+  // R3-I2: attested = the id is named AND the stored value hash equals the figure's current hash.
+  const hashes = moneyValueHashes(constants);
+  const attested = new Set(
+    (view?.approval?.ids ?? []).filter((id) => view?.approval?.hashes[id] === hashes[id]),
+  );
   const pending = constants.filter((c) => !c.verified && !attested.has(c.id));
 
   return (
