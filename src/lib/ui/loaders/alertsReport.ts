@@ -5,8 +5,7 @@
 import "server-only";
 import type { Client } from "@libsql/client";
 import { getConfig } from "@/lib/config/store";
-import { getCell } from "@/lib/cortex/store/ledger";
-import { cellIdOf, MIN_CANDIDATES, MIN_SESSIONS } from "@/lib/intraday/evaluator";
+import { activeStreamCell, MIN_CANDIDATES, MIN_SESSIONS } from "@/lib/intraday/evaluator";
 
 export type AlertsMonth = {
   readonly month: string;
@@ -70,7 +69,7 @@ export async function loadAlertsReport(db: Client, market: string): Promise<Aler
       };
     });
   const measured = rows.filter((r) => r.c !== null);
-  const cell = await getCell(db, cellIdOf(market));
+  const cell = await activeStreamCell(db, market);
   const spec = cell?.spec as { hypothesis?: string } | null | undefined;
   const result = cell?.result as { passed?: boolean } | null | undefined;
   return {
