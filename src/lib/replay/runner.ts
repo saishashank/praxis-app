@@ -137,7 +137,8 @@ export type Stage =
   | "arn076"
   | "factors"
   | "robustness"
-  | "rankIc";
+  | "rankIc"
+  | "experts";
 
 export type StageTime = { readonly stage: Stage; readonly minutes: number };
 

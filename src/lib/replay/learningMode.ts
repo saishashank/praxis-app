@@ -27,6 +27,7 @@ import {
   rollsStage,
   type WeeklyContext,
 } from "@/lib/learning/weeklyStages";
+import { expertsStage } from "@/lib/experts/weeklyStage";
 import { rankIcStage } from "@/lib/learning/rankIcStage";
 import { robustnessStage } from "@/lib/learning/robustnessStage";
 import {
@@ -175,6 +176,7 @@ export async function runLearning(o: LearningRunOptions): Promise<LearningOutput
       factors: wrap(factorsStage),
       robustness: wrap(robustnessStage),
       rankIc: wrap(rankIcStage),
+      experts: wrap(expertsStage),
     },
   });
 

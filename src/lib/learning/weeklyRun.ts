@@ -13,7 +13,9 @@
 //   arn076        leave-one-class-out (F6 classes, F4 event filter);
 //   factors       AGT-112 development factor buckets;
 //   robustness    M14 (ARN-106/107/108, VAL-115): exit ablation, one-tick slip, neighbourhood, MinBTL;
-//   rankIc        M14 (VAL-114): backfill of the daily rank quality from the replay.
+//   rankIc        M14 (VAL-114): backfill of the daily rank quality from the replay;
+//   experts       M13-lite (D-517): screens confirmed expert clusters and offers survivors to createChallenger;
+//                 last so the v1 generator keeps priority on the weekly cap and the KB-042 slots.
 // A stage that ends over the budget stops the run at that boundary (`paused_budget`) and its output is
 // dropped: no partial statistics are kept (D-095). Stages that finished in an earlier run of the same
 // ISO week are skipped (`done`), so a paused week resumes from the first unfinished stage and a finished
@@ -31,6 +33,7 @@ export const LEARNING_STAGES = [
   "factors",
   "robustness",
   "rankIc",
+  "experts",
 ] as const;
 export type LearningStage = (typeof LEARNING_STAGES)[number];
 /** The stages that are recorded as done and can be skipped (forward is always rebuilt). */
