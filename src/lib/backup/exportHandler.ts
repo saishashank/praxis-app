@@ -13,6 +13,9 @@ import { isValidDate } from "./retention";
 
 export const MAX_BODY_BYTES = 4096;
 export const COUNTS_HEADER = "X-Praxis-Backup-Counts";
+// V1-I6 / D-784: per-table sha256 of the dumped row lines (the same values the main dump records), so
+// the nightly job can persist and compare them. Digests of data, not data; the route is signed.
+export const SHA256_HEADER = "X-Praxis-Backup-Sha256";
 
 export type Deps = {
   env: Record<string, string | undefined>;
@@ -102,8 +105,9 @@ export function createBackupExportHandler(deps: Deps) {
         headers: {
           "Content-Type": "application/octet-stream",
           "Cache-Control": "no-store",
-          // Row counts per table only: no values, no hashes of values.
+          // Row counts and per-table digests only: no values.
           [COUNTS_HEADER]: JSON.stringify(out.counts),
+          [SHA256_HEADER]: JSON.stringify(out.sha256),
         },
       });
     } catch {

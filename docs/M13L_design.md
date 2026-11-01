@@ -551,3 +551,60 @@ the V1 spec. No migration, no change to any money value, replay goldens untouche
 - **D-719** Test seams: `MarketModeInput.unverifiedConstants` and `fullModeRefusal(..., unverified)` let tests
   inject "all approved"; production callers never pass them, so the real flags decide. `planDates` takes
   `strictCalendar` (batch 1 passes true; unit tests and replays leave it off).
+
+## Improvements
+
+Improvement findings of `docs/V2_architecture_review.md` (value/effort list), one batch per builder.
+
+### Batch I-2
+
+Auth and security: V1-I3 (signer half), I6, I9, I10, I11, I12, I13, I14. Decisions D-780…D-789. No migration.
+
+- **D-780** (V1-I3) One definition of the Actions to Vercel signing scheme: `src/lib/security/hmacCore.mjs` (+ `.d.mts`) holds the
+  canonical message `${timestamp}.${nonce}.${rawBody}`, the three header names and the outgoing header shape. The verifier
+  (`hmac.ts`), the Node caller signer (`scripts/smoke/sign.mjs`) and the Worker signer (`worker/src/selfcheck.ts`, WebCrypto) all
+  import it, the same bridge pattern as `calendarCore.mjs`. Only the HMAC primitive differs per runtime. The three known-answer tests
+  stay and still share one literal. Not done: adding `${method}\n${path}\n` to the message (the D-029 amendment the review mentions
+  "when touched"). It changes the wire format of every machine caller (Worker, five Actions scripts, smoke) and needs a coordinated
+  deploy of Vercel and Worker; the nonce is single use and the route bound is in the signed body (`purpose`), so it is deferred.
+- **D-781** (V1-I3) The trading-day half of V1-I3 was done in batch B (D-710…); nothing further here.
+- **D-782** (V1-I9) The test identity needs a POSITIVE staging signal, `isStagingEnv` (`src/lib/security/envKind.ts`): either
+  `PRAXIS_ENV` equals "staging" (case-insensitive; any other non-empty value is an explicit veto that a host name cannot override) or the host of `APP_BASE_URL` has a hyphen-separated part "staging" in one of its
+  labels (`praxis-app-staging.vercel.app`, `staging.example.com`; `notstaging-ish.com` and a path "/staging" do not count).
+  Staging is a separate Vercel project, so `VERCEL_ENV` cannot tell; absent secrets never imply staging. `testIdentityEnabled`
+  requires it on top of the valid secret and the absent production markers; `appEnvironment` (Worker report) and `isProduction`
+  (watchdog) use the same helper, so an explicit staging signal wins over a present `BACKUP_PUBLIC_KEY`. `PRAXIS_ENV=staging` on the
+  staging Vercel project is OPTIONAL but recommended (it makes the signal independent of the project's domain name); no Owner step
+  is needed while the staging host name carries "staging". `selfcheck/checks.ts deriveEnv` and `usage/meters.ts` keep their own
+  derivation (they report, they do not enable anything).
+- **D-783** (V1-I10) Auth.js host and cookies are pinned from `APP_BASE_URL` (`src/lib/auth/cookies.ts`): the origin is handed to
+  Auth.js as `AUTH_URL` (next-auth rewrites every request URL to it, an explicit `AUTH_URL` wins), `trustHost` is true only when the
+  origin is pinned or `NODE_ENV !== "production"` (production without `APP_BASE_URL` fails closed; the self-check already requires
+  it), and the session-token cookie is pinned to the Auth.js default name and `httpOnly`, `sameSite: lax`, `path: /`, `secure` from
+  the pinned scheme (PLT-033). The other Auth.js cookies keep their defaults, asserted in `tests/auth/config.test.ts` against
+  Auth.js's own table. The cookie names are one constant shared with `proxy.ts` and the test-identity login.
+- **D-784** (V1-I6) `authDbBigint()` (`db/client.ts`) is a separate cached client with `intMode: "bigint"`, used only by the backup
+  export route. The export returns `X-Praxis-Backup-Sha256` (per-table digest of the dumped row lines, the same value the main dump
+  records; digests only, no row text). `scripts/backup/run.mjs` checks that the digests cover exactly the tables of the counts and
+  are 64 hex (else the `auth_export` stage fails) and persists them as `details.auth.tableSha256`. An absent header (a route from
+  before this change, during deploy skew) is recorded as `null`, not a failure, so a backup is never lost to ordering; the hash is the
+  digest of plaintext rows, which the job cannot recompute without the private key, so the restore drill (key held) remains the
+  content proof.
+- **D-785** (V1-I11) `clientIp` (sign-in rate limit and every audit row) prefers `x-vercel-forwarded-for`, then the RIGHT-most
+  `x-forwarded-for` hop, then `x-real-ip`. The first entry is client-supplied behind any proxy that appends. On Vercel the headers
+  are overwritten, so production values do not change.
+- **D-786** (V1-I12) `scripts/ci/bundle-secret-scan.mjs` derives `FORBIDDEN_NAMES` from the secrets registry through the existing
+  architecture reader (`readSecrets`, the names `allNames()` enumerates) plus `TURSO_` and `OWNER_RECOVERY_EMAIL` as extras; names
+  that contain another listed name are folded away (substring scan). A test asserts the registry names and the formerly missing ones
+  (`WORKER_HMAC_SECRET`, `BACKUP_*`, `FIXTURES_READ_TOKEN`, `GITHUB_DISPATCH_TOKEN`, ...) are covered.
+- **D-787** (V1-I13) Break-glass recovery fails closed: PLT-035 / O-33 say every recovery sign-in MUST email the Owner. When the
+  alert is not accepted, `auth.recovery_signin` and `auth.recovery_alert_failed` are written and the sign-in is refused
+  (`auth.signin_refused`, reason `recovery_alert_failed`); the Owner retries when mail works. Trade-off recorded: in a real lock-out a
+  mail outage now blocks recovery until it clears; the alternative (session issued, alert lost) is what the spec forbids.
+- **D-788** (V1-I14) `tests/audit/ownerWritersAudit.test.ts` finds every `"admin"`-gated server action (per exported function) and
+  route handler and requires a call to `audit`/`auditTx`/`audited`/`appendAudit`/`appendAuditTx` in its body or in an imported
+  module it uses (one level of delegation, never through the guard/session/audit modules). Static approximation: it proves a path
+  exists, not that every branch audits. One allow-list entry with a written reason: `markReviewReadAction` (a read receipt).
+- **D-789** Not changed: no `PRAXIS_ENV` was added to `.env.example`/the secrets registry (it is a plain variable already in the env
+  names list); the review's `tests/http/headers.test.ts` assertion for the cookie flags is placed in `tests/auth/config.test.ts`
+  next to the existing Auth.js cookie-table test, which is where the old default-cookie assertion lived.

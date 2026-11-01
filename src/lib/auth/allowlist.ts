@@ -13,7 +13,8 @@ export type GoogleProfile = {
   name?: unknown;
 };
 
-export type RefusalReason = "not_verified" | "not_allowlisted" | "revoked" | "sub_mismatch";
+export type RefusalReason =
+  "not_verified" | "not_allowlisted" | "revoked" | "sub_mismatch" | "recovery_alert_failed";
 
 export type SignInDecision =
   | { ok: true; userId: number; role: Role; sessionVersion: number; recovery: boolean }
@@ -103,7 +104,8 @@ export async function decideSignIn(
   const email = rawEmail;
   const ownerEmail = norm(env.OWNER_EMAIL);
 
-  // D-034: break-glass recovery address signs in as the Owner row (no sub binding).
+  // D-034: break-glass recovery address signs in as the Owner row (no sub binding). The sign-in is
+  // issued only after the Owner alert e-mail was accepted (PLT-035, V1-I13).
   if (!isOwnerEmail(env, email) && isRecoveryEmail(env, email) && ownerEmail !== "") {
     let owner = await findByEmail(db, ownerEmail);
     if (!owner) {
@@ -130,6 +132,10 @@ export async function decideSignIn(
         targetType: "app_user",
         targetId: String(owner.id),
       });
+      // V1-I13 / D-787: fail closed. PLT-035 / O-33 say every recovery sign-in MUST email the Owner;
+      // a session that nobody was told about is the case the alert exists to prevent. The Owner can
+      // simply try again once mail works (the attempt and the failure are both audited).
+      return refuse(db, env, meta, now, "recovery_alert_failed", email, owner.id);
     }
     return {
       ok: true,

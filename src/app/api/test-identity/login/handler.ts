@@ -4,6 +4,7 @@
 import type { Client } from "@libsql/client";
 import { encode } from "next-auth/jwt";
 import { audit, requestMeta } from "@/lib/auth/audit";
+import { SESSION_COOKIE_PLAIN, SESSION_COOKIE_SECURE } from "@/lib/auth/cookies";
 import { isTestEmail, testIdentityEnabled, type TestIdentityEnv } from "@/lib/auth/testIdentity";
 import { getSessionMaxAgeSec } from "@/lib/http/limits";
 import { verifySignedRequest } from "@/lib/security/hmac";
@@ -18,8 +19,8 @@ export type TestLoginDeps = {
 
 export const MAX_BODY_BYTES = 1024;
 // Same names Auth.js derives: __Secure- prefix on https (see src/proxy.ts).
-export const COOKIE_SECURE = "__Secure-authjs.session-token";
-export const COOKIE_PLAIN = "authjs.session-token";
+export const COOKIE_SECURE = SESSION_COOKIE_SECURE;
+export const COOKIE_PLAIN = SESSION_COOKIE_PLAIN;
 
 const NO_STORE = { "Cache-Control": "no-store" };
 const unauthorized = () =>

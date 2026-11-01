@@ -3,6 +3,13 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it, beforeEach } from "vitest";
 // @ts-expect-error plain .mjs signer without types (the Actions-side twin)
 import { sign } from "../../scripts/smoke/sign.mjs";
+import {
+  HEADER_NONCE,
+  HEADER_SIGNATURE,
+  HEADER_TIMESTAMP,
+  hmacMessage,
+  signedHeaders,
+} from "@/lib/security/hmacCore.mjs";
 import { computeSignature, isValidSecret, verifySignedRequest } from "@/lib/security/hmac";
 import { TursoNonceStore, type NonceStore } from "@/lib/security/replay";
 
@@ -49,6 +56,28 @@ describe("signature known answer", () => {
       "X-Praxis-Nonce": NONCE,
       "X-Praxis-Signature": KNOWN_SIGNATURE,
     });
+  });
+});
+
+describe("hmacCore: the one definition of the scheme (V1-I3)", () => {
+  it("message and header names are the documented ones", () => {
+    expect(hmacMessage("1", "n", "b")).toBe("1.n.b");
+    expect([HEADER_TIMESTAMP, HEADER_NONCE, HEADER_SIGNATURE]).toEqual([
+      "x-praxis-timestamp",
+      "x-praxis-nonce",
+      "x-praxis-signature",
+    ]);
+    expect(signedHeaders("1", "n", "s")).toEqual({
+      "X-Praxis-Timestamp": "1",
+      "X-Praxis-Nonce": "n",
+      "X-Praxis-Signature": "s",
+    });
+  });
+  it("the verifier and the caller-side signer both go through it", () => {
+    const sig = createHmac("sha256", SECRET)
+      .update(hmacMessage(String(NOW), NONCE, BODY))
+      .digest("hex");
+    expect(sig).toBe(KNOWN_SIGNATURE);
   });
 });
 

@@ -30,7 +30,11 @@ const mem = vi.hoisted(() => ({
   auth: null as unknown,
   user: null as unknown,
 }));
-vi.mock("@/lib/db/client", () => ({ mainDb: () => mem.main, authDb: () => mem.auth }));
+vi.mock("@/lib/db/client", () => ({
+  mainDb: () => mem.main,
+  authDb: () => mem.auth,
+  authDbBigint: () => mem.auth,
+}));
 vi.mock("@/lib/auth/session", async (orig) => ({
   ...(await orig<typeof import("@/lib/auth/session")>()),
   getCurrentUser: async () => mem.user,

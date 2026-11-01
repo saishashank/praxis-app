@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { FORBIDDEN_NAMES, scanDir } from "./bundle-secret-scan.mjs";
+import { FORBIDDEN_NAMES, registryNames, scanDir } from "./bundle-secret-scan.mjs";
 
 function tmp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "bundle-scan-"));
@@ -32,4 +32,25 @@ test("hits report names and paths only, never content", () => {
   const dir = tmp();
   fs.writeFileSync(path.join(dir, "c.js"), "AUTH_SECRET=SECRET-VALUE-123");
   assert.ok(!JSON.stringify(scanDir(dir)).includes("SECRET-VALUE-123"));
+});
+
+test("the list is derived from the secrets registry (V1-I12)", () => {
+  const derived = registryNames();
+  assert.ok(derived.length >= 25, "registry names were read");
+  for (const n of derived)
+    assert.ok(
+      FORBIDDEN_NAMES.some((f) => n.includes(f)),
+      n,
+    );
+  for (const n of [
+    "WORKER_HMAC_SECRET",
+    "BACKUP_PRIVATE_KEY",
+    "FIXTURES_READ_TOKEN",
+    "GITHUB_DISPATCH_TOKEN",
+  ])
+    assert.ok(
+      FORBIDDEN_NAMES.some((f) => n.includes(f)),
+      n,
+    );
+  assert.ok(FORBIDDEN_NAMES.includes("TURSO_"));
 });
