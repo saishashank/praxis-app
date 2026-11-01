@@ -328,3 +328,126 @@ Covered by V2-S3's fix; listed here because it also serves the V1 route slots (p
 11. **Storage**: add `cortex_feature_daily` to the storage meter and decide retention (V2-S2) before the first month of nightly shadow rows.
 12. **Confirm** (not verified here): DAT-236 two alternative free universe sources in the licence register (O-53); the DAT-232 split-day frequency measurement on staging (M14 §4); the draw.io desktop open check (D-369); CTX-052 organ warm-up started in staging (AT-50 clause 2).
 13. **One go-live page** for all of the above (V2-S9).
+
+# Round 2
+
+Second Fable review of the complete solution (V1 + V2) on local `build` at HEAD 95e5390 (2026-11-02). Read-only; no sub-agents. Part A verifies every Round 1 finding in code; Part B is a fresh review centred on what the fixes introduced and on the interactions between the batches merged in parallel.
+
+## Part A: Round 1 findings, verified in code
+
+Legend: **resolved** = the fix is in code and matches the recorded decision; **partially** = part of the finding is fixed, the rest is deliberately open with a recorded decision (judged acceptable unless stated); **not** = no fix in code.
+
+| Id | Status | Evidence |
+|---|---|---|
+| V1-B1 | resolved | `src/lib/arena/closeBooks.ts:1440-1500` guard (`CLOSED_2A_SQL`, `refuseGap` → failed record + S2 `arena_close_gap`); `worker/src/clock.ts:296-307` re-dispatches a `dispatched` slot when the night's record is not closed (`Slot.recheck`, `worker/src/schedule.ts:280` arena-2a `afterMin 30, untilMin 150`); `RECHECK_CLOSED_SQL` mirrors the guard plus `running` ≤ 45 min (`clock.ts:125,455-461`). D-661…D-669, D-675…D-679. Residual D-666 (2a recovered after the 18:10 2b slot) is recorded and acceptable. |
+| V2-B1 | resolved | `src/lib/http/gate.ts:34-50` lists `/api/internal/intraday-scan` and `/api/internal/pick-alerts`; `tests/http/gate.test.ts:380-431` walks `src/app/api` and asserts every internal/cron route passes the gate; `worker/src/routes.ts:356` writes one `worker-route` failed record per recurring slot per day (D-668). |
+| V2-B2 | resolved | `src/lib/intraday/evaluator.ts:38-58, 84-86, 181-225`: one look per cell, state set only from the RECORDED result, a later cell only after a failed look and a new quarter (D-670…D-674); `tests/intraday/streamLook.test.ts`. |
+| V1-S1 | resolved | `src/lib/arena/unfreeze.ts` (Owner-only, audited); `closeBooks.ts:1242` `activityOf` honours `cohort_event kind='data_event'` `{type:'invariants_cleared'}` (D-680…D-689). Page button deliberately not added (D-689); acceptable, the action exists and is audited. |
+| V1-S2 | resolved (see R2-S2) | `src/lib/golive/moneyConstants.ts`, `interlock.ts:43-55` `constants_unverified`, checklist item `v2_money_constants` (`checklist.ts:181`), Health "Money figures" line (`summary.ts:185`). The gate is in; the approval path is R2-S2. |
+| V1-S3 | partially | (a) `calendar_horizon` + `calendar_missing` in the heartbeat (D-712); (b) one definition `src/lib/data/calendarCore.mjs` (`dayStatus` → "missing" is never a session) used by the app, the Worker (`clock.ts:65,493`, `routes.ts:299`) and `rules.mjs` (D-711); (c) the yearly draft job is NOT built, recorded in D-712 (rows must come from ASX's published calendar; first alarm 2027-11-02). Acceptable: fail-safe plus a 60-day alarm. |
+| V1-S4 | resolved | `src/lib/incidents/detectors.ts:158` `detectAuditChain`, called from the evening heartbeat (`heartbeat/handler.ts:98`) (D-723). |
+| V1-S5 | partially | chunked resumable restore (`scripts/backup/core.mjs:409-555`, checkpoint table, `defer_foreign_keys`, D-715); `scripts/restore/drill-size.mjs` (D-716); `prunePriceBars` in nightly maintenance (`src/lib/maintenance/retention.ts:203-233`, D-717). The real-key drill is still Owner-dispatched only (`restore-drill.yml` has no `schedule:`, PLT-015). Acceptable with an Owner step (R2-I7). |
+| V1-S6 | resolved | FK ON verified (`src/lib/db/client.ts:47-57`), restore order parent-first + `defer_foreign_keys` (`core.mjs:430,508`) (D-713, D-714). |
+| V1-S7 | resolved | quarantine on suspected reuse (`src/lib/data/universe/apply.mjs:12-35`, D-685/D-686); migration `0025_instrument_listing.sql` (`instrument_listing`, `instrument_no_revive`); `listingFloor` (`src/lib/data/listing.ts`) in `arena/marketData.ts:97,109,136`, `cortex/stage.ts:369,1509`, `agents/decisionView.ts`, `data/adjusted.ts` (D-760…D-764). Residual on the trigger: R2-I4. |
+| V1-S8 | resolved | `src/lib/health/morningRoute.ts:34-39` answers 503 `send_pending`; the Worker re-dispatches (max 3) (D-691). |
+| V1-S9 | resolved | `src/lib/alerts/deliver.ts:421-422` a first-of-window P0 left `pending` schedules the flush (D-693). |
+| V1-S10 | resolved | `src/lib/email/send.ts:232-236` `reclaim()` finalises a `claimed` row with an `accepted` attempt as `sent`, returns `duplicate` (D-692). |
+| V1-S11 | partially | nonce store: no per-call DDL, prune once a minute (`src/lib/security/replay.ts:12-50`, D-721), resolved. Metering: labelled estimates for nonce writes and Worker ticks (D-720); Turso platform usage "not measured yet" (`meters.ts:233`). Acceptable; the platform pull stays a V3 item. |
+| V1-S12 | resolved | `gate.ts:189-205` `read:<uid>` 60/min and `export:<uid>` 5/h on authenticated non-machine API GETs; `EXPORT_ROUTES` (`gate.ts:55`) (D-722). |
+| V1-S13 | resolved | as V2-B1; the filesystem-walking test is `tests/http/gate.test.ts:380-431`. |
+| V1-S14 | resolved | `src/lib/view/displayText.ts` applied in the news/market/company loaders and the four e-mail templates (D-724, D-725). |
+| V1-S15 | resolved | `closeBooks.ts:1117` `Mark.stale`, `staleSessions`, S2 `stale_mark` after N sessions (`:205-207`) (D-683, D-684). |
+| V1-I1 | resolved | `src/lib/health/jobs.ts` adds `maintenance-nightly`, `arena-learn`, `arena-words`, `worker-reenable`; `src/lib/health/routePosts.ts` "Last 7 nights" table (D-770). The other names write no `run_record` (D-771 checked; the Round 1 claim was wrong). |
+| V1-I2 | resolved | watchdog problems through `notifyIncident` (`src/lib/watchdog/script.ts:272-287`); `watchdog.yml` scheduled lines gated by `scheduleGate.mjs`; DST-aware evening lines in `vercel.json` + `EVENING_WINDOW` (`heartbeat/handler.ts:48,143-145`) (D-772). The DST fix introduced R2-S1. |
+| V1-I3 | resolved | `src/lib/security/hmacCore.mjs` imported by `hmac.ts:15`, `scripts/smoke/sign.mjs:5`, `worker/src/selfcheck.ts:40` (D-780); trading day in `calendarCore.mjs` (D-711/D-781). |
+| V1-I4 | resolved | `adjusted.ts:70` `knownBy` mandatory; `calendarCovers` removed (D-790). |
+| V1-I5 | resolved | D-798 policy; `scripts/db/migrate.mjs --down-to --confirm-down`; `docs/runbooks/rollback-v2.md`. |
+| V1-I6 | resolved | `client.ts:41` `authDbBigint()`; `scripts/backup/run.mjs:138,249-256` persists sha256 for both DBs (D-784). |
+| V1-I7 | resolved | `?try=2` lines in `vercel.json` (00:50, 10:40, 11:40, 12:40 UTC); `alreadyDone` keyed on `final` (`handler.ts:62-74`) (D-778). |
+| V1-I8 | resolved | `worker/src/index.ts:44` `Promise.all` over runner chains (D-774). |
+| V1-I9 | resolved | `src/lib/security/envKind.ts` `isStagingEnv`; `testIdentity.ts:33`, `workerReport/handler.ts:38`, `watchdog/handler.ts:41` (D-782). |
+| V1-I10 | resolved | `src/lib/auth/cookies.ts` (`pinnedOrigin`, `trustHostFor`, `sessionCookieConfig`); `auth/config.ts:14-27` sets `AUTH_URL` from `APP_BASE_URL` (D-783). Staging has its own `APP_BASE_URL`; previews are off (`git.deploymentEnabled false`). |
+| V1-I11 | resolved | `src/lib/auth/audit.ts:12-18` `x-vercel-forwarded-for` first, right-most XFF next (D-785). |
+| V1-I12 | resolved | `scripts/ci/bundle-secret-scan.mjs:11-12` derives from the secrets registry (D-786). |
+| V1-I13 | resolved | `src/lib/auth/allowlist.ts:135-138` refuses the recovery sign-in when the alert e-mail fails (D-787). Accepted consequence: a Resend outage also blocks break-glass; the allowlist path is unaffected. |
+| V1-I14 | resolved | `tests/audit/ownerWritersAudit.test.ts` (D-788). |
+| V1-I15 | resolved | `docs/runbooks/gates.md`; `scripts/ci/ci.workflow.test.mjs:173` asserts `CI_REQUIRED_JOBS` equals the workflow's gated jobs (D-796). |
+| V2-S1 | resolved | `src/lib/cortex/look.ts` quarterly status look from batch 3 (`batch3.ts:1003-1015`), one charged ledger cell per family per quarter, `recordFamilyStatus` the only writer (D-700…D-702). |
+| V2-S2 | resolved | `0023_feature_retention.sql` prune-only-beyond-400-days trigger with a down section; `retention.ts:188` prunes it (D-704, D-705). |
+| V2-S3 | resolved | `worker/src/routes.ts:356` (D-668); route-post health lines (D-773). |
+| V2-S4 | resolved | `migrate-core.mjs:103-122` `allowNewer`; `scripts/db/migrate.mjs --allow-newer` / `MIGRATE_ALLOW_NEWER=1`, `--down-to <v> --confirm-down`; `docs/runbooks/rollback-v2.md` (D-703, D-708, D-798). |
+| V2-S5 | resolved | `src/lib/alerts/pick/poll.ts:172-177` armed picks keep polling past the 95 % stop until the day's budget is spent (D-694). Consequence in R2-I5. |
+| V2-S6 | resolved | `scripts/ci/repo-hygiene.allow.json:56,62` (`docs/V2_architecture_review.md`, `docs/runbooks/`). |
+| V2-S7 | resolved | `src/lib/data/quotes/fetch.ts:14,69-117` whole-run deadline, `AbortSignal.timeout` (D-696); `run.ts:67` clock injection. |
+| V2-S8 | resolved | D-445 and D-462 on the PR tick list (`docs/owner-guide/V2_go_live.md:27`). The movers batch re-opens the selection half: R2-S3. |
+| V2-S9 | resolved | `docs/owner-guide/V2_go_live.md`; `checklist.ts:56-` V2 block (D-706, D-707). |
+| V2-I1 | resolved | `schedule.ts:501-504` scan 10:32…15:32 (D-775). |
+| V2-I2 | resolved | `keys.ts:527` bounds 10…10 (D-791). |
+| V2-I3 | resolved | `fetch.ts:17-18` note, licence register (D-792). |
+| V2-I4 | resolved | D-773 (`HealthSummary.routeLines`). |
+| V2-I5 | resolved | `scripts/ci/decision-index.mjs` → `docs/V2_decisions.md` (D-797). |
+| V2-I6 | not changed, recorded | D-776: the empty-plan claim row is the poll's only per-tick heartbeat. Acceptable. |
+| V2-I7 | resolved | `corpActions.ts:72-82` `LEGACY_NULL_KNOWN_AT_BEFORE` (D-793). |
+| V2-I8 | resolved | `tests/security/expertBoundary.test.ts` part (vi) (D-794). |
+| V2-I9 | resolved | default 20 → 15 (D-777); the job timeout stays 40 (`arena-signals.yml:31,89`), fine with the new default. |
+| V2-I10 | resolved | `src/lib/ui/loaders/cortex.ts:138,260` (D-795). |
+| V2-I11 | resolved | `worker/src/routes.ts:299` `isTradingDayKind` (D-711). |
+
+**Round 1 items not fully resolved (each with a recorded decision; all judged acceptable):** V1-S3 (c) yearly draft job (D-712); V1-S5 scheduled real-key drill (Owner-dispatched, PLT-015); V1-S11 Turso platform metering (D-720); V2-I6 (D-776, deliberate).
+
+## Part B: fresh review of the complete solution
+
+### Summary
+Blocking 0, Should-fix 3, Improvement 7. The fixes are coherent across the parallel batches: the calendar strictness is one shared module that the Worker, the close guard and the heartbeat all read; the listing floor is a no-op fragment until the Owner writes a listing row, so the Cortex replay hashes are untouched; the rate limits exclude machine routes; Auth.js pinning fails closed only in production without `APP_BASE_URL`, which the self-check already requires; the retention prunes delete beyond BEFORE DELETE trigger floors that the restore never crosses (it only inserts). Migrations 0023 to 0025 are additive, each with a down section; the only V1-visible schema change is the `instrument_no_revive` trigger (R2-I4). What the fixes did introduce: a timing hole in the DST-aware heartbeat (R2-S1), a money-constant approval path that needs a second release after the single PR (R2-S2), and a candidate-selection change from the movers batch that the pre-registered intraday hypothesis does not state (R2-S3).
+
+### Should-fix
+
+#### R2-S1 — Evening heartbeat: the 55-minute acceptance window is narrower than Vercel Hobby's ±59-minute firing precision; about one night in six has no evening check
+**Evidence** `src/lib/heartbeat/handler.ts:48` `EVENING_WINDOW` = 21:00–21:55 Melbourne; `:143-145` a `vercel-cron` call outside it is a 200 no-op (no run record, no incident). `vercel.json` evening lines: `10 10` and `40 10` UTC (`?dst=aedt`), `10 11` and `40 11` UTC. Vercel docs (Usage & Pricing for Cron Jobs, read 2026-11-02): Hobby "Scheduling precision: per-hour (±59 min)"; a `10 10` job fires anywhere in 10:10–11:09 UTC. In AEDT that is 21:10–22:09 local: the first line is a no-op when it fires after 21:55 (about 14/60 of the time); the retry (`40 10`, 21:40–22:39) is a no-op about 45/60 of the time. Both no-op on roughly 0.23 × 0.75 ≈ 17 % of nights (same arithmetic in AEST for the `11:xx` lines). Before the DST fix the single `10 11` line had no window and always ran; the window was added so the other regime's line is a no-op, and it now also drops the right regime's late firings. `tests/heartbeat/route.test.ts:304` tests the exact 21:10 instant only.
+**Impact** The evening heartbeat carries `detectDataQualityTwoNights`, `detectReviewMissing` and the NFR-023 audit-chain check (V1-S4): on those nights none runs, silently. The 21:50 GitHub watchdog then sees no same-night incident. The `final` idempotency that makes the retry safe also makes the miss invisible (a no-op writes no record).
+**Fix** (S) Decide the regime from the query (`?dst=aedt` accepts the whole 10:xx UTC hour, the plain line the 11:xx hour: "is Melbourne currently at that offset", not "is it 21:00–21:55") and let `alreadyDone` suppress the other regime's line as today. If the 21:50 watchdog ordering matters (`handler.ts:46` comment), move the `scheduleGate` line of `watchdog.yml` to 22:20 or let the morning heartbeat read the evening incidents. One test per regime at :59.
+
+#### R2-S2 — The money-constant gate turns `full` in production into a code release after the single V2 PR
+**Evidence** `src/lib/golive/interlock.ts:43-55` `fullModeRefusal` returns `constants_unverified` from `unverifiedMoneyConstants()`, which reads compile-time flags (`moneyConstants.ts:8-11`; all `false` today). D-710: "Approval is NOT done here: it stays a code change recorded as a D-nnn (flip the flag, add `cost_profile` rows …)". `checklist.ts:181-186` `v2_money_constants` is an Owner attestation the interlock does not read; `docs/owner-guide/V2_go_live.md:29` step 15 says "production cannot switch to full mode until each one is approved" without saying that approval is another PR. CLAUDE.md §3 allows exactly one PR for V2.
+**Impact** Two cases, both real. (a) If AU is `full` in production today: the gate is checked on the transition only (`controls.ts:30-42`), so the running mode stands, but the first pause (incident runbook: "pause affected market") cannot be reversed from the UI until a release flips the flags; a one-person operator loses the resume path at the worst moment. (b) If AU is not yet `full`: V2 go-live cannot reach `full` from this PR. Either way the Owner-facing step promises an approval no page can give.
+**Fix** (S) Pick one and record it: (1) make the approval data, not code: the interlock accepts `full` when the market's go-live sign-off carries `money_constants` attested (add the item to `signoff.ts`, read it in `fullModeRefusal`), keeping the flags for the staging message and the Health line; or (2) carry the approval in this PR: flip the four flags, add `cost_profile` rows at version 2 (D-070 note 8), list "D-nnn money figures approved" first among the Owner ticks, and amend the branch once if the Owner strikes it (still inside the one PR). (1) is smaller and leaves the Owner in control at runtime.
+
+#### R2-S3 — The movers batch changed which intraday moves become candidates (sector-adjusted when available) after the pre-registered text and D-445 were written for the raw move
+**Evidence** `src/lib/intraday/candidate.ts:45` `effective = x.sectorAdjPpm ?? x.movePpm`; `scan.ts:339-347` now fills `sectorAdjPpm` from `sectorReturns` (`sector_composite_daily`, 0024, D-750) when the industry has ≥ 5 members and the composite points the same way. Round 1 recorded the build as "raw move" (D-445, `sectorAdjPpm: null`), and the PR tick list carries D-445 and D-462 (`V2_go_live.md:27`) but not D-750. `evaluator.ts:27-30` `HYPOTHESIS_TEXT` states the measurement (market TR index, costs, 60/60, 90 % bound) but not the selection rule; the cell id is still `intraday_stream:<market>:v1` (`:32`). The selection defines the sample, so it is part of the hypothesis the Owner approves against (VAL-118, O-74).
+**Impact** No sample exists yet (M17 has not run in production), so nothing is invalidated today. Once the first candidate is written, the first cell is bound to a selection rule the registered text does not state and whose data-dependence (the composite exists only for some industries on some days) is not pre-registered. This is the one place V2 promises statistical discipline for a new stream (Round 1 V2-B2).
+**Fix** (S) Before the first production scan: one sentence in `HYPOTHESIS_TEXT` naming the selection rule (sector-adjusted move where a same-direction industry composite with ≥ 5 members exists for the previous session, else the raw move; threshold max(`intraday_move_min_pct`, 1.5 × sd60)); bump the cell to `v2` only if a `v1` cell has already been logged on staging; add D-750 to the PR tick list beside D-445/D-462; say "vs market; sector-adjusted selection where available" in the section explainer.
+
+### Improvement
+
+#### R2-I1 — Cron paths with query strings: confirm on the first staging deploy
+`vercel.json` now has five entries whose `path` carries a query string (`?try=2`, `?dst=aedt`). The proxy matches on the pathname (`MACHINE_ROUTES`), the handler ignores the query (the window and `alreadyDone` do the work), and `tests/http/vercelCrons.test.ts` asserts the shape only. Vercel's docs show plain paths; the first staging deploy and the project's cron list should confirm the entries are accepted and distinct. Effort S (one go-live line).
+
+#### R2-I2 — Close guard fails open when `previousTradingDay` throws
+`closeBooks.ts:1446-1449`: an exception from the walk (a calendar slice starting at `d`, a bad date) returns `{ ok: true }`. With the production calendar loaded for the range this cannot happen; in a replay fixture with a partial calendar the guard is silently skipped. Prefer `recordSkip(… "calendar_walk_failed")` plus an app_log warning. Effort S.
+
+#### R2-I3 — A `previous_session_not_closed` refusal is re-dispatched up to MAX_ATTEMPTS by the recheck
+The refusal is a `failed` record (D-663), which `RECHECK_CLOSED_SQL` does not count as closed, so `clock.ts:296-307` dispatches `arena-close.yml` again after 30 min and again inside the 150-minute window: three GitHub runs refusing the same way, three failed records, one S2 (idempotent). Bounded and harmless; counting the refusal as "closed for recheck" (`details.reason`) would make the night cost one run. Effort S.
+
+#### R2-I4 — `instrument_no_revive` aborts the whole universe import when a delisted row has a NULL or foreign `delist_reason`
+`0025_instrument_listing.sql:34-41` refuses `delisted_on → NULL` unless the old reason is `absent_from_listed_companies`, `relist_confirmed%` or `reuse_confirmed%`. `import.ts:155-160` runs the reactivation UPDATE inside the import's one write batch, so a trigger abort fails the batch, not the row. Every current writer sets a reason (`import.ts:188`, `relist.ts`), so the case needs a hand-edited or fixture row; if it occurs, the nightly universe import stops for every code until the row is fixed. Have `apply.mjs` quarantine such a row (no UPDATE, an S2 as for reuse) instead of relying on the trigger. Effort S.
+
+#### R2-I5 — D-694 lets the armed-pick poll spend the last 5 % of the quote budget, leaving the shadow scan nothing late in the day
+`poll.ts:172-177`: armed picks poll until `allowed <= 0`. The 95 % stop was the margin shared with `intraday-scan`; on a day with many armed picks the scan's last slots return `budget_stop`. The priority is right (the alerts are the Owner's feature, the scan is shadow) and the 2,000/day host cap holds, so this is wording: "scan skipped: budget spent on pick alerts" in the health line rather than a bare budget stop. Effort S.
+
+#### R2-I6 — Movers additions sit inside the frozen Cortex design and should be ticked explicitly
+D-740…D-755 add G08 sub-checks 8f/8g/8h, angle version 2s (A-D1-01/02, A-D2-07) and a nightly arm list the M17 scan reads (`run.ts:38,235`), while ch. 17 is frozen at v7. They are shadow-only by construction (D-740), the v1 interpreter is untouched (D-748), and the 0024 tables fall under the AT-41 complement hash (`at41Replay.test.ts:8`). Add D-740…D-755 (and D-710/D-718, D-761) to the PR tick list in `V2_go_live.md:27`, which today names only the Round 1 decisions. Effort S.
+
+#### R2-I7 — The production-size restore drill is a script, not a scheduled or ticked step
+`scripts/restore/drill-size.mjs` (D-716) exists; `restore-drill.yml` is Owner-dispatched only (PLT-015). Put "run `drill-size.mjs` once on the latest production dump" on the V2 go-live page with a date column so the RTO (NFR-004) is measured once before merge. Effort S.
+
+### Interactions checked and found sound
+- **Calendar strictness vs catch-up/recheck.** `dayStatus` "missing" is not a trading day in the Worker (`clock.ts:493`, `routes.ts:299`), so market-bound slots are never dispatched on a missing day and the close guard never sees one; `isWalkDay` (loose) is used only for arithmetic walks, as its comment demands. The heartbeat raises `calendar_missing` the same day.
+- **Listing floor vs Cortex/replay.** `listingFloor` is `d >= COALESCE((SELECT MAX(listed_on) …), '')`: an identical result set while `instrument_listing` is empty, so the AT-41/AT-43/AT-50 goldens are unchanged until the Owner confirms a code reuse; a replay world with a listing row is then correctly split.
+- **Rate limits vs machine routes.** `gate.ts:189` `!machine`; Vercel cron GETs and Worker POSTs are untouched; the Control Room polls one endpoint a minute (`ControlRoomClient.tsx:17`), search is debounced (`MarketSearch.tsx:74`).
+- **Auth.js pinning vs staging.** Each project has its own `APP_BASE_URL`; outside production `trustHostFor` is true; previews are disabled.
+- **Retention vs backup/restore/triggers.** Prunes are DELETEs older than the trigger floors (730 d price bars, 400 d features); the restore only INSERTs (schema from the dump, parent-first, `defer_foreign_keys`), never crossing a BEFORE DELETE trigger; the 0023 down section restores the unconditional trigger.
+- **Vercel crons.** Eight entries: Hobby allows 100 per project, daily only; all eight are plain daily schedules (`vercelCrons.test.ts`). Timing precision is R2-S1.
+- **Migrations 0023–0025 on a live V1 database.** Additive; 0023 replaces a trigger 0019 created; 0024 creates five tables; 0025 one table plus one trigger on `instrument`; each down section drops only what its up created; tests pin version 25 (`tests/db/0019…0025`). A V1 rebuild on the migrated database needs `MIGRATE_ALLOW_NEWER=1` (D-703, rollback runbook).
+- **Fail-closed break-glass.** The refusal is audited; the allowlist sign-in is unaffected.
+
+**Round 2 verdict: NOT CLEAN** (0 Blocking, 3 Should-fix, 7 Improvement).
