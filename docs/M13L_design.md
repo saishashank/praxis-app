@@ -322,3 +322,50 @@ Verdict: merge after the fixes below (applied in this branch). Replay/golden sui
   stay FAILED for ever; the "no successful poll today" line from `quote_run` is V2-S3 (should-fix, PR
   list). Residual: a restore that drops `run_record` but keeps the arena tables makes the next night a
   "first night" (exempt); a full-database restore keeps both consistent.
+
+## Should-fix fixes
+
+### Batch C
+
+- **D-690 Scope.** Batch C closes V1-S8, V1-S9, V1-S10 (e-mail delivery) and V2-S3, V2-S5, V2-S7 (quote-poll / scan budget and
+  health). No migration: the `quote_run` reconciliation uses a `<slot>+done` row, as `+paused` already does.
+- **D-691 V1-S8 (morning route).** `POST /api/internal/morning` answers 503 `send_pending` when the reminder or brief row is still
+  `claimed` after the run (a send ended `pending` after two retryable provider outcomes, or a retry landed inside the 60 s
+  `RETRY_GAP` and `sendEmail` answered `duplicate`). The Worker's single-shot retry (max 3, next minute) then re-runs the route;
+  the email keys keep it idempotent. The row state is read instead of `send` so the duplicate-inside-the-gap case cannot report
+  success. Alternative rejected: an `everyMin` pattern for `morning` (would re-post a settled slot all window).
+- **D-692 V1-S10 (crash after acceptance).** `reclaim()` first looks for an `accepted` row in `email_attempt` for the key; if one
+  exists it finalises the `claimed` row as `sent` (provider id, attempt time and number from the attempt) and `sendEmail`
+  answers `duplicate`; it never sends a second time. Only applies once the claim is stale (a live invocation is not raced). The
+  Resend `Idempotency-Key` stays as the second line; its 24 h window remains `[VERIFY at build]` in `resend.ts` (not verifiable
+  offline, now no longer load-bearing for this case).
+- **D-693 V1-S9 (first-of-window P0).** `deliverP0` schedules the flush at now + `RETRY_DUE_MS` (60 s, moved to `deliver.ts` and
+  shared with `flush.ts`) when the in-request single ends `pending`; the flush already re-sends claimed singles. In
+  `sentinel-ingest`, a fault in `processAssessments` primes `alert_flush_due = now`, so the Worker calls the flush on the next
+  tick instead of waiting for a next ingest. The 30 min `P0_PENDING_MAX_MIN` bound is unchanged.
+- **D-694 V2-S5 (armed reserve).** D-502 is superseded for the poll: armed picks are polled every tick and the 95 % stop no longer
+  stops them (they run until the day's 2,000 is spent; a stop with no armed pick is still `budget_stop`). `reserve.ts` sets aside
+  armed codes x remaining poll ticks (to 16:00). The scan subtracts the same reserve from its day allowance (only when armed
+  alerts exist, so its behaviour is unchanged otherwise).
+- **D-695 V2-S5 (slower cadence).** Watch-listed and held codes are polled every tick while the room under the 95 % line after the
+  reserve covers them for all remaining ticks, else every k-th tick (k = ceil(ticks left / affordable polls)), and not at all
+  only when no room is left. The tick index is from the window start, so the choice is deterministic per slot. The 80 % "narrow"
+  band no longer gates the poll (the cadence replaces it; `narrowed` is true when extras were skipped or cut).
+- **D-696 V2-S7 (whole-run deadline).** The route's `now` is the signed request time and never advances, so the 20 s budget in
+  `fetchDelayedQuotes` never tripped by clock and each call could take 20 s. `QuoteFetchDeps.clock` (default `now`; routes use
+  `Date.now`) and `opts.deadlineAt` give a run deadline of 22 s from run start (`QUOTE_RUN_DEADLINE_MS`, 8 s left of
+  `maxDuration` 30 for evaluation and mail): no request starts after it, each call's abort timer is the time left, remaining
+  codes are `unfetched`. A deadline abort of an in-flight call counts as a `network` pause (cool-down), a slow host being backed
+  off. The batched `v7/finance/quote` endpoint was not adopted: the licence note covers the chart endpoint only.
+- **D-697 V2-S7/S5 (reservation reconciliation).** `quoteRequestsToday` charges a claim's reserved count unless a
+  `<slot>+done` row exists for the same (market, session, purpose); then the done row's actual count replaces it. The poll writes
+  the row when it made fewer requests than reserved; the scan also when it planned nothing. A run killed before writing it stays
+  charged in full (fail safe).
+- **D-698 V2-S3 (health lines).** `recurringRunHealth` (run.ts) reads the latest non-paused claim from `quote_run`: on a trading
+  day, after two ticks of grace from the window start, "Pick-alert poll / Intraday scan: no successful run today (since HH:MM)",
+  and while the window is open "last successful run HH:MM" once it is more than three ticks old. Wired into `pickAlertsHealth` /
+  `intradayScanHealth`, which were not used anywhere, via `HealthSummary.intradayLines` (Owner) and an "Intraday polling"
+  section on `/health`. The `worker-route` failure record already exists (D-668); an incident after N consecutive failures was
+  not added (no cheap hook: the detectors read `run_record` per job and a recurring slot has no success record to reset it).
+- **D-699 Residual.** The morning retry can reach the route inside the 60 s `RETRY_GAP` and be answered 503 again (an attempt of
+  the Worker's three is spent); the next attempt after the gap succeeds. The Worker's retry timing was not changed.

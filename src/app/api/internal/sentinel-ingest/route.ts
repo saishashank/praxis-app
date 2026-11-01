@@ -5,7 +5,7 @@ import { getConfig } from "@/lib/config/store";
 import { sydneyDate } from "@/lib/data/pipeline/rules.mjs";
 import { createSentinelIngestHandler } from "@/lib/sentinel/handler";
 import { ingestFeed } from "@/lib/sentinel/ingest";
-import { processAssessments } from "@/lib/alerts/deliver";
+import { processAssessments, scheduleFlush } from "@/lib/alerts/deliver";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -37,7 +37,13 @@ export async function POST(req: Request): Promise<Response> {
           try {
             await processAssessments({ db, env, now: () => new Date(nowSec * 1000) });
           } catch {
-            // retried by alert-flush
+            // retried by alert-flush; V1-S9 (D-693): prime the flush so the Worker calls it now
+            try {
+              const at = new Date(nowSec * 1000);
+              await scheduleFlush({ db, env, now: () => at }, at);
+            } catch {
+              // the Worker's own periodic flush still covers it
+            }
           }
         }
         return r;

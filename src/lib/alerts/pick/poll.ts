@@ -17,18 +17,30 @@ import { getConfig } from "@/lib/config/store";
 import { localToUtc, marketDate, sessionsBetween, sessionTimes } from "@/lib/data/calendar";
 import { readQuoteSourceState } from "@/lib/data/controls";
 import {
+  DONE_SUFFIX,
   QUOTE_REQUESTS_PER_DAY,
   budgetBand,
   quoteRequestsToday,
   requestsAllowed,
 } from "@/lib/data/quotes/budget";
-import { fetchDelayedQuotes, refusalFor, type QuoteFetchDeps } from "@/lib/data/quotes/fetch";
+import {
+  QUOTE_RUN_DEADLINE_MS,
+  fetchDelayedQuotes,
+  refusalFor,
+  type QuoteFetchDeps,
+} from "@/lib/data/quotes/fetch";
 import type { DelayedQuote, QuoteRefusal } from "@/lib/data/quotes/types";
 import { heldCodes } from "@/lib/intraday/universe";
-import { SESSION_TZ, minutesSincePause, readCalendar } from "@/lib/intraday/run";
+import {
+  SESSION_TZ,
+  minutesSincePause,
+  readCalendar,
+  recurringRunHealth,
+} from "@/lib/intraday/run";
 import { signed, type MachineDeps } from "@/lib/alerts/machine";
 import type { AlertCtx } from "@/lib/alerts/deliver";
 import { armForSession } from "./arm";
+import { extrasCadence, remainingPollTicks } from "./reserve";
 import { evaluateAlert } from "./evaluate";
 import {
   activeAlerts,
@@ -69,6 +81,8 @@ export type PollRunDeps = {
   now: () => Date;
   fetch: QuoteFetchDeps["fetch"];
   sleep: (ms: number) => Promise<void>;
+  /** Wall clock (ms) for the whole-run deadline; defaults to Date.now (V2-S7). */
+  clock?: () => number;
   /** Users whose pick alerts are on (ARN-112); the route reads the auth DB. */
   recipients: () => Promise<string[]>;
   /** WP4 hook; defaults to none (no mail leaves). */
@@ -105,6 +119,8 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
   const mailer = deps.mailer ?? NO_MAILER;
   const now = deps.now();
   const sessionD = marketDate(now, SESSION_TZ);
+  const clock = deps.clock ?? Date.now;
+  const deadlineAt = clock() + QUOTE_RUN_DEADLINE_MS;
 
   // 1. Source acceptance, before anything else.
   let refusal: QuoteRefusal | null;
@@ -152,11 +168,16 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
   const usedToday = await quoteRequestsToday(db, market, sessionD);
   const dayBudget = { dayMax: QUOTE_REQUESTS_PER_DAY, usedToday };
   const band = budgetBand(dayBudget);
-  if (band === "stop") return skip("budget_stop", arm.armed);
-  const allowed = requestsAllowed({ perRunMax: await num(db, "intraday_codes_max"), ...dayBudget });
-
-  // 5. Plan: armed picks first, then watch-listed, then held codes (armed only above 80 %).
   const active = await activeAlerts(db, market);
+  // D-502 re-budget (V2-S5, D-694): armed picks keep their requests to 16:00. The 95 % stop only
+  // ends the watch/held polling; an armed pick is polled until the day's budget itself is spent.
+  const armedCodes = [...new Set(active.map((a) => a.latest.code))];
+  if (band === "stop" && armedCodes.length === 0) return skip("budget_stop", arm.armed);
+  const allowed = requestsAllowed({ perRunMax: await num(db, "intraday_codes_max"), ...dayBudget });
+  if (allowed <= 0) return skip("budget_stop", arm.armed);
+
+  // 5. Plan: armed picks first (every tick), then watch-listed and held codes at the cadence the
+  // remaining budget sustains (every tick, or every k-th tick instead of stopping, D-695).
   const codes: string[] = [];
   const seen = new Set<string>();
   const add = (c: string): void => {
@@ -165,14 +186,22 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
       codes.push(c);
     }
   };
-  for (const a of active) add(a.latest.code);
-  const armedOnly = band === "narrow";
-  if (!armedOnly) {
-    for (const c of await watchCodes(db, market, sessionD)) add(c);
-    for (const c of [...(await heldCodes(db, market))].sort()) add(c);
-  }
+  for (const c of armedCodes) add(c);
+  const extraCodes = new Set<string>();
+  for (const c of await watchCodes(db, market, sessionD)) if (!seen.has(c)) extraCodes.add(c);
+  for (const c of [...(await heldCodes(db, market))].sort()) if (!seen.has(c)) extraCodes.add(c);
+  const ticksLeft = remainingPollTicks(now, end, stepMin);
+  const cadence = extrasCadence({
+    ...dayBudget,
+    armed: armedCodes.length,
+    ticksLeft,
+    extras: extraCodes.size,
+  });
+  const tickIndex = Math.floor(sinceStartMin / stepMin);
+  const extrasDue = cadence > 0 && tickIndex % cadence === 0;
+  if (extrasDue) for (const c of extraCodes) add(c);
   const planned = codes.slice(0, allowed);
-  const narrowed = armedOnly || codes.length > planned.length;
+  const narrowed = (extraCodes.size > 0 && !extrasDue) || codes.length > planned.length;
 
   // 6. Claim first: the row exists before any request (D-442). The reserved count is what this run may
   // request (never more than it plans), so 73 ticks stay inside the daily budget.
@@ -195,18 +224,37 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
   // 7. Fetch.
   let quotes: DelayedQuote[] = [];
   let paused: string | false = false;
+  let requestsMade = 0;
   if (planned.length > 0) {
     const fetched = await fetchDelayedQuotes(
       {
         fetch: deps.fetch,
         now: deps.now,
+        clock,
         sleep: deps.sleep,
         sourceState: () => readQuoteSourceState(db),
       },
       planned,
       { perRunMax: planned.length, dayMax: QUOTE_REQUESTS_PER_DAY, usedToday },
+      { deadlineAt },
     );
     quotes = fetched.quotes;
+    requestsMade = fetched.requests;
+    // V2-S7 (D-697): reconcile the reservation to the requests actually made.
+    if (fetched.requests < planned.length) {
+      await db.execute({
+        sql:
+          "INSERT INTO quote_run (market, session_d, slot_minute, purpose, started_at, requests) " +
+          "VALUES (?, ?, ?, 'poll', ?, ?) ON CONFLICT DO NOTHING",
+        args: [
+          market,
+          sessionD,
+          `${slot}${DONE_SUFFIX}`,
+          deps.now().toISOString(),
+          fetched.requests,
+        ],
+      });
+    }
     paused = fetched.paused;
     if (fetched.paused !== false) {
       // The claim row is append-only: a pause is its own row, read by the cool-down.
@@ -288,7 +336,7 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
     sessionD,
     slot,
     armed: arm.armed,
-    requests: planned.length,
+    requests: requestsMade,
     codes: planned.length,
     quotes: quotes.length,
     hits,
@@ -317,7 +365,20 @@ export async function pickAlertsHealth(
   if (budgetBand({ dayMax: QUOTE_REQUESTS_PER_DAY, usedToday: used }) === "stop") {
     lines.push("Pick alerts stopped for the day (request budget)");
   }
-  if ((await minutesSincePause(db, market, d, now)) !== null) lines.push("Prices paused");
+  const paused = (await minutesSincePause(db, market, d, now)) !== null;
+  if (paused) lines.push("Prices paused");
+  if (!paused && lines.length === 0) {
+    lines.push(
+      ...(await recurringRunHealth(db, now, {
+        market,
+        purpose: "poll",
+        label: "Pick-alert poll",
+        startText: POLL_START,
+        endText: POLL_END,
+        stepMin: await num(db, "intraday_refresh_min"),
+      })),
+    );
+  }
   return lines;
 }
 

@@ -18,9 +18,17 @@ import {
   marketDate,
   sessionTimes,
 } from "@/lib/data/calendar";
-import { refusalFor, fetchDelayedQuotes, type QuoteFetchDeps } from "@/lib/data/quotes/fetch";
+import {
+  QUOTE_RUN_DEADLINE_MS,
+  refusalFor,
+  fetchDelayedQuotes,
+  type QuoteFetchDeps,
+} from "@/lib/data/quotes/fetch";
+import { armedReserve, remainingPollTicks } from "@/lib/alerts/pick/reserve";
+import { activeAlerts } from "@/lib/alerts/pick/store";
 import { readQuoteSourceState } from "@/lib/data/controls";
 import {
+  DONE_SUFFIX,
   QUOTE_REQUESTS_PER_DAY,
   budgetBand,
   quoteRequestsToday,
@@ -33,6 +41,7 @@ import { scanUniverse, type ScanCode } from "./universe";
 
 export const SCAN_MARKET = "AU";
 /** Session dates are Melbourne market dates (D-442). */
+const SCAN_POLL_END = "16:00"; // threshold-ok: end of the quote-poll window (poll.ts POLL_END)
 export const SESSION_TZ = "Australia/Melbourne";
 const MS_PER_MIN = 60_000; // threshold-ok: unit
 
@@ -53,6 +62,8 @@ export type ScanRunDeps = {
   now: () => Date;
   fetch: QuoteFetchDeps["fetch"];
   sleep: (ms: number) => Promise<void>;
+  /** Wall clock (ms) for the whole-run deadline; defaults to Date.now (V2-S7). */
+  clock?: () => number;
   market?: string;
   /** WP4 hook (EML-040): mails the new candidates after they are written; default none. */
   mailCandidates?: (c: {
@@ -121,6 +132,8 @@ export async function runIntradayScan(deps: ScanRunDeps): Promise<ScanRunResult>
   const market = deps.market ?? SCAN_MARKET;
   const now = deps.now();
   const sessionD = marketDate(now, SESSION_TZ);
+  const clock = deps.clock ?? Date.now;
+  const deadlineAt = clock() + QUOTE_RUN_DEADLINE_MS;
 
   // 1. Source acceptance, before anything else.
   let refusal: QuoteRefusal | null;
@@ -170,10 +183,25 @@ export async function runIntradayScan(deps: ScanRunDeps): Promise<ScanRunResult>
   const dayBudget = { dayMax: QUOTE_REQUESTS_PER_DAY, usedToday };
   const band = budgetBand(dayBudget);
   if (band === "stop") return skip("budget_stop");
+  // V2-S5 (D-694): the armed picks' requests to the end of the poll window are not the scan's to spend.
+  const armedCount = new Set((await activeAlerts(db, market)).map((a) => a.latest.code)).size;
+  const reserve =
+    armedCount === 0
+      ? 0
+      : armedReserve(
+          armedCount,
+          remainingPollTicks(
+            now,
+            localToUtc(sessionD, SCAN_POLL_END, hours.tz),
+            await num(db, "intraday_refresh_min"),
+          ),
+        );
   const allowed = requestsAllowed({
     perRunMax: await num(db, "intraday_scan_requests_max"),
-    ...dayBudget,
+    dayMax: dayBudget.dayMax - reserve,
+    usedToday,
   });
+  if (reserve > 0 && allowed <= 0) return skip("budget_stop");
 
   // 5. Plan: universe ∩ today's catalysts, tier 1 first, cut at the allowance.
   const universe = await scanUniverse(db, market, sessionD, codesMax);
@@ -203,6 +231,13 @@ export async function runIntradayScan(deps: ScanRunDeps): Promise<ScanRunResult>
     narrowed,
   };
   if (planned.length === 0) {
+    // Nothing to fetch: the reservation is refunded (V2-S5, D-697).
+    await db.execute({
+      sql:
+        "INSERT INTO quote_run (market, session_d, slot_minute, purpose, started_at, requests) " +
+        "VALUES (?, ?, ?, 'scan', ?, 0) ON CONFLICT DO NOTHING",
+      args: [market, sessionD, `${slot}${DONE_SUFFIX}`, now.toISOString()],
+    });
     return { ...base, quotes: 0, written: 0, gateFailed: 0, paused: false, volumeUnavailable: 0 };
   }
 
@@ -211,12 +246,23 @@ export async function runIntradayScan(deps: ScanRunDeps): Promise<ScanRunResult>
     {
       fetch: deps.fetch,
       now: deps.now,
+      clock,
       sleep: deps.sleep,
       sourceState: () => readQuoteSourceState(db),
     },
     planned.map((c) => c.code),
     { perRunMax: allowed, dayMax: QUOTE_REQUESTS_PER_DAY, usedToday },
+    { deadlineAt },
   );
+  // V2-S5/S7 (D-697): the claim reserved `allowed`; reconcile it to the requests actually made.
+  if (fetched.requests < allowed) {
+    await db.execute({
+      sql:
+        "INSERT INTO quote_run (market, session_d, slot_minute, purpose, started_at, requests) " +
+        "VALUES (?, ?, ?, 'scan', ?, ?) ON CONFLICT DO NOTHING",
+      args: [market, sessionD, `${slot}${DONE_SUFFIX}`, deps.now().toISOString(), fetched.requests],
+    });
+  }
   if (fetched.paused !== false) {
     // The claim row is append-only: a pause is its own row, read by the cool-down.
     await db.execute({
@@ -263,6 +309,71 @@ export async function runIntradayScan(deps: ScanRunDeps): Promise<ScanRunResult>
   };
 }
 
+/** Latest slot (HH:MM) of `purpose` whose run was not paused (a claim without a `+paused` row), or null. */
+export async function lastSuccessfulSlot(
+  db: Exec,
+  market: string,
+  sessionD: string,
+  purpose: "poll" | "scan",
+): Promise<string | null> {
+  const r = await db.execute({
+    sql:
+      "SELECT q.slot_minute AS s FROM quote_run q WHERE q.market = ? AND q.session_d = ? AND q.purpose = ? " +
+      "AND q.slot_minute NOT LIKE '%+%' AND NOT EXISTS (SELECT 1 FROM quote_run p WHERE p.market = q.market " +
+      "AND p.session_d = q.session_d AND p.purpose = q.purpose AND p.slot_minute = q.slot_minute || '+paused') " +
+      "ORDER BY q.slot_minute DESC LIMIT 1",
+    args: [market, sessionD, purpose],
+  });
+  return r.rows.length ? String(r.rows[0].s) : null;
+}
+
+const GRACE_STEPS = 2; // threshold-ok: ticks of grace before a missing run is reported
+const LATE_STEPS = 3; // threshold-ok: ticks without a run before "last run" is reported
+
+/**
+ * V2-S3 (D-698): the recurring route slots (quote-poll, intraday-scan) have no worker_state row, so
+ * their health is read from `quote_run`: on a trading day, after a grace of two ticks from the window
+ * start, "no successful run today" when none exists, and "last successful run HH:MM" while the window
+ * is open and the last one is more than three ticks old. Empty when the day or market is off.
+ */
+export async function recurringRunHealth(
+  db: Exec,
+  now: Date,
+  p: {
+    market: string;
+    purpose: "poll" | "scan";
+    label: string;
+    startText: string;
+    endText: string;
+    stepMin: number;
+  },
+): Promise<string[]> {
+  const sessionD = marketDate(now, SESSION_TZ);
+  const mk = await db.execute({
+    sql: "SELECT tz, open_time, close_time, mode FROM market WHERE code = ?",
+    args: [p.market],
+  });
+  if (mk.rows.length === 0 || String(mk.rows[0].mode) === "off") return [];
+  const hours = {
+    tz: String(mk.rows[0].tz),
+    open_time: String(mk.rows[0].open_time),
+    close_time: String(mk.rows[0].close_time),
+  };
+  const session = sessionTimes(sessionD, hours, await readCalendar(db, p.market));
+  if (session === null) return [];
+  const start = localToUtc(sessionD, p.startText, hours.tz).getTime();
+  const end = localToUtc(sessionD, p.endText, hours.tz).getTime();
+  const step = Math.max(1, p.stepMin) * MS_PER_MIN;
+  if (now.getTime() < start + GRACE_STEPS * step) return [];
+  const last = await lastSuccessfulSlot(db, p.market, sessionD, p.purpose);
+  if (last === null) return [`${p.label}: no successful run today (since ${p.startText})`];
+  const lastAt = localToUtc(sessionD, last, hours.tz).getTime();
+  if (now.getTime() <= end && now.getTime() - lastAt > LATE_STEPS * step) {
+    return [`${p.label}: last successful run ${last}`];
+  }
+  return [];
+}
+
 /** System Health lines of the "intraday scan" series, derived on read (nothing is stored for them). */
 export async function intradayScanHealth(
   db: Exec,
@@ -288,5 +399,17 @@ export async function intradayScanHealth(
   if (Number(r.rows[0]?.n ?? 0) > 0) lines.push("Intraday scan narrowed");
   const since = await minutesSincePause(db, market, d, now);
   if (since !== null) lines.push("Prices paused");
+  if (band !== "stop" && since === null && (await num(db, "intraday_scan_codes_max")) > 0) {
+    lines.push(
+      ...(await recurringRunHealth(db, now, {
+        market,
+        purpose: "scan",
+        label: "Intraday scan",
+        startText: String(await getConfig(db, "intraday_scan_start")),
+        endText: String(await getConfig(db, "intraday_scan_end")),
+        stepMin: await num(db, "intraday_scan_min"),
+      })),
+    );
+  }
   return lines;
 }
