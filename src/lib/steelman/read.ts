@@ -15,13 +15,16 @@ import {
 import type { NotWrittenReason } from "./write";
 
 export type PointView = { text: string; citations: string[]; monitorable: boolean };
+/** A cited pack item as the page sees it: id, kind and text only. The item's `at` timestamp never leaves
+ * the reader, so a masked viewer cannot get an exact date through it (D-561). */
+export type CitedItem = { id: string; kind: string; text: string };
 export type SteelmanView = {
   state: "written" | "not_written";
   reason?: NotWrittenReason;
   bull: PointView[];
   bear: PointView[];
   /** The pack items cited by the shown points, in id order. */
-  cited: PackItemRow[];
+  cited: CitedItem[];
 };
 
 const view = (p: PointRow): PointView => ({
@@ -29,6 +32,13 @@ const view = (p: PointRow): PointView => ({
   citations: p.citations,
   monitorable: p.monitorable,
 });
+
+/** The items of a pack cited by `ids`, in id order, without their timestamps. */
+const citedOf = (items: readonly PackItemRow[], ids: ReadonlySet<string>): CitedItem[] =>
+  items
+    .filter((i) => ids.has(i.id))
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+    .map((i) => ({ id: i.id, kind: i.kind, text: i.text }));
 
 /** The only reason the night row can name on its own: exactly one not-written counter is non-zero. */
 async function nightReason(
@@ -64,8 +74,7 @@ export async function readSteelmanForCard(db: Exec, cardId: string): Promise<Ste
     const reason = all.length > 0 ? "rejected" : await nightReason(db, pack.market, pack.d);
     return { state: "not_written", ...(reason ? { reason } : {}), bull: [], bear: [], cited: [] };
   }
-  const ids = new Set(shown.flatMap((p) => p.citations));
-  const cited = pack.items.filter((i) => ids.has(i.id)).sort((a, b) => (a.id < b.id ? -1 : 1));
+  const cited = citedOf(pack.items, new Set(shown.flatMap((p) => p.citations)));
   return { state: "written", bull, bear, cited };
 }
 
@@ -77,7 +86,7 @@ export type SuggestionView = {
   family: string;
   /** The bear point the suggestion comes from. */
   text: string;
-  cited: PackItemRow[];
+  cited: CitedItem[];
 };
 
 /** Open suggestions with their bear point and cited evidence (Owner `/review`; never masked, D-497). */
@@ -87,7 +96,6 @@ export async function readSuggestionViews(db: Exec, market: string): Promise<Sug
     const pt = await readPoint(db, s.pointId);
     if (pt === null) continue;
     const pack = await readPack(db, pt.packId);
-    const ids = new Set(pt.citations);
     out.push({
       suggestionId: s.suggestionId,
       d: s.d,
@@ -95,9 +103,7 @@ export async function readSuggestionViews(db: Exec, market: string): Promise<Sug
       cardId: s.cardId,
       family: s.family,
       text: pt.text,
-      cited: (pack?.items ?? [])
-        .filter((i) => ids.has(i.id))
-        .sort((a, b) => (a.id < b.id ? -1 : 1)),
+      cited: citedOf(pack?.items ?? [], new Set(pt.citations)),
     });
   }
   return out;

@@ -1,8 +1,9 @@
 // Steelman section of the Decision Card (V2 ch. 07, UXR-024; M11-lite D-497/D-498): the strongest case
 // for and against the card, written by a model from the evidence on the card and checked app-side. Two
-// lists with evidence chips, the cited evidence rows, and a caption that says what it is. Under 640 px the
-// body sits in a collapsed <details> (no client state): the two bodies are the same markup with their own
-// id prefix, one shown per breakpoint by CSS. Nothing here is advice or a forecast.
+// lists with evidence chips, the cited evidence rows, and a caption that says what it is. Below the `sm`
+// breakpoint (600 px, D-562) the body sits in a collapsed <details> (no client state): the two bodies are
+// the same markup with their own id prefix, one shown per breakpoint by CSS (`display: none` for the
+// other, so assistive technology reads one copy). Nothing here is advice or a forecast.
 import { Card } from "@/components/ui/Card";
 import type { SteelmanView } from "@/lib/steelman/read";
 
@@ -90,9 +91,10 @@ export function Steelman({ data }: { data: SteelmanView | null }) {
       <div className="hidden sm:block" data-testid="steelman-wide">
         <Body data={data} prefix="ev-" />
       </div>
-      <details className="sm:hidden" data-testid="steelman-narrow">
+      <details className="group sm:hidden" data-testid="steelman-narrow">
         <summary className="inline-flex min-h-6 cursor-pointer items-center py-1 text-accent underline">
-          Show the case for and against
+          <span className="group-open:hidden">Show the case for and against</span>
+          <span className="hidden group-open:inline">Hide the case for and against</span>
         </summary>
         <div className="mt-2">
           <Body data={data} prefix="m-ev-" />

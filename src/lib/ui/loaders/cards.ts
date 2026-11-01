@@ -163,14 +163,23 @@ const NOT_FOUND: CardPage = {
   links: { home: "/", strategy: null },
 };
 
-/** Every free text of the steelman through the viewer's scope (ROL-107, D-497); ids stay as they are. */
-function maskedSteelman(v: SteelmanView, t: (x: string) => string): SteelmanView {
-  const pt = (p: SteelmanView["bull"][number]) => ({ ...p, text: t(p.text) });
+/** A stored card or signal id inside free text (the pack's subject line names the card, D-506). */
+const STORED_ID_RE = /\b(?:card|sig):[^\s,;)]+/g;
+const ID_HIDDEN = "[reference hidden]";
+
+/**
+ * Every free text of the steelman through the viewer's scope (ROL-107, D-497); evidence ids stay as they
+ * are. A masked viewer also never sees a stored card or signal id inside a point or a cited item (such a
+ * viewer addresses cards by opaque reference only, D-135; D-561).
+ */
+function maskedSteelman(v: SteelmanView, t: (x: string) => string, masked: boolean): SteelmanView {
+  const m = (x: string) => (masked ? t(x).replace(STORED_ID_RE, ID_HIDDEN) : t(x));
+  const pt = (p: SteelmanView["bull"][number]) => ({ ...p, text: m(p.text) });
   return {
     ...v,
     bull: v.bull.map(pt),
     bear: v.bear.map(pt),
-    cited: v.cited.map((i) => ({ ...i, text: t(i.text) })),
+    cited: v.cited.map((i) => ({ ...i, text: m(i.text) })),
   };
 }
 
@@ -371,7 +380,7 @@ export async function loadCardPage(deps: LoaderDeps, idOrRef: string): Promise<L
       scenarioRows: scenarioRows(card),
       why: whyLines(card, rows, warnings, t),
       afterwards: afterwards(card, closed, led !== null),
-      steelman: steelman === null ? null : maskedSteelman(steelman, t),
+      steelman: steelman === null ? null : maskedSteelman(steelman, t, masked),
       notes,
       links: { home: "/", strategy: `/strategies/${encodeURIComponent(card.execution)}` },
     },

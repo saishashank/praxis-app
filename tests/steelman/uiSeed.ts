@@ -7,9 +7,16 @@ import { CARD_UP, D } from "../loaders/seed";
 export const PACK_ID = "c".repeat(64);
 const AT = "2026-10-19T08:00:00.000Z";
 
+// E01 is the night stage's subject line (D-506): it names the stored card id. E02 carries an `at`
+// timestamp like a headline item. Both must stay hidden from a masked viewer (D-561).
 export const ITEMS = [
-  { id: "E01", kind: "card", text: "Subject order ZZUP, Zed Upward Holdings" },
-  { id: "E02", kind: "event", text: "Zed Upward Holdings reported results on 2026-10-19." },
+  { id: "E01", kind: "card", text: `Subject order ZZUP, card ${CARD_UP}` },
+  {
+    id: "E02",
+    kind: "event",
+    text: "Zed Upward Holdings reported results on 2026-10-19.",
+    at: "2026-10-19T07:30:00.000Z",
+  },
   { id: "E03", kind: "regime", text: "The market state is neutral." },
 ];
 
@@ -53,7 +60,7 @@ export async function seedSteelman(main: Client, o: { suggestion?: boolean } = {
     createdAt: AT,
   });
   for (const p of [
-    P("bull", 1, "Zed Upward Holdings reported results.", ["E02"]),
+    P("bull", 1, "Zed Upward Holdings reported results.", ["E01", "E02"]),
     P("bull", 2, "The market state is neutral.", ["E03"]),
     BEAR_MON,
     P("bear", 2, "A neutral market gives little lift.", ["E03"]),

@@ -12,6 +12,7 @@ import {
   CARD_UP,
   EDITOR,
   emptyDbs,
+  leaks,
   NOW,
   OWNER,
   seedPopulated,
@@ -44,7 +45,9 @@ describe("Steelman component", () => {
     expect(v.state).toBe("written");
     expect(v.bull).toHaveLength(2);
     expect(v.bear).toHaveLength(2); // the critic-hidden point is not shown
-    expect(v.cited.map((c) => c.id)).toEqual(["E02", "E03"]);
+    expect(v.cited.map((c) => c.id)).toEqual(["E01", "E02", "E03"]);
+    // the cited rows carry id, kind and text only: no item timestamp reaches the page (D-561)
+    for (const c of v.cited) expect(Object.keys(c).sort()).toEqual(["id", "kind", "text"]);
     const html = renderToStaticMarkup(<Steelman data={v} />);
     expect(html).toContain(">Strongest case for</h3>");
     expect(html).toContain(">Strongest case against</h3>");
@@ -57,11 +60,14 @@ describe("Steelman component", () => {
     expect(html).not.toContain("Hidden by the checker");
   });
 
-  it("keeps the body under 640 px in a collapsed <details> with its own anchors", async () => {
+  it("keeps the body under the sm breakpoint in a collapsed <details> with its own anchors", async () => {
     const v = (await readSteelmanForCard(db.main, CARD_UP))!;
     const html = renderToStaticMarkup(<Steelman data={v} />);
-    expect(html).toMatch(/<details class="sm:hidden"(?! open)/);
+    expect(html).toMatch(/<details class="group sm:hidden"(?! open)/);
     expect(html).toContain('class="hidden sm:block"');
+    // the summary names both states; one is shown per open state by CSS
+    expect(html).toContain("Show the case for and against");
+    expect(html).toContain("Hide the case for and against");
     expect(html).toContain('href="#m-ev-E02"');
     expect(html).toContain('id="m-ev-E02"');
   });
@@ -102,7 +108,7 @@ describe("card loader", () => {
     const r = await load(OWNER, CARD_UP);
     const s = r.data.steelman!;
     expect(s.bull[0]!.text).toContain("Zed Upward Holdings");
-    expect(s.cited[0]!.text).toContain("Zed Upward Holdings");
+    expect(s.cited[1]!.text).toContain("Zed Upward Holdings");
   });
 
   it("masks every point and cited item for a masked viewer (ROL-107)", async () => {
@@ -114,8 +120,16 @@ describe("card loader", () => {
       const blob = JSON.stringify(s);
       expect(blob).not.toMatch(/ZZUP|Zed Upward/);
       expect(blob).not.toContain("2026-10-19");
-      expect(s.cited.map((c) => c.id)).toEqual(["E02", "E03"]); // ids stay
+      expect(blob).not.toContain("07:30"); // the item timestamp never leaves the reader (D-561)
+      expect(leaks(s)).toEqual([]); // no code, name, signal id or card id (the subject line, D-506)
+      expect(s.cited[0]!.text).toContain("[reference hidden]");
+      expect(s.cited.map((c) => c.id)).toEqual(["E01", "E02", "E03"]); // ids stay
     }
+  });
+
+  it("leaves the Owner's text untouched, card id included", async () => {
+    const r = await load(OWNER, CARD_UP);
+    expect(r.data.steelman!.cited[0]!.text).toBe(`Subject order ZZUP, card ${CARD_UP}`);
   });
 
   it("is null when nothing is stored", async () => {

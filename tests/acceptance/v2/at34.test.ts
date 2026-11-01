@@ -143,10 +143,18 @@ describe("AT-34 dismiss and expiry", () => {
     expect(await auditRows(db.auth)).toHaveLength(auditBefore + 1);
   });
 
-  it("an invalid id changes nothing", async () => {
+  it("an invalid or unknown id changes nothing", async () => {
     as(OWNER);
-    expect(await dismissSuggestionAction(form(""))).toEqual({ error: "invalid" });
-    expect(await dismissSuggestionAction(form("nope"))).toEqual({ error: "not_found" });
+    const auditBefore = (await auditRows(db.auth)).length;
+    // shape check in the action (D-561): not a suggestion id -> refused before any read
+    for (const bad of ["", "nope", "x".repeat(300), `${"c".repeat(64)}:bull:1; DROP TABLE x`]) {
+      expect(await dismissSuggestionAction(form(bad))).toEqual({ error: "invalid" });
+    }
+    // well-formed but unknown -> not found; neither writes an audit row
+    expect(await dismissSuggestionAction(form(`${"e".repeat(64)}:bull:1`))).toEqual({
+      error: "not_found",
+    });
+    expect(await auditRows(db.auth)).toHaveLength(auditBefore);
   });
 
   it("expires by trading-session count, closed by 'system', and never touches rules", async () => {
