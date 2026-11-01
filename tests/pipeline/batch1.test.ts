@@ -210,15 +210,18 @@ describe("idempotency and early exit (PLT-016, PLT-076, DAT-003)", () => {
       covered: true,
       confirmed: false,
     });
+    // V1-S3 / D-710: a weekday the calendar has no row for (past the 2027 seed) is not fetched, no
+    // marker is written, and the run record says why
     const db2 = await pipelineDb();
     await runBatch1(db2, {
       nowMs: () => Date.parse("2028-03-01T06:30:00Z"),
       barsText: text(barsFor(["2028-03-01"])),
     });
-    expect(details((await runs(db2))[0]).stages.calendar).toMatchObject({
-      covered: false,
-      confirmed: false,
-    });
+    const skipped = (await runs(db2))[0];
+    expect(String(skipped.status)).toBe("skipped");
+    expect(details(skipped)).toMatchObject({ reason: "calendar_missing" });
+    expect(await count(db2, "price_bar")).toBe(0);
+    expect(await count(db2, "completion_marker")).toBe(0);
   });
 
   it("a bar already stored is never overwritten (first-seen immutable)", async () => {

@@ -217,11 +217,31 @@ describe("evening check", () => {
     expect(kinds(sun)).toEqual(["worker_blind"]); // only the Worker check
   });
 
-  it("a weekday the calendar has no row for counts as a trading day", async () => {
+  it("a weekday the calendar has no row for is NOT a trading day: calendar_missing, no marker check (V1-S3)", async () => {
     await setState("dispatch_enabled", true);
     const wed = new Date("2029-03-14T11:10:00.000Z");
     await rollup("2029-03-14");
-    expect(kinds(await runChecks("evening", db, wed))).toEqual(["completion_marker_missing"]);
+    const r = await runChecks("evening", db, wed);
+    expect(kinds(r).sort()).toEqual(["calendar_horizon", "calendar_missing"]);
+    expect(r.notes.join(" ")).toMatch(/not a trading day/);
+  });
+
+  it("raises calendar_horizon when the calendar ends within 60 days, and not before", async () => {
+    // seed ends 2027-12-31; 2027-11-01 has exactly 60 days left (quiet), 2027-11-02 has 59
+    await rollup("2027-11-01");
+    await rollup("2027-11-02");
+    const quiet = await runChecks("morning", db, new Date("2027-11-01T00:30:00.000Z"));
+    expect(kinds(quiet)).not.toContain("calendar_horizon");
+    const loud = await runChecks("morning", db, new Date("2027-11-02T00:30:00.000Z"));
+    expect(kinds(loud)).toContain("calendar_horizon");
+    expect(loud.problems.find((p) => p.kind === "calendar_horizon")!.detail).toMatchObject({
+      lastDate: "2027-12-31",
+    });
+  });
+
+  it("a weekday with a session row raises no calendar problem", async () => {
+    await rollup();
+    expect(kinds(await runChecks("morning", db, MORNING_MON))).not.toContain("calendar_missing");
   });
 
   it("poll boundary: the last poll must be within 15 minutes of the 19:30 close", async () => {

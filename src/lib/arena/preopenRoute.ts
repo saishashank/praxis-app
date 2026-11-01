@@ -17,6 +17,7 @@ export function createPreopenHandler(deps: MachineDeps) {
       market: "AU",
       d: body.d as string,
       attempt: a === 2 ? 2 : 1,
+      strictCalendar: true, // D-711
       now: () => new Date(nowSec * 1000).toISOString(),
     });
     if (r.status === "error") return json(503, { error: "unavailable" });

@@ -160,6 +160,7 @@ export async function closeBooksMain(
         market: MARKET,
         d,
         replay,
+        strictCalendar: !replay, // D-711
         calendar,
         now: () => new Date(nowMs()).toISOString(),
         commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
@@ -379,6 +380,7 @@ export async function signalsMain(
         market: MARKET,
         d,
         replay,
+        strictCalendar: !replay, // D-711
         calendar,
         now: () => new Date(nowMs()).toISOString(),
         commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
@@ -400,6 +402,7 @@ export async function signalsMain(
         market: MARKET,
         d,
         replay,
+        strictCalendar: !replay, // D-711
         calendar,
         now: () => new Date(nowMs()).toISOString(),
         commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,

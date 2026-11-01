@@ -62,6 +62,7 @@
 import { dbConfigured, pipeline, type Arg, type DbEnv, type Stmt, type StmtResult } from "./db";
 import { dispatchWorkflow, refFor, type DispatchEnv } from "./dispatch";
 import { isWeekend, MINUTE_MS, sydneyLocal, type Local } from "./localtime";
+import { isTradingDayKind } from "../../src/lib/data/calendarCore.mjs";
 import { AU_SLOTS, type Slot } from "./schedule";
 
 export const CLOCK_JOB = "worker-clock";
@@ -488,7 +489,8 @@ export async function runClock(
     const facts: Facts = {
       dispatchEnabled: parseEnabled(enabledRaw),
       marketMode: typeof mode === "string" ? mode : null,
-      tradingDay: !isWeekend(local) && calKind !== "holiday",
+      // V1-S3 / D-711: fail safe, a weekday with no calendar row is NOT a trading day.
+      tradingDay: isTradingDayKind(local.date, typeof calKind === "string" ? calKind : null),
       slotsEnabled: parseSlotsEnabled(listRaw),
       slotInputs,
       closedKeys: iClosed >= 0 ? new Set(r1[iClosed].rows.map((r) => String(r[0]))) : undefined,

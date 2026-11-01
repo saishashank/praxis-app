@@ -27,6 +27,8 @@ import {
 
 /** [VERIFY] ARN-024 (l.56): AU minimum marketable parcel A$500. Not Owner-approved yet. */
 export const MIN_MARKETABLE_PARCEL_MICRO: Micro = 500_000_000n;
+/** V1-S2 / D-710: false until the Owner approves the parcel; the `full` go-live gate reads it. */
+export const MIN_MARKETABLE_PARCEL_VERIFIED = false;
 /** ARN-024 (l.56) / ch.15 `participation_cap`: 1 % of the 20-session ADV (in shares). */
 export const DEFAULT_PARTICIPATION_CAP: Rational = makeRational(1n, 100n);
 /** ARN-024a (l.57) / ch.15 `cash_buffer`: 1 % of NAV. */

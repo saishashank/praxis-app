@@ -173,6 +173,7 @@ describe("planDates (catch-up)", () => {
     expect(mk([], null, "2026-10-16")).toEqual({
       dates: [{ d: "2026-10-16", trading: true }],
       remaining: 0,
+      calendarMissing: false,
     });
   });
 

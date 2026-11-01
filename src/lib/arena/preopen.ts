@@ -41,7 +41,7 @@ import { alertKeys } from "@/lib/alerts/tiers";
 import { cortexOpenGuard } from "@/lib/cortex/stage";
 import { loadAsxTokenView } from "@/lib/data/asxToken";
 import {
-  isTradingDay,
+  gateDayStatus,
   localToUtc,
   previousTradingDay,
   type CalendarKind,
@@ -321,6 +321,12 @@ export type PreopenOptions = {
   readonly attempt?: 1 | 2;
   /** A replay against a NON-production database: a `data_only` market may then be processed. */
   readonly replay?: boolean;
+  /**
+   * D-711: the live entry points set this so a weekday the calendar has no row for is skipped as
+   * `calendar_missing` (fail safe). Off (default): the looser "not a holiday row" rule that
+   * replays and the synthetic-date tests rely on.
+   */
+  readonly strictCalendar?: boolean;
   /** Stamps run / alert rows only. */
   readonly now: () => string;
   readonly params?: AgentParams;
@@ -538,7 +544,9 @@ export async function runPreopen(db: Client, o: PreopenOptions): Promise<Preopen
   if (mode === "off") return { status: "skipped", reason: "market_off" };
   if (mode !== "full" && o.replay !== true) return { status: "skipped", reason: "data_only_guard" };
   const calendar = await readCalendar(db, market);
-  if (!isTradingDay(d, calendar)) return { status: "skipped", reason: "non_trading_day" };
+  const dayState = gateDayStatus(d, calendar, o.strictCalendar);
+  if (dayState === "missing") return { status: "skipped", reason: "calendar_missing" }; // D-711
+  if (dayState !== "open") return { status: "skipped", reason: "non_trading_day" };
 
   const existing = await readRun(db, market, d);
   if (existing !== null && !(existing.status === "error" && existing.attempt === 1)) {

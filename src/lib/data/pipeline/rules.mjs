@@ -7,6 +7,7 @@
 // src/lib/data/sources/yahoo.ts (validateBar, parseYahooBars) because plain Node cannot import the
 // TS files. tests/pipeline/rules.test.ts checks both pairs against each other, so a drift fails CI.
 import { createHash } from "node:crypto";
+import { dayStatusRows, isTradingDayRows, isWalkDay } from "../calendarCore.mjs";
 
 export const MARKET = "AU";
 export const TZ = "Australia/Sydney";
@@ -82,18 +83,20 @@ export function isWeekend(date) {
 }
 
 /**
- * A weekday without a holiday row is a trading day (provisional, as calendar.ts).
+ * The gate (V1-S3 / D-711, calendarCore.mjs): a weekday with a session or early_close row. A
+ * weekday with NO row is not a trading day (fail safe).
  * @param {string} date @param {readonly { d: string, kind: string }[]} rows
  */
 export function isTradingDay(date, rows) {
-  return !isWeekend(date) && !rows.some((r) => r.kind === "holiday" && r.d === date);
+  if (!isRealDate(date)) throw new RangeError(`bad date: ${date}`);
+  return isTradingDayRows(date, rows);
 }
 
 /** @param {string} date @param {readonly { d: string, kind: string }[]} rows */
 export function previousTradingDay(date, rows) {
   for (let i = 1; i <= SEARCH_LIMIT; i++) {
     const d = addDays(date, -i);
-    if (isTradingDay(d, rows)) return d;
+    if (isWalkDay(d, rows)) return d;
   }
   throw new RangeError(`no trading day within ${SEARCH_LIMIT} days before ${date}`);
 }
@@ -104,7 +107,7 @@ export function previousTradingDay(date, rows) {
  */
 export function tradingDaysBetween(from, to, rows) {
   const out = [];
-  for (let d = from; d <= to; d = addDays(d, 1)) if (isTradingDay(d, rows)) out.push(d);
+  for (let d = from; d <= to; d = addDays(d, 1)) if (isWalkDay(d, rows)) out.push(d);
   return out;
 }
 
@@ -121,14 +124,22 @@ export function tradingDaysBetween(from, to, rows) {
  * a trading day gets a `non-trading` marker.
  * @param {{ target: string, markers: ReadonlySet<string>, firstMarker: string | null,
  *   rows: readonly { d: string, kind: string }[], maxDates?: number, lookbackDays?: number,
- *   lastBarBefore?: string | null, gapMaxDates?: number }} p
- * @returns {{ dates: { d: string, trading: boolean }[], remaining: number }}
+ *   lastBarBefore?: string | null, gapMaxDates?: number, strictCalendar?: boolean }} p
+ * @returns {{ dates: { d: string, trading: boolean }[], remaining: number, calendarMissing: boolean }}
  */
 export function planDates(p) {
   const { target, markers, firstMarker, rows } = p;
   const maxDates = p.maxDates ?? MAX_DATES_PER_RUN;
   const lookback = p.lookbackDays ?? LOOKBACK_DAYS;
-  const targetTrading = isTradingDay(target, rows);
+  // strictCalendar (the live entry point): a weekday with no row is "missing", not a session.
+  // Off (unit tests, replays with holiday-only calendars): the looser "not a holiday row" walk.
+  const targetStatus =
+    p.strictCalendar === true
+      ? dayStatusRows(target, rows)
+      : isWalkDay(target, rows)
+        ? "open"
+        : "closed";
+  const targetTrading = targetStatus === "open";
   const older = [];
   const gapDays = [];
   if (firstMarker !== null) {
@@ -145,8 +156,15 @@ export function planDates(p) {
   const gap = gapDays.slice(0, p.gapMaxDates ?? GAP_MAX_DATES);
   const picked = older.slice(0, room);
   const dates = [...gap, ...picked].map((d) => ({ d, trading: true }));
-  if (targetMissing) dates.push({ d: target, trading: targetTrading });
-  return { dates, remaining: gapDays.length - gap.length + older.length - picked.length };
+  // D-711: a weekday with no calendar row is NOT planned (no `non-trading` marker either: that
+  // would keep the day closed after the row is added); the caller reports `calendar_missing`.
+  const calendarMissing = targetStatus === "missing";
+  if (targetMissing && !calendarMissing) dates.push({ d: target, trading: targetTrading });
+  return {
+    dates,
+    remaining: gapDays.length - gap.length + older.length - picked.length,
+    calendarMissing: calendarMissing && targetMissing,
+  };
 }
 
 /**
