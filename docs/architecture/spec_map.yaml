@@ -69,6 +69,10 @@ rules:
     specIds: [KB-040, VAL-110]
     purpose: "Learned page: lessons, challengers and family history."
     views: [learning]
+  - match: "page:{/reviews/experts*,/reviews/techniques}"
+    specIds: [PRD-034, KB-074, KB-075, UXN-292]
+    purpose: "Expert library page {name}: experts by tested evidence, the claim queue and technique clusters (hypotheses, not advice)."
+    views: [learning]
   - match: "page:/cortex*"
     specIds: [CTX-010, CTX-011]
     purpose: "Cortex page: family states and passports (status only)."
@@ -141,6 +145,10 @@ rules:
   - match: "action:src/app/(app)/users/*"
     specIds: [ROL-101, ROL-102a]
     views: [security]
+  - match: "action:src/app/(app)/reviews/experts/*"
+    specIds: [KB-073, KB-075, LLM-069, ROL-102a]
+    purpose: "Server action {name}: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited."
+    views: [learning, security]
   - match: "action:src/app/(app)/alerts/*"
     specIds: [UXN-303, ARN-115, ROL-102a]
     purpose: "Server action {name}: mutes or restores pick alerts for the signed-in user."

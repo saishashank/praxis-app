@@ -750,6 +750,214 @@
       }
     },
     {
+      "id": "action:src/app/(app)/reviews/experts/queue/actions.ts#bulkConfirmExpertAction",
+      "type": "action",
+      "name": "bulkConfirmExpertAction",
+      "purpose": "Server action bulkConfirmExpertAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/experts/queue/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/reviews/experts/queue/actions.ts"
+      }
+    },
+    {
+      "id": "action:src/app/(app)/reviews/experts/queue/actions.ts#confirmClaimAction",
+      "type": "action",
+      "name": "confirmClaimAction",
+      "purpose": "Server action confirmClaimAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/experts/queue/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/reviews/experts/queue/actions.ts"
+      }
+    },
+    {
+      "id": "action:src/app/(app)/reviews/experts/queue/actions.ts#confirmClusterAction",
+      "type": "action",
+      "name": "confirmClusterAction",
+      "purpose": "Server action confirmClusterAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/experts/queue/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/reviews/experts/queue/actions.ts"
+      }
+    },
+    {
+      "id": "action:src/app/(app)/reviews/experts/queue/actions.ts#editClaimAction",
+      "type": "action",
+      "name": "editClaimAction",
+      "purpose": "Server action editClaimAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/experts/queue/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/reviews/experts/queue/actions.ts"
+      }
+    },
+    {
+      "id": "action:src/app/(app)/reviews/experts/queue/actions.ts#mergeClaimAction",
+      "type": "action",
+      "name": "mergeClaimAction",
+      "purpose": "Server action mergeClaimAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/experts/queue/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/reviews/experts/queue/actions.ts"
+      }
+    },
+    {
+      "id": "action:src/app/(app)/reviews/experts/queue/actions.ts#mergeClusterAction",
+      "type": "action",
+      "name": "mergeClusterAction",
+      "purpose": "Server action mergeClusterAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/experts/queue/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/reviews/experts/queue/actions.ts"
+      }
+    },
+    {
+      "id": "action:src/app/(app)/reviews/experts/queue/actions.ts#parkClaimAction",
+      "type": "action",
+      "name": "parkClaimAction",
+      "purpose": "Server action parkClaimAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/experts/queue/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/reviews/experts/queue/actions.ts"
+      }
+    },
+    {
+      "id": "action:src/app/(app)/reviews/experts/queue/actions.ts#rejectClaimAction",
+      "type": "action",
+      "name": "rejectClaimAction",
+      "purpose": "Server action rejectClaimAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/experts/queue/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/reviews/experts/queue/actions.ts"
+      }
+    },
+    {
       "id": "action:src/app/(app)/settings/actions.ts#setQuietHoursAction",
       "type": "action",
       "name": "setQuietHoursAction",
@@ -3029,6 +3237,81 @@
       "attrs": {}
     },
     {
+      "id": "page:/reviews/experts",
+      "type": "page",
+      "name": "/reviews/experts",
+      "purpose": "Expert library page /reviews/experts: experts by tested evidence, the claim queue and technique clusters (hypotheses, not advice).",
+      "specIds": [
+        "KB-074",
+        "KB-075",
+        "PRD-034",
+        "UXN-292"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "learning"
+      ],
+      "source": "src/app/(app)/reviews/experts/page.tsx",
+      "attrs": {}
+    },
+    {
+      "id": "page:/reviews/experts/[id]",
+      "type": "page",
+      "name": "/reviews/experts/[id]",
+      "purpose": "Expert library page /reviews/experts/[id]: experts by tested evidence, the claim queue and technique clusters (hypotheses, not advice).",
+      "specIds": [
+        "KB-074",
+        "KB-075",
+        "PRD-034",
+        "UXN-292"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "learning"
+      ],
+      "source": "src/app/(app)/reviews/experts/[id]/page.tsx",
+      "attrs": {}
+    },
+    {
+      "id": "page:/reviews/experts/queue",
+      "type": "page",
+      "name": "/reviews/experts/queue",
+      "purpose": "Expert library page /reviews/experts/queue: experts by tested evidence, the claim queue and technique clusters (hypotheses, not advice).",
+      "specIds": [
+        "KB-074",
+        "KB-075",
+        "PRD-034",
+        "UXN-292"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "learning"
+      ],
+      "source": "src/app/(app)/reviews/experts/queue/page.tsx",
+      "attrs": {}
+    },
+    {
       "id": "page:/reviews/glossary",
       "type": "page",
       "name": "/reviews/glossary",
@@ -3163,6 +3446,31 @@
         "learning"
       ],
       "source": "src/app/(app)/reviews/learned/lessons/[id]/page.tsx",
+      "attrs": {}
+    },
+    {
+      "id": "page:/reviews/techniques",
+      "type": "page",
+      "name": "/reviews/techniques",
+      "purpose": "Expert library page /reviews/techniques: experts by tested evidence, the claim queue and technique clusters (hypotheses, not advice).",
+      "specIds": [
+        "KB-074",
+        "KB-075",
+        "PRD-034",
+        "UXN-292"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "learning"
+      ],
+      "source": "src/app/(app)/reviews/techniques/page.tsx",
       "attrs": {}
     },
     {
@@ -15883,6 +16191,94 @@
       ]
     },
     {
+      "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#bulkConfirmExpertAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#bulkConfirmExpertAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#confirmClaimAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#confirmClaimAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#confirmClusterAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#confirmClusterAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#editClaimAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#editClaimAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#mergeClaimAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#mergeClaimAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#mergeClusterAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#mergeClusterAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#parkClaimAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#parkClaimAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#rejectClaimAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#rejectClaimAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
       "id": "service:app|contains|action:src/app/(app)/settings/actions.ts#setQuietHoursAction",
       "from": "service:app",
       "to": "action:src/app/(app)/settings/actions.ts#setQuietHoursAction",
@@ -16301,6 +16697,36 @@
       ]
     },
     {
+      "id": "service:app|contains|page:/reviews/experts",
+      "from": "service:app",
+      "to": "page:/reviews/experts",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning"
+      ]
+    },
+    {
+      "id": "service:app|contains|page:/reviews/experts/[id]",
+      "from": "service:app",
+      "to": "page:/reviews/experts/[id]",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning"
+      ]
+    },
+    {
+      "id": "service:app|contains|page:/reviews/experts/queue",
+      "from": "service:app",
+      "to": "page:/reviews/experts/queue",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning"
+      ]
+    },
+    {
       "id": "service:app|contains|page:/reviews/glossary",
       "from": "service:app",
       "to": "page:/reviews/glossary",
@@ -16354,6 +16780,16 @@
       "id": "service:app|contains|page:/reviews/learned/lessons/[id]",
       "from": "service:app",
       "to": "page:/reviews/learned/lessons/[id]",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning"
+      ]
+    },
+    {
+      "id": "service:app|contains|page:/reviews/techniques",
+      "from": "service:app",
+      "to": "page:/reviews/techniques",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
