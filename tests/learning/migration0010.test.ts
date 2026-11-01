@@ -886,7 +886,7 @@ describe("main migration 0010_learning: challenger state machine (KB-040)", () =
         }
       }
     }
-  }, 120_000); // walks every challenger edge pair through a real migrated DB: slow on loaded machines and CI runners
+  }, 300_000); // 56 fresh fully migrated DBs (22 migrations since M13-lite 0022): ~110 s on a loaded machine, so 120 s was too tight
 
   it("starts proposed with a zero counter and not ready", async () => {
     const db = await freshDb("main");
