@@ -91,6 +91,8 @@ export type Mark = {
   readonly haircut?: Rational | null;
   /** Suspended: frozen at the last price, no fill possible (ARN-026); the haircut may not apply yet. */
   readonly halted?: boolean;
+  /** V1-S15: not halted but today's bar is missing, so the code is carried at its last close (flagged). */
+  readonly stale?: boolean;
 };
 
 export type NavCostOptions = {

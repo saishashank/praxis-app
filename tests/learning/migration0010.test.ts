@@ -1078,7 +1078,7 @@ describe("main migration 0010_learning: up / down / up and backup", () => {
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
     const full = await schemaOf(db);
-    await migrateDown(db, ms, 14); // 0024…0020, 0019, 0018 (m14), 0017 (first_ingested_at), 0016 (known_at), 0015 (vendor actions), 0014 (pick checks), 0013 (calendar history), 0012 (golive) and 0011 (ui) sit on top: take the schema as of 0010
+    await migrateDown(db, ms, 15); // 0019, 0018 (m14), 0017 (first_ingested_at), 0016 (known_at), 0015 (vendor actions), 0014 (pick checks), 0013 (calendar history), 0012 (golive) and 0011 (ui) sit on top: take the schema as of 0010
     const before = await schemaOf(db);
     expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 9 });
     const mid = await schemaOf(db);
@@ -1097,9 +1097,9 @@ describe("main migration 0010_learning: up / down / up and backup", () => {
       );
     });
     expect(mid).toEqual(rest);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 15, version: 24 }); // 0010, 0011, 0012, then 0013
+    expect(await migrateUp(db, ms)).toEqual({ applied: 16, version: 25 }); // 0010, 0011, 0012, then 0013
     expect(await schemaOf(db)).toEqual(full);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 24 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 25 });
   });
 
   it("every forever table of the migration is in the backup list; pruned tables are not", async () => {
@@ -1121,7 +1121,7 @@ describe("main migration 0010_learning: up / down / up and backup", () => {
     await expect(run(target, "DELETE FROM challenger")).rejects.toThrow(/forever table/);
     await expect(set(target, "challenger", "state = 'approved'")).rejects.toThrow(/KB-040 edges/);
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 24 });
+    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 25 });
   });
 });
 

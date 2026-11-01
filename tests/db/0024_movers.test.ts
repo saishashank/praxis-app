@@ -42,7 +42,7 @@ const fails = async (db: Client, sql: string): Promise<string> => {
 describe("migration 0024_movers: apply, roll back, apply again", () => {
   it("creates the five tables, rolls back to 0023 and comes back identical", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
-    const ms = await loadMigrations(MIGRATIONS("main"));
+    const ms = (await loadMigrations(MIGRATIONS("main"))).filter((m) => m.version <= 24); // pinned: later migrations must not change this test
     await migrateUp(db, ms);
     const after = await schemaOf(db);
     for (const t of NEW_TABLES) expect(after.some((s) => s.startsWith(`table:${t}:`))).toBe(true);

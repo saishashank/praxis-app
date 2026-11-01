@@ -10,6 +10,7 @@ import { headers } from "next/headers";
 import { requestMeta } from "@/lib/auth/audit";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
+import { clearCohortInvariants } from "@/lib/arena/unfreeze";
 import { setArenaControl } from "@/lib/learning/arenaControl";
 import type { ControlResult } from "./messages";
 
@@ -37,6 +38,43 @@ export async function setArenaControlAction(fd: FormData): Promise<ControlResult
         key: field(fd, "key"),
         state: field(fd, "state"),
         reason: field(fd, "reason"),
+        confirm: field(fd, "confirm") === "true",
+      },
+    );
+  } catch {
+    return { error: "unavailable" };
+  }
+  if (result.status !== 200) {
+    const code = result.body.error;
+    return { error: typeof code === "string" ? code : "unavailable" };
+  }
+  revalidatePath(PATH);
+  revalidatePath("/strategies");
+  revalidatePath("/");
+  return { ok: true };
+}
+
+/**
+ * Let a frozen cohort carry on after the cause of a fatal ledger verdict was fixed (V1-S1, D-680..D-682).
+ * Same order of work as above: the role guard FIRST, validation, then the shared Owner writer
+ * (src/lib/arena/unfreeze.ts): audit event before the change, the skipped sessions replayed for that
+ * cohort only, then ONE `cohort_event` row. Nothing is edited or deleted.
+ */
+export async function clearCohortInvariantsAction(fd: FormData): Promise<ControlResult> {
+  const user = await requireUser("admin", PATH);
+  let result;
+  try {
+    result = await clearCohortInvariants(
+      {
+        mainDb: mainDb(),
+        authDb: authDb(),
+        env: process.env,
+        meta: requestMeta(await headers()),
+      },
+      user,
+      {
+        cohortId: field(fd, "cohortId"),
+        cause: field(fd, "cause"),
         confirm: field(fd, "confirm") === "true",
       },
     );

@@ -158,11 +158,11 @@ describe("migration 0021_steelman: apply, roll back, apply again", () => {
     const after = await schemaOf(db);
     for (const t of NEW_TABLES) expect(after.some((s) => s.startsWith(`table:${t}:`))).toBe(true);
 
-    expect(await migrateDown(db, ms, 4)).toEqual({ rolledBack: 4, version: 20 });
+    expect(await migrateDown(db, ms, 5)).toEqual({ rolledBack: 5, version: 20 });
     const mid = await schemaOf(db);
     for (const t of NEW_TABLES) expect(mid.some((s) => s.startsWith(`table:${t}:`))).toBe(false);
 
-    expect(await migrateUp(db, ms)).toEqual({ applied: 4, version: 24 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 5, version: 25 });
     expect(await schemaOf(db)).toEqual(after);
   });
 });

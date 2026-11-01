@@ -16,6 +16,7 @@
 // V1 stays unchanged while every family is `shadow` (D-280/D-281): the stage only WRITES cortex_* rows.
 // The data window the live world carries is bounded (`STAGE_BAR_SESSIONS` raw sessions per code,
 // `STAGE_INDEX_DAYS` calendar days of index closes) so a night reads a bounded amount of history.
+import { listingFloor } from "@/lib/data/listing";
 import type { Client } from "@libsql/client";
 import { eventRowOf } from "@/lib/agents/candidates";
 import type { IndexViewBar, ViewBar } from "@/lib/agents/decisionView";
@@ -365,6 +366,7 @@ export async function loadStageRows(db: Client, o: LoadOptions): Promise<StageRo
       sql: `SELECT code, d, o, h, l, c, volume FROM price_bar
             WHERE market = ? AND d >= ? AND d <= ?${o.liveIngestBound ? " AND ingested_at <= ?" : ""}
               AND code IN (${chunk.map(() => "?").join(", ")})
+              AND ${listingFloor("price_bar")}
             ORDER BY code, d`,
       args: barArgs,
     });
@@ -1504,7 +1506,7 @@ export async function scoreOutcomes(
     if (hit !== undefined) return hit;
     const rs = await db.execute({
       sql: `SELECT d, o, h, l, c, volume FROM price_bar WHERE market = ? AND code = ? AND d <= ?
-            ORDER BY d DESC LIMIT ?`,
+            AND ${listingFloor("price_bar")} ORDER BY d DESC LIMIT ?`,
       args: [o.market, code, o.d, STAGE_BAR_SESSIONS + 300], // threshold-ok: history for ATR and hold
     });
     const list: ViewBar[] = [];

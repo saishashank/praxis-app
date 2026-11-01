@@ -17,6 +17,7 @@
 // Numeric: factors are stored as the nearest double to the exact fraction (see
 // corporateActions/rules.mjs); the product of a few such doubles is within a few ulps (1e-15
 // relative), far below a tick, and the reader does not round.
+import { listingFloor } from "@/lib/data/listing";
 import type { Client } from "@libsql/client";
 import { isRealDate } from "./pipeline/rules.mjs";
 import { factorKindOf, isEffective, stateOf } from "./corporateActions/rules.mjs";
@@ -107,7 +108,8 @@ export async function adjustedBars(
   );
   const bars = await db.execute({
     sql: `SELECT d, o, h, l, c, volume FROM price_bar
-          WHERE market = ? AND code = ? AND d >= ? AND d <= ? ORDER BY d`,
+          WHERE market = ? AND code = ? AND d >= ? AND d <= ? AND ${listingFloor("price_bar")}
+          ORDER BY d`,
     args: [market, code, from, to],
   });
   return bars.rows.map((r) => {

@@ -118,7 +118,7 @@ describe("planUniverse", () => {
   it("a delisted code back in the file is reactivated; delisted rows still absent are left alone", () => {
     const e = [
       ...codes(10).map((c) => ex(c)),
-      ex("ZZOLD", { delistedOn: "2025-02-02" }),
+      ex("ZZOLD", { delistedOn: "2026-10-01" }), // V1-S7: a quick return (even renamed) is the same company
       ex("ZZGONE", { delistedOn: "2025-03-03" }),
     ];
     const p = plan(e, [...rows(10), row("ZZOLD", { name: "Synthetic Back Ltd" })]);

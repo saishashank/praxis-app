@@ -826,7 +826,8 @@ export async function computeTiers(ctx, io, d, universe) {
   const bars = await sel(
     db,
     io,
-    `SELECT code, d, c, volume FROM price_bar WHERE market = ? AND d >= ? AND d < ? ORDER BY code, d`,
+    `SELECT code, d, c, volume FROM price_bar WHERE market = ? AND d >= ? AND d < ?
+     AND d >= COALESCE((SELECT MAX(l.listed_on) FROM instrument_listing l WHERE l.market = price_bar.market AND l.code = price_bar.code), '') ORDER BY code, d`,
     [market, from, d],
   );
   const traded = new Map();

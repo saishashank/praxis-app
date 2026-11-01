@@ -8,6 +8,7 @@
 //
 // Untimed items are stored with a date-only `published_at` (YYYY-MM-DD, "assumed time"); a date
 // string sorts before any instant of that day, so they become usable from that day's cut-off.
+import { listingFloor } from "@/lib/data/listing";
 import type { Client } from "@libsql/client";
 import { LookAheadError, priceMicro } from "@/lib/arena/marketData";
 import { assertBar } from "@/lib/arena/fills";
@@ -151,6 +152,7 @@ export function createDecisionView(db: Reader, opts: DecisionViewOptions): Decis
       const rs = await db.execute({
         sql: `SELECT d, o, h, l, c, volume FROM price_bar
               WHERE market = ? AND code = ? AND d <= ? AND d <= ?${ingestClause}
+                AND ${listingFloor("price_bar")}
               ORDER BY d DESC LIMIT ?`,
         args,
       });
