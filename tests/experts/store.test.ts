@@ -31,13 +31,19 @@ const expert = (id: string) =>
     sql: "INSERT INTO expert (id, name, status, tier, created_at, updated_at) VALUES (?, ?, 'tracked', 'core', ?, ?)",
     args: [id, `ZZ Expert ${id}`, NOW, NOW],
   });
-const cluster = async (id: string, over: { fit?: string | null; testability?: string } = {}) => {
+/** A cluster at `proposed` (seq 1) and, unless `proposed: true`, confirmed by a person (seq 2; D-594). */
+const cluster = async (
+  id: string,
+  over: { fit?: string | null; testability?: string; proposed?: boolean } = {},
+) => {
   await db.execute({
     sql: `INSERT INTO cluster (id, name, category, statement, testability, external_grade, family_fit_json, created_at)
           VALUES (?, 'ZZ cluster', 'trend_momentum', 'A statement.', ?, 'none', ?, ?)`,
     args: [id, over.testability ?? "testable_eod", over.fit === undefined ? FIT : over.fit, NOW],
   });
   await appendClusterState(db, { clusterId: id, state: "proposed", actor: "seed", at: NOW });
+  if (over.proposed !== true)
+    await appendClusterState(db, { clusterId: id, state: "confirmed", actor: "u1", at: NOW });
 };
 const claim = async (id: string, clusterId: string | null = null, expertId = "X-1") => {
   await insertClaim(db, {
@@ -174,8 +180,18 @@ describe("eligibleClusters (LLM-069)", () => {
       at: NOW,
     });
     expect((await eligibleClusters(db, "AU")).map((x) => x.id)).toEqual(["K-ok"]);
-    await appendClusterState(db, { clusterId: "K-ok", state: "confirmed", actor: "u1", at: NOW });
-    expect((await eligibleClusters(db, "AU")).map((x) => x.id)).toEqual(["K-ok"]);
+  });
+
+  it("a proposed cluster is not eligible until a person confirms it (KB-075, D-594)", async () => {
+    await cluster("K-llm", { proposed: true });
+    await claim("C-1", "K-llm");
+    await step("C-1", "owner_checked");
+    expect(await eligibleClusters(db, "AU")).toEqual([]);
+    await appendClusterState(db, { clusterId: "K-llm", state: "confirmed", actor: "u1", at: NOW });
+    expect((await eligibleClusters(db, "AU")).map((x) => x.id)).toEqual(["K-llm"]);
+    // parking a confirmed cluster takes it out again
+    await appendClusterState(db, { clusterId: "K-llm", state: "parked", actor: "u1", at: NOW });
+    expect(await eligibleClusters(db, "AU")).toEqual([]);
   });
 });
 
@@ -218,7 +234,7 @@ describe("cluster links and merge", () => {
   });
 
   it("currentClusterState treats merged as terminal and resolves merged_into (chains too)", async () => {
-    await cluster("K-A");
+    await cluster("K-A", { proposed: true });
     await cluster("K-B");
     await cluster("K-C");
     expect(await currentClusterState(db, "K-A")).toEqual({
