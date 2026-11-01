@@ -149,6 +149,7 @@ import {
 import { markNotRechecked } from "./preopen";
 import { planLegacy } from "./terminal";
 import { openS2Once } from "@/lib/heartbeat/incidents";
+import { INVARIANTS_CLEARED } from "./unfreezeCore";
 import type { NotifyCtx } from "@/lib/incidents/notify";
 
 export const ARENA_JOB = "arena-close";
@@ -188,6 +189,10 @@ export type CloseBooksOptions = {
   /** Email context for the P1 "previous session not closed" incident (V1-B1); absent = recorded only. */
   readonly notify?: Omit<NotifyCtx, "db" | "now">;
 };
+
+/** V1-S15 (D-682): a held code with no bar on this many sessions in a row opens the S2 `stale_mark` incident. */
+export const STALE_MARK_ALERT_SESSIONS = 3; // threshold-ok: decision D-682, bounded wait before an alert
+export const STALE_MARK_INCIDENT = "stale_mark";
 
 export type CloseBooksStatus = "success" | "degraded" | "failed" | "skipped" | "already_done";
 
@@ -236,6 +241,8 @@ type DayCtx = {
   readonly gates: Map<string, EntryDecision>;
   /** Fills older than this are settled and posted (T+2 plus holidays fit well inside 14 days). */
   readonly recentFrom: string;
+  /** V1-S15: email context for the "stale mark" incident; absent = recorded only. */
+  readonly notify?: Omit<NotifyCtx, "db" | "now">;
 };
 
 /** Per-cohort, per-day cache of the two book reads that most stages need (dropped on every write). */
@@ -1091,7 +1098,22 @@ async function markOf(ctx: DayCtx, code: string): Promise<Mark> {
     });
   }
   const bar = await ctx.data.bar(code, ctx.d);
-  return { closeMicro: bar === null ? last : bar.closeMicro, advMicro };
+  // V1-S15 / DAT-127: no bar and no halt flag = a data gap, not a close. The position is marked at the
+  // last price (no price is invented, no haircut: ARN-026 is for halts) but the mark is FLAGGED.
+  if (bar === null) return { closeMicro: last, advMicro, stale: true };
+  return { closeMicro: bar.closeMicro, advMicro };
+}
+
+/** V1-S15: sessions in a row, ending today, on which `code` has no usable bar (capped at the alert limit). */
+async function staleSessions(ctx: DayCtx, code: string): Promise<number> {
+  let n = 0;
+  let day = ctx.d;
+  while (n < STALE_MARK_ALERT_SESSIONS) {
+    if ((await ctx.data.bar(code, day)) !== null) break;
+    n += 1;
+    day = previousTradingDay(day, ctx.calendar);
+  }
+  return n;
 }
 
 type NavOutcome = {
@@ -1099,6 +1121,8 @@ type NavOutcome = {
   readonly ok: boolean;
   readonly violations: Violation[];
   readonly marks: ReadonlyMap<string, Mark>;
+  /** V1-S15: held codes marked at the last close because today's bar is missing, with the run length. */
+  readonly stale: readonly { readonly code: string; readonly sessions: number }[];
 };
 
 async function navStage(ctx: DayCtx, cc: CohortCtx): Promise<NavOutcome> {
@@ -1168,11 +1192,24 @@ async function navStage(ctx: DayCtx, cc: CohortCtx): Promise<NavOutcome> {
     seedMicro: cc.cohort.seedMicro,
     sleeve: cfg === null ? undefined : { trades, states, cfg },
   });
+  const stale: { code: string; sessions: number }[] = [];
+  for (const [code, mark] of [...marks].sort(([a], [b]) => (a < b ? -1 : 1))) {
+    if (mark.stale !== true) continue;
+    const sessions = await staleSessions(ctx, code);
+    stale.push({ code, sessions });
+    // non-fatal: the day is stored as ok, the flag is the log line and (after the limit) an incident
+    violations.push({
+      code: "stale_mark",
+      d,
+      message: `${code} marked at the last close: no bar on ${d} (${sessions} session(s) in a row)`,
+      fatal: false,
+    });
+  }
   const ok = !violations.some(isFatal);
   const stored = ok ? day : withInvariantsOk(day, false);
   await writeNavDay(ctx.db, stored);
   ctx.stats.navDays += 1;
-  return { day: stored, ok, violations, marks };
+  return { day: stored, ok, violations, marks, stale };
 }
 
 // ---- one cohort-day --------------------------------------------------------------------------------------------
@@ -1186,7 +1223,10 @@ type CohortResult =
 async function activityOf(ctx: DayCtx, cohortId: string) {
   const rs = await ctx.db.execute({
     sql: `SELECT
-      (SELECT COUNT(*) FROM nav_daily WHERE cohort_id = ? AND invariants_ok = 0) AS bad,
+      (SELECT COUNT(*) FROM nav_daily WHERE cohort_id = ? AND invariants_ok = 0
+         AND d > COALESCE((SELECT MAX(json_extract(e.detail_json, '$.through_d')) FROM cohort_event e
+                           WHERE e.cohort_id = ? AND e.kind = 'data_event'
+                             AND json_extract(e.detail_json, '$.type') = '${INVARIANTS_CLEARED}'), '')) AS bad,
       (SELECT COUNT(*) FROM arena_order WHERE cohort_id = ? AND status = 'pending'
          AND decided_d < ? AND kind IN ('entry','exit_cs')) AS pending,
       (SELECT COUNT(*) FROM trade WHERE cohort_id = ? AND exit_type IS NULL) AS open_trades,
@@ -1202,6 +1242,7 @@ async function activityOf(ctx: DayCtx, cohortId: string) {
          AND status = 'filled' AND fill_d = ?) AS entries_today,
       (SELECT sleeve_json FROM cohort WHERE id = ?) AS sleeve_json`,
     args: [
+      cohortId,
       cohortId,
       cohortId,
       ctx.d,
@@ -1264,7 +1305,24 @@ async function closeCohortDay(ctx: DayCtx, cohortId: string): Promise<CohortResu
     return { state: "failed", violations: nav.violations };
   }
   for (const v of nav.violations) {
-    await logApp(ctx, "warn", `${cohortId} ${ctx.d}: ${v.code}`);
+    await logApp(
+      ctx,
+      "warn",
+      v.code === "stale_mark"
+        ? `${cohortId} ${ctx.d}: ${v.message}`
+        : `${cohortId} ${ctx.d}: ${v.code}`,
+    );
+  }
+  const overdue = nav.stale.filter((x) => x.sessions >= STALE_MARK_ALERT_SESSIONS);
+  if (overdue.length > 0) {
+    await openS2Once(
+      ctx.db,
+      STALE_MARK_INCIDENT,
+      { cohortId, d: ctx.d, codes: overdue.map((x) => x.code).slice(0, 10) },
+      ctx.now(),
+      ctx.notify,
+      `A held position has had no price bar for ${STALE_MARK_ALERT_SESSIONS} sessions in a row`,
+    );
   }
   if (cc.cfg !== null) {
     await runSleeveUnlockCheck(ctx.db, {
@@ -1523,6 +1581,7 @@ export async function closeBooksDay(
       exDivCutoff,
       gates: new Map(),
       recentFrom: addDays(opts.d, -14),
+      notify: opts.notify,
     };
     const outcomes = new Map<string, Extract<CohortResult, { state: "ok" }>>();
     for (const cohortId of await activeCohortIds(db, opts.d, ctx.recentFrom)) {
