@@ -1,5 +1,6 @@
 export const FORMAT: string;
 export const CAPS: Record<string, number>;
+export const JSON_CAPS: Record<string, number>;
 export const SUMMARY_WORDS: number;
 export const QUOTE_WORDS: number;
 export function wordCount(text: string): number;

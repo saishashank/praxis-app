@@ -27,7 +27,8 @@ Rules the validator enforces:
 - **Items are metadata only** (D-513): one item per `(url, content_hash)`; `summary` is our own text, at most 80 words and 800 characters; `quote` is one string of at most 15 words and 160 characters, one quoted span at most; all URLs are `http(s)`.
 - **A red flag needs a source URL and a date** (D-521); an unsourced flag rejects the whole seed.
 - **References resolve:** claim to experts, item URLs and cluster; cluster to claims; call to a claim of type `call`.
-- **`family_fit`** (D-514) is `{ family: F1..F6, params: { key: finite number or boolean } }` and only its shape is checked here; the keys and bounds are checked by the application at run time, and a wrong fit is parked, never screened.
+- **`family_fit`** (D-514) is `{ family: F1..F6, params: { key: finite number | boolean | enum word } }` (an enum word is `[a-z0-9_]{1,40}`, for a structural key such as `f1_momentum_variant`; never free text or an object) and only its shape is checked here; the keys and bounds are checked by the application at run time (every Lane-B key of the family must be present and inside its bounds), and a wrong fit is parked, never screened. F6 cannot be seeded this way (its `insider_score_weights` key is an object).
+- **Expert arrays** (`platforms`, `home_urls`, `markets`, `focus`, `handles`) must also fit the 0022 JSON-column caps as JSON text (500 / 1,500 / 200 / 500 / 1,000 characters); `handles` keys are platform ids (`[a-z0-9_]{1,40}`).
 - Licence status defaults to `unchecked` (D-520).
 
 ## What the import writes

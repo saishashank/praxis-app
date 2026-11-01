@@ -56,7 +56,18 @@ export const CLOSEST_FAMILY = ["F1", "F2", "F3", "F4", "F5", "F6", "new", "overl
 export const FIT_FAMILIES = ["F1", "F2", "F3", "F4", "F5", "F6"];
 export const DIRECTIONS = ["long", "short"];
 
+/** JSON-column caps of 0022 `expert` (the importer stores these arrays as JSON text). */
+export const JSON_CAPS = {
+  platforms: 500,
+  home_urls: 1500,
+  markets: 200,
+  focus: 500,
+  handles: 1000,
+};
+
 const isObj = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+/** A platform id or an enum word: short, lower-case, no whitespace (never free text). */
+const isWord = (v) => typeof v === "string" && /^[a-z0-9_]{1,40}$/.test(v);
 const isStr = (v) => typeof v === "string" && v.length > 0;
 const isInt = (v) => Number.isInteger(v);
 const isDay = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
@@ -160,15 +171,12 @@ export function validateExperts(j) {
     strCap(e, f, `${p}.name`, x.name, CAPS.name);
     strArr(e, f, `${p}.platforms`, x.platforms, CAPS.platform, 12);
     if (e.check(f, `${p}.handles`, isObj(x.handles), "object required")) {
-      for (const [k, v] of Object.entries(x.handles)) {
-        strCap(e, f, `${p}.handles.${k}`, v, CAPS.handle);
-      }
-      e.check(
-        f,
-        `${p}.handles`,
-        JSON.stringify(x.handles).length <= 1000,
-        "longer than 1000 characters",
-      );
+      Object.entries(x.handles).forEach(([k, v], n) => {
+        // The key is a platform id; an arbitrary key would be printed in the path, so it is checked by
+        // position and never echoed.
+        if (e.check(f, `${p}.handles[${n}]`, isWord(k), "key must be a platform id"))
+          strCap(e, f, `${p}.handles.${k}`, v, CAPS.handle);
+      });
     }
     if (e.check(f, `${p}.home_urls`, Array.isArray(x.home_urls), "array required")) {
       e.check(f, `${p}.home_urls`, x.home_urls.length <= 5, "more than 5 entries");
@@ -183,6 +191,16 @@ export function validateExperts(j) {
     }
     strArr(e, f, `${p}.markets`, x.markets, CAPS.market, 8);
     strArr(e, f, `${p}.focus`, x.focus, CAPS.tag, 8);
+    // The 0022 JSON-column caps, so an over-long array is named here and not refused by the database.
+    for (const [k, cap] of Object.entries(JSON_CAPS)) {
+      if (x[k] !== undefined && x[k] !== null)
+        e.check(
+          f,
+          `${p}.${k}`,
+          JSON.stringify(x[k]).length <= cap,
+          `longer than ${cap} characters as JSON`,
+        );
+    }
     e.check(f, `${p}.status`, EXPERT_STATUS.includes(x.status), "unknown status");
     e.check(f, `${p}.tier`, TIERS.includes(x.tier), "unknown tier");
     e.check(f, `${p}.no_feed`, typeof x.no_feed === "boolean", "boolean required");
@@ -416,14 +434,17 @@ function validateFitShape(e, file, p, fit) {
       Object.keys(fit.params).length >= 1,
       "at least one parameter required",
     );
-    for (const [k, v] of Object.entries(fit.params)) {
+    Object.entries(fit.params).forEach(([k, v], n) => {
+      if (!e.check(file, `${p}.params[${n}]`, isWord(k), "key must be a parameter key")) return;
+      // A number (ranged Lane-B key), a boolean, or an enum word for a structural key such as
+      // `f1_momentum_variant` (FAMILY_OPTIONAL_KEYS); never free text, never an object.
       e.check(
         file,
         `${p}.params.${k}`,
-        (typeof v === "number" && Number.isFinite(v)) || typeof v === "boolean",
-        "finite number or boolean required",
+        (typeof v === "number" && Number.isFinite(v)) || typeof v === "boolean" || isWord(v),
+        "finite number, boolean or enum word required",
       );
-    }
+    });
     e.check(
       file,
       `${p}.params`,

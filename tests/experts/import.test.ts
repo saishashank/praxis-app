@@ -295,8 +295,34 @@ describe("schema rejection (nothing is written; AT-39 (b))", () => {
     ],
     [
       "a family fit with a non-numeric parameter",
-      (f) => (f["clusters.json"].clusters[0].family_fit = { family: "F1", params: { a: "x" } }),
+      (f) => (f["clusters.json"].clusters[0].family_fit = { family: "F1", params: { a: null } }),
       "clusters.json: clusters[0].family_fit.params.a",
+    ],
+    [
+      "a family fit with a free-text parameter",
+      (f) =>
+        (f["clusters.json"].clusters[0].family_fit = {
+          family: "F1",
+          params: { a: "Not An Enum Word" },
+        }),
+      "clusters.json: clusters[0].family_fit.params.a",
+    ],
+    [
+      "a family fit with an object parameter",
+      (f) =>
+        (f["clusters.json"].clusters[0].family_fit = { family: "F6", params: { w: { x: 1 } } }),
+      "clusters.json: clusters[0].family_fit.params.w",
+    ],
+    [
+      "a platforms array over the 500-character JSON cap",
+      (f) =>
+        (f["experts.json"].experts[0].platforms = Array.from({ length: 12 }, () => "p".repeat(40))),
+      "experts.json: experts[0].platforms: longer than 500 characters as JSON",
+    ],
+    [
+      "a handles key that is not a platform id (the key is not echoed)",
+      (f) => (f["experts.json"].experts[0].handles = { "ZZ leaky key": "h" }),
+      "experts.json: experts[0].handles[0]: key must be a platform id",
     ],
     [
       "a statement over the 600-character cap",
@@ -339,6 +365,32 @@ describe("schema rejection (nothing is written; AT-39 (b))", () => {
       await freshDb("main"),
     );
     expect(r2.text).not.toContain("zz-leaky");
+    const r3 = await go(
+      [seed((f) => (f["experts.json"].experts[0].handles = { "zz-leaky key": "h" }))],
+      await freshDb("main"),
+    );
+    expect(r3.code).toBe(1);
+    expect(r3.text).not.toContain("zz-leaky");
+  });
+
+  it("accepts an enum word for a structural key in a family fit (D-570)", async () => {
+    const db = await freshDb("main");
+    const r = await go(
+      [
+        seed((f) => {
+          f["clusters.json"].clusters[0].family_fit = {
+            family: "F1",
+            params: { lookback: 126, f1_momentum_variant: "skip_month_u2" },
+          };
+        }),
+      ],
+      db,
+    );
+    expect(r.code).toBe(0);
+    const fit = await db.execute("SELECT family_fit_json FROM cluster WHERE id = 'K-ZZ1'");
+    expect(JSON.parse(String(fit.rows[0]!.family_fit_json)).params.f1_momentum_variant).toBe(
+      "skip_month_u2",
+    );
   });
 
   it("a missing file, invalid JSON, a missing folder and a folder inside the repository are refused", async () => {
