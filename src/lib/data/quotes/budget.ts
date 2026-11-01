@@ -24,11 +24,24 @@ export function budgetBand(b: Pick<QuoteBudget, "dayMax" | "usedToday">): Budget
   return "ok";
 }
 
-/** Sum of `quote_run.requests` for the session (read only; the table is WP2's). */
+/** Slot suffix of the row that reconciles a claim to the requests actually made (D-697). */
+export const DONE_SUFFIX = "+done";
+
+/**
+ * Requests charged to the session (read only; the table is WP2's). A claim reserves a count before
+ * any request (D-442); the table is append-only, so a run that made fewer requests (deadline, pause,
+ * cut) adds a `<slot>+done` row with the actual count, which then replaces the claim's count
+ * (V2-S7, D-697). A run killed before that row is written stays charged in full (fail safe).
+ */
 export async function quoteRequestsToday(db: Exec, market: string, d: string): Promise<number> {
   const r = await db.execute({
-    sql: "SELECT COALESCE(SUM(requests), 0) AS n FROM quote_run WHERE market = ? AND session_d = ?",
-    args: [market, d],
+    sql:
+      "SELECT COALESCE(SUM(CASE " +
+      "WHEN q.slot_minute LIKE '%' || ? THEN q.requests " +
+      "WHEN EXISTS (SELECT 1 FROM quote_run x WHERE x.market = q.market AND x.session_d = q.session_d " +
+      "AND x.purpose = q.purpose AND x.slot_minute = q.slot_minute || ?) THEN 0 " +
+      "ELSE q.requests END), 0) AS n FROM quote_run q WHERE q.market = ? AND q.session_d = ?",
+    args: [DONE_SUFFIX, DONE_SUFFIX, market, d],
   });
   return Number(r.rows[0]?.n ?? 0);
 }

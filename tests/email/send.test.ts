@@ -483,6 +483,30 @@ describe("retries, backoff and the attempts log (EML-030)", () => {
     expect(mock.outbox).toHaveLength(1);
   });
 
+  it("a stale claim with an accepted attempt is finalised as sent and never re-sent (V1-S10, D-692)", async () => {
+    const caps = await loadCaps(db);
+    await claimKey(db, {
+      key: KEY.tokens,
+      kind: "tokens",
+      env: "production",
+      d: D,
+      nowIso: T0.toISOString(),
+      recipientSha: null,
+      caps,
+    });
+    await db.execute({
+      sql: "INSERT INTO email_attempt (email_key, n, at, outcome, http_status, provider_id) VALUES (?, 1, ?, 'accepted', 200, 'prov-1')",
+      args: [KEY.tokens, T0.toISOString()],
+    });
+    clock = new Date(T0.getTime() + 181_000);
+    const out = await send("tokens");
+    expect(out.status).toBe("duplicate");
+    expect(mock.calls).toHaveLength(0);
+    const r = (await rows())[0];
+    expect(r.status).toBe("sent");
+    expect(r.provider_id).toBe("prov-1");
+  });
+
   it("a provider that throws an unexpected error counts as a network failure, not a crash", async () => {
     const bad: EmailProvider = {
       name: "mock",

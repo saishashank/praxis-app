@@ -525,6 +525,9 @@ export default async function HealthPage() {
     if (owner) nav.push({ id: "email-controls-h", label: "Email and alerts" });
     nav.push({ id: "day-timeline-h", label: "Day timeline" });
     if (owner) nav.push({ id: "worker-slots-h", label: "Worker slots" });
+    if (owner && summary.intradayLines && summary.intradayLines.length > 0) {
+      nav.push({ id: "intraday-h", label: "Intraday polling" });
+    }
     if (summary.quality) nav.push({ id: "quality-h", label: "Data quality" });
     if (owner && summary.secrets) nav.push({ id: "secrets-h", label: "Secrets" });
     if (owner && summary.workerSecrets) {
@@ -688,6 +691,19 @@ export default async function HealthPage() {
             <DayTimelineCheck owner={owner} />
 
             {owner && <WorkerSlotsSection view={slotsView} />}
+
+            {owner && summary.intradayLines && summary.intradayLines.length > 0 && (
+              <section aria-labelledby="intraday-h" className="flex flex-col gap-3">
+                <h2 id="intraday-h" className="text-xl font-semibold">
+                  Intraday polling
+                </h2>
+                <ul className="list-disc pl-6 text-sm">
+                  {summary.intradayLines.map((l) => (
+                    <li key={l}>{l}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
             {summary.quality && (
               <section aria-labelledby="quality-h" className="flex flex-col gap-3">
