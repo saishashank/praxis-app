@@ -325,7 +325,7 @@ Verdict: merge after the fixes below (applied in this branch). Replay/golden sui
 
 ## Should-fix fixes
 
-Each batch appends its own subsection. Decisions D-680..D-689 belong to Batch A.
+Fixes for the should-fix findings of `docs/V2_architecture_review.md`, one batch per builder (A money path D-680…689, B calendar/data D-710…719, C email/quotes D-690…699, D security D-720…729, E Cortex/ops D-700…709).
 
 ### Batch A
 
@@ -341,3 +341,64 @@ Money path (V1-S1, V1-S15, V1-S7 of `docs/V2_architecture_review.md`). No migrat
 - **D-687** Gap measure for D-682 counts `failed` arena-close records too (including the `previous_session_not_closed` refusals), which can only overstate the gap, so the refusal errs on the safe side.
 - **D-688** Tests: `tests/arena/cohortRecovery.test.ts` (S1: never auto-unfrozen, clear at gap 0 with a pending order, audit and event content, refreeze on a new fatal, flat cohort resumes after a gap, `gap_unsafe` writes nothing, role/confirm/input/unknown/not-frozen, idempotence; S15: flag, last-close mark without haircut, no incident before 3, exactly one at 3, none on a normal run) and `tests/universe/codeReuse.test.ts` (S7: pure rule, import quarantine with kept reason and one incident, quick return unchanged, Owner confirmation then reactivation, refusals).
 - **D-689** Not done in this batch: a page button for the clear (and a server action, which must be added to the security action inventory and route manifest), a runbook line (spec 11 S1 "pause affected market" does not say how to resume; the ops step is "fix the cause, then Strategies > Risk > clear invariants for the cohort before the next close").
+
+### Batch C
+
+- **D-690 Scope.** Batch C closes V1-S8, V1-S9, V1-S10 (e-mail delivery) and V2-S3, V2-S5, V2-S7 (quote-poll / scan budget and
+  health). No migration: the `quote_run` reconciliation uses a `<slot>+done` row, as `+paused` already does.
+- **D-691 V1-S8 (morning route).** `POST /api/internal/morning` answers 503 `send_pending` when the reminder or brief row is still
+  `claimed` after the run (a send ended `pending` after two retryable provider outcomes, or a retry landed inside the 60 s
+  `RETRY_GAP` and `sendEmail` answered `duplicate`). The Worker's single-shot retry (max 3, next minute) then re-runs the route;
+  the email keys keep it idempotent. The row state is read instead of `send` so the duplicate-inside-the-gap case cannot report
+  success. Alternative rejected: an `everyMin` pattern for `morning` (would re-post a settled slot all window).
+- **D-692 V1-S10 (crash after acceptance).** `reclaim()` first looks for an `accepted` row in `email_attempt` for the key; if one
+  exists it finalises the `claimed` row as `sent` (provider id, attempt time and number from the attempt) and `sendEmail`
+  answers `duplicate`; it never sends a second time. Only applies once the claim is stale (a live invocation is not raced). The
+  Resend `Idempotency-Key` stays as the second line; its 24 h window remains `[VERIFY at build]` in `resend.ts` (not verifiable
+  offline, now no longer load-bearing for this case).
+- **D-693 V1-S9 (first-of-window P0).** `deliverP0` schedules the flush at now + `RETRY_DUE_MS` (60 s, moved to `deliver.ts` and
+  shared with `flush.ts`) when the in-request single ends `pending`; the flush already re-sends claimed singles. In
+  `sentinel-ingest`, a fault in `processAssessments` primes `alert_flush_due = now`, so the Worker calls the flush on the next
+  tick instead of waiting for a next ingest. The 30 min `P0_PENDING_MAX_MIN` bound is unchanged.
+- **D-694 V2-S5 (armed reserve).** D-502 is superseded for the poll: armed picks are polled every tick and the 95 % stop no longer
+  stops them (they run until the day's 2,000 is spent; a stop with no armed pick is still `budget_stop`). `reserve.ts` sets aside
+  armed codes x remaining poll ticks (to 16:00). The scan subtracts the same reserve from its day allowance (only when armed
+  alerts exist, so its behaviour is unchanged otherwise).
+- **D-695 V2-S5 (slower cadence).** Watch-listed and held codes are polled every tick while the room under the 95 % line after the
+  reserve covers them for all remaining ticks, else every k-th tick (k = ceil(ticks left / affordable polls)), and not at all
+  only when no room is left. The tick index is from the window start, so the choice is deterministic per slot. The 80 % "narrow"
+  band no longer gates the poll (the cadence replaces it; `narrowed` is true when extras were skipped or cut).
+- **D-696 V2-S7 (whole-run deadline).** The route's `now` is the signed request time and never advances, so the 20 s budget in
+  `fetchDelayedQuotes` never tripped by clock and each call could take 20 s. `QuoteFetchDeps.clock` (default `now`; routes use
+  `Date.now`) and `opts.deadlineAt` give a run deadline of 22 s from run start (`QUOTE_RUN_DEADLINE_MS`, 8 s left of
+  `maxDuration` 30 for evaluation and mail): no request starts after it, each call's abort timer is the time left, remaining
+  codes are `unfetched`. A deadline abort of an in-flight call counts as a `network` pause (cool-down), a slow host being backed
+  off. The batched `v7/finance/quote` endpoint was not adopted: the licence note covers the chart endpoint only.
+- **D-697 V2-S7/S5 (reservation reconciliation).** `quoteRequestsToday` charges a claim's reserved count unless a
+  `<slot>+done` row exists for the same (market, session, purpose); then the done row's actual count replaces it. The poll writes
+  the row when it made fewer requests than reserved; the scan also when it planned nothing. A run killed before writing it stays
+  charged in full (fail safe).
+- **D-698 V2-S3 (health lines).** `recurringRunHealth` (run.ts) reads the latest non-paused claim from `quote_run`: on a trading
+  day, after two ticks of grace from the window start, "Pick-alert poll / Intraday scan: no successful run today (since HH:MM)",
+  and while the window is open "last successful run HH:MM" once it is more than three ticks old. Wired into `pickAlertsHealth` /
+  `intradayScanHealth`, which were not used anywhere, via `HealthSummary.intradayLines` (Owner) and an "Intraday polling"
+  section on `/health`. The `worker-route` failure record already exists (D-668); an incident after N consecutive failures was
+  not added (no cheap hook: the detectors read `run_record` per job and a recurring slot has no success record to reset it).
+- **D-699 Residual.** The morning retry can reach the route inside the 60 s `RETRY_GAP` and be answered 503 again (an attempt of
+  the Worker's three is spent); the next attempt after the gap succeeds. The Worker's retry timing was not changed.
+
+
+### Batch E
+
+Findings V2-S1, V2-S2, V2-S4 and V2-S9. Migration 0023 (`0023_feature_retention.sql`).
+
+- **D-700** (V2-S1) The CTX-053 status is re-evaluated in the app by `src/lib/cortex/look.ts`, called from the nightly review (batch 3) after the would-have scoring, as stage `cortex_status_look`. One look per family (F1..F6; F7 is never allowed, CTX-054) per quarter, run from the first night after the quarter and covering data up to its last day. Each look is a ledger cell of kind `status_look` (`look:<market>:<family>:<quarter>`), logged before its result (CTX-031), so it counts in the luck figure (D-277, D-358) and a repeat of the night charges nothing. A family with no filled live outcome is not looked at and nothing is written, so on today's data every family stays shadow (D-379, D-380, D-446, D-461). The review proposed a weekly learning stage; a nightly-review call was chosen because the outcomes it reads are written by the same job one step earlier and it avoids a twelfth entry in `LEARNING_STAGES` (resume markers, replay and test pins). A failing look logs a warning and never fails the review.
+- **D-701** (V2-S1) The private development out-of-fold samples are not in the database (D-267). The look therefore judges the LIVE sample alone (filled would-have outcomes of shadow and live arm, `y` = net after costs above zero) against the same rules as the import: `decideFamily` with own n_eff at the trade floor (default 200), Brier-skill lower bound above zero, and the CTX-021 gate on the pooled top-3 cell with regime stability. The top-3 band is cut on the frozen `top3_min_s` of the family's map (never re-ranked live, as `scoreBands` warns); regimes come from the G09 trace of each decision; no threshold means no cell and the family fails the economic gate. This is stricter than the spec's pooled test, never looser. Consequences, stated for the Owner: with the pre-registered block length of 120 sessions a live-only n_eff of 200 needs years of sessions, so in practice the look measures and records (`n_eff_live` is in every look result) and demotes; leaving shadow still goes through the Owner-run pooled calibration and import. A sample below `cellMinSetups` (60) is recorded as inconclusive and writes no status row.
+- **D-702** (V2-S1) Only `recordFamilyStatus` writes a status (CTX-072; a test greps `look.ts` for any other writer). An Owner kill is left alone. A family `allowed` by the import is not demoted by a look whose live n_eff is below the trade floor (too thin to test it); a conclusive failure demotes it. The status row is dated with the night of the look (`since_d`), not the quarter end, so a replay of an earlier night never sees it. A new `allowed` family gets the existing CTX-053 statement (live-tested pending). The CTX-082 live-tested statement stays unpublished here: its slope, intercept and ECE intervals need the pooled samples (not changed).
+- **D-703** (V2-S4) `migrateUp(db, migrations, { allowNewer })`: with the flag, applied versions after the tree's last file are skipped (reported as `newer`), while a changed checksum or a missing file inside the tree still throws; without it the behaviour is as before. `scripts/db/migrate.mjs` reads `--allow-newer` or `MIGRATE_ALLOW_NEWER=1` and gains `--db main --down-to <version> --confirm-down` (`migrateDownTo`, newest `-- +down` first; refused without the confirm flag because it deletes data). A V1 build cannot read a flag that only exists in V2, so the V1 tolerance is a small backport commit on `main`/`release` described in `docs/runbooks/rollback-v2.md` (level 2, option 1); the runbook's other option is `--down-to 14` from a V2 checkout. Tested from 0023 down to the V1 schema and back to a schema identical to a fresh one.
+- **D-704** (V2-S2) Migration 0023 replaces the unconditional `cortex_feature_daily_no_delete` trigger by one with the same name and message that lets a DELETE through only for rows older than 400 days (`WHEN OLD.d >= date('now','-400 days')`); UPDATE still aborts. The floor is the `email_attempt` floor; the features are deterministic from the bars (D-278) and each night keeps its `active_set_hash` and `manifest_id`, so a replay can regenerate a pruned night. `CORTEX_PRUNED_TABLES` (`store/features.ts`) joins `LEARNING_PRUNED_TABLES` in `pruneLearningTables`, so the nightly maintenance deletes exactly the rows beyond the floor (no new count key). The backup is unaffected: the dump takes the schema text from `sqlite_master`, so a restore recreates the conditional trigger. Expected size is now bounded at about 400 nights, roughly 1.2 GB steady state at the review's worst case of 2 KB × 2,000 codes (down from unbounded growth). There is no storage meter in the code to add the table to (the review's "storage meter" is the DAT-142 `storage_warn_gb` key, which nothing reads yet); not changed.
+- **D-705** (V2-S2) The 0023 down section restores the unconditional trigger, so rolling back past 0023 on a database that already pruned is fine and a database that did not prune loses nothing.
+- **D-706** (V2-S9) The V2 Owner steps are one list in execution order: `V2_GO_LIVE_STEPS` in `src/lib/golive/checklist.ts` (16 steps in four phases, each with the steps it needs first), shown on the Go-live page as "V2 steps", and the same text in `docs/owner-guide/V2_go_live.md` with the step ids in brackets. Consolidated from the exit documents of M8.1, M14, M15, M16, M17, M11L and M13L and the V2 pull request's "Your steps". They are deliberately NOT added to `GO_LIVE_ITEMS`: production was signed off before V2 existed, `go_live_signoff` is append-only, and adding items would make the stored V1 sign-off look incomplete. The page shows the V2 block before and after the V1 sign-off.
+- **D-707** (V2-S9) Tick marks on the V2 block are kept in the browser's local storage on that device (a per-viewer convenience, with the storage failure path covered), not on the server: a server record would need a new table and an audited control for a one-person checklist. Said on the page. If the Owner wants a server record later it is one append-only table and one runner call.
+- **D-708** (V2-S4) `docs/runbooks/rollback-v2.md` is new and `docs/runbooks/` is on the repo-hygiene allow-list. Level 1 instant rollback (no build, schema stays), level 2 rebuild or hotfix (tolerate newer schema, or step the schema down), what the down path deletes (0020: every `pick_*` e-mail row and attempt), and after-rollback checks (unlist the V2 Worker slots).
+- **D-709** Batch E migrations that pinned versions (`version: 22`, `rolledBack` counts, the backup schema version) were moved to 23 in the same commit, as M13-lite WP1 did for 0022.

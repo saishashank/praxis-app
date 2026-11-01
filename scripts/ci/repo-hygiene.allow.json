@@ -51,12 +51,14 @@
     "docs/M11L_design.md",
     "docs/M11L_exit_evidence.md",
     "docs/M13L_design.md",
+    "docs/M15_movers_gap_study.md",
     "docs/V2_architecture_review.md",
     "docs/M13L_requirements.md",
     "docs/M13L_exit_evidence.md",
     "docs/llm-roster.md",
     "docs/rule_schema.md",
     "docs/owner-guide/",
+    "docs/runbooks/",
     "docs/brand/"
   ],
   "files": {

@@ -46,6 +46,20 @@ export default async function AboutPage() {
       title="About"
       intro="Praxis is a practice-only research tool. Every trade is simulated with pretend money; nothing here is financial advice."
     >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/brand/praxis-logo-tagline-light.svg"
+        alt="Praxis — Learn. Earn. Repeat."
+        width={240}
+        className="logo-light h-auto"
+      />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/brand/praxis-logo-tagline-dark.svg"
+        alt="Praxis — Learn. Earn. Repeat."
+        width={240}
+        className="logo-dark h-auto"
+      />
       <Card title="This build" headingLevel={2}>
         <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
           <dt className="text-text-muted">Version</dt>

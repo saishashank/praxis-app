@@ -99,16 +99,32 @@ async function appliedRows(db) {
 
 /**
  * Apply all pending migrations in order, one transaction per file.
+ *
+ * `allowNewer` (V2-S4, D-703) is the explicit rollback switch: a database that is AHEAD of this tree
+ * (it holds versions after the tree's last file, e.g. a V1 build on a V2 database) is left alone
+ * instead of failing the build. It is deliberately narrow: only versions beyond the tree's last file
+ * are tolerated (a gap inside the tree still throws), and every version the tree does know must keep
+ * its checksum. The skipped versions come back as `newer`; nothing is applied or changed for them.
  * @param {Client} db
  * @param {Migration[]} migrations
- * @returns {Promise<{ applied: number, version: number }>}
+ * @param {{ allowNewer?: boolean }} [opts]
+ * @returns {Promise<{ applied: number, version: number, newer?: number[] }>}
  */
-export async function migrateUp(db, migrations) {
+export async function migrateUp(db, migrations, opts = {}) {
   await ensureTable(db);
   const done = await appliedRows(db);
+  const lastKnown = migrations.length ? migrations[migrations.length - 1].version : 0;
+  /** @type {number[]} */
+  const newer = [];
   for (const row of done) {
     const m = migrations.find((x) => x.version === row.version);
-    if (!m) throw new Error(`applied migration ${row.version} has no file`);
+    if (!m) {
+      if (opts.allowNewer === true && row.version > lastKnown) {
+        newer.push(row.version);
+        continue;
+      }
+      throw new Error(`applied migration ${row.version} has no file`);
+    }
     if (m.checksum !== row.checksum) {
       throw new Error(`migration ${row.version} (${row.name}) changed after it was applied`);
     }
@@ -130,7 +146,7 @@ export async function migrateUp(db, migrations) {
     applied++;
     version = m.version;
   }
-  return { applied, version };
+  return newer.length ? { applied, version, newer } : { applied, version };
 }
 
 /**
@@ -155,4 +171,23 @@ export async function migrateDown(db, migrations, n) {
   }
   const rest = await appliedRows(db);
   return { rolledBack, version: rest.length ? rest[rest.length - 1].version : 0 };
+}
+
+/**
+ * Roll back until the database is at `target` (V2-S4, D-703): every applied migration above it, newest
+ * first, using the `-- +down` sections. The tree must hold a file for each one it rolls back.
+ * @param {Client} db
+ * @param {Migration[]} migrations
+ * @param {number} target
+ * @returns {Promise<{ rolledBack: number, version: number }>}
+ */
+export async function migrateDownTo(db, migrations, target) {
+  if (!Number.isInteger(target) || target < 0)
+    throw new Error("rollback: target must be a version number");
+  await ensureTable(db);
+  const rows = await appliedRows(db);
+  const above = rows.filter((r) => r.version > target);
+  if (above.length === 0)
+    return { rolledBack: 0, version: rows.length ? rows[rows.length - 1].version : 0 };
+  return migrateDown(db, migrations, above.length);
 }

@@ -16,19 +16,18 @@ export default async function SignInPage({ searchParams }: Props) {
       <h1 className="sr-only">Sign in</h1>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/brand/praxis-logo-light.svg"
-        alt="Praxis logo"
-        width={200}
+        src="/brand/praxis-logo-tagline-light.svg"
+        alt="Praxis — Learn. Earn. Repeat."
+        width={240}
         className="logo-light h-auto"
       />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/brand/praxis-logo-dark.svg"
-        alt="Praxis logo"
-        width={200}
+        src="/brand/praxis-logo-tagline-dark.svg"
+        alt="Praxis — Learn. Earn. Repeat."
+        width={240}
         className="logo-dark h-auto"
       />
-      <p className="m-0 -mt-3 text-base font-medium text-text-muted">Learn. Earn. Repeat.</p>
       <p className="m-0 text-sm text-text">
         Praxis is a personal stock-learning simulator: it picks, tracks and reviews paper trades,
         with no real money.

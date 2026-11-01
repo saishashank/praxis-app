@@ -15,6 +15,8 @@ import {
 import { marketDate, type CalendarSummary } from "@/lib/data/calendar";
 import { calendarYearSummary } from "@/lib/data/calendarAdmin";
 import { loadControlsView, type ControlsView } from "@/lib/data/controls";
+import { pickAlertsHealth } from "@/lib/alerts/pick/poll";
+import { intradayScanHealth } from "@/lib/intraday/run";
 import { isStale, JOBS } from "./jobs";
 import { getQualitySummary, type QualitySummary } from "./quality";
 
@@ -58,6 +60,7 @@ export type HealthSummary = {
   watchdog: WatchdogSummary;
   openIncidents?: IncidentRow[] | null; // Owner only; null = could not be read
   heartbeatIncidents?: OpenS2[] | null; // Owner only; open S2 incidents (PLT-074)
+  intradayLines?: string[] | null; // Owner only; pick-alert poll and intraday scan lines (V2-S3)
   secrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only (Vercel)
   workerSecrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only (Worker)
 };
@@ -175,6 +178,15 @@ export async function getHealthSummary(
     quality: await getQuality(mainDb, role),
   };
   if (owner) {
+    try {
+      const lines = [
+        ...(await pickAlertsHealth(mainDb, now)),
+        ...(await intradayScanHealth(mainDb, now)),
+      ];
+      summary.intradayLines = lines;
+    } catch {
+      summary.intradayLines = null; // intraday trouble never hides job status
+    }
     try {
       summary.openIncidents = await listOpenS1(mainDb);
     } catch {

@@ -79,12 +79,12 @@ describe("migration 0019_cortex: apply, roll back, apply again", () => {
     const after = await schemaOf(db);
     for (const t of ORDER) expect(after.some((s) => s.startsWith(`table:${t}:`))).toBe(true);
 
-    expect(await migrateDown(db, ms, 4)).toEqual({ rolledBack: 4, version: 18 });
+    expect(await migrateDown(db, ms, 5)).toEqual({ rolledBack: 5, version: 18 });
     const mid = await schemaOf(db);
     for (const t of ORDER) expect(mid.some((s) => s.startsWith(`table:${t}:`))).toBe(false);
     expect(mid.join("\n")).not.toContain("limit_micro");
 
-    expect(await migrateUp(db, ms)).toEqual({ applied: 4, version: 22 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 5, version: 23 });
     expect(await schemaOf(db)).toEqual(after);
   });
 
@@ -336,7 +336,7 @@ describe("arena_order.limit_micro (CTX-028, D-288)", () => {
     const db = track(createClient({ url: tempDbUrl() }));
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(db, ms);
-    await migrateDown(db, ms, 4);
+    await migrateDown(db, ms, 5);
     const cols = (await db.execute("PRAGMA table_info(arena_order)")).rows.map((c) =>
       String(c.name),
     );
@@ -380,7 +380,7 @@ describe("source_register: FRED (DAT-101, D-291)", () => {
         .rows[0],
     ).toMatchObject({ status: "pending", owner_ref: "O-26" });
 
-    await migrateDown(db, ms, 4);
+    await migrateDown(db, ms, 5);
     expect(
       Number(
         (await db.execute("SELECT COUNT(*) AS n FROM source_register WHERE source = 'fred'"))

@@ -4,3 +4,5 @@
 eafb5c934a2fc5fe0e55d06e3f2b7b3816d60b7b:scripts/ci/zap-run.test.mjs:generic-api-key:7
 # Marker annotation text in the KB-051 test, M8 T5: it proves note text never reaches an LLM context pack. Not a secret.
 003bc04463ca249ab6831060b95a7f0137042161:tests/kb/m8contextPack.test.ts:generic-api-key:15
+# Config key names in the M14 rule schema ("key: \"f1_momentum_variant\"") match the generic-api-key pattern. A structural parameter name, not a secret.
+ffb9ba02cfcb56859210d3e84fc02990dc9abcab:src/lib/agents/families/ruleSchema.ts:generic-api-key:656

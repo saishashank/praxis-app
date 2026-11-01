@@ -11,6 +11,8 @@ import type { DelayedQuote, QuoteBudget, QuoteRefusal, QuoteSourceState } from "
 export const QUOTE_CONCURRENCY = 4; // threshold-ok: fetch concurrency, D-400
 export const QUOTE_SPACING_MS = 250; // threshold-ok: per-worker spacing, D-400
 export const QUOTE_CALL_BUDGET_MS = 20_000; // threshold-ok: per-call time budget, D-400
+/** Whole-run deadline of a route (maxDuration 30 s): no request starts after it (V2-S7, D-696). */
+export const QUOTE_RUN_DEADLINE_MS = 22_000; // threshold-ok: leaves 8 s of the 30 s for evaluate and mail
 export const QUOTE_USER_AGENT = "Mozilla/5.0 (compatible; praxis-quotes/1.0)";
 /** [VERIFY at build] same chart endpoint as scripts/fixtures/record-day.mjs. */
 export const QUOTE_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/";
@@ -23,6 +25,11 @@ export type QuoteFetchDeps = {
     init: { headers: Record<string, string>; signal?: AbortSignal },
   ) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
   now: () => Date;
+  /**
+   * Wall clock in ms for the deadlines. Defaults to `now`; the routes inject `Date.now` because their
+   * `now` is the signed request time and never advances (V2-S7, D-696).
+   */
+  clock?: () => number;
   sleep: (ms: number) => Promise<void>;
   /** Reads `source_register`, `source_status` and `dispatch_enabled` through the existing API. */
   sourceState: () => Promise<QuoteSourceState>;
@@ -59,6 +66,7 @@ export async function fetchDelayedQuotes(
   deps: QuoteFetchDeps,
   codes: readonly string[],
   budget: QuoteBudget,
+  opts: { deadlineAt?: number } = {},
 ): Promise<QuoteFetchResult> {
   const out: QuoteFetchResult = {
     quotes: [],
@@ -78,21 +86,22 @@ export async function fetchDelayedQuotes(
 
   const allowed = requestsAllowed(budget);
   const queue = [...new Set(codes)];
-  const deadline = deps.now().getTime() + QUOTE_CALL_BUDGET_MS;
+  const clock = deps.clock ?? (() => deps.now().getTime());
+  const deadline = Math.min(clock() + QUOTE_CALL_BUDGET_MS, opts.deadlineAt ?? Infinity);
   let next = 0;
 
   const worker = async (): Promise<void> => {
     let first = true;
     for (;;) {
       if (out.paused || next >= queue.length) return;
-      if (out.requests >= allowed || deps.now().getTime() >= deadline) {
+      if (out.requests >= allowed || clock() >= deadline) {
         out.cut = true;
         return;
       }
       if (!first) {
         await deps.sleep(QUOTE_SPACING_MS);
         if (out.paused || next >= queue.length) return;
-        if (out.requests >= allowed || deps.now().getTime() >= deadline) {
+        if (out.requests >= allowed || clock() >= deadline) {
           out.cut = true;
           return;
         }
@@ -105,7 +114,7 @@ export async function fetchDelayedQuotes(
       try {
         res = await deps.fetch(url, {
           headers: { "User-Agent": QUOTE_USER_AGENT, Accept: "application/json" },
-          signal: AbortSignal.timeout(Math.max(1, deadline - deps.now().getTime())),
+          signal: AbortSignal.timeout(Math.max(1, deadline - clock())),
         });
       } catch {
         out.paused ||= "network"; // includes the 20 s abort

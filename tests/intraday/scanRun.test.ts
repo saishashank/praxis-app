@@ -211,9 +211,11 @@ describe("claim first, Melbourne date", () => {
     expect(at.toISOString().slice(0, 10)).toBe("2026-11-03"); // UTC date is yesterday
     const r = await runIntradayScan(deps(at));
     expect(r).toMatchObject({ status: "ok", sessionD: SESSION, slot: "10:00" });
-    expect(await scalar(`SELECT COUNT(*) AS n FROM quote_run WHERE session_d = '${SESSION}'`)).toBe(
-      1,
-    );
+    expect(
+      await scalar(
+        `SELECT COUNT(*) AS n FROM quote_run WHERE session_d = '${SESSION}' AND slot_minute NOT LIKE '%+%'`,
+      ),
+    ).toBe(1);
   });
 
   it("a repeat of the same slot is already_done and makes no request", async () => {

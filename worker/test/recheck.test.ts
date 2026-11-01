@@ -181,7 +181,7 @@ describe("runClock: re-dispatch against a real database", () => {
     expect(arenaCalls()).toHaveLength(1);
     const state = db
       .prepare("SELECT value_json FROM worker_state WHERE key = ?")
-      .get(slotKey("arena-close", MON)) as { value_json: string };
+      .all(slotKey("arena-close", MON))[0] as { value_json: string };
     expect(JSON.parse(state.value_json)).toMatchObject({ s: "dispatched", n: 2 });
     // the very next minute: the fresh dispatch time keeps it quiet
     await tick(at("18:21"));

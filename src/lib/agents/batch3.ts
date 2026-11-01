@@ -58,6 +58,7 @@ import {
   type NarrativeRow,
 } from "@/lib/review/sections";
 import { syncForwardLedger, type ForwardResult } from "./forwardLedger";
+import { runStatusLooks } from "@/lib/cortex/look";
 import { scoreOutcomes } from "@/lib/cortex/stage";
 import { loadAgentParams, type AgentParams } from "./params";
 import { wordsKey } from "@/lib/learning/learnFacts";
@@ -983,6 +984,27 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
           o.now(),
           REVIEW_JOB,
           `cortex outcomes not scored on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
+            0,
+            LOG_MESSAGE_MAX,
+          ),
+          runId,
+        ],
+      });
+    }
+
+    // V2-S1 (CTX-053, CTX-082, D-700): the quarterly live look at each family's status, after the
+    // outcomes above. One look per family per quarter (a ledger cell), never a promotion outside the
+    // CTX-053 rules; a failure only logs.
+    stage = "cortex_status_look";
+    try {
+      await runStatusLooks(db, { market: o.market, d: o.d, now: o.now() });
+    } catch (error) {
+      await db.execute({
+        sql: "INSERT INTO app_log (at, level, source, message, run_id) VALUES (?, 'warn', ?, ?, ?)",
+        args: [
+          o.now(),
+          REVIEW_JOB,
+          `cortex status look failed on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
             0,
             LOG_MESSAGE_MAX,
           ),

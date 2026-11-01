@@ -44,8 +44,7 @@ describe("sign-in page", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     expect(document.querySelector("input[name=callbackUrl]")).toHaveValue("/markets");
     // logo, tagline and one line on what Praxis is (UXR-030)
-    expect(screen.getAllByAltText("Praxis logo").length).toBeGreaterThan(0);
-    expect(screen.getByText("Learn. Earn. Repeat.")).toBeInTheDocument();
+    expect(screen.getAllByAltText("Praxis — Learn. Earn. Repeat.")).toHaveLength(2);
     expect(screen.getByText(/personal stock-learning simulator/)).toBeInTheDocument();
     expect(document.querySelectorAll("form")).toHaveLength(1);
   });
