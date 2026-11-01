@@ -22,6 +22,7 @@ const URL_HTTPS = "https://staging.example.test/api/test-identity/login";
 const URL_HTTP = "http://localhost:3000/api/test-identity/login";
 
 const STAGING = {
+  PRAXIS_ENV: "staging", // V1-I9: the positive staging signal
   TEST_IDENTITY_SECRET: SECRET,
   AUTH_SECRET,
   PII_HASH_KEY: KEY,
@@ -76,6 +77,9 @@ describe("testIdentityEnabled (SEC-109)", () => {
   });
 
   it.each([
+    ["PRAXIS_ENV absent (no positive staging signal, V1-I9)", { PRAXIS_ENV: undefined }],
+    ["PRAXIS_ENV production", { PRAXIS_ENV: "production" }],
+    ["PRAXIS_ENV Staging (exact match only)", { PRAXIS_ENV: "Staging" }],
     ["no secret", { TEST_IDENTITY_SECRET: undefined }],
     ["empty secret", { TEST_IDENTITY_SECRET: "" }],
     ["short secret", { TEST_IDENTITY_SECRET: "ab12" }],
@@ -320,6 +324,7 @@ describe("route", () => {
 
   it("production -> 404 'Not found' without reading the body or touching any DB", async () => {
     vi.stubEnv("TEST_IDENTITY_SECRET", SECRET);
+    vi.stubEnv("PRAXIS_ENV", "staging");
     vi.stubEnv("BACKUP_PUBLIC_KEY", "age1abc");
     const authDbSpy = vi.fn();
     const ctor = vi.fn();
@@ -344,6 +349,7 @@ describe("route", () => {
 
   it("enabled -> wires the handler (unsigned call -> 401)", async () => {
     vi.stubEnv("TEST_IDENTITY_SECRET", SECRET);
+    vi.stubEnv("PRAXIS_ENV", "staging");
     vi.stubEnv("BACKUP_PUBLIC_KEY", "");
     vi.stubEnv("OWNER_RECOVERY_EMAIL", "");
     vi.stubEnv("NODE_ENV", "production");
@@ -356,6 +362,7 @@ describe("route", () => {
 
   it("enabled + signed, replay store misconfigured -> 401 (fails closed)", async () => {
     vi.stubEnv("TEST_IDENTITY_SECRET", SECRET);
+    vi.stubEnv("PRAXIS_ENV", "staging");
     vi.stubEnv("BACKUP_PUBLIC_KEY", "");
     vi.stubEnv("OWNER_RECOVERY_EMAIL", "");
     vi.stubEnv("NODE_ENV", "production");

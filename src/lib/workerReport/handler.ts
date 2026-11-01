@@ -30,10 +30,15 @@ const badRequest = () => json(400, { error: "bad_request" });
 
 const has = (v: string | undefined): v is string => typeof v === "string" && v.trim() !== "";
 
-// Production iff it holds BACKUP_PUBLIC_KEY and not the staging-only TEST_IDENTITY_SECRET.
+// Production iff it holds BACKUP_PUBLIC_KEY, not the staging-only TEST_IDENTITY_SECRET, and is not
+// explicitly marked PRAXIS_ENV=staging (V1-I9: an explicit staging mark always wins).
 // Anything else is treated as staging; a Worker reporting "production" to it is then refused.
 export function appEnvironment(env: Deps["env"]): "production" | "staging" {
-  return has(env.BACKUP_PUBLIC_KEY) && !has(env.TEST_IDENTITY_SECRET) ? "production" : "staging";
+  return has(env.BACKUP_PUBLIC_KEY) &&
+    !has(env.TEST_IDENTITY_SECRET) &&
+    env.PRAXIS_ENV !== "staging"
+    ? "production"
+    : "staging";
 }
 
 const COMMIT_RE = /^(?:[0-9a-f]{40}|unknown)$/;

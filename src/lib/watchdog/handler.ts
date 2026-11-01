@@ -32,9 +32,14 @@ const json = (status: number, body: unknown) =>
 
 const has = (v: string | undefined): v is string => typeof v === "string" && v.trim() !== "";
 
-/** Production = BACKUP_PUBLIC_KEY present (only production holds it) and no TEST_IDENTITY_SECRET. */
+/**
+ * Production = BACKUP_PUBLIC_KEY present (only production holds it), no TEST_IDENTITY_SECRET, and
+ * not explicitly PRAXIS_ENV=staging (V1-I9).
+ */
 export function isProduction(env: Env): boolean {
-  return has(env.BACKUP_PUBLIC_KEY) && !has(env.TEST_IDENTITY_SECRET);
+  return (
+    has(env.BACKUP_PUBLIC_KEY) && !has(env.TEST_IDENTITY_SECRET) && env.PRAXIS_ENV !== "staging"
+  );
 }
 
 const MIN_SECRET_LENGTH = 16;

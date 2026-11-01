@@ -1,6 +1,9 @@
 // Staging-only test-identity login: the runtime guard (SEC-109, TST-113). Opus reviews every line.
 //
-// The route answers 404 unless ALL of these independent signals say "this is not production":
+// The route answers 404 unless ALL of these independent signals say "this is staging":
+//   0. PRAXIS_ENV is exactly "staging" (V1-I9 / D-782): a POSITIVE signal. Before this, "not
+//      production" was inferred only from the absence of BACKUP_PUBLIC_KEY and OWNER_RECOVERY_EMAIL.
+//      The staging Vercel project must set PRAXIS_ENV=staging (a plain variable, not a secret).
 //   1. TEST_IDENTITY_SECRET is a valid secret (64 lowercase hex). Only the staging Vercel
 //      environment holds it (SEC-017 c4); production never does.
 //   2. BACKUP_PUBLIC_KEY is absent: production holds it (SEC-017 k, D-029).
@@ -26,6 +29,7 @@ export function testIdentityEnabled(
   env: TestIdentityEnv,
   opts: { allowDevelopment?: boolean } = {},
 ): boolean {
+  if (env.PRAXIS_ENV !== "staging") return false;
   if (!isValidSecret(env.TEST_IDENTITY_SECRET)) return false;
   if (has(env.BACKUP_PUBLIC_KEY)) return false;
   if (has(env.OWNER_RECOVERY_EMAIL)) return false;

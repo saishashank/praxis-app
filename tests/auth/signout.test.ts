@@ -36,10 +36,20 @@ describe("signOutEverywhere", () => {
 });
 
 describe("audit helpers", () => {
-  it("clientIp prefers the first x-forwarded-for entry, then x-real-ip", () => {
+  it("clientIp: platform header, then the right-most x-forwarded-for hop, then x-real-ip", () => {
+    expect(
+      clientIp(
+        new Headers({
+          "x-vercel-forwarded-for": "7.7.7.7",
+          "x-forwarded-for": "1.1.1.1, 2.2.2.2",
+          "x-real-ip": "3.3.3.3",
+        }),
+      ),
+    ).toBe("7.7.7.7");
     expect(
       clientIp(new Headers({ "x-forwarded-for": " 1.1.1.1 , 2.2.2.2", "x-real-ip": "3.3.3.3" })),
-    ).toBe("1.1.1.1");
+    ).toBe("2.2.2.2");
+    expect(clientIp(new Headers({ "x-forwarded-for": "8.8.8.8" }))).toBe("8.8.8.8");
     expect(clientIp(new Headers({ "x-real-ip": "3.3.3.3" }))).toBe("3.3.3.3");
     expect(clientIp(new Headers())).toBeNull();
   });

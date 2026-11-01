@@ -8,14 +8,18 @@ import { createClient, type Client } from "@libsql/client";
 const isLocal = (u: string) => u.startsWith("file:") || u === ":memory:";
 const shared = new Map<string, Client>();
 
-function make(urlVar: string, tokenVar: string): Client {
+function make(urlVar: string, tokenVar: string, intMode?: "bigint"): Client {
   const url = process.env[urlVar];
   const authToken = process.env[tokenVar];
   if (!url || (!authToken && !isLocal(url))) throw new Error("database not configured");
-  const key = `${url}\n${authToken ?? ""}`;
+  const key = `${url}\n${authToken ?? ""}\n${intMode ?? ""}`;
   const hit = shared.get(key);
   if (hit && !hit.closed) return hit;
-  const client = createClient({ url, authToken: authToken || undefined });
+  const client = createClient({
+    url,
+    authToken: authToken || undefined,
+    ...(intMode ? { intMode } : {}),
+  });
   shared.set(key, client);
   return client;
 }
@@ -27,6 +31,15 @@ export function mainDb(): Client {
 // Only the Vercel app holds the auth-DB token (ROL-101a); never call this from workers/Actions.
 export function authDb(): Client {
   return make("TURSO_AUTH_URL", "TURSO_AUTH_TOKEN");
+}
+
+/**
+ * V1-I6 / D-784: a lossless auth-DB client for the signed backup export only. The default number
+ * mode throws on an INTEGER above 2^53; a backup must dump every value exactly (the main-DB dump
+ * has used intMode "bigint" since D-175). Everything else keeps the normal client.
+ */
+export function authDbBigint(): Client {
+  return make("TURSO_AUTH_URL", "TURSO_AUTH_TOKEN", "bigint");
 }
 
 /**
