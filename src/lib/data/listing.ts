@@ -1,4 +1,4 @@
-// Listing identity (V1-S7, migration 0025, D-690..D-694): the one SQL fragment that bounds a code-keyed
+// Listing identity (V1-S7, migration 0025, D-760..D-764): the one SQL fragment that bounds a code-keyed
 // lookback at the start of the code's CURRENT entity. `instrument_listing` holds a row only where the
 // Owner decided that a reused code is a different company; with no row the fragment is '' and the bound
 // is `d >= ''`, true for every date, so histories (and every replay world) are unchanged.

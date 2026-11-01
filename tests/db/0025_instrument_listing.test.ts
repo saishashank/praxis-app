@@ -1,5 +1,5 @@
 // @vitest-environment node
-// Migration 0025_instrument_listing (should-fix batch A, V1-S7, D-690..D-694): applies, rolls back and
+// Migration 0025_instrument_listing (should-fix batch A, V1-S7, D-760..D-764): applies, rolls back and
 // comes back identical; the listing table is append-only and shape-checked; a delisted instrument can come
 // back (delisted_on -> NULL) only when the universe import delisted it itself or the Owner decided.
 import { createClient } from "@libsql/client";

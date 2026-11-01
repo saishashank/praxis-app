@@ -7,7 +7,7 @@
 // ordinary rule. `confirmCodeReuse` is the other decision: it is a DIFFERENT company; `reuse_confirmed`
 // makes the next import reactivate the code AND write an `instrument_listing` row (migration 0025), so
 // every lookback stops at the new listing's start (src/lib/data/listing.ts). Leaving a code quarantined
-// is the third outcome: it stays out. See docs/M13L_design.md, Batch A, D-686 and D-690..D-694.
+// is the third outcome: it stays out. See docs/M13L_design.md, Batch A, D-686 and D-760..D-764.
 import {
   commit,
   fail,

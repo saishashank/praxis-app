@@ -1,5 +1,5 @@
 -- +up
--- V1-S7 (should-fix batch A, D-690..D-694): code reuse. `instrument` is one row per (market, code) and every
+-- V1-S7 (should-fix batch A, D-760..D-764): code reuse. `instrument` is one row per (market, code) and every
 -- price history is keyed by it, so a code that a different company takes over after a delisting would
 -- inherit the old company's bars (ADV, tiers, indicators, corporate-action evidence). A LISTING row records
 -- "from this session on, the history of this code is a new entity's". Readers that look back over
