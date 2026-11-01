@@ -13,6 +13,17 @@ export type FeatureRow = {
   manifestId: string;
 };
 
+/**
+ * Retention of the nightly features (V2-S2, D-700; migration 0023). The table trigger refuses a DELETE
+ * of any row inside this floor, and the nightly maintenance job (pruneLearningTables) deletes exactly
+ * the rows beyond it. The features are deterministic from the bars (D-278) and each night keeps its
+ * active_set_hash and manifest_id, so a replay can regenerate a pruned night. Same shape as
+ * SENTINEL_PRUNED_TABLES.
+ */
+export const CORTEX_PRUNED_TABLES = {
+  cortex_feature_daily: { column: "d", kind: "date", days: 400 },
+} as const satisfies Record<string, { column: string; kind: "date" | "instant"; days: number }>;
+
 const ROWS_PER_BATCH = 200;
 
 /** Writes a night's feature rows in batches; returns how many were new. */

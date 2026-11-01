@@ -7,7 +7,12 @@ import GoLivePage from "@/app/(app)/ops/go-live/page";
 import HealthPage from "@/app/(app)/health/page";
 import { GoLiveForm } from "@/app/(app)/ops/go-live/GoLiveForm";
 import { WorkerSlotsForm } from "@/app/(app)/health/WorkerSlotsForm";
-import { GO_LIVE_ITEMS, SIGNOFF_CONFIRM_PHRASE, SIGNOFF_NOTE_MAX } from "@/lib/golive/checklist";
+import {
+  GO_LIVE_ITEMS,
+  SIGNOFF_CONFIRM_PHRASE,
+  SIGNOFF_NOTE_MAX,
+  V2_GO_LIVE_STEPS,
+} from "@/lib/golive/checklist";
 import { GO_LIVE_SLOTS } from "@/lib/golive/slots";
 import { ROUTES } from "@/lib/ui/nav";
 
@@ -65,8 +70,16 @@ describe("/ops/go-live page", () => {
     const { container } = render(await GoLivePage());
     expect(container.querySelectorAll("main").length).toBe(1);
     expect(screen.getByRole("heading", { level: 1, name: "Go-live sign-off" })).toBeInTheDocument();
-    expect(screen.getAllByRole("checkbox")).toHaveLength(GO_LIVE_ITEMS.length);
+    // the V1 checklist plus the read-only V2 guide (V2-S9): both are tick boxes, none ticked
+    expect(screen.getAllByRole("checkbox")).toHaveLength(
+      GO_LIVE_ITEMS.length + V2_GO_LIVE_STEPS.length,
+    );
     for (const box of screen.getAllByRole("checkbox")) expect(box).not.toBeChecked();
+    expect(screen.getByRole("heading", { level: 2, name: "V2 steps" })).toBeInTheDocument();
+    for (const st of V2_GO_LIVE_STEPS)
+      expect(
+        screen.getByText((t) => /^\d+\. /.test(t) && t.endsWith(st.label)),
+      ).toBeInTheDocument();
     for (const i of GO_LIVE_ITEMS) expect(screen.getByText(i.label)).toBeInTheDocument();
     expect(screen.getByText(SIGNOFF_CONFIRM_PHRASE)).toBeInTheDocument();
     expect(screen.getByText("abcdef1234")).toBeInTheDocument();

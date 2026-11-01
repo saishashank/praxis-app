@@ -57,6 +57,7 @@
     "docs/llm-roster.md",
     "docs/rule_schema.md",
     "docs/owner-guide/",
+    "docs/runbooks/",
     "docs/brand/"
   ],
   "files": {

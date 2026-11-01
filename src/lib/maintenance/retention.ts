@@ -44,6 +44,7 @@ import {
 import { readState } from "@/lib/data/backfill/engine.mjs";
 import { appendAuditTx, auditKey, hashUserPii, nullAuditPii } from "@/lib/db/audit";
 import { finishRun, hasSuccess, pruneRuns, startRun } from "@/lib/runs/runRecord";
+import { CORTEX_PRUNED_TABLES } from "@/lib/cortex/store/features";
 import { LEARNING_PRUNED_TABLES } from "@/lib/learning/schema";
 import { SENTINEL_PRUNED_TABLES } from "@/lib/sentinel/schema";
 
@@ -182,15 +183,18 @@ export async function pruneSentinelTables(db: Client, nowIso: string): Promise<n
 }
 
 // M6 (migration 0010, DAT-142): comparison_result (2 years) and kb_archive_run (180 days) lose rows
-// older than their floor; the triggers refuse anything younger. Strictly older rows only.
+// older than their floor; the triggers refuse anything younger. Strictly older rows only. V2-S2
+// (migration 0023): cortex_feature_daily (400 days) is pruned in the same batch.
 export async function pruneLearningTables(db: Client, nowIso: string): Promise<number> {
-  const stmts = Object.entries(LEARNING_PRUNED_TABLES).map(([table, def]) => {
-    const cutoff = cutoffIso(nowIso, def.days);
-    return {
-      sql: `DELETE FROM ${table} WHERE ${def.column} < ?`,
-      args: [def.kind === "date" ? cutoff.slice(0, 10) : cutoff],
-    };
-  });
+  const stmts = Object.entries({ ...LEARNING_PRUNED_TABLES, ...CORTEX_PRUNED_TABLES }).map(
+    ([table, def]) => {
+      const cutoff = cutoffIso(nowIso, def.days);
+      return {
+        sql: `DELETE FROM ${table} WHERE ${def.column} < ?`,
+        args: [def.kind === "date" ? cutoff.slice(0, 10) : cutoff],
+      };
+    },
+  );
   const results = await db.batch(stmts, "write");
   return results.reduce((n, x) => n + x.rowsAffected, 0);
 }
