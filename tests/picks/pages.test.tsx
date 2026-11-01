@@ -59,7 +59,10 @@ describe("Picks list", () => {
   let w: World;
   beforeAll(async () => {
     w = await fullWorld();
-  });
+    // The family sheet's panel is a lazy chunk (Sheet.tsx); load it once here so the 1 s findBy* wait
+    // below is not spent on the first transform of the Radix dialog (same as tests/strategies/c7).
+    await import("@/components/ui/SheetPanel");
+  }, 60_000);
 
   it("shows the family badge with plain words, an info sheet and the Today / Track record tabs (UXR-021, UXN-311)", async () => {
     as(w, "owner");

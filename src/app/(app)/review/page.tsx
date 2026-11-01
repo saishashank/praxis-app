@@ -7,7 +7,10 @@ import { Banner, EmptyState } from "@/components/ui/States";
 import { requireUser } from "@/lib/auth/guard";
 import { loadReviewQueue } from "@/lib/data/corporateActions/queue";
 import { mainDb } from "@/lib/db/client";
+import { readSuggestionViews } from "@/lib/steelman/read";
+import { DEFAULT_MARKET, soft } from "@/lib/ui/loaders/common";
 import { ReviewForm } from "./ReviewForm";
+import { Suggestions } from "./Suggestions";
 import { confirmCorporateActionAction, rejectCorporateActionAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +24,8 @@ const SOURCE_TEXT: Record<string, string> = {
 export default async function ReviewPage() {
   await requireUser("admin", "/review");
   const { cards, blockedOnly } = await loadReviewQueue(mainDb());
+  // Steelman rule suggestions (M11-lite D-492): Owner only; a failed read draws no group.
+  const suggestions = await soft(() => readSuggestionViews(mainDb(), DEFAULT_MARKET), []);
   return (
     <main className="mx-auto flex w-full max-w-3xl min-w-0 flex-col gap-4 px-4 py-6">
       <header className="flex flex-col gap-1">
@@ -100,6 +105,7 @@ export default async function ReviewPage() {
           for entry and will appear here if the code becomes one.
         </Banner>
       )}
+      <Suggestions items={suggestions} />
       <p className="m-0 text-sm">
         <Link href="/" className="text-accent underline">
           Home
