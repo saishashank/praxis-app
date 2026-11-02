@@ -1,7 +1,9 @@
   production:
     if: github.ref == 'refs/heads/release'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # Batch 3 now takes about 41-45 min from the US runner with 66 active cohorts (2026-11-02);
+    # 90 min until the batch 3 speed-up lands (D-870).
+    timeout-minutes: 90
     permissions:
       contents: read
       deployments: read
