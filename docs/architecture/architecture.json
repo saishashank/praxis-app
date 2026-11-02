@@ -596,6 +596,31 @@
       }
     },
     {
+      "id": "action:src/app/(app)/ops/actions.ts#requestRunNowAction",
+      "type": "action",
+      "name": "requestRunNowAction",
+      "purpose": "Server action requestRunNowAction: a form write with a role check and an audit event.",
+      "specIds": [
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "platform",
+        "security"
+      ],
+      "source": "src/app/(app)/ops/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/ops/actions.ts"
+      }
+    },
+    {
       "id": "action:src/app/(app)/ops/actions.ts#tickOpsTaskAction",
       "type": "action",
       "name": "tickOpsTaskAction",
@@ -13022,6 +13047,46 @@
       }
     },
     {
+      "id": "table:main.run_now_request",
+      "type": "table",
+      "name": "run_now_request",
+      "purpose": "Table run_now_request in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0026_run_now.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "job_id",
+          "market",
+          "params_json",
+          "requested_by_hmac",
+          "requested_at",
+          "audit_ref",
+          "status",
+          "result",
+          "updated_at"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_run_now_request_job",
+          "idx_run_now_request_status"
+        ]
+      }
+    },
+    {
       "id": "table:main.run_record",
       "type": "table",
       "name": "run_record",
@@ -16456,6 +16521,17 @@
       ]
     },
     {
+      "id": "service:app|contains|action:src/app/(app)/ops/actions.ts#requestRunNowAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/ops/actions.ts#requestRunNowAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform",
+        "security"
+      ]
+    },
+    {
       "id": "service:app|contains|action:src/app/(app)/ops/actions.ts#tickOpsTaskAction",
       "from": "service:app",
       "to": "action:src/app/(app)/ops/actions.ts#tickOpsTaskAction",
@@ -19535,6 +19611,16 @@
       "views": [
         "agents",
         "learning"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.run_now_request",
+      "from": "service:turso-main",
+      "to": "table:main.run_now_request",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
       ]
     },
     {

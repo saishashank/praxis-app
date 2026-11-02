@@ -24,16 +24,16 @@ describe("0025_instrument_listing", () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(db, ms);
     const after = await schemaOf(db);
-    const top = ms[ms.length - 1]!.version;
-    expect(ms[top - 1]!.name).toBe("instrument_listing");
-    expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: top - 1 });
+    expect(ms[24]!.name).toBe("instrument_listing");
+    // 0026 (run now) sits on top of 0025
+    expect(await migrateDown(db, ms, 2)).toEqual({ rolledBack: 2, version: 24 });
     const names = (await db.execute("SELECT name FROM sqlite_master")).rows.map((r) =>
       String(r.name),
     );
     expect(names).not.toContain("instrument_listing");
     expect(names).not.toContain("instrument_no_revive");
     expect(names).toContain("instrument_guard_update");
-    expect(await migrateUp(db, ms)).toEqual({ applied: 1, version: top });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 2, version: 26 });
     expect(await schemaOf(db)).toEqual(after);
   });
 
