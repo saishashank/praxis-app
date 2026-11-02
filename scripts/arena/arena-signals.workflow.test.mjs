@@ -35,7 +35,8 @@ test("one production job on release, environment production without a deployment
   assert.deepEqual(job.concurrency, { group: "arena-signals", "cancel-in-progress": false });
   assert.notEqual(job.concurrency.group, close.jobs.production.concurrency.group);
   assert.equal(job["runs-on"], "ubuntu-latest");
-  assert.ok(job["timeout-minutes"] > 0 && job["timeout-minutes"] <= 60);
+  // 90 since 2026-11-02: batch 3 took ~41-45 min with 66 active cohorts (D-870); 120 is the ceiling.
+  assert.ok(job["timeout-minutes"] > 0 && job["timeout-minutes"] <= 120);
 });
 
 test("the approved-commit steps and node setup are copied exactly from Batch 1 and arena-close", () => {
