@@ -1,6 +1,14 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildAuthConfig } from "@/lib/auth/config";
+import {
+  SESSION_COOKIE_PLAIN,
+  SESSION_COOKIE_SECURE,
+  cookieSecure,
+  pinnedOrigin,
+  sessionCookieConfig,
+  trustHostFor,
+} from "@/lib/auth/cookies";
 import { addUser, auditRows, authDb, ENV } from "./helpers";
 // Auth.js default cookie table (not exported by the package): pins HttpOnly/Secure/SameSite=Lax.
 import { defaultCookies } from "../../node_modules/@auth/core/lib/utils/cookie.js";
@@ -25,6 +33,7 @@ describe("auth config object", () => {
   it("uses JWT sessions with the configured lifetime and no adapter", () => {
     expect(cfg.session).toEqual({ strategy: "jwt", maxAge: 14 * 86400 });
     expect(cfg.adapter).toBeUndefined();
+    // no APP_BASE_URL and not production (vitest): the host may be derived from the request
     expect(cfg.trustHost).toBe(true);
     expect(cfg.pages).toEqual({ signIn: "/signin", error: "/signin" });
   });
@@ -46,14 +55,67 @@ describe("auth config object", () => {
     expect(o.checks).toEqual(["pkce", "state"]);
     expect(o.authorization.params.scope).toBe("openid email profile");
   });
-  it("leaves cookies at Auth.js defaults, which are HttpOnly + Secure + SameSite=Lax on https", () => {
-    expect(cfg.cookies).toBeUndefined();
-    const c = defaultCookies(true);
-    expect(c.sessionToken.name).toBe("__Secure-authjs.session-token");
-    for (const k of ["sessionToken", "callbackUrl", "csrfToken", "pkceCodeVerifier", "state"]) {
-      const opt = (c as Record<string, { options: Record<string, unknown> }>)[k].options;
+  it("pins the session cookie to the Auth.js default name and flags (PLT-033, V1-I10)", () => {
+    const https = defaultCookies(true);
+    expect(
+      sessionCookieConfig({ APP_BASE_URL: "https://praxis.example.test" }).sessionToken,
+    ).toEqual({ name: https.sessionToken.name, options: https.sessionToken.options });
+    const http = defaultCookies(false);
+    expect(sessionCookieConfig({ APP_BASE_URL: "http://localhost:3000" }).sessionToken).toEqual({
+      name: http.sessionToken.name,
+      options: http.sessionToken.options,
+    });
+    for (const k of ["callbackUrl", "csrfToken", "pkceCodeVerifier", "state"]) {
+      const opt = (https as Record<string, { options: Record<string, unknown> }>)[k].options;
       expect(opt).toMatchObject({ httpOnly: true, sameSite: "lax", secure: true });
     }
+    expect(SESSION_COOKIE_SECURE).toBe(https.sessionToken.name);
+    expect(SESSION_COOKIE_PLAIN).toBe(http.sessionToken.name);
+  });
+  it("buildAuthConfig carries the pinned cookie block", () => {
+    vi.stubEnv("APP_BASE_URL", "https://praxis.example.test");
+    const c = buildAuthConfig();
+    expect(c.cookies?.sessionToken).toEqual({
+      name: "__Secure-authjs.session-token",
+      options: { httpOnly: true, sameSite: "lax", path: "/", secure: true },
+    });
+  });
+});
+
+describe("pinned host (V1-I10)", () => {
+  afterEach(() => {
+    delete process.env.AUTH_URL;
+  });
+  it("pinnedOrigin reads only a valid http(s) APP_BASE_URL", () => {
+    expect(pinnedOrigin({ APP_BASE_URL: "https://praxis.example.test/x/" })).toBe(
+      "https://praxis.example.test",
+    );
+    for (const v of [undefined, "", "  ", "not a url", "ftp://x.test", "javascript:1"])
+      expect(pinnedOrigin({ APP_BASE_URL: v })).toBeNull();
+  });
+  it("production without a pin refuses to trust the request host; with a pin it does", () => {
+    expect(trustHostFor({ NODE_ENV: "production" })).toBe(false);
+    expect(trustHostFor({ NODE_ENV: "production", APP_BASE_URL: "https://p.example.test" })).toBe(
+      true,
+    );
+    expect(trustHostFor({ NODE_ENV: "development" })).toBe(true);
+  });
+  it("cookieSecure follows the pinned scheme, else production", () => {
+    expect(cookieSecure({ APP_BASE_URL: "https://p.example.test" })).toBe(true);
+    expect(cookieSecure({ APP_BASE_URL: "http://localhost:3000", NODE_ENV: "production" })).toBe(
+      false,
+    );
+    expect(cookieSecure({ NODE_ENV: "production" })).toBe(true);
+    expect(cookieSecure({})).toBe(false);
+  });
+  it("buildAuthConfig hands the origin to Auth.js as AUTH_URL, keeping an explicit one", () => {
+    vi.stubEnv("APP_BASE_URL", "https://praxis.example.test");
+    delete process.env.AUTH_URL;
+    buildAuthConfig();
+    expect(process.env.AUTH_URL).toBe("https://praxis.example.test");
+    process.env.AUTH_URL = "https://other.example.test";
+    buildAuthConfig();
+    expect(process.env.AUTH_URL).toBe("https://other.example.test");
   });
 });
 

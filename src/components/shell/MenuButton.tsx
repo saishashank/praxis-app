@@ -11,6 +11,8 @@ export function MenuButton({
   children: panel,
   icon,
   text,
+  shortText,
+  title,
   className,
   panelClassName,
 }: {
@@ -21,6 +23,10 @@ export function MenuButton({
   icon: ReactNode;
   /** Optional visible text next to the icon. */
   text?: string;
+  /** Shorter text for phones (below 640 px) in place of `text`. */
+  shortText?: string;
+  /** Native tooltip (hover, long-press on touch). */
+  title?: string;
   className?: string;
   panelClassName?: string;
 }) {
@@ -58,6 +64,7 @@ export function MenuButton({
         ref={button}
         type="button"
         aria-label={label}
+        title={title}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen((v) => !v)}
@@ -67,6 +74,7 @@ export function MenuButton({
         )}
       >
         {icon}
+        {shortText ? <span className="sm:hidden">{shortText}</span> : null}
         {text ? <span className="hidden max-w-40 truncate sm:inline">{text}</span> : null}
       </button>
       {open ? (

@@ -98,6 +98,8 @@ export function runCorporateActions(ctx: {
   now?: string;
   candidates?: Candidate[];
   relevant?: (code: string) => boolean;
+  /** GL-01: optional Yahoo adjusted closes around the ex-date, by code; absent = no veto. */
+  adjClose?: Record<string, { prevAdj: number; exAdj: number }>;
 }): Promise<CaSummary>;
 
 export const corporateActionsHook: (c: {
@@ -108,4 +110,9 @@ export const corporateActionsHook: (c: {
   now?: string;
   candidates?: Candidate[];
   relevant?: (code: string) => boolean;
+  /** GL-01: optional Yahoo adjusted closes around the ex-date, by code; absent = no veto. */
+  adjClose?: Record<string, { prevAdj: number; exAdj: number }>;
 }) => Promise<CaSummary>;
+
+/** A stored dollar price in whole micro by its decimal text (no float arithmetic); null when not a number. */
+export function microOfDollars(value: unknown): number | null;

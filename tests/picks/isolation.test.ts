@@ -71,6 +71,17 @@ describe("picks are never read by ranking or sizing", () => {
     const allowed = (f: string): boolean =>
       f === "src/lib/review/sections.ts" ||
       f === "src/lib/ui/loaders/picks.ts" || // the page data loader for the picks pages (M7 T8)
+      // M17 WP9 (D-462, D-464): the alert-stream measurement reads the total-return benchmark and
+      // the stream cost helper; it ranks and sizes nothing and is outside the trading folders.
+      f === "src/lib/intraday/measure.ts" ||
+      f === "src/lib/intraday/evaluator.ts" ||
+      // M11-lite WP3 (AGT-131, D-499): the steelman evidence pack reads the stored factor rows; its
+      // output is an opinion only and never reaches ranking or sizing (PRD-033 boundary test).
+      f === "src/lib/steelman/pack.ts" ||
+      // M13-lite WP7 (KB-080, D-524, D-640): the paper tracker for expert calls reads the total-return
+      // benchmark and the window helper so a call is set against the market on the same basis as a pick;
+      // it writes only expert_call_outcome, never a pick, order or rank (PRD-035 boundary test).
+      f === "src/lib/experts/calls.ts" ||
       f.startsWith("src/app/");
     expect(importers.filter((f) => !allowed(f))).toEqual([]);
     // and the review import exists, so this guard is not vacuous
@@ -104,13 +115,13 @@ describe("picks are never read by ranking or sizing", () => {
     expect(bad).toEqual([]);
   });
 
-  it("writes only to its own three tables (pick_check: D-187)", () => {
+  it("writes only to its own four tables (pick_check: D-187; pick_market: M11-lite ARN-103)", () => {
     const re = /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)/gi;
     const targets = new Set<string>();
     for (const file of walk(path.join(ROOT, "src/lib/picks"))) {
       for (const m of readFileSync(file, "utf8").matchAll(re)) targets.add(m[1]!.toLowerCase());
     }
-    expect([...targets].sort()).toEqual(["pick", "pick_check", "pick_outcome"]);
+    expect([...targets].sort()).toEqual(["pick", "pick_check", "pick_market", "pick_outcome"]);
   });
 });
 

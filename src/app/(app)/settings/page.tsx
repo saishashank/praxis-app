@@ -1,8 +1,10 @@
-// Settings (UXR-027; UX-110, UXN-160, UXN-280, UXN-282, ROL-102a). One page, grouped rows, each
-// showing its current value; opening a row shows its form in place with one Save. Every role may open
-// it and change its OWN preferences. Account carries the identity and a full-width Sign out (UXR-004).
-// P0 alerts are fixed. The markets table and the licence list stay on their detail pages.
+// Settings (UXR-027, UXR-003, UXR-042, UXR-043, UXR-046, UXR-055; UX-110, UXN-160, UXN-280, UXN-282,
+// ROL-102a). One page of grouped value rows (current value on the right); a row opens a sheet/drawer
+// with one Save (SettingsRows). Without JavaScript each row is a link to its detail page. Every role
+// may change its OWN preferences. Account carries identity, role and a full-width Sign out (UXR-004).
+// Destructive actions are neutral in the list; red appears only in the confirm sheet. P0 alerts are fixed.
 import { Avatar } from "@/components/shell/GearMenu";
+import { ValueRow } from "@/components/ui/ValueRow";
 import { requireUser } from "@/lib/auth/guard";
 import { signOutAction } from "@/lib/auth/actions";
 import { authDb } from "@/lib/db/client";
@@ -12,13 +14,23 @@ import type { CurrentUser } from "@/lib/auth/session";
 import { loadSettings } from "@/lib/ui/loaders/settings";
 import { envFor } from "@/lib/ui/loaders/shell";
 import { melbourneDate } from "@/lib/view/active";
-import { QuietHoursForm } from "./QuietHoursForm";
 import { marketRows, readProfiles, readSharedMarkets, type MarketProfiles } from "./region";
-import { SettingsForm } from "./SettingsForm";
-import { EditRow, LinkRow, Select, SettingsFrame, SettingsGroup } from "./SettingsNav";
-import { ThemePicker, THEME_LABEL } from "./appearance/ThemePicker";
+import { AboutIcon, ClockIcon, GlobeIcon, PaletteIcon, UserIcon } from "./GroupIcons";
+import { LinkRow, SettingsFrame } from "./SettingsNav";
+import { MotionRow, ThemeRow } from "./AppearanceRows";
+import {
+  Group,
+  InfoRow,
+  QuietRow,
+  ChoiceRow,
+  SettingsRoot,
+  SignOutEverywhereRow,
+} from "./SettingsRows";
+import { DELIVERY, TIME_FORMAT, TIMES_IN } from "./options";
+import notices from "@/generated/notices.json";
 import {
   setQuietHoursAction,
+  signOutEverywhereSelfAction,
   updateAppearanceAction,
   updatePreferencesAction,
   updateRegionAction,
@@ -27,26 +39,6 @@ import {
 export const dynamic = "force-dynamic";
 
 const ROLE_NAME: Record<string, string> = { owner: "Owner", editor: "Editor", viewer: "Viewer" };
-
-const DELIVERY: Array<[string, string]> = [
-  ["immediate", "Immediately"],
-  ["digest", "In the digest"],
-];
-const TIME_FORMAT: Array<[string, string]> = [
-  ["24h", "24-hour (13:30)"],
-  ["12h", "12-hour (1:30 pm)"],
-];
-const TIMES_IN: Array<[string, string]> = [
-  ["melbourne", "Melbourne time"],
-  ["exchange", "Exchange-local time"],
-];
-const MOTION: Array<[string, string]> = [
-  ["on", "On"],
-  ["off", "Off (no animation)"],
-];
-
-const labelOf = (opts: Array<[string, string]>, v: string): string =>
-  opts.find(([k]) => k === v)?.[1] ?? v;
 
 /** The markets this user may open the app in (same rules as Settings › Region & markets). */
 async function choosableMarkets(user: CurrentUser): Promise<Array<[string, string]>> {
@@ -67,125 +59,144 @@ export default async function SettingsPage() {
   const db = authDb();
   const prefs = await getPreferences(db, user.id);
   const quiet = await getQuietHours(db, user.id).catch(() => null);
-  const quietText = quiet?.start && quiet?.end ? `${quiet.start}–${quiet.end}` : "Off";
   const markets = await choosableMarkets(user).catch((): Array<[string, string]> => []);
   if (!markets.some(([k]) => k === prefs.default_market)) {
     markets.unshift([prefs.default_market, prefs.default_market]);
   }
   const role = ROLE_NAME[user.role] ?? user.role;
+  const choices = (opts: Array<[string, string]>) =>
+    opts.map(([value, label]) => ({ value, label }));
+  const build = (process.env.APP_COMMIT ?? "").slice(0, 7);
   return (
     <SettingsFrame intro="Your own preferences. They apply to your account on every device.">
-      <SettingsGroup id="account" title="Account">
-        <div className="flex flex-wrap items-center gap-4 px-4 py-4">
-          <Avatar account={{ email: user.email, name: user.name }} role={user.role} size="lg" />
-          <div className="min-w-0 flex-1">
-            <p className="m-0 truncate font-medium">{user.email}</p>
-            <p className="m-0 text-sm text-text-muted">
-              Role: <span aria-label="Your role">{role}</span>
-            </p>
+      <SettingsRoot>
+        <Group id="account" title="Account" hue="home" icon={<UserIcon />}>
+          <div className="flex flex-wrap items-center gap-4 py-4">
+            <Avatar account={{ email: user.email, name: user.name }} role={user.role} size="lg" />
+            <div className="min-w-0 flex-1">
+              <p className="m-0 truncate font-medium">{user.email}</p>
+              <p className="m-0 text-sm text-text-muted">
+                Role: <span aria-label="Your role">{role}</span>
+              </p>
+            </div>
           </div>
-        </div>
-        <form action={signOutAction} className="px-4 py-4">
-          <button
-            type="submit"
-            className="ui-btn-secondary min-h-11 w-full rounded-md border border-border px-4 text-sm font-semibold"
-          >
-            Sign out
-          </button>
-        </form>
-      </SettingsGroup>
-
-      <SettingsGroup id="appearance" title="Appearance">
-        <EditRow
-          name="Look"
-          values={[
-            { label: "Theme", value: THEME_LABEL[prefs.theme] ?? prefs.theme },
-            { label: "Animation", value: labelOf(MOTION, prefs.motion) },
-          ]}
-        >
-          <SettingsForm action={updateAppearanceAction}>
-            <ThemePicker value={prefs.theme} />
-            <Select
-              name="motion"
-              label="Animation"
-              value={prefs.motion}
-              options={MOTION}
-              hint="Off stops non-essential animation. It is also off automatically when your device asks for reduced motion."
+          <form action={signOutAction} className="pb-4">
+            <button
+              type="submit"
+              className="ui-btn-secondary min-h-11 w-full rounded-md border border-border px-4 text-sm font-semibold"
+            >
+              Sign out
+            </button>
+          </form>
+          {user.role === "owner" ? (
+            <SignOutEverywhereRow
+              action={signOutEverywhereSelfAction}
+              href="/settings/sign-out-everywhere"
             />
-            <p className="m-0 text-xs text-text-muted">
-              Gains and losses use colour-blind-safe teal and orange, and always also show a ▲ or ▼
-              and a sign.
-            </p>
-          </SettingsForm>
-        </EditRow>
-      </SettingsGroup>
+          ) : null}
+        </Group>
 
-      <SettingsGroup id="time" title="Time and alerts">
-        <EditRow
-          name="Time and alerts"
-          values={[
-            { label: "Time format", value: labelOf(TIME_FORMAT, prefs.time_format) },
-            { label: "P1 alerts", value: labelOf(DELIVERY, prefs.alert_p1) },
-            { label: "P2 alerts", value: labelOf(DELIVERY, prefs.alert_p2) },
-          ]}
-        >
-          <SettingsForm action={updatePreferencesAction}>
-            <Select
-              name="time_format"
-              label="Time format"
-              value={prefs.time_format}
-              options={TIME_FORMAT}
-            />
-            <p className="m-0 text-sm">
-              P0 alerts are always delivered immediately. They cannot be turned off or delayed.
-            </p>
-            <Select name="alert_p1" label="P1 alerts" value={prefs.alert_p1} options={DELIVERY} />
-            <Select name="alert_p2" label="P2 alerts" value={prefs.alert_p2} options={DELIVERY} />
-          </SettingsForm>
-        </EditRow>
-        <EditRow name="Quiet hours" values={[{ label: "Melbourne time", value: quietText }]}>
-          <QuietHoursForm
-            action={setQuietHoursAction}
+        <Group id="appearance" title="Appearance" hue="strategies" icon={<PaletteIcon />}>
+          <ThemeRow current={prefs.theme} action={updateAppearanceAction} />
+          <MotionRow current={prefs.motion} action={updateAppearanceAction} />
+        </Group>
+
+        <Group id="time" title="Time and alerts" hue="picks" icon={<ClockIcon />}>
+          <ChoiceRow
+            label="Time format"
+            field="time_format"
+            current={prefs.time_format}
+            choices={choices(TIME_FORMAT)}
+            href="/settings/time"
+            action={updatePreferencesAction}
+          />
+          <ChoiceRow
+            label="P1 alerts"
+            field="alert_p1"
+            current={prefs.alert_p1}
+            choices={choices(DELIVERY)}
+            href="/settings/time"
+            description="P0 alerts are always delivered immediately. They cannot be turned off or delayed."
+            action={updatePreferencesAction}
+          />
+          <ChoiceRow
+            label="P2 alerts"
+            field="alert_p2"
+            current={prefs.alert_p2}
+            choices={choices(DELIVERY)}
+            href="/settings/time"
+            description="P0 alerts are always delivered immediately. They cannot be turned off or delayed."
+            action={updatePreferencesAction}
+          />
+          <LinkRow
+            name="Pick alerts"
+            href="/settings/alerts"
+            hint="Buy-price alerts, their e-mails and the daily cap"
+          />
+          <QuietRow
             start={quiet?.start ?? null}
             end={quiet?.end ?? null}
+            action={setQuietHoursAction}
+            href="/settings/quiet-hours"
           />
-        </EditRow>
-      </SettingsGroup>
+        </Group>
 
-      <SettingsGroup id="region" title="Region and markets">
-        <EditRow
-          name="Region"
-          values={[
-            { label: "Open the app in", value: prefs.default_market },
-            { label: "Show times in", value: labelOf(TIMES_IN, prefs.times_in) },
-          ]}
-        >
-          <SettingsForm action={updateRegionAction}>
-            <Select
-              name="default_market"
-              label="Open the app in"
-              value={prefs.default_market}
-              options={markets}
-              hint="Only active markets can be chosen. The full list is under Markets."
-            />
-            <Select
-              name="times_in"
-              label="Show times in"
-              value={prefs.times_in}
-              options={TIMES_IN}
-            />
-          </SettingsForm>
-        </EditRow>
-        <LinkRow
-          name="Markets"
-          href="/settings/region"
-          hint="Exchanges, currencies, hours and status"
-        />
-      </SettingsGroup>
+        <Group id="region" title="Region and markets" hue="market" icon={<GlobeIcon />}>
+          <ChoiceRow
+            label="Open the app in"
+            field="default_market"
+            current={prefs.default_market}
+            choices={choices(markets)}
+            href="/settings/region"
+            description="Only active markets can be chosen. The full list is under Markets."
+            action={updateRegionAction}
+          />
+          <ChoiceRow
+            label="Show times in"
+            field="times_in"
+            current={prefs.times_in}
+            choices={choices(TIMES_IN)}
+            href="/settings/region"
+            action={updateRegionAction}
+          />
+          <ValueRow label="Markets" value="Exchanges, hours, status" href="/settings/region" />
+        </Group>
 
-      <SettingsGroup id="about" title="About">
-        <LinkRow name="About Praxis" href="/settings/about" hint="Version, fonts and licences" />
-      </SettingsGroup>
+        <Group id="about" title="About" hue="reviews" icon={<AboutIcon />}>
+          <ValueRow
+            label="Version"
+            value={<span className="font-mono">{build || "—"}</span>}
+            href="/settings/about"
+          />
+          <InfoRow
+            label="Fonts and attribution"
+            value="Inter, JetBrains Mono"
+            href="/settings/about"
+            title="Fonts and attribution"
+          >
+            <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
+              {notices.fonts.map((f) => (
+                <li key={f.name}>
+                  {f.name}: {f.license}. {f.note}
+                </li>
+              ))}
+              {notices.attributions.map((a) => (
+                <li key={a.name}>
+                  {a.text}{" "}
+                  <a href={a.href} rel="noopener noreferrer" className="text-accent underline">
+                    tradingview.com
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </InfoRow>
+          <ValueRow
+            label="Licences"
+            value={`${notices.packages.length} packages`}
+            href="/settings/about#licences"
+          />
+        </Group>
+      </SettingsRoot>
     </SettingsFrame>
   );
 }

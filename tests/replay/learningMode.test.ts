@@ -16,7 +16,19 @@ import { world as learningWorld } from "../learning/challengerFixtures";
 const params = defaultAgentParams();
 const CODES = Array.from({ length: 12 }, (_, i) => `ZZ${String.fromCharCode(65 + i)}`);
 const SESSIONS = 640;
-const STAGES = ["forward", "comparisons", "lessons", "challengers", "rolls", "arn076", "factors"];
+const STAGES = [
+  "forward",
+  "comparisons",
+  "lessons",
+  "preregistered",
+  "challengers",
+  "rolls",
+  "arn076",
+  "factors",
+  "robustness",
+  "rankIc",
+  "experts",
+];
 
 function snapshotBytes(): Uint8Array {
   const cal = weekdayCalendar(SESSIONS, "2027-01-04");
@@ -188,6 +200,20 @@ describe("weekly learning run", () => {
       expect(r.family).toBe("F1");
     }
 
+    // M13-lite (D-517, D-623): the experts stage ran last and, with no expert data, wrote only its stat
+    const ex = JSON.parse(
+      String(
+        (await rows(db, "SELECT value_json FROM replay_stat WHERE metric = 'experts'"))[0]!
+          .value_json,
+      ),
+    ) as { degraded: string[]; screening: { status: string }; proposals: object; parked: number };
+    expect(ex.degraded).toEqual([]);
+    expect(ex.screening.status).toBe("nothing_eligible");
+    expect(ex.proposals).toEqual({});
+    expect(ex.parked).toBe(0);
+    for (const t of ["screening_run", "expert_proposal", "claim_status", "cluster_state"]) {
+      expect(await rows(db, `SELECT 1 FROM ${t}`)).toHaveLength(0);
+    }
     // idempotent per ISO week: the same day, and another day of the week, do nothing
     const before = Number((await rows(db, "SELECT COUNT(*) AS n FROM replay_stat"))[0]!.n);
     expect(await replayMain(argv, env, d)).toBe(0);
@@ -234,17 +260,21 @@ describe("weekly learning run", () => {
     expect(stageOrder(lines2[0]!)).toEqual([
       "forward",
       "lessons",
+      "preregistered",
       "challengers",
       "rolls",
       "arn076",
       "factors",
+      "robustness",
+      "rankIc",
+      "experts",
     ]);
     expect(
       await rows(
         db,
         "SELECT metric FROM replay_stat WHERE scope = 'learning' AND metric LIKE 'stage:%'",
       ),
-    ).toHaveLength(6);
+    ).toHaveLength(10);
     expect(
       await rows(db, "SELECT 1 FROM replay_stat WHERE scope = 'learning' AND metric = 'status'"),
     ).toHaveLength(1);

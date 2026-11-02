@@ -35,9 +35,16 @@
 //  - A local time that happens twice (fall-back overlap, 02:00..02:59 on the first Sunday in
 //    April) resolves to the FIRST occurrence (the earlier instant, still on daylight time), so a
 //    daily job never runs later than its stated time.
-//  - A weekday with no calendar row counts as a trading day (provisional), so callers decide
-//    separately what to do about uncovered dates with `calendarCovers`.
+//  - V1-S3 / D-711: the production GATES are fail safe. A live run trades, fetches, fills or marks a
+//    day only when the calendar HAS a `session` or `early_close` row for it (calendarDayStatus /
+//    gateDayStatus; the one definition is ./calendarCore.mjs, shared with the Worker, the heartbeat
+//    and the Actions CLIs). A weekday with no row is `missing`: the gate skips it as
+//    `calendar_missing` and the heartbeat raises an incident. A REPLAY (synthetic dates, calendars
+//    with holiday rows only) and the pure arithmetic below (isTradingDay, nextTradingDay,
+//    previousTradingDay, sessionsBetween) keep the looser "weekday and not a holiday row": the
+//    replay goldens depend on it, and the arithmetic walks a range a gate has already checked.
 import { formatTime, type TimeFormat } from "@/lib/health/format";
+import { dayStatusRows, isWalkDay, isWeekendDate, type DayStatus } from "./calendarCore.mjs";
 
 export type CalendarKind = "session" | "holiday" | "early_close";
 
@@ -151,22 +158,34 @@ export function addDays(date: string, n: number): string {
 }
 
 export function isWeekend(date: string): boolean {
-  const { y, m, d } = parseDate(date);
-  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-  return dow === 0 || dow === 6;
+  return isWeekendDate(date);
 }
 
 function holidaySet(rows: readonly CalendarRow[]): Set<string> {
   return new Set(rows.filter((r) => r.kind === "holiday").map((r) => r.d));
 }
 
-// True when the calendar has a row for the date (weekends carry no rows).
-export function calendarCovers(date: string, rows: readonly CalendarRow[]): boolean {
-  return rows.some((r) => r.d === date);
+// Arithmetic / replay form: a weekday that is not a holiday row. NOT a gate (see the header).
+export function isTradingDay(date: string, rows: readonly CalendarRow[]): boolean {
+  return isWalkDay(date, rows);
 }
 
-export function isTradingDay(date: string, rows: readonly CalendarRow[]): boolean {
-  return !isWeekend(date) && !holidaySet(rows).has(date);
+/** "open" | "closed" | "missing": a weekday with no row is `missing` (D-711). The live gate. */
+export function calendarDayStatus(date: string, rows: readonly CalendarRow[]): DayStatus {
+  return dayStatusRows(date, rows);
+}
+
+/**
+ * The gate the run entry points use (D-711): strict when the live caller asks for it
+ * (`strictCalendar`), otherwise the looser walk that replays and synthetic-date tests keep.
+ */
+export function gateDayStatus(
+  date: string,
+  rows: readonly CalendarRow[],
+  strict: boolean | undefined,
+): DayStatus {
+  if (strict !== true) return isWalkDay(date, rows) ? "open" : "closed";
+  return dayStatusRows(date, rows);
 }
 
 export function sessionTimes(

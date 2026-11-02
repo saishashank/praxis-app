@@ -118,7 +118,7 @@ describe("dumpDatabase", () => {
       kind: "meta",
       format: 1,
       db: "main",
-      schema_version: 14,
+      schema_version: 25,
       created_at: AT,
       ephemeral: ["request_nonce"],
     });
@@ -208,7 +208,7 @@ describe("restoreDatabase", () => {
     expect(idx.rows.length).toBe(1);
     // And the migration table says the same version, so later migrations continue from it.
     const v = await target.execute("SELECT MAX(version) v FROM schema_migrations");
-    expect(Number(v.rows[0].v)).toBe(14);
+    expect(Number(v.rows[0].v)).toBe(25);
   });
 
   it("round-trips the auth DB (NULL name, unique indexes, audit trigger)", async () => {
@@ -298,7 +298,12 @@ describe("restoreDatabase", () => {
     s.sql = s.sql.replace("CREATE TABLE app_log (", "CREATE TABLE app_log (zzz DEFAULT 1, ");
     lines[i] = JSON.stringify(s); // extra column: INSERT with the original arity fails
     const target = emptyDb();
-    await expect(restoreDatabase(target, lines.join("\n") + "\n")).rejects.toThrow();
+    // the migrated main DB holds thousands of seed rows (calendar), so ask for the single-batch
+    // mode explicitly: a stream that fits one batch is atomic (V1-S5, D-715); a bigger one is
+    // chunked and leaves a resumable checkpoint instead (tests/backup/restoreChunks.test.ts)
+    await expect(
+      restoreDatabase(target, lines.join("\n") + "\n", { chunkStatements: 1_000_000 }),
+    ).rejects.toThrow();
     const n = await target.execute("SELECT COUNT(*) c FROM sqlite_master");
     expect(Number(n.rows[0].c)).toBe(0);
   });
@@ -319,7 +324,7 @@ describe("encryption (age)", () => {
     const r = await restoreDatabase(target, text);
     expect(r.sha256).toEqual(exp.sha256);
     expect(exp.tables).toContain("app_log");
-    expect(exp.schemaVersion).toBe(14);
+    expect(exp.schemaVersion).toBe(25);
   });
 
   it("another key cannot decrypt; tampered ciphertext is refused", async () => {

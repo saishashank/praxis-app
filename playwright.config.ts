@@ -57,6 +57,8 @@ const projects = [
 export default defineConfig({
   testDir: "./e2e",
   testMatch: /.*\.spec\.ts/,
+  // One Temp folder per run, removed at the end (scripts/test/runTemp.mjs).
+  globalSetup: "./e2e/global-temp.ts",
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

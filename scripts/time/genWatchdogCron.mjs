@@ -4,8 +4,8 @@
 // UTC+10); the first step of a scheduled run maps `github.event.schedule` plus the current
 // Melbourne offset back to a slot and exits 0 on the wrong line (`slotForSchedule` below).
 //   node scripts/time/genWatchdogCron.mjs [HH:MM ...]      (default 20:40 21:50)
-// The output is for the Owner to paste into .github/workflows/watchdog.yml in a separate,
-// Owner-approved change (PLT-015). watchdog.yml does NOT contain a `schedule:` block today.
+// GL-07 (O-52): the output is now pasted into watchdog.yml (20:40, 21:50) and ingest-batch1.yml
+// (Batch-1 fallback, 18:15); `scheduleGate.mjs` is the no-op guard for the other regime's line.
 import { fileURLToPath } from "node:url";
 
 export const DEFAULT_TIMES = ["20:40", "21:50"];

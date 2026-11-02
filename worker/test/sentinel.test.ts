@@ -531,3 +531,50 @@ describe("runAsx: nothing is contacted unless every switch is on", () => {
     none();
   });
 });
+
+// GL-05 (slot `decision-cutoff`): the first poll that starts at or after 18:10 Melbourne and stores
+// its feed writes the insert-once marker `cutoff_poll:AU:<d>`; nothing earlier or failed does.
+describe("runAsx: the cut-off poll marker (GL-05)", () => {
+  beforeEach(() => enable());
+  const T0608 = Date.UTC(2026, 9, 13, 7, 8, 0); // 18:08 AEDT
+  const T1812 = Date.UTC(2026, 9, 13, 7, 12, 0); // 18:12 AEDT, the first poll after 18:10
+  const marker = () => state("cutoff_poll:AU:2026-10-13");
+
+  it("a poll at 18:08 writes no marker; the 18:12 poll writes it at its completion instant", async () => {
+    await runAsx(ENV, T0608, deps(T0608));
+    expect(marker()).toEqual([]);
+    asx.reply = feed(feedBody(2), '"v2"');
+    // the clock moves 7 s during the hand-off: the marker is the time AFTER the hand-off
+    const ticks = [T1812, T1812 + 2_000, T1812 + 7_000];
+    let i = 0;
+    const s = await runAsx(ENV, T1812, { fetch: f, nowMs: () => ticks[Math.min(i++, 2)] });
+    expect(s.delivered).toBe(200);
+    expect(marker()).toEqual([JSON.stringify(new Date(T1812 + 7_000).toISOString())]);
+  });
+
+  it("insert-once: a later poll never moves the marker; a 304 poll can write it too", async () => {
+    asx.reply = () => new Response(null, { status: 304 });
+    await runAsx(ENV, T1812, deps(T1812));
+    const first = marker();
+    expect(first).toEqual([JSON.stringify(new Date(T1812).toISOString())]);
+    const t2 = T1812 + POLL;
+    asx.reply = feed(feedBody(3), '"v3"');
+    await runAsx(ENV, t2, deps(t2));
+    expect(marker()).toEqual(first);
+  });
+
+  it("a poll whose hand-off failed, or that failed outright, is not a completed poll", async () => {
+    app.reply = () => new Response("no", { status: 500 });
+    await runAsx(ENV, T1812, deps(T1812));
+    expect(marker()).toEqual([]);
+    asx.reply = () => new Response("oops", { status: 500 });
+    const t2 = T1812 + POLL;
+    await runAsx(ENV, t2 + 5 * POLL, deps(t2 + 5 * POLL));
+    expect(marker()).toEqual([]);
+  });
+
+  it("the marker rides in the poll's own batch: the request count does not change", async () => {
+    const s = await runAsx(ENV, T1812, deps(T1812));
+    expect(s.requests).toBe(3);
+  });
+});

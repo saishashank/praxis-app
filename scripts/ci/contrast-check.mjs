@@ -60,6 +60,53 @@ export const PAIRS = [
   ]),
 ];
 
+// V2 palette (UXR-051..058, D-208): hue tokens carry -fill (vivid, non-text, 3:1 as a UI component),
+// -text (AA 4.5, AAA 7 in High contrast) and -on-fill (label colour on the fill).
+export const V2_HUES = [
+  "brand-a",
+  "brand-b",
+  "positive",
+  "negative",
+  "outcome-flat",
+  "tier-p0",
+  "tier-p1",
+  "tier-p2",
+  ...["br", "vc", "nd", "bo", "sc", "co", "ex", "id"].map((x) => `family-${x}`),
+  ...["running", "allowed", "livetested", "target", "paused", "stopped", "shadow"].map(
+    (x) => `status-${x}`,
+  ),
+  ...[
+    "energy",
+    "materials",
+    "industrials",
+    "discretionary",
+    "staples",
+    "healthcare",
+    "financials",
+    "tech",
+    "comms",
+    "utilities",
+    "realestate",
+  ].map((x) => `sector-${x}`),
+];
+// Badges of these never sit on surface-2 (same rule as the palette generator).
+const NO_S2 = /^(brand-|family-|sector-)/;
+
+// A background may be "<token>" or "<token>+tint:<hue>": the token mixed with the hue's fill at the
+// theme's --tint-strength (the strongest tint a band or tile uses), like color-mix(in srgb, ...).
+export const V2_PAIRS = V2_HUES.flatMap((h) => {
+  const surfaces = NO_S2.test(h) ? ["bg", "surface"] : ["bg", "surface", "surface-2"];
+  return [
+    ...surfaces.flatMap((b) => [
+      [`${h}-text`, b, "text"],
+      [`${h}-text`, `${b}+tint:${h}`, "text"],
+      [`${h}-fill`, b, "ui"],
+    ]),
+    [`${h}-on-fill`, `${h}-fill`, "text"],
+  ];
+});
+PAIRS.push(...V2_PAIRS);
+
 export const THEME_NAMES = ["dark", "light", "midnight", "dim", "high_contrast"];
 
 export function threshold(theme, kind) {
@@ -91,6 +138,7 @@ export function ratio(a, b) {
 function declarations(body) {
   const out = {};
   for (const m of body.matchAll(/--color-([a-z0-9-]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();
+  for (const m of body.matchAll(/--(tint-[a-z]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();
   return out;
 }
 
@@ -126,6 +174,31 @@ export function parseThemes(css) {
   return themes;
 }
 
+export function mixHex(base, top, pct) {
+  const a = parseHex(base);
+  const b = parseHex(top);
+  return (
+    "#" +
+    a
+      .map((v, i) =>
+        Math.round(v + (b[i] - v) * pct)
+          .toString(16)
+          .padStart(2, "0"),
+      )
+      .join("")
+  );
+}
+
+// Resolve a PAIRS background spec against one theme's token map; null when a token is missing.
+export function resolveBg(t, spec) {
+  const [base, tint] = spec.split("+tint:");
+  if (!t[base]) return null;
+  if (tint === undefined) return t[base];
+  const strength = /^(\d+(?:\.\d+)?)%$/.exec(t["tint-strength"] ?? "");
+  if (!t[`${tint}-fill`] || !strength) return null;
+  return mixHex(t[base], t[`${tint}-fill`], Number(strength[1]) / 100);
+}
+
 export function check(css) {
   const themes = parseThemes(css);
   const results = [];
@@ -138,11 +211,12 @@ export function check(css) {
     }
     const base = name.startsWith("system") ? "x" : name;
     for (const [fg, bg, kind] of PAIRS) {
-      if (!t[fg] || !t[bg]) {
+      const bgHex = resolveBg(t, bg);
+      if (!t[fg] || !bgHex) {
         failures.push(`${name}: missing --color-${!t[fg] ? fg : bg}`);
         continue;
       }
-      const r = ratio(t[fg], t[bg]);
+      const r = ratio(t[fg], bgHex);
       const need = threshold(base, kind);
       results.push({ theme: name, fg, bg, kind, ratio: r, need, ok: r >= need });
       if (r < need) {

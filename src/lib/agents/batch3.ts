@@ -14,14 +14,17 @@
 //      or a ledger row, and a violation does not stop the other stages;
 //   4. kill switch: K for the calendar year (first night of a year, or first evaluation), then the
 //      looks that are due (stats/killSwitch.ts). A trip recommends, see that file;
-//   5. VAL-102 evidence timeline per (lineage, rule version) into `replay_stat` (UI is M7).
+//   5. VAL-102 evidence timeline per (lineage, rule version) into `replay_stat` (UI is M7);
+//   6. VAL-114 daily rank quality (M14, D-232): the Spearman IC of D' = two sessions before D, one
+//      `rank_ic_daily` row per (family, rank variant), and the bootstrap summaries as `replay_stat`
+//      metric `rank_ic`. Descriptive and read only: a failure here only degrades the run.
 // Preconditions as 2b: market mode `full` (or `data_only` only as a replay against a non-production
 // database, D-066 / BLD-024), D a trading session, and batch 2b of D `success` or `degraded`. Anything
 // else records a `skipped` run and touches no table. The status is `degraded` when the re-check found
 // violations or a stage had to be partial; `failed` carries the stage code.
 import type { Client } from "@libsql/client";
 import {
-  isTradingDay,
+  gateDayStatus,
   sessionsBetween,
   type CalendarRow,
   type MarketHours,
@@ -55,8 +58,11 @@ import {
   type NarrativeRow,
 } from "@/lib/review/sections";
 import { syncForwardLedger, type ForwardResult } from "./forwardLedger";
+import { runStatusLooks } from "@/lib/cortex/look";
+import { scoreOutcomes } from "@/lib/cortex/stage";
 import { loadAgentParams, type AgentParams } from "./params";
 import { wordsKey } from "@/lib/learning/learnFacts";
+import { liveRankIc } from "@/lib/learning/rankIcStage";
 import { signalsKey } from "./batch2b";
 import { notifyIncident, type NotifyCtx } from "@/lib/incidents/notify";
 import type { Family } from "./families";
@@ -82,6 +88,12 @@ export type ReviewOptions = {
   readonly d: string;
   /** An explicit replay against a NON-production database (D-066 / BLD-024). */
   readonly replay?: boolean;
+  /**
+   * D-711: the live entry points set this so a weekday the calendar has no row for is skipped as
+   * `calendar_missing` (fail safe). Off (default): the looser "not a holiday row" rule that
+   * replays and the synthetic-date tests rely on.
+   */
+  readonly strictCalendar?: boolean;
   /** Stamps run_record, app_log and the arena_control row only; never a number. */
   readonly now: () => string;
   readonly commitSha?: string | null;
@@ -106,6 +118,7 @@ export type ReviewStats = {
   killTriggered: number;
   killLooksPerYear: number | null;
   evidenceRows: number;
+  rankIcRows: number;
 };
 
 export type ReviewResult = {
@@ -134,6 +147,7 @@ function emptyStats(): ReviewStats {
     killTriggered: 0,
     killLooksPerYear: null,
     evidenceRows: 0,
+    rankIcRows: 0,
   };
 }
 
@@ -784,7 +798,9 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
   if (mode === "off") return recordSkip(db, o, "market_off");
   if (mode !== "full" && o.replay !== true) return recordSkip(db, o, "data_only_guard");
   const calendar = o.calendar ?? (await loadCalendar(db, o.market));
-  if (!isTradingDay(o.d, calendar)) return recordSkip(db, o, "non_trading_day");
+  const dayState = gateDayStatus(o.d, calendar, o.strictCalendar);
+  if (dayState === "missing") return recordSkip(db, o, "calendar_missing"); // D-711 fail safe
+  if (dayState !== "open") return recordSkip(db, o, "non_trading_day");
   if (!(await decidedOk(db, o.market, o.d))) return recordSkip(db, o, "no_2b_success");
   const hours: MarketHours = {
     tz: text(market.rows[0]!.tz),
@@ -930,7 +946,83 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
       ),
     );
 
-    const status: ReviewStatus = rc.violations > 0 || recostFailed ? "degraded" : "success";
+    stage = "rank_ic";
+    let rankIcFailed = false;
+    try {
+      const ric = await liveRankIc(db, {
+        market: o.market,
+        d: o.d,
+        calendar,
+        hours,
+        params,
+        replay: o.replay === true,
+        now: o.now(),
+      });
+      stats.rankIcRows = ric.rows;
+      stats.statRows += await putStats(
+        db,
+        ric.stats.map((x) => jsonRow(key, o.d, x.scope, "rank_ic", x.value)),
+      );
+    } catch (error) {
+      // descriptive rows: a failure must not fail the review (the kill switch and evidence have run)
+      rankIcFailed = true;
+      await db.execute({
+        sql: "INSERT INTO app_log (at, level, source, message, run_id) VALUES (?, 'warn', ?, ?, ?)",
+        args: [
+          o.now(),
+          REVIEW_JOB,
+          `rank IC not written on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
+            0,
+            LOG_MESSAGE_MAX,
+          ),
+          runId,
+        ],
+      });
+    }
+
+    // M15 P2 (CTX-023, CTX-054): would-have outcomes of every Cortex decision whose hold has closed.
+    // Descriptive and idempotent; a failure only logs (the run's status does not depend on it).
+    stage = "cortex_outcome";
+    try {
+      await scoreOutcomes(db, { market: o.market, d: o.d, params, now: o.now });
+    } catch (error) {
+      await db.execute({
+        sql: "INSERT INTO app_log (at, level, source, message, run_id) VALUES (?, 'warn', ?, ?, ?)",
+        args: [
+          o.now(),
+          REVIEW_JOB,
+          `cortex outcomes not scored on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
+            0,
+            LOG_MESSAGE_MAX,
+          ),
+          runId,
+        ],
+      });
+    }
+
+    // V2-S1 (CTX-053, CTX-082, D-700): the quarterly live look at each family's status, after the
+    // outcomes above. One look per family per quarter (a ledger cell), never a promotion outside the
+    // CTX-053 rules; a failure only logs.
+    stage = "cortex_status_look";
+    try {
+      await runStatusLooks(db, { market: o.market, d: o.d, now: o.now() });
+    } catch (error) {
+      await db.execute({
+        sql: "INSERT INTO app_log (at, level, source, message, run_id) VALUES (?, 'warn', ?, ?, ?)",
+        args: [
+          o.now(),
+          REVIEW_JOB,
+          `cortex status look failed on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
+            0,
+            LOG_MESSAGE_MAX,
+          ),
+          runId,
+        ],
+      });
+    }
+
+    const status: ReviewStatus =
+      rc.violations > 0 || recostFailed || rankIcFailed ? "degraded" : "success";
     await finishRun(db, runId, {
       status,
       itemsProcessed: stats.cohorts,
@@ -945,7 +1037,13 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
     return emptyResult(
       o,
       status,
-      rc.violations > 0 ? "invariant_violations" : recostFailed ? "recost_failed" : null,
+      rc.violations > 0
+        ? "invariant_violations"
+        : recostFailed
+          ? "recost_failed"
+          : rankIcFailed
+            ? "rank_ic_failed"
+            : null,
       runId,
       stats,
     );

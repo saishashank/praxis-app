@@ -7,6 +7,8 @@
 import { clamp, n } from "@/components/charts/format";
 import { ChartTable } from "@/components/charts";
 import { Card } from "@/components/ui/Card";
+import { Pill } from "@/components/ui/Pill";
+import { StatusStrip as StatusBar } from "@/components/ui/StatusStrip";
 import { EmptyState, ShowDetails } from "@/components/ui/States";
 import { formatMelbourne, type TimeFormat } from "@/lib/health/format";
 import type { AttentionItem } from "@/lib/health/attention";
@@ -34,20 +36,15 @@ export type SnoozeInfo = {
   maxDays: number;
 };
 
-const STATE_TEXT: Record<string, string> = {
-  healthy: "text-breaker-green",
-  attention: "text-breaker-amber",
-  down: "text-breaker-red",
-};
+// UXR-045: a status pill that always carries the word (never colour alone) plus the state mark.
+const PILL_VALUE: Record<string, string> = { healthy: "ok", attention: "warn", down: "bad" };
 
 function StateBadge({ state }: { state: string }) {
   return (
-    <span
-      data-state={state}
-      className={`inline-flex shrink-0 items-center gap-1 rounded-md bg-surface-2 px-2 py-0.5 text-xs font-semibold ${STATE_TEXT[state] ?? ""}`}
-    >
-      <span aria-hidden="true">{STATE_MARK[state]}</span>
-      {STATE_WORD[state] ?? state}
+    <span data-state={state} className="inline-flex shrink-0">
+      <Pill kind="status" value={PILL_VALUE[state] ?? "neutral"}>
+        <span aria-hidden="true">{STATE_MARK[state]}</span> {STATE_WORD[state] ?? state}
+      </Pill>
     </span>
   );
 }
@@ -369,18 +366,6 @@ export function ControlRoom({
           now, so the parts shown may be out of date. Last check: {checked}.
         </p>
       )}
-      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
-        <div className="flex flex-col items-center gap-2">
-          <ControlRoomRing components={h.components} healthy={h.healthy} total={h.total} />
-          <p className="m-0 text-sm text-text-muted">Last check: {checked}</p>
-        </div>
-        <ol aria-label="Numbered readouts" className="m-0 flex min-w-0 flex-col gap-2 p-0">
-          {h.components.map((c, i) => (
-            <Readout key={c.id} index={i} c={c} owner={owner} checked={checked} snooze={snooze} />
-          ))}
-        </ol>
-      </div>
-
       <Card title="Status briefing" data-briefing="">
         <ul className="m-0 flex flex-col gap-1 p-0 text-sm">
           {lines.map((l) => (
@@ -394,6 +379,38 @@ export function ControlRoom({
         </p>
       </Card>
 
+      <StatusBar
+        label="Health overview"
+        items={[
+          {
+            label: "Status ring",
+            value: (
+              <ControlRoomRing components={h.components} healthy={h.healthy} total={h.total} />
+            ),
+          },
+          { label: "Healthy", value: `${h.healthy} of ${h.total}` },
+          {
+            label: "Needs attention",
+            value: String(h.components.filter((c) => c.state === "attention").length),
+          },
+          { label: "Down", value: String(h.components.filter((c) => c.state === "down").length) },
+          { label: "Last check", value: checked },
+        ]}
+      />
+      <ol aria-label="Numbered readouts" className="m-0 flex min-w-0 flex-col gap-2 p-0">
+        {h.components.map((c, i) => (
+          <Readout key={c.id} index={i} c={c} owner={owner} checked={checked} snooze={snooze} />
+        ))}
+      </ol>
+
+      <p className="m-0 text-sm text-text-muted" data-testid="steelman-health">
+        {h.steelman.text}
+      </p>
+
+      <p className="m-0 text-sm text-text-muted" data-testid="experts-health">
+        {h.experts.text}
+      </p>
+
       <Card title="Free-tier limits">
         {model.gauges === null ? (
           <p className="m-0 text-sm text-text-muted">
@@ -402,7 +419,7 @@ export function ControlRoom({
               : "A free-tier limit needs the Owner. The numbers are shown to the Owner."}
           </p>
         ) : model.gauges.length === 0 ? (
-          <EmptyState title="No usage numbers yet">
+          <EmptyState motif="check" hue="home" title="No usage numbers yet">
             The meters fill in as the system runs.
           </EmptyState>
         ) : (

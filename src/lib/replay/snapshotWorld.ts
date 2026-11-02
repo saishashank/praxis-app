@@ -7,12 +7,34 @@
 // the world reports no event coverage and both sources off: F4 runs as its "no event filter"
 // variant, and the event/short-interest families output BLOCKED-DATA until those inputs exist
 // (ARN-082 labels this). No clock, no randomness.
-import type { ViewBar } from "@/lib/agents/decisionView";
-import { adjustBars, barsNeeded, splitActionsByCode } from "@/lib/agents/candidates";
+import {
+  AU_TIME_ZONE,
+  decisionCutoffUtc,
+  type IndexViewBar,
+  type ViewBar,
+} from "@/lib/agents/decisionView";
+import { addDays, marketDate, type CalendarRow } from "@/lib/data/calendar";
+import type {
+  HaltRow,
+  IndexChangeRow as PitIndexChangeRow,
+  IndustryRow as PitIndustryRow,
+  MacroRow,
+  ShortPoint,
+  TierRow,
+} from "@/lib/cortex/pit/types";
+import { announcementIngestBound } from "@/lib/sentinel/cutoffPoll";
+import {
+  adjustBars,
+  barsNeeded,
+  splitActionsByCode,
+  splitsKnownOn,
+  withReferenceData,
+} from "@/lib/agents/candidates";
 import {
   buildCodeFacts,
   type CodeFacts,
   type FamilyInputs,
+  type IndexChangeFact,
   type Tier,
 } from "@/lib/agents/families";
 import { logReturns, microToFloat, stdevFloat, volumeRatio } from "@/lib/agents/indicators";
@@ -25,7 +47,7 @@ import { floorRat } from "@/lib/money/round";
 import type { PoolCode } from "./controlLibrary";
 import type { CohortReplaySource } from "./cohortReplay";
 import type { PositionFacts } from "./returns";
-import { loadSnapshot } from "./snapshot";
+import { loadSnapshot, type SnapshotAnnouncement } from "./snapshot";
 
 type LoadedSnapshot = ReturnType<typeof loadSnapshot>;
 
@@ -35,6 +57,28 @@ const RATIO_LOOKBACK = 4; // threshold-ok: last five sessions of volume ratios, 
 
 type UniverseRow = { d: string; code: string; tier: Tier; halted: number };
 type IndexRow = { index_code: string; d: string; c_micro: number };
+type IndustryRow = {
+  code: string;
+  industry: string;
+  source: string;
+  as_of: string;
+  loaded_at?: string | null;
+};
+type IndexChangeRow = {
+  code: string;
+  index_name: string;
+  kind: "add" | "delete";
+  announced: string | null;
+  effective: string;
+  loaded_at?: string | null;
+};
+
+/** D-285: a reference row is known by a cut-off when it carries no load time or was loaded by then. */
+const loadedBy = (loadedAt: string | null | undefined, cutMs: number): boolean => {
+  if (loadedAt === null || loadedAt === undefined) return true;
+  const t = Date.parse(loadedAt);
+  return Number.isFinite(t) && t <= cutMs;
+};
 
 /** price factor (<1 for a split) -> shares-per-share ratio as a small integer pair, or null. */
 export function ratioPayload(type: string, factor: number): { new: number; old: number } | null {
@@ -63,9 +107,31 @@ export function corpRecordsOf(snap: LoadedSnapshot): CorpActionRecord[] {
       type: a.type,
       exDate: a.ex_date,
       payload: p,
+      knownAt: a.known_at ?? null,
     });
   }
   return out;
+}
+
+/**
+ * GL-05: is the announcement usable by the decision it belongs to? That is the session whose cut-off
+ * follows its publication (the same day before the cut-off, else the next day). A row without
+ * first_ingested_at is legacy and always visible. The bound is the live rule: the day's stored marker
+ * when it lies in [cut-off, cut-off + 4 min], else cut-off + 4 min.
+ */
+export function snapshotAnnouncementVisible(
+  a: SnapshotAnnouncement,
+  markers: ReadonlyMap<string, string>,
+  decisionCutoffHhmm: string,
+): boolean {
+  if (a.first_ingested_at === null || a.first_ingested_at === undefined) return true;
+  let day = marketDate(new Date(a.published_at), AU_TIME_ZONE);
+  if (a.published_at >= decisionCutoffUtc(day, decisionCutoffHhmm)) day = addDays(day, 1);
+  const bound = announcementIngestBound(
+    markers.get(day) ?? null,
+    decisionCutoffUtc(day, decisionCutoffHhmm),
+  );
+  return a.first_ingested_at <= bound;
 }
 
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -128,11 +194,25 @@ export class SnapshotWorld implements CohortReplaySource {
     ReadonlyMap<string, { tier: Tier; active: boolean }>
   >();
   private readonly need: number;
+  /** FAM-006: industry rows by code (finer manual class and the ASX group), oldest as_of first. */
+  private readonly industries = new Map<string, IndustryRow[]>();
+  /** DAT-234: index changes by code, oldest effective date first. */
+  private readonly indexChanges = new Map<
+    string,
+    { fact: IndexChangeFact; loaded: string | null }[]
+  >();
   readonly codes: readonly string[];
   /** Announcement days of the snapshot (DAT-125 list input). */
   readonly announcements: readonly { readonly code: string; readonly d: string }[];
   /** Delisting dates by code, from the confirmed corporate actions of type `delisting`. */
   readonly delistings: ReadonlyMap<string, string>;
+  /** M15 P3: the snapshot's raw tables the Cortex replay world is built from (read-only views). */
+  private readonly calendarAll: CalendarRow[];
+  private readonly indexBarsBy = new Map<string, IndexViewBar[]>();
+  private readonly shortsBy = new Map<string, ShortPoint[]>();
+  private readonly macroBy = new Map<string, MacroRow[]>();
+  private readonly cortexActions = new Map<string, CorpActionRecord[]>();
+  private readonly hasIndexChanges: boolean;
 
   constructor(
     snap: LoadedSnapshot,
@@ -171,9 +251,17 @@ export class SnapshotWorld implements CohortReplaySource {
       list.push(r);
     }
     for (const l of this.tiers.values()) l.sort((a, b) => cmp(a.d, b.d));
-    this.announcements = (
-      snap.tables.announcements as unknown as { code: string; published_at: string }[]
-    ).map((a) => ({ code: a.code, d: a.published_at.slice(0, 10) })); // threshold-ok: ISO date prefix length
+    // GL-05: an announcement first stored after the bound live had for its deciding session is not
+    // used (the stored marker of that day, else cut-off + 4 min); rows without first_ingested_at stay.
+    const markers = new Map(
+      ((snap.tables.cutoff_polls ?? []) as unknown as { d: string; at: string }[]).map((m) => [
+        m.d,
+        m.at,
+      ]),
+    );
+    this.announcements = (snap.tables.announcements as unknown as SnapshotAnnouncement[])
+      .filter((a) => snapshotAnnouncementVisible(a, markers, o.params.decisionCutoff))
+      .map((a) => ({ code: a.code, d: a.published_at.slice(0, 10) })); // threshold-ok: ISO date prefix length
     const dl = new Map<string, string>();
     for (const a of snap.corporateActions) {
       if (a.type === "delisting" && (dl.get(a.code) ?? "9999") > a.ex_date)
@@ -183,7 +271,151 @@ export class SnapshotWorld implements CohortReplaySource {
     this.actions = corpRecordsOf(snap);
     this.splits = splitActionsByCode(this.actions).byCode;
     this.need = barsNeeded(o.params);
+    // reference data (older snapshots have neither table: they read as empty, v1 behaviour)
+    for (const r of (snap.tables.industry ?? []) as unknown as IndustryRow[]) {
+      const list = this.industries.get(r.code);
+      if (list === undefined) this.industries.set(r.code, [r]);
+      else list.push(r);
+    }
+    for (const list of this.industries.values()) list.sort((a, b) => cmp(a.as_of, b.as_of));
+    for (const r of (snap.tables.index_changes ?? []) as unknown as IndexChangeRow[]) {
+      const fact: IndexChangeFact = {
+        indexName: r.index_name,
+        kind: r.kind,
+        announced: r.announced,
+        effective: r.effective,
+      };
+      const entry = { fact, loaded: r.loaded_at ?? null };
+      const list = this.indexChanges.get(r.code);
+      if (list === undefined) this.indexChanges.set(r.code, [entry]);
+      else list.push(entry);
+    }
+    for (const list of this.indexChanges.values()) {
+      list.sort(
+        (a, b) =>
+          cmp(a.fact.effective, b.fact.effective) || cmp(a.fact.indexName, b.fact.indexName),
+      );
+    }
     this.buildRegime(snap.tables.index_bars as unknown as IndexRow[]);
+    // M15 P3: tables for the Cortex as-of world (all additive; an older snapshot reads as empty)
+    this.calendarAll = (
+      snap.tables.calendar as unknown as {
+        d: string;
+        kind: CalendarRow["kind"];
+        close_time: string | null;
+        confirmed: 0 | 1;
+      }[]
+    )
+      .map((r) => ({ d: r.d, kind: r.kind, close_time: r.close_time, confirmed: r.confirmed }))
+      .sort((a, b) => cmp(a.d, b.d));
+    for (const r of snap.indexBars) {
+      const list = this.indexBarsBy.get(r.index_code);
+      const bar = { d: r.d, close: BigInt(r.c_micro) };
+      if (list === undefined) this.indexBarsBy.set(r.index_code, [bar]);
+      else list.push(bar);
+    }
+    for (const list of this.indexBarsBy.values()) list.sort((a, b) => cmp(a.d, b.d));
+    for (const r of snap.shortInterest) {
+      const list = this.shortsBy.get(r.code);
+      const pt = { asOf: r.as_of, ppm: r.ppm };
+      if (list === undefined) this.shortsBy.set(r.code, [pt]);
+      else list.push(pt);
+    }
+    for (const list of this.shortsBy.values()) list.sort((a, b) => cmp(a.asOf, b.asOf));
+    for (const r of snap.macroSeries) {
+      const list = this.macroBy.get(r.series);
+      const row: MacroRow =
+        r.published_at === null || r.published_at === undefined
+          ? { obsD: r.obs_d, value: r.value }
+          : { obsD: r.obs_d, value: r.value, publishedAt: r.published_at };
+      if (list === undefined) this.macroBy.set(r.series, [row]);
+      else list.push(row);
+    }
+    for (const list of this.macroBy.values()) list.sort((a, b) => cmp(a.obsD, b.obsD));
+    // D-321: provenance from the snapshot's corporate-action evidence. A row without the columns is a
+    // legacy vendor row (confirmed, vendor-only): it adjusts prices (CTX-050) but is never a candidate
+    // and never re-bases a Cortex stop. Rows are in file order (code, ex_date, action_id).
+    const provenanceBy = new Map<string, { sources: string[]; status: string }>();
+    for (const a of snap.corporateActions) {
+      provenanceBy.set(`snap:${a.code}:${a.ex_date}:${a.action_id}`, {
+        sources:
+          a.sources === null || a.sources === undefined || a.sources === ""
+            ? ["vendor"]
+            : a.sources.split(","),
+        status: a.status ?? "confirmed",
+      });
+    }
+    for (const rec of this.actions) {
+      const prov = provenanceBy.get(rec.id)!;
+      const list = this.cortexActions.get(rec.code);
+      const withProv = { ...rec, ...prov } as CorpActionRecord;
+      if (list === undefined) this.cortexActions.set(rec.code, [withProv]);
+      else list.push(withProv);
+    }
+    this.hasIndexChanges = this.indexChanges.size > 0;
+  }
+
+  // ---- M15 P3: the Cortex as-of world's inputs (cortexReplay.ts assembles them) -----------------------------
+
+  /** Calendar rows of the snapshot (sessions, holidays, early closes), oldest first. */
+  calendarRows(): readonly CalendarRow[] {
+    return this.calendarAll;
+  }
+
+  /** Raw bars of the code, oldest first (empty when unknown). */
+  barsOf(code: string): readonly ViewBar[] {
+    return this.bars.get(code) ?? [];
+  }
+
+  /** Tier rows of the code (universe snapshots), oldest first. */
+  tierRowsOf(code: string): readonly TierRow[] {
+    return (this.tiers.get(code) ?? []).map((r) => ({ d: r.d, tier: r.tier }));
+  }
+
+  /** Halted flags of the code per universe row. */
+  haltRowsOf(code: string): readonly HaltRow[] {
+    return (this.tiers.get(code) ?? []).map((r) => ({ d: r.d, halted: r.halted === 1 }));
+  }
+
+  /** Index closes of one index (AXJO, GSPC, VIX), oldest first; empty when absent. */
+  indexBarsOf(indexCode: string): readonly IndexViewBar[] {
+    return this.indexBarsBy.get(indexCode) ?? [];
+  }
+
+  /** ASIC short-interest points by code, oldest first (empty map: the table is absent). */
+  shortInterest(): ReadonlyMap<string, readonly ShortPoint[]> {
+    return this.shortsBy;
+  }
+
+  /** Macro observations by series, oldest first (empty map: the table is absent). */
+  macroSeries(): ReadonlyMap<string, readonly MacroRow[]> {
+    return this.macroBy;
+  }
+
+  /** Quantity-changing actions by code with their provenance (D-321), for the Cortex corporate-action state. */
+  cortexCorpActions(): ReadonlyMap<string, readonly CorpActionRecord[]> {
+    return this.cortexActions;
+  }
+
+  /** Industry rows of the code as the Cortex view reads them (the newest manual class, else the group). */
+  industryRowsOf(code: string): readonly PitIndustryRow[] {
+    return (this.industries.get(code) ?? []).map((r) => ({
+      asOf: r.as_of,
+      industry: r.industry,
+    }));
+  }
+
+  /** The DAT-234 list per code with its load stamp; null when the snapshot carries none (G08 fails closed). */
+  indexChangeRowsOf(): ReadonlyMap<string, readonly PitIndexChangeRow[]> | null {
+    if (!this.hasIndexChanges) return null;
+    const out = new Map<string, PitIndexChangeRow[]>();
+    for (const [code, list] of this.indexChanges) {
+      out.set(
+        code,
+        list.map((e) => ({ ...e.fact, knownAt: e.loaded })),
+      );
+    }
+    return out;
   }
 
   private buildRegime(rows: IndexRow[]): void {
@@ -263,6 +495,11 @@ export class SnapshotWorld implements CohortReplaySource {
     return { tier: r.tier, halted: list[hit >= 0 ? hit : 0]!.d === d && r.halted === 1 };
   }
 
+  /** GL-02: the decision cut-off (UTC) of session `d`, as batch 2b and the cohort replay derive it. */
+  decisionCutoffOf(d: string): string {
+    return decisionCutoffUtc(d, this.o.params.decisionCutoff);
+  }
+
   corpActions(code: string): readonly CorpActionRecord[] {
     return this.actions.filter((a) => a.code === code);
   }
@@ -272,16 +509,42 @@ export class SnapshotWorld implements CohortReplaySource {
     return i === undefined ? null : this.bars.get(code)![i]!;
   }
 
+  /** The code's industry as of `d`: the newest manual class, else the ASX industry group. */
+  private industryOn(code: string, d: string): string | null {
+    const list = this.industries.get(code);
+    if (list === undefined) return null;
+    const cutMs = Date.parse(this.decisionCutoffOf(d));
+    let cls: string | null = null;
+    let grp: string | null = null;
+    for (const r of list) {
+      if (r.source === "class" && r.as_of <= d && loadedBy(r.loaded_at, cutMs)) cls = r.industry;
+      if (r.source === "instrument") grp = r.industry;
+    }
+    return cls ?? grp;
+  }
+
+  /** DAT-234 index changes of the code that were loaded by the decision cut-off of `d` (D-285). */
+  private indexChangesOn(code: string, d: string): IndexChangeFact[] | undefined {
+    const list = this.indexChanges.get(code);
+    if (list === undefined) return undefined;
+    const cutMs = Date.parse(this.decisionCutoffOf(d));
+    return list.filter((e) => loadedBy(e.loaded, cutMs)).map((e) => e.fact);
+  }
+
   private factsAt(code: string, i: number): CodeFacts {
     const d = this.bars.get(code)![i]!.d;
     let f = this.memo.get(d, code);
     if (f === undefined) {
       const raw = this.bars.get(code)!.slice(Math.max(0, i + 1 - this.need), i + 1);
-      const known = (this.splits.get(code) ?? []).filter((a) => a.exDate <= d);
+      const known = splitsKnownOn(this.splits.get(code) ?? [], d, this.o.params.decisionCutoff);
       const { tier, halted } = this.tierOn(code, d);
-      f = buildCodeFacts(
-        { code, tier, adjusted: adjustBars(raw, known), raw, halted },
-        this.o.params,
+      f = withReferenceData(
+        buildCodeFacts(
+          { code, tier, adjusted: adjustBars(raw, known), raw, halted },
+          this.o.params,
+        ),
+        this.industryOn(code, d),
+        this.indexChangesOn(code, d),
       );
       this.memo.set(d, code, f);
     }
@@ -305,7 +568,7 @@ export class SnapshotWorld implements CohortReplaySource {
     if (i === undefined) return null;
     const f = this.factsAt(code, i);
     const raw = this.bars.get(code)!.slice(Math.max(0, i + 1 - this.need), i + 1);
-    const known = (this.splits.get(code) ?? []).filter((a) => a.exDate <= d);
+    const known = splitsKnownOn(this.splits.get(code) ?? [], d, this.o.params.decisionCutoff);
     const volumes = adjustBars(raw, known).map((b) => b.volume);
     const ratios = [];
     for (let j = RATIO_LOOKBACK; j >= 0; j -= 1) {

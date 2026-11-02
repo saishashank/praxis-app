@@ -13,9 +13,14 @@ import {
   type WatchdogStatus,
 } from "@/lib/watchdog/state";
 import { marketDate, type CalendarSummary } from "@/lib/data/calendar";
+import { unverifiedMoneyConstants } from "@/lib/golive/moneyConstants";
+import { uncoveredByApproval } from "@/lib/golive/moneyApprovalRead";
 import { calendarYearSummary } from "@/lib/data/calendarAdmin";
 import { loadControlsView, type ControlsView } from "@/lib/data/controls";
+import { pickAlertsHealth } from "@/lib/alerts/pick/poll";
+import { intradayScanHealth } from "@/lib/intraday/run";
 import { isStale, JOBS } from "./jobs";
+import { workerRouteLines } from "./routePosts";
 import { getQualitySummary, type QualitySummary } from "./quality";
 
 export const SELFCHECK_JOB = "credential-selfcheck-vercel";
@@ -31,6 +36,8 @@ export type JobSummary = {
   stale: boolean;
   state: JobState;
   note?: string; // shown when there is no data
+  /** R4-I3 (D-833): a capped arena catch-up is still open (shown whatever the state). */
+  attention?: string;
   errorSummary?: string | null; // Owner only
 };
 
@@ -58,6 +65,9 @@ export type HealthSummary = {
   watchdog: WatchdogSummary;
   openIncidents?: IncidentRow[] | null; // Owner only; null = could not be read
   heartbeatIncidents?: OpenS2[] | null; // Owner only; open S2 incidents (PLT-074)
+  intradayLines?: string[] | null; // Owner only; pick-alert poll and intraday scan lines (V2-S3)
+  routeLines?: string[] | null; // Owner only; failed Worker route posts today per slot (V2-I4, D-773)
+  moneyUnverified?: string[]; // Owner only; [VERIFY] money constants not yet approved (D-710)
   secrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only (Vercel)
   workerSecrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only (Worker)
 };
@@ -129,6 +139,20 @@ async function getQuality(mainDb: Client, role: Role): Promise<QualitySummary | 
   }
 }
 
+/** R4-I3 (D-833): the text for a latest arena-close record left by a capped catch-up, else null. */
+export function cappedCatchUp(
+  job: string,
+  last: { status: RunStatus; details?: unknown } | undefined,
+): string | null {
+  if (job !== "arena-close" || last === undefined || last.status !== "skipped") return null;
+  const d = last.details;
+  if (typeof d !== "object" || d === null) return null;
+  const r = d as { reason?: unknown; closed?: unknown; remaining?: unknown };
+  if (r.reason !== "catch_up_capped") return null;
+  const n = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return `Catch-up capped: ${n(r.closed)} closed, ${n(r.remaining)} still to close. Dispatch Arena close again.`;
+}
+
 export async function getHealthSummary(
   mainDb: Client,
   now: Date,
@@ -152,6 +176,8 @@ export async function getHealthSummary(
     else state = "ok";
     const s: JobSummary = { job: def.job, label: def.label, lastRun, lastSuccessAt, stale, state };
     if (state === "no data") s.note = def.noDataNote;
+    const capped = cappedCatchUp(def.job, row?.last);
+    if (capped !== null) s.attention = capped;
     if (owner) s.errorSummary = row?.last.errorSummary ?? null;
     return s;
   });
@@ -175,6 +201,26 @@ export async function getHealthSummary(
     quality: await getQuality(mainDb, role),
   };
   if (owner) {
+    try {
+      // R2-S2: a figure the Owner attested on the go-live page no longer counts as waiting.
+      summary.moneyUnverified = await uncoveredByApproval(mainDb, unverifiedMoneyConstants());
+    } catch {
+      summary.moneyUnverified = unverifiedMoneyConstants();
+    }
+    try {
+      const lines = [
+        ...(await pickAlertsHealth(mainDb, now)),
+        ...(await intradayScanHealth(mainDb, now)),
+      ];
+      summary.intradayLines = lines;
+    } catch {
+      summary.intradayLines = null; // intraday trouble never hides job status
+    }
+    try {
+      summary.routeLines = await workerRouteLines(mainDb, now);
+    } catch {
+      summary.routeLines = null; // route trouble never hides job status
+    }
     try {
       summary.openIncidents = await listOpenS1(mainDb);
     } catch {

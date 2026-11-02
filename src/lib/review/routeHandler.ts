@@ -15,7 +15,10 @@ import type { EmailEnvVars, EmailProvider } from "@/lib/email/provider";
 import { isValidSecret, verifySignedRequest } from "@/lib/security/hmac";
 import type { NonceStore } from "@/lib/security/replay";
 import { appEnvironment } from "@/lib/workerReport/handler";
-import { runReviewSend, type ReviewSendResult } from "./send";
+import { recordOutcomes } from "@/lib/intraday/outcome";
+import { measureCandidates } from "@/lib/intraday/measure";
+import { evaluateIntradayStream } from "@/lib/intraday/evaluator";
+import { MARKET, runReviewSend, type ReviewSendResult } from "./send";
 
 export const EVENING_REVIEW_PURPOSE = "evening-review";
 export const MAX_BODY_BYTES = 2048;
@@ -28,6 +31,8 @@ export type ReviewRouteDeps = {
   store: NonceStore;
   nowSec: () => number;
   db: () => Client;
+  /** The auth database, for the Owner's `intraday_candidate_emails`; absent = default on. */
+  auth?: () => Client;
   provider?: EmailProvider;
   sleep?: (ms: number) => Promise<void>;
 };
@@ -36,6 +41,26 @@ const json = (status: number, body: unknown) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
 type Caller = "worker" | "watchdog";
+
+/** EML-042: the optional candidate section follows the Owner's `intraday_candidate_emails`
+ * (stored only once chosen, D-452; absent or unreadable = on). */
+export async function ownerCandidatesOn(auth: (() => Client) | undefined): Promise<boolean> {
+  if (!auth) return true;
+  try {
+    const r = await auth().execute(
+      "SELECT p.prefs_json AS prefs_json FROM app_user u JOIN user_preference p ON p.user_id = u.id WHERE u.role = 'owner' ORDER BY u.id LIMIT 1",
+    );
+    if (!r.rows.length || r.rows[0].prefs_json === null) return true;
+    const j: unknown = JSON.parse(String(r.rows[0].prefs_json));
+    return !(
+      typeof j === "object" &&
+      j !== null &&
+      (j as Record<string, unknown>).intraday_candidate_emails === "off"
+    );
+  } catch {
+    return true;
+  }
+}
 
 export function createEveningReviewHandler(deps: ReviewRouteDeps) {
   return async function handle(req: Request): Promise<Response> {
@@ -102,13 +127,30 @@ export function createEveningReviewHandler(deps: ReviewRouteDeps) {
       const yesterday = melbourneDate(new Date(nowSec * 1000 - DAY_MS));
       if (d !== today && d !== yesterday) return json(400, { error: "bad_request" });
 
+      const db = deps.db();
+      // M17 WP6 (D-399): hand the intraday candidates their outcome (read-after-run, idempotent). An
+      // optional step: a failure never blocks the evening review.
+      try {
+        await recordOutcomes(db, MARKET, d);
+      } catch {
+        /* the review goes out without outcomes; the next run records them */
+      }
+      // M17 WP9 (D-399, D-466): measure the candidates whose horizon has completed, then run the
+      // VAL-118 evaluator; own try/catch, a failure never blocks the review.
+      try {
+        await measureCandidates(db, MARKET, d);
+        await evaluateIntradayStream(db, MARKET, new Date(nowSec * 1000).toISOString());
+      } catch {
+        /* measurement is retried by the next evening run */
+      }
       const r: ReviewSendResult = await runReviewSend(
         {
-          db: deps.db(),
+          db,
           env: deps.env,
           now: () => new Date(nowSec * 1000),
           provider: deps.provider,
           sleep: deps.sleep,
+          pickCandidatesOn: await ownerCandidatesOn(deps.auth),
         },
         d,
       );

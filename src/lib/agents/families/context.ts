@@ -2,7 +2,8 @@
 // code and group, tier return percentiles, rank ordering and rule-trace helpers. Pure.
 import { cmpRat, makeRational, type Rational } from "@/lib/money/rational";
 import { ratFromNumber, type AgentParams } from "../params";
-import { tierPercentile } from "../indicators";
+import { lookbackReturn, tierPercentile } from "../indicators";
+import { rankScores, type RankVariant } from "./rankScore";
 import type {
   Arn011Thresholds,
   Candidate,
@@ -10,6 +11,7 @@ import type {
   EventFact,
   FamilyInputs,
   FamilyOptions,
+  IndexChangeFact,
   RuleTrace,
   SpecConstants,
   Tier,
@@ -40,6 +42,8 @@ export type EvalContext = {
   readonly f6Disabled: ReadonlySet<string>;
   /** F4 event filter switched off (ARN-076 weekly with/without; false live). */
   readonly f4EventFilterOff?: boolean;
+  /** O-49: also emit F5 on U3 as the descriptive `F5-U3-stress` variant (replay only). */
+  readonly f5StressU3: boolean;
   /** Rule-version id stamped on each family's candidates (default: the v1 id, M6 T8). */
   readonly ruleVersions: Readonly<Partial<Record<Family, string>>>;
   /** Codes sorted ascending (determinism). */
@@ -47,8 +51,27 @@ export type EvalContext = {
   readonly groupsByCode: ReadonlyMap<string, readonly EventGroupFact[]>;
   /** 6-month return percentile within the code's tier; null = not computable. */
   readonly returnPercentile: ReadonlyMap<string, Rational | null>;
+  /**
+   * F1's relative-strength percentile (KB-081): the same map as `returnPercentile` under the v1
+   * settings, a recomputed one when `f1_return_window_sessions` or `f1_momentum_variant` differ.
+   */
+  readonly f1Percentile: ReadonlyMap<string, Rational | null>;
   sessionsAgo(day: string): number | null;
+  /**
+   * KB-081 rank variants: the rank-key value of `code` under a non-v1 variant from `rankScores`
+   * (null = not scored). Memoised per (family, variant).
+   */
+  variantRank(family: Family, variant: RankVariant, code: string): Rational | null;
+  /**
+   * DAT-234 (D-238): an index add or delete of `code` whose announcement or effective date lies
+   * within `index_change_window_sessions` of `day0` and that was known by D, else null.
+   */
+  indexChangeNear(code: string, day0: string): IndexChangeFact | null;
 };
+
+/** Sessions skipped by the F1 `skip_month_u2` momentum variant (one month). */
+export const SKIP_MONTH_SESSIONS = 21; // threshold-ok: KB-081 skip-month convention (about one month)
+const MS_PER_DAY = 86_400_000; // threshold-ok: milliseconds per day
 
 const cmpStr = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -111,28 +134,95 @@ export function createContext(
     groupsByCode.set(code, groups);
   }
 
-  // tier percentiles of the 6-month return (AGT-030): ties count half, self excluded
-  const returnPercentile = new Map<string, Rational | null>();
-  const tiers = new Map<Tier, CodeFacts[]>();
-  for (const c of codes) {
-    const list = tiers.get(c.tier);
-    if (list === undefined) tiers.set(c.tier, [c]);
-    else list.push(c);
-  }
-  for (const list of tiers.values()) {
-    for (const c of list) {
-      const self = c.ind.returnLookback;
-      if (self === null) {
-        returnPercentile.set(c.code, null);
-        continue;
-      }
-      const others: Rational[] = [];
-      for (const o of list) {
-        if (o.code !== c.code && o.ind.returnLookback !== null) others.push(o.ind.returnLookback);
-      }
-      returnPercentile.set(c.code, tierPercentile(self, others));
+  // tier percentiles of a per-code return (AGT-030): ties count half, self excluded
+  const percentiles = (selfOf: (c: CodeFacts) => Rational | null): Map<string, Rational | null> => {
+    const out = new Map<string, Rational | null>();
+    const tiers = new Map<Tier, CodeFacts[]>();
+    for (const c of codes) {
+      const list = tiers.get(c.tier);
+      if (list === undefined) tiers.set(c.tier, [c]);
+      else list.push(c);
     }
-  }
+    for (const list of tiers.values()) {
+      for (const c of list) {
+        const self = selfOf(c);
+        if (self === null) {
+          out.set(c.code, null);
+          continue;
+        }
+        const others: Rational[] = [];
+        for (const o of list) {
+          if (o.code === c.code) continue;
+          const v = selfOf(o);
+          if (v !== null) others.push(v);
+        }
+        out.set(c.code, tierPercentile(self, others));
+      }
+    }
+    return out;
+  };
+  const returnPercentile = percentiles((c) => c.ind.returnLookback);
+  // KB-081: the F1 variants read another window / skip the last month; v1 settings reuse the map above
+  const f1Skip = p.f1.momentumVariant === "skip_month_u2";
+  const f1Percentile =
+    !f1Skip && p.f1.returnWindowSessions === p.windows.returnWindow
+      ? returnPercentile
+      : percentiles((c) =>
+          lookbackReturn(
+            f1Skip
+              ? c.closesAdj.slice(0, Math.max(0, c.closesAdj.length - SKIP_MONTH_SESSIONS))
+              : c.closesAdj,
+            p.f1.returnWindowSessions,
+          ),
+        );
+
+  // DAT-234: position of a date on the session line (dates after D count weekdays past D)
+  const pos = (day: string): number => {
+    const list = inputs.sessions;
+    if (day <= inputs.d) {
+      let lo = 0;
+      let hi = list.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (list[mid]! <= day) lo = mid + 1;
+        else hi = mid;
+      }
+      return lo;
+    }
+    let n = list.length;
+    let t = Date.parse(`${inputs.d}T00:00:00Z`);
+    const end = Date.parse(`${day}T00:00:00Z`);
+    while (t < end) {
+      t += MS_PER_DAY;
+      const dow = new Date(t).getUTCDay();
+      if (dow !== 0 && dow !== 6) n += 1; // threshold-ok: JS weekday numbers (Sunday 0, Saturday 6)
+    }
+    return n;
+  };
+  const indexWindow = p.entry.indexChangeWindowSessions;
+  const indexChangeNear = (code: string, day0: string): IndexChangeFact | null => {
+    const list = codes.find((c) => c.code === code)?.indexChanges;
+    if (list === undefined || list.length === 0) return null;
+    const at = pos(day0);
+    for (const ch of list) {
+      // neither announced nor effective by D: not yet known, so replay = live
+      if ((ch.announced ?? ch.effective) > inputs.d) continue;
+      const dates = ch.announced === null ? [ch.effective] : [ch.announced, ch.effective];
+      if (dates.some((x) => Math.abs(pos(x) - at) <= indexWindow)) return ch;
+    }
+    return null;
+  };
+
+  const scoreCache = new Map<string, ReadonlyMap<string, Rational>>();
+  const variantRank = (family: Family, variant: RankVariant, code: string): Rational | null => {
+    const key = `${family}|${variant}`;
+    let m = scoreCache.get(key);
+    if (m === undefined) {
+      m = new Map(rankScores(family, inputs, p, variant).map((r) => [r.code, floatRat(r.score)]));
+      scoreCache.set(key, m);
+    }
+    return m.get(code) ?? null;
+  };
 
   return {
     inputs,
@@ -143,11 +233,15 @@ export function createContext(
     restrictToU1: opts.restrictToU1 === true,
     f6Disabled: new Set(opts.f6DisabledClasses ?? []),
     f4EventFilterOff: opts.f4EventFilterOff === true,
+    f5StressU3: opts.f5StressU3 === true,
     ruleVersions: opts.ruleVersions ?? {},
     codes,
     groupsByCode,
     returnPercentile,
+    f1Percentile,
     sessionsAgo,
+    variantRank,
+    indexChangeNear,
   };
 }
 

@@ -9,6 +9,7 @@ export type Action =
   | "what_if"
   | "watchlist" // personal watchlist (decision 9): Owner and Editor
   | "unmask"
+  | "review_claims" // M13-lite: confirm, edit, reject, park, merge expert claims and clusters (D-529)
   | "admin"; // users, markets, sources, config, review queue, rules, challengers, kill switches, secrets status, Usage, Ops, logs
 
 const MATRIX: Record<Action, readonly Role[]> = {
@@ -18,6 +19,7 @@ const MATRIX: Record<Action, readonly Role[]> = {
   what_if: ["owner", "editor"],
   watchlist: ["owner", "editor"],
   unmask: ["owner"],
+  review_claims: ["owner", "editor"],
   admin: ["owner"],
 };
 

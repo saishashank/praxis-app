@@ -41,7 +41,7 @@ export default async function AuditPage() {
         </p>
       </header>
       {events.length === 0 ? (
-        <EmptyState title="Nothing recorded yet">
+        <EmptyState motif="list" hue="home" title="Nothing recorded yet">
           Changes you make (users, switches, sign-offs) appear here.
         </EmptyState>
       ) : (

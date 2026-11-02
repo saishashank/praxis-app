@@ -22,8 +22,17 @@ const env = (over = {}) => ({
   GITHUB_RUN_ID: "500",
   ...over,
 });
-const J = (name, conclusion = "success", steps = []) => ({ name, conclusion, steps });
 const S = (name, conclusion = "success") => ({ name, conclusion });
+// GL-09: the fixtures job carries its strict step by default.
+const J = (
+  name,
+  conclusion = "success",
+  steps = name === "fixtures" ? [S(STEP.fixturesStrict)] : [],
+) => ({
+  name,
+  conclusion,
+  steps,
+});
 const R = (id, sha, created, conclusion = "success") => ({
   id,
   head_sha: sha,
@@ -221,9 +230,9 @@ test("--real-key-since: a build-phase drill before the date no longer counts", a
 });
 
 test("--ci-jobs replaces the required CI job list", async () => {
-  const r = await exec([...FULL, "--ci-jobs", `${CI_REQUIRED_JOBS.join(",")},coverage`]);
+  const r = await exec([...FULL, "--ci-jobs", `${CI_REQUIRED_JOBS.join(",")},extra-job`]);
   assert.equal(r.code, 1);
-  assert.match(r.text, /coverage \(not found\)/);
+  assert.match(r.text, /extra-job \(not found\)/);
 });
 
 test("arguments: the mode is required and there is no default; bad values exit 2 without a request", async () => {

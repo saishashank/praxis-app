@@ -47,6 +47,7 @@ import {
   planCorporateActions,
   type CorpActionRecord,
 } from "@/lib/arena/corpActions";
+import { exDividendOn, toExDividendActions } from "@/lib/arena/exDividend";
 
 const QTY_CHANGING: ReadonlySet<string> = new Set(["split", "consolidation", "bonus_issue"]);
 const CLOSING: ReadonlySet<string> = new Set(["merger_cash", "merger_scrip", "delisting"]);
@@ -74,6 +75,12 @@ export type PositionFacts = {
 export interface PathSource {
   /** Confirmed corporate actions of a code (the walk reads those with an ex-date inside the hold). */
   corpActions?(code: string): readonly CorpActionRecord[];
+  /**
+   * FAM-007 (GL-02): the decision cut-off instant (ISO) of session `d`. A dividend going ex on the
+   * next session counts for the stop only when confirmed by it. Required (D-282b), so a source cannot silently skip dated dividends; before: applied only
+   * dividends with no `known_at` (conservative: nothing is assumed known).
+   */
+  decisionCutoffOf(d: string): string;
   /** Trading sessions, oldest first (the snapshot calendar). */
   readonly sessions: readonly string[];
   bar(code: string, d: string): ViewBar | null;
@@ -303,6 +310,11 @@ export function walkPosition(src: PathSource, spec: PositionSpec, cost: CostSetu
     if (list === undefined) actionsByD.set(a.exDate, [a]);
     else list.push(a);
   }
+  const exDivs = toExDividendActions(
+    (src.corpActions?.(spec.code) ?? []).filter((a) => a.exDate > entryD),
+  );
+  const exDivAt = (i: number, d: string): bigint =>
+    exDividendOn(exDivs, spec.code, d, src.decisionCutoffOf(sessions[i - 1] ?? ""));
   const rebase = (price: bigint, ratio: Rational): bigint => divFloor(price * ratio.den, ratio.num);
 
   const closeOut = (
@@ -316,7 +328,10 @@ export function walkPosition(src: PathSource, spec: PositionSpec, cost: CostSetu
     const stressSell =
       chosen.rule === "close_signal"
         ? fillCloseSignalExit(envOf(bar, true), qty)
-        : fillIntradayStop(envOf(bar, true), qty, level, { afterOpen: idx === spec.entryIdx });
+        : fillIntradayStop(envOf(bar, true), qty, level, {
+            afterOpen: idx === spec.entryIdx,
+            exDividendMicro: exDivAt(idx, bar.d),
+          });
     if (stressSell === null)
       throw new RangeError("stress exit did not fill where the base exit did");
     const proceeds = qty * chosen.fillPriceMicro - chosen.brokerageMicro;
@@ -439,7 +454,10 @@ export function walkPosition(src: PathSource, spec: PositionSpec, cost: CostSetu
       const cs = pending === null ? null : fillCloseSignalExit(envOf(bar, false), qty);
       let level = level0;
       for (const l of trailLevels) level = maxBig(level, l);
-      const is = level > 0n ? fillIntradayStop(envOf(bar, false), qty, level) : null;
+      const is =
+        level > 0n
+          ? fillIntradayStop(envOf(bar, false), qty, level, { exDividendMicro: exDivAt(i, d) })
+          : null;
       const chosen = selectExit(cs, is);
       if (chosen !== null) {
         const isCs = chosen.rule === "close_signal";

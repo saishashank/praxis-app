@@ -3,7 +3,9 @@
 //
 // A `route` slot is a signed POST to a Vercel route. The slots (schedule.ts) are: alert-flush (odd
 // minutes, only when `alert_flush_due` has passed), pre-open / pre-open-retry (09:54, 09:58) and
-// evening-review / evening-review-late (20:00-22:00). All are DISABLED; the dispatch clock
+// evening-review / evening-review-late (20:00-22:00), and the M17 quote-poll (10:00-16:00 every 5 min)
+// and intraday-scan (10:32-15:32 every 30 min) recurring slots (disabled or listed-only; the routes refuse until the
+// quote source is accepted). All are DISABLED; the dispatch clock
 // (clock.ts) never fires them, this runner does.
 //
 // Per tick, nothing happens (no database request, no log) unless an enabled route slot is due at
@@ -31,6 +33,7 @@ import {
 } from "./clock";
 import { dbConfigured, pipeline, type Arg, type DbEnv, type Stmt, type StmtResult } from "./db";
 import { isWeekend, sydneyLocal, type Local } from "./localtime";
+import { isTradingDayKind } from "../../src/lib/data/calendarCore.mjs";
 import { AU_SLOTS, type Slot } from "./schedule";
 import { randomHex, signHeaders } from "./selfcheck";
 
@@ -185,6 +188,27 @@ export async function postSigned(
   }
 }
 
+/** Concurrent signed posts in one tick (the Workers limit is six simultaneous connections). */
+export const POST_CONCURRENCY = 3;
+
+/** Runs `fn` over `items` with at most `limit` in flight; results keep the input order. */
+export async function mapBounded<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const lane = async (): Promise<void> => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
+  return out;
+}
+
 export type RouteSummary = { requests: number; posted: string[]; failed: string[] };
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -271,7 +295,8 @@ export async function runRoutes(
     const facts: RouteFacts = {
       dispatchEnabled: parseEnabled(enabledRaw),
       marketMode: typeof mode === "string" ? mode : null,
-      tradingDay: !isWeekend(local) && calKind !== "holiday",
+      // V1-S3 / D-711: fail safe, a weekday with no calendar row is NOT a trading day.
+      tradingDay: isTradingDayKind(local.date, typeof calKind === "string" ? calKind : null),
       flushDue: flushDue(flushRaw, nowMs),
       slotsEnabled: parseSlotsEnabled(listRaw),
     };
@@ -313,15 +338,46 @@ export async function runRoutes(
       });
     }
 
-    // ---- post (sequential, priority order), then request 3: record single-shot outcomes -----
+    // ---- post (bounded parallel, results in priority order), then request 3: record outcomes -----
+    // V1-I8 (D-774): the posts are independent signed requests to idempotent routes; one tick used to
+    // wait for each in turn (up to 28 s apiece). At most POST_CONCURRENCY are in flight; the records
+    // below are still written in priority order from the collected results.
     const record: Stmt[] = [];
-    for (const a of actions) {
-      if (!owned.has(a)) continue;
-      const res = await postSigned(env, a.slot, local.date, deps);
+    const todo = actions.filter((a) => owned.has(a));
+    const results = await mapBounded(todo, POST_CONCURRENCY, (a) =>
+      postSigned(env, a.slot, local.date, deps),
+    );
+    for (const [i, a] of todo.entries()) {
+      const res = results[i];
       if (res.ok) summary.posted.push(a.slot.id);
       else summary.failed.push(a.slot.id);
       console.log(`routes: ${res.ok ? "posted" : "failed"} ${a.slot.id} attempt ${a.attempt}`);
-      if (a.key === null) continue;
+      if (a.key === null) {
+        // V2-B1 (D-668): a recurring slot has no state row, so its failure is recorded once per slot
+        // and local day (first failure wins; the guarded insert is idempotent) for System Health.
+        if (!res.ok) {
+          const at = iso(deps.nowMs());
+          const key = `route-failed:${a.slot.id}:${local.date}:recurring`;
+          record.push({
+            sql:
+              "INSERT INTO run_record (job, market, concurrency_key, scheduled_for, started_at, " +
+              "ended_at, status, error_summary, details_json) SELECT ?, ?, ?, ?, ?, ?, 'failed', ?, ? " +
+              "WHERE NOT EXISTS (SELECT 1 FROM run_record WHERE concurrency_key = ?)",
+            args: [
+              ROUTE_JOB,
+              MARKET,
+              key,
+              local.date,
+              at,
+              at,
+              `route ${a.slot.id} ${res.detail}`.slice(0, 120),
+              JSON.stringify({ slot: a.slot.id, recurring: true }),
+              key,
+            ],
+          });
+        }
+        continue;
+      }
       const at = iso(deps.nowMs());
       record.push({
         sql: "UPDATE worker_state SET value_json = ?, updated_at = ? WHERE key = ?",

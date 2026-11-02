@@ -1,6 +1,6 @@
 // Request gate used by src/proxy.ts (Next 16 proxy, Node runtime). Opus reviews every line.
 // Order: CSP headers -> same-origin check for writes (SEC-011) -> sign-in rate limit (SEC-014)
-// -> authentication (PLT-031) -> per-user write rate limit (SEC-014).
+// -> authentication (PLT-031) -> per-user write, API read and export rate limits (SEC-014).
 // The JWT is verified here; role / status / session_version are re-read from the DB by
 // requireUser / withAuth on every page, route and action (the proxy is the first line only).
 import type { Client } from "@libsql/client";
@@ -20,6 +20,8 @@ export type GateDeps = {
   limits: RateLimits;
   nowSec: () => number;
   nonce?: () => string;
+  // D-371: true only for the pinned Owner. Absent or throwing counts as false (fail closed).
+  isPinnedOwner?: (claims: Claims) => Promise<boolean>;
 };
 
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -41,12 +43,34 @@ const MACHINE_ROUTES = new Set([
   "/api/internal/incident",
   "/api/internal/maintenance",
   "/api/internal/backup-export",
+  "/api/internal/intraday-scan",
+  "/api/internal/pick-alerts",
   "/api/cron/watchdog",
   "/api/cron/heartbeat-morning",
   "/api/cron/heartbeat-evening",
   TEST_LOGIN_ROUTE,
 ]);
+// SEC-014 exports (Content-Disposition attachments): ≤ exports_per_hour_user per user and hour.
+// Keep in step with the routes that set Content-Disposition (tests/http/gate.test.ts walks src/app/api).
+export const EXPORT_ROUTES = new Set(["/api/blueprint/export"]);
 const PUBLIC_EXACT = new Set(["/signin", "/privacy", "/terms", "/api/health", "/robots.txt"]);
+
+// Paths that must be indistinguishable from a missing route for anyone but the pinned Owner.
+// A non-owner is not rewritten by the proxy (that leaks x-middleware-rewrite to the client). The
+// proxy marks the request and next.config.ts rewrites marked requests to ABSENT_PATH, which no
+// route serves, so Next renders its own 404.
+export const ABSENT_PATH = "/_praxis-absent";
+export const HIDE_HEADER = "x-praxis-hide";
+export function isBlueprintPath(raw: string): boolean {
+  let p: string;
+  try {
+    p = decodeURIComponent(raw);
+  } catch {
+    return false;
+  }
+  p = p.replace(/\/{2,}/g, "/");
+  return /^\/(?:api\/)?blueprint(?:\/|$)/.test(p);
+}
 
 export function isPublicPath(p: string): boolean {
   return (
@@ -136,6 +160,20 @@ export async function gate(req: NextRequest, deps: GateDeps): Promise<NextRespon
       }
     }
 
+    // D-371 (amends D-361): an anonymous Blueprint request gets exactly what any other missing
+    // path gets (sign-in redirect / 401). A signed-in user who is not the pinned Owner is
+    // marked for the config rewrite to an absent path, so Next renders its own 404, never a 503 or a 403.
+    let hide = false;
+    if (claims && isBlueprintPath(path)) {
+      let pinned = false;
+      try {
+        pinned = (await deps.isPinnedOwner?.(claims)) === true;
+      } catch {
+        pinned = false;
+      }
+      hide = !pinned;
+    }
+
     // SEC-014: authenticated writes per user (public paths such as sign-out under /api/auth
     // are covered by the sign-in limit only).
     if (claims && write && !machine) {
@@ -149,8 +187,26 @@ export async function gate(req: NextRequest, deps: GateDeps): Promise<NextRespon
       if (!r.allowed) return text(429, "too many requests");
     }
 
+    // SEC-014 (V1-S12): authenticated API reads per user, exports per user and hour. Page
+    // navigations are not API reads. Same fail-closed rule: a DB failure answers 503 via the catch.
+    if (claims && isApi && !write && !machine) {
+      const isExport = EXPORT_ROUTES.has(path);
+      const r = isExport
+        ? await rateLimit(
+            deps.db(),
+            `export:${claims.uid}`,
+            deps.limits.exports_per_hour_user,
+            3600,
+            now,
+          )
+        : await rateLimit(deps.db(), `read:${claims.uid}`, deps.limits.reads_per_min_user, 60, now);
+      if (!r.allowed) return text(429, "too many requests");
+    }
+
     // Next picks the nonce up from the request's CSP header and stamps its own scripts.
     const reqHeaders = new Headers(req.headers);
+    reqHeaders.delete(HIDE_HEADER); // never trust a client-sent copy
+    if (hide) reqHeaders.set(HIDE_HEADER, "1");
     reqHeaders.set("x-nonce", nonce);
     reqHeaders.set("Content-Security-Policy", csp);
     return decorate(NextResponse.next({ request: { headers: reqHeaders } }));

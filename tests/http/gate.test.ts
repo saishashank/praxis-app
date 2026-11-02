@@ -3,12 +3,19 @@ import type { Client } from "@libsql/client";
 import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
 import type { Claims } from "@/lib/auth/claims";
-import { gate, isPublicPath, type GateDeps } from "@/lib/http/gate";
+import { EXPORT_ROUTES, gate, isPublicPath, type GateDeps } from "@/lib/http/gate";
+import fs, { readdirSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
 import { freshDb } from "../db/helpers";
 
 const BASE = "https://app.example.test";
 const CLAIMS: Claims = { uid: 5, sv: 1, si: 1, rec: false };
-const LIMITS = { signin_per_min_ip: 10, writes_per_min_user: 60, exports_per_hour_user: 5 };
+const LIMITS = {
+  signin_per_min_ip: 10,
+  writes_per_min_user: 60,
+  exports_per_hour_user: 5,
+  reads_per_min_user: 60,
+};
 
 async function mk(over: Partial<GateDeps> = {}): Promise<GateDeps> {
   const db = await freshDb("auth");
@@ -117,6 +124,8 @@ describe("authentication (PLT-031)", () => {
     "/api/internal/incident",
     "/api/internal/maintenance",
     "/api/internal/backup-export",
+    "/api/internal/intraday-scan",
+    "/api/internal/pick-alerts",
     "/api/cron/watchdog",
     "/api/cron/heartbeat-morning",
     "/api/cron/heartbeat-evening",
@@ -333,6 +342,61 @@ describe("rate limits (SEC-014)", () => {
     for (let i = 0; i < 5; i++) expect((await gate(req("/"), d)).status).toBe(200);
   });
 
+  // V1-S12 (D-722): SEC-014 reads (60/min/user) and exports (5/h/user) are enforced.
+  it("authenticated API reads: 61st in a minute -> 429, per user, window resets", async () => {
+    let t = 1_700_000_000;
+    const d = await mk({ nowSec: () => t });
+    const call = (uid = 5) =>
+      gate(req("/api/market/search?q=a"), { ...d, readClaims: async () => ({ ...CLAIMS, uid }) });
+    for (let i = 0; i < 60; i++) expect((await call()).status).toBe(200);
+    expect((await call()).status).toBe(429);
+    expect((await call(6)).status).toBe(200); // another user is unaffected
+    t += 60; // next fixed window
+    expect((await call()).status).toBe(200);
+  });
+
+  it("page GETs, machine routes and public paths are not read-limited", async () => {
+    const d = await mk({ limits: { ...LIMITS, reads_per_min_user: 1 } });
+    for (let i = 0; i < 4; i++) expect((await gate(req("/"), d)).status).toBe(200);
+    for (let i = 0; i < 4; i++) {
+      expect((await gate(req("/api/cron/watchdog"), d)).status).toBe(200);
+      expect((await gate(req("/api/health"), d)).status).toBe(200);
+    }
+  });
+
+  it("exports: 6th in an hour -> 429 even though reads allow it; resets next hour", async () => {
+    let t = 1_700_000_000;
+    const d = await mk({ nowSec: () => t });
+    const call = () => gate(req("/api/blueprint/export"), d);
+    for (let i = 0; i < 5; i++) expect((await call()).status).toBe(200);
+    expect((await call()).status).toBe(429);
+    // an ordinary read by the same user is still fine
+    expect((await gate(req("/api/market/search?q=a"), d)).status).toBe(200);
+    t += 3600;
+    expect((await call()).status).toBe(200);
+  });
+
+  it("every route that sets Content-Disposition is an export route (limit cannot be skipped)", () => {
+    const walkRoutes = (dir: string, out: string[] = []): string[] => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) walkRoutes(full, out);
+        else if (e.name === "route.ts") out.push(full);
+      }
+      return out;
+    };
+    const root = path.join(process.cwd(), "src/app/api");
+    const exporting = walkRoutes(root)
+      .filter((f) => /Content-Disposition/i.test(fs.readFileSync(f, "utf8")))
+      .map((f) => "/api/" + path.relative(root, path.dirname(f)).split(path.sep).join("/"));
+    expect(exporting.sort()).toEqual([...EXPORT_ROUTES].sort());
+  });
+
+  it("read rate-limit DB failure -> 503", async () => {
+    const d = await mk({ db: broken });
+    expect((await gate(req("/api/market/search"), d)).status).toBe(503);
+  });
+
   it("write rate-limit DB failure -> 503", async () => {
     const d = await mk({ db: broken });
     const res = await gate(req("/api/thing", { method: "POST", headers: { origin: BASE } }), d);
@@ -347,5 +411,50 @@ describe("rate limits (SEC-014)", () => {
       },
     });
     expect((await gate(req("/"), d)).status).toBe(503);
+  });
+});
+
+// V1-S13 / V2-B1: the machine-route list is tied to the filesystem. Every internal or cron route
+// handler must be public to the proxy (it authenticates itself), and no other /api route may be.
+describe("MACHINE_ROUTES covers the filesystem", () => {
+  const apiRoot = path.join(process.cwd(), "src/app/api");
+  const routes = (dir: string): string[] =>
+    readdirSync(dir).flatMap((f) => {
+      const full = path.join(dir, f);
+      if (statSync(full).isDirectory()) return routes(full);
+      return f === "route.ts" ? [full] : [];
+    });
+  const urlOf = (file: string) =>
+    "/api/" + path.relative(apiRoot, path.dirname(file)).split(path.sep).join("/");
+  const all = routes(apiRoot);
+
+  it("every src/app/api/internal and src/app/api/cron route passes the gate without a session", async () => {
+    const machine = all.filter(
+      (f) => urlOf(f).startsWith("/api/internal/") || urlOf(f).startsWith("/api/cron/"),
+    );
+    expect(machine.length).toBeGreaterThanOrEqual(15);
+    for (const f of machine) {
+      const readClaims = vi.fn(async () => null);
+      const res = await gate(req(urlOf(f)), await mk({ readClaims }));
+      expect(res.status, urlOf(f)).toBe(200);
+      expect(readClaims, urlOf(f)).not.toHaveBeenCalled();
+    }
+  });
+
+  it("every internal route imports a signed (HMAC) handler; no other route is public to the gate", async () => {
+    for (const f of all.filter((x) => urlOf(x).startsWith("/api/internal/"))) {
+      expect(readFileSync(f, "utf8"), urlOf(f)).toMatch(/sign|hmac|Signed|verify/i);
+    }
+    for (const f of all.filter(
+      (x) =>
+        !["/api/internal/", "/api/cron/", "/api/auth/", "/api/test-identity/"].some((p) =>
+          urlOf(x).startsWith(p),
+        ),
+    )) {
+      if (urlOf(f) === "/api/health") continue;
+      const readClaims = vi.fn(async () => null);
+      const res = await gate(req(urlOf(f)), await mk({ readClaims }));
+      expect(res.status, urlOf(f)).not.toBe(200);
+    }
   });
 });

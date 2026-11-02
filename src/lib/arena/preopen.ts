@@ -38,9 +38,10 @@ import { decisionCutoffUtc } from "@/lib/agents/decisionView";
 import { loadAgentParams, type AgentParams } from "@/lib/agents/params";
 import type { CardBreaker } from "@/lib/agents/thesisBreakers";
 import { alertKeys } from "@/lib/alerts/tiers";
+import { cortexOpenGuard } from "@/lib/cortex/stage";
 import { loadAsxTokenView } from "@/lib/data/asxToken";
 import {
-  isTradingDay,
+  gateDayStatus,
   localToUtc,
   previousTradingDay,
   type CalendarKind,
@@ -320,6 +321,12 @@ export type PreopenOptions = {
   readonly attempt?: 1 | 2;
   /** A replay against a NON-production database: a `data_only` market may then be processed. */
   readonly replay?: boolean;
+  /**
+   * D-711: the live entry points set this so a weekday the calendar has no row for is skipped as
+   * `calendar_missing` (fail safe). Off (default): the looser "not a holiday row" rule that
+   * replays and the synthetic-date tests rely on.
+   */
+  readonly strictCalendar?: boolean;
   /** Stamps run / alert rows only. */
   readonly now: () => string;
   readonly params?: AgentParams;
@@ -337,7 +344,13 @@ export type PreopenResult =
   | { status: "skipped"; reason: string }
   | { status: "error"; attempt: 1 | 2 };
 
-type Candidate = PreopenOrder & { decidedD: string };
+type Candidate = PreopenOrder & {
+  decidedD: string;
+  /** Cortex orders only (migration 0019): the CTX-028 open-time list then follows the v1 checks. */
+  limitMicro: bigint | null;
+  signalId: string | null;
+  family: string | null;
+};
 
 async function readCalendar(db: Exec, market: string): Promise<CalendarRow[]> {
   const rs = await db.execute({
@@ -365,7 +378,8 @@ function breakersOf(json: unknown): CardBreaker[] {
 async function pendingEntries(db: Exec, market: string, d: string): Promise<Candidate[]> {
   const rs = await db.execute({
     sql: `SELECT o.id AS id, o.code AS code, o.tier AS tier, o.decided_d AS decided_d,
-                 o.card_id AS card_id, k.card_json AS card_json
+                 o.card_id AS card_id, k.card_json AS card_json,
+                 o.limit_micro AS limit_micro, o.signal_id AS signal_id, e.family AS family
           FROM arena_order o
           JOIN cohort c ON c.id = o.cohort_id
           JOIN execution e ON e.id = c.execution_id
@@ -382,6 +396,10 @@ async function pendingEntries(db: Exec, market: string, d: string): Promise<Cand
     decidedD: text(r.decided_d),
     cardId: r.card_id === null ? null : text(r.card_id),
     breakers: breakersOf(r.card_json),
+    limitMicro:
+      r.limit_micro === null || r.limit_micro === undefined ? null : BigInt(r.limit_micro as never),
+    signalId: r.signal_id === null ? null : text(r.signal_id),
+    family: r.family === null || r.family === undefined ? null : text(r.family),
   }));
 }
 
@@ -526,7 +544,9 @@ export async function runPreopen(db: Client, o: PreopenOptions): Promise<Preopen
   if (mode === "off") return { status: "skipped", reason: "market_off" };
   if (mode !== "full" && o.replay !== true) return { status: "skipped", reason: "data_only_guard" };
   const calendar = await readCalendar(db, market);
-  if (!isTradingDay(d, calendar)) return { status: "skipped", reason: "non_trading_day" };
+  const dayState = gateDayStatus(d, calendar, o.strictCalendar);
+  if (dayState === "missing") return { status: "skipped", reason: "calendar_missing" }; // D-711
+  if (dayState !== "open") return { status: "skipped", reason: "non_trading_day" };
 
   const existing = await readRun(db, market, d);
   if (existing !== null && !(existing.status === "error" && existing.attempt === 1)) {
@@ -554,7 +574,29 @@ export async function runPreopen(db: Client, o: PreopenOptions): Promise<Preopen
         asxOn,
         lastSession: await lastSessionOf(db, market, c.code, priorD),
       };
-      const decision = preopenDecision(c, evidence, params, d);
+      let decision = preopenDecision(c, evidence, params, d);
+      // M15 P2 (CTX-028): a Cortex order (limit_micro set) also passes the open-time list at 09:55;
+      // v1 orders never reach it
+      if (decision.outcome === "pass" && c.limitMicro !== null && c.family !== null) {
+        const guard = await cortexOpenGuard(db, {
+          market,
+          d,
+          barD: c.decidedD,
+          orderId: c.id,
+          signalId: c.signalId,
+          family: c.family as never,
+          fill: null,
+          stopSpec: null,
+          rechecked: true,
+        });
+        if (guard.firstFail !== null) {
+          decision = {
+            outcome: "cancel",
+            reason: `filter:open_${guard.firstFail}`,
+            evaluations: decision.evaluations,
+          };
+        }
+      }
       await writeBreakerRows(db, market, d, c, decision);
       for (const e of decision.evaluations) {
         if (e.status !== "red") continue;

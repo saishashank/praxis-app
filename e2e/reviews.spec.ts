@@ -51,9 +51,10 @@ test("the list and the calendar switch by link and keep state in the URL", async
 }) => {
   await signIn(context, "viewer");
   await page.goto("/reviews");
-  await page.getByRole("link", { name: "Calendar" }).click();
+  const view = page.getByRole("navigation", { name: "Review view" });
+  await view.getByRole("link", { name: /^Calendar/ }).click();
   await expect(page).toHaveURL(/view=calendar/);
-  await page.getByRole("link", { name: "List" }).click();
+  await view.getByRole("link", { name: /^Reviews/ }).click();
   await expect(page).toHaveURL(/\/reviews$/);
 });
 

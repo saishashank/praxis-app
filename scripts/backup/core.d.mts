@@ -37,9 +37,14 @@ export function parseBackup(text: string): {
   data: Map<string, { lines: string[]; rows: unknown[][] }>;
   end: { counts: Record<string, number>; sha256: Record<string, string> };
 };
+export const RESTORE_CHUNK_STATEMENTS: number;
+export const RESTORE_CHECKPOINT_TABLE: string;
+export function referencedTables(createSql: string): string[];
+export function foreignKeyOrder(tables: string[], sqlOf: Map<string, string>): string[];
 export function restoreDatabase(
   db: Client,
   text: string,
+  opts?: { chunkStatements?: number; haltAfterChunks?: number },
 ): Promise<{ meta: Meta; counts: Record<string, number>; sha256: Record<string, string> }>;
 
 export function parseRecipient(value: unknown): string | null;

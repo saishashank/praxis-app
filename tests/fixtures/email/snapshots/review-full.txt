@@ -142,6 +142,8 @@ Read this review in the app: https://praxis.example.test/reviews/2026-10-19
 
 Simulation for personal information only; not financial advice.
 
+Emails from this system never ask for keys or passwords. Sign in and do rotations only via your own bookmark.
+
 Open Praxis: https://praxis.example.test
 
 This is a transactional email sent to the account Owner only; there is no mailing list, so there is nothing to unsubscribe from. Reviews can be paused in Settings.

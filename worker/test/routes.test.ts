@@ -27,7 +27,9 @@ const ENV: RouteEnv = {
   APP_BASE_URL: APP,
   WORKER_HMAC_SECRET: SECRET,
 };
-const on: Slot[] = AU_SLOTS.map((s) =>
+// M17 slots (quote-poll, intraday-scan) have their own tests (m17Slots.test.ts); these suites cover the M5 table.
+const M17_SLOTS = new Set(["quote-poll", "intraday-scan"]);
+const on: Slot[] = AU_SLOTS.filter((s) => !M17_SLOTS.has(s.id)).map((s) =>
   s.runner === "route" ? { ...s, enabled: true, requiresListing: false } : s,
 );
 
@@ -91,7 +93,7 @@ const hm = (m: number) =>
 
 describe("the route slots in the table", () => {
   it("every route slot is disabled", () => {
-    const route = AU_SLOTS.filter((s) => s.runner === "route");
+    const route = AU_SLOTS.filter((s) => s.runner === "route" && !M17_SLOTS.has(s.id));
     expect(route.map((s) => s.id).sort()).toEqual([
       "alert-flush",
       "evening-review",
@@ -327,7 +329,7 @@ describe("runRoutes", () => {
     expect(net.pipelines).toBe(0);
   });
 
-  it("a failing recurring slot logs and is retried by the next tick; no state, no run record", async () => {
+  it("a failing recurring slot logs, is retried by the next tick, keeps no state and records ONE failure per slot and day (V2-B1)", async () => {
     dispatchOn();
     app.status = 503;
     const s = await runRoutes(ENV, at(MON, "20:00"), deps(at(MON, "20:00")), on);
@@ -336,7 +338,20 @@ describe("runRoutes", () => {
     app.status = 200;
     const s2 = await runRoutes(ENV, at(MON, "20:05"), deps(at(MON, "20:05")), on);
     expect(s2.posted).toEqual(["evening-review"]);
-    expect(rows(db, "SELECT 1 FROM run_record WHERE job = 'worker-route'")).toEqual([]);
+    const rec = rows(
+      db,
+      "SELECT concurrency_key, status, error_summary FROM run_record WHERE job = 'worker-route'",
+    );
+    expect(rec).toHaveLength(1);
+    expect(rec[0]).toMatchObject({
+      concurrency_key: `route-failed:evening-review:${MON}:recurring`,
+      status: "failed",
+    });
+    expect(String(rec[0]!.error_summary)).toContain("evening-review");
+    // a second failing tick the same day adds no second row
+    app.status = 503;
+    await runRoutes(ENV, at(MON, "20:10"), deps(at(MON, "20:10")), on);
+    expect(rows(db, "SELECT 1 FROM run_record WHERE job = 'worker-route'")).toHaveLength(1);
   });
 
   it("a network error is contained", async () => {
@@ -419,6 +434,18 @@ describe("runRoutes", () => {
   });
 });
 
+describe("calendar fail safe (V1-S3, D-710)", () => {
+  it("a weekday after the seeded calendar (no row) is not a trading day: market-bound slots do not post", async () => {
+    dispatchOn();
+    marketFull();
+    const gap = "2028-03-15"; // a Wednesday beyond the 2027-12-31 seed
+    await runRoutes(ENV, at(gap, "09:54"), deps(at(gap, "09:54")), on);
+    expect(app.calls).toHaveLength(0);
+    await runRoutes(ENV, at(gap, "20:00"), deps(at(gap, "20:00")), on);
+    expect(app.calls).toHaveLength(1); // evening-review is not market-bound to a trading day
+  });
+});
+
 describe("helpers", () => {
   it("routeUrl accepts https origins only and keeps the path", () => {
     expect(routeUrl("https://a.example.test/", "/api/x")).toBe("https://a.example.test/api/x");
@@ -432,5 +459,23 @@ describe("helpers", () => {
     const r = await postSigned({ ...ENV, WORKER_HMAC_SECRET: "" }, slot, MON, deps(0));
     expect(r).toEqual({ ok: false, detail: "not-configured" });
     expect(app.calls).toHaveLength(0);
+  });
+});
+
+describe("V1-I8: mapBounded", () => {
+  it("never runs more than the limit at once and keeps the input order", async () => {
+    const { mapBounded } = await import("../src/routes");
+    let inFlight = 0;
+    let peak = 0;
+    const out = await mapBounded([1, 2, 3, 4, 5, 6, 7], 3, async (n) => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 5));
+      inFlight--;
+      return n * 2;
+    });
+    expect(out).toEqual([2, 4, 6, 8, 10, 12, 14]);
+    expect(peak).toBe(3);
+    expect(await mapBounded([], 3, async (n: number) => n)).toEqual([]);
   });
 });

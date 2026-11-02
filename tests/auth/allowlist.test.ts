@@ -194,25 +194,26 @@ describe("decideSignIn", () => {
           throw new Error("down");
         },
       ],
-    ])("email failure (%s) does not block and is audit-logged", async (_n, impl) => {
+    ])("email failure (%s) fails closed and is audit-logged (V1-I13)", async (_n, impl) => {
       const db = await authDb();
       await addUser(db, { email: "owner@example.test", role: "owner" });
       const d = await decideSignIn(db, rec, on, NOW, { fetchImpl: vi.fn(impl) });
-      expect(d.ok).toBe(true);
+      expect(d).toEqual({ ok: false, reason: "recovery_alert_failed" });
       expect((await auditRows(db)).map((r) => r.action)).toEqual([
         "auth.recovery_signin",
         "auth.recovery_alert_failed",
+        "auth.signin_refused",
       ]);
     });
 
-    it("no Resend key: audit-logged failure, still signs in", async () => {
+    it("no Resend key: audit-logged failure, sign-in refused", async () => {
       const db = await authDb();
       await addUser(db, { email: "owner@example.test", role: "owner" });
       const f = okFetch();
       const d = await decideSignIn(db, rec, { ...on, RESEND_API_KEY: undefined }, NOW, {
         fetchImpl: f,
       });
-      expect(d.ok).toBe(true);
+      expect(d).toEqual({ ok: false, reason: "recovery_alert_failed" });
       expect(f).not.toHaveBeenCalled();
     });
 

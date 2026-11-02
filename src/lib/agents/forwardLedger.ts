@@ -37,6 +37,7 @@ import {
   eventRowOf,
   loadDayInputs,
   splitActionsByCode,
+  splitsKnownOn,
   type DayInputs,
 } from "./candidates";
 import {
@@ -229,6 +230,11 @@ export class LiveWorld implements LedgerSource, PathSource {
     o.sessions.forEach((s, i) => this.index.set(s, i));
   }
 
+  /** FAM-007: decision cut-off instant (ISO UTC) of session `d`, as SnapshotWorld. */
+  decisionCutoffOf(d: string): string {
+    return decisionCutoffUtc(d, this.o.params.decisionCutoff);
+  }
+
   /** Fetch bars (back to `need` bars before the first session) and events of codes not yet loaded. */
   async load(codes: readonly string[]): Promise<void> {
     const todo = [...new Set(codes)].filter((c) => !this.series.has(c)).sort(cmp);
@@ -301,7 +307,7 @@ export class LiveWorld implements LedgerSource, PathSource {
       const s = this.seriesOf(code);
       const raw = s.bars.slice(Math.max(0, i + 1 - this.need), i + 1);
       const d = raw[raw.length - 1]!.d;
-      const known = (this.splits.get(code) ?? []).filter((a) => a.exDate <= d);
+      const known = splitsKnownOn(this.splits.get(code) ?? [], d, this.o.params.decisionCutoff);
       f = buildCodeFacts({ code, tier, adjusted: adjustBars(raw, known), raw }, this.o.params);
       this.memo.set(key, f);
     }
@@ -317,7 +323,7 @@ export class LiveWorld implements LedgerSource, PathSource {
     if (hit !== undefined) return hit;
     const f = this.factsAt(code, i, "U1");
     const raw = s.bars.slice(Math.max(0, i + 1 - this.need), i + 1);
-    const known = (this.splits.get(code) ?? []).filter((a) => a.exDate <= d);
+    const known = splitsKnownOn(this.splits.get(code) ?? [], d, this.o.params.decisionCutoff);
     const volumes = adjustBars(raw, known).map((b) => b.volume);
     const tail = this.o.params.specConstants.f5DryUpSessions;
     const ratios = [];

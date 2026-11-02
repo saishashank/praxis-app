@@ -19,7 +19,7 @@ export type BarRowIn = {
   low: number;
   close: number;
   volume: number;
-  adj_close: number;
+  adj_close: number | null;
   source: "yahoo";
   published_at: null;
   fetched_at: string;
@@ -53,7 +53,8 @@ export function planDates(p: {
   lookbackDays?: number;
   lastBarBefore?: string | null;
   gapMaxDates?: number;
-}): { dates: PlannedDate[]; remaining: number };
+  strictCalendar?: boolean;
+}): { dates: PlannedDate[]; remaining: number; calendarMissing: boolean };
 export function validateBar(raw: unknown, opts?: ParseOpts): { row: BarRowIn } | { reason: string };
 export class BarsFormatError extends Error {}
 export function parseBars(

@@ -25,3 +25,6 @@ test-results
 # StrykerJS (weekly mutation run; nothing is committed)
 .stryker-tmp
 /reports/
+
+# Vitest reporter output (local paths; never committed)
+.vitest/

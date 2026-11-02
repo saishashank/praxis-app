@@ -336,6 +336,8 @@ export function randomSignalSource(
     corpActions: world.corpActions === undefined ? undefined : (c) => world.corpActions!(c),
     controlUniverse: (d, f) => world.controlUniverse(d, f),
     familyInputs: (d) => world.familyInputs(d),
+    // a class world's methods are not copied by the spread above (FAM-007 needs the cut-off)
+    decisionCutoffOf: (d) => world.decisionCutoffOf(d),
     familyOutput(d) {
       const i = index.get(d);
       if (i === undefined) return null;

@@ -1,5 +1,16 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render as rtlRender,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import type { ComponentProps, ReactElement } from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The shell mounts the ToastProvider; the page tests do the same.
+const render = (ui: ReactElement) => rtlRender(<ToastProvider>{ui}</ToastProvider>);
 
 const requireUser = vi.hoisted(() => vi.fn());
 const svc = vi.hoisted(() => ({
@@ -29,7 +40,8 @@ vi.mock("@/app/(app)/users/actions", () => actions);
 
 import UsersPage from "@/app/(app)/users/page";
 import { ActionForm } from "@/app/(app)/users/ActionForm";
-import { RevokeButton } from "@/app/(app)/users/RevokeButton";
+import { ActionSheet } from "@/app/(app)/users/ActionSheet";
+import { ToastProvider } from "@/components/ui/Toast";
 import { ACK_TEXT } from "@/lib/users/ack";
 
 const T = "2026-10-10T12:00:00.000Z";
@@ -68,15 +80,9 @@ const submit = async (el: HTMLElement) => {
   });
 };
 
-beforeAll(() => {
-  // jsdom has no modal dialog support.
-  HTMLDialogElement.prototype.showModal = vi.fn(function (this: HTMLDialogElement) {
-    this.setAttribute("open", "");
-  });
-  HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
-    this.removeAttribute("open");
-  });
-});
+beforeAll(async () => {
+  await import("@/components/ui/SheetPanel");
+}, 60_000);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -133,25 +139,44 @@ describe("users page", () => {
     expect(screen.getByLabelText("Google email")).toBeRequired();
   });
 
-  it("users table: Owner has no role select or Revoke; revoked rows have no controls", async () => {
+  it("users table: actions are buttons; Owner has no Change role or Revoke; revoked rows have no controls", async () => {
     svc.getSharingAck.mockResolvedValue(ack);
     render(await UsersPage());
     const row = (email: string) => screen.getByRole("rowheader", { name: email }).closest("tr")!;
     const owner = within(row("owner@example.test"));
     expect(owner.queryByRole("combobox")).toBeNull();
-    expect(owner.queryByRole("button", { name: "Revoke" })).toBeNull();
+    expect(owner.queryByRole("button", { name: /^Revoke/ })).toBeNull();
+    expect(owner.queryByRole("button", { name: /^Change role/ })).toBeNull();
     expect(owner.getByText("Owner")).toBeInTheDocument();
     expect(owner.getByRole("button", { name: /Sign out everywhere/ })).toBeInTheDocument();
     const ed = within(row("ed@example.test"));
-    expect(ed.getByLabelText("Role for ed@example.test")).toHaveValue("editor");
-    expect(ed.getByRole("button", { name: "Save" })).toBeInTheDocument();
-    expect(ed.getByRole("button", { name: "Revoke" })).toBeInTheDocument();
+    expect(ed.getByText("Editor")).toBeInTheDocument();
+    expect(ed.getByRole("button", { name: /^Change role/ })).toBeInTheDocument();
+    expect(ed.getByRole("button", { name: /^Sign out everywhere/ })).toBeInTheDocument();
+    expect(ed.getByRole("button", { name: /^Revoke/ })).toBeInTheDocument();
+    // nothing in a row changes anything by itself: no select until a sheet is open
+    expect(ed.queryByRole("combobox")).toBeNull();
     expect(within(row("inv@example.test")).getByText("Invited")).toBeInTheDocument();
     const gone = within(row("gone@example.test"));
     expect(gone.getByText("Revoked")).toBeInTheDocument();
     expect(gone.queryByRole("button")).toBeNull();
     expect(gone.queryByRole("combobox")).toBeNull();
     expect(screen.getAllByText("2026-10-10 23:00 AEDT").length).toBeGreaterThan(0);
+  });
+
+  it("Change role opens a sheet with the select and one primary Save role", async () => {
+    render(await UsersPage());
+    fireEvent.click(screen.getAllByRole("button", { name: /^Change role/ })[0]!);
+    const dialog = await screen.findByRole("dialog", { name: "Change role for ed@example.test" });
+    expect(within(dialog).getByLabelText("Role for ed@example.test")).toHaveValue("editor");
+    expect(within(dialog).getAllByRole("button", { name: "Save role" })).toHaveLength(1);
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Save role" }));
+    });
+    await waitFor(() => expect(actions.changeRoleAction).toHaveBeenCalledTimes(1));
+    const fd = (actions.changeRoleAction.mock.calls[0] as unknown as [FormData])[0];
+    expect(fd.get("userId")).toBe("2");
+    expect(fd.get("role")).toBe("editor");
   });
 
   it("the audit log is no longer here; it links to its own page (D-174)", async () => {
@@ -215,47 +240,84 @@ describe("ActionForm", () => {
   });
 });
 
-describe("RevokeButton dialog", () => {
-  it("opens a modal naming the user and saying they are not emailed", () => {
-    render(<RevokeButton userId={2} email="ed@example.test" action={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
-    expect(HTMLDialogElement.prototype.showModal).toHaveBeenCalled();
+describe("ActionSheet (confirm sheets, UXR-029)", () => {
+  const open = async (props: Partial<ComponentProps<typeof ActionSheet>> = {}) => {
+    const action = (props.action ?? vi.fn(async () => ({ ok: true as const }))) as (
+      fd: FormData,
+    ) => Promise<{ ok: true }>;
+    render(
+      <ActionSheet
+        label="Revoke"
+        forWhom="ed@example.test"
+        title="Revoke access for ed@example.test?"
+        description="They are not emailed."
+        submitLabel="Revoke access"
+        danger
+        doneText="Access revoked"
+        action={action}
+        {...props}
+      >
+        <input type="hidden" name="userId" value="2" />
+      </ActionSheet>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Revoke/ }));
+    return { action, dialog: await screen.findByRole("dialog") };
+  };
+
+  it("opens a sheet naming the user and saying they are not emailed; one primary action", async () => {
+    const { dialog } = await open();
+    expect(dialog).toHaveAccessibleName("Revoke access for ed@example.test?");
+    expect(within(dialog).getByText("They are not emailed.")).toBeInTheDocument();
+    const primary = within(dialog).getByRole("button", { name: "Revoke access" });
+    expect(primary.className).toContain("bg-danger"); // red only inside the confirm sheet
+    // the only buttons are the sheet's close control and the primary action
     expect(
-      screen.getByRole("heading", {
-        name: "Revoke access for ed@example.test? They are not emailed.",
-      }),
-    ).toBeInTheDocument();
+      within(dialog)
+        .getAllByRole("button")
+        .map((b) => b.getAttribute("aria-label") ?? b.textContent),
+    ).toEqual(["Close", "Revoke access"]);
   });
 
-  it("Cancel closes without calling the action", () => {
-    const action = vi.fn();
-    render(<RevokeButton userId={2} email="ed@example.test" action={action} />);
-    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(HTMLDialogElement.prototype.close).toHaveBeenCalled();
+  it("the trigger on the page is not red", () => {
+    render(
+      <ActionSheet label="Revoke" title="t" submitLabel="Go" danger action={vi.fn()} doneText="x">
+        <span />
+      </ActionSheet>,
+    );
+    expect(screen.getByRole("button", { name: "Revoke" }).className).not.toContain("bg-danger");
+  });
+
+  it("Esc closes it without calling the action", async () => {
+    const { action } = await open();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(action).not.toHaveBeenCalled();
   });
 
-  it("Confirm submits the user id and closes on success", async () => {
+  it("the primary action submits the user id, closes the sheet and toasts", async () => {
     const action = vi.fn<(fd: FormData) => Promise<{ ok: true }>>(async () => ({
       ok: true as const,
     }));
-    render(<RevokeButton userId={2} email="ed@example.test" action={action} />);
-    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
-    await submit(screen.getByRole("button", { name: "Confirm" }));
-    expect(action.mock.calls[0][0].get("userId")).toBe("2");
-    expect(HTMLDialogElement.prototype.close).toHaveBeenCalled();
+    const { dialog } = await open({ action });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Revoke access" }));
+    });
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    expect(action.mock.calls[0]![0].get("userId")).toBe("2");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByText("Access revoked")).toBeInTheDocument();
   });
 
   it("stays open and shows the error when the action refuses", async () => {
     const action = vi.fn<(fd: FormData) => Promise<{ error: string }>>(async () => ({
       error: "owner_protected",
     }));
-    render(<RevokeButton userId={1} email="owner@example.test" action={action} />);
-    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
-    await submit(screen.getByRole("button", { name: "Confirm" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("The Owner cannot be changed here.");
-    expect(HTMLDialogElement.prototype.close).not.toHaveBeenCalled();
+    const { dialog } = await open({ action: action as never });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Revoke access" }));
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent("The Owner cannot be changed here.");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });
 
@@ -296,15 +358,20 @@ describe("unmask grants section (UX-009, ROL-107)", () => {
       "Expired",
       "Revoked",
     ]);
-    expect(within(sec).getAllByRole("button", { name: /Revoke unmask grant/ })).toHaveLength(1);
+    expect(within(sec).getAllByRole("button", { name: /^Revoke/ })).toHaveLength(1);
   });
 
-  it("submits the grant form to grantUnmaskAction and a revoke to revokeUnmaskAction", async () => {
+  it("submits the grant form to grantUnmaskAction and a revoke (via its confirm sheet) to revokeUnmaskAction", async () => {
     svc.listGrants.mockResolvedValue([grant(3, 2, FAR, null)]);
     render(await UsersPage());
     await submit(screen.getByRole("button", { name: "Grant unmask" }));
     expect(actions.grantUnmaskAction).toHaveBeenCalledTimes(1);
-    await submit(screen.getByRole("button", { name: /Revoke unmask grant/ }));
-    expect(actions.revokeUnmaskAction).toHaveBeenCalledTimes(1);
+    const sec = screen.getByRole("heading", { name: "Unmask grants" }).closest("section")!;
+    fireEvent.click(within(sec).getByRole("button", { name: /^Revoke/ }));
+    const dialog = await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Revoke grant" }));
+    });
+    await waitFor(() => expect(actions.revokeUnmaskAction).toHaveBeenCalledTimes(1));
   });
 });

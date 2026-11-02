@@ -90,7 +90,13 @@ describe("replay runs", () => {
     const a = runReplay(base("full"));
     expect(a.report.status).toBe("complete");
     expect(a.report.within).toBe(true);
-    expect(a.report.stages.map((s) => s.stage)).toEqual(["world", "ledger", "cohorts", "stats"]);
+    expect(a.report.stages.map((s) => s.stage)).toEqual([
+      "world",
+      "ledger",
+      "cohorts",
+      "stats",
+      "stats",
+    ]);
     expect(a.run.kind).toBe("full");
     expect(a.run.commit_sha).toBe("a".repeat(40));
     expect(a.stats.some((s) => s.scope === "run" && s.metric === "compute_report")).toBe(true);

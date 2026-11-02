@@ -33,8 +33,9 @@ const RANGED: readonly (readonly [ConfigKey, number, number, number, string])[] 
   ["shakedown_sessions", 10, 5, 20, "l.68"],
   ["critic_llm_calls_per_night", 10, 0, 20, "D-111"],
   ["factor_min_bucket_n", 30, 20, 100, "AGT-112"],
-  ["picks_per_profile", 5, 0, 10, "AGT-113"],
-  ["picks_max_per_family", 2, 1, 5, "AGT-113"],
+  // M17 O-76 (c3a942e): 10 picks per profile and no family cap by default
+  ["picks_per_profile", 10, 0, 10, "AGT-113"],
+  ["picks_max_per_family", 10, 10, 10, "AGT-113"],
   ["pick_valid_sessions", 2, 1, 5, "AGT-113"],
   ["pick_success_min_n", 30, 10, 200, "D-111"],
 ];
@@ -348,8 +349,8 @@ describe("reviewed constants that now have keys keep their values (D-085, D-090,
     expect(p.picks).toMatchObject({
       factorMinBucketN: 30,
       factorBuckets: "terciles",
-      picksPerProfile: 5,
-      picksMaxPerFamily: 2,
+      picksPerProfile: 10, // M17 O-76
+      picksMaxPerFamily: 10,
       pickValidSessions: 2,
       pickSuccessMinN: 30,
     });

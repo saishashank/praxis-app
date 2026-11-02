@@ -1,6 +1,9 @@
 // Staging-only test-identity login: the runtime guard (SEC-109, TST-113). Opus reviews every line.
 //
-// The route answers 404 unless ALL of these independent signals say "this is not production":
+// The route answers 404 unless ALL of these independent signals say "this is staging":
+//   0. isStagingEnv(env) (V1-I9 / D-782): a POSITIVE signal, PRAXIS_ENV=staging or an APP_BASE_URL host
+//      with a "staging" label part. Before, "not production" was inferred only from the absence of
+//      BACKUP_PUBLIC_KEY and OWNER_RECOVERY_EMAIL.
 //   1. TEST_IDENTITY_SECRET is a valid secret (64 lowercase hex). Only the staging Vercel
 //      environment holds it (SEC-017 c4); production never does.
 //   2. BACKUP_PUBLIC_KEY is absent: production holds it (SEC-017 k, D-029).
@@ -13,6 +16,7 @@
 // cannot be removed from the production bundle. The guard is a runtime check, the route module
 // loads the login logic by dynamic import only after the guard passes, and production holds no
 // TEST_IDENTITY_SECRET (decision D-039).
+import { isStagingEnv } from "@/lib/security/envKind";
 import { isValidSecret } from "@/lib/security/hmac";
 
 export type TestIdentityEnv = Record<string, string | undefined>;
@@ -26,6 +30,7 @@ export function testIdentityEnabled(
   env: TestIdentityEnv,
   opts: { allowDevelopment?: boolean } = {},
 ): boolean {
+  if (!isStagingEnv(env)) return false;
   if (!isValidSecret(env.TEST_IDENTITY_SECRET)) return false;
   if (has(env.BACKUP_PUBLIC_KEY)) return false;
   if (has(env.OWNER_RECOVERY_EMAIL)) return false;

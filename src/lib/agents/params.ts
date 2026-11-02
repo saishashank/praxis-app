@@ -13,7 +13,18 @@
 // corporate-action engines do); this module never throws on bad configuration.
 import { createHash } from "node:crypto";
 import type { Client } from "@libsql/client";
-import { CONFIG_KEYS, injectionPhrasesOf, type ConfigKey } from "@/lib/config/keys";
+import {
+  CONFIG_KEYS,
+  injectionPhrasesOf,
+  type ConfigKey,
+  type F1_MOMENTUM_VARIANTS,
+  type F3_SURPRISE_MODES,
+  type F4_ENTRY_VARIANTS,
+  type F5_UNIVERSES,
+  type RANK_VARIANTS,
+  type SETTLEMENT_STATS_MODES,
+  type VAL_ERROR_BUDGET_MODES,
+} from "@/lib/config/keys";
 import { parseRational, type Rational } from "@/lib/money/rational";
 
 export type ConfigSource = (key: ConfigKey) => unknown;
@@ -69,6 +80,12 @@ export type F1Params = {
   minGain: Rational;
   maxHold: number;
   highLookback: number;
+  /** KB-081: sessions of the relative-strength return window (126 = v1). */
+  returnWindowSessions: number;
+  /** KB-081: momentum variant (`v1` = v1 rule). */
+  momentumVariant: (typeof F1_MOMENTUM_VARIANTS)[number];
+  /** KB-081: rank variant (`v1` = v1 rule). */
+  rankVariant: (typeof RANK_VARIANTS)[number];
 };
 export type F2Params = {
   eventArMin: Rational;
@@ -84,6 +101,8 @@ export type F3Params = {
   trailAfter: Rational;
   trailAtr: Rational;
   timeExit: number;
+  /** AGT-137: how the surprise is read (`category` = v1 rule). */
+  surpriseMode: (typeof F3_SURPRISE_MODES)[number];
 };
 export type F4Params = {
   /** Float64 thresholds: compared with Wilder RSI values. */
@@ -91,6 +110,10 @@ export type F4Params = {
   rsi14Max: number;
   timeExit: number;
   stopAtr: Rational;
+  /** KB-081: entry variant (`v1` = v1 rule). */
+  entryVariant: (typeof F4_ENTRY_VARIANTS)[number];
+  /** KB-081: rank variant (`v1` = v1 rule). */
+  rankVariant: (typeof RANK_VARIANTS)[number];
 };
 export type F5Params = {
   volumeRatioMin: Rational;
@@ -101,6 +124,8 @@ export type F5Params = {
   stopCap: Rational;
   trailAtr: Rational;
   timeStop: number;
+  /** O-49: the universe F5 trades (U2). U3 runs only as the replay stress variant. */
+  defaultUniverse: (typeof F5_UNIVERSES)[number];
 };
 export type F6Params = {
   minClasses: number;
@@ -138,6 +163,24 @@ export type Arn011Params = {
   rangeDaysMin: number;
 };
 
+/** M14 entry gates and data rules (FAM-004/005/006, DAT-234, DAT-237; keys in config/keys.ts M14). */
+export type EntryParams = {
+  /** FAM-004: largest initial stop distance, as a fraction of the reference price (12 % = 3/25). */
+  maxStopDistance: Rational;
+  /** FAM-005: median gross return must be at least this multiple of the round-trip cost. */
+  costGateK: Rational;
+  /** FAM-005: ledger rows needed before the gate applies. */
+  costGateMinRows: number;
+  /** FAM-006: highest correlation of daily returns between two new positions. */
+  secondPositionMaxCorr: number;
+  secondPositionCorrSessions: number;
+  /** DAT-237: duplicate announcement window and title similarity. */
+  dedupWindowSessions: number;
+  dedupMinhashThreshold: number;
+  /** DAT-234: sessions around day 0 in which an index change excludes an F3 event. */
+  indexChangeWindowSessions: number;
+};
+
 /** F5 volume exit (spec 07 l.56; keys f5_dry_up_*, D-085, D-111). */
 export type SpecConstantParams = {
   f5DryUpRatio: Rational;
@@ -165,6 +208,10 @@ export type LearningParams = {
   lessonBootstrapLevel: number;
   l2AlphaW0: number;
   l2AlphaPayout: number;
+  /** VAL-116: share of the pool wealth spent on each lesson test. */
+  l2AlphaSpendFraction: number;
+  /** VAL-116: the pool is exhausted when the next test level would be below this. */
+  l2AlphaExhaustedLevel: number;
   comparisonsFdrQ: number;
   comparisonLookAlpha: number;
   comparisonLockoutSessions: number;
@@ -176,6 +223,14 @@ export type LearningParams = {
   kbArchiveTime: string;
   /** `none` or provider:model. */
   classifierModel: string;
+  /** M13-lite (D-528): tested claims an expert needs before a scorecard shows. */
+  expertMinScored: number;
+  /** M13-lite: BH false-discovery rate for the weekly expert-cluster screening. */
+  expertScreenFdr: number;
+  /** M13-lite: most challengers proposed from expert clusters a week. */
+  expertChallengersPerWeek: number;
+  /** M13-lite: distinct-expert L2 clusters needed for the dormant F7 gate. */
+  f7MinClusters: number;
 };
 
 export type PickProfileParams = {
@@ -241,6 +296,18 @@ export type StatsParams = {
   codeReuseGapSessions: number;
   /** VAL-110 (vi): variance of the daily Sharpe when fewer than 2 families have development rows. */
   dsrDefaultSrVariance: number;
+  /** VAL-112: how the validation error budget is spent (O-43). */
+  valErrorBudgetMode: (typeof VAL_ERROR_BUDGET_MODES)[number];
+  /** VAL-112: family-wise error per lineage and split version (W0). */
+  valFwerPerLineage: number;
+  /** ARN-109: settlement used for replay statistics (O-48). */
+  settlementStatsMode: (typeof SETTLEMENT_STATS_MODES)[number];
+  /** VAL-115: annual Sharpe the minimum backtest length is computed for. */
+  minbtlTargetSharpe: number;
+  /** VAL-114: daily rank quality. */
+  rankIcMinCodes: number;
+  rankIcBootstrapReplicates: number;
+  rankIcBootstrapBlocks: "monthly" | "weekly";
 };
 
 export type KillswitchParams = {
@@ -268,7 +335,7 @@ export type ReplayParams = {
 };
 
 export type LlmParams = {
-  roleDailyTokens: { R1: number; R2: number; R3: number; R5: number };
+  roleDailyTokens: { R1: number; R2: number; R3: number; R5: number; R6: number };
   dailyTotal: number;
   nightlyTokensPerMarket: number;
   /** Per market, as an exact fraction. */
@@ -278,6 +345,62 @@ export type LlmParams = {
   /** The phrases of llm_injection_phrases and their list version (LLM-035). */
   injectionPhrases: readonly string[];
   injectionPhrasesVersion: string;
+};
+
+/**
+ * M15 Cortex parameters (CTX rows, docs/M15_requirements.md; keys in config/keys.ts M15). Shares of
+ * money and loss caps are exact Rationals; counts, multiples and statistical levels are numbers.
+ */
+export type CortexParams = {
+  /** CTX-021: fewest matched setups a cell needs. */
+  cellMinSetups: number;
+  /** CTX-012: fewest independent time blocks. */
+  cellMinBlocks: number;
+  /** CTX-053: effective sample size a family needs before it may trade. */
+  minNeffTrade: number;
+  /** CTX-022: shrinkage pseudo-sample of the ranking. */
+  rankShrinkN0: number;
+  /** CTX-022b: largest loss (stop distance plus overnight gap), fraction of the reference price. */
+  maxLoss: Rational;
+  /** CTX-022b / CTX-028: highest open above the close at which a limit order still buys, fraction. */
+  entryGapCap: Rational;
+  /** CTX-023: evidence disagreement above which a candidate is not taken. */
+  disagreementMax: number;
+  /** CTX-012: largest score share of one angle cluster. */
+  clusterWeightMax: number;
+  /** CTX-025: sector tilt margin (shadow), percentage points. */
+  sectorTiltMarginPp: number;
+  /** CTX-026 caps across the 12 books. */
+  maxBooksSameCode: number;
+  maxBooksSameIndustry: number;
+  maxCodeNavShare: Rational;
+  maxIndustryNavShare: Rational;
+  /** CTX-015: loss at which a frozen position is sold (fraction) and sessions of the freeze. */
+  freezeMaxLoss: Rational;
+  unresolvedFreezeSessions: number;
+  /** CTX-043 / CTX-044. */
+  persistVolumeMult: number;
+  pumpVolumeMult: number;
+  pumpAr: Rational;
+  promotionFlagSessions: number;
+  /** CTX-023: sessions of abstaining in a row that raise the alarm. */
+  abstainAlarmSessions: number;
+  /** CTX-028 / D-289: share of the universe without a fresh bar above which the night abstains. */
+  staleUniverseMaxShare: number;
+  /** CTX-060: settled opinions needed. */
+  opinionMinN: number;
+  /** CTX-031: BH false-discovery rate (PRDS). */
+  ledgerFdrQ: number;
+  /** CTX-012: expected block length of the stationary bootstrap, sessions. */
+  bootstrapBlockSessions: number;
+  /** CTX-053 / D-257: p is hidden when the slope's upper bound is below this. */
+  slopeHideUb: number;
+  /** D-289: minutes the nightly stage may run before it abstains. */
+  stageMinutes: number;
+  /** CTX-050: survivorship haircut, percentage points per holding year (fixed). */
+  survivorshipHaircutPp: number;
+  /** CTX-016: suspension mark policy (fixed text). */
+  suspensionMarkPolicy: string;
 };
 
 export type AgentParams = {
@@ -297,6 +420,8 @@ export type AgentParams = {
     directorNet: Rational;
     holderNewOrIncrease: Rational;
     holderDecrease: Rational;
+    /** AGT-136: weight of a net director sale; equals directorNet unless set (v1). */
+    directorSale: Rational;
   };
   regime: RegimeParams;
   /** "HH:MM" Melbourne time of the decision cut-off. */
@@ -307,6 +432,7 @@ export type AgentParams = {
   /** D-096 #16: nights a keyword breaker waits for its confirmation before it reads green again. */
   tbKwConfirmSessions: number;
   arn011: Arn011Params;
+  entry: EntryParams;
   specConstants: SpecConstantParams;
   cif: CifParams;
   progress: ProgressParams;
@@ -316,6 +442,7 @@ export type AgentParams = {
   killswitch: KillswitchParams;
   replay: ReplayParams;
   llm: LlmParams;
+  cortex: CortexParams;
 };
 
 // ---- building ----
@@ -366,6 +493,9 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       minGain: pct("f1_min_gain_pct"),
       maxHold: num("f1_max_hold"),
       highLookback: num("f1_high_lookback"),
+      returnWindowSessions: num("f1_return_window_sessions"),
+      momentumVariant: str("f1_momentum_variant") as F1Params["momentumVariant"],
+      rankVariant: str("f1_rank_variant") as F1Params["rankVariant"],
     },
     f2: {
       eventArMin: pct("f2_event_ar_min_pct"),
@@ -380,12 +510,15 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       trailAfter: pct("f3_trail_after_pct"),
       trailAtr: rat("f3_trail_atr"),
       timeExit: num("f3_time_exit"),
+      surpriseMode: str("f3_surprise_mode") as F3Params["surpriseMode"],
     },
     f4: {
       rsi2Max: num("f4_rsi2_max"),
       rsi14Max: num("f4_rsi14_max"),
       timeExit: num("f4_time_exit"),
       stopAtr: rat("f4_stop_atr"),
+      entryVariant: str("f4_entry_variant") as F4Params["entryVariant"],
+      rankVariant: str("f4_rank_variant") as F4Params["rankVariant"],
     },
     f5: {
       volumeRatioMin: rat("f5_volume_ratio_min"),
@@ -395,6 +528,7 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       stopCap: pct("f5_stop_cap_pct"),
       trailAtr: rat("f5_trail_atr"),
       timeStop: num("f5_time_stop"),
+      defaultUniverse: str("f5_default_universe") as F5Params["defaultUniverse"],
     },
     f6: {
       minClasses: num("f6_min_classes"),
@@ -411,6 +545,8 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       directorNet: ratFromNumber(weights.director_net),
       holderNewOrIncrease: ratFromNumber(weights.holder_new_or_increase),
       holderDecrease: ratFromNumber(weights.holder_decrease),
+      // AGT-136: absent = follows director_net (v1 behaviour).
+      directorSale: ratFromNumber(weights.director_sale ?? weights.director_net),
     },
     regime: {
       smaSessions: regime.sma_sessions,
@@ -439,6 +575,16 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       rangeDaysWindow: num("arn011_range_days_window"),
       rangeDaysMin: num("arn011_range_days_min"),
     },
+    entry: {
+      maxStopDistance: pct("max_stop_distance_pct"),
+      costGateK: rat("cost_gate_k"),
+      costGateMinRows: num("cost_gate_min_rows"),
+      secondPositionMaxCorr: num("second_position_max_corr"),
+      secondPositionCorrSessions: num("second_position_corr_sessions"),
+      dedupWindowSessions: num("dedup_window_sessions"),
+      dedupMinhashThreshold: num("dedup_minhash_threshold"),
+      indexChangeWindowSessions: num("index_change_window_sessions"),
+    },
     specConstants: {
       f5DryUpRatio: rat("f5_dry_up_ratio"),
       f5DryUpSessions: num("f5_dry_up_sessions"),
@@ -458,6 +604,8 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       lessonBootstrapLevel: num("lesson_bootstrap_level"),
       l2AlphaW0: num("l2_alpha_w0"),
       l2AlphaPayout: num("l2_alpha_payout"),
+      l2AlphaSpendFraction: num("l2_alpha_spend_fraction"),
+      l2AlphaExhaustedLevel: num("l2_alpha_exhausted_level"),
       comparisonsFdrQ: num("comparisons_fdr_q"),
       comparisonLookAlpha: num("comparison_look_alpha"),
       comparisonLockoutSessions: num("comparison_lockout_sessions"),
@@ -467,6 +615,10 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       challengerGeneratorPerWeek: num("challenger_generator_per_week"),
       kbArchiveTime: str("kb_archive_time"),
       classifierModel: str("llm_classifier_model"),
+      expertMinScored: num("expert_min_scored"),
+      expertScreenFdr: num("expert_screen_fdr"),
+      expertChallengersPerWeek: num("expert_challengers_per_week"),
+      f7MinClusters: num("f7_min_clusters"),
     },
     picks: {
       factorMinBucketN: num("factor_min_bucket_n"),
@@ -533,6 +685,15 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       eventCoverageMin: pct("event_coverage_min_pct"),
       codeReuseGapSessions: num("code_reuse_gap_sessions"),
       dsrDefaultSrVariance: num("dsr_default_sr_variance"),
+      valErrorBudgetMode: str("val_error_budget_mode") as StatsParams["valErrorBudgetMode"],
+      valFwerPerLineage: num("val_fwer_per_lineage"),
+      settlementStatsMode: str("settlement_stats_mode") as StatsParams["settlementStatsMode"],
+      minbtlTargetSharpe: num("minbtl_target_sharpe"),
+      rankIcMinCodes: num("rank_ic_min_codes"),
+      rankIcBootstrapReplicates: num("rank_ic_bootstrap_replicates"),
+      rankIcBootstrapBlocks: str(
+        "rank_ic_bootstrap_blocks",
+      ) as StatsParams["rankIcBootstrapBlocks"],
     },
     killswitch: {
       tradesPerLook: num("killswitch_trades_per_look"),
@@ -555,12 +716,43 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
       eventBackfillYears: num("event_backfill_years"),
       ledgerNotionalMicro: BigInt(num("ledger_notional_aud")) * MICRO_PER_AUD,
     },
+    cortex: {
+      cellMinSetups: num("cell_min_setups"),
+      cellMinBlocks: num("cell_min_blocks"),
+      minNeffTrade: num("cortex_min_neff_trade"),
+      rankShrinkN0: num("rank_shrink_n0"),
+      maxLoss: pct("max_loss_pct"),
+      entryGapCap: pct("entry_gap_cap_pct"),
+      disagreementMax: num("cortex_disagreement_max"),
+      clusterWeightMax: num("cluster_weight_max"),
+      sectorTiltMarginPp: num("sector_tilt_margin_pp"),
+      maxBooksSameCode: num("max_books_same_code"),
+      maxBooksSameIndustry: num("max_books_same_industry"),
+      maxCodeNavShare: rat("max_code_nav_share"),
+      maxIndustryNavShare: rat("max_industry_nav_share"),
+      freezeMaxLoss: pct("freeze_max_loss_pct"),
+      unresolvedFreezeSessions: num("unresolved_freeze_sessions"),
+      persistVolumeMult: num("persist_volume_mult"),
+      pumpVolumeMult: num("pump_volume_mult"),
+      pumpAr: pct("pump_ar_pct"),
+      promotionFlagSessions: num("promotion_flag_sessions"),
+      abstainAlarmSessions: num("abstain_alarm_sessions"),
+      staleUniverseMaxShare: num("stale_universe_max_share"),
+      opinionMinN: num("opinion_min_n"),
+      ledgerFdrQ: num("ledger_fdr_q"),
+      bootstrapBlockSessions: num("bootstrap_block_sessions"),
+      slopeHideUb: num("cortex_slope_hide_ub"),
+      stageMinutes: num("cortex_stage_minutes"),
+      survivorshipHaircutPp: num("survivorship_haircut_pp"),
+      suspensionMarkPolicy: str("suspension_mark_policy"),
+    },
     llm: {
       roleDailyTokens: {
         R1: num("llm_budget_r1_daily"),
         R2: num("llm_budget_r2_daily"),
         R3: num("llm_budget_r3_daily"),
         R5: num("llm_budget_r5_daily"),
+        R6: num("llm_budget_r6_steelman_daily"),
       },
       dailyTotal: num("llm_daily_budget_total"),
       nightlyTokensPerMarket: num("nightly_tokens_per_market"),

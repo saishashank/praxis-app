@@ -246,22 +246,11 @@ body {
   background-image: none;
 }
 
-/* ---- status dots: a slow pulse on live states -------------------------------------------- */
+/* ---- status dots: a static ring on live states -------------------------------------------- */
 
 .ui-live-dot {
-  box-shadow: 0 0 0 0 currentColor;
-  animation: ui-pulse 2.4s ease-out infinite;
-}
-@keyframes ui-pulse {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 55%, transparent);
-  }
-  70% {
-    box-shadow: 0 0 0 8px transparent;
-  }
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-  }
+  /* UXR-056: nothing moves continuously, so a live state is a static soft ring. */
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 30%, transparent);
 }
 
 [data-motion="off"] .ui-card,
@@ -290,7 +279,7 @@ body {
   );
 }
 
-/* Slow-drifting aurora behind every page (GPU transform only, stops for reduced motion). */
+/* Still aurora behind every page (UXR-056: nothing moves continuously). */
 body::before {
   content: "";
   position: fixed;
@@ -301,18 +290,6 @@ body::before {
     radial-gradient(38vmax 26vmax at 22% 18%, var(--aura-1), transparent 70%),
     radial-gradient(34vmax 24vmax at 82% 12%, var(--aura-2), transparent 70%),
     radial-gradient(40vmax 28vmax at 55% 92%, var(--aura-3), transparent 70%);
-  animation: ui-aurora 48s ease-in-out infinite alternate;
-}
-@keyframes ui-aurora {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(3vmax, 2vmax, 0) scale(1.06);
-  }
-  100% {
-    transform: translate3d(-2vmax, 3vmax, 0) scale(1.02);
-  }
 }
 
 /* The wordmark carries the brand line. */
@@ -361,29 +338,7 @@ body::before {
   box-shadow: var(--glow-accent);
 }
 
-/* Empty states: a lit orb above the message. */
-.ui-empty::before {
-  content: "";
-  display: block;
-  width: 2.75rem;
-  height: 2.75rem;
-  margin: 0 auto 0.85rem;
-  border-radius: 999px;
-  background: var(--orb);
-  box-shadow: 0 0 34px color-mix(in srgb, var(--color-accent) 45%, transparent);
-  animation: ui-orb 4s ease-in-out infinite;
-}
-@keyframes ui-orb {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.85;
-  }
-  50% {
-    transform: scale(1.08);
-    opacity: 1;
-  }
-}
+/* Empty states carry the shared section-colour illustration (UXR-055), not a CSS orb. */
 
 /* Tables: header row tinted, a lit rule under it, rows light up on hover. */
 #content thead th {
@@ -403,8 +358,7 @@ body::before {
 }
 
 /* High contrast: plain borders, no aurora, no orb, no markers' glow. */
-:root[data-theme="high_contrast"] body::before,
-:root[data-theme="high_contrast"] .ui-empty::before {
+:root[data-theme="high_contrast"] body::before {
   display: none;
 }
 :root[data-theme="high_contrast"] .ui-card,
@@ -422,10 +376,6 @@ body::before {
 }
 
 /* Motion switch off: everything stands still (the OS setting is handled in globals.css). */
-[data-motion="off"] body::before,
-[data-motion="off"] .ui-empty::before {
-  animation: none;
-}
 
 /* ---- round 3: halo behind page titles, brighter edges, lit active tab ---------------------- */
 
@@ -512,8 +462,8 @@ body::before {
 /* ---- account avatar (UXR-004) and the brand mark ------------------------------------------ */
 
 .ui-avatar {
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
+  background: var(--gradient-brand);
+  color: var(--color-brand-a-on-fill);
   box-shadow:
     0 0 0 2px var(--color-bg),
     0 0 0 3px color-mix(in srgb, var(--color-accent) 60%, transparent),
@@ -527,4 +477,116 @@ body::before {
 }
 :root[data-theme="high_contrast"] .app-mark {
   filter: none;
+}
+
+/* ---- V2 shared components (C1): motion <= 200 ms (UXR-056), marks in High contrast (UXR-057) ---- */
+
+.ui-motion {
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+.ui-toast {
+  animation: ui-toast-in 180ms ease-out;
+}
+@keyframes ui-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+[data-motion="off"] .ui-motion,
+[data-motion="off"] .ui-toast {
+  transition: none;
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-motion,
+  .ui-toast {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* The two-letter mark is shown only where hue alone is not enough. */
+.ui-mark {
+  display: none;
+}
+:root[data-theme="high_contrast"] .ui-mark {
+  display: inline;
+}
+
+/* ---- C12 motion (UXR-056): tile lift, badge pop, fresh-chip pulse; every one <= 200 ms, none repeats ---- */
+
+.ui-lift {
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
+}
+.ui-lift:hover {
+  transform: translateY(-2px);
+}
+.ui-lift:active {
+  transform: translateY(0) scale(0.99);
+}
+.ui-pop {
+  animation: ui-pop-in 180ms ease-out 1;
+}
+@keyframes ui-pop-in {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.ui-pulse-soft {
+  animation: ui-pulse-once 200ms ease-out 1;
+}
+@keyframes ui-pulse-once {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+[data-motion="off"] .ui-lift,
+[data-motion="off"] .ui-pop,
+[data-motion="off"] .ui-pulse-soft {
+  transition: none;
+  animation: none;
+}
+[data-motion="off"] .ui-lift:hover,
+[data-motion="off"] .ui-lift:active {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-lift,
+  .ui-pop,
+  .ui-pulse-soft {
+    transition: none;
+    animation: none;
+  }
+  .ui-lift:hover,
+  .ui-lift:active {
+    transform: none;
+  }
+}
+
+/* The title halo of a centred h1 (404 page) can reach past the viewport on a phone: clip it without
+   making #content a scroll container (so sticky headers inside keep working). */
+#content {
+  overflow-x: clip;
 }

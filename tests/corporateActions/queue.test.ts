@@ -35,6 +35,7 @@ describe("loadReviewQueue", () => {
       sources: ["announcement"],
       queuedOn: D1,
       applyOn: "2026-10-20", // 5 sessions after Tue 13 Oct
+      neverAuto: false,
     });
     expect(q.cards[0].observed).toBeCloseTo(0.5, 10);
     expect(q.cards[0].reasons).toEqual(["the sources disagree about the terms"]);
@@ -53,7 +54,10 @@ describe("loadReviewQueue", () => {
       now: nowOf(D0),
     });
     await run(db, D1);
-    expect((await loadReviewQueue(db)).cards[0].applyOn).toBe("2026-10-15");
+    const card = (await loadReviewQueue(db)).cards[0];
+    expect(card.applyOn).toBe("2026-10-15");
+    // a price-only jump (GL-01) is never applied automatically
+    expect(card.neverAuto).toBe(true);
   });
 
   it("is empty when nothing is queued; blocked-only conflicts are only counted", async () => {

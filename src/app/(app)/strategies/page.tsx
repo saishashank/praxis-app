@@ -3,7 +3,6 @@
 // attention group comes first (its count is the badge on the tab), then every strategy in the chosen
 // order. The four sort chips are a form with a server action, so they work without JavaScript and the
 // choice is remembered per user (UXN-046a); `?sort=` in a link wins for that visit.
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
@@ -25,6 +24,7 @@ import { Banner, EmptyState } from "@/components/ui/States";
 import { SimulatedLabel } from "@/components/ui/Values";
 import { buttonClass } from "@/components/ui/Button";
 import { setSortPreferenceAction } from "./actions";
+import { StrategyTabs } from "./StrategyTabs";
 import { StrategyTile } from "./StrategyTile";
 
 export const dynamic = "force-dynamic";
@@ -66,24 +66,14 @@ export default async function StrategiesPage({
   ]);
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-6 px-4 py-6">
+    <main className="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-6 px-4 py-6">
       <header className="flex min-w-0 flex-col gap-2">
         <h1 className="m-0 text-2xl font-semibold">Strategies</h1>
         <p className="m-0 text-sm text-text-muted">
           Practice strategies that trade with simulated money. Nothing here is a real trade.
         </p>
         <SimulatedLabel />
-        <nav aria-label="Strategy pages" className="flex flex-wrap gap-3 text-sm">
-          <Link href="/strategies/leaderboard" className="text-accent underline">
-            Leaderboard
-          </Link>
-          <Link href="/strategies/risk" className="text-accent underline">
-            Risk overview
-          </Link>
-          <Link href="/strategies/ideas" className="text-accent underline">
-            {"Tonight’s trade ideas"}
-          </Link>
-        </nav>
+        <StrategyTabs current="overview" />
       </header>
 
       {list.data.market.control !== "enabled" ? (
@@ -100,7 +90,9 @@ export default async function StrategiesPage({
       ) : null}
 
       {tiles.length === 0 ? (
-        <EmptyState title="No strategies yet">{list.text}</EmptyState>
+        <EmptyState motif="strategies" hue="strategies" title="No strategies yet">
+          {list.text}
+        </EmptyState>
       ) : (
         <>
           {list.state === "empty" ? <Banner>{list.text}</Banner> : null}
@@ -110,9 +102,14 @@ export default async function StrategiesPage({
               Needs attention{attention.length > 0 ? ` (${attention.length})` : ""}
             </h2>
             {attention.length === 0 ? (
-              <p className="m-0 text-sm text-text-muted">Nothing needs a look right now.</p>
+              <EmptyState
+                compact
+                motif="strategies"
+                hue="strategies"
+                title="Nothing needs a look right now."
+              />
             ) : (
-              <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {attention.map((t) => (
                   <StrategyTile
                     key={t.execution}
@@ -149,7 +146,7 @@ export default async function StrategiesPage({
                 </fieldset>
               </form>
             </div>
-            <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {tiles.map((t) => (
                 <StrategyTile
                   key={t.execution}

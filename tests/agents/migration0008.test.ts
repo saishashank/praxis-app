@@ -542,7 +542,10 @@ describe("main migration 0008_agents: shape", () => {
 describe("main migration 0008_agents: arena_order M4 columns (edited into 0007)", () => {
   it("arena_order has signal_id, card_id, max_open_micro, stop_spec after untradeable_flag", async () => {
     const db = await freshDb("main");
-    const cols = (await q(db, "PRAGMA table_info(arena_order)")).map((r) => r.name);
+    // 0019 (M15) appends limit_micro after the M4 columns
+    const all = (await q(db, "PRAGMA table_info(arena_order)")).map((r) => r.name);
+    expect(all.at(-1)).toBe("limit_micro");
+    const cols = all.slice(0, -1);
     expect(cols).toEqual([...ARENA_COLUMNS.arena_order]);
     expect(cols.slice(-4)).toEqual(["signal_id", "card_id", "max_open_micro", "stop_spec"]);
     const info = await q(db, "PRAGMA table_info(arena_order)");
@@ -614,7 +617,7 @@ describe("main migration 0008_agents: up / down / up", () => {
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
     const full = await schemaOf(db);
-    await migrateDown(db, ms, 6); // 0014, 0013, 0012, 0011, 0010 and 0009 sit on top: take the schema as of 0008
+    await migrateDown(db, ms, 17); // 0019, 0018, 0017, 0016, 0015, 0014, 0013, 0012, 0011, 0010 and 0009 sit on top: take the schema as of 0008
     const before = await schemaOf(db);
     expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 7 });
     const mid = await schemaOf(db);
@@ -633,9 +636,9 @@ describe("main migration 0008_agents: up / down / up", () => {
       );
     });
     expect(mid).toEqual(nonAgent);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 7, version: 14 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 18, version: 25 });
     expect(await schemaOf(db)).toEqual(full);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 14 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 25 });
   });
 
   it("a fresh database and a down/up database have the same schema", async () => {
@@ -1106,7 +1109,7 @@ describe("main migration 0008_agents: backup round trip", () => {
       /only category_llm/,
     );
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 14 });
+    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 25 });
   });
 
   it("the meta line lists the forever agent tables (and not the pruned ones)", async () => {

@@ -34,6 +34,9 @@ export const ALERT_DELIVERY = ["immediate", "digest"] as const;
 // UXN-281 "Motion" switch; UXN-282 "whether times show in Melbourne or exchange-local time".
 export const MOTIONS = ["on", "off"] as const;
 export const TIME_ZONES = ["melbourne", "exchange"] as const;
+// M17 (D-444): pick alerts and their e-mails (ARN-112, EML-038..040); the pick order (UXN-309).
+export const ON_OFF = ["on", "off"] as const;
+export const PICK_SORTS = ["chance", "expected_gain"] as const;
 // Only active markets are selectable: AU until a second market activates (ROL-107).
 export const SELECTABLE_MARKETS = ["AU"] as const;
 
@@ -42,6 +45,8 @@ export type TimeFormat = (typeof TIME_FORMATS)[number];
 export type AlertDelivery = (typeof ALERT_DELIVERY)[number];
 export type Motion = (typeof MOTIONS)[number];
 export type TimeZoneChoice = (typeof TIME_ZONES)[number];
+export type OnOff = (typeof ON_OFF)[number];
+export type PickSort = (typeof PICK_SORTS)[number];
 
 export type Preferences = {
   theme: Theme;
@@ -51,7 +56,27 @@ export type Preferences = {
   alert_p2: AlertDelivery;
   motion: Motion;
   times_in: TimeZoneChoice;
+  /**
+   * Pick alerts (ARN-112). The role-blind default is "off"; the Owner's effective default is "on"
+   * (config `pick_alerts_default_owner`, D-385) and applies while the field is not stored: only an
+   * explicit choice is ever written (see PICK_FIELDS), so the alert poll can tell "never chose".
+   */
+  pick_alerts: OnOff;
+  /** E-mail for a cleared pick (below_stop, above_chase_cap; EML-039). */
+  cleared_pick_emails: OnOff;
+  /** E-mail "Attention needed: new intraday candidate" (EML-040). */
+  intraday_candidate_emails: OnOff;
+  /** Pick order on Picks and Home; `sortPicks(rows, basis)` takes exactly these two values. */
+  picks_sort: PickSort;
 };
+
+/** Fields that are stored only once the user chose them (their default depends on role or on config). */
+export const PICK_FIELDS = [
+  "pick_alerts",
+  "cleared_pick_emails",
+  "intraday_candidate_emails",
+  "picks_sort",
+] as const;
 
 export const DEFAULT_PREFERENCES: Readonly<Preferences> = Object.freeze({
   theme: "dark",
@@ -61,6 +86,10 @@ export const DEFAULT_PREFERENCES: Readonly<Preferences> = Object.freeze({
   alert_p2: "digest",
   motion: "on",
   times_in: "melbourne",
+  pick_alerts: "off",
+  cleared_pick_emails: "on",
+  intraday_candidate_emails: "on",
+  picks_sort: "chance",
 });
 
 const ALLOWED: { [K in keyof Preferences]: readonly string[] } = {
@@ -71,6 +100,10 @@ const ALLOWED: { [K in keyof Preferences]: readonly string[] } = {
   alert_p2: ALERT_DELIVERY,
   motion: MOTIONS,
   times_in: TIME_ZONES,
+  pick_alerts: ON_OFF,
+  cleared_pick_emails: ON_OFF,
+  intraday_candidate_emails: ON_OFF,
+  picks_sort: PICK_SORTS,
 };
 const FIELDS = Object.keys(ALLOWED) as Array<keyof Preferences>;
 
@@ -129,6 +162,18 @@ async function storedExtras(
   return keep;
 }
 
+// The pick fields the user has stored explicitly (they are written only once chosen).
+async function storedPickKeys(db: Pick<Client, "execute">, userId: number): Promise<Set<string>> {
+  const r = await db.execute({
+    sql: "SELECT prefs_json FROM user_preference WHERE user_id = ?",
+    args: [userId],
+  });
+  const v = r.rows.length ? parseStored(r.rows[0].prefs_json) : null;
+  const out = new Set<string>();
+  if (isRecord(v)) for (const f of PICK_FIELDS) if (f in v) out.add(f);
+  return out;
+}
+
 // Whole-patch validation: any unknown key or invalid value rejects everything.
 function validate(patch: unknown): Partial<Preferences> | null {
   if (!isRecord(patch)) return null;
@@ -140,6 +185,17 @@ function validate(patch: unknown): Partial<Preferences> | null {
     clean[key] = v;
   }
   return clean as Partial<Preferences>;
+}
+
+// next without the pick fields the user never chose (their defaults must not become stored choices).
+function storable(
+  next: Preferences,
+  clean: Partial<Preferences>,
+  explicit: ReadonlySet<string>,
+): Record<string, string> {
+  const out: Record<string, string> = { ...next };
+  for (const f of PICK_FIELDS) if (!(f in clean) && !explicit.has(f)) delete out[f];
+  return out;
 }
 
 export async function updatePreferences(
@@ -170,7 +226,13 @@ export async function updatePreferences(
     const cur = await getPreferences(tx, actor.id);
     const keep = await storedExtras(tx, actor.id);
     const next: Preferences = { ...cur, ...clean };
-    const changed = FIELDS.filter((f) => next[f] !== cur[f]);
+    const explicit = await storedPickKeys(tx, actor.id);
+    // A pick field counts as changed when it is chosen for the first time, even to its default.
+    const changed = FIELDS.filter(
+      (f) =>
+        next[f] !== cur[f] ||
+        ((PICK_FIELDS as readonly string[]).includes(f) && f in clean && !explicit.has(f)),
+    );
     if (!changed.length) {
       await tx.rollback();
       return { ok: true, changed: [] };
@@ -179,7 +241,7 @@ export async function updatePreferences(
     await tx.execute({
       sql: `INSERT INTO user_preference (user_id, prefs_json, updated_at) VALUES (?, ?, ?)
             ON CONFLICT (user_id) DO UPDATE SET prefs_json = excluded.prefs_json, updated_at = excluded.updated_at`,
-      args: [actor.id, JSON.stringify({ ...keep, ...next }), at],
+      args: [actor.id, JSON.stringify({ ...keep, ...storable(next, clean, explicit) }), at],
     });
     await auditTx(tx, env, meta ?? NO_META, {
       at,

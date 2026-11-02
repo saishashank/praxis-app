@@ -49,6 +49,8 @@ export type CodeDef = {
   readonly volume?: (i: number) => bigint;
   /** A 2-for-1 split with this ex-date session index: raw prices halve from it on. */
   readonly splitAt?: number;
+  /** Overrides the open of session i (default: the previous close); M15 P2 uses it for a gap-up. */
+  readonly open?: (i: number, prevClose: bigint) => bigint;
 };
 
 const CENT = 10_000n;
@@ -86,7 +88,8 @@ export async function buildNight(db: Client, o: NightOptions): Promise<void> {
       const split = c.splitAt !== undefined && i >= c.splitAt;
       const close = split ? c.close(i) / 2n : c.close(i);
       const first = prev.get(c.code);
-      const open = c.splitAt === i && first !== undefined ? first / 2n : (first ?? close);
+      const base = c.splitAt === i && first !== undefined ? first / 2n : (first ?? close);
+      const open = c.open === undefined ? base : c.open(i, base);
       prev.set(c.code, close);
       const hi = (open > close ? open : close) + CENT;
       const lo = (open < close ? open : close) - CENT;
@@ -157,9 +160,11 @@ export async function addAction(
 ): Promise<void> {
   const exD = DATES[exIndex]!;
   const res = await db.execute({
-    sql: `INSERT INTO corporate_action (market, code, type, ex_date, record_date, payload_json, evidence_json)
-          VALUES (?, ?, ?, ?, NULL, ?, NULL)`,
-    args: [MARKET, code, type, exD, JSON.stringify(payload)],
+    // D-793: a synthetic action is known from the first session of the run (a NULL known_at on a row
+    // born after the legacy bound is no longer "always known").
+    sql: `INSERT INTO corporate_action (market, code, type, ex_date, record_date, payload_json, evidence_json, known_at)
+          VALUES (?, ?, ?, ?, NULL, ?, NULL, ?)`,
+    args: [MARKET, code, type, exD, JSON.stringify(payload), `${DATES[0]!}T00:00:00.000Z`],
   });
   await db.execute({
     sql: `INSERT INTO corporate_action_event (action_id, at, status, by, note)

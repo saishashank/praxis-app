@@ -15,6 +15,7 @@ import {
   type SleeveLegView,
   type VersionRow,
 } from "@/lib/ui/loaders/strategyViews";
+import { loadRobustness } from "@/lib/ui/loaders/robustness";
 import { CifTable, type CifRow } from "@/components/charts/Cif";
 import { RegimeBadge, ValidationBadge } from "@/components/ui/Badges";
 import { Button } from "@/components/ui/Button";
@@ -23,9 +24,15 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { KpiRow, KpiTile } from "@/components/ui/Kpi";
 import { Term } from "@/components/ui/Overlays";
 import { Banner, EmptyState, ShowDetails } from "@/components/ui/States";
+import { Pill } from "@/components/ui/Pill";
 import { GainLoss, Money, NotMeasured, SimulatedLabel } from "@/components/ui/Values";
 import { formatDate, formatMicro, formatPpm, gainLossGlyph } from "@/lib/view/format";
+import { NavBar } from "../NavBar";
+import { OutcomeBars } from "../OutcomeBars";
+import { StrategyTabs } from "../StrategyTabs";
+import { tileState } from "../state";
 import { RevertVersion } from "./RevertVersion";
+import { Robustness } from "./Robustness";
 import { StrategyChart, type ChartControl, type ChartTrade } from "./StrategyChart";
 
 export const dynamic = "force-dynamic";
@@ -140,6 +147,9 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
     d.navSeries.map((p) => p.d),
   );
 
+  // M14 (D-251): Owner and Editor only; the loader reads nothing for any other role
+  const robustness = await loadRobustness(deps, id);
+
   const navPoints = d.navSeries.map((p) => ({ time: p.d, value: dollars(p.nav) }));
   const ddPpm = drawdownPpm(d.navSeries.map((p) => p.nav));
   const maxDropPpm = ddPpm.length > 0 ? Math.min(...ddPpm) : 0;
@@ -184,6 +194,10 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
   const isOwner = user.role === "owner";
   const isEditor = user.role === "editor";
   const liveVersion = ex.versions.find((v) => v.live)?.id ?? d.ruleVersion;
+  const openTrades = ex.trades.filter((t) => t.open);
+  const closedTrades = ex.trades.flatMap((t) =>
+    !t.open && t.returnPpm !== null ? [{ key: t.key, stock: t.stock, returnPpm: t.returnPpm }] : [],
+  );
   // D-200: with fewer than 3 separate finished rounds the chances are not shown (0% with a 0-100%
   // range looks like a result); the card says what is needed instead
   const ev = ex.evidence && (ex.evidence.effectiveN ?? 0) >= MIN_ROUNDS ? ex.evidence : null;
@@ -252,8 +266,33 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
 
   return (
     <main className="mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-6 px-4 py-6">
-      <header className="flex min-w-0 flex-col gap-2">
-        <h1 className="m-0 text-2xl font-semibold">{d.name}</h1>
+      <StrategyTabs current="overview" />
+      <header
+        data-sticky-header=""
+        className="sticky top-14 z-20 -mx-4 flex min-w-0 flex-col gap-2 border-b border-border bg-bg px-4 py-3"
+      >
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+          <h1 className="m-0 text-2xl font-semibold">{d.name}</h1>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {tile?.nav ? (
+              <span className="font-mono text-lg" data-header-nav="">
+                <Money micro={tile.nav.micro} />
+              </span>
+            ) : null}
+            {tile && tileState(tile) ? (
+              <Pill kind="state" value={tileState(tile) as string} />
+            ) : null}
+          </div>
+        </div>
+        {tile?.nav ? (
+          <NavBar
+            label={d.name ?? "Strategy"}
+            navCents={Math.round(tile.nav.micro / MICRO_PER_CENT)}
+            startCents={tile.seed ? Math.round(tile.seed.micro / MICRO_PER_CENT) : undefined}
+            minCents={tile.bust ? Math.round(tile.bust.micro / MICRO_PER_CENT) : undefined}
+            maxCents={tile.target ? Math.round(tile.target.micro / MICRO_PER_CENT) : undefined}
+          />
+        ) : null}
         <p className="m-0 text-sm text-text-muted">
           {tile?.moneyType}
           {d.oneLiner ? ` · ${d.oneLiner}` : ""}
@@ -297,7 +336,9 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
       ) : null}
 
       {!tile?.hasCohort ? (
-        <EmptyState title="Nothing to chart yet">{detail.text}</EmptyState>
+        <EmptyState motif="strategies" hue="strategies" title="Nothing to chart yet">
+          {detail.text}
+        </EmptyState>
       ) : (
         <>
           <KpiRow label="Where this round stands">
@@ -344,6 +385,52 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
           </Card>
         </>
       )}
+
+      <Card title="Open positions" headingLevel={2}>
+        {openTrades.length === 0 ? (
+          <EmptyState compact motif="strategies" hue="strategies" title="No open positions." />
+        ) : (
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {openTrades.map((t) => (
+              <li
+                key={t.key}
+                className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md bg-surface-2 p-2 text-sm"
+              >
+                <span className="min-w-0 font-semibold break-words">{t.stock}</span>
+                <span>
+                  {t.qty} {t.qty === 1 ? "share" : "shares"}
+                </span>
+                <span className="text-text-muted">since {t.entryDay ?? "an earlier session"}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card title="Rules in force" headingLevel={2}>
+        <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+          <li>
+            Rule version in use:{" "}
+            {detail.masked ? (
+              "the current one"
+            ) : (
+              <span className="font-mono">{liveVersion ?? "n/a"}</span>
+            )}
+          </li>
+          {d.costProfile && !detail.masked ? <li>Cost profile: {d.costProfile}</li> : null}
+          <li>Pausing stops new entries only; open positions close by their own rules.</li>
+        </ul>
+      </Card>
+
+      <Card title="Outcomes so far" headingLevel={2}>
+        <div className="flex min-w-0 flex-col gap-3">
+          <p className="m-0 text-sm text-text-muted">
+            {closedTrades.length} closed {closedTrades.length === 1 ? "trade" : "trades"} in this
+            round, by return. Simulated.
+          </p>
+          <OutcomeBars items={closedTrades} />
+        </div>
+      </Card>
 
       <Card title="Compared with matched controls" headingLevel={2}>
         {ev ? (
@@ -409,13 +496,15 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
         )}
       </Card>
 
+      <Robustness view={robustness} />
+
       <Card title="Past rounds" headingLevel={2}>
         <DataTable
           caption="Rounds of this strategy, newest first"
           columns={roundCols}
           rows={d.pastRounds}
           rowKey={(r) => String(r.round)}
-          empty={<p className="m-0 text-sm text-text-muted">No rounds yet.</p>}
+          empty={<EmptyState compact motif="strategies" hue="strategies" title="No rounds yet." />}
         />
       </Card>
 
@@ -486,7 +575,12 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
               </ul>
             </div>
           ) : (
-            <p className="m-0 text-sm text-text-muted">No challengers are waiting.</p>
+            <EmptyState
+              compact
+              motif="strategies"
+              hue="strategies"
+              title="No challengers are waiting."
+            />
           )}
           <h3 className="m-0 text-base font-semibold">Version history</h3>
           <DataTable
@@ -494,7 +588,14 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
             columns={versionCols}
             rows={ex.versions}
             rowKey={(v) => v.id}
-            empty={<p className="m-0 text-sm text-text-muted">No versions are stored yet.</p>}
+            empty={
+              <EmptyState
+                compact
+                motif="strategies"
+                hue="strategies"
+                title="No versions are stored yet."
+              />
+            }
           />
           {isOwner ? (
             <p className="m-0 text-xs text-text-muted">

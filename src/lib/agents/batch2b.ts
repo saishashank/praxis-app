@@ -22,7 +22,7 @@
 // run_record / app_log.
 import type { Client } from "@libsql/client";
 import {
-  isTradingDay,
+  gateDayStatus,
   nextTradingDay,
   type CalendarRow,
   type MarketHours,
@@ -49,7 +49,9 @@ import {
 import { ensureCohorts } from "@/lib/arena/cohortStart";
 import { loadExecutions, loadUnresolvedCohorts, type StoredCohort } from "@/lib/arena/cohortWriter";
 import { loadConfirmedActions, loadQtyAdjustments } from "@/lib/arena/corpActionWriter";
-import type { CorpActionRecord } from "@/lib/arena/corpActions";
+import { knownBy, type CorpActionRecord } from "@/lib/arena/corpActions";
+import { loadIngestBound } from "@/lib/sentinel/cutoffPoll";
+import { decisionCutoffUtc } from "./decisionView";
 import {
   availableCash,
   balancesFromRows,
@@ -79,6 +81,8 @@ import {
   type OpenTrade,
   type SizingContext,
 } from "./candidates";
+import { loadCostGateTable, type CostGateTable } from "./costGate";
+import { firstLegRetryCode, selectEntries } from "./entryGates";
 import {
   cardIdOf,
   CardError,
@@ -120,6 +124,18 @@ import { createAlertRowSink, type BreakerAlertSink } from "./breakerEval";
 import { evaluateSubject, loadBreakerSubjects, writeEvaluation } from "./breakerNightly";
 import { loadAgentParams, type AgentParams } from "./params";
 import type { Tier } from "./families/types";
+import {
+  cortexSignalId,
+  allowedFamilies,
+  cortexStage,
+  persistLiveDecisions,
+  type LiveLink,
+  type StageOptions,
+  type StageResult,
+} from "@/lib/cortex/stage";
+import { familyStatusMap } from "@/lib/cortex/store";
+import type { AngleDef } from "@/lib/cortex/angles/types";
+import { cellKey, TOP3_BAND_KEY } from "@/lib/stats/cells";
 
 export const SIGNALS_JOB = "arena-signals";
 const LOG_MESSAGE_MAX = 500; // threshold-ok: app_log message length cap (as closeBooks logApp)
@@ -142,6 +158,12 @@ export type SignalsOptions = {
   readonly d: string;
   /** An explicit replay against a NON-production database (D-066 / BLD-024). */
   readonly replay?: boolean;
+  /**
+   * D-711: the live entry points set this so a weekday the calendar has no row for is skipped as
+   * `calendar_missing` (fail safe). Off (default): the looser "not a holiday row" rule that
+   * replays and the synthetic-date tests rely on.
+   */
+  readonly strictCalendar?: boolean;
   /** Stamps run_record only; never an engine row. */
   readonly now: () => string;
   readonly commitSha?: string | null;
@@ -158,6 +180,20 @@ export type SignalsOptions = {
    * path (the Owner runs no leverage); the sleeve engine's own tests switch it on.
    */
   readonly withLeverage?: boolean;
+  /**
+   * The Cortex stage (M15 P2, D-265). On by default: it only writes cortex_* rows while every family
+   * is `shadow` (D-280), so v1 is unchanged; `enabled: false` switches it off (the v1 byte-identity
+   * test). The rest is test injection.
+   */
+  readonly cortex?: {
+    readonly enabled?: boolean;
+    readonly angles?: readonly AngleDef[];
+    readonly nowMs?: StageOptions["nowMs"];
+    readonly goLiveD?: string | null;
+    /** Overrides the cortex_stage_minutes time box (tests). */
+    readonly timeoutMs?: number;
+    readonly onStage?: (r: StageResult) => void;
+  };
 };
 
 export type SignalsStatus = "success" | "degraded" | "failed" | "skipped" | "already_done";
@@ -308,6 +344,8 @@ type NewOrder = {
   readonly cardId: string | null;
   readonly maxOpenMicro: bigint | null;
   readonly stopSpec: string | null;
+  /** Cortex orders only (D-288, migration 0019): the entry fills at or below this price. */
+  readonly limitMicro?: bigint | null;
 };
 
 const ORDER_COLS = [
@@ -326,6 +364,7 @@ const ORDER_COLS = [
   "card_id",
   "max_open_micro",
   "stop_spec",
+  "limit_micro",
 ] as const;
 
 async function putOrder(db: Exec, o: NewOrder): Promise<boolean> {
@@ -345,6 +384,7 @@ async function putOrder(db: Exec, o: NewOrder): Promise<boolean> {
     o.cardId,
     o.maxOpenMicro,
     o.stopSpec,
+    o.limitMicro ?? null,
   ];
   // an already-decided order may have moved on (filled/cancelled) only on a later session, never on D
   return putRow(db, "arena_order", ORDER_COLS, ["id"], values, ORDER_COLS);
@@ -595,8 +635,12 @@ type Ctx = {
   readonly llm: LlmRouter | undefined;
   /** Scenario inputs per family|rule version|variant (one ledger read each per night). */
   readonly scenarios: Map<string, ScenarioInput>;
+  /** FAM-005 development-split medians (D-214); loaded once per run. */
+  readonly costTable: CostGateTable;
   /** arena_control as of the start of the run (D-094). */
   readonly control: ControlStates;
+  /** Matched-setup cells of tonight's Cortex stage (gap95 on the Cortex signal evidence). */
+  readonly cortexCells?: ReadonlyMap<string, { readonly gap95: number }>;
 };
 
 async function loadControl(db: Client): Promise<ControlStates> {
@@ -956,6 +1000,8 @@ type CardStatus = {
   readonly reason: string | null;
   /** The sizing result when the candidate was sized (accepted or rejected). */
   readonly sized: LegResult | null;
+  /** M14 card flags of the entry gates (`cost_gate_unmeasured`, `industry_unknown`, `corr_unknown`). */
+  readonly flags?: readonly string[];
 };
 
 type PreparedCard = {
@@ -992,7 +1038,7 @@ async function prepareCard(
     market: ctx.market,
     d: ctx.d,
     executionId: exec.id,
-    candidate: c,
+    candidate: status.flags === undefined ? c : { ...c, flags: [...c.flags, ...status.flags] },
     taken: status.taken,
     notTakenReason: status.reason,
     closeMicro: scaleMicro(facts.bar.close, cross.priceFactor),
@@ -1060,55 +1106,98 @@ async function entriesFor(
     else if (blocked.has(c.code)) notTaken.set(c, "reentry_block");
     else pool.push(c);
   }
-  // the quality gate at creation: a global refusal rejects the top-ranked once, a blocked code
-  // is rejected and the next candidate takes its place (entries only; exits are never gated)
-  const eligible: Candidate[] = [];
-  const gateRejects: { c: Candidate; reason: string }[] = [];
-  let stoppedAt = pool.length;
-  for (const [i, c] of pool.entries()) {
-    if (eligible.length >= slots) {
-      stoppedAt = i;
-      break;
-    }
-    if (crossing(ctx.actionsNext, c.code, ctx.d, ctx.nextD).disposal) {
-      notTaken.set(c, "corporate_action");
-      continue;
-    }
-    const g = await gateOf(ctx, c.code);
-    if (g.allowed) {
-      eligible.push(c);
-      continue;
-    }
-    gateRejects.push({ c, reason: g.reason });
-    if (g.reason !== "code_blocked") {
-      stoppedAt = i + 1;
-      break;
+  // codes that cannot open tonight do not count as the first leg of FAM-006
+  const noPosition = new Set<string>();
+  for (const c of pool) {
+    if (
+      crossing(ctx.actionsNext, c.code, ctx.d, ctx.nextD).disposal ||
+      (await gateOf(ctx, c.code)).reason === "code_blocked"
+    ) {
+      noPosition.add(c.code);
     }
   }
-  for (const c of pool.slice(stoppedAt)) notTaken.set(c, "rank");
-  const legs: Leg[] = [];
-  const byKey = new Map<string, Candidate>();
-  for (const c of eligible) {
-    const facts = ctx.day.facts.get(c.code);
-    if (facts === undefined) {
-      notTaken.set(c, "no_facts");
-      continue;
+  // M14 entry gates (cost gate, second position, SHOCK abstain; the same function the replay calls).
+  // D-284 (FAM-006): when the first leg is then rejected at sizing, the gates run once more with that
+  // code out of the pool, so the same-industry second it blocked and the next candidate get a turn.
+  const attempt = async (rejected: ReadonlySet<string>) => {
+    const nt = new Map<Candidate, string>();
+    const poolA = pool.filter((c) => !rejected.has(c.code));
+    const noPositionA = new Set([...noPosition, ...rejected]);
+    const selection = selectEntries(poolA, {
+      entry: ctx.params.entry,
+      advWindow: ctx.params.windows.adv,
+      costProfile: COST_PROFILES[books.params.costProfile],
+      costTable: ctx.costTable,
+      factsOf: (code) => ctx.day.facts.get(code),
+      heldCodes: [...open].sort(),
+      cashMicro: books.cashMicro,
+      noPosition: noPositionA,
+    });
+    for (const [c, reason] of selection.skipped) nt.set(c, reason);
+    const gated = selection.eligible;
+    // the quality gate at creation: a global refusal rejects the top-ranked once, a blocked code
+    // is rejected and the next candidate takes its place (entries only; exits are never gated)
+    const eligible: Candidate[] = [];
+    const gateRejects: { c: Candidate; reason: string }[] = [];
+    let stoppedAt = gated.length;
+    for (const [i, c] of gated.entries()) {
+      if (eligible.length >= slots) {
+        stoppedAt = i;
+        break;
+      }
+      if (crossing(ctx.actionsNext, c.code, ctx.d, ctx.nextD).disposal) {
+        nt.set(c, "corporate_action");
+        continue;
+      }
+      const g = await gateOf(ctx, c.code);
+      if (g.allowed) {
+        eligible.push(c);
+        continue;
+      }
+      gateRejects.push({ c, reason: g.reason });
+      if (g.reason !== "code_blocked") {
+        stoppedAt = i + 1;
+        break;
+      }
     }
-    const leg = legFor(ctx, facts, c.halfSize, c.code);
-    if (leg === null) {
-      notTaken.set(c, "corporate_action");
-      continue;
+    for (const c of gated.slice(stoppedAt)) nt.set(c, "rank");
+    const legs: Leg[] = [];
+    const byKey = new Map<string, Candidate>();
+    for (const c of eligible) {
+      const facts = ctx.day.facts.get(c.code);
+      if (facts === undefined) {
+        nt.set(c, "no_facts");
+        continue;
+      }
+      const leg = legFor(ctx, facts, c.halfSize, c.code);
+      if (leg === null) {
+        nt.set(c, "corporate_action");
+        continue;
+      }
+      legs.push(leg);
+      byKey.set(c.code, c);
     }
-    legs.push(leg);
-    byKey.set(c.code, c);
-  }
-  const sizing: SizingContext = {
-    params: books.params,
-    cashMicro: books.cashMicro,
-    navMicro: books.navMicro,
-    sleeveReserveMicro: books.sleeveReserveMicro,
+    const sizing: SizingContext = {
+      params: books.params,
+      cashMicro: books.cashMicro,
+      navMicro: books.navMicro,
+      sleeveReserveMicro: books.sleeveReserveMicro,
+    };
+    const results = planLegs(sizing, markSleeve(legs, books), slots);
+    return { selection, gateRejects, byKey, results, nt };
   };
-  const results = planLegs(sizing, markSleeve(legs, books), slots);
+  let att = await attempt(new Set());
+  const rejectedFirst = firstLegRetryCode(att.results);
+  if (rejectedFirst !== null) {
+    const retry = await attempt(new Set([rejectedFirst]));
+    att = {
+      ...retry,
+      byKey: new Map([[rejectedFirst, att.byKey.get(rejectedFirst)!], ...retry.byKey]),
+      results: [att.results[0]!, ...retry.results],
+    };
+  }
+  const { selection, gateRejects, byKey, results } = att;
+  for (const [c, reason] of att.nt) notTaken.set(c, reason);
   const sizedOf = new Map(results.map((r) => [r.leg.key, r] as const));
   const status = new Map<Candidate, CardStatus>();
   for (const g of gateRejects) status.set(g.c, { taken: false, reason: "gate", sized: null });
@@ -1126,6 +1215,10 @@ async function entriesFor(
     }
   }
   for (const [c, reason] of notTaken) status.set(c, { taken: false, reason, sized: null });
+  for (const [c, flags] of selection.flags) {
+    const st = status.get(c);
+    if (st !== undefined) status.set(c, { ...st, flags });
+  }
   // cards and notes first (the router call must not sit inside the write transaction)
   const prepared = new Map<Candidate, PreparedCard>();
   for (const c of ranked) {
@@ -1187,6 +1280,204 @@ async function entriesFor(
   });
   return taken;
 }
+
+/**
+ * Step 4 for one E cohort whose family is `allowed` (M15 P2, D-266/D-280): the Cortex live-arm
+ * decisions replace the v1 pool (no `selectEntries`, D-260). Each decision taken becomes a `signal`
+ * (variant `cortex`), its Decision Card and a pending entry order carrying `limit_micro` (D-288) and
+ * the family's v1 exit plan, in one transaction. The v1 position rules still hold (open slots, no
+ * second line in a held code, FAM-002 re-entry block, arena_control, the quality gate and a
+ * corporate-action disposal). Returns the links by `${bookId}|${code}`.
+ */
+async function cortexEntriesFor(
+  ctx: Ctx,
+  books: CohortBooks,
+  exec: ExecutionRow,
+  family: Family,
+  cx: StageResult,
+): Promise<Map<string, LiveLink>> {
+  const links = new Map<string, LiveLink>();
+  const decisions = cx.out.decisions.filter((x) => x.bookId === books.cohort.id);
+  if (decisions.length === 0) return links;
+  const held = heldReason(ctx, exec);
+  if (held !== null) {
+    ctx.stats.controlSkips += decisions.length;
+    return links;
+  }
+  let slots = books.params.maxOpenPositions - books.positions.size;
+  const open = new Set(books.positions.keys());
+  const blocked = slots < 1 ? new Set<string>() : await reentryBlocked(ctx, exec.id);
+  const ruleVersion = cx.signalRuleVersion.get(family) ?? cortexRuleVersionFallback(family);
+  type Ready = {
+    dec: (typeof decisions)[number];
+    signalId: string;
+    built: BuiltCard;
+    note: CardNote;
+  };
+  const ready: Ready[] = [];
+  for (const dec of decisions) {
+    if (slots < 1 || open.has(dec.code) || blocked.has(dec.code)) continue;
+    const cross = crossing(ctx.actionsNext, dec.code, ctx.d, ctx.nextD);
+    if (cross.disposal) continue;
+    if (!(await gateOf(ctx, dec.code)).allowed) continue;
+    const facts = ctx.day.facts.get(dec.code);
+    const leg = facts === undefined ? null : legFor(ctx, facts, dec.halfSize, dec.code);
+    const signalId = cortexSignalId(ctx.market, ctx.d, family, ruleVersion, dec.code);
+    const plan = scalePlanPrices(dec.plan, cross.priceFactor);
+    const rules = dec.trace.map((t) => ({
+      id: t.gateId,
+      pass: t.pass,
+      value: t.value ?? "",
+      threshold: "",
+    }));
+    const rankText = dec.rankKey.length === 0 ? "none" : JSON.stringify(dec.rankKey);
+    const built = finishCard({
+      signalId,
+      market: ctx.market,
+      d: ctx.d,
+      executionId: exec.id,
+      candidate: {
+        family,
+        variant: CORTEX_SIGNAL_VARIANT,
+        ruleVersion,
+        code: dec.code,
+        regime: dec.card.regime,
+        rules,
+        rankText,
+        flags: [],
+        halfSize: dec.halfSize,
+        groupKey: null,
+      },
+      taken: true,
+      notTakenReason: null,
+      closeMicro: scaleMicro(dec.refMicro, cross.priceFactor),
+      plan,
+      events: [],
+      insiderScoreQ: null,
+      shortDrop: "unknown",
+      eventLowMicro: null,
+      sizing: {
+        accepted: true,
+        reasons: [],
+        qty: dec.qty,
+        fillPriceMicro: scaleMicro(dec.limitMicro, cross.priceFactor),
+        slipMicro: 0n,
+        brokerageMicro: 0n,
+        orderValueMicro: dec.orderValueMicro,
+        refPriceMicro: scaleMicro(dec.refMicro, cross.priceFactor),
+        advValueMicro: leg === null ? 0n : leg.env.advValueMicro,
+      },
+      scenario: { split: null, nets: [] },
+      params: ctx.params,
+      costProfile: COST_PROFILES[books.params.costProfile],
+      tickCrossFactor: books.params.tickCrossFactor,
+    });
+    const errors = checkCard(JSON.parse(built.json), ctx.params);
+    if (errors.length > 0) {
+      throw new SignalsError("card_invalid", errors.slice(0, 3).join("; ")); // threshold-ok: error text length
+    }
+    ready.push({ dec, signalId, built, note: await cardNote(built.card, ctx.llm) });
+    slots -= 1;
+  }
+  await withTx(ctx.db, async (tx) => {
+    for (const r of ready) {
+      const { dec } = r;
+      const cross = crossing(ctx.actionsNext, dec.code, ctx.d, ctx.nextD);
+      const gap95 = ctx.cortexCells?.get(
+        cellKey(family, TOP3_BAND_KEY, dec.volBucket, dec.tier),
+      )?.gap95;
+      const evidence = canonicalJson({
+        gap95: gap95 ?? null,
+        limit_micro: String(scaleMicro(dec.limitMicro, cross.priceFactor)),
+        manifest_id: cx.manifestId,
+        map_rule_version: ruleVersion,
+        p: dec.p,
+        s: dec.s,
+        stop_micro: String(dec.stopMicro),
+        tier: dec.tier,
+        vol_bucket: dec.volBucket,
+      });
+      const values = [
+        r.signalId,
+        ctx.market,
+        ctx.d,
+        family,
+        ruleVersion,
+        CORTEX_SIGNAL_VARIANT,
+        dec.code,
+        dec.card.regime,
+        JSON.stringify([dec.s]),
+        // one signal per code (two books may take it): book-level gates (G11, G12) stay on the card
+        canonicalJson(
+          dec.trace
+            .filter((t) => t.gateId !== "G11_portfolio" && t.gateId !== "G12_settled_cash")
+            .map((t) => ({
+              rule: t.gateId,
+              value: t.value ?? "",
+              threshold: "",
+              pass: t.pass,
+            })),
+        ),
+        evidence,
+        null,
+        null,
+        ctx.day.partial ? 1 : 0,
+        SIGNAL_SCHEMA_VERSION,
+        AGENT_VERSION,
+        ctx.day.inputsRef,
+        ctx.day.cutoff,
+      ];
+      if (await putRow(tx, "signal", SIGNAL_COLS, ["id"], values, SIGNAL_COLS))
+        ctx.stats.signals += 1;
+      const orderId = entryOrderId(books.cohort.id, ctx.d, dec.code);
+      if (
+        await putCard(
+          tx,
+          r.built,
+          { orderId, cohortId: books.cohort.id },
+          r.signalId,
+          ctx.day.cutoff,
+        )
+      ) {
+        ctx.stats.cards += 1;
+      }
+      await putCardNote(tx, r.built.id, r.note);
+      const wrote = await putOrder(tx, {
+        id: orderId,
+        cohortId: books.cohort.id,
+        decidedD: ctx.d,
+        code: dec.code,
+        side: "buy",
+        kind: "entry",
+        qty: dec.qty,
+        status: "pending",
+        rejectReason: null,
+        tier: dec.tier,
+        untradeable: false,
+        signalId: r.signalId,
+        cardId: r.built.id,
+        maxOpenMicro: null,
+        stopSpec: serializePlan({
+          family,
+          variant: CORTEX_SIGNAL_VARIANT,
+          ruleVersion,
+          caThrough: ctx.d,
+          caApplied: cross.ids,
+          plan: scalePlanPrices(dec.plan, cross.priceFactor),
+          rel: [],
+        }),
+        limitMicro: dec.limitMicro,
+      });
+      if (wrote) ctx.stats.orders += 1;
+      links.set(`${dec.bookId}|${dec.code}`, { signalId: r.signalId, orderId, cardId: r.built.id });
+    }
+  });
+  return links;
+}
+
+const CORTEX_SIGNAL_VARIANT = "cortex";
+const CORTEX_V1_FAMILIES: readonly Family[] = ["F1", "F2", "F3", "F4", "F5", "F6"];
+const cortexRuleVersionFallback = (family: Family): string => `${family}.cortex.none`;
 
 /** Step 5: the matched random-entry controls of one C2 / C3 cohort. */
 async function controlsFor(
@@ -1412,7 +1703,9 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
   if (mode === "off") return recordSkip(db, o, "market_off");
   if (mode !== "full" && o.replay !== true) return recordSkip(db, o, "data_only_guard");
   const calendar = o.calendar ?? (await loadCalendar(db, o.market));
-  if (!isTradingDay(o.d, calendar)) return recordSkip(db, o, "non_trading_day");
+  const dayState = gateDayStatus(o.d, calendar, o.strictCalendar);
+  if (dayState === "missing") return recordSkip(db, o, "calendar_missing"); // D-711 fail safe
+  if (dayState !== "open") return recordSkip(db, o, "non_trading_day");
   if (!(await closedOk(db, o.market, o.d))) return recordSkip(db, o, "no_2a_success");
   const hours: MarketHours = {
     tz: text(market.rows[0]!.tz),
@@ -1465,8 +1758,13 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
     // live parameters: the incumbent rule versions laid over the configuration (D-115)
     const params = liveParams(baseParams, versionSet);
     const nextD = nextTradingDay(o.d, calendar);
-    const actions = await loadConfirmedActions(db, o.market, o.d);
-    const actionsNext = await loadConfirmedActions(db, o.market, nextD);
+    // GL-02: both lists hold only actions confirmed by the decision cut-off of D
+    const cutoffD = decisionCutoffUtc(o.d, params.decisionCutoff);
+    // GL-05: a live night without the "first completed poll after the cut-off" marker is recorded
+    const cutoffPollMissing =
+      o.replay === true ? false : (await loadIngestBound(db, o.market, o.d, cutoffD)).missing;
+    const actions = knownBy(await loadConfirmedActions(db, o.market, o.d), cutoffD);
+    const actionsNext = knownBy(await loadConfirmedActions(db, o.market, nextD), cutoffD);
     const trades = await loadOpenTrades(db);
     const day = await loadDayInputs(db, {
       market: o.market,
@@ -1496,6 +1794,7 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       gates: new Map(),
       llm: o.llm,
       scenarios: new Map(),
+      costTable: await loadCostGateTable(db, o.market, params.entry.costGateMinRows),
       control: await loadControl(db),
     };
     const signalIds = new Map<Candidate, string>();
@@ -1512,6 +1811,101 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
     const unresolved = await loadUnresolvedCohorts(db, o.d);
     await exitsStage(ctx, new Map(unresolved.map((c) => [c.id, c])));
     await breakersStage(ctx, o.breakerSink ?? createAlertRowSink(db), o.now());
+
+    // M15 P2 (D-265, D-352): order of work: the v1 cohorts of every non-allowed family first, then the
+    // Cortex stage, then the Cortex entries of the allowed families. A stage failure or overrun never
+    // touches v1: the stage only writes cortex_* rows, and an allowed family then opens nothing
+    // tonight (it holds cash).
+    const cortexOn = o.cortex?.enabled !== false;
+    let cortexAllowed = new Set<Family>();
+    let cortex: StageResult | null = null;
+    const offControl = (key: string): boolean => {
+      const v = ctx.control.get(key);
+      return v === "paused" || v === "killed";
+    };
+    const killedArena = offControl(`market|${o.market}`);
+    const killedFamilies = new Set<Family>(
+      CORTEX_V1_FAMILIES.filter((f) => offControl(`family|${f}`)),
+    );
+    if (cortexOn) {
+      try {
+        cortexAllowed = allowedFamilies(
+          await familyStatusMap(db, o.market, o.d),
+          killedArena,
+          killedFamilies,
+        );
+      } catch {
+        cortexAllowed = new Set<Family>();
+      }
+    }
+    const cortexLinks = new Map<string, LiveLink>();
+    const warnCortex = async (what: string, error: unknown): Promise<void> => {
+      await db.execute({
+        sql: "INSERT INTO app_log (at, level, source, message, run_id) VALUES (?, 'warn', ?, ?, ?)",
+        args: [
+          o.now(),
+          SIGNALS_JOB,
+          `${what} on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
+            0,
+            LOG_MESSAGE_MAX,
+          ),
+          runId,
+        ],
+      });
+    };
+    /** The whole stage (reads, runNight, persist) against cortex_stage_minutes (D-353). */
+    const runStage = async (): Promise<StageResult | null> => {
+      const abort = { aborted: false };
+      const budgetMs = o.cortex?.timeoutMs ?? params.cortex.stageMinutes * 60_000; // threshold-ok: minutes to ms
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const arnCtx = createContext(day.inputs, params, {});
+        const arn011Failed = new Map<string, readonly string[]>();
+        for (const c of day.inputs.codes) {
+          if (c.tier === "U1") continue;
+          const failed = applyArn011(c, arnCtx).failed;
+          if (failed.length > 0) arn011Failed.set(c.code, failed);
+        }
+        const work = cortexStage(db, {
+          market: o.market,
+          d: o.d,
+          params,
+          calendar,
+          replay: o.replay === true,
+          now: o.now,
+          nowMs: o.cortex?.nowMs,
+          killedArena,
+          killedFamilies,
+          arn011Failed,
+          angles: o.cortex?.angles,
+          goLiveD: o.cortex?.goLiveD,
+          includeLeverage: o.withLeverage,
+          abort,
+          timeBoxMs: budgetMs,
+        });
+        const limit = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            abort.aborted = true;
+            reject(new Error(`over cortex_stage_minutes (${budgetMs} ms)`));
+          }, budgetMs);
+        });
+        work.catch(() => undefined); // a late failure after the time box is already handled
+        const result = await Promise.race([work, limit]);
+        o.cortex?.onStage?.(result);
+        return result;
+      } catch (error) {
+        await warnCortex("cortex stage failed", error);
+        return null;
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+      }
+    };
+    const deferred: {
+      books: CohortBooks;
+      exec: ExecutionRow;
+      family: Family;
+      vctx: Ctx;
+    }[] = [];
 
     const live = unresolved.filter((c) => c.live).sort((a, b) => cmp(a.id, b.id));
     const matched = new Map<string, Taken[]>();
@@ -1534,11 +1928,63 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       const family = exec.family as Family;
       const vid = versionOf(exec, family);
       const vctx: Ctx = { ...ctx, params: paramsOf.get(vid) ?? params };
+      if (cortexOn && cortexAllowed.has(family)) {
+        // D-266/D-280: an allowed family trades the Cortex live arm in place of the v1 pool, after
+        // the stage (below); the cohort is not touched by the v1 path
+        deferred.push({ books, exec, family, vctx });
+        continue;
+      }
       const taken = await entriesFor(vctx, books, exec, family, forVersion(family, vid), signalIds);
       const mkey = `${family}|${vid}`;
       const list = matched.get(mkey) ?? [];
       for (const t of taken) if (!list.some((x) => x.signalId === t.signalId)) list.push(t);
       matched.set(mkey, list);
+    }
+
+    if (cortexOn) {
+      cortex = await runStage();
+      if (cortex !== null) {
+        // the one source of "allowed" is the stage's own (N3); a mismatch can only mean a status row
+        // changed during the run: the later reading wins and the family holds cash otherwise
+        cortexAllowed = new Set([...cortexAllowed].filter((f) => cortex!.allowed.has(f)));
+        for (const x of deferred) {
+          if (!cortexAllowed.has(x.family)) continue;
+          try {
+            const vctx: Ctx = { ...x.vctx, cortexCells: cortex.inputs.cells };
+            for (const [k, v] of await cortexEntriesFor(vctx, x.books, x.exec, x.family, cortex)) {
+              cortexLinks.set(k, v);
+            }
+          } catch (error) {
+            // S3 (D-356): this family holds cash tonight; the other families are not affected
+            await warnCortex(`cortex entries failed for ${x.family}`, error);
+          }
+        }
+      }
+    }
+
+    if (cortex !== null) {
+      try {
+        await persistLiveDecisions(db, {
+          market: o.market,
+          d: o.d,
+          manifestId: cortex.manifestId,
+          out: cortex.out,
+          links: cortexLinks,
+        });
+      } catch (error) {
+        await db.execute({
+          sql: "INSERT INTO app_log (at, level, source, message, run_id) VALUES (?, 'warn', ?, ?, ?)",
+          args: [
+            o.now(),
+            SIGNALS_JOB,
+            `cortex live decisions not written on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
+              0,
+              LOG_MESSAGE_MAX,
+            ),
+            runId,
+          ],
+        });
+      }
     }
 
     const evalCtxOf = new Map<string, ReturnType<typeof createContext>>();
@@ -1591,6 +2037,7 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       details: {
         ...stats,
         partial: day.partialReasons.length > 0 ? day.partialReasons : null,
+        ...(cutoffPollMissing ? { cutoff_poll_missing: true } : {}),
         coverage: gaps.length > 0 ? gaps : null,
         ...(started !== null && started.opened > 0
           ? { cohortsOpened: started.opened, cohortStartD: started.startD }

@@ -131,7 +131,31 @@ async function fetchAuthExport(env, fetchImpl, nowMs, date) {
   } catch {
     // counts are informational only
   }
-  return { bytes, counts };
+  // V1-I6 / D-784: the per-table digests of the dump. When present they must match the counts'
+  // tables and be 64-hex; a malformed header fails the stage. An absent one (an older deployed
+  // route) is recorded as null so the gap is visible, not silent.
+  let tableSha256 = null;
+  const rawHash = res.headers.get("x-praxis-backup-sha256");
+  if (rawHash !== null) {
+    let h;
+    try {
+      h = JSON.parse(rawHash);
+    } catch {
+      throw new StageError("auth_export", "bad table digest header");
+    }
+    const names = h && typeof h === "object" && !Array.isArray(h) ? Object.keys(h).sort() : null;
+    const want = Object.keys(counts).sort();
+    if (
+      names === null ||
+      names.length !== want.length ||
+      names.some((n, i) => n !== want[i]) ||
+      !Object.values(h).every((v) => typeof v === "string" && /^[0-9a-f]{64}$/.test(v))
+    ) {
+      throw new StageError("auth_export", "table digests do not match the row counts");
+    }
+    tableSha256 = h;
+  }
+  return { bytes, counts, tableSha256 };
 }
 
 /**
@@ -231,6 +255,7 @@ export async function run(env, deps = {}) {
         bytes: auth.bytes.length,
         sha256: sha256(auth.bytes),
         counts: auth.counts,
+        tableSha256: auth.tableSha256,
       },
       uploaded,
       skipped,

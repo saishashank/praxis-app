@@ -1,25 +1,18 @@
 "use client";
-// The six tabs (UXN-270): a top tab row from 1024 px up and a fixed bottom bar with icons and short
-// labels below it (UXN-017). Both are plain links with aria-current on the active tab. The active tab
+// The six tabs (UXN-270): a top tab row from 1024 px up and a fixed bottom bar below it (UXN-017). Both
+// show a two-tone line icon and the label, always (UXR-055). Both are plain links with aria-current on the active tab. The active tab
 // comes from the pathname, so it is right after a client-side navigation too. Only one of the two
 // navs is displayed at a time (CSS), so assistive technology reads one.
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { cn } from "@/components/ui/cn";
-import { activeTab, type TabId } from "@/lib/ui/nav";
-import { HomeIcon, MarketIcon, NewsIcon, PicksIcon, ReviewsIcon, StrategiesIcon } from "./icons";
+import { activeTabOf } from "@/lib/ui/activeTab";
+import type { TabId } from "@/lib/ui/nav";
+import { CheckIcon } from "@/components/ui/icons";
 
-export type TabView = { id: TabId; label: string; href: string; badge?: number };
-
-const ICONS: Record<TabId, ReactNode> = {
-  home: <HomeIcon />,
-  picks: <PicksIcon />,
-  market: <MarketIcon />,
-  strategies: <StrategiesIcon />,
-  news: <NewsIcon />,
-  reviews: <ReviewsIcon />,
-};
+/** `icon` is rendered by the server (AppHeader), so the six icon components stay out of the client JS. */
+export type TabView = { id: TabId; label: string; href: string; badge?: number; icon: ReactNode };
 
 function badgeOf(t: TabView): number | null {
   return t.badge && t.badge > 0 ? t.badge : null;
@@ -59,7 +52,7 @@ export function TabPending() {
 }
 
 export function TabBar({ tabs }: { tabs: TabView[] }) {
-  const current = activeTab(usePathname() ?? "/");
+  const current = activeTabOf(usePathname() ?? "/");
   return (
     <>
       <nav aria-label="Main" className="hidden min-w-0 lg:block">
@@ -76,7 +69,14 @@ export function TabBar({ tabs }: { tabs: TabView[] }) {
                     : "text-text-muted hover:bg-surface-2 hover:text-text",
                 )}
               >
+                {t.icon}
                 {t.label}
+                {t.id === current ? (
+                  <>
+                    <CheckIcon aria-hidden="true" className="h-3.5 w-3.5" />
+                    <span className="sr-only"> (Selected)</span>
+                  </>
+                ) : null}
                 {badgeOf(t) !== null ? <Badge n={badgeOf(t)!} /> : null}
                 <TabPending />
               </Link>
@@ -96,12 +96,16 @@ export function TabBar({ tabs }: { tabs: TabView[] }) {
                 aria-current={t.id === current ? "page" : undefined}
                 className={cn(
                   "relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] leading-tight",
-                  t.id === current ? "font-semibold text-accent" : "text-text-muted",
+                  t.id === current ? "bg-surface-2 font-semibold text-accent" : "text-text-muted",
                 )}
               >
-                {ICONS[t.id]}
+                {t.icon}
+                {t.id === current ? (
+                  <CheckIcon aria-hidden="true" className="absolute top-1 right-1 h-3 w-3" />
+                ) : null}
                 <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
                   {t.label}
+                  {t.id === current ? <span className="sr-only"> (Selected)</span> : null}
                   {badgeOf(t) !== null ? <Badge n={badgeOf(t)!} /> : null}
                 </span>
                 <TabPending />

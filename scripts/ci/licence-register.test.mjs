@@ -135,3 +135,14 @@ test("the committed document is up to date", () => {
     lines.join("\n"),
   );
 });
+
+test("0018 UPDATEs show in the document: the ASX listed-companies file cites O-23b (DAT-236)", () => {
+  const doc = build();
+  const asx = doc.split("\n").find((l) => l.startsWith("| `asx_listed_companies`"));
+  assert.match(asx, /\| O-23b \| pending Owner \(O-23b\) \|/);
+  assert.match(asx, /under its own terms \(O-23b\)/);
+  const rba = doc.split("\n").find((l) => l.startsWith("| `rba`"));
+  assert.match(rba, /copyrighted by the RBA/);
+  assert.match(doc, /Wikidata structured data is CC0/);
+  assert.match(doc, /CC BY-SA 4\.0/);
+});

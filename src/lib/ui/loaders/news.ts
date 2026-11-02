@@ -18,6 +18,9 @@ import {
   type LoaderEnv,
   type LoaderState,
 } from "./shell";
+import { displayText, displayTitle } from "@/lib/view/displayText";
+
+const SUMMARY_WITHHELD = "Summary withheld — see source announcements";
 
 const LIST_ROWS = 50; // threshold-ok: one page of the news list
 const SCAN_ROWS = 200; // threshold-ok: rows read before the masked filter
@@ -155,16 +158,18 @@ export async function loadNews(env: LoaderEnv, q: NewsQuery): Promise<NewsModel>
       id: Number(x.id), // money-float-ok: SQL integer key
       stock: aliases ? aliases.label(code) : code,
       company: masked || x.name == null ? null : String(x.name),
-      title: aliases && kit ? maskText(String(x.title), aliases, kit.lookup) : String(x.title),
+      title: displayTitle(
+        aliases && kit ? maskText(String(x.title), aliases, kit.lookup) : String(x.title),
+      ),
       type: masked || x.type == null ? null : String(x.type),
       summary:
         x.text_llm == null
           ? null
           : aliases && kit
-            ? maskText(String(x.text_llm), aliases, kit.lookup)
+            ? displayText(maskText(String(x.text_llm), aliases, kit.lookup), SUMMARY_WITHHELD)
             : masked
               ? null
-              : String(x.text_llm),
+              : displayText(String(x.text_llm), SUMMARY_WITHHELD),
       published: masked ? (isoWeek(d) ?? MISSING) : String(x.published_at),
       priceSensitive: Number(x.price_sensitive) === 1,
       materiality: x.materiality === null ? null : Number(x.materiality), // money-float-ok: SQL integer column
@@ -225,13 +230,13 @@ export async function loadNewsItem(env: LoaderEnv, id: number): Promise<NewsItem
     id: Number(x.id), // money-float-ok: SQL integer key
     stock,
     company: masked || x.name === null ? null : String(x.name),
-    title,
+    title: displayTitle(title),
     type: x.type === null ? null : String(x.type),
     published: masked ? (isoWeek(d) ?? MISSING) : String(x.published_at),
     priceSensitive: Number(x.price_sensitive) === 1,
     materiality: x.materiality === null ? null : Number(x.materiality), // money-float-ok: SQL integer column
     polarity: pol(x.polarity),
-    assessment,
+    assessment: assessment === null ? null : displayText(assessment, SUMMARY_WITHHELD),
     url: masked || x.url === null ? null : safeSourceUrl(x.url), // SEC-016: https + registered host, else text only
     today: todayD(env),
   };

@@ -4,7 +4,7 @@
 //
 // Idempotent per ISO week: a run id is `replay:learning:<market>:<week>:<snapshot>:<commit>`, finished
 // stages are recorded as `replay_stat` rows (scope `learning`, metric `stage:<name>`), and a run skips
-// every stage a run of the same week already finished. A week whose six stages are all recorded is a
+// every stage a run of the same week already finished. A week whose stages are all recorded is a
 // no-op (`learningDone`). A stage that ends over `replay_light_minutes` stops the run at that boundary
 // with `paused_budget`; its output is dropped and the next run resumes from it. Stage writers are
 // idempotent, so a stage cut off after its database writes simply runs again and writes nothing new.
@@ -15,6 +15,7 @@ import { agentParamsSha } from "@/lib/agents/params";
 import { canonicalJson, sha256Hex } from "@/lib/arena/cohort";
 import { gzipDeterministic, sha256Hex as fileSha } from "@/lib/data/backfill/rules.mjs";
 import type { Family } from "@/lib/agents/schema";
+import type { FamilyOutput } from "@/lib/agents/families";
 import {
   arn076Stage,
   challengersStage,
@@ -22,9 +23,13 @@ import {
   factorsStage,
   lessonsStage,
   loadMarketCalendar,
+  preRegisteredStage,
   rollsStage,
   type WeeklyContext,
 } from "@/lib/learning/weeklyStages";
+import { expertsStage } from "@/lib/experts/weeklyStage";
+import { rankIcStage } from "@/lib/learning/rankIcStage";
+import { robustnessStage } from "@/lib/learning/robustnessStage";
 import {
   LEARNING_SCOPE,
   RESUMABLE_STAGES,
@@ -126,10 +131,12 @@ export async function runLearning(o: LearningRunOptions): Promise<LearningOutput
     const ruleVersions: Partial<Record<Family, string>> = {};
     for (const [family, v] of set === null ? [] : [...set.live]) ruleVersions[family] = v.id;
     const facts = new Map<string, EntryFacts>();
+    const familyOutputs = new Map<string, Pick<FamilyOutput, "candidates" | "blocked">>();
     const ledger: LedgerResult = replayLedger(world, {
       params: live,
       familyOptions: { ruleVersions },
       factsSink: facts,
+      outputSink: familyOutputs,
     });
     ctx = {
       db: o.db,
@@ -140,6 +147,7 @@ export async function runLearning(o: LearningRunOptions): Promise<LearningOutput
       world,
       ledger,
       facts,
+      familyOutputs,
       calendar: await loadMarketCalendar(o.db, market),
     };
     return {
@@ -161,10 +169,14 @@ export async function runLearning(o: LearningRunOptions): Promise<LearningOutput
       forward,
       comparisons: wrap(comparisonsStage),
       lessons: wrap(lessonsStage),
+      preregistered: wrap(preRegisteredStage),
       challengers: wrap(challengersStage),
       rolls: wrap(rollsStage),
       arn076: wrap(arn076Stage),
       factors: wrap(factorsStage),
+      robustness: wrap(robustnessStage),
+      rankIc: wrap(rankIcStage),
+      experts: wrap(expertsStage),
     },
   });
 

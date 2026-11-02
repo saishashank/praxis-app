@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Banner, EmptyState } from "@/components/ui/States";
+import { Pill } from "@/components/ui/Pill";
 import { Masked, Money, SimulatedLabel } from "@/components/ui/Values";
 import { BustBar } from "@/components/charts";
 import { can } from "@/lib/auth/permissions";
@@ -22,7 +23,10 @@ import {
   type StressRow,
 } from "@/lib/ui/loaders/risk";
 import { formatMicro, formatPpm } from "@/lib/view/format";
-import { setArenaControlAction } from "./actions";
+import { StrategyTabs } from "../StrategyTabs";
+import { listFrozenCohorts } from "@/lib/arena/unfreeze";
+import { clearCohortInvariantsAction, setArenaControlAction } from "./actions";
+import { ClearFrozenButton } from "./ClearFrozenButton";
 import { ControlButton } from "./ControlButton";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +40,7 @@ const FLAG_WORDS = {
   caution: "Caution: close to the loss limit",
   bust: "Would reach the loss limit",
 } as const;
+const PILL_STATE = { enabled: "running", paused: "paused", killed: "stopped" } as const;
 const OWNER_ONLY = "Only the Owner can pause or switch off a strategy.";
 
 function StrategyCard({ s, nearPct }: { s: RiskStrategy; nearPct: number }) {
@@ -66,7 +71,7 @@ function StrategyCard({ s, nearPct }: { s: RiskStrategy; nearPct: number }) {
         </div>
       )}
       {s.positions.length === 0 ? (
-        <p className="m-0 text-sm text-text-muted">No open positions.</p>
+        <EmptyState compact motif="strategies" hue="strategies" title="No open positions." />
       ) : (
         <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {s.positions.map((p) => (
@@ -126,7 +131,10 @@ function SwitchRow({
   return (
     <li className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm">
       <span className="min-w-0 break-words">
-        <strong>{sw.name}</strong> ({sw.key}): {STATE_WORDS[sw.state]}
+        <strong>{sw.name}</strong> ({sw.key}){" "}
+        <Pill kind="state" value={PILL_STATE[sw.state]}>
+          {STATE_WORDS[sw.state]}
+        </Pill>
         {sw.state === "enabled" && sw.effective !== "enabled"
           ? ` (${STATE_WORDS[sw.effective].toLowerCase()} by a wider switch)`
           : ""}
@@ -158,6 +166,7 @@ export default async function RiskPage() {
   const r = await loadRisk({ mainDb: mainDb(), authDb: authDb(), user });
   const d = r.data;
   const owner = can(user.role, "admin");
+  const frozen = owner ? await listFrozenCohorts(mainDb()).catch(() => []) : [];
   const editor = user.role === "editor";
 
   const stressCols: Column<StressRow>[] = [
@@ -194,6 +203,7 @@ export default async function RiskPage() {
 
   return (
     <main className="mx-auto flex max-w-5xl min-w-0 flex-col gap-6 px-4 py-6">
+      <StrategyTabs current="risk" />
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Risk overview</h1>
         <p className="m-0 text-sm text-text-muted">
@@ -256,6 +266,29 @@ export default async function RiskPage() {
                 <SwitchRow key={f.key} sw={f} scope="family" role={owner ? "owner" : "editor"} />
               ))}
             </ul>
+            {frozen.length > 0 ? (
+              <>
+                <h4 className="m-0 mb-2 mt-4 text-sm font-semibold">Stopped by a ledger check</h4>
+                <ul className="m-0 flex list-none flex-col gap-3 p-0">
+                  {frozen.map((f) => (
+                    <li
+                      key={f.cohortId}
+                      className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"
+                    >
+                      <span className="min-w-0 break-words">
+                        <strong>{f.cohortId}</strong> stopped on {f.throughD}
+                      </span>
+                      <ClearFrozenButton
+                        cohortId={f.cohortId}
+                        throughD={f.throughD}
+                        gapSessions={f.gapSessions}
+                        action={clearCohortInvariantsAction}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
           </Card>
         ) : null}
       </section>
@@ -265,7 +298,9 @@ export default async function RiskPage() {
           Positions and distance to the loss limit
         </h2>
         {d.strategies.length === 0 ? (
-          <EmptyState title="No positions yet">{r.text}</EmptyState>
+          <EmptyState motif="strategies" hue="strategies" title="No positions yet">
+            {r.text}
+          </EmptyState>
         ) : (
           <div className="grid min-w-0 gap-4 md:grid-cols-2">
             {d.strategies.map((s) => (
@@ -285,7 +320,12 @@ export default async function RiskPage() {
           Concentration
         </h2>
         {d.concentration.length === 0 ? (
-          <p className="m-0 text-sm text-text-muted">Nothing is held at the moment.</p>
+          <EmptyState
+            compact
+            motif="strategies"
+            hue="strategies"
+            title="Nothing is held at the moment."
+          />
         ) : (
           <Card>
             <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
@@ -323,7 +363,7 @@ export default async function RiskPage() {
           rows={d.stress}
           rowKey={(x) => String(x.pct)}
           empty={
-            <EmptyState title="No stress test yet">
+            <EmptyState motif="strategies" hue="strategies" title="No stress test yet">
               The shock table is written overnight once strategies hold positions.
             </EmptyState>
           }

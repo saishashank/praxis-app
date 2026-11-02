@@ -74,6 +74,7 @@ export const ROUTES: readonly RouteNode[] = [
   { pattern: "/picks", label: "Picks", tab: "picks" },
   { pattern: "/picks/track-record", label: "Track record", parent: "/picks", tab: "picks" },
   { pattern: "/picks/[id]", label: "Why this pick", parent: "/picks", tab: "picks" },
+  { pattern: "/alerts", label: "My alerts", parent: "/picks", tab: "picks" },
   { pattern: "/market", label: "Market", tab: "market" },
   { pattern: "/market/[code]", label: "Company", parent: "/market", tab: "market" },
   { pattern: "/strategies", label: "Strategies", tab: "strategies" },
@@ -103,6 +104,7 @@ export const ROUTES: readonly RouteNode[] = [
     tab: "strategies",
   },
   { pattern: "/what-if", label: "What-if", parent: "/strategies", tab: "strategies" },
+  { pattern: "/cortex", label: "Cortex", parent: "/strategies", tab: "strategies" },
   { pattern: "/news", label: "News", tab: "news" },
   { pattern: "/reviews", label: "Reviews", tab: "reviews" },
   { pattern: "/reviews/[date]", label: "Evening review", parent: "/reviews", tab: "reviews" },
@@ -136,11 +138,35 @@ export const ROUTES: readonly RouteNode[] = [
     parent: "/reviews/learned",
     tab: "reviews",
   },
+  { pattern: "/reviews/experts", label: "Experts", parent: "/reviews", tab: "reviews" },
+  {
+    pattern: "/reviews/experts/[id]",
+    label: "Expert",
+    parent: "/reviews/experts",
+    tab: "reviews",
+  },
+  {
+    pattern: "/reviews/experts/queue",
+    label: "Claims to check",
+    parent: "/reviews/experts",
+    tab: "reviews",
+  },
+  { pattern: "/reviews/techniques", label: "Techniques", parent: "/reviews", tab: "reviews" },
   { pattern: "/reviews/glossary", label: "Glossary", parent: "/reviews", tab: "reviews" },
+  {
+    pattern: "/reviews/alerts",
+    label: "Monthly alerts report",
+    parent: "/reviews",
+    tab: "reviews",
+  },
   // Gear and public pages.
   { pattern: "/settings", label: "Settings" },
   { pattern: "/settings/appearance", label: "Appearance", parent: "/settings" },
   { pattern: "/settings/region", label: "Region & markets", parent: "/settings" },
+  { pattern: "/settings/time", label: "Time and alerts", parent: "/settings" },
+  { pattern: "/settings/alerts", label: "Alerts", parent: "/settings" },
+  { pattern: "/settings/quiet-hours", label: "Quiet hours", parent: "/settings" },
+  { pattern: "/settings/sign-out-everywhere", label: "Sign out everywhere", parent: "/settings" },
   { pattern: "/settings/about", label: "About", parent: "/settings" },
   { pattern: "/health", label: "System health" },
   { pattern: "/usage", label: "Usage" },
@@ -279,3 +305,14 @@ export function nextTheme(theme: Theme): Theme {
   const i = THEME_ORDER.indexOf(theme);
   return THEME_ORDER[(i + 1) % THEME_ORDER.length]!;
 }
+
+// ---- region chip (UXR-005) ------------------------------------------------------------------------------
+
+/** The visible chip text, "AU · ASX" (the mode is a dot, not words: UXR-005). */
+export function regionChip(market: { code: string } | null): string {
+  if (!market) return "Region";
+  return [market.code, EXCHANGE[market.code]].filter(Boolean).join(" · ");
+}
+
+/** The dot of the chip: green only for an active market, grey in data-only and off mode. */
+export const regionDot = (mode: string): "active" | "grey" => (mode === "full" ? "active" : "grey");

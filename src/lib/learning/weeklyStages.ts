@@ -20,11 +20,14 @@ import {
   type LedgerEntry,
   type LedgerResult,
 } from "@/lib/replay/ledger";
+import { comparatorLedger, type FamilyOutputs } from "@/lib/replay/exitAblation";
+import { developmentNet, type NetRow } from "@/lib/replay/sensitivity";
 import { periodReturns, costSetupFrom } from "@/lib/replay/returns";
 import type { SnapshotWorld } from "@/lib/replay/snapshotWorld";
 import type { ReplayStatInput } from "@/lib/replay/scorecards";
 import {
   lineageId,
+  splitFromRow,
   splitOf,
   validationSessions,
   type LineageSplitRecord,
@@ -62,6 +65,7 @@ import {
   promotionsAwaitingRoll,
   rollAfterPromotion,
 } from "./promotion";
+import { releasePreRegistered } from "./preRegistered";
 import type { LessonObs } from "./templates";
 import type { StageOutput } from "./weeklyRun";
 import {
@@ -83,6 +87,8 @@ export type WeeklyContext = {
   readonly ledger: LedgerResult;
   readonly facts: ReadonlyMap<string, EntryFacts>;
   readonly calendar: readonly CalendarRow[];
+  /** Family outputs of the forward pass (ARN-106: the comparator pass reuses them); absent = no comparator. */
+  readonly familyOutputs?: FamilyOutputs;
 };
 
 const stat = (scope: string, metric: string, value: unknown): ReplayStatInput => ({
@@ -105,25 +111,7 @@ export async function loadSplit(db: Client, lineage: string): Promise<LineageSpl
     args: [lineage],
   });
   if (rs.rows.length === 0) return null;
-  const r = rs.rows[0]!;
-  const opt = (v: unknown): string | null => (v === null || v === undefined ? null : text(v));
-  return {
-    lineage_id: text(r.lineage_id),
-    version: Number(r.version),
-    block_sessions: Number(r.block_sessions),
-    holdout_len: Number(r.holdout_len),
-    validation_len: Number(r.validation_len),
-    purge: Number(r.purge),
-    data_end_d: text(r.data_end_d),
-    holdout_start_d: opt(r.holdout_start_d),
-    holdout_end_d: opt(r.holdout_end_d),
-    validation_start_d: opt(r.validation_start_d),
-    validation_end_d: opt(r.validation_end_d),
-    dev_end_d: opt(r.dev_end_d),
-    deferred_until_d: opt(r.deferred_until_d),
-    reason: text(r.reason) as "create" | "roll",
-    measured_on_run: opt(r.measured_on_run),
-  };
+  return splitFromRow(rs.rows[0]! as Record<string, unknown>);
 }
 
 /** The family's own variant, optionally of one rule version. */
@@ -137,6 +125,74 @@ const primary = (res: LedgerResult, family: Family, version?: string): LedgerEnt
 
 const indexOf = (sessions: readonly string[]): Map<string, number> =>
   new Map(sessions.map((d, i) => [d, i]));
+
+/** ARN-106: the time-stop-only ledger of the forward pass, computed once per context. */
+const comparators = new WeakMap<WeeklyContext, LedgerResult | null>();
+export function comparatorOf(c: WeeklyContext): LedgerResult | null {
+  if (c.familyOutputs === undefined) return null;
+  let r = comparators.get(c);
+  if (r === undefined) {
+    r = comparatorLedger(c.world, c.market, c.params, c.familyOutputs);
+    comparators.set(c, r);
+  }
+  return r;
+}
+
+/**
+ * One replay memo per weekly run (D-286): the challenger generator, the challenger entries and the
+ * robustness stability neighbours replay the same incumbent +- steps, so every stage shares this memo.
+ * Key `family|version|canonicalJson(params)`; a run with controls also answers a controls-off request
+ * (the nets are identical, only `excess` is extra).
+ */
+const replayMemos = new WeakMap<WeeklyContext, Map<string, LedgerResult>>();
+export function replayOf(
+  c: WeeklyContext,
+  family: Family,
+  versionId: string,
+  p: Readonly<Record<string, unknown>>,
+  controls = true,
+): LedgerResult {
+  let memo = replayMemos.get(c);
+  if (memo === undefined) {
+    memo = new Map();
+    replayMemos.set(c, memo);
+  }
+  const key = `${family}|${versionId}|${canonicalJson(p)}`;
+  const full = memo.get(`${key}|c`);
+  if (full !== undefined) return full;
+  const bare = controls ? undefined : memo.get(`${key}|n`);
+  if (bare !== undefined) return bare;
+  const r = replayLedger(c.world, {
+    params: paramsWithVersion(c.params, family, p),
+    familyOptions: { families: [family], ruleVersions: { [family]: versionId } },
+    ...(controls ? {} : { controls: false }),
+  });
+  memo.set(`${key}|${controls ? "c" : "n"}`, r);
+  return r;
+}
+
+/** The development sessions of a split and the index of each (entry sessions of the bootstrap). */
+export function developmentSessions(
+  world: SnapshotWorld,
+  split: LineageSplitRecord,
+): { sessions: string[]; index: Map<string, number> } {
+  const sessions = world.sessions.filter((d) => isDevelopment(split, d));
+  return { sessions, index: indexOf(sessions) };
+}
+
+/** Closed development rows as bootstrap input (float net, entry-session index in the development window). */
+export function netRowsOf(
+  entries: readonly LedgerEntry[],
+  index: ReadonlyMap<string, number>,
+): NetRow[] {
+  const out: NetRow[] = [];
+  for (const e of entries) {
+    const s = index.get(e.row.entry_d);
+    if (e.net === null || s === undefined) continue;
+    out.push({ session: s, net: ratNumber(e.net) });
+  }
+  return out;
+}
 
 const isDevelopment = (split: LineageSplitRecord, entryD: string): boolean =>
   split.deferred_until_d !== null ? true : splitOf(split, entryD) === "development";
@@ -319,7 +375,7 @@ export async function lessonsStage(c: WeeklyContext): Promise<StageOutput> {
 
 // ---- challengers ----------------------------------------------------------------------------------------------------
 
-async function versionParams(db: Client, id: string): Promise<Record<string, unknown>> {
+export async function versionParams(db: Client, id: string): Promise<Record<string, unknown>> {
   const rs = await db.execute({
     sql: "SELECT params_json FROM rule_version WHERE id = ?",
     args: [id],
@@ -342,6 +398,40 @@ async function paramHints(db: Client, lineage: string): Promise<ParamHint[]> {
 
 const entryKey = (e: LedgerEntry): string => `${e.code}|${e.row.entry_d}`;
 
+/**
+ * M14 KB-081 / O-46: releases the pre-registered challengers family by family, in list order, as slots
+ * free up. A family with no split yet is left alone (nothing to charge a trial to); each family uses its
+ * own cumulative trial budget. Idempotent: a change already carried by a stored version is not created
+ * again. The F5-U3-stress variant is a replay-descriptive variant (D-221), not in this list.
+ */
+export async function preRegisteredStage(c: WeeklyContext): Promise<StageOutput> {
+  const { db, market, params } = c;
+  const perFamily: Record<string, unknown>[] = [];
+  for (const family of FAMILY_ORDER) {
+    const split = await loadSplit(db, lineageId(market, family));
+    if (split === null || split.deferred_until_d !== null) continue;
+    const budgetTotal = await budgetTotalFor(
+      db,
+      market,
+      family,
+      split.version,
+      params.stats.trialBudgetPerLineage,
+    );
+    const r = await releasePreRegistered(db, {
+      market,
+      d: c.d,
+      learning: params.learning,
+      stats: params.stats,
+      budgetTotal,
+      families: [family],
+    });
+    if (r.created.length + r.alreadyRegistered.length + r.skipped.length > 0 || r.stoppedBy) {
+      perFamily.push({ family, ...r });
+    }
+  }
+  return { stats: [stat(market, "preregistered", { families: perFamily })] };
+}
+
 export async function challengersStage(c: WeeklyContext): Promise<StageOutput> {
   const { db, market, world, params } = c;
   const index = indexOf(world.sessions);
@@ -349,30 +439,20 @@ export async function challengersStage(c: WeeklyContext): Promise<StageOutput> {
   const perFamily: Record<string, unknown>[] = [];
   const holdoutDue: string[] = [];
   const lastSession = world.sessions[world.sessions.length - 1]!;
-  const replays = new Map<string, LedgerResult>();
-  const replayOf = (
+  const replayOfFamily = (
     family: Family,
     versionId: string,
     p: Readonly<Record<string, unknown>>,
-  ): LedgerResult => {
-    const key = `${family}|${versionId}|${canonicalJson(p)}`;
-    let r = replays.get(key);
-    if (r === undefined) {
-      r = replayLedger(world, {
-        params: paramsWithVersion(params, family, p),
-        familyOptions: { families: [family], ruleVersions: { [family]: versionId } },
-      });
-      replays.set(key, r);
-    }
-    return r;
-  };
+  ): LedgerResult => replayOf(c, family, versionId, p);
   const entriesOf = (
     family: Family,
     versionId: string,
     p: Readonly<Record<string, unknown>>,
   ): LedgerEntry[] => {
     const live = primary(c.ledger, family, versionId);
-    return live.length > 0 ? live : primary(replayOf(family, versionId, p), family, versionId);
+    return live.length > 0
+      ? live
+      : primary(replayOfFamily(family, versionId, p), family, versionId);
   };
   let activeLineages = 0;
   for (const family of FAMILY_ORDER) {
@@ -393,6 +473,19 @@ export async function challengersStage(c: WeeklyContext): Promise<StageOutput> {
       continue;
     }
     const incumbentParams = await versionParams(db, incumbentId);
+    const devWin = developmentSessions(world, split);
+    const comparator = comparatorOf(c);
+    const comparatorDev =
+      comparator === null
+        ? []
+        : primary(comparator, family, incumbentId).filter(
+            (x) => x.net !== null && isDevelopment(split, x.row.entry_d),
+          );
+    const comparatorMeanNet =
+      comparatorDev.length === 0
+        ? null
+        : netRowsOf(comparatorDev, devWin.index).reduce((a, r) => a + r.net, 0) /
+          comparatorDev.length;
     const budgetTotal = await budgetTotalFor(
       db,
       market,
@@ -408,18 +501,27 @@ export async function challengersStage(c: WeeklyContext): Promise<StageOutput> {
         const k = canonicalJson(p);
         let e = devEval.get(k);
         if (e === undefined) {
-          const dev = primary(replayOf(family, `${family}.dev`, p), family).filter(
+          const dev = primary(replayOfFamily(family, `${family}.dev`, p), family).filter(
             (x) => x.net !== null && splitOf(split, x.row.entry_d) === "development",
           );
           const ex = dev.filter((x) => x.excess !== null).map((x) => ratNumber(x.excess!));
           const blocks = new Set(
             dev.map((x) => Math.floor((index.get(x.row.entry_d) ?? 0) / split.block_sessions)),
           );
+          const dn = developmentNet(
+            netRowsOf(dev, devWin.index),
+            devWin.sessions.length,
+            split.block_sessions,
+            params.stats,
+            `${lineage}:${k}`,
+          );
           e = {
             split: "development",
             rows: dev.length,
             blocks: blocks.size,
             meanExcess: ex.length === 0 ? null : ex.reduce((a, b) => a + b, 0) / ex.length,
+            meanNet: dn.meanNet,
+            netLower90: dn.netLower90,
           };
           devEval.set(k, e);
         }
@@ -434,6 +536,7 @@ export async function challengersStage(c: WeeklyContext): Promise<StageOutput> {
       learning: params.learning,
       stats: params.stats,
       budgetTotal,
+      comparatorMeanNet,
     });
     row.generator =
       gen.status === "blocked" || gen.status === "refused"

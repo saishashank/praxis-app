@@ -23,6 +23,10 @@ import {
   ROOT,
   routesOf,
   snapshot,
+  auditActions,
+  expectOnlyBlueprintAudit,
+  isAuditOnlyGet,
+  stateFor,
   surfaces,
   WRITE_METHODS,
 } from "./support";
@@ -32,18 +36,33 @@ const mem = vi.hoisted(() => ({
   auth: null as unknown,
   user: null as unknown,
 }));
-vi.mock("@/lib/db/client", () => ({ mainDb: () => mem.main, authDb: () => mem.auth }));
+vi.mock("@/lib/db/client", () => ({
+  mainDb: () => mem.main,
+  authDb: () => mem.auth,
+  authDbBigint: () => mem.auth,
+}));
 vi.mock("@/lib/auth/session", async (orig) => ({
   ...(await orig<typeof import("@/lib/auth/session")>()),
   getCurrentUser: async () => mem.user,
 }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
-vi.mock("next/navigation", () => ({ redirect: vi.fn(), forbidden: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  redirect: vi.fn(),
+  forbidden: vi.fn(),
+  notFound: vi.fn(() => {
+    throw new Error("NEXT_NOT_FOUND");
+  }),
+}));
 vi.mock("@/auth", () => ({ handlers: { GET: vi.fn(), POST: vi.fn() }, auth: vi.fn() }));
 
 const BASE = "https://app.example.test";
 const CLAIMS: Claims = { uid: 5, sv: 1, si: 1, rec: false };
-const LIMITS = { signin_per_min_ip: 10, writes_per_min_user: 100_000, exports_per_hour_user: 5 };
+const LIMITS = {
+  signin_per_min_ip: 10,
+  writes_per_min_user: 100_000,
+  exports_per_hour_user: 5,
+  reads_per_min_user: 100_000,
+};
 const all = surfaces();
 const routes = routesOf(all);
 const actions = actionsOf(all);
@@ -257,11 +276,12 @@ describe("SEC-011: GET and HEAD never change state", () => {
   it("the gate writes nothing for GET, HEAD or OPTIONS on any non-sign-in route", async () => {
     const d = await deps();
     const db = d.db();
-    const before = await snapshot(db);
+    // SEC-014 counts API reads in rate_limit (V1-S12): that bookkeeping is the one allowed write.
+    const before = await snapshot(db, ["rate_limit"]);
     for (const r of reads.filter((x) => !isAuthJsUrl(x.url))) {
       for (const m of ["GET", "HEAD", "OPTIONS"]) await gate(send(m, r.url), d);
     }
-    expect(await snapshot(db)).toBe(before);
+    expect(await snapshot(db, ["rate_limit"])).toBe(before);
   });
 });
 
@@ -272,6 +292,7 @@ describe("SEC-011: no GET handler changes state when called (as the Owner, real 
 
   beforeAll(async () => {
     vi.stubEnv("PII_HASH_KEY", KEY);
+    vi.stubEnv("OWNER_EMAIL", "owner@example.test"); // the Blueprint routes pin the Owner (SEC-111)
     main = await freshDb("main");
     auth = await freshDb("auth");
     mem.main = main;
@@ -296,10 +317,14 @@ describe("SEC-011: no GET handler changes state when called (as the Owner, real 
         (req: Request, ctx?: unknown) => Promise<Response> | Response
       >;
       const ctx = { params: Promise.resolve({ key: "k", id: "sample-1", code: "ABC" }) };
-      const before = [await snapshot(main), await snapshot(auth)];
-      const res = await mod.GET(new Request(new URL(concreteUrl(r.url), BASE)), ctx);
+      const url = concreteUrl(r.url);
+      const before = await stateFor(main, auth, url);
+      const audits = await auditActions(auth);
+      const res = await mod.GET(new Request(new URL(url, BASE)), ctx);
       expect(res.status).toBeLessThan(600);
-      expect([await snapshot(main), await snapshot(auth)]).toEqual(before);
+      expect(await stateFor(main, auth, url)).toEqual(before);
+      if (isAuditOnlyGet(url))
+        expect(expectOnlyBlueprintAudit(audits, await auditActions(auth))).toHaveLength(1);
     });
   }
 });

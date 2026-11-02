@@ -16,6 +16,8 @@ export default defineConfig({
     environment: "jsdom",
     include: ["tests/**/*.test.{ts,tsx}", "src/**/*.test.{ts,tsx}"],
     setupFiles: ["./vitest.setup.ts"],
+    // One Temp folder per run, removed at the end (Owner 2026-10-30: no leftovers in Temp).
+    globalSetup: ["./vitest.global-setup.mts"],
     // Database-backed tests (migrations, replays) need more than the 5 s default on CI runners;
     // one limit for local and CI runs so a slow test cannot pass locally and fail in CI.
     testTimeout: 30_000,

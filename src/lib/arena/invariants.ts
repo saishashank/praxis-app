@@ -90,6 +90,7 @@ export type InvariantCode =
   | "lock_state_inconsistent"
   | "lock_missing"
   | "lock_unexplained"
+  | "stale_mark"
   | "sleeve_opened_while_locked";
 
 export type Violation = {

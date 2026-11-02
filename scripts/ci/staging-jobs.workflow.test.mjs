@@ -38,6 +38,9 @@ const NOTICE = [
   "diagnose-signals",
 ];
 
+// GL-07 (O-52): these two carry their own schedule lines (watchdog, Batch-1 fallback).
+const SCHEDULED = ["watchdog", "ingest-batch1"];
+
 test("every workflow with a production job is in the locked list, and the lists are complete", () => {
   const withProduction = readdirSync(path.join(root, ".github/workflows"))
     .filter((f) => f.endsWith(".yml"))
@@ -59,12 +62,12 @@ for (const name of LOCKED_WORKFLOWS) {
     assert.ok(wf.jobs.production && staging);
   });
 
-  test(`${name}: trigger stays workflow_dispatch only; no schedule, push or pull request`, () => {
+  test(`${name}: trigger stays workflow_dispatch only, plus schedule for the GL-07 files; no push or pull request`, () => {
     assert.deepEqual(wf.permissions, {});
-    assert.doesNotMatch(
-      text(name),
-      /^\s*(schedule|push|pull_request\w*|workflow_run|repository_dispatch):/m,
-    );
+    const pattern = SCHEDULED.includes(name)
+      ? /^s*(push|pull_requestw*|workflow_run|repository_dispatch):/m
+      : /^s*(schedule|push|pull_requestw*|workflow_run|repository_dispatch):/m;
+    assert.doesNotMatch(text(name), pattern);
   });
 
   test(`${name}: staging job shape (main only, environment staging, minimal permissions)`, () => {

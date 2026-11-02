@@ -1,6 +1,6 @@
-// M7 T9 component tests (TST-128): role menus, tabs and bottom bar, gear and region menus, bell, theme
-// cycle, breadcrumb, footer, banners; keyboard behaviour; 360 px layout at unit level; axe.
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+// M7 T9 component tests (TST-128), updated for C2 (UXR-004/005/006/011/055, AT-49): role menus, tabs
+// and bottom bar, avatar and region menus, bell, breadcrumb, footer, banners; keyboard behaviour; 360 px layout at unit level; axe.
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import axe from "axe-core";
 import fs from "node:fs";
 import path from "node:path";
@@ -13,7 +13,6 @@ import { AppShell } from "@/components/shell";
 import { bellLabel } from "@/components/shell/AlertBell";
 import { DISCLAIMER } from "@/components/shell/Footer";
 import type { Role } from "@/lib/auth/permissions";
-import type { Theme } from "@/lib/preferences/service";
 
 const noop = async () => {};
 type Over = Partial<React.ComponentProps<typeof AppShell>>;
@@ -21,11 +20,9 @@ type Over = Partial<React.ComponentProps<typeof AppShell>>;
 function shell(role: Role = "owner", over: Over = {}) {
   const props = {
     role,
-    theme: "dark" as Theme,
     market: { code: "AU", mode: "data_only", currency: "AUD" },
     bell: { count: 0, topTier: null },
     banners: [],
-    themeAction: noop,
     signOut: noop,
     ...over,
   };
@@ -65,7 +62,8 @@ describe("landmarks and tabs", () => {
 
   it.each(["owner", "editor", "viewer"] as const)("%s sees the six tabs in both bars", (role) => {
     shell(role);
-    const six = ["Home", "Picks", "Market", "Strategies", "News", "Reviews"];
+    // UXR-002 / AT-47: the current tab carries a screen-reader "(Selected)" cue beside aria-current.
+    const six = ["Home (Selected)", "Picks", "Market", "Strategies", "News", "Reviews"];
     expect(names(top())).toEqual(six);
     expect(names(bottom())).toEqual(six);
   });
@@ -77,13 +75,13 @@ describe("landmarks and tabs", () => {
       const current = within(nav)
         .getAllByRole("link")
         .filter((a) => a.getAttribute("aria-current") === "page");
-      expect(current.map((a) => a.textContent?.trim())).toEqual(["Strategies"]);
+      expect(current.map((a) => a.textContent?.trim())).toEqual(["Strategies (Selected)"]);
     }
   });
 
   it("marks Home on the root and no tab on a gear page", () => {
     shell();
-    expect(within(top()).getByRole("link", { name: "Home" })).toHaveAttribute(
+    expect(within(top()).getByRole("link", { name: /^Home\s*\(Selected\)$/ })).toHaveAttribute(
       "aria-current",
       "page",
     );
@@ -219,21 +217,111 @@ describe("alert bell (UXN-161)", () => {
   });
 });
 
-describe("theme cycle (UXN-280)", () => {
-  it("names the current and the next theme and submits the action", async () => {
-    const action = vi.fn(async () => {});
-    shell("viewer", { theme: "midnight", themeAction: action });
-    const btn = screen.getByRole("button", { name: "Appearance: Midnight. Switch to Dim." });
-    await act(async () => {
-      fireEvent.click(btn);
-    });
-    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+describe("header controls (UXR-005, AT-49)", () => {
+  const header = () => screen.getByRole("banner");
+  /** Header controls other than the wordmark and the tabs. */
+  const controls = () =>
+    [...header().querySelectorAll<HTMLElement>("a[href], button")]
+      .filter((el) => !el.closest("nav") && el.getAttribute("href") !== "/")
+      .map((el) => el.getAttribute("aria-label"));
+
+  it("shows only the region chip, the bell and the avatar next to the tabs", () => {
+    shell();
+    expect(controls()).toEqual([
+      "Region: AU · ASX · Data only",
+      "Alerts, none waiting",
+      "Account and settings menu",
+    ]);
+    expect(screen.queryByRole("button", { name: /Appearance/ })).toBeNull();
   });
-  it("wraps from High contrast to Dark", () => {
-    shell("owner", { theme: "high_contrast" });
+  it("the chip reads AU · ASX with a grey dot in data-only mode, and AU on phones", () => {
+    shell();
+    const chip = screen.getByRole("button", { name: /^Region:/ });
+    expect(chip.textContent).toContain("AU · ASX");
+    expect(chip.textContent).not.toContain("Data only");
+    expect(chip.querySelector("[data-region-dot]")).toHaveAttribute("data-region-dot", "grey");
+    expect(chip.querySelector(".sm\\:hidden")?.textContent).toBe("AU");
+  });
+  it("an active market has a coloured dot", () => {
+    shell("owner", { market: { code: "AU", mode: "full", currency: "AUD" } });
     expect(
-      screen.getByRole("button", { name: "Appearance: High contrast. Switch to Dark." }),
-    ).toBeInTheDocument();
+      screen.getByRole("button", { name: /^Region:/ }).querySelector("[data-region-dot]"),
+    ).toHaveAttribute("data-region-dot", "active");
+  });
+  it("the avatar is an initial with the role as its tooltip", () => {
+    shell("editor", { account: { email: "ed@example.test", name: null } });
+    const btn = screen.getByRole("button", { name: "Account and settings menu" });
+    expect(btn).toHaveTextContent("E");
+    expect(btn).toHaveAttribute("title", "Editor");
+  });
+  it("the avatar menu lists identity, Settings, then Sign out first", () => {
+    shell("owner", { account: { email: "o@example.test", name: null } });
+    const btn = screen.getByRole("button", { name: "Account and settings menu" });
+    fireEvent.click(btn);
+    const panel = document.getElementById(btn.getAttribute("aria-controls")!)!;
+    expect(panel.firstElementChild).toHaveTextContent("o@example.test");
+    expect(panel.firstElementChild).toHaveTextContent("Owner");
+    const order = [...panel.querySelectorAll("a, button")].map((e) => e.textContent?.trim());
+    expect(order.slice(0, 3)).toEqual(["Settings", "Sign out", "System health"]);
+    expect(panel.querySelector("ul + ul")?.className).toMatch(/border-t/); // the divider
+  });
+  it("masking is unchanged: the shell never prints a stock code from the URL", () => {
+    pathname.value = "/cards/E-1234";
+    shell("viewer");
+    expect(document.body.textContent).not.toContain("1234");
+  });
+});
+
+describe("tab icons (UXR-055)", () => {
+  it("every tab shows an icon and its label in both bars; icons are two-tone", () => {
+    shell();
+    for (const nav of [top(), bottom()]) {
+      for (const a of within(nav).getAllByRole("link")) {
+        const svg = a.querySelector("svg")!;
+        expect(svg.getAttribute("aria-hidden")).toBe("true");
+        expect(a.textContent?.trim().length).toBeGreaterThan(0);
+        const hued = [...svg.querySelectorAll<SVGElement>("[style]")].map((e) =>
+          e.getAttribute("style"),
+        );
+        expect(hued.length).toBeGreaterThan(0);
+        for (const st of hued) {
+          expect(st).toMatch(/var\(--color-section-(home|picks|market|strategies|news|reviews)\)/);
+        }
+        expect(svg.getAttribute("stroke")).toBe("currentColor");
+      }
+    }
+  });
+  it("each tab has its own hue", () => {
+    shell();
+    const hues = within(top())
+      .getAllByRole("link")
+      .map((a) => a.querySelector("[style]")!.getAttribute("style"));
+    expect(new Set(hues).size).toBe(6);
+  });
+});
+
+describe("toast provider", () => {
+  it("is mounted once in the shell so pages can call useToast()", async () => {
+    const { useToast } = await import("@/components/ui/Toast");
+    function Probe() {
+      const { toast } = useToast();
+      return <button onClick={() => toast("Saved")}>probe</button>;
+    }
+    render(
+      <AppShell
+        role="owner"
+        market={null}
+        bell={{ count: 0, topTier: null }}
+        banners={[]}
+        signOut={noop}
+      >
+        <main>
+          <Probe />
+        </main>
+      </AppShell>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "probe" }));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
   });
 });
 
@@ -242,10 +330,10 @@ describe("breadcrumb, banners, footer", () => {
     shell();
     expect(screen.queryByRole("navigation", { name: "Breadcrumb" })).toBeNull();
   });
-  it("a detail page gets a breadcrumb with the current page and a back link", () => {
+  it("a detail page gets a breadcrumb with the current page and a back link", async () => {
     pathname.value = "/strategies/leaderboard";
     shell();
-    const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
+    const crumbs = await screen.findByRole("navigation", { name: "Breadcrumb" });
     expect(within(crumbs).getByRole("link", { name: "Strategies" })).toHaveAttribute(
       "href",
       "/strategies",
@@ -253,16 +341,36 @@ describe("breadcrumb, banners, footer", () => {
     expect(within(crumbs).getByText("Leaderboard")).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: /Back/ })).toHaveAttribute("href", "/strategies");
   });
-  it("does not echo a code from the URL", () => {
+  it("does not echo a code from the URL", async () => {
     pathname.value = "/market/BHP";
     shell();
+    await screen.findByRole("navigation", { name: "Breadcrumb" });
     expect(document.body.textContent).not.toContain("BHP");
+  });
+  it("renders no mode banner on any page; the Home status strip carries the data-only line (UXR-006)", () => {
+    const data = [{ id: "mode:data_only", text: "Data only: the strategies are not running yet." }];
+    for (const p of ["/", "/picks", "/market", "/strategies", "/news", "/reviews", "/settings"]) {
+      pathname.value = p;
+      const r = shell("owner", { banners: data });
+      expect(screen.queryByText(data[0]!.text), p).toBeNull();
+      expect(screen.queryByRole("region", { name: "Notices" }), p).toBeNull();
+      // the chip still carries the state in words for assistive technology
+      expect(screen.getByRole("button", { name: "Region: AU · ASX · Data only" })).toBeTruthy();
+      r.unmount();
+    }
+  });
+  it("other notices (a reduced header) still show on every page", () => {
+    pathname.value = "/picks";
+    shell("owner", {
+      banners: [{ id: "shell:unavailable", text: "Some header information is unavailable." }],
+    });
+    expect(screen.getByText("Some header information is unavailable.")).toBeInTheDocument();
   });
   it("renders banners from the loader and none when empty", () => {
     const { unmount } = shell("owner", {
-      banners: [{ id: "mode:data_only", text: "Data only: the strategies are not running yet." }],
+      banners: [{ id: "shell:unavailable", text: "Some header information is unavailable." }],
     });
-    expect(screen.getAllByText("Data only: the strategies are not running yet.").length).toBe(1);
+    expect(screen.getAllByText("Some header information is unavailable.").length).toBe(1);
     expect(screen.getByRole("region", { name: "Notices" })).toBeInTheDocument();
     unmount();
     shell();
@@ -292,7 +400,7 @@ describe("breadcrumb, banners, footer", () => {
 });
 
 describe("keyboard order", () => {
-  it("focus order is skip link, wordmark, tabs, region, bell, theme, gear, page, footer", () => {
+  it("focus order is skip link, wordmark, tabs, region, bell, avatar, page, footer", () => {
     shell();
     const order = [...document.querySelectorAll<HTMLElement>("a[href], button")]
       // the bottom bar is display:none at desktop widths; in jsdom both exist, so drop it for the order
@@ -301,7 +409,7 @@ describe("keyboard order", () => {
     expect(order).toEqual([
       "Skip to main content",
       "Praxis",
-      "Home",
+      "Home (Selected)",
       "Picks",
       "Market",
       "Strategies",
@@ -309,7 +417,6 @@ describe("keyboard order", () => {
       "Reviews",
       "Region: AU · ASX · Data only",
       "Alerts, none waiting",
-      "Appearance: Dark. Switch to Light.",
       "Account and settings menu",
       "Inside link",
       "What does simulated mean?",
@@ -378,7 +485,7 @@ describe("axe (WCAG 2.0/2.1/2.2 A and AA; colour contrast is covered by the toke
     expect(r.violations.map((v) => `${v.id}: ${v.nodes[0]?.html}`)).toEqual([]);
   });
 
-  it("no violations with the gear and region menus open", async () => {
+  it("no violations with the avatar and region menus open", async () => {
     const { container } = shell("owner");
     fireEvent.click(screen.getByRole("button", { name: "Account and settings menu" }));
     fireEvent.click(screen.getByRole("button", { name: /^Region:/ }));

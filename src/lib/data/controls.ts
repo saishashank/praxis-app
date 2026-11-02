@@ -94,6 +94,7 @@ export const ASX_ENABLED_KEY = "asx_enabled";
 export const ASX_SOURCE_ID = "asx_announcements";
 export const YAHOO_SOURCE_ID = "yahoo_eod";
 export const MARKET_MODE_KEY = "market_mode";
+export const YAHOO_DELAYED_SOURCE_ID = "yahoo_delayed";
 
 /** The sources whose use needs an Owner risk acceptance (DAT-120). Nothing else can be switched. */
 export const SOURCE_CONTROLS = {
@@ -117,6 +118,17 @@ export const SOURCE_CONTROLS = {
       "access (decision O-26): the data may be wrong, change shape or be blocked without notice. " +
       "A kill switch stops it, and the build keeps looking for a cleaner free source.",
   },
+  [YAHOO_DELAYED_SOURCE_ID]: {
+    ref: "O-26",
+    label: "Yahoo Finance delayed intraday quotes",
+    riskText:
+      "Yahoo Finance delayed quotes are unofficial, meant for personal use and rate-limited. Its " +
+      "terms may not permit automated access, and this feed makes far more requests than the " +
+      "end-of-day prices: up to 2,000 a day, one per company (decision O-26, extended for M17). By " +
+      "accepting you take on the risk of automated personal-use access: the quotes may be late, " +
+      "wrong, change shape or be blocked without notice. Until you accept, no pick is armed and no " +
+      "intraday candidate is found. A kill switch stops the requests at once.",
+  },
 } as const;
 export type ControlSource = keyof typeof SOURCE_CONTROLS;
 const isControlSource = (s: unknown): s is ControlSource =>
@@ -135,6 +147,7 @@ export type ControlError =
   | "email_mode_required"
   | "signoff_required"
   | "email_off"
+  | "constants_unverified"
   | "market_full"
   | "confirm_required"
   | "items_missing"
@@ -211,6 +224,30 @@ async function readRegisterStatus(db: Exec, source: string): Promise<SourceStatu
 }
 
 /** True when the AU calendar for the current Sydney year has rows and none is unconfirmed. */
+/**
+ * What the quote routes need to decide whether `yahoo_delayed` may be called (M17 D-398): the register
+ * status, the kill-switch mode and the dispatch switch. Structurally the `QuoteSourceState` of
+ * src/lib/data/quotes/types.ts (declared here so this module has no dependency on that package).
+ */
+export type QuoteSourceState = {
+  register: SourceStatus | null;
+  mode: string | null;
+  dispatchEnabled: boolean;
+};
+
+export async function readQuoteSourceState(db: Exec): Promise<QuoteSourceState> {
+  const r = await db.execute({
+    sql: "SELECT mode FROM source_status WHERE source = ?",
+    args: [YAHOO_DELAYED_SOURCE_ID],
+  });
+  const mode = r.rows[0]?.mode;
+  return {
+    register: await readRegisterStatus(db, YAHOO_DELAYED_SOURCE_ID),
+    mode: typeof mode === "string" ? mode : null,
+    dispatchEnabled: await readSwitch(db, DISPATCH_ENABLED_KEY),
+  };
+}
+
 async function calendarConfirmed(db: Exec, now: string): Promise<boolean> {
   const year = marketDate(new Date(now), "Australia/Sydney").slice(0, 4);
   const r = await db.execute({
@@ -449,7 +486,12 @@ export async function setSourceAccepted(p: SourceInput): Promise<ControlResult> 
 
 // ---- d. market mode ---------------------------------------------------------------------------
 
-export type MarketModeInput = ControlBase & { market: unknown; mode: unknown };
+export type MarketModeInput = ControlBase & {
+  market: unknown;
+  mode: unknown;
+  /** Test seam for the money-constant gate (D-710); production callers never set it. */
+  unverifiedConstants?: readonly string[];
+};
 
 type ModeMap = Record<string, unknown>;
 
@@ -477,7 +519,8 @@ async function readConfigModes(db: Exec): Promise<{ raw: string | null; map: Mod
 
 /**
  * Sets a market's mode to `off`, `data_only` or `full`. In production `full` is refused with
- * `signoff_required` (no go_live_signoff row) or `email_off` (email_mode is off), before any audit
+ * `signoff_required` (no go_live_signoff row), `email_off` (email_mode is off) or
+ * `constants_unverified` (a [VERIFY] money constant is not approved, D-710), before any audit
  * row and again inside the write transaction (M8 T11, decision 33); staging is free. Writes the versioned
  * `market_mode` config value AND `market.mode` in one transaction (see the header).
  */
@@ -504,7 +547,7 @@ export async function setMarketMode(p: MarketModeInput): Promise<ControlResult> 
     if (columnMode === to && map[market] === to) return NOOP;
     const today = localDay(now);
     if (to === "full") {
-      const refused = await fullModeRefusal(p.mainDb, p.env, market, today);
+      const refused = await fullModeRefusal(p.mainDb, p.env, market, today, p.unverifiedConstants);
       if (refused !== null) return fail(refused);
     }
     return await commit(p, now, {
@@ -514,7 +557,7 @@ export async function setMarketMode(p: MarketModeInput): Promise<ControlResult> 
       detail: { market, from: columnMode, to },
       apply: async (tx) => {
         if (to === "full") {
-          const refused = await fullModeRefusal(tx, p.env, market, today);
+          const refused = await fullModeRefusal(tx, p.env, market, today, p.unverifiedConstants);
           if (refused !== null) throw new Precondition(refused);
         }
         const cur = await readConfigModes(tx);

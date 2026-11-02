@@ -49,7 +49,7 @@ describe("config store", () => {
     expect(d("turso_reads_ceiling_month")).toBe(300_000_000);
     expect(d("turso_staging_share")).toBe(0.15);
     expect(d("actions_minutes_soft_ceiling")).toBe(3000);
-    expect(d("llm_daily_budget_total")).toBe(150_000);
+    expect(d("llm_daily_budget_total")).toBe(240_000);
     expect(d("yahoo_chunk_size")).toBe(100);
     expect(d("yahoo_min_gap_s")).toBe(5);
     expect(isConfigKey("nope")).toBe(false);

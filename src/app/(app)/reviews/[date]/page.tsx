@@ -11,11 +11,19 @@
 // `rv-` reference (D-144); a typed date still opens, as before.
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Banner } from "@/components/ui/States";
+import { Banner, EmptyState } from "@/components/ui/States";
 import { requireUser } from "@/lib/auth/guard";
 import { envFor, isDateParam } from "@/lib/ui/loaders/shell";
 import { isReviewRef, loadReviewPage } from "@/lib/ui/loaders/reviews";
 import type { MaskedReview } from "@/lib/view/reviews";
+import { REVIEW_SECTION_NAMES } from "@/lib/review/facts";
+import {
+  REVIEW_TONES,
+  SectionIcon,
+  SectionIndex,
+  type SectionItem,
+  type SectionTone,
+} from "../SectionIndex";
 import { MarkRead } from "./MarkRead";
 import { NewPicks } from "./NewPicks";
 
@@ -65,7 +73,14 @@ export default async function ReviewDatePage({
         </Link>
       </header>
       {model === null ? (
-        <p role="status">No review is stored for {date}.</p>
+        <div role="status">
+          <EmptyState
+            compact
+            motif="reviews"
+            hue="reviews"
+            title={`No review is stored for ${date}.`}
+          />
+        </div>
       ) : (
         <>
           <ul
@@ -110,6 +125,7 @@ export default async function ReviewDatePage({
               ))}
             </nav>
           )}
+          <SectionIndex items={indexOf(model)} />
           {model.canMarkRead && (
             <MarkRead date={model.d} auto={sp.src === "email"} alreadyRead={model.read !== null} />
           )}
@@ -137,6 +153,42 @@ export default async function ReviewDatePage({
   );
 }
 
+/** Index of the reading page: the masked view's own sections (linked), or the review's headings. */
+function indexOf(model: NonNullable<Awaited<ReturnType<typeof loadReviewPage>>>): SectionItem[] {
+  if (model.maskedView !== null) {
+    const v = model.maskedView;
+    return [
+      { id: "mr-summary", label: "Summary", tone: "home" },
+      { id: "mr-orders", label: "Investments made today", tone: "strategies" },
+      ...v.narrative.map((n, i) => ({
+        id: `mr-n${i}`,
+        label: n.heading,
+        tone: NARRATIVE_TONES[i % NARRATIVE_TONES.length]!,
+      })),
+      { id: "mr-alerts", label: "Alerts", tone: "news" as SectionTone },
+      { id: "mr-health", label: "System health", tone: "market" as SectionTone },
+    ];
+  }
+  if (model.html === null) return [];
+  const missing = new Set(model.missing.map((m) => m.n));
+  return REVIEW_SECTION_NAMES.slice(0, REVIEW_TONES.length).map((label, i) => ({
+    label,
+    tone: REVIEW_TONES[i]!,
+    missing: missing.has(i + 1),
+  }));
+}
+
+const NARRATIVE_TONES: readonly SectionTone[] = ["reviews", "picks", "news"];
+
+function H2({ id, tone, children }: { id?: string; tone: SectionTone; children: string }) {
+  return (
+    <h2 id={id} className="flex items-center gap-2 text-xl font-semibold">
+      <SectionIcon tone={tone} />
+      {children}
+    </h2>
+  );
+}
+
 function MaskedBody({ view }: { view: MaskedReview }) {
   const list = (items: string[]) =>
     items.length === 0 ? (
@@ -156,33 +208,35 @@ function MaskedBody({ view }: { view: MaskedReview }) {
         {view.notice}
       </p>
       <section aria-labelledby="mr-summary" className="flex flex-col gap-2">
-        <h2 id="mr-summary" className="text-xl font-semibold">
+        <H2 id="mr-summary" tone="home">
           Summary
-        </h2>
+        </H2>
         {list(view.summary)}
       </section>
       <section aria-labelledby="mr-orders" className="flex flex-col gap-2">
-        <h2 id="mr-orders" className="text-xl font-semibold">
+        <H2 id="mr-orders" tone="strategies">
           Investments made today
-        </h2>
+        </H2>
         {list(view.orders)}
       </section>
-      {view.narrative.map((n) => (
+      {view.narrative.map((n, i) => (
         <section key={n.heading} className="flex flex-col gap-2">
-          <h2 className="text-xl font-semibold">{n.heading}</h2>
+          <H2 id={`mr-n${i}`} tone={NARRATIVE_TONES[i % NARRATIVE_TONES.length]!}>
+            {n.heading}
+          </H2>
           {list(n.items)}
         </section>
       ))}
       <section aria-labelledby="mr-alerts" className="flex flex-col gap-2">
-        <h2 id="mr-alerts" className="text-xl font-semibold">
+        <H2 id="mr-alerts" tone="news">
           Alerts
-        </h2>
+        </H2>
         {list(view.alerts)}
       </section>
       <section aria-labelledby="mr-health" className="flex flex-col gap-2">
-        <h2 id="mr-health" className="text-xl font-semibold">
+        <H2 id="mr-health" tone="market">
           System health
-        </h2>
+        </H2>
         {list(view.health)}
       </section>
     </div>

@@ -18,7 +18,18 @@ import {
   slippageFill,
   type SlippageBucket,
 } from "./slippage";
-import type { Rational } from "@/lib/money/rational";
+import {
+  addRat,
+  cmpRat,
+  divRat,
+  makeRational,
+  mulRat,
+  subRat,
+  type Rational,
+} from "@/lib/money/rational";
+import { floorRat, roundToTick } from "@/lib/money/round";
+
+const ONE: Rational = makeRational(1n);
 
 /** A raw (unadjusted) session bar, micro-AUD per share. */
 export type Bar = {
@@ -103,6 +114,77 @@ export function fillEntryAtOpen(env: FillEnv, qty: bigint): SimulatedFill {
   return build(env, "open", "buy", qty, env.bar.openMicro, slipOf(env, env.bar.openMicro, "buy"));
 }
 
+// ---- Cortex limit entry (M15 C3a; spec ch. 17 CTX-028; docs/M15_design.md 3c, D-288) ----------
+// Additive only: nothing above changes. v1 orders (`arena_order.limit_micro` NULL) never reach here.
+
+/** The rule of a trade-through fill at the limit (CTX-028). Not in `FILL_RULES` / the 0007 CHECK. */
+export const LIMIT_FILL_RULE = "limit" as const;
+export type LimitFillRule = FillRule | typeof LIMIT_FILL_RULE;
+
+/** A `SimulatedFill` that may carry the `limit` rule (D-288 trade-through). */
+export type SimulatedLimitFill = Omit<SimulatedFill, "rule"> & { readonly rule: LimitFillRule };
+
+export type LimitFillOutcome =
+  | { readonly status: "filled"; readonly fill: SimulatedLimitFill }
+  | { readonly status: "unfilled"; readonly reason: "limit_not_reached" };
+
+/**
+ * The CTX-028 pre-order limit: min(close × (1 + gapCapPct), stop ÷ (1 − stopCapPct)), exact, then
+ * rounded DOWN onto the tick grid of the band the raw limit falls in (a limit buy never rounds up:
+ * it would admit a worse fill than the caps allow). `gapCapPct` and `stopCapPct` are fractions
+ * (8 % = 8/100). A band edge is a whole number of its own ticks, so rounding down never leaves the band.
+ */
+export function limitPriceMicro(
+  closeMicro: Micro,
+  stopMicro: Micro,
+  gapCapPct: Rational,
+  stopCapPct: Rational,
+  tickMicro?: bigint,
+): Micro {
+  if (closeMicro <= 0n) throw new RangeError("close must be positive");
+  if (stopMicro <= 0n || stopMicro >= closeMicro)
+    throw new RangeError("stop must be positive and below the close");
+  if (gapCapPct.num < 0n) throw new RangeError("gap cap must not be negative");
+  if (stopCapPct.num < 0n || cmpRat(stopCapPct, ONE) >= 0)
+    throw new RangeError("stop cap must be in [0, 1)");
+  const byGap = mulRat(makeRational(closeMicro), addRat(ONE, gapCapPct));
+  const byStop = divRat(makeRational(stopMicro), subRat(ONE, stopCapPct));
+  const raw = cmpRat(byGap, byStop) <= 0 ? byGap : byStop;
+  const tick = tickMicro ?? tickFor(floorRat(raw));
+  const limit = roundToTick(raw, tick, "down");
+  if (limit <= 0n) throw new RangeError("limit rounds to zero");
+  return limit;
+}
+
+/**
+ * D-288 limit-order entry fill on the session after the decision night:
+ *   open ≤ limit  → v1 fill (open + slippage, `fillEntryAtOpen`) capped at the limit, rule `open`;
+ *   low ≤ limit   → a trade-through: filled at the limit EXACTLY, rule `limit`, no slippage beyond it;
+ *   otherwise     → unfilled (`limit_not_reached`), recorded as unfilled in both arms by the caller.
+ * A limit order cannot fill worse than its limit; the limit must be on the tick grid (`limitPriceMicro`).
+ * Persistence (D-307): the 0007 `fill.rule` CHECK has no `limit`, so a trade-through is written as
+ * rule `level` with `arena_order.limit_micro` set and an open fill stays `open` — see
+ * `fillRowRule` in src/lib/cortex/economics/fillRow.ts; the in-memory fill keeps `limit`.
+ */
+export function fillEntryLimit(env: FillEnv, qty: bigint, limitMicro: Micro): LimitFillOutcome {
+  assertBar(env.bar);
+  if (limitMicro <= 0n) throw new RangeError("limit must be positive");
+  const { openMicro, lowMicro } = env.bar;
+  if (openMicro <= limitMicro) {
+    const atOpen = fillEntryAtOpen(env, qty);
+    if (atOpen.fillPriceMicro <= limitMicro) return { status: "filled", fill: atOpen };
+    return { status: "filled", fill: build(env, "open", "buy", qty, openMicro, limitMicro) };
+  }
+  if (lowMicro <= limitMicro) {
+    const fill: SimulatedLimitFill = {
+      ...build(env, "open", "buy", qty, limitMicro, limitMicro),
+      rule: LIMIT_FILL_RULE,
+    };
+    return { status: "filled", fill };
+  }
+  return { status: "unfilled", reason: "limit_not_reached" };
+}
+
 /** CS exit (sell): evaluated at the close, filled at the next open - slippage (ARN-021). */
 export function fillCloseSignalExit(env: FillEnv, qty: bigint): SimulatedFill {
   assertBar(env.bar);
@@ -122,24 +204,33 @@ export function fillCloseSignalExit(env: FillEnv, qty: bigint): SimulatedFill {
  *   else low <= level        -> fill at level - slippage - 1 tick (rule level)
  * `afterOpen` is for a stop that becomes active only after the open (the initial stop in the
  * entry session, ARN-021): the open cannot gap through it, so only the low test applies.
+ * `exDividendMicro` (FAM-007, D-219; M14 WP2) is the cash dividend per share going ex on this session.
+ * Only on that session, the trigger tests use open + dividend and low + dividend against the level (the
+ * share is worth the dividend less after the ex-date open); the raw level is not re-based and stays in
+ * force unchanged from the next session. A gap fill stays at open - slippage. A level fill is at
+ * (level - dividend) - slippage - 1 tick, floored as in D-184. Absent or 0n = v1 behaviour.
  */
 export function fillIntradayStop(
   env: FillEnv,
   qty: bigint,
   levelMicro: Micro,
-  options: { readonly afterOpen?: boolean } = {},
+  options: { readonly afterOpen?: boolean; readonly exDividendMicro?: Micro } = {},
 ): SimulatedFill | null {
   assertBar(env.bar);
   if (levelMicro <= 0n) throw new RangeError("stop level must be positive");
   const { openMicro, lowMicro } = env.bar;
-  if (options.afterOpen !== true && openMicro <= levelMicro) {
+  const div = options.exDividendMicro ?? 0n;
+  if (div < 0n) throw new RangeError("ex-date dividend must not be negative");
+  if (options.afterOpen !== true && openMicro + div <= levelMicro) {
     return build(env, "gap_open", "sell", qty, openMicro, slipOf(env, openMicro, "sell"));
   }
-  if (lowMicro <= levelMicro) {
+  if (lowMicro + div <= levelMicro) {
+    // FAM-007: the level in the ex-date price terms; 0n dividend = the raw level (v1)
+    const eff = levelMicro - div; // >= the low, so positive
     // D-184: never below the lowest price on the grid (a A$0.001-0.002 stop would go to zero)
-    const below = slipOf(env, levelMicro, "sell") - tickFor(levelMicro);
+    const below = slipOf(env, eff, "sell") - tickFor(eff);
     const fill = below < MIN_PRICE_MICRO ? MIN_PRICE_MICRO : below;
-    return build(env, "level", "sell", qty, levelMicro, fill);
+    return build(env, "level", "sell", qty, eff, fill);
   }
   return null;
 }

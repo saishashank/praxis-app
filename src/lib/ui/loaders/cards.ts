@@ -12,6 +12,7 @@ import "server-only";
 import { loadScenarioInput, type DecisionCard } from "@/lib/agents/cards";
 import { opaqueDigest } from "@/lib/view/opaqueRef";
 import { getConfig } from "@/lib/config/store";
+import { readSteelmanForCard, type SteelmanView } from "@/lib/steelman/read";
 import { wilsonInterval } from "@/lib/stats/binomial";
 import { cardViewModel, type CardView } from "@/lib/view/cards";
 import {
@@ -131,6 +132,9 @@ export type CardPage = {
   /** The rules-only "Why?" lines (UXN-102). */
   why: string[];
   afterwards: Afterwards | null;
+  /** Steelman (V2 ch. 07, UXR-024; M11-lite D-497): AI-written strongest case for and against, read from
+   * the stored points and masked for a masked viewer. null = none stored, the page draws no heading. */
+  steelman: SteelmanView | null;
   notes: CardNote[];
   /** Back-links; none contains a code. */
   links: { home: string; strategy: string | null };
@@ -154,9 +158,30 @@ const NOT_FOUND: CardPage = {
   scenarioRows: null,
   why: [],
   afterwards: null,
+  steelman: null,
   notes: [],
   links: { home: "/", strategy: null },
 };
+
+/** A stored card or signal id inside free text (the pack's subject line names the card, D-506). */
+const STORED_ID_RE = /\b(?:card|sig):[^\s,;)]+/g;
+const ID_HIDDEN = "[reference hidden]";
+
+/**
+ * Every free text of the steelman through the viewer's scope (ROL-107, D-497); evidence ids stay as they
+ * are. A masked viewer also never sees a stored card or signal id inside a point or a cited item (such a
+ * viewer addresses cards by opaque reference only, D-135; D-561).
+ */
+function maskedSteelman(v: SteelmanView, t: (x: string) => string, masked: boolean): SteelmanView {
+  const m = (x: string) => (masked ? t(x).replace(STORED_ID_RE, ID_HIDDEN) : t(x));
+  const pt = (p: SteelmanView["bull"][number]) => ({ ...p, text: m(p.text) });
+  return {
+    ...v,
+    bull: v.bull.map(pt),
+    bear: v.bear.map(pt),
+    cited: v.cited.map((i) => ({ ...i, text: m(i.text) })),
+  };
+}
 
 type Config = Parameters<typeof getConfig>[0];
 
@@ -301,6 +326,12 @@ export async function loadCardPage(deps: LoaderDeps, idOrRef: string): Promise<L
     if (net !== null) closed = { net, day: scope.day(str(led.exit_d)) };
   }
 
+  // Steelman (M11-lite): a failed read draws no section; every point and cited item goes through the scope.
+  const steelman = await soft<SteelmanView | null>(
+    () => readSteelmanForCard(deps.mainDb, id),
+    null,
+  );
+
   // Notes (auth DB). A masked viewer sees who added one and when, never the text.
   const notes = await soft<CardNote[]>(async () => {
     const r = await deps.authDb.execute({
@@ -349,6 +380,7 @@ export async function loadCardPage(deps: LoaderDeps, idOrRef: string): Promise<L
       scenarioRows: scenarioRows(card),
       why: whyLines(card, rows, warnings, t),
       afterwards: afterwards(card, closed, led !== null),
+      steelman: steelman === null ? null : maskedSteelman(steelman, t, masked),
       notes,
       links: { home: "/", strategy: `/strategies/${encodeURIComponent(card.execution)}` },
     },

@@ -8,8 +8,12 @@ import { requestMeta } from "@/lib/auth/audit";
 import { requireUser } from "@/lib/auth/guard";
 import { resolveCorporateAction } from "@/lib/data/corporateActions/admin";
 import { authDb, mainDb } from "@/lib/db/client";
+import { dismissSuggestion } from "@/lib/steelman/suggestions";
 
 const PATH = "/review";
+
+/** A suggestion id is `<pack sha256>:<side>:<n>` (store.ts `pointIdOf`); anything else is refused unread. */
+const SUGGESTION_ID_RE = /^[0-9a-f]{64}:(?:bull|bear):\d{1,3}$/;
 
 export type ReviewResult = { ok: true } | { error: string };
 
@@ -41,4 +45,26 @@ export async function confirmCorporateActionAction(fd: FormData): Promise<Review
 
 export async function rejectCorporateActionAction(fd: FormData): Promise<ReviewResult> {
   return decide(fd, "reject");
+}
+
+/** Dismisses one steelman suggestion (D-492): Owner only, audited by the service, never touches a rule. */
+export async function dismissSuggestionAction(fd: FormData): Promise<ReviewResult> {
+  const user = await requireUser("admin", PATH);
+  const id = fd.get("id");
+  if (typeof id !== "string" || !SUGGESTION_ID_RE.test(id)) return { error: "invalid" };
+  try {
+    const result = await dismissSuggestion({
+      mainDb: mainDb(),
+      authDb: authDb(),
+      env: process.env,
+      meta: requestMeta(await headers()),
+      actorId: user.id,
+      id,
+    });
+    if ("error" in result) return { error: result.error };
+    revalidatePath(PATH);
+    return { ok: true };
+  } catch {
+    return { error: "unavailable" };
+  }
 }

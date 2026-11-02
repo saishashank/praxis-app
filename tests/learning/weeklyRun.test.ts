@@ -17,10 +17,14 @@ const ORDER: LearningStage[] = [
   "forward",
   "comparisons",
   "lessons",
+  "preregistered",
   "challengers",
   "rolls",
   "arn076",
   "factors",
+  "robustness",
+  "rankIc",
+  "experts",
 ];
 
 /** Stages that record their call order and advance the fake clock by `stepMs` each. */
@@ -37,7 +41,7 @@ function fakes(calls: LearningStage[], tick: { t: number }, stepMs: number) {
 }
 
 describe("weekly learning run: stage order", () => {
-  it("forward data, comparisons, lessons, challengers, rolls, ARN-076, AGT-112 buckets", async () => {
+  it("forward data, comparisons, lessons, pre-registered (M14), challengers, rolls, ARN-076, AGT-112 buckets, robustness and rank quality (M14)", async () => {
     expect([...LEARNING_STAGES]).toEqual(ORDER);
     const calls: LearningStage[] = [];
     const tick = { t: 0 };
@@ -95,7 +99,18 @@ describe("weekly learning run: budget stop", () => {
       stages: fakes(calls, tick, MIN),
     });
     expect(r.skipped).toEqual(["comparisons"]);
-    expect(calls).toEqual(["forward", "lessons", "challengers", "rolls", "arn076", "factors"]);
+    expect(calls).toEqual([
+      "forward",
+      "lessons",
+      "preregistered",
+      "challengers",
+      "rolls",
+      "arn076",
+      "factors",
+      "robustness",
+      "rankIc",
+      "experts",
+    ]);
     expect(r.status).toBe("complete");
   });
 
@@ -103,9 +118,13 @@ describe("weekly learning run: budget stop", () => {
     expect(unfinishedStages(new Set(RESUMABLE_STAGES))).toEqual([]);
     expect(unfinishedStages(new Set<LearningStage>(["comparisons", "factors"]))).toEqual([
       "lessons",
+      "preregistered",
       "challengers",
       "rolls",
       "arn076",
+      "robustness",
+      "rankIc",
+      "experts",
     ]);
   });
 });

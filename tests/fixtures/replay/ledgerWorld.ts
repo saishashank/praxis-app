@@ -46,6 +46,7 @@ export function handSource(
   return {
     sessions,
     corpActions: (code) => actions.filter((a) => a.code === code),
+    decisionCutoffOf: (d) => `${d}T07:00:00.000Z`,
     bar(code, d) {
       spy?.bar.push(d);
       const i = sessions.indexOf(d);
@@ -64,6 +65,8 @@ export type WorldOptions = {
   readonly events?: readonly EventFact[];
   /** Bars with index > this are replaced by a poison bar in every lookup. */
   readonly poisonAfter?: number;
+  /** Session list of the world (default SESSIONS, 300 sessions ending on D); bars must line up with it. */
+  readonly sessions?: readonly string[];
   /** familyInputs for an index > this throws (look-ahead tripwire). */
   readonly failInputsAfter?: number;
 };
@@ -71,7 +74,7 @@ export type WorldOptions = {
 const POISON = 777_000_000n;
 
 export function buildWorld(codes: readonly WorldCode[], p: AgentParams, o: WorldOptions = {}) {
-  const sessions = SESSIONS;
+  const sessions = o.sessions ?? SESSIONS;
   const byCode = new Map(codes.map((c) => [c.code, c]));
   const poisoned = (b: ViewBar, i: number): ViewBar =>
     o.poisonAfter !== undefined && i > o.poisonAfter
@@ -103,6 +106,7 @@ export function buildWorld(codes: readonly WorldCode[], p: AgentParams, o: World
   const source: LedgerSource & { inputsCalls: string[] } = {
     sessions,
     inputsCalls: [],
+    decisionCutoffOf: (d) => `${d}T07:00:00.000Z`,
     bar: (code, d) => barAt(code, idxOf(d)),
     positionFacts(code, d) {
       const i = idxOf(d);

@@ -1,6 +1,7 @@
 // Email keys and slot rules (M5 T3, design 2.3 and 2.4, EML-010, NFR-006). One email per key.
 //   review:<d>  p0:<alert_key>  p0b:<first_alert_key>  inc:<incident_id>:open|s1  tokens:<d>
 //   unread7:<d>  reminder:<d>  brief:<d>  test:<d>:<n>  dbdown:<d>:<slot>
+import { createHash } from "node:crypto";
 import type { EmailKind, EmailSlot } from "@/lib/sentinel/schema";
 
 const D = "\\d{4}-\\d{2}-\\d{2}";
@@ -16,6 +17,12 @@ const KEY_PATTERNS: Record<EmailKind, RegExp> = {
   brief: new RegExp(`^brief:${D}$`),
   test: new RegExp(`^test:${D}:[1-9]\\d?$`),
   dbdown: new RegExp(`^dbdown:${D}:[A-Za-z0-9_-]{1,20}$`),
+  // M17 (D-381..D-400): pick alerts. Patterns only here; builders and slots are WP4's.
+  pick_hit: new RegExp(`^pickhit:[0-9a-f]{8,64}:${D}$`),
+  pick_cleared: new RegExp(`^pickclr:[0-9a-f]{8,64}:${D}$`),
+  pick_candidate: new RegExp(`^pickcand:[A-Z]{2}:${D}:[A-Za-z0-9.-]{1,12}$`),
+  pick_batch: new RegExp(`^pickb:[^:\\s]{1,80}:${D}:(?:\\d{4}|[0-9a-f]{8,64})$`),
+  pick_digest: new RegExp(`^pickdg:[^:\\s]{1,80}:${D}$`),
 };
 
 export const emailKeys = {
@@ -30,7 +37,40 @@ export const emailKeys = {
   brief: (d: string) => `brief:${d}`,
   test: (d: string, n: number) => `test:${d}:${n}`,
   dbdown: (d: string, slot: string) => `dbdown:${d}:${slot}`,
+  // M17 WP4 (D-388/D-389): one key per pick per session (alertId = the 64-hex sha of `pick_alert`).
+  pickHit: (alertId: string, sessionD: string) => `pickhit:${alertId}:${sessionD}`,
+  pickCleared: (alertId: string, sessionD: string) => `pickclr:${alertId}:${sessionD}`,
+  pickCandidate: (market: string, sessionD: string, code: string) =>
+    `pickcand:${market}:${sessionD}:${code}`,
+  pickBatch: (userId: string, sessionD: string, tail: string) =>
+    `pickb:${userId}:${sessionD}:${tail}`,
+  pickDigest: (userId: string, sessionD: string) => `pickdg:${userId}:${sessionD}`,
 } as const;
+
+/**
+ * Slot-independent batch key (D-470): derived from the item set, so a retry of the same items after
+ * a crash or a pending send re-uses the same claim (and the provider idempotency key).
+ */
+export function pickBatchKey(
+  userId: string,
+  sessionD: string,
+  alertIds: readonly string[],
+): string {
+  const sha = createHash("sha256")
+    .update([...alertIds].sort().join("|"))
+    .digest("hex")
+    .slice(0, 32);
+  return emailKeys.pickBatch(userId, sessionD, sha);
+}
+
+/** The five M17 pick e-mail kinds: pool slot only, counted against `pick_alert_emails_per_day`. */
+export const PICK_MAIL_KINDS = [
+  "pick_hit",
+  "pick_cleared",
+  "pick_candidate",
+  "pick_batch",
+  "pick_digest",
+] as const satisfies readonly EmailKind[];
 
 /** True when `key` is a well-formed key of that kind (a typo can never claim another kind's slot). */
 export function keyMatchesKind(kind: EmailKind, key: string): boolean {
@@ -54,6 +94,12 @@ export function slotCandidates(kind: EmailKind): readonly EmailSlot[] {
     case "p0":
     case "p0_batch":
       return ["p0"];
+    case "pick_hit":
+    case "pick_cleared":
+    case "pick_candidate":
+    case "pick_batch":
+    case "pick_digest":
+      return ["pool"]; // M17: never p0, never a reserved slot
     default:
       return ["pool"];
   }

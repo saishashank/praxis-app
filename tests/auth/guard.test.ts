@@ -115,7 +115,7 @@ describe("withAuth", () => {
     const res = await withAuth("what_if", handler, deps(user("viewer"), forbid))(r, {});
     expect(res.status).toBe(403);
     expect(forbid).toHaveBeenCalledWith(user("viewer"), "what_if", "/api/thing", {
-      ip: "5.5.5.5",
+      ip: "6.6.6.6",
       userAgent: "agent",
     });
     expect(handler).not.toHaveBeenCalled();

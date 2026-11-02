@@ -10,6 +10,12 @@
 import { gunzipSync } from "node:zlib";
 import { gzipDeterministic, isRealDate, sha256Hex, sydneyDate } from "./rules.mjs";
 
+// Format note (M15 P3, additive; the format number stays 1): the tables `short_interest` and
+// `macro_series` are new and written only when non-empty (omitEmpty), and `corporate_actions`
+// gained the trailing optional columns `sources` and `status` (CTX-015, D-321 provenance). A trailing
+// optional column that is null/absent on a row is left OFF that row's line, so a snapshot built
+// from inputs without the new data is byte-identical to one built before (same sha). Index bars of
+// GSPC and VIX ride in the existing `index_bars` table (index_code); older readers ignore them.
 export const SNAPSHOT_FORMAT = 1;
 
 export class SnapshotError extends Error {
@@ -96,7 +102,11 @@ export const TABLES = [
   },
   {
     name: "corporate_actions",
-    fields: ["code", "ex_date", "action_id", "type", "factor"],
+    fields: ["code", "ex_date", "action_id", "type", "factor", "known_at", "sources", "status"],
+    // GL-02: added last; a row or an older snapshot without it reads as null (known since before)
+    optional: ["known_at", "sources", "status"],
+    // M15 P3 (D-321): provenance of the confirmation, trimmed from the line when null on the row
+    trimTrailing: ["sources", "status"],
     key: ["code", "ex_date", "action_id"],
     // Everything up to the end of the range: a bar before the range still needs a later factor
     // to be adjusted, and the replay filters by its own decision date (DAT-126).
@@ -108,11 +118,36 @@ export const TABLES = [
       action_id: isInt,
       type: isStr,
       factor: (v) => isNum(v) && v > 0,
+      known_at: (v) =>
+        v === null || v === undefined || (isStr(v) && Number.isFinite(Date.parse(v))),
+      // sorted, comma-joined subset of announcement,vendor,price
+      sources: (v) =>
+        v === null ||
+        v === undefined ||
+        (isStr(v) &&
+          v.split(",").every((x) => x === "announcement" || x === "vendor" || x === "price")),
+      status: (v) =>
+        v === null ||
+        v === undefined ||
+        v === "pending" ||
+        v === "confirmed" ||
+        v === "rejected" ||
+        v === "reversed",
     },
   },
   {
     name: "announcements",
-    fields: ["code", "ann_id", "published_at", "type", "price_sensitive", "title"],
+    fields: [
+      "code",
+      "ann_id",
+      "published_at",
+      "type",
+      "price_sensitive",
+      "title",
+      "first_ingested_at",
+    ],
+    // GL-05: added last; a row or an older snapshot without it reads as null (stored before the column)
+    optional: ["first_ingested_at"],
     key: ["published_at", "code", "ann_id"],
     day: (r) => sydneyDate(Date.parse(r.published_at)),
     ok: {
@@ -122,6 +157,85 @@ export const TABLES = [
       type: isNullableStr,
       price_sensitive: isBool01,
       title: (v) => typeof v === "string",
+      first_ingested_at: (v) =>
+        v === null || v === undefined || (isStr(v) && Number.isFinite(Date.parse(v))),
+    },
+  },
+  {
+    // GL-05: the stored "first completed poll after the cut-off" instant of each session (the live
+    // marker worker_state cutoff_poll:AU:<d>), so an offline replay uses the bound live used.
+    name: "cutoff_polls",
+    fields: ["d", "at"],
+    key: ["d"],
+    day: (r) => r.d,
+    ok: { d: isRealDate, at: (v) => isStr(v) && Number.isFinite(Date.parse(v)) },
+  },
+  {
+    // DAT-234 (D-238): the manual index adds and deletes known by the end of the range. An empty
+    // table writes no manifest count, so a snapshot without index changes is byte-identical to before.
+    name: "index_changes",
+    fields: ["code", "index_name", "kind", "announced", "effective", "loaded_at"],
+    // D-285: when the row became known; a row or an older snapshot without it reads as null (always known)
+    optional: ["loaded_at"],
+    omitEmpty: true,
+    key: ["code", "index_name", "kind", "effective"],
+    day: (r) => r.announced ?? r.effective,
+    upTo: true,
+    ok: {
+      code: isStr,
+      index_name: isStr,
+      kind: (v) => v === "add" || v === "delete",
+      announced: (v) => v === null || isRealDate(v),
+      effective: isRealDate,
+      loaded_at: (v) =>
+        v === null || v === undefined || (isStr(v) && Number.isFinite(Date.parse(v))),
+    },
+  },
+  {
+    // M15 P3 (CTX-010, `asic_short`): ASIC short-position points (ppm of shares on issue) by report
+    // date; the replay applies the known-time rule (as_of + 4 weekdays). Written only when non-empty.
+    name: "short_interest",
+    fields: ["code", "as_of", "ppm"],
+    omitEmpty: true,
+    key: ["code", "as_of"],
+    day: (r) => r.as_of,
+    upTo: true,
+    ok: { code: isStr, as_of: isRealDate, ppm: (v) => isNum(v) && v >= 0 },
+  },
+  {
+    // M15 P3 (CTX-010, `macro`): RBA / FRED observations; published_at null = the series' lag rule.
+    name: "macro_series",
+    fields: ["series", "obs_d", "value", "published_at"],
+    optional: ["published_at"],
+    omitEmpty: true,
+    key: ["series", "obs_d"],
+    day: (r) => r.obs_d,
+    upTo: true,
+    ok: {
+      series: isStr,
+      obs_d: isRealDate,
+      value: isNum,
+      published_at: (v) =>
+        v === null || v === undefined || (isStr(v) && Number.isFinite(Date.parse(v))),
+    },
+  },
+  {
+    // FAM-006 (D-218): industry per code, the finer manual class ('class') or the ASX industry group
+    // ('instrument'); the replay prefers 'class'. Same empty-table rule as index_changes.
+    name: "industry",
+    fields: ["code", "industry", "source", "as_of", "loaded_at"],
+    optional: ["loaded_at"], // D-285; null for the ASX group (no history is kept)
+    omitEmpty: true,
+    key: ["code", "source", "as_of"],
+    day: (r) => r.as_of,
+    upTo: true,
+    ok: {
+      code: isStr,
+      industry: isStr,
+      source: (v) => v === "class" || v === "instrument",
+      as_of: isRealDate,
+      loaded_at: (v) =>
+        v === null || v === undefined || (isStr(v) && Number.isFinite(Date.parse(v))),
     },
   },
 ];
@@ -155,6 +269,7 @@ export function buildSnapshot(o) {
     const kept = [];
     for (const r of rows) {
       for (const f of spec.fields) {
+        if (spec.optional?.includes(f) && !(f in r)) continue;
         if (!(f in r) || !spec.ok[f](r[f])) throw new SnapshotError(`bad_row:${spec.name}.${f}`);
       }
       const day = spec.day(r);
@@ -168,8 +283,19 @@ export function buildSnapshot(o) {
       }
       return 0;
     });
-    counts[spec.name] = kept.length;
-    for (const r of kept) body.push(JSON.stringify([spec.name, spec.fields.map((f) => r[f])]));
+    if (kept.length > 0 || spec.omitEmpty !== true) counts[spec.name] = kept.length;
+    for (const r of kept) {
+      const vals = spec.fields.map((f) => r[f] ?? null);
+      // a trailing optional column that is null on this row is left off its line (byte-identical to before)
+      while (
+        vals.length > 0 &&
+        vals[vals.length - 1] === null &&
+        spec.trimTrailing?.includes(spec.fields[vals.length - 1])
+      ) {
+        vals.pop();
+      }
+      body.push(JSON.stringify([spec.name, vals]));
+    }
   }
   lines.push(JSON.stringify({ format: SNAPSHOT_FORMAT, from: o.from, to: o.to, counts }));
   // A loop, never push(...body): a full-universe snapshot has ~1M lines, more than a call can take
@@ -204,10 +330,19 @@ export function parseSnapshot(bytes) {
     const [name, values] = JSON.parse(line);
     const spec = TABLES.find((t) => t.name === name);
     if (!spec) throw new SnapshotError("bad_table");
-    tables[name].push(Object.fromEntries(spec.fields.map((f, i) => [f, values[i]])));
+    tables[name].push(
+      Object.fromEntries(
+        spec.fields
+          // a trimmed trailing optional column is absent from the row, as it was before it existed
+          .map((f, i) => [f, values[i]])
+          .filter(([f, v]) => v !== undefined || !spec.trimTrailing?.includes(f)),
+      ),
+    );
   }
   for (const t of TABLES) {
-    if (tables[t.name].length !== manifest.counts[t.name]) throw new SnapshotError("bad_counts");
+    // a snapshot written before a table existed has no count for it: it reads as empty (GL-05)
+    if (tables[t.name].length !== (manifest.counts[t.name] ?? 0))
+      throw new SnapshotError("bad_counts");
   }
   return { manifest, tables, sha: sha256Hex(new Uint8Array(raw)) };
 }

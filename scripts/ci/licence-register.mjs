@@ -38,22 +38,98 @@ export const SOURCE_FACTS = {
     code: ["worker/src/asx/universe.ts"],
     hosts: ["asx.com.au"],
     terms:
-      "A second ASX request type. It is covered by the same Owner risk acceptance as the announcements (O-23).",
+      "A second ASX request type with its own terms (Owner reference O-23b). It is enabled together with the ASX announcements entry (O-23); uploading the same file by hand is the fallback (Configuration, Data files).",
   },
   yahoo_eod: {
     label: "Yahoo Finance end-of-day prices",
-    provides: "Daily price bars (and the market index) for ASX codes.",
+    provides:
+      "Daily price bars for ASX codes, the ASX 200 index, and the US S&P 500 and VIX index closes (M15).",
     code: ["scripts/ingest/yahoo_fetch.py", "src/lib/data/sources/yahoo.ts"],
     hosts: ["Yahoo Finance, through the yfinance library"],
     terms:
       "Unofficial data for personal use. Its terms may not permit automated access. Used under the Owner risk acceptance O-26.",
+  },
+  yahoo_delayed: {
+    label: "Yahoo Finance delayed intraday quotes",
+    provides:
+      "Delayed quotes (last price, quote time, cumulative volume, previous close) for armed picks and the intraday scan (M17).",
+    code: ["src/lib/data/quotes/fetch.ts"],
+    hosts: ["Yahoo Finance chart endpoint (query1.finance.yahoo.com)"],
+    terms:
+      "Unofficial data for personal use. Its terms may not permit automated access, and the request count is much higher than for end-of-day prices. Own budget: 2,000 requests a day. Used only under the Owner risk acceptance O-26, recorded separately in Settings, Data sources; until then no request is made.",
+  },
+  // M13-lite (DAT-227, D-522): expert channels; automated classes pending, platforms manual-only.
+  expert_rss: {
+    label: "Expert RSS and Atom feeds (pending)",
+    provides: "Titles, links and dates of expert posts from public feeds.",
+    code: [],
+    hosts: [],
+    terms:
+      "Public feed metadata and our own short summary only (PRD-036, DAT-227). Terms are not yet checked [VERIFY]. No fetcher is built in this release, so nothing is requested; the row stays pending until the Owner reviews the terms.",
+  },
+  expert_youtube_feed: {
+    label: "Expert YouTube channel feeds (pending)",
+    provides: "Titles, links and dates of expert videos from public channel feeds.",
+    code: [],
+    hosts: [],
+    terms:
+      "Public feed metadata and our own short summary only (PRD-036, DAT-227). Terms are not yet checked [VERIFY]. No fetcher is built in this release, so nothing is requested; the row stays pending until the Owner reviews the terms.",
+  },
+  expert_own_site: {
+    label: "Expert own websites (pending)",
+    provides: "Titles, links and dates of posts on an expert's own site.",
+    code: [],
+    hosts: [],
+    terms:
+      "Public feed metadata and our own short summary only (PRD-036, DAT-227). Terms are not yet checked [VERIFY]. No fetcher is built in this release, so nothing is requested; the row stays pending until the Owner reviews the terms.",
+  },
+  expert_x: {
+    label: "X (manual only, disabled)",
+    provides: "A link the Owner pastes by hand for an expert's post; public metadata only.",
+    code: [],
+    hosts: [],
+    terms:
+      "No automated reading; the Owner pastes a link (DAT-227). The platform's terms restrict automated access, so the row stays disabled and nothing is fetched.",
+  },
+  expert_instagram: {
+    label: "Instagram (manual only, disabled)",
+    provides: "A link the Owner pastes by hand for an expert's post; public metadata only.",
+    code: [],
+    hosts: [],
+    terms:
+      "No automated reading; the Owner pastes a link (DAT-227). The platform's terms restrict automated access, so the row stays disabled and nothing is fetched.",
+  },
+  expert_tiktok: {
+    label: "TikTok (manual only, disabled)",
+    provides: "A link the Owner pastes by hand for an expert's post; public metadata only.",
+    code: [],
+    hosts: [],
+    terms:
+      "No automated reading; the Owner pastes a link (DAT-227). The platform's terms restrict automated access, so the row stays disabled and nothing is fetched.",
+  },
+  expert_facebook: {
+    label: "Facebook (manual only, disabled)",
+    provides: "A link the Owner pastes by hand for an expert's post; public metadata only.",
+    code: [],
+    hosts: [],
+    terms:
+      "No automated reading; the Owner pastes a link (DAT-227). The platform's terms restrict automated access, so the row stays disabled and nothing is fetched.",
+  },
+  expert_linkedin: {
+    label: "LinkedIn (manual only, disabled)",
+    provides: "A link the Owner pastes by hand for an expert's post; public metadata only.",
+    code: [],
+    hosts: [],
+    terms:
+      "No automated reading; the Owner pastes a link (DAT-227). The platform's terms restrict automated access, so the row stays disabled and nothing is fetched.",
   },
   rba: {
     label: "Reserve Bank of Australia",
     provides: "Public interest-rate and macro data.",
     code: [],
     hosts: [],
-    terms: "Public data. The register row exists; no fetcher is built in this release.",
+    terms:
+      "Copyrighted by the RBA. Only derived numbers may be shown, with the source named. The register row exists; no fetcher is built in this release.",
   },
   abs: {
     label: "Australian Bureau of Statistics",
@@ -68,6 +144,48 @@ export const SOURCE_FACTS = {
     code: ["scripts/ingest/asic_fetch.mjs", "src/lib/data/shortInterest.mjs"],
     hosts: ["download.asic.gov.au"],
     terms: "Public data published by the regulator.",
+  },
+  // M14 (DAT-236, D-239): disabled alternatives and manual uploads.
+  wikidata_asx: {
+    label: "Wikidata ASX companies (alternative, disabled)",
+    provides: "Company names and industry for ASX codes, as a universe alternative.",
+    code: [],
+    hosts: [],
+    terms:
+      "Wikidata structured data is CC0 (no conditions). No fetcher is built; a downloaded export can be turned into the listed-companies CSV offline (scripts/data/universe-from-wikidata.mjs) and uploaded by the Owner. The source stays disabled.",
+  },
+  wikipedia_asx200: {
+    label: "Wikipedia S&P/ASX 200 list (alternative, disabled)",
+    provides: "About 200 ASX codes, as a universe alternative.",
+    code: [],
+    hosts: [],
+    terms:
+      "Wikipedia text is CC BY-SA 4.0: attribution and share-alike apply to anything copied from the list. No fetcher is built and the source stays disabled.",
+  },
+  index_changes_manual: {
+    label: "Index changes (manual CSV)",
+    provides: "Index adds and deletes for the F3 exclusion, uploaded by the Owner.",
+    code: [],
+    hosts: [],
+    terms:
+      "Keyed by hand from the index-change announcements that S&P Dow Jones Indices publishes through the ASX (quarterly rebalance notices), so it sits under the ASX announcement terms (O-23). The licensed constituent files are not used. No automated fetch.",
+  },
+  // M15 (DAT-101, D-291): recorded as pending; no fetcher is built.
+  fred: {
+    label: "FRED economic series (pending)",
+    provides: "Macro series, used in offline calibration only.",
+    code: [],
+    hosts: [],
+    terms:
+      "Each FRED series carries its own terms, checked per series before any use. No fetcher is built and the row stays pending.",
+  },
+  industry_map_manual: {
+    label: "Industry classes (manual CSV)",
+    provides: "Finer industry classes for the second-position limit, uploaded by the Owner.",
+    code: [],
+    hosts: [],
+    terms:
+      "A file the Owner prepares and uploads (for example classes taken from a Wikidata export, which is CC0). No automated fetch.",
   },
 };
 
@@ -172,6 +290,64 @@ export function parseRegisterInserts(sql) {
   return rows;
 }
 
+/**
+ * All `UPDATE source_register SET col = value, ... WHERE source = 'id';` statements in the `-- +up`
+ * part of one migration (M14 0018 changes the ASX and RBA rows that 0004 and 0006 seeded), in order.
+ */
+export function parseRegisterUpdates(sql) {
+  const up = sql.split(/^-- \+down/m)[0];
+  const text = up
+    .split("\n")
+    .filter((l) => !/^\s*--/.test(l))
+    .join("\n");
+  const out = [];
+  const head = /UPDATE\s+source_register\s+SET\s+/gi;
+  for (const m of text.matchAll(head)) {
+    let end = m.index + m[0].length;
+    let inStr = false;
+    while (end < text.length) {
+      const c = text[end];
+      if (c === "'") {
+        if (inStr && text[end + 1] === "'") end += 1;
+        else inStr = !inStr;
+      } else if (c === ";" && !inStr) break;
+      end += 1;
+    }
+    const body = text.slice(m.index + m[0].length, end);
+    const w = /\s+WHERE\s+source\s*=\s*'([^']+)'\s*$/i.exec(body);
+    if (!w) throw new Error("source_register update: unsupported WHERE");
+    const sets = body.slice(0, w.index);
+    // Split `col = value` pairs on commas outside quotes.
+    const pairs = [];
+    let cur = "";
+    let q = false;
+    for (let i = 0; i < sets.length; i += 1) {
+      const c = sets[i];
+      if (c === "'") {
+        if (q && sets[i + 1] === "'") {
+          cur += "''";
+          i += 1;
+          continue;
+        }
+        q = !q;
+      }
+      if (c === "," && !q) {
+        pairs.push(cur);
+        cur = "";
+      } else cur += c;
+    }
+    pairs.push(cur);
+    const values = {};
+    for (const pair of pairs) {
+      const eq = pair.indexOf("=");
+      if (eq < 0) throw new Error("source_register update: bad assignment");
+      values[pair.slice(0, eq).trim()] = parseTuple(pair.slice(eq + 1))[0];
+    }
+    out.push({ source: w[1], values });
+  }
+  return out;
+}
+
 export function loadSeed(root = ROOT) {
   const dir = path.join(root, MIGRATIONS_DIR);
   const files = fs
@@ -184,18 +360,26 @@ export function loadSeed(root = ROOT) {
       if (bySource.has(r.source)) throw new Error(`duplicate source in seed: ${r.source}`);
       bySource.set(r.source, { ...r, migration: f });
     }
+    // A later migration's UPDATEs change the seeded row (0018: ASX listed companies, RBA).
+    for (const u of parseRegisterUpdates(fs.readFileSync(path.join(dir, f), "utf8"))) {
+      const cur = bySource.get(u.source);
+      if (!cur) throw new Error(`update of an unseeded source: ${u.source}`);
+      bySource.set(u.source, { ...cur, ...u.values });
+    }
   }
   return [...bySource.values()];
 }
 
-/** The source ids the code declares: AU_SOURCES plus UNIVERSE_SOURCE (src/lib/data/schema.ts). */
+/** The source ids the code declares: AU_SOURCES, UNIVERSE_SOURCE and REFERENCE_SOURCES (src/lib/data/schema.ts). */
 export function declaredSources(root = ROOT) {
   const text = fs.readFileSync(path.join(root, SCHEMA_PATH), "utf8");
   const list = /AU_SOURCES\s*=\s*\[([^\]]*)\]/.exec(text);
   const uni = /UNIVERSE_SOURCE\s*=\s*"([^"]+)"/.exec(text);
   if (!list || !uni) throw new Error("source ids not found in schema.ts");
   const ids = [...list[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  return [...ids, uni[1]];
+  const ref = /REFERENCE_SOURCES\s*=\s*\[([^\]]*)\]/.exec(text); // M14 (DAT-236); absent in older trees
+  const refIds = ref ? [...ref[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]) : [];
+  return [...ids, uni[1], ...refIds];
 }
 
 // ---- rendering ----
@@ -296,6 +480,13 @@ export function render(rows) {
         )
       : ["- None."]),
     "- Terms URLs and last-checked dates are not recorded in the seed. The source evaluation and the monthly re-check fill them in the live register.",
+    "",
+    "## Delayed-quote endpoint: facts and fallback (V2-I3, D-792)",
+    "",
+    "- Request pattern (one per code): `GET https://query1.finance.yahoo.com/v8/finance/chart/{CODE}.AX?interval=1m&range=1d`. The same host and path family as the end-of-day fetch (`scripts/fixtures/record-day.mjs` uses `/v8/finance/chart/` with `interval=1d`). The two scripts share the host but not the code; the fixture recorder is the reference for the payload shape.",
+    "- Status of the endpoint: unofficial, undocumented, no API key, no service-level promise, terms not recorded (see the Yahoo rows). The [VERIFY at build] marker is closed: the pattern above is the one the code uses and the parser tests (`tests/quotes`) pin the payload shape. It can change or be blocked without notice.",
+    "- Failure behaviour: HTTP 429 pauses both quote routes for `quote_pause_cooldown_min`; 5xx and network errors end the run. Nothing else contacts the host, and nothing is requested unless the source is accepted (D-398).",
+    "- Named fallback: none. The ASX delayed quote page is scrape-only, its terms forbid automated access, and it is not zero-cost-safe, so it is not a fallback and no second source is added. If the endpoint stops working the intraday watch and pick alerts go quiet and System Health shows the source as paused; the Owner can leave the source off. Any paid or licensed feed would be a new Owner decision with its own register row.",
     "",
   ];
   return lines.join("\n");

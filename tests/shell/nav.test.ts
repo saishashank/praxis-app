@@ -108,11 +108,32 @@ describe("route model: at most three levels (UXN-033)", () => {
     };
     walk(root);
     expect(found.length).toBeGreaterThan(5);
-    for (const f of found)
+    // M16 D-361/D-371: the Blueprint page is invisible outside the Owner's own address bar, so it is
+    // deliberately absent from the route model (no breadcrumb, no menu entry).
+    for (const f of found.filter((p) => p !== "/blueprint"))
       expect(
         ROUTES.some((r) => r.pattern === f),
         f,
       ).toBe(true);
+  });
+});
+
+describe("expert routes (M13-lite D-511)", () => {
+  it("sit under Reviews, three levels at most, queue wins over the id route", () => {
+    expect(levelOf("/reviews/experts")).toBe(2);
+    expect(levelOf("/reviews/experts/[id]")).toBe(3);
+    expect(levelOf("/reviews/experts/queue")).toBe(3);
+    expect(levelOf("/reviews/techniques")).toBe(2);
+    expect(matchRoute("/reviews/experts/queue")?.label).toBe("Claims to check");
+    expect(matchRoute("/reviews/experts/X-001")?.label).toBe("Expert");
+    expect(breadcrumbFor("/reviews/experts/queue").crumbs.map((c) => c.label)).toEqual([
+      "Reviews",
+      "Experts",
+      "Claims to check",
+    ]);
+  });
+  it("adds no tab", () => {
+    expect(TABS.map((t) => t.label)).toEqual(SIX);
   });
 });
 
@@ -188,6 +209,9 @@ describe("activeTab", () => {
     ["/reviews/2026-10-20", "reviews"],
     ["/reviews/learned", "reviews"],
     ["/reviews/learned/compare", "reviews"],
+    ["/reviews/experts", "reviews"],
+    ["/reviews/experts/queue", "reviews"],
+    ["/reviews/techniques", "reviews"],
     ["/picks/unknown/deeper/still", "picks"],
   ])("%s -> %s", (p, tab) => {
     expect(activeTab(p)).toBe(tab);

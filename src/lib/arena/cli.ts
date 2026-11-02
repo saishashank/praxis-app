@@ -21,7 +21,9 @@ import { createClient, type Client } from "@libsql/client";
 import { addDays, marketDate, sessionsBetween } from "@/lib/data/calendar";
 import { signalsDay, type SignalsResult } from "@/lib/agents/batch2b";
 import { reviewDay, type ReviewResult } from "@/lib/agents/batch3";
-import type { AgentParams } from "@/lib/agents/params";
+import { loadAgentParams, type AgentParams } from "@/lib/agents/params";
+import { decisionCutoffUtc } from "@/lib/agents/decisionView";
+import { waitForCutoffPoll } from "@/lib/sentinel/cutoffPoll";
 import { learnDay, type LearnResult } from "@/lib/learning/learnStage";
 import { wordsDay, type WordsLlm, type WordsResult } from "@/lib/learning/wordsStage";
 import { createRouter, type LlmRouter } from "@/lib/llm/router";
@@ -31,6 +33,7 @@ import {
   closeBooksDay,
   closeBooksKey,
   loadCalendar,
+  recordCatchUpCapped,
   type CloseBooksResult,
 } from "./closeBooks";
 import { replaySessions } from "./replay";
@@ -141,7 +144,11 @@ export async function closeBooksMain(
         ? [target]
         : sessionsBetween(addDays(done, 1), target, calendar);
     if (sessions.length === 0) sessions = [target];
-    if (sessions.length > cap) sessions = sessions.slice(sessions.length - cap);
+    // R3-I5 (D-821): the ledger closes in order, so a gap longer than the cap keeps the OLDEST sessions (the
+    // newest-first slice used before made the first kept session fail the previous-session guard). The rest
+    // wait for the next dispatch; the run says so and exits 1 so the Owner sees that the target is still open.
+    const capped = sessions.length > cap ? sessions.length - cap : 0;
+    if (capped > 0) sessions = sessions.slice(0, cap);
     const mode = await db.execute({
       sql: "SELECT mode FROM market WHERE code = ?",
       args: [MARKET],
@@ -158,9 +165,11 @@ export async function closeBooksMain(
         market: MARKET,
         d,
         replay,
+        strictCalendar: !replay, // D-711
         calendar,
         now: () => new Date(nowMs()).toISOString(),
         commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
+        notify: { env },
       });
       out(summary(result));
       lines.push(`status=${result.status}`);
@@ -173,6 +182,23 @@ export async function closeBooksMain(
         exit = 1;
         break;
       }
+    }
+    if (capped > 0 && exit === 0) {
+      out(
+        `arena-2a: capped at ${cap} sessions per run; ${capped} more still to close, oldest first: dispatch Arena close again`,
+      );
+      // R4-I3 (D-833): a record, so System Health shows the open target without GitHub
+      if (!replay) {
+        await recordCatchUpCapped(db, {
+          market: MARKET,
+          d: target,
+          closed: sessions.length,
+          remaining: capped,
+          now: new Date(nowMs()).toISOString(),
+          commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
+        });
+      }
+      exit = 1;
     }
   } catch (error) {
     // Never print a driver error message: it can carry the database URL. The class name is safe.
@@ -353,11 +379,30 @@ export async function signalsMain(
       if (writes) {
         const deadline = nowMs() + wait * 60_000;
         while (!(await hasClosedBooks(db, d)) && nowMs() < deadline) await sleep(POLL_MS);
+        // GL-05: then the "first completed poll after the cut-off" marker, at most 4 minutes (bounded,
+        // never past cut-off + 4 min). A missing marker never stalls the night: signalsDay records
+        // `cutoff_poll_missing` on the run and the announcements are bounded at cut-off + 4 min.
+        if (!replay) {
+          let found = false;
+          try {
+            found = await waitForCutoffPoll(db, {
+              market: MARKET,
+              d,
+              cutoffIso: decisionCutoffUtc(d, (await loadAgentParams(db)).decisionCutoff),
+              nowMs,
+              sleep,
+            });
+          } catch {
+            // the wait is best effort: never a reason to stop the night
+          }
+          if (!found) out("arena-2b: cut-off poll marker missing after the wait; going on");
+        }
       }
       const result = await signalsDay(db, {
         market: MARKET,
         d,
         replay,
+        strictCalendar: !replay, // D-711
         calendar,
         now: () => new Date(nowMs()).toISOString(),
         commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
@@ -379,6 +424,7 @@ export async function signalsMain(
         market: MARKET,
         d,
         replay,
+        strictCalendar: !replay, // D-711
         calendar,
         now: () => new Date(nowMs()).toISOString(),
         commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,

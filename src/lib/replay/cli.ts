@@ -12,7 +12,7 @@
 import { createClient, type Client, type InStatement } from "@libsql/client";
 import { defaultAgentParams, loadAgentParams, type AgentParams } from "@/lib/agents/params";
 import { marketDate } from "@/lib/data/calendar";
-import type { TrialLedgerRow } from "@/lib/stats/splits";
+import { splitFromRow, type LineageSplitRecord, type TrialLedgerRow } from "@/lib/stats/splits";
 import { learningDone, learningWeek, runLearning } from "./learningMode";
 import {
   RUN_MODES,
@@ -264,6 +264,14 @@ export async function persistOutput(db: Client, out: ReplayOutput): Promise<numb
   return stmts.length;
 }
 
+async function existingSplits(db: Client): Promise<LineageSplitRecord[]> {
+  const rs = await db.execute({
+    sql: "SELECT * FROM lineage_split WHERE lineage_id LIKE ? ORDER BY lineage_id, version",
+    args: [`${MARKET}:%`],
+  });
+  return rs.rows.map((r) => splitFromRow(r as Record<string, unknown>));
+}
+
 async function existingTrials(db: Client): Promise<TrialLedgerRow[]> {
   const rs = await db.execute({
     sql: "SELECT * FROM trial_ledger WHERE market = ?",
@@ -364,6 +372,8 @@ export async function replayMain(
             nodeVersion: deps.nodeVersion ?? process.version,
             snapshotBytes: bytes,
             since,
+            // D-282: the cost gate reads the stored split; null and injected runs have no cost gate
+            existingSplits: m === "null" || m === "injected" ? [] : await existingSplits(db),
             existingTrials: m === "evidence" ? await existingTrials(db) : [],
             nullRuns: runs,
             synthetic,

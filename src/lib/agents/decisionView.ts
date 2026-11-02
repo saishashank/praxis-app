@@ -8,6 +8,7 @@
 //
 // Untimed items are stored with a date-only `published_at` (YYYY-MM-DD, "assumed time"); a date
 // string sorts before any instant of that day, so they become usable from that day's cut-off.
+import { listingFloor } from "@/lib/data/listing";
 import type { Client } from "@libsql/client";
 import { LookAheadError, priceMicro } from "@/lib/arena/marketData";
 import { assertBar } from "@/lib/arena/fills";
@@ -79,6 +80,12 @@ export type DecisionViewOptions = {
    * Replays read backfilled rows whose ingested_at is later by construction, so they leave it off.
    */
   readonly liveIngestBound?: boolean;
+  /**
+   * GL-05: an announcement first stored after this instant did not exist for the decision (live or
+   * replay alike). Rows with first_ingested_at NULL (stored before the column) are always visible.
+   * Set by loadDayInputs from the cut-off poll marker (src/lib/sentinel/cutoffPoll.ts).
+   */
+  readonly announcementIngestBound?: string;
 };
 
 export type DecisionView = {
@@ -145,6 +152,7 @@ export function createDecisionView(db: Reader, opts: DecisionViewOptions): Decis
       const rs = await db.execute({
         sql: `SELECT d, o, h, l, c, volume FROM price_bar
               WHERE market = ? AND code = ? AND d <= ? AND d <= ?${ingestClause}
+                AND ${listingFloor("price_bar")}
               ORDER BY d DESC LIMIT ?`,
         args,
       });
@@ -188,6 +196,10 @@ export function createDecisionView(db: Reader, opts: DecisionViewOptions): Decis
       }
       const where = ["market = ?", "published_at < ?"];
       const args: (string | number)[] = [market, cutoff];
+      if (opts.announcementIngestBound !== undefined) {
+        where.push("(first_ingested_at IS NULL OR first_ingested_at <= ?)");
+        args.push(opts.announcementIngestBound);
+      }
       if (q.sinceIso !== undefined) {
         where.push("published_at >= ?");
         args.push(q.sinceIso);

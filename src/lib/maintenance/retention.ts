@@ -44,6 +44,7 @@ import {
 import { readState } from "@/lib/data/backfill/engine.mjs";
 import { appendAuditTx, auditKey, hashUserPii, nullAuditPii } from "@/lib/db/audit";
 import { finishRun, hasSuccess, pruneRuns, startRun } from "@/lib/runs/runRecord";
+import { CORTEX_PRUNED_TABLES } from "@/lib/cortex/store/features";
 import { LEARNING_PRUNED_TABLES } from "@/lib/learning/schema";
 import { SENTINEL_PRUNED_TABLES } from "@/lib/sentinel/schema";
 
@@ -61,6 +62,7 @@ export type MaintenanceCounts = {
   prunedAnnouncements: number;
   prunedSentinel: number;
   prunedLearning: number;
+  prunedBars: number;
   hashedUsers: number;
 };
 
@@ -182,17 +184,64 @@ export async function pruneSentinelTables(db: Client, nowIso: string): Promise<n
 }
 
 // M6 (migration 0010, DAT-142): comparison_result (2 years) and kb_archive_run (180 days) lose rows
-// older than their floor; the triggers refuse anything younger. Strictly older rows only.
+// older than their floor; the triggers refuse anything younger. Strictly older rows only. V2-S2
+// (migration 0023): cortex_feature_daily (400 days) is pruned in the same batch.
 export async function pruneLearningTables(db: Client, nowIso: string): Promise<number> {
-  const stmts = Object.entries(LEARNING_PRUNED_TABLES).map(([table, def]) => {
-    const cutoff = cutoffIso(nowIso, def.days);
-    return {
-      sql: `DELETE FROM ${table} WHERE ${def.column} < ?`,
-      args: [def.kind === "date" ? cutoff.slice(0, 10) : cutoff],
-    };
-  });
+  const stmts = Object.entries({ ...LEARNING_PRUNED_TABLES, ...CORTEX_PRUNED_TABLES }).map(
+    ([table, def]) => {
+      const cutoff = cutoffIso(nowIso, def.days);
+      return {
+        sql: `DELETE FROM ${table} WHERE ${def.column} < ?`,
+        args: [def.kind === "date" ? cutoff.slice(0, 10) : cutoff],
+      };
+    },
+  );
   const results = await db.batch(stmts, "write");
   return results.reduce((n, x) => n + x.rowsAffected, 0);
+}
+
+// V1-S5 / D-717 (DAT-142 "market data in Turso 500 sessions"): price bars (and their re-fetch
+// diffs, which "live and die with the bar") older than the 500th most recent session lose their
+// rows. The table triggers (0004) refuse a delete inside 730 days, so the cutoff is the OLDER of the
+// 500-session date and the 730-day floor (one extra day of margin for the database clock): in
+// practice 500 AU sessions are about 725 days, so the floor decides and nothing the trigger would
+// refuse is ever attempted. Bounded: at most PRUNE_MAX_CHUNKS x PRUNE_CHUNK rows per run (the next
+// night continues), so the first run on a big table cannot become one huge write.
+export const PRICE_BAR_KEEP_SESSIONS = 500;
+export const PRICE_BAR_FLOOR_DAYS = 730;
+export const PRUNE_CHUNK = 5000;
+export const PRUNE_MAX_CHUNKS = 40;
+
+export async function prunePriceBars(
+  db: Client,
+  nowIso: string,
+  market = "AU",
+  keepSessions = PRICE_BAR_KEEP_SESSIONS,
+): Promise<number> {
+  const nth = await db.execute({
+    sql: `SELECT d FROM (SELECT DISTINCT d FROM price_bar WHERE market = ? ORDER BY d DESC
+                         LIMIT 1 OFFSET ?)`,
+    args: [market, keepSessions - 1],
+  });
+  if (nth.rows.length === 0) return 0; // fewer sessions than the retention: nothing to prune
+  const floor = cutoffIso(nowIso, PRICE_BAR_FLOOR_DAYS + 1).slice(0, 10);
+  const sessionCutoff = String(nth.rows[0].d);
+  const cutoff = sessionCutoff < floor ? sessionCutoff : floor;
+  let total = 0;
+  for (let i = 0; i < PRUNE_MAX_CHUNKS; i++) {
+    const r = await db.execute({
+      sql: `DELETE FROM price_bar WHERE (market, code, d) IN
+              (SELECT market, code, d FROM price_bar WHERE market = ? AND d < ? LIMIT ?)`,
+      args: [market, cutoff, PRUNE_CHUNK],
+    });
+    total += r.rowsAffected;
+    if (r.rowsAffected < PRUNE_CHUNK) break;
+  }
+  await db.execute({
+    sql: "DELETE FROM bar_refetch WHERE market = ? AND d < ?",
+    args: [market, cutoff],
+  });
+  return total;
 }
 
 export async function pruneNonces(db: Client, nowSec: number): Promise<number> {
@@ -305,6 +354,7 @@ export async function runMaintenance(
     prunedAnnouncements: 0,
     prunedSentinel: 0,
     prunedLearning: 0,
+    prunedBars: 0,
     hashedUsers: 0,
   };
   const failedSteps: string[] = [];
@@ -378,6 +428,14 @@ export async function runMaintenance(
   } catch {
     failedSteps.push("prune_learning");
   }
+  // DAT-142 market data: price bars beyond 500 sessions (and the 730-day trigger floor).
+  try {
+    counts.prunedBars = await prunePriceBars(mainDb, nowIso);
+    rowsRead += 1;
+    rowsWritten += counts.prunedBars;
+  } catch {
+    failedSteps.push("prune_price_bars");
+  }
   // NFR-030: the 90-day value is fixed (no stored override).
   try {
     const r = await hashRevokedUsers(
@@ -402,6 +460,7 @@ export async function runMaintenance(
     counts.prunedAnnouncements +
     counts.prunedSentinel +
     counts.prunedLearning +
+    counts.prunedBars +
     counts.hashedUsers;
   const ok = failedSteps.length === 0;
   const finish = (status: "success" | "failed") =>

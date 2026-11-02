@@ -9,7 +9,7 @@ import type { ViewBar } from "../decisionView";
 import type { IndicatorRow } from "../indicators";
 import type { PatternName } from "../patterns";
 import type { RegimeLabel } from "../regime";
-import type { EventCategory, Family, Polarity } from "../schema";
+import type { EventCategory, EventDetail, Family, Polarity } from "../schema";
 
 export type { Family, RegimeLabel, PatternName };
 
@@ -41,6 +41,22 @@ export type EventFact = {
   readonly timed: boolean;
   /** Raw day-0 low in micro (F2 close-below-low exit); null when day 0 has no bar. */
   readonly day0LowMicro: bigint | null;
+  /** AGT-135 / AGT-138 detail (events-v2); undefined or null on a v1 event. */
+  readonly categoryDetail?: EventDetail | null;
+  /**
+   * AGT-135 display flag: the day0 -> day0+1 close return has the opposite sign to the day-0 AR.
+   * Known only from day 0 + 1; never a rule input. undefined = not computed.
+   */
+  readonly reversedNextClose?: boolean | null;
+};
+
+/** DAT-234: an index add or delete near a code's event (from the manual CSV, `index_change`). */
+export type IndexChangeFact = {
+  readonly indexName: string;
+  readonly kind: "add" | "delete";
+  /** YYYY-MM-DD, or null when only the effective date is known. */
+  readonly announced: string | null;
+  readonly effective: string;
 };
 
 export type IndicatorFacts = Pick<
@@ -82,6 +98,13 @@ export type CodeFacts = {
   readonly consolidationSessionsAgo: number | null;
   /** ARN-011 promotional pattern: a title matched the configured keyword list. */
   readonly promotional: boolean;
+  /**
+   * FAM-006 industry (instrument_class, else the ASX industry group). Absent, null or a
+   * placeholder ("Class Pend", "Not Applic") = unknown (D-217, D-218).
+   */
+  readonly industry?: string | null;
+  /** DAT-234 index changes of this code, oldest first. Absent = none loaded. */
+  readonly indexChanges?: readonly IndexChangeFact[];
 };
 
 export type FamilyInputs = {
@@ -121,6 +144,11 @@ export type FamilyOptions = {
    * Never set by the live batch.
    */
   readonly f4EventFilterOff?: boolean;
+  /**
+   * O-49 (D-221): also emit F5 on U3 as the descriptive variant `F5-U3-stress`. Replay only, never
+   * traded and never validated. The live batch never sets it.
+   */
+  readonly f5StressU3?: boolean;
   /**
    * Rule-version id stamped on the candidates of a family (default `<family>.v1`). The caller runs the
    * family with that version's parameters (M6 T8, D-110 #44); never changes a rule, only the label.

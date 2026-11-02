@@ -37,6 +37,28 @@ export type LineageSplitRecord = {
   readonly measured_on_run: string | null;
 };
 
+/** A stored `lineage_split` row (any driver's row object) as a record. */
+export function splitFromRow(r: Readonly<Record<string, unknown>>): LineageSplitRecord {
+  const opt = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
+  return {
+    lineage_id: String(r.lineage_id),
+    version: Number(r.version),
+    block_sessions: Number(r.block_sessions),
+    holdout_len: Number(r.holdout_len),
+    validation_len: Number(r.validation_len),
+    purge: Number(r.purge),
+    data_end_d: String(r.data_end_d),
+    holdout_start_d: opt(r.holdout_start_d),
+    holdout_end_d: opt(r.holdout_end_d),
+    validation_start_d: opt(r.validation_start_d),
+    validation_end_d: opt(r.validation_end_d),
+    dev_end_d: opt(r.dev_end_d),
+    deferred_until_d: opt(r.deferred_until_d),
+    reason: String(r.reason) as "create" | "roll",
+    measured_on_run: opt(r.measured_on_run),
+  };
+}
+
 export type SplitName = "development" | "validation" | "holdout" | "purge" | "completion";
 
 /** Lineage id = `<market>:<family>` (ch.05 5.1, decision 23). */
@@ -424,6 +446,26 @@ export type TrialCounts = {
   readonly holdoutAccesses: number;
   readonly byKind: Readonly<Record<TrialKind, number>>;
 };
+
+/**
+ * VAL-112 (D-283): k, the validation_access + pattern_test rows spent on one split version of a
+ * lineage. With `access`, only those strictly before it in (d, id) order (so a repeat of the same
+ * run gets the same level); without, all of them. The one count behind every level.
+ */
+export function spentTestsBefore(
+  ledger: readonly Pick<TrialLedgerRow, "id" | "d" | "lineage_id" | "split_version" | "kind">[],
+  lineage: string,
+  splitVersion: number,
+  access?: Pick<TrialLedgerRow, "id" | "d">,
+): number {
+  return ledger.filter(
+    (r) =>
+      r.lineage_id === lineage &&
+      r.split_version === splitVersion &&
+      (r.kind === "validation_access" || r.kind === "pattern_test") &&
+      (access === undefined || r.d < access.d || (r.d === access.d && r.id < access.id)),
+  ).length;
+}
 
 /** Trials charged to a lineage on one split version (ARN-085: every kind counts toward the budget). */
 export function trialCounts(

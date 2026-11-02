@@ -8,6 +8,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ALL_SPEC_KEYS,
+  FAMILY_OPTIONAL_KEYS,
   FAMILY_PARAM_KEYS,
   FAMILY_SPECS,
   RULE_FIELDS,
@@ -48,7 +49,9 @@ describe("rule schema: the six families", () => {
     expect([...ALL_SPEC_KEYS].sort()).toEqual(bKeys);
     for (const f of FAMILIES) {
       const prefix = `${f.toLowerCase()}_`;
-      const own = bKeys.filter((k) => k.startsWith(prefix));
+      // the M14 structural switches are optional in params_json (FAMILY_OPTIONAL_KEYS)
+      const optional = FAMILY_OPTIONAL_KEYS[f].map((s) => s.key);
+      const own = bKeys.filter((k) => k.startsWith(prefix) && !optional.includes(k));
       for (const k of own) expect(FAMILY_PARAM_KEYS[f], `${f} ${k}`).toContain(k);
       expect(FAMILY_PARAM_KEYS[f]).toContain("reentry_block");
     }

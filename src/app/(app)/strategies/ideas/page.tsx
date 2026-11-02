@@ -10,6 +10,7 @@ import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
 import { loadIdeas } from "@/lib/ui/loaders/ideas";
 import { NOT_ADVICE_FOOTER } from "@/lib/view/honesty";
+import { StrategyTabs } from "../StrategyTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,7 @@ export default async function IdeasPage({
 
   return (
     <main className="mx-auto flex max-w-4xl min-w-0 flex-col gap-6 px-4 py-6">
+      <StrategyTabs current="ideas" />
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Tonight&apos;s trade ideas</h1>
         <p className="m-0 text-sm text-text-muted">
@@ -57,7 +59,9 @@ export default async function IdeasPage({
       ) : null}
 
       {page.state === "empty" ? (
-        <EmptyState title="No trade ideas yet">{page.text}</EmptyState>
+        <EmptyState motif="strategies" hue="strategies" title="No trade ideas yet">
+          {page.text}
+        </EmptyState>
       ) : (
         <>
           <p className="m-0 text-sm" data-testid="ideas-tally">

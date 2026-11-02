@@ -147,12 +147,20 @@ describe("the stage inside a Batch 1 run", () => {
     const db = await pipelineDb();
     const res = await go(db, { indexText: null, shortText: null });
     expect(res.exit).toBe(0);
-    expect(await stage6(db)).toEqual({ index: "no_file", short_interest: "no_file" });
+    expect(await stage6(db)).toEqual({
+      index: "no_file",
+      short_interest: "no_file",
+      vendor_actions: "no_file",
+    });
     expect(await count(db, "index_bar")).toBe(0);
 
     const db2 = await pipelineDb();
     await go(db2, { indexText: "not json", shortText: "[1]" });
-    expect(await stage6(db2)).toEqual({ index: "file_invalid", short_interest: "file_invalid" });
+    expect(await stage6(db2)).toEqual({
+      index: "file_invalid",
+      short_interest: "file_invalid",
+      vendor_actions: "no_file",
+    });
     expect(await count(db2, "price_bar")).toBe(3);
   });
 
@@ -176,7 +184,7 @@ describe("the stage inside a Batch 1 run", () => {
     const prep2 = await prepareBatch1(db, { nowMs: at1730(TUE) });
     expect(prep2).toMatchObject({
       action: "fetch",
-      request: { indices: ["^AXJO"], short_dates: [] },
+      request: { indices: ["^AXJO", "^GSPC", "^VIX"], short_dates: [] },
     });
     await go(db, { indexText: INDEX_TEXT, shortText: shortFile() });
     expect((await stage6(db)).short_interest).toBe("source_off");

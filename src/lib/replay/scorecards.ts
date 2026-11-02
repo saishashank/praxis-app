@@ -63,6 +63,19 @@ const ratNum = (r: Rational): number => Number(r.num) / Number(r.den);
 /** Candle patterns of ARN-074 (AGT-031 v1 candidates). */
 export const PATTERN_NAMES = ["bullishEngulfing", "hammer", "morningStar", "piercingLine"] as const;
 
+/**
+ * VAL-113 (D-229): the fixed order in which patterns are tested, one trial each, so the alpha-spending
+ * level of each is known in advance: engulfing, piercing, harami, morning star, hammer. Harami is not
+ * in `PATTERN_NAMES` until M15 publishes its sample size (`isBullishHarami` exists, unwired).
+ */
+export const PATTERN_TEST_ORDER = [
+  "bullishEngulfing",
+  "piercingLine",
+  "bullishHarami",
+  "morningStar",
+  "hammer",
+] as const;
+
 export function median(xs: readonly number[]): number | null {
   if (xs.length === 0) return null;
   const s = [...xs].sort((a, b) => a - b);

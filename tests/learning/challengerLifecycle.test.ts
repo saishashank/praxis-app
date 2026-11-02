@@ -13,6 +13,10 @@ import {
   incumbentOf,
   isAllowedEdge,
   isoWeekBounds,
+  isStopOrSizingKey,
+  changesStopOrSizing,
+  quarterBounds,
+  VARIANT_QUARTER_CAP,
   loadChallenger,
   promotionCapacity,
   reviewChallenger,
@@ -176,20 +180,80 @@ describe("limits (KB-042, ARN-005, ARN-065, ARN-085, KB-043)", () => {
   it("at most max_challengers (8) in proposed..approved; a decided challenger frees its slot", async () => {
     const { db } = await world();
     expect(LEARNING.maxChallengers).toBe(8);
+    // volume-ratio variants: the O-46 cap counts stop, trail and sizing variants only
+    const vol = async (i: number) =>
+      ownerChallenger(db, i, D0, {
+        params: await f1With(db, { f1_volume_ratio_min: Number((1.55 + 0.05 * i).toFixed(2)) }),
+      });
     const ids: string[] = [];
-    for (let i = 0; i < LEARNING.maxChallengers; i += 1) ids.push(await created(db, i));
+    for (let i = 0; i < LEARNING.maxChallengers; i += 1) {
+      const r = await vol(i);
+      if (r.status !== "created") throw new Error(JSON.stringify(r));
+      ids.push(r.id);
+    }
     expect(await challengerSlots(db, MARKET, LEARNING)).toEqual({ used: 8, max: 8, free: false });
-    expect(await ownerChallenger(db, 8)).toMatchObject({
-      status: "refused",
-      reason: "max_challengers",
-    });
+    expect(await vol(8)).toMatchObject({ status: "refused", reason: "max_challengers" });
     await transitionChallenger(
       db,
       { id: ids[0]!, to: "rejected", d: D0, actor: "A6", reason: "x" },
       LEARNING,
     );
     expect((await challengerSlots(db, MARKET, LEARNING)).free).toBe(true);
-    expect(await ownerChallenger(db, 8)).toMatchObject({ status: "created" });
+    expect(await vol(8)).toMatchObject({ status: "created" });
+  });
+
+  it("O-46: at most 3 stop, trail or sizing variants per family per calendar quarter (variant_quarter_cap)", async () => {
+    const { db } = await world();
+    for (let i = 0; i < VARIANT_QUARTER_CAP; i += 1) await created(db, i);
+    expect(await ownerChallenger(db, 3)).toMatchObject({
+      status: "refused",
+      reason: "variant_quarter_cap",
+    });
+    // a structural or entry change is not counted
+    const other = await ownerChallenger(db, 0, D0, {
+      params: await f1With(db, { f1_volume_ratio_min: 1.4 }),
+    });
+    expect(other).toMatchObject({ status: "created" });
+    // the next quarter starts a new count
+    expect(await ownerChallenger(db, 3, "2027-01-04")).toMatchObject({ status: "created" });
+  });
+
+  it("quarter bounds, stop-key test and the diff", () => {
+    expect(quarterBounds("2026-10-05")).toEqual({ start: "2026-10-01", end: "2026-12-31" });
+    expect(quarterBounds("2026-02-28")).toEqual({ start: "2026-01-01", end: "2026-03-31" });
+    expect(quarterBounds("2026-06-30")).toEqual({ start: "2026-04-01", end: "2026-06-30" });
+    expect(quarterBounds("2026-09-01")).toEqual({ start: "2026-07-01", end: "2026-09-30" });
+    expect(() => quarterBounds("nope")).toThrow(ChallengerError);
+    for (const k of [
+      "f1_trail_atr",
+      "f1_initial_stop_atr",
+      "f5_stop_cap_pct",
+      "f3_trail_after_pct",
+    ])
+      expect(isStopOrSizingKey(k)).toBe(true);
+    for (const k of ["f1_time_stop", "f3_time_exit", "f1_volume_ratio_min", "f4_rank_variant"])
+      expect(isStopOrSizingKey(k)).toBe(false);
+    expect(changesStopOrSizing({ f1_trail_atr: 3 }, { f1_trail_atr: 3.5 })).toBe(true);
+    expect(changesStopOrSizing({ f1_trail_atr: 3 }, { f1_trail_atr: 3 })).toBe(false);
+  });
+
+  it("KB-081 optional structural keys are accepted; a bad value or an unknown key is refused", async () => {
+    const { db } = await world();
+    const base = await f1With(db, {});
+    const ok = await ownerChallenger(db, 0, D0, {
+      params: { ...base, f1_rank_variant: "composite3", f1_return_window_sessions: 252 },
+    });
+    expect(ok).toMatchObject({ status: "created" });
+    expect(
+      await ownerChallenger(db, 0, D0, { params: { ...base, f1_rank_variant: "nope" } }),
+    ).toMatchObject({ status: "refused", reason: "invalid_params" });
+    expect(
+      await ownerChallenger(db, 0, D0, { params: { ...base, f1_return_window_sessions: 300 } }),
+    ).toMatchObject({ status: "refused", reason: "invalid_params" });
+    // a key of another family is not an optional key of F1
+    expect(
+      await ownerChallenger(db, 0, D0, { params: { ...base, f4_rank_variant: "vol_scaled" } }),
+    ).toMatchObject({ status: "refused", reason: "invalid_params" });
   });
 
   it("the cap follows the key, not a constant", async () => {

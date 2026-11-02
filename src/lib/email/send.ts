@@ -36,6 +36,21 @@ import { renderIncident, renderTest, renderTokensDue, renderUnread7 } from "./te
 import type { IncidentInput, TokensDueInput, UnreadInput } from "./templates/notices";
 import { renderBrief, renderReminder } from "./templates/reminder";
 import type { BriefInput, ReminderInput } from "./templates/reminder";
+import {
+  renderPickBatch,
+  renderPickCandidate,
+  renderPickCleared,
+  renderPickDigest,
+  renderPickHit,
+} from "./templates/pickAlerts";
+import type {
+  PickBatchInput,
+  PickCandidateFacts,
+  PickClearedFacts,
+  PickDigestInput,
+  PickHitFacts,
+  PickInput,
+} from "./templates/pickAlerts";
 import { renderReview } from "./templates/review";
 import type { ReviewFacts } from "./templates/review";
 
@@ -56,6 +71,12 @@ export interface FactsByKind {
   reminder: Facts<ReminderInput>;
   brief: Facts<BriefInput>;
   test: { requestedAt: string };
+  /** M17 pick-alert mail (WP4); numbers are pre-formatted by pickMail.ts. */
+  pick_hit: Facts<PickInput<PickHitFacts>>;
+  pick_cleared: Facts<PickInput<PickClearedFacts>>;
+  pick_candidate: Facts<PickInput<PickCandidateFacts>>;
+  pick_batch: Facts<PickBatchInput>;
+  pick_digest: Facts<PickDigestInput>;
 }
 
 export interface SendContext {
@@ -92,6 +113,8 @@ export interface SendOutcome {
 export interface SendOptions {
   /** The Evening Review sent by the watchdog's direct path (allowed in `incidents` mode). */
   watchdogFallback?: boolean;
+  /** M17 (D-470): pick caps enforced atomically inside the claim. */
+  pickCap?: { own: number; candidate?: number };
 }
 
 export const CLAIM_STALE_S = 180; // design 2.4 (as the Worker clock)
@@ -157,6 +180,16 @@ function render<K extends EmailKind>(
       return renderBrief({ ...(f as FactsByKind["brief"]), ...base });
     case "test":
       return renderTest({ ...(f as FactsByKind["test"]), ...base });
+    case "pick_hit":
+      return renderPickHit({ ...(f as FactsByKind["pick_hit"]), ...base });
+    case "pick_cleared":
+      return renderPickCleared({ ...(f as FactsByKind["pick_cleared"]), ...base });
+    case "pick_candidate":
+      return renderPickCandidate({ ...(f as FactsByKind["pick_candidate"]), ...base });
+    case "pick_batch":
+      return renderPickBatch({ ...(f as FactsByKind["pick_batch"]), ...base });
+    case "pick_digest":
+      return renderPickDigest({ ...(f as FactsByKind["pick_digest"]), ...base });
     default:
       throw new Error("unknown email kind");
   }
@@ -191,10 +224,26 @@ async function reclaim(
   key: string,
   row: { status: string; attempts: number; claimAt: string; claimN: number },
   now: Date,
-): Promise<boolean> {
-  if (row.status !== "claimed" || row.attempts >= MAX_ATTEMPTS) return false;
+): Promise<boolean | "finalised"> {
+  if (row.status !== "claimed") return false;
   const needS = row.attempts > 0 ? RETRY_GAP_S : CLAIM_STALE_S;
   if (now.getTime() - new Date(row.claimAt).getTime() < needS * 1000) return false;
+  // V1-S10 (D-692): a crash between the provider's acceptance and the `sent` write leaves a stale
+  // `claimed` row with an `accepted` attempt. Finalise it as sent; never send a second time.
+  const acc = await db.execute({
+    sql: "SELECT n, at, provider_id FROM email_attempt WHERE email_key = ? AND outcome = 'accepted' ORDER BY n LIMIT 1",
+    args: [key],
+  });
+  if (acc.rows.length) {
+    const a = acc.rows[0];
+    await db.execute({
+      sql: `UPDATE email_message SET status = 'sent', provider_id = ?, sent_at = ?, attempts = ?
+            WHERE email_key = ? AND status = 'claimed'`,
+      args: [a.provider_id === null ? null : String(a.provider_id), String(a.at), Number(a.n), key],
+    });
+    return "finalised";
+  }
+  if (row.attempts >= MAX_ATTEMPTS) return false;
   const r = await db.execute({
     sql: `UPDATE email_message
           SET ref_json = json_set(ref_json, '$.claim_at', ?, '$.claim_n', ?)
@@ -323,7 +372,16 @@ async function sendOne<K extends EmailKind>(
   const piiKey = env.PII_HASH_KEY;
   const recipientSha = piiKey ? createHmac("sha256", piiKey).update(owner).digest("hex") : null;
   const caps = await loadCaps(db);
-  const claim = await claimKey(db, { key, kind, env: envName, d, nowIso, recipientSha, caps });
+  const claim = await claimKey(db, {
+    key,
+    kind,
+    env: envName,
+    d,
+    nowIso,
+    recipientSha,
+    caps,
+    pickCap: opts.pickCap,
+  });
   let startAttempts = 0;
   let slot: EmailSlot | undefined;
   if (claim.kind === "capped") {
@@ -332,7 +390,11 @@ async function sendOne<K extends EmailKind>(
   }
   if (claim.kind === "exists") {
     const row = await readRow(db, key);
-    if (!row || !(await reclaim(db, key, row, now))) {
+    const took = row ? await reclaim(db, key, row, now) : false;
+    if (took === "finalised") {
+      return { status: "duplicate", attempts: row?.attempts ?? 0, reason: "sent" };
+    }
+    if (!row || !took) {
       return { status: "duplicate", attempts: row?.attempts ?? 0, reason: row?.status };
     }
     startAttempts = row.attempts;

@@ -124,7 +124,7 @@ const M4_RANGED = [
   ["f3_max_gap_pct", "num", 8, 5, 12, "%", "B", FAM, "ch.15 15.3 F3 max_gap", "F3: cancel the order if the open gaps this far above the day-0 close"],
   ["f3_trail_after_pct", "num", 10, 5, 20, "%", "B", FAM, "ch.15 15.3 F3 trail_after", "F3: gain after which the trailing stop starts"],
   ["f3_trail_atr", "num", 2.5, 1.5, 4, "x ATR", "B", FAM, "ch.15 15.3 F3 trail_atr", "F3: trailing stop distance"],
-  ["f3_time_exit", "int", 20, 10, 40, "sessions", "B", FAM, "ch.15 15.3 F3 time_exit", "F3: time exit"],
+  ["f3_time_exit", "int", 20, 10, 60, "sessions", "B", FAM, "ch.15 15.3 F3 time_exit", "F3: time exit"],
   // F4 mean reversion (07 l.55)
   ["f4_rsi2_max", "num", 10, 5, 20, "RSI", "B", FAM, "ch.15 15.3 F4 rsi2_max", "F4: RSI(2) below"],
   ["f4_rsi14_max", "num", 30, 20, 35, "RSI", "B", FAM, "ch.15 15.3 F4 rsi14_max", "F4: RSI(14) below"],
@@ -486,7 +486,10 @@ export const INSIDER_WEIGHT_NAMES = [
   "holder_decrease",
 ] as const;
 async function validateInsiderWeights(v: unknown): Promise<string | null> {
-  if (!exactKeys(v, [...INSIDER_WEIGHT_NAMES])) return `needs ${INSIDER_WEIGHT_NAMES.join(", ")}`;
+  // director_sale is optional (AGT-136, D-242): absent means it follows director_net, as in v1.
+  const base = [...INSIDER_WEIGHT_NAMES];
+  if (!exactKeys(v, base) && !exactKeys(v, [...base, "director_sale"]))
+    return `needs ${INSIDER_WEIGHT_NAMES.join(", ")} (and optionally director_sale)`;
   return Object.values(v).every((x) => isNum(x) && x >= 0 && x <= 1)
     ? null
     : "every weight must be a number from 0 to 1";
@@ -520,8 +523,8 @@ const M6_RANGED = [
   ["critic_llm_calls_per_night", "int", 10, 0, 20, "calls/night", "O", LRN, "LLM-021; ch.15 l.124 (bounds 0-20 agent-chosen, D-111)", "Critic wording calls per night per market"],
   // Ch.16 factor data and picks (AGT-112, AGT-113, ARN-095)
   ["factor_min_bucket_n", "int", 30, 20, 100, "trades", "O", LRN, "AGT-112; ch.15 l.207", "Trades a factor bucket needs to be shown"],
-  ["picks_per_profile", "int", 5, 0, 10, "picks", "O", LRN, "AGT-113; ch.15 l.208", "Picks per profile per night"],
-  ["picks_max_per_family", "int", 2, 1, 5, "picks", "O", LRN, "AGT-113; ch.15 l.211", "Most picks per profile per night from one family"],
+  ["picks_per_profile", "int", 10, 0, 10, "picks", "O", LRN, "AGT-113; ch.15 l.208; M17 O-76 default 10", "Picks per profile per night"],
+  ["picks_max_per_family", "int", 10, 10, 10, "picks", "O", LRN, "AGT-113; ch.15 l.211; M17 O-76: no per-family cap; bounds pinned to 10 by D-791", "Fixed at 10 = no per-family cap (Owner decision O-76); kept so a stored value cannot bring the cap back"],
   ["pick_valid_sessions", "int", 2, 1, 5, "sessions", "O", LRN, "UXN-040, AGT-113; ch.15 l.212", "Not used since D-187: a waiting pick is checked each night against information instead of a session count"],
   ["pick_success_min_n", "int", 30, 10, 200, "picks", "O", LRN, "UXN-041; ch.15 l.213 (bounds 'as ch. 16' not given, 10-200 agent-chosen, D-111)", "Closed picks needed before model success is shown"],
 ] as const satisfies readonly RangedRow[];
@@ -1005,6 +1008,524 @@ const M7_META_TABLES: Record<M7RangedKey | M7FixedKey | keyof typeof M7_EXPLICIT
     },
   };
 
+// ---- M14 keys (returns and validation; docs/M14_design.md 2.7, decisions D-213 to D-252) ----
+// Every default is the spec default (ch.15 V2 keys, Owner decisions O-43 to O-50). The structural
+// switches (KB-081 / O-46) are enum or window keys of edit class B whose defaults reproduce v1
+// exactly: nothing changes until a pre-registered challenger sets one (D-235).
+
+// prettier-ignore
+const M14_RANGED = [
+  ["max_stop_distance_pct", "num", 12, 6, 20, "%", "O", FAM, "FAM-004, O-47 (D-216)", "Largest initial stop distance a new entry may have"],
+  ["cost_gate_k", "num", 2, 1.5, 3, "x", "O", FAM, "FAM-005 (same key as CTX-022a; D-214)", "Median gross return needed as a multiple of the round-trip cost"],
+  ["second_position_max_corr", "num", 0.6, 0.3, 0.9, "correlation", "O", FAM, "FAM-006 (D-217)", "Highest 60-session return correlation between two new positions"],
+  ["val_fwer_per_lineage", "num", 0.05, 0.01, 0.1, "level", "O", VAL, "VAL-112, O-43 (D-226)", "Family-wise error allowed per lineage and split version"],
+  ["l2_alpha_spend_fraction", "num", 0.1, 0.05, 0.25, "fraction", "O", VAL, "VAL-116, O-44 (D-231)", "Share of the lesson alpha pool spent on each lesson test"],
+  ["dedup_minhash_threshold", "num", 0.85, 0.7, 0.95, "similarity", "O", REG, "DAT-237 (D-240)", "Title similarity at which a later announcement counts as a repeat"],
+  ["f1_return_window_sessions", "int", 126, 126, 252, "sessions", "B", FAM, "KB-081, O-46 (D-235)", "F1: return window for the relative-strength rank"],
+] as const satisfies readonly RangedRow[];
+
+// prettier-ignore
+const M14_FIXED = [
+  ["cost_gate_min_rows", "int", 30, "rows", FAM, "FAM-005 (D-214)", "Signal-ledger rows needed before the cost gate applies"],
+  ["second_position_corr_sessions", "int", 60, "sessions", FAM, "FAM-006 (D-217)", "Sessions of returns in the second-position correlation"],
+  ["l2_alpha_exhausted_level", "num", 0.005, "level", VAL, "VAL-116 (D-231)", "Lesson alpha pool is exhausted below this test level"],
+  ["minbtl_target_sharpe", "num", 1, "Sharpe", VAL, "VAL-115 (D-230)", "Annual Sharpe ratio the minimum backtest length is computed for"],
+  ["rank_ic_min_codes", "int", 10, "codes", VAL, "VAL-114 (D-232)", "Scored codes needed for one day of rank quality"],
+  ["rank_ic_bootstrap_replicates", "int", 2000, "replications", VAL, "VAL-114", "Bootstrap replications for the rank quality interval"],
+  ["rank_ic_bootstrap_blocks", "text", "monthly", "blocks", VAL, "VAL-114 (monthly or weekly blocks; D-232)", "Block length of the rank quality bootstrap"],
+  ["dedup_window_sessions", "int", 5, "sessions", REG, "DAT-237 (D-240)", "Sessions in which a repeated announcement is a duplicate"],
+  ["index_change_window_sessions", "int", 1, "sessions", REG, "DAT-234 (D-238)", "Sessions around day 0 in which an index change excludes an F3 event"],
+] as const satisfies readonly FixedRow[];
+
+type M14RangedKey = (typeof M14_RANGED)[number][0];
+type M14FixedKey = (typeof M14_FIXED)[number][0];
+
+const M14_RANGED_KEYS = Object.fromEntries(
+  M14_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M14RangedKey, ConfigKeyDef>;
+
+const M14_FIXED_KEYS = Object.fromEntries(
+  M14_FIXED.map(([key, , def, unit, , ref]) => [
+    key,
+    { default: def, unit, editable: "fixed", ref, validate: never } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M14FixedKey, ConfigKeyDef>;
+
+/** VAL-112 error-budget modes. `bh_fdr` is refused in V2 (D-227). */
+export const VAL_ERROR_BUDGET_MODES = ["fixed", "alpha_spending"] as const;
+export const SETTLEMENT_STATS_MODES = ["conservative", "matched"] as const;
+export const F5_UNIVERSES = ["U1", "U2", "U3"] as const;
+export const F1_MOMENTUM_VARIANTS = ["v1", "skip_month_u2"] as const;
+export const RANK_VARIANTS = ["v1", "composite3", "vol_scaled"] as const;
+export const F4_ENTRY_VARIANTS = ["v1", "reversal5_u2"] as const;
+export const F3_SURPRISE_MODES = ["category", "day0_ar"] as const;
+
+// prettier-ignore
+const M14_ENUM_ROWS = [
+  ["val_error_budget_mode", "alpha_spending", VAL_ERROR_BUDGET_MODES, "O", VAL, "VAL-112, O-43 (D-226, D-227)", "How the validation error budget is spent"],
+  ["settlement_stats_mode", "conservative", SETTLEMENT_STATS_MODES, "O", REP, "ARN-109, O-48 (D-225)", "Settlement used for replay statistics"],
+  ["f5_default_universe", "U2", F5_UNIVERSES, "O", FAM, "O-49 (D-221)", "F5: universe it trades"],
+  ["f1_momentum_variant", "v1", F1_MOMENTUM_VARIANTS, "B", FAM, "KB-081, O-46 (D-235)", "F1: momentum variant"],
+  ["f1_rank_variant", "v1", RANK_VARIANTS, "B", FAM, "KB-081, O-46 (D-235)", "F1: rank variant"],
+  ["f4_rank_variant", "v1", RANK_VARIANTS, "B", FAM, "KB-081, O-46 (D-235)", "F4: rank variant"],
+  ["f4_entry_variant", "v1", F4_ENTRY_VARIANTS, "B", FAM, "KB-081, O-46 (D-235)", "F4: entry variant"],
+  ["f3_surprise_mode", "category", F3_SURPRISE_MODES, "B", FAM, "AGT-137, KB-081 (D-243)", "F3: how the surprise is read"],
+] as const;
+
+type M14EnumKey = (typeof M14_ENUM_ROWS)[number][0];
+
+const M14_ENUM_KEYS = Object.fromEntries(
+  M14_ENUM_ROWS.map(([key, def, allowed, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit: "choice",
+      editable: edit,
+      ref,
+      validate:
+        key === "val_error_budget_mode"
+          ? async (v: unknown) =>
+              v === "bh_fdr"
+                ? "bh_fdr is not available in V2 (no family-wise-safe sequential form, D-227)"
+                : oneOf(allowed)(v)
+          : oneOf(allowed),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M14EnumKey, ConfigKeyDef>;
+
+const M14_META_TABLES: Record<M14RangedKey | M14FixedKey | M14EnumKey, ConfigMeta> = {
+  ...(Object.fromEntries(
+    M14_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+      key,
+      {
+        label,
+        area,
+        bounds: boundsText(kind, min, max, unit),
+        input: kind === "int" ? "int" : "number",
+      },
+    ]),
+  ) as Record<M14RangedKey, ConfigMeta>),
+  ...(Object.fromEntries(
+    M14_FIXED.map(([key, kind, , , area, , label]) => [
+      key,
+      {
+        label,
+        area,
+        bounds: "fixed",
+        input: kind === "text" ? "text" : kind === "num" ? "number" : "int",
+      },
+    ]),
+  ) as Record<M14FixedKey, ConfigMeta>),
+  ...(Object.fromEntries(
+    M14_ENUM_ROWS.map(([key, , allowed, , area, , label]) => [
+      key,
+      { label, area, bounds: `one of ${allowed.join(", ")}`, input: "text" },
+    ]),
+  ) as Record<M14EnumKey, ConfigMeta>),
+};
+
+// ---- M15 keys (Cortex calibration; docs/M15_requirements.md "Configuration keys", D-257 to D-306) ----
+// Every default is the chapter 17 / ch.15 V2 default. An Owner edit of one of these keys is a charged
+// trial and marks the map for a refit (CTX-072; src/lib/cortex/store/keyEdit.ts). `cost_gate_k`
+// (CTX-022a) already exists from M14 and is reused unchanged.
+
+// prettier-ignore
+const M15_RANGED = [
+  ["cell_min_setups", "int", 60, 30, 200, "setups", "O", VAL, "CTX-021", "Fewest matched setups a cell needs before it can trade"],
+  ["cell_min_blocks", "int", 20, 6, 60, "blocks", "O", VAL, "CTX-012", "Fewest independent time blocks a cell or map needs"],
+  ["cortex_min_neff_trade", "int", 200, 150, 400, "setups", "O", VAL, "CTX-053", "Effective sample size needed before a family may trade"],
+  ["rank_shrink_n0", "int", 60, 20, 200, "setups", "O", FAM, "CTX-022", "Pseudo-sample that pulls a thin cell towards its family average when ranking"],
+  ["max_loss_pct", "num", 18, 12, 25, "%", "O", FAM, "CTX-022b", "Largest loss a new entry may risk, stop distance plus overnight gap"],
+  ["entry_gap_cap_pct", "num", 8, 4, 12, "%", "O", FAM, "CTX-022b, CTX-028", "Highest open above the close at which a limit order still buys"],
+  ["cortex_disagreement_max", "num", 0.4, 0.25, 0.6, "score", "O", FAM, "CTX-023", "Evidence disagreement above which a candidate is not taken"],
+  ["cluster_weight_max", "num", 0.35, 0.2, 0.35, "fraction", "O", FAM, "CTX-012", "Largest share of the score one angle cluster may carry"],
+  ["sector_tilt_margin_pp", "num", 5, 0, 15, "pp", "O", FAM, "CTX-025", "Sector tilt margin (shadow only)"],
+  ["max_books_same_code", "int", 2, 1, 3, "books", "O", FAM, "CTX-026", "Most books that may hold the same code"],
+  ["max_books_same_industry", "int", 3, 2, 6, "books", "O", FAM, "CTX-026", "Most books that may hold the same industry (reporting only)"],
+  ["max_code_nav_share", "num", 0.2, 0.1, 0.35, "fraction", "O", FAM, "CTX-026, O-61", "Largest share of a book's value in one code"],
+  ["max_industry_nav_share", "num", 0.35, 0.2, 0.5, "fraction", "O", FAM, "CTX-026", "Largest share of a book's value in one industry"],
+  ["freeze_max_loss_pct", "num", 25, 15, 40, "%", "O", REG, "CTX-015, O-63", "Loss at which a position frozen by an unresolved corporate action is sold"],
+  ["unresolved_freeze_sessions", "int", 5, 2, 10, "sessions", "O", REG, "CTX-015", "Sessions an unresolved corporate action freezes a position"],
+  ["persist_volume_mult", "num", 2, 1, 5, "x", "O", REG, "CTX-043", "Volume multiple that confirms an event on day two"],
+  ["pump_volume_mult", "num", 4, 3, 6, "x", "O", REG, "CTX-044", "Volume multiple that raises a promotion flag"],
+  ["pump_ar_pct", "num", 8, 5, 12, "%", "O", REG, "CTX-044", "Abnormal return that raises a promotion flag"],
+  ["promotion_flag_sessions", "int", 20, 10, 40, "sessions", "O", REG, "CTX-044", "Sessions a promotion flag stays on"],
+  ["abstain_alarm_sessions", "int", 40, 20, 120, "sessions", "O", FAM, "CTX-023", "Sessions of abstaining in a row that raise an alarm"],
+  ["stale_universe_max_share", "num", 0.1, 0.02, 0.25, "fraction", "O", FAM, "CTX-028, D-289", "Share of the universe without a fresh bar above which the night abstains"],
+  ["opinion_min_n", "int", 150, 100, 500, "opinions", "O", VAL, "CTX-060", "Settled opinions needed before an opinion track is read"],
+  ["ledger_fdr_q", "num", 0.1, 0.05, 0.2, "level", "O", VAL, "CTX-031 (BH under PRDS)", "False-discovery rate allowed across the angle ledger"],
+  ["bootstrap_block_sessions", "int", 120, 60, 250, "sessions", "O", VAL, "CTX-012", "Expected block length of the stationary bootstrap"],
+  ["cortex_slope_hide_ub", "num", 1, 0.5, 1, "slope", "O", VAL, "CTX-053, D-257", "A probability is hidden when the calibration slope upper bound is below this"],
+  ["cortex_stage_minutes", "int", 15, 5, 60, "minutes", "O", REP, "CTX-050, D-289", "Minutes the nightly Cortex stage may run before it abstains for the night"],
+] as const satisfies readonly RangedRow[];
+
+// prettier-ignore
+const M15_FIXED = [
+  ["survivorship_haircut_pp", "num", 1.5, "pp per holding year", VAL, "CTX-050, D-262 (freeze record)", "Survivorship haircut shown beside every result"],
+  ["suspension_mark_policy", "text", "100% x5, -10pts per 5, floor 50%", "policy", REG, "CTX-016, D-272", "Mark of a suspended position (full for 5 sessions, then 10 points per 5, floor 50 %)"],
+] as const satisfies readonly FixedRow[];
+
+type M15RangedKey = (typeof M15_RANGED)[number][0];
+type M15FixedKey = (typeof M15_FIXED)[number][0];
+
+const M15_RANGED_KEYS = Object.fromEntries(
+  M15_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M15RangedKey, ConfigKeyDef>;
+
+const M15_FIXED_KEYS = Object.fromEntries(
+  M15_FIXED.map(([key, , def, unit, , ref]) => [
+    key,
+    { default: def, unit, editable: "fixed", ref, validate: never } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M15FixedKey, ConfigKeyDef>;
+
+const M15_META_TABLES: Record<M15RangedKey | M15FixedKey, ConfigMeta> = {
+  ...(Object.fromEntries(
+    M15_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+      key,
+      {
+        label,
+        area,
+        bounds: boundsText(kind, min, max, unit),
+        input: kind === "int" ? "int" : "number",
+      },
+    ]),
+  ) as Record<M15RangedKey, ConfigMeta>),
+  ...(Object.fromEntries(
+    M15_FIXED.map(([key, kind, , , area, , label]) => [
+      key,
+      {
+        label,
+        area,
+        bounds: "fixed",
+        input: kind === "text" ? "text" : "number",
+      },
+    ]),
+  ) as Record<M15FixedKey, ConfigMeta>),
+};
+
+// ---- M17 keys (intraday watch and pick alerts; docs/M17_design.md, D-381 to D-400) ----
+// prettier-ignore
+const M17_RANGED = [
+  ["chase_cap_pct", "num", 3, 1, 8, "%", "O", OTH, "ARN-114", "Open or quote above the pick limit by this much clears its alert"],
+  ["pick_alert_max_sessions", "int", 3, 1, 10, "sessions", "O", OTH, "ARN-114", "Sessions a pick alert stays armed before it expires"],
+  ["pick_alert_emails_per_day", "int", 12, 0, 20, "emails", "O", SEM, "EML-041, D-389", "Most pick-alert e-mails a day, inside the daily e-mail budget"],
+  ["intraday_scan_min", "int", 30, 15, 60, "min", "O", OTH, "AGT-140", "Minutes between intraday scans"],
+  ["intraday_scan_codes_max", "int", 800, 0, 1500, "codes", "O", OTH, "DAT-239 (0 = scan off)", "Most codes the intraday scan looks at (0 turns the scan off)"],
+  ["intraday_scan_requests_max", "int", 40, 10, 100, "requests", "O", OTH, "AGT-140, D-400", "Most delayed-quote requests in one scan run"],
+  ["intraday_move_min_pct", "num", 4, 2, 10, "%", "O", OTH, "AGT-141", "Smallest sector-adjusted move that can make an intraday candidate"],
+  ["intraday_rel_volume_min", "num", 2, 1.2, 4, "x", "O", OTH, "AGT-141", "Smallest volume, against the pro-rated 20-session average, for a candidate"],
+  ["intraday_candidate_emails_per_day", "int", 3, 0, 8, "emails", "O", SEM, "EML-040, EML-041", "Most Attention-needed e-mails a day (inside the pick-alert budget)"],
+  ["quote_pause_cooldown_min", "int", 30, 10, 120, "min", "O", OTH, "D-442", "Minutes the quote routes wait after a rate-limit, server error or network pause"],
+  ["intraday_quote_delay_min", "int", 20, 0, 60, "min", "O", OTH, "UXN-048 [VERIFY at build], D-442", "Minutes the free quote feed is behind the market (shown as the delay)"],
+  ["home_picks_shown", "int", 3, 1, 5, "picks", "O", OTH, "UXN-307", "Night picks shown on Home"],
+  ["intraday_candidates_shown_max", "int", 5, 1, 20, "candidates", "O", OTH, "UXN-307", "Intraday candidates shown on Picks and Home"],
+  ["pick_min_chance", "num", 55, 50, 70, "%", "O", LRN, "UXN-307, D-383", "Lowest chance of a net gain a pick may show (applies only where a calibrated chance exists)"],
+] as const satisfies readonly RangedRow[];
+
+export const INTRADAY_STREAM_STATES = ["shadow", "allowed", "live-tested"] as const;
+export const PICKS_SORT_BASES = ["chance", "expected_gain"] as const;
+
+// prettier-ignore
+const M17_ENUM_ROWS = [
+  ["pick_alerts_default_owner", "on", ON_OFF, "O", OTH, "ARN-112", "Pick alerts on for the Owner by default"],
+  ["picks_default_sort", "chance", PICKS_SORT_BASES, "O", LRN, "UXN-309", "How the picks are ordered unless a person chooses otherwise"],
+  // Fixed: no UI or API writer; only the VAL-118 evaluator (and the Owner's kill) moves it (D-391).
+  ["intraday_stream_state", "shadow", INTRADAY_STREAM_STATES, "fixed", VAL, "VAL-118, D-391", "Validation state of the intraday stream (set only by the evaluator)"],
+] as const;
+
+type M17RangedKey = (typeof M17_RANGED)[number][0];
+type M17EnumKey = (typeof M17_ENUM_ROWS)[number][0];
+type M17TimeKey = "intraday_scan_start" | "intraday_scan_end";
+
+const M17_RANGED_KEYS = Object.fromEntries(
+  M17_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M17RangedKey, ConfigKeyDef>;
+
+const M17_ENUM_KEYS = Object.fromEntries(
+  M17_ENUM_ROWS.map(([key, def, allowed, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit: "choice",
+      editable: edit,
+      ref,
+      validate: edit === "fixed" ? never : oneOf(allowed),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M17EnumKey, ConfigKeyDef>;
+
+/** The scan window (AGT-140): inside the 10:00 to 16:00 session, start before end. */
+async function validateScanWindow(
+  key: M17TimeKey,
+  v: unknown,
+  get: (k: M17TimeKey) => Promise<unknown>,
+): Promise<string | null> {
+  const bad = await timeIn("10:00", "16:00")(v);
+  if (bad) return bad;
+  const t = clockMinutes(v)!;
+  const other = clockMinutes(
+    await get(key === "intraday_scan_start" ? "intraday_scan_end" : "intraday_scan_start"),
+  );
+  if (other === null) return null;
+  const [a, b] = key === "intraday_scan_start" ? [t, other] : [other, t];
+  return a < b ? null : "the scan start must be before the scan end";
+}
+
+const M17_TIME_KEYS: Record<M17TimeKey, ConfigKeyDef> = {
+  intraday_scan_start: {
+    default: "10:30",
+    unit: "Melbourne time",
+    editable: "O",
+    ref: "AGT-140",
+    validate: (v, get) => validateScanWindow("intraday_scan_start", v, (k) => get(k)),
+  },
+  intraday_scan_end: {
+    default: "15:30",
+    unit: "Melbourne time",
+    editable: "O",
+    ref: "AGT-140",
+    validate: (v, get) => validateScanWindow("intraday_scan_end", v, (k) => get(k)),
+  },
+};
+
+const M17_META_TABLES: Record<M17RangedKey | M17EnumKey | M17TimeKey, ConfigMeta> = {
+  ...(Object.fromEntries(
+    M17_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+      key,
+      {
+        label,
+        area,
+        bounds: boundsText(kind, min, max, unit),
+        input: kind === "int" ? "int" : "number",
+      },
+    ]),
+  ) as Record<M17RangedKey, ConfigMeta>),
+  ...(Object.fromEntries(
+    M17_ENUM_ROWS.map(([key, , allowed, edit, area, , label]) => [
+      key,
+      {
+        label,
+        area,
+        bounds: edit === "fixed" ? "fixed" : `one of ${allowed.join(", ")}`,
+        input: "text",
+      },
+    ]),
+  ) as Record<M17EnumKey, ConfigMeta>),
+  intraday_scan_start: {
+    label: "First intraday scan of the day",
+    area: OTH,
+    bounds: "HH:MM, 10:00 to 16:00, before the scan end",
+    input: "text",
+  },
+  intraday_scan_end: {
+    label: "Last intraday scan of the day",
+    area: OTH,
+    bounds: "HH:MM, 10:00 to 16:00, after the scan start",
+    input: "text",
+  },
+};
+
+/** Every key added in M17 (docs/M17_design.md, D-381 to D-400). */
+export const M17_KEY_NAMES: readonly ConfigKey[] = [
+  ...M17_RANGED.map((r) => r[0]),
+  ...M17_ENUM_ROWS.map((r) => r[0]),
+  "intraday_scan_start",
+  "intraday_scan_end",
+];
+
+// ---- M11-lite keys (steelman; docs/M11L_design.md, D-480 to D-498) ----
+// prettier-ignore
+const M11L_RANGED = [
+  ["llm_budget_r6_steelman_daily", "int", 20000, 0, 40000, "tokens/day", "O", "Quotas", "LLM-061, D-481", "Daily LLM token budget, R6 steelman"],
+  ["evidence_pack_max_items", "int", 25, 10, 40, "items", "O", LRN, "AGT-131, D-486", "Most evidence items in one steelman pack"],
+  ["steelman_daily_cards", "int", 8, 0, 20, "cards", "O", LRN, "AGT-133, D-484", "Most steelman cards written a night (0 turns the steelman off)"],
+  ["steelman_suggestion_expiry_sessions", "int", 10, 5, 30, "sessions", "O", LRN, "AGT-133a, D-492", "Sessions an open steelman suggestion stays before it expires"],
+] as const satisfies readonly RangedRow[];
+
+// prettier-ignore
+const M11L_ENUM_ROWS = [
+  ["pick_reflection_enabled", "on", ON_OFF, "O", LRN, "AGT-134, D-496", "Write the optional AI-written pick reflection (on by default; needs a model)"],
+] as const;
+
+type M11LRangedKey = (typeof M11L_RANGED)[number][0];
+type M11LEnumKey = (typeof M11L_ENUM_ROWS)[number][0];
+
+const M11L_RANGED_KEYS = Object.fromEntries(
+  M11L_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M11LRangedKey, ConfigKeyDef>;
+
+const M11L_ENUM_KEYS = Object.fromEntries(
+  M11L_ENUM_ROWS.map(([key, def, allowed, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit: "choice",
+      editable: edit,
+      ref,
+      validate: oneOf(allowed),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M11LEnumKey, ConfigKeyDef>;
+
+const M11L_META_TABLES: Record<M11LRangedKey | M11LEnumKey, ConfigMeta> = {
+  ...(Object.fromEntries(
+    M11L_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+      key,
+      {
+        label,
+        area,
+        bounds: boundsText(kind, min, max, unit),
+        input: kind === "int" ? "int" : "number",
+      },
+    ]),
+  ) as Record<M11LRangedKey, ConfigMeta>),
+  ...(Object.fromEntries(
+    M11L_ENUM_ROWS.map(([key, , allowed, , area, , label]) => [
+      key,
+      { label, area, bounds: `one of ${allowed.join(", ")}`, input: "text" },
+    ]),
+  ) as Record<M11LEnumKey, ConfigMeta>),
+};
+
+/** Every key added in M11-lite (docs/M11L_design.md, D-480 to D-498); llm_daily_budget_total is re-based, not new. */
+export const M11L_KEY_NAMES: readonly ConfigKey[] = [
+  ...M11L_RANGED.map((r) => r[0]),
+  ...M11L_ENUM_ROWS.map((r) => r[0]),
+];
+
+// ---- M13-lite keys (expert screening; docs/M13L_design.md, D-510 to D-533) ----
+// prettier-ignore
+const M13L_RANGED = [
+  ["expert_min_scored", "int", 10, 5, 50, "claims", "O", LRN, "KB-074; ch.15 V2 l.25, D-528", "Tested claims an expert needs before a scorecard is shown"],
+  ["expert_screen_fdr", "num", 0.1, 0.05, 0.2, "q", "O", LRN, "KB-075; ch.15 V2 l.26, D-528", "False-discovery rate for the weekly expert-cluster screening"],
+  ["expert_challengers_per_week", "int", 2, 0, 4, "challengers/week", "O", LRN, "KB-077; ch.15 V2 l.27, D-528", "Most challengers proposed from expert clusters a week (0 turns proposals off)"],
+  ["f7_min_clusters", "int", 3, 2, 10, "clusters", "O", LRN, "KB-078; ch.15 V2 l.28, D-528", "Clusters from distinct experts that must pass before the F7 gate fires"],
+] as const satisfies readonly RangedRow[];
+
+type M13LRangedKey = (typeof M13L_RANGED)[number][0];
+
+const M13L_RANGED_KEYS = Object.fromEntries(
+  M13L_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<M13LRangedKey, ConfigKeyDef>;
+
+const M13L_META_TABLES = Object.fromEntries(
+  M13L_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+    key,
+    {
+      label,
+      area,
+      bounds: boundsText(kind, min, max, unit),
+      input: kind === "int" ? "int" : "number",
+    },
+  ]),
+) as Record<M13LRangedKey, ConfigMeta>;
+
+/** Every key added in M13-lite (docs/M13L_design.md, D-528). */
+export const M13L_KEY_NAMES: readonly ConfigKey[] = M13L_RANGED.map((r) => r[0]);
+
+// ---- Movers gap additions (A1-A8; docs/M15_design.md "Movers gap additions", D-740 to D-759) ----
+// Gates, states and facts outside the score; none is a Cortex refit key (D-752): editing one does not
+// change the map or a family's status. Every addition starts in shadow.
+// prettier-ignore
+const MOVERS_RANGED = [
+  ["halt_resume_arm_minute", "int", 600, 570, 720, "min after midnight", "O", OTH, "CR-MOV-A1, D-744", "Local minute from which a code resuming after a halt is given delayed prices (600 = 10:00)"],
+  ["halt_resume_block_sessions", "int", 1, 0, 5, "sessions", "O", REG, "CR-MOV-A1, D-743", "Sessions after a halt resume with a negative expectation in which a dip-buy or short-cover entry is not taken (0 = only while halted)"],
+  ["halt_watch_expiry_sessions", "int", 5, 2, 20, "sessions", "O", REG, "CR-MOV-A1, D-742", "Sessions after which an unresolved halt watch stops arming and blocking (a long halt is a suspension)"],
+  ["results_window_start_day", "int", 1, 1, 15, "day of month", "O", REG, "CR-MOV-A2, D-745", "First day of the February and August reporting windows"],
+  ["results_window_end_day", "int", 31, 16, 31, "day of month", "O", REG, "CR-MOV-A2, D-745", "Last day of the February and August reporting windows (cut at the month end)"],
+  ["results_pre_window_sessions", "int", 2, 0, 10, "sessions", "O", REG, "CR-MOV-A2, D-745", "Sessions before a known results date in which a dip-buy entry is not taken (0 = off)"],
+  ["known_date_min_history_days", "int", 365, 330, 730, "days", "O", REG, "CR-MOV-A2, D-745", "Days of announcement history needed before a company's own results date is predicted"],
+  ["volume_creep_vr_min", "num", 3, 2, 6, "x", "O", REG, "CR-MOV-A3, D-746", "Volume against the 20-session average that counts as creep when no news is out"],
+  ["volume_creep_ar_min_pct", "num", 2, 1, 6, "%", "O", REG, "CR-MOV-A3, D-746", "Smallest abnormal return that counts with the volume creep"],
+  ["intraday_arm_codes_max", "int", 20, 0, 60, "codes", "O", OTH, "CR-MOV-A1, CR-MOV-A3, D-744", "Most armed codes (halt resumes, volume creep) added to a day's intraday scan (0 = none)"],
+  ["short_risk_pct_min", "num", 5, 3, 12, "%", "O", REG, "CR-MOV-A4, D-747", "Short interest at or above which a name counts as heavily shorted (risk marker, not a signal)"],
+  ["short_risk_change_pp_min", "num", 2, 1, 6, "pp", "O", REG, "CR-MOV-A4, D-747", "Rise in short interest over 20 reports that counts as a short-risk marker"],
+  ["short_risk_f4_veto", "int", 0, 0, 1, "0 or 1", "O", REG, "CR-MOV-A4, D-747", "1 = no dip-buy entry in a heavily shorted name (0 = only the smaller parcel)"],
+  ["sector_composite_min_members", "int", 5, 3, 30, "codes", "O", OTH, "CR-MOV-A8, D-750", "Fewest codes an industry needs before its end-of-day composite adjusts an intraday move"],
+] as const satisfies readonly RangedRow[];
+
+type MoversRangedKey = (typeof MOVERS_RANGED)[number][0];
+
+const MOVERS_RANGED_KEYS = Object.fromEntries(
+  MOVERS_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<MoversRangedKey, ConfigKeyDef>;
+
+const MOVERS_META_TABLES = Object.fromEntries(
+  MOVERS_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+    key,
+    {
+      label,
+      area,
+      bounds: boundsText(kind, min, max, unit),
+      input: kind === "int" ? "int" : "number",
+    },
+  ]),
+) as Record<MoversRangedKey, ConfigMeta>;
+
+/** Every key added by the movers gap additions (D-740 to D-759). */
+export const MOVERS_KEY_NAMES: readonly ConfigKey[] = MOVERS_RANGED.map((r) => r[0]);
+
 export const CONFIG_KEYS = {
   ...M4_RANGED_KEYS,
   ...M4_FIXED_KEYS,
@@ -1016,6 +1537,18 @@ export const CONFIG_KEYS = {
   ...M7_RANGED_KEYS,
   ...M7_FIXED_KEYS,
   ...M7_EXPLICIT_KEYS,
+  ...M14_RANGED_KEYS,
+  ...M14_FIXED_KEYS,
+  ...M14_ENUM_KEYS,
+  ...M15_RANGED_KEYS,
+  ...M15_FIXED_KEYS,
+  ...M17_RANGED_KEYS,
+  ...M17_ENUM_KEYS,
+  ...M17_TIME_KEYS,
+  ...M11L_RANGED_KEYS,
+  ...M11L_ENUM_KEYS,
+  ...M13L_RANGED_KEYS,
+  ...MOVERS_RANGED_KEYS,
   // ch.15 l.163: evening_review_time / partial_at / send_by 20:00 / 20:30 / 20:45, O; EML-010/011.
   evening_review_time: {
     default: "20:00",
@@ -1262,12 +1795,13 @@ export const CONFIG_KEYS = {
     validate: intRange(1),
   },
   // Line 187: llm_daily_budget_total 150,000 tokens, bounds 75,000-225,000, O; LLM-050.
+  // M11-lite (D-481): re-based to 240,000, bounds 150,000-300,000, to carry the R6 steelman cap.
   llm_daily_budget_total: {
-    default: 150_000,
+    default: 240_000,
     unit: "tokens/day",
     editable: "O",
-    ref: "LLM-050",
-    validate: intRange(75_000, 225_000),
+    ref: "LLM-050, D-481",
+    validate: intRange(150_000, 300_000),
   },
   // Architect decision 8 (D-057): ch.15 has no Yahoo throttle row (spec gap, M2_requirements s4);
   // Owner-editable, bounds 10-500. Used by scripts/ingest/yahoo_fetch.py (DAT-120, DAT-103).
@@ -1527,6 +2061,12 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   ...M6_META_TABLES,
   ...M6_EXPLICIT_META,
   ...M7_META_TABLES,
+  ...M14_META_TABLES,
+  ...M15_META_TABLES,
+  ...M17_META_TABLES,
+  ...M11L_META_TABLES,
+  ...M13L_META_TABLES,
+  ...MOVERS_META_TABLES,
   evening_review_time: {
     label: "Evening Review send time",
     area: SEM,
@@ -1597,7 +2137,8 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   insider_score_weights: {
     label: "Insider and flow score weights",
     area: "Regime and events",
-    bounds: "JSON with director_net, holder_new_or_increase, holder_decrease, each 0 to 1",
+    bounds:
+      "JSON with director_net, holder_new_or_increase, holder_decrease and optionally director_sale, each 0 to 1",
     input: "object",
   },
   llm_market_share: {
@@ -1681,7 +2222,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   llm_daily_budget_total: {
     label: "Daily LLM token budget",
     area: "Quotas",
-    bounds: "75,000 to 225,000",
+    bounds: "150,000 to 300,000",
     input: "int",
   },
   session_lifetime_days: {
@@ -1847,3 +2388,22 @@ export const M7_KEY_NAMES: readonly ConfigKey[] = [
   ...M7_FIXED.map((r) => r[0]),
   ...(Object.keys(M7_EXPLICIT_KEYS) as ConfigKey[]),
 ];
+
+/** Every key added in M14 (docs/M14_design.md 2.7, D-250): the tables above plus the enum keys. */
+export const M14_KEY_NAMES: readonly ConfigKey[] = [
+  ...M14_RANGED.map((r) => r[0]),
+  ...M14_FIXED.map((r) => r[0]),
+  ...(Object.keys(M14_ENUM_KEYS) as ConfigKey[]),
+];
+
+/** Every key added in M15 (docs/M15_requirements.md, D-257 to D-306): the tables above. */
+export const M15_KEY_NAMES: readonly ConfigKey[] = [
+  ...M15_RANGED.map((r) => r[0]),
+  ...M15_FIXED.map((r) => r[0]),
+];
+
+/**
+ * The Cortex keys whose Owner edit is a charged trial and refits the map (CTX-072): every editable
+ * M15 key. The fixed pair never changes, so it is not listed.
+ */
+export const CORTEX_REFIT_KEYS: readonly ConfigKey[] = M15_RANGED.map((r) => r[0]);

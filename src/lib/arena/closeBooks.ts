@@ -31,7 +31,7 @@
 import type { Client } from "@libsql/client";
 import {
   addDays,
-  isTradingDay,
+  gateDayStatus,
   previousTradingDay,
   type CalendarKind,
   type CalendarRow,
@@ -72,14 +72,25 @@ import {
   loadQtyAdjustments,
 } from "./corpActionWriter";
 import { suspensionMark } from "./corpActions";
+import { exDividendOn, toExDividendActions, type ExDividendAction } from "./exDividend";
+import { decisionCutoffUtc } from "@/lib/agents/decisionView";
+import { getConfig } from "@/lib/config/store";
 import { COST_PROFILES, type CostProfile, type CostProfileCode } from "./costs";
 import {
   fillCloseSignalExit,
+  fillEntryLimit,
   fillIntradayStop,
   fillOrder,
   selectExit,
   type FillEnv,
+  type FillOrderEnv,
+  type LimitFillOutcome,
+  type OrderToFill,
+  type SimulatedFill,
 } from "./fills";
+import { fillRowRule } from "@/lib/cortex/economics/fillRow";
+import { cortexOpenGuard } from "@/lib/cortex/stage";
+import { resizeEntryAtFill } from "./sizing";
 import { writeFill } from "./fillWriter";
 import { isFatal, checkCohortBooks, type Violation } from "./invariants";
 import {
@@ -137,6 +148,9 @@ import {
 } from "./sleeveWriter";
 import { markNotRechecked } from "./preopen";
 import { planLegacy } from "./terminal";
+import { openS2Once } from "@/lib/heartbeat/incidents";
+import { INVARIANTS_CLEARED } from "./unfreezeCore";
+import type { NotifyCtx } from "@/lib/incidents/notify";
 
 export const ARENA_JOB = "arena-close";
 export const ARENA_MASTER_SEED = 20_261_011n;
@@ -162,6 +176,12 @@ export type CloseBooksOptions = {
    * processed (D-066 / BLD-024: production in data_only mode never writes arena tables).
    */
   readonly replay?: boolean;
+  /**
+   * D-711: the live entry points set this so a weekday the calendar has no row for is skipped as
+   * `calendar_missing` (fail safe). Off (default): the looser "not a holiday row" rule that
+   * replays and the synthetic-date tests rely on.
+   */
+  readonly strictCalendar?: boolean;
   /** Stamps run_record / app_log only; never an engine row. */
   readonly now: () => string;
   readonly commitSha?: string | null;
@@ -172,7 +192,19 @@ export type CloseBooksOptions = {
   readonly restartParams?: (executionId: string) => ParamOverrides;
   /** ch.15 max_promotions_per_week for a pending promotion at a restart (default: the registry value). */
   readonly maxPromotionsPerWeek?: number;
+  /** Email context for the P1 "previous session not closed" incident (V1-B1); absent = recorded only. */
+  readonly notify?: Omit<NotifyCtx, "db" | "now">;
+  /**
+   * V1-S1 catch-up (D-682, unfreeze.ts): close this already-closed session for THIS cohort only, and
+   * ignore its freeze for the run. The other cohorts are not touched (they closed that night), and the
+   * run's own `running` record is the only run_record written. Never set by the nightly job.
+   */
+  readonly catchUpCohort?: string;
 };
+
+/** V1-S15 (D-683): a held code with no bar on this many sessions in a row opens the S2 `stale_mark` incident. */
+export const STALE_MARK_ALERT_SESSIONS = 3; // threshold-ok: decision D-682, bounded wait before an alert
+export const STALE_MARK_INCIDENT = "stale_mark";
 
 export type CloseBooksStatus = "success" | "degraded" | "failed" | "skipped" | "already_done";
 
@@ -215,9 +247,16 @@ type DayCtx = {
   readonly stats: Stats;
   readonly actions: Awaited<ReturnType<typeof loadConfirmedActions>>;
   readonly lastCloses: Map<string, Micro>;
+  /** FAM-007: the dividends going ex today, and the decision cut-off of the previous session (GL-02). */
+  readonly exDividends: readonly ExDividendAction[];
+  readonly exDivCutoff: string;
   readonly gates: Map<string, EntryDecision>;
   /** Fills older than this are settled and posted (T+2 plus holidays fit well inside 14 days). */
   readonly recentFrom: string;
+  /** V1-S1 catch-up: the one cohort this run is for; its freeze is ignored (see CloseBooksOptions). */
+  readonly catchUpCohort?: string;
+  /** V1-S15: email context for the "stale mark" incident; absent = recorded only. */
+  readonly notify?: Omit<NotifyCtx, "db" | "now">;
 };
 
 /** Per-cohort, per-day cache of the two book reads that most stages need (dropped on every write). */
@@ -469,6 +508,11 @@ function effectiveStop(
   return best;
 }
 
+/** FAM-007 (D-219): the confirmed dividend per share going ex today, known by the previous cut-off. */
+function exDividendToday(ctx: DayCtx, code: string): Micro {
+  return exDividendOn(ctx.exDividends, code, ctx.d, ctx.exDivCutoff);
+}
+
 async function cancelOrder(ctx: DayCtx, orderId: string, reason: string): Promise<void> {
   await ctx.db.execute({
     sql: "UPDATE arena_order SET status = 'cancelled', reject_reason = ? WHERE id = ? AND status = 'pending'",
@@ -489,8 +533,8 @@ function fillEnvOf(cc: CohortCtx, bar: FillEnv["bar"], advMicro: Micro): FillEnv
   return { bar, advMicro, profile: cc.profile, tickCrossFactor: cc.params.tickCrossFactor };
 }
 
-/** True when the cohort's available cash (ARN-025, by settlement mode) covers `needed` right now. */
-async function entryFunded(ctx: DayCtx, cc: CohortCtx, needed: Micro): Promise<boolean> {
+/** The cohort's available cash right now (ARN-025, by settlement mode). */
+async function availableCashNow(ctx: DayCtx, cc: CohortCtx): Promise<Micro> {
   await postUnposted(ctx, cc);
   const id = cc.cohort.id;
   const [fills, rows] = await Promise.all([fillsOf(ctx, cc), loadLedgerRows(ctx.db, id)]);
@@ -503,7 +547,7 @@ async function entryFunded(ctx: DayCtx, cc: CohortCtx, needed: Micro): Promise<b
     pending: pendingSettlements(fills, settled, ctx.calendar),
     sessionD: ctx.d,
   });
-  return available >= needed;
+  return available;
 }
 
 /**
@@ -512,10 +556,78 @@ async function entryFunded(ctx: DayCtx, cc: CohortCtx, needed: Micro): Promise<b
  * IS stops after the open (F3:). So a position opened and stopped out in one session is bought
  * before it is sold, and an exit never follows a re-entry of the same code at the open.
  */
+/**
+ * The entry fill of one order. A v1 order (no `limit_micro`) goes through `fillOrder` exactly as
+ * before. A Cortex order (D-288) re-checks the gate and the halt, then fills through `fillEntryLimit`:
+ * at the open when the open is at or below the limit, else at the limit on a trade-through, else
+ * `unfilled`. The in-memory `limit` rule is written as the 0007-legal `level` (D-307).
+ */
+type EntryOutcome =
+  | ReturnType<typeof fillOrder>
+  | { readonly status: "unfilled"; readonly reason: "limit_not_reached" }
+  | {
+      readonly status: "filled";
+      readonly fill: SimulatedFill;
+      readonly initialStopMicro: bigint | null;
+      readonly limit: LimitFillOutcome;
+    };
+function fillEntry(
+  order: Extract<OrderToFill, { kind: "entry" }>,
+  env: FillOrderEnv,
+  limitMicro: bigint | null,
+): EntryOutcome {
+  if (limitMicro === null) return fillOrder(order, env);
+  if (env.gate === undefined || !env.gate.allowed) {
+    const detail = env.gate === undefined ? "no_gate_decision" : env.gate.reason;
+    return { status: "cancelled", reason: "gate", detail };
+  }
+  if (env.halted === true) return { status: "cancelled", reason: "halted", detail: "halted" };
+  const limit = fillEntryLimit(env, order.qty, limitMicro);
+  if (limit.status === "unfilled") return { status: "unfilled", reason: "limit_not_reached" };
+  if (order.stopFrom === undefined) throw new RangeError("a limit order needs a stop rule");
+  const fill: SimulatedFill = { ...limit.fill, rule: fillRowRule(limit) };
+  const stop = order.stopFrom(fill.fillPriceMicro);
+  if (stop <= 0n) throw new RangeError("initial stop must be positive");
+  return { status: "filled", fill, initialStopMicro: stop, limit };
+}
+
+/** The open-time checks of a Cortex entry at its fill; the cancel reason, or null when all pass. */
+async function cortexGuardAtFill(
+  ctx: DayCtx,
+  o: Record<string, unknown>,
+  cohortId: string,
+  plan: ReturnType<typeof parsePlan> | null,
+  limit: LimitFillOutcome,
+): Promise<string | null> {
+  const exec = await ctx.db.execute({
+    sql: "SELECT e.family AS family FROM cohort c JOIN execution e ON e.id = c.execution_id WHERE c.id = ?",
+    args: [cohortId],
+  });
+  const family = exec.rows.length === 0 ? null : exec.rows[0]!.family;
+  if (family === null || family === undefined) return null;
+  const rechecked = await ctx.db.execute({
+    sql: "SELECT 1 FROM preopen_result WHERE order_id = ? AND outcome IN ('pass', 'cancel')",
+    args: [text(o.id)],
+  });
+  const g = await cortexOpenGuard(ctx.db, {
+    market: ctx.market,
+    d: ctx.d,
+    barD: ctx.d,
+    orderId: text(o.id),
+    signalId: o.signal_id === null || o.signal_id === undefined ? null : text(o.signal_id),
+    family: text(family) as never,
+    fill: limit,
+    stopSpec: plan?.plan.initialStops[0]?.spec ?? null,
+    rechecked: rechecked.rows.length > 0,
+  });
+  return g.firstFail === null ? null : `filter:open_${g.firstFail}`;
+}
+
 async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
   const id = cc.cohort.id;
   const rs = await ctx.db.execute({
-    sql: `SELECT id, code, kind, qty, ref_stop_micro, decided_d, stop_spec, max_open_micro, card_id
+    sql: `SELECT id, code, kind, qty, ref_stop_micro, decided_d, stop_spec, max_open_micro, card_id,
+                 limit_micro, signal_id
           FROM arena_order
           WHERE cohort_id = ? AND status = 'pending' AND decided_d < ? AND kind IN ('entry','exit_cs')
           ORDER BY id`,
@@ -572,9 +684,14 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
         const fills = await fillsOf(ctx, cc);
         first = !fills.some((f) => f.side === "buy" && f.code === code && f.d === ctx.d);
       }
-      let outcome: ReturnType<typeof fillOrder>;
+      // Cortex orders only (D-288): the limit, on the fill-session price basis
+      const limitMicro =
+        o.limit_micro === null || o.limit_micro === undefined
+          ? null
+          : scaleMicro(toBig(o.limit_micro), crossed.priceFactor);
+      let outcome: EntryOutcome;
       try {
-        outcome = fillOrder(
+        outcome = fillEntry(
           plan !== null
             ? {
                 kind: "entry",
@@ -588,13 +705,17 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
             halted,
             gate,
           },
+          limitMicro,
         );
       } catch (error) {
         if (!(error instanceof RangeError)) throw error;
         await cancelOrder(ctx, orderId, "unfillable");
         continue;
       }
-      if (outcome.status === "cancelled") {
+      if (outcome.status === "unfilled") {
+        // a limit order the session never reached (D-288): no trade in either arm
+        await cancelOrder(ctx, orderId, outcome.reason);
+      } else if (outcome.status === "cancelled") {
         await cancelOrder(ctx, orderId, outcome.reason);
       } else if (
         outcome.status === "filled" &&
@@ -604,11 +725,50 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
         // F3 (spec 7.4): the order is cancelled at the fill when the open gaps to the cap or above
         await cancelOrder(ctx, orderId, "gap");
       } else if (outcome.status === "filled") {
-        // a gap above the expected price can leave the order unaffordable: like a broker, refuse it
-        // (cancelled 'cash') rather than overdraw the cohort (ARN-101 cash >= 0)
-        if (!(await entryFunded(ctx, cc, outcome.fill.valueMicro + outcome.fill.brokerageMicro))) {
-          await cancelOrder(ctx, orderId, "cash");
+        // GL-03 (D-207): a gap above the expected price can leave the planned quantity unaffordable.
+        // Resize to the largest affordable whole parcel; cancel 'cash' only when one marketable
+        // parcel (A$500) is unaffordable (ARN-101 cash >= 0 holds either way).
+        const sized = resizeEntryAtFill({
+          plannedQty: outcome.fill.qty,
+          fillPriceMicro: outcome.fill.fillPriceMicro,
+          availableCashMicro: await availableCashNow(ctx, cc),
+          profile: cc.profile,
+          feeContext: { code, firstBuyOfSecurityToday: first },
+        });
+        if (sized.status === "cancel") {
+          await cancelOrder(ctx, orderId, sized.reason);
           continue;
+        }
+        if (sized.status === "resized") {
+          outcome = fillEntry(
+            plan !== null
+              ? {
+                  kind: "entry",
+                  qty: sized.qty,
+                  stopFrom: (fillMicro) => initialStopAtFill(plan, fillMicro, crossed.priceFactor),
+                }
+              : { kind: "entry", qty: sized.qty, stopDistanceMicro: toBig(o.ref_stop_micro) },
+            {
+              ...fillEnvOf(cc, bar, advMicro),
+              feeContext: { code, firstBuyOfSecurityToday: first },
+              halted,
+              gate,
+            },
+            limitMicro,
+          );
+          if (outcome.status !== "filled") {
+            await cancelOrder(ctx, orderId, "unfillable");
+            continue;
+          }
+        }
+        // CTX-028 open-time list (Cortex orders only): kills, sources, shock, stale universe, the limit
+        // at the fill, the stop plus gap95 re-check, and a missing 09:55 re-check (O07)
+        if (limitMicro !== null && "limit" in outcome) {
+          const guard = await cortexGuardAtFill(ctx, o, id, plan, outcome.limit);
+          if (guard !== null) {
+            await cancelOrder(ctx, orderId, guard);
+            continue;
+          }
         }
         // ARN-020a: an entry that was never re-checked fills flagged `not_rechecked` (AT-18 part B)
         await markNotRechecked(ctx.db, {
@@ -654,7 +814,9 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
     const sellQty = holding < qty ? holding : qty;
     const env = fillEnvOf(cc, bar, advMicro);
     const cs = fillCloseSignalExit(env, sellQty);
-    const stop = fillIntradayStop(env, sellQty, effectiveStop(trade, ctx.d, adjustments));
+    const stop = fillIntradayStop(env, sellQty, effectiveStop(trade, ctx.d, adjustments), {
+      exDividendMicro: exDividendToday(ctx, code),
+    });
     const chosen = selectExit(cs, stop);
     if (chosen === null) continue;
     const liquidation = orderId.startsWith("LQ:");
@@ -692,6 +854,7 @@ async function isStops(ctx: DayCtx, cc: CohortCtx): Promise<void> {
     const env = fillEnvOf(cc, bar, await ctx.data.adv(t.code, ctx.priorD));
     const fill = fillIntradayStop(env, qty, effectiveStop(t, ctx.d, adjustments), {
       afterOpen: t.entryD === ctx.d,
+      exDividendMicro: exDividendToday(ctx, t.code),
     });
     if (fill === null) continue;
     const orderId = `IS:${t.id}:${ctx.d}`;
@@ -949,7 +1112,22 @@ async function markOf(ctx: DayCtx, code: string): Promise<Mark> {
     });
   }
   const bar = await ctx.data.bar(code, ctx.d);
-  return { closeMicro: bar === null ? last : bar.closeMicro, advMicro };
+  // V1-S15 / DAT-127: no bar and no halt flag = a data gap, not a close. The position is marked at the
+  // last price (no price is invented, no haircut: ARN-026 is for halts) but the mark is FLAGGED.
+  if (bar === null) return { closeMicro: last, advMicro, stale: true };
+  return { closeMicro: bar.closeMicro, advMicro };
+}
+
+/** V1-S15: sessions in a row, ending today, on which `code` has no usable bar (capped at the alert limit). */
+async function staleSessions(ctx: DayCtx, code: string): Promise<number> {
+  let n = 0;
+  let day = ctx.d;
+  while (n < STALE_MARK_ALERT_SESSIONS) {
+    if ((await ctx.data.bar(code, day)) !== null) break;
+    n += 1;
+    day = previousTradingDay(day, ctx.calendar);
+  }
+  return n;
 }
 
 type NavOutcome = {
@@ -957,6 +1135,8 @@ type NavOutcome = {
   readonly ok: boolean;
   readonly violations: Violation[];
   readonly marks: ReadonlyMap<string, Mark>;
+  /** V1-S15: held codes marked at the last close because today's bar is missing, with the run length. */
+  readonly stale: readonly { readonly code: string; readonly sessions: number }[];
 };
 
 async function navStage(ctx: DayCtx, cc: CohortCtx): Promise<NavOutcome> {
@@ -1026,11 +1206,24 @@ async function navStage(ctx: DayCtx, cc: CohortCtx): Promise<NavOutcome> {
     seedMicro: cc.cohort.seedMicro,
     sleeve: cfg === null ? undefined : { trades, states, cfg },
   });
+  const stale: { code: string; sessions: number }[] = [];
+  for (const [code, mark] of [...marks].sort(([a], [b]) => (a < b ? -1 : 1))) {
+    if (mark.stale !== true) continue;
+    const sessions = await staleSessions(ctx, code);
+    stale.push({ code, sessions });
+    // non-fatal: the day is stored as ok, the flag is the log line and (after the limit) an incident
+    violations.push({
+      code: "stale_mark",
+      d,
+      message: `${code} marked at the last close: no bar on ${d} (${sessions} session(s) in a row)`,
+      fatal: false,
+    });
+  }
   const ok = !violations.some(isFatal);
   const stored = ok ? day : withInvariantsOk(day, false);
   await writeNavDay(ctx.db, stored);
   ctx.stats.navDays += 1;
-  return { day: stored, ok, violations, marks };
+  return { day: stored, ok, violations, marks, stale };
 }
 
 // ---- one cohort-day --------------------------------------------------------------------------------------------
@@ -1044,7 +1237,10 @@ type CohortResult =
 async function activityOf(ctx: DayCtx, cohortId: string) {
   const rs = await ctx.db.execute({
     sql: `SELECT
-      (SELECT COUNT(*) FROM nav_daily WHERE cohort_id = ? AND invariants_ok = 0) AS bad,
+      (SELECT COUNT(*) FROM nav_daily WHERE cohort_id = ? AND invariants_ok = 0
+         AND d > COALESCE((SELECT MAX(json_extract(e.detail_json, '$.through_d')) FROM cohort_event e
+                           WHERE e.cohort_id = ? AND e.kind = 'data_event'
+                             AND json_extract(e.detail_json, '$.type') = '${INVARIANTS_CLEARED}'), '')) AS bad,
       (SELECT COUNT(*) FROM arena_order WHERE cohort_id = ? AND status = 'pending'
          AND decided_d < ? AND kind IN ('entry','exit_cs')) AS pending,
       (SELECT COUNT(*) FROM trade WHERE cohort_id = ? AND exit_type IS NULL) AS open_trades,
@@ -1060,6 +1256,7 @@ async function activityOf(ctx: DayCtx, cohortId: string) {
          AND status = 'filled' AND fill_d = ?) AS entries_today,
       (SELECT sleeve_json FROM cohort WHERE id = ?) AS sleeve_json`,
     args: [
+      cohortId,
       cohortId,
       cohortId,
       ctx.d,
@@ -1094,7 +1291,7 @@ async function activityOf(ctx: DayCtx, cohortId: string) {
 
 async function closeCohortDay(ctx: DayCtx, cohortId: string): Promise<CohortResult> {
   const act = await activityOf(ctx, cohortId);
-  if (act.frozen) return { state: "frozen" };
+  if (act.frozen && ctx.catchUpCohort !== cohortId) return { state: "frozen" };
   const cohort = await loadCohort(ctx.db, cohortId);
   if (cohort === null) throw new CloseBooksError("cohort_missing", `no cohort ${cohortId}`);
   const params = parseCohortParams(cohort.paramsJson);
@@ -1122,7 +1319,24 @@ async function closeCohortDay(ctx: DayCtx, cohortId: string): Promise<CohortResu
     return { state: "failed", violations: nav.violations };
   }
   for (const v of nav.violations) {
-    await logApp(ctx, "warn", `${cohortId} ${ctx.d}: ${v.code}`);
+    await logApp(
+      ctx,
+      "warn",
+      v.code === "stale_mark"
+        ? `${cohortId} ${ctx.d}: ${v.message}`
+        : `${cohortId} ${ctx.d}: ${v.code}`,
+    );
+  }
+  const overdue = nav.stale.filter((x) => x.sessions >= STALE_MARK_ALERT_SESSIONS);
+  if (overdue.length > 0) {
+    await openS2Once(
+      ctx.db,
+      STALE_MARK_INCIDENT,
+      { cohortId, d: ctx.d, codes: overdue.map((x) => x.code).slice(0, 10) },
+      ctx.now(),
+      ctx.notify,
+      `A held position has had no price bar for ${STALE_MARK_ALERT_SESSIONS} sessions in a row`,
+    );
   }
   if (cc.cfg !== null) {
     await runSleeveUnlockCheck(ctx.db, {
@@ -1217,6 +1431,121 @@ async function recordSkip(
 }
 
 /**
+ * V1-B1 / D-661: is the session before `d` closed? True when its 2a run record is `success` or
+ * `degraded` (books written), `failed` for invariants (the day completed, the cohort is frozen), or `skipped` for a reason that is not a missing Batch 1 marker
+ * (market off, data only, non-trading). The first night is exempt: with no earlier closed
+ * session for the market (go-live, fresh start, replay start) there is nothing to be late for.
+ */
+export async function previousSessionClosed(
+  db: Client,
+  market: string,
+  d: string,
+  calendar: CalendarRow[],
+): Promise<{ ok: true } | { ok: false; priorD: string }> {
+  let priorD: string | null;
+  try {
+    priorD = previousTradingDay(d, calendar);
+  } catch {
+    priorD = null; // R2-I2 (D-807): the walk failed; decided below, never silently skipped
+  }
+  if (priorD !== null) {
+    const prior = await db.execute({
+      sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND ${CLOSED_2A_SQL} LIMIT 1`,
+      args: [closeBooksKey(market, priorD)],
+    });
+    if (prior.rows.length > 0) return { ok: true };
+  }
+  // D-675: the exemption uses the same "closed" predicate as the check, so a market whose only
+  // earlier nights ended in an invariant freeze (`failed` + navDays) is not a first night.
+  const earlier = await db.execute({
+    sql: `SELECT 1 FROM run_record WHERE job = ? AND market = ? AND scheduled_for < ?
+          AND ${CLOSED_2A_SQL} LIMIT 1`,
+    args: [ARENA_JOB, market, d],
+  });
+  if (earlier.rows.length === 0) return { ok: true };
+  // R2-I2: a failed walk with earlier closed sessions on record fails CLOSED (refuse + incident).
+  return { ok: false, priorD: priorD ?? "unknown" };
+}
+
+/**
+ * SQL predicate "this arena-2a run record closed its session" (D-661, D-675). The Worker's
+ * re-dispatch check (`worker/src/clock.ts`, `RECHECK_CLOSED_SQL`) mirrors it, plus `running`.
+ */
+export const CLOSED_2A_SQL =
+  "(status IN ('success', 'degraded') " +
+  "OR (status = 'failed' AND json_extract(details_json, '$.navDays') IS NOT NULL) " +
+  "OR (status = 'skipped' AND json_extract(details_json, '$.reason') IS NOT 'no_completion_marker' " +
+  "AND json_extract(details_json, '$.reason') IS NOT 'catch_up_capped'))";
+
+/** R4-I3 (D-833): the reason of the record a capped catch-up writes; it never counts as closing a session. */
+export const CATCH_UP_CAPPED = "catch_up_capped";
+
+/**
+ * R4-I3 (D-833): a catch-up run that hit `--max-sessions` leaves a `skipped` record (reason
+ * `catch_up_capped`, details {closed, remaining}) under the target's key, so System Health shows the
+ * open target without GitHub. `CLOSED_2A_SQL` and `RECHECK_CLOSED_SQL` exclude the reason: the target
+ * stays open, the recheck dispatches again and the previous-session guard is unaffected.
+ */
+export async function recordCatchUpCapped(
+  db: Client,
+  p: {
+    market: string;
+    d: string;
+    closed: number;
+    remaining: number;
+    now: string;
+    commitSha?: string;
+  },
+): Promise<void> {
+  const runId = await startRun(db, {
+    job: ARENA_JOB,
+    market: p.market,
+    concurrencyKey: closeBooksKey(p.market, p.d),
+    scheduledFor: p.d,
+    commitSha: p.commitSha,
+    now: p.now,
+  });
+  await finishRun(db, runId, {
+    status: "skipped",
+    errorSummary: `${CATCH_UP_CAPPED}: ${p.closed} closed, ${p.remaining} still to close`,
+    details: { reason: CATCH_UP_CAPPED, closed: p.closed, remaining: p.remaining },
+    now: p.now,
+  });
+}
+
+/** Refuse session d: a `failed` record (never `skipped`, which the next night would read as closed) + a P1 incident. */
+async function refuseGap(
+  db: Client,
+  opts: CloseBooksOptions,
+  priorD: string,
+): Promise<CloseBooksResult> {
+  const reason = "previous_session_not_closed";
+  const runId = await startRun(db, {
+    job: ARENA_JOB,
+    market: opts.market,
+    concurrencyKey: closeBooksKey(opts.market, opts.d),
+    scheduledFor: opts.d,
+    commitSha: opts.commitSha ?? undefined,
+    now: opts.now(),
+  });
+  await finishRun(db, runId, {
+    status: "failed",
+    errorSummary: `${reason}: ${priorD} has no closed arena-2a record`,
+    details: { reason, priorD },
+    now: opts.now(),
+  });
+  await openS2Once(
+    db,
+    "arena_close_gap",
+    { market: opts.market, d: opts.d, priorD },
+    opts.now(),
+    opts.notify,
+    `Arena close refused for ${opts.d}: session ${priorD} is not closed`,
+  );
+  return emptyResult(opts, "failed", reason, runId);
+}
+
+/**
  * Close the books for session `opts.d` (batch 2a). Never throws for a data or invariant problem:
  * the outcome is the run record and the returned status (`failed` carries the code).
  */
@@ -1237,7 +1566,9 @@ export async function closeBooksDay(
   if (mode === "off") return recordSkip(db, opts, "market_off");
   if (mode !== "full" && opts.replay !== true) return recordSkip(db, opts, "data_only_guard");
   const calendar = opts.calendar ?? (await loadCalendar(db, opts.market));
-  if (!isTradingDay(opts.d, calendar)) return recordSkip(db, opts, "non_trading_day");
+  const dayState = gateDayStatus(opts.d, calendar, opts.strictCalendar);
+  if (dayState === "missing") return recordSkip(db, opts, "calendar_missing"); // D-711 fail safe
+  if (dayState !== "open") return recordSkip(db, opts, "non_trading_day");
   const marker = await db.execute({
     sql: "SELECT kind FROM completion_marker WHERE market = ? AND d = ? AND kind IN ('data', 'non-trading')",
     args: [opts.market, opts.d],
@@ -1249,6 +1580,9 @@ export async function closeBooksDay(
       marker.rows.length > 0 ? "non_trading_day" : "no_completion_marker",
     );
   }
+
+  const gap = await previousSessionClosed(db, opts.market, opts.d, calendar);
+  if (!gap.ok) return refuseGap(db, opts, gap.priorD);
 
   const stale = await db.execute({
     sql: "SELECT 1 FROM run_record WHERE concurrency_key = ? AND status = 'running' LIMIT 1",
@@ -1283,6 +1617,11 @@ export async function closeBooksDay(
       const last = await data.lastClose(a.code, priorD);
       if (last !== null) lastCloses.set(a.code, last);
     }
+    const cutoffHm = await getConfig(db, "decision_cutoff").catch(() => undefined);
+    const exDivCutoff = decisionCutoffUtc(
+      priorD,
+      typeof cutoffHm === "string" ? cutoffHm : "18:10",
+    );
     const ctx: DayCtx = {
       db,
       market: opts.market,
@@ -1295,11 +1634,16 @@ export async function closeBooksDay(
       stats,
       actions,
       lastCloses,
+      exDividends: toExDividendActions(actions.filter((x) => x.exDate === opts.d)),
+      exDivCutoff,
       gates: new Map(),
       recentFrom: addDays(opts.d, -14),
+      notify: opts.notify,
+      catchUpCohort: opts.catchUpCohort,
     };
     const outcomes = new Map<string, Extract<CohortResult, { state: "ok" }>>();
     for (const cohortId of await activeCohortIds(db, opts.d, ctx.recentFrom)) {
+      if (opts.catchUpCohort !== undefined && cohortId !== opts.catchUpCohort) continue;
       const result = await closeCohortDay(ctx, cohortId);
       if (result.state === "frozen") frozenIds.push(cohortId);
       else if (result.state === "failed") failed.push(cohortId);
@@ -1342,6 +1686,7 @@ export async function closeBooksDay(
       errorSummary:
         failed.length > 0 ? `invariants failed for ${failed.length} cohort(s)` : undefined,
       details: {
+        ...(opts.catchUpCohort === undefined ? {} : { catchUp: opts.catchUpCohort }),
         cohorts: closed.length,
         failed: failed.length,
         frozen: frozenIds.length,

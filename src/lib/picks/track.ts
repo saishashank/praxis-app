@@ -14,7 +14,8 @@
 // the ex-date the levels are divided by the exact M3 quantity ratio and a held position's shares are
 // multiplied by it and rounded down (`rebaseQty`), cash unchanged, as the arena does. Known limit
 // (D-122): no dividends and no other corporate action (mergers, delistings); the Picks page says
-// "price only - dividends not included".
+// "price only - dividends not included". GL-10 (O-51): the market benchmark of a comparison is a total-return
+// series (./benchmark.ts), labelled "Price only" until vendor dividends cover the window.
 import type { Client, InStatement } from "@libsql/client";
 import { priceMicro } from "@/lib/arena/marketData";
 import {
@@ -30,7 +31,12 @@ import { rebaseQty } from "@/lib/arena/ledger";
 import { divFloor, makeRational, mulRat, type Rational } from "@/lib/money/rational";
 import { roundHalfAwayFromZero } from "@/lib/money/round";
 import type { Micro } from "@/lib/money/micro";
+import { exDividendOn, toExDividendActions } from "@/lib/arena/exDividend";
+import { decisionCutoffUtc } from "@/lib/agents/decisionView";
+import { getConfig } from "@/lib/config/store";
 import { PicksError } from "./types";
+import { loadTotalReturnSeries } from "./benchmark";
+import { BENCH_INDEX, pickMarketStatement } from "./vsMarket";
 
 type Db = Client;
 const PPM = 1_000_000n; // threshold-ok: parts per million
@@ -99,7 +105,15 @@ type SimEnv = {
   readonly withdrawnNight?: string | null;
   /** Confirmed splits, consolidations and bonus issues after publication, ordered by ex-date. */
   readonly actions?: readonly PickAction[];
+  /**
+   * FAM-007 (D-219): confirmed cash and special dividends of the code, with the decision cut-off of each
+   * previous session already applied by the caller (see `pickExDividends`). Used on the ex-date only.
+   */
+  readonly exDividends?: readonly PickExDividend[];
 };
+
+/** A dividend per share (micro) going ex on `exD`, known by the previous session's cut-off. */
+export type PickExDividend = { readonly exD: string; readonly dpsMicro: Micro };
 
 /** The buy, stop and aim levels in the terms of night `d`, after the actions with ex-date up to it. */
 export function levelsAfter<L extends { buyMaxMicro: Micro; stopMicro: Micro; aimMicro: Micro }>(
@@ -121,6 +135,12 @@ export function levelsAfter<L extends { buyMaxMicro: Micro; stopMicro: Micro; ai
 function levelAt(v: Micro, factor: Rational): Micro {
   const r = roundHalfAwayFromZero(mulRat(makeRational(v), makeRational(factor.den, factor.num)));
   return r < 1n ? 1n : r;
+}
+
+function exDividendAt(list: readonly PickExDividend[] | undefined, d: string): Micro {
+  let sum = 0n;
+  for (const x of list ?? []) if (x.exD === d) sum += x.dpsMicro;
+  return sum;
 }
 
 export function simulateOutcome(base: Levels, bars: readonly DatedBar[], env: SimEnv): Outcome {
@@ -193,6 +213,7 @@ export function simulateOutcome(base: Levels, bars: readonly DatedBar[], env: Si
     const e = entry;
     const stop = fillIntradayStop(fillEnv(bar), e.qty, levels.stopMicro, {
       afterOpen: bar.d === e.d,
+      exDividendMicro: exDividendAt(env.exDividends, bar.d),
     });
     if (stop !== null) {
       return close(
@@ -286,6 +307,27 @@ export function pickActions(
     .sort((a, b) => (a.exD < b.exD ? -1 : a.exD > b.exD ? 1 : 0));
 }
 
+/**
+ * FAM-007: the confirmed dividends of `code` going ex on a bar after publication, each counted only if
+ * known (GL-02) by the decision cut-off of the session before it (`cutoffOf`).
+ */
+export function pickExDividends(
+  confirmed: readonly CorpActionRecord[],
+  code: string,
+  bars: readonly { readonly d: string }[],
+  pubD: string,
+  cutoffOf: (priorD: string) => string,
+): PickExDividend[] {
+  const acts = toExDividendActions(confirmed.filter((a) => a.code === code && a.exDate > pubD));
+  const out: PickExDividend[] = [];
+  bars.forEach((b, i) => {
+    const prior = i === 0 ? pubD : bars[i - 1]!.d;
+    const dps = exDividendOn(acts, code, b.d, cutoffOf(prior));
+    if (dps > 0n) out.push({ exD: b.d, dpsMicro: dps });
+  });
+  return out;
+}
+
 export type TrackOptions = {
   readonly market: string;
   /** The night: bars after publication up to and including D are used, nothing later. */
@@ -312,6 +354,9 @@ export async function trackPicks(db: Db, o: TrackOptions): Promise<TrackSummary>
   });
   const sum: TrackSummary = { bought: 0, missed: 0, closed: 0, open: 0 };
   const confirmed = await loadConfirmedActions(db, o.market, o.d);
+  const cutoffHm = await getConfig(db, "decision_cutoff").catch(() => undefined);
+  const cutoffOf = (priorD: string): string =>
+    decisionCutoffUtc(priorD, typeof cutoffHm === "string" ? cutoffHm : "18:10");
   for (const r of rows.rows) {
     const pubD = text(r.pub_d);
     let levels: Levels = {
@@ -345,6 +390,7 @@ export async function trackPicks(db: Db, o: TrackOptions): Promise<TrackSummary>
       profile,
       asOfD: o.d,
       actions,
+      exDividends: pickExDividends(confirmed, code, bars, pubD, cutoffOf),
       withdrawnNight,
     });
     const stored = text(r.state);
@@ -385,6 +431,21 @@ export async function trackPicks(db: Db, o: TrackOptions): Promise<TrackSummary>
       sum.closed += 1;
     }
     if (sim.state === "bought" || sim.state === "waiting") sum.open += 1;
+    // ARN-103: the market side is fixed with the settlement, in the same batch (rows are never edited)
+    if (sim.state === "closed" || (sim.state === "missed" && stored === "waiting")) {
+      const end = sim.exitD ?? levels.validUntilD;
+      const m = await loadTotalReturnSeries(db, o.market, BENCH_INDEX, pubD, end);
+      const stmt = pickMarketStatement({
+        key,
+        sim,
+        basis: m.basis,
+        series: m.series,
+        validUntilD: levels.validUntilD,
+        withdrawnNight,
+        settledD: o.d,
+      });
+      if (stmt !== null) stmts.push(stmt);
+    }
     if (stmts.length > 0) await db.batch(stmts, "write");
   }
   return sum;

@@ -42,6 +42,7 @@ function source(
 ): ControlSource {
   return {
     sessions: S,
+    decisionCutoffOf: (d) => `${d}T07:00:00.000Z`,
     bar: (c, d) => (missing.has(c) ? null : viewBar(d, 50n * M, 50n * M, 50n * M, 50n * M)),
     positionFacts: () => ({
       atrMicro: null,

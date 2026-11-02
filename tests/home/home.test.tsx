@@ -13,6 +13,7 @@ import {
   EDITOR,
   emptyDbs,
   LATE,
+  NOW,
   leaks,
   NAMES,
   OWNER,
@@ -54,7 +55,7 @@ describe("Home page content", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Today" })).toBeInTheDocument();
     expect(screen.getByText("Strategies today")).toBeInTheDocument();
     expect(screen.getAllByText("Simulated").length).toBeGreaterThan(0);
-    expect(screen.getByText("Today's picks")).toBeInTheDocument();
+    expect(screen.getByText("Tonight's picks")).toBeInTheDocument();
     expect(screen.getByText("Tonight's trade ideas")).toBeInTheDocument();
     expect(screen.getByText("Your watchlist")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "See all tonight's ideas" })).toHaveAttribute(
@@ -238,7 +239,6 @@ describe("Home for a first-time user (D-200)", () => {
       (v.summary as { tiles: unknown[] }).tiles = [tile];
       v.news = { hidden: false, items: [news] };
     });
-    expect(screen.getByText("Today's prices passed their checks.")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/Data U1|data flags? still open/);
     expect(screen.getByRole("link", { name: "Follow the trend" })).toHaveAttribute(
       "href",
@@ -263,7 +263,182 @@ describe("Home for a first-time user (D-200)", () => {
       };
       v.news = { hidden: false, items: [{ ...news, stock: "Stock A" }] };
     });
-    expect(screen.getByText("Some of today's prices are still being checked.")).toBeInTheDocument();
     expect(screen.getByText(/Half year results/).closest("a")).toBeNull();
+  });
+});
+
+describe("Home redesign (UXR-020, 044, 053, 055, 056)", () => {
+  async function withPatch(u: typeof OWNER, patch: (v: Record<string, unknown>) => void) {
+    const result = await loadHome(deps(pop, u));
+    const data = structuredClone(result.data) as unknown as Record<string, unknown>;
+    patch(data);
+    return render(
+      <HomeContent
+        result={{ ...result, data: data as unknown as typeof result.data }}
+        role={u.role}
+        showWelcome={false}
+      />,
+    );
+  }
+
+  it.each([
+    ["RISK-ON", "on", "Risk-on"],
+    ["NEUTRAL", "neutral", "Neutral"],
+    ["RISK-OFF", "off", "Risk-off"],
+    ["SHOCK", "off", "Shock"],
+  ])("status strip: %s -> %s gradient and the word %s", async (regime, key, word) => {
+    await withPatch(OWNER, (v) => {
+      (v.day as { regime: string }).regime = regime;
+    });
+    const strip = screen.getByRole("region", { name: "Today at a glance" });
+    expect(strip).toHaveAttribute("data-mood", key);
+    expect(strip.getAttribute("style")).toContain(`--gradient-mood-${key}`);
+    expect(strip).toHaveTextContent(word);
+  });
+
+  it("status strip shows the freshness and the next run, in outcome colour with a sparkline", async () => {
+    await view(pop, OWNER, false, NOW);
+    const strip = screen.getByRole("region", { name: "Today at a glance" });
+    expect(strip).toHaveTextContent("Data as of");
+    expect(strip).toHaveTextContent(/Next run\s*(tonight|tomorrow|[A-Z][a-z]{2}) 18:10/);
+    expect(strip.querySelector("[data-outcome]")).not.toBeNull();
+    expect(strip.querySelector("[data-sparkline]")).not.toBeNull();
+    // the number carries a sign glyph and words, never colour alone
+    expect(strip.textContent).toMatch(/[▲▼–]/);
+  });
+
+  it("data-only mode adds one line in the strip, and only there", async () => {
+    await withPatch(OWNER, (v) => {
+      v.dataOnly = true;
+    });
+    const line = screen.getAllByTestId("data-only-line");
+    expect(line).toHaveLength(1);
+    expect(screen.getByRole("region", { name: "Today at a glance" })).toContainElement(line[0]!);
+    cleanup();
+    await withPatch(OWNER, (v) => {
+      v.dataOnly = false;
+    });
+    expect(screen.queryByTestId("data-only-line")).toBeNull();
+  });
+
+  it("every empty section says what appears and when (UXR-007) and shows an illustration", async () => {
+    await view(empty, OWNER);
+    const blocks = document.querySelectorAll("[data-empty]");
+    expect(blocks.length).toBeGreaterThanOrEqual(5);
+    for (const b of blocks) {
+      expect(b.textContent ?? "", b.textContent ?? "").toMatch(
+        /after |at \d\d:\d\d|as soon as|as they are|from the next|appear/i,
+      );
+      expect(b.querySelector("svg[aria-hidden='true']")).not.toBeNull();
+    }
+  });
+
+  it("Since yesterday rows are single links; Needs you has an empty state", async () => {
+    await view(pop, OWNER);
+    const since = screen.getByRole("region", { name: "Since yesterday" });
+    const rows = within(since).getAllByRole("listitem");
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    expect(rows.length).toBeLessThanOrEqual(5);
+    for (const r of rows) expect(within(r).getAllByRole("link")).toHaveLength(1);
+    expect(within(since).getByRole("link", { name: /pick/ })).toHaveAttribute("href", "/picks");
+  });
+
+  it("Needs you: tier-coloured items with one action each", async () => {
+    await withPatch(OWNER, (v) => {
+      v.needs = [
+        {
+          key: "a",
+          tier: "P0",
+          text: "Halt on a held stock",
+          href: "/news?chip=alerts",
+          action: "Open alert",
+        },
+        {
+          key: "b",
+          tier: "P1",
+          text: "Two things need a look",
+          href: "/health",
+          action: "Open System Health",
+        },
+      ];
+    });
+    const needs = screen.getByRole("region", { name: "Needs you" });
+    const items = within(needs).getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0]!.querySelector("[data-hue='tier-p0']")).not.toBeNull();
+    expect(items[1]!.querySelector("[data-hue='tier-p1']")).not.toBeNull();
+    for (const i of items) expect(within(i).getAllByRole("link")).toHaveLength(1);
+  });
+
+  it("pick cards show the family badge text, aim, stop, time frame and Why this pick", async () => {
+    await view(pop, OWNER);
+    const cards = document.querySelectorAll("[data-pick-card]");
+    expect(cards.length).toBeGreaterThan(0);
+    expect(cards.length).toBeLessThanOrEqual(3);
+    for (const c of cards) {
+      const badge = c.querySelector("[data-family]");
+      expect(badge, c.textContent ?? "").not.toBeNull();
+      expect(badge!.textContent).toMatch(/^(BR|VC|ND|BO|SC|CO|EX)\s?\S/);
+      expect(c.textContent).toMatch(/Aim .*Stop /);
+      expect(c.textContent).toMatch(/Time frame/);
+      expect(within(c as HTMLElement).getByRole("link", { name: "Why this pick" })).toBeTruthy();
+    }
+  });
+
+  it.each([
+    ["Editor", EDITOR],
+    ["Viewer", VIEWER],
+  ])("%s: pick cards keep the family badge but no code, price or exact date", async (_n, u) => {
+    await view(pop, u);
+    const cards = document.querySelectorAll("[data-pick-card]");
+    expect(cards.length).toBeGreaterThan(0);
+    for (const c of cards) {
+      expect(c.querySelector("[data-family]")).not.toBeNull();
+      expect(c.querySelector("[data-money]")).toBeNull();
+      expect(c.textContent).not.toMatch(/Valid until \d{4}-\d{2}-\d{2}/);
+    }
+    const html = document.body.innerHTML;
+    for (const s of [...CODES, ...NAMES]) expect(html).not.toContain(s);
+    expect(leaks(html)).toEqual([]);
+  });
+
+  it("welcome: full card once, then a one-line 'how Praxis works' row", async () => {
+    await view(pop, OWNER, true);
+    expect(screen.getByText("Welcome to Praxis")).toBeInTheDocument();
+    expect(screen.queryByTestId("how-it-works")).toBeNull();
+    cleanup();
+    await view(pop, OWNER, false);
+    expect(screen.queryByText("Welcome to Praxis")).toBeNull();
+    expect(screen.getByRole("link", { name: "Read how Praxis works" })).toBeInTheDocument();
+  });
+
+  it("the counter renders its final value and an accessible label without any animation", async () => {
+    await view(pop, OWNER);
+    const c = document.querySelector("[data-countup]");
+    expect(c).not.toBeNull();
+    expect(c!.querySelector(".sr-only")?.textContent).toMatch(/(gain|loss|no change):/);
+  });
+});
+
+describe("Home loader additions", () => {
+  it("the system row says in one sentence whether the prices passed their checks (D-200)", async () => {
+    const r = await loadHome(deps(pop, EDITOR));
+    const sys = r.data.since.find((x) => x.key === "system");
+    expect(sys?.href).toBe("/health");
+    expect(sys?.text).toMatch(/passed their checks|still being checked|have not run/);
+    expect(JSON.stringify(r.data.since)).not.toMatch(/Data U1|data flags? still open/);
+    expect(r.data.since.length).toBeLessThanOrEqual(5);
+  });
+
+  it("next run label skips the weekend and melbourneStamp reads Melbourne time", async () => {
+    const { nextRunLabel, melbourneStamp } = await import("@/lib/ui/loaders/home");
+    // Tue 21 Oct 2026 14:00 Melbourne (03:00Z): before the slot
+    expect(nextRunLabel(new Date("2026-10-21T03:00:00Z"))).toBe("tonight 18:10");
+    // 19:00 Melbourne (08:00Z) the same day
+    expect(nextRunLabel(new Date("2026-10-21T08:00:00Z"))).toBe("tomorrow 18:10");
+    // Fri 19:00 Melbourne -> Mon
+    expect(nextRunLabel(new Date("2026-10-23T08:00:00Z"))).toBe("Mon 18:10");
+    expect(melbourneStamp("2026-10-21T05:45:00Z")).toBe("Wed 21 Oct, 16:45");
+    expect(melbourneStamp(null)).toBeNull();
   });
 });

@@ -10,7 +10,14 @@
 import "server-only";
 import type { Row } from "@libsql/client";
 import { loadAttentionItems } from "@/lib/health/attention";
+import { listInbox } from "@/lib/alerts/api";
+import { addDays, isWeekend, marketDate } from "@/lib/data/calendar";
+import { maskAlertViews } from "@/lib/view/alerts";
+import { formatDate, plural } from "@/lib/view/format";
 import { loadIdeas } from "./ideas";
+import { pickRef } from "./picks";
+import { loadAlertHomeFacts, loadIntraday, type IntradayModel } from "./pickAlerts";
+import type { LoaderEnv } from "./shell";
 import {
   latestDataDate,
   latestRegime,
@@ -39,6 +46,55 @@ const MAX_WATCH = 50; // threshold-ok: bound of the watchlist read
 const MAX_NEWS = 3; // threshold-ok: UX-011 news items on Home
 const PRICE_WINDOW_DAYS = 10; // threshold-ok: calendar days that hold the two newest closes
 const DAY_MS = 86_400_000; // threshold-ok: unit conversion
+const SPARK_DAYS = 30; // threshold-ok: sessions in the Home sparkline
+const MAX_NEEDS = 3; // threshold-ok: UXR-020 items in Needs you
+const RUN_HHMM = "18:10"; // threshold-ok: Batch 2 slot shown as the next run (controlRoom.ts A2)
+const RUN_MINUTES = 18 * 60 + 10; // threshold-ok: same slot in minutes of the Melbourne day
+const MEL_TZ = "Australia/Melbourne";
+const MEL_PARTS = new Intl.DateTimeFormat("en-AU", {
+  timeZone: MEL_TZ,
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+/** "Tue 21 Oct, 16:45" in Melbourne time, or null when the instant cannot be read. */
+export function melbourneStamp(iso: string | null): string | null {
+  if (!iso) return null;
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return null;
+  const p = Object.fromEntries(MEL_PARTS.formatToParts(t).map((x) => [x.type, x.value]));
+  return `${p.weekday} ${p.day} ${p.month}, ${p.hour}:${p.minute}`;
+}
+
+/** UXR-020: "tonight 18:10", "tomorrow 18:10" or "Mon 18:10"; weekends skipped (holidays not known here). */
+export function nextRunLabel(now: Date): string {
+  const p = Object.fromEntries(MEL_PARTS.formatToParts(now).map((x) => [x.type, x.value]));
+  const minutes = Number(p.hour) * 60 + Number(p.minute);
+  const today = marketDate(now, MEL_TZ);
+  for (let off = minutes < RUN_MINUTES ? 0 : 1; off < 8; off++) {
+    const d = addDays(today, off);
+    if (isWeekend(d)) continue;
+    if (off === 0) return `tonight ${RUN_HHMM}`;
+    if (off === 1) return `tomorrow ${RUN_HHMM}`;
+    return `${new Date(`${d}T00:00:00Z`).toLocaleDateString("en-AU", { weekday: "short", timeZone: "UTC" })} ${RUN_HHMM}`;
+  }
+  return `tonight ${RUN_HHMM}`;
+}
+
+export type SinceKind =
+  "picks" | "ideas" | "fills" | "alerts" | "pickhits" | "candidates" | "breakers" | "system";
+export type HomeSinceRow = { key: SinceKind; text: string; href: string };
+export type HomeNeed = {
+  key: string;
+  tier: "P0" | "P1" | "P2";
+  text: string;
+  href: string;
+  action: string;
+};
 
 export type HomePick = {
   profile: string;
@@ -55,6 +111,8 @@ export type HomePick = {
   timeFrameSessions: number | null;
   /** Last day the pick can be bought: exact, or the ISO week for a masked viewer. */
   validUntil: string | null;
+  /** Link to the pick detail ("Why this pick"); the id is opaque for a masked viewer. */
+  whyHref: string;
 };
 
 export type HomeIdea = {
@@ -85,7 +143,27 @@ export type StrategyTile = {
   startD: string;
 };
 
+export type HomeHeadline = {
+  currency: "AUD";
+  /** Combined result since the strategies started, as a share of what they started with (not a sum of amounts). */
+  sinceStartPpm: number | null;
+  /** The same ratio for the last session only. */
+  dayChangePpm: number | null;
+  /** Share since the start per session, oldest first (for the sparkline). */
+  series: number[];
+};
+
 export type HomeView = {
+  /** UXR-020 status strip: value and change per currency, freshness, next run, data-only mode. */
+  headline: HomeHeadline[];
+  /** Data finished at (ISO), shown as Melbourne time; null before the first run. */
+  dataAtLabel: string | null;
+  nextRun: string;
+  /** True while a market runs in data-only mode (BLD-024): the one line in the strip on Home. */
+  dataOnly: boolean;
+  since: HomeSinceRow[];
+  needs: HomeNeed[];
+  picksTotal: number;
   /**
    * D-192: one tile per live strategy (its own pretend money, never added up across strategies,
    * Owner 2026-10-26), unlevered strategies only (D-191).
@@ -102,6 +180,8 @@ export type HomeView = {
     openFlags: number;
   };
   picks: { d: string | null; items: HomePick[] };
+  /** UXN-301: the Intraday watch section (shadow, unrated); null when it could not be read. */
+  intraday: IntradayModel | null;
   ideas: { d: string | null; items: HomeIdea[]; signals: number };
   watchlist: HomeWatch[];
   news: {
@@ -115,9 +195,17 @@ export type HomeView = {
 
 function emptyView(): HomeView {
   return {
+    headline: [],
+    dataAtLabel: null,
+    nextRun: "",
+    dataOnly: false,
+    since: [],
+    needs: [],
+    picksTotal: 0,
     summary: { strategies: 0, d: null, tiles: [] },
     day: { regime: null, regimeD: null, quality: [], openFlags: 0 },
     picks: { d: null, items: [] },
+    intraday: null,
     ideas: { d: null, items: [], signals: 0 },
     watchlist: [],
     news: { hidden: false, items: [] },
@@ -260,6 +348,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
       aimReachPpm: numOrNull(r.aim_reach_ppm),
       timeFrameSessions: numOrNull(r.time_frame_sessions),
       validUntil: scope ? scope.day(str(r.valid_until_d)) : str(r.valid_until_d),
+      whyHref: `/picks/${encodeURIComponent(masked ? pickRef(`${pickD}.${str(r.profile)}.${num(r.rank)}`) : `${pickD}.${str(r.profile)}.${num(r.rank)}`)}`,
     })),
   };
 
@@ -326,6 +415,227 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
   if (deps.user?.role === "owner") {
     view.attentionCount = (await soft(() => loadAttentionItems(deps.mainDb), [])).length;
   }
+
+  // ---- UXR-020 status strip: freshness, next run, data-only mode, value and change ----------------
+  view.nextRun = nextRunLabel(v.now);
+  view.dataAtLabel = dataD
+    ? melbourneStamp(
+        await soft(
+          async () =>
+            strOrNull(
+              (
+                await deps.mainDb.execute({
+                  sql: "SELECT at FROM completion_marker WHERE market = ? AND d = ? AND kind = 'data'",
+                  args: [v.market, dataD],
+                })
+              ).rows[0]?.at,
+            ),
+          null,
+        ),
+      )
+    : null;
+  view.dataOnly = await soft(async () => {
+    const r = await deps.mainDb.execute(
+      "SELECT SUM(mode = 'data_only') AS d, SUM(mode = 'full') AS f FROM market",
+    );
+    return num(r.rows[0]?.d ?? 0) > 0 && num(r.rows[0]?.f ?? 0) === 0;
+  }, false);
+  if (tiles.length > 0) {
+    // One ratio over all live strategies (result against what they started with); amounts are never added.
+    const hist = await soft(
+      async () =>
+        (
+          await deps.mainDb.execute({
+            sql: `SELECT n.d AS d, SUM(n.liq_nav_micro) AS v, SUM(c.seed_micro) AS s
+                  FROM nav_daily n JOIN cohort c ON c.id = n.cohort_id JOIN execution e ON e.id = c.execution_id
+                  WHERE e.kind = 'E' AND e.variant = 'U' AND c.terminal_kind IS NULL AND c.control_idx IS NULL
+                    AND n.d IN (SELECT DISTINCT d FROM nav_daily ORDER BY d DESC LIMIT ?)
+                  GROUP BY n.d ORDER BY n.d`,
+            args: [SPARK_DAYS],
+          })
+        ).rows,
+      [] as Row[],
+    );
+    const series = hist.flatMap((r) => {
+      const p = ratioPpm(num(r.v) - num(r.s), num(r.s));
+      return p === null ? [] : [p];
+    });
+    const last = hist[hist.length - 1];
+    const prev = hist[hist.length - 2];
+    view.headline = [
+      {
+        currency: "AUD",
+        sinceStartPpm: series.length > 0 ? series[series.length - 1]! : null,
+        dayChangePpm:
+          last && prev && num(last.s) === num(prev.s)
+            ? ratioPpm(num(last.v) - num(prev.v), num(prev.v))
+            : null,
+        series,
+      },
+    ];
+  }
+
+  // ---- UXR-020 Since yesterday: counts and one link each; no code, name or price ----------------
+  const count = (sql: string, args: Array<string | number>) =>
+    soft(async () => num((await deps.mainDb.execute({ sql, args })).rows[0]?.n), 0);
+  view.picksTotal = pickD
+    ? await count("SELECT COUNT(*) AS n FROM pick WHERE market = ? AND d = ?", [v.market, pickD])
+    : 0;
+  const since: HomeSinceRow[] = [];
+  if (view.picksTotal > 0) {
+    since.push({
+      key: "picks",
+      text: `${view.picksTotal} new ${plural(view.picksTotal, "pick")} for the next session`,
+      href: "/picks",
+    });
+  }
+  if (view.ideas.signals > 0) {
+    since.push({
+      key: "ideas",
+      text: `${view.ideas.signals} trade ${plural(view.ideas.signals, "idea")} tonight`,
+      href: "/strategies/ideas",
+    });
+  }
+  const fills = navD
+    ? await count(
+        `SELECT COUNT(*) AS n FROM fill f JOIN cohort c ON c.id = f.cohort_id JOIN execution e ON e.id = c.execution_id
+         WHERE e.kind = 'E' AND e.variant = 'U' AND f.d = ?`,
+        [navD],
+      )
+    : 0;
+  if (fills > 0) {
+    since.push({
+      key: "fills",
+      text: `${fills} practice ${plural(fills, "trade")} filled on ${formatDate(navD)}`,
+      href: "/strategies",
+    });
+  }
+  const alertsDay = await count(
+    "SELECT COUNT(*) AS n FROM alert WHERE market = ? AND detected_at >= ?",
+    [v.market, new Date(v.now.getTime() - DAY_MS).toISOString()],
+  );
+  if (alertsDay > 0) {
+    since.push({
+      key: "alerts",
+      text: `${alertsDay} new ${plural(alertsDay, "alert")} in the last day`,
+      href: "/news?chip=alerts",
+    });
+  }
+  // M17 (UXN-305): alert hits and intraday candidates, from the same env a Picks page would use.
+  const alertEnv: LoaderEnv = {
+    main: deps.mainDb,
+    auth: deps.authDb as LoaderEnv["auth"], // loaders only call execute()
+    user: {
+      id: typeof deps.user?.id === "number" ? deps.user.id : 0,
+      role: deps.user?.role ?? null,
+    },
+    mask: { masked },
+    now: v.now,
+    market: v.market,
+  };
+  const alertFacts = await loadAlertHomeFacts(
+    alertEnv,
+    new Date(v.now.getTime() - 2 * DAY_MS).toISOString(),
+  );
+  view.intraday = await soft(() => loadIntraday(alertEnv), null);
+  if (alertFacts.hits > 0) {
+    since.push({
+      key: "pickhits",
+      text: `${alertFacts.hits} buy-price ${plural(alertFacts.hits, "alert")} reached the limit`,
+      href: "/alerts",
+    });
+  }
+  if (alertFacts.candidates > 0) {
+    since.push({
+      key: "candidates",
+      text: `${alertFacts.candidates} intraday ${plural(alertFacts.candidates, "candidate")} found, unrated`,
+      href: "/picks#intraday-h",
+    });
+  }
+  const moved = await count(
+    `SELECT COUNT(DISTINCT t.subject_id || '/' || t.breaker_id) AS n FROM thesis_breaker_eval t
+     WHERE t.market = ? AND t.d = (SELECT MAX(d) FROM thesis_breaker_eval WHERE market = ?)
+       AND t.status <> COALESCE((SELECT p.status FROM thesis_breaker_eval p
+         WHERE p.subject_id = t.subject_id AND p.breaker_id = t.breaker_id AND p.d < t.d
+         ORDER BY p.d DESC, p.seq DESC LIMIT 1), 'green')`,
+    [v.market, v.market],
+  );
+  if (moved > 0) {
+    since.push({
+      key: "breakers",
+      text: `${moved} warning ${plural(moved, "sign")} changed colour`,
+      href: "/strategies",
+    });
+  }
+  const attention = view.attentionCount ?? 0;
+  const allPass = view.day.quality.length > 0 && view.day.quality.every((q) => q.gatePass);
+  since.push({
+    key: "system",
+    text:
+      attention > 0
+        ? `${attention} ${plural(attention, "thing")} in system health need a look`
+        : view.day.quality.length === 0
+          ? "Price checks have not run yet"
+          : allPass
+            ? "Today's prices passed their checks"
+            : "Some of today's prices are still being checked",
+    href: "/health",
+  });
+  // threshold-ok: UXR-020 shows 3 to 5 rows; the system row always stays.
+  view.since = [
+    ...since.filter((r) => r.key !== "system").slice(0, 4),
+    ...since.filter((r) => r.key === "system"),
+  ];
+
+  // ---- UXR-020 Needs you: open urgent and important alerts, then a health item for the Owner ----
+  const needs: HomeNeed[] = [];
+  if (typeof userId === "number") {
+    const open = await soft(async () => {
+      const inbox = await listInbox(
+        { mainDb: deps.mainDb, authDb: deps.authDb },
+        userId,
+        {},
+        v.now,
+      );
+      const rows = masked ? await maskAlertViews(deps.mainDb, inbox.alerts) : inbox.alerts;
+      const nowIso = v.now.toISOString();
+      return rows.filter(
+        (a) =>
+          a.ackedAt === null &&
+          (a.snoozedUntil === null || a.snoozedUntil <= nowIso) &&
+          (a.tier === "P0" || a.tier === "P1"),
+      );
+    }, []);
+    open.sort((x, y) => (x.tier === y.tier ? 0 : x.tier === "P0" ? -1 : 1));
+    for (const a of open.slice(0, MAX_NEEDS)) {
+      needs.push({
+        key: `alert-${needs.length}`,
+        tier: a.tier,
+        text: a.text,
+        href: "/news?chip=alerts",
+        action: "Open alert",
+      });
+    }
+  }
+  if (alertFacts.suppressed > 0 && needs.length < MAX_NEEDS) {
+    needs.push({
+      key: "candidates-held",
+      tier: "P2",
+      text: `${alertFacts.suppressed} intraday ${plural(alertFacts.suppressed, "candidate")} found; the e-mail was held back by the daily limit`,
+      href: "/picks#intraday-h",
+      action: "Open Intraday watch",
+    });
+  }
+  if (attention > 0 && needs.length < MAX_NEEDS) {
+    needs.push({
+      key: "health",
+      tier: "P1",
+      text: `${attention} ${plural(attention, "thing")} in system health need a look`,
+      href: "/health",
+      action: "Open System Health",
+    });
+  }
+  view.needs = needs;
 
   return loaded(
     maxDate(dataD, navD, ideas.data.d, pickD),

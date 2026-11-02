@@ -272,7 +272,7 @@ describe("intraday event breakers (Sentinel)", () => {
             time,
             type: "Trading Halt",
             price_sensitive: true,
-            title: "Trading Halt",
+            title: `Trading Halt ${id}`,
             url: "https://example.test/x.pdf",
           },
         ],
