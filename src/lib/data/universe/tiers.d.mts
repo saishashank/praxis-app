@@ -1,7 +1,12 @@
 export const MICRO: bigint;
 export const TIER_RULES: {
   readonly windowSessions: number;
-  readonly u1: { readonly advMicro: bigint; readonly priceMicro: bigint; readonly top: number };
+  readonly u1: {
+    readonly advMicro: bigint;
+    readonly priceMicro: bigint;
+    readonly top: number;
+    readonly minSessions: number;
+  };
   readonly u2: {
     readonly advMicro: bigint;
     readonly priceMicro: bigint;

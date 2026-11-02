@@ -10,13 +10,16 @@
 // ADV here is the 60-session median traded value (close x volume) of the bars up to the night.
 // Not applied yet (recorded in D-189): the market-cap test of U2 is skipped while no market cap is
 // known (mcap null), and "plus listed ETFs" is not added (the universe holds companies).
+// D-253: U1 needs stored bars on at least 54 of the 60 sessions (90 %), not on all 60. ARN-010 asks
+// for the 60-session median, not a bar every session; a vendor miss on a few days (a partial night,
+// a trading halt) kept every large company out of U1. A recent listing (fewer bars) still stays out.
 // A code below the U3 floor gets no tier: it is stored with status `below_floor` and no family sees it.
 
 export const MICRO = 1_000_000n;
 /** spec 05 ARN-010 table, micro-AUD. */
 export const TIER_RULES = Object.freeze({
   windowSessions: 60,
-  u1: { advMicro: 1_000_000n * MICRO, priceMicro: 500_000n, top: 300 },
+  u1: { advMicro: 1_000_000n * MICRO, priceMicro: 500_000n, top: 300, minSessions: 54 },
   u2: {
     advMicro: 250_000n * MICRO,
     priceMicro: 200_000n,
@@ -66,7 +69,7 @@ export function assignTiers(rows, d) {
     .filter(
       (r) =>
         r.adv !== null &&
-        r.tradedMicro.length >= R.windowSessions &&
+        r.tradedMicro.length >= R.u1.minSessions &&
         r.adv >= R.u1.advMicro &&
         r.priceMicro >= R.u1.priceMicro,
     )
