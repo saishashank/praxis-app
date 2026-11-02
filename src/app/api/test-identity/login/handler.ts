@@ -86,6 +86,14 @@ export function createTestLoginHandler(deps: TestLoginDeps) {
         targetType: "user",
         targetId: String(uid),
       });
+      // An invited test identity becomes active here, as a first Google sign-in would
+      // (allowlist.ts): the session check accepts active users only (session.ts).
+      if (status === "invited") {
+        await db.execute({
+          sql: "UPDATE app_user SET status = 'active', updated_at = ? WHERE id = ? AND status = 'invited'",
+          args: [new Date(nowSec * 1000).toISOString(), uid],
+        });
+      }
 
       const https = isHttps(req);
       const name = https ? COOKIE_SECURE : COOKIE_PLAIN;

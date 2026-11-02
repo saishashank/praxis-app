@@ -213,11 +213,24 @@ describe("login handler", () => {
     expect(res.headers.get("set-cookie")!.startsWith("__Secure-authjs.session-token=")).toBe(true);
   });
 
-  it("an invited user gets a cookie, but resolveUser refuses it until activation", async () => {
+  it("an invited test identity is activated by its first login, as a first Google sign-in is (D-850)", async () => {
+    // Before D-850 an invited test user got a cookie the session check refused, and nothing ever
+    // seeded an active one, so the staging nightly and E2E day failed at every login.
     const uid = await addUser(db, { email: "inv@praxis.test", status: "invited" });
+    expect(await resolveUser(db, { uid, sv: 1, si: NOW, rec: false }, ENV)).toBeNull();
     const res = await make()(signed(login("inv@praxis.test")));
     expect(res.status).toBe(200);
-    expect(await resolveUser(db, { uid, sv: 1, si: NOW, rec: false }, ENV)).toBeNull();
+    expect(await resolveUser(db, { uid, sv: 1, si: NOW, rec: false }, ENV)).not.toBeNull();
+    const row = await db.execute({ sql: "SELECT status FROM app_user WHERE id = ?", args: [uid] });
+    expect(row.rows[0]?.status).toBe("active");
+  });
+
+  it("a revoked test identity stays refused and is never re-activated", async () => {
+    const uid = await addUser(db, { email: "rev@praxis.test", status: "revoked" });
+    const res = await make()(signed(login("rev@praxis.test")));
+    expect(res.status).toBe(401);
+    const row = await db.execute({ sql: "SELECT status FROM app_user WHERE id = ?", args: [uid] });
+    expect(row.rows[0]?.status).toBe("revoked");
   });
 
   it("writes audit auth.test_identity_signin with the user as actor and a valid chain", async () => {
