@@ -265,6 +265,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-833 | (R4-I3) A capped arena catch-up (D-821, --max-sessions) writes one run record for the target: job arena-close, key arena-2a:AU:<target>, status skipped, reas... |
 | D-834 | (R4-I3) The capped record never closes a night. |
 | D-835 | (R4-I3) System Health shows it: a JobSummary has an optional attention line, set by cappedCatchUp in src/lib/health/summary.ts when the latest arena-close re... |
+| D-850 | The staging test login activates an invited .test user on its first successful login, the same way a first Google sign-in activates an invited user (allowlis... |
 
 ## M14 (M14_design.md)
 
