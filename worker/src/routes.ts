@@ -215,7 +215,7 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const errName = (e: unknown) => (e instanceof Error && e.name ? e.name.slice(0, 40) : "Error");
 const placeholders = (n: number) => Array.from({ length: n }, () => "?").join(", ");
 
-function flushDue(raw: string | undefined, nowMs: number): boolean {
+export function flushDue(raw: string | undefined, nowMs: number): boolean {
   if (raw === undefined) return false;
   try {
     const v: unknown = JSON.parse(raw);

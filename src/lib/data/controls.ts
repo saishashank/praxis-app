@@ -157,6 +157,9 @@ export type ControlError =
   | "item_not_found"
   | "snooze_red"
   | "snooze_deadline"
+  | "unknown_job"
+  | "rate_limited"
+  | "already_pending"
   | "unavailable";
 export type ControlResult = { ok: true; changed: boolean } | { ok: false; error: ControlError };
 

@@ -265,6 +265,16 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-833 | (R4-I3) A capped arena catch-up (D-821, --max-sessions) writes one run record for the target: job arena-close, key arena-2a:AU:<target>, status skipped, reas... |
 | D-834 | (R4-I3) The capped record never closes a night. |
 | D-835 | (R4-I3) System Health shows it: a JobSummary has an optional attention line, set by cappedCatchUp in src/lib/health/summary.ts when the latest arena-close re... |
+| D-840 | One job registry, src/lib/jobs/registry.mjs (plain ESM with a .d.mts twin, so the app, the Worker and the tests import the same file). |
+| D-841 | Adding a job is one registry entry plus its normal slot. tests/jobs/registry.test.ts fails when a slot id or a dispatchable workflow has no entry, when kind,... |
+| D-842 | One generic request table, run_now_request(id, job_id, market, params_json, requested_by_hmac, requested_at, audit_ref, status, result, updated_at). |
+| D-843 | requestRunNow (src/lib/jobs/runNow.ts) follows the D-066 controls runner: |
+| D-844 | The Worker runner (worker/src/runNow.ts) runs in the per-minute tick as its own concurrent chain. |
+| D-845 | Gates a manual run keeps (the safer choice): the dispatch kill switch, the Owner list for go-live jobs (no list, not listed or an unreadable list is refused:... |
+| D-846 | Requests nobody started within 30 minutes become expired and are never run late; a dispatched request with no result after 30 minutes also becomes expired. |
+| D-847 | A manual run goes through the same function as the schedule (dispatchWorkflow with the fixed ref for the environment, or postSigned with the HMAC body), so t... |
+| D-848 | Date picker: GitHub workflows in this build take no date input (they use the Sydney date themselves), so a date is offered only for route jobs that accept one: |
+| D-849 | The Ops page lists every runnable job: label, schedule (Melbourne), the last scheduled start from worker_state (slot:<id>:<date>), the newest manual request... |
 
 ## M14 (M14_design.md)
 

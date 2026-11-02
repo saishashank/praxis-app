@@ -1,0 +1,8 @@
+{
+  "$comment": "Run now (D-840..D-849): the Owner action that asks for a scheduled job to run at once. A test file must mention the action name.",
+  "routes": {
+    "action src/app/(app)/ops/actions.ts#requestRunNowAction": {
+      "tests": ["tests/jobs/runNowAction.test.ts"]
+    }
+  }
+}

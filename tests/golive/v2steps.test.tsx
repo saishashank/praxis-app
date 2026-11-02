@@ -68,7 +68,7 @@ describe("V2 go-live documents track the code (R3-S1, R3-S2)", () => {
   it("the rollback runbook names the newest migration version and the tables it deletes", () => {
     const runbook = readFileSync("docs/runbooks/rollback-v2.md", "utf8");
     const top = newest();
-    expect(top).toBe("0025");
+    expect(top).toBe("0026");
     expect(runbook).toContain(`0015 to ${top}`);
     expect(runbook).toContain(`stays at ${top}`);
     expect(runbook).toContain(`sections of ${top} to 0015`);

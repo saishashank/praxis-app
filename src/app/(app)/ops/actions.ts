@@ -9,8 +9,9 @@ import { headers } from "next/headers";
 import { requestMeta } from "@/lib/auth/audit";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
+import { requestRunNow } from "@/lib/jobs/runNow";
 import { tickOpsTask } from "@/lib/ops/service";
-import type { TickResult } from "./messages";
+import type { RunNowResult, TickResult } from "./messages";
 
 const PATH = "/ops";
 
@@ -35,6 +36,35 @@ export async function tickOpsTaskAction(fd: FormData): Promise<TickResult> {
     const code = result.body.error;
     return { error: typeof code === "string" ? code : "unavailable" };
   }
+  revalidatePath(PATH);
+  return { ok: true };
+}
+
+/**
+ * Ask for a scheduled job to run now (D-840..D-849). Same order of work as above: the role guard FIRST
+ * (a refusal is a 403 and is audit-logged by the guard), then the shared Owner writer
+ * (src/lib/jobs/runNow.ts: Owner check, registry and parameter checks, confirm, audit event first, ONE
+ * request row). It only writes a request; the Worker decides whether it runs and records why not.
+ */
+export async function requestRunNowAction(fd: FormData): Promise<RunNowResult> {
+  const user = await requireUser("admin", PATH);
+  const d = field(fd, "d");
+  let result;
+  try {
+    result = await requestRunNow({
+      mainDb: mainDb(),
+      authDb: authDb(),
+      env: process.env,
+      meta: requestMeta(await headers()),
+      actorId: user.id,
+      jobId: field(fd, "job"),
+      params: d === undefined || d === "" ? {} : { d },
+      confirmed: field(fd, "confirm") === "true",
+    });
+  } catch {
+    return { error: "unavailable" };
+  }
+  if (!result.ok) return { error: result.error };
   revalidatePath(PATH);
   return { ok: true };
 }
