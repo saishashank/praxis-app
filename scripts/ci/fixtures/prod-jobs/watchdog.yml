@@ -1,5 +1,6 @@
   production:
-    if: github.ref == 'refs/heads/release'
+    needs: gate
+    if: github.ref == 'refs/heads/release' && needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -40,7 +41,7 @@
       - name: Watchdog
         run: node scripts/watchdog/run.mjs
         env:
-          WATCHDOG_SLOT: ${{ inputs.slot }}
+          WATCHDOG_SLOT: ${{ inputs.slot || needs.gate.outputs.slot }}
           WATCHDOG_DELIBERATE_FAILURE: ${{ inputs.deliberate_failure && '1' || '0' }}
           PRAXIS_ENV: production
           EMAIL_PROVIDER: resend

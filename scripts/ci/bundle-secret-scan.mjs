@@ -6,20 +6,22 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const FORBIDDEN_NAMES = [
-  "AUTH_SECRET",
-  "CRON_SECRET",
-  "PII_HASH_KEY",
-  "ACTIONS_HMAC_SECRET",
-  "TEST_IDENTITY_SECRET",
-  "TURSO_",
-  "RESEND_API_KEY",
-  "GOOGLE_AI_API_KEY",
-  "GROQ_API_KEY",
-  "OPENROUTER_API_KEY",
-  "GITHUB_READ_TOKEN",
-  "AUTH_GOOGLE_SECRET",
-];
+import { readSecrets } from "../architecture/readers.mjs";
+
+// V1-I12 / D-786: the list is DERIVED from the secrets registry (src/lib/security/secretStores.ts,
+// the same names allNames() returns) so a new secret is covered the day it is registered. The
+// hand-kept entries below are only what the registry cannot express: the TURSO_ prefix (URLs and
+// tokens of every database) and names that are secrets but are not held in a store row.
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+export const EXTRA_FORBIDDEN = ["TURSO_", "OWNER_RECOVERY_EMAIL"];
+
+export function registryNames(root = REPO_ROOT) {
+  return readSecrets(root).map((s) => s.name);
+}
+
+const ALL = [...new Set([...registryNames(), ...EXTRA_FORBIDDEN])];
+// A name that contains another listed name adds nothing (substring scan) and would double-report.
+export const FORBIDDEN_NAMES = ALL.filter((n) => !ALL.some((m) => m !== n && n.includes(m)));
 
 function walk(dir, out = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

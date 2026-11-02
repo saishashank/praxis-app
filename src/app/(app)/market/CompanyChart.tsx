@@ -8,6 +8,7 @@
 // Lightweight Charts is Apache-2.0: the on-chart attribution logo and the link below satisfy its NOTICE.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChartTable } from "@/components/charts/ChartTable";
+import { CheckIcon } from "@/components/ui/icons";
 import { formatCount, formatMicro } from "@/lib/view/format";
 
 // Same shapes as the company loader's CandleBar and ChartMarker (a client file may not import the loaders).
@@ -24,14 +25,31 @@ const CHART_HEIGHT = 280; // threshold-ok: design 3 row 9, 280 px on phones
 
 const px = (micro: number): number => micro / MICRO; // money-float-ok: chart axis value, display only
 
-function tokens() {
+const VOLUME_ALPHA = 0.4; // threshold-ok: UXR-022 volume bars at 40 % of the sector hue
+
+/** "#rrggbb" or "#rgb" to rgba(...) at the given alpha; any other colour string is returned unchanged. */
+export function withAlpha(color: string, alpha: number): string {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
+  if (!m) return color;
+  const h = m[1]!.length === 3 ? [...m[1]!].map((x) => x + x).join("") : m[1]!;
+  const v = (i: number) => parseInt(h.slice(i, i + 2), 16);
+  return `rgba(${v(0)}, ${v(2)}, ${v(4)}, ${alpha})`;
+}
+
+/** Colours from the V2 tokens (D-208): candles in the outcome pair, volume in the sector hue at 40 %. */
+function tokens(hue: string | null) {
   const cs = getComputedStyle(document.documentElement);
   const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
+  const up = v("--color-positive-fill", v("--color-positive", "#0b7a6c"));
+  const down = v("--color-negative-fill", v("--color-negative", "#b0440c"));
+  const volBase = hue
+    ? v(`--color-${hue}-fill`, v("--color-chart-2", "#7a4fc4"))
+    : v("--color-chart-2", "#7a4fc4");
   return {
-    up: v("--color-positive", "#0b7a6c"),
-    down: v("--color-negative", "#b0440c"),
+    up,
+    down,
     line: v("--color-chart-1", "#1b6aa5"),
-    vol: v("--color-chart-2", "#7a4fc4"),
+    vol: withAlpha(volBase, VOLUME_ALPHA),
     ma50: v("--color-chart-3", "#9a6a00"),
     ma200: v("--color-chart-4", "#2a7f52"),
     grid: v("--color-grid", "#788296"),
@@ -55,10 +73,13 @@ export function CompanyChart({
   bars,
   markers,
   label,
+  hue = null,
 }: {
   bars: CandleBar[];
   markers: ChartMarker[];
   label: string;
+  /** The company's sector hue token stem, e.g. "sector-tech"; volume bars use it at 40 %. */
+  hue?: string | null;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [range, setRange] = useState<Range>("6M");
@@ -89,7 +110,7 @@ export function CompanyChart({
     let cleanup = () => {};
     void import("lightweight-charts").then((lc) => {
       if (disposed || !host.current) return;
-      const t = tokens();
+      const t = tokens(hue);
       const chart = lc.createChart(el, {
         autoSize: true,
         height: CHART_HEIGHT,
@@ -181,7 +202,7 @@ export function CompanyChart({
       disposed = true;
       cleanup();
     };
-  }, [shown, bars, markers, line, ma, asTable]);
+  }, [shown, bars, markers, line, ma, asTable, hue]);
 
   function onKey(e: React.KeyboardEvent) {
     const i = Math.min(Math.max(cursor, 0), Math.max(0, shown.length - 1));
@@ -208,8 +229,13 @@ export function CompanyChart({
                 setRange(r);
                 setCursor(Number.MAX_SAFE_INTEGER);
               }}
-              className={chip + (r === range ? " bg-accent text-accent-contrast" : " bg-surface")}
+              className={
+                chip +
+                " inline-flex items-center gap-1" +
+                (r === range ? " bg-accent text-accent-contrast font-semibold" : " bg-surface")
+              }
             >
+              {r === range ? <CheckIcon aria-hidden="true" /> : null}
               {r}
             </button>
           ))}
@@ -245,7 +271,7 @@ export function CompanyChart({
           style={{ minHeight: CHART_HEIGHT }}
         />
       )}
-      <p aria-live="polite" className="m-0 mt-1 break-words font-mono text-sm">
+      <p aria-live="polite" className="m-0 mt-1 break-words font-sans text-sm tabular-nums">
         {at
           ? `${at.time}  open ${formatMicro(at.o)}  high ${formatMicro(at.h)}  low ${formatMicro(at.l)}  close ${formatMicro(at.c)}  volume ${formatCount(at.volume)}`
           : "No price data"}

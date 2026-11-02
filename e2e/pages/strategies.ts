@@ -20,4 +20,10 @@ export const STRATEGIES_PAGES: PageEntry[] = [
     action: "read",
     needsData: true,
   },
+  {
+    file: "src/app/(app)/cortex/page.tsx",
+    path: "/cortex",
+    action: "read",
+    h1: "Cortex",
+  },
 ];

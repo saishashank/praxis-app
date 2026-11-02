@@ -8,6 +8,12 @@ export class StageError extends Error {
   constructor(stage: string, detail?: string);
 }
 
+export function buildAdjClose(
+  rows: { code: string; date: string; adj_close?: number | null }[],
+  prev: string,
+  d: string,
+): Record<string, { prevAdj: number; exAdj: number }>;
+
 export type Io = { read: number; written: number };
 
 export type QualityHookContext = {
@@ -36,6 +42,8 @@ export type CorporateActionsHook = (ctx: {
   io: Io;
   now: string;
   candidates: object[];
+  /** GL-01: per code previous and current Yahoo adj_close (both present only). */
+  adjClose?: Record<string, { prevAdj: number; exAdj: number }>;
   relevant?: (code: string) => boolean;
 }) => Promise<object | void>;
 export const noopCorporateActionsHook: CorporateActionsHook;
@@ -59,7 +67,7 @@ export type Assessment =
       target: string;
       market: string;
       io: Io;
-      plan: { dates: PlannedDate[]; remaining: number };
+      plan: { dates: PlannedDate[]; remaining: number; calendarMissing?: boolean };
       calRows: (CalendarLike & { confirmed: number })[];
       codes: string[];
       excluded?: number;
@@ -96,6 +104,8 @@ export type RunOptions = {
   barsText?: string | null;
   /** index.json contents (M4 T3); null/absent = no file. */
   indexText?: string | null;
+  /** actions.json contents (DAT-231 vendor splits and dividends); null/absent = no file. */
+  actionsText?: string | null;
   /** short.json contents (M4 T3); null/absent = no file. */
   shortText?: string | null;
   inputsHook?: import("../index/inputsStage.mjs").InputsHook;

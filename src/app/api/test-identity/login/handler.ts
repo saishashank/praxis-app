@@ -4,6 +4,7 @@
 import type { Client } from "@libsql/client";
 import { encode } from "next-auth/jwt";
 import { audit, requestMeta } from "@/lib/auth/audit";
+import { SESSION_COOKIE_PLAIN, SESSION_COOKIE_SECURE } from "@/lib/auth/cookies";
 import { isTestEmail, testIdentityEnabled, type TestIdentityEnv } from "@/lib/auth/testIdentity";
 import { getSessionMaxAgeSec } from "@/lib/http/limits";
 import { verifySignedRequest } from "@/lib/security/hmac";
@@ -18,8 +19,8 @@ export type TestLoginDeps = {
 
 export const MAX_BODY_BYTES = 1024;
 // Same names Auth.js derives: __Secure- prefix on https (see src/proxy.ts).
-export const COOKIE_SECURE = "__Secure-authjs.session-token";
-export const COOKIE_PLAIN = "authjs.session-token";
+export const COOKIE_SECURE = SESSION_COOKIE_SECURE;
+export const COOKIE_PLAIN = SESSION_COOKIE_PLAIN;
 
 const NO_STORE = { "Cache-Control": "no-store" };
 const unauthorized = () =>
@@ -85,6 +86,14 @@ export function createTestLoginHandler(deps: TestLoginDeps) {
         targetType: "user",
         targetId: String(uid),
       });
+      // An invited test identity becomes active here, as a first Google sign-in would
+      // (allowlist.ts): the session check accepts active users only (session.ts).
+      if (status === "invited") {
+        await db.execute({
+          sql: "UPDATE app_user SET status = 'active', updated_at = ? WHERE id = ? AND status = 'invited'",
+          args: [new Date(nowSec * 1000).toISOString(), uid],
+        });
+      }
 
       const https = isHttps(req);
       const name = https ? COOKIE_SECURE : COOKIE_PLAIN;

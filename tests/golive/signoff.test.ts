@@ -261,8 +261,10 @@ describe("signOffGoLiveAction (guard first)", () => {
 });
 
 describe("the full-mode interlock (decision 33)", () => {
-  const full = (env: Record<string, string | undefined>) =>
-    setMarketMode({ ...base({ env }), market: "AU", mode: "full" } as never);
+  // D-710: the [VERIFY] money constants are unverified in the shipped code, so a passing case injects
+  // "all approved" ([]); the real default is covered in the last tests of this block.
+  const full = (env: Record<string, string | undefined>, unverifiedConstants: string[] = []) =>
+    setMarketMode({ ...base({ env }), market: "AU", mode: "full", unverifiedConstants } as never);
   const markSigned = () => signOffGoLive(good() as never);
 
   it("production: refused without a sign-off, then with email off; nothing changes, no audit", async () => {
@@ -326,7 +328,30 @@ describe("the full-mode interlock (decision 33)", () => {
     await markSigned();
     expect(await fullModeRefusal(main, PROD, "AU", "2026-10-21")).toBe("email_off");
     await setEmail("incidents");
-    expect(await fullModeRefusal(main, PROD, "AU", "2026-10-21")).toBeNull();
+    expect(await fullModeRefusal(main, PROD, "AU", "2026-10-21", [])).toBeNull();
+    expect(await fullModeRefusal(main, PROD, "AU", "2026-10-21", ["tick_table"])).toBe(
+      "constants_unverified",
+    );
+  });
+
+  it("production: unverified money constants block full even with sign-off and email on (D-710)", async () => {
+    await markSigned();
+    expect(await setEmail("incidents")).toEqual({ ok: true, changed: true });
+    const before = await actions();
+    expect(await full(PROD, ["slippage_buckets"])).toEqual({
+      ok: false,
+      error: "constants_unverified",
+    });
+    expect(await marketMode()).toBe("data_only");
+    expect(await actions()).toEqual(before);
+  });
+
+  it("the shipped code is still unverified, so the real gate refuses full in production", async () => {
+    await markSigned();
+    await setEmail("incidents");
+    // no override: the real flags (costs, tick table, slippage, parcel) are all false today
+    expect(await fullModeRefusal(main, PROD, "AU", "2026-10-21")).toBe("constants_unverified");
+    expect(await fullModeRefusal(main, STAGING, "AU", "2026-10-21")).toBeNull(); // staging is free
   });
 
   it("the Owner action refuses an Editor and bad input without auditing", async () => {

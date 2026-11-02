@@ -62,6 +62,7 @@
 import { dbConfigured, pipeline, type Arg, type DbEnv, type Stmt, type StmtResult } from "./db";
 import { dispatchWorkflow, refFor, type DispatchEnv } from "./dispatch";
 import { isWeekend, MINUTE_MS, sydneyLocal, type Local } from "./localtime";
+import { isTradingDayKind } from "../../src/lib/data/calendarCore.mjs";
 import { AU_SLOTS, type Slot } from "./schedule";
 
 export const CLOCK_JOB = "worker-clock";
@@ -101,6 +102,11 @@ export type Facts = {
   slotsEnabled?: SlotList;
   /** Parsed workflow inputs by `worker_state` key; null = present but invalid (default: none). */
   slotInputs?: Readonly<Record<string, Record<string, string> | null>>;
+  /**
+   * V1-B1: run-record keys (`Slot.recheck`) that are closed or running. Absent = unknown, so a
+   * dispatched slot is never dispatched again (fail safe).
+   */
+  closedKeys?: ReadonlySet<string>;
 };
 
 /** The runtime list `worker_state.slots_enabled`: absent, a valid list, or unreadable (fail safe). */
@@ -116,6 +122,22 @@ export type SkipReason =
 export type Skipped = { id: string; reason: SkipReason };
 
 export const slotKey = (id: string, date: string): string => `slot:${id}:${date}`;
+export const RECHECK_RUNNING_MAX_MS = 45 * MINUTE_MS; // a `running` record older than this is a lost runner
+/**
+ * "The record closed its session" (D-675): the same predicate as `CLOSED_2A_SQL` in
+ * `src/lib/arena/closeBooks.ts`. An invariant freeze (`failed` with `navDays`) completed the night
+ * and is not dispatched again; a `failed` without it (crash, provider error) is retried. R2-I3: so is a
+ * refusal `previous_session_not_closed` (one run per night, the S2 `arena_close_gap` is the alarm).
+ */
+export const RECHECK_CLOSED_SQL =
+  "(status IN ('success', 'degraded') " +
+  "OR (status = 'failed' AND json_extract(details_json, '$.navDays') IS NOT NULL) " +
+  "OR (status = 'skipped' AND json_extract(details_json, '$.reason') IS NOT 'no_completion_marker' " +
+  // R4-I3 (D-833): a capped catch-up leaves a `skipped` record that does NOT close the night
+  "AND json_extract(details_json, '$.reason') IS NOT 'catch_up_capped') " +
+  // R2-I3 (D-808): a night REFUSED because the previous session is not closed is closed FOR THE RECHECK
+  // only (the guard in closeBooks.ts does not count it): a second run the same day refuses the same way.
+  "OR (status = 'failed' AND json_extract(details_json, '$.reason') = 'previous_session_not_closed'))";
 const rollupKey = (date: string): string => `${CLOCK_JOB}:${MARKET}:${date}`;
 
 // ---- pure decision ---------------------------------------------------------------------------
@@ -132,7 +154,7 @@ export function candidateSlots(local: Local, slots: readonly Slot[] = AU_SLOTS):
         (!s.tradingDaysOnly || !isWeekend(local)) &&
         (s.monthly !== "first-saturday" || isFirstSaturday(local)) &&
         local.minute >= s.minute &&
-        local.minute <= Math.min(s.minute + s.catchUpMin, 1439),
+        local.minute <= Math.min(s.minute + (s.recheck?.untilMin ?? s.catchUpMin), 1439),
     )
     .sort((a, b) => a.priority - b.priority);
 }
@@ -271,11 +293,27 @@ export function decideWithSkips(
     const key = slotKey(slot.id, local.date);
     const stored = states.get(key);
     if (stored === undefined) {
+      // the window of a `recheck` slot is longer than its catch-up: a first dispatch stays within catch-up
+      if (local.minute > slot.minute + slot.catchUpMin) continue;
       out.push({ slot, key, attempt: 1, prev: null, inputs });
       continue;
     }
     const st = stored.state;
-    if (st === null || st.s === "dispatched") continue; // unreadable state: never dispatch over it
+    if (st === null) continue; // unreadable state: never dispatch over it
+    if (st.s === "dispatched") {
+      // 204 means accepted, not ran (V1-B1): dispatch again when the night's record is missing
+      const rc = slot.recheck;
+      if (
+        rc !== undefined &&
+        facts.closedKeys !== undefined &&
+        st.n < MAX_ATTEMPTS &&
+        nowMs - Date.parse(st.at) >= rc.afterMin * MINUTE_MS &&
+        !facts.closedKeys.has(`${rc.keyPrefix}${local.date}`)
+      ) {
+        out.push({ slot, key, attempt: st.n + 1, prev: stored.raw, inputs });
+      }
+      continue;
+    }
     const stale = st.s === "claimed" && nowMs - Date.parse(st.at) >= CLAIM_STALE_MS;
     if ((st.s === "failed" || stale) && st.n < MAX_ATTEMPTS) {
       out.push({ slot, key, attempt: st.n + 1, prev: stored.raw, inputs });
@@ -368,6 +406,12 @@ async function recordMalformed(
 
 const placeholders = (n: number) => Array.from({ length: n }, () => "?").join(", ");
 
+/** GL-06: the HTTP status (null when none) and a short fixed reason; never a response body or token. */
+export function dispatchFailure(detail: string): { status: number | null; reason: string } {
+  const m = /^HTTP ([0-9]{3})$/.exec(detail);
+  return { status: m ? Number(m[1]) : null, reason: detail.slice(0, 40) };
+}
+
 /** One clock tick. Never throws. See the header for the request budget. */
 export async function runClock(
   env: ClockEnv,
@@ -392,6 +436,7 @@ export async function runClock(
     let iState = -1;
     let iMode = -1;
     let iCal = -1;
+    let iClosed = -1;
     if (cands.length > 0) {
       iState = first.length;
       first.push({
@@ -409,6 +454,18 @@ export async function runClock(
           args: [MARKET, local.date],
         });
       }
+    }
+    const recheckKeys = [
+      ...new Set(cands.flatMap((s) => (s.recheck ? [`${s.recheck.keyPrefix}${local.date}`] : []))),
+    ];
+    if (recheckKeys.length > 0) {
+      iClosed = first.length;
+      first.push({
+        sql:
+          `SELECT DISTINCT concurrency_key FROM run_record WHERE concurrency_key IN (${placeholders(recheckKeys.length)}) ` +
+          `AND (${RECHECK_CLOSED_SQL} OR (status = 'running' AND started_at > ?))`,
+        args: [...recheckKeys, iso(nowMs - RECHECK_RUNNING_MAX_MS)],
+      });
     }
     let r1: StmtResult[];
     try {
@@ -438,9 +495,11 @@ export async function runClock(
     const facts: Facts = {
       dispatchEnabled: parseEnabled(enabledRaw),
       marketMode: typeof mode === "string" ? mode : null,
-      tradingDay: !isWeekend(local) && calKind !== "holiday",
+      // V1-S3 / D-711: fail safe, a weekday with no calendar row is NOT a trading day.
+      tradingDay: isTradingDayKind(local.date, typeof calKind === "string" ? calKind : null),
       slotsEnabled: parseSlotsEnabled(listRaw),
       slotInputs,
+      closedKeys: iClosed >= 0 ? new Set(r1[iClosed].rows.map((r) => String(r[0]))) : undefined,
     };
     const { actions, skipped } = decideWithSkips(local, facts, states, nowMs, slots);
     summary.skipped = skipped;
@@ -508,7 +567,12 @@ export async function runClock(
           at,
           at,
           `dispatch ${a.slot.id} ${res.detail}`.slice(0, 120),
-          JSON.stringify({ slot: a.slot.id, attempt: a.attempt, ref: refFor(env.PRAXIS_ENV) }),
+          JSON.stringify({
+            slot: a.slot.id,
+            attempt: a.attempt,
+            ref: refFor(env.PRAXIS_ENV),
+            ...dispatchFailure(res.detail),
+          }),
         ];
         record.push({
           sql:

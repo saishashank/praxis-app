@@ -4,14 +4,19 @@
 // Simulated label; a missing figure says "Not measured yet" (never a sparkline of nothing).
 import Link from "next/link";
 import { Sparkline } from "@/components/charts/Sparkline";
-import { GlyphBar } from "@/components/charts/GlyphBar";
+import { FamilyBadge } from "@/components/ui/Family";
+import { BAND_BG, hueStyle } from "@/components/ui/hue";
 import { InfoButton } from "@/components/ui/Overlays";
+import { Pill } from "@/components/ui/Pill";
 import { BreakerStatus, RegimeBadge, ValidationBadge } from "@/components/ui/Badges";
 import { GainLoss, Money, NotMeasured } from "@/components/ui/Values";
 import type { StrategyTile as Tile } from "@/lib/ui/loaders/strategies";
 import type { StrategyName } from "@/lib/ui/loaders/common";
 import type { TileExtra } from "@/lib/ui/loaders/strategyViews";
 import { formatDate } from "@/lib/view/format";
+import { familyBadge } from "../home/familyMap";
+import { NavBar } from "./NavBar";
+import { tileState } from "./state";
 
 const MICRO_PER_CENT = 10_000; // threshold-ok: micro-AUD to cents
 const cents = (micro: number | undefined): number | undefined =>
@@ -30,14 +35,25 @@ export function StrategyTile({
   reasons?: string[];
 }) {
   const hid = `tile-${tile.execution}`;
+  const fam = familyBadge(tile.family);
+  const state = tileState(tile);
   const sparkValues = tile.spark.map((m) => Math.round(m / MICRO_PER_CENT) / 100);
   return (
     <article
       aria-labelledby={hid}
       data-strategy-tile=""
-      className="flex min-w-0 flex-col gap-3 break-words rounded-lg border border-border bg-surface p-4"
+      data-hue={`family-${fam.code}`}
+      style={hueStyle(`family-${fam.code}`)}
+      className="flex min-w-0 flex-col gap-3 overflow-hidden break-words rounded-lg border border-l-4 border-border border-l-[var(--h-fill)] bg-surface pb-4"
     >
-      <header className="min-w-0">
+      <div
+        style={{ background: BAND_BG }}
+        className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-4 py-2"
+      >
+        <FamilyBadge code={fam.code} label={fam.label} />
+        {state ? <Pill kind="state" value={state} /> : <Pill kind="status" value="neutral" />}
+      </div>
+      <header className="min-w-0 px-4">
         <div className="flex items-start justify-between gap-2">
           <h3 id={hid} className="m-0 min-w-0 text-base font-semibold">
             <Link
@@ -77,7 +93,7 @@ export function StrategyTile({
       </header>
 
       {reasons && reasons.length > 0 ? (
-        <ul className="m-0 list-disc space-y-1 pl-5 text-sm">
+        <ul className="m-0 mx-4 list-disc space-y-1 pl-5 text-sm">
           {reasons.map((r) => (
             <li key={r}>{r}</li>
           ))}
@@ -86,18 +102,19 @@ export function StrategyTile({
 
       {tile.hasCohort ? (
         <>
-          <p className="m-0 text-sm text-text-muted">
+          <p className="m-0 px-4 text-sm text-text-muted">
             Round {tile.round} · started {formatDate(tile.startD)} · {tile.sessions}{" "}
             {tile.sessions === 1 ? "session" : "sessions"} held
           </p>
-          <GlyphBar
+          <NavBar
             label={tile.name}
-            valueCents={cents(tile.nav?.micro) ?? null}
-            seedCents={cents(tile.seed?.micro)}
-            bustCents={cents(tile.bust?.micro)}
-            targetCents={cents(tile.target?.micro)}
+            navCents={cents(tile.nav?.micro) ?? null}
+            startCents={cents(tile.seed?.micro)}
+            minCents={cents(tile.bust?.micro)}
+            maxCents={cents(tile.target?.micro)}
+            className="px-4"
           />
-          <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+          <dl className="m-0 mx-4 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
             <dt className="text-text-muted">Value now</dt>
             <dd className="m-0 text-right">
               <Money micro={tile.nav?.micro ?? null} />
@@ -118,23 +135,25 @@ export function StrategyTile({
             ) : null}
           </dl>
           {sparkValues.length >= 2 ? (
-            <Sparkline
-              values={sparkValues}
-              label={`${tile.name} value, last ${sparkValues.length} sessions`}
-            />
+            <div className="px-4">
+              <Sparkline
+                values={sparkValues}
+                label={`${tile.name} value, last ${sparkValues.length} sessions`}
+              />
+            </div>
           ) : (
-            <p className="m-0 text-sm">
+            <p className="m-0 px-4 text-sm">
               Last 30 sessions: <NotMeasured />
             </p>
           )}
         </>
       ) : (
-        <p className="m-0 text-sm">
+        <p className="m-0 px-4 text-sm">
           <NotMeasured>No round has started yet</NotMeasured>
         </p>
       )}
 
-      <div className="flex flex-wrap items-start gap-2">
+      <div className="flex flex-wrap items-start gap-2 px-4">
         <RegimeBadge regime={tile.regime} />
         {tile.label ? (
           <ValidationBadge label={tile.label} />

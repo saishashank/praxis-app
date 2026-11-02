@@ -19,7 +19,9 @@ env:
 jobs:
   app:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The V2 test suite (about 9,100 tests) plus the production build no longer fits in 15 minutes
+    # (D-830); a stuck job is still stopped.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -33,6 +35,8 @@ jobs:
       - run: npm run lint
       - name: Theme contrast (UXN-280, WCAG 2.2 AA / AAA)
         run: node scripts/ci/contrast-check.mjs
+      - name: Theme tokens match the palette (generator drift, UXR-058)
+        run: npm run test:tokens
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:smoke
@@ -149,7 +153,9 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: npm ci
-      # An empty or missing fixtures repo must not fail the job: the tests then skip (see below).
+      # An empty or missing fixtures repo must not fail the job on a normal PR or push: the tests then
+      # skip (see below). GL-09: on a PR into `release` the strict step further down fails the job
+      # instead, and the release gate also requires that step to have succeeded.
       - name: Check out the private fixtures repo
         id: fixtures_checkout
         continue-on-error: true
@@ -165,7 +171,12 @@ jobs:
       - name: Fixture-backed tests (skipped when PRAXIS_FIXTURES_DIR has no content)
         env:
           PRAXIS_FIXTURES_DIR: ${{ github.workspace }}/fixtures
-        run: npx vitest run tests/sources/realFixtures.test.ts --reporter=verbose
+        run: npx vitest run tests/sources/realFixtures.test.ts --reporter=verbose --reporter=json --outputFile.json=fixtures-report.json
+      - name: Release PR fixtures strict check (checked out, none skipped)
+        if: github.event_name == 'pull_request' && github.base_ref == 'release'
+        run: node scripts/ci/fixtures-skip-check.mjs fixtures-report.json
+        env:
+          FIXTURES_CHECKOUT_OUTCOME: ${{ steps.fixtures_checkout.outcome }}
 
   # PLT-072: the Yahoo fetcher is Python; its tests mock yfinance and never touch the network.
   python:
@@ -289,6 +300,8 @@ jobs:
         run: npm run test:env-names
       - name: Configuration reference is current (BLD-040)
         run: npm run test:config-reference
+      - name: Architecture model complete and current (ARC-001, AT-58)
+        run: npm run test:architecture
 
   # M8 T17 (decision 25; TST-112): the release gate, only on a pull request into `release`. The
   # Owner adds `release-gate` as a required status check. It runs even when a job it needs failed

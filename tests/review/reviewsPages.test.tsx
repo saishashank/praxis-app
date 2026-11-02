@@ -31,6 +31,7 @@ import { markReviewReadAction } from "@/app/(app)/reviews/[date]/actions";
 import { assembleReview } from "@/lib/review/assemble";
 import {
   loadReviewCalendar,
+  loadNextReview,
   loadReviewList,
   loadReviewPage,
   parseReviewsQuery,
@@ -262,7 +263,7 @@ describe("/reviews list", () => {
   });
 });
 
-describe("pending state (UX-080: 19:30 to send_by)", () => {
+describe("pending state (UXR-026: 19:45 to 21:00 on a trading day)", () => {
   // 2026-10-20 is AEDT (UTC+11): 08:45Z = 19:45, 09:50Z = 20:50, 03:00Z = 14:00.
   it("window: no review for today yet and the clock is between 19:30 and 20:45", async () => {
     const m = await loadReviewList(envAt("owner", false, new Date("2026-10-20T08:45:00.000Z")), {
@@ -295,6 +296,19 @@ describe("pending state (UX-080: 19:30 to send_by)", () => {
     expect(stored.pending).toBe(false);
     expect(stored.pendingState).toBeNull();
   });
+  it("outside 19:45 to 21:00 Melbourne there is no pending state, and a non-trading day never has one", async () => {
+    const at = (iso: string) => loadReviewList(envAt("owner", false, new Date(iso)), { page: 1 });
+    expect((await at("2026-10-20T08:44:00.000Z")).pendingState).toBeNull(); // 19:44
+    expect((await at("2026-10-20T10:00:00.000Z")).pendingState).toBe("late"); // 21:00
+    expect((await at("2026-10-20T10:01:00.000Z")).pendingState).toBeNull(); // 21:01
+    expect((await at("2026-10-24T08:50:00.000Z")).pendingState).toBeNull(); // Saturday 19:50
+  });
+  it("next review line: tonight on a trading day, the next trading day otherwise", async () => {
+    const next = (iso: string) => loadNextReview(envAt("owner", false, new Date(iso)));
+    expect(await next("2026-10-20T03:00:00.000Z")).toBe("Next review: tonight 20:00");
+    expect(await next("2026-10-20T10:30:00.000Z")).toBe("Next review: tomorrow 20:00"); // 21:30 Tue
+    expect(await next("2026-10-24T08:50:00.000Z")).toBe("Next review: Monday 20:00"); // Saturday
+  });
   it("the page shows the pending notice only while it applies", async () => {
     as("owner");
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -307,9 +321,41 @@ describe("pending state (UX-080: 19:30 to send_by)", () => {
       const html = await list();
       expect(html).not.toContain("being prepared");
       expect(html).not.toContain("is late");
+      expect(html).toContain("Next review: tonight 20:00");
+      vi.setSystemTime(new Date("2026-10-24T08:50:00.000Z"));
+      const sat = await list();
+      expect(sat).not.toContain("being prepared");
+      expect(sat).toContain("Next review: Monday 20:00");
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("reading page and tabs (UXR-026, UXR-052, UXR-002)", () => {
+  it("the list has Reviews and Calendar tabs; the current one shows the check and Selected cues", async () => {
+    as("owner");
+    const html = await list();
+    expect(html).toMatch(/aria-current="page"[^>]*><svg[^>]*>.*?<[/]svg>Reviews/);
+    expect(html).toContain("(Selected)");
+    const cal = await list({ view: "calendar" });
+    expect(cal).toMatch(/aria-current="page"[^>]*><svg[^>]*>.*?<[/]svg>Calendar/);
+  });
+  it("the latest review is offered with a section index whose icons carry the section colours", async () => {
+    as("owner");
+    const html = await list();
+    expect(html).toContain('data-testid="latest-review"');
+    expect(html).toContain('data-testid="review-index"');
+    expect(html).toContain("Headline scorecard");
+    for (const tone of ["home", "strategies", "market", "reviews", "picks", "news"]) {
+      expect(html).toContain(`var(--color-section-${tone})`);
+    }
+  });
+  it("a review page shows its section index", async () => {
+    as("owner");
+    const html = await page(PARTIAL_D);
+    expect(html).toContain('data-testid="review-index"');
+    expect(html).toContain("Profit / loss");
   });
 });
 

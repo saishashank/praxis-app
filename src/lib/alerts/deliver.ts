@@ -352,6 +352,8 @@ export async function clearFlushDue(db: Pick<Client, "execute">): Promise<void> 
   await db.execute({ sql: "DELETE FROM worker_state WHERE key = ?", args: [FLUSH_DUE_KEY] });
 }
 
+export const RETRY_DUE_MS = 60_000; // the email core's retry gap (RETRY_GAP_S)
+
 /** Statuses after which the alert is "handled" (sent, owned by another sender, capped, failed). */
 const FINAL: ReadonlySet<SendStatus> = new Set(["sent", "duplicate", "suppressed_cap", "failed"]);
 
@@ -416,6 +418,10 @@ export async function deliverP0(ctx: AlertCtx, keys: readonly string[]): Promise
     const end = await openWindowEnd(ctx);
     if (end === null) {
       const out = await sendSingleP0(ctx, a);
+      // V1-S9 (D-693): a first-of-window P0 left `pending` is retried by the flush (claimed singles).
+      if (out.status === "pending") {
+        await scheduleFlush(ctx, new Date(nowOf(ctx).getTime() + RETRY_DUE_MS));
+      }
       results.push({ key, action: "sent", status: out.status });
     } else {
       await scheduleFlush(ctx, end);

@@ -69,7 +69,8 @@ export function insiderFlowScore(
   if (!covered) return { score_q: null, inputs };
   let total: Rational = ratFromInt(0n);
   if (dirn > 0) total = addRat(total, p.insiderWeights.directorNet);
-  if (dirn < 0) total = addRat(total, negRat(p.insiderWeights.directorNet));
+  // AGT-136: net director selling uses its own weight (defaults to director_net: v1)
+  if (dirn < 0) total = addRat(total, negRat(p.insiderWeights.directorSale));
   if (up) total = addRat(total, p.insiderWeights.holderNewOrIncrease);
   if (down) total = addRat(total, negRat(p.insiderWeights.holderDecrease));
   const one = ratFromInt(1n);

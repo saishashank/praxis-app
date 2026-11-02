@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/Button";
 type Result = { ok: true } | { error: string };
 type Props = {
   id: number;
+  /** Stock code, for the accessible name of the one Apply button. */
+  code?: string;
   confirm: (fd: FormData) => Promise<Result>;
   reject: (fd: FormData) => Promise<Result>;
 };
@@ -20,7 +22,7 @@ const TEXT: Record<string, string> = {
   unavailable: "Something went wrong. Please try again.",
 };
 
-export function ReviewForm({ id, confirm, reject }: Props) {
+export function ReviewForm({ id, code = "this item", confirm, reject }: Props) {
   const [state, run] = useActionState<Result | null, FormData>(
     (_prev, fd) => (fd.get("decision") === "reject" ? reject(fd) : confirm(fd)),
     null,
@@ -28,10 +30,15 @@ export function ReviewForm({ id, confirm, reject }: Props) {
   return (
     <form action={run} className="flex flex-wrap items-center gap-2">
       <input type="hidden" name="id" value={id} />
-      <Button type="submit" name="decision" value="confirm">
-        Confirm
+      <Button
+        type="submit"
+        name="decision"
+        value="confirm"
+        aria-label={`Apply the reported reading for ${code}`}
+      >
+        Apply
       </Button>
-      <Button type="submit" name="decision" value="reject" variant="secondary">
+      <Button type="submit" name="decision" value="reject" variant="ghost">
         Reject
       </Button>
       {state !== null && "error" in state && (

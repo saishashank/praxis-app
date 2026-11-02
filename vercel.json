@@ -13,12 +13,32 @@
       "schedule": "20 0 * * *"
     },
     {
+      "path": "/api/cron/heartbeat-morning?try=2",
+      "schedule": "50 0 * * *"
+    },
+    {
+      "path": "/api/cron/heartbeat-evening?dst=aedt",
+      "schedule": "10 10 * * *"
+    },
+    {
+      "path": "/api/cron/heartbeat-evening?dst=aedt&try=2",
+      "schedule": "40 10 * * *"
+    },
+    {
       "path": "/api/cron/heartbeat-evening",
       "schedule": "10 11 * * *"
     },
     {
+      "path": "/api/cron/heartbeat-evening?try=2",
+      "schedule": "40 11 * * *"
+    },
+    {
       "path": "/api/cron/watchdog",
       "schedule": "40 11 * * *"
+    },
+    {
+      "path": "/api/cron/watchdog?try=2",
+      "schedule": "40 12 * * *"
     }
   ]
 }

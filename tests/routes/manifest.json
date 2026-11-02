@@ -37,6 +37,7 @@
       "tests": [
         "tests/review/send.test.ts",
         "tests/review/route.test.ts",
+        "tests/acceptance/v2/at61.test.ts",
         "tests/security/hmac.test.ts"
       ]
     },
@@ -164,6 +165,9 @@
     },
     "action src/app/(app)/settings/actions.ts#updatePreferencesAction": {
       "tests": ["tests/preferences/actions.test.ts"]
+    },
+    "action src/app/(app)/settings/actions.ts#signOutEverywhereSelfAction": {
+      "tests": ["tests/settings/settingsActions.test.ts", "tests/security/validation.test.ts"]
     },
     "GET /api/learning/challengers": {
       "tests": ["tests/learning/routes.test.ts"]

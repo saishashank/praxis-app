@@ -170,6 +170,7 @@ test("release-gate job: PRs into release only, needs every other job, infrastruc
   assert.match(gate.run, /--sha "\$HEAD_SHA"/);
   const list = /--ci-jobs (\S+)/.exec(gate.run)[1].split(",");
   assert.deepEqual([...list].sort(), [...GATED].sort());
+  assert.deepEqual([...CI_REQUIRED_JOBS].sort(), [...GATED].sort()); // V1-I15: the default is not weaker than the workflow
   for (const j of CI_REQUIRED_JOBS) assert.ok(list.includes(j), `default required job ${j}`);
   const all = g.steps.map((s) => s.run ?? "").join("\n");
   assert.ok(all.includes("node scripts/ci/licence-check.mjs --release"));

@@ -133,6 +133,10 @@ describe("bar validation mirrors yahoo.ts", () => {
       { ...base, fetched_at: "yesterday" },
       { ...base, fetched_at: "2026-13-45T25:00:00Z" },
       { ...base, fetched_at: 5 },
+      { ...base, adj_close: null },
+      { ...base, adj_close: undefined },
+      { ...base, adj_close: 0 },
+      { ...base, adj_close: "1" },
       base,
     ];
     for (const m of mutations) {
@@ -169,6 +173,7 @@ describe("planDates (catch-up)", () => {
     expect(mk([], null, "2026-10-16")).toEqual({
       dates: [{ d: "2026-10-16", trading: true }],
       remaining: 0,
+      calendarMissing: false,
     });
   });
 

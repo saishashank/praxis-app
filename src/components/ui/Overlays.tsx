@@ -8,7 +8,7 @@
 // trigger is activated. So Radix Dialog and Popover cost no first-load JavaScript on any route, and the
 // trigger stays one DOM element for its whole life (focus returns to it on close).
 import { lazy, Suspense, useId, useRef, useState, type ReactNode } from "react";
-import { buttonClass, type ButtonVariant } from "./Button";
+import { buttonClass, type ButtonVariant } from "./buttonClass";
 import { InfoIcon } from "./icons";
 
 const PopoverPanel = lazy(() =>

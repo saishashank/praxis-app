@@ -23,9 +23,16 @@ import type { AgentParams } from "./params";
 import { initialStop } from "./families/exits";
 import type { Candidate, CsRule, EventFact, ExitPlan, Family, RegimeLabel } from "./families/types";
 import { roundHalfAway } from "./regime";
+import { ENTRY_SKIP_REASONS } from "./schema";
 import { cardBreakers, BREAKER_CATALOGUE, type CardBreaker } from "./thesisBreakers";
+import type { CardFields } from "@/lib/cortex/night";
+import { GATE_LABELS } from "@/lib/cortex/gates/list";
+import { CARD_BANNED, type CardBlock } from "@/lib/cortex/phrases";
 
 export const CARD_SCHEMA_VERSION = 1;
+/** Schema v2 (M15 P4, CTX-070): v1 plus the `cortex` block. v1 cards stay valid and render unchanged. */
+export const CARD_SCHEMA_VERSION_V2 = 2;
+const CARD_COST_LEVEL_COUNT = 3; // threshold-ok: the card shows break-even at three cost levels
 export const CARD_NOTE_KIND = "summary";
 export const CARD_TEMPLATE_VERSION = "card-summary-1";
 
@@ -56,8 +63,23 @@ export const FAMILY_THESIS: Readonly<Record<Family, string>> = {
   F6: "Consensus: several independent evidence classes agree on the same code.",
 };
 
-const NOT_TAKEN =
-  /^(rank|positions_full|holding|reentry_block|corporate_action|no_facts|gate|control_paused|control_killed|rejected:[a-z_,]+)$/;
+// The M14 skip words (ENTRY_SKIP_REASONS: stop distance, cost gate, second position, SHOCK abstain,
+// index change) join the v1 reasons.
+const NOT_TAKEN = new RegExp(
+  `^(rank|positions_full|holding|reentry_block|corporate_action|no_facts|gate|control_paused|control_killed|${ENTRY_SKIP_REASONS.join("|")}|rejected:[a-z_,]+)$`,
+);
+
+/**
+ * M14 vocabulary of `other_flags` on a card (free-form list, so this is documentation plus a
+ * single source for the card words in the UI): the cost gate had too few rows (D-214), the
+ * second-position test fell back to one leg (D-217), and the AGT-135 next-close reversal.
+ */
+export const M14_CARD_FLAGS = [
+  "cost_gate_unmeasured",
+  "industry_unknown",
+  "corr_unknown",
+  "event_reversed_next_close",
+] as const;
 
 // ---- types -------------------------------------------------------------------------------------
 
@@ -483,6 +505,56 @@ export function buildCard(inputs: CardInputs): DecisionCard {
   };
 }
 
+// ---- schema v2: the Cortex block (CTX-070) ---------------------------------------------------------
+
+export type CortexCardBlock = CardBlock;
+export type DecisionCardV2 = DecisionCard & { readonly cortex: CortexCardBlock };
+
+const ppmOf = (x: number): number => Math.round(x * Number(PPM)); // money-float-ok: ppm of a statistic
+
+/**
+ * The stored block from the night's `CardFields`: whole numbers (ppm) and words only. The check that
+ * would have stopped the trade is stored as its plain label, never its id (CTX-070 ban list).
+ * `abstainLabel` is the plain label of an abstain record (a card with no trade).
+ */
+export function cortexBlockOf(f: CardFields, abstainLabel: string | null = null): CortexCardBlock {
+  return {
+    similar:
+      f.similar === null
+        ? null
+        : {
+            p_ppm: ppmOf(f.similar.p),
+            lo_ppm: f.similar.lo === null ? null : ppmOf(f.similar.lo),
+            hi_ppm: f.similar.hi === null ? null : ppmOf(f.similar.hi),
+            n: f.similar.n,
+          },
+    break_even: f.breakEven.map((b) => ({ cost_ppm: ppmOf(b.c), p_be_ppm: ppmOf(b.pBe) })),
+    reasons_for: [...f.reasonsFor],
+    reasons_against: [...f.reasonsAgainst],
+    would_have_stopped: f.wouldHaveStopped === null ? null : GATE_LABELS[f.wouldHaveStopped],
+    independent_sources: [...f.independentSources],
+    cost_per_order_ppm: f.costPerOrderPpm,
+    abstain: abstainLabel,
+  };
+}
+
+/** A v2 card: the v1 card of the same inputs with `v` = 2 and the Cortex block. Deterministic. */
+export function buildCardV2(inputs: CardInputs, fields: CardFields): DecisionCardV2 {
+  return {
+    ...buildCard(inputs),
+    v: CARD_SCHEMA_VERSION_V2,
+    cortex: cortexBlockOf(fields),
+  };
+}
+
+/** The version a stored card carries (1 for every card written before M15). */
+export const cardVersion = (card: unknown): number =>
+  typeof card === "object" &&
+  card !== null &&
+  (card as { v?: unknown }).v === CARD_SCHEMA_VERSION_V2
+    ? CARD_SCHEMA_VERSION_V2
+    : CARD_SCHEMA_VERSION;
+
 export type BuiltCard = {
   readonly id: string;
   readonly card: DecisionCard;
@@ -580,7 +652,7 @@ function forbiddenKeys(v: unknown, path: string, e: string[]): void {
   }
 }
 
-const SCHEMA: Check = shape({
+const BASE_FIELDS: Readonly<Record<string, Check>> = {
   v: oneOf(CARD_SCHEMA_VERSION),
   market: str,
   d: str,
@@ -659,7 +731,28 @@ const SCHEMA: Check = shape({
     rule_version: str,
   }),
   footnote: str,
+};
+
+// Schema v2 (M15 P4, CTX-070): the v1 fields plus a `cortex` block. v1 cards keep the v1 schema and
+// every v1 reader; a reader tells them apart by `v`.
+const CORTEX_BLOCK: Check = shape({
+  similar: nullable(shape({ p_ppm: int, lo_ppm: nullable(int), hi_ppm: nullable(int), n: int })),
+  break_even: list(shape({ cost_ppm: int, p_be_ppm: int })),
+  reasons_for: list(str),
+  reasons_against: list(str),
+  would_have_stopped: nullable(str),
+  independent_sources: list(str),
+  cost_per_order_ppm: int,
+  abstain: nullable(str),
 });
+const SCHEMA_V1: Check = shape({ ...BASE_FIELDS, v: oneOf(CARD_SCHEMA_VERSION) });
+const SCHEMA_V2: Check = shape({
+  ...BASE_FIELDS,
+  v: oneOf(CARD_SCHEMA_VERSION_V2),
+  cortex: CORTEX_BLOCK,
+});
+const SCHEMA: Check = (v, path, e) =>
+  (isObj(v) && v.v === CARD_SCHEMA_VERSION_V2 ? SCHEMA_V2 : SCHEMA_V1)(v, path, e);
 
 /** JSON-schema-style check of a stored `card_json` value plus the AGT-110 content rules. */
 export function checkCard(card: unknown, p: AgentParams): string[] {
@@ -704,6 +797,18 @@ export function checkCard(card: unknown, p: AgentParams): string[] {
     }
   }
   if (c.footnote !== buildFootnote(s)) errors.push("footnote: not the standing template");
+  if (cardVersion(card) === CARD_SCHEMA_VERSION_V2) {
+    const b = (card as DecisionCardV2).cortex;
+    if (b.break_even.length !== 0 && b.break_even.length !== CARD_COST_LEVEL_COUNT) {
+      errors.push("cortex.break_even: none or three cost levels");
+    }
+    const words = [b.would_have_stopped, b.abstain, ...b.reasons_for, ...b.reasons_against];
+    for (const w of words) {
+      if (w !== null && CARD_BANNED.some((re) => re.test(w))) {
+        errors.push("cortex: a banned term on the card");
+      }
+    }
+  }
   return errors;
 }
 

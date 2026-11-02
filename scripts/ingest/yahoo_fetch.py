@@ -11,6 +11,10 @@ Request file:  {"codes": ["ZZZ", ...], "start": "YYYY-MM-DD", "end": "YYYY-MM-DD
 Optional (M4 T3): "indices": ["^AXJO"] asks for index bars too; they go to --index-output (index.json),
 never into bars.json:  [{"code":"AXJO","date","open","high","low","close","source":"yahoo",
                          "published_at":null,"fetched_at"}, ...]
+Optional (DAT-231): --actions-output writes actions.json, the split and dividend rows that the SAME
+equity request returns (actions=True, no extra request):
+  [{"code","ex_date","kind":"split","ratio","currency":"AUD","source":"yahoo","fetched_at"},
+   {"code","ex_date","kind":"dividend","amount","currency":"AUD","source":"yahoo","fetched_at"}, ...]
 Output file:   [{"code","date","open","high","low","close","volume","adj_close",
                  "source":"yahoo","published_at":null,"fetched_at"}, ...]
 
@@ -191,6 +195,43 @@ def rows_from_frame(df: Any, codes: list[str], fetched_at: str) -> list[dict[str
     return out
 
 
+def actions_from_frame(df: Any, codes: list[str], fetched_at: str) -> list[dict[str, Any]]:
+    """Split and dividend rows (DAT-231) from the same yfinance result as the bars. The columns
+    "Stock Splits" (new shares per old share: 2.0 = two-for-one) and "Dividends" (cash per share,
+    AUD) exist because the download is made with actions=True; a frame without them gives no rows.
+    Zero, NaN and a split ratio of exactly 1 mean "no action that day" and are skipped."""
+    out: list[dict[str, Any]] = []
+    if df is None or getattr(df, "empty", True):
+        return out
+    single = len(codes) == 1
+    for code in codes:
+        sub = _frame_for(df, f"{code}.AX")
+        if sub is None and single:
+            sub = df
+        if sub is None or getattr(sub, "empty", True):
+            continue
+        for idx, rec in sub.iterrows():
+            ratio = _clean(rec.get("Stock Splits"))
+            amount = _clean(rec.get("Dividends"))
+            has_split = ratio is not None and ratio > 0 and ratio != 1
+            has_div = amount is not None and amount > 0
+            if not (has_split or has_div):
+                continue
+            day = idx.date() if hasattr(idx, "date") else date.fromisoformat(str(idx)[:10])
+            base = {
+                "code": code,
+                "ex_date": day.isoformat(),
+                "currency": "AUD",
+                "source": "yahoo",
+                "fetched_at": fetched_at,
+            }
+            if has_split:
+                out.append({**base, "kind": "split", "ratio": ratio})
+            if has_div:
+                out.append({**base, "kind": "dividend", "amount": amount})
+    return out
+
+
 def index_rows_from_frame(df: Any, symbol: str, fetched_at: str) -> list[dict[str, Any]]:
     """Index bar rows (no repair, all-NaN days skipped). The stored code drops the caret."""
     out: list[dict[str, Any]] = []
@@ -272,8 +313,11 @@ def fetch_all(
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+    actions_out: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Download in chunks, never closer together than `min_gap_s`. Returns (rows, report)."""
+    """Download in chunks, never closer together than `min_gap_s`. Returns (rows, report).
+    DAT-231: each request also asks for the corporate actions (actions=True, same request, no extra
+    call); when `actions_out` is given the split and dividend rows are appended to it."""
     # yfinance treats `end` as exclusive; the request's `end` is inclusive.
     end_exclusive = (date.fromisoformat(end) + timedelta(days=1)).isoformat()
     rows: list[dict[str, Any]] = []
@@ -299,6 +343,7 @@ def fetch_all(
                     end=end_exclusive,
                     interval="1d",
                     auto_adjust=False,
+                    actions=True,
                     group_by="ticker",
                     progress=False,
                     threads=False,
@@ -312,7 +357,10 @@ def fetch_all(
                     retries += 1
                     continue
                 raise FetchError(f"download failed: {type(exc).__name__}") from exc
-        rows.extend(rows_from_frame(df, chunk, now().strftime("%Y-%m-%dT%H:%M:%S.000Z")))
+        stamp = now().strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        rows.extend(rows_from_frame(df, chunk, stamp))
+        if actions_out is not None:
+            actions_out.extend(actions_from_frame(df, chunk, stamp))
     got = {r["code"] for r in rows}
     report = {
         "requested": len(codes),
@@ -332,6 +380,7 @@ def run(
     download: Callable[..., Any] | None = None,
     sleep: Callable[[float], None] = time.sleep,
     index_output_path: str | None = None,
+    actions_output_path: str | None = None,
 ) -> dict[str, Any]:
     with open(request_path, encoding="utf-8") as f:
         try:
@@ -344,11 +393,20 @@ def run(
         import yfinance as yf  # imported late so tests and --help work without it
 
         download = yf.download
-    rows, report = fetch_all(codes, start, end, chunk_size, min_gap_s, download, sleep=sleep)
+    actions: list[dict[str, Any]] | None = [] if actions_output_path else None
+    rows, report = fetch_all(
+        codes, start, end, chunk_size, min_gap_s, download, sleep=sleep, actions_out=actions
+    )
     tmp = f"{output_path}.tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(rows, f, allow_nan=False, separators=(",", ":"))
     os.replace(tmp, output_path)  # the file appears complete or not at all
+    if actions is not None and actions_output_path:
+        atmp = f"{actions_output_path}.tmp"
+        with open(atmp, "w", encoding="utf-8") as f:
+            json.dump(actions, f, allow_nan=False, separators=(",", ":"))
+        os.replace(atmp, actions_output_path)
+        report["action_rows"] = len(actions)
     # M4 T3: the benchmark index. Bars are already safely written, so an index failure fails the
     # stage visibly (exit code) without losing them.
     symbols = parse_indices(raw)
@@ -367,10 +425,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--request", required=True, help="JSON file: codes, start, end")
     ap.add_argument("--output", required=True, help="where to write bars.json")
     ap.add_argument("--index-output", help="where to write index.json (optional index bars)")
+    ap.add_argument("--actions-output", help="where to write actions.json (vendor splits and dividends)")
     ap.add_argument("--report", help="optional path for a counts-only JSON report")
     args = ap.parse_args(argv)
     try:
-        report = run(args.request, args.output, index_output_path=args.index_output)
+        report = run(
+            args.request,
+            args.output,
+            index_output_path=args.index_output,
+            actions_output_path=args.actions_output,
+        )
     except InputError as exc:
         print(f"yahoo_fetch: input error: {exc}", file=sys.stderr)
         return 2

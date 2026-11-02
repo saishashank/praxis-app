@@ -255,7 +255,7 @@ describe("source-off behaviour (DAT-127)", () => {
     const e = factsOf("ZZE", "U1", makeBars({ close: () => 2n * DOLLAR }), p);
     const s = factsOf(
       "ZZS",
-      "U3",
+      "U2",
       makeBars({
         close: () => DOLLAR,
         volume: volumes(1_000_000n, 4_000_000n),

@@ -1,5 +1,6 @@
 // Section 7a "New picks" of the in-app Evening Review (UXN-044). Stored picks of the review date, no
 // recomputation. A masked user gets "Stock A", no company, no prices and ISO weeks (loader).
+import { EmptyState } from "@/components/ui/States";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Money, NotMeasured, SimulatedLabel } from "@/components/ui/Values";
@@ -14,7 +15,12 @@ export function NewPicks({ picks, masked }: { picks: NewPicksView; masked: boole
         New picks
       </h2>
       {picks.none ? (
-        <p className="m-0 text-sm text-text-muted">No picks were published for this review.</p>
+        <EmptyState
+          compact
+          motif="picks"
+          hue="picks"
+          title="No picks were published for this review."
+        />
       ) : (
         picks.profiles.map((p) => (
           <Card key={p.profile} title={title(p.profile)} headingLevel={3}>

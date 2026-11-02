@@ -14,6 +14,7 @@ const summaryMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/health/summary", () => ({ getHealthSummary: summaryMock }));
 vi.mock("@/lib/db/client", () => ({ mainDb: () => ({}), authDb: () => ({}) }));
 vi.mock("@/app/(app)/health/DayTimelineCheck", () => ({ DayTimelineCheck: () => null })); // M8 T12: async server card, tested on its own
+vi.mock("@/app/(app)/health/NightsCheck", () => ({ NightsCheck: () => null })); // V1-I1: async server card
 vi.mock("next/headers", () => ({
   cookies: async () => ({ has: () => false, set: vi.fn() }),
   headers: async () => new Headers(),
@@ -43,6 +44,10 @@ describe("sign-in page", () => {
     ]);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(document.querySelector("input[name=callbackUrl]")).toHaveValue("/markets");
+    // logo, tagline and one line on what Praxis is (UXR-030)
+    expect(screen.getAllByAltText("Praxis — Learn. Earn. Repeat.")).toHaveLength(2);
+    expect(screen.getByText(/personal stock-learning simulator/)).toBeInTheDocument();
+    expect(document.querySelectorAll("form")).toHaveLength(1);
   });
 
   it("shows only the neutral message on error and sanitises callbackUrl", async () => {

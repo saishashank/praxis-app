@@ -83,6 +83,11 @@ const FACTS: { [K in EmailKind]: FactsByKind[K] } = {
   reminder: fx.REMINDER,
   brief: fx.BRIEF,
   test: { requestedAt: "Mon 19 Oct 2026 20:00 AEDT" },
+  pick_hit: { facts: fx.PICK_HIT },
+  pick_cleared: { facts: fx.PICK_CLEARED_BELOW },
+  pick_candidate: { facts: fx.PICK_CANDIDATE },
+  pick_batch: { window: "10:45 Melbourne", lines: fx.PICK_LINES },
+  pick_digest: { quietWindow: "22:00-07:00", lines: fx.PICK_LINES },
 };
 const KEY: { [K in EmailKind]: string } = {
   review: emailKeys.review(D),
@@ -96,7 +101,14 @@ const KEY: { [K in EmailKind]: string } = {
   reminder: emailKeys.reminder(D),
   brief: emailKeys.brief(D),
   test: emailKeys.test(D, 1),
+  pick_hit: `pickhit:${"a".repeat(16)}:${D}`,
+  pick_cleared: `pickclr:${"a".repeat(16)}:${D}`,
+  pick_candidate: `pickcand:AU:${D}:ABC`,
+  pick_batch: `pickb:u1:${D}:1005`,
+  pick_digest: `pickdg:u1:${D}`,
 };
+/** Every kind has a renderer (the M17 pick kinds since WP4). */
+const SENDABLE_KINDS = EMAIL_KINDS;
 const send = <K extends EmailKind>(kind: K, key = KEY[kind], c = ctx(), o = {}) =>
   sendEmail(c, kind, key, FACTS[kind], o);
 
@@ -139,10 +151,12 @@ describe("keys", () => {
 describe("email_mode matrix (design 4.12)", () => {
   it("off: nothing is sent and each attempt is recorded as suppressed_off", async () => {
     await setMode("off");
-    for (const k of EMAIL_KINDS) expect((await send(k)).status).toBe("suppressed_off");
+    for (const k of SENDABLE_KINDS) expect((await send(k)).status).toBe("suppressed_off");
     expect(mock.calls).toHaveLength(0);
     const r = await rows("SELECT status, count(*) AS n FROM email_message GROUP BY status");
-    expect(r.map((x) => [x.status, Number(x.n)])).toEqual([["suppressed_off", EMAIL_KINDS.length]]);
+    expect(r.map((x) => [x.status, Number(x.n)])).toEqual([
+      ["suppressed_off", SENDABLE_KINDS.length],
+    ]);
   });
 
   it("a missing switch reads as off", async () => {
@@ -153,7 +167,7 @@ describe("email_mode matrix (design 4.12)", () => {
   it("incidents: incident-class mail only; a review only on the test date or as the fallback", async () => {
     await setMode("incidents");
     const allowed = ["incident_open", "incident_s1", "tokens", "unread7", "dbdown"] as const;
-    for (const k of EMAIL_KINDS) {
+    for (const k of SENDABLE_KINDS) {
       const out = await send(k);
       expect(out.status, k).toBe(
         (allowed as readonly string[]).includes(k) ? "sent" : "suppressed_off",
@@ -173,8 +187,8 @@ describe("email_mode matrix (design 4.12)", () => {
   });
 
   it("full: every kind renders and sends, to the Owner only", async () => {
-    for (const k of EMAIL_KINDS) expect((await send(k)).status, k).toBe("sent");
-    expect(mock.outbox).toHaveLength(EMAIL_KINDS.length);
+    for (const k of SENDABLE_KINDS) expect((await send(k)).status, k).toBe("sent");
+    expect(mock.outbox).toHaveLength(SENDABLE_KINDS.length);
     for (const m of mock.outbox) {
       expect(m.to).toBe(OWNER);
       expect(m.html.length).toBeGreaterThan(100);
@@ -469,6 +483,30 @@ describe("retries, backoff and the attempts log (EML-030)", () => {
     expect(mock.outbox).toHaveLength(1);
   });
 
+  it("a stale claim with an accepted attempt is finalised as sent and never re-sent (V1-S10, D-692)", async () => {
+    const caps = await loadCaps(db);
+    await claimKey(db, {
+      key: KEY.tokens,
+      kind: "tokens",
+      env: "production",
+      d: D,
+      nowIso: T0.toISOString(),
+      recipientSha: null,
+      caps,
+    });
+    await db.execute({
+      sql: "INSERT INTO email_attempt (email_key, n, at, outcome, http_status, provider_id) VALUES (?, 1, ?, 'accepted', 200, 'prov-1')",
+      args: [KEY.tokens, T0.toISOString()],
+    });
+    clock = new Date(T0.getTime() + 181_000);
+    const out = await send("tokens");
+    expect(out.status).toBe("duplicate");
+    expect(mock.calls).toHaveLength(0);
+    const r = (await rows())[0];
+    expect(r.status).toBe("sent");
+    expect(r.provider_id).toBe("prov-1");
+  });
+
   it("a provider that throws an unexpected error counts as a network failure, not a crash", async () => {
     const bad: EmailProvider = {
       name: "mock",
@@ -536,7 +574,7 @@ describe("recipient guard (EML-003b, EML-005, ROL-105)", () => {
 describe("staging prefix and environments (EML-004, NFR-040)", () => {
   it("every staging subject starts with [STAGING] and counts in its own environment", async () => {
     const c = ctx({ env: { ...ENV, PRAXIS_ENV: "staging" } });
-    for (const k of EMAIL_KINDS) expect((await send(k, KEY[k], c)).status, k).toBe("sent");
+    for (const k of SENDABLE_KINDS) expect((await send(k, KEY[k], c)).status, k).toBe("sent");
     for (const m of mock.outbox) expect(m.subject.startsWith("[STAGING] ")).toBe(true);
     expect(mock.outbox.every((m) => m.idempotencyKey.startsWith("staging:"))).toBe(true);
     const r = await rows("SELECT DISTINCT env FROM email_message");

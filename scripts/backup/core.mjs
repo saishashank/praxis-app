@@ -406,35 +406,154 @@ export function parseBackup(text) {
   return { meta: /** @type {Meta} */ (meta), schemas, data, end };
 }
 
+/** V1-S5 / D-715: a restore writes at most this many statements per batch (one transaction each). */
+export const RESTORE_CHUNK_STATEMENTS = 1000;
+/** The in-target checkpoint table of a chunked restore; dropped in the last batch. */
+export const RESTORE_CHECKPOINT_TABLE = "_restore_checkpoint";
+
 /**
- * Restore a stream into an EMPTY database in one atomic batch, then re-read the restored
- * database and compare every table's count and sha256 with the stream's end line.
- * Refuses a stream that does not verify (before writing anything) and a non-empty target.
+ * Parent tables a CREATE TABLE statement references (V1-S6 / D-714). Text based on purpose: the
+ * plan must be known before any table exists and must be the same on a resumed run.
+ * @param {string} createSql
+ */
+export function referencedTables(createSql) {
+  const out = new Set();
+  for (const m of createSql.matchAll(/\bREFERENCES\s+[`"[]?([A-Za-z_][A-Za-z0-9_]*)/gi)) {
+    out.add(m[1]);
+  }
+  return [...out];
+}
+
+/**
+ * Data tables in an FK-safe order: every parent before its children, otherwise the stream's own
+ * order. A self reference is ignored; a true cycle keeps the stream order for its members (the
+ * batches also run with defer_foreign_keys, so a cycle inside one batch still commits).
+ * @param {string[]} tables @param {Map<string, string>} sqlOf
+ */
+export function foreignKeyOrder(tables, sqlOf) {
+  const set = new Set(tables);
+  const parents = new Map(
+    tables.map((t) => [
+      t,
+      referencedTables(sqlOf.get(t) ?? "").filter((x) => x !== t && set.has(x)),
+    ]),
+  );
+  const out = [];
+  const done = new Set();
+  const visiting = new Set();
+  const visit = (t) => {
+    if (done.has(t) || visiting.has(t)) return;
+    visiting.add(t);
+    for (const par of parents.get(t) ?? []) visit(par);
+    visiting.delete(t);
+    done.add(t);
+    out.push(t);
+  };
+  for (const t of tables) visit(t);
+  return out;
+}
+
+/**
+ * Restore a stream into an EMPTY database, then re-read the restored database and compare every
+ * table's count and sha256 with the stream's end line. Refuses a stream that does not verify
+ * (before writing anything) and a non-empty target.
+ *
+ * Writes (V1-S5 / D-715, V1-S6 / D-714): tables are filled parent-first (foreign keys are ON,
+ * D-713) in batches of at most `chunkStatements` statements. A stream that fits one batch is
+ * restored atomically (a failure commits nothing). A larger one writes the tables first, then the
+ * rows chunk by chunk; every chunk batch also advances a checkpoint row in the target, so a
+ * killed or failed restore is resumed by calling restoreDatabase again with the SAME stream on
+ * the SAME target (a different stream or an unrelated non-empty database is still refused). The
+ * checkpoint table is dropped in the last batch, together with the indexes, triggers and views.
  * @param {Client} db
  * @param {string} text
+ * @param {{ chunkStatements?: number, haltAfterChunks?: number }} [opts] haltAfterChunks is for
+ *   the drill and the tests: stop (throw) after that many chunks, leaving the checkpoint.
  * @returns {Promise<{ meta: Meta, counts: Record<string, number>, sha256: Record<string, string> }>}
  */
-export async function restoreDatabase(db, text) {
+export async function restoreDatabase(db, text, opts = {}) {
   const parsed = parseBackup(text);
-  const existing = await db.execute(
-    "SELECT COUNT(*) AS c FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'",
-  );
-  if (Number(existing.rows[0].c) !== 0) fail("target database is not empty");
+  const chunk = opts.chunkStatements ?? RESTORE_CHUNK_STATEMENTS;
+  if (!Number.isInteger(chunk) || chunk < 1) fail("bad chunk size");
+  const streamId = sha256Hex(JSON.stringify([parsed.end.counts, parsed.end.sha256]));
 
-  /** @type {import("@libsql/client").InStatement[]} */
-  const stmts = [];
-  for (const s of parsed.schemas) if (s.type === "table") stmts.push(s.sql);
-  for (const [table, t] of parsed.data) {
-    for (const values of t.rows) {
-      stmts.push({
-        sql: `INSERT INTO ${quote(table)} VALUES (${values.map(() => "?").join(", ")})`,
-        args: values.map(decodeValue),
-      });
+  const tableSql = new Map(
+    parsed.schemas.filter((x) => x.type === "table").map((x) => [x.table, x.sql]),
+  );
+  const dataOrder = foreignKeyOrder([...parsed.data.keys()], tableSql);
+  const total = [...parsed.data.values()].reduce((n, t) => n + t.rows.length, 0);
+  const others = parsed.schemas.filter((x) => x.type !== "table").map((x) => x.sql);
+  const createTables = [...tableSql.values()];
+  const single = total <= chunk; // the schema statements are cheap; only the row count is bounded
+
+  const names = await db.execute("SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'");
+  let step = 0; // data statements already applied (resume)
+  let tablesDone = false;
+  if (names.rows.length !== 0) {
+    const has = names.rows.some((r) => String(r.name) === RESTORE_CHECKPOINT_TABLE);
+    const cp = has
+      ? await db.execute(`SELECT stream, step FROM ${RESTORE_CHECKPOINT_TABLE} WHERE id = 1`)
+      : null;
+    if (!cp || cp.rows.length !== 1 || String(cp.rows[0].stream) !== streamId) {
+      fail("target database is not empty");
     }
+    step = Number(cp.rows[0].step);
+    tablesDone = true;
   }
-  // Indexes, triggers and views last: no trigger fires for the restore's own inserts.
-  for (const s of parsed.schemas) if (s.type !== "table") stmts.push(s.sql);
-  await db.batch(stmts, "write");
+
+  const insertOf = (table, values) => ({
+    sql: `INSERT INTO ${quote(table)} VALUES (${values.map(() => "?").join(", ")})`,
+    args: values.map(decodeValue),
+  });
+  const defer = "PRAGMA defer_foreign_keys = ON";
+  /** The data statements in plan order (lazy per table would be nicer; rows are already in memory). */
+  const plan = [];
+  for (const table of dataOrder)
+    for (const values of parsed.data.get(table).rows) plan.push([table, values]);
+
+  if (single) {
+    // Atomic: tables, rows (parents first), then indexes, triggers and views last (no trigger
+    // fires for the restore's own inserts).
+    await db.batch(
+      [defer, ...createTables, ...plan.map(([t, v]) => insertOf(t, v)), ...others],
+      "write",
+    );
+  } else {
+    if (!tablesDone) {
+      await db.batch(
+        [
+          ...createTables,
+          `CREATE TABLE ${RESTORE_CHECKPOINT_TABLE} (id INTEGER PRIMARY KEY CHECK (id = 1), stream TEXT NOT NULL, step INTEGER NOT NULL)`,
+          { sql: `INSERT INTO ${RESTORE_CHECKPOINT_TABLE} VALUES (1, ?, 0)`, args: [streamId] },
+        ],
+        "write",
+      );
+    }
+    let chunks = 0;
+    for (let at = step; at < plan.length; at += chunk) {
+      const part = plan.slice(at, at + chunk);
+      await db.batch(
+        [
+          defer,
+          ...part.map(([t, v]) => insertOf(t, v)),
+          {
+            sql: `UPDATE ${RESTORE_CHECKPOINT_TABLE} SET step = ? WHERE id = 1`,
+            args: [at + part.length],
+          },
+        ],
+        "write",
+      );
+      chunks += 1;
+      if (
+        opts.haltAfterChunks !== undefined &&
+        chunks >= opts.haltAfterChunks &&
+        at + chunk < plan.length
+      ) {
+        throw new BackupError("restore halted at checkpoint");
+      }
+    }
+    await db.batch([...others, `DROP TABLE ${RESTORE_CHECKPOINT_TABLE}`], "write");
+  }
 
   const again = await dumpDatabase(db, {
     name: parsed.meta.db,

@@ -9,6 +9,7 @@ import { getConfig } from "@/lib/config/store";
 import { ASX_SOURCE_ID } from "@/lib/data/controls";
 import { melbourneDate, emailKeys } from "@/lib/email/keys";
 import { readEmailSwitch, reviewCheckForced } from "@/lib/email/switch";
+import { auditKey, verifyAuditChain } from "@/lib/db/audit";
 import { getMeters, usageEnvironment, type Meter } from "@/lib/usage/meters";
 import type { IncidentFacts } from "./notify";
 
@@ -114,6 +115,61 @@ export async function detectReviewMissing(db: Client, now: Date): Promise<Detect
       kind: "review_missing",
       severity: "S2",
       facts: { summary: `No Evening Review email was sent for ${d}`, detail: { d } },
+    },
+  ];
+}
+
+/**
+ * GL-06: a `dispatch-failed` run record of the last 24 hours whose HTTP status is 401 or 403 (the
+ * Worker's GitHub dispatch token was refused) is a credential problem: S2 the same night, from the
+ * next heartbeat. One incident while open (notifyIncident); other statuses stay with the
+ * heartbeat checks. Reads the structured `status` the Worker records; details hold no secrets.
+ */
+export async function detectDispatchAuth(db: Client, now: Date): Promise<Detected[]> {
+  const since = new Date(now.getTime() - 24 * 3_600_000).toISOString();
+  const r = await db.execute({
+    sql: `SELECT concurrency_key, json_extract(details_json, '$.slot') AS slot,
+                 json_extract(details_json, '$.status') AS status
+          FROM run_record
+          WHERE status = 'failed' AND concurrency_key LIKE 'dispatch-failed:%' AND started_at >= ?
+            AND json_extract(details_json, '$.status') IN (401, 403)
+          ORDER BY started_at DESC LIMIT 20`,
+    args: [since],
+  });
+  if (r.rows.length === 0) return [];
+  const slots = [...new Set(r.rows.map((x) => String(x.slot)))].sort();
+  return [
+    {
+      kind: "dispatch_auth",
+      severity: "S2",
+      facts: {
+        summary: `The Worker's GitHub dispatch was refused (HTTP ${Number(r.rows[0].status)}) for ${slots.join(", ")}`,
+        detail: { slots, status: Number(r.rows[0].status), key: String(r.rows[0].concurrency_key) },
+      },
+    },
+  ];
+}
+
+/**
+ * NFR-023 (V1-S4, D-723): walks the whole audit chain and raises S1 `audit_chain_broken` on a break.
+ * Needs the auth DB (where audit_event lives) and PII_HASH_KEY; without either it cannot verify and
+ * answers nothing rather than guessing. The facts carry the first broken row id only.
+ */
+export async function detectAuditChain(
+  authDb: Client,
+  piiHashKey: string | undefined,
+): Promise<Detected[]> {
+  if (!piiHashKey) return [];
+  const broken = await verifyAuditChain(authDb, auditKey(piiHashKey));
+  if (broken === null) return [];
+  return [
+    {
+      kind: "audit_chain_broken",
+      severity: "S1",
+      facts: {
+        summary: `The audit hash chain breaks at row ${broken}`,
+        detail: { firstBrokenId: broken },
+      },
     },
   ];
 }

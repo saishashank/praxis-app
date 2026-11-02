@@ -3,6 +3,7 @@
 // UXN-126; D-128, D-129, D-135 draft). Masked viewers see "Stock A" and no signal or card ids that
 // contain a code; the card link is the opaque `ck:` reference (see cards.ts).
 import "server-only";
+import { notTakenText } from "./cardParts";
 import { cardHref } from "./cards";
 import {
   loaded,
@@ -179,7 +180,9 @@ export async function loadIdeas(
       href: cardHref(str(c.id), masked),
       execution: str(c.execution_id),
       taken,
-      reason: taken ? null : scope.text(strOrNull(c.not_taken_reason) ?? "reason not recorded"),
+      reason: taken
+        ? null
+        : scope.text(notTakenText(strOrNull(c.not_taken_reason) ?? "reason not recorded")),
     });
     bySignal.set(str(c.signal_id), list);
   }

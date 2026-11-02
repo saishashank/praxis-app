@@ -1,8 +1,15 @@
 // @vitest-environment node
 import { createHmac } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 // @ts-expect-error plain .mjs signer without types (the Actions-side twin)
 import { sign } from "../../scripts/smoke/sign.mjs";
+import {
+  HEADER_NONCE,
+  HEADER_SIGNATURE,
+  HEADER_TIMESTAMP,
+  hmacMessage,
+  signedHeaders,
+} from "@/lib/security/hmacCore.mjs";
 import { computeSignature, isValidSecret, verifySignedRequest } from "@/lib/security/hmac";
 import { TursoNonceStore, type NonceStore } from "@/lib/security/replay";
 
@@ -49,6 +56,28 @@ describe("signature known answer", () => {
       "X-Praxis-Nonce": NONCE,
       "X-Praxis-Signature": KNOWN_SIGNATURE,
     });
+  });
+});
+
+describe("hmacCore: the one definition of the scheme (V1-I3)", () => {
+  it("message and header names are the documented ones", () => {
+    expect(hmacMessage("1", "n", "b")).toBe("1.n.b");
+    expect([HEADER_TIMESTAMP, HEADER_NONCE, HEADER_SIGNATURE]).toEqual([
+      "x-praxis-timestamp",
+      "x-praxis-nonce",
+      "x-praxis-signature",
+    ]);
+    expect(signedHeaders("1", "n", "s")).toEqual({
+      "X-Praxis-Timestamp": "1",
+      "X-Praxis-Nonce": "n",
+      "X-Praxis-Signature": "s",
+    });
+  });
+  it("the verifier and the caller-side signer both go through it", () => {
+    const sig = createHmac("sha256", SECRET)
+      .update(hmacMessage(String(NOW), NONCE, BODY))
+      .digest("hex");
+    expect(sig).toBe(KNOWN_SIGNATURE);
   });
 });
 
@@ -129,21 +158,25 @@ describe("isValidSecret", () => {
 });
 
 describe("TursoNonceStore", () => {
-  const ok = (affected: number, type = "ok") => ({
+  // First call of a store: prune + insert + close; later calls inside a minute: insert + close.
+  const ok = (affected: number, type = "ok", prune = true) => ({
     status: 200,
     json: async () => ({
       results: [
-        { type: "ok" },
-        { type: "ok" },
+        ...(prune ? [{ type: "ok" }] : []),
         { type, response: { result: { affected_row_count: affected } } },
         { type: "ok" },
       ],
     }),
   });
+  let nowSec = 1234;
   const make = (fetchImpl: unknown, url = "libsql://db.example.test") =>
-    new TursoNonceStore(url, "TOKEN-SECRET", fetchImpl as typeof fetch, () => 1234);
+    new TursoNonceStore(url, "TOKEN-SECRET", fetchImpl as typeof fetch, () => nowSec);
+  beforeEach(() => {
+    nowSec = 1234;
+  });
 
-  it("sends the four statements and treats affected_row_count 1 as claimed", async () => {
+  it("sends prune, insert and close (no DDL) and treats affected_row_count 1 as claimed", async () => {
     let seen: { url: string; init: RequestInit } | undefined;
     const store = make(async (url: string, init: RequestInit) => {
       seen = { url, init };
@@ -152,17 +185,33 @@ describe("TursoNonceStore", () => {
     expect(await store.claim(NONCE, 99)).toBe(true);
     expect(seen?.url).toBe("https://db.example.test/v2/pipeline");
     const reqs = JSON.parse(seen?.init.body as string).requests;
-    expect(reqs[0].stmt.sql).toMatch(/^CREATE TABLE IF NOT EXISTS request_nonce/);
-    expect(reqs[1].stmt).toEqual({
+    expect(reqs).toHaveLength(3);
+    expect(JSON.stringify(reqs)).not.toMatch(/CREATE TABLE/i);
+    expect(reqs[0].stmt).toEqual({
       sql: "DELETE FROM request_nonce WHERE expires_at < ?",
       args: [{ type: "integer", value: "1234" }],
     });
-    expect(reqs[2].stmt.sql).toMatch(/ON CONFLICT DO NOTHING$/);
-    expect(reqs[2].stmt.args).toEqual([
+    expect(reqs[1].stmt.sql).toMatch(/ON CONFLICT DO NOTHING$/);
+    expect(reqs[1].stmt.args).toEqual([
       { type: "text", value: NONCE },
       { type: "integer", value: "99" },
     ]);
-    expect(reqs[3]).toEqual({ type: "close" });
+    expect(reqs[2]).toEqual({ type: "close" });
+  });
+  it("prunes at most once a minute per store and skips DDL on every call (V1-S11)", async () => {
+    const bodies: string[][] = [];
+    const store = make(async (_u: string, init: RequestInit) => {
+      const reqs = JSON.parse(init.body as string).requests as { stmt?: { sql: string } }[];
+      bodies.push(reqs.map((r) => r.stmt?.sql ?? "close"));
+      return ok(1, "ok", reqs.length === 3);
+    });
+    await store.claim("a".repeat(32), 99);
+    nowSec += 30;
+    await store.claim("b".repeat(32), 99);
+    nowSec += 31;
+    await store.claim("c".repeat(32), 99);
+    expect(bodies.map((b) => b.length)).toEqual([3, 2, 3]);
+    expect(bodies.flat().some((q) => /CREATE/i.test(q))).toBe(false);
   });
   it("0 affected rows = replay", async () => {
     expect(await make(async () => ok(0)).claim(NONCE, 1)).toBe(false);

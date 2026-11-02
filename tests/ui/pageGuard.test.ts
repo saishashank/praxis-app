@@ -17,7 +17,11 @@ function findPages(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-const onDisk = findPages(path.join(root, "src", "app")).sort();
+// M16 D-361/D-371: the Blueprint page answers as a missing route to everyone but the pinned Owner,
+// so it is not a registry page; its own guard is tested in tests/blueprint/blueprintGuard.test.ts.
+const onDisk = findPages(path.join(root, "src", "app"))
+  .filter((f) => f !== "src/app/(app)/blueprint/page.tsx")
+  .sort();
 const src = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
 
 describe("page registry", () => {

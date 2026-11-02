@@ -9,7 +9,7 @@
 // and the Wilder indicators inside the A4 module (design 2.1).
 import type { Client } from "@libsql/client";
 import { LookAheadError } from "@/lib/arena/marketData";
-import { quantityRatio, type CorpActionRecord } from "@/lib/arena/corpActions";
+import { knownBy, quantityRatio, type CorpActionRecord } from "@/lib/arena/corpActions";
 import { COST_PROFILES } from "@/lib/arena/costs";
 import type { CohortParams } from "@/lib/arena/cohort";
 import { rejectReasonText, sizeEntry, type SizingResult } from "@/lib/arena/sizing";
@@ -20,7 +20,9 @@ import {
   type CalendarRow,
   type MarketHours,
 } from "@/lib/data/calendar";
+import { loadIndexChanges, loadIndustryMap } from "@/lib/data/referenceData";
 import { divFloor, makeRational, mulRat, type Rational } from "@/lib/money/rational";
+import { loadIngestBound } from "@/lib/sentinel/cutoffPoll";
 import {
   createDecisionView,
   decisionCutoffUtc,
@@ -30,7 +32,7 @@ import {
 import { eventFactFromRow } from "./families/facts";
 import { buildCodeFacts } from "./families/facts";
 import { FAMILY_AGENT_VERSION } from "./families/constants";
-import { compareCandidates } from "./families/context";
+import { compareCandidates, SKIP_MONTH_SESSIONS } from "./families/context";
 import { evaluatePositions } from "./families/exits";
 import type {
   Candidate,
@@ -38,6 +40,7 @@ import type {
   EventFact,
   ExitEvaluation,
   FamilyInputs,
+  IndexChangeFact,
   PositionState,
   Sources,
   Tier,
@@ -70,7 +73,38 @@ const cmpStr = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 // ---- corporate-action helpers ----------------------------------------------------------------------
 
-export type SplitAction = { readonly exDate: string; readonly ratio: Rational };
+export type SplitAction = {
+  readonly exDate: string;
+  readonly ratio: Rational;
+  /** GL-02: when the action was first confirmed (null/absent = known since before the column). */
+  readonly knownAt?: string | null;
+};
+
+const cutoffCache = new Map<string, string>();
+/**
+ * GL-02: the splits a decision on session `d` may use: ex-date <= d (DAT-126) AND confirmed by the
+ * decision cut-off of d (known_at <= cut-off(d), `hhmm` is the decision_cut-off setting). The one
+ * rule every replay reader shares; the cut-off instant is memoised per session.
+ */
+export function splitsKnownOn(
+  splits: readonly SplitAction[],
+  d: string,
+  hhmm: string,
+): SplitAction[] {
+  if (!splits.some((a) => a.knownAt !== null && a.knownAt !== undefined)) {
+    return splits.filter((a) => a.exDate <= d); // legacy rows: always known
+  }
+  const key = `${d}|${hhmm}`;
+  let cut = cutoffCache.get(key);
+  if (cut === undefined) {
+    cut = decisionCutoffUtc(d, hhmm);
+    cutoffCache.set(key, cut);
+  }
+  return knownBy(
+    splits.filter((a) => a.exDate <= d),
+    cut,
+  );
+}
 
 /** Quantity-changing actions per code, exact; a code with an unreadable payload is reported bad. */
 export function splitActionsByCode(actions: readonly CorpActionRecord[]): {
@@ -83,7 +117,7 @@ export function splitActionsByCode(actions: readonly CorpActionRecord[]): {
     if (a.type !== "split" && a.type !== "consolidation" && a.type !== "bonus_issue") continue;
     try {
       const list = byCode.get(a.code) ?? [];
-      list.push({ exDate: a.exDate, ratio: quantityRatio(a) });
+      list.push({ exDate: a.exDate, ratio: quantityRatio(a), knownAt: a.knownAt ?? null });
       byCode.set(a.code, list);
     } catch {
       bad.add(a.code);
@@ -167,6 +201,10 @@ export function barsNeeded(p: AgentParams): number {
     p.f1.highLookback,
     p.windows.smaTrend,
     p.windows.returnWindow + 1,
+    // KB-081: the F1 variants read a longer window / skip the last month (v1: no change)
+    p.f1.returnWindowSessions +
+      1 +
+      (p.f1.momentumVariant === "skip_month_u2" ? SKIP_MONTH_SESSIONS : 0),
     p.windows.adv + 1,
     p.windows.vol + 1,
     p.windows.volumeRatio + 1,
@@ -208,6 +246,10 @@ export function eventRowOf(r: Record<string, unknown>): EventRow {
     polarity: Number(r.polarity) as EventRow["polarity"], // money-float-ok: SQL integer column read as a version/flag
     rule_version: String(r.rule_version),
     category_llm: r.category_llm === null ? null : String(r.category_llm),
+    category_detail:
+      r.category_detail === null || r.category_detail === undefined
+        ? null
+        : (String(r.category_detail) as EventRow["category_detail"]),
     polarity_llm: r.polarity_llm === null ? null : (Number(r.polarity_llm) as never), // money-float-ok: SQL integer column read as a version/flag
   };
 }
@@ -236,6 +278,19 @@ function consolidationAgo(
   return best;
 }
 
+/** Adds the reference-data facts only when known, so a code without them is exactly the v1 facts. */
+export function withReferenceData(
+  facts: CodeFacts,
+  industry: string | null | undefined,
+  indexChanges: readonly IndexChangeFact[] | undefined,
+): CodeFacts {
+  return {
+    ...facts,
+    ...(industry === undefined || industry === null ? {} : { industry }),
+    ...(indexChanges === undefined || indexChanges.length === 0 ? {} : { indexChanges }),
+  };
+}
+
 /**
  * A4 -> A3 -> A2 for D. Failures of A2/A3 are caught per agent and make the outputs partial
  * (AGT-004, decision 22); a look-ahead is a bug and always propagates.
@@ -243,14 +298,24 @@ function consolidationAgo(
 export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInputs> {
   const { market, d, params: p } = req;
   const cutoff = decisionCutoffUtc(d, p.decisionCutoff);
-  const view = createDecisionView(db, { market, d, cutoff, liveIngestBound: !req.replay });
+  // GL-05: announcements first stored after the cut-off poll marker (or cut-off + 4 min) are invisible
+  const annBound = await loadIngestBound(db, market, d, cutoff);
+  const view = createDecisionView(db, {
+    market,
+    d,
+    cutoff,
+    liveIngestBound: !req.replay,
+    announcementIngestBound: annBound.bound,
+  });
   const partialReasons: string[] = [];
 
   // sessions: enough for the longest event window (ARN-011) and the consolidation window
   const lookback = Math.max(p.arn011.placementWindow, p.arn011.consolidationWindow); // money-float-ok: window sizes in sessions
   const sessions = sessionsBetween(addDays(d, -lookback * 2), d, req.calendar);
   const sources = await sourcesOf(db);
-  const { byCode: splitsByCode, bad } = splitActionsByCode(req.actions);
+  // GL-02: only actions confirmed by the decision cut-off of D exist for this decision
+  const actions = knownBy(req.actions, cutoff);
+  const { byCode: splitsByCode, bad } = splitActionsByCode(actions);
 
   // universe rows of D
   const uni = await db.execute({
@@ -263,6 +328,16 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
     tier: String(r.tier) as Tier,
     halted: bigintCol(r.halted) === 1n,
   }));
+
+  // FAM-006 / DAT-234 reference data: the finer industry class (manual CSV) else the ASX industry
+  // group, and the index changes, both read as of D through the reference-data readers
+  const classMap = await loadIndustryMap(db, market, d, cutoff);
+  const indexChangeMap = await loadIndexChanges(db, market, d, cutoff);
+  const groupRows = await db.execute({
+    sql: "SELECT code, industry FROM instrument WHERE market = ? AND industry IS NOT NULL",
+    args: [market],
+  });
+  const groupOf = new Map(groupRows.rows.map((r) => [String(r.code), String(r.industry)]));
 
   // A3: regime
   let regime: DayInputs["regime"] = null;
@@ -305,6 +380,11 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
           }
           return f;
         },
+        // DAT-232: day-0 volume ratios on the split-adjusted basis (ex-date <= day 0)
+        splitsFor: (code, day0) =>
+          (splitsByCode.get(code) ?? [])
+            .filter((s) => s.exDate <= day0)
+            .map((s) => ({ exDate: s.exDate, ratio: makeRational(s.ratio.num, s.ratio.den) })),
       });
     } catch (error) {
       if (error instanceof LookAheadError) throw error;
@@ -355,21 +435,27 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
         partialReasons.push("a2_score_failed");
       }
     }
+    const industry = classMap.get(code) ?? groupOf.get(code);
+    const changes = indexChangeMap.get(code);
     facts.set(
       code,
-      buildCodeFacts(
-        {
-          code,
-          tier: w.tier,
-          adjusted: adj,
-          raw,
-          halted: w.halted,
-          insiderScoreQ: score === null ? null : score.score_q,
-          shortDrop,
-          consolidationSessionsAgo: consolidationAgo(code, req.actions, sessions),
-          promotional: false,
-        },
-        p,
+      withReferenceData(
+        buildCodeFacts(
+          {
+            code,
+            tier: w.tier,
+            adjusted: adj,
+            raw,
+            halted: w.halted,
+            insiderScoreQ: score === null ? null : score.score_q,
+            shortDrop,
+            consolidationSessionsAgo: consolidationAgo(code, actions, sessions),
+            promotional: false,
+          },
+          p,
+        ),
+        industry,
+        changes,
       ),
     );
     adjusted.set(code, adj);
@@ -392,7 +478,17 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
       const b = await view.bars(row.code, 1, row.day0_d);
       day0Low.set(key, b.length > 0 && b[0]!.d === row.day0_d ? b[0]!.low : null);
     }
-    const fact = eventFactFromRow(row, day0Low.get(key) ?? null);
+    // AGT-135 display flag: the day-0 and next-session closes on the adjusted basis, when both exist
+    const adjBars = adjusted.get(row.code);
+    const at = adjBars === undefined ? -1 : adjBars.findIndex((b) => b.d === row.day0_d);
+    const closes =
+      adjBars === undefined || at < 0
+        ? undefined
+        : {
+            day0Close: adjBars[at]!.close,
+            nextClose: at + 1 < adjBars.length ? adjBars[at + 1]!.close : null,
+          };
+    const fact = eventFactFromRow(row, day0Low.get(key) ?? null, closes);
     allEvents.push(fact);
     const list = eventsByCode.get(row.code) ?? [];
     list.push(fact);

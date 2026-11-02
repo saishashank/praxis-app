@@ -86,9 +86,9 @@ describe("cards in the nightly run", () => {
     ).toEqual([
       "E01:ZZUP:1:null",
       "E07:ZZD1:1:null",
-      "E07:ZZD2:0:rank",
+      "E07:ZZD2:0:second_position",
       "E08:ZZD1:1:null",
-      "E08:ZZD2:0:rank",
+      "E08:ZZD2:0:second_position",
     ]);
     for (const c of cards) expect(String(c.decided_at)).toBe("2031-02-26T07:10:00.000Z");
   });

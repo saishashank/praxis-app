@@ -27,6 +27,7 @@ import {
   ownerChallenger,
   rows,
   world,
+  f1With,
 } from "./challengerFixtures";
 
 afterEach(cleanupTempDbs);
@@ -299,7 +300,12 @@ describe("generation", () => {
     }
     {
       const { db, p } = await mk();
-      for (let i = 0; i < LEARNING.maxChallengers; i += 1) await ownerChallenger(db, i);
+      // O-46: trail changes are capped per quarter, so the slots are filled with a non-stop key
+      for (let i = 0; i < LEARNING.maxChallengers; i += 1) {
+        await ownerChallenger(db, i, undefined, {
+          params: await f1With(db, { f1_volume_ratio_min: 1.5 + 0.05 * (i + 1) }),
+        });
+      }
       expect(await generateChallenger(db, p.view, INPUT)).toMatchObject({
         status: "blocked",
         reason: "max_challengers",

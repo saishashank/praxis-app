@@ -26,7 +26,18 @@ export const ZAP_MAX_DAYS = 7; // staging ZAP scan must be this fresh
 export const DRILL_MAX_DAYS = 120; // TST-112, TST-108, D-155
 
 /** CI jobs of ci.yml that must have succeeded on the commit (the PR gate, M7 and M8 checks). */
-export const CI_REQUIRED_JOBS = ["app", "e2e", "secrets", "worker", "fixtures", "python"];
+// V1-I15 / D-796: the default equals the ci.yml release-gate `needs` list (a test pins the two together).
+export const CI_REQUIRED_JOBS = [
+  "app",
+  "e2e",
+  "secrets",
+  "worker",
+  "fixtures",
+  "python",
+  "audit",
+  "coverage",
+  "checks",
+];
 
 /** Step names the gate reads (workflow text; a rename must be mirrored here and in the tests). */
 export const STEP = {
@@ -34,8 +45,18 @@ export const STEP = {
   e2eStaging: "Staging end-to-end checks (viewer test identity)",
   zapScan: "Scan staging as the viewer test identity",
   drill: "Drill or restore",
+  // GL-09: the strict step of the ci.yml fixtures job (release PRs only): real fixtures checked out,
+  // no fixture-backed test skipped. A skipped step is NOT a pass here.
+  fixturesStrict: "Release PR fixtures strict check (checked out, none skipped)",
 };
 export const JOB = { stagingE2eDay: "staging", nightly: "staging", zap: "staging" };
+
+// D-860: Owner waivers (docs/release/waivers.json). Narrow on purpose: only conditions on this
+// allow-list can be waived, never CI, nightly, ZAP, the restore drill or the strict fixtures step;
+// a waiver lasts at most 14 days; anything invalid is ignored and the condition is judged normally.
+export const WAIVABLE = ["staging-e2e-day"];
+export const MAX_WAIVER_DAYS = 14; // threshold-ok: calendar limit fixed by D-860, not a tunable rule value
+const WAIVER_TEXT_MAX = 600; // threshold-ok: length cap on Owner-written waiver prose
 
 const HOUR_MS = 3_600_000; // threshold-ok: ms per hour
 const DAY_MS = 86_400_000; // threshold-ok: ms per day
@@ -75,8 +96,17 @@ function ciCondition(input) {
   for (const name of required) {
     const j = jobs.find((x) => x?.name === name);
     if (!j) bad.push(`${name} (not found)`);
-    else if (j.conclusion === "success") continue;
-    else if (j.conclusion === null || j.conclusion === undefined)
+    else if (j.conclusion === "success") {
+      // GL-09: the soft PR-time path lets the fixtures job pass with only a warning; a release
+      // must have run the strict step (it fails on a failed checkout or any skipped test).
+      if (name === "fixtures" && stepOf(j, STEP.fixturesStrict)?.conclusion !== "success") {
+        const c = stepOf(j, STEP.fixturesStrict)?.conclusion ?? "missing";
+        bad.push(
+          `fixtures (passed with fixtures skipped or unchecked: strict step ${c}; the private fixtures repo must be checked out and no fixture test skipped)`,
+        );
+      }
+      continue;
+    } else if (j.conclusion === null || j.conclusion === undefined)
       bad.push(`${name} (still running)`);
     else bad.push(`${name} (${j.conclusion})`);
   }
@@ -297,6 +327,80 @@ function drillCondition(input, now) {
   );
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function dayNumber(s) {
+  if (typeof s !== "string" || !DATE_RE.test(s)) return null;
+  const t = Date.parse(`${s}T00:00:00Z`);
+  if (Number.isNaN(t) || new Date(t).toISOString().slice(0, 10) !== s) return null;
+  return t / DAY_MS;
+}
+const prose = (v) =>
+  typeof v === "string" && v.trim().length > 0 && v.length <= WAIVER_TEXT_MAX && !v.includes("://"); // a URL pasted into Owner prose must not reach a log
+
+/**
+ * Keeps only the valid waivers. Fail closed: a malformed, expired, future-dated, over-long,
+ * non-Owner or non-allow-listed entry is dropped (and counted), never half-applied.
+ * @returns {{ valid: any[], ignored: number }}
+ */
+export function validateWaivers(raw, today) {
+  const t = dayNumber(today);
+  const valid = [];
+  let ignored = 0;
+  if (raw === undefined || raw === null) return { valid, ignored };
+  if (!Array.isArray(raw) || t === null) {
+    return { valid, ignored: Array.isArray(raw) ? raw.length : 1 };
+  }
+  for (const w of raw) {
+    const from = dayNumber(w?.decidedOn);
+    const to = dayNumber(w?.expires);
+    const good =
+      w &&
+      typeof w === "object" &&
+      WAIVABLE.includes(w.condition) &&
+      w.decidedBy === "Owner" &&
+      prose(w.reason) &&
+      prose(w.followUp) &&
+      from !== null &&
+      to !== null &&
+      from <= t &&
+      to >= t &&
+      to - from <= MAX_WAIVER_DAYS;
+    if (good) valid.push(w);
+    else ignored += 1;
+  }
+  return { valid, ignored };
+}
+
+/** Turns a FAILED waivable condition into "waived" when a valid waiver names it. */
+function applyWaivers(conditions, input, nowMs) {
+  const today =
+    typeof input.today === "string" ? input.today : new Date(nowMs).toISOString().slice(0, 10);
+  const { valid, ignored } = validateWaivers(input.waivers, today);
+  const waived = [];
+  const out = conditions.map((c) => {
+    if (c.status !== "fail" || !WAIVABLE.includes(c.id)) return c;
+    const w = valid.find((x) => x.condition === c.id);
+    if (!w) return c;
+    waived.push({
+      id: c.id,
+      label: c.label,
+      decidedOn: w.decidedOn,
+      expires: w.expires,
+      reason: w.reason,
+      followUp: w.followUp,
+      wouldHaveFailedBecause: c.reason,
+    });
+    return {
+      id: c.id,
+      label: c.label,
+      required: true,
+      status: "waived",
+      reason: `waived by the Owner on ${w.decidedOn} until ${w.expires}: ${w.reason}`,
+    };
+  });
+  return { conditions: out, waived, ignoredWaivers: ignored };
+}
+
 /**
  * @param {import("./release-gate-core.d.mts").GateInput} input
  * @returns {import("./release-gate-core.d.mts").GateResult}
@@ -378,13 +482,25 @@ export function evaluateReleaseGate(input) {
       notRequired("restore-drill", "Restore drill and verify-removed run", why),
     );
   }
-  return { mode, pass: conditions.every((c) => c.status !== "fail"), conditions };
+  const w = applyWaivers(conditions, input, now);
+  return {
+    mode,
+    pass: w.conditions.every((c) => c.status !== "fail"),
+    conditions: w.conditions,
+    waived: w.waived,
+    ignoredWaivers: w.ignoredWaivers,
+  };
 }
 
 /** Markdown table for the job summary and the sign-off page. No token, URL or SHA in it. */
 export function renderGate(result) {
-  const word = { pass: "PASS", fail: "FAIL", "not-required": "n/a" };
-  const lines = [`### Release gate: ${result.pass ? "PASS" : "FAIL"} (${result.mode} mode)`, ""];
+  const word = { pass: "PASS", fail: "FAIL", "not-required": "n/a", waived: "WAIVED" };
+  const waived = Array.isArray(result.waived) ? result.waived : [];
+  const extra = waived.length ? `, ${plural(waived.length, "condition")} waived by the Owner` : "";
+  const lines = [
+    `### Release gate: ${result.pass ? "PASS" : "FAIL"} (${result.mode} mode${extra})`,
+    "",
+  ];
   if (result.mode === "infrastructure") {
     lines.push(
       "> Infrastructure gate (first release, data-only mode): the staging conditions are not required. The full gate applies from the second release and for the go-live switch.",
@@ -396,5 +512,21 @@ export function renderGate(result) {
     lines.push(`| ${c.label} | ${word[c.status]} | ${c.reason.replaceAll("|", "/")} |`);
   }
   lines.push("");
+  if (waived.length) {
+    lines.push("**Waived by the Owner (this is not a pass):**", "");
+    for (const w of waived) {
+      lines.push(
+        `- ${w.label}: waived on ${w.decidedOn}, ends ${w.expires}. Reason: ${w.reason.replaceAll("|", "/")} Next step: ${w.followUp.replaceAll("|", "/")}`,
+      );
+    }
+    lines.push("");
+  }
+  if (result.ignoredWaivers > 0) {
+    const n = result.ignoredWaivers;
+    lines.push(
+      `${plural(n, "waiver")} in docs/release/waivers.json ${n === 1 ? "was" : "were"} ignored (expired, invalid or not allowed).`,
+      "",
+    );
+  }
   return lines.join("\n");
 }

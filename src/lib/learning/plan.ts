@@ -207,7 +207,9 @@ export async function planCandidates(db: Client, i: CandidateInput): Promise<Pla
     );
   }
   const so = await db.execute({
-    sql: "SELECT source, mode FROM source_status WHERE mode <> 'on' ORDER BY source",
+    // The expert channels (migration 0022, D-522) are off by design until the Owner enables a fetcher;
+    // an off-by-design source is not a data weakness (it would fill the plan every night).
+    sql: "SELECT source, mode FROM source_status WHERE mode <> 'on' AND source NOT LIKE 'expert\\_%' ESCAPE '\\' ORDER BY source",
     args: [],
   });
   for (const r of so.rows) {

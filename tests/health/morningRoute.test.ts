@@ -101,6 +101,25 @@ describe("POST /api/internal/morning", () => {
     expect(mock.outbox).toHaveLength(1);
   });
 
+  it("503 while a reminder send is pending, so the Worker retries (V1-S8, D-691)", async () => {
+    await db.execute({
+      sql: "INSERT INTO credential_expiry (name, expires_on, set_at, set_by) VALUES ('d_turso_main_tokens', '2026-10-31', 'x', 1)",
+      args: [],
+    });
+    mock.script = [
+      { outcome: "retryable", httpStatus: 503 },
+      { outcome: "retryable", httpStatus: 503 },
+    ];
+    const h = createMorningHandler(deps());
+    const r = await h(post(body()));
+    expect(r.status).toBe(503);
+    expect(await r.json()).toMatchObject({ error: "send_pending" });
+    // A retry inside the 60 s gap answers "duplicate" from sendEmail but the row is still claimed.
+    const r2 = await h(post(body()));
+    expect(r2.status).toBe(503);
+    expect(mock.outbox).toHaveLength(0);
+  });
+
   it("all green: 200, no email", async () => {
     const r = await createMorningHandler(deps())(post(body()));
     expect(await r.json()).toEqual({ reminder: "none", brief: "skipped", reminder_items: 0 });

@@ -18,6 +18,7 @@ import {
   type StudentisedTest,
 } from "./bootstrap";
 import { deflatedSharpeRatio, returnMoments } from "./dsr";
+import { validationLevelFor } from "./errorBudget";
 import {
   absoluteGatePasses,
   holdoutLevel,
@@ -129,6 +130,12 @@ export type Val110Input = {
   readonly windowEndD: string;
   /** Lineage trials on this split (DSR N). */
   readonly trialsOnSplit: number;
+  /**
+   * VAL-112 (D-226): validation_access + pattern_test rows already spent on this lineage's split
+   * version, not counting this access (k), from `spentTestsBefore`. Required (D-283): a missing k can
+   * no longer fall back to the v1 fixed level.
+   */
+  readonly priorTests: number;
   readonly challenger?: {
     readonly challengerRows: readonly ChallengerRow[];
     readonly incumbentRows: readonly ChallengerRow[];
@@ -323,7 +330,12 @@ export function evaluateVal110(input: Val110Input): Val110Result {
   const master = input.masterSeed ?? STATS_MASTER_SEED;
   const L = Math.max(params.activeLineagesFloor, input.activeLineages);
   const m = params.trialBudgetPerLineage;
-  const level = validationLevel(params.alpha, m, L);
+  const level = validationLevelFor({
+    mode: params.valErrorBudgetMode,
+    w0: params.valFwerPerLineage,
+    priorTests: input.priorTests,
+    legacy: { alpha: params.alpha, m, lineages: L },
+  });
   const B = replicationsFor(level, params);
   const results: ValidationResultRecord[] = [];
   const base = (extra: {
@@ -693,7 +705,15 @@ export function evaluateVal110(input: Val110Input): Val110Result {
 
 export type SingleTestInput = Omit<
   Val110Input,
-  "challenger" | "safety" | "costInfeasible" | "pboWeekly" | "dsr" | "trialsOnSplit" | "windowEndD"
+  | "access"
+  | "challenger"
+  | "safety"
+  | "costInfeasible"
+  | "pboWeekly"
+  | "dsr"
+  | "trialsOnSplit"
+  | "priorTests"
+  | "windowEndD"
 > & { readonly windowEndD: string };
 
 export type SingleTestResult = {
@@ -791,11 +811,13 @@ export function evaluateHoldout(
   return singleTest(input, "holdout", holdoutLevel(input.params.alpha, L), L, true);
 }
 
-/** ARN-084 sleeve per-trade net expectancy at alpha / (m L); recorded in the trial ledger like any access. */
+/**
+ * ARN-084 sleeve per-trade net expectancy at alpha / (m L). Descriptive since O-45 (D-228): it is not
+ * charged to the trial ledger, so it needs no access row (an `access` passed in is ignored).
+ */
 export function evaluateLeverage(
-  input: SingleTestInput & { readonly access: TrialLedgerRow },
+  input: SingleTestInput & { readonly access?: TrialLedgerRow },
 ): SingleTestResult {
-  requireAccess(input.access, input, "validation_access");
   const L = Math.max(input.params.activeLineagesFloor, input.activeLineages);
   return singleTest(
     input,

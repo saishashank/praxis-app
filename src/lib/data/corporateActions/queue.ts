@@ -6,6 +6,7 @@ import {
   autoApplyDate,
   classOf,
   describeTerms,
+  isPriceOnly,
   reasonText,
   typeLabel,
 } from "./rules.mjs";
@@ -26,6 +27,8 @@ export type ReviewCard = {
   queuedOn: string | null;
   /** The session on which the item is applied on best evidence (DAT-221), when known. */
   applyOn: string | null;
+  /** GL-01: a price-only reading that the vendor evidence vetoes is never applied automatically. */
+  neverAuto: boolean;
 };
 
 export type ReviewQueue = { cards: ReviewCard[]; blockedOnly: number };
@@ -71,6 +74,8 @@ export async function loadReviewQueue(db: Client, market = "AU"): Promise<Review
       ),
       observed: typeof a.note.observed === "number" ? a.note.observed : null,
       queuedOn: a.stateSince,
+      // GL-01: the same rule applyDue uses, so the card and the engine never disagree.
+      neverAuto: isPriceOnly(a.sources),
       applyOn: a.stateSince ? autoApplyDate(a.stateSince, cal, sessions) : null,
     };
   });

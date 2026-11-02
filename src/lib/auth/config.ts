@@ -6,10 +6,15 @@ import { authDb } from "@/lib/db/client";
 import { getSessionMaxAgeSec } from "@/lib/http/limits";
 import { requestMeta } from "./audit";
 import { decideSignIn } from "./allowlist";
+import { pinnedOrigin, sessionCookieConfig, trustHostFor } from "./cookies";
 
 type Tok = Record<string, unknown>;
 
 export function buildAuthConfig(): NextAuthConfig {
+  // V1-I10: pin the host. next-auth reads AUTH_URL from process.env to rewrite every request URL
+  // to the canonical origin; an explicitly set AUTH_URL is left alone.
+  const pin = pinnedOrigin(process.env);
+  if (pin && !process.env.AUTH_URL) process.env.AUTH_URL = pin;
   return {
     providers: [
       Google({
@@ -18,7 +23,8 @@ export function buildAuthConfig(): NextAuthConfig {
       }),
     ],
     session: { strategy: "jwt", maxAge: getSessionMaxAgeSec() },
-    trustHost: true,
+    trustHost: trustHostFor(process.env),
+    cookies: sessionCookieConfig(process.env),
     pages: { signIn: "/signin", error: "/signin" },
     callbacks: {
       async signIn({ user, profile }) {

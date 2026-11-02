@@ -1,0 +1,8 @@
+{
+  "$comment": "M16 WP6 fragment: Blueprint export download route.",
+  "routes": {
+    "GET /api/blueprint/export": {
+      "tests": ["tests/blueprint/export.test.ts"]
+    }
+  }
+}

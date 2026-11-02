@@ -1,6 +1,6 @@
 // M7 T14 Picks pages (UXN-040..045, ch.16 16.21 acceptance, AT-25/AT-27): list, Why this pick and
 // Track record, rendered from a real (temporary) database through the page components.
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import axe from "axe-core";
 import fs from "node:fs";
 import path from "node:path";
@@ -13,7 +13,12 @@ import PicksPage from "@/app/(app)/picks/page";
 import WhyPage from "@/app/(app)/picks/[id]/page";
 import TrackRecordPage from "@/app/(app)/picks/track-record/page";
 import { SuccessStrip } from "@/app/(app)/picks/SuccessStrip";
-import { capPerFamily, honestyLine, timeFrameText } from "@/app/(app)/picks/text";
+import {
+  capPerFamily,
+  EMPTY_PICKS_SENTENCE,
+  honestyLine,
+  timeFrameText,
+} from "@/app/(app)/picks/text";
 import { loadPicks } from "@/lib/ui/loaders/picks";
 import { successLine, type ModelSuccess } from "@/lib/picks/success";
 
@@ -54,6 +59,58 @@ describe("Picks list", () => {
   let w: World;
   beforeAll(async () => {
     w = await fullWorld();
+    // The family sheet's panel is a lazy chunk (Sheet.tsx); load it once here so the 1 s findBy* wait
+    // below is not spent on the first transform of the Radix dialog (same as tests/strategies/c7).
+    await import("@/components/ui/SheetPanel");
+  }, 60_000);
+
+  it("shows the family badge with plain words, an info sheet and the Today / Track record tabs (UXR-021, UXN-311)", async () => {
+    as(w, "owner");
+    render(await PicksPage({ searchParams: sp() }));
+    const card = screen.getAllByTestId("pick-card")[0]!;
+    const badge = card.querySelector("[data-family]")!;
+    expect(badge.getAttribute("data-family")).toBe("br");
+    expect(badge.textContent).toContain("Breakout");
+    expect(card.querySelector("[data-hue=family-br]")).not.toBeNull();
+    fireEvent.click(within(card).getByRole("link", { name: "About Breakout" }));
+    const sheet = await screen.findByTestId("family-sheet");
+    expect(sheet.textContent).toContain("Buys when");
+    expect(sheet.textContent).toContain("Usually breaks when");
+    cleanup();
+    render(await PicksPage({ searchParams: sp() }));
+    const tabs = screen.getByRole("navigation", { name: "Picks view" });
+    expect(within(tabs).getByRole("link", { name: /Today/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(within(tabs).getByRole("link", { name: "Track record" })).toHaveAttribute(
+      "href",
+      "/picks?profile=balanced&view=track",
+    );
+  });
+
+  it("renders the Track record tab on /picks?view=track and keeps the old route", async () => {
+    as(w, "owner");
+    render(await PicksPage({ searchParams: sp({ view: "track" }) }));
+    const tabs = screen.getByRole("navigation", { name: "Picks view" });
+    expect(within(tabs).getByRole("link", { name: /Track record/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.queryByTestId("pick-card")).toBeNull();
+    cleanup();
+    render(await TrackRecordPage({ searchParams: sp() }));
+    expect(screen.getByRole("heading", { level: 1, name: "Track record" })).toBeInTheDocument();
+    expect(screen.getByRole("table")).toBeInTheDocument();
+  });
+
+  it("masked roles still see the family badge but no code, company or price", async () => {
+    as(w, "viewer");
+    const { container } = render(await PicksPage({ searchParams: sp() }));
+    expect(container.querySelector("[data-family]")?.textContent).toContain("Breakout");
+    expect(container.textContent).not.toContain("ZZUP");
+    expect(container.textContent).not.toContain("A$");
   });
 
   it("shows the profile switch, success strip, cards and the honesty line to the Owner", async () => {
@@ -64,12 +121,19 @@ describe("Picks list", () => {
     expect(
       within(chips)
         .getAllByRole("link")
-        .map((a) => a.textContent),
+        .map((a) => a.textContent?.replace(" (Selected)", "")),
     ).toEqual(["Aggressive", "Balanced", "Conservative"]);
-    expect(within(chips).getByRole("link", { name: "Balanced" })).toHaveAttribute(
+    // UXR-002: fill + check + the word "Selected" on the chosen profile only.
+    const on = within(chips).getByRole("link", { name: /Balanced/ });
+    expect(on).toHaveAttribute("aria-current", "page");
+    expect(on.textContent).toContain("(Selected)");
+    expect(on.querySelector("svg")).not.toBeNull();
+    expect(on.className).toContain("bg-accent");
+    expect(within(chips).getByRole("link", { name: "Aggressive" })).not.toHaveAttribute(
       "aria-current",
-      "page",
     );
+    // The profile sentence sits directly under the control.
+    expect(chips.parentElement?.querySelector("p")?.textContent).toContain("Balanced: Picks from");
     expect(screen.getByTestId("success-line").textContent).toBe(
       "Model success: not measured yet — 1 of 30 picks closed",
     );
@@ -91,34 +155,29 @@ describe("Picks list", () => {
     );
     // Decision support only: nothing can place an order (UX-130, PRD-001).
     expect(screen.queryByRole("button", { name: /buy now|sell|place.*order/i })).toBeNull();
-    expect(document.querySelector("form, input")).toBeNull();
+    // The only form is the sort toggle (UXN-309, D-474): one hidden field, no order control.
+    expect(
+      document.querySelector("form:not([data-testid=sort-toggle]), input:not([type=hidden])"),
+    ).toBeNull();
   });
 
-  it("shows at most picks_max_per_family picks per family, read from the config key", async () => {
+  it("O-76/D-791: picks_max_per_family is pinned to 10, so no per-family cap reaches the page", async () => {
     await addPick(w, 3, "ZZDN", "F1");
     await addPick(w, 4, "ZZOTH", "F2");
     as(w, "owner");
+    // A value below 10 is refused (the V1 values 1..5 can no longer re-introduce the cap).
+    for (const value of [1, 2, 3, 9]) {
+      await expect(
+        setConfig(w.main, {
+          key: "picks_max_per_family",
+          value,
+          userId: null,
+          now: "2026-10-19T00:00:00.000Z",
+        }),
+      ).rejects.toThrow();
+    }
     render(await PicksPage({ searchParams: sp() }));
-    // Default 2: ranks 1, 2 (both F1) and 4 (F2); rank 3 is the third F1 pick.
-    expect(screen.getAllByTestId("pick-card")).toHaveLength(3);
-    cleanup();
-    await setConfig(w.main, {
-      key: "picks_max_per_family",
-      value: 1,
-      userId: null,
-      now: "2026-10-20T00:00:00.000Z",
-    });
-    render(await PicksPage({ searchParams: sp() }));
-    expect(screen.getAllByTestId("pick-card")).toHaveLength(2); // one F1, one F2
-    cleanup();
-    await setConfig(w.main, {
-      key: "picks_max_per_family",
-      value: 3,
-      userId: null,
-      now: "2026-10-20T00:01:00.000Z",
-    });
-    render(await PicksPage({ searchParams: sp() }));
-    expect(screen.getAllByTestId("pick-card")).toHaveLength(4);
+    expect(screen.getAllByTestId("pick-card")).toHaveLength(4); // all of F1 and F2 shown
   });
 
   it("capPerFamily keeps order and never exceeds the cap", () => {
@@ -215,6 +274,8 @@ describe("empty and stale states", () => {
     as(w, "owner");
     render(await PicksPage({ searchParams: sp() }));
     expect(screen.getByText("No picks yet")).toBeInTheDocument();
+    expect(screen.getByText(EMPTY_PICKS_SENTENCE)).toBeInTheDocument();
+    expect(screen.getByTestId("picks-empty").querySelector("svg")).not.toBeNull();
     expect(screen.queryAllByTestId("pick-card")).toHaveLength(0);
     cleanup();
     render(await TrackRecordPage({ searchParams: sp() }));

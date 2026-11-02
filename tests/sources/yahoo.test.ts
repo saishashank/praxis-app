@@ -38,6 +38,18 @@ describe("validateBar", () => {
     expect(validateBar(good)).toEqual({ row: good });
   });
 
+  it("GL-04: a null or missing adj_close never rejects an otherwise valid bar", () => {
+    expect(validateBar({ ...good, adj_close: null })).toEqual({
+      row: { ...good, adj_close: null },
+    });
+    const noAdj: Record<string, unknown> = { ...good };
+    delete noAdj.adj_close;
+    expect(validateBar(noAdj)).toEqual({ row: { ...good, adj_close: null } });
+    // a present value is still validated
+    expect(reason({ adj_close: Number.NaN })).toBe("bad_number");
+    expect(reason({ adj_close: -1 })).toBe("non_positive_price");
+  });
+
   it("accepts a flat bar and zero volume", () => {
     expect(reason({ open: 10, high: 10, low: 10, close: 10, volume: 0 })).toBe("ok");
   });

@@ -274,6 +274,12 @@ export const EMAIL_KINDS = [
   "brief",
   "test",
   "dbdown",
+  // M17 (D-381..D-400; migration 0020): pick alerts and the intraday candidate mail. Pool slot only.
+  "pick_hit",
+  "pick_cleared",
+  "pick_candidate",
+  "pick_batch",
+  "pick_digest",
 ] as const;
 export type EmailKind = (typeof EMAIL_KINDS)[number];
 

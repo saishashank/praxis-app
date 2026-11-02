@@ -2,7 +2,7 @@
 // Adjusted-price reader (M2 T8): DAT-002 (raw bars never change), DAT-126 (only factors with
 // ex-date <= D), AT-08 (no artificial P/L across a split or consolidation). Synthetic ZZ* data.
 import { afterEach, describe, expect, it } from "vitest";
-import { adjustedBars, effectiveFactors } from "@/lib/data/adjusted";
+import { adjustedBars, effectiveFactors, UNBOUNDED } from "@/lib/data/adjusted";
 import { runCorporateActions } from "@/lib/data/corporateActions/engine.mjs";
 import { cleanupTempDbs } from "../db/helpers";
 import { announced, caDb, count, D0, D1, D2, D3, io, nowOf, putBar, rows } from "./helpers";
@@ -28,7 +28,7 @@ describe("adjustedBars", () => {
     await run(db, D1, [announced("ZZA", "split", D1, { new: 2, old: 1 })]);
     const rawBefore = await rows(db, "SELECT * FROM price_bar ORDER BY d");
 
-    const bars = await adjustedBars(db, "ZZA", D0, D2);
+    const bars = await adjustedBars(db, "ZZA", D0, D2, { knownBy: UNBOUNDED });
     expect(bars.map((b) => [b.d, b.c, b.factor])).toEqual([
       [D0, 5, 0.5],
       [D1, 5.1, 1],
@@ -47,7 +47,7 @@ describe("adjustedBars", () => {
     await putBar(db, "ZZA", D0, 0.5);
     await putBar(db, "ZZA", D1, 5.05);
     await run(db, D1, [announced("ZZA", "consolidation", D1, { new: 1, old: 10 })]);
-    const [a, b] = await adjustedBars(db, "ZZA", D0, D1);
+    const [a, b] = await adjustedBars(db, "ZZA", D0, D1, { knownBy: UNBOUNDED });
     expect(a.c).toBe(5);
     expect(b.c).toBe(5.05);
   });
@@ -59,7 +59,7 @@ describe("adjustedBars", () => {
     await putBar(db, "ZZA", D2, 5);
     await run(db, D1, [announced("ZZA", "split", D1, { new: 2, old: 1 })]);
     await run(db, D2, [announced("ZZA", "split", D2, { new: 4, old: 1 })]);
-    const bars = await adjustedBars(db, "ZZA", D0, D2);
+    const bars = await adjustedBars(db, "ZZA", D0, D2, { knownBy: UNBOUNDED });
     expect(bars.map((b) => b.c)).toEqual([5, 5, 5]);
     expect(bars.map((b) => b.factor)).toEqual([0.125, 0.25, 1]);
   });
@@ -69,9 +69,9 @@ describe("adjustedBars", () => {
     await putBar(db, "ZZA", D0, 10);
     await putBar(db, "ZZA", D1, 5.1);
     await run(db, D1, [announced("ZZA", "split", D1, { new: 2, old: 1 })]);
-    const early = await adjustedBars(db, "ZZA", D0, D0, { asOf: D0 });
+    const early = await adjustedBars(db, "ZZA", D0, D0, { knownBy: UNBOUNDED, asOf: D0 });
     expect(early[0].c).toBe(10); // the ex-date is after D0: not yet known to that decision date
-    const late = await adjustedBars(db, "ZZA", D0, D0, { asOf: D1 });
+    const late = await adjustedBars(db, "ZZA", D0, D0, { knownBy: UNBOUNDED, asOf: D1 });
     expect(late[0].c).toBe(5);
   });
 
@@ -80,8 +80,10 @@ describe("adjustedBars", () => {
     await putBar(db, "ZZA", D0, 10);
     await putBar(db, "ZZA", D1, 10.2);
     await run(db, D1, [announced("ZZA", "split", D1, { new: 2, old: 1 })]); // price flat: queued
-    expect((await adjustedBars(db, "ZZA", D0, D1)).map((b) => b.c)).toEqual([10, 10.2]);
-    expect(await effectiveFactors(db, "ZZA")).toEqual([]);
+    expect((await adjustedBars(db, "ZZA", D0, D1, { knownBy: UNBOUNDED })).map((b) => b.c)).toEqual(
+      [10, 10.2],
+    );
+    expect(await effectiveFactors(db, "ZZA", "AU", UNBOUNDED)).toEqual([]);
   });
 
   it("an action with no event rows or no factor row is ignored", async () => {
@@ -90,12 +92,12 @@ describe("adjustedBars", () => {
     await db.execute(
       "INSERT INTO corporate_action (id, market, code, type, ex_date, payload_json) VALUES (1, 'AU', 'ZZA', 'split', '2026-10-13', '{}')",
     );
-    expect(await effectiveFactors(db, "ZZA")).toEqual([]);
+    expect(await effectiveFactors(db, "ZZA", "AU", UNBOUNDED)).toEqual([]);
     await db.execute(
       "INSERT INTO corporate_action_event (action_id, at, status, by) VALUES (1, '2026-10-13T00:00:00.000Z', 'auto_confirmed', 'system')",
     );
-    expect(await effectiveFactors(db, "ZZA")).toEqual([]); // confirmed but no factor yet
-    expect((await adjustedBars(db, "ZZA", D0, D1))[0].c).toBe(10);
+    expect(await effectiveFactors(db, "ZZA", "AU", UNBOUNDED)).toEqual([]); // confirmed but no factor yet
+    expect((await adjustedBars(db, "ZZA", D0, D1, { knownBy: UNBOUNDED }))[0].c).toBe(10);
   });
 
   it("the newest factor row of an action wins", async () => {
@@ -107,18 +109,26 @@ describe("adjustedBars", () => {
       sql: "INSERT INTO adjustment_factor (market, code, ex_date, factor, corporate_action_id, computed_at) VALUES ('AU', 'ZZA', ?, 0.25, 1, '2099-01-01T00:00:00.000Z')",
       args: [D1],
     });
-    expect((await adjustedBars(db, "ZZA", D0, D0))[0].c).toBe(2.5);
+    expect((await adjustedBars(db, "ZZA", D0, D0, { knownBy: UNBOUNDED }))[0].c).toBe(2.5);
   });
 
   it("is read-only and validates its arguments", async () => {
     const db = await caDb();
     const before = [await count(db, "price_bar"), await count(db, "adjustment_factor")];
-    expect(await adjustedBars(db, "ZZA", D0, D3)).toEqual([]);
-    expect(await adjustedBars(db, "ZZB", D0, D3, { market: "AU" })).toEqual([]);
+    expect(await adjustedBars(db, "ZZA", D0, D3, { knownBy: UNBOUNDED })).toEqual([]);
+    expect(await adjustedBars(db, "ZZB", D0, D3, { knownBy: UNBOUNDED, market: "AU" })).toEqual([]);
     expect([await count(db, "price_bar"), await count(db, "adjustment_factor")]).toEqual(before);
-    await expect(adjustedBars(db, "zz", D0, D1)).rejects.toThrow(RangeError);
-    await expect(adjustedBars(db, "ZZA", "2026-02-30", D1)).rejects.toThrow(RangeError);
-    await expect(adjustedBars(db, "ZZA", D1, D0)).rejects.toThrow(RangeError);
-    await expect(adjustedBars(db, "ZZA", D0, D1, { asOf: "x" })).rejects.toThrow(RangeError);
+    await expect(adjustedBars(db, "zz", D0, D1, { knownBy: UNBOUNDED })).rejects.toThrow(
+      RangeError,
+    );
+    await expect(adjustedBars(db, "ZZA", "2026-02-30", D1, { knownBy: UNBOUNDED })).rejects.toThrow(
+      RangeError,
+    );
+    await expect(adjustedBars(db, "ZZA", D1, D0, { knownBy: UNBOUNDED })).rejects.toThrow(
+      RangeError,
+    );
+    await expect(
+      adjustedBars(db, "ZZA", D0, D1, { knownBy: UNBOUNDED, asOf: "x" }),
+    ).rejects.toThrow(RangeError);
   });
 });

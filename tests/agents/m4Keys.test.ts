@@ -11,6 +11,12 @@ import {
   M5_KEY_NAMES,
   M6_KEY_NAMES,
   M7_KEY_NAMES,
+  M14_KEY_NAMES,
+  M15_KEY_NAMES,
+  M17_KEY_NAMES,
+  M11L_KEY_NAMES,
+  M13L_KEY_NAMES,
+  MOVERS_KEY_NAMES,
   type ConfigKey,
 } from "@/lib/config/keys";
 import { getConfig, setConfig } from "@/lib/config/store";
@@ -41,7 +47,7 @@ const FAMILY_TABLE: readonly Ranged[] = [
   ["f3_max_gap_pct", 8, 5, 12, "B"],
   ["f3_trail_after_pct", 10, 5, 20, "B"],
   ["f3_trail_atr", 2.5, 1.5, 4, "B"],
-  ["f3_time_exit", 20, 10, 40, "B"],
+  ["f3_time_exit", 20, 10, 60, "B"], // upper bound raised from 40 in M14 (KB-081, D-233)
   ["f4_rsi2_max", 10, 5, 20, "B"],
   ["f4_rsi14_max", 30, 20, 35, "B"],
   ["f4_time_exit", 10, 5, 20, "B"],
@@ -182,6 +188,13 @@ describe("M4 keys: defaults and bounds equal ch.15", () => {
       "event_polarity_threshold_pct",
       "insider_window_sessions",
       "insider_score_weights",
+      // M14 structural switches (KB-081, D-235)
+      "f1_return_window_sessions",
+      "f1_momentum_variant",
+      "f1_rank_variant",
+      "f3_surprise_mode",
+      "f4_entry_variant",
+      "f4_rank_variant",
     ].sort();
     expect(b).toEqual(expected);
   });
@@ -256,6 +269,12 @@ describe("M4 keys: defaults and bounds equal ch.15", () => {
       ...M5_KEY_NAMES, // the M5 keys have their own table in tests/sentinel/m5Keys.test.ts
       ...M6_KEY_NAMES, // the M6 keys have their own table in tests/learning/m6Keys.test.ts
       ...M7_KEY_NAMES, // the M7 keys have their own table in tests/view/m7Keys.test.ts
+      ...M14_KEY_NAMES, // the M14 keys have their own table in tests/agents/m14Keys.test.ts
+      ...M15_KEY_NAMES, // the M15 Cortex keys have their own table in tests/config/m15Keys.test.ts
+      ...M17_KEY_NAMES, // the M17 keys have their own table in tests/config/m17Keys.test.ts
+      ...M11L_KEY_NAMES, // the M11-lite keys have their own table in tests/config/m11lKeys.test.ts
+      ...M13L_KEY_NAMES, // the M13-lite keys have their own table in tests/config/m13lKeys.test.ts
+      ...MOVERS_KEY_NAMES, // the movers gap keys have their own table in tests/config/moversKeys.test.ts
     ]);
     const listed = new Set<string>([
       ...RANGED.map((r) => r[0]),

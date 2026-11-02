@@ -48,6 +48,30 @@ describe("isStale", () => {
   });
 });
 
+describe("R4-I3: capped arena catch-up on the jobs view", () => {
+  it("shows the capped record on arena-close, and clears when a later run follows", async () => {
+    await run("arena-close", "success", 7200);
+    const id = await startRun(db, {
+      job: "arena-close",
+      concurrencyKey: "arena-2a:AU:x",
+      now: at(61),
+    });
+    await finishRun(db, id, {
+      status: "skipped",
+      now: at(60),
+      details: { reason: "catch_up_capped", closed: 10, remaining: 4 },
+    });
+    let s = await getHealthSummary(db, NOW, "viewer");
+    expect(find(s, "arena-close").attention).toBe(
+      "Catch-up capped: 10 closed, 4 still to close. Dispatch Arena close again.",
+    );
+    expect(find(s, "arena-close").state).toBe("ok");
+    await run("arena-close", "success", 10);
+    s = await getHealthSummary(db, NOW, "viewer");
+    expect(find(s, "arena-close").attention).toBeUndefined();
+  });
+});
+
 describe("getHealthSummary", () => {
   it("empty database: every known job is 'no data' with a note", async () => {
     const s = await getHealthSummary(db, NOW, "viewer");
@@ -65,6 +89,10 @@ describe("getHealthSummary", () => {
       "arena-close",
       "arena-signals",
       "arena-review",
+      "maintenance-nightly",
+      "arena-learn",
+      "arena-words",
+      "worker-reenable",
       "backfill-history",
     ]);
     for (const j of s.jobs) {

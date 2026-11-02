@@ -51,7 +51,7 @@ export function DataTable<Row>({
     <div className={cn("min-w-0", className)}>
       <table className="hidden w-full table-fixed border-collapse text-sm sm:table">
         <caption className="sr-only">{caption}</caption>
-        <thead className="sticky top-0 bg-surface">
+        <thead className="sticky top-14 z-10 bg-surface">
           <tr>
             {columns.map((c) => (
               <th

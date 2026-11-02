@@ -5,12 +5,14 @@
 // reason, and a test fails when a table is in neither list, so a new writer must choose.
 import type { Client } from "@libsql/client";
 import { LEARNING_TABLES } from "@/lib/learning/schema";
+import { buildExpertDocuments } from "@/lib/experts/kbDocs";
 import { buildMarketDocuments, REVIEW_MARKET } from "./documents";
 
 type Source = {
   readonly table: string;
   /** SQL selecting `id` (the `<kind>:<key>` text) and `d`, with `?` = market. */
   readonly sql: string;
+  /** Not market-bound (reviews, the expert mirror): listed once, for the review market (MKT-102). */
   readonly reviewOnly?: true;
 };
 
@@ -78,6 +80,18 @@ export const RECORD_SOURCES: readonly Source[] = [
     sql: "SELECT 'evening_review:' || d || ':' || version AS id, d FROM evening_review",
     reviewOnly: true,
   },
+  // M13-lite WP7 (D-523, D-641): the expert mirror is not market-bound; the documents under
+  // knowledge/common/experts and knowledge/common/techniques carry these ids.
+  {
+    table: "expert",
+    sql: "SELECT 'expert:' || id AS id, substr(created_at, 1, 10) AS d FROM expert",
+    reviewOnly: true,
+  },
+  {
+    table: "cluster",
+    sql: "SELECT 'cluster:' || id AS id, substr(created_at, 1, 10) AS d FROM cluster",
+    reviewOnly: true,
+  },
 ];
 
 /** Learning tables that no document renders, each with the reason (checked by a test). */
@@ -124,7 +138,10 @@ export async function mappingCompleteness(
   market: string,
   d?: string,
 ): Promise<CompletenessResult> {
-  const docs = await buildMarketDocuments(db, market);
+  const docs = [
+    ...(await buildMarketDocuments(db, market)),
+    ...(market === REVIEW_MARKET ? await buildExpertDocuments(db) : []),
+  ];
   const carried = new Set(docs.flatMap((x) => x.sourceIds));
   const ids = await listRecordIds(db, market, d);
   return {

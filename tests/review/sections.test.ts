@@ -334,6 +334,52 @@ describe("section 9: system and quota health", () => {
   });
 });
 
+describe("section 9: the steelman budget-state line (D-484, AT-37)", () => {
+  const night = (db: Client, n: { written: number; noModel: number; budget: number }) =>
+    exec(
+      db,
+      `INSERT INTO steelman_night (market, d, requested, written, not_written_limit, not_written_budget,
+         not_written_no_model, not_written_critic, claims_total, claims_valid, validity_ppm, critic_hidden, created_at)
+       VALUES (?, ?, ?, ?, 0, ?, ?, 0, 0, 0, 0, 0, ?)`,
+      [
+        MARKET,
+        D,
+        n.written + n.noModel + n.budget,
+        n.written,
+        n.budget,
+        n.noModel,
+        `${D}T09:00:00.000Z`,
+      ],
+    );
+
+  it("has no line on a night without a steelman row", async () => {
+    const db = await mainWorld();
+    await tradingDay(db);
+    const { facts } = await buildFacts(db, opts());
+    expect(facts.health.some((h) => h.label === "Steelman")).toBe(false);
+  });
+
+  it("says no model was available, informational and OK", async () => {
+    const db = await mainWorld();
+    await tradingDay(db);
+    await night(db, { written: 0, noModel: 3, budget: 0 });
+    const { facts } = await buildFacts(db, opts());
+    const l = facts.health.find((h) => h.label === "Steelman")!;
+    expect(l.status).toBe("ok");
+    expect(l.detail).toContain("0 of 3 written; 3 with no model available");
+  });
+
+  it("asks for attention when the AI budget stopped it", async () => {
+    const db = await mainWorld();
+    await tradingDay(db);
+    await night(db, { written: 1, noModel: 0, budget: 2 });
+    const { facts } = await buildFacts(db, opts());
+    const l = facts.health.find((h) => h.label === "Steelman")!;
+    expect(l.status).toBe("attention");
+    expect(l.detail).toContain("1 of 3 written; 2 stopped by the AI budget");
+  });
+});
+
 describe("variants", () => {
   it("data-only mode is not partial: sections 1-7 carry the 'not active' notice", async () => {
     const db = await mainWorld({ mode: "data_only" });

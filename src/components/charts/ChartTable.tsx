@@ -15,8 +15,8 @@ export function ChartTable({
   rows: ReactNode[][];
   visible?: boolean;
 }) {
-  return (
-    <table className={visible ? "w-full text-sm font-mono" : "sr-only"}>
+  const table = (
+    <table className={visible ? "w-full text-sm font-mono" : undefined}>
       <caption>{caption}</caption>
       <thead>
         <tr>
@@ -44,4 +44,6 @@ export function ChartTable({
       </tbody>
     </table>
   );
+  // Hidden: the sr-only box (1px, clipped) contains the table, so its min-content width cannot widen the page.
+  return visible ? table : <div className="sr-only">{table}</div>;
 }

@@ -46,6 +46,20 @@ export default async function AboutPage() {
       title="About"
       intro="Praxis is a practice-only research tool. Every trade is simulated with pretend money; nothing here is financial advice."
     >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/brand/praxis-logo-tagline-light.svg"
+        alt="Praxis — Learn. Earn. Repeat."
+        width={240}
+        className="logo-light h-auto"
+      />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/brand/praxis-logo-tagline-dark.svg"
+        alt="Praxis — Learn. Earn. Repeat."
+        width={240}
+        className="logo-dark h-auto"
+      />
       <Card title="This build" headingLevel={2}>
         <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
           <dt className="text-text-muted">Version</dt>
@@ -81,7 +95,7 @@ export default async function AboutPage() {
           ))}
         </ul>
       </Card>
-      <details className="ui-card min-w-0 rounded-lg border border-border bg-surface">
+      <details id="licences" className="ui-card min-w-0 rounded-lg border border-border bg-surface">
         <summary className="flex min-h-12 cursor-pointer items-center justify-between gap-3 px-4 py-3">
           <span className="font-semibold">Open-source licences</span>
           <span className="text-sm text-text-muted" data-testid="notices-count">

@@ -22,6 +22,7 @@ const URL_HTTPS = "https://staging.example.test/api/test-identity/login";
 const URL_HTTP = "http://localhost:3000/api/test-identity/login";
 
 const STAGING = {
+  PRAXIS_ENV: "staging", // V1-I9: the positive staging signal
   TEST_IDENTITY_SECRET: SECRET,
   AUTH_SECRET,
   PII_HASH_KEY: KEY,
@@ -76,6 +77,16 @@ describe("testIdentityEnabled (SEC-109)", () => {
   });
 
   it.each([
+    ["no staging signal at all (V1-I9)", { PRAXIS_ENV: undefined, APP_BASE_URL: undefined }],
+    [
+      "production-looking APP_BASE_URL, no PRAXIS_ENV",
+      { PRAXIS_ENV: undefined, APP_BASE_URL: "https://praxis-app.vercel.app" },
+    ],
+    ["PRAXIS_ENV production", { PRAXIS_ENV: "production" }],
+    [
+      "PRAXIS_ENV production, even with a staging-looking host",
+      { PRAXIS_ENV: "production", APP_BASE_URL: "https://staging.example.test" },
+    ],
     ["no secret", { TEST_IDENTITY_SECRET: undefined }],
     ["empty secret", { TEST_IDENTITY_SECRET: "" }],
     ["short secret", { TEST_IDENTITY_SECRET: "ab12" }],
@@ -86,6 +97,16 @@ describe("testIdentityEnabled (SEC-109)", () => {
     ["NODE_ENV development", { NODE_ENV: "development" }],
   ])("each signal alone disables it: %s", (_n, over) => {
     expect(testIdentityEnabled({ ...STAGING, ...over })).toBe(false);
+  });
+
+  it("the host label also qualifies when PRAXIS_ENV is not set (separate staging Vercel project)", () => {
+    const env = {
+      ...STAGING,
+      PRAXIS_ENV: undefined,
+      APP_BASE_URL: "https://praxis-app-staging.vercel.app",
+    };
+    expect(testIdentityEnabled(env)).toBe(true);
+    expect(testIdentityEnabled({ ...STAGING, PRAXIS_ENV: "Staging" })).toBe(true);
   });
 
   it("blank production markers (whitespace) do not count as present", () => {
@@ -192,11 +213,24 @@ describe("login handler", () => {
     expect(res.headers.get("set-cookie")!.startsWith("__Secure-authjs.session-token=")).toBe(true);
   });
 
-  it("an invited user gets a cookie, but resolveUser refuses it until activation", async () => {
+  it("an invited test identity is activated by its first login, as a first Google sign-in is (D-850)", async () => {
+    // Before D-850 an invited test user got a cookie the session check refused, and nothing ever
+    // seeded an active one, so the staging nightly and E2E day failed at every login.
     const uid = await addUser(db, { email: "inv@praxis.test", status: "invited" });
+    expect(await resolveUser(db, { uid, sv: 1, si: NOW, rec: false }, ENV)).toBeNull();
     const res = await make()(signed(login("inv@praxis.test")));
     expect(res.status).toBe(200);
-    expect(await resolveUser(db, { uid, sv: 1, si: NOW, rec: false }, ENV)).toBeNull();
+    expect(await resolveUser(db, { uid, sv: 1, si: NOW, rec: false }, ENV)).not.toBeNull();
+    const row = await db.execute({ sql: "SELECT status FROM app_user WHERE id = ?", args: [uid] });
+    expect(row.rows[0]?.status).toBe("active");
+  });
+
+  it("a revoked test identity stays refused and is never re-activated", async () => {
+    const uid = await addUser(db, { email: "rev@praxis.test", status: "revoked" });
+    const res = await make()(signed(login("rev@praxis.test")));
+    expect(res.status).toBe(401);
+    const row = await db.execute({ sql: "SELECT status FROM app_user WHERE id = ?", args: [uid] });
+    expect(row.rows[0]?.status).toBe("revoked");
   });
 
   it("writes audit auth.test_identity_signin with the user as actor and a valid chain", async () => {
@@ -320,6 +354,7 @@ describe("route", () => {
 
   it("production -> 404 'Not found' without reading the body or touching any DB", async () => {
     vi.stubEnv("TEST_IDENTITY_SECRET", SECRET);
+    vi.stubEnv("PRAXIS_ENV", "staging");
     vi.stubEnv("BACKUP_PUBLIC_KEY", "age1abc");
     const authDbSpy = vi.fn();
     const ctor = vi.fn();
@@ -344,6 +379,7 @@ describe("route", () => {
 
   it("enabled -> wires the handler (unsigned call -> 401)", async () => {
     vi.stubEnv("TEST_IDENTITY_SECRET", SECRET);
+    vi.stubEnv("PRAXIS_ENV", "staging");
     vi.stubEnv("BACKUP_PUBLIC_KEY", "");
     vi.stubEnv("OWNER_RECOVERY_EMAIL", "");
     vi.stubEnv("NODE_ENV", "production");
@@ -356,6 +392,7 @@ describe("route", () => {
 
   it("enabled + signed, replay store misconfigured -> 401 (fails closed)", async () => {
     vi.stubEnv("TEST_IDENTITY_SECRET", SECRET);
+    vi.stubEnv("PRAXIS_ENV", "staging");
     vi.stubEnv("BACKUP_PUBLIC_KEY", "");
     vi.stubEnv("OWNER_RECOVERY_EMAIL", "");
     vi.stubEnv("NODE_ENV", "production");

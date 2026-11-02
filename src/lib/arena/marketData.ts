@@ -4,6 +4,7 @@
 // before it reaches SQL, so a bug that asks for tomorrow's bar fails loudly instead of leaking the
 // future into a fill or a mark. Prices are read as vendor REALs and converted once through the
 // decimal string (toMicroFromVendor), never through float arithmetic.
+import { listingFloor } from "@/lib/data/listing";
 import type { Client } from "@libsql/client";
 import { MICRO_PER_DOLLAR, toMicroFromVendor, type Micro } from "@/lib/money/micro";
 import { divFloor } from "@/lib/money/rational";
@@ -93,7 +94,7 @@ export function createMarketData(db: Reader, market: string, guardD: string): Ma
       check(asOfD);
       const rs = await db.execute({
         sql: `SELECT c FROM price_bar WHERE market = ? AND code = ? AND d <= ? AND d <= ?
-              ORDER BY d DESC LIMIT 1`,
+              AND ${listingFloor("price_bar")} ORDER BY d DESC LIMIT 1`,
         args: [market, code, asOfD, guardD],
       });
       return rs.rows.length === 0 ? null : priceMicro(rs.rows[0].c);
@@ -105,7 +106,7 @@ export function createMarketData(db: Reader, market: string, guardD: string): Ma
       if (cached !== undefined) return cached;
       const rs = await db.execute({
         sql: `SELECT c, volume FROM price_bar WHERE market = ? AND code = ? AND d <= ? AND d <= ?
-              ORDER BY d DESC LIMIT ${ADV_SESSIONS}`,
+              AND ${listingFloor("price_bar")} ORDER BY d DESC LIMIT ${ADV_SESSIONS}`,
         args: [market, code, asOfD, guardD],
       });
       let total = 0n;
@@ -131,7 +132,8 @@ export function createMarketData(db: Reader, market: string, guardD: string): Ma
       check(d);
       const rs = await db.execute({
         sql: `SELECT MAX(d) AS last_ok FROM universe_snapshot
-              WHERE market = ? AND code = ? AND halted = 0 AND d <= ? AND d <= ?`,
+              WHERE market = ? AND code = ? AND halted = 0 AND d <= ? AND d <= ?
+                AND ${listingFloor("universe_snapshot")}`,
         args: [market, code, d, guardD],
       });
       const lastOk = rs.rows.length === 0 ? null : rs.rows[0].last_ok;

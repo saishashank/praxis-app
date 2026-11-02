@@ -12,6 +12,7 @@ export type InputsContext = {
   inputs?: {
     index: ReturnType<typeof import("./indexBars.mjs").parseIndexText>;
     short: ReturnType<typeof import("../shortInterest.mjs").parseShortText>;
+    actions?: import("../vendorActions/vendorActions.mjs").ParsedVendorActions;
   };
 };
 export type InputsHook = (ctx: InputsContext) => Promise<Record<string, unknown> | void>;

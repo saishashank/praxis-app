@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { ChartTable } from "./ChartTable";
 import { clamp, n, signed, tone } from "./format";
 
@@ -127,6 +128,65 @@ export function CalendarGrid({
         caption={`${label} (${currency})`}
         headers={["Date", "Profit / loss"]}
         rows={days.map((d) => [d.date, d.value === null ? "no result" : fmt(d.value)])}
+      />
+    </figure>
+  );
+}
+
+export type SectorHeatCell = { label: string; value: number | null; hue: string | null };
+
+/** Tint strength (percent of the sector fill over the surface): 10 % at no move up to 30 % at the cap. */
+const HEAT_MIN = 10; // threshold-ok: weakest tint, percent
+const HEAT_SPAN = 20; // threshold-ok: extra tint at the full move, percent
+
+/**
+ * Sector heat grid (UXR-051, UXR-022): each tile takes its sector hue, and the tint grows with the size
+ * of the day's move. The arrow, sign and number are body text on the tint (never white-on-fill), so the
+ * text stays AA; the tint is capped well below the full fill. A tile without a hue uses the neutral fill.
+ */
+export function SectorHeatGrid({
+  cells,
+  label,
+  maxAbs = 3,
+}: {
+  cells: SectorHeatCell[];
+  label: string;
+  maxAbs?: number;
+}) {
+  return (
+    <figure className="m-0">
+      <ul
+        aria-label={label}
+        className="m-0 grid list-none grid-cols-2 gap-2 p-0 sm:grid-cols-3 lg:grid-cols-4"
+      >
+        {cells.map((c) => {
+          const strength = c.value === null ? 0 : clamp(Math.abs(c.value) / maxAbs, 0, 1);
+          const pct = n(HEAT_MIN + HEAT_SPAN * strength);
+          const hue = c.hue ?? "outcome-flat";
+          const style = {
+            "--h-fill": `var(--color-${hue}-fill)`,
+            background: `color-mix(in srgb, var(--h-fill) ${pct}%, var(--color-surface))`,
+            borderLeftColor: "var(--h-fill)",
+          } as CSSProperties;
+          return (
+            <li
+              key={c.label}
+              data-sector-hue={c.hue ?? "none"}
+              style={style}
+              className="min-w-0 rounded-lg border border-l-4 border-border p-2 text-text"
+            >
+              <span className="block text-xs break-words">{c.label}</span>
+              <span className="block text-sm font-semibold tabular-nums">
+                {c.value === null ? "—" : signed(c.value)}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <ChartTable
+        caption={label}
+        headers={["Sector", "Day change"]}
+        rows={cells.map((c) => [c.label, c.value === null ? "no data" : signed(c.value)])}
       />
     </figure>
   );

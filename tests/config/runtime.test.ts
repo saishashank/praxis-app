@@ -189,6 +189,7 @@ describe("limits accessors read the store", () => {
       signin_per_min_ip: 3,
       writes_per_min_user: 20,
       exports_per_hour_user: 1,
+      reads_per_min_user: 60, // D-722: fixed SEC-014 read maximum, not stored
     });
     expect(l.getSessionMaxAgeSec()).toBe(7 * 86400);
   });
@@ -205,6 +206,7 @@ describe("limits accessors read the store", () => {
       signin_per_min_ip: 10,
       writes_per_min_user: 60,
       exports_per_hour_user: 5,
+      reads_per_min_user: 60,
     });
     expect(l.getSessionMaxAgeSec()).toBe(14 * 86400);
   });
@@ -218,6 +220,7 @@ describe("limits accessors read the store", () => {
       signin_per_min_ip: 10,
       writes_per_min_user: 60,
       exports_per_hour_user: 5,
+      reads_per_min_user: 60,
     });
   });
 

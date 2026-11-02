@@ -10,7 +10,9 @@ import {
   classOf,
   describeTerms,
   entitlementCompensation,
+  adjCloseDisagrees,
   evaluateGroup,
+  isPriceOnly,
   evidenceScore,
   factorFor,
   inferRatio,
@@ -414,5 +416,32 @@ describe("plain-language text (UX-114)", () => {
     expect(describeTerms("cash_dividend", {})).toBe("no price adjustment");
     expect(reasonText("price_mismatch")).toMatch(/does not match/);
     expect(reasonText("zzz")).toBe("zzz");
+  });
+});
+
+describe("GL-01 veto rules", () => {
+  it("isPriceOnly is true only when every source is the price", () => {
+    expect(isPriceOnly(["price"])).toBe(true);
+    expect(isPriceOnly(["price", "vendor"])).toBe(false);
+    expect(isPriceOnly(["announcement"])).toBe(false);
+    expect(isPriceOnly([])).toBe(false);
+  });
+  it("adjCloseDisagrees: no data never vetoes; a jump in the adjusted close does", () => {
+    expect(adjCloseDisagrees(null, 10)).toBe(false);
+    expect(adjCloseDisagrees({ prevAdj: 0, exAdj: 5 }, 10)).toBe(false);
+    expect(adjCloseDisagrees({ prevAdj: 5.2, exAdj: 5.2 }, 10)).toBe(false);
+    expect(adjCloseDisagrees({ prevAdj: 10, exAdj: 5.2 }, 10)).toBe(true);
+  });
+  it("a price-only candidate beside a vendor record gets the vendor_disagrees reason", () => {
+    const r = evaluateGroup({
+      actions: [
+        { id: 1, type: "split", payload: { new: 2, old: 1 }, sources: ["price"] },
+        { id: 2, type: "split", payload: { new: 3, old: 1 }, sources: ["vendor"] },
+      ],
+      price: { prevClose: 10, exClose: 5.2 },
+    });
+    if (r.pending) throw new Error("unexpected");
+    expect(r.decisions[0].reasons).toContain("vendor_disagrees");
+    expect(r.decisions[1].reasons).not.toContain("vendor_disagrees");
   });
 });

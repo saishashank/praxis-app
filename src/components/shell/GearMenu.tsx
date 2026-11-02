@@ -59,6 +59,7 @@ export function GearMenu({
   return (
     <MenuButton
       label="Account and settings menu"
+      title={ROLE_NAME[role]}
       icon={<Avatar account={account} role={role} />}
       className="rounded-full px-1"
     >

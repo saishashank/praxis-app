@@ -10,7 +10,14 @@
 //  - shrink guard: if the file has fewer than 80 % of the previous active count the WHOLE import is
 //    rejected (`suspicious_shrink`) and nothing changes, not even the missing counters.
 //  - a delisted code that appears in the file again is reactivated (delisted_on, delist_reason
-//    cleared); delisted rows are never deleted (DAT-130).
+//    cleared); delisted rows are never deleted (DAT-130). EXCEPT a suspected code reuse (V1-S7,
+//    ARN-082, D-685): the code is back after more than REUSE_GAP_DAYS delisted, or under a materially
+//    different name after more than RENAME_GAP_DAYS. `instrument` is one row per (market, code) and every price history is
+//    keyed by it, so reactivating would splice two companies into one history. Such a code is
+//    QUARANTINED: it stays delisted (so no tier, no entry, no new snapshot row) with the reason
+//    `code_reuse_suspected:<old reason>`, and an S2 incident asks the Owner to decide. The Owner confirms
+//    a genuine relisting of the same company with `confirmRelisting` (delist_reason becomes
+//    `relist_confirmed:...`); the next import then reactivates it as before.
 //  - applying the plan twice for one Sydney date is prevented by the caller (success run record
 //    keyed by market and date); the plan itself is a pure function of its inputs.
 
@@ -18,10 +25,68 @@ export const MISSING_TO_DELIST = 2;
 /** The file must hold at least this share of the previous active count (strictly less rejects). */
 export const SHRINK_MIN_PERCENT = 80;
 export const DELIST_REASON = "absent_from_listed_companies";
+/** A code delisted for longer than this and then listed again is treated as a different entity (D-685). */
+export const REUSE_GAP_DAYS = 365;
+/** ... or, under a different name, after more than this many days (a quick rename is not a new entity). */
+export const RENAME_GAP_DAYS = 30;
+export const REUSE_SUSPECTED = "code_reuse_suspected";
+export const RELIST_CONFIRMED = "relist_confirmed";
+/** The Owner decided that the reused code is a DIFFERENT company: reactivate it with a new listing (0025). */
+export const REUSE_CONFIRMED = "reuse_confirmed";
+
+const NAME_NOISE = new Set([
+  "LIMITED",
+  "LTD",
+  "PTY",
+  "NL",
+  "THE",
+  "CORPORATION",
+  "CORP",
+  "INC",
+  "PLC",
+]);
+/** Upper case, punctuation to spaces, legal-form words dropped: "BHP Group Limited" ~ "BHP GROUP". */
+export function normaliseName(name) {
+  return String(name)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .split(" ")
+    .filter((w) => w.length > 0 && !NAME_NOISE.has(w))
+    .join(" ");
+}
+
+const dayNumber = (d) => Math.floor(Date.parse(`${d}T00:00:00Z`) / 86_400_000);
+
+/**
+ * R2-I4 (D-809): the SQL trigger `instrument_no_revive` (0025) refuses delisted_on -> NULL unless the
+ * old reason is the import's own, or an Owner decision. The plan mirrors that test, so a row the
+ * trigger would refuse (a NULL or foreign reason, a hand-edited row) is quarantined here instead of
+ * aborting the whole import batch. `undefined` (field not supplied) is not judged; NULL is refused.
+ */
+export function revivable(reason) {
+  if (reason === undefined) return true; // not supplied (a pure caller); the import always supplies it
+  const r = reason ?? "";
+  return r === DELIST_REASON || r.startsWith(RELIST_CONFIRMED) || r.startsWith(REUSE_CONFIRMED);
+}
+
+/** Why a returning delisted code looks like a different company, or null (V1-S7). */
+export function reuseSuspicion(e, row, today) {
+  const reason = e.delistReason ?? null;
+  if (reason !== null && reason.startsWith(RELIST_CONFIRMED)) return null; // the Owner confirmed it
+  if (reason !== null && reason.startsWith(REUSE_CONFIRMED)) return null; // the Owner decided: new entity
+  if (e.delistedOn === null) return null;
+  const gap = dayNumber(today) - dayNumber(e.delistedOn);
+  if (gap > REUSE_GAP_DAYS) return "long_gap";
+  // a rename right after a short absence (a glitchy file, a name change) is the same company
+  if (gap > RENAME_GAP_DAYS && normaliseName(e.name) !== normaliseName(row.name)) {
+    return "name_changed";
+  }
+  return null;
+}
 
 /**
  * @typedef {{ code: string, name: string, industry: string | null,
- *   delistedOn: string | null, missingCount: number }} ExistingInstrument
+ *   delistedOn: string | null, missingCount: number, delistReason?: string | null }} ExistingInstrument
  * @typedef {{ code: string, name: string, industry: string | null }} FileRow
  */
 
@@ -45,6 +110,10 @@ export function planUniverse({ existing, file, today }) {
   /** @type {FileRow[]} */ const inserts = [];
   /** @type {FileRow[]} */ const updates = [];
   /** @type {FileRow[]} */ const reactivations = [];
+  /** @type {{ code: string, name: string, priorName: string, priorDelistedOn: string | null, decidedBy: string }[]} */
+  const newListings = [];
+  /** @type {{ code: string, name: string, oldName: string, delistedOn: string | null, priorReason: string | null, why: string }[]} */
+  const quarantined = [];
   /** @type {string[]} */ const seenAgain = [];
   /** @type {{ code: string, missingCount: number }[]} */ const missing = [];
   /** @type {string[]} */ const delists = [];
@@ -55,7 +124,30 @@ export function planUniverse({ existing, file, today }) {
     if (e === undefined) {
       inserts.push(r);
     } else if (e.delistedOn !== null) {
-      reactivations.push(r);
+      const why =
+        reuseSuspicion(e, r, today) ?? (revivable(e.delistReason) ? null : "revive_refused");
+      if (why === null) {
+        reactivations.push(r);
+        const reason = e.delistReason ?? "";
+        if (reason.startsWith(REUSE_CONFIRMED)) {
+          newListings.push({
+            code: r.code,
+            name: r.name,
+            priorName: e.name,
+            priorDelistedOn: e.delistedOn,
+            decidedBy: reason.split(":").slice(1, 3).join(":") || "owner",
+          });
+        }
+      } else {
+        quarantined.push({
+          code: r.code,
+          name: r.name,
+          oldName: e.name,
+          delistedOn: e.delistedOn,
+          priorReason: e.delistReason ?? null,
+          why,
+        });
+      }
     } else {
       if (e.missingCount > 0) seenAgain.push(r.code);
       if (e.name !== r.name || e.industry !== r.industry) updates.push(r);
@@ -75,6 +167,8 @@ export function planUniverse({ existing, file, today }) {
     inserts,
     updates,
     reactivations,
+    quarantined,
+    newListings,
     seenAgain,
     missing,
     delists,

@@ -5,10 +5,10 @@
 import Link from "next/link";
 import { use, type ReactNode } from "react";
 import { Sparkline } from "@/components/charts/Sparkline";
-import { HeatGrid } from "@/components/charts/Grids";
+import { SectorHeatGrid } from "@/components/charts/Grids";
 import { Banner, EmptyState } from "@/components/ui/States";
-import { Chips, Tabs } from "@/components/ui/Nav";
-import { GainLoss } from "@/components/ui/Values";
+import { Chips } from "@/components/ui/Nav";
+import { Segmented } from "@/components/ui/Segmented";
 import type { IndexStrip } from "@/lib/ui/loaders/company";
 import {
   marketHref,
@@ -17,9 +17,11 @@ import {
   type MarketQuery,
   type MarketSection,
 } from "@/lib/ui/loaders/market";
+import { Change } from "./Figures";
 import { MarketTable } from "./MarketTable";
 import type { WatchResult } from "./messages";
 import type { WatchMode } from "./RowActions";
+import { sectorKey } from "./sectorHue";
 import { ppmToPercent } from "./text";
 
 type Star = (fd: FormData) => Promise<WatchResult>;
@@ -56,12 +58,12 @@ export function MarketSectionFrame({
       aria-labelledby={`${id}-h`}
       className="flex min-w-0 flex-col gap-3 rounded-lg border border-border p-3"
     >
-      <h2 id={`${id}-h`} className="m-0 text-lg font-semibold">
+      <h2 id={`${id}-h`} className="m-0 flex items-center text-lg font-semibold">
         <Link
           href={marketHref(q, { open: toggled })}
           aria-expanded={open}
           scroll={false}
-          className="flex min-h-10 items-center gap-2"
+          className="flex min-h-10 min-w-0 flex-1 items-center gap-2"
         >
           <span aria-hidden="true" className={open ? "inline-block rotate-90" : "inline-block"}>
             ›
@@ -120,7 +122,7 @@ export function IndexSection({ index, masked }: { index: Promise<IndexStrip>; ma
       <span>
         {masked ? "Market index" : strip.code}, close of {strip.d}
       </span>
-      <GainLoss value={strip.changePpm} kind="ppm" />
+      <Change ppm={strip.changePpm} />
       <Sparkline values={strip.closes} label="Main index, last month" />
     </div>
   ) : (
@@ -149,13 +151,14 @@ export function MarketStatus({ model, q }: { model: Promise<MarketModel>; q: Mar
       ) : null}
       {m.sized && !m.masked ? (
         <div className="flex flex-col gap-1">
-          <Tabs
+          <Segmented
             label="Company size"
+            value={m.size}
             items={sizes.map((z) => ({
               // a new size starts every list on its first page
               href: marketHref(q, { size: z.id, upPage: 1, downPage: 1, tradedPage: 1, page: 1 }),
+              value: z.id,
               label: z.label,
-              current: z.id === m.size,
             }))}
           />
           <p className="m-0 text-xs text-text-muted">
@@ -175,7 +178,7 @@ export function MarketStatus({ model, q }: { model: Promise<MarketModel>; q: Mar
 }
 
 const NO_DATA = (
-  <EmptyState title="No market data yet">
+  <EmptyState motif="market" hue="market" title="No market data yet">
     Prices appear here after the first nightly data run. Nothing is shown until then.
   </EmptyState>
 );
@@ -228,7 +231,7 @@ export function SectorsSection({ model, q }: { model: Promise<MarketModel>; q: M
   if (m.state === "empty") return NO_DATA;
   if (m.masked) {
     return (
-      <EmptyState title="Sectors are hidden">
+      <EmptyState motif="market" hue="market" title="Sectors are hidden">
         Sector groups would reveal which companies are behind the letters, so they are hidden for
         your access level.
       </EmptyState>
@@ -236,7 +239,7 @@ export function SectorsSection({ model, q }: { model: Promise<MarketModel>; q: M
   }
   if (m.sectors.length === 0) {
     return (
-      <EmptyState title="No sector data yet">
+      <EmptyState motif="market" hue="market" title="No sector data yet">
         Sectors appear once the company list carries an industry group for each company.
       </EmptyState>
     );
@@ -244,9 +247,13 @@ export function SectorsSection({ model, q }: { model: Promise<MarketModel>; q: M
   const all: MarketSection[] = q.open.includes("all") ? q.open : [...q.open, "all"];
   return (
     <>
-      <HeatGrid
+      <SectorHeatGrid
         label="Average day change by sector"
-        cells={m.sectors.map((s) => ({ label: s.sector, value: ppmToPercent(s.avgChangePpm) }))}
+        cells={m.sectors.map((s) => ({
+          label: s.sector,
+          value: ppmToPercent(s.avgChangePpm),
+          hue: sectorKey(s.sector) === null ? null : `sector-${sectorKey(s.sector)}`,
+        }))}
       />
       <Chips
         label="Open a sector"

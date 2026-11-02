@@ -37,7 +37,7 @@
 //    The only log lines are "selfcheck: n/m passed" and "selfcheck: report delivered|not delivered".
 //  - Signing scheme = src/lib/security/hmac.ts (a known-answer test shares the vector with
 //    scripts/smoke/sign.mjs). Dependency-free: WebCrypto + fetch only.
-
+import { hmacMessage, signedHeaders } from "../../src/lib/security/hmacCore.mjs";
 export interface SelfCheckEnv {
   PRAXIS_ENV: string;
   /** Plain vars (wrangler.jsonc / --var). */
@@ -98,7 +98,7 @@ async function safe(name: string, body: () => Promise<CheckResult>): Promise<Che
   }
 }
 
-// ---- signing (twin of src/lib/security/hmac.ts and scripts/smoke/sign.mjs) -------------------
+// ---- signing (message and headers come from the shared src/lib/security/hmacCore.mjs) -------------------
 
 const hexOf = (buf: ArrayBuffer) =>
   Array.from(new Uint8Array(buf), (x) => x.toString(16).padStart(2, "0")).join("");
@@ -119,12 +119,12 @@ export async function signHeaders(
     false,
     ["sign"],
   );
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${timestamp}.${nonce}.${body}`));
-  return {
-    "X-Praxis-Timestamp": timestamp,
-    "X-Praxis-Nonce": nonce,
-    "X-Praxis-Signature": hexOf(sig),
-  };
+  const sig = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    enc.encode(hmacMessage(timestamp, nonce, body)),
+  );
+  return signedHeaders(timestamp, nonce, hexOf(sig));
 }
 
 // ---- when to run -----------------------------------------------------------------------------

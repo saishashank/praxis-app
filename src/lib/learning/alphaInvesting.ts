@@ -3,10 +3,12 @@
 //
 // Foster-Stine alpha-investing, one pool per lineage (`<market>:<family>`) and one market pool
 // (`<market>:*`). Wealth starts at W0 (`l2_alpha_w0`) and is NEVER reset: it carries across windows and
-// rolls. Test j runs at level alpha_j = W / (2 + W) and rejects when p <= alpha_j. Update:
+// rolls. Test j runs at level alpha_j = f x W (VAL-116, D-231: f = `l2_alpha_spend_fraction`, 0.1; M14
+// replaced the earlier W / (2 + W)) and rejects when p <= alpha_j. Update:
 //   rejection      W <- W + payout (`l2_alpha_payout`)
-//   non-rejection  W <- W - alpha_j / (1 - alpha_j)     (= W / 2 for this alpha_j)
-// W never goes below 0; W = 0 means no further L2 test ("alpha-wealth exhausted"). The ledger
+//   non-rejection  W <- W - alpha_j / (1 - alpha_j)
+// W never goes below 0. The pool is exhausted when the NEXT level is below `l2_alpha_exhausted_level`
+// (0.005): no further L2 test ("alpha-wealth exhausted"). The ledger
 // `alpha_wealth` is append-only; the next test reads the last row of its pool and the DB trigger
 // requires `w_before` to equal the previous `w_after` exactly, so this module always continues from
 // the stored REAL value and never recomputes it.
@@ -21,9 +23,23 @@ export function poolId(market: string, family: string | null): string {
   return `${market}:${family ?? "*"}`;
 }
 
-/** alpha_j = W / (2 + W). */
-export function alphaLevel(wealth: number): number {
-  return wealth / (2 + wealth);
+/** VAL-116 default share of the pool spent on one test (`l2_alpha_spend_fraction`). */
+export const DEFAULT_SPEND_FRACTION = 0.1; // threshold-ok: l2_alpha_spend_fraction default (VAL-116)
+/** VAL-116 default exhaustion level (`l2_alpha_exhausted_level`). */
+export const DEFAULT_EXHAUSTED_LEVEL = 0.005; // threshold-ok: l2_alpha_exhausted_level default (VAL-116)
+
+/** alpha_j = f x W (VAL-116): a fixed share of the current wealth. */
+export function alphaLevel(wealth: number, spendFraction: number = DEFAULT_SPEND_FRACTION): number {
+  return spendFraction * wealth;
+}
+
+/** The pool is exhausted when the next test's level would be below `exhaustedLevel` (VAL-116). */
+export function poolExhausted(
+  wealth: number,
+  spendFraction: number = DEFAULT_SPEND_FRACTION,
+  exhaustedLevel: number = DEFAULT_EXHAUSTED_LEVEL,
+): boolean {
+  return !(wealth > 0) || alphaLevel(wealth, spendFraction) < exhaustedLevel;
 }
 
 export type AlphaStep = {
@@ -35,22 +51,36 @@ export type AlphaStep = {
 };
 
 /** One test of the sequence: the level, the decision and the new wealth (pure). */
-export function alphaStep(wealth: number, p: number, payout: number): AlphaStep {
-  if (!(wealth > 0)) throw new LessonError("alpha_exhausted", "alpha-wealth is exhausted");
+export function alphaStep(
+  wealth: number,
+  p: number,
+  payout: number,
+  spendFraction: number = DEFAULT_SPEND_FRACTION,
+  exhaustedLevel: number = DEFAULT_EXHAUSTED_LEVEL,
+): AlphaStep {
+  if (poolExhausted(wealth, spendFraction, exhaustedLevel)) {
+    throw new LessonError("alpha_exhausted", "alpha-wealth is exhausted");
+  }
   if (!(p >= 0 && p <= 1)) throw new RangeError("p must be in [0, 1]");
-  const alphaJ = alphaLevel(wealth);
+  const alphaJ = alphaLevel(wealth, spendFraction);
   const rejected = p <= alphaJ;
   const wAfter = rejected ? wealth + payout : Math.max(0, wealth - alphaJ / (1 - alphaJ));
   return { wBefore: wealth, alphaJ, p, rejected, wAfter };
 }
 
 /** The wealth sequence of a list of p-values from W0 (pure; tests and the hand table). */
-export function alphaSequence(w0: number, ps: readonly number[], payout: number): AlphaStep[] {
+export function alphaSequence(
+  w0: number,
+  ps: readonly number[],
+  payout: number,
+  spendFraction: number = DEFAULT_SPEND_FRACTION,
+  exhaustedLevel: number = DEFAULT_EXHAUSTED_LEVEL,
+): AlphaStep[] {
   const out: AlphaStep[] = [];
   let w = w0;
   for (const p of ps) {
-    if (!(w > 0)) break;
-    const s = alphaStep(w, p, payout);
+    if (poolExhausted(w, spendFraction, exhaustedLevel)) break;
+    const s = alphaStep(w, p, payout, spendFraction, exhaustedLevel);
     out.push(s);
     w = s.wAfter;
   }
@@ -64,6 +94,8 @@ export type PoolState = {
   readonly seq: number;
   /** Wealth available for the next test: the last `w_after`, else W0. */
   readonly wealth: number;
+  /** VAL-116: the next level would be below `l2_alpha_exhausted_level`; no test may run. */
+  readonly exhausted: boolean;
 };
 
 export async function readPoolState(
@@ -75,8 +107,17 @@ export async function readPoolState(
     sql: "SELECT seq, w_after FROM alpha_wealth WHERE pool = ? ORDER BY seq DESC LIMIT 1",
     args: [pool],
   });
-  if (r.rows.length === 0) return { seq: 0, wealth: params.learning.l2AlphaW0 };
-  return { seq: Number(r.rows[0]!.seq), wealth: Number(r.rows[0]!.w_after) };
+  const seq = r.rows.length === 0 ? 0 : Number(r.rows[0]!.seq);
+  const wealth = r.rows.length === 0 ? params.learning.l2AlphaW0 : Number(r.rows[0]!.w_after);
+  return {
+    seq,
+    wealth,
+    exhausted: poolExhausted(
+      wealth,
+      params.learning.l2AlphaSpendFraction,
+      params.learning.l2AlphaExhaustedLevel,
+    ),
+  };
 }
 
 export type AlphaTestRow = {
@@ -144,8 +185,14 @@ export async function recordAlphaTest(
     return { kind: "existing", row };
   }
   const state = await readPoolState(tx, t.pool, t.params);
-  if (!(state.wealth > 0)) return { kind: "exhausted", wealth: state.wealth };
-  const step = alphaStep(state.wealth, t.p, t.params.learning.l2AlphaPayout);
+  if (state.exhausted) return { kind: "exhausted", wealth: state.wealth };
+  const step = alphaStep(
+    state.wealth,
+    t.p,
+    t.params.learning.l2AlphaPayout,
+    t.params.learning.l2AlphaSpendFraction,
+    t.params.learning.l2AlphaExhaustedLevel,
+  );
   const row: AlphaTestRow = {
     pool: t.pool,
     seq: state.seq + 1,

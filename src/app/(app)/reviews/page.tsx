@@ -5,11 +5,12 @@
 // the search never reaches review text for them (loader). "Mark as read" lives on the review page.
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Chips } from "@/components/ui/Nav";
+import { Segmented } from "@/components/ui/Segmented";
 import { Banner, EmptyState } from "@/components/ui/States";
 import { SimulatedLabel } from "@/components/ui/Values";
 import { requireUser } from "@/lib/auth/guard";
 import {
+  loadNextReview,
   loadPendingState,
   loadReviewCalendar,
   loadReviewList,
@@ -18,6 +19,8 @@ import {
 } from "@/lib/ui/loaders/reviews";
 import { envFor } from "@/lib/ui/loaders/shell";
 import { ReviewCalendar } from "./ReviewCalendar";
+import { REVIEW_TONES, SectionIcon, SectionIndex } from "./SectionIndex";
+import { REVIEW_SECTION_NAMES } from "@/lib/review/facts";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +44,7 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
   const model = calendar ? null : await loadReviewList(env, query);
   const cal = calendar ? await loadReviewCalendar(env, { month: query.month }) : null;
   const pendingState = model ? model.pendingState : await loadPendingState(env);
+  const nextReview = pendingState ? null : await loadNextReview(env);
 
   return (
     <main className="mx-auto flex w-full max-w-4xl min-w-0 flex-col gap-4 px-4 py-6">
@@ -58,11 +62,12 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
         </p>
       </header>
 
-      <Chips
+      <Segmented
         label="Review view"
+        value={calendar ? "calendar" : "list"}
         items={[
-          { label: "List", href: "/reviews", current: !calendar },
-          { label: "Calendar", href: "/reviews?view=calendar", current: calendar },
+          { value: "list", label: "Reviews", href: "/reviews" },
+          { value: "calendar", label: "Calendar", href: "/reviews?view=calendar" },
         ]}
       />
 
@@ -72,7 +77,15 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
             {PENDING_TEXT[pendingState]}
           </Banner>
         </div>
-      ) : null}
+      ) : (
+        <p
+          data-testid="next-review"
+          className="m-0 flex items-center gap-2 text-sm text-text-muted"
+        >
+          <SectionIcon tone="reviews" />
+          {nextReview}
+        </p>
+      )}
 
       {cal ? (
         <>
@@ -125,8 +138,30 @@ function ListView({ model, q }: { model: ReviewListModel; q: string | undefined 
         </Banner>
       ) : null}
 
+      {q === undefined && model.page === 1 && model.rows[0] ? (
+        <section
+          aria-label="Latest review"
+          data-testid="latest-review"
+          className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-surface p-4"
+          style={{ borderLeft: "4px solid var(--color-section-reviews)" }}
+        >
+          <h2 className="m-0 text-lg font-semibold">Latest review</h2>
+          <Link href={model.rows[0].href} className="text-base font-semibold text-accent underline">
+            Read {model.rows[0].label}
+          </Link>
+          {model.masked ? null : (
+            <SectionIndex
+              items={REVIEW_SECTION_NAMES.slice(0, REVIEW_TONES.length).map((label, i) => ({
+                label,
+                tone: REVIEW_TONES[i]!,
+              }))}
+            />
+          )}
+        </section>
+      ) : null}
+
       {model.rows.length === 0 ? (
-        <EmptyState title={q ? "No reviews match" : "No reviews yet"}>
+        <EmptyState motif="reviews" hue="reviews" title={q ? "No reviews match" : "No reviews yet"}>
           {q
             ? "Try a different date, week or word."
             : "The first review appears after the evening run has stored one."}

@@ -376,7 +376,7 @@ export function StrategyChart({
         ) : (
           <div
             ref={host}
-            role="img"
+            role="group"
             aria-label={summary}
             tabIndex={0}
             onKeyDown={onKey}

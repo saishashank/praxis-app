@@ -224,7 +224,7 @@ describe("AT-15: family rules and regime gates (spec 7.4, AGT-101)", () => {
   };
   const f5Bars = factsOf(
     "ZZS",
-    "U3",
+    "U2",
     makeBars({
       close: () => DOLLAR,
       volume: volumes(1_000_000n, 4_000_000n),

@@ -5,7 +5,8 @@ import type { RegimeLabel } from "../regime";
 import type { Family } from "../schema";
 
 /** Bumped when any family rule changes (AGT-002 agent_version). */
-export const FAMILY_AGENT_VERSION = "families-1";
+// families-2 (M14, D-216): FAM-004 stop-distance cap and the F5 universe change.
+export const FAMILY_AGENT_VERSION = "families-2";
 
 /** Rule version per family (the lineage's rule-version tree starts here, ch.05). */
 export const FAMILY_RULE_VERSION: Readonly<Record<Family, string>> = {

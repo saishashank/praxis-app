@@ -4,5 +4,6 @@ export * from "./core";
 export * from "./format";
 export * from "./notices";
 export * from "./palette";
+export * from "./pickAlerts";
 export * from "./reminder";
 export * from "./review";

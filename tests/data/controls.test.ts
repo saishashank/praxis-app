@@ -608,7 +608,7 @@ describe("c2. the listed-companies source follows O-23 (D-067)", () => {
       await count(
         "SELECT COUNT(*) AS n FROM source_register_history WHERE source = 'asx_listed_companies'",
       ),
-    ).toBe(4); // insert (0006), enabled, disabled, enabled
+    ).toBe(5); // insert (0006), update (0018, O-23b), enabled, disabled, enabled
   });
 });
 
@@ -785,6 +785,7 @@ describe("read model for System Health", () => {
     expect(owner.sources.map((s) => [s.source, s.ref, s.status])).toEqual([
       ["asx_announcements", "O-23", "pending"],
       ["yahoo_eod", "O-26", "pending"],
+      ["yahoo_delayed", "O-26", "pending"],
     ]);
     expect("asxTrippedReason" in viewer).toBe(false);
     expect(viewer.asxTripped).toBe(true);

@@ -1,5 +1,5 @@
 // UX-116, ROL-102a, ROL-106 (Configuration page)
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const requireUser = vi.hoisted(() => vi.fn());
@@ -12,6 +12,9 @@ vi.mock("@/lib/config/admin", async (orig) => ({
 }));
 const action = vi.hoisted(() => ({
   updateConfigAction: vi.fn<(fd: FormData) => Promise<unknown>>(async () => ({ ok: true })),
+  uploadIndexChangesAction: vi.fn(),
+  uploadIndustryMapAction: vi.fn(),
+  uploadUniverseAction: vi.fn(),
 }));
 vi.mock("@/app/(app)/config/actions", () => action);
 
@@ -82,6 +85,7 @@ describe("configuration page", () => {
       "Sentinel and email",
       "Learning and knowledge",
       "Other",
+      "Data files",
       "Recent changes",
     ]);
   });
@@ -89,12 +93,18 @@ describe("configuration page", () => {
   it("shows value, default, bounds and spec ref, read-only (D-174)", async () => {
     render(await ConfigPage());
     const retention = screen.getByRole("region", { name: "How long we keep data" });
-    const row = within(retention).getByRole("row", { name: /retention_logs_days/ });
+    const row = within(retention)
+      .getAllByRole("listitem")
+      .find((li) => li.getAttribute("data-config-key") === "retention_logs_days")!;
     expect(within(row).getByText("Keep application logs for")).toBeInTheDocument();
+    expect(within(row).getByText("retention_logs_days")).toBeInTheDocument();
     expect(within(row).getAllByText("30 days")).toHaveLength(2); // current and default
-    expect(within(row).getByText("whole days, at least 1")).toBeInTheDocument();
-    expect(within(row).getByText("DAT-142")).toBeInTheDocument();
+    expect(within(row).getByText("Current value")).toBeInTheDocument();
     expect(within(row).getByText("Default")).toBeInTheDocument();
+    expect(within(row).getByText(/whole days, at least 1/)).toBeInTheDocument();
+    expect(within(row).getByText(/DAT-142/)).toBeInTheDocument();
+    // an unchanged value has no "changed" dot
+    expect(row.querySelector("[data-changed]")).toBeNull();
     expect(within(row).queryByRole("textbox")).toBeNull();
     expect(within(row).queryByRole("button")).toBeNull();
   });
@@ -102,6 +112,12 @@ describe("configuration page", () => {
   it("no row on the page offers a way to change a value (Owner: just show it)", async () => {
     render(await ConfigPage());
     expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    // the only form is the search (UXR-028 search, D-174 no editor): one text field, one Search button
+    expect(screen.getAllByRole("searchbox")).toHaveLength(1);
+    // plus the three Data files uploads (data, not settings)
+    expect(screen.getAllByRole("button")).toHaveLength(4);
+    expect(screen.getAllByRole("button", { name: "Upload" })).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
     expect(screen.queryAllByRole("button", { name: "Save" })).toHaveLength(0);
     expect(screen.queryByText("Fixed by the spec")).toBeNull();
     expect(screen.getByText(/Read-only/)).toBeInTheDocument();
@@ -109,7 +125,7 @@ describe("configuration page", () => {
     expect(Object.values(CONFIG_KEYS).length).toBeGreaterThan(3);
   });
 
-  it("a stored value shows when it changed", async () => {
+  it("a stored value shows the changed dot and when it changed", async () => {
     svc.listConfig.mockResolvedValue(
       rows({
         token_warning_days: {
@@ -120,9 +136,11 @@ describe("configuration page", () => {
       }),
     );
     render(await ConfigPage());
-    const row = screen.getByRole("row", { name: /token_warning_days/ });
+    const row = document.querySelector('[data-config-key="token_warning_days"]') as HTMLElement;
     expect(within(row).getByText("21, 7 days")).toBeInTheDocument();
     expect(within(row).getByText("Changed 2026-10-10 23:00 AEDT (version 12)")).toBeInTheDocument();
+    expect(row.querySelector("[data-changed]")).toHaveTextContent("Changed");
+    expect(document.querySelectorAll("[data-changed]")).toHaveLength(1);
   });
 
   it("history lists at, key, before -> after and reason", async () => {
@@ -155,6 +173,29 @@ describe("configuration page", () => {
       screen.getByText("Simulation for personal information only — not financial advice"),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/");
+  });
+
+  it("search filters by key or plain label and says so when nothing matches", async () => {
+    render(await ConfigPage({ searchParams: Promise.resolve({ q: "RETENTION" }) }));
+    const items = screen
+      .getAllByRole("listitem")
+      .filter((li) => li.hasAttribute("data-config-key"));
+    expect(items.length).toBeGreaterThan(0);
+    for (const li of items) {
+      expect(li.getAttribute("data-config-key")! + li.textContent!.toLowerCase()).toMatch(
+        /retention/,
+      );
+    }
+    expect(screen.getByRole("searchbox")).toHaveValue("retention");
+    cleanup();
+    render(await ConfigPage({ searchParams: Promise.resolve({ q: "zzz-no-such-setting" }) }));
+    expect(screen.getByText("No setting matches that search")).toBeInTheDocument();
+    expect(document.querySelectorAll("[data-config-key]")).toHaveLength(0);
+  });
+
+  it("states its purpose in one line (UXR-001)", async () => {
+    render(await ConfigPage());
+    expect(screen.getByText(/Every tunable value with its default/)).toBeInTheDocument();
   });
 
   it("hides an area with no keys", async () => {

@@ -57,6 +57,7 @@ describe("limits accessor", () => {
       signin_per_min_ip: 10,
       writes_per_min_user: 60,
       exports_per_hour_user: 5,
+      reads_per_min_user: 60,
     });
     expect(getSessionMaxAgeSec()).toBe(14 * 86400);
   });

@@ -88,7 +88,7 @@ export async function loadInputs(o) {
   }));
   const annRecent = (
     await qPaged(
-      `SELECT code, ann_id, published_at, type, price_sensitive, title FROM announcement
+      `SELECT code, ann_id, published_at, type, price_sensitive, title, first_ingested_at FROM announcement
        WHERE market = ? AND published_at >= ? AND published_at < ? ORDER BY id`,
       [MARKET, `${addDays(recentFrom, -1)}T00:00:00.000Z`, `${addDays(o.to, 2)}T00:00:00.000Z`],
     )
@@ -99,7 +99,25 @@ export async function loadInputs(o) {
     type: r.type === null ? null : String(r.type),
     price_sensitive: Number(r.price_sensitive),
     title: String(r.title),
+    first_ingested_at: r.first_ingested_at === null ? null : String(r.first_ingested_at),
   }));
+  // GL-05: the live cut-off poll markers of the range (worker_state cutoff_poll:AU:<d>)
+  const cutoffPolls = (
+    await q("SELECT key, value_json FROM worker_state WHERE key LIKE ? ORDER BY key", [
+      `cutoff_poll:${MARKET}:%`,
+    ])
+  )
+    .map((r) => {
+      try {
+        return {
+          d: String(r.key).slice(`cutoff_poll:${MARKET}:`.length),
+          at: JSON.parse(String(r.value_json)),
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter((m) => m !== null && typeof m.at === "string" && m.d >= o.from && m.d <= o.to);
   const calendar = (
     await q(
       "SELECT d, kind, close_time, confirmed FROM trading_calendar WHERE market = ? AND d >= ? AND d <= ?",
@@ -140,6 +158,48 @@ export async function loadInputs(o) {
     l_micro: Number(r.l_micro),
     c_micro: Number(r.c_micro),
   }));
+  // DAT-234 / FAM-006: reference data known by the end of the range (manual CSV tables, migration 0018)
+  const indexChanges = (
+    await q(
+      `SELECT code, index_name, kind, announced_d, effective_d, loaded_at FROM index_change
+       WHERE market = ? AND COALESCE(announced_d, effective_d) <= ?
+       ORDER BY code, index_name, kind, effective_d`,
+      [MARKET, o.to],
+    )
+  ).map((r) => ({
+    code: String(r.code),
+    index_name: String(r.index_name),
+    kind: String(r.kind),
+    announced: r.announced_d === null ? null : String(r.announced_d),
+    effective: String(r.effective_d),
+    loaded_at: String(r.loaded_at),
+  }));
+  const industry = [
+    ...(
+      await q(
+        "SELECT code, industry, as_of, loaded_at FROM instrument_class WHERE market = ? AND as_of <= ? ORDER BY code, as_of",
+        [MARKET, o.to],
+      )
+    ).map((r) => ({
+      code: String(r.code),
+      industry: String(r.industry),
+      source: "class",
+      as_of: String(r.as_of),
+      loaded_at: String(r.loaded_at),
+    })),
+    // the ASX industry group is the current one (no history is kept): dated at the range start
+    ...(
+      await q(
+        "SELECT code, industry FROM instrument WHERE market = ? AND industry IS NOT NULL ORDER BY code",
+        [MARKET],
+      )
+    ).map((r) => ({
+      code: String(r.code),
+      industry: String(r.industry),
+      source: "instrument",
+      as_of: o.from,
+    })),
+  ];
   const codes = (
     await q("SELECT DISTINCT code FROM corporate_action WHERE market = ?", [MARKET])
   ).map((r) => String(r.code));
@@ -150,15 +210,19 @@ export async function loadInputs(o) {
     action_id: f.actionId,
     type: f.type,
     factor: f.factor,
+    known_at: f.knownAt ?? null,
   }));
   return {
     bars,
     bars_recent: barsRecent,
     announcements,
     announcements_recent: annRecent,
+    cutoff_polls: cutoffPolls,
     calendar,
     universe,
     index_bars: index,
     corporate_actions: actions,
+    index_changes: indexChanges,
+    industry,
   };
 }

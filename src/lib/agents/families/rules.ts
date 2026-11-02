@@ -7,10 +7,12 @@ import {
   cmpRat,
   makeRational,
   mulRat,
+  negRat,
   ratFromInt,
   subRat,
   type Rational,
 } from "@/lib/money/rational";
+import { lookbackReturn } from "../indicators";
 import type { Family } from "../schema";
 import { applyArn011 } from "./arn011";
 import {
@@ -47,6 +49,11 @@ export type Evaluated = { readonly cand: Candidate; readonly reasons: readonly s
 const ONE = ratFromInt(1n);
 const QUARTER_UNITS = 4n; // threshold-ok: insider/flow score is stored in quarter units (0.25 = 1)
 const EVIDENCE_CLASSES = 4; // threshold-ok: F6 has four evidence classes (a)-(d)
+/** KB-081 F4 `reversal5_u2`: look-back sessions and the fall (10 %) that counts as oversold. */
+const F4_REVERSAL_SESSIONS = 5; // threshold-ok: KB-081 five-session reversal
+const F4_REVERSAL_DROP = makeRational(1n, 10n); // threshold-ok: KB-081 reversal fall of 10 %
+/** O-49 (D-221): variant label of the descriptive U3 run; never traded, never validated. */
+export const F5_STRESS_VARIANT = "F5-U3-stress";
 
 // ---- helpers ----
 
@@ -143,6 +150,8 @@ type Build = {
   maxOpenMicro?: bigint | null;
   halfSize?: boolean;
   flags?: readonly string[];
+  /** Reasons beyond the common gates (DAT-234 `index_change`): the candidate is blocked. */
+  extraReasons?: readonly string[];
 };
 
 function build(b: Build): Evaluated {
@@ -169,7 +178,11 @@ function build(b: Build): Evaluated {
     rules: b.rules,
     flags,
   };
-  return { cand, reasons: gate.reasons };
+  const reasons =
+    b.extraReasons === undefined || b.extraReasons.length === 0
+      ? gate.reasons
+      : [...new Set([...gate.reasons, ...b.extraReasons])].sort();
+  return { cand, reasons };
 }
 
 const allPass = (rules: readonly RuleTrace[]): boolean => rules.every((r) => r.pass);
@@ -179,12 +192,19 @@ const allPass = (rules: readonly RuleTrace[]): boolean => rules.every((r) => r.p
 export function evaluateF1(ctx: EvalContext): Evaluated[] {
   const p = ctx.p;
   const variant = ctx.restrictToU1 ? "F1-U1" : "F1";
-  const tiers: Tier[] = ctx.u2OptInF1 && !ctx.restrictToU1 ? ["U1", "U2"] : ["U1"];
+  // KB-081 `skip_month_u2`: the challenger trades U2 only (the validation variant F1-U1 stays U1)
+  const tiers: Tier[] = ctx.restrictToU1
+    ? ["U1"]
+    : p.f1.momentumVariant === "skip_month_u2"
+      ? ["U2"]
+      : ctx.u2OptInF1
+        ? ["U1", "U2"]
+        : ["U1"];
   const topCut = subRat(ONE, p.f1.rsTopFraction);
   const out: Evaluated[] = [];
   for (const c of ctx.codes) {
     if (!inTiers(c, tiers)) continue;
-    const pct = ctx.returnPercentile.get(c.code) ?? null;
+    const pct = ctx.f1Percentile.get(c.code) ?? null;
     const rules: RuleTrace[] = [
       trace("atr_warm", atrUsable(c), String(c.ind.atrMicro), "ATR warm"),
       trace(
@@ -213,7 +233,7 @@ export function evaluateF1(ctx: EvalContext): Evaluated[] {
         variant,
         c,
         ctx,
-        rank: [pct],
+        rank: [p.f1.rankVariant === "v1" ? pct : ctx.variantRank("F1", p.f1.rankVariant, c.code)],
         plan: f1Plan(p, c.ind.atrMicro),
         rules,
       }),
@@ -274,6 +294,7 @@ export function evaluateF3(ctx: EvalContext): Evaluated[] {
   const p = ctx.p;
   const variant = ctx.restrictToU1 ? "F3-U1" : "F3";
   const tiers: Tier[] = ctx.restrictToU1 ? ["U1"] : ["U1", "U2"];
+  const priceSurprise = p.f3.surpriseMode === "day0_ar";
   const out: Evaluated[] = [];
   for (const c of ctx.codes) {
     if (!inTiers(c, tiers)) continue;
@@ -284,7 +305,9 @@ export function evaluateF3(ctx: EvalContext): Evaluated[] {
         x.sessionsAgo < 1 &&
         x.members.some(
           (m) =>
-            m.priceSensitive && m.polarity === 1 && F3_CATEGORIES.some((k) => k === m.category),
+            m.priceSensitive &&
+            // AGT-137 `day0_ar`: any price-sensitive group; the category list is ignored
+            (priceSurprise || (m.polarity === 1 && F3_CATEGORIES.some((k) => k === m.category))),
         ) &&
         !hasNegative(x) &&
         geq(x.ar, p.f3.eventArMin) &&
@@ -306,7 +329,12 @@ export function evaluateF3(ctx: EvalContext): Evaluated[] {
     ];
     if (g === null || !allPass(rules)) continue;
     const score = mulRat(g.ar ?? ratFromInt(0n), g.volRatio ?? ratFromInt(0n));
-    const flags = g.members.some((m) => !m.timed) ? ["assumed-time"] : [];
+    // DAT-234 (D-238): an index add or delete near day 0 blocks the event, tagged on the card
+    const indexChange = ctx.indexChangeNear(c.code, g.day0);
+    const flags = [
+      ...(g.members.some((m) => !m.timed) ? ["assumed-time"] : []),
+      ...(indexChange === null ? [] : [`index_change:${indexChange.indexName}`]),
+    ];
     out.push(
       build({
         family: "F3",
@@ -320,6 +348,7 @@ export function evaluateF3(ctx: EvalContext): Evaluated[] {
         groupKey: g.key,
         maxOpenMicro: gapCancelLevel(c.bar.close, p.f3.maxGap),
         flags,
+        extraReasons: indexChange === null ? [] : ["index_change"],
       }),
     );
   }
@@ -333,19 +362,23 @@ export function evaluateF4(ctx: EvalContext): Evaluated[] {
   const covered = ctx.inputs.eventCoverage && ctx.inputs.sources.asx === "on";
   const variant = covered ? "F4" : "F4-no-event-filter";
   const passed = ctx.inputs.passedPatterns ?? new Set();
+  const reversal = p.f4.entryVariant === "reversal5_u2";
   const out: Evaluated[] = [];
   for (const c of ctx.codes) {
-    if (c.tier !== "U1") continue;
+    // KB-081 `reversal5_u2`: the challenger trades U2 only
+    if (c.tier !== (reversal ? "U2" : "U1")) continue;
     const ind = c.ind;
     const rsi2Ok = rsiUsable(ind.rsiShort, ind.rsiShortWarm, c.closesAdj, p.windows.rsiShort);
     const rsi14Ok = rsiUsable(ind.rsiLong, ind.rsiLongWarm, c.closesAdj, p.windows.rsiLong);
     const rsi2 = rsi2Ok ? ind.rsiShort! : null;
     const rsi14 = rsi14Ok ? ind.rsiLong! : null;
     const patternHit = [...passed].sort().some((name) => c.patterns?.[name] === true);
-    const oversold =
-      (rsi2 !== null && rsi2 < p.f4.rsi2Max) ||
-      (rsi14 !== null && rsi14 < p.f4.rsi14Max) ||
-      patternHit;
+    const ret5 = reversal ? lookbackReturn(c.closesAdj, F4_REVERSAL_SESSIONS) : null;
+    const oversold = reversal
+      ? ret5 !== null && cmpRat(ret5, negRat(F4_REVERSAL_DROP)) <= 0
+      : (rsi2 !== null && rsi2 < p.f4.rsi2Max) ||
+        (rsi14 !== null && rsi14 < p.f4.rsi14Max) ||
+        patternHit;
     const groups = ctx.groupsByCode.get(c.code) ?? [];
     const negEvent = groups.some((g) => g.sessionsAgo < p.windows.f4EventWindow && hasNegative(g));
     const rules: RuleTrace[] = [
@@ -359,8 +392,12 @@ export function evaluateF4(ctx: EvalContext): Evaluated[] {
       trace(
         "oversold",
         oversold,
-        `rsi2=${rsi2 === null ? "unusable" : rsi2} rsi14=${rsi14 === null ? "unusable" : rsi14} pattern=${patternHit}`,
-        `RSI(${p.windows.rsiShort}) < ${p.f4.rsi2Max} or RSI(${p.windows.rsiLong}) < ${p.f4.rsi14Max}`,
+        reversal
+          ? `ret${F4_REVERSAL_SESSIONS}=${ratOrNull(ret5)}`
+          : `rsi2=${rsi2 === null ? "unusable" : rsi2} rsi14=${rsi14 === null ? "unusable" : rsi14} pattern=${patternHit}`,
+        reversal
+          ? `${F4_REVERSAL_SESSIONS}-session return <= -${ratText(F4_REVERSAL_DROP)}`
+          : `RSI(${p.windows.rsiShort}) < ${p.f4.rsi2Max} or RSI(${p.windows.rsiLong}) < ${p.f4.rsi14Max}`,
       ),
       trace(
         "no_negative_event",
@@ -376,7 +413,17 @@ export function evaluateF4(ctx: EvalContext): Evaluated[] {
         variant,
         c,
         ctx,
-        rank: [rsi2 === null ? null : floatRat(-rsi2)],
+        rank: [
+          p.f4.rankVariant !== "v1"
+            ? ctx.variantRank("F4", p.f4.rankVariant, c.code)
+            : reversal
+              ? ret5 === null
+                ? null
+                : negRat(ret5)
+              : rsi2 === null
+                ? null
+                : floatRat(-rsi2),
+        ],
         plan: f4Plan(p, ind.atrMicro),
         rules,
         halfSize: ctx.inputs.regime === "SHOCK",
@@ -391,8 +438,11 @@ export function evaluateF4(ctx: EvalContext): Evaluated[] {
 export function evaluateF5(ctx: EvalContext): Evaluated[] {
   const p = ctx.p;
   const out: Evaluated[] = [];
+  // O-49 (D-221): F5 trades its default universe (U2); U3 runs only as the replay stress variant
+  const tier = p.f5.defaultUniverse;
   for (const c of ctx.codes) {
-    if (!inTiers(c, ["U2", "U3"])) continue;
+    const stress = ctx.f5StressU3 && c.tier === "U3" && tier !== "U3";
+    if (c.tier !== tier && !stress) continue;
     const groups = ctx.groupsByCode.get(c.code) ?? [];
     const g = bestGroup(
       groups,
@@ -432,7 +482,7 @@ export function evaluateF5(ctx: EvalContext): Evaluated[] {
     out.push(
       build({
         family: "F5",
-        variant: "F5",
+        variant: stress ? F5_STRESS_VARIANT : "F5",
         c,
         ctx,
         rank: [c.ind.volumeRatio],
@@ -458,6 +508,7 @@ type Components = ReadonlyMap<string, readonly Candidate[]>;
 export function componentsByCode(evaluated: readonly Evaluated[]): Components {
   const map = new Map<string, Candidate[]>();
   for (const e of evaluated) {
+    if (e.cand.variant === F5_STRESS_VARIANT) continue; // descriptive only: never F6 evidence
     const list = map.get(e.cand.code);
     if (list === undefined) map.set(e.cand.code, [e.cand]);
     else list.push(e.cand);

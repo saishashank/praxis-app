@@ -4,7 +4,7 @@
 // DAT-220..223, DAT-126, DAT-003, AT-08. Synthetic ZZ* codes only (SEC-110).
 import { afterEach, describe, expect, it } from "vitest";
 import { setConfig } from "@/lib/config/store";
-import { adjustedBars } from "@/lib/data/adjusted";
+import { adjustedBars, UNBOUNDED } from "@/lib/data/adjusted";
 import {
   BEST_EVIDENCE_CHECK,
   BLOCK_CHECK,
@@ -480,7 +480,7 @@ describe("Owner decisions and reversal (DAT-126 reading: new rows, never edits)"
     const t = await rows(db, "SELECT computed_at FROM adjustment_factor ORDER BY computed_at");
     expect(String(t[1].computed_at) > String(t[0].computed_at)).toBe(true);
     // the reader no longer adjusts
-    const bars = await adjustedBars(db, "ZZA", D0, D1);
+    const bars = await adjustedBars(db, "ZZA", D0, D1, { knownBy: UNBOUNDED });
     expect(bars.map((b) => b.c)).toEqual([10, 5.1]);
   });
 
@@ -646,5 +646,56 @@ describe("configuration", () => {
     });
     const r = await run(db, D1, { candidates: [announced("ZZA", "split", D1, split21)] });
     expect(r.auto_confirmed).toBe(1);
+  });
+});
+
+describe("GL-01 price-only veto (V2)", () => {
+  /** ZZA falls 48% (10.00 -> 5.20): a clean 2:1 reading within tolerance, no announcement. */
+  async function fallDb() {
+    const db = await caDb();
+    await putBar(db, "ZZA", D0, 10);
+    await putBar(db, "ZZA", D1, 5.2);
+    return db;
+  }
+
+  it("a 48% fall with no announcement stays queued after 5+ sessions, and entries stay blocked", async () => {
+    const db = await fallDb();
+    await run(db, D1);
+    const [q] = await loadActions(db, io(), "AU");
+    expect(q).toMatchObject({ state: "owner", sources: ["price"] });
+    for (const d of [D2, D3, D4, D5, D6, "2026-10-21", "2026-10-22"]) {
+      expect((await run(db, d)).applied_best_evidence).toBe(0);
+    }
+    const [a] = await loadActions(db, io(), "AU");
+    expect(a.state).toBe("owner");
+    expect(await factors(db)).toEqual([]);
+    await runQuality({ db, market: "AU", d: D6, io: io(), now: nowOf(D6) });
+    expect(await entriesAllowed(db, "ZZA", D6)).toEqual({ allowed: false, reason: "code_blocked" });
+    // the Owner can still resolve it
+    expect((await owner(db, a.id, "confirm", "2026-10-22")).ok).toBe(true);
+    expect((await loadActions(db, io(), "AU"))[0].state).toBe("confirmed");
+  });
+
+  it("an announcement-backed split still applies on the 5-session rule", async () => {
+    const db = await fallDb();
+    await run(db, D1, { candidates: [announced("ZZA", "split", D1, { new: 4, old: 1 })] }); // price mismatch
+    for (const d of [D2, D3, D4, D5]) await run(db, d);
+    expect((await run(db, D6)).applied_best_evidence).toBe(1);
+    expect(await factors(db)).toEqual([[1, 0.25]]);
+  });
+
+  it("a Yahoo adjusted-close that shows a real price move vetoes, with a reason", async () => {
+    const db = await fallDb();
+    // adjusted close fell with the raw close: the vendor saw no split
+    await run(db, D1, { adjClose: { ZZA: { prevAdj: 10, exAdj: 5.2 } } });
+    const [a] = await loadActions(db, io(), "AU");
+    expect(a.note.reasons).toEqual(["unexplained_jump", "adj_close_disagrees"]);
+    expect(a.state).toBe("owner");
+  });
+
+  it("an adjusted close that is flat across the ex-date adds no veto reason", async () => {
+    const db = await fallDb();
+    await run(db, D1, { adjClose: { ZZA: { prevAdj: 5.2, exAdj: 5.2 } } });
+    expect((await loadActions(db, io(), "AU"))[0].note.reasons).toEqual(["unexplained_jump"]);
   });
 });

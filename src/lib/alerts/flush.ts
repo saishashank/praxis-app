@@ -27,6 +27,7 @@ import {
   parseFacts,
   processAssessments,
   readFlushDue,
+  RETRY_DUE_MS,
   scheduleFlush,
   sendSingleP0,
   type AlertCtx,
@@ -34,7 +35,6 @@ import {
 import { alertKeys, regimeTransition, type AlertFacts } from "./tiers";
 
 const MIN_MS = 60_000;
-const RETRY_DUE_MS = 60_000; // the email core's retry gap (RETRY_GAP_S)
 const REGIME_MAX_AGE_DAYS = 3; // threshold-ok: a transition older than this is history, not news
 
 // ---- regime transition P1 (UXN-251) ------------------------------------------------------------

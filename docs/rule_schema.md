@@ -77,6 +77,14 @@ Universe: U1, U2. Rank: `return_6m_top_fraction` asc.
 | `f1_volume_ratio_min` | 1.5 | 1.2 to 3 | x |
 | `reentry_block` | 10 | 5 to 20 | sessions |
 
+Optional structural switches (KB-081; absent = default = v1 behaviour; set only by a pre-registered challenger):
+
+| Key | Default | Allowed |
+|---|---|---|
+| `f1_return_window_sessions` | 126 | 126 to 252 sessions |
+| `f1_momentum_variant` | "v1" | v1, skip_month_u2 |
+| `f1_rank_variant` | "v1" | v1, composite3, vol_scaled |
+
 ```json
 {
   "schema_version": 1,
@@ -368,11 +376,17 @@ Universe: U1, U2. Rank: `event_ar_day0_pct` desc.
 | `event_polarity_threshold_pct` | 2 | 0.5 to 10 | % |
 | `f3_event_ar_min_pct` | 4 | 3 to 8 | % |
 | `f3_max_gap_pct` | 8 | 5 to 12 | % |
-| `f3_time_exit` | 20 | 10 to 40 | sessions |
+| `f3_time_exit` | 20 | 10 to 60 | sessions |
 | `f3_trail_after_pct` | 10 | 5 to 20 | % |
 | `f3_trail_atr` | 2.5 | 1.5 to 4 | x ATR |
 | `f3_volume_ratio_min` | 2 | 1.5 to 4 | x |
 | `reentry_block` | 10 | 5 to 20 | sessions |
+
+Optional structural switches (KB-081; absent = default = v1 behaviour; set only by a pre-registered challenger):
+
+| Key | Default | Allowed |
+|---|---|---|
+| `f3_surprise_mode` | "category" | category, day0_ar |
 
 ```json
 {
@@ -526,6 +540,13 @@ Universe: U1. Rank: `rsi2` asc.
 | `f4_stop_atr` | 2 | 1.5 to 3 | x ATR |
 | `f4_time_exit` | 10 | 5 to 20 | sessions |
 | `reentry_block` | 10 | 5 to 20 | sessions |
+
+Optional structural switches (KB-081; absent = default = v1 behaviour; set only by a pre-registered challenger):
+
+| Key | Default | Allowed |
+|---|---|---|
+| `f4_entry_variant` | "v1" | v1, reversal5_u2 |
+| `f4_rank_variant` | "v1" | v1, composite3, vol_scaled |
 
 ```json
 {

@@ -15,7 +15,7 @@ const NOW = new Date("2026-10-10T12:00:00.000Z");
 async function seedWrites(n: number) {
   await db.execute({
     sql: `INSERT INTO run_record (job, concurrency_key, started_at, status, rows_written)
-          VALUES ('data-refresh', 'q1', '2026-10-02T00:00:00.000Z', 'success', ?)`,
+          VALUES ('heartbeat-evening', 'q1', '2026-10-02T00:00:00.000Z', 'success', ?)`,
     args: [n],
   });
 }

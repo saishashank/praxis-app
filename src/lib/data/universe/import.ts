@@ -15,12 +15,14 @@
 import type { Client, InStatement } from "@libsql/client";
 import { openS2Once } from "@/lib/heartbeat/incidents";
 import { finishRun, hasSuccess, startRun } from "@/lib/runs/runRecord";
-import { DELIST_REASON, planUniverse, type UniverseCounts } from "./apply.mjs";
+import { DELIST_REASON, planUniverse, REUSE_SUSPECTED, type UniverseCounts } from "./apply.mjs";
 import { parseListedCompanies, type ParseStats } from "./parse.mjs";
 
 export const UNIVERSE_JOB = "universe-import";
 export const UNIVERSE_MARKET = "AU";
 export const UNIVERSE_INCIDENT = "universe_shrink";
+/** V1-S7: a delisted code came back looking like a different company; it stays delisted until the Owner decides. */
+export const CODE_REUSE_INCIDENT = "code_reuse_suspected";
 
 export const universeKey = (date: string): string => `${UNIVERSE_JOB}:${UNIVERSE_MARKET}:${date}`;
 
@@ -38,6 +40,8 @@ export type ImportInput = {
   /** ISO timestamp source (injected so tests are deterministic). */
   now: () => string;
   commit?: string;
+  /** Where the file came from: the Worker (default) or the Owner's upload on Configuration (DAT-236). */
+  source?: "worker" | "manual";
   /** Email environment: present = the shrink incident is also emailed (M5 T11). */
   env?: Record<string, string | undefined>;
 };
@@ -89,7 +93,7 @@ export async function importUniverse(i: ImportInput): Promise<ImportResult> {
     if (!parsed.ok) return await reject(i, "unrecognised_format", {});
 
     const res = await i.db.execute({
-      sql: "SELECT code, name, industry, delisted_on, missing_count FROM instrument WHERE market = ?",
+      sql: "SELECT code, name, industry, delisted_on, delist_reason, missing_count FROM instrument WHERE market = ?",
       args: [UNIVERSE_MARKET],
     });
     const existing = res.rows.map((r) => ({
@@ -97,6 +101,7 @@ export async function importUniverse(i: ImportInput): Promise<ImportResult> {
       name: String(r.name),
       industry: r.industry === null ? null : String(r.industry),
       delistedOn: r.delisted_on === null ? null : String(r.delisted_on),
+      delistReason: r.delist_reason === null ? null : String(r.delist_reason),
       missingCount: Number(r.missing_count),
     }));
 
@@ -125,12 +130,44 @@ export async function importUniverse(i: ImportInput): Promise<ImportResult> {
         args: [r.name, r.industry, UNIVERSE_MARKET, r.code],
       });
     }
+    for (const nl of plan.newListings) {
+      // the new entity's history starts today (V1-S7): readers stop at this listed_on (src/lib/data/listing.ts)
+      stmts.push({
+        sql:
+          "INSERT INTO instrument_listing (market, code, listed_on, name, prior_name, prior_delisted_on, decided_by, created_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (market, code, listed_on) DO NOTHING",
+        args: [
+          UNIVERSE_MARKET,
+          nl.code,
+          i.today,
+          nl.name,
+          nl.priorName,
+          nl.priorDelistedOn,
+          nl.decidedBy,
+          i.now(),
+        ],
+      });
+      stmts.push({
+        sql: "UPDATE instrument SET listed_on = ? WHERE market = ? AND code = ?",
+        args: [i.today, UNIVERSE_MARKET, nl.code],
+      });
+    }
     for (const r of plan.reactivations) {
       stmts.push({
         sql:
           "UPDATE instrument SET name = ?, industry = ?, missing_count = 0, delisted_on = NULL, " +
           "delist_reason = NULL WHERE market = ? AND code = ? AND delisted_on IS NOT NULL",
         args: [r.name, r.industry, UNIVERSE_MARKET, r.code],
+      });
+    }
+    for (const q of plan.quarantined) {
+      // status column only; the old reason is kept inside the new one (DAT-130: delisted, with reason)
+      if ((q.priorReason ?? "").startsWith(REUSE_SUSPECTED)) continue; // already recorded
+      stmts.push({
+        sql:
+          "UPDATE instrument SET delist_reason = ? " +
+          "WHERE market = ? AND code = ? AND delisted_on IS NOT NULL",
+        args: [`${REUSE_SUSPECTED}:${q.priorReason ?? "none"}`, UNIVERSE_MARKET, q.code],
       });
     }
     for (const code of plan.seenAgain) {
@@ -187,7 +224,13 @@ export async function importUniverse(i: ImportInput): Promise<ImportResult> {
         plan.counts.file,
         existing.length,
         rowsWritten,
-        JSON.stringify({ counts: plan.counts, parsed: parsed.stats }),
+        JSON.stringify({
+          counts: plan.counts,
+          quarantined: plan.quarantined.length,
+          newListings: plan.newListings.length,
+          parsed: parsed.stats,
+          source: i.source ?? "worker",
+        }),
         id,
       ],
     });
@@ -201,6 +244,25 @@ export async function importUniverse(i: ImportInput): Promise<ImportResult> {
         // the run stays `running`; the next import for the date is unaffected
       }
       throw e;
+    }
+    if (plan.quarantined.length > 0) {
+      // Short facts only (codes and a reason word, never file text beyond the code and the two names).
+      try {
+        await openS2Once(
+          i.db,
+          CODE_REUSE_INCIDENT,
+          {
+            rule: "code_reuse_suspected",
+            codes: plan.quarantined.slice(0, 10).map((q) => ({ code: q.code, why: q.why })),
+            count: plan.quarantined.length,
+          },
+          i.now(),
+          i.env ? { env: i.env } : undefined,
+          "A delisted code is listed again and looks like a different company; it stays out of the universe",
+        );
+      } catch {
+        // the quarantine itself is already stored; the incident is best effort
+      }
     }
     return { ok: true, status: "applied", counts: plan.counts, parsed: parsed.stats };
   } catch {

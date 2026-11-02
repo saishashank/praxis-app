@@ -187,12 +187,12 @@ function runRecordStmt(key, scheduledFor, nowIso, p) {
 
 const insertAnnouncements = (rows, nowIso) => {
   const stmts = [];
-  const ph = "(?,?,?,?,?,?,?,?,?,?)";
+  const ph = "(?,?,?,?,?,?,?,?,?,?,?)";
   for (let i = 0; i < rows.length; i += ROWS_PER_STATEMENT) {
     const slice = rows.slice(i, i + ROWS_PER_STATEMENT);
     stmts.push({
       sql: `INSERT INTO announcement (market, code, ann_id, published_at, ingested_at, type,
-              price_sensitive, title, url, source) VALUES ${slice.map(() => ph).join(",")}
+              price_sensitive, title, url, source, first_ingested_at) VALUES ${slice.map(() => ph).join(",")}
             ON CONFLICT DO NOTHING`,
       args: slice.flatMap((r) => [
         MARKET,
@@ -205,6 +205,7 @@ const insertAnnouncements = (rows, nowIso) => {
         r.title,
         r.url,
         ANNOUNCEMENT_SOURCE,
+        nowIso, // GL-05: first_ingested_at = the backfill time, so a replay of an earlier day drops the row
       ]),
     });
   }

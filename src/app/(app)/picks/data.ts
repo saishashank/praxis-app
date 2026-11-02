@@ -3,7 +3,7 @@
 import { getConfig } from "@/lib/config/store";
 import type { Db } from "@/lib/ui/loaders/shell";
 
-export const PICKS_MAX_PER_FAMILY_DEFAULT = 2; // threshold-ok: ch.15 default, used only if the read fails
+export const PICKS_MAX_PER_FAMILY_DEFAULT = 10; // threshold-ok: O-76 (10 = no cap), used only if the read fails
 
 export async function maxPerFamily(db: Db): Promise<number> {
   try {

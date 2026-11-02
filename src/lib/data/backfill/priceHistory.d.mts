@@ -22,6 +22,8 @@ export type Factor = {
   factor: number;
   actionId?: number;
   type?: string;
+  /** GL-02: instant the action was first confirmed; null = known since before the column. */
+  knownAt?: string | null;
 };
 export type VendorSplit = { code: string; exDate: string; ratio: number };
 export type Finding = { code: string; kind: string; exDate?: string };

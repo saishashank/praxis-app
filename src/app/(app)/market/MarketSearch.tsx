@@ -3,6 +3,7 @@
 // /market?q=...; with JavaScript the results update after a 150 ms pause from GET /api/market/search.
 // Masked users get a disabled box with the reason (DAT-124: matching a typed code would reveal which
 // codes exist), so nothing is sent for them.
+import { EmptyState } from "@/components/ui/States";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { RowActions, type WatchMode } from "./RowActions";
@@ -121,7 +122,7 @@ export function MarketSearch({ initialQuery, initialHits, masked, note, mode, st
       <div aria-live="polite">
         {failed ? <p role="alert">Search is not available right now. Try again.</p> : null}
         {!masked && asked && !failed && hits.length === 0 ? (
-          <p className="m-0 text-sm text-text-muted">No companies match that search.</p>
+          <EmptyState compact motif="market" hue="market" title="No companies match that search." />
         ) : null}
         {hits.length > 0 && !masked ? (
           <ul aria-label="Search results" className="m-0 flex list-none flex-col gap-2 p-0">

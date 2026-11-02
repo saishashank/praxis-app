@@ -3,6 +3,7 @@
 // controls. Uses the existing audited route /api/learning/annotations (D-125; decision 11). The server
 // decides what text a reader may see: a Viewer gets `text: null` and the line "Note added by <role> on
 // <day>". `canChange` is computed on the server (author or Owner), so no user id reaches the browser.
+import { EmptyState } from "@/components/ui/States";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
@@ -55,7 +56,7 @@ export function Notes({
   return (
     <div className="flex flex-col gap-2">
       {notes.length === 0 ? (
-        <p className="m-0 text-sm text-text-muted">No notes yet.</p>
+        <EmptyState compact motif="reviews" hue="reviews" title="No notes yet." />
       ) : (
         <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
           {notes.map((n) => (

@@ -122,3 +122,90 @@ export function stateText(
 }
 
 export const trackStateText = (r: TrackRow): string => stateText(r);
+
+/** UXN-311: the one badge table lives in src/lib/ui/familyBadge.ts (D-393). */
+export { FAMILY_BADGE as FAMILY_BADGES } from "@/lib/ui/familyBadge";
+
+/** UXR-007: one sentence on what will appear and when. */
+export const EMPTY_PICKS_SENTENCE =
+  "Picks for this profile appear here after tonight's run (about 6:30 pm) finds enough evidence.";
+export const EMPTY_TRACK_SENTENCE =
+  "Picks appear here after they are published and followed on paper.";
+
+// ---- M17 WP8 wording (UXN-301..311, NFR-041). Plain words; never "real-time"; every intraday figure is delayed. ----
+
+export const TONIGHT_TITLE = "Tonight's picks";
+export const INTRADAY_TITLE = "Intraday watch";
+export const INTRADAY_EXPLAINER =
+  "Stocks with news today that have already moved. Found during the day from delayed prices, not rated, not checked against past results.";
+export const INTRADAY_UNRATED = "Unrated - no history yet";
+export const INTRADAY_UNVALIDATED =
+  "Unvalidated: this stream has not been tested against past results.";
+export const NO_HISTORY = "Not enough history yet";
+
+/** NFR-041: the delay statement in help text. */
+export const delayStatement = (delayMin: number): string =>
+  `Prices here are delayed: up to about ${delayMin} minutes after the trade, plus the time between refreshes. Each one shows the time of its quote.`;
+export const ALERT_DELAY_HELP =
+  "Alert prices come from a delayed feed: up to about 20 minutes after the trade, plus the time between refreshes. A hit means the delayed price reached your buy limit; the time shown is the quote time.";
+
+export const ALERT_SETTING_WORDS = {
+  pickAlerts: "Buy-price alerts",
+  cleared: "E-mail when a pick's alert is cleared",
+  candidates: "E-mail for new intraday candidates",
+  cap: "Most alert e-mails a day",
+  quiet:
+    "Alerts that arrive in this window are held and sent as one digest afterwards. Nothing here is urgent (P0); those always arrive.",
+} as const;
+
+export const CLEAR_WORDS: Record<string, string> = {
+  left_list: "Left the list",
+  below_stop: "Price fell below the stop-loss",
+  above_chase_cap: "Price moved too far above the buy limit",
+  halted: "Trading halted",
+  expired: "Expired",
+  muted: "Muted by you",
+  filled: "Bought in the practice portfolio",
+};
+
+export const MAIL_WORDS: Record<string, string> = {
+  sent: "E-mail sent",
+  batched: "Sent with others",
+  suppressed: "E-mail held back (daily limit)",
+  held: "Held until quiet hours end",
+  off: "E-mail off",
+  none: "No e-mail",
+};
+
+export const SORT_WORDS = {
+  chance: "Sorted by chance of a net gain",
+  expected_gain: "Sorted by typical past result",
+  toChance: "Sort by chance",
+  toGain: "Sort by expected gain",
+} as const;
+
+// ARN-103/104, UXN-288, D-490/D-491: picks against the market.
+/** Percentage points with one decimal and a sign, from ppm (1 pp = 10 000 ppm). */
+export function ppText(ppm: number | null): string {
+  if (ppm === null) return "not measured";
+  const tenths = Math.round((Math.abs(ppm) / 10_000) * 10) / 10; // threshold-ok: ppm to pp
+  return `${ppm < 0 ? "-" : "+"}${tenths.toFixed(1)} pp`;
+}
+export const VS_MARKET_CAPTION = "Past paper picks, not a forecast.";
+export const VS_MARKET_INSUFFICIENT = "insufficient history";
+export const VS_MARKET_HELP =
+  "Market = S&P/ASX 200. The index has closes only, so each window runs from the close before the pick was bought to the close of the day it was sold. Vs market = the pick's result after costs minus the market's.";
+export const MISSED_NOT_BOUGHT = "missed, not bought";
+export const vsMarketRowText = (v: NonNullable<TrackRow["vsMarket"]>): string =>
+  v.missed
+    ? `market ${ppText(v.marketRetPpm)} over the window; ${MISSED_NOT_BOUGHT}`
+    : `vs market ${ppText(v.vsPpm)} (market ${ppText(v.marketRetPpm)})`;
+export function vsMarketSummaryLine(s: {
+  n: number;
+  medianPpm: number | null;
+  beatingPct: number | null;
+  insufficient: boolean;
+}): string {
+  if (s.insufficient) return `Vs market: ${VS_MARKET_INSUFFICIENT} (n = ${s.n}).`;
+  return `Median vs market ${ppText(s.medianPpm)}; ${s.beatingPct}% of picks beat the market; n = ${s.n}.`;
+}

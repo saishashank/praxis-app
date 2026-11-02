@@ -1,9 +1,11 @@
 // Link-based navigation primitives: Tabs, Chips, Breadcrumb + back link. State lives in the URL
 // (D-128), so these are plain links with `aria-current` on the active one; no client code.
+// UXR-002: the current item has three cues: a filled surface, a check, and a text cue (visually hidden
+// "Selected"), never colour alone.
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "./cn";
-import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
 
 export type NavItem = {
   href: string;
@@ -34,13 +36,15 @@ export function Tabs({
               href={it.href}
               aria-current={it.current ? "page" : undefined}
               className={cn(
-                "inline-flex min-h-6 items-center gap-1 px-3 py-2 text-sm break-words",
+                "ui-motion inline-flex min-h-6 items-center gap-1 px-3 py-2 text-sm break-words",
                 it.current
-                  ? "border-b-2 border-accent font-semibold text-text"
+                  ? "bg-surface-2 font-semibold text-text shadow-[inset_0_-2px_0_var(--color-accent)]"
                   : "text-text-muted hover:text-text",
               )}
             >
+              {it.current ? <CheckIcon aria-hidden="true" /> : null}
               {it.label}
+              {it.current ? <span className="sr-only"> (Selected)</span> : null}
               {badgeText(it.badge) ? (
                 <span className="rounded-md bg-surface-2 px-1 text-xs text-text">
                   {badgeText(it.badge)}
@@ -73,13 +77,15 @@ export function Chips({
               href={it.href}
               aria-current={it.current ? "page" : undefined}
               className={cn(
-                "inline-flex min-h-6 items-center rounded-full px-3 py-1 text-sm break-words",
+                "ui-motion inline-flex min-h-6 items-center gap-1 rounded-full px-3 py-1 text-sm break-words",
                 it.current
                   ? "bg-accent text-accent-contrast font-semibold"
                   : "bg-surface text-text border border-border hover:bg-bg",
               )}
             >
+              {it.current ? <CheckIcon aria-hidden="true" /> : null}
               {it.label}
+              {it.current ? <span className="sr-only"> (Selected)</span> : null}
             </Link>
           </li>
         ))}

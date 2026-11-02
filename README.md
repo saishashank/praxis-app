@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="public/brand/praxis-logo-tagline-dark.svg">
+    <img src="public/brand/praxis-logo-tagline-light.svg" alt="Praxis — Learn. Earn. Repeat." width="320">
+  </picture>
+</p>
+
 # Praxis
 
 Praxis is a personal investment-research and **simulated** (paper) trading app, first for the ASX. It is a simulation for personal information only. It is **not financial advice**, it never places a real order, and no screen can. Every money figure is labelled "Simulated".

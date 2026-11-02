@@ -3,11 +3,12 @@
 // expected value is hand-computed in micro-AUD (A$1.00 = 1_000_000) and written as a literal.
 // Common setup: P5 brokerage (A$5.00 up to A$1,000.00), ADV A$5M (10 bps), tick A$0.01 from A$2.00.
 import { describe, expect, it } from "vitest";
-import { COST_PROFILES, type CostProfile } from "@/lib/arena/costs";
+import { COST_PROFILES, feeFor, type CostProfile } from "@/lib/arena/costs";
 import {
   isParcelOnlyRejection,
   MIN_MARKETABLE_PARCEL_MICRO,
   rejectReasonText,
+  resizeEntryAtFill,
   sizeEntry,
   stallFloorMicro,
   type SizingInput,
@@ -347,5 +348,92 @@ describe("stall floor (spec 05 section 5.1, decision 4)", () => {
     expect(stallFloorMicro({ profile: COST_PROFILES.P5, refPriceMicro: 9_800_000n })).toBe(
       510_616_368n,
     );
+  });
+});
+
+describe("entry quantity at the fill (GL-03, D-207 item 3)", () => {
+  const P5 = COST_PROFILES.P5;
+  // plan: 60 shares at A$9.81 = 588.60 + A$5.00 brokerage = 593.60 against 594.00 of cash
+  const planned = { plannedQty: 60n, profile: P5 };
+
+  it("keeps the planned quantity when it is still covered (price as planned)", () => {
+    expect(
+      resizeEntryAtFill({
+        ...planned,
+        fillPriceMicro: 9_810_000n,
+        availableCashMicro: 594_000_000n,
+      }),
+    ).toEqual({ status: "keep", qty: 60n });
+  });
+
+  it("a gap down never enlarges the order", () => {
+    expect(
+      resizeEntryAtFill({
+        ...planned,
+        fillPriceMicro: 9_520_000n,
+        availableCashMicro: 594_000_000n,
+      }),
+    ).toEqual({ status: "keep", qty: 60n });
+  });
+
+  it("a +3% gap cuts the quantity instead of cancelling", () => {
+    // A$9.81 +3% is about A$10.11 on the tick grid: 58 x 10.11 = 586.38 + 5.00 = 591.38 <= 594.00;
+    // 59 x 10.11 = 596.49 + 5.00 > 594.00
+    expect(
+      resizeEntryAtFill({
+        ...planned,
+        fillPriceMicro: 10_110_000n,
+        availableCashMicro: 594_000_000n,
+      }),
+    ).toEqual({ status: "resized", qty: 58n });
+  });
+
+  it("the resized value plus brokerage never exceeds cash, and one more share would", () => {
+    const cash = 594_000_000n;
+    const r = resizeEntryAtFill({
+      ...planned,
+      fillPriceMicro: 10_110_000n,
+      availableCashMicro: cash,
+    });
+    if (r.status !== "resized") throw new Error("expected resized");
+    const cost = (q: bigint): bigint => q * 10_110_000n + feeFor(P5, q * 10_110_000n, "buy");
+    expect(cost(r.qty) <= cash).toBe(true);
+    expect(cost(r.qty + 1n) > cash).toBe(true);
+  });
+
+  it("cancels as cash when one marketable parcel (A$500) is unaffordable", () => {
+    // 49 shares x A$10.11 = 495.39 < A$500, cash only affords 49 after the A$5 fee (500.00 cash)
+    expect(
+      resizeEntryAtFill({
+        ...planned,
+        fillPriceMicro: 10_110_000n,
+        availableCashMicro: 500_000_000n,
+      }),
+    ).toEqual({ status: "cancel", reason: "cash" });
+  });
+
+  it("cancels as cash when not even one share is affordable", () => {
+    expect(
+      resizeEntryAtFill({
+        ...planned,
+        fillPriceMicro: 10_110_000n,
+        availableCashMicro: 4_000_000n,
+      }),
+    ).toEqual({ status: "cancel", reason: "cash" });
+    expect(
+      resizeEntryAtFill({ ...planned, fillPriceMicro: 10_110_000n, availableCashMicro: 0n }),
+    ).toEqual({ status: "cancel", reason: "cash" });
+  });
+
+  it("a resized parcel exactly at A$500 is marketable", () => {
+    // 50 x A$10.00 = 500.00 + 5.00 brokerage = 505.00 cash
+    expect(
+      resizeEntryAtFill({
+        plannedQty: 60n,
+        profile: P5,
+        fillPriceMicro: 10_000_000n,
+        availableCashMicro: 505_000_000n,
+      }),
+    ).toEqual({ status: "resized", qty: 50n });
   });
 });

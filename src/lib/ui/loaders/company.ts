@@ -13,6 +13,7 @@ import { strategyNames } from "./common";
 import { TIER_RULES } from "@/lib/data/universe/tiers.mjs";
 import { codeFromSlug, sectorName, slugOf, starredCodes } from "./market";
 import { marketOf, maskKit, priceMicro, todayD, type LoaderEnv, type LoaderState } from "./shell";
+import { displayTitle } from "@/lib/view/displayText";
 
 const PPM = 1_000_000; // threshold-ok: parts per million
 const BAR_ROWS = 520; // threshold-ok: about two years of sessions (the store keeps 500, DAT-140)
@@ -191,7 +192,7 @@ export async function loadCompany(env: LoaderEnv, key: string): Promise<CompanyM
   );
   const announcements: Announcement[] = (ann?.rows ?? []).map((x) => ({
     id: Number(x.id), // money-float-ok: SQL integer key
-    title: kit ? maskText(String(x.title), kit.aliases, kit.lookup) : String(x.title),
+    title: displayTitle(kit ? maskText(String(x.title), kit.aliases, kit.lookup) : String(x.title)),
     published: masked
       ? (isoWeek(String(x.published_at).slice(0, 10)) ?? MISSING)
       : String(x.published_at),

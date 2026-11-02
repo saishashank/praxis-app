@@ -2,6 +2,7 @@
 // the stored per-currency day profit/loss as a glyph (sign + arrow, never colour alone, UXN-001) and,
 // below the grid, the same figures as text. No FX blending (O-34): a currency gets its own glyph and
 // line. A masked user sees one row per ISO week instead of days (UX-009). Server component.
+import { EmptyState } from "@/components/ui/States";
 import Link from "next/link";
 import { GainLoss } from "@/components/ui/Values";
 import { cn } from "@/components/ui/cn";
@@ -76,7 +77,7 @@ export function ReviewCalendar({ model }: { model: ReviewCalendarModel }) {
       <section aria-label="Calendar" className="flex min-w-0 flex-col gap-3">
         {nav}
         {model.maskedWeeks.length === 0 ? (
-          <p className="m-0 text-sm text-text-muted">No reviews in this month.</p>
+          <EmptyState compact motif="reviews" hue="reviews" title="No reviews in this month." />
         ) : (
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {model.maskedWeeks.map((w) => (
@@ -149,7 +150,7 @@ export function ReviewCalendar({ model }: { model: ReviewCalendarModel }) {
         ▲ profit, ▼ loss, – none recorded, one mark per currency. * Partial review.
       </p>
       {withReview.length === 0 ? (
-        <p className="m-0 text-sm text-text-muted">No reviews in this month.</p>
+        <EmptyState compact motif="reviews" hue="reviews" title="No reviews in this month." />
       ) : (
         <ul aria-label="Day by day" className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
           {withReview.map((c) =>

@@ -20,7 +20,14 @@
 // ./rules.ts and ./exits.ts (the tests check that its param references are exactly the family's
 // Lane-B keys and that its literals equal the registry's fixed keys). docs/rule_schema.md is
 // generated from this module by scripts/learning/genRuleSchema.mjs and checked by a test.
-import { CONFIG_KEYS, type ConfigKey } from "@/lib/config/keys";
+import {
+  CONFIG_KEYS,
+  F1_MOMENTUM_VARIANTS,
+  F3_SURPRISE_MODES,
+  F4_ENTRY_VARIANTS,
+  RANK_VARIANTS,
+  type ConfigKey,
+} from "@/lib/config/keys";
 import type { Family } from "../schema";
 
 export const RULE_SCHEMA_VERSION = 1;
@@ -629,6 +636,57 @@ export const FAMILY_PARAM_KEYS: Readonly<Record<Family, readonly string[]>> = {
   F6: FAMILY_SPECS.F6.params,
 };
 
+/**
+ * M14 structural switches (KB-081, O-46, D-235): Lane-B keys that a pre-registered challenger may set
+ * and that no condition references. They are OPTIONAL in params_json: an absent key means its
+ * registry default, which reproduces v1 exactly, so the stored `F*.v1` rows (and their params_sha)
+ * stay valid and FAMILY_PARAM_KEYS (the required set) is unchanged. An enum key holds one of its
+ * allowed words; `f1_return_window_sessions` is a number inside its bounds. The generator never steps
+ * an enum key (candidateSteps skips non-numeric values).
+ */
+export type StructuralKey = {
+  readonly key: string;
+  /** `enum`: one of `allowed`; `window`: a whole number inside the registry bounds. */
+  readonly kind: "enum" | "window";
+  readonly allowed?: readonly string[];
+};
+export const FAMILY_OPTIONAL_KEYS: Readonly<Record<Family, readonly StructuralKey[]>> = {
+  F1: [
+    { key: "f1_return_window_sessions", kind: "window" },
+    { key: "f1_momentum_variant", kind: "enum", allowed: F1_MOMENTUM_VARIANTS },
+    { key: "f1_rank_variant", kind: "enum", allowed: RANK_VARIANTS },
+  ],
+  F2: [],
+  F3: [{ key: "f3_surprise_mode", kind: "enum", allowed: F3_SURPRISE_MODES }],
+  F4: [
+    { key: "f4_entry_variant", kind: "enum", allowed: F4_ENTRY_VARIANTS },
+    { key: "f4_rank_variant", kind: "enum", allowed: RANK_VARIANTS },
+  ],
+  F5: [],
+  F6: [],
+};
+
+/** Problems with the structural keys present in a params_json (an absent key is fine: default). */
+export function checkStructuralParams(
+  family: Family,
+  params: Readonly<Record<string, unknown>>,
+): string[] {
+  const errors: string[] = [];
+  for (const s of FAMILY_OPTIONAL_KEYS[family]) {
+    if (!Object.prototype.hasOwnProperty.call(params, s.key)) continue;
+    const v = params[s.key];
+    if (s.kind === "enum") {
+      if (typeof v !== "string" || !(s.allowed ?? []).includes(v))
+        errors.push(`params: ${s.key} must be one of ${(s.allowed ?? []).join(", ")}`);
+    } else {
+      const b = paramBounds(s.key);
+      if (typeof v !== "number" || !Number.isInteger(v) || b === null || v < b[0] || v > b[1])
+        errors.push(`params: ${s.key} must be a whole number inside its bounds`);
+    }
+  }
+  return errors;
+}
+
 // ---- the loader check -------------------------------------------------------------------------------
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
@@ -780,6 +838,7 @@ export function validateRuleSpec(
 ): string[] {
   const errors: string[] = [];
   if (!isObj(spec)) return ["spec must be an object"];
+  const specFamily = typeof spec.family === "string" ? spec.family : "";
   const keys = Object.keys(spec).sort().join(",");
   if (keys !== "actions,family,params,rank,schema_version,universe") {
     errors.push("spec has exactly schema_version, family, universe, params, actions and rank");
@@ -825,6 +884,9 @@ export function validateRuleSpec(
       errors.push("rank: order is asc or desc");
   }
   const ctx: Ctx = { errors, declared, params };
+  if (params !== null && FAMILIES.includes(specFamily)) {
+    errors.push(...checkStructuralParams(specFamily as Family, params));
+  }
   if (!Array.isArray(spec.actions) || spec.actions.length < 1) {
     errors.push("actions must be a non-empty list");
     return errors;
@@ -959,6 +1021,22 @@ export function renderRuleSchemaDoc(): string {
       const b = def.range === undefined ? "object" : `${def.range[0]} to ${def.range[1]}`;
       out.push(`| \`${k}\` | ${cell(JSON.stringify(def.default))} | ${b} | ${cell(def.unit)} |`);
     }
+    if (FAMILY_OPTIONAL_KEYS[fam].length > 0) {
+      out.push("");
+      out.push(
+        "Optional structural switches (KB-081; absent = default = v1 behaviour; set only by a pre-registered challenger):",
+      );
+      out.push("");
+      out.push("| Key | Default | Allowed |");
+      out.push("|---|---|---|");
+      for (const s of FAMILY_OPTIONAL_KEYS[fam]) {
+        const d = (CONFIG_KEYS as Record<string, { default: unknown }>)[s.key];
+        const b = paramBounds(s.key);
+        const allowed =
+          s.kind === "enum" ? (s.allowed ?? []).join(", ") : `${b?.[0]} to ${b?.[1]} sessions`;
+        out.push(`| \`${s.key}\` | ${cell(JSON.stringify(d.default))} | ${allowed} |`);
+      }
+    }
     out.push("");
     out.push("```json");
     out.push(JSON.stringify(spec, null, 2));
@@ -970,5 +1048,8 @@ export function renderRuleSchemaDoc(): string {
 
 /** Keys the specs reference, for tests and the seed. */
 export const ALL_SPEC_KEYS: readonly ConfigKey[] = [
-  ...new Set(Object.values(FAMILY_PARAM_KEYS).flat()),
+  ...new Set([
+    ...Object.values(FAMILY_PARAM_KEYS).flat(),
+    ...Object.values(FAMILY_OPTIONAL_KEYS).flatMap((l) => l.map((s) => s.key)),
+  ]),
 ].sort() as ConfigKey[];

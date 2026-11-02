@@ -12,6 +12,8 @@ import { bearerMatches, isProduction, melbourneDate, type Env } from "@/lib/watc
 import type { EmailProvider } from "@/lib/email/provider";
 import {
   detectAsxTrip,
+  detectAuditChain,
+  detectDispatchAuth,
   detectDataQualityTwoNights,
   detectQuota,
   detectReviewMissing,
@@ -27,6 +29,8 @@ import { heartbeatJob, type HeartbeatKind } from "./state";
 export type Deps = {
   env: Env;
   mainDb: () => Client;
+  /** Auth DB (audit_event, NFR-023). Absent = the chain check is skipped. */
+  authDb?: () => Client;
   now: () => Date;
   /** Email provider and sleep for tests; production selects its own. */
   provider?: EmailProvider;
@@ -35,6 +39,41 @@ export type Deps = {
 
 const json = (status: number, body: unknown) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+
+/**
+ * V1-I2 (D-772), R2-S1 (D-800): Vercel crons are fixed UTC and Hobby fires "anywhere within the scheduled
+ * hour" (+0..59 min), so the evening check has a line per DST regime and a scheduled call (user agent
+ * `vercel-cron`) is accepted by REGIME, not by a Melbourne clock window: the `?dst=aedt` lines run
+ * whenever Melbourne is at UTC+11, the plain lines whenever it is at UTC+10; the other regime's line is
+ * a 200 no-op. A manual call (no such agent) always runs. Exactly-once per night is `alreadyDone`.
+ * Ordering with the 21:50 watchdog (D-801): both open the SAME stable incident kinds through
+ * `notifyIncident` (one open incident per kind), so a heartbeat that fires after 21:50 only finds the
+ * condition already open; neither order loses or doubles an alert.
+ */
+const CRON_AGENT = /^vercel-cron\//i;
+
+/** Melbourne's UTC offset in minutes at `now` (660 in AEDT, 600 in AEST). */
+export function melbourneOffsetMinutes(now: Date): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Australia/Melbourne",
+    timeZoneName: "shortOffset",
+  }).formatToParts(now);
+  const name = parts.find((p) => p.type === "timeZoneName")?.value ?? "GMT+10";
+  const m = /^GMT([+-])(\d{1,2})(?::(\d{2}))?$/.exec(name);
+  if (!m) return 600; // threshold-ok: fail to AEST
+  return (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3] ?? 0));
+}
+
+/** True when a scheduled evening call belongs to the regime Melbourne is in now (R2-S1). */
+export function eveningLineInRegime(url: string, now: Date): boolean {
+  let aedtLine = false;
+  try {
+    aedtLine = new URL(url).searchParams.get("dst") === "aedt";
+  } catch {
+    // an unparsable URL is the plain (AEST) line
+  }
+  return melbourneOffsetMinutes(now) === (aedtLine ? 660 : 600); // threshold-ok: UTC offsets
+}
 
 const has = (v: string | undefined): v is string => typeof v === "string" && v.trim() !== "";
 const MIN_SECRET_LENGTH = 16;
@@ -67,9 +106,12 @@ async function runExtras(
   };
   await safe(() => detectAsxTrip(db));
   await safe(() => detectQuota(db, now, deps.env));
+  await safe(() => detectDispatchAuth(db, now));
   if (kind === "evening") {
     await safe(() => detectDataQualityTwoNights(db));
     await safe(() => detectReviewMissing(db, now));
+    // NFR-023: the nightly verification of the audit hash chain (V1-S4).
+    if (deps.authDb) await safe(() => detectAuditChain(deps.authDb!(), deps.env.PII_HASH_KEY));
   }
   const opened: string[] = [];
   for (const f of found) {
@@ -114,6 +156,13 @@ export function createHeartbeatHandler(kind: HeartbeatKind, deps: Deps) {
       if (!isProduction(deps.env)) return json(200, { skipped: "not production" });
 
       const now = deps.now();
+      if (
+        kind === "evening" &&
+        CRON_AGENT.test(req.headers.get("user-agent") ?? "") &&
+        !eveningLineInRegime(req.url, now)
+      ) {
+        return json(200, { skipped: "other regime" });
+      }
       const date = melbourneDate(now);
       const key = `${job}:${date}`;
       const db = deps.mainDb();

@@ -118,6 +118,34 @@ export const JOBS: readonly JobDef[] = [
     noDataNote: "Not run yet (follows batch 2b; off until the Owner enables the arena)",
   },
   {
+    // V1-I1 (D-771): nightly retention and personal-data hashing (PLT-076). It is always on (D-155), so a
+    // silent stop is a privacy risk; 2 x 1 day flags it after two missed nights.
+    job: "maintenance-nightly",
+    label: "Nightly maintenance (retention, personal-data hashing)",
+    expectedIntervalSec: 86_400,
+    noDataNote: "Not run yet (production, nightly once the Worker dispatches it)",
+  },
+  {
+    // V1-I1 (D-771): the two learning stages that follow batch 3 (trading days; same gap logic).
+    job: "arena-learn",
+    label: "Arena learning (AU)",
+    expectedIntervalSec: 3 * 86_400,
+    noDataNote: "Not run yet (follows batch 3; off until the Owner enables the arena)",
+  },
+  {
+    job: "arena-words",
+    label: "Arena narrative and critic (AU)",
+    expectedIntervalSec: 3 * 86_400,
+    noDataNote: "Not run yet (follows learning; off until the Owner enables the arena)",
+  },
+  {
+    // V1-I1 (D-771): the Worker re-enables GitHub workflows disabled after 60 idle days, once a day (PLT-015).
+    job: "worker-reenable",
+    label: "Workflow re-enable (Worker, daily)",
+    expectedIntervalSec: 86_400,
+    noDataNote: "Production only; first record after the Worker is deployed",
+  },
+  {
     // M2 T9 (DAT-125, DAT-125a): runs on demand; the Worker slot is off until the Owner enables the
     // backfill, and a paused_cap or empty plan still ends in a success record or none at all.
     job: "backfill-history",

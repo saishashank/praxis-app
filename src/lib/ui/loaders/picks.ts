@@ -3,12 +3,17 @@
 // DAT-124) gets "Stock A" for the code, no company name, no prices, the ISO week instead of exact
 // dates and masked free text; the figures that carry no price (probabilities, counts) stay.
 import { getConfig } from "@/lib/config/store";
+import { chanceDisplay, chanceLine, type ChanceDisplay } from "@/lib/picks/chance";
+import { familyStatusMap } from "@/lib/cortex/store/status";
 import { modelSuccess, successLine, type ModelSuccess } from "@/lib/picks/success";
-import { formatPpm, isoWeek, MISSING } from "@/lib/view/format";
+import { benchmarkLabel, type BenchBasis } from "@/lib/picks/benchmark";
+import { vsMarketSummary, type VsMarketSummary } from "@/lib/picks/vsMarket";
+import { formatDate, formatPpm, isoWeek, MISSING } from "@/lib/view/format";
 import { dateStaleness } from "@/lib/view/staleness";
 import { maskText } from "@/lib/view/mask";
 import { opaqueDigest } from "@/lib/view/opaqueRef";
 import { soft, strategyNames } from "./common";
+import { melTime } from "./pickAlerts";
 import { cardHref } from "./cards";
 import {
   isDateParam,
@@ -35,6 +40,8 @@ export const pickRef = (realId: string): string => "pk:" + opaqueDigest("pk", re
 
 /** Re-exported for the reviews loader (section 7a), so this file stays the one page-side importer of src/lib/picks (D-136). */
 export { modelSuccess, successLine };
+/** UXN-309 order, re-exported for the Picks page (D-136: only this loader imports src/lib/picks). */
+export { sortPicks } from "@/lib/picks/sort";
 
 /** The id shown in links: readable for an unmasked viewer, opaque for a masked one (no date in the URL). */
 const publicPickId = (realId: string, masked: boolean): string =>
@@ -50,6 +57,15 @@ async function resolvePickRef(env: LoaderEnv, ref: string): Promise<string | nul
     if (pickRef(real) === ref) return real;
   }
   return null;
+}
+
+/** UXN-302: when the list was published and which prices it is based on (the week for a masked user). */
+export function pickStamp(createdAt: string | null, d: string, masked: boolean): string {
+  const time = createdAt ? melTime(createdAt) : MISSING;
+  const day = masked ? (isoWeek(d) ?? MISSING) : formatDate(d);
+  return time === MISSING
+    ? `Published ${day} from closing prices`
+    : `Published ${time} on ${day} from closing prices`;
 }
 
 export type PicksQuery = { profile: string; d?: string };
@@ -106,6 +122,14 @@ export type PickRowView = {
   rank: number;
   /** Friendly strategy name of the family (UXN-039), or the family code when no name is stored. */
   familyName: string;
+  /** Plain-words description of the family for the badge sheet (same text as the Strategies tab, UXN-311). */
+  familyInfo: {
+    oneLiner: string;
+    buys: string;
+    sells: string;
+    worksBest: string;
+    mainRisk: string;
+  } | null;
   /** Stop and aim as ppm of the reference price (the "-8%" and "+10%" of UXN-040). */
   stopPpm: number | null;
   aimPpm: number | null;
@@ -138,6 +162,13 @@ export type PickRowView = {
   basedOn: string[];
   /** Link to the Decision Card; opaque `ck:` reference for a masked user. */
   cardHref: string | null;
+  /** UXN-308: "Chance of a net gain" or "Not enough history yet" (every family is in shadow today). */
+  chance: ChanceDisplay;
+  chanceText: string;
+  /** Typical past result in ppm (the expected-gain line and the sort key); null when not enough cases. */
+  expectedGainPpm: number | null;
+  /** UXN-302: published time and data basis, e.g. "Published 18:10 on 2026-11-01 from closing prices". */
+  stamp: string;
 };
 
 export type PicksModel = {
@@ -147,6 +178,8 @@ export type PicksModel = {
   profiles: string[];
   /** Publication date shown (exact for the Owner, ISO week for a masked user). */
   d: string | null;
+  /** The real list date, for server-side joins only (alert chips); never rendered. */
+  realD: string | null;
   staleText: string | null;
   success: (ModelSuccess & { line: string }) | null;
   picks: PickRowView[];
@@ -213,6 +246,7 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
     profile: q.profile,
     profiles,
     d: null,
+    realD: null,
     staleText: null,
     success: null,
     picks: [],
@@ -221,7 +255,7 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
   const rows = await env.main.execute({
     sql: `SELECT p.rank, p.code, p.family, p.tier, p.label, p.buy_max_micro, p.stop_micro, p.aim_micro,
                  p.valid_until_d, p.bad_ppm, p.typical_ppm, p.good_ppm, p.n_similar, p.aim_reach_ppm,
-                 p.time_frame_sessions, p.based_on_json, p.card_id, i.name, p.reference_micro,
+                 p.time_frame_sessions, p.based_on_json, p.card_id, p.created_at, i.name, p.reference_micro,
                  p.size_micro, p.risk_micro, o.state AS o_state, o.entry_micro AS o_entry,
                  o.exit_reason AS o_reason, o.net_ppm AS o_net,
                  (SELECT c.reason FROM pick_check c WHERE c.market = p.market AND c.d = p.d
@@ -236,6 +270,7 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
   const kit = masked ? await maskKit(env, d, await pickCodes(env, d)) : null;
   const t = (s: string): string => (kit ? maskText(s, kit.aliases, kit.lookup) : s);
   const names = await soft(() => strategyNames(env.main), {});
+  const statuses = await soft(() => familyStatusMap(env.main, market, d), null);
   const picks: PickRowView[] = rows.rows.map((x) => {
     const code = String(x.code);
     const scenario =
@@ -248,10 +283,29 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
             n: Number(x.n_similar),
           }; // money-float-ok: SQL integer columns
     const valid = String(x.valid_until_d);
+    // No stored p exists for a V1 pick, so the display is always "no_history" until a family is allowed.
+    const chance = chanceDisplay({
+      status: statuses?.[String(x.family) as keyof typeof statuses] ?? "shadow",
+      p: null,
+      lo: null,
+      hi: null,
+      nEff: null,
+      slopeUb: null,
+      hideBelow: 1,
+    });
     return {
       id: publicPickId(`${d}.${q.profile}.${Number(x.rank)}`, masked),
       rank: Number(x.rank), // money-float-ok: SQL integer column
       familyName: names[String(x.family)]?.name ?? String(x.family),
+      familyInfo: names[String(x.family)]
+        ? {
+            oneLiner: names[String(x.family)]!.one_liner,
+            buys: names[String(x.family)]!.buys,
+            sells: names[String(x.family)]!.sells,
+            worksBest: names[String(x.family)]!.works_best,
+            mainRisk: names[String(x.family)]!.main_risk,
+          }
+        : null,
       stopPpm: ppmOf(x.stop_micro, x.reference_micro),
       aimPpm: ppmOf(x.aim_micro, x.reference_micro),
       size: masked ? null : money(String(x.size_micro)),
@@ -280,6 +334,10 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
       timeFrameSessions: toNum(x.time_frame_sessions),
       basedOn: parseList(x.based_on_json).map(t),
       cardHref: x.card_id === null ? null : cardHref(String(x.card_id), masked),
+      chance,
+      chanceText: chanceLine(chance),
+      expectedGainPpm: scenario ? scenario.typicalPpm : null,
+      stamp: pickStamp(x.created_at === null ? null : String(x.created_at), d, masked),
     };
   });
   const stale = dateStaleness(d, todayD(env), STALE_DAYS);
@@ -287,6 +345,7 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
     ...base,
     state: picks.length === 0 ? "empty" : stale.state === "stale" ? "stale" : "ok",
     d: masked ? (isoWeek(d) ?? MISSING) : d,
+    realD: d,
     staleText: stale.state === "stale" ? stale.text : null,
     success: await successFor(env, q.profile, d),
     picks,
@@ -410,6 +469,17 @@ export type TrackRow = {
   };
   /** A closed result against the published range. */
   position: "inside" | "below" | "above" | null;
+  /** ARN-103/UXN-288: the stored market figures of a settled pick; null before settlement. */
+  vsMarket: {
+    marketRetPpm: number;
+    /** pick net minus market return; null for a missed pick. */
+    vsPpm: number | null;
+    missed: boolean;
+    basis: BenchBasis;
+    basisLabel: string;
+    windowFromD: string;
+    windowToD: string;
+  } | null;
 };
 export type TrackModel = {
   state: LoaderState;
@@ -418,6 +488,8 @@ export type TrackModel = {
   profiles: string[];
   success: (ModelSuccess & { line: string }) | null;
   rows: TrackRow[];
+  /** ARN-104: summary over filled, settled picks (missed excluded); null with no settled rows. */
+  vsMarket: (VsMarketSummary & { basisLabel: string }) | null;
 };
 
 export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): Promise<TrackModel> {
@@ -425,10 +497,14 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
   const r = await env.main.execute({
     sql: `SELECT o.d, o.rank, o.code, o.state, o.exit_reason, o.net_ppm, o.entry_micro, o.exit_micro,
                  p.buy_max_micro, p.stop_micro, p.aim_micro, p.bad_ppm, p.good_ppm,
+                 m.market_ret_ppm, m.vs_market_ppm, m.missed AS m_missed, m.basis AS m_basis,
+                 m.window_from_d, m.window_to_d,
                  (SELECT c.reason FROM pick_check c WHERE c.market = p.market AND c.d = p.d
                    AND c.profile = p.profile AND c.rank = p.rank AND c.valid = 0 LIMIT 1) AS withdrawn
           FROM pick_outcome o JOIN pick p ON p.market = o.market AND p.d = o.d
             AND p.profile = o.profile AND p.rank = o.rank
+          LEFT JOIN pick_market m ON m.market = o.market AND m.d = o.d AND m.profile = o.profile
+            AND m.rank = o.rank AND m.kind = o.kind
           WHERE o.market = ? AND o.profile = ? AND o.kind = 'pick'
           ORDER BY o.d DESC, o.rank LIMIT ?`,
     args: [market, q.profile, TRACK_ROWS],
@@ -461,7 +537,33 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
       String(x.state) === "closed"
         ? rangePosition(toNum(x.net_ppm), toNum(x.bad_ppm), toNum(x.good_ppm))
         : null,
+    vsMarket:
+      x.market_ret_ppm === null || x.market_ret_ppm === undefined
+        ? null
+        : {
+            marketRetPpm: Number(x.market_ret_ppm), // money-float-ok: ppm column
+            vsPpm: toNum(x.vs_market_ppm),
+            missed: Number(x.m_missed) === 1,
+            basis: String(x.m_basis) as BenchBasis,
+            basisLabel: benchmarkLabel(String(x.m_basis) as BenchBasis),
+            windowFromD: masked
+              ? (isoWeek(String(x.window_from_d)) ?? MISSING)
+              : String(x.window_from_d),
+            windowToD: masked ? (isoWeek(String(x.window_to_d)) ?? MISSING) : String(x.window_to_d),
+          },
   }));
+  const settled = rows.filter((x) => x.vsMarket !== null);
+  const vsMarket =
+    settled.length === 0
+      ? null
+      : {
+          ...vsMarketSummary(settled.map((x) => ({ vsMarketPpm: x.vsMarket!.vsPpm }))),
+          basisLabel: benchmarkLabel(
+            settled.every((x) => x.vsMarket!.basis === "total_return")
+              ? "total_return"
+              : "price_only",
+          ),
+        };
   return {
     state: rows.length === 0 ? "empty" : "ok",
     masked,
@@ -469,5 +571,6 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
     profiles,
     success: rows.length === 0 ? null : await successFor(env, q.profile, todayD(env)),
     rows,
+    vsMarket,
   };
 }

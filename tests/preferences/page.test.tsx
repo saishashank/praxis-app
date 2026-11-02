@@ -1,5 +1,5 @@
 // UX-110, UX-004, SEC-016, ROL-106, ROL-102a: Settings > Personal page, home link, layout theme.
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const requireUser = vi.hoisted(() => vi.fn());
@@ -17,9 +17,10 @@ vi.mock("@/lib/preferences/service", async (orig) => ({
 }));
 vi.mock("@/app/(app)/settings/actions", () => ({
   updatePreferencesAction: (fd: FormData) => action(fd),
-  updateAppearanceAction: vi.fn(),
-  updateRegionAction: vi.fn(),
+  updateAppearanceAction: (fd: FormData) => action(fd),
+  updateRegionAction: (fd: FormData) => action(fd),
   setQuietHoursAction: vi.fn(),
+  signOutEverywhereSelfAction: vi.fn(),
 }));
 // The market list for "Open the app in" (falls back to the stored market when it cannot be read).
 const envFor = vi.hoisted(() => vi.fn());
@@ -57,11 +58,15 @@ beforeEach(() => {
 const as = (role: string) =>
   requireUser.mockResolvedValue({ id: 7, email: `${role}@example.test`, name: null, role });
 
-const timeForm = () => screen.getByLabelText("Time format").closest("form") as HTMLFormElement;
+const openRow = async (name: RegExp | string) => {
+  const row = screen.getByRole("link", { name });
+  await act(async () => fireEvent.click(row));
+  return await screen.findByRole("dialog");
+};
 
 describe("settings page (UXR-027: one page, rows with current values)", () => {
   it.each(["owner", "editor", "viewer"])(
-    "renders for %s with account, sign out, rows, forms and footers",
+    "renders for %s with account, sign out, grouped value rows and footers",
     async (r) => {
       as(r);
       render(await SettingsPage());
@@ -74,29 +79,34 @@ describe("settings page (UXR-027: one page, rows with current values)", () => {
       // UXR-004: identity and a visible Sign out, without opening a menu
       expect(screen.getByText(`${r}@example.test`)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
-      // the four sub-page tabs are gone; groups take their place
+      // "Sign out everywhere" is admin (Owner) only
+      expect(screen.queryByRole("link", { name: /Sign out everywhere/ }) !== null).toBe(
+        r === "owner",
+      );
       expect(screen.queryByRole("navigation", { name: "Settings sections" })).toBeNull();
       for (const g of ["Account", "Appearance", "Time and alerts", "Region and markets", "About"]) {
         expect(screen.getByRole("heading", { name: g })).toBeInTheDocument();
       }
-      // UXR-003: current values are visible before editing
-      expect(screen.getByText("Dark (default)", { selector: "span" })).toBeInTheDocument();
-      expect(screen.getByText("24-hour (13:30)", { selector: "span" })).toBeInTheDocument();
-      expect(screen.getAllByText("Immediately", { selector: "span" }).length).toBeGreaterThan(0);
-      expect(screen.getByText("Off", { selector: "span" })).toBeInTheDocument(); // quiet hours
-      expect(screen.getByRole("link", { name: /Markets/ })).toHaveAttribute(
-        "href",
-        "/settings/region",
-      );
-      expect(screen.getByRole("link", { name: /About Praxis/ })).toHaveAttribute(
-        "href",
-        "/settings/about",
-      );
-      expect(screen.getByLabelText("Time format")).toHaveValue("24h");
-      expect(screen.getByLabelText("P1 alerts")).toHaveValue("immediate");
-      expect(screen.getByLabelText("P2 alerts")).toHaveValue("digest");
-      expect(screen.getByText(/P0 alerts are always delivered immediately/)).toBeInTheDocument();
-      expect(screen.queryByLabelText("P0 alerts")).toBeNull();
+      // UXR-003: the current value is in the row, before anything is opened
+      const rowValue = (name: RegExp, value: string) =>
+        expect(screen.getByRole("link", { name })).toHaveTextContent(value);
+      rowValue(/^Theme/, "Dark (default)");
+      rowValue(/^Motion/, "On");
+      rowValue(/^Time format/, "24-hour (13:30)");
+      rowValue(/^P1 alerts/, "Immediately");
+      rowValue(/^P2 alerts/, "In the digest");
+      rowValue(/^Quiet hours/, "Off");
+      rowValue(/^Show times in/, "Melbourne time");
+      // no JS: each row is a link to its detail page
+      const href = (name: RegExp, h: string) =>
+        expect(screen.getByRole("link", { name })).toHaveAttribute("href", h);
+      href(/^Time format/, "/settings/time");
+      href(/^Quiet hours/, "/settings/quiet-hours");
+      href(/^Theme/, "/settings/appearance");
+      href(/^Markets/, "/settings/region");
+      href(/^Licences/, "/settings/about#licences");
+      // nothing is edited in the list itself: a Save only appears inside an open sheet
+      expect(screen.queryAllByRole("button", { name: "Save" })).toHaveLength(0);
       expect(
         screen.getByText(
           "Emails from this system never ask for keys or passwords. Sign in and do rotations only via your own bookmark.",
@@ -105,9 +115,6 @@ describe("settings page (UXR-027: one page, rows with current values)", () => {
       expect(
         screen.getByText("Simulation for personal information only — not financial advice"),
       ).toBeInTheDocument();
-      // one Save per form (Appearance, Time and alerts, Region; quiet hours has its own "Save quiet hours")
-      expect(within(timeForm()).getByRole("button", { name: "Save" })).toBeEnabled();
-      expect(screen.getAllByRole("button", { name: "Save" }).length).toBe(3);
     },
   );
 
@@ -115,36 +122,95 @@ describe("settings page (UXR-027: one page, rows with current values)", () => {
     as("viewer");
     getPrefs.mockResolvedValue({ ...DEFAULT_PREFERENCES, time_format: "12h" });
     render(await SettingsPage());
-    expect(screen.getByLabelText("Time format")).toHaveValue("12h");
+    expect(screen.getByRole("link", { name: /^Time format/ })).toHaveTextContent("12-hour");
   });
 
-  it("submits the form and shows Saved, then an error text", async () => {
+  it("a row opens a sheet with exactly one Save; saving closes it and toasts Saved", async () => {
     as("viewer");
     render(await SettingsPage());
-    const save = () => within(timeForm()).getByRole("button", { name: "Save" });
-    await act(async () => fireEvent.click(save()));
+    const dialog = await openRow(/^Time format/);
+    expect(within(dialog).getAllByRole("button", { name: "Save" })).toHaveLength(1);
+    fireEvent.click(within(dialog).getByRole("radio", { name: /12-hour/ }));
+    await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "Save" })));
     expect(action).toHaveBeenCalledTimes(1);
     const fd = action.mock.calls[0][0];
+    expect(fd.get("time_format")).toBe("12h");
     expect(fd.has("theme")).toBe(false);
-    expect(fd.get("time_format")).toBe("24h");
-    expect(fd.get("alert_p2")).toBe("digest");
     expect(fd.has("alert_p0")).toBe(false);
-    expect(await screen.findByRole("status")).toHaveTextContent("Saved.");
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByRole("link", { name: /^Time format/ })).toHaveTextContent("12-hour");
+  });
+
+  it("shows the error text in the sheet and keeps it open", async () => {
+    as("viewer");
     action.mockResolvedValue({ error: "invalid" });
-    await act(async () => fireEvent.click(save()));
+    render(await SettingsPage());
+    const dialog = await openRow(/^P1 alerts/);
+    await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "Save" })));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Please check the entries and try again.",
     );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("theme sheet: six option cards, check and Current on the stored theme, live preview", async () => {
+    as("viewer");
+    getPrefs.mockResolvedValue({ ...DEFAULT_PREFERENCES, theme: "dim" });
+    render(await SettingsPage());
+    const dialog = await openRow(/^Theme/);
+    expect(within(dialog).getAllByRole("radio")).toHaveLength(6);
+    expect(within(dialog).getByRole("radio", { name: /Dim/ })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(within(dialog).getAllByText("Current")).toHaveLength(1);
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Midnight/ }));
+    expect(document.documentElement.getAttribute("data-theme")).toBe("midnight");
+    expect(within(dialog).getByRole("radio", { name: /Midnight/ })).toHaveTextContent("Current");
+    document.documentElement.removeAttribute("data-theme");
+  });
+
+  it("motion sheet saves only motion and sets data-motion on the root element", async () => {
+    as("viewer");
+    render(await SettingsPage());
+    const dialog = await openRow(/^Motion/);
+    fireEvent.click(within(dialog).getByRole("radio", { name: /^Off/ }));
+    expect(document.documentElement.getAttribute("data-motion")).toBe("off");
+    await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "Save" })));
+    expect(action).toHaveBeenCalledTimes(1);
+    expect([...action.mock.calls[0][0].keys()]).toEqual(["motion"]);
+    expect(action.mock.calls[0][0].get("motion")).toBe("off");
+    await waitFor(() =>
+      expect(screen.getByRole("link", { name: /^Motion/ })).toHaveTextContent("Off"),
+    );
+    expect(document.documentElement.getAttribute("data-motion")).toBe("off");
+    document.documentElement.removeAttribute("data-motion");
+  });
+
+  it("closing the theme sheet without saving restores the stored theme", async () => {
+    as("viewer");
+    render(await SettingsPage());
+    document.documentElement.setAttribute("data-theme", "dark");
+    const dialog = await openRow(/^Theme/);
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Light/ }));
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+    await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "Close" })));
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(action).not.toHaveBeenCalled();
+    document.documentElement.removeAttribute("data-theme");
+  });
+
+  it("Owner gets a confirm sheet for Sign out everywhere", async () => {
+    as("owner");
+    render(await SettingsPage());
+    const dialog = await openRow(/Sign out everywhere/);
+    expect(within(dialog).getByText(/ends your sessions on every device/)).toBeInTheDocument();
+    expect(within(dialog).getAllByRole("button", { name: "Sign out everywhere" })).toHaveLength(1);
   });
 });
 
 describe("settings page values (UXR-003)", () => {
-  const selectOptions = (label: string) =>
-    [...(screen.getByLabelText(label) as HTMLSelectElement).options].map((o) => [
-      o.value,
-      o.textContent,
-    ]);
-
   it("lists only the markets the user may open, and shows quiet hours when set", async () => {
     as("owner");
     envFor.mockResolvedValue({ main: {}, auth: {}, now: new Date("2026-10-23T00:00:00Z") });
@@ -155,15 +221,17 @@ describe("settings page values (UXR-003)", () => {
     ]);
     quietHours.mockResolvedValue({ start: "22:00", end: "07:00" });
     render(await SettingsPage());
-    expect(selectOptions("Open the app in")).toEqual([
-      ["AU", "AU (ASX)"],
-      ["US", "US (NYSE)"],
-    ]);
+    const dialog = await openRow(/^Open the app in/);
+    expect(within(dialog).getAllByRole("radio")).toHaveLength(2);
+    expect(within(dialog).getByRole("radio", { name: /AU \(ASX\)/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole("radio", { name: /US \(NYSE\)/ })).toBeInTheDocument();
     expect(marketRows.mock.calls[0][3]).toBe(true); // the Owner's view of the markets
-    expect(screen.getByText("22:00–07:00", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^Quiet hours/, hidden: true })).toHaveTextContent(
+      "22:00–07:00",
+    );
   });
 
-  it("keeps a stored market that is no longer choosable, and shows unknown values as stored", async () => {
+  it("keeps a stored market that is no longer choosable, and shows stored values", async () => {
     as("viewer");
     envFor.mockResolvedValue({ main: {}, auth: {}, now: new Date("2026-10-23T00:00:00Z") });
     marketRows.mockReturnValue([{ code: "AU", exchange: "ASX", selectable: true }]);
@@ -175,14 +243,13 @@ describe("settings page values (UXR-003)", () => {
       theme: "midnight",
     });
     render(await SettingsPage());
-    expect(selectOptions("Open the app in")).toEqual([
-      ["JP", "JP"],
-      ["AU", "AU (ASX)"],
-    ]);
+    expect(screen.getByRole("link", { name: /^Open the app in/ })).toHaveTextContent("JP");
     expect(marketRows.mock.calls[0][3]).toBe(false);
-    expect(screen.getByText("Exchange-local time", { selector: "span" })).toBeInTheDocument();
-    expect(screen.getByText("Off (no animation)", { selector: "span" })).toBeInTheDocument();
-    expect(screen.getByText("Midnight", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^Show times in/ })).toHaveTextContent(
+      "Exchange-local time",
+    );
+    expect(screen.getByRole("link", { name: /^Motion/ })).toHaveTextContent("Off");
+    expect(screen.getByRole("link", { name: /^Theme/ })).toHaveTextContent("Midnight");
   });
 });
 

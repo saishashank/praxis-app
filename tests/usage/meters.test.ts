@@ -6,6 +6,8 @@ import { setConfig } from "@/lib/config/store";
 import {
   dayBounds,
   getMeters,
+  NONCE_WRITES_PER_SIGNED_CALL,
+  WORKER_READS_PER_TICK,
   levelFor,
   monthBounds,
   usageEnvironment,
@@ -94,8 +96,22 @@ describe("getMeters", () => {
       periodLabel: "2026-10 (UTC)",
       level: "ok",
     });
-    expect(byId(ms, "turso-rows-written")).toMatchObject({ used: 3, limit: 6_000_000 });
-    expect(byId(ms, "turso-rows-read").note).toMatch(/app traffic not included/);
+    expect(byId(ms, "turso-rows-written")).toMatchObject({
+      used: 3 + 2 * NONCE_WRITES_PER_SIGNED_CALL, // two in-month signed-call runs: estimate added
+      limit: 6_000_000,
+    });
+    expect(byId(ms, "turso-rows-read").note).toMatch(/app page traffic not included/);
+    expect(byId(ms, "turso-rows-written").note).toMatch(/estimate of signed-call nonce writes/);
+  });
+
+  it("estimates Worker tick reads once the Worker has reported this month (V1-S11)", async () => {
+    await insert({ job: "worker-clock", at: "2026-10-01T00:00:00.000Z", read: 7 });
+    const ticks = Math.floor((NOW.getTime() - Date.parse("2026-10-01T00:00:00.000Z")) / 60_000);
+    const m = byId(await getMeters(db, NOW, "production"), "turso-rows-read");
+    expect(m.used).toBe(7 + ticks * WORKER_READS_PER_TICK);
+    expect(m.note).toMatch(/Worker tick reads/);
+    // Not a signed call: no nonce estimate for the clock's own rollup row.
+    expect(byId(await getMeters(db, NOW, "production"), "turso-rows-written").used).toBe(0);
   });
 
   it("reaches notice / alert / degrade at exactly 70 / 90 / 95 % of the writes ceiling", async () => {
@@ -105,12 +121,12 @@ describe("getMeters", () => {
       [5_700_000, "degrade"],
     ] as const) {
       await db.execute("DELETE FROM run_record");
-      await insert({ at: "2026-10-02T00:00:00.000Z", written: w });
+      await insert({ job: "heartbeat-evening", at: "2026-10-02T00:00:00.000Z", written: w });
       const m = byId(await getMeters(db, NOW, "production"), "turso-rows-written");
       expect(m.level).toBe(level);
     }
     await db.execute("DELETE FROM run_record");
-    await insert({ at: "2026-10-02T00:00:00.000Z", written: 4_199_999 });
+    await insert({ job: "heartbeat-evening", at: "2026-10-02T00:00:00.000Z", written: 4_199_999 });
     expect(byId(await getMeters(db, NOW, "production"), "turso-rows-written").level).toBe("ok");
   });
 
@@ -173,9 +189,10 @@ describe("getMeters", () => {
   it("LLM tokens are totalled for today (UTC) against the daily budget", async () => {
     await insert({ at: "2026-10-09T23:59:59.999Z", tokens: 999_999 });
     await insert({ at: "2026-10-10T00:00:00.000Z", tokens: 100_000 });
-    await insert({ at: "2026-10-10T11:00:00.000Z", tokens: 50_000 });
+    await insert({ at: "2026-10-10T11:00:00.000Z", tokens: 140_000 });
     const m = byId(await getMeters(db, NOW, "production"), "llm-tokens");
-    expect(m).toMatchObject({ used: 150_000, limit: 150_000, period: "daily", level: "alert" });
+    // M11-lite D-481: the daily total default is 240,000 (it carries the R6 steelman cap)
+    expect(m).toMatchObject({ used: 240_000, limit: 240_000, period: "daily", level: "alert" });
   });
 });
 

@@ -293,6 +293,32 @@ describe("the company page for the Owner", () => {
     expect(screen.getByText("+5.00%")).toBeInTheDocument();
   });
 
+  it("UXR-022: a sticky header carries code, name, last close, day change and watch, with the sector hue band", async () => {
+    await company("ZZUP");
+    const header = screen.getByTestId("company-header");
+    expect(header).toHaveClass("sticky");
+    expect(header.dataset.sectorHue).toBe("sector-tech");
+    expect(header.getAttribute("style")).toContain("--color-sector-tech-fill");
+    for (const t of ["Zed Upward Holdings", "ZZUP", "A$10.50", "+5.00%"]) {
+      expect(header.textContent).toContain(t);
+    }
+    expect(
+      within(header).getByRole("button", { name: "Add ZZUP to watchlist" }),
+    ).toBeInTheDocument();
+  });
+
+  it("UXR-022: the key numbers are a 2-column grid of six tiles that sits above the chart on phones", async () => {
+    await company("ZZUP");
+    const key = screen.getByRole("heading", { name: "Key numbers" }).closest("section")!;
+    expect(key).toHaveClass("order-1", "sm:order-3");
+    expect(screen.getByRole("heading", { name: "Price chart" }).closest("section")).toHaveClass(
+      "order-2",
+    );
+    const grid = key.querySelector("dl")!;
+    expect(grid).toHaveClass("grid-cols-2");
+    expect(grid.children).toHaveLength(6);
+  });
+
   it("has the chart with range chips 1M to 2Y, a table alternative, the attribution and no 5Y", async () => {
     await company("ZZUP");
     const group = screen.getByRole("group", { name: "Chart range" });
@@ -355,6 +381,8 @@ describe("the company page for masked users (decision 21)", () => {
     expect(findLeaks(container.textContent, CODES, NAMES)).toEqual([]);
     expect(container.innerHTML).not.toMatch(/ZZUP|ZZDN|ZZOTH|news\.example/);
     expect(lc.createChart).not.toHaveBeenCalled();
+    // masking unchanged (ROL-107): no sector hue on the header, no price
+    expect(screen.getByTestId("company-header").dataset.sectorHue).toBe("none");
   });
 
   it("a real code from a masked user is the same 404 as an unknown one", async () => {

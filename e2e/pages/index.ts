@@ -10,6 +10,7 @@ import { RISK_IDEAS_PAGES } from "./riskIdeas";
 import { NEWS_PAGES } from "./news";
 import { REVIEWS_PAGES } from "./reviews";
 import { LEARNED_PAGES } from "./learned";
+import { EXPERTS_PAGES } from "./experts";
 import { SETTINGS_PAGES } from "./settings";
 import { OPS_PAGES } from "./ops";
 import type { PageEntry } from "./types";
@@ -25,6 +26,7 @@ export const PAGES: PageEntry[] = [
   ...NEWS_PAGES,
   ...REVIEWS_PAGES,
   ...LEARNED_PAGES,
+  ...EXPERTS_PAGES,
   ...SETTINGS_PAGES,
   ...OPS_PAGES,
 ];

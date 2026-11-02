@@ -302,7 +302,7 @@ describe("Tabs, Chips, Breadcrumb", () => {
   });
   it("Chips are links with aria-current", () => {
     render(<Chips label="Filter" items={items} />);
-    expect(screen.getByRole("link", { name: "Picks" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: /^Picks/ })).toHaveAttribute("aria-current", "page");
   });
   it("Breadcrumb: last crumb is current, earlier ones link, back link optional", () => {
     render(

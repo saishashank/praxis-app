@@ -7,6 +7,7 @@ import {
   alphaLevel,
   alphaSequence,
   alphaStep,
+  poolExhausted,
   poolId,
   readPoolState,
   recordAlphaTest,
@@ -17,46 +18,57 @@ afterEach(cleanupTempDbs);
 
 const params = defaultAgentParams();
 
-describe("alpha-investing hand table (W0 = 0.10, payout 0.05)", () => {
-  // j  W        alpha_j = W / (2 + W)   p      outcome      W after
-  // 1  0.10     0.1 / 2.1   = 0.047619  0.010  reject       0.10 + 0.05 = 0.15
-  // 2  0.15     0.15 / 2.15 = 0.069767  0.500  keep         0.15 - 0.15 / 2 = 0.075   (alpha / (1 - alpha) = W / 2)
-  // 3  0.075    0.075 / 2.075 = 0.036145 0.030 reject       0.075 + 0.05 = 0.125
-  // 4  0.125    0.125 / 2.125 = 0.058824 0.060 keep         0.125 - 0.0625 = 0.0625
-  // 5  0.0625   0.0625 / 2.0625 = 0.030303 0.020 reject     0.0625 + 0.05 = 0.1125
-  const ps = [0.01, 0.5, 0.03, 0.06, 0.02];
+describe("alpha-investing hand table (W0 = 0.10, payout 0.05, spend fraction 0.1; VAL-116, D-231)", () => {
+  // Re-pinned in M14 (D-231): the level is f x W with f = 0.1 instead of W / (2 + W). Cost of a
+  // non-rejection is alpha / (1 - alpha); a rejection pays 0.05.
+  // j  W          alpha_j = 0.1 W   p      outcome  W after
+  // 1  0.10       0.010             0.005  reject   0.10 + 0.05 = 0.15
+  // 2  0.15       0.015             0.500  keep     0.15 - 0.015 / 0.985 = 0.134772
+  // 3  0.134772   0.013477          0.010  reject   0.134772 + 0.05 = 0.184772
+  // 4  0.184772   0.018477          0.200  keep     0.184772 - 0.018477 / 0.981523 = 0.165947
+  // 5  0.165947   0.016595          0.001  reject   0.165947 + 0.05 = 0.215947
+  const ps = [0.005, 0.5, 0.01, 0.2, 0.001];
   const table = [
-    { w: 0.1, alpha: 0.047619, rejected: true, after: 0.15 },
-    { w: 0.15, alpha: 0.069767, rejected: false, after: 0.075 },
-    { w: 0.075, alpha: 0.036145, rejected: true, after: 0.125 },
-    { w: 0.125, alpha: 0.058824, rejected: false, after: 0.0625 },
-    { w: 0.0625, alpha: 0.030303, rejected: true, after: 0.1125 },
+    { w: 0.1, alpha: 0.01, rejected: true, after: 0.15 },
+    { w: 0.15, alpha: 0.015, rejected: false, after: 0.134772 },
+    { w: 0.134772, alpha: 0.013477, rejected: true, after: 0.184772 },
+    { w: 0.184772, alpha: 0.018477, rejected: false, after: 0.165947 },
+    { w: 0.165947, alpha: 0.016595, rejected: true, after: 0.215947 },
   ];
 
   it("matches the table step by step", () => {
     const seq = alphaSequence(0.1, ps, 0.05);
     expect(seq).toHaveLength(5);
     seq.forEach((s, i) => {
-      expect(s.wBefore).toBeCloseTo(table[i]!.w, 12);
+      expect(s.wBefore).toBeCloseTo(table[i]!.w, 6);
       expect(s.alphaJ).toBeCloseTo(table[i]!.alpha, 6);
       expect(s.rejected).toBe(table[i]!.rejected);
-      expect(s.wAfter).toBeCloseTo(table[i]!.after, 12);
+      expect(s.wAfter).toBeCloseTo(table[i]!.after, 6);
     });
   });
 
   it("level formula, boundary p = alpha_j rejects, wealth never negative, zero wealth refuses", () => {
-    expect(alphaLevel(0.1)).toBeCloseTo(0.1 / 2.1, 15);
+    expect(alphaLevel(0.1)).toBeCloseTo(0.01, 15);
+    expect(alphaLevel(0.1, 0.25)).toBeCloseTo(0.025, 15);
     const w = 0.15;
     expect(alphaStep(w, alphaLevel(w), 0.05).rejected).toBe(true);
     expect(alphaStep(w, alphaLevel(w) + 1e-9, 0.05).rejected).toBe(false);
-    expect(alphaStep(1e-300, 1, 0.05).wAfter).toBeGreaterThanOrEqual(0);
+    expect(alphaStep(0.06, 1, 0.05).wAfter).toBeGreaterThanOrEqual(0);
     expect(() => alphaStep(0, 0.01, 0.05)).toThrow(/exhausted/);
     expect(alphaSequence(0, [0.01, 0.01], 0.05)).toEqual([]);
   });
 
-  it("a non-rejection costs exactly W / 2 and mFDR budget is never reset by a long losing run", () => {
-    const seq = alphaSequence(0.1, Array<number>(10).fill(1), 0.05);
-    seq.forEach((s, i) => expect(s.wAfter).toBeCloseTo(0.1 / 2 ** (i + 1), 15));
+  it("is exhausted when the next level is below 0.005: after 7 non-rejections from W0 = 0.1", () => {
+    const seq = alphaSequence(0.1, Array<number>(20).fill(1), 0.05);
+    expect(seq).toHaveLength(7);
+    const last = seq[6]!;
+    expect(last.wAfter).toBeCloseTo(0.047552, 6);
+    expect(poolExhausted(last.wAfter)).toBe(true);
+    expect(poolExhausted(seq[5]!.wAfter)).toBe(false);
+    // boundary: W = 0.05 gives exactly 0.005, which is not below the level
+    expect(poolExhausted(0.05)).toBe(false);
+    expect(poolExhausted(0.0499)).toBe(true);
+    expect(() => alphaStep(last.wAfter, 0.5, 0.05)).toThrow(/exhausted/);
   });
 });
 
@@ -74,7 +86,7 @@ describe("alpha_wealth ledger", () => {
 
   it("writes the hand table exactly and the chaining trigger accepts every row", async () => {
     const db = await freshDb("main");
-    const ps = [0.01, 0.5, 0.03, 0.06, 0.02];
+    const ps = [0.005, 0.5, 0.01, 0.2, 0.001];
     for (const [i, p] of ps.entries()) {
       const id = `L-AU-LT-REGIME-0000000${String(i)}-F1.v1`;
       await insertLesson(db, id);
@@ -94,7 +106,7 @@ describe("alpha_wealth ledger", () => {
     for (let i = 1; i < rows.length; i += 1) {
       expect(Number(rows[i]!.w_before)).toBe(Number(rows[i - 1]!.w_after));
     }
-    expect(Number(rows[4]!.w_after)).toBeCloseTo(0.1125, 12);
+    expect(Number(rows[4]!.w_after)).toBeCloseTo(0.215947, 6);
     expect((await readPoolState(db, pool, params)).wealth).toBe(Number(rows[4]!.w_after));
   });
 
@@ -135,7 +147,11 @@ describe("alpha_wealth ledger", () => {
     expect(next.kind === "tested" && next.row.w_before).toBe(0.1 + 0.05);
     expect((await readPoolState(db, pool, params)).seq).toBe(2);
     // Another pool starts at W0.
-    expect(await readPoolState(db, poolId("AU", null), params)).toEqual({ seq: 0, wealth: 0.1 });
+    expect(await readPoolState(db, poolId("AU", null), params)).toEqual({
+      seq: 0,
+      wealth: 0.1,
+      exhausted: false,
+    });
     expect(poolId("AU", null)).toBe("AU:*");
   });
 

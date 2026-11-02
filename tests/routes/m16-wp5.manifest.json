@@ -1,0 +1,7 @@
+{
+  "routes": {
+    "GET /api/blueprint/model": {
+      "tests": ["tests/blueprint/blueprintPage.test.ts", "e2e/m16-blueprint-access.spec.ts"]
+    }
+  }
+}

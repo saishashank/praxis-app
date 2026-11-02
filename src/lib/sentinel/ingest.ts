@@ -4,6 +4,8 @@
 //   1. parse with the active `FeedParser` (the format is TODO(fixtures) [VERIFY]);
 //   2. first-seen insert of every item into `announcement` (ON CONFLICT DO NOTHING, so a repeated
 //      body or a repeated item changes nothing and `items_new` counts only the rows really added);
+//      (M14 DAT-237) each row carries `content_hash`; an item whose hash an earlier row of the same
+//      code already holds is an exact repeat and is assessed at materiality 0: no alert, no breaker;
 //   3. take at most `maxItems` (<= 40, `sentinel_max_items_per_run`) UNASSESSED announcements of
 //      the carry window, OLDEST FIRST, so nothing starves; the `announcement` table is the queue,
 //      the rest are "carried" and are picked up by the next call (or by alert-flush, T6);
@@ -13,14 +15,20 @@
 //      and a sink call for a red one (`breakers.ts`).
 // No order is written here (AGT-012: the Sentinel never changes orders); the alert and e-mail path
 // is T6. Nothing the feed says reaches a log or a response body.
+import { createHash } from "node:crypto";
 import type { Client, InStatement } from "@libsql/client";
+import { normaliseTitle } from "@/lib/agents/announcementDedup";
 import { ASX_SOURCE } from "@/lib/data/asxToken";
 import { ACTIVE_FEED_PARSER, type FeedItem, type FeedParser } from "./feed";
 import { assess, MATERIALITY_RULE_VERSION } from "./materiality";
 import type { BreakerAlertSink } from "@/lib/agents/breakerEval";
 import { loadAgentParams } from "@/lib/agents/params";
 import { evaluateIntraday, type IntradayAnnouncement } from "./breakers";
+import { loadCalendarRows } from "@/lib/data/calendarAdmin";
+import { marketDate, sessionsBetween } from "@/lib/data/calendar";
+import { AU_TIME_ZONE } from "@/lib/agents/decisionView";
 import { loadMembership, membershipOf } from "./membership";
+import { archiveStatements, DEFAULT_HOURS, type MarketHoursLocal } from "./archive";
 
 export const MAX_ITEMS_PER_RUN = 40; // AGT-010, PLT-075: a hard ceiling whatever the config says
 /** Only announcements first seen and published within this window are assessed (not the backfill). */
@@ -54,6 +62,18 @@ const clampItems = (n: number | undefined): number =>
     ? Math.min(n, MAX_ITEMS_PER_RUN)
     : MAX_ITEMS_PER_RUN;
 
+/** DAT-237 (D-240): sha256(market | code | normalised title | published date), lower-case hex. */
+export function announcementContentHash(
+  market: string,
+  code: string,
+  title: string,
+  publishedAt: string,
+): string {
+  return createHash("sha256")
+    .update([market, code, normaliseTitle(title), publishedAt.slice(0, 10)].join("|"), "utf8")
+    .digest("hex");
+}
+
 function insertAnnouncements(
   items: readonly FeedItem[],
   market: string,
@@ -65,7 +85,8 @@ function insertAnnouncements(
     stmts.push({
       sql:
         "INSERT INTO announcement (market, code, ann_id, published_at, ingested_at, type, " +
-        `price_sensitive, title, url, source) VALUES ${slice.map(() => "(?,?,?,?,?,?,?,?,?,?)").join(",")} ` +
+        // GL-05: first_ingested_at = the instant this system first stored the row (live: now)
+        `price_sensitive, title, url, source, first_ingested_at, content_hash) VALUES ${slice.map(() => "(?,?,?,?,?,?,?,?,?,?,?,?)").join(",")} ` +
         "ON CONFLICT DO NOTHING",
       args: slice.flatMap((r) => [
         market,
@@ -78,6 +99,8 @@ function insertAnnouncements(
         r.title,
         r.url,
         ASX_SOURCE,
+        now,
+        announcementContentHash(market, r.code, r.title, r.publishedAt),
       ]),
     });
   }
@@ -98,6 +121,34 @@ export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
       added = res.reduce((n, r) => n + r.rowsAffected, 0);
     }
 
+    // 2b. (A7, D-749) the append-only archive: every item, forever, with its timing class. A fault here
+    // never fails the ingest (the `announcement` rows above are the queue).
+    try {
+      const mk = await i.db.execute({
+        sql: "SELECT tz, open_time, close_time FROM market WHERE code = ?",
+        args: [market],
+      });
+      const hours: MarketHoursLocal =
+        mk.rows.length === 0
+          ? DEFAULT_HOURS
+          : {
+              tz: String(mk.rows[0]!.tz),
+              open_time: String(mk.rows[0]!.open_time),
+              close_time: String(mk.rows[0]!.close_time),
+            };
+      const arch = archiveStatements(
+        parsed.items,
+        market,
+        ASX_SOURCE,
+        i.now,
+        hours,
+        await loadCalendarRows(i.db, market),
+      );
+      if (arch.length > 0) await i.db.batch(arch, "write");
+    } catch {
+      // swallowed on purpose
+    }
+
     // 3. the queue: unassessed announcements of the carry window, oldest first
     const since = new Date(Date.parse(i.now) - CARRY_WINDOW_H * HOUR_MS).toISOString();
     const where =
@@ -110,7 +161,10 @@ export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
         {
           sql:
             "SELECT a.ann_id AS ann_id, a.code AS code, a.type AS type, a.published_at AS published_at, " +
-            "a.price_sensitive AS price_sensitive, a.title AS title " +
+            "a.price_sensitive AS price_sensitive, a.title AS title, " +
+            "(CASE WHEN a.content_hash IS NULL THEN NULL ELSE (SELECT MAX(b.published_at) FROM announcement b " +
+            "WHERE b.market = a.market AND b.code = a.code AND b.content_hash = a.content_hash " +
+            "AND b.id < a.id) END) AS dup_prev " +
             `${where} ORDER BY a.published_at ASC, a.id ASC LIMIT ?`,
           args: [...qargs, max],
         },
@@ -122,12 +176,23 @@ export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
 
     // 4. classify and write, one batch
     const sets = await loadMembership(i.db, market, i.today);
+    // D-287: an exact repeat only counts within `dedup_window_sessions` sessions of the earlier row
+    const windowSessions = (await loadAgentParams(i.db)).entry.dedupWindowSessions;
+    const calendar = await loadCalendarRows(i.db, market);
+    const sessionOf = (iso: string): string => marketDate(new Date(iso), AU_TIME_ZONE);
     const stmts: InStatement[] = [];
     const affected: IntradayAnnouncement[] = [];
     for (const r of queue.rows) {
       const code = String(r.code);
       const m = membershipOf(code, sets);
-      const a = assess(
+      const dup =
+        r.dup_prev !== null &&
+        r.dup_prev !== undefined &&
+        sessionsBetween(sessionOf(String(r.dup_prev)), sessionOf(String(r.published_at)), calendar)
+          .length -
+          1 <=
+          windowSessions;
+      const assessed1 = assess(
         {
           type: r.type === null ? null : String(r.type),
           title: String(r.title),
@@ -135,7 +200,9 @@ export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
         },
         m,
       );
-      if (m.held || m.candidate) {
+      // An exact repeat is stored and marked assessed, but never alerts (materiality 0, polarity 0).
+      const a = dup ? { ...assessed1, materiality: 0 as const, polarity: 0 as const } : assessed1;
+      if (!dup && (m.held || m.candidate)) {
         affected.push({
           annId: String(r.ann_id),
           code,

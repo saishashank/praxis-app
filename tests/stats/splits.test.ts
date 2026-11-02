@@ -57,9 +57,11 @@ describe("lineage and purge", () => {
     });
   });
 
-  it("purge = upper bound of the max-holding parameter + 20 (F1 140 ... F6 60)", () => {
+  it("purge = upper bound of the max-holding parameter + 20 (F1 140 ... F6 60; F3 80 since M14)", () => {
     const purge = FAMILIES.map((f) => purgeSessions(maxHoldingUpperBound(f), PARAMS));
-    expect(purge).toEqual([140, 110, 60, 40, 65, 60]);
+    // F3 is 80 since M14 raised f3_time_exit's upper bound to 60 (KB-081, D-233); only splits created
+    // from now on get it, the frozen F3 split keeps its purge of 60
+    expect(purge).toEqual([140, 110, 80, 40, 65, 60]);
   });
 });
 

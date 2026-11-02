@@ -1,13 +1,21 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { defaultAgentParams } from "@/lib/agents/params";
-import { allowance, estimateTokens, fits, scaledCap } from "@/lib/llm/budget";
+import { allowance, estimateTokens, fits, ROLES, scaledCap } from "@/lib/llm/budget";
 import { makeRational } from "@/lib/money/rational";
 
 const p = defaultAgentParams().llm;
 const zero = { roleDay: 0, totalDay: 0, marketNight: 0 };
 
 describe("budget accounting (LLM-050, stricter cap wins)", () => {
+  it("R6 is a role with its own cap and the v1 role caps are unchanged (AT-37)", () => {
+    expect(ROLES).toContain("R6");
+    expect(p.roleDailyTokens).toEqual({ R1: 60000, R2: 50000, R3: 25000, R5: 10000, R6: 20000 });
+    expect(allowance(p, "R6", "AU", false, zero)).toEqual({ allowed: 20000, binding: "role" });
+    for (const r of ["R1", "R2", "R3", "R5"] as const)
+      expect(allowance(p, r, "AU", false, zero).allowed).toBe(p.roleDailyTokens[r]);
+  });
+
   it("uses the role cap when it is the tighter one", () => {
     const a = allowance(p, "R5", "AU", false, zero);
     expect(a).toEqual({ allowed: p.roleDailyTokens.R5, binding: "role" });

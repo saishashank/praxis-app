@@ -1,5 +1,5 @@
 // M7 T9 app shell in a real browser (TST-126): the six tabs fit the bottom bar at 360 px (UXN-270 "More"
-// is only needed if they do not), no horizontal scroll, menus by keyboard, theme cycle without reload,
+// is only needed if they do not), no horizontal scroll, menus by keyboard, header controls (UXR-005, AT-49),
 // axe on the shell. Runs in the desktop project; the phone width is set per test.
 import { expect, test } from "@playwright/test";
 import { ROLE_LIST, axeViolations, expectNoHorizontalScroll, signIn } from "./helpers";
@@ -96,15 +96,21 @@ test("skip link is the first Tab stop and moves focus to the page content", asyn
   await expect(page.locator("#content")).toBeFocused();
 });
 
-test("theme shortcut changes the theme without a full reload", async ({ page, context }) => {
+test("header: only the region chip, the bell and the avatar; no theme toggle (UXR-004/005, AT-49)", async ({
+  page,
+  context,
+}) => {
   await signIn(context, "editor");
-  await page.goto("/");
-  const html = page.locator("html");
-  const before = await html.getAttribute("data-theme");
-  await page.evaluate(() => ((window as unknown as { __kept: boolean }).__kept = true));
-  await page.getByRole("button", { name: /^Appearance:/ }).click();
-  await expect(html).not.toHaveAttribute("data-theme", before!);
-  expect(await page.evaluate(() => (window as unknown as { __kept?: boolean }).__kept)).toBe(true);
+  await page.goto("/picks");
+  const header = page.getByRole("banner");
+  await expect(header.getByRole("button", { name: /^Region:/ })).toBeVisible();
+  await expect(header.getByRole("link", { name: /^Alerts,/ })).toBeVisible();
+  await expect(header.getByRole("button", { name: "Account and settings menu" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Appearance:/ })).toHaveCount(0);
+  await header.getByRole("button", { name: "Account and settings menu" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  // data-only state is a chip dot; no banner on a page other than Home (UXR-006)
+  await expect(page.getByRole("region", { name: "Notices" })).toHaveCount(0);
 });
 
 test("axe: no violations on the shell, phone and desktop, gear menu open", async ({
@@ -119,4 +125,36 @@ test("axe: no violations on the shell, phone and desktop, gear menu open", async
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto("/settings");
   expect(await axeViolations(page)).toEqual([]);
+});
+
+test("avatar menu: identity first, then Settings and Sign out, then the other pages (UXR-004, AT-49)", async ({
+  page,
+  context,
+}) => {
+  await signIn(context, "owner");
+  await page.goto("/");
+  const gear = page.getByRole("button", { name: "Account and settings menu" });
+  await gear.click();
+  const panel = page.locator(`#${await gear.getAttribute("aria-controls")}`);
+  const order = await panel.evaluate((el) =>
+    Array.from(el.querySelectorAll("a,button,span"))
+      .map((n) => (n.textContent ?? "").trim())
+      .filter(Boolean),
+  );
+  const identity = order.findIndex((t) => t.includes("owner@praxis.test"));
+  expect(identity).toBeGreaterThanOrEqual(0);
+  expect(order.indexOf("Settings")).toBeGreaterThan(identity);
+  expect(order.indexOf("Sign out")).toBeGreaterThan(order.indexOf("Settings"));
+  expect(order.indexOf("System health")).toBeGreaterThan(order.indexOf("Sign out"));
+  // the header holds exactly three controls besides the tab row and brand link
+  const controls = page
+    .getByRole("banner")
+    .locator("button, a")
+    .filter({ hasNot: page.locator("nav a") });
+  const names = await controls.evaluateAll((els) =>
+    els
+      .filter((e) => !e.closest("nav") && (e as HTMLElement).offsetParent !== null)
+      .map((e) => e.getAttribute("aria-label") ?? (e.textContent ?? "").trim()),
+  );
+  expect(names.filter((n) => /^Region:|^Alerts,|^Account and settings/.test(n))).toHaveLength(3);
 });

@@ -65,10 +65,6 @@ test("the ZAP image is a ghcr.io/zaproxy reference pinned by sha256 digest", () 
   assert.match(w.wf.env.ZAP_IMAGE, IMAGE_PATTERN);
 });
 
-test(
-  "TODO pin: the image digest is still the all-zero placeholder",
-  { todo: "Opus/Owner: pin the reviewed ZAP release digest" },
-  () => {
-    assert.doesNotMatch(w.wf.env.ZAP_IMAGE, /sha256:0{64}$/);
-  },
-);
+test("the image is pinned to a real digest, not the all-zero placeholder (D-814)", () => {
+  assert.doesNotMatch(w.wf.env.ZAP_IMAGE, /sha256:0{64}$/);
+});

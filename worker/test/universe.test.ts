@@ -544,7 +544,7 @@ describe("runUniverse: a live import", () => {
       db.prepare("SELECT mode FROM source_status WHERE source = 'asx_announcements'").all()[0],
     ).toMatchObject({ mode: "tripped" });
     expect(db.prepare("SELECT kind, severity FROM incident").all()).toEqual([
-      { kind: "asx_block_trip", severity: "S2" },
+      { kind: "asx_trip", severity: "S2" },
     ]);
   });
 

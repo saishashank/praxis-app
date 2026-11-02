@@ -37,6 +37,10 @@ export type DevelopmentEvaluation = {
   readonly blocks: number;
   /** Mean per-trade excess over matched controls; null without controls. */
   readonly meanExcess: number | null;
+  /** Mean net return (P5) of those rows; null without rows (ARN-106/108). */
+  readonly meanNet?: number | null;
+  /** One-sided 90 % lower bound of the mean net under P5; null when rows or blocks are too few. */
+  readonly netLower90?: number | null;
 };
 
 export interface DevelopmentView {
@@ -55,6 +59,14 @@ export type Candidate = {
   readonly hinted: boolean;
   readonly params: Readonly<Record<string, unknown>>;
 };
+
+/** ARN-106: the keys that set a trailing stop; a challenger that changes one must beat the time-stop-only comparator. */
+export const TRAIL_KEYS: readonly string[] = [
+  "f1_trail_atr",
+  "f3_trail_atr",
+  "f3_trail_after_pct",
+  "f5_trail_atr",
+];
 
 const STEP_FRACTION = 0.1; // threshold-ok: decision 20 "10 % of its range" when the registry gives no step
 const SIG_DIGITS = 12; // threshold-ok: float noise guard for v +- step
@@ -128,15 +140,24 @@ export type Evaluated = {
   readonly evaluation: DevelopmentEvaluation;
 };
 
+function beatsComparator(e: Evaluated, comparatorMeanNet: number | null): boolean {
+  if (comparatorMeanNet === null || !TRAIL_KEYS.includes(e.candidate.key)) return true;
+  const m = e.evaluation.meanNet;
+  return m !== undefined && m !== null && m > comparatorMeanNet;
+}
+
 /**
  * The winner: among candidates with at least `min_trades` rows, `min_blocks` blocks and a mean
  * excess that is strictly above the incumbent's (a step that does not improve development is not
  * worth a trial), the hinted tier first, the highest mean excess, ties by key name then direction.
+ * ARN-106 (D-222): when `comparatorMeanNet` is given, a candidate that changes a trail key is also
+ * dropped unless its development mean net is above the comparator's (the next candidate is tried).
  */
 export function pickWinner(
   evaluated: readonly Evaluated[],
   incumbentMean: number | null,
   stats: Pick<StatsParams, "minTrades" | "minBlocks">,
+  comparatorMeanNet: number | null = null,
 ): Candidate | null {
   const floor = incumbentMean ?? Number.NEGATIVE_INFINITY;
   const ok = evaluated.filter(
@@ -144,7 +165,8 @@ export function pickWinner(
       e.evaluation.rows >= stats.minTrades &&
       e.evaluation.blocks >= stats.minBlocks &&
       e.evaluation.meanExcess !== null &&
-      e.evaluation.meanExcess > floor,
+      e.evaluation.meanExcess > floor &&
+      beatsComparator(e, comparatorMeanNet),
   );
   const cmp = (a: Evaluated, b: Evaluated): number =>
     b.evaluation.meanExcess! - a.evaluation.meanExcess! ||
@@ -180,6 +202,8 @@ export type GenerateInput = {
   readonly learning: Pick<LearningParams, "maxChallengers" | "challengerGeneratorPerWeek">;
   readonly stats: Pick<StatsParams, "minTrades" | "minBlocks" | "trialBudgetPerLineage">;
   readonly budgetTotal?: number;
+  /** ARN-106: development mean net of the family's time-stop-only comparator; null/absent = not applied. */
+  readonly comparatorMeanNet?: number | null;
 };
 
 export type GenerateResult =
@@ -241,7 +265,12 @@ export async function generateChallenger(
       evaluation: await evaluateDevelopment(view, candidate.params, seed),
     });
   }
-  const winner = pickWinner(evaluated, incumbentEval.meanExcess, input.stats);
+  const winner = pickWinner(
+    evaluated,
+    incumbentEval.meanExcess,
+    input.stats,
+    input.comparatorMeanNet ?? null,
+  );
   if (winner === null) return { status: "none", evaluated: evaluated.length };
 
   const lessonIds = input.hints.filter((h) => h.key === winner.key).map((h) => h.lessonId);

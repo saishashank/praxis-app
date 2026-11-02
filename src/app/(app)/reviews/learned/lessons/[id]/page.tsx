@@ -1,5 +1,6 @@
 // One lesson (UX-070/071/071a, UXN-200; D-125): grade, grade history, Critic checks, notes, and the
 // Owner's two buttons (force apply, retire). All signed-in roles read; only the Owner sees the buttons.
+import { EmptyState } from "@/components/ui/States";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/guard";
@@ -66,7 +67,12 @@ export default async function LessonPage({ params }: { params: Promise<{ id: str
         <p className="m-0 mt-2 text-xs text-text-muted">{GRADE_HELP}</p>
         <h3 className="mt-4 mb-1 text-sm font-semibold">Grade history</h3>
         {lesson.history.length === 0 ? (
-          <p className="m-0 text-sm text-text-muted">No grade has been recorded yet.</p>
+          <EmptyState
+            compact
+            motif="reviews"
+            hue="reviews"
+            title="No grade has been recorded yet."
+          />
         ) : (
           <ol className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
             {lesson.history.map((g) => (

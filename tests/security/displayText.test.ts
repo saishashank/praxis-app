@@ -93,6 +93,7 @@ describe("no code path turns stored text into markup", () => {
       .filter((f) => /\burl:\s*(?:string|masked)/.test(read(f)));
     expect(loadersWithUrl.map(rel).sort()).toEqual([
       "src/lib/ui/loaders/company.ts",
+      "src/lib/ui/loaders/experts.ts",
       "src/lib/ui/loaders/market.ts",
       "src/lib/ui/loaders/news.ts",
     ]);
@@ -162,8 +163,13 @@ describe("safeSourceUrl: https + registered host, else not a link", () => {
 
 // ---- loaders and components with adversarial stored text ---------------------------------------
 
-const HOSTILE_TITLE = `<img src=x onerror=alert(1)> [click](javascript:alert(1)) ![p](https://evil.example/p.png) <script>alert(2)</script>`;
-const HOSTILE_LLM = `**bold** [sign in to verify](https://evil.example/login) <a href="javascript:alert(3)">x</a> &lt;b&gt;`;
+// Markup and markdown that the SEC-016 display-text check lets through, so the escaping tests below
+// still prove React / the templates turn them into text. Texts that carry a URL, domain or credential
+// phrase are withheld before they get that far (V1-S14): HOSTILE_*_LINKS, tested at the end.
+const HOSTILE_TITLE = `<img src=x onerror=alert(1)> [click](#) ![p](x) <script>alert(2)</script>`;
+const HOSTILE_LLM = `**bold** [note](#) <a href="#">x</a> &lt;b&gt;`;
+const HOSTILE_TITLE_LINKS = `<img src=x onerror=alert(1)> [click](javascript:alert(1)) ![p](https://evil.example/p.png)`;
+const HOSTILE_LLM_LINKS = `**bold** [sign in to verify](https://evil.example/login)`;
 
 describe("stored text goes loader -> component as plain text, and bad URLs lose their link", () => {
   let w: World;
@@ -316,5 +322,37 @@ describe("email HTML comes from templates with escaped fields (SEC-016)", () => 
     for (const sourceUrl of ["javascript:alert(1)", "data:text/html,x", "vbscript:x"]) {
       expect(renderP0(facts({ sourceUrl })).html).not.toMatch(/href="(javascript|data|vbscript):/i);
     }
+  });
+});
+
+// ---- SEC-016 display-text check at the loaders and templates (V1-S14, D-724) ----------------------
+
+describe("the display-text check withholds URL, domain and credential text before display", () => {
+  it("renderP0 replaces a link-bearing headline in body and subject", () => {
+    const out = renderP0({
+      env: "production",
+      appUrl: "https://praxis.example.test",
+      alert: {
+        alertKey: "p0:AU:src:n2",
+        code: "ZZUP",
+        title: "Visit praxis-login.example to re-verify",
+        type: "Trading halt",
+        why: "Template reason",
+        executions: [],
+        sourceUrl: "https://www.asx.com.au/x",
+        time: "Mon 19 Oct 2026 10:42 AEDT",
+      },
+    });
+    expect(out.html).not.toContain("praxis-login.example");
+    expect(out.text).not.toContain("praxis-login.example");
+    expect(out.subject).not.toContain("praxis-login.example");
+    expect(out.subject).toContain("[title withheld — see source]");
+  });
+
+  it("a headline with links is withheld by displayTitle, markup-only text is not", async () => {
+    const { displayTitle } = await import("@/lib/view/displayText");
+    expect(displayTitle(HOSTILE_TITLE_LINKS)).toBe("[title withheld — see source]");
+    expect(displayTitle(HOSTILE_LLM_LINKS)).toBe("[title withheld — see source]");
+    expect(displayTitle(HOSTILE_TITLE)).toBe(HOSTILE_TITLE);
   });
 });

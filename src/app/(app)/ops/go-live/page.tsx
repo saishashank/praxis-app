@@ -2,6 +2,7 @@
 // Shows the go-live checklist as tick boxes, the sign-off history and what is still needed before
 // production can be switched to full mode. The sign-off never switches the mode: afterwards the
 // Owner sets AU to full in the System Health data controls, which then passes the interlock.
+import { EmptyState } from "@/components/ui/States";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { requireUser } from "@/lib/auth/guard";
@@ -10,16 +11,24 @@ import { readEmailSwitch } from "@/lib/email/switch";
 import { formatMelbourne } from "@/lib/health/format";
 import {
   GO_LIVE_ITEMS,
+  V2_GO_LIVE_STEPS,
+  V2_GUIDE_PATH,
+  V2_PHASE_LABELS,
   GO_LIVE_MARKET,
   SIGNOFF_CONFIRM_PHRASE,
   SIGNOFF_NOTE_MAX,
 } from "@/lib/golive/checklist";
 import { isProductionEnv } from "@/lib/golive/interlock";
+import { MONEY_APPROVAL_PHRASE } from "@/lib/golive/moneyApproval";
+import { readMoneyApproval, type MoneyApproval } from "@/lib/golive/moneyApprovalRead";
+import { moneyConstants, moneyValueHashes } from "@/lib/golive/moneyConstants";
 import { deployedCommit, loadSignoffs, type SignoffRow } from "@/lib/golive/signoff";
 import { marketDate } from "@/lib/data/calendar";
 import { userPreferences } from "@/lib/preferences/read";
-import { signOffGoLiveAction } from "./actions";
+import { approveMoneyConstantsAction, signOffGoLiveAction } from "./actions";
 import { GoLiveForm } from "./GoLiveForm";
+import { MoneyApprovalForm } from "./MoneyApprovalForm";
+import { V2Steps } from "./V2Steps";
 
 export const dynamic = "force-dynamic";
 
@@ -27,18 +36,21 @@ type View = {
   signoffs: SignoffRow[];
   emailMode: string;
   marketMode: string;
+  approval: MoneyApproval | null;
 };
 
 async function load(now: Date): Promise<View> {
   const db = mainDb();
-  const [signoffs, email, market] = await Promise.all([
+  const [signoffs, email, market, approval] = await Promise.all([
     loadSignoffs(db),
     readEmailSwitch(db, marketDate(now, "Australia/Melbourne")),
     db.execute({ sql: "SELECT mode FROM market WHERE code = ?", args: [GO_LIVE_MARKET] }),
+    readMoneyApproval(db),
   ]);
   return {
     signoffs,
     emailMode: email.mode,
+    approval,
     marketMode: market.rows.length === 1 ? String(market.rows[0]!.mode) : "unknown",
   };
 }
@@ -57,6 +69,13 @@ export default async function GoLivePage() {
   const production = isProductionEnv(process.env);
   const commit = deployedCommit(process.env);
   const signed = view !== null && view.signoffs.length > 0;
+  const constants = moneyConstants();
+  // R3-I2: attested = the id is named AND the stored value hash equals the figure's current hash.
+  const hashes = moneyValueHashes(constants);
+  const attested = new Set(
+    (view?.approval?.ids ?? []).filter((id) => view?.approval?.hashes[id] === hashes[id]),
+  );
+  const pending = constants.filter((c) => !c.verified && !attested.has(c.id));
 
   return (
     <main className="mx-auto flex max-w-4xl min-w-0 flex-col gap-6 px-4 py-6">
@@ -120,6 +139,37 @@ export default async function GoLivePage() {
             </ul>
           </Card>
 
+          <Card title="Money figures waiting for your approval" className="min-w-0">
+            {pending.length === 0 ? (
+              <p className="m-0 text-sm">
+                Every cost, tick, slippage and parcel figure is approved
+                {view.approval !== null
+                  ? ` (you approved them ${formatMelbourne(view.approval.approvedAt, tf)})`
+                  : ""}
+                .
+              </p>
+            ) : (
+              <>
+                <p className="m-0 mb-2 text-sm">
+                  {pending.length} of {constants.length} figures are not approved. Production stays
+                  out of full mode until you approve them here.
+                </p>
+                <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+                  {pending.map((c) => (
+                    <li key={c.id}>
+                      {c.label} <span className="text-text-muted">({c.specRef})</span>
+                    </li>
+                  ))}
+                </ul>
+                <MoneyApprovalForm
+                  action={approveMoneyConstantsAction}
+                  ids={constants.map((c) => c.id)}
+                  phrase={MONEY_APPROVAL_PHRASE}
+                />
+              </>
+            )}
+          </Card>
+
           {/* D-174: once signed off, the checklist and the form are gone; only the record stays. */}
           {!signed && (
             <section aria-labelledby="signoff-h" className="flex flex-col gap-3">
@@ -136,12 +186,33 @@ export default async function GoLivePage() {
             </section>
           )}
 
+          {/* V2-S9 (D-706): shown before and after the V1 sign-off; V2 steps are not part of it. */}
+          <section aria-labelledby="v2-h" className="flex flex-col gap-3">
+            <h2 id="v2-h" className="text-lg font-semibold">
+              V2 steps
+            </h2>
+            <p className="m-0 text-sm text-text-muted">
+              What is left to do by hand before V2 is switched on, in the order to do it. These are
+              not part of the sign-off.
+            </p>
+            <V2Steps
+              phases={Object.entries(V2_PHASE_LABELS).map(([id, label]) => ({ id, label }))}
+              steps={V2_GO_LIVE_STEPS.map((x) => ({ ...x, after: [...x.after] }))}
+              guidePath={V2_GUIDE_PATH}
+            />
+          </section>
+
           <section aria-labelledby="history-h" className="flex flex-col gap-3">
             <h2 id="history-h" className="text-lg font-semibold">
               Sign-off record
             </h2>
             {view.signoffs.length === 0 ? (
-              <p className="m-0 text-sm text-text-muted">No sign-off has been recorded yet.</p>
+              <EmptyState
+                compact
+                motif="check"
+                hue="home"
+                title="No sign-off has been recorded yet."
+              />
             ) : (
               <ul className="m-0 flex list-none flex-col gap-2 p-0">
                 {view.signoffs.map((s) => (

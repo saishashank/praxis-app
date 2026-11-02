@@ -1,0 +1,13 @@
+export const FORMAT: string;
+export const CAPS: Record<string, number>;
+export const JSON_CAPS: Record<string, number>;
+export const SUMMARY_WORDS: number;
+export const QUOTE_WORDS: number;
+export function wordCount(text: string): number;
+export function validateManifest(m: unknown): string[];
+export function validateExperts(j: unknown): string[];
+export function validateItems(j: unknown): string[];
+export function validateClaims(j: unknown): string[];
+export function validateClusters(j: unknown): string[];
+export function validateCalls(j: unknown): string[];
+export function validateSeed(files: Record<string, any>): string[];

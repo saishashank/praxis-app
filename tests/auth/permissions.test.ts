@@ -9,6 +9,7 @@ const TABLE: Array<[Action, boolean, boolean, boolean]> = [
   ["what_if", true, true, false],
   ["watchlist", true, true, false],
   ["unmask", true, false, false],
+  ["review_claims", true, true, false],
   ["admin", true, false, false],
 ];
 

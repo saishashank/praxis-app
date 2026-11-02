@@ -5,9 +5,12 @@ import assert from "node:assert/strict";
 import {
   CI_REQUIRED_JOBS,
   DRILL_MAX_DAYS,
+  MAX_WAIVER_DAYS,
   NIGHTLY_GREENS,
   STEP,
+  WAIVABLE,
   ZAP_MAX_DAYS,
+  validateWaivers,
   evaluateReleaseGate,
   renderGate,
 } from "./release-gate-core.mjs";
@@ -18,8 +21,17 @@ const iso = (msAgo) => new Date(NOW - msAgo).toISOString();
 const H = 3_600_000;
 const D = 86_400_000;
 
-const job = (name, conclusion = "success", steps = []) => ({ name, conclusion, steps });
 const step = (name, conclusion = "success") => ({ name, conclusion });
+// GL-09: the fixtures job carries its strict step by default (a release PR ran it).
+const job = (
+  name,
+  conclusion = "success",
+  steps = name === "fixtures" ? [step(STEP.fixturesStrict)] : [],
+) => ({
+  name,
+  conclusion,
+  steps,
+});
 const run = (createdAgo, jobs, over = {}) => ({
   headSha: SHA,
   createdAt: iso(createdAgo),
@@ -105,6 +117,34 @@ const CASES = [
     { ci: CI_REQUIRED_JOBS.map((n) => job(n, n === "app" ? null : "success")) },
     "ci",
     /app \(still running\)/,
+  ],
+  [
+    "ci: fixtures passed with a warning only (checkout failed, strict step skipped or failed)",
+    {
+      ci: CI_REQUIRED_JOBS.map((n) =>
+        job(n, "success", n === "fixtures" ? [step(STEP.fixturesStrict, "skipped")] : undefined),
+      ),
+    },
+    "ci",
+    /fixtures \(passed with fixtures skipped or unchecked: strict step skipped/,
+  ],
+  [
+    "ci: fixtures job has no strict step at all (old workflow)",
+    {
+      ci: CI_REQUIRED_JOBS.map((n) => job(n, "success", n === "fixtures" ? [] : undefined)),
+    },
+    "ci",
+    /strict step missing/,
+  ],
+  [
+    "ci: fixtures strict step failed",
+    {
+      ci: CI_REQUIRED_JOBS.map((n) =>
+        job(n, "success", n === "fixtures" ? [step(STEP.fixturesStrict, "failure")] : undefined),
+      ),
+    },
+    "ci",
+    /strict step failure/,
   ],
   [
     "licence: pending Owner approval (D-153)",
@@ -402,13 +442,13 @@ test("malformed time or commit id fails closed", () => {
 });
 
 test("the final CI job list can be overridden, and a job outside it is not required", () => {
-  const ci = [...CI_REQUIRED_JOBS.map((n) => job(n)), job("coverage", "failure")];
+  const ci = [...CI_REQUIRED_JOBS.map((n) => job(n)), job("extra-job", "failure")];
   assert.equal(evaluateReleaseGate(goodInput({ ci })).pass, true);
   const r = evaluateReleaseGate(
-    goodInput({ ci, ciRequiredJobs: [...CI_REQUIRED_JOBS, "coverage"] }),
+    goodInput({ ci, ciRequiredJobs: [...CI_REQUIRED_JOBS, "extra-job"] }),
   );
   assert.deepEqual(failing(r), ["ci"]);
-  assert.match(r.conditions.find((c) => c.id === "ci").reason, /coverage \(failure\)/);
+  assert.match(r.conditions.find((c) => c.id === "ci").reason, /extra-job \(failure\)/);
 });
 
 test("future-dated runs are ignored (clock skew cannot satisfy a window)", () => {
@@ -448,4 +488,155 @@ test("renderGate: a pass/fail table with one row per condition and no pipe break
     1 + r.conditions.length,
   );
   assert.match(md, /\| CI is green on this commit \| FAIL \|/);
+});
+
+// D-860: Owner waivers. NOW is 2026-11-20 in this file.
+const WAIVER = {
+  condition: "staging-e2e-day",
+  reason: "staging has never run a full day; the Owner releases on the other gates",
+  decidedBy: "Owner",
+  decidedOn: "2026-11-18",
+  expires: "2026-11-25",
+  followUp: "set up a staging test day",
+};
+const noDay = { stagingE2eDay: [] };
+
+test("waiver: a valid waiver turns the failed Staging E2E day into waived, never pass", () => {
+  const r = evaluateReleaseGate(goodInput({ ...noDay, waivers: [WAIVER] }));
+  const c = byId(r)["staging-e2e-day"];
+  assert.equal(c.status, "waived");
+  assert.notEqual(c.status, "pass");
+  assert.equal(c.label, "Staging E2E day is green on this commit");
+  assert.equal(c.reason, `waived by the Owner on 2026-11-18 until 2026-11-25: ${WAIVER.reason}`);
+  assert.equal(r.pass, true);
+  assert.deepEqual(
+    r.waived.map((w) => w.id),
+    ["staging-e2e-day"],
+  );
+  assert.match(r.waived[0].wouldHaveFailedBecause, /no Staging E2E day run/);
+});
+
+test("waiver: without a waiver the same input still fails", () => {
+  const r = evaluateReleaseGate(goodInput(noDay));
+  assert.equal(r.pass, false);
+  assert.deepEqual(failing(r), ["staging-e2e-day"]);
+  assert.deepEqual(r.waived, []);
+});
+
+test("waiver: the summary names the waiver and the next step, and says it is not a pass", () => {
+  const text = renderGate(evaluateReleaseGate(goodInput({ ...noDay, waivers: [WAIVER] })));
+  assert.match(text, /### Release gate: PASS \(full mode, 1 condition waived by the Owner\)/);
+  assert.match(text, /\| Staging E2E day is green on this commit \| WAIVED \|/);
+  assert.match(text, /Waived by the Owner \(this is not a pass\)/);
+  assert.match(text, /Next step: set up a staging test day/);
+});
+
+test("waiver: expired, over 14 days, malformed, future, not Owner or unknown condition are ignored", () => {
+  const bad = [
+    ["expired", { ...WAIVER, decidedOn: "2026-11-01", expires: "2026-11-19" }],
+    ["24 days", { ...WAIVER, decidedOn: "2026-11-01", expires: "2026-11-25" }],
+    ["15 days", { ...WAIVER, decidedOn: "2026-11-10", expires: "2026-11-25" }],
+    ["future decision", { ...WAIVER, decidedOn: "2026-11-21", expires: "2026-11-25" }],
+    ["bad date", { ...WAIVER, expires: "2026-13-40" }],
+    ["no date", { ...WAIVER, expires: undefined }],
+    ["not Owner", { ...WAIVER, decidedBy: "Claude" }],
+    ["no reason", { ...WAIVER, reason: "  " }],
+    ["no follow-up", { ...WAIVER, followUp: undefined }],
+    ["link in reason", { ...WAIVER, reason: "see https://example.com/x" }],
+    ["unknown condition", { ...WAIVER, condition: "made-up" }],
+    ["not an object", "staging-e2e-day"],
+    ["null", null],
+  ];
+  for (const [name, w] of bad) {
+    const r = evaluateReleaseGate(goodInput({ ...noDay, waivers: [w] }));
+    assert.equal(r.pass, false, name);
+    assert.equal(byId(r)["staging-e2e-day"].status, "fail", name);
+    assert.equal(r.ignoredWaivers, 1, name);
+  }
+  for (const w of [{}, "x", 5]) {
+    const r = evaluateReleaseGate(goodInput({ ...noDay, waivers: w }));
+    assert.equal(r.pass, false);
+  }
+});
+
+test("waiver: an explicit today decides expiry; the last day still counts", () => {
+  const on = (today) => evaluateReleaseGate(goodInput({ ...noDay, waivers: [WAIVER], today }));
+  assert.equal(on("2026-11-25").pass, true);
+  assert.equal(on("2026-11-26").pass, false);
+  assert.equal(on("2026-11-17").pass, false); // before the decision
+  assert.equal(on("garbage").pass, false);
+});
+
+test("waiver: exactly 14 days is allowed, the allow-list is only staging-e2e-day", () => {
+  const w = { ...WAIVER, decidedOn: "2026-11-11", expires: "2026-11-25" };
+  assert.equal(evaluateReleaseGate(goodInput({ ...noDay, waivers: [w] })).pass, true);
+  assert.deepEqual(WAIVABLE, ["staging-e2e-day"]);
+  assert.equal(MAX_WAIVER_DAYS, 14);
+});
+
+test("waiver: it never affects CI, fixtures strict, nightly, ZAP, restore drill, licence, quarantine or exceptions", () => {
+  const cases = {
+    ci: { ci: null },
+    fixtures: {
+      ci: CI_REQUIRED_JOBS.map((n) =>
+        job(n, "success", n === "fixtures" ? [step(STEP.fixturesStrict, "skipped")] : undefined),
+      ),
+    },
+    nightly: { nightly: [] },
+    "zap-staging": { zapStaging: [] },
+    "restore-drill": { restoreDrill: [] },
+    licence: { licence: null },
+    quarantine: { quarantineFindings: 2 },
+    exceptions: { auditExceptionProblems: 1 },
+  };
+  for (const [id, over] of Object.entries(cases)) {
+    // a waiver naming the failing condition, valid in every other respect: it must not be honoured
+    const condition = id === "fixtures" ? "ci" : id;
+    const r = evaluateReleaseGate(goodInput({ ...over, waivers: [{ ...WAIVER, condition }] }));
+    assert.equal(r.pass, false, id);
+    assert.deepEqual(r.waived, [], id);
+    assert.equal(r.ignoredWaivers, 1, id);
+  }
+});
+
+test("waiver: other failures still fail the gate when the day is waived", () => {
+  const r = evaluateReleaseGate(goodInput({ ...noDay, nightly: [], waivers: [WAIVER] }));
+  assert.equal(r.pass, false);
+  assert.deepEqual(failing(r), ["nightly"]);
+  assert.equal(byId(r)["staging-e2e-day"].status, "waived");
+});
+
+test("waiver: a green day stays pass and the waiver is not used", () => {
+  const r = evaluateReleaseGate(goodInput({ waivers: [WAIVER] }));
+  assert.equal(byId(r)["staging-e2e-day"].status, "pass");
+  assert.deepEqual(r.waived, []);
+  assert.doesNotMatch(renderGate(r), /Waived by the Owner/);
+});
+
+test("waiver: the infrastructure gate is unchanged and shows no waiver", () => {
+  const r = evaluateReleaseGate(goodInput({ mode: "infrastructure", waivers: [WAIVER] }));
+  assert.equal(byId(r)["staging-e2e-day"].status, "not-required");
+  assert.deepEqual(r.waived, []);
+});
+
+test("waiver: an ignored entry is reported in the summary", () => {
+  const text = renderGate(
+    evaluateReleaseGate(goodInput({ ...noDay, waivers: [{ ...WAIVER, decidedBy: "x" }] })),
+  );
+  assert.match(text, /1 waiver in docs\/release\/waivers\.json was ignored/);
+  assert.match(text, /### Release gate: FAIL/);
+});
+
+test("docs/release/waivers.json is allow-listed, by the Owner and at most 14 days", async () => {
+  const { readFileSync } = await import("node:fs");
+  const url = new URL("../../docs/release/waivers.json", import.meta.url);
+  const file = JSON.parse(readFileSync(url, "utf8"));
+  assert.ok(Array.isArray(file.waivers));
+  for (const w of file.waivers) {
+    assert.ok(WAIVABLE.includes(w.condition));
+    assert.equal(w.decidedBy, "Owner");
+    const days = (Date.parse(w.expires) - Date.parse(w.decidedOn)) / 86_400_000;
+    assert.ok(days >= 0 && days <= MAX_WAIVER_DAYS, "at most 14 days");
+    assert.equal(validateWaivers([w], w.decidedOn).valid.length, 1);
+  }
 });

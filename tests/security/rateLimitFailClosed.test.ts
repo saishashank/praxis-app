@@ -21,7 +21,12 @@ import {
 
 const BASE = "https://app.example.test";
 const CLAIMS: Claims = { uid: 5, sv: 1, si: 1, rec: false };
-const LIMITS = { signin_per_min_ip: 10, writes_per_min_user: 60, exports_per_hour_user: 5 };
+const LIMITS = {
+  signin_per_min_ip: 10,
+  writes_per_min_user: 60,
+  exports_per_hour_user: 5,
+  reads_per_min_user: 60,
+};
 const all = surfaces();
 const routes = routesOf(all);
 const actions = actionsOf(all);
@@ -193,10 +198,18 @@ describe("SEC-014: the limit itself still bites when the store works", () => {
   });
 });
 
+describe("SEC-014 API reads fail closed too (V1-S12)", () => {
+  it("an authenticated API GET answers 503 when the store is down, never allowed through", async () => {
+    expect((await gate(send("GET", "/api/alerts", {}), mk(down()))).status).toBe(503);
+  });
+  it("page navigations do not touch the store", async () => {
+    expect(forwarded(await gate(send("GET", "/", {}), mk(down())))).toBe(true);
+  });
+});
+
 describe("SEC-014: what a failing store does not touch", () => {
-  it("reads and signed machine routes do not depend on the rate-limit store", async () => {
+  it("signed machine routes and public paths do not depend on the rate-limit store", async () => {
     const d = mk(down());
-    expect((await gate(send("GET", "/api/alerts", {}), d)).status).toBe(200);
     expect(forwarded(await gate(send("POST", "/api/internal/self-check", {}), d))).toBe(true);
     expect(forwarded(await gate(send("GET", "/api/health", {}), d))).toBe(true);
   });

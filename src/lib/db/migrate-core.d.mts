@@ -14,9 +14,15 @@ export function loadMigrations(dir: string): Promise<Migration[]>;
 export function migrateUp(
   db: Client,
   migrations: Migration[],
-): Promise<{ applied: number; version: number }>;
+  opts?: { allowNewer?: boolean },
+): Promise<{ applied: number; version: number; newer?: number[] }>;
 export function migrateDown(
   db: Client,
   migrations: Migration[],
   n: number,
+): Promise<{ rolledBack: number; version: number }>;
+export function migrateDownTo(
+  db: Client,
+  migrations: Migration[],
+  target: number,
 ): Promise<{ rolledBack: number; version: number }>;

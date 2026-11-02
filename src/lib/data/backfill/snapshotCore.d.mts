@@ -4,7 +4,17 @@ export class SnapshotError extends Error {
   constructor(reason: string);
 }
 export type SnapshotTableName =
-  "calendar" | "universe" | "bars" | "index_bars" | "corporate_actions" | "announcements";
+  | "calendar"
+  | "universe"
+  | "bars"
+  | "index_bars"
+  | "corporate_actions"
+  | "announcements"
+  | "cutoff_polls"
+  | "index_changes"
+  | "short_interest"
+  | "macro_series"
+  | "industry";
 export const TABLES: readonly { name: SnapshotTableName; fields: readonly string[] }[];
 export type SnapshotInputs = Partial<
   Record<SnapshotTableName | `${SnapshotTableName}_recent`, Record<string, unknown>[]>

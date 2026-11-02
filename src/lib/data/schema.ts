@@ -64,7 +64,16 @@ export const AU_COLUMNS = {
     "ingested_at",
   ],
   bar_refetch: ["market", "code", "d", "fetched_at", "ohlcv_json", "max_diff_pct"],
-  adjustment_factor: ["market", "code", "ex_date", "factor", "corporate_action_id", "computed_at"],
+  adjustment_factor: [
+    "market",
+    "code",
+    "ex_date",
+    "factor",
+    "corporate_action_id",
+    "computed_at",
+    "factor_kind",
+    "ref_close_micro",
+  ],
   corporate_action: [
     "id",
     "market",
@@ -74,6 +83,7 @@ export const AU_COLUMNS = {
     "record_date",
     "payload_json",
     "evidence_json",
+    "known_at",
   ],
   corporate_action_event: ["id", "action_id", "at", "status", "by", "note"],
   announcement: [
@@ -88,6 +98,8 @@ export const AU_COLUMNS = {
     "title",
     "url",
     "source",
+    "first_ingested_at",
+    "content_hash",
   ],
   source_register: [
     "source",
@@ -136,13 +148,41 @@ export const AU_COLUMNS = {
 } as const satisfies Record<AuTableName, readonly string[]>;
 
 /** The AU source keys seeded into source_register / source_status. */
-export const AU_SOURCES = ["asx_announcements", "yahoo_eod", "rba", "abs", "asic_short"] as const;
+export const AU_SOURCES = [
+  "asx_announcements",
+  "yahoo_eod",
+  "rba",
+  "abs",
+  "asic_short",
+  "yahoo_delayed", // M17 (D-398; migration 0020): pending until the Owner accepts it
+  // M13-lite (DAT-227, D-522; migration 0022): expert channels. The first three are pending classes (no
+  // fetcher is built); the five platforms are manual-only and disabled.
+  "expert_rss",
+  "expert_youtube_feed",
+  "expert_own_site",
+  "expert_x",
+  "expert_instagram",
+  "expert_tiktok",
+  "expert_facebook",
+  "expert_linkedin",
+] as const;
 export type AuSource = (typeof AU_SOURCES)[number];
 /**
  * The ASX listed-companies file (D-067): a register row only (migration 0006), covered by the ASX
  * announcements entry O-23. It has no source_status row; the rate token uses `asx_announcements`.
  */
 export const UNIVERSE_SOURCE = "asx_listed_companies";
+/**
+ * M14 reference sources (DAT-236, D-239; migration 0018): two disabled universe alternatives (no
+ * fetcher) and the two manual CSV uploads; M15 adds the pending FRED row (migration 0019). Register rows only: no source_status row.
+ */
+export const REFERENCE_SOURCES = [
+  "wikidata_asx",
+  "wikipedia_asx200",
+  "index_changes_manual",
+  "industry_map_manual",
+  "fred", // M15 (DAT-101, D-291; migration 0019): pending, no fetcher
+] as const;
 
 export type MarketMode = "off" | "data_only" | "full";
 export type CalendarKind = "session" | "holiday" | "early_close";

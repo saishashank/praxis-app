@@ -5,6 +5,7 @@
 import type { AgentParams } from "../params";
 import { FAMILY_ORDER } from "./constants";
 import { createContext } from "./context";
+import { exceedsStopCap, STOP_DISTANCE_REASON } from "./stopCap";
 import {
   componentsByCode,
   evaluateF1,
@@ -77,6 +78,19 @@ export function runFamilies(
       ...evaluated.F5,
     ]),
   );
+
+  // FAM-004 (D-216): after F6, a candidate whose stop is further than the cap from the D close is blocked
+  const closeOf = new Map(inputs.codes.map((f) => [f.code, f.bar.close] as const));
+  for (const family of FAMILY_ORDER) {
+    evaluated[family] = evaluated[family].map((e) => {
+      if (e.reasons.length > 0) return e;
+      const ref = closeOf.get(e.cand.code);
+      if (ref === undefined || ref <= 0n) return e;
+      return exceedsStopCap(e.cand, ref, params.entry.maxStopDistance)
+        ? { cand: e.cand, reasons: [STOP_DISTANCE_REASON] }
+        : e;
+    });
+  }
 
   const wanted = opts.families ?? FAMILY_ORDER;
   const candidates: Candidate[] = [];

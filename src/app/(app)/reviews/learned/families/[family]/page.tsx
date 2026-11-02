@@ -31,7 +31,7 @@ export default async function FamilyPage({ params }: { params: Promise<{ family:
         {view.liveId === null ? "No live version yet." : `Live version: ${view.liveId}.`}
       </PageHead>
       {view.state === "empty" ? (
-        <EmptyState title="Nothing recorded for this family yet">
+        <EmptyState motif="reviews" hue="reviews" title="Nothing recorded for this family yet">
           Versions, lessons and challengers appear after the starting rules are registered and the
           weekly run has looked at this family.
         </EmptyState>
@@ -39,7 +39,7 @@ export default async function FamilyPage({ params }: { params: Promise<{ family:
 
       <Card title="Version history">
         {view.versions.length === 0 ? (
-          <p className="m-0 text-sm text-text-muted">No versions yet.</p>
+          <EmptyState compact motif="reviews" hue="reviews" title="No versions yet." />
         ) : (
           <ol className="m-0 flex list-none flex-col gap-4 p-0">
             {view.versions.map((v) => (
@@ -113,7 +113,12 @@ export default async function FamilyPage({ params }: { params: Promise<{ family:
 
       <Card title="Lessons">
         {view.lessons.length === 0 ? (
-          <p className="m-0 text-sm text-text-muted">No lessons for this family yet.</p>
+          <EmptyState
+            compact
+            motif="reviews"
+            hue="reviews"
+            title="No lessons for this family yet."
+          />
         ) : (
           <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2">
             {view.lessons.map((l) => (
@@ -127,7 +132,12 @@ export default async function FamilyPage({ params }: { params: Promise<{ family:
 
       <Card title="Challengers">
         {view.challengers.length === 0 ? (
-          <p className="m-0 text-sm text-text-muted">No challengers for this family.</p>
+          <EmptyState
+            compact
+            motif="reviews"
+            hue="reviews"
+            title="No challengers for this family."
+          />
         ) : (
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {view.challengers.map((c) => (
@@ -150,7 +160,7 @@ export default async function FamilyPage({ params }: { params: Promise<{ family:
           caption={`Changes to family ${family}`}
           rows={ledger}
           rowKey={(r) => String(r.id)}
-          empty={<p className="m-0 text-sm text-text-muted">No changes yet.</p>}
+          empty={<EmptyState compact motif="reviews" hue="reviews" title="No changes yet." />}
           columns={[
             { key: "day", header: "When", cell: (r) => r.day },
             { key: "kind", header: "What", cell: (r) => r.kind },

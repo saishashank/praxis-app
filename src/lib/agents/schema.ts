@@ -184,6 +184,7 @@ export const AGENT_COLUMNS = {
     "rule_version",
     "category_llm",
     "polarity_llm",
+    "category_detail",
   ],
   insider_flow_score: ["market", "code", "d", "score_q", "inputs_json"],
   signal: [
@@ -447,6 +448,26 @@ export const EVENT_CATEGORIES = [
   "other",
 ] as const;
 export type EventCategory = (typeof EVENT_CATEGORIES)[number];
+
+/**
+ * M14 event detail (AGT-135, AGT-138; D-241): a finer label beside the category, stored in the
+ * nullable `event.category_detail` column (0018). NULL on every v1 event.
+ */
+export const EVENT_DETAILS = ["query_response", "guidance_maintained"] as const;
+export type EventDetail = (typeof EVENT_DETAILS)[number];
+
+/**
+ * M14 reasons an entry is not taken before the order stage (FAM-004/005/006/009, DAT-234). They
+ * are the `not_taken_reason` words of a Decision Card (checked by the card validator).
+ */
+export const ENTRY_SKIP_REASONS = [
+  "skipped_stop_distance",
+  "skipped_cost_gate",
+  "second_position",
+  "abstain_shock",
+  "index_change",
+] as const;
+export type EntrySkipReason = (typeof ENTRY_SKIP_REASONS)[number];
 export type Polarity = -1 | 0 | 1;
 
 export const LEDGER_EXIT_TAGS = ["IS", "CS"] as const;
@@ -603,6 +624,8 @@ export type EventRow = {
   /** LLM-adjusted fields: NULL -> value once, never read by A5 (AGT-011a). */
   category_llm: string | null;
   polarity_llm: Polarity | null;
+  /** AGT-135 / AGT-138 detail (0018); NULL on rows written before events-v2. */
+  category_detail?: EventDetail | null;
 };
 
 export type InsiderFlowScoreRow = {

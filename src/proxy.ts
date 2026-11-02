@@ -1,14 +1,16 @@
 // Next 16 proxy (formerly middleware), Node.js runtime. All logic lives in lib/http/gate.ts.
 import { getToken } from "next-auth/jwt";
 import type { NextRequest } from "next/server";
+import { isPinnedOwnerClaims } from "@/lib/auth/pinnedOwnerClaims";
+import { SESSION_COOKIE_PLAIN, SESSION_COOKIE_SECURE } from "@/lib/auth/cookies";
 import { parseClaims } from "@/lib/auth/claims";
 import { authDb } from "@/lib/db/client";
 import { gate } from "@/lib/http/gate";
 import { getRateLimits, getSessionMaxAgeSec } from "@/lib/http/limits";
 
-// Same names Auth.js derives: __Secure- prefix on https.
-const COOKIE_SECURE = "__Secure-authjs.session-token";
-const COOKIE_PLAIN = "authjs.session-token";
+// Same names Auth.js derives: __Secure- prefix on https (pinned in src/lib/auth/cookies.ts).
+const COOKIE_SECURE = SESSION_COOKIE_SECURE;
+const COOKIE_PLAIN = SESSION_COOKIE_PLAIN;
 
 async function readClaims(req: NextRequest) {
   const secret = process.env.AUTH_SECRET;
@@ -31,6 +33,7 @@ export function proxy(req: NextRequest) {
     db: authDb,
     readClaims,
     limits: getRateLimits(),
+    isPinnedOwner: (claims) => isPinnedOwnerClaims(authDb(), claims, process.env),
     nowSec: () => Math.floor(Date.now() / 1000),
   });
 }

@@ -13,9 +13,15 @@ vi.mock("@/lib/db/client", () => ({ mainDb: () => ({}) }));
 vi.mock("@/lib/preferences/read", () => ({
   userPreferences: async () => ({ time_format: "24h" }),
 }));
-vi.mock("@/app/(app)/ops/actions", () => ({ tickOpsTaskAction: vi.fn() }));
+const runNow = vi.hoisted(() => ({ loadRunNowRows: vi.fn() }));
+vi.mock("@/lib/jobs/runNow", () => ({ loadRunNowRows: runNow.loadRunNowRows }));
+vi.mock("@/app/(app)/ops/actions", () => ({
+  tickOpsTaskAction: vi.fn(),
+  requestRunNowAction: vi.fn(),
+}));
 
 beforeEach(() => {
+  runNow.loadRunNowRows.mockResolvedValue([]);
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-05T01:00:00Z"));
 });
@@ -47,25 +53,37 @@ describe("ops page", () => {
     expect(ops.loadOps).not.toHaveBeenCalled();
   });
 
-  it("shows due and overdue tasks with a button, finished and future ones without", async () => {
+  it("groups tasks Overdue / Due soon / Done; one Mark done and a text status pill per tickable row", async () => {
     guard.requireUser.mockResolvedValueOnce(owner);
     ops.loadOps.mockResolvedValueOnce(model());
     render(await OpsPage());
     expect(screen.getByRole("heading", { level: 1, name: "Ops checklist" })).toBeInTheDocument();
     expect(screen.getByText(/Today is Mon, 5 Oct 2026/)).toBeInTheDocument();
-    const needs = screen.getByRole("region", { name: "Needs doing" });
+    const overdue = screen.getByRole("region", { name: /^Overdue/ });
+    const soon = screen.getByRole("region", { name: /^Due soon/ });
+    const done = screen.getByRole("region", { name: /^Done/ });
     // monthly (Sat 3 Oct), offsite (1 Oct), restore drill (1 Oct), calendar (1 Nov 2025), token rotation
-    expect(within(needs).getAllByText(/Monthly checks/).length).toBeGreaterThan(0);
+    expect(within(overdue).getAllByText(/Monthly checks/).length).toBeGreaterThan(0);
     expect(
-      within(needs).getByText(/Overdue by 2 days \(due Sat, 3 Oct 2026\)/),
+      within(overdue).getByText(/Overdue by 2 days \(due Sat, 3 Oct 2026\)/),
     ).toBeInTheDocument();
-    expect(within(needs).getAllByText(/Rotate turso_token/).length).toBeGreaterThan(0);
-    expect(within(needs).getAllByRole("button", { name: /Mark done/ }).length).toBe(5);
-    const rest = screen.getByRole("region", { name: "Done and coming up" });
-    expect(within(rest).getAllByText(/Weekly review/).length).toBeGreaterThan(0);
-    expect(within(rest).getByText(/Next due Sat, 10 Oct 2026/)).toBeInTheDocument();
-    expect(within(rest).getAllByText(/ASIC CFD leverage label/).length).toBeGreaterThan(0);
-    expect(within(rest).queryByRole("button")).toBeNull();
+    // exactly one Mark done per overdue row, each row with a status pill that carries text
+    const rows = within(overdue).getAllByRole("listitem");
+    expect(rows.length).toBe(4);
+    for (const r of rows) {
+      expect(within(r).getAllByRole("button", { name: /Mark done/ })).toHaveLength(1);
+      expect(r.querySelector('[data-kind="status"]')).toHaveTextContent("Overdue");
+    }
+    expect(within(done).getAllByText(/Weekly review/).length).toBeGreaterThan(0);
+    expect(within(done).getByText(/Next due Sat, 10 Oct 2026/)).toBeInTheDocument();
+    expect(within(done).queryByRole("button")).toBeNull();
+    expect(within(soon).getAllByText(/ASIC CFD leverage label/).length).toBeGreaterThan(0);
+    // the token rotation is due now (not yet overdue): one Mark done; the not-yet-due ones have none
+    expect(within(soon).getAllByText(/Rotate turso_token/).length).toBeGreaterThan(0);
+    expect(within(soon).getAllByRole("button", { name: /Mark done/ })).toHaveLength(1);
+    for (const r of within(soon).getAllByRole("listitem")) {
+      expect(r.querySelector('[data-kind="status"]')).toHaveTextContent(/^(Not due yet|Due)$/);
+    }
     const tokens = screen.getByRole("table", { name: "Token expiry dates" });
     expect(within(tokens).getByRole("rowheader", { name: "turso_token" })).toBeInTheDocument();
     expect(within(tokens).getByText("7")).toBeInTheDocument();
@@ -76,6 +94,65 @@ describe("ops page", () => {
     ops.loadOps.mockRejectedValueOnce(new Error("db down: secret detail"));
     render(await OpsPage());
     expect(screen.getByRole("status")).toHaveTextContent("Ops checklist unavailable");
+    expect(screen.queryByText(/secret detail/)).toBeNull();
+  });
+
+  it("lists the jobs with their schedule, last run and a Run now button; a waiting request disables it", async () => {
+    guard.requireUser.mockResolvedValueOnce(owner);
+    ops.loadOps.mockResolvedValueOnce(model());
+    const job = (id: string, label: string, back = 0) => ({
+      id,
+      label,
+      schedule: "Every day at 20:00",
+      time: "20:00",
+      dateBackDays: back,
+    });
+    runNow.loadRunNowRows.mockResolvedValueOnce([
+      {
+        job: job("evening-review", "Evening review", 1),
+        last: {
+          status: "refused",
+          result: "refused: not listed",
+          requestedAt: "2026-10-05T00:00:00.000Z",
+          updatedAt: "2026-10-05T00:00:30.000Z",
+        },
+        scheduled: { state: "dispatched", at: "2026-10-04T09:00:00.000Z", d: "2026-10-04" },
+      },
+      {
+        job: job("backup", "Nightly backup"),
+        last: {
+          status: "pending",
+          result: null,
+          requestedAt: "2026-10-05T00:59:00.000Z",
+          updatedAt: "2026-10-05T00:59:00.000Z",
+        },
+        scheduled: null,
+      },
+    ]);
+    render(await OpsPage());
+    const sec = screen.getByRole("region", { name: "Run a job now" });
+    const items = within(sec).getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(within(items[0]!).getByText(/Not run: the job is not on your list/)).toBeInTheDocument();
+    expect(
+      within(items[0]!).getByText(/Last scheduled run: started on 2026-10-04/),
+    ).toBeInTheDocument();
+    expect(within(items[0]!).getByRole("button", { name: /Run now/ })).toBeInTheDocument();
+    expect(within(items[1]!).getByText(/Waiting. The Worker picks it up/)).toBeInTheDocument();
+    expect(
+      within(items[1]!).getByText(/Never ran|Last scheduled run: none recorded/),
+    ).toBeInTheDocument();
+    expect(sec.textContent?.toLowerCase()).not.toContain("blueprint");
+  });
+
+  it("shows a neutral message when the job list cannot be read", async () => {
+    guard.requireUser.mockResolvedValueOnce(owner);
+    ops.loadOps.mockResolvedValueOnce(model());
+    runNow.loadRunNowRows.mockRejectedValueOnce(new Error("db down: secret detail"));
+    render(await OpsPage());
+    expect(
+      screen.getByText("The job list is unavailable. Nothing was changed."),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/secret detail/)).toBeNull();
   });
 });

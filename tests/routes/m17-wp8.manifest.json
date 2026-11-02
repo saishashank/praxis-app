@@ -1,0 +1,16 @@
+{
+  "routes": {
+    "action src/app/(app)/alerts/actions.ts#muteAlertAction": {
+      "tests": ["tests/picks/wp8.test.tsx"]
+    },
+    "action src/app/(app)/alerts/actions.ts#setAlertsForAllAction": {
+      "tests": ["tests/picks/wp8.test.tsx"]
+    },
+    "action src/app/(app)/settings/alerts/actions.ts#setPicksSortAction": {
+      "tests": ["tests/picks/wp8.test.tsx"]
+    },
+    "action src/app/(app)/settings/alerts/actions.ts#updateAlertSettingsAction": {
+      "tests": ["tests/picks/wp8.test.tsx"]
+    }
+  }
+}

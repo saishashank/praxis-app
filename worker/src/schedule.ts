@@ -59,6 +59,13 @@ export type Slot = {
   requiredInputs?: readonly string[];
   /** Runner "actions": constant workflow inputs sent with every dispatch (watchdog `slot`). */
   fixedInputs?: Record<string, string>;
+  /**
+   * Runner "actions": verify the night's outcome (V1-B1, D-662). A 204 from GitHub only means the
+   * workflow was accepted. From `afterMin` after the dispatch until `untilMin` after the slot time,
+   * a slot whose run record `<keyPrefix><local date>` is neither closed nor running is dispatched
+   * again (bounded by MAX_ATTEMPTS; the script's own success check makes a duplicate a no-op).
+   */
+  recheck?: { keyPrefix: string; afterMin: number; untilMin: number };
   note: string;
 };
 
@@ -270,6 +277,7 @@ export const AU_SLOTS: readonly Slot[] = [
     marketBound: true,
     priority: 15,
     catchUpMin: 20,
+    recheck: { keyPrefix: "arena-2a:AU:", afterMin: 30, untilMin: 150 },
     enabled: true,
     requiresListing: true,
     note: "Batch 2a close the books (T10, ARN-060): fills, stops, settlement, NAV, invariants; OFF until the Owner enables the arena",
@@ -290,17 +298,23 @@ export const AU_SLOTS: readonly Slot[] = [
     requiresListing: true,
     note: "Batch 2b signals and orders (M4 T8, ARN-060/020): A4/A3/A2, family rules, exits, FAM-001 entries, C2/C3 controls; OFF until the Owner enables the arena",
   }),
+  // GL-05 (D-207 item 5): the decision cut-off poll. A trading-day announcement fetch starts at 18:10
+  // (the 30-minute `asx-fetch` cadence has no run between 18:00 and 18:30). The first poll that
+  // started at or after 18:10 and stored its items writes the insert-once marker `cutoff_poll:AU:<d>`
+  // (src/lib/data/asxIngest.ts, and the Worker's own poll in worker/src/asx/slots.ts, which keys on
+  // this slot being enabled). Batch 2b waits for the marker for at most 4 minutes and then goes on,
+  // recording `cutoff_poll_missing`. A single try (no catch-up): a poll later than 18:14 is too late.
   slot({
     id: "decision-cutoff",
     time: "18:10",
-    runner: "worker",
-    workflow: null,
+    runner: "actions",
+    workflow: "asx-fetch.yml",
     tradingDaysOnly: true,
     marketBound: true,
     priority: 11,
-    catchUpMin: 0,
-    enabled: false,
-    note: "Decision cut-off: M2 records only the first completed poll after 18:10 (T4)",
+    catchUpMin: 2,
+    enabled: true,
+    note: "Decision cut-off poll (GL-05): the first completed announcement poll after 18:10 is the marker batch 2b waits for (4 min)",
   }),
   slot({
     id: "late-sweep",
@@ -461,5 +475,42 @@ export const AU_SLOTS: readonly Slot[] = [
     enabled: true,
     requiresListing: true,
     note: "YAML watchdog 21:50 (M8 T13, PLT-071, NFR-006): last check of the worker poll and the review; OFF until the Owner lists it",
+  }),
+  // M17 WP5 (D-387, D-397, PLT-077): delayed-quote slots. Recurring route slots: one signed POST per
+  // matching minute, no slot state; the routes are idempotent per (market, session, slot minute, purpose)
+  // through quote_run and enforce the early close from the calendar. Available but listed-only (an absent
+  // list skips them) and the routes themselves refuse until the Owner accepts the yahoo_delayed source.
+  slot({
+    id: "quote-poll",
+    time: "10:00",
+    until: "16:00",
+    everyMin: 5,
+    runner: "route",
+    route: "/api/internal/pick-alerts",
+    workflow: null,
+    tradingDaysOnly: true,
+    marketBound: true,
+    priority: 5,
+    catchUpMin: 0,
+    enabled: true,
+    requiresListing: true,
+    note: "Pick-alert quote poll 10:00-16:00 every 5 min (M17, PLT-077); OFF until the Owner lists it and accepts the quote source",
+  }),
+  slot({
+    id: "intraday-scan",
+    // V2-I1 (D-770): offset 2 minutes so the scan never shares a tick with quote-poll (multiples of 5).
+    time: "10:32",
+    until: "15:32",
+    everyMin: 30,
+    runner: "route",
+    route: "/api/internal/intraday-scan",
+    workflow: null,
+    tradingDaysOnly: true,
+    marketBound: true,
+    priority: 6,
+    catchUpMin: 0,
+    enabled: true,
+    requiresListing: true,
+    note: "Intraday scan 10:32-15:32 every 30 min (M17, AGT-140); OFF until the Owner lists it and accepts the quote source",
   }),
 ];

@@ -1,8 +1,12 @@
 # Batch 1: end-of-day ingest for the AU market, M2 T6 (DAT-020 stages 1..9, DAT-002, DAT-003,
 # PLT-016, PLT-072, PLT-076, BLD-024, D-057 decision 2).
-# workflow_dispatch ONLY: the Worker's per-minute cron (the master clock, PLT-071) dispatches this
-# workflow with `ref: release` at 17:30 Sydney on trading days. It has no `schedule:` trigger
-# (PLT-015). Secrets are referenced ONLY in `env:` of the two steps that read or write the
+# Triggers: the Worker's per-minute cron (the master clock, PLT-071) dispatches this workflow with
+# `ref: release` at 17:30 Sydney. GL-07 (O-52): a GitHub FALLBACK `schedule:` at 18:15 Melbourne
+# (both DST offsets, `node scripts/time/genWatchdogCron.mjs 18:15`) covers a Worker that did not
+# dispatch; the `gate` job makes the other regime's line a no-op. The fallback cannot double-ingest:
+# `prepare` reads the run record `batch1:AU:<date>` and a day that already succeeded is "done", and
+# the `ingest-batch1` concurrency group serialises a late Worker dispatch against it.
+# `workflow_dispatch` stays. Secrets are referenced ONLY in `env:` of the two steps that read or write the
 # database; the Python fetch step has NO secrets and no database access.
 # SEC-108 c: the production job checks out the latest approved deploy-production commit, not the
 # release head. `deployment: false` gives the job the environment's secrets without creating a
@@ -16,13 +20,43 @@
 # fetch failed or was not needed, so a skip or a failure is always recorded in a run record.
 name: Ingest batch 1 (AU EOD)
 
-on: workflow_dispatch
+on:
+  schedule:
+    - cron: "15 7 * * *"
+    - cron: "15 8 * * *"
+  workflow_dispatch:
 
 permissions: {}
 
 jobs:
-  production:
+  # GL-07 (O-52): a scheduled run maps its cron line back to a slot and exits as a no-op on the line
+  # of the other DST regime (PLT-019); a dispatch always runs. No secrets, no environment.
+  gate:
     if: github.ref == 'refs/heads/release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+      slot: ${{ steps.gate.outputs.slot }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts/time
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Schedule gate
+        id: gate
+        run: node scripts/time/scheduleGate.mjs 18:15
+        env:
+          SCHEDULE_CRON: ${{ github.event.schedule }}
+
+  production:
+    needs: gate
+    if: github.ref == 'refs/heads/release' && needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -75,7 +109,7 @@ jobs:
       # bars.json. The throttle values come from the plan step's outputs, which are not secret.
       - name: Fetch bars (no secrets)
         if: steps.plan.outputs.fetch == 'true'
-        run: python scripts/ingest/yahoo_fetch.py --request request.json --output bars.json --index-output index.json
+        run: python scripts/ingest/yahoo_fetch.py --request request.json --output bars.json --index-output index.json --actions-output actions.json
         env:
           YAHOO_CHUNK_SIZE: ${{ steps.plan.outputs.chunk_size }}
           YAHOO_MIN_GAP_S: ${{ steps.plan.outputs.min_gap_s }}
@@ -86,7 +120,7 @@ jobs:
         run: node scripts/ingest/asic_fetch.mjs --request request.json --output short.json
       - name: Ingest batch 1
         if: ${{ !cancelled() && steps.plan.outcome == 'success' }}
-        run: node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json
+        run: node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json --actions actions.json
         env:
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
@@ -140,7 +174,7 @@ jobs:
         run: node scripts/ingest/recorded_day.mjs --request request.json --fixtures fixtures --output bars.json --index-output index.json --short-output short.json
       - name: Ingest batch 1
         if: ${{ !cancelled() && steps.plan.outcome == 'success' }}
-        run: node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json
+        run: node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json --actions actions.json
         env:
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_STAGING }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_STAGING }}

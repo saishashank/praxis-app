@@ -16,9 +16,8 @@ import {
   type WordsOptions,
 } from "@/lib/learning/wordsStage";
 import { createMockProvider, promptSha, type LlmProvider } from "@/lib/llm/providers";
-import { buildPrompt, type LlmRouter } from "@/lib/llm/router";
+import { buildPrompt, requestReservation, type LlmRouter } from "@/lib/llm/router";
 import { MemoryStore } from "@/lib/llm/store";
-import { estimateTokens } from "@/lib/llm/budget";
 import {
   NARRATIVE_TEMPLATE_VERSION,
   loadCtx,
@@ -313,8 +312,8 @@ describe("the R5 reservation (D-110 #48, LLM-050 s13)", () => {
     rules: { rules: true } as unknown,
     maxOutputTokens: 400,
   };
-  const projected =
-    estimateTokens(buildPrompt(req.task, req.facts, undefined, false)) + req.maxOutputTokens;
+  // LLM-074: the first call plus one repair
+  const projected = requestReservation(req, undefined);
   const base = (route: ReturnType<typeof vi.fn>): LlmRouter =>
     ({ mode: "mock", route }) as unknown as LlmRouter;
   const ok = { value: { ok: true }, source: "mock", llmUsed: true };

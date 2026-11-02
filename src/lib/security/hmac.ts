@@ -12,11 +12,13 @@
 // The nonce is claimed only AFTER the signature is valid, so unsigned traffic cannot burn nonces.
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { NonceStore } from "./replay";
+import { HEADER_NONCE, HEADER_SIGNATURE, HEADER_TIMESTAMP, hmacMessage } from "./hmacCore.mjs";
+
+// The scheme (message, header names) is defined once in hmacCore.mjs and shared with the Node and
+// Worker signers (V1-I3).
+export { HEADER_NONCE, HEADER_SIGNATURE, HEADER_TIMESTAMP };
 
 export const MAX_SKEW_SEC = 300;
-export const HEADER_TIMESTAMP = "x-praxis-timestamp";
-export const HEADER_NONCE = "x-praxis-nonce";
-export const HEADER_SIGNATURE = "x-praxis-signature";
 
 const SECRET_RE = /^[0-9a-f]{64}$/;
 const TIMESTAMP_RE = /^[0-9]{1,12}$/;
@@ -34,7 +36,7 @@ export function computeSignature(
   rawBody: string,
 ): string {
   return createHmac("sha256", secret)
-    .update(`${timestamp}.${nonce}.${rawBody}`, "utf8")
+    .update(hmacMessage(timestamp, nonce, rawBody), "utf8")
     .digest("hex");
 }
 

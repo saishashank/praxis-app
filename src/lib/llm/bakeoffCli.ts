@@ -27,6 +27,7 @@ import {
   type Candidate,
 } from "./bakeoff";
 import { createLiveProvider, KEY_ENV, type LiveKind, type LlmProvider } from "./providers";
+import { isRetired } from "./roster";
 
 const DEFAULT_GOLDEN = "tests/fixtures/llm/golden-zz";
 const KINDS: readonly LiveKind[] = ["google", "groq", "openrouter"];
@@ -121,6 +122,8 @@ export async function bakeoffMain(
           throw new Usage(`bad candidate ${spec}`);
         if (kind === "openrouter" && !model.endsWith(":free"))
           throw new Usage("openrouter models must end in :free (LLM-003)");
+        if (isRetired(kind, model))
+          throw new Usage(`${kind}:${model} is retired in the LLM roster (LLM-070)`);
         const trainsOnPrompts = trains.get(kind) !== "no";
         const provider = deps.makeProvider
           ? deps.makeProvider({ kind, model, trainsOnPrompts })

@@ -71,7 +71,7 @@ describe("Appearance page", () => {
       expect(screen.getAllByRole("radio")).toHaveLength(6);
       expect(screen.getByRole("radio", { name: "Dark (default)" })).toBeChecked();
       expect(screen.getByLabelText("Animation")).toHaveValue("on");
-      // The shell's "Appearance: X. Switch to Y." button must stay the only control with that name.
+      // The header theme toggle is gone (UXR-004); Settings > Appearance is the only place.
       expect(screen.queryByLabelText("Theme")).toBeNull();
       // UXR-002: the selected option is marked by text too, and the stored one says so
       expect(screen.getByText("Current setting")).toBeInTheDocument();

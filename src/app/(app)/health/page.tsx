@@ -9,7 +9,7 @@ import { userPreferences } from "@/lib/preferences/read";
 import { envFor } from "@/lib/ui/loaders/shell";
 import { loadControlRoom, type ControlRoomModel } from "@/lib/ui/loaders/controlRoom";
 import { HealthNav, type HealthNavItem } from "./HealthNav";
-import { Banner } from "@/components/ui/States";
+import { Banner, EmptyState } from "@/components/ui/States";
 import { ControlRoom, type SnoozeInfo } from "./ControlRoom";
 import { CalendarConfirmForm } from "./CalendarConfirmForm";
 import { DataControlForm } from "./DataControlForm";
@@ -17,6 +17,7 @@ import { EmailControlsSection } from "./EmailControlsSection";
 import { WorkerSlotsSection } from "./WorkerSlotsSection";
 import { loadSlotsView, type SlotsView } from "@/lib/golive/slots";
 import { DayTimelineCheck } from "./DayTimelineCheck";
+import { NightsCheck } from "./NightsCheck";
 import { loadAttentionItems } from "@/lib/health/attention";
 import {
   loadEmailControlsView,
@@ -424,7 +425,7 @@ function QualitySection(props: { q: NonNullable<HealthSummary["quality"]>; owner
         </tbody>
       </table>
       {q.rules.length === 0 ? (
-        <p className="text-sm text-text-muted">No open flags for this date.</p>
+        <EmptyState compact motif="check" hue="home" title="No open flags for this date." />
       ) : (
         <table className="w-full border-collapse text-left text-sm">
           <caption className="sr-only">Open flags by rule</caption>
@@ -521,10 +522,20 @@ export default async function HealthPage() {
     if (summary.calendar && summary.calendar.length > 0) {
       nav.push({ id: "calendar-h", label: "Trading calendar" });
     }
+    if (owner && summary.moneyUnverified && summary.moneyUnverified.length > 0) {
+      nav.push({ id: "money-h", label: "Money figures" });
+    }
     if (summary.controls) nav.push({ id: "controls-h", label: "Data controls" });
     if (owner) nav.push({ id: "email-controls-h", label: "Email and alerts" });
     nav.push({ id: "day-timeline-h", label: "Day timeline" });
+    if (owner) nav.push({ id: "nights-h", label: "Last 7 nights" });
+    if (owner && summary.routeLines && summary.routeLines.length > 0) {
+      nav.push({ id: "route-posts-h", label: "Worker route posts" });
+    }
     if (owner) nav.push({ id: "worker-slots-h", label: "Worker slots" });
+    if (owner && summary.intradayLines && summary.intradayLines.length > 0) {
+      nav.push({ id: "intraday-h", label: "Intraday polling" });
+    }
     if (summary.quality) nav.push({ id: "quality-h", label: "Data quality" });
     if (owner && summary.secrets) nav.push({ id: "secrets-h", label: "Secrets" });
     if (owner && summary.workerSecrets) {
@@ -540,7 +551,8 @@ export default async function HealthPage() {
         <header id="overview" className="flex scroll-mt-20 flex-col gap-1">
           <h1 className="text-3xl font-semibold tracking-tight">System Health</h1>
           <p className="m-0 text-sm text-text-muted">
-            The Control Room. Times are shown in Australia/Melbourne.
+            Is everything running as it should? The briefing comes first, then each part. Times are
+            shown in Australia/Melbourne.
           </p>
         </header>
 
@@ -635,6 +647,7 @@ export default async function HealthPage() {
                           {STATE_LABEL[j.state]}
                         </span>
                         {j.note && <span className="ml-2 text-text-muted">{j.note}</span>}
+                        {j.attention && <span className="ml-2 font-medium">{j.attention}</span>}
                         {j.stale && j.state !== "stale" && (
                           <span className="ml-2 font-medium">Also stale</span>
                         )}
@@ -674,6 +687,22 @@ export default async function HealthPage() {
               </section>
             )}
 
+            {owner && summary.moneyUnverified && summary.moneyUnverified.length > 0 && (
+              <section aria-labelledby="money-h" className="flex flex-col gap-3">
+                <h2 id="money-h" className="text-xl font-semibold">
+                  Money figures
+                </h2>
+                <p className="m-0 text-sm" role="status">
+                  {summary.moneyUnverified.length} cost, tick, slippage or parcel figures are not
+                  approved yet. Production stays out of full mode until they are. The list is on the{" "}
+                  <Link href="/ops/go-live" className="underline">
+                    Go-live page
+                  </Link>
+                  .
+                </p>
+              </section>
+            )}
+
             {summary.controls && (
               <DataControlsSection
                 c={summary.controls}
@@ -685,8 +714,35 @@ export default async function HealthPage() {
 
             {owner && <EmailControlsSection v={emailControls} />}
             <DayTimelineCheck owner={owner} />
+            <NightsCheck owner={owner} />
+
+            {owner && summary.routeLines && summary.routeLines.length > 0 && (
+              <section aria-labelledby="route-posts-h" className="flex flex-col gap-3">
+                <h2 id="route-posts-h" className="text-xl font-semibold">
+                  Worker route posts
+                </h2>
+                <ul className="list-disc pl-6 text-sm">
+                  {summary.routeLines.map((l) => (
+                    <li key={l}>{l}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
             {owner && <WorkerSlotsSection view={slotsView} />}
+
+            {owner && summary.intradayLines && summary.intradayLines.length > 0 && (
+              <section aria-labelledby="intraday-h" className="flex flex-col gap-3">
+                <h2 id="intraday-h" className="text-xl font-semibold">
+                  Intraday polling
+                </h2>
+                <ul className="list-disc pl-6 text-sm">
+                  {summary.intradayLines.map((l) => (
+                    <li key={l}>{l}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
             {summary.quality && (
               <section aria-labelledby="quality-h" className="flex flex-col gap-3">
@@ -694,7 +750,12 @@ export default async function HealthPage() {
                   Data quality
                 </h2>
                 {summary.quality.date === null ? (
-                  <p className="text-sm text-text-muted">No quality checks have run yet.</p>
+                  <EmptyState
+                    compact
+                    motif="check"
+                    hue="home"
+                    title="No quality checks have run yet."
+                  />
                 ) : (
                   <QualitySection q={summary.quality} owner={owner} />
                 )}

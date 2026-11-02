@@ -8,7 +8,11 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 // @ts-expect-error plain .mjs signer without types (the Actions-side twin)
 import { sign } from "../../scripts/smoke/sign.mjs";
 import * as route from "@/app/api/internal/backup-export/route";
-import { COUNTS_HEADER, createBackupExportHandler } from "@/lib/backup/exportHandler";
+import {
+  COUNTS_HEADER,
+  SHA256_HEADER,
+  createBackupExportHandler,
+} from "@/lib/backup/exportHandler";
 import { decryptToText, looksLikeAge } from "@/lib/backup/crypto";
 import { dumpDatabase } from "@/lib/backup/dump";
 import { restoreDatabase } from "@/lib/backup/restore";
@@ -83,6 +87,11 @@ describe("backup export handler", () => {
     const counts = JSON.parse(r.headers.get(COUNTS_HEADER) ?? "{}");
     expect(counts.app_user).toBe(1);
     expect(r.headers.get(COUNTS_HEADER)).not.toContain(MARK);
+    // V1-I6: per-table digests for the same tables, 64 hex each, no row text
+    const sha = JSON.parse(r.headers.get(SHA256_HEADER) ?? "{}") as Record<string, string>;
+    expect(Object.keys(sha).sort()).toEqual(Object.keys(counts).sort());
+    for (const v of Object.values(sha)) expect(v).toMatch(/^[0-9a-f]{64}$/);
+    expect(r.headers.get(SHA256_HEADER)).not.toContain(MARK);
   });
 
   it("the ciphertext decrypts with the private key and restores to the same auth data", async () => {

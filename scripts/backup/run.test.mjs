@@ -120,9 +120,16 @@ function fakeWorld({
         authExport.data.byteOffset,
         authExport.data.byteOffset + authExport.data.byteLength,
       );
+      const sha =
+        vercel === "badsha"
+          ? { not_a_table: "0".repeat(64) }
+          : vercel === "nonhex"
+            ? Object.fromEntries(Object.keys(authExport.counts).map((t) => [t, "xyz"]))
+            : authExport.sha256;
       return res(200, buf, {
         "content-type": "application/octet-stream",
         "x-praxis-backup-counts": JSON.stringify(authExport.counts),
+        ...(vercel === "nosha" ? {} : { "x-praxis-backup-sha256": JSON.stringify(sha) }),
       });
     }
     // GitHub: the token only goes to the two fixed hosts
@@ -258,6 +265,9 @@ test("happy path: uploads both encrypted files, applies retention exactly, write
     const details = JSON.parse(rows[0].details_json);
     assert.equal(details.main.counts.app_log, 1);
     assert.match(details.main.sha256, /^[0-9a-f]{64}$/);
+    // V1-I6: the auth side now persists per-table digests, not counts alone
+    assert.deepEqual(details.auth.tableSha256, s.authExport.sha256);
+    assert.ok(Object.keys(details.auth.tableSha256).length > 0);
     assert.equal(details.deleted, expected.length);
     assert.equal(rows[0].details_json.includes(MARK), false);
     assert.equal(rows[0].details_json.includes("praxis-secret-host"), false);
@@ -320,7 +330,7 @@ test("a release created by a parallel run (422 on create) is reused", async () =
 });
 
 test("auth export failure: main is still uploaded, run is recorded failed, exit 1, nothing leaks", async () => {
-  for (const vercel of ["500", "throw", "plaintext", "json"]) {
+  for (const vercel of ["500", "throw", "plaintext", "json", "badsha", "nonhex"]) {
     const s = await setup();
     try {
       const world = fakeWorld({ authExport: s.authExport, vercel });
@@ -537,4 +547,17 @@ test("the workflow file is dispatch-only, uses the approved commit and holds no 
   // secrets only in env: blocks, never inside run: scripts
   assert.equal(/run:[^\n]*\$\{\{\s*secrets\./.test(wf), false);
   assert.match(wf, /node scripts\/backup\/drill\.mjs/);
+});
+
+test("an older route without the digest header still backs up, recorded as null (V1-I6)", async () => {
+  const s = await setup();
+  try {
+    const world = fakeWorld({ authExport: s.authExport, vercel: "nosha" });
+    const { code } = await exec(env(), world, s.openDb);
+    assert.equal(code, 0);
+    const rows = await runRows(s.reader);
+    assert.equal(JSON.parse(rows[0].details_json).auth.tableSha256, null);
+  } finally {
+    s.cleanup();
+  }
 });

@@ -57,6 +57,26 @@ export const INCIDENT_SPECS: Readonly<Record<string, Spec>> = {
     fix: "Check the Batch 1 run in System Health.",
     fixPath: "/health",
   },
+  calendar_missing: {
+    component: "Trading calendar",
+    impact:
+      "Today has no row in the trading calendar, so it is treated as NOT a trading day and the market jobs skip it.",
+    fix: "Add the missing calendar rows, confirm them on System Health, and re-run the day.",
+    fixPath: "/health",
+  },
+  evening_heartbeat_missing: {
+    component: "Heartbeat",
+    impact:
+      "Last night's evening heartbeat did not complete, so the data-quality, review and audit-chain checks did not run.",
+    fix: "Check the cron list on the production project, run the evening heartbeat once by hand, and look at System Health.",
+    fixPath: "/health",
+  },
+  calendar_horizon: {
+    component: "Trading calendar",
+    impact: "The trading calendar ends within 60 days; after that every weekday would be skipped.",
+    fix: "Draft next year's calendar rows from the ASX calendar and confirm them on System Health.",
+    fixPath: "/health",
+  },
   review_missing: {
     component: "Evening Review",
     impact: "No Evening Review email was sent for today.",
@@ -87,6 +107,12 @@ export const INCIDENT_SPECS: Readonly<Record<string, Spec>> = {
     fix: "Check the ASX source, then reset the trip in System Health.",
     fixPath: "/health#sentinel",
   },
+  audit_chain_broken: {
+    component: "Audit log",
+    impact: "The audit hash chain does not verify; an audit row was changed, removed or inserted.",
+    fix: "Run the audit verifier (npm run audit:verify) and compare the first broken row with the last backup.",
+    fixPath: "/health",
+  },
   quota_high: {
     component: "Quota",
     impact: "A free-tier quota is at 90 percent or more of its limit.",
@@ -109,6 +135,20 @@ export const INCIDENT_SPECS: Readonly<Record<string, Spec>> = {
     component: "Ledger",
     impact: "A ledger invariant was violated; affected books are held.",
     fix: "Open the Control Room and follow the ledger runbook.",
+    fixPath: "/health",
+  },
+  dispatch_auth: {
+    component: "Worker dispatch",
+    impact:
+      "GitHub refused the Worker's dispatch token (401/403); scheduled jobs are not starting.",
+    fix: "Check and rotate the dispatch token in the Worker secrets, then update the expiry date.",
+    fixPath: "/health",
+  },
+  arena_close_gap: {
+    component: "Arena close",
+    impact:
+      "A trading session was not closed, so the next night refused to run: orders would fill at the wrong open and stops would be skipped.",
+    fix: "Dispatch Arena close again: it closes the missed sessions oldest first, up to 10 per run (dispatch again if the log says more remain); or run close-books.mjs --date for each missed day, oldest first, before the next session's close.",
     fixPath: "/health",
   },
   provider_auth: {

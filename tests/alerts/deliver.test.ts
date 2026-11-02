@@ -358,6 +358,24 @@ describe("P0 delivery: first immediately, the rest batched (decision 40)", () =>
     expect(mails()).toBe(2);
   });
 
+  it("a first-of-window P0 that ends pending is retried by the flush (V1-S9, D-693)", async () => {
+    mock.script = [
+      { outcome: "retryable", httpStatus: 503 },
+      { outcome: "retryable", httpStatus: 503 },
+    ];
+    const k1 = await seedAnn();
+    const r = await processAssessments(ctx());
+    expect(r.p0).toEqual([{ key: k1, action: "sent", status: "pending" }]);
+    expect(mails()).toBe(0);
+    const due = await rows("SELECT value_json FROM worker_state WHERE key = 'alert_flush_due'");
+    expect(JSON.parse(String(due[0].value_json))).toBe(at(1).toISOString());
+    clock = at(2);
+    const f = await flushAlerts(ctx());
+    expect(f.retried).toBe(1);
+    expect(mails()).toBe(1);
+    expect((await alertRow(k1)).email_key).toBe(emailKeys.p0(k1));
+  });
+
   it("a P0 after the window has closed is immediate again", async () => {
     await seedAnn();
     await processAssessments(ctx());

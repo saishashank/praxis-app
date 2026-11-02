@@ -8,6 +8,7 @@ import { headers } from "next/headers";
 import { requestMeta } from "@/lib/auth/audit";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
+import { approveMoneyConstants } from "@/lib/golive/moneyApproval";
 import { signOffGoLive } from "@/lib/golive/signoff";
 
 const PATH = "/ops/go-live";
@@ -32,6 +33,31 @@ export async function signOffGoLiveAction(fd: FormData): Promise<SignoffActionRe
       confirmation: text(fd, "confirmation"),
       note: text(fd, "note"),
       commit: text(fd, "commit"),
+    });
+    if (!result.ok) return { error: result.error };
+    revalidatePath(PATH);
+    revalidatePath("/health");
+    return { ok: true, changed: result.changed };
+  } catch {
+    return { error: "unavailable" };
+  }
+}
+
+/**
+ * R2-S2: the Owner's attestation that the money figures are approved. Owner only (guard first), audit
+ * first, typed phrase; the ids are the figures the page showed. It changes no figure and no mode.
+ */
+export async function approveMoneyConstantsAction(fd: FormData): Promise<SignoffActionResult> {
+  const user = await requireUser("admin", PATH);
+  try {
+    const result = await approveMoneyConstants({
+      mainDb: mainDb(),
+      authDb: authDb(),
+      env: process.env,
+      meta: requestMeta(await headers()),
+      actorId: user.id,
+      ids: fd.getAll("id").filter((v): v is string => typeof v === "string"),
+      confirmation: text(fd, "confirmation"),
     });
     if (!result.ok) return { error: result.error };
     revalidatePath(PATH);

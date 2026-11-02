@@ -67,12 +67,24 @@ describe("usage page", () => {
     expect(metersMock).not.toHaveBeenCalled();
   });
 
-  it("owner: table with text levels, used/limit, period, source and footer", async () => {
+  it("owner: meter rows with a progress bar, text level pills, used/limit, period, source and footer", async () => {
     guard.requireUser.mockResolvedValueOnce(owner);
     metersMock.mockResolvedValueOnce(meters);
     render(await UsagePage());
     expect(screen.getByRole("heading", { level: 1, name: "Usage" })).toBeInTheDocument();
-    expect(screen.getByRole("rowheader", { name: "Turso rows written" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Turso rows written" }),
+    ).toBeInTheDocument();
+    const bar = screen.getByRole("progressbar", { name: "Turso rows written used" });
+    expect(bar).toHaveAttribute("aria-valuenow", "70");
+    expect(bar.firstElementChild).toHaveAttribute("data-level", "notice");
+    expect(bar.firstElementChild).toHaveStyle({ width: "70%" });
+    // no-data meters still get a bar, with no value
+    expect(screen.getByRole("progressbar", { name: "Turso storage used" })).not.toHaveAttribute(
+      "aria-valuenow",
+    );
+    expect(document.querySelectorAll('[data-kind="status"]').length).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByRole("table", { name: "Free-tier usage meters" })).toBeNull();
     expect(screen.getAllByText("NOTICE").length).toBe(2); // summary + row
     expect(screen.getAllByText("NO DATA").length).toBe(2);
     expect(screen.getByText(/4,200,000 rows \/ 6,000,000 rows \(70\.0%\)/)).toBeInTheDocument();

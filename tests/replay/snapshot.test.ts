@@ -124,7 +124,9 @@ describe("snapshot builder", () => {
     expect(loaded.sha).toBe(s.sha);
     expect(loaded.bars).toHaveLength(bars.length);
     expect(loaded.bars[0].code).toBe("ZZA");
-    expect(loaded.corporateActions).toEqual(corporate_actions);
+    expect(loaded.corporateActions).toEqual(
+      corporate_actions.map((a) => ({ ...a, known_at: null })), // GL-02: absent reads as null
+    );
   });
 
   it("rejects malformed rows and ranges instead of repairing them", () => {
@@ -214,7 +216,14 @@ describe("snapshot load (history files + database)", () => {
     expect(input.bars_recent).toHaveLength(days.length - 10);
     expect(input.bars).toHaveLength(20);
     expect(input.corporate_actions).toEqual([
-      { code: "ZZA", ex_date: "2026-09-15", action_id: 1, type: "split", factor: 0.5 },
+      {
+        code: "ZZA",
+        ex_date: "2026-09-15",
+        action_id: 1,
+        type: "split",
+        factor: 0.5,
+        known_at: null,
+      },
     ]);
     expect(input.announcements).toHaveLength(5);
     expect((input.calendar ?? []).length).toBeGreaterThan(0); // seeded by migration 0005

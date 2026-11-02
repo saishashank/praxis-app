@@ -10,7 +10,7 @@ export class ConfigError extends Error {
   }
 }
 
-async function stored(db: Client, key: string, scope: string): Promise<unknown> {
+async function stored(db: Pick<Client, "execute">, key: string, scope: string): Promise<unknown> {
   const res = await db.execute({
     sql: "SELECT value_json FROM config_version WHERE key = ? AND scope = ? ORDER BY id DESC LIMIT 1",
     args: [key, scope],
@@ -19,7 +19,11 @@ async function stored(db: Client, key: string, scope: string): Promise<unknown> 
 }
 
 // Latest value for (key, scope), else for (key, 'global'), else the registry default.
-export async function getConfig(db: Client, key: ConfigKey, scope = "global"): Promise<unknown> {
+export async function getConfig(
+  db: Pick<Client, "execute">,
+  key: ConfigKey,
+  scope = "global",
+): Promise<unknown> {
   const own = await stored(db, key, scope);
   if (own !== undefined) return own;
   if (scope !== "global") {

@@ -290,3 +290,66 @@ describe("failure handling", () => {
     expect(body).toBe('{"error":"unavailable"}');
   });
 });
+
+describe("V1-I2 / V1-I7: DST-aware evening window and the same-day retry", () => {
+  const cronGet = (path: string) =>
+    new Request(`https://praxis-host.vercel.app${path}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${CRON}`, "user-agent": "vercel-cron/1.0" },
+    });
+  const AEDT_2110 = new Date("2026-10-12T10:10:00.000Z"); // 21:10 Melbourne (AEDT)
+
+  it("R2-S1: a scheduled call is accepted by regime, anywhere within Vercel's +59 min hour, and nothing else", async () => {
+    const AEDT = "/api/cron/heartbeat-evening?dst=aedt";
+    const AEST = "/api/cron/heartbeat-evening";
+    // [line, instant, runs]. AEDT regime (Oct): lines at 10:xx UTC, fired 10:10..11:09 UTC = 21:10..22:09 local.
+    // AEST regime (Jun): lines at 11:xx UTC, fired 11:10..12:09 UTC = 21:10..22:09 local.
+    const cases: Array<[string, string, boolean]> = [
+      [AEDT, "2026-10-12T10:00:00.000Z", true],
+      [AEDT, "2026-10-12T11:09:00.000Z", true], // 22:09 AEDT: the hour edge the old window dropped
+      [AEST, "2026-10-12T11:09:00.000Z", false], // plain line in summer: other regime
+      [AEST, "2026-06-15T11:00:00.000Z", true],
+      [AEST, "2026-06-15T12:09:00.000Z", true], // 22:09 AEST
+      [AEDT, "2026-06-15T10:30:00.000Z", false], // aedt line in winter: other regime
+    ];
+    const seen: string[] = [];
+    for (const [path, iso, runsIt] of cases) {
+      await db.execute("DELETE FROM run_record");
+      const res = await make("evening", new Date(iso))(cronGet(path));
+      const body = (await res.json()) as { skipped?: string };
+      expect(res.status).toBe(200);
+      expect(body.skipped === "other regime", `${path} ${iso}`).toBe(!runsIt);
+      seen.push(`${path}@${iso}:${(await runs()).length}`);
+      expect((await runs()).length).toBe(runsIt ? 1 : 0);
+    }
+    expect(seen).toHaveLength(cases.length);
+  });
+
+  it("R2-S1: exactly once per night when both lines of the right regime fire", async () => {
+    const a = await make(
+      "evening",
+      new Date("2026-10-12T10:20:00.000Z"),
+    )(cronGet("/api/cron/heartbeat-evening?dst=aedt"));
+    expect(((await a.json()) as { skipped?: string }).skipped).toBeUndefined();
+    const b = await make(
+      "evening",
+      new Date("2026-10-12T11:30:00.000Z"),
+    )(cronGet("/api/cron/heartbeat-evening?dst=aedt&try=2"));
+    expect(((await b.json()) as { skipped?: string }).skipped).toBe("already ran");
+    expect(await runs()).toHaveLength(1);
+  });
+
+  it("a manual call (no cron agent) is never window-gated", async () => {
+    const res = await make("evening", EVENING_NOW)(get(EP));
+    expect(((await res.json()) as { skipped?: string }).skipped).toBeUndefined();
+  });
+
+  it("the retry call finishes a non-final day and skips a final one", async () => {
+    await db.execute("DROP TABLE market");
+    const first = await make("evening", AEDT_2110)(cronGet(`${EP}?dst=aedt`));
+    expect(await first.json()).toMatchObject({ status: "unknown" });
+    const retry = await make("evening", AEDT_2110)(cronGet(`${EP}?dst=aedt&try=2`));
+    expect(((await retry.json()) as { skipped?: string }).skipped).toBeUndefined();
+    expect(await runs()).toHaveLength(2);
+  });
+});

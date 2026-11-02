@@ -5,6 +5,8 @@
 // reasons pass through maskText with an empty active set, so no code or company name can appear.
 import { computeComponents, type ComponentResult } from "@/lib/health/components";
 import { gatherHealthFacts } from "@/lib/health/snapshot";
+import { loadExpertsHealth, type ExpertsHealth } from "@/lib/health/experts";
+import { loadSteelmanHealth, type SteelmanHealth } from "@/lib/health/steelman";
 import { loadMaskLookup, maskText, StockAliases } from "@/lib/view/mask";
 import { marketOf, todayD, type LoaderEnv, type LoaderState } from "./shell";
 
@@ -35,7 +37,21 @@ export type HealthModel = {
   /** One entry per stored day, oldest first: healthy components that day. */
   strip: Array<{ d: string; healthy: number; total: number }>;
   details: boolean;
+  /** BLD-041 evidence line (D-493); text only, no code or name, so it needs no masking. */
+  steelman: SteelmanHealth;
+  /** M13-lite line (D-518, D-624); text only, no code or name. */
+  experts: ExpertsHealth;
 };
+
+/**
+ * D-652: the experts line carries the last screening date; a masked viewer sees every date as an ISO week
+ * (D-147, D-615), which `maskText` already does for the component reasons, so the line goes through it too.
+ */
+const experts = (x: ExpertsHealth, t: (s: string) => string): ExpertsHealth => ({
+  ...x,
+  lastScreening: x.lastScreening === null ? null : t(x.lastScreening),
+  text: t(x.text),
+});
 
 export async function loadHealth(
   env: LoaderEnv,
@@ -100,5 +116,7 @@ export async function loadHealth(
     components,
     strip,
     details: owner,
+    steelman: await loadSteelmanHealth(env.main, marketOf(env)),
+    experts: experts(await loadExpertsHealth(env.main, marketOf(env)), t),
   };
 }

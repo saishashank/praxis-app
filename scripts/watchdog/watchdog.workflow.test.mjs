@@ -25,19 +25,36 @@ const job = wf.jobs.production;
 const steps = job.steps;
 const SHA_USES = /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/;
 
-test("workflow_dispatch only: no schedule, push or pull request trigger (PLT-015, decision 11)", () => {
-  assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"]);
-  assert.equal(wf.on.schedule, undefined);
+test("own schedule lines for both DST offsets plus workflow_dispatch (GL-07, O-52)", () => {
+  assert.deepEqual(Object.keys(wf.on), ["schedule", "workflow_dispatch"]);
+  assert.deepEqual(
+    wf.on.schedule.map((s) => s.cron),
+    cronLines(), // 20:40 and 21:50 Melbourne as 09:40, 10:40, 10:50, 11:50 UTC
+  );
   assert.deepEqual(wf.permissions, {});
-  assert.doesNotMatch(read(FILE), /^\s*(schedule|push|pull_request\w*):/m);
-  assert.doesNotMatch(read(FILE), /^\s*-\s*cron:/m);
+  assert.doesNotMatch(read(FILE), /^s*(push|pull_requestw*):/m);
   assert.deepEqual(Object.keys(wf.on.workflow_dispatch.inputs), ["slot", "deliberate_failure"]);
   assert.deepEqual(wf.on.workflow_dispatch.inputs.slot.options, ["manual", "2040", "2150"]);
 });
 
+test("the gate job turns the wrong DST line into a no-op and the production job waits for it", () => {
+  const g = wf.jobs.gate;
+  assert.equal(g.if, "github.ref == 'refs/heads/release'");
+  assert.deepEqual(g.permissions, { contents: "read" });
+  assert.equal(g.environment, undefined);
+  assert.doesNotMatch(JSON.stringify(g), /secrets./);
+  const s = g.steps.find((x) => x.id === "gate");
+  assert.equal(s.run, "node scripts/time/scheduleGate.mjs 20:40 21:50");
+  assert.deepEqual(s.env, { SCHEDULE_CRON: "${{ github.event.schedule }}" });
+  assert.equal(job.needs, "gate");
+  assert.equal(job.if, "github.ref == 'refs/heads/release' && needs.gate.outputs.run == 'true'");
+  const w = steps.find((x) => x.name === "Watchdog");
+  assert.equal(w.env.WATCHDOG_SLOT, "${{ inputs.slot || needs.gate.outputs.slot }}");
+});
+
 test("one production job on release, environment production without a deployment record", () => {
-  assert.deepEqual(Object.keys(wf.jobs), ["production", "staging"]); // M8 T9: the staging job is covered by staging-jobs.workflow.test.mjs
-  assert.equal(job.if, "github.ref == 'refs/heads/release'");
+  assert.deepEqual(Object.keys(wf.jobs), ["gate", "production", "staging"]); // M8 T9: the staging job is covered by staging-jobs.workflow.test.mjs
+  assert.ok(job.if.startsWith("github.ref == 'refs/heads/release'"));
   assert.deepEqual(job.environment, { name: "production", deployment: false });
   assert.deepEqual(job.permissions, { contents: "read", deployments: "read" });
   assert.deepEqual(job.concurrency, { group: "watchdog", "cancel-in-progress": false });

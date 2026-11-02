@@ -32,6 +32,7 @@ const card = {
   observed: 0.51,
   queuedOn: "2026-10-13",
   applyOn: "2026-10-20",
+  neverAuto: false,
 };
 
 beforeEach(() => {
@@ -50,6 +51,12 @@ describe("review page", () => {
     expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
       "ZZA: share split, ex-date 2026-10-13",
     );
+    // the two readings side by side, each in its own labelled block (UXR-029)
+    const reported = screen.getByRole("region", { name: "Reported reading for ZZA" });
+    const other = screen.getByRole("region", { name: "Other reading for ZZA" });
+    expect(reported).toHaveTextContent("1 old share(s) become 2 new share(s)");
+    expect(other).toHaveTextContent("1 old share(s) become 3 new share(s)");
+    expect(other).toHaveTextContent("51.0% of the day before");
     expect(
       screen.getByText(/Reported terms: 1 old share\(s\) become 2 new share\(s\)\./),
     ).toBeInTheDocument();
@@ -62,7 +69,8 @@ describe("review page", () => {
     expect(
       screen.getByText("Applied automatically on 2026-10-20 if left alone."),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
+    // one Apply per row (UXR-029); Reject is a quiet secondary action
+    expect(screen.getAllByRole("button", { name: /^Apply/ })).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Reject" })).toBeInTheDocument();
     expect(document.querySelector("input[name=id]")).toHaveValue("7");
   });
@@ -78,8 +86,38 @@ describe("review page", () => {
     expect(screen.getByText(/Seen in: unknown\./)).toBeInTheDocument();
     expect(screen.queryByText(/Why it is here/)).toBeNull();
     expect(screen.queryByText(/of the day before/)).toBeNull();
-    expect(screen.queryByText(/Another reading/)).toBeNull();
+    expect(screen.queryByText(/Another reading:/)).toBeNull();
     expect(screen.getByText(/after the configured number of sessions/)).toBeInTheDocument();
+  });
+
+  it("a GL-01 price-only item shows its veto reason in plain words and is never auto-applied", async () => {
+    queue.loadReviewQueue.mockResolvedValue({
+      cards: [
+        {
+          ...card,
+          sources: ["price"],
+          terms: "no price adjustment",
+          reasons: [
+            "only a price jump was seen; no announcement or vendor record, so it is never applied automatically",
+            "the vendor adjusted close does not show a split on this date",
+          ],
+          alternatives: [],
+          neverAuto: true,
+        },
+      ],
+      blockedOnly: 0,
+    });
+    render(await ReviewPage());
+    expect(screen.getByText(/Why it is here:/)).toHaveTextContent(
+      "only a price jump was seen; no announcement or vendor record",
+    );
+    expect(screen.getByText(/Why it is here:/)).toHaveTextContent(
+      "the vendor adjusted close does not show a split on this date",
+    );
+    expect(screen.getByText(/Seen in: price move only/)).toBeInTheDocument();
+    expect(screen.getByText("No other reading was reported.")).toBeInTheDocument();
+    expect(screen.getByText(/Never applied automatically/)).toBeInTheDocument();
+    expect(screen.queryByText(/Applied automatically on/)).toBeNull();
   });
 
   it("says so when nothing is waiting, and mentions blocked-only conflicts", async () => {
@@ -87,7 +125,7 @@ describe("review page", () => {
     render(await ReviewPage());
     expect(screen.getByText("Nothing is waiting for review.")).toBeInTheDocument();
     expect(screen.getByText(/2 more conflict\(s\)/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
   });
 
   it("is refused for a non-Owner (the guard throws before anything loads)", async () => {
@@ -104,11 +142,11 @@ describe("review form", () => {
 
   afterEach(() => vi.restoreAllMocks());
 
-  it("Confirm calls the confirm action with the id", async () => {
+  it("Apply calls the confirm action with the id", async () => {
     const c = vi.fn<(fd: FormData) => Promise<{ ok: true }>>(async () => ({ ok: true }));
     const r = vi.fn<(fd: FormData) => Promise<{ ok: true }>>(async () => ({ ok: true }));
     form(c, r);
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Apply/ }));
     await waitFor(() => expect(c).toHaveBeenCalled());
     expect(c.mock.calls[0][0].get("id")).toBe("7");
     expect(r).not.toHaveBeenCalled();
@@ -130,7 +168,7 @@ describe("review form", () => {
     ["anything-else", /Something went wrong/],
   ])("shows the %s error without internals", async (error, text) => {
     form(async () => ({ error }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Apply/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent(text);
   });
 });

@@ -12,7 +12,7 @@ export type BarRow = {
   low: number;
   close: number;
   volume: number;
-  adj_close: number;
+  adj_close: number | null;
   source: "yahoo";
   published_at: null;
   fetched_at: string; // ISO-8601 UTC with Z (D-031)
@@ -53,7 +53,7 @@ export type ParseOptions = { from?: string; to?: string }; // inclusive bounds, 
 const CODE_RE = /^[A-Z0-9]{2,6}$/;
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const FETCHED_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/;
-const FIELDS = ["open", "high", "low", "close", "adj_close"] as const;
+const FIELDS = ["open", "high", "low", "close"] as const;
 
 export function isRealDate(s: unknown): s is string {
   if (typeof s !== "string") return false;
@@ -86,8 +86,13 @@ export function validateBar(
   }
   for (const f of FIELDS) if (!isFiniteNum(r[f])) return { reason: "bad_number" };
   if (!isFiniteNum(r.volume)) return { reason: "bad_number" };
-  const [open, high, low, close, adj] = FIELDS.map((f) => r[f] as number);
-  if (open <= 0 || high <= 0 || low <= 0 || close <= 0 || adj <= 0) {
+  // GL-04 (D-207 item 4): adj_close is optional; null/missing never rejects the bar, a present
+  // value is validated as before.
+  const hasAdj = r.adj_close !== undefined && r.adj_close !== null;
+  if (hasAdj && !isFiniteNum(r.adj_close)) return { reason: "bad_number" };
+  const [open, high, low, close] = FIELDS.map((f) => r[f] as number);
+  const adj: number | null = hasAdj ? (r.adj_close as number) : null;
+  if (open <= 0 || high <= 0 || low <= 0 || close <= 0 || (adj !== null && adj <= 0)) {
     return { reason: "non_positive_price" };
   }
   const volume = r.volume as number;

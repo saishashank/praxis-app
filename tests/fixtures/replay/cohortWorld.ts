@@ -84,6 +84,7 @@ export function buildCohortWorld(
     sessions,
     inputsCalls: [],
     corpActions: (code) => actions.filter((a) => a.code === code),
+    decisionCutoffOf: (d) => `${d}T07:00:00.000Z`,
     ...(o.halted === undefined ? {} : { halted: o.halted }),
     ...(o.qualityGate === undefined ? {} : { qualityGate: o.qualityGate }),
     bar: (code, d) => barAt(code, idxOf(d)),

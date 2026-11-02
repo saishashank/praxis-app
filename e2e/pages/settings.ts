@@ -21,3 +21,31 @@ export const SETTINGS_PAGES: PageEntry[] = [
     h1: "About",
   },
 ];
+
+// No-JS detail pages behind the rows on /settings (UXR-027).
+SETTINGS_PAGES.push(
+  {
+    file: "src/app/(app)/settings/time/page.tsx",
+    path: "/settings/time",
+    action: "own_preferences",
+    h1: "Time and alerts",
+  },
+  {
+    file: "src/app/(app)/settings/alerts/page.tsx",
+    path: "/settings/alerts",
+    action: "own_preferences",
+    h1: "Alerts",
+  },
+  {
+    file: "src/app/(app)/settings/quiet-hours/page.tsx",
+    path: "/settings/quiet-hours",
+    action: "own_preferences",
+    h1: "Quiet hours",
+  },
+  {
+    file: "src/app/(app)/settings/sign-out-everywhere/page.tsx",
+    path: "/settings/sign-out-everywhere",
+    action: "admin",
+    h1: "Sign out everywhere",
+  },
+);

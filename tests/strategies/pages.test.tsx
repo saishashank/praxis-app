@@ -115,6 +115,34 @@ describe("the list", () => {
     );
   });
 
+  it("gives each tile a family rail, a state pill and a NAV bar with the start marked (UXR-023, 045, 052)", async () => {
+    const { container } = await list();
+    const tiles = container.querySelectorAll("[data-strategy-tile]");
+    expect(tiles.length).toBeGreaterThan(0);
+    for (const t of tiles) {
+      expect(t.getAttribute("data-hue")).toMatch(/^family-(br|vc|nd|bo|sc|co)$/);
+      expect(t.querySelector("[data-family]")).not.toBeNull();
+      expect(t.querySelector("[data-kind=state]")?.textContent).toMatch(
+        /^(Running|Paused|Target reached|Stopped)$/,
+      );
+      expect(t.querySelector("[data-nav-start]")).not.toBeNull();
+      expect(t.textContent).toContain("Start A$600.00");
+    }
+    expect(tiles.length).toBeLessThanOrEqual(12);
+  });
+
+  it("shows the tabs with the Overview tab selected by three cues (UXR-002)", async () => {
+    await list();
+    const nav = screen.getByRole("navigation", { name: "Strategy pages" });
+    const cur = nav.querySelector("[aria-current=page]")!;
+    expect(cur.textContent).toContain("Overview");
+    expect(cur.textContent).toContain("Selected");
+    expect(cur.querySelector("svg")).not.toBeNull();
+    for (const n of ["Leaderboard", "Ideas", "Risk", "What-if"]) {
+      expect(within(nav).getByRole("link", { name: n })).toBeInTheDocument();
+    }
+  });
+
   it("starts with Needs attention (UXN-046) and lists every strategy below it", async () => {
     await list();
     expect(
@@ -225,6 +253,19 @@ describe("the list", () => {
 });
 
 describe("one strategy", () => {
+  it("has a sticky header with the value and state and the three sections (UXR-023)", async () => {
+    const { container } = await one("E01");
+    const header = container.querySelector("[data-sticky-header]")!;
+    expect(header.className).toContain("sticky");
+    expect(within(header as HTMLElement).getByText("Running")).toBeInTheDocument();
+    expect(header.querySelector("[data-header-nav]")?.textContent).toContain("A$630.00");
+    for (const h of ["Open positions", "Rules in force", "Outcomes so far"]) {
+      expect(screen.getByRole("heading", { level: 2, name: h })).toBeInTheDocument();
+    }
+    expect(screen.getByText("Pushing it up")).toBeInTheDocument();
+    expect(screen.getByText("Pulling it down")).toBeInTheDocument();
+  });
+
   it("shows the round line, the chart, the drawdown and the controls toggle", async () => {
     await one("E01");
     expect(screen.getByRole("heading", { level: 1, name: "Follow the trend" })).toBeInTheDocument();
@@ -522,7 +563,7 @@ describe("the leaderboard", () => {
     await board({ cost: "P3" });
     expect(screen.getAllByText("Value under cost profile P3").length).toBeGreaterThan(0);
     expect(screen.getAllByText("A$628.00").length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: "P3" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: /^P3/ })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "As traded" })).toHaveAttribute(
       "href",
       "/strategies/leaderboard",
@@ -531,7 +572,7 @@ describe("the leaderboard", () => {
 
   it("filters round counts by market mood with the regime chips (UXN-057)", async () => {
     await board({ regime: "RISK-ON" });
-    expect(screen.getByRole("link", { name: "Calm and rising" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /^Calm and rising/ })).toHaveAttribute(
       "aria-current",
       "page",
     );

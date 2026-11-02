@@ -1,17 +1,15 @@
 "use client";
-// Breadcrumb and back link of the current page (UXN-033), from the pathname and the nav model. Labels
-// are the model's generic ones, never the URL segments (a segment may be a code masked users must not
-// see). Nothing is shown on a tab root or an unknown path.
-import { usePathname } from "next/navigation";
-import { Breadcrumb } from "@/components/ui/Nav";
-import { breadcrumbFor } from "@/lib/ui/nav";
+// Breadcrumb and back link of the current page (UXN-033). The route table with its labels is only
+// needed here, so the view is a lazy chunk (CrumbsView.tsx) that stays out of the first-load JS of
+// every page (UX-005 budget). It still renders on the server.
+import { lazy, Suspense } from "react";
+
+const View = lazy(() => import("./CrumbsView").then((m) => ({ default: m.CrumbsView })));
 
 export function Crumbs() {
-  const { crumbs, backHref } = breadcrumbFor(usePathname() ?? "/");
-  if (crumbs.length === 0) return null;
   return (
-    <div className="page-frame pt-3">
-      <Breadcrumb items={crumbs} backHref={backHref} />
-    </div>
+    <Suspense fallback={null}>
+      <View />
+    </Suspense>
   );
 }

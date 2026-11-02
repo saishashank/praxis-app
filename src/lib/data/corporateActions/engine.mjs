@@ -23,12 +23,15 @@ import {
   DEFAULT_PRICE_TOLERANCE_PCT,
   evaluateGroup,
   factorFor,
+  factorKindOf,
   inferRatio,
   isEffective,
+  isPriceOnly,
   isUnresolved,
   parseNote,
   pickBestEvidence,
   ratioToNumber,
+  refCloseMatches,
   stateOf,
   validateCandidate,
 } from "./rules.mjs";
@@ -354,7 +357,7 @@ async function priceEvidence(db, io, market, code, exDate) {
   const rows = await sel(
     db,
     io,
-    "SELECT d, c FROM price_bar WHERE market = ? AND code = ? AND d <= ? ORDER BY d DESC LIMIT 2",
+    "SELECT d, c FROM price_bar WHERE market = ? AND code = ? AND d <= ? AND d >= COALESCE((SELECT MAX(l.listed_on) FROM instrument_listing l WHERE l.market = price_bar.market AND l.code = price_bar.code), '') ORDER BY d DESC LIMIT 2",
     [market, code, exDate],
   );
   if (rows.length < 2 || String(rows[0].d) !== exDate) return null;
@@ -365,7 +368,8 @@ async function priceEvidence(db, io, market, code, exDate) {
  * Decide every pending action whose evidence is available: auto-confirm, or queue as a conflict
  * (Owner queue for relevant codes, blocked-only otherwise).
  * @param {Client} db @param {{ market: string, d: string, now: string, io: Io, actions: Action[],
- *   relevant: (code: string) => boolean }} c
+ *   relevant: (code: string) => boolean,
+ *   adjClose?: Record<string, { prevAdj: number, exAdj: number }> }} c
  * @param {{ priceTolerancePct: number }} cfg
  */
 export async function evaluatePending(db, c, cfg) {
@@ -397,6 +401,8 @@ export async function evaluatePending(db, c, cfg) {
       price,
       tolerancePct: cfg.priceTolerancePct,
       hasEffective: members.some((a) => a.state === "confirmed"),
+      // GL-01: optional Yahoo adjusted closes (code -> { prevAdj, exAdj }); absent = no veto.
+      adj: c.adjClose?.[first.code] ?? null,
     });
     if (res.pending) {
       out.still_pending += pending.length;
@@ -517,7 +523,10 @@ export async function applyDue(db, c, cfg) {
       [c.market, from, c.d],
     )
   ).map((r) => ({ d: String(r.d), kind: String(r.kind) }));
-  const due = owner.filter((a) => autoApplyDue(a.stateSince, c.d, cal, cfg.autoApplySessions));
+  // GL-01: a price-only inferred action is never auto-applied; it waits for the Owner.
+  const due = owner.filter(
+    (a) => !isPriceOnly(a.sources) && autoApplyDue(a.stateSince, c.d, cal, cfg.autoApplySessions),
+  );
   const done = new Set();
   for (const a of due) {
     const k = groupKey(a);
@@ -526,13 +535,12 @@ export async function applyDue(db, c, cfg) {
     const members = c.actions.filter((x) => groupKey(x) === k);
     const hasEffective = members.some((x) => x.state === "confirmed");
     const openMembers = members.filter((x) => ["owner", "blocked", "pending"].includes(x.state));
+    const eligible = openMembers.filter((x) => x.state !== "pending" && !isPriceOnly(x.sources));
+    // Nothing but vetoed price-only readings left: they stay queued (and entries stay blocked).
+    if (!hasEffective && !eligible.length) continue;
     const best = hasEffective
       ? null
-      : pickBestEvidence(
-          openMembers
-            .filter((x) => x.state !== "pending")
-            .map((x) => ({ id: x.id, score: Number(x.note.score ?? 0) })),
-        );
+      : pickBestEvidence(eligible.map((x) => ({ id: x.id, score: Number(x.note.score ?? 0) })));
     for (const x of openMembers) {
       const now = after(c.now, x.latest?.at);
       if (best && x.id === best.id) {
@@ -584,20 +592,43 @@ export async function syncFactors(db, c) {
   const rows = await sel(
     db,
     c.io,
-    `SELECT corporate_action_id AS id, factor, computed_at FROM adjustment_factor
+    `SELECT corporate_action_id AS id, factor, computed_at, ref_close_micro FROM adjustment_factor
      WHERE market = ? ORDER BY computed_at`,
     [c.market],
   );
   const latest = new Map();
   for (const r of rows)
-    latest.set(Number(r.id), { factor: Number(r.factor), at: String(r.computed_at) });
+    latest.set(Number(r.id), {
+      factor: Number(r.factor),
+      at: String(r.computed_at),
+      ref: r.ref_close_micro === null ? null : Number(r.ref_close_micro),
+    });
   let written = 0;
   for (const a of c.actions) {
     const cur = latest.get(a.id);
+    const kind = factorKindOf(a.type);
     let want = null;
+    let ref = null;
     if (isEffective(a.state)) {
       const f = factorFor(a.type, a.payload);
       want = f === null ? 1 : ratioToNumber(f);
+      if (kind === "price") {
+        ref = await refCloseOf(db, c.io, c.market, a.code, a.ex_date);
+        // DAT-233 (D-237): a price factor other than 1 is used only while its stored reference close
+        // still equals the raw close before the ex-date; an Owner-resolved action is the Owner's call.
+        if (want !== 1 && a.latest?.by === SYSTEM && !refCloseMatches(cur?.ref ?? null, ref)) {
+          const now = after(c.now, a.latest?.at);
+          const d = c.now.slice(0, 10);
+          const note = { d, queue: "owner", reasons: ["ref_close_mismatch"], score: 0 };
+          await addEvent(db, c.io, { actionId: a.id, now, status: "queued", note });
+          a.state = "owner";
+          a.stateSince = d;
+          a.note = note;
+          a.latest = { id: 0, at: now, status: "queued", by: SYSTEM, note: JSON.stringify(note) };
+          want = 1;
+          ref = cur?.ref ?? null;
+        }
+      }
     } else if (cur) {
       want = 1;
     }
@@ -606,13 +637,68 @@ export async function syncFactors(db, c) {
       db,
       c.io,
       `INSERT INTO adjustment_factor
-         (market, code, ex_date, factor, corporate_action_id, computed_at)
-       VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
-      [c.market, a.code, a.ex_date, want, a.id, after(c.now, cur?.at)],
+         (market, code, ex_date, factor, corporate_action_id, computed_at, factor_kind,
+          ref_close_micro)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+      [c.market, a.code, a.ex_date, want, a.id, after(c.now, cur?.at), kind, ref],
     );
     written += r.rowsAffected;
   }
   return written;
+}
+
+/** DAT-233: the raw close before the ex-date in whole micro (null when no earlier bar is stored). */
+async function refCloseOf(db, io, market, code, exDate) {
+  const rows = await sel(
+    db,
+    io,
+    "SELECT c FROM price_bar WHERE market = ? AND code = ? AND d < ? AND d >= COALESCE((SELECT MAX(l.listed_on) FROM instrument_listing l WHERE l.market = price_bar.market AND l.code = price_bar.code), '') ORDER BY d DESC LIMIT 1",
+    [market, code, exDate],
+  );
+  return rows.length === 0 ? null : microOfDollars(rows[0].c);
+}
+
+/**
+ * A stored dollar price (REAL) in whole micro, by its shortest decimal text, never float arithmetic
+ * (the .mjs twin of money/micro.ts toMicroFromVendor, which a plain-node CLI cannot import). More than
+ * six decimals, or exponent form, rounds half away from zero once on the decimal digits.
+ * @param {unknown} value
+ * @returns {number | null}
+ */
+export function microOfDollars(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const text =
+    Math.abs(n) < 1e21 && Math.abs(n) >= 1e-6 ? String(Math.abs(n)) : Math.abs(n).toFixed(12);
+  const m = /^(\d+)(?:\.(\d+))?$/.exec(text);
+  if (m === null) return null;
+  const frac = (m[2] ?? "").padEnd(7, "0");
+  let micro = BigInt(m[1] + frac.slice(0, 6));
+  if (frac.charCodeAt(6) >= 53) micro += 1n; // first dropped digit >= "5"
+  return Number(n < 0 ? -micro : micro);
+}
+
+/**
+ * GL-02: stamp `known_at` on every action confirmed in this run that has none yet, with the instant of the event
+ * that made it effective (announcement-backed auto-confirm, Owner resolve, or the 5-session
+ * auto-apply). Set once (the table trigger allows only NULL -> value) and never moved, so a later
+ * reversal or recompute cannot re-date it; replays use an action only when known_at <= cut-off(D).
+ * @param {Client} db @param {{ market: string, now: string, io: Io, actions: Action[] }} c
+ */
+export async function syncKnownAt(db, c) {
+  let stamped = 0;
+  for (const a of c.actions) {
+    if (!isEffective(a.state)) continue;
+    // only a confirmation made in THIS run is stamped; older effective rows stay NULL (legacy: known)
+    if (a.latest === null || a.latest.at < c.now) continue;
+    // not counted in io.written: a stamp is bookkeeping on an existing row, run records stay as before
+    const r = await db.execute({
+      sql: "UPDATE corporate_action SET known_at = ? WHERE id = ? AND market = ? AND known_at IS NULL",
+      args: [a.latest.at, a.id, c.market],
+    });
+    stamped += r.rowsAffected;
+  }
+  return stamped;
 }
 
 /**
@@ -712,6 +798,7 @@ export async function reevaluateQuality(db, c) {
 export async function settle(db, c) {
   const actions = await loadActions(db, c.io, c.market);
   const factors = await syncFactors(db, { ...c, actions });
+  await syncKnownAt(db, { ...c, actions });
   const flags = await syncBlockFlags(db, { ...c, actions, assertDate: c.assertDate ?? null });
   const reevaluated = await reevaluateQuality(db, {
     ...c,
@@ -789,6 +876,14 @@ export async function resolveAction(db, c) {
     await write(c.actionId, me.at, { d: c.d, resolution });
     let written = 1;
     if (c.decision === "confirm") {
+      // GL-02: the Owner confirmation is the first moment the action is known (set once)
+      const stamp = await tx.execute({
+        sql: "UPDATE corporate_action SET known_at = ? WHERE id = ? AND known_at IS NULL",
+        args: [after(c.now, me.at), c.actionId],
+      });
+      void stamp; // not counted: bookkeeping on the existing row
+    }
+    if (c.decision === "confirm") {
       for (const s of sib) {
         const id = Number(s.id);
         if (id === c.actionId) continue;
@@ -814,7 +909,8 @@ export async function resolveAction(db, c) {
  * Stage 4 for one trading date: capture, decide, queue, apply due items, recompute factors, raise
  * and clear entry blocks, re-run quality for earlier affected dates.
  * @param {{ db: Client, market: string, d: string, io: Io, now?: string,
- *   candidates?: Candidate[], relevant?: (code: string) => boolean }} ctx
+ *   candidates?: Candidate[], relevant?: (code: string) => boolean,
+ *   adjClose?: Record<string, { prevAdj: number, exAdj: number }> }} ctx
  */
 export async function runCorporateActions(ctx) {
   const { db, market, d, io } = ctx;
@@ -843,7 +939,7 @@ export async function runCorporateActions(ctx) {
     actions,
   });
   captured.inserted += capturedJumps.inserted;
-  const base = { market, d, now, io, actions, relevant };
+  const base = { market, d, now, io, actions, relevant, adjClose: ctx.adjClose };
   const evaluated = await evaluatePending(db, base, cfg);
   const promoted = await promoteBlocked(db, base);
   const applied = await applyDue(db, base, cfg);
@@ -888,4 +984,5 @@ export const corporateActionsHook = async (c) =>
     now: c.now,
     candidates: c.candidates,
     relevant: c.relevant,
+    adjClose: c.adjClose,
   });

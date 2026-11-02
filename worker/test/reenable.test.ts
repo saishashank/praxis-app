@@ -114,10 +114,11 @@ describe("hasScheduleTrigger", () => {
       ),
     ).toBe(false);
   });
-  it("the shipped workflows are all dispatch-only today", () => {
-    for (const y of [arenaYml, backupYml, bakeoffYml, maintenanceYml, watchdogYml]) {
+  it("the shipped workflows are dispatch-only, except the watchdog's own schedule (GL-07)", () => {
+    for (const y of [arenaYml, backupYml, bakeoffYml, maintenanceYml]) {
       expect(hasScheduleTrigger(y)).toBe(false);
     }
+    expect(hasScheduleTrigger(watchdogYml)).toBe(true);
   });
 });
 

@@ -1,0 +1,7 @@
+{
+  "routes": {
+    "action src/app/(app)/review/actions.ts#dismissSuggestionAction": {
+      "tests": ["tests/acceptance/v2/at34.test.ts"]
+    }
+  }
+}

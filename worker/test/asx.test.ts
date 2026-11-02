@@ -364,7 +364,7 @@ describe("outcomes, trip and Retry-After", () => {
     expect(status()).toMatchObject({ mode: "tripped", tripped_by: "asx_block_trip" });
     expect(status().reason).toContain("asx_block_trip");
     const inc = rows(db, "SELECT severity, kind FROM incident");
-    expect(inc).toEqual([{ severity: "S2", kind: "asx_block_trip" }]);
+    expect(inc).toEqual([{ severity: "S2", kind: "asx_trip" }]);
     expect(await acquire(ENV, T0 + 20 * 65_000, 1, f)).toEqual({
       granted: false,
       reason: "source_off",

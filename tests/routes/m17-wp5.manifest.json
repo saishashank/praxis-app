@@ -1,0 +1,7 @@
+{
+  "routes": {
+    "POST /api/internal/intraday-scan": {
+      "tests": ["tests/intraday/handler.test.ts", "tests/intraday/scanRun.test.ts"]
+    }
+  }
+}

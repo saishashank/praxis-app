@@ -68,6 +68,8 @@ import {
   type SizingContext,
 } from "@/lib/agents/candidates";
 import { controlPlan, controlPool } from "@/lib/agents/controls";
+import type { CostGateTable } from "@/lib/agents/costGate";
+import { ABSTAIN_SHOCK_REASON, firstLegRetryCode, selectEntries } from "@/lib/agents/entryGates";
 import {
   crossing,
   initialStopAtFill,
@@ -91,10 +93,12 @@ import {
 import { COST_PROFILES, feeFor, type CostProfile } from "@/lib/arena/costs";
 import {
   fillCloseSignalExit,
+  fillEntryLimit,
   fillIntradayStop,
   fillOrder,
   selectExit,
   type FillEnv,
+  type FillOutcome,
   type SimulatedFill,
 } from "@/lib/arena/fills";
 import {
@@ -114,7 +118,7 @@ import {
 } from "@/lib/arena/ledger";
 import { computeNavDay, type Mark, type NavPosRow } from "@/lib/arena/nav";
 import type { ExecutionRow, LedgerAccount, TerminalKind } from "@/lib/arena/schema";
-import { isParcelOnlyRejection } from "@/lib/arena/sizing";
+import { isParcelOnlyRejection, resizeEntryAtFill } from "@/lib/arena/sizing";
 import {
   defaultSleeveConfig,
   evaluateUnlock,
@@ -157,6 +161,7 @@ import {
   DEFAULT_SUSPENSION,
   planCorporateActions,
   suspensionMark,
+  knownBy,
   type CorpActionRecord,
   type PlannedAdjustment,
   type SuspensionConfig,
@@ -164,9 +169,12 @@ import {
 import { planLegacy, planLiquidation } from "@/lib/arena/terminal";
 import { addDays, isWeekend, type CalendarRow } from "@/lib/data/calendar";
 import type { EntryDecision } from "@/lib/data/quality/gate";
+import { exDividendOn, toExDividendActions } from "@/lib/arena/exDividend";
 import { floorRat } from "@/lib/money/round";
 import { divFloor, type Rational } from "@/lib/money/rational";
-import type { ViewBar } from "@/lib/agents/decisionView";
+import { decisionCutoffUtc, type ViewBar } from "@/lib/agents/decisionView";
+import { fillRowRule, type FillRowRule } from "@/lib/cortex/economics/fillRow";
+import type { BookState as CortexBook, FamilyStatusMap, NightOutput } from "@/lib/cortex/night";
 import type { LedgerSource } from "./ledger";
 import type { PositionFacts } from "./returns";
 
@@ -247,6 +255,28 @@ export type CohortReplayOptions = {
   /** Restrict the registry to these execution ids (default: all). */
   readonly executions?: readonly string[];
   readonly ruleVersion?: string;
+  /**
+   * FAM-005 (D-214): development-split medians the E cohorts' entries are gated by. Absent: every
+   * signal is unmeasured and passes (the no-split goldens stay as they are).
+   */
+  readonly costGate?: CostGateTable;
+  /**
+   * M15 P3 (design 3c): Cortex-governed entries. Absent = the v1 path, byte for byte. When set, the
+   * E cohort of a family whose status is `allowed` takes the night's `decisions` of its own book
+   * (book id = cohort id; already ranked and sized, with `limitMicro`) in place of
+   * `rankedCandidates`; every other family runs the v1 path. `night` runs once per session.
+   */
+  readonly cortex?: CortexReplayHook;
+};
+
+/** The Cortex hook of `replayCohorts`; `cortexReplay.ts` builds it over a SnapshotWorld. */
+export type CortexReplayHook = {
+  night(d: string, books: readonly CortexBook[]): NightOutput;
+  readonly status: FamilyStatusMap;
+  /** Every night's full output (shadow rows, blocked candidates, abstains) as it is produced. */
+  sink?(d: string, out: NightOutput): void;
+  /** Every Cortex entry fill with the `fill.rule` the row would carry (D-307). */
+  onFill?(e: { d: string; cohortId: string; code: string; rule: FillRowRule }): void;
 };
 
 export type SleeveSummary = {
@@ -389,7 +419,11 @@ type EntryOrder = {
   readonly tier: Tier;
   readonly id: string;
   readonly thesis: Thesis | null;
+  /** M15: the limit of a Cortex entry (D-288); absent = a v1 market-at-open entry. */
+  readonly limitMicro?: bigint;
 };
+
+type FillOutcomeFill = Extract<FillOutcome, { status: "filled" }>["fill"];
 
 type StockExit = {
   readonly type: "IS" | "CS";
@@ -601,14 +635,41 @@ export function replayCohorts(
   };
   let actionsAll: CorpActionRecord[] = [];
   let actionsAllCodes = -1;
-  const allActions = (): CorpActionRecord[] => {
+  // GL-02: what a decision on session d may use is the actions confirmed by the decision cut-off of d
+  let anyKnownAt = false;
+  let actionsKnownD = "";
+  let actionsKnown: CorpActionRecord[] = [];
+  const allActions = (d: string): CorpActionRecord[] => {
     if (actionsAllCodes !== actionsByCode.size) {
       actionsAll = [...actionsByCode.keys()]
         .sort()
         .flatMap((k) => [...(actionsByCode.get(k) ?? [])]);
       actionsAllCodes = actionsByCode.size;
+      actionsKnownD = "";
+      anyKnownAt = actionsAll.some((x) => x.knownAt !== null && x.knownAt !== undefined);
     }
-    return actionsAll;
+    // legacy rows (known_at null) are always known: skip the per-day cut-off work entirely
+    if (!anyKnownAt) return actionsAll;
+    if (actionsKnownD !== d) {
+      actionsKnown = knownBy(actionsAll, decisionCutoffUtc(d, params.decisionCutoff));
+      actionsKnownD = d;
+    }
+    return actionsKnown;
+  };
+
+  // FAM-007 (D-219): the dividend per share going ex on session env.d, known by the cut-off of the
+  // previous session (the same records that credit the dividend)
+  const exDividendFor = (env: DayEnv, code: string): bigint => {
+    const today = actionsOf(code).filter((a) => a.exDate === env.d);
+    if (today.length === 0) return 0n;
+    const prev = sessions[env.i - 1];
+    if (prev === undefined) return 0n;
+    return exDividendOn(
+      toExDividendActions(today),
+      code,
+      env.d,
+      decisionCutoffUtc(prev, params.decisionCutoff),
+    );
   };
 
   const cohorts: Cohort[] = [];
@@ -771,13 +832,13 @@ export function replayCohorts(
     }
   };
 
-  const fundedFor = (c: Cohort, needed: bigint, env: DayEnv): boolean =>
+  const cashNow = (c: Cohort, env: DayEnv): bigint =>
     availableCash({
       mode: c.params.settlementMode,
       balances: c.bal as LedgerBalances,
       pending: c.pending,
       sessionD: env.d,
-    }) >= needed;
+    });
 
   // ---- 2a stages -----------------------------------------------------------------------------------------------
   const applyActions = (c: Cohort, env: DayEnv): void => {
@@ -854,7 +915,9 @@ export function replayCohorts(
       const fe = fillEnv(c, bar, env, pos.code);
       const cs = fillCloseSignalExit(fe, pos.qty);
       const level = effLevel(pos);
-      const stop = fillIntradayStop(fe, pos.qty, level);
+      const stop = fillIntradayStop(fe, pos.qty, level, {
+        exDividendMicro: exDividendFor(env, pos.code),
+      });
       const chosen = selectExit(cs, stop);
       if (chosen === null) continue;
       closePosition(c, pos, chosen, chosen.rule === "close_signal" ? "CS" : "IS", env, level);
@@ -866,24 +929,58 @@ export function replayCohorts(
       if (bar === null) continue; // cancelled: no bar
       if (c.positions.has(o.code)) continue;
       const fe = fillEnv(c, bar, env, o.code);
-      const outcome = fillOrder(
-        {
-          kind: "entry",
-          qty: o.qty,
-          stopFrom: (fillMicro) => initialStopAtFill(o.plan, fillMicro),
-        },
-        {
-          ...fe,
-          halted: env.halted(o.code),
-          // the gate result of the fill session; without quality data every code passes (flagged)
-          gate:
-            gateSource === undefined ? { allowed: true, reason: "ok" } : gateSource(o.code, env.d),
-        },
-      );
+      const fillEntryV1 = (qty: bigint): FillOutcome =>
+        fillOrder(
+          {
+            kind: "entry",
+            qty,
+            stopFrom: (fillMicro) => initialStopAtFill(o.plan, fillMicro),
+          },
+          {
+            ...fe,
+            halted: env.halted(o.code),
+            // the gate result of the fill session; without quality data every code passes (flagged)
+            gate:
+              gateSource === undefined
+                ? { allowed: true, reason: "ok" }
+                : gateSource(o.code, env.d),
+          },
+        );
+      const limitMicro = o.limitMicro;
+      let limitRule: FillRowRule | null = null;
+      // M15: a Cortex entry fills through `fillEntryLimit` (D-288) after the same gate and halt checks
+      const fillEntry = (qty: bigint): FillOutcome | { readonly status: "unfilled" } => {
+        const v1 = fillEntryV1(qty);
+        if (limitMicro === undefined || v1.status !== "filled") return v1;
+        const lim = fillEntryLimit(fe, qty, limitMicro);
+        if (lim.status !== "filled") return { status: "unfilled" };
+        limitRule = fillRowRule(lim);
+        return {
+          status: "filled",
+          fill: lim.fill as FillOutcomeFill,
+          initialStopMicro: initialStopAtFill(o.plan, lim.fill.fillPriceMicro),
+        };
+      };
+      let outcome = fillEntry(o.qty);
       if (outcome.status !== "filled") continue;
-      const fill = outcome.fill;
       if (o.maxOpen !== null && bar.open >= o.maxOpen) continue; // F3 gap cap: cancelled at the fill
-      if (!fundedFor(c, fill.valueMicro + fill.brokerageMicro, env)) continue; // cancelled: cash
+      // GL-03: the same resize rule as closeBooks (resizeEntryAtFill); cancelled only for cash
+      const sized = resizeEntryAtFill({
+        plannedQty: outcome.fill.qty,
+        fillPriceMicro: outcome.fill.fillPriceMicro,
+        availableCashMicro: cashNow(c, env),
+        profile: c.profile,
+        feeContext: fe.feeContext,
+      });
+      if (sized.status === "cancel") continue; // cancelled: cash
+      if (sized.status === "resized") {
+        outcome = fillEntry(sized.qty);
+        if (outcome.status !== "filled") continue;
+      }
+      const fill = outcome.fill;
+      if (limitRule !== null) {
+        opts.cortex?.onFill?.({ d: env.d, cohortId: c.id, code: o.code, rule: limitRule });
+      }
       const ledgerFill: LedgerFill = {
         id: `${c.id}|buy|${o.id}`,
         d: env.d,
@@ -938,6 +1035,7 @@ export function replayCohorts(
       const level = effLevel(pos);
       const fill = fillIntradayStop(fillEnv(c, bar, env, pos.code), pos.qty, level, {
         afterOpen: pos.entryIdx === env.i,
+        exDividendMicro: exDividendFor(env, pos.code),
       });
       if (fill !== null) closePosition(c, pos, fill, "IS", env, level);
     }
@@ -976,7 +1074,7 @@ export function replayCohorts(
       }
       if (c.sleeveTrades.some((t) => !t.shadow && t.closed === null)) continue;
       const need = margin + quote.entryBrokerageMicro;
-      if (c.bal.cash_settled < need || !fundedFor(c, need, env)) continue; // ARN-003: sleeve skipped
+      if (c.bal.cash_settled < need || cashNow(c, env) < need) continue; // ARN-003: sleeve skipped
       const trade = openTrade({
         id,
         cohortId: c.id,
@@ -1183,7 +1281,7 @@ export function replayCohorts(
       const level = effLevel(pos);
       const chosen = selectExit(
         fillCloseSignalExit(fe, pos.qty),
-        fillIntradayStop(fe, pos.qty, level),
+        fillIntradayStop(fe, pos.qty, level, { exDividendMicro: exDividendFor(env, code) }),
       );
       if (chosen === null) continue;
       closePosition(c, pos, chosen, "CS", env, null, true);
@@ -1292,7 +1390,7 @@ export function replayCohorts(
       });
       pos.trail = ev.isLevels.map((l) => l.levelMicro).filter((l) => l >= 1n);
       if (pos.pendingCs === null && ev.cs !== null) {
-        const cross = crossing(allActions(), pos.code, env.d, env.nextD);
+        const cross = crossing(allActions(env.d), pos.code, env.d, env.nextD);
         if (!cross.disposal) pos.pendingCs = ev.cs;
       }
       // thesis-breakers (AGT-111, M5 T7): the SAME pure evaluator as batch 2b; a red one on a held
@@ -1320,7 +1418,7 @@ export function replayCohorts(
         const verdict = evaluateBreakers(t.breakers, obs, params);
         const red = verdict.evaluations.find((e) => e.status === "red");
         if (red !== undefined) {
-          const cross = crossing(allActions(), pos.code, env.d, env.nextD);
+          const cross = crossing(allActions(env.d), pos.code, env.d, env.nextD);
           if (!cross.disposal) {
             pos.pendingCs = { rule: red.id, via: null, detail: red.valueText };
           }
@@ -1370,7 +1468,7 @@ export function replayCohorts(
     halfSize: boolean,
     key: string,
   ): { leg: Leg; priceFactor: Rational; ids: readonly string[] } | null => {
-    const cross = crossing(allActions(), facts.code, env.d, env.nextD!);
+    const cross = crossing(allActions(env.d), facts.code, env.d, env.nextD!);
     if (cross.disposal) return null;
     return {
       leg: { key, halfSize, sleeve: false, env: sizingEnvFor({ facts, cross, p: params }) },
@@ -1426,47 +1524,166 @@ export function replayCohorts(
     maxOpen: c.maxOpenMicro === null ? null : scaleMicro(c.maxOpenMicro, cross.priceFactor),
   });
 
+  /** The night of the session when the Cortex hook is set (run once, before the entries stage). */
+  let cortexNight: NightOutput | null = null;
+
+  /** M15: the book each E cohort is to the night (book id = cohort id; design 3c). */
+  const cortexBooks = (cohortsNow: readonly Cohort[], env: DayEnv): CortexBook[] =>
+    cohortsNow
+      .filter(
+        (c) =>
+          c.execution.kind === "E" &&
+          c.execution.family !== null &&
+          c.group === "base" &&
+          c.startIdx <= env.i,
+      )
+      .map((c) => ({
+        bookId: c.id,
+        family: c.execution.family as Family,
+        executionId: c.execution.id,
+        positions: [...c.positions.values()]
+          .sort((a, b) => cmp(a.code, b.code))
+          .map((p) => ({
+            code: p.code,
+            qty: p.qty,
+            costMicro: p.costMicro,
+            stopMicro: effLevel(p),
+            entryD: p.entryD,
+          })),
+        // the replay ledger's own deployable cash (as the v1 sizing reads it): no separate pending list
+        settledCashMicro: cashNow(c, env),
+        navMicro: c.lastNav,
+        costProfile: c.profile,
+        sessionsSinceGoLive: env.i - c.startIdx,
+      }));
+
+  /** M15: the cohort's own Cortex decisions become limit orders (design 3c); no controls match them. */
+  const cortexEntries = (c: Cohort, env: DayEnv, family: Family): Taken[] => {
+    if (cortexNight === null || env.nextD === null) return [];
+    const slotsLeft = c.params.maxOpenPositions - c.positions.size;
+    const blockFrom = env.i - params.reentryBlock;
+    let placed = 0;
+    for (const dec of cortexNight.decisions) {
+      if (placed >= slotsLeft) break;
+      if (dec.bookId !== c.id || dec.family !== family) continue;
+      if (c.positions.has(dec.code)) continue;
+      const last = c.lastIs.get(dec.code);
+      if (last !== undefined && last >= blockFrom) continue; // re-entry block (FAM-002)
+      const cross = crossing(allActions(env.d), dec.code, env.d, env.nextD);
+      // the night sized in today's share terms: a quantity change across the fill is not placed
+      if (cross.disposal || cross.priceFactor.num !== cross.priceFactor.den) continue;
+      c.todaySignals += 1;
+      placed += 1;
+      c.orders.push({
+        code: dec.code,
+        qty: dec.qty,
+        plan: {
+          family: dec.family,
+          variant: "cortex",
+          ruleVersion: "cortex",
+          caThrough: env.d,
+          caApplied: cross.ids,
+          plan: dec.plan,
+          rel: [],
+        },
+        maxOpen: null,
+        tier: dec.tier,
+        id: `EN:${c.id}:${env.d}:${dec.code}`,
+        thesis: null,
+        limitMicro: dec.limitMicro,
+      });
+    }
+    return [];
+  };
+
   const entriesFor = (c: Cohort, env: DayEnv, family: Family): Taken[] => {
     if (env.nextD === null) return [];
+    if (opts.cortex !== undefined && opts.cortex.status[family] === "allowed") {
+      return cortexEntries(c, env, family);
+    }
     const ranked = rankedCandidates(env.out.candidates.filter((x) => x.family === family));
     if (ranked.length === 0) return [];
     const slotsLeft = c.params.maxOpenPositions - c.positions.size;
     if (slotsLeft < 1) return [];
     const blockFrom = env.i - params.reentryBlock;
-    const legs: Leg[] = [];
-    const meta = new Map<
-      string,
-      { cand: Candidate; plan: OrderPlan; maxOpen: bigint | null; thesis: Thesis | undefined }
-    >();
-    for (const cand of ranked) {
-      if (legs.length >= slotsLeft) break;
-      if (c.positions.has(cand.code)) continue;
+    const pool = ranked.filter((cand) => {
+      if (c.positions.has(cand.code)) return false;
       const last = c.lastIs.get(cand.code);
-      if (last !== undefined && last >= blockFrom) continue; // re-entry block (FAM-002)
-      const facts = env.facts.get(cand.code);
-      if (facts === undefined) continue;
-      const made = legFor(env, facts, cand.halfSize, cand.code);
-      if (made === null) continue;
-      legs.push(made.leg);
-      // the thesis-breakers the live card would carry (cards.ts: same function, same levels)
-      const codeEvents = env.inputs.events.filter((e) => e.code === cand.code);
-      const low = eventLowOf(codeEvents, cand.groupKey);
-      const cross = made.priceFactor;
-      const thesis: Thesis = {
-        breakers: cardBreakers(
-          { family: cand.family, shortInterestAvailable: facts.shortDrop !== "unknown" },
-          params,
-          {
-            closeMicro: scaleMicro(facts.bar.close, cross),
-            eventLowMicro: low === null ? null : scaleMicro(low, cross),
-          },
-        ),
-        known: new Set(codeEvents.map((e) => e.id)),
-        refCloseMicro: facts.bar.close,
+      return last === undefined || last < blockFrom; // re-entry block (FAM-002)
+    });
+    // M14 entry gates: the same function as the live night (cost gate, second position, abstain)
+    const sizing = sizingOf(c, env);
+    // a disposal across the next session cannot open, so it is not the FAM-006 first leg (as batch 2b)
+    const noPosition = new Set(
+      pool
+        .filter((cand) => crossing(allActions(env.d), cand.code, env.d, env.nextD!).disposal)
+        .map((cand) => cand.code),
+    );
+    // D-284 (FAM-006): a rejected first leg is dropped and the gates run once more (as batch 2b)
+    const attempt = (rejected: ReadonlySet<string>) => {
+      const legs: Leg[] = [];
+      const meta = new Map<
+        string,
+        { cand: Candidate; plan: OrderPlan; maxOpen: bigint | null; thesis: Thesis | undefined }
+      >();
+      const poolA = pool.filter((cand) => !rejected.has(cand.code));
+      const noPositionA = new Set([...noPosition, ...rejected]);
+      const gated = selectEntries(poolA, {
+        entry: params.entry,
+        advWindow: params.windows.adv,
+        costProfile: c.profile,
+        costTable: opts.costGate,
+        factsOf: (code) => env.facts.get(code),
+        heldCodes: [...c.positions.keys()].sort(),
+        cashMicro: sizing.cashMicro,
+        noPosition: noPositionA,
+      });
+      for (const cand of gated.eligible) {
+        if (legs.length >= slotsLeft) break;
+        const facts = env.facts.get(cand.code);
+        if (facts === undefined) continue;
+        const made = legFor(env, facts, cand.halfSize, cand.code);
+        if (made === null) continue;
+        legs.push(made.leg);
+        // the thesis-breakers the live card would carry (cards.ts: same function, same levels)
+        const codeEvents = env.inputs.events.filter((e) => e.code === cand.code);
+        const low = eventLowOf(codeEvents, cand.groupKey);
+        const cross = made.priceFactor;
+        const thesis: Thesis = {
+          breakers: cardBreakers(
+            { family: cand.family, shortInterestAvailable: facts.shortDrop !== "unknown" },
+            params,
+            {
+              closeMicro: scaleMicro(facts.bar.close, cross),
+              eventLowMicro: low === null ? null : scaleMicro(low, cross),
+            },
+          ),
+          known: new Set(codeEvents.map((e) => e.id)),
+          refCloseMicro: facts.bar.close,
+        };
+        meta.set(cand.code, { cand, thesis, ...entryPlanOf(cand, env, made) });
+      }
+      const results = planLegs(sizing, markSleeve(legs, sleeveReserve(c)), slotsLeft);
+      const abstained = [...gated.skipped.values()].some((r) => r === ABSTAIN_SHOCK_REASON);
+      return { meta, results, abstained };
+    };
+    let att = attempt(new Set());
+    const rejectedFirst = firstLegRetryCode(att.results);
+    if (rejectedFirst !== null) {
+      const retry = attempt(new Set([rejectedFirst]));
+      att = {
+        ...retry,
+        meta: new Map([...att.meta, ...retry.meta]),
+        results: [att.results[0]!, ...retry.results],
+        abstained: retry.abstained,
       };
-      meta.set(cand.code, { cand, thesis, ...entryPlanOf(cand, env, made) });
     }
-    const results = planLegs(sizingOf(c, env), markSleeve(legs, sleeveReserve(c)), slotsLeft);
+    const { meta, results, abstained } = att;
+    if (abstained && results.length === 0) {
+      // the abstain replaces the below-two-parcels rejection one for one (stall counters unchanged)
+      c.todaySignals += 1;
+      c.todayParcel += 1;
+    }
     placeOrders(c, env, results, (leg) => {
       const m = meta.get(leg.key)!;
       return { plan: m.plan, maxOpen: m.maxOpen, tier: m.cand.tier, thesis: m.thesis };
@@ -1662,6 +1879,10 @@ export function replayCohorts(
       const liveNow = live.filter((c) => !c.done);
       const matched = new Map<Family, Taken[]>();
       for (const c of liveNow) exitsStage(c, env);
+      if (opts.cortex !== undefined) {
+        cortexNight = opts.cortex.night(d, cortexBooks(liveNow, env));
+        opts.cortex.sink?.(d, cortexNight);
+      }
       for (const c of liveNow) {
         if (c.execution.kind === "C1") {
           if (c1Active) c1Entry(c, env);

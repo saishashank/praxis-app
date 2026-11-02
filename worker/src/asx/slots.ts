@@ -44,6 +44,7 @@ import {
   acceptedStmts,
   blindIncidentStmt,
   byteLength,
+  cutoffPollStmt,
   deliverFeed,
   failedStmts,
   incidentUrl,
@@ -57,6 +58,7 @@ import {
   type FailState,
 } from "./sentinel";
 import { acquire, recordOutcome } from "./token";
+import { AU_SLOTS } from "../schedule";
 
 export type AsxEnv = DbEnv & {
   PRAXIS_ENV: string;
@@ -80,6 +82,10 @@ export type AsxJob = {
 };
 
 export const POLL_START_MIN = MAP_START_MIN;
+const CUTOFF_SLOT = AU_SLOTS.find((x) => x.id === "decision-cutoff");
+/** The local minute of the decision cut-off (slot `decision-cutoff`, 18:10) and whether it is on. */
+const CUTOFF_MINUTE = CUTOFF_SLOT?.minute ?? 18 * 60 + 10;
+const CUTOFF_SLOT_ENABLED = CUTOFF_SLOT?.enabled === true;
 export const POLL_END_MIN = MAP_END_MIN;
 export const POLL_EVERY_MIN = 4;
 
@@ -315,6 +321,7 @@ export async function runAsx(
     // ---- hand-off to the Sentinel route (decision 36): changed bodies only ---------------------
     const now = deps.nowMs();
     const extra: Stmt[] = [];
+    let handoffFailed = false;
     if (outcome === "ok" && feed !== null) {
       const sha = await sha256Hex(feed);
       if (sha !== lastSha) {
@@ -322,6 +329,7 @@ export async function runAsx(
         const secret = (env.WORKER_HMAC_SECRET ?? "").trim();
         if (url === null || secret === "") {
           newEtag = null; // not delivered: keep fetching the full body
+          handoffFailed = true;
           console.log("sentinel: hand-off skipped (app not configured)");
         } else {
           const d = await deliverFeed(deps.fetch, {
@@ -338,6 +346,7 @@ export async function runAsx(
             extra.push(...acceptedStmts(sha, now));
             console.log("sentinel: feed accepted");
           } else {
+            handoffFailed = true;
             const n = (fail !== null && fail.sha === sha ? fail.n : 0) + 1;
             extra.push(...failedStmts(sha, n, now));
             if (n < MAX_DELIVERY_ATTEMPTS) newEtag = null; // offered again on the next poll
@@ -348,6 +357,17 @@ export async function runAsx(
     }
     const kind = pollKind(outcome, status);
     extra.push(pollDayStmt(now, local.date, kind));
+    // GL-05 (slot `decision-cutoff`): the first poll that started at or after the cut-off minute and
+    // whose feed is stored (or unchanged) is the marker batch 2b waits for. Insert-once. The instant is
+    // taken after the hand-off, so no item of this poll was stored later than the marker.
+    if (
+      (kind === "ok" || kind === "not_modified") &&
+      !handoffFailed &&
+      local.minute >= CUTOFF_MINUTE &&
+      CUTOFF_SLOT_ENABLED
+    ) {
+      extra.push(cutoffPollStmt(local.date, deps.nowMs()));
+    }
     if (blindNow && kind !== "ok" && kind !== "not_modified") {
       if (!(await askAppForBlindIncident(env, deps, local.date, now))) {
         extra.push(blindIncidentStmt(now));
