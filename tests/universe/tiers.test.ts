@@ -75,17 +75,20 @@ describe("assignTiers", () => {
     expect(t.get("C001")!.tier).toBe("U2");
   });
 
-  it("U1 needs a full 60-session window; U2 checks market cap only when it is known", () => {
+  it("U1 needs bars on 54 of the 60 sessions (D-253); U2 checks market cap only when it is known", () => {
+    const bars = (n: number) => Array.from({ length: n }, () => A$(2_000_000));
     const t = assignTiers(
       [
-        row("SHORT", 5, 2_000_000, {
-          tradedMicro: Array.from({ length: 30 }, () => A$(2_000_000)),
-        }),
+        row("SHORT", 5, 2_000_000, { tradedMicro: bars(30) }),
+        row("GAP53", 5, 2_000_000, { tradedMicro: bars(53) }),
+        row("GAP54", 5, 2_000_000, { tradedMicro: bars(54) }),
         row("SMALLCAP", 0.5, 300_000, { mcapMicro: A$(10_000_000) }),
       ],
       D,
     );
     expect(t.get("SHORT")!.tier).toBe("U2");
+    expect(t.get("GAP53")!.tier).toBe("U2");
+    expect(t.get("GAP54")!.tier).toBe("U1");
     expect(t.get("SMALLCAP")!.tier).toBe("U3");
   });
 });
