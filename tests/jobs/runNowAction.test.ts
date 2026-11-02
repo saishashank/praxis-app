@@ -235,6 +235,25 @@ describe("one waiting request per job and the hourly limit", () => {
     });
   });
 
+  it("the bake-off is capped at one manual request per hour; other jobs are not affected (D-851)", async () => {
+    const BAKE = { job: "llm-bakeoff", confirm: "true" };
+    expect(await requestRunNowAction(form(BAKE))).toEqual({ ok: true });
+    await main.execute(
+      "UPDATE run_now_request SET status = 'done', result = 'started: HTTP 204' WHERE status = 'pending'",
+    );
+    expect(await requestRunNowAction(form(BAKE))).toEqual({ error: "rate_limited" });
+    expect(await requestRunNowAction(form(OK))).toEqual({ ok: true });
+    vi.setSystemTime(new Date(NOW.getTime() + 61 * 60_000));
+    expect(await requestRunNowAction(form(BAKE))).toEqual({ ok: true });
+  });
+
+  it("a waiting request older than an hour still blocks a second one (D-852)", async () => {
+    expect(await requestRunNowAction(form(OK))).toEqual({ ok: true });
+    vi.setSystemTime(new Date(NOW.getTime() + 2 * 60 * 60_000));
+    expect(await requestRunNowAction(form(OK))).toEqual({ error: "already_pending" });
+    expect((await requests()).length).toBe(1);
+  });
+
   it("two requests racing for the same job write one row (the check is repeated in the transaction)", async () => {
     const run = () =>
       requestRunNow({

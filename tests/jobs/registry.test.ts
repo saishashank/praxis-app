@@ -71,6 +71,20 @@ describe("registry rules", () => {
     }
   });
 
+  it("has a per-job hourly cap of at least 1 and plain-word notes (D-851)", () => {
+    for (const j of JOBS) {
+      expect(Number.isInteger(j.maxPerHour) && j.maxPerHour >= 1, j.id).toBe(true);
+      if (j.note !== undefined) {
+        expect(j.note.toLowerCase(), j.id).not.toContain("blueprint");
+        expect(j.note.endsWith("."), j.id).toBe(true);
+      }
+    }
+    expect(findJob("llm-bakeoff")?.maxPerHour).toBe(1);
+    expect(findJob("arena-close")?.note).toBeDefined();
+    expect(findJob("arena-signals")?.note).toBeDefined();
+    expect(findJob("backup")?.maxPerHour).toBe(6);
+  });
+
   it("only workflows or routes can be run by hand; Worker-internal jobs never", () => {
     for (const j of JOBS) {
       expect(j.runNow, j.id).toBe(j.kind !== "worker-internal");

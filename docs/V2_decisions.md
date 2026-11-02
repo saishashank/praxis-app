@@ -276,6 +276,10 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-848 | Date picker: GitHub workflows in this build take no date input (they use the Sydney date themselves), so a date is offered only for route jobs that accept one: |
 | D-849 | The Ops page lists every runnable job: label, schedule (Melbourne), the last scheduled start from worker_state (slot:<id>:<date>), the newest manual request... |
 | D-850 | The staging test login activates an invited .test user on its first successful login, the same way a first Google sign-in activates an invited user (allowlis... |
+| D-851 | The per-job hourly cap and a warning live in the registry: maxPerHour (default 6, DEFAULT_MAX_PER_HOUR) and an optional plain-words note shown first in the c... |
+| D-852 | "One waiting request per job" counts every pending or dispatched row of the job, however old, not only those of the last hour. |
+| D-853 | A claimed (dispatched) request expires 30 minutes after the claim (updated_at), not 30 minutes after the request. |
+| D-854 | A date for workflow jobs later (price backfill, Arena close for a missed day), the minimal path: |
 
 ## M14 (M14_design.md)
 

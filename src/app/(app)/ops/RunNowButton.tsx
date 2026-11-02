@@ -14,11 +14,13 @@ type Props = {
   today: string;
   /** Earliest pickable date; null when the job takes no date. */
   minDate: string | null;
+  /** The registry's plain-words warning for this job (cost, or what a repeat does), if any. */
+  note: string | null;
   disabled: boolean;
   action: (fd: FormData) => Promise<RunNowResult>;
 };
 
-export function RunNowButton({ job, title, today, minDate, disabled, action }: Props) {
+export function RunNowButton({ job, title, today, minDate, note, disabled, action }: Props) {
   const [open, setOpen] = useState(false);
   const formId = `run-now-${job}`;
   const [result, run, pending] = useActionState<RunNowResult | null, FormData>(
@@ -43,7 +45,7 @@ export function RunNowButton({ job, title, today, minDate, disabled, action }: P
       description={
         disabled
           ? "A request for this job is already waiting. Please wait for it to finish."
-          : "The Worker starts it within a minute. The usual safety checks still apply: if one says no, the job is not run and the reason is shown here. The usual schedule does not change. This is logged."
+          : `${note === null ? "" : `${note} `}The Worker starts it within a minute. The usual safety checks still apply: if one says no, the job is not run and the reason is shown here. The usual schedule does not change. This is logged.`
       }
       primary={
         <Button type="submit" form={formId} disabled={pending || disabled}>

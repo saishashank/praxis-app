@@ -3,8 +3,8 @@
 //
 // The Owner writes a `pending` row to `run_now_request` (src/lib/jobs/runNow.ts, audited). On every
 // per-minute tick this runner:
-//   request 1  expires requests nobody started within 30 minutes, then reads up to MAX_PER_TICK pending
-//              ones. This is the ONLY cost of an idle minute: one request carrying two statements.
+//   request 1  expires requests nobody started within 30 minutes (and claimed ones with no result 30
+//              minutes after the claim, D-853), then reads up to MAX_PER_TICK pending ones. This is the ONLY cost of an idle minute: one request carrying two statements.
 //   request 2  claims each one (`pending` -> `dispatched`, a conditional write, so two ticks never run
 //              the same request) and reads every fact the gates need in the same request.
 //   then       runs each claimed request through the SAME functions the schedule uses
@@ -171,8 +171,9 @@ export async function runRunNow(
               "UPDATE run_now_request SET status = 'expired', updated_at = ?, " +
               "result = CASE status WHEN 'pending' THEN 'expired: not started in 30 minutes' " +
               "ELSE 'expired: no result was recorded' END " +
-              "WHERE status IN ('pending', 'dispatched') AND requested_at < ?",
-            args: [iso(nowMs), iso(nowMs - RUN_NOW_EXPIRY_MS)],
+              "WHERE (status = 'pending' AND requested_at < ?) " +
+              "OR (status = 'dispatched' AND updated_at < ?)",
+            args: [iso(nowMs), iso(nowMs - RUN_NOW_EXPIRY_MS), iso(nowMs - RUN_NOW_EXPIRY_MS)],
           },
           {
             sql:

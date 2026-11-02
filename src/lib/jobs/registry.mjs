@@ -25,6 +25,8 @@
 //              "go-live"    runs by hand only when the Owner has listed it (same rule as the schedule)
 //              "internal"   never started by hand
 //  dateBackDays  0 = takes no date; N = the Owner may pick a day from N days ago up to today
+//  maxPerHour  at most this many manual requests for the job in one hour (default 6; D-851)
+//  note        optional plain-words warning shown in the confirm sheet (cost, or what a repeat does)
 //  runNow      the Owner may start it by hand
 //  workflow / route   the file or app path the Worker table uses for this job (checked by tests)
 //  ownerOnly   always true: only the Owner can request a run
@@ -42,18 +44,24 @@
  * @property {JobDays} days
  * @property {JobSafety} safety
  * @property {number} dateBackDays
+ * @property {number} maxPerHour
+ * @property {string} [note]
  * @property {boolean} runNow
  * @property {true} ownerOnly
  * @property {string} [workflow]
  * @property {string} [route]
  */
 
+/** The default per-job hourly cap of manual requests (D-843, D-851). */
+export const DEFAULT_MAX_PER_HOUR = 6;
+
 /**
- * @param {Omit<Job, "ownerOnly" | "runNow" | "dateBackDays"> & {dateBackDays?: number, runNow?: boolean}} j
+ * @param {Omit<Job, "ownerOnly" | "runNow" | "dateBackDays" | "maxPerHour"> & {dateBackDays?: number, maxPerHour?: number, runNow?: boolean}} j
  * @returns {Job}
  */
 const job = (j) => ({
   dateBackDays: 0,
+  maxPerHour: DEFAULT_MAX_PER_HOUR,
   runNow: j.safety !== "internal",
   ...j,
   ownerOnly: true,
@@ -114,6 +122,8 @@ export const JOBS = [
     time: "10:00",
     days: "first-saturday",
     safety: "go-live",
+    maxPerHour: 1,
+    note: "Each run spends model budget. The job has no check of its own for a repeat.",
   }),
   job({
     id: "quote-poll",
@@ -144,6 +154,7 @@ export const JOBS = [
     time: "17:50",
     days: "trading",
     safety: "go-live",
+    note: "A day that is already closed is skipped by the job itself.",
   }),
   job({
     id: "arena-signals",
@@ -154,6 +165,7 @@ export const JOBS = [
     time: "18:10",
     days: "trading",
     safety: "go-live",
+    note: "A day that already has its signals is skipped by the job itself.",
   }),
   job({
     id: "evening-review",

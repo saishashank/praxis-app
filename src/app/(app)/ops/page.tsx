@@ -142,6 +142,7 @@ function RunNowItem({ row, today, tf }: { row: JobRow; today: string; tf: "24h" 
         title={job.label}
         today={today}
         minDate={job.dateBackDays > 0 ? addDays(today, -job.dateBackDays) : null}
+        note={job.note ?? null}
         disabled={waiting}
         action={requestRunNowAction}
       />

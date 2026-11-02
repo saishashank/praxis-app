@@ -20,12 +20,18 @@ import {
   type ControlBase,
   type ControlResult,
 } from "@/lib/data/controls";
-import { findJob, RUNNABLE_JOBS, validateParams, type Job } from "@/lib/jobs/registry.mjs";
+import {
+  DEFAULT_MAX_PER_HOUR,
+  findJob,
+  RUNNABLE_JOBS,
+  validateParams,
+  type Job,
+} from "@/lib/jobs/registry.mjs";
 import { melbourneToday } from "@/lib/ops/checklist";
 
 export const RUN_NOW_MARKET = "AU";
-/** At most this many requests per job in one hour (a pending one blocks a second anyway). */
-export const RUN_NOW_MAX_PER_JOB_HOUR = 6; // threshold-ok: abuse limit, D-843
+/** Default per-job cap in one hour (the registry may set a lower `maxPerHour`, D-851). */
+export const RUN_NOW_MAX_PER_JOB_HOUR = DEFAULT_MAX_PER_HOUR;
 /** At most this many requests over all jobs in one hour. */
 export const RUN_NOW_MAX_PER_HOUR = 30; // threshold-ok: abuse limit, D-843
 const HOUR_MS = 3_600_000; // threshold-ok: unit
@@ -41,10 +47,13 @@ async function counts(
   jobId: string,
   sinceIso: string,
 ): Promise<{ pending: number; jobHour: number; hour: number }> {
+  // `pending` counts every waiting request of the job, however old (D-852): the Worker expires
+  // them after 30 minutes, but while it is down an old one must still block a second.
   const r = await db.execute({
     sql:
       "SELECT " +
-      "COALESCE(SUM(job_id = ? AND status IN ('pending', 'dispatched')), 0) AS pending, " +
+      "(SELECT COUNT(*) FROM run_now_request WHERE job_id = ? " +
+      "AND status IN ('pending', 'dispatched')) AS pending, " +
       "COALESCE(SUM(job_id = ?), 0) AS job_hour, COUNT(*) AS hour " +
       "FROM run_now_request WHERE requested_at >= ?",
     args: [jobId, jobId, sinceIso],
@@ -73,7 +82,7 @@ export async function requestRunNow(p: RunNowInput): Promise<ControlResult> {
     const tag = requesterTag(requireKey(p.env), p.actorId);
     const c = await counts(p.mainDb, job.id, since);
     if (c.pending > 0) return fail("already_pending");
-    if (c.jobHour >= RUN_NOW_MAX_PER_JOB_HOUR || c.hour >= RUN_NOW_MAX_PER_HOUR) {
+    if (c.jobHour >= job.maxPerHour || c.hour >= RUN_NOW_MAX_PER_HOUR) {
       return fail("rate_limited");
     }
     return await commit(p, now, {
@@ -84,7 +93,7 @@ export async function requestRunNow(p: RunNowInput): Promise<ControlResult> {
       apply: async (tx, auditRef) => {
         const again = await counts(tx, job.id, since);
         if (again.pending > 0) throw new Precondition("already_pending");
-        if (again.jobHour >= RUN_NOW_MAX_PER_JOB_HOUR || again.hour >= RUN_NOW_MAX_PER_HOUR) {
+        if (again.jobHour >= job.maxPerHour || again.hour >= RUN_NOW_MAX_PER_HOUR) {
           throw new Precondition("rate_limited");
         }
         await tx.execute({

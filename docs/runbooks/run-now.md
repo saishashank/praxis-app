@@ -1,15 +1,15 @@
 # Run now: start a scheduled job by hand
 
-D-840 to D-849. The Owner can start any scheduled job at once from the Ops page ("Run a job now"). The normal schedule does not change. This page is for the builder and the Owner.
+D-840 to D-854. The Owner can start any scheduled job at once from the Ops page ("Run a job now"). The normal schedule does not change. This page is for the builder and the Owner.
 
 ## What the Owner sees
 
-Ops page, section "Run a job now". Each job shows its name, its schedule (Melbourne time), the last scheduled start the Worker recorded, and the result of the last manual request. "Run now" opens a sheet; jobs that take a date (Evening review, Evening review late run) show a date picker (today, or yesterday). "Confirm run now" writes a request. The Worker picks it up within a minute and the page shows the outcome after a reload.
+Ops page, section "Run a job now". Each job shows its name, its schedule (Melbourne time), the last scheduled start the Worker recorded, and the result of the last manual request. "Run now" opens a sheet; a job with a registry `note` (the bake-off: spends model budget; Arena close and signals: a finished day is skipped) shows it first; jobs that take a date (Evening review, Evening review late run) show a date picker (today, or yesterday). "Confirm run now" writes a request. The Worker picks it up within a minute and the page shows the outcome after a reload.
 
 ## How it works
 
-1. `requestRunNowAction` (Owner only) calls `requestRunNow` (`src/lib/jobs/runNow.ts`): Owner check, job id and parameters checked against the registry, confirm, one audit event first, then one row in `run_now_request` (status `pending`). At most one waiting request per job; at most 6 per job and 30 in all per hour.
-2. The Worker (`worker/src/runNow.ts`, called from the per-minute tick) expires requests older than 30 minutes, reads up to 3 pending requests, claims each (`pending` to `dispatched`, a conditional write, so a request runs once), and runs it through the same function the schedule uses: `dispatchWorkflow` for workflow jobs, `postSigned` for route jobs. It then records `done` or `refused` with a short result.
+1. `requestRunNowAction` (Owner only) calls `requestRunNow` (`src/lib/jobs/runNow.ts`): Owner check, job id and parameters checked against the registry, confirm, one audit event first, then one row in `run_now_request` (status `pending`). At most one waiting request per job (however old); at most `maxPerHour` per job (6 unless the registry says less; the bake-off: 1) and 30 in all per hour.
+2. The Worker (`worker/src/runNow.ts`, called from the per-minute tick) expires pending requests older than 30 minutes and claimed requests with no result 30 minutes after the claim, reads up to 3 pending requests, claims each (`pending` to `dispatched`, a conditional write, so a request runs once), and runs it through the same function the schedule uses: `dispatchWorkflow` for workflow jobs, `postSigned` for route jobs. It then records `done` or `refused` with a short result.
 3. Result words: `started: HTTP 204` (workflow accepted), `ran: HTTP 200` (route answered), `failed: <reason>` (status `done`), `refused: <reason>`, `expired: ...`.
 
 ## Safety gates a manual run keeps
@@ -29,18 +29,18 @@ Only the time window is bypassed. Everything else still applies, and a "no" is r
 
 A manual run never writes the schedule's own `slot:<id>:<date>` state, so it does not stop the scheduled run and the scheduled run does not stop it.
 
-Workflows take no date input: they work out "today" themselves. Only route jobs with `dateBackDays` in the registry take a date.
+Workflows take no date input: they work out "today" themselves. Only route jobs with `dateBackDays` in the registry take a date. To give a workflow job a date later, follow D-854: an optional `workflow_dispatch` input `d` that the script validates, `dateBackDays` on the registry entry, and `inputs.d` from the validated params in `worker/src/runNow.ts`.
 
 ## Stuck or missing
 
 - Request stays `pending`: the Worker is not ticking, or `dispatch_enabled` is not set up (check System Health). After 30 minutes it becomes `expired`.
-- Request shows `dispatched` for 30 minutes: the Worker crashed after claiming. It becomes `expired: no result was recorded` and is NOT run again; request again.
+- Request shows `dispatched` for 30 minutes after the claim: the Worker crashed after claiming. It becomes `expired: no result was recorded` and is NOT run again; request again.
 - Read the audit log for `jobs.run_now_requested` (and `_failed`) to see who asked and when.
 
 ## How to add a job (V3, V4 and later)
 
 1. Add the normal Worker slot in `worker/src/schedule.ts` (and its workflow to `DISPATCHABLE_WORKFLOWS`, or its signed route under `src/app/api/internal/`).
-2. Add ONE entry to `JOBS` in `src/lib/jobs/registry.mjs`: `id` (the slot id), `label` (plain words), `kind`, `schedule` text (Melbourne time), `time`, `days`, `safety` (`go-live` if the slot has `requiresListing`, `always-on` if it runs whatever the list says, `internal` if the Worker runs it itself), `dateBackDays` (0 unless the route takes a date), and the `workflow` or `route`. Put go-live jobs in time-of-day order among the go-live jobs. The Owner list (`GO_LIVE_SLOTS`) and the Ops page follow from the registry.
+2. Add ONE entry to `JOBS` in `src/lib/jobs/registry.mjs`: `id` (the slot id), `label` (plain words), `kind`, `schedule` text (Melbourne time), `time`, `days`, `safety` (`go-live` if the slot has `requiresListing`, `always-on` if it runs whatever the list says, `internal` if the Worker runs it itself), `dateBackDays` (0 unless the route takes a date), `maxPerHour` when 6 an hour is too many (a job that spends budget), a `note` when the Owner should read something before confirming, and the `workflow` or `route`. Put go-live jobs in time-of-day order among the go-live jobs. The Owner list (`GO_LIVE_SLOTS`) and the Ops page follow from the registry.
 3. Run `npx vitest run tests/jobs/registry.test.ts`. It fails when a slot or dispatchable workflow has no entry, or when kind, time, route, workflow, trading-day, monthly or listing rule disagree with the Worker table, or when a workflow or route file is missing.
 4. A job with new parameters: extend `validateParams` in the registry (one schema, used by the Owner action and the Worker) and add cases to `tests/jobs/registry.test.ts`. The request table stores parameters as JSON (`params_json`), so no migration is needed.
 5. Run `node scripts/architecture/generate.mjs` and add a decision to `docs/M13L_design.md` if the job changes what a manual run may do.

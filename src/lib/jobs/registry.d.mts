@@ -10,11 +10,14 @@ export interface Job {
   days: JobDays;
   safety: JobSafety;
   dateBackDays: number;
+  maxPerHour: number;
+  note?: string;
   runNow: boolean;
   ownerOnly: true;
   workflow?: string;
   route?: string;
 }
+export const DEFAULT_MAX_PER_HOUR: number;
 export const JOBS: readonly Job[];
 export const RUNNABLE_JOBS: readonly Job[];
 export function findJob(id: unknown): Job | undefined;

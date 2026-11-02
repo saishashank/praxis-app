@@ -329,6 +329,22 @@ describe("expiry and idempotency", () => {
     expect(net.github).toEqual([]);
   });
 
+  it("a claimed request expires 30 minutes after the claim, not after the request (D-853)", async () => {
+    dispatchOn();
+    list(["backfill-prices"]);
+    const id = add("backfill-prices", "{}", T0 - RUN_NOW_EXPIRY_MS - MIN);
+    db.prepare("UPDATE run_now_request SET status = 'dispatched', updated_at = ? WHERE id = ?").run(
+      iso(T0 - MIN),
+      id,
+    );
+    await tick();
+    expect(req(id)).toEqual({ status: "dispatched", result: null });
+    expect(net.github).toEqual([]);
+    await tick(T0 + RUN_NOW_EXPIRY_MS);
+    expect(req(id)).toEqual({ status: "expired", result: "expired: no result was recorded" });
+    expect(net.github).toEqual([]);
+  });
+
   it("two ticks (or two overlapping isolates) run a request once", async () => {
     dispatchOn();
     list(["backfill-prices"]);
