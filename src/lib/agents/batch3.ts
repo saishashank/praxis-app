@@ -30,7 +30,12 @@ import {
   type MarketHours,
 } from "@/lib/data/calendar";
 import { hasSuccess, finishRun, startRun } from "@/lib/runs/runRecord";
-import { ARENA_MASTER_SEED, loadCalendar, loadSleeveConfig } from "@/lib/arena/closeBooks";
+import {
+  ARENA_MASTER_SEED,
+  loadCalendar,
+  loadSleeveConfig,
+  sleeveConfigFrom,
+} from "@/lib/arena/closeBooks";
 import { COST_PROFILES } from "@/lib/arena/costs";
 import { recostRowsFor } from "@/lib/arena/recost";
 import { parseCohortParams } from "@/lib/arena/cohort";
@@ -69,6 +74,9 @@ import type { Family } from "./families";
 
 export const REVIEW_JOB = "arena-review";
 const LOG_MESSAGE_MAX = 500; // threshold-ok: app_log message length cap (as batch 2b)
+/** Context sessions of candidates batch 3 rebuilds in one night (D-873). */
+const LEDGER_CATCH_UP = 1; // threshold-ok: rebuilds per night
+
 const FAMILIES: readonly Family[] = ["F1", "F2", "F3", "F4", "F5", "F6"];
 
 /** `arena-3:<market>:<d>`: the concurrency key of batch 3 (cf. `arena-2b:<market>:<d>`). */
@@ -102,6 +110,11 @@ export type ReviewOptions = {
   readonly params?: AgentParams;
   /** Email wiring for the ledger-invariant incident (D-105); absent = record only, no email. */
   readonly notify?: Omit<NotifyCtx, "db" | "now">;
+  /**
+   * D-878: called at each stage boundary with the stage name, the milliseconds it took and a count
+   * note, so a killed job log shows where the night was. Diagnostics only; it never changes a number.
+   */
+  readonly onStage?: (stage: string, ms: number, note?: string) => void;
 };
 
 export type ReviewStatus = "success" | "degraded" | "failed" | "skipped" | "already_done";
@@ -182,15 +195,21 @@ async function decidedOk(db: Client, market: string, d: string): Promise<boolean
 
 // ---- replay_stat rows (this run) ---------------------------------------------------------------------------------
 
-async function putStats(db: Client, rows: readonly ReplayStatRow[]): Promise<number> {
+/** Rows per write batch: one round trip per chunk instead of one per row (D-870). */
+const STAT_CHUNK = 500; // threshold-ok: insert chunk size
+
+export async function putStats(db: Client, rows: readonly ReplayStatRow[]): Promise<number> {
   let written = 0;
-  for (const r of rows) {
-    const res = await db.execute({
-      sql: `INSERT INTO replay_stat (run_id, scope, metric, d, value_json) VALUES (?, ?, ?, ?, ?)
+  for (let i = 0; i < rows.length; i += STAT_CHUNK) {
+    const res = await db.batch(
+      rows.slice(i, i + STAT_CHUNK).map((r) => ({
+        sql: `INSERT INTO replay_stat (run_id, scope, metric, d, value_json) VALUES (?, ?, ?, ?, ?)
             ON CONFLICT DO NOTHING`,
-      args: [r.run_id, r.scope, r.metric, r.d, r.value_json],
-    });
-    written += res.rowsAffected;
+        args: [r.run_id, r.scope, r.metric, r.d, r.value_json],
+      })),
+      "write",
+    );
+    for (const x of res) written += x.rowsAffected;
   }
   return written;
 }
@@ -221,6 +240,8 @@ type CohortRow = {
   terminalD: string | null;
   ttd: number | null;
   outcome: bigint | null;
+  /** The stored sleeve config text (D-875: read with the cohort rows, not one query per cohort). */
+  sleeveJson: string | null;
 };
 
 /** The live cohorts as `CohortOutcome`s (the T14 shape), censored at D when unresolved. */
@@ -233,7 +254,7 @@ export async function liveCohortOutcomes(
   const executions = new Map((await loadExecutions(db)).map((e) => [e.id, e]));
   const cs = await db.execute({
     sql: `SELECT id, execution_id, control_idx, start_d, seed_micro, terminal_kind, terminal_d, ttd_sessions,
-                 outcome_micro FROM cohort WHERE start_d <= ? ORDER BY start_d, id`,
+                 outcome_micro, sleeve_json FROM cohort WHERE start_d <= ? ORDER BY start_d, id`,
     args: [d],
   });
   const cohorts: CohortRow[] = cs.rows.map((r) => ({
@@ -246,6 +267,7 @@ export async function liveCohortOutcomes(
     terminalD: r.terminal_d === null ? null : text(r.terminal_d),
     ttd: r.ttd_sessions === null ? null : num(r.ttd_sessions),
     outcome: r.outcome_micro === null ? null : toBig(r.outcome_micro),
+    sleeveJson: r.sleeve_json === null ? null : text(r.sleeve_json),
   }));
   const nav = await db.execute({
     sql: "SELECT cohort_id, d, nav_micro, liq_nav_micro FROM nav_daily WHERE d <= ? ORDER BY cohort_id, d",
@@ -280,7 +302,7 @@ export async function liveCohortOutcomes(
     const endD = resolved ? c.terminalD! : lastDay.d;
     const endIdx = index.get(endD) ?? startIdx;
     const atEnd = days.find((x) => x.d === endD) ?? lastDay;
-    const cfg = await loadSleeveConfig(db, c.id);
+    const cfg = c.sleeveJson === null ? null : sleeveConfigFrom(c.sleeveJson);
     const checkpoints: [number, number][] = [];
     for (const s of progressSessions) {
       const x = days.find((p) => (index.get(p.d) ?? -1) - startIdx + 1 === s);
@@ -444,6 +466,22 @@ async function scorecardStage(
 
 // ---- stage 2b: re-cost and price-shock rows (M7 T4) ------------------------------------------------------------------
 
+/** Cohorts read at once by the re-cost and the re-check (D-876): each is a handful of serial round trips. */
+const COHORT_PARALLEL = 8; // threshold-ok: concurrent cohort reads
+
+/** `fn` over `items` in chunks of `size` run with Promise.all; the result order is the item order. */
+export async function inChunks<T, R>(
+  items: readonly T[],
+  size: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = [];
+  for (let i = 0; i < items.length; i += size) {
+    out.push(...(await Promise.all(items.slice(i, i + size).map(fn))));
+  }
+  return out;
+}
+
 /** The rows only read the stored books: no cohort, NAV or ledger row is changed. */
 async function recostStage(
   db: Client,
@@ -458,8 +496,9 @@ async function recostStage(
     args: [o.d, o.d],
   });
   const out: ReplayStatRow[] = [];
-  for (const r of ids.rows) {
-    const rows = await recostRowsFor(db, {
+  // D-876: bounded parallel chunks (the cohorts are independent reads); results keep the cohort order
+  const perCohort = await inChunks(ids.rows, COHORT_PARALLEL, (r) =>
+    recostRowsFor(db, {
       market: o.market,
       cohortId: text(r.id),
       d: o.d,
@@ -468,7 +507,9 @@ async function recostStage(
         stressProfile: params.stats.stressCostProfile,
         stressSlippageExtraPct: params.stats.stressSlippageExtraPct,
       },
-    });
+    }),
+  );
+  for (const rows of perCohort) {
     for (const x of rows) out.push(jsonRow(runId, o.d, x.scope, x.metric, x.value));
   }
   return out;
@@ -540,9 +581,11 @@ export async function recheckInvariants(
   const bad: string[] = [];
   let total = 0;
   let fatal = 0;
-  for (const r of ids.rows) {
+  const found = await inChunks(ids.rows, COHORT_PARALLEL, async (r) => {
     const id = text(r.id);
-    const violations = await recheckCohort(db, id, d, calendar);
+    return { id, violations: await recheckCohort(db, id, d, calendar) };
+  });
+  for (const { id, violations } of found) {
     if (violations.length > 0) bad.push(id);
     for (const v of violations) {
       byCode[v.code] = (byCode[v.code] ?? 0) + 1;
@@ -565,27 +608,28 @@ async function recheckCohort(
   d: string,
   calendar: readonly CalendarRow[],
 ): Promise<Violation[]> {
-  const c = await db.execute({
-    sql: "SELECT seed_micro, params_json FROM cohort WHERE id = ?",
-    args: [id],
-  });
-  const params = parseCohortParams(text(c.rows[0]!.params_json));
-  const [rows, fills, adjustments] = await Promise.all([
+  // D-876: the independent reads in one round trip, the sleeve reads (which need the config) in a second
+  const [c, rows, fills, adjustments, navRs, unreal, cfg] = await Promise.all([
+    db.execute({
+      sql: "SELECT seed_micro, params_json FROM cohort WHERE id = ?",
+      args: [id],
+    }),
     loadLedgerRows(db, id, d),
     loadLedgerFills(db, id),
     loadQtyAdjustments(db, id),
+    db.execute({
+      sql: "SELECT code, close_micro, value_micro FROM nav_daily_pos WHERE cohort_id = ? AND d = ?",
+      args: [id, d],
+    }),
+    db.execute({
+      sql: "SELECT sleeve_unreal_micro FROM nav_daily WHERE cohort_id = ? AND d = ?",
+      args: [id, d],
+    }),
+    loadSleeveConfig(db, id),
   ]);
-  const navRs = await db.execute({
-    sql: "SELECT code, close_micro, value_micro FROM nav_daily_pos WHERE cohort_id = ? AND d = ?",
-    args: [id, d],
-  });
+  const params = parseCohortParams(text(c.rows[0]!.params_json));
   const storedClose = new Map(navRs.rows.map((p) => [text(p.code), toBig(p.close_micro)]));
-  const unreal = await db.execute({
-    sql: "SELECT sleeve_unreal_micro FROM nav_daily WHERE cohort_id = ? AND d = ?",
-    args: [id, d],
-  });
   const sleeveUnreal = unreal.rows.length === 0 ? 0n : toBig(unreal.rows[0]!.sleeve_unreal_micro);
-  const cfg = await loadSleeveConfig(db, id);
   const [trades, states] =
     cfg === null
       ? [[], []]
@@ -829,9 +873,16 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
   });
   const stats = emptyStats();
   let stage = "start";
+  let stageT0 = Date.now(); // diagnostics only (D-878)
+  const tick = (name: string, note?: string): void => {
+    const t = Date.now();
+    o.onStage?.(name, t - stageT0, note);
+    stageT0 = t;
+  };
   try {
     let params = o.params ?? (await loadAgentParams(db));
     const sessions = await sessionsOfRun(db, o.market, o.d, calendar);
+    tick("start", `sessions=${sessions.length}`);
 
     stage = "ledger";
     stats.ledger = await syncForwardLedger(db, {
@@ -842,12 +893,18 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
       params,
       replay: o.replay === true,
       masterSeed: o.masterSeed ?? ARENA_MASTER_SEED,
+      maxCatchUp: LEDGER_CATCH_UP, // D-873
     });
+    tick(
+      "ledger",
+      `opened=${stats.ledger.opened} closed=${stats.ledger.closed} rebuilt=${stats.ledger.candidatesRebuilt}`,
+    );
 
     stage = "scorecards";
     const sc = await scorecardStage(db, o, params, sessions);
     stats.statRows += await putStats(db, sc.rows);
     stats.cohorts = sc.cohorts;
+    tick("scorecards", `cohorts=${sc.cohorts} rows=${sc.rows.length}`);
 
     stage = "recost";
     let recostFailed = false;
@@ -872,6 +929,8 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
       });
     }
 
+    tick("recost", `rows=${stats.recostRows}`);
+
     stage = "invariants";
     const rc = await recheckInvariants(db, o.d, calendar);
     stats.invariantCohorts = rc.cohorts;
@@ -894,6 +953,8 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
       });
       await raiseLedgerInvariantIncident(db, { d: o.d, now: o.now(), notify: o.notify }, rc);
     }
+
+    tick("invariants", `cohorts=${rc.cohorts} violations=${rc.violations}`);
 
     stage = "killswitch";
     const k = await ensureLooksPerYear(db, {
@@ -936,6 +997,8 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
       });
     }
 
+    tick("killswitch", `looks=${stats.killLooks}`);
+
     stage = "evidence";
     const timelines = await evidenceTimelines(db, o.market, o.d, sessions, params);
     stats.evidenceRows = timelines.length;
@@ -946,9 +1009,14 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
       ),
     );
 
+    tick("evidence", `rows=${timelines.length}`);
+
     stage = "rank_ic";
     let rankIcFailed = false;
     try {
+      // D-874: a live night skips the day's rebuild unless review_rank_ic_nightly = 1; a replay keeps it
+      const computeDay =
+        o.replay === true || Number(await getConfig(db, "review_rank_ic_nightly")) === 1;
       const ric = await liveRankIc(db, {
         market: o.market,
         d: o.d,
@@ -957,6 +1025,7 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
         params,
         replay: o.replay === true,
         now: o.now(),
+        computeDay,
       });
       stats.rankIcRows = ric.rows;
       stats.statRows += await putStats(
@@ -982,6 +1051,7 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
 
     // M15 P2 (CTX-023, CTX-054): would-have outcomes of every Cortex decision whose hold has closed.
     // Descriptive and idempotent; a failure only logs (the run's status does not depend on it).
+    tick("rank_ic", `rows=${stats.rankIcRows}`);
     stage = "cortex_outcome";
     try {
       await scoreOutcomes(db, { market: o.market, d: o.d, params, now: o.now });
@@ -1003,6 +1073,7 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
     // V2-S1 (CTX-053, CTX-082, D-700): the quarterly live look at each family's status, after the
     // outcomes above. One look per family per quarter (a ledger cell), never a promotion outside the
     // CTX-053 rules; a failure only logs.
+    tick("cortex_outcome");
     stage = "cortex_status_look";
     try {
       await runStatusLooks(db, { market: o.market, d: o.d, now: o.now() });
@@ -1021,6 +1092,7 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
       });
     }
 
+    tick("cortex_status_look");
     const status: ReviewStatus =
       rc.violations > 0 || recostFailed || rankIcFailed ? "degraded" : "success";
     await finishRun(db, runId, {

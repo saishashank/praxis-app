@@ -190,22 +190,31 @@ export async function liveRankIc(
     readonly params: AgentParams;
     readonly replay: boolean;
     readonly now: string;
+    /**
+     * D-874: false skips the day's rebuild (a full `loadDayInputs`, minutes against a remote database);
+     * the weekly `rankIcStage` backfills the missing day (D-286) and the summaries below still read the
+     * stored series. Default true.
+     */
+    readonly computeDay?: boolean;
   },
 ): Promise<LiveRankIcResult> {
   const d1 = previousTradingDay(o.d, [...o.calendar]);
   const d0 = previousTradingDay(d1, [...o.calendar]);
   let rows = 0;
-  const day = await loadDayInputs(db, {
-    market: o.market,
-    d: d0,
-    calendar: o.calendar,
-    hours: o.hours,
-    params: o.params,
-    replay: o.replay,
-    heldCodes: [],
-    actions: await loadConfirmedActions(db, o.market, d0),
-  });
-  if (day.inputs.codes.length > 0) {
+  const day =
+    o.computeDay === false
+      ? null
+      : await loadDayInputs(db, {
+          market: o.market,
+          d: d0,
+          calendar: o.calendar,
+          hours: o.hours,
+          params: o.params,
+          replay: o.replay,
+          heldCodes: [],
+          actions: await loadConfirmedActions(db, o.market, d0),
+        });
+  if (day !== null && day.inputs.codes.length > 0) {
     const bars = await db.execute({
       sql: `SELECT code, d, o, h, l, c, volume FROM price_bar WHERE market = ? AND d IN (?, ?)`,
       args: [o.market, d1, o.d],

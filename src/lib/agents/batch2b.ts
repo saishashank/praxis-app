@@ -107,7 +107,8 @@ import {
 } from "./controls";
 import { applyArn011 } from "./families/arn011";
 import { createContext } from "./families/context";
-import { FAMILY_RULE_VERSION } from "./families";
+import { FAMILY_RULE_VERSION, runFamilies } from "./families";
+import { putDayCandidates } from "./forwardLedger";
 import { liveParams, loadVersionSet, runVersions, versionIdOf } from "./versionRuns";
 import type { Candidate, CodeFacts, Family, FamilyInputs } from "./families/types";
 import {
@@ -194,6 +195,8 @@ export type SignalsOptions = {
     readonly timeoutMs?: number;
     readonly onStage?: (r: StageResult) => void;
   };
+  /** D-878: stage name, milliseconds and a count note at each stage boundary; diagnostics only. */
+  readonly onTiming?: (stage: string, ms: number, note?: string) => void;
 };
 
 export type SignalsStatus = "success" | "degraded" | "failed" | "skipped" | "already_done";
@@ -410,6 +413,28 @@ const EVENT_COLS = [
   "polarity",
   "rule_version",
 ] as const;
+
+/**
+ * D-872: store the night's candidates exactly as batch 3's forward-ledger catch-up would rebuild them
+ * (`runFamilies` on the base parameters, same `day.inputs`: held codes never enter `inputs`), under the
+ * key `loadDayCandidates` reads. First write wins, so a rerun or a batch 3 that stored them first is
+ * unchanged. Live only (a replay keeps its replay_stat rows as they were) and never fails the night:
+ * batch 3 rebuilds what is missing.
+ */
+async function storeLedgerCandidates(
+  db: Client,
+  o: { market: string; d: string; replay?: boolean },
+  baseParams: AgentParams,
+  day: DayInputs,
+): Promise<void> {
+  if (o.replay === true) return;
+  try {
+    const out = runFamilies(day.inputs, baseParams);
+    await putDayCandidates(db, o.market, o.d, { candidates: out.candidates, blocked: out.blocked });
+  } catch {
+    // batch 3 rebuilds the day
+  }
+}
 
 async function recordAgentRows(db: Client, day: DayInputs, market: string): Promise<number> {
   let written = 0;
@@ -1733,6 +1758,12 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
     now: o.now(),
   });
   const stats = emptyStats();
+  let stageT0 = Date.now(); // diagnostics only (D-878)
+  const tick = (name: string, note?: string): void => {
+    const t = Date.now();
+    o.onTiming?.(name, t - stageT0, note);
+    stageT0 = t;
+  };
   try {
     const baseParams = o.params ?? (await loadAgentParams(db));
     // Cohort start stage (M8 T10, decision 3): `full` only, idempotent. It runs BEFORE the night's
@@ -1766,6 +1797,7 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
     const actions = knownBy(await loadConfirmedActions(db, o.market, o.d), cutoffD);
     const actionsNext = knownBy(await loadConfirmedActions(db, o.market, nextD), cutoffD);
     const trades = await loadOpenTrades(db);
+    tick("setup", `cohortsOpened=${started?.opened ?? 0}`);
     const day = await loadDayInputs(db, {
       market: o.market,
       d: o.d,
@@ -1777,6 +1809,9 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       actions,
     });
     stats.agentRows = await recordAgentRows(db, day, o.market);
+    tick("loadDayInputs", `codes=${day.inputs.codes.length}`);
+    await storeLedgerCandidates(db, o, baseParams, day); // D-872
+    tick("storeCandidates");
 
     // A5: the rule interpreter, once per active rule version (live set first; D-110 #44)
     const { out, paramsOf } = runVersions(day.inputs, params, versionSet);
@@ -1807,10 +1842,12 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       }
     });
 
+    tick("signals", `signals=${stats.signals}`);
     const executions = new Map(executionList.map((e) => [e.id, e]));
     const unresolved = await loadUnresolvedCohorts(db, o.d);
     await exitsStage(ctx, new Map(unresolved.map((c) => [c.id, c])));
     await breakersStage(ctx, o.breakerSink ?? createAlertRowSink(db), o.now());
+    tick("exits_breakers", `exits=${stats.exits}`);
 
     // M15 P2 (D-265, D-352): order of work: the v1 cohorts of every non-allowed family first, then the
     // Cortex stage, then the Cortex entries of the allowed families. A stage failure or overrun never
@@ -1942,7 +1979,9 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
     }
 
     if (cortexOn) {
+      tick("v1_entries", `orders=${stats.orders}`);
       cortex = await runStage();
+      tick("cortex_stage");
       if (cortex !== null) {
         // the one source of "allowed" is the stage's own (N3); a mismatch can only mean a status row
         // changed during the run: the later reading wins and the family holds cash otherwise
@@ -2020,6 +2059,7 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       await controlsFor({ ...ctx, params: vp }, books, exec, family, list, qualifying, evalCtx);
     }
 
+    tick("controls_and_cortex_entries", `orders=${stats.orders} controls=${stats.controls}`);
     const gaps = coverageGaps(day.inputs);
     const status: SignalsStatus = day.partial || gaps.length > 0 ? "degraded" : "success";
     await finishRun(db, runId, {

@@ -281,6 +281,16 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-853 | A claimed (dispatched) request expires 30 minutes after the claim (updated_at), not 30 minutes after the request. |
 | D-854 | A date for workflow jobs later (price backfill, Arena close for a missed day), the minimal path: |
 | D-860 | The Owner decided on 2026-11-02 to release V2 without the Staging E2E day, once ("B"): staging has never run a full day (its Worker cron is off and WORKER_HM... |
+| D-870 | putStats (batch 3) writes replay_stat rows with db.batch(chunk, "write") in chunks of 500 (as rankIcStage.insertRows), summing rowsAffected; each statement k... |
+| D-871 | A db.batch(..., "write") chunk is one implicit transaction: if a chunk fails, none of its rows is written and the stage throws as the single-row loop did (th... |
+| D-872 | Batch 2b stores the night's candidates and blocked list (putDayCandidates, key fwd:<market> / cand:<D>, first write wins) right after loadDayInputs, so batch... |
+| D-873 | syncForwardLedger is called with maxCatchUp: 1: a backlog of decided sessions without stored candidates costs at most one rebuild a night among the CONTEXT d... |
+| D-874 | The nightly liveRankIc rebuild of day D' (a second full loadDayInputs) is gated by review_rank_ic_nightly (0 or 1, default 0, Owner-editable, Validation stat... |
+| D-875 | liveCohortOutcomes reads sleeve_json with the cohort rows and parses it with sleeveConfigFrom instead of calling loadSleeveConfig once per cohort (253 round... |
+| D-876 | recostStage and recheckInvariants process cohorts in bounded parallel chunks of 8 (inChunks, Promise.all; results are collected in the cohort order, so the r... |
+| D-877 | Cortex scoreOutcomes fetches the bars of every code it will walk with db.batch([...], "read"), 25 statements per round trip, using the very statement the per... |
+| D-878 | Stage timings: ReviewOptions.onStage(stage, ms, note?) (batch 3) and SignalsOptions.onTiming (2b) are called at each stage boundary; src/lib/arena/cli.ts pri... |
+| D-879 | The production job of .github/workflows/arena-signals.yml has timeout-minutes: 90 (was 40) and the locked copy under scripts/ci/fixtures/prod-jobs/ is re-sto... |
 
 ## M14 (M14_design.md)
 
