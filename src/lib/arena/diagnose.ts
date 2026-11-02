@@ -113,14 +113,15 @@ async function recomputedTiers(db: Client, d: string, out: (line: string) => voi
   );
   let from = d;
   for (let i = 0; i < TIER_RULES.windowSessions; i += 1) from = previousTradingDay(from, calRows);
-  const perCode = await db.execute({
-    sql: "SELECT code, COUNT(*) AS n FROM price_bar WHERE market = ? AND d >= ? AND d < ? GROUP BY code",
-    args: [MARKET, from, d],
-  });
   const u1Adv = Number(TIER_RULES.u1.advMicro / 1_000_000n); // money-float-ok: A$ threshold
-  const pool = perCode.rows
-    .filter((r) => (tiers.get(String(r.code))?.adv ?? 0) >= u1Adv)
-    .map((r) => Number(r.n)); // money-float-ok: a row count
+  // Number(null) is 0: a code without bars is never in the pool
+  const big = [...tiers].filter(([, t]) => Number(t.adv) >= u1Adv).map(([code]) => code); // money-float-ok: A$ compare
+  const perCode = await db.execute({
+    sql: `SELECT COUNT(*) AS n FROM price_bar WHERE market = ? AND d >= ? AND d < ?
+          AND code IN (SELECT value FROM json_each(?)) GROUP BY code`,
+    args: [MARKET, from, d, JSON.stringify(big)],
+  });
+  const pool = perCode.rows.map((r) => Number(r.n)); // money-float-ok: row counts
   const perSession = await db.execute({
     sql: "SELECT d, COUNT(*) AS n FROM price_bar WHERE market = ? AND d >= ? AND d < ? GROUP BY d ORDER BY d",
     args: [MARKET, from, d],
