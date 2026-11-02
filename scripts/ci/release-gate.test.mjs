@@ -362,3 +362,58 @@ test("localChecks: quarantine and exception files are read and checked against t
   writeFileSync(join(dir, "tests/quarantine.json"), expired);
   assert.ok((await l.quarantine("2026-11-20")) >= 1);
 });
+
+// D-860: the CLI reads docs/release/waivers.json from the checked-out commit.
+const GATE_WAIVER = {
+  condition: "staging-e2e-day",
+  reason: "staging has never run a full day",
+  decidedBy: "Owner",
+  decidedOn: "2026-11-18",
+  expires: "2026-11-25",
+  followUp: "set up a staging test day",
+};
+const noDayWorld = () =>
+  world({
+    [`/repos/${REPO}/actions/workflows/staging-e2e-day.yml/runs?per_page=30&head_sha=${SHA}&status=completed`]:
+      { workflow_runs: [] },
+  });
+
+test("waivers: a valid waiver passes the gate (exit 0) and the summary names it", async () => {
+  const local = okLocal({ waivers: async () => [GATE_WAIVER] });
+  const r = await exec(FULL, { w: noDayWorld(), local, summary: true });
+  assert.equal(r.code, 0);
+  assert.match(r.text, /1 condition waived by the Owner/);
+  assert.match(r.summary, /WAIVED/);
+  assert.match(r.summary, /Next step: set up a staging test day/);
+});
+
+test("waivers: none, expired, unreadable or malformed waivers leave the failure in place (exit 1)", async () => {
+  const none = await exec(FULL, { w: noDayWorld() });
+  assert.equal(none.code, 1);
+  const expired = okLocal({
+    waivers: async () => [{ ...GATE_WAIVER, decidedOn: "2026-10-01", expires: "2026-10-10" }],
+  });
+  assert.equal((await exec(FULL, { w: noDayWorld(), local: expired })).code, 1);
+  const broken = okLocal({
+    waivers: async () => {
+      throw new Error("bad json");
+    },
+  });
+  assert.equal((await exec(FULL, { w: noDayWorld(), local: broken })).code, 1);
+  const malformed = okLocal({ waivers: async () => "malformed" });
+  assert.equal((await exec(FULL, { w: noDayWorld(), local: malformed })).code, 1);
+});
+
+test("localChecks.waivers: absent file = no waivers; a list is returned; a bad shape is flagged", async () => {
+  const { mkdirSync } = await import("node:fs");
+  const dir = mkdtempSync(join(tmpdir(), "rg-waiv-"));
+  const l = localChecks(dir);
+  assert.deepEqual(await l.waivers(), []);
+  mkdirSync(join(dir, "docs/release"), { recursive: true });
+  writeFileSync(join(dir, "docs/release/waivers.json"), JSON.stringify({ waivers: [GATE_WAIVER] }));
+  assert.deepEqual(await l.waivers(), [GATE_WAIVER]);
+  writeFileSync(join(dir, "docs/release/waivers.json"), JSON.stringify({ waivers: 5 }));
+  assert.equal(await l.waivers(), "malformed");
+  writeFileSync(join(dir, "docs/release/waivers.json"), "{not json");
+  await assert.rejects(() => l.waivers());
+});

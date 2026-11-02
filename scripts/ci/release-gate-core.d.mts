@@ -57,6 +57,28 @@ export interface GateInput {
   nightly?: RunFact[];
   zapStaging?: RunFact[];
   restoreDrill?: RunFact[];
+  /** D-860: parsed entries of docs/release/waivers.json (validated inside the core). */
+  waivers?: unknown;
+  /** YYYY-MM-DD used to judge waiver expiry; defaults to the date of `now`. */
+  today?: string;
+}
+
+export interface Waiver {
+  condition: string;
+  reason: string;
+  decidedBy: "Owner";
+  decidedOn: string;
+  expires: string;
+  followUp: string;
+}
+export interface WaivedCondition {
+  id: string;
+  label: string;
+  decidedOn: string;
+  expires: string;
+  reason: string;
+  followUp: string;
+  wouldHaveFailedBecause: string;
 }
 
 export interface Condition {
@@ -64,7 +86,7 @@ export interface Condition {
   label: string;
   /** false only for conditions the infrastructure gate does not require */
   required: boolean;
-  status: "pass" | "fail" | "not-required";
+  status: "pass" | "fail" | "not-required" | "waived";
   /** One plain sentence. Never holds a token, URL or SHA. */
   reason: string;
 }
@@ -72,8 +94,15 @@ export interface GateResult {
   mode: GateMode | "invalid";
   pass: boolean;
   conditions: Condition[];
+  /** Conditions that failed but are waived by a valid Owner waiver (never counted as pass). */
+  waived?: WaivedCondition[];
+  /** Number of waiver entries ignored (expired, invalid or not allow-listed). */
+  ignoredWaivers?: number;
 }
 
+export const WAIVABLE: string[];
+export const MAX_WAIVER_DAYS: number;
+export function validateWaivers(raw: unknown, today: string): { valid: Waiver[]; ignored: number };
 export const MODES: readonly ["full", "infrastructure"];
 export const NIGHTLY_GREENS: number;
 export const NIGHTLY_MAX_HOURS: number;

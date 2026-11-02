@@ -280,6 +280,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-852 | "One waiting request per job" counts every pending or dispatched row of the job, however old, not only those of the last hour. |
 | D-853 | A claimed (dispatched) request expires 30 minutes after the claim (updated_at), not 30 minutes after the request. |
 | D-854 | A date for workflow jobs later (price backfill, Arena close for a missed day), the minimal path: |
+| D-860 | The Owner decided on 2026-11-02 to release V2 without the Staging E2E day, once ("B"): staging has never run a full day (its Worker cron is off and WORKER_HM... |
 
 ## M14 (M14_design.md)
 
