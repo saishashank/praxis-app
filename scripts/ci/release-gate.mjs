@@ -127,6 +127,12 @@ export function localChecks(root = ROOT) {
       const data = JSON.parse(readFileSync(file, "utf8"));
       return checkQuarantine(data, { today, root, exists: existsSync }).length;
     },
+    async waivers() {
+      const file = path.join(root, "docs/release/waivers.json");
+      if (!existsSync(file)) return [];
+      const data = JSON.parse(readFileSync(file, "utf8"));
+      return Array.isArray(data?.waivers) ? data.waivers : "malformed";
+    },
     async exceptions(today) {
       const { checkExceptions } = await import("./exceptions-core.mjs");
       const read = (f) => JSON.parse(readFileSync(path.join(root, "scripts/ci", f), "utf8"));
@@ -189,6 +195,10 @@ export async function gather({ opts, repo, client, local, now, runId }) {
     quarantineFindings,
     auditExceptionProblems: ex ? ex.audit : null,
     zapExceptionProblems: ex ? ex.zap : null,
+    // D-860: Owner waivers from the checked-out commit. An absent file means none; an unreadable
+    // file gives null and a malformed one a non-list: the core ignores both (fail closed).
+    waivers: (await settle(() => local.waivers?.())) ?? undefined,
+    today,
   };
 
   if (full) {
