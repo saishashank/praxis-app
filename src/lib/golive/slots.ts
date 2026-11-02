@@ -9,6 +9,7 @@
 // confirm, audit event FIRST, one write transaction, a `_failed` event if it fails. It is allowed
 // while the market is data-only (it is how the Owner lists slots before `full`).
 import type { Client } from "@libsql/client";
+import { JOBS } from "@/lib/jobs/registry.mjs";
 import {
   commit,
   fail,
@@ -22,30 +23,14 @@ export const SLOTS_ENABLED_KEY = "slots_enabled";
 
 export type GoLiveSlot = { readonly id: string; readonly time: string; readonly label: string };
 
-/** The `requiresListing` slots of worker/src/schedule.ts in PLT-073 order (time of day, 07:00 on). */
-export const GO_LIVE_SLOTS: readonly GoLiveSlot[] = [
-  { id: "alert-flush", time: "07:01", label: "Alert flush (urgent batch and missing alerts)" },
-  { id: "morning", time: "08:00", label: "Morning email" },
-  { id: "pre-open", time: "09:54", label: "Pre-open re-check, attempt 1" },
-  { id: "pre-open-retry", time: "09:58", label: "Pre-open re-check, attempt 2" },
-  { id: "llm-bakeoff", time: "10:00", label: "Monthly model bake-off (first Saturday)" },
-  {
-    id: "quote-poll",
-    time: "10:00",
-    label: "Pick alerts: delayed quotes every 5 minutes to 16:00",
-  },
-  { id: "intraday-scan", time: "10:32", label: "Intraday watch scan every 30 minutes to 15:32" },
-  { id: "arena-close", time: "17:50", label: "Arena close" },
-  { id: "arena-signals", time: "18:10", label: "Arena signals" },
-  { id: "evening-review", time: "20:00", label: "Evening review" },
-  { id: "watchdog-2040", time: "20:40", label: "Watchdog check, 20:40" },
-  { id: "evening-review-late", time: "21:00", label: "Evening review, late run" },
-  { id: "watchdog-2150", time: "21:50", label: "Watchdog check, 21:50" },
-  { id: "kb-archive", time: "22:15", label: "Knowledge-base archive" },
-  { id: "backfill-history", time: "23:30", label: "History backfill" },
-  { id: "backfill-prices", time: "23:45", label: "Price backfill" },
-  { id: "replay", time: "00:15", label: "Replay" },
-];
+/**
+ * The `requiresListing` slots of worker/src/schedule.ts in PLT-073 order (time of day, 07:00 on).
+ * Derived from the job registry (src/lib/jobs/registry.mjs, D-840): the registry lists the go-live
+ * jobs in this order, and tests/jobs/registry.test.ts keeps it equal to the Worker table.
+ */
+export const GO_LIVE_SLOTS: readonly GoLiveSlot[] = JOBS.filter((j) => j.safety === "go-live").map(
+  (j) => ({ id: j.id, time: j.time, label: j.label }),
+);
 
 export const GO_LIVE_SLOT_IDS: readonly string[] = GO_LIVE_SLOTS.map((s) => s.id);
 

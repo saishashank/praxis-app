@@ -7,11 +7,16 @@ import { Pill } from "@/components/ui/Pill";
 import { EmptyState } from "@/components/ui/States";
 import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
+import { addDays } from "@/lib/data/calendar";
+import { loadRunNowRows, type JobRow } from "@/lib/jobs/runNow";
+import { melbourneToday } from "@/lib/ops/checklist";
 import { loadOps } from "@/lib/ops/service";
 import type { TaskRow, TaskStatus } from "@/lib/ops/checklist";
 import { formatMelbourne } from "@/lib/health/format";
 import { userPreferences } from "@/lib/preferences/read";
-import { tickOpsTaskAction } from "./actions";
+import { requestRunNowAction, tickOpsTaskAction } from "./actions";
+import { runNowOutcomeText } from "./messages";
+import { RunNowButton } from "./RunNowButton";
 import { TickButton } from "./TickButton";
 
 export const dynamic = "force-dynamic";
@@ -107,6 +112,44 @@ function Group({
   );
 }
 
+const SCHEDULED_WORDS: Record<string, string> = {
+  claimed: "starting",
+  dispatched: "started",
+  failed: "failed to start",
+};
+
+function RunNowItem({ row, today, tf }: { row: JobRow; today: string; tf: "24h" | "12h" }) {
+  const { job, last, scheduled } = row;
+  const waiting = last !== null && (last.status === "pending" || last.status === "dispatched");
+  return (
+    <li className="flex min-w-0 flex-col gap-2 rounded-md bg-surface-2 p-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
+        <p className="m-0 font-semibold break-words">{job.label}</p>
+        <p className="m-0 text-sm text-text-muted">{job.schedule}.</p>
+        <p className="m-0 mt-1 text-sm">
+          {scheduled
+            ? `Last scheduled run: ${SCHEDULED_WORDS[scheduled.state] ?? "unknown"} on ${scheduled.d} (${formatMelbourne(scheduled.at, tf)}).`
+            : "Last scheduled run: none recorded."}
+        </p>
+        <p className="m-0 text-sm">
+          {last
+            ? `Last run now (${formatMelbourne(last.requestedAt, tf)}): ${runNowOutcomeText(last.status, last.result)}`
+            : "Never run by hand."}
+        </p>
+      </div>
+      <RunNowButton
+        job={job.id}
+        title={job.label}
+        today={today}
+        minDate={job.dateBackDays > 0 ? addDays(today, -job.dateBackDays) : null}
+        note={job.note ?? null}
+        disabled={waiting}
+        action={requestRunNowAction}
+      />
+    </li>
+  );
+}
+
 export default async function OpsPage() {
   const user = await requireUser("admin", "/ops");
   const tf = (await userPreferences(user.id)).time_format;
@@ -116,6 +159,13 @@ export default async function OpsPage() {
   } catch {
     ops = null; // neutral message below; no error details
   }
+  let runRows: JobRow[] | null = null;
+  try {
+    runRows = await loadRunNowRows(mainDb());
+  } catch {
+    runRows = null; // neutral message below; no error details
+  }
+  const today = melbourneToday(new Date());
   const tasks = ops?.tasks ?? [];
   // UXR-029: three groups. "Due soon" holds what is due now and what is still coming up.
   const overdue = tasks.filter((t) => t.status === "overdue");
@@ -197,6 +247,28 @@ export default async function OpsPage() {
           </Card>
         </>
       )}
+
+      <section aria-labelledby="run-now-h" className="flex flex-col gap-3">
+        <h2 id="run-now-h" className="text-lg font-semibold">
+          Run a job now
+        </h2>
+        <p className="m-0 text-sm text-text-muted">
+          Jobs run at their usual times. Use these buttons to run one now instead of waiting. The
+          Worker starts it within a minute. It still follows the same safety checks as the schedule:
+          the dispatch switch, your list of jobs that may run, the market mode and trading days. If
+          a check says no, the job is not run and the reason is shown here. A job that has already
+          finished for the day does nothing the second time.
+        </p>
+        {runRows === null ? (
+          <p role="status">The job list is unavailable. Nothing was changed.</p>
+        ) : (
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {runRows.map((r) => (
+              <RunNowItem key={r.job.id} row={r} today={today} tf={tf} />
+            ))}
+          </ul>
+        )}
+      </section>
     </main>
   );
 }

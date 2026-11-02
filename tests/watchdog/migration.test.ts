@@ -29,7 +29,7 @@ describe("main migration 0003_incident", () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
     const before = await schemaOf(db);
     // main is at v13 since D-175 (0013_au_calendar_history): eleven steps down reach v2, just before 0003_incident
-    expect(await migrateDown(db, ms, 23)).toEqual({ rolledBack: 23, version: 2 });
+    expect(await migrateDown(db, ms, 24)).toEqual({ rolledBack: 24, version: 2 });
     expect((await schemaOf(db)).some((s) => s.includes("incident"))).toBe(false);
     await migrateUp(db, ms);
     expect(await schemaOf(db)).toEqual(before);
