@@ -415,19 +415,26 @@ const EVENT_COLS = [
 ] as const;
 
 /**
- * D-872: store the night's candidates exactly as batch 3's forward-ledger catch-up would rebuild them
- * (`runFamilies` on the base parameters, same `day.inputs`: held codes never enter `inputs`), under the
- * key `loadDayCandidates` reads. First write wins, so a rerun or a batch 3 that stored them first is
- * unchanged. Live only (a replay keeps its replay_stat rows as they were) and never fails the night:
- * batch 3 rebuilds what is missing.
+ * D-872 / D-880: store the night's candidates exactly as batch 3's forward-ledger sync would rebuild
+ * them (`runFamilies` on the base parameters over `day.inputs`), under the key `loadDayCandidates`
+ * reads. `day.inputs` is the sync's own input only when it was built from the base parameters: a live
+ * rule version lays its family slice over them (`liveParams`, D-115) and `loadDayInputs` reads that
+ * slice (bars needed, high lookback, insider weights and window), so with an incumbent live the night
+ * stores nothing and batch 3 rebuilds the day as before. The held codes never enter `inputs` (only
+ * universe codes do), and `loadDayInputs` applies the same decision cut-off to the actions itself.
+ * Called once the night's status is known (success or degraded), so a stored day is always a decided
+ * day, as the sync's own stores are. First write wins, so a rerun or a batch 3 that stored them first
+ * is unchanged. Live only (a replay keeps its replay_stat rows as they were) and never fails the
+ * night: batch 3 rebuilds what is missing. Exported as a test seam.
  */
-async function storeLedgerCandidates(
+export async function storeLedgerCandidates(
   db: Client,
   o: { market: string; d: string; replay?: boolean },
   baseParams: AgentParams,
+  dayParams: AgentParams,
   day: DayInputs,
 ): Promise<void> {
-  if (o.replay === true) return;
+  if (o.replay === true || dayParams !== baseParams) return;
   try {
     const out = runFamilies(day.inputs, baseParams);
     await putDayCandidates(db, o.market, o.d, { candidates: out.candidates, blocked: out.blocked });
@@ -1810,8 +1817,6 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
     });
     stats.agentRows = await recordAgentRows(db, day, o.market);
     tick("loadDayInputs", `codes=${day.inputs.codes.length}`);
-    await storeLedgerCandidates(db, o, baseParams, day); // D-872
-    tick("storeCandidates");
 
     // A5: the rule interpreter, once per active rule version (live set first; D-110 #44)
     const { out, paramsOf } = runVersions(day.inputs, params, versionSet);
@@ -2062,6 +2067,8 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
     tick("controls_and_cortex_entries", `orders=${stats.orders} controls=${stats.controls}`);
     const gaps = coverageGaps(day.inputs);
     const status: SignalsStatus = day.partial || gaps.length > 0 ? "degraded" : "success";
+    await storeLedgerCandidates(db, o, baseParams, params, day); // D-872, D-880
+    tick("storeCandidates");
     await finishRun(db, runId, {
       status,
       itemsProcessed: stats.cohorts,

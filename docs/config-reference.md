@@ -266,7 +266,7 @@ Who may change a key: Owner (any valid value), Owner within bounds (Lane B, beco
 | `retention_news_days` | `400` | days | Owner | whole days, at least 1 | no | DAT-142 |
 | `retention_runs_days` | `180` | days | Owner | whole days, at least 1 | no | DAT-142 |
 | `return_window_sessions` | `126` | sessions | nobody (fixed) | fixed | no | AGT-030 6-month return |
-| `review_rank_ic_nightly` | `0` | 0 or 1 | Owner | whole number, 0 to 1 | no | VAL-114, D-874 |
+| `review_rank_ic_nightly` | `1` | 0 or 1 | Owner | whole number, 0 to 1 | no | VAL-114, D-874, D-882 |
 | `rolling_start_step` | `5` | sessions | Owner | whole number, 5 to 21 | yes | ARN-080; ch.15 l.39 |
 | `rsi_long_period` | `14` | sessions | nobody (fixed) | fixed | no | AGT-030 RSI(14), Wilder |
 | `rsi_short_period` | `2` | sessions | nobody (fixed) | fixed | no | AGT-030 RSI(2), Wilder |

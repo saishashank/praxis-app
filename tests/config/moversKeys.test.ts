@@ -29,7 +29,7 @@ const RANGED: ReadonlyArray<readonly [ConfigKey, number, number, number, boolean
   ["short_risk_pct_min", 5, 3, 12, false],
   ["short_risk_change_pp_min", 2, 1, 6, false],
   ["short_risk_f4_veto", 0, 0, 1, true],
-  ["review_rank_ic_nightly", 0, 0, 1, true],
+  ["review_rank_ic_nightly", 1, 0, 1, true],
   ["sector_composite_min_members", 5, 3, 30, true],
 ];
 

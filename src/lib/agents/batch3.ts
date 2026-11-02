@@ -74,9 +74,6 @@ import type { Family } from "./families";
 
 export const REVIEW_JOB = "arena-review";
 const LOG_MESSAGE_MAX = 500; // threshold-ok: app_log message length cap (as batch 2b)
-/** Context sessions of candidates batch 3 rebuilds in one night (D-873). */
-const LEDGER_CATCH_UP = 1; // threshold-ok: rebuilds per night
-
 const FAMILIES: readonly Family[] = ["F1", "F2", "F3", "F4", "F5", "F6"];
 
 /** `arena-3:<market>:<d>`: the concurrency key of batch 3 (cf. `arena-2b:<market>:<d>`). */
@@ -893,7 +890,10 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
       params,
       replay: o.replay === true,
       masterSeed: o.masterSeed ?? ARENA_MASTER_SEED,
-      maxCatchUp: LEDGER_CATCH_UP, // D-873
+      // D-881: no catch-up cap. A context day left unbuilt changes the positions the write zone starts
+      // from, so a row written that night could differ from the full rebuild and the next night's
+      // recomputation would then raise `row_conflict`; with 2b storing each decided day (D-872) a
+      // backlog arises only after a missed batch 3, and those days sit inside the write zone anyway.
     });
     tick(
       "ledger",
