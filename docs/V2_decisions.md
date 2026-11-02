@@ -275,6 +275,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-847 | A manual run goes through the same function as the schedule (dispatchWorkflow with the fixed ref for the environment, or postSigned with the HMAC body), so t... |
 | D-848 | Date picker: GitHub workflows in this build take no date input (they use the Sydney date themselves), so a date is offered only for route jobs that accept one: |
 | D-849 | The Ops page lists every runnable job: label, schedule (Melbourne), the last scheduled start from worker_state (slot:<id>:<date>), the newest manual request... |
+| D-850 | The staging test login activates an invited .test user on its first successful login, the same way a first Google sign-in activates an invited user (allowlis... |
 
 ## M14 (M14_design.md)
 
