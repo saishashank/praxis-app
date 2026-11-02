@@ -75,7 +75,7 @@ describe("assignTiers", () => {
     expect(t.get("C001")!.tier).toBe("U2");
   });
 
-  it("U1 needs bars on 54 of the 60 sessions (D-253); U2 checks market cap only when it is known", () => {
+  it("U1 needs bars on 54 of the 60 sessions (D-861); U2 checks market cap only when it is known", () => {
     const bars = (n: number) => Array.from({ length: n }, () => A$(2_000_000));
     const t = assignTiers(
       [
