@@ -18,6 +18,9 @@ import { runFamilies, type FamilyOutput } from "@/lib/agents/families";
 import { defaultAgentParams, loadAgentParams } from "@/lib/agents/params";
 import { regimeWarmupCloses } from "@/lib/agents/regime";
 import { liveParams, loadVersionSet, runVersions } from "@/lib/agents/versionRuns";
+import { computeTiers } from "@/lib/data/pipeline/batch1-core.mjs";
+import { addDays, previousTradingDay } from "@/lib/data/pipeline/rules.mjs";
+import { TIER_RULES } from "@/lib/data/universe/tiers.mjs";
 
 const MARKET = "AU";
 const READ = /^\s*(SELECT|WITH)\b/i; // money-float-ok: a regular expression, not money
@@ -85,6 +88,56 @@ async function count(db: Client, sql: string, args: (string | number)[]): Promis
   return String(rs.rows[0]!.n);
 }
 
+/**
+ * D-253: the night's tiers recomputed from the bars stored now (the stored snapshot may predate a
+ * history fill), the stored-bar counts of the codes whose ADV meets U1, and the thin sessions of the
+ * window (fewer than half the busiest session's bars).
+ */
+async function recomputedTiers(db: Client, d: string, out: (line: string) => void): Promise<void> {
+  const calRows = (
+    await db.execute({
+      sql: "SELECT d, kind FROM trading_calendar WHERE market = ? AND d >= ? AND d <= ?",
+      args: [MARKET, addDays(d, -150), d],
+    })
+  ).rows.map((r) => ({ d: String(r.d), kind: String(r.kind) }));
+  const uni = await db.execute({
+    sql: `SELECT code FROM universe_snapshot WHERE market = ?
+          AND d = (SELECT MAX(d) FROM universe_snapshot WHERE market = ? AND d <= ?)`,
+    args: [MARKET, MARKET, d],
+  });
+  const tiers = await computeTiers(
+    { db, market: MARKET, calRows },
+    { read: 0, written: 0 },
+    d,
+    uni.rows.map((r) => String(r.code)),
+  );
+  let from = d;
+  for (let i = 0; i < TIER_RULES.windowSessions; i += 1) from = previousTradingDay(from, calRows);
+  const perCode = await db.execute({
+    sql: "SELECT code, COUNT(*) AS n FROM price_bar WHERE market = ? AND d >= ? AND d < ? GROUP BY code",
+    args: [MARKET, from, d],
+  });
+  const u1Adv = Number(TIER_RULES.u1.advMicro / 1_000_000n); // money-float-ok: A$ threshold
+  const pool = perCode.rows
+    .filter((r) => (tiers.get(String(r.code))?.adv ?? 0) >= u1Adv)
+    .map((r) => Number(r.n)); // money-float-ok: a row count
+  const perSession = await db.execute({
+    sql: "SELECT d, COUNT(*) AS n FROM price_bar WHERE market = ? AND d >= ? AND d < ? GROUP BY d ORDER BY d",
+    args: [MARKET, from, d],
+  });
+  const counts = perSession.rows.map((r) => Number(r.n)); // money-float-ok: row counts
+  const busiest = Math.max(0, ...counts); // money-float-ok: a row count
+  const thin = perSession.rows
+    .filter((r) => Number(r.n) * 2 < busiest) // money-float-ok: row counts
+    .map((r) => `${String(r.d)}:${String(r.n)}`);
+  out(
+    `  tiers now: ${tally([...tiers.values()].map((t) => `${t.tier}|${t.status}`))}` +
+      ` window=${from}..${d} sessionsWithBars=${counts.length} busiest=${busiest} thin=${JSON.stringify(thin)}` +
+      ` u1AdvPool=${pool.length} poolBars: 60=${pool.filter((n) => n >= 60).length}` +
+      ` 54-59=${pool.filter((n) => n >= 54 && n < 60).length} under54=${pool.filter((n) => n < 54).length}`,
+  );
+}
+
 export async function diagnoseDay(
   db: Client,
   d: string,
@@ -137,6 +190,7 @@ export async function diagnoseDay(
     )} lastUniverseD=${String(lastUni.rows[0]!.d ?? "none")} barsOnD=${barsOnD}` +
       ` activeUniverseWithBar=${uniWithBar} signalRowsStored=${signalRows}`,
   );
+  await recomputedTiers(db, d, out);
 
   const base = await loadAgentParams(db);
   const executions = await loadExecutions(db);
