@@ -3,6 +3,7 @@ import { runUniverse, type UniverseEnv } from "./asx/universe";
 import { runClock } from "./clock";
 import { runPostDeploy } from "./postdeploy";
 import { runReenable } from "./reenable";
+import { runRunNow } from "./runNow";
 import { runRoutes, type RouteEnv } from "./routes";
 import { runSelfCheck, type SelfCheckEnv } from "./selfcheck";
 
@@ -50,6 +51,9 @@ export default {
       guarded(() => runReenable(env, controller.scheduledTime, deps)),
       // Signed route slots (M5 T10, decision 41): no work and no database request unless one is due.
       guarded(() => runRoutes(env, controller.scheduledTime, deps)),
+      // Owner "Run now" requests (D-840): one cheap read per minute; runs a request through the same
+      // dispatch path as the schedule, with every safety gate except the time window.
+      guarded(() => runRunNow(env, controller.scheduledTime, deps)),
       // ASX poll (DAT-122), then the listed-companies import (D-067): serial, they share the token.
       guarded(async () => {
         await guarded(() => runAsx(env, controller.scheduledTime, deps));

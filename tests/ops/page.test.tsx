@@ -13,9 +13,15 @@ vi.mock("@/lib/db/client", () => ({ mainDb: () => ({}) }));
 vi.mock("@/lib/preferences/read", () => ({
   userPreferences: async () => ({ time_format: "24h" }),
 }));
-vi.mock("@/app/(app)/ops/actions", () => ({ tickOpsTaskAction: vi.fn() }));
+const runNow = vi.hoisted(() => ({ loadRunNowRows: vi.fn() }));
+vi.mock("@/lib/jobs/runNow", () => ({ loadRunNowRows: runNow.loadRunNowRows }));
+vi.mock("@/app/(app)/ops/actions", () => ({
+  tickOpsTaskAction: vi.fn(),
+  requestRunNowAction: vi.fn(),
+}));
 
 beforeEach(() => {
+  runNow.loadRunNowRows.mockResolvedValue([]);
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-05T01:00:00Z"));
 });
@@ -88,6 +94,65 @@ describe("ops page", () => {
     ops.loadOps.mockRejectedValueOnce(new Error("db down: secret detail"));
     render(await OpsPage());
     expect(screen.getByRole("status")).toHaveTextContent("Ops checklist unavailable");
+    expect(screen.queryByText(/secret detail/)).toBeNull();
+  });
+
+  it("lists the jobs with their schedule, last run and a Run now button; a waiting request disables it", async () => {
+    guard.requireUser.mockResolvedValueOnce(owner);
+    ops.loadOps.mockResolvedValueOnce(model());
+    const job = (id: string, label: string, back = 0) => ({
+      id,
+      label,
+      schedule: "Every day at 20:00",
+      time: "20:00",
+      dateBackDays: back,
+    });
+    runNow.loadRunNowRows.mockResolvedValueOnce([
+      {
+        job: job("evening-review", "Evening review", 1),
+        last: {
+          status: "refused",
+          result: "refused: not listed",
+          requestedAt: "2026-10-05T00:00:00.000Z",
+          updatedAt: "2026-10-05T00:00:30.000Z",
+        },
+        scheduled: { state: "dispatched", at: "2026-10-04T09:00:00.000Z", d: "2026-10-04" },
+      },
+      {
+        job: job("backup", "Nightly backup"),
+        last: {
+          status: "pending",
+          result: null,
+          requestedAt: "2026-10-05T00:59:00.000Z",
+          updatedAt: "2026-10-05T00:59:00.000Z",
+        },
+        scheduled: null,
+      },
+    ]);
+    render(await OpsPage());
+    const sec = screen.getByRole("region", { name: "Run a job now" });
+    const items = within(sec).getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(within(items[0]!).getByText(/Not run: the job is not on your list/)).toBeInTheDocument();
+    expect(
+      within(items[0]!).getByText(/Last scheduled run: started on 2026-10-04/),
+    ).toBeInTheDocument();
+    expect(within(items[0]!).getByRole("button", { name: /Run now/ })).toBeInTheDocument();
+    expect(within(items[1]!).getByText(/Waiting. The Worker picks it up/)).toBeInTheDocument();
+    expect(
+      within(items[1]!).getByText(/Never ran|Last scheduled run: none recorded/),
+    ).toBeInTheDocument();
+    expect(sec.textContent?.toLowerCase()).not.toContain("blueprint");
+  });
+
+  it("shows a neutral message when the job list cannot be read", async () => {
+    guard.requireUser.mockResolvedValueOnce(owner);
+    ops.loadOps.mockResolvedValueOnce(model());
+    runNow.loadRunNowRows.mockRejectedValueOnce(new Error("db down: secret detail"));
+    render(await OpsPage());
+    expect(
+      screen.getByText("The job list is unavailable. Nothing was changed."),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/secret detail/)).toBeNull();
   });
 });

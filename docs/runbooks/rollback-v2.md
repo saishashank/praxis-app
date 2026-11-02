@@ -1,6 +1,6 @@
 # Rolling back from V2 to V1
 
-Applies once migrations 0015 to 0025 have reached a database. Rehearse it once on staging before production (V2 go-live step "Try the rollback once").
+Applies once migrations 0015 to 0026 have reached a database. Rehearse it once on staging before production (V2 go-live step "Try the rollback once").
 
 ## What stays true
 
@@ -9,7 +9,7 @@ Applies once migrations 0015 to 0025 have reached a database. Rehearse it once o
 
 ## Level 1: instant rollback (no build, minutes)
 
-Use this first. In Vercel, promote the last good V1 deployment (Deployments, the V1 build, "Instant Rollback"). No build runs, so the migration step is not involved. The schema stays at 0025. Before the V1 code runs against it, do the pre-check under "Before V1 runs on the V2 database" below. Re-promote the V2 deployment to go forward again.
+Use this first. In Vercel, promote the last good V1 deployment (Deployments, the V1 build, "Instant Rollback"). No build runs, so the migration step is not involved. The schema stays at 0026. Before the V1 code runs against it, do the pre-check under "Before V1 runs on the V2 database" below. Re-promote the V2 deployment to go forward again.
 
 ## Level 2: a V1 rebuild or hotfix on the V2 database
 
@@ -21,8 +21,8 @@ A V1 build runs `node scripts/db/migrate.mjs --if-vercel`. The V1 copy of that s
    - With the variable unset the old strict behaviour stays. Remove the variable when you are back on V2.
 2. **Step the schema down to V1.** From a V2 checkout, with the database credentials for that database in the environment:
    - `node scripts/db/migrate.mjs --db main --down-to 14 --confirm-down`
-   - It runs the `-- +down` sections of 0025 to 0015, newest first, and then the V1 tree accepts the database with no flag. Going forward again is a normal `migrate.mjs --db main`.
-   - **This deletes data.** Take a backup first (the nightly backup, or run `scripts/backup` by hand and keep the file). What goes: every Cortex, intraday, steelman and experts table with its rows; the 0024 movers tables `announcement_archive`, `halt_watch`, `intraday_arm`, `sector_composite_daily` and `angle_forward_flag`; the 0025 table `instrument_listing` and the trigger `instrument_no_revive`; 0020 also deletes every `pick_*` e-mail row and attempt (it restores the narrower `email_message` kind list); 0016 and 0017 take back the "known at" and "first seen" additions.
+   - It runs the `-- +down` sections of 0026 to 0015, newest first, and then the V1 tree accepts the database with no flag. Going forward again is a normal `migrate.mjs --db main`.
+   - **This deletes data.** Take a backup first (the nightly backup, or run `scripts/backup` by hand and keep the file). What goes: every Cortex, intraday, steelman and experts table with its rows; the 0024 movers tables `announcement_archive`, `halt_watch`, `intraday_arm`, `sector_composite_daily` and `angle_forward_flag`; the 0025 table `instrument_listing` and the trigger `instrument_no_revive`; the 0026 table `run_now_request` (the Owner's manual-run requests; the audit log keeps who asked); 0020 also deletes every `pick_*` e-mail row and attempt (it restores the narrower `email_message` kind list); 0016 and 0017 take back the "known at" and "first seen" additions.
    - The auth database has no V2 migrations; do not run `--db auth` down.
    - **`instrument_listing` holds Owner decisions** (the confirmed relist and code-reuse decisions, V1-S7) that cannot be rebuilt from any feed, and it is append-only by trigger, so a down section is the only thing that removes it. **Export it first**, from the V2 checkout with `TURSO_MAIN_URL` and `TURSO_MAIN_TOKEN` set (keep the file outside the repository):
      `node --input-type=module -e "import {createClient} from '@libsql/client'; import fs from 'node:fs'; const c=createClient({url:process.env.TURSO_MAIN_URL,authToken:process.env.TURSO_MAIN_TOKEN}); const r=await c.execute('SELECT * FROM instrument_listing'); fs.writeFileSync('instrument_listing.json',JSON.stringify(r.rows,null,1)); console.log(r.rows.length,'rows')"`
@@ -48,7 +48,7 @@ For each row returned, decide it (no row, nothing to do):
 
 ## Tested
 
-`tests/db/0023_feature_retention.test.ts` covers: an older tree failing by default and tolerating the newer database only on request; the checksum guard; `--down-to 14` from 0025 and back up to a schema identical to a fresh one; the CLI refusing `--down-to` without `--confirm-down`. `tests/db/0024_movers.test.ts` and `tests/db/0025_instrument_listing.test.ts` (the down path at line 29: table and both triggers go, the schema comes back identical) cover each new step on its own. `tests/golive/v2steps.test.tsx` asserts that this runbook names the newest migration version in `db/migrations/main` (R3-S2).
+`tests/db/0023_feature_retention.test.ts` covers: an older tree failing by default and tolerating the newer database only on request; the checksum guard; `--down-to 14` from 0026 and back up to a schema identical to a fresh one; the CLI refusing `--down-to` without `--confirm-down`. `tests/db/0024_movers.test.ts` and `tests/db/0025_instrument_listing.test.ts` and `tests/jobs/runNowAction.test.ts` (0026: append-only triggers) (the 0025 down path at line 29: table and both triggers go, the schema comes back identical) cover each new step on its own. `tests/golive/v2steps.test.tsx` asserts that this runbook names the newest migration version in `db/migrations/main` (R3-S2).
 
 ## Migration "down" policy (V1-I5, D-798)
 
