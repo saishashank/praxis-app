@@ -295,6 +295,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-881 | Batch 3 passes no maxCatchUp (D-873 reverted for the live path). |
 | D-882 | review_rank_ic_nightly defaults to 1 (D-874 said 0). |
 | D-884 | The Owner asked on 2026-11-04 for a quieter, professional look ("white background, navy blue looks professional", "the app looks very dull", "font is very ba... |
+| D-885 | Every trade already has a stop loss (trade.stop_micro NOT NULL; the stop in force is the higher of it and the latest recomputed stop_level, decision 7). |
+| D-886 | Movers check (Owner 2026-11-04: "at the end of the day run a job on why we haven't picked the top 20 movers and if we have stopped the top 20 losers"). |
 
 ## M14 (M14_design.md)
 

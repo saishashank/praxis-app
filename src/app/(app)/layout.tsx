@@ -30,7 +30,14 @@ async function shellFor(user: CurrentUser): Promise<ShellModel> {
   }
 }
 
-export default async function AppLayout({ children }: { children: ReactNode }) {
+// D-884: `modal` is the @modal slot (the Decision Card popup); empty unless a card link was followed.
+export default async function AppLayout({
+  children,
+  modal,
+}: {
+  children: ReactNode;
+  modal?: ReactNode;
+}) {
   const user = await userOrNull();
   if (!user) return <>{children}</>;
   const shell = await shellFor(user);
@@ -44,6 +51,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       account={{ email: user.email, name: user.name }}
     >
       {children}
+      {modal}
     </AppShell>
   );
 }
