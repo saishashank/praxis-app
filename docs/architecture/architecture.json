@@ -2873,28 +2873,6 @@
       "attrs": {}
     },
     {
-      "id": "page:/[...rest]",
-      "type": "page",
-      "name": "/[...rest]",
-      "purpose": "Screen /[...rest] of the web app.",
-      "specIds": [
-        "UXN-001"
-      ],
-      "owner": "app",
-      "schedule": null,
-      "inputs": [],
-      "outputs": [],
-      "configKeys": [],
-      "tables": [],
-      "failure": "Shows the standard error state; nothing is written.",
-      "runbook": null,
-      "views": [
-        "platform"
-      ],
-      "source": "src/app/(app)/@modal/[...rest]/page.tsx",
-      "attrs": {}
-    },
-    {
       "id": "page:/alerts",
       "type": "page",
       "name": "/alerts",
@@ -16990,16 +16968,6 @@
       "id": "service:app|contains|page:/(.)cards/[id]",
       "from": "service:app",
       "to": "page:/(.)cards/[id]",
-      "kind": "contains",
-      "contract": "Runs or holds this element.",
-      "views": [
-        "platform"
-      ]
-    },
-    {
-      "id": "service:app|contains|page:/[...rest]",
-      "from": "service:app",
-      "to": "page:/[...rest]",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
