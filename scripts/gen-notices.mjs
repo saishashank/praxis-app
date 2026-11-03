@@ -55,8 +55,8 @@ export function buildNotices(lock, approved = new Map()) {
   }
   const packages = [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
   const fonts = [
-    { name: "Inter", license: "OFL-1.1", note: "Self-hosted at build time by next/font." },
-    { name: "JetBrains Mono", license: "OFL-1.1", note: "Self-hosted at build time by next/font." },
+    { name: "IBM Plex Sans", license: "OFL-1.1", note: "Self-hosted at build time by next/font." },
+    { name: "Source Serif 4", license: "OFL-1.1", note: "Self-hosted at build time by next/font." },
   ];
   const attributions = [
     {

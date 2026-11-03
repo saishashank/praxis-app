@@ -130,7 +130,9 @@ describe("states", () => {
     const { result } = await view(empty, OWNER);
     expect(result.state).toBe("empty");
     expect(screen.getByText("No data yet")).toBeInTheDocument();
-    expect(screen.getByText(/First Evening Review at 20:00/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/The first Evening Review appears after this evening/),
+    ).toBeInTheDocument(); // D-884
     expect(screen.getAllByText(/No trade ideas yet/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/SAMPLE DATA/)).toBeNull();
     expect(document.querySelectorAll("[data-money]")).toHaveLength(0);
@@ -296,11 +298,11 @@ describe("Home redesign (UXR-020, 044, 053, 055, 056)", () => {
     expect(strip).toHaveTextContent(word);
   });
 
-  it("status strip shows the freshness and the next run, in outcome colour with a sparkline", async () => {
+  it("status strip shows the freshness but no run time (D-884), in outcome colour with a sparkline", async () => {
     await view(pop, OWNER, false, NOW);
     const strip = screen.getByRole("region", { name: "Today at a glance" });
     expect(strip).toHaveTextContent("Data as of");
-    expect(strip).toHaveTextContent(/Next run\s*(tonight|tomorrow|[A-Z][a-z]{2}) 18:10/);
+    expect(strip).not.toHaveTextContent(/Next run/); // D-884: no run times on Home
     expect(strip.querySelector("[data-outcome]")).not.toBeNull();
     expect(strip.querySelector("[data-sparkline]")).not.toBeNull();
     // the number carries a sign glyph and words, never colour alone
@@ -333,7 +335,7 @@ describe("Home redesign (UXR-020, 044, 053, 055, 056)", () => {
     }
   });
 
-  it("Since yesterday rows are single links; Needs you has an empty state", async () => {
+  it("Since yesterday rows are single links", async () => {
     await view(pop, OWNER);
     const since = screen.getByRole("region", { name: "Since yesterday" });
     const rows = within(since).getAllByRole("listitem");
@@ -368,6 +370,60 @@ describe("Home redesign (UXR-020, 044, 053, 055, 056)", () => {
     expect(items[0]!.querySelector("[data-hue='tier-p0']")).not.toBeNull();
     expect(items[1]!.querySelector("[data-hue='tier-p1']")).not.toBeNull();
     for (const i of items) expect(within(i).getAllByRole("link")).toHaveLength(1);
+  });
+
+  it("Needs you is not drawn when nothing needs the viewer (D-884)", async () => {
+    await withPatch(OWNER, (v) => {
+      v.needs = [];
+    });
+    expect(screen.queryByRole("region", { name: "Needs you" })).toBeNull();
+  });
+
+  it("idea tiles: code, company name, strategy, bought or not, and an i with the reasons (D-884)", async () => {
+    await withPatch(OWNER, (v) => {
+      v.ideas = {
+        d: "2026-11-03",
+        signals: 2,
+        items: [
+          {
+            stock: "AAA",
+            name: "Alpha Mining Ltd",
+            strategy: "Follow the trend",
+            reasons: ["the stop would have been too far below the entry price"],
+            taken: 0,
+            notTaken: 1,
+            href: "/cards/x",
+          },
+          {
+            stock: "BBB",
+            name: null,
+            strategy: "Buy the dip",
+            reasons: [],
+            taken: 1,
+            notTaken: 0,
+            href: null,
+          },
+        ],
+      };
+    });
+    const list = screen.getByRole("list", { name: "Tonight's trade ideas" });
+    const tiles = within(list).getAllByRole("listitem");
+    expect(tiles).toHaveLength(2);
+    expect(tiles[0]).toHaveTextContent("Alpha Mining Ltd");
+    expect(tiles[0]).toHaveTextContent("Follow the trend");
+    expect(tiles[0]).toHaveTextContent("Not bought");
+    expect(within(tiles[0]!).getByRole("link", { name: "AAA" })).toHaveAttribute(
+      "href",
+      "/cards/x",
+    );
+    expect(
+      within(tiles[0]!).getByRole("button", { name: "Why AAA was not bought" }),
+    ).toBeInTheDocument();
+    expect(tiles[1]).toHaveTextContent("Bought");
+    expect(
+      within(tiles[1]!).getByRole("button", { name: "Why BBB was bought" }),
+    ).toBeInTheDocument();
+    expect(tiles[0]).not.toHaveTextContent(/taken \d/);
   });
 
   it("pick cards show the family badge text, aim, stop, time frame and Why this pick", async () => {

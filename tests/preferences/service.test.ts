@@ -26,7 +26,7 @@ beforeEach(async () => {
 describe("defaults and merge", () => {
   it("returns the spec defaults when nothing is stored", async () => {
     expect(await getPreferences(db, uid)).toEqual({
-      theme: "dark",
+      theme: "light", // D-884: default is light
       default_market: "AU",
       time_format: "24h",
       alert_p1: "immediate",
@@ -38,7 +38,7 @@ describe("defaults and merge", () => {
       intraday_candidate_emails: "on",
       picks_sort: "chance",
     });
-    expect(DEFAULT_PREFERENCES.theme).toBe("dark");
+    expect(DEFAULT_PREFERENCES.theme).toBe("light"); // D-884: default is light
   });
 
   it("merges stored values over defaults and ignores bad stored values", async () => {
@@ -86,13 +86,13 @@ describe("updatePreferences", () => {
   });
 
   it("writes the row and one audit event naming only the changed fields", async () => {
-    const r = await upd({ theme: "light", time_format: "12h", default_market: "AU" });
+    const r = await upd({ theme: "dark", time_format: "12h", default_market: "AU" }); // D-884: default is light
     expect(r).toEqual({ ok: true, changed: ["theme", "time_format"] });
     const rows = await stored(uid);
     expect(rows).toHaveLength(1);
     expect(rows[0].updated_at).toBe(NOW.toISOString());
     expect(JSON.parse(String(rows[0].prefs_json))).toEqual({
-      theme: "light",
+      theme: "dark",
       default_market: "AU",
       time_format: "12h",
       alert_p1: "immediate",
@@ -123,7 +123,7 @@ describe("updatePreferences", () => {
 
   it("an empty or no-op patch succeeds without a write or an audit event", async () => {
     expect(await upd({})).toEqual({ ok: true, changed: [] });
-    expect(await upd({ theme: "dark" })).toEqual({ ok: true, changed: [] });
+    expect(await upd({ theme: "light" })).toEqual({ ok: true, changed: [] }); // D-884: default is light
     expect(await stored(uid)).toHaveLength(0);
     expect(await auditRows(db)).toHaveLength(0);
   });
@@ -168,13 +168,13 @@ describe("updatePreferences", () => {
       ok: false,
       error: "invalid",
     });
-    expect((await getPreferences(db, uid)).theme).toBe("dark");
+    expect((await getPreferences(db, uid)).theme).toBe("light"); // D-884: default is light
   });
 
   it("only ever touches the actor's own row", async () => {
     await upd({ theme: "light" });
     expect(await stored(other)).toHaveLength(0);
-    expect((await getPreferences(db, other)).theme).toBe("dark");
+    expect((await getPreferences(db, other)).theme).toBe("light"); // D-884: default is light
   });
 
   it("refuses a missing or non-active actor", async () => {
@@ -185,12 +185,13 @@ describe("updatePreferences", () => {
   });
 
   it("rolls back the preference when the audit append fails", async () => {
+    // D-884: default is light, so patch to dark (a real change)
     const bad = { ...ENV, PII_HASH_KEY: undefined };
-    const r = await updatePreferences(db, bad, META, { id: uid }, { theme: "light" }, NOW);
+    const r = await updatePreferences(db, bad, META, { id: uid }, { theme: "dark" }, NOW);
     expect(r).toEqual({ ok: false, error: "unavailable" });
     expect(await stored(uid)).toHaveLength(0);
     await db.execute("DROP TABLE audit_event"); // a real SQL failure inside the transaction
-    expect(await upd({ theme: "light" })).toEqual({ ok: false, error: "unavailable" });
+    expect(await upd({ theme: "dark" })).toEqual({ ok: false, error: "unavailable" });
     expect(await stored(uid)).toHaveLength(0);
   });
 

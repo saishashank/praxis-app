@@ -27,8 +27,8 @@ vi.mock("@/app/(app)/settings/actions", () => ({
   setQuietHoursAction: vi.fn(),
 }));
 vi.mock("next/font/google", () => ({
-  Inter: () => ({ variable: "inter-var" }),
-  JetBrains_Mono: () => ({ variable: "mono-var" }),
+  IBM_Plex_Sans: () => ({ variable: "inter-var" }),
+  Source_Serif_4: () => ({ variable: "mono-var" }),
 }));
 vi.mock("next/server", () => ({ connection: async () => undefined }));
 
@@ -69,7 +69,11 @@ describe("Appearance page", () => {
       expect(requireUser).toHaveBeenCalledWith("own_preferences", "/settings/appearance");
       expect(screen.getByRole("heading", { name: "Appearance" })).toBeInTheDocument();
       expect(screen.getAllByRole("radio")).toHaveLength(6);
-      expect(screen.getByRole("radio", { name: "Dark (default)" })).toBeChecked();
+      expect(
+        screen.getByRole("radio", {
+          name: /^Light/, // D-884: default is light
+        }),
+      ).toBeChecked();
       expect(screen.getByLabelText("Animation")).toHaveValue("on");
       // The header theme toggle is gone (UXR-004); Settings > Appearance is the only place.
       expect(screen.queryByLabelText("Theme")).toBeNull();
@@ -185,8 +189,8 @@ describe("About page and notices", () => {
       as(r);
       const { unmount } = render(await AboutPage());
       expect(requireUser).toHaveBeenLastCalledWith("read", "/settings/about");
-      expect(screen.getByText(/Inter: OFL-1.1/)).toBeInTheDocument();
-      expect(screen.getByText(/JetBrains Mono: OFL-1.1/)).toBeInTheDocument();
+      expect(screen.getByText(/IBM Plex Sans: OFL-1.1/)).toBeInTheDocument();
+      expect(screen.getByText(/Source Serif 4: OFL-1.1/)).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "tradingview.com" })).toHaveAttribute(
         "href",
         "https://www.tradingview.com/",
@@ -277,6 +281,6 @@ describe("Motion switch on the root element", () => {
 
   it("currentLook falls back to the defaults on any failure", async () => {
     getCurrentUser.mockRejectedValue(new Error("auth down"));
-    expect(await currentLook()).toEqual({ theme: "dark", motion: "on" });
+    expect(await currentLook()).toEqual({ theme: "light", motion: "on" }); // D-884: default is light
   });
 });

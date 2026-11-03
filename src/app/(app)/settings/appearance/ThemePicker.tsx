@@ -4,8 +4,8 @@
 import { THEMES, type Theme } from "@/lib/preferences/service";
 
 export const THEME_LABEL: Record<Theme, string> = {
-  dark: "Dark (default)",
-  light: "Light",
+  dark: "Dark",
+  light: "Light (default)",
   system: "Match device",
   midnight: "Midnight",
   dim: "Dim",
@@ -13,8 +13,8 @@ export const THEME_LABEL: Record<Theme, string> = {
 };
 
 export const THEME_NOTE: Record<Theme, string> = {
-  dark: "Dark blue-grey surfaces. The default.",
-  light: "Light surfaces with dark text.",
+  dark: "Dark blue-grey surfaces.",
+  light: "White surfaces with navy, the default (D-884).",
   system: "Follows your device: light or dark.",
   midnight: "True black, for OLED screens.",
   dim: "A softer blue-grey dark.",

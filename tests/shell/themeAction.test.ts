@@ -18,7 +18,6 @@ vi.mock("@/lib/db/client", () => ({ authDb: () => dbMock() }));
 
 import { cycleThemeAction } from "@/app/(app)/settings/themeActions";
 import { getPreferences, THEMES } from "@/lib/preferences/service";
-import { THEME_ORDER } from "@/lib/ui/nav";
 
 afterEach(cleanupTempDbs);
 
@@ -45,7 +44,7 @@ describe("cycleThemeAction", () => {
       expect(await cycleThemeAction()).toEqual({ ok: true });
       expect(requireUser).toHaveBeenCalledWith("own_preferences", "/settings");
       expect(revalidatePath).toHaveBeenCalledWith("/", "layout");
-      expect((await getPreferences(db, id)).theme).toBe("light"); // default dark -> light
+      expect((await getPreferences(db, id)).theme).toBe("system"); // D-884: default is light -> next in THEME_ORDER is system
       const audits = await auditRows(db);
       expect(audits.at(-1)).toMatchObject({ action: "user.preferences_update", actor_user_id: id });
       expect(audits.at(-1)?.detail).toEqual({ changed: ["theme"] });
@@ -62,7 +61,7 @@ describe("cycleThemeAction", () => {
       seen.push((await getPreferences(db, id)).theme);
     }
     expect(new Set(seen).size).toBe(THEMES.length);
-    expect(seen.at(-1)).toBe(THEME_ORDER[0]);
+    expect(seen.at(-1)).toBe("light"); // D-884: default is light, so six steps return to light
   });
 
   it("only changes the signed-in user, never another", async () => {
@@ -70,7 +69,7 @@ describe("cycleThemeAction", () => {
     const other = await addUser(db, { email: "o@example.test", role: "owner" });
     asUser(me, "viewer");
     await cycleThemeAction();
-    expect((await getPreferences(db, other)).theme).toBe("dark");
+    expect((await getPreferences(db, other)).theme).toBe("light"); // D-884: default is light
     expect((await db.execute("SELECT user_id FROM user_preference")).rows).toHaveLength(1);
   });
 

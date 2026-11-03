@@ -117,7 +117,11 @@ export type HomePick = {
 
 export type HomeIdea = {
   stock: string;
+  /** Company name (D-884); null for a masked viewer. */
+  name: string | null;
   strategy: string;
+  /** Why it was not taken, in plain words, one entry per distinct reason (D-884). */
+  reasons: string[];
   taken: number;
   notTaken: number;
   href: string | null;
@@ -372,7 +376,9 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
       .flatMap((g) =>
         g.ideas.map((i) => ({
           stock: i.stock,
+          name: i.name,
           strategy: g.strategy,
+          reasons: [...new Set(i.cards.flatMap((c) => (c.reason === null ? [] : [c.reason])))],
           taken: i.taken,
           notTaken: i.notTaken,
           href: i.cards[0]?.href ?? null,

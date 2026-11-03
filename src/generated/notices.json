@@ -829,12 +829,12 @@
   ],
   "fonts": [
     {
-      "name": "Inter",
+      "name": "IBM Plex Sans",
       "license": "OFL-1.1",
       "note": "Self-hosted at build time by next/font."
     },
     {
-      "name": "JetBrains Mono",
+      "name": "Source Serif 4",
       "license": "OFL-1.1",
       "note": "Self-hosted at build time by next/font."
     }

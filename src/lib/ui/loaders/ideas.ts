@@ -33,6 +33,8 @@ export type IdeaCard = {
 
 export type Idea = {
   stock: string;
+  /** The company name (D-884); null for a masked viewer or an unknown code. */
+  name: string | null;
   variant: string;
   regime: string;
   rankScore: string;
@@ -187,6 +189,17 @@ export async function loadIdeas(
     bySignal.set(str(c.signal_id), list);
   }
 
+  // D-884: company names for unmasked viewers only (a name identifies the code)
+  const companyNames = new Map<string, string>();
+  const codes = [...new Set(sig.rows.map((r) => str(r.code)))];
+  if (!masked && codes.length > 0) {
+    const nr = await deps.mainDb.execute({
+      sql: `SELECT code, name FROM instrument WHERE market = ? AND code IN (${codes.map(() => "?").join(", ")})`,
+      args: [market, ...codes],
+    });
+    for (const x of nr.rows) if (x.name !== null) companyNames.set(str(x.code), str(x.name));
+  }
+
   const groups = new Map<string, Idea[]>();
   const order = new Map<Idea, { score: number; code: string }>();
   let taken = 0;
@@ -195,6 +208,7 @@ export async function loadIdeas(
     const list = bySignal.get(str(r.id)) ?? [];
     const idea: Idea = {
       stock: scope.label(str(r.code)),
+      name: masked ? null : (companyNames.get(str(r.code)) ?? null),
       variant: str(r.variant),
       regime: str(r.regime),
       rankScore: str(r.rank_score),

@@ -294,6 +294,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-880 | The 2b store (D-872) is exact only when day.inputs was built from the base parameters. 2b builds its inputs with liveParams(base, versionSet) (D-115), and lo... |
 | D-881 | Batch 3 passes no maxCatchUp (D-873 reverted for the live path). |
 | D-882 | review_rank_ic_nightly defaults to 1 (D-874 said 0). |
+| D-884 | The Owner asked on 2026-11-04 for a quieter, professional look ("white background, navy blue looks professional", "the app looks very dull", "font is very ba... |
 
 ## M14 (M14_design.md)
 

@@ -53,7 +53,7 @@ describe("CSP lock", () => {
     const root = path.resolve(import.meta.dirname, "../..");
     const layout = fs.readFileSync(path.join(root, "src/app/layout.tsx"), "utf8");
     const css = fs.readFileSync(path.join(root, "src/app/globals.css"), "utf8");
-    expect(layout).toContain("JetBrains_Mono");
+    expect(layout).toContain("IBM_Plex_Sans");
     for (const text of [layout, css]) {
       expect(text).not.toMatch(/fonts\.(googleapis|gstatic)\.com/);
       expect(text).not.toMatch(/@import\s+url\(/);
