@@ -191,11 +191,11 @@
   --color-breaker-amber: #f0b94a;
   --color-breaker-red: #ff6b6b;
   --color-danger: #ff7b72;
-  --font-sans: var(--font-plex-sans), system-ui, sans-serif;
+  --font-sans: var(--font-source-sans), system-ui, sans-serif;
   /* Titles (D-884). */
   --font-display: var(--font-source-serif), Georgia, "Times New Roman", serif;
   /* Numbers use font-mono, which is the text face with tabular figures (UXN-002, D-884). */
-  --font-mono: var(--font-plex-sans), system-ui, sans-serif;
+  --font-mono: var(--font-source-sans), system-ui, sans-serif;
   /* Breakpoints (M7 design 4.5): sm = tables become cards below it; lg = desktop header. */
   --breakpoint-sm: 600px;
   --breakpoint-md: 768px;

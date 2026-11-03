@@ -35,7 +35,7 @@ vi.mock("@/app/(app)/settings/region", () => ({
 }));
 vi.mock("@/lib/alerts/api", () => ({ getQuietHours: (...a: unknown[]) => quietHours(...a) }));
 vi.mock("next/font/google", () => ({
-  IBM_Plex_Sans: () => ({ variable: "inter-var" }),
+  Source_Sans_3: () => ({ variable: "inter-var" }),
   Source_Serif_4: () => ({ variable: "mono-var" }),
 }));
 vi.mock("next/server", () => ({ connection: async () => undefined }));

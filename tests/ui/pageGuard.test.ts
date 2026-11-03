@@ -20,7 +20,7 @@ function findPages(dir: string, out: string[] = []): string[] {
 // M16 D-361/D-371: the Blueprint page answers as a missing route to everyone but the pinned Owner,
 // so it is not a registry page; its own guard is tested in tests/blueprint/blueprintGuard.test.ts.
 // D-884: the @modal slot holds the Decision Card popup (an overlay of /cards/[id], not an address of
-// its own) and an empty catch-all; the popup's guard is checked below like the page's.
+// its own); the popup's guard is checked below like the page's.
 const onDisk = findPages(path.join(root, "src", "app"))
   .filter((f) => f !== "src/app/(app)/blueprint/page.tsx" && !f.includes("/@modal/"))
   .sort();
@@ -35,9 +35,8 @@ describe("Decision Card popup guard (D-884)", () => {
     );
     expect(awaits[0]?.[1]).toBe("requireUser");
     expect(body.match(/requireUser\(\s*"([^"]+)"/)?.[1]).toBe("read");
-    // the empty slot pages call nothing
-    for (const f of ["src/app/(app)/@modal/default.tsx", "src/app/(app)/@modal/[...rest]/page.tsx"])
-      expect(src(f)).not.toMatch(/await|requireUser|Db\(/);
+    // the empty slot calls nothing
+    expect(src("src/app/(app)/@modal/default.tsx")).not.toMatch(/await|requireUser|Db\(/);
   });
 });
 

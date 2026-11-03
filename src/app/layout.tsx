@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
-import { IBM_Plex_Sans, Source_Serif_4 } from "next/font/google";
+import { Source_Sans_3, Source_Serif_4 } from "next/font/google";
 import { currentLook } from "@/lib/preferences/current";
 import "./globals.css";
 
 // Self-hosted at build time by next/font (served from our origin; font-src 'self', D-130).
-// D-884: IBM Plex Sans for text and numbers (tabular figures, UXN-002), Source Serif 4 for titles.
-const plexSans = IBM_Plex_Sans({
+// D-884: Source Sans 3 for text and numbers (tabular figures, UXN-002), Source Serif 4 for titles.
+const sourceSans = Source_Sans_3({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-plex-sans",
+  variable: "--font-source-sans",
   display: "swap",
 });
 const sourceSerif = Source_Serif_4({
@@ -32,7 +32,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html
       lang="en"
-      className={`${plexSans.variable} ${sourceSerif.variable}`}
+      className={`${sourceSans.variable} ${sourceSerif.variable}`}
       data-theme={theme}
       data-motion={motion === "off" ? "off" : undefined}
     >

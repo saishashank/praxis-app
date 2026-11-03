@@ -27,7 +27,7 @@ vi.mock("@/app/(app)/settings/actions", () => ({
   setQuietHoursAction: vi.fn(),
 }));
 vi.mock("next/font/google", () => ({
-  IBM_Plex_Sans: () => ({ variable: "inter-var" }),
+  Source_Sans_3: () => ({ variable: "inter-var" }),
   Source_Serif_4: () => ({ variable: "mono-var" }),
 }));
 vi.mock("next/server", () => ({ connection: async () => undefined }));
@@ -189,7 +189,7 @@ describe("About page and notices", () => {
       as(r);
       const { unmount } = render(await AboutPage());
       expect(requireUser).toHaveBeenLastCalledWith("read", "/settings/about");
-      expect(screen.getByText(/IBM Plex Sans: OFL-1.1/)).toBeInTheDocument();
+      expect(screen.getByText(/Source Sans 3: OFL-1.1/)).toBeInTheDocument();
       expect(screen.getByText(/Source Serif 4: OFL-1.1/)).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "tradingview.com" })).toHaveAttribute(
         "href",

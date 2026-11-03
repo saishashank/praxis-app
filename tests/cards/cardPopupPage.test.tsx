@@ -14,11 +14,11 @@ vi.mock("@/lib/db/client", () => ({ mainDb: () => mem.main, authDb: () => mem.au
 vi.mock("next/navigation", async (orig) => ({
   ...(await orig<typeof import("next/navigation")>()),
   useRouter: () => ({ back: vi.fn() }),
+  usePathname: () => "/cards/x",
 }));
 
 import CardPopup from "@/app/(app)/@modal/(.)cards/[id]/page";
 import NoModal from "@/app/(app)/@modal/default";
-import NoModalRest from "@/app/(app)/@modal/[...rest]/page";
 
 let db: Both;
 beforeAll(async () => {
@@ -46,8 +46,7 @@ describe("Decision Card popup route (D-884)", () => {
     await expect(CardPopup({ params: Promise.resolve({ id: "%E0%A4%A" }) })).rejects.toThrow();
   });
 
-  it("the empty slot pages render nothing", () => {
+  it("the empty slot renders nothing", () => {
     expect(NoModal()).toBeNull();
-    expect(NoModalRest()).toBeNull();
   });
 });

@@ -4,7 +4,11 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 const back = vi.hoisted(() => vi.fn());
-vi.mock("next/navigation", () => ({ useRouter: () => ({ back }) }));
+const where = vi.hoisted(() => ({ path: "/cards/x" }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ back }),
+  usePathname: () => where.path,
+}));
 
 import { CardModal } from "@/app/(app)/@modal/(.)cards/[id]/CardModal";
 
@@ -21,6 +25,7 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   back.mockReset();
+  where.path = "/cards/x";
 });
 
 describe("CardModal (D-884)", () => {
@@ -54,5 +59,15 @@ describe("CardModal (D-884)", () => {
     );
     fireEvent.click(document.querySelector("dialog")!);
     expect(back).toHaveBeenCalledTimes(2);
+  });
+
+  it("draws nothing once the address is no longer a card", () => {
+    where.path = "/strategies";
+    render(
+      <CardModal>
+        <p>body</p>
+      </CardModal>,
+    );
+    expect(document.querySelector("dialog")).toBeNull();
   });
 });

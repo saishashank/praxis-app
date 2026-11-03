@@ -2,16 +2,20 @@
 // The Decision Card popup (D-884). A native <dialog> opened with showModal(): the browser traps the
 // focus, Esc closes it, and the page behind is inert. Closing (the button, Esc or a click on the
 // backdrop) goes back in history, which leaves the page that opened the card exactly as it was.
-import { useRouter } from "next/navigation";
+// A slot keeps its last page on a soft navigation, so the popup draws nothing once the address is no
+// longer a card (a link inside the card to another page leaves no dialog behind).
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, type ReactNode } from "react";
 
 export function CardModal({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDialogElement | null>(null);
   const router = useRouter();
+  const onCard = (usePathname() ?? "").startsWith("/cards/");
   useEffect(() => {
     const d = ref.current;
-    if (d && !d.open) d.showModal();
-  }, []);
+    if (onCard && d && !d.open) d.showModal();
+  }, [onCard]);
+  if (!onCard) return null;
   return (
     <dialog
       ref={ref}
