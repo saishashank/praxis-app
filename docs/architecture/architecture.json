@@ -2851,6 +2851,50 @@
       "attrs": {}
     },
     {
+      "id": "page:/(.)cards/[id]",
+      "type": "page",
+      "name": "/(.)cards/[id]",
+      "purpose": "Screen /(.)cards/[id] of the web app.",
+      "specIds": [
+        "UXN-001"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/app/(app)/@modal/(.)cards/[id]/page.tsx",
+      "attrs": {}
+    },
+    {
+      "id": "page:/[...rest]",
+      "type": "page",
+      "name": "/[...rest]",
+      "purpose": "Screen /[...rest] of the web app.",
+      "specIds": [
+        "UXN-001"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/app/(app)/@modal/[...rest]/page.tsx",
+      "attrs": {}
+    },
+    {
       "id": "page:/alerts",
       "type": "page",
       "name": "/alerts",
@@ -3854,6 +3898,28 @@
         "platform"
       ],
       "source": "src/app/(app)/strategies/leaderboard/page.tsx",
+      "attrs": {}
+    },
+    {
+      "id": "page:/strategies/movers",
+      "type": "page",
+      "name": "/strategies/movers",
+      "purpose": "Screen /strategies/movers of the web app.",
+      "specIds": [
+        "UXN-001"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/app/(app)/strategies/movers/page.tsx",
       "attrs": {}
     },
     {
@@ -16921,6 +16987,26 @@
       ]
     },
     {
+      "id": "service:app|contains|page:/(.)cards/[id]",
+      "from": "service:app",
+      "to": "page:/(.)cards/[id]",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|page:/[...rest]",
+      "from": "service:app",
+      "to": "page:/[...rest]",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
       "id": "service:app|contains|page:/alerts",
       "from": "service:app",
       "to": "page:/alerts",
@@ -17349,6 +17435,16 @@
       "id": "service:app|contains|page:/strategies/leaderboard",
       "from": "service:app",
       "to": "page:/strategies/leaderboard",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|page:/strategies/movers",
+      "from": "service:app",
+      "to": "page:/strategies/movers",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
