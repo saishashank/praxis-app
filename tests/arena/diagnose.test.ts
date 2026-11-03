@@ -7,7 +7,13 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Client } from "@libsql/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { diagnoseDay, diagnoseMain, readOnly, WriteRefused } from "@/lib/arena/diagnose";
+import {
+  diagnoseDay,
+  diagnoseMain,
+  picksReadiness,
+  readOnly,
+  WriteRefused,
+} from "@/lib/arena/diagnose";
 import { seedRuleVersions } from "@/lib/learning/ruleVersions";
 import { cleanupTempDbs } from "../db/helpers";
 import { DATES, freshReplayDb, setMode } from "../agents/batch2bHarness";
@@ -91,6 +97,57 @@ describe("diagnoseDay", () => {
   });
 });
 
+describe("picksReadiness (D-883)", () => {
+  it("an empty database: no splits and no ledger rows, and nothing is written", async () => {
+    const empty = await freshReplayDb();
+    const before = await tableCounts(empty);
+    const lines: string[] = [];
+    await picksReadiness(readOnly(empty), (l) => lines.push(l));
+    expect(lines).toEqual(["diagnose picks: splits=0", "  ledger: rows=0"]);
+    expect(await tableCounts(empty)).toEqual(before);
+  });
+
+  it("per lineage: the latest split and the closed development rows by rule version and variant", async () => {
+    const lines: string[] = [];
+    const calls: string[] = [];
+    const fake = {
+      execute: async (q: { sql: string }) => {
+        calls.push(q.sql);
+        if (q.sql.includes("FROM lineage_split")) {
+          return {
+            rows: [
+              {
+                lineage_id: "AU:F1",
+                version: 2n,
+                dev_end_d: "2024-06-28",
+                data_end_d: "2026-10-31",
+                deferred_until_d: null,
+              },
+              {
+                lineage_id: "AU:F2",
+                version: 1n,
+                dev_end_d: null,
+                data_end_d: "2026-10-31",
+                deferred_until_d: "2027-01-04",
+              },
+            ],
+          };
+        }
+        if (q.sql.includes("GROUP BY k")) return { rows: [{ k: "F1.v1|full", n: 0n }] };
+        return { rows: [{ f: 1n, n: 21n, closed: 0n, first: "2026-11-03", last: "2026-11-03" }] };
+      },
+    } as unknown as Client;
+    await picksReadiness(fake, (l) => lines.push(l));
+    expect(lines).toEqual([
+      "diagnose picks: splits=2",
+      '  AU:F1: v=2 devEnd=2024-06-28 dataEnd=2026-10-31 deferredUntil=none devClosed={"F1.v1|full":"0"}',
+      "  AU:F2: v=1 devEnd=none dataEnd=2026-10-31 deferredUntil=2027-01-04 devClosed={}",
+      "  ledger forward=1: rows=21 closed=0 entries=2026-11-03..2026-11-03",
+    ]);
+    expect(calls.filter((s) => s.includes("GROUP BY k"))).toHaveLength(1); // no dev end: no count
+  });
+});
+
 describe("diagnoseMain", () => {
   it("rejects a call without valid dates (exit 2) and an unconfigured database (exit 1)", async () => {
     const lines: string[] = [];
@@ -117,10 +174,11 @@ describe("diagnoseMain", () => {
     expect(
       await diagnoseMain(["--dates", "2026-10-29,2026-10-30"], env(url), (l) => lines.push(l)),
     ).toBe(1);
-    expect(lines).toHaveLength(3);
+    expect(lines).toHaveLength(4);
     expect(lines[0]).toMatch(/^diagnose: failed \(\w+\)$/);
     expect(lines[1]).toMatch(/^diagnose 2026-10-29: failed \(\w+\)$/);
     expect(lines[2]).toMatch(/^diagnose 2026-10-30: failed \(\w+\)$/);
+    expect(lines[3]).toMatch(/^diagnose picks: failed \(\w+\)$/);
     expect(lines.join("\n")).not.toMatch(/secret|file:/);
     try {
       rmSync(dir, { recursive: true, force: true, maxRetries: 3 });

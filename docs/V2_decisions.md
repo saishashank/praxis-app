@@ -281,6 +281,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-853 | A claimed (dispatched) request expires 30 minutes after the claim (updated_at), not 30 minutes after the request. |
 | D-854 | A date for workflow jobs later (price backfill, Arena close for a missed day), the minimal path: |
 | D-860 | The Owner decided on 2026-11-02 to release V2 without the Staging E2E day, once ("B"): staging has never run a full day (its Worker cron is off and WORKER_HM... |
+| D-883 | Production replay.yml (mode full) failed on every run after the V2 release with UND_ERR_SOCKET at stage=compute: |
 
 ## M14 (M14_design.md)
 

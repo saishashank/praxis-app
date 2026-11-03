@@ -103,7 +103,9 @@ describe("replayMain refusals", () => {
       {
         out: c.out,
         openDb: () =>
-          stubDb(async () => {
+          stubDb(async (q?: unknown) => {
+            // D-883: the stored splits are read before the snapshot; only the params read fails here
+            if (JSON.stringify(q).includes("lineage_split")) return { rows: [] };
             throw new TypeError(secret);
           }),
         prepareSnapshot: async () => {
@@ -174,6 +176,37 @@ describe("replayMain refusals", () => {
       expect([0, 1]).toContain(code);
     }
   }, 120_000);
+});
+
+describe("replayMain stored inputs (D-883)", () => {
+  it("full and evidence read the stored splits and trials before the snapshot build, not after", async () => {
+    for (const [mode, tables] of [
+      ["full", ["lineage_split"]],
+      ["evidence", ["lineage_split", "trial_ledger"]],
+    ] as const) {
+      const events: string[] = [];
+      await replayMain(
+        ["--mode", mode, "--date", "2029-06-29"],
+        { TURSO_MAIN_URL: "file:x.db" },
+        {
+          out: () => undefined,
+          params,
+          openDb: () =>
+            stubDb(async (q?: unknown) => {
+              const text = typeof q === "string" ? q : (q as { sql: string }).sql;
+              const t = /FROM (lineage_split|trial_ledger)/.exec(text);
+              if (t) events.push(t[1]!);
+              return { rows: [] };
+            }),
+          prepareSnapshot: async () => {
+            events.push("snapshot");
+            throw new Error("stop");
+          },
+        },
+      );
+      expect(events).toEqual([...tables, "snapshot"]);
+    }
+  });
 });
 
 describe("replayMain recording (D-198)", () => {

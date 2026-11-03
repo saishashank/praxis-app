@@ -339,6 +339,12 @@ export async function replayMain(
     const commitSha = has(env.COMMIT_SHA)
       ? env.COMMIT_SHA
       : "0000000000000000000000000000000000000000";
+    // D-883: read the stored splits and trials BEFORE the snapshot build; the build takes ~20 min and
+    // the server drops the idle connection meanwhile (UND_ERR_SOCKET at stage=compute, as D-198)
+    // D-282: the cost gate reads the stored split; null and injected runs have no cost gate
+    const splitsBefore =
+      m === "learning" || m === "null" || m === "injected" ? [] : await existingSplits(db);
+    const trialsBefore = m === "evidence" ? await existingTrials(db) : [];
     let bytes: Uint8Array | null = null;
     if (NEEDS_SNAPSHOT(m, synthetic)) {
       if (deps.prepareSnapshot === undefined) {
@@ -372,9 +378,8 @@ export async function replayMain(
             nodeVersion: deps.nodeVersion ?? process.version,
             snapshotBytes: bytes,
             since,
-            // D-282: the cost gate reads the stored split; null and injected runs have no cost gate
-            existingSplits: m === "null" || m === "injected" ? [] : await existingSplits(db),
-            existingTrials: m === "evidence" ? await existingTrials(db) : [],
+            existingSplits: splitsBefore,
+            existingTrials: trialsBefore,
             nullRuns: runs,
             synthetic,
             now: nowMs,
