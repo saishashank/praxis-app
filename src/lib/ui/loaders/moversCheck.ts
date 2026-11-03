@@ -10,7 +10,7 @@
 // would reveal the companies, so a masked viewer gets `hidden` and no rows (DAT-124).
 import "server-only";
 import { notTakenText } from "./cardParts";
-import { strategyNames } from "./common";
+import { strategyNames, strOrNull } from "./common";
 import { loadMarket, parseMarketQuery, type MarketRow } from "./market";
 import { marketOf, type LoaderEnv } from "./shell";
 
@@ -59,6 +59,12 @@ const EMPTY: MoversCheck = {
 
 const str = (v: unknown): string => String(v);
 const placeholders = (n: number): string => Array.from({ length: n }, () => "?").join(", ");
+/** Appends `v` to the list of `k`. */
+function pushTo<T>(m: Map<string, T[]>, k: string, v: T): void {
+  const list = m.get(k);
+  if (list) list.push(v);
+  else m.set(k, [v]);
+}
 
 /** The top rises and falls of the latest session, two pages of the Market lists (10 a page). */
 async function topMovers(
@@ -66,12 +72,13 @@ async function topMovers(
 ): Promise<{ d: string | null; up: MarketRow[]; down: MarketRow[] }> {
   const q = parseMarketQuery(new URLSearchParams())!;
   const first = await loadMarket(env, q);
-  if (first.state === "empty" || first.d === null) return { d: null, up: [], down: [] };
+  if (first.d === null) return { d: null, up: [], down: [] };
+  // both pages read the same stored session (nothing is written between the two reads)
   const second = await loadMarket(env, { ...q, upPage: 2, downPage: 2 });
   return {
     d: first.d,
-    up: [...first.up.rows, ...(second.d === first.d ? second.up.rows : [])].slice(0, TOP_N),
-    down: [...first.down.rows, ...(second.d === first.d ? second.down.rows : [])].slice(0, TOP_N),
+    up: [...first.up.rows, ...second.up.rows].slice(0, TOP_N),
+    down: [...first.down.rows, ...second.down.rows].slice(0, TOP_N),
   };
 }
 
@@ -131,7 +138,7 @@ export function riseRow(
     };
   }
   const status = ctx.followed.get(code);
-  if (status === undefined || status !== "active") {
+  if (status !== "active") {
     return {
       ...base,
       verdict: "not_followed",
@@ -200,7 +207,7 @@ export async function loadMoversCheck(env: LoaderEnv): Promise<MoversCheck> {
     sql: "SELECT MAX(d) AS d FROM price_bar WHERE market = ? AND d < ?",
     args: [market, d],
   });
-  const prev = pr.rows[0]?.d === null || pr.rows[0]?.d === undefined ? null : str(pr.rows[0].d);
+  const prev = strOrNull(pr.rows[0]?.d);
   const names = await strategyNames(env.main);
   const nameOf = (family: unknown): string => names[str(family)]?.name ?? str(family);
 
@@ -221,13 +228,11 @@ export async function loadMoversCheck(env: LoaderEnv): Promise<MoversCheck> {
     Array<{ family: string; exitD: string | null; exitType: string | null }>
   >();
   for (const r of held.rows) {
-    const list = holds.get(str(r.code)) ?? [];
-    list.push({
+    pushTo(holds, str(r.code), {
       family: str(r.family),
-      exitD: r.exit_d === null || r.exit_d === undefined ? null : str(r.exit_d),
-      exitType: r.exit_type === null || r.exit_type === undefined ? null : str(r.exit_type),
+      exitD: strOrNull(r.exit_d),
+      exitType: strOrNull(r.exit_type),
     });
-    holds.set(str(r.code), list);
   }
 
   // The evening before: the ideas (signals) and why each was or was not bought.
@@ -240,16 +245,11 @@ export async function loadMoversCheck(env: LoaderEnv): Promise<MoversCheck> {
       args: [market, prev, ...codes],
     });
     for (const r of sg.rows) {
-      const list = ideas.get(str(r.code)) ?? [];
-      list.push({
+      pushTo(ideas, str(r.code), {
         family: str(r.family),
         taken: Number(r.taken) === 1,
-        reason:
-          r.not_taken_reason === null || r.not_taken_reason === undefined
-            ? null
-            : str(r.not_taken_reason),
+        reason: strOrNull(r.not_taken_reason),
       });
-      ideas.set(str(r.code), list);
     }
   }
 
