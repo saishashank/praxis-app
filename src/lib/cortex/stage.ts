@@ -1455,6 +1455,7 @@ export type ScoreResult = {
 };
 
 export const SCORE_BATCH = 5000; // threshold-ok: rows per nightly scoring pass
+const BAR_FETCH_CHUNK = 25; // threshold-ok: bar statements per round trip
 
 /**
  * Scores every decision (live, shadow, blocked) whose hold has closed: the limit fill on the first
@@ -1501,16 +1502,14 @@ export async function scoreOutcomes(
       confirmed: toBig(r.confirmed) === 1n ? 1 : 0,
     }));
   const barCache = new Map<string, ViewBar[]>();
-  const barsOf = async (code: string): Promise<ViewBar[]> => {
-    const hit = barCache.get(code);
-    if (hit !== undefined) return hit;
-    const rs = await db.execute({
-      sql: `SELECT d, o, h, l, c, volume FROM price_bar WHERE market = ? AND code = ? AND d <= ?
+  const barStatement = (code: string) => ({
+    sql: `SELECT d, o, h, l, c, volume FROM price_bar WHERE market = ? AND code = ? AND d <= ?
             AND ${listingFloor("price_bar")} ORDER BY d DESC LIMIT ?`,
-      args: [o.market, code, o.d, STAGE_BAR_SESSIONS + 300], // threshold-ok: history for ATR and hold
-    });
+    args: [o.market, code, o.d, STAGE_BAR_SESSIONS + 300], // threshold-ok: history for ATR and hold
+  });
+  const barsFrom = (rows: readonly Record<string, unknown>[]): ViewBar[] => {
     const list: ViewBar[] = [];
-    for (const r of rs.rows) {
+    for (const r of rows) {
       list.push({
         d: text(r.d),
         open: priceMicro(r.o),
@@ -1521,6 +1520,20 @@ export async function scoreOutcomes(
       });
     }
     list.reverse();
+    return list;
+  };
+  // D-877: the bars of every code the pass walks, BAR_FETCH_CHUNK statements per round trip (the very
+  // statement the per-code read used), instead of one round trip per code
+  const wanted = [...new Set(pending.map((x) => x.code))];
+  for (let i = 0; i < wanted.length; i += BAR_FETCH_CHUNK) {
+    const codes = wanted.slice(i, i + BAR_FETCH_CHUNK);
+    const res = await db.batch(codes.map(barStatement), "read");
+    codes.forEach((code, k) => barCache.set(code, barsFrom(res[k]!.rows)));
+  }
+  const barsOf = async (code: string): Promise<ViewBar[]> => {
+    const hit = barCache.get(code);
+    if (hit !== undefined) return hit;
+    const list = barsFrom((await db.execute(barStatement(code))).rows);
     barCache.set(code, list);
     return list;
   };

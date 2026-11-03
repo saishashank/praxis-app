@@ -1,7 +1,7 @@
   production:
     if: github.ref == 'refs/heads/release'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 90
     permissions:
       contents: read
       deployments: read
