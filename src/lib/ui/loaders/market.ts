@@ -289,6 +289,8 @@ export type MarketQuery = {
   sector?: string;
   /** All companies page. */
   page: number;
+  /** D-884: which movers list is shown (rises, falls or most traded); one at a time. */
+  movers: MoversList;
   /** D-205: the page of each movers list. */
   upPage: number;
   downPage: number;
@@ -296,6 +298,8 @@ export type MarketQuery = {
 };
 
 const MAX_PAGE = 1000; // threshold-ok: page numbers accepted in a link
+export const MOVERS_LISTS = ["up", "down", "traded"] as const;
+export type MoversList = (typeof MOVERS_LISTS)[number];
 
 /**
  * `?open=movers,sectors&size=mid&up=2&down=1&traded=1&page=3&sector=...`, or null when a value is not
@@ -307,6 +311,8 @@ export function parseMarketQuery(sp: URLSearchParams): MarketQuery | null {
   if (!open.every((s) => (SECTIONS as readonly string[]).includes(s))) return null;
   const sector = textParam(sp.get("sector"), 60);
   const size = sp.get("size") ?? "all";
+  const movers = sp.get("movers") ?? "up";
+  if (!(MOVERS_LISTS as readonly string[]).includes(movers)) return null;
   const pages = ["page", "up", "down", "traded"].map((k) => intParam(sp.get(k), 1, MAX_PAGE));
   if (sector === null || pages.includes(null) || !(SIZES as readonly string[]).includes(size)) {
     return null;
@@ -315,6 +321,7 @@ export function parseMarketQuery(sp: URLSearchParams): MarketQuery | null {
   return {
     open: SECTIONS.filter((s) => open.includes(s)),
     size: size as MarketSize,
+    movers: movers as MoversList,
     sector,
     page: page!,
     upPage: upPage!,
@@ -330,6 +337,7 @@ export function marketHref(q: MarketQuery, change: Partial<MarketQuery> = {}): s
   const open = n.open.join(",");
   if (open !== "movers") sp.set("open", open);
   if (n.size !== "all") sp.set("size", n.size);
+  if (n.movers !== "up") sp.set("movers", n.movers);
   if (n.sector !== undefined) sp.set("sector", n.sector);
   if (n.upPage > 1) sp.set("up", String(n.upPage));
   if (n.downPage > 1) sp.set("down", String(n.downPage));

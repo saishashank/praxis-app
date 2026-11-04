@@ -35,8 +35,8 @@ vi.mock("@/app/(app)/settings/region", () => ({
 }));
 vi.mock("@/lib/alerts/api", () => ({ getQuietHours: (...a: unknown[]) => quietHours(...a) }));
 vi.mock("next/font/google", () => ({
-  Inter: () => ({ variable: "inter-var" }),
-  JetBrains_Mono: () => ({ variable: "mono-var" }),
+  Source_Sans_3: () => ({ variable: "inter-var" }),
+  Source_Serif_4: () => ({ variable: "mono-var" }),
 }));
 vi.mock("next/server", () => ({ connection: async () => undefined }));
 
@@ -90,7 +90,7 @@ describe("settings page (UXR-027: one page, rows with current values)", () => {
       // UXR-003: the current value is in the row, before anything is opened
       const rowValue = (name: RegExp, value: string) =>
         expect(screen.getByRole("link", { name })).toHaveTextContent(value);
-      rowValue(/^Theme/, "Dark (default)");
+      rowValue(/^Theme/, "Light"); // D-884: default is light
       rowValue(/^Motion/, "On");
       rowValue(/^Time format/, "24-hour (13:30)");
       rowValue(/^P1 alerts/, "Immediately");
@@ -191,12 +191,12 @@ describe("settings page (UXR-027: one page, rows with current values)", () => {
   it("closing the theme sheet without saving restores the stored theme", async () => {
     as("viewer");
     render(await SettingsPage());
-    document.documentElement.setAttribute("data-theme", "dark");
+    document.documentElement.setAttribute("data-theme", "light"); // D-884: default is light
     const dialog = await openRow(/^Theme/);
-    fireEvent.click(within(dialog).getByRole("radio", { name: /Light/ }));
-    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
-    await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "Close" })));
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Dark/ }));
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "Close" })));
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
     expect(action).not.toHaveBeenCalled();
     document.documentElement.removeAttribute("data-theme");
   });
@@ -264,12 +264,12 @@ describe("root layout theme", () => {
 
   it("uses the default theme when signed out or on any failure", async () => {
     getCurrentUser.mockResolvedValue(null);
-    expect((await RootLayout({ children: null })).props["data-theme"]).toBe("dark");
+    expect((await RootLayout({ children: null })).props["data-theme"]).toBe("light"); // D-884: default is light
     getCurrentUser.mockRejectedValue(new Error("auth down"));
-    expect(await currentTheme()).toBe("dark");
+    expect(await currentTheme()).toBe("light");
     getCurrentUser.mockResolvedValue({ id: 7 });
     getPrefs.mockRejectedValue(new Error("db down"));
-    expect(await currentTheme()).toBe("dark");
+    expect(await currentTheme()).toBe("light");
     expect(await userPreferences(7)).toEqual(DEFAULT_PREFERENCES);
   });
 });

@@ -72,12 +72,33 @@ describe("Market sections (D-205)", () => {
       "href",
       "/market?up=3",
     );
+    // D-884: only the chosen list is drawn
+    expect(screen.queryByRole("navigation", { name: "Most traded pages" })).toBeNull();
+    cleanup();
+    await show(
+      <MoversSection
+        model={Promise.resolve(model())}
+        q={mq({ upPage: 2, movers: "down" })}
+        mode="star"
+        starAction={star}
+      />,
+    );
     // five falls fit on one page: no controls
+    expect(screen.getByRole("heading", { name: "Biggest falls" })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Biggest falls pages" })).toBeNull();
+    cleanup();
+    await show(
+      <MoversSection
+        model={Promise.resolve(model())}
+        q={mq({ upPage: 2, movers: "traded" })}
+        mode="star"
+        starAction={star}
+      />,
+    );
     const traded = screen.getByRole("navigation", { name: "Most traded pages" });
     expect(within(traded).getByRole("link", { name: "Next page" })).toHaveAttribute(
       "href",
-      "/market?up=2&traded=2",
+      "/market?movers=traded&up=2&traded=2",
     );
   });
 
@@ -101,7 +122,7 @@ describe("Market sections (D-205)", () => {
     expect(within(nav).getByRole("link", { name: "All" }).querySelector("svg")).toBeNull();
     expect(within(nav).getByRole("link", { name: /Mid/ })).toHaveAttribute("aria-current", "page");
     expect(within(nav).getByRole("link", { name: "All" })).toHaveAttribute("href", "/market");
-    expect(screen.getByText("Latest data: 2026-10-28.")).toBeInTheDocument();
+    expect(screen.getByText("Prices as of Wed 28 Oct 2026 (end of day)")).toBeInTheDocument(); // D-884
   });
 
   it("shows the out-of-date banner, and no size switch for a masked user", async () => {

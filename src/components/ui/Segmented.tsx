@@ -12,6 +12,9 @@ export type SegmentedItem = { value: string; label: ReactNode; href?: string };
 
 const SEG =
   "ui-motion inline-flex min-h-11 flex-1 shrink-0 items-center justify-center gap-1 px-3 py-2 text-sm break-words";
+const PILL =
+  "ui-motion inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full border border-border px-4 py-2 text-sm whitespace-nowrap";
+const PILL_ROW_MIN = 4; // threshold-ok: D-884, more links than this become a sliding pill row
 const ON = "bg-accent text-accent-contrast font-semibold";
 const OFF = "bg-surface text-text hover:bg-bg";
 
@@ -52,8 +55,21 @@ export function Segmented({
   };
 
   if (linkMode) {
+    // D-884: a long tab row (Strategies has six) is a row of pills that slides on a phone, with no
+    // scroll bar and no squeezed equal segments; short rows keep the joined segments.
+    const pills = items.length > PILL_ROW_MIN;
     return (
-      <nav aria-label={label} className={wrap}>
+      <nav
+        aria-label={label}
+        className={
+          pills
+            ? cn(
+                "ui-scroll-x -mx-1 flex w-full gap-2 overflow-x-auto px-1 py-1 sm:mx-0 sm:flex-wrap sm:px-0",
+                className,
+              )
+            : wrap
+        }
+      >
         {items.map((it, i) => {
           const on = it.value === value;
           return (
@@ -65,7 +81,7 @@ export function Segmented({
               }}
               aria-current={on ? "page" : undefined}
               onKeyDown={(e) => move(i, e)}
-              className={cn(SEG, on ? ON : OFF)}
+              className={cn(pills ? PILL : SEG, on ? ON : OFF)}
             >
               {on ? <CheckIcon aria-hidden="true" /> : null}
               {it.label}

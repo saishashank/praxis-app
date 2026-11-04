@@ -175,6 +175,9 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
     pnlText: t.pnl ? formatMicro(t.pnl.micro, { sign: "always" }) : null,
     entryPriceText: t.entryPrice ? formatMicro(t.entryPrice.micro) : null,
     exitPriceText: t.exitPrice ? formatMicro(t.exitPrice.micro) : null,
+    stopText: t.stop ? formatMicro(t.stop.micro) : null,
+    targetText: t.target ? formatMicro(t.target.micro) : null,
+    lastPriceText: t.lastPrice ? formatMicro(t.lastPrice.micro) : null,
     cardHref: t.cardHref,
   }));
   const controls: ChartControl[] = ex.controls.map((c) => ({

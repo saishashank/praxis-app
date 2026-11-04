@@ -353,11 +353,25 @@ const NOT_TAKEN_WORDS: Readonly<Record<string, string>> = {
     "the first position of the night is in the same industry or moves too much like this one",
   abstain_shock: "the market was in a sharp shock and the order would have been below two parcels",
   index_change: "the share was joining or leaving a stock-market index around the news",
+  // D-884: the remaining codes of cards.ts NOT_TAKEN, so no raw code reaches the page
+  rank: "other ideas ranked higher tonight and the strategy had no room left",
+  positions_full: "the strategy already holds as many shares as it is allowed",
+  holding: "the strategy already holds this share",
+  reentry_block:
+    "the strategy sold this share recently and waits a few sessions before buying it again",
+  corporate_action:
+    "a split, dividend or other company event was due, so the price was not comparable",
+  no_facts: "the data needed to check this idea was missing tonight",
+  gate: "market conditions did not allow this strategy to buy tonight",
+  control_paused: "this strategy is paused",
+  control_killed: "this strategy has been stopped",
 };
 
 /** Plain words for a reason an order was not placed; an older reason is returned unchanged. */
 export function notTakenText(reason: string): string {
-  return Object.hasOwn(NOT_TAKEN_WORDS, reason) ? NOT_TAKEN_WORDS[reason]! : reason;
+  if (Object.hasOwn(NOT_TAKEN_WORDS, reason)) return NOT_TAKEN_WORDS[reason]!;
+  if (reason.startsWith("rejected:")) return "the order did not pass the size and cash checks"; // D-884
+  return reason;
 }
 
 const FLAG_WORDS: Readonly<Record<string, string>> = {

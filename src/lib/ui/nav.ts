@@ -85,6 +85,13 @@ export const ROUTES: readonly RouteNode[] = [
     tab: "strategies",
   },
   { pattern: "/strategies/risk", label: "Risk overview", parent: "/strategies", tab: "strategies" },
+  // D-886: why the day's top risers were or were not held, and whether the top fallers were avoided
+  {
+    pattern: "/strategies/movers",
+    label: "Movers check",
+    parent: "/strategies",
+    tab: "strategies",
+  },
   {
     pattern: "/strategies/ideas",
     label: "Tonight's trade ideas",

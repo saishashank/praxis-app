@@ -127,6 +127,6 @@ describe("field scoping", () => {
     expect(
       await updatePreferencesAction(form({ theme: "light", motion: "off", default_market: "AU" })),
     ).toEqual({ ok: true });
-    expect(await getPreferences(db, id)).toMatchObject({ theme: "dark", motion: "on" });
+    expect(await getPreferences(db, id)).toMatchObject({ theme: "light", motion: "on" }); // D-884: default is light
   });
 });
