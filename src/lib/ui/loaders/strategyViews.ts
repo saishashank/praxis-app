@@ -24,6 +24,30 @@ import {
 import type { StrategyTile, StrategySort } from "./strategies";
 
 const MAX_TRADES = 50; // threshold-ok: trade strip length
+const TARGET_R = 2n; // threshold-ok: D-885 indicative target at twice the first-stop distance (2R)
+
+/**
+ * D-885: the stop in force and the indicative target of one trade, in micro. The stop in force is
+ * the higher of the first stop and the latest session's recomputed stops (decision 7); the target is
+ * shown only (no strategy exits on it): entry + 2 x (entry - first stop). Masked viewers get neither.
+ */
+export function stopTarget(
+  masked: boolean,
+  entryMicro: number,
+  firstStopMicro: number,
+  latestStopMicro: number | null,
+): { stop: Money | null; target: Money | null } {
+  if (masked || !(firstStopMicro > 0) || !(entryMicro > firstStopMicro)) {
+    return { stop: null, target: null };
+  }
+  const inForce =
+    latestStopMicro !== null && latestStopMicro > firstStopMicro ? latestStopMicro : firstStopMicro;
+  const entry = BigInt(entryMicro);
+  return {
+    stop: money(inForce),
+    target: money(Number(entry + TARGET_R * (entry - BigInt(firstStopMicro)))),
+  };
+}
 const MAX_CONTROL_ROWS = 1500; // threshold-ok: three controls x 500 sessions
 const MAX_VERSIONS = 30; // threshold-ok: versions listed per family
 const MAX_PENDING = 10; // threshold-ok: pending challengers and ledger rows listed
@@ -337,6 +361,15 @@ export type StripTrade = {
   pnl: Money | null;
   entryPrice: Money | null;
   exitPrice: Money | null;
+  /** D-885: the stop in force (the higher of the first stop and the latest recomputed one). */
+  stop: Money | null;
+  /**
+   * D-885: an indicative target, shown only and never an exit rule: the buy price plus twice the
+   * distance to the first stop (2R). Null for a masked viewer.
+   */
+  target: Money | null;
+  /** Latest stored close of an open trade; null when closed or for a masked viewer. */
+  lastPrice: Money | null;
   /** Link to the Decision Card; opaque for a masked viewer; null when no card is stored. */
   cardHref: string | null;
 };
@@ -508,13 +541,18 @@ export async function loadStrategyExtras(
   if (cohortId !== null) {
     const tr = await deps.mainDb.execute({
       sql: `SELECT t.code, t.exit_type, ef.d AS entry_d, ef.qty AS qty, ef.fill_price_micro AS entry_price,
-                   xf.d AS exit_d, xf.fill_price_micro AS exit_price, dc.id AS card_id
+                   xf.d AS exit_d, xf.fill_price_micro AS exit_price, dc.id AS card_id,
+                   t.stop_micro AS first_stop,
+                   (SELECT MAX(s.level_micro) FROM stop_level s WHERE s.trade_id = t.id
+                      AND s.d = (SELECT MAX(s2.d) FROM stop_level s2 WHERE s2.trade_id = t.id)) AS latest_stop,
+                   (SELECT b.c FROM price_bar b WHERE b.market = ? AND b.code = t.code
+                      ORDER BY b.d DESC LIMIT 1) AS last_close
             FROM trade t JOIN fill ef ON ef.id = t.entry_fill_id
             LEFT JOIN fill xf ON xf.id = t.exit_fill_id
             LEFT JOIN arena_order o ON o.id = ef.order_id
             LEFT JOIN decision_card dc ON dc.id = o.card_id
             WHERE t.cohort_id = ? ORDER BY ef.d DESC, t.id LIMIT ?`,
-      args: [cohortId, MAX_TRADES],
+      args: [v.market, cohortId, MAX_TRADES],
     });
     const codesByDate = new Map<string, string[]>();
     let lo = "9999-12-31";
@@ -546,6 +584,11 @@ export async function loadStrategyExtras(
         pnl: masked || !closed ? null : money(Number((BigInt(xp) - BigInt(ep)) * BigInt(qty))),
         entryPrice: masked ? null : money(ep),
         exitPrice: masked || xp === null ? null : money(xp),
+        ...stopTarget(masked, ep, num(r.first_stop), numOrNull(r.latest_stop)),
+        lastPrice:
+          masked || closed || r.last_close === null || r.last_close === undefined
+            ? null
+            : money(Math.round(Number(r.last_close) * 1_000_000)), // money-float-ok: stored close in dollars to micro
         cardHref:
           r.card_id === null || r.card_id === undefined ? null : cardHref(str(r.card_id), masked),
       });

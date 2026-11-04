@@ -4,6 +4,7 @@ import type { MarketQuery } from "@/lib/ui/loaders/market";
 export const mq = (over: Partial<MarketQuery> = {}): MarketQuery => ({
   open: ["movers"],
   size: "all",
+  movers: "up",
   page: 1,
   upPage: 1,
   downPage: 1,

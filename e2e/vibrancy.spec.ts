@@ -1,4 +1,4 @@
-// AT-66 / UXR-051, UXR-057: on each of the six themes every tab shows at least three distinct
+// AT-66 / UXR-051, UXR-057 (light family relaxed by D-884, see below): on each of the six themes every tab shows at least three distinct
 // meaningful hues (family / sector / outcome / status / tier / section tokens) above the fold beside
 // the neutrals; text passes AA (AAA in High contrast) by axe color-contrast; and nothing animates with
 // "Motion: Off" or under prefers-reduced-motion. Hues are counted by matching the computed colours of
@@ -102,7 +102,11 @@ test("AT-66: at least three meaningful hues above the fold, on every tab and the
           .catch(() => {});
         const h = await hues(page);
         report.push(`${width} ${theme} ${p}: ${h.tokens.length} (${h.tokens.join(" ")})`);
-        if (h.tokens.length < 3) bad.push(`${width} ${theme} ${p}: ${h.tokens.length} hues`);
+        // D-884 (Owner 2026-11-04, "two colours: white background, navy blue"): the light family is
+        // navy on white by design, so it needs the navy brand hue only; the data hues (outcome,
+        // family, sector) appear where there is data. Every other theme keeps the UXR-051 three.
+        const min = theme === "light" || theme === "system" ? 1 : 3;
+        if (h.tokens.length < min) bad.push(`${width} ${theme} ${p}: ${h.tokens.length} hues`);
       }
     }
   }

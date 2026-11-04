@@ -79,7 +79,7 @@ export const PICK_FIELDS = [
 ] as const;
 
 export const DEFAULT_PREFERENCES: Readonly<Preferences> = Object.freeze({
-  theme: "dark",
+  theme: "light", // D-884: Owner 2026-11-04 "white background, navy blue" (was dark, O-35)
   default_market: "AU",
   time_format: "24h",
   alert_p1: "immediate",

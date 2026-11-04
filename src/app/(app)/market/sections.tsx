@@ -22,6 +22,7 @@ import { MarketTable } from "./MarketTable";
 import type { WatchResult } from "./messages";
 import type { WatchMode } from "./RowActions";
 import { sectorKey } from "./sectorHue";
+import { formatDate } from "@/lib/view/format";
 import { ppmToPercent } from "./text";
 
 type Star = (fd: FormData) => Promise<WatchResult>;
@@ -143,7 +144,10 @@ export function MarketStatus({ model, q }: { model: Promise<MarketModel>; q: Mar
   ] as const;
   return (
     <>
-      {m.d ? <p className="m-0 text-sm text-text-muted">Latest data: {m.d}.</p> : null}
+      {/* D-884: the day the prices are from, plainly at the top of the lists */}
+      <p className="m-0 text-sm font-medium" data-prices-as-of="">
+        {m.d ? `Prices as of ${formatDate(m.d)} (end of day)` : "No prices stored yet"}
+      </p>
       {m.state === "stale" && m.staleText ? (
         <Banner tone="warning" title="Out of date">
           {m.staleText}
@@ -197,13 +201,24 @@ export function MoversSection({
   const m = use(model);
   if (m.state === "empty") return NO_DATA;
   const lists = [
-    ["Biggest rises", m.up, "No company rose at the last close.", "upPage"],
-    ["Biggest falls", m.down, "No company fell at the last close.", "downPage"],
-    ["Most traded", m.traded, "No trading was recorded at the last close.", "tradedPage"],
+    ["up", "Biggest rises", m.up, "No company rose at the last close.", "upPage"],
+    ["down", "Biggest falls", m.down, "No company fell at the last close.", "downPage"],
+    ["traded", "Most traded", m.traded, "No trading was recorded at the last close.", "tradedPage"],
   ] as const;
+  // D-884: one list at a time behind a switch, so the falls are not buried below the rises
+  const shown = lists.filter(([id]) => id === q.movers);
   return (
-    <div className="flex flex-col gap-6">
-      {lists.map(([title, list, empty, key]) => (
+    <div className="flex flex-col gap-3">
+      <Segmented
+        label="Which movers"
+        value={q.movers}
+        items={lists.map(([id, title]) => ({
+          value: id,
+          label: title,
+          href: marketHref(q, { movers: id }),
+        }))}
+      />
+      {shown.map(([, title, list, empty, key]) => (
         <div key={title} className="flex min-w-0 flex-col gap-2">
           <h3 className="m-0 text-base font-semibold">{title}</h3>
           <MarketTable

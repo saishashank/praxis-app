@@ -156,9 +156,17 @@ describe("the Market tab for the Owner", () => {
 
   it("Top movers lists rises, falls and most traded with day change, arrow and sign", async () => {
     const { container } = await market();
+    // D-884: one list at a time; the switch links to the other two
     expect(screen.getByRole("heading", { name: "Biggest rises" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Biggest falls" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Most traded" })).toBeInTheDocument();
+    const which = screen.getByRole("navigation", { name: "Which movers" });
+    expect(within(which).getByRole("link", { name: "Biggest falls" })).toHaveAttribute(
+      "href",
+      "/market?movers=down",
+    );
+    expect(within(which).getByRole("link", { name: "Most traded" })).toHaveAttribute(
+      "href",
+      "/market?movers=traded",
+    );
     // D-200: this world's thinly traded codes stay out of the movers before size groups exist,
     // so the day change, arrow and sign are checked on All companies
     expect(container.textContent).toContain("No company rose at the last close.");

@@ -89,7 +89,7 @@ async function count(db: Client, sql: string, args: (string | number)[]): Promis
 }
 
 /**
- * D-253: the night's tiers recomputed from the bars stored now (the stored snapshot may predate a
+ * D-861: the night's tiers recomputed from the bars stored now (the stored snapshot may predate a
  * history fill), the stored-bar counts of the codes whose ADV meets U1, and the thin sessions of the
  * window (fewer than half the busiest session's bars).
  */

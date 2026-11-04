@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   FIXTURES_ENV,
   listFixtures,
+  listRecordedBars,
   readFixtureJson,
   readFixtureText,
   resolveFixturesDir,
@@ -71,6 +72,22 @@ describe("reading fixtures", () => {
     fs.writeFileSync(path.join(d, "asx", "note.txt"), "x");
     expect(listFixtures(d, "asx")).toEqual(["asx/a.json", "asx/b.json"]);
     expect(listFixtures(d, "nope")).toEqual([]);
+  });
+
+  it("lists the recorded days' bars.json files, skipping days without one", () => {
+    const d = mk();
+    for (const day of ["au/2026-10-21", "au/2026-10-20", "us/2026-10-21"]) {
+      fs.mkdirSync(path.join(d, "recorded", ...day.split("/")), { recursive: true });
+    }
+    fs.writeFileSync(path.join(d, "recorded", "au", "2026-10-21", "bars.json"), "[]");
+    fs.writeFileSync(path.join(d, "recorded", "us", "2026-10-21", "bars.json"), "[]");
+    fs.mkdirSync(path.join(d, "recorded", "au", "2026-10-19", "bars.json"), { recursive: true });
+    fs.writeFileSync(path.join(d, "recorded", "note.txt"), "x");
+    expect(listRecordedBars(d)).toEqual([
+      "recorded/au/2026-10-21/bars.json",
+      "recorded/us/2026-10-21/bars.json",
+    ]);
+    expect(listRecordedBars(mk())).toEqual([]);
   });
 
   it("reads text and JSON", () => {

@@ -1,14 +1,21 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Source_Sans_3, Source_Serif_4 } from "next/font/google";
 import { currentLook } from "@/lib/preferences/current";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 // Self-hosted at build time by next/font (served from our origin; font-src 'self', D-130).
-const jetbrainsMono = JetBrains_Mono({
+// D-884: Source Sans 3 for text and numbers (tabular figures, UXN-002), Source Serif 4 for titles.
+const sourceSans = Source_Sans_3({
   subsets: ["latin"],
-  variable: "--font-jetbrains-mono",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-source-sans",
+  display: "swap",
+});
+const sourceSerif = Source_Serif_4({
+  subsets: ["latin"],
+  weight: ["600", "700"],
+  variable: "--font-source-serif",
   display: "swap",
 });
 
@@ -25,7 +32,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${jetbrainsMono.variable}`}
+      className={`${sourceSans.variable} ${sourceSerif.variable}`}
       data-theme={theme}
       data-motion={motion === "off" ? "off" : undefined}
     >

@@ -191,10 +191,11 @@
   --color-breaker-amber: #f0b94a;
   --color-breaker-red: #ff6b6b;
   --color-danger: #ff7b72;
-  --font-sans: var(--font-inter), system-ui, sans-serif;
-  /* Numbers use font-mono with tabular figures (UXN-002). */
-  --font-mono:
-    var(--font-jetbrains-mono), ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --font-sans: var(--font-source-sans), system-ui, sans-serif;
+  /* Titles (D-884). */
+  --font-display: var(--font-source-serif), Georgia, "Times New Roman", serif;
+  /* Numbers use font-mono, which is the text face with tabular figures (UXN-002, D-884). */
+  --font-mono: var(--font-source-sans), system-ui, sans-serif;
   /* Breakpoints (M7 design 4.5): sm = tables become cards below it; lg = desktop header. */
   --breakpoint-sm: 600px;
   --breakpoint-md: 768px;
@@ -246,4 +247,13 @@ html {
 
 .logo-light {
   display: var(--logo-light-display);
+}
+
+/* D-884: a sideways strip (tab pills, tile rows) slides without a visible scroll bar. */
+.ui-scroll-x {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.ui-scroll-x::-webkit-scrollbar {
+  display: none;
 }

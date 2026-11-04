@@ -49,6 +49,7 @@ vi.mock("lightweight-charts", () => ({
 import StrategiesPage from "@/app/(app)/strategies/page";
 import StrategyPage from "@/app/(app)/strategies/[execution]/page";
 import LeaderboardPage from "@/app/(app)/strategies/leaderboard/page";
+import MoversCheckPage from "@/app/(app)/strategies/movers/page";
 import { requireUser } from "@/lib/auth/guard";
 
 const ROLE = {
@@ -307,21 +308,41 @@ describe("one strategy", () => {
     expect(markers.filter((m) => m.shape === "arrowUp").length).toBe(3);
     expect(markers.filter((m) => m.shape === "arrowDown").length).toBe(1);
     expect(markers.map((m) => m.time)).toEqual([...markers.map((m) => m.time)].sort());
-    const strip = screen.getByRole("list", { name: "Trades, newest first" });
-    const buttons = within(strip).getAllByRole("button");
-    expect(buttons).toHaveLength(3);
-    fireEvent.click(buttons[0]!);
-    const detail = screen.getByRole("region", { name: "Selected trade" });
-    expect(within(detail).getByText("3 shares")).toBeInTheDocument();
-    expect(within(detail).getByText("A$12.00")).toBeInTheDocument();
-    expect(within(detail).getByRole("link", { name: /Decision Card/ })).toHaveAttribute(
-      "href",
-      `/cards/${encodeURIComponent(CARD_UP)}`,
+    // D-884/D-885: one table, Open first; All shows the round's three trades
+    const which = screen.getByRole("group", { name: "Which trades" });
+    expect(within(which).getByRole("button", { name: /^Open/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
     );
-    expect(buttons[0]).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(within(which).getByRole("button", { name: /^All \(3\)/ }));
+    const table = screen.getByRole("table", { name: /Trades in this round, all/ });
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent);
+    expect(headers).toEqual([
+      "Stock",
+      "Bought",
+      "Size",
+      "Buy price",
+      "Stop loss",
+      "Target",
+      "Now / sold",
+      "Result",
+      "Why",
+    ]);
+    const rows = table.querySelectorAll("[data-trade-row]");
+    expect(rows).toHaveLength(3);
+    expect(table.textContent).toContain("A$12.00");
+    expect(
+      within(table)
+        .getAllByRole("link", { name: "Why" })
+        .map((a) => a.getAttribute("href")),
+    ).toContain(`/cards/${encodeURIComponent(CARD_UP)}`);
+    fireEvent.click(rows[0]!);
+    expect(rows[0]).toHaveAttribute("aria-selected", "true");
     fireEvent.click(screen.getByRole("button", { name: "Next trade" }));
-    expect(buttons[1]).toHaveAttribute("aria-pressed", "true");
-    expect(buttons[0]).toHaveAttribute("aria-pressed", "false");
+    expect(rows[1]).toHaveAttribute("aria-selected", "true");
+    expect(rows[0]).toHaveAttribute("aria-selected", "false");
   });
 
   it("overlays only the matched controls and the zero-edge benchmark when toggled (UXN-068)", async () => {
@@ -450,23 +471,20 @@ describe("one strategy", () => {
       as(r);
       const { container } = await one("E01");
       expect(leaks(container.innerHTML)).toEqual([]);
-      const strip = screen.getByRole("list", { name: "Trades, newest first" });
-      expect(
-        within(strip)
-          .getAllByRole("button")
-          .map((b) => b.textContent)
-          .join(" "),
-      ).toMatch(/Stock [A-Z]/);
-      expect(strip.textContent).toMatch(/\d{4}-W\d{2}/);
-      expect(strip.textContent).not.toMatch(/2026-10-1\d/);
-      fireEvent.click(within(strip).getAllByRole("button")[0]!);
-      const detail = screen.getByRole("region", { name: "Selected trade" });
-      expect(detail.textContent).not.toMatch(/A\$12\.00|A\$10\.00|A\$11\.00/);
-      expect(
-        within(detail)
-          .getByRole("link", { name: /Decision Card/ })
-          .getAttribute("href"),
-      ).toMatch(/^\/cards\/ck%3A[0-9a-f]{16}$/);
+      fireEvent.click(
+        within(screen.getByRole("group", { name: "Which trades" })).getByRole("button", {
+          name: /^All/,
+        }),
+      );
+      const table = screen.getByRole("table", { name: /Trades in this round/ });
+      expect(table.textContent).toMatch(/Stock [A-Z]/);
+      expect(table.textContent).toMatch(/\d{4}-W\d{2}/);
+      expect(table.textContent).not.toMatch(/2026-10-1\d/);
+      // D-885: no price, stop or target for a masked viewer
+      expect(table.textContent).not.toMatch(/A\$\d/);
+      for (const a of within(table).getAllByRole("link", { name: "Why" })) {
+        expect(a.getAttribute("href")).toMatch(/^\/cards\/ck%3A[0-9a-f]{16}$/);
+      }
       await new Promise((res) => setTimeout(res, 20));
       expect(lc.markers).not.toHaveBeenCalled();
       expect(container.textContent).toMatch(/Trade markers on the chart are for the Owner/);
@@ -617,5 +635,22 @@ describe("evidence not stored yet", () => {
       .closest("section")!;
     expect(section.querySelector("table")!.querySelectorAll(":scope > tbody > tr").length).toBe(2);
     expect(within(section).getAllByText("Not measured yet").length).toBeGreaterThan(4);
+  });
+});
+
+describe("movers check page (D-886)", () => {
+  it("Owner: the tab is current and the page reads the stored movers; a masked viewer sees it hidden", async () => {
+    render(await MoversCheckPage());
+    expect(screen.getByRole("heading", { level: 1, name: "Movers check" })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("navigation", { name: "Strategy pages" })).getByRole("link", {
+        name: /Movers check/,
+      }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByText("Hidden for your access")).toBeNull();
+    cleanup();
+    as("viewer");
+    render(await MoversCheckPage());
+    expect(screen.getByText("Hidden for your access")).toBeInTheDocument();
   });
 });

@@ -281,7 +281,23 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-853 | A claimed (dispatched) request expires 30 minutes after the claim (updated_at), not 30 minutes after the request. |
 | D-854 | A date for workflow jobs later (price backfill, Arena close for a missed day), the minimal path: |
 | D-860 | The Owner decided on 2026-11-02 to release V2 without the Staging E2E day, once ("B"): staging has never run a full day (its Worker cron is off and WORKER_HM... |
+| D-870 | putStats (batch 3) writes replay_stat rows with db.batch(chunk, "write") in chunks of 500 (as rankIcStage.insertRows), summing rowsAffected; each statement k... |
+| D-871 | A db.batch(..., "write") chunk is one implicit transaction: if a chunk fails, none of its rows is written and the stage throws as the single-row loop did (th... |
+| D-872 | Batch 2b stores the night's candidates and blocked list (putDayCandidates, key fwd:<market> / cand:<D>, first write wins) once the night's status is known, s... |
+| D-873 | (superseded by D-881 for batch 3) ForwardOptions.maxCatchUp now spares only CONTEXT days (before the write zone, writeFrom): a day inside the write zone and... |
+| D-874 | The nightly liveRankIc rebuild of day D' (a second full loadDayInputs) is gated by review_rank_ic_nightly (0 or 1, default 1 per D-882, Owner-editable, Valid... |
+| D-875 | liveCohortOutcomes reads sleeve_json with the cohort rows and parses it with sleeveConfigFrom instead of calling loadSleeveConfig once per cohort (253 round... |
+| D-876 | recostStage and recheckInvariants process cohorts in bounded parallel chunks of 8 (inChunks, Promise.all; results are collected in the cohort order, so the r... |
+| D-877 | Cortex scoreOutcomes fetches the bars of every code it will walk with db.batch([...], "read"), 25 statements per round trip, using the very statement the per... |
+| D-878 | Stage timings: ReviewOptions.onStage(stage, ms, note?) (batch 3) and SignalsOptions.onTiming (2b) are called at each stage boundary; src/lib/arena/cli.ts pri... |
+| D-879 | The production job of .github/workflows/arena-signals.yml has timeout-minutes: 90 (was 40) and the locked copy under scripts/ci/fixtures/prod-jobs/ is re-sto... |
+| D-880 | The 2b store (D-872) is exact only when day.inputs was built from the base parameters. 2b builds its inputs with liveParams(base, versionSet) (D-115), and lo... |
+| D-881 | Batch 3 passes no maxCatchUp (D-873 reverted for the live path). |
+| D-882 | review_rank_ic_nightly defaults to 1 (D-874 said 0). |
 | D-883 | Production replay.yml (mode full) failed on every run after the V2 release with UND_ERR_SOCKET at stage=compute: |
+| D-884 | The Owner asked on 2026-11-04 for a quieter, professional look ("white background, navy blue looks professional", "the app looks very dull", "font is very ba... |
+| D-885 | Every trade already has a stop loss (trade.stop_micro NOT NULL; the stop in force is the higher of it and the latest recomputed stop_level, decision 7). |
+| D-886 | Movers check (Owner 2026-11-04: "at the end of the day run a job on why we haven't picked the top 20 movers and if we have stopped the top 20 losers"). |
 
 ## M14 (M14_design.md)
 

@@ -7,6 +7,8 @@
 // Expected layout of the fixtures repo (TODO(fixtures): confirm when the first recordings land):
 //   yahoo/*.json   bars.json-shaped arrays (may include deliberately bad bars)
 //   asx/*.json     response envelopes { "status": number, "headers": {...}, "body": string }
+//   recorded/<market>/<day>/bars.json   a recorded trading day (record-day.mjs); the same
+//                  bars.json shape, so the Yahoo checks read it too
 import fs from "node:fs";
 import path from "node:path";
 
@@ -43,6 +45,37 @@ export function safeJoin(dir: string, rel: string): string {
     throw new Error("fixture path escapes the fixtures directory");
   }
   return full;
+}
+
+/** Sorted `recorded/<market>/<day>/bars.json` paths of the recorded trading days; empty when absent. */
+export function listRecordedBars(dir: string): string[] {
+  const out: string[] = [];
+  for (const market of subdirs(dir, "recorded")) {
+    for (const day of subdirs(dir, `recorded/${market}`)) {
+      const rel = `recorded/${market}/${day}/bars.json`;
+      if (isFile(dir, rel)) out.push(rel);
+    }
+  }
+  return out.sort();
+}
+
+function subdirs(dir: string, rel: string): string[] {
+  try {
+    return fs
+      .readdirSync(safeJoin(dir, rel), { withFileTypes: true })
+      .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+      .map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+
+function isFile(dir: string, rel: string): boolean {
+  try {
+    return fs.statSync(safeJoin(dir, rel)).isFile();
+  } catch {
+    return false;
+  }
 }
 
 /** Sorted names of `*.json` files directly inside `<dir>/<sub>`; empty when the folder is absent. */

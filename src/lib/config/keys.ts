@@ -1492,6 +1492,7 @@ const MOVERS_RANGED = [
   ["short_risk_pct_min", "num", 5, 3, 12, "%", "O", REG, "CR-MOV-A4, D-747", "Short interest at or above which a name counts as heavily shorted (risk marker, not a signal)"],
   ["short_risk_change_pp_min", "num", 2, 1, 6, "pp", "O", REG, "CR-MOV-A4, D-747", "Rise in short interest over 20 reports that counts as a short-risk marker"],
   ["short_risk_f4_veto", "int", 0, 0, 1, "0 or 1", "O", REG, "CR-MOV-A4, D-747", "1 = no dip-buy entry in a heavily shorted name (0 = only the smaller parcel)"],
+  ["review_rank_ic_nightly", "int", 1, 0, 1, "0 or 1", "O", VAL, "VAL-114, D-874, D-882", "1 = batch 3 computes the live rank quality of the day two sessions back each night (0 = skip it, about 7 min a night; only the weekly learning replay backfills it, D-286)"],
   ["sector_composite_min_members", "int", 5, 3, 30, "codes", "O", OTH, "CR-MOV-A8, D-750", "Fewest codes an industry needs before its end-of-day composite adjusts an intraday move"],
 ] as const satisfies readonly RangedRow[];
 

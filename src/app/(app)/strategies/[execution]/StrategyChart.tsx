@@ -26,6 +26,10 @@ export type ChartTrade = {
   pnlText: string | null;
   entryPriceText: string | null;
   exitPriceText: string | null;
+  /** D-885: stop in force, indicative target (shown only) and the latest close of an open trade. */
+  stopText: string | null;
+  targetText: string | null;
+  lastPriceText: string | null;
   cardHref: string | null;
 };
 export type ChartControl = { id: string; label: string; points: ChartPoint[] };
@@ -130,7 +134,6 @@ export function StrategyChart({
   const at = nav[safe];
   const prev = nav[safe - 1];
   const mood = regimes[safe] ?? null;
-  const selectedTrade = trades.find((t) => t.key === selected) ?? null;
   const selectedIdx = trades.findIndex((t) => t.key === selected);
 
   const summary = nav.length
@@ -462,74 +465,155 @@ export function StrategyChart({
         {trades.length === 0 ? (
           <p className="m-0 mt-2 text-sm text-text-muted">No trades in this round yet.</p>
         ) : (
-          <ol
-            aria-label="Trades, newest first"
-            className="m-0 mt-2 flex list-none gap-2 overflow-x-auto p-0 pb-2 max-sm:snap-x"
-          >
-            {trades.map((tr) => (
-              <li key={tr.key} className="min-w-44 shrink-0 snap-start">
-                <button
-                  type="button"
-                  aria-pressed={tr.key === selected}
-                  onClick={() => pick(tr.key)}
-                  className={`w-full min-w-0 break-words rounded-lg border p-2 text-left text-sm ${tr.key === selected ? "border-accent bg-surface-2" : "border-border bg-surface"}`}
-                >
-                  <span className="block font-semibold">{tr.stock}</span>
-                  <span className="block text-xs text-text-muted">
-                    {tr.entryDay ?? "n/a"}
-                    {tr.exitDay ? ` to ${tr.exitDay}` : " (open)"}
-                  </span>
-                  <span className="block font-mono">{tr.returnText ?? "Open"}</span>
-                </button>
-              </li>
-            ))}
-          </ol>
+          <TradesTable trades={trades} selected={selected} onPick={pick} />
         )}
-        {selectedTrade ? (
-          <div
-            role="region"
-            aria-label="Selected trade"
-            aria-live="polite"
-            className="mt-2 rounded-lg border border-border bg-surface p-3 text-sm break-words"
-          >
-            <p className="m-0 font-semibold">{selectedTrade.stock}</p>
-            <dl className="m-0 mt-1 grid grid-cols-2 gap-x-3 gap-y-1">
-              <dt className="text-text-muted">Bought</dt>
-              <dd className="m-0 text-right font-mono">{selectedTrade.entryDay ?? "n/a"}</dd>
-              <dt className="text-text-muted">Sold</dt>
-              <dd className="m-0 text-right font-mono">{selectedTrade.exitDay ?? "Still open"}</dd>
-              <dt className="text-text-muted">Size</dt>
-              <dd className="m-0 text-right font-mono">{selectedTrade.qty} shares</dd>
-              {selectedTrade.entryPriceText ? (
-                <>
-                  <dt className="text-text-muted">Buy price</dt>
-                  <dd className="m-0 text-right font-mono">{selectedTrade.entryPriceText}</dd>
-                </>
-              ) : null}
-              {selectedTrade.exitPriceText ? (
-                <>
-                  <dt className="text-text-muted">Sell price</dt>
-                  <dd className="m-0 text-right font-mono">{selectedTrade.exitPriceText}</dd>
-                </>
-              ) : null}
-              <dt className="text-text-muted">Result</dt>
-              <dd className="m-0 text-right font-mono">
-                {selectedTrade.pnlText ?? selectedTrade.returnText ?? "Open"}
-              </dd>
-            </dl>
-            {selectedTrade.cardHref ? (
-              <Link
-                href={selectedTrade.cardHref}
-                className="mt-2 inline-block text-accent underline"
-              >
-                Why this trade (Decision Card)
-              </Link>
-            ) : (
-              <p className="m-0 mt-2 text-text-muted">No Decision Card is stored for this trade.</p>
-            )}
-          </div>
-        ) : null}
       </section>
+    </div>
+  );
+}
+
+type TradeView = "open" | "closed" | "all";
+
+/**
+ * D-884/D-885 ("trades need to be understood at a glance, not click to understand more"): one table
+ * of the round's trades, Open first, with size, buy price, stop, indicative target, price now or
+ * sell price and the result. A row click also lights the trade on the chart; "Why" opens the
+ * Decision Card as a popup, so the page stays where it is.
+ */
+export function TradesTable({
+  trades,
+  selected,
+  onPick,
+}: {
+  trades: ChartTrade[];
+  selected: string | null;
+  onPick: (key: string) => void;
+}) {
+  const [view, setView] = useState<TradeView>("open");
+  const counts = {
+    open: trades.filter((t) => t.open).length,
+    closed: trades.filter((t) => !t.open).length,
+    all: trades.length,
+  };
+  const shown = trades.filter((t) => (view === "all" ? true : view === "open" ? t.open : !t.open));
+  const tabs: Array<{ id: TradeView; label: string }> = [
+    { id: "open", label: "Open" },
+    { id: "closed", label: "Closed" },
+    { id: "all", label: "All" },
+  ];
+  const cell = "px-2 py-2 text-right font-mono whitespace-nowrap";
+  return (
+    <div className="mt-2 flex min-w-0 flex-col gap-2">
+      <div role="group" aria-label="Which trades" className="flex gap-2">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            aria-pressed={view === t.id}
+            onClick={() => setView(t.id)}
+            className={`min-h-11 rounded-full border px-4 text-sm ${view === t.id ? "border-accent bg-accent font-semibold text-accent-contrast" : "border-border bg-surface"}`}
+          >
+            {t.label} ({counts[t.id]})
+          </button>
+        ))}
+      </div>
+      {shown.length === 0 ? (
+        <p className="m-0 text-sm text-text-muted">
+          {view === "open" ? "No open trades right now." : "No closed trades in this round yet."}
+        </p>
+      ) : (
+        <div className="ui-scroll-x min-w-0 overflow-x-auto rounded-lg border border-border">
+          <table className="w-full min-w-[44rem] border-collapse text-sm">
+            <caption className="sr-only">Trades in this round, {view}</caption>
+            <thead>
+              <tr>
+                <th scope="col" className="sticky left-0 bg-surface px-2 py-2 text-left">
+                  Stock
+                </th>
+                <th scope="col" className="px-2 py-2 text-left">
+                  Bought
+                </th>
+                <th scope="col" className="px-2 py-2 text-right">
+                  Size
+                </th>
+                <th scope="col" className="px-2 py-2 text-right">
+                  Buy price
+                </th>
+                <th scope="col" className="px-2 py-2 text-right">
+                  Stop loss
+                </th>
+                <th scope="col" className="px-2 py-2 text-right">
+                  <abbr title="Shown only: the buy price plus twice the distance to the first stop. No strategy sells on it.">
+                    Target
+                  </abbr>
+                </th>
+                <th scope="col" className="px-2 py-2 text-right">
+                  {view === "open" ? "Price now" : view === "closed" ? "Sell price" : "Now / sold"}
+                </th>
+                <th scope="col" className="px-2 py-2 text-right">
+                  Result
+                </th>
+                <th scope="col" className="px-2 py-2 text-left">
+                  Why
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((t) => (
+                <tr
+                  key={t.key}
+                  data-trade-row={t.key}
+                  aria-selected={t.key === selected}
+                  onClick={() => onPick(t.key)}
+                  className={`cursor-pointer border-t border-border ${t.key === selected ? "bg-surface-2" : ""}`}
+                >
+                  <th
+                    scope="row"
+                    className="sticky left-0 bg-surface px-2 py-2 text-left font-semibold"
+                  >
+                    {t.stock}
+                  </th>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    {t.entryDay ?? "n/a"}
+                    {t.open ? null : (
+                      <span className="block text-xs text-text-muted">
+                        sold {t.exitDay ?? "n/a"}
+                      </span>
+                    )}
+                  </td>
+                  <td className={cell}>{t.qty}</td>
+                  <td className={cell}>{t.entryPriceText ?? "Hidden"}</td>
+                  <td className={cell}>{t.stopText ?? "Hidden"}</td>
+                  <td className={cell}>{t.targetText ?? "Hidden"}</td>
+                  <td className={cell}>
+                    {(t.open ? t.lastPriceText : t.exitPriceText) ?? (t.open ? "n/a" : "Hidden")}
+                  </td>
+                  <td className={cell}>{t.open ? "Open" : (t.pnlText ?? t.returnText ?? "n/a")}</td>
+                  <td className="px-2 py-2">
+                    {t.cardHref ? (
+                      <Link
+                        href={t.cardHref}
+                        scroll={false}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-accent underline"
+                      >
+                        Why
+                      </Link>
+                    ) : (
+                      <span className="text-text-muted">No card</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="m-0 text-xs text-text-muted">
+        Every trade has a stop loss. The target is shown only: the buy price plus twice the distance
+        to the first stop. The strategies sell on their own rules (the stop, a time limit, news or a
+        cross of the average), not at the target.
+      </p>
     </div>
   );
 }

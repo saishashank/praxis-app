@@ -21,7 +21,22 @@ describe("M14 card wording", () => {
       expect(text, r).not.toBe(r);
       expect(text).not.toMatch(/_/);
     }
-    expect(notTakenText("rank")).toBe("rank"); // an older reason is unchanged
+    // D-884: the older codes have words too; only an unknown code is returned unchanged
+    for (const r of [
+      "rank",
+      "positions_full",
+      "holding",
+      "reentry_block",
+      "corporate_action",
+      "no_facts",
+      "gate",
+      "control_paused",
+      "control_killed",
+      "rejected:cash,min_parcel",
+    ]) {
+      expect(notTakenText(r), r).not.toMatch(/_|^rank$|^gate$|^holding$/);
+    }
+    expect(notTakenText("some_future_code")).toBe("some_future_code");
   });
 
   it("has plain words for every new flag; an older flag keeps its spaced form", () => {

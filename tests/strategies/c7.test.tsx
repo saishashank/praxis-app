@@ -64,6 +64,7 @@ describe("tabs", () => {
       "/strategies",
       "/strategies/leaderboard",
       "/strategies/ideas",
+      "/strategies/movers", // D-886
       "/strategies/risk",
       "/what-if",
       "/cortex",
