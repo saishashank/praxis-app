@@ -294,6 +294,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-880 | The 2b store (D-872) is exact only when day.inputs was built from the base parameters. 2b builds its inputs with liveParams(base, versionSet) (D-115), and lo... |
 | D-881 | Batch 3 passes no maxCatchUp (D-873 reverted for the live path). |
 | D-882 | review_rank_ic_nightly defaults to 1 (D-874 said 0). |
+| D-883 | Production replay.yml (mode full) failed on every run after the V2 release with UND_ERR_SOCKET at stage=compute: |
 | D-884 | The Owner asked on 2026-11-04 for a quieter, professional look ("white background, navy blue looks professional", "the app looks very dull", "font is very ba... |
 | D-885 | Every trade already has a stop loss (trade.stop_micro NOT NULL; the stop in force is the higher of it and the latest recomputed stop_level, decision 7). |
 | D-886 | Movers check (Owner 2026-11-04: "at the end of the day run a job on why we haven't picked the top 20 movers and if we have stopped the top 20 losers"). |

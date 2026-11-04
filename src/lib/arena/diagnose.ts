@@ -264,6 +264,61 @@ export async function diagnoseDay(
   for (const l of outLines("default params", runFamilies(day.inputs, defaultAgentParams()))) out(l);
 }
 
+/**
+ * D-883: whether tonight's pick candidates can carry the three cases. A pick needs a scenario, read
+ * from closed `ledger_row` rows of the family that entered and exited by the split's `dev_end_d`
+ * (cards.ts loadScenarioInput), at least `scenario_min_n` of them. Per lineage: the latest split's
+ * version and dates and that closed-row count by rule version and variant; then the ledger by kind.
+ */
+export async function picksReadiness(db: Client, out: (line: string) => void): Promise<void> {
+  const splits = await db.execute({
+    sql: `SELECT s.lineage_id, s.version, s.dev_end_d, s.data_end_d, s.deferred_until_d FROM lineage_split s
+          WHERE s.lineage_id LIKE ? AND s.version =
+            (SELECT MAX(x.version) FROM lineage_split x WHERE x.lineage_id = s.lineage_id)
+          ORDER BY s.lineage_id`,
+    args: [`${MARKET}:%`],
+  });
+  out(`diagnose picks: splits=${splits.rows.length}`);
+  for (const r of splits.rows) {
+    const lineage = String(r.lineage_id);
+    const family = lineage.slice(MARKET.length + 1);
+    const devEnd = r.dev_end_d === null ? null : String(r.dev_end_d);
+    let byVersion = "{}";
+    if (devEnd !== null) {
+      const rs = await db.execute({
+        sql: `SELECT s.rule_version || '|' || s.variant AS k, COUNT(*) AS n
+              FROM ledger_row l JOIN signal s ON s.id = l.signal_id
+              WHERE s.market = ? AND s.family = ? AND l.exit_d IS NOT NULL
+                AND l.entry_d <= ? AND l.exit_d <= ?
+              GROUP BY k ORDER BY k`,
+        args: [MARKET, family, devEnd, devEnd],
+      });
+      byVersion = JSON.stringify(
+        Object.fromEntries(rs.rows.map((x) => [String(x.k), String(x.n)])),
+      );
+    }
+    out(
+      `  ${lineage}: v=${String(r.version)} devEnd=${devEnd ?? "none"} dataEnd=${String(r.data_end_d)}` +
+        ` deferredUntil=${r.deferred_until_d === null ? "none" : String(r.deferred_until_d)}` +
+        ` devClosed=${byVersion}`,
+    );
+  }
+  const ledger = await db.execute({
+    sql: `SELECT l.forward AS f, COUNT(*) AS n, SUM(CASE WHEN l.exit_d IS NULL THEN 0 ELSE 1 END) AS closed,
+            MIN(l.entry_d) AS first, MAX(l.entry_d) AS last
+          FROM ledger_row l JOIN signal s ON s.id = l.signal_id WHERE s.market = ?
+          GROUP BY l.forward ORDER BY l.forward`,
+    args: [MARKET],
+  });
+  for (const r of ledger.rows) {
+    out(
+      `  ledger forward=${String(r.f)}: rows=${String(r.n)} closed=${String(r.closed ?? 0)}` +
+        ` entries=${String(r.first)}..${String(r.last)}`,
+    );
+  }
+  if (ledger.rows.length === 0) out("  ledger: rows=0");
+}
+
 export async function diagnoseMain(
   argv: readonly string[],
   env: Readonly<Record<string, string | undefined>>,
@@ -297,6 +352,14 @@ export async function diagnoseMain(
       );
       code = 1;
     }
+  }
+  try {
+    await picksReadiness(db, out);
+  } catch (error) {
+    out(
+      `diagnose picks: failed (${error instanceof WriteRefused ? error.message : (error as Error).name})`,
+    );
+    code = 1;
   }
   db.close();
   return code;
