@@ -82,7 +82,7 @@ describe("empty state (no data at all)", () => {
   });
   it("the settings and shell loaders still answer", async () => {
     const env = envOf(w, "owner");
-    expect((await loadSettings(env)).preferences.theme).toBe("dark");
+    expect((await loadSettings(env)).preferences.theme).toBe("light"); // D-884: default is light;
     const shell = await loadShell(env);
     expect(shell.bell.count).toBe(0);
     expect(shell.masked).toBe(false);
@@ -198,6 +198,7 @@ describe("populated loaders", () => {
       expect(parseMarketQuery(sp(""))).toEqual({
         open: ["movers"],
         size: "all",
+        movers: "up", // D-884
         sector: undefined,
         page: 1,
         upPage: 1,

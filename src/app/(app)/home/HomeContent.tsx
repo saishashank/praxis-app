@@ -10,6 +10,7 @@ import { buttonClass } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FamilyBadge, Rail } from "@/components/ui/Family";
 import { ChevronRightIcon } from "@/components/ui/icons";
+import { InfoButton } from "@/components/ui/Overlays";
 import { Pill } from "@/components/ui/Pill";
 import { StatusStrip, type Mood } from "@/components/ui/StatusStrip";
 import { Banner, EmptyState } from "@/components/ui/States";
@@ -18,7 +19,7 @@ import { GainLoss, Masked, Money, NotMeasured, SimulatedLabel } from "@/componen
 import { formatDate, formatMicro, formatPpm, plural } from "@/lib/view/format";
 import { regimeLabel } from "@/lib/view/terms";
 import type { Loaded } from "@/lib/ui/loaders/common";
-import type { HomeNeed, HomePick, HomeSinceRow, HomeView } from "@/lib/ui/loaders/home";
+import type { HomeIdea, HomeNeed, HomePick, HomeSinceRow, HomeView } from "@/lib/ui/loaders/home";
 import { EmptyArt, Sparkline } from "./Art";
 import { familyBadge } from "./familyMap";
 import { CountUp, PopIn } from "./Motion";
@@ -34,6 +35,67 @@ const SIZE_NAME: Record<string, string> = { U1: "Large", U2: "Mid", U3: "Small" 
 const MAX_HOME_CARDS = 3; // threshold-ok: UXR-020 shows up to 3 pick cards
 
 const linkCls = "text-accent underline";
+
+/**
+ * D-884 ("too much boxed information, use sliding tiles on mobile"): a row of small tiles that
+ * slides sideways on a phone (snap to each tile) and becomes a grid from sm up.
+ */
+const tileStrip =
+  "ui-scroll-x m-0 -mx-1 flex list-none snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 xl:grid-cols-3";
+const tileItem = "w-[78%] min-w-0 shrink-0 snap-start sm:w-auto";
+
+/** One trade idea as a tile: code, company name, strategy, bought or not, and an "i" with why. */
+function IdeaTile({ idea }: { idea: HomeIdea }) {
+  const bought = idea.taken > 0;
+  const rounds = idea.taken + idea.notTaken;
+  return (
+    <div className="ui-card flex h-full flex-col gap-1 rounded-lg border border-border bg-surface p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          {idea.href ? (
+            <Link href={idea.href} className="text-lg font-semibold text-accent no-underline">
+              {idea.stock}
+            </Link>
+          ) : (
+            <span className="text-lg font-semibold">{idea.stock}</span>
+          )}
+          {idea.name ? (
+            <p className="m-0 truncate text-sm text-text-muted" title={idea.name}>
+              {idea.name}
+            </p>
+          ) : null}
+        </div>
+        <InfoButton label={`Why ${idea.stock} was ${bought ? "bought" : "not bought"}`}>
+          {bought ? (
+            <p className="m-0">
+              Bought in {idea.taken} of {rounds} strategy {plural(rounds, "round")}.
+            </p>
+          ) : null}
+          {idea.reasons.length > 0 ? (
+            <>
+              <p className="m-0 font-semibold">
+                {bought ? "Not bought in the other rounds because" : "Not bought because"}
+              </p>
+              <ul className="m-0 mt-1 list-disc pl-4">
+                {idea.reasons.map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            </>
+          ) : bought ? null : (
+            <p className="m-0">The reason was not recorded.</p>
+          )}
+        </InfoButton>
+      </div>
+      <p className="m-0 text-sm">{idea.strategy}</p>
+      <p className="m-0 mt-auto pt-1">
+        <Pill kind="status" value={bought ? "ok" : "neutral"}>
+          {bought ? "Bought" : "Not bought"}
+        </Pill>
+      </p>
+    </div>
+  );
+}
 
 /** Market regime -> gradient key and the word printed on it (the gradient is decoration, UXR-053). */
 export function moodOf(regime: string | null): { key: Mood; word: string } {
@@ -161,7 +223,7 @@ function Strip({ v, asOf }: { v: HomeView; asOf: string | null }) {
     label: "Data as of",
     value: v.dataAtLabel ?? (asOf ? formatDate(asOf) : <NotMeasured>No run yet</NotMeasured>),
   });
-  items.push({ label: "Next run", value: v.nextRun || "tonight 18:10" });
+  // D-884: no run times on Home ("don't give technical information like next run 18:30")
   if (v.dataOnly) {
     // UXR-006: the one place that says it; the shell header only shows the dot.
     items.push({
@@ -319,11 +381,11 @@ function SummaryCard({ v }: { v: HomeView }) {
           <span>The six strategies appear here with A$600 each after tonight&apos;s run.</span>
         </Empty>
       ) : (
-        <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 min-[480px]:grid-cols-2 xl:grid-cols-3">
+        <ul className={tileStrip} aria-label="Strategies today">
           {s.tiles.map((t) => (
             <li
               key={`${t.id}-${t.startD}`}
-              className="relative min-w-0 rounded-lg border border-border p-3 hover:border-accent focus-within:border-accent"
+              className={`${tileItem} relative rounded-lg border border-border bg-surface p-3 hover:border-accent focus-within:border-accent`}
               data-strategy-tile={t.id}
             >
               {/* D-200: the whole tile opens the strategy (the link covers the tile) */}
@@ -436,13 +498,14 @@ export function HomeContent({
       {empty ? (
         <EmptyState motif="home" hue="home" title="No data yet">
           {result.text} The six strategies show A$600, Starting, once they exist. First trade ideas
-          come after tonight&apos;s run; the first Evening Review arrives at 20:00.
+          come after tonight&apos;s run; the first Evening Review arrives this evening.
         </EmptyState>
       ) : null}
 
       <div className={twoCol}>
         <SinceYesterday rows={v.since} />
-        <NeedsYou needs={v.needs} />
+        {/* D-884: shown only when something needs the viewer (the bell holds the alerts) */}
+        {v.needs.length > 0 ? <NeedsYou needs={v.needs} /> : null}
       </div>
 
       <Section
@@ -452,9 +515,9 @@ export function HomeContent({
       >
         {cards.length > 0 ? (
           <>
-            <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 md:grid-cols-2 xl:grid-cols-3">
+            <ul className={tileStrip} aria-label="Tonight's picks">
               {cards.map((p) => (
-                <li key={`${p.profile}-${p.rank}`} className="min-w-0" data-pick-card="">
+                <li key={`${p.profile}-${p.rank}`} className={tileItem} data-pick-card="">
                   <PickCard p={p} masked={masked} />
                 </li>
               ))}
@@ -468,7 +531,7 @@ export function HomeContent({
           </>
         ) : (
           <Empty hue="family-br" shape="picks">
-            No picks yet. The first ones come after tonight&apos;s run at 18:10.
+            No picks yet. The first ones come after tonight&apos;s run.
           </Empty>
         )}
       </Section>
@@ -495,19 +558,10 @@ export function HomeContent({
           more={{ href: "/strategies/ideas", label: "See all tonight's ideas" }}
         >
           {v.ideas.items.length > 0 ? (
-            <ul className="m-0 list-none divide-y divide-border p-0">
+            <ul className={tileStrip} aria-label="Tonight's trade ideas">
               {v.ideas.items.map((i, n) => (
-                <li key={`${i.strategy}-${i.stock}-${n}`} className="min-w-0 break-words py-2">
-                  {i.href ? (
-                    <Link href={i.href} className={linkCls}>
-                      {i.stock}
-                    </Link>
-                  ) : (
-                    <span className="font-semibold">{i.stock}</span>
-                  )}{" "}
-                  <span className="text-text-muted">
-                    {i.strategy} · taken {i.taken}, not taken {i.notTaken}
-                  </span>
+                <li key={`${i.strategy}-${i.stock}-${n}`} className={tileItem}>
+                  <IdeaTile idea={i} />
                 </li>
               ))}
             </ul>
@@ -591,7 +645,7 @@ export function HomeContent({
             </p>
           ) : (
             <Empty hue="brand-a" shape="list">
-              First Evening Review at 20:00.
+              The first Evening Review appears after this evening&apos;s run.
             </Empty>
           )}
         </Section>

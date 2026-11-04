@@ -590,3 +590,108 @@ body::before {
 #content {
   overflow-x: clip;
 }
+
+/* ---- light: navy on white (D-884, Owner 2026-11-04: "white background, navy blue looks
+   professional", "the app looks very dull", "font is very basic") ------------------------------
+   The light family drops the glow layer for a quiet print-like look: plain page, white cards with a
+   soft shadow, solid navy titles in the display face, no grid, no aurora, no halos. */
+:root[data-theme="light"],
+:root[data-theme="system"],
+:root:not([data-theme]) {
+  --brand-line: linear-gradient(90deg, #0b2545 0%, #1d3a6e 100%);
+  --grid-line: transparent;
+  --surface-glass: color-mix(in srgb, #ffffff 92%, transparent);
+  --surface-lift: #ffffff;
+  --edge-light: none;
+  --glow-accent: none;
+  --glow-text: none;
+  --glow-value: none;
+  --glow-card: 0 1px 2px rgb(11 37 69 / 0.06), 0 8px 24px -12px rgb(11 37 69 / 0.18);
+  --edge-gradient: linear-gradient(#dfe5ee, #dfe5ee);
+  --card-shadow: 0 1px 2px rgb(11 37 69 / 0.05), 0 4px 14px -8px rgb(11 37 69 / 0.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"],
+  :root:not([data-theme]) {
+    --grid-line: color-mix(in srgb, var(--color-text) 4%, transparent);
+    --card-shadow: none;
+  }
+}
+:root[data-theme="light"] body::before,
+:root[data-theme="light"] #content main h1::after,
+:root[data-theme="light"] .ui-card::after,
+:root[data-theme="light"] #content .rounded-lg.border.bg-surface::after {
+  display: none;
+}
+:root[data-theme="light"] .ui-card,
+:root[data-theme="light"] #content .rounded-lg.border.bg-surface {
+  box-shadow: var(--card-shadow);
+}
+:root[data-theme="light"] .ui-card:hover,
+:root[data-theme="light"] #content .rounded-lg.border.bg-surface:hover {
+  box-shadow: var(--glow-card);
+}
+:root[data-theme="light"] #content main h1 {
+  background: none;
+  color: #0b2545;
+  filter: none;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+:root[data-theme="light"] #content main h2 {
+  text-shadow: none;
+  color: #0b2545;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+:root[data-theme="light"] #content main h2:not(.sr-only)::before {
+  width: 0.25rem;
+  height: 1em;
+  border-radius: 2px;
+  vertical-align: -0.12em;
+  background: #1d3a6e;
+}
+:root[data-theme="light"] .app-brand {
+  background: none;
+  color: #0b2545;
+  filter: none;
+  font-family: var(--font-display);
+}
+:root[data-theme="light"] .app-header {
+  border-bottom-color: #dfe5ee;
+}
+:root[data-theme="light"] .app-header::after {
+  background: #0b2545;
+  opacity: 1;
+  height: 2px;
+}
+:root[data-theme="light"] .app-tab[aria-current="page"] {
+  background: #0b2545;
+  color: #ffffff;
+  box-shadow: none;
+}
+:root[data-theme="light"] .app-tab[aria-current="page"]::after {
+  display: none;
+}
+:root[data-theme="light"] #content .bg-accent {
+  background-image: none;
+}
+:root[data-theme="light"] #content thead th {
+  background: #eef2f8;
+  border-bottom: 1px solid #c9d3e2;
+}
+:root[data-theme="light"] #content main a:hover {
+  text-shadow: none;
+}
+:root[data-theme="light"] .ui-avatar {
+  background: #0b2545;
+  color: #ffffff;
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 0 0 3px #1d3a6e;
+}
+:root[data-theme="light"] .app-mark {
+  filter: none;
+}

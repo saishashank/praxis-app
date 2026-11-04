@@ -67,7 +67,7 @@ describe("updateAppearanceAction", () => {
     asUser(me, "viewer");
     await updateAppearanceAction(form({ theme: "dim", time_format: "12h", userId: String(other) }));
     expect(await getPreferences(db, me)).toMatchObject({ theme: "dim", time_format: "24h" });
-    expect((await getPreferences(db, other)).theme).toBe("dark");
+    expect((await getPreferences(db, other)).theme).toBe("light"); // D-884: default is light
   });
 
   it("stops at the guard and writes nothing", async () => {

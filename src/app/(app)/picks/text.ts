@@ -128,7 +128,7 @@ export { FAMILY_BADGE as FAMILY_BADGES } from "@/lib/ui/familyBadge";
 
 /** UXR-007: one sentence on what will appear and when. */
 export const EMPTY_PICKS_SENTENCE =
-  "Picks for this profile appear here after tonight's run (about 6:30 pm) finds enough evidence.";
+  "Picks for this profile appear here once an evening run finds enough evidence.";
 export const EMPTY_TRACK_SENTENCE =
   "Picks appear here after they are published and followed on paper.";
 

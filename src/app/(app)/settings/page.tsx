@@ -170,7 +170,7 @@ export default async function SettingsPage() {
           />
           <InfoRow
             label="Fonts and attribution"
-            value="Inter, JetBrains Mono"
+            value="Source Sans 3, Source Serif 4"
             href="/settings/about"
             title="Fonts and attribution"
           >

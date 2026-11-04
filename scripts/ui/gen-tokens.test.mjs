@@ -39,7 +39,7 @@ test("generate is idempotent and refuses a file without markers", () => {
 
 test("a hand edit inside the generated section is detected as drift", () => {
   const edited = CSS.replace(
-    /(generated V2 palette: light \*\/[\s\S]*?--color-bg: )#ffffff/,
+    /(generated V2 palette: light \*\/[\s\S]*?--color-bg: )#f5f7fb/, // D-884 light page colour
     "$1#fefefe",
   );
   assert.notEqual(edited, CSS);

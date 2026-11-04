@@ -50,7 +50,7 @@ describe("diagnoseDay", () => {
     const text = lines.join("\n");
     expect(lines[0]).toMatch(new RegExp(`^diagnose ${DATES[D]}: mode=full universe=\\[".+\\]`));
     expect(text).toMatch(/activeUniverseWithBar=[1-9]/);
-    // D-253: tiers recomputed from the stored bars, with the window and the U1 pool's bar counts
+    // D-861: tiers recomputed from the stored bars, with the window and the U1 pool's bar counts
     expect(lines[1]).toMatch(
       /^ {2}tiers now: \{.+\} window=\d{4}-\d{2}-\d{2}\.\.\S+ sessionsWithBars=[1-9]\d* busiest=[1-9]\d* thin=\[.*\] u1AdvPool=\d+ poolBars: 60=\d+ 54-59=\d+ under54=\d+$/,
     );

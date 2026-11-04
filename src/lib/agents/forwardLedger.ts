@@ -536,7 +536,7 @@ export type ForwardOptions = {
   readonly masterSeed: bigint;
   /** Window reach in sessions (default: `reachSessions`); a test seam for the truncated window. */
   readonly reach?: number;
-  /** Maximum sessions of candidates rebuilt in one night (catch-up after missed batch 3 runs). */
+  /** Maximum context sessions (before the write zone) of candidates rebuilt in one night (catch-up after missed batch 3 runs); days inside the write zone and tonight are always rebuilt (D-873). */
   readonly maxCatchUp?: number;
   /**
    * Called once after the rows and the final controls of the night are written (M6 T3: attribution of
@@ -653,9 +653,13 @@ export async function syncForwardLedger(db: Client, o: ForwardOptions): Promise<
   const decided = await decidedDays(db, o.market, from, o.d);
   let rebuilt = 0;
   const cap = o.maxCatchUp ?? Number.POSITIVE_INFINITY;
+  const writeFromD = all[trusted]!;
   for (const d of window) {
     if (stored.has(d) || !decided.has(d)) continue;
-    if (d !== o.d && rebuilt >= cap) continue;
+    // D-873: the cap only spares context days before the write zone; a day inside the zone (and tonight)
+    // is always rebuilt, because a row written from a world that lacks one of its days would differ
+    // from the uncapped result (the replay is forward only, but later rows depend on earlier days).
+    if (d !== o.d && d < writeFromD && rebuilt >= cap) continue;
     const day = await dayInputs(db, o, d);
     const out = runFamilies(day.inputs, o.params);
     const pick: DayCandidates = { candidates: out.candidates, blocked: out.blocked };

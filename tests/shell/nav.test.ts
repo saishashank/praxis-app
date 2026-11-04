@@ -110,7 +110,8 @@ describe("route model: at most three levels (UXN-033)", () => {
     expect(found.length).toBeGreaterThan(5);
     // M16 D-361/D-371: the Blueprint page is invisible outside the Owner's own address bar, so it is
     // deliberately absent from the route model (no breadcrumb, no menu entry).
-    for (const f of found.filter((p) => p !== "/blueprint"))
+    // D-884: the @modal slot (the Decision Card popup) is not an address of its own
+    for (const f of found.filter((p) => p !== "/blueprint" && !p.startsWith("/@modal")))
       expect(
         ROUTES.some((r) => r.pattern === f),
         f,

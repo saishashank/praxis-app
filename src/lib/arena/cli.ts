@@ -406,6 +406,10 @@ export async function signalsMain(
         calendar,
         now: () => new Date(nowMs()).toISOString(),
         commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
+        onTiming: (stage, ms, note) =>
+          out(
+            `arena-2b ${MARKET} ${d}: stage=${stage} ms=${ms}${note === undefined ? "" : ` ${note}`}`,
+          ),
       });
       out(signalsSummary(result));
       last = `status=${result.status}`;
@@ -431,6 +435,10 @@ export async function signalsMain(
         // D-105 / M8 T5: a ledger-invariant violation opens an S1 incident; with the Resend
         // variables in the job env it is also emailed, without them it is recorded only.
         notify: { env },
+        onStage: (stage, ms, note) =>
+          out(
+            `arena-3 ${MARKET} ${d}: stage=${stage} ms=${ms}${note === undefined ? "" : ` ${note}`}`,
+          ),
       });
       out(reviewSummary(review));
       lastReview = `review=${review.status}`;
