@@ -10,14 +10,20 @@ import {
   AsxSourceError,
   type AsxResponse,
 } from "@/lib/data/sources/asx";
-import { listFixtures, readFixtureJson, resolveFixturesDir } from "@/lib/data/sources/fixtures";
+import {
+  listFixtures,
+  listRecordedBars,
+  readFixtureJson,
+  resolveFixturesDir,
+} from "@/lib/data/sources/fixtures";
 import { parseYahooBars } from "@/lib/data/sources/yahoo";
 
 const fx = resolveFixturesDir();
 const dir = fx.available ? fx.dir : "";
 if (!fx.available) console.info(`[fixtures] ${fx.reason}`);
 
-const yahoo = fx.available ? listFixtures(dir, "yahoo") : [];
+// Recorded trading days (record-day.mjs) are bars.json arrays too, so the Yahoo checks read them.
+const yahoo = fx.available ? [...listFixtures(dir, "yahoo"), ...listRecordedBars(dir)] : [];
 const asx = fx.available ? listFixtures(dir, "asx") : [];
 
 describe.skipIf(!fx.available)("real fixtures: Yahoo", () => {
