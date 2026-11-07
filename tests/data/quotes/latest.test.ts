@@ -79,9 +79,9 @@ describe("storeLatestQuotes / readLatestQuotes", () => {
     expect(
       await storeLatestQuotesSoft(broken, "AU", [q("AAA", 1n, "2026-11-09T00:35:00.000Z")]),
     ).toBe(false);
-    expect(
-      await storeLatestQuotesSoft(db, "AU", [q("AAA", 1n, "2026-11-09T00:35:00.000Z")]),
-    ).toBe(true);
+    expect(await storeLatestQuotesSoft(db, "AU", [q("AAA", 1n, "2026-11-09T00:35:00.000Z")])).toBe(
+      true,
+    );
   });
 });
 

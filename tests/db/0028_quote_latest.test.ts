@@ -29,7 +29,9 @@ describe("0028_quote_latest", () => {
 
     expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 27 });
     const tables = (
-      await db.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'quote_latest'")
+      await db.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'quote_latest'",
+      )
     ).rows;
     expect(tables).toHaveLength(0);
     expect(await migrateUp(db, ms)).toEqual({ applied: 1, version: 28 });

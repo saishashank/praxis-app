@@ -326,7 +326,9 @@ describe("masking: Editor and Viewer never see a code, a name, a link, a trade p
     expect(home.data.picks.items[0]!.validUntil).toBe("2026-W43");
     expect(home.data.news).toEqual({ hidden: true, items: [] });
     expect(home.data.review?.day).toBe("2026-W43");
-    expect(home.data.watchlist).toEqual([{ stock: "Stock C", close: null, changePpm: 19_835, at: null }]);
+    expect(home.data.watchlist).toEqual([
+      { stock: "Stock C", close: null, changePpm: 19_835, at: null },
+    ]);
     expect(home.data.ideas.items.map((i) => i.stock)).toEqual(["Stock C", "Stock A", "Stock B"]);
     expect(home.data.ideas.items[0]!.href).toMatch(/^\/cards\/ck%3A[0-9a-f]{16}$/);
 

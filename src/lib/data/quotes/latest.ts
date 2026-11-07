@@ -99,7 +99,10 @@ export async function readLatestQuotes(
  * The quote to show instead of the last close: only when it is from a later exchange date than that
  * close (a quote of the same day as the stored close adds nothing; an older one is stale). Pure.
  */
-export function newerThanClose(q: LatestQuote | undefined, closeD: string | null): LatestQuote | null {
+export function newerThanClose(
+  q: LatestQuote | undefined,
+  closeD: string | null,
+): LatestQuote | null {
   if (q === undefined) return null;
   if (closeD === null) return q;
   return q.quoteD > closeD ? q : null;
