@@ -16,6 +16,12 @@ import { maskAlertViews } from "@/lib/view/alerts";
 import { formatDate, plural } from "@/lib/view/format";
 import { loadIdeas } from "./ideas";
 import { pickRef } from "./picks";
+import {
+  newerThanClose,
+  quoteTimeMelbourne,
+  readLatestQuotes,
+  type LatestQuote,
+} from "@/lib/data/quotes/latest";
 import { loadAlertHomeFacts, loadIntraday, type IntradayModel } from "./pickAlerts";
 import type { LoaderEnv } from "./shell";
 import {
@@ -132,6 +138,8 @@ export type HomeWatch = {
   /** Latest close in micro-AUD-free dollars as stored; null for a masked viewer. */
   close: number | null;
   changePpm: number | null;
+  /** D-900: Melbourne time of the delayed quote behind `close` ("11:35"); null when it is the close. */
+  at: string | null;
 };
 
 export type StrategyTile = {
@@ -356,14 +364,34 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     })),
   };
 
+  // D-900: the newest delayed quote, shown instead of the close when it is from a later day.
+  const live =
+    masked || wlCodes.length === 0
+      ? new Map<string, LatestQuote>()
+      : await soft(
+          () => readLatestQuotes(deps.mainDb, v.market, wlCodes),
+          new Map<string, LatestQuote>(),
+        );
   view.watchlist = wlCodes.map((code) => {
     const series = closes.get(code) ?? [];
     const last = series[series.length - 1];
     const prev = series[series.length - 2];
+    const q = newerThanClose(live.get(code), last ? last.d : null);
+    if (q !== null) {
+      const lastC = Number(q.lastMicro) / 1_000_000; // money-float-ok: display dollars, as `c` is stored
+      const base = q.prevCloseMicro !== null ? Number(q.prevCloseMicro) / 1_000_000 : null; // money-float-ok: display dollars
+      return {
+        stock: label(code),
+        close: lastC,
+        changePpm: base !== null && base > 0 ? Math.round(((lastC - base) * PPM) / base) : null,
+        at: quoteTimeMelbourne(q.quoteAt),
+      };
+    }
     return {
       stock: label(code),
       close: masked || !last ? null : last.c,
       changePpm: last && prev && prev.c > 0 ? Math.round(((last.c - prev.c) * PPM) / prev.c) : null,
+      at: null,
     };
   });
 

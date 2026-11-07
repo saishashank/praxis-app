@@ -15,6 +15,7 @@ import {
   openViewer,
   PPM,
   ratioPpm,
+  soft,
   str,
   strOrNull,
   type Db,
@@ -22,6 +23,12 @@ import {
   type Money,
 } from "./common";
 import type { StrategyTile, StrategySort } from "./strategies";
+import {
+  newerThanClose,
+  quoteTimeMelbourne,
+  readLatestQuotes,
+  type LatestQuote,
+} from "@/lib/data/quotes/latest";
 
 const MAX_TRADES = 50; // threshold-ok: trade strip length
 const TARGET_R = 2n; // threshold-ok: D-885 indicative target at twice the first-stop distance (2R)
@@ -46,6 +53,29 @@ export function stopTarget(
   return {
     stop: money(inForce),
     target: money(Number(entry + TARGET_R * (entry - BigInt(firstStopMicro)))),
+  };
+}
+/**
+ * D-900: the price shown for a trade. An open trade shows the delayed quote when it is from a later day
+ * than its stored close (with the quote's Melbourne time), else the stored close (no time). Closed
+ * trades and masked viewers show none. Pure.
+ */
+export function lastPriceOf(
+  masked: boolean,
+  closed: boolean,
+  lastClose: unknown,
+  lastCloseD: string | null,
+  quote: LatestQuote | undefined,
+): { lastPrice: Money | null; lastPriceAt: string | null } {
+  if (masked || closed) return { lastPrice: null, lastPriceAt: null };
+  const q = newerThanClose(quote, lastCloseD);
+  if (q !== null) {
+    return { lastPrice: money(Number(q.lastMicro)), lastPriceAt: quoteTimeMelbourne(q.quoteAt) }; // money-float-ok: micro bigint to the Money view
+  }
+  if (lastClose === null || lastClose === undefined) return { lastPrice: null, lastPriceAt: null };
+  return {
+    lastPrice: money(Math.round(Number(lastClose) * 1_000_000)), // money-float-ok: stored close in dollars to micro
+    lastPriceAt: null,
   };
 }
 const MAX_CONTROL_ROWS = 1500; // threshold-ok: three controls x 500 sessions
@@ -368,8 +398,13 @@ export type StripTrade = {
    * distance to the first stop (2R). Null for a masked viewer.
    */
   target: Money | null;
-  /** Latest stored close of an open trade; null when closed or for a masked viewer. */
+  /**
+   * Latest price of an open trade: the delayed intraday quote when it is from a later day than the
+   * stored close (D-900), else the stored close. Null when closed or for a masked viewer.
+   */
   lastPrice: Money | null;
+  /** Melbourne time of the delayed quote behind `lastPrice` ("11:35"); null when it is the close. */
+  lastPriceAt: string | null;
   /** Link to the Decision Card; opaque for a masked viewer; null when no card is stored. */
   cardHref: string | null;
 };
@@ -546,14 +581,26 @@ export async function loadStrategyExtras(
                    (SELECT MAX(s.level_micro) FROM stop_level s WHERE s.trade_id = t.id
                       AND s.d = (SELECT MAX(s2.d) FROM stop_level s2 WHERE s2.trade_id = t.id)) AS latest_stop,
                    (SELECT b.c FROM price_bar b WHERE b.market = ? AND b.code = t.code
-                      ORDER BY b.d DESC LIMIT 1) AS last_close
+                      ORDER BY b.d DESC LIMIT 1) AS last_close,
+                   (SELECT MAX(b.d) FROM price_bar b WHERE b.market = ? AND b.code = t.code) AS last_close_d
             FROM trade t JOIN fill ef ON ef.id = t.entry_fill_id
             LEFT JOIN fill xf ON xf.id = t.exit_fill_id
             LEFT JOIN arena_order o ON o.id = ef.order_id
             LEFT JOIN decision_card dc ON dc.id = o.card_id
             WHERE t.cohort_id = ? ORDER BY ef.d DESC, t.id LIMIT ?`,
-      args: [v.market, cohortId, MAX_TRADES],
+      args: [v.market, v.market, cohortId, MAX_TRADES],
     });
+    // D-900: the newest delayed quote of each open trade's code, shown when it is from a later day
+    // than the stored close. Display only; a read failure keeps the close.
+    const openCodes = tr.rows
+      .filter((r) => r.exit_type === null || r.exit_type === undefined)
+      .map((r) => str(r.code));
+    const live = masked
+      ? new Map<string, LatestQuote>()
+      : await soft(
+          () => readLatestQuotes(deps.mainDb, v.market, openCodes),
+          new Map<string, LatestQuote>(),
+        );
     const codesByDate = new Map<string, string[]>();
     let lo = "9999-12-31";
     let hi = "0000-01-01";
@@ -585,10 +632,13 @@ export async function loadStrategyExtras(
         entryPrice: masked ? null : money(ep),
         exitPrice: masked || xp === null ? null : money(xp),
         ...stopTarget(masked, ep, num(r.first_stop), numOrNull(r.latest_stop)),
-        lastPrice:
-          masked || closed || r.last_close === null || r.last_close === undefined
-            ? null
-            : money(Math.round(Number(r.last_close) * 1_000_000)), // money-float-ok: stored close in dollars to micro
+        ...lastPriceOf(
+          masked,
+          closed,
+          r.last_close,
+          strOrNull(r.last_close_d),
+          live.get(str(r.code)),
+        ),
         cardHref:
           r.card_id === null || r.card_id === undefined ? null : cardHref(str(r.card_id), masked),
       });

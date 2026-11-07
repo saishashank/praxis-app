@@ -30,6 +30,7 @@ import {
   type QuoteFetchDeps,
 } from "@/lib/data/quotes/fetch";
 import type { DelayedQuote, QuoteRefusal } from "@/lib/data/quotes/types";
+import { storeLatestQuotesSoft } from "@/lib/data/quotes/latest";
 import { heldCodes } from "@/lib/intraday/universe";
 import {
   SESSION_TZ,
@@ -240,6 +241,8 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
     );
     quotes = fetched.quotes;
     requestsMade = fetched.requests;
+    // D-900: keep the newest quote per code for the site's delayed live price (display only).
+    await storeLatestQuotesSoft(db, market, quotes);
     // V2-S7 (D-697): reconcile the reservation to the requests actually made.
     if (fetched.requests < planned.length) {
       await db.execute({

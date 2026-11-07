@@ -197,6 +197,8 @@ describe("transitions and mail", () => {
         .map((t) => `${t.code}:${t.state}`)
         .sort(),
     ).toEqual(["ZZ01:hit", "ZZ02:cleared"]);
+    // D-900: every fetched quote is kept for the site's delayed live price.
+    expect(await scalar("SELECT COUNT(*) AS n FROM quote_latest")).toBeGreaterThan(0);
   });
 
   it("duplicate ticks and a repeated slot give no second hit, no second mail", async () => {

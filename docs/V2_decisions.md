@@ -540,3 +540,6 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-672 | (V2-B2) The state write is idempotent and recoverable: it sets allowed (pass) or shadow (fail) from the RECORDED result, never from the night's figures, with... |
 | D-673 | (V2-B2) The Monthly alerts report (loadAlertsReport) reads the newest stream cell (activeStreamCell), so its hypothesis and verdict (pending / passed / faile... |
 | D-674 | (V2-B2) Tests: tests/intraday/streamLook.test.ts - first qualifying night records the look and sets the state; later nights with the opposite outcome (fail t... |
+| D-900 | (O-80) Migration 0028 adds quote_latest, one row per market and code with the newest delayed quote (last, previous close, quote time, fetch time). |
+| D-901 | (O-80) Where it shows: the open trades of a strategy round (lastPriceOf in strategyViews.ts) and the Home watchlist. |
+| D-902 | (O-80) Coverage follows the poll's existing plan (D-502/D-695): armed picks every tick, then watch-listed and held codes at the cadence the day's budget sust... |

@@ -588,7 +588,9 @@ export function HomeContent({
                     <span className="block font-semibold">{w.stock}</span>
                     {w.close !== null ? (
                       <span className="block font-mono text-sm">
-                        End-of-day {w.close.toFixed(2)}
+                        {w.at !== null
+                          ? `${w.close.toFixed(2)} (delayed, ${w.at})`
+                          : `End-of-day ${w.close.toFixed(2)}`}
                       </span>
                     ) : masked ? (
                       <Masked label="Price hidden" />

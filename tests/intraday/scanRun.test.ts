@@ -267,6 +267,12 @@ describe("shadow candidates", () => {
     const r = await runIntradayScan(deps());
     expect(r).toMatchObject({ status: "ok", codes: 2, quotes: 2, written: 1 });
     expect(calls.map((u) => /chart\/(\w+)\./.exec(u)![1]).sort()).toEqual(["ZZ01", "ZZ02"]);
+    // D-900: the fetched quotes are kept for the site's delayed live price.
+    expect(
+      (await db.execute("SELECT code FROM quote_latest WHERE market = 'AU' ORDER BY code")).rows.map(
+        (x) => String(x.code),
+      ),
+    ).toEqual(["ZZ01", "ZZ02"]);
     const rows = (await db.execute("SELECT * FROM intraday_candidate")).rows;
     expect(rows).toHaveLength(1);
     const row = rows[0];

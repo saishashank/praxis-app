@@ -38,12 +38,12 @@ describe("0026_run_now", () => {
     await migrateUp(db, ms);
     const after = await schemaOf(db);
     expect(ms[25]).toMatchObject({ version: 26, name: "run_now" });
-    expect(await migrateDown(db, ms, 2)).toEqual({ rolledBack: 2, version: 25 });
+    expect(await migrateDown(db, ms, 3)).toEqual({ rolledBack: 3, version: 25 });
     const names = (await db.execute("SELECT name FROM sqlite_master")).rows.map((r) =>
       String(r.name),
     );
     expect(names.filter((n) => n.includes("run_now"))).toEqual([]);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 2, version: 27 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 3, version: 28 });
     expect(await schemaOf(db)).toEqual(after);
   });
 
