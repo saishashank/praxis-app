@@ -264,6 +264,13 @@ describe("shadow-only nights (D-280): the Cortex writes its tables and no order"
     const stage = run.stages.get(d(D))!;
     expect(stage.out.status).toBe("ran");
     expect(stage.allowed.size).toBe(0);
+    // D-890: every decision row carries the rule version of its family's map
+    const versions = await rows(
+      on,
+      "SELECT DISTINCT family, rule_version FROM cortex_decision WHERE d = ? ORDER BY family",
+      [d(D)],
+    );
+    for (const v of versions) expect(String(v.rule_version)).toBe(`${String(v.family)}.zz.1`);
   });
 
   it("writes no Cortex signal, card or order while every family is shadow", async () => {
@@ -411,6 +418,12 @@ describe("an allowed F1 family trades the Cortex live arm (D-266)", () => {
     expect(dec).toHaveLength(1);
     expect(String(dec[0]!.order_id)).toBe(orderId);
     expect(String(dec[0]!.signal_id)).toBe(signalId);
+    const live = await rows(
+      db,
+      "SELECT rule_version FROM cortex_decision WHERE d = ? AND arm = 'live' AND code = ? AND book_id = ?",
+      [day, pick.code, id],
+    );
+    expect(live).toEqual([{ rule_version: "F1.zz.1" }]); // D-890
     // F4 stays shadow: its book (E07) has no Cortex order
     expect(
       await rows(

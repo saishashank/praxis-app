@@ -456,6 +456,19 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-753 | (not built) A6, the intraday universe sweep, needs Owner acceptance: a batch delayed-quote endpoint on the accepted host (about 5 requests a slot inside the... |
 | D-754 | (migration) 0024 follows 0023; every test that pinned "version 23" or the number of steps to roll back moved by one (the 0019…0023 migration tests, the CLI a... |
 | D-755 | (limits, for the reviewer) (a) a halt title with no reason text stays unknown, so the 8f block applies to any zero-or-negative expectation including unknown:... |
+| D-887 | (O-79a) The go-live set is F1 alone: COLD_START_FAMILIES = [F1] (CTX-055 amended). |
+| D-888 | (O-79b) Angle A-D1-11 "12-month momentum": adjusted close today ÷ the adjusted close 252 sessions earlier − 1, score angle, cluster momentum, orientation +1,... |
+| D-889 | (O-79b) Rule version F1.v2-mom from the F1 map's params_json: angles: ["A-D1-11"], clusters: ["momentum"], K: 1, tiers: ["U1"], top3_min_s: 0.8, slots: 1, p_... |
+| D-890 | (O-79b) Plan time_hold (timeHoldPlan): the initial stop at the FAM-004 cap (12 % below the fill, a disaster stop), no trail, one time stop after hold session... |
+| D-891 | (O-79b) Tranche cadence (isEntryNight): a rule with entry_every E and entry_anchor A decides only on nights whose session distance from A is a multiple of E,... |
+| D-892 | (O-79c) A rule version that claims no calibrated p: the evidence row carries claims_p: false, accepted by the import only when every map of the family is a r... |
+| D-893 | (O-79c) The F1.v2-mom cells come from a new offline M15 tool (tools/m15/lib/f1mom.mjs, private) that imports the app code (D-278): every 20th session from 20... |
+| D-894 | (O-79e) One recorded look at the post-2021 data. |
+| D-895 | (O-79d) Cost profile P6 "A$1.00 or 0.03 %, whichever is greater, GST included", each side (Webull Australia, CHESS-sponsored, the cheapest reliable broker fo... |
+| D-896 | Stale-open flag: deferred. A D9 gate angle with a flag would become an L0 veto for every family (review 1); the measured rates (open = previous close in 15 %... |
+| D-897 | Research challengers, logged and not trading: the heavy-volume-down veto on F1.v2-mom candidates, a bear-state size halving, and the angle yardstick (top-dec... |
+| D-898 | Diagnosis readout of trades (tradesReadout, read-only, run by diagnose-signals.yml): the main books' trades closed in the last ten fill sessions by family an... |
+| D-899 | (O-79e, the result of the one look, 2026-11-08) F1.v2-mom stays in shadow. |
 
 ## M16 (M16_design.md)
 

@@ -23,8 +23,8 @@ const fee = (code: CostProfileCode, notional: bigint, side: "buy" | "sell" = "bu
 
 describe("profile table", () => {
   it("has exactly P0..P5b, version 1, flagged [VERIFY] and unverified, with spec line refs", () => {
-    expect(COST_PROFILE_CODES).toEqual(["P0", "P1", "P2", "P3", "P4", "P5", "P5b"]);
-    for (const code of COST_PROFILE_CODES) {
+    expect(COST_PROFILE_CODES).toEqual(["P0", "P1", "P2", "P3", "P4", "P5", "P5b", "P6"]);
+    for (const code of COST_PROFILE_CODES.filter((c) => c !== "P6")) {
       const p = COST_PROFILES[code];
       expect(p.code).toBe(code);
       expect(p.version).toBe(1);
@@ -38,7 +38,8 @@ describe("profile table", () => {
 
   it("lookup helpers", () => {
     expect(getCostProfile("P5")).toBe(COST_PROFILES.P5);
-    expect(() => getCostProfile("P6")).toThrow(/unknown cost profile/);
+    expect(() => getCostProfile("P7")).toThrow(/unknown cost profile/);
+    expect(getCostProfile("P6")).toBe(COST_PROFILES.P6);
     expect(isCostProfileCode("P5b")).toBe(true);
     expect(isCostProfileCode("p5")).toBe(false);
     expect(isCostProfileCode(5)).toBe(false);
@@ -200,11 +201,24 @@ describe("P0: zero-fee list, else P1 (list empty until supplied)", () => {
   });
 });
 
+describe("P6 (D-895, O-79d): the greater of A$1.00 and 0.03%, GST included, each side", () => {
+  it("is verified with its source and charges A$1 up to A$3,333.33, then 0.03%", () => {
+    const p = COST_PROFILES.P6;
+    expect(p).toMatchObject({ code: "P6", version: 1, verify: true, verified: true });
+    expect(p.specRef).toContain("webull.com.au/pricing");
+    expect(fee("P6", 600_000_000n)).toBe(1_000_000n);
+    expect(fee("P6", 600_000_000n, "sell")).toBe(1_000_000n);
+    expect(fee("P6", 3_333_000_000n)).toBe(1_000_000n);
+    expect(fee("P6", 10_000_000_000n)).toBe(3_000_000n);
+    expect(fee("P6", 100_000_000_000n)).toBe(30_000_000n);
+  });
+});
+
 describe("cost_profile rows (verified = 0, append-only, versioned)", () => {
   it("round-trips every profile through tiers_json", () => {
     for (const code of COST_PROFILE_CODES) {
       const p = COST_PROFILES[code];
-      const back = parseProfileRule(code, 1, serializeProfileRule(p), false);
+      const back = parseProfileRule(code, 1, serializeProfileRule(p), p.verified);
       expect(back).toEqual(p);
       expect(feeFor(back, 25_000_010_000n, "buy")).toBe(feeFor(p, 25_000_010_000n, "buy"));
     }
@@ -214,9 +228,15 @@ describe("cost_profile rows (verified = 0, append-only, versioned)", () => {
     const db = await freshDb("main");
     for (const code of COST_PROFILE_CODES) {
       const row = costProfileRow(COST_PROFILES[code], "2026-10-11T00:00:00.000Z");
-      expect(row.verified).toBe(0);
-      expect(row.source).toContain("[VERIFY]");
-      expect(row.source).toContain("l.64");
+      if (code === "P6") {
+        expect(row.verified).toBe(1);
+        expect(row.source).toContain("webull.com.au/pricing");
+        expect(row.source).not.toContain("[VERIFY]");
+      } else {
+        expect(row.verified).toBe(0);
+        expect(row.source).toContain("[VERIFY]");
+        expect(row.source).toContain("l.64");
+      }
       expect(() => JSON.parse(row.slippage_json)).not.toThrow();
       await db.execute({
         sql: `INSERT INTO cost_profile (code, version, tiers_json, slippage_json, source, verified, effective_from)

@@ -2014,6 +2014,9 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
           manifestId: cortex.manifestId,
           out: cortex.out,
           links: cortexLinks,
+          ruleVersions: new Map(
+            [...cortex.inputs.rules].map(([family, rule]) => [family, rule.ruleVersion]),
+          ),
         });
       } catch (error) {
         await db.execute({

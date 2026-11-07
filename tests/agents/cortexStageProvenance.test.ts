@@ -206,3 +206,58 @@ describe("ruleFromMap", () => {
     });
   });
 });
+
+describe("ruleFromMap: the F1.v2-mom fields (D-889..D-891)", () => {
+  const base = {
+    market: "AU",
+    family: "F1",
+    ruleVersion: "F1.v2-mom",
+    fittedAt: "2030-01-01T00:00:00.000Z",
+    activeSetHash: "h",
+    nEff: 100,
+    pool: "p",
+    fitSplit: "full",
+  } as const;
+  const params = (extra: Record<string, unknown>) =>
+    ({ a: 1, b: 0, s_mean: 0, s_sd: 1, K: 1, clusters: ["momentum"], ...extra }) as never;
+
+  it("reads angles, the time_hold plan and the cadence", () => {
+    const r = ruleFromMap("F1", {
+      ...base,
+      params: params({
+        angles: ["A-D1-11"],
+        plan: "time_hold",
+        hold: 120,
+        entry_every: 20,
+        entry_anchor: "2026-11-09",
+      }),
+    });
+    expect(r).toMatchObject({
+      angles: ["A-D1-11"],
+      plan: "time_hold",
+      hold: 120,
+      entryEvery: 20,
+      entryAnchor: "2026-11-09",
+    });
+  });
+
+  it("ignores malformed fields instead of half-reading them", () => {
+    const r = ruleFromMap("F1", {
+      ...base,
+      params: params({
+        angles: ["A-D1-11", 7],
+        plan: "time_hold",
+        entry_every: 20,
+        entry_anchor: "9 November",
+      }),
+    });
+    expect(r.angles).toBeUndefined();
+    expect(r.plan).toBeUndefined(); // no hold
+    expect(r.entryEvery).toBeUndefined(); // bad anchor
+    const noEvery = ruleFromMap("F1", {
+      ...base,
+      params: params({ entry_every: 0, entry_anchor: "2026-11-09" }),
+    });
+    expect(noEvery.entryEvery).toBeUndefined();
+  });
+});

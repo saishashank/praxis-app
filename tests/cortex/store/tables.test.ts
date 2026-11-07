@@ -255,6 +255,7 @@ describe("decisions and outcomes", () => {
     cardId: "card1",
     sectorTilt: null,
     manifestId: "m1",
+    ruleVersion: "F1.zz.1", // D-890 (migration 0027)
     ...over,
   });
   const out = (over: Partial<OutcomeRow> = {}): OutcomeRow => ({

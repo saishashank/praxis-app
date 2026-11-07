@@ -23,7 +23,8 @@
 //   evidence.json  { as_of_d: YYYY-MM-DD, families: [ { family, n_eff|null, min_neff_trade?: 150..400,
 //                      brier_skill_lo90|null, slope_ub90|null, gate_cell_key (a matched_cell cellKey),
 //                      mde: number|null, mde_rows: [ {n_eff, mde} for 100, 150 and 300 ],
-//                      n_eff_live_per_session|null } ] }
+//                      n_eff_live_per_session|null, claims_p?: boolean (D-892; false only for a
+//                      NO_P_RULE_VERSIONS rule version) } ] }
 // OPTIONAL kb_report.md (D-469): the calibration report as a KB item. Front matter (JSON-quoted
 //   scalars, as the KB renderer writes them) with id, market (= the manifest's), type
 //   "cortex_report" or "review", created and updated (YYYY-MM-DD), optional related: [...]; then a
@@ -46,6 +47,7 @@ import {
   decideFamily,
   FAMILIES,
   MIN_NEFF_TRADE_BOUNDS,
+  NO_P_RULE_VERSIONS,
 } from "../../src/lib/cortex/statusRules.mjs";
 
 export const FORMAT = "praxis-cortex-artefact/1";
@@ -392,6 +394,13 @@ export function validateEvidence(j) {
       "number or null required",
     );
     check(e, f, `${p}.gate_cell_key`, isStr(r.gate_cell_key), "string required");
+    check(
+      e,
+      f,
+      `${p}.claims_p`,
+      r.claims_p === undefined || typeof r.claims_p === "boolean",
+      "boolean or absent required",
+    );
     check(e, f, `${p}.mde`, r.mde === null || isNum(r.mde), "number or null required");
     const rows = r.mde_rows;
     if (
@@ -473,6 +482,18 @@ export function loadArtefact(dir) {
     const cell = gateCells.get(ev.gate_cell_key) ?? null;
     if (cell === null)
       errs.push(`evidence.json: ${ev.family}.gate_cell_key: no matched_cell with that cellKey`);
+    // D-892: `claims_p: false` is accepted only for a rule version on the reviewed list, and only
+    // when every map of the family is that rule version (so no other rule inherits the exemption).
+    if (ev.claims_p === false) {
+      const maps = data["maps.json"].maps.filter((x) => x.family === ev.family);
+      const listed =
+        maps.length > 0 && maps.every((m) => NO_P_RULE_VERSIONS.includes(m.rule_version));
+      if (!listed) {
+        errs.push(
+          `evidence.json: ${ev.family}.claims_p: false needs every map of the family on a listed rule version`,
+        );
+      }
+    }
     const d = decideFamily({
       family: ev.family,
       nEff: ev.n_eff,
@@ -480,6 +501,7 @@ export function loadArtefact(dir) {
       brierLo90: ev.brier_skill_lo90,
       slopeUb90: ev.slope_ub90,
       cell,
+      ...(ev.claims_p === false ? { claimsP: false } : {}),
     });
     d.evidence = { ...d.evidence, mde: ev.mde, mde_rows: ev.mde_rows };
     decisions.push({ ev, decision: d });
@@ -664,6 +686,7 @@ function plan(data, decisions) {
       const s = allowedWeakStatement({
         family: ev.family,
         nEffLivePerSession: ev.n_eff_live_per_session,
+        ...(ev.claims_p === false ? { claimsP: false } : {}),
       });
       statementId = `stmt:${market}:${ev.family}:allowed_weak:${createdAt.slice(0, 10)}`;
       stmts.push(

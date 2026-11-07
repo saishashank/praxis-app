@@ -226,6 +226,24 @@ function highProximity(view: AsOfView, code: string, t: number, g: GridPoint): A
   return ratio(s.adjClose[s.adjClose.length - 1]!, top);
 }
 
+// ---- A-D1-11 ---------------------------------------------------------------------------------------------------
+
+/** D-888: adjusted close today ÷ the adjusted close `lookback` sessions earlier, minus 1. */
+export function twelveMonthReturn(
+  view: AsOfView,
+  code: string,
+  t: number,
+  g: GridPoint,
+): AngleValue {
+  const l = int(g, "lookback");
+  const s = seriesAt(view, code, t, l + 1);
+  if (!s) return undefined;
+  const c = s.adjClose;
+  const then = c[c.length - 1 - l]!;
+  if (then <= 0n) return undefined;
+  return noNegZero(ratio(c[c.length - 1]!, then) - 1);
+}
+
 // ---- A-D1-03 ---------------------------------------------------------------------------------------------------
 
 function breakoutQuality(view: AsOfView, code: string, t: number, g: GridPoint): AngleValue {
@@ -678,5 +696,22 @@ export const D1_ANGLES: readonly AngleDef[] = [
       "D-271: the offline sector map is the current list, labelled; not point-in-time",
     ],
     compute: relativeStrength,
+  },
+  {
+    id: "A-D1-11",
+    version: 1,
+    domain: 1,
+    title: "12-month momentum (F1.v2-mom)",
+    definition:
+      "Adjusted close today divided by the adjusted close `lookback` sessions earlier, minus 1 (no skip). D-888 (O-79b): the one score angle of rule version F1.v2-mom; exclusive, so it is scored only by a rule version that lists it and never changes another rule's scored set.",
+    kind: "score",
+    cluster: "momentum",
+    orientation: 1,
+    horizonSessions: 120,
+    warmupSessions: 253,
+    inputs: ["bar_au"],
+    grid: { lookback: [252] },
+    exclusive: true,
+    compute: twelveMonthReturn,
   },
 ];

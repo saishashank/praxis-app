@@ -132,11 +132,12 @@ function atrRef(v: AsOfView, code: string, t: number): number {
 }
 
 describe("D1 registry entries", () => {
-  it("ten ids A-D1-01..10, valid under defineAngles, one gate (A-D1-09), the rest score angles", () => {
+  it("ids A-D1-01..10 plus the exclusive A-D1-11 (D-888), valid under defineAngles, one gate (A-D1-09), the rest score angles", () => {
     const sorted = defineAngles(D1_ANGLES);
     expect(sorted.map((a) => a.id)).toEqual(
-      Array.from({ length: 10 }, (_, i) => `A-D1-${String(i + 1).padStart(2, "0")}`),
+      Array.from({ length: 11 }, (_, i) => `A-D1-${String(i + 1).padStart(2, "0")}`),
     );
+    expect(D1_ANGLES.filter((a) => a.exclusive === true).map((a) => a.id)).toEqual(["A-D1-11"]);
     for (const a of D1_ANGLES) {
       expect(a.domain).toBe(1);
       expect(a.orientation).toBe(1);
@@ -192,6 +193,7 @@ describe("D-318: every grid key changes some value on the test world", () => {
     "A-D1-08": { body_min: 0.9, level: 0.25 },
     "A-D1-09": { near: 0.1 },
     "A-D1-10": { lookback: 63, skip: 21 },
+    "A-D1-11": { lookback: 126 },
   };
   for (const a of D1_ANGLES) {
     it(`${a.id}: ${Object.keys(a.grid).join(", ")}`, () => {

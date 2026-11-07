@@ -15,9 +15,10 @@ describe("money constants", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("every one is unverified today (nothing was approved by the Owner)", () => {
-    expect(moneyConstants().every((c) => !c.verified)).toBe(true);
-    expect(unverifiedMoneyConstants()).toHaveLength(moneyConstants().length);
+  it("every one is unverified today except P6, which the Owner asked for (D-895, 2026-11-08)", () => {
+    const verified = moneyConstants().filter((c) => c.verified);
+    expect(verified.map((c) => c.id)).toEqual(["cost_profile:P6"]);
+    expect(unverifiedMoneyConstants()).toHaveLength(moneyConstants().length - 1);
     expect(TICK_TABLE_VERIFIED).toBe(false);
     expect(SLIPPAGE_BUCKETS_VERIFIED).toBe(false);
     expect(MIN_MARKETABLE_PARCEL_VERIFIED).toBe(false);

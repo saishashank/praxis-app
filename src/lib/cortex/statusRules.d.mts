@@ -20,6 +20,8 @@ export type FamilyDecisionInput = {
   cell: PooledCell | null;
   hideUb?: number;
   gateOpts?: GateOpts;
+  /** D-892: false = no calibrated p (n_eff and Brier are diagnostics, p hidden). Default true. */
+  claimsP?: boolean;
 };
 export type FamilyDecision = {
   family: string;
@@ -65,6 +67,7 @@ export const GATE_DEFAULTS: {
   cellMinBlocks: number;
   regimeMinSetups: number;
 };
+export const NO_P_RULE_VERSIONS: readonly string[];
 export const A_D5_08: string;
 export const A_D5_08_MIN_LIVE_SESSIONS: number;
 export const LINEAGES: number;
@@ -95,5 +98,7 @@ export function projectSessions(
 export function allowedWeakStatement(input: {
   family: string;
   nEffLivePerSession: number | null;
+  /** D-892: false = the no-p wording. */
+  claimsP?: boolean;
 }): StatementDraft;
 export function liveTestedStatement(input: LiveTestedInput): LiveTestedDraft;

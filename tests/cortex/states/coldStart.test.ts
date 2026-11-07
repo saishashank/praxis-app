@@ -17,7 +17,7 @@ const view = buildAsOfView(
 const GO_LIVE = SESSIONS[0]!;
 
 describe("fixture 9: session 3 after go-live", () => {
-  it("is 'warming up' with F1 and F4 only and no refit, and nothing is a fault", () => {
+  it("is 'warming up' with F1 only (D-887) and no refit, and nothing is a fault", () => {
     const r = coldStartAt(view, 2, { goLiveD: GO_LIVE, abstainRatePct: 100 }, false);
     expect(r.state).toEqual({
       phase: "cold",
@@ -27,7 +27,7 @@ describe("fixture 9: session 3 after go-live", () => {
       label: "warming up (session 3 of 20)",
       reason: "cold_start",
     });
-    expect(r.state.familiesAllowed).toEqual(["F1", "F4"]);
+    expect(r.state.familiesAllowed).toEqual(["F1"]); // D-887 (O-79a)
     expect(r.eligible).toBe(true);
     expect(r.abstainAlarm).toBe(false); // a 100 % abstain rate is no alarm inside the cold phase
     expect(r.populationStable).toBeNull();
