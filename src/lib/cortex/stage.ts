@@ -781,6 +781,24 @@ export function ruleFromMap(family: Family, map: MapRow | undefined): FamilyNigh
   const loss = num(p.loss);
   const top3 = num(p.top3_min_s);
   const slots = num(p.slots);
+  // D-889..D-891 (O-79): optional rule-version fields; a map without them reads exactly as before
+  const angles =
+    Array.isArray(p.angles) && p.angles.every((a) => typeof a === "string")
+      ? (p.angles as string[])
+      : undefined;
+  const hold = num(p.hold);
+  const entryEvery = num(p.entry_every);
+  const anchor =
+    typeof p.entry_anchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(p.entry_anchor)
+      ? p.entry_anchor
+      : undefined;
+  const cadence =
+    entryEvery !== undefined &&
+    Number.isInteger(entryEvery) &&
+    entryEvery >= 1 &&
+    anchor !== undefined
+      ? { entryEvery, entryAnchor: anchor }
+      : {};
   return {
     ruleVersion: map.ruleVersion,
     clusters: map.params.clusters as FamilyNightRule["clusters"],
@@ -790,6 +808,9 @@ export function ruleFromMap(family: Family, map: MapRow | undefined): FamilyNigh
     ...(p.p_hidden === true ? { pHidden: true } : {}),
     ...(gain !== undefined && loss !== undefined ? { gainLoss: { gain, loss } } : {}),
     ...(slots === undefined ? {} : { slots }),
+    ...(angles === undefined ? {} : { angles }),
+    ...(p.plan === "time_hold" && hold !== undefined ? { plan: "time_hold" as const, hold } : {}),
+    ...cadence,
   };
 }
 
@@ -1071,6 +1092,7 @@ function decisionRowOf(
   dec: AnyDecision,
   tilt: readonly unknown[],
   links?: { signalId: string; orderId: string; cardId: string },
+  ruleVersion?: string,
 ): DecisionRow {
   return {
     market,
@@ -1093,6 +1115,7 @@ function decisionRowOf(
     cardId: links?.cardId ?? null,
     sectorTilt: tilt.length === 0 ? null : tilt,
     manifestId,
+    ruleVersion: ruleVersion ?? null,
   };
 }
 
@@ -1158,8 +1181,17 @@ export async function persistNight(
       .filter((x) => x.bookId === bookId)
       .map((x) => ({ sector: x.sector, tiltPp: x.tiltPp }));
   const rows: DecisionRow[] = [
-    ...out.shadow.map((x) => decisionRowOf(market, d, manifestId, x, tiltOf(x.bookId))),
-    ...out.blocked.map((x) => decisionRowOf(market, d, manifestId, x, tiltOf(x.bookId))),
+    ...[...out.shadow, ...out.blocked].map((x) =>
+      decisionRowOf(
+        market,
+        d,
+        manifestId,
+        x,
+        tiltOf(x.bookId),
+        undefined,
+        inputs.rules.get(x.family)?.ruleVersion,
+      ),
+    ),
   ];
   await insertDecisions(db, rows);
   for (const a of out.abstains) {
@@ -1196,6 +1228,8 @@ export async function persistLiveDecisions(
     out: NightOutput;
     /** key = `${bookId}|${code}` */
     links: ReadonlyMap<string, LiveLink>;
+    /** D-890: family → rule version of the night (the night inputs' rules). */
+    ruleVersions?: ReadonlyMap<Family, string>;
   },
 ): Promise<number> {
   const tiltOf = (bookId: string): unknown[] =>
@@ -1210,6 +1244,7 @@ export async function persistLiveDecisions(
       x,
       tiltOf(x.bookId),
       o.links.get(`${x.bookId}|${x.code}`),
+      o.ruleVersions?.get(x.family),
     ),
   );
   await insertDecisions(db, rows);
@@ -1552,6 +1587,17 @@ export async function scoreOutcomes(
     profileCache.set(bookId, profile);
     return profile;
   };
+  // D-890: the plan a decision was made under: the rule version stored on the decision (migration
+  // 0027); a row without one (written before) walks the family's v1 plan as before
+  const mapRows = await latestMaps(db, o.market);
+  const ruleOf = (
+    family: Family,
+    ruleVersion: string | null | undefined,
+  ): FamilyNightRule | undefined => {
+    if (ruleVersion === null || ruleVersion === undefined) return undefined;
+    const m = mapRows.find((x) => x.family === family && x.ruleVersion === ruleVersion);
+    return m === undefined ? undefined : ruleFromMap(family, m);
+  };
   let scored = 0;
   let unscorable = unsized.rowsAffected;
   let open = 0;
@@ -1562,7 +1608,9 @@ export async function scoreOutcomes(
     const upTo = all.filter((b) => b.d <= dec.d);
     const after = all.filter((b) => b.d > dec.d);
     const atr = atr20Micro(upTo.slice(-250)); // threshold-ok: ATR_HISTORY
-    const plan = isV1Family(family) ? familyPlan(family, o.params, atr) : null;
+    const plan = isV1Family(family)
+      ? familyPlan(family, o.params, atr, ruleOf(family, dec.ruleVersion))
+      : null;
     if (
       plan === null ||
       dec.limitMicro === null ||

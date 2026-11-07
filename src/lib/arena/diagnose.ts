@@ -319,6 +319,74 @@ export async function picksReadiness(db: Client, out: (line: string) => void): P
   if (ledger.rows.length === 0) out("  ledger: rows=0");
 }
 
+/**
+ * D-898: the main books' trades by family over the last `sessions` sessions with fills — closed
+ * trades (count, wins, mean and total net after both fees, by exit type) and open trades marked at
+ * the latest close. Counts and percentages only (SEC-110): no code or price is printed.
+ */
+export async function tradesReadout(
+  db: Client,
+  out: (line: string) => void,
+  sessions = 10,
+): Promise<void> {
+  const days = await db.execute({
+    sql: "SELECT DISTINCT d FROM fill ORDER BY d DESC LIMIT ?",
+    args: [sessions],
+  });
+  const ds = days.rows.map((r) => String(r.d)).sort();
+  if (ds.length === 0) {
+    out("diagnose trades: no fills");
+    return;
+  }
+  const from = ds[0]!;
+  const closed = await db.execute({
+    sql: `SELECT e.family AS family, t.exit_type AS exit_type,
+                 COUNT(*) AS n,
+                 SUM(CASE WHEN (x.value_micro - x.brokerage_micro) - (b.value_micro + b.brokerage_micro) > 0
+                          THEN 1 ELSE 0 END) AS wins,
+                 SUM((x.value_micro - x.brokerage_micro) - (b.value_micro + b.brokerage_micro)) AS net,
+                 SUM(b.value_micro + b.brokerage_micro) AS cost
+          FROM trade t
+          JOIN fill b ON b.id = t.entry_fill_id
+          JOIN fill x ON x.id = t.exit_fill_id
+          JOIN cohort c ON c.id = t.cohort_id
+          JOIN execution e ON e.id = c.execution_id
+          WHERE c.control_idx IS NULL AND e.kind = 'E' AND x.d >= ?
+          GROUP BY e.family, t.exit_type ORDER BY e.family, t.exit_type`,
+    args: [from],
+  });
+  out(`diagnose trades: closed since ${from} (${ds.length} fill sessions), main E books`);
+  for (const r of closed.rows) {
+    const n = Number(r.n); // money-float-ok: a trade count
+    const cost = Number(r.cost); // money-float-ok: a display percentage, never stored
+    const net = Number(r.net); // money-float-ok: a display percentage, never stored
+    out(
+      `  ${String(r.family)} ${String(r.exit_type)}: trades=${n} wins=${Number(r.wins)} ` +
+        `net=${cost > 0 ? ((net / cost) * 100).toFixed(2) : "0.00"}% of cost (A$${(net / 1e6).toFixed(2)})`,
+    );
+  }
+  const open = await db.execute({
+    sql: `SELECT e.family AS family, COUNT(*) AS n,
+                 SUM(b.qty * 1000000.0 * COALESCE((SELECT p.c FROM price_bar p WHERE p.market = e.market
+                       AND p.code = t.code ORDER BY p.d DESC LIMIT 1), 0)) AS mark,
+                 SUM(b.value_micro + b.brokerage_micro) AS cost
+          FROM trade t
+          JOIN fill b ON b.id = t.entry_fill_id
+          JOIN cohort c ON c.id = t.cohort_id
+          JOIN execution e ON e.id = c.execution_id
+          WHERE c.control_idx IS NULL AND e.kind = 'E' AND t.exit_type IS NULL
+          GROUP BY e.family ORDER BY e.family`,
+    args: [],
+  });
+  for (const r of open.rows) {
+    const cost = Number(r.cost); // money-float-ok: a display percentage, never stored
+    const mark = Number(r.mark); // money-float-ok: a display percentage, never stored
+    out(
+      `  ${String(r.family)} open: trades=${Number(r.n)} marked=${cost > 0 ? (((mark - cost) / cost) * 100).toFixed(2) : "0.00"}% vs cost`,
+    );
+  }
+}
+
 export async function diagnoseMain(
   argv: readonly string[],
   env: Readonly<Record<string, string | undefined>>,
@@ -358,6 +426,14 @@ export async function diagnoseMain(
   } catch (error) {
     out(
       `diagnose picks: failed (${error instanceof WriteRefused ? error.message : (error as Error).name})`,
+    );
+    code = 1;
+  }
+  try {
+    await tradesReadout(db, out);
+  } catch (error) {
+    out(
+      `diagnose trades: failed (${error instanceof WriteRefused ? error.message : (error as Error).name})`,
     );
     code = 1;
   }

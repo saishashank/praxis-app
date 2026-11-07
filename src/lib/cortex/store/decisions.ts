@@ -40,14 +40,16 @@ export type DecisionRow = {
   cardId: string | null;
   sectorTilt: unknown | null;
   manifestId: string;
+  /** D-890: the rule version the decision was made under (null on rows before migration 0027). */
+  ruleVersion?: string | null;
 };
 
 export async function insertDecision(db: Exec, x: DecisionRow): Promise<WriteResult> {
   return insertIgnore(db, {
     sql: `INSERT INTO cortex_decision (market, d, book_id, code, arm, family, s, p, expected_net_micro,
             rank_key, limit_micro, stop_micro, qty, gate_trace_json, first_fail_gate, signal_id,
-            order_id, card_id, sector_tilt_json, manifest_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            order_id, card_id, sector_tilt_json, manifest_id, rule_version)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       x.market,
       x.d,
@@ -69,6 +71,7 @@ export async function insertDecision(db: Exec, x: DecisionRow): Promise<WriteRes
       x.cardId,
       x.sectorTilt === null ? null : jsonText(x.sectorTilt),
       x.manifestId,
+      x.ruleVersion ?? null,
     ],
   });
 }
@@ -86,8 +89,8 @@ export async function insertDecisions(
       rows.slice(i, i + DECISIONS_PER_BATCH).map((x) => ({
         sql: `INSERT INTO cortex_decision (market, d, book_id, code, arm, family, s, p, expected_net_micro,
                 rank_key, limit_micro, stop_micro, qty, gate_trace_json, first_fail_gate, signal_id,
-                order_id, card_id, sector_tilt_json, manifest_id)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+                order_id, card_id, sector_tilt_json, manifest_id, rule_version)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
         args: [
           x.market,
           x.d,
@@ -109,6 +112,7 @@ export async function insertDecisions(
           x.cardId,
           x.sectorTilt === null ? null : jsonText(x.sectorTilt),
           x.manifestId,
+          x.ruleVersion ?? null,
         ],
       })),
       "write",
@@ -139,6 +143,7 @@ const toDecision = (r: Record<string, unknown>): DecisionRow => ({
   cardId: strOrNull(r.card_id),
   sectorTilt: r.sector_tilt_json === null ? null : parseJson(r.sector_tilt_json),
   manifestId: str(r.manifest_id),
+  ruleVersion: strOrNull(r.rule_version),
 });
 
 /** All decisions of a night in key order; optionally one family and/or one arm. */

@@ -15,13 +15,21 @@ export const DEFAULT_HIDE_UB = 1.0;
 export const GATE_DEFAULTS = { cellMinSetups: 60, cellMinBlocks: 20, regimeMinSetups: 30 };
 export const A_D5_08 = "A-D5-08";
 export const A_D5_08_MIN_LIVE_SESSIONS = 60;
-/** CTX-002: seven lineages, tested one-sided at 90 % (weak) and family-wise 0.05 (strict). */
-export const LINEAGES = 7;
+/**
+ * CTX-002: lineages tested one-sided at 90 % (weak) and family-wise 0.05 (strict). Seven in v7;
+ * D-894 (review 7): F1.v2-mom is an eighth.
+ */
+export const LINEAGES = 8;
 export const WEAK_LEVEL = 0.1;
 export const STRICT_LEVEL = 0.05;
 export const LIVE_TESTED_MIN_NEFF = 150;
 export const LIVE_PENDING_LABEL = "live-tested pending (n_eff_live = 0)";
 export const PROJECTION_TARGETS = [100, 150];
+/**
+ * D-892: rule versions that claim no calibrated p (their evidence may carry `claims_p: false`).
+ * A reviewed list: adding a version is a code change, never artefact data.
+ */
+export const NO_P_RULE_VERSIONS = ["F1.v2-mom"];
 
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 
@@ -68,8 +76,12 @@ export function decideFamily(input) {
   const failed = [];
   if (input.family === "F7") failed.push("f7_never_allowed");
   const nEff = isNum(input.nEff) ? input.nEff : null;
-  if (nEff === null || nEff < minNEff) failed.push("calibration_untestable");
-  if (!isNum(input.brierLo90) || !(input.brierLo90 > 0)) failed.push("brier_skill_not_positive");
+  // D-892 (O-79c): a rule version that claims no calibrated p (`claimsP === false`) has n_eff and the
+  // Brier-skill bound as diagnostics only; it binds on the economic gate alone and its p is hidden.
+  const claimsP = input.claimsP !== false;
+  if (claimsP && (nEff === null || nEff < minNEff)) failed.push("calibration_untestable");
+  if (claimsP && (!isNum(input.brierLo90) || !(input.brierLo90 > 0)))
+    failed.push("brier_skill_not_positive");
   let gate = null;
   if (!input.cell) {
     failed.push("economic_gate:not_enough_history");
@@ -83,7 +95,7 @@ export function decideFamily(input) {
       failed.push(`economic_gate:${reason}`);
     }
   }
-  const pHidden = slopeHiddenFromUb(input.slopeUb90, input.hideUb);
+  const pHidden = !claimsP || slopeHiddenFromUb(input.slopeUb90, input.hideUb);
   return {
     family: input.family,
     status: failed.length === 0 ? "allowed" : "shadow",
@@ -158,11 +170,16 @@ function projectionSentence(perSession) {
 /** CTX-053 statement (allowed to trade, weak test) marked live-tested pending. Plain words. */
 export function allowedWeakStatement(input) {
   const chance = pct(luckChance(), 0);
+  // D-892 (review 8): a rule that claims no calibrated p never says its forecasts beat the base rate
+  const claim =
+    input.claimsP === false
+      ? `its picks beat a random pick of the same kind by more than they cost; it gives no chance of a ` +
+        `gain for any single trade. `
+      : `its forecasts beat the base rate and its picks earned more than they cost. `;
   const text =
-    `${input.family} is allowed to trade (weak test). On past data and shadow sessions its forecasts ` +
-    `beat the base rate and its picks earned more than they cost. This is a frequency test of the past, ` +
+    `${input.family} is allowed to trade (weak test). On past data and shadow sessions ${claim}This is a frequency test of the past, ` +
     `not a promise about any single trade. Status: ${LIVE_PENDING_LABEL}. ${projectionSentence(input.nEffLivePerSession)} ` +
-    `With seven families each tested at 90%, the chance that at least one is allowed to trade by luck alone is about ${chance}.`;
+    `With ${LINEAGES} lineages each tested at 90%, the chance that at least one is allowed to trade by luck alone is about ${chance}.`;
   return {
     kind: "allowed_weak",
     text,

@@ -48,13 +48,19 @@ import {
 } from "@/lib/arena/fills";
 import type { SettlementItem } from "@/lib/arena/ledger";
 import { sizeEntry, type SizingResult } from "@/lib/arena/sizing";
-import { nextTradingDay } from "@/lib/data/calendar";
+import { nextTradingDay, sessionsBetween } from "@/lib/data/calendar";
 import type { Micro } from "@/lib/money/micro";
 import { divFloor, makeRational, type Rational } from "@/lib/money/rational";
 import { roundHalfAwayFromZero } from "@/lib/money/round";
 import { cellKey, TOP3_BAND_KEY, type CellStatistic } from "@/lib/stats/cells";
 import type { Prng } from "@/lib/stats/rng";
-import { ANGLES, evaluateAngle, rankStandardise, scoredSet } from "./angles/registry";
+import {
+  ANGLES,
+  evaluateAngle,
+  rankStandardise,
+  ruleScoredSet,
+  scoredSet,
+} from "./angles/registry";
 import type { AngleCluster, AngleDef, AngleStatus, AngleValue } from "./angles/types";
 import { costPerOrder, type CostPerOrder } from "./economics/cost";
 import { breakEvenCard } from "./economics/breakEven";
@@ -148,6 +154,17 @@ export type FamilyNightRule = {
   readonly gainLoss?: { readonly gain: number; readonly loss: number };
   /** Entries a book may open on one night (default 1). */
   readonly slots?: number;
+  /**
+   * D-889: the rule version's own scored set (angle ids). Absent → the global scored set. Listed
+   * exclusive angles (D-888) are scored only here.
+   */
+  readonly angles?: readonly string[];
+  /** D-890: `time_hold` = initial stop at the FAM-004 cap, no trail, exit after `hold` sessions. */
+  readonly plan?: "time_hold";
+  readonly hold?: number;
+  /** D-891: entries only on nights whose session distance from `entryAnchor` is a multiple of this. */
+  readonly entryEvery?: number;
+  readonly entryAnchor?: string;
 };
 
 export type StateRef = {
@@ -338,13 +355,61 @@ export function familyPlan(
   family: Family,
   params: AgentParams,
   atrMicro: Micro | null,
+  rule?: Pick<FamilyNightRule, "plan" | "hold">,
 ): ExitPlan | null {
+  if (rule?.plan === "time_hold") return timeHoldPlan(params, rule.hold);
   if (family === "F1") return f1Plan(params, atrMicro);
   if (family === "F4") return f4Plan(params, atrMicro);
   return null;
 }
 
 const EMPTY_PLAN: ExitPlan = { initialStops: [], trails: [], cs: [] };
+
+/**
+ * D-890: the `time_hold` plan of a long-hold rule version (F1.v2-mom): the initial stop at the
+ * FAM-004 cap (`max_stop_distance_pct` below the fill, a disaster stop), no trail, and one time stop
+ * after `hold` sessions with no minimum return. G06 passes by construction.
+ */
+export function timeHoldPlan(params: AgentParams, hold: number | undefined): ExitPlan {
+  if (hold === undefined || !Number.isInteger(hold) || hold < 1) {
+    throw new RangeError("a time_hold rule needs an integer hold >= 1");
+  }
+  return {
+    initialStops: [
+      {
+        id: "initial",
+        via: null,
+        spec: { atr_micro: null, k: null, cap: params.entry.maxStopDistance, level_micro: null },
+      },
+    ],
+    trails: [],
+    cs: [{ id: "max_hold", via: null, kind: "time_stop", sessions: hold, minReturn: null }],
+  };
+}
+
+/**
+ * D-891: whether night `d` is an entry night of a rule with a tranche cadence: the trading-session
+ * distance between `entryAnchor` and `d` (calendar walk, either direction) is a multiple of
+ * `entryEvery`. A rule without a cadence enters every night.
+ */
+export function isEntryNight(
+  rule: Pick<FamilyNightRule, "entryEvery" | "entryAnchor"> | undefined,
+  d: string,
+  view: Pick<AsOfView, "sessions" | "calendar">,
+): boolean {
+  if (rule?.entryEvery === undefined || rule.entryAnchor === undefined) return true;
+  // review 5: count on the view's own sessions when both nights are in it (holiday rows cannot shift
+  // it); the calendar walk only for an anchor outside the view
+  const a = view.sessions.indexOf(rule.entryAnchor);
+  const b = view.sessions.indexOf(d);
+  let distance: number;
+  if (a >= 0 && b >= 0) distance = Math.abs(b - a);
+  else {
+    const [from, to] = d >= rule.entryAnchor ? [rule.entryAnchor, d] : [d, rule.entryAnchor];
+    distance = sessionsBetween(from, to, view.calendar).length - 1;
+  }
+  return distance % rule.entryEvery === 0;
+}
 
 /** The initial stop spec of a plan (its first initial-stop rule). */
 export function planStopSpec(plan: ExitPlan, atrMicro: Micro | null): StopSpec {
@@ -481,6 +546,18 @@ type Eval = {
   readonly sources: readonly InputKind[];
 };
 
+/**
+ * D-889: a rule version with its own angle list. `features` are ranked within the rule's own tiers
+ * (the research ranks F1.v2-mom within U1, review 2) and never enter the night's shared features;
+ * `valid` is false when a listed angle is unknown or not active (its candidates fail G04).
+ */
+type RuleSet = {
+  readonly scoredAngles: readonly ScoredAngle[];
+  readonly hash: string;
+  readonly features: ReadonlyMap<string, ReadonlyMap<string, AngleValue>>;
+  readonly valid: boolean;
+};
+
 type NightCtx = {
   readonly inputs: NightInputs;
   readonly night: { status: "ran" } | { status: "abstain_all"; reason: string };
@@ -495,6 +572,8 @@ type NightCtx = {
   readonly arenaNavMicro: Micro;
   readonly coldExcluded: (family: Family) => boolean;
   readonly sources: readonly InputKind[];
+  /** D-889: each rule version's own scored set and its hash (absent → the global set). */
+  readonly ruleSets: ReadonlyMap<Family, RuleSet>;
 };
 
 function statusOf(inputs: NightInputs): (id: string) => AngleStatus {
@@ -606,11 +685,16 @@ function evaluateCandidate(
   const bar = f.bar!;
 
   // 2. eligibility (CTX-012; an ATR warming up is an undefined feature too)
-  const feats = ctx.features.get(code) ?? new Map<string, AngleValue>();
+  const ruleSet = ctx.ruleSets.get(book.family);
+  const feats =
+    (ruleSet === undefined ? ctx.features : ruleSet.features).get(code) ??
+    new Map<string, AngleValue>();
+  const scoredAngles = ruleSet?.scoredAngles ?? ctx.scoredAngles;
+  const setHash = ruleSet?.hash ?? ctx.hash;
   const clusters = rule?.clusters ?? inputs.maps.get(book.family)?.clusters ?? [];
   score =
     clusters.length > 0
-      ? scoreCode(feats, ctx.scoredAngles, inputs.maps.get(book.family), ctx.hash, clusters)
+      ? scoreCode(feats, scoredAngles, inputs.maps.get(book.family), setHash, clusters)
       : null;
   if (score !== null && score.status === "ineligible") {
     step("G02_eligibility", gateEligibility(score.eligibility));
@@ -642,8 +726,14 @@ function evaluateCandidate(
   // 4. economic gate
   volBucket = volBucketOf(f.atrMicro, bar.close);
   cell = inputs.cells.get(cellKey(book.family, TOP3_BAND_KEY, volBucket, tier));
-  plan = familyPlan(book.family, params, f.atrMicro);
-  if (rule === undefined || score === null || score.status !== "scored" || plan === null) {
+  plan = familyPlan(book.family, params, f.atrMicro, rule);
+  if (
+    rule === undefined ||
+    ruleSet?.valid === false ||
+    score === null ||
+    score.status !== "scored" ||
+    plan === null
+  ) {
     step("G04_economic", {
       pass: false,
       gateId: "G04_economic",
@@ -867,7 +957,10 @@ function blockedOf(
 ): BlockedDecision {
   const f = ctx.facts.get(code)!;
   const score = e.score !== null && e.score.status === "scored" ? e.score : null;
-  const plan = e.plan ?? familyPlan(book.family, ctx.inputs.params, f.atrMicro) ?? EMPTY_PLAN;
+  const plan =
+    e.plan ??
+    familyPlan(book.family, ctx.inputs.params, f.atrMicro, ctx.inputs.rules.get(book.family)) ??
+    EMPTY_PLAN;
   const spec = e.stopSpec ?? planStopSpec(plan, f.atrMicro);
   return {
     bookId: book.bookId,
@@ -1062,6 +1155,28 @@ export function runNight(inputs: NightInputs): NightOutput {
 
   // L1
   const features = featuresAt(view, t, scoredDefs, codes);
+  // D-889: a rule version that lists its own angles scores exactly those (exclusive ones included),
+  // ranked within its own tiers; the night's shared features stay as they are
+  const ruleSets = new Map<Family, RuleSet>();
+  for (const [family, rule] of [...inputs.rules].sort((a, b) => byText(a[0], b[0]))) {
+    if (rule.angles === undefined) continue;
+    const own = ruleScoredSet(angles, status, rule.angles);
+    const set = own.map((a) => ({
+      id: a.id,
+      version: a.version,
+      cluster: a.cluster as AngleCluster,
+    }));
+    const tierCodes = codes.filter((c) => {
+      const tier = view.tier(c, t);
+      return tier !== null && rule.tiers.includes(tier);
+    });
+    ruleSets.set(family, {
+      scoredAngles: set,
+      hash: activeSetHash(set),
+      features: featuresAt(view, t, own, tierCodes),
+      valid: own.length === new Set(rule.angles).size && own.length > 0,
+    });
+  }
   const gateAngles = angles.filter(
     (a) =>
       a.kind === "gate" &&
@@ -1098,6 +1213,7 @@ export function runNight(inputs: NightInputs): NightOutput {
     arenaNavMicro: arenaNav > 0n ? arenaNav : 1n,
     coldExcluded,
     sources,
+    ruleSets,
   };
 
   const decisions: Decision[] = [];
@@ -1207,6 +1323,8 @@ export function runNight(inputs: NightInputs): NightOutput {
   };
 
   for (const book of books) {
+    // D-891: a rule with a tranche cadence decides only on its entry nights (held lines still exit)
+    if (!isEntryNight(inputs.rules.get(book.family), d, view)) continue;
     const allowed = (inputs.status[book.family] ?? "shadow") === "allowed";
     const deployable = deployableOf(book);
     const live = runArm(book, "live", allowed, deployable);

@@ -62,6 +62,11 @@ export type AngleDef = {
   readonly historyFields?: readonly string[];
   /** D-292: rule ids and modules of the existing v1 implementation a gate/meta entry cites. */
   readonly existing?: readonly string[];
+  /**
+   * D-888: scored only by a rule version whose map lists it (`FamilyNightRule.angles`); never part
+   * of the global scored set, so it cannot change another rule's features, hash or map.
+   */
+  readonly exclusive?: boolean;
   /** Pure. Reads only through `view` at `t`. Absent for gate/meta entries that are existing rules. */
   readonly compute?: (view: AsOfView, code: string, t: number, grid: GridPoint) => AngleValue;
 };

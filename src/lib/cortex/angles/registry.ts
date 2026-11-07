@@ -33,7 +33,9 @@ import {
 export const ANGLE_ID_RE = /^A-D(10|[1-9])-(\d{2})$/;
 /** Angles per domain in the D1...D10 lists (10 x 10 = 100, CTX-011). */
 export const ANGLES_PER_DOMAIN = 10;
-export const ANGLE_COUNT = 100;
+/** D-888: the 100 spec angles plus the exclusive rule-version angles (A-D1-11). */
+export const EXCLUSIVE_ANGLE_IDS: readonly string[] = ["A-D1-11"];
+export const ANGLE_COUNT = 100 + EXCLUSIVE_ANGLE_IDS.length;
 
 /**
  * InputKinds the live app can read at the cut-off. `macro` has no live fetcher in M15 (D-291), so
@@ -185,7 +187,27 @@ export function scoredSet(
   statusOf: (id: string) => AngleStatus,
 ): readonly AngleDef[] {
   return defs.filter((a) => {
-    if (a.kind !== "score") return false;
+    if (a.kind !== "score" || a.exclusive === true) return false;
+    const s = statusOf(a.id);
+    return s === "active" || s === "watch";
+  });
+}
+
+/**
+ * D-888/D-889: the scored set of one rule version. No list → the global set. A list → exactly the
+ * listed score angles that are `active` or `watch` (exclusive or not), in registry order; an id that
+ * is unknown, not a score angle or not active is left out (the rule then scores nothing for it and its
+ * candidates are blocked downstream, never a throw).
+ */
+export function ruleScoredSet(
+  defs: readonly AngleDef[],
+  statusOf: (id: string) => AngleStatus,
+  listed: readonly string[] | undefined,
+): readonly AngleDef[] {
+  if (listed === undefined) return scoredSet(defs, statusOf);
+  const want = new Set(listed);
+  return defs.filter((a) => {
+    if (a.kind !== "score" || !want.has(a.id)) return false;
     const s = statusOf(a.id);
     return s === "active" || s === "watch";
   });

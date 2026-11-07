@@ -420,7 +420,7 @@ describe("fixture 9: cold start, session 3 -> `warming up`, no fault", () => {
     expect(r.state).toMatchObject({
       phase: "cold",
       sessionNumber: 3,
-      familiesAllowed: ["F1", "F4"],
+      familiesAllowed: ["F1"], // D-887 (O-79a)
       label: "warming up (session 3 of 20)",
     });
     expect(r.abstainAlarm).toBe(false);

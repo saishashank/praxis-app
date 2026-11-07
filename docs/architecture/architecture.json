@@ -9659,7 +9659,8 @@
           "order_id",
           "card_id",
           "sector_tilt_json",
-          "manifest_id"
+          "manifest_id",
+          "rule_version"
         ],
         "database": "main",
         "indexes": [

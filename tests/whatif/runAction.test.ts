@@ -260,7 +260,7 @@ describe("answers come from stored rows", () => {
       { id: "E01", name: "Follow the trend" },
       { id: "E02", name: "Good company, good news" },
     ]);
-    expect(o.profiles).toEqual(["P0", "P1", "P2", "P3", "P4", "P5", "P5b", "stress"]);
+    expect(o.profiles).toEqual(["P0", "P1", "P2", "P3", "P4", "P5", "P5b", "P6", "stress"]);
     expect(o.shocks).toEqual([-30, -20, -10, 10, 20, 30]);
   });
 });
