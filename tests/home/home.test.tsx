@@ -198,6 +198,15 @@ describe("accessibility and layout", () => {
     const result = await loadHome(deps(pop, OWNER));
     expect(daySentence(result.data)).not.toMatch(new RegExp(CODES.join("|")));
   });
+
+  it("the day sentence says when there are no picks, and never mentions trade ideas (D-912)", async () => {
+    const { data } = await loadHome(deps(pop, OWNER));
+    const none = daySentence({ ...data, picks: { ...data.picks, items: [] } });
+    expect(none).toContain("No picks on the list yet.");
+    expect(none).not.toMatch(/trade idea/);
+    if (data.picks.items.length > 0)
+      expect(daySentence(data)).not.toContain("No picks on the list yet.");
+  });
 });
 
 describe("Home for a first-time user (D-200)", () => {
