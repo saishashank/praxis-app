@@ -67,7 +67,7 @@ Who may change a key: Owner (any valid value), Owner within bounds (Lane B, beco
 | `cost_feasibility_ratio` | `2` | x | nobody (fixed) | fixed | yes | ARN-094; ch.15 l.74 |
 | `cost_gate_k` | `2` | x | Owner | number, 1.5 to 3 | no | FAM-005 (same key as CTX-022a; D-214) |
 | `cost_gate_min_rows` | `30` | rows | nobody (fixed) | fixed | no | FAM-005 (D-214) |
-| `cost_profile_default` | `"P5"` | profile | Owner | one of P0, P1, P2, P3, P4, P5, P5b | yes | ARN-031 |
+| `cost_profile_default` | `"P6"` | profile | Owner | one of P0, P1, P2, P3, P4, P5, P5b, P6 | yes | ARN-031 |
 | `critic_llm_calls_per_night` | `10` | calls/night | Owner | whole number, 0 to 20 | yes | LLM-021; ch.15 l.124 (bounds 0-20 agent-chosen, D-111) |
 | `day0_close_offset_min` | `10` | min | nobody (fixed) | fixed | no | ARN-020 day 0; continuous trading ends 10 min before the close [VERIFY] |
 | `decision_cutoff` | `"18:10"` | Melbourne time | nobody (fixed) | fixed | yes | ARN-020, DAT-001; ch.15 l.15 |
