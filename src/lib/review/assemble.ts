@@ -12,6 +12,7 @@
 import type { Client } from "@libsql/client";
 import { renderReview, type ReviewFacts } from "@/lib/email/templates";
 import { dateLabel } from "@/lib/email/templates/format";
+import { readMissedMovers } from "./missedMovers";
 import type { EnvName } from "@/lib/email/templates/core";
 import {
   canonicalFacts,
@@ -159,6 +160,9 @@ export async function buildFacts(db: Client, o: BuildOptions): Promise<BuiltFact
   if (recap.regimeNotice !== undefined) facts.regimeNotice = recap.regimeNotice;
   const pickAlerts = await readPickReview(c, o.pickCandidatesOn ?? true);
   if (pickAlerts !== null) facts.pickAlerts = pickAlerts;
+  // D-909: descriptive, soft: a failing read leaves the section out, never the review
+  const missedMovers = await readMissedMovers(c).catch(() => null);
+  if (missedMovers !== null) facts.missedMovers = missedMovers;
   if (minimal) {
     const noData = executions.length === 0 ? ` No data for ${o.d}.` : "";
     facts.minimalReason = `${o.minimal!.reason}${noData}`;

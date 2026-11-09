@@ -4,6 +4,12 @@
 
 One line per V2 decision from D-206 on, grouped by milestone, with the file that holds the full text. D-001 to D-252 are in [07_decision_log.md](07_decision_log.md). Improvement-batch decisions are in the "Improvements" section at the end of `M13L_design.md`.
 
+## M7 (M7_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-909 | The Evening Review's section 6 ("What needs improving for tomorrow") gains "What we missed today" (src/lib/review/missedMovers.ts), built from the stored nig... |
+
 ## M8.1 (M8.1_design.md)
 
 | Id | Decision |
