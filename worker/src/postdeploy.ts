@@ -16,7 +16,8 @@ import { dispatchWorkflow, type DispatchEnv } from "./dispatch";
 
 export const POSTDEPLOY_JOBS: readonly { workflow: string; inputs: Record<string, string> }[] = [
   { workflow: "asx-fetch.yml", inputs: { history: "true" } },
-  { workflow: "replay.yml", inputs: { mode: "full" } },
+  // D-905: the replay skips itself unless the deploy changed replay inputs (scripts/ci/replay-needed.mjs).
+  { workflow: "replay.yml", inputs: { mode: "full", only_if_changed: "true" } },
 ];
 export const MAX_ATTEMPTS = 3;
 const COMMIT_RE = /^[0-9a-f]{40}$/;

@@ -9,6 +9,10 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | Id | Decision |
 | --- | --- |
 | D-730 | The app header shows the logo with its tagline ("Learn. Earn. Repeat.", praxis-logo-tagline-*.svg, 40 px high) from the sm breakpoint (600 px) at the Owner's... |
+| D-903 | Bulk reads page by key, never by OFFSET: the backup dump pages each table by rowid (rowid tables) or its primary key (WITHOUT ROWID tables), each page strict... |
+| D-904 | Read budget (NFR, V2 spec ch. 10): the whole system (production; staging is off, D-906) stays under 20 % of the Turso free plan's monthly allowance, 100 mill... |
+| D-905 | The post-deploy full replay (D-195) runs only when the deploy changed what a replay depends on: the Worker dispatches it with only_if_changed: "true", and sc... |
+| D-906 | Staging is off (Owner 2026-11-09: "Don't use any staging going forward on anything"): the Nightly, Deploy staging and Staging E2E day workflows are disabled... |
 
 ## M11L (M11L_design.md)
 
