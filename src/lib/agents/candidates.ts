@@ -202,7 +202,7 @@ const CAL_SLACK_DAYS = 14; // threshold-ok: extra calendar days searched for the
 /** The session `n` sessions back from D (D counts as one), or the oldest the calendar knows. */
 function sessionFloor(d: string, n: number, calendar: readonly CalendarRow[]): string {
   const back = sessionsBetween(addDays(d, -n * CAL_DAYS_PER_SESSION - CAL_SLACK_DAYS), d, calendar);
-  return back[Math.max(0, back.length - n)] ?? d;
+  return back[back.length > n ? back.length - n : 0] ?? d;
 }
 
 /** Bars to read per code: the longest window of any rule plus the Wilder warm-up (design 2.2). */
