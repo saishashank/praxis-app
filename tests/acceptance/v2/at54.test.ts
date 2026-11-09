@@ -148,16 +148,18 @@ describe("AT-54 plain words and the luck figure", () => {
     expect(row.text).toContain("pace of live cases has not been measured");
   });
 
-  it("the chance that at least one of seven lineages is allowed by luck is about 52 % (weak) and 30 % (strict)", () => {
+  it("the chance that at least one lineage is allowed by luck: seven lineages about 52 % (weak) and 30 % (strict); with F1.v2-mom (D-894) eight, about 57 % and 34 %", () => {
     expect(luckChance(7, 0.1)).toBeCloseTo(0.5217, 4);
     expect(luckChance(7, 0.05)).toBeCloseTo(0.3017, 4);
+    expect(luckChance(8, 0.1)).toBeCloseTo(0.5695, 4);
+    expect(luckChance(8, 0.05)).toBeCloseTo(0.3366, 4);
     const row = allowedWeakRow({
       market: "AU",
       family: "F1",
       createdAt: "2030-02-01T00:00:00Z",
       nEffLivePerSession: 2,
     });
-    expect(row.text).toContain("about 52%");
+    expect(row.text).toContain("about 57%");
   });
 
   it("ideas tried x ledger_fdr_q, counted from the ledger with the Owner key edits", async () => {

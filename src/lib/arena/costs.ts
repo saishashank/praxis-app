@@ -16,7 +16,7 @@ import { roundHalfAwayFromZero } from "@/lib/money/round";
 import { type Side } from "@/lib/money/tick";
 import { serializeBuckets, SLIPPAGE_BUCKETS } from "./slippage";
 
-export const COST_PROFILE_CODES = ["P0", "P1", "P2", "P3", "P4", "P5", "P5b"] as const;
+export const COST_PROFILE_CODES = ["P0", "P1", "P2", "P3", "P4", "P5", "P5b", "P6"] as const;
 export type CostProfileCode = (typeof COST_PROFILE_CODES)[number];
 
 export type FeeRule =
@@ -92,6 +92,10 @@ function profile(code: CostProfileCode, name: string, rule: FeeRule): CostProfil
  *  greater of A$11.00 or 0.10% | P3 (stress) A$6.50 | P4 0.03% min A$3 max A$9.99 |
  *  P5 default: <= 1,000.00 A$5.00; <= 3,000.00 A$10.00; <= 10,000.00 A$19.95; <= 25,000.00 A$29.95;
  *  above 25,000.00 0.12% | P5b <= 1,000.00 A$2.00, above 0.20%.
+ * P6 (D-895, O-79d; not in ARN-031): the greater of A$1.00 and 0.03% of the order value, GST
+ * included, each side (Webull Australia, CHESS-sponsored; webull.com.au/pricing read 2026-11-08).
+ * The Owner asked the costs to follow the cheapest reliable broker, so P6 carries that source and
+ * is verified; a fee change there is a new version.
  */
 export const COST_PROFILES: Readonly<Record<CostProfileCode, CostProfile>> = {
   P0: profile("P0", "Zero-fee list, else P1", { kind: "zeroFeeListElse", otherwise: P1_RULE }),
@@ -118,6 +122,15 @@ export const COST_PROFILES: Readonly<Record<CostProfileCode, CostProfile>> = {
     tiers: [{ upToMicro: aud(1_000n), feeMicro: aud(2n) }],
     above: pct("0.20%"),
   }),
+  P6: {
+    code: "P6",
+    version: 1,
+    name: "A$1.00 or 0.03%, whichever is greater (GST included)",
+    specRef: "O-79d / D-895: webull.com.au/pricing, read 2026-11-08",
+    verify: true,
+    verified: true,
+    rule: pct("0.03%", aud(1n)),
+  },
 };
 
 export function isCostProfileCode(value: unknown): value is CostProfileCode {
@@ -308,7 +321,7 @@ export function costProfileRow(costProfile: CostProfile, effectiveFrom: string):
     version: costProfile.version,
     tiers_json: serializeProfileRule(costProfile),
     slippage_json: serializeBuckets(SLIPPAGE_BUCKETS),
-    source: `${costProfile.specRef} [VERIFY]`,
+    source: costProfile.verified ? costProfile.specRef : `${costProfile.specRef} [VERIFY]`,
     verified: costProfile.verified ? 1 : 0,
     effective_from: effectiveFrom,
   };

@@ -178,6 +178,16 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
     stopText: t.stop ? formatMicro(t.stop.micro) : null,
     targetText: t.target ? formatMicro(t.target.micro) : null,
     lastPriceText: t.lastPrice ? formatMicro(t.lastPrice.micro) : null,
+    lastPriceAtText: t.lastPriceAt ? `delayed, ${t.lastPriceAt}` : null,
+    openReturnText:
+      t.open && t.lastPrice && t.entryPrice && t.entryPrice.micro > 0
+        ? (() => {
+            const ppm = Math.round(
+              ((t.lastPrice.micro - t.entryPrice.micro) * 1_000_000) / t.entryPrice.micro,
+            );
+            return `${gainLossGlyph(ppm)} ${formatPpm(ppm, { sign: "always" })}`;
+          })()
+        : null,
     cardHref: t.cardHref,
   }));
   const controls: ChartControl[] = ex.controls.map((c) => ({

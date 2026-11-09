@@ -14,7 +14,8 @@ export type ColdStartParams = Pick<
   "coldStartSessions" | "abstainAlarmPct" | "psiMax"
 >;
 
-export const COLD_START_FAMILIES: readonly Family[] = ["F1", "F4"];
+/** D-887 (O-79a): the go-live set is F1 alone (CTX-055 amended; F4 stays in shadow). */
+export const COLD_START_FAMILIES: readonly Family[] = ["F1"];
 
 export type ColdStartPhase = "cold" | "warm";
 

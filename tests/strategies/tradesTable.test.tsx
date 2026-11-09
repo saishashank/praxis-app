@@ -22,6 +22,8 @@ const trade = (over: Partial<ChartTrade>): ChartTrade => ({
   stopText: "A$9.00",
   targetText: "A$12.00",
   lastPriceText: "A$10.50",
+  lastPriceAtText: null,
+  openReturnText: null,
   cardHref: "/cards/x",
   ...over,
 });
@@ -95,5 +97,20 @@ describe("TradesTable (D-884, D-885)", () => {
     render(<TradesTable trades={[trade({})]} selected={null} onPick={() => undefined} />);
     fireEvent.click(screen.getByRole("button", { name: "Closed (0)" }));
     expect(screen.getByText("No closed trades in this round yet.")).toBeInTheDocument();
+  });
+});
+
+describe("TradesTable live price (D-900)", () => {
+  it("an open trade with a delayed quote shows its time and the move since the buy", () => {
+    render(
+      <TradesTable
+        trades={[trade({ lastPriceAtText: "delayed, 11:35", openReturnText: "▲ +5.0 %" })]}
+        selected={null}
+        onPick={vi.fn()}
+      />,
+    );
+    const table = screen.getByRole("table", { name: /open/ });
+    expect(table).toHaveTextContent("delayed, 11:35");
+    expect(table).toHaveTextContent("Open ▲ +5.0 %");
   });
 });

@@ -85,6 +85,7 @@ import {
   type ReplayStatRow,
 } from "./scorecards";
 import { SnapshotWorld } from "./snapshotWorld";
+import { pickHistoryStats } from "./pickHistory";
 import { loadSnapshot } from "./snapshot";
 import {
   blockOf,
@@ -412,6 +413,25 @@ export function runReplay(o: RunOptions): ReplayOutput {
         }),
       );
       stats.push(...built.rows);
+      if (mode === "full") {
+        // D-908: the development track record per group for the nightly picks (no look, no split written)
+        stats.push(
+          ...tm.stage("stats", () =>
+            statRows(
+              runId,
+              o.d,
+              pickHistoryStats({
+                market: MARKET,
+                ledger,
+                world,
+                params,
+                runId,
+                existingSplits: o.existingSplits ?? [],
+              }),
+            ),
+          ),
+        );
+      }
       if (otherCohorts !== null) {
         // the same cohort statistics under the other settlement mode: a sensitivity, scope suffix `:<mode>`
         const alt = tm.stage("stats", () =>

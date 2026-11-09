@@ -98,10 +98,33 @@ describe("Home", () => {
     expect(d.picks.items).toHaveLength(1);
     expect(d.picks.items[0]).toMatchObject({ stock: "ZZUP", referenceMicro: 12_340_000, rank: 1 });
     expect(d.ideas.items.map((i) => i.stock)).toEqual(["ZZUP", "ZZDN", "ZZOTH"]);
-    expect(d.watchlist).toEqual([{ stock: "ZZUP", close: 12.34, changePpm: 19_835 }]);
+    expect(d.watchlist).toEqual([{ stock: "ZZUP", close: 12.34, changePpm: 19_835, at: null }]);
     expect(d.news.items[0]?.stock).toBe("ZZUP");
     expect(d.review).toEqual({ d: "2026-10-19", day: "2026-10-19", kind: "full" });
     expect(d.attentionCount).toBe(0);
+  });
+
+  it("D-900: the watchlist shows a delayed quote from a later day than the close, with its time", async () => {
+    await db.main.execute(
+      "INSERT INTO quote_latest (market, code, last_micro, prev_close_micro, quote_at, fetched_at) " +
+        "VALUES ('AU', 'ZZUP', 12600000, 12340000, '2099-01-05T00:35:00.000Z', '2099-01-05T00:35:00.000Z')",
+    );
+    try {
+      const w = (await loadHome(deps(db, OWNER))).data.watchlist;
+      expect(w).toEqual([
+        {
+          stock: "ZZUP",
+          close: 12.6,
+          changePpm: Math.round(((12.6 - 12.34) * 1_000_000) / 12.34),
+          at: "11:35",
+        },
+      ]);
+      // a masked viewer never gets the quote
+      const m = (await loadHome(deps(db, VIEWER))).data.watchlist;
+      expect(m.every((x) => x.at === null && x.close === null)).toBe(true);
+    } finally {
+      await db.main.execute("DELETE FROM quote_latest");
+    }
   });
 
   it("is serialisable (no bigint, no Date)", async () => {
@@ -303,7 +326,9 @@ describe("masking: Editor and Viewer never see a code, a name, a link, a trade p
     expect(home.data.picks.items[0]!.validUntil).toBe("2026-W43");
     expect(home.data.news).toEqual({ hidden: true, items: [] });
     expect(home.data.review?.day).toBe("2026-W43");
-    expect(home.data.watchlist).toEqual([{ stock: "Stock C", close: null, changePpm: 19_835 }]);
+    expect(home.data.watchlist).toEqual([
+      { stock: "Stock C", close: null, changePpm: 19_835, at: null },
+    ]);
     expect(home.data.ideas.items.map((i) => i.stock)).toEqual(["Stock C", "Stock A", "Stock B"]);
     expect(home.data.ideas.items[0]!.href).toMatch(/^\/cards\/ck%3A[0-9a-f]{16}$/);
 

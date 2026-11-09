@@ -35,6 +35,7 @@ import {
   requestsAllowed,
 } from "@/lib/data/quotes/budget";
 import type { QuoteRefusal } from "@/lib/data/quotes/types";
+import { storeLatestQuotesSoft } from "@/lib/data/quotes/latest";
 import { armedCatalysts, armHaltResumes, loadMoversParams } from "@/lib/cortex/store/movers";
 import { todayCatalysts } from "@/lib/sentinel/todayItems";
 import { evaluateQuotes } from "./scan";
@@ -286,6 +287,8 @@ export async function runIntradayScan(deps: ScanRunDeps): Promise<ScanRunResult>
     { perRunMax: allowed, dayMax: QUOTE_REQUESTS_PER_DAY, usedToday },
     { deadlineAt },
   );
+  // D-900: keep the newest quote per code for the site's delayed live price (display only).
+  await storeLatestQuotesSoft(db, market, fetched.quotes);
   // V2-S5/S7 (D-697): the claim reserved `allowed`; reconcile it to the requests actually made.
   if (fetched.requests < allowed) {
     await db.execute({

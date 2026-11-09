@@ -12,6 +12,7 @@ import {
   diagnoseMain,
   picksReadiness,
   readOnly,
+  tradesReadout,
   WriteRefused,
 } from "@/lib/arena/diagnose";
 import { seedRuleVersions } from "@/lib/learning/ruleVersions";
@@ -174,17 +175,73 @@ describe("diagnoseMain", () => {
     expect(
       await diagnoseMain(["--dates", "2026-10-29,2026-10-30"], env(url), (l) => lines.push(l)),
     ).toBe(1);
-    expect(lines).toHaveLength(4);
+    expect(lines).toHaveLength(5);
     expect(lines[0]).toMatch(/^diagnose: failed \(\w+\)$/);
     expect(lines[1]).toMatch(/^diagnose 2026-10-29: failed \(\w+\)$/);
     expect(lines[2]).toMatch(/^diagnose 2026-10-30: failed \(\w+\)$/);
     expect(lines[3]).toMatch(/^diagnose picks: failed \(\w+\)$/);
+    expect(lines[4]).toMatch(/^diagnose trades: failed \(\w+\)$/);
     expect(lines.join("\n")).not.toMatch(/secret|file:/);
     try {
       rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
     } catch {
       // Windows may keep the file locked for a moment; the OS temp folder is cleaned later.
     }
+  });
+});
+
+describe("tradesReadout (D-898)", () => {
+  it("an empty database says there are no fills and writes nothing", async () => {
+    const empty = await freshReplayDb();
+    const before = await tableCounts(empty);
+    const lines: string[] = [];
+    await tradesReadout(readOnly(empty), (l) => lines.push(l));
+    expect(lines).toEqual(["diagnose trades: no fills"]);
+    expect(await tableCounts(empty)).toEqual(before);
+  });
+
+  it("closed trades by family and exit type, open trades marked; counts only, read queries only", async () => {
+    const sqls: string[] = [];
+    const fake = {
+      execute: async (q: { sql: string; args: unknown[] }) => {
+        sqls.push(q.sql);
+        if (q.sql.includes("DISTINCT d FROM fill")) {
+          return { rows: [{ d: "2026-11-06" }, { d: "2026-11-05" }, { d: "2026-11-04" }] };
+        }
+        if (q.sql.includes("t.exit_fill_id")) {
+          return {
+            rows: [
+              {
+                family: "F1",
+                exit_type: "IS",
+                n: 2n,
+                wins: 0n,
+                net: -30_000_000n,
+                cost: 1_000_000_000n,
+              },
+              {
+                family: "F4",
+                exit_type: "CS",
+                n: 1n,
+                wins: 1n,
+                net: 12_500_000n,
+                cost: 500_000_000n,
+              },
+            ],
+          };
+        }
+        return { rows: [{ family: "F2", n: 3n, mark: 1_470_000_000, cost: 1_500_000_000n }] };
+      },
+    } as unknown as Client;
+    const lines: string[] = [];
+    await tradesReadout(readOnly(fake), (l) => lines.push(l));
+    expect(lines).toEqual([
+      "diagnose trades: closed since 2026-11-04 (3 fill sessions), main E books",
+      "  F1 IS: trades=2 wins=0 net=-3.00% of cost (A$-30.00)",
+      "  F4 CS: trades=1 wins=1 net=2.50% of cost (A$12.50)",
+      "  F2 open: trades=3 marked=-2.00% vs cost",
+    ]);
+    expect(sqls.every((s) => /^\s*SELECT/.test(s))).toBe(true);
   });
 });
 

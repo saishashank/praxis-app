@@ -69,6 +69,7 @@ export const NOT_CONFIG = new Set([
   "WATCHDOG_DELIBERATE_FAILURE",
   "ALLOW_BOOTSTRAP",
   "EXPECT_COMMIT",
+  "CURRENT_SHA", // per-run commit the replay-needed check compares (replay.yml, D-905)
   "SMOKE_ENV",
   // Local test and audit tooling
   "E2E_SCENARIO",

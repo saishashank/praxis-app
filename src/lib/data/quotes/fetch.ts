@@ -5,7 +5,7 @@
 // Concurrency 4, 250 ms spacing per worker, 20 s per-call budget (D-400). 429/5xx/network error ->
 // `paused` set, the run ends and remaining codes keep no quote.
 import { requestsAllowed } from "./budget";
-import { isRejected, parseChartMeta } from "./parse";
+import { chartSymbol, isRejected, parseChartMeta } from "./parse";
 import type { DelayedQuote, QuoteBudget, QuoteRefusal, QuoteSourceState } from "./types";
 
 export const QUOTE_CONCURRENCY = 4; // threshold-ok: fetch concurrency, D-400
@@ -109,7 +109,7 @@ export async function fetchDelayedQuotes(
       first = false;
       const code = queue[next++];
       out.requests += 1; // counted when issued, before the response
-      const url = `${QUOTE_CHART_URL}${encodeURIComponent(`${code}.AX`)}?interval=1m&range=1d`;
+      const url = `${QUOTE_CHART_URL}${encodeURIComponent(chartSymbol(code))}?interval=1m&range=1d`;
       let res;
       try {
         res = await deps.fetch(url, {

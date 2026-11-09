@@ -37,6 +37,7 @@ const NON_COMPARISON_READERS = new Set([
   "lib/replay/snapshotWorld.ts",
   "lib/cortex/stage.ts", // M15: index levels into the Cortex as-of world (regime, US index known-time), not a comparison
   "lib/ui/loaders/company.ts",
+  "lib/ui/loaders/home.ts", // D-907: the ASX 200 line on Home, a level and its change (as the company page), not a comparison
   "lib/arena/diagnose.ts", // read-only signals diagnosis (#58): counts index rows to check regime coverage, not a comparison
 ]);
 

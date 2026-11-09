@@ -1893,11 +1893,12 @@ export const CONFIG_KEYS = {
     ref: "BLD-024",
     validate: async (v) => validateMarketModes(v),
   },
-  // Line 24: cost_profile_default P5 (enum P0-P5b), Edit O; ARN-031. Selects the brokerage profile
+  // Line 24: cost_profile_default (enum P0-P6), Edit O; ARN-031. Selects the brokerage profile
   // of a new cohort; the P0-P5b tables themselves are versioned cost_profile rows, verified = 0
-  // until the Owner approves them (M3 design 4.4, D-070 note 8).
+  // until the Owner approves them (M3 design 4.4, D-070 note 8). D-895 (O-79d): the default is P6,
+  // the cheapest reliable broker's fee (A$1 or 0.03 %, GST included).
   cost_profile_default: {
-    default: "P5",
+    default: "P6",
     unit: "profile",
     editable: "O",
     ref: "ARN-031",
@@ -2319,7 +2320,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   cost_profile_default: {
     label: "Brokerage cost profile for new cohorts",
     area: "Other",
-    bounds: "one of P0, P1, P2, P3, P4, P5, P5b",
+    bounds: "one of P0, P1, P2, P3, P4, P5, P5b, P6",
     input: "text",
   },
   stall_floor_bps: {

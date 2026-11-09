@@ -291,3 +291,43 @@ describe("kb_report.md (D-469: the calibration report as a KB item)", () => {
     expect(await count(db, "angle_passport")).toBe(0);
   });
 });
+
+describe("claims_p: false (D-892, O-79c)", () => {
+  const noP = (f: ArtefactFiles, ruleVersion: string) => {
+    f["maps.json"].maps[0].rule_version = ruleVersion; // the F1 map (p_hidden true)
+    Object.assign(f["evidence.json"].families[0], {
+      claims_p: false,
+      n_eff: 40,
+      brier_skill_lo90: -0.05,
+    });
+  };
+
+  it("allows a listed rule version on the economic gate alone, with the no-p statement", async () => {
+    const db = await freshDb("main");
+    expect((await go([artefact((f) => noP(f, "F1.v2-mom"))], db)).code).toBe(0);
+    const s = await db.execute("SELECT status FROM family_status WHERE family = 'F1'");
+    expect(String(s.rows[0]!.status)).toBe("allowed");
+    const st = await db.execute("SELECT text FROM cortex_statement WHERE family = 'F1'");
+    const text = String(st.rows[0]!.text);
+    expect(text).toContain("beat a random pick of the same kind");
+    expect(text).not.toContain("forecasts beat the base rate");
+    expect(text).toContain("With 8 lineages");
+  });
+
+  it("refuses claims_p: false for a rule version that is not on the reviewed list", async () => {
+    const r = await go([artefact((f) => noP(f, "F1.zz.1")), "--dry-run"]);
+    expect(r.code).not.toBe(0);
+    expect(r.text).toContain(
+      "claims_p: false needs every map of the family on a listed rule version",
+    );
+  });
+
+  it("refuses a non-boolean claims_p", async () => {
+    const r = await go([
+      artefact((f) => Object.assign(f["evidence.json"].families[0], { claims_p: "no" })),
+      "--dry-run",
+    ]);
+    expect(r.code).not.toBe(0);
+    expect(r.text).toContain("claims_p");
+  });
+});

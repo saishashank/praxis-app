@@ -55,12 +55,13 @@ const noView = new Proxy({} as AsOfView, {
 });
 
 describe("the full registry (D-331)", () => {
-  it("holds exactly the 100 ids A-D1-01…A-D10-10, sorted by domain then id", () => {
+  it("holds exactly the 100 ids A-D1-01…A-D10-10 plus the exclusive A-D1-11, sorted by domain then id", () => {
     expect(ANGLES.length).toBe(ANGLE_COUNT);
     const want: string[] = [];
     for (let d = 1; d <= 10; d++) {
       for (let i = 1; i <= ANGLES_PER_DOMAIN; i++)
         want.push(`A-D${d}-${String(i).padStart(2, "0")}`);
+      if (d === 1) want.push("A-D1-11");
     }
     expect(ANGLES.map((a) => a.id)).toEqual(want);
     expect(angleById("A-D1-01")?.domain).toBe(1);

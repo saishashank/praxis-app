@@ -113,6 +113,13 @@ export interface PickReviewFacts {
   held: string[];
 }
 
+/** D-909 (section 6): the next-day check of the picks and the biggest movers. */
+export interface MissedMoversReviewFacts {
+  lines: string[];
+  gainers: { code: string; movePpm: number; seen: string; news: string }[];
+  losers: { code: string; movePpm: number; seen: string; news: string }[];
+}
+
 export interface ReviewFacts {
   variant: ReviewVariant;
   env: EnvName;
@@ -146,6 +153,8 @@ export interface ReviewFacts {
   suppressedEmails: number;
   nextTradingNote?: string;
   pickAlerts?: PickReviewFacts;
+  /** D-909: last night's picks graded, today's biggest movers and why they were or were not seen. */
+  missedMovers?: MissedMoversReviewFacts;
 }
 
 const SECTION_NAMES = [
@@ -617,6 +626,7 @@ function buildDoc(f: ReviewFacts, level: number): Doc {
       ...narrativeSection(4, f, missing),
       ...narrativeSection(5, f, missing),
       ...narrativeSection(6, f, missing),
+      ...missedMoversBlocks(f),
       ...section7(f, level, missing),
       ...section8(f),
       ...section9(f),
@@ -659,4 +669,32 @@ export function renderReview(
 ): SizedEmailOut {
   const subject = subjectFor(facts);
   return fitLadder((level) => renderEmail(subject, buildDoc(facts, level)), MAX_LADDER, maxBytes);
+}
+
+/** D-909: section 6 addition, the picks graded and the biggest movers with what we saw. */
+function missedMoversBlocks(f: ReviewFacts): Block[] {
+  const m = f.missedMovers;
+  if (!m) return [];
+  const out: Block[] = [
+    { t: "p", text: "What we missed today", bold: true },
+    { t: "ul", items: m.lines },
+  ];
+  const pct = (ppm: number) => `${ppm > 0 ? "+" : ""}${(ppm / 10_000).toFixed(1)} %`; // threshold-ok: ppm -> percent
+  const table = (title: string, rows: MissedMoversReviewFacts["gainers"]) => {
+    if (rows.length === 0) return;
+    out.push({ t: "p", text: title, bold: true });
+    out.push({
+      t: "table",
+      head: ["Code", "Move", "What we saw", "News"],
+      rows: rows.map((r) => [
+        r.code,
+        { text: pct(r.movePpm), tone: r.movePpm >= 0 ? "pos" : "neg" },
+        truncate(r.seen, 100),
+        truncate(r.news, 120),
+      ]),
+    });
+  };
+  table("Biggest gainers", m.gainers);
+  table("Biggest losers", m.losers);
+  return out;
 }

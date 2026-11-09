@@ -270,7 +270,7 @@ describe("AT-50 clause 4: as-of truncation equality (TST-109) for every registry
   const SAMPLE = [150, 199, 230, 262, 285, 299];
 
   it("the registry has angles with a compute to check", () => {
-    expect(ANGLES.length).toBe(100);
+    expect(ANGLES.length).toBe(101); // 100 spec angles + the exclusive A-D1-11 (D-888)
     expect(withCompute.length).toBeGreaterThan(40);
   });
 

@@ -8,16 +8,16 @@ const get = async () => undefined;
 const check = (key: keyof typeof CONFIG_KEYS, v: unknown) => CONFIG_KEYS[key].validate(v, get);
 
 describe("cost_profile_default", () => {
-  it("defaults to P5, Owner-editable, enum P0 to P5b (ch.15 l.24)", async () => {
+  it("defaults to P6 (D-895), Owner-editable, enum P0 to P6 (ch.15 l.24)", async () => {
     expect(CONFIG_KEYS.cost_profile_default).toMatchObject({
-      default: "P5",
+      default: "P6",
       editable: "O",
       ref: "ARN-031",
     });
-    for (const code of ["P0", "P1", "P2", "P3", "P4", "P5", "P5b"]) {
+    for (const code of ["P0", "P1", "P2", "P3", "P4", "P5", "P5b", "P6"]) {
       expect(await check("cost_profile_default", code)).toBeNull();
     }
-    for (const bad of ["P6", "p5", "", 5, null]) {
+    for (const bad of ["P7", "p5", "", 5, null]) {
       expect(await check("cost_profile_default", bad)).toMatch(/must be one of/);
     }
     expect(CONFIG_META.cost_profile_default.input).toBe("text");

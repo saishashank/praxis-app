@@ -219,6 +219,35 @@ function Strip({ v, asOf }: { v: HomeView; asOf: string | null }) {
   } else {
     items.push({ label: "Practice result since the start", value: <NotMeasured /> });
   }
+  // D-907: the ASX 200 line, delayed during the session, the last close otherwise.
+  const ix = v.day.index;
+  if (ix) {
+    const hue = outcomeHue(ix.changePpm);
+    items.push({
+      label: ix.name,
+      value: (
+        <span className="flex flex-wrap items-baseline gap-x-2">
+          <span>
+            {ix.level.toLocaleString("en-AU", {
+              minimumFractionDigits: 1,
+              maximumFractionDigits: 1,
+            })}
+          </span>
+          {ix.changePpm !== null ? (
+            <span style={{ color: `var(--color-${hue}-text)` }} data-outcome={hue}>
+              <span aria-hidden="true">
+                {ix.changePpm > 0 ? "▲ " : ix.changePpm < 0 ? "▼ " : "– "}
+              </span>
+              {formatPpm(ix.changePpm, { sign: "always" })}
+            </span>
+          ) : null}
+          <span className="text-xs font-normal text-text-muted">
+            {ix.at ? `delayed, ${ix.at}` : ix.d ? `close ${formatDate(ix.d)}` : ""}
+          </span>
+        </span>
+      ),
+    });
+  }
   items.push({
     label: "Data as of",
     value: v.dataAtLabel ?? (asOf ? formatDate(asOf) : <NotMeasured>No run yet</NotMeasured>),
@@ -588,7 +617,9 @@ export function HomeContent({
                     <span className="block font-semibold">{w.stock}</span>
                     {w.close !== null ? (
                       <span className="block font-mono text-sm">
-                        End-of-day {w.close.toFixed(2)}
+                        {w.at !== null
+                          ? `${w.close.toFixed(2)} (delayed, ${w.at})`
+                          : `End-of-day ${w.close.toFixed(2)}`}
                       </span>
                     ) : masked ? (
                       <Masked label="Price hidden" />

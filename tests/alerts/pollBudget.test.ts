@@ -22,6 +22,7 @@ let db: Client;
 let calls: string[];
 
 const fetchStub: PollRunDeps["fetch"] = async (url) => {
+  if (String(url).includes("%5EAXJO")) return { ok: false, status: 404, json: async () => ({}) }; // D-907 index
   calls.push(url);
   const code = /chart\/([A-Z0-9]+)\.AX/.exec(url)![1];
   return {
@@ -110,7 +111,7 @@ describe("armed reserve and extras cadence (V2-S5, D-694/D-695)", () => {
     await seedPick("ZZ01", 1);
     await watch("ZZW1");
     const r = await runPickAlertPoll(deps(at("10:45")));
-    expect(r).toMatchObject({ status: "ok", codes: 2 });
+    expect(r).toMatchObject({ status: "ok", codes: 3 }); // D-907: plus the ASX 200
     expect(codesCalled()).toEqual(["ZZ01", "ZZW1"]);
   });
 
@@ -169,7 +170,7 @@ describe("whole-run deadline and reconciliation (V2-S7, D-696/D-697)", () => {
     );
     expect(r).toMatchObject({ status: "ok", paused: "rate_limited" });
     const claim = await db.execute("SELECT requests FROM quote_run WHERE slot_minute = '10:45'");
-    expect(Number(claim.rows[0].requests)).toBe(6); // reserved
+    expect(Number(claim.rows[0].requests)).toBe(7); // reserved (D-907: includes the ASX 200)
     const done = await db.execute(
       "SELECT requests FROM quote_run WHERE slot_minute = '10:45+done'",
     );

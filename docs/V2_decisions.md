@@ -4,11 +4,21 @@
 
 One line per V2 decision from D-206 on, grouped by milestone, with the file that holds the full text. D-001 to D-252 are in [07_decision_log.md](07_decision_log.md). Improvement-batch decisions are in the "Improvements" section at the end of `M13L_design.md`.
 
+## M7 (M7_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-909 | The Evening Review's section 6 ("What needs improving for tomorrow") gains "What we missed today" (src/lib/review/missedMovers.ts), built from the stored nig... |
+
 ## M8.1 (M8.1_design.md)
 
 | Id | Decision |
 | --- | --- |
 | D-730 | The app header shows the logo with its tagline ("Learn. Earn. Repeat.", praxis-logo-tagline-*.svg, 40 px high) from the sm breakpoint (600 px) at the Owner's... |
+| D-903 | Bulk reads page by key, never by OFFSET: the backup dump pages each table by rowid (rowid tables) or its primary key (WITHOUT ROWID tables), each page strict... |
+| D-904 | Read budget (NFR, V2 spec ch. 10): the whole system (production; staging is off, D-906) stays under 20 % of the Turso free plan's monthly allowance, 100 mill... |
+| D-905 | The post-deploy full replay (D-195) runs only when the deploy changed what a replay depends on: the Worker dispatches it with only_if_changed: "true", and sc... |
+| D-906 | Staging is off (Owner 2026-11-09: "Don't use any staging going forward on anything"): the Nightly, Deploy staging and Staging E2E day workflows are disabled... |
 
 ## M11L (M11L_design.md)
 
@@ -298,6 +308,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-884 | The Owner asked on 2026-11-04 for a quieter, professional look ("white background, navy blue looks professional", "the app looks very dull", "font is very ba... |
 | D-885 | Every trade already has a stop loss (trade.stop_micro NOT NULL; the stop in force is the higher of it and the latest recomputed stop_level, decision 7). |
 | D-886 | Movers check (Owner 2026-11-04: "at the end of the day run a job on why we haven't picked the top 20 movers and if we have stopped the top 20 losers"). |
+| D-908 | A complete full replay stores, per (family, rule version, variant), the development track record the picks loader needs, as one replay_stat row (scope pick_h... |
 
 ## M14 (M14_design.md)
 
@@ -456,6 +467,19 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-753 | (not built) A6, the intraday universe sweep, needs Owner acceptance: a batch delayed-quote endpoint on the accepted host (about 5 requests a slot inside the... |
 | D-754 | (migration) 0024 follows 0023; every test that pinned "version 23" or the number of steps to roll back moved by one (the 0019…0023 migration tests, the CLI a... |
 | D-755 | (limits, for the reviewer) (a) a halt title with no reason text stays unknown, so the 8f block applies to any zero-or-negative expectation including unknown:... |
+| D-887 | (O-79a) The go-live set is F1 alone: COLD_START_FAMILIES = [F1] (CTX-055 amended). |
+| D-888 | (O-79b) Angle A-D1-11 "12-month momentum": adjusted close today ÷ the adjusted close 252 sessions earlier − 1, score angle, cluster momentum, orientation +1,... |
+| D-889 | (O-79b) Rule version F1.v2-mom from the F1 map's params_json: angles: ["A-D1-11"], clusters: ["momentum"], K: 1, tiers: ["U1"], top3_min_s: 0.8, slots: 1, p_... |
+| D-890 | (O-79b) Plan time_hold (timeHoldPlan): the initial stop at the FAM-004 cap (12 % below the fill, a disaster stop), no trail, one time stop after hold session... |
+| D-891 | (O-79b) Tranche cadence (isEntryNight): a rule with entry_every E and entry_anchor A decides only on nights whose session distance from A is a multiple of E,... |
+| D-892 | (O-79c) A rule version that claims no calibrated p: the evidence row carries claims_p: false, accepted by the import only when every map of the family is a r... |
+| D-893 | (O-79c) The F1.v2-mom cells come from a new offline M15 tool (tools/m15/lib/f1mom.mjs, private) that imports the app code (D-278): every 20th session from 20... |
+| D-894 | (O-79e) One recorded look at the post-2021 data. |
+| D-895 | (O-79d) Cost profile P6 "A$1.00 or 0.03 %, whichever is greater, GST included", each side (Webull Australia, CHESS-sponsored, the cheapest reliable broker fo... |
+| D-896 | Stale-open flag: deferred. A D9 gate angle with a flag would become an L0 veto for every family (review 1); the measured rates (open = previous close in 15 %... |
+| D-897 | Research challengers, logged and not trading: the heavy-volume-down veto on F1.v2-mom candidates, a bear-state size halving, and the angle yardstick (top-dec... |
+| D-898 | Diagnosis readout of trades (tradesReadout, read-only, run by diagnose-signals.yml): the main books' trades closed in the last ten fill sessions by family an... |
+| D-899 | (O-79e, the result of the one look, 2026-11-08) F1.v2-mom stays in shadow. |
 
 ## M16 (M16_design.md)
 
@@ -527,3 +551,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-672 | (V2-B2) The state write is idempotent and recoverable: it sets allowed (pass) or shadow (fail) from the RECORDED result, never from the night's figures, with... |
 | D-673 | (V2-B2) The Monthly alerts report (loadAlertsReport) reads the newest stream cell (activeStreamCell), so its hypothesis and verdict (pending / passed / faile... |
 | D-674 | (V2-B2) Tests: tests/intraday/streamLook.test.ts - first qualifying night records the look and sets the state; later nights with the opposite outcome (fail t... |
+| D-900 | (O-80) Migration 0028 adds quote_latest, one row per market and code with the newest delayed quote (last, previous close, quote time, fetch time). |
+| D-901 | (O-80) Where it shows: the open trades of a strategy round (lastPriceOf in strategyViews.ts) and the Home watchlist. |
+| D-902 | (O-80) Coverage follows the poll's existing plan (D-502/D-695): armed picks every tick, then watch-listed and held codes at the cadence the day's budget sust... |
+| D-907 | (Owner 2026-11-09) Home shows the ASX 200 live: the quote poll fetches ^AXJO (stored in quote_latest under the index_bar code AXJO) as the first of its extra... |
