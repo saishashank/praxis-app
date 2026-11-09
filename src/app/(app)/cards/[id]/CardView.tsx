@@ -119,7 +119,7 @@ export async function cardBody(user: CurrentUser, id: string) {
               Home
             </Link>
             <Link href="/strategies/ideas" className="text-accent underline">
-              Tonight&apos;s trade ideas
+              All signals (research)
             </Link>
             {c.links.strategy ? (
               <Link href={c.links.strategy} className="text-accent underline">
