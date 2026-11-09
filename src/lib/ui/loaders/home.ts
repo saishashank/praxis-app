@@ -153,6 +153,8 @@ export type StrategyTile = {
   sinceStart: Money;
   sinceStartPpm: number | null;
   dayChange: Money | null;
+  /** The day's change as a share of the value the day before. */
+  dayChangePpm: number | null;
   startD: string;
 };
 
@@ -219,6 +221,8 @@ export type HomeView = {
   headline: HomeHeadline[];
   /** Data finished at (ISO), shown as Melbourne time; null before the first run. */
   dataAtLabel: string | null;
+  /** The day the day's change covers in market words: "Today" or "Fri 6 Nov"; null before any value. */
+  dayLabel: string | null;
   nextRun: string;
   /** True while a market runs in data-only mode (BLD-024): the one line in the strip on Home. */
   dataOnly: boolean;
@@ -264,6 +268,7 @@ function emptyView(): HomeView {
   return {
     headline: [],
     dataAtLabel: null,
+    dayLabel: null,
     nextRun: "",
     dataOnly: false,
     since: [],
@@ -313,6 +318,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
       sinceStart: money(value - seed),
       sinceStartPpm: ratioPpm(value - seed, seed),
       dayChange: prev === null ? null : money(value - prev),
+      dayChangePpm: prev === null ? null : ratioPpm(value - prev, prev),
       startD: str(r.start_d),
     };
   });
@@ -527,6 +533,8 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
   // Owner 2026-11-09: market words, not the run's finishing time ("17:39" meant nothing): during
   // the session "Delayed, 13:05" from the live quote (D-907), otherwise "End of day, Fri 6 Nov".
   view.dataAtLabel = freshnessLabel(dataD, view.day.index);
+  // Owner 2026-11-09: the change is the day's ("Today"), not a "session"
+  view.dayLabel = dayLabel(view.summary?.d ?? null, v.now);
   view.dataOnly = await soft(async () => {
     const r = await deps.mainDb.execute(
       "SELECT SUM(mode = 'data_only') AS d, SUM(mode = 'full') AS f FROM market",
@@ -744,14 +752,26 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
  * quote (its Melbourne time), else "End of day, Fri 6 Nov" for the newest stored close; null before
  * any data.
  */
+/** "Today" when `d` is today's date in Sydney (the market's clock), else "Fri 6 Nov". */
+export function dayLabel(d: string | null, now: Date): string | null {
+  if (!d) return null;
+  if (d === marketDate(now, "Australia/Sydney")) return "Today";
+  return shortDay(d);
+}
+
+function shortDay(d: string): string {
+  return new Date(`${d}T00:00:00Z`)
+    .toLocaleDateString("en-AU", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    })
+    .replace(",", "");
+}
+
 export function freshnessLabel(dataD: string | null, index: HomeIndex | null): string | null {
   if (index?.at) return `Delayed, ${index.at}`;
   if (!dataD) return null;
-  const day = new Date(`${dataD}T00:00:00Z`).toLocaleDateString("en-AU", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
-  return `End of day, ${day.replace(",", "")}`;
+  return `End of day, ${shortDay(dataD)}`;
 }

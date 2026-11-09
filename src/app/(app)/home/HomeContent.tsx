@@ -210,7 +210,7 @@ function Strip({ v, asOf }: { v: HomeView; asOf: string | null }) {
           <Sparkline values={h.series} hue={sinceHue} />
           {h.dayChangePpm !== null ? (
             <span className="text-xs font-normal text-text-muted">
-              Last session {formatPpm(h.dayChangePpm, { sign: "always" })} ({h.currency})
+              {v.dayLabel ?? "Today"} {formatPpm(h.dayChangePpm, { sign: "always" })}
             </span>
           ) : null}
         </span>
@@ -444,9 +444,13 @@ function SummaryCard({ v }: { v: HomeView }) {
               </p>
               {t.dayChange ? (
                 <p className="m-0 mt-1 text-xs text-text-muted">
-                  Last session:{" "}
+                  {v.dayLabel ?? "Today"}:{" "}
                   <GainLoss value={t.dayChange.micro}>
-                    {formatMicro(t.dayChange.micro, { sign: "always" })}
+                    {`${formatMicro(t.dayChange.micro, { sign: "always" })}${
+                      t.dayChangePpm !== null
+                        ? ` (${formatPpm(t.dayChangePpm, { sign: "always" })})`
+                        : ""
+                    }`}
                   </GainLoss>
                 </p>
               ) : null}
