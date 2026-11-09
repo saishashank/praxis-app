@@ -88,6 +88,19 @@ export type DecisionViewOptions = {
   readonly announcementIngestBound?: string;
 };
 
+export type PrefetchRequest = {
+  readonly codes: readonly string[];
+  /** Bars with d in [barsFromD, D] are cached for `bars(code, n)` calls with the default upTo. */
+  readonly barsFromD: string;
+  /** Short-interest points with as_of in [shortFromD, D] are cached for `shortInterest`. */
+  readonly shortFromD: string;
+  /** Insider notices published in [insiderSinceIso, cut-off) are cached for that `sinceIso`. */
+  readonly insiderSinceIso: string;
+};
+
+/** Codes per batched query: well inside SQLite's bound-parameter limit. */
+export const PREFETCH_CHUNK = 200; // threshold-ok: query batch size, not a rule
+
 export type DecisionView = {
   readonly market: string;
   readonly guardD: string;
@@ -111,6 +124,12 @@ export type DecisionView = {
   insiderNotices(code: string, sinceIso: string): Promise<NoticeRow[]>;
   /** True when at least one notice (any code) was published before the cut-off: the source ran. */
   insiderCoverage(): Promise<boolean>;
+  /**
+   * D-910: read the per-code rows of many codes in a few batched queries, so the per-code calls above
+   * answer from memory instead of one round trip each. Results are identical: a code whose prefetched
+   * rows cannot answer a call in full falls back to the per-code query.
+   */
+  prefetch?(req: PrefetchRequest): Promise<void>;
   /** The latest regime_daily row strictly before D for this rule version. */
   priorRegime(version: number): Promise<PriorRegime | null>;
   /** The latest indicator_daily row for the code with d <= D (stored state, design 4.2). */
@@ -137,6 +156,51 @@ export function createDecisionView(db: Reader, opts: DecisionViewOptions): Decis
     if (iso >= cutoff) throw new LookAheadError(iso, `cut-off ${cutoff}`);
   };
   const ingestClause = opts.liveIngestBound === true ? " AND ingested_at <= ?" : "";
+  // D-910 prefetch caches (raw rows; see `prefetch`)
+  type Row = Record<string, unknown>;
+  const barCache = new Map<string, Row[]>(); // oldest first, d in [barsFromD, D]
+  const shortCache = new Map<string, Row[]>(); // newest first, as_of in [shortFromD, D]
+  let insiderCache: { since: string; byCode: Map<string, Row[]> } | null = null;
+  let coverageCache: boolean | null = null;
+  const marks = (n: number): string => Array.from({ length: n }, () => "?").join(", ");
+  const toBars = (rows: readonly Row[]): ViewBar[] => {
+    const out: ViewBar[] = [];
+    for (const r of rows) {
+      const bar: ViewBar = {
+        d: String(r.d),
+        open: priceMicro(r.o),
+        high: priceMicro(r.h),
+        low: priceMicro(r.l),
+        close: priceMicro(r.c),
+        volume: bigintCol(r.volume),
+      };
+      try {
+        assertBar({
+          openMicro: bar.open,
+          highMicro: bar.high,
+          lowMicro: bar.low,
+          closeMicro: bar.close,
+        });
+        out.push(bar);
+      } catch {
+        // a malformed bar is unusable evidence (DAT-200 flags it)
+      }
+    }
+    return out;
+  };
+  const toShort = (rows: readonly Row[]): ShortInterestPoint[] =>
+    rows.map((r) => ({
+      as_of: String(r.as_of),
+      short_ppm: Number(r.short_ppm),
+      published_at: String(r.published_at),
+    }));
+  const toNotices = (rows: readonly Row[]): NoticeRow[] =>
+    rows.map((r) => ({
+      ann_id: String(r.ann_id),
+      kind: String(r.kind),
+      value_micro: r.value_micro === null ? null : bigintCol(r.value_micro),
+      published_at: String(r.published_at),
+    }));
 
   return {
     market,
@@ -146,6 +210,10 @@ export function createDecisionView(db: Reader, opts: DecisionViewOptions): Decis
     checkInstant,
     async bars(code, count, upTo = guardD) {
       checkDate(upTo);
+      const cached = upTo === guardD ? barCache.get(code) : undefined;
+      // the last `count` rows of a complete [barsFromD, D] range are exactly the LIMIT query's rows
+      if (cached !== undefined && cached.length >= count)
+        return toBars(cached.slice(cached.length - count));
       const args: (string | number)[] = [market, code, upTo, guardD];
       if (opts.liveIngestBound === true) args.push(cutoff);
       args.push(count);
@@ -156,29 +224,7 @@ export function createDecisionView(db: Reader, opts: DecisionViewOptions): Decis
               ORDER BY d DESC LIMIT ?`,
         args,
       });
-      const out: ViewBar[] = [];
-      for (const r of rs.rows) {
-        const bar: ViewBar = {
-          d: String(r.d),
-          open: priceMicro(r.o),
-          high: priceMicro(r.h),
-          low: priceMicro(r.l),
-          close: priceMicro(r.c),
-          volume: bigintCol(r.volume),
-        };
-        try {
-          assertBar({
-            openMicro: bar.open,
-            highMicro: bar.high,
-            lowMicro: bar.low,
-            closeMicro: bar.close,
-          });
-          out.push(bar);
-        } catch {
-          // a malformed bar is unusable evidence (DAT-200 flags it)
-        }
-      }
-      return out.reverse();
+      return toBars([...rs.rows].reverse() as Row[]);
     },
     async indexBars(indexCode, count, upTo = guardD) {
       checkDate(upTo);
@@ -234,39 +280,84 @@ export function createDecisionView(db: Reader, opts: DecisionViewOptions): Decis
       return new Set(rs.rows.map((r) => `${String(r.source)}|${String(r.ann_id)}`));
     },
     async shortInterest(code, limit) {
+      const cached = shortCache.get(code);
+      if (cached !== undefined && cached.length >= limit) return toShort(cached.slice(0, limit));
       const rs = await db.execute({
         sql: `SELECT as_of, short_ppm, published_at FROM short_interest
               WHERE market = ? AND code = ? AND as_of <= ? AND published_at < ?
               ORDER BY as_of DESC LIMIT ?`,
         args: [market, code, guardD, cutoff, limit],
       });
-      return rs.rows.map((r) => ({
-        as_of: String(r.as_of),
-        short_ppm: Number(r.short_ppm),
-        published_at: String(r.published_at),
-      }));
+      return toShort(rs.rows as Row[]);
     },
     async insiderNotices(code, sinceIso) {
       if (sinceIso >= cutoff) throw new LookAheadError(sinceIso, `cut-off ${cutoff}`);
+      const cached = insiderCache?.since === sinceIso ? insiderCache.byCode.get(code) : undefined;
+      if (cached !== undefined) return toNotices(cached);
       const rs = await db.execute({
         sql: `SELECT ann_id, kind, value_micro, published_at FROM insider_notice
               WHERE market = ? AND code = ? AND published_at >= ? AND published_at < ?
               ORDER BY published_at, ann_id`,
         args: [market, code, sinceIso, cutoff],
       });
-      return rs.rows.map((r) => ({
-        ann_id: String(r.ann_id),
-        kind: String(r.kind),
-        value_micro: r.value_micro === null ? null : bigintCol(r.value_micro),
-        published_at: String(r.published_at),
-      }));
+      return toNotices(rs.rows as Row[]);
     },
     async insiderCoverage() {
+      if (coverageCache !== null) return coverageCache;
       const rs = await db.execute({
         sql: `SELECT 1 FROM insider_notice WHERE market = ? AND published_at < ? LIMIT 1`,
         args: [market, cutoff],
       });
       return rs.rows.length > 0;
+    },
+    async prefetch(req) {
+      checkDate(req.barsFromD);
+      checkDate(req.shortFromD);
+      if (req.insiderSinceIso >= cutoff)
+        throw new LookAheadError(req.insiderSinceIso, `cut-off ${cutoff}`);
+      const codes = [...new Set(req.codes)];
+      const cov = await db.execute({
+        sql: `SELECT 1 FROM insider_notice WHERE market = ? AND published_at < ? LIMIT 1`,
+        args: [market, cutoff],
+      });
+      coverageCache = cov.rows.length > 0;
+      const byCode = new Map<string, Row[]>();
+      for (let i = 0; i < codes.length; i += PREFETCH_CHUNK) {
+        const part = codes.slice(i, i + PREFETCH_CHUNK);
+        const barArgs: (string | number)[] = [market, ...part, req.barsFromD, guardD];
+        if (opts.liveIngestBound === true) barArgs.push(cutoff);
+        const bars = await db.execute({
+          sql: `SELECT code, d, o, h, l, c, volume FROM price_bar
+                WHERE market = ? AND code IN (${marks(part.length)}) AND d >= ? AND d <= ?${ingestClause}
+                  AND ${listingFloor("price_bar")}
+                ORDER BY code, d`,
+          args: barArgs,
+        });
+        const shorts = await db.execute({
+          sql: `SELECT code, as_of, short_ppm, published_at FROM short_interest
+                WHERE market = ? AND code IN (${marks(part.length)}) AND as_of >= ? AND as_of <= ?
+                  AND published_at < ?
+                ORDER BY code, as_of DESC`,
+          args: [market, ...part, req.shortFromD, guardD, cutoff],
+        });
+        for (const code of part) {
+          barCache.set(code, []);
+          shortCache.set(code, []);
+          byCode.set(code, []);
+        }
+        for (const r of bars.rows) barCache.get(String(r.code))!.push(r as Row);
+        for (const r of shorts.rows) shortCache.get(String(r.code))!.push(r as Row);
+        if (coverageCache) {
+          const notices = await db.execute({
+            sql: `SELECT code, ann_id, kind, value_micro, published_at FROM insider_notice
+                  WHERE market = ? AND code IN (${marks(part.length)}) AND published_at >= ? AND published_at < ?
+                  ORDER BY code, published_at, ann_id`,
+            args: [market, ...part, req.insiderSinceIso, cutoff],
+          });
+          for (const r of notices.rows) byCode.get(String(r.code))!.push(r as Row);
+        }
+      }
+      insiderCache = { since: req.insiderSinceIso, byCode };
     },
     async priorRegime(version) {
       const rs = await db.execute({

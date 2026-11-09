@@ -214,6 +214,7 @@ describe("Home for a first-time user (D-200)", () => {
     sinceStart: { micro: "0", currency: "AUD", simulated: true },
     sinceStartPpm: 0,
     dayChange: null,
+    dayChangePpm: null,
   };
   const news = { stock: "ZZUP", title: "Half year results", publishedAt: "x", materiality: 2 };
 

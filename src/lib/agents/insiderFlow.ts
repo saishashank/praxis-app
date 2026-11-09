@@ -104,6 +104,17 @@ export function insiderInputsJson(inputs: InsiderInputs): string {
   });
 }
 
+/** The instant the insider window of D opens (midnight local of its first session), ISO UTC. */
+export function insiderSinceIso(
+  d: string,
+  p: AgentParams,
+  calendar: readonly CalendarRow[],
+  hours: MarketHours,
+): string {
+  const start = insiderWindowStart(d, p.insiderWindowSessions, calendar);
+  return localToUtc(start, MIDNIGHT, hours.tz).toISOString();
+}
+
 /** The row for (code, D), read through the view (notices published before the cut-off). */
 export async function insiderFlowFor(
   view: DecisionView,
@@ -112,8 +123,7 @@ export async function insiderFlowFor(
   calendar: readonly CalendarRow[],
   hours: MarketHours,
 ): Promise<InsiderFlowScoreRow> {
-  const start = insiderWindowStart(view.guardD, p.insiderWindowSessions, calendar);
-  const sinceIso = localToUtc(start, MIDNIGHT, hours.tz).toISOString();
+  const sinceIso = insiderSinceIso(view.guardD, p, calendar, hours);
   const covered = await view.insiderCoverage();
   const notices = covered ? await view.insiderNotices(code, sinceIso) : [];
   const score = insiderFlowScore(notices, covered, p);
