@@ -44,6 +44,20 @@ function statusesUrl(u) {
  * @returns {Promise<string | null>}
  */
 export async function findApprovedSha(fetchImpl, token, repo) {
+  const shas = await listApprovedShas(fetchImpl, token, repo, 1);
+  return shas[0] ?? null;
+}
+
+/**
+ * The commits of the newest approved deployments (of at most 30), newest first, distinct, at most
+ * `max` of them (D-905: the replay-needed check compares the current deploy with the one before).
+ * @param {(url: string, init: object) => Promise<{ status: number, json: () => Promise<unknown> }>} fetchImpl
+ * @param {string} token
+ * @param {string} repo "owner/name"
+ * @param {number} max
+ * @returns {Promise<string[]>}
+ */
+export async function listApprovedShas(fetchImpl, token, repo, max) {
   if (!token || !isValidRepo(repo))
     throw new Fail("GITHUB_TOKEN and GITHUB_REPOSITORY are required.");
   const list = await getJson(
@@ -52,7 +66,9 @@ export async function findApprovedSha(fetchImpl, token, repo) {
     token,
   );
   if (!Array.isArray(list)) throw new Fail("Unexpected deployments response.");
+  const out = [];
   for (const d of list) {
+    if (out.length >= max) break;
     const statuses = await getJson(fetchImpl, statusesUrl(d.statuses_url), token);
     if (!Array.isArray(statuses) || statuses.length === 0) continue;
     // Statuses come newest first; the latest one decides.
@@ -60,8 +76,22 @@ export async function findApprovedSha(fetchImpl, token, repo) {
       if (typeof d.sha !== "string" || !SHA.test(d.sha)) {
         throw new Fail("Commit SHA is not a 40-character hex value.");
       }
-      return d.sha;
+      if (!out.includes(d.sha)) out.push(d.sha);
     }
   }
-  return null;
+  return out;
+}
+
+/** GitHub's compare of two commits: the changed file names, or null when the list may be cut. */
+export async function changedFiles(fetchImpl, token, repo, base, head) {
+  if (!token || !isValidRepo(repo))
+    throw new Fail("GITHUB_TOKEN and GITHUB_REPOSITORY are required.");
+  if (!SHA.test(base) || !SHA.test(head))
+    throw new Fail("Commit SHA is not a 40-character hex value.");
+  const cmp = await getJson(fetchImpl, `${API}/repos/${repo}/compare/${base}...${head}`, token);
+  const files = cmp?.files;
+  if (!Array.isArray(files)) throw new Fail("Unexpected compare response.");
+  // GitHub lists at most 300 files per compare; a longer change is treated as unknown.
+  if (files.length >= 300 || cmp.status === "diverged" || cmp.status === "behind") return null;
+  return files.map((f) => String(f.filename));
 }

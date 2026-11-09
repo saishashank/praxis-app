@@ -210,15 +210,50 @@ export function decodeValue(v) {
 
 const sha256Hex = (data) => createHash("sha256").update(data).digest("hex");
 
-/** ORDER BY clause that makes row order deterministic for a table. */
-async function orderBy(tx, table, createSql) {
-  if (!/WITHOUT\s+ROWID/i.test(createSql)) return "rowid";
+/** The hidden key column a rowid table's dump selects first (stripped from the row line). */
+const ROWID_KEY = "__praxis_rowid";
+
+/**
+ * The key that makes row order deterministic for a table and pages it (D-903): `rowid` for a
+ * rowid table, the primary-key columns for a WITHOUT ROWID table. `null` only for a WITHOUT ROWID
+ * table without a primary key, which SQLite does not allow.
+ * @returns {Promise<{ rowid: true } | { rowid: false, cols: string[] } | null>}
+ */
+async function pageKey(tx, table, createSql) {
+  if (!/WITHOUT\s+ROWID/i.test(createSql)) return { rowid: true };
   const info = await tx.execute(`PRAGMA table_info(${quote(table)})`);
-  const pk = info.rows
+  const cols = info.rows
     .filter((r) => Number(r.pk) > 0)
     .sort((a, b) => Number(a.pk) - Number(b.pk))
-    .map((r) => quote(String(r.name)));
-  return pk.length ? pk.join(", ") : "1";
+    .map((r) => String(r.name));
+  return cols.length ? { rowid: false, cols } : null;
+}
+
+/**
+ * One page of a table in key order, strictly after `after` (the last key of the previous page, or
+ * null for the first page). D-903: keyset paging, so every row is scanned once per dump; the old
+ * LIMIT/OFFSET paging made the database scan every skipped row again on every page (Turso bills
+ * each scanned row: ~N²/(2·page) reads per table, which used up the free plan's monthly reads).
+ * Returns the row values in table column order and the key of the last row.
+ */
+async function readPage(tx, table, key, after, pageRows) {
+  if (key === null) throw new Error("table has no key to page by");
+  const keyCols = key.rowid ? ["rowid"] : key.cols.map(quote);
+  const keyList = keyCols.join(", ");
+  const where =
+    after === null ? "" : ` WHERE (${keyList}) > (${keyCols.map(() => "?").join(", ")})`;
+  const select = key.rowid ? `rowid AS ${quote(ROWID_KEY)}, *` : "*";
+  const res = await tx.execute({
+    sql: `SELECT ${select} FROM ${quote(table)}${where} ORDER BY ${keyList} LIMIT ?`,
+    args: [...(after ?? []), pageRows],
+  });
+  const skip = key.rowid ? 1 : 0;
+  const columns = res.columns.slice(skip);
+  const keyIdx = key.rowid ? [0] : key.cols.map((c) => res.columns.indexOf(c));
+  if (keyIdx.some((i) => i < 0)) throw new Error("key column missing from the page");
+  const rows = res.rows.map((row) => columns.map((_, i) => row[i + skip]));
+  const last = res.rows.length ? keyIdx.map((i) => res.rows[res.rows.length - 1][i]) : null;
+  return { rows, last };
 }
 
 /**
@@ -282,24 +317,23 @@ export async function dumpDatabase(db, opts) {
       );
       if (isEphemeral) continue;
       // D-202: page by page inside the one read transaction (still one consistent snapshot); a
-      // single SELECT of price_bar (~490k rows after D-199) failed the night's backup
-      const ob = await orderBy(tx, t.name, t.sql);
+      // single SELECT of price_bar (~490k rows after D-199) failed the night's backup. D-903: each
+      // page starts after the previous page's last key (keyset), never at an OFFSET.
+      const key = await pageKey(tx, t.name, t.sql);
       const hash = createHash("sha256");
       let n = 0;
       const pageRows = opts.pageRows ?? DUMP_PAGE_ROWS;
-      for (let offset = 0; ; offset += pageRows) {
-        const res = await tx.execute({
-          sql: `SELECT * FROM ${quote(t.name)} ORDER BY ${ob} LIMIT ? OFFSET ?`,
-          args: [pageRows, offset],
-        });
-        for (const row of res.rows) {
-          const values = res.columns.map((_, i) => encodeValue(row[i]));
+      for (let after = null; ;) {
+        const page = await readPage(tx, t.name, key, after, pageRows);
+        for (const row of page.rows) {
+          const values = row.map(encodeValue);
           const line = JSON.stringify({ kind: "row", table: t.name, values });
           hash.update(`${line}\n`);
           lines.push(line);
         }
-        n += res.rows.length;
-        if (res.rows.length < pageRows) break;
+        n += page.rows.length;
+        if (page.rows.length < pageRows) break;
+        after = page.last;
       }
       counts[t.name] = n;
       sha256[t.name] = hash.digest("hex");

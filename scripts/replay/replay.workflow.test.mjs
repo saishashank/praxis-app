@@ -56,6 +56,27 @@ test("the approved-commit steps and node setup are copied exactly from arena-clo
   assert.deepEqual(ours, close.jobs.production.steps.slice(0, 5));
 });
 
+test("D-905: a post-deploy run asks replay-needed first; the replay step skips only on run=false", () => {
+  const input = wf.on.workflow_dispatch.inputs.only_if_changed;
+  assert.equal(input.type, "string");
+  assert.equal(input.default, "");
+  const needed = steps.find((s) => s.id === "needed");
+  assert.equal(needed.if, "${{ inputs.only_if_changed == 'true' }}");
+  assert.equal(needed.run, "node ci-tools/scripts/ci/replay-needed.mjs");
+  assert.deepEqual(needed.env, {
+    GITHUB_TOKEN: "${{ github.token }}",
+    CURRENT_SHA: "${{ steps.approved.outputs.sha }}",
+  });
+  const replay = steps[steps.length - 1];
+  assert.equal(replay.if, "${{ steps.needed.outputs.run != 'false' }}");
+  assert.ok(steps.indexOf(needed) < steps.indexOf(replay));
+  // the Worker's post-deploy dispatch is the one caller that sets the flag
+  assert.match(
+    read("worker/src/postdeploy.ts"),
+    /workflow: "replay\.yml", inputs: \{ mode: "full", only_if_changed: "true" \}/,
+  );
+});
+
 test("every action is pinned to a full commit SHA", () => {
   for (const s of steps.filter((x) => x.uses)) assert.match(s.uses, SHA_USES);
 });

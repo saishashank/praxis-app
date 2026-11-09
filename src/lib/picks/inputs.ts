@@ -8,6 +8,12 @@ import type { AgentParams } from "@/lib/agents/params";
 import { priceMicro } from "@/lib/arena/marketData";
 import { addDays, isTradingDay, sessionsBetween, type CalendarRow } from "@/lib/data/calendar";
 import { divFloor } from "@/lib/money/rational";
+import {
+  PICK_HISTORY_FORMAT,
+  PICK_HISTORY_METRIC,
+  PICK_HISTORY_SCOPE,
+  type PickHistorySummary,
+} from "@/lib/replay/pickHistoryFormat";
 import { factorLines, readFactorRows } from "./factors";
 import type { Family, PickInput, Tier, UniverseCode } from "./types";
 
@@ -95,9 +101,61 @@ type History = {
   readonly holdMedian: number | null;
   readonly medianDropPpm: number | null;
   readonly splitVersion: number | null;
+  /** D-908: where the history came from (the live development ledger or a full replay's record). */
+  readonly source: "ledger" | "replay";
+  /** Share (ppm) of the history's closed trades that ended with a net gain; null when unknown. */
+  readonly winRatePpm: number | null;
 };
 
+/**
+ * D-908: the newest development track record a full replay stored for this group (replay_stat,
+ * src/lib/replay/pickHistory.ts), or null. Only complete runs store it (a paused run keeps no stats).
+ */
+export async function replayHistoryOf(
+  db: Db,
+  q: { family: string; ruleVersion: string; variant: string },
+): Promise<History | null> {
+  const r = await db.execute({
+    sql: `SELECT value_json FROM replay_stat WHERE scope = ? AND metric = ?
+          ORDER BY d DESC, run_id DESC LIMIT 1`,
+    args: [`${PICK_HISTORY_SCOPE}${q.family}|${q.ruleVersion}|${q.variant}`, PICK_HISTORY_METRIC],
+  });
+  if (r.rows.length === 0) return null;
+  const v = JSON.parse(str(r.rows[0]!.value_json)) as PickHistorySummary;
+  if (v.v !== PICK_HISTORY_FORMAT) return null;
+  const scenario: PickInput["scenario"] =
+    v.insufficient || v.p10_ppm === null || v.p50_ppm === null || v.p90_ppm === null
+      ? null
+      : { n: v.n, badPpm: v.p10_ppm, typicalPpm: v.p50_ppm, goodPpm: v.p90_ppm };
+  return {
+    scenario,
+    holdMedian: v.hold_median,
+    medianDropPpm: v.median_drop_ppm,
+    // factor rows are keyed by a stored split version; a computed split has none
+    splitVersion: v.split.stored ? v.split.version : null,
+    // the stored share is for the good case of the same rows, the only aim a pick uses
+    aimReachByGood: (goodPpm) => (goodPpm === v.p90_ppm ? v.aim_reach_ppm : null),
+    source: "replay",
+    winRatePpm: v.win_rate_ppm ?? null,
+  };
+}
+
+/**
+ * The live development ledger when it reaches scenario_min_n, else the replay's stored record of
+ * the same rule version and variant (D-908), else the live result (no scenario).
+ */
 async function historyOf(
+  db: Db,
+  q: { market: string; family: string; ruleVersion: string; variant: string },
+  p: AgentParams,
+  calendar: readonly CalendarRow[],
+): Promise<History> {
+  const live = await liveHistoryOf(db, q, p, calendar);
+  if (live.scenario !== null) return live;
+  return (await replayHistoryOf(db, q)) ?? live;
+}
+
+async function liveHistoryOf(
   db: Db,
   q: { market: string; family: string; ruleVersion: string; variant: string },
   p: AgentParams,
@@ -146,6 +204,13 @@ async function historyOf(
     holdMedian,
     medianDropPpm: medianDrop,
     splitVersion: input.split?.version ?? null,
+    source: "ledger",
+    winRatePpm:
+      input.nets.length === 0
+        ? null
+        : Number(
+            (BigInt(input.nets.filter((f) => f.num > 0n).length) * PPM) / BigInt(input.nets.length),
+          ), // money-float-ok: ppm share
     aimReachByGood: (goodPpm) => {
       if (input.nets.length === 0) return null;
       const reached = input.nets.filter((f) => f.num * PPM >= BigInt(goodPpm) * f.den).length;
@@ -254,10 +319,31 @@ export async function loadPickInputs(
       holdMedianSessions: h.holdMedian,
       medianDropPpm: h.medianDropPpm,
       factors: factorLines(today, rows, p.picks.factorMinBucketN),
-      basedOn: rules
-        .filter((r) => r.pass)
-        .map((r) => `${r.rule}: ${r.value} (needed ${r.threshold})`),
+      basedOn: [
+        // D-908: first (BASED_ON_MAX keeps 3): what the three cases rest on and how often it worked
+        ...(h.scenario !== null ? [historyLine(h.scenario.n, h.source, h.winRatePpm)] : []),
+        ...rules.filter((r) => r.pass).map((r) => `${r.rule}: ${r.value} (needed ${r.threshold})`),
+      ],
     });
   }
   return { inputs, universe };
+}
+
+/**
+ * D-908: the pick's first "based on" line, plain words: how many similar past trades the three
+ * cases rest on, where they come from, and the share of them that ended with a net gain. A fact
+ * about the past, not the calibrated "Chance of a net gain" (UXN-308), which stays hidden until the
+ * family is allowed or live-tested. Pure.
+ */
+export function historyLine(
+  n: number,
+  source: "ledger" | "replay",
+  winRatePpm: number | null,
+): string {
+  const where = source === "replay" ? "in the development replay" : "in the development ledger";
+  const won =
+    winRatePpm === null
+      ? ""
+      : `; ${Math.round(winRatePpm / 10_000)} % of them ended with a net gain`; // threshold-ok: ppm -> percent
+  return `History: ${n} similar past trades ${where}${won}`;
 }

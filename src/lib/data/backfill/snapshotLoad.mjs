@@ -62,20 +62,33 @@ export async function loadInputs(o) {
     }
   }
   const q = async (sql, args) => (await o.db.execute({ sql, args })).rows;
-  /** The rows of `sql` (which ends in a total ORDER BY) read page by page (D-202). */
-  const qPaged = async (sql, args) => {
+  /**
+   * The rows of `sql` (a SELECT ... WHERE ... with no ORDER BY) in `keys` order, read page by page
+   * (D-202). D-903: keyset paging, each page strictly after the last key of the one before; the
+   * selected columns must include every key. LIMIT/OFFSET made the database re-scan every skipped
+   * row on every page (Turso bills scanned rows), about 25 million reads per replay.
+   */
+  const qPaged = async (sql, args, keys) => {
     const out = [];
     const pageRows = o.pageRows ?? PAGE_ROWS;
-    for (let offset = 0; ; offset += pageRows) {
-      const page = await q(`${sql} LIMIT ? OFFSET ?`, [...args, pageRows, offset]);
+    const keyList = keys.join(", ");
+    const marks = keys.map(() => "?").join(", ");
+    for (let after = null; ;) {
+      const page = await q(
+        `${sql}${after === null ? "" : ` AND (${keyList}) > (${marks})`} ORDER BY ${keyList} LIMIT ?`,
+        [...args, ...(after ?? []), pageRows],
+      );
       out.push(...page);
       if (page.length < pageRows) return out;
+      const last = page[page.length - 1];
+      after = keys.map((k) => last[k]);
     }
   };
   const barsRecent = (
     await qPaged(
-      "SELECT code, d, o, h, l, c, volume FROM price_bar WHERE market = ? AND d >= ? AND d <= ? ORDER BY code, d",
+      "SELECT code, d, o, h, l, c, volume FROM price_bar WHERE market = ? AND d >= ? AND d <= ?",
       [MARKET, recentFrom, o.to],
+      ["code", "d"],
     )
   ).map((r) => ({
     code: String(r.code),
@@ -88,9 +101,10 @@ export async function loadInputs(o) {
   }));
   const annRecent = (
     await qPaged(
-      `SELECT code, ann_id, published_at, type, price_sensitive, title, first_ingested_at FROM announcement
-       WHERE market = ? AND published_at >= ? AND published_at < ? ORDER BY id`,
+      `SELECT id, code, ann_id, published_at, type, price_sensitive, title, first_ingested_at FROM announcement
+       WHERE market = ? AND published_at >= ? AND published_at < ?`,
       [MARKET, `${addDays(recentFrom, -1)}T00:00:00.000Z`, `${addDays(o.to, 2)}T00:00:00.000Z`],
+      ["id"],
     )
   ).map((r) => ({
     code: String(r.code),

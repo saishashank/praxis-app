@@ -4,11 +4,21 @@
 
 One line per V2 decision from D-206 on, grouped by milestone, with the file that holds the full text. D-001 to D-252 are in [07_decision_log.md](07_decision_log.md). Improvement-batch decisions are in the "Improvements" section at the end of `M13L_design.md`.
 
+## M7 (M7_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-909 | The Evening Review's section 6 ("What needs improving for tomorrow") gains "What we missed today" (src/lib/review/missedMovers.ts), built from the stored nig... |
+
 ## M8.1 (M8.1_design.md)
 
 | Id | Decision |
 | --- | --- |
 | D-730 | The app header shows the logo with its tagline ("Learn. Earn. Repeat.", praxis-logo-tagline-*.svg, 40 px high) from the sm breakpoint (600 px) at the Owner's... |
+| D-903 | Bulk reads page by key, never by OFFSET: the backup dump pages each table by rowid (rowid tables) or its primary key (WITHOUT ROWID tables), each page strict... |
+| D-904 | Read budget (NFR, V2 spec ch. 10): the whole system (production; staging is off, D-906) stays under 20 % of the Turso free plan's monthly allowance, 100 mill... |
+| D-905 | The post-deploy full replay (D-195) runs only when the deploy changed what a replay depends on: the Worker dispatches it with only_if_changed: "true", and sc... |
+| D-906 | Staging is off (Owner 2026-11-09: "Don't use any staging going forward on anything"): the Nightly, Deploy staging and Staging E2E day workflows are disabled... |
 
 ## M11L (M11L_design.md)
 
@@ -298,6 +308,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-884 | The Owner asked on 2026-11-04 for a quieter, professional look ("white background, navy blue looks professional", "the app looks very dull", "font is very ba... |
 | D-885 | Every trade already has a stop loss (trade.stop_micro NOT NULL; the stop in force is the higher of it and the latest recomputed stop_level, decision 7). |
 | D-886 | Movers check (Owner 2026-11-04: "at the end of the day run a job on why we haven't picked the top 20 movers and if we have stopped the top 20 losers"). |
+| D-908 | A complete full replay stores, per (family, rule version, variant), the development track record the picks loader needs, as one replay_stat row (scope pick_h... |
 
 ## M14 (M14_design.md)
 
