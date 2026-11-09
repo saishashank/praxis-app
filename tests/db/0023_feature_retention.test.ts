@@ -72,10 +72,10 @@ describe("migration 0023: cortex_feature_daily is prunable beyond 400 days", () 
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(db, ms);
     const after = await schemaOf(db);
-    expect(await migrateDown(db, ms, 5)).toEqual({ rolledBack: 5, version: 22 });
+    expect(await migrateDown(db, ms, 6)).toEqual({ rolledBack: 6, version: 22 });
     await db.execute(feature(dayAgo(900), "ZZOLD"));
     expect(await fails(db, "DELETE FROM cortex_feature_daily")).toMatch(/append-only/);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 5, version: 27 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 6, version: 28 });
     expect(await schemaOf(db)).toEqual(after);
   });
 });
@@ -100,8 +100,8 @@ describe("rollback to V1 (V2-S4)", () => {
       await expect(migrateUp(db, old)).rejects.toThrow(/applied migration 15 has no file/);
       expect(await migrateUp(db, old, { allowNewer: true })).toEqual({
         applied: 0,
-        version: 27,
-        newer: [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27],
+        version: 28,
+        newer: [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28],
       });
     } finally {
       rm(dir);
@@ -125,12 +125,12 @@ describe("rollback to V1 (V2-S4)", () => {
     }
   });
 
-  it("--down-to walks 0027…0015 down to the V1 schema (0014) and the up path restores it", async () => {
+  it("--down-to walks 0028…0015 down to the V1 schema (0014) and the up path restores it", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(db, ms);
     const full = await schemaOf(db);
-    expect(await migrateDownTo(db, ms, 14)).toEqual({ rolledBack: 13, version: 14 });
+    expect(await migrateDownTo(db, ms, 14)).toEqual({ rolledBack: 14, version: 14 });
     const v1 = await schemaOf(db);
     expect(v1.some((s) => s.startsWith("table:cortex_night:"))).toBe(false);
     expect(v1.some((s) => s.startsWith("table:expert:"))).toBe(false);
@@ -142,7 +142,7 @@ describe("rollback to V1 (V2-S4)", () => {
     } finally {
       rm(dir);
     }
-    expect(await migrateUp(db, ms)).toEqual({ applied: 13, version: 27 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 14, version: 28 });
     expect(await schemaOf(db)).toEqual(full);
   }, 60_000);
 
@@ -167,14 +167,14 @@ describe("rollback to V1 (V2-S4)", () => {
       TURSO_MAIN_URL: url,
     });
     expect(done.code).toBe(0);
-    expect(done.out).toContain("rolled back 13 (now at v14)");
+    expect(done.out).toContain("rolled back 14 (now at v14)");
     expect(
       run(["--db", "main", "--down-to", "x", "--confirm-down"], { TURSO_MAIN_URL: url }).code,
     ).toBe(1);
   }, 60_000);
 
   it("MIGRATE_ALLOW_NEWER=1 and --allow-newer are read by the build step; without them the build fails", () => {
-    // the real tree is at 27, so build a database one version AHEAD of it by faking schema_migrations
+    // the real tree is at 28, so build a database one version AHEAD of it by faking schema_migrations
     const url = tempDbUrl();
     expect(run(["--db", "main"], { TURSO_MAIN_URL: url }).code).toBe(0);
     const bump = spawnSync(
@@ -182,14 +182,14 @@ describe("rollback to V1 (V2-S4)", () => {
       [
         "-e",
         `const {createClient}=require("@libsql/client");const c=createClient({url:process.env.U});` +
-          `c.execute("INSERT INTO schema_migrations (version,name,checksum,applied_at) VALUES (28,'zz','x','t')").then(()=>c.close());`,
+          `c.execute("INSERT INTO schema_migrations (version,name,checksum,applied_at) VALUES (29,'zz','x','t')").then(()=>c.close());`,
       ],
       { env: { ...process.env, U: url }, encoding: "utf8", cwd: ROOT },
     );
     expect(bump.status).toBe(0);
     const plain = run(["--db", "main"], { TURSO_MAIN_URL: url });
     expect(plain.code).toBe(1);
-    expect(plain.out).toContain("applied migration 28 has no file");
+    expect(plain.out).toContain("applied migration 29 has no file");
     const flag = run(["--db", "main", "--allow-newer"], { TURSO_MAIN_URL: url });
     expect(flag.code).toBe(0);
     expect(flag.out).toContain("database is ahead of this build");

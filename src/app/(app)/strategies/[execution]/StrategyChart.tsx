@@ -30,6 +30,10 @@ export type ChartTrade = {
   stopText: string | null;
   targetText: string | null;
   lastPriceText: string | null;
+  /** D-900: "delayed, 11:35" when the last price is an intraday quote; null when it is the close. */
+  lastPriceAtText: string | null;
+  /** D-900: an open trade's move from its buy price to the last price (before costs). */
+  openReturnText: string | null;
   cardHref: string | null;
 };
 export type ChartControl = { id: string; label: string; points: ChartPoint[] };
@@ -587,8 +591,17 @@ export function TradesTable({
                   <td className={cell}>{t.targetText ?? "Hidden"}</td>
                   <td className={cell}>
                     {(t.open ? t.lastPriceText : t.exitPriceText) ?? (t.open ? "n/a" : "Hidden")}
+                    {t.open && t.lastPriceAtText ? (
+                      <span className="block text-xs text-text-muted">{t.lastPriceAtText}</span>
+                    ) : null}
                   </td>
-                  <td className={cell}>{t.open ? "Open" : (t.pnlText ?? t.returnText ?? "n/a")}</td>
+                  <td className={cell}>
+                    {t.open
+                      ? t.openReturnText
+                        ? `Open ${t.openReturnText}`
+                        : "Open"
+                      : (t.pnlText ?? t.returnText ?? "n/a")}
+                  </td>
                   <td className="px-2 py-2">
                     {t.cardHref ? (
                       <Link

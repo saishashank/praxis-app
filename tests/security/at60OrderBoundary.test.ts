@@ -158,7 +158,13 @@ describe("AT-60 order boundary (i): import guard", () => {
 });
 
 describe("AT-60 order boundary (ii): SQL write allowlist", () => {
-  const ALLOWED = new Set(["pick_alert", "pick_alert_mail", "intraday_candidate", "quote_run"]);
+  const ALLOWED = new Set([
+    "pick_alert",
+    "pick_alert_mail",
+    "intraday_candidate",
+    "quote_run",
+    "quote_latest",
+  ]);
   const WRITE_RE =
     /(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|(?<!DO\s)UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+([A-Za-z_][A-Za-z0-9_]*)/gi;
   // a write keyword followed by anything but an identifier (interpolation, concatenation)

@@ -31,6 +31,7 @@ let prices: Map<string, { price: number; volume: number | null; ageMin: number; 
 let clock: Date;
 
 const fetchStub: PollRunDeps["fetch"] = async (url) => {
+  if (String(url).includes("%5EAXJO")) return { ok: false, status: 404, json: async () => ({}) }; // D-907 index
   calls.push(url);
   const code = /chart\/([A-Z0-9]+)\.AX/.exec(url)![1];
   const s = prices.get(code);
@@ -197,6 +198,8 @@ describe("transitions and mail", () => {
         .map((t) => `${t.code}:${t.state}`)
         .sort(),
     ).toEqual(["ZZ01:hit", "ZZ02:cleared"]);
+    // D-900: every fetched quote is kept for the site's delayed live price.
+    expect(await scalar("SELECT COUNT(*) AS n FROM quote_latest")).toBeGreaterThan(0);
   });
 
   it("duplicate ticks and a repeated slot give no second hit, no second mail", async () => {

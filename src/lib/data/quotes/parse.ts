@@ -28,6 +28,18 @@ const positiveMicro = (v: unknown): Micro | null => {
   }
 };
 
+/**
+ * D-907: the market index the quote poll also fetches, for the live ASX 200 line on Home. Stored in
+ * quote_latest under the same code the stored index bars use (Batch 1 index stage, `^AXJO`).
+ */
+export const MARKET_INDEX_CODE = "AXJO";
+const INDEX_SYMBOLS: Readonly<Record<string, string>> = { [MARKET_INDEX_CODE]: "^AXJO" };
+
+/** The Yahoo chart symbol of a code: `^AXJO` for the index, `<code>.AX` for a listed stock. */
+export function chartSymbol(code: string): string {
+  return INDEX_SYMBOLS[code] ?? `${code}.AX`;
+}
+
 export function parseChartMeta(json: unknown, code: string, now: Date): DelayedQuote | QuoteReject {
   if (!CODE_RE.test(code)) return { reject: "bad_code" };
   if (!isRecord(json) || !isRecord(json.chart)) return { reject: "bad_shape" };
@@ -41,7 +53,7 @@ export function parseChartMeta(json: unknown, code: string, now: Date): DelayedQ
   if (meta.currency !== "AUD") {
     return { reject: meta.currency === undefined ? "no_currency" : "bad_currency" };
   }
-  if (meta.symbol !== undefined && meta.symbol !== `${code}.AX`) {
+  if (meta.symbol !== undefined && meta.symbol !== chartSymbol(code)) {
     return { reject: "symbol_mismatch" };
   }
 

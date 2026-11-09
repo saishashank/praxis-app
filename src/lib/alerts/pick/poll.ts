@@ -30,6 +30,8 @@ import {
   type QuoteFetchDeps,
 } from "@/lib/data/quotes/fetch";
 import type { DelayedQuote, QuoteRefusal } from "@/lib/data/quotes/types";
+import { storeLatestQuotesSoft } from "@/lib/data/quotes/latest";
+import { MARKET_INDEX_CODE } from "@/lib/data/quotes/parse";
 import { heldCodes } from "@/lib/intraday/universe";
 import {
   SESSION_TZ,
@@ -188,6 +190,8 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
   };
   for (const c of armedCodes) add(c);
   const extraCodes = new Set<string>();
+  // D-907: the ASX 200 first among the extras, one request a tick, for the live line on Home.
+  if (market === "AU") extraCodes.add(MARKET_INDEX_CODE);
   for (const c of await watchCodes(db, market, sessionD)) if (!seen.has(c)) extraCodes.add(c);
   for (const c of [...(await heldCodes(db, market))].sort()) if (!seen.has(c)) extraCodes.add(c);
   const ticksLeft = remainingPollTicks(now, end, stepMin);
@@ -240,6 +244,8 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
     );
     quotes = fetched.quotes;
     requestsMade = fetched.requests;
+    // D-900: keep the newest quote per code for the site's delayed live price (display only).
+    await storeLatestQuotesSoft(db, market, quotes);
     // V2-S7 (D-697): reconcile the reservation to the requests actually made.
     if (fetched.requests < planned.length) {
       await db.execute({

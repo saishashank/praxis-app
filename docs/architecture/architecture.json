@@ -12763,6 +12763,39 @@
       }
     },
     {
+      "id": "table:main.quote_latest",
+      "type": "table",
+      "name": "quote_latest",
+      "purpose": "Table quote_latest in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0028_quote_latest.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "code",
+          "last_micro",
+          "prev_close_micro",
+          "quote_at",
+          "fetched_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.quote_run",
       "type": "table",
       "name": "quote_run",
@@ -19578,6 +19611,16 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.quote_latest",
+      "from": "service:turso-main",
+      "to": "table:main.quote_latest",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
         "data"
       ]
     },
