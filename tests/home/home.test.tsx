@@ -303,7 +303,7 @@ describe("Home redesign (UXR-020, 044, 053, 055, 056)", () => {
   it("status strip shows the freshness but no run time (D-884), in outcome colour with a sparkline", async () => {
     await view(pop, OWNER, false, NOW);
     const strip = screen.getByRole("region", { name: "Today at a glance" });
-    expect(strip).toHaveTextContent("Data as of");
+    expect(strip).toHaveTextContent("Prices");
     expect(strip).not.toHaveTextContent(/Next run/); // D-884: no run times on Home
     expect(strip.querySelector("[data-outcome]")).not.toBeNull();
     expect(strip.querySelector("[data-sparkline]")).not.toBeNull();
