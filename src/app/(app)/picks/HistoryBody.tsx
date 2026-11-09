@@ -22,6 +22,8 @@ import { exitWords, profileRules, profileSentence } from "./text";
 export const FILTER_LABEL: Record<HistoryFilter, string> = {
   open: "Open",
   closed: "Closed",
+  profit: "In profit",
+  loss: "In loss",
   not_traded: "Not traded",
   waiting: "Waiting to buy",
   all: "All",
@@ -37,6 +39,8 @@ const STATUS_WORDS: Record<HistoryRow["status"], string> = {
 const EMPTY_WORDS: Record<HistoryFilter, string> = {
   open: "No pick is open right now. Picks become open once the price reaches the buy price.",
   closed: "No pick has closed yet.",
+  profit: "No pick is in profit yet.",
+  loss: "No pick is in loss.",
   not_traded: "No pick has expired without reaching its buy price.",
   waiting: "No pick is waiting to be bought.",
   all: "No pick has been published yet.",
@@ -110,8 +114,7 @@ export async function HistoryBody({
 }) {
   const model = await loadPickHistory(env, { profile, filter, cursor });
   const rule = profileSentence(profileRules(await pickProfilesConfig(env.main), model.profile));
-  const base = `/picks?profile=${encodeURIComponent(model.profile)}&view=history`;
-  const withFilter = `${base}&status=${model.filter}`;
+  const query = `profile=${encodeURIComponent(model.profile)}&view=history&status=${model.filter}`;
   const columns: Column<HistoryRow>[] = [
     { key: "stock", header: "Stock", cell: stockCell },
     {
@@ -168,6 +171,8 @@ export async function HistoryBody({
       <p className="m-0 text-xs text-text-muted">
         Change is the price move from the buy: to the sale once closed, to the latest price while
         open (delayed quote during the session, else the last close). Days held are calendar days.
+        Newest pick first. In profit / In loss: a closed trade by its result after costs, an open
+        one by its last close against the buy price.
       </p>
 
       {!model.masked && model.rows.length > 0 ? <SimulatedLabel /> : null}
@@ -182,9 +187,9 @@ export async function HistoryBody({
 
       {model.paged || model.next ? (
         <nav aria-label="History pages" className="flex gap-4 text-sm">
-          {model.paged ? <Link href={withFilter}>Newest</Link> : null}
+          {model.paged ? <Link href={`/picks?${query}`}>Newest</Link> : null}
           {model.next ? (
-            <Link href={`${withFilter}&after=${encodeURIComponent(model.next)}`}>Older</Link>
+            <Link href={`/picks?${query}&after=${encodeURIComponent(model.next)}`}>Older</Link>
           ) : null}
         </nav>
       ) : null}

@@ -85,6 +85,24 @@ describe("loadPickHistory", () => {
     expect(none.state).toBe("empty");
   });
 
+  it("In profit / In loss: closed by the result after costs, open by the last close", async () => {
+    const env = owner();
+    const win = await loadPickHistory(env, { profile: "balanced", filter: "profit", cursor: null });
+    expect(win.rows.map((r) => r.status)).toEqual(["closed", "open"]); // newest first
+    const lose = await loadPickHistory(env, { profile: "balanced", filter: "loss", cursor: null });
+    expect(lose.state).toBe("empty");
+    // the open trade turns into a loss when a newer close is under the buy price (bars are write-once)
+    await w.main.execute({
+      sql: `INSERT INTO price_bar (market, code, d, o, h, l, c, volume, source, published_at, ingested_at)
+            VALUES ('AU', 'ZZOTH', '2026-10-20', 1.8, 1.8, 1.8, 1.8, 100, 'test',
+              '2026-10-20T06:00:00.000Z', '2026-10-20T06:05:00.000Z')`,
+      args: [],
+    });
+    const now = await loadPickHistory(env, { profile: "balanced", filter: "loss", cursor: null });
+    expect(now.rows.map((r) => r.stock)).toEqual(["Zed Other Group (ZZOTH)"]);
+    expect(now.rows[0]!.changePpm).toBe(-100_000);
+  });
+
   it("pages by key: a cursor after rank 1 returns rank 2 only", async () => {
     expect(parseHistoryCursor(`${D}.1`)).toEqual({ d: D, rank: 1 });
     expect(parseHistoryCursor("x; DROP")).toBeNull();

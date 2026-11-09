@@ -580,9 +580,25 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
 // ---- Pick history (Owner 2026-11-10): one row per published pick, paged, filtered by status --------
 
 /** Status filter of the History tab; "open" is the default (the Owner validates live trades first). */
-export const HISTORY_FILTERS = ["open", "closed", "not_traded", "waiting", "all"] as const;
+export const HISTORY_FILTERS = [
+  "open",
+  "closed",
+  "profit",
+  "loss",
+  "not_traded",
+  "waiting",
+  "all",
+] as const;
 export type HistoryFilter = (typeof HISTORY_FILTERS)[number];
-const HISTORY_STATE: Record<Exclude<HistoryFilter, "all">, string> = {
+// "In profit" / "In loss": a closed trade by its result after costs; an open one by its last close
+// against the buy price (the latest close of the code, read with the price_bar key)
+const LAST_CLOSE_MICRO = `(SELECT pb.c FROM price_bar pb WHERE pb.market = o.market AND pb.code = o.code
+  ORDER BY pb.d DESC LIMIT 1) * 1000000`;
+const RESULT_WHERE: Record<"profit" | "loss", string> = {
+  profit: `((o.state = 'closed' AND o.net_ppm > 0) OR (o.state = 'bought' AND ${LAST_CLOSE_MICRO} > o.entry_micro))`,
+  loss: `((o.state = 'closed' AND o.net_ppm < 0) OR (o.state = 'bought' AND ${LAST_CLOSE_MICRO} < o.entry_micro))`,
+};
+const HISTORY_STATE: Record<Exclude<HistoryFilter, "all" | "profit" | "loss">, string> = {
   open: "bought",
   closed: "closed",
   not_traded: "missed",
@@ -660,7 +676,9 @@ export async function loadPickHistory(
   const after = masked ? null : parseHistoryCursor(q.cursor);
   const where = ["o.market = ?", "o.profile = ?", "o.kind = 'pick'"];
   const args: (string | number)[] = [market, q.profile];
-  if (q.filter !== "all") {
+  if (q.filter === "profit" || q.filter === "loss") {
+    where.push(RESULT_WHERE[q.filter]);
+  } else if (q.filter !== "all") {
     where.push("o.state = ?");
     args.push(HISTORY_STATE[q.filter]);
   }
