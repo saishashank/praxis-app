@@ -10,7 +10,6 @@ import { buttonClass } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FamilyBadge, Rail } from "@/components/ui/Family";
 import { ChevronRightIcon } from "@/components/ui/icons";
-import { InfoButton } from "@/components/ui/Overlays";
 import { Pill } from "@/components/ui/Pill";
 import { StatusStrip, type Mood } from "@/components/ui/StatusStrip";
 import { Banner, EmptyState } from "@/components/ui/States";
@@ -19,7 +18,7 @@ import { GainLoss, Masked, Money, NotMeasured, SimulatedLabel } from "@/componen
 import { formatDate, formatMicro, formatPpm, plural } from "@/lib/view/format";
 import { regimeLabel } from "@/lib/view/terms";
 import type { Loaded } from "@/lib/ui/loaders/common";
-import type { HomeIdea, HomeNeed, HomePick, HomeSinceRow, HomeView } from "@/lib/ui/loaders/home";
+import type { HomeNeed, HomePick, HomeSinceRow, HomeView } from "@/lib/ui/loaders/home";
 import { EmptyArt, Sparkline } from "./Art";
 import { familyBadge } from "./familyMap";
 import { CountUp, PopIn } from "./Motion";
@@ -43,59 +42,6 @@ const linkCls = "text-accent underline";
 const tileStrip =
   "ui-scroll-x m-0 -mx-1 flex list-none snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 xl:grid-cols-3";
 const tileItem = "w-[78%] min-w-0 shrink-0 snap-start sm:w-auto";
-
-/** One trade idea as a tile: code, company name, strategy, bought or not, and an "i" with why. */
-function IdeaTile({ idea }: { idea: HomeIdea }) {
-  const bought = idea.taken > 0;
-  const rounds = idea.taken + idea.notTaken;
-  return (
-    <div className="ui-card flex h-full flex-col gap-1 rounded-lg border border-border bg-surface p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          {idea.href ? (
-            <Link href={idea.href} className="text-lg font-semibold text-accent no-underline">
-              {idea.stock}
-            </Link>
-          ) : (
-            <span className="text-lg font-semibold">{idea.stock}</span>
-          )}
-          {idea.name ? (
-            <p className="m-0 truncate text-sm text-text-muted" title={idea.name}>
-              {idea.name}
-            </p>
-          ) : null}
-        </div>
-        <InfoButton label={`Why ${idea.stock} was ${bought ? "bought" : "not bought"}`}>
-          {bought ? (
-            <p className="m-0">
-              Bought in {idea.taken} of {rounds} strategy {plural(rounds, "round")}.
-            </p>
-          ) : null}
-          {idea.reasons.length > 0 ? (
-            <>
-              <p className="m-0 font-semibold">
-                {bought ? "Not bought in the other rounds because" : "Not bought because"}
-              </p>
-              <ul className="m-0 mt-1 list-disc pl-4">
-                {idea.reasons.map((r) => (
-                  <li key={r}>{r}</li>
-                ))}
-              </ul>
-            </>
-          ) : bought ? null : (
-            <p className="m-0">The reason was not recorded.</p>
-          )}
-        </InfoButton>
-      </div>
-      <p className="m-0 text-sm">{idea.strategy}</p>
-      <p className="m-0 mt-auto pt-1">
-        <Pill kind="status" value={bought ? "ok" : "neutral"}>
-          {bought ? "Bought" : "Not bought"}
-        </Pill>
-      </p>
-    </div>
-  );
-}
 
 /** Market regime -> gradient key and the word printed on it (the gradient is decoration, UXR-053). */
 export function moodOf(regime: string | null): { key: Mood; word: string } {
@@ -174,11 +120,7 @@ export function daySentence(v: HomeView): string {
   if (v.picks.items.length > 0) {
     parts.push(`${v.picks.items.length} ${plural(v.picks.items.length, "pick")} on the list.`);
   }
-  if (v.ideas.signals > 0) {
-    parts.push(`${v.ideas.signals} trade ${plural(v.ideas.signals, "idea")} tonight.`);
-  } else {
-    parts.push("No trade ideas yet.");
-  }
+  if (v.picks.items.length === 0) parts.push("No picks on the list yet.");
   return parts.join(" ");
 }
 
@@ -581,26 +523,6 @@ export function HomeContent({
       </p>
 
       <div className={twoCol}>
-        <Section
-          id="home-ideas"
-          title="Tonight's trade ideas"
-          more={{ href: "/strategies/ideas", label: "See all tonight's ideas" }}
-        >
-          {v.ideas.items.length > 0 ? (
-            <ul className={tileStrip} aria-label="Tonight's trade ideas">
-              {v.ideas.items.map((i, n) => (
-                <li key={`${i.strategy}-${i.stock}-${n}`} className={tileItem}>
-                  <IdeaTile idea={i} />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <Empty hue="brand-b" shape="ideas">
-              No trade ideas yet — first ones after tonight&apos;s run.
-            </Empty>
-          )}
-        </Section>
-
         {canWatch ? (
           <Section
             id="home-watchlist"

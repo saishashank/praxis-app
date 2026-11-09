@@ -97,7 +97,7 @@ describe("Home", () => {
     expect(d.day.quality).toEqual([{ tier: "U1", score: 1, gatePass: true }]);
     expect(d.picks.items).toHaveLength(1);
     expect(d.picks.items[0]).toMatchObject({ stock: "ZZUP", referenceMicro: 12_340_000, rank: 1 });
-    expect(d.ideas.items.map((i) => i.stock)).toEqual(["ZZUP", "ZZDN", "ZZOTH"]);
+    expect(d.ideas.items).toEqual([]); // Owner 2026-11-10: signals are research, not read on Home
     expect(d.watchlist).toEqual([{ stock: "ZZUP", close: 12.34, changePpm: 19_835, at: null }]);
     expect(d.news.items[0]?.stock).toBe("ZZUP");
     expect(d.review).toEqual({ d: "2026-10-19", day: "2026-10-19", kind: "full" });
@@ -265,7 +265,8 @@ describe("Ideas", () => {
       ["F2", "Good company, good news"],
     ]);
     expect(i.data.groups[0]!.ideas.map((x) => x.stock)).toEqual(["ZZUP", "ZZDN"]);
-    expect(i.data.tally).toEqual({ signals: 3, taken: 1, notTaken: 1 });
+    expect(i.data.tally).toEqual({ signals: 3, taken: 1, notTaken: 1, picked: 1 });
+    expect(i.data.groups[0]!.ideas[0]!.picks).toEqual([{ rank: 1, profile: "balanced" }]);
     expect(i.data.groups[0]!.ideas[0]!.cards[0]!.href).toBe(
       `/cards/${encodeURIComponent(CARD_UP)}`,
     );
@@ -329,8 +330,7 @@ describe("masking: Editor and Viewer never see a code, a name, a link, a trade p
     expect(home.data.watchlist).toEqual([
       { stock: "Stock C", close: null, changePpm: 19_835, at: null },
     ]);
-    expect(home.data.ideas.items.map((i) => i.stock)).toEqual(["Stock C", "Stock A", "Stock B"]);
-    expect(home.data.ideas.items[0]!.href).toMatch(/^\/cards\/ck%3A[0-9a-f]{16}$/);
+    expect(home.data.ideas.items).toEqual([]);
 
     const detail = await loadStrategyDetail(d, "E01");
     for (const t of detail.data.trades) {

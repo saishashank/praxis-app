@@ -39,6 +39,8 @@ export type Idea = {
   regime: string;
   rankScore: string;
   cards: IdeaCard[];
+  /** Owner 2026-11-10: the published picks made from this signal (rank and risk profile). */
+  picks: { rank: number; profile: string }[];
   taken: number;
   notTaken: number;
 };
@@ -63,7 +65,7 @@ export type IdeasView = {
   /** The session the ideas are for; null when there are no signals yet. */
   d: string | null;
   groups: IdeaGroup[];
-  tally: { signals: number; taken: number; notTaken: number };
+  tally: { signals: number; taken: number; notTaken: number; picked: number };
   /** Per family, over all closed forward trades (not only tonight's); no code in it. */
   familyTally: FamilyTally[];
 };
@@ -75,7 +77,7 @@ function emptyView(market: string): IdeasView {
     market,
     d: null,
     groups: [],
-    tally: { signals: 0, taken: 0, notTaken: 0 },
+    tally: { signals: 0, taken: 0, notTaken: 0, picked: 0 },
     familyTally: [],
   };
 }
@@ -168,6 +170,19 @@ export async function loadIdeas(
     args: [market, d, MAX_CARDS],
   });
 
+  // picks published from these signals (the same night's shortlist for the Owner)
+  const pickRows = await deps.mainDb.execute({
+    sql: `SELECT p.signal_id, p.rank, p.profile FROM pick p JOIN signal s ON s.id = p.signal_id
+          WHERE s.market = ? AND s.d = ? ORDER BY p.profile, p.rank LIMIT ?`,
+    args: [market, d, MAX_SIGNALS],
+  });
+  const picksOf = new Map<string, { rank: number; profile: string }[]>();
+  for (const p of pickRows.rows) {
+    const list = picksOf.get(str(p.signal_id)) ?? [];
+    list.push({ rank: num(p.rank), profile: str(p.profile) });
+    picksOf.set(str(p.signal_id), list);
+  }
+
   // Codes are collected first, letters are given afterwards.
   const scope = await v.masker.scope(
     d,
@@ -204,6 +219,7 @@ export async function loadIdeas(
   const order = new Map<Idea, { score: number; code: string }>();
   let taken = 0;
   let notTaken = 0;
+  let picked = 0;
   for (const r of sig.rows) {
     const list = bySignal.get(str(r.id)) ?? [];
     const idea: Idea = {
@@ -213,11 +229,13 @@ export async function loadIdeas(
       regime: str(r.regime),
       rankScore: str(r.rank_score),
       cards: list,
+      picks: picksOf.get(str(r.id)) ?? [],
       taken: list.filter((x) => x.taken).length,
       notTaken: list.filter((x) => !x.taken).length,
     };
     taken += idea.taken;
     notTaken += idea.notTaken;
+    if (idea.picks.length > 0) picked += 1;
     const score = Number(str(r.rank_score));
     order.set(idea, { score: Number.isFinite(score) ? score : -Infinity, code: str(r.code) });
     const fam = str(r.family);
@@ -237,7 +255,7 @@ export async function loadIdeas(
     market,
     d,
     groups: out,
-    tally: { signals: sig.rows.length, taken, notTaken },
+    tally: { signals: sig.rows.length, taken, notTaken, picked },
     familyTally: await loadFamilyTally(deps, market, names),
   });
 }

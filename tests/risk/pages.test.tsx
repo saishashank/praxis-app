@@ -262,9 +262,11 @@ describe("Tonight's trade ideas (UX-040, UXN-126)", () => {
     as(OWNER);
     const html = await ideas();
     expect(requireUser).toHaveBeenCalledWith("read", "/strategies/ideas");
-    expect(html).toContain("Tonight&#x27;s trade ideas");
+    expect(html).toContain("All signals (research)");
+    expect(html).toContain("Not trade advice.");
+    expect(html).toContain("Not a pick (not on the shortlist for you)");
     expect(html).toContain("ZZUP");
-    expect(html).toContain("3 ideas found: 1 taken, 1 not taken.");
+    expect(html).toContain("3 signals found: 1 practice orders, 1 not taken; 1 is also a pick.");
     expect(html).toContain("not taken: ZZOTH is held");
     expect(html).toContain(encodeURIComponent(CARD_UP));
     expect(html).toContain(
