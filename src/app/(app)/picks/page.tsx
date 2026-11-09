@@ -4,12 +4,19 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/guard";
 import { envFor } from "@/lib/ui/loaders/shell";
-import { loadPicks, parsePicksQuery, sortPicks } from "@/lib/ui/loaders/picks";
+import {
+  historyFilterOf,
+  loadPicks,
+  parsePicksQuery,
+  sortPicks,
+  type HistoryFilter,
+} from "@/lib/ui/loaders/picks";
 import { Banner } from "@/components/ui/States";
 import { PickCard } from "./PickCard";
 import { ProfileSwitch, ViewTabs } from "./PickTabs";
 import { PicksEmptyArt } from "./EmptyArt";
 import { TrackRecordBody } from "./TrackRecordBody";
+import { HistoryBody } from "./HistoryBody";
 import { SuccessStrip } from "./SuccessStrip";
 import { IntradaySection } from "./IntradaySection";
 import { SortToggle } from "./SortToggle";
@@ -40,6 +47,13 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
   if (query === null) notFound();
   const track = sp.view === "track";
   if (track) return await TrackView({ env, profile: query.profile });
+  if (sp.view === "history")
+    return await HistoryView({
+      env,
+      profile: query.profile,
+      filter: historyFilterOf(sp.status),
+      cursor: typeof sp.after === "string" ? sp.after : null,
+    });
   const model = await loadPicks(env, query);
   const max = await maxPerFamily(env.main);
   const rule = profileSentence(profileRules(await pickProfilesConfig(env.main), model.profile));
@@ -106,6 +120,32 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
       )}
 
       <IntradaySection model={intraday} />
+    </main>
+  );
+}
+
+async function HistoryView({
+  env,
+  profile,
+  filter,
+  cursor,
+}: {
+  env: Awaited<ReturnType<typeof envFor>>;
+  profile: string;
+  filter: HistoryFilter;
+  cursor: string | null;
+}) {
+  return (
+    <main className="mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-4 px-4 py-6">
+      <header className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight">Picks</h1>
+        <p className="m-0 text-sm text-text-muted">
+          Every pick with its buy, its sale and how it moved, so each trade can be checked against
+          the pick. {NOT_REAL_ORDERS}
+        </p>
+      </header>
+      <ViewTabs current="history" profile={profile} />
+      {await HistoryBody({ env, profile, filter, cursor })}
     </main>
   );
 }
