@@ -298,6 +298,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-884 | The Owner asked on 2026-11-04 for a quieter, professional look ("white background, navy blue looks professional", "the app looks very dull", "font is very ba... |
 | D-885 | Every trade already has a stop loss (trade.stop_micro NOT NULL; the stop in force is the higher of it and the latest recomputed stop_level, decision 7). |
 | D-886 | Movers check (Owner 2026-11-04: "at the end of the day run a job on why we haven't picked the top 20 movers and if we have stopped the top 20 losers"). |
+| D-908 | A complete full replay stores, per (family, rule version, variant), the development track record the picks loader needs, as one replay_stat row (scope pick_h... |
 
 ## M14 (M14_design.md)
 
