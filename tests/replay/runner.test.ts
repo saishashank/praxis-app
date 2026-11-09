@@ -95,9 +95,17 @@ describe("replay runs", () => {
       "ledger",
       "cohorts",
       "stats",
+      "stats", // D-908: the development track record for the picks
       "stats",
     ]);
     expect(a.run.kind).toBe("full");
+    // D-908: one record per group, development only: no split, trial or validation row written
+    const hist = a.stats.filter((s) => s.scope.startsWith("pick_history:"));
+    // this small snapshot trades nothing (ledgerRows 0): no group, no record; content: pickHistory.test.ts
+    expect(hist.length).toBe(a.report.ledgerRows === 0 ? 0 : hist.length);
+    expect(hist.every((s) => s.metric === "dev_summary")).toBe(true);
+    expect(a.splits).toHaveLength(0);
+    expect(a.trials).toHaveLength(0);
     expect(a.run.commit_sha).toBe("a".repeat(40));
     expect(a.stats.some((s) => s.scope === "run" && s.metric === "compute_report")).toBe(true);
     expect(a.files.map((f) => f.name).every((n) => /^replay-[a-z0-9-]+\.jsonl\.gz$/.test(n))).toBe(
@@ -116,6 +124,7 @@ describe("replay runs", () => {
     const since = "2029-03-01";
     const l = runReplay(base("light", { since }));
     expect(l.run.kind).toBe("light");
+    expect(l.stats.some((s) => s.scope.startsWith("pick_history:"))).toBe(false); // D-908: full only
     expect(l.report.status).toBe("complete");
   }, 120_000);
 

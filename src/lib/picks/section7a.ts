@@ -67,7 +67,14 @@ export async function readSection7a(
         aimMicro: BigInt(String(x.aim_micro)),
         timeFrameWeeks:
           sessions === null ? null : Math.max(1, Math.round(sessions / SESSIONS_PER_WEEK)),
-        basedOn: basedOn.length > 0 ? basedOn[0]! : null,
+        // D-908: the first rule that fired, then the history line (what it rests on, how often it worked)
+        basedOn:
+          [
+            basedOn.find((l) => !l.startsWith("History:")),
+            basedOn.find((l) => l.startsWith("History:")),
+          ]
+            .filter((l): l is string => l !== undefined)
+            .join(" · ") || null,
         link: `${q.appUrl}/picks?d=${q.d}&profile=${profile}`,
       };
     });
