@@ -54,12 +54,12 @@ import {
   volumeRatio,
   type Bar,
 } from "./indicators";
-import { insiderFlowFor } from "./insiderFlow";
+import { insiderFlowFor, insiderSinceIso } from "./insiderFlow";
 import { crossing, scaleMicro, type Crossing } from "./orderPlan";
 import type { AgentParams } from "./params";
 import { computeRegime, type RegimeResult, type RegimeLabel } from "./regime";
 import type { EventRow, InsiderFlowScoreRow } from "./schema";
-import { shortInterestFor } from "./shortInterest";
+import { shortInterestFor, shortInterestLimit } from "./shortInterest";
 
 /** The benchmark index code of the AU market (Batch 1 index stage, `^AXJO`). */
 export const INDEX_CODE = "AXJO";
@@ -192,6 +192,17 @@ function bigintCol(v: unknown): bigint {
   if (typeof v === "bigint") return v;
   if (typeof v === "number" && Number.isSafeInteger(v)) return BigInt(v);
   throw new TypeError("expected an integer column value");
+}
+
+/** D-910: extra sessions prefetched so a code with a few missing bars still answers from memory. */
+const PREFETCH_MARGIN = 10; // threshold-ok: read-ahead slack in sessions, not a rule
+const CAL_DAYS_PER_SESSION = 2; // threshold-ok: calendar days searched per session (weekends, holidays)
+const CAL_SLACK_DAYS = 14; // threshold-ok: extra calendar days searched for the session floor
+
+/** The session `n` sessions back from D (D counts as one), or the oldest the calendar knows. */
+function sessionFloor(d: string, n: number, calendar: readonly CalendarRow[]): string {
+  const back = sessionsBetween(addDays(d, -n * CAL_DAYS_PER_SESSION - CAL_SLACK_DAYS), d, calendar);
+  return back[back.length > n ? back.length - n : 0] ?? d;
 }
 
 /** Bars to read per code: the longest window of any rule plus the Wilder warm-up (design 2.2). */
@@ -416,7 +427,22 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
   const vol20 = new Map<string, number>();
   const scores: InsiderFlowScoreRow[] = [];
   const day0Low = new Map<string, bigint | null>();
-  for (const code of [...wanted.keys()].sort(cmpStr)) {
+  const codeOrder = [...wanted.keys()].sort(cmpStr);
+  // D-910: one batched read for every code instead of four round trips per code (same results)
+  if (view.prefetch !== undefined && codeOrder.length > 0) {
+    try {
+      await view.prefetch({
+        codes: codeOrder.filter((c) => !bad.has(c)),
+        barsFromD: sessionFloor(d, need + PREFETCH_MARGIN, req.calendar),
+        shortFromD: sessionFloor(d, shortInterestLimit(p) + PREFETCH_MARGIN, req.calendar),
+        insiderSinceIso: insiderSinceIso(d, p, req.calendar, req.hours),
+      });
+    } catch (error) {
+      if (error instanceof LookAheadError) throw error;
+      // a failed prefetch only costs speed: the per-code reads below answer every call
+    }
+  }
+  for (const code of codeOrder) {
     if (bad.has(code)) continue;
     const w = wanted.get(code)!;
     const raw = await view.bars(code, need);

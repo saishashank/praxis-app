@@ -89,6 +89,7 @@ describe("Home", () => {
     const [t, t2] = d.summary.tiles;
     expect(t).toMatchObject({ id: "E01", startD: "2026-10-12" });
     expect(t!.dayChange?.micro).toBe(20_000_000); // E01 +20 M
+    expect(t!.dayChangePpm).not.toBeNull();
     expect(t2).toMatchObject({ id: "E02", startD: "2026-10-12" });
     expect(t2!.dayChange?.micro).toBe(-5_000_000); // E02 -5 M
     expect(t!.value.micro - t!.seed.micro).toBe(t!.sinceStart.micro);
