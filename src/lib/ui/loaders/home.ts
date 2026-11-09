@@ -22,6 +22,7 @@ import {
   readLatestQuotes,
   type LatestQuote,
 } from "@/lib/data/quotes/latest";
+import { MARKET_INDEX_CODE } from "@/lib/data/quotes/parse";
 import { loadAlertHomeFacts, loadIntraday, type IntradayModel } from "./pickAlerts";
 import type { LoaderEnv } from "./shell";
 import {
@@ -165,6 +166,54 @@ export type HomeHeadline = {
   series: number[];
 };
 
+export type HomeIndex = {
+  name: string;
+  level: number;
+  changePpm: number | null;
+  at: string | null;
+  d: string | null;
+};
+
+/**
+ * D-907, pure: the index line from the last two stored closes (newest first) and the latest delayed
+ * quote. The quote wins only when it is from a later day than the newest close (newerThanClose).
+ */
+export function indexLine(
+  closes: ReadonlyArray<{ d: string; cMicro: number }>,
+  quote: LatestQuote | undefined,
+): HomeIndex | null {
+  const last = closes[0];
+  const prev = closes[1];
+  const q = newerThanClose(quote, last ? last.d : null);
+  const ppmOf = (now: number, base: number | null) =>
+    base !== null && base > 0 ? Math.round(((now - base) * PPM) / base) : null;
+  if (q !== null) {
+    const level = Number(q.lastMicro) / 1_000_000; // money-float-ok: index points for display
+    const base =
+      q.prevCloseMicro !== null
+        ? Number(q.prevCloseMicro) / 1_000_000 // money-float-ok: index points for display
+        : last
+          ? last.cMicro / 1_000_000 // money-float-ok: index points for display
+          : null;
+    return {
+      name: "ASX 200",
+      level,
+      changePpm: ppmOf(level, base),
+      at: quoteTimeMelbourne(q.quoteAt),
+      d: q.quoteD,
+    };
+  }
+  if (!last) return null;
+  const level = last.cMicro / 1_000_000; // money-float-ok: index points for display
+  return {
+    name: "ASX 200",
+    level,
+    changePpm: ppmOf(level, prev ? prev.cMicro / 1_000_000 : null), // money-float-ok: display
+    at: null,
+    d: last.d,
+  };
+}
+
 export type HomeView = {
   /** UXR-020 status strip: value and change per currency, freshness, next run, data-only mode. */
   headline: HomeHeadline[];
@@ -190,6 +239,12 @@ export type HomeView = {
     regimeD: string | null;
     quality: Array<{ tier: string; score: number; gatePass: boolean }>;
     openFlags: number;
+    /**
+     * D-907: the ASX 200 level and its move from the previous close. During the session it is the
+     * delayed quote (`at` = Melbourne time of the quote); otherwise the last stored close (`at` null,
+     * `d` its date). Null when neither exists.
+     */
+    index: HomeIndex | null;
   };
   picks: { d: string | null; items: HomePick[] };
   /** UXN-301: the Intraday watch section (shadow, unrated); null when it could not be read. */
@@ -215,7 +270,7 @@ function emptyView(): HomeView {
     needs: [],
     picksTotal: 0,
     summary: { strategies: 0, d: null, tiles: [] },
-    day: { regime: null, regimeD: null, quality: [], openFlags: 0 },
+    day: { regime: null, regimeD: null, quality: [], openFlags: 0, index: null },
     picks: { d: null, items: [] },
     intraday: null,
     ideas: { d: null, items: [], signals: 0 },
@@ -282,6 +337,22 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     sql: "SELECT COUNT(*) AS n FROM data_quality_flag WHERE market = ? AND cleared_at IS NULL",
     args: [v.market],
   });
+  // D-907: the ASX 200 line (two newest closes by primary key, plus the delayed quote). Soft: a
+  // failure leaves the line out, never the page.
+  const index =
+    v.market === "AU"
+      ? await soft(async () => {
+          const r = await deps.mainDb.execute({
+            sql: "SELECT d, c_micro FROM index_bar WHERE market = ? AND index_code = ? ORDER BY d DESC LIMIT 2",
+            args: [v.market, MARKET_INDEX_CODE],
+          });
+          const q = await readLatestQuotes(deps.mainDb, v.market, [MARKET_INDEX_CODE]);
+          return indexLine(
+            r.rows.map((x) => ({ d: str(x.d), cMicro: num(x.c_micro) })),
+            q.get(MARKET_INDEX_CODE),
+          );
+        }, null)
+      : null;
   view.day = {
     regime: regime?.state ?? null,
     regimeD: regime?.d ?? null,
@@ -291,6 +362,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
       gatePass: num(r.gate_pass) === 1,
     })),
     openFlags: num(flags.rows[0]?.n),
+    index,
   };
 
   // Picks of the newest published day: the first ranks of each profile.

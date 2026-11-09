@@ -237,6 +237,7 @@ describe("Home for a first-time user (D-200)", () => {
         regimeD: null,
         quality: [{ tier: "U1", score: 1, gatePass: true }],
         openFlags: 7,
+        index: null,
       };
       (v.summary as { tiles: unknown[] }).tiles = [tile];
       v.news = { hidden: false, items: [news] };
@@ -262,6 +263,7 @@ describe("Home for a first-time user (D-200)", () => {
           { tier: "U2", score: 0, gatePass: false },
         ],
         openFlags: 0,
+        index: null,
       };
       v.news = { hidden: false, items: [{ ...news, stock: "Stock A" }] };
     });

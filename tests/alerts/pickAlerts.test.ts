@@ -31,6 +31,7 @@ let prices: Map<string, { price: number; volume: number | null; ageMin: number; 
 let clock: Date;
 
 const fetchStub: PollRunDeps["fetch"] = async (url) => {
+  if (String(url).includes("%5EAXJO")) return { ok: false, status: 404, json: async () => ({}) }; // D-907 index
   calls.push(url);
   const code = /chart\/([A-Z0-9]+)\.AX/.exec(url)![1];
   const s = prices.get(code);

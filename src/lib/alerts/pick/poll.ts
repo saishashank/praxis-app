@@ -31,6 +31,7 @@ import {
 } from "@/lib/data/quotes/fetch";
 import type { DelayedQuote, QuoteRefusal } from "@/lib/data/quotes/types";
 import { storeLatestQuotesSoft } from "@/lib/data/quotes/latest";
+import { MARKET_INDEX_CODE } from "@/lib/data/quotes/parse";
 import { heldCodes } from "@/lib/intraday/universe";
 import {
   SESSION_TZ,
@@ -189,6 +190,8 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
   };
   for (const c of armedCodes) add(c);
   const extraCodes = new Set<string>();
+  // D-907: the ASX 200 first among the extras, one request a tick, for the live line on Home.
+  if (market === "AU") extraCodes.add(MARKET_INDEX_CODE);
   for (const c of await watchCodes(db, market, sessionD)) if (!seen.has(c)) extraCodes.add(c);
   for (const c of [...(await heldCodes(db, market))].sort()) if (!seen.has(c)) extraCodes.add(c);
   const ticksLeft = remainingPollTicks(now, end, stepMin);
