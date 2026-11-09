@@ -249,7 +249,7 @@ function Strip({ v, asOf }: { v: HomeView; asOf: string | null }) {
     });
   }
   items.push({
-    label: "Data as of",
+    label: "Prices",
     value: v.dataAtLabel ?? (asOf ? formatDate(asOf) : <NotMeasured>No run yet</NotMeasured>),
   });
   // D-884: no run times on Home ("don't give technical information like next run 18:30")

@@ -524,22 +524,9 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
 
   // ---- UXR-020 status strip: freshness, next run, data-only mode, value and change ----------------
   view.nextRun = nextRunLabel(v.now);
-  view.dataAtLabel = dataD
-    ? melbourneStamp(
-        await soft(
-          async () =>
-            strOrNull(
-              (
-                await deps.mainDb.execute({
-                  sql: "SELECT at FROM completion_marker WHERE market = ? AND d = ? AND kind = 'data'",
-                  args: [v.market, dataD],
-                })
-              ).rows[0]?.at,
-            ),
-          null,
-        ),
-      )
-    : null;
+  // Owner 2026-11-09: market words, not the run's finishing time ("17:39" meant nothing): during
+  // the session "Delayed, 13:05" from the live quote (D-907), otherwise "End of day, Fri 6 Nov".
+  view.dataAtLabel = freshnessLabel(dataD, view.day.index);
   view.dataOnly = await soft(async () => {
     const r = await deps.mainDb.execute(
       "SELECT SUM(mode = 'data_only') AS d, SUM(mode = 'full') AS f FROM market",
@@ -750,4 +737,21 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     view,
     "No data yet — the strategies make their first trades after tonight's run.",
   );
+}
+
+/**
+ * The strip's freshness words, pure: "Delayed, 13:05" while the ASX 200 line carries a live delayed
+ * quote (its Melbourne time), else "End of day, Fri 6 Nov" for the newest stored close; null before
+ * any data.
+ */
+export function freshnessLabel(dataD: string | null, index: HomeIndex | null): string | null {
+  if (index?.at) return `Delayed, ${index.at}`;
+  if (!dataD) return null;
+  const day = new Date(`${dataD}T00:00:00Z`).toLocaleDateString("en-AU", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+  return `End of day, ${day.replace(",", "")}`;
 }
