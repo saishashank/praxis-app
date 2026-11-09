@@ -62,7 +62,7 @@ test("D-905: a post-deploy run asks replay-needed first; the replay step skips o
   assert.equal(input.default, "");
   const needed = steps.find((s) => s.id === "needed");
   assert.equal(needed.if, "${{ inputs.only_if_changed == 'true' }}");
-  assert.equal(needed.run, "node ci-tools/scripts/ci/replay-needed.mjs");
+  assert.equal(needed.run, "node scripts/ci/replay-needed.mjs"); // the approved checkout (it cleans ci-tools)
   assert.deepEqual(needed.env, {
     GITHUB_TOKEN: "${{ github.token }}",
     CURRENT_SHA: "${{ steps.approved.outputs.sha }}",
