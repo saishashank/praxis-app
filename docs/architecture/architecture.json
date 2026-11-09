@@ -12420,6 +12420,80 @@
       }
     },
     {
+      "id": "table:main.pick_portfolio_day",
+      "type": "table",
+      "name": "pick_portfolio_day",
+      "purpose": "Table pick_portfolio_day in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0029_pick_portfolio.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "profile",
+          "d",
+          "cash_micro",
+          "holdings_micro",
+          "value_micro",
+          "holdings"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.pick_portfolio_trade",
+      "type": "table",
+      "name": "pick_portfolio_trade",
+      "purpose": "Table pick_portfolio_trade in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0029_pick_portfolio.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "profile",
+          "pub_d",
+          "rank",
+          "code",
+          "entry_d",
+          "entry_micro",
+          "qty",
+          "cost_micro",
+          "exit_d",
+          "exit_micro",
+          "exit_reason",
+          "net_micro"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.pick_reflection",
       "type": "table",
       "name": "pick_reflection",
@@ -19514,6 +19588,26 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.pick_portfolio_day",
+      "from": "service:turso-main",
+      "to": "table:main.pick_portfolio_day",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.pick_portfolio_trade",
+      "from": "service:turso-main",
+      "to": "table:main.pick_portfolio_trade",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
         "data"
       ]
     },
