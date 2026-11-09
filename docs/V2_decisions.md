@@ -65,6 +65,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-587 | (final review) noOpinionReads.test.ts also forbids the label tables (text_label, label_validation) in arena, agents and picks: a text label is an LLM output... |
 | D-588 | (final review) The health line's "written" count is over the window it reads (the last 10 nights), and says so: "n written over the last k nights". |
 | D-589 | (final review) Repo hygiene: .vitest/ is ignored (a Vitest JSON reporter output with local machine paths had been committed in WP7 and is removed from the co... |
+| D-913 | (Owner 2026-11-10: "pick multiple stocks so you diversify … while trading on the portfolio think as end-user money … if a stock is not doing well and has no... |
 
 ## M13L (M13L_design.md)
 
