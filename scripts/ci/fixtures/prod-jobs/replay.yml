@@ -37,11 +37,12 @@
           node-version-file: .nvmrc
       - run: npm ci
       # D-905: a post-deploy run replays only when the deploy changed what a replay depends on
+      # (runs from the approved checkout: the second checkout above cleans the `ci-tools` folder)
       # (github.token alone; each replay reads the whole recent price window from the database).
       - name: Replay needed?
         id: needed
         if: ${{ inputs.only_if_changed == 'true' }}
-        run: node ci-tools/scripts/ci/replay-needed.mjs
+        run: node scripts/ci/replay-needed.mjs
         env:
           GITHUB_TOKEN: ${{ github.token }}
           CURRENT_SHA: ${{ steps.approved.outputs.sha }}
