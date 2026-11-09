@@ -62,6 +62,11 @@ export function shortInterestDelta(
   };
 }
 
+/** Newest-first points read per code (shared with the D-910 prefetch). */
+export function shortInterestLimit(p: AgentParams): number {
+  return p.windows.shortInterest * 2 + p.windows.shortInterest;
+}
+
 /** Reads the usable points through the view and computes the delta for D. */
 export async function shortInterestFor(
   view: DecisionView,
@@ -71,7 +76,6 @@ export async function shortInterestFor(
 ): Promise<ShortInterestDelta> {
   // Enough newest-first points to reach the one `window` sessions before the latest (calendar
   // gaps and weekends do not matter: the lookup is by exact as_of).
-  const limit = p.windows.shortInterest * 2 + p.windows.shortInterest;
-  const points = await view.shortInterest(code, limit);
+  const points = await view.shortInterest(code, shortInterestLimit(p));
   return shortInterestDelta(points, calendar, p);
 }

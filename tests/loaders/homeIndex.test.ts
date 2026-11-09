@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { LatestQuote } from "@/lib/data/quotes/latest";
 import { chartSymbol, MARKET_INDEX_CODE, parseChartMeta } from "@/lib/data/quotes/parse";
 import { INDEX_CODE, INDEX_YAHOO_SYMBOL } from "@/lib/data/index/indexBars.mjs";
-import { indexLine } from "@/lib/ui/loaders/home";
+import { dayLabel, freshnessLabel, indexLine } from "@/lib/ui/loaders/home";
 
 const closes = [
   { d: "2026-11-06", cMicro: 8_400_000_000 },
@@ -72,5 +72,25 @@ describe("indexLine", () => {
   });
   it("a quote without a previous close falls back to the newest stored close", () => {
     expect(indexLine(closes, quote({ prevCloseMicro: null }))!.changePpm).toBe(10_000);
+  });
+});
+
+describe("freshnessLabel (Owner 2026-11-09: market words, not the run's finishing time)", () => {
+  it("'Delayed, hh:mm' during the session, 'End of day, <day>' otherwise, null before data", () => {
+    expect(freshnessLabel("2026-11-06", indexLine(closes, quote()))).toBe("Delayed, 13:05");
+    expect(freshnessLabel("2026-11-06", indexLine(closes, undefined))).toBe(
+      "End of day, Fri 6 Nov",
+    );
+    expect(freshnessLabel("2026-11-06", null)).toBe("End of day, Fri 6 Nov");
+    expect(freshnessLabel(null, null)).toBeNull();
+  });
+});
+
+describe("dayLabel (Owner 2026-11-09: the day's change, not a session's)", () => {
+  it("says Today on the day in Sydney, otherwise the day", () => {
+    const now = new Date("2026-11-09T22:30:00.000Z"); // Tue 10 Nov 09:30 Sydney
+    expect(dayLabel("2026-11-10", now)).toBe("Today");
+    expect(dayLabel("2026-11-09", now)).toBe("Mon 9 Nov");
+    expect(dayLabel(null, now)).toBeNull();
   });
 });
