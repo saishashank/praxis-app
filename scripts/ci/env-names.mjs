@@ -70,6 +70,7 @@ export const NOT_CONFIG = new Set([
   "ALLOW_BOOTSTRAP",
   "EXPECT_COMMIT",
   "CURRENT_SHA", // per-run commit the replay-needed check compares (replay.yml, D-905)
+  "REPLAY_ROOT", // optional checkout root the replay-needed check reads code from (tests only; D-917)
   "SMOKE_ENV",
   // Local test and audit tooling
   "E2E_SCENARIO",
