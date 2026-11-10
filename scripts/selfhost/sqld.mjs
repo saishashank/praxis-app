@@ -111,7 +111,7 @@ export function openNamespace(o) {
     url: t.url,
     authToken: has(o.token) ? o.token.trim() : undefined,
     ...(o.intMode ? { intMode: o.intMode } : {}),
-    ...(t.host ? { fetch: hostFetch(t.host, o.fetchImpl ?? fetch) } : {}),
+    ...(t.host ? { fetch: hostFetch(t.host, o.fetchImpl) } : {}),
   });
 }
 
