@@ -83,9 +83,12 @@ export type ReviewsQuery = {
   month?: string;
   /** `?all=1`: also list the non-trading days (weekends and holidays), hidden by default. */
   all?: boolean;
+  /** Keyset cursors (D-959, no OFFSET): the oldest review date of the page before, or the newest of the page after. */
+  after?: string;
+  before?: string;
 };
 
-/** `?q=&page=&view=&month=`: q is a date prefix, kind word or text; null when a value is not allowed. */
+/** `?q=&page=&view=&month=&after=&before=`: q is a date prefix, kind word or text; null when a value is not allowed. */
 export function parseReviewsQuery(sp: URLSearchParams): ReviewsQuery | null {
   const q = textParam(sp.get("q"), 20);
   const page = intParam(sp.get("page"), 1, 1000);
@@ -97,7 +100,18 @@ export function parseReviewsQuery(sp: URLSearchParams): ReviewsQuery | null {
   if (m !== null && m !== "" && !MONTH_RE.test(m)) return null;
   const a = sp.get("all");
   if (a !== null && a !== "" && a !== "1") return null;
+  const after = sp.get("after") || undefined;
+  const before = sp.get("before") || undefined;
+  if (
+    (after !== undefined && !isDateParam(after)) ||
+    (before !== undefined && !isDateParam(before))
+  ) {
+    return null;
+  }
+  if (after !== undefined && before !== undefined) return null;
   const out: ReviewsQuery = { q, page };
+  if (after !== undefined) out.after = after;
+  if (before !== undefined) out.before = before;
   if (a === "1") out.all = true;
   if (v === "calendar") out.view = "calendar";
   if (m) out.month = m;
@@ -255,7 +269,13 @@ export type ReviewListModel = {
   pendingState: PendingState;
   rows: ReviewListRow[];
   page: number;
+  /** Older reviews exist. */
   hasMore: boolean;
+  /** Newer reviews exist. */
+  hasNewer: boolean;
+  /** Cursors for the two links (null for a masked list, which pages in memory, and at either end). */
+  olderAfter: string | null;
+  newerBefore: string | null;
   /** True when every listed review was written by fixed rules (no AI): said once above the list. */
   allRuleWritten: boolean;
   /** True when every listed review was written with AI. */
@@ -311,7 +331,11 @@ export async function loadReviewList(env: LoaderEnv, q: ReviewsQuery): Promise<R
       seen.set(wk, n);
       ordinal.set(String(x.d), n);
     }
-    return finishList(env, raw, hasMore, q.page, today, ordinal, showNonTrading);
+    return finishList(env, raw, hasMore, q.page, today, ordinal, showNonTrading, {
+      hasNewer: q.page > 1,
+      olderAfter: null,
+      newerBefore: null,
+    });
   }
   const where: string[] = [];
   if (!showNonTrading) where.push("e.kind <> 'non_trading'");
@@ -326,15 +350,35 @@ export async function loadReviewList(env: LoaderEnv, q: ReviewsQuery): Promise<R
     }
     where.push(`(${clauses.join(" OR ")})`);
   }
-  args.push(LIST_ROWS + 1, (q.page - 1) * LIST_ROWS);
+  // Keyset paging (D-959): after the oldest date shown, or before the newest date shown; never OFFSET.
+  // The order is the primary key of evening_review (d, version) through its index, one row read per row listed.
+  const backwards = q.before !== undefined;
+  if (q.after !== undefined) {
+    where.push("e.d < ?");
+    args.push(q.after);
+  } else if (backwards) {
+    where.push("e.d > ?");
+    args.push(q.before!);
+  }
+  args.push(LIST_ROWS + 1);
   const r = await env.main.execute({
     sql: `${select} ${where.length ? `AND ${where.join(" AND ")}` : ""}
-          ORDER BY e.d DESC LIMIT ? OFFSET ?`,
+          ORDER BY e.d ${backwards ? "ASC" : "DESC"} LIMIT ?`,
     args,
   });
-  raw = (r.rows as unknown as ListRow[]).slice(0, LIST_ROWS);
-  hasMore = r.rows.length > LIST_ROWS;
-  return finishList(env, raw, hasMore, q.page, today, null, showNonTrading);
+  const fetched = r.rows as unknown as ListRow[];
+  raw = fetched.slice(0, LIST_ROWS);
+  if (backwards) raw.reverse(); // newest first again
+  const more = fetched.length > LIST_ROWS;
+  hasMore = backwards ? true : more; // going back, the cursor review itself is older
+  const hasNewer = backwards ? more : q.after !== undefined;
+  const cursor = {
+    hasNewer,
+    olderAfter: hasMore && raw.length > 0 ? String(raw[raw.length - 1]!.d) : null,
+    newerBefore: hasNewer && raw.length > 0 ? String(raw[0]!.d) : null,
+  };
+  const page = hasNewer ? Math.max(2, q.page) : 1;
+  return finishList(env, raw, hasMore, page, today, null, showNonTrading, cursor);
 }
 
 async function finishList(
@@ -345,6 +389,7 @@ async function finishList(
   today: string,
   ordinal: Map<string, number> | null,
   showingNonTrading: boolean,
+  cursor: { hasNewer: boolean; olderAfter: string | null; newerBefore: string | null },
 ): Promise<ReviewListModel> {
   const masked = env.mask.masked;
   const deliveries = await deliveryByDate(
@@ -389,6 +434,9 @@ async function finishList(
     rows,
     page,
     hasMore,
+    hasNewer: cursor.hasNewer,
+    olderAfter: cursor.olderAfter,
+    newerBefore: cursor.newerBefore,
     allRuleWritten: rows.length > 0 && rows.every((r) => !r.ai),
     allAi: rows.length > 0 && rows.every((r) => r.ai),
     showingNonTrading,

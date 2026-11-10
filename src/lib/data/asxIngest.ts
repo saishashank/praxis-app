@@ -72,7 +72,7 @@ export async function asxIngestMain(
   };
   let exit = 0;
   try {
-    const cap = await getConfig(db, "sentinel_max_items_per_run").catch(() => undefined);
+    const cap = await getConfig(db, "news_assess_per_run").catch(() => undefined);
     let feedOk = false;
     const history = existsSync(dir)
       ? readdirSync(dir)

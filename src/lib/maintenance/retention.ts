@@ -47,6 +47,7 @@ import { finishRun, hasSuccess, pruneRuns, startRun } from "@/lib/runs/runRecord
 import { CORTEX_PRUNED_TABLES } from "@/lib/cortex/store/features";
 import { LEARNING_PRUNED_TABLES } from "@/lib/learning/schema";
 import { SENTINEL_PRUNED_TABLES } from "@/lib/sentinel/schema";
+import { checkMarketRows } from "./rowsByMarket";
 
 export const MAINTENANCE_JOB = "maintenance-nightly";
 export const PII_HASHED_ACTION = "user.pii_hashed";
@@ -218,12 +219,14 @@ export async function prunePriceBars(
   market = "AU",
   keepSessions = PRICE_BAR_KEEP_SESSIONS,
 ): Promise<number> {
+  // The keep-N boundary without OFFSET (D-959): the oldest of the newest `keepSessions` sessions.
+  // rows-ok: the same newest-first walk of the price_bar key the OFFSET form made, once per run
   const nth = await db.execute({
-    sql: `SELECT d FROM (SELECT DISTINCT d FROM price_bar WHERE market = ? ORDER BY d DESC
-                         LIMIT 1 OFFSET ?)`,
-    args: [market, keepSessions - 1],
+    sql: `SELECT MIN(k) AS d, COUNT(*) AS n
+          FROM (SELECT DISTINCT d AS k FROM price_bar WHERE market = ? ORDER BY d DESC LIMIT ?)`,
+    args: [market, keepSessions],
   });
-  if (nth.rows.length === 0) return 0; // fewer sessions than the retention: nothing to prune
+  if (Number(nth.rows[0]?.n ?? 0) < keepSessions) return 0; // fewer sessions than the retention: nothing to prune
   const floor = cutoffIso(nowIso, PRICE_BAR_FLOOR_DAYS + 1).slice(0, 10);
   const sessionCutoff = String(nth.rows[0].d);
   const cutoff = sessionCutoff < floor ? sessionCutoff : floor;
@@ -327,6 +330,8 @@ export type MaintenanceDeps = {
   authDb: Client;
   piiHashKey: string | undefined;
   now: Date;
+  /** Raise the S2 incident of the row-by-market invariant (default true; counts are stored either way). */
+  raiseIncidents?: boolean;
 };
 
 export async function runMaintenance(
@@ -435,6 +440,14 @@ export async function runMaintenance(
     rowsWritten += counts.prunedBars;
   } catch {
     failedSteps.push("prune_price_bars");
+  }
+  // OPS-104 e (D-960): no row may exist for a market that is switched off or unknown.
+  try {
+    const r = await checkMarketRows(mainDb, date, deps.now, { raise: deps.raiseIncidents });
+    rowsRead += r.rowsRead;
+    rowsWritten += r.counts.length;
+  } catch {
+    failedSteps.push("market_rows");
   }
   // NFR-030: the 90-day value is fixed (no stored override).
   try {

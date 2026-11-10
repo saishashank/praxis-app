@@ -91,14 +91,14 @@ describe("getMeters", () => {
     const ms = await getMeters(db, NOW, "production");
     expect(byId(ms, "turso-rows-read")).toMatchObject({
       used: 30,
-      limit: 300_000_000,
+      limit: 100_000_000,
       period: "monthly",
       periodLabel: "2026-10 (UTC)",
       level: "ok",
     });
     expect(byId(ms, "turso-rows-written")).toMatchObject({
       used: 3 + 2 * NONCE_WRITES_PER_SIGNED_CALL, // two in-month signed-call runs: estimate added
-      limit: 6_000_000,
+      limit: 2_000_000,
     });
     expect(byId(ms, "turso-rows-read").note).toMatch(/app page traffic not included/);
     expect(byId(ms, "turso-rows-written").note).toMatch(/estimate of signed-call nonce writes/);
@@ -114,28 +114,27 @@ describe("getMeters", () => {
     expect(byId(await getMeters(db, NOW, "production"), "turso-rows-written").used).toBe(0);
   });
 
-  it("reaches notice / alert / degrade at exactly 70 / 90 / 95 % of the writes ceiling", async () => {
+  it("the Turso meters step at 15 % (told) and 20 % (degrade) of the free plan, not at 70 / 90 / 95", async () => {
+    // 10 M written is the free plan; the writes ceiling is 20 % of it (2 M)
     for (const [w, level] of [
-      [4_200_000, "notice"],
-      [5_400_000, "alert"],
-      [5_700_000, "degrade"],
+      [1_499_999, "ok"], // 14.99 % of the plan
+      [1_500_000, "alert"], // 15 %: the notice share (quota_high)
+      [1_990_000, "alert"], // 19.9 %
+      [2_000_000, "degrade"], // 20 %: the ceiling
     ] as const) {
       await db.execute("DELETE FROM run_record");
       await insert({ job: "heartbeat-evening", at: "2026-10-02T00:00:00.000Z", written: w });
       const m = byId(await getMeters(db, NOW, "production"), "turso-rows-written");
-      expect(m.level).toBe(level);
+      expect(m.level, String(w)).toBe(level);
     }
-    await db.execute("DELETE FROM run_record");
-    await insert({ job: "heartbeat-evening", at: "2026-10-02T00:00:00.000Z", written: 4_199_999 });
-    expect(byId(await getMeters(db, NOW, "production"), "turso-rows-written").level).toBe("ok");
   });
 
   it("staging limits are 15 % of the ceilings", async () => {
     const ms = await getMeters(db, NOW, "staging");
-    expect(byId(ms, "turso-rows-written").limit).toBe(900_000);
-    expect(byId(ms, "turso-rows-read").limit).toBe(45_000_000);
+    expect(byId(ms, "turso-rows-written").limit).toBe(300_000);
+    expect(byId(ms, "turso-rows-read").limit).toBe(15_000_000);
     expect(byId(ms, "turso-rows-written").note).toMatch(/staging/);
-    await insert({ at: "2026-10-02T00:00:00.000Z", written: 900_000 });
+    await insert({ at: "2026-10-02T00:00:00.000Z", written: 300_000 });
     expect(byId(await getMeters(db, NOW, "staging"), "turso-rows-written").level).toBe("degrade");
   });
 
@@ -147,14 +146,15 @@ describe("getMeters", () => {
       now: "2026-10-01T00:00:00.000Z",
     });
     await setConfig(db, {
-      key: "quota_thresholds",
-      value: { notice: 0.1, alert: 0.2, degrade: 0.3 },
+      key: "turso_notice_pct",
+      value: 10,
       userId: 1,
       now: "2026-10-01T00:00:00.000Z",
     });
-    await insert({ at: "2026-10-02T00:00:00.000Z", written: 100 });
+    await insert({ at: "2026-10-02T00:00:00.000Z", written: 600 });
     const m = byId(await getMeters(db, NOW, "production"), "turso-rows-written");
-    expect(m).toMatchObject({ limit: 1000, level: "notice" });
+    // notice share 10 of the 20 % ceiling: told from half the limit (the quota_thresholds key does not apply to Turso)
+    expect(m).toMatchObject({ limit: 1000, level: "alert" });
   });
 
   it("no-data meters: storage, actions without rows, emails without a limit", async () => {

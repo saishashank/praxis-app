@@ -29,7 +29,7 @@ const RANGED: readonly (readonly [ConfigKey, number, number, number, string])[] 
   ["p0_batch_window_min", 5, 1, 15, "D-097"],
   ["watch_list_window", 20, 5, 60, "D-097"],
   ["owner_add_expiry_days", 90, 1, 90, "D-097"],
-  ["sentinel_max_items_per_run", 40, 1, 40, "D-097"],
+  ["news_assess_per_run", 40, 20, 200, "D-954"],
   ["email_daily_cap", 20, 5, 50, "l.189"],
   ["email_monthly_cap", 300, 50, 1000, "l.190"],
   ["unopened_review_banner_days", 3, 1, 14, "D-097"],
@@ -78,8 +78,9 @@ describe("M5 keys: ranged integers and numbers", () => {
     expect(await check("alert_p0_weight", 0.125)).toBeNull();
   });
 
-  it("the spec ceilings are not exceeded: 40 items per call (PLT-075), 90-day expiry (AGT-014)", async () => {
-    expect(await check("sentinel_max_items_per_run", 41)).not.toBeNull();
+  it("the ceilings hold: 20 to 200 items per call (DAT-251 b supersedes the PLT-075 40), 90-day expiry (AGT-014)", async () => {
+    expect(await check("news_assess_per_run", 201)).not.toBeNull();
+    expect(await check("news_assess_per_run", 19)).not.toBeNull();
     expect(await check("owner_add_expiry_days", 91)).not.toBeNull();
   });
 });

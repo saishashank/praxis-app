@@ -45,8 +45,8 @@ describe("config store", () => {
     expect(d("token_warning_days")).toEqual([14, 7, 2]);
     expect(d("what_if_daily_limit_per_user")).toBe(5);
     expect(d("sentinel_blind_alert_min")).toBe(15);
-    expect(d("turso_writes_ceiling_month")).toBe(6_000_000);
-    expect(d("turso_reads_ceiling_month")).toBe(300_000_000);
+    expect(d("turso_writes_ceiling_month")).toBe(2_000_000); // 20 % of the free plan (OPS-104, D-958)
+    expect(d("turso_reads_ceiling_month")).toBe(100_000_000);
     expect(d("turso_staging_share")).toBe(0.15);
     expect(d("actions_minutes_soft_ceiling")).toBe(3000);
     expect(d("llm_daily_budget_total")).toBe(240_000);

@@ -76,6 +76,14 @@ Real key (production, after the build-agent PAT is revoked):
 
 Real restore: the same, with `mode=restore`, `confirm=RESTORE`; then OPS-040 steps 3 to 5.
 
+## The local target and the quarterly dry run (OPS-105, D-962)
+
+`drill-turso.mjs run` also restores into LOCAL libSQL files in a private temp folder: set `TARGET=local`. It needs no Turso organisation and no platform token, and makes no Turso call. The same path runs: decrypt in memory, restore, compare counts and sha256, replay the check cohort, remove the files. `MODE=restore` is refused for a local target.
+
+- **CI dry run:** `.github/workflows/restore-dry-run.yml` runs on the first day of January, April, July and October (and by hand) with `MODE=drill KEY_MODE=throwaway TARGET=local`: synthetic backups, a throwaway key made inside the run, no secret, no environment, no network. It proves the drill code still works; it is not a production job (PLT-015).
+- **On your own machine:** with `KEY_MODE=real TARGET=local BACKUP_DIR=<folder of the downloaded .ndjson.gz.age files> BACKUP_PRIVATE_KEY=<your key>` the newest backup date with both files is restored into local files and removed again; nothing leaves the machine. Never paste the key into a file or a log.
+- **The real-key drill** stays Owner-run (SEC-108 f) from `restore-drill.yml`. After a successful run its `Record the result` step writes one `restore-drill` run record (`drill-turso.mjs record`); the quarterly Owner item on System Health ("Quarterly restore drill due") clears when a real-key drill and a later green `verify-removed` run are recorded in the quarter. The guide page is `docs/owner-guide/owner_checks.md`.
+
 ## Local script: `restore.mjs` (GitHub-down path)
 
 `restore.mjs` is a **local** restore script. It is run on the Owner's own computer (or by the build agent with the Owner present) when GitHub is unavailable, using the monthly offsite copy. The Owner decrypts on their own computer (owner guide, section I), then runs this script on the plaintext `.ndjson.gz`.
@@ -116,4 +124,4 @@ The 4 hours count from when the Owner starts, not from when the script starts. N
 
 ## Tests
 
-`restore.test.mjs` (local script), `turso-platform.test.mjs` (fake fetch), `cohortCheck.test.mjs`, `drill-turso.test.mjs` (fake Platform API, local libSQL files, synthetic throwaway key) and `restore-drill.workflow.test.mjs` (parses the YAML). node:test, no network, no credentials; all part of `npm run test:smoke`.
+`restore.test.mjs` (local script), `turso-platform.test.mjs` (fake fetch), `cohortCheck.test.mjs`, `drill-turso.test.mjs` (fake Platform API, local libSQL files, synthetic throwaway key) and `restore-drill.workflow.test.mjs` (parses the YAML), `dryRun.test.mjs` (the local target end to end, the backup folder, the run record) and `restore-dry-run.workflow.test.mjs` (the scheduled dry run). node:test, no network, no credentials; all part of `npm run test:smoke`.

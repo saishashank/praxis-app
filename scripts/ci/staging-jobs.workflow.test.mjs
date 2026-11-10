@@ -41,15 +41,51 @@ const NOTICE = [
 // GL-07 (O-52): these two carry their own schedule lines (watchdog, Batch-1 fallback).
 const SCHEDULED = ["watchdog", "ingest-batch1"];
 
+// M18 (PRD-046, D-958, D-961): production-only workflows. Staging is retired, so these have NO staging
+// job; their production job is still LOCKED to a stored copy and held to the same trigger, pinning and
+// secret rules as the mirrored ones.
+const PRODUCTION_ONLY = ["turso-usage", "calendar-draft"];
+
 test("every workflow with a production job is in the locked list, and the lists are complete", () => {
   const withProduction = readdirSync(path.join(root, ".github/workflows"))
     .filter((f) => f.endsWith(".yml"))
     .map((f) => f.replace(/\.yml$/, ""))
     .filter((n) => n !== "smoke-test") // the Owner smoke test is not a pipeline workflow (Worker never dispatches it)
+    .filter((n) => !PRODUCTION_ONLY.includes(n)) // covered by the production-only tests below
     .filter((n) => load(n)?.jobs?.production !== undefined);
   assert.deepEqual([...withProduction].sort(), [...LOCKED_WORKFLOWS].sort());
   assert.deepEqual([...FULL, ...NOTICE, "backup"].sort(), [...LOCKED_WORKFLOWS].sort());
 });
+
+for (const name of PRODUCTION_ONLY) {
+  test(`${name}: production-only (no staging job), locked, dispatch-only, pinned, secrets only in step env`, () => {
+    const wf = load(name);
+    assert.deepEqual(Object.keys(wf.jobs), ["production"]);
+    assert.equal(readProduction(name), readLocked(name));
+    assert.ok(
+      wf.on === "workflow_dispatch" ||
+        JSON.stringify(Object.keys(wf.on)) === JSON.stringify(["workflow_dispatch"]),
+    );
+    assert.deepEqual(wf.permissions, {});
+    assert.doesNotMatch(
+      text(name),
+      /^\s*(schedule|push|pull_request\w*|workflow_run|repository_dispatch):/m,
+    );
+    const prod = wf.jobs.production;
+    assert.equal(prod.if, "github.ref == 'refs/heads/release'");
+    assert.deepEqual(prod.environment, { name: "production", deployment: false });
+    assert.equal(prod.steps[1].run, "node ci-tools/scripts/ci/approved-commit.mjs");
+    for (const s of prod.steps) {
+      if (s.uses) assert.match(s.uses, SHA_USES, s.uses);
+      if (s.run) assert.ok(!String(s.run).includes("${{") && !String(s.run).includes("secrets."));
+      if (JSON.stringify(s).includes("secrets.")) {
+        const where = Object.keys(s).filter((k) => JSON.stringify(s[k]).includes("secrets."));
+        assert.deepEqual(where, ["env"], `${name}: ${s.name}`);
+      }
+    }
+    assert.doesNotMatch(text(name), /upload-artifact|download-artifact|actions\/cache|cache:/);
+  });
+}
 
 for (const name of LOCKED_WORKFLOWS) {
   const wf = load(name);
