@@ -9,6 +9,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | Id | Decision |
 | --- | --- |
 | D-909 | The Evening Review's section 6 ("What needs improving for tomorrow") gains "What we missed today" (src/lib/review/missedMovers.ts), built from the stored nig... |
+| D-911 | (Owner 2026-11-10) The Picks page gains a History tab (/picks?view=history, between Today and Track record): one row per published pick (the same stock picke... |
 
 ## M8.1 (M8.1_design.md)
 

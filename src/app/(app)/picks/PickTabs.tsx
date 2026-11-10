@@ -30,8 +30,14 @@ export function ProfileSwitch({
   );
 }
 
-/** Today / Track record tabs of the Picks page (UXR-021). */
-export function ViewTabs({ current, profile }: { current: "today" | "track"; profile: string }) {
+/** Today / History / Track record tabs of the Picks page (UXR-021; History: Owner 2026-11-10). */
+export function ViewTabs({
+  current,
+  profile,
+}: {
+  current: "today" | "history" | "track";
+  profile: string;
+}) {
   const p = encodeURIComponent(profile);
   return (
     <Segmented
@@ -39,6 +45,7 @@ export function ViewTabs({ current, profile }: { current: "today" | "track"; pro
       value={current}
       items={[
         { value: "today", label: "Today", href: `/picks?profile=${p}` },
+        { value: "history", label: "History", href: `/picks?profile=${p}&view=history` },
         { value: "track", label: "Track record", href: `/picks?profile=${p}&view=track` },
       ]}
     />
