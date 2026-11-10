@@ -119,3 +119,68 @@ test("unknown means run: first deploy, a cut list, an API error, a bad commit", 
   );
   assert.equal((await runWith({ ...ENV, CURRENT_SHA: "nope" }, fake([], {}).f)).out, "run=true\n");
 });
+
+test("D-917: migrationTables reads the tables a migration touches, not SQL words", async () => {
+  const { migrationTables } = await import("./replay-needed.mjs");
+  const patch = [
+    "@@ -0,0 +1,9 @@",
+    "+-- +up",
+    "+CREATE TABLE pick_portfolio_day (d TEXT) STRICT;",
+    "+CREATE INDEX pp_idx ON pick_portfolio_day (d);",
+    "+CREATE TRIGGER pp_no_update BEFORE UPDATE ON pick_portfolio_day BEGIN SELECT 1; END;",
+    "+INSERT INTO quote_latest (code) VALUES ('x') ON CONFLICT DO NOTHING;",
+    "+ALTER TABLE cortex_decision ADD COLUMN x TEXT; -- ALTER TABLE price_bar in a comment",
+    "+-- +down",
+    "+DROP TABLE IF EXISTS pick_portfolio_day;",
+    " CREATE TABLE unchanged_context (x TEXT);",
+  ].join("\n");
+  assert.deepEqual(migrationTables(patch).sort(), [
+    "cortex_decision",
+    "pick_portfolio_day",
+    "quote_latest",
+  ]);
+  assert.deepEqual(migrationTables("@@ -1 +1 @@\n+-- only a comment"), []);
+});
+
+test("D-917: a migration counts only when the replay code names one of its tables", () => {
+  const used = (t) => t === "price_bar" || t === "cortex_decision";
+  const mig = (patch) => ({ filename: "db/migrations/main/0030_x.sql", patch });
+  // display tables only: no replay
+  assert.equal(needsReplay([mig("+CREATE TABLE pick_portfolio_day (d TEXT);")], used), false);
+  // a table the replay reads: replay
+  assert.equal(needsReplay([mig("+ALTER TABLE price_bar ADD COLUMN y INTEGER;")], used), true);
+  // unknown: no patch, or no table recognised
+  assert.equal(needsReplay([mig(null)], used), true);
+  assert.equal(needsReplay([mig("+-- nothing")], used), true);
+  assert.equal(needsReplay(["db/migrations/main/0030_x.sql"], used), true); // a bare name
+  // a code file under the replay paths always counts
+  assert.equal(needsReplay([{ filename: "src/lib/agents/x.ts", patch: "+x" }], used), true);
+});
+
+test("D-917: the real replay code names price_bar but not the portfolio or quote cache tables", async () => {
+  const { replayCodeText, usedIn } = await import("./replay-needed.mjs");
+  const has = usedIn(replayCodeText());
+  assert.equal(has("price_bar"), true);
+  assert.equal(has("pick_portfolio_trade"), false);
+  assert.equal(has("quote_latest"), false);
+});
+
+test("D-917: a deploy whose only replay-path change is a display-table migration skips the replay", async () => {
+  const { f } = fake(
+    [
+      [A, "success"],
+      [B, "success"],
+    ],
+    {
+      status: "ahead",
+      files: [
+        { filename: "src/app/page.tsx", patch: "+x" },
+        {
+          filename: "db/migrations/main/0029_pick_portfolio.sql",
+          patch: "+CREATE TABLE pick_portfolio_trade (x TEXT);",
+        },
+      ],
+    },
+  );
+  assert.equal((await runWith(ENV, f)).out, "run=false\n");
+});

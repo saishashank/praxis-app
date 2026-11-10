@@ -84,6 +84,15 @@ export async function listApprovedShas(fetchImpl, token, repo, max) {
 
 /** GitHub's compare of two commits: the changed file names, or null when the list may be cut. */
 export async function changedFiles(fetchImpl, token, repo, base, head) {
+  const d = await changedFileDetails(fetchImpl, token, repo, base, head);
+  return d === null ? null : d.map((x) => x.filename);
+}
+
+/**
+ * The changed files with GitHub's patch text (null when GitHub leaves it out, e.g. a large or
+ * binary file); null when the list is unknown (cut at 300, diverged or behind).
+ */
+export async function changedFileDetails(fetchImpl, token, repo, base, head) {
   if (!token || !isValidRepo(repo))
     throw new Fail("GITHUB_TOKEN and GITHUB_REPOSITORY are required.");
   if (!SHA.test(base) || !SHA.test(head))
@@ -93,5 +102,8 @@ export async function changedFiles(fetchImpl, token, repo, base, head) {
   if (!Array.isArray(files)) throw new Fail("Unexpected compare response.");
   // GitHub lists at most 300 files per compare; a longer change is treated as unknown.
   if (files.length >= 300 || cmp.status === "diverged" || cmp.status === "behind") return null;
-  return files.map((f) => String(f.filename));
+  return files.map((f) => ({
+    filename: String(f.filename),
+    patch: typeof f.patch === "string" ? f.patch : null,
+  }));
 }
