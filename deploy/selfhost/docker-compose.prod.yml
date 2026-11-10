@@ -123,10 +123,14 @@ services:
     mem_limit: 1536m
     memswap_limit: 1536m
     env_file: /srv/praxis/env/sqld.env
-    # Namespaces "main" and "auth" (INFRA §8.1). The JWT public key arrives as SQLD_AUTH_JWT_KEY from sqld.env.
-    # TODO verify against the pinned image (T4): flag names and the data path.
+    # Namespaces "main" and "auth" (INFRA §8.1); the JWT public key arrives as SQLD_AUTH_JWT_KEY from sqld.env.
+    # The image's own entrypoint (docker-wrapper.sh) chowns the data dir, drops to uid 666 with gosu and appends its
+    # own --db-path / --http-listen-addr / --grpc-listen-addr, which clash with ours and need capabilities we drop
+    # (found by real Docker, INFRA T4). So the entrypoint is replaced: sqld runs directly as uid 666 with our flags,
+    # on a data dir that uid owns (the image's volume, or /srv/praxis/sqld chowned by bootstrap.sh).
+    entrypoint: ["/bin/sqld"]
+    user: "666:666"
     command:
-      - /bin/sqld
       - --http-listen-addr=0.0.0.0:8080
       - --admin-listen-addr=0.0.0.0:8081
       - --enable-namespaces
@@ -142,12 +146,12 @@ services:
         # (TODO verify with the pinned image; T4 owns the exact TURSO_*_URL values).
         aliases: [main.sqld, auth.sqld]
     healthcheck:
-      # TODO verify: the image must have curl or wget; otherwise switch to a TCP check.
+      # The image is debian-slim without curl or wget (found by real Docker, INFRA T4): a bash TCP probe instead.
       test:
-        [
-          "CMD-SHELL",
-          "curl -fsS http://127.0.0.1:8080/health || wget -qO- http://127.0.0.1:8080/health",
-        ]
+        - CMD
+        - bash
+        - -c
+        - "exec 3<>/dev/tcp/127.0.0.1/8080; printf 'GET /health HTTP/1.0\r\n\r\n' >&3; head -n1 <&3 | grep -q ' 200 '"
       interval: 30s
       timeout: 5s
       start_period: 20s

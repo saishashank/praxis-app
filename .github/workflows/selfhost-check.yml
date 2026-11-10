@@ -66,7 +66,8 @@ jobs:
           docker run -d --name sqld-ci --network ci-net \
             --network-alias sqld --network-alias main.sqld --network-alias auth.sqld \
             -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 \
-            "$SQLD_IMAGE" /bin/sqld \
+            --entrypoint /bin/sqld --user 666:666 -v sqld_ci:/var/lib/sqld \
+            "$SQLD_IMAGE" \
             --http-listen-addr=0.0.0.0:8080 --admin-listen-addr=0.0.0.0:8081 \
             --enable-namespaces --db-path=/var/lib/sqld/data.sqld
           echo "127.0.0.1 sqld main.sqld auth.sqld" | sudo tee -a /etc/hosts > /dev/null
@@ -75,10 +76,12 @@ jobs:
             sleep 1
           done
           echo "::error::sqld did not become healthy"; docker logs sqld-ci | tail -n 40; exit 1
-      - name: Does the sqld image have curl or wget (the compose healthcheck needs one)?
+      - name: The compose healthcheck of sqld works inside the container
         run: |
-          docker exec sqld-ci sh -c 'command -v curl || command -v wget || echo "NEITHER curl NOR wget"'
-          docker exec sqld-ci sh -c 'id -u; ls -ld /var/lib/sqld'
+          set -eu
+          docker exec sqld-ci id -u
+          docker exec sqld-ci bash -c "exec 3<>/dev/tcp/127.0.0.1/8080; printf 'GET /health HTTP/1.0\r\n\r\n' >&3; head -n1 <&3 | grep -q ' 200 '"
+          echo "healthcheck ok"
 
       - name: sqld, namespaces and migrations (main, auth; second run applies nothing)
         env:
@@ -126,8 +129,8 @@ jobs:
             [ "$code" = 200 ] && break
             sleep 2
           done
-          cat "$RUNNER_TEMP/health0.json"; echo
-          [ "$code" = 200 ] || { docker logs clock0 | tail -n 60; echo "::error::clock health is not 200"; exit 1; }
+          [ -f "$RUNNER_TEMP/health0.json" ] && cat "$RUNNER_TEMP/health0.json"; echo
+          [ "$code" = 200 ] || { docker ps -a; docker logs clock0 2>&1 | tail -n 60; echo "::error::clock health is not 200"; exit 1; }
           node -e "const h=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP+'/health0.json','utf8')); if(h.enabled!==false||h.runtime!=='selfhost'||h.lastTick!==null||h.running.length!==0) process.exit(1)"
           docker rm -f clock0 > /dev/null
       - name: Clock with CLOCK_ENABLED=1 and no clock_owner (cloud owns it) stays in standby
@@ -143,8 +146,8 @@ jobs:
             if node -e "const h=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP+'/health1.json','utf8')); process.exit(h.owner==='cloud'&&h.lastTick?0:1)" 2> /dev/null; then ok=1; break; fi
             sleep 2
           done
-          cat "$RUNNER_TEMP/health1.json"; echo
-          [ "$ok" = 1 ] || { docker logs clock1 | tail -n 80; echo "::error::clock did not reach standby"; exit 1; }
+          [ -f "$RUNNER_TEMP/health1.json" ] && cat "$RUNNER_TEMP/health1.json"; echo
+          [ "$ok" = 1 ] || { docker logs clock1 2>&1 | tail -n 80; echo "::error::clock did not reach standby"; exit 1; }
           sleep 20
           curl -fsS http://127.0.0.1:9100/health > "$RUNNER_TEMP/health1.json"
           node -e "const h=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP+'/health1.json','utf8')); if(h.runtime!=='selfhost'||h.owner!=='cloud'||h.running.length!==0||h.queued!==0) { console.error('not standby'); process.exit(1) }"
@@ -252,8 +255,8 @@ jobs:
             [ "$code" = 200 ] && break
             sleep 2
           done
-          cat "$RUNNER_TEMP/health.json"; echo
-          [ "$code" = 200 ] || { docker logs clock0 | tail -n 60; exit 1; }
+          [ -f "$RUNNER_TEMP/health.json" ] && cat "$RUNNER_TEMP/health.json"; echo
+          [ "$code" = 200 ] || { docker ps -a; docker logs clock0 2>&1 | tail -n 60; echo "::error::clock health is not 200"; exit 1; }
       - name: Timing
         if: always()
         run: |

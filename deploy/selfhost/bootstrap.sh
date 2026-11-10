@@ -154,8 +154,10 @@ step_layout() {
   log "3/8 host layout and compose files"
   mkdir -p "$COMPOSE_DIR" "$ENV_DIR" "$BIN_DIR" "$BASE/sqld" "$BASE/check" "$BASE/jobs"
   chmod 700 "$ENV_DIR"
-  # The jobs and web containers run as uid 10001; sqld keeps its own user (TODO verify with the pinned image).
+  # The jobs and web containers run as uid 10001; sqld runs as uid 666.
   chown 10001:10001 "$BASE/jobs"
+  # sqld runs as uid 666 (the image's own user) directly, without the image wrapper that chowns (compose file).
+  chown 666:666 "$BASE/sqld"
   fetch_file deploy/selfhost/docker-compose.prod.yml "$COMPOSE_DIR/docker-compose.prod.yml" required 0644
   fetch_file deploy/selfhost/docker-compose.check.yml "$COMPOSE_DIR/docker-compose.check.yml" required 0644
   fetch_file deploy/selfhost/Caddyfile "$COMPOSE_DIR/Caddyfile" required 0644
