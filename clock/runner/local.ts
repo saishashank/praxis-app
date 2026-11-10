@@ -263,26 +263,47 @@ export class LocalRunner {
     let child: ChildProcess | null = null;
     let killTimer: NodeJS.Timeout | undefined;
     const limitMs = job.timeoutMin * 60_000;
+    // Stops the running step: SIGTERM, then SIGKILL after the grace period.
+    const stopChild = (): void => {
+      if (!child) return;
+      child.kill("SIGTERM");
+      if (killTimer) clearTimeout(killTimer);
+      killTimer = setTimeout(() => {
+        emit(
+          `still running ${(this.o.graceMs ?? GRACE_MS) / 1000} s after SIGTERM: sending SIGKILL`,
+        );
+        child?.kill("SIGKILL");
+      }, this.o.graceMs ?? GRACE_MS);
+    };
     const limitTimer = setTimeout(() => {
       timedOut = true;
       emit(`timeout after ${job.timeoutMin} min: sending SIGTERM`);
-      if (child) {
-        child.kill("SIGTERM");
-        killTimer = setTimeout(() => {
-          emit(
-            `still running ${(this.o.graceMs ?? GRACE_MS) / 1000} s after SIGTERM: sending SIGKILL`,
-          );
-          child?.kill("SIGKILL");
-        }, this.o.graceMs ?? GRACE_MS);
-      }
+      stopChild();
     }, limitMs);
+    // S3: the lease goes stale at LEASE_STALE_MS without a heartbeat and the group is then free for another run.
+    // A child must not outlive its lease: when no heartbeat has been confirmed for half the stale window (or the
+    // row is no longer 'running'), the child is stopped and the run ends as failed.
+    let lastBeat = this.o.now();
+    let leaseLost = false;
+    const loseLease = (why: string): void => {
+      if (leaseLost) return;
+      leaseLost = true;
+      emit(`lease lost (${why}): stopping the job, SIGTERM`);
+      stopChild();
+    };
+    const toleranceMs = Math.floor((this.o.staleMs ?? LEASE_STALE_MS) / 2);
     const hbTimer = setInterval(() => {
       heartbeat(this.o.db, id, this.o.now()).then(
         (alive) => {
-          if (!alive) emit("heartbeat: this run is no longer marked running");
+          if (alive) lastBeat = this.o.now();
+          else {
+            emit("heartbeat: this run is no longer marked running");
+            loseLease("the run row is no longer running");
+          }
         },
         () => emit("heartbeat failed (database); will try again"),
       );
+      if (this.o.now() - lastBeat >= toleranceMs) loseLease("no heartbeat confirmed");
     }, this.o.heartbeatMs ?? HEARTBEAT_MS);
 
     let failed = false;
@@ -292,7 +313,7 @@ export class LocalRunner {
       for (let i = 0; i < job.steps.length; i++) {
         const step = job.steps[i]!;
         const sid = step.id ?? `s${i + 1}`;
-        if (timedOut) break;
+        if (timedOut || leaseLost) break;
         if (failed && !step.always) {
           outcomes[sid] = "skipped";
           continue;
@@ -369,11 +390,12 @@ export class LocalRunner {
 
     const status: Exclude<RunStatus, "running" | "skipped"> = timedOut
       ? "timeout"
-      : failed
+      : leaseLost || failed
         ? "failed"
         : standby
           ? "standby"
           : "success";
+    if (leaseLost && !timedOut) exitCode = null;
     if ((status === "failed" || status === "timeout") && exitCode === 0) exitCode = null;
     emit(`end ${status}${exitCode === null ? "" : ` (exit code ${exitCode})`}`);
     await new Promise<void>((r) => out.end(r));

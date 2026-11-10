@@ -44,7 +44,7 @@ jobs:
           set -eu
           # next/font/google fetches fonts at build time: retry the web build on a network hiccup (seen once on arm64).
           ( for n in 1 2 3; do
-              docker build -f deploy/selfhost/Dockerfile.web -t "$WEB_IMAGE" . && exit 0
+              docker build -f deploy/selfhost/Dockerfile.web --build-arg APP_COMMIT="$GITHUB_SHA" -t "$WEB_IMAGE" . && exit 0
               echo "web build attempt $n failed"; sleep 20
             done; exit 1 ) > "$RUNNER_TEMP/build-web.log" 2>&1 &
           p1=$!
@@ -338,7 +338,7 @@ jobs:
         run: |
           set -eu
           ( for n in 1 2 3; do
-              docker build -f deploy/selfhost/Dockerfile.web -t "$WEB_IMAGE" . && exit 0
+              docker build -f deploy/selfhost/Dockerfile.web --build-arg APP_COMMIT="$GITHUB_SHA" -t "$WEB_IMAGE" . && exit 0
               echo "web build attempt $n failed"; sleep 20
             done; exit 1 ) > "$RUNNER_TEMP/build-web.log" 2>&1 &
           p1=$!
@@ -457,7 +457,7 @@ jobs:
       - name: Build praxis-web natively (retried, fonts are fetched at build time)
         run: |
           for n in 1 2 3; do
-            docker build -f deploy/selfhost/Dockerfile.web -t "$WEB_IMAGE" . && exit 0
+            docker build -f deploy/selfhost/Dockerfile.web --build-arg APP_COMMIT="$GITHUB_SHA" -t "$WEB_IMAGE" . && exit 0
             echo "web build attempt $n failed"; sleep 20
           done
           exit 1

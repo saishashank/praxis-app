@@ -287,3 +287,47 @@ describe("idempotency per Melbourne date", () => {
     expect((await next.json()).status).toBe("ok"); // different Melbourne date: runs
   });
 });
+
+describe("self-hosted runtime (review S2): compares with the host's deploy state, no GitHub call", () => {
+  const SELF = { ...PROD, PRAXIS_RUNTIME: "selfhost", GITHUB_READ_TOKEN: undefined };
+  const own = async () => {
+    await db.execute({
+      sql: "INSERT INTO worker_state (key, value_json, updated_at) VALUES ('clock_owner', ?, ?)",
+      args: [JSON.stringify("selfhost"), NOW.toISOString()],
+    });
+  };
+  const noFetch = (async () => {
+    throw new Error("the self-hosted check must not call the network");
+  }) as unknown as typeof fetch;
+
+  it("APP_COMMIT equal to PRAXIS_DEPLOYED_SHA: ok, no incident (also with a digest suffix)", async () => {
+    await own();
+    for (const deployed of [A, `${A}@sha256:${"e".repeat(64)}`]) {
+      await db.execute("DELETE FROM run_record");
+      const res = await make(
+        { fetchImpl: noFetch },
+        { ...SELF, PRAXIS_DEPLOYED_SHA: deployed },
+      )(get());
+      expect(await res.json()).toEqual({ status: "ok", date: "2026-10-10" });
+    }
+    expect(await incidents()).toHaveLength(0);
+  });
+
+  it("a different commit is a mismatch (one S1 incident); a missing one is unknown", async () => {
+    await own();
+    const res = await make({ fetchImpl: noFetch }, { ...SELF, PRAXIS_DEPLOYED_SHA: B })(get());
+    expect(await res.json()).toEqual({ status: "mismatch", date: "2026-10-10" });
+    expect(await incidents()).toHaveLength(1);
+    await db.execute("DELETE FROM run_record");
+    const res2 = await make(
+      { fetchImpl: noFetch },
+      { ...SELF, APP_COMMIT: undefined, PRAXIS_DEPLOYED_SHA: A },
+    )(get());
+    expect(await res2.json()).toEqual({ status: "unknown", date: "2026-10-10" });
+  });
+
+  it("the cloud path is unchanged: a stray PRAXIS_DEPLOYED_SHA does not matter there", async () => {
+    const res = await make({}, { ...PROD, PRAXIS_DEPLOYED_SHA: B })(get());
+    expect(await res.json()).toEqual({ status: "ok", date: "2026-10-10" });
+  });
+});

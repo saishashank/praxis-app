@@ -12,8 +12,8 @@ import type { Client } from "@libsql/client";
 import { finishRun, startRun } from "@/lib/runs/runRecord";
 import { CHECK_TIMEOUT_MS, CODE_REPO } from "@/lib/selfcheck/config";
 import type { EmailProvider } from "@/lib/email/provider";
-import { onStandby, STANDBY_BODY } from "@/lib/runtime/owner";
-import { checkApprovedCommit, type WatchdogResult } from "./approvedCommit";
+import { onStandby, runtimeOf, STANDBY_BODY } from "@/lib/runtime/owner";
+import { checkApprovedCommit, checkSelfhostCommit, type WatchdogResult } from "./approvedCommit";
 import { KIND_UNAPPROVED_CODE, openS1Once } from "./incidents";
 import { WATCHDOG_JOB } from "./state";
 
@@ -108,13 +108,17 @@ export function createWatchdogHandler(deps: Deps) {
 
       let result: WatchdogResult;
       try {
-        result = await checkApprovedCommit({
-          fetchImpl: (url, init) =>
-            deps.fetchImpl(url, { ...init, signal: AbortSignal.timeout(CHECK_TIMEOUT_MS) }),
-          token: deps.env.GITHUB_READ_TOKEN,
-          repo: CODE_REPO,
-          deployedCommit,
-        });
+        // The self-hosted runtime has no Vercel/GitHub approval; it compares with the host's deploy state.
+        result =
+          runtimeOf(deps.env) === "selfhost"
+            ? checkSelfhostCommit(deps.env)
+            : await checkApprovedCommit({
+                fetchImpl: (url, init) =>
+                  deps.fetchImpl(url, { ...init, signal: AbortSignal.timeout(CHECK_TIMEOUT_MS) }),
+                token: deps.env.GITHUB_READ_TOKEN,
+                repo: CODE_REPO,
+                deployedCommit,
+              });
       } catch {
         result = { status: "unknown", detail: "Check failed." };
       }

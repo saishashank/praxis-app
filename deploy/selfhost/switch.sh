@@ -58,8 +58,14 @@ assert_idle() {
 recreate() { compose up -d --force-recreate --no-deps "$@"; }
 
 # The Turso pair (TURSO_REFRESH_MAIN_*) is in the clock container's own environment (jobs.env): the values stay inside.
+# `owner <x> --turso` writes the Turso copy and first cross-checks sqld (cloud needs sqld=cloud); `owner selfhost` in sqld
+# cross-checks Turso (needs Turso=selfhost). --force skips the cross-check (review S1).
 turso_owner() {
-  compose exec -T clock sh -c 'TURSO_MAIN_URL="$TURSO_REFRESH_MAIN_URL" TURSO_MAIN_TOKEN="$TURSO_REFRESH_MAIN_TOKEN" exec node clock/cli.mjs owner '"$1"
+  if [ "$force" = 1 ]; then
+    compose exec -T clock node clock/cli.mjs owner "$1" --turso --force
+  else
+    compose exec -T clock node clock/cli.mjs owner "$1" --turso
+  fi
 }
 
 case "$target" in
@@ -89,7 +95,7 @@ PLAN
       [ "$restored" = 1 ] || { echo "switch: --local needs --restored (step 3, the final restore into sqld, must be done first)" >&2; exit 2; }
       assert_idle
       echo "switch: self-hosted side of the cutover (§11.3 step 4)"
-      "$PRAXIS" owner selfhost
+      if [ "$force" = 1 ]; then "$PRAXIS" owner selfhost --force; else "$PRAXIS" owner selfhost; fi
       set_env jobs.env EMAIL_LIVE 1
       set_env web.env EMAIL_LIVE 1
       set_env jobs.env CLOCK_ENABLED 1

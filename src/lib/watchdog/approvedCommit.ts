@@ -74,9 +74,49 @@ export type CheckInput = {
   deployedCommit: string | undefined;
 };
 
-function normalizeSha(v: string | undefined): string | null {
+export function normalizeSha(v: string | undefined): string | null {
   const s = (v ?? "").trim().toLowerCase();
   return SHA.test(s) ? s : null;
+}
+
+/**
+ * Self-hosted runtime (review S2): there is no Vercel/GitHub "approved deployment" for this server. The host's
+ * deploy state (deployed.json, written by the deploy script after the checks passed) reaches the container as
+ * PRAXIS_DEPLOYED_SHA (compose); the image carries its own build commit as APP_COMMIT (build argument). The check
+ * is: both present and equal, i.e. the running image is the release the host recorded. No network call.
+ */
+export function checkSelfhostCommit(env: Record<string, string | undefined>): WatchdogResult {
+  const deployed = normalizeSha(env.APP_COMMIT);
+  // compose may carry "<sha>@sha256:<digest>" (deploy by digest): only the commit part counts
+  const approved = normalizeSha((env.PRAXIS_DEPLOYED_SHA ?? "").split("@")[0]);
+  if (approved === null) {
+    return {
+      status: "unknown",
+      ...(deployed ? { deployedSha: deployed } : {}),
+      detail: "The host's deployed commit (PRAXIS_DEPLOYED_SHA) is missing or malformed.",
+    };
+  }
+  if (deployed === null) {
+    return {
+      status: "unknown",
+      approvedSha: approved,
+      detail: "The deployed commit (APP_COMMIT) is missing or malformed.",
+    };
+  }
+  if (deployed !== approved) {
+    return {
+      status: "mismatch",
+      approvedSha: approved,
+      deployedSha: deployed,
+      detail: "The running image differs from the release the host deployed.",
+    };
+  }
+  return {
+    status: "ok",
+    approvedSha: approved,
+    deployedSha: deployed,
+    detail: "The running image is the release the host deployed.",
+  };
 }
 
 export async function checkApprovedCommit(input: CheckInput): Promise<WatchdogResult> {

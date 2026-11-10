@@ -39,7 +39,7 @@ echo "$out" | sed 's/^/     /'
 ok "refused while CLOCK_ENABLED is not 0; data untouched"
 
 # guard 2: the owner must not be selfhost
-sudo "$PRAXIS" owner selfhost > /dev/null
+sudo "$PRAXIS" owner selfhost --force > /dev/null
 set +e
 out="$(sudo "$PRAXIS" restore-latest --replace 2>&1)"
 rc=$?

@@ -21,7 +21,11 @@ COPY . .
 RUN npm run build
 
 FROM ${NODE_IMAGE} AS runner
-ENV NODE_ENV=production \
+# The commit this image was built from (build-selfhost.yml passes github.sha). The watchdog compares it with the host's
+# deploy state (PRAXIS_DEPLOYED_SHA, set by compose); the settings page shows its first 7 characters.
+ARG APP_COMMIT=""
+ENV APP_COMMIT=${APP_COMMIT} \
+    NODE_ENV=production \
     PRAXIS_RUNTIME=selfhost \
     NEXT_TELEMETRY_DISABLED=1 \
     HOSTNAME=0.0.0.0 \

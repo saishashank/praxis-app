@@ -3,8 +3,9 @@
 //   status                       health of the clock and the newest job runs
 //   run <job> [--input k=v ...]  run one job now (same lease and runner as the clock)
 //   logs <job|run-id>            print the log of a run (the newest run of a job)
-//   owner [cloud|selfhost]       show, or switch, the clock owner (ONE database write), then print the
-//                                last-tick times of both clocks
+//   owner [cloud|selfhost] [--turso] [--force]   show, or switch, the clock owner (ONE database write, after reading
+//                                the OTHER database: selfhost in sqld needs Turso=selfhost; cloud --turso needs sqld=cloud;
+//                                --force skips that), then print the last-tick times of both clocks
 //   backup-now                   run the backup job now (repo copy, then the bucket copy)
 //   restore-drill [--source live|synthetic|backup]   run the restore drill job now
 //   restore-latest [--replace]   newest backup into sqld, then migrate (BACKUP_PRIVATE_KEY supplied per command).
@@ -16,6 +17,7 @@
 // printed: the database URL and token are read from the environment and used, never shown.
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { dropNamespace, ensureNamespace } from "../scripts/selfhost/sqld.mjs";
 
 const OWNER_KEY = "clock_owner";
@@ -24,11 +26,18 @@ const HOST_ONLY = { deploy: true, switch: true };
 
 const env = process.env;
 
-/** Pipeline client for the main database (Turso or sqld, hrana over http). */
-async function pipe(stmts) {
-  const url = (env.TURSO_MAIN_URL ?? "").trim().replace(/^libsql:/, "https:");
-  const token = (env.TURSO_MAIN_TOKEN ?? "").trim();
-  if (!url || !token) throw new Error("TURSO_MAIN_URL / TURSO_MAIN_TOKEN are not set");
+/** The two main databases: "local" = sqld (TURSO_MAIN_*), "turso" = the Turso copy (TURSO_REFRESH_MAIN_*). */
+const CONN = {
+  local: ["TURSO_MAIN_URL", "TURSO_MAIN_TOKEN"],
+  turso: ["TURSO_REFRESH_MAIN_URL", "TURSO_REFRESH_MAIN_TOKEN"],
+};
+
+/** Pipeline client for a main database (Turso or sqld, hrana over http). */
+async function pipe(stmts, which = "local") {
+  const [urlName, tokenName] = CONN[which];
+  const url = (env[urlName] ?? "").trim().replace(/^libsql:/, "https:");
+  const token = (env[tokenName] ?? "").trim();
+  if (!url || !token) throw new Error(`${urlName} / ${tokenName} are not set`);
   const arg = (a) =>
     a === null || a === undefined
       ? { type: "null" }
@@ -80,8 +89,8 @@ async function health() {
   }
 }
 
-async function lastTicks() {
-  const [tick, wState, wRec] = await pipe([
+async function lastTicks(io = { pipe }) {
+  const [tick, wState, wRec] = await io.pipe([
     {
       sql: "SELECT value_json, updated_at FROM worker_state WHERE key = ?",
       args: ["clock_tick:selfhost"],
@@ -127,32 +136,70 @@ async function status() {
   if (rows.length === 0) console.log("  none");
 }
 
-async function owner(arg) {
+const readOwner = async (which, io) => {
+  try {
+    const [r] = await io.pipe(
+      [{ sql: "SELECT value_json FROM worker_state WHERE key = ?", args: [OWNER_KEY] }],
+      which,
+    );
+    return r[0] ? ownerOf(r[0][0]) : "cloud";
+  } catch {
+    return null; // unreachable, or not set up
+  }
+};
+
+/**
+ * Show or switch the clock owner. ONE database write, but the OTHER database is read first (review S1):
+ *   owner selfhost        (sqld)  refused unless the Turso copy already says selfhost (cutover step 2 came first)
+ *   owner cloud --turso   (Turso) refused unless sqld already says cloud (switch-back step 1 came first)
+ * --force skips the cross-check (the Owner knows the other side is gone).
+ * @param {string | undefined} arg @param {{ turso?: boolean, force?: boolean }} [flags]
+ */
+export async function owner(arg, flags = {}, io = { pipe, log: (t) => console.log(t) }) {
+  const which = flags.turso ? "turso" : "local";
   if (arg === undefined) {
-    const [r] = await pipe([
-      { sql: "SELECT value_json FROM worker_state WHERE key = ?", args: [OWNER_KEY] },
-    ]);
-    console.log(`owner: ${r[0] ? ownerOf(r[0][0]) : "cloud (key absent)"}`);
-    printTicks(await lastTicks());
+    const [r] = await io.pipe(
+      [{ sql: "SELECT value_json FROM worker_state WHERE key = ?", args: [OWNER_KEY] }],
+      which,
+    );
+    io.log(`owner: ${r[0] ? ownerOf(r[0][0]) : "cloud (key absent)"}`);
+    if (which === "local") printTicks(await lastTicks(io));
     return 0;
   }
   if (arg !== "cloud" && arg !== "selfhost") {
-    console.log("usage: praxis owner [cloud|selfhost]");
+    io.log("usage: praxis owner [cloud|selfhost] [--turso] [--force]");
     return 2;
   }
+  if (!flags.force) {
+    if (arg === "selfhost" && !flags.turso && (await readOwner("turso", io)) !== "selfhost") {
+      io.log(
+        "owner: refused: the Turso copy does not say selfhost (cutover step 2: switch.sh selfhost --turso, first). --force overrides.",
+      );
+      return 1;
+    }
+    if (arg === "cloud" && flags.turso && (await readOwner("local", io)) !== "cloud") {
+      io.log(
+        "owner: refused: sqld does not say cloud (switch-back step 1: switch.sh cloud --local, first). --force overrides.",
+      );
+      return 1;
+    }
+  }
   const at = new Date().toISOString();
-  await pipe([
-    {
-      sql:
-        "INSERT INTO worker_state (key, value_json, updated_at) VALUES (?, ?, ?) " +
-        "ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at",
-      args: [OWNER_KEY, JSON.stringify(arg), at],
-    },
-  ]);
-  console.log(
-    `owner set to ${arg} at ${at}. The other clock goes to standby on its next tick (within a minute).`,
+  await io.pipe(
+    [
+      {
+        sql:
+          "INSERT INTO worker_state (key, value_json, updated_at) VALUES (?, ?, ?) " +
+          "ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at",
+        args: [OWNER_KEY, JSON.stringify(arg), at],
+      },
+    ],
+    which,
   );
-  printTicks(await lastTicks());
+  io.log(
+    `owner set to ${arg} at ${at}${flags.turso ? " (in Turso)" : ""}. The other clock goes to standby on its next tick (within a minute).`,
+  );
+  if (which === "local") printTicks(await lastTicks(io));
   return 0;
 }
 
@@ -264,44 +311,51 @@ async function run(rest) {
   return entry.runJobCli(process.env, job, inputs);
 }
 
-const [cmd, ...rest] = process.argv.slice(2);
-let code = 0;
-try {
-  if (cmd === "status") await status();
-  else if (cmd === "owner") code = await owner(rest[0]);
-  else if (cmd === "logs") code = await logs(rest[0]);
-  else if (cmd === "run" && rest[0] === "logs") code = await logs(rest[1]);
-  else if (cmd === "run") code = await run(rest);
-  else if (cmd === "backup-now") code = await run(["backup"]);
-  else if (cmd === "restore-drill") {
-    const src = rest[0] === "--source" ? rest[1] : undefined;
-    if (rest.length > 0 && (src === undefined || rest.length !== 2)) {
-      console.log("usage: praxis restore-drill [--source live|synthetic|backup]");
+async function main() {
+  const [cmd, ...rest] = process.argv.slice(2);
+  let code = 0;
+  try {
+    if (cmd === "status") await status();
+    else if (cmd === "owner") {
+      const flags = { turso: rest.includes("--turso"), force: rest.includes("--force") };
+      const pos = rest.filter((a) => !a.startsWith("--"));
+      code = await owner(pos[0], flags);
+    } else if (cmd === "logs") code = await logs(rest[0]);
+    else if (cmd === "run" && rest[0] === "logs") code = await logs(rest[1]);
+    else if (cmd === "run") code = await run(rest);
+    else if (cmd === "backup-now") code = await run(["backup"]);
+    else if (cmd === "restore-drill") {
+      const src = rest[0] === "--source" ? rest[1] : undefined;
+      if (rest.length > 0 && (src === undefined || rest.length !== 2)) {
+        console.log("usage: praxis restore-drill [--source live|synthetic|backup]");
+        code = 2;
+      } else {
+        code = await run(
+          src === undefined ? ["restore-drill"] : ["restore-drill", "--input", `source=${src}`],
+        );
+      }
+    } else if (cmd === "restore-latest") {
+      const extra = rest.filter((a) => a !== "--replace");
+      code = extra.length
+        ? (console.log("usage: praxis restore-latest [--replace]"), 2)
+        : await restoreLatest(rest.includes("--replace"));
+    } else if (cmd in HOST_ONLY) {
+      console.log(`${cmd} runs on the host, not in the clock container: use "praxis ${cmd}" there`);
       code = 2;
     } else {
-      code = await run(
-        src === undefined ? ["restore-drill"] : ["restore-drill", "--input", `source=${src}`],
+      console.log(
+        "usage: praxis status | run <job> [--input k=v] | logs <job|run-id> | owner [cloud|selfhost]",
       );
+      console.log(
+        "       praxis backup-now | restore-drill [--source s] | restore-latest | deploy <sha> | switch (the last two run on the host)",
+      );
+      code = 2;
     }
-  } else if (cmd === "restore-latest") {
-    const extra = rest.filter((a) => a !== "--replace");
-    code = extra.length
-      ? (console.log("usage: praxis restore-latest [--replace]"), 2)
-      : await restoreLatest(rest.includes("--replace"));
-  } else if (cmd in HOST_ONLY) {
-    console.log(`${cmd} runs on the host, not in the clock container: use "praxis ${cmd}" there`);
-    code = 2;
-  } else {
-    console.log(
-      "usage: praxis status | run <job> [--input k=v] | logs <job|run-id> | owner [cloud|selfhost]",
-    );
-    console.log(
-      "       praxis backup-now | restore-drill [--source s] | restore-latest | deploy <sha> | switch (the last two run on the host)",
-    );
-    code = 2;
+  } catch (e) {
+    console.log(`failed: ${e instanceof Error ? e.message : "error"}`);
+    code = 1;
   }
-} catch (e) {
-  console.log(`failed: ${e instanceof Error ? e.message : "error"}`);
-  code = 1;
+  process.exit(code);
 }
-process.exit(code);
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) await main();

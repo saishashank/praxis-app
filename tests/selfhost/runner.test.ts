@@ -339,6 +339,53 @@ describe("the lease", () => {
   });
 });
 
+describe("the lease (S3): a child never outlives its lease", () => {
+  const long = (): string =>
+    script("long.mjs", `console.log("started"); setInterval(() => {}, 1000);`);
+
+  it("heartbeats failing past half the stale window stop the child; the run ends failed", async () => {
+    const m = manifestOf({
+      lease: job({ timeoutMin: 1, steps: [{ run: "$NODE $S", env: stepEnv(long()) }] }),
+    });
+    const real = leaseDb;
+    let broken = false;
+    leaseDb = async (stmts) => {
+      if (broken && /UPDATE job_run SET heartbeat_at/.test(stmts[0]!.sql))
+        throw new Error("db down");
+      return real(stmts);
+    };
+    setTimeout(() => (broken = true), 300);
+    const t0 = Date.now();
+    const res = await runner(m, { staleMs: 1000, graceMs: 300 }).runNow({ job: "lease" });
+    expect(res.status).toBe("failed");
+    expect(Date.now() - t0).toBeLessThan(5000);
+    const log = readFileSync(path.join(root, "logs", `${res.id}-lease.log`), "utf8");
+    expect(log).toContain("heartbeat failed (database)");
+    expect(log).toContain("lease lost (no heartbeat confirmed)");
+    expect(log).toContain("end failed");
+  }, 20_000);
+
+  it("a run whose row is no longer 'running' is stopped at once", async () => {
+    const m = manifestOf({
+      lease: job({ timeoutMin: 1, steps: [{ run: "$NODE $S", env: stepEnv(long()) }] }),
+    });
+    setTimeout(() => db.exec("UPDATE job_run SET status = 'failed' WHERE status = 'running'"), 300);
+    const res = await runner(m, { staleMs: 60_000, graceMs: 300 }).runNow({ job: "lease" });
+    expect(res.status).toBe("failed");
+    const log = readFileSync(path.join(root, "logs", `${res.id}-lease.log`), "utf8");
+    expect(log).toContain("lease lost (the run row is no longer running)");
+  }, 20_000);
+
+  it("a working heartbeat never stops a healthy long step", async () => {
+    const quick = script("q.mjs", `setTimeout(() => console.log("done"), 1500);`);
+    const m = manifestOf({
+      ok: job({ timeoutMin: 1, steps: [{ run: "$NODE $S", env: stepEnv(quick) }] }),
+    });
+    const res = await runner(m, { staleMs: 1000 }).runNow({ job: "ok" });
+    expect(res.status).toBe("success");
+  }, 20_000);
+});
+
 describe("the timeout", () => {
   it("SIGTERM at the limit, SIGKILL after the grace, status timeout, failure alert", async () => {
     // Ignores SIGTERM where signals exist (posix); on Windows SIGTERM already ends the process.

@@ -59,6 +59,8 @@ services:
     env_file: /srv/praxis/env/web.env
     environment:
       PRAXIS_RUNTIME: selfhost
+      # The release the host recorded in deployed.json; the watchdog compares it with the image's own APP_COMMIT.
+      PRAXIS_DEPLOYED_SHA: ${PRAXIS_SHA:-}
       NODE_OPTIONS: --max-old-space-size=1152
     expose: ["3000"]
     tmpfs:

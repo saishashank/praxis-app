@@ -28,6 +28,7 @@ services:
     environment:
       # Overrides win over env_file: nothing in the check can send mail or start work.
       PRAXIS_RUNTIME: selfhost
+      PRAXIS_DEPLOYED_SHA: ${PRAXIS_SHA:-}
       CLOCK_ENABLED: "0"
       EMAIL_LIVE: "0"
       EMAIL_PROVIDER: mock
