@@ -15126,7 +15126,9 @@
         "jobs": [
           "amd64",
           "arm64",
-          "shell-checks"
+          "shell-checks",
+          "sqld-jwt",
+          "stack"
         ],
         "triggers": [
           "push",
