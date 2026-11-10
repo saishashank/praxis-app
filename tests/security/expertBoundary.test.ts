@@ -84,6 +84,10 @@ describe("expert boundary (i): who may import src/lib/experts", () => {
   ];
   const WIRING = new Set([
     "src/lib/replay/learningMode.ts", // registers expertsStage in the weekly learning run (D-608)
+    // D-921: the daily learning loop WRITES one proposed hypothesis (cluster + method claim) into the
+    // expert pipeline when a feature keeps beating the market; it reads no expert material into any
+    // decision, and the hypothesis is graded by the same screening before it can become a challenger.
+    "src/lib/learning/dailyHypothesis.ts",
   ]);
   // Readers: the KB mirror, the pages and their loaders. Nothing that decides, sizes or places.
   const READERS = new Set(["src/lib/kb/documents.ts", "src/lib/kb/mapping.ts"]);

@@ -46,14 +46,16 @@ afterEach(cleanupTempDbs);
 
 const opts = (d = D) => ({ market: MARKET, d, env: "production" as const, appUrl: APP, now: NOW });
 
+/** Sections 1-7 always; "Today's alerts" only with content (D-922); the footer closes the review. */
 function headings(text: string): void {
-  REVIEW_SECTION_NAMES.forEach((name, i) => {
+  REVIEW_SECTION_NAMES.slice(0, 7).forEach((name, i) => {
     expect(text, `section ${i + 1}`).toContain(`${i + 1}. ${name}`);
   });
+  expect(text).toMatch(/\d\. Footer/);
 }
 
 describe("rendering with the T4 templates", () => {
-  it("full review: all ten headings, KPI row, under 90 KB, deterministic", async () => {
+  it("full review: its headings, KPI row, under 90 KB, deterministic", async () => {
     const db = await mainWorld();
     const { e01 } = await tradingDay(db);
     await addPending(db, e01, "o-pend", "ZZP");
@@ -64,9 +66,13 @@ describe("rendering with the T4 templates", () => {
     expect(out).toEqual(renderReview(b.facts));
     headings(out.text);
     expect(out.sizeHtml).toBeLessThanOrEqual(REVIEW_MAX_BYTES);
-    expect(out.subject).toBe("Praxis Evening Review — Mon 19 Oct 2026");
-    expect(out.text).toContain("Written without AI today");
-    expect(out.text).toContain("E01");
+    expect(out.subject).toBe("Praxis Evening Review — Mon 19 Oct");
+    expect(out.text).toContain("Follow the trend");
+    const seen = out.text.replace(/\(https?:\/\/\S+\)/g, ""); // link targets are not read
+    expect(seen).not.toMatch(/\bE\d{2}\b|F\d-[UL]|\bP[012]\b|\bNAV\b/);
+    expect(out.text).toContain("The learning step did not run tonight.");
+    expect(out.text).not.toContain("System & quota health");
+    expect(out.text).not.toContain("8. Today's alerts"); // nothing to show: the section is dropped
   });
 
   it("partial review: the EML-011 box lists the missing sections, no yesterday's numbers", async () => {
@@ -84,7 +90,7 @@ describe("rendering with the T4 templates", () => {
     headings(out.text);
   });
 
-  it("non-trading variant keeps all ten headings", async () => {
+  it("non-trading variant keeps its headings", async () => {
     const db = await mainWorld();
     await tradingDay(db);
     await addMarker(db, SAT, "non-trading");
@@ -113,7 +119,7 @@ describe("rendering with the T4 templates", () => {
     const built = await buildFacts(db, { ...opts(), minimal: { reason: "Normal path failed." } });
     const out = renderReview(built.facts);
     expect(out.subject).toContain("(minimal)");
-    expect(out.text).toContain(`No data for ${D}.`);
+    expect(out.text).toContain("No data for Mon 19 Oct.");
     expect(out.text).not.toContain("601.00");
   });
 
@@ -227,9 +233,10 @@ describe("R5 narrative (batch 3) through the router", () => {
     const row = await readNarrativeRow(db, MARKET, D);
     expect(row).toMatchObject({ kind: "llm", provider: "mock", ...answer });
     const out = await assembleReview(db, opts());
-    expect(out.narrative).toBe("mock");
-    expect(out.text).toContain("E01 did best on the day.");
-    expect(out.text).not.toContain("Written without AI today");
+    // D-922: the review no longer uses the model words; provenance is always the facts-only lists
+    expect(out.narrative).toBe("rules");
+    expect(out.text).not.toContain("E01 did best on the day.");
+    expect(out.text).not.toContain("Written with");
   });
 
   it("an ungrounded answer (a number not in the facts) is rejected and the facts-only lists are stored", async () => {
@@ -256,7 +263,6 @@ describe("R5 narrative (batch 3) through the router", () => {
     expect(row?.kind).toBe("rules");
     const out = await assembleReview(db, opts());
     expect(out.narrative).toBe("rules");
-    expect(out.text).toContain("Written without AI today");
     expect(out.text).not.toContain("99999");
   });
 
@@ -272,7 +278,7 @@ describe("R5 narrative (batch 3) through the router", () => {
     await tradingDay(none);
     expect(await readNarrativeRow(none, MARKET, D)).toBeNull();
     const out = await assembleReview(none, opts());
-    expect(out.text).toContain("Written without AI today");
+    expect(out.text).toContain("The learning step did not run tonight.");
   });
 
   it("rejects a malformed stored row (the request path never trusts it)", async () => {

@@ -239,7 +239,7 @@ describe("maskedReview", () => {
     expect(v.summary[0]).toBe("E01 F1 U: day profit/loss +A$123.45");
     expect(v.summary[1]).toBe("E02 Stock C follower: day profit/loss -A$0.50");
     expect(v.narrative.map((n) => n.heading)).toEqual([
-      "What was learned today",
+      "What we learned today",
       "What worked better and why",
       "What needs improving for tomorrow",
     ]);

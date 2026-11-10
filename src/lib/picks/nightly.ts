@@ -11,12 +11,16 @@ import { isTradingDay } from "@/lib/data/calendar";
 import { generatePicks } from "./generate";
 import { loadPickInputs } from "./inputs";
 import { writePicks } from "./store";
+import { loadShortlistInputs } from "./shortlistLoad";
+import type { PickInput } from "./types";
 import { trackPicks, type TrackSummary } from "./track";
 import { checkWaitingPicks, type CheckSummary } from "./validity";
 
 export type PicksNightResult = {
   readonly published: number;
   readonly candidates: number;
+  /** D-920: shortlist candidates added to the strategy signals tonight (-1 when the shortlist failed). */
+  readonly shortlist: number;
   readonly tracking: TrackSummary;
   readonly checks: CheckSummary;
 };
@@ -46,7 +50,7 @@ export async function runPicksNight(
     now: o.now,
   });
   if (!isTradingDay(o.d, o.calendar) || o.params.picks.picksPerProfile === 0) {
-    return { published: 0, candidates: 0, tracking, checks };
+    return { published: 0, candidates: 0, shortlist: 0, tracking, checks };
   }
   const { inputs, universe } = await loadPickInputs(db, {
     market: o.market,
@@ -54,7 +58,21 @@ export async function runPicksNight(
     params: o.params,
     calendar: o.calendar,
   });
-  const picks = generatePicks(inputs, {
+  // D-920: the nightly shortlist fills the places the strategy signals leave empty (never blocks them)
+  let shortlist: PickInput[] = [];
+  let shortlistCount = 0;
+  try {
+    shortlist = await loadShortlistInputs(db, {
+      market: o.market,
+      d: o.d,
+      exclude: new Set(inputs.map((x) => x.code)),
+      costProfile: o.costProfile,
+    });
+    shortlistCount = shortlist.length;
+  } catch {
+    shortlistCount = -1;
+  }
+  const picks = generatePicks([...inputs, ...shortlist], {
     market: o.market,
     d: o.d,
     calendar: o.calendar,
@@ -63,5 +81,5 @@ export async function runPicksNight(
     createdAt: o.now,
   });
   const published = await writePicks(db, picks);
-  return { published, candidates: inputs.length, tracking, checks };
+  return { published, candidates: inputs.length, shortlist: shortlistCount, tracking, checks };
 }

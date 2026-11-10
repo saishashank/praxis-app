@@ -200,14 +200,13 @@ describe("partial, then complete later", () => {
 });
 
 describe("non-trading days (decision 5)", () => {
-  it("a Saturday with the non-trading marker sends at 20:00 with all ten headings", async () => {
+  it("a Saturday with the non-trading marker sends at 20:00 with all its headings", async () => {
     await addMarker(db, SAT, "non-trading");
     at("20:00", SAT);
     const r = await run(SAT);
     expect(r).toMatchObject({ status: "sent", kind: "non_trading", partial: false });
     expect(mock.outbox).toHaveLength(1);
-    for (const n of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-      expect(mock.outbox[0]!.text).toContain(`${n}.`);
+    for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) expect(mock.outbox[0]!.text).toContain(`${n}.`);
   });
 
   it("a Saturday without the marker waits for it until 20:30, then sends the non-trading form", async () => {

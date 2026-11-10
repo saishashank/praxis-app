@@ -1,4 +1,6 @@
 // @vitest-environment node
+// D-922: the review itself now reads the DAILY learning (src/lib/learning/daily.ts); these tests keep
+// covering the A6 lists the narrative pack still builds for the batch 3 R5 request (rulesNarrative).
 // Evening Review sections 4-6 from the stored A6 output (M6 T11; AT-20 content parts, EML-012, EML-037,
 // D-104, D-123): lessons with grades, Lane-A changes, challenger status with the earliest date a
 // promotion could first be possible, the plan and the review of yesterday's plan, findings or "no
@@ -9,6 +11,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { learnDay } from "@/lib/learning/learnStage";
 import { learnKey, wordsKey } from "@/lib/learning/learnFacts";
 import { assembleReview, buildFacts } from "@/lib/review/assemble";
+import { loadCtx, readNarrativePack, rulesNarrative } from "@/lib/review/sections";
 import { runKeys } from "@/lib/review/facts";
 import { defaultAgentParams } from "@/lib/agents/params";
 import { seedRuleVersions } from "@/lib/learning/ruleVersions";
@@ -28,6 +31,12 @@ it("the review's run keys are the phases' keys", () => {
   expect(runKeys.learn(MARKET, D)).toBe(learnKey(MARKET, D));
   expect(runKeys.words(MARKET, D)).toBe(wordsKey(MARKET, D));
 });
+
+/** The A6 lists of the narrative pack (what the R5 request falls back to). */
+async function lists(db: Client, d = D, nonTrading = false) {
+  const c = await loadCtx(db, opts(d));
+  return rulesNarrative(await readNarrativePack(c), nonTrading);
+}
 
 const failRun = (db: Client, key: string, status = "failed") =>
   db.execute({
@@ -82,14 +91,15 @@ async function a6World(): Promise<Client> {
 describe("sections 4-6 from A6 output", () => {
   it("section 4 lists the lessons with grades, the Lane-A change and the challenger status with its date", async () => {
     const db = await a6World();
-    const { facts, variant, missing, narrative } = await buildFacts(db, opts());
+    const { variant, missing, narrative } = await buildFacts(db, opts());
     expect(variant).toBe("full");
     expect(missing).toEqual([]);
     expect(narrative).toBe("rules");
-    const s4 = facts.narrative!.s4.join("\n");
+    const l = await lists(db);
+    const s4 = l.s4.join("\n");
     expect(s4).toMatch(/Lesson L-1 \(L3, n = 120\)/); // adopted through Lane A tonight
     expect(s4).toMatch(/Playbook A1.* changes from 2026-10-20/);
-    const ch = facts.narrative!.s4.find((l) => l.startsWith("Challenger C-"))!;
+    const ch = l.s4.find((l) => l.startsWith("Challenger C-"))!;
     expect(ch).toContain("is in shakedown");
     expect(ch).toMatch(
       /could reach review on 2026-\d\d-\d\d, then needs your approval and the next group restart/,
@@ -99,7 +109,7 @@ describe("sections 4-6 from A6 output", () => {
 
   it("section 5 states a finding with its numbers, or 'no detectable difference (n = ...)', and today's attributions", async () => {
     const db = await a6World();
-    const s5 = (await buildFacts(db, opts())).facts.narrative!.s5.join("\n");
+    const s5 = (await lists(db)).s5.join("\n");
     expect(s5).toContain("F1.v1|F2.v1: no detectable difference (n = 40).");
     expect(s5).toContain(
       "F2.v1|F4.v1: confirmation look — passed (finding) (estimate 80, p = 0.01, n = 60).",
@@ -110,19 +120,20 @@ describe("sections 4-6 from A6 output", () => {
 
   it("section 6 shows tonight's plan and the review of yesterday's plan", async () => {
     const db = await a6World();
-    const s6 = (await buildFacts(db, opts())).facts.narrative!.s6;
+    const s6 = (await lists(db)).s6;
     expect(s6.some((l) => /^Plan item 1 \(A\): playbook .* change/.test(l))).toBe(true);
     expect(s6.some((l) => /^Plan of 2026-10-16, item \d+ \(.*\): /.test(l))).toBe(true);
     // at most five plan items (ARN-066)
     expect(s6.filter((l) => l.startsWith("Plan item ")).length).toBeLessThanOrEqual(5);
   });
 
-  it("the rendered review carries the A6 lines and says it was written without AI (rules lists)", async () => {
+  it("the rendered review no longer carries the A6 lines: it reads the daily learning (D-922)", async () => {
     const db = await a6World();
     const out = await assembleReview(db, opts());
-    expect(out.text).toContain("Lesson L-1");
-    expect(out.text).toContain("no detectable difference (n = 40)");
-    expect(out.text).toContain("Written without AI today");
+    expect(out.text).not.toContain("Lesson L-1");
+    expect(out.text).not.toContain("no detectable difference (n = 40)");
+    expect(out.text).not.toContain("Written without AI today");
+    expect(out.text).toContain("The learning step did not run tonight.");
   });
 
   it("is bounded to D: A6 rows of the next night do not appear", async () => {
@@ -133,7 +144,7 @@ describe("sections 4-6 from A6 output", () => {
        VALUES (?, '2026-10-20', 1, 'data_weakness', 'no-lesson:data_weakness: later', NULL, 'ops', '{"metric":"m","threshold":0,"check_d":"2026-10-21","ref":{}}')`,
       [MARKET],
     );
-    const s6 = (await buildFacts(db, opts())).facts.narrative!.s6.join("\n");
+    const s6 = (await lists(db)).s6.join("\n");
     expect(s6).not.toContain("later");
   });
 });
@@ -153,9 +164,9 @@ describe("the partial rule (D-104, D-123)", () => {
     const db = await mainWorld();
     await tradingDay(db);
     await failRun(db, learnKey(MARKET, D), "degraded");
-    const { variant, facts } = await buildFacts(db, opts());
+    const { variant } = await buildFacts(db, opts());
     expect(variant).toBe("full");
-    expect(facts.narrative!.s4[0]).toBe("Tonight's learning step ran on partial inputs.");
+    expect((await lists(db)).s4[0]).toBe("Tonight's learning step ran on partial inputs.");
   });
 
   it("missing batch 3 leaves sections 4-6 alone and takes only section 7", async () => {
@@ -176,22 +187,23 @@ describe("a non-trading review (D-110 #3)", () => {
     await seedRuleVersions(db, { market: MARKET, d: "2026-10-01" });
     const r = await learnDay(db, { market: MARKET, d: SAT, now: nowFor(SAT), params: PARAMS });
     expect(r.stats.variant).toBe("reduced");
-    const { facts, variant } = await buildFacts(db, opts(SAT));
+    const { variant } = await buildFacts(db, opts(SAT));
     expect(variant).toBe("nonTrading");
-    const s4 = facts.narrative!.s4.join("\n");
+    const l = await lists(db, SAT, true);
+    const s4 = l.s4.join("\n");
     expect(s4).toMatch(/Playbook A1.* changes from 2026-10-19/); // effective on Monday
     expect(s4).toContain("Lesson L-1");
-    expect(facts.narrative!.s5.join("\n")).toContain("No position finished today");
-    expect(facts.narrative!.s6.join("\n")).toMatch(/Plan item 1/);
+    expect(l.s5.join("\n")).toContain("No position finished today");
+    expect(l.s6.join("\n")).toMatch(/Plan item 1/);
   });
 
   it("without a reduced run the non-trading review is still complete (never partial)", async () => {
     const db = await mainWorld();
     await tradingDay(db);
     await addMarker(db, SAT, "non-trading");
-    const { variant, missing, facts } = await buildFacts(db, opts(SAT));
+    const { variant, missing } = await buildFacts(db, opts(SAT));
     expect(variant).toBe("nonTrading");
     expect(missing).toEqual([]);
-    expect(facts.narrative!.s4.join(" ")).toMatch(/No attribution observations/);
+    expect((await lists(db, SAT, true)).s4.join(" ")).toMatch(/No attribution observations/);
   });
 });

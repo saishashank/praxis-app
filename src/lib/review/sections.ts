@@ -12,7 +12,6 @@ import { loadCalendar } from "@/lib/arena/closeBooks";
 import { addDays, isTradingDay, type CalendarRow } from "@/lib/data/calendar";
 import { parseOn } from "@/lib/data/controls";
 import type {
-  AgentSuccess,
   AlertFact,
   AttentionItem,
   ExecutionFact,
@@ -23,6 +22,9 @@ import type {
   StatRow,
 } from "@/lib/email/templates/review";
 import { money, pct, plural } from "@/lib/email/templates/format";
+import { aud, exitWords, type ClosedTradeFact } from "@/lib/email/templates/reviewWords";
+import { formatDay } from "@/lib/view/format";
+import { companyNames, familyNames } from "./names";
 import type { EnvName } from "@/lib/email/templates/core";
 import { melbourneDate } from "@/lib/email/keys";
 import type { PicksParams } from "@/lib/agents/params";
@@ -191,7 +193,23 @@ const sum = async (db: Db, sql: string, args: (string | number)[]): Promise<bigi
   return r.rows.length && r.rows[0]!.s !== null ? big(r.rows[0]!.s) : 0n;
 };
 
-async function executionFact(c: Ctx, x: CohortNav, carried: boolean): Promise<ExecutionFact> {
+const PPM_SCALE = 1_000_000n; // threshold-ok: parts per million
+
+/** num/den in parts per million (rounded half away from zero), null when den is not positive. */
+function ppmOf(num: bigint, den: bigint): number | null {
+  if (den <= 0n) return null;
+  const neg = num < 0n;
+  const a = neg ? -num : num;
+  const r = (a * PPM_SCALE + den / 2n) / den;
+  return Number(neg ? -r : r); // money-float-ok: ppm ratio for display
+}
+
+async function executionFact(
+  c: Ctx,
+  x: CohortNav,
+  carried: boolean,
+  names: Record<string, string>,
+): Promise<ExecutionFact> {
   const prev = await c.db.execute({
     sql: "SELECT nav_micro FROM nav_daily WHERE cohort_id = ? AND d < ? ORDER BY d DESC LIMIT 1",
     args: [x.cohortId, x.navD],
@@ -238,6 +256,11 @@ async function executionFact(c: Ctx, x: CohortNav, carried: boolean): Promise<Ex
   const fact: ExecutionFact = {
     id: x.executionId,
     label: `${x.family}-${x.variant}`,
+    name: names[x.family] ?? x.family,
+    variant: x.variant === "L" ? "L" : "U",
+    dayPlPpm: carried ? null : ppmOf(dayPl, prevNav),
+    sinceStartCents: microToCents(x.nav - x.seed),
+    sinceStartPpm: ppmOf(x.nav - x.seed, x.seed),
     currency: c.currency,
     navCents: microToCents(x.nav),
     dayPlCents: microToCents(dayPl),
@@ -258,7 +281,8 @@ async function executionFact(c: Ctx, x: CohortNav, carried: boolean): Promise<Ex
 export async function readExecutions(c: Ctx, carried: boolean): Promise<ExecutionFact[]> {
   const navs = await cohortNavs(c, carried);
   const out: ExecutionFact[] = [];
-  for (const x of navs) out.push(await executionFact(c, x, carried));
+  const names = await familyNames(c.db);
+  for (const x of navs) out.push(await executionFact(c, x, carried, names));
   return out;
 }
 
@@ -282,11 +306,11 @@ type CardJson = {
 export async function readOrders(c: Ctx): Promise<OrderFact[]> {
   const r = await c.db.execute({
     sql: `SELECT o.id, o.kind, o.side, o.code, o.qty, o.status, o.card_id, o.ref_stop_micro,
-            o.decided_d, co.execution_id, f.d AS fill_d, f.fill_price_micro, f.brokerage_micro,
+            o.decided_d, co.execution_id, e.family, f.d AS fill_d, f.fill_price_micro, f.brokerage_micro,
             dc.card_json
           FROM arena_order o
           JOIN cohort co ON co.id = o.cohort_id
-          JOIN execution e ON e.id = co.execution_id AND e.kind = 'E' AND e.market = ?
+          JOIN execution e ON e.id = co.execution_id AND e.kind = 'E' AND e.market = ? AND e.variant = 'U'
           LEFT JOIN fill f ON f.order_id = o.id
           LEFT JOIN decision_card dc ON dc.id = o.card_id
           WHERE (f.d = ?) OR (o.decided_d = ? AND o.status <> 'cancelled' AND o.status <> 'rejected')
@@ -294,6 +318,12 @@ export async function readOrders(c: Ctx): Promise<OrderFact[]> {
     args: [c.market, c.d, c.d],
   });
   const out: OrderFact[] = [];
+  const fam = await familyNames(c.db);
+  const cn = await companyNames(
+    c.db,
+    c.market,
+    r.rows.map((x) => str(x.code)),
+  );
   for (const x of r.rows) {
     const filledToday = x.fill_d !== null && str(x.fill_d) === c.d;
     const kind = str(x.kind);
@@ -320,9 +350,11 @@ export async function readOrders(c: Ctx): Promise<OrderFact[]> {
         : (EXIT_TEXT[kind] ?? kind);
     const o: OrderFact = {
       executionId: str(x.execution_id),
+      strategy: fam[str(x.family)] ?? str(x.family),
       state: filledToday ? "filled" : "created",
       side: str(x.side) as OrderFact["side"],
       code: str(x.code),
+      companyName: cn.get(str(x.code)) ?? null,
       qty: num(x.qty),
       priceCents: microToCents(price),
       costsCents: microToCents(costs),
@@ -337,9 +369,47 @@ export async function readOrders(c: Ctx): Promise<OrderFact[]> {
   return out;
 }
 
+// ---- section 5: positions finished today ----------------------------------------------------------
+
+/**
+ * Positions of the plain-share strategies whose exit filled on D, with the result after costs and how
+ * they ended in plain words (D-922). The learning attribution tag, when it exists, gives the exact
+ * closing rule; otherwise the trade's exit type and the fill rule do.
+ */
+export async function readClosedToday(c: Ctx): Promise<ClosedTradeFact[]> {
+  const r = await c.db.execute({
+    sql: `SELECT e.family, t.id AS trade_id, t.code, t.exit_type, xf.rule AS exit_rule,
+            ef.value_micro AS ev, ef.brokerage_micro AS eb, xf.value_micro AS xv, xf.brokerage_micro AS xb,
+            (SELECT json_extract(a.tags_json, '$.exit.reason') FROM attribution a
+              WHERE a.subject_kind = 'trade' AND a.subject_id = t.id AND a.final = 1
+              ORDER BY a.version DESC LIMIT 1) AS reason
+          FROM trade t
+          JOIN cohort co ON co.id = t.cohort_id
+          JOIN execution e ON e.id = co.execution_id AND e.kind = 'E' AND e.market = ? AND e.variant = 'U'
+          JOIN fill ef ON ef.id = t.entry_fill_id
+          JOIN fill xf ON xf.id = t.exit_fill_id
+          WHERE xf.d = ?
+          ORDER BY e.family, t.code, t.id`,
+    args: [c.market, c.d],
+  });
+  const fam = await familyNames(c.db);
+  const cn = await companyNames(
+    c.db,
+    c.market,
+    r.rows.map((x) => str(x.code)),
+  );
+  return r.rows.map((x) => ({
+    strategy: fam[str(x.family)] ?? str(x.family),
+    code: str(x.code),
+    company: cn.get(str(x.code)) ?? null,
+    resultCents: microToCents(big(x.xv) - big(x.xb) - big(x.ev) - big(x.eb)),
+    exit: exitWords(text(x.reason), text(x.exit_type), text(x.exit_rule)),
+  }));
+}
+
 // ---- section 7: statistics ----------------------------------------------------------------------
 
-export type Stats = { headline: string; rows: StatRow[]; agents: AgentSuccess[] };
+export type Stats = { headline: string; rows: StatRow[]; comparisons: string[] };
 
 const oneDecimal = (n: bigint, den: bigint): string => {
   // n/den with two decimals, exact integer arithmetic
@@ -433,7 +503,7 @@ export async function readStats(c: Ctx, exact: boolean): Promise<Stats | null> {
   const trades = await closedTrades(c);
   const rows: StatRow[] = [];
   const n = trades.length;
-  let headline = `No closed trades yet (to ${c.d}).`;
+  let headline = `No finished trades yet (to ${formatDay(c.d, new Date(`${c.d}T00:00:00.000Z`))}).`;
   if (n > 0) {
     const wins = trades.filter((t) => t.pl > 0n);
     const losses = trades.filter((t) => t.pl < 0n);
@@ -441,32 +511,33 @@ export async function readStats(c: Ctx, exact: boolean): Promise<Stats | null> {
     const winSum = wins.reduce((a, t) => a + t.pl, 0n);
     const lossSum = losses.reduce((a, t) => a - t.pl, 0n);
     const winRate = Number((BigInt(wins.length) * 1000n) / BigInt(n)) / 10; // money-float-ok: percent display
-    headline = `Cumulative to ${c.d}: ${n} closed ${plural(n, "trade")}, win rate ${pct(winRate, 1)}.`;
-    rows.push({ label: "Closed trades", value: String(n), detail: "all live executions" });
+    headline = `All trades so far, to ${formatDay(c.d, new Date(`${c.d}T00:00:00.000Z`))}: ${n} finished ${plural(n, "trade")}, ${pct(winRate, 1)} of them made money.`;
+    rows.push({ label: "Finished trades", value: String(n), detail: "all strategies" });
     rows.push({ label: "Win rate", value: pct(winRate, 1), detail: `${wins.length} of ${n}` });
     rows.push({
-      label: "Expectancy per trade",
-      value: money(microToCents(total / BigInt(n)), c.currency, true),
+      label: "Average result per trade",
+      value: aud(microToCents(total / BigInt(n)), true),
       detail: "after costs",
     });
     if (wins.length > 0)
       rows.push({
         label: "Average win",
-        value: money(microToCents(winSum / BigInt(wins.length)), c.currency, true),
+        value: aud(microToCents(winSum / BigInt(wins.length)), true),
       });
     if (losses.length > 0)
       rows.push({
         label: "Average loss",
-        value: money(-microToCents(lossSum / BigInt(losses.length)), c.currency),
+        value: aud(-microToCents(lossSum / BigInt(losses.length))),
       });
     rows.push({
       label: "Profit factor",
       value: lossSum > 0n ? oneDecimal(winSum, lossSum) : "n/a",
-      detail: lossSum > 0n ? "gross wins / gross losses" : "no losing trade yet",
+      detail: lossSum > 0n ? "total wins divided by total losses" : "no losing trade yet",
     });
   }
 
-  // batch 3 figures (CIFs with n and effective N versus the controls, zero-edge, labels)
+  // Comparison with the random-pick twins: one line per plain-share strategy, only when measured.
+  const comparisons: string[] = [];
   const run = await c.db.execute({
     sql: exact
       ? "SELECT run_id FROM replay_stat WHERE run_id = ? LIMIT 1"
@@ -479,66 +550,27 @@ export async function readStats(c: Ctx, exact: boolean): Promise<Stats | null> {
       sql: "SELECT scope, value_json FROM replay_stat WHERE run_id = ? AND metric = 'headline' ORDER BY scope",
       args: [runId],
     });
+    const fam = await familyNames(c.db);
+    const ex = await c.db.execute({
+      sql: "SELECT id, family, variant FROM execution WHERE kind = 'E' AND market = ?",
+      args: [c.market],
+    });
+    const byId = new Map(ex.rows.map((x) => [str(x.id), x]));
     for (const h of hs.rows) {
       const v = JSON.parse(str(h.value_json)) as {
-        comparator: string;
         cifTargetMinusC2: number | null;
         effectiveN: number;
         comparatorEffectiveN: number;
       };
-      rows.push({
-        label: `${str(h.scope)} vs ${v.comparator}`,
-        value:
-          v.cifTargetMinusC2 === null
-            ? "not yet measured"
-            : `${pct(v.cifTargetMinusC2 * 100, 1, true)} target CIF`, // money-float-ok: fraction to percent
-        detail: `effective N ${v.effectiveN} vs ${v.comparatorEffectiveN}`,
-      });
-    }
-    const ze = await c.db.execute({
-      sql: "SELECT scope, value_json FROM replay_stat WHERE run_id = ? AND metric = 'zero_edge' AND scope LIKE ? ORDER BY scope",
-      args: [runId, `${c.market}:%`],
-    });
-    for (const z of ze.rows) {
-      const v = JSON.parse(str(z.value_json)) as {
-        family: string;
-        trials: number;
-        probability: { target: number };
-      };
-      rows.push({
-        label: `Zero-edge ${v.family}`,
-        value: `${pct(v.probability.target * 100, 1)} reach target`, // money-float-ok: fraction to percent
-        detail: `${v.trials} trials`,
-      });
+      const e = byId.get(str(h.scope));
+      if (e === undefined || str(e.variant) !== "U" || v.cifTargetMinusC2 === null) continue;
+      const lead = v.cifTargetMinusC2 * 100; // money-float-ok: fraction to percentage points
+      comparisons.push(
+        `${fam[str(e.family)] ?? str(e.family)}: ${Math.abs(lead).toFixed(1)} percentage points ${lead >= 0 ? "ahead of" : "behind"} its random-pick twin at reaching the target (${v.effectiveN} against ${v.comparatorEffectiveN} finished rounds).`,
+      );
     }
   }
-  const lb = await c.db.execute({
-    sql: `SELECT l.execution_id, l.label, l.n, l.mde FROM label l
-          WHERE l.d <= ? AND l.id = (SELECT l2.id FROM label l2 WHERE l2.execution_id = l.execution_id
-            AND l2.d <= ? ORDER BY l2.d DESC, l2.id DESC LIMIT 1)
-          ORDER BY l.execution_id`,
-    args: [c.d, c.d],
-  });
-  for (const l of lb.rows) {
-    rows.push({
-      label: `${str(l.execution_id)} label`,
-      value: str(l.label),
-      detail: `n = ${str(l.n)}${l.mde === null ? "" : `, minimum detectable effect ${pct(num(l.mde) * 100, 1)}`}`, // money-float-ok: display
-    });
-  }
-
-  const s = await sentinelScore(c.db, c.market, c.d);
-  const agents: AgentSuccess[] = [
-    {
-      agent: "A1 Sentinel (ARN-073)",
-      successPct: s.n === 0 ? null : Math.round((s.hits * 100) / s.n),
-      n: s.n,
-    },
-    { agent: "Pattern agent (ARN-074)", successPct: null, n: 0 },
-    { agent: "LLM roles (ARN-075)", successPct: null, n: 0 },
-  ];
-  if (rows.length === 0 && n === 0 && s.n === 0) return null;
-  return { headline, rows, agents };
+  return { headline, rows, comparisons };
 }
 
 // ---- section 8: Sentinel recap ------------------------------------------------------------------
@@ -575,6 +607,23 @@ export async function readRecap(c: Ctx): Promise<Recap> {
           : 0),
   );
   const alerts: AlertFact[] = [];
+  const fam = await familyNames(c.db);
+  const exFam = await c.db.execute({
+    sql: "SELECT id, family, variant FROM execution WHERE kind = 'E' AND market = ?",
+    args: [c.market],
+  });
+  const stratOf = new Map(
+    exFam.rows.map((x) => [
+      str(x.id),
+      `${fam[str(x.family)] ?? str(x.family)}${str(x.variant) === "L" ? " (leverage)" : ""}`,
+    ]),
+  );
+  const cn = await companyNames(
+    c.db,
+    c.market,
+    day.flatMap((x) => (x.code === null ? [] : [str(x.code)])),
+  );
+  const plainRegime = (s: string): string => s.toLowerCase().replace(/_/g, " ");
   let p2 = 0;
   let regimeNotice: string | undefined;
   for (const x of day) {
@@ -589,8 +638,10 @@ export async function readRecap(c: Ctx): Promise<Recap> {
     };
     const kind = str(x.kind);
     if (kind === "regime_shift" && f.from !== undefined && f.to !== undefined) {
-      const gated = (f.gated ?? []).map((g) => `${g.id}: ${g.effect}`).join("; ");
-      regimeNotice = `Market regime changed from ${f.from} to ${f.to}.${gated ? ` ${gated}.` : ""}`;
+      const gated = (f.gated ?? [])
+        .map((g) => `${stratOf.get(g.id) ?? g.id}: ${g.effect}`)
+        .join("; ");
+      regimeNotice = `The market mood changed from ${plainRegime(f.from)} to ${plainRegime(f.to)}.${gated ? ` ${gated}.` : ""}`;
     }
     const tier = str(x.tier) as AlertFact["tier"];
     if (tier === "P2") {
@@ -600,6 +651,7 @@ export async function readRecap(c: Ctx): Promise<Recap> {
     const a: AlertFact = {
       tier,
       code: x.code === null ? "-" : str(x.code),
+      company: x.code === null ? null : (cn.get(str(x.code)) ?? null),
       title: f.title ?? f.type ?? kind.replace(/_/g, " "),
       time: timeFmt.format(new Date(str(x.detected_at))),
       effect: f.why ?? "Recorded.",
@@ -615,11 +667,17 @@ export async function readRecap(c: Ctx): Promise<Recap> {
           ORDER BY t.status DESC, t.subject_id, t.breaker_id, t.phase, t.seq`,
     args: [c.market, c.d],
   });
+  const bcn = await companyNames(
+    c.db,
+    c.market,
+    br.rows.map((x) => str(x.code)),
+  );
   const breakerHits = br.rows.map((x) => {
     const red = str(x.status) === "red";
     const order = str(x.subject_kind) === "order";
     return {
       execution: str(x.code),
+      company: bcn.get(str(x.code)) ?? null,
       breaker: `${str(x.breaker_id)} (${str(x.status)})`,
       effect: red
         ? order
@@ -690,14 +748,28 @@ export async function readPickReview(
     return null;
   const nClear = [...clears.values()].reduce((s, n) => s + n, 0);
   const why = [...clears.entries()].map(([r, n]) => `${n} ${CLEAR_WORDS[r] ?? r}`).join(", ");
-  const lines = [
-    `Buy-price alerts today: ${hits.size} hit, ${nClear} cleared${why ? ` (${why})` : ""}.`,
-    `Intraday candidates today: ${cand.rows.length} found, ${carried} carried into tonight's decision.`,
-  ];
+  // only lines with content (D-922)
+  const lines: string[] = [];
+  if (hits.size > 0 || nClear > 0) {
+    lines.push(
+      `Buy-price alerts today: ${hits.size} hit, ${nClear} cleared${why ? ` (${why})` : ""}.`,
+    );
+  }
+  if (cand.rows.length > 0) {
+    lines.push(
+      `Intraday candidates today: ${cand.rows.length} found, ${carried} carried into tonight's decision.`,
+    );
+  }
+  const names = await companyNames(
+    c.db,
+    c.market,
+    cand.rows.map((x) => str(x.code)),
+  );
   const candidates =
     candidatesOn && cand.rows.length > 0
       ? cand.rows.map((x) => ({
           code: str(x.code),
+          name: names.get(str(x.code)) ?? null,
           trigger: text(x.item_category) ?? str(x.item_source),
           outcome: text(x.decision_outcome) ?? "not yet decided",
         }))

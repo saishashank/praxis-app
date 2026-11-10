@@ -169,7 +169,7 @@ function indexOf(model: NonNullable<Awaited<ReturnType<typeof loadReviewPage>>>)
   }
   if (model.html === null) return [];
   const missing = new Set(model.missing.map((m) => m.n));
-  return REVIEW_SECTION_NAMES.slice(0, REVIEW_TONES.length).map((label, i) => ({
+  return REVIEW_SECTION_NAMES.slice(0, REVIEW_SECTION_NAMES.length - 1).map((label, i) => ({
     label: plainSectionName(label),
     tone: REVIEW_TONES[i]!,
     missing: missing.has(i + 1),
