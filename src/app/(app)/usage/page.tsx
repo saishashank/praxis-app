@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
 import { formatMelbourne } from "@/lib/health/format";
 import { userPreferences } from "@/lib/preferences/read";
+import { loadTursoSplit, type TursoSplit, type TursoSplitRow } from "@/lib/ui/loaders/usage";
 import { loadBakeoffResults, type BakeoffView } from "@/lib/ui/loaders/usageBakeoff";
 import { loadLlmUsage, type LlmCounts, type LlmUsage } from "@/lib/ui/loaders/usageLlm";
 import {
@@ -50,7 +51,14 @@ const amount = (v: number | null, unit: string) => (v === null ? "n/a" : `${nf.f
 
 /** One meter as a row (UXR-029): name, period, a progress bar, used / limit and the level pill. */
 function MeterRow({ m }: { m: Meter }) {
-  const pct = m.ratio === null ? null : Math.max(0, Math.min(100, m.ratio * 100));
+  // Turso meters (M18, OPS-104 b): the bar is the share of the whole FREE plan and a marker draws the
+  // line this system may not cross (20 %); every other meter is a share of its own limit.
+  const plan = m.planLimit !== undefined && m.limit !== null && m.limit > 0 ? m.planLimit : null;
+  const planPct =
+    plan !== null && m.used !== null ? Math.max(0, Math.min(100, (m.used / plan) * 100)) : null;
+  const linePct = plan !== null && m.limit !== null ? (m.limit / plan) * 100 : null;
+  const pct =
+    plan !== null ? planPct : m.ratio === null ? null : Math.max(0, Math.min(100, m.ratio * 100));
   return (
     <li className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-surface p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -65,19 +73,41 @@ function MeterRow({ m }: { m: Meter }) {
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={pct === null ? undefined : Math.round(pct)}
-        aria-valuetext={pct === null ? "No data" : `${pct.toFixed(1)}% of the limit`}
-        className="h-2 w-full overflow-hidden rounded-full bg-surface-2"
+        aria-valuetext={
+          pct === null
+            ? "No data"
+            : plan !== null
+              ? `${pct.toFixed(1)}% of the free plan, the line is at ${linePct?.toFixed(0)}%`
+              : `${pct.toFixed(1)}% of the limit`
+        }
+        className="relative h-2 w-full overflow-hidden rounded-full bg-surface-2"
       >
         <div
           data-level={m.level}
           className="h-full rounded-full"
           style={{ width: `${pct ?? 0}%`, background: LEVEL_BAR[m.level] }}
         />
+        {linePct !== null && (
+          <div
+            data-testid="plan-line"
+            aria-hidden="true"
+            className="absolute top-0 h-full w-0.5 bg-text"
+            style={{ left: `${linePct}%` }}
+          />
+        )}
       </div>
       <p className="m-0 text-sm">
         {m.used === null ? "No data" : amount(m.used, m.unit)} / {amount(m.limit, m.unit)}
         {m.ratio !== null && ` (${(m.ratio * 100).toFixed(1)}%)`}
+        {plan !== null &&
+          planPct !== null &&
+          ` — ${planPct.toFixed(1)}% of the free plan (line at ${linePct?.toFixed(0)}%)`}
       </p>
+      {m.source !== undefined && (
+        <p className="m-0 text-xs font-medium text-text-muted">
+          {m.source === "platform" ? "Platform figure" : "Estimate"}
+        </p>
+      )}
       <p className="m-0 text-xs text-text-muted">
         <span>{m.periodLabel}</span>. {m.note}
       </p>
@@ -96,6 +126,12 @@ export default async function UsagePage() {
     meters = null; // neutral message below; no error details
   }
   const worst = meters ? worstMeter(meters) : null;
+  let split: TursoSplit | null = null;
+  try {
+    split = await loadTursoSplit(mainDb(), now);
+  } catch {
+    split = null; // the section says so below; no error details
+  }
   let llm: LlmUsage | null = null;
   try {
     llm = await loadLlmUsage(mainDb(), user.role, now);
@@ -132,9 +168,10 @@ export default async function UsagePage() {
           </h2>
           <p className="text-sm text-text-muted">
             Worst level: <span className="font-mono">{LEVEL_LABEL[worst.level]}</span>. Notice at
-            70%, alert at 90%, degrade at 95% of a monthly limit. Figures are recorded by jobs (app
-            traffic is not included), so compare them with the provider dashboards during the
-            monthly $0 check.
+            70%, alert at 90%, degrade at 95% of a monthly limit. The three Turso bars are a share
+            of the whole free plan: this system may use 20% of it, and you are told from 15%. Other
+            figures are recorded by jobs (app traffic is not included), so compare them with the
+            provider dashboards during the monthly $0 check.
           </p>
           <ul aria-label="Free-tier usage meters" className="m-0 flex list-none flex-col gap-3 p-0">
             {meters.map((m) => (
@@ -144,6 +181,8 @@ export default async function UsagePage() {
         </section>
       )}
 
+      <TursoSplitSection split={split} />
+
       <LlmSection llm={llm} />
 
       <BakeoffSection bakeoff={bakeoff} />
@@ -152,6 +191,73 @@ export default async function UsagePage() {
         Simulation for personal information only — not financial advice
       </footer>
     </main>
+  );
+}
+
+function SplitTable({
+  caption,
+  first,
+  rows,
+}: {
+  caption: string;
+  first: string;
+  rows: TursoSplitRow[];
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-left text-sm">
+        <caption className="text-left font-medium">{caption}</caption>
+        <thead>
+          <tr>
+            <th scope="col" className="py-2 pr-4">
+              {first}
+            </th>
+            <th scope="col" className="py-2 pr-4 text-right">
+              Rows read
+            </th>
+            <th scope="col" className="py-2 text-right">
+              Rows written
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.key} className="border-t border-border">
+              <th scope="row" className="py-2 pr-4 font-medium">
+                {r.key}
+              </th>
+              <td className="py-2 pr-4 text-right font-mono">{whole.format(r.reads)}</td>
+              <td className="py-2 text-right font-mono">{whole.format(r.writes)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** OPS-104 (b): where this month's Turso rows went, per market and per job (an estimate from run records). */
+function TursoSplitSection({ split }: { split: TursoSplit | null }) {
+  return (
+    <section aria-labelledby="split-h" className="flex min-w-0 flex-col gap-3">
+      <h2 id="split-h" className="text-xl font-semibold">
+        Database rows by market and job
+      </h2>
+      {split === null ? (
+        <p role="status">Split unavailable</p>
+      ) : split.byJob.length === 0 ? (
+        <p>No job has reported rows this month ({split.monthLabel}).</p>
+      ) : (
+        <>
+          <p className="text-sm text-text-muted">
+            Estimate, {split.monthLabel}: each job reports its own rows read and written (app page
+            traffic is not included). A row without a market belongs to no single market.
+          </p>
+          <SplitTable caption="By market" first="Market" rows={split.byMarket} />
+          <SplitTable caption="By job" first="Job" rows={split.byJob} />
+        </>
+      )}
+    </section>
   );
 }
 

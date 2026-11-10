@@ -1,0 +1,46 @@
+  production:
+    if: github.ref == 'refs/heads/release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: read
+    # PLT-076: one run at a time, never cancelling one in progress.
+    concurrency:
+      group: turso-usage
+      cancel-in-progress: false
+    environment:
+      name: production
+      deployment: false
+    steps:
+      # SEC-108 c: these two steps run only the tiny reviewed script, with github.token alone.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ci-tools
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - name: Find approved commit
+        id: approved
+        run: node ci-tools/scripts/ci/approved-commit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.approved.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      # The only step that sees the platform token. No database access here.
+      - name: Sample the Turso usage (platform token, no database)
+        run: node scripts/usage/turso-sample.mjs sample --out "$RUNNER_TEMP/usage-sample.json"
+        env:
+          TURSO_PLATFORM_TOKEN_USAGE: ${{ secrets.TURSO_PLATFORM_TOKEN_USAGE }}
+          TURSO_ORG: ${{ vars.TURSO_ORG }}
+      # The only step that sees the database secrets. No platform token here.
+      - name: Store the sample
+        run: node scripts/usage/turso-sample.mjs store --file "$RUNNER_TEMP/usage-sample.json"
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}

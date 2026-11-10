@@ -33,6 +33,13 @@
 //   "actions_minutes_soft_ceiling | 3,000/month" (l.154); "quota thresholds | 70/90/95% per
 //   period" (l.155); "llm_daily_budget_total | 150,000 tokens" (l.187).
 //
+// M18 (OPS-104, D-958): the Turso meters read the PLATFORM figure from the newest `usage_sample` row
+// of the month (written once a day by scripts/usage/turso-sample.mjs through the turso-usage workflow;
+// the app never holds a platform token) and show it against the FREE plan x turso_free_ceiling_pct
+// (the 20 % line, PRD-045). The summed run_record figure stays as the cross-check line. With no usable
+// sample the meter is the labelled estimate it always was (PLT-050). Turso meters have their own levels:
+// the notice share (turso_notice_pct) is reached at 15 % of the plan and the ceiling at 20 %.
+//
 // Decisions: the spec does not name the month boundary, so the quota month is the calendar month
 // in UTC (stored timestamps are UTC, PLT-023; Turso bills by UTC month) and the daily LLM period
 // is the UTC day. Staging is derived like the self-check does: TEST_IDENTITY_SECRET present.
@@ -53,10 +60,28 @@ export type Meter = {
   ratio: number | null;
   level: MeterLevel;
   note: string; // where the figure comes from
+  /** Turso meters only (M18): where the used figure comes from. */
+  source?: "platform" | "estimate";
+  /** Turso meters only: the whole free-plan allowance in the meter's unit (the page draws the 20 % line against it). */
+  planLimit?: number;
 };
 
 export type Thresholds = { notice: number; alert: number; degrade: number };
 export type UsageEnvironment = "staging" | "production";
+
+/**
+ * The Turso FREE plan (turso.tech/pricing, checked 2026-11-11, docs/M18_exit_evidence.md section 4):
+ * 500 million rows read and 10 million rows written a month, 5 GB of storage. M18 may use
+ * turso_free_ceiling_pct (20) of each, PRD-045.
+ */
+export const TURSO_FREE_PLAN = Object.freeze({
+  rowsRead: 500_000_000,
+  rowsWritten: 10_000_000,
+  storageBytes: 5_000_000_000,
+});
+/** A sample older than this is not used: the meter falls back to the labelled estimate. */
+export const TURSO_SAMPLE_MAX_AGE_MS = 72 * 3_600_000; // threshold-ok: three missed daily samples
+const BYTES_PER_GB = 1_000_000_000; // threshold-ok: unit conversion (decimal GB, as Turso quotes it)
 
 const SEVERITY: Record<MeterLevel, number> = {
   "no data": -1,
@@ -100,6 +125,61 @@ export function dayBounds(now: Date): { start: string; end: string; label: strin
   };
 }
 
+/**
+ * Turso levels (D-958): notice and alert at the notice share of the ceiling, degrade at the ceiling.
+ * `degrade` is the PLT-051 degrade mode: non-essential jobs pause. When it is reached the order of work
+ * to drop is standby markets first (data_only before full), the full market last; the jobs that read the
+ * degrade state today are src/lib/arena/cli.ts, src/lib/cortex/stage.ts and
+ * src/lib/data/quotes/fetch.ts (OPS-104 c: an ordering note only, no market is named here).
+ */
+export function tursoThresholds(noticePct: number, ceilingPct: number): Thresholds {
+  const notice = noticePct / ceilingPct;
+  return { notice, alert: notice, degrade: 1 };
+}
+
+export type TursoSample = {
+  sampledAt: string;
+  rowsRead: number;
+  rowsWritten: number;
+  storageBytes: number | null;
+  planName: string | null;
+};
+
+/** The newest usable platform sample of the month, or null (none yet, unavailable, or too old). */
+export async function latestTursoSample(
+  db: Pick<Client, "execute">,
+  now: Date,
+  month: { start: string; end: string },
+): Promise<TursoSample | null> {
+  const r = await db.execute({
+    // rows-ok: one row, read through the primary key
+    sql: `SELECT sampled_at, rows_read_month, rows_written_month, storage_bytes, plan_name
+          FROM usage_sample WHERE source = 'platform' AND sampled_at >= ? AND sampled_at < ?
+          ORDER BY sampled_at DESC LIMIT 1`,
+    args: [month.start, month.end],
+  });
+  const x = r.rows[0];
+  if (!x) return null;
+  const at = String(x.sampled_at);
+  if (now.getTime() - Date.parse(at) > TURSO_SAMPLE_MAX_AGE_MS) return null;
+  if (x.rows_read_month === null || x.rows_written_month === null) return null;
+  return {
+    sampledAt: at,
+    rowsRead: Number(x.rows_read_month),
+    rowsWritten: Number(x.rows_written_month),
+    storageBytes: x.storage_bytes === null ? null : Number(x.storage_bytes),
+    planName: x.plan_name === null ? null : String(x.plan_name),
+  };
+}
+
+const melbourneHm = (iso: string) =>
+  new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Melbourne",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(iso));
+
 function make(
   m: Omit<Meter, "ratio" | "level">,
   t: Thresholds,
@@ -113,6 +193,7 @@ function make(
 }
 
 const num = (v: unknown) => Number(v ?? 0);
+const nf = new Intl.NumberFormat("en-AU", { maximumFractionDigits: 1 });
 
 // V1-S11 (D-720): traffic that no job reports about itself is estimated, never silently left out.
 // Every signed machine call claims a nonce (one INSERT, plus a prune DELETE) and the Worker reads
@@ -151,22 +232,34 @@ export async function getMeters(
   now: Date,
   environment: UsageEnvironment,
 ): Promise<Meter[]> {
-  const [thresholds, writesCeil, readsCeil, share, actionsCeil, llmBudget, storageCeil] =
-    await Promise.all([
-      getConfig(db, "quota_thresholds") as Promise<Thresholds>,
-      getConfig(db, "turso_writes_ceiling_month") as Promise<number>,
-      getConfig(db, "turso_reads_ceiling_month") as Promise<number>,
-      getConfig(db, "turso_staging_share") as Promise<number>,
-      getConfig(db, "actions_minutes_soft_ceiling") as Promise<number>,
-      getConfig(db, "llm_daily_budget_total") as Promise<number>,
-      getConfig(db, "storage_ceiling_gb") as Promise<number>,
-    ]);
+  const [
+    thresholds,
+    writesCeil,
+    readsCeil,
+    share,
+    actionsCeil,
+    llmBudget,
+    storageCeil,
+    ceilingPct,
+    noticePct,
+  ] = await Promise.all([
+    getConfig(db, "quota_thresholds") as Promise<Thresholds>,
+    getConfig(db, "turso_writes_ceiling_month") as Promise<number>,
+    getConfig(db, "turso_reads_ceiling_month") as Promise<number>,
+    getConfig(db, "turso_staging_share") as Promise<number>,
+    getConfig(db, "actions_minutes_soft_ceiling") as Promise<number>,
+    getConfig(db, "llm_daily_budget_total") as Promise<number>,
+    getConfig(db, "storage_ceiling_gb") as Promise<number>,
+    getConfig(db, "turso_free_ceiling_pct") as Promise<number>,
+    getConfig(db, "turso_notice_pct") as Promise<number>,
+  ]);
+  const tursoLevels = tursoThresholds(noticePct, ceilingPct);
   const month = monthBounds(now);
   const day = dayBounds(now);
   const factor = environment === "staging" ? share : 1;
   const scope = environment === "staging" ? "staging share of the " : "";
 
-  const [tursoRes, emailRes, actionsRes, llmRes, traffic] = await Promise.all([
+  const [tursoRes, emailRes, actionsRes, llmRes, traffic, sample] = await Promise.all([
     db.execute({
       sql: `SELECT SUM(rows_read) AS r, SUM(rows_written) AS w FROM run_record
             WHERE started_at >= ? AND started_at < ?`,
@@ -187,6 +280,7 @@ export async function getMeters(
       args: [day.start, day.end],
     }),
     estimateUntrackedTraffic(db, now, month),
+    latestTursoSample(db, now, month),
   ]);
 
   const turso = tursoRes.rows[0];
@@ -194,47 +288,110 @@ export async function getMeters(
   const recorded = (extra: string) =>
     `Recorded by jobs plus an estimate of ${extra} (app page traffic not included). Estimate.`;
 
+  // Our own count (run records plus the untracked-traffic estimate), the figure the estimate meter
+  // shows and the cross-check beside a platform figure.
+  const ourWrites = num(turso.w) + traffic.nonceWrites;
+  const ourReads = num(turso.r) + traffic.workerTickReads;
+  const crossCheck = (ours: number, platform: number) => {
+    if (platform <= 0) return `Our count: ${nf.format(ours)}.`;
+    const delta = ((ours - platform) / platform) * 100;
+    return `Our count: ${nf.format(ours)}, ${delta >= 0 ? "+" : "-"}${nf.format(Math.abs(delta))} % against the platform.`;
+  };
+  const tursoRow = (
+    id: string,
+    label: string,
+    ours: number,
+    platform: number | null,
+    freeTotal: number,
+    ceiling: number,
+    ceilingNote: string,
+    extra: string,
+  ): Meter =>
+    sample && platform !== null
+      ? make(
+          {
+            id,
+            label,
+            used: platform,
+            limit: Math.round((freeTotal * ceilingPct) / 100),
+            unit: "rows",
+            period: "monthly",
+            periodLabel: month.label,
+            source: "platform",
+            planLimit: freeTotal,
+            note: `Platform figure, sampled ${melbourneHm(sample.sampledAt)} Melbourne; limit is ${ceilingPct} % of the Turso free plan (PRD-045). ${crossCheck(ours, platform)}`,
+          },
+          tursoLevels,
+        )
+      : make(
+          {
+            id,
+            label,
+            used: ours,
+            limit: Math.round(ceiling * factor),
+            unit: "rows",
+            period: "monthly",
+            periodLabel: month.label,
+            source: "estimate",
+            planLimit: freeTotal,
+            note: `${recorded(extra)} Limit is the ${scope}${ceilingNote} (DAT-141). No platform sample this month yet.`,
+          },
+          tursoLevels,
+        );
+
   return [
-    make(
-      {
-        id: "turso-rows-written",
-        label: "Turso rows written",
-        used: num(turso.w) + traffic.nonceWrites,
-        limit: Math.round(writesCeil * factor),
-        unit: "rows",
-        period: "monthly",
-        periodLabel: month.label,
-        note: `${recorded(`signed-call nonce writes (~${traffic.nonceWrites})`)} Limit is the ${scope}writes ceiling (DAT-141).`,
-      },
-      thresholds,
+    tursoRow(
+      "turso-rows-written",
+      "Turso rows written",
+      ourWrites,
+      sample ? sample.rowsWritten : null,
+      TURSO_FREE_PLAN.rowsWritten,
+      writesCeil,
+      "writes ceiling",
+      `signed-call nonce writes (~${traffic.nonceWrites})`,
     ),
-    make(
-      {
-        id: "turso-rows-read",
-        label: "Turso rows read",
-        used: num(turso.r) + traffic.workerTickReads,
-        limit: Math.round(readsCeil * factor),
-        unit: "rows",
-        period: "monthly",
-        periodLabel: month.label,
-        note: `${recorded(`Worker tick reads (~${traffic.workerTickReads})`)} Limit is the ${scope}reads ceiling (DAT-141).`,
-      },
-      thresholds,
+    tursoRow(
+      "turso-rows-read",
+      "Turso rows read",
+      ourReads,
+      sample ? sample.rowsRead : null,
+      TURSO_FREE_PLAN.rowsRead,
+      readsCeil,
+      "reads ceiling",
+      `Worker tick reads (~${traffic.workerTickReads})`,
     ),
-    make(
-      {
-        id: "turso-storage",
-        label: "Turso storage",
-        used: null,
-        limit: storageCeil,
-        unit: "GB",
-        period: "none",
-        periodLabel: "current",
-        note: "Not measured yet (needs the Turso platform API - later).",
-      },
-      thresholds,
-      { noData: true },
-    ),
+    sample && sample.storageBytes !== null
+      ? make(
+          {
+            id: "turso-storage",
+            label: "Turso storage",
+            used: sample.storageBytes / BYTES_PER_GB,
+            limit: (TURSO_FREE_PLAN.storageBytes * ceilingPct) / 100 / BYTES_PER_GB,
+            unit: "GB",
+            period: "none",
+            periodLabel: "current",
+            source: "platform",
+            planLimit: TURSO_FREE_PLAN.storageBytes / BYTES_PER_GB,
+            note: `Platform figure, sampled ${melbourneHm(sample.sampledAt)} Melbourne; limit is ${ceilingPct} % of the Turso free plan (PRD-045).`,
+          },
+          tursoLevels,
+        )
+      : make(
+          {
+            id: "turso-storage",
+            label: "Turso storage",
+            used: null,
+            limit: storageCeil,
+            unit: "GB",
+            period: "none",
+            periodLabel: "current",
+            source: "estimate",
+            planLimit: TURSO_FREE_PLAN.storageBytes / BYTES_PER_GB,
+            note: "Not measured yet (no platform sample: the Turso platform token is not set).",
+          },
+          tursoLevels,
+          { noData: true },
+        ),
     make(
       {
         id: "llm-tokens",

@@ -2,7 +2,14 @@
 // (ROL-102a): the loader refuses any other role itself (returns null), on top of the page guard.
 // Meters come from `getMeters`; the LLM section is read from `llm_call` for the last 30 days, grouped
 // by role and provider (counts and tokens only; no prompts or text are stored there).
-import { getMeters, usageEnvironment, worstMeter, type Meter } from "@/lib/usage/meters";
+import type { Client } from "@libsql/client";
+import {
+  getMeters,
+  monthBounds,
+  usageEnvironment,
+  worstMeter,
+  type Meter,
+} from "@/lib/usage/meters";
 import { marketOf, type LoaderEnv, type LoaderState } from "./shell";
 
 const LLM_DAYS = 30; // threshold-ok: LLM-051 view window
@@ -24,6 +31,35 @@ export type UsageModel = {
   meters: Meter[];
   llm: { sinceD: string; rows: LlmUsageRow[] };
 };
+
+export type TursoSplitRow = { key: string; reads: number; writes: number };
+export type TursoSplit = { monthLabel: string; byMarket: TursoSplitRow[]; byJob: TursoSplitRow[] };
+
+const SPLIT_ROWS = 25; // threshold-ok: bounded rows
+
+/**
+ * OPS-104 (b): where this month's Turso rows went, per market and per job, from the run records
+ * (an estimate: jobs report their own reads and writes, app page traffic is not included). Owner
+ * only (the page guard); counts only.
+ */
+export async function loadTursoSplit(db: Pick<Client, "execute">, now: Date): Promise<TursoSplit> {
+  const month = monthBounds(now);
+  const by = async (col: "market" | "job"): Promise<TursoSplitRow[]> => {
+    // rows-ok: one month of run records (a few thousand rows) through idx_run_record_started
+    const r = await db.execute({
+      sql: `SELECT COALESCE(${col}, '(none)') AS k, SUM(rows_read) AS r, SUM(rows_written) AS w
+            FROM run_record WHERE started_at >= ? AND started_at < ?
+            GROUP BY ${col} ORDER BY r DESC, k LIMIT ?`,
+      args: [month.start, month.end, SPLIT_ROWS],
+    });
+    return r.rows.map((x) => ({
+      key: String(x.k),
+      reads: Number(x.r ?? 0), // money-float-ok: SQL count
+      writes: Number(x.w ?? 0), // money-float-ok: SQL count
+    }));
+  };
+  return { monthLabel: month.label, byMarket: await by("market"), byJob: await by("job") };
+}
 
 export async function loadUsage(
   env: LoaderEnv,
