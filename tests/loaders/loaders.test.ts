@@ -105,6 +105,29 @@ describe("Home", () => {
     expect(d.attentionCount).toBe(0);
   });
 
+  it("Owner 2026-11-10: during the session the strategy tiles move with the delayed quotes", async () => {
+    await db.main.execute(
+      "INSERT INTO quote_latest (market, code, last_micro, prev_close_micro, quote_at, fetched_at) " +
+        "VALUES ('AU', 'ZZUP', 12600000, 12340000, '2099-01-05T00:35:00.000Z', '2099-01-05T00:35:00.000Z')",
+    );
+    try {
+      const d = (await loadHome(deps(db, OWNER))).data;
+      const e01 = d.summary!.tiles.find((x) => x.id === "E01")!;
+      const e02 = d.summary!.tiles.find((x) => x.id === "E02")!;
+      expect(e01.dayChange?.micro).toBe(2_600_000); // 10 shares x (12.60 - 12.34)
+      expect(e01.dayChangePpm).not.toBeNull();
+      expect(e02.dayChange?.micro).toBe(0); // holds no shares: cash did not move today
+      expect(d.dayLabel).toBe("Today (delayed, 11:35)");
+      expect(d.headline[0]!.dayChangePpm! > 0).toBe(true);
+    } finally {
+      await db.main.execute("DELETE FROM quote_latest");
+    }
+    // without a fresher quote the end-of-day change stands
+    const after = (await loadHome(deps(db, OWNER))).data;
+    expect(after.summary!.tiles.find((x) => x.id === "E01")!.dayChange?.micro).toBe(20_000_000);
+    expect(after.dayLabel).not.toMatch(/delayed/);
+  });
+
   it("D-900: the watchlist shows a delayed quote from a later day than the close, with its time", async () => {
     await db.main.execute(
       "INSERT INTO quote_latest (market, code, last_micro, prev_close_micro, quote_at, fetched_at) " +

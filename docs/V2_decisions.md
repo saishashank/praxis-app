@@ -560,3 +560,4 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-901 | (O-80) Where it shows: the open trades of a strategy round (lastPriceOf in strategyViews.ts) and the Home watchlist. |
 | D-902 | (O-80) Coverage follows the poll's existing plan (D-502/D-695): armed picks every tick, then watch-listed and held codes at the cadence the day's budget sust... |
 | D-907 | (Owner 2026-11-09) Home shows the ASX 200 live: the quote poll fetches ^AXJO (stored in quote_latest under the index_bar code AXJO) as the first of its extra... |
+| D-915 | (Owner 2026-11-10: "the strategies still show percentage as of yesterday, not the delayed profit or loss for the day") During the session the Home strategy t... |

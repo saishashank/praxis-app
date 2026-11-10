@@ -294,7 +294,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
   // Summary (D-192): one tile per live unlevered strategy, latest liquidation value against its
   // seed and against the session before; nothing is added across strategies.
   const nav = await deps.mainDb.execute(
-    `SELECT c.execution_id, e.family, c.seed_micro, c.start_d, n.d, n.liq_nav_micro,
+    `SELECT n.cohort_id, c.execution_id, e.family, c.seed_micro, c.start_d, n.d, n.liq_nav_micro,
             (SELECT p.liq_nav_micro FROM nav_daily p WHERE p.cohort_id = n.cohort_id AND p.d < n.d
              ORDER BY p.d DESC LIMIT 1) AS prev
      FROM nav_daily n JOIN cohort c ON c.id = n.cohort_id JOIN execution e ON e.id = c.execution_id
@@ -321,6 +321,67 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     };
   });
   const navD = maxDate(...nav.rows.map((r) => str(r.d)));
+  // Owner 2026-11-10: during the session the day's change comes from the delayed quotes of the shares
+  // each strategy holds (against the last close), not from the last end of day.
+  let liveAt: string | null = null;
+  let liveSum: { change: number; base: number } | null = null;
+  if (tiles.length > 0) {
+    const live = await soft(async () => {
+      const pairs = nav.rows.map((r) => [str(r.cohort_id), str(r.d)] as const);
+      const pos = await deps.mainDb.execute({
+        sql: `SELECT cohort_id, code, qty, close_micro FROM nav_daily_pos
+              WHERE ${pairs.map(() => "(cohort_id = ? AND d = ?)").join(" OR ")}`,
+        args: pairs.flat(),
+      });
+      const rows = pos.rows.map((p) => ({
+        cohortId: str(p.cohort_id),
+        code: str(p.code),
+        qty: num(p.qty),
+        closeMicro: num(p.close_micro),
+      }));
+      const quotes = await readLatestQuotes(deps.mainDb, v.market, [
+        ...new Set(rows.map((p) => p.code)),
+      ]);
+      return { rows, quotes, updated: new Set<number>() };
+    }, null);
+    if (live !== null) {
+      nav.rows.forEach((r, i) => {
+        const c = liveDayChange(
+          live.rows.filter((p) => p.cohortId === str(r.cohort_id)),
+          live.quotes,
+          str(r.d),
+        );
+        if (c === null) return;
+        const t = tiles[i]!;
+        const base = num(r.liq_nav_micro);
+        const now = base + c.changeMicro;
+        tiles[i] = {
+          ...t,
+          value: money(now),
+          sinceStart: money(now - num(r.seed_micro)),
+          sinceStartPpm: ratioPpm(now - num(r.seed_micro), num(r.seed_micro)),
+          dayChange: money(c.changeMicro),
+          dayChangePpm: ratioPpm(c.changeMicro, base),
+        };
+        liveSum = {
+          change: (liveSum?.change ?? 0) + c.changeMicro,
+          base: (liveSum?.base ?? 0) + base,
+        };
+        if (liveAt === null || c.at > liveAt) liveAt = c.at;
+        live.updated.add(i);
+      });
+      // a strategy in cash (or without a fresher quote) did not move today
+      if (liveAt !== null)
+        nav.rows.forEach((r, i) => {
+          if (live.updated.has(i)) return;
+          tiles[i] = { ...tiles[i]!, dayChange: money(0), dayChangePpm: 0 };
+          liveSum = {
+            change: liveSum?.change ?? 0,
+            base: (liveSum?.base ?? 0) + num(r.liq_nav_micro),
+          };
+        });
+    }
+  }
   if (tiles.length > 0) {
     view.summary = {
       strategies: tiles.length,
@@ -515,7 +576,9 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
   // the session "Delayed, 13:05" from the live quote (D-907), otherwise "End of day, Fri 6 Nov".
   view.dataAtLabel = freshnessLabel(dataD, view.day.index);
   // Owner 2026-11-09: the change is the day's ("Today"), not a "session"
-  view.dayLabel = dayLabel(view.summary?.d ?? null, v.now);
+  view.dayLabel = liveAt
+    ? `Today (delayed, ${quoteTimeMelbourne(liveAt)})`
+    : dayLabel(view.summary?.d ?? null, v.now);
   view.dataOnly = await soft(async () => {
     const r = await deps.mainDb.execute(
       "SELECT SUM(mode = 'data_only') AS d, SUM(mode = 'full') AS f FROM market",
@@ -549,9 +612,11 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
         currency: "AUD",
         sinceStartPpm: series.length > 0 ? series[series.length - 1]! : null,
         dayChangePpm:
-          last && prev && num(last.s) === num(prev.s)
-            ? ratioPpm(num(last.v) - num(prev.v), num(prev.v))
-            : null,
+          liveSum !== null
+            ? ratioPpm((liveSum as { change: number }).change, (liveSum as { base: number }).base)
+            : last && prev && num(last.s) === num(prev.s)
+              ? ratioPpm(num(last.v) - num(prev.v), num(prev.v))
+              : null,
         series,
       },
     ];
@@ -726,6 +791,27 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
  * quote (its Melbourne time), else "End of day, Fri 6 Nov" for the newest stored close; null before
  * any data.
  */
+/**
+ * Owner 2026-11-10: a strategy's change today from delayed quotes: shares held at the last close times
+ * (quote - that close), for every holding whose quote is from a later day than the close. null when no
+ * holding has such a quote (outside the session the end-of-day change stands). Cash does not move.
+ */
+export function liveDayChange(
+  positions: ReadonlyArray<{ code: string; qty: number; closeMicro: number }>,
+  quotes: ReadonlyMap<string, LatestQuote>,
+  navD: string,
+): { changeMicro: number; at: string } | null {
+  let change = 0;
+  let at: string | null = null;
+  for (const p of positions) {
+    const q = newerThanClose(quotes.get(p.code), navD);
+    if (q === null) continue;
+    change += p.qty * (Number(q.lastMicro) - p.closeMicro); // money-float-ok: micro-AUD within 2^53
+    if (at === null || q.quoteAt > at) at = q.quoteAt;
+  }
+  return at === null ? null : { changeMicro: change, at };
+}
+
 /** "Today" when `d` is today's date in Sydney (the market's clock), else "Fri 6 Nov". */
 export function dayLabel(d: string | null, now: Date): string | null {
   if (!d) return null;
