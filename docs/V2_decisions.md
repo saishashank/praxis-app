@@ -562,3 +562,4 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-907 | (Owner 2026-11-09) Home shows the ASX 200 live: the quote poll fetches ^AXJO (stored in quote_latest under the index_bar code AXJO) as the first of its extra... |
 | D-915 | (Owner 2026-11-10: "the strategies still show percentage as of yesterday, not the delayed profit or loss for the day") During the session the Home strategy t... |
 | D-916 | (Owner 2026-11-10: a delayed feed on the Market tab without exhausting the Yahoo limit) The Market tables show, for each listed company, the delayed quote al... |
+| D-918 | (Owner 2026-11-10: "the changes on the strategy cards are not visible on the Strategies page") The Strategies page tiles show the same day's change as Home (... |

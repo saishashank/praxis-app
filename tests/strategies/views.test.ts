@@ -51,6 +51,7 @@ const tile = (over: Partial<StrategyTile>): StrategyTile => ({
   needsAttention: false,
   attention: [],
   spark: [],
+  day: null,
   ...over,
 });
 

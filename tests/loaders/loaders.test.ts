@@ -178,6 +178,31 @@ describe("Strategies list", () => {
     expect(e02.moneyType).toBe("Plain shares"); // D-191: the L twins are not listed
   });
 
+  it("D-915: the tile shows the day's change, delayed during the session (same figure as Home)", async () => {
+    const eod = await loadStrategies(deps(db, OWNER));
+    const e01 = eod.data.tiles.find((t) => t.execution === "E01")!;
+    expect(e01.day).toMatchObject({ change: { micro: 20_000_000 }, label: "Mon 19 Oct" });
+    await db.main.execute(
+      "INSERT INTO quote_latest (market, code, last_micro, prev_close_micro, quote_at, fetched_at) " +
+        "VALUES ('AU', 'ZZUP', 12600000, 12340000, '2099-01-05T00:35:00.000Z', '2099-01-05T00:35:00.000Z')",
+    );
+    try {
+      const s = await loadStrategies(deps(db, OWNER));
+      const live = s.data.tiles.find((t) => t.execution === "E01")!;
+      expect(live.day).toMatchObject({
+        change: { micro: 2_600_000 }, // 10 shares x (12.60 - 12.34)
+        label: "Today (delayed, 11:35)",
+      });
+      expect(live.nav?.micro).toBe(632_600_000);
+      const home = (await loadHome(deps(db, OWNER))).data.summary!.tiles.find(
+        (t) => t.id === "E01",
+      )!;
+      expect(home.dayChange?.micro).toBe(live.day!.change.micro); // the same figure on both pages
+    } finally {
+      await db.main.execute("DELETE FROM quote_latest");
+    }
+  });
+
   it("puts what needs attention first and orders deterministically", async () => {
     const s = await loadStrategies(deps(db, OWNER));
     // E02: paused family F2 and within 15 % of the bust level.

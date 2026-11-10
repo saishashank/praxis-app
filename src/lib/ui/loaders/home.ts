@@ -22,6 +22,7 @@ import {
   type LatestQuote,
 } from "@/lib/data/quotes/latest";
 import { MARKET_INDEX_CODE } from "@/lib/data/quotes/parse";
+import { liveDayChange } from "./liveDay";
 import { loadAlertHomeFacts, loadIntraday, type IntradayModel } from "./pickAlerts";
 import type { LoaderEnv } from "./shell";
 import {
@@ -791,27 +792,6 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
  * quote (its Melbourne time), else "End of day, Fri 6 Nov" for the newest stored close; null before
  * any data.
  */
-/**
- * Owner 2026-11-10: a strategy's change today from delayed quotes: shares held at the last close times
- * (quote - that close), for every holding whose quote is from a later day than the close. null when no
- * holding has such a quote (outside the session the end-of-day change stands). Cash does not move.
- */
-export function liveDayChange(
-  positions: ReadonlyArray<{ code: string; qty: number; closeMicro: number }>,
-  quotes: ReadonlyMap<string, LatestQuote>,
-  navD: string,
-): { changeMicro: number; at: string } | null {
-  let change = 0;
-  let at: string | null = null;
-  for (const p of positions) {
-    const q = newerThanClose(quotes.get(p.code), navD);
-    if (q === null) continue;
-    change += p.qty * (Number(q.lastMicro) - p.closeMicro); // money-float-ok: micro-AUD within 2^53
-    if (at === null || q.quoteAt > at) at = q.quoteAt;
-  }
-  return at === null ? null : { changeMicro: change, at };
-}
-
 /** "Today" when `d` is today's date in Sydney (the market's clock), else "Fri 6 Nov". */
 export function dayLabel(d: string | null, now: Date): string | null {
   if (!d) return null;
@@ -835,3 +815,6 @@ export function freshnessLabel(dataD: string | null, index: HomeIndex | null): s
   if (!dataD) return null;
   return `End of day, ${shortDay(dataD)}`;
 }
+
+// D-915: shared with the Strategies page (./liveDay.ts)
+export { liveDayChange };
