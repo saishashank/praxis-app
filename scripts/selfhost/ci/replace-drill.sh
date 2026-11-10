@@ -25,7 +25,7 @@ code="$(docker run --rm --network praxis-prod --entrypoint node "$JOBS_IMAGE" -e
 case "$code" in 401|403) ok "sqld admin API without its key: HTTP $code" ;; *) fail "admin API answered $code without a key" ;; esac
 
 # state to be erased: an owner row in main
-"$PRAXIS" owner cloud > /dev/null
+sudo "$PRAXIS" owner cloud > /dev/null
 [ "$(owner_of)" = cloud ] || fail "could not seed the marker row"
 
 # guard 1: CLOCK_ENABLED must be 0 in the container that runs it
@@ -39,9 +39,9 @@ echo "$out" | sed 's/^/     /'
 ok "refused while CLOCK_ENABLED is not 0; data untouched"
 
 # guard 2: the owner must not be selfhost
-"$PRAXIS" owner selfhost > /dev/null
+sudo "$PRAXIS" owner selfhost > /dev/null
 set +e
-out="$("$PRAXIS" restore-latest --replace 2>&1)"
+out="$(sudo "$PRAXIS" restore-latest --replace 2>&1)"
 rc=$?
 set -e
 echo "$out" | sed 's/^/     /'
@@ -50,13 +50,13 @@ echo "$out" | sed 's/^/     /'
 ok "refused while the clock owner is selfhost; data untouched"
 
 # guard 3: a running job
-"$PRAXIS" owner cloud > /dev/null
+sudo "$PRAXIS" owner cloud > /dev/null
 docker run --rm --network praxis-prod -e T="$LOCAL_TOKEN" --entrypoint node "$JOBS_IMAGE" -e "
   const h={'content-type':'application/json',authorization:'Bearer '+process.env.T};
   const now=new Date().toISOString();
   fetch('http://main.sqld:8080/v2/pipeline',{method:'POST',headers:h,body:JSON.stringify({requests:[{type:'execute',stmt:{sql:\"INSERT INTO job_run (job, status, local_date, started_at, heartbeat_at) VALUES ('ci-probe','running','2026-01-01','\"+now+\"','\"+now+\"')\"}},{type:'close'}]})}).then(r=>r.json()).then(j=>{if(j.results[0].type!=='ok'){console.log(JSON.stringify(j.results[0]).slice(0,300));process.exit(1)}})"
 set +e
-out="$("$PRAXIS" restore-latest --replace 2>&1)"
+out="$(sudo "$PRAXIS" restore-latest --replace 2>&1)"
 rc=$?
 set -e
 echo "$out" | sed 's/^/     /'
@@ -68,7 +68,7 @@ docker run --rm --network praxis-prod -e T="$LOCAL_TOKEN" --entrypoint node "$JO
   const h={'content-type':'application/json',authorization:'Bearer '+process.env.T};
   fetch('http://main.sqld:8080/v2/pipeline',{method:'POST',headers:h,body:JSON.stringify({requests:[{type:'execute',stmt:{sql:\"UPDATE job_run SET status='failed' WHERE job='ci-probe'\"}},{type:'close'}]})}).then(r=>r.json()).then(j=>{if(j.results[0].type!=='ok'){console.log(JSON.stringify(j.results[0]).slice(0,300));process.exit(1)}})"
 set +e
-out="$("$PRAXIS" restore-latest --replace 2>&1)"
+out="$(sudo "$PRAXIS" restore-latest --replace 2>&1)"
 rc=$?
 set -e
 echo "$out" | sed 's/^/     /'
