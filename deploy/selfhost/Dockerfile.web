@@ -1,10 +1,9 @@
 # praxis-web: the Next.js app as a standalone server (INFRA §3.2, §10). Multi-arch: linux/amd64 + linux/arm64.
 # Build from the repository root:  docker buildx build -f deploy/selfhost/Dockerfile.web .
 #
-# TODO pin digest: the base is pinned by tag only. At the first real build, resolve the multi-arch
-# index digest (docker buildx imagetools inspect node:24-bookworm-slim) and replace the tag with
-# node:24-bookworm-slim@sha256:<digest> in both FROM lines (INFRA §3.2: deploy by digest).
-ARG NODE_IMAGE=node:24-bookworm-slim
+# Base pinned by the multi-arch index digest (amd64 + arm64), resolved from the registry on 2026-11-10 (INFRA §3.2).
+# To update: resolve the new index digest (docker buildx imagetools inspect node:24-bookworm-slim) and change it here.
+ARG NODE_IMAGE=node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9
 
 FROM ${NODE_IMAGE} AS deps
 WORKDIR /app

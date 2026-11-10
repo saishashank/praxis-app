@@ -23,8 +23,8 @@ x-hardening: &hardening
 services:
   caddy:
     <<: *hardening
-    # TODO pin digest: replace the tag with caddy:2-alpine@sha256:<digest> at the first real deploy.
-    image: caddy:2-alpine
+    # Tag plus multi-arch index digest, resolved from the registry on 2026-11-10 (the digest is what runs).
+    image: caddy:2-alpine@sha256:78bd35025c7ba85961dd149ae670315129954e77abe2383ac47c89106b35ade9
     cap_add:
       - NET_BIND_SERVICE
     mem_limit: 128m
@@ -117,9 +117,8 @@ services:
 
   sqld:
     <<: *hardening
-    # Pinned tag (current release at authoring time, 2026-11-10).
-    # TODO pin digest: add @sha256:<digest> at the first real deploy.
-    image: ghcr.io/tursodatabase/libsql-server:v0.24.32
+    # Release v0.24.32 pinned by the multi-arch index digest, resolved from the registry on 2026-11-10.
+    image: ghcr.io/tursodatabase/libsql-server:v0.24.32@sha256:dedf5273da945d90f3b85fe367ed8f821349117ac2c488bf43c4a6bf9f2123e0
     mem_limit: 1536m
     memswap_limit: 1536m
     env_file: /srv/praxis/env/sqld.env

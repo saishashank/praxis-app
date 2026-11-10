@@ -56,7 +56,7 @@ services:
 
   sqld:
     <<: *hardening
-    image: ghcr.io/tursodatabase/libsql-server:v0.24.32 # keep equal to docker-compose.prod.yml
+    image: ghcr.io/tursodatabase/libsql-server:v0.24.32@sha256:dedf5273da945d90f3b85fe367ed8f821349117ac2c488bf43c4a6bf9f2123e0 # keep equal to docker-compose.prod.yml
     mem_limit: 1g
     memswap_limit: 1g
     env_file: ${PRAXIS_ENV_DIR:-/srv/praxis/env}/sqld.env
