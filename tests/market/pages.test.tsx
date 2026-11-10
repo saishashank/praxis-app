@@ -180,7 +180,9 @@ describe("the Market tab for the Owner", () => {
 
   it("All companies shows name, code, price label, size and sector, and pages with links", async () => {
     const { container } = await market({ tab: "all" });
-    expect(screen.getAllByText("End-of-day price").length).toBeGreaterThan(0);
+    // D-916: the table header is "Price"; each cell says "close" or "delayed hh:mm"
+    expect(screen.getAllByText("Price").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("close").length).toBeGreaterThan(0);
     // D-193: this young world has under 60 sessions of history, so no size groups yet
     expect(container.textContent).toContain("Size groups need 60 sessions of price history");
     expect(container.textContent).toContain("Technology");

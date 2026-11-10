@@ -18,6 +18,7 @@ import {
   NOW,
   OWNER,
   seedPopulated,
+  SIG_DN,
   SIG_UP,
   VIEWER,
   type Both,
@@ -262,9 +263,11 @@ describe("Tonight's trade ideas (UX-040, UXN-126)", () => {
     as(OWNER);
     const html = await ideas();
     expect(requireUser).toHaveBeenCalledWith("read", "/strategies/ideas");
-    expect(html).toContain("Tonight&#x27;s trade ideas");
+    expect(html).toContain("All signals (research)");
+    expect(html).toContain("Not trade advice.");
+    expect(html).toContain("Not a pick (not on the shortlist for you)");
     expect(html).toContain("ZZUP");
-    expect(html).toContain("3 ideas found: 1 taken, 1 not taken.");
+    expect(html).toContain("3 signals found: 1 practice orders, 1 not taken; 1 is also a pick.");
     expect(html).toContain("not taken: ZZOTH is held");
     expect(html).toContain(encodeURIComponent(CARD_UP));
     expect(html).toContain(
@@ -282,6 +285,22 @@ describe("Tonight's trade ideas (UX-040, UXN-126)", () => {
     expect(html).toContain("Stock C");
     expect(html).toContain(encodeURIComponent(cardRef(CARD_UP)));
     expect(leaks(html)).toEqual([]);
+  });
+
+  it("counts every signal that is also a pick (D-912)", async () => {
+    await db.main.execute({
+      sql: `INSERT INTO pick (market, d, profile, rank, code, family, tier, rule_version, signal_id, label,
+              reference_micro, buy_max_micro, valid_until_d, stop_micro, aim_micro, n_similar, bad_ppm,
+              typical_ppm, good_ppm, time_frame_sessions, size_micro, risk_micro, factors_json, based_on_json,
+              pick_sha, created_at)
+            VALUES ('AU', ?, 'balanced', 2, 'ZZDN', 'F1', 'U1', 'v1', ?, 'Trend follower', 12340000, 12400000,
+              '2026-10-23', 11000000, 14000000, 41, -50000, 12000, 90000, 20, 100000000, 10000000, '[]', '[]', ?, ?)`,
+      args: [D, SIG_DN, "a".repeat(64), `${D}T08:00:00.000Z`],
+    });
+    as(OWNER);
+    const html = await ideas();
+    expect(html).toContain("2 are also a pick.");
+    expect(html).toContain("Also a pick: #2 (Balanced)");
   });
 });
 

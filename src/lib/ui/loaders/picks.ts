@@ -15,12 +15,14 @@ import { opaqueDigest } from "@/lib/view/opaqueRef";
 import { soft, strategyNames } from "./common";
 import { melTime } from "./pickAlerts";
 import { cardHref } from "./cards";
+import { newerThanClose, readLatestQuotes } from "@/lib/data/quotes/latest";
 import {
   isDateParam,
   marketOf,
   maskKit,
   maskKitByDate,
   money,
+  priceMicro,
   todayD,
   type LoaderEnv,
   type LoaderState,
@@ -572,5 +574,216 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
     success: rows.length === 0 ? null : await successFor(env, q.profile, todayD(env)),
     rows,
     vsMarket,
+  };
+}
+
+// ---- Pick history (Owner 2026-11-10): one row per published pick, paged, filtered by status --------
+
+/** Status filter of the History tab; "open" is the default (the Owner validates live trades first). */
+export const HISTORY_FILTERS = [
+  "open",
+  "closed",
+  "profit",
+  "loss",
+  "not_traded",
+  "waiting",
+  "all",
+] as const;
+export type HistoryFilter = (typeof HISTORY_FILTERS)[number];
+// "In profit" / "In loss": a closed trade by its result after costs; an open one by its last close
+// against the buy price (the latest close of the code, read with the price_bar key)
+const LAST_CLOSE_MICRO = `(SELECT pb.c FROM price_bar pb WHERE pb.market = o.market AND pb.code = o.code
+  ORDER BY pb.d DESC LIMIT 1) * 1000000`;
+const RESULT_WHERE: Record<"profit" | "loss", string> = {
+  profit: `((o.state = 'closed' AND o.net_ppm > 0) OR (o.state = 'bought' AND ${LAST_CLOSE_MICRO} > o.entry_micro))`,
+  loss: `((o.state = 'closed' AND o.net_ppm < 0) OR (o.state = 'bought' AND ${LAST_CLOSE_MICRO} < o.entry_micro))`,
+};
+const HISTORY_STATE: Record<Exclude<HistoryFilter, "all" | "profit" | "loss">, string> = {
+  open: "bought",
+  closed: "closed",
+  not_traded: "missed",
+  waiting: "waiting",
+};
+export const HISTORY_PAGE = 25; // threshold-ok: rows per page of a bounded UI list
+const DAY_MS = 86_400_000; // threshold-ok: milliseconds per day
+
+export type HistoryRow = {
+  id: string;
+  /** "Name (CODE)" for an unmasked viewer, the letter otherwise. */
+  stock: string;
+  /** The day the pick was published (the ISO week for a masked viewer). */
+  pickedD: string;
+  /** The published plan, for checking the trade against it; null for a masked viewer. */
+  plan: { buyUpTo: MoneyView | null; stop: MoneyView | null; aim: MoneyView | null } | null;
+  status: "open" | "closed" | "not_traded" | "waiting";
+  entryD: string | null;
+  entry: MoneyView | null;
+  exitD: string | null;
+  exit: MoneyView | null;
+  exitReason: string | null;
+  /** The latest price of an open trade (delayed quote, else the last close); null otherwise. */
+  now: MoneyView | null;
+  /** Calendar days from the buy to the sale, or to today while open. */
+  daysHeld: number | null;
+  /** Price change from the buy: to the sale, or to the latest price while open. */
+  changePpm: number | null;
+  /** A closed trade's result after costs. */
+  netPpm: number | null;
+};
+
+export type HistoryModel = {
+  state: LoaderState;
+  masked: boolean;
+  profile: string;
+  profiles: string[];
+  filter: HistoryFilter;
+  rows: HistoryRow[];
+  /** Keyset cursor of the next (older) page, null on the last page or for a masked viewer. */
+  next: string | null;
+  /** True when this is not the first page. */
+  paged: boolean;
+};
+
+const STATUS_OF: Record<string, HistoryRow["status"]> = {
+  bought: "open",
+  closed: "closed",
+  missed: "not_traded",
+  waiting: "waiting",
+};
+
+/** `d.rank` of the last row of a page; anything else is no cursor (first page). */
+export function parseHistoryCursor(v: unknown): { d: string; rank: number } | null {
+  if (typeof v !== "string") return null;
+  const m = /^(\d{4}-\d{2}-\d{2})\.(\d{1,2})$/.exec(v);
+  return m ? { d: m[1]!, rank: Number(m[2]) } : null;
+}
+
+export function historyFilterOf(v: unknown): HistoryFilter {
+  return (HISTORY_FILTERS as readonly unknown[]).includes(v) ? (v as HistoryFilter) : "open";
+}
+
+const dayCount = (from: string, to: string): number =>
+  Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS); // money-float-ok: day count
+
+const changeOf = (from: bigint, to: bigint): number => Number(((to - from) * 1_000_000n) / from); // money-float-ok: ppm of exact micro prices
+
+export async function loadPickHistory(
+  env: LoaderEnv,
+  q: { profile: string; filter: HistoryFilter; cursor: string | null },
+): Promise<HistoryModel> {
+  const market = marketOf(env);
+  const masked = env.mask.masked;
+  const after = masked ? null : parseHistoryCursor(q.cursor);
+  const where = ["o.market = ?", "o.profile = ?", "o.kind = 'pick'"];
+  const args: (string | number)[] = [market, q.profile];
+  if (q.filter === "profit" || q.filter === "loss") {
+    where.push(RESULT_WHERE[q.filter]);
+  } else if (q.filter !== "all") {
+    where.push("o.state = ?");
+    args.push(HISTORY_STATE[q.filter]);
+  }
+  if (after) {
+    where.push("(o.d < ? OR (o.d = ? AND o.rank > ?))");
+    args.push(after.d, after.d, after.rank);
+  }
+  args.push(HISTORY_PAGE + 1);
+  const r = await env.main.execute({
+    sql: `SELECT o.d, o.rank, o.code, o.state, o.entry_d, o.entry_micro, o.exit_d, o.exit_micro,
+                 o.exit_reason, o.net_ppm, p.buy_max_micro, p.stop_micro, p.aim_micro, i.name
+          FROM pick_outcome o JOIN pick p ON p.market = o.market AND p.d = o.d
+            AND p.profile = o.profile AND p.rank = o.rank
+          LEFT JOIN instrument i ON i.market = o.market AND i.code = o.code
+          WHERE ${where.join(" AND ")}
+          ORDER BY o.d DESC, o.rank LIMIT ?`,
+    args,
+  });
+  const page = r.rows.slice(0, HISTORY_PAGE);
+  const profiles = await profileNames(env);
+  const today = todayD(env);
+
+  // latest price of the open trades on this page: a delayed quote newer than the last close wins
+  const openCodes = [
+    ...new Set(page.filter((x) => x.state === "bought").map((x) => String(x.code))),
+  ];
+  const nowOf = new Map<string, bigint>();
+  if (!masked && openCodes.length > 0) {
+    const closes = await soft(
+      async () =>
+        (
+          await env.main.execute({
+            sql: `SELECT pb.code, pb.d, pb.c FROM price_bar pb
+                  WHERE pb.market = ? AND pb.code IN (${openCodes.map(() => "?").join(", ")})
+                    AND pb.d = (SELECT MAX(x.d) FROM price_bar x WHERE x.market = pb.market AND x.code = pb.code)`,
+            args: [market, ...openCodes],
+          })
+        ).rows,
+      [],
+    );
+    const closeD = new Map<string, string>();
+    for (const c of closes) {
+      nowOf.set(String(c.code), BigInt(priceMicro(Number(c.c)))); // money-float-ok: stored REAL bar price
+      closeD.set(String(c.code), String(c.d));
+    }
+    const quotes = await soft(() => readLatestQuotes(env.main, market, openCodes), new Map());
+    for (const code of openCodes) {
+      const live = newerThanClose(quotes.get(code), closeD.get(code) ?? null);
+      if (live) nowOf.set(code, live.lastMicro);
+    }
+  }
+
+  const raw = page.map((x) => ({ d: String(x.d), code: String(x.code), x }));
+  const kit = masked
+    ? await maskKitByDate(env, [...raw, ...(await pickCodesInRange(env, raw))])
+    : null;
+  const rows: HistoryRow[] = raw.map(({ d, code, x }) => {
+    const status = STATUS_OF[String(x.state)] ?? "waiting";
+    const entryD = x.entry_d === null ? null : String(x.entry_d);
+    const exitD = x.exit_d === null ? null : String(x.exit_d);
+    const entry = x.entry_micro === null ? null : BigInt(String(x.entry_micro));
+    const exit = x.exit_micro === null ? null : BigInt(String(x.exit_micro));
+    const now = status === "open" ? (nowOf.get(code) ?? null) : null;
+    const to = status === "closed" ? exit : now;
+    const name = x.name === null || x.name === undefined ? null : String(x.name);
+    return {
+      id: publicPickId(`${d}.${q.profile}.${Number(x.rank)}`, masked),
+      stock: kit ? kit.aliasOf(d).label(code) : name ? `${name} (${code})` : code,
+      pickedD: masked ? (isoWeek(d) ?? MISSING) : d,
+      plan: masked
+        ? null
+        : {
+            buyUpTo: money(String(x.buy_max_micro)),
+            stop: money(String(x.stop_micro)),
+            aim: money(String(x.aim_micro)),
+          },
+      status,
+      entryD: masked ? null : entryD,
+      entry: masked || entry === null ? null : money(entry.toString()),
+      exitD: masked ? null : exitD,
+      exit: masked || exit === null ? null : money(exit.toString()),
+      exitReason: x.exit_reason === null ? null : String(x.exit_reason),
+      now: masked || now === null ? null : money(now.toString()),
+      daysHeld:
+        entryD === null
+          ? null
+          : status === "closed" && exitD !== null
+            ? dayCount(entryD, exitD)
+            : dayCount(entryD, today),
+      changePpm: entry !== null && to !== null ? changeOf(entry, to) : null,
+      netPpm: status === "closed" ? toNum(x.net_ppm) : null,
+    };
+  });
+  const last = page[page.length - 1];
+  return {
+    state: rows.length === 0 ? "empty" : "ok",
+    masked,
+    profile: q.profile,
+    profiles,
+    filter: q.filter,
+    rows,
+    next:
+      !masked && r.rows.length > HISTORY_PAGE && last
+        ? `${String(last.d)}.${Number(last.rank)}`
+        : null,
+    paged: after !== null,
   };
 }

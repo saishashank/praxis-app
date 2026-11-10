@@ -139,7 +139,7 @@ describe("the list", () => {
     expect(cur.textContent).toContain("Overview");
     expect(cur.textContent).toContain("Selected");
     expect(cur.querySelector("svg")).not.toBeNull();
-    for (const n of ["Leaderboard", "Ideas", "Risk", "What-if"]) {
+    for (const n of ["Leaderboard", "All signals", "Risk", "What-if"]) {
       expect(within(nav).getByRole("link", { name: n })).toBeInTheDocument();
     }
   });

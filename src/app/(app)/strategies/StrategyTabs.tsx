@@ -8,7 +8,7 @@ export type StrategyTab =
 const ITEMS = [
   { value: "overview", label: "Overview", href: "/strategies" },
   { value: "leaderboard", label: "Leaderboard", href: "/strategies/leaderboard" },
-  { value: "ideas", label: "Ideas", href: "/strategies/ideas" },
+  { value: "ideas", label: "All signals", href: "/strategies/ideas" },
   { value: "movers", label: "Movers check", href: "/strategies/movers" }, // D-886
   { value: "risk", label: "Risk", href: "/strategies/risk" },
   { value: "whatif", label: "What-if", href: "/what-if" },

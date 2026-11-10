@@ -94,7 +94,7 @@ export const ROUTES: readonly RouteNode[] = [
   },
   {
     pattern: "/strategies/ideas",
-    label: "Tonight's trade ideas",
+    label: "All signals (research)",
     parent: "/strategies",
     tab: "strategies",
   },

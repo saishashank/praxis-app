@@ -13,7 +13,10 @@ import { Change, FIG } from "./Figures";
 import { RowActions, type WatchMode } from "./RowActions";
 import { sectorHueOf, sectorKey } from "./sectorHue";
 import type { WatchResult } from "./messages";
-import { PRICE_LABEL, volumeVsUsual } from "./text";
+import { volumeVsUsual } from "./text";
+
+// D-916: the delayed price when one is stored, else the last close (each cell says which)
+const TABLE_PRICE_LABEL = "Price";
 
 /** D-205: Large / Mid / Small as a small colour-coded letter; the word is there for screen readers. */
 const SIZE_STYLE: Record<string, { letter: string; dot: string }> = {
@@ -101,16 +104,29 @@ export function MarketTable({
     },
     {
       key: "price",
-      header: PRICE_LABEL,
+      header: TABLE_PRICE_LABEL,
       align: "right",
       cell: (r) =>
-        r.close === null ? <Masked /> : <span className={FIG}>{formatMicro(r.close.micro)}</span>,
+        r.close === null ? (
+          <Masked />
+        ) : r.live ? (
+          <span className="block">
+            <span className={FIG}>{formatMicro(r.live.price.micro)}</span>
+            <span className="block text-xs text-text-muted">delayed {r.live.at}</span>
+          </span>
+        ) : (
+          <span className="block">
+            <span className={FIG}>{formatMicro(r.close.micro)}</span>
+            <span className="block text-xs text-text-muted">close</span>
+          </span>
+        ),
     },
     {
       key: "change",
       header: "Day change",
       align: "right",
-      cell: (r) => <Change ppm={r.changePpm} />,
+      // D-916: today's move against the last close while a delayed quote exists, else the session's
+      cell: (r) => <Change ppm={r.live ? r.live.changePpm : r.changePpm} />,
     },
     {
       key: "volume",

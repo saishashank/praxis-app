@@ -9,6 +9,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | Id | Decision |
 | --- | --- |
 | D-909 | The Evening Review's section 6 ("What needs improving for tomorrow") gains "What we missed today" (src/lib/review/missedMovers.ts), built from the stored nig... |
+| D-911 | (Owner 2026-11-10) The Picks page gains a History tab (/picks?view=history, between Today and Track record): one row per published pick (the same stock picke... |
 
 ## M8.1 (M8.1_design.md)
 
@@ -20,6 +21,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-905 | The post-deploy full replay (D-195) runs only when the deploy changed what a replay depends on: the Worker dispatches it with only_if_changed: "true", and sc... |
 | D-906 | Staging is off (Owner 2026-11-09: "Don't use any staging going forward on anything"): the Nightly, Deploy staging and Staging E2E day workflows are disabled... |
 | D-910 | loadDayInputs asks the DecisionView to prefetch the per-code rows of all its codes in batches of 200 codes (bars from the session need + 10 sessions back, sh... |
+| D-914 | (2026-11-10) GitHub can start a scheduled run hours late: the 07:15 UTC Batch-1 backup line of 9 Nov started at 17:31 UTC (04:31 the next day in Sydney), too... |
 
 ## M11L (M11L_design.md)
 
@@ -66,6 +68,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-587 | (final review) noOpinionReads.test.ts also forbids the label tables (text_label, label_validation) in arena, agents and picks: a text label is an LLM output... |
 | D-588 | (final review) The health line's "written" count is over the window it reads (the last 10 nights), and says so: "n written over the last k nights". |
 | D-589 | (final review) Repo hygiene: .vitest/ is ignored (a Vitest JSON reporter output with local machine paths had been committed in WP7 and is removed from the co... |
+| D-913 | (Owner 2026-11-10: "pick multiple stocks so you diversify … while trading on the portfolio think as end-user money … if a stock is not doing well and has no... |
 
 ## M13L (M13L_design.md)
 
@@ -310,6 +313,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-885 | Every trade already has a stop loss (trade.stop_micro NOT NULL; the stop in force is the higher of it and the latest recomputed stop_level, decision 7). |
 | D-886 | Movers check (Owner 2026-11-04: "at the end of the day run a job on why we haven't picked the top 20 movers and if we have stopped the top 20 losers"). |
 | D-908 | A complete full replay stores, per (family, rule version, variant), the development track record the picks loader needs, as one replay_stat row (scope pick_h... |
+| D-912 | (Owner 2026-11-10: "stocks in ideas and no picks makes me doubt the basis") Picks are what the Owner trades; the strategies' signals are research. "Tonight's... |
 
 ## M14 (M14_design.md)
 
@@ -556,3 +560,5 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-901 | (O-80) Where it shows: the open trades of a strategy round (lastPriceOf in strategyViews.ts) and the Home watchlist. |
 | D-902 | (O-80) Coverage follows the poll's existing plan (D-502/D-695): armed picks every tick, then watch-listed and held codes at the cadence the day's budget sust... |
 | D-907 | (Owner 2026-11-09) Home shows the ASX 200 live: the quote poll fetches ^AXJO (stored in quote_latest under the index_bar code AXJO) as the first of its extra... |
+| D-915 | (Owner 2026-11-10: "the strategies still show percentage as of yesterday, not the delayed profit or loss for the day") During the session the Home strategy t... |
+| D-916 | (Owner 2026-11-10: a delayed feed on the Market tab without exhausting the Yahoo limit) The Market tables show, for each listed company, the delayed quote al... |
