@@ -263,6 +263,29 @@ describe("populated loaders", () => {
         currency: "AUD",
         simulated: true,
       });
+      expect(live.up.rows[0]!.live).toBeNull();
+      // D-916: a stored delayed quote from a later day shows with its change against the close and
+      // its time; a quote of the close's own day is not newer and is ignored. Nothing is requested.
+      await liquid.main.execute(
+        "INSERT INTO quote_latest (market, code, last_micro, prev_close_micro, quote_at, fetched_at) " +
+          "VALUES ('AU', 'ZZLIQ', 21840000, 21000000, '2099-01-05T00:35:00.000Z', '2099-01-05T00:35:00.000Z')",
+      );
+      const delayed = await loadMarket(envOf(liquid, "owner"), mq());
+      expect(delayed.up.rows[0]!.live).toEqual({
+        price: { micro: "21840000", currency: "AUD", simulated: true },
+        changePpm: 40000,
+        at: "11:35",
+      });
+      expect(delayed.up.rows[0]!.changePpm).toBe(50000); // the list keeps the session's ranking
+      for (const who of MASKED) {
+        const m = await loadMarket(envOf(liquid, who), mq({ open: ["all"] }));
+        expect(m.all.rows.every((r) => r.live === null)).toBe(true);
+      }
+      await liquid.main.execute(
+        `UPDATE quote_latest SET quote_at = '${D}T03:00:00.000Z' WHERE code = 'ZZLIQ'`,
+      );
+      const same = await loadMarket(envOf(liquid, "owner"), mq());
+      expect(same.up.rows[0]!.live).toBeNull();
       const sectors = await loadMarket(env, mq({ open: ["sectors"] }));
       expect(sectors.sectors.map((s) => s.sector)).toEqual(["Materials", "Other", "Technology"]);
       const all = await loadMarket(env, mq({ open: ["all"], sector: "Technology" }));

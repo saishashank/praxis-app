@@ -27,6 +27,8 @@ import {
   type MoneyView,
 } from "./shell";
 import { displayTitle } from "@/lib/view/displayText";
+import { newerThanClose, quoteTimeMelbourne, readLatestQuotes } from "@/lib/data/quotes/latest";
+import { soft } from "./common";
 
 const MEMO_MS = 600_000; // threshold-ok: design 2.9, 10-minute ceiling
 const UNIVERSE_ROWS = 5000; // threshold-ok: bounded read of one day of bars
@@ -362,6 +364,12 @@ export type MarketRow = {
   /** Large / Mid / Small from the universe tier; null for masked users or when unknown. */
   sizeGroup: string | null;
   starred: boolean;
+  /**
+   * Owner 2026-11-10 (D-916): a delayed quote already stored by the poll or the scan, from a later day
+   * than the close: its price, its change against that close and its Melbourne time. null otherwise
+   * (and always for a masked viewer). No request is made for it.
+   */
+  live: { price: MoneyView; changePpm: number; at: string } | null;
 };
 export type SectorRow = { sector: string; count: number; avgChangePpm: number };
 /** One page of a list. */
@@ -445,6 +453,7 @@ export async function loadMarket(env: LoaderEnv, q: MarketQuery): Promise<Market
         : null,
     sizeGroup: masked ? null : (SIZE_GROUP[r.tier ?? ""] ?? null),
     starred: stars.has(normCode(r.code)),
+    live: null,
   });
   const pageOf = (rows: DayRow[], number: number, size: number): MarketList => ({
     rows: rows.slice((number - 1) * size, number * size).map(toRow),
@@ -476,12 +485,7 @@ export async function loadMarket(env: LoaderEnv, q: MarketQuery): Promise<Market
       ? pool.filter((r) => (r.sector ?? "Other") === q.sector)
       : pool;
   const stale = dateStaleness(day.d, todayD(env), STALE_DAYS);
-  return {
-    ...empty,
-    state: pool.length === 0 ? "empty" : stale.state === "stale" ? "stale" : "ok",
-    d: day.d,
-    sized: day.sized,
-    staleText: stale.state === "stale" ? stale.text : null,
+  const lists = {
     up: pageOf(
       sorted.filter((r) => changePpm(r) > 0),
       q.upPage,
@@ -496,9 +500,40 @@ export async function loadMarket(env: LoaderEnv, q: MarketQuery): Promise<Market
       q.tradedPage,
       MOVERS,
     ),
-    sectors,
     all: pageOf(filtered, q.page, pageSize),
   };
+  if (!masked) await withLive(env, day.d, Object.values(lists));
+  return {
+    ...empty,
+    state: pool.length === 0 ? "empty" : stale.state === "stale" ? "stale" : "ok",
+    d: day.d,
+    sized: day.sized,
+    staleText: stale.state === "stale" ? stale.text : null,
+    ...lists,
+    sectors,
+  };
+}
+
+/**
+ * D-916: attach the stored delayed quote of each listed code (one bounded read of quote_latest, no
+ * request to any source). A quote counts only when it is from a later day than the close `closeD`.
+ */
+async function withLive(env: LoaderEnv, closeD: string, lists: MarketList[]): Promise<void> {
+  const rows = lists.flatMap((l) => l.rows);
+  const codes = [...new Set(rows.map((r) => r.slug))];
+  if (codes.length === 0) return;
+  const quotes = await soft(() => readLatestQuotes(env.main, marketOf(env), codes), new Map());
+  for (const r of rows) {
+    const q = newerThanClose(quotes.get(r.slug), closeD);
+    if (q === null || r.close === null) continue;
+    const close = BigInt(r.close.micro);
+    if (close <= 0n) continue;
+    r.live = {
+      price: { micro: q.lastMicro.toString(), currency: "AUD", simulated: true },
+      changePpm: Number(((q.lastMicro - close) * 1_000_000n) / close), // money-float-ok: ppm of micro prices
+      at: quoteTimeMelbourne(q.quoteAt),
+    };
+  }
 }
 
 // ---- search ---------------------------------------------------------------------------------------
