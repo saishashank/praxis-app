@@ -81,8 +81,9 @@ describe("empty world", () => {
     expect(v.shadowOnlyText).toMatch(/shadow only/);
     expect(v.passports.total).toBe(0);
     expect(v.ledger.luckText).toBe("Not measured yet");
-    // V2-I10 / D-795: the 0.05 (strategies, O-43) and the 0.1 (lesson pool, VAL-116) are named apart
-    expect(v.ledger.errorLevelsText).toContain("family-wise level of 0.05");
+    // the 5% (strategies) and the 0.1 (lesson pool) are named apart, with no internal ids
+    expect(v.ledger.errorLevelsText).toContain("5% chance of a false win");
+    expect(v.ledger.errorLevelsText).not.toMatch(/O-43|VAL-116/);
     expect(v.ledger.errorLevelsText).toContain("their own pool, which starts at 0.1");
     expect(v.families).toHaveLength(7);
     expect(
@@ -103,7 +104,7 @@ describe("seeded world", () => {
     expect(v.shadowOnly).toBe(false);
     expect(v.passports.rows[0]!.angle).toBe("zz_secret_angle");
     expect(v.families[0]).toMatchObject({ status: "allowed", nEff: 212, mde: 0.012 });
-    expect(v.families[0]!.name).toContain("F1");
+    expect(v.families[0]!.name).toBe("Follow the trend");
     expect(v.ledger.cells).toBe(3);
     expect(v.ledger.luckExpected).toBe(0.3); // 3 cells x level 0.1
     expect(v.ledger.luckText).toBe("Of 3 ideas tried, about 0.3 would look good by luck alone.");
@@ -113,7 +114,7 @@ describe("seeded world", () => {
       { label: "setups like this have not come out ahead after costs", count: 2 },
     ]);
     expect(v.controls.canEdit).toBe(true);
-    expect(v.asOfMelbourne).toContain("(UTC+11)");
+    expect(v.asOfMelbourne).toMatch(/^[A-Z][a-z]{2} [0-9]{1,2} [A-Z][a-z]{2}$/);
   });
 
   it("masks angles and strategies for Editor and Viewer and offers no controls", async () => {
@@ -141,11 +142,12 @@ describe("seeded world", () => {
         p.data.placebo,
         p.data.navAtRisk,
       ]);
-      expect(shown).not.toMatch(/d{4}-d{2}-d{2}/);
+      expect(shown).not.toMatch(/[0-9]{4}-[0-9]{2}-[0-9]{2}/);
       expect(p.data.asOfMelbourne).toBe("week 2026-W42");
       expect(p.data.coldStart.firstD).toBe("week 2026-W42");
     }
     const owner = await loadCortex(deps(w, "owner"));
     expect(owner.data.coldStart.firstD).toBe("2026-10-16");
+    expect(owner.data.asOfMelbourne).not.toMatch(/[0-9]{4}-[0-9]{2}-[0-9]{2}/);
   });
 });

@@ -18,7 +18,7 @@ import {
   type PassportView,
   type TickRowView,
 } from "@/lib/ui/loaders/cortex";
-import { formatCount, formatMicro } from "@/lib/view/format";
+import { formatCount, formatDay, formatMicro } from "@/lib/view/format";
 import { StrategyTabs } from "../strategies/StrategyTabs";
 
 export const dynamic = "force-dynamic";
@@ -82,7 +82,7 @@ const passportCols: Column<PassportView>[] = [
 ];
 const reasonCols: Column<AbstainReason>[] = [
   { key: "label", header: "Reason", cell: (r) => <span className="break-words">{r.label}</span> },
-  { key: "n", header: "Book-nights", align: "right", cell: (r) => formatCount(r.count) },
+  { key: "n", header: "Strategy-nights", align: "right", cell: (r) => formatCount(r.count) },
 ];
 const tickCols: Column<TickRowView>[] = [
   {
@@ -110,6 +110,25 @@ export default async function CortexPage() {
   const page = await loadCortex({ mainDb: mainDb(), authDb: authDb(), user });
   const v = page.data;
   const a = v.abstains;
+  // Parts with nothing stored yet are gathered in one closed list instead of eight "Not measured yet" cards.
+  const has = {
+    passports: v.passports.total > 0,
+    ledger: v.ledger.cells > 0 || v.ledger.keyEdits > 0,
+    placebo: v.placebo !== null,
+    nav: v.navAtRisk !== null,
+    abstain: a.total > 0 || a.shadowFilled > 0 || a.idleSharePpm !== null,
+    sector: v.sectorTilt !== null,
+    opinion: v.opinions.length > 0,
+  };
+  const missing = [
+    has.passports ? null : "Angles",
+    has.ledger ? null : "Ideas tried and luck",
+    has.placebo ? null : "Placebo check",
+    has.nav ? null : "Value at risk",
+    has.abstain ? null : "Nights with no trade",
+    has.sector ? null : "Sector tilt (shadow only)",
+    has.opinion ? null : "Opinion track",
+  ].filter((x): x is string => x !== null);
 
   return (
     <main className="mx-auto flex max-w-4xl min-w-0 flex-col gap-6 px-4 py-6" data-cortex="">
@@ -120,8 +139,8 @@ export default async function CortexPage() {
           {v.liveBooksLabel}. Every money figure is simulated.
         </p>
         <p className="m-0 text-xs text-text-muted">
-          Times are Melbourne time with the daylight offset shown.
-          {v.asOfMelbourne !== null ? ` Latest night: ${v.asOfMelbourne}.` : ""}
+          Times are Melbourne time.
+          {v.asOfMelbourne !== null ? ` Latest run: ${v.asOfMelbourne}.` : ""}
         </p>
       </header>
 
@@ -141,40 +160,45 @@ export default async function CortexPage() {
         </Banner>
       ) : null}
 
-      <Section id="passports" title="Angles">
-        <p className="m-0">
-          {v.passports.total === 0 ? (
-            <NotMeasured />
-          ) : (
-            `${v.passports.total} angles. ` +
-            Object.entries(v.passports.byStatus)
-              .map(([k, n]) => `${n} ${k}`)
-              .join(", ") +
-            "."
-          )}
-        </p>
-        {v.passports.rows.length > 0 ? (
-          <DataTable
-            caption="Angles and their status"
-            columns={passportCols}
-            rows={v.passports.rows}
-            rowKey={(r) => r.angle}
-          />
-        ) : null}
-      </Section>
+      {has.passports ? (
+        <Section id="passports" title="Angles">
+          <p className="m-0">
+            {v.passports.total === 0 ? (
+              <NotMeasured />
+            ) : (
+              `${v.passports.total} angles. ` +
+              Object.entries(v.passports.byStatus)
+                .map(([k, n]) => `${n} ${k}`)
+                .join(", ") +
+              "."
+            )}
+          </p>
+          {v.passports.rows.length > 0 ? (
+            <DataTable
+              caption="Angles and their status"
+              columns={passportCols}
+              rows={v.passports.rows}
+              rowKey={(r) => r.angle}
+            />
+          ) : null}
+        </Section>
+      ) : null}
 
-      <Section id="ledger" title="Ideas tried and luck">
-        <p className="m-0" data-luck="">
-          {v.ledger.cells === 0 && v.ledger.keyEdits === 0 ? <NotMeasured /> : v.ledger.luckText}
-        </p>
-        <p className="m-0 text-text-muted" data-error-levels="">
-          {v.ledger.errorLevelsText}
-        </p>
-        <p className="m-0 text-text-muted">
-          {formatCount(v.ledger.cells)} cells logged, {formatCount(v.ledger.keyEdits)} Owner setting
-          edits counted as trials.
-        </p>
-      </Section>
+      {has.ledger ? (
+        <Section id="ledger" title="Ideas tried and luck">
+          <p className="m-0" data-luck="">
+            {v.ledger.cells === 0 && v.ledger.keyEdits === 0 ? <NotMeasured /> : v.ledger.luckText}
+          </p>
+          <p className="m-0 text-text-muted" data-error-levels="">
+            {v.ledger.errorLevelsText}
+          </p>
+          <p className="m-0 text-text-muted">
+            {formatCount(v.ledger.cells)} {v.ledger.cells === 1 ? "idea" : "ideas"} tested so far;{" "}
+            {formatCount(v.ledger.keyEdits)} Owner setting{" "}
+            {v.ledger.keyEdits === 1 ? "change" : "changes"} also counted as tests.
+          </p>
+        </Section>
+      ) : null}
 
       <Section id="families" title="Strategies and what we can detect">
         <DataTable
@@ -196,100 +220,110 @@ export default async function CortexPage() {
         ) : null}
       </Section>
 
-      <Section id="placebo" title="Placebo check">
-        {v.placebo === null ? (
-          <NotMeasured />
-        ) : (
-          <p className="m-0" data-placebo="">
-            {v.placebo.passed ? "Passed" : "Failed"}: a random look-alike passed about{" "}
-            {pct(v.placebo.nullPassRatePpm)} of the time. {v.placebo.at ?? ""}
-          </p>
-        )}
-      </Section>
-
-      <Section id="nav" title="Value at risk">
-        {v.navAtRisk === null ? (
-          <NotMeasured />
-        ) : (
-          <p className="m-0" data-nav-at-risk="">
-            On a bad day (1 in 20) the books could lose about {plain(v.navAtRisk.loss95Pct, 1)}%;
-            the worst day tested was {plain(v.navAtRisk.lossWorstPct, 1)}%. {v.navAtRisk.at ?? ""}
-          </p>
-        )}
-      </Section>
-
-      <Section id="abstain" title="Nights with no trade">
-        {a.total === 0 ? (
-          <NotMeasured />
-        ) : (
-          <>
-            <p className="m-0">
-              {formatCount(a.total)} book-nights without a trade in the last 60 days.
+      {has.placebo ? (
+        <Section id="placebo" title="Placebo check">
+          {v.placebo === null ? (
+            <NotMeasured />
+          ) : (
+            <p className="m-0" data-placebo="">
+              {v.placebo.passed ? "Passed" : "Failed"}: a random look-alike passed about{" "}
+              {pct(v.placebo.nullPassRatePpm)} of the time. {v.placebo.at ?? ""}
             </p>
-            <DataTable
-              caption="Reasons for no trade"
-              columns={reasonCols}
-              rows={a.reasons}
-              rowKey={(r) => r.label}
-            />
-          </>
-        )}
-        <p className="m-0" data-comparator="">
-          What the shadow arm would have done meanwhile:{" "}
-          {a.shadowFilled === 0 ? (
+          )}
+        </Section>
+      ) : null}
+
+      {has.nav ? (
+        <Section id="nav" title="Value at risk">
+          {v.navAtRisk === null ? (
+            <NotMeasured />
+          ) : (
+            <p className="m-0" data-nav-at-risk="">
+              On a bad day (1 in 20) the books could lose about {plain(v.navAtRisk.loss95Pct, 1)}%;
+              the worst day tested was {plain(v.navAtRisk.lossWorstPct, 1)}%. {v.navAtRisk.at ?? ""}
+            </p>
+          )}
+        </Section>
+      ) : null}
+
+      {has.abstain ? (
+        <Section id="abstain" title="Nights with no trade">
+          {a.total === 0 ? (
             <NotMeasured />
           ) : (
             <>
-              {formatCount(a.shadowFilled)} trades
-              {a.shadowTotalNet !== null
-                ? `, ${formatMicro(a.shadowTotalNet.micro)} after costs in total`
-                : ""}
-              .
+              <p className="m-0">
+                {formatCount(a.total)} strategy-nights without a trade in the last 60 days.
+              </p>
+              <DataTable
+                caption="Reasons for no trade"
+                columns={reasonCols}
+                rows={a.reasons}
+                rowKey={(r) => r.label}
+              />
             </>
           )}
-        </p>
-        <p className="m-0">
-          Cash sitting idle: {a.idleSharePpm === null ? <NotMeasured /> : pct(a.idleSharePpm)} of
-          book-nights.
-        </p>
-      </Section>
+          <p className="m-0" data-comparator="">
+            What the shadow arm would have done meanwhile:{" "}
+            {a.shadowFilled === 0 ? (
+              <NotMeasured />
+            ) : (
+              <>
+                {formatCount(a.shadowFilled)} trades
+                {a.shadowTotalNet !== null
+                  ? `, ${formatMicro(a.shadowTotalNet.micro)} after costs in total`
+                  : ""}
+                .
+              </>
+            )}
+          </p>
+          <p className="m-0">
+            Cash sitting idle: {a.idleSharePpm === null ? <NotMeasured /> : pct(a.idleSharePpm)} of
+            strategy-nights.
+          </p>
+        </Section>
+      ) : null}
 
-      <Section id="sector" title="Sector tilt (shadow only)">
-        {v.sectorTilt === null ? (
-          <NotMeasured />
-        ) : (
-          <ul className="m-0 list-none p-0">
-            {v.sectorTilt.rows.map((r, i) => (
-              <li key={`${r.book}:${r.sector}:${i}`}>
-                {r.book}: {r.sector}, {r.tiltPp > 0 ? "+" : ""}
-                {r.tiltPp} points
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+      {has.sector ? (
+        <Section id="sector" title="Sector tilt (shadow only)">
+          {v.sectorTilt === null ? (
+            <NotMeasured />
+          ) : (
+            <ul className="m-0 list-none p-0">
+              {v.sectorTilt.rows.map((r, i) => (
+                <li key={`${r.book}:${r.sector}:${i}`}>
+                  {r.book}: {r.sector}, {r.tiltPp > 0 ? "+" : ""}
+                  {r.tiltPp} points
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      ) : null}
 
       <Section id="cold-start" title="Warming up">
         <p className="m-0" data-cold-start="">
           {v.coldStart.warming
             ? `Warming up: ${formatCount(v.coldStart.nights)} nights recorded and no map loaded yet.`
-            : `${formatCount(v.coldStart.nights)} nights recorded since ${v.coldStart.firstD ?? ""}.`}
+            : `${formatCount(v.coldStart.nights)} nights recorded since ${v.coldStart.firstD === null ? "" : v.coldStart.firstD.startsWith("week") ? v.coldStart.firstD : formatDay(v.coldStart.firstD)}.`}
         </p>
       </Section>
 
-      <Section id="opinion" title="Opinion track">
-        {v.opinions.length === 0 ? (
-          <NotMeasured />
-        ) : (
-          <ul className="m-0 list-none p-0">
-            {v.opinions.map((o) => (
-              <li key={o.kind}>
-                {o.kind}: {formatCount(o.total)} recorded, {formatCount(o.settled)} settled
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+      {has.opinion ? (
+        <Section id="opinion" title="Opinion track">
+          {v.opinions.length === 0 ? (
+            <NotMeasured />
+          ) : (
+            <ul className="m-0 list-none p-0">
+              {v.opinions.map((o) => (
+                <li key={o.kind}>
+                  {o.kind}: {formatCount(o.total)} recorded, {formatCount(o.settled)} settled
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      ) : null}
 
       <Section id="ticks" title="Price steps and costs">
         <DataTable
@@ -302,6 +336,19 @@ export default async function CortexPage() {
           Half spreads are placeholders until checked against a quoted-spread source.
         </p>
       </Section>
+
+      {missing.length > 0 ? (
+        <details data-cortex-unmeasured="" className="rounded-lg border border-border p-3 text-sm">
+          <summary className="cursor-pointer font-semibold">
+            Not measured yet (fills in as data arrives)
+          </summary>
+          <ul className="m-0 mt-2 list-none p-0 text-text-muted">
+            {missing.map((m) => (
+              <li key={m}>{m}</li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
 
       <Section id="controls" title="Owner controls">
         {v.controls.canEdit ? (

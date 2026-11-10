@@ -62,10 +62,10 @@ describe("tabs", () => {
     const links = within(container).getAllByRole("link");
     expect(links.map((l) => l.getAttribute("href"))).toEqual([
       "/strategies",
+      "/strategies/risk",
       "/strategies/leaderboard",
       "/strategies/ideas",
       "/strategies/movers", // D-886
-      "/strategies/risk",
       "/what-if",
       "/cortex",
     ]);

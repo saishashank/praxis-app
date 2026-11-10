@@ -263,9 +263,9 @@ describe("/cards/[id]", () => {
     const html = await card(REF);
     expect(requireUser).toHaveBeenCalledWith("read", `/cards/${REF}`);
     expect(html).not.toContain("card:sig");
-    expect(html).toContain("Decision Card: Stock C (E01)");
+    expect(html).toMatch(/Decision Card: Stock C \((?!E0)[^)<]+\)/);
     expect(html).toContain("Guidance upgrade with a rising trend.");
-    expect(html).toContain("TB-NEG: Negative announcement");
+    expect(html).toContain("Bad news that moves the price");
     expect(html).toContain("Insufficient history (n &lt; 30).");
     expect(html).toContain("Stock C F1 note.");
     expect(html).toContain("(Written without AI.)");
@@ -283,7 +283,7 @@ describe("/cards/[id]", () => {
   it("an Editor sees the same masked card; the note form carries the reference, never the id", async () => {
     as("editor");
     const html = await card(REF);
-    expect(html).toContain("Decision Card: Stock C (E01)");
+    expect(html).toMatch(/Decision Card: Stock C \((?!E0)[^)<]+\)/);
     expect(html).toContain("<form");
     expect(html).toContain(decodeURIComponent(REF));
     expect(html).not.toContain("card:sig");
@@ -307,14 +307,14 @@ describe("/cards/[id]", () => {
   it("the Owner and a user with a live grant see the real code and amounts", async () => {
     as("owner");
     const o = await card(encodeURIComponent(CARD_ID));
-    expect(o).toContain("Decision Card: ZZUP (E01)");
+    expect(o).toMatch(/Decision Card: ZZUP \((?!E0)[^)<]+\)/);
     expect(o).toContain("ZZUP F1 note.");
     expect(o).toContain("A$1.50");
     expect(o).toContain("A$150.00");
     expect(o).toContain(D);
     as("editor");
     await grantTo("2099-01-01T00:00:00.000Z");
-    expect(await card(encodeURIComponent(CARD_ID))).toContain("Decision Card: ZZUP (E01)");
+    expect(await card(encodeURIComponent(CARD_ID))).toMatch(/Decision Card: ZZUP \((?!E0)[^)<]+\)/);
   });
 
   it("an expired grant leaves the card masked (a real id still 404s)", async () => {
@@ -326,7 +326,7 @@ describe("/cards/[id]", () => {
 
   it("the Owner can open a card by its opaque reference too", async () => {
     as("owner");
-    expect(await card(REF)).toContain("Decision Card: ZZUP (E01)");
+    expect(await card(REF)).toMatch(/Decision Card: ZZUP \((?!E0)[^)<]+\)/);
   });
 
   it("404s an unknown card and refuses when the guard refuses", async () => {

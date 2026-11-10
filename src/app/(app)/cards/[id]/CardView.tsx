@@ -25,6 +25,8 @@ import {
   type FactorItem,
 } from "@/lib/ui/loaders/cardParts";
 import { loadCardPage } from "@/lib/ui/loaders/cards";
+import { breakerWord } from "@/lib/view/cards";
+import { formatDay } from "@/lib/view/format";
 import { NOT_ADVICE_FOOTER, SCENARIO_CAPTION } from "@/lib/view/honesty";
 import { familyBadge } from "../../home/familyMap";
 import { addCardNoteAction } from "./actions";
@@ -196,7 +198,7 @@ export async function cardBody(user: CurrentUser, id: string) {
               <li key={`${i}:${b.id}`} className="flex min-w-0 flex-wrap items-center gap-2">
                 <Pill kind="thesis" value={b.status} />
                 <span className="break-words">
-                  {b.id}: {b.value}
+                  {breakerWord(b.id)}: {b.value}
                 </span>
               </li>
             ))}
@@ -354,13 +356,13 @@ export async function cardBody(user: CurrentUser, id: string) {
               <li key={n.id} className="min-w-0 break-words">
                 {n.text === null ? (
                   <>
-                    Note added by {n.role} on {n.day}
+                    Note added by {n.role} on {formatDay(n.day)}
                   </>
                 ) : (
                   <>
                     {n.text}{" "}
                     <span className="text-text-muted">
-                      ({n.role}, {n.day})
+                      ({n.role}, {formatDay(n.day)})
                     </span>
                   </>
                 )}

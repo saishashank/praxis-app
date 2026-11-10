@@ -27,6 +27,7 @@ import { Term } from "@/components/ui/Overlays";
 import { Banner, EmptyState, ShowDetails } from "@/components/ui/States";
 import { GainLoss, Money, NotMeasured, SimulatedLabel } from "@/components/ui/Values";
 import { regimeLabel } from "@/lib/view/terms";
+import { costPlan } from "@/lib/view/costPlans";
 import { formatMicro } from "@/lib/view/format";
 import { StrategyTabs } from "../StrategyTabs";
 
@@ -163,7 +164,7 @@ function columns(cost: string | null, regime: RegimeState | null): Column<Row>[]
               {formatMicro(r.ev.navMinusSeed.meanMicro, { sign: "always" })}
             </GainLoss>
             <span className="text-xs text-text-muted">
-              Minus matched control C2:{" "}
+              Minus its random-pick twin:{" "}
               {r.ev.minusC2Micro === null
                 ? "Not measured yet"
                 : formatMicro(r.ev.minusC2Micro, { sign: "always" })}
@@ -175,14 +176,14 @@ function columns(cost: string | null, regime: RegimeState | null): Column<Row>[]
     },
     {
       key: "zero",
-      header: "Zero-edge benchmark",
+      header: "No-skill comparison",
       align: "right",
       cell: (r) =>
         r.zero ? <span className="font-mono">Goal {pct(r.zero.target)}</span> : <NotMeasured />,
     },
     {
       key: "cost",
-      header: cost ? `Value under cost profile ${cost}` : "Costs",
+      header: cost ? `Value with ${costPlan(cost).title.toLowerCase()} fees` : "Costs",
       align: "right",
       cell: (r) =>
         cost ? (
@@ -215,6 +216,38 @@ function columns(cost: string | null, regime: RegimeState | null): Column<Row>[]
     },
   ];
   return cols;
+}
+
+/** One honest line while a strategy has no finished round (no figure to show yet). */
+function waitingLine(l: LeaderRow): string {
+  const running = `${l.live} ${l.live === 1 ? "round" : "rounds"} running`;
+  return `${running}, none finished: ranking starts after 3 finished rounds.`;
+}
+
+/** Few columns for the time before any round has finished: name, one line, the value trend. */
+function waitingColumns(): Column<Row>[] {
+  return [
+    {
+      key: "strategy",
+      header: "Strategy",
+      cell: (r) => (
+        <Link href={`/strategies/${encodeURIComponent(r.id)}`} className="text-accent underline">
+          {r.name}
+        </Link>
+      ),
+    },
+    { key: "status", header: "Where it stands", cell: (r) => waitingLine(r.leader) },
+    {
+      key: "trend",
+      header: "Recent trend",
+      cell: (r) =>
+        r.spark.length >= 2 ? (
+          <Sparkline values={r.spark} label={`${r.name} value, last ${r.spark.length} sessions`} />
+        ) : (
+          <NotMeasured />
+        ),
+    },
+  ];
 }
 
 export default async function LeaderboardPage({
@@ -284,6 +317,7 @@ export default async function LeaderboardPage({
         labelRank(a.label?.label ?? null) - labelRank(b.label?.label ?? null) || byName(a, b),
     );
   const compared = ranked.size;
+  const waiting = insufficient.length > 0 && insufficient.every((r) => r.leader.finished === 0);
 
   const q = (over: { cost?: string | null; regime?: string | null }): string => {
     const p = new URLSearchParams();
@@ -306,7 +340,7 @@ export default async function LeaderboardPage({
     { href: q({ cost: null }), label: "As traded", current: cost === null },
     ...lb.data.costKeys.map((k) => ({
       href: q({ cost: k }),
-      label: k === "stress" ? "Stress" : k,
+      label: costPlan(k).title,
       current: cost === k,
     })),
   ];
@@ -373,7 +407,8 @@ export default async function LeaderboardPage({
         <Chips label="Cost profile" items={costChips} />
         {cost ? (
           <p className="m-0 text-xs text-text-muted">
-            Values re-costed overnight under cost profile {cost}, from stored rows.
+            Values re-costed overnight with {costPlan(cost).title.toLowerCase()} fees (
+            {costPlan(cost).detail}), from stored rows.
           </p>
         ) : null}
         {regime ? (
@@ -444,7 +479,7 @@ export default async function LeaderboardPage({
             </p>
             <DataTable
               caption="Strategies without enough evidence"
-              columns={cols}
+              columns={waiting ? waitingColumns() : cols}
               rows={insufficient}
               rowKey={(r) => r.id}
               empty={
@@ -458,8 +493,9 @@ export default async function LeaderboardPage({
               Controls
             </h2>
             <p className="m-0 text-sm text-text-muted">
-              Matched controls C1, C2 and C3 follow simple rules with no edge. A strategy that beats
-              them by luck is flagged &ldquo;possible luck&rdquo;.
+              Each control is a simple comparison with no skill: an index fund held for the whole
+              period, and for each strategy a twin that makes random picks but uses the same exit
+              rules. A strategy that beats them by luck is flagged &ldquo;possible luck&rdquo;.
             </p>
             <DataTable
               caption="Matched controls"
