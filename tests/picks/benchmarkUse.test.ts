@@ -39,6 +39,7 @@ const NON_COMPARISON_READERS = new Set([
   "lib/ui/loaders/company.ts",
   "lib/ui/loaders/home.ts", // D-907: the ASX 200 line on Home, a level and its change (as the company page), not a comparison
   "lib/arena/diagnose.ts", // read-only signals diagnosis (#58): counts index rows to check regime coverage, not a comparison
+  "lib/learning/dailyLoad.ts", // D-921: the day's AXJO level move, one of the mover causes ("the market moved"); a description of a day, not a comparison of a strategy with the market
 ]);
 
 describe("DAT-235: market comparisons use the total-return series", () => {
