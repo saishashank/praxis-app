@@ -107,7 +107,8 @@ describe("the Market tab for the Owner", () => {
     expect(requireUser).toHaveBeenCalledWith("read", "/market");
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1, name: "Market" })).toBeInTheDocument();
-    expect(container.textContent).toMatch(/end-of-day prices/i);
+    expect(container.textContent).toMatch(/last close, or a delayed quote/i);
+    expect(container.textContent).not.toMatch(/not live quotes/i);
     expect(container.textContent).toMatch(/Nothing here places an order/);
     expect(screen.queryByRole("button", { name: /\b(buy|sell|order)\b/i })).toBeNull();
   });
@@ -218,7 +219,8 @@ describe("the Market tab for the Owner", () => {
     );
     await market();
     expect(screen.getByRole("heading", { name: "Main index" })).toBeInTheDocument();
-    expect(screen.getByText(/ZZX, close of 2026-10-19/)).toBeInTheDocument();
+    expect(screen.getByText(/End of day, Mon 19 Oct/)).toBeInTheDocument();
+    expect(screen.queryByText(/ZZX/)).toBeNull();
     expect(screen.getByRole("img", { name: /Main index, last month/ })).toBeInTheDocument();
   });
 
@@ -297,7 +299,7 @@ describe("the company page for the Owner", () => {
     ).toBeInTheDocument();
     expect(container.textContent).toContain("Technology");
     expect(container.textContent).toContain("A$10.50");
-    expect(container.textContent).toMatch(/End-of-day price, /);
+    expect(container.textContent).toMatch(/End of day, /);
     expect(screen.getByRole("button", { name: "Add ZZUP to watchlist" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Company overview for ZZUP" })).toBeInTheDocument();
     expect(screen.getByText("+5.00%")).toBeInTheDocument();
@@ -345,10 +347,12 @@ describe("the company page for the Owner", () => {
     await waitFor(() => expect(lc.createChart).toHaveBeenCalled());
   });
 
-  it("shows key numbers with 'Not available' where the source has none, and Our activity", async () => {
+  it("leaves out key numbers that are not available, and shows Our activity", async () => {
     const { container } = await company("ZZUP");
     const key = screen.getByRole("heading", { name: "Key numbers" }).closest("section")!;
-    expect(within(key).getAllByText("Not available").length).toBeGreaterThanOrEqual(3);
+    for (const gone of ["Market cap", "P/E ratio", "Dividend yield"]) {
+      expect(key.textContent).not.toContain(gone);
+    }
     expect(key.textContent).toContain("52-week range");
     expect(key.textContent).toMatch(/usual/);
     expect(screen.getByRole("heading", { name: "Our activity" })).toBeInTheDocument();

@@ -22,8 +22,8 @@ import { MarketTable } from "./MarketTable";
 import type { WatchResult } from "./messages";
 import type { WatchMode } from "./RowActions";
 import { sectorKey } from "./sectorHue";
-import { formatDate } from "@/lib/view/format";
-import { ppmToPercent } from "./text";
+import { formatDay } from "@/lib/view/format";
+import { formatIndexPoints, ppmToPercent } from "./text";
 
 type Star = (fd: FormData) => Promise<WatchResult>;
 
@@ -120,11 +120,24 @@ export function IndexSection({ index, masked }: { index: Promise<IndexStrip>; ma
   const strip = use(index);
   return strip ? (
     <div className="mt-1 flex flex-wrap items-center gap-3">
-      <span>
-        {masked ? "Market index" : strip.code}, close of {strip.d}
+      <span className="font-medium">{masked ? "Market index" : strip.label}</span>
+      {!masked ? (
+        <span className="font-sans tabular-nums">
+          {formatIndexPoints(strip.live ? strip.live.levelMicro : strip.closeMicro)}
+        </span>
+      ) : null}
+      <Change ppm={strip.live ? strip.live.changePpm : strip.changePpm} />
+      <span className="text-sm text-text-muted">
+        {strip.live
+          ? `Delayed, ${strip.live.at}`
+          : `End of day${masked ? "" : `, ${formatDay(strip.d)}`}`}
       </span>
-      <Change ppm={strip.changePpm} />
-      <Sparkline values={strip.closes} label="Main index, last month" />
+      <Sparkline
+        values={strip.closes}
+        label="Main index, last month"
+        format={formatIndexPoints}
+        labels={masked ? undefined : strip.dates.map((d) => formatDay(d))}
+      />
     </div>
   ) : (
     <p className="m-0 mt-1 text-sm text-text-muted">
@@ -146,7 +159,11 @@ export function MarketStatus({ model, q }: { model: Promise<MarketModel>; q: Mar
     <>
       {/* D-884: the day the prices are from, plainly at the top of the lists */}
       <p className="m-0 text-sm font-medium" data-prices-as-of="">
-        {m.d ? `Prices as of ${formatDate(m.d)} (end of day)` : "No prices stored yet"}
+        {m.d
+          ? m.masked
+            ? "Last close (end of day)"
+            : `Last close: ${formatDay(m.d)} (end of day)`
+          : "No prices stored yet"}
       </p>
       {m.state === "stale" && m.staleText ? (
         <Banner tone="warning" title="Out of date">
@@ -225,6 +242,7 @@ export function MoversSection({
             caption={title}
             rows={list.rows}
             masked={m.masked}
+            day={m.d}
             mode={mode}
             starAction={starAction}
             showVolume={false}
@@ -311,6 +329,7 @@ export function CompaniesSection({
         caption="All companies"
         rows={m.all.rows}
         masked={m.masked}
+        day={m.d}
         mode={mode}
         starAction={starAction}
         empty="No companies match."

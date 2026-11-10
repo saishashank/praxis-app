@@ -126,6 +126,27 @@ describe("the company model for the Owner", () => {
     expect(c.announcements[0]!.url).toBe("https://news.example.test/doc.pdf");
   });
 
+  it("D-919: shows the stored delayed quote when it is newer than the close, never for a masked user", async () => {
+    expect((await loadCompany(envOf(w, "owner"), "ZZUP"))!.live).toBeNull();
+    await run(
+      `INSERT INTO quote_latest (market, code, last_micro, prev_close_micro, quote_at, fetched_at)
+       VALUES ('AU', 'ZZUP', 11025000, 10500000, '2026-10-20T01:50:00.000Z', '2026-10-20T01:55:00.000Z')`,
+    );
+    const c = (await loadCompany(envOf(w, "owner"), "ZZUP"))!;
+    expect(c.live).toEqual({ priceMicro: "11025000", changePpm: 50_000, at: "12:50" });
+    expect(c.closeMicro).toBe("10500000"); // the close itself is unchanged
+    const masked = (await loadCompany(envOf(w, "viewer"), "stock-b"))!;
+    expect(masked.live).toBeNull();
+    expect(findLeaks(masked, CODES, NAMES)).toEqual([]);
+    await run("DELETE FROM quote_latest WHERE code = 'ZZUP'");
+  });
+
+  it("D-919: announcement times read as Melbourne trading words, not ISO text", async () => {
+    const c = (await loadCompany(envOf(w, "owner"), "ZZUP"))!;
+    for (const a of c.announcements)
+      expect(a.published).toMatch(/^[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}( \d{4})?, \d{2}:\d{2}$/);
+  });
+
   it("a company without bars is an empty page, not a failure", async () => {
     await run(
       `INSERT INTO instrument (market, code, name) VALUES ('AU','ZZNEW','Zed New Listing')`,
@@ -204,10 +225,29 @@ describe("the index strip", () => {
     const s = await loadIndexStrip(envOf(w, "viewer"));
     expect(s).toEqual({
       code: "ZZX",
+      label: "Market index",
       d: D,
       changePpm: 4975, // 7035 -> 7070
+      closeMicro: 7_070_000_000,
       closes: [7_000_000_000, 7_035_000_000, 7_070_000_000],
+      dates: ["2026-10-15", "2026-10-16", D],
+      live: null,
     });
+  });
+
+  it("D-919: carries the delayed level only when it is from a later day than the last close", async () => {
+    const put = (at: string) =>
+      run(
+        `INSERT OR REPLACE INTO quote_latest (market, code, last_micro, prev_close_micro, quote_at, fetched_at)
+         VALUES ('AU', 'ZZX', 7140000000, 7070000000, ?, ?)`,
+        [at, at],
+      );
+    await put("2026-10-19T02:00:00.000Z"); // the same Sydney day as the close: nothing to add
+    expect((await loadIndexStrip(envOf(w, "viewer")))!.live).toBeNull();
+    await put("2026-10-20T02:50:00.000Z"); // 13:50 in Melbourne on the next day
+    const s = (await loadIndexStrip(envOf(w, "viewer")))!;
+    expect(s.live).toEqual({ levelMicro: 7_140_000_000, changePpm: 9_901, at: "13:50" });
+    await run("DELETE FROM quote_latest WHERE code = 'ZZX'");
   });
 
   it("is null when no index is stored", async () => {

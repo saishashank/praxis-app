@@ -7,12 +7,19 @@ export function Sparkline({
   label,
   width = 120,
   height = 32,
+  format,
+  labels,
 }: {
   values: Array<number | null>;
   label: string;
   width?: number;
   height?: number;
+  /** How a value reads in the text alternative (default: plain number). */
+  format?: (v: number) => string;
+  /** Row labels for the text alternative, one per value (default: 1, 2, 3 ...). */
+  labels?: string[];
 }) {
+  const fmt = format ?? n;
   const real = values.filter((v): v is number => v !== null && Number.isFinite(v));
   if (real.length < 2) {
     return (
@@ -41,7 +48,7 @@ export function Sparkline({
   const first = real[0]!;
   const last = real[real.length - 1]!;
   const change = first === 0 ? 0 : ((last - first) / Math.abs(first)) * 100;
-  const summary = `${label}: ${values.length} sessions, ${signed(change)} from ${n(first)} to ${n(last)}, low ${n(lo)}, high ${n(hi)}`;
+  const summary = `${label}: ${values.length} sessions, ${signed(change)} from ${fmt(first)} to ${fmt(last)}, low ${fmt(lo)}, high ${fmt(hi)}`;
   return (
     <figure className="inline-block m-0">
       <svg
@@ -55,8 +62,8 @@ export function Sparkline({
       </svg>
       <ChartTable
         caption={label}
-        headers={["Session", "Value"]}
-        rows={values.map((v, i) => [i + 1, v === null ? "no data" : n(v)])}
+        headers={[labels ? "Day" : "Session", "Value"]}
+        rows={values.map((v, i) => [labels?.[i] ?? i + 1, v === null ? "no data" : fmt(v)])}
       />
     </figure>
   );

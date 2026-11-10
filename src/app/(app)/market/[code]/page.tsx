@@ -17,7 +17,7 @@ import { loadCandidateForCode, loadChipsForCode } from "@/lib/ui/loaders/pickAle
 import { AlertChip } from "../../picks/AlertChip";
 import { INTRADAY_UNRATED } from "../../picks/text";
 import { envFor } from "@/lib/ui/loaders/shell";
-import { formatCount, formatDate, formatMicro } from "@/lib/view/format";
+import { formatCount, formatDate, formatDay, formatMicro } from "@/lib/view/format";
 import { toggleWatchlistAction } from "../actions";
 import { CompanyChart } from "../CompanyChart";
 import { Change, Dash, FIG, Tile } from "../Figures";
@@ -26,7 +26,6 @@ import { sectorHueOf } from "../sectorHue";
 import {
   maText,
   MASKED_MARKET_NOTE,
-  NOT_AVAILABLE,
   PRICE_LABEL,
   PRICE_NOTE,
   rangePositionText,
@@ -73,7 +72,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ code: 
   return (
     <main className="mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-4 px-4 py-6">
       <Breadcrumb
-        items={[{ href: "/market", label: "Market" }, { label: title }]}
+        items={[{ href: "/market", label: "Market" }, { label: c.stock }]}
         backHref="/market"
       />
       <header
@@ -94,16 +93,18 @@ export default async function CompanyPage({ params }: { params: Promise<{ code: 
               <div className="mt-1 flex flex-wrap items-baseline gap-3">
                 {c.closeMicro ? (
                   <span className={`${FIG} text-2xl font-semibold`}>
-                    {formatMicro(c.closeMicro)}
+                    {formatMicro(c.live ? c.live.priceMicro : c.closeMicro)}
                   </span>
                 ) : (
                   <Masked />
                 )}
-                <Change ppm={c.changePpm} />
+                <Change ppm={c.live ? c.live.changePpm : c.changePpm} />
               </div>
               <p className="m-0 mt-1 text-sm text-text-muted">
-                {PRICE_LABEL}
-                {c.d ? `, ${formatDate(c.d)}` : ""}. {PRICE_NOTE}
+                {c.live
+                  ? `Delayed, ${c.live.at}. Last close ${c.closeMicro ? formatMicro(c.closeMicro) + ", " : ""}${formatDay(c.d)}`
+                  : `${PRICE_LABEL}${c.d && !c.masked ? `, ${formatDay(c.d)}` : ""}`}
+                . {PRICE_NOTE}
               </p>
             </>
           )}
@@ -145,7 +146,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ code: 
       ) : null}
       {c.delisted ? (
         <Banner tone="warning" title="No longer listed">
-          Delisted on {c.delisted.on}
+          Delisted on {formatDay(c.delisted.on)}
           {c.delisted.reason ? `: ${c.delisted.reason}` : "."}
         </Banner>
       ) : null}
@@ -191,14 +192,14 @@ export default async function CompanyPage({ params }: { params: Promise<{ code: 
           <Tile label="Against 200-day average">{maText(c.ma.long)}</Tile>
         </dl>
         <dl className="m-0 grid gap-x-6 sm:grid-cols-2">
-          <Row term="Today within the range">{rangePositionText(c.rangePositionPpm)}</Row>
+          <Row term="Where it sits in its 52-week range">
+            {rangePositionText(c.rangePositionPpm)}
+          </Row>
+          {/* D-919: a row whose value is not available is left out rather than printed as "Not available" */}
           {c.masked ? null : (
             <>
-              <Row term="Market cap">{NOT_AVAILABLE}</Row>
-              <Row term="P/E ratio">{NOT_AVAILABLE}</Row>
-              <Row term="Dividend yield">{NOT_AVAILABLE}</Row>
-              <Row term="Sector">{c.sector ?? NOT_AVAILABLE}</Row>
-              <Row term="Listed since">{c.listedOn ? formatDate(c.listedOn) : NOT_AVAILABLE}</Row>
+              {c.sector ? <Row term="Sector">{c.sector}</Row> : null}
+              {c.listedOn ? <Row term="Listed since">{formatDate(c.listedOn)}</Row> : null}
             </>
           )}
         </dl>
