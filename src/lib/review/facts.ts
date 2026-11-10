@@ -10,17 +10,19 @@ import type { ReviewFacts, ReviewVariant } from "@/lib/email/templates/review";
 
 export type { ReviewFacts, ReviewVariant };
 
-/** The ten headings of EML-012, in order (the renderer prints the same names). */
+/**
+ * The headings of the review, in order (the renderer prints the same names). D-922: the system and
+ * quota health section is gone, "Sentinel recap" is "Today's alerts" (shown only when it has content).
+ */
 export const REVIEW_SECTION_NAMES: readonly string[] = [
   "Headline scorecard",
   "Investments made today",
   "Profit / loss",
-  "What was learned today",
+  "What we learned today",
   "What worked better and why",
   "What needs improving for tomorrow",
   "Overall picture — success %",
-  "Sentinel recap",
-  "System & quota health",
+  "Today's alerts",
   "Footer",
 ];
 

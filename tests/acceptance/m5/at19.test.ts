@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { flushAlerts } from "@/lib/alerts/flush";
 import { processAssessments } from "@/lib/alerts/deliver";
 import { buildFacts } from "@/lib/review/assemble";
+import { loadCtx, readAvailability, readHealth } from "@/lib/review/sections";
 import { sendEmail } from "@/lib/email/send";
 import { emailKeys } from "@/lib/email/keys";
 import { cleanupTempDbs } from "../../db/helpers";
@@ -111,7 +112,7 @@ describe("AT-19 alert tiers", () => {
     expect(w.mock.outbox).toHaveLength(1);
   });
 
-  it("given 12 P0 events in an hour: 10 sent, 2 suppressed_cap listed in section 9, and the reserved review slot still sends", async () => {
+  it("given 12 P0 events in an hour: 10 sent, 2 suppressed_cap counted by the health reader, and the reserved review slot still sends", async () => {
     const w = await alertWorld();
     for (let i = 0; i < 12; i++) {
       w.clock = w.at(i * 5 + 1 + i); // spaced past every 5-minute window, all inside ~1.2 h
@@ -129,14 +130,15 @@ describe("AT-19 alert tiers", () => {
     // the capped events stay in the alert inbox
     expect(await w.rows("SELECT 1 FROM alert WHERE tier = 'P0'")).toHaveLength(12);
     w.clock = w.at(70);
-    const { facts } = await buildFacts(w.db, {
+    // D-922: the review no longer has a system-health section; the reader still counts them (04 AC, EML-004)
+    const c = await loadCtx(w.db, {
       market: "AU",
       d: "2026-10-19",
       env: "production",
       appUrl: APP,
       now: w.clock,
     });
-    expect(facts.suppressedEmails).toBe(2); // section 9 lists them (04 AC, EML-004)
+    expect((await readHealth(c, await readAvailability(c))).suppressed).toBe(2);
     const review = await sendEmail(
       { db: w.db, env: ENV, now: () => w.clock, provider: w.mock, sleep: async () => {} },
       "review",
