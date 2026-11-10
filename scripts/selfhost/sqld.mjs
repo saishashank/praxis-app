@@ -46,19 +46,64 @@ export function namespaceTarget(base, ns, mode = "subdomain") {
   return { url: `${u.protocol}//${ns}.${u.host}`, host: null };
 }
 
-/** A fetch that forces the Host header (host mode). */
-export function hostFetch(host, inner = fetch) {
-  return (input, init) => {
-    const req = new Request(input, init);
-    req.headers.set("host", host);
-    return inner(req);
-  };
+/**
+ * A plain http(s) request through node:http that sends the Host header it is given. Node's global fetch (undici)
+ * ignores a `host` header set on a Request, so every host-mode call went to sqld's default namespace (found by
+ * branch CI against a real sqld, INFRA T4). Returns a standard Response.
+ * @param {Request} req @param {string | null} [host]
+ */
+export async function nodeHttpFetch(req, host = null) {
+  const { request: httpRequest } = await import("node:http");
+  const { request: httpsRequest } = await import("node:https");
+  const u = new URL(req.url);
+  const body = req.body ? Buffer.from(await req.arrayBuffer()) : null;
+  const headers = Object.fromEntries(req.headers);
+  if (host) headers.host = host;
+  if (body) headers["content-length"] = String(body.length);
+  const send = u.protocol === "https:" ? httpsRequest : httpRequest;
+  return new Promise((resolve, reject) => {
+    const r = send(
+      {
+        hostname: u.hostname,
+        port: u.port || undefined,
+        path: `${u.pathname}${u.search}`,
+        method: req.method,
+        headers,
+        signal: req.signal,
+      },
+      (res) => {
+        const chunks = [];
+        res.on("data", (c) => chunks.push(c));
+        res.on("error", reject);
+        res.on("end", () => {
+          const h = new Headers();
+          for (const [k, v] of Object.entries(res.headers)) {
+            if (v !== undefined) h.set(k, Array.isArray(v) ? v.join(", ") : v);
+          }
+          const status = res.statusCode ?? 502;
+          const empty = [101, 204, 205, 304].includes(status);
+          resolve(new Response(empty ? null : Buffer.concat(chunks), { status, headers: h }));
+        });
+      },
+    );
+    r.on("error", reject);
+    if (body) r.write(body);
+    r.end();
+  });
+}
+
+/**
+ * A fetch that sends `Host: <host>` (host mode). `inner(req, host)` does the request; the default is nodeHttpFetch.
+ * @param {string} host @param {(req: Request, host: string) => Promise<Response>} [inner]
+ */
+export function hostFetch(host, inner = nodeHttpFetch) {
+  return (input, init) => inner(new Request(input, init), host);
 }
 
 /**
  * Open a client on one namespace of a sqld server.
  * @param {{ base: string, ns: string, token?: string, mode?: "subdomain" | "host",
- *   intMode?: "number" | "bigint" | "string", fetchImpl?: typeof fetch }} o
+ *   intMode?: "number" | "bigint" | "string", fetchImpl?: (req: Request, host: string) => Promise<Response> }} o
  */
 export function openNamespace(o) {
   const t = namespaceTarget(o.base, o.ns, o.mode ?? "subdomain");

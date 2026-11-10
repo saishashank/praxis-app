@@ -40,12 +40,45 @@ test("namespaceTarget: subdomain mode, host mode, and bad input", () => {
 
 test("hostFetch forces the Host header on the request it forwards", async () => {
   let seen;
-  const f = hostFetch("drill-1.sqld", async (req) => {
-    seen = req;
+  const f = hostFetch("drill-1.sqld", async (req, host) => {
+    seen = { req, host };
     return { status: 200 };
   });
   await f("http://sqld:8080/v2/pipeline", { method: "POST", body: "{}" });
-  assert.equal(seen.headers.get("host"), "drill-1.sqld");
+  assert.equal(seen.host, "drill-1.sqld");
+  assert.equal(seen.req.url, "http://sqld:8080/v2/pipeline");
+});
+
+test("nodeHttpFetch really sends the Host header (global fetch would drop it) and returns a Response", async () => {
+  const { createServer } = await import("node:http");
+  const seen = [];
+  const srv = createServer((q, r) => {
+    let b = "";
+    q.on("data", (c) => (b += c));
+    q.on("end", () => {
+      seen.push({ host: q.headers.host, method: q.method, url: q.url, body: b });
+      r.writeHead(200, { "Content-Type": "application/json" }).end('{"ok":true}');
+    });
+  });
+  await new Promise((res) => srv.listen(0, "127.0.0.1", res));
+  try {
+    const port = srv.address().port;
+    const f = hostFetch("scratch-ns.sqld");
+    const res = await f(`http://127.0.0.1:${port}/v2/pipeline?x=1`, {
+      method: "POST",
+      body: '{"a":1}',
+    });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: true });
+    assert.deepEqual(seen[0], {
+      host: "scratch-ns.sqld",
+      method: "POST",
+      url: "/v2/pipeline?x=1",
+      body: '{"a":1}',
+    });
+  } finally {
+    srv.close();
+  }
 });
 
 test("openNamespace builds a client without touching the network", async () => {
@@ -211,13 +244,23 @@ test(
     assert.equal(await ensureNamespace(admin, ns), "created");
     assert.equal(await ensureNamespace(admin, ns), "exists");
     const db = openNamespace({ base: process.env.SQLD_TEST_URL, ns, mode: "host" });
+    const other = openNamespace({
+      base: process.env.SQLD_TEST_URL,
+      ns: "main",
+      mode: "host",
+    });
     try {
+      // The Host header must really route: a table made here must not show up in the main namespace.
+      const before = (await other.execute("SELECT COUNT(*) AS n FROM sqlite_master")).rows[0].n;
       await assertForeignKeys(db, "sqld scratch");
       await db.execute("CREATE TABLE p (id INTEGER PRIMARY KEY)");
       await db.execute("CREATE TABLE c (id INTEGER PRIMARY KEY, p_id INTEGER REFERENCES p(id))");
       await assert.rejects(db.execute("INSERT INTO c (p_id) VALUES (99)"));
+      const after = (await other.execute("SELECT COUNT(*) AS n FROM sqlite_master")).rows[0].n;
+      assert.equal(after, before, "a scratch namespace leaked into main");
     } finally {
       db.close();
+      other.close();
     }
     assert.equal(await dropNamespace(admin, ns), "dropped");
     assert.equal(await dropNamespace(admin, ns), "absent");

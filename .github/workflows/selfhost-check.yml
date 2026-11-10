@@ -42,7 +42,11 @@ jobs:
       - name: Build both images (amd64, local only)
         run: |
           set -eu
-          docker build -f deploy/selfhost/Dockerfile.web -t "$WEB_IMAGE" . > "$RUNNER_TEMP/build-web.log" 2>&1 &
+          # next/font/google fetches fonts at build time: retry the web build on a network hiccup (seen once on arm64).
+          ( for n in 1 2 3; do
+              docker build -f deploy/selfhost/Dockerfile.web -t "$WEB_IMAGE" . && exit 0
+              echo "web build attempt $n failed"; sleep 20
+            done; exit 1 ) > "$RUNNER_TEMP/build-web.log" 2>&1 &
           p1=$!
           docker build -f deploy/selfhost/Dockerfile.jobs --build-arg BUILD_COMMIT="$GITHUB_SHA" -t "$JOBS_IMAGE" . > "$RUNNER_TEMP/build-jobs.log" 2>&1 &
           p2=$!
@@ -247,8 +251,13 @@ jobs:
         run: uname -m && [ "$(uname -m)" = aarch64 ]
       - name: Build praxis-jobs natively (pip --require-hashes with requirements-arm64.txt)
         run: docker build -f deploy/selfhost/Dockerfile.jobs --build-arg BUILD_COMMIT="$GITHUB_SHA" -t "$JOBS_IMAGE" .
-      - name: Build praxis-web natively
-        run: docker build -f deploy/selfhost/Dockerfile.web -t "$WEB_IMAGE" .
+      - name: Build praxis-web natively (retried, fonts are fetched at build time)
+        run: |
+          for n in 1 2 3; do
+            docker build -f deploy/selfhost/Dockerfile.web -t "$WEB_IMAGE" . && exit 0
+            echo "web build attempt $n failed"; sleep 20
+          done
+          exit 1
       - name: Python and Node inside the jobs image
         run: |
           set -eu
