@@ -164,7 +164,7 @@ describe("the company model for the Owner", () => {
     const later = new Date("2026-11-20T03:00:00.000Z");
     const c = (await loadCompany(envOf(w, "owner", later), "ZZUP"))!;
     expect(c.state).toBe("stale");
-    expect(c.staleText).toContain(D);
+    expect(c.staleText).toContain("Mon 19 Oct"); // D-919: trading words, not ISO
   });
 });
 

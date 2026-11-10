@@ -309,13 +309,13 @@ describe("one strategy", () => {
     await one("E01");
     const chart = screen.getByTestId("nav-chart");
     const readout = () => document.querySelector("[aria-live=polite]")!.textContent!;
-    expect(readout()).toContain("2026-10-19: A$630.00");
-    expect(readout()).toContain("market mood Mixed (NEUTRAL)");
+    expect(readout()).toContain("Mon 19 Oct: A$630.00");
+    expect(readout()).toContain("market mood Mixed");
     expect(readout()).toContain("+A$20.00 on the day");
     fireEvent.keyDown(chart, { key: "ArrowLeft" });
-    expect(readout()).toContain("2026-10-16: A$610.00");
+    expect(readout()).toContain("Fri 16 Oct: A$610.00");
     fireEvent.keyDown(chart, { key: "Home" });
-    expect(readout()).toContain("2026-10-15: A$600.00");
+    expect(readout()).toContain("Thu 15 Oct: A$600.00");
     expect(readout()).not.toContain("on the day");
   });
 
