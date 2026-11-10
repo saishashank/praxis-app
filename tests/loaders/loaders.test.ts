@@ -98,11 +98,34 @@ describe("Home", () => {
     expect(d.day.quality).toEqual([{ tier: "U1", score: 1, gatePass: true }]);
     expect(d.picks.items).toHaveLength(1);
     expect(d.picks.items[0]).toMatchObject({ stock: "ZZUP", referenceMicro: 12_340_000, rank: 1 });
-    expect(d.ideas.items.map((i) => i.stock)).toEqual(["ZZUP", "ZZDN", "ZZOTH"]);
+    expect(d.ideas.items).toEqual([]); // Owner 2026-11-10: signals are research, not read on Home
     expect(d.watchlist).toEqual([{ stock: "ZZUP", close: 12.34, changePpm: 19_835, at: null }]);
     expect(d.news.items[0]?.stock).toBe("ZZUP");
     expect(d.review).toEqual({ d: "2026-10-19", day: "2026-10-19", kind: "full" });
     expect(d.attentionCount).toBe(0);
+  });
+
+  it("Owner 2026-11-10: during the session the strategy tiles move with the delayed quotes", async () => {
+    await db.main.execute(
+      "INSERT INTO quote_latest (market, code, last_micro, prev_close_micro, quote_at, fetched_at) " +
+        "VALUES ('AU', 'ZZUP', 12600000, 12340000, '2099-01-05T00:35:00.000Z', '2099-01-05T00:35:00.000Z')",
+    );
+    try {
+      const d = (await loadHome(deps(db, OWNER))).data;
+      const e01 = d.summary!.tiles.find((x) => x.id === "E01")!;
+      const e02 = d.summary!.tiles.find((x) => x.id === "E02")!;
+      expect(e01.dayChange?.micro).toBe(2_600_000); // 10 shares x (12.60 - 12.34)
+      expect(e01.dayChangePpm).not.toBeNull();
+      expect(e02.dayChange?.micro).toBe(0); // holds no shares: cash did not move today
+      expect(d.dayLabel).toBe("Today (delayed, 11:35)");
+      expect(d.headline[0]!.dayChangePpm! > 0).toBe(true);
+    } finally {
+      await db.main.execute("DELETE FROM quote_latest");
+    }
+    // without a fresher quote the end-of-day change stands
+    const after = (await loadHome(deps(db, OWNER))).data;
+    expect(after.summary!.tiles.find((x) => x.id === "E01")!.dayChange?.micro).toBe(20_000_000);
+    expect(after.dayLabel).not.toMatch(/delayed/);
   });
 
   it("D-900: the watchlist shows a delayed quote from a later day than the close, with its time", async () => {
@@ -266,7 +289,8 @@ describe("Ideas", () => {
       ["F2", "Good company, good news"],
     ]);
     expect(i.data.groups[0]!.ideas.map((x) => x.stock)).toEqual(["ZZUP", "ZZDN"]);
-    expect(i.data.tally).toEqual({ signals: 3, taken: 1, notTaken: 1 });
+    expect(i.data.tally).toEqual({ signals: 3, taken: 1, notTaken: 1, picked: 1 });
+    expect(i.data.groups[0]!.ideas[0]!.picks).toEqual([{ rank: 1, profile: "balanced" }]);
     expect(i.data.groups[0]!.ideas[0]!.cards[0]!.href).toBe(
       `/cards/${encodeURIComponent(CARD_UP)}`,
     );
@@ -330,8 +354,7 @@ describe("masking: Editor and Viewer never see a code, a name, a link, a trade p
     expect(home.data.watchlist).toEqual([
       { stock: "Stock C", close: null, changePpm: 19_835, at: null },
     ]);
-    expect(home.data.ideas.items.map((i) => i.stock)).toEqual(["Stock C", "Stock A", "Stock B"]);
-    expect(home.data.ideas.items[0]!.href).toMatch(/^\/cards\/ck%3A[0-9a-f]{16}$/);
+    expect(home.data.ideas.items).toEqual([]);
 
     const detail = await loadStrategyDetail(d, "E01");
     for (const t of detail.data.trades) {

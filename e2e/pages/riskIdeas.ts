@@ -13,7 +13,7 @@ export const RISK_IDEAS_PAGES: PageEntry[] = [
     file: "src/app/(app)/strategies/ideas/page.tsx",
     path: "/strategies/ideas",
     action: "read",
-    h1: "Tonight's trade ideas",
+    h1: "All signals (research)",
   },
   {
     // D-886

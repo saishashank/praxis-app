@@ -27,6 +27,7 @@ const row = (n: number): MarketRow => ({
   volumeVsUsualPpm: null,
   sizeGroup: n % 2 === 0 ? "Large" : "Small",
   starred: false,
+  live: null,
 });
 const list = (number: number, total: number): MarketList => ({
   rows: [row(number * 10 + 1), row(number * 10 + 2)],

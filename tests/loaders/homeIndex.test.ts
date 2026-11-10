@@ -94,3 +94,27 @@ describe("dayLabel (Owner 2026-11-09: the day's change, not a session's)", () =>
     expect(dayLabel(null, now)).toBeNull();
   });
 });
+
+describe("liveDayChange (Owner 2026-11-10: the day's change from delayed quotes)", () => {
+  it("sums shares x (quote - close) for quotes newer than the close; null without one", async () => {
+    const { liveDayChange } = await import("@/lib/ui/loaders/home");
+    const q = (code: string, last: bigint, d: string, at: string) =>
+      [code, { code, lastMicro: last, prevCloseMicro: null, quoteAt: at, quoteD: d }] as const;
+    const quotes = new Map([
+      q("ZZA", 10_500_000n, "2026-11-10", "2026-11-09T23:30:00.000Z"),
+      q("ZZB", 4_000_000n, "2026-11-10", "2026-11-09T23:45:00.000Z"),
+      q("ZZC", 9_000_000n, "2026-11-09", "2026-11-09T05:00:00.000Z"), // same day as the close: ignored
+    ]);
+    const pos = [
+      { code: "ZZA", qty: 100, closeMicro: 10_000_000 },
+      { code: "ZZB", qty: 50, closeMicro: 4_200_000 },
+      { code: "ZZC", qty: 10, closeMicro: 8_000_000 },
+    ];
+    expect(liveDayChange(pos, quotes, "2026-11-09")).toEqual({
+      changeMicro: 100 * 500_000 - 50 * 200_000,
+      at: "2026-11-09T23:45:00.000Z",
+    });
+    expect(liveDayChange([pos[2]!], quotes, "2026-11-09")).toBeNull();
+    expect(liveDayChange([], quotes, "2026-11-09")).toBeNull();
+  });
+});

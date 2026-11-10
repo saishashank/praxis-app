@@ -11,6 +11,7 @@ import { authDb, mainDb } from "@/lib/db/client";
 import { loadIdeas } from "@/lib/ui/loaders/ideas";
 import { NOT_ADVICE_FOOTER } from "@/lib/view/honesty";
 import { StrategyTabs } from "../StrategyTabs";
+import { profileLabel } from "../../picks/text";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +45,15 @@ export default async function IdeasPage({
     <main className="mx-auto flex max-w-4xl min-w-0 flex-col gap-6 px-4 py-6">
       <StrategyTabs current="ideas" />
       <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Tonight&apos;s trade ideas</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">All signals (research)</h1>
+        <p className="m-0 text-sm font-medium" data-testid="research-note">
+          Not trade advice. These are every signal the practice strategies saw, used to test the
+          rules. Your trades are the picks on the{" "}
+          <Link href="/picks" className="text-accent underline">
+            Picks
+          </Link>{" "}
+          page.
+        </p>
         <p className="m-0 text-sm text-text-muted">
           What each strategy found in the latest session, and whether it placed a practice order.
           {v.d !== null ? ` Session: ${page.masked ? "latest" : v.d}.` : ""}
@@ -59,14 +68,15 @@ export default async function IdeasPage({
       ) : null}
 
       {page.state === "empty" ? (
-        <EmptyState motif="strategies" hue="strategies" title="No trade ideas yet">
+        <EmptyState motif="strategies" hue="strategies" title="No signals yet">
           {page.text}
         </EmptyState>
       ) : (
         <>
           <p className="m-0 text-sm" data-testid="ideas-tally">
-            {v.tally.signals} {v.tally.signals === 1 ? "idea" : "ideas"} found: {v.tally.taken}{" "}
-            taken, {v.tally.notTaken} not taken.
+            {v.tally.signals} {v.tally.signals === 1 ? "signal" : "signals"} found: {v.tally.taken}{" "}
+            practice orders, {v.tally.notTaken} not taken; {v.tally.picked}{" "}
+            {v.tally.picked === 1 ? "is" : "are"} also a pick.
           </p>
           {v.groups.map((g) => (
             <section
@@ -81,6 +91,11 @@ export default async function IdeasPage({
                 {g.ideas.map((idea, i) => (
                   <li key={`${i}:${idea.stock}:${idea.variant}`}>
                     <Card title={idea.stock} headingLevel={3}>
+                      <p className="m-0 mb-1 text-sm font-medium" data-testid="pick-status">
+                        {idea.picks.length > 0
+                          ? `Also a pick: ${idea.picks.map((p) => `#${p.rank} (${profileLabel(p.profile)})`).join(", ")}`
+                          : "Not a pick (not on the shortlist for you)"}
+                      </p>
                       <p className="m-0 mb-2 text-sm text-text-muted">
                         {idea.taken} taken, {idea.notTaken} not taken
                       </p>

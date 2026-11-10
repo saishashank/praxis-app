@@ -89,6 +89,29 @@ describe("Picks list", () => {
     );
   });
 
+  it("renders the History tab with the status filter, Open by default (Owner 2026-11-10)", async () => {
+    as(w, "owner");
+    render(await PicksPage({ searchParams: sp({ view: "history" }) }));
+    const tabs = screen.getByRole("navigation", { name: "Picks view" });
+    expect(within(tabs).getByRole("link", { name: /History/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByLabelText("Show")).toHaveValue("open");
+    cleanup();
+    render(await PicksPage({ searchParams: sp({ view: "history", status: "all" }) }));
+    expect(screen.getByLabelText("Show")).toHaveValue("all");
+    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
+      "Stock",
+      "Picked",
+      "Bought at",
+      "Sold at",
+      "Status",
+      "Days held",
+      "Change",
+    ]);
+  });
+
   it("renders the Track record tab on /picks?view=track and keeps the old route", async () => {
     as(w, "owner");
     render(await PicksPage({ searchParams: sp({ view: "track" }) }));

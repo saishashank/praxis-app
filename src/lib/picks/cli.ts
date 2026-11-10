@@ -16,6 +16,7 @@ import { loadAgentParams } from "@/lib/agents/params";
 import { loadCalendar } from "@/lib/arena/closeBooks";
 import { marketDate } from "@/lib/data/calendar";
 import { runPicksNight } from "./nightly";
+import { runPickPortfolio } from "./portfolioStore";
 
 const MARKET = "AU";
 const MARKET_TZ = "Australia/Sydney";
@@ -85,6 +86,17 @@ export async function picksMain(
         ` bought=${t.bought} missed=${t.missed} closed=${t.closed} open=${t.open}` +
         ` checked=${p.checks.checked} withdrawn=${p.checks.withdrawn}`,
     );
+    // D-913: the Follow the picks portfolio, rebuilt after the picks; a failure never stops them
+    try {
+      const f = await runPickPortfolio(db, { market: MARKET, d });
+      out(
+        `arena-portfolio ${MARKET} ${d}: trades=${f.trades} open=${f.open} days=${f.days} skipped=${f.skipped}`,
+      );
+    } catch (error) {
+      out(
+        `arena-portfolio ${MARKET} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
+      );
+    }
     return 0;
   } catch (error) {
     out(
