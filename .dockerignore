@@ -12,7 +12,7 @@ coverage
 !worker/test/coverage/
 test-results
 playwright-report
-e2e
+# e2e/ stays in the context: tests/ import e2e/pages and `next build` type-checks the tests (INFRA T7, found by real Docker).
 e2e-staging
 .stryker-tmp
 reports
