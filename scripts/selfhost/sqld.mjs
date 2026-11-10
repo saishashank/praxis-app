@@ -94,20 +94,30 @@ async function admin(adminBase, method, ns, adminAuth, fetchImpl) {
   } catch {
     return refuse("sqld: admin API unreachable");
   }
-  return res.status;
+  // The body is read only to tell "already exists" from other 400s; it is never returned or printed.
+  let exists = false;
+  if (res.status === 400 && typeof res.text === "function") {
+    try {
+      exists = /already exists/i.test((await res.text()).slice(0, 500));
+    } catch {
+      exists = false;
+    }
+  }
+  return { status: res.status, exists };
 }
 
 /** Create the namespace; an existing one is fine (idempotent). */
 export async function ensureNamespace(adminBase, ns, { adminAuth, fetchImpl = fetch } = {}) {
-  const s = await admin(adminBase, "POST", ns, adminAuth, fetchImpl);
+  const { status: s, exists } = await admin(adminBase, "POST", ns, adminAuth, fetchImpl);
   if (s >= 200 && s < 300) return "created";
-  if (s === 409) return "exists";
+  // Real sqld (v0.24.32) answers 400 "Namespace ... already exists", not 409 (found by branch CI, INFRA T4).
+  if (s === 409 || exists) return "exists";
   return refuse(`sqld: create namespace failed (HTTP ${s})`);
 }
 
 /** Drop the namespace and its data; a missing one is fine. */
 export async function dropNamespace(adminBase, ns, { adminAuth, fetchImpl = fetch } = {}) {
-  const s = await admin(adminBase, "DELETE", ns, adminAuth, fetchImpl);
+  const { status: s } = await admin(adminBase, "DELETE", ns, adminAuth, fetchImpl);
   if (s >= 200 && s < 300) return "dropped";
   if (s === 404) return "absent";
   return refuse(`sqld: drop namespace failed (HTTP ${s})`);

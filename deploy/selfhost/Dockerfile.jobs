@@ -43,7 +43,8 @@ WORKDIR /app
 # TypeScript engine (scripts/arena/engine.mjs and the asx/ingest loaders) bundle src/lib/*.ts with
 # Vite at start-up, and Vite comes in through vitest. No separate TS loader is needed.
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# NODE_ENV=production is set above, which would make npm skip devDependencies; --include=dev keeps vite (found by real Docker).
+RUN npm ci --no-audit --no-fund --include=dev
 
 # Python dependencies, hashed (SEC-107). Fails closed when no hash set exists for this architecture.
 COPY scripts/ingest/requirements*.txt ./scripts/ingest/

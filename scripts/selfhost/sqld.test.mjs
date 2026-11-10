@@ -65,6 +65,18 @@ test("ensureNamespace / dropNamespace: statuses and fixed error text", async () 
     "created",
   );
   assert.equal(await ensureNamespace("http://sqld:8081", "main", { fetchImpl: mk(409) }), "exists");
+  // real sqld: 400 with an "already exists" body is the same as 409; any other 400 is an error
+  const mk400 = (body) => async () => ({ status: 400, text: async () => body });
+  assert.equal(
+    await ensureNamespace("http://sqld:8081", "main", {
+      fetchImpl: mk400('{"error":"Namespace `main` already exists"}'),
+    }),
+    "exists",
+  );
+  await assert.rejects(
+    ensureNamespace("http://sqld:8081", "main", { fetchImpl: mk400('{"error":"bad body"}') }),
+    /create namespace failed .HTTP 400./,
+  );
   assert.equal(
     await dropNamespace("http://sqld:8081", "drill-1-main", {
       fetchImpl: mk(404),
