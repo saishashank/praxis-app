@@ -6,6 +6,7 @@
 // Masked users see ISO weeks, never an exact review date, and address a review by an opaque `rv-`
 // reference (keyed digest, like `ck-`/`pk:`). Section 7a "New picks" is read from the stored picks with
 // the review's own letters, so "Stock A" is the same stock in every section of the page.
+import { readNoPicksLine } from "@/lib/picks/noPicks";
 import { getConfig } from "@/lib/config/store";
 import {
   isTradingDay,
@@ -604,6 +605,8 @@ export type NewPickView = {
 };
 export type NewPicksView = {
   none: boolean;
+  /** OPS-110: the plain-words reason when none (stored with the night), else null. */
+  noneLine: string | null;
   honesty: string;
   profiles: Array<{ profile: string; successLine: string; picks: NewPickView[] }>;
 };
@@ -731,6 +734,10 @@ async function newPicksOf(
   const { lines, proven } = await successLines(env, d, names);
   return {
     none: rows.length === 0,
+    noneLine:
+      rows.length === 0
+        ? await readNoPicksLine(env.main, marketOf(env), d).catch(() => null)
+        : null,
     honesty: "Personal use only · Not financial advice" + (proven ? "" : " · Model not proven yet"),
     profiles: names.map((profile) => ({
       profile,

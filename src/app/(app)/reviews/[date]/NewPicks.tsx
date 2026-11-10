@@ -19,7 +19,7 @@ export function NewPicks({ picks, masked }: { picks: NewPicksView; masked: boole
           compact
           motif="picks"
           hue="picks"
-          title="No picks were published for this review."
+          title={picks.noneLine ?? "No picks were published for this review."}
         />
       ) : (
         picks.profiles.map((p) => (

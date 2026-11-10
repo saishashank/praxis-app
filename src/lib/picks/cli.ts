@@ -18,6 +18,7 @@ import { marketDate } from "@/lib/data/calendar";
 import { runDailyLearning } from "@/lib/learning/daily";
 import { pickHooks } from "./dailyHooks";
 import { runPicksNight } from "./nightly";
+import { recordPicksNight } from "./noPicks";
 import { runPickPortfolio } from "./portfolioStore";
 
 const MARKET = "AU";
@@ -88,6 +89,26 @@ export async function picksMain(
         ` bought=${t.bought} missed=${t.missed} closed=${t.closed} open=${t.open}` +
         ` checked=${p.checks.checked} withdrawn=${p.checks.withdrawn} shortlist=${p.shortlist}`,
     );
+    if (p.noPicksLine !== null) {
+      out(
+        `arena-picks ${MARKET} ${d}: no_picks blocked=${JSON.stringify(p.blocked)} ${p.noPicksLine}`,
+      );
+    }
+    // OPS-110: the night's outcome and its plain-words reason, for Home and the Evening Review
+    try {
+      await recordPicksNight(db, {
+        market: MARKET,
+        d,
+        now: new Date(nowMs()).toISOString(),
+        published: p.published,
+        candidates: p.candidates,
+        shortlist: p.shortlist,
+        blocked: p.blocked,
+        line: p.noPicksLine,
+      });
+    } catch {
+      out(`arena-picks ${MARKET} ${d}: outcome row not stored`);
+    }
     // D-913: the Follow the picks portfolio, rebuilt after the picks; a failure never stops them
     try {
       const f = await runPickPortfolio(db, { market: MARKET, d });

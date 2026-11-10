@@ -51,6 +51,40 @@ export async function startRun(
   return Number(res.lastInsertRowid);
 }
 
+/**
+ * Record a finished, successful outcome once per concurrency key (a re-run keeps the first row;
+ * uq_run_record_success_key makes the insert idempotent). For jobs that only store an outcome.
+ */
+export async function recordSuccessOnce(
+  db: Pick<Client, "execute">,
+  p: {
+    job: string;
+    market: string;
+    concurrencyKey: string;
+    scheduledFor: string;
+    now: string;
+    itemsProcessed: number;
+    details: unknown;
+  },
+): Promise<void> {
+  await db.execute({
+    sql: `INSERT OR IGNORE INTO run_record
+            (job, market, concurrency_key, scheduled_for, started_at, ended_at, status,
+             items_processed, details_json)
+          VALUES (?, ?, ?, ?, ?, ?, 'success', ?, ?)`,
+    args: [
+      p.job,
+      p.market,
+      p.concurrencyKey,
+      p.scheduledFor,
+      p.now,
+      p.now,
+      p.itemsProcessed,
+      JSON.stringify(p.details),
+    ],
+  });
+}
+
 export async function finishRun(
   db: Client,
   id: number,

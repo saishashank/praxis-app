@@ -64,6 +64,10 @@ describe("picks entry", () => {
     for (const phase of ["all", "3", "picks"]) {
       const r = await cli(url, ["--date", D, "--phase", phase]);
       expect(r.code, phase).toBe(0);
+      // OPS-110: a night without picks adds one "no_picks" line with the reason (checked below)
+      const noPicks = r.lines.filter((l) => l.includes(": no_picks blocked="));
+      r.lines = r.lines.filter((l) => !l.includes(": no_picks blocked="));
+      expect(noPicks.length, phase).toBeLessThanOrEqual(1);
       expect(r.lines, phase).toHaveLength(3);
       expect(r.lines[0]).toMatch(
         /^arena-picks AU 2026-10-20: published=\d+ candidates=\d+ bought=\d+ missed=\d+ closed=\d+ open=\d+ checked=\d+ withdrawn=\d+ shortlist=-?\d+$/,

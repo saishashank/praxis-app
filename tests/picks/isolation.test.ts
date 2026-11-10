@@ -84,6 +84,9 @@ describe("picks are never read by ranking or sizing", () => {
       f === "src/lib/experts/calls.ts" ||
       // D-913: the page loader of the Follow the picks card reads the profile name it follows
       f === "src/lib/ui/loaders/pickPortfolio.ts" ||
+      // OPS-110 (D-941): Home and the Evening Review read the stored "No picks tonight: ..." line
+      f === "src/lib/ui/loaders/home.ts" ||
+      f === "src/lib/ui/loaders/reviews.ts" ||
       f.startsWith("src/app/");
     expect(importers.filter((f) => !allowed(f))).toEqual([]);
     // and the review import exists, so this guard is not vacuous
@@ -118,7 +121,8 @@ describe("picks are never read by ranking or sizing", () => {
   });
 
   it("writes only to its own tables (pick_check: D-187; pick_market: ARN-103; pick_portfolio_*: D-913)", () => {
-    const re = /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)/gi;
+    // INSERT OR IGNORE / OR REPLACE INTO counts too (D-951).
+    const re = /\b(?:INSERT\s+(?:OR\s+[a-z]+\s+)?INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)/gi;
     const targets = new Set<string>();
     for (const file of walk(path.join(ROOT, "src/lib/picks"))) {
       for (const m of readFileSync(file, "utf8").matchAll(re)) targets.add(m[1]!.toLowerCase());

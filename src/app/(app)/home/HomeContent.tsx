@@ -134,7 +134,9 @@ export function daySentence(v: HomeView): string {
   if (n > 0) {
     parts.push(`${n} ${plural(n, "pick")} on the list for the next session.`);
   } else {
-    parts.push(`No picks yet: the first ones come after ${nextRunPhrase(v.nextRun)}.`);
+    parts.push(
+      v.noPicksLine ?? `No picks yet: the first ones come after ${nextRunPhrase(v.nextRun)}.`,
+    );
   }
   const ppm = v.headline[0]?.dayChangePpm ?? null;
   if (ppm !== null) {
@@ -537,7 +539,7 @@ export function HomeContent({
           </>
         ) : (
           <Empty hue="family-br" shape="picks">
-            No picks yet. The first ones come after tonight&apos;s run.
+            {v.noPicksLine ?? "No picks yet. The first ones come after tonight's run."}
           </Empty>
         )}
       </Section>

@@ -15,6 +15,7 @@ import { addDays, isWeekend, marketDate } from "@/lib/data/calendar";
 import { maskAlertViews } from "@/lib/view/alerts";
 import { formatDay, plural } from "@/lib/view/format";
 import { regimeLabel } from "@/lib/view/terms";
+import { readNoPicksLine } from "@/lib/picks/noPicks";
 import { pickRef } from "./picks";
 import {
   newerThanClose,
@@ -251,6 +252,8 @@ export type HomeView = {
   since: HomeSinceRow[];
   needs: HomeNeed[];
   picksTotal: number;
+  /** OPS-110: "No picks tonight: …" from the latest night when nothing is on the list; else null. */
+  noPicksLine: string | null;
   /**
    * D-192: one tile per live strategy (its own pretend money, never added up across strategies,
    * Owner 2026-10-26), unlevered strategies only (D-191).
@@ -296,6 +299,7 @@ function emptyView(): HomeView {
     since: [],
     needs: [],
     picksTotal: 0,
+    noPicksLine: null,
     summary: { strategies: 0, d: null, tiles: [] },
     day: { regime: null, regimeD: null, quality: [], openFlags: 0, index: null },
     picks: { d: null, items: [] },
@@ -660,6 +664,9 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
   view.picksTotal = pickD
     ? await count("SELECT COUNT(*) AS n FROM pick WHERE market = ? AND d = ?", [v.market, pickD])
     : 0;
+  if (view.picksTotal === 0) {
+    view.noPicksLine = await soft(() => readNoPicksLine(deps.mainDb, v.market, null), null);
+  }
   const since: HomeSinceRow[] = [];
   if (view.picksTotal > 0) {
     since.push({

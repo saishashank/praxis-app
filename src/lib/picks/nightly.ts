@@ -10,6 +10,7 @@ import type { CalendarRow } from "@/lib/data/calendar";
 import { isTradingDay } from "@/lib/data/calendar";
 import { generatePicks } from "./generate";
 import { loadPickInputs } from "./inputs";
+import { countBlocks, noPicksSentence, type BlockCounts } from "./noPicks";
 import { writePicks } from "./store";
 import { loadShortlistInputs } from "./shortlistLoad";
 import type { PickInput } from "./types";
@@ -21,6 +22,10 @@ export type PicksNightResult = {
   readonly candidates: number;
   /** D-920: shortlist candidates added to the strategy signals tonight (-1 when the shortlist failed). */
   readonly shortlist: number;
+  /** OPS-110: first blocking reason per candidate (empty on a non-trading day). */
+  readonly blocked: BlockCounts;
+  /** OPS-110: plain-words reason when nothing was published on a trading day, else null. */
+  readonly noPicksLine: string | null;
   readonly tracking: TrackSummary;
   readonly checks: CheckSummary;
 };
@@ -50,7 +55,15 @@ export async function runPicksNight(
     now: o.now,
   });
   if (!isTradingDay(o.d, o.calendar) || o.params.picks.picksPerProfile === 0) {
-    return { published: 0, candidates: 0, shortlist: 0, tracking, checks };
+    return {
+      published: 0,
+      candidates: 0,
+      shortlist: 0,
+      blocked: {},
+      noPicksLine: null,
+      tracking,
+      checks,
+    };
   }
   const { inputs, universe } = await loadPickInputs(db, {
     market: o.market,
@@ -81,5 +94,22 @@ export async function runPicksNight(
     createdAt: o.now,
   });
   const published = await writePicks(db, picks);
-  return { published, candidates: inputs.length, shortlist: shortlistCount, tracking, checks };
+  const blocked = countBlocks([...inputs, ...shortlist]);
+  const noPicksLine =
+    published > 0
+      ? null
+      : noPicksSentence({
+          signals: inputs.length,
+          shortlist: shortlistCount,
+          blocked: countBlocks(inputs),
+        });
+  return {
+    published,
+    candidates: inputs.length,
+    shortlist: shortlistCount,
+    blocked,
+    noPicksLine,
+    tracking,
+    checks,
+  };
 }

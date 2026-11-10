@@ -24,6 +24,7 @@ function baseView(): HomeView {
     since: [],
     needs: [],
     picksTotal: 0,
+    noPicksLine: null,
     summary: { strategies: 0, d: null, tiles: [] },
     day: { regime: null, regimeD: null, quality: [], openFlags: 0, index: null },
     picks: { d: null, items: [] },
@@ -106,6 +107,17 @@ describe("daySentence", () => {
     const v = baseView();
     v.picks.items = [pick(), pick({ rank: 2 })];
     expect(daySentence(v)).toBe("2 picks on the list for the next session.");
+  });
+  it("says why there are no picks when the night stored a reason (OPS-110), else the first-run line", () => {
+    const v = baseView();
+    v.nextRun = "tonight 18:10";
+    expect(daySentence(v)).toContain(
+      "No picks yet: the first ones come after tonight's 18:10 run.",
+    );
+    v.noPicksLine =
+      "No picks tonight: no strategy gave a buy signal, and the shortlist could not be read.";
+    expect(daySentence(v)).toContain(v.noPicksLine);
+    expect(daySentence(v)).not.toContain("No picks yet");
   });
   it("says unchanged, today or on a named day, up or down", () => {
     expect(withPpm(0, "Today", 2)).toContain("Your strategies are unchanged today.");
