@@ -36,6 +36,7 @@ export async function run(env, fetchImpl, out, nowMs = () => Date.now()) {
       body,
       Math.floor(nowMs() / 1000),
       randomBytes(16).toString("hex"),
+      { method: "POST", path: "/api/internal/maintenance" },
     ),
   };
   let res;

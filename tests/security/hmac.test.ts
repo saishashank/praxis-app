@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { describe, expect, it, beforeEach } from "vitest";
 // @ts-expect-error plain .mjs signer without types (the Actions-side twin)
 import { sign } from "../../scripts/smoke/sign.mjs";
@@ -7,6 +7,8 @@ import {
   HEADER_NONCE,
   HEADER_SIGNATURE,
   HEADER_TIMESTAMP,
+  HEADER_VERSION,
+  HMAC_SCHEME_VERSION,
   hmacMessage,
   signedHeaders,
 } from "@/lib/security/hmacCore.mjs";
@@ -17,8 +19,14 @@ const SECRET = "a".repeat(64);
 const BODY = '{"purpose":"self-check"}';
 const NOW = 1_700_000_000;
 const NONCE = "0123456789abcdef0123456789abcdef";
-// Fixed literal for (SECRET, BODY, NOW, NONCE). A change to either signer breaks this test.
-const KNOWN_SIGNATURE = "d115837af5305a21feb65b671c7f044bb5c564d701b89c5badaf99b27c1747c8";
+const METHOD = "POST";
+const PATH = "/api/internal/self-check";
+const TARGET = { method: METHOD, path: PATH };
+const BODY_SHA256 = "ec1ae6408754723394aa07541c0445102a9a99a42637390c542fb95a89664041";
+// Fixed v2 literal for (SECRET, BODY, NOW, NONCE, POST, PATH). A change to any signer breaks this test.
+const KNOWN_SIGNATURE = "9898d6c5f0870de218e1461a0944ed763e9926b6cd3f7c9f01bacaa529a73367";
+// The v1 signature of the same inputs (message ts.nonce.body): must be refused (SEC-115).
+const V1_SIGNATURE = "d115837af5305a21feb65b671c7f044bb5c564d701b89c5badaf99b27c1747c8";
 
 class MemoryStore implements NonceStore {
   seen = new Set<string>();
@@ -34,13 +42,15 @@ const failingStore: NonceStore = {
   },
 };
 
-const headersFor = (body = BODY, ts = NOW, nonce = NONCE, secret = SECRET) =>
-  new Headers(sign(secret, body, ts, nonce) as Record<string, string>);
+const headersFor = (body = BODY, ts = NOW, nonce = NONCE, secret = SECRET, target = TARGET) =>
+  new Headers(sign(secret, body, ts, nonce, target) as Record<string, string>);
 const verify = (over: Partial<Parameters<typeof verifySignedRequest>[0]> = {}) =>
   verifySignedRequest({
     secret: SECRET,
     headers: headersFor(),
     rawBody: BODY,
+    method: METHOD,
+    path: PATH,
     nowSec: NOW,
     store: new MemoryStore(),
     ...over,
@@ -48,34 +58,53 @@ const verify = (over: Partial<Parameters<typeof verifySignedRequest>[0]> = {}) =
 
 describe("signature known answer", () => {
   it("matches node:crypto, the literal, and sign.mjs", () => {
-    const expected = createHmac("sha256", SECRET).update(`${NOW}.${NONCE}.${BODY}`).digest("hex");
-    expect(computeSignature(SECRET, String(NOW), NONCE, BODY)).toBe(expected);
+    const message = ["v2", "POST", PATH, String(NOW), NONCE, BODY_SHA256].join("\n");
+    const expected = createHmac("sha256", SECRET).update(message).digest("hex");
+    expect(createHash("sha256").update(BODY).digest("hex")).toBe(BODY_SHA256);
+    expect(computeSignature(SECRET, String(NOW), NONCE, BODY, METHOD, PATH)).toBe(expected);
     expect(expected).toBe(KNOWN_SIGNATURE);
-    expect(sign(SECRET, BODY, NOW, NONCE)).toEqual({
+    expect(sign(SECRET, BODY, NOW, NONCE, TARGET)).toEqual({
       "X-Praxis-Timestamp": String(NOW),
       "X-Praxis-Nonce": NONCE,
       "X-Praxis-Signature": KNOWN_SIGNATURE,
+      "X-Praxis-Version": "2",
     });
+  });
+  it("sign.mjs refuses to sign without a method and path", () => {
+    expect(() => sign(SECRET, BODY, NOW, NONCE)).toThrow(/target/);
   });
 });
 
 describe("hmacCore: the one definition of the scheme (V1-I3)", () => {
   it("message and header names are the documented ones", () => {
-    expect(hmacMessage("1", "n", "b")).toBe("1.n.b");
-    expect([HEADER_TIMESTAMP, HEADER_NONCE, HEADER_SIGNATURE]).toEqual([
+    expect(
+      hmacMessage({ method: "post", path: "/p", timestamp: "1", nonce: "n", bodySha256Hex: "h" }),
+    ).toBe("v2\nPOST\n/p\n1\nn\nh");
+    expect(HMAC_SCHEME_VERSION).toBe(2);
+    expect([HEADER_TIMESTAMP, HEADER_NONCE, HEADER_SIGNATURE, HEADER_VERSION]).toEqual([
       "x-praxis-timestamp",
       "x-praxis-nonce",
       "x-praxis-signature",
+      "x-praxis-version",
     ]);
     expect(signedHeaders("1", "n", "s")).toEqual({
       "X-Praxis-Timestamp": "1",
       "X-Praxis-Nonce": "n",
       "X-Praxis-Signature": "s",
+      "X-Praxis-Version": "2",
     });
   });
   it("the verifier and the caller-side signer both go through it", () => {
     const sig = createHmac("sha256", SECRET)
-      .update(hmacMessage(String(NOW), NONCE, BODY))
+      .update(
+        hmacMessage({
+          method: METHOD,
+          path: PATH,
+          timestamp: String(NOW),
+          nonce: NONCE,
+          bodySha256Hex: BODY_SHA256,
+        }),
+      )
       .digest("hex");
     expect(sig).toBe(KNOWN_SIGNATURE);
   });
@@ -89,6 +118,50 @@ describe("verifySignedRequest", () => {
     const h = headersFor();
     h.set("X-Praxis-Signature", "0".repeat(64));
     expect(await verify({ headers: h })).toEqual({ ok: false, status: 401 });
+  });
+  it("v2 passes; the SAME v1-signed request (old literal, no version header) is refused, nonce not claimed", async () => {
+    const store = new MemoryStore();
+    expect(await verify({ store })).toEqual({ ok: true });
+    const v1Store = new MemoryStore();
+    const v1 = new Headers({
+      "X-Praxis-Timestamp": String(NOW),
+      "X-Praxis-Nonce": NONCE,
+      "X-Praxis-Signature": V1_SIGNATURE,
+    });
+    expect(await verify({ headers: v1, store: v1Store })).toEqual({ ok: false, status: 401 });
+    // even with the version header added, a v1 signature does not verify as v2
+    v1.set("X-Praxis-Version", "2");
+    expect(await verify({ headers: v1, store: v1Store })).toEqual({ ok: false, status: 401 });
+    expect(v1Store.seen.size).toBe(0);
+  });
+  it.each(["1", "3", "", "02"])(
+    "refuses version header %j before the compare, nonce not claimed",
+    async (v) => {
+      const store = new MemoryStore();
+      const h = headersFor();
+      h.set("X-Praxis-Version", v);
+      expect(await verify({ headers: h, store })).toEqual({ ok: false, status: 401 });
+      expect(store.seen.size).toBe(0);
+    },
+  );
+  it("refuses a signature made for another method (GET vs POST)", async () => {
+    const store = new MemoryStore();
+    expect(await verify({ method: "GET", store })).toEqual({ ok: false, status: 401 });
+    expect(store.seen.size).toBe(0);
+  });
+  it("refuses a signature made for another path", async () => {
+    const store = new MemoryStore();
+    expect(await verify({ path: "/api/internal/maintenance", store })).toEqual({
+      ok: false,
+      status: 401,
+    });
+    expect(store.seen.size).toBe(0);
+  });
+  it("refuses a replay of the same signed request against another path or method with the same nonce", async () => {
+    const store = new MemoryStore();
+    expect((await verify({ store })).ok).toBe(true);
+    // replay of the identical request: nonce already claimed
+    expect(await verify({ store })).toEqual({ ok: false, status: 401 });
   });
   it("rejects a signature made with another secret", async () => {
     expect(await verify({ headers: headersFor(BODY, NOW, NONCE, "b".repeat(64)) })).toEqual({

@@ -26,7 +26,7 @@
 // Logs carry fixed words and numbers only: never a URL, a header, a secret or file content.
 import { dbConfigured, pipeline } from "../db";
 import { isWeekend, sydneyLocal, type Local } from "../localtime";
-import { randomHex, signHeaders } from "../selfcheck";
+import { pathOf, randomHex, signHeaders } from "../selfcheck";
 import {
   ASX_ENABLED_KEY,
   classifyResponse,
@@ -209,12 +209,13 @@ export async function runUniverse(
         d: local.date,
         csv,
       });
-      const headers = await signHeaders(
-        secret,
+      const headers = await signHeaders(secret, {
+        method: "POST",
+        path: pathOf(url),
         body,
-        Math.floor(deps.nowMs() / 1000),
-        randomHex(16),
-      );
+        nowSec: Math.floor(deps.nowMs() / 1000),
+        nonce: randomHex(16),
+      });
       const res = await deps.fetch(url, {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },

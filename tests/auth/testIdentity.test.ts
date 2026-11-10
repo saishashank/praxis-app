@@ -46,14 +46,16 @@ function signed(
 ): Request {
   const ts = String(o.ts ?? NOW);
   const nonce = o.nonce ?? randomBytes(16).toString("hex");
-  const sig = computeSignature(o.secret ?? SECRET, ts, nonce, body);
-  return new Request(o.url ?? URL_HTTPS, {
+  const url = o.url ?? URL_HTTPS;
+  const sig = computeSignature(o.secret ?? SECRET, ts, nonce, body, "POST", new URL(url).pathname);
+  return new Request(url, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       "x-praxis-timestamp": ts,
       "x-praxis-nonce": nonce,
       "x-praxis-signature": sig,
+      "x-praxis-version": "2",
       ...(o.headers as Record<string, string>),
     },
     body,

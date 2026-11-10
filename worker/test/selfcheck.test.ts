@@ -98,15 +98,31 @@ describe("signature (twin of src/lib/security/hmac.ts and scripts/smoke/sign.mjs
   const NOW = 1_700_000_000;
   const NONCE = "0123456789abcdef0123456789abcdef";
   // Same literal as tests/security/hmac.test.ts in the app.
-  const KNOWN = "d115837af5305a21feb65b671c7f044bb5c564d701b89c5badaf99b27c1747c8";
+  const KNOWN = "9898d6c5f0870de218e1461a0944ed763e9926b6cd3f7c9f01bacaa529a73367";
+  const TARGET = { method: "POST", path: "/api/internal/self-check" };
   it("WebCrypto output equals the literal and sign.mjs", async () => {
-    const h = await signHeaders(SECRET, BODY, NOW, NONCE);
+    const h = await signHeaders(SECRET, { ...TARGET, body: BODY, nowSec: NOW, nonce: NONCE });
     expect(h).toEqual({
       "X-Praxis-Timestamp": String(NOW),
       "X-Praxis-Nonce": NONCE,
       "X-Praxis-Signature": KNOWN,
+      "X-Praxis-Version": "2",
     });
-    expect(h).toEqual(sign(SECRET, BODY, NOW, NONCE));
+    expect(h).toEqual(sign(SECRET, BODY, NOW, NONCE, TARGET));
+  });
+  it("covers method and path: another method or path gives another signature", async () => {
+    const base = {
+      method: "POST",
+      path: "/api/internal/self-check",
+      body: BODY,
+      nowSec: NOW,
+      nonce: NONCE,
+    };
+    const sigOf = async (o: typeof base) => (await signHeaders(SECRET, o))["X-Praxis-Signature"];
+    expect(await sigOf({ ...base, method: "GET" })).not.toBe(KNOWN);
+    expect(await sigOf({ ...base, path: "/api/internal/maintenance" })).not.toBe(KNOWN);
+    expect(await sigOf({ ...base, body: BODY + " " })).not.toBe(KNOWN);
+    expect(await sigOf({ ...base, method: "post" })).toBe(KNOWN); // method is upper-cased
   });
 });
 
@@ -260,9 +276,10 @@ describe("runSelfCheck", () => {
     expect(rep.headers["x-praxis-timestamp"]).toBe(String(ts));
     expect(rep.headers["x-praxis-nonce"]).toMatch(/^[0-9a-f]{32}$/);
     expect(rep.headers["x-praxis-signature"]).toBe(
-      sign(SECRETS.WORKER_HMAC_SECRET, rep.body, ts, rep.headers["x-praxis-nonce"])[
-        "X-Praxis-Signature"
-      ],
+      sign(SECRETS.WORKER_HMAC_SECRET, rep.body, ts, rep.headers["x-praxis-nonce"], {
+        method: "POST",
+        path: "/api/internal/worker-report",
+      })["X-Praxis-Signature"],
     );
     expect(rep.headers["content-type"]).toBe("application/json");
     expect(log.mock.calls.map((c) => c[0])).toContain("selfcheck: 4/4 passed");

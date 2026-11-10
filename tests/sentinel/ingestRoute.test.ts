@@ -33,6 +33,8 @@ vi.mock("@/lib/db/client", () => ({ mainDb: () => mem.db }));
 
 import * as route from "@/app/api/internal/sentinel-ingest/route";
 
+const SIGN_TARGET = { method: "POST", path: "/api/internal/sentinel-ingest" };
+
 afterEach(() => {
   cleanupTempDbs();
   vi.useRealTimers();
@@ -105,7 +107,7 @@ const post = (
   return new Request(URL_, {
     method: "POST",
     body: raw,
-    headers: headers ?? (sign(SECRET, raw, NOW, nonce) as Record<string, string>),
+    headers: headers ?? (sign(SECRET, raw, NOW, nonce, SIGN_TARGET) as Record<string, string>),
   });
 };
 
@@ -131,10 +133,19 @@ describe("sentinel-ingest handler", () => {
     const calls: Call[] = [];
     const h = make({}, calls);
     const raw = JSON.stringify(good());
-    const wrong = sign("8".repeat(64), raw, NOW, "a".repeat(32)) as Record<string, string>;
-    const stale = sign(SECRET, raw, NOW - 301, "b".repeat(32)) as Record<string, string>;
-    const future = sign(SECRET, raw, NOW + 301, "d".repeat(32)) as Record<string, string>;
-    const okHeaders = sign(SECRET, raw, NOW, "e".repeat(32)) as Record<string, string>;
+    const wrong = sign("8".repeat(64), raw, NOW, "a".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const stale = sign(SECRET, raw, NOW - 301, "b".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const future = sign(SECRET, raw, NOW + 301, "d".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const okHeaders = sign(SECRET, raw, NOW, "e".repeat(32), SIGN_TARGET) as Record<string, string>;
     const nonce = "c".repeat(32);
     expect((await h(post(raw, undefined, nonce))).status).toBe(200);
     const tampered = JSON.stringify(good({ d: "2026-10-14" }));
@@ -308,7 +319,7 @@ describe("the real route against a local database", () => {
       new Request(URL_, {
         method: "POST",
         body: raw,
-        headers: sign(SECRET, raw, NOW, nonce) as Record<string, string>,
+        headers: sign(SECRET, raw, NOW, nonce, SIGN_TARGET) as Record<string, string>,
       });
     const r = await route.POST(mk());
     expect(r.status).toBe(200);

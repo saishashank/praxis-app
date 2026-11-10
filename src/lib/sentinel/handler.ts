@@ -59,6 +59,8 @@ export function createSentinelIngestHandler(deps: Deps) {
         secret,
         headers: req.headers,
         rawBody,
+        method: req.method,
+        path: new URL(req.url).pathname,
         nowSec,
         store: deps.store,
       });

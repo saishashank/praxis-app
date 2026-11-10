@@ -9,6 +9,8 @@ import { createMaintenanceHandler } from "@/lib/maintenance/handler";
 import type { NonceStore } from "@/lib/security/replay";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
 
+const SIGN_TARGET = { method: "POST", path: "/api/internal/maintenance" };
+
 afterEach(cleanupTempDbs);
 
 const SECRET = "9".repeat(64);
@@ -47,7 +49,7 @@ const post = (body = BODY, headers?: Record<string, string>, nonce = nextNonce()
   new Request("https://praxis-host.vercel.app/api/internal/maintenance", {
     method: "POST",
     body,
-    headers: headers ?? (sign(SECRET, body, NOW, nonce) as Record<string, string>),
+    headers: headers ?? (sign(SECRET, body, NOW, nonce, SIGN_TARGET) as Record<string, string>),
   });
 const runCount = async () =>
   Number((await main.execute("SELECT COUNT(*) AS c FROM run_record")).rows[0].c);
@@ -85,14 +87,24 @@ describe("maintenance handler", () => {
 
   it("401 generic body for bad signature, missing headers, replay, stale timestamp; no run", async () => {
     const h = make();
-    const bad = sign("8".repeat(64), BODY, NOW, "a".repeat(32)) as Record<string, string>;
-    const stale = sign(SECRET, BODY, NOW - 301, "b".repeat(32)) as Record<string, string>;
-    const future = sign(SECRET, BODY, NOW + 301, "d".repeat(32)) as Record<string, string>;
+    const bad = sign("8".repeat(64), BODY, NOW, "a".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const stale = sign(SECRET, BODY, NOW - 301, "b".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const future = sign(SECRET, BODY, NOW + 301, "d".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
     const tampered = sign(
       SECRET,
       '{"purpose":"maintenance","date":"2023-11-14"}',
       NOW,
       "e".repeat(32),
+      SIGN_TARGET,
     ) as Record<string, string>;
     const nonce = "c".repeat(32);
     expect((await h(post(BODY, undefined, nonce))).status).toBe(200);
@@ -207,7 +219,7 @@ describe("route module", () => {
     delete process.env.TURSO_MAIN_URL;
     delete process.env.TURSO_MAIN_TOKEN;
     try {
-      const headers = sign(SECRET, BODY, Math.floor(Date.now() / 1000), nextNonce());
+      const headers = sign(SECRET, BODY, Math.floor(Date.now() / 1000), nextNonce(), SIGN_TARGET);
       const r = await route.POST(post(BODY, headers as Record<string, string>));
       expect(r.status).toBe(503);
     } finally {

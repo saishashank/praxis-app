@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -38,10 +38,12 @@ const exec = async (e, f) => {
 test('sign: known-answer vector', () => {
   const nonce = '0123456789abcdef0123456789abcdef';
   const body = '{"purpose":"self-check"}';
-  const h = sign(SECRET, body, 1700000000, nonce);
-  const expected = createHmac('sha256', SECRET).update(`1700000000.${nonce}.${body}`).digest('hex');
+  const h = sign(SECRET, body, 1700000000, nonce, { method: 'POST', path: '/api/internal/self-check' });
+  const message = ['v2', 'POST', '/api/internal/self-check', '1700000000', nonce, createHash('sha256').update(body).digest('hex')].join('\n');
+  const expected = createHmac('sha256', SECRET).update(message).digest('hex');
   assert.equal(h['X-Praxis-Signature'], expected);
-  assert.equal(expected, 'd115837af5305a21feb65b671c7f044bb5c564d701b89c5badaf99b27c1747c8');
+  assert.equal(h['X-Praxis-Version'], '2');
+  assert.equal(expected, '9898d6c5f0870de218e1461a0944ed763e9926b6cd3f7c9f01bacaa529a73367');
 });
 
 test('sends a signed POST that an independent verifier accepts', async () => {
@@ -56,7 +58,8 @@ test('sends a signed POST that an independent verifier accepts', async () => {
   const h = init.headers;
   assert.equal(h['X-Praxis-Timestamp'], '1700000000');
   assert.match(h['X-Praxis-Nonce'], /^[0-9a-f]{32}$/);
-  const mac = createHmac('sha256', SECRET).update(`${h['X-Praxis-Timestamp']}.${h['X-Praxis-Nonce']}.${init.body}`).digest('hex');
+  const mac = createHmac('sha256', SECRET).update(['v2', 'POST', '/api/internal/self-check', h['X-Praxis-Timestamp'], h['X-Praxis-Nonce'], createHash('sha256').update(init.body).digest('hex')].join('\n')).digest('hex');
+  assert.equal(h['X-Praxis-Version'], '2');
   assert.equal(h['X-Praxis-Signature'], mac);
 });
 

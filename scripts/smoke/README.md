@@ -47,17 +47,19 @@ Secrets that Actions cannot see are proven by a signed route on the deployed app
 Actions never prints the app URL (it comes from the environment secret
 `APP_BASE_URL_STAGING` or `APP_BASE_URL_PROD`; if missing, the step says so and exits 1).
 
-Signing scheme (code: `src/lib/security/hmac.ts` and `scripts/smoke/sign.mjs`):
+Signing scheme v2 (SEC-115, D-957; code: `src/lib/security/hmac.ts` and `scripts/smoke/sign.mjs`):
 
 | Item | Value |
 | --- | --- |
+| `X-Praxis-Version` | `2` (a request without it, or with another value, is refused before the signature is checked) |
 | `X-Praxis-Timestamp` | unix seconds, integer string |
 | `X-Praxis-Nonce` | 32 lowercase hex characters (16 random bytes), single use |
-| `X-Praxis-Signature` | lowercase hex HMAC-SHA256, key = `ACTIONS_HMAC_SECRET` as UTF-8, message = `<timestamp>.<nonce>.<raw body>` |
+| `X-Praxis-Signature` | lowercase hex HMAC-SHA256, key = `ACTIONS_HMAC_SECRET` as UTF-8, message = the lines `v2`, `<METHOD>`, `<path>`, `<timestamp>`, `<nonce>`, `<sha256 hex of the raw body>` joined by LF ( METHOD upper-case; path = URL pathname only, no query, no host) |
 | Body | `{"purpose":"self-check"}`, at most 4 KB |
 
 The server rejects (401, same generic body for every reason) a bad or missing header, a
-timestamp more than 300 s old or ahead, a wrong signature, or a nonce it has seen
+wrong version (a v1 signature is refused), a
+method or path that differs from the signed one, a timestamp more than 300 s old or ahead, a wrong signature, or a nonce it has seen
 (`request_nonce` table in the main Turso DB; if that store fails the route answers 503, fail
 closed). A missing or malformed `ACTIONS_HMAC_SECRET` on Vercel gives 503 without evaluating
 any signature. Only POST is accepted.
