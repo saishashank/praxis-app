@@ -68,12 +68,13 @@ export const PIPELINE_WORKFLOWS = [
   "deploy-staging.yml",
   "deploy-production.yml",
 ];
-/** Files allowed to carry `schedule:` (decision 21 nightly, decision 22 weekly mutation, GL-07 watchdog and Batch-1 fallback). */
+/** Files allowed to carry `schedule:` (decision 21 nightly, decision 22 weekly mutation, GL-07 watchdog and Batch-1 fallback, D-962 quarterly restore dry run: no secret, no environment). */
 export const SCHEDULED_WORKFLOWS = [
   "nightly.yml",
   "mutation.yml",
   "watchdog.yml",
   "ingest-batch1.yml",
+  "restore-dry-run.yml",
 ];
 /** `file::job` pairs allowed to upload an artifact (failure-only report on synthetic data). */
 export const UPLOAD_ALLOWED = ["ci.yml::e2e"];

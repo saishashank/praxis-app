@@ -2278,6 +2278,33 @@
       }
     },
     {
+      "id": "host:docs.turso.tech",
+      "type": "host",
+      "name": "docs.turso.tech",
+      "purpose": "External host docs.turso.tech called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/config/verify.ts",
+      "attrs": {
+        "files": [
+          "src/lib/config/verify.ts"
+        ]
+      }
+    },
+    {
       "id": "host:generativelanguage.googleapis.com",
       "type": "host",
       "name": "generativelanguage.googleapis.com",
@@ -11988,6 +12015,37 @@
       }
     },
     {
+      "id": "table:main.market_row_count",
+      "type": "table",
+      "name": "market_row_count",
+      "purpose": "Table market_row_count in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0031_m18_ops.sql",
+      "attrs": {
+        "columns": [
+          "d",
+          "tbl",
+          "market",
+          "n"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.nav_daily",
       "type": "table",
       "name": "nav_daily",
@@ -12934,7 +12992,9 @@
           "rejected",
           "paused",
           "narrowed",
-          "codes"
+          "codes",
+          "skipped",
+          "plan"
         ],
         "database": "main",
         "indexes": []
@@ -14290,6 +14350,39 @@
       }
     },
     {
+      "id": "table:main.usage_sample",
+      "type": "table",
+      "name": "usage_sample",
+      "purpose": "Table usage_sample in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0031_m18_ops.sql",
+      "attrs": {
+        "columns": [
+          "sampled_at",
+          "rows_read_month",
+          "rows_written_month",
+          "storage_bytes",
+          "plan_name",
+          "source"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.validation_result",
       "type": "table",
       "name": "validation_result",
@@ -14681,6 +14774,37 @@
           "drill",
           "production",
           "staging"
+        ],
+        "triggers": [
+          "workflow_dispatch"
+        ]
+      }
+    },
+    {
+      "id": "workflow:calendar-draft",
+      "type": "workflow",
+      "name": "Calendar draft",
+      "purpose": "GitHub Actions workflow Calendar draft.",
+      "specIds": [
+        "PLT-015"
+      ],
+      "owner": "actions",
+      "schedule": "dispatch only",
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
+      "runbook": null,
+      "views": [
+        "platform",
+        "security"
+      ],
+      "source": ".github/workflows/calendar-draft.yml",
+      "attrs": {
+        "file": ".github/workflows/calendar-draft.yml",
+        "jobs": [
+          "production"
         ],
         "triggers": [
           "workflow_dispatch"
@@ -15134,6 +15258,38 @@
       }
     },
     {
+      "id": "workflow:restore-dry-run",
+      "type": "workflow",
+      "name": "Restore dry run",
+      "purpose": "GitHub Actions workflow Restore dry run.",
+      "specIds": [
+        "PLT-015"
+      ],
+      "owner": "actions",
+      "schedule": "cron (UTC): 17 3 1 1,4,7,10 *",
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
+      "runbook": null,
+      "views": [
+        "platform",
+        "security"
+      ],
+      "source": ".github/workflows/restore-dry-run.yml",
+      "attrs": {
+        "file": ".github/workflows/restore-dry-run.yml",
+        "jobs": [
+          "dry-run"
+        ],
+        "triggers": [
+          "schedule",
+          "workflow_dispatch"
+        ]
+      }
+    },
+    {
       "id": "workflow:smoke-test",
       "type": "workflow",
       "name": "Credential smoke test (stage 1)",
@@ -15228,6 +15384,37 @@
         "file": ".github/workflows/talib-reference.yml",
         "jobs": [
           "reference"
+        ],
+        "triggers": [
+          "workflow_dispatch"
+        ]
+      }
+    },
+    {
+      "id": "workflow:turso-usage",
+      "type": "workflow",
+      "name": "Turso usage sample",
+      "purpose": "GitHub Actions workflow Turso usage sample.",
+      "specIds": [
+        "PLT-015"
+      ],
+      "owner": "actions",
+      "schedule": "dispatch only",
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
+      "runbook": null,
+      "views": [
+        "platform",
+        "security"
+      ],
+      "source": ".github/workflows/turso-usage.yml",
+      "attrs": {
+        "file": ".github/workflows/turso-usage.yml",
+        "jobs": [
+          "production"
         ],
         "triggers": [
           "workflow_dispatch"
@@ -16206,6 +16393,17 @@
       ]
     },
     {
+      "id": "service:actions|contains|workflow:calendar-draft",
+      "from": "service:actions",
+      "to": "workflow:calendar-draft",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform",
+        "security"
+      ]
+    },
+    {
       "id": "service:actions|contains|workflow:ci",
       "from": "service:actions",
       "to": "workflow:ci",
@@ -16356,6 +16554,17 @@
       ]
     },
     {
+      "id": "service:actions|contains|workflow:restore-dry-run",
+      "from": "service:actions",
+      "to": "workflow:restore-dry-run",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform",
+        "security"
+      ]
+    },
+    {
       "id": "service:actions|contains|workflow:smoke-test",
       "from": "service:actions",
       "to": "workflow:smoke-test",
@@ -16381,6 +16590,17 @@
       "id": "service:actions|contains|workflow:talib-reference",
       "from": "service:actions",
       "to": "workflow:talib-reference",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform",
+        "security"
+      ]
+    },
+    {
+      "id": "service:actions|contains|workflow:turso-usage",
+      "from": "service:actions",
+      "to": "workflow:turso-usage",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
@@ -18245,6 +18465,16 @@
       ]
     },
     {
+      "id": "service:app|http|host:docs.turso.tech",
+      "from": "service:app",
+      "to": "host:docs.turso.tech",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
       "id": "service:app|http|host:generativelanguage.googleapis.com",
       "from": "service:app",
       "to": "host:generativelanguage.googleapis.com",
@@ -19510,6 +19740,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.market_row_count",
+      "from": "service:turso-main",
+      "to": "table:main.market_row_count",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.nav_daily",
       "from": "service:turso-main",
       "to": "table:main.nav_daily",
@@ -20132,6 +20372,16 @@
       "id": "service:turso-main|contains|table:main.universe_snapshot",
       "from": "service:turso-main",
       "to": "table:main.universe_snapshot",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.usage_sample",
+      "from": "service:turso-main",
+      "to": "table:main.usage_sample",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
@@ -20933,6 +21183,16 @@
       ]
     },
     {
+      "id": "workflow:calendar-draft|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:calendar-draft",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
       "id": "workflow:ci|uses|secret:FIXTURES_READ_TOKEN",
       "from": "workflow:ci",
       "to": "secret:FIXTURES_READ_TOKEN",
@@ -21156,6 +21416,16 @@
       ]
     },
     {
+      "id": "workflow:restore-drill|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:restore-drill",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
       "id": "workflow:restore-drill|uses|secret:TURSO_PLATFORM_TOKEN_TEMP",
       "from": "workflow:restore-drill",
       "to": "secret:TURSO_PLATFORM_TOKEN_TEMP",
@@ -21353,6 +21623,16 @@
       "to": "secret:TURSO_MAIN_TOKEN_STAGING",
       "kind": "uses",
       "contract": "Reads the secret TURSO_MAIN_TOKEN_STAGING from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:turso-usage|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:turso-usage",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
       "views": [
         "security"
       ]
