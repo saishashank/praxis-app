@@ -74,3 +74,16 @@ Praxis from the latest backup. The checklist for a real move is `deploy/selfhost
 | Date | Box | Minutes | Backup age | Failures |
 |---|---|---|---|---|
 | 2026-11-10 | CI proxy (not a real box): GitHub-hosted runners, images built from source, synthetic data | amd64 5 (both images in parallel 100 s, sqld, restore drill, clock, pre-deploy check good and broken, 316 s in all); arm64 2 (native build and boot, 108 s) | n/a (synthetic) | none in the last run; 7 fixes were needed to get there (see the decision log) |
+| 2026-11-10 | CI runner (not a real box): `ubuntu-latest`, `bootstrap.sh` end to end, images from a local registry, no backup restore, no OS hardening, empty schema (run 42806581367) | `bootstrap.sh` 1 min 36 s (the script alone; 2 min 24 s with the 68 s image build in front, stack job 9 min in all with Caddy, switch, replace and deploy drills); a second `bootstrap.sh` run on the working box 8 s | n/a (no restore) | none in the last run; the rehearsal found bootstrap, migrate and env bugs (see the decision log) |
+
+### Branch-CI rehearsal of the move (workflow "Self-host check", job `stack`)
+
+A GitHub-hosted `ubuntu-latest` runner is not a fresh box (Docker and Node are already on it), so the table above
+labels it a CI runner. The job runs `bootstrap.sh` end to end with images served from a local `registry:2`
+(`PRAXIS_IMAGE_PREFIX`), `--skip-os-hardening` (SSH and firewall are the parts not exercised) and `--skip-restore`
+(no backup bucket or key in CI). After it, against the same stack: Caddy with its internal CA, `switch.sh` both ways
+(a second local sqld stands in for the cloud database), `praxis restore-latest --replace` guards, `praxis deploy` by
+digest with rollback, a failed check and an automatic revert, and a second `bootstrap.sh` run that must change nothing.
+
+Still not proven by CI: the OS hardening step, installing Docker on a bare box, the backup restore itself (needs the
+bucket and the age key), `restore-latest` refusing a non-empty database, real DNS and Let's Encrypt, GHCR pulls.
