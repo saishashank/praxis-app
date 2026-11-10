@@ -2,7 +2,7 @@
 // "Stock A", percentages and counts only: no company name, price, size or exact date (DAT-124, UX-009).
 import Link from "next/link";
 import type { PickRowView } from "@/lib/ui/loaders/picks";
-import { formatDate } from "@/lib/view/format";
+import { formatDay } from "@/lib/view/format";
 import { Rail } from "@/components/ui/Family";
 import { buttonClass } from "@/components/ui/Button";
 import type { AlertChipView } from "@/lib/ui/loaders/pickAlerts";
@@ -92,7 +92,7 @@ export function PickCard({
               Buy up to
             </Term>{" "}
             {masked || !pick.buyUpTo ? <Masked /> : <Money micro={pick.buyUpTo.micro} />} (from{" "}
-            {masked ? pick.validUntil : formatDate(pick.validUntil)}, checked again each night)
+            {masked ? pick.validUntil : formatDay(pick.validUntil)}, checked again each night)
           </li>
           <li>
             <Term meaning={STOP_GAP_HOVER}>Stop-loss</Term>{" "}

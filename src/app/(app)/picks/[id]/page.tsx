@@ -10,7 +10,7 @@ import { Breadcrumb } from "@/components/ui/Nav";
 import { ShowDetails } from "@/components/ui/States";
 import { Masked, Money, SimulatedLabel } from "@/components/ui/Values";
 import { ValidationBadge } from "@/components/ui/Badges";
-import { formatDate, formatPpm } from "@/lib/view/format";
+import { formatDay, formatPpm } from "@/lib/view/format";
 import { pickProfilesConfig } from "../data";
 import {
   exitWords,
@@ -85,7 +85,7 @@ export default async function WhyThisPickPage({ params }: { params: Promise<{ id
             <strong>Buy zone:</strong> tonight&apos;s closing price plus a small allowance for price
             slip. Buy up to{" "}
             {masked || !pick.buyUpTo ? <Masked /> : <Money micro={pick.buyUpTo.micro} />}, valid
-            until {masked ? pick.validUntil : formatDate(pick.validUntil)}.
+            until {masked ? pick.validUntil : formatDay(pick.validUntil)}.
           </li>
           <li>
             <strong>Stop-loss:</strong> the strategy&apos;s own rule

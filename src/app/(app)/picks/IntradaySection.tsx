@@ -4,12 +4,13 @@
 // A masked user sees "Stock A", words and times only.
 import Link from "next/link";
 import type { IntradayModel } from "@/lib/ui/loaders/pickAlerts";
-import { Rail, FamilyBadge } from "@/components/ui/Family";
+import { Rail } from "@/components/ui/Family";
 import { Masked, Money } from "@/components/ui/Values";
-import { formatPpm } from "@/lib/view/format";
+import { displayName, formatPpm } from "@/lib/view/format";
 import {
   delayStatement,
   INTRADAY_EXPLAINER,
+  INTRADAY_NO_LEVELS,
   INTRADAY_TITLE,
   INTRADAY_UNRATED,
   INTRADAY_UNVALIDATED,
@@ -33,12 +34,9 @@ export function IntradaySection({
       data-testid="intraday-section"
       className="flex min-w-0 flex-col gap-2 break-words"
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 id="intraday-h" className="m-0 text-lg font-semibold">
-          {INTRADAY_TITLE}
-        </h2>
-        <FamilyBadge code="id" label="Intraday" />
-      </div>
+      <h2 id="intraday-h" className="m-0 text-lg font-semibold">
+        {INTRADAY_TITLE}
+      </h2>
       <p className="m-0 text-sm text-text-muted">{INTRADAY_EXPLAINER}</p>
       <p className="m-0 text-xs text-text-muted">
         {when} {INTRADAY_UNVALIDATED}
@@ -65,7 +63,10 @@ export function IntradaySection({
                         r.stock
                       )}
                       {r.company ? (
-                        <span className="font-normal text-text-muted"> · {r.company}</span>
+                        <span className="font-normal text-text-muted">
+                          {" "}
+                          · {displayName(r.company)}
+                        </span>
                       ) : null}
                     </span>
                     <span
@@ -83,7 +84,11 @@ export function IntradaySection({
                   so far
                   {r.quoteTime ? ` (quote at ${r.quoteTime})` : ""}
                 </p>
-                {compact ? null : (
+                {compact ? null : !r.rated ? (
+                  <p className="m-0 mt-1 text-xs text-text-muted" data-testid="intraday-no-levels">
+                    {INTRADAY_NO_LEVELS}
+                  </p>
+                ) : (
                   <p className="m-0 mt-1 text-xs">
                     Possible buy limit{" "}
                     {r.limit ? (

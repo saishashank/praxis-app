@@ -219,6 +219,7 @@ describe("WP8 components and wording", () => {
       catalyst: catalystWords("results", "positive"),
       materiality: 3,
       movePpm: 60000,
+      rated: false,
       limit: null,
       stop: null,
       quoteTime: "10:50",
@@ -246,6 +247,44 @@ describe("WP8 components and wording", () => {
     expect(text).not.toMatch(/real[- ]?time/i);
     expect(text).not.toMatch(/chance of a net gain|score/i);
     expect(screen.getByTestId("intraday-more").textContent).toBe("5 more not shown.");
+  });
+
+  it("Intraday section: an unrated item shows no buy limit or stop-loss, even when stored", () => {
+    const row = {
+      code: "ZZDN",
+      stock: "ZZDN",
+      company: "SERVICE STREAM LIMITED",
+      foundTime: "10:11",
+      catalyst: "Bad news",
+      materiality: 3,
+      movePpm: -45000,
+      rated: false,
+      limit: { micro: "2230000", currency: "AUD" as const, simulated: true as const },
+      stop: { micro: "1970000", currency: "AUD" as const, simulated: true as const },
+      quoteTime: "12:41",
+      decisionOutcome: null,
+      href: null,
+    };
+    render(
+      <IntradaySection
+        model={{
+          masked: false,
+          session: "2026-11-09",
+          today: true,
+          lastScan: "12:41",
+          total: 1,
+          rows: [row],
+          more: 0,
+          delayMin: 20,
+        }}
+      />,
+    );
+    const text = screen.getByTestId("intraday-section").textContent!;
+    expect(text).not.toMatch(/Possible buy limit|A\$2\.23|A\$1\.97/);
+    expect(text).toContain("no buy limit or stop-loss is suggested");
+    expect(text).toContain("Service Stream Limited");
+    expect(text).toContain("Found 10:11");
+    expect(text).not.toContain("ID");
   });
 
   it("empty state names the last scan time", () => {
