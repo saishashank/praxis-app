@@ -13,6 +13,7 @@
 import { DISPATCH_ENABLED_KEY, parseEnabled } from "./clock";
 import { dbConfigured, pipeline, type DbEnv } from "./db";
 import { dispatchWorkflow, type DispatchEnv } from "./dispatch";
+import { CLOCK_OWNER_KEY, isOwner, standbyLine, type OwnerEnv } from "./owner";
 
 export const POSTDEPLOY_JOBS: readonly { workflow: string; inputs: Record<string, string> }[] = [
   { workflow: "asx-fetch.yml", inputs: { history: "true" } },
@@ -22,7 +23,7 @@ export const POSTDEPLOY_JOBS: readonly { workflow: string; inputs: Record<string
 export const MAX_ATTEMPTS = 3;
 const COMMIT_RE = /^[0-9a-f]{40}$/;
 
-export type PostDeployEnv = DbEnv & DispatchEnv & { BUILD_COMMIT?: string };
+export type PostDeployEnv = DbEnv & DispatchEnv & OwnerEnv & { BUILD_COMMIT?: string };
 export type PostDeployDeps = { fetch: typeof fetch; nowMs: () => number };
 type Stored = { s: "claimed" | "dispatched" | "failed"; n: number; at: string };
 
@@ -38,7 +39,7 @@ export const postDeployKey = (commit: string): string => `postdeploy:${commit}`;
 export async function runPostDeploy(
   env: PostDeployEnv,
   deps: PostDeployDeps,
-): Promise<"inert" | "done" | "not-enabled" | "not-owner" | "dispatched" | "failed"> {
+): Promise<"inert" | "done" | "not-enabled" | "not-owner" | "standby" | "dispatched" | "failed"> {
   try {
     const commit = (env.BUILD_COMMIT ?? "").trim();
     if (env.PRAXIS_ENV !== "production" || !dbConfigured(env) || !COMMIT_RE.test(commit)) {
@@ -50,17 +51,24 @@ export async function runPostDeploy(
       env,
       [
         {
-          sql: "SELECT key, value_json FROM worker_state WHERE key IN (?, ?)",
-          args: [DISPATCH_ENABLED_KEY, key],
+          sql: "SELECT key, value_json FROM worker_state WHERE key IN (?, ?, ?)",
+          args: [DISPATCH_ENABLED_KEY, CLOCK_OWNER_KEY, key],
         },
       ],
       deps.fetch,
     );
     let enabledRaw: string | undefined;
+    let ownerRaw: string | undefined;
     let prev: string | null = null;
     for (const r of rows!.rows) {
       if (String(r[0]) === DISPATCH_ENABLED_KEY) enabledRaw = String(r[1]);
+      else if (String(r[0]) === CLOCK_OWNER_KEY) ownerRaw = String(r[1]);
       else prev = String(r[1]);
+    }
+    // INFRA T1: the other runtime owns the clock: no post-deploy fill from here, nothing claimed.
+    if (!isOwner(env, ownerRaw)) {
+      console.log(standbyLine(env, ownerRaw));
+      return "standby";
     }
     if (!parseEnabled(enabledRaw)) return "not-enabled";
     let attempt = 1;

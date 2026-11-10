@@ -59,17 +59,19 @@ import {
 } from "./sentinel";
 import { acquire, recordOutcome } from "./token";
 import { AU_SLOTS } from "../schedule";
+import { CLOCK_OWNER_KEY, isOwner, type OwnerEnv } from "../owner";
 
-export type AsxEnv = DbEnv & {
-  PRAXIS_ENV: string;
-  /** "1" turns the live poll on. Unset (default) means no network call is ever made. */
-  ASX_LIVE?: string;
-  /** Identifying User-Agent, a plain var (e.g. "praxis-sentinel (contact: ...)"). */
-  ASX_USER_AGENT?: string;
-  /** Sentinel hand-off target and signing secret (M5 T5); both are needed to deliver a feed. */
-  APP_BASE_URL?: string;
-  WORKER_HMAC_SECRET?: string;
-};
+export type AsxEnv = DbEnv &
+  OwnerEnv & {
+    PRAXIS_ENV: string;
+    /** "1" turns the live poll on. Unset (default) means no network call is ever made. */
+    ASX_LIVE?: string;
+    /** Identifying User-Agent, a plain var (e.g. "praxis-sentinel (contact: ...)"). */
+    ASX_USER_AGENT?: string;
+    /** Sentinel hand-off target and signing secret (M5 T5); both are needed to deliver a feed. */
+    APP_BASE_URL?: string;
+    WORKER_HMAC_SECRET?: string;
+  };
 export type AsxDeps = { fetch: typeof fetch; nowMs: () => number };
 
 export type AsxJob = {
@@ -200,8 +202,8 @@ export async function runAsx(
         env,
         [
           {
-            sql: "SELECT key, value_json FROM worker_state WHERE key IN (?, ?, ?, ?)",
-            args: [ASX_ENABLED_KEY, ETAG_KEY, LAST_SHA_KEY, FAIL_KEY],
+            sql: "SELECT key, value_json FROM worker_state WHERE key IN (?, ?, ?, ?, ?)",
+            args: [ASX_ENABLED_KEY, ETAG_KEY, LAST_SHA_KEY, FAIL_KEY, CLOCK_OWNER_KEY], // INFRA T1
           },
           { sql: "SELECT mode FROM market WHERE code = 'AU'" },
           {
@@ -220,8 +222,10 @@ export async function runAsx(
       const lo = str(lastOk.rows[0], 0);
       if (lo !== null && Number.isFinite(Date.parse(lo))) lastOkMs = Date.parse(lo);
       let enabledRaw: string | null = null;
+      let ownerRaw: string | null = null;
       for (const r of state.rows) {
         if (r[0] === ASX_ENABLED_KEY) enabledRaw = str(r, 1);
+        else if (r[0] === CLOCK_OWNER_KEY) ownerRaw = str(r, 1);
         else if (r[0] === ETAG_KEY && typeof r[1] === "string") {
           try {
             const v: unknown = JSON.parse(r[1]);
@@ -238,6 +242,7 @@ export async function runAsx(
           }
         } else if (r[0] === FAIL_KEY) fail = parseFail(str(r, 1));
       }
+      if (!isOwner(env, ownerRaw)) return skip("standby", "asx: skipped (standby)");
       if (!parseOn(enabledRaw)) return skip("disabled", "asx: skipped (asx_enabled off)");
       if (job.marketBound) {
         const m = str(mode.rows[0], 0);

@@ -1,0 +1,35 @@
+# Keep the build context small and free of local state and secrets (SEC-110).
+.git
+.github
+.claude
+node_modules
+**/node_modules
+.next
+out
+coverage
+**/coverage/
+!tests/coverage/
+!worker/test/coverage/
+test-results
+playwright-report
+e2e
+e2e-staging
+.stryker-tmp
+reports
+.vitest
+*.tsbuildinfo
+next-env.d.ts
+.wrangler
+worker/dist
+# Local env and key material: never in an image
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.age
+*.p12
+id_rsa*
+.npmrc
+# Real recorded fixtures live in a private repo (SEC-110)
+fixtures

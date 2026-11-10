@@ -12,6 +12,7 @@ import type { Client } from "@libsql/client";
 import { finishRun, startRun } from "@/lib/runs/runRecord";
 import { CHECK_TIMEOUT_MS, CODE_REPO } from "@/lib/selfcheck/config";
 import type { EmailProvider } from "@/lib/email/provider";
+import { onStandby, STANDBY_BODY } from "@/lib/runtime/owner";
 import { checkApprovedCommit, type WatchdogResult } from "./approvedCommit";
 import { KIND_UNAPPROVED_CODE, openS1Once } from "./incidents";
 import { WATCHDOG_JOB } from "./state";
@@ -90,6 +91,8 @@ export function createWatchdogHandler(deps: Deps) {
       const date = melbourneDate(now);
       const key = `watchdog:${date}`;
       const db = deps.mainDb();
+      // INFRA T1: the other runtime owns the clock; do nothing (one cheap read, a few times a day).
+      if (await onStandby(db, deps.env)) return json(200, STANDBY_BODY);
       if (await alreadyDone(db, key)) return json(200, { skipped: "already ran", date });
 
       const deployedCommit = deps.env.APP_COMMIT;

@@ -1,0 +1,76 @@
+# praxis-jobs: the clock and the job runner (INFRA §3.2, §5). Node 24 + Python 3.12, linux/amd64 + linux/arm64.
+# Build from the repository root:  docker buildx build -f deploy/selfhost/Dockerfile.jobs .
+#
+# Base approach: the python:3.12 image (Debian bookworm) supplies Python; Node 24 is copied in from the
+# node:24 bookworm image (same glibc, both multi-arch). Debian bookworm itself ships Python 3.11 only.
+# TODO pin digest: both bases are pinned by tag only; at the first real build replace them with
+# @sha256:<index digest> (docker buildx imagetools inspect <image>).
+ARG NODE_IMAGE=node:24-bookworm-slim
+ARG PYTHON_IMAGE=python:3.12-slim-bookworm
+
+FROM ${NODE_IMAGE} AS node
+
+FROM ${PYTHON_IMAGE} AS runtime
+# Node runtime (node, npm, npx, headers) from the node stage.
+COPY --from=node /usr/local/ /usr/local/
+
+# Which hashed Python requirement file to install (INFRA §9, §15.1).
+#  - empty (default): amd64 -> scripts/ingest/requirements.txt, arm64 -> scripts/ingest/requirements-arm64.txt
+#  - the committed requirements.txt carries hashes for x86_64 CPython 3.12 Linux ONLY. The arm64 file does
+#    not exist until it is generated: see deploy/selfhost/ARM64.md. No hashes are ever made up here.
+ARG PY_REQUIREMENTS=""
+ARG TARGETARCH
+
+ENV NODE_ENV=production \
+    PRAXIS_RUNTIME=selfhost \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    PUPPETEER_SKIP_DOWNLOAD=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOME=/srv/praxis/jobs
+
+RUN groupadd --system --gid 10001 praxis \
+ && useradd --system --uid 10001 --gid praxis --home-dir /srv/praxis/jobs --no-create-home --shell /usr/sbin/nologin praxis \
+ && mkdir -p /app /srv/praxis/jobs \
+ && chown praxis:praxis /srv/praxis/jobs
+
+WORKDIR /app
+
+# Node dependencies. The devDependencies are needed at run time on purpose: scripts that load the
+# TypeScript engine (scripts/arena/engine.mjs and the asx/ingest loaders) bundle src/lib/*.ts with
+# Vite at start-up, and Vite comes in through vitest. No separate TS loader is needed.
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+# Python dependencies, hashed (SEC-107). Fails closed when no hash set exists for this architecture.
+COPY scripts/ingest/requirements*.txt ./scripts/ingest/
+RUN set -eu; \
+    req="${PY_REQUIREMENTS}"; \
+    if [ -z "$req" ]; then \
+      case "${TARGETARCH:-amd64}" in \
+        arm64) req=scripts/ingest/requirements-arm64.txt ;; \
+        *)     req=scripts/ingest/requirements.txt ;; \
+      esac; \
+    fi; \
+    if [ ! -f "$req" ]; then \
+      echo "No hashed requirement file '$req' for ${TARGETARCH:-amd64}. See deploy/selfhost/ARM64.md." >&2; \
+      exit 1; \
+    fi; \
+    pip install --require-hashes --only-binary=:all: -r "$req"
+
+# Repository code: scripts/, src/lib, worker/src (schedule), clock/ (added in T3), db/migrations, spec/.
+COPY . .
+
+# Vite bundles the TS engines into node_modules/.cache at run time; the compose file mounts a tmpfs there.
+RUN mkdir -p /app/node_modules/.cache && chown -R praxis:praxis /app/node_modules/.cache
+
+USER praxis
+VOLUME ["/srv/praxis/jobs"]
+EXPOSE 9100
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:9100/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+# clock/index.mjs is built in T3 (INFRA §5, §13).
+CMD ["node", "clock/index.mjs"]

@@ -28,6 +28,7 @@
 // scheduled run think it already happened (and the scheduled run is not blocked by it).
 // Logs carry job ids and fixed words only; never a URL, header, secret or body.
 import { dbConfigured, pipeline, type DbEnv, type Stmt, type StmtResult } from "./db";
+import { CLOCK_OWNER_KEY, isOwner, ownerGuardSql, standbyLine } from "./owner";
 import { dispatchWorkflow, refFor, type DispatchEnv } from "./dispatch";
 import {
   DISPATCH_ENABLED_KEY,
@@ -200,8 +201,9 @@ export async function runRunNow(
     const claimStmts: Stmt[] = pending.map((p) => ({
       sql:
         "UPDATE run_now_request SET status = 'dispatched', updated_at = ? " +
-        "WHERE id = ? AND status = 'pending'",
-      args: [claimAt, p.id],
+        "WHERE id = ? AND status = 'pending' AND " +
+        ownerGuardSql(env), // INFRA T1: a standby runtime never claims a request
+      args: [claimAt, p.id, CLOCK_OWNER_KEY],
     }));
     const inputKeys = new Set<string>();
     const afterKeys = new Set<string>();
@@ -218,6 +220,7 @@ export async function runRunNow(
       }
     }
     const keys = [
+      CLOCK_OWNER_KEY,
       DISPATCH_ENABLED_KEY,
       SLOTS_ENABLED_KEY,
       FLUSH_DUE_KEY,
@@ -246,6 +249,15 @@ export async function runRunNow(
     }
     const n = pending.length;
     const owned = pending.filter((_, i) => r2[i]!.affected === 1);
+    // INFRA T1: the claim above is guarded in SQL, so a standby runtime consumed nothing; this
+    // row (same pipeline, no extra request) only tells a standby apart from a lost race for the log.
+    let ownerRaw: string | undefined;
+    for (const row of r2[n]!.rows)
+      if (String(row[0]) === CLOCK_OWNER_KEY) ownerRaw = String(row[1]);
+    if (!isOwner(env, ownerRaw)) {
+      console.log(standbyLine(env, ownerRaw));
+      return summary;
+    }
     if (owned.length === 0) return summary;
 
     let enabledRaw: string | undefined;
@@ -257,6 +269,7 @@ export async function runRunNow(
       const k = String(row[0]);
       const raw = String(row[1]);
       if (k === DISPATCH_ENABLED_KEY) enabledRaw = raw;
+      else if (k === CLOCK_OWNER_KEY) continue;
       else if (k === SLOTS_ENABLED_KEY) listRaw = row[1] === null ? null : raw;
       else if (k === FLUSH_DUE_KEY) flushRaw = raw;
       else if (inputKeys.has(k)) slotInputs[k] = parseInputs(raw);

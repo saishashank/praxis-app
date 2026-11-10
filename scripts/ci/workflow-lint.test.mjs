@@ -319,3 +319,24 @@ test("the exceptions file lists only pending deploy-file entries (Owner-only fil
     assert.match(x.reason, /Owner to decide at the M8 review point/);
   }
 });
+
+test("packages: write is allowed only on the allow-listed build job, and no other scope is", () => {
+  const wf = (scope) =>
+    `name: x
+on: push
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      ${scope}: write
+    steps:
+      - run: echo hi
+`;
+  assert.deepEqual(ruleList(lintWorkflow("build-selfhost.yml", wf("packages"))), []);
+  assert.deepEqual(ruleList(lintWorkflow("other.yml", wf("packages"))), ["permissions-wide"]);
+  assert.deepEqual(ruleList(lintWorkflow("build-selfhost.yml", wf("contents"))), [
+    "permissions-wide",
+  ]);
+});

@@ -46,15 +46,45 @@ test("the gate job turns the wrong DST line into a no-op and the production job 
   const s = g.steps.find((x) => x.id === "gate");
   assert.equal(s.run, "node scripts/time/scheduleGate.mjs 20:40 21:50");
   assert.deepEqual(s.env, { SCHEDULE_CRON: "${{ github.event.schedule }}" });
-  assert.equal(job.needs, "gate");
-  assert.equal(job.if, "github.ref == 'refs/heads/release' && needs.gate.outputs.run == 'true'");
+  // INFRA T1 (INFRA §6): the gate stays secret-free; the owner check is its own job on the approved commit.
+  const o = wf.jobs.owner;
+  assert.equal(o.needs, "gate");
+  assert.equal(
+    o.if,
+    "github.ref == 'refs/heads/release' && needs.gate.outputs.run == 'true' && github.event_name == 'schedule'",
+  );
+  assert.deepEqual(o.environment, { name: "production", deployment: false });
+  assert.deepEqual(o.permissions, { contents: "read", deployments: "read" });
+  assert.ok(o["timeout-minutes"] > 0);
+  assert.ok(o.concurrency.group.endsWith("-owner-" + "$" + "{{ github.run_id }}"));
+  assert.equal(o.concurrency["cancel-in-progress"], false);
+  assert.equal(o.outputs.run, "$" + "{{ steps.owner.outputs.run }}");
+  // the same approved-commit lookup as production, then the approved SHA (sparse: only scripts/time)
+  assert.deepEqual(o.steps.slice(0, 2), job.steps.slice(0, 2));
+  assert.equal(o.steps[2].with.ref, "$" + "{{ steps.approved.outputs.sha }}");
+  assert.equal(o.steps[2].with["sparse-checkout"], "scripts/time");
+  // secrets only in the env of the last step; an older approved commit without the script means run
+  const ownerSecrets = o.steps.filter((x) => JSON.stringify(x).includes("secrets."));
+  assert.deepEqual(ownerSecrets, [o.steps.at(-1)]);
+  const last = o.steps.at(-1);
+  assert.equal(last.id, "owner");
+  assert.ok(last.run.includes("node scripts/time/ownerGate.mjs"));
+  assert.ok(last.run.includes("[ -f scripts/time/ownerGate.mjs ]"));
+  assert.ok(!last.run.includes("secrets."));
+  // production runs when owner is skipped, failed or true; skips only on an output of exactly 'false'
+  assert.deepEqual(job.needs, ["gate", "owner"]);
+  assert.equal(
+    job.if,
+    "$" +
+      "{{ always() && github.ref == 'refs/heads/release' && needs.gate.outputs.run == 'true' && needs.owner.outputs.run != 'false' }}",
+  );
   const w = steps.find((x) => x.name === "Watchdog");
   assert.equal(w.env.WATCHDOG_SLOT, "${{ inputs.slot || needs.gate.outputs.slot }}");
 });
 
 test("one production job on release, environment production without a deployment record", () => {
-  assert.deepEqual(Object.keys(wf.jobs), ["gate", "production", "staging"]); // M8 T9: the staging job is covered by staging-jobs.workflow.test.mjs
-  assert.ok(job.if.startsWith("github.ref == 'refs/heads/release'"));
+  assert.deepEqual(Object.keys(wf.jobs), ["gate", "owner", "production", "staging"]); // M8 T9: the staging job is covered by staging-jobs.workflow.test.mjs
+  assert.ok(job.if.includes("github.ref == 'refs/heads/release'"));
   assert.deepEqual(job.environment, { name: "production", deployment: false });
   assert.deepEqual(job.permissions, { contents: "read", deployments: "read" });
   assert.deepEqual(job.concurrency, { group: "watchdog", "cancel-in-progress": false });

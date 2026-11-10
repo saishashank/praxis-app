@@ -45,7 +45,13 @@ export const BLUEPRINT_TRACE_INCLUDES = {
   "/api/blueprint/model": ["./docs/architecture/architecture.json"],
 };
 
+// Self-hosted container build (INFRA §10): a standalone server bundle only when asked for, so the
+// Vercel build is unchanged.
+const standalone =
+  process.env.PRAXIS_RUNTIME === "selfhost" || process.env.NEXT_OUTPUT === "standalone";
+
 const nextConfig: NextConfig = {
+  ...(standalone ? { output: "standalone" as const } : {}),
   poweredByHeader: false,
   outputFileTracingIncludes: BLUEPRINT_TRACE_INCLUDES,
   experimental: { authInterrupts: true }, // forbidden() / unauthorized() (D-038)

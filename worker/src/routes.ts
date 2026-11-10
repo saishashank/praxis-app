@@ -32,6 +32,7 @@ import {
   type SlotList,
 } from "./clock";
 import { dbConfigured, pipeline, type Arg, type DbEnv, type Stmt, type StmtResult } from "./db";
+import { CLOCK_OWNER_KEY, isOwner, standbyLine, type OwnerEnv } from "./owner";
 import { isWeekend, sydneyLocal, type Local } from "./localtime";
 import { isTradingDayKind } from "../../src/lib/data/calendarCore.mjs";
 import { AU_SLOTS, type Slot } from "./schedule";
@@ -44,11 +45,12 @@ export const FLUSH_DUE_KEY = "alert_flush_due";
 export const ROUTE_JOB = "worker-route";
 export const MARKET = "AU";
 
-export type RouteEnv = DbEnv & {
-  PRAXIS_ENV: string;
-  APP_BASE_URL?: string;
-  WORKER_HMAC_SECRET?: string;
-};
+export type RouteEnv = DbEnv &
+  OwnerEnv & {
+    PRAXIS_ENV: string;
+    APP_BASE_URL?: string;
+    WORKER_HMAC_SECRET?: string;
+  };
 export type RouteDeps = { fetch: typeof fetch; nowMs: () => number };
 
 export type RouteFacts = {
@@ -244,7 +246,7 @@ export async function runRoutes(
 
     // ---- request 1: switch, mode, calendar, flush marker, single-shot states -----------------
     const nowMs = deps.nowMs();
-    const keys: string[] = [DISPATCH_ENABLED_KEY, SLOTS_ENABLED_KEY];
+    const keys: string[] = [DISPATCH_ENABLED_KEY, SLOTS_ENABLED_KEY, CLOCK_OWNER_KEY]; // INFRA T1
     if (due.some((s) => s.needs === "alert_flush_due")) keys.push(FLUSH_DUE_KEY);
     for (const s of due) {
       if (s.everyMin !== undefined) continue;
@@ -281,14 +283,21 @@ export async function runRoutes(
     const states = new Map<string, StoredState>();
     let enabledRaw: string | undefined;
     let flushRaw: string | undefined;
+    let ownerRaw: string | undefined;
     let listRaw: string | null | undefined;
     for (const row of r1[0].rows) {
       const k = String(row[0]);
       const raw = String(row[1]);
       if (k === DISPATCH_ENABLED_KEY) enabledRaw = raw;
+      else if (k === CLOCK_OWNER_KEY) ownerRaw = raw;
       else if (k === SLOTS_ENABLED_KEY) listRaw = row[1] === null ? null : raw;
       else if (k === FLUSH_DUE_KEY) flushRaw = raw;
       else states.set(k, { raw, state: parseState(raw) });
+    }
+    // INFRA T1: the other runtime owns the clock: post nothing, claim nothing.
+    if (!isOwner(env, ownerRaw)) {
+      console.log(standbyLine(env, ownerRaw));
+      return summary;
     }
     const mode = iMode >= 0 ? r1[iMode].rows[0]?.[0] : undefined;
     const calKind = iCal >= 0 ? r1[iCal].rows[0]?.[0] : undefined;

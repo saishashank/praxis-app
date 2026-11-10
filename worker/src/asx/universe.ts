@@ -25,6 +25,7 @@
 //   Worst case 4 of 50 database subrequests (5 when the trip fires) plus the ASX fetch and the POST.
 // Logs carry fixed words and numbers only: never a URL, a header, a secret or file content.
 import { dbConfigured, pipeline } from "../db";
+import { CLOCK_OWNER_KEY, isOwner } from "../owner";
 import { isWeekend, sydneyLocal, type Local } from "../localtime";
 import { randomHex, signHeaders } from "../selfcheck";
 import {
@@ -120,7 +121,11 @@ export async function runUniverse(
       const [state, mode, cal, reg] = await pipeline(
         env,
         [
-          { sql: "SELECT value_json FROM worker_state WHERE key = ?", args: [ASX_ENABLED_KEY] },
+          {
+            // INFRA T1: the owner key rides in this existing read.
+            sql: "SELECT key, value_json FROM worker_state WHERE key IN (?, ?)",
+            args: [ASX_ENABLED_KEY, CLOCK_OWNER_KEY],
+          },
           { sql: "SELECT mode FROM market WHERE code = 'AU'" },
           {
             sql: "SELECT kind FROM trading_calendar WHERE market = 'AU' AND d = ?",
@@ -133,7 +138,14 @@ export async function runUniverse(
         ],
         deps.fetch,
       );
-      if (!parseOn(str(state.rows[0]?.[0]))) return skip("disabled", "asx_enabled off");
+      let enabledRaw: string | null = null;
+      let ownerRaw: string | null = null;
+      for (const r of state.rows) {
+        if (r[0] === ASX_ENABLED_KEY) enabledRaw = str(r[1]);
+        else if (r[0] === CLOCK_OWNER_KEY) ownerRaw = str(r[1]);
+      }
+      if (!isOwner(env, ownerRaw)) return skip("standby", "standby");
+      if (!parseOn(enabledRaw)) return skip("disabled", "asx_enabled off");
       const m = str(mode.rows[0]?.[0]);
       if (m === null || m === "off") return skip("market-off", "market off");
       if (str(cal.rows[0]?.[0]) === "holiday") return skip("holiday", "holiday");

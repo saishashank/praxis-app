@@ -10,6 +10,7 @@ import type { Client } from "@libsql/client";
 import { finishRun, startRun } from "@/lib/runs/runRecord";
 import { bearerMatches, isProduction, melbourneDate, type Env } from "@/lib/watchdog/handler";
 import type { EmailProvider } from "@/lib/email/provider";
+import { onStandby, STANDBY_BODY } from "@/lib/runtime/owner";
 import {
   detectAsxTrip,
   detectAuditChain,
@@ -166,6 +167,8 @@ export function createHeartbeatHandler(kind: HeartbeatKind, deps: Deps) {
       const date = melbourneDate(now);
       const key = `${job}:${date}`;
       const db = deps.mainDb();
+      // INFRA T1: the other runtime owns the clock; do nothing (one cheap read, a few times a day).
+      if (await onStandby(db, deps.env)) return json(200, STANDBY_BODY);
       if (await alreadyDone(db, key)) return json(200, { skipped: "already ran", date });
 
       const runId = await startRun(db, {

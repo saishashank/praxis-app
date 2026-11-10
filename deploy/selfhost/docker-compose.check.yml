@@ -1,0 +1,87 @@
+# Pre-deploy check pair (INFRA §10): web + sqld on a throwaway copy of last night's backup. Project
+# "praxis-check". No public port, no clock, no email. Used by `praxis deploy <sha>` (T5), then wiped.
+#   docker compose -f docker-compose.check.yml --env-file /srv/praxis/compose/.env up -d
+# The smoke test attaches to the network "praxis-check" (e.g. docker run --network praxis-check ...).
+name: praxis-check
+
+x-hardening: &hardening
+  restart: "no"
+  read_only: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  pids_limit: 512
+
+services:
+  web:
+    <<: *hardening
+    image: ghcr.io/saishashank/praxis-web:${PRAXIS_SHA:?set PRAXIS_SHA}
+    # The check pair together is budgeted at 2 GB (INFRA §9): web 1 GB + sqld 1 GB.
+    mem_limit: 1g
+    memswap_limit: 1g
+    env_file: /srv/praxis/env/web.env
+    environment:
+      # Overrides win over env_file: nothing in the check can send mail or start work.
+      PRAXIS_RUNTIME: selfhost
+      CLOCK_ENABLED: "0"
+      EMAIL_LIVE: "0"
+      EMAIL_PROVIDER: mock
+      APP_BASE_URL: http://web:3000
+      AUTH_URL: http://web:3000
+      AUTH_TRUST_HOST: "true"
+      NODE_OPTIONS: --max-old-space-size=768
+    expose: ["3000"]
+    tmpfs:
+      - /tmp
+      - /app/.next/cache:uid=10001,gid=10001,size=128m
+    networks: [check]
+    depends_on:
+      sqld:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 6
+
+  sqld:
+    <<: *hardening
+    image: ghcr.io/tursodatabase/libsql-server:v0.24.32 # keep equal to docker-compose.prod.yml
+    mem_limit: 1g
+    memswap_limit: 1g
+    env_file: /srv/praxis/env/sqld.env
+    # TODO verify against the pinned image (T4): flag names and the data path.
+    command:
+      - /bin/sqld
+      - --http-listen-addr=0.0.0.0:8080
+      - --admin-listen-addr=0.0.0.0:8081
+      - --enable-namespaces
+      - --db-path=/var/lib/sqld/data.sqld
+    expose: ["8080", "8081"]
+    volumes:
+      - /srv/praxis/check:/var/lib/sqld
+    tmpfs:
+      - /tmp
+    networks:
+      check:
+        aliases: [main.sqld, auth.sqld]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://127.0.0.1:8080/health || wget -qO- http://127.0.0.1:8080/health",
+        ]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 6
+
+networks:
+  check:
+    name: praxis-check

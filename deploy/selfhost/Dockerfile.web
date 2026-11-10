@@ -1,0 +1,42 @@
+# praxis-web: the Next.js app as a standalone server (INFRA §3.2, §10). Multi-arch: linux/amd64 + linux/arm64.
+# Build from the repository root:  docker buildx build -f deploy/selfhost/Dockerfile.web .
+#
+# TODO pin digest: the base is pinned by tag only. At the first real build, resolve the multi-arch
+# index digest (docker buildx imagetools inspect node:24-bookworm-slim) and replace the tag with
+# node:24-bookworm-slim@sha256:<digest> in both FROM lines (INFRA §3.2: deploy by digest).
+ARG NODE_IMAGE=node:24-bookworm-slim
+
+FROM ${NODE_IMAGE} AS deps
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    PUPPETEER_SKIP_DOWNLOAD=1
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+FROM deps AS build
+WORKDIR /app
+ENV NEXT_OUTPUT=standalone \
+    NEXT_TELEMETRY_DISABLED=1
+COPY . .
+RUN npm run build
+
+FROM ${NODE_IMAGE} AS runner
+ENV NODE_ENV=production \
+    PRAXIS_RUNTIME=selfhost \
+    NEXT_TELEMETRY_DISABLED=1 \
+    HOSTNAME=0.0.0.0 \
+    PORT=3000
+WORKDIR /app
+RUN groupadd --system --gid 10001 praxis \
+ && useradd --system --uid 10001 --gid praxis --no-create-home --shell /usr/sbin/nologin praxis
+COPY --from=build --chown=praxis:praxis /app/.next/standalone ./
+COPY --from=build --chown=praxis:praxis /app/.next/static ./.next/static
+COPY --from=build --chown=praxis:praxis /app/public ./public
+# Next writes its image/data cache under .next/cache; the compose file mounts a tmpfs there.
+RUN mkdir -p .next/cache && chown praxis:praxis .next/cache
+USER praxis
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+CMD ["node", "server.js"]

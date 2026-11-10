@@ -24,6 +24,7 @@
 //  - GitHub is reached through the injectable `WorkflowClient`; tests use a fake. Errors never escape
 //    `runReenable` and carry only fixed words or an error NAME (never the token or a response body).
 import { dbConfigured, pipeline, type Arg, type DbEnv, type Stmt } from "./db";
+import { CLOCK_OWNER_KEY, isOwner, standbyLine, type OwnerEnv } from "./owner";
 import { CODE_REPO, DISPATCH_TIMEOUT_MS, GITHUB_API_VERSION, refFor } from "./dispatch";
 import { sydneyLocal } from "./localtime";
 import { CLAIM_STALE_MS, MAX_ATTEMPTS, parseState, type SlotState } from "./clock";
@@ -46,7 +47,7 @@ export interface WorkflowClient {
   enable(id: number): Promise<void>;
 }
 
-export type ReenableEnv = DbEnv & { PRAXIS_ENV: string; GITHUB_DISPATCH_TOKEN?: string };
+export type ReenableEnv = DbEnv & OwnerEnv & { PRAXIS_ENV: string; GITHUB_DISPATCH_TOKEN?: string };
 export type ReenableDeps = { fetch: typeof fetch; nowMs: () => number; client?: WorkflowClient };
 export type ReenableSummary = {
   requests: number;
@@ -180,12 +181,26 @@ export async function runReenable(
       summary.requests++;
       const [r] = await pipeline(
         env,
-        [{ sql: "SELECT value_json FROM worker_state WHERE key = ?", args: [key] }],
+        [
+          {
+            // INFRA T1: the owner key rides in this existing read (no extra request).
+            sql: "SELECT key, value_json FROM worker_state WHERE key IN (?, ?)",
+            args: [key, CLOCK_OWNER_KEY],
+          },
+        ],
         deps.fetch,
       );
-      const raw = r.rows[0]?.[0];
-      if (raw !== undefined && raw !== null)
-        stored = { raw: String(raw), state: parseState(String(raw)) };
+      let ownerRaw: string | undefined;
+      for (const row of r.rows) {
+        const v = row[1];
+        if (v === undefined || v === null) continue;
+        if (String(row[0]) === CLOCK_OWNER_KEY) ownerRaw = String(v);
+        else stored = { raw: String(v), state: parseState(String(v)) };
+      }
+      if (!isOwner(env, ownerRaw)) {
+        console.log(standbyLine(env, ownerRaw));
+        return summary;
+      }
     } catch (e) {
       console.log(`reenable: db error ${errName(e)}`);
       return summary;

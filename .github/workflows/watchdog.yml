@@ -68,9 +68,63 @@ jobs:
         env:
           SCHEDULE_CRON: ${{ github.event.schedule }}
 
-  production:
+  # INFRA T1 (INFRA §6): a scheduled run stands by when `worker_state.clock_owner` names another
+  # runtime. Same approved-commit checkout as `production` (SEC-108 c); only the last step holds the
+  # database secrets (one row read). It writes `run=false` ONLY on standby; any error, a skipped or a
+  # failed job, or an approved commit without the script leaves `production` running (= cloud).
+  owner:
     needs: gate
-    if: github.ref == 'refs/heads/release' && needs.gate.outputs.run == 'true'
+    if: github.ref == 'refs/heads/release' && needs.gate.outputs.run == 'true' && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      deployments: read
+    # A per-run group (lint wants one on a job with an environment); it never queues or cancels.
+    concurrency:
+      group: watchdog-owner-${{ github.run_id }}
+      cancel-in-progress: false
+    environment:
+      name: production
+      deployment: false
+    outputs:
+      run: ${{ steps.owner.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ci-tools
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - name: Find approved commit
+        id: approved
+        run: node ci-tools/scripts/ci/approved-commit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.approved.outputs.sha }}
+          sparse-checkout: scripts/time
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Clock owner gate
+        id: owner
+        run: |
+          if [ -f scripts/time/ownerGate.mjs ]; then
+            node scripts/time/ownerGate.mjs
+          else
+            echo "owner-gate: not in the approved commit yet (run, owner=cloud)"
+          fi
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+
+  production:
+    needs: [gate, owner]
+    # always(): a skipped (dispatch) or failed `owner` job must not skip this one; only an output of
+    # exactly 'false' (standby) does.
+    if: ${{ always() && github.ref == 'refs/heads/release' && needs.gate.outputs.run == 'true' && needs.owner.outputs.run != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

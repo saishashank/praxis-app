@@ -1,6 +1,8 @@
   production:
-    needs: gate
-    if: github.ref == 'refs/heads/release' && needs.gate.outputs.run == 'true'
+    needs: [gate, owner]
+    # always(): a skipped (dispatch) or failed `owner` job must not skip this one; only an output of
+    # exactly 'false' (standby) does.
+    if: ${{ always() && github.ref == 'refs/heads/release' && needs.gate.outputs.run == 'true' && needs.owner.outputs.run != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:

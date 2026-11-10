@@ -61,6 +61,7 @@
 //  - Errors never escape `runClock`; log lines carry slot ids and fixed words only.
 import { dbConfigured, pipeline, type Arg, type DbEnv, type Stmt, type StmtResult } from "./db";
 import { dispatchWorkflow, refFor, type DispatchEnv } from "./dispatch";
+import { CLOCK_OWNER_KEY, isOwner, standbyLine, type OwnerEnv } from "./owner";
 import { isWeekend, MINUTE_MS, sydneyLocal, type Local } from "./localtime";
 import { isTradingDayKind } from "../../src/lib/data/calendarCore.mjs";
 import { AU_SLOTS, type Slot } from "./schedule";
@@ -75,7 +76,8 @@ export const DISPATCH_ENABLED_KEY = "dispatch_enabled";
 export const SLOTS_ENABLED_KEY = "slots_enabled";
 
 export type ClockEnv = DbEnv &
-  DispatchEnv & {
+  DispatchEnv &
+  OwnerEnv & {
     BUILD_COMMIT?: string;
   };
 export type ClockDeps = { fetch: typeof fetch; nowMs: () => number };
@@ -118,7 +120,8 @@ export type SkipReason =
   | "not-released" // available in this build but no list yet: stays off
   | "not-listed" // a list exists and the slot is not in it
   | "list-malformed" // the list is unreadable: nothing new is dispatched
-  | "inputs-missing"; // the slot's workflow inputs are absent or invalid
+  | "inputs-missing" // the slot's workflow inputs are absent or invalid
+  | "standby"; // INFRA T1: `clock_owner` names the other runtime; nothing is dispatched or claimed
 export type Skipped = { id: string; reason: SkipReason };
 
 export const slotKey = (id: string, date: string): string => `slot:${id}:${date}`;
@@ -440,8 +443,8 @@ export async function runClock(
     if (cands.length > 0) {
       iState = first.length;
       first.push({
-        sql: `SELECT key, value_json FROM worker_state WHERE key IN (${placeholders(keys.length + inputKeys.length + 2)})`,
-        args: [DISPATCH_ENABLED_KEY, SLOTS_ENABLED_KEY, ...inputKeys, ...keys],
+        sql: `SELECT key, value_json FROM worker_state WHERE key IN (${placeholders(keys.length + inputKeys.length + 3)})`,
+        args: [DISPATCH_ENABLED_KEY, SLOTS_ENABLED_KEY, CLOCK_OWNER_KEY, ...inputKeys, ...keys],
       });
       if (cands.some((s) => s.marketBound)) {
         iMode = first.length;
@@ -480,15 +483,23 @@ export async function runClock(
 
     const states = new Map<string, StoredState>();
     let enabledRaw: string | undefined;
+    let ownerRaw: string | undefined;
     let listRaw: string | null | undefined;
     const slotInputs: Record<string, Record<string, string> | null> = {};
     for (const row of r1[iState].rows) {
       const k = String(row[0]);
       const raw = String(row[1]);
       if (k === DISPATCH_ENABLED_KEY) enabledRaw = raw;
+      else if (k === CLOCK_OWNER_KEY) ownerRaw = raw;
       else if (k === SLOTS_ENABLED_KEY) listRaw = row[1] === null ? null : raw;
       else if (inputKeys.includes(k)) slotInputs[k] = parseInputs(raw);
       else states.set(k, { raw, state: parseState(raw) });
+    }
+    // INFRA T1: the other runtime owns the clock: dispatch nothing, claim nothing.
+    if (!isOwner(env, ownerRaw)) {
+      summary.skipped = [{ id: "clock", reason: "standby" }];
+      console.log(standbyLine(env, ownerRaw));
+      return summary;
     }
     const mode = iMode >= 0 ? r1[iMode].rows[0]?.[0] : undefined;
     const calKind = iCal >= 0 ? r1[iCal].rows[0]?.[0] : undefined;

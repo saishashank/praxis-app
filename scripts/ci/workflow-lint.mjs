@@ -77,6 +77,8 @@ export const SCHEDULED_WORKFLOWS = [
 ];
 /** `file::job` pairs allowed to upload an artifact (failure-only report on synthetic data). */
 export const UPLOAD_ALLOWED = ["ci.yml::e2e"];
+/** `file::job` pairs allowed `packages: write` (image push to GHCR with the run token; self-host build, INFRA §10). */
+export const PACKAGES_WRITE_ALLOWED = ["build-selfhost.yml::build"];
 
 const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const SECRET_REF = /\bsecrets\s*(\.|\[)|secrets:\s*inherit/;
@@ -131,13 +133,14 @@ const FORK_GUARDS = [
 /**
  * @param {string} file workflow file name, e.g. "ci.yml"
  * @param {string} text the YAML text
- * @param {{ pipeline?: string[], scheduled?: string[], uploadAllowed?: string[] }} [opts]
+ * @param {{ pipeline?: string[], scheduled?: string[], uploadAllowed?: string[], packagesWriteAllowed?: string[] }} [opts]
  * @returns {{ file: string, rule: string, where: string, message: string }[]}
  */
 export function lintWorkflow(file, text, opts = {}) {
   const pipeline = opts.pipeline ?? PIPELINE_WORKFLOWS;
   const scheduled = opts.scheduled ?? SCHEDULED_WORKFLOWS;
   const uploadAllowed = opts.uploadAllowed ?? UPLOAD_ALLOWED;
+  const packagesWriteAllowed = opts.packagesWriteAllowed ?? PACKAGES_WRITE_ALLOWED;
   const findings = [];
   const add = (rule, where, message) => findings.push({ file, rule, where, message });
 
@@ -177,7 +180,12 @@ export function lintWorkflow(file, text, opts = {}) {
       add("permissions-wide", `job ${id}`, `permissions is "${job.permissions}"`);
     } else if (isObj(job.permissions)) {
       for (const [scope, level] of Object.entries(job.permissions)) {
-        if (level === "write") add("permissions-wide", `job ${id}`, `${scope}: write`);
+        if (
+          level === "write" &&
+          !(scope === "packages" && packagesWriteAllowed.includes(`${file}::${id}`))
+        ) {
+          add("permissions-wide", `job ${id}`, `${scope}: write`);
+        }
       }
     }
   }
