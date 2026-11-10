@@ -111,14 +111,12 @@ describe("Home page content", () => {
     expect(screen.getByText("Your watchlist")).toBeInTheDocument();
   });
 
-  it("Owner status line names the attention count; others only link to System health", async () => {
+  it("system health is not repeated on Home: no status line and no Since yesterday row", async () => {
     await view(pop, OWNER);
-    expect(screen.getByTestId("status-line").textContent).toMatch(
-      /All systems working|need a look/,
-    );
-    cleanup();
-    await view(pop, EDITOR);
-    expect(screen.getByTestId("status-line").textContent).toBe("System health");
+    expect(screen.queryByTestId("status-line")).toBeNull();
+    expect(screen.queryByText(/System health/)).toBeNull();
+    const r = await loadHome(deps(pop, OWNER));
+    expect(r.data.since.some((x) => (x.key as string) === "system")).toBe(false);
   });
 });
 
@@ -201,11 +199,33 @@ describe("accessibility and layout", () => {
 
   it("the day sentence says when there are no picks, and never mentions trade ideas (D-912)", async () => {
     const { data } = await loadHome(deps(pop, OWNER));
-    const none = daySentence({ ...data, picks: { ...data.picks, items: [] } });
-    expect(none).toContain("No picks on the list yet.");
+    const none = daySentence({
+      ...data,
+      picksTotal: 0,
+      nextRun: "tonight 18:10",
+      picks: { ...data.picks, items: [] },
+    });
+    expect(none).toContain("No picks yet: the first ones come after tonight's 18:10 run.");
     expect(none).not.toMatch(/trade idea/);
-    if (data.picks.items.length > 0)
-      expect(daySentence(data)).not.toContain("No picks on the list yet.");
+    if (data.picks.items.length > 0) expect(daySentence(data)).not.toContain("No picks yet");
+  });
+
+  it("the day sentence says how the strategies are doing today, live or at the close", async () => {
+    const { data } = await loadHome(deps(pop, OWNER));
+    const head = { ...data.headline[0]!, dayChangePpm: 14_000 };
+    const live = daySentence({
+      ...data,
+      headline: [head],
+      dayLabel: "Today (delayed, 10:45)",
+    });
+    expect(live).toContain("Your strategies are up 1.40% today (delayed).");
+    const down = daySentence({
+      ...data,
+      headline: [{ ...head, dayChangePpm: -5_000 }],
+      dayLabel: "Fri 6 Nov",
+    });
+    expect(down).toContain("Your strategies are down 0.50% on Fri 6 Nov.");
+    expect(live).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
 });
 
@@ -292,19 +312,23 @@ describe("Home redesign (UXR-020, 044, 053, 055, 056)", () => {
   }
 
   it.each([
-    ["RISK-ON", "on", "Risk-on"],
-    ["NEUTRAL", "neutral", "Neutral"],
-    ["RISK-OFF", "off", "Risk-off"],
-    ["SHOCK", "off", "Shock"],
-  ])("status strip: %s -> %s gradient and the word %s", async (regime, key, word) => {
-    await withPatch(OWNER, (v) => {
-      (v.day as { regime: string }).regime = regime;
-    });
-    const strip = screen.getByRole("region", { name: "Today at a glance" });
-    expect(strip).toHaveAttribute("data-mood", key);
-    expect(strip.getAttribute("style")).toContain(`--gradient-mood-${key}`);
-    expect(strip).toHaveTextContent(word);
-  });
+    ["RISK-ON", "on", "Calm and rising: prices are steady and trending up"],
+    ["NEUTRAL", "neutral", "Mixed: no clear direction"],
+    ["RISK-OFF", "off", "Nervous: prices are swinging down"],
+    ["SHOCK", "off", "Shock: a sudden, sharp market fall"],
+  ])(
+    "status strip: %s -> %s gradient and one plain word with its meaning: %s",
+    async (regime, key, word) => {
+      await withPatch(OWNER, (v) => {
+        (v.day as { regime: string }).regime = regime;
+      });
+      const strip = screen.getByRole("region", { name: "Today at a glance" });
+      expect(strip).toHaveAttribute("data-mood", key);
+      expect(strip.getAttribute("style")).toContain(`--gradient-mood-${key}`);
+      expect(strip).toHaveTextContent(word);
+      expect(strip.textContent).not.toMatch(/Neutral|Risk-on|Risk-off/); // one word, not two names
+    },
+  );
 
   it("status strip shows the freshness but no run time (D-884), in outcome colour with a sparkline", async () => {
     await view(pop, OWNER, false, NOW);
@@ -443,13 +467,62 @@ describe("Home redesign (UXR-020, 044, 053, 055, 056)", () => {
 });
 
 describe("Home loader additions", () => {
-  it("the system row says in one sentence whether the prices passed their checks (D-200)", async () => {
+  it("Since yesterday has no system row and no raw dates (Owner 2026-11-10)", async () => {
     const r = await loadHome(deps(pop, EDITOR));
-    const sys = r.data.since.find((x) => x.key === "system");
-    expect(sys?.href).toBe("/health");
-    expect(sys?.text).toMatch(/passed their checks|still being checked|have not run/);
     expect(JSON.stringify(r.data.since)).not.toMatch(/Data U1|data flags? still open/);
+    expect(JSON.stringify(r.data.since)).not.toMatch(/\d{4}-\d{2}-\d{2}/);
     expect(r.data.since.length).toBeLessThanOrEqual(5);
+  });
+
+  it("alert sentences are mapped to plain words with a short date", async () => {
+    const { plainAlertText } = await import("@/lib/ui/loaders/home");
+    expect(plainAlertText("A thesis breaker turned red on WAF.")).toBe(
+      "A warning sign turned red on WAF.",
+    );
+    expect(plainAlertText("A thesis breaker (B1) turned red on WAF: price below the stop")).toBe(
+      "A warning sign turned red on WAF: price below the stop",
+    );
+    expect(
+      plainAlertText(
+        "The pre-open re-check did not complete on 2026-11-09; orders fill without it.",
+      ),
+    ).toMatch(
+      /^The morning safety check did not run on Mon 9 Nov( 2026)?; practice orders went ahead without it\.$/,
+    );
+    expect(plainAlertText("Market regime changed from RISK-ON to NEUTRAL on 2026-11-09.")).toMatch(
+      /^The market mood changed from Calm and rising to Mixed on Mon 9 Nov( 2026)?\.$/,
+    );
+  });
+
+  it("Needs you shows the plain severity word, never the P-code", async () => {
+    const result = await loadHome(deps(pop, OWNER));
+    const data = structuredClone(result.data);
+    data.needs = [
+      { key: "a", tier: "P0", text: "x", href: "/health", action: "Open" },
+      { key: "b", tier: "P1", text: "y", href: "/health", action: "Open" },
+      { key: "c", tier: "P2", text: "z", href: "/health", action: "Open" },
+    ];
+    render(<HomeContent result={{ ...result, data }} role="owner" showWelcome={false} />);
+    const needs = screen.getByRole("region", { name: "Needs you" });
+    expect(needs).toHaveTextContent("Urgent");
+    expect(needs).toHaveTextContent("Important");
+    expect(needs).toHaveTextContent("FYI");
+    expect(needs.textContent).not.toMatch(/\bP[012]\b/);
+  });
+
+  it("the Strategies today footer follows the tiles: live wording or the end of day", async () => {
+    const result = await loadHome(deps(pop, OWNER));
+    const data = structuredClone(result.data);
+    data.dayLabel = "Today (delayed, 10:45)";
+    render(<HomeContent result={{ ...result, data }} role="owner" showWelcome={false} />);
+    expect(document.body.textContent).toContain(
+      "Values move with delayed prices during the session.",
+    );
+    expect(document.body.textContent).not.toMatch(/As of /);
+    cleanup();
+    data.dayLabel = "Fri 6 Nov";
+    render(<HomeContent result={{ ...result, data }} role="owner" showWelcome={false} />);
+    expect(document.body.textContent).toMatch(/End of day, \w{3} \d{1,2} \w{3}/);
   });
 
   it("next run label skips the weekend and melbourneStamp reads Melbourne time", async () => {

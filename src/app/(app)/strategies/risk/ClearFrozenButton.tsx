@@ -5,6 +5,7 @@
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
+import { formatDay } from "@/lib/view/format";
 import { controlErrorText, type ControlResult } from "./messages";
 
 type Props = {
@@ -32,7 +33,7 @@ export function ClearFrozenButton({ cohortId, throughD, gapSessions, action }: P
       trigger={<>Resume</>}
       triggerClassName="inline-flex min-h-11 items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm font-semibold text-text hover:bg-surface-2"
       title={`Resume ${cohortId}?`}
-      description={`It stopped on ${throughD} after a ledger check failed. Only do this once the cause is fixed. ${
+      description={`It stopped on ${formatDay(throughD)} after a ledger check failed. Only do this once the cause is fixed. ${
         gapSessions > 0
           ? `${gapSessions} session(s) it missed are replayed for this cohort first. `
           : ""

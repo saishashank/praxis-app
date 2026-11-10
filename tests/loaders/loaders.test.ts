@@ -101,7 +101,8 @@ describe("Home", () => {
     expect(d.ideas.items).toEqual([]); // Owner 2026-11-10: signals are research, not read on Home
     expect(d.watchlist).toEqual([{ stock: "ZZUP", close: 12.34, changePpm: 19_835, at: null }]);
     expect(d.news.items[0]?.stock).toBe("ZZUP");
-    expect(d.review).toEqual({ d: "2026-10-19", day: "2026-10-19", kind: "full" });
+    expect(d.review).toMatchObject({ d: "2026-10-19", kind: "full" });
+    expect(d.review?.day).toMatch(/^Mon 19 Oct( 2026)?$/);
     expect(d.attentionCount).toBe(0);
   });
 

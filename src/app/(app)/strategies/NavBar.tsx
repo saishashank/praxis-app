@@ -35,8 +35,8 @@ export function NavBar({
         ? "positive"
         : "negative";
   const summary = known
-    ? `${label}: ${formatCents(navCents)} on a bar from ${formatCents(minCents)} to ${formatCents(maxCents)}; start ${formatCents(startCents)}.`
-    : `${label}: not measured yet; bar from ${formatCents(minCents)} to ${formatCents(maxCents)}; start ${formatCents(startCents)}.`;
+    ? `${label}: ${formatCents(navCents)} on a bar from the loss limit ${formatCents(minCents)} to the goal ${formatCents(maxCents)}; start ${formatCents(startCents)}.`
+    : `${label}: not measured yet; bar from the loss limit ${formatCents(minCents)} to the goal ${formatCents(maxCents)}; start ${formatCents(startCents)}.`;
   return (
     <figure data-nav-bar="" className={cn("m-0 min-w-0", className)}>
       <div
@@ -60,9 +60,9 @@ export function NavBar({
         />
       </div>
       <figcaption className="mt-1 flex min-w-0 flex-wrap justify-between gap-x-2 text-xs text-text-muted">
-        <span>{formatCents(minCents)}</span>
+        <span>Loss limit {formatCents(minCents)}</span>
         <span data-nav-start-label="">Start {formatCents(startCents)}</span>
-        <span>{formatCents(maxCents)}</span>
+        <span>Goal {formatCents(maxCents)}</span>
       </figcaption>
     </figure>
   );
