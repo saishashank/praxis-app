@@ -19,7 +19,7 @@ const fake =
     const p = new URL(url).pathname;
     seen.push({ p, cookie: init?.headers?.Cookie });
     const r = routes[p] ?? [404];
-    return res(r[0], r[1] ?? {}, "x");
+    return res(r[0], r[1] ?? {}, r[2] ?? "x");
   };
 const GATE = { Location: "http://web:3000/signin?callbackUrl=%2F" };
 const healthy = {
@@ -79,9 +79,29 @@ test("with a session cookie Home, Picks and Market must answer 200; the cookie s
   const ok = await runSmoke("http://web:3000", {
     cookie: COOKIE,
     healthWaitMs: 0,
-    fetchImpl: fake({ ...healthy, "/": [200], "/picks": [200], "/market": [200] }, seen),
+    fetchImpl: fake(
+      {
+        ...healthy,
+        "/": [200, {}, '<main><h1 class="a">Today</h1></main>'],
+        "/picks": [200, {}, "<h1>Picks</h1>"],
+        "/market": [200, {}, "<h1> <span>Market</span> </h1>"],
+      },
+      seen,
+    ),
   });
   assert.equal(ok.ok, true);
+  const wrongPage = await runSmoke("http://web:3000", {
+    cookie: COOKIE,
+    healthWaitMs: 0,
+    fetchImpl: fake({
+      ...healthy,
+      "/": [200, {}, "<h1>Today</h1>"],
+      "/picks": [200, {}, "<h1>Sign in</h1>"],
+      "/market": [200, {}, "<h1>Market</h1>"],
+    }),
+  });
+  assert.equal(wrongPage.ok, false, "a 200 page without the expected heading is not a pass");
+  assert.equal(wrongPage.checks.filter((c) => !c.ok).length, 1);
   assert.equal(seen.filter((s) => s.cookie === COOKIE).length, 3);
   const redirected = await runSmoke("http://web:3000", {
     cookie: COOKIE,

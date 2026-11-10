@@ -6,7 +6,8 @@
 //   1. /api/health answers 200
 //   2. the sign-in page renders (200, HTML)
 //   3. Home (/), Picks (/picks), Market (/market):
-//        - with SMOKE_SESSION_COOKIE ("name=value", a seeded smoke session): each answers 200
+//        - with SMOKE_SESSION_COOKIE ("name=value", a seeded smoke session): each answers 200 AND its page has
+//          the expected <h1> (Today, Picks, Market): a 200 error page or a login page is not a pass
 //        - without it (the default: the check stack holds no session secret): each must send an anonymous
 //          visitor to the sign-in page (redirect to /signin) or answer 401, which proves the app, its
 //          routing and the auth gate are alive. The signed-in render of those three pages is then NOT
@@ -17,10 +18,24 @@ import { fileURLToPath } from "node:url";
 
 const TIMEOUT_MS = 20_000;
 export const PAGES = [
-  ["Home", "/"],
-  ["Picks", "/picks"],
-  ["Market", "/market"],
+  ["Home", "/", "Today"],
+  ["Picks", "/picks", "Picks"],
+  ["Market", "/market", "Market"],
 ];
+
+/** The text of every <h1> of a page (tags inside removed, whitespace collapsed). */
+export function h1Texts(html) {
+  const out = [];
+  for (const m of String(html).matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi)) {
+    out.push(
+      m[1]
+        .replace(/<[^>]*>/g, "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    );
+  }
+  return out;
+}
 const COOKIE_PAIR = /^(?:__Secure-)?authjs\.session-token=[\w.%~+/=-]+$/;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -80,12 +95,18 @@ export async function runSmoke(baseUrl, o = {}) {
   if (cookie !== "" && !COOKIE_PAIR.test(cookie)) {
     add("session cookie", false, "unexpected shape");
   } else {
-    for (const [label, path] of PAGES) {
+    for (const [label, path, heading] of PAGES) {
       await attempt(`${label} (${cookie ? "signed in" : "anonymous gate"})`, async () => {
         const res = await get(fetchImpl, base, path, cookie ? { Cookie: cookie } : {});
         const loc = res.headers.get("location") ?? "";
-        await res.arrayBuffer();
-        if (cookie) return [res.status === 200, `HTTP ${res.status}`];
+        const body = await res.text();
+        if (cookie) {
+          const found = h1Texts(body).includes(heading);
+          return [
+            res.status === 200 && found,
+            `HTTP ${res.status}, heading ${found ? "found" : "missing"}`,
+          ];
+        }
         const toSignin = res.status >= 300 && res.status < 400 && /\/signin(\?|$)/.test(loc);
         return [toSignin || res.status === 401, `HTTP ${res.status}`];
       });
