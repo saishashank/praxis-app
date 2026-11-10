@@ -3,19 +3,26 @@
 #
 # Usage (as root or with sudo):
 #   bootstrap.sh --release <git-sha> --domain <praxis.example.com> [--repo owner/name] [--skip-os-hardening]
+#                [--skip-restore]
+#   --skip-restore   do not restore a backup (it needs the Owner's backup key, which is never on the box): sqld gets
+#                    the migrated EMPTY schema only. For rehearsals and CI; a real move never uses it.
+#   PRAXIS_IMAGE_PREFIX=<registry/path> (environment) pulls praxis-web and praxis-jobs from there instead of GHCR and
+#                    pins the compose stack to the pulled digests (branch CI uses a local registry). Unset = production.
 #
 # Before running: put the three env files in /srv/praxis/env/ (web.env, jobs.env, sqld.env, chmod 600),
 # filled from the Owner's own copy. This script only checks that the NAMES exist; it never prints a value.
 # If the GHCR images are private, export GHCR_USER and GHCR_TOKEN first (read from the environment, never an argument).
 #
 # Every step is idempotent: running it again on a half-built box continues where it stopped.
-# Steps that need the operator CLI (restore, migrations, smoke) call `/srv/praxis/bin/praxis <command>`.
+# Restore and migrations run as one-off containers of the clock service (the clock is not up yet); the smoke test runs
+# scripts/selfhost/smoke.mjs in the web image on the compose network.
 set -euo pipefail
 
 REPO="saishashank/praxis-app"
 RELEASE=""
 DOMAIN=""
 SKIP_HARDENING=0
+SKIP_RESTORE=0
 BASE=/srv/praxis
 ENV_DIR="$BASE/env"
 COMPOSE_DIR="$BASE/compose"
@@ -29,7 +36,7 @@ warn() { printf '[bootstrap] WARNING: %s\n' "$*" >&2; }
 die() { printf '[bootstrap] ERROR: %s\n' "$*" >&2; exit 1; }
 
 usage() {
-  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -39,6 +46,7 @@ while [ $# -gt 0 ]; do
     --domain) DOMAIN="${2:-}"; shift 2 ;;
     --repo) REPO="${2:-}"; shift 2 ;;
     --skip-os-hardening) SKIP_HARDENING=1; shift ;;
+    --skip-restore) SKIP_RESTORE=1; shift ;;
     -h|--help) usage 0 ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; usage 2 ;;
   esac
@@ -59,6 +67,14 @@ log "release ${RELEASE:0:12}, domain $DOMAIN, architecture $ARCH"
 IMAGE_PREFIX="ghcr.io/${REPO%%/*}"
 # Registry owners are lower-case.
 IMAGE_PREFIX="$(printf '%s' "$IMAGE_PREFIX" | tr '[:upper:]' '[:lower:]')"
+# Rehearsal only: another registry (branch CI). Default = GHCR, unchanged.
+LOCAL_REGISTRY=0
+if [ -n "${PRAXIS_IMAGE_PREFIX:-}" ]; then
+  [[ "$PRAXIS_IMAGE_PREFIX" =~ ^[a-z0-9][a-z0-9.:/_-]*$ ]] || die "PRAXIS_IMAGE_PREFIX is not a registry path"
+  IMAGE_PREFIX="$PRAXIS_IMAGE_PREFIX"
+  LOCAL_REGISTRY=1
+  warn "PRAXIS_IMAGE_PREFIX is set: images come from $IMAGE_PREFIX, not GHCR (rehearsal)"
+fi
 
 # ---------------------------------------------------------------- 1. OS hardening
 step_os() {
@@ -221,7 +237,7 @@ step_images() {
   if [ -n "${GHCR_TOKEN:-}" ] && [ -n "${GHCR_USER:-}" ]; then
     printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin >/dev/null
   fi
-  local img digest
+  local img digest web_ref="" jobs_ref=""
   for img in praxis-web praxis-jobs; do
     docker pull --platform "linux/$ARCH" "$IMAGE_PREFIX/$img:$RELEASE" >/dev/null \
       || die "cannot pull $IMAGE_PREFIX/$img:$RELEASE for linux/$ARCH (not built yet, wrong arch, or private: set GHCR_USER and GHCR_TOKEN)"
@@ -230,7 +246,15 @@ step_images() {
     digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE_PREFIX/$img:$RELEASE" | sed 's/.*@//')"
     [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || die "could not read the digest of $img"
     log "$img @ $digest"
+    if [ "$img" = praxis-web ]; then web_ref="$IMAGE_PREFIX/$img@$digest"; else jobs_ref="$IMAGE_PREFIX/$img@$digest"; fi
   done
+  if [ "$LOCAL_REGISTRY" -eq 1 ]; then
+    # The compose file names ghcr.io images: point it at the pulled digests (same variables deploy.sh uses).
+    {
+      printf 'PRAXIS_WEB_IMAGE=%s\n' "$web_ref"
+      printf 'PRAXIS_JOBS_IMAGE=%s\n' "$jobs_ref"
+    } >>"$COMPOSE_DIR/.env"
+  fi
   # Compose uses the SHA tag; the digests are logged above for the record. deploy.sh (T5) verifies them on later deploys.
   docker compose --project-directory "$COMPOSE_DIR" -f "$COMPOSE_DIR/docker-compose.prod.yml" pull sqld caddy
 }
@@ -242,20 +266,42 @@ need_cli() {
 }
 
 # ---------------------------------------------------------------- 6. database
+# One-off containers of the clock service (jobs image, jobs.env): the clock itself is not running yet, and neither
+# restore-latest nor the migrations need it.
+run_jobs() { compose run --rm --no-deps -T "$@"; }
+
 step_database() {
   log "6/8 sqld, restore latest backup, migrations, checks"
   need_cli
-  compose up -d sqld
-  "$BIN_DIR/praxis" restore-latest   # newest of: bucket hourly, bucket nightly, data repo nightly; verifies row counts and FK check
-  "$BIN_DIR/praxis" migrate
+  compose up -d --wait --wait-timeout 180 sqld
+  if [ "$SKIP_RESTORE" -eq 1 ]; then
+    warn "--skip-restore: no backup restored; sqld holds only the migrated empty schema"
+    run_jobs clock node scripts/db/migrate.mjs --db main --target sqld
+    run_jobs clock node scripts/db/migrate.mjs --db auth --target sqld
+  else
+    # newest of: bucket hourly, bucket nightly, data repo nightly; verifies row counts and FK check, then migrates.
+    # BACKUP_PRIVATE_KEY comes from the caller's environment for this one command and is never stored.
+    run_jobs -e BACKUP_PRIVATE_KEY clock node clock/cli.mjs restore-latest
+  fi
 }
 
 # ---------------------------------------------------------------- 7. web + clock (standby) + smoke
+smoke() {
+  [ -f "$BIN_DIR/smoke.mjs" ] || die "$BIN_DIR/smoke.mjs is not in release ${RELEASE:0:12}; cannot run the smoke test"
+  local web_ref
+  web_ref="$(compose config --images | grep 'praxis-web' | head -n1)"
+  [ -n "$web_ref" ] || die "could not read the web image from the compose file"
+  local pass=()
+  [ -n "${SMOKE_SESSION_COOKIE:-}" ] && pass=(-e SMOKE_SESSION_COOKIE)
+  docker run --rm --network praxis-prod --read-only --cap-drop ALL --security-opt no-new-privileges \
+    --entrypoint node "${pass[@]}" -v "$BIN_DIR/smoke.mjs:/smoke.mjs:ro" "$web_ref" /smoke.mjs http://web:3000
+}
+
 step_start() {
   log "7/8 start web, clock (standby) and caddy, then smoke test"
   need_cli
-  compose up -d web clock caddy
-  "$BIN_DIR/praxis" smoke
+  compose up -d --wait --wait-timeout 300 web clock caddy
+  smoke
 }
 
 # ---------------------------------------------------------------- 8. next steps
@@ -276,3 +322,4 @@ step_images
 step_database
 step_start
 step_next
+log "finished in $((SECONDS / 60)) min $((SECONDS % 60)) s (from the start of this script)"

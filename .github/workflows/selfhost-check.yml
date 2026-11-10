@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SQLD_IMAGE: ghcr.io/tursodatabase/libsql-server:v0.24.32
+  SQLD_IMAGE: ghcr.io/tursodatabase/libsql-server:v0.24.32@sha256:dedf5273da945d90f3b85fe367ed8f821349117ac2c488bf43c4a6bf9f2123e0
   WEB_IMAGE: ghcr.io/saishashank/praxis-web:ci
   JOBS_IMAGE: ghcr.io/saishashank/praxis-jobs:ci
   NEXT_TELEMETRY_DISABLED: "1"
@@ -191,6 +191,42 @@ jobs:
           docker logs clock1 2>&1 | tail -n 15
           docker rm -f clock1 trap > /dev/null
 
+      # 1e. Signed-in smoke, in this throwaway stack only: web from the built image on the real sqld (migrated main and
+      # auth), a test user (owner@praxis.test) and the session cookie Auth.js would issue for it, both made here at run
+      # time (scripts/selfhost/seed-session.mjs). Home, Picks and Market must answer 200 with their own heading.
+      - name: Signed-in smoke test (seeded test user and session, throwaway stack only)
+        run: |
+          set -eu
+          echo "127.0.0.1 web" | sudo tee -a /etc/hosts > /dev/null
+          set -a
+          . "$RUNNER_TEMP/env/web.env"
+          set +a
+          node scripts/selfhost/seed-session.mjs "$RUNNER_TEMP/session.cookie"
+          echo "::add-mask::$(cat "$RUNNER_TEMP/session.cookie")"
+          docker run -d --name web-ci --network ci-net --network-alias web -p 127.0.0.1:3000:3000 \
+            --env-file "$RUNNER_TEMP/env/web.env" -e NODE_OPTIONS=--max-old-space-size=768 \
+            --read-only --tmpfs /tmp --tmpfs /app/.next/cache:uid=10001,gid=10001,size=128m "$WEB_IMAGE"
+          code=000
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://web:3000/api/health || true)
+            [ "$code" = 200 ] && break
+            sleep 2
+          done
+          [ "$code" = 200 ] || { docker logs web-ci 2>&1 | tail -n 40; echo "::error::web did not become healthy"; exit 1; }
+          SMOKE_SESSION_COOKIE="$(cat "$RUNNER_TEMP/session.cookie")" node scripts/selfhost/smoke.mjs http://web:3000 | tee "$RUNNER_TEMP/smoke-in.txt"
+          grep -q 'PASS Home (signed in): HTTP 200, heading found' "$RUNNER_TEMP/smoke-in.txt"
+          grep -q 'PASS Picks (signed in): HTTP 200, heading found' "$RUNNER_TEMP/smoke-in.txt"
+          grep -q 'PASS Market (signed in): HTTP 200, heading found' "$RUNNER_TEMP/smoke-in.txt"
+          # Negative control: a cookie the app cannot decrypt must NOT pass (the pages then send to sign-in).
+          bad="authjs.session-token=$(openssl rand -hex 120)"
+          set +e
+          SMOKE_SESSION_COOKIE="$bad" node scripts/selfhost/smoke.mjs http://web:3000 > "$RUNNER_TEMP/smoke-bad.txt"
+          rc=$?
+          set -e
+          [ "$rc" = 1 ] || { cat "$RUNNER_TEMP/smoke-bad.txt"; echo "::error::a forged cookie passed the smoke test"; exit 1; }
+          echo "forged cookie refused by the smoke test, as it must be"
+          docker rm -f web-ci > /dev/null
+
       # 1c / 1d. The T7 pre-deploy check: good image passes, broken image fails and leaves nothing behind.
       - name: Pre-deploy check, good image (with ZAP) must exit 0
         env:
@@ -236,6 +272,140 @@ jobs:
       - name: Container logs on failure
         if: failure()
         run: |
+          for c in $(docker ps -a --format '{{.Names}}'); do echo "== $c"; docker logs --tail 40 "$c" 2>&1 | sed 's/[A-Za-z0-9_-]\{40,\}/<redacted>/g'; done
+
+  # sqld verifies JWTs (SQLD_AUTH_JWT_KEY, as in production): a throwaway Ed25519 pair is made here, sqld trusts the
+  # public half, and scripts/selfhost/sqld-jwt.test.mjs proves that no token, a token of another key and an expired
+  # token are refused while a valid one works through sqld.mjs (openNamespace) and migrate.mjs.
+  sqld-jwt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Throwaway key pairs (good = trusted by sqld, other = not), made up here
+        run: node scripts/selfhost/jwt.mjs gen "$RUNNER_TEMP/keys" good other
+      - name: Start sqld with SQLD_AUTH_JWT_KEY (flags of docker-compose.prod.yml)
+        run: |
+          set -eu
+          docker pull "$SQLD_IMAGE"
+          docker run -d --name sqld-jwt -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 \
+            -e SQLD_AUTH_JWT_KEY="$(cat "$RUNNER_TEMP/keys/good.pub")" \
+            --entrypoint /bin/sqld --user 666:666 -v sqld_jwt:/var/lib/sqld \
+            "$SQLD_IMAGE" \
+            --http-listen-addr=0.0.0.0:8080 --admin-listen-addr=0.0.0.0:8081 \
+            --enable-namespaces --db-path=/var/lib/sqld/data.sqld
+          echo "127.0.0.1 jwtsqld main.jwtsqld auth.jwtsqld" | sudo tee -a /etc/hosts > /dev/null
+          for i in $(seq 1 40); do
+            if curl -s -o /dev/null http://127.0.0.1:8080/health; then echo "sqld answers after ${i} tries"; exit 0; fi
+            sleep 1
+          done
+          echo "::error::sqld did not answer"; docker logs sqld-jwt | tail -n 40; exit 1
+      - name: JWT tests (refused without a token, with another key's token, expired; valid works)
+        env:
+          SQLD_JWT_BASE: http://jwtsqld:8080
+          SQLD_JWT_ADMIN: http://127.0.0.1:8081
+          SQLD_JWT_KEYS: ${{ runner.temp }}/keys
+        run: node --test scripts/selfhost/sqld-jwt.test.mjs
+      - name: Container log on failure
+        if: failure()
+        run: docker logs --tail 60 sqld-jwt 2>&1 | sed 's/[A-Za-z0-9_-]\{40,\}/<redacted>/g'
+
+  # The whole box, as bootstrap.sh builds it (a fresh `ubuntu-latest` runner: Docker and Node are already on it, the
+  # OS hardening step is skipped, the backup restore is skipped because it needs the Owner's key), then Caddy, the
+  # runtime switch, and `praxis deploy` by digest with rollback and automatic revert, all against it. Images are
+  # built here and served from a local registry:2 instead of GHCR. No secret, no real service; sqld verifies JWTs.
+  stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Start the clock
+        run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Build both images (amd64, local only)
+        run: |
+          set -eu
+          ( for n in 1 2 3; do
+              docker build -f deploy/selfhost/Dockerfile.web -t "$WEB_IMAGE" . && exit 0
+              echo "web build attempt $n failed"; sleep 20
+            done; exit 1 ) > "$RUNNER_TEMP/build-web.log" 2>&1 &
+          p1=$!
+          docker build -f deploy/selfhost/Dockerfile.jobs --build-arg BUILD_COMMIT="$GITHUB_SHA" -t "$JOBS_IMAGE" . > "$RUNNER_TEMP/build-jobs.log" 2>&1 &
+          p2=$!
+          rc=0
+          wait "$p1" || { echo "::error::praxis-web build failed"; tail -n 60 "$RUNNER_TEMP/build-web.log"; rc=1; }
+          wait "$p2" || { echo "::error::praxis-jobs build failed"; tail -n 60 "$RUNNER_TEMP/build-jobs.log"; rc=1; }
+          [ "$rc" = 0 ]
+          echo "T_BUILT=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Local registry (registry:2, pinned) and the release images in it
+        run: |
+          set -eu
+          docker run -d --name registry -p 127.0.0.1:5000:5000 registry:2@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:5000/v2/ > /dev/null && break; sleep 1; done
+          for img in web jobs; do
+            docker tag "ghcr.io/saishashank/praxis-$img:ci" "localhost:5000/praxis-$img:$GITHUB_SHA"
+            docker push -q "localhost:5000/praxis-$img:$GITHUB_SHA"
+          done
+          curl -fsS http://127.0.0.1:5000/v2/_catalog
+      - name: Throwaway env files for /srv/praxis/env (random values, a JWT pair for sqld, made up here)
+        run: |
+          set -eu
+          node scripts/selfhost/predeploy-ci-env.mjs "$RUNNER_TEMP/stack-env" --full deploy/selfhost/env.example \
+            --jwt "$RUNNER_TEMP/keys" --refresh-url http://fake-turso:8080
+          sudo install -d -m 700 /srv/praxis/env
+          sudo install -m 600 "$RUNNER_TEMP"/stack-env/web.env "$RUNNER_TEMP"/stack-env/jobs.env "$RUNNER_TEMP"/stack-env/sqld.env /srv/praxis/env/
+      - name: bootstrap.sh, end to end (timed)
+        run: |
+          set -eo pipefail
+          t0=$(date +%s)
+          sudo env PRAXIS_IMAGE_PREFIX=localhost:5000 bash deploy/selfhost/bootstrap.sh \
+            --release "$GITHUB_SHA" --domain localhost --skip-os-hardening --skip-restore 2>&1 | tee "$RUNNER_TEMP/bootstrap.log"
+          t1=$(date +%s)
+          echo "T_BOOT=$(( t1 - t0 ))" >> "$GITHUB_ENV"
+          echo "TIMING bootstrap.sh: $(( t1 - t0 )) s ($(( (t1 - t0) / 60 )) min $(( (t1 - t0) % 60 )) s)"
+          echo "### bootstrap.sh on the CI runner: $(( t1 - t0 )) s ($(( (t1 - t0) / 60 )) min), images from a local registry, no backup restore, no OS hardening" >> "$GITHUB_STEP_SUMMARY"
+      - name: web, clock, sqld and caddy are healthy; the clock is off; the operator CLI answers (JWT in use)
+        run: |
+          set -eu
+          for s in web clock sqld caddy; do
+            st=$(docker inspect -f '{{.State.Health.Status}}' "praxis-prod-$s-1")
+            echo "$s: $st"
+            [ "$st" = healthy ] || { echo "::error::$s is $st"; exit 1; }
+          done
+          docker exec praxis-prod-clock-1 node -e "fetch('http://127.0.0.1:9100/health').then(r=>r.text()).then(t=>process.stdout.write(t))" > "$RUNNER_TEMP/clock-health.json"
+          cat "$RUNNER_TEMP/clock-health.json"; echo
+          node -e "const h=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP+'/clock-health.json','utf8')); if(h.enabled!==false||h.runtime!=='selfhost') process.exit(1)"
+          sudo /srv/praxis/bin/praxis status
+          sudo /srv/praxis/bin/praxis owner
+          # sqld refuses a call without a token (the stack runs with SQLD_AUTH_JWT_KEY)
+          code=$(docker run --rm --network praxis-prod --entrypoint node "$JOBS_IMAGE" -e "fetch('http://main.sqld:8080/v2/pipeline',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requests:[{type:'execute',stmt:{sql:'SELECT 1'}},{type:'close'}]})}).then(r=>console.log(r.status))")
+          echo "sqld without a token: HTTP $code"
+          [ "$code" = 401 ] || [ "$code" = 403 ]
+          docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
+      - name: Caddy with the repo Caddyfile and its internal CA (TLS, headers, no route to sqld or the clock)
+        run: bash scripts/selfhost/ci/caddy-check.sh
+      - name: switch.sh, cloud to selfhost and back (a second local sqld stands in for the cloud database)
+        run: bash scripts/selfhost/ci/switch-drill.sh
+      - name: praxis deploy by digest from a local registry, rollback, failed check, automatic revert
+        run: bash scripts/selfhost/ci/deploy-drill.sh "$GITHUB_SHA"
+      - name: Timing
+        if: always()
+        run: |
+          now=$(date +%s)
+          echo "TIMING stack: build=$(( ${T_BUILT:-$now} - T0 )) s, bootstrap=${T_BOOT:-?} s, total=$(( now - T0 )) s ($(( (now - T0) / 60 )) min)"
+          echo "### stack job: build $(( ${T_BUILT:-$now} - T0 )) s, bootstrap ${T_BOOT:-?} s, total $(( now - T0 )) s" >> "$GITHUB_STEP_SUMMARY"
+      - name: Logs on failure
+        if: failure()
+        run: |
+          sudo cat /srv/praxis/state/last-deploy.log 2>/dev/null || true
           for c in $(docker ps -a --format '{{.Names}}'); do echo "== $c"; docker logs --tail 40 "$c" 2>&1 | sed 's/[A-Za-z0-9_-]\{40,\}/<redacted>/g'; done
 
   arm64:
@@ -306,9 +476,9 @@ jobs:
       - name: bash -n on every host script
         run: |
           set -eu
-          for f in deploy/selfhost/*.sh deploy/selfhost/bin/praxis; do bash -n "$f" && echo "syntax ok: $f"; done
+          for f in deploy/selfhost/*.sh deploy/selfhost/bin/praxis scripts/selfhost/ci/*.sh; do bash -n "$f" && echo "syntax ok: $f"; done
       - name: shellcheck (errors and warnings)
         run: |
           set -eu
           shellcheck --version
-          shellcheck -S warning deploy/selfhost/*.sh deploy/selfhost/bin/praxis
+          shellcheck -S warning deploy/selfhost/*.sh deploy/selfhost/bin/praxis scripts/selfhost/ci/*.sh

@@ -895,6 +895,8 @@ export function parseArgs(argv, env = process.env) {
   const abs = (p) => (path.isAbsolute(p) ? p : path.resolve(p));
   const cfg = {
     mode: "deploy",
+    // PRAXIS_REGISTRY (also read by deploy.sh) moves the image registry: branch CI deploys from a local registry:2.
+    ...(env.PRAXIS_REGISTRY ? { registry: env.PRAXIS_REGISTRY } : {}),
     dirs: {
       compose: abs(env.PRAXIS_COMPOSE_DIR ?? `${root}/compose`),
       env: abs(env.PRAXIS_ENV_DIR ?? `${root}/env`),
