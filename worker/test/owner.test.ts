@@ -233,6 +233,19 @@ describe("runRunNow", () => {
     expect(net.github).toHaveLength(1);
   });
 
+  it("N1: a standby runtime does not even expire a stale request; the owner does", async () => {
+    owner('"selfhost"');
+    const old = new Date(T - 2 * 3600_000).toISOString();
+    db.prepare(
+      "INSERT INTO run_now_request (job_id, market, params_json, requested_by_hmac, requested_at, " +
+        "audit_ref, status, updated_at) VALUES ('backfill-prices', 'AU', '{}', ?, ?, 'audit:1', 'pending', ?)",
+    ).run("a".repeat(64), old, old);
+    await tick(CLOUD); // standby (owner is selfhost)
+    expect(status()).toBe("pending");
+    await tick(SELF); // the owner expires it
+    expect(status()).toBe("expired");
+  });
+
   it("an idle minute makes one request, owner key or not", async () => {
     owner('"selfhost"');
     await tick(CLOUD);

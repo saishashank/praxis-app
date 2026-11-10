@@ -126,6 +126,35 @@ export async function recoverStale(
   return r?.affected ?? 0;
 }
 
+/**
+ * Like recoverStale, but returns the runs it marked (N3: the clock mails the Owner about each interrupted job). A run
+ * that finishes between the read and the update is not 'running' any more and is skipped by the update.
+ */
+export async function recoverStaleRows(
+  db: LeaseDb,
+  nowMs: number,
+  staleMs: number = LEASE_STALE_MS,
+): Promise<{ id: number; job: string }[]> {
+  const cutoff = iso(nowMs - staleMs);
+  const [sel] = await db([
+    {
+      sql: "SELECT id, job FROM job_run WHERE status = 'running' AND heartbeat_at <= ?",
+      args: [cutoff],
+    },
+  ]);
+  const out: { id: number; job: string }[] = [];
+  for (const r of sel?.rows ?? []) {
+    const [u] = await db([
+      {
+        sql: "UPDATE job_run SET status = 'failed' WHERE id = ? AND status = 'running' AND heartbeat_at <= ?",
+        args: [Number(r[0]), cutoff],
+      },
+    ]);
+    if ((u?.affected ?? 0) === 1) out.push({ id: Number(r[0]), job: String(r[1]) });
+  }
+  return out;
+}
+
 const COLS = "id, job, slot_id, local_date, status, started_at, heartbeat_at, exit_code, log_path";
 const toRow = (r: (string | number | null)[]): JobRunRow => ({
   id: Number(r[0]),

@@ -172,9 +172,15 @@ export async function runRunNow(
               "UPDATE run_now_request SET status = 'expired', updated_at = ?, " +
               "result = CASE status WHEN 'pending' THEN 'expired: not started in 30 minutes' " +
               "ELSE 'expired: no result was recorded' END " +
-              "WHERE (status = 'pending' AND requested_at < ?) " +
-              "OR (status = 'dispatched' AND updated_at < ?)",
-            args: [iso(nowMs), iso(nowMs - RUN_NOW_EXPIRY_MS), iso(nowMs - RUN_NOW_EXPIRY_MS)],
+              "WHERE ((status = 'pending' AND requested_at < ?) " +
+              "OR (status = 'dispatched' AND updated_at < ?)) AND " +
+              ownerGuardSql(env), // N1: a standby runtime changes no row, expiry included
+            args: [
+              iso(nowMs),
+              iso(nowMs - RUN_NOW_EXPIRY_MS),
+              iso(nowMs - RUN_NOW_EXPIRY_MS),
+              CLOCK_OWNER_KEY,
+            ],
           },
           {
             sql:

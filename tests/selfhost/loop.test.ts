@@ -31,7 +31,10 @@ let gets: string[];
 let failDb: boolean;
 let now: number;
 
-function make(raw: Record<string, string> = RAW) {
+function make(
+  raw: Record<string, string> = RAW,
+  extra: Partial<Parameters<typeof createClock>[0]> = {},
+) {
   const worker = vi.fn().mockResolvedValue(undefined);
   const queued: string[] = [];
   const clock = createClock({
@@ -41,6 +44,7 @@ function make(raw: Record<string, string> = RAW) {
     log: () => {},
     root: "unused",
     runWorker: worker,
+    ...extra,
     realFetch: (async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/v2/pipeline")) {
@@ -176,7 +180,11 @@ describe("UTC crons in the loop", () => {
 
 describe("start-up", () => {
   it("selfCheck names what failed, never a value; recover marks a dead run failed", async () => {
-    const { clock } = make({ ...RAW, WORKER_HMAC_SECRET: "short" });
+    const notified: { job: string; runId: number; status: string }[] = [];
+    const { clock } = make(
+      { ...RAW, WORKER_HMAC_SECRET: "short" },
+      { notify: async (i) => void notified.push(i) },
+    );
     const c = await clock.selfCheck();
     expect(c.failed).toEqual(["signing-secret"]);
     expect(c).toMatchObject({ passed: 3, total: 4 });
@@ -190,6 +198,10 @@ describe("start-up", () => {
     ).run();
     expect(await clock.recover()).toBe(1);
     expect(rows(db, "SELECT status FROM job_run")[0]!.status).toBe("failed");
+    // N3: the interrupted job is reported like any other failure
+    expect(notified).toEqual([expect.objectContaining({ job: "backup", status: "failed" })]);
+    expect(await clock.recover()).toBe(0);
+    expect(notified).toHaveLength(1);
   });
 });
 
@@ -207,6 +219,21 @@ describe("local-only scheduled jobs and the daily prune", () => {
     now = Date.parse("2026-11-03T21:05:10Z"); // 08:05
     await clock.tick(now);
     expect(queued).toHaveLength(2);
+  });
+
+  it("N2: a tick that arrives late still queues the local job whose minute it skipped, once", async () => {
+    setState(db, "clock_owner", '"selfhost"');
+    const { clock, queued } = make();
+    now = Date.parse("2026-11-03T12:20:10Z"); // 23:20 AEDT: the first tick sets the baseline
+    await clock.tick(now);
+    expect(queued).toEqual([]);
+    now = Date.parse("2026-11-03T12:27:10Z"); // 23:27: the clock was busy through 23:25
+    await clock.tick(now);
+    expect(queued).toEqual(["turso-refresh"]);
+    now = Date.parse("2026-11-03T12:28:10Z");
+    await clock.tick(now);
+    await clock.tick(now); // the same minute again does nothing
+    expect(queued).toEqual(["turso-refresh"]);
   });
 
   it("prunes job_run rows older than 30 days once per Sydney day, never a running row", async () => {

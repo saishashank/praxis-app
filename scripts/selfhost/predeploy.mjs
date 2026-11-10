@@ -523,6 +523,7 @@ export async function runDeploy(cfg, deps) {
   const deployedPath = j(dirs.state, "deployed.json");
   const prevPath = j(dirs.state, "deployed.prev.json");
   const envPath = j(dirs.compose, ".env");
+  const pendingPath = j(dirs.state, "deploy.pending.json");
 
   const applyEnvFile = (web, jobs, sha) => {
     const text = setEnvLines(fsx.read(envPath) ?? "", {
@@ -586,6 +587,14 @@ export async function runDeploy(cfg, deps) {
     }
     rec("prod: migrations", true);
 
+    // N12: from the moment .env names the new release until deployed.json says so, a marker records the target. A deploy
+    // killed in between leaves it behind (the next deploy reports it); revert and a finished deploy remove it.
+    fsx.write(
+      pendingPath,
+      `${JSON.stringify({ target: state.sha, previous: previous?.sha ?? null, startedAt: new Date(deps.now()).toISOString() }, null, 2)}
+`,
+      0o644,
+    );
     applyEnvFile(state.web.ref, state.jobs.ref, state.sha);
     const revert = () => {
       if (!previous) return "no previous deploy recorded: nothing to go back to";
@@ -613,6 +622,7 @@ export async function runDeploy(cfg, deps) {
         ],
         env,
       );
+      if (r.code === 0) fsx.rm(pendingPath); // back on the recorded release: nothing is pending
       return r.code === 0
         ? `containers put back on ${shortSha(previous.sha)}`
         : "putting the previous containers back failed too";
@@ -650,6 +660,7 @@ export async function runDeploy(cfg, deps) {
     const tmp = `${deployedPath}.tmp`;
     fsx.write(tmp, `${JSON.stringify(now, null, 2)}\n`, 0o644);
     fsx.rename(tmp, deployedPath);
+    fsx.rm(pendingPath);
     rec("prod: recorded", true, `${shortSha(state.sha)} in deployed.json`);
     pruneSnapshots();
   };
@@ -747,6 +758,11 @@ export async function runDeploy(cfg, deps) {
     );
 
     if (!cfg.checkOnly) release = fsx.lock(j(dirs.state, "deploy.lock"));
+    if (!cfg.checkOnly && fsx.exists(j(dirs.state, "deploy.pending.json"))) {
+      note(
+        "an earlier deploy was interrupted (state/deploy.pending.json): check .env, deployed.json and the running containers",
+      );
+    }
     if (!cfg.checkOnly) await waitIdle("busy", cfg.wait === true);
     if (!cfg.checkOnly) rec("no job is running", true);
 

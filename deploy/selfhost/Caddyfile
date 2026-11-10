@@ -1,5 +1,6 @@
 # Public edge for Praxis (INFRA §3.1, §7). TLS is automatic (Let's Encrypt) for {$PRAXIS_DOMAIN}.
-# Set ACME_EMAIL in the caddy container environment to receive expiry notices (optional).
+# No ACME contact address is configured (N13): Caddy obtains and renews the certificate without one. To get expiry
+# notices, add a global block `{ email you@example.com }` here; an empty `email` argument is a Caddy syntax error.
 
 {$PRAXIS_DOMAIN} {
 	encode zstd gzip

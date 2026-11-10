@@ -281,7 +281,10 @@ async function restoreLatest(replace) {
   ];
   for (const args of steps) {
     console.log(`restore-latest: ${args[0]} ${args.slice(1).join(" ")}`);
-    const r = spawnSync(process.execPath, args, { stdio: "inherit", env: process.env });
+    // N6: only the restore step needs the backup key; the migrate children never see it
+    const childEnv = { ...process.env };
+    if (!args[0].includes("latest-backup")) delete childEnv.BACKUP_PRIVATE_KEY;
+    const r = spawnSync(process.execPath, args, { stdio: "inherit", env: childEnv });
     if (r.status !== 0) {
       console.log(`restore-latest: stopped, ${args[0]} exited with ${r.status}`);
       return r.status ?? 1;

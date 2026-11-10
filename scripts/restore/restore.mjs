@@ -181,7 +181,7 @@ export async function run(argv, env, deps = {}) {
     let existing;
     try {
       existing = await db.execute(
-        "SELECT COUNT(*) AS c FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'",
+        "SELECT COUNT(*) AS c FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE 'libsql_%'", // same predicate as restoreDatabase (N9)
       );
     } catch {
       refuse("cannot reach the target database (check the URL and token)");

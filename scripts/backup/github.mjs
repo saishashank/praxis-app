@@ -80,7 +80,7 @@ export function createGithub({ repo, token, fetchImpl = fetch }) {
       } catch {
         throw new GithubError("download_asset", null);
       }
-      if (loc.protocol !== "https:" || !/(^|.)githubusercontent.com$/.test(loc.hostname)) {
+      if (loc.protocol !== "https:" || !/(^|[.])githubusercontent[.]com$/.test(loc.hostname)) {
         throw new GithubError("download_asset", null);
       }
       try {

@@ -14,7 +14,7 @@ import { CLOCK_OWNER_KEY, ownerFrom, runtimeOf } from "../worker/src/owner";
 import { runWorkerRunners, type WorkerDeps } from "./adapter";
 import { buildClockEnv, type RawEnv, type TickEnv } from "./env";
 import { healthBody, newHealthState, noteError, type HealthState } from "./health";
-import { pruneOld, recoverStale, type LeaseDb } from "./lease";
+import { pruneOld, recoverStaleRows, type LeaseDb } from "./lease";
 import { makeMasker } from "./mask";
 import { jobForWorkflow, localJobsDue, type Manifest } from "./manifest";
 import { createMonitor, type Monitor } from "./monitor";
@@ -100,6 +100,7 @@ export function createClock(o: ClockOptions): Clock {
     },
   });
   const leaseDb: LeaseDb = (stmts) => pipeline(built.env, stmts, fetchShim);
+  const failureNotify = o.notify ?? ((info) => sendFailureEmail(env, info, realFetch));
   const runner = new LocalRunner({
     manifest: o.manifest,
     env,
@@ -109,7 +110,7 @@ export function createClock(o: ClockOptions): Clock {
     now: nowMs,
     log: say,
     mask,
-    notify: o.notify ?? ((info) => sendFailureEmail(env, info, realFetch)),
+    notify: failureNotify,
     ...o.runnerOptions,
   });
   runnerRef = runner;
@@ -174,10 +175,15 @@ export function createClock(o: ClockOptions): Clock {
         );
       }
       // Self-hosted-only scheduled jobs (jobs.json `localSchedule`): only while this clock is the owner.
+      // N2: same catch-up window as the UTC crons above (a missed tick must not skip a once-a-day job); every minute is
+      // visited once (`from` starts after the last visited one), so nothing fires twice.
       if (owner === "selfhost" && runtime === "selfhost") {
-        for (const name of localJobsDue(o.manifest, local.minute, local.dow)) {
-          const res = enqueue({ job: name, slotId: `local:${name}` });
-          say(`clock: local job ${name} (${res})`);
+        for (let m = from; m <= minute; m++) {
+          const at = sydneyLocal(m * MINUTE_MS);
+          for (const name of localJobsDue(o.manifest, at.minute, at.dow)) {
+            const res = enqueue({ job: name, slotId: `local:${name}` });
+            say(`clock: local job ${name} (${res})${m === minute ? "" : " [catch-up]"}`);
+          }
         }
       }
       await runWorker(built.env, minute * MINUTE_MS, deps);
@@ -221,9 +227,15 @@ export function createClock(o: ClockOptions): Clock {
 
   async function recover(): Promise<number> {
     try {
-      const n = await recoverStale(leaseDb, nowMs());
-      if (n > 0) say(`clock: ${n} run(s) of a dead runner marked failed`);
-      return n;
+      const dead = await recoverStaleRows(leaseDb, nowMs());
+      if (dead.length > 0) say(`clock: ${dead.length} run(s) of a dead runner marked failed`);
+      // N3: a job cut off by a container stop or crash is a failure the Owner should hear about, like any other
+      for (const d of dead) {
+        await failureNotify({ job: d.job, runId: d.id, status: "failed", exitCode: null }).catch(
+          () => {},
+        );
+      }
+      return dead.length;
     } catch {
       return 0;
     }

@@ -23,7 +23,7 @@ The cloud runtime (Vercel, the Worker, Actions, Turso) is kept warm for exactly 
 3. Check the next evening slot ran (the Worker's own status page, or the watchdog mail).
 
 If the old box is still alive, stop its clock first: `/srv/praxis/bin/switch.sh cloud --local` (sets
-`CLOCK_ENABLED=0`, `clock_owner=cloud` in sqld, restarts). Two clocks must never both own the schedule.
+`CLOCK_ENABLED=0` and `EMAIL_LIVE=0` so the standby sends no mail, `clock_owner=cloud` in sqld, restarts). Two clocks must never both own the schedule.
 
 ## 2. Choose where to go (in this order)
 

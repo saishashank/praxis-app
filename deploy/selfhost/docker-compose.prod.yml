@@ -34,7 +34,6 @@ services:
       - "443:443"
     environment:
       PRAXIS_DOMAIN: ${PRAXIS_DOMAIN:?set PRAXIS_DOMAIN in /srv/praxis/compose/.env}
-      ACME_EMAIL: ${ACME_EMAIL:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

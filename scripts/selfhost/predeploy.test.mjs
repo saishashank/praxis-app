@@ -436,6 +436,26 @@ test("a failed prod web restart puts the previous containers back and emails the
   );
   assert.match(h.mails[0].text, /partly changed/);
   assert.match(h.files.get("/srv/praxis/compose/.env"), new RegExp(`PRAXIS_SHA=${PREV_SHA}`));
+  assert.equal(
+    h.files.has("/srv/praxis/state/deploy.pending.json"),
+    true,
+    "the fake also fails the put-back: the marker stays",
+  );
+});
+
+test("N12: a failed web restart with no previous deploy leaves the pending marker; a good deploy leaves none", async () => {
+  const bad = makeHost({ prodWebUnhealthy: true });
+  const r = await runDeploy(cfg(), bad.deps);
+  assert.equal(r.failedStep, "prod: web");
+  const marker = JSON.parse(bad.files.get("/srv/praxis/state/deploy.pending.json"));
+  assert.equal(marker.target, SHA);
+  const good = makeHost({});
+  assert.equal((await runDeploy(cfg(), good.deps)).code, 0);
+  assert.equal(good.files.has("/srv/praxis/state/deploy.pending.json"), false);
+  // the next deploy reports an interrupted one
+  const next = makeHost({ files: [["/srv/praxis/state/deploy.pending.json", "{}"]] });
+  await runDeploy(cfg(), next.deps);
+  assert.ok(next.logs.some((l) => /earlier deploy was interrupted/.test(l)));
 });
 
 test("a failed prod migration stops before any restart", async () => {

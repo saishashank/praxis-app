@@ -242,7 +242,11 @@ export async function run(argv, env, deps = {}) {
         : /^backup stream rejected:/.test(String(e?.message))
           ? e.message
           : "unexpected error";
-    out(`latest-backup: FAIL ${msg}`);
+    // N7: say how a non-empty prod namespace is replaced (the hint adds to, never replaces, the fixed message)
+    const hint = /target database is not empty/.test(msg)
+      ? " (a namespace that already holds data is never overwritten: praxis restore-latest --replace drops and recreates main and auth, after its guards)"
+      : "";
+    out(`latest-backup: FAIL ${msg}${hint}`);
     return 1;
   }
 }
