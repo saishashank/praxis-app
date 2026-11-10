@@ -10,7 +10,8 @@ const PAGES = [
   { path: "/reviews", h1: "Reviews" },
   { path: "/reviews?view=calendar", h1: "Reviews" },
   { path: "/reviews/glossary", h1: "Glossary" },
-  { path: "/reviews/2026-01-01", h1: "Evening Review 2026-01-01" },
+  // D-919: trading words; the year shows only when it is not the current one
+  { path: "/reviews/2026-01-01", h1: /^Evening Review, Thu 1 Jan( 2026)?$/ },
 ] as const;
 
 for (const role of ROLE_LIST) {
