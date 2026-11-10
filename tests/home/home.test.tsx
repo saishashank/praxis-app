@@ -138,7 +138,7 @@ describe("states", () => {
     expect(result.state).toBe("stale");
     const banner = screen.getByRole("alert");
     expect(banner).toHaveTextContent("Out of date");
-    expect(banner).toHaveTextContent(result.asOf!);
+    expect(banner).toHaveTextContent("Mon 19 Oct"); // D-919: trading words, not ISO
   });
 
   it("error: the loader failed -> a clear message, no crash", () => {

@@ -69,7 +69,7 @@ describe("stale state", () => {
     const home = await loadHome(deps(db, OWNER, LATE));
     expect(home.state).toBe("stale");
     expect(home.asOf).toBe("2026-10-19");
-    expect(home.text).toContain("2026-10-19");
+    expect(home.text).toContain("Mon 19 Oct"); // D-919
     expect((await loadStrategies(deps(db, OWNER, LATE))).state).toBe("stale");
     expect((await loadHome(deps(db, OWNER, NOW))).state).toBe("ok");
   });
