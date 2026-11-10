@@ -409,7 +409,9 @@ describe("loader: role split, masking, bounded reads per refresh (decision 24)",
       // rows a month) at 8 open hours a day for 30 days. Decision 24 estimated ~300; see the T10 report.
       expect(stats.rows).toBeLessThanOrEqual(600);
       expect(stats.rows * 8 * 30 * 60).toBeLessThan(0.02 * 500_000_000);
-      expect(stats.calls).toBeLessThanOrEqual(80);
+      // M18 (D-958, D-961, D-962, D-963): the usage sample, the two Turso level keys, the drafted-calendar read,
+      // the restore-drill read and the plan name add six short statements (a few rows each): 80 became 90.
+      expect(stats.calls).toBeLessThanOrEqual(90);
     }
   });
 
