@@ -78,8 +78,8 @@ wait_clock false
 
 # ---- plan-only default changes nothing ---------------------------------------------------------------------------------
 before_hash="$(env_hash)"; before_ids="$(ids)"
-sudo "$SWITCH" selfhost > "${RUNNER_TEMP:-/tmp}/plan-selfhost.txt"
-sudo "$SWITCH" cloud > "${RUNNER_TEMP:-/tmp}/plan-cloud.txt"
+sudo "$SWITCH" selfhost | tee "${RUNNER_TEMP:-/tmp}/plan-selfhost.txt" > /dev/null
+sudo "$SWITCH" cloud | tee "${RUNNER_TEMP:-/tmp}/plan-cloud.txt" > /dev/null
 grep -q '^Cutover' "${RUNNER_TEMP:-/tmp}/plan-selfhost.txt" || fail "selfhost without flags did not print the cutover plan"
 grep -q '^Switch back' "${RUNNER_TEMP:-/tmp}/plan-cloud.txt" || fail "cloud without flags did not print the switch-back plan"
 expect "local owner after plans" absent "$(local_owner)"

@@ -47,3 +47,18 @@ test("an unknown --target is a usage error; an unreachable admin API is a short 
   assert.match(down.out, /migrate: sqld: admin API unreachable/);
   assert.equal(/127\.0\.0\.1/.test(down.out), false);
 });
+
+test("--target sqld with SQLD_URL and no TURSO_AUTH_URL reaches the namespace through SQLD_URL (jobs.env has no auth URL)", () => {
+  const needsUrl = migrate(["--db", "auth", "--target", "sqld"], {});
+  assert.equal(needsUrl.code, 1);
+  assert.match(needsUrl.out, /migrate: TURSO_AUTH_URL is not set/);
+  // SQLD_URL given: the error is now about reaching that sqld (nothing listens on port 1), not about the missing URL
+  // variable, and neither the address nor the token is printed.
+  const viaBase = migrate(["--db", "auth", "--target", "sqld"], {
+    SQLD_URL: "http://sqld:1",
+    SQLD_TOKEN: "t0ken-value",
+  });
+  assert.equal(viaBase.code, 1);
+  assert.doesNotMatch(viaBase.out, /TURSO_AUTH_URL is not set/);
+  assert.equal(/t0ken-value|sqld:1/.test(viaBase.out), false, viaBase.out);
+});

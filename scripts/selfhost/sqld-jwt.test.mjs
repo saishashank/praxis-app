@@ -4,14 +4,14 @@
 //   SQLD_JWT_ADMIN       http://127.0.0.1:8081
 //   SQLD_JWT_KEYS        folder with good.pem (the pair sqld trusts) and other.pem (a different pair), see jwt.mjs
 // Output rules of the scripts under test: a failed run must never print a token.
-import { test } from "node:test";
+import { before, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { mintToken } from "./jwt.mjs";
-import { nodeHttpFetch, openNamespace } from "./sqld.mjs";
+import { ensureNamespace, nodeHttpFetch, openNamespace } from "./sqld.mjs";
 
 const BASE = process.env.SQLD_JWT_BASE ?? "";
 const ADMIN = process.env.SQLD_JWT_ADMIN ?? "";
@@ -20,6 +20,12 @@ const skip =
   !BASE || !ADMIN || !KEYS ? "SQLD_JWT_BASE, SQLD_JWT_ADMIN and SQLD_JWT_KEYS are not set" : false;
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const pem = (n) => readFileSync(path.join(KEYS, `${n}.pem`), "utf8");
+
+// sqld answers 404 for a namespace that does not exist BEFORE it looks at the token: create it first (the admin API is
+// not behind the JWT).
+before(async () => {
+  if (!skip) await ensureNamespace(ADMIN, "main");
+});
 
 /** One statement through the HTTP pipeline API with an optional bearer token. Returns the HTTP status. */
 async function pipelineStatus(ns, token) {

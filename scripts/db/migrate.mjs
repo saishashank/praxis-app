@@ -2,7 +2,8 @@
 //   node scripts/db/migrate.mjs --if-vercel      (build step: runs only when VERCEL=1; main, then auth)
 //   node scripts/db/migrate.mjs --db main|auth   (needs the two env vars for that database)
 // Self-hosted sqld (INFRA T4): add `--target sqld` to any form. The URL variables then hold the sqld
-// namespace URLs (e.g. http://main.sqld:8080), the token is optional (only when sqld verifies JWTs),
+// namespace URLs (e.g. http://main.sqld:8080; or SQLD_URL and SQLD_NS_MODE for the namespace of a database whose URL
+// variable is unset), the token (SQLD_TOKEN, else the database's own) is optional (only when sqld verifies JWTs),
 // the namespace is created first when SQLD_ADMIN_URL is set, and each connection is checked:
 // `PRAGMA foreign_keys` is 1 (D-713). The default target is turso and behaves exactly as before.
 // Rollback (V2-S4, D-703; the procedure is docs/runbooks/rollback-v2.md):
@@ -14,7 +15,7 @@ import { createClient } from "@libsql/client";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadMigrations, migrateDownTo, migrateUp } from "../../src/lib/db/migrate-core.mjs";
-import { assertForeignKeys, ensureNamespace } from "../selfhost/sqld.mjs";
+import { assertForeignKeys, ensureNamespace, openNamespace } from "../selfhost/sqld.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const VARS = {
@@ -25,12 +26,19 @@ const VARS = {
 /** True when the run targets the self-hosted sqld (set once in main()). */
 let sqldTarget = false;
 
+const has = (v) => typeof v === "string" && v.trim() !== "";
+
 async function withClient(name, f) {
   const [urlVar, tokenVar] = VARS[name];
   const url = process.env[urlVar];
-  if (!url) throw new Error(`${urlVar} is not set`);
-  const authToken = process.env[tokenVar];
-  if (!authToken && !url.startsWith("file:") && !sqldTarget) {
+  // Self-hosted jobs.env holds no TURSO_AUTH_* (the jobs never get the auth database, ROL-101a): with --target sqld the
+  // namespace is then reached through SQLD_URL like restore and the backup scripts do, with SQLD_TOKEN (found by the
+  // branch-CI bootstrap rehearsal: praxis deploy and restore-latest migrate both databases from jobs.env).
+  const viaBase = sqldTarget && !has(url) && has(process.env.SQLD_URL);
+  if (!url && !viaBase) throw new Error(`${urlVar} is not set`);
+  const authToken =
+    sqldTarget && has(process.env.SQLD_TOKEN) ? process.env.SQLD_TOKEN : process.env[tokenVar];
+  if (!authToken && !viaBase && !url.startsWith("file:") && !sqldTarget) {
     throw new Error(`${tokenVar} is not set`);
   }
   if (sqldTarget && process.env.SQLD_ADMIN_URL) {
@@ -38,7 +46,14 @@ async function withClient(name, f) {
       adminAuth: process.env.SQLD_ADMIN_AUTH,
     });
   }
-  const client = createClient({ url, authToken: authToken || undefined });
+  const client = viaBase
+    ? openNamespace({
+        base: process.env.SQLD_URL,
+        ns: name,
+        token: authToken,
+        mode: process.env.SQLD_NS_MODE === "host" ? "host" : "subdomain",
+      })
+    : createClient({ url, authToken: authToken || undefined });
   try {
     if (sqldTarget) await assertForeignKeys(client, `sqld ${name}`);
     return await f(client, await loadMigrations(path.join(root, "db", "migrations", name)));
