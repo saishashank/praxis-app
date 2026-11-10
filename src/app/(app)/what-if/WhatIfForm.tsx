@@ -6,6 +6,8 @@ import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Money, SimulatedLabel } from "@/components/ui/Values";
+import { formatDay } from "@/lib/view/format";
+import { costPlan } from "@/lib/view/costPlans";
 import type { WhatIfOptions } from "@/lib/whatif/options";
 import { whatIfErrorText, type WhatIfActionResult } from "./messages";
 
@@ -16,13 +18,12 @@ type Props = {
   action: (fd: FormData) => Promise<WhatIfActionResult>;
 };
 
-// D-200: the fees in words, never a bare profile code
-const PROFILE_WORDS: Record<string, string> = {
-  stress: "Stress test: A$6.50 a trade and wider price gaps",
-  P0: "No fee on the zero-fee list, else A$3.00 a trade",
+// D-200, D-919: the fees as a broker-style plan in words, with the exact fee as secondary text
+const profileText = (p: string, names: Record<string, string> = {}): string => {
+  const plan = costPlan(p);
+  if (plan.detail !== "") return `${plan.title}: ${plan.detail}`;
+  return names[p] ? `Fees: ${names[p]}` : "Its own trading costs";
 };
-const profileText = (p: string, names: Record<string, string> = {}): string =>
-  PROFILE_WORDS[p] ?? (names[p] ? `Fees: ${names[p]}` : "Its own trading costs");
 
 const FIELD = "rounded-md border border-border bg-bg px-2 py-2 text-text";
 
@@ -93,7 +94,7 @@ export function WhatIfForm({ options, remaining, limit, action }: Props) {
             Run what-if
           </Button>
           <span role="status" className="text-sm text-text-muted">
-            {left} of {limit} left today.
+            You can run {limit} what-ifs a day; {left} left.
             {left <= 0 ? " The count starts again at midnight in Melbourne." : ""}
           </span>
         </div>
@@ -106,7 +107,7 @@ export function WhatIfForm({ options, remaining, limit, action }: Props) {
       {out ? (
         <Card title={out.name} headingLevel={2} aria-live="polite">
           <p className="mt-0 text-sm text-text-muted">
-            From the nightly result of {out.d}. <SimulatedLabel />
+            From the nightly result for {formatDay(out.d)}. <SimulatedLabel />
           </p>
           {out.result.kind === "cost" ? (
             <dl className="m-0 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">

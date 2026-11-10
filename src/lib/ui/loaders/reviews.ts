@@ -16,7 +16,7 @@ import {
 import { listVersions, loadReview, readState } from "@/lib/review/assemble";
 import type { Missing } from "@/lib/review/facts";
 import { activeCodesForDate } from "@/lib/view/active";
-import { formatCents, isoWeek, MISSING } from "@/lib/view/format";
+import { formatCents, formatDay, formatInstant, isoWeek, MISSING } from "@/lib/view/format";
 import { findLeaks, loadMaskLookup, maskText, StockAliases, weekOnly } from "@/lib/view/mask";
 import { opaqueDigest } from "@/lib/view/opaqueRef";
 import {
@@ -75,7 +75,14 @@ export async function resolveReviewRef(env: LoaderEnv, ref: string): Promise<str
   return null;
 }
 
-export type ReviewsQuery = { q?: string; page: number; view?: "calendar"; month?: string };
+export type ReviewsQuery = {
+  q?: string;
+  page: number;
+  view?: "calendar";
+  month?: string;
+  /** `?all=1`: also list the non-trading days (weekends and holidays), hidden by default. */
+  all?: boolean;
+};
 
 /** `?q=&page=&view=&month=`: q is a date prefix, kind word or text; null when a value is not allowed. */
 export function parseReviewsQuery(sp: URLSearchParams): ReviewsQuery | null {
@@ -87,7 +94,10 @@ export function parseReviewsQuery(sp: URLSearchParams): ReviewsQuery | null {
   if (v !== null && v !== "list" && v !== "calendar") return null;
   const m = sp.get("month");
   if (m !== null && m !== "" && !MONTH_RE.test(m)) return null;
+  const a = sp.get("all");
+  if (a !== null && a !== "" && a !== "1") return null;
   const out: ReviewsQuery = { q, page };
+  if (a === "1") out.all = true;
   if (v === "calendar") out.view = "calendar";
   if (m) out.month = m;
   return out;
@@ -212,6 +222,9 @@ function nextCalendarDay(d: string): string {
 const aiOf = (narrative: string): boolean => narrative === "llm" || narrative === "mock";
 export const AI_TEXT = "Written with AI";
 export const NO_AI_TEXT = "Written without AI today";
+/** The plain name of review section 8 (the stored name is "Sentinel recap"). */
+export const plainSectionName = (n: string): string =>
+  n === "Sentinel recap" ? "Overnight checks" : n;
 
 // ---- the list -----------------------------------------------------------------------------------
 
@@ -242,6 +255,12 @@ export type ReviewListModel = {
   rows: ReviewListRow[];
   page: number;
   hasMore: boolean;
+  /** True when every listed review was written by fixed rules (no AI): said once above the list. */
+  allRuleWritten: boolean;
+  /** True when every listed review was written with AI. */
+  allAi: boolean;
+  /** True when non-trading days are included in the list. */
+  showingNonTrading: boolean;
 };
 
 type ListRow = Record<string, unknown>;
@@ -255,6 +274,8 @@ export async function loadReviewList(env: LoaderEnv, q: ReviewsQuery): Promise<R
           FROM evening_review e LEFT JOIN review_read rr ON rr.d = e.d
           WHERE e.version = (SELECT MAX(v.version) FROM evening_review v WHERE v.d = e.d)`;
   const lowerQ = q.q?.toLowerCase();
+  // Non-trading days (weekends, holidays) are hidden unless asked for (`?all=1`) or searched for.
+  const showNonTrading = q.all === true || q.q !== undefined;
   const kindHits =
     lowerQ === undefined
       ? []
@@ -272,6 +293,7 @@ export async function loadReviewList(env: LoaderEnv, q: ReviewsQuery): Promise<R
     });
     const all = r.rows as unknown as ListRow[];
     const hits = all.filter((x) => {
+      if (!showNonTrading && String(x.kind) === "non_trading") return false;
       if (lowerQ === undefined) return true;
       const wk = (isoWeek(String(x.d)) ?? "").toLowerCase();
       return wk.includes(lowerQ) || kindHits.includes(String(x.kind));
@@ -288,9 +310,10 @@ export async function loadReviewList(env: LoaderEnv, q: ReviewsQuery): Promise<R
       seen.set(wk, n);
       ordinal.set(String(x.d), n);
     }
-    return finishList(env, raw, hasMore, q.page, today, ordinal);
+    return finishList(env, raw, hasMore, q.page, today, ordinal, showNonTrading);
   }
   const where: string[] = [];
+  if (!showNonTrading) where.push("e.kind <> 'non_trading'");
   const args: Array<string | number> = [];
   if (q.q !== undefined) {
     const like = `${escapeLike(q.q)}%`;
@@ -310,7 +333,7 @@ export async function loadReviewList(env: LoaderEnv, q: ReviewsQuery): Promise<R
   });
   raw = (r.rows as unknown as ListRow[]).slice(0, LIST_ROWS);
   hasMore = r.rows.length > LIST_ROWS;
-  return finishList(env, raw, hasMore, q.page, today, null);
+  return finishList(env, raw, hasMore, q.page, today, null, showNonTrading);
 }
 
 async function finishList(
@@ -320,6 +343,7 @@ async function finishList(
   page: number,
   today: string,
   ordinal: Map<string, number> | null,
+  showingNonTrading: boolean,
 ): Promise<ReviewListModel> {
   const masked = env.mask.masked;
   const deliveries = await deliveryByDate(
@@ -333,7 +357,7 @@ async function finishList(
     const narrative = String(x.narrative);
     return {
       d: masked ? wk : real,
-      label: masked ? `Week ${wk}, review ${ordinal?.get(real) ?? 1}` : real,
+      label: masked ? `Week ${wk}, review ${ordinal?.get(real) ?? 1}` : formatDay(real),
       href: reviewPath(real, masked),
       version: Number(x.version), // money-float-ok: SQL integer column
       kind,
@@ -364,6 +388,9 @@ async function finishList(
     rows,
     page,
     hasMore,
+    allRuleWritten: rows.length > 0 && rows.every((r) => !r.ai),
+    allAi: rows.length > 0 && rows.every((r) => r.ai),
+    showingNonTrading,
   };
 }
 
@@ -603,6 +630,8 @@ export type ReviewModel = {
   delivery: DeliveryView;
   /** Stored HTML: only for the Owner and unmasked users. */
   html: string | null;
+  /** Stored plain-text version: only for the Owner and unmasked users. */
+  text: string | null;
   /** The masked view; null for an unmasked user, and also null when it failed the leak check. */
   maskedView: MaskedReview | null;
   /** True when a masked user's view could not be built safely. */
@@ -790,7 +819,7 @@ export async function loadReviewPage(
   } else {
     newPicks = await newPicksOf(env, d, picks, null, (s) => s);
   }
-  const title = masked && byRef ? `Evening Review, week ${wk}` : `Evening Review ${d}`;
+  const title = masked && byRef ? `Evening Review, week ${wk}` : `Evening Review, ${formatDay(d)}`;
   return {
     masked,
     d: masked ? wk : d,
@@ -799,17 +828,24 @@ export async function loadReviewPage(
     versions: versions.map((v) => ({ version: v.version, kindText: KIND_TEXT[v.kind] ?? v.kind })),
     kind: review.kind,
     kindText: KIND_TEXT[review.kind] ?? review.kind,
-    missing: review.kind === "partial" ? review.missing : [],
-    createdAt: masked ? (weekOnly(review.createdAt) ?? MISSING) : review.createdAt,
+    missing:
+      review.kind === "partial"
+        ? review.missing.map((m) => ({ ...m, name: plainSectionName(m.name) }))
+        : [],
+    createdAt: masked ? (weekOnly(review.createdAt) ?? MISSING) : formatInstant(review.createdAt),
     narrative: review.narrative,
     ai: aiOf(review.narrative),
     aiText: aiOf(review.narrative) ? AI_TEXT : NO_AI_TEXT,
     read: read
-      ? { readAt: masked ? (weekOnly(read.readAt) ?? MISSING) : read.readAt, via: read.via }
+      ? {
+          readAt: masked ? (weekOnly(read.readAt) ?? MISSING) : formatInstant(read.readAt),
+          via: read.via,
+        }
       : null,
     canMarkRead: env.user.role === "owner",
     delivery: deliveries.get(d) ?? NOT_EMAILED,
     html: masked ? null : review.html,
+    text: masked ? null : review.text,
     maskedView: view,
     unavailable: masked && view === null,
     newPicks,

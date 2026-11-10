@@ -5,7 +5,9 @@
 // volume against usual, moving-average relation), no code, name, price, candle, link or "Our activity".
 // A real code from a masked user is "not found", like an unknown one (no oracle for which codes exist).
 // Unmasked users get the candles (integer micro prices), key numbers, markers and our activity.
-import { isoWeek, MISSING } from "@/lib/view/format";
+import { displayName, formatInstant, isoWeek, MISSING } from "@/lib/view/format";
+import { MARKET_INDEX_CODE } from "@/lib/data/quotes/parse";
+import { newerThanClose, quoteTimeMelbourne, readLatestQuotes } from "@/lib/data/quotes/latest";
 import { safeSourceUrl } from "@/lib/http/safeLink";
 import { dateStaleness } from "@/lib/view/staleness";
 import { maskText, normCode } from "@/lib/view/mask";
@@ -69,6 +71,12 @@ export type CompanyModel = {
   staleText: string | null;
   closeMicro: string | null;
   changePpm: number | null;
+  /**
+   * D-919: a delayed quote already stored by the poll or the scan, from a later day than the last close:
+   * its price, its move against that close and its Melbourne time ("12:50"). null otherwise and always
+   * for a masked viewer. No request is made for it.
+   */
+  live: { priceMicro: string; changePpm: number; at: string } | null;
   /** 0 = at the 52-week low, 1,000,000 = at the high; null when there is no range. */
   rangePositionPpm: number | null;
   rangeLowMicro: string | null;
@@ -208,6 +216,7 @@ export async function loadCompany(env: LoaderEnv, key: string): Promise<CompanyM
     d: last?.d ?? null,
     staleText: stale.state === "stale" ? stale.text : null,
     changePpm: last && prev && prev.c > 0 ? Math.round(((last.c - prev.c) / prev.c) * PPM) : null, // money-float-ok: derived ratio
+    live: null as CompanyModel["live"],
     rangePositionPpm:
       last && hi !== null && lo !== null && hi > lo
         ? Math.round(((last.c - lo) / (hi - lo)) * PPM) // money-float-ok: derived ratio
@@ -240,10 +249,27 @@ export async function loadCompany(env: LoaderEnv, key: string): Promise<CompanyM
 
   const markers = await loadMarkers(env, code, bars[0]?.d ?? null, announcements);
   const activity = await loadActivity(env, code);
+  const live = last
+    ? await soft(async () => {
+        const q = newerThanClose(
+          (await readLatestQuotes(env.main, market, [code])).get(code),
+          last.d,
+        );
+        const close = BigInt(priceMicro(last.c));
+        if (q === null || close <= 0n) return null;
+        return {
+          priceMicro: q.lastMicro.toString(),
+          changePpm: Number(((q.lastMicro - close) * 1_000_000n) / close), // money-float-ok: ppm of micro prices
+          at: quoteTimeMelbourne(q.quoteAt),
+        };
+      }, null)
+    : null;
   return {
     ...base,
+    live,
+    announcements: announcements.map((a) => ({ ...a, published: formatInstant(a.published) })),
     starred: (await soft(() => starredCodes(env), new Set<string>())).has(normCode(code)),
-    name: String(i.name),
+    name: displayName(String(i.name)),
     sector: sectorName(i.sector),
     sizeGroup: SIZE_GROUP[tier ?? ""] ?? null,
     listedOn: i.listed_on === null ? null : String(i.listed_on),
@@ -373,10 +399,18 @@ async function loadActivity(env: LoaderEnv, code: string): Promise<CompanyModel[
 
 export type IndexStrip = {
   code: string;
+  /** Plain name for the page: "ASX 200" for the ASX index (the code is not shown). */
+  label: string;
   d: string;
   changePpm: number | null;
+  /** The last close (integer micro index points). */
+  closeMicro: number;
   /** Closes (integer micro), oldest first, for the sparkline. */
   closes: number[];
+  /** The session dates of `closes` (YYYY-MM-DD). */
+  dates: string[];
+  /** D-919: a delayed level from a later day than the last close, its move against that close and Melbourne time. */
+  live: { levelMicro: number; changePpm: number; at: string } | null;
 } | null;
 
 /** The market's main index: the index with the most stored bars (UXN-270). Public data, all roles. */
@@ -401,8 +435,24 @@ export async function loadIndexStrip(env: LoaderEnv): Promise<IndexStrip> {
     const prev = rows[rows.length - 2];
     const lastC = Number(last.c_micro); // money-float-ok: index level in integer micro units
     const prevC = prev ? Number(prev.c_micro) : 0; // money-float-ok: index level in integer micro units
+    const live = await soft(async () => {
+      const q = newerThanClose(
+        (await readLatestQuotes(env.main, market, [String(code)])).get(String(code)),
+        String(last.d),
+      );
+      if (q === null || lastC <= 0) return null;
+      return {
+        levelMicro: Number(q.lastMicro), // money-float-ok: index level in integer micro units
+        changePpm: Math.round(((Number(q.lastMicro) - lastC) / lastC) * PPM), // money-float-ok: derived ratio
+        at: quoteTimeMelbourne(q.quoteAt),
+      };
+    }, null);
     return {
       code: String(code),
+      label: String(code) === MARKET_INDEX_CODE ? "ASX 200" : "Market index",
+      closeMicro: lastC,
+      dates: rows.map((x) => String(x.d)),
+      live,
       d: String(last.d),
       changePpm: prev && prevC > 0 ? Math.round(((lastC - prevC) / prevC) * PPM) : null, // money-float-ok: derived ratio
       closes: rows.map((x) => Number(x.c_micro)), // money-float-ok: index level in integer micro units

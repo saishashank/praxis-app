@@ -190,14 +190,15 @@ describe("Risk overview page", () => {
     expect(html).toContain("<h1");
     expect(html).toContain("Risk overview");
     expect(html).toContain("ZZUP");
-    expect(html).toContain("Distance to bust");
+    expect(html).toContain("Distance to the loss limit");
+    expect(html).not.toMatch(/Distance to bust|Bust level|bNAVb|(E0d)/);
     expect(html).toContain("Owner controls");
     expect(html).toContain("Pause new entries");
     expect(html).toContain("Switch off");
     expect(html).toContain("Switch back on"); // F2 is paused/off: lifting is offered
     expect(html).toContain("Stress test");
-    expect(html).toContain("Would reach the loss limit");
-    expect(html).toContain("Caution: close to the loss limit");
+    expect(html).toContain("Would reach a loss limit");
+    expect(html).toContain("Close to a loss limit");
     expect(html).toContain("Simulated");
     expect(html).not.toMatch(/liquidat/i); // UXN-150: never the word "liquidation"
   });
@@ -393,7 +394,7 @@ describe("Decision Card page (UXN-037, 100, 102, 104, 120 to 123, 126)", () => {
   it("a Viewer addressing the opaque reference: no code, id or note text; 'Note added by' only", async () => {
     as(VIEWER);
     const html = await card(encodeURIComponent(cardRef(CARD_UP)));
-    expect(html).toContain("Note added by editor on 2026-10-19");
+    expect(html).toContain("Note added by editor on Mon 19 Oct");
     expect(html).not.toContain("looks cheap");
     expect(html).not.toContain("<form");
     expect(html).not.toContain("news</a>"); // company news is hidden when masked

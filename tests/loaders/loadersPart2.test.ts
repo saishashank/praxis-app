@@ -189,7 +189,7 @@ describe("populated loaders", () => {
       const later = new Date("2026-10-30T03:00:00.000Z");
       const m = await loadPicks({ ...envOf(w, "owner"), now: later }, { profile: "balanced" });
       expect(m.state).toBe("stale");
-      expect(m.staleText).toContain(D);
+      expect(m.staleText).toContain("Mon 19 Oct"); // D-919: trading words, not ISO
     });
   });
 

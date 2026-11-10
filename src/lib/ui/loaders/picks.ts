@@ -8,7 +8,7 @@ import { familyStatusMap } from "@/lib/cortex/store/status";
 import { modelSuccess, successLine, type ModelSuccess } from "@/lib/picks/success";
 import { benchmarkLabel, type BenchBasis } from "@/lib/picks/benchmark";
 import { vsMarketSummary, type VsMarketSummary } from "@/lib/picks/vsMarket";
-import { formatDate, formatPpm, isoWeek, MISSING } from "@/lib/view/format";
+import { formatDay, formatPpm, isoWeek, MISSING } from "@/lib/view/format";
 import { dateStaleness } from "@/lib/view/staleness";
 import { maskText } from "@/lib/view/mask";
 import { opaqueDigest } from "@/lib/view/opaqueRef";
@@ -64,7 +64,7 @@ async function resolvePickRef(env: LoaderEnv, ref: string): Promise<string | nul
 /** UXN-302: when the list was published and which prices it is based on (the week for a masked user). */
 export function pickStamp(createdAt: string | null, d: string, masked: boolean): string {
   const time = createdAt ? melTime(createdAt) : MISSING;
-  const day = masked ? (isoWeek(d) ?? MISSING) : formatDate(d);
+  const day = masked ? (isoWeek(d) ?? MISSING) : formatDay(d);
   return time === MISSING
     ? `Published ${day} from closing prices`
     : `Published ${time} on ${day} from closing prices`;

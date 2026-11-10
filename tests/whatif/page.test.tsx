@@ -74,13 +74,13 @@ describe("what-if form", () => {
       budget: { limit: 5, used: 3, remaining: 2 },
     });
     render(<WhatIfForm options={options} remaining={3} limit={5} action={action} />);
-    expect(screen.getByRole("status")).toHaveTextContent("3 of 5 left today");
+    expect(screen.getByRole("status")).toHaveTextContent("5 what-ifs a day; 3 left");
     fireEvent.click(screen.getByRole("button", { name: "Run what-if" }));
     await waitFor(() =>
-      expect(screen.getByText(/From the nightly result of 2026-10-03/)).toBeInTheDocument(),
+      expect(screen.getByText(/From the nightly result for Sat 3 Oct/)).toBeInTheDocument(),
     );
     expect(screen.getByText(/Simulated/)).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("2 of 5 left today");
+    expect(screen.getByRole("status")).toHaveTextContent("5 what-ifs a day; 2 left");
     const fd = action.mock.calls[0]![0] as FormData;
     expect(fd.get("kind")).toBe("cost");
     expect(fd.get("key")).toBe("E01");

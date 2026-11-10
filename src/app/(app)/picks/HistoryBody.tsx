@@ -13,10 +13,11 @@ import {
 import type { LoaderEnv } from "@/lib/ui/loaders/shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { GainLoss, Money, NotMeasured, SimulatedLabel } from "@/components/ui/Values";
-import { formatDate, formatPpm } from "@/lib/view/format";
+import { formatDay, formatPpm } from "@/lib/view/format";
 import { ProfileSwitch } from "./PickTabs";
 import { pickProfilesConfig } from "./data";
 import { PicksEmptyArt } from "./EmptyArt";
+import { StatusFilter } from "./StatusFilter";
 import { exitWords, profileRules, profileSentence } from "./text";
 
 export const FILTER_LABEL: Record<HistoryFilter, string> = {
@@ -54,7 +55,7 @@ function priceOn(m: HistoryRow["entry"], d: string | null) {
   return (
     <span className="block">
       <Money micro={m.micro} />
-      {d ? <span className="block text-xs text-text-muted">{formatDate(d)}</span> : null}
+      {d ? <span className="block text-xs text-text-muted">{formatDay(d)}</span> : null}
     </span>
   );
 }
@@ -120,7 +121,7 @@ export async function HistoryBody({
     {
       key: "picked",
       header: "Picked",
-      cell: (r) => (model.masked ? r.pickedD : formatDate(r.pickedD)),
+      cell: (r) => (model.masked ? r.pickedD : formatDay(r.pickedD)),
     },
     { key: "entry", header: "Bought at", cell: (r) => priceOn(r.entry, r.entryD) },
     { key: "exit", header: "Sold at", cell: (r) => priceOn(r.exit, r.exitD) },
@@ -145,35 +146,24 @@ export async function HistoryBody({
       <form method="get" action="/picks" className="flex flex-wrap items-center gap-2 text-sm">
         <input type="hidden" name="profile" value={model.profile} />
         <input type="hidden" name="view" value="history" />
-        <label htmlFor="history-status" className="font-medium">
-          Show
-        </label>
-        <select
-          id="history-status"
-          name="status"
-          defaultValue={model.filter}
-          className="rounded-md border border-border bg-surface px-2 py-1"
-        >
-          {HISTORY_FILTERS.map((f) => (
-            <option key={f} value={f}>
-              {FILTER_LABEL[f]}
-            </option>
-          ))}
-        </select>
-        <button
-          type="submit"
-          className="rounded-md border border-border bg-surface px-3 py-1 font-medium"
-        >
-          Apply
-        </button>
+        <StatusFilter
+          current={model.filter}
+          options={HISTORY_FILTERS.map((f) => ({ value: f, label: FILTER_LABEL[f] }))}
+        />
       </form>
 
       <p className="m-0 text-xs text-text-muted">
-        Change is the price move from the buy: to the sale once closed, to the latest price while
-        open (delayed quote during the session, else the last close). Days held are calendar days.
-        Newest pick first. In profit / In loss: a closed trade by its result after costs, an open
-        one by its last close against the buy price.
+        Change is the price move since the buy. Newest pick first.
       </p>
+      <details className="text-xs text-text-muted">
+        <summary className="cursor-pointer font-medium">How these numbers are worked out</summary>
+        <p className="m-0 mt-1">
+          Change is the price move from the buy: to the sale once closed, to the latest price while
+          open (delayed quote during the session, else the last close). Days held are calendar days.
+          In profit / In loss: a closed trade by its result after costs, an open one by its last
+          close against the buy price.
+        </p>
+      </details>
 
       {!model.masked && model.rows.length > 0 ? <SimulatedLabel /> : null}
 

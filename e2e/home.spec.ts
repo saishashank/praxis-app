@@ -71,10 +71,13 @@ test("masked roles: the page text never carries a stock code from the seed (UX-0
   }
 });
 
-test("owner: system-health line is present", async ({ page, context }) => {
+test("owner: system health is said once, not as a separate status line", async ({
+  page,
+  context,
+}) => {
   await signIn(context, "owner");
   await page.goto("/");
-  await expect(page.getByTestId("status-line")).toContainText(/All systems working|need a look/);
+  await expect(page.getByTestId("status-line")).toHaveCount(0);
 });
 
 test("axe: Home has no violations in any of the six themes", async ({ page, context }) => {

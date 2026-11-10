@@ -12,7 +12,6 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Banner, EmptyState } from "@/components/ui/States";
 import { Pill } from "@/components/ui/Pill";
 import { Masked, Money, SimulatedLabel } from "@/components/ui/Values";
-import { BustBar } from "@/components/charts";
 import { can } from "@/lib/auth/permissions";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
@@ -23,7 +22,9 @@ import {
   type StressRow,
 } from "@/lib/ui/loaders/risk";
 import { formatMicro, formatPpm } from "@/lib/view/format";
+import { dayText } from "../plain";
 import { StrategyTabs } from "../StrategyTabs";
+import { LossLimitBar } from "./LossLimitBar";
 import { listFrozenCohorts } from "@/lib/arena/unfreeze";
 import { clearCohortInvariantsAction, setArenaControlAction } from "./actions";
 import { ClearFrozenButton } from "./ClearFrozenButton";
@@ -35,17 +36,18 @@ const MICRO = 1_000_000; // threshold-ok: micro units per dollar, display only
 const WIDTH_PCT = 100; // threshold-ok: percent
 
 const STATE_WORDS = { enabled: "Running", paused: "Paused", killed: "Switched off" } as const;
+// Owner 2026-11-10: "Safe" on every row said nothing; only a real risk is flagged.
 const FLAG_WORDS = {
-  safe: "Safe",
-  caution: "Caution: close to the loss limit",
-  bust: "Would reach the loss limit",
+  safe: "Above every loss limit",
+  caution: "Close to a loss limit",
+  bust: "Would reach a loss limit",
 } as const;
 const PILL_STATE = { enabled: "running", paused: "paused", killed: "stopped" } as const;
 const OWNER_ONLY = "Only the Owner can pause or switch off a strategy.";
 
 function StrategyCard({ s, nearPct }: { s: RiskStrategy; nearPct: number }) {
   return (
-    <Card title={`${s.name} (${s.execution})`} headingLevel={3}>
+    <Card title={s.name} headingLevel={3}>
       <dl className="m-0 mb-3 grid grid-cols-2 gap-2 text-sm">
         <div>
           <dt className="text-text-muted">Value now</dt>
@@ -62,7 +64,7 @@ function StrategyCard({ s, nearPct }: { s: RiskStrategy; nearPct: number }) {
         <p className="m-0 mb-3 text-sm text-text-muted">Loss limit not available.</p>
       ) : (
         <div className="mb-3">
-          <BustBar
+          <LossLimitBar
             nav={s.nav.micro / MICRO}
             seed={s.seed.micro / MICRO}
             bust={s.bust.micro / MICRO}
@@ -131,7 +133,7 @@ function SwitchRow({
   return (
     <li className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm">
       <span className="min-w-0 break-words">
-        <strong>{sw.name}</strong> ({sw.key}){" "}
+        <strong>{sw.name}</strong>{" "}
         <Pill kind="state" value={PILL_STATE[sw.state]}>
           {STATE_WORDS[sw.state]}
         </Pill>
@@ -194,7 +196,9 @@ export default async function RiskPage() {
       header: "Flag",
       cell: (x) => (
         <span>
-          {FLAG_WORDS[x.flag]}
+          <span className={x.flag === "safe" ? "text-text-muted" : undefined}>
+            {FLAG_WORDS[x.flag]}
+          </span>
           {x.affected > 0 ? ` (${x.affected} of ${d.strategies.length})` : ""}
         </span>
       ),
@@ -231,10 +235,9 @@ export default async function RiskPage() {
               <li key={`${c.scope}:${c.key}`}>
                 {c.scope === "market"
                   ? "The whole market"
-                  : c.scope === "family"
-                    ? "Family"
-                    : "Strategy"}{" "}
-                {c.scope === "market" ? "" : c.key}: {STATE_WORDS[c.state]}
+                  : ((c.scope === "family" ? d.families : d.executions).find((x) => x.key === c.key)
+                      ?.name ?? "A strategy")}
+                : {STATE_WORDS[c.state]}
               </li>
             ))}
           </ul>
@@ -276,7 +279,7 @@ export default async function RiskPage() {
                       className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm"
                     >
                       <span className="min-w-0 break-words">
-                        <strong>{f.cohortId}</strong> stopped on {f.throughD}
+                        <strong>{f.cohortId}</strong> stopped on {dayText(f.throughD)}
                       </span>
                       <ClearFrozenButton
                         cohortId={f.cohortId}

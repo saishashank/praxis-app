@@ -26,6 +26,8 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export type IdeaCard = {
   href: string;
   execution: string;
+  /** The strategy in words (with "with leverage sleeve" for the leveraged twin); never a code (D-919). */
+  strategy: string;
   taken: boolean;
   /** Why it was not taken (masked text); null for a taken card. */
   reason: string | null;
@@ -164,8 +166,8 @@ export async function loadIdeas(
     args: [market, d, MAX_SIGNALS],
   });
   const cards = await deps.mainDb.execute({
-    sql: `SELECT c.id, c.signal_id, c.execution_id, c.taken, c.not_taken_reason
-          FROM decision_card c JOIN signal s ON s.id = c.signal_id
+    sql: `SELECT c.id, c.signal_id, c.execution_id, c.taken, c.not_taken_reason, s.family AS family, e.variant AS variant
+          FROM decision_card c JOIN signal s ON s.id = c.signal_id LEFT JOIN execution e ON e.id = c.execution_id
           WHERE s.market = ? AND s.d = ? ORDER BY c.execution_id, c.id LIMIT ?`,
     args: [market, d, MAX_CARDS],
   });
@@ -196,6 +198,7 @@ export async function loadIdeas(
     list.push({
       href: cardHref(str(c.id), masked),
       execution: str(c.execution_id),
+      strategy: `${names[str(c.family)]?.name ?? "Strategy"}${strOrNull(c.variant) === "L" ? " (with leverage sleeve)" : ""}`,
       taken,
       reason: taken
         ? null

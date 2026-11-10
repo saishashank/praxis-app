@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/ui/States";
 import { Pill } from "@/components/ui/Pill";
 import { hueStyle } from "@/components/ui/hue";
 import { Masked } from "@/components/ui/Values";
-import { formatCount, formatMicro } from "@/lib/view/format";
+import { displayName, formatCount, formatDay, formatMicro } from "@/lib/view/format";
 import type { MarketRow } from "@/lib/ui/loaders/market";
 import { Change, FIG } from "./Figures";
 import { RowActions, type WatchMode } from "./RowActions";
@@ -42,6 +42,7 @@ export function SizeBadge({ size }: { size: string | null }) {
 
 export function MarketTable({
   caption,
+  day = null,
   rows,
   masked,
   mode,
@@ -50,6 +51,8 @@ export function MarketTable({
   empty,
 }: {
   caption: string;
+  /** The last session (YYYY-MM-DD): names the day of the "Change" column. Null for a masked viewer. */
+  day?: string | null;
   rows: MarketRow[];
   masked: boolean;
   mode: WatchMode;
@@ -79,7 +82,7 @@ export function MarketTable({
               >
                 {r.name ? (
                   <>
-                    {r.name} <span className="ml-1 text-text-muted">{r.stock}</span>
+                    {displayName(r.name)} <span className="ml-1 text-text-muted">{r.stock}</span>
                   </>
                 ) : (
                   r.stock
@@ -123,11 +126,22 @@ export function MarketTable({
     },
     {
       key: "change",
-      header: "Day change",
+      // the list is ranked by this session's change, so the column always shows it (D-919)
+      header: day && !masked ? `Change ${formatDay(day)}` : "Last session change",
       align: "right",
-      // D-916: today's move against the last close while a delayed quote exists, else the session's
-      cell: (r) => <Change ppm={r.live ? r.live.changePpm : r.changePpm} />,
+      cell: (r) => <Change ppm={r.changePpm} />,
     },
+    ...(!masked && rows.some((r) => r.live)
+      ? [
+          {
+            key: "today",
+            header: "Today (delayed)",
+            align: "right" as const,
+            // only a row with a stored delayed quote shows a figure; the others show nothing
+            cell: (r: MarketRow) => (r.live ? <Change ppm={r.live.changePpm} /> : null),
+          },
+        ]
+      : []),
     {
       key: "volume",
       header: "Volume",

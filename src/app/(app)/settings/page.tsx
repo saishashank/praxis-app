@@ -17,7 +17,7 @@ import { melbourneDate } from "@/lib/view/active";
 import { marketRows, readProfiles, readSharedMarkets, type MarketProfiles } from "./region";
 import { AboutIcon, ClockIcon, GlobeIcon, PaletteIcon, UserIcon } from "./GroupIcons";
 import { LinkRow, SettingsFrame } from "./SettingsNav";
-import { MotionRow, ThemeRow } from "./AppearanceRows";
+import { MotionRow, TextSizeRow, ThemeRow } from "./AppearanceRows";
 import {
   Group,
   InfoRow,
@@ -98,6 +98,7 @@ export default async function SettingsPage() {
 
         <Group id="appearance" title="Appearance" hue="strategies" icon={<PaletteIcon />}>
           <ThemeRow current={prefs.theme} action={updateAppearanceAction} />
+          <TextSizeRow current={prefs.text_size} action={updateAppearanceAction} />
           <MotionRow current={prefs.motion} action={updateAppearanceAction} />
         </Group>
 
@@ -111,21 +112,21 @@ export default async function SettingsPage() {
             action={updatePreferencesAction}
           />
           <ChoiceRow
-            label="P1 alerts"
+            label="Important alerts"
             field="alert_p1"
             current={prefs.alert_p1}
             choices={choices(DELIVERY)}
             href="/settings/time"
-            description="P0 alerts are always delivered immediately. They cannot be turned off or delayed."
+            description="Urgent alerts are always delivered immediately. They cannot be turned off or delayed."
             action={updatePreferencesAction}
           />
           <ChoiceRow
-            label="P2 alerts"
+            label="FYI alerts"
             field="alert_p2"
             current={prefs.alert_p2}
             choices={choices(DELIVERY)}
             href="/settings/time"
-            description="P0 alerts are always delivered immediately. They cannot be turned off or delayed."
+            description="Urgent alerts are always delivered immediately. They cannot be turned off or delayed."
             action={updatePreferencesAction}
           />
           <LinkRow

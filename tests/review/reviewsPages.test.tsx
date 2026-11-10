@@ -187,18 +187,25 @@ describe("/reviews list", () => {
     as("owner");
     const html = await list();
     expect(html).toContain("<h1");
-    expect(html).toContain(D);
-    expect(html).toContain(PARTIAL_D);
+    expect(html).toContain("Mon 19 Oct"); // trading words, never the raw ISO date
+    expect(html).toContain("Fri 16 Oct");
+    expect(html).not.toMatch(/>2026-10-\d\d</);
     expect(html).toContain(">Partial<"); // D-200: not "Partial (partial)"
     expect(html).not.toContain("(partial)");
-    expect(html).toContain("Non-trading day");
+    // non-trading days are hidden by default and offered with a plain link (works without JS)
+    expect(html).not.toContain("Non-trading day");
+    expect(html).toContain('href="/reviews?all=1"');
+    expect(html).toContain("Show non-trading days");
+    const all = await list({ all: "1" });
+    expect(all).toContain("Non-trading day");
+    expect(all).toContain("Hide non-trading days");
     expect(html).toContain("Written with AI"); // the partial review has an llm narrative
-    expect(html).toContain("Written without AI today");
+    expect(html).not.toContain("Written without AI today"); // not repeated on every row
     expect(html).toContain('data-delivery="sent"');
     expect(html).toContain("Emailed");
     expect(html).toContain('data-delivery="failed"');
     expect(html).toContain("Email failed");
-    expect(html).toContain("Not emailed"); // the non-trading day has no mail
+    expect(all).toContain("Not emailed"); // the non-trading day has no mail
     expect(html).toContain("Not read yet");
     expect(html).toContain(`href="/reviews/${D}"`);
     expect(html).not.toContain("Mark as read"); // the control lives on the review page, Owner only
@@ -408,6 +415,18 @@ describe("calendar (UXN-206)", () => {
   });
 });
 
+describe("/reviews/[date] partial review", () => {
+  it("shows the stored content as plain text next to the frame and a plain section name", async () => {
+    as("owner");
+    const html = await page(PARTIAL_D);
+    expect(html).toContain("Read as plain text");
+    expect(html).toMatch(/<details[^>]*open/); // open for a partial review
+    expect(html).toContain("Overnight checks");
+    expect(html).not.toContain("Sentinel recap");
+    expect(html).not.toMatch(/stored 2026-\d\d-\d\dT/); // no raw ISO timestamp
+  });
+});
+
 describe("/reviews/[date]", () => {
   it("shows the AI / no-AI badge, delivery status and the sections of 7a for the Owner", async () => {
     as("owner");
@@ -475,7 +494,7 @@ describe("/reviews/[date]", () => {
   it("the Owner may use the reference too and then sees the real date", async () => {
     as("owner");
     const html = await page(reviewRef(D));
-    expect(html).toContain(`Evening Review ${D}`);
+    expect(html).toContain("Evening Review, Mon 19 Oct");
     expect(html).toContain("<iframe");
   });
 
@@ -590,7 +609,7 @@ describe("/reviews list wording (D-200)", () => {
       args: [NONTRADING_D, `${NONTRADING_D}T09:30:00.000Z`],
     });
     as("owner");
-    const html = await list();
+    const html = await list({ all: "1" });
     expect(html).toContain("Email is switched off, so these reviews were not emailed.");
     expect(html).not.toContain('data-delivery="suppressed_off"');
     expect(html).toContain('data-delivery="sent"');

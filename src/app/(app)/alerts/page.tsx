@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/auth/guard";
 import { loadMyAlerts } from "@/lib/ui/loaders/pickAlerts";
 import { envFor } from "@/lib/ui/loaders/shell";
 import { Money, Masked } from "@/components/ui/Values";
-import { ALERT_DELAY_HELP, CLEAR_WORDS, MAIL_WORDS } from "../picks/text";
+import { ALERT_DELAY_HELP, CLEAR_WORDS, MAIL_WORDS, profileLabel } from "../picks/text";
 import { muteAlertAction, setAlertsForAllAction } from "./actions";
 import { AllPicksToggle, MuteButton } from "./MuteButton";
 
@@ -52,8 +52,8 @@ export default async function MyAlertsPage() {
                     className="flex min-w-0 flex-wrap items-center justify-between gap-2 py-2 text-sm"
                   >
                     <span className="min-w-0 break-words">
-                      <strong>{r.stock}</strong> · {r.profile} #{r.rank} · list of {r.pickDate} ·
-                      limit {r.limit ? <Money micro={r.limit.micro} /> : <Masked />}
+                      <strong>{r.stock}</strong> · {profileLabel(r.profile)} #{r.rank} · picked{" "}
+                      {r.pickDate} · limit {r.limit ? <Money micro={r.limit.micro} /> : <Masked />}
                       {r.hitTime ? ` · hit at ${r.hitTime} (delayed quote)` : ""}
                       {r.reason ? ` · ${CLEAR_WORDS[r.reason] ?? r.reason}` : ""}
                       <span className="text-text-muted"> · {MAIL_WORDS[r.mail]}</span>

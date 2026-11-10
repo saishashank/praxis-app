@@ -5,7 +5,7 @@
 //   rises: held during the rise, or an idea the evening before that was not bought (with the plain
 //          reasons), or not followed (outside the traded universe), or followed with no rule matched;
 //   falls: held during the fall (sold by the stop that day, or still held with the stop in force), or
-//          avoided (not held; an idea that was not bought says why).
+//          not held (an idea that was not bought says why).
 // Computed from the stored nightly data when the page opens; nothing is written. Codes and names
 // would reveal the companies, so a masked viewer gets `hidden` and no rows (DAT-124).
 import "server-only";
@@ -23,7 +23,7 @@ export type MoverVerdict =
   | "no_rule"
   | "sold_by_stop"
   | "held_in_fall"
-  | "avoided";
+  | "not_held";
 
 export type MoverRow = {
   code: string;
@@ -186,12 +186,12 @@ export function fallRow(
   const reasons = reasonsOf(ctx, code);
   return {
     ...base,
-    verdict: "avoided",
+    verdict: "not_held",
     strategies: reasons.length > 0 ? ideaFamilies(ctx, code) : [],
     text:
       reasons.length > 0
-        ? `Avoided: an idea the evening before, not bought (${reasons.join("; ")}).`
-        : "Avoided: no strategy held it.",
+        ? `Not held: an idea the evening before, not bought (${reasons.join("; ")}).`
+        : "Not held: no strategy held it.",
   };
 }
 

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { SizeBadge } from "@/app/(app)/market/MarketTable";
 import {
   CompaniesSection,
+  IndexSection,
   MarketStatus,
   MoversSection,
   SectionLoading,
@@ -123,7 +124,7 @@ describe("Market sections (D-205)", () => {
     expect(within(nav).getByRole("link", { name: "All" }).querySelector("svg")).toBeNull();
     expect(within(nav).getByRole("link", { name: /Mid/ })).toHaveAttribute("aria-current", "page");
     expect(within(nav).getByRole("link", { name: "All" })).toHaveAttribute("href", "/market");
-    expect(screen.getByText("Prices as of Wed 28 Oct 2026 (end of day)")).toBeInTheDocument(); // D-884
+    expect(screen.getByText("Last close: Wed 28 Oct (end of day)")).toBeInTheDocument(); // D-884
   });
 
   it("shows the out-of-date banner, and no size switch for a masked user", async () => {
@@ -216,5 +217,96 @@ describe("Market sections (D-205)", () => {
     expect(tiles[1]!.textContent).toContain("▼ −1.0%");
     // the text sits on the tint as body text, not a fill colour
     expect(tiles[0]).toHaveClass("text-text");
+  });
+});
+
+describe("D-919: session change and today's delayed move are separate", () => {
+  const withLive = (): MarketModel => {
+    const m = model();
+    m.up = {
+      rows: [
+        {
+          ...row(1),
+          name: "ZED ONE LIMITED",
+          live: {
+            price: { micro: "1100000", currency: "AUD", simulated: true },
+            changePpm: 91_000,
+            at: "12:50",
+          },
+        },
+        row(2),
+      ],
+      page: { number: 1, size: 10, total: 2 },
+    };
+    return m;
+  };
+
+  it("names the day of the change column and shows today only where a quote exists", async () => {
+    const { container } = await show(
+      <MoversSection model={Promise.resolve(withLive())} q={mq()} mode="star" starAction={star} />,
+    );
+    const heads = [...container.querySelectorAll("th[scope=col]")].map((h) => h.textContent);
+    expect(heads).toContain("Change Wed 28 Oct");
+    expect(heads).toContain("Today (delayed)");
+    const rows = container.querySelectorAll("tbody tr");
+    const cells = (i: number) => [...rows[i]!.querySelectorAll("td")].map((c) => c.textContent);
+    // the session change (+1.00%) stays in its column; the delayed move (+9.10%) sits apart
+    expect(cells(0).join("|")).toContain("+1.00%");
+    expect(cells(0).join("|")).toContain("+9.10%");
+    expect(cells(1).join("|")).not.toContain("+9.10%");
+    expect(container.textContent).toContain("Zed One Limited");
+    expect(container.textContent).not.toContain("ZED ONE LIMITED");
+  });
+
+  it("no Today column when no row has a quote, and none for a masked viewer", async () => {
+    const { container } = await show(
+      <MoversSection model={Promise.resolve(model())} q={mq()} mode="star" starAction={star} />,
+    );
+    expect(container.textContent).not.toContain("Today (delayed)");
+    cleanup();
+    const masked = withLive();
+    masked.masked = true;
+    const { container: c2 } = await show(
+      <MoversSection model={Promise.resolve(masked)} q={mq()} mode="star" starAction={star} />,
+    );
+    expect(c2.textContent).not.toContain("Today (delayed)");
+    expect(c2.textContent).not.toContain("Wed 28 Oct");
+    expect(c2.textContent).toContain("Last session change");
+  });
+
+  const strip = {
+    code: "AXJO",
+    label: "ASX 200",
+    d: "2026-11-09",
+    changePpm: 5_000,
+    closeMicro: 8_679_700_195,
+    closes: [8_600_000_000, 8_679_700_195],
+    dates: ["2026-11-06", "2026-11-09"],
+    live: null as { levelMicro: number; changePpm: number; at: string } | null,
+  };
+
+  it("the index block says ASX 200 with its delayed level, and its table shows index points", async () => {
+    const live = { levelMicro: 8_700_000_000, changePpm: 2_338, at: "12:50" };
+    const { container } = await show(
+      <IndexSection index={Promise.resolve({ ...strip, live })} masked={false} />,
+    );
+    expect(container.textContent).toContain("ASX 200");
+    expect(container.textContent).toContain("8,700.00");
+    expect(container.textContent).toContain("Delayed, 12:50");
+    expect(container.textContent).not.toMatch(/AXJO|\d{9,}|2026-/);
+    expect(container.textContent).toContain("8,679.70");
+    expect(container.textContent).toContain("Mon 9 Nov");
+    cleanup();
+    const { container: c2 } = await show(
+      <IndexSection index={Promise.resolve(strip)} masked={false} />,
+    );
+    expect(c2.textContent).toContain("End of day, Mon 9 Nov");
+    expect(c2.textContent).toContain("8,679.70");
+  });
+
+  it("a masked viewer sees no index code, level or exact date", async () => {
+    const { container } = await show(<IndexSection index={Promise.resolve(strip)} masked />);
+    expect(container.textContent).toContain("Market index");
+    expect(container.textContent).not.toMatch(/AXJO|ASX 200|Nov|2026-/);
   });
 });

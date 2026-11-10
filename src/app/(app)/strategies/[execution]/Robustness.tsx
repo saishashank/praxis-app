@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/States";
 import { NotMeasured } from "@/components/ui/Values";
 import type { NeighbourView, RankQualityRow, RobustnessView } from "@/lib/ui/loaders/robustness";
 import { formatCount, formatPercent } from "@/lib/view/format";
+import { rankingName } from "../plain";
 
 const PERCENT = 100; // threshold-ok: fraction to percent
 const DIGITS_IC = 3; // threshold-ok: display precision of a rank correlation
@@ -108,7 +109,7 @@ const rankCols: Column<RankQualityRow>[] = [
   {
     key: "ranking",
     header: "Ranking",
-    cell: (r) => <span className="break-words">{r.ranking}</span>,
+    cell: (r) => <span className="break-words">{rankingName(r.ranking)}</span>,
   },
   { key: "days", header: "Days", align: "right", cell: (r) => formatCount(r.nDays) },
   { key: "median", header: "Middle rank match", align: "right", cell: (r) => ic(r.medianIc) },

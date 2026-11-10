@@ -309,7 +309,7 @@ describe("empty and stale states", () => {
     const w = await fullWorld();
     current = { ...envOf(w, "owner"), now: new Date("2026-10-30T03:00:00.000Z") };
     render(await PicksPage({ searchParams: sp() }));
-    expect(screen.getByRole("alert").textContent).toContain(D);
+    expect(screen.getByRole("alert").textContent).toContain("Mon 19 Oct"); // D-919
   });
 });
 

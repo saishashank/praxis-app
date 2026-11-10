@@ -13,6 +13,7 @@ import { EmptyState, ShowDetails } from "@/components/ui/States";
 import { FamilyForm } from "../../FamilyForm";
 import { OwnerActions } from "../../OwnerActions";
 import { ChallengerLine, LessonCard, LEARNED, PageHead, Shell } from "../../parts";
+import { familyName } from "../../plain";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export default async function FamilyPage({ params }: { params: Promise<{ family:
 
   return (
     <Shell>
-      <PageHead title={`Strategy family ${family}`}>
+      <PageHead title={`Strategy family: ${familyName(family)}`}>
         {view.liveId === null ? "No live version yet." : `Live version: ${view.liveId}.`}
       </PageHead>
       {view.state === "empty" ? (
@@ -157,7 +158,7 @@ export default async function FamilyPage({ params }: { params: Promise<{ family:
 
       <Card title="Changes to this family">
         <DataTable
-          caption={`Changes to family ${family}`}
+          caption={`Changes to the ${familyName(family)} family`}
           rows={ledger}
           rowKey={(r) => String(r.id)}
           empty={<EmptyState compact motif="reviews" hue="reviews" title="No changes yet." />}

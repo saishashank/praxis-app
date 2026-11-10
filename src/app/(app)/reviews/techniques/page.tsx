@@ -13,6 +13,7 @@ import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
 import { loadTechniques, parseTechniqueQuery, type TechniqueRow } from "@/lib/ui/loaders/experts";
 import { PageHead, Shell } from "../learned/parts";
+import { familyName } from "../learned/plain";
 import { challengerLink, detailHref, Out, pct, TECHNIQUES } from "../experts/parts";
 
 export const dynamic = "force-dynamic";
@@ -66,8 +67,8 @@ function Result({ t, caption }: { t: TechniqueRow; caption: string }) {
       data-technique-result={r.survived ? "passed" : "not_passed"}
     >
       <p className="m-0">
-        {r.survived ? "Passed the screen" : "Did not pass the screen"} (family {r.family}, run{" "}
-        {r.runDay ?? "date hidden"}, grade {r.grade}
+        {r.survived ? "Passed the screen" : "Did not pass the screen"} ({familyName(r.family)}{" "}
+        strategies, run {r.runDay ?? "date hidden"}, grade {r.grade}
         {r.rank !== null ? `, rank ${r.rank}` : ""}).{" "}
         {t.screeningNote !== "screened this week" ? t.screeningNote + "." : ""}
       </p>

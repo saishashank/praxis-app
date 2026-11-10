@@ -153,3 +153,87 @@ export function truncate(s: string, max: number): string {
 export function plural(n: number, one: string, many = `${one}s`): string {
   return n === 1 ? one : many;
 }
+
+// ---- Owner 2026-11-10 usability pass (D-919): one date and time style, plain names -------------------
+
+/** "2026-11-09" -> "Mon 9 Nov" (the year only when it is not the current one); anything else -> "n/a". */
+export function formatDay(d: string | null | undefined, now: Date = new Date()): string {
+  const t = typeof d === "string" ? utcDate(d.slice(0, 10)) : null;
+  if (t === null) return MISSING;
+  const base = `${DAYS[t.getUTCDay()]} ${t.getUTCDate()} ${MONTHS[t.getUTCMonth()]}`;
+  return t.getUTCFullYear() === now.getUTCFullYear() ? base : `${base} ${t.getUTCFullYear()}`;
+}
+
+/**
+ * An instant (ISO text) in Melbourne trading words: "Mon 9 Nov, 20:30" (24-hour, Melbourne time; the
+ * year only when it is not the current one). Never prints the raw ISO text; unreadable -> "n/a".
+ */
+export function formatInstant(iso: string | null | undefined, now: Date = new Date()): string {
+  if (typeof iso !== "string") return MISSING;
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return MISSING;
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-AU", {
+      timeZone: "Australia/Melbourne",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(t)
+      .map((p) => [p.type, p.value]),
+  );
+  const day = formatDay(`${parts.year}-${parts.month}-${parts.day}`, now);
+  return `${day}, ${parts.hour}:${parts.minute}`;
+}
+
+const KEEP_UPPER = new Set([
+  "NL",
+  "PLC",
+  "ETF",
+  "REIT",
+  "NZ",
+  "UK",
+  "US",
+  "USA",
+  "AI",
+  "IT",
+  "II",
+  "III",
+  "IV",
+]);
+const SUFFIXES: Record<string, string> = {
+  LTD: "Ltd",
+  PTY: "Pty",
+  CO: "Co",
+  INC: "Inc",
+  CORP: "Corp",
+};
+const SMALL_WORDS = new Set(["and", "of", "the", "for", "in", "on", "at", "to", "&"]);
+
+/**
+ * "SERVICE STREAM LIMITED" -> "Service Stream Limited"; "BHP GROUP LIMITED" -> "BHP Group Limited".
+ * Only an all-capitals name is changed (a name in mixed case is kept as stored). Short all-letter
+ * words of up to 3 letters without a vowel, words with digits or dots, and known abbreviations stay
+ * in capitals ("BHP", "G8", "SCX.AI", "NL").
+ */
+export function displayName(name: string | null | undefined): string {
+  if (typeof name !== "string" || name.trim() === "") return MISSING;
+  if (name !== name.toUpperCase()) return name;
+  return name
+    .split(/(\s+)/)
+    .map((w, i) => {
+      if (/^\s+$/.test(w) || w === "") return w;
+      const bare = w.replace(/[.,]$/, "");
+      if (KEEP_UPPER.has(bare) || /\d/.test(bare) || /\.\w/.test(bare)) return w;
+      const suffix = SUFFIXES[bare];
+      if (suffix !== undefined) return suffix + w.slice(bare.length);
+      if (bare.length <= 3 && !/[AEIOU]/.test(bare)) return w;
+      const lower = w.toLowerCase();
+      if (i > 0 && SMALL_WORDS.has(lower)) return lower;
+      return lower.replace(/(^|[-'(/])([a-z])/g, (_m, p: string, c: string) => p + c.toUpperCase());
+    })
+    .join("");
+}
