@@ -102,6 +102,29 @@ jobs:
           SQLD_TEST_NS: main
         run: node --test scripts/selfhost/sqld.test.mjs
 
+      - name: Diagnostic, what a fresh namespace holds and that namespaces are isolated
+        run: |
+          set -eu
+          cat > "$RUNNER_TEMP/ns-diag.mjs" <<'DIAG'
+          import { ensureNamespace, dropNamespace, openNamespace } from "./scripts/selfhost/sqld.mjs";
+          const admin = "http://127.0.0.1:8081";
+          const names = ["diag-a", "diag-b"];
+          for (const n of names) await ensureNamespace(admin, n);
+          const open = (n) => openNamespace({ base: "http://sqld:8080", ns: n, mode: "host" });
+          const a = open("diag-a");
+          const b = open("diag-b");
+          const list = async (c) => (await c.execute("SELECT type, name FROM sqlite_master")).rows.map((r) => r.type + ":" + r.name);
+          console.log("fresh diag-a:", JSON.stringify(await list(a)));
+          await a.execute("CREATE TABLE only_in_a (id INTEGER)");
+          console.log("diag-a after create:", JSON.stringify(await list(a)));
+          console.log("diag-b (must not see only_in_a):", JSON.stringify(await list(b)));
+          for (const n of names) await dropNamespace(admin, n);
+          a.close();
+          b.close();
+          DIAG
+          cp "$RUNNER_TEMP/ns-diag.mjs" ./ns-diag.mjs
+          node ./ns-diag.mjs
+          rm -f ./ns-diag.mjs
       - name: Restore drill on the real sqld (synthetic source)
         env:
           SQLD_URL: http://sqld:8080

@@ -267,7 +267,7 @@ export async function dumpDatabase(db, opts) {
   const tx = await db.transaction("read");
   try {
     const master = await tx.execute(
-      "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY name",
+      "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'libsql_%' ORDER BY name",
     );
     const objs = master.rows.map((r) => ({
       type: String(r.type),
@@ -520,7 +520,9 @@ export async function restoreDatabase(db, text, opts = {}) {
   const createTables = [...tableSql.values()];
   const single = total <= chunk; // the schema statements are cheap; only the row count is bounded
 
-  const names = await db.execute("SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'");
+  const names = await db.execute(
+    "SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE 'libsql_%'",
+  );
   let step = 0; // data statements already applied (resume)
   let tablesDone = false;
   if (names.rows.length !== 0) {
