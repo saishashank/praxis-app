@@ -7,7 +7,7 @@ import type { PortfolioView } from "@/lib/ui/loaders/pickPortfolio";
 
 afterEach(cleanup);
 
-const m = (micro: string) => ({ micro, currency: "AUD" as const, simulated: true });
+const m = (micro: string) => ({ micro, currency: "AUD" as const, simulated: true as const });
 const base: PortfolioView = {
   masked: false,
   profile: "balanced",
