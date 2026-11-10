@@ -11,6 +11,7 @@ import { GradeBadge } from "@/components/ui/Badges";
 import { Card } from "@/components/ui/Card";
 import { Notes } from "../../Notes";
 import { OwnerActions, type OwnerButton } from "../../OwnerActions";
+import { familyName } from "../../plain";
 import { CritiqueBlock, familyHref, GRADE_HELP, LEARNED, PageHead, Shell } from "../../parts";
 
 export const dynamic = "force-dynamic";
@@ -55,7 +56,7 @@ export default async function LessonPage({ params }: { params: Promise<{ id: str
         Lesson {lesson.id}, found {lesson.createdDay}, measured by {lesson.metric}. Rule version{" "}
         {lesson.ruleVersion} of{" "}
         <Link href={familyHref(lesson.family)} className="text-accent underline">
-          family {lesson.family}
+          {familyName(lesson.family)} strategies
         </Link>
         .
       </PageHead>

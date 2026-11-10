@@ -3,7 +3,15 @@
 // Masking (DAT-124, UX-009): a masked user sees only items about stocks of the item's own Melbourne
 // date's active set, as "Stock A", with a masked headline, the ISO week, no company name and no link.
 // A search term and a code filter are ignored for them (they would reveal which codes exist).
-import { isoWeek, MISSING } from "@/lib/view/format";
+import { displayName, isoWeek, MISSING } from "@/lib/view/format";
+import { starredCodes } from "./market";
+
+/** "CESSATION OF SECURITIES" -> "Cessation of securities"; text that is not all capitals is kept. */
+export function sentenceCase(s: string): string {
+  if (s !== s.toUpperCase() || !/[A-Z]/.test(s)) return s;
+  const lower = s.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
 import { safeSourceUrl } from "@/lib/http/safeLink";
 import { activeCodesByDate, melbourneDate } from "@/lib/view/active";
 import { maskText, normCode } from "@/lib/view/mask";
@@ -23,6 +31,7 @@ import { displayText, displayTitle } from "@/lib/view/displayText";
 const SUMMARY_WITHHELD = "Summary withheld — see source announcements";
 
 const LIST_ROWS = 50; // threshold-ok: one page of the news list
+const STAR_CAP = 200; // threshold-ok: starred codes added to the important filter
 const SCAN_ROWS = 200; // threshold-ok: rows read before the masked filter
 const CHIPS = ["mine", "all", "alerts"] as const;
 export type NewsChip = (typeof CHIPS)[number];
@@ -35,6 +44,8 @@ export type NewsQuery = {
   from?: string;
   to?: string;
   page: number;
+  /** `?show=all`: every announcement; the default shows only the important ones (chip "all"). */
+  show?: "all";
 };
 
 /** `?chip=&q=&code=&from=&to=&page=`: null when a value is not allowed. */
@@ -52,7 +63,11 @@ export function parseNewsQuery(sp: URLSearchParams): NewsQuery | null {
     return null;
   }
   if (from !== undefined && to !== undefined && from > to) return null;
-  return { chip: chip as NewsChip, q, code, from, to, page };
+  const show = sp.get("show");
+  if (show !== null && show !== "" && show !== "important" && show !== "all") return null;
+  const out: NewsQuery = { chip: chip as NewsChip, q, code, from, to, page };
+  if (show === "all") out.show = "all";
+  return out;
 }
 
 export type NewsItemRow = {
@@ -80,6 +95,8 @@ export type NewsModel = {
   page: number;
   hasMore: boolean;
   note: string | null;
+  /** True when the list is limited to important announcements (the default of the "All news" chip). */
+  importantOnly: boolean;
 };
 
 const ROW_SQL = `SELECT a.id, a.code, a.title, a.type, a.published_at, a.price_sensitive,
@@ -101,12 +118,26 @@ export async function loadNews(env: LoaderEnv, q: NewsQuery): Promise<NewsModel>
     page: q.page,
     hasMore: false,
     note: masked ? "Company names, links and exact dates are hidden for your access level." : null,
+    importantOnly: false,
   };
   // The alerts chip lists alerts, which the alert inbox loader owns.
   if (q.chip === "alerts") return base;
   const where = ["a.market = ?"];
   const args: Array<string | number> = [marketOf(env)];
   if (q.chip === "mine") where.push("(i.held = 1 OR i.watch = 1)");
+  // Default view: price-sensitive announcements and those about held, picked or starred companies.
+  // A search or a company or date filter always looks through everything.
+  const filtered = [q.q, q.code, q.from, q.to].some((v) => v !== undefined);
+  const importantOnly = q.chip === "all" && q.show !== "all" && !filtered;
+  if (importantOnly) {
+    const stars = masked ? [] : [...(await starredCodes(env))].slice(0, STAR_CAP);
+    where.push(
+      `(a.price_sensitive = 1 OR i.held = 1 OR i.watch = 1 OR i.candidate = 1${
+        stars.length > 0 ? ` OR UPPER(a.code) IN (${stars.map(() => "?").join(",")})` : ""
+      })`,
+    );
+    args.push(...stars.map((c) => c.toUpperCase()));
+  }
   if (!masked && q.code !== undefined) {
     where.push("a.code = ?");
     args.push(q.code.toUpperCase());
@@ -157,11 +188,11 @@ export async function loadNews(env: LoaderEnv, q: NewsQuery): Promise<NewsModel>
     return {
       id: Number(x.id), // money-float-ok: SQL integer key
       stock: aliases ? aliases.label(code) : code,
-      company: masked || x.name == null ? null : String(x.name),
+      company: masked || x.name == null ? null : displayName(String(x.name)),
       title: displayTitle(
         aliases && kit ? maskText(String(x.title), aliases, kit.lookup) : String(x.title),
       ),
-      type: masked || x.type == null ? null : String(x.type),
+      type: masked || x.type == null ? null : sentenceCase(String(x.type)),
       summary:
         x.text_llm == null
           ? null
@@ -177,7 +208,7 @@ export async function loadNews(env: LoaderEnv, q: NewsQuery): Promise<NewsModel>
       heldByUs: !masked && Number(x.held ?? 0) === 1,
     };
   });
-  return { ...base, state: items.length === 0 ? "empty" : "ok", items };
+  return { ...base, state: items.length === 0 ? "empty" : "ok", items, importantOnly };
 }
 
 // ---- one item (pop-up) -----------------------------------------------------------------------------
@@ -229,9 +260,9 @@ export async function loadNewsItem(env: LoaderEnv, id: number): Promise<NewsItem
     masked,
     id: Number(x.id), // money-float-ok: SQL integer key
     stock,
-    company: masked || x.name === null ? null : String(x.name),
+    company: masked || x.name === null ? null : displayName(String(x.name)),
     title: displayTitle(title),
-    type: x.type === null ? null : String(x.type),
+    type: x.type === null ? null : sentenceCase(String(x.type)),
     published: masked ? (isoWeek(d) ?? MISSING) : String(x.published_at),
     priceSensitive: Number(x.price_sensitive) === 1,
     materiality: x.materiality === null ? null : Number(x.materiality), // money-float-ok: SQL integer column

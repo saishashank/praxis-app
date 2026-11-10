@@ -22,6 +22,19 @@ export default async function AppearancePage() {
       <SettingsForm action={updateAppearanceAction}>
         <ThemePicker value={prefs.theme} />
         <fieldset className="flex flex-col gap-4">
+          <legend className="mb-2 text-lg font-medium">Text size</legend>
+          <Select
+            name="text_size"
+            label="Text size"
+            value={prefs.text_size}
+            options={[
+              ["normal", "Normal"],
+              ["large", "Large (about a quarter bigger)"],
+            ]}
+            hint="Large makes text and controls bigger on every page."
+          />
+        </fieldset>
+        <fieldset className="flex flex-col gap-4">
           <legend className="mb-2 text-lg font-medium">Motion</legend>
           <Select
             name="motion"

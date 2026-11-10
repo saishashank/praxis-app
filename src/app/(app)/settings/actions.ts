@@ -19,7 +19,7 @@ import type { ActionResult } from "@/lib/users/messages";
 const PATH = "/settings";
 // Anything else in a form is ignored here; the service itself rejects unknown fields for any other caller.
 const PERSONAL_FIELDS = ["time_format", "alert_p1", "alert_p2"] as const;
-const APPEARANCE_FIELDS = ["theme", "motion"] as const;
+const APPEARANCE_FIELDS = ["theme", "motion", "text_size"] as const;
 const SIGN_OUT_CONFIRM_FIELD = "confirm";
 const SIGN_OUT_CONFIRM_VALUE = "sign_out_everywhere";
 const REGION_FIELDS = ["default_market", "times_in"] as const;
@@ -47,7 +47,7 @@ async function save(path: string, fields: readonly string[], fd: FormData): Prom
   return { ok: true };
 }
 
-/** Settings > Personal: time format and P1/P2 alert delivery (P0 is not a setting). */
+/** Settings > Personal: time format and delivery of important and FYI alerts (urgent ones are not a setting). */
 export async function updatePreferencesAction(fd: FormData): Promise<ActionResult> {
   return save(PATH, PERSONAL_FIELDS, fd);
 }

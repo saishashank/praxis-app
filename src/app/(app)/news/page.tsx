@@ -48,7 +48,8 @@ type AlertRow = AlertsModel["groups"][number]["alerts"][number];
 
 // Owner 2026-10-27: All news first and the default
 const CHIP_LABEL = { all: "All news", mine: "My companies", alerts: "Alerts" } as const;
-const TIER_TITLE = { P0: "Urgent (P0)", P1: "Important (P1)", P2: "For information (P2)" } as const;
+const TIER_TITLE = { P0: "Urgent", P1: "Important", P2: "For information" } as const;
+const SHOW_LABEL = { important: "Important only", all: "All announcements" } as const;
 
 function href(params: Record<string, string | undefined>): string {
   const q = new URLSearchParams();
@@ -76,7 +77,7 @@ function MaterialityPill({ m }: { m: number | null }) {
   }
   return (
     <Pill kind="tier" value={tier} title={materialityLabel(m)}>
-      {tier} {alertTierLabel(tier).shown}
+      {alertTierLabel(tier).shown}
     </Pill>
   );
 }
@@ -108,7 +109,7 @@ function AlertItem({ a, masked, nowMs }: { a: AlertRow; masked: boolean; nowMs: 
       <Rail hue={`tier-${a.tier.toLowerCase()}`} className="p-1">
         <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
           <Pill kind="tier" value={a.tier} title={alertTierLabel(a.tier).hover}>
-            {a.tier} {alertTierLabel(a.tier).shown}
+            {alertTierLabel(a.tier).shown}
           </Pill>
           {a.code ? <span className="font-medium text-text">{a.code}</span> : null}
           <span>{alertWhen(a, masked)}</span>
@@ -169,8 +170,8 @@ function Inbox({ model, q, nowMs }: { model: AlertsModel; q: string | undefined;
     <div className="flex flex-col gap-4" data-testid="alert-inbox">
       <p className="m-0 text-sm text-text-muted">
         {model.quietHours
-          ? `Quiet hours: ${model.quietHours.start} to ${model.quietHours.end} Melbourne time. They quieten P1 and P2 only; urgent (P0) alerts and market-mood alerts are never silenced.`
-          : "No quiet hours set. Urgent (P0) alerts and market-mood alerts are never silenced."}{" "}
+          ? `Quiet hours: ${model.quietHours.start} to ${model.quietHours.end} Melbourne time. They quieten important and FYI alerts only; urgent alerts and market-mood alerts are never silenced.`
+          : "No quiet hours set. Urgent alerts and market-mood alerts are never silenced."}{" "}
         <Link href="/settings" className="text-accent underline">
           Settings
         </Link>
@@ -248,9 +249,9 @@ function FilterFields({
               Tier
               <select name="tier" defaultValue={alertsQuery.tier ?? ""} className={field}>
                 <option value="">All tiers</option>
-                <option value="P0">P0</option>
-                <option value="P1">P1</option>
-                <option value="P2">P2</option>
+                <option value="P0">Urgent</option>
+                <option value="P1">Important</option>
+                <option value="P2">For information</option>
               </select>
             </label>
             <label className="flex items-center gap-2">
@@ -324,6 +325,7 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
   }
   const closeHref = href({
     chip: chip === "all" ? undefined : chip,
+    show: query.show,
     q: query.q,
     code: query.code,
     from: query.from,
@@ -332,6 +334,7 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
 
   const chipHref = (c: keyof typeof CHIP_LABEL) => href({ chip: c === "all" ? undefined : c });
   const unread = shell.bell.count;
+  const showParam = query.show;
   const hasFilter = [query.q, query.code, query.from, query.to].some((v) => v !== undefined);
 
   return (
@@ -354,8 +357,21 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
         }))}
       />
 
+      {chip === "all" ? (
+        <Segmented
+          label="Which announcements"
+          value={showParam ?? "important"}
+          items={(Object.keys(SHOW_LABEL) as Array<keyof typeof SHOW_LABEL>).map((s) => ({
+            value: s,
+            href: href({ show: s === "all" ? "all" : undefined }),
+            label: SHOW_LABEL[s],
+          }))}
+        />
+      ) : null}
+
       <form method="get" action="/news" className="flex flex-col gap-3 text-sm" role="search">
         {chip !== "all" ? <input type="hidden" name="chip" value={chip} /> : null}
+        {chip === "all" && showParam ? <input type="hidden" name="show" value={showParam} /> : null}
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex min-w-0 flex-1 flex-col gap-1">
             Search
@@ -406,13 +422,24 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
       {news ? (
         <>
           {news.note ? <Banner tone="info">{news.note}</Banner> : null}
+          {news.importantOnly && news.state !== "empty" ? (
+            <p className="m-0 text-sm text-text-muted" data-testid="important-note">
+              Showing price-sensitive announcements and those about companies we hold, picked or you
+              starred.{" "}
+              <Link href={href({ show: "all" })} className="text-accent underline">
+                Show all announcements
+              </Link>
+            </p>
+          ) : null}
           {news.state === "empty" ? (
             <EmptyState motif="news" hue="news" title="No news yet">
               {hasFilter
                 ? "Nothing matches these filters."
                 : chip === "mine"
                   ? "No announcements about companies we hold or watch yet. Try All news."
-                  : "No announcements have been stored yet. They appear once the news feed is switched on."}
+                  : news.importantOnly
+                    ? "No important announcements right now. Choose All announcements to see everything."
+                    : "No announcements have been stored yet. They appear once the news feed is switched on."}
             </EmptyState>
           ) : (
             <ul className="m-0 flex list-none flex-col gap-3 p-0" aria-label="News">
@@ -467,6 +494,7 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
                   className="text-accent underline"
                   href={href({
                     chip: chip === "all" ? undefined : chip,
+                    show: query.show,
                     q: query.q,
                     code: query.code,
                     from: query.from,
@@ -482,6 +510,7 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
                   className="text-accent underline"
                   href={href({
                     chip: chip === "all" ? undefined : chip,
+                    show: query.show,
                     q: query.q,
                     code: query.code,
                     from: query.from,

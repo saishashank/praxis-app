@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/Card";
 import { Banner, EmptyState, ShowDetails } from "@/components/ui/States";
 import { NotMeasured } from "@/components/ui/Values";
 import { challengerHref, LEARNED, PageHead, Shell, StageText } from "../parts";
+import { familyName } from "../plain";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,7 @@ function Item({ item }: { item: CompareItem }) {
           {item.kind === "champion" ? "Current version (champion)" : "Challenger"}
         </dd>
         <dt className="text-text-muted">Family</dt>
-        <dd className="m-0">{item.family}</dd>
+        <dd className="m-0">{familyName(item.family)}</dd>
         <dt className="text-text-muted">Version</dt>
         <dd className="m-0 font-mono">{item.version}</dd>
         {item.stage !== null ? (
