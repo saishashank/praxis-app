@@ -84,7 +84,7 @@ export async function picksMain(
     out(
       `arena-picks ${MARKET} ${d}: published=${p.published} candidates=${p.candidates}` +
         ` bought=${t.bought} missed=${t.missed} closed=${t.closed} open=${t.open}` +
-        ` checked=${p.checks.checked} withdrawn=${p.checks.withdrawn}`,
+        ` checked=${p.checks.checked} withdrawn=${p.checks.withdrawn} shortlist=${p.shortlist}`,
     );
     // D-913: the Follow the picks portfolio, rebuilt after the picks; a failure never stops them
     try {
