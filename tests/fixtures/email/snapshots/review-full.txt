@@ -1,32 +1,27 @@
-Subject: Praxis Evening Review — Mon 19 Oct 2026
+Subject: Praxis Evening Review — Mon 19 Oct
 
 PRAXIS EVENING REVIEW
 
 
-Mon 19 Oct 2026
+Mon 19 Oct
 
-* Day P/L AUD: AUD +2,222.10 (12 executions)
-* Best execution: E12 AUD +1,481.40 (single-day result — noise)
-* Worst execution: E09 AUD -1,111.05 (single-day result — noise)
-* P0 alerts: 1
+* Today, all strategies: +A$1,481.40 (6 strategies)
+* Value now: A$644,444.16
+* Trades finished today: 2
 
 
 1. Headline scorecard
 ---------------------
 
-Currency | Day P/L | Executions
-AUD | AUD +2,222.10 | 12
+Strategy | Today (A$) | Today (%) | Value now
+Strategy 1 (https://praxis.example.test/executions/E01) | +A$123.45 | +0.1% | A$101,234.56
+Strategy 3 (https://praxis.example.test/executions/E03) | -A$370.35 | -0.3% | A$103,703.68
+Strategy 5 (https://praxis.example.test/executions/E05) | +A$617.25 | +0.5% | A$106,172.80
+Strategy 7 (https://praxis.example.test/executions/E07) | +A$864.15 | +0.7% | A$108,641.92
+Strategy 9 (https://praxis.example.test/executions/E09) | -A$1,111.05 | -0.9% | A$111,111.04
+Strategy 11 (https://praxis.example.test/executions/E11) | +A$1,357.95 | +1.1% | A$113,580.16
 
-Best: E12 Strategy 12: AUD +1,481.40
-Worst: E09 Strategy 9: AUD -1,111.05
-
-Best and worst are a single-day result — noise.
-
-No execution reached a terminal state today.
-
-System health: 8 of 9 components healthy.
-
-- Backups (needs attention, day 2): Re-run the backup workflow
+- Example Company 3 (TST03) is in a trading halt (a possible deal): Nothing is bought or sold while it is halted.
 
 
 2. Investments made today
@@ -34,111 +29,104 @@ System health: 8 of 9 components healthy.
 
 Filled today (4)
 
-Exec | Order | Qty | Price | Costs | Stop / target | Reason (card)
-E02 | SELL TST01 | 101 | AUD 10.07 | AUD 9.95 | - | Signal E02 fired on volume and trend alignment for example code 1 (https://praxis.example.test/cards/card:sig1:E01)
-E03 | BUY TST02 | 102 | AUD 10.14 | AUD 9.95 | stop AUD 9.02, target AUD 13.02 | Signal E03 fired on volume and trend alignment for example code 2 (https://praxis.example.test/cards/card:sig2:E01)
-E05 | BUY TST04 | 104 | AUD 10.28 | AUD 9.95 | stop AUD 9.04, target AUD 13.04 | Signal E05 fired on volume and trend alignment for example code 4 (https://praxis.example.test/cards/card:sig4:E01)
-E06 | SELL TST05 | 105 | AUD 10.35 | AUD 9.95 | - | Signal E06 fired on volume and trend alignment for example code 5 (https://praxis.example.test/cards/card:sig5:E01)
+Strategy | Order | Qty | Price | Costs | Stop / target | Reason (card)
+Strategy 3 | Sell Example Company 1 (TST01) | 101 | A$10.07 | A$9.95 | - | Signal fired on volume and trend alignment for example code 1 (https://praxis.example.test/cards/card:sig1:E01)
+Strategy 5 | Buy Example Company 2 (TST02) | 102 | A$10.14 | A$9.95 | stop A$9.02, target A$13.02 | Signal fired on volume and trend alignment for example code 2 (https://praxis.example.test/cards/card:sig2:E01)
+Strategy 9 | Buy Example Company 4 (TST04) | 104 | A$10.28 | A$9.95 | stop A$9.04, target A$13.04 | Signal fired on volume and trend alignment for example code 4 (https://praxis.example.test/cards/card:sig4:E01)
+Strategy 11 | Sell Example Company 5 (TST05) | 105 | A$10.35 | A$9.95 | - | Signal fired on volume and trend alignment for example code 5 (https://praxis.example.test/cards/card:sig5:E01)
 
 Created for the next session (2)
 
-Exec | Order | Qty | Price | Costs | Stop / target | Reason (card)
-E04 | SELL TST03 | 103 | AUD 10.21 | AUD 9.95 | - | Signal E04 fired on volume and trend alignment for example code 3 (https://praxis.example.test/cards/card:sig3:E01)
-E07 | BUY TST06 | 106 | AUD 10.42 | AUD 9.95 | stop AUD 9.06, target AUD 13.06 | Signal E07 fired on volume and trend alignment for example code 6 (https://praxis.example.test/cards/card:sig6:E01)
+Strategy | Order | Qty | Price | Costs | Stop / target | Reason (card)
+Strategy 7 | Sell Example Company 3 (TST03) | 103 | A$10.21 | A$9.95 | - | Signal fired on volume and trend alignment for example code 3 (https://praxis.example.test/cards/card:sig3:E01)
+Strategy 1 | Buy Example Company 6 (TST06) | 106 | A$10.42 | A$9.95 | stop A$9.06, target A$13.06 | Signal fired on volume and trend alignment for example code 6 (https://praxis.example.test/cards/card:sig6:E01)
 
 
 3. Profit / loss
 ----------------
 
-Execution | NAV | Day P/L | To target | Detail
-E01 Strategy 1 (https://praxis.example.test/executions/E01) | AUD 101,234.56 | AUD +123.45 | █░░░░░░░░░ 7% (AUD 49,900.00 to go) | realised AUD +50.00; unrealised AUD -15.00; costs AUD 2.50; no sleeve
-E02 Strategy 2 (https://praxis.example.test/executions/E02) | AUD 102,469.12 | AUD +246.90 | █░░░░░░░░░ 14% (AUD 49,800.00 to go) | realised AUD +100.00; unrealised AUD -30.00; costs AUD 5.00; sleeve AUD +2.00 unlocked
-E03 Strategy 3 (https://praxis.example.test/executions/E03) | AUD 103,703.68 | AUD -370.35 | ██░░░░░░░░ 21% (AUD 49,700.00 to go) | realised AUD +150.00; unrealised AUD -45.00; costs AUD 7.50; no sleeve
-E04 Strategy 4 (https://praxis.example.test/executions/E04) | AUD 104,938.24 | AUD +493.80 | ███░░░░░░░ 28% (AUD 49,600.00 to go) | realised AUD +200.00; unrealised AUD -60.00; costs AUD 10.00; sleeve AUD +4.00 locked, recovery 35%
-E05 Strategy 5 (https://praxis.example.test/executions/E05) | AUD 106,172.80 | AUD +617.25 | ████░░░░░░ 35% (AUD 49,500.00 to go) | realised AUD +250.00; unrealised AUD -75.00; costs AUD 12.50; no sleeve
-E06 Strategy 6 (https://praxis.example.test/executions/E06) | AUD 107,407.36 | AUD -740.70 | ████░░░░░░ 42% (AUD 49,400.00 to go) | realised AUD +300.00; unrealised AUD -90.00; costs AUD 15.00; sleeve AUD +6.00 unlocked
-E07 Strategy 7 (https://praxis.example.test/executions/E07) | AUD 108,641.92 | AUD +864.15 | █████░░░░░ 49% (AUD 49,300.00 to go) | realised AUD +350.00; unrealised AUD -105.00; costs AUD 17.50; no sleeve
-E08 Strategy 8 (https://praxis.example.test/executions/E08) | AUD 109,876.48 | AUD +987.60 | ██████░░░░ 56% (AUD 49,200.00 to go) | realised AUD +400.00; unrealised AUD -120.00; costs AUD 20.00; sleeve AUD +8.00 locked, recovery 35%
-E09 Strategy 9 (https://praxis.example.test/executions/E09) | AUD 111,111.04 | AUD -1,111.05 | ██████░░░░ 63% (AUD 49,100.00 to go) | realised AUD +450.00; unrealised AUD -135.00; costs AUD 22.50; no sleeve
-E10 Strategy 10 (https://praxis.example.test/executions/E10) | AUD 112,345.60 | AUD +1,234.50 | ███████░░░ 70% (AUD 49,000.00 to go) | realised AUD +500.00; unrealised AUD -150.00; costs AUD 25.00; sleeve AUD +10.00 unlocked
-E11 Strategy 11 (https://praxis.example.test/executions/E11) | AUD 113,580.16 | AUD +1,357.95 | ████████░░ 77% (AUD 48,900.00 to go) | realised AUD +550.00; unrealised AUD -165.00; costs AUD 27.50; no sleeve
-E12 Strategy 12 (https://praxis.example.test/executions/E12) | AUD 114,814.72 | AUD -1,481.40 | ████████░░ 84% (AUD 48,800.00 to go) | realised AUD +600.00; unrealised AUD -180.00; costs AUD 30.00; sleeve AUD +12.00 locked, recovery 35%
+Strategy | Value now | Today | Since start
+Strategy 1 (https://praxis.example.test/executions/E01) | A$101,234.56 | +A$123.45 (+0.1%) | +A$1,234.56 (+1.2%)
+Strategy 3 (https://praxis.example.test/executions/E03) | A$103,703.68 | -A$370.35 (-0.3%) | +A$3,703.68 (+3.6%)
+Strategy 5 (https://praxis.example.test/executions/E05) | A$106,172.80 | +A$617.25 (+0.5%) | +A$6,172.80 (+6.0%)
+Strategy 7 (https://praxis.example.test/executions/E07) | A$108,641.92 | +A$864.15 (+0.7%) | +A$8,641.92 (+8.4%)
+Strategy 9 (https://praxis.example.test/executions/E09) | A$111,111.04 | -A$1,111.05 (-0.9%) | +A$11,111.04 (+10.8%)
+Strategy 11 (https://praxis.example.test/executions/E11) | A$113,580.16 | +A$1,357.95 (+1.1%) | +A$13,580.16 (+13.2%)
 
 
-4. What was learned today
--------------------------
+4. What we learned today
+------------------------
 
-Written without AI today — facts only.
+- Stocks that broke out on heavy volume rose 0.6% the next day on average.
 
-- Challenger C1 is at n = 12 of 30 required; promotion not yet possible.
+Feature | Cases (n) | Next day vs market | Verdict | Change
+Breakout on heavy volume | 120 | +0.6% vs +0.1% | beats the market | stronger
+
+New ideas being tested
+
+- Gap-ups after results continue for 3 days.
 
 
 5. What worked better and why
 -----------------------------
 
-Written without AI today — facts only.
+Nothing worked today: all 2 trades that finished lost money (-A$52.50 in all).
 
-- No detectable difference between families (n = 12).
+Strategy | Company | Result | How it ended
+Strategy 1 | Example Company 1 (TST01) | -A$42.50 | stop-loss hit
+Strategy 3 | Example Company 3 (TST03) | -A$10.00 | closing signal
 
 
 6. What needs improving for tomorrow
 ------------------------------------
 
-Written without AI today — facts only.
+- Look at gap-up news earlier: 2 of the 3 biggest gainers had news before the open. Next step: Add pre-open announcements to tonight's pick screen.
 
-- 2 orders pending for the next session.
-- Known event tomorrow: RBA minutes.
+2 orders queued for the next session.
+
+Biggest gainers
+
+Company | Move | Why it moved | Setup before | Caught by / near miss
+Example Company 11 (TST11) | +8.5% | Rose after a results announcement before the open. | near a 1-year high | Near miss: Follow the trend (price was 2% under its high)
+
+Biggest losers
+
+Company | Move | Why it moved | Setup before | Caught by / near miss
+Example Company 12 (TST12) | -6.4% | Fell on its own with no news and normal volume. | none seen | Not caught
 
 
 7. Overall picture — success %
 ------------------------------
 
-P(target) 4.1%, P(bust) 9.8%, P(stalled) 20.0% vs matched controls (n = 12).
+All trades so far, to Mon 19 Oct: 50 finished trades, 52.0% of them made money.
 
 Measure | Value | Detail
-Win rate | 52.0% | n = 50
-Expectancy | AUD +4.20 | per trade
+Win rate | 52.0% | 26 of 50
+Average result per trade | +A$4.20 | after costs
 
-Signal success % by agent
-
-A1 Sentinel ██████░░░░ 61% (n = 40)
-
-Patterns █████░░░░░ 48% (n = 35)
-
-Scribe ░░░░░░░░░░ n/a
+Comparison with random-pick twins starts after 3 finished rounds.
 
 
-8. Sentinel recap
+8. Today's alerts
 -----------------
 
-[Regime notice]
-  Regime changed from calm to stressed; 4 executions gated.
+[Market mood changed]
+  The market mood changed from calm to stressed; Strategy 1: paused.
 
-Tier | Code | What | Time | Effect
-P0 | TST01 | Trading halt pending an announcement (https://asx.example.test/ann/1) | 10:42 AEDT | E03 holds 12.5% of NAV; stop review queued
-P1 | TST07 | Quarterly activities report | 11:05 AEDT | Watch-list item, materiality 3
-P2 | TST09 | Appendix 3Y | 12:30 AEDT | No effect
+Company | What | Time | Effect
+Example Company 1 (TST01) | Trading halt pending an announcement (https://asx.example.test/ann/1) | 10:42 AEDT | A strategy holds 12.5% of its value here; stop review queued
+Example Company 7 (TST07) | Quarterly activities report | 11:05 AEDT | Watch-list item, materiality 3
+Example Company 9 (TST09) | Appendix 3Y | 12:30 AEDT | No effect
 
-Thesis-breaker hits
+Held or queued shares with a warning
 
-- E03: TB-REGIME — exit queued for next open
-
-
-9. System & quota health
-------------------------
-
-Check | Status | Detail
-Jobs | OK | all fresh
-Data | OK | ASX bars to 2026-10-19
-ASX switch | OK | on
-LLM budget | Needs attention | estimate 72% of quota
-Last backup | Down | failed 2026-10-18
+- Example Company 3 (TST03): held position exits at the next open
 
 Read this review in the app: https://praxis.example.test/reviews/2026-10-19
 
 --
 
-10. Footer
+9. Footer
 
 Simulation for personal information only; not financial advice.
 

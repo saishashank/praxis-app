@@ -9,7 +9,13 @@ import { signalsKey } from "@/lib/agents/batch2b";
 import { reviewKey } from "@/lib/agents/batch3";
 import { buildFacts } from "@/lib/review/assemble";
 import { REVIEW_SECTION_NAMES, missingSections, runKeys } from "@/lib/review/facts";
-import { sentinelScore } from "@/lib/review/sections";
+import {
+  loadCtx,
+  readAvailability,
+  readHealth,
+  readHealthSummary,
+  sentinelScore,
+} from "@/lib/review/sections";
 import { cleanupTempDbs } from "../db/helpers";
 import {
   APP,
@@ -41,7 +47,7 @@ describe("keys", () => {
     expect(runKeys.close(MARKET, D)).toBe(closeBooksKey(MARKET, D));
     expect(runKeys.signals(MARKET, D)).toBe(signalsKey(MARKET, D));
     expect(runKeys.review(MARKET, D)).toBe(reviewKey(MARKET, D));
-    expect(REVIEW_SECTION_NAMES).toHaveLength(10);
+    expect(REVIEW_SECTION_NAMES).toHaveLength(9);
   });
 });
 
@@ -71,7 +77,7 @@ describe("partial map", () => {
     // sections 4-6 read the A6 `learn` run (M6 T11); section 7 reads batch 3
     const m = missingSections({ ...base, learnOk: false });
     expect(m.map((x) => x.n)).toEqual([4, 5, 6]);
-    expect(m[0]!.name).toBe("What was learned today");
+    expect(m[0]!.name).toBe("What we learned today");
     expect(missingSections({ ...base, reviewOk: false }).map((x) => x.n)).toEqual([7]);
   });
 });
@@ -94,8 +100,15 @@ describe("sections 1 and 3: executions", () => {
     const e02 = facts.executions.find((e) => e.id === "E02")!;
     expect(e02.dayPlCents).toBe(-300);
     expect(e02.sleeve).toBe("unlocked");
-    expect(facts.scorecard.best?.id).toBe("E01");
-    expect(facts.scorecard.worst?.id).toBe("E02");
+    // D-922: strategy names, the plain-share / leverage split, day and since-start percentages
+    expect(e01).toMatchObject({ name: "Follow the trend", variant: "U" });
+    expect(e02).toMatchObject({ name: "Follow the trend", variant: "L" });
+    expect(e01.dayPlPpm).toBe(5_824); // +3.50 on 601.00 = 0.5824 %
+    expect(e01.sinceStartCents).toBe(e01.navCents - 60_000);
+    expect(e01.sinceStartPpm).not.toBeNull();
+    expect(facts.scorecard.best).toBeUndefined();
+    expect(facts.scorecard.worst).toBeUndefined();
+    expect(facts.health).toEqual([]);
   });
 
   it("never uses a previous day's NAV when the date's own books are missing (EML-035)", async () => {
@@ -119,23 +132,40 @@ describe("section 2: orders", () => {
     const db = await mainWorld();
     const { e01, e02 } = await tradingDay(db);
     const card = await addCard(db, e01);
-    await addFilled(db, e02, "o-filled", "ZZF");
-    await addPending(db, e02, "o-pend", "ZZP");
+    await addFilled(db, e01, "o-filled", "ZZF");
+    await addPending(db, e01, "o-pend", "ZZP");
+    await addPending(db, e02, "o-lev", "ZZL"); // the leverage twin is never listed (D-922)
     const { facts } = await buildFacts(db, opts());
     expect(facts.orders.map((o) => [o.executionId, o.code, o.state])).toEqual([
+      ["E01", "ZZF", "filled"],
+      ["E01", "ZZP", "created"],
       ["E01", "ZZUP", "created"],
-      ["E02", "ZZF", "filled"],
-      ["E02", "ZZP", "created"],
     ]);
-    const created = facts.orders[0]!;
+    expect(facts.orders.every((o) => o.strategy === "Follow the trend")).toBe(true);
+    const created = facts.orders[2]!;
     expect(created.cardPath).toBe(`/cards/${encodeURIComponent(card)}`);
     expect(created.reason).toBe("Guidance upgrade with a rising trend.");
     expect(created.priceCents).toBe(150);
-    const filled = facts.orders[1]!;
+    const filled = facts.orders[0]!;
     expect(filled.priceCents).toBe(100);
     expect(filled.costsCents).toBe(950);
     expect(filled.cardPath).toBe(`/reviews/${D}`);
-    expect(facts.orders[2]!.stopCents).toBe(140);
+    expect(facts.orders[1]!.stopCents).toBe(140);
+    expect(facts.queuedOrders).toBe(2);
+  });
+
+  it("gives the company name (display form) of an order when the instrument is known", async () => {
+    const db = await mainWorld();
+    const { e01 } = await tradingDay(db);
+    await addPending(db, e01, "o-pend", "ZZP");
+    await exec(
+      db,
+      "INSERT INTO instrument (market, code, name) VALUES (?, 'ZZP', 'ZED PRODUCTS LIMITED')",
+      [MARKET],
+    );
+    const { facts } = await buildFacts(db, opts());
+    const o = facts.orders.find((x) => x.code === "ZZP")!;
+    expect(o.companyName).toBe("Zed Products Limited");
   });
 
   it("is empty ('No paper orders today') when nothing happened", async () => {
@@ -147,24 +177,66 @@ describe("section 2: orders", () => {
 });
 
 describe("sections 4-6: narrative facts and the no-AI fallback", () => {
-  it("falls back to deterministic facts-only lists when there is no R5 row (EML-014)", async () => {
+  it("builds the plain lists from the daily learning and the closed trades, never from a model (D-922)", async () => {
     const db = await mainWorld();
     const { e01 } = await tradingDay(db);
     await addPending(db, e01, "o-pend", "ZZP");
     const { facts, narrative } = await buildFacts(db, opts());
     expect(narrative).toBe("rules");
     expect(facts.narrative?.kind).toBe("rules");
-    expect(facts.narrative!.s4.join(" ")).toMatch(/No lesson was graded or changed/);
-    expect(facts.narrative!.s5.join(" ")).toMatch(/No position finished today/);
-    expect(facts.narrative!.s6.join(" ")).toMatch(/No plan items for the next session/);
-    expect(facts.narrative!.s5[0]).toMatch(/^Best day: E01 AUD \+3\.50/);
-    expect(facts.narrative!.s6).toContain("Next trading session: 2026-10-20.");
-    expect(facts.narrative!.s6).toContain("1 order queued for the next session.");
+    // the learning module is a stub that returns null in this branch: said plainly, not hidden
+    expect(facts.learning).toBeNull();
+    expect(facts.narrative!.s4).toEqual(["The learning step did not run tonight."]);
+    expect(facts.narrative!.s5[0]).toBe("Nothing worked today: no strategy finished a trade.");
+    expect(facts.narrative!.s6).toEqual(["1 order queued for the next session."]);
+    expect(facts.queuedOrders).toBe(1);
+    expect(facts.nextTradingNote).toBe("Next trading session: Tue 20 Oct.");
+    expect(JSON.stringify(facts.narrative)).not.toMatch(/E01|ledger re-check|No lesson was graded/);
+  });
+});
+
+describe("section 5: positions finished today", () => {
+  it("lists the plain-share strategies' finished trades with the result and how they ended", async () => {
+    const db = await mainWorld();
+    const { e01, e02 } = await tradingDay(db);
+    await addClosedTrade(db, e01, "a", false, D); // finished today, a loss
+    await addClosedTrade(db, e02, "b", false, D); // leverage twin: never listed
+    await addClosedTrade(db, e01, "c", true); // finished on the previous session: not today
+    const { facts } = await buildFacts(db, opts());
+    expect(facts.closedTrades).toEqual([
+      {
+        strategy: "Follow the trend",
+        code: "ZZA",
+        company: null,
+        resultCents: -4000, // 80 - 10 brokerage - 100 - 10 brokerage
+        exit: "closing signal",
+      },
+    ]);
+    expect(facts.narrative!.s5[0]).toBe(
+      "Nothing worked today: the one trade that finished lost money (-A$40.00 in all).",
+    );
+  });
+
+  it("uses the learning attribution tag for the plain-word exit reason when it exists", async () => {
+    const db = await mainWorld();
+    const { e01 } = await tradingDay(db);
+    await addClosedTrade(db, e01, "a", true, D);
+    await exec(
+      db,
+      `INSERT INTO attribution (subject_kind, subject_id, version, market, d, final, tags_json, mfe_ppm, mae_ppm,
+         hold_sessions, cost_micro, slippage_micro) VALUES ('trade', 't-a', 1, ?, ?, 1, ?, 0, 0, 1, 0, 0)`,
+      [MARKET, D, JSON.stringify({ exit: { reason: "CS:close_above_sma" } })],
+    );
+    const { facts } = await buildFacts(db, opts());
+    expect(facts.closedTrades![0]!.exit).toBe(
+      "closing signal: the price crossed its average (the trend turned)",
+    );
+    expect(facts.closedTrades![0]!.resultCents).toBe(1000); // 130 - 10 - 100 - 10 = A$10
   });
 });
 
 describe("section 7: statistics, ARN-073 and ARN-075", () => {
-  it("computes cumulative trade statistics and shows 'n/a' for agents without a success test", async () => {
+  it("computes cumulative trade statistics in plain words, without labels, control rows or agent bars", async () => {
     const db = await mainWorld();
     const { e01 } = await tradingDay(db);
     await addClosedTrade(db, e01, "a", true);
@@ -176,17 +248,48 @@ describe("section 7: statistics, ARN-073 and ARN-075", () => {
     );
     const { facts } = await buildFacts(db, opts());
     const s = facts.stats!;
-    expect(s.headline).toContain("2 closed trades");
+    expect(s.headline).toContain("2 finished trades");
+    expect(s.headline).toContain("Mon 19 Oct");
     const row = (l: string) => s.rows.find((r) => r.label === l)!;
-    expect(row("Closed trades").value).toBe("2");
+    expect(row("Finished trades").value).toBe("2");
     expect(row("Win rate").value).toBe("50.0%");
     expect(row("Profit factor").value).toBe("0.25"); // wins 10 vs losses 40
-    expect(row("E01 label").value).toBe("UNVALIDATED");
-    expect(s.agents.map((a) => [a.agent, a.successPct])).toEqual([
-      ["A1 Sentinel (ARN-073)", null],
-      ["Pattern agent (ARN-074)", null],
-      ["LLM roles (ARN-075)", null],
+    expect(row("Average result per trade").value).toBe("-A$15.00");
+    expect(s.rows.some((r) => /label|C2|Zero-edge|vs/.test(r.label))).toBe(false);
+    expect(s.comparisons).toEqual([]);
+    expect("agents" in s).toBe(false);
+  });
+
+  it("lists one comparison line per plain-share strategy, only when measured", async () => {
+    const db = await mainWorld();
+    await tradingDay(db);
+    const head = (scope: string, cif: number | null) =>
+      exec(
+        db,
+        `INSERT INTO replay_stat (run_id, d, scope, metric, value_json) VALUES (?, ?, ?, 'headline', ?)`,
+        [
+          runKeys.review(MARKET, D),
+          D,
+          scope,
+          JSON.stringify({
+            scope,
+            comparator: "C2-F1",
+            cifTargetMinusC2: cif,
+            navMinusC2Micro: null,
+            effectiveN: 12,
+            comparatorEffectiveN: 14,
+          }),
+        ],
+      );
+    await head("E01", 0.025);
+    await head("E02", 0.5); // the leverage twin is never listed
+    const { facts } = await buildFacts(db, opts());
+    expect(facts.stats!.comparisons).toEqual([
+      "Follow the trend: 2.5 percentage points ahead of its random-pick twin at reaching the target (12 against 14 finished rounds).",
     ]);
+    const unmeasured = await mainWorld();
+    await tradingDay(unmeasured);
+    expect((await buildFacts(unmeasured, opts())).facts.stats!.comparisons).toEqual([]);
   });
 
   it("scores the Sentinel against measured moves of 5 % or more (ARN-073)", async () => {
@@ -205,12 +308,10 @@ describe("section 7: statistics, ARN-073 and ARN-075", () => {
     }
     const score = await sentinelScore(db, MARKET, D);
     expect(score).toMatchObject({ n: 3, hits: 2, falseAlarms: 1 });
-    const { facts } = await buildFacts(db, opts());
-    expect(facts.stats!.agents[0]).toMatchObject({ successPct: 67, n: 3 });
   });
 });
 
-describe("section 8: Sentinel recap", () => {
+describe("section 8: today's alerts", () => {
   it("lists the alerts of the Melbourne date only, P0 first, with the regime notice", async () => {
     const db = await mainWorld();
     await tradingDay(db);
@@ -245,7 +346,7 @@ describe("section 8: Sentinel recap", () => {
       url: "https://example.test/a",
     });
     expect(facts.regimeNotice).toBe(
-      "Market regime changed from NEUTRAL to SHOCK. E01: entries paused.",
+      "The market mood changed from neutral to shock. Follow the trend: entries paused.",
     );
   });
 
@@ -263,6 +364,7 @@ describe("section 8: Sentinel recap", () => {
     expect(facts.breakerHits).toEqual([
       {
         execution: "ZZUP",
+        company: null,
         breaker: "TB-NEG (red)",
         effect: "held position exits at the next open",
       },
@@ -270,7 +372,22 @@ describe("section 8: Sentinel recap", () => {
   });
 });
 
-describe("section 9: system and quota health", () => {
+const healthOf = async (db: Client) => {
+  const c = await loadCtx(db, opts());
+  const av = await readAvailability(c);
+  return { c, ...(await readHealth(c, av)) };
+};
+
+describe("system and quota health (no longer in the review, D-922; the reader stays for the app)", () => {
+  it("leaves the review facts free of health lines and counts", async () => {
+    const db = await mainWorld();
+    await tradingDay(db);
+    const { facts } = await buildFacts(db, opts());
+    expect(facts.health).toEqual([]);
+    expect(facts.suppressedEmails).toBe(0);
+    expect(facts.scorecard.attention).toEqual([]);
+  });
+
   it("reports the ASX switch, jobs, models, incidents and suppressed emails", async () => {
     const db = await mainWorld();
     await tradingDay(db);
@@ -291,7 +408,10 @@ describe("section 9: system and quota health", () => {
       `INSERT INTO email_message (email_key, env, kind, d, slot, status, created_at) VALUES ('p0:a', 'production', 'p0', ?, 'p0', 'suppressed_cap', ?)`,
       [D, `${D}T01:00:00.000Z`],
     );
-    const { facts } = await buildFacts(db, opts());
+    const facts = {
+      health: (await healthOf(db)).lines,
+      suppressedEmails: (await healthOf(db)).suppressed,
+    };
     const line = (l: string) => facts.health.find((h) => h.label === l)!;
     expect(line("ASX feed")).toMatchObject({ status: "attention" });
     expect(line("ASX feed").detail).toContain("off: Owner switch");
@@ -301,7 +421,9 @@ describe("section 9: system and quota health", () => {
     expect(line("Incidents")).toMatchObject({ status: "attention", detail: "1 open incident." });
     expect(line("Backups").status).toBe("attention");
     expect(facts.suppressedEmails).toBe(1);
-    expect(facts.scorecard.attention.map((a) => a.name)).toContain("ASX feed");
+    const h = await healthOf(db);
+    const summary = await readHealthSummary(h.c, h.lines);
+    expect(summary.attention.map((a) => a.name)).toContain("ASX feed");
   });
 
   it("uses the stored health snapshot of the review when there is one", async () => {
@@ -326,15 +448,16 @@ describe("section 9: system and quota health", () => {
         }),
       ],
     );
-    const { facts } = await buildFacts(db, opts());
-    expect(facts.scorecard).toMatchObject({ healthyComponents: 1, totalComponents: 2 });
-    expect(facts.scorecard.attention).toEqual([
+    const h = await healthOf(db);
+    const summary = await readHealthSummary(h.c, h.lines);
+    expect(summary).toMatchObject({ healthyComponents: 1, totalComponents: 2 });
+    expect(summary.attention).toEqual([
       { name: "Yahoo slow", status: "attention", daysOpen: 4, fix: "Wait" },
     ]);
   });
 });
 
-describe("section 9: the steelman budget-state line (D-484, AT-37)", () => {
+describe("health reader: the steelman budget-state line (D-484, AT-37)", () => {
   const night = (db: Client, n: { written: number; noModel: number; budget: number }) =>
     exec(
       db,
@@ -355,7 +478,7 @@ describe("section 9: the steelman budget-state line (D-484, AT-37)", () => {
   it("has no line on a night without a steelman row", async () => {
     const db = await mainWorld();
     await tradingDay(db);
-    const { facts } = await buildFacts(db, opts());
+    const facts = { health: (await healthOf(db)).lines };
     expect(facts.health.some((h) => h.label === "Steelman")).toBe(false);
   });
 
@@ -363,7 +486,7 @@ describe("section 9: the steelman budget-state line (D-484, AT-37)", () => {
     const db = await mainWorld();
     await tradingDay(db);
     await night(db, { written: 0, noModel: 3, budget: 0 });
-    const { facts } = await buildFacts(db, opts());
+    const facts = { health: (await healthOf(db)).lines };
     const l = facts.health.find((h) => h.label === "Steelman")!;
     expect(l.status).toBe("ok");
     expect(l.detail).toContain("0 of 3 written; 3 with no model available");
@@ -373,7 +496,7 @@ describe("section 9: the steelman budget-state line (D-484, AT-37)", () => {
     const db = await mainWorld();
     await tradingDay(db);
     await night(db, { written: 1, noModel: 0, budget: 2 });
-    const { facts } = await buildFacts(db, opts());
+    const facts = { health: (await healthOf(db)).lines };
     const l = facts.health.find((h) => h.label === "Steelman")!;
     expect(l.status).toBe("attention");
     expect(l.detail).toContain("1 of 3 written; 2 stopped by the AI budget");
@@ -390,7 +513,7 @@ describe("variants", () => {
     expect(facts.executions).toEqual([]);
   });
 
-  it("non-trading day: carried NAV, no day P/L, no yesterday-as-today, still all ten headings", async () => {
+  it("non-trading day: carried NAV, no day P/L, no yesterday-as-today, no learning on a market-closed day", async () => {
     const db = await mainWorld();
     const { e01 } = await tradingDay(db);
     void e01;
@@ -403,7 +526,7 @@ describe("variants", () => {
     expect(e.navCents).toBe(60100); // Friday's NAV, carried over the weekend
     expect(e.dayPlCents).toBe(0);
     expect(facts.scorecard.best).toBeUndefined();
-    expect(facts.narrative?.s6[0]).toBe("Next trading session: 2026-10-19.");
+    expect(facts.nextTradingNote).toBe("Next trading session: Mon 19 Oct.");
   });
 
   it("minimal review: this date's data only, with the reason", async () => {
@@ -421,7 +544,7 @@ describe("variants", () => {
     const empty = await mainWorld();
     const none = await buildFacts(empty, { ...opts(), minimal: { reason: "Normal path failed." } });
     expect(none.facts.executions).toEqual([]);
-    expect(none.facts.minimalReason).toBe(`Normal path failed. No data for ${D}.`);
+    expect(none.facts.minimalReason).toBe("Normal path failed. No data for Mon 19 Oct.");
   });
 });
 

@@ -4,6 +4,8 @@
 // "when promotion could first be possible"; 5 findings or "no detectable difference"; 6 the plan and
 // the review of yesterday's plan. The rows come from the real `learn` phase; the review is assembled by
 // the real facts and renderer. Heavier cover (named, not repeated): tests/review/sections46.test.ts.
+// D-922: the review itself now reads the DAILY learning; these tests keep covering the A6 lists the
+// narrative pack builds for the batch 3 request (rulesNarrative), and the partial rule.
 // PENDING (Owner / staging, not evidenced here): the inbox check, and the real review on a staging run.
 import type { Client } from "@libsql/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -13,6 +15,7 @@ import { learnKey } from "@/lib/learning/learnFacts";
 import { learnDay } from "@/lib/learning/learnStage";
 import { seedRuleVersions } from "@/lib/learning/ruleVersions";
 import { assembleReview, buildFacts } from "@/lib/review/assemble";
+import { loadCtx, readNarrativePack, rulesNarrative } from "@/lib/review/sections";
 import { cleanupTempDbs } from "../../db/helpers";
 import { addLineage, ownerChallenger } from "../../learning/challengerFixtures";
 import { addRun, seedLesson } from "../../learning/learnHelpers";
@@ -61,13 +64,19 @@ beforeAll(async () => {
 });
 afterAll(cleanupTempDbs);
 
+/** The A6 lists of the narrative pack (what the R5 request falls back to). */
+async function lists() {
+  const c = await loadCtx(db, opts);
+  return rulesNarrative(await readNarrativePack(c), false);
+}
+
 describe("AT-20 sections 4-6 from the stored A6 output", () => {
   it("section 4: the lesson with its grade, the Lane-A change, the challenger status and the earliest date a promotion could first be possible", async () => {
-    const { facts, variant, missing, narrative } = await buildFacts(db, opts);
+    const { variant, missing, narrative } = await buildFacts(db, opts);
     expect(variant).toBe("full");
     expect(missing).toEqual([]);
     expect(narrative).toBe("rules");
-    const s4 = facts.narrative!.s4;
+    const s4 = (await lists()).s4;
     expect(s4.join("\n")).toMatch(/Lesson L-1 \(L3, n = 120\)/);
     expect(s4.join("\n")).toMatch(/Playbook A1.* changes from 2026-10-20/);
     const ch = s4.find((l) => l.startsWith("Challenger C-"))!;
@@ -78,7 +87,7 @@ describe("AT-20 sections 4-6 from the stored A6 output", () => {
   });
 
   it("section 5: a finding states its numbers, otherwise 'no detectable difference (n = ...)'", async () => {
-    const s5 = (await buildFacts(db, opts)).facts.narrative!.s5.join("\n");
+    const s5 = (await lists()).s5.join("\n");
     expect(s5).toContain("F1.v1|F2.v1: no detectable difference (n = 40).");
     expect(s5).toContain(
       "F2.v1|F4.v1: confirmation look — passed (finding) (estimate 80, p = 0.01, n = 60).",
@@ -86,18 +95,18 @@ describe("AT-20 sections 4-6 from the stored A6 output", () => {
   });
 
   it("section 6: tonight's plan (at most 5 items) and the review of the previous plan", async () => {
-    const s6 = (await buildFacts(db, opts)).facts.narrative!.s6;
+    const s6 = (await lists()).s6;
     const items = s6.filter((l) => l.startsWith("Plan item "));
     expect(items.length).toBeGreaterThan(0);
     expect(items.length).toBeLessThanOrEqual(5);
     expect(s6.some((l) => /^Plan of 2026-10-16, item \d+ \(.*\): /.test(l))).toBe(true);
   });
 
-  it("the rendered review carries the A6 lines, and without a `learn` run sections 4-6 are marked missing", async () => {
+  it("the rendered review reads the daily learning, and without a `learn` run sections 4-6 are marked missing", async () => {
     const out = await assembleReview(db, opts);
-    expect(out.text).toContain("Lesson L-1");
-    expect(out.text).toContain("no detectable difference (n = 40)");
-    expect(out.text).toContain("Written without AI today");
+    expect(out.text).not.toContain("Lesson L-1");
+    expect(out.text).not.toContain("Written without AI today");
+    expect(out.text).toContain("The learning step did not run tonight.");
     // the partial rule (AGT-050): no finished `learn` run -> sections 4-6 are missing, the review is partial
     await db.execute({
       sql: "UPDATE run_record SET status = 'failed' WHERE concurrency_key = ?",

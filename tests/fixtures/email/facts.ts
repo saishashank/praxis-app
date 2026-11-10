@@ -22,9 +22,15 @@ export function execution(i: number, over: Partial<ExecutionFact> = {}): Executi
   return {
     id,
     label: `Strategy ${i}`,
+    name: `Strategy ${i}`,
+    // odd = plain shares (listed), even = leverage twin (never listed)
+    variant: i % 2 === 1 ? "U" : "L",
     currency: "AUD",
     navCents: 100_000_00 + i * 1_234_56,
     dayPlCents: (i % 3 === 0 ? -1 : 1) * i * 12_345,
+    dayPlPpm: (i % 3 === 0 ? -1 : 1) * i * 1_000,
+    sinceStartCents: i * 1_234_56,
+    sinceStartPpm: i * 12_000,
     progressPct: (i * 7) % 100,
     distanceToTargetCents: 50_000_00 - i * 100_00,
     realisedCents: i * 5_000,
@@ -41,6 +47,8 @@ export function execution(i: number, over: Partial<ExecutionFact> = {}): Executi
 export function order(i: number, over: Partial<OrderFact> = {}): OrderFact {
   return {
     executionId: `E${String((i % 12) + 1).padStart(2, "0")}`,
+    strategy: `Strategy ${(i % 6) * 2 + 1}`,
+    companyName: `Example Company ${i % 40}`,
     state: i % 3 === 0 ? "created" : "filled",
     side: i % 2 === 0 ? "buy" : "sell",
     code: `TST${String(i % 40).padStart(2, "0")}`,
@@ -50,7 +58,7 @@ export function order(i: number, over: Partial<OrderFact> = {}): OrderFact {
     currency: "AUD",
     stopCents: i % 2 === 0 ? 900 + i : undefined,
     targetCents: i % 2 === 0 ? 1_300 + i : undefined,
-    reason: `Signal E0${(i % 9) + 1} fired on volume and trend alignment for example code ${i}`,
+    reason: `Signal fired on volume and trend alignment for example code ${i}`,
     cardPath: `/cards/card:sig${i}:E01`,
     ...over,
   };
@@ -75,6 +83,17 @@ export const ALERTS: AlertFact[] = [
   { tier: "P2", code: "TST09", title: "Appendix 3Y", time: "12:30 AEDT", effect: "No effect" },
 ];
 
+/** The alerts as the review reads them (company name added, plain effect text). */
+const REVIEW_ALERTS: AlertFact[] = [
+  {
+    ...ALERTS[0]!,
+    company: "Example Company 1",
+    effect: "A strategy holds 12.5% of its value here; stop review queued",
+  },
+  { ...ALERTS[1]!, company: "Example Company 7" },
+  { ...ALERTS[2]!, company: "Example Company 9" },
+];
+
 export function reviewFacts(over: Partial<ReviewFacts> = {}): ReviewFacts {
   const executions = Array.from({ length: 12 }, (_, k) => execution(k + 1));
   return {
@@ -85,36 +104,117 @@ export function reviewFacts(over: Partial<ReviewFacts> = {}): ReviewFacts {
     arenaActive: true,
     executions,
     scorecard: {
-      best: { id: "E12", label: "Strategy 12", currency: "AUD", dayPlCents: 12 * 12_345 },
-      worst: { id: "E09", label: "Strategy 9", currency: "AUD", dayPlCents: -9 * 12_345 },
       healthyComponents: 8,
       totalComponents: 9,
       attention: [
-        { name: "Backups", status: "attention", daysOpen: 2, fix: "Re-run the backup workflow" },
+        {
+          name: "Example Company 3 (TST03) is in a trading halt (a possible deal)",
+          status: "attention",
+          daysOpen: 1,
+          fix: "Nothing is bought or sold while it is halted.",
+        },
       ],
     },
     orders: Array.from({ length: 6 }, (_, k) => order(k + 1)),
+    closedTrades: [
+      {
+        strategy: "Strategy 1",
+        code: "TST01",
+        company: "Example Company 1",
+        resultCents: -4_250,
+        exit: "stop-loss hit",
+      },
+      {
+        strategy: "Strategy 3",
+        code: "TST03",
+        company: "Example Company 3",
+        resultCents: -1_000,
+        exit: "closing signal",
+      },
+    ],
+    queuedOrders: 2,
+    learning: {
+      d: DATE,
+      summary: ["Stocks that broke out on heavy volume rose 0.6% the next day on average."],
+      movers: [
+        {
+          code: "TST11",
+          name: "Example Company 11",
+          side: "gainer",
+          movePpm: 85_000,
+          cause: "news_before_open",
+          causeText: "Rose after a results announcement before the open.",
+          indexMovePpm: 2_000,
+          sectorName: null,
+          sectorMovePpm: null,
+          volumeVsUsualPpm: 3_000_000,
+          setupBefore: ["near a 1-year high"],
+          caughtBy: null,
+          nearMiss: "Follow the trend (price was 2% under its high)",
+        },
+        {
+          code: "TST12",
+          name: "Example Company 12",
+          side: "loser",
+          movePpm: -64_000,
+          cause: "stock_specific",
+          causeText: "Fell on its own with no news and normal volume.",
+          indexMovePpm: 2_000,
+          sectorName: null,
+          sectorMovePpm: null,
+          volumeVsUsualPpm: null,
+          setupBefore: [],
+          caughtBy: null,
+          nearMiss: null,
+        },
+      ],
+      lessons: [
+        {
+          feature: "Breakout on heavy volume",
+          sessions: 40,
+          n: 120,
+          nextDayAvgPpm: 6_000,
+          baseAvgPpm: 1_000,
+          liftPpm: 5_000,
+          hitRatePpm: 560_000,
+          verdict: "beats the market",
+          change: "stronger",
+        },
+      ],
+      improvements: [
+        {
+          title: "Look at gap-up news earlier",
+          evidence: "2 of the 3 biggest gainers had news before the open.",
+          action: "Add pre-open announcements to tonight's pick screen.",
+          area: "picks",
+        },
+      ],
+      hypothesesOpened: ["Gap-ups after results continue for 3 days."],
+    },
     narrative: {
       kind: "rules",
-      s4: ["Challenger C1 is at n = 12 of 30 required; promotion not yet possible."],
-      s5: ["No detectable difference between families (n = 12)."],
-      s6: ["2 orders pending for the next session.", "Known event tomorrow: RBA minutes."],
+      s4: ["Stocks that broke out on heavy volume rose 0.6% the next day on average."],
+      s5: ["Nothing worked today: all 2 trades that finished lost money (-A$52.50 in all)."],
+      s6: ["2 orders queued for the next session."],
     },
     stats: {
-      headline: "P(target) 4.1%, P(bust) 9.8%, P(stalled) 20.0% vs matched controls (n = 12).",
+      headline: "All trades so far, to Mon 19 Oct: 50 finished trades, 52.0% of them made money.",
       rows: [
-        { label: "Win rate", value: "52.0%", detail: "n = 50" },
-        { label: "Expectancy", value: "AUD +4.20", detail: "per trade" },
+        { label: "Win rate", value: "52.0%", detail: "26 of 50" },
+        { label: "Average result per trade", value: "+A$4.20", detail: "after costs" },
       ],
-      agents: [
-        { agent: "A1 Sentinel", successPct: 61, n: 40 },
-        { agent: "Patterns", successPct: 48, n: 35 },
-        { agent: "Scribe", successPct: null, n: 0 },
-      ],
+      comparisons: [],
     },
-    alerts: ALERTS,
-    regimeNotice: "Regime changed from calm to stressed; 4 executions gated.",
-    breakerHits: [{ execution: "E03", breaker: "TB-REGIME", effect: "exit queued for next open" }],
+    alerts: REVIEW_ALERTS,
+    regimeNotice: "The market mood changed from calm to stressed; Strategy 1: paused.",
+    breakerHits: [
+      {
+        execution: "TST03",
+        company: "Example Company 3",
+        breaker: "TB-REGIME",
+        effect: "held position exits at the next open",
+      },
+    ],
     health: [
       { label: "Jobs", status: "ok", detail: "all fresh" },
       { label: "Data", status: "ok", detail: "ASX bars to 2026-10-19" },
@@ -131,7 +231,7 @@ export const REVIEW_FULL = reviewFacts();
 export const REVIEW_PARTIAL = reviewFacts({
   variant: "partial",
   missing: [
-    { n: 4, name: "What was learned today" },
+    { n: 4, name: "What we learned today" },
     { n: 7, name: "Overall picture — success %" },
   ],
 });
@@ -143,7 +243,7 @@ export const REVIEW_NON_TRADING = reviewFacts({
   variant: "nonTrading",
   date: "2026-10-17",
   orders: [],
-  alerts: [ALERTS[1]!],
+  alerts: [REVIEW_ALERTS[1]!],
   regimeNotice: undefined,
   breakerHits: [],
 });
@@ -161,7 +261,6 @@ export function worstReview(): ReviewFacts {
         value: `${k}.00`,
         detail: "detail text that repeats across rows to inflate the table size",
       })),
-      agents: Array.from({ length: 12 }, (_, k) => ({ agent: `Agent ${k}`, successPct: k * 5, n: 30 + k })),
     },
   });
 }

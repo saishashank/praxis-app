@@ -366,7 +366,7 @@ describe("quiet hours, digest and Evening Review (D-388)", () => {
     expect(mock.outbox).toHaveLength(1);
   });
 
-  it("quiet hours ending after 16:00: held_to_review, no digest, listed in section 9", async () => {
+  it("quiet hours ending after 16:00: held_to_review, no digest, listed in today's alerts", async () => {
     await setQuiet("09:00", "17:00");
     await transition(1, "hit");
     const mailer = createPickMailer(ctx());
@@ -406,7 +406,7 @@ describe("quiet hours, digest and Evening Review (D-388)", () => {
       "Intraday candidates today: 1 found, 0 carried into tonight's decision.",
     ]);
     expect(on?.candidates).toEqual([
-      { code: "ZY01", trigger: "Contract", outcome: "not yet decided" },
+      { code: "ZY01", name: null, trigger: "Contract", outcome: "not yet decided" },
     ]);
     const off = await readPickReview({ db, market: "AU", d: SESSION } as Ctx, false);
     expect(off?.candidates).toBeNull();

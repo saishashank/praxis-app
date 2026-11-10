@@ -67,7 +67,7 @@ beforeEach(async () => {
 });
 
 describe("AT-20 Evening Review", () => {
-  it("trading day: exactly one review in the 20:00-20:45 window, to the Owner only, all 10 sections, <= 90 KB HTML, plain text, no remote image or pixel", async () => {
+  it("trading day: exactly one review in the 20:00-20:45 window, to the Owner only, all its sections, <= 90 KB HTML, plain text, no remote image or pixel", async () => {
     await tradingDay(db);
     for (const t of ["20:00", "20:05", "20:40"]) {
       at(t);
@@ -77,7 +77,11 @@ describe("AT-20 Evening Review", () => {
     const m = mock.outbox[0]!;
     expect(m.to).toBe(OWNER);
     expect(m.subject).toContain("Evening Review");
-    REVIEW_SECTION_NAMES.forEach((name, i) => expect(m.text).toContain(`${i + 1}. ${name}`));
+    // D-922: sections 1-7 always; "Today's alerts" only with content; the footer closes the review
+    REVIEW_SECTION_NAMES.slice(0, 7).forEach((name, i) =>
+      expect(m.text).toContain(`${i + 1}. ${name}`),
+    );
+    expect(m.text).toMatch(/\d\. Footer/);
     expect(Buffer.byteLength(m.html, "utf8")).toBeLessThanOrEqual(REVIEW_MAX_BYTES); // EML-013: HTML bytes before transfer encoding
     expect(m.text.length).toBeGreaterThan(200);
     expect(m.html).not.toMatch(/<img\b/i);
@@ -91,7 +95,7 @@ describe("AT-20 Evening Review", () => {
     expect(await count("SELECT COUNT(*) AS n FROM evening_review WHERE d = ?", [D])).toBe(1); // stored in-app (KB archive: M6, pending)
   });
 
-  it("non-trading day (Saturday): exactly one review, all 10 headings kept", async () => {
+  it("non-trading day (Saturday): exactly one review, its headings kept", async () => {
     await addMarker(db, SAT, "non-trading");
     at("20:00", SAT);
     await send(SAT);
@@ -99,9 +103,10 @@ describe("AT-20 Evening Review", () => {
     await send(SAT);
     expect(mock.outbox).toHaveLength(1);
     expect(mock.outbox[0]!.to).toBe(OWNER);
-    REVIEW_SECTION_NAMES.forEach((name, i) =>
+    REVIEW_SECTION_NAMES.slice(0, 7).forEach((name, i) =>
       expect(mock.outbox[0]!.text).toContain(`${i + 1}. ${name}`),
     );
+    expect(mock.outbox[0]!.text).toMatch(/\d\. Footer/);
   });
 
   it("a late pipeline yields a partial review at 20:30 listing what is missing; the complete version is stored later and not re-sent", async () => {
@@ -121,12 +126,12 @@ describe("AT-20 Evening Review", () => {
     expect(await count("SELECT COUNT(*) AS n FROM evening_review WHERE d = ?", [D])).toBe(2);
   });
 
-  it("all LLM providers unavailable: still sent with template text ('Written without AI today') and the numbers from data", async () => {
+  it("all LLM providers unavailable: still sent from the stored data, with plain words and no model text", async () => {
     await tradingDay(db); // no llm_call or narrative rows exist
     await send();
     const m = mock.outbox[0]!;
-    expect(m.text).toContain("Written without AI today");
-    expect(m.text).toContain("E01");
+    expect(m.text).toContain("The learning step did not run tonight.");
+    expect(m.text).toContain("Follow the trend");
   });
 
   it("staging emails carry [STAGING]", async () => {

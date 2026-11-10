@@ -9,7 +9,7 @@
 import type { Client } from "@libsql/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setAsxEnabled } from "@/lib/data/controls";
-import { buildFacts } from "@/lib/review/assemble";
+import { loadCtx, readAvailability, readHealth } from "@/lib/review/sections";
 import { runAsx, type AsxEnv } from "../../../worker/src/asx/slots";
 import { addUser, auditRows, KEY } from "../../auth/helpers";
 import { cleanupTempDbs, freshDb } from "../../db/helpers";
@@ -66,7 +66,7 @@ function pipelineFetch(db: Client): typeof fetch {
 }
 
 describe("AT-21 kill switch", () => {
-  it("switching ASX off stops requests on the next tick, is audited, and the review section 9 lists it", async () => {
+  it("switching ASX off stops requests on the next tick, is audited, and the health reader says so", async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     const main = await freshDb("main");
     const auth = await freshDb("auth");
@@ -93,16 +93,19 @@ describe("AT-21 kill switch", () => {
       return turso(input, init);
     }) as typeof fetch;
     const tick = () => runAsx(WENV, now, { fetch: f, nowMs: () => now });
-    const facts = async () =>
-      (
-        await buildFacts(main, {
-          market: "AU",
-          d: "2026-10-13",
-          env: "production",
-          appUrl: "https://praxis.example.test",
-          now: new Date(now),
-        })
-      ).facts.health.find((h) => h.label === "ASX feed");
+    // D-922: the review has no system-health section any more; the reader still states the feed
+    const facts = async () => {
+      const c = await loadCtx(main, {
+        market: "AU",
+        d: "2026-10-13",
+        env: "production",
+        appUrl: "https://praxis.example.test",
+        now: new Date(now),
+      });
+      return (await readHealth(c, await readAvailability(c))).lines.find(
+        (h) => h.label === "ASX feed",
+      );
+    };
 
     // switch on: the poll makes its one request and the review says the feed is on
     expect((await tick()).fetched).toBe(1);
