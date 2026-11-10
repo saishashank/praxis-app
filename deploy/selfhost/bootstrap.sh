@@ -65,7 +65,7 @@ step_os() {
   log "1/8 OS hardening"
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -y
-  apt-get install -y --no-install-recommends ca-certificates curl gnupg ufw fail2ban unattended-upgrades jq
+  apt-get install -y --no-install-recommends ca-certificates curl gnupg ufw fail2ban unattended-upgrades jq nodejs
 
   timedatectl set-timezone UTC || warn "could not set timezone (not systemd?)"
 
@@ -163,6 +163,10 @@ step_layout() {
   fetch_file deploy/selfhost/bin/praxis "$BIN_DIR/praxis" optional 0755
   fetch_file deploy/selfhost/deploy.sh "$BIN_DIR/deploy.sh" optional 0755
   fetch_file deploy/selfhost/switch.sh "$BIN_DIR/switch.sh" optional 0755
+  # praxis deploy runs these with the host node (deploy.sh falls back to the jobs image when one is missing).
+  fetch_file scripts/selfhost/predeploy.mjs "$BIN_DIR/predeploy.mjs" optional 0644
+  fetch_file scripts/selfhost/smoke.mjs "$BIN_DIR/smoke.mjs" optional 0644
+  fetch_file scripts/selfhost/predeploy-copy.mjs "$BIN_DIR/predeploy-copy.mjs" optional 0644
   fetch_file deploy/selfhost/backup-now.sh "$BIN_DIR/backup-now.sh" optional 0755
   # Non-secret compose variables. PRAXIS_SHA is rewritten with the digest in step 5.
   {

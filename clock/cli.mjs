@@ -8,14 +8,15 @@
 //   backup-now                   run the backup job now (repo copy, then the bucket copy)
 //   restore-drill [--source live|synthetic|backup]   run the restore drill job now
 //   restore-latest               newest backup into sqld, then migrate (BACKUP_PRIVATE_KEY supplied per command)
-//   deploy                       not built yet (T7): exit 2
+//   deploy, switch               host commands (deploy.sh, switch.sh), not run here: print a pointer, exit 2
 // The commands other than `run` use plain fetch and need no bundle, so they answer at once. No secret is
 // printed: the database URL and token are read from the environment and used, never shown.
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const OWNER_KEY = "clock_owner";
-const STUBS = { deploy: true }; // T7
+// `deploy` drives docker compose, so it is a host command (deploy/selfhost/deploy.sh); the wrapper never sends it here.
+const HOST_ONLY = { deploy: true, switch: true };
 
 const env = process.env;
 
@@ -242,15 +243,15 @@ try {
       );
     }
   } else if (cmd === "restore-latest") code = restoreLatest();
-  else if (cmd in STUBS) {
-    console.log("not built yet (T7)");
+  else if (cmd in HOST_ONLY) {
+    console.log(`${cmd} runs on the host, not in the clock container: use "praxis ${cmd}" there`);
     code = 2;
   } else {
     console.log(
       "usage: praxis status | run <job> [--input k=v] | logs <job|run-id> | owner [cloud|selfhost]",
     );
     console.log(
-      "       praxis backup-now | restore-drill [--source s] | restore-latest | deploy <sha> (deploy: not built yet, T7)",
+      "       praxis backup-now | restore-drill [--source s] | restore-latest | deploy <sha> | switch (the last two run on the host)",
     );
     code = 2;
   }

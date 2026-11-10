@@ -6,3 +6,8 @@ eafb5c934a2fc5fe0e55d06e3f2b7b3816d60b7b:scripts/ci/zap-run.test.mjs:generic-api
 003bc04463ca249ab6831060b95a7f0137042161:tests/kb/m8contextPack.test.ts:generic-api-key:15
 # Config key names in the M14 rule schema ("key: \"f1_momentum_variant\"") match the generic-api-key pattern. A structural parameter name, not a secret.
 ffb9ba02cfcb56859210d3e84fc02990dc9abcab:src/lib/agents/families/ruleSchema.ts:generic-api-key:656
+# Fake test values in the self-hosted clock tests (infra branch, commit 16fb5f7): a fake cron secret, a fake Resend key and a fake token for the log-masking test. Built at run time from the next commit on. Not real secrets.
+16fb5f743532efc228d5c2331b15ec77f73aac19:tests/selfhost/units.test.ts:generic-api-key:226
+16fb5f743532efc228d5c2331b15ec77f73aac19:tests/selfhost/loop.test.ts:generic-api-key:21
+16fb5f743532efc228d5c2331b15ec77f73aac19:tests/selfhost/clock-week.test.ts:generic-api-key:27
+16fb5f743532efc228d5c2331b15ec77f73aac19:tests/selfhost/runner.test.ts:generic-api-key:421

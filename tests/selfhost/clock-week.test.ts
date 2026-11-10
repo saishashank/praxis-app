@@ -14,6 +14,8 @@ import { AU_SLOTS } from "../../worker/src/schedule";
 import { makeDb, pipelineResponse, rows, setState } from "./fakeDb";
 import path from "node:path";
 
+const FAKE_CRON_SECRET = ["cron", "secret", "test", "0123456789"].join("-"); // built at run time: a fake, not a secret
+
 const APP = "http://web:3000";
 const DBURL = "http://main.sqld:8080";
 const RAW = {
@@ -24,7 +26,7 @@ const RAW = {
   TURSO_MAIN_TOKEN: "tok-test-main",
   APP_BASE_URL: APP,
   WORKER_HMAC_SECRET: "7".repeat(64),
-  CRON_SECRET: "cron-secret-test-0123456789",
+  CRON_SECRET: FAKE_CRON_SECRET,
   GITHUB_DISPATCH_TOKEN: "gh-token-test-0123456789",
 };
 const MIN = 60_000;
@@ -268,7 +270,8 @@ function expectedLocalEvents(): string[] {
   const out: string[] = [];
   for (const d of DAYS) {
     for (let h = 7; h <= 23; h++) out.push(`bucket-hourly@${d} ${hm(h * 60 + 5)}`);
-    out.push(`turso-refresh@${d} 23:40`);
+    out.push(`turso-refresh@${d} 23:25`);
+    out.push(`replay-sync@${d} 06:00`, `replay-sync@${d} 23:10`);
   }
   out.push("restore-drill@2026-11-08 10:00"); // the Sunday
   return out.sort();
@@ -340,7 +343,7 @@ describe("a simulated Sydney week, clock_owner = selfhost (T3 acceptance)", () =
 
     const wantLocal = expectedLocalEvents();
     expect(diff(wantLocal, observedLocalEvents())).toEqual({ missing: [], extra: [] });
-    expect(wantLocal).toHaveLength(7 * 18 + 1);
+    expect(wantLocal).toHaveLength(7 * 20 + 1);
     expect(observedLocalEvents()).toHaveLength(wantLocal.length);
 
     // Sanity on the size of the week, so an empty comparison cannot pass: 8 + 3 crons a day, 7 days.

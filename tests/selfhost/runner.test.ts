@@ -24,6 +24,8 @@ import { LocalRunner, SCRATCH_KEEP_MS } from "../../clock/runner/local";
 import { pipeline } from "../../worker/src/db";
 import { makeDb, pipelineResponse, rows } from "./fakeDb";
 
+const FAKE_TOKEN = ["abcdef", "123456"].join(""); // built at run time: a fake, not a secret
+
 const SECRET = "tok-SECRETVALUE-123456";
 const RAW: Record<string, string> = {
   PATH: process.env.PATH ?? "",
@@ -418,17 +420,17 @@ describe("masking and logs", () => {
 
   it("makeMasker: names by pattern and by list, short values and unset names are ignored, longest first", () => {
     const mask = makeMasker({
-      A_TOKEN: "abcdef123456",
+      A_TOKEN: FAKE_TOKEN,
       B_SECRET: "abc", // too short to mask
       TURSO_MAIN_URL: "http://main.sqld:8080",
       PLAIN: "visible-value",
-      NESTED_KEY: "abcdef123456-and-more",
+      NESTED_KEY: `${FAKE_TOKEN}-and-more`,
       UNSET_KEY: undefined,
     });
-    expect(mask("x abcdef123456 y")).toBe("x *** y");
+    expect(mask(`x ${FAKE_TOKEN} y`)).toBe("x *** y");
     expect(mask("abc visible-value")).toBe("abc visible-value");
     expect(mask("go to main.sqld:8080 now")).toBe("go to *** now");
-    expect(mask("abcdef123456-and-more")).toBe("***");
+    expect(mask(`${FAKE_TOKEN}-and-more`)).toBe("***");
   });
 
   it("the console sink of the runner never receives an unmasked secret", async () => {

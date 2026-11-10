@@ -2,6 +2,7 @@
 // time, the clock owner as last read, the running jobs and the last error. Only fixed words, ids, times and
 // counts: no secret, URL, host or upstream text. Caddy may expose it at /clock-health behind HMAC.
 import { createServer, type Server } from "node:http";
+import type { HostView } from "./monitor";
 import type { RunningInfo } from "./runner/local";
 
 export const STALE_AFTER_MS = 180_000;
@@ -18,6 +19,8 @@ export type HealthState = {
   lastError: { atMs: number; what: string } | null;
   build: string;
   selfCheck: { atMs: number; passed: number; total: number; failed: string[] } | null;
+  /** Latest host numbers and idle trend (clock/monitor.ts); null until the first host check. */
+  host: HostView | null;
 };
 
 export function newHealthState(init: {
@@ -35,6 +38,7 @@ export function newHealthState(init: {
     lastError: null,
     build: (init.build ?? "").slice(0, 12),
     selfCheck: null,
+    host: null,
   };
 }
 
@@ -56,6 +60,7 @@ export type HealthBody = {
   queued: number;
   lastError: { at: string; what: string } | null;
   selfCheck: { at: string; passed: number; total: number; failed: string[] } | null;
+  host: HostView | null;
   build: string;
   uptimeS: number;
 };
@@ -87,6 +92,7 @@ export function healthBody(s: HealthState, r: RunnerView, nowMs: number): Health
           failed: s.selfCheck.failed,
         }
       : null,
+    host: s.host,
     build: s.build,
     uptimeS: Math.round((nowMs - s.startedAtMs) / 1000),
   };

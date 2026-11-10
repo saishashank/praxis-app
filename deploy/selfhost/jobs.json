@@ -313,11 +313,11 @@
     "turso-refresh": {
       "timeoutMin": 40,
       "group": "turso-refresh",
-      "exclusiveWith": ["backup"],
+      "exclusiveWith": ["backup", "replay-sync"],
       "standbyExitCodes": [3],
       "schedule": {
-        "from": "23:40",
-        "until": "23:40",
+        "from": "23:25",
+        "until": "23:25",
         "everyMin": 1
       },
       "steps": [
@@ -333,6 +333,29 @@
             "TURSO_REFRESH_MAIN_TOKEN": "env",
             "TURSO_REFRESH_AUTH_URL": "env",
             "TURSO_REFRESH_AUTH_TOKEN": "env"
+          }
+        }
+      ]
+    },
+    "replay-sync": {
+      "timeoutMin": 20,
+      "group": "replay-sync",
+      "exclusiveWith": ["turso-refresh"],
+      "standbyExitCodes": [3],
+      "schedule": {
+        "from": "06:00",
+        "until": "23:10",
+        "everyMin": 1030
+      },
+      "steps": [
+        {
+          "id": "sync",
+          "run": "node scripts/selfhost/replay-sync.mjs",
+          "env": {
+            "TURSO_MAIN_URL": "env",
+            "TURSO_MAIN_TOKEN": "env",
+            "TURSO_REFRESH_MAIN_URL": "env",
+            "TURSO_REFRESH_MAIN_TOKEN": "env"
           }
         }
       ]

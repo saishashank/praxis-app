@@ -1,32 +1,26 @@
-# arm64 Python requirements (TODO before the first arm64 jobs image)
+# arm64 Python requirements
 
 `scripts/ingest/requirements.txt` carries SHA-256 hashes for **x86_64 CPython 3.12 on Linux only**.
 `pip install --require-hashes` on an aarch64 box (Oracle Ampere A1, INFRA §9) rejects those files, so
-`Dockerfile.jobs` looks for a second hashed file for arm64 and stops with a clear error when it is
-missing. Hashes are never written by hand.
+`Dockerfile.jobs` uses a second hashed file on arm64, `scripts/ingest/requirements-arm64.txt`, and stops
+with a clear error when it is missing. Hashes are never written by hand.
 
-## Generate `scripts/ingest/requirements-arm64.txt`
-
-Run on an arm64 Linux machine (or in an arm64 container, for example
-`docker run --rm --platform linux/arm64 -v "$PWD":/w -w /w python:3.12-slim-bookworm bash`):
+## How the arm64 file is made
 
 ```bash
-python -m pip install pip-tools
-# Same direct requirement as requirements.txt (yfinance==1.7.0, see its header).
-echo "yfinance==1.7.0" > /tmp/requirements.in
-pip-compile --generate-hashes --allow-unsafe --no-header --output-file scripts/ingest/requirements-arm64.txt /tmp/requirements.in
+node scripts/ingest/gen-arm64-reqs.mjs
 ```
 
-Then:
+The script keeps **exactly** the versions pinned in `requirements.txt` (no new resolution, so the two
+files can never drift apart in versions) and, for each pin, lists the SHA-256 of every file PyPI
+publishes that pip may choose on CPython 3.12 / Linux aarch64: pure wheels, `cp312` or `abi3`
+manylinux/musllinux aarch64 wheels, and the sdist. The hashes come from PyPI's JSON API. If a binary
+package has no aarch64 wheel, the script reports it and exits 1. `--check` fails when the committed
+file is stale.
 
-1. Copy the explanatory header of `requirements.txt`, change "x86_64" to "aarch64", and add the date.
-2. Review the diff against `requirements.txt`: the package names and versions must be the same set
-   (only the hash lists differ). A version that differs needs a decision before it is committed.
-3. Prove it installs: `pip install --require-hashes --only-binary=:all: -r scripts/ingest/requirements-arm64.txt`
-   in a `python:3.12-slim-bookworm` arm64 container.
-4. Commit the file. `Dockerfile.jobs` then picks it up automatically for `TARGETARCH=arm64`
-   (override with `--build-arg PY_REQUIREMENTS=<path>`), and `build-selfhost.yml` adds `linux/arm64`
-   to the jobs image on its own once the file exists.
+Re-run it whenever `requirements.txt` changes, review the diff and commit both files together.
 
-Re-run these steps whenever `requirements.txt` changes (INFRA §15.1: hashed requirements resolved for
-both architectures).
+## How it is proven
+
+The branch CI job (`selfhost-check.yml`) builds `praxis-jobs` for `linux/arm64` on an arm64 runner,
+which runs `pip install --require-hashes` with this file. A wrong or missing hash fails that build.

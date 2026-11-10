@@ -11,6 +11,8 @@ import { createClock, tickKey } from "../../clock/loop";
 import { loadManifest } from "../../clock/manifest";
 import { makeDb, pipelineResponse, rows, setState } from "./fakeDb";
 
+const FAKE_CRON_SECRET = ["cron", "secret", "test", "0123456789"].join("-"); // built at run time: a fake, not a secret
+
 const RAW = {
   PRAXIS_ENV: "production",
   PRAXIS_RUNTIME: "selfhost",
@@ -18,7 +20,7 @@ const RAW = {
   TURSO_MAIN_TOKEN: "tok-test-main",
   APP_BASE_URL: "http://web:3000",
   WORKER_HMAC_SECRET: "7".repeat(64),
-  CRON_SECRET: "cron-secret-test-0123456789",
+  CRON_SECRET: FAKE_CRON_SECRET,
 };
 const NO_ENV = {} as NodeJS.ProcessEnv;
 const manifest = loadManifest(path.resolve(import.meta.dirname, "../../deploy/selfhost/jobs.json"));
@@ -195,7 +197,7 @@ describe("local-only scheduled jobs and the daily prune", () => {
   it("only the owner queues them, at their Sydney time, with a local: slot id", async () => {
     setState(db, "clock_owner", '"selfhost"');
     const { clock, queued } = make();
-    now = Date.parse("2026-11-03T12:40:10Z"); // 23:40 AEDT Tuesday
+    now = Date.parse("2026-11-03T12:25:10Z"); // 23:25 AEDT Tuesday
     await clock.tick(now);
     expect(queued).toEqual(["turso-refresh"]);
     now = Date.parse("2026-11-03T20:05:10Z"); // 07:05 AEDT Wednesday
@@ -231,10 +233,11 @@ describe("local-only scheduled jobs and the daily prune", () => {
 describe("the operator CLI", () => {
   it("the stubs print the not-built message and exit 2; an unknown command prints usage and exits 2", () => {
     const cli = path.resolve(import.meta.dirname, "../../clock/cli.mjs");
-    for (const cmd of ["deploy"]) {
+    // T7: deploy and switch are host commands (deploy.sh, switch.sh); inside the clock container they only point there.
+    for (const cmd of ["deploy", "switch"]) {
       const r = spawnSync(process.execPath, [cli, cmd], { encoding: "utf8", env: NO_ENV });
       expect(r.status, cmd).toBe(2);
-      expect(r.stdout.trim(), cmd).toBe("not built yet (T7)");
+      expect(r.stdout, cmd).toContain(`${cmd} runs on the host`);
     }
     const rd = spawnSync(process.execPath, [cli, "restore-drill", "--bogus"], {
       encoding: "utf8",

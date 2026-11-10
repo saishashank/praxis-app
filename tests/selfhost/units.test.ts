@@ -27,6 +27,8 @@ import {
 } from "../../clock/manifest";
 import { failureEmail, sendFailureEmail } from "../../clock/notify";
 
+const FAKE_RESEND_KEY = ["re", "key", "test", "0123456789"].join("_"); // built at run time: a fake, not a secret
+
 describe("tokenize (the words of a job command)", () => {
   const vars = { W: "/srv/praxis/jobs/run-7", HISTORY_FLAG: "--history", EMPTY: "", C: "a:b c:d" };
   it("splits on spaces, honours quotes, expands $W and $VAR", () => {
@@ -170,6 +172,7 @@ describe("health", () => {
       [
         "build",
         "enabled",
+        "host",
         "lastError",
         "lastTick",
         "lastTickAgeS",
@@ -223,7 +226,7 @@ describe("health", () => {
 describe("the failure email", () => {
   const env = {
     EMAIL_PROVIDER: "resend",
-    RESEND_API_KEY: "re_key_test_0123456789",
+    RESEND_API_KEY: FAKE_RESEND_KEY,
     OWNER_EMAIL: "Owner@Example.test",
     PRAXIS_ENV: "production",
   };
@@ -335,10 +338,16 @@ describe("localSchedule matcher and validation", () => {
     }
     expect(n).toBe(17);
   });
-  it("turso-refresh nightly at 23:40; restore-drill Sunday 10:00 only", () => {
-    expect(at(23, 40, 3)).toEqual(["turso-refresh"]);
+  it("turso-refresh nightly at 23:25 (done before the 00:15 replay slot); restore-drill Sunday 10:00 only", () => {
+    expect(at(23, 25, 3)).toEqual(["turso-refresh"]);
+    expect(at(23, 40, 3)).toEqual([]);
     expect(at(10, 0, 0)).toEqual(["restore-drill"]);
     expect(at(10, 0, 1)).toEqual([]);
+  });
+  it("replay-sync twice a day: 06:00 (after replay's 5.5 h limit) and 23:10 (before the refresh wipes Turso)", () => {
+    expect(at(6, 0, 3)).toEqual(["replay-sync"]);
+    expect(at(23, 10, 3)).toEqual(["replay-sync"]);
+    expect(at(12, 0, 3)).toEqual([]);
   });
   it("validateManifest refuses a bad local schedule, a workflow on a local job and bad exit codes", () => {
     const base = JSON.parse(

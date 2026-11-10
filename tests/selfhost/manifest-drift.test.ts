@@ -142,8 +142,13 @@ describe("each manifest job runs the commands of its workflow's production job",
 
 describe("localSchedule: jobs that exist only on the self-hosted runtime", () => {
   const local = manifest.localSchedule ?? {};
-  it("are exactly bucket-hourly, turso-refresh and restore-drill, with no workflow", () => {
-    expect(Object.keys(local).sort()).toEqual(["bucket-hourly", "restore-drill", "turso-refresh"]);
+  it("are exactly bucket-hourly, replay-sync, restore-drill and turso-refresh, with no workflow", () => {
+    expect(Object.keys(local).sort()).toEqual([
+      "bucket-hourly",
+      "replay-sync",
+      "restore-drill",
+      "turso-refresh",
+    ]);
     for (const [name, j] of Object.entries(local)) {
       expect("workflow" in j, name).toBe(false);
       expect(name in manifest.jobs, name).toBe(false);
@@ -188,7 +193,22 @@ describe("localSchedule: jobs that exist only on the self-hosted runtime", () =>
       localOnly: true,
     });
     expect(manifest.jobs.backup!.exclusiveWith).toEqual(["turso-refresh"]);
-    expect(local["turso-refresh"]!.exclusiveWith).toEqual(["backup"]);
+    expect(local["turso-refresh"]!.exclusiveWith).toEqual(["backup", "replay-sync"]);
+  });
+  it("replay bridge: refresh ends before the replay slot, replay-sync starts after its 330 min limit", () => {
+    const min = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+    const replay = AU_SLOTS.find((s) => s.id === "replay")!;
+    const refresh = local["turso-refresh"]!;
+    // 23:25 start + 40 min limit = 00:05 < 00:15 (next day, so + 24 h)
+    expect(min(refresh.schedule.from) + refresh.timeoutMin).toBeLessThan(min(replay.time) + 1440);
+    const sync = local["replay-sync"]!;
+    expect(sync.steps.map((s) => s.run)).toEqual(["node scripts/selfhost/replay-sync.mjs"]);
+    expect(sync.standbyExitCodes).toEqual([3]);
+    expect(sync.exclusiveWith).toEqual(["turso-refresh"]);
+    expect(min(sync.schedule.from)).toBeGreaterThanOrEqual(min(replay.time) + 330); // replay timeout-minutes
+    expect(sync.schedule).toMatchObject({ from: "06:00", until: "23:10" }); // 06:00 and 23:10 (1030 min apart)
+    expect(sync.schedule.everyMin).toBe(1030);
+    expect(workflows.get("replay.yml")!.jobs.production?.["timeout-minutes"]).toBe(330);
   });
 });
 

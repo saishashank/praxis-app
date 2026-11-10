@@ -8,6 +8,7 @@ import { createClock, type Clock } from "./loop";
 import { allJobs, loadManifest, type Manifest } from "./manifest";
 
 export const TICK_EVERY_MS = 30_000;
+export const MONITOR_EVERY_MS = 30_000;
 export const STOP_WAIT_MS = 50_000;
 
 const manifestPath = (env: Record<string, string | undefined>): string =>
@@ -22,6 +23,7 @@ export async function main(env: Record<string, string | undefined> = process.env
     `clock: up (runtime=${clock.health.runtime}, enabled=${clock.health.enabled}, jobs=${allJobs(manifest).length})`,
   );
   let timer: NodeJS.Timeout | undefined;
+  let monitorTimer: NodeJS.Timeout | undefined;
   if (clock.health.enabled) {
     await clock.recover();
     await clock.selfCheck();
@@ -30,12 +32,20 @@ export async function main(env: Record<string, string | undefined> = process.env
     };
     safeTick();
     timer = setInterval(safeTick, TICK_EVERY_MS);
+    // INFRA T6: dead-man ping, host checks, idle trend. The monitor never throws and schedules itself.
+    await clock.monitor.init();
+    const safeMonitor = (): void => {
+      void clock.monitor.step();
+    };
+    safeMonitor();
+    monitorTimer = setInterval(safeMonitor, MONITOR_EVERY_MS);
   } else {
     console.log("clock: CLOCK_ENABLED=0, nothing is read; serving health only");
   }
   const stop = (sig: string): void => {
     console.log(`clock: ${sig}, stopping`);
     if (timer) clearInterval(timer);
+    if (monitorTimer) clearInterval(monitorTimer);
     const hardStop = setTimeout(() => process.exit(0), STOP_WAIT_MS);
     hardStop.unref();
     clock.runner.idle().finally(() => server.close(() => process.exit(0)));

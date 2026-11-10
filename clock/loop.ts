@@ -17,7 +17,8 @@ import { healthBody, newHealthState, noteError, type HealthState } from "./healt
 import { pruneOld, recoverStale, type LeaseDb } from "./lease";
 import { makeMasker } from "./mask";
 import { jobForWorkflow, localJobsDue, type Manifest } from "./manifest";
-import { sendFailureEmail } from "./notify";
+import { createMonitor, type Monitor } from "./monitor";
+import { sendAlertEmail, sendFailureEmail } from "./notify";
 import { LocalRunner, type RunRequest } from "./runner/local";
 import { makeClockFetch, type EnqueueResult } from "./shim";
 import { runUtcCrons, type UtcSummary } from "./utc";
@@ -68,6 +69,8 @@ export type Clock = {
   selfCheck(): Promise<{ passed: number; total: number; failed: string[] }>;
   /** Marks runs of a dead runner (stale heartbeat) as failed. */
   recover(): Promise<number>;
+  /** Dead-man ping, host checks and idle trend (INFRA T6); main.ts drives it. */
+  monitor: Monitor;
 };
 
 export function createClock(o: ClockOptions): Clock {
@@ -226,6 +229,17 @@ export function createClock(o: ClockOptions): Clock {
     }
   }
 
+  const monitor = createMonitor({
+    env,
+    runtime,
+    health,
+    db: leaseDb,
+    nowMs,
+    fetch: realFetch,
+    log: say,
+    notify: (a) => sendAlertEmail(env, a, realFetch, nowMs()),
+  });
+
   return {
     tick,
     runner,
@@ -236,6 +250,7 @@ export function createClock(o: ClockOptions): Clock {
     enqueue,
     selfCheck,
     recover,
+    monitor,
   };
 }
 

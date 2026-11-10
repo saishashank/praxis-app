@@ -53,7 +53,7 @@ services:
 
   web:
     <<: *hardening
-    image: ghcr.io/saishashank/praxis-web:${PRAXIS_SHA:?set PRAXIS_SHA}
+    image: ${PRAXIS_WEB_IMAGE:-ghcr.io/saishashank/praxis-web:${PRAXIS_SHA:?set PRAXIS_SHA}}
     mem_limit: 1536m
     memswap_limit: 1536m
     env_file: /srv/praxis/env/web.env
@@ -81,7 +81,7 @@ services:
 
   clock:
     <<: *hardening
-    image: ghcr.io/saishashank/praxis-jobs:${PRAXIS_SHA:?set PRAXIS_SHA}
+    image: ${PRAXIS_JOBS_IMAGE:-ghcr.io/saishashank/praxis-jobs:${PRAXIS_SHA:?set PRAXIS_SHA}}
     mem_limit: 5g
     memswap_limit: 5g
     env_file: /srv/praxis/env/jobs.env

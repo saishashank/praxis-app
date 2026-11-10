@@ -54,3 +54,45 @@ export async function sendFailureEmail(
     return "failed";
   }
 }
+
+/** A host-monitoring alert (clock/monitor.ts): fixed words and numbers only, to the Owner address only. */
+export type AlertInfo = { key: string; subject: string; text: string };
+
+export function alertEmail(
+  env: EmailEnvVars,
+  a: AlertInfo,
+  to: string,
+  atMs: number,
+): OutgoingEmail {
+  const esc = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  return {
+    from: RESEND_FROM,
+    to,
+    subject: `[Praxis] ${a.subject}`,
+    html: `<p>${esc(a.text)}</p>`,
+    text: a.text,
+    // one mail per condition change; a retry of the same instant is a no-op at the provider
+    idempotencyKey: `${env.PRAXIS_ENV ?? "production"}:monitor:${a.key}:${Math.floor(atMs / 60_000)}`,
+  };
+}
+
+/** "sent" | "skipped" | "failed", same rules as `sendFailureEmail`. Never throws. */
+export async function sendAlertEmail(
+  env: EmailEnvVars,
+  a: AlertInfo,
+  f: typeof fetch,
+  atMs: number,
+): Promise<"sent" | "skipped" | "failed"> {
+  try {
+    const owner = ownerAddress(env);
+    const apiKey = (env.RESEND_API_KEY ?? "").trim();
+    if ((env.EMAIL_PROVIDER ?? "").trim().toLowerCase() !== "resend" || !apiKey || !owner) {
+      return "skipped";
+    }
+    const provider = guardRecipient(createResendProvider({ apiKey, fetchImpl: f, env }), owner);
+    const res = await provider.send(alertEmail(env, a, owner, atMs));
+    return res.outcome === "accepted" ? "sent" : "failed";
+  } catch {
+    return "failed";
+  }
+}

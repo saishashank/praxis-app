@@ -1,7 +1,11 @@
 # Pre-deploy check pair (INFRA §10): web + sqld on a throwaway copy of last night's backup. Project
-# "praxis-check". No public port, no clock, no email. Used by `praxis deploy <sha>` (T5), then wiped.
-#   docker compose -f docker-compose.check.yml --env-file /srv/praxis/compose/.env up -d
-# The smoke test attaches to the network "praxis-check" (e.g. docker run --network praxis-check ...).
+# "praxis-check". No public port, no clock, no email. Used by `praxis deploy <sha>` (T7, scripts/selfhost/predeploy.mjs),
+# which starts it, restores the data, migrates, smoke-tests and scans it, then wipes it (`down -v`: the named volume
+# check_data is the throwaway database). Variables, set by predeploy.mjs (never `latest`):
+#   PRAXIS_WEB_IMAGE   the web image to test, by digest (ghcr.io/<owner>/praxis-web@sha256:...) or tag
+#   PRAXIS_SHA         fallback when PRAXIS_WEB_IMAGE is unset: the tag of ghcr.io/saishashank/praxis-web
+#   PRAXIS_ENV_DIR     where web.env and sqld.env live (default /srv/praxis/env; branch CI points it at a temp dir)
+# The smoke test, the ZAP scan and the migration containers attach to the network "praxis-check".
 name: praxis-check
 
 x-hardening: &hardening
@@ -16,11 +20,11 @@ x-hardening: &hardening
 services:
   web:
     <<: *hardening
-    image: ghcr.io/saishashank/praxis-web:${PRAXIS_SHA:?set PRAXIS_SHA}
+    image: ${PRAXIS_WEB_IMAGE:-ghcr.io/saishashank/praxis-web:${PRAXIS_SHA:?set PRAXIS_WEB_IMAGE or PRAXIS_SHA}}
     # The check pair together is budgeted at 2 GB (INFRA §9): web 1 GB + sqld 1 GB.
     mem_limit: 1g
     memswap_limit: 1g
-    env_file: /srv/praxis/env/web.env
+    env_file: ${PRAXIS_ENV_DIR:-/srv/praxis/env}/web.env
     environment:
       # Overrides win over env_file: nothing in the check can send mail or start work.
       PRAXIS_RUNTIME: selfhost
@@ -55,7 +59,7 @@ services:
     image: ghcr.io/tursodatabase/libsql-server:v0.24.32 # keep equal to docker-compose.prod.yml
     mem_limit: 1g
     memswap_limit: 1g
-    env_file: /srv/praxis/env/sqld.env
+    env_file: ${PRAXIS_ENV_DIR:-/srv/praxis/env}/sqld.env
     # TODO verify against the pinned image (T4): flag names and the data path.
     command:
       - /bin/sqld
@@ -65,7 +69,7 @@ services:
       - --db-path=/var/lib/sqld/data.sqld
     expose: ["8080", "8081"]
     volumes:
-      - /srv/praxis/check:/var/lib/sqld
+      - check_data:/var/lib/sqld
     tmpfs:
       - /tmp
     networks:
@@ -85,3 +89,7 @@ services:
 networks:
   check:
     name: praxis-check
+
+volumes:
+  # The throwaway database of the check. `docker compose down -v` removes it.
+  check_data:
