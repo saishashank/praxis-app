@@ -16,15 +16,18 @@ import { ensureNamespace, nodeHttpFetch, openNamespace } from "./sqld.mjs";
 const BASE = process.env.SQLD_JWT_BASE ?? "";
 const ADMIN = process.env.SQLD_JWT_ADMIN ?? "";
 const KEYS = process.env.SQLD_JWT_KEYS ?? "";
+const ADMIN_AUTH = process.env.SQLD_JWT_ADMIN_AUTH ?? ""; // "Basic <key>" of SQLD_ADMIN_AUTH_KEY
 const skip =
-  !BASE || !ADMIN || !KEYS ? "SQLD_JWT_BASE, SQLD_JWT_ADMIN and SQLD_JWT_KEYS are not set" : false;
+  !BASE || !ADMIN || !KEYS || !ADMIN_AUTH
+    ? "SQLD_JWT_BASE, SQLD_JWT_ADMIN, SQLD_JWT_KEYS and SQLD_JWT_ADMIN_AUTH are not set"
+    : false;
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const pem = (n) => readFileSync(path.join(KEYS, `${n}.pem`), "utf8");
 
 // sqld answers 404 for a namespace that does not exist BEFORE it looks at the token: create it first (the admin API is
-// not behind the JWT).
+// not behind the JWT, it has its own key).
 before(async () => {
-  if (!skip) await ensureNamespace(ADMIN, "main");
+  if (!skip) await ensureNamespace(ADMIN, "main", { adminAuth: ADMIN_AUTH });
 });
 
 /** One statement through the HTTP pipeline API with an optional bearer token. Returns the HTTP status. */
@@ -100,6 +103,7 @@ function migrate(token) {
         TURSO_MAIN_URL: `${u.protocol}//main.${u.host}`,
         ...(token ? { TURSO_MAIN_TOKEN: token } : {}),
         SQLD_ADMIN_URL: ADMIN,
+        SQLD_ADMIN_AUTH: ADMIN_AUTH,
       },
     },
   );
@@ -124,5 +128,21 @@ test(
     const again = migrate(good);
     assert.equal(again.code, 0);
     assert.match(again.out, /applied 0/);
+  },
+);
+
+test(
+  "the admin API refuses a call without its key and with a wrong key; the right key works",
+  { skip },
+  async () => {
+    await assert.rejects(ensureNamespace(ADMIN, "adminprobe"), /HTTP 40[13]/);
+    await assert.rejects(
+      ensureNamespace(ADMIN, "adminprobe", { adminAuth: "Basic wrong" }),
+      /HTTP 40[13]/,
+    );
+    assert.match(
+      await ensureNamespace(ADMIN, "adminprobe", { adminAuth: ADMIN_AUTH }),
+      /created|exists/,
+    );
   },
 );

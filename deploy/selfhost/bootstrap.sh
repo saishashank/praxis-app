@@ -166,6 +166,20 @@ fetch_file() { # fetch_file <repo path> <dest> <required|optional> <mode>
   rm -f "$tmp"
 }
 
+# set_kv <file> <name> <value> [keep]: replace or append NAME=value (value never printed). With "keep" an existing
+# non-empty value is left alone.
+set_kv() {
+  local f="$1" k="$2" v="$3" keep="${4:-}" tmp
+  if grep -q "^${k}=" "$f" 2>/dev/null; then
+    if [ "$keep" = keep ] && [ -n "$(sed -n "s/^${k}=//p" "$f" | head -n1)" ]; then return 0; fi
+    tmp="$(mktemp)"
+    awk -v k="$k" -v v="$v" 'BEGIN{FS=OFS="="} $1==k && !done {print k "=" v; done=1; next} $1==k {next} {print}' "$f" >"$tmp"
+    cat "$tmp" >"$f"; rm -f "$tmp"
+  else
+    printf '%s=%s\n' "$k" "$v" >>"$f"
+  fi
+}
+
 step_layout() {
   log "3/8 host layout and compose files"
   mkdir -p "$COMPOSE_DIR" "$ENV_DIR" "$BIN_DIR" "$BASE/sqld" "$BASE/check" "$BASE/jobs"
@@ -186,11 +200,11 @@ step_layout() {
   fetch_file scripts/selfhost/smoke.mjs "$BIN_DIR/smoke.mjs" optional 0644
   fetch_file scripts/selfhost/predeploy-copy.mjs "$BIN_DIR/predeploy-copy.mjs" optional 0644
   fetch_file deploy/selfhost/backup-now.sh "$BIN_DIR/backup-now.sh" optional 0755
-  # Non-secret compose variables. PRAXIS_SHA is rewritten with the digest in step 5.
-  {
-    printf 'PRAXIS_SHA=%s\n' "$RELEASE"
-    printf 'PRAXIS_DOMAIN=%s\n' "$DOMAIN"
-  } >"$COMPOSE_DIR/.env"
+  # Non-secret compose variables. MERGED, never overwritten: a box that `praxis deploy` has already moved to
+  # digests (PRAXIS_WEB_IMAGE, PRAXIS_JOBS_IMAGE) keeps them when bootstrap is run again.
+  touch "$COMPOSE_DIR/.env"
+  set_kv "$COMPOSE_DIR/.env" PRAXIS_SHA "$RELEASE"
+  set_kv "$COMPOSE_DIR/.env" PRAXIS_DOMAIN "$DOMAIN"
   chmod 644 "$COMPOSE_DIR/.env"
 }
 
@@ -204,8 +218,23 @@ section_names() {
   ' "$COMPOSE_DIR/env.example"
 }
 
+# The sqld admin API (namespace create/drop) has its own key (SQLD_ADMIN_AUTH_KEY in sqld.env, sent by the scripts as
+# SQLD_ADMIN_AUTH="Basic <key>" from jobs.env). Generated here when absent, never printed, kept on later runs.
+ensure_admin_key() {
+  local key
+  [ -f "$ENV_DIR/sqld.env" ] && [ -f "$ENV_DIR/jobs.env" ] || return 0
+  key="$(sed -n 's/^SQLD_ADMIN_AUTH_KEY=//p' "$ENV_DIR/sqld.env" | head -n1 | tr -d ' "'"'"'')"
+  if [ -z "$key" ]; then
+    key="$(openssl rand -hex 24)"
+    set_kv "$ENV_DIR/sqld.env" SQLD_ADMIN_AUTH_KEY "$key"
+    log "generated the sqld admin key (in sqld.env; not shown)"
+  fi
+  set_kv "$ENV_DIR/jobs.env" SQLD_ADMIN_AUTH "Basic $key" keep
+}
+
 step_env() {
   log "4/8 env files (names only)"
+  ensure_admin_key
   local f name missing=0 empty=()
   for f in web jobs sqld; do
     local path="$ENV_DIR/$f.env"
@@ -227,15 +256,22 @@ step_env() {
   local v
   for f in web jobs; do
     v="$(sed -n 's/^CLOCK_ENABLED=//p' "$ENV_DIR/$f.env" | head -n1 | tr -d ' "'"'")"
-    [ "$v" = "0" ] || die "CLOCK_ENABLED in $f.env must be 0 for bootstrap; switch on later with: praxis owner selfhost"
+    [ "$v" = "0" ] || die "CLOCK_ENABLED in $f.env must be 0 for bootstrap; switch on later with: switch.sh selfhost (the cutover plan)"
   done
 }
 
 # ---------------------------------------------------------------- 5. images by digest
 step_images() {
   log "5/8 pull images for $ARCH and pin their digests"
+  # The login lives in a throwaway DOCKER_CONFIG that is removed when this step ends (or the script dies), so the
+  # token never reaches /root/.docker/config.json.
+  LOGIN_CFG=""
   if [ -n "${GHCR_TOKEN:-}" ] && [ -n "${GHCR_USER:-}" ]; then
-    printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin >/dev/null
+    LOGIN_CFG="$(mktemp -d)"
+    trap 'rm -rf "$LOGIN_CFG"' EXIT
+    export DOCKER_CONFIG="$LOGIN_CFG"
+    [ -d /root/.docker/cli-plugins ] && ln -s /root/.docker/cli-plugins "$LOGIN_CFG/cli-plugins"
+    printf '%s' "$GHCR_TOKEN" | docker login "${IMAGE_PREFIX%%/*}" -u "$GHCR_USER" --password-stdin >/dev/null
   fi
   local img digest web_ref="" jobs_ref=""
   for img in praxis-web praxis-jobs; do
@@ -250,13 +286,13 @@ step_images() {
   done
   if [ "$LOCAL_REGISTRY" -eq 1 ]; then
     # The compose file names ghcr.io images: point it at the pulled digests (same variables deploy.sh uses).
-    {
-      printf 'PRAXIS_WEB_IMAGE=%s\n' "$web_ref"
-      printf 'PRAXIS_JOBS_IMAGE=%s\n' "$jobs_ref"
-    } >>"$COMPOSE_DIR/.env"
+    # Only when no pin exists yet: a second run must not undo a later `praxis deploy`.
+    set_kv "$COMPOSE_DIR/.env" PRAXIS_WEB_IMAGE "$web_ref" keep
+    set_kv "$COMPOSE_DIR/.env" PRAXIS_JOBS_IMAGE "$jobs_ref" keep
   fi
   # Compose uses the SHA tag; the digests are logged above for the record. deploy.sh (T5) verifies them on later deploys.
   docker compose --project-directory "$COMPOSE_DIR" -f "$COMPOSE_DIR/docker-compose.prod.yml" pull sqld caddy
+  if [ -n "$LOGIN_CFG" ]; then rm -rf "$LOGIN_CFG"; unset DOCKER_CONFIG; trap - EXIT; fi
 }
 
 compose() { docker compose --project-directory "$COMPOSE_DIR" -f "$COMPOSE_DIR/docker-compose.prod.yml" "$@"; }
@@ -270,12 +306,24 @@ need_cli() {
 # restore-latest nor the migrations need it.
 run_jobs() { compose run --rm --no-deps -T "$@"; }
 
+# True when main already holds a migrated database (a second run on a working box must not restore over it).
+main_has_schema() {
+  run_jobs clock node -e "
+    const h={'content-type':'application/json',authorization:'Bearer '+(process.env.SQLD_TOKEN||process.env.TURSO_MAIN_TOKEN||'')};
+    fetch(process.env.TURSO_MAIN_URL.replace(/\/\$/,'')+'/v2/pipeline',{method:'POST',headers:h,body:JSON.stringify({requests:[{type:'execute',stmt:{sql:\"SELECT COUNT(*) FROM sqlite_master WHERE name='schema_migrations'\"}},{type:'close'}]})})
+      .then(r=>r.json()).then(j=>process.exit(Number(j.results[0].response.result.rows[0][0].value)>0?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1
+}
+
 step_database() {
   log "6/8 sqld, restore latest backup, migrations, checks"
   need_cli
   compose up -d --wait --wait-timeout 180 sqld
   if [ "$SKIP_RESTORE" -eq 1 ]; then
     warn "--skip-restore: no backup restored; sqld holds only the migrated empty schema"
+    run_jobs clock node scripts/db/migrate.mjs --db main --target sqld
+    run_jobs clock node scripts/db/migrate.mjs --db auth --target sqld
+  elif main_has_schema; then
+    log "main already holds a migrated database: restore skipped (use: praxis restore-latest --replace for a deliberate restore); migrating only"
     run_jobs clock node scripts/db/migrate.mjs --db main --target sqld
     run_jobs clock node scripts/db/migrate.mjs --db auth --target sqld
   else
@@ -310,7 +358,8 @@ step_next() {
   cat <<EOF
   1. DNS: point an A record for $DOMAIN at this box's public IP (TTL 300 s).
   2. Google OAuth client: add https://$DOMAIN/api/auth/callback/google as a redirect URL.
-  3. When satisfied (side-by-side week, INFRA §11.2): $BIN_DIR/praxis owner selfhost
+  3. When satisfied (side-by-side week, INFRA §11.2), the cutover is $BIN_DIR/switch.sh selfhost: it prints the
+     steps (--turso, the final restore with praxis restore-latest --replace, then --local --restored).
 EOF
 }
 

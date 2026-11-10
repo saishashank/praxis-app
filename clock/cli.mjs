@@ -7,12 +7,16 @@
 //                                last-tick times of both clocks
 //   backup-now                   run the backup job now (repo copy, then the bucket copy)
 //   restore-drill [--source live|synthetic|backup]   run the restore drill job now
-//   restore-latest               newest backup into sqld, then migrate (BACKUP_PRIVATE_KEY supplied per command)
+//   restore-latest [--replace]   newest backup into sqld, then migrate (BACKUP_PRIVATE_KEY supplied per command).
+//                                Without --replace a database that already holds tables is refused. --replace drops and
+//                                recreates the main and auth namespaces first (cutover step 3, after the shadow week), and
+//                                refuses unless CLOCK_ENABLED=0, the owner is not selfhost and no job is running.
 //   deploy, switch               host commands (deploy.sh, switch.sh), not run here: print a pointer, exit 2
 // The commands other than `run` use plain fetch and need no bundle, so they answer at once. No secret is
 // printed: the database URL and token are read from the environment and used, never shown.
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { dropNamespace, ensureNamespace } from "../scripts/selfhost/sqld.mjs";
 
 const OWNER_KEY = "clock_owner";
 // `deploy` drives docker compose, so it is a host command (deploy/selfhost/deploy.sh); the wrapper never sends it here.
@@ -184,8 +188,45 @@ async function logs(target) {
   return 0;
 }
 
+/** The guard of --replace: nothing may be working on the data. Returns a refusal text, or null when it is safe. */
+async function replaceGuard() {
+  if ((env.CLOCK_ENABLED ?? "").trim() !== "0")
+    return "CLOCK_ENABLED must be 0 (run: switch.sh cloud --local first)";
+  if (!(env.SQLD_ADMIN_URL ?? "").trim()) return "SQLD_ADMIN_URL is not set";
+  let rows;
+  try {
+    [rows] = await pipe([
+      { sql: "SELECT value_json FROM worker_state WHERE key = ?", args: [OWNER_KEY] },
+    ]);
+  } catch {
+    return null; // no main namespace or no worker_state yet: nothing is using it
+  }
+  if (rows[0] && ownerOf(rows[0][0]) === "selfhost")
+    return "the clock owner is selfhost here (set it to cloud first)";
+  try {
+    const [run] = await pipe([{ sql: "SELECT COUNT(*) FROM job_run WHERE status = 'running'" }]);
+    if (Number(run[0]?.[0]) > 0) return "a job is running";
+  } catch {
+    /* no job_run table: nothing running */
+  }
+  return null;
+}
+
 /** `praxis restore-latest`: newest backup into (empty) sqld, then the migrations on top. Stops at the first failure. */
-function restoreLatest() {
+async function restoreLatest(replace) {
+  if (replace) {
+    const why = await replaceGuard();
+    if (why) {
+      console.log(`restore-latest: --replace refused: ${why}`);
+      return 1;
+    }
+    for (const ns of ["main", "auth"]) {
+      const opts = { adminAuth: env.SQLD_ADMIN_AUTH };
+      await dropNamespace(env.SQLD_ADMIN_URL, ns, opts);
+      await ensureNamespace(env.SQLD_ADMIN_URL, ns, opts);
+    }
+    console.log("restore-latest: --replace: main and auth namespaces dropped and recreated");
+  }
   const steps = [
     ["scripts/selfhost/latest-backup.mjs", "--db", "both", "--restore"],
     ["scripts/db/migrate.mjs", "--db", "main", "--target", "sqld"],
@@ -242,8 +283,12 @@ try {
         src === undefined ? ["restore-drill"] : ["restore-drill", "--input", `source=${src}`],
       );
     }
-  } else if (cmd === "restore-latest") code = restoreLatest();
-  else if (cmd in HOST_ONLY) {
+  } else if (cmd === "restore-latest") {
+    const extra = rest.filter((a) => a !== "--replace");
+    code = extra.length
+      ? (console.log("usage: praxis restore-latest [--replace]"), 2)
+      : await restoreLatest(rest.includes("--replace"));
+  } else if (cmd in HOST_ONLY) {
     console.log(`${cmd} runs on the host, not in the clock container: use "praxis ${cmd}" there`);
     code = 2;
   } else {

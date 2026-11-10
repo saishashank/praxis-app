@@ -72,7 +72,7 @@ case "$target" in
 Cutover (§11.3). Needs the Owner's OK. Pick a weekend or a non-trading evening after 01:00 (after replay).
   1 (YOU) choose the time.
   2 switch.sh selfhost --turso              clock_owner=selfhost in Turso: the Worker and Vercel crons stand by from the next tick.
-  3 (YOU) final backup of Turso, restored into sqld:   BACKUP_PRIVATE_KEY=... praxis restore-latest   (data of record moves)
+  3 (YOU) final backup of Turso, restored into sqld:   BACKUP_PRIVATE_KEY=... praxis restore-latest --replace   (data of record moves; --replace because main and auth hold shadow-week data)
   4 switch.sh selfhost --local --restored   sqld clock_owner=selfhost, EMAIL_LIVE=1, CLOCK_ENABLED=1, restart web and clock.
     (YOU) remove the shadow banner (its setting is in web.env, see env.example).
   5 (YOU) check: the next tick shows "owner" here and "standby" on the Worker (praxis owner); 08:00 morning slot; heartbeat email.

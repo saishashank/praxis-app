@@ -68,7 +68,7 @@ the Owner also creates the tunnel.
    for one evening (one night is enough here). The deploy check (`praxis deploy <sha>`) does the same smoke test.
 2. When the numbers agree, do the cutover on the new box, in this order:
    1. `/srv/praxis/bin/switch.sh selfhost --turso` (clock_owner in Turso, cloud goes to standby)
-   2. ★ the final restore into sqld (needs the backup key): `praxis restore-latest`
+   2. ★ the final restore into sqld (needs the backup key): `praxis restore-latest --replace` (the plain command refuses a database that already holds tables; --replace drops and recreates main and auth, and refuses unless `CLOCK_ENABLED=0`, the owner is not selfhost and no job is running)
    3. `/srv/praxis/bin/switch.sh selfhost --local --restored` (sqld owner, `EMAIL_LIVE=1`, `CLOCK_ENABLED=1`,
       restart web and clock)
    4. `praxis owner` shows `selfhost`; watch the next tick.

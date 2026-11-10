@@ -3,7 +3,7 @@
 # Installed by bootstrap.sh as /srv/praxis/bin/praxis. It runs clock/cli.mjs inside the clock container,
 # so the database address and tokens come from jobs.env and are never typed or printed here.
 #   praxis status | run <job> [--input k=v] | logs <job|run-id> | owner [cloud|selfhost]
-#   praxis backup-now | restore-drill [--source live|synthetic|backup] | restore-latest
+#   praxis backup-now | restore-drill [--source live|synthetic|backup] | restore-latest [--replace]
 #   praxis deploy <40-hex sha> [--wait] [--skip-zap] | deploy --rollback   (host side: deploy.sh, INFRA T7, §10)
 #   praxis switch <switch.sh arguments>                                    (runtime switch, §11.3/§11.4)
 #   restore-latest needs the age private key in the caller's environment:

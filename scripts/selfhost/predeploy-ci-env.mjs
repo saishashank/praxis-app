@@ -63,8 +63,8 @@ export function ciEnv(o = {}) {
       ...(o.refreshUrl
         ? { TURSO_REFRESH_MAIN_URL: o.refreshUrl, TURSO_REFRESH_MAIN_TOKEN: hex() }
         : {}),
-      TURSO_AUTH_URL: "http://auth.sqld:8080",
-      TURSO_AUTH_TOKEN: tok(),
+      // No TURSO_AUTH_*: like the real jobs.env (ROL-101a), so CI proves that migrate and restore reach the auth
+      // namespace through SQLD_URL.
     }),
     sqld: o.jwt ? lines({ SQLD_AUTH_JWT_KEY: o.jwt.publicKey }) : "",
   };
