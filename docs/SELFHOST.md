@@ -73,4 +73,4 @@ Praxis from the latest backup. The checklist for a real move is `deploy/selfhost
 
 | Date | Box | Minutes | Backup age | Failures |
 |---|---|---|---|---|
-| 2026-11-10 (first run) | CI proxy (not a real box): GitHub-hosted runners, images built from source, synthetic data | pending (see the Self-host check run), pending | n/a (synthetic) | pending |
+| 2026-11-10 | CI proxy (not a real box): GitHub-hosted runners, images built from source, synthetic data | amd64 5 (both images in parallel 100 s, sqld, restore drill, clock, pre-deploy check good and broken, 316 s in all); arm64 2 (native build and boot, 108 s) | n/a (synthetic) | none in the last run; 7 fixes were needed to get there (see the decision log) |
