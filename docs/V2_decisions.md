@@ -568,3 +568,37 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-915 | (Owner 2026-11-10: "the strategies still show percentage as of yesterday, not the delayed profit or loss for the day") During the session the Home strategy t... |
 | D-916 | (Owner 2026-11-10: a delayed feed on the Market tab without exhausting the Yahoo limit) The Market tables show, for each listed company, the delayed quote al... |
 | D-918 | (Owner 2026-11-10: "the changes on the strategy cards are not visible on the Strategies page") The Strategies page tiles show the same day's change as Home (... |
+
+## M18 (M18_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-951 | OPS-110 is closed by evidence, not by a fix to the decision path: the night's "No picks tonight: …" reason is a stored line (src/lib/picks/noPicks.ts), writt... |
+| D-952 | OPS-106 gap table (the spec names the decisions, not the gaps). |
+| D-953 | D-666 is closed on the Worker side, not in the scripts: the arena-signals slot gains recheck: { keyPrefix: "arena-2b:AU:" → derived from the slot's market, a... |
+| D-954 | DAT-251 b key conflict: sentinel_max_items_per_run (1–40) is renamed news_assess_per_run (default 40, bounds 20–200, Owner) with a config_version row rename... |
+| D-955 | Acceptance for the extract's "no AT named" items and reference corrections: |
+| D-956 | ARN-123 verdict: the picks track record does not credit dividends (track.ts net = qty × exit − brokerage − cost) while its benchmark is total-return (D-490),... |
+| D-957 | SEC-115 scheme v2: message v2\n${METHOD}\n${path}\n${timestamp}\n${nonce}\n${sha256(body)} with header X-Praxis-Version: 2; the verifier refuses any other ve... |
+| D-958 | Turso metering transport: a daily Actions job (turso-usage.yml, Worker slot turso-usage 06:40 Melbourne, approved-commit, deployment: false) reads the platfo... |
+| D-959 | OFFSET has zero exceptions: news.ts and reviews.ts page by keyset cursor ((published_at, id), (d)), retention.ts finds the keep-N boundary with MIN(k) FROM (... |
+| D-960 | The row-by-market invariant runs inside the nightly maintenance route: it counts rows per market in every table with a market column (list derived from schem... |
+| D-961 | Calendar draft job: scripts/calendar/draft.mjs + calendar-draft.yml (dispatch-only, production pattern) + Worker slot calendar-draft on 1 November 09:00 Melb... |
+| D-962 | Restore drill: drill-turso.mjs gains TARGET=local (the same path into local libSQL files, no platform token) and writes a restore-drill:<date> run record on... |
+| D-963 | PLT-080: the plan name comes from the daily usage sample; after 2026-12-01 a plan other than free (or an unknown plan) raises an Owner item; a static test gr... |
+| D-964 | Staging retirement in the gate: nightly.yml and deploy-staging.yml become dispatch-only with a header (D-906 made permanent); the release gate replaces three... |
+| D-965 | Recorded-day CI job: scripts/e2e-day/recorded-day.mjs runs one full AU day on local libSQL files with a simulated clock (--now), from the recorded fixtures (... |
+| D-966 | TST-134: the e2e CI job lists every spec file in four lane steps (empty, populated, rich + all states, walks with the AT-65 family-badge walk); scripts/ci/e2... |
+| D-967 | TST-135: seed states are idempotent overlays (E2E_STATES, e2e/seed/states/<name>.ts) on a scenario, loaded and re-applied by a unit test; market-built-off as... |
+| D-968 | TST-136: the three timing checks become count-based budget tests (Worker work-unit counters through an injected count dep in clock.ts; replay step/evaluation... |
+| D-969 | TST-137: one guide page docs/owner-guide/owner_checks.md; scripts/cortex/golden-spot-check.mjs (seeded 20-row draw from label, agreement and κ on --answers;... |
+| D-970 | TST-138/139: docs/test-map.md gains a "V3 home" column that test-map.mjs requires for every AT-01…AT-85 and AT-M1…AT-M5 (staging-homed tests move to CI recor... |
+| D-971 | OPS-109: (a) is already pinned (vercel@63.1.0) and gets a lint rule so it stays exact; |
+| D-972 | DAT-251 a: asx-fetch classifies every request (not_found / rate_limited / server_error / network / parse), backs off on 429 (Retry-After or doubling) inside... |
+| D-973 | DAT-251 c: RBA and ABS fetchers are Node scripts under scripts/macro/ run as a Friday step of ingest-batch1.yml gated by the repository variable MACRO_FETCH... |
+| D-974 | DAT-252: the Wikidata converter runs in CI on a fixture export; the fallback fetch (one SPARQL request per asx-fetch run) engages only when the listed-compan... |
+| D-975 | DAT-253: SOURCE_HOSTS gains asic.gov.au and ssrn.com; register rows asic_documents and ssrn_papers are seeded pending with their terms [VERIFY] (listed); the... |
+| D-976 | OPS-108: docs/runbooks/rotate-secrets.md is written per secret with the secrets tool steps and the smoke proof; rotation and PAT revocation are PR-listed Own... |
+| D-977 | OPS-111 verdicts: (1) → LLM-077 (M22), re-accepted; |
+| D-978 | OPS-112 verdicts: (1) closed: the weekly close requires the horizon session's bar when d equals the horizon session, else marks the outcome early (new column... |
+| D-979 | Fixed V3 keys are registered once: hmac_scheme_version (default = the hmacCore constant), calendar_draft_markets (default = CALENDAR_MARKETS), restore_drill_... |
