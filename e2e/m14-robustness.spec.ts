@@ -14,12 +14,19 @@ test.beforeAll(async () => {
 
 const section = (page: import("@playwright/test").Page) => page.locator("[data-robustness]");
 
+/** The research sections sit in one closed "Research details" disclosure (Owner 2026-11-10): open it. */
+async function openResearch(page: import("@playwright/test").Page) {
+  const summary = page.getByText("Research details (fills in as rounds finish)");
+  if ((await summary.count()) > 0) await summary.click();
+}
+
 test("owner sees every table with names, and the not-a-finding label", async ({
   page,
   context,
 }) => {
   await signIn(context, "owner");
   await page.goto("/strategies/E01");
+  await openResearch(page);
   const s = section(page);
   await expect(s).toBeVisible();
   await expect(s.getByRole("heading", { name: "Robustness" })).toBeVisible();
@@ -38,6 +45,7 @@ test("editor sees the section but no setting, ranking, family or version names",
 }) => {
   await signIn(context, "editor");
   await page.goto("/strategies/E01");
+  await openResearch(page);
   const s = section(page);
   await expect(s).toBeVisible();
   await expect(s).toContainText("Setting 1");
@@ -57,6 +65,7 @@ test("viewer does not see the section", async ({ page, context }) => {
 test("a strategy with nothing stored says Not measured yet", async ({ page, context }) => {
   await signIn(context, "owner");
   await page.goto("/strategies/E02");
+  await openResearch(page);
   const s = section(page);
   await expect(s).toBeVisible();
   await expect(s).toContainText("Not measured yet");
@@ -67,6 +76,7 @@ test("the section fits a phone without sideways scrolling", async ({ page, conte
   await signIn(context, "owner");
   await page.setViewportSize({ width: 375, height: 800 });
   await page.goto("/strategies/E01");
+  await openResearch(page);
   await expect(section(page)).toBeVisible();
   const { scrollWidth, innerWidth } = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,

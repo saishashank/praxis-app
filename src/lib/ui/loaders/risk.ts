@@ -140,7 +140,8 @@ export async function loadRisk(deps: LoaderDeps): Promise<Loaded<RiskView>> {
   const live = await deps.mainDb.execute(
     `SELECT c.id, c.execution_id, e.family, c.seed_micro, c.params_json
      FROM cohort c JOIN execution e ON e.id = c.execution_id
-     WHERE e.kind = 'E' AND c.terminal_kind IS NULL AND c.control_idx IS NULL ORDER BY c.execution_id, c.id`,
+     WHERE e.kind = 'E' AND e.variant = 'U' AND c.terminal_kind IS NULL AND c.control_idx IS NULL
+     ORDER BY c.execution_id, c.id`, // D-191: no leverage twins
   );
   const cohorts = live.rows.map((r) => ({
     id: str(r.id),

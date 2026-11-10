@@ -10,12 +10,11 @@ import { buttonClass } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FamilyBadge, Rail } from "@/components/ui/Family";
 import { ChevronRightIcon } from "@/components/ui/icons";
-import { Pill } from "@/components/ui/Pill";
 import { StatusStrip, type Mood } from "@/components/ui/StatusStrip";
 import { Banner, EmptyState } from "@/components/ui/States";
 import { hueStyle } from "@/components/ui/hue";
 import { GainLoss, Masked, Money, NotMeasured, SimulatedLabel } from "@/components/ui/Values";
-import { formatDate, formatMicro, formatPpm, plural } from "@/lib/view/format";
+import { formatDay, formatMicro, formatPpm, plural } from "@/lib/view/format";
 import { regimeLabel } from "@/lib/view/terms";
 import type { Loaded } from "@/lib/ui/loaders/common";
 import type { HomeNeed, HomePick, HomeSinceRow, HomeView } from "@/lib/ui/loaders/home";
@@ -43,23 +42,33 @@ const tileStrip =
   "ui-scroll-x m-0 -mx-1 flex list-none snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 xl:grid-cols-3";
 const tileItem = "w-[78%] min-w-0 shrink-0 snap-start sm:w-auto";
 
-/** Market regime -> gradient key and the word printed on it (the gradient is decoration, UXR-053). */
+/** One short meaning per market mood word (Owner 2026-11-10: one plain word and what it means). */
+const MOOD_MEANING: Record<string, string> = {
+  "RISK-ON": "prices are steady and trending up",
+  NEUTRAL: "no clear direction",
+  "RISK-OFF": "prices are swinging down",
+  SHOCK: "a sudden, sharp market fall",
+};
+
+/** Market regime -> gradient key and the one plain word printed on it (the gradient is decoration, UXR-053). */
 export function moodOf(regime: string | null): { key: Mood; word: string } {
   if (!regime) return { key: "neutral", word: "Not measured yet" };
   const shown = regimeLabel(regime).shown;
+  const meaning = MOOD_MEANING[regime];
+  const word = meaning ? `${shown}: ${meaning}` : shown;
   switch (regime) {
     case "RISK-ON":
-      return { key: "on", word: `Risk-on · ${shown}` };
+      return { key: "on", word };
     case "RISK-OFF":
-      return { key: "off", word: `Risk-off · ${shown}` };
     case "SHOCK":
-      return { key: "off", word: `Shock · ${shown}` };
-    case "NEUTRAL":
-      return { key: "neutral", word: `Neutral · ${shown}` };
+      return { key: "off", word };
     default:
-      return { key: "neutral", word: shown };
+      return { key: "neutral", word };
   }
 }
+
+/** "2026-11-09" -> "Mon 9 Nov"; text that is not an ISO day (an ISO week for a masked viewer) is kept. */
+const dayText = (d: string): string => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? formatDay(d) : d);
 
 const outcomeHue = (v: number | null): "positive" | "negative" | "outcome-flat" =>
   v === null || v === 0 ? "outcome-flat" : v > 0 ? "positive" : "negative";
@@ -109,18 +118,37 @@ function Empty({
   );
 }
 
-/** One plain-words sentence about the day (UXN-034). Never names a stock. */
+/** "tonight 18:10" -> "tonight's 18:10 run"; "Mon 18:10" -> "Mon's 18:10 run". */
+function nextRunPhrase(nextRun: string): string {
+  const m = /^(\S+) (\d{2}:\d{2})$/.exec(nextRun);
+  return m ? `${m[1]}'s ${m[2]} run` : "next run";
+}
+
+/**
+ * One actionable line about the day (UXN-034, Owner 2026-11-10): what is on the list or when the first
+ * picks come, then how the strategies are doing today. Never names a stock.
+ */
 export function daySentence(v: HomeView): string {
   const parts: string[] = [];
-  parts.push(
-    v.day.regime
-      ? "Tonight's plans follow the market mood below."
-      : "The market mood is not measured yet.",
-  );
-  if (v.picks.items.length > 0) {
-    parts.push(`${v.picks.items.length} ${plural(v.picks.items.length, "pick")} on the list.`);
+  const n = v.picksTotal > 0 ? v.picksTotal : v.picks.items.length;
+  if (n > 0) {
+    parts.push(`${n} ${plural(n, "pick")} on the list for the next session.`);
+  } else {
+    parts.push(`No picks yet: the first ones come after ${nextRunPhrase(v.nextRun)}.`);
   }
-  if (v.picks.items.length === 0) parts.push("No picks on the list yet.");
+  const ppm = v.headline[0]?.dayChangePpm ?? null;
+  if (ppm !== null) {
+    const when = v.dayLabel?.startsWith("Today (delayed")
+      ? "today (delayed)"
+      : v.dayLabel === "Today" || v.dayLabel === null
+        ? "today"
+        : `on ${v.dayLabel}`;
+    parts.push(
+      ppm === 0
+        ? `Your strategies are unchanged ${when}.`
+        : `Your strategies are ${ppm > 0 ? "up" : "down"} ${formatPpm(Math.abs(ppm))} ${when}.`,
+    );
+  }
   return parts.join(" ");
 }
 
@@ -184,7 +212,7 @@ function Strip({ v, asOf }: { v: HomeView; asOf: string | null }) {
             </span>
           ) : null}
           <span className="text-xs font-normal text-text-muted">
-            {ix.at ? `delayed, ${ix.at}` : ix.d ? `close ${formatDate(ix.d)}` : ""}
+            {ix.at ? `delayed, ${ix.at}` : ix.d ? `close ${formatDay(ix.d)}` : ""}
           </span>
         </span>
       ),
@@ -192,7 +220,7 @@ function Strip({ v, asOf }: { v: HomeView; asOf: string | null }) {
   }
   items.push({
     label: "Prices",
-    value: v.dataAtLabel ?? (asOf ? formatDate(asOf) : <NotMeasured>No run yet</NotMeasured>),
+    value: v.dataAtLabel ?? (asOf ? formatDay(asOf) : <NotMeasured>No run yet</NotMeasured>),
   });
   // D-884: no run times on Home ("don't give technical information like next run 18:30")
   if (v.dataOnly) {
@@ -220,7 +248,6 @@ const SINCE_HUE: Record<HomeSinceRow["key"], string> = {
   fills: "status-running",
   alerts: "tier-p1",
   breakers: "tier-p0",
-  system: "outcome-flat",
 };
 
 /** UXR-020 (2): rows, not boxes; each row is one link. */
@@ -272,8 +299,7 @@ function NeedsYou({ needs }: { needs: HomeNeed[] }) {
                 hue={`tier-${n.tier.toLowerCase()}`}
                 header={
                   <span className="inline-flex items-center gap-2 text-sm font-semibold">
-                    <Pill kind="tier" value={n.tier} />
-                    {n.tier === "P0" ? "Urgent" : "Important"}
+                    {n.tier === "P0" ? "Urgent" : n.tier === "P1" ? "Important" : "FYI"}
                   </span>
                 }
               >
@@ -330,7 +356,7 @@ function PickCard({ p, masked }: { p: HomePick; masked: boolean }) {
         {p.timeFrameSessions !== null
           ? `Time frame ${p.timeFrameSessions} ${plural(p.timeFrameSessions, "session")}`
           : "Time frame not set"}
-        {p.validUntil ? ` · Valid until ${p.validUntil}` : ""}
+        {p.validUntil ? ` · Valid until ${dayText(p.validUntil)}` : ""}
       </p>
       <p className="m-0 mt-3">
         <Link href={p.whyHref} className={buttonClass("default")}>
@@ -372,7 +398,7 @@ function SummaryCard({ v }: { v: HomeView }) {
                 <Money micro={t.value.micro} />
               </p>
               <p className="m-0 mt-1 text-xs text-text-muted">
-                Started with <Money micro={t.seed.micro} /> on {formatDate(t.startD)}
+                Started with <Money micro={t.seed.micro} /> on {formatDay(t.startD)}
               </p>
               <p className="m-0 mt-1 text-sm">
                 <GainLoss value={t.sinceStart.micro}>
@@ -401,8 +427,13 @@ function SummaryCard({ v }: { v: HomeView }) {
         </ul>
       )}
       <p className="mt-2 text-xs text-text-muted">
-        {s.d ? `As of ${formatDate(s.d)}. ` : ""}Each strategy invests its own pretend money, with
-        no borrowing. The amounts are never added together.
+        {s.d
+          ? v.dayLabel?.startsWith("Today (delayed")
+            ? "Values move with delayed prices during the session. "
+            : `End of day, ${formatDay(s.d)}. `
+          : ""}
+        Each strategy invests its own pretend money, with no borrowing. The amounts are never added
+        together.
       </p>
       <p className="mt-1">
         <SimulatedLabel />
@@ -515,17 +546,6 @@ export function HomeContent({
 
       <SummaryCard v={v} />
 
-      <p className="text-sm" data-testid="status-line">
-        {role === "owner"
-          ? !v.attentionCount
-            ? "All systems working. "
-            : `${v.attentionCount} ${plural(v.attentionCount, "thing")} in system health need a look. `
-          : null}
-        <Link href="/health" className={linkCls}>
-          System health
-        </Link>
-      </p>
-
       <div className={twoCol}>
         {canWatch ? (
           <Section
@@ -560,8 +580,8 @@ export function HomeContent({
               </ul>
             ) : (
               <Empty hue="sector-tech" shape="list">
-                Nothing starred yet. Star a company on the Market tab and it shows here from the
-                next end-of-day update.
+                Nothing starred yet. Star a company on the Market tab and it appears here with its
+                latest delayed price.
               </Empty>
             )}
           </Section>
@@ -597,7 +617,7 @@ export function HomeContent({
           {v.review ? (
             <p className="text-sm">
               <Link href={masked ? "/reviews" : `/reviews/${v.review.d}`} className={linkCls}>
-                Latest Evening Review{v.review.day ? `, ${v.review.day}` : ""}
+                Latest Evening Review{v.review.day ? `, ${dayText(v.review.day)}` : ""}
               </Link>
             </p>
           ) : (

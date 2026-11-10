@@ -267,11 +267,33 @@ describe("one strategy", () => {
     expect(screen.getByText("Pulling it down")).toBeInTheDocument();
   });
 
+  it("says things in plain words: day row, bar labels, mood word, cost profile, one research disclosure", async () => {
+    await one("E01");
+    const text = document.body.textContent ?? "";
+    // the bar names its ends
+    expect(text).toMatch(/Loss limit A\$300\.00/);
+    expect(text).toMatch(/Goal A\$1,200\.00/);
+    // one word for the market mood, no official code beside it
+    expect(text).not.toMatch(/Market mood\s*\S+\s*(NEUTRAL|RISK-ON|RISK-OFF|SHOCK)/);
+    // no internal cost-profile code, no raw ISO date in the open positions
+    expect(text).not.toMatch(/Cost profile: P\d/);
+    const open = screen.getByRole("heading", { name: "Open positions" }).closest("section")!;
+    expect(open.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    // the empty research sections sit in one closed disclosure
+    const details = document.querySelector("[data-research-details]")!.closest("details")!;
+    expect(details).not.toBeNull();
+    expect(details.open).toBe(false);
+    expect(details.querySelector("summary")?.textContent).toBe(
+      "Research details (fills in as rounds finish)",
+    );
+    expect(details.textContent).toContain("Robustness");
+  });
+
   it("shows the round line, the chart, the drawdown and the controls toggle", async () => {
     await one("E01");
     expect(screen.getByRole("heading", { level: 1, name: "Follow the trend" })).toBeInTheDocument();
     expect(
-      screen.getByText(/Round 1 · started Mon 12 Oct 2026 · 3 sessions held/),
+      screen.getByText(/Round 1 · started Mon 12 Oct( 2026)? · 3 sessions held/),
     ).toBeInTheDocument();
     expect(screen.getByTestId("nav-chart")).toBeInTheDocument();
     expect(
@@ -388,7 +410,7 @@ describe("one strategy", () => {
     const rounds = screen.getByRole("heading", { name: "Past rounds" }).closest("section")!;
     expect(within(rounds).getAllByText(/Round [12]/).length).toBeGreaterThanOrEqual(2);
     expect(
-      within(rounds).getAllByText(/Hit the loss limit, Sun 20 Sep 2026/).length,
+      within(rounds).getAllByText(/Hit the loss limit, Sun 20 Sep( 2026)?/).length,
     ).toBeGreaterThan(0);
     // D-191: the L twin (E04) runs nothing and is listed nowhere; its own page still explains the
     // hypothetical sleeve
