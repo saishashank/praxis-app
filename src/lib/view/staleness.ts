@@ -64,5 +64,10 @@ export function dateStaleness(
       text: `Showing data from ${formatDay(lastD)}. It has not updated since.`,
     };
   }
-  return { state: "fresh", lastGood: lastD as string, ageMinutes, text: `Data for ${formatDay(lastD)}` };
+  return {
+    state: "fresh",
+    lastGood: lastD as string,
+    ageMinutes,
+    text: `Data for ${formatDay(lastD)}`,
+  };
 }

@@ -23,6 +23,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-910 | loadDayInputs asks the DecisionView to prefetch the per-code rows of all its codes in batches of 200 codes (bars from the session need + 10 sessions back, sh... |
 | D-914 | (2026-11-10) GitHub can start a scheduled run hours late: the 07:15 UTC Batch-1 backup line of 9 Nov started at 17:31 UTC (04:31 the next day in Sydney), too... |
 | D-917 | (Owner 2026-11-10: "do we need these many replays?") The post-deploy replay check (D-905) counts a main-database migration only when it touches a table the r... |
+| D-919 | (Owner 2026-11-10: "go through the app … with different eyes … and suggest changes", then "fix all") A usability pass over every user page, from a review thr... |
 
 ## M11L (M11L_design.md)
 
