@@ -169,11 +169,11 @@ describe("breadcrumb and back link", () => {
     ]);
     expect(b.backHref).toBe("/strategies");
   });
-  it("three levels: Strategies > Tonight's trade ideas > Decision card", () => {
+  it("three levels: Strategies > All signals (research) > Decision card", () => {
     const b = breadcrumbFor("/cards/17");
     expect(b.crumbs.map((c) => c.label)).toEqual([
       "Strategies",
-      "Tonight's trade ideas",
+      "All signals (research)",
       "Decision card",
     ]);
     expect(b.backHref).toBe("/strategies/ideas");

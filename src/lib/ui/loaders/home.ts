@@ -14,7 +14,6 @@ import { listInbox } from "@/lib/alerts/api";
 import { addDays, isWeekend, marketDate } from "@/lib/data/calendar";
 import { maskAlertViews } from "@/lib/view/alerts";
 import { formatDate, plural } from "@/lib/view/format";
-import { loadIdeas } from "./ideas";
 import { pickRef } from "./picks";
 import {
   newerThanClose,
@@ -48,7 +47,6 @@ import {
 
 const PICKS_PER_PROFILE = 3; // threshold-ok: picks shown per profile on Home
 const MAX_HOME_PICKS = 30; // threshold-ok: bound of the picks read
-const MAX_IDEAS = 5; // threshold-ok: UX-011 ideas on Home
 const MAX_WATCH = 50; // threshold-ok: bound of the watchlist read
 const MAX_NEWS = 3; // threshold-ok: UX-011 news items on Home
 const PRICE_WINDOW_DAYS = 10; // threshold-ok: calendar days that hold the two newest closes
@@ -473,25 +471,8 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     };
   });
 
-  // Ideas: the first ones of the newest session, in the order of the Ideas page.
-  const ideas = await loadIdeas(deps);
-  view.ideas = {
-    d: ideas.data.d,
-    signals: ideas.data.tally.signals,
-    items: ideas.data.groups
-      .flatMap((g) =>
-        g.ideas.map((i) => ({
-          stock: i.stock,
-          name: i.name,
-          strategy: g.strategy,
-          reasons: [...new Set(i.cards.flatMap((c) => (c.reason === null ? [] : [c.reason])))],
-          taken: i.taken,
-          notTaken: i.notTaken,
-          href: i.cards[0]?.href ?? null,
-        })),
-      )
-      .slice(0, MAX_IDEAS),
-  };
+  // Owner 2026-11-10: the strategies' signals are research (Strategies > All signals), not on Home;
+  // `view.ideas` stays empty and the ideas are not read here.
 
   // News: company items are for unmasked viewers only (UX-009).
   if (masked) {
@@ -588,13 +569,6 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
       key: "picks",
       text: `${view.picksTotal} new ${plural(view.picksTotal, "pick")} for the next session`,
       href: "/picks",
-    });
-  }
-  if (view.ideas.signals > 0) {
-    since.push({
-      key: "ideas",
-      text: `${view.ideas.signals} trade ${plural(view.ideas.signals, "idea")} tonight`,
-      href: "/strategies/ideas",
     });
   }
   const fills = navD
@@ -739,7 +713,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
   view.needs = needs;
 
   return loaded(
-    maxDate(dataD, navD, ideas.data.d, pickD),
+    maxDate(dataD, navD, pickD),
     v.now,
     masked,
     view,

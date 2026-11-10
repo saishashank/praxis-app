@@ -56,12 +56,9 @@ describe("Home page content", () => {
     expect(screen.getByText("Strategies today")).toBeInTheDocument();
     expect(screen.getAllByText("Simulated").length).toBeGreaterThan(0);
     expect(screen.getByText("Tonight's picks")).toBeInTheDocument();
-    expect(screen.getByText("Tonight's trade ideas")).toBeInTheDocument();
+    // Owner 2026-11-10: the strategies' signals are research, not on Home
+    expect(screen.queryByText("Tonight's trade ideas")).toBeNull();
     expect(screen.getByText("Your watchlist")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "See all tonight's ideas" })).toHaveAttribute(
-      "href",
-      "/strategies/ideas",
-    );
     expect(screen.getByRole("link", { name: /Latest Evening Review/ })).toHaveAttribute(
       "href",
       expect.stringMatching(/^\/reviews\/\d{4}-\d{2}-\d{2}$/),
@@ -133,7 +130,6 @@ describe("states", () => {
     expect(
       screen.getByText(/The first Evening Review appears after this evening/),
     ).toBeInTheDocument(); // D-884
-    expect(screen.getAllByText(/No trade ideas yet/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/SAMPLE DATA/)).toBeNull();
     expect(document.querySelectorAll("[data-money]")).toHaveLength(0);
     expect(screen.getByText("No strategy is running yet.")).toBeInTheDocument();
@@ -201,6 +197,15 @@ describe("accessibility and layout", () => {
   it("the day sentence never names a stock", async () => {
     const result = await loadHome(deps(pop, OWNER));
     expect(daySentence(result.data)).not.toMatch(new RegExp(CODES.join("|")));
+  });
+
+  it("the day sentence says when there are no picks, and never mentions trade ideas (D-912)", async () => {
+    const { data } = await loadHome(deps(pop, OWNER));
+    const none = daySentence({ ...data, picks: { ...data.picks, items: [] } });
+    expect(none).toContain("No picks on the list yet.");
+    expect(none).not.toMatch(/trade idea/);
+    if (data.picks.items.length > 0)
+      expect(daySentence(data)).not.toContain("No picks on the list yet.");
   });
 });
 
@@ -382,51 +387,9 @@ describe("Home redesign (UXR-020, 044, 053, 055, 056)", () => {
     expect(screen.queryByRole("region", { name: "Needs you" })).toBeNull();
   });
 
-  it("idea tiles: code, company name, strategy, bought or not, and an i with the reasons (D-884)", async () => {
-    await withPatch(OWNER, (v) => {
-      v.ideas = {
-        d: "2026-11-03",
-        signals: 2,
-        items: [
-          {
-            stock: "AAA",
-            name: "Alpha Mining Ltd",
-            strategy: "Follow the trend",
-            reasons: ["the stop would have been too far below the entry price"],
-            taken: 0,
-            notTaken: 1,
-            href: "/cards/x",
-          },
-          {
-            stock: "BBB",
-            name: null,
-            strategy: "Buy the dip",
-            reasons: [],
-            taken: 1,
-            notTaken: 0,
-            href: null,
-          },
-        ],
-      };
-    });
-    const list = screen.getByRole("list", { name: "Tonight's trade ideas" });
-    const tiles = within(list).getAllByRole("listitem");
-    expect(tiles).toHaveLength(2);
-    expect(tiles[0]).toHaveTextContent("Alpha Mining Ltd");
-    expect(tiles[0]).toHaveTextContent("Follow the trend");
-    expect(tiles[0]).toHaveTextContent("Not bought");
-    expect(within(tiles[0]!).getByRole("link", { name: "AAA" })).toHaveAttribute(
-      "href",
-      "/cards/x",
-    );
-    expect(
-      within(tiles[0]!).getByRole("button", { name: "Why AAA was not bought" }),
-    ).toBeInTheDocument();
-    expect(tiles[1]).toHaveTextContent("Bought");
-    expect(
-      within(tiles[1]!).getByRole("button", { name: "Why BBB was bought" }),
-    ).toBeInTheDocument();
-    expect(tiles[0]).not.toHaveTextContent(/taken \d/);
+  it("Home shows no trade ideas: they are research under Strategies (Owner 2026-11-10)", async () => {
+    await view(pop, OWNER);
+    expect(screen.queryByRole("list", { name: "Tonight's trade ideas" })).toBeNull();
   });
 
   it("pick cards show the family badge text, aim, stop, time frame and Why this pick", async () => {
