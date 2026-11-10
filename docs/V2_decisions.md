@@ -21,6 +21,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-905 | The post-deploy full replay (D-195) runs only when the deploy changed what a replay depends on: the Worker dispatches it with only_if_changed: "true", and sc... |
 | D-906 | Staging is off (Owner 2026-11-09: "Don't use any staging going forward on anything"): the Nightly, Deploy staging and Staging E2E day workflows are disabled... |
 | D-910 | loadDayInputs asks the DecisionView to prefetch the per-code rows of all its codes in batches of 200 codes (bars from the session need + 10 sessions back, sh... |
+| D-914 | (2026-11-10) GitHub can start a scheduled run hours late: the 07:15 UTC Batch-1 backup line of 9 Nov started at 17:31 UTC (04:31 the next day in Sydney), too... |
 
 ## M11L (M11L_design.md)
 

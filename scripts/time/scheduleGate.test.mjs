@@ -28,3 +28,16 @@ test("the Batch-1 fallback lines are 07:15 and 08:15 UTC for 18:15 Melbourne", (
   assert.deepEqual(gate("15 7 * * *", SUMMER, ["18:15"]), { run: true, slot: "1815" });
   assert.equal(gate("15 7 * * *", WINTER, ["18:15"]).run, false);
 });
+
+test("D-914: a scheduled run that starts hours late is skipped, a few minutes late still runs", async () => {
+  const { lateMinutes, MAX_LATE_MIN } = await import("./scheduleGate.mjs");
+  // the 2026-11-09 case: the 07:15 UTC line (18:15 AEDT) started at 17:31 UTC = 04:31 next day
+  const LATE = Date.parse("2026-11-09T17:31:36Z");
+  assert.deepEqual(gate("15 7 * * *", LATE, ["18:15"]), { run: false, slot: "", late: true });
+  assert.equal(lateMinutes("1815", LATE), 616); // 04:31 is 10 h 16 min after 18:15
+  const ON_TIME = Date.parse("2026-11-09T07:21:00Z"); // 18:21 AEDT
+  assert.deepEqual(gate("15 7 * * *", ON_TIME, ["18:15"]), { run: true, slot: "1815" });
+  const LIMIT = Date.parse("2026-11-09T11:15:00Z"); // 22:15 AEDT, exactly the limit
+  assert.equal(lateMinutes("1815", LIMIT), MAX_LATE_MIN);
+  assert.equal(gate("15 7 * * *", LIMIT, ["18:15"]).run, true);
+});
