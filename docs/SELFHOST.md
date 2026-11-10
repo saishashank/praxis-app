@@ -46,8 +46,14 @@ traffic; point `HOST_NET_DEV_PATH` at a bind-mounted host file for the host's.
 
 Replay stays on GitHub Actions (12 GB heap) and keeps using Turso; sqld is never exposed.
 
-- 23:25 Sydney: `turso-refresh` makes Turso identical to sqld (done by 00:05 at the latest, before the
-  00:15 replay slot).
+- 23:25 Sydney: `turso-refresh` brings Turso to the sqld state INCREMENTALLY (done by 00:05 at the latest,
+  before the 00:15 replay slot): only new, changed or removed rows are written, `worker_state` is never dropped or
+  rewritten (the cloud gates keep reading `clock_owner = selfhost` the whole time), replay's seven result tables
+  and `worker_state` never lose Turso-only rows, a table whose schema differs (a migration ran on sqld only) is
+  rebuilt. A usage meter in sqld (`worker_state` key `turso_refresh_usage`) keeps the job under 20 % of the Turso
+  FREE plan (100 M rows read, 2 M rows written per rolling 30 days; free plan = 500 M / 10 M per month, turso.tech/pricing);
+  the estimate (about 1 M rows read and a few thousand rows written per night) is in the header of
+  `scripts/selfhost/turso-refresh.mjs`. `--dry-run`, `--verify` and `--rebuild <table>` are the operator flags.
 - 00:15: the clock dispatches `replay.yml` as before (up to 330 minutes).
 - 06:00 and 23:10 Sydney: `replay-sync` copies the new rows of replay's seven result tables
   (`lineage`, `lineage_split`, `trial_ledger`, `replay_run`, `validation_result`, `label`,

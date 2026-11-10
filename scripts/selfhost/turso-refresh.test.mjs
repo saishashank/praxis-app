@@ -55,18 +55,20 @@ const logRows = async (db) =>
 
 test("owner is selfhost: Turso is replaced by the source (main and auth), verified", async () => {
   const w = await world("selfhost");
-  const code = await run([], w.env, { open: w.open, out: w.out });
+  const code = await run(["--verify"], w.env, { open: w.open, out: w.out });
   assert.equal(code, 0, w.lines.join("\n"));
   assert.match(
     w.lines.join("\n"),
-    /^turso-refresh: PASS main\(tables=\d+ rows=\d+ replaced=\d+\) auth\(/,
+    /^turso-refresh: PASS main\(tables=\d+ rows=\d+ written=\d+ deleted=[0-9]+ rebuilt=0\) auth\(/,
   );
   assert.deepEqual(await logRows(w.tgt), await logRows(w.src)); // 'old' is gone, 'new' is there
   assert.ok((await logRows(w.tgt)).includes("new"));
   assert.equal((await logRows(w.tgt)).includes("old"), false);
   const a = await dumpDatabase(w.src, { name: "main", createdAt: NOW });
   const b = await dumpDatabase(w.tgt, { name: "main", createdAt: NOW });
-  assert.deepEqual(b.sha256, a.sha256);
+  for (const [tbl, h] of Object.entries(a.sha256)) {
+    if (tbl !== "worker_state") assert.equal(b.sha256[tbl], h, tbl); // the usage key lives in sqld only
+  }
   assert.equal(await readClockOwner(w.tgt), "selfhost"); // the copy carries the owner
   assert.equal(/libsql:|file:|t1|t2/.test(w.lines.join("\n")), false); // no URL or token in the output
 });
@@ -129,7 +131,10 @@ test("--dry-run: guard and dump only, nothing written", async () => {
   const w = await world("selfhost");
   const before = await logRows(w.tgt);
   assert.equal(await run(["--dry-run"], w.env, { open: w.open, out: w.out }), 0);
-  assert.match(w.lines[0], /DRY RUN ok main\(tables=\d+ rows=\d+ dry-run\)/);
+  assert.match(
+    w.lines[0],
+    /DRY RUN ok main\(tables=\d+ rows=\d+ written=\d+ deleted=[0-9]+ rebuilt=0 dry-run\)/,
+  );
   assert.deepEqual(await logRows(w.tgt), before);
   const w2 = await world("cloud"); // a dry run is guarded too
   assert.equal(await run(["--dry-run"], w2.env, { open: w2.open, out: w2.out }), 3);
