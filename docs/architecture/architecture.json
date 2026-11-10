@@ -12444,7 +12444,8 @@
           "exit_reason",
           "net_micro",
           "net_ppm",
-          "updated_d"
+          "updated_d",
+          "outcome_basis"
         ],
         "database": "main",
         "indexes": []

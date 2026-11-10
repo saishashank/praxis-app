@@ -167,8 +167,7 @@ async function TrackView({
       <header className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Picks</h1>
         <p className="m-0 text-sm text-text-muted">
-          Price only — dividends not included. Nothing shown here can be changed afterwards.{" "}
-          {NOT_REAL_ORDERS}
+          Nothing shown here can be changed afterwards. {NOT_REAL_ORDERS}
         </p>
       </header>
       <ViewTabs current="track" profile={profile} />

@@ -6,7 +6,12 @@ import { getConfig } from "@/lib/config/store";
 import { chanceDisplay, chanceLine, type ChanceDisplay } from "@/lib/picks/chance";
 import { familyStatusMap } from "@/lib/cortex/store/status";
 import { modelSuccess, successLine, type ModelSuccess } from "@/lib/picks/success";
-import { benchmarkLabel, type BenchBasis } from "@/lib/picks/benchmark";
+import {
+  benchmarkLabel,
+  outcomeBasisLabel,
+  type BenchBasis,
+  type OutcomeBasisValue,
+} from "@/lib/picks/benchmark";
 import { vsMarketSummary, type VsMarketSummary } from "@/lib/picks/vsMarket";
 import { formatDay, formatPpm, isoWeek, MISSING } from "@/lib/view/format";
 import { dateStaleness } from "@/lib/view/staleness";
@@ -183,7 +188,7 @@ export type PicksModel = {
   /** The real list date, for server-side joins only (alert chips); never rendered. */
   realD: string | null;
   staleText: string | null;
-  success: (ModelSuccess & { line: string }) | null;
+  success: (ModelSuccess & { line: string; basisLabel?: string }) | null;
   picks: PickRowView[];
 };
 
@@ -191,15 +196,26 @@ async function successFor(env: LoaderEnv, profile: string, d: string) {
   const minN = Number(await getConfig(env.main, "pick_success_min_n"));
   const confidence = Number(await getConfig(env.main, "cif_confidence"));
   const s = await modelSuccess(env.main, { market: marketOf(env), profile, d, minN, confidence });
+  // ARN-123 (D-956): the money basis the closed results were settled on ("Price only" for rows from
+  // before M18, "Total return" for later ones, both named when the record holds both).
+  const bases = await env.main.execute({
+    sql: `SELECT DISTINCT outcome_basis FROM pick_outcome
+          WHERE market = ? AND profile = ? AND kind = 'pick' AND state = 'closed'`,
+    args: [marketOf(env), profile],
+  });
+  const basisLabel = outcomeBasisLabel(
+    bases.rows.map((x) => String(x.outcome_basis) as OutcomeBasisValue),
+  );
   // The "since" date is a trade date: a masked user sees the week (UX-009). The line has a short date.
   if (env.mask.masked) {
     return {
       ...s,
       since: s.since === null ? null : (isoWeek(s.since) ?? MISSING),
       line: successLine({ ...s, since: null }),
+      basisLabel,
     };
   }
-  return { ...s, line: successLine(s) };
+  return { ...s, line: successLine(s), basisLabel };
 }
 
 const toNum = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v)); // money-float-ok: SQL integer column
@@ -488,7 +504,7 @@ export type TrackModel = {
   masked: boolean;
   profile: string;
   profiles: string[];
-  success: (ModelSuccess & { line: string }) | null;
+  success: (ModelSuccess & { line: string; basisLabel?: string }) | null;
   rows: TrackRow[];
   /** ARN-104: summary over filled, settled picks (missed excluded); null with no settled rows. */
   vsMarket: (VsMarketSummary & { basisLabel: string }) | null;
