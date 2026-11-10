@@ -189,3 +189,25 @@ test(
     }
   },
 );
+
+test(
+  "real sqld (branch CI): scratch namespace create, host-mode access, foreign keys, drop",
+  { skip: !process.env.SQLD_TEST_URL || !process.env.SQLD_TEST_ADMIN_URL },
+  async () => {
+    const ns = `t4-${Date.now().toString(36)}`;
+    const admin = process.env.SQLD_TEST_ADMIN_URL;
+    assert.equal(await ensureNamespace(admin, ns), "created");
+    assert.equal(await ensureNamespace(admin, ns), "exists");
+    const db = openNamespace({ base: process.env.SQLD_TEST_URL, ns, mode: "host" });
+    try {
+      await assertForeignKeys(db, "sqld scratch");
+      await db.execute("CREATE TABLE p (id INTEGER PRIMARY KEY)");
+      await db.execute("CREATE TABLE c (id INTEGER PRIMARY KEY, p_id INTEGER REFERENCES p(id))");
+      await assert.rejects(db.execute("INSERT INTO c (p_id) VALUES (99)"));
+    } finally {
+      db.close();
+    }
+    assert.equal(await dropNamespace(admin, ns), "dropped");
+    assert.equal(await dropNamespace(admin, ns), "absent");
+  },
+);

@@ -55,3 +55,22 @@ Replay stays on GitHub Actions (12 GB heap) and keeps using Turso; sqld is never
   sqld says `clock_owner = selfhost` (exit 3 = standby, no alert). The 23:10 run saves any manual
   replay of the day before the refresh overwrites Turso.
 - Source credentials reuse `TURSO_REFRESH_MAIN_URL` and `TURSO_REFRESH_MAIN_TOKEN`; Turso is only read.
+
+## Move drill (REQ §15.5)
+
+The weekly restore drill proves the backups. The move drill proves the whole rebuild: a fresh box to a working
+Praxis from the latest backup. The checklist for a real move is `deploy/selfhost/MOVE.md`.
+
+**Quarterly**, on the first Saturday of January, April, July and October (after replay):
+
+1. Get a throwaway amd64 box: the Owner's PC under WSL2 with Docker, or a VPS billed by the hour.
+2. Put the three env files in `/srv/praxis/env/` from the password manager. Start a timer.
+3. `bootstrap.sh --release <sha of the live release> --domain <test name>`. Leave `CLOCK_ENABLED=0` and
+   `EMAIL_LIVE=0`.
+4. Pass means: sign-in and Home work on the restored data within 60 minutes of the timer start. Note the
+   age of the backup that was restored.
+5. Destroy the box. Add a row below. Any failure is a P1 fix before the next trading week.
+
+| Date | Box | Minutes | Backup age | Failures |
+|---|---|---|---|---|
+| 2026-11-10 (first run) | CI proxy (not a real box): GitHub-hosted runners, images built from source, synthetic data | pending (see the Self-host check run), pending | n/a (synthetic) | pending |

@@ -15101,6 +15101,40 @@
       }
     },
     {
+      "id": "workflow:selfhost-check",
+      "type": "workflow",
+      "name": "Self-host check",
+      "purpose": "GitHub Actions workflow Self-host check.",
+      "specIds": [
+        "PLT-015"
+      ],
+      "owner": "actions",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
+      "runbook": null,
+      "views": [
+        "platform",
+        "security"
+      ],
+      "source": ".github/workflows/selfhost-check.yml",
+      "attrs": {
+        "file": ".github/workflows/selfhost-check.yml",
+        "jobs": [
+          "amd64",
+          "arm64",
+          "shell-checks"
+        ],
+        "triggers": [
+          "push",
+          "workflow_dispatch"
+        ]
+      }
+    },
+    {
       "id": "workflow:smoke-test",
       "type": "workflow",
       "name": "Credential smoke test (stage 1)",
@@ -16331,6 +16365,17 @@
       "views": [
         "agents",
         "data",
+        "security"
+      ]
+    },
+    {
+      "id": "service:actions|contains|workflow:selfhost-check",
+      "from": "service:actions",
+      "to": "workflow:selfhost-check",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform",
         "security"
       ]
     },

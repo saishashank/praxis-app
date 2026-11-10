@@ -36,6 +36,13 @@ export const NOT_CONFIG = new Set([
   // Tool pins in workflows
   "GITLEAKS_SHA256",
   "GITLEAKS_VERSION",
+  // selfhost-check.yml (branch CI proof, INFRA T4/T7/T11): image refs and test-only addresses, not configuration
+  "SQLD_IMAGE",
+  "WEB_IMAGE",
+  "JOBS_IMAGE",
+  "SQLD_TEST_URL",
+  "SQLD_TEST_ADMIN_URL",
+  "SQLD_TEST_NS",
   "ZAP_IMAGE", // ZAP container pinned by digest in zap-baseline.yml (M8 T12)
   // Per-run workflow or script inputs
   "MODE",

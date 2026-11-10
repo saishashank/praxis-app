@@ -1,0 +1,279 @@
+# Branch-only proof of the self-hosted runtime (INFRA T4, T7, T9 rehearsal, T11; REQ\infra\INFRA_REQUIREMENT.md §14, §15).
+# Runs on pushes to infra/selfhost and by hand. Real Docker on GitHub's runners: images built locally (nothing is
+# pushed anywhere), a real sqld, the clock booted against it, the pre-deploy check run on a good and on a broken
+# image, and the arm64 build on a native arm64 runner. No secret is read, no deploy key exists, the run token is
+# read-only. Every value the stack needs is made up at run time (scripts/selfhost/predeploy-ci-env.mjs).
+name: Self-host check
+
+on:
+  push:
+    branches: [infra/selfhost]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: selfhost-check-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SQLD_IMAGE: ghcr.io/tursodatabase/libsql-server:v0.24.32
+  WEB_IMAGE: ghcr.io/saishashank/praxis-web:ci
+  JOBS_IMAGE: ghcr.io/saishashank/praxis-jobs:ci
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  amd64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Start the clock
+        run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+
+      - name: Build both images (amd64, local only)
+        run: |
+          set -eu
+          docker build -f deploy/selfhost/Dockerfile.web -t "$WEB_IMAGE" . > "$RUNNER_TEMP/build-web.log" 2>&1 &
+          p1=$!
+          docker build -f deploy/selfhost/Dockerfile.jobs --build-arg BUILD_COMMIT="$GITHUB_SHA" -t "$JOBS_IMAGE" . > "$RUNNER_TEMP/build-jobs.log" 2>&1 &
+          p2=$!
+          rc=0
+          wait "$p1" || { echo "::error::praxis-web build failed"; tail -n 60 "$RUNNER_TEMP/build-web.log"; rc=1; }
+          wait "$p2" || { echo "::error::praxis-jobs build failed"; tail -n 60 "$RUNNER_TEMP/build-jobs.log"; rc=1; }
+          [ "$rc" = 0 ]
+          docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep praxis
+          echo "T_BUILT=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Throwaway env files (random values made up here)
+        run: node scripts/selfhost/predeploy-ci-env.mjs "$RUNNER_TEMP/env"
+
+      # 1a. A real sqld, started with the same flags as docker-compose.prod.yml. The names main.sqld / auth.sqld /
+      # sqld resolve to it on the runner (as the compose network aliases do in the containers).
+      - name: Start sqld (flags of docker-compose.prod.yml)
+        run: |
+          set -eu
+          docker network create ci-net
+          docker pull "$SQLD_IMAGE"
+          docker run -d --name sqld-ci --network ci-net \
+            --network-alias sqld --network-alias main.sqld --network-alias auth.sqld \
+            -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 \
+            "$SQLD_IMAGE" /bin/sqld \
+            --http-listen-addr=0.0.0.0:8080 --admin-listen-addr=0.0.0.0:8081 \
+            --enable-namespaces --db-path=/var/lib/sqld/data.sqld
+          echo "127.0.0.1 sqld main.sqld auth.sqld" | sudo tee -a /etc/hosts > /dev/null
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8080/health > /dev/null 2>&1; then echo "sqld healthy after ${i} tries"; exit 0; fi
+            sleep 1
+          done
+          echo "::error::sqld did not become healthy"; docker logs sqld-ci | tail -n 40; exit 1
+      - name: Does the sqld image have curl or wget (the compose healthcheck needs one)?
+        run: |
+          docker exec sqld-ci sh -c 'command -v curl || command -v wget || echo "NEITHER curl NOR wget"'
+          docker exec sqld-ci sh -c 'id -u; ls -ld /var/lib/sqld'
+
+      - name: sqld, namespaces and migrations (main, auth; second run applies nothing)
+        env:
+          TURSO_MAIN_URL: http://main.sqld:8080
+          TURSO_AUTH_URL: http://auth.sqld:8080
+          SQLD_ADMIN_URL: http://127.0.0.1:8081
+        run: |
+          set -eu
+          node scripts/db/migrate.mjs --db main --target sqld
+          node scripts/db/migrate.mjs --db auth --target sqld
+          node scripts/db/migrate.mjs --db main --target sqld | tee "$RUNNER_TEMP/again.txt"
+          grep -q "applied 0" "$RUNNER_TEMP/again.txt"
+
+      - name: T4 tests against the real sqld (foreign_keys = 1, namespace admin API)
+        env:
+          SQLD_TEST_URL: http://sqld:8080
+          SQLD_TEST_ADMIN_URL: http://127.0.0.1:8081
+          SQLD_TEST_NS: main
+        run: node --test scripts/selfhost/sqld.test.mjs
+
+      - name: Restore drill on the real sqld (synthetic source)
+        env:
+          SQLD_URL: http://sqld:8080
+          SQLD_ADMIN_URL: http://127.0.0.1:8081
+        run: node scripts/selfhost/restore-drill.mjs --source synthetic
+
+      # 1b. The clock from the jobs image against that sqld.
+      - name: A trap that records any call to api.github.com or api.resend.com
+        run: |
+          set -eu
+          docker run -d --name trap --network ci-net \
+            --network-alias api.github.com --network-alias api.resend.com \
+            --entrypoint node "$JOBS_IMAGE" \
+            -e "require('net').createServer(s=>{console.log('CONNECTION');s.destroy()}).listen(443,'0.0.0.0')"
+      - name: Clock boots with CLOCK_ENABLED=0 (health 200, nothing read)
+        run: |
+          set -eu
+          docker run -d --name clock0 --network ci-net -p 127.0.0.1:9100:9100 \
+            --env-file "$RUNNER_TEMP/env/jobs.env" -e CLOCK_ENABLED=0 \
+            --tmpfs /app/node_modules/.cache:uid=10001,gid=10001,size=512m \
+            "$JOBS_IMAGE"
+          code=000
+          for i in $(seq 1 60); do
+            code=$(curl -s -o "$RUNNER_TEMP/health0.json" -w '%{http_code}' http://127.0.0.1:9100/health || true)
+            [ "$code" = 200 ] && break
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/health0.json"; echo
+          [ "$code" = 200 ] || { docker logs clock0 | tail -n 60; echo "::error::clock health is not 200"; exit 1; }
+          node -e "const h=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP+'/health0.json','utf8')); if(h.enabled!==false||h.runtime!=='selfhost'||h.lastTick!==null||h.running.length!==0) process.exit(1)"
+          docker rm -f clock0 > /dev/null
+      - name: Clock with CLOCK_ENABLED=1 and no clock_owner (cloud owns it) stays in standby
+        run: |
+          set -eu
+          docker run -d --name clock1 --network ci-net -p 127.0.0.1:9100:9100 \
+            --env-file "$RUNNER_TEMP/env/jobs.env" -e CLOCK_ENABLED=1 \
+            --tmpfs /app/node_modules/.cache:uid=10001,gid=10001,size=512m \
+            "$JOBS_IMAGE"
+          ok=0
+          for i in $(seq 1 90); do
+            curl -s -o "$RUNNER_TEMP/health1.json" http://127.0.0.1:9100/health || true
+            if node -e "const h=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP+'/health1.json','utf8')); process.exit(h.owner==='cloud'&&h.lastTick?0:1)" 2> /dev/null; then ok=1; break; fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/health1.json"; echo
+          [ "$ok" = 1 ] || { docker logs clock1 | tail -n 80; echo "::error::clock did not reach standby"; exit 1; }
+          sleep 20
+          curl -fsS http://127.0.0.1:9100/health > "$RUNNER_TEMP/health1.json"
+          node -e "const h=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP+'/health1.json','utf8')); if(h.runtime!=='selfhost'||h.owner!=='cloud'||h.running.length!==0||h.queued!==0) { console.error('not standby'); process.exit(1) }"
+          # no job was started: the lease table has no run
+          TURSO_MAIN_URL=http://main.sqld:8080 node -e "
+            import('@libsql/client').then(async ({createClient})=>{
+              const c=createClient({url:process.env.TURSO_MAIN_URL});
+              const r=await c.execute('SELECT COUNT(*) AS n FROM job_run');
+              console.log('job_run rows:', r.rows[0].n);
+              process.exit(Number(r.rows[0].n)===0?0:1);
+            })"
+          # no outbound call to GitHub or Resend
+          if docker logs trap 2>&1 | grep -q CONNECTION; then echo "::error::the clock called api.github.com or api.resend.com"; exit 1; fi
+          docker logs clock1 2>&1 | tail -n 15
+          docker rm -f clock1 trap > /dev/null
+
+      # 1c / 1d. The T7 pre-deploy check: good image passes, broken image fails and leaves nothing behind.
+      - name: Pre-deploy check, good image (with ZAP) must exit 0
+        env:
+          PRAXIS_ENV_DIR: ${{ runner.temp }}/env
+          PRAXIS_COMPOSE_DIR: deploy/selfhost
+          PRAXIS_SCRIPTS_DIR: scripts/selfhost
+          PRAXIS_CHECK_TMP: ${{ runner.temp }}/check
+        run: |
+          set -eu
+          docker rm -f sqld-ci > /dev/null 2>&1 || true
+          node scripts/selfhost/predeploy.mjs --ci --web-image "$WEB_IMAGE" --jobs-image "$JOBS_IMAGE"
+          echo "T_CHECK=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Pre-deploy check, broken image must exit 1 and leave no praxis-check leftovers
+        env:
+          PRAXIS_ENV_DIR: ${{ runner.temp }}/env
+          PRAXIS_COMPOSE_DIR: deploy/selfhost
+          PRAXIS_SCRIPTS_DIR: scripts/selfhost
+          PRAXIS_CHECK_TMP: ${{ runner.temp }}/check-broken
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/broken"
+          {
+            echo "FROM $WEB_IMAGE"
+            echo 'CMD ["node","-e","require(\"http\").createServer((q,s)=>{s.statusCode=500;s.end(\"x\")}).listen(3000,\"0.0.0.0\")"]'
+          } > "$RUNNER_TEMP/broken/Dockerfile"
+          docker build -t ghcr.io/saishashank/praxis-web:ci-broken "$RUNNER_TEMP/broken"
+          set +e
+          node scripts/selfhost/predeploy.mjs --ci --web-image ghcr.io/saishashank/praxis-web:ci-broken --jobs-image "$JOBS_IMAGE"
+          rc=$?
+          set -e
+          echo "predeploy exit code: $rc"
+          [ "$rc" = 1 ] || { echo "::error::the broken image gave exit $rc, expected 1"; exit 1; }
+          left=$( { docker ps -a --format '{{.Names}}'; docker network ls --format '{{.Name}}'; docker volume ls --format '{{.Name}}'; } | grep praxis-check || true)
+          if [ -n "$left" ]; then echo "::error::leftovers after the failed check:"; echo "$left"; exit 1; fi
+          echo "no praxis-check containers, networks or volumes left"
+
+      - name: Timing (first proxy for the 60-minute move, INFRA §15.5)
+        if: always()
+        run: |
+          now=$(date +%s)
+          echo "TIMING amd64: build=$(( ${T_BUILT:-$now} - T0 ))s total=$(( now - T0 ))s ($(( (now - T0) / 60 )) min)"
+          echo "### amd64 timing: build $(( ${T_BUILT:-$now} - T0 )) s, total $(( now - T0 )) s" >> "$GITHUB_STEP_SUMMARY"
+      - name: Container logs on failure
+        if: failure()
+        run: |
+          for c in $(docker ps -a --format '{{.Names}}'); do echo "== $c"; docker logs --tail 40 "$c" 2>&1 | sed 's/[A-Za-z0-9_-]\{40,\}/<redacted>/g'; done
+
+  arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Start the clock
+        run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Machine is aarch64
+        run: uname -m && [ "$(uname -m)" = aarch64 ]
+      - name: Build praxis-jobs natively (pip --require-hashes with requirements-arm64.txt)
+        run: docker build -f deploy/selfhost/Dockerfile.jobs --build-arg BUILD_COMMIT="$GITHUB_SHA" -t "$JOBS_IMAGE" .
+      - name: Build praxis-web natively
+        run: docker build -f deploy/selfhost/Dockerfile.web -t "$WEB_IMAGE" .
+      - name: Python and Node inside the jobs image
+        run: |
+          set -eu
+          docker run --rm --entrypoint python "$JOBS_IMAGE" -c "import platform, yfinance, pandas, numpy, curl_cffi; print(platform.machine(), 'imports ok')"
+          docker run --rm --entrypoint node "$JOBS_IMAGE" --version
+      - name: Clock boots on arm64 with CLOCK_ENABLED=0
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/env"
+          # Minimal made-up environment: the clock only serves health with CLOCK_ENABLED=0.
+          {
+            echo "PRAXIS_RUNTIME=selfhost"
+            echo "TURSO_MAIN_URL=http://main.sqld:8080"
+            echo "TURSO_MAIN_TOKEN=$(openssl rand -hex 16)"
+            echo "APP_BASE_URL=http://web:3000"
+            echo "WORKER_HMAC_SECRET=$(openssl rand -hex 16)"
+            echo "EMAIL_PROVIDER=mock"
+            echo "EMAIL_LIVE=0"
+          } > "$RUNNER_TEMP/env/jobs.env"
+          docker run -d --name clock0 -p 127.0.0.1:9100:9100 \
+            --env-file "$RUNNER_TEMP/env/jobs.env" -e CLOCK_ENABLED=0 \
+            --tmpfs /app/node_modules/.cache:uid=10001,gid=10001,size=512m \
+            "$JOBS_IMAGE"
+          code=000
+          for i in $(seq 1 60); do
+            code=$(curl -s -o "$RUNNER_TEMP/health.json" -w '%{http_code}' http://127.0.0.1:9100/health || true)
+            [ "$code" = 200 ] && break
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/health.json"; echo
+          [ "$code" = 200 ] || { docker logs clock0 | tail -n 60; exit 1; }
+      - name: Timing
+        if: always()
+        run: |
+          now=$(date +%s)
+          echo "TIMING arm64: total=$(( now - T0 ))s ($(( (now - T0) / 60 )) min)"
+          echo "### arm64 timing: total $(( now - T0 )) s" >> "$GITHUB_STEP_SUMMARY"
+
+  shell-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: bash -n on every host script
+        run: |
+          set -eu
+          for f in deploy/selfhost/*.sh deploy/selfhost/bin/praxis; do bash -n "$f" && echo "syntax ok: $f"; done
+      - name: shellcheck (errors and warnings)
+        run: |
+          set -eu
+          shellcheck --version
+          shellcheck -S warning deploy/selfhost/*.sh deploy/selfhost/bin/praxis
