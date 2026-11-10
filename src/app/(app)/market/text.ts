@@ -1,10 +1,10 @@
 // Fixed texts and small formatters of the Market pages (UXN-270..273). Plain words, no internals.
-import { formatPpm } from "@/lib/view/format";
+import { formatMicro, formatPpm } from "@/lib/view/format";
 import type { MaRelation } from "@/lib/ui/loaders/company";
 
-export const PRICE_LABEL = "End-of-day price";
+export const PRICE_LABEL = "End of day";
 export const PRICE_NOTE =
-  "Prices are the last close of each company (end-of-day prices), not live quotes. Nothing here places an order.";
+  "Prices show the last close, or a delayed quote (up to about 20 minutes late) where we have one. Nothing here places an order.";
 export const NOT_AVAILABLE = "Not available";
 export const MASKED_MARKET_NOTE =
   "Company names, codes and prices are hidden for your access level. You see how each stock moved, as Stock A, Stock B and so on.";
@@ -24,10 +24,15 @@ export function maText(ma: MaRelation): string {
   return `${ma.above ? "Above" : "Below"} its ${ma.days}-day average (${formatPpm(ma.gapPpm, { sign: "always" })})`;
 }
 
-/** 0..1,000,000 -> "62% of the way from the 52-week low to the high". */
+/** 0..1,000,000 -> "Price is 62% of the way from its 52-week low to its high". */
 export function rangePositionText(ppm: number | null): string {
   if (ppm === null) return "n/a";
-  return `${Math.round((ppm / PPM) * HUNDRED)}% of the way from the 52-week low to the high`;
+  return `Price is ${Math.round((ppm / PPM) * HUNDRED)}% of the way from its 52-week low to its high`;
+}
+
+/** Index level in micro points -> "8,679.70" (index points: never "A$", never the raw micro number). */
+export function formatIndexPoints(micro: number | string | bigint): string {
+  return formatMicro(micro).replace("A$", "");
 }
 
 /** Average sector move in ppm -> percent for the heat grid. */

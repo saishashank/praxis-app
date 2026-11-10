@@ -10,7 +10,7 @@ import { getConfig } from "@/lib/config/store";
 import { assignTiers, medianMicro, TIER_RULES } from "@/lib/data/universe/tiers.mjs";
 import { safeSourceUrl } from "@/lib/http/safeLink";
 import { buildSwot, type Swot } from "@/lib/view/swot";
-import { isoWeek, MISSING } from "@/lib/view/format";
+import { displayName, formatInstant, isoWeek, MISSING } from "@/lib/view/format";
 import { dateStaleness } from "@/lib/view/staleness";
 import { maskText, normCode, type StockAliases } from "@/lib/view/mask";
 import {
@@ -442,7 +442,7 @@ export async function loadMarket(env: LoaderEnv, q: MarketQuery): Promise<Market
   const toRow = (r: DayRow): MarketRow => ({
     stock: label(r.code),
     slug: masked ? slugOf(label(r.code)) : r.code,
-    name: masked ? null : r.name,
+    name: masked ? null : displayName(r.name),
     sector: masked ? null : r.sector,
     close: masked ? null : { micro: priceMicro(r.close), currency: "AUD", simulated: true },
     changePpm: changePpm(r),
@@ -573,7 +573,7 @@ export async function searchInstruments(env: LoaderEnv, q: string): Promise<Sear
   const stars = await starredCodes(env);
   const results = r.rows.map((x) => ({
     code: String(x.code),
-    name: String(x.name),
+    name: displayName(String(x.name)),
     sector: sectorName(x.sector),
     starred: stars.has(normCode(String(x.code))),
   }));
@@ -639,7 +639,7 @@ export async function loadOverview(env: LoaderEnv, key: string): Promise<Overvie
     masked,
     stock,
     slug: masked ? slugOf(stock) : code,
-    name: masked ? null : String(i.name),
+    name: masked ? null : displayName(String(i.name)),
     sector: masked || i.sector === null ? null : String(i.sector),
     d: last ? String(last.d) : null,
     close:
@@ -655,7 +655,7 @@ export async function loadOverview(env: LoaderEnv, key: string): Promise<Overvie
       ),
       published: masked
         ? (isoWeek(String(x.published_at).slice(0, 10)) ?? MISSING)
-        : String(x.published_at),
+        : formatInstant(String(x.published_at)),
       url: masked || x.url === null ? null : safeSourceUrl(x.url), // SEC-016: https + registered host, else text only
     })),
     summary: NO_PROFILE,

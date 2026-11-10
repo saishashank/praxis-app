@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // UXR-022: candles take the outcome tokens, the volume takes the sector hue at 40 %, and the range chip
 // that is on carries a check icon as well as its fill.
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const series = vi.hoisted(() => ({ calls: [] as Array<{ kind: string; opts: unknown }> }));
@@ -47,6 +47,16 @@ describe("withAlpha", () => {
     expect(withAlpha("#59c7b4", 0.4)).toBe("rgba(89, 199, 180, 0.4)");
     expect(withAlpha("#fff", 0.4)).toBe("rgba(255, 255, 255, 0.4)");
     expect(withAlpha("rgb(1 2 3)", 0.4)).toBe("rgb(1 2 3)");
+  });
+});
+
+describe("CompanyChart dates (D-919)", () => {
+  it("the readout, summary and table use plain days, never ISO dates", () => {
+    const { container } = render(<CompanyChart bars={bars} markers={[]} label="Zed" />);
+    fireEvent.click(screen.getByRole("button", { name: "Show as table" }));
+    expect(container.textContent).toContain("Tue 27 Oct");
+    expect(container.textContent).toContain("Wed 28 Oct");
+    expect(container.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
 });
 
