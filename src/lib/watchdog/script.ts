@@ -18,6 +18,7 @@ import { notifyIncident } from "@/lib/incidents/notify";
 import { readEmailSwitch } from "@/lib/email/switch";
 import { renderIncident } from "@/lib/email/templates/notices";
 import type { ReviewFacts } from "@/lib/email/templates/review";
+import { familyNames } from "@/lib/review/names";
 import {
   HEARTBEAT_EVENING_JOB,
   HEARTBEAT_MORNING_JOB,
@@ -78,21 +79,25 @@ export async function minimalReviewFacts(
   let executions: ReviewFacts["executions"] = [];
   try {
     const r = await db.execute({
-      sql: `SELECT c.execution_id AS id, n.nav_micro AS nav,
+      sql: `SELECT c.execution_id AS id, e.family AS family, e.variant AS variant, n.nav_micro AS nav,
                    (SELECT p.nav_micro FROM nav_daily p
                      WHERE p.cohort_id = n.cohort_id AND p.d < n.d ORDER BY p.d DESC LIMIT 1) AS prev,
                    c.seed_micro AS seed
-            FROM nav_daily n JOIN cohort c ON c.id = n.cohort_id
+            FROM nav_daily n JOIN cohort c ON c.id = n.cohort_id JOIN execution e ON e.id = c.execution_id
             WHERE n.d = ? AND c.control_idx IS NULL AND c.live = 1
             ORDER BY c.execution_id`,
       args: [d],
     });
+    // D-922: the minimal review names the strategies too (no execution codes on a review)
+    const names = await familyNames(db).catch(() => ({}) as Record<string, string>);
     executions = r.rows.map((x) => {
       const nav = Number(x.nav);
       const base = x.prev === null ? Number(x.seed) : Number(x.prev);
       return {
         id: String(x.id),
         label: String(x.id),
+        name: names[String(x.family)] ?? undefined,
+        variant: String(x.variant) === "L" ? ("L" as const) : ("U" as const),
         currency: "AUD",
         navCents: Math.round(nav / MICRO_PER_CENT),
         dayPlCents: Math.round((nav - base) / MICRO_PER_CENT),

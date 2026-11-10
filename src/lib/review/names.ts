@@ -10,7 +10,7 @@ type Db = Pick<Client, "execute">;
 const CHUNK = 200; // threshold-ok: bound parameters per IN list
 
 /** Strategy name by family ("F1" -> "Follow the trend"): the stored table, else the default table. */
-export async function familyNames(db: Client): Promise<Record<string, string>> {
+export async function familyNames(db: Pick<Client, "execute">): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   for (const [fam, row] of Object.entries(STRATEGY_NAMES_DEFAULT)) out[fam] = row.name;
   try {
