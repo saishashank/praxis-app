@@ -103,10 +103,16 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
 }
 
 function ListView({ model, q }: { model: ReviewListModel; q: string | undefined }) {
-  const qs = (page: number, all = model.showingNonTrading && q === undefined) => {
+  const qs = (
+    page: number,
+    all = model.showingNonTrading && q === undefined,
+    cursor: { after?: string | null; before?: string | null } = {},
+  ) => {
     const p = new URLSearchParams();
     if (q) p.set("q", q);
     if (all) p.set("all", "1");
+    if (cursor.after) p.set("after", cursor.after); // keyset paging, no OFFSET (D-959)
+    if (cursor.before) p.set("before", cursor.before);
     if (page > 1) p.set("page", String(page));
     const s = p.toString();
     return s ? `/reviews?${s}` : "/reviews";
@@ -241,15 +247,23 @@ function ListView({ model, q }: { model: ReviewListModel; q: string | undefined 
         </p>
       ) : null}
 
-      {model.page > 1 || model.hasMore ? (
+      {model.hasNewer || model.hasMore ? (
         <nav aria-label="Pages" className="flex gap-4 text-sm">
-          {model.page > 1 ? (
-            <Link href={qs(model.page - 1)} rel="prev" className="text-accent underline">
+          {model.hasNewer ? (
+            <Link
+              href={qs(model.page - 1, undefined, { before: model.newerBefore })}
+              rel="prev"
+              className="text-accent underline"
+            >
               Newer reviews
             </Link>
           ) : null}
           {model.hasMore ? (
-            <Link href={qs(model.page + 1)} rel="next" className="text-accent underline">
+            <Link
+              href={qs(model.page + 1, undefined, { after: model.olderAfter })}
+              rel="next"
+              className="text-accent underline"
+            >
               Older reviews
             </Link>
           ) : null}

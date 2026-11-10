@@ -46,9 +46,18 @@ export type NewsQuery = {
   page: number;
   /** `?show=all`: every announcement; the default shows only the important ones (chip "all"). */
   show?: "all";
+  /** Keyset cursors "<published_at>|<id>" (D-959, no OFFSET): after the oldest item shown, or before the newest. */
+  after?: string;
+  before?: string;
 };
 
-/** `?chip=&q=&code=&from=&to=&page=`: null when a value is not allowed. */
+const CURSOR_RE = /^[0-9T:.+ Z-]{10,40}\|[0-9]{1,12}$/;
+const splitCursor = (c: string): [string, number] => {
+  const i = c.lastIndexOf("|");
+  return [c.slice(0, i), Number(c.slice(i + 1))]; // money-float-ok: SQL integer key
+};
+
+/** `?chip=&q=&code=&from=&to=&page=&after=&before=`: null when a value is not allowed. */
 export function parseNewsQuery(sp: URLSearchParams): NewsQuery | null {
   const chip = sp.get("chip") ?? "all"; // Owner 2026-10-27: All news first
   if (!(CHIPS as readonly string[]).includes(chip)) return null;
@@ -65,7 +74,13 @@ export function parseNewsQuery(sp: URLSearchParams): NewsQuery | null {
   if (from !== undefined && to !== undefined && from > to) return null;
   const show = sp.get("show");
   if (show !== null && show !== "" && show !== "important" && show !== "all") return null;
+  const after = sp.get("after") || undefined;
+  const before = sp.get("before") || undefined;
+  for (const c of [after, before]) if (c !== undefined && !CURSOR_RE.test(c)) return null;
+  if (after !== undefined && before !== undefined) return null;
   const out: NewsQuery = { chip: chip as NewsChip, q, code, from, to, page };
+  if (after !== undefined) out.after = after;
+  if (before !== undefined) out.before = before;
   if (show === "all") out.show = "all";
   return out;
 }
@@ -93,7 +108,13 @@ export type NewsModel = {
   chip: NewsChip;
   items: NewsItemRow[];
   page: number;
+  /** Older items exist. */
   hasMore: boolean;
+  /** Newer items exist. */
+  hasNewer: boolean;
+  /** Cursors for the two links (null for a masked list, which pages in memory, and at either end). */
+  olderAfter: string | null;
+  newerBefore: string | null;
   note: string | null;
   /** True when the list is limited to important announcements (the default of the "All news" chip). */
   importantOnly: boolean;
@@ -117,6 +138,9 @@ export async function loadNews(env: LoaderEnv, q: NewsQuery): Promise<NewsModel>
     items: [],
     page: q.page,
     hasMore: false,
+    hasNewer: false,
+    olderAfter: null,
+    newerBefore: null,
     note: masked ? "Company names, links and exact dates are hidden for your access level." : null,
     importantOnly: false,
   };
@@ -156,9 +180,22 @@ export async function loadNews(env: LoaderEnv, q: NewsQuery): Promise<NewsModel>
       `${new Date(Date.parse(`${q.to}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)}T00:00:00`,
     ); // threshold-ok: one day
   }
-  args.push(masked ? SCAN_ROWS : LIST_ROWS + 1, masked ? 0 : (q.page - 1) * LIST_ROWS);
+  // Keyset paging (D-959): after the oldest item shown, or before the newest; never OFFSET. A masked
+  // list reads one bounded scan and pages it in memory. The order uses idx_announcement_published.
+  const backwards = !masked && q.before !== undefined;
+  const cursor = masked ? undefined : (q.after ?? q.before);
+  if (cursor !== undefined) {
+    const [at, id] = splitCursor(cursor);
+    where.push(
+      backwards
+        ? "(a.published_at > ? OR (a.published_at = ? AND a.id > ?))"
+        : "(a.published_at < ? OR (a.published_at = ? AND a.id < ?))",
+    );
+    args.push(at, at, id);
+  }
+  args.push(masked ? SCAN_ROWS : LIST_ROWS + 1);
   const r = await env.main.execute({
-    sql: `${ROW_SQL} WHERE ${where.join(" AND ")} ORDER BY a.published_at DESC, a.id DESC LIMIT ? OFFSET ?`,
+    sql: `${ROW_SQL} WHERE ${where.join(" AND ")} ORDER BY a.published_at ${backwards ? "ASC" : "DESC"}, a.id ${backwards ? "ASC" : "DESC"} LIMIT ?`,
     args,
   });
   let rows = r.rows.map((x) => ({
@@ -178,10 +215,19 @@ export async function loadNews(env: LoaderEnv, q: NewsQuery): Promise<NewsModel>
     kit = await maskKitByDate(env, rows);
     const start = (q.page - 1) * LIST_ROWS;
     base.hasMore = rows.length > start + LIST_ROWS;
+    base.hasNewer = q.page > 1;
     rows = rows.slice(start, start + LIST_ROWS);
   } else {
-    base.hasMore = rows.length > LIST_ROWS;
+    const more = rows.length > LIST_ROWS;
     rows = rows.slice(0, LIST_ROWS);
+    if (backwards) rows.reverse(); // newest first again
+    base.hasMore = backwards ? true : more; // going back, the cursor item itself is older
+    base.hasNewer = backwards ? more : q.after !== undefined;
+    base.page = base.hasNewer ? Math.max(2, q.page) : 1;
+    const keyOf = (x: { x: Record<string, unknown> }) =>
+      `${String(x.x.published_at)}|${Number(x.x.id)}`;
+    base.olderAfter = base.hasMore && rows.length > 0 ? keyOf(rows[rows.length - 1]!) : null;
+    base.newerBefore = base.hasNewer && rows.length > 0 ? keyOf(rows[0]!) : null;
   }
   const items: NewsItemRow[] = rows.map(({ d, code, x }) => {
     const aliases = kit?.aliasOf(d);
