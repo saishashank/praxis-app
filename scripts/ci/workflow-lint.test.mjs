@@ -307,6 +307,7 @@ test("the real .github/workflows: no open finding once the recorded exceptions a
     "npm-install",
     "secret-placement",
     "pip-hashes",
+    "cli-unpinned",
   ]);
   assert.deepEqual(findings.filter((f) => never.has(f.rule)).map(format), []);
 });
@@ -318,4 +319,35 @@ test("the exceptions file lists only pending deploy-file entries (Owner-only fil
     assert.equal(x.approvedBy, "pending");
     assert.match(x.reason, /Owner to decide at the M8 review point/);
   }
+});
+
+// OPS-109 a (D-971, AT-83 "CLI pin"): a floating vercel / wrangler version fails CI.
+const cliWorkflow = (run) =>
+  `on: workflow_dispatch\npermissions:\n  contents: read\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n${run
+    .split("\n")
+    .map((l) => `          ${l}`)
+    .join("\n")}\n`;
+const cliFindings = (run) =>
+  lintWorkflow("x.yml", cliWorkflow(run)).filter((f) => f.rule === "cli-unpinned");
+
+test("cli-unpinned: the shipped deploy line (exact vercel@63.1.0, multi-line) passes", () => {
+  assert.deepEqual(cliFindings("npx --yes vercel@63.1.0 deploy --prod --yes \\\n  --token x"), []);
+});
+
+test("cli-unpinned: a planted vercel@latest fails (also bare, major-only, range, tag)", () => {
+  for (const spec of ["vercel@latest", "vercel", "vercel@63", "vercel@^63.1.0", "vercel@63.1"]) {
+    assert.equal(cliFindings(`npx --yes ${spec} deploy --prod`).length, 1, spec);
+  }
+  assert.equal(cliFindings("npx --yes vercel@latest \\\n  deploy --prod").length, 1);
+});
+
+test("cli-unpinned: wrangler needs an exact version only when one is named", () => {
+  assert.deepEqual(cliFindings("npx wrangler deploy --name x"), []); // lockfile devDependency
+  assert.deepEqual(cliFindings("npx wrangler@4.1.0 deploy"), []);
+  assert.equal(cliFindings("npx wrangler@latest deploy").length, 1);
+  assert.equal(cliFindings("npx wrangler@4 deploy").length, 1);
+});
+
+test("cli-unpinned: other npx packages are not this rule's business", () => {
+  assert.deepEqual(cliFindings("npx playwright test"), []);
 });
