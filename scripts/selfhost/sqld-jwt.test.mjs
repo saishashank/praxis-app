@@ -16,7 +16,7 @@ import { ensureNamespace, nodeHttpFetch, openNamespace } from "./sqld.mjs";
 const BASE = process.env.SQLD_JWT_BASE ?? "";
 const ADMIN = process.env.SQLD_JWT_ADMIN ?? "";
 const KEYS = process.env.SQLD_JWT_KEYS ?? "";
-const ADMIN_AUTH = process.env.SQLD_JWT_ADMIN_AUTH ?? ""; // "Basic <key>" of SQLD_ADMIN_AUTH_KEY
+const ADMIN_AUTH = process.env.SQLD_JWT_ADMIN_AUTH ?? ""; // "Basic <key>" of LIBSQL_ADMIN_AUTH_KEY
 const skip =
   !BASE || !ADMIN || !KEYS || !ADMIN_AUTH
     ? "SQLD_JWT_BASE, SQLD_JWT_ADMIN, SQLD_JWT_KEYS and SQLD_JWT_ADMIN_AUTH are not set"

@@ -218,15 +218,15 @@ section_names() {
   ' "$COMPOSE_DIR/env.example"
 }
 
-# The sqld admin API (namespace create/drop) has its own key (SQLD_ADMIN_AUTH_KEY in sqld.env, sent by the scripts as
+# The sqld admin API (namespace create/drop) has its own key (LIBSQL_ADMIN_AUTH_KEY in sqld.env, sent by the scripts as
 # SQLD_ADMIN_AUTH="Basic <key>" from jobs.env). Generated here when absent, never printed, kept on later runs.
 ensure_admin_key() {
   local key
   [ -f "$ENV_DIR/sqld.env" ] && [ -f "$ENV_DIR/jobs.env" ] || return 0
-  key="$(sed -n 's/^SQLD_ADMIN_AUTH_KEY=//p' "$ENV_DIR/sqld.env" | head -n1 | tr -d ' "'"'"'')"
+  key="$(sed -n 's/^LIBSQL_ADMIN_AUTH_KEY=//p' "$ENV_DIR/sqld.env" | head -n1 | tr -d ' "'"'"'')"
   if [ -z "$key" ]; then
     key="$(openssl rand -hex 24)"
-    set_kv "$ENV_DIR/sqld.env" SQLD_ADMIN_AUTH_KEY "$key"
+    set_kv "$ENV_DIR/sqld.env" LIBSQL_ADMIN_AUTH_KEY "$key"
     log "generated the sqld admin key (in sqld.env; not shown)"
   fi
   set_kv "$ENV_DIR/jobs.env" SQLD_ADMIN_AUTH "Basic $key" keep
