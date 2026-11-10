@@ -4,6 +4,13 @@
 // (SEC-108 f, PLT-022b), so decryption happens locally first (owner guide, section I) and this
 // script only reads the resulting plaintext `<db>-<date>.ndjson.gz`.
 // Usage: node scripts/restore/restore.mjs --file main-2026-01-02.ndjson.gz --db main|auth [--dry-run]
+//          [--target turso|sqld] [--namespace <ns>]
+// --target sqld (INFRA T4): the target is a namespace of the self-hosted sqld. Give the full
+//   RESTORE_TARGET_URL (e.g. http://main.sqld:8080), or SQLD_URL + --namespace (default: the --db
+//   name; SQLD_NS_MODE=subdomain|host). The token is optional (only when sqld verifies JWTs). The
+//   live-URL refusal below is for Turso; on sqld the "target must be EMPTY" rule is the guard (a
+//   fresh server's main namespace is the very thing a bootstrap restores into). After the restore
+//   the foreign-key pragma and foreign_key_check are verified. The default target stays turso.
 // env (real run only): RESTORE_TARGET_URL, RESTORE_TARGET_TOKEN = a NEW EMPTY database created
 //   at Turso for this restore. Refused when the URL equals the live database of this shell
 //   (TURSO_MAIN_URL / TURSO_AUTH_URL and their *_PROD forms) when those variables are present.
@@ -17,6 +24,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 import { looksLikeAge, parseBackup, restoreDatabase } from "../backup/core.mjs";
+import { connectionCheck, namespaceTarget, NS_RE, openNamespace } from "../selfhost/sqld.mjs";
 
 const MAX_PLAINTEXT_BYTES = 2 ** 30;
 const LIVE_URL_VARS = [
@@ -50,16 +58,27 @@ export function sameDatabase(a, b) {
 
 /** @param {string[]} argv */
 export function parseArgs(argv) {
-  const out = { file: "", db: "", dryRun: false };
+  const out = { file: "", db: "", dryRun: false, target: "turso", namespace: "" };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--dry-run") out.dryRun = true;
     else if (a === "--file" && i + 1 < argv.length) out.file = argv[++i];
     else if (a === "--db" && i + 1 < argv.length) out.db = argv[++i];
-    else refuse("usage: --file <db>-<date>.ndjson.gz --db main|auth [--dry-run]");
+    else if (a === "--target" && i + 1 < argv.length) out.target = argv[++i];
+    else if (a === "--namespace" && i + 1 < argv.length) out.namespace = argv[++i];
+    else
+      refuse(
+        "usage: --file <db>-<date>.ndjson.gz --db main|auth [--dry-run] [--target turso|sqld] [--namespace <ns>]",
+      );
   }
   if (!has(out.file)) refuse("usage: --file is required");
   if (out.db !== "main" && out.db !== "auth") refuse("usage: --db must be main or auth");
+  if (out.target !== "turso" && out.target !== "sqld") {
+    refuse("usage: --target must be turso or sqld");
+  }
+  if (out.namespace !== "" && (out.target !== "sqld" || !NS_RE.test(out.namespace))) {
+    refuse("usage: --namespace needs --target sqld and a plain namespace name");
+  }
   return out;
 }
 
@@ -94,7 +113,16 @@ export async function run(argv, env, deps = {}) {
   const openDb =
     deps.openDb ??
     // Lossless integers (D-175): the restore re-dumps to verify, and cohort.rng_seed is 64-bit.
-    ((url, authToken) => createClient({ url, authToken, intMode: "bigint" }));
+    ((url, authToken, host) =>
+      host
+        ? openNamespace({
+            base: url,
+            ns: host.split(".")[0],
+            token: authToken,
+            mode: "host",
+            intMode: "bigint",
+          })
+        : createClient({ url, authToken, intMode: "bigint" }));
   const now = deps.now ?? (() => Date.now());
   const out = deps.out ?? ((s) => console.log(s));
   const started = now();
@@ -122,17 +150,30 @@ export async function run(argv, env, deps = {}) {
       return 0;
     }
 
-    const url = env.RESTORE_TARGET_URL;
+    const sqld = args.target === "sqld";
+    let url = env.RESTORE_TARGET_URL;
     const token = env.RESTORE_TARGET_TOKEN;
-    if (!has(url)) refuse("RESTORE_TARGET_URL is not set");
-    for (const v of LIVE_URL_VARS) {
-      if (has(env[v]) && sameDatabase(url, env[v])) {
-        refuse("the target is the live database; create a NEW empty database for the restore");
-      }
+    let host = null; // sqld host mode: the Host header that selects the namespace
+    if (sqld && !has(url) && has(env.SQLD_URL)) {
+      const mode = env.SQLD_NS_MODE === "host" ? "host" : "subdomain";
+      const t = namespaceTarget(env.SQLD_URL, args.namespace || args.db, mode);
+      url = t.url;
+      host = t.host;
     }
-    if (!/^file:/i.test(url.trim()) && !has(token)) refuse("RESTORE_TARGET_TOKEN is not set");
+    if (!has(url)) refuse("RESTORE_TARGET_URL is not set");
+    // --target sqld skips the live-URL check below, so it must never point at Turso.
+    if (sqld && /turso\.io/i.test(url))
+      refuse("--target sqld cannot restore into a Turso database");
+    if (!sqld) {
+      for (const v of LIVE_URL_VARS) {
+        if (has(env[v]) && sameDatabase(url, env[v])) {
+          refuse("the target is the live database; create a NEW empty database for the restore");
+        }
+      }
+      if (!/^file:/i.test(url.trim()) && !has(token)) refuse("RESTORE_TARGET_TOKEN is not set");
+    }
 
-    db = openDb(url.trim(), has(token) ? token.trim() : "");
+    db = openDb(url.trim(), has(token) ? token.trim() : "", host);
     let existing;
     try {
       existing = await db.execute(
@@ -159,6 +200,14 @@ export async function run(argv, env, deps = {}) {
       ok &&= same;
       out(
         `  ${safeName(t).padEnd(26)} ${String(parsed.end.counts[t]).padStart(9)}  ${String(result.counts[t]).padStart(13)}  ${same ? "PASS" : "FAIL"}`,
+      );
+    }
+    if (sqld) {
+      const fk = await connectionCheck(db);
+      const fkOk = fk.foreignKeys && fk.violations === 0;
+      ok &&= fkOk;
+      out(
+        `restore: foreign keys ${fk.foreignKeys ? "ON" : "OFF"}, orphan rows ${fk.violations} ${fkOk ? "PASS" : "FAIL"}`,
       );
     }
     out(

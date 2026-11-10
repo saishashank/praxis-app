@@ -22,10 +22,10 @@ import {
 } from "./core.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const NOW = "2026-01-02T03:04:05.678Z";
-const MARKER = "DRILL-MARKER-8f3a1c"; // must never be readable in the ciphertext
+export const NOW = "2026-01-02T03:04:05.678Z";
+export const MARKER = "DRILL-MARKER-8f3a1c"; // must never be readable in the ciphertext
 
-async function seed(db, name) {
+export async function seed(db, name) {
   await migrateUp(db, await loadMigrations(path.join(root, "db", "migrations", name)));
   await db.execute(
     "CREATE TABLE drill_misc (id INTEGER PRIMARY KEY, label TEXT, n INTEGER, r REAL, b BLOB, big TEXT)",

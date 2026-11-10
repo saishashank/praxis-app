@@ -1,0 +1,369 @@
+{
+  "version": 1,
+  "passthrough": ["replay.yml"],
+  "jobs": {
+    "arena-close": {
+      "workflow": "arena-close.yml",
+      "timeoutMin": 40,
+      "group": "arena-close",
+      "exclusiveWith": ["arena-signals"],
+      "steps": [
+        {
+          "id": "close",
+          "run": "node scripts/arena/close-books.mjs",
+          "env": {
+            "TURSO_MAIN_URL": "env",
+            "TURSO_MAIN_TOKEN": "env",
+            "COMMIT_SHA": "env:BUILD_COMMIT"
+          }
+        }
+      ]
+    },
+    "arena-signals": {
+      "workflow": "arena-signals.yml",
+      "timeoutMin": 90,
+      "group": "arena-signals",
+      "exclusiveWith": ["arena-close"],
+      "steps": [
+        {
+          "id": "signals",
+          "run": "node scripts/arena/signals.mjs",
+          "env": {
+            "TURSO_MAIN_URL": "env",
+            "TURSO_MAIN_TOKEN": "env",
+            "COMMIT_SHA": "env:BUILD_COMMIT",
+            "PRAXIS_ENV": "env",
+            "EMAIL_PROVIDER": "env",
+            "RESEND_API_KEY": "env",
+            "OWNER_EMAIL": "env",
+            "PII_HASH_KEY": "env"
+          }
+        }
+      ]
+    },
+    "asx-fetch": {
+      "workflow": "asx-fetch.yml",
+      "timeoutMin": 60,
+      "group": "asx-fetch",
+      "steps": [
+        {
+          "id": "fetch",
+          "run": "node scripts/asx/fetch.mjs --out-dir $W/asx $HISTORY_FLAG",
+          "env": {
+            "HISTORY_FLAG": "flag:history=--history|",
+            "ASX_USER_AGENT": "env"
+          }
+        },
+        {
+          "id": "store",
+          "run": "node scripts/asx/ingest.mjs --dir $W/asx",
+          "env": {
+            "TURSO_MAIN_URL": "env",
+            "TURSO_MAIN_TOKEN": "env"
+          }
+        }
+      ]
+    },
+    "backfill-history": {
+      "workflow": "backfill-history.yml",
+      "timeoutMin": 60,
+      "group": "backfill-history",
+      "steps": [
+        {
+          "id": "plan",
+          "run": "node scripts/backfill/run.mjs plan --out $W/plan.json",
+          "env": {
+            "TURSO_MAIN_URL": "env",
+            "TURSO_MAIN_TOKEN": "env"
+          }
+        },
+        {
+          "id": "fetch",
+          "run": "node scripts/backfill/fetch-asic.mjs --plan $W/plan.json --output $W/chunks.json",
+          "if": "out:plan.fetch=true"
+        },
+        {
+          "id": "commit",
+          "run": "node scripts/backfill/run.mjs commit --chunks $W/chunks.json",
+          "if": "outcome:plan=success",
+          "always": true,
+          "env": {
+            "TURSO_MAIN_URL": "env",
+            "TURSO_MAIN_TOKEN": "env",
+            "DATA_REPO_TOKEN": "env",
+            "DATA_REPO": "env",
+            "COMMIT_SHA": "env:BUILD_COMMIT"
+          }
+        }
+      ]
+    },
+    "backfill-prices": {
+      "workflow": "backfill-prices.yml",
+      "timeoutMin": 60,
+      "group": "backfill-prices",
+      "steps": [
+        {
+          "id": "plan",
+          "run": "node scripts/backfill/prices.mjs plan --out $W/plan.json",
+          "env": {
+            "TURSO_MAIN_URL": "env",
+            "TURSO_MAIN_TOKEN": "env"
+          }
+        },
+        {
+          "id": "fetch",
+          "run": "python scripts/backfill/fetch_prices.py --plan $W/plan.json --output $W/prices.json",
+          "if": "out:plan.fetch=true"
+        },
+        {
+          "id": "commit",
+          "run": "node scripts/backfill/prices.mjs commit --prices $W/prices.json",
+          "if": "out:plan.fetch=true",
+          "env": {
+            "TURSO_MAIN_URL": "env",
+            "TURSO_MAIN_TOKEN": "env",
+            "DATA_REPO_TOKEN": "env",
+            "DATA_REPO": "env",
+            "COMMIT_SHA": "env:BUILD_COMMIT"
+          }
+        }
+      ]
+    },
+    "backup": {
+      "workflow": "backup.yml",
+      "timeoutMin": 20,
+      "group": "backup",
+      "steps": [
+        {
+          "id": "backup",
+          "run": "node scripts/backup/run.mjs",
+          "env": {
+            "TURSO_MAIN_URL": "env",
+            "TURSO_MAIN_TOKEN": "env",
+            "BACKUP_PUBLIC_KEY": "env",
+            "APP_BASE_URL": "env",
+            "ACTIONS_HMAC_SECRET": "env",
+            "DATA_REPO_TOKEN": "env",
+            "DATA_REPO": "env",
+            "COMMIT_SHA": "env:BUILD_COMMIT"
+          }
+        },
+        {
+          "id": "bucket",
+          "run": "node scripts/backup/bucket-copy.mjs",
+          "localOnly": true,
+          "env": {
+            "BACKUP_BUCKET_URL": "env",
+            "BACKUP_BUCKET_NAME": "env",
+            "BACKUP_BUCKET_KEY_ID": "env",
+            "BACKUP_BUCKET_SECRET": "env",
+            "BACKUP_BUCKET_REGION": "env",
+            "DATA_REPO_TOKEN": "env",
+            "DATA_REPO": "env"
+          }
+        }
+      ],
+      "exclusiveWith": ["turso-refresh"]
+    },
+    "ingest-batch1": {
+      "workflow": "ingest-batch1.yml",
+      "timeoutMin": 40,
+      "group": "ingest-batch1",
+      "steps": [
+        {
+          "id": "plan",
+          "run": "node scripts/ingest/batch1.mjs prepare --request $W/request.json",
+          "env": {
+            "TURSO_MAIN_URL": "env",
+            "TURSO_MAIN_TOKEN": "env"
+          }
+        },
+        {
+          "id": "bars",
+          "run": "python scripts/ingest/yahoo_fetch.py --request $W/request.json --output $W/bars.json --index-output $W/index.json --actions-output $W/actions.json",
+          "if": "out:plan.fetch=true",
+          "env": {
+            "YAHOO_CHUNK_SIZE": "out:plan.chunk_size",
+            "YAHOO_MIN_GAP_S": "out:plan.min_gap_s"
+          }
+        },
+        {
+          "id": "asic",
+          "run": "node scripts/ingest/asic_fetch.mjs --request $W/request.json --output $W/short.json",
+          "if": "out:plan.fetch=true",
+          "always": true
+        },
+        {
+          "id": "ingest",
+          "run": "node scripts/ingest/batch1.mjs run --bars $W/bars.json --index $W/index.json --short $W/short.json --actions $W/actions.json",
+          "if": "outcome:plan=success",
+          "always": true,
+          "env": {
+            "TURSO_MAIN_URL": "env",
+            "TURSO_MAIN_TOKEN": "env",
+            "COMMIT_SHA": "env:BUILD_COMMIT"
+          }
+        }
+      ]
+    },
+    "kb-archive": {
+      "workflow": "kb-archive.yml",
+      "timeoutMin": 20,
+      "group": "kb-archive",
+      "steps": [
+        {
+          "id": "archive",
+          "run": "node scripts/kb/archive.mjs",
+          "env": {
+            "TURSO_MAIN_URL": "env",
+            "TURSO_MAIN_TOKEN": "env",
+            "DATA_REPO_TOKEN": "env",
+            "DATA_REPO": "env"
+          }
+        }
+      ]
+    },
+    "llm-bakeoff": {
+      "workflow": "llm-bakeoff.yml",
+      "timeoutMin": 120,
+      "group": "llm-bakeoff",
+      "steps": [
+        {
+          "id": "bakeoff",
+          "run": "node scripts/llm/bakeoff.mjs --candidate \"$CANDIDATES\" --trains \"$TRAINS\" --checked \"$CHECKED\"",
+          "env": {
+            "CANDIDATES": "input:candidates",
+            "TRAINS": "input:trains",
+            "CHECKED": "input:checked",
+            "GOOGLE_AI_API_KEY": "env",
+            "GROQ_API_KEY": "env",
+            "OPENROUTER_API_KEY": "env",
+            "TURSO_MAIN_URL": "when:store?env",
+            "TURSO_MAIN_TOKEN": "when:store?env"
+          }
+        }
+      ]
+    },
+    "maintenance": {
+      "workflow": "maintenance.yml",
+      "timeoutMin": 10,
+      "group": "maintenance",
+      "steps": [
+        {
+          "id": "maintenance",
+          "run": "node scripts/maintenance/run.mjs",
+          "env": {
+            "APP_BASE_URL": "env",
+            "ACTIONS_HMAC_SECRET": "env"
+          }
+        }
+      ]
+    },
+    "watchdog": {
+      "workflow": "watchdog.yml",
+      "timeoutMin": 10,
+      "group": "watchdog",
+      "steps": [
+        {
+          "id": "watchdog",
+          "run": "node scripts/watchdog/run.mjs",
+          "env": {
+            "WATCHDOG_SLOT": "input:slot|manual",
+            "WATCHDOG_DELIBERATE_FAILURE": "flag:deliberate_failure=1|0",
+            "PRAXIS_ENV": "env",
+            "EMAIL_PROVIDER": "env",
+            "TURSO_MAIN_URL": "env",
+            "TURSO_MAIN_TOKEN": "env",
+            "RESEND_API_KEY": "env",
+            "OWNER_EMAIL": "env",
+            "PII_HASH_KEY": "env",
+            "APP_BASE_URL": "env",
+            "ACTIONS_HMAC_SECRET": "env"
+          }
+        }
+      ]
+    }
+  },
+  "localSchedule": {
+    "bucket-hourly": {
+      "timeoutMin": 20,
+      "group": "bucket-hourly",
+      "schedule": {
+        "from": "07:05",
+        "until": "23:05",
+        "everyMin": 60
+      },
+      "steps": [
+        {
+          "id": "hourly",
+          "run": "node scripts/backup/bucket-copy.mjs --hourly",
+          "env": {
+            "BACKUP_BUCKET_URL": "env",
+            "BACKUP_BUCKET_NAME": "env",
+            "BACKUP_BUCKET_KEY_ID": "env",
+            "BACKUP_BUCKET_SECRET": "env",
+            "BACKUP_BUCKET_REGION": "env",
+            "TURSO_MAIN_URL": "env",
+            "TURSO_MAIN_TOKEN": "env",
+            "BACKUP_PUBLIC_KEY": "env"
+          }
+        }
+      ]
+    },
+    "turso-refresh": {
+      "timeoutMin": 40,
+      "group": "turso-refresh",
+      "exclusiveWith": ["backup"],
+      "standbyExitCodes": [3],
+      "schedule": {
+        "from": "23:40",
+        "until": "23:40",
+        "everyMin": 1
+      },
+      "steps": [
+        {
+          "id": "refresh",
+          "run": "node scripts/selfhost/turso-refresh.mjs",
+          "env": {
+            "TURSO_MAIN_URL": "env",
+            "TURSO_MAIN_TOKEN": "env",
+            "TURSO_AUTH_URL": "env",
+            "TURSO_AUTH_TOKEN": "env",
+            "TURSO_REFRESH_MAIN_URL": "env",
+            "TURSO_REFRESH_MAIN_TOKEN": "env",
+            "TURSO_REFRESH_AUTH_URL": "env",
+            "TURSO_REFRESH_AUTH_TOKEN": "env"
+          }
+        }
+      ]
+    },
+    "restore-drill": {
+      "timeoutMin": 60,
+      "group": "restore-drill",
+      "schedule": {
+        "from": "10:00",
+        "until": "10:00",
+        "everyMin": 1,
+        "days": [0]
+      },
+      "steps": [
+        {
+          "id": "drill",
+          "run": "node scripts/selfhost/restore-drill.mjs --source $SOURCE",
+          "env": {
+            "SOURCE": "input:source|live",
+            "SQLD_URL": "env",
+            "SQLD_ADMIN_URL": "env",
+            "SQLD_ADMIN_AUTH": "env",
+            "SQLD_NS_MODE": "env",
+            "SQLD_TOKEN": "env",
+            "TURSO_MAIN_URL": "env",
+            "TURSO_MAIN_TOKEN": "env",
+            "TURSO_AUTH_URL": "env",
+            "TURSO_AUTH_TOKEN": "env"
+          }
+        }
+      ]
+    }
+  }
+}

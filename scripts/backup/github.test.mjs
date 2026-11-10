@@ -73,3 +73,47 @@ test("uploadAsset needs 201; listReleases rejects a non-array body and a non-200
   await assert.rejects(client(async () => resp(200, {})).listReleases(), /list_releases failed/);
   await assert.rejects(client(async () => resp(403, {})).listReleases(), /HTTP 403/);
 });
+
+// INFRA T5: downloading a release asset (for the bucket copy and the newest-backup lookup).
+test("downloadAsset follows the storage redirect without the token, and only to a GitHub content host", async () => {
+  const calls = [];
+  const handler = async (url, init) => {
+    calls.push({ url, auth: init.headers?.Authorization, redirect: init.redirect });
+    if (url.includes("/releases/tags/"))
+      return resp(200, {
+        id: 1,
+        tag_name: "backup-2026-01-02",
+        assets: [{ id: 77, name: "main-x" }],
+      });
+    if (url.includes("/releases/assets/77"))
+      return {
+        status: 302,
+        headers: { get: () => "https://release-assets.githubusercontent.com/blob/abc" },
+      };
+    return { status: 200, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer };
+  };
+  const gh = client(handler);
+  assert.deepEqual([...(await gh.downloadAsset("backup-2026-01-02", "main-x"))], [1, 2, 3]);
+  assert.equal(calls[1].auth, `Bearer ${TOKEN}`);
+  assert.equal(calls[1].redirect, "manual");
+  assert.equal(calls[2].auth, undefined); // the storage host never sees the token
+  assert.equal(await gh.downloadAsset("backup-2026-01-02", "auth-missing"), null);
+
+  const evil = client(async (url) =>
+    url.includes("/releases/tags/")
+      ? resp(200, { id: 1, tag_name: "t", assets: [{ id: 77, name: "a" }] })
+      : { status: 302, headers: { get: () => "https://evil.example/x" } },
+  );
+  await assert.rejects(evil.downloadAsset("t", "a"), /download_asset failed/);
+  const none = client(async () => resp(404, {}));
+  assert.equal(await none.downloadAsset("t", "a"), null);
+});
+
+test("listReleases carries createdAt when the API sends it", async () => {
+  const gh = client(async () =>
+    resp(200, [{ id: 3, tag_name: "t", created_at: "2026-01-02T00:00:00Z" }]),
+  );
+  assert.deepEqual(await gh.listReleases(), [
+    { id: 3, tag: "t", assets: [], createdAt: "2026-01-02T00:00:00Z" },
+  ]);
+});

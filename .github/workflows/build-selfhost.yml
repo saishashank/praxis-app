@@ -75,6 +75,8 @@ jobs:
           platforms: ${{ steps.meta.outputs.jobs_platforms }}
           push: true
           tags: ${{ steps.meta.outputs.prefix }}/praxis-jobs:${{ github.sha }}
+          build-args: |
+            BUILD_COMMIT=${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}

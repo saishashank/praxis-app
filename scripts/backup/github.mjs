@@ -34,7 +34,7 @@ export function createGithub({ repo, token, fetchImpl = fetch }) {
       return await fetchImpl(url, {
         ...init,
         headers: { ...base, ...(init.headers ?? {}) },
-        redirect: "error",
+        redirect: init.redirect ?? "error",
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {
@@ -53,8 +53,53 @@ export function createGithub({ repo, token, fetchImpl = fetch }) {
     return normalise(await res.json());
   }
 
+  /** INFRA T5: the bytes of one release asset (null when the release or the asset is missing). */
+  async function downloadAsset(tag, name) {
+    const res = await call(
+      "get_release",
+      `${API}/repos/${repo}/releases/tags/${encodeURIComponent(tag)}`,
+      { method: "GET" },
+    );
+    if (res.status === 404) return null;
+    if (res.status !== 200) throw new GithubError("get_release", res.status);
+    const raw = await res.json();
+    const asset = Array.isArray(raw?.assets) ? raw.assets.find((a) => a?.name === name) : null;
+    if (!asset || !Number.isInteger(asset.id)) return null;
+    const first = await call(
+      "download_asset",
+      `${API}/repos/${repo}/releases/assets/${asset.id}`,
+      { method: "GET", headers: { Accept: "application/octet-stream" }, redirect: "manual" },
+      UPLOAD_TIMEOUT_MS,
+    );
+    let body = first;
+    if (first.status >= 300 && first.status < 400) {
+      // The storage host gets NO Authorization header and must be a GitHub content host.
+      let loc;
+      try {
+        loc = new URL(String(first.headers.get("location")));
+      } catch {
+        throw new GithubError("download_asset", null);
+      }
+      if (loc.protocol !== "https:" || !/(^|.)githubusercontent.com$/.test(loc.hostname)) {
+        throw new GithubError("download_asset", null);
+      }
+      try {
+        body = await fetchImpl(loc.href, {
+          method: "GET",
+          redirect: "error",
+          signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+        });
+      } catch {
+        throw new GithubError("download_asset", null);
+      }
+    }
+    if (body.status !== 200) throw new GithubError("download_asset", body.status);
+    return new Uint8Array(await body.arrayBuffer());
+  }
+
   return {
     getRelease,
+    downloadAsset,
 
     /** Existing release for the tag, or a newly created one (idempotent). */
     async ensureRelease(tag) {
@@ -132,5 +177,11 @@ function normalise(r) {
     throw new GithubError("parse_release", null);
   }
   const assets = Array.isArray(r.assets) ? r.assets.map((a) => String(a?.name)) : [];
-  return { id: r.id, tag: r.tag_name, assets };
+  // createdAt only when the API sent it (INFRA T5: "newest backup" compares real times).
+  return {
+    id: r.id,
+    tag: r.tag_name,
+    assets,
+    ...(typeof r.created_at === "string" ? { createdAt: r.created_at } : {}),
+  };
 }

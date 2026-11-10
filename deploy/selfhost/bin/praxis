@@ -1,0 +1,28 @@
+#!/bin/sh
+# praxis: operator CLI of the self-hosted runtime (INFRA T3, REQ\infra\INFRA_REQUIREMENT.md §5.5).
+# Installed by bootstrap.sh as /srv/praxis/bin/praxis. It runs clock/cli.mjs inside the clock container,
+# so the database address and tokens come from jobs.env and are never typed or printed here.
+#   praxis status | run <job> [--input k=v] | logs <job|run-id> | owner [cloud|selfhost]
+#   praxis backup-now | restore-drill [--source live|synthetic|backup] | restore-latest | deploy <sha>
+#   (deploy is not built yet: T7). restore-latest needs the age private key in the caller's environment:
+#   BACKUP_PRIVATE_KEY is passed through for that one command and is never stored on the server.
+set -eu
+
+COMPOSE_DIR="${PRAXIS_COMPOSE_DIR:-/srv/praxis/compose}"
+COMPOSE_FILE="$COMPOSE_DIR/docker-compose.prod.yml"
+
+case "${1:-}" in
+  deploy)
+    echo "not built yet (T7)"
+    exit 2
+    ;;
+esac
+
+[ -f "$COMPOSE_FILE" ] || { echo "praxis: $COMPOSE_FILE not found (set PRAXIS_COMPOSE_DIR)" >&2; exit 1; }
+
+# -T: no TTY, so the output can be piped (praxis logs 42 | less).
+if [ -n "${BACKUP_PRIVATE_KEY:-}" ]; then
+  # -e NAME (no value) reads it from this shell, so the key never appears in the process list
+  exec docker compose -f "$COMPOSE_FILE" --env-file "$COMPOSE_DIR/.env" exec -T -e BACKUP_PRIVATE_KEY clock node clock/cli.mjs "$@"
+fi
+exec docker compose -f "$COMPOSE_FILE" --env-file "$COMPOSE_DIR/.env" exec -T clock node clock/cli.mjs "$@"

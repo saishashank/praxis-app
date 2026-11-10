@@ -159,7 +159,7 @@ function walk(dir, root, acc) {
 
 export function collectReadNames(root) {
   const read = new Set();
-  for (const top of ["src", "scripts", "worker/src"]) {
+  for (const top of ["src", "scripts", "worker/src", "clock"]) {
     const dir = join(root, top);
     if (!existsSync(dir)) continue;
     const files = [];

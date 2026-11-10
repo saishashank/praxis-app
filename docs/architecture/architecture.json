@@ -11404,6 +11404,45 @@
       }
     },
     {
+      "id": "table:main.job_run",
+      "type": "table",
+      "name": "job_run",
+      "purpose": "Table job_run in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0029_job_run.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "job",
+          "slot_id",
+          "local_date",
+          "status",
+          "started_at",
+          "heartbeat_at",
+          "exit_code",
+          "log_path"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_job_run_job",
+          "idx_job_run_status"
+        ]
+      }
+    },
+    {
       "id": "table:main.kb_archive_run",
       "type": "table",
       "name": "kb_archive_run",
@@ -19290,6 +19329,16 @@
       "views": [
         "data",
         "learning"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.job_run",
+      "from": "service:turso-main",
+      "to": "table:main.job_run",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
       ]
     },
     {

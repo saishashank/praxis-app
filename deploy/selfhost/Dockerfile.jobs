@@ -61,8 +61,13 @@ RUN set -eu; \
     fi; \
     pip install --require-hashes --only-binary=:all: -r "$req"
 
-# Repository code: scripts/, src/lib, worker/src (schedule), clock/ (added in T3), db/migrations, spec/.
+# Repository code: scripts/, src/lib, worker/src (the Worker runners the clock reuses), clock/ (the scheduler and
+# job runner, INFRA T3), deploy/selfhost/jobs.json (the job manifest), db/migrations, spec/.
 COPY . .
+
+# The approved commit of this image (INFRA §10): jobs report it as COMMIT_SHA, the clock shows it in /health.
+ARG BUILD_COMMIT=""
+ENV BUILD_COMMIT=${BUILD_COMMIT}
 
 # Vite bundles the TS engines into node_modules/.cache at run time; the compose file mounts a tmpfs there.
 RUN mkdir -p /app/node_modules/.cache && chown -R praxis:praxis /app/node_modules/.cache
@@ -72,5 +77,6 @@ VOLUME ["/srv/praxis/jobs"]
 EXPOSE 9100
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:9100/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-# clock/index.mjs is built in T3 (INFRA §5, §13).
+# clock/index.mjs bundles clock/ and the Worker runners with Vite at start-up (see the note above), then ticks
+# every 30 s. `praxis <cmd>` runs clock/cli.mjs inside this container (deploy/selfhost/bin/praxis).
 CMD ["node", "clock/index.mjs"]

@@ -87,6 +87,9 @@ services:
     env_file: /srv/praxis/env/jobs.env
     environment:
       PRAXIS_RUNTIME: selfhost
+      # Scratch folders and job logs live on the host volume below (INFRA §3.3); the manifest is baked into the image.
+      JOBS_ROOT: /srv/praxis/jobs
+      JOBS_MANIFEST: /app/deploy/selfhost/jobs.json
     expose: ["9100"]
     volumes:
       - /srv/praxis/jobs:/srv/praxis/jobs

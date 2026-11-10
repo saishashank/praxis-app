@@ -229,3 +229,82 @@ test("CLI: exits 0 on a good restore, non-zero on failure, prints no URL", () =>
     }),
   );
 });
+
+// INFRA T4: --target sqld (a local file database stands in for a sqld namespace).
+test("--target sqld: restores without a token, checks foreign keys, prints PASS", async () => {
+  const t = nextTarget();
+  const r = await exec(["--file", dumpFile, "--db", "main", "--target", "sqld"], {
+    RESTORE_TARGET_URL: fileUrl(t),
+  });
+  assert.equal(r.code, 0, r.text);
+  assert.match(r.text, /restore: foreign keys ON, orphan rows 0 PASS/);
+  assert.match(r.text, /restore: PASS db=main/);
+});
+
+test("--target sqld: not the live-URL refusal (the empty-target rule guards), still refuses a non-empty namespace", async () => {
+  const t = nextTarget();
+  const env = { RESTORE_TARGET_URL: fileUrl(t), TURSO_MAIN_URL: fileUrl(t) }; // same as the "live" URL
+  const ok = await exec(["--file", dumpFile, "--db", "main", "--target", "sqld"], env);
+  assert.equal(ok.code, 0, ok.text);
+  const again = await exec(["--file", dumpFile, "--db", "main", "--target", "sqld"], env);
+  assert.equal(again.code, 1);
+  assert.match(again.text, /the target database is not empty/);
+  // the default target (turso) keeps refusing the live URL exactly as before
+  const turso = await exec(["--file", dumpFile, "--db", "main"], env);
+  assert.equal(turso.code, 1);
+  assert.match(turso.text, /the target is the live database/);
+});
+
+test("--target sqld: refuses a Turso URL before opening anything", async () => {
+  let opened = false;
+  const r = await exec(
+    ["--file", dumpFile, "--db", "main", "--target", "sqld"],
+    { RESTORE_TARGET_URL: "libsql://praxis-main-x.aws-ap-southeast-2.turso.io" },
+    {
+      openDb: () => {
+        opened = true;
+        throw new Error("must not open");
+      },
+    },
+  );
+  assert.equal(r.code, 1);
+  assert.match(r.text, /cannot restore into a Turso database/);
+  assert.equal(opened, false);
+});
+
+test("--target sqld: URL built from SQLD_URL + the namespace; usage errors", async () => {
+  const seen = [];
+  const fake = {
+    execute: async () => {
+      throw new Error("down");
+    },
+    close() {},
+  };
+  const r = await exec(
+    ["--file", dumpFile, "--db", "main", "--target", "sqld", "--namespace", "drill-x"],
+    { SQLD_URL: "http://sqld:8080", SQLD_NS_MODE: "host" },
+    {
+      openDb: (url, token, host) => {
+        seen.push([url, token, host]);
+        return fake;
+      },
+    },
+  );
+  assert.equal(r.code, 1);
+  assert.deepEqual(seen, [["http://sqld:8080", "", "drill-x.sqld"]]);
+  const sub = await exec(
+    ["--file", dumpFile, "--db", "auth", "--target", "sqld"],
+    { SQLD_URL: "http://sqld:8080" },
+    {
+      openDb: (url, token, host) => {
+        seen.push([url, token, host]);
+        return fake;
+      },
+    },
+  );
+  assert.match(sub.text, /the dump is the main database, not auth/);
+  const bad = await exec(["--file", dumpFile, "--db", "main", "--target", "mars"], {});
+  assert.match(bad.text, /--target must be turso or sqld/);
+  const ns = await exec(["--file", dumpFile, "--db", "main", "--namespace", "x"], {});
+  assert.match(ns.text, /--namespace needs --target sqld/);
+});

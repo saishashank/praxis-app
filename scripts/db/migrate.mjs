@@ -1,6 +1,10 @@
 // Migration CLI (D-030). Usage:
 //   node scripts/db/migrate.mjs --if-vercel      (build step: runs only when VERCEL=1; main, then auth)
 //   node scripts/db/migrate.mjs --db main|auth   (needs the two env vars for that database)
+// Self-hosted sqld (INFRA T4): add `--target sqld` to any form. The URL variables then hold the sqld
+// namespace URLs (e.g. http://main.sqld:8080), the token is optional (only when sqld verifies JWTs),
+// the namespace is created first when SQLD_ADMIN_URL is set, and each connection is checked:
+// `PRAGMA foreign_keys` is 1 (D-713). The default target is turso and behaves exactly as before.
 // Rollback (V2-S4, D-703; the procedure is docs/runbooks/rollback-v2.md):
 //   MIGRATE_ALLOW_NEWER=1 (or --allow-newer)       a database AHEAD of this tree is left alone, not an error
 //   --db main --down-to <version> --confirm-down   run the `-- +down` sections newest first until <version>
@@ -10,6 +14,7 @@ import { createClient } from "@libsql/client";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadMigrations, migrateDownTo, migrateUp } from "../../src/lib/db/migrate-core.mjs";
+import { assertForeignKeys, ensureNamespace } from "../selfhost/sqld.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const VARS = {
@@ -17,14 +22,25 @@ const VARS = {
   auth: ["TURSO_AUTH_URL", "TURSO_AUTH_TOKEN"],
 };
 
+/** True when the run targets the self-hosted sqld (set once in main()). */
+let sqldTarget = false;
+
 async function withClient(name, f) {
   const [urlVar, tokenVar] = VARS[name];
   const url = process.env[urlVar];
   if (!url) throw new Error(`${urlVar} is not set`);
   const authToken = process.env[tokenVar];
-  if (!authToken && !url.startsWith("file:")) throw new Error(`${tokenVar} is not set`);
+  if (!authToken && !url.startsWith("file:") && !sqldTarget) {
+    throw new Error(`${tokenVar} is not set`);
+  }
+  if (sqldTarget && process.env.SQLD_ADMIN_URL) {
+    await ensureNamespace(process.env.SQLD_ADMIN_URL, name, {
+      adminAuth: process.env.SQLD_ADMIN_AUTH,
+    });
+  }
   const client = createClient({ url, authToken: authToken || undefined });
   try {
+    if (sqldTarget) await assertForeignKeys(client, `sqld ${name}`);
     return await f(client, await loadMigrations(path.join(root, "db", "migrations", name)));
   } finally {
     client.close();
@@ -50,6 +66,10 @@ async function down(name, target) {
 
 async function main() {
   const args = process.argv.slice(2);
+  const ti = args.indexOf("--target");
+  const target = ti >= 0 ? args[ti + 1] : "turso";
+  if (target !== "turso" && target !== "sqld") throw new Error("usage: --target turso|sqld");
+  sqldTarget = target === "sqld";
   const allowNewer = args.includes("--allow-newer") || process.env.MIGRATE_ALLOW_NEWER === "1";
   if (args.includes("--if-vercel")) {
     if (process.env.VERCEL !== "1") {
@@ -82,7 +102,7 @@ main().catch((e) => {
   // Only our own short messages; never the underlying driver error (could echo a URL).
   const msg =
     e instanceof Error &&
-    /^(TURSO_\w+ is not set|usage:|migration |applied migration \d+ has no file|rollback:)/.test(
+    /^(TURSO_\w+ is not set|usage:|sqld [a-z]+: PRAGMA foreign_keys is not 1|sqld: [A-Za-z() 0-9]+$|migration |applied migration \d+ has no file|rollback:)/.test(
       e.message,
     )
       ? e.message
