@@ -35,7 +35,7 @@ import { dbConfigured, pipeline, type Arg, type DbEnv, type Stmt, type StmtResul
 import { isWeekend, sydneyLocal, type Local } from "./localtime";
 import { isTradingDayKind } from "../../src/lib/data/calendarCore.mjs";
 import { AU_SLOTS, type Slot } from "./schedule";
-import { randomHex, signHeaders } from "./selfcheck";
+import { pathOf, randomHex, signHeaders } from "./selfcheck";
 
 export const MAX_ROUTE_ATTEMPTS = MAX_ATTEMPTS;
 export const ROUTE_TIMEOUT_MS = 28_000;
@@ -172,7 +172,13 @@ export async function postSigned(
       slot: slot.id,
       ...(slot.extra ?? {}),
     });
-    const headers = await signHeaders(secret, body, Math.floor(deps.nowMs() / 1000), randomHex(16));
+    const headers = await signHeaders(secret, {
+      method: "POST",
+      path: pathOf(url),
+      body,
+      nowSec: Math.floor(deps.nowMs() / 1000),
+      nonce: randomHex(16),
+    });
     const res = await deps.fetch(url, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },

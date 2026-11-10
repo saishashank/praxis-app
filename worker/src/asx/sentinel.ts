@@ -17,7 +17,7 @@
 //    `sentinel_ingest_failed` incident.
 // Logs carry fixed words and numbers only: never a URL, a header, a secret or feed content.
 import type { Stmt } from "../db";
-import { randomHex, signHeaders } from "../selfcheck";
+import { pathOf, randomHex, signHeaders } from "../selfcheck";
 import type { Outcome } from "./policy";
 import { ASX_SOURCE } from "./policy";
 
@@ -134,7 +134,13 @@ export async function reportBlind(
       kind: "sentinel_blind",
       window_min: o.windowMin ?? BLIND_ALERT_MIN,
     });
-    const headers = await signHeaders(o.secret, body, Math.floor(o.nowMs / 1000), randomHex(16));
+    const headers = await signHeaders(o.secret, {
+      method: "POST",
+      path: pathOf(o.url),
+      body,
+      nowSec: Math.floor(o.nowMs / 1000),
+      nonce: randomHex(16),
+    });
     const res = await f(o.url, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
@@ -259,7 +265,13 @@ export async function deliverFeed(
       sha: o.sha,
       feed: o.feed,
     });
-    const headers = await signHeaders(o.secret, body, Math.floor(o.nowMs / 1000), randomHex(16));
+    const headers = await signHeaders(o.secret, {
+      method: "POST",
+      path: pathOf(o.url),
+      body,
+      nowSec: Math.floor(o.nowMs / 1000),
+      nonce: randomHex(16),
+    });
     const res = await f(o.url, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },

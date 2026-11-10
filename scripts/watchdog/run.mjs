@@ -31,6 +31,7 @@ export async function callRoute(env, fetchImpl, d, slot, nowMs) {
       body,
       Math.floor(nowMs / 1000),
       randomBytes(16).toString("hex"),
+      { method: "POST", path: "/api/internal/evening-review" },
     ),
   };
   let res;

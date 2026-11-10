@@ -88,6 +88,8 @@ export function createEveningReviewHandler(deps: ReviewRouteDeps) {
           secret: c.secret,
           headers: req.headers,
           rawBody,
+          method: req.method,
+          path: new URL(req.url).pathname,
           nowSec,
           store: deps.store,
         });

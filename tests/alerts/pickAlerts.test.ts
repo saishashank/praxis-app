@@ -18,6 +18,8 @@ import { syntheticChart } from "@/lib/data/quotes/fixture";
 import type { NonceStore } from "@/lib/security/replay";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
 
+const SIGN_TARGET = { method: "POST", path: "/api/internal/pick-alerts" };
+
 afterEach(cleanupTempDbs);
 
 const SESSION = "2026-11-04"; // Wed, AEDT (UTC+11)
@@ -315,7 +317,10 @@ describe("POST /api/internal/pick-alerts", () => {
       method: "POST",
       body: raw,
       headers: signed
-        ? (sign(SECRET, raw, NOW_S, n.toString(16).padStart(32, "0")) as Record<string, string>)
+        ? (sign(SECRET, raw, NOW_S, n.toString(16).padStart(32, "0"), SIGN_TARGET) as Record<
+            string,
+            string
+          >)
         : {},
     });
   };

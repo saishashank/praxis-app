@@ -13,9 +13,13 @@
 // Splits, consolidations and bonus issues inside the window are re-based (M7 T4, decision 33): from
 // the ex-date the levels are divided by the exact M3 quantity ratio and a held position's shares are
 // multiplied by it and rounded down (`rebaseQty`), cash unchanged, as the arena does. Known limit
-// (D-122): no dividends and no other corporate action (mergers, delistings); the Picks page says
-// "price only - dividends not included". GL-10 (O-51): the market benchmark of a comparison is a total-return
-// series (./benchmark.ts), labelled "Price only" until vendor dividends cover the window.
+// (D-122): no other corporate action (mergers, delistings). Dividends (ARN-123, D-956): a settlement
+// written after M18 credits the confirmed cash and special dividends that went ex after the fill session
+// and on or before the exit session, on the shares held at the prior close (the books' entitlement rule,
+// ARN-036), and is stored with outcome_basis 'total_return' (label "Total return - dividends included");
+// a row settled before that stays 'price_only' ("Price only - dividends not included", D-143) and is never
+// rewritten. GL-10 (O-51): the market benchmark of a comparison is a total-return series (./benchmark.ts),
+// labelled "Price only" until vendor dividends cover the window.
 import type { Client, InStatement } from "@libsql/client";
 import { priceMicro } from "@/lib/arena/marketData";
 import {
@@ -43,6 +47,8 @@ const PPM = 1_000_000n; // threshold-ok: parts per million
 const text = (v: unknown): string => String(v);
 
 export type ExitReason = "stop" | "gap" | "aim" | "time_frame";
+/** ARN-123: what a settled net result contains. Rows settled before M18 are price only. */
+export type OutcomeBasis = "price_only" | "total_return";
 export type TrackState = "waiting" | "bought" | "missed" | "closed";
 
 export type Levels = {
@@ -66,6 +72,10 @@ export type Outcome = {
   readonly exitReason: ExitReason | null;
   readonly netMicro: Micro | null;
   readonly netPpm: number | null;
+  /** ARN-123: cash dividends credited inside net (micro); 0 on a price-only run. Set on a closed outcome. */
+  readonly dividendMicro?: Micro;
+  /** ARN-123: the basis net was computed on. Set on a closed outcome. */
+  readonly basis?: OutcomeBasis;
 };
 
 const EMPTY: Outcome = {
@@ -110,6 +120,11 @@ type SimEnv = {
    * previous session already applied by the caller (see `pickExDividends`). Used on the ex-date only.
    */
   readonly exDividends?: readonly PickExDividend[];
+  /**
+   * ARN-123 (D-956): also CREDIT those dividends to the net result (total-return basis). Off = the
+   * price-only maths every earlier row was settled with, byte for byte.
+   */
+  readonly creditDividends?: boolean;
 };
 
 /** A dividend per share (micro) going ex on `exD`, known by the previous session's cut-off. */
@@ -151,10 +166,19 @@ export function simulateOutcome(base: Levels, bars: readonly DatedBar[], env: Si
   let entry: { d: string; fill: Micro; qty: bigint; brokerage: Micro; cost: Micro } | null = null;
   let held = 0;
   const fillEnv = (bar: DatedBar) => ({ bar, advMicro: env.advMicro, profile: env.profile });
-  const close = (d: string, exit: Micro, brokOut: Micro, reason: ExitReason): Outcome => {
+  const credit = env.creditDividends === true;
+  let divCredit = 0n; // ARN-123: dividends that went ex while the position was held (micro)
+  const close = (
+    d: string,
+    exit: Micro,
+    brokOut: Micro,
+    reason: ExitReason,
+    exitDayDividend: Micro = 0n,
+  ): Outcome => {
     const e = entry!;
     const cost = e.cost; // fixed at entry: a re-base changes shares, never what was paid
-    const net = e.qty * exit - brokOut - cost;
+    const dividend = divCredit + exitDayDividend;
+    const net = e.qty * exit - brokOut - cost + dividend;
     const netPpm = Number(roundHalfAwayFromZero(makeRational(net * PPM, cost))); // money-float-ok: ppm fits a safe integer
     return {
       state: "closed",
@@ -165,10 +189,17 @@ export function simulateOutcome(base: Levels, bars: readonly DatedBar[], env: Si
       exitReason: reason,
       netMicro: net,
       netPpm,
+      dividendMicro: dividend,
+      basis: credit ? "total_return" : "price_only",
     };
   };
   for (let i = 0; i < bars.length; i += 1) {
     const bar = bars[i]!;
+    // ARN-123: a position bought on an EARLIER session was held at the prior close, so it is entitled to
+    // a dividend going ex today (shares before today's re-base; ARN-036). A fill on the ex-date is not.
+    if (credit && entry !== null && entry.d < bar.d) {
+      divCredit += entry.qty * exDividendAt(env.exDividends, bar.d);
+    }
     // actions with ex-date on or before this session: levels move into post-event terms; a position
     // bought BEFORE the ex-date has its shares re-based (a fill on the ex-date is already post-event)
     let moved = false;
@@ -231,7 +262,9 @@ export function simulateOutcome(base: Levels, bars: readonly DatedBar[], env: Si
       const next = bars[i + 1];
       if (next === undefined) break; // the exit session has not happened yet
       const out = fillCloseSignalExit(fillEnv(next), e.qty);
-      return close(next.d, out.fillPriceMicro, out.brokerageMicro, "time_frame");
+      // the exit session is not processed by the loop: a dividend going ex on it is credited here
+      const exitDay = credit ? e.qty * exDividendAt(env.exDividends, next.d) : 0n;
+      return close(next.d, out.fillPriceMicro, out.brokerageMicro, "time_frame", exitDay);
     }
   }
   if (entry !== null) {
@@ -391,6 +424,7 @@ export async function trackPicks(db: Db, o: TrackOptions): Promise<TrackSummary>
       asOfD: o.d,
       actions,
       exDividends: pickExDividends(confirmed, code, bars, pubD, cutoffOf),
+      creditDividends: true, // ARN-123 (D-956): every settlement written from now on is total return
       withdrawnNight,
     });
     const stored = text(r.state);
@@ -425,8 +459,17 @@ export async function trackPicks(db: Db, o: TrackOptions): Promise<TrackSummary>
     if (sim.state === "closed") {
       stmts.push({
         sql: `UPDATE pick_outcome SET state = 'closed', exit_d = ?, exit_micro = ?, exit_reason = ?,
-                net_micro = ?, net_ppm = ?, updated_d = ? ${where}`,
-        args: [sim.exitD, sim.exitMicro, sim.exitReason, sim.netMicro, sim.netPpm, o.d, ...key],
+                net_micro = ?, net_ppm = ?, outcome_basis = ?, updated_d = ? ${where}`,
+        args: [
+          sim.exitD,
+          sim.exitMicro,
+          sim.exitReason,
+          sim.netMicro,
+          sim.netPpm,
+          sim.basis ?? "price_only",
+          o.d,
+          ...key,
+        ],
       });
       sum.closed += 1;
     }

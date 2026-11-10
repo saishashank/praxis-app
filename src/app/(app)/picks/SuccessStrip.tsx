@@ -61,7 +61,7 @@ export function SuccessStrip({
         {success.missed > 0
           ? `${success.missed} withdrawn before buying — not counted as a win or a loss. `
           : ""}
-        {SELECTION_LINE} {PRICE_ONLY_LABEL}
+        {SELECTION_LINE} {success.basisLabel ?? PRICE_ONLY_LABEL}
       </p>
       <p className="m-0 mt-1 text-text-muted">
         {success.insidePct !== null

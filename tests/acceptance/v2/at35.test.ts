@@ -13,6 +13,7 @@
 import type { Client } from "@libsql/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { benchmarkLabel, TOTAL_RETURN_BASIS_LABEL } from "@/lib/picks/benchmark";
+import { feeFor, getCostProfile } from "@/lib/arena/costs";
 import { trackPicks } from "@/lib/picks/track";
 import { setConfig } from "@/lib/config/store";
 import {
@@ -56,6 +57,20 @@ async function pick(rank: number, code: string) {
   );
 }
 
+/** A confirmed cash dividend of `code` going ex on `exD`, known from the first session (GL-02). */
+async function action(code: string, exD: string, dps: string) {
+  const res = await run(
+    `INSERT INTO corporate_action (market, code, type, ex_date, record_date, payload_json, evidence_json, known_at)
+     VALUES ('AU', ?, 'cash_dividend', ?, NULL, ?, NULL, ?)`,
+    [code, exD, JSON.stringify({ dps, pay_date: "2030-01-31" }), `${S[0]}T00:00:00.000Z`],
+  );
+  await db.execute({
+    sql: `INSERT INTO corporate_action_event (action_id, at, status, by, note)
+          VALUES (?, ?, 'auto_confirmed', 'synthetic', NULL)`,
+    args: [res.lastInsertRowid as never, `${S[0]}T00:00:00.000Z`],
+  });
+}
+
 beforeAll(async () => {
   db = await freshDb("main");
   await setConfig(db, {
@@ -89,6 +104,21 @@ beforeAll(async () => {
   await pick(1, "ZZA");
   await pick(2, "ZZB");
   await pick(3, "ZZC");
+  // (c) ARN-123: ZZB pays A$0.50 going ex on S3 while held (bought S1, exit S4); ZZD is a row settled
+  // BEFORE the deploy (price only) with a dividend inside its old window.
+  await action("ZZB", S[3]!, "0.50");
+  await pick(4, "ZZD");
+  await action("ZZD", S[2]!, "0.50");
+  await run(
+    `UPDATE pick_outcome SET state = 'bought', entry_d = ?, entry_micro = 10000000, updated_d = ?
+     WHERE rank = 4`,
+    [S[1]!, S[1]!],
+  );
+  await run(
+    `UPDATE pick_outcome SET state = 'closed', exit_d = ?, exit_micro = 11000000, exit_reason = 'aim',
+       net_micro = 95000000, net_ppm = 95000, updated_d = ? WHERE rank = 4`,
+    [S[2]!, S[2]!],
+  );
   await run(
     `INSERT INTO pick_check (market, d, profile, rank, night_d, valid, reason, checked_at)
      VALUES ('AU', ?, 'aggressive', 3, ?, 0, 'regime', ?)`,
@@ -165,6 +195,48 @@ describe("AT-35 picks vs market", () => {
     expect(benchmarkLabel("total_return")).toBe(TOTAL_RETURN_BASIS_LABEL);
     await expect(run("UPDATE pick_market SET market_ret_ppm = 0")).rejects.toThrow(/append-only/);
     await expect(run("DELETE FROM pick_market")).rejects.toThrow(/append-only/);
+  });
+
+  // AT-35 (c), ARN-123 / D-956: the pick side credits the in-window dividend; a row settled before the
+  // deploy stays price only and is not rewritten.
+  it("(c) the pick side credits the in-window dividend: net = sale - fees - cost + 100 x A$0.50", async () => {
+    const o = (await run("SELECT * FROM pick_outcome WHERE rank = 2")).rows[0]!;
+    expect(o.exit_reason).toBe("aim");
+    expect(o.outcome_basis).toBe("total_return");
+    const qty = 100n; // A$1,000 at A$10.00
+    const entry = BigInt(String(o.entry_micro));
+    const exit = BigInt(String(o.exit_micro));
+    const profile = getCostProfile("P5");
+    const cost = qty * entry + feeFor(profile, qty * entry, "buy");
+    const sale = qty * exit;
+    const withDividend = sale - feeFor(profile, sale, "sell") - cost + 50_000_000n; // 100 x 0.50
+    expect(BigInt(String(o.net_micro))).toBe(withDividend);
+    expect(Number(o.net_ppm)).toBe(Number((withDividend * 1_000_000n + cost / 2n) / cost));
+    // a zero-dividend pick of the same run is total return too, with nothing added
+    const a = (await run("SELECT * FROM pick_outcome WHERE rank = 1")).rows[0]!;
+    expect(a.outcome_basis).toBe("total_return");
+    const aEntry = BigInt(String(a.entry_micro));
+    const aCost = 100n * aEntry + feeFor(profile, 100n * aEntry, "buy");
+    const aSale = 100n * BigInt(String(a.exit_micro));
+    expect(BigInt(String(a.net_micro))).toBe(aSale - feeFor(profile, aSale, "sell") - aCost);
+  });
+
+  it("(c) a settled price_only row is unchanged by the deploy and cannot be switched", async () => {
+    const o = (await run("SELECT * FROM pick_outcome WHERE rank = 4")).rows[0]!;
+    expect(o).toMatchObject({
+      state: "closed",
+      net_micro: 95_000_000,
+      outcome_basis: "price_only",
+    });
+    await expect(
+      run("UPDATE pick_outcome SET outcome_basis = 'total_return' WHERE rank = 4"),
+    ).rejects.toThrow(/outcome_basis is fixed/);
+    await expect(run("UPDATE pick_outcome SET net_micro = 1 WHERE rank = 4")).rejects.toThrow(
+      /filled once/,
+    );
+    await expect(
+      run("UPDATE pick_outcome SET outcome_basis = 'other' WHERE rank = 1"),
+    ).rejects.toThrow(/outcome_basis/);
   });
 
   it("a re-run writes nothing new", async () => {

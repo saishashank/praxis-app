@@ -24,6 +24,26 @@ export const PRICE_ONLY_BASIS_LABEL = "Price only — dividends not included.";
 export const benchmarkLabel = (basis: BenchBasis): string =>
   basis === "total_return" ? TOTAL_RETURN_BASIS_LABEL : PRICE_ONLY_BASIS_LABEL;
 
+/**
+ * ARN-123 (D-956): the label of a pick's OWN result by its stored outcome basis. Rows settled before M18
+ * are price only and keep the D-143 wording; later rows credit dividends. A list that holds both says so
+ * in one plain sentence; an empty list keeps the old wording.
+ */
+export const OUTCOME_TOTAL_RETURN_LABEL = "Total return — dividends included.";
+export const OUTCOME_MIXED_LABEL =
+  "Older results are price only (dividends not included); newer results are total return (dividends included).";
+export type OutcomeBasisValue = "price_only" | "total_return";
+export function outcomeBasisLabel(bases: Iterable<OutcomeBasisValue>): string {
+  let tr = 0;
+  let po = 0;
+  for (const b of bases) {
+    if (b === "total_return") tr += 1;
+    else po += 1;
+  }
+  if (tr > 0 && po > 0) return OUTCOME_MIXED_LABEL;
+  return tr > 0 ? OUTCOME_TOTAL_RETURN_LABEL : PRICE_ONLY_BASIS_LABEL;
+}
+
 const ratio = (num: bigint, den: bigint): bigint => roundHalfAwayFromZero(makeRational(num, den));
 
 /**

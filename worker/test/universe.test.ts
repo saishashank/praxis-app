@@ -1,6 +1,7 @@
 // M2 T11 (D-067): the Worker's universe slot. Real SQLite via node:sqlite; no network anywhere (the
 // ASX URL and the app are answered by local fakes, and most tests assert they were never called).
 // Synthetic CSV text only (SEC-110).
+import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
@@ -416,9 +417,17 @@ describe("runUniverse: a live import", () => {
     expect(hh["X-Praxis-Nonce"]).toMatch(/^[0-9a-f]{32}$/);
     const expected = await hmacHex(
       SECRET,
-      `${hh["X-Praxis-Timestamp"]}.${hh["X-Praxis-Nonce"]}.${body}`,
+      [
+        "v2",
+        "POST",
+        "/api/internal/universe-import",
+        hh["X-Praxis-Timestamp"],
+        hh["X-Praxis-Nonce"],
+        createHash("sha256").update(body).digest("hex"),
+      ].join("\n"),
     );
     expect(hh["X-Praxis-Signature"]).toBe(expected);
+    expect(hh["X-Praxis-Version"]).toBe("2");
     expect(log()).toContain("universe: ok");
     expect(log()).toContain("universe: import accepted");
   });

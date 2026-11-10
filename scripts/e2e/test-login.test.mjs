@@ -1,7 +1,7 @@
 // Run: node --test scripts/e2e/test-login.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { testLogin } from "./test-login.mjs";
 
 const SECRET = "b".repeat(64);
@@ -23,9 +23,19 @@ test("signs the body, posts to the login route and returns the cookie pair", asy
   assert.equal(call.init.body, '{"email":"a@x.test"}');
   const h = call.init.headers;
   const mac = createHmac("sha256", SECRET)
-    .update(`${h["X-Praxis-Timestamp"]}.${h["X-Praxis-Nonce"]}.${call.init.body}`)
+    .update(
+      [
+        "v2",
+        "POST",
+        "/api/test-identity/login",
+        h["X-Praxis-Timestamp"],
+        h["X-Praxis-Nonce"],
+        createHash("sha256").update(call.init.body).digest("hex"),
+      ].join("\n"),
+    )
     .digest("hex");
   assert.equal(h["X-Praxis-Signature"], mac);
+  assert.equal(h["X-Praxis-Version"], "2");
   assert.match(h["X-Praxis-Nonce"], /^[0-9a-f]{32}$/);
 });
 

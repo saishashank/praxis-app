@@ -25,6 +25,8 @@ vi.mock("@/lib/db/client", () => ({ mainDb: () => null, authDb: () => null }));
 
 import * as morningRoute from "@/app/api/internal/morning/route";
 
+const SIGN_TARGET = { method: "POST", path: "/api/internal/morning" };
+
 afterEach(() => {
   cleanupTempDbs();
   vi.unstubAllEnvs();
@@ -71,7 +73,7 @@ const post = (b: string | object, headers?: Record<string, string>, nc = nonce()
   return new Request(URL_M, {
     method: "POST",
     body: raw,
-    headers: headers ?? (sign(SECRET, raw, NOW, nc) as Record<string, string>),
+    headers: headers ?? (sign(SECRET, raw, NOW, nc, SIGN_TARGET) as Record<string, string>),
   });
 };
 
@@ -129,9 +131,15 @@ describe("POST /api/internal/morning", () => {
   it("401 generic body: wrong secret, no headers, stale, tampered body, replay", async () => {
     const h = createMorningHandler(deps());
     const raw = JSON.stringify(body());
-    const wrong = sign("8".repeat(64), raw, NOW, "a".repeat(32)) as Record<string, string>;
-    const stale = sign(SECRET, raw, NOW - 301, "b".repeat(32)) as Record<string, string>;
-    const ok = sign(SECRET, raw, NOW, "e".repeat(32)) as Record<string, string>;
+    const wrong = sign("8".repeat(64), raw, NOW, "a".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const stale = sign(SECRET, raw, NOW - 301, "b".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const ok = sign(SECRET, raw, NOW, "e".repeat(32), SIGN_TARGET) as Record<string, string>;
     const once = "c".repeat(32);
     expect((await h(post(raw, undefined, once))).status).toBe(200);
     for (const req of [

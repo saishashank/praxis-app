@@ -1,6 +1,7 @@
 // M5 T10 (D-107): the Worker route runner. Real SQLite through the Turso fake; the app is answered by a
 // local fake, so nothing touches a network. Every route slot is disabled in the shipped table; the
 // tests enable copies of them.
+import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
@@ -294,7 +295,17 @@ describe("runRoutes", () => {
       slot: "evening-review",
     });
     expect(h["X-Praxis-Signature"]).toBe(
-      await hmacHex(SECRET, `${h["X-Praxis-Timestamp"]}.${h["X-Praxis-Nonce"]}.${body}`),
+      await hmacHex(
+        SECRET,
+        [
+          "v2",
+          "POST",
+          "/api/internal/evening-review",
+          h["X-Praxis-Timestamp"],
+          h["X-Praxis-Nonce"],
+          createHash("sha256").update(body).digest("hex"),
+        ].join("\n"),
+      ),
     );
     expect(JSON.stringify(logs())).not.toContain(SECRET);
     // a recurring slot keeps no slot state
