@@ -288,3 +288,95 @@ export function shortlistInputs(codes: readonly ShortlistCode[], o: ShortlistOpt
     } satisfies PickInput;
   });
 }
+
+export type ShortlistNote = { readonly note: string; readonly onShortlist: boolean };
+
+const PCT = 100; // threshold-ok: percent
+const pctOf = (x: number): string => `${String(Math.round(x * PCT))}%`;
+
+/**
+ * D-921: how close SL.v1 came at the close of d for the wanted codes, in plain words (pure; the daily
+ * learning loop shows it next to each big mover). Tier U3 shares are outside the rule's universe.
+ */
+export function shortlistNotes(
+  codes: readonly ShortlistCode[],
+  d: string,
+  wanted: readonly string[],
+): Map<string, ShortlistNote> {
+  const all = codes.map(series);
+  const liquid = all.filter((s) => s.tier !== "U3");
+  const rises = liquid
+    .map((s) => {
+      const i = s.index.get(d);
+      return i === undefined ? null : s.rise[i];
+    })
+    .filter((x): x is number => x != null)
+    .sort((a, b) => b - a);
+  const cut =
+    rises.length === 0 ? null : rises[Math.max(0, Math.ceil(rises.length * TOP_SHARE) - 1)]!;
+  const ranked = selectOn(liquid, d, liquid.length).map((x) => x.s.code);
+  const out = new Map<string, ShortlistNote>();
+  for (const code of wanted) {
+    const s = all.find((x) => x.code === code);
+    const i = s?.index.get(d);
+    if (s === undefined || i === undefined) {
+      out.set(code, {
+        note: "no price bar the evening before, so the shortlist rule could not run",
+        onShortlist: false,
+      });
+      continue;
+    }
+    if (s.tier === "U3") {
+      out.set(code, {
+        note: "outside the shortlist: a small share, below the large and mid-size universe",
+        onShortlist: false,
+      });
+      continue;
+    }
+    const c = s.close[i]!;
+    const [fa, mi, sl, atr, rise] = [s.smaF[i], s.smaM[i], s.smaS[i], s.atr[i], s.rise[i]];
+    if (fa == null || mi == null || sl == null || atr == null || rise == null) {
+      out.set(code, {
+        note: "missed the shortlist: not enough price history for the rule",
+        onShortlist: false,
+      });
+      continue;
+    }
+    const miss: string[] = [];
+    if (!(c > mi)) miss.push("closed below its 50-day average");
+    if (!(c > sl)) miss.push("closed below its 200-day average");
+    if (!(mi > sl)) miss.push("its 50-day average is not above its 200-day average");
+    if (!(c >= fa)) miss.push("closed below its 20-day average");
+    if (rise < MIN_RISE) {
+      miss.push(`rise only ${pctOf(rise)} over 3 months (needs ${pctOf(MIN_RISE)})`);
+    } else if (cut !== null && rise < cut) {
+      miss.push(
+        `rise of ${pctOf(rise)} over 3 months is outside the top fifth (needs ${pctOf(cut)})`,
+      );
+    }
+    const dist = (STOP_ATR * atr) / c;
+    if (dist < STOP_MIN)
+      miss.push(`the stop would be only ${pctOf(dist)} away (needs ${pctOf(STOP_MIN)})`);
+    if (dist > STOP_MAX)
+      miss.push(`the stop would be ${pctOf(dist)} away (limit ${pctOf(STOP_MAX)})`);
+    if (miss.length > 0) {
+      out.set(code, {
+        note: `missed the shortlist: ${miss.slice(0, 2).join("; ")}`,
+        onShortlist: false,
+      }); // threshold-ok: the two main misses
+      continue;
+    }
+    const pos = ranked.indexOf(code);
+    if (pos >= 0 && pos < TAKE_PER_DAY)
+      out.set(code, { note: `on the shortlist (rank ${pos + 1})`, onShortlist: true });
+    else
+      out.set(code, {
+        note:
+          pos >= 0
+            ? `met every shortlist condition but ranked ${pos + 1} (only the top ${TAKE_PER_DAY} are listed)`
+            : "met the shortlist conditions but no stop could be set",
+        onShortlist: false,
+      });
+  }
+  return out;
+}

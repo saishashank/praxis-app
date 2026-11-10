@@ -15,6 +15,8 @@ import { reviewKey } from "@/lib/agents/batch3";
 import { loadAgentParams } from "@/lib/agents/params";
 import { loadCalendar } from "@/lib/arena/closeBooks";
 import { marketDate } from "@/lib/data/calendar";
+import { runDailyLearning } from "@/lib/learning/daily";
+import { pickHooks } from "./dailyHooks";
 import { runPicksNight } from "./nightly";
 import { runPickPortfolio } from "./portfolioStore";
 
@@ -95,6 +97,23 @@ export async function picksMain(
     } catch (error) {
       out(
         `arena-portfolio ${MARKET} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
+      );
+    }
+    // D-921: the daily learning loop, after the picks and the portfolio; a failure never stops them
+    try {
+      const l = await runDailyLearning(db, {
+        market: MARKET,
+        d,
+        calendar: await loadCalendar(db, MARKET),
+        now: new Date(nowMs()).toISOString(),
+        hooks: pickHooks,
+      });
+      out(
+        `arena-learning ${MARKET} ${d}: movers=${l.movers} lessons=${l.lessons} improvements=${l.improvements} hypotheses=${l.hypotheses}`,
+      );
+    } catch (error) {
+      out(
+        `arena-learning ${MARKET} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
       );
     }
     return 0;
