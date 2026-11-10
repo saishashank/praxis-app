@@ -95,7 +95,7 @@ describe("Appearance page", () => {
     const fd = appearanceAction.mock.calls[0][0];
     expect(fd.get("theme")).toBe("midnight");
     expect(fd.get("motion")).toBe("off");
-    expect([...fd.keys()].sort()).toEqual(["motion", "theme"]);
+    expect([...fd.keys()].sort()).toEqual(["motion", "text_size", "theme"]);
     expect(await screen.findByRole("status")).toHaveTextContent("Saved.");
   });
 });
@@ -281,6 +281,6 @@ describe("Motion switch on the root element", () => {
 
   it("currentLook falls back to the defaults on any failure", async () => {
     getCurrentUser.mockRejectedValue(new Error("auth down"));
-    expect(await currentLook()).toEqual({ theme: "light", motion: "on" }); // D-884: default is light
+    expect(await currentLook()).toEqual({ theme: "light", motion: "on", text_size: "normal" }); // D-884: default is light
   });
 });

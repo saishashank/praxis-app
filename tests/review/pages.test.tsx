@@ -132,7 +132,7 @@ describe("/reviews/[date]", () => {
     async (role) => {
       as(role);
       const html = await page(D);
-      expect(html).toContain("Evening Review 2026-10-19");
+      expect(html).toContain("Evening Review, Mon 19 Oct");
       expect(html).not.toContain("<iframe");
       expect(html).not.toContain("srcdoc");
       expect(html).toContain("Stock A");
@@ -199,13 +199,13 @@ describe("/reviews/[date]", () => {
     as("owner");
     await markReviewReadAction(form({ d: D, via: "page" }));
     const html = await page(D);
-    expect(html).toContain("Read 20");
+    expect(html).toMatch(/Read [A-Z][a-z]{2} [0-9]+ [A-Z][a-z]{2}, [0-9]{2}:[0-9]{2}/);
     expect(html).toContain("Marked as read.");
   });
 
   it("says so when no review is stored, and 404s a malformed date", async () => {
     as("viewer");
-    expect(await page("2026-01-01")).toContain("No review is stored for 2026-01-01.");
+    expect(await page("2026-01-01")).toContain("No review is stored for Thu 1 Jan.");
     await expect(page("not-a-date")).rejects.toThrow();
   });
 });

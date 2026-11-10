@@ -32,6 +32,7 @@ describe("defaults and merge", () => {
       alert_p1: "immediate",
       alert_p2: "digest",
       motion: "on",
+      text_size: "normal",
       times_in: "melbourne",
       pick_alerts: "off",
       cleared_pick_emails: "on",
@@ -98,6 +99,7 @@ describe("updatePreferences", () => {
       alert_p1: "immediate",
       alert_p2: "digest",
       motion: "on",
+      text_size: "normal",
       times_in: "melbourne",
     });
     const audits = await auditRows(db);

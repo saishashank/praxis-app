@@ -246,7 +246,7 @@ describe("Alert inbox (UXN-157, UXN-160, UXN-161)", () => {
     as(w, "owner");
     render(await NewsPage({ searchParams: sp({ chip: "alerts" }) }));
     const inbox = screen.getByTestId("alert-inbox");
-    const p0 = within(inbox).getByRole("heading", { name: /Urgent \(P0\)/ });
+    const p0 = within(inbox).getByRole("heading", { name: /^Urgent/ });
     expect(p0.closest("details")).toBeNull();
     expect(p0.textContent).toContain("1 unread");
     const sections = inbox.querySelectorAll("section, details");
@@ -267,7 +267,7 @@ describe("Alert inbox (UXN-157, UXN-160, UXN-161)", () => {
   it("an empty P0 still shows its section", async () => {
     as(w, "owner");
     render(await NewsPage({ searchParams: sp({ chip: "alerts", tier: "P1" }) }));
-    expect(screen.getByRole("heading", { name: /Urgent \(P0\)/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^Urgent/ })).toBeInTheDocument();
     expect(screen.getByTestId("p0-empty")).toBeInTheDocument();
   });
 
@@ -479,7 +479,7 @@ describe("C9 redesign (UXR-025, UXR-045, UXR-052)", () => {
       );
       const pill = card.querySelector('[data-kind="tier"], [data-kind="status"]');
       expect(pill).not.toBeNull();
-      expect(pill!.textContent).toMatch(/P[012] (Urgent|Important|FYI)|Not important/);
+      expect(pill!.textContent).toMatch(/^(Urgent|Important|FYI)$|Not important/);
     }
     expect(container.querySelector("ul[aria-label='News'] details")).toBeNull();
   });
@@ -491,12 +491,33 @@ describe("C9 redesign (UXR-025, UXR-045, UXR-052)", () => {
     const items = screen.getAllByTestId("alert-item");
     for (const item of items) {
       const pill = item.querySelector('[data-kind="tier"]')!;
-      expect(pill.textContent).toMatch(/P[012] (Urgent|Important|FYI)/);
+      expect(pill.textContent).toMatch(/^(Urgent|Important|FYI)$/);
       expect(item.querySelector("[data-hue^='tier-']")).not.toBeNull();
     }
     const p0 = items.find((i) => i.textContent?.includes("Trading halt on"))!;
-    expect(p0.querySelector('[data-kind="tier"]')!.textContent).toBe("P0 Urgent");
+    expect(p0.querySelector('[data-kind="tier"]')!.textContent).toBe("Urgent");
     expect(p0.querySelector("[data-hue]")!.getAttribute("data-hue")).toBe("tier-p0");
     expect(within(p0).getByRole("button", { name: /^Acknowledge/ })).toBeVisible();
+  });
+});
+
+// Last on purpose: the paperwork row it adds is append-only and would change the counts above.
+describe("Important only by default, All announcements on request", () => {
+  it("hides paperwork by default and lists it with ?show=all (works without JS)", async () => {
+    await w.main.execute({
+      sql: `INSERT INTO announcement (market, code, ann_id, published_at, ingested_at, type, price_sensitive, title, url, source)
+            VALUES ('AU','ZZPAPER','p1',?,?,'CESSATION OF SECURITIES',0,'Cessation of securities','https://news.example.test/p.pdf','src')`,
+      args: [`${D}T01:00:00.000Z`, `${D}T01:01:00.000Z`],
+    });
+    as(w, "owner");
+    render(await NewsPage({ searchParams: sp() }));
+    expect(screen.queryByText("Cessation of securities")).toBeNull();
+    expect(screen.getByTestId("important-note")).toBeInTheDocument();
+    const all = screen.getByRole("link", { name: /^All announcements/ });
+    expect(all).toHaveAttribute("href", "/news?show=all");
+    cleanup();
+    render(await NewsPage({ searchParams: sp({ show: "all" }) }));
+    expect(screen.getByText("Cessation of securities")).toBeInTheDocument();
+    expect(screen.queryByTestId("important-note")).toBeNull();
   });
 });

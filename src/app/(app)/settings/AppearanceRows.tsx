@@ -23,6 +23,26 @@ export function ThemeRow({ current, action }: { current: string; action: Action 
   );
 }
 
+export function TextSizeRow({ current, action }: { current: string; action: Action }) {
+  const apply = (v: string) => setRootAttr("data-text-size", v === "large" ? "large" : null);
+  return (
+    <ChoiceRow
+      label="Text size"
+      field="text_size"
+      current={current}
+      href="/settings/appearance"
+      action={action}
+      description="Large makes text and controls about a quarter bigger on every page."
+      choices={[
+        { value: "normal", label: "Normal", note: "The standard size." },
+        { value: "large", label: "Large", note: "Bigger text and controls." },
+      ]}
+      onPreview={apply}
+      onSaved={apply}
+    />
+  );
+}
+
 export function MotionRow({ current, action }: { current: string; action: Action }) {
   const apply = (v: string) => setRootAttr("data-motion", v === "off" ? "off" : null);
   return (

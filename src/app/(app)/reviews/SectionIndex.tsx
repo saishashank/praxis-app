@@ -23,7 +23,7 @@ export const REVIEW_TONES: readonly SectionTone[] = [
   "picks", // 5 What worked better and why
   "news", // 6 What needs improving
   "home", // 7 Overall picture
-  "strategies", // 8 Sentinel recap
+  "strategies", // 8 Overnight checks
   "market", // 9 System & quota health
 ];
 
@@ -72,7 +72,7 @@ export function SectionIndex({ items }: { items: SectionItem[] }) {
             ) : (
               <span>{it.label}</span>
             )}
-            {it.missing ? <span className="text-text-muted">(not ready)</span> : null}
+            {it.missing ? <span className="text-text-muted">(not ready yet)</span> : null}
           </li>
         ))}
       </ol>

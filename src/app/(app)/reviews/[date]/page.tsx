@@ -14,7 +14,8 @@ import { notFound } from "next/navigation";
 import { Banner, EmptyState } from "@/components/ui/States";
 import { requireUser } from "@/lib/auth/guard";
 import { envFor, isDateParam } from "@/lib/ui/loaders/shell";
-import { isReviewRef, loadReviewPage } from "@/lib/ui/loaders/reviews";
+import { formatDay } from "@/lib/view/format";
+import { isReviewRef, loadReviewPage, plainSectionName } from "@/lib/ui/loaders/reviews";
 import type { MaskedReview } from "@/lib/view/reviews";
 import { REVIEW_SECTION_NAMES } from "@/lib/review/facts";
 import {
@@ -26,21 +27,6 @@ import {
 } from "../SectionIndex";
 import { MarkRead } from "./MarkRead";
 import { NewPicks } from "./NewPicks";
-
-/** D-200: a stored UTC timestamp reads as Melbourne time; an ISO week (masked) stays as it is. */
-const STAMP_RE = /^d{4}-d{2}-d{2}T/;
-const localTime = (v: string): string =>
-  STAMP_RE.test(v) && !Number.isNaN(Date.parse(v))
-    ? new Intl.DateTimeFormat("en-AU", {
-        timeZone: "Australia/Melbourne",
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        timeZoneName: "short",
-      }).format(new Date(v))
-    : v;
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +52,7 @@ export default async function ReviewDatePage({
     <main className="mx-auto flex w-full max-w-3xl min-w-0 flex-col gap-4 px-4 py-6">
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">
-          {model === null ? `Evening Review ${date}` : model.title}
+          {model === null ? `Evening Review, ${formatDay(date)}` : model.title}
         </h1>
         <Link href="/reviews" className="text-sm text-accent underline">
           All reviews
@@ -78,7 +64,7 @@ export default async function ReviewDatePage({
             compact
             motif="reviews"
             hue="reviews"
-            title={`No review is stored for ${date}.`}
+            title={`No review is stored for ${formatDay(date)}.`}
           />
         </div>
       ) : (
@@ -99,9 +85,8 @@ export default async function ReviewDatePage({
             </li>
           </ul>
           <p className="m-0 text-sm text-text-muted">
-            Version {model.version} ({model.kindText.toLowerCase()}), stored{" "}
-            {localTime(model.createdAt)}.{" "}
-            {model.read ? `Read ${localTime(model.read.readAt)}.` : "Not marked as read yet."}
+            Version {model.version} ({model.kindText.toLowerCase()}), stored {model.createdAt}.{" "}
+            {model.read ? `Read ${model.read.readAt}.` : "Not marked as read yet."}
           </p>
           {model.kind === "partial" ? (
             <Banner tone="warning" title="Partial review">
@@ -131,12 +116,25 @@ export default async function ReviewDatePage({
           )}
           {model.html !== null ? (
             <iframe
-              title={`Evening Review ${model.d}`}
+              title={model.title}
               sandbox=""
               srcDoc={model.html}
               className="h-[80vh] w-full rounded border border-border bg-white"
             />
-          ) : model.maskedView === null ? (
+          ) : null}
+          {model.html !== null && model.text ? (
+            <details
+              open={model.kind === "partial"}
+              data-testid="review-text"
+              className="rounded border border-border bg-surface p-3"
+            >
+              <summary className="cursor-pointer text-sm font-semibold">Read as plain text</summary>
+              <pre className="m-0 mt-2 overflow-x-auto text-sm break-words whitespace-pre-wrap">
+                {model.text}
+              </pre>
+            </details>
+          ) : null}
+          {model.html !== null ? null : model.maskedView === null ? (
             <p role="status">This review cannot be shown at your access level.</p>
           ) : (
             <MaskedBody view={model.maskedView} />
@@ -172,7 +170,7 @@ function indexOf(model: NonNullable<Awaited<ReturnType<typeof loadReviewPage>>>)
   if (model.html === null) return [];
   const missing = new Set(model.missing.map((m) => m.n));
   return REVIEW_SECTION_NAMES.slice(0, REVIEW_TONES.length).map((label, i) => ({
-    label,
+    label: plainSectionName(label),
     tone: REVIEW_TONES[i]!,
     missing: missing.has(i + 1),
   }));

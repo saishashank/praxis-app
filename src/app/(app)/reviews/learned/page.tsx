@@ -19,12 +19,12 @@ import {
   loadLedger,
   loadLessonCards,
 } from "@/lib/ui/loaders/knowledgeViews";
-import { familyBadge } from "../../home/familyMap";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
 import { Banner, EmptyState, ShowDetails } from "@/components/ui/States";
 import { Notes } from "./Notes";
+import { documentTitle, familyName, plainPlanItem } from "./plain";
 import {
   ChallengerLine,
   familyHref,
@@ -116,7 +116,7 @@ export default async function LearnedPage({ searchParams }: { searchParams: Prom
               <option value="">All</option>
               {FAMILIES.map((f) => (
                 <option key={f} value={f}>
-                  {familyBadge(f).label}
+                  {familyName(f)}
                 </option>
               ))}
             </select>
@@ -163,7 +163,7 @@ export default async function LearnedPage({ searchParams }: { searchParams: Prom
                   className="min-w-0 rounded-lg border border-border bg-bg p-3 text-sm break-words"
                 >
                   <Link href={familyHref(f.family)} className="font-semibold text-accent underline">
-                    Family {f.family}
+                    {familyName(f.family)}
                   </Link>
                   <p className="m-0 mt-1">
                     {f.liveId === null ? "No live version yet" : `Live version ${f.liveId}`}
@@ -280,10 +280,9 @@ export default async function LearnedPage({ searchParams }: { searchParams: Prom
                   {model.plan.items.map((i) => (
                     <li key={i.rank} className="min-w-0 break-words">
                       <span className="font-medium">
-                        {i.rank}. {i.kind.replace(/_/g, " ")}
+                        {i.rank}. {plainPlanItem(i.kind, i.reason).heading}
                       </span>
-                      : {i.reason.replace(/^no-lesson:/, "")}{" "}
-                      <span className="text-text-muted">(lane {i.lane})</span>
+                      : {plainPlanItem(i.kind, i.reason).text}
                     </li>
                   ))}
                 </ol>
@@ -312,7 +311,10 @@ export default async function LearnedPage({ searchParams }: { searchParams: Prom
                 {model.documents.map((d) => {
                   const title = (d.front as { title?: unknown } | null)?.title;
                   const href = model.masked ? null : documentHref(d.path);
-                  const label = typeof title === "string" && title !== "" ? title : "Untitled";
+                  const label =
+                    typeof title === "string" && title !== ""
+                      ? title
+                      : documentTitle(d.doc_type, d.d, model.masked);
                   return (
                     <li key={`${d.path}@${d.version}`} className="min-w-0 break-words">
                       {href ? (
@@ -323,8 +325,7 @@ export default async function LearnedPage({ searchParams }: { searchParams: Prom
                         label
                       )}{" "}
                       <span className="text-text-muted">
-                        ({d.doc_type.replace(/_/g, " ")}, version {d.version},{" "}
-                        {dayText(d.d, model.masked)})
+                        {d.version > 1 ? `(version ${d.version})` : null}
                       </span>
                     </li>
                   );

@@ -33,6 +33,8 @@ export const TIME_FORMATS = ["24h", "12h"] as const;
 export const ALERT_DELIVERY = ["immediate", "digest"] as const;
 // UXN-281 "Motion" switch; UXN-282 "whether times show in Melbourne or exchange-local time".
 export const MOTIONS = ["on", "off"] as const;
+// Usability pass 2026-11-10: "Text size" (Appearance); "large" scales every rem-based size by 125 %.
+export const TEXT_SIZES = ["normal", "large"] as const;
 export const TIME_ZONES = ["melbourne", "exchange"] as const;
 // M17 (D-444): pick alerts and their e-mails (ARN-112, EML-038..040); the pick order (UXN-309).
 export const ON_OFF = ["on", "off"] as const;
@@ -44,6 +46,7 @@ export type Theme = (typeof THEMES)[number];
 export type TimeFormat = (typeof TIME_FORMATS)[number];
 export type AlertDelivery = (typeof ALERT_DELIVERY)[number];
 export type Motion = (typeof MOTIONS)[number];
+export type TextSize = (typeof TEXT_SIZES)[number];
 export type TimeZoneChoice = (typeof TIME_ZONES)[number];
 export type OnOff = (typeof ON_OFF)[number];
 export type PickSort = (typeof PICK_SORTS)[number];
@@ -55,6 +58,7 @@ export type Preferences = {
   alert_p1: AlertDelivery;
   alert_p2: AlertDelivery;
   motion: Motion;
+  text_size: TextSize;
   times_in: TimeZoneChoice;
   /**
    * Pick alerts (ARN-112). The role-blind default is "off"; the Owner's effective default is "on"
@@ -85,6 +89,7 @@ export const DEFAULT_PREFERENCES: Readonly<Preferences> = Object.freeze({
   alert_p1: "immediate",
   alert_p2: "digest",
   motion: "on",
+  text_size: "normal",
   times_in: "melbourne",
   pick_alerts: "off",
   cleared_pick_emails: "on",
@@ -99,6 +104,7 @@ const ALLOWED: { [K in keyof Preferences]: readonly string[] } = {
   alert_p1: ALERT_DELIVERY,
   alert_p2: ALERT_DELIVERY,
   motion: MOTIONS,
+  text_size: TEXT_SIZES,
   times_in: TIME_ZONES,
   pick_alerts: ON_OFF,
   cleared_pick_emails: ON_OFF,

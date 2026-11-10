@@ -76,6 +76,38 @@ const EXTRA: GlossaryEntry[] = [
     group: "Honesty",
   },
   {
+    id: "loss-limit",
+    term: "Loss limit",
+    official: "Stop-loss level / drawdown limit",
+    meaning:
+      "The most a practice trade or strategy may lose before it is closed. When the price falls to this level the practice position is sold automatically, so one bad result cannot grow.",
+    group: "Words used in the app",
+  },
+  {
+    id: "delayed-price",
+    term: "Delayed price",
+    official: null,
+    meaning:
+      "A share price shown about 20 minutes after it happened, because live prices are not free. It is fine for judging a day, not for catching the exact moment.",
+    group: "Words used in the app",
+  },
+  {
+    id: "pick",
+    term: "Pick",
+    official: "Trade idea",
+    meaning:
+      "A share the system suggests studying for a practice trade, with a price to buy up to, a loss limit and a goal. A pick is an idea to test with pretend money, not advice to buy.",
+    group: "Words used in the app",
+  },
+  {
+    id: "practice-strategy",
+    term: "Practice strategy",
+    official: "Strategy",
+    meaning:
+      "A fixed set of rules that makes pretend trades on its own, such as buying breakouts or bounces. Each one keeps its own pretend money so you can compare how the rules do over time.",
+    group: "Words used in the app",
+  },
+  {
     id: "cif",
     term: "Chance over time (CIF)",
     official: "CIF (cumulative incidence function)",
