@@ -175,7 +175,7 @@ export function QuietRow({
       value={on ? `${start}–${end}` : "Off"}
       href={href}
       title="Quiet hours"
-      description="Melbourne time. Important (P1) and for-information (P2) alerts stay out of the bell count in this window; they are still listed in the inbox. Urgent (P0) alerts are always delivered."
+      description="Melbourne time. Important and FYI alerts stay out of the bell count in this window; they are still listed in the inbox. Urgent alerts are always delivered."
       action={action}
     >
       <div className="flex flex-wrap gap-4">
@@ -331,7 +331,10 @@ export function SettingsRoot({ children }: { children: ReactNode }) {
 }
 
 /** Apply a theme or motion preview/saved value to the root element (the layout does it on reload). */
-export function setRootAttr(name: "data-theme" | "data-motion", value: string | null): void {
+export function setRootAttr(
+  name: "data-theme" | "data-motion" | "data-text-size",
+  value: string | null,
+): void {
   const root = document.documentElement;
   if (value === null) root.removeAttribute(name);
   else root.setAttribute(name, value);

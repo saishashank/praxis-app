@@ -45,7 +45,7 @@ export function profileSentence(rules: ProfileRules | null): string {
     words.length > 1
       ? `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`
       : words.join("");
-  return `Picks from ${sizes} companies. No more than ${rules.maxPct}% of the portfolio goes into one company, and no more than ${rules.riskPct}% of it is at risk on one pick.`;
+  return `Picks from ${sizes} companies. No more than ${rules.maxPct}% of the portfolio goes into one company, and you would lose at most about ${rules.riskPct}% of the portfolio if a pick hits its stop-loss.`;
 }
 
 /** At most `max` picks per family, in the loader's order (rank). */
@@ -128,7 +128,7 @@ export { FAMILY_BADGE as FAMILY_BADGES } from "@/lib/ui/familyBadge";
 
 /** UXR-007: one sentence on what will appear and when. */
 export const EMPTY_PICKS_SENTENCE =
-  "Picks for this profile appear here once an evening run finds enough evidence.";
+  "Picks for this profile appear here after the evening run at about 18:10 on trading days, once it finds enough evidence.";
 export const EMPTY_TRACK_SENTENCE =
   "Picks appear here after they are published and followed on paper.";
 
@@ -141,6 +141,12 @@ export const INTRADAY_EXPLAINER =
 export const INTRADAY_UNRATED = "Unrated - no history yet";
 export const INTRADAY_UNVALIDATED =
   "Unvalidated: this stream has not been tested against past results.";
+export const INTRADAY_NO_LEVELS =
+  "Not rated or tested, so no buy limit or stop-loss is suggested for this stock.";
+export const HISTORY_PURPOSE = "History: every pick and what happened to the trade.";
+export const TRACK_PURPOSE =
+  "Track record: how good the picks are overall, against their ranges and the market.";
+export const PORTFOLIO_PROFILE_NOTE = "This practice portfolio follows the Balanced picks.";
 export const NO_HISTORY = "Not enough history yet";
 
 /** NFR-041: the delay statement in help text. */

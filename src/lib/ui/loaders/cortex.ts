@@ -27,7 +27,7 @@ import {
 } from "@/lib/cortex/store";
 import { tickCostRow, LIQUIDITY_TIERS } from "@/lib/cortex/economics/cost";
 import { FAMILY_WORD, CLUSTER_WORD } from "@/lib/cortex/phrases";
-import { isoWeek, MISSING } from "@/lib/view/format";
+import { formatDay, formatInstant, isoWeek, MISSING } from "@/lib/view/format";
 import {
   loaded,
   money,
@@ -35,6 +35,7 @@ import {
   openViewer,
   soft,
   str,
+  strategyNames,
   type Loaded,
   type LoaderDeps,
   type Money,
@@ -49,8 +50,9 @@ export const SHADOW_ONLY_TEXT =
 const WINDOW_DAYS = 60; // threshold-ok: look-back of the abstain and comparator figures
 const MAX_PASSPORTS = 80; // threshold-ok: passport rows listed
 const MAX_NIGHTS = 400; // threshold-ok: nights read for the cold-start count
-const DEFAULT_FWER = 0.05; // threshold-ok: registry default of val_fwer_per_lineage (O-43)
-const DEFAULT_LESSON_POOL = 0.1; // threshold-ok: registry default of l2_alpha_w0 (VAL-116)
+const DEFAULT_FWER = 0.05; // threshold-ok: registry default of val_fwer_per_lineage
+const DEFAULT_LESSON_POOL = 0.1; // threshold-ok: registry default of l2_alpha_w0
+const PERCENT = 100; // threshold-ok: percent
 const DEFAULT_FDR_Q = 0.1; // threshold-ok: registry default of ledger_fdr_q
 const PPM = 1_000_000; // threshold-ok: parts per million
 const MS_DAY = 86_400_000; // threshold-ok: milliseconds per day
@@ -100,7 +102,7 @@ export type PassportView = {
   horizonSessions: number;
 };
 export type FamilyView = {
-  /** "F1 trend breakout" for the Owner, "Strategy 1" for a masked viewer. */
+  /** The strategy name for the Owner ("Follow the trend"), "Strategy 1" for a masked viewer. */
   name: string;
   status: FamilyStatusWord;
   sinceD: string;
@@ -135,7 +137,7 @@ export type CortexView = {
     level: number;
     luckExpected: number;
     luckText: string;
-    /** V2-I10 / D-795: the two separate error levels, in words (strategies 0.05, lessons 0.1 pool). */
+    /** The two separate error limits, in plain words (strategies 5%, lessons a 0.1 pool). */
     errorLevelsText: string;
   };
   families: FamilyView[];
@@ -208,8 +210,13 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
   // A masked viewer sees ISO weeks, never an exact date (UX-009, D-175).
   const weekOf = (d: string): string => `week ${isoWeek(d.slice(0, 10)) ?? MISSING}`;
   const stampOf = (iso: string | null): string | null =>
-    masked && iso !== null ? weekOf(iso) : melbourneStamp(iso);
-  const asOfIso = lastD === null ? null : `${lastD}T00:00:00Z`;
+    masked && iso !== null
+      ? weekOf(iso)
+      : iso === null
+        ? null
+        : formatInstant(iso) === MISSING
+          ? null
+          : formatInstant(iso);
   const since = lastD === null ? "0000-00-00" : dayMinus(lastD, WINDOW_DAYS);
 
   const maps = await soft(() => latestMaps(db, market), []);
@@ -257,12 +264,12 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
       ? NOT_MEASURED
       : `Of ${tried} ideas tried, about ${luckExpected} would look good by luck alone.`;
 
-  // V2-I10 (D-795): two separate error levels, each named exactly (O-43 for lineages, VAL-116 for lessons)
+  // two separate error limits, each named plainly
   const fwer =
     fin(await soft(() => getConfig(db, "val_fwer_per_lineage"), DEFAULT_FWER)) ?? DEFAULT_FWER;
   const lessonPool =
     fin(await soft(() => getConfig(db, "l2_alpha_w0"), DEFAULT_LESSON_POOL)) ?? DEFAULT_LESSON_POOL;
-  const errorLevelsText = `Two separate error levels apply. Each Cortex strategy is held to a family-wise level of ${fwer} across all the tests of that strategy (Owner decision O-43). Lessons are tested from their own pool, which starts at ${lessonPool} (VAL-116); that is a different pool, not the same level.`;
+  const errorLevelsText = `Two separate limits on lucky false wins apply. Each Cortex strategy may have at most a ${Math.round(fwer * PERCENT)}% chance of a false win across all the tests of that strategy. Lessons are tested from their own pool, which starts at ${lessonPool}; that is a different pool, not the same limit.`;
 
   // family status, numbers and MDEs
   const status = await soft(
@@ -282,13 +289,16 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
     [],
   );
   const byFamily = new Map(rows.map((r) => [str(r.family), r]));
+  const stratNames = await strategyNames(db);
   const families: FamilyView[] = [];
   for (const [i, f] of CORTEX_FAMILIES.entries()) {
     const r = byFamily.get(f);
     const ev = r ? obj(safeParse(r.evidence_json)) : null;
     const st = await soft(() => latestStatement(db, market, f), null);
     families.push({
-      name: masked ? `Strategy ${i + 1}` : `${f} ${FAMILY_WORD[f] ?? ""}`.trim(),
+      name: masked
+        ? `Strategy ${i + 1}`
+        : (stratNames[f]?.name ?? sentenceCase(FAMILY_WORD[f] ?? f)),
       status: status?.[f] ?? "shadow",
       sinceD: r ? str(r.since_d) : "",
       setBy: r ? str(r.set_by) : "import",
@@ -417,7 +427,7 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
     masked,
     liveBooksLabel: LIVE_BOOKS_LABEL,
     asOf: lastD,
-    asOfMelbourne: stampOf(asOfIso),
+    asOfMelbourne: lastD === null ? null : masked ? weekOf(lastD) : formatDay(lastD),
     mapsLoaded,
     shadowOnly: mapsLoaded === 0,
     shadowOnlyText: SHADOW_ONLY_TEXT,
@@ -450,6 +460,8 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
   }
   return page;
 }
+
+const sentenceCase = (w: string): string => w.charAt(0).toUpperCase() + w.slice(1);
 
 function safeParse(s: unknown): unknown {
   try {

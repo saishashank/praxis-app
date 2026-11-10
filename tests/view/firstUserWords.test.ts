@@ -21,7 +21,7 @@ describe("news short text (D-200)", () => {
 describe("picks rule sentence (D-200)", () => {
   it("joins the sizes with 'and' and spells out the caps", () => {
     expect(profileSentence({ tiers: ["U1", "U2"], maxPct: 10, riskPct: 1 })).toBe(
-      "Picks from large and mid-size companies. No more than 10% of the portfolio goes into one company, and no more than 1% of it is at risk on one pick.",
+      "Picks from large and mid-size companies. No more than 10% of the portfolio goes into one company, and you would lose at most about 1% of the portfolio if a pick hits its stop-loss.",
     );
     expect(profileSentence({ tiers: ["U1", "U2", "U3"], maxPct: 20, riskPct: 2 })).toMatch(
       /^Picks from large, mid-size and small companies\./,

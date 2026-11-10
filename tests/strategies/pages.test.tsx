@@ -139,8 +139,13 @@ describe("the list", () => {
     expect(cur.textContent).toContain("Overview");
     expect(cur.textContent).toContain("Selected");
     expect(cur.querySelector("svg")).not.toBeNull();
-    for (const n of ["Leaderboard", "All signals", "Risk", "What-if"]) {
-      expect(within(nav).getByRole("link", { name: n })).toBeInTheDocument();
+    for (const n of ["Overview", "Risk"]) {
+      expect(within(nav).getByRole("link", { name: new RegExp(n) })).toBeInTheDocument();
+    }
+    // the research pages sit in their own, smaller row
+    const research = screen.getByRole("navigation", { name: "Research pages" });
+    for (const n of ["Leaderboard", "All signals", "Movers check", "What-if", "Cortex"]) {
+      expect(within(research).getByRole("link", { name: n })).toBeInTheDocument();
     }
   });
 
@@ -267,11 +272,33 @@ describe("one strategy", () => {
     expect(screen.getByText("Pulling it down")).toBeInTheDocument();
   });
 
+  it("says things in plain words: day row, bar labels, mood word, cost profile, one research disclosure", async () => {
+    await one("E01");
+    const text = document.body.textContent ?? "";
+    // the bar names its ends
+    expect(text).toMatch(/Loss limit A\$300\.00/);
+    expect(text).toMatch(/Goal A\$1,200\.00/);
+    // one word for the market mood, no official code beside it
+    expect(text).not.toMatch(/Market mood\s*\S+\s*(NEUTRAL|RISK-ON|RISK-OFF|SHOCK)/);
+    // no internal cost-profile code, no raw ISO date in the open positions
+    expect(text).not.toMatch(/Cost profile: P\d/);
+    const open = screen.getByRole("heading", { name: "Open positions" }).closest("section")!;
+    expect(open.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    // the empty research sections sit in one closed disclosure
+    const details = document.querySelector("[data-research-details]")!.closest("details")!;
+    expect(details).not.toBeNull();
+    expect(details.open).toBe(false);
+    expect(details.querySelector("summary")?.textContent).toBe(
+      "Research details (fills in as rounds finish)",
+    );
+    expect(details.textContent).toContain("Robustness");
+  });
+
   it("shows the round line, the chart, the drawdown and the controls toggle", async () => {
     await one("E01");
     expect(screen.getByRole("heading", { level: 1, name: "Follow the trend" })).toBeInTheDocument();
     expect(
-      screen.getByText(/Round 1 · started Mon 12 Oct 2026 · 3 sessions held/),
+      screen.getByText(/Round 1 · started Mon 12 Oct( 2026)? · 3 sessions held/),
     ).toBeInTheDocument();
     expect(screen.getByTestId("nav-chart")).toBeInTheDocument();
     expect(
@@ -287,13 +314,13 @@ describe("one strategy", () => {
     await one("E01");
     const chart = screen.getByTestId("nav-chart");
     const readout = () => document.querySelector("[aria-live=polite]")!.textContent!;
-    expect(readout()).toContain("2026-10-19: A$630.00");
-    expect(readout()).toContain("market mood Mixed (NEUTRAL)");
+    expect(readout()).toContain("Mon 19 Oct: A$630.00");
+    expect(readout()).toContain("market mood Mixed");
     expect(readout()).toContain("+A$20.00 on the day");
     fireEvent.keyDown(chart, { key: "ArrowLeft" });
-    expect(readout()).toContain("2026-10-16: A$610.00");
+    expect(readout()).toContain("Fri 16 Oct: A$610.00");
     fireEvent.keyDown(chart, { key: "Home" });
-    expect(readout()).toContain("2026-10-15: A$600.00");
+    expect(readout()).toContain("Thu 15 Oct: A$600.00");
     expect(readout()).not.toContain("on the day");
   });
 
@@ -388,7 +415,7 @@ describe("one strategy", () => {
     const rounds = screen.getByRole("heading", { name: "Past rounds" }).closest("section")!;
     expect(within(rounds).getAllByText(/Round [12]/).length).toBeGreaterThanOrEqual(2);
     expect(
-      within(rounds).getAllByText(/Hit the loss limit, Sun 20 Sep 2026/).length,
+      within(rounds).getAllByText(/Hit the loss limit, Sun 20 Sep( 2026)?/).length,
     ).toBeGreaterThan(0);
     // D-191: the L twin (E04) runs nothing and is listed nowhere; its own page still explains the
     // hypothetical sleeve
@@ -546,7 +573,7 @@ describe("the leaderboard", () => {
       "Rounds",
       "Chance of ending (12 months)",
       "Value change vs start",
-      "Zero-edge benchmark",
+      "No-skill comparison",
       "Costs",
       "Largest drop",
       "Recent trend",
@@ -561,7 +588,7 @@ describe("the leaderboard", () => {
       .find((c) => c.textContent === "Follow the trend")!
       .closest("tr")!;
     expect(within(row).getByText(/Goal 12\.0% \(2\.0% to 50\.0%\)/)).toBeInTheDocument();
-    expect(within(row).getByText(/Minus matched control C2: \+A\$10\.00/)).toBeInTheDocument();
+    expect(within(row).getByText(/Minus its random-pick twin: \+A\$10\.00/)).toBeInTheDocument();
     expect(within(row).getByText("Goal 3.0%")).toBeInTheDocument();
     expect(within(row).getByText("UNVALIDATED")).toBeInTheDocument();
     expect(within(row).getByText(/Separate rounds/)).toBeInTheDocument();
@@ -570,7 +597,7 @@ describe("the leaderboard", () => {
   it("lists the controls and renders a card list for phones", async () => {
     const { container } = await board();
     const ctl = screen.getByRole("heading", { name: "Controls" }).closest("section")!;
-    expect(within(ctl).getAllByText(/Control C2/).length).toBeGreaterThan(0);
+    expect(within(ctl).getAllByText(/Random-pick twin of/).length).toBeGreaterThan(0);
     // Below 600 px the DataTable shows this list instead of the table (UXN-017).
     const cards = container.querySelectorAll("ul.sm\\:hidden");
     expect(cards.length).toBeGreaterThanOrEqual(2);
@@ -579,9 +606,12 @@ describe("the leaderboard", () => {
 
   it("toggles the cost profile from stored re-cost rows", async () => {
     await board({ cost: "P3" });
-    expect(screen.getAllByText("Value under cost profile P3").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Value with high flat-fee broker fees").length).toBeGreaterThan(0);
     expect(screen.getAllByText("A$628.00").length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: /^P3/ })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: /^High flat-fee broker/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
     expect(screen.getByRole("link", { name: "As traded" })).toHaveAttribute(
       "href",
       "/strategies/leaderboard",
@@ -636,6 +666,30 @@ describe("evidence not stored yet", () => {
     expect(section.querySelector("table")!.querySelectorAll(":scope > tbody > tr").length).toBe(2);
     expect(within(section).getAllByText("Not measured yet").length).toBeGreaterThan(4);
   });
+
+  it("while no round has finished, each strategy gets one honest line and a trend, not a row of empty figures", async () => {
+    const bare = await strategiesWorld();
+    bare.main.execute = ((orig) => async (q: unknown) => {
+      const sql = typeof q === "string" ? q : (q as { sql: string }).sql;
+      if (/FROM replay_stat WHERE run_id LIKE/.test(sql))
+        return { rows: [], columns: [], rowsAffected: 0 };
+      const r = await orig(q as never);
+      if (/c.terminal_kind AS tk/.test(sql))
+        return { ...r, rows: r.rows.map((x) => ({ ...x, tk: null })) } as typeof r;
+      return r;
+    })(bare.main.execute.bind(bare.main)) as typeof bare.main.execute;
+    dbs.main = bare.main;
+    await board();
+    const section = screen
+      .getByRole("heading", { name: "Not enough evidence yet" })
+      .closest("section")!;
+    expect(
+      within(section).getAllByText(
+        /rounds? running, none finished: ranking starts after 3 finished rounds/,
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(within(section).queryByText(/Goal d/)).toBeNull();
+  });
 });
 
 describe("movers check page (D-886)", () => {
@@ -643,7 +697,7 @@ describe("movers check page (D-886)", () => {
     render(await MoversCheckPage());
     expect(screen.getByRole("heading", { level: 1, name: "Movers check" })).toBeInTheDocument();
     expect(
-      within(screen.getByRole("navigation", { name: "Strategy pages" })).getByRole("link", {
+      within(screen.getByRole("navigation", { name: "Research pages" })).getByRole("link", {
         name: /Movers check/,
       }),
     ).toHaveAttribute("aria-current", "page");

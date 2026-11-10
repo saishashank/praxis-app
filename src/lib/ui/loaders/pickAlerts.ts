@@ -5,7 +5,7 @@
 // and times, never a price, a limit or a headline.
 import { getConfig } from "@/lib/config/store";
 import type { ConfigKey } from "@/lib/config/keys";
-import { formatDate, isoWeek, MISSING } from "@/lib/view/format";
+import { formatDay, isoWeek, MISSING } from "@/lib/view/format";
 import type { AlertStateName, ClearReason } from "@/lib/alerts/pick/types";
 import { maskKit, marketOf, money, todayD, type LoaderEnv, type MoneyView } from "./shell";
 
@@ -122,6 +122,8 @@ export type IntradayRow = {
   materiality: number;
   /** Move so far, ppm of the previous close (a derived figure, shown to every role). */
   movePpm: number;
+  /** False for every candidate today: the stream has no history, so no limit or stop is shown. */
+  rated: boolean;
   /** Indicative limit / stop; null for a masked user or when none was computed. */
   limit: MoneyView | null;
   stop: MoneyView | null;
@@ -239,6 +241,7 @@ export async function loadIntraday(env: LoaderEnv): Promise<IntradayModel> {
         catalyst: title ? `${words}: ${title}` : words,
         materiality: num(x.materiality),
         movePpm: num(x.move_ppm),
+        rated: false,
         limit:
           masked || x.indicative_limit_micro === null ? null : money(str(x.indicative_limit_micro)),
         stop:
@@ -482,7 +485,7 @@ export async function loadMyAlerts(env: LoaderEnv): Promise<MyAlertsModel> {
         stock: kit ? kit.aliases.label(code) : code,
         profile: str(x.profile),
         rank: num(x.rank),
-        pickDate: masked ? (isoWeek(str(x.pick_d)) ?? MISSING) : formatDate(str(x.pick_d)),
+        pickDate: masked ? (isoWeek(str(x.pick_d)) ?? MISSING) : formatDay(str(x.pick_d)),
         state: chip.state,
         reason: chip.reason,
         limit: chip.limit,

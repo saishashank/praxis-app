@@ -17,7 +17,7 @@ import {
 } from "@/lib/ui/loaders/strategyViews";
 import { loadRobustness } from "@/lib/ui/loaders/robustness";
 import { CifTable, type CifRow } from "@/components/charts/Cif";
-import { RegimeBadge, ValidationBadge } from "@/components/ui/Badges";
+import { ValidationBadge } from "@/components/ui/Badges";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DataTable, type Column } from "@/components/ui/DataTable";
@@ -26,10 +26,11 @@ import { Term } from "@/components/ui/Overlays";
 import { Banner, EmptyState, ShowDetails } from "@/components/ui/States";
 import { Pill } from "@/components/ui/Pill";
 import { GainLoss, Money, NotMeasured, SimulatedLabel } from "@/components/ui/Values";
-import { formatDate, formatMicro, formatPpm, gainLossGlyph } from "@/lib/view/format";
+import { formatMicro, formatPpm, gainLossGlyph } from "@/lib/view/format";
 import { NavBar } from "../NavBar";
 import { OutcomeBars } from "../OutcomeBars";
 import { StrategyTabs } from "../StrategyTabs";
+import { costProfileText, dayText, MoodBadge } from "../plain";
 import { tileState } from "../state";
 import { RevertVersion } from "./RevertVersion";
 import { Robustness } from "./Robustness";
@@ -164,8 +165,8 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
     stock: t.stock,
     entryDate: t.entryDate,
     exitDate: t.exitDate,
-    entryDay: t.entryDay,
-    exitDay: t.exitDay,
+    entryDay: t.entryDay === null ? null : dayText(t.entryDay),
+    exitDay: t.exitDay === null ? null : dayText(t.exitDay),
     qty: t.qty,
     open: t.open,
     returnText:
@@ -219,13 +220,13 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
 
   const roundCols: Column<PastRound>[] = [
     { key: "round", header: "Round", cell: (r) => `Round ${r.round}` },
-    { key: "started", header: "Started", cell: (r) => formatDate(r.startD) },
+    { key: "started", header: "Started", cell: (r) => dayText(r.startD) },
     {
       key: "ended",
       header: "How it ended",
       cell: (r) =>
         r.terminalKind
-          ? `${ENDED[r.terminalKind] ?? r.terminalKind}, ${formatDate(r.terminalD)}`
+          ? `${ENDED[r.terminalKind] ?? r.terminalKind}, ${dayText(r.terminalD)}`
           : "In progress",
     },
     {
@@ -246,7 +247,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
 
   const versionCols: Column<VersionRow>[] = [
     { key: "version", header: "Version", cell: (v) => <span className="font-mono">{v.id}</span> },
-    { key: "date", header: "Date", cell: (v) => formatDate(v.registeredD) },
+    { key: "date", header: "Date", cell: (v) => dayText(v.registeredD) },
     {
       key: "action",
       header: "What happened",
@@ -276,6 +277,101 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
         ) : null,
     },
   ];
+
+  const matchedCard = (
+    <Card title="Compared with matched controls" headingLevel={2}>
+      {ev ? (
+        <div className="flex min-w-0 flex-col gap-3">
+          <p className="m-0 text-sm text-text-muted">
+            Based on {ev.effectiveN ?? 0} separate finished rounds (
+            <Term
+              meaning="Effective N is the number of finished rounds that do not overlap in time. Overlapping rounds are counted once, so the ranges are not too narrow."
+              official="Effective N"
+            >
+              effective N
+            </Term>
+            ). Chances are shares of those rounds, with 90% ranges.
+          </p>
+          <KpiRow label="Strategy against its matched control">
+            <KpiTile
+              label="Chance of reaching the goal in 12 months"
+              value={last12 ? `${(last12.target.p * 100).toFixed(1)}%` : null}
+              note={
+                last12?.target.lo !== undefined
+                  ? `90% range ${(last12.target.lo * 100).toFixed(1)}% to ${(last12.target.hi! * 100).toFixed(1)}%`
+                  : undefined
+              }
+            />
+            <KpiTile
+              label="Chance vs matched control C2"
+              value={
+                ev.cifTargetMinusC2 === null
+                  ? null
+                  : `${ev.cifTargetMinusC2 >= 0 ? "+" : "-"}${(Math.abs(ev.cifTargetMinusC2) * 100).toFixed(1)} points`
+              }
+            />
+            <KpiTile
+              label="Average value change vs start"
+              value={
+                ev.navMinusSeed ? <Money micro={ev.navMinusSeed.meanMicro} sign="always" /> : null
+              }
+            />
+            <KpiTile
+              label="Value change vs matched control C2"
+              value={
+                ev.minusC2Micro === null ? null : <Money micro={ev.minusC2Micro} sign="always" />
+              }
+            />
+          </KpiRow>
+          {ex.zeroEdge ? (
+            <p className="m-0 text-sm">
+              Zero-edge benchmark: a made-up strategy with no skill, but the same swings, costs and
+              rules, reaches the goal in {(ex.zeroEdge.target * 100).toFixed(1)}% of{" "}
+              {ex.zeroEdge.trials} trials.
+            </p>
+          ) : (
+            <p className="m-0 text-sm">
+              Zero-edge benchmark: <NotMeasured />
+            </p>
+          )}
+          {cifRows.length > 0 ? <CifTable rows={cifRows} /> : null}
+        </div>
+      ) : (
+        <p className="m-0 text-sm">
+          <NotMeasured>These figures need at least 3 separate finished rounds</NotMeasured>
+        </p>
+      )}
+    </Card>
+  );
+
+  const versionTable = (
+    <DataTable
+      caption="Versions of this strategy's rules, newest first"
+      columns={versionCols}
+      rows={ex.versions}
+      rowKey={(v) => v.id}
+      empty={
+        <EmptyState
+          compact
+          motif="strategies"
+          hue="strategies"
+          title="No versions are stored yet."
+        />
+      }
+    />
+  );
+  const versionHistory = (
+    <>
+      <h3 className="m-0 text-base font-semibold">Version history</h3>
+      {versionTable}
+    </>
+  );
+  const versionCard = (
+    <Card title="Version history" headingLevel={2}>
+      {versionTable}
+    </Card>
+  );
+  const researchHasContent = !ev || robustness.visible || ex.versions.length === 0;
 
   return (
     <main className="mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-6 px-4 py-6">
@@ -312,7 +408,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
         </p>
         {tile?.hasCohort ? (
           <p className="m-0 text-base">
-            Round {tile.round} · started {formatDate(tile.startD)} · {tile.sessions}{" "}
+            Round {tile.round} · started {dayText(tile.startD)} · {tile.sessions}{" "}
             {tile.sessions === 1 ? "session" : "sessions"} held
           </p>
         ) : (
@@ -322,7 +418,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
         )}
         <SimulatedLabel />
         <div className="flex flex-wrap items-start gap-2">
-          <RegimeBadge regime={tile?.regime} />
+          <MoodBadge regime={tile?.regime} />
           {ex.label ? (
             <>
               <ValidationBadge label={ex.label.label} possibleLuck={ex.label.possibleLuck} />
@@ -366,6 +462,24 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
                 tile.returnPpm === null ? null : <GainLoss value={tile.returnPpm} kind="ppm" />
               }
             />
+            {tile.day ? (
+              <KpiTile
+                label={
+                  tile.day.label.startsWith("Today")
+                    ? tile.day.label
+                    : `Change on ${tile.day.label}`
+                }
+                value={
+                  <GainLoss value={tile.day.change.micro}>
+                    {`${formatMicro(tile.day.change.micro, { sign: "always" })}${
+                      tile.day.ppm !== null
+                        ? ` (${formatPpm(tile.day.ppm, { sign: "always" })})`
+                        : ""
+                    }`}
+                  </GainLoss>
+                }
+              />
+            ) : null}
             <KpiTile
               label="Loss limit"
               value={tile.bust ? <Money micro={tile.bust.micro} /> : null}
@@ -413,7 +527,9 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
                 <span>
                   {t.qty} {t.qty === 1 ? "share" : "shares"}
                 </span>
-                <span className="text-text-muted">since {t.entryDay ?? "an earlier session"}</span>
+                <span className="text-text-muted">
+                  since {t.entryDay === null ? "an earlier session" : dayText(t.entryDay)}
+                </span>
               </li>
             ))}
           </ul>
@@ -430,7 +546,9 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
               <span className="font-mono">{liveVersion ?? "n/a"}</span>
             )}
           </li>
-          {d.costProfile && !detail.masked ? <li>Cost profile: {d.costProfile}</li> : null}
+          {d.costProfile && !detail.masked ? (
+            <li>Trading costs: {costProfileText(d.costProfile)}</li>
+          ) : null}
           <li>Pausing stops new entries only; open positions close by their own rules.</li>
         </ul>
       </Card>
@@ -445,71 +563,17 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
         </div>
       </Card>
 
-      <Card title="Compared with matched controls" headingLevel={2}>
-        {ev ? (
-          <div className="flex min-w-0 flex-col gap-3">
-            <p className="m-0 text-sm text-text-muted">
-              Based on {ev.effectiveN ?? 0} separate finished rounds (
-              <Term
-                meaning="Effective N is the number of finished rounds that do not overlap in time. Overlapping rounds are counted once, so the ranges are not too narrow."
-                official="Effective N"
-              >
-                effective N
-              </Term>
-              ). Chances are shares of those rounds, with 90% ranges.
-            </p>
-            <KpiRow label="Strategy against its matched control">
-              <KpiTile
-                label="Chance of reaching the goal in 12 months"
-                value={last12 ? `${(last12.target.p * 100).toFixed(1)}%` : null}
-                note={
-                  last12?.target.lo !== undefined
-                    ? `90% range ${(last12.target.lo * 100).toFixed(1)}% to ${(last12.target.hi! * 100).toFixed(1)}%`
-                    : undefined
-                }
-              />
-              <KpiTile
-                label="Chance vs matched control C2"
-                value={
-                  ev.cifTargetMinusC2 === null
-                    ? null
-                    : `${ev.cifTargetMinusC2 >= 0 ? "+" : "-"}${(Math.abs(ev.cifTargetMinusC2) * 100).toFixed(1)} points`
-                }
-              />
-              <KpiTile
-                label="Average value change vs start"
-                value={
-                  ev.navMinusSeed ? <Money micro={ev.navMinusSeed.meanMicro} sign="always" /> : null
-                }
-              />
-              <KpiTile
-                label="Value change vs matched control C2"
-                value={
-                  ev.minusC2Micro === null ? null : <Money micro={ev.minusC2Micro} sign="always" />
-                }
-              />
-            </KpiRow>
-            {ex.zeroEdge ? (
-              <p className="m-0 text-sm">
-                Zero-edge benchmark: a made-up strategy with no skill, but the same swings, costs
-                and rules, reaches the goal in {(ex.zeroEdge.target * 100).toFixed(1)}% of{" "}
-                {ex.zeroEdge.trials} trials.
-              </p>
-            ) : (
-              <p className="m-0 text-sm">
-                Zero-edge benchmark: <NotMeasured />
-              </p>
-            )}
-            {cifRows.length > 0 ? <CifTable rows={cifRows} /> : null}
-          </div>
-        ) : (
-          <p className="m-0 text-sm">
-            <NotMeasured>These figures need at least 3 separate finished rounds</NotMeasured>
-          </p>
-        )}
-      </Card>
+      {ev ? matchedCard : null}
 
-      <Robustness view={robustness} />
+      {researchHasContent ? (
+        <ShowDetails summary="Research details (fills in as rounds finish)">
+          <div className="flex min-w-0 flex-col gap-6" data-research-details="">
+            {ev ? null : matchedCard}
+            <Robustness view={robustness} />
+            {ex.versions.length === 0 ? versionCard : null}
+          </div>
+        </ShowDetails>
+      ) : null}
 
       <Card title="Past rounds" headingLevel={2}>
         <DataTable
@@ -531,7 +595,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
                   {d.sleeve.state === "locked" ? "Locked while it recovers" : "Unlocked"}
                 </dd>
                 <dt className="text-text-muted">Since</dt>
-                <dd className="m-0 text-right">{formatDate(d.sleeve.sinceD)}</dd>
+                <dd className="m-0 text-right">{dayText(d.sleeve.sinceD)}</dd>
                 <dt className="text-text-muted">Loss to win back</dt>
                 <dd className="m-0 text-right">
                   <Money micro={d.sleeve.lossToRecover.micro} />
@@ -595,21 +659,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
               title="No challengers are waiting."
             />
           )}
-          <h3 className="m-0 text-base font-semibold">Version history</h3>
-          <DataTable
-            caption="Versions of this strategy's rules, newest first"
-            columns={versionCols}
-            rows={ex.versions}
-            rowKey={(v) => v.id}
-            empty={
-              <EmptyState
-                compact
-                motif="strategies"
-                hue="strategies"
-                title="No versions are stored yet."
-              />
-            }
-          />
+          {ex.versions.length > 0 ? versionHistory : null}
           {isOwner ? (
             <p className="m-0 text-xs text-text-muted">
               Reverting schedules an earlier version for the next restart. It is recorded in the
@@ -621,7 +671,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
               <ul className="m-0 list-disc pl-5 text-sm">
                 {ex.ledger.map((l, i) => (
                   <li key={`${l.effectiveD}-${i}`}>
-                    {LEDGER[l.kind] ?? l.kind}, {formatDate(l.effectiveD)}
+                    {LEDGER[l.kind] ?? l.kind}, {dayText(l.effectiveD)}
                   </li>
                 ))}
               </ul>

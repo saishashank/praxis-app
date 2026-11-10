@@ -8,6 +8,7 @@ import { envFor } from "@/lib/ui/loaders/shell";
 import { loadChallengerView } from "@/lib/ui/loaders/knowledgeViews";
 import { Card } from "@/components/ui/Card";
 import { OwnerActions, ShadowResults, type OwnerButton } from "../../OwnerActions";
+import { familyName } from "../../plain";
 import { CritiqueBlock, familyHref, LEARNED, PageHead, Shell, StageText } from "../../parts";
 
 export const dynamic = "force-dynamic";
@@ -68,7 +69,7 @@ export default async function ChallengerPage({ params }: { params: Promise<{ id:
         Stage <StageText stage={ch.state} /> since {ch.stateDay}. Origin: {ch.origin}. Version{" "}
         {ch.ruleVersionId} against {ch.incumbentId} in{" "}
         <Link href={familyHref(ch.family)} className="text-accent underline">
-          family {ch.family}
+          {familyName(ch.family)} strategies
         </Link>
         . {ch.ready ? "All Critic checks passed." : "Not ready: a Critic check has not passed."}
       </PageHead>

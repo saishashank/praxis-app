@@ -13,7 +13,7 @@ import { GainLoss, Money, NotMeasured } from "@/components/ui/Values";
 import type { StrategyTile as Tile } from "@/lib/ui/loaders/strategies";
 import type { StrategyName } from "@/lib/ui/loaders/common";
 import type { TileExtra } from "@/lib/ui/loaders/strategyViews";
-import { formatDate } from "@/lib/view/format";
+import { formatDate, formatMicro, formatPpm } from "@/lib/view/format";
 import { familyBadge } from "../home/familyMap";
 import { NavBar } from "./NavBar";
 import { tileState } from "./state";
@@ -123,6 +123,23 @@ export function StrategyTile({
             <dd className="m-0 text-right">
               <GainLoss value={tile.returnPpm} kind="ppm" />
             </dd>
+            {tile.day ? (
+              <>
+                {/* D-915: the same day's change as on Home (delayed during the session) */}
+                <dt className="text-text-muted" data-testid="tile-day-label">
+                  {tile.day.label}
+                </dt>
+                <dd className="m-0 text-right">
+                  <GainLoss value={Number(tile.day.change.micro)}>
+                    {`${formatMicro(tile.day.change.micro, { sign: "always" })}${
+                      tile.day.ppm !== null
+                        ? ` (${formatPpm(tile.day.ppm, { sign: "always" })})`
+                        : ""
+                    }`}
+                  </GainLoss>
+                </dd>
+              </>
+            ) : null}
             <dt className="text-text-muted">Open positions</dt>
             <dd className="m-0 text-right font-mono">{extra?.openPositions ?? <NotMeasured />}</dd>
             {extra?.sleeve ? (

@@ -1,6 +1,7 @@
 // Server components shared by the "What the system learned" pages (M7 T18). No state; links and text.
 import { EmptyState } from "@/components/ui/States";
 import Link from "next/link";
+import { familyName } from "./plain";
 import type { ReactNode } from "react";
 import { Card } from "@/components/ui/Card";
 import { GradeBadge } from "@/components/ui/Badges";
@@ -19,7 +20,7 @@ export const challengerHref = (id: string): string =>
 export const familyHref = (f: string): string => `${LEARNED}/families/${encodeURIComponent(f)}`;
 
 export const GRADE_HELP =
-  "Grades say how much evidence stands behind a lesson. L0 is an observation, L1 held up in the first two-thirds of the history, L2 held up in the last third kept aside, L3 is adopted.";
+  "Grades say how much evidence stands behind a lesson. L0 is an observation (seen, not tested). L1 held up in the first two-thirds of the history. L2 also held up in the last third, which was kept aside for the test. L3 is adopted into the rules.";
 
 export function PageHead({ title, children }: { title: string; children?: ReactNode }) {
   return (
@@ -62,7 +63,7 @@ export function LessonCard({ lesson }: { lesson: LessonCardData }) {
         <dt className="text-text-muted">Strategy family</dt>
         <dd className="m-0">
           <Link href={familyHref(lesson.family)} className="text-accent underline">
-            {lesson.family}
+            {familyName(lesson.family)}
           </Link>
         </dd>
       </dl>
@@ -95,7 +96,7 @@ export function ChallengerLine({
         {c.id}
       </Link>
       <span>
-        {c.family}: <StageText stage={c.state} /> since {c.stateDay}
+        {familyName(c.family)}: <StageText stage={c.state} /> since {c.stateDay}
       </span>
       <span className="text-text-muted">
         {c.ready ? "All Critic checks passed" : "Not ready: a Critic check has not passed"}

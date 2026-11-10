@@ -10,6 +10,7 @@ import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
 import { loadQueue } from "@/lib/ui/loaders/experts";
 import { PageHead, Shell } from "../../learned/parts";
+import { familyName } from "../../learned/plain";
 import { EXPERTS, Out } from "../parts";
 import {
   bulkConfirmExpertAction,
@@ -83,7 +84,7 @@ export default async function QueuePage() {
                 <span className="text-text-muted">
                   {k.supporters} supporting {k.supporters === 1 ? "claim" : "claims"};{" "}
                   {k.validFit && k.fitFamily
-                    ? `fits strategy family ${k.fitFamily}, so it can be screened once confirmed`
+                    ? `fits the ${familyName(k.fitFamily)} strategies, so it can be screened once confirmed`
                     : "does not fit a strategy family yet, so confirming it does not start a test"}
                   .
                 </span>

@@ -22,6 +22,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-906 | Staging is off (Owner 2026-11-09: "Don't use any staging going forward on anything"): the Nightly, Deploy staging and Staging E2E day workflows are disabled... |
 | D-910 | loadDayInputs asks the DecisionView to prefetch the per-code rows of all its codes in batches of 200 codes (bars from the session need + 10 sessions back, sh... |
 | D-914 | (2026-11-10) GitHub can start a scheduled run hours late: the 07:15 UTC Batch-1 backup line of 9 Nov started at 17:31 UTC (04:31 the next day in Sydney), too... |
+| D-917 | (Owner 2026-11-10: "do we need these many replays?") The post-deploy replay check (D-905) counts a main-database migration only when it touches a table the r... |
+| D-919 | (Owner 2026-11-10: "go through the app … with different eyes … and suggest changes", then "fix all") A usability pass over every user page, from a review thr... |
 
 ## M11L (M11L_design.md)
 
@@ -562,3 +564,4 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-907 | (Owner 2026-11-09) Home shows the ASX 200 live: the quote poll fetches ^AXJO (stored in quote_latest under the index_bar code AXJO) as the first of its extra... |
 | D-915 | (Owner 2026-11-10: "the strategies still show percentage as of yesterday, not the delayed profit or loss for the day") During the session the Home strategy t... |
 | D-916 | (Owner 2026-11-10: a delayed feed on the Market tab without exhausting the Yahoo limit) The Market tables show, for each listed company, the delayed quote al... |
+| D-918 | (Owner 2026-11-10: "the changes on the strategy cards are not visible on the Strategies page") The Strategies page tiles show the same day's change as Home (... |

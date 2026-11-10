@@ -2,6 +2,7 @@
 // last good; a section older than its allowance shows a banner with that time instead of silently
 // showing old numbers. Pure: the clock is a parameter.
 import { formatTime } from "@/lib/health/format";
+import { formatDay } from "./format";
 
 export type Staleness =
   | { state: "missing"; text: string }
@@ -60,8 +61,13 @@ export function dateStaleness(
       state: "stale",
       lastGood: lastD as string,
       ageMinutes,
-      text: `Showing data from ${lastD}. It has not updated since.`,
+      text: `Showing data from ${formatDay(lastD)}. It has not updated since.`,
     };
   }
-  return { state: "fresh", lastGood: lastD as string, ageMinutes, text: `Data for ${lastD}` };
+  return {
+    state: "fresh",
+    lastGood: lastD as string,
+    ageMinutes,
+    text: `Data for ${formatDay(lastD)}`,
+  };
 }

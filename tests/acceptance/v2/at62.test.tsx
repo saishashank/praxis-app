@@ -24,6 +24,7 @@ const row = (code: string, movePpm: number) => ({
   catalyst: catalystWords("results", "positive"),
   materiality: 3,
   movePpm,
+  rated: false,
   limit: { micro: "1000000", currency: "AUD", simulated: true as const },
   stop: { micro: "900000", currency: "AUD", simulated: true as const },
   quoteTime: "10:50",

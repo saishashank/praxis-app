@@ -9,6 +9,7 @@ import { Banner, EmptyState } from "@/components/ui/States";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
 import { loadIdeas } from "@/lib/ui/loaders/ideas";
+import { displayName, formatDay } from "@/lib/view/format";
 import { NOT_ADVICE_FOOTER } from "@/lib/view/honesty";
 import { StrategyTabs } from "../StrategyTabs";
 import { profileLabel } from "../../picks/text";
@@ -56,7 +57,7 @@ export default async function IdeasPage({
         </p>
         <p className="m-0 text-sm text-text-muted">
           What each strategy found in the latest session, and whether it placed a practice order.
-          {v.d !== null ? ` Session: ${page.masked ? "latest" : v.d}.` : ""}
+          {v.d !== null ? ` Session: ${page.masked ? "latest" : formatDay(v.d)}.` : ""}
         </p>
         <p className="m-0 text-xs text-text-muted">{NOT_ADVICE_FOOTER}</p>
       </header>
@@ -90,7 +91,14 @@ export default async function IdeasPage({
               <ul className="m-0 flex list-none flex-col gap-3 p-0">
                 {g.ideas.map((idea, i) => (
                   <li key={`${i}:${idea.stock}:${idea.variant}`}>
-                    <Card title={idea.stock} headingLevel={3}>
+                    <Card
+                      title={
+                        idea.name !== null
+                          ? `${displayName(idea.name)} (${idea.stock})`
+                          : idea.stock
+                      }
+                      headingLevel={3}
+                    >
                       <p className="m-0 mb-1 text-sm font-medium" data-testid="pick-status">
                         {idea.picks.length > 0
                           ? `Also a pick: ${idea.picks.map((p) => `#${p.rank} (${profileLabel(p.profile)})`).join(", ")}`
@@ -103,7 +111,7 @@ export default async function IdeasPage({
                         {idea.cards.map((c) => (
                           <li key={c.href} className="min-w-0 break-words">
                             <Link href={c.href} className="text-accent underline">
-                              {c.execution}: why this trade
+                              {c.strategy}: why this trade
                             </Link>
                             {" — "}
                             {c.taken ? "taken" : `not taken: ${c.reason}`}

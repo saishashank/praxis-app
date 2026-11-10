@@ -40,8 +40,8 @@ export function QuietHoursForm({ action, start, end }: Props) {
         </label>
       </div>
       <p className="text-xs text-text-muted">
-        Melbourne time. Important (P1) and for-information (P2) alerts stay out of the bell count in
-        this window; they are still listed in the inbox. Urgent (P0) alerts are always delivered.
+        Melbourne time. Important and FYI alerts stay out of the bell count in this window; they are
+        still listed in the inbox. Urgent alerts are always delivered.
       </p>
       <div className="flex flex-wrap items-center gap-4">
         <button

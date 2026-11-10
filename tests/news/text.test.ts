@@ -20,8 +20,8 @@ describe("polarity wording (UXN-158)", () => {
 describe("whenText", () => {
   it("keeps an ISO week, formats a timestamp in Melbourne time, and tolerates junk", () => {
     expect(whenText("2026-W43")).toBe("Week 2026-W43");
-    expect(whenText("2026-10-19T02:00:00.000Z")).toMatch(/19 Oct 2026/);
-    expect(whenText("2026-10-19T02:00:00.000Z")).toMatch(/1:00/);
+    expect(whenText("2026-10-19T02:00:00.000Z")).toMatch(/Mon 19 Oct/);
+    expect(whenText("2026-10-19T02:00:00.000Z")).toMatch(/13:00/);
     expect(whenText("nonsense")).toBe("n/a");
   });
 });

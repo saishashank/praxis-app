@@ -21,6 +21,7 @@ import {
   openViewer,
   PPM,
   ratioPpm,
+  soft,
   str,
   strategyNames,
   strOrNull,
@@ -28,6 +29,19 @@ import {
   type LoaderDeps,
   type Money,
 } from "./common";
+import { quoteTimeMelbourne } from "@/lib/data/quotes/latest";
+import { liveDayByCohort } from "./liveDay";
+
+/** "Mon 9 Nov" (market words, Owner 2026-11-09). */
+const shortDay = (d: string): string =>
+  new Date(`${d}T00:00:00Z`)
+    .toLocaleDateString("en-AU", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    })
+    .replace(",", "");
 
 const SPARK_POINTS = 60; // threshold-ok: sparkline length
 const SPARK_WINDOW_DAYS = 120; // threshold-ok: calendar days that hold SPARK_POINTS sessions
@@ -158,6 +172,12 @@ export type StrategyTile = {
   seed: Money | null;
   nav: Money | null;
   returnPpm: number | null;
+  /**
+   * D-915 (Owner 2026-11-10): the day's change, the same figure as on Home: from the delayed quotes of
+   * the shares held while the session runs ("Today (delayed, 10:45)"), else the change of the last
+   * valued session ("Mon 9 Nov"). null without two valued sessions and without a fresher quote.
+   */
+  day: { change: Money; ppm: number | null; label: string } | null;
   /** Progress from bust (0) to target (1,000,000). */
   positionPpm: number | null;
   bust: Money | null;
@@ -312,8 +332,51 @@ export async function loadStrategies(
       needsAttention: attention.length > 0,
       attention,
       spark: series.slice(-SPARK_POINTS).map((p) => p.nav),
+      day:
+        series.length >= 2 && last !== null
+          ? {
+              change: money(last - series[series.length - 2]!.nav),
+              ppm: ratioPpm(last - series[series.length - 2]!.nav, series[series.length - 2]!.nav),
+              label: shortDay(series[series.length - 1]!.d),
+            }
+          : null,
     };
   });
+
+  // D-915: during the session the day's change, the value and the result since the start move with
+  // the delayed quotes of the shares held (the same calculation as Home)
+  const valued = execs.rows.flatMap((e) => {
+    const c = latest.get(str(e.id));
+    const s = c ? (navs.get(c.id) ?? []) : [];
+    return c && c.terminalKind === null && s.length > 0
+      ? [
+          {
+            execution: str(e.id),
+            cohortId: c.id,
+            d: s[s.length - 1]!.d,
+            nav: s[s.length - 1]!.nav,
+            seed: c.seed,
+          },
+        ]
+      : [];
+  });
+  const live = await soft(() => liveDayByCohort(deps.mainDb, v.market, valued), null);
+  if (live !== null && live.anyAt !== null) {
+    const label = `Today (delayed, ${quoteTimeMelbourne(live.anyAt)})`;
+    for (const x of valued) {
+      const i = tiles.findIndex((t) => t.execution === x.execution);
+      if (i < 0) continue;
+      const c = live.byCohort.get(x.cohortId);
+      const change = c?.changeMicro ?? 0; // in cash or no fresher quote: no move today
+      const now = x.nav + change;
+      tiles[i] = {
+        ...tiles[i]!,
+        nav: money(now),
+        returnPpm: ratioPpm(now - x.seed, x.seed),
+        day: { change: money(change), ppm: ratioPpm(change, x.nav), label },
+      };
+    }
+  }
 
   const key = (t: StrategyTile): number => {
     // Ascending sort key; a missing figure sorts last.
@@ -643,7 +706,9 @@ export async function loadLeaderboard(
           name:
             kind === "E"
               ? `${fname ?? str(r.id)}${str(r.variant) === "L" ? " (with leverage sleeve)" : ""}`
-              : `Control ${kind}${fname ? `: ${fname}` : ""}`,
+              : kind === "C1"
+                ? "Index fund held throughout"
+                : `Random-pick twin of ${fname ?? "a strategy"}`,
           label: null,
           rounds: 0,
           finished: 0,

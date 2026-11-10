@@ -70,12 +70,12 @@ describe("fallRow (D-886)", () => {
   });
 
   it("avoided, with the reason when it was an idea", () => {
-    expect(fallRow(ctx(), row("BBB", -1)).text).toBe("Avoided: no strategy held it.");
+    expect(fallRow(ctx(), row("BBB", -1)).text).toBe("Not held: no strategy held it.");
     const idea = fallRow(
       ctx({ ideas: new Map([["BBB", [{ family: "F4", taken: false, reason: "gate" }]]]) }),
       row("BBB", -1),
     );
-    expect(idea.verdict).toBe("avoided");
+    expect(idea.verdict).toBe("not_held");
     expect(idea.text).toMatch(/market conditions did not allow/);
   });
 });
@@ -104,7 +104,7 @@ describe("loadMoversCheck (D-886)", () => {
     expect(m.prev).toBe("2026-10-16");
     expect(m.rises.map((r) => r.code)).toEqual(["ZZLIQ"]);
     expect(m.falls.map((r) => r.code)).toEqual(["ZZDRP"]);
-    expect(m.falls[0]!.verdict).toBe("avoided");
+    expect(m.falls[0]!.verdict).toBe("not_held");
     expect(m.summary).toEqual({ risesHeld: 0, fallsHeld: 0, fallsSold: 0 });
 
     const masked = await loadMoversCheck(envOf(w, "viewer"));

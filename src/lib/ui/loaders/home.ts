@@ -13,7 +13,8 @@ import { loadAttentionItems } from "@/lib/health/attention";
 import { listInbox } from "@/lib/alerts/api";
 import { addDays, isWeekend, marketDate } from "@/lib/data/calendar";
 import { maskAlertViews } from "@/lib/view/alerts";
-import { formatDate, plural } from "@/lib/view/format";
+import { formatDay, plural } from "@/lib/view/format";
+import { regimeLabel } from "@/lib/view/terms";
 import { pickRef } from "./picks";
 import {
   newerThanClose,
@@ -22,6 +23,7 @@ import {
   type LatestQuote,
 } from "@/lib/data/quotes/latest";
 import { MARKET_INDEX_CODE } from "@/lib/data/quotes/parse";
+import { liveDayChange } from "./liveDay";
 import { loadAlertHomeFacts, loadIntraday, type IntradayModel } from "./pickAlerts";
 import type { LoaderEnv } from "./shell";
 import {
@@ -90,8 +92,30 @@ export function nextRunLabel(now: Date): string {
   return `tonight ${RUN_HHMM}`;
 }
 
+const ISO_DAY = /\b(\d{4}-\d{2}-\d{2})\b/g;
+
+/**
+ * Owner 2026-11-10: alert sentences in plain words on Home (no "thesis breaker", no "pre-open re-check",
+ * no ISO dates, no market-regime codes). The alert module keeps its own text; this only maps it for display.
+ */
+export function plainAlertText(text: string): string {
+  return text
+    .replace(
+      /The pre-open re-check did not complete on (\d{4}-\d{2}-\d{2}); orders fill without it\./,
+      (_m, d: string) =>
+        `The morning safety check did not run on ${formatDay(d)}; practice orders went ahead without it.`,
+    )
+    .replace(
+      /Market regime changed from (\S+) to (\S+) on (\d{4}-\d{2}-\d{2})\./,
+      (_m, f: string, t: string, d: string) =>
+        `The market mood changed from ${regimeLabel(f).shown} to ${regimeLabel(t).shown} on ${formatDay(d)}.`,
+    )
+    .replace(/A thesis breaker(?: \([^)]*\))? turned red/, "A warning sign turned red")
+    .replace(ISO_DAY, (_m, d: string) => formatDay(d));
+}
+
 export type SinceKind =
-  "picks" | "ideas" | "fills" | "alerts" | "pickhits" | "candidates" | "breakers" | "system";
+  "picks" | "ideas" | "fills" | "alerts" | "pickhits" | "candidates" | "breakers";
 export type HomeSinceRow = { key: SinceKind; text: string; href: string };
 export type HomeNeed = {
   key: string;
@@ -496,7 +520,11 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
       aimMicro: masked ? null : num(r.aim_micro),
       aimReachPpm: numOrNull(r.aim_reach_ppm),
       timeFrameSessions: numOrNull(r.time_frame_sessions),
-      validUntil: scope ? scope.day(str(r.valid_until_d)) : str(r.valid_until_d),
+      validUntil: masked
+        ? scope
+          ? scope.day(str(r.valid_until_d))
+          : null
+        : formatDay(str(r.valid_until_d)),
       whyHref: `/picks/${encodeURIComponent(masked ? pickRef(`${pickD}.${str(r.profile)}.${num(r.rank)}`) : `${pickD}.${str(r.profile)}.${num(r.rank)}`)}`,
     })),
   };
@@ -562,7 +590,11 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
   );
   if (rv.rows[0]) {
     const d = str(rv.rows[0].d);
-    view.review = { d, day: scope ? scope.day(d) : d, kind: str(rv.rows[0].kind) };
+    view.review = {
+      d,
+      day: masked ? (scope ? scope.day(d) : null) : formatDay(d),
+      kind: str(rv.rows[0].kind),
+    };
   }
 
   // Owner only: attention items from the latest health snapshot.
@@ -646,7 +678,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
   if (fills > 0) {
     since.push({
       key: "fills",
-      text: `${fills} practice ${plural(fills, "trade")} filled on ${formatDate(navD)}`,
+      text: `${fills} practice ${plural(fills, "trade")} filled on ${formatDay(navD)}`,
       href: "/strategies",
     });
   }
@@ -708,24 +740,8 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     });
   }
   const attention = view.attentionCount ?? 0;
-  const allPass = view.day.quality.length > 0 && view.day.quality.every((q) => q.gatePass);
-  since.push({
-    key: "system",
-    text:
-      attention > 0
-        ? `${attention} ${plural(attention, "thing")} in system health need a look`
-        : view.day.quality.length === 0
-          ? "Price checks have not run yet"
-          : allPass
-            ? "Today's prices passed their checks"
-            : "Some of today's prices are still being checked",
-    href: "/health",
-  });
-  // threshold-ok: UXR-020 shows 3 to 5 rows; the system row always stays.
-  view.since = [
-    ...since.filter((r) => r.key !== "system").slice(0, 4),
-    ...since.filter((r) => r.key === "system"),
-  ];
+  // Owner 2026-11-10: system health is said once on Home, as the Needs-you item for the Owner.
+  view.since = since.slice(0, 4); // threshold-ok: UXR-020 shows at most 4 rows
 
   // ---- UXR-020 Needs you: open urgent and important alerts, then a health item for the Owner ----
   const needs: HomeNeed[] = [];
@@ -751,7 +767,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
       needs.push({
         key: `alert-${needs.length}`,
         tier: a.tier,
-        text: a.text,
+        text: plainAlertText(a.text),
         href: "/news?chip=alerts",
         action: "Open alert",
       });
@@ -791,27 +807,6 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
  * quote (its Melbourne time), else "End of day, Fri 6 Nov" for the newest stored close; null before
  * any data.
  */
-/**
- * Owner 2026-11-10: a strategy's change today from delayed quotes: shares held at the last close times
- * (quote - that close), for every holding whose quote is from a later day than the close. null when no
- * holding has such a quote (outside the session the end-of-day change stands). Cash does not move.
- */
-export function liveDayChange(
-  positions: ReadonlyArray<{ code: string; qty: number; closeMicro: number }>,
-  quotes: ReadonlyMap<string, LatestQuote>,
-  navD: string,
-): { changeMicro: number; at: string } | null {
-  let change = 0;
-  let at: string | null = null;
-  for (const p of positions) {
-    const q = newerThanClose(quotes.get(p.code), navD);
-    if (q === null) continue;
-    change += p.qty * (Number(q.lastMicro) - p.closeMicro); // money-float-ok: micro-AUD within 2^53
-    if (at === null || q.quoteAt > at) at = q.quoteAt;
-  }
-  return at === null ? null : { changeMicro: change, at };
-}
-
 /** "Today" when `d` is today's date in Sydney (the market's clock), else "Fri 6 Nov". */
 export function dayLabel(d: string | null, now: Date): string | null {
   if (!d) return null;
@@ -835,3 +830,6 @@ export function freshnessLabel(dataD: string | null, index: HomeIndex | null): s
   if (!dataD) return null;
   return `End of day, ${shortDay(dataD)}`;
 }
+
+// D-915: shared with the Strategies page (./liveDay.ts)
+export { liveDayChange };

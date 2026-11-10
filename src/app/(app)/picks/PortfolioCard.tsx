@@ -1,12 +1,14 @@
 // D-913 "Follow the picks" card on the Picks page: the practice portfolio of trading exactly the picks.
 import type { PortfolioView } from "@/lib/ui/loaders/pickPortfolio";
 import { GainLoss, Money, NotMeasured, SimulatedLabel } from "@/components/ui/Values";
-import { formatDate, formatPpm } from "@/lib/view/format";
+import { formatDay, formatPpm } from "@/lib/view/format";
+import { PORTFOLIO_PROFILE_NOTE, profileLabel } from "./text";
 
 const pctText = (ppm: number | null) =>
   ppm === null ? null : formatPpm(ppm, { digits: 1, sign: "always" });
 
-export function PortfolioCard({ v }: { v: PortfolioView }) {
+export function PortfolioCard({ v, current }: { v: PortfolioView; current?: string }) {
+  const followed = v.profile;
   return (
     <section
       aria-labelledby="portfolio-h"
@@ -15,15 +17,29 @@ export function PortfolioCard({ v }: { v: PortfolioView }) {
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="portfolio-h" className="m-0 text-lg font-semibold">
-          Follow the picks
+          Follow the picks ({profileLabel(followed)})
         </h2>
         {!v.masked && v.asOfD ? <SimulatedLabel /> : null}
       </div>
+      {current !== undefined && current !== followed ? (
+        <p className="m-0 mt-1 font-medium" data-testid="portfolio-profile-note">
+          {PORTFOLIO_PROFILE_NOTE}
+        </p>
+      ) : null}
       <p className="m-0 mt-1 text-text-muted">
-        Practice money that buys every pick when its buy price is reached, at most {v.slots} stocks
-        at once, and sells at the stop-loss, at the aim, when the time frame ends with nothing new
-        on the stock, or early when it is weak with no signal. Money not invested waits as cash.
+        Practice money that buys each pick when its buy price is reached, up to {v.slots} stocks at
+        once.
       </p>
+      <details className="mt-1 text-text-muted">
+        <summary className="cursor-pointer font-medium">How it trades</summary>
+        <ul className="m-0 mt-1 list-disc pl-5">
+          <li>Buys every pick when its buy price is reached, at most {v.slots} stocks at once.</li>
+          <li>Sells at the stop-loss or at the aim.</li>
+          <li>Sells when the time frame ends with nothing new on the stock.</li>
+          <li>Sells early when the stock is weak with no signal.</li>
+          <li>Money not invested waits as cash.</li>
+        </ul>
+      </details>
       {!v.started ? (
         <p className="m-0 mt-2">
           <NotMeasured>Starts with the first pick.</NotMeasured>
@@ -41,7 +57,7 @@ export function PortfolioCard({ v }: { v: PortfolioView }) {
           {v.cash && v.seed ? (
             <p className="m-0 mt-1 text-text-muted">
               Started with <Money micro={v.seed.micro} />; cash <Money micro={v.cash.micro} />
-              {v.asOfD ? `, end of day ${formatDate(v.asOfD)}` : ""}.
+              {v.asOfD ? `, end of day ${formatDay(v.asOfD)}` : ""}.
             </p>
           ) : null}
           <p className="m-0 mt-1 text-text-muted">
@@ -58,7 +74,7 @@ export function PortfolioCard({ v }: { v: PortfolioView }) {
                     <>
                       {" "}
                       bought at <Money micro={h.entry.micro} />
-                      {h.entryD ? ` on ${formatDate(h.entryD)}` : ""}
+                      {h.entryD ? ` on ${formatDay(h.entryD)}` : ""}
                     </>
                   ) : null}
                   {h.now ? (

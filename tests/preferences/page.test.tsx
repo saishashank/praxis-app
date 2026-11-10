@@ -93,8 +93,8 @@ describe("settings page (UXR-027: one page, rows with current values)", () => {
       rowValue(/^Theme/, "Light"); // D-884: default is light
       rowValue(/^Motion/, "On");
       rowValue(/^Time format/, "24-hour (13:30)");
-      rowValue(/^P1 alerts/, "Immediately");
-      rowValue(/^P2 alerts/, "In the digest");
+      rowValue(/^Important alerts/, "Immediately");
+      rowValue(/^FYI alerts/, "In the digest");
       rowValue(/^Quiet hours/, "Off");
       rowValue(/^Show times in/, "Melbourne time");
       // no JS: each row is a link to its detail page
@@ -146,7 +146,7 @@ describe("settings page (UXR-027: one page, rows with current values)", () => {
     as("viewer");
     action.mockResolvedValue({ error: "invalid" });
     render(await SettingsPage());
-    const dialog = await openRow(/^P1 alerts/);
+    const dialog = await openRow(/^Important alerts/);
     await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "Save" })));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Please check the entries and try again.",

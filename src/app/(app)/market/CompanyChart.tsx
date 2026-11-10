@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChartTable } from "@/components/charts/ChartTable";
 import { CheckIcon } from "@/components/ui/icons";
-import { formatCount, formatMicro } from "@/lib/view/format";
+import { formatCount, formatDay, formatMicro } from "@/lib/view/format";
 
 // Same shapes as the company loader's CandleBar and ChartMarker (a client file may not import the loaders).
 type CandleBar = { time: string; o: number; h: number; l: number; c: number; volume: number };
@@ -100,7 +100,7 @@ export function CompanyChart({
   const last = shown[shown.length - 1];
   const summary =
     first && last
-      ? `${label}, ${range}: ${shown.length} end-of-day bars from ${first.time} (close ${formatMicro(first.c)}) to ${last.time} (close ${formatMicro(last.c)}).`
+      ? `${label}, ${range}: ${shown.length} end-of-day bars from ${formatDay(first.time)} (close ${formatMicro(first.c)}) to ${formatDay(last.time)} (close ${formatMicro(last.c)}).`
       : `${label}: no price data`;
 
   useEffect(() => {
@@ -273,7 +273,7 @@ export function CompanyChart({
       )}
       <p aria-live="polite" className="m-0 mt-1 break-words font-sans text-sm tabular-nums">
         {at
-          ? `${at.time}  open ${formatMicro(at.o)}  high ${formatMicro(at.h)}  low ${formatMicro(at.l)}  close ${formatMicro(at.c)}  volume ${formatCount(at.volume)}`
+          ? `${formatDay(at.time)}  open ${formatMicro(at.o)}  high ${formatMicro(at.h)}  low ${formatMicro(at.l)}  close ${formatMicro(at.c)}  volume ${formatCount(at.volume)}`
           : "No price data"}
         {at ? " (left and right arrow keys move the readout)" : ""}
       </p>
@@ -286,7 +286,7 @@ export function CompanyChart({
             .slice()
             .reverse()
             .map((b) => [
-              b.time,
+              formatDay(b.time),
               formatMicro(b.o),
               formatMicro(b.h),
               formatMicro(b.l),

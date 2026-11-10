@@ -9,7 +9,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChartTable } from "@/components/charts/ChartTable";
-import { formatCents, gainLossGlyph } from "@/lib/view/format";
+import { formatCents, formatDay, gainLossGlyph } from "@/lib/view/format";
 import { regimeLabel } from "@/lib/view/terms";
 
 export type ChartPoint = { time: string; value: number };
@@ -393,11 +393,11 @@ export function StrategyChart({
         )}
         <p aria-live="polite" className="m-0 mt-2 text-sm font-mono">
           {at
-            ? `${at.time}: ${dollars(at.value)}${
+            ? `${/^\d{4}-\d{2}-\d{2}$/.test(at.time) ? formatDay(at.time) : at.time}: ${dollars(at.value)}${
                 dayChange !== null
                   ? `, ${gainLossGlyph(dayChange)} ${formatCents(dayChange, { sign: "always" })} on the day`
                   : ""
-              }${mood ? `, market mood ${regimeLabel(mood).shown} (${mood})` : ""} (arrow keys move along the line)`
+              }${mood ? `, market mood ${regimeLabel(mood).shown}` : ""} (arrow keys move along the line)`
             : "No values yet"}
         </p>
         <figcaption className="text-xs text-text-muted">

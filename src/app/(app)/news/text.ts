@@ -1,6 +1,8 @@
 // Fixed texts and small pure helpers of the News page (UXN-035, UXN-038, UXN-158, UXN-160). No server
 // imports, so client islands can use them.
 
+import { formatInstant } from "@/lib/view/format";
+
 export type Polarity = -1 | 0 | 1 | null;
 
 /** The tag is our own rule-based classification and says so (UXN-158). */
@@ -25,23 +27,11 @@ export const NO_SUMMARY = "Summary not written yet.";
 export const HELD_TAG = "Held by our strategies";
 
 const WEEK_RE = /^\d{4}-W\d{2}$/;
-const MELBOURNE = "Australia/Melbourne";
 
 /** An ISO week stays as "Week 2026-W43"; a timestamp becomes Melbourne time. */
 export function whenText(v: string): string {
   if (WEEK_RE.test(v)) return `Week ${v}`;
-  const t = Date.parse(v);
-  if (Number.isNaN(t)) return "n/a";
-  return new Intl.DateTimeFormat("en-AU", {
-    timeZone: MELBOURNE,
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZoneName: "short",
-  }).format(new Date(t));
+  return formatInstant(v);
 }
 
 export { SNOOZE_CHOICES, SNOOZE_LABEL, snoozeUntil, type SnoozeChoice } from "./snooze";

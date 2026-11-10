@@ -1,0 +1,5 @@
+/* Appearance > Text size: "Large" is stored per user and set as data-text-size="large" on <html> by the
+   root layout. Every size in the app is rem-based, so one root font size scales all pages together. */
+html[data-text-size="large"] {
+  font-size: 125%;
+}

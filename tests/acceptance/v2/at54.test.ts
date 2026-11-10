@@ -74,9 +74,10 @@ describe("AT-54 allowed-to-trade statements for F1 and F4", () => {
       now: NOW,
     });
     const fams = view.data.families;
-    const f1 = fams.find((f) => f.name.startsWith("F1"))!;
-    const f4 = fams.find((f) => f.name.startsWith("F4"))!;
-    const f2 = fams.find((f) => f.name.startsWith("F2"))!;
+    // D-919: families show by name; they keep the CORTEX_FAMILIES order (F1, F2, ... F7)
+    const f1 = fams[0]!;
+    const f4 = fams[3]!;
+    const f2 = fams[1]!;
     for (const f of [f1, f4]) {
       expect(f.status).toBe("allowed");
       expect(f.statement).toContain(LIVE_PENDING_LABEL);

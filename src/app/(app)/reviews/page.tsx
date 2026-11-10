@@ -15,6 +15,9 @@ import {
   loadReviewCalendar,
   loadReviewList,
   parseReviewsQuery,
+  AI_TEXT,
+  NO_AI_TEXT,
+  plainSectionName,
   type ReviewListModel,
 } from "@/lib/ui/loaders/reviews";
 import { envFor } from "@/lib/ui/loaders/shell";
@@ -100,9 +103,10 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
 }
 
 function ListView({ model, q }: { model: ReviewListModel; q: string | undefined }) {
-  const qs = (page: number) => {
+  const qs = (page: number, all = model.showingNonTrading && q === undefined) => {
     const p = new URLSearchParams();
     if (q) p.set("q", q);
+    if (all) p.set("all", "1");
     if (page > 1) p.set("page", String(page));
     const s = p.toString();
     return s ? `/reviews?${s}` : "/reviews";
@@ -152,7 +156,7 @@ function ListView({ model, q }: { model: ReviewListModel; q: string | undefined 
           {model.masked ? null : (
             <SectionIndex
               items={REVIEW_SECTION_NAMES.slice(0, REVIEW_TONES.length).map((label, i) => ({
-                label,
+                label: plainSectionName(label),
                 tone: REVIEW_TONES[i]!,
               }))}
             />
@@ -173,6 +177,16 @@ function ListView({ model, q }: { model: ReviewListModel; q: string | undefined 
               Email is switched off, so these reviews were not emailed. They are all here.
             </p>
           ) : null}
+          {model.allRuleWritten ? (
+            <p className="m-0 text-sm text-text-muted" data-provenance="no-ai">
+              {NO_AI_TEXT}: every review here is built from the day&apos;s stored numbers by fixed
+              rules.
+            </p>
+          ) : model.allAi ? (
+            <p className="m-0 text-sm text-text-muted" data-provenance="ai">
+              {AI_TEXT}: every review here has a written summary.
+            </p>
+          ) : null}
           <ul aria-label="Evening reviews" className="m-0 flex list-none flex-col gap-2 p-0">
             {model.rows.map((r) => (
               <li
@@ -187,12 +201,11 @@ function ListView({ model, q }: { model: ReviewListModel; q: string | undefined 
                     {r.kindText}
                     {r.partial && !/partial/i.test(r.kindText) ? " (partial)" : ""}
                   </li>
-                  <li
-                    className="rounded-md bg-surface-2 px-2 py-1"
-                    data-provenance={r.ai ? "ai" : "no-ai"}
-                  >
-                    {r.aiText}
-                  </li>
+                  {r.ai && !model.allAi ? (
+                    <li className="rounded-md bg-surface-2 px-2 py-1" data-provenance="ai">
+                      {r.aiText}
+                    </li>
+                  ) : null}
                   {/* D-200: "email is switched off" is said once above the list, not on every row */}
                   {r.delivery.status === "suppressed_off" ? null : (
                     <li
@@ -211,6 +224,20 @@ function ListView({ model, q }: { model: ReviewListModel; q: string | undefined 
           </ul>
         </>
       )}
+
+      {q === undefined && model.page === 1 ? (
+        <p className="m-0 text-sm">
+          {model.showingNonTrading ? (
+            <Link href={qs(1, false)} className="text-accent underline">
+              Hide non-trading days
+            </Link>
+          ) : (
+            <Link href={qs(1, true)} className="text-accent underline">
+              Show non-trading days
+            </Link>
+          )}
+        </p>
+      ) : null}
 
       {model.page > 1 || model.hasMore ? (
         <nav aria-label="Pages" className="flex gap-4 text-sm">
