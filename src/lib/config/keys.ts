@@ -527,6 +527,9 @@ const M6_RANGED = [
   ["picks_max_per_family", "int", 10, 10, 10, "picks", "O", LRN, "AGT-113; ch.15 l.211; M17 O-76: no per-family cap; bounds pinned to 10 by D-791", "Fixed at 10 = no per-family cap (Owner decision O-76); kept so a stored value cannot bring the cap back"],
   ["pick_valid_sessions", "int", 2, 1, 5, "sessions", "O", LRN, "UXN-040, AGT-113; ch.15 l.212", "Not used since D-187: a waiting pick is checked each night against information instead of a session count"],
   ["pick_success_min_n", "int", 30, 10, 200, "picks", "O", LRN, "UXN-041; ch.15 l.213 (bounds 'as ch. 16' not given, 10-200 agent-chosen, D-111)", "Closed picks needed before model success is shown"],
+  // D-913 "Follow the picks" practice portfolio (Owner 2026-11-10)
+  ["picks_portfolio_seed_aud", "int", 5000, 1000, 100000, "AUD", "O", LRN, "D-913 (Owner 2026-11-10: multiple stocks, think as end-user money)", "Practice money the Follow the picks portfolio starts with"],
+  ["picks_portfolio_slots", "int", 5, 1, 10, "stocks", "O", LRN, "D-913 (Owner 2026-11-10)", "Most stocks the Follow the picks portfolio holds at once; each buy is about the value divided by this"],
 ] as const satisfies readonly RangedRow[];
 
 // prettier-ignore

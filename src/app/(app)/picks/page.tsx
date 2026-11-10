@@ -18,6 +18,8 @@ import { PicksEmptyArt } from "./EmptyArt";
 import { TrackRecordBody } from "./TrackRecordBody";
 import { HistoryBody } from "./HistoryBody";
 import { SuccessStrip } from "./SuccessStrip";
+import { PortfolioCard } from "./PortfolioCard";
+import { loadPickPortfolio } from "@/lib/ui/loaders/pickPortfolio";
 import { IntradaySection } from "./IntradaySection";
 import { SortToggle } from "./SortToggle";
 import { setPicksSortAction } from "../settings/alerts/actions";
@@ -61,6 +63,7 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
   const picks = sortPicks(capPerFamily(model.picks, max), sort);
   const chips = model.realD ? await loadAlertChips(env, model.realD) : new Map();
   const intraday = await loadIntraday(env);
+  const portfolio = await loadPickPortfolio(env);
 
   return (
     <main className="mx-auto flex w-full max-w-4xl min-w-0 flex-col gap-4 px-4 py-6">
@@ -82,6 +85,8 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
       />
 
       {model.success ? <SuccessStrip success={model.success} profile={model.profile} /> : null}
+
+      <PortfolioCard v={portfolio} />
 
       {model.state === "stale" && model.staleText ? (
         <Banner tone="warning" title="Out of date">

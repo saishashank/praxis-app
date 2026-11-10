@@ -82,6 +82,8 @@ describe("picks are never read by ranking or sizing", () => {
       // benchmark and the window helper so a call is set against the market on the same basis as a pick;
       // it writes only expert_call_outcome, never a pick, order or rank (PRD-035 boundary test).
       f === "src/lib/experts/calls.ts" ||
+      // D-913: the page loader of the Follow the picks card reads the profile name it follows
+      f === "src/lib/ui/loaders/pickPortfolio.ts" ||
       f.startsWith("src/app/");
     expect(importers.filter((f) => !allowed(f))).toEqual([]);
     // and the review import exists, so this guard is not vacuous
@@ -115,13 +117,20 @@ describe("picks are never read by ranking or sizing", () => {
     expect(bad).toEqual([]);
   });
 
-  it("writes only to its own four tables (pick_check: D-187; pick_market: M11-lite ARN-103)", () => {
+  it("writes only to its own tables (pick_check: D-187; pick_market: ARN-103; pick_portfolio_*: D-913)", () => {
     const re = /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)/gi;
     const targets = new Set<string>();
     for (const file of walk(path.join(ROOT, "src/lib/picks"))) {
       for (const m of readFileSync(file, "utf8").matchAll(re)) targets.add(m[1]!.toLowerCase());
     }
-    expect([...targets].sort()).toEqual(["pick", "pick_check", "pick_market", "pick_outcome"]);
+    expect([...targets].sort()).toEqual([
+      "pick",
+      "pick_check",
+      "pick_market",
+      "pick_outcome",
+      "pick_portfolio_day",
+      "pick_portfolio_trade",
+    ]);
   });
 });
 
