@@ -22,7 +22,7 @@ export async function POST(req: Request): Promise<Response> {
     ingest: async (feed, sha, today, nowSec) => {
       try {
         const db = mainDb();
-        const cap = await getConfig(db, "sentinel_max_items_per_run");
+        const cap = await getConfig(db, "news_assess_per_run");
         const r = await ingestFeed({
           db,
           feed,

@@ -1,4 +1,5 @@
 import { COST_PROFILE_CODES } from "@/lib/arena/costs";
+import { CALENDAR_MARKETS } from "@/lib/data/calendarAdmin";
 import { DEFAULT_INJECTION_PHRASES } from "@/lib/llm/injection";
 
 // Typed registry of configuration keys (spec ch.15). Values are stored as JSON in config_version.
@@ -313,7 +314,7 @@ const M5_RANGED = [
   ["p0_batch_window_min", "int", 5, 1, 15, "min", "O", SEM, "EML-020, AGT-115; ch.15 l.120 (bounds not in the extract, D-097)", "P0 follow-ups inside this window are batched into one email"],
   ["watch_list_window", "int", 20, 5, 60, "sessions", "O", SEM, "AGT-014; ch.15 l.121 (bounds not in the extract, D-097)", "A code with a family signal in the last this many sessions is on the watch-list"],
   ["owner_add_expiry_days", "int", 90, 1, 90, "days", "O", SEM, "AGT-014 (expiry at most 90 days); ch.15 l.121 (lower bound D-097)", "Longest an Owner-added watch-list code stays on"],
-  ["sentinel_max_items_per_run", "int", 40, 1, 40, "items", "O", SEM, "AGT-010, PLT-075 (at most 40); ch.15 l.122 (lower bound D-097)", "Announcements assessed per Sentinel call"],
+  ["news_assess_per_run", "int", 40, 20, 200, "items", "O", SEM, "DAT-251 b (supersedes the AGT-010/PLT-075 ceiling of 40), D-954", "Announcements assessed per Sentinel call (the effective cap is also bounded by the LLM headroom and, near the Turso line, by 40)"],
   // Email budget and review follow-up (EML-004, EML-036, NFR-006)
   ["email_daily_cap", "int", 20, 5, 50, "emails/day", "O", SEM, "EML-004; ch.15 l.189", "Emails per day (3 are reserved, P0 uses the rest)"],
   ["email_monthly_cap", "int", 300, 50, 1000, "emails/month", "O", SEM, "EML-004; ch.15 l.190", "Emails per month"],
@@ -1768,19 +1769,61 @@ export const CONFIG_KEYS = {
     validate: intRange(1),
   },
   // Line 142: turso ceilings (storage 3 GB, writes 6M/month, reads 300M/month, staging <= 15%); DAT-141.
+  // M18 (OPS-104, D-958): the two row ceilings default to 20 % of the Turso FREE plan (10 M written,
+  // 500 M read a month), so the Usage page and the configuration agree with PRD-045 / O-81.
   turso_writes_ceiling_month: {
-    default: 6_000_000,
+    default: 2_000_000,
     unit: "rows/month",
     editable: "O",
-    ref: "DAT-141",
+    ref: "DAT-141, OPS-104, D-958",
     validate: intRange(1),
   },
   turso_reads_ceiling_month: {
-    default: 300_000_000,
+    default: 100_000_000,
     unit: "rows/month",
     editable: "O",
-    ref: "DAT-141",
+    ref: "DAT-141, OPS-104, D-958",
     validate: intRange(1),
+  },
+  // M18 (OPS-104, D-958, D-979): the share of the Turso free plan this system may use, and the share at
+  // which the Owner is told. The Usage page draws the ceiling as the "20 % line".
+  turso_free_ceiling_pct: {
+    default: 20,
+    unit: "% of the free plan",
+    editable: "fixed",
+    ref: "OPS-104, PRD-045, O-81, D-979",
+    validate: never,
+  },
+  turso_notice_pct: {
+    default: 15,
+    unit: "% of the free plan",
+    editable: "O",
+    range: [10, 19] as const,
+    ref: "OPS-104, D-958, D-979",
+    validate: intRange(10, 19),
+  },
+  // M18 (D-979): fixed registry entries shown on the Configuration page. The HMAC version mirrors
+  // HMAC_SCHEME_VERSION in src/lib/security/hmacCore.mjs (stream B swaps this literal for the import).
+  hmac_scheme_version: {
+    default: 2,
+    unit: "version",
+    editable: "fixed",
+    ref: "SEC-115, D-957, D-979",
+    validate: never,
+  },
+  calendar_draft_markets: {
+    default: CALENDAR_MARKETS.join(", "), // the market codes as one text: "AU" (D-979)
+    unit: "markets",
+    editable: "fixed",
+    ref: "OPS-103, D-961, D-979",
+    validate: never,
+  },
+  restore_drill_reminder: {
+    default: "quarterly, first day",
+    unit: "schedule",
+    editable: "fixed",
+    ref: "OPS-105, D-962, D-979",
+    validate: never,
   },
   turso_staging_share: {
     default: 0.15,
@@ -2201,16 +2244,46 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
     input: "object",
   },
   turso_writes_ceiling_month: {
-    label: "Database writes ceiling",
+    label: "Database writes ceiling (20 % of the free plan)",
     area: "Quotas",
     bounds: "whole number, at least 1",
     input: "int",
   },
   turso_reads_ceiling_month: {
-    label: "Database reads ceiling",
+    label: "Database reads ceiling (20 % of the free plan)",
     area: "Quotas",
     bounds: "whole number, at least 1",
     input: "int",
+  },
+  turso_free_ceiling_pct: {
+    label: "Share of the Turso free plan this system may use",
+    area: "Quotas",
+    bounds: "fixed",
+    input: "int",
+  },
+  turso_notice_pct: {
+    label: "Share of the Turso free plan at which the Owner is told",
+    area: "Quotas",
+    bounds: "whole percent, 10 to 19",
+    input: "int",
+  },
+  hmac_scheme_version: {
+    label: "Signing scheme version of machine calls",
+    area: "Other",
+    bounds: "fixed",
+    input: "int",
+  },
+  calendar_draft_markets: {
+    label: "Markets whose next-year trading calendar is drafted",
+    area: "Other",
+    bounds: "fixed",
+    input: "text",
+  },
+  restore_drill_reminder: {
+    label: "When the restore-drill reminder appears",
+    area: "Other",
+    bounds: "fixed",
+    input: "text",
   },
   turso_staging_share: {
     label: "Staging share of the database limits",

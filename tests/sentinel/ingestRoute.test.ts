@@ -355,9 +355,9 @@ describe("the real route against a local database", () => {
     expect((await route.POST(post())).status).toBe(503);
   });
 
-  it("honours sentinel_max_items_per_run from the configuration", async () => {
+  it("honours news_assess_per_run from the configuration", async () => {
     await db.execute({
-      sql: "INSERT INTO config_version (key, scope, value_json, reason, changed_at) VALUES ('sentinel_max_items_per_run','global','3','test',?)",
+      sql: "INSERT INTO config_version (key, scope, value_json, reason, changed_at) VALUES ('news_assess_per_run','global','3','test',?)",
       args: [new Date(NOW_MS).toISOString()],
     });
     const feed = feedOf(5);
