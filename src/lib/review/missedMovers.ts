@@ -13,6 +13,7 @@
 import type { CalendarRow } from "@/lib/data/calendar";
 import { addDays, isTradingDay } from "@/lib/data/calendar";
 import type { Ctx } from "./sections";
+import { companyNames, familyNames } from "./names";
 
 export const MOVERS_LISTED = 10; // threshold-ok: gainers and losers listed in the review
 const LIQUID_TIERS = ["U1", "U2"] as const;
@@ -23,6 +24,8 @@ const MARKET_TZ = "Australia/Sydney";
 
 export type MoverFact = {
   readonly code: string;
+  /** Company name (display form), null when unknown. */
+  readonly name: string | null;
   readonly movePpm: number;
   /** Plain words: picked / signalled (and blocked why) / not seen. */
   readonly seen: string;
@@ -107,7 +110,7 @@ export function newsWords(
   if (during.length > 0)
     return `price-sensitive news during the day (not knowable at the open): "${cut(during[0]!.title)}"`;
   if (anns.length > 0) return "only routine announcements";
-  return "no announcement (market or sector move?)";
+  return "no announcement";
 }
 
 /** Section facts for review date c.d, or null on a non-trading day or without two sessions of bars. */
@@ -185,12 +188,15 @@ export async function readMissedMovers(c: Ctx): Promise<MissedMoversFacts | null
       },
     ]);
   }
+  const famName = await familyNames(c.db);
+  const cn = await companyNames(c.db, c.market, codes);
   const fact = (m: { code: string; movePpm: number }): MoverFact => ({
     code: m.code,
+    name: cn.get(m.code) ?? null,
     movePpm: m.movePpm,
     seen: seenWords({
       picked: picked.has(m.code),
-      families: fam.get(m.code) ?? [],
+      families: (fam.get(m.code) ?? []).map((f) => famName[f] ?? f),
       blocked: blk.get(m.code) ?? [],
     }),
     news: newsWords(c.d, annBy.get(m.code) ?? []),

@@ -91,10 +91,12 @@ describe("readMissedMovers", () => {
     expect(f.losers.map((g) => g.code)).toEqual(["ZZL1", "ZZL2", "ZZL3", "ZZL4", "ZZL5", "ZZL6"]);
     expect(f.gainers.map((g) => g.code)).not.toContain("ZZU3"); // illiquid tier left out
     expect(f.gainers[0]).toMatchObject({ seen: "picked last night", movePpm: 60_000 });
-    expect(f.gainers[1]!.seen).toBe("signalled by F4, trade blocked: the stop was too far away");
+    expect(f.gainers[1]!.seen).toBe(
+      "signalled by Buy the dip, trade blocked: the stop was too far away",
+    );
     expect(f.gainers[2]!.seen).toBe("no strategy signalled it");
     expect(f.losers[0]!.news).toBe('price-sensitive news before the open: "Guidance downgrade"');
-    expect(f.losers[1]!.news).toBe("no announcement (market or sector move?)");
+    expect(f.losers[1]!.news).toBe("no announcement");
   });
 
   it("grades last night's picks against today's bar", async () => {

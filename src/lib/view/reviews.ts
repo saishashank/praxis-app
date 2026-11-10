@@ -82,7 +82,7 @@ export function maskedReview(
   if (isObj(facts.narrative)) {
     const n = facts.narrative;
     const sections: Array<[string, unknown]> = [
-      ["What was learned today", n.s4],
+      ["What we learned today", n.s4],
       ["What worked better and why", n.s5],
       ["What needs improving for tomorrow", n.s6],
     ];

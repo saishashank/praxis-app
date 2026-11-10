@@ -64,13 +64,17 @@ describe("picks entry", () => {
     for (const phase of ["all", "3", "picks"]) {
       const r = await cli(url, ["--date", D, "--phase", phase]);
       expect(r.code, phase).toBe(0);
-      expect(r.lines, phase).toHaveLength(2);
+      expect(r.lines, phase).toHaveLength(3);
       expect(r.lines[0]).toMatch(
-        /^arena-picks AU 2026-10-20: published=\d+ candidates=\d+ bought=\d+ missed=\d+ closed=\d+ open=\d+ checked=\d+ withdrawn=\d+$/,
+        /^arena-picks AU 2026-10-20: published=\d+ candidates=\d+ bought=\d+ missed=\d+ closed=\d+ open=\d+ checked=\d+ withdrawn=\d+ shortlist=-?\d+$/,
       );
       // D-913: the Follow the picks portfolio runs after the picks, counts only
       expect(r.lines[1]).toMatch(
         /^arena-portfolio AU 2026-10-20: trades=\d+ open=\d+ days=\d+ skipped=\d+$/,
+      );
+      // D-921: the daily learning loop runs after the portfolio, counts only (nothing to learn from on an empty file)
+      expect(r.lines[2]).toBe(
+        "arena-learning AU 2026-10-20: movers=0 lessons=0 improvements=0 hypotheses=0",
       );
       expect(r.lines.join("\n")).not.toMatch(/secret|file:/);
     }

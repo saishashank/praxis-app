@@ -225,7 +225,13 @@ export async function addFilled(db: Client, cohortId: string, id: string, code: 
 }
 
 /** A closed winning trade (entry and exit fills) so that section 7 has figures. */
-export async function addClosedTrade(db: Client, cohortId: string, tag: string, win: boolean) {
+export async function addClosedTrade(
+  db: Client,
+  cohortId: string,
+  tag: string,
+  win: boolean,
+  exitD: string = PREV,
+) {
   const code = `ZZ${tag.toUpperCase()}`;
   const o1 = `ot-${tag}-1`;
   const o2 = `ot-${tag}-2`;
@@ -258,8 +264,8 @@ export async function addClosedTrade(db: Client, cohortId: string, tag: string, 
      VALUES (?, ?, '2026-10-15', '${code}', 'sell', 'exit_cs', 100, 'pending')`,
     [o2, cohortId],
   );
-  await fill(`fx-${tag}`, o2, "sell", PREV, win ? 130_000_000 : 80_000_000);
-  await exec(db, "UPDATE arena_order SET status = 'filled', fill_d = ? WHERE id = ?", [PREV, o2]);
+  await fill(`fx-${tag}`, o2, "sell", exitD, win ? 130_000_000 : 80_000_000);
+  await exec(db, "UPDATE arena_order SET status = 'filled', fill_d = ? WHERE id = ?", [exitD, o2]);
   await exec(db, "UPDATE trade SET exit_fill_id = ?, exit_type = 'CS' WHERE id = ?", [
     `fx-${tag}`,
     `t-${tag}`,

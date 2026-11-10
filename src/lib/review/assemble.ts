@@ -11,7 +11,10 @@
 //   - versions are append-only: the same facts and kind never write a second version.
 import type { Client } from "@libsql/client";
 import { renderReview, type ReviewFacts } from "@/lib/email/templates";
-import { dateLabel } from "@/lib/email/templates/format";
+import { formatDay } from "@/lib/view/format";
+import type { AttentionItem } from "@/lib/email/templates/review";
+import { reviewLists, type ClosedTradeFact } from "@/lib/email/templates/reviewWords";
+import { loadDailyLearning, type DailyLearning } from "@/lib/learning/daily";
 import { readMissedMovers } from "./missedMovers";
 import type { EnvName } from "@/lib/email/templates/core";
 import {
@@ -27,20 +30,14 @@ import {
 import { haltAttentionItems } from "./haltAttention";
 import {
   loadCtx,
-  narrativeFacts,
-  narrativeProvenance,
   nextSession,
   readAvailability,
+  readClosedToday,
   readExecutions,
-  readHealth,
-  readHealthSummary,
-  readNarrativePack,
-  readNarrativeRow,
   readOrders,
   readPickReview,
   readRecap,
   readStats,
-  rulesNarrative,
   unreadStreak,
 } from "./sections";
 
@@ -69,6 +66,9 @@ export type BuiltFacts = {
 
 const NARRATIVE_SECTIONS = [4, 5, 6];
 
+/** formatDay anchor: the review date itself, so the year shows only when a date is in another year. */
+const anchor = (d: string): Date => new Date(`${d}T00:00:00.000Z`);
+
 export async function buildFacts(db: Client, o: BuildOptions): Promise<BuiltFacts> {
   const c = await loadCtx(db, o);
   const av = await readAvailability(c);
@@ -94,22 +94,35 @@ export async function buildFacts(db: Client, o: BuildOptions): Promise<BuiltFact
   let orders: ReviewFacts["orders"] = [];
   if (av.arenaActive && c.tradingDay && !minimal && !gone.has(2)) orders = await readOrders(c);
 
-  // sections 4-6 and 7
+  // section 5: positions finished today (plain-share strategies)
+  let closedTrades: ClosedTradeFact[] | undefined;
+  if (av.arenaActive && c.tradingDay && !minimal) closedTrades = await readClosedToday(c);
+
+  // section 4 and 6: the daily learning (D-922); a failing or absent module reads as "did not run"
+  let learning: DailyLearning | null = null;
+  if (av.arenaActive && !minimal) {
+    learning = await loadDailyLearning(db, o.market, o.d).catch(() => null);
+  }
+  const queuedOrders =
+    c.tradingDay && !minimal && av.arenaActive && !gone.has(2)
+      ? orders.filter((x) => x.state === "created").length
+      : undefined;
+
+  // sections 4-6: the plain lists the masked in-app view reads (no model words any more, D-922)
   let narrative: ReviewFacts["narrative"] = null;
-  let provenance: NarrativeKind = "rules";
+  const provenance: NarrativeKind = "rules";
   if (av.arenaActive && !minimal && NARRATIVE_SECTIONS.every((n) => !gone.has(n))) {
-    const pack = await readNarrativePack(c);
-    const row = c.tradingDay ? await readNarrativeRow(db, o.market, o.d) : null;
-    narrative = narrativeFacts(row, rulesNarrative(pack, !c.tradingDay));
-    provenance = narrativeProvenance(row);
+    narrative = {
+      kind: "rules",
+      ...reviewLists({ learning, closed: closedTrades ?? [], queuedOrders: queuedOrders ?? null }),
+    };
   }
   const stats =
     av.arenaActive && !minimal && !gone.has(7) ? await readStats(c, c.tradingDay) : null;
 
-  // sections 8 and 9
+  // section 8: today's alerts (the system-health section is gone, D-922)
   const recap = await readRecap(c);
-  const health = await readHealth(c, av);
-  const hs = await readHealthSummary(c, health.lines);
+  const hs: { attention: AttentionItem[] } = { attention: [] };
   // A1 (D-744): a halted code that may resume is an attention line; a fault never breaks the review.
   if (!minimal) {
     try {
@@ -119,24 +132,12 @@ export async function buildFacts(db: Client, o: BuildOptions): Promise<BuiltFact
     }
   }
 
-  const sorted = [...executions].sort(
-    (a, b) => b.dayPlCents - a.dayPlCents || (a.id < b.id ? -1 : 1),
-  );
+  // D-922: no best/worst tiles and no component counts; only actionable items (a halted share).
   const scorecard: ReviewFacts["scorecard"] = {
-    healthyComponents: hs.healthyComponents,
-    totalComponents: hs.totalComponents,
+    healthyComponents: 0,
+    totalComponents: 0,
     attention: hs.attention,
   };
-  if (!carried && sorted.length > 0) {
-    const pick = (e: (typeof sorted)[number]) => ({
-      id: e.id,
-      label: e.label,
-      currency: e.currency,
-      dayPlCents: e.dayPlCents,
-    });
-    scorecard.best = pick(sorted[0]!);
-    if (sorted.length > 1) scorecard.worst = pick(sorted[sorted.length - 1]!);
-  }
 
   const facts: ReviewFacts = {
     variant,
@@ -151,9 +152,12 @@ export async function buildFacts(db: Client, o: BuildOptions): Promise<BuiltFact
     stats,
     alerts: recap.alerts,
     breakerHits: recap.breakerHits,
-    health: health.lines,
-    suppressedEmails: health.suppressed,
+    health: [],
+    suppressedEmails: 0,
   };
+  if (av.arenaActive && !minimal) facts.learning = learning;
+  if (closedTrades !== undefined) facts.closedTrades = closedTrades;
+  if (queuedOrders !== undefined) facts.queuedOrders = queuedOrders;
   const unread = await unreadStreak(db, o.d);
   if (unread > 0) facts.unreadDays = unread;
   if (variant === "partial") facts.missing = missing;
@@ -164,11 +168,13 @@ export async function buildFacts(db: Client, o: BuildOptions): Promise<BuiltFact
   const missedMovers = await readMissedMovers(c).catch(() => null);
   if (missedMovers !== null) facts.missedMovers = missedMovers;
   if (minimal) {
-    const noData = executions.length === 0 ? ` No data for ${o.d}.` : "";
+    const noData = executions.length === 0 ? ` No data for ${formatDay(o.d, anchor(o.d))}.` : "";
     facts.minimalReason = `${o.minimal!.reason}${noData}`;
   }
   const next = nextSession(o.d, c.calendar);
-  if (next !== null) facts.nextTradingNote = `Next trading session: ${dateLabel(next)}.`;
+  if (next !== null) {
+    facts.nextTradingNote = `Next trading session: ${formatDay(next, anchor(o.d))}.`;
+  }
   return {
     facts,
     variant,

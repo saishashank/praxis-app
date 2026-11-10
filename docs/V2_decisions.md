@@ -10,6 +10,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | --- | --- |
 | D-909 | The Evening Review's section 6 ("What needs improving for tomorrow") gains "What we missed today" (src/lib/review/missedMovers.ts), built from the stored nig... |
 | D-911 | (Owner 2026-11-10) The Picks page gains a History tab (/picks?view=history, between Today and Track record): one row per published pick (the same stock picke... |
+| D-922 | (Owner 2026-11-10: the review is "utter nonsense") The Evening Review is rebuilt in plain words, email and app from the same facts. |
 
 ## M8.1 (M8.1_design.md)
 
@@ -316,6 +317,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-886 | Movers check (Owner 2026-11-04: "at the end of the day run a job on why we haven't picked the top 20 movers and if we have stopped the top 20 losers"). |
 | D-908 | A complete full replay stores, per (family, rule version, variant), the development track record the picks loader needs, as one replay_stat row (scope pick_h... |
 | D-912 | (Owner 2026-11-10: "stocks in ideas and no picks makes me doubt the basis") Picks are what the Owner trades; the strategies' signals are research. "Tonight's... |
+| D-920 | (Owner 2026-11-10: "no picks yet. This is frustrating") The strategies raise only a handful of signals a night (one on 10 Nov; most rules do not fire in a mi... |
+| D-921 | (Owner 2026-11-10: "the system never learns from each day"; the Evening Review listed the top gainers and losers with "market or sector move?" and nothing wa... |
 
 ## M14 (M14_design.md)
 

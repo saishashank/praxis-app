@@ -155,10 +155,12 @@ function ListView({ model, q }: { model: ReviewListModel; q: string | undefined 
           </Link>
           {model.masked ? null : (
             <SectionIndex
-              items={REVIEW_SECTION_NAMES.slice(0, REVIEW_TONES.length).map((label, i) => ({
-                label: plainSectionName(label),
-                tone: REVIEW_TONES[i]!,
-              }))}
+              items={REVIEW_SECTION_NAMES.slice(0, REVIEW_SECTION_NAMES.length - 1).map(
+                (label, i) => ({
+                  label: plainSectionName(label),
+                  tone: REVIEW_TONES[i]!,
+                }),
+              )}
             />
           )}
         </section>

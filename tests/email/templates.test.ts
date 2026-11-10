@@ -120,39 +120,172 @@ describe("every template", () => {
 });
 
 describe("Evening Review variants", () => {
-  it("full review has all ten headings, the KPI row and no partial box", () => {
+  it("full review has its nine headings, the KPI row and no partial box (D-922)", () => {
     const { text, html } = CASES["review-full"]!.out;
     for (const h of [
       "1. Headline scorecard",
       "2. Investments made today",
       "3. Profit / loss",
-      "4. What was learned today",
+      "4. What we learned today",
       "5. What worked better and why",
       "6. What needs improving for tomorrow",
       "7. Overall picture",
-      "8. Sentinel recap",
-      "9. System & quota health",
-      "10. Footer",
+      "8. Today's alerts",
+      "9. Footer",
     ]) {
       expect(text).toContain(h);
     }
     expect(html.match(/data-kpi="1"/g)?.length).toBeGreaterThanOrEqual(3);
     expect(html.match(/data-kpi="1"/g)?.length).toBeLessThanOrEqual(4);
     expect(text).not.toContain("Partial review");
-    expect(text).toContain("Written without AI today");
-    expect(text).toContain("single-day result — noise");
     expect(text).toContain("Simulation for personal information only; not financial advice");
     expect(text).toContain("never ask for keys or passwords");
-    expect(text).toContain("n/a");
   });
 
-  it("KPI tiles are single column at phone width and per-currency only", () => {
+  it("KPI tiles are single column at phone width and show the listed strategies' total", () => {
     const { html, text } = CASES["review-full"]!.out;
     expect(html).toMatch(
       /max-width:600px[^}]*\{[^}]*\}[^<]*\.kpi\{display:block !important;width:100% !important/,
     );
-    expect(text).toContain("Day P/L AUD");
-    expect(text.toLowerCase()).not.toContain("total across");
+    expect(text).toContain("Today, all strategies");
+    expect(text).toContain("Value now");
+    expect(text).not.toContain("Best execution");
+    expect(text).not.toContain("Worst execution");
+  });
+
+  it("uses no internal codes anywhere (D-922)", () => {
+    const { text, html } = CASES["review-full"]!.out;
+    // what a reader sees: no link targets, no tags
+    const seen = [
+      text.replace(/\(https?:\/\/\S+\)/g, "").replace(/https?:\/\/\S+/g, ""),
+      html.replace(/<[^>]*>/g, " "),
+    ];
+    for (const s of seen) {
+      expect(s).not.toMatch(/\bE\d{2}\b/);
+      expect(s).not.toMatch(/\bF\d-[UL]\b/);
+      expect(s).not.toMatch(/\bC\d-F\d\b/);
+      expect(s).not.toMatch(/\bARN-\d+/);
+      expect(s).not.toMatch(/\bP[012]\b/);
+      expect(s).not.toMatch(/\bNAV\b/);
+      expect(s).not.toContain("System & quota health");
+      expect(s).not.toContain("Sentinel recap");
+      expect(s).not.toContain("To target");
+      expect(s).not.toContain("█");
+    }
+  });
+
+  it("lists one line per plain-share strategy and never the leverage twins", () => {
+    const { text } = CASES["review-full"]!.out;
+    for (const i of [1, 3, 5, 7, 9, 11]) expect(text).toContain(`Strategy ${i}`);
+    for (const i of [2, 4, 6, 8, 10, 12]) expect(text).not.toMatch(new RegExp(`Strategy ${i}\\b`));
+    expect(text).toMatch(/Strategy 1[^\n]*\+A\$123\.45/);
+  });
+
+  it("the profit / loss table has strategy, value, today and since start only", () => {
+    const { html } = CASES["review-full"]!.out;
+    expect(html).toContain(">Since start<");
+    expect(html).not.toContain(">To target<");
+    expect(html).not.toContain(">Execution<");
+    expect(html).not.toMatch(/realised|unrealised|sleeve/);
+  });
+
+  it("orders show the strategy name and the company with its code in brackets", () => {
+    const { text } = CASES["review-full"]!.out;
+    expect(text).toMatch(/Sell Example Company 1 \(TST01\)/);
+    expect(text).toMatch(/Buy Example Company 2 \(TST02\)/);
+  });
+
+  it("what we learned: the daily learning, or a plain sentence when it did not run", () => {
+    const { text } = CASES["review-full"]!.out;
+    expect(text).toContain("Stocks that broke out on heavy volume rose 0.6%");
+    expect(text).toContain("Breakout on heavy volume");
+    expect(text).toContain("beats the market");
+    expect(text).toContain("Gap-ups after results continue for 3 days.");
+    const none = renderReview(fx.reviewFacts({ learning: null })).text;
+    expect(none).toContain("The learning step did not run tonight.");
+    expect(none).not.toContain("Breakout on heavy volume");
+  });
+
+  it("what worked: honest when every result is a loss, and when nothing closed", () => {
+    const { text } = CASES["review-full"]!.out;
+    expect(text).toContain("Nothing worked today: all 2 trades that finished lost money");
+    expect(text).toContain("stop-loss hit");
+    expect(text).toContain("closing signal");
+    const empty = renderReview(fx.reviewFacts({ closedTrades: [] })).text;
+    expect(empty).toContain("Nothing worked today: no strategy finished a trade.");
+    const won = renderReview(
+      fx.reviewFacts({
+        closedTrades: [
+          {
+            strategy: "Strategy 1",
+            code: "TST01",
+            company: null,
+            resultCents: 5_00,
+            exit: "closing signal",
+          },
+        ],
+      }),
+    ).text;
+    expect(won).not.toContain("Nothing worked today");
+    expect(won).toContain("1 of 1 finished trade made money");
+  });
+
+  it("what needs improving: the improvements, the queued-order line, then the movers", () => {
+    const { text } = CASES["review-full"]!.out;
+    expect(text).toContain("Look at gap-up news earlier");
+    expect(text).toContain("Next step: Add pre-open announcements");
+    expect(text).toContain("2 orders queued for the next session.");
+    expect(text).toContain("Example Company 11 (TST11)");
+    expect(text).toContain("Rose after a results announcement before the open.");
+    expect(text).toContain("Near miss: Follow the trend");
+    expect(text).toContain("Not caught");
+    expect(text).not.toContain("?");
+  });
+
+  it("the movers fall back to the descriptive check only when the learning is missing", () => {
+    const fb = {
+      lines: ["Last night's picks: none were published."],
+      gainers: [
+        {
+          code: "TST21",
+          name: "Fallback Co",
+          movePpm: 70_000,
+          seen: "no strategy signalled it",
+          news: "no announcement",
+        },
+      ],
+      losers: [],
+    };
+    const withLearning = renderReview(fx.reviewFacts({ missedMovers: fb })).text;
+    expect(withLearning).not.toContain("Fallback Co");
+    const without = renderReview(fx.reviewFacts({ learning: null, missedMovers: fb })).text;
+    expect(without).toContain("Fallback Co (TST21)");
+    expect(without).toContain("no announcement");
+  });
+
+  it("success %: no agent bars and no control rows; a sentence until the twins are measured", () => {
+    const { text } = CASES["review-full"]!.out;
+    expect(text).toContain("Comparison with random-pick twins starts after 3 finished rounds.");
+    expect(text).not.toContain("Sentinel");
+    const measured = renderReview(
+      fx.reviewFacts({
+        stats: {
+          headline: "h",
+          rows: [],
+          comparisons: ["Strategy 1: 2.0 percentage points ahead of its random-pick twin."],
+        },
+      }),
+    ).text;
+    expect(measured).toContain("Strategy 1: 2.0 percentage points ahead");
+    expect(measured).not.toContain("starts after 3 finished rounds");
+  });
+
+  it("today's alerts is dropped when there is nothing to show", () => {
+    const quiet = renderReview(
+      fx.reviewFacts({ alerts: [], regimeNotice: undefined, breakerHits: [] }),
+    ).text;
+    expect(quiet).not.toContain("Today's alerts");
+    expect(quiet).toContain("8. Footer");
   });
 
   it("partial review starts with the EML-011 box listing missing sections", () => {
@@ -160,7 +293,7 @@ describe("Evening Review variants", () => {
     expect(subject).toContain("(partial)");
     expect(text.indexOf("Partial review — not ready by 20:30:")).toBeGreaterThan(-1);
     expect(text.indexOf("Partial review")).toBeLessThan(text.indexOf("1. Headline scorecard"));
-    expect(text).toContain("Section 4: What was learned today");
+    expect(text).toContain("Section 4: What we learned today");
     expect(text).toContain("Section 7: Overall picture — success %");
     expect(text).toContain("Not ready");
   });
@@ -169,14 +302,14 @@ describe("Evening Review variants", () => {
     const { text, subject, sizeHtml } = CASES["review-minimal"]!.out;
     expect(subject).toContain("(minimal)");
     expect(text).toContain("Minimal review");
-    expect(text).not.toContain("8. Sentinel recap");
+    expect(text).not.toContain("8. Today's alerts");
     expect(sizeHtml).toBeLessThan(CASES["review-full"]!.out.sizeHtml);
   });
 
-  it("non-trading day keeps all ten headings and replaces trading content", () => {
+  it("non-trading day keeps its headings and replaces trading content", () => {
     const { text, subject } = CASES["review-non-trading"]!.out;
     expect(subject).toContain("non-trading day");
-    expect(text).toContain("10. Footer");
+    expect(text).toContain("9. Footer");
     expect(text).toContain("No trading today.");
     expect(text).toContain("Market closed");
     expect(text).not.toContain("No paper orders today");
@@ -364,6 +497,43 @@ describe("escaping", () => {
       breakerHits: [{ execution: evil, breaker: evil, effect: evil }],
       narrative: { kind: "llm", s4: [evil], s5: [evil], s6: [evil] },
       health: [{ label: evil, status: "ok", detail: evil }],
+      closedTrades: [{ strategy: evil, code: evil, company: evil, resultCents: -1, exit: evil }],
+      learning: {
+        d: fx.DATE,
+        summary: [evil],
+        movers: [
+          {
+            code: evil,
+            name: evil,
+            side: "gainer",
+            movePpm: 1,
+            cause: "stock_specific",
+            causeText: evil,
+            indexMovePpm: null,
+            sectorName: null,
+            sectorMovePpm: null,
+            volumeVsUsualPpm: null,
+            setupBefore: [evil],
+            caughtBy: evil,
+            nearMiss: null,
+          },
+        ],
+        lessons: [
+          {
+            feature: evil,
+            sessions: 1,
+            n: 1,
+            nextDayAvgPpm: 1,
+            baseAvgPpm: 1,
+            liftPpm: 0,
+            hitRatePpm: 0,
+            verdict: "no clear edge yet",
+            change: "new",
+          },
+        ],
+        improvements: [{ title: evil, evidence: evil, action: evil, area: "picks" }],
+        hypothesesOpened: [evil],
+      },
       orders: [fx.order(1, { reason: evil, code: evil, cardPath: '/x"onmouseover="y' })],
     });
     const { html } = renderReview(f);

@@ -1,11 +1,11 @@
-// Evening Review renderer (M5 T4; design 2.6 and 4.6; EML-010...014, EML-035...037, UXN-163).
-// Pure: typed facts in, { subject, html, text } out. Every number comes from the facts (LLM-034);
-// the narrative is either supplied (R5 wording) or the facts-only "Written without AI today" list.
+// Evening Review renderer (M5 T4; design 2.6 and 4.6; EML-010...014, EML-035...037, UXN-163;
+// rebuilt in plain words by D-922, Owner 2026-11-10). Pure: typed facts in, { subject, html, text }
+// out. Every number comes from the facts (LLM-034). No internal codes: strategies by name, companies
+// as "Name (CODE)", money as A$ with a sign, dates through formatDay.
 //
 // Variants: full, partial (EML-011 box), minimal (watchdog fallback, NFR-006), non-trading
-// (all 10 headings, trading sections replaced, DAT-022). Size ladder (design 4.6 step 2): level 0 =
-// one line per execution; 1 = section 2 per-order tables become counts + link; 2 = section 7
-// tables become a headline + link.
+// (trading sections replaced, DAT-022). Size ladder (design 4.6 step 2): level 0 = full tables;
+// 1 = section 2 per-order tables become counts + link; 2 = section 7 tables become a headline + link.
 
 import {
   type Block,
@@ -21,18 +21,39 @@ import {
   standardFooter,
   withEnvPrefix,
 } from "./core";
-import { dateLabel, glyphBar, money, pct, plural, toneOf, truncate } from "./format";
+import { dateLabel, plural, toneOf, truncate } from "./format";
+import { formatDay } from "@/lib/view/format";
 import { displayTitle } from "@/lib/view/displayText";
+import type { DailyLearning } from "@/lib/learning/daily";
+import {
+  type ClosedTradeFact,
+  aud,
+  audWithPct,
+  companyLabel,
+  pctPpm,
+  sortClosed,
+  workedHeadline,
+} from "./reviewWords";
 
+export type { ClosedTradeFact };
 export type ReviewVariant = "full" | "partial" | "minimal" | "nonTrading";
 
 export interface ExecutionFact {
-  id: string; // "E01"
+  id: string; // "E01" (never shown)
   label: string;
+  /** The strategy name ("Follow the trend"); absent in old facts and the watchdog fallback. */
+  name?: string;
+  /** "U" plain shares, "L" leverage twin (never listed). Absent = listed. */
+  variant?: "U" | "L";
   currency: string;
   navCents: number;
   dayPlCents: number;
-  /** Progress towards the target, 0..100 (glyph bar). */
+  /** Day result as parts per million of yesterday's value (null when unknown). */
+  dayPlPpm?: number | null;
+  /** Value now minus the starting money, and as parts per million of it. */
+  sinceStartCents?: number;
+  sinceStartPpm?: number | null;
+  /** Progress towards the target, 0..100 (no longer shown). */
   progressPct: number;
   distanceToTargetCents: number;
   realisedCents: number;
@@ -48,9 +69,13 @@ export interface ExecutionFact {
 
 export interface OrderFact {
   executionId: string;
+  /** Strategy name of the order's execution. */
+  strategy?: string;
   state: "filled" | "created";
   side: "buy" | "sell";
   code: string;
+  /** Company name (display form). */
+  companyName?: string | null;
   qty: number;
   priceCents: number;
   costsCents: number;
@@ -77,6 +102,8 @@ export interface AttentionItem {
 export interface AlertFact {
   tier: "P0" | "P1" | "P2";
   code: string;
+  /** Company name (display form). */
+  company?: string | null;
   title: string;
   time: string; // pre-formatted Australia/Melbourne time
   effect: string;
@@ -91,33 +118,49 @@ export interface StatRow {
 
 export interface AgentSuccess {
   agent: string;
-  successPct: number | null; // null -> "n/a" (ARN-075)
+  successPct: number | null;
   n: number;
 }
 
 export interface NarrativeFacts {
-  /** "llm" = R5 wording; "rules" = deterministic facts-only fallback (EML-014). */
+  /** Plain lists behind sections 4-6, built by the readers (read by the masked in-app view). */
   kind: "llm" | "rules";
   s4: string[];
   s5: string[];
   s6: string[];
 }
 
-/** M17 EML-042: pick-alert lines of section 8, the optional candidate list, section 9's held/suppressed mail. */
+/** M17 EML-042: pick-alert lines of the alerts section and the optional candidate list. */
 export interface PickReviewFacts {
-  /** "Buy-price alerts today: ..." and "Intraday candidates today: ..." */
+  /** "Buy-price alerts today: ..." and "Intraday candidates today: ..." (only lines with content). */
   lines: string[];
   /** Null = the candidate list is switched off (`intraday_candidate_emails`) or empty. */
-  candidates: { code: string; trigger: string; outcome: string }[] | null;
+  candidates: { code: string; name?: string | null; trigger: string; outcome: string }[] | null;
   /** Pick mail the cap suppressed or quiet hours held (EML-041), one line each. */
   held: string[];
 }
 
-/** D-909 (section 6): the next-day check of the picks and the biggest movers. */
+/** D-909 (fallback when the daily learning is missing): last night's picks graded and the biggest movers. */
+export interface MoverFactRow {
+  code: string;
+  name?: string | null;
+  movePpm: number;
+  seen: string;
+  news: string;
+}
 export interface MissedMoversReviewFacts {
   lines: string[];
-  gainers: { code: string; movePpm: number; seen: string; news: string }[];
-  losers: { code: string; movePpm: number; seen: string; news: string }[];
+  gainers: MoverFactRow[];
+  losers: MoverFactRow[];
+}
+
+export interface StatsFacts {
+  headline: string;
+  rows: StatRow[];
+  /** One line per strategy measured against its random-pick twins (empty until measured). */
+  comparisons?: string[];
+  /** Old facts only; no longer shown. */
+  agents?: AgentSuccess[];
 }
 
 export interface ReviewFacts {
@@ -135,25 +178,33 @@ export interface ReviewFacts {
   /** Minimal review: why the fallback was used. */
   minimalReason?: string;
   executions: ExecutionFact[];
-  /** Section 1. */
+  /** Section 1 (the best/worst fields of earlier versions are no longer shown). */
   scorecard: {
     best?: { id: string; label: string; currency: string; dayPlCents: number };
     worst?: { id: string; label: string; currency: string; dayPlCents: number };
     healthyComponents: number;
     totalComponents: number;
+    /** Actionable items only (a halted share that may resume). */
     attention: AttentionItem[];
   };
   orders: OrderFact[];
+  /** Positions finished today (section 5). */
+  closedTrades?: ClosedTradeFact[];
+  /** Orders queued for the next session (section 6). */
+  queuedOrders?: number;
+  /** The daily learning of the date; null/absent = the step did not run. */
+  learning?: DailyLearning | null;
   narrative: NarrativeFacts | null;
-  stats: { headline: string; rows: StatRow[]; agents: AgentSuccess[] } | null;
+  stats: StatsFacts | null;
   alerts: AlertFact[];
   regimeNotice?: string;
-  breakerHits: { execution: string; breaker: string; effect: string }[];
+  breakerHits: { execution: string; company?: string | null; breaker: string; effect: string }[];
+  /** No longer shown (the system-health section was removed, D-922). */
   health: HealthLine[];
   suppressedEmails: number;
   nextTradingNote?: string;
   pickAlerts?: PickReviewFacts;
-  /** D-909: last night's picks graded, today's biggest movers and why they were or were not seen. */
+  /** D-909: shown only when `learning` is null. */
   missedMovers?: MissedMoversReviewFacts;
 }
 
@@ -161,42 +212,36 @@ const SECTION_NAMES = [
   "Headline scorecard",
   "Investments made today",
   "Profit / loss",
-  "What was learned today",
+  "What we learned today",
   "What worked better and why",
   "What needs improving for tomorrow",
   "Overall picture — success %",
-  "Sentinel recap",
-  "System & quota health",
+  "Today's alerts",
   "Footer",
 ];
 
 const MAX_LADDER = 2;
 
-function currencies(ex: ExecutionFact[]): string[] {
-  return [...new Set(ex.map((e) => e.currency))].sort();
+/** formatDay anchored to the review date: deterministic, the year only when it differs. */
+function dayOf(f: Pick<ReviewFacts, "date">, d: string): string {
+  return formatDay(d, new Date(`${f.date}T00:00:00.000Z`));
 }
 
-function dayPlByCurrency(ex: ExecutionFact[]): { currency: string; cents: number; n: number }[] {
-  return currencies(ex).map((currency) => {
-    const rows = ex.filter((e) => e.currency === currency);
-    return { currency, cents: rows.reduce((a, r) => a + r.dayPlCents, 0), n: rows.length };
-  });
+/** The listed strategies: plain shares only, never the leverage twins. */
+function live(ex: ExecutionFact[]): ExecutionFact[] {
+  return ex.filter((e) => e.variant !== "L");
+}
+
+function nameOf(e: ExecutionFact): string {
+  return e.name ?? e.label;
 }
 
 function tone(cents: number): Tone | undefined {
   return toneOf(cents);
 }
 
-function statusTone(s: HealthLine["status"]): Tone | undefined {
-  return s === "ok" ? "pos" : s === "attention" ? "warn" : "neg";
-}
-
-function statusWord(s: HealthLine["status"]): string {
-  return s === "ok" ? "OK" : s === "attention" ? "Needs attention" : "Down";
-}
-
 function subjectFor(f: ReviewFacts): string {
-  const label = dateLabel(f.date);
+  const label = dayOf(f, f.date);
   const tag =
     f.variant === "partial"
       ? " (partial)"
@@ -209,51 +254,38 @@ function subjectFor(f: ReviewFacts): string {
   return withEnvPrefix(f.env, `${unread}Praxis Evening Review${tag} — ${label}`);
 }
 
+const sum = (xs: number[]): number => xs.reduce((a, x) => a + x, 0);
+
 function kpiBlock(f: ReviewFacts): Block {
   const tiles: Extract<Block, { t: "kpis" }>["tiles"] = [];
+  const ex = live(f.executions);
   const trading = f.variant !== "nonTrading" && f.arenaActive;
   if (trading) {
-    for (const c of dayPlByCurrency(f.executions)) {
-      tiles.push({
-        label: `Day P/L ${c.currency}`,
-        value: money(c.cents, c.currency, true),
-        sub: `${c.n} ${plural(c.n, "execution")}`,
-        tone: tone(c.cents),
-      });
-    }
-    const { best, worst } = f.scorecard;
-    if (best) {
-      tiles.push({
-        label: "Best execution",
-        value: `${best.id} ${money(best.dayPlCents, best.currency, true)}`,
-        sub: "single-day result — noise",
-        tone: tone(best.dayPlCents),
-      });
-    }
-    if (worst) {
-      tiles.push({
-        label: "Worst execution",
-        value: `${worst.id} ${money(worst.dayPlCents, worst.currency, true)}`,
-        sub: "single-day result — noise",
-        tone: tone(worst.dayPlCents),
-      });
-    }
+    const day = sum(ex.map((e) => e.dayPlCents));
+    tiles.push({
+      label: "Today, all strategies",
+      value: aud(day, true),
+      sub: `${ex.length} ${plural(ex.length, "strategy", "strategies")}`,
+      tone: tone(day),
+    });
+    tiles.push({ label: "Value now", value: aud(sum(ex.map((e) => e.navCents))) });
+    const closed = (f.closedTrades ?? []).length;
+    tiles.push({
+      label: "Trades finished today",
+      value: String(closed),
+      sub: closed === 0 ? "none closed" : undefined,
+    });
   } else {
     tiles.push({
       label: f.arenaActive ? "Market" : "Arena",
       value: f.arenaActive ? "Market closed" : "Not active",
       sub: f.arenaActive ? "non-trading day" : "data-only mode",
     });
-    for (const c of currencies(f.executions)) {
-      const nav = f.executions.filter((e) => e.currency === c).reduce((a, e) => a + e.navCents, 0);
-      tiles.push({ label: `Carried NAV ${c}`, value: money(nav, c) });
+    if (ex.length > 0) {
+      tiles.push({ label: "Value now", value: aud(sum(ex.map((e) => e.navCents))) });
     }
   }
-  const p0 = f.alerts.filter((a) => a.tier === "P0").length;
-  tiles.push({ label: "P0 alerts", value: String(p0), tone: p0 > 0 ? "warn" : undefined });
-  // 3-4 tiles (UXN-163): keep the P0 tile and at most three others.
-  const p0Tile = tiles[tiles.length - 1]!;
-  return { t: "kpis", tiles: [...tiles.slice(0, 3), p0Tile].slice(-4) };
+  return { t: "kpis", tiles };
 }
 
 function notActive(): Block {
@@ -264,82 +296,82 @@ function unavailable(): Block {
   return { t: "p", text: "Not ready — see the partial-review box at the top.", tone: "warn" };
 }
 
-function section1(f: ReviewFacts, missing: Set<number>): Block[] {
-  const out: Block[] = [{ t: "h", text: `1. ${SECTION_NAMES[0]}` }];
+const TERMINAL_WORDS: Readonly<Record<string, string>> = {
+  target: "reached its profit target",
+  bust: "lost too much and was stopped",
+  stalled: "stalled without enough progress",
+  timeout: "ran out of time",
+};
+
+function head(n: number, name: string): Block {
+  return { t: "h", text: `${n}. ${name}` };
+}
+
+function section1(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
+  const out: Block[] = [head(n, SECTION_NAMES[0]!)];
   if (!f.arenaActive) out.push(notActive());
   else if (missing.has(1)) out.push(unavailable());
   else if (f.variant === "nonTrading") {
-    out.push({ t: "p", text: "Market closed today. Carried NAV and system health are shown." });
+    out.push({ t: "p", text: "Market closed today. Values are carried from the last session." });
+    out.push({
+      t: "table",
+      head: ["Strategy", "Value now"],
+      rows: live(f.executions).map((e) => [
+        { text: nameOf(e), href: joinUrl(f.appUrl, e.path) },
+        aud(e.navCents),
+      ]),
+      right: [1],
+    });
   } else {
     out.push({
       t: "table",
-      head: ["Currency", "Day P/L", "Executions"],
-      rows: dayPlByCurrency(f.executions).map((c) => [
-        c.currency,
-        { text: money(c.cents, c.currency, true), tone: tone(c.cents) },
-        String(c.n),
+      head: ["Strategy", "Today (A$)", "Today (%)", "Value now"],
+      rows: live(f.executions).map((e) => [
+        { text: nameOf(e), href: joinUrl(f.appUrl, e.path) },
+        { text: aud(e.dayPlCents, true), tone: tone(e.dayPlCents) },
+        {
+          text: e.dayPlPpm === null || e.dayPlPpm === undefined ? "-" : pctPpm(e.dayPlPpm),
+          tone: tone(e.dayPlPpm ?? 0),
+        },
+        aud(e.navCents),
       ]),
-      right: [1, 2],
+      right: [1, 2, 3],
     });
-    const { best, worst } = f.scorecard;
-    const kv: [string, Cell][] = [];
-    if (best)
-      kv.push(["Best", `${best.id} ${best.label}: ${money(best.dayPlCents, best.currency, true)}`]);
-    if (worst)
-      kv.push([
-        "Worst",
-        `${worst.id} ${worst.label}: ${money(worst.dayPlCents, worst.currency, true)}`,
-      ]);
-    if (kv.length)
-      out.push(
-        { t: "kv", rows: kv },
-        { t: "small", text: "Best and worst are a single-day result — noise." },
-      );
-    const terminal = f.executions.filter((e) => e.terminal);
-    out.push(
-      terminal.length
-        ? {
-            t: "ul",
-            items: terminal.map(
-              (e) => `${e.id} ${e.label} reached a terminal state today: ${e.terminal}.`,
-            ),
-          }
-        : { t: "p", text: "No execution reached a terminal state today.", tone: "muted" },
-    );
+    const terminal = live(f.executions).filter((e) => e.terminal);
+    if (terminal.length) {
+      out.push({
+        t: "ul",
+        items: terminal.map(
+          (e) => `${nameOf(e)} ${TERMINAL_WORDS[e.terminal!] ?? `ended: ${e.terminal}`} today.`,
+        ),
+      });
+    }
   }
-  out.push({
-    t: "p",
-    text: `System health: ${f.scorecard.healthyComponents} of ${f.scorecard.totalComponents} components healthy.`,
-    tone: f.scorecard.healthyComponents === f.scorecard.totalComponents ? "pos" : "warn",
-  });
   if (f.scorecard.attention.length) {
     out.push({
       t: "ul",
-      items: f.scorecard.attention.map(
-        (a) =>
-          `${a.name} (${a.status === "down" ? "down" : "needs attention"}, day ${a.daysOpen}): ${a.fix}`,
-      ),
+      items: f.scorecard.attention.map((a) => `${a.name}: ${a.fix}`),
     });
   }
   return out;
 }
 
 function orderRow(o: OrderFact, appUrl: string): Cell[] {
+  const stop = o.stopCents !== undefined ? `stop ${aud(o.stopCents)}` : "";
+  const target = o.targetCents !== undefined ? `target ${aud(o.targetCents)}` : "";
   return [
-    o.executionId,
-    `${o.side.toUpperCase()} ${o.code}`,
+    o.strategy ?? o.executionId,
+    `${o.side === "buy" ? "Buy" : "Sell"} ${companyLabel(o.companyName, o.code)}`,
     String(o.qty),
-    money(o.priceCents, o.currency),
-    money(o.costsCents, o.currency),
-    o.stopCents !== undefined || o.targetCents !== undefined
-      ? `${o.stopCents !== undefined ? `stop ${money(o.stopCents, o.currency)}` : ""}${o.stopCents !== undefined && o.targetCents !== undefined ? ", " : ""}${o.targetCents !== undefined ? `target ${money(o.targetCents, o.currency)}` : ""}`
-      : "-",
+    aud(o.priceCents),
+    aud(o.costsCents),
+    stop || target ? [stop, target].filter(Boolean).join(", ") : "-",
     { text: truncate(o.reason, 90), href: joinUrl(appUrl, o.cardPath) },
   ];
 }
 
-function section2(f: ReviewFacts, level: number, missing: Set<number>): Block[] {
-  const out: Block[] = [{ t: "h", text: `2. ${SECTION_NAMES[1]}` }];
+function section2(f: ReviewFacts, level: number, missing: Set<number>, n: number): Block[] {
+  const out: Block[] = [head(n, SECTION_NAMES[1]!)];
   if (!f.arenaActive) return [...out, notActive()];
   if (missing.has(2)) return [...out, unavailable()];
   if (f.variant === "nonTrading") {
@@ -348,7 +380,7 @@ function section2(f: ReviewFacts, level: number, missing: Set<number>): Block[] 
   const filled = f.orders.filter((o) => o.state === "filled");
   const created = f.orders.filter((o) => o.state === "created");
   if (f.orders.length === 0) return [...out, { t: "p", text: "No paper orders today." }];
-  const head = ["Exec", "Order", "Qty", "Price", "Costs", "Stop / target", "Reason (card)"];
+  const cols = ["Strategy", "Order", "Qty", "Price", "Costs", "Stop / target", "Reason (card)"];
   const reviewLink: Block = {
     t: "link",
     label: "All orders and Decision Cards in the app",
@@ -366,7 +398,7 @@ function section2(f: ReviewFacts, level: number, missing: Set<number>): Block[] 
     out.push({ t: "p", text: `Filled today (${filled.length})`, bold: true });
     out.push({
       t: "table",
-      head,
+      head: cols,
       rows: filled.map((o) => orderRow(o, f.appUrl)),
       right: [2, 3, 4],
     });
@@ -375,7 +407,7 @@ function section2(f: ReviewFacts, level: number, missing: Set<number>): Block[] 
     out.push({ t: "p", text: `Created for the next session (${created.length})`, bold: true });
     out.push({
       t: "table",
-      head,
+      head: cols,
       rows: created.map((o) => orderRow(o, f.appUrl)),
       right: [2, 3, 4],
     });
@@ -383,63 +415,186 @@ function section2(f: ReviewFacts, level: number, missing: Set<number>): Block[] 
   return out;
 }
 
-function sleeveText(e: ExecutionFact): string {
-  if (e.sleeve === "none") return "no sleeve";
-  const lock = e.sleeve === "locked" ? "locked" : "unlocked";
-  const rec = e.sleeveRecoveryPct !== undefined ? `, recovery ${pct(e.sleeveRecoveryPct, 0)}` : "";
-  return `sleeve ${money(e.sleevePlCents, e.currency, true)} ${lock}${rec}`;
-}
-
-function section3(f: ReviewFacts, missing: Set<number>): Block[] {
-  const out: Block[] = [{ t: "h", text: `3. ${SECTION_NAMES[2]}` }];
+function section3(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
+  const out: Block[] = [head(n, SECTION_NAMES[2]!)];
   if (!f.arenaActive) return [...out, notActive()];
   if (missing.has(3)) return [...out, unavailable()];
-  if (f.executions.length === 0) return [...out, { t: "p", text: "No executions.", tone: "muted" }];
+  const ex = live(f.executions);
+  if (ex.length === 0) return [...out, { t: "p", text: "No strategies.", tone: "muted" }];
   const carried = f.variant === "nonTrading";
   out.push({
     t: "table",
-    head: ["Execution", "NAV", carried ? "Day P/L" : "Day P/L", "To target", "Detail"],
-    rows: f.executions.map((e) => [
-      { text: `${e.id} ${e.label}`, href: joinUrl(f.appUrl, e.path) },
-      money(e.navCents, e.currency),
+    head: ["Strategy", "Value now", "Today", "Since start"],
+    rows: ex.map((e) => [
+      { text: nameOf(e), href: joinUrl(f.appUrl, e.path) },
+      aud(e.navCents),
       {
-        text: carried ? "-" : money(e.dayPlCents, e.currency, true),
+        text: carried ? "-" : audWithPct(e.dayPlCents, e.dayPlPpm),
         tone: carried ? undefined : tone(e.dayPlCents),
       },
-      `${glyphBar(e.progressPct)} ${pct(e.progressPct, 0)} (${money(e.distanceToTargetCents, e.currency)} to go)`,
-      `realised ${money(e.realisedCents, e.currency, true)}; unrealised ${money(e.unrealisedCents, e.currency, true)}; costs ${money(e.costsCents, e.currency)}; ${sleeveText(e)}`,
+      e.sinceStartCents === undefined
+        ? "-"
+        : {
+            text: audWithPct(e.sinceStartCents, e.sinceStartPpm),
+            tone: tone(e.sinceStartCents),
+          },
     ]),
-    right: [1, 2],
+    right: [1, 2, 3],
   });
   return out;
 }
 
-function narrativeSection(n: 4 | 5 | 6, f: ReviewFacts, missing: Set<number>): Block[] {
-  const out: Block[] = [{ t: "h", text: `${n}. ${SECTION_NAMES[n - 1]}` }];
+const LEARNING_MISSING = "The learning step did not run tonight.";
+
+function section4(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
+  const out: Block[] = [head(n, SECTION_NAMES[3]!)];
   if (!f.arenaActive) return [...out, notActive()];
-  if (missing.has(n)) return [...out, unavailable()];
-  const nar = f.narrative;
-  const items = nar ? (n === 4 ? nar.s4 : n === 5 ? nar.s5 : nar.s6) : [];
-  if (!nar || nar.kind === "rules") {
-    out.push({ t: "small", text: "Written without AI today — facts only." });
+  if (missing.has(4)) return [...out, unavailable()];
+  const l = f.learning ?? null;
+  if (l === null) return [...out, { t: "p", text: LEARNING_MISSING, tone: "muted" }];
+  if (l.summary.length) out.push({ t: "ul", items: l.summary });
+  if (l.lessons.length) {
+    out.push({
+      t: "table",
+      head: ["Feature", "Cases (n)", "Next day vs market", "Verdict", "Change"],
+      rows: l.lessons.map((x) => [
+        x.feature,
+        String(x.n),
+        `${pctPpm(x.nextDayAvgPpm)} vs ${pctPpm(x.baseAvgPpm)}`,
+        x.verdict,
+        x.change,
+      ]),
+      right: [1],
+    });
   }
-  out.push(
-    items.length
-      ? { t: "ul", items }
-      : {
-          t: "p",
-          text:
-            n === 6 && f.variant === "nonTrading"
-              ? "No items queued for the next session."
-              : "Nothing to report.",
-          tone: "muted",
-        },
-  );
+  if (l.hypothesesOpened.length) {
+    out.push({ t: "p", text: "New ideas being tested", bold: true });
+    out.push({ t: "ul", items: l.hypothesesOpened });
+  }
+  if (!l.summary.length && !l.lessons.length && !l.hypothesesOpened.length) {
+    out.push({ t: "p", text: "Nothing new was learned today.", tone: "muted" });
+  }
   return out;
 }
 
-function section7(f: ReviewFacts, level: number, missing: Set<number>): Block[] {
-  const out: Block[] = [{ t: "h", text: `7. ${SECTION_NAMES[6]}` }];
+function section5(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
+  const out: Block[] = [head(n, SECTION_NAMES[4]!)];
+  if (!f.arenaActive) return [...out, notActive()];
+  if (missing.has(5)) return [...out, unavailable()];
+  if (f.variant === "nonTrading") {
+    return [...out, { t: "p", text: "No trading today.", tone: "muted" }];
+  }
+  const closed = sortClosed(f.closedTrades ?? []);
+  const h = workedHeadline(closed);
+  out.push({ t: "p", text: h.text, tone: h.worked ? "pos" : "warn" });
+  if (closed.length) {
+    out.push({
+      t: "table",
+      head: ["Strategy", "Company", "Result", "How it ended"],
+      rows: closed.map((c) => [
+        c.strategy,
+        companyLabel(c.company, c.code),
+        { text: aud(c.resultCents, true), tone: tone(c.resultCents) },
+        c.exit,
+      ]),
+      right: [2],
+    });
+  }
+  return out;
+}
+
+function moverCaught(m: DailyLearning["movers"][number]): string {
+  if (m.caughtBy) return `Caught by ${m.caughtBy}`;
+  if (m.nearMiss) return `Near miss: ${m.nearMiss}`;
+  return "Not caught";
+}
+
+function section6(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
+  const out: Block[] = [head(n, SECTION_NAMES[5]!)];
+  if (!f.arenaActive) return [...out, notActive()];
+  if (missing.has(6)) return [...out, unavailable()];
+  const l = f.learning ?? null;
+  if (l === null) {
+    out.push({
+      t: "p",
+      text: "No improvement ideas tonight: the learning step did not run.",
+      tone: "muted",
+    });
+  } else if (l.improvements.length === 0) {
+    out.push({ t: "p", text: "No improvements are proposed for tomorrow.", tone: "muted" });
+  } else {
+    out.push({
+      t: "ul",
+      items: l.improvements.map((i) => `${i.title}: ${i.evidence} Next step: ${i.action}`),
+    });
+  }
+  if (f.queuedOrders !== undefined && f.variant !== "nonTrading") {
+    out.push({
+      t: "p",
+      text:
+        f.queuedOrders === 0
+          ? "No orders are queued for the next session."
+          : `${f.queuedOrders} ${plural(f.queuedOrders, "order")} queued for the next session.`,
+    });
+  }
+  out.push(...moversBlocks(f));
+  return out;
+}
+
+/** Biggest gainers and losers: the daily learning's explanations, else the descriptive fallback. */
+function moversBlocks(f: ReviewFacts): Block[] {
+  const l = f.learning ?? null;
+  const out: Block[] = [];
+  const fb = f.missedMovers;
+  if (fb && fb.lines.length) {
+    out.push({ t: "p", text: "What we missed today", bold: true }, { t: "ul", items: fb.lines });
+  }
+  if (l !== null && l.movers.length > 0) {
+    const table = (title: string, side: "gainer" | "loser") => {
+      const rows = l.movers.filter((m) => m.side === side);
+      if (rows.length === 0) return;
+      out.push({ t: "p", text: title, bold: true });
+      out.push({
+        t: "table",
+        head: ["Company", "Move", "Why it moved", "Setup before", "Caught by / near miss"],
+        rows: rows.map((m) => [
+          companyLabel(m.name === null ? null : m.name, m.code),
+          { text: pctPpm(m.movePpm), tone: m.movePpm >= 0 ? "pos" : "neg" },
+          truncate(m.causeText, 160),
+          m.setupBefore.length ? truncate(m.setupBefore.join("; "), 140) : "none seen",
+          moverCaught(m),
+        ]),
+        right: [1],
+      });
+    };
+    table("Biggest gainers", "gainer");
+    table("Biggest losers", "loser");
+    return out;
+  }
+  if (fb) {
+    const table = (title: string, rows: MoverFactRow[]) => {
+      if (rows.length === 0) return;
+      out.push({ t: "p", text: title, bold: true });
+      out.push({
+        t: "table",
+        head: ["Company", "Move", "What we saw", "News"],
+        rows: rows.map((r) => [
+          companyLabel(r.name, r.code),
+          { text: pctPpm(r.movePpm), tone: r.movePpm >= 0 ? "pos" : "neg" },
+          truncate(r.seen, 100),
+          truncate(r.news, 120),
+        ]),
+        right: [1],
+      });
+    };
+    table("Biggest gainers", fb.gainers);
+    table("Biggest losers", fb.losers);
+  }
+  return out;
+}
+
+function section7(f: ReviewFacts, level: number, missing: Set<number>, n: number): Block[] {
+  const out: Block[] = [head(n, SECTION_NAMES[6]!)];
   if (!f.arenaActive) return [...out, notActive()];
   if (missing.has(7)) return [...out, unavailable()];
   if (!f.stats) return [...out, { t: "p", text: "No statistics available yet.", tone: "muted" }];
@@ -460,37 +615,38 @@ function section7(f: ReviewFacts, level: number, missing: Set<number>): Block[] 
       right: [1],
     });
   }
-  if (f.stats.agents.length) {
-    out.push({ t: "p", text: "Signal success % by agent", bold: true });
-    for (const a of f.stats.agents) {
-      out.push({
-        t: "bar",
-        label: a.agent,
-        percent: a.successPct ?? 0,
-        valueText: a.successPct === null ? "n/a" : `${pct(a.successPct, 0)} (n = ${a.n})`,
-      });
-    }
+  const cmp = f.stats.comparisons ?? [];
+  if (cmp.length) out.push({ t: "ul", items: cmp });
+  else {
+    out.push({
+      t: "p",
+      text: "Comparison with random-pick twins starts after 3 finished rounds.",
+      tone: "muted",
+    });
   }
   return out;
 }
 
-function section8(f: ReviewFacts): Block[] {
-  const out: Block[] = [{ t: "h", text: `8. ${SECTION_NAMES[7]}` }];
-  if (f.regimeNotice)
-    out.push({ t: "box", title: "Regime notice", lines: [f.regimeNotice], tone: "warn" });
-  if (f.alerts.length === 0)
-    out.push({ t: "p", text: "No significant alerts today.", tone: "muted" });
-  else {
+const CANDIDATE_OUTCOME: Readonly<Record<string, string>> = {
+  night_pick: "carried into tonight's picks",
+  "not yet decided": "not decided yet",
+};
+
+/** Today's alerts (D-922): only what has content; null when there is nothing to show. */
+function section8(f: ReviewFacts, n: number): Block[] | null {
+  const out: Block[] = [head(n, SECTION_NAMES[7]!)];
+  let any = false;
+  if (f.regimeNotice) {
+    out.push({ t: "box", title: "Market mood changed", lines: [f.regimeNotice], tone: "warn" });
+    any = true;
+  }
+  if (f.alerts.length > 0) {
+    any = true;
     out.push({
       t: "table",
-      head: ["Tier", "Code", "What", "Time", "Effect"],
+      head: ["Company", "What", "Time", "Effect"],
       rows: f.alerts.map((a) => [
-        {
-          text: a.tier,
-          tone: a.tier === "P0" ? "neg" : a.tier === "P1" ? "warn" : undefined,
-          bold: true,
-        },
-        a.code,
+        a.code === "-" || a.code === "" ? "-" : companyLabel(a.company, a.code),
         { text: truncate(displayTitle(a.title), 100), href: a.url },
         a.time,
         truncate(a.effect, 120),
@@ -498,15 +654,20 @@ function section8(f: ReviewFacts): Block[] {
     });
   }
   if (f.breakerHits.length) {
-    out.push({ t: "p", text: "Thesis-breaker hits", bold: true });
+    any = true;
+    out.push({ t: "p", text: "Held or queued shares with a warning", bold: true });
     out.push({
       t: "ul",
-      items: f.breakerHits.map((b) => `${b.execution}: ${b.breaker} — ${b.effect}`),
+      items: f.breakerHits.map((b) => `${companyLabel(b.company, b.execution)}: ${b.effect}`),
     });
   }
   const pa = f.pickAlerts;
-  if (pa && pa.lines.length) out.push({ t: "ul", items: pa.lines });
+  if (pa && pa.lines.length) {
+    any = true;
+    out.push({ t: "ul", items: pa.lines });
+  }
   if (pa?.candidates && pa.candidates.length) {
+    any = true;
     out.push({
       t: "p",
       text: "Intraday candidates (delayed prices, unvalidated stream)",
@@ -514,36 +675,20 @@ function section8(f: ReviewFacts): Block[] {
     });
     out.push({
       t: "table",
-      head: ["Code", "Trigger", "18:10 outcome"],
-      rows: pa.candidates.map((c) => [c.code, truncate(c.trigger, 100), c.outcome]),
+      head: ["Company", "Trigger", "Outcome"],
+      rows: pa.candidates.map((c) => [
+        companyLabel(c.name, c.code),
+        truncate(c.trigger.replace(/_/g, " "), 100),
+        CANDIDATE_OUTCOME[c.outcome] ?? c.outcome.replace(/_/g, " "),
+      ]),
     });
   }
-  return out;
-}
-
-function section9(f: ReviewFacts): Block[] {
-  const out: Block[] = [{ t: "h", text: `9. ${SECTION_NAMES[8]}` }];
-  out.push({
-    t: "table",
-    head: ["Check", "Status", "Detail"],
-    rows: f.health.map((h) => [
-      h.label,
-      { text: statusWord(h.status), tone: statusTone(h.status), bold: true },
-      h.detail,
-    ]),
-  });
-  if (f.pickAlerts && f.pickAlerts.held.length) {
+  if (pa && pa.held.length) {
+    any = true;
     out.push({ t: "p", text: "Pick alerts not e-mailed today", bold: true });
-    out.push({ t: "ul", items: f.pickAlerts.held });
+    out.push({ t: "ul", items: pa.held });
   }
-  if (f.suppressedEmails > 0) {
-    out.push({
-      t: "p",
-      text: `${f.suppressedEmails} ${plural(f.suppressedEmails, "email")} suppressed by the daily cap (EML-004).`,
-      tone: "warn",
-    });
-  }
-  return out;
+  return any ? out : null;
 }
 
 function partialBox(f: ReviewFacts): Block[] {
@@ -580,26 +725,20 @@ function minimalDoc(f: ReviewFacts): Block[] {
     kpiBlock(f),
     { t: "h", text: `3. ${SECTION_NAMES[2]}` },
   ];
+  const ex = live(f.executions);
   out.push(
-    f.executions.length
+    ex.length
       ? {
           t: "table",
-          head: ["Execution", "NAV", "Day P/L"],
-          rows: f.executions.map((e) => [
-            { text: `${e.id} ${e.label}`, href: joinUrl(f.appUrl, e.path) },
-            money(e.navCents, e.currency),
-            { text: money(e.dayPlCents, e.currency, true), tone: tone(e.dayPlCents) },
+          head: ["Strategy", "Value now", "Today"],
+          rows: ex.map((e) => [
+            { text: nameOf(e), href: joinUrl(f.appUrl, e.path) },
+            aud(e.navCents),
+            { text: aud(e.dayPlCents, true), tone: tone(e.dayPlCents) },
           ]),
           right: [1, 2],
         }
-      : { t: "p", text: "No execution data available.", tone: "muted" },
-  );
-  out.push(
-    { t: "h", text: `9. ${SECTION_NAMES[8]}` },
-    {
-      t: "p",
-      text: `System health: ${f.scorecard.healthyComponents} of ${f.scorecard.totalComponents} components healthy.`,
-    },
+      : { t: "p", text: "No strategy data available.", tone: "muted" },
   );
   if (f.scorecard.attention.length) {
     out.push({ t: "ul", items: f.scorecard.attention.map((a) => `${a.name}: ${a.fix}`) });
@@ -609,28 +748,31 @@ function minimalDoc(f: ReviewFacts): Block[] {
 
 function buildDoc(f: ReviewFacts, level: number): Doc {
   const missing = new Set((f.missing ?? []).map((m) => m.n));
-  const label = dateLabel(f.date);
+  const label = dayOf(f, f.date);
   const blocks: Block[] = [
     { t: "h", text: "Praxis Evening Review", level: 1 },
     { t: "p", text: label, tone: "muted" },
     ...partialBox(f),
   ];
+  let next = 1;
   if (f.variant === "minimal") {
     blocks.push(...minimalDoc(f));
   } else {
     blocks.push(
       kpiBlock(f),
-      ...section1(f, missing),
-      ...section2(f, level, missing),
-      ...section3(f, missing),
-      ...narrativeSection(4, f, missing),
-      ...narrativeSection(5, f, missing),
-      ...narrativeSection(6, f, missing),
-      ...missedMoversBlocks(f),
-      ...section7(f, level, missing),
-      ...section8(f),
-      ...section9(f),
+      ...section1(f, missing, next++),
+      ...section2(f, level, missing, next++),
+      ...section3(f, missing, next++),
+      ...section4(f, missing, next++),
+      ...section5(f, missing, next++),
+      ...section6(f, missing, next++),
+      ...section7(f, level, missing, next++),
     );
+    const alerts = section8(f, next);
+    if (alerts !== null) {
+      blocks.push(...alerts);
+      next += 1;
+    }
   }
   blocks.push({
     t: "link",
@@ -639,7 +781,11 @@ function buildDoc(f: ReviewFacts, level: number): Doc {
   });
   if (f.nextTradingNote) blocks.push({ t: "small", text: f.nextTradingNote });
   const footer: Block[] = [
-    { t: "p", text: `10. ${SECTION_NAMES[9]}`, bold: true },
+    {
+      t: "p",
+      text: `${f.variant === "minimal" ? SECTION_NAMES.length : next}. ${SECTION_NAMES[8]}`,
+      bold: true,
+    },
     ...standardFooter(f.appUrl, f.env),
   ];
   const unread = f.unreadDays !== undefined && f.unreadDays >= 3;
@@ -667,34 +813,7 @@ export function renderReview(
   facts: ReviewFacts,
   maxBytes: number = REVIEW_MAX_BYTES,
 ): SizedEmailOut {
+  dateLabel(facts.date); // a malformed review date throws (never printed: dates go through formatDay)
   const subject = subjectFor(facts);
   return fitLadder((level) => renderEmail(subject, buildDoc(facts, level)), MAX_LADDER, maxBytes);
-}
-
-/** D-909: section 6 addition, the picks graded and the biggest movers with what we saw. */
-function missedMoversBlocks(f: ReviewFacts): Block[] {
-  const m = f.missedMovers;
-  if (!m) return [];
-  const out: Block[] = [
-    { t: "p", text: "What we missed today", bold: true },
-    { t: "ul", items: m.lines },
-  ];
-  const pct = (ppm: number) => `${ppm > 0 ? "+" : ""}${(ppm / 10_000).toFixed(1)} %`; // threshold-ok: ppm -> percent
-  const table = (title: string, rows: MissedMoversReviewFacts["gainers"]) => {
-    if (rows.length === 0) return;
-    out.push({ t: "p", text: title, bold: true });
-    out.push({
-      t: "table",
-      head: ["Code", "Move", "What we saw", "News"],
-      rows: rows.map((r) => [
-        r.code,
-        { text: pct(r.movePpm), tone: r.movePpm >= 0 ? "pos" : "neg" },
-        truncate(r.seen, 100),
-        truncate(r.news, 120),
-      ]),
-    });
-  };
-  table("Biggest gainers", m.gainers);
-  table("Biggest losers", m.losers);
-  return out;
 }

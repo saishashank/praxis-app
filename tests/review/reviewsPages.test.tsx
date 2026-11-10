@@ -421,7 +421,7 @@ describe("/reviews/[date] partial review", () => {
     const html = await page(PARTIAL_D);
     expect(html).toContain("Read as plain text");
     expect(html).toMatch(/<details[^>]*open/); // open for a partial review
-    expect(html).toContain("Overnight checks");
+    expect(html).toMatch(/Today(&#x27;|.)s alerts/);
     expect(html).not.toContain("Sentinel recap");
     expect(html).not.toMatch(/stored 2026-\d\d-\d\dT/); // no raw ISO timestamp
   });
