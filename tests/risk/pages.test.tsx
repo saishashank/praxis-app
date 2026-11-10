@@ -394,7 +394,7 @@ describe("Decision Card page (UXN-037, 100, 102, 104, 120 to 123, 126)", () => {
   it("a Viewer addressing the opaque reference: no code, id or note text; 'Note added by' only", async () => {
     as(VIEWER);
     const html = await card(encodeURIComponent(cardRef(CARD_UP)));
-    expect(html).toContain("Note added by editor on 2026-10-19");
+    expect(html).toContain("Note added by editor on Mon 19 Oct");
     expect(html).not.toContain("looks cheap");
     expect(html).not.toContain("<form");
     expect(html).not.toContain("news</a>"); // company news is hidden when masked

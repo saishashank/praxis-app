@@ -3,8 +3,22 @@
 // user gets "Stock A" for the code, no company name, no trade price, order value or cost amount, the
 // week instead of the exact date and no links; free text goes through maskText.
 import type { DecisionCard } from "@/lib/agents/cards";
-import { formatMicro, formatPpm, isoWeek, MISSING } from "./format";
+import { formatDay, formatMicro, formatPpm, isoWeek, MISSING } from "./format";
+import { regimeLabel } from "./terms";
 import { maskText, StockAliases, type MaskContext, type MaskLookup, EMPTY_LOOKUP } from "./mask";
+
+/** Thesis-breaker ids in plain words (D-919): no TB-… code on a page. */
+export const BREAKER_WORD: Readonly<Record<string, string>> = {
+  "TB-NEG": "Bad news that moves the price",
+  "TB-HALT": "Trading halted, suspended or queried",
+  "TB-RAISE": "Company announces a capital raising",
+  "TB-EVLOW": "Price closes below the event day low",
+  "TB-SI": "Short selling rises",
+  "TB-REGIME": "The market mood turns nervous",
+  "TB-SMA": "Price closes below its trend line",
+  "TB-KW": "A warning word in a news headline",
+};
+export const breakerWord = (id: string): string => BREAKER_WORD[id] ?? id;
 
 export type CardNote = { text: string; provider: string | null };
 
@@ -30,11 +44,14 @@ export function cardViewModel(
   ctx: MaskContext,
   aliases: StockAliases,
   lookup: MaskLookup = EMPTY_LOOKUP,
+  /** The strategy in words; without it the title falls back to the execution id (D-919). */
+  strategyName?: string,
 ): CardView {
   const m = ctx.masked;
   const t = (s: string): string => (m ? maskText(s, aliases, lookup) : s);
   const stock = m ? aliases.label(card.code) : card.code;
-  const day = m ? (isoWeek(card.d) ?? MISSING) : card.d;
+  const day = m ? (isoWeek(card.d) ?? MISSING) : formatDay(card.d);
+  const strategy = strategyName ?? card.execution;
   const reason = card.not_taken_reason ?? "reason not recorded";
   const s = card.scenario;
 
@@ -57,8 +74,8 @@ export function cardViewModel(
   return {
     masked: m,
     stock,
-    title: `Decision Card: ${stock} (${card.execution})`,
-    subtitle: `${day}, ${card.family} ${card.rule_version}, regime ${card.regime}. ${
+    title: `Decision Card: ${stock} (${strategy})`,
+    subtitle: `${day}, ${strategy}, market mood: ${regimeLabel(card.regime).shown}. ${
       card.taken ? "Order placed." : `Not taken: ${t(reason)}.`
     }`,
     thesis: t(card.thesis),
@@ -72,7 +89,7 @@ export function cardViewModel(
       (x) =>
         `${t(x.rule)}: ${t(x.value)} (threshold ${t(x.threshold)}) ${x.pass ? "passed" : "not met"}`,
     ),
-    breakers: card.thesis_breakers.map((b) => `${t(b.id)}: ${t(b.check)}`),
+    breakers: card.thesis_breakers.map((b) => breakerWord(t(b.id))),
     exits: card.exit_plan.map((x) => `${t(x.tag)} ${t(x.rule)} (${t(x.kind)})`),
     sizing: `${sizing} ${cost}`,
     scenario: s.insufficient_history

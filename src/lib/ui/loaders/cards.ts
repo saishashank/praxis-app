@@ -41,6 +41,7 @@ import {
   openViewer,
   soft,
   str,
+  strategyNames,
   strOrNull,
   type Db,
   type Loaded,
@@ -221,7 +222,9 @@ export async function loadCardPage(deps: LoaderDeps, idOrRef: string): Promise<L
 
   const { aliases, lookup } = await v.masker.parts(card.d, [card.code]);
   const scope = await v.masker.scope(card.d, [card.code]);
-  const view = cardViewModel(card, note, v.masker.ctx, aliases, lookup);
+  const stratNames = await strategyNames(deps.mainDb);
+  const strategyName = `${stratNames[card.family]?.name ?? "Strategy"}${card.variant === "L" ? " (with leverage sleeve)" : ""}`;
+  const view = cardViewModel(card, note, v.masker.ctx, aliases, lookup, strategyName);
   const seen = new Set<string>();
   const breakers: BreakerCheck[] = [];
   for (const x of bk.rows) {

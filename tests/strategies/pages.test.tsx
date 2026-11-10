@@ -139,8 +139,13 @@ describe("the list", () => {
     expect(cur.textContent).toContain("Overview");
     expect(cur.textContent).toContain("Selected");
     expect(cur.querySelector("svg")).not.toBeNull();
-    for (const n of ["Leaderboard", "All signals", "Risk", "What-if"]) {
-      expect(within(nav).getByRole("link", { name: n })).toBeInTheDocument();
+    for (const n of ["Overview", "Risk"]) {
+      expect(within(nav).getByRole("link", { name: new RegExp(n) })).toBeInTheDocument();
+    }
+    // the research pages sit in their own, smaller row
+    const research = screen.getByRole("navigation", { name: "Research pages" });
+    for (const n of ["Leaderboard", "All signals", "Movers check", "What-if", "Cortex"]) {
+      expect(within(research).getByRole("link", { name: n })).toBeInTheDocument();
     }
   });
 
@@ -568,7 +573,7 @@ describe("the leaderboard", () => {
       "Rounds",
       "Chance of ending (12 months)",
       "Value change vs start",
-      "Zero-edge benchmark",
+      "No-skill comparison",
       "Costs",
       "Largest drop",
       "Recent trend",
@@ -583,7 +588,7 @@ describe("the leaderboard", () => {
       .find((c) => c.textContent === "Follow the trend")!
       .closest("tr")!;
     expect(within(row).getByText(/Goal 12\.0% \(2\.0% to 50\.0%\)/)).toBeInTheDocument();
-    expect(within(row).getByText(/Minus matched control C2: \+A\$10\.00/)).toBeInTheDocument();
+    expect(within(row).getByText(/Minus its random-pick twin: \+A\$10\.00/)).toBeInTheDocument();
     expect(within(row).getByText("Goal 3.0%")).toBeInTheDocument();
     expect(within(row).getByText("UNVALIDATED")).toBeInTheDocument();
     expect(within(row).getByText(/Separate rounds/)).toBeInTheDocument();
@@ -592,7 +597,7 @@ describe("the leaderboard", () => {
   it("lists the controls and renders a card list for phones", async () => {
     const { container } = await board();
     const ctl = screen.getByRole("heading", { name: "Controls" }).closest("section")!;
-    expect(within(ctl).getAllByText(/Control C2/).length).toBeGreaterThan(0);
+    expect(within(ctl).getAllByText(/Random-pick twin of/).length).toBeGreaterThan(0);
     // Below 600 px the DataTable shows this list instead of the table (UXN-017).
     const cards = container.querySelectorAll("ul.sm\\:hidden");
     expect(cards.length).toBeGreaterThanOrEqual(2);
@@ -601,9 +606,12 @@ describe("the leaderboard", () => {
 
   it("toggles the cost profile from stored re-cost rows", async () => {
     await board({ cost: "P3" });
-    expect(screen.getAllByText("Value under cost profile P3").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Value with high flat-fee broker fees").length).toBeGreaterThan(0);
     expect(screen.getAllByText("A$628.00").length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: /^P3/ })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: /^High flat-fee broker/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
     expect(screen.getByRole("link", { name: "As traded" })).toHaveAttribute(
       "href",
       "/strategies/leaderboard",
@@ -658,6 +666,30 @@ describe("evidence not stored yet", () => {
     expect(section.querySelector("table")!.querySelectorAll(":scope > tbody > tr").length).toBe(2);
     expect(within(section).getAllByText("Not measured yet").length).toBeGreaterThan(4);
   });
+
+  it("while no round has finished, each strategy gets one honest line and a trend, not a row of empty figures", async () => {
+    const bare = await strategiesWorld();
+    bare.main.execute = ((orig) => async (q: unknown) => {
+      const sql = typeof q === "string" ? q : (q as { sql: string }).sql;
+      if (/FROM replay_stat WHERE run_id LIKE/.test(sql))
+        return { rows: [], columns: [], rowsAffected: 0 };
+      const r = await orig(q as never);
+      if (/c.terminal_kind AS tk/.test(sql))
+        return { ...r, rows: r.rows.map((x) => ({ ...x, tk: null })) } as typeof r;
+      return r;
+    })(bare.main.execute.bind(bare.main)) as typeof bare.main.execute;
+    dbs.main = bare.main;
+    await board();
+    const section = screen
+      .getByRole("heading", { name: "Not enough evidence yet" })
+      .closest("section")!;
+    expect(
+      within(section).getAllByText(
+        /rounds? running, none finished: ranking starts after 3 finished rounds/,
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(within(section).queryByText(/Goal d/)).toBeNull();
+  });
 });
 
 describe("movers check page (D-886)", () => {
@@ -665,7 +697,7 @@ describe("movers check page (D-886)", () => {
     render(await MoversCheckPage());
     expect(screen.getByRole("heading", { level: 1, name: "Movers check" })).toBeInTheDocument();
     expect(
-      within(screen.getByRole("navigation", { name: "Strategy pages" })).getByRole("link", {
+      within(screen.getByRole("navigation", { name: "Research pages" })).getByRole("link", {
         name: /Movers check/,
       }),
     ).toHaveAttribute("aria-current", "page");

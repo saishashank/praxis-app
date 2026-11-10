@@ -148,7 +148,7 @@ describe("cardViewModel", () => {
   it("unmasked: the real values, amounts and date", () => {
     const v = cardViewModel(card(), note, { masked: false }, aliases, lookup);
     expect(v.title).toBe("Decision Card: ZZUP (E01)");
-    expect(v.subtitle).toContain("2026-10-19");
+    expect(v.subtitle).toContain("Mon 19 Oct");
     expect(v.thesis).toContain("ZZUP");
     expect(v.sizing).toContain("A$12.34");
     expect(v.sizing).toContain("A$1,234.00");

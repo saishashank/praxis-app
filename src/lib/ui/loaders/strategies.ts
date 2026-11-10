@@ -706,7 +706,9 @@ export async function loadLeaderboard(
           name:
             kind === "E"
               ? `${fname ?? str(r.id)}${str(r.variant) === "L" ? " (with leverage sleeve)" : ""}`
-              : `Control ${kind}${fname ? `: ${fname}` : ""}`,
+              : kind === "C1"
+                ? "Index fund held throughout"
+                : `Random-pick twin of ${fname ?? "a strategy"}`,
           label: null,
           rounds: 0,
           finished: 0,
