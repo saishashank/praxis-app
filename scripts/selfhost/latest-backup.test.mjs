@@ -174,3 +174,25 @@ test("run: usage, no source, no key, nothing found", async () => {
   assert.equal(await run(["--db", "main"], {}, { out, s3: memoryS3(), gh: null }), 1);
   assert.match(lines[3], /FAIL no backup found/);
 });
+
+test("S12: --restore needs SQLD_URL and never falls back to TURSO_MAIN_URL; a Turso address is refused", async () => {
+  const f = await fixture();
+  at(f.s3, "hourly/main-20260102T0400Z.ndjson.gz.age", f.exp.data, "2026-01-02T04:00:30.000Z");
+  for (const [env, why] of [
+    [
+      { TURSO_MAIN_URL: "libsql://x.turso.io", TURSO_MAIN_TOKEN: "tok-123456" },
+      /SQLD_URL is not set/,
+    ],
+    [{ SQLD_URL: "libsql://x.turso.io" }, /not a Turso address/],
+    [{ SQLD_URL: "https://praxis-main.turso.io" }, /not a Turso address/],
+  ]) {
+    const lines = [];
+    const code = await run(
+      ["--db", "main", "--restore"],
+      { BACKUP_PRIVATE_KEY: f.identity, ...env },
+      { s3: f.s3, gh: f.gh, out: (s) => lines.push(s) },
+    );
+    assert.equal(code, 1, lines.join("\n"));
+    assert.match(lines.at(-1), why);
+  }
+});

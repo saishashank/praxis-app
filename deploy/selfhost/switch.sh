@@ -8,7 +8,7 @@
 #   switch.sh selfhost --local --restored    §11.3 step 4: sqld clock_owner=selfhost, EMAIL_LIVE=1, CLOCK_ENABLED=1,
 #                                            restart web and clock (--restored = you did step 3, the final restore)
 #   switch.sh cloud                          print the §11.4 plan
-#   switch.sh cloud --local                  §11.4 step 1: CLOCK_ENABLED=0, clock_owner=cloud in sqld, restart
+#   switch.sh cloud --local                  §11.4 step 1: CLOCK_ENABLED=0, EMAIL_LIVE=0, clock_owner=cloud in sqld, restart
 #   switch.sh cloud --turso                  §11.4 step 3: clock_owner=cloud in TURSO (after you restored it, step 2)
 # Steps marked (YOU) are the Owner's: restores (they need the backup key, which is never stored here), DNS and the
 # Vercel banner. Add --force to restart even though a job is running. No secret is printed or put on a command line.
@@ -108,7 +108,7 @@ PLAN
     if [ "$turso_step" = 0 ] && [ "$local_step" = 0 ]; then
       cat <<'PLAN'
 Switch back to cloud (§11.4).
-  1 switch.sh cloud --local    CLOCK_ENABLED=0 on this host, clock_owner=cloud in sqld, recreate web and clock.
+  1 switch.sh cloud --local    CLOCK_ENABLED=0 and EMAIL_LIVE=0 on this host (standby sends no mail), clock_owner=cloud in sqld, recreate web and clock.
   2 (YOU) restore the latest sqld backup into Turso (or use last night's refresh, §8.2-3).
   3 switch.sh cloud --turso    clock_owner=cloud in Turso: the Worker resumes on its next tick.
   4 (YOU) remove the Vercel banner; users go back to the Vercel URL.
@@ -121,6 +121,11 @@ PLAN
       "$PRAXIS" owner cloud
       set_env jobs.env CLOCK_ENABLED 0
       set_env web.env CLOCK_ENABLED 0
+      # EMAIL_LIVE is read by every process that builds a mail provider (web and jobs alike), not only by the clock: a
+      # stand-by self-hosted web that kept it at 1 would still send real mail (sign-in links, incident and alert mail)
+      # next to the cloud runtime. Standby = mock mail, the mirror of selfhost --local (shadow mode, MOVE.md step 1).
+      set_env jobs.env EMAIL_LIVE 0
+      set_env web.env EMAIL_LIVE 0
       recreate web clock
     fi
     if [ "$turso_step" = 1 ]; then

@@ -383,7 +383,15 @@
             "TURSO_MAIN_URL": "env",
             "TURSO_MAIN_TOKEN": "env",
             "TURSO_AUTH_URL": "env",
-            "TURSO_AUTH_TOKEN": "env"
+            "TURSO_AUTH_TOKEN": "env",
+            "BACKUP_PRIVATE_KEY": "env",
+            "BACKUP_BUCKET_URL": "env",
+            "BACKUP_BUCKET_NAME": "env",
+            "BACKUP_BUCKET_KEY_ID": "env",
+            "BACKUP_BUCKET_SECRET": "env",
+            "BACKUP_BUCKET_REGION": "env",
+            "DATA_REPO": "env",
+            "DATA_REPO_TOKEN": "env"
           }
         }
       ]

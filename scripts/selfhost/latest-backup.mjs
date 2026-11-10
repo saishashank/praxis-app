@@ -15,7 +15,6 @@
 // Output: sources, names, sizes, counts, PASS/FAIL. Never a URL, key or row content.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createClient } from "@libsql/client";
 import { assetName, decryptToText, parseBackup } from "../backup/core.mjs";
 import { bucketFromEnv, parseHourlyKey, parseNightlyKey } from "../backup/bucket-copy.mjs";
 import { createGithub, GithubError } from "../backup/github.mjs";
@@ -156,25 +155,25 @@ function identityFrom(env) {
   return "";
 }
 
-/** The namespace client for the restore target (the same rules as scripts/restore/restore.mjs). */
+/**
+ * The namespace client for the restore target. Restores go into the self-hosted sqld ONLY (review S12): SQLD_URL is
+ * required, and a Turso or libsql: address is refused; there is no fallback to TURSO_MAIN_URL, so a wrong env can never
+ * restore a backup over the live cloud database.
+ */
 function openTarget(env, db) {
+  if (!has(env.SQLD_URL))
+    throw new SqldError("SQLD_URL is not set (--restore restores into sqld only)");
+  if (/turso[.]io|^[ ]*libsql:/i.test(env.SQLD_URL)) {
+    throw new SqldError("SQLD_URL must be the self-hosted sqld, not a Turso address");
+  }
   const token = has(env.SQLD_TOKEN)
     ? env.SQLD_TOKEN
     : env[db === "main" ? "TURSO_MAIN_TOKEN" : "TURSO_AUTH_TOKEN"];
-  if (has(env.SQLD_URL)) {
-    return openNamespace({
-      base: env.SQLD_URL,
-      ns: db,
-      token,
-      mode: env.SQLD_NS_MODE === "host" ? "host" : "subdomain",
-      intMode: "bigint",
-    });
-  }
-  const url = env[db === "main" ? "TURSO_MAIN_URL" : "TURSO_AUTH_URL"];
-  if (!has(url)) throw new SqldError("target is not configured (SQLD_URL or TURSO_*_URL)");
-  return createClient({
-    url: url.trim(),
-    authToken: has(token) ? token.trim() : undefined,
+  return openNamespace({
+    base: env.SQLD_URL,
+    ns: db,
+    token,
+    mode: env.SQLD_NS_MODE === "host" ? "host" : "subdomain",
     intMode: "bigint",
   });
 }

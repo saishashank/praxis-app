@@ -154,6 +154,10 @@ export async function run(argv, env, deps = {}) {
     let url = env.RESTORE_TARGET_URL;
     const token = env.RESTORE_TARGET_TOKEN;
     let host = null; // sqld host mode: the Host header that selects the namespace
+    // RESTORE_TARGET_URL names the target in full; a --namespace next to it would be ignored silently (review S11)
+    if (sqld && args.namespace !== "" && has(url)) {
+      refuse("--namespace cannot be combined with RESTORE_TARGET_URL (use SQLD_URL + --namespace)");
+    }
     if (sqld && !has(url) && has(env.SQLD_URL)) {
       const mode = env.SQLD_NS_MODE === "host" ? "host" : "subdomain";
       const t = namespaceTarget(env.SQLD_URL, args.namespace || args.db, mode);

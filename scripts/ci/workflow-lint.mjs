@@ -78,7 +78,7 @@ export const SCHEDULED_WORKFLOWS = [
 /** `file::job` pairs allowed to upload an artifact (failure-only report on synthetic data). */
 export const UPLOAD_ALLOWED = ["ci.yml::e2e"];
 /** `file::job` pairs allowed `packages: write` (image push to GHCR with the run token; self-host build, INFRA §10). */
-export const PACKAGES_WRITE_ALLOWED = ["build-selfhost.yml::build"];
+export const PACKAGES_WRITE_ALLOWED = ["build-selfhost.yml::build", "build-selfhost.yml::manifest"];
 
 const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const SECRET_REF = /\bsecrets\s*(\.|\[)|secrets:\s*inherit/;

@@ -62,6 +62,7 @@ function makeHost(o = {}) {
         if (sub === "up" && args.includes("sqld") && o.sqldUnhealthy) return bad;
         return ok;
       }
+      if (sub === "ps" && o.psFails) return bad;
       if (sub === "ps") return { ...ok, stdout: o.noClock ? "" : "abc123\n" };
       if (sub === "exec" && args.includes("backup-now")) return o.backupFails ? bad : ok;
       if (sub === "exec") {
@@ -96,6 +97,9 @@ function makeHost(o = {}) {
       if (line.includes("migrate.mjs") && net === "praxis-check" && o.checkMigrateFails) return bad;
       if (line.includes("migrate.mjs") && net === "praxis-prod" && o.prodMigrateFails) return bad;
       if (line.includes("latest-backup.mjs") && o.restoreFails) return bad;
+      if (line.includes("predeploy-copy.mjs dump") && net === "praxis-prod" && o.snapFails) {
+        return { code: 1, stdout: "", stderr: "leak: TOKEN=supersecretvalue123\n" };
+      }
       void image;
       return { ...ok, stdout: "migrate main: applied 0 (now at v1)\n" };
     }
@@ -445,6 +449,31 @@ test("a failed prod migration stops before any restart", async () => {
   );
   assert.ok(teardownCalls(h.calls).length >= 1);
   assert.equal(h.files.has("/srv/praxis/state/deployed.json"), false);
+});
+
+test("S9 + S10: a failed prod snapshot logs no raw container output and leaves no half-written folder", async () => {
+  const h = makeHost({ snapFails: true });
+  const r = await runDeploy(cfg(), h.deps);
+  assert.equal(r.failedStep, "prod: snapshot");
+  assert.equal(
+    [...h.logs, ...h.notes, JSON.stringify(r.steps)].some((l) => /supersecretvalue/.test(l)),
+    false,
+  );
+  assert.ok(
+    h.notes.some((n) => /^rm .*pre-deploy-.*[.]tmp$/.test(n)),
+    "the .tmp folder was removed",
+  );
+  assert.equal(
+    h.calls.some((c) => prodCompose(c) && c.args.includes("up")),
+    false,
+  );
+});
+
+test("N11: a failing 'compose ps' fails the deploy instead of counting as idle", async () => {
+  const h = makeHost({ psFails: true });
+  const r = await runDeploy(cfg(), h.deps);
+  assert.notEqual(r.code, 0);
+  assert.equal(r.failedStep, "prod: idle");
 });
 
 test("a bad SHA is refused before anything runs; --check-only skips prod entirely", async () => {

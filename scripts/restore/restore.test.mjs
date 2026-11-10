@@ -272,6 +272,24 @@ test("--target sqld: refuses a Turso URL before opening anything", async () => {
   assert.equal(opened, false);
 });
 
+test("--target sqld: --namespace together with RESTORE_TARGET_URL is refused, nothing opened (S11)", async () => {
+  const t = nextTarget();
+  let opened = 0;
+  const r = await exec(
+    ["--file", dumpFile, "--db", "main", "--target", "sqld", "--namespace", "drill-x"],
+    { RESTORE_TARGET_URL: fileUrl(t) },
+    {
+      openDb: () => {
+        opened++;
+        throw new Error("must not open");
+      },
+    },
+  );
+  assert.equal(r.code, 1, r.text);
+  assert.match(r.text, /--namespace cannot be combined with RESTORE_TARGET_URL/);
+  assert.equal(opened, 0);
+});
+
 test("--target sqld: URL built from SQLD_URL + the namespace; usage errors", async () => {
   const seen = [];
   const fake = {

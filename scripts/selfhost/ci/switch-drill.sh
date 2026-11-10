@@ -122,6 +122,7 @@ expect "local owner after cloud --local" cloud "$(local_owner)"
 expect "turso owner after cloud --local" selfhost "$(turso_owner)"
 for f in jobs.env web.env; do
   expect "CLOCK_ENABLED ($f) after cloud --local" 0 "$(env_value "$f" CLOCK_ENABLED)"
+  expect "EMAIL_LIVE ($f) after cloud --local" 0 "$(env_value "$f" EMAIL_LIVE)"
 done
 wait_clock false
 ok "cloud --local: sqld owner=cloud, CLOCK_ENABLED=0, clock disabled"

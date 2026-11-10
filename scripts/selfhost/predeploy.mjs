@@ -225,7 +225,8 @@ export async function runDeploy(cfg, deps) {
     const r = docker(args);
     for (const l of tail(r.stdout, 40)) if (SHOW.test(l)) note(l);
     if (r.code !== 0) {
-      for (const l of tail(r.stderr || r.stdout, 6)) if (!SHOW.test(l)) note(l);
+      // Only our own status lines (SHOW) and the exit code: a container's raw stderr can carry an env value or a URL.
+      for (const l of tail(r.stderr || r.stdout, 40)) if (SHOW.test(l)) note(l);
       fail(
         name,
         `${cmd[0] === "node" ? path.posix.basename(cmd[1] ?? "") : cmd[0]} exited with ${r.code}`,
@@ -252,7 +253,9 @@ export async function runDeploy(cfg, deps) {
   /** @returns {{ known: boolean, jobs: string[] }} */
   const runningJobs = () => {
     const ps = prodCompose(["ps", "-q", "clock"], false);
-    if (ps.code !== 0 || ps.stdout.trim() === "") return { known: true, jobs: [] }; // no clock container yet
+    // a failing `compose ps` is a failure, not "idle" (N11); an empty answer = no clock container yet
+    if (ps.code !== 0) fail("prod: idle", `docker compose ps exited with ${ps.code}`);
+    if (ps.stdout.trim() === "") return { known: true, jobs: [] };
     const r = prodCompose(["exec", "-T", "clock", "node", "-e", HEALTH_JS], false);
     try {
       const h = JSON.parse(r.stdout);
@@ -536,19 +539,27 @@ export async function runDeploy(cfg, deps) {
     // the local snapshot always happens (never skipped, never replaced by the remote copy)
     const stamp = new Date(deps.now()).toISOString().replace(/[:.]/g, "-");
     const snapDir = j(dirs.backups, `pre-deploy-${shortSha(state.sha)}-${stamp}`);
+    // Dumped into a .tmp folder and renamed only when complete: a failed dump leaves nothing that counts as a snapshot.
+    const snapTmp = `${snapDir}.tmp`;
     fsx.mkdirp(dirs.backups, 0o700);
-    fsx.mkdirp(snapDir, 0o700);
-    util(
-      "prod: snapshot",
-      "praxis-prod",
-      state.jobs.ref,
-      ["node", "scripts/selfhost/predeploy-copy.mjs", "dump", "--out", "/snap"],
-      {
-        envFile: jobsEnvFile,
-        user: "0:0",
-        mounts: [`${snapDir}:/snap`, copyMount],
-      },
-    );
+    fsx.mkdirp(snapTmp, 0o700);
+    try {
+      util(
+        "prod: snapshot",
+        "praxis-prod",
+        state.jobs.ref,
+        ["node", "scripts/selfhost/predeploy-copy.mjs", "dump", "--out", "/snap"],
+        {
+          envFile: jobsEnvFile,
+          user: "0:0",
+          mounts: [`${snapTmp}:/snap`, copyMount],
+        },
+      );
+    } catch (e) {
+      fsx.rm(snapTmp);
+      throw e;
+    }
+    fsx.rename(snapTmp, snapDir);
     rec("prod: local snapshot", true, snapDir);
 
     // the bucket/repo backup through the running clock, when it is configured; not fatal (the snapshot exists)
@@ -649,9 +660,13 @@ export async function runDeploy(cfg, deps) {
     const stampOf = (n) => n.replace(/^pre-deploy-[0-9a-z-]*?-(\d{4}-\d{2}-\d{2}T)/, "$1");
     const snaps = fsx
       .list(dirs.backups)
-      .filter((n) => n.startsWith("pre-deploy-"))
+      .filter((n) => n.startsWith("pre-deploy-") && !n.endsWith(".tmp"))
       .sort((a, b) => stampOf(b).localeCompare(stampOf(a)));
     for (const n of snaps.slice(KEEP_SNAPSHOTS)) fsx.rm(j(dirs.backups, n));
+    // a .tmp left by a killed deploy is not a snapshot
+    for (const n of fsx.list(dirs.backups)) {
+      if (n.startsWith("pre-deploy-") && n.endsWith(".tmp")) fsx.rm(j(dirs.backups, n));
+    }
     rec(
       "prod: snapshots",
       true,

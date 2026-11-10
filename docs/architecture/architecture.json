@@ -14645,7 +14645,8 @@
       "attrs": {
         "file": ".github/workflows/build-selfhost.yml",
         "jobs": [
-          "build"
+          "build",
+          "manifest"
         ],
         "triggers": [
           "push",
