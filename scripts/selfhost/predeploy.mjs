@@ -891,15 +891,17 @@ const USAGE = `usage: praxis deploy <40-hex sha> [--wait] [--no-pull] [--skip-za
 /** Parse argv into a config (pure; tested). Returns { error } on bad usage. */
 export function parseArgs(argv, env = process.env) {
   const root = env.PRAXIS_ROOT ?? "/srv/praxis";
+  // docker -v wants absolute host paths: a relative PRAXIS_*_DIR (branch CI) is resolved here (found by real Docker).
+  const abs = (p) => (path.isAbsolute(p) ? p : path.resolve(p));
   const cfg = {
     mode: "deploy",
     dirs: {
-      compose: env.PRAXIS_COMPOSE_DIR ?? `${root}/compose`,
-      env: env.PRAXIS_ENV_DIR ?? `${root}/env`,
-      state: env.PRAXIS_STATE_DIR ?? `${root}/state`,
-      backups: env.PRAXIS_BACKUPS_DIR ?? `${root}/backups`,
-      check: env.PRAXIS_CHECK_TMP ?? `${root}/check`,
-      scripts: env.PRAXIS_SCRIPTS_DIR ?? path.dirname(fileURLToPath(import.meta.url)),
+      compose: abs(env.PRAXIS_COMPOSE_DIR ?? `${root}/compose`),
+      env: abs(env.PRAXIS_ENV_DIR ?? `${root}/env`),
+      state: abs(env.PRAXIS_STATE_DIR ?? `${root}/state`),
+      backups: abs(env.PRAXIS_BACKUPS_DIR ?? `${root}/backups`),
+      check: abs(env.PRAXIS_CHECK_TMP ?? `${root}/check`),
+      scripts: abs(env.PRAXIS_SCRIPTS_DIR ?? path.dirname(fileURLToPath(import.meta.url))),
     },
   };
   const images = {};
