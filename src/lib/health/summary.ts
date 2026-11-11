@@ -17,7 +17,7 @@ import { unverifiedMoneyConstants } from "@/lib/golive/moneyConstants";
 import { uncoveredByApproval } from "@/lib/golive/moneyApprovalRead";
 import { calendarYearSummary } from "@/lib/data/calendarAdmin";
 import { loadControlsView, type ControlsView } from "@/lib/data/controls";
-import { pickAlertsHealth } from "@/lib/alerts/pick/poll";
+import { pickAlertsHealth, quoteBudgetLines } from "@/lib/alerts/pick/poll";
 import { intradayScanHealth } from "@/lib/intraday/run";
 import { isStale, JOBS } from "./jobs";
 import { workerRouteLines } from "./routePosts";
@@ -210,6 +210,7 @@ export async function getHealthSummary(
     try {
       const lines = [
         ...(await pickAlertsHealth(mainDb, now)),
+        ...(await quoteBudgetLines(mainDb, now)),
         ...(await intradayScanHealth(mainDb, now)),
       ];
       summary.intradayLines = lines;

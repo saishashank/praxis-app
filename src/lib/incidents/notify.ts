@@ -71,6 +71,13 @@ export const INCIDENT_SPECS: Readonly<Record<string, Spec>> = {
     fix: "Check the cron list on the production project, run the evening heartbeat once by hand, and look at System Health.",
     fixPath: "/health",
   },
+  quote_starvation: {
+    component: "Delayed prices",
+    impact:
+      "A held position has had no fresh delayed price for 30 minutes during market hours; the live price and its alerts may be out of date.",
+    fix: "Look at the Quotes lines and the request budget on System Health; the next polls may recover on their own.",
+    fixPath: "/health",
+  },
   calendar_horizon: {
     component: "Trading calendar",
     impact: "The trading calendar ends within 60 days; after that every weekday would be skipped.",

@@ -72,6 +72,40 @@ describe("R4-I3: capped arena catch-up on the jobs view", () => {
   });
 });
 
+describe("OPS-109 c: the per-slot quote budget line (D-971)", () => {
+  const slot = (hm: string, requests: number, skipped: number, plan: string) =>
+    db.execute({
+      sql: `INSERT INTO quote_run (market, session_d, slot_minute, purpose, started_at, requests, skipped, plan)
+            VALUES ('AU', '2026-10-11', ?, 'poll', 't', ?, ?, ?)`,
+      args: [hm, requests, skipped, plan],
+    });
+  // 2026-10-11T02:00Z = 13:00 Sydney (AEDT), the market date the lines read
+  const T = new Date("2026-10-11T02:00:00.000Z");
+
+  it("the Owner sees fixed-word lines with counts only; a Viewer sees none", async () => {
+    await slot("12:55", 9, 2, JSON.stringify({ armed: 3, watch: 4, held: 2 }));
+    await slot("13:00", 12, 0, JSON.stringify({ armed: 3, watch: 5, held: 4 }));
+    const s = await getHealthSummary(db, T, "owner");
+    expect(s.intradayLines).toEqual(
+      expect.arrayContaining([
+        "Quotes 12:55: used 9, skipped 2 (armed 3, watch 4, held 2)",
+        "Quotes 13:00: used 12, skipped 0 (armed 3, watch 5, held 4)",
+      ]),
+    );
+    const v = await getHealthSummary(db, T, "viewer");
+    expect(v.intradayLines).toBeUndefined();
+  });
+
+  it("a slot without a stored plan (before this change) renders no line", async () => {
+    await db.execute({
+      sql: "INSERT INTO quote_run (market, session_d, slot_minute, purpose, started_at, requests) VALUES ('AU', '2026-10-11', '12:55', 'poll', 't', 9)",
+      args: [],
+    });
+    const s = await getHealthSummary(db, T, "owner");
+    expect((s.intradayLines ?? []).some((l) => l.startsWith("Quotes "))).toBe(false);
+  });
+});
+
 describe("getHealthSummary", () => {
   it("empty database: every known job is 'no data' with a note", async () => {
     const s = await getHealthSummary(db, NOW, "viewer");
