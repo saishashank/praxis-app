@@ -143,6 +143,14 @@ describe("what each state leaves behind", () => {
     await expect(applyStates(db, ["market-built-off"], NOW)).rejects.toThrow(/expected markets AU/);
   });
 
+  it("market-built-off stops the run when a built market is enabled", async () => {
+    const db = await freshDb("main");
+    await db.execute("UPDATE market SET enabled = 1 WHERE code = 'IN'");
+    await expect(applyStates(db, ["market-built-off"], NOW)).rejects.toThrow(
+      /expected markets AU enabled, found AU,IN/,
+    );
+  });
+
   it("blueprint-full: one successful run record per nightly job", async () => {
     const db = await freshDb("main");
     await applyStates(db, ["blueprint-full"], NOW);
