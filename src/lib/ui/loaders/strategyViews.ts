@@ -43,6 +43,7 @@ export function stopTarget(
   entryMicro: number,
   firstStopMicro: number,
   latestStopMicro: number | null,
+  currency: string,
 ): { stop: Money | null; target: Money | null } {
   if (masked || !(firstStopMicro > 0) || !(entryMicro > firstStopMicro)) {
     return { stop: null, target: null };
@@ -51,8 +52,8 @@ export function stopTarget(
     latestStopMicro !== null && latestStopMicro > firstStopMicro ? latestStopMicro : firstStopMicro;
   const entry = BigInt(entryMicro);
   return {
-    stop: money(inForce),
-    target: money(Number(entry + TARGET_R * (entry - BigInt(firstStopMicro)))),
+    stop: money(inForce, currency),
+    target: money(Number(entry + TARGET_R * (entry - BigInt(firstStopMicro))), currency),
   };
 }
 /**
@@ -66,15 +67,19 @@ export function lastPriceOf(
   lastClose: unknown,
   lastCloseD: string | null,
   quote: LatestQuote | undefined,
+  currency: string,
 ): { lastPrice: Money | null; lastPriceAt: string | null } {
   if (masked || closed) return { lastPrice: null, lastPriceAt: null };
   const q = newerThanClose(quote, lastCloseD);
   if (q !== null) {
-    return { lastPrice: money(Number(q.lastMicro)), lastPriceAt: quoteTimeMelbourne(q.quoteAt) }; // money-float-ok: micro bigint to the Money view
+    return {
+      lastPrice: money(Number(q.lastMicro), currency),
+      lastPriceAt: quoteTimeMelbourne(q.quoteAt),
+    }; // money-float-ok: micro bigint to the Money view
   }
   if (lastClose === null || lastClose === undefined) return { lastPrice: null, lastPriceAt: null };
   return {
-    lastPrice: money(Math.round(Number(lastClose) * 1_000_000)), // money-float-ok: stored close in dollars to micro
+    lastPrice: money(Math.round(Number(lastClose) * 1_000_000), currency), // money-float-ok: stored close in dollars to micro
     lastPriceAt: null,
   };
 }
@@ -502,7 +507,7 @@ function labelOf(r: Record<string, unknown> | undefined): LabelView | null {
   };
 }
 
-function legOf(v: unknown): SleeveLegView | null {
+function legOf(v: unknown, currency: string): SleeveLegView | null {
   const o = asObj(v);
   if (!o) return null;
   const fig = asObj(o.figure);
@@ -513,7 +518,7 @@ function legOf(v: unknown): SleeveLegView | null {
   const hi = finite(iv?.upper);
   let net: Money | null = null;
   try {
-    net = money(Number(BigInt(str(o.netPlMicro))));
+    net = money(Number(BigInt(str(o.netPlMicro))), currency);
   } catch {
     net = null;
   }
@@ -628,16 +633,20 @@ export async function loadStrategyExtras(
         open: r.exit_type === null || r.exit_type === undefined,
         exitType: strOrNull(r.exit_type),
         returnPpm: closed && ep > 0 ? Math.round(((xp - ep) * PPM) / ep) : null,
-        pnl: masked || !closed ? null : money(Number((BigInt(xp) - BigInt(ep)) * BigInt(qty))),
-        entryPrice: masked ? null : money(ep),
-        exitPrice: masked || xp === null ? null : money(xp),
-        ...stopTarget(masked, ep, num(r.first_stop), numOrNull(r.latest_stop)),
+        pnl:
+          masked || !closed
+            ? null
+            : money(Number((BigInt(xp) - BigInt(ep)) * BigInt(qty)), v.currency),
+        entryPrice: masked ? null : money(ep, v.currency),
+        exitPrice: masked || xp === null ? null : money(xp, v.currency),
+        ...stopTarget(masked, ep, num(r.first_stop), numOrNull(r.latest_stop), v.currency),
         ...lastPriceOf(
           masked,
           closed,
           r.last_close,
           strOrNull(r.last_close_d),
           live.get(str(r.code)),
+          v.currency,
         ),
         cardHref:
           r.card_id === null || r.card_id === undefined ? null : cardHref(str(r.card_id), masked),
@@ -713,8 +722,8 @@ export async function loadStrategyExtras(
     const sv = json(sr.rows[0]?.value_json);
     sleeve = {
       hypotheticalLabel: "hypothetical leverage",
-      levered: legOf(sv?.levered),
-      reality: legOf(sv?.reality),
+      levered: legOf(sv?.levered, v.currency),
+      reality: legOf(sv?.reality, v.currency),
     };
   }
 

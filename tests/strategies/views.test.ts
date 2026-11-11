@@ -26,6 +26,7 @@ beforeAll(async () => {
 afterAll(cleanupTempDbs);
 
 const tile = (over: Partial<StrategyTile>): StrategyTile => ({
+  currency: "AUD",
   execution: "E01",
   family: "F1",
   variant: "U",

@@ -18,7 +18,7 @@ import {
   type PassportView,
   type TickRowView,
 } from "@/lib/ui/loaders/cortex";
-import { formatCount, formatDay, formatMicro } from "@/lib/view/format";
+import { currencyFormatFor, formatCount, formatDay, formatMicro } from "@/lib/view/format";
 import { StrategyTabs } from "../strategies/StrategyTabs";
 
 export const dynamic = "force-dynamic";
@@ -271,7 +271,7 @@ export default async function CortexPage() {
               <>
                 {formatCount(a.shadowFilled)} trades
                 {a.shadowTotalNet !== null
-                  ? `, ${formatMicro(a.shadowTotalNet.micro)} after costs in total`
+                  ? `, ${formatMicro(a.shadowTotalNet.micro, currencyFormatFor(a.shadowTotalNet.currency))} after costs in total`
                   : ""}
                 .
               </>

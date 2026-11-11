@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChartTable } from "@/components/charts/ChartTable";
 import { CheckIcon } from "@/components/ui/icons";
-import { formatCount, formatDay, formatMicro } from "@/lib/view/format";
+import { currencyFormatFor, formatCount, formatDay, formatMicro } from "@/lib/view/format";
 
 // Same shapes as the company loader's CandleBar and ChartMarker (a client file may not import the loaders).
 type CandleBar = { time: string; o: number; h: number; l: number; c: number; volume: number };
@@ -74,13 +74,17 @@ export function CompanyChart({
   markers,
   label,
   hue = null,
+  currency,
 }: {
   bars: CandleBar[];
   markers: ChartMarker[];
   label: string;
   /** The company's sector hue token stem, e.g. "sector-tech"; volume bars use it at 40 %. */
   hue?: string | null;
+  /** ISO 4217 code of the prices (D-1002). */
+  currency: string;
 }) {
+  const fmt = currencyFormatFor(currency);
   const host = useRef<HTMLDivElement>(null);
   const [range, setRange] = useState<Range>("6M");
   const [line, setLine] = useState(false);
@@ -100,7 +104,7 @@ export function CompanyChart({
   const last = shown[shown.length - 1];
   const summary =
     first && last
-      ? `${label}, ${range}: ${shown.length} end-of-day bars from ${formatDay(first.time)} (close ${formatMicro(first.c)}) to ${formatDay(last.time)} (close ${formatMicro(last.c)}).`
+      ? `${label}, ${range}: ${shown.length} end-of-day bars from ${formatDay(first.time)} (close ${formatMicro(first.c, fmt)}) to ${formatDay(last.time)} (close ${formatMicro(last.c, fmt)}).`
       : `${label}: no price data`;
 
   useEffect(() => {
@@ -273,7 +277,7 @@ export function CompanyChart({
       )}
       <p aria-live="polite" className="m-0 mt-1 break-words font-sans text-sm tabular-nums">
         {at
-          ? `${formatDay(at.time)}  open ${formatMicro(at.o)}  high ${formatMicro(at.h)}  low ${formatMicro(at.l)}  close ${formatMicro(at.c)}  volume ${formatCount(at.volume)}`
+          ? `${formatDay(at.time)}  open ${formatMicro(at.o, fmt)}  high ${formatMicro(at.h, fmt)}  low ${formatMicro(at.l, fmt)}  close ${formatMicro(at.c, fmt)}  volume ${formatCount(at.volume)}`
           : "No price data"}
         {at ? " (left and right arrow keys move the readout)" : ""}
       </p>
@@ -287,10 +291,10 @@ export function CompanyChart({
             .reverse()
             .map((b) => [
               formatDay(b.time),
-              formatMicro(b.o),
-              formatMicro(b.h),
-              formatMicro(b.l),
-              formatMicro(b.c),
+              formatMicro(b.o, fmt),
+              formatMicro(b.h, fmt),
+              formatMicro(b.l, fmt),
+              formatMicro(b.c, fmt),
               formatCount(b.volume),
             ])}
         />

@@ -4,6 +4,7 @@
 // statement is a SELECT, nothing is triggered, nothing is fetched. It is called only behind
 // requirePinnedOwner (blueprintGuard), which writes the audit event; the loader writes nothing.
 // Details are plain words with counts and times only: no money, no data rows, no error text.
+import { resolveMarketOrNotFound } from "@/lib/market/resolve";
 import "server-only";
 import type { Client } from "@libsql/client";
 import { CONFIG_KEYS, type ConfigKey } from "@/lib/config/keys";
@@ -304,7 +305,7 @@ export async function loadBlueprintStatus(
   await sourceStatuses(mainDb, model.elements, out, licences);
   const runs = await recentRuns(mainDb, model.elements);
   const config = await configLines(mainDb, model.elements);
-  await cortexGroups(mainDb, deps.market ?? "AU", now, out);
+  await cortexGroups(mainDb, await resolveMarketOrNotFound(mainDb, deps.market, null), now, out);
   // Tables: a row-count freshness check is not cheap on every table, so they stay unknown.
   const statuses: Record<string, ElementStatus> = {};
   for (const e of model.elements) statuses[e.id] = out[e.id] ?? UNKNOWN;

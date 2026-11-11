@@ -9,7 +9,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChartTable } from "@/components/charts/ChartTable";
-import { formatCents, formatDay, gainLossGlyph } from "@/lib/view/format";
+import { currencyFormatFor, formatCents, formatDay, gainLossGlyph } from "@/lib/view/format";
 import { regimeLabel } from "@/lib/view/terms";
 
 export type ChartPoint = { time: string; value: number };
@@ -76,8 +76,6 @@ function timeKey(t: unknown): string | null {
   return null;
 }
 
-const dollars = (v: number): string => formatCents(Math.round(v * 100));
-
 /** Re-reads the chart tokens when the theme attribute of <html> changes. */
 function useThemeTick(): number {
   const [tick, setTick] = useState(0);
@@ -93,6 +91,7 @@ function useThemeTick(): number {
 }
 
 export function StrategyChart({
+  currency,
   name,
   nav,
   regimes,
@@ -104,6 +103,8 @@ export function StrategyChart({
   drawdown,
   maxDropText,
 }: {
+  /** ISO 4217 code of the chart amounts (D-1002). */
+  currency: string;
   name: string;
   nav: ChartPoint[];
   regimes: Array<string | null>;
@@ -115,6 +116,8 @@ export function StrategyChart({
   drawdown: ChartPoint[];
   maxDropText: string;
 }) {
+  const fmt = currencyFormatFor(currency);
+  const dollars = (v: number): string => formatCents(Math.round(v * 100), fmt);
   const host = useRef<HTMLDivElement>(null);
   const ddHost = useRef<HTMLDivElement>(null);
   const [compare, setCompare] = useState(false);
@@ -395,7 +398,7 @@ export function StrategyChart({
           {at
             ? `${/^\d{4}-\d{2}-\d{2}$/.test(at.time) ? formatDay(at.time) : at.time}: ${dollars(at.value)}${
                 dayChange !== null
-                  ? `, ${gainLossGlyph(dayChange)} ${formatCents(dayChange, { sign: "always" })} on the day`
+                  ? `, ${gainLossGlyph(dayChange)} ${formatCents(dayChange, fmt, { sign: "always" })} on the day`
                   : ""
               }${mood ? `, market mood ${regimeLabel(mood).shown}` : ""} (arrow keys move along the line)`
             : "No values yet"}

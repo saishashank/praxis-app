@@ -18,7 +18,6 @@ import { maskText, normCode } from "@/lib/view/mask";
 import {
   intParam,
   isDateParam,
-  marketOf,
   maskKit,
   maskKitByDate,
   textParam,
@@ -147,7 +146,7 @@ export async function loadNews(env: LoaderEnv, q: NewsQuery): Promise<NewsModel>
   // The alerts chip lists alerts, which the alert inbox loader owns.
   if (q.chip === "alerts") return base;
   const where = ["a.market = ?"];
-  const args: Array<string | number> = [marketOf(env)];
+  const args: Array<string | number> = [env.market];
   if (q.chip === "mine") where.push("(i.held = 1 OR i.watch = 1)");
   // Default view: price-sensitive announcements and those about held, picked or starred companies.
   // A search or a company or date filter always looks through everything.
@@ -209,7 +208,7 @@ export async function loadNews(env: LoaderEnv, q: NewsQuery): Promise<NewsModel>
     const dates = [...new Set(rows.map((x) => x.d))].sort();
     const active =
       dates.length > 0
-        ? await activeCodesByDate(env.main, marketOf(env), dates[0]!, dates[dates.length - 1]!)
+        ? await activeCodesByDate(env.main, env.market, dates[0]!, dates[dates.length - 1]!)
         : new Map<string, Set<string>>();
     rows = rows.filter((x) => active.get(x.d)?.has(normCode(x.code)) === true);
     kit = await maskKitByDate(env, rows);
@@ -286,7 +285,7 @@ export async function loadNewsItem(env: LoaderEnv, id: number): Promise<NewsItem
           LEFT JOIN item_assessment i ON i.source = a.source AND i.ann_id = a.ann_id
           LEFT JOIN instrument n ON n.market = a.market AND n.code = a.code
           WHERE a.id = ? AND a.market = ?`,
-    args: [id, marketOf(env)],
+    args: [id, env.market],
   });
   const x = r.rows[0];
   if (!x) return null;
@@ -328,7 +327,7 @@ export async function resolveNewsItemRef(env: LoaderEnv, annId: string): Promise
   if (env.mask.masked || annId.length === 0 || annId.length > 200) return null; // threshold-ok: id length cap
   const r = await env.main.execute({
     sql: "SELECT id FROM announcement WHERE market = ? AND ann_id = ? ORDER BY id LIMIT 1",
-    args: [marketOf(env), annId],
+    args: [env.market, annId],
   });
   const x = r.rows[0];
   return x ? Number(x.id) : null; // money-float-ok: SQL integer key

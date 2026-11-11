@@ -644,3 +644,9 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1014 | Owner edit of a mkt.* key (A1, DAT-242): updateConfig (audit first) writes the config_version row as for any key and then calls setProfileField (field row, m... |
 | D-1015 | Derived lists (A1, D-993): MODE_MARKETS is builtMarkets(); calendarMarkets() is the keys of CALENDAR_RULE_MODULES and CALENDAR_MARKETS stays as a constant de... |
 | D-1016 | Cortex schema hash (A1, found by the step-0 baseline): the night's input manifest carries schemaSha, the sha256 of the table names (src/lib/cortex/stage.ts),... |
+| D-1060 | Formatting API (D1, D-1002): formatMicro(micro, fmt, opts?) and formatCents(cents, fmt, opts?) take the CurrencyFormat as a required second argument (the cur... |
+| D-1061 | E-mail loops (D1, D-997): runBrief collects the overnight announcements and today's events of every enabled market that is active and trades on D into the on... |
+| D-1062 | Default market (D1/D2, D-997): default_market is stored as any built market (builtMarkets(), the service is sync and holds the auth database only); updateReg... |
+| D-1063 | Dual time (D1, D-1002): formatMarketTime(iso, marketTz, prefs?) in health/format.ts returns the single Melbourne form when the market zone has the same UTC o... |
+| D-1064 | Pages and switcher (D2, D-997): envFor(user, now?, candidate?) is the one resolver for pages and loaders (?market= candidate not enabled: 404; none: the only... |
+| D-1065 | Markets table (D2, D-998): marketRows has no static IN/US rows; the Owner sees every market row with statusText(profile, mode), "AT-M evidence: not recorded"... |

@@ -10,7 +10,7 @@ import {
   worstMeter,
   type Meter,
 } from "@/lib/usage/meters";
-import { marketOf, type LoaderEnv, type LoaderState } from "./shell";
+import type { LoaderEnv, LoaderState } from "./shell";
 
 const LLM_DAYS = 30; // threshold-ok: LLM-051 view window
 const DAY_MS = 86_400_000; // threshold-ok: unit conversion
@@ -75,7 +75,7 @@ export async function loadUsage(
                  SUM(tokens_in) AS tin, SUM(tokens_out) AS tout
           FROM llm_call WHERE market = ? AND d >= ? GROUP BY role, provider
           ORDER BY calls DESC, role LIMIT ?`,
-    args: [marketOf(env), sinceD, LLM_GROUPS],
+    args: [env.market, sinceD, LLM_GROUPS],
   });
   return {
     state: meters.every((m) => m.level === "no data") && r.rows.length === 0 ? "empty" : "ok",

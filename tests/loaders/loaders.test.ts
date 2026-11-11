@@ -222,7 +222,7 @@ describe("Strategies list", () => {
     const a = counting(db);
     await loadStrategies(deps(a.db, OWNER));
     const two = a.count();
-    expect(two).toBeLessThanOrEqual(14);
+    expect(two).toBeLessThanOrEqual(20); // 14 + the market resolve and the profile read (D-997)
     const more = await emptyDbs();
     await seedPopulated(more);
     for (let i = 5; i <= 14; i += 1) {

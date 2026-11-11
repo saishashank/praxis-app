@@ -2,6 +2,7 @@
 // states, each with a text label and a different pattern, not colour only. The shared BustBar keeps its
 // own wording for the charts gallery; this Risk page version says what an ordinary reader would.
 import { ChartTable } from "@/components/charts/ChartTable";
+import { currencyFormatFor } from "@/lib/view/format";
 import { clamp, money, n, tone } from "@/components/charts/format";
 
 type LimitState = "safe" | "near" | "hit";
@@ -17,20 +18,22 @@ export function LossLimitBar({
   seed,
   bust,
   nearPct,
-  currency = "A$",
+  currency,
 }: {
   nav: number;
   seed: number;
   bust: number;
   nearPct: number;
-  currency?: string;
+  /** ISO 4217 code (D-1002). */
+  currency: string;
 }) {
+  const fmt = currencyFormatFor(currency);
   const room = (nav - bust) / (seed - bust);
   const state: LimitState = nav <= bust ? "hit" : room * 100 <= nearPct ? "near" : "safe";
   const stateText = STATE_TEXT[state];
   const fill = { safe: tone.c4, near: tone.c3, hit: tone.text }[state];
   const pct = clamp(room, 0, 1);
-  const summary = `Distance to the loss limit: ${stateText}. Value ${money(nav, currency)}, loss limit ${money(bust, currency)}, ${n(pct * 100)}% of the way from the loss limit to the start`;
+  const summary = `Distance to the loss limit: ${stateText}. Value ${money(nav, fmt)}, loss limit ${money(bust, fmt)}, ${n(pct * 100)}% of the way from the loss limit to the start`;
   return (
     <figure className="m-0">
       <svg role="img" aria-label={summary} viewBox="0 0 200 28" width="100%" height={28}>
@@ -53,8 +56,8 @@ export function LossLimitBar({
         headers={["Measure", "Value"]}
         rows={[
           ["State", stateText],
-          ["Value", money(nav, currency)],
-          ["Loss limit", money(bust, currency)],
+          ["Value", money(nav, fmt)],
+          ["Loss limit", money(bust, fmt)],
         ]}
       />
     </figure>

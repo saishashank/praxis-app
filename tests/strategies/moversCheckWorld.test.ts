@@ -31,7 +31,7 @@ describe("loadMoversCheck over stored trades and ideas (D-886)", () => {
     const w = await strategiesWorld();
     const user = { id: 1, role: "owner" };
     const mask = await maskContextFor(user, w.auth, NOW);
-    const env = { main: w.main, auth: w.auth, user, mask, now: NOW };
+    const env = { main: w.main, auth: w.auth, user, mask, now: NOW, market: "AU", currency: "AUD" };
     const m = await loadMoversCheck(env);
     expect(m.d).toBe("2026-10-20");
     expect(m.prev).toBe("2026-10-19");

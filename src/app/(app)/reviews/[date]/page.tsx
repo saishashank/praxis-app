@@ -35,7 +35,7 @@ export default async function ReviewDatePage({
   searchParams,
 }: {
   params: Promise<{ date: string }>;
-  searchParams: Promise<{ v?: string; src?: string }>;
+  searchParams: Promise<{ v?: string; src?: string; market?: string }>;
 }) {
   const { date: raw } = await params;
   const date = safeDecode(raw);
@@ -43,7 +43,7 @@ export default async function ReviewDatePage({
   const user = await requireUser("read", `/reviews/${date}`);
   const sp = await searchParams;
   const wanted = sp.v !== undefined && /^\d{1,4}$/.test(sp.v) ? Number(sp.v) : undefined;
-  const env = await envFor(user);
+  const env = await envFor(user, undefined, sp.market);
   const model = await loadReviewPage(env, date, wanted);
   if (model === null && isReviewRef(date)) notFound();
   const base = `/reviews/${encodeURIComponent(date)}`;

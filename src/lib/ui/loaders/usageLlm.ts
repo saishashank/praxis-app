@@ -81,7 +81,7 @@ export async function loadLlmUsage(
   db: Pick<Client, "execute">,
   role: string | null | undefined,
   now: Date,
-  market = "AU",
+  market: string,
 ): Promise<LlmUsage | null> {
   if (role !== "owner") return null;
   const sinceD = dayAt(now, ROLE_DAYS);

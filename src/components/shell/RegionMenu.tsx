@@ -13,11 +13,23 @@ import {
 } from "@/lib/ui/nav";
 import { MenuButton } from "./MenuButton";
 
-export type RegionMarket = { code: string; mode: string; currency: string };
+export type RegionMarket = {
+  code: string;
+  mode: string;
+  currency: string;
+  exchange?: string | null;
+};
 
-export function RegionMenu({ market }: { market: RegionMarket | null }) {
+export function RegionMenu({
+  market,
+  markets = [],
+}: {
+  market: RegionMarket | null;
+  /** The enabled markets (D-997). With several, each is a link that switches the page to it. */
+  markets?: RegionMarket[];
+}) {
   const label = regionLabel(market);
-  const status = market ? regionStatus(market) : null;
+  const listed = markets.length > 0 ? markets : market ? [market] : [];
   return (
     <MenuButton
       label={market ? `Region: ${label}` : "Region menu"}
@@ -38,19 +50,40 @@ export function RegionMenu({ market }: { market: RegionMarket | null }) {
       shortText={market ? market.code : "Region"}
     >
       <p className="m-0 px-2 py-1 text-xs text-text-muted">Markets</p>
-      {market && status ? (
+      {listed.length > 0 ? (
         <ul className="m-0 list-none p-0">
-          <li className="rounded-md px-2 py-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold">
-                {market.code} · {market.currency}
-              </span>
-              <span className="text-xs text-text-muted">{status.text}</span>
-            </div>
-            <p className="m-0 mt-0.5 text-xs text-text-muted">
-              {status.selectable ? "Selected" : status.reason}
-            </p>
-          </li>
+          {listed.map((m) => {
+            const status = regionStatus(m);
+            const selected = market !== null && m.code === market.code;
+            const body = (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold">
+                    {m.code} · {m.currency}
+                  </span>
+                  <span className="text-xs text-text-muted">{status.text}</span>
+                </div>
+                <p className="m-0 mt-0.5 text-xs text-text-muted">
+                  {status.selectable
+                    ? selected
+                      ? "Selected"
+                      : "Switch to this market"
+                    : (status.reason ?? "")}
+                </p>
+              </>
+            );
+            return (
+              <li key={m.code} data-market={m.code} className="rounded-md px-2 py-1.5">
+                {listed.length > 1 && !selected && status.selectable ? (
+                  <Link href={`?market=${m.code}`} className="block hover:bg-surface-2">
+                    {body}
+                  </Link>
+                ) : (
+                  body
+                )}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p className="m-0 px-2 py-1.5 text-text-muted">Market information is not available.</p>

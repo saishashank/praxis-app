@@ -14,7 +14,7 @@ import { maskText, normCode } from "@/lib/view/mask";
 import { strategyNames } from "./common";
 import { TIER_RULES } from "@/lib/data/universe/tiers.mjs";
 import { codeFromSlug, sectorName, slugOf, starredCodes } from "./market";
-import { marketOf, maskKit, priceMicro, todayD, type LoaderEnv, type LoaderState } from "./shell";
+import { maskKit, priceMicro, todayD, type LoaderEnv, type LoaderState } from "./shell";
 import { displayTitle } from "@/lib/view/displayText";
 
 const PPM = 1_000_000; // threshold-ok: parts per million
@@ -54,6 +54,8 @@ export type Announcement = {
 };
 
 export type CompanyModel = {
+  /** ISO 4217 code of the prices below (D-1002). */
+  currency: string;
   state: LoaderState;
   masked: boolean;
   /** Code, or "Stock A" for a masked user. */
@@ -102,7 +104,7 @@ const slugKey = (s: string): boolean => /^stock-[a-z]{1,4}$/.test(s.toLowerCase(
 async function latestBarDay(env: LoaderEnv): Promise<string | null> {
   const r = await env.main.execute({
     sql: "SELECT MAX(d) AS d FROM price_bar WHERE market = ?",
-    args: [marketOf(env)],
+    args: [env.market],
   });
   return r.rows[0]?.d ? String(r.rows[0].d) : null;
 }
@@ -128,7 +130,7 @@ function maOf(closes: number[], days: number): MaRelation {
 /** `key` is the real code (unmasked users) or the opaque slug (masked users); null = unknown to this user. */
 export async function loadCompany(env: LoaderEnv, key: string): Promise<CompanyModel | null> {
   const masked = env.mask.masked;
-  const market = marketOf(env);
+  const market = env.market;
   const barDay = await latestBarDay(env);
   let code: string | null;
   let kit: Awaited<ReturnType<typeof maskKit>> | null = null;
@@ -238,6 +240,7 @@ export async function loadCompany(env: LoaderEnv, key: string): Promise<CompanyM
       sizeGroup: null,
       listedOn: null,
       delisted: null,
+      currency: env.currency,
       closeMicro: null,
       rangeLowMicro: null,
       rangeHighMicro: null,
@@ -280,6 +283,7 @@ export async function loadCompany(env: LoaderEnv, key: string): Promise<CompanyM
             on: String(i.delisted_on),
             reason: i.delist_reason === null ? null : String(i.delist_reason),
           },
+    currency: env.currency,
     closeMicro: last ? priceMicro(last.c) : null,
     rangeLowMicro: lo === null ? null : priceMicro(lo),
     rangeHighMicro: hi === null ? null : priceMicro(hi),
@@ -303,7 +307,7 @@ async function loadMarkers(
   announcements: Announcement[],
 ): Promise<ChartMarker[]> {
   if (since === null) return [];
-  const market = marketOf(env);
+  const market = env.market;
   const out: ChartMarker[] = [];
   const fills = await soft(
     () =>
@@ -343,7 +347,7 @@ async function loadMarkers(
 }
 
 async function loadActivity(env: LoaderEnv, code: string): Promise<CompanyModel["activity"]> {
-  const market = marketOf(env);
+  const market = env.market;
   const names = await soft(() => strategyNames(env.main), {});
   const nameOf = (fam: string): string => names[fam]?.name ?? fam;
   const holders = await soft(
@@ -415,7 +419,7 @@ export type IndexStrip = {
 
 /** The market's main index: the index with the most stored bars (UXN-270). Public data, all roles. */
 export async function loadIndexStrip(env: LoaderEnv): Promise<IndexStrip> {
-  const market = marketOf(env);
+  const market = env.market;
   try {
     const main = await env.main.execute({
       sql: `SELECT index_code, COUNT(*) AS n FROM index_bar WHERE market = ?

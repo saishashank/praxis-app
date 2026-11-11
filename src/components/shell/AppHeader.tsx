@@ -23,6 +23,8 @@ const ICONS: Record<TabView["id"], ReactNode> = {
 export type HeaderProps = {
   role: Role;
   market: RegionMarket | null;
+  /** The enabled markets the switcher lists (D-997); a built market that is off is never in it. */
+  markets?: RegionMarket[];
   bell: BellView;
   /** Badge counts by tab id (Strategies: attention count, UXN-046). */
   badges?: Partial<Record<string, number>>;
@@ -31,7 +33,15 @@ export type HeaderProps = {
   account?: Account;
 };
 
-export function AppHeader({ role, market, bell, badges = {}, signOut, account }: HeaderProps) {
+export function AppHeader({
+  role,
+  market,
+  markets = [],
+  bell,
+  badges = {},
+  signOut,
+  account,
+}: HeaderProps) {
   const tabs: TabView[] = tabsFor(role).map((t) => ({
     id: t.id,
     label: t.label,
@@ -88,7 +98,7 @@ export function AppHeader({ role, market, bell, badges = {}, signOut, account }:
         </Link>
         <TabBar tabs={tabs} />
         <div className="ml-auto flex items-center gap-1">
-          <RegionMenu market={market} />
+          <RegionMenu market={market} markets={markets} />
           <AlertBell bell={bell} />
           <GearMenu role={role} account={account} signOut={signOut} />
         </div>

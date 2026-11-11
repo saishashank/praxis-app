@@ -38,10 +38,25 @@ export function NewPicks({ picks, masked }: { picks: NewPicksView; masked: boole
                     </p>
                   ) : (
                     <p className="m-0">
-                      Buy up to {x.buyUpTo ? <Money micro={x.buyUpTo.micro} /> : <NotMeasured />} ·
-                      Stop-loss {x.stop ? <Money micro={x.stop.micro} /> : <NotMeasured />} · Aim{" "}
-                      {x.aim ? <Money micro={x.aim.micro} /> : <NotMeasured />} · Valid until{" "}
-                      {x.validUntil}
+                      Buy up to{" "}
+                      {x.buyUpTo ? (
+                        <Money micro={x.buyUpTo.micro} currency={x.buyUpTo.currency} />
+                      ) : (
+                        <NotMeasured />
+                      )}{" "}
+                      · Stop-loss{" "}
+                      {x.stop ? (
+                        <Money micro={x.stop.micro} currency={x.stop.currency} />
+                      ) : (
+                        <NotMeasured />
+                      )}{" "}
+                      · Aim{" "}
+                      {x.aim ? (
+                        <Money micro={x.aim.micro} currency={x.aim.currency} />
+                      ) : (
+                        <NotMeasured />
+                      )}{" "}
+                      · Valid until {x.validUntil}
                       {x.timeFrameWeeks !== null ? ` · about ${x.timeFrameWeeks} weeks` : ""}
                     </p>
                   )}

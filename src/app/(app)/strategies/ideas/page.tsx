@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { Banner, EmptyState } from "@/components/ui/States";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
+import { resolveMarketOrNotFound } from "@/lib/market/resolve";
 import { loadIdeas } from "@/lib/ui/loaders/ideas";
 import { displayName, formatDay } from "@/lib/view/format";
 import { NOT_ADVICE_FOOTER } from "@/lib/view/honesty";
@@ -17,7 +18,6 @@ import { profileLabel } from "../../picks/text";
 export const dynamic = "force-dynamic";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const MARKET_RE = /^[A-Z]{2,4}$/;
 const EXPECTED_INSIDE = "about 80% expected if the ranges are honest"; // 10th to 90th range holds 80%
 
 const one = (v: string | string[] | undefined): string | undefined => (Array.isArray(v) ? v[0] : v);
@@ -30,13 +30,14 @@ export default async function IdeasPage({
   const sp = await searchParams;
   const user = await requireUser("read", "/strategies/ideas");
   const d = one(sp.d);
-  const market = one(sp.market);
+  const market =
+    sp.market === undefined ? undefined : await resolveMarketOrNotFound(mainDb(), sp.market, null);
   const page = await loadIdeas(
     {
       mainDb: mainDb(),
       authDb: authDb(),
       user,
-      market: market !== undefined && MARKET_RE.test(market) ? market : undefined,
+      market,
     },
     { d: d !== undefined && DATE_RE.test(d) ? d : null },
   );

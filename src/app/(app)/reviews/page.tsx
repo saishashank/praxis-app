@@ -38,7 +38,7 @@ const PENDING_TEXT = {
 export default async function ReviewsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const user = await requireUser("read", "/reviews");
-  const env = await envFor(user);
+  const env = await envFor(user, undefined, sp.market);
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(sp)) if (typeof v === "string") params.set(k, v);
   const query = parseReviewsQuery(params);

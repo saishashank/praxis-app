@@ -366,8 +366,8 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
         total,
         reasons,
         shadowFilled: n,
-        shadowMeanNet: masked || n === 0 ? null : money(Math.round(net / n)),
-        shadowTotalNet: masked || n === 0 ? null : money(net),
+        shadowMeanNet: masked || n === 0 ? null : money(Math.round(net / n), v.currency),
+        shadowTotalNet: masked || n === 0 ? null : money(net, v.currency),
         idleSharePpm:
           total + bookNights === 0 ? null : Math.round((total / (total + bookNights)) * PPM),
       };

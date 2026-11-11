@@ -3,12 +3,7 @@
 // is the session user's, never a parameter). Owner-only fields (the sharing acknowledgement trail) are
 // absent for Editors and Viewers.
 import { getQuietHours, type QuietHours } from "@/lib/alerts/api";
-import {
-  getPreferences,
-  SELECTABLE_MARKETS,
-  THEMES,
-  type Preferences,
-} from "@/lib/preferences/service";
+import { getPreferences, THEMES, type Preferences } from "@/lib/preferences/service";
 import { type LoaderEnv, type LoaderState } from "./shell";
 
 export type SettingsModel = {
@@ -16,7 +11,14 @@ export type SettingsModel = {
   preferences: Preferences;
   themes: readonly string[];
   quietHours: QuietHours | null;
-  markets: Array<{ code: string; mode: string; currency: string; selectable: boolean }>;
+  /** Owner: every profile row. Editor and Viewer: the enabled markets only (D-997). */
+  markets: Array<{
+    code: string;
+    mode: string;
+    currency: string;
+    enabled: boolean;
+    selectable: boolean;
+  }>;
   /** Owner only; null for everyone else. */
   sharing: { acknowledgements: number; lastAt: string | null } | null;
 };
@@ -25,15 +27,19 @@ export async function loadSettings(env: LoaderEnv): Promise<SettingsModel> {
   const preferences = await getPreferences(env.auth, env.user.id);
   const quietHours = await getQuietHours(env.auth, env.user.id);
   const m = await env.main.execute({
-    sql: "SELECT code, mode, currency FROM market ORDER BY code",
+    sql: "SELECT code, mode, currency, enabled FROM market ORDER BY code",
     args: [],
   });
-  const markets = m.rows.map((x) => ({
-    code: String(x.code),
-    mode: String(x.mode),
-    currency: String(x.currency),
-    selectable: (SELECTABLE_MARKETS as readonly string[]).includes(String(x.code)),
-  }));
+  const owner = env.user.role === "owner";
+  const markets = m.rows
+    .map((x) => ({
+      code: String(x.code),
+      mode: String(x.mode),
+      currency: String(x.currency),
+      enabled: Number(x.enabled) === 1,
+    }))
+    .filter((x) => owner || x.enabled)
+    .map((x) => ({ ...x, selectable: x.enabled }));
   let sharing: SettingsModel["sharing"] = null;
   if (env.user.role === "owner") {
     const s = await env.auth.execute({

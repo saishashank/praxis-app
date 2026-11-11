@@ -224,8 +224,10 @@ describe("activeTab", () => {
 
 describe("region", () => {
   it("labels the market like the spec example", () => {
-    expect(regionLabel({ code: "AU", mode: "full" })).toBe("AU · ASX · Active");
-    expect(regionLabel({ code: "AU", mode: "data_only" })).toBe("AU · ASX · Data only");
+    expect(regionLabel({ code: "AU", exchange: "ASX", mode: "full" })).toBe("AU · ASX · Active");
+    expect(regionLabel({ code: "AU", exchange: "ASX", mode: "data_only" })).toBe(
+      "AU · ASX · Data only",
+    );
     expect(regionLabel({ code: "IN", mode: "weird" })).toBe("IN · weird");
     expect(regionLabel(null)).toBe("Region");
   });

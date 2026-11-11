@@ -41,7 +41,7 @@ type SP = Record<string, string | string[] | undefined>;
 export default async function MarketPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const user = await requireUser("read", "/market");
-  const env = await envFor(user);
+  const env = await envFor(user, undefined, sp.market);
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(sp)) if (typeof v === "string") params.set(k, v);
   const q = parseMarketQuery(params);

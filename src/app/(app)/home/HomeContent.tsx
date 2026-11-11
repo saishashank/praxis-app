@@ -14,7 +14,7 @@ import { StatusStrip, type Mood } from "@/components/ui/StatusStrip";
 import { Banner, EmptyState } from "@/components/ui/States";
 import { hueStyle } from "@/components/ui/hue";
 import { GainLoss, Masked, Money, NotMeasured, SimulatedLabel } from "@/components/ui/Values";
-import { formatDay, formatMicro, formatPpm, plural } from "@/lib/view/format";
+import { currencyFormatFor, formatDay, formatMicro, formatPpm, plural } from "@/lib/view/format";
 import { regimeLabel } from "@/lib/view/terms";
 import type { Loaded } from "@/lib/ui/loaders/common";
 import type { HomeNeed, HomePick, HomeSinceRow, HomeView } from "@/lib/ui/loaders/home";
@@ -346,8 +346,8 @@ function PickCard({ p, masked }: { p: HomePick; masked: boolean }) {
       </p>
       {p.referenceMicro !== null ? (
         <p className="m-0 mt-1 text-sm">
-          Aim {p.aimMicro !== null ? <Money micro={p.aimMicro} /> : "n/a"} · Stop{" "}
-          {p.stopMicro !== null ? <Money micro={p.stopMicro} /> : "n/a"}
+          Aim {p.aimMicro !== null ? <Money micro={p.aimMicro} currency={p.currency} /> : "n/a"} ·
+          Stop {p.stopMicro !== null ? <Money micro={p.stopMicro} currency={p.currency} /> : "n/a"}
         </p>
       ) : masked ? (
         <p className="m-0 mt-1 text-sm">
@@ -397,14 +397,15 @@ function SummaryCard({ v }: { v: HomeView }) {
                 </Link>
               </p>
               <p className="m-0 mt-1 text-xl font-semibold">
-                <Money micro={t.value.micro} />
+                <Money micro={t.value.micro} currency={t.value.currency} />
               </p>
               <p className="m-0 mt-1 text-xs text-text-muted">
-                Started with <Money micro={t.seed.micro} /> on {formatDay(t.startD)}
+                Started with <Money micro={t.seed.micro} currency={t.seed.currency} /> on{" "}
+                {formatDay(t.startD)}
               </p>
               <p className="m-0 mt-1 text-sm">
                 <GainLoss value={t.sinceStart.micro}>
-                  {`${formatMicro(t.sinceStart.micro, { sign: "always" })}${
+                  {`${formatMicro(t.sinceStart.micro, currencyFormatFor(t.sinceStart.currency), { sign: "always" })}${
                     t.sinceStartPpm !== null
                       ? ` (${formatPpm(t.sinceStartPpm, { sign: "always" })})`
                       : ""
@@ -416,7 +417,7 @@ function SummaryCard({ v }: { v: HomeView }) {
                 <p className="m-0 mt-1 text-xs text-text-muted">
                   {v.dayLabel ?? "Today"}:{" "}
                   <GainLoss value={t.dayChange.micro}>
-                    {`${formatMicro(t.dayChange.micro, { sign: "always" })}${
+                    {`${formatMicro(t.dayChange.micro, currencyFormatFor(t.dayChange.currency), { sign: "always" })}${
                       t.dayChangePpm !== null
                         ? ` (${formatPpm(t.dayChangePpm, { sign: "always" })})`
                         : ""

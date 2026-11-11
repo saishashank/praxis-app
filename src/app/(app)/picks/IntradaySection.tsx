@@ -92,7 +92,7 @@ export function IntradaySection({
                   <p className="m-0 mt-1 text-xs">
                     Possible buy limit{" "}
                     {r.limit ? (
-                      <Money micro={r.limit.micro} />
+                      <Money micro={r.limit.micro} currency={r.limit.currency} />
                     ) : model.masked ? (
                       <Masked />
                     ) : (
@@ -100,7 +100,7 @@ export function IntradaySection({
                     )}
                     {" · stop-loss "}
                     {r.stop ? (
-                      <Money micro={r.stop.micro} />
+                      <Money micro={r.stop.micro} currency={r.stop.currency} />
                     ) : model.masked ? (
                       <Masked />
                     ) : (

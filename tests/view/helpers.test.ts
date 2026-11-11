@@ -40,7 +40,6 @@ import { STRATEGY_NAMES_DEFAULT } from "@/lib/config/keys";
 import { LABELS } from "@/lib/agents/schema";
 
 const AUD = currencyFormatOf("AUD");
-const INR = currencyFormatOf("INR");
 const USD = currencyFormatOf("USD");
 
 describe("format", () => {

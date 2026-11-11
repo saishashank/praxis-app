@@ -3,6 +3,7 @@
 // (never 0 or blank); masked values show a lock mark, never a partial value (DAT-124).
 import type { ReactNode } from "react";
 import {
+  currencyFormatFor,
   formatCents,
   formatMicro,
   formatPercent,
@@ -34,15 +35,19 @@ export function Masked({ label = MASKED_TEXT, className }: { label?: string; cla
 type MoneyProps = {
   cents?: number | null;
   micro?: string | bigint | number | null;
+  /** ISO 4217 code of the amount (a MoneyView carries it); the symbol and grouping follow (D-1002). */
+  currency: string;
   sign?: SignStyle;
   masked?: boolean;
   className?: string;
 };
 
 /** Simulated money (`data-money`; always read together with a Simulated label on the page, UX-002). */
-export function Money({ cents, micro, sign, masked, className }: MoneyProps) {
+export function Money({ cents, micro, currency, sign, masked, className }: MoneyProps) {
   if (masked) return <Masked className={className} />;
-  const text = micro !== undefined ? formatMicro(micro, { sign }) : formatCents(cents, { sign });
+  const fmt = currencyFormatFor(currency);
+  const text =
+    micro !== undefined ? formatMicro(micro, fmt, { sign }) : formatCents(cents, fmt, { sign });
   if (text === MISSING) return <NotMeasured />;
   return (
     <span data-money="" className={cn("font-mono break-words", className)}>
@@ -57,10 +62,12 @@ type GainLossProps = {
   /** Display text; defaults to the value formatted per `kind`. */
   children?: string;
   kind?: "cents" | "percent" | "ppm";
+  /** Needed only when the text is the value formatted as cents (no `children`). */
+  currency?: string;
   masked?: boolean;
 };
 
-export function GainLoss({ value, children, kind = "cents", masked }: GainLossProps) {
+export function GainLoss({ value, children, kind = "cents", currency, masked }: GainLossProps) {
   if (masked) return <Masked />;
   if (value === null || value === undefined || !Number.isFinite(value)) return <NotMeasured />;
   const text =
@@ -69,7 +76,9 @@ export function GainLoss({ value, children, kind = "cents", masked }: GainLossPr
       ? formatPercent(value, { sign: "always" })
       : kind === "ppm"
         ? formatPpm(value, { sign: "always" })
-        : formatCents(value, { sign: "always" }));
+        : currency === undefined
+          ? MISSING
+          : formatCents(value, currencyFormatFor(currency), { sign: "always" }));
   const tone = value > 0 ? "text-positive" : value < 0 ? "text-negative" : "text-text-muted";
   return (
     <span

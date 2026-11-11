@@ -299,7 +299,7 @@ function FilterFields({
 export default async function NewsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const user = await requireUser("read", "/news");
-  const env = await envFor(user);
+  const env = await envFor(user, undefined, sp.market);
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(sp)) if (typeof v === "string") params.set(k, v);
   const query = parseNewsQuery(params);

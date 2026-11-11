@@ -47,7 +47,7 @@ export function PortfolioCard({ v, current }: { v: PortfolioView; current?: stri
       ) : (
         <>
           <p className="m-0 mt-2 text-base">
-            {v.value ? <Money micro={v.value.micro} /> : null}{" "}
+            {v.value ? <Money micro={v.value.micro} currency={v.value.currency} /> : null}{" "}
             {v.sinceStartPpm !== null ? (
               <GainLoss
                 value={v.sinceStartPpm}
@@ -56,7 +56,8 @@ export function PortfolioCard({ v, current }: { v: PortfolioView; current?: stri
           </p>
           {v.cash && v.seed ? (
             <p className="m-0 mt-1 text-text-muted">
-              Started with <Money micro={v.seed.micro} />; cash <Money micro={v.cash.micro} />
+              Started with <Money micro={v.seed.micro} currency={v.seed.currency} />; cash{" "}
+              <Money micro={v.cash.micro} currency={v.cash.currency} />
               {v.asOfD ? `, end of day ${formatDay(v.asOfD)}` : ""}.
             </p>
           ) : null}
@@ -73,13 +74,13 @@ export function PortfolioCard({ v, current }: { v: PortfolioView; current?: stri
                   {h.entry ? (
                     <>
                       {" "}
-                      bought at <Money micro={h.entry.micro} />
+                      bought at <Money micro={h.entry.micro} currency={h.entry.currency} />
                       {h.entryD ? ` on ${formatDay(h.entryD)}` : ""}
                     </>
                   ) : null}
                   {h.now ? (
                     <>
-                      , now <Money micro={h.now.micro} />
+                      , now <Money micro={h.now.micro} currency={h.now.currency} />
                     </>
                   ) : null}{" "}
                   {h.changePpm !== null ? (

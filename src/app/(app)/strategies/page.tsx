@@ -6,6 +6,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
+import { resolveMarketOrNotFound } from "@/lib/market/resolve";
 import { readStrategySort } from "@/lib/preferences/strategySort";
 import { strategyNames } from "@/lib/ui/loaders/common";
 import {
@@ -53,7 +54,14 @@ export default async function StrategiesPage({
   const stored = await readStrategySort(authDb(), user.id);
   const sort: StrategySort = asked !== null ? parseSort(asked) : (stored ?? "best");
 
-  const deps = { mainDb: mainDb(), authDb: authDb(), user: { id: user.id, role: user.role } };
+  const market =
+    sp.market === undefined ? undefined : await resolveMarketOrNotFound(mainDb(), sp.market, null);
+  const deps = {
+    mainDb: mainDb(),
+    authDb: authDb(),
+    user: { id: user.id, role: user.role },
+    market,
+  };
   const list = await loadStrategies(deps, { sort });
   const tiles = sortTiles(list.data.tiles, sort);
   const attention = attentionOrder(list.data.tiles);

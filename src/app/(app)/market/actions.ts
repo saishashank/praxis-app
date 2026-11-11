@@ -11,11 +11,12 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { audit, requestMeta, type RequestMeta } from "@/lib/auth/audit";
 import { requireUser } from "@/lib/auth/guard";
-import { MODE_MARKETS } from "@/lib/config/keys";
 import { getConfig } from "@/lib/config/store";
 import { marketDate } from "@/lib/data/calendar";
 import { addWatchListCode, removeWatchListCode } from "@/lib/data/controls";
 import { authDb, mainDb } from "@/lib/db/client";
+import { loadProfile } from "@/lib/market/profile";
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import { resolveMarket } from "@/lib/market/resolve";
 import { envFor } from "@/lib/ui/loaders/shell";
 import type { WatchResult } from "./messages";
@@ -48,22 +49,23 @@ function done(starred: boolean, changed: boolean): WatchResult {
 export async function toggleWatchlistAction(fd: FormData): Promise<WatchResult> {
   const user = await requireUser("watchlist", PATH);
   const code = field(fd, "code")?.trim().toUpperCase();
-  const market = field(fd, "market") ?? "AU";
   const wanted = field(fd, "state"); // "on" | "off" | absent (flip)
   if (
     code === undefined ||
     !CODE_RE.test(code) ||
-    !(MODE_MARKETS as readonly string[]).includes(market) ||
     (wanted !== undefined && wanted !== "on" && wanted !== "off")
   ) {
     return { error: "invalid" };
   }
   try {
     // A masked user never learns or names a code (DAT-124): refuse before touching any data.
-    const env = await envFor({ id: user.id, role: user.role });
+    // MKT-110 (c), D-997: a market that is not enabled is never accepted (`invalid`, nothing echoed). No market
+    // field means the single enabled market (or the user's default when several are enabled).
+    const resolved = await resolveMarket(mainDb(), field(fd, "market"), null);
+    if (!resolved.ok) return { error: "invalid" };
+    const market = resolved.market;
+    const env = await envFor({ id: user.id, role: user.role }, new Date(), market);
     if (env.mask.masked) return { error: "masked" };
-    // MKT-110 (c), D-997: a market that is not enabled is never accepted (the stream D2 resolver replaces this call)
-    if (!(await resolveMarket(env.main, market, null)).ok) return { error: "invalid" };
     const meta = requestMeta(await headers());
     const max = await limit();
     return user.role === "owner"
@@ -85,7 +87,7 @@ async function ownerToggle(
   meta: RequestMeta,
 ): Promise<WatchResult> {
   const main = mainDb();
-  const today = marketDate(new Date(), "Australia/Sydney");
+  const today = marketDate(new Date(), (await loadProfile(main, market)).tz ?? OWNER_TZ);
   const rows = await main.execute({
     sql: `SELECT code FROM watch_list_owner WHERE market = ? AND removed_at IS NULL AND expires_d >= ?`,
     args: [market, today],
