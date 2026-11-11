@@ -7,14 +7,16 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  checkEnabledSet,
   checkMarketRows,
   countRowsByMarket,
   enabledMarkets,
   marketTables,
   MARKET_ROWS_INCIDENT,
+  MARKETS_MISMATCH_INCIDENT,
 } from "@/lib/maintenance/rowsByMarket";
 import { runMaintenance } from "@/lib/maintenance/retention";
-import { cleanupTempDbs, freshDb, MIGRATIONS } from "../db/helpers";
+import { cleanupTempDbs, freshDb, MIGRATIONS, plantOffMarketRow } from "../db/helpers";
 
 afterEach(cleanupTempDbs);
 let db: Client;
@@ -27,21 +29,35 @@ beforeEach(async () => {
 const NOW = new Date("2026-11-12T00:30:00.000Z");
 const D = "2026-11-12";
 
-// A foreign code that is not in the `market` table at all, and a code made off through a market row.
+// A foreign code that is not in the `market` table at all, and a code made off through a market row. Since
+// migration 0035 a row of a market that is not enabled cannot be inserted directly: the fixtures plant it through
+// plantOffMarketRow (enable, insert, disable); a code with no market row gets one, off.
 const FOREIGN = "ZQ";
 const OFF = "ZO";
 
 async function runRow(market: string | null, key: string) {
-  await db.execute({
-    sql: "INSERT INTO run_record (job, market, concurrency_key, started_at, status) VALUES ('x', ?, ?, '2026-11-11T00:00:00.000Z', 'success')",
-    args: [market, key],
-  });
+  const row = {
+    job: "x",
+    market,
+    concurrency_key: key,
+    started_at: "2026-11-11T00:00:00.000Z",
+    status: "success",
+  };
+  if (market === null) {
+    await db.execute({
+      sql: "INSERT INTO run_record (job, market, concurrency_key, started_at, status) VALUES ('x', NULL, ?, '2026-11-11T00:00:00.000Z', 'success')",
+      args: [key],
+    });
+  } else await plantOffMarketRow(db, "run_record", { ...row, market });
 }
 async function quoteRow(market: string, code: string) {
-  await db.execute({
-    sql: `INSERT INTO quote_latest (market, code, last_micro, prev_close_micro, quote_at, fetched_at)
-          VALUES (?, ?, 1000000, NULL, 't', 't')`,
-    args: [market, code],
+  await plantOffMarketRow(db, "quote_latest", {
+    market,
+    code,
+    last_micro: 1000000,
+    prev_close_micro: null,
+    quote_at: "t",
+    fetched_at: "t",
   });
 }
 async function addMarket(code: string, mode: string) {
@@ -95,6 +111,30 @@ describe("the invariant", () => {
     expect((await db.execute("SELECT 1 FROM incident")).rows).toHaveLength(0);
   });
 
+  it("document rows of the scope 'common' (the source register, the expert mirror) belong to no market and are quiet (D-1024)", async () => {
+    await db.execute(
+      `INSERT INTO document (path, version, market, doc_type, front_json, body, body_sha, d, created_at)
+       VALUES ('knowledge/sources/register.md', 1, 'common', 'source_register', '{}', 'b', '${"a".repeat(64)}', '2026-11-12', 't')`,
+    );
+    const r = await checkMarketRows(db, D, NOW);
+    expect(r.unexpected).toEqual([]);
+    expect((await db.execute("SELECT 1 FROM incident")).rows).toHaveLength(0);
+    await plantOffMarketRow(db, "document", {
+      path: "knowledge/in/x.md",
+      version: 1,
+      market: "IN",
+      doc_type: "family",
+      front_json: "{}",
+      body: "b",
+      body_sha: "a".repeat(64),
+      d: "2026-11-12",
+      created_at: "t",
+    });
+    expect((await countRowsByMarket(db)).unexpected.map((u) => [u.tbl, u.market])).toEqual([
+      ["document", "IN"],
+    ]);
+  });
+
   it("a planted foreign-market row alarms (S2) on an indexed table and on an unindexed one", async () => {
     await quoteRow(FOREIGN, "AAA");
     await quoteRow(FOREIGN, "BBB");
@@ -126,7 +166,7 @@ describe("the invariant", () => {
     expect(r.unexpected.map((u) => u.market).sort()).toEqual(["A0", "ZN", "ZZ"]);
   });
 
-  it("a market row with mode off makes its rows unexpected; data_only makes them fine", async () => {
+  it("a market row that is not enabled makes its rows unexpected, whatever the mode; enabling makes them fine", async () => {
     await addMarket(OFF, "off");
     await quoteRow(OFF, "AAA");
     expect((await countRowsByMarket(db)).unexpected.map((u) => u.market)).toEqual([OFF]);
@@ -144,6 +184,15 @@ describe("the invariant", () => {
     await checkMarketRows(db, D, NOW);
     expect(await rowsOf()).toEqual([[D, "quote_latest", FOREIGN, 2]]);
     expect((await db.execute("SELECT 1 FROM incident")).rows).toHaveLength(1);
+  });
+
+  it("the guard refuses the direct insert the invariant would otherwise have found (D-995)", async () => {
+    await expect(
+      db.execute(
+        "INSERT INTO quote_latest (market, code, last_micro, quote_at, fetched_at) VALUES ('ZQ', 'A', 1, 't', 't')",
+      ),
+    ).rejects.toThrow(/MarketNotEnabled quote_latest/);
+    expect((await countRowsByMarket(db)).unexpected).toEqual([]);
   });
 
   it("raise: false stores the counts without an incident", async () => {
@@ -167,5 +216,36 @@ describe("the invariant", () => {
     expect(bad.status).toBe("success"); // the alarm is the incident, not a failed run
     const inc = (await db.execute("SELECT kind FROM incident")).rows;
     expect(inc.map((r) => String(r.kind))).toEqual([MARKET_ROWS_INCIDENT]);
+  });
+});
+
+describe("the enabled set against the production setting (D-994)", () => {
+  it("is quiet when the database and PRAXIS_MARKETS_ENABLED agree (unset = AU only)", async () => {
+    const r = await checkEnabledSet(db, NOW, {});
+    expect(r).toEqual({ expected: ["AU"], actual: ["AU"], mismatch: false });
+    expect((await db.execute("SELECT 1 FROM incident")).rows).toHaveLength(0);
+  });
+
+  it("raises S2 markets_enabled_mismatch once when they differ, in either direction", async () => {
+    await db.execute("UPDATE market SET enabled = 1 WHERE code = 'IN'");
+    const r = await checkEnabledSet(db, NOW, {});
+    expect(r).toMatchObject({ expected: ["AU"], actual: ["AU", "IN"], mismatch: true });
+    await checkEnabledSet(db, NOW, {});
+    const inc = (await db.execute("SELECT severity, kind FROM incident")).rows;
+    expect(inc).toHaveLength(1);
+    expect(inc[0]).toMatchObject({ severity: "S2", kind: MARKETS_MISMATCH_INCIDENT });
+    expect((await checkEnabledSet(db, NOW, { PRAXIS_MARKETS_ENABLED: "AU,IN" })).mismatch).toBe(
+      false,
+    );
+  });
+
+  it("is part of the nightly step unless raise is false", async () => {
+    await db.execute("UPDATE market SET enabled = 1 WHERE code = 'US'");
+    await checkMarketRows(db, D, NOW, { env: {}, raise: false });
+    expect((await db.execute("SELECT 1 FROM incident")).rows).toHaveLength(0);
+    await checkMarketRows(db, D, NOW, { env: {} });
+    expect((await db.execute("SELECT kind FROM incident")).rows.map((r) => String(r.kind))).toEqual(
+      [MARKETS_MISMATCH_INCIDENT],
+    );
   });
 });

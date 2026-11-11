@@ -26,7 +26,7 @@ import {
 } from "../../agents/batch2bHarness";
 import { goldenCodes } from "../../agents/batch2bScenario";
 import { freshReplayDb } from "../../arena/replayHarness";
-import { cleanupTempDbs } from "../../db/helpers";
+import { allowMarket, cleanupTempDbs } from "../../db/helpers";
 import { plantedWorld, RUN_D } from "../../experts/zzProposals";
 import { addOutcome, addProposal, addScreening, importZzSeed } from "../../experts/zzWorld";
 
@@ -164,6 +164,8 @@ async function seedExperts(db: Client): Promise<void> {
 
 async function world(withExperts: boolean): Promise<{ db: Client }> {
   const db = await freshReplayDb();
+  // M19 0035: the ZZ expert seed holds one US call, so US is enabled in BOTH worlds (the market table must not differ)
+  await allowMarket(db, "US");
   await buildNight(db, { codes: goldenCodes() });
   await setMode(db, "full");
   await startCohortsAt(db, 296, ["E01", "E07"]);

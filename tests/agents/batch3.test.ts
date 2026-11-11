@@ -435,10 +435,11 @@ describe("guards", () => {
     expect(
       await reviewDay(fresh, { market: MARKET, d: "2031-03-01", now: NOW, params }),
     ).toMatchObject({ status: "skipped", reason: "non_trading_day" });
-    expect(await reviewDay(fresh, { market: "ZZ", d: d(300), now: NOW, params })).toMatchObject({
-      status: "skipped",
-      reason: "market_missing",
-    });
+    // M19 0035: the skip would be a run record of a market with no row; the write guard refuses it (a refused job
+    // writes no run record, D-995), so the call fails with the guard refusal instead of recording market_missing
+    await expect(reviewDay(fresh, { market: "ZZ", d: d(300), now: NOW, params })).rejects.toThrow(
+      /MarketNotEnabled run_record/,
+    );
     await setMode(fresh, "off");
     expect(await reviewDay(fresh, { market: MARKET, d: d(300), now: NOW, params })).toMatchObject({
       status: "skipped",

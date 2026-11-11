@@ -22,7 +22,14 @@ import {
   type PlaybookItem,
 } from "@/lib/learning/playbook";
 import type { LessonGradeRow, LessonRow } from "@/lib/learning/schema";
-import { cleanupTempDbs, freshDb } from "../db/helpers";
+import { allowMarket, cleanupTempDbs, freshDb as baseFreshDb } from "../db/helpers";
+
+// M19 0035: these tests key their rows by the invented market ZZ; the write guard needs it enabled.
+const freshDb = async (name: "main" | "auth") => {
+  const db = await baseFreshDb(name);
+  if (name === "main") await allowMarket(db, "ZZ");
+  return db;
+};
 
 afterEach(cleanupTempDbs);
 

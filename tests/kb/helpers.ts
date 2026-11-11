@@ -2,7 +2,7 @@
 // Oct 2026, real migrations. Nothing here resembles a real company or a real result.
 import type { Client } from "@libsql/client";
 import { seedRuleVersions } from "@/lib/learning/ruleVersions";
-import { freshDb } from "../db/helpers";
+import { allowMarket, freshDb } from "../db/helpers";
 
 export const MARKET = "AU";
 export const LESSON = "L-AU-ZZ_TEMPLATE-aaaa1111-F1.v1";
@@ -15,6 +15,7 @@ export async function exec(db: Client, sql: string, args: V[] = []) {
 
 export async function kbWorld(): Promise<Client> {
   const db = await freshDb("main");
+  await allowMarket(db, "US"); // M19 0035: some KB records are keyed by market US; the write guard needs it enabled
   await seedRuleVersions(db, { market: MARKET, d: "2026-10-01" });
 
   // A challenger version: F1.v1 with one parameter changed.

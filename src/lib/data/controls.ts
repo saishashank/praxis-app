@@ -69,6 +69,7 @@ import {
   validateMarketModes,
 } from "@/lib/config/keys";
 import { getConfig } from "@/lib/config/store";
+import { isMarketEnabled } from "@/lib/market/profile";
 import { anyMarketFull, fullModeRefusal, isProductionEnv } from "@/lib/golive/interlock";
 import {
   EMAIL_MODE_KEY,
@@ -784,6 +785,8 @@ export async function addWatchListCode(p: WatchListAddInput): Promise<ControlRes
   const code = p.code;
   const today = localDay(now);
   try {
+    // D-997 (M19 A2): a market parameter outside the enabled set is invalid (MODE_MARKETS is the built set now)
+    if (!(await isMarketEnabled(p.mainDb, market))) return fail("invalid");
     const max = await ownerAddExpiryDays(p.mainDb);
     const days = p.days === undefined ? max : p.days;
     if (days < 1 || days > max) return fail("invalid");
@@ -840,6 +843,7 @@ export async function removeWatchListCode(p: WatchListRemoveInput): Promise<Cont
   const market = p.market;
   const code = p.code;
   try {
+    if (!(await isMarketEnabled(p.mainDb, market))) return fail("invalid"); // D-997, as in the add
     const open = await p.mainDb.execute({
       sql: "SELECT id FROM watch_list_owner WHERE market = ? AND code = ? AND removed_at IS NULL",
       args: [market, code],

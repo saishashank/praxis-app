@@ -2,7 +2,7 @@
 // LLM usage on the Usage page (LLM-051, UX-100; M7 T19b): the loader reads our own call log, is
 // Owner-only, and the page shows it. Counts, tokens, cache hit rate, fallback rate and failures.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupTempDbs, freshDb } from "../db/helpers";
+import { allowMarket, cleanupTempDbs, freshDb } from "../db/helpers";
 import { loadLlmUsage, pct } from "@/lib/ui/loaders/usageLlm";
 
 afterEach(cleanupTempDbs);
@@ -164,6 +164,7 @@ describe("loadLlmUsage", () => {
       outcome: "ok",
       d: "2026-08-01",
     });
+    await allowMarket(db, "US"); // M19 0035: an llm_call row of another market needs that market enabled
     await insert(db, {
       ...base,
       role: "narrator",

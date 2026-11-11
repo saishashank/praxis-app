@@ -317,6 +317,9 @@ const SEED_ORDER = [
 
 async function seeded(): Promise<Client> {
   const db = await freshDb("main");
+  // M19 0035: the frozen-column tests below move a row to market 'US'; with US enabled the write guard lets that
+  // UPDATE through, so the freeze trigger under test (and not the guard, which fires first) is what refuses it.
+  await db.execute("UPDATE market SET enabled = 1 WHERE code = 'US'");
   await seedParents(db);
   for (const t of SEED_ORDER) await ins(db, t, ROW[t]);
   return db;
@@ -1191,7 +1194,7 @@ describe("main migration 0009_sentinel_email: up / down / up and backup", () => 
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
     const full = await schemaOf(db);
-    await migrateDown(db, ms, 25); // 0033, 0032, 0031 to 0020, 0019, 0018 (m14), 0017 (first_ingested_at), 0016 (known_at), 0015 (vendor actions), 0014 (pick checks), 0013 (calendar history), 0012 (golive), 0011 (ui) and 0010 (learning) sit on top: take the schema as of 0009
+    await migrateDown(db, ms, 26); // 0033, 0032, 0031 to 0020, 0019, 0018 (m14), 0017 (first_ingested_at), 0016 (known_at), 0015 (vendor actions), 0014 (pick checks), 0013 (calendar history), 0012 (golive), 0011 (ui) and 0010 (learning) sit on top: take the schema as of 0009
     const before = await schemaOf(db);
     expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 8 });
     const mid = await schemaOf(db);
@@ -1210,9 +1213,9 @@ describe("main migration 0009_sentinel_email: up / down / up and backup", () => 
       );
     });
     expect(mid).toEqual(rest);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 26, version: 34 }); // 0009, then 0010
+    expect(await migrateUp(db, ms)).toEqual({ applied: 27, version: 35 }); // 0009, then 0010
     expect(await schemaOf(db)).toEqual(full);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 34 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 35 });
   });
 
   it("dump and restore round-trip rows, triggers and the history log (no double log)", async () => {
@@ -1231,7 +1234,7 @@ describe("main migration 0009_sentinel_email: up / down / up and backup", () => 
       /append-only/,
     );
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 34 });
+    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 35 });
   });
 
   it("the backup meta line lists the forever tables and not the pruned ones", async () => {

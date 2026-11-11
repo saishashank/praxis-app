@@ -4,6 +4,8 @@
 // client keeps no per-request state (each transaction has its own stream), so sharing it is safe;
 // callers never close it. A closed client (a test, a dropped connection) is replaced.
 import { createClient, type Client } from "@libsql/client";
+import { wrapClient } from "@/lib/market/guard.mjs";
+import type { MarketNotEnabled } from "@/lib/market/errors.mjs";
 
 const isLocal = (u: string) => u.startsWith("file:") || u === ":memory:";
 const shared = new Map<string, Client>();
@@ -24,8 +26,38 @@ function make(urlVar: string, tokenVar: string, intMode?: "bigint"): Client {
   return client;
 }
 
+/**
+ * M19 A2 (D-995): the incident writer for a refused write. S2 `market_not_enabled`, at most once per market per
+ * process-day here (the incident itself opens once while unresolved), best effort: it never throws, and it
+ * writes through the raw client (the incident table has no market column, the guard is not in its way).
+ */
+const reported = new Set<string>();
+export function marketRefusalReporter(raw: Client, now: () => Date = () => new Date()) {
+  return async (err: MarketNotEnabled, info: { table: string | null }): Promise<void> => {
+    try {
+      const at = now();
+      const key = `${err.market}|${at.toISOString().slice(0, 10)}`;
+      if (reported.has(key)) return;
+      reported.add(key);
+      const { notifyIncident } = await import("@/lib/incidents/notify");
+      await notifyIncident({ db: raw, now: () => at }, "market_not_enabled", "S2", {
+        summary: `A write for a market that is not enabled was refused: ${err.market}`,
+        detail: { market: err.market, table: info.table },
+      });
+    } catch {
+      /* best effort */
+    }
+  };
+}
+
+/** Test hook: forget which refusals were reported (the once-per-market-per-day memory). */
+export function resetMarketRefusalReports(): void {
+  reported.clear();
+}
+
 export function mainDb(): Client {
-  return make("TURSO_MAIN_URL", "TURSO_MAIN_TOKEN");
+  const raw = make("TURSO_MAIN_URL", "TURSO_MAIN_TOKEN");
+  return wrapClient(raw, marketRefusalReporter(raw));
 }
 
 // Only the Vercel app holds the auth-DB token (ROL-101a); never call this from workers/Actions.

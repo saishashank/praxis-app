@@ -130,6 +130,9 @@ describe("marketsWithoutRow: the production shape", () => {
     await run("AU", "k1");
     await run(null, "k2");
     expect(await marketsWithoutRow(db)).toEqual([]);
+    // M19 0035: the write guard refuses a row of a market with no row, so the shape is reached by a bypass of it
+    await expect(run("ZQ", "k3")).rejects.toThrow(/MarketNotEnabled/);
+    await db.execute("DROP TRIGGER run_record_market_guard_ins");
     await run("ZQ", "k3");
     expect(await marketsWithoutRow(db)).toEqual(["ZQ"]);
   });
