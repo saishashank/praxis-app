@@ -59,7 +59,7 @@ describe("AT-37: the steelman shrinks first and says why", () => {
         },
       }),
     );
-    expect(r.notWritten).toEqual({ limit: 0, budget: 0, noModel: 3, critic: 0 });
+    expect(r.notWritten).toEqual({ limit: 0, budget: 0, noModel: 3, critic: 0, error: 0 });
     expect(down.calls).toHaveLength(0);
     expect(await readNight(db, MARKET, D)).toMatchObject({ written: 0, notWrittenNoModel: 3 });
   });
@@ -86,7 +86,7 @@ describe("AT-37: the steelman shrinks first and says why", () => {
       db,
       base({ llm: llmOf([author], [scripted("beta", criticAnswer())], store) }),
     );
-    expect(r.notWritten).toEqual({ limit: 0, budget: 3, noModel: 0, critic: 0 });
+    expect(r.notWritten).toEqual({ limit: 0, budget: 3, noModel: 0, critic: 0, error: 0 });
     expect(author.calls).toHaveLength(0);
   });
 

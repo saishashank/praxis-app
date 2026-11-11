@@ -866,6 +866,7 @@ export async function readHealth(
     if (n !== null) {
       const parts = [`${n.written} of ${n.requested} written`];
       if (n.notWrittenNoModel > 0) parts.push(`${n.notWrittenNoModel} with no model available`);
+      if (n.notWrittenError > 0) parts.push(`${n.notWrittenError} stopped by an unexpected error`);
       if (n.notWrittenBudget > 0) parts.push(`${n.notWrittenBudget} stopped by the AI budget`);
       if (n.notWrittenLimit > 0) parts.push(`${n.notWrittenLimit} over the daily limit`);
       if (n.notWrittenCritic > 0) parts.push(`${n.notWrittenCritic} not passed by the checks`);

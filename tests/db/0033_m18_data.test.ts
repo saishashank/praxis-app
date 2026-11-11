@@ -97,6 +97,18 @@ describe("0033_m18_data", () => {
     expect(Number(info.rows[0]!.nn)).toBe(1);
   });
 
+  it("steelman_night.not_written_error defaults to 0, is NOT NULL, and goes with the roll-back", async () => {
+    const db = track(createClient({ url: tempDbUrl() }));
+    const ms = await loadMigrations(MIGRATIONS("main"));
+    await migrateUp(db, ms);
+    const q =
+      "SELECT dflt_value AS d, \"notnull\" AS nn FROM pragma_table_info('steelman_night') WHERE name = 'not_written_error'";
+    const info = await db.execute(q);
+    expect([String(info.rows[0]!.d), Number(info.rows[0]!.nn)]).toEqual(["0", 1]);
+    await migrateDown(db, ms, 1);
+    expect((await db.execute(q)).rows).toHaveLength(0);
+  });
+
   it("the DAT-253 register rows are pending, logged,", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
     await migrateUp(db, await loadMigrations(MIGRATIONS("main")));

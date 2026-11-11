@@ -1,0 +1,11 @@
+{
+  "readers": [
+    "src/app/(app)/cards/[id]/Steelman.tsx",
+    "src/app/(app)/review/Suggestions.tsx",
+    "src/app/(app)/review/actions.ts",
+    "src/app/(app)/review/page.tsx",
+    "src/lib/health/steelman.ts",
+    "src/lib/review/sections.ts",
+    "src/lib/ui/loaders/cards.ts"
+  ]
+}

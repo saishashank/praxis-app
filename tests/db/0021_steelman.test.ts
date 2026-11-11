@@ -85,6 +85,7 @@ const night = {
   notWrittenBudget: 1,
   notWrittenNoModel: 1,
   notWrittenCritic: 0,
+  notWrittenError: 0,
   claimsTotal: 40,
   claimsValid: 39,
   validityPpm: 975_000,

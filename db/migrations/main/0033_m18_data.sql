@@ -50,6 +50,11 @@ CREATE TABLE macro_series (
 --    marked early). Insert-once stays: ADD COLUMN is not an UPDATE; existing rows read 0.
 ALTER TABLE expert_call_outcome ADD COLUMN early INTEGER NOT NULL DEFAULT 0 CHECK (early IN (0,1));
 
+-- 4b. steelman_night.not_written_error (OPS-111 (6), D-977): an unexpected error is counted on its own, not
+--    folded into not_written_no_model, so the card says "an unexpected error stopped this note" and not
+--    "no model was available". steelman_night is insert-once; ADD COLUMN is not an UPDATE; old nights read 0.
+ALTER TABLE steelman_night ADD COLUMN not_written_error INTEGER NOT NULL DEFAULT 0 CHECK (not_written_error >= 0);
+
 -- 5. Licence register rows for DAT-253 (D-975). Both are PENDING (terms [VERIFY]); nothing fetches in M18
 --    and no document text is stored. Register rows only, like the other reference sources: no source_status
 --    row (nothing fetches, so there is nothing to switch off). The inserts write their history rows through
@@ -76,6 +81,7 @@ CREATE TRIGGER source_register_history_no_delete BEFORE DELETE ON source_registe
 BEGIN
   SELECT RAISE(ABORT, 'append-only');
 END;
+ALTER TABLE steelman_night DROP COLUMN not_written_error;
 ALTER TABLE expert_call_outcome DROP COLUMN early;
 DROP TABLE macro_series;
 DROP TABLE source_fetch_status;

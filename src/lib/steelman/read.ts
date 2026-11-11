@@ -53,6 +53,7 @@ async function nightReason(
     ["budget", n.notWrittenBudget],
     ["no_model", n.notWrittenNoModel],
     ["critic_unavailable", n.notWrittenCritic],
+    ["error", n.notWrittenError],
   ];
   const on = c.filter(([, v]) => v > 0);
   return on.length === 1 ? on[0]![0] : undefined;

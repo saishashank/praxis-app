@@ -86,6 +86,19 @@ describe("Steelman component", () => {
     expect(bare).toContain("Not available tonight.");
   });
 
+  it("an unexpected error is not blamed on a missing model (OPS-111 (6), D-977)", () => {
+    const v: SteelmanView = {
+      state: "not_written",
+      reason: "error",
+      bull: [],
+      bear: [],
+      cited: [],
+    };
+    const t = text(renderToStaticMarkup(<Steelman data={v} />));
+    expect(t).toContain("Not available tonight: an unexpected error stopped this note.");
+    expect(t).not.toContain("no model was available");
+  });
+
   it("never says certain, guaranteed or will, and no banned card wording", async () => {
     const v = (await readSteelmanForCard(db.main, CARD_UP))!;
     const all = [

@@ -142,6 +142,25 @@ export function requestReservation(
   return reservedTokens(first, repair, req.maxOutputTokens);
 }
 
+/**
+ * OPS-111 (2), D-977: the reservation is the estimate, raised to the measured need when the trailing mean
+ * of a call of this role (the provider's own returned counts) says a first call plus a repair would cost
+ * more. The estimate is the floor: a measured mean never lowers it.
+ */
+export function reservationWithMeasured(
+  estimate: number,
+  measuredMeanPerCall: number | null,
+): number {
+  if (
+    measuredMeanPerCall === null ||
+    !Number.isFinite(measuredMeanPerCall) ||
+    measuredMeanPerCall <= 0
+  ) {
+    return estimate;
+  }
+  return Math.max(estimate, Math.ceil(measuredMeanPerCall * 2)); // first call + one repair
+}
+
 /** LLM-074: tokens to reserve before the first call: the first call plus one repair call. */
 export function reservedTokens(prompt: string, repairPrompt: string, maxOutput: number): number {
   return estimateTokens(prompt) + maxOutput + estimateTokens(repairPrompt) + maxOutput;
@@ -271,7 +290,10 @@ export function createRouter(cfg: RouterConfig) {
       const allow = allowance(cfg.params, req.role, req.market, req.nightly === true, usage);
       const schema =
         req.schema && req.citationIds ? withCitationEnum(req.schema, req.citationIds) : req.schema;
-      if (!fits(allow, requestReservation(req, text, prompt))) {
+      const measured = cfg.store.measuredMean
+        ? await cfg.store.measuredMean(req.role, req.market, today)
+        : null;
+      if (!fits(allow, reservationWithMeasured(requestReservation(req, text, prompt), measured))) {
         // Role and total budgets are shared by every provider, so exhaustion ends the chain (LLM-050).
         budgetExhausted = true;
         attempts.push({ provider: p.id, outcome: `budget-exhausted:${allow.binding}` });

@@ -26,15 +26,17 @@ const STEELMAN_ENTRY = "src/lib/steelman/cli.ts";
 
 /** @param {string[]} argv @param {Record<string, string | undefined>} env */
 export async function run(argv, env, deps = {}) {
-  const { signalsMain } = await loadEngine();
+  // `deps.loadEngine` lets a test break one bundle build (OPS-111 (5), D-977); production passes nothing.
+  const load = deps.loadEngine ?? loadEngine;
+  const { signalsMain } = await load();
   const code = await signalsMain(argv, env, deps);
   if (code === 2) return code;
-  const { picksMain } = await loadEngine(PICKS_ENTRY);
+  const { picksMain } = await load(PICKS_ENTRY);
   const afterPicks = Math.max(code, await picksMain(argv, env, deps));
   // D-504: the steelman is an opinion only. A bundle that fails to build or a stage that throws past
   // its own guard is logged in one line and changes neither the exit code nor anything above.
   try {
-    const { steelmanMain } = await loadEngine(STEELMAN_ENTRY);
+    const { steelmanMain } = await load(STEELMAN_ENTRY);
     await steelmanMain(argv, env, deps);
   } catch (error) {
     const name = error instanceof Error ? error.name : "unknown";

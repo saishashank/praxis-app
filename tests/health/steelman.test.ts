@@ -18,12 +18,61 @@ const row = (i: number, over: Partial<NightRow> = {}): NightRow => ({
   notWrittenBudget: 0,
   notWrittenNoModel: 0,
   notWrittenCritic: 0,
+  notWrittenError: 0,
   claimsTotal: 20,
   claimsValid: 20,
   validityPpm: 1_000_000,
   criticHidden: 0,
   createdAt: "2026-03-30T00:00:00.000Z",
   ...over,
+});
+
+// OPS-111 (13), D-977: the line shows to every role, so it must stay free of anything the masking rule
+// would hide: no ASX code, no company name, no date. Counts and fixed words only.
+describe("steelman health line masking (D-580)", () => {
+  const NO_CODE_NAME_DATE = /\b[A-Z]{3,4}\b|\d{4}-\d{2}-\d{2}|\b(Pty|Ltd|Limited|Corp)\b/;
+  const shapes = [
+    [],
+    [1, 2, 3].map((i) => row(i, { written: 0, claimsTotal: 0, claimsValid: 0, validityPpm: 0 })),
+    [row(5), row(4, { validityPpm: 979_999 })],
+    Array.from({ length: 12 }, (_, i) => row(12 - i)),
+    [row(1, { notWrittenError: 2, notWrittenNoModel: 1, notWrittenCritic: 4 })],
+  ];
+
+  it("every shape reads as fixed words and counts: no code, name or date", () => {
+    for (const rows of shapes) {
+      const t = steelmanHealthOf(rows).text;
+      // "Steelman" is the label; strip it and the fixed uppercase-free words before the scan
+      expect(t.replace(/Steelman/g, "").match(NO_CODE_NAME_DATE), t).toBeNull();
+    }
+  });
+
+  it("the scan itself catches a code, a name and a date (self-test)", () => {
+    for (const bad of ["Steelman: ZZA written", "Steelman: Zed Pty Ltd", "Steelman 2026-03-04"]) {
+      expect(NO_CODE_NAME_DATE.test(bad.replace(/Steelman/g, ""))).toBe(true);
+    }
+  });
+
+  it("a NightRow carries no code, name or date field to leak", () => {
+    expect(Object.keys(row(1)).sort()).toEqual(
+      [
+        "claimsTotal",
+        "claimsValid",
+        "createdAt",
+        "criticHidden",
+        "d",
+        "market",
+        "notWrittenBudget",
+        "notWrittenCritic",
+        "notWrittenError",
+        "notWrittenLimit",
+        "notWrittenNoModel",
+        "requested",
+        "validityPpm",
+        "written",
+      ].sort(),
+    );
+  });
 });
 
 describe("steelman health line", () => {

@@ -15,6 +15,7 @@ const REASON_TEXT: Record<string, string> = {
   no_model: "no model was available",
   critic_unavailable: "no independent checker was available",
   rejected: "the answer did not pass the checks",
+  error: "an unexpected error stopped this note",
 };
 
 function Side({
