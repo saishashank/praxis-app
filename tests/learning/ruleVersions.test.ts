@@ -31,7 +31,7 @@ import {
   seedRuleVersions,
 } from "@/lib/learning/ruleVersions";
 import { CHANGE_KINDS, CONTEXT_CHANGE_KINDS } from "@/lib/learning/schema";
-import { cleanupTempDbs, freshDb } from "../db/helpers";
+import { allowMarket, cleanupTempDbs, freshDb } from "../db/helpers";
 
 afterEach(cleanupTempDbs);
 
@@ -81,6 +81,7 @@ describe("KB version (LLM-031)", () => {
 
   it("can be limited to one market", async () => {
     const db = await freshDb("main");
+    await allowMarket(db, "IN"); // M19 0035: a ledger row of another market needs that market enabled
     await ledger(db, "lane_a_playbook", "AU");
     await ledger(db, "lane_a_playbook", "IN");
     expect(await currentKbVersion(db, "AU")).toBe("kb-1");

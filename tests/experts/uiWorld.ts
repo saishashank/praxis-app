@@ -4,7 +4,7 @@
 import type { Client } from "@libsql/client";
 import { run } from "../../scripts/experts/import.mjs";
 import { addUser } from "../auth/helpers";
-import { freshDb } from "../db/helpers";
+import { allowMarket, freshDb } from "../db/helpers";
 import { type SeedFiles, writeSeed, zzSeedFiles } from "./zzSeed";
 
 export type World = {
@@ -16,6 +16,7 @@ export type World = {
 };
 
 export async function importSeed(main: Client, mod?: (f: SeedFiles) => void): Promise<void> {
+  await allowMarket(main, "US"); // M19 0035: the ZZ seed holds one US call; the write guard needs the market enabled
   const f = zzSeedFiles();
   mod?.(f);
   const { dir, cleanup } = writeSeed(f);

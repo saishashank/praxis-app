@@ -32,7 +32,7 @@ describe("0034_m19_market_profile", () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(db, ms);
     const after = await schemaOf(db);
-    expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 33 });
+    expect(await migrateDown(db, ms, 2)).toEqual({ rolledBack: 2, version: 33 }); // 0035 (the guard) sits on top
     const left = await rows(db, "SELECT name FROM sqlite_master WHERE name LIKE 'market_profile%'");
     expect(left).toHaveLength(0);
     const cols = (await rows(db, "SELECT name FROM pragma_table_info('market')")).map((r) =>
@@ -41,7 +41,7 @@ describe("0034_m19_market_profile", () => {
     expect(cols).not.toContain("enabled");
     expect(cols).not.toContain("slots_json");
     expect((await rows(db, "SELECT code FROM market")).map((r) => String(r.code))).toEqual(["AU"]);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 1, version: 34 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 2, version: 35 });
     expect(await schemaOf(db)).toEqual(after);
   });
 

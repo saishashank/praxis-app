@@ -644,3 +644,13 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1014 | Owner edit of a mkt.* key (A1, DAT-242): updateConfig (audit first) writes the config_version row as for any key and then calls setProfileField (field row, m... |
 | D-1015 | Derived lists (A1, D-993): MODE_MARKETS is builtMarkets(); calendarMarkets() is the keys of CALENDAR_RULE_MODULES and CALENDAR_MARKETS stays as a constant de... |
 | D-1016 | Cortex schema hash (A1, found by the step-0 baseline): the night's input manifest carries schemaSha, the sha256 of the table names (src/lib/cortex/stage.ts),... |
+| D-1017 | Guard trigger conditions (A2, D-995): the insert trigger is WHEN NEW.market IS NOT NULL AND NOT EXISTS (SELECT 1 FROM market WHERE code = NEW.market AND enab... |
+| D-1018 | Update trigger (A2, D-995): BEFORE UPDATE OF market fires only when the new market differs from the old (NEW.market IS NOT OLD.market) and is not enabled. |
+| D-1019 | Typed error (A2, D-995, D-1013): wrapClient (guard.mjs) rethrows a refused write as the one MarketNotEnabled class from errors.mjs with table from the trigge... |
+| D-1020 | Where the wrapper is applied (A2, D-995): mainDb() only (the auth database has no market table; authDbBigint is the signed backup export, read-only). |
+| D-1021 | Enabled-set mismatch alarm (A2, D-994): checkMarketRows (the nightly step) also runs checkEnabledSet, which compares the market.enabled = 1 set with marketsE... |
+| D-1022 | Guard generation (A2, D-995): scripts/db/gen-market-guard.mjs applies migrations 0001 to 0034 to a scratch database and reads every table with a market colum... |
+| D-1023 | Fixtures (A2, D-995): a row of a market that is not enabled can no longer be inserted directly, so plantOffMarketRow(db, table, row) (tests/db/helpers.ts) en... |
+| D-1024 | The scope common (A2, found by the full suite): document.market is common for the source register and the expert mirror (src/lib/kb/render.ts:654, src/lib/ex... |
+| D-1025 | Write guard and the skip records of the jobs (A2, D-995, D-996): a library job called for a market that is not enabled (or has no row) cannot even record its... |
+| D-1026 | Fixture rule (A2, D-1023): a test that keys rows by a market other than AU enables it through allowMarket(db, code) (tests/db/helpers.ts, a row for an unknow... |

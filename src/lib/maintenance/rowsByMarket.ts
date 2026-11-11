@@ -4,9 +4,11 @@
 // The tables to look at are every table whose schema has a `market` column, read from the live database
 // (sqlite_master and pragma_table_info), so a migration that adds one is covered without a list to
 // maintain; tests/maintenance/rowsByMarket.test.ts asserts the derived list equals a scan of the
-// migration files. The enabled set is the `market` table rows whose mode is not `off`
-// (src/lib/data/controls.ts: market.mode is the source of truth); no market code is written here, so
-// M19's profile loader changes nothing.
+// migration files. The enabled set is the `market` table rows with `enabled = 1` (M19 D-994: a market that is
+// not enabled holds no data, whatever its mode; migration 0035's write guard refuses such rows, so a hit here
+// means the guard was bypassed or a trigger is missing). The nightly step also compares that set with the
+// production setting (`PRAXIS_MARKETS_ENABLED`, key `markets_enabled`) and raises S2 `markets_enabled_mismatch`.
+// No market code is written here.
 //
 // Turso FREE plan (PRD-045): a table whose key starts with `market` is checked with index probes that
 // skip the enabled markets (rows-ok: k + 1 index seeks per table, k = enabled markets), never a scan;
@@ -16,11 +18,21 @@
 // row for every market found by a full count and for every UNEXPECTED market found by a probe.
 import type { Client } from "@libsql/client";
 import { notifyIncident } from "@/lib/incidents/notify";
+import { marketsEnabledDefault } from "@/lib/market/profileCore.mjs";
+import { builtMarkets } from "@/lib/market/seed/index.mjs";
 
 export const MARKET_ROWS_INCIDENT = "market_rows_unexpected";
+export const MARKETS_MISMATCH_INCIDENT = "markets_enabled_mismatch";
 const OWN_TABLE = "market_row_count";
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const DETAIL_ROWS = 20; // threshold-ok: rows named in the incident detail
+
+/**
+ * Tables whose `market` column also holds a scope that belongs to no market (D-1024): `document.market` is "common" for
+ * the source register and the expert mirror. That value is not a market, so it is never counted or alarmed. The
+ * guard (migration 0035, scripts/db/gen-market-guard.mjs COMMON_SCOPE) lets the same value through.
+ */
+export const COMMON_SCOPE: Readonly<Record<string, string>> = { document: "common" };
 
 export type MarketTable = { table: string; indexed: boolean };
 export type MarketRowCount = { tbl: string; market: string; n: number };
@@ -50,9 +62,10 @@ export async function marketTables(db: Q): Promise<MarketTable[]> {
     .filter((t) => IDENT.test(t.table));
 }
 
-/** Markets that are on: a `market` row whose mode is not `off`. */
+/** Markets that are on: a `market` row with `enabled = 1` (D-994). */
 export async function enabledMarkets(db: Q): Promise<string[]> {
-  const r = await db.execute("SELECT code FROM market WHERE mode <> 'off' ORDER BY code");
+  // rows-ok: the market table holds one row per built market (3)
+  const r = await db.execute("SELECT code FROM market WHERE enabled = 1 ORDER BY code");
   return r.rows.map((x) => String(x.code));
 }
 
@@ -98,6 +111,7 @@ export async function countRowsByMarket(db: Q): Promise<MarketRowsResult> {
   gaps.push([prev, null]);
 
   for (const t of tables) {
+    const noMarket = COMMON_SCOPE[t.table]; // a scope that belongs to no market (D-1024)
     if (t.indexed) {
       for (const [lo0, hi] of gaps) {
         let lo = lo0;
@@ -106,6 +120,10 @@ export async function countRowsByMarket(db: Q): Promise<MarketRowsResult> {
           out.queries += 1;
           out.rowsRead += 1;
           if (m === null) break;
+          if (m === noMarket) {
+            lo = m;
+            continue;
+          }
           const c = await db.execute({
             sql: `SELECT COUNT(*) AS n FROM ${t.table} WHERE market = ?`,
             args: [m],
@@ -125,6 +143,7 @@ export async function countRowsByMarket(db: Q): Promise<MarketRowsResult> {
       );
       out.queries += 1;
       for (const x of r.rows) {
+        if (String(x.market) === noMarket) continue;
         const row = { tbl: t.table, market: String(x.market), n: Number(x.n) };
         out.rowsRead += row.n;
         out.counts.push(row);
@@ -143,7 +162,7 @@ export async function checkMarketRows(
   db: Client,
   d: string,
   now: Date,
-  opts: { raise?: boolean } = {},
+  opts: { raise?: boolean; env?: Record<string, string | undefined> } = {},
 ): Promise<MarketRowsResult> {
   const res = await countRowsByMarket(db);
   const stmts = [
@@ -166,5 +185,24 @@ export async function checkMarketRows(
       fixPath: "/health",
     });
   }
+  if (opts.raise !== false) await checkEnabledSet(db, now, opts.env ?? process.env);
   return res;
+}
+
+/** S2 `markets_enabled_mismatch` when the `market.enabled` set differs from the production setting (D-994). */
+export async function checkEnabledSet(
+  db: Client,
+  now: Date,
+  env: Record<string, string | undefined>,
+): Promise<{ expected: string[]; actual: string[]; mismatch: boolean }> {
+  const expected = marketsEnabledDefault(env, builtMarkets());
+  const actual = await enabledMarkets(db);
+  const mismatch = expected.join(",") !== actual.join(",");
+  if (mismatch) {
+    await notifyIncident({ db, now: () => now }, MARKETS_MISMATCH_INCIDENT, "S2", {
+      summary: `The markets enabled in the database (${actual.join(", ") || "none"}) differ from the production setting (${expected.join(", ")})`,
+      detail: { expected, actual },
+    });
+  }
+  return { expected, actual, mismatch };
 }

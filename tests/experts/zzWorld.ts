@@ -3,10 +3,12 @@
 // example.test hosts only (D-521, SEC-110); nothing here comes from the private research.
 import type { Client } from "@libsql/client";
 import { run } from "../../scripts/experts/import.mjs";
+import { allowMarket } from "../db/helpers";
 import { writeSeed, zzSeedFiles } from "./zzSeed";
 
 /** Imports the ZZ seed (6 experts, 12 items, 20 claims incl. 2 calls, 5 clusters, 1 red flag). */
 export async function importZzSeed(db: Client): Promise<void> {
+  await allowMarket(db, "US"); // M19 0035: one seed call is keyed by market US; the write guard needs it enabled
   const seed = writeSeed(zzSeedFiles());
   try {
     const code = await run(

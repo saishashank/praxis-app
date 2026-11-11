@@ -6,7 +6,22 @@
 import { createClient, type Client } from "@libsql/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadMigrations, migrateDown, migrateUp } from "@/lib/db/migrate-core.mjs";
-import { cleanupTempDbs, freshDb, MIGRATIONS, schemaOf, tempDbUrl, track } from "./helpers";
+import {
+  allowMarket,
+  cleanupTempDbs,
+  freshDb as baseFreshDb,
+  MIGRATIONS,
+  schemaOf,
+  tempDbUrl,
+  track,
+} from "./helpers";
+
+// M19 0035: these tests key their rows by the invented market ZZ; the write guard needs it enabled.
+const freshDb = async (name: "main" | "auth") => {
+  const db = await baseFreshDb(name);
+  if (name === "main") await allowMarket(db, "ZZ");
+  return db;
+};
 
 afterEach(cleanupTempDbs);
 
@@ -105,7 +120,7 @@ describe("migration 0022_experts: apply, roll back, apply again", () => {
     expect(NEW_TABLES).toHaveLength(16);
     for (const t of NEW_TABLES) expect(after.some((s) => s.startsWith(`table:${t}:`))).toBe(true);
 
-    expect(await migrateDown(db, ms, 13)).toEqual({ rolledBack: 13, version: 21 });
+    expect(await migrateDown(db, ms, 14)).toEqual({ rolledBack: 14, version: 21 });
     const mid = await schemaOf(db);
     for (const t of NEW_TABLES) expect(mid.some((s) => s.startsWith(`table:${t}:`))).toBe(false);
     const reg = await db.execute(
@@ -121,7 +136,7 @@ describe("migration 0022_experts: apply, roll back, apply again", () => {
     );
     expect(hist.rows).toHaveLength(0);
 
-    expect(await migrateUp(db, ms)).toEqual({ applied: 13, version: 34 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 14, version: 35 });
     expect(await schemaOf(db)).toEqual(after);
   });
 
@@ -129,7 +144,7 @@ describe("migration 0022_experts: apply, roll back, apply again", () => {
     const db = track(createClient({ url: tempDbUrl() }));
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(db, ms);
-    await migrateDown(db, ms, 7);
+    await migrateDown(db, ms, 8);
     expect(await fails(db, "DELETE FROM source_register WHERE source = 'yahoo_eod'")).toContain(
       "forever table",
     );

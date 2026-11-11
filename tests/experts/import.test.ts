@@ -8,7 +8,21 @@ import { createClient } from "@libsql/client";
 import { loadMigrations, migrateUp } from "@/lib/db/migrate-core.mjs";
 import { run, itemId } from "../../scripts/experts/import.mjs";
 import { wordCount } from "../../scripts/experts/validate.mjs";
-import { cleanupTempDbs, freshDb, MIGRATIONS, tempDbUrl, track } from "../db/helpers";
+import {
+  allowMarket,
+  cleanupTempDbs,
+  freshDb as baseFreshDb,
+  MIGRATIONS,
+  tempDbUrl,
+  track,
+} from "../db/helpers";
+
+// M19 0035: the ZZ seed holds one US call; the write guard needs that market enabled to store it.
+const freshDb = async (name: "main" | "auth") => {
+  const db = await baseFreshDb(name);
+  if (name === "main") await allowMarket(db, "US");
+  return db;
+};
 import { type SeedFiles, writeSeed, zzSeedFiles } from "./zzSeed";
 
 const cleanups: (() => void)[] = [];

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { expertsHealthOf, loadExpertsHealth, statWarnings } from "@/lib/health/experts";
 import { maskExpertsHealth } from "@/lib/ui/loaders/health";
 import { loadMaskLookup, maskText, StockAliases } from "@/lib/view/mask";
-import { cleanupTempDbs, freshDb } from "../db/helpers";
+import { allowMarket, cleanupTempDbs, freshDb } from "../db/helpers";
 import { addProposal, addScreening, importZzSeed } from "../experts/zzWorld";
 
 afterEach(cleanupTempDbs);
@@ -165,7 +165,8 @@ describe("loadExpertsHealth", () => {
     const h = await loadExpertsHealth(db, "AU");
     expect(h.warnings).toEqual(["F7 gate fired: needs an Owner decision"]);
     expect(h.state).toBe("attention");
-    // another market's stat does not leak in
+    // another market's stat does not leak in (M19 0035: its row needs the market enabled)
+    await allowMarket(db, "US");
     await addStat(db, "r3", "2030-03-15", { degraded: ["degraded:docs"] }, "US");
     expect((await loadExpertsHealth(db, "AU")).warnings).toEqual([
       "F7 gate fired: needs an Owner decision",

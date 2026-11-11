@@ -158,6 +158,20 @@ export const INCIDENT_SPECS: Readonly<Record<string, Spec>> = {
     fix: "Dispatch Arena close again: it closes the missed sessions oldest first, up to 10 per run (dispatch again if the log says more remain); or run close-books.mjs --date for each missed day, oldest first, before the next session's close.",
     fixPath: "/health",
   },
+  market_not_enabled: {
+    component: "Markets",
+    impact:
+      "A job tried to write data for a market that is not enabled; the database refused it, so nothing was stored.",
+    fix: "Find which job or script named that market (the table is in the incident) and stop it; no data was written.",
+    fixPath: "/health",
+  },
+  markets_enabled_mismatch: {
+    component: "Markets",
+    impact:
+      "The markets switched on in the database differ from the production setting; the database decides what runs.",
+    fix: "Compare the market rows with PRAXIS_MARKETS_ENABLED and correct whichever is wrong.",
+    fixPath: "/health",
+  },
   provider_auth: {
     component: "Provider",
     impact: "A provider refused our key (401/403); calls to it fail.",

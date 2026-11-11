@@ -305,6 +305,7 @@ describe("the full-mode interlock (decision 33)", () => {
   });
 
   it("a sign-off for another market does not count", async () => {
+    await main.execute("UPDATE market SET enabled = 1 WHERE code = 'US'"); // M19 0035: the guard needs the market enabled to store its row
     await main.execute(
       "INSERT INTO go_live_signoff (market, signed_by, signed_at, release_commit, items_json, note, audit_ref) VALUES ('US', 1, 't', 'abcdef1', '[]', '', 'a')",
     );
