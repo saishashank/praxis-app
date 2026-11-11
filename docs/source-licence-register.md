@@ -36,6 +36,8 @@ How to read this page:
 | `expert_tiktok` | TikTok (manual only, disabled) | manual-only: Owner pastes a link, public metadata only (DAT-227) | high | disabled | none | not needed | no |
 | `expert_facebook` | Facebook (manual only, disabled) | manual-only: Owner pastes a link, public metadata only (DAT-227) | high | disabled | none | not needed | no |
 | `expert_linkedin` | LinkedIn (manual only, disabled) | manual-only: Owner pastes a link, public metadata only (DAT-227) | high | disabled | none | not needed | no |
+| `asic_documents` | ASIC public documents (pending) | public regulator documents: links and own summary only (DAT-253); terms [VERIFY] | low | pending | none | not needed | yes |
+| `ssrn_papers` | SSRN papers (pending) | abstract page links only, no PDF fetch (DAT-253); terms [VERIFY] | medium | pending | none | not needed | no |
 
 ## Terms, display rule and code
 
@@ -61,6 +63,8 @@ How to read this page:
 | `expert_tiktok` | A link the Owner pastes by hand for an expert's post; public metadata only. | No automated reading; the Owner pastes a link (DAT-227). The platform's terms restrict automated access, so the row stays disabled and nothing is fetched. Terms URL: not recorded yet (to be filled by the source evaluation, DAT-101). Last checked: not recorded. | Public data. May be shown with its source named. | no fetcher yet | none |
 | `expert_facebook` | A link the Owner pastes by hand for an expert's post; public metadata only. | No automated reading; the Owner pastes a link (DAT-227). The platform's terms restrict automated access, so the row stays disabled and nothing is fetched. Terms URL: not recorded yet (to be filled by the source evaluation, DAT-101). Last checked: not recorded. | Public data. May be shown with its source named. | no fetcher yet | none |
 | `expert_linkedin` | A link the Owner pastes by hand for an expert's post; public metadata only. | No automated reading; the Owner pastes a link (DAT-227). The platform's terms restrict automated access, so the row stays disabled and nothing is fetched. Terms URL: not recorded yet (to be filled by the source evaluation, DAT-101). Last checked: not recorded. | Public data. May be shown with its source named. | no fetcher yet | none |
+| `asic_documents` | Links to public regulator documents and our own short summary; no document text is stored. | Public regulator documents: links and our own summary only (DAT-253, D-975). Terms are not yet checked [VERIFY]. Nothing is fetched in this release; the knowledge-base fetch rules (robots, conditional requests, daily cap) apply when polling is built (KB-082). The row stays pending. Terms URL: not recorded yet (to be filled by the source evaluation, DAT-101). Last checked: not recorded. | Public data. May be shown with its source named. | `src/lib/http/safeLink.ts` | none |
+| `ssrn_papers` | Links to abstract pages only; no PDF is fetched and no text is stored. | Abstract page links only (DAT-253, D-975). Terms are not yet checked [VERIFY]. Nothing is fetched in this release; the row stays pending. Terms URL: not recorded yet (to be filled by the source evaluation, DAT-101). Last checked: not recorded. | Public data. May be shown with its source named. | `src/lib/http/safeLink.ts` | none |
 
 ## Owner dependencies
 

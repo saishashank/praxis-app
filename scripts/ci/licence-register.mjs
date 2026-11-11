@@ -179,6 +179,22 @@ export const SOURCE_FACTS = {
     terms:
       "Each FRED series carries its own terms, checked per series before any use. No fetcher is built and the row stays pending.",
   },
+  asic_documents: {
+    label: "ASIC public documents (pending)",
+    provides: "Links to public regulator documents and our own short summary; no document text is stored.",
+    code: ["src/lib/http/safeLink.ts"],
+    hosts: [],
+    terms:
+      "Public regulator documents: links and our own summary only (DAT-253, D-975). Terms are not yet checked [VERIFY]. Nothing is fetched in this release; the knowledge-base fetch rules (robots, conditional requests, daily cap) apply when polling is built (KB-082). The row stays pending.",
+  },
+  ssrn_papers: {
+    label: "SSRN papers (pending)",
+    provides: "Links to abstract pages only; no PDF is fetched and no text is stored.",
+    code: ["src/lib/http/safeLink.ts"],
+    hosts: [],
+    terms:
+      "Abstract page links only (DAT-253, D-975). Terms are not yet checked [VERIFY]. Nothing is fetched in this release; the row stays pending.",
+  },
   industry_map_manual: {
     label: "Industry classes (manual CSV)",
     provides: "Finer industry classes for the second-position limit, uploaded by the Owner.",
