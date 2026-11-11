@@ -21,6 +21,14 @@ import type { LearnConfig } from "./config";
 import { loadLearnConfig } from "./configStore";
 import { CORTEX_LEARN_HOOKS, HOOK_SEQ_BASE, type CortexLearnHooks } from "./hooks";
 import { learnerNight } from "./nightLearner";
+import { top5Movers } from "@/lib/learning/dailyTop5";
+import {
+  top5Flags,
+  top5History,
+  top5ScorecardWords,
+  type CandidateTally,
+  type Top5Flags,
+} from "./top5";
 
 /** Sessions back to the 20-session feature evening (D-21) and the prior-60 reference window. */
 export const BACK20_SESSIONS = 21; // threshold-ok: design C.6 feature night of the 20-session leg
@@ -45,7 +53,12 @@ export type CortexLearnOpts = {
   readonly config?: LearnConfig;
   /** The probe / base plug-ins (default CORTEX_LEARN_HOOKS). */
   readonly hooks?: CortexLearnHooks;
+  /** Finished candidate picks per probe angle (the picks entry hands them in; D-983, words only). */
+  readonly candidatePicks?: ReadonlyMap<string, CandidateTally>;
 };
+
+/** Nights of the top-5 coverage words (four weeks of trading days, D-986). */
+export const TOP5_NIGHTS = 20; // threshold-ok: four weeks of trading days
 
 /** The line the section carries when the learner part failed tonight (the scorecard still stands). */
 export const LEARNER_FAILED_WORDS =
@@ -125,12 +138,26 @@ export async function cortexLearnNight(
     prior60: reference,
   });
   const coverage = moverCoverage(featuresPrev, movers);
-  const section = scorecardWords({
+  const scored = scorecardWords({
     d: o.d,
     rows: card.rows,
     coverage,
     now: new Date(`${o.d}T00:00:00.000Z`),
   });
+  // D-986: the Owner's top-5 gainer target, per measure (evidence and words only)
+  const top5 = top5Movers(o.world.moves ?? [], o.world.liquidCodes);
+  const flags = top5Flags(featuresPrev, top5);
+  const top5Window = window.slice(-(TOP5_NIGHTS - 1));
+  const history = await top5History(db, o.market, top5Window[0] ?? o.d, o.d);
+  const top5Line = top5ScorecardWords(flags, history);
+  const last = scored.lines.length - 1;
+  const section: CortexLearnSection =
+    top5Line === null
+      ? scored
+      : {
+          ...scored,
+          lines: [...scored.lines.slice(0, last), top5Line, ...scored.lines.slice(last)],
+        };
   await insertAngleDays(db, card.rows);
   await logEvent(db, {
     market: o.market,
@@ -170,6 +197,7 @@ export async function cortexLearnNight(
   }
   // the probe / base builder's nightly step (hooks.ts), after the learner; never fatal either
   const hookLines: string[] = [];
+  let probeFlags: Top5Flags = {};
   const hooks = o.hooks ?? CORTEX_LEARN_HOOKS;
   if (hooks.probeNight !== undefined) {
     try {
@@ -178,21 +206,30 @@ export async function cortexLearnNight(
         d: o.d,
         calendar: o.calendar,
         world: o.world,
+        movers,
+        top5,
+        top5History: history,
+        ...(o.candidatePicks === undefined ? {} : { candidatePicks: o.candidatePicks }),
         learner: learner?.learner ?? null,
         config: learner?.config ?? o.config ?? (await loadLearnConfig(db)),
         seqBase: HOOK_SEQ_BASE,
         now: o.now,
       });
       if (r && r.lines) hookLines.push(...r.lines);
+      if (r && r.top5) probeFlags = r.top5;
     } catch {
       // the probe step failed tonight; the scorecard and the learner stand
     }
   }
+  const withFlags: CortexLearnSection = {
+    ...section,
+    numbers: { ...section.numbers, top5: { ...flags, ...probeFlags } },
+  };
   const out: CortexLearnSection =
     learner === null && hookLines.length === 0
       ? learnerFailed
-        ? { ...section, lines: [...section.lines, LEARNER_FAILED_WORDS] }
-        : section
+        ? { ...withFlags, lines: [...section.lines, LEARNER_FAILED_WORDS] }
+        : withFlags
       : {
           lines: [
             ...section.lines.filter(
@@ -202,7 +239,7 @@ export async function cortexLearnNight(
             ...hookLines,
           ],
           numbers: {
-            ...section.numbers,
+            ...withFlags.numbers,
             ...(learner === null ? {} : { learner: learner.numbers }),
           },
         };

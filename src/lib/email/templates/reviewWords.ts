@@ -2,6 +2,7 @@
 // exit reasons in plain words, and the plain-text lists of sections 4-6 that the masked in-app view
 // reads (facts.narrative). Pure: no clock, no database. Shared by the renderer and the readers.
 import type { DailyLearning } from "@/lib/learning/daily";
+import { top5Lines } from "@/lib/learning/dailyTop5";
 import { amount } from "./format";
 
 const PPM_PER_PERCENT = 10_000; // threshold-ok: parts per million -> percent
@@ -119,6 +120,8 @@ export type SectionLists = { s4: string[]; s5: string[]; s6: string[] };
 
 /** The heading of the learning Cortex's lines inside "What we learned today" (D-923). */
 export const BRAIN_HEADING = "What the brain learned";
+/** The heading of the top-5 gainer target lines, first in "What we learned today" (D-993). */
+export const TOP5_HEADING = "Our target: the day's top 5 gainers";
 
 /** The plain lists behind sections 4-6, built from structured facts only (no model). */
 export function reviewLists(p: {
@@ -129,6 +132,8 @@ export function reviewLists(p: {
   const s4: string[] = [];
   if (p.learning === null) s4.push("The learning step did not run tonight.");
   else {
+    // D-993: the Owner's target first (top-5 gainers named before they moved)
+    if (p.learning.top5) s4.push(`${TOP5_HEADING}:`, ...top5Lines(p.learning.top5));
     s4.push(...p.learning.summary);
     for (const l of p.learning.lessons) {
       s4.push(

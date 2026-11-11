@@ -68,6 +68,7 @@ import {
 import {
   CAUSE_WINDOW_SESSIONS,
   escalateWords,
+  measureName,
   probeActions,
   probeCloseWords,
   probeOpenWords,
@@ -80,11 +81,21 @@ import {
 import { familyWords } from "./learnWords";
 import { scorecardNight } from "./scorecard";
 import { angleDaysSince, insertAngleDays, logEvent, type LearnEvent } from "./store";
+import {
+  probeEvidenceWords,
+  top5Count,
+  top5Flags,
+  type CandidateTally,
+  type Top5Flags,
+} from "./top5";
+import type { Top5Sets } from "@/lib/learning/dailyTop5";
 
-/** cortex_learn_event seq ranges of a night: probeNight 100–149, baseWeekly 150–199 (the scorecard
- *  is 0; the checkpoint and the reweight take their own seqs below 100). */
-export const PROBE_SEQ0 = 100; // threshold-ok: reserved seq range of the night
-export const BASE_SEQ0 = 150; // threshold-ok: reserved seq range of the night
+/** cortex_learn_event seq ranges of a night (D-970): probeNight 200–249, baseWeekly 250–299, from the
+ *  hooks' first seq (hooks.ts HOOK_SEQ_BASE = 200). Below them: 0 the scorecard, 1–99 the nightly
+ *  learner (duel, checkpoint), 100 / 101 the weekly reweight (or no_change) and its placebo twin, all
+ *  of which can fall on the same Friday night. */
+export const PROBE_SEQ0 = 200; // threshold-ok: reserved seq range of the night (= HOOK_SEQ_BASE)
+export const BASE_SEQ0 = 250; // threshold-ok: reserved seq range of the night (HOOK_SEQ_BASE + 50)
 const SEQ_SPAN = 50; // threshold-ok: width of each reserved range
 const BACK20_SESSIONS = 21; // threshold-ok: design C.6 feature night of the 20-session leg
 const CALENDAR_SPAN = 2; // threshold-ok: calendar days per session searched back
@@ -182,6 +193,12 @@ export type ProbeNightOpts = {
   readonly now: string;
   /** A synthetic registry (tests); default the code registry. */
   readonly angles?: readonly AngleDef[];
+  /** The five biggest liquid gainers and losers of night d (D-986: the probes' top-5 coverage). */
+  readonly top5?: Top5Sets;
+  /** The stored top-5 flags of the earlier nights of the four-week window (oldest first). */
+  readonly top5History?: readonly Top5Flags[];
+  /** Finished candidate picks per probe angle (D-983: evidence words only, never the strict test). */
+  readonly candidatePicks?: ReadonlyMap<string, CandidateTally>;
 };
 
 export type ProbeNightResult = {
@@ -189,8 +206,10 @@ export type ProbeNightResult = {
   readonly scoredRows: number;
   readonly opened: readonly { family: string; angleId: string }[];
   readonly escalated: readonly string[];
-  /** The night's Owner lines (already in the events' words). */
+  /** The night's Owner lines: the events' words, then one evidence line per open probe. */
   readonly lines: readonly string[];
+  /** Tonight's top-5 flags of the open probes (empty without their values or the top-5 sets). */
+  readonly top5: Top5Flags;
 };
 
 /**
@@ -207,11 +226,13 @@ export async function probeNight(
 
   // 1. score the open probes from their stored values (the same scorecard as the scored set)
   let scoredRows = 0;
+  let top5: Top5Flags = {};
   const ids = [...new Set(open.map((p) => p.angleId))].sort(byText);
   if (o.world !== undefined && ids.length > 0) {
     const prev = previousTradingDay(o.d, o.calendar);
     const back20 = sessionsBack(o.d, BACK20_SESSIONS, o.calendar);
     const nights = await probeFeatureNights(db, o.market, [prev, back20], ids);
+    top5 = top5Flags(nights.get(prev) ?? null, o.top5);
     if (nights.size > 0) {
       const regimes = new Map<string, string>([
         [prev, await regimeBefore(db, o.market, prev)],
@@ -254,7 +275,15 @@ export async function probeNight(
   const opened: { family: string; angleId: string }[] = [];
   const escalated: string[] = [];
   const lines: string[] = [];
-  if (causes.length === 0) return { scoredRows, opened, escalated, lines };
+  // D-983 / D-986: one evidence line per open probe (candidate picks, top-5 coverage), words only
+  const evidence = ids.map((id) =>
+    probeEvidenceWords({
+      name: measureName(id, o.angles),
+      picks: o.candidatePicks?.get(id),
+      top5: o.top5 === undefined ? null : top5Count(id, top5, o.top5History ?? []),
+    }),
+  );
+  if (causes.length === 0) return { scoredRows, opened, escalated, lines: evidence, top5 };
   const bases = new Map<string, readonly string[]>();
   for (const [f, v] of latestBases(await baseVersions(db, o.market))) bases.set(f, v.angles);
   const status = statusFrom(await latestPassports(db, o.market));
@@ -307,7 +336,7 @@ export async function probeNight(
       lines.push(words);
     }
   }
-  return { scoredRows, opened, escalated, lines };
+  return { scoredRows, opened, escalated, lines: [...lines, ...evidence], top5 };
 }
 
 // ---- weekly ---------------------------------------------------------------------------------------

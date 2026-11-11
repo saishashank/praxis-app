@@ -470,7 +470,7 @@ describe("probeNight", () => {
       movers: [],
       now: NOW,
     }))!;
-    expect(quiet).toEqual({ scoredRows: 0, opened: [], escalated: [], lines: [] });
+    expect(quiet).toEqual({ scoredRows: 0, opened: [], escalated: [], lines: [], top5: {} });
     await seedMovers(db);
     const r = (await probeNight(db, { market: "AU", d: D, calendar: [], movers: [], now: NOW }))!;
     expect(r.opened).toEqual([]);

@@ -11,6 +11,7 @@ import {
   type HistoryRow,
 } from "@/lib/ui/loaders/picks";
 import type { LoaderEnv } from "@/lib/ui/loaders/shell";
+import { CandidateBadge } from "@/components/ui/Badges";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { GainLoss, Money, NotMeasured, SimulatedLabel } from "@/components/ui/Values";
 import { formatDay, formatPpm } from "@/lib/view/format";
@@ -27,6 +28,7 @@ export const FILTER_LABEL: Record<HistoryFilter, string> = {
   loss: "In loss",
   not_traded: "Not traded",
   waiting: "Waiting to buy",
+  candidate: "Candidate",
   all: "All",
 };
 
@@ -44,6 +46,8 @@ const EMPTY_WORDS: Record<HistoryFilter, string> = {
   loss: "No pick is in loss.",
   not_traded: "No pick has expired without reaching its buy price.",
   waiting: "No pick is waiting to be bought.",
+  candidate:
+    "No candidate pick yet. When the system tries a new measure, its best share each night is published as a candidate pick.",
   all: "No pick has been published yet.",
 };
 
@@ -91,6 +95,11 @@ function stockCell(r: HistoryRow) {
   return (
     <span className="block min-w-0 break-words">
       {r.stock}
+      {r.candidate ? (
+        <span className="mt-1 block">
+          <CandidateBadge />
+        </span>
+      ) : null}
       {r.plan ? (
         <span className="block text-xs text-text-muted">
           Plan: buy up to {r.plan.buyUpTo ? <Money micro={r.plan.buyUpTo.micro} /> : "—"}, stop{" "}

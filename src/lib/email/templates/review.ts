@@ -25,11 +25,13 @@ import { dateLabel, plural, toneOf, truncate } from "./format";
 import { formatDay } from "@/lib/view/format";
 import { displayTitle } from "@/lib/view/displayText";
 import type { DailyLearning } from "@/lib/learning/daily";
+import { top5Lines } from "@/lib/learning/dailyTop5";
 import {
   type ClosedTradeFact,
   aud,
   audWithPct,
   BRAIN_HEADING,
+  TOP5_HEADING,
   companyLabel,
   pctPpm,
   sortClosed,
@@ -453,6 +455,11 @@ function section4(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
   if (missing.has(4)) return [...out, unavailable()];
   const l = f.learning ?? null;
   if (l === null) return [...out, { t: "p", text: LEARNING_MISSING, tone: "muted" }];
+  // D-993: the Owner's target opens the learning section (top-5 gainers named before they moved)
+  const top5 = l.top5 ? top5Lines(l.top5) : [];
+  if (top5.length) {
+    out.push({ t: "p", text: TOP5_HEADING, bold: true }, { t: "ul", items: top5 });
+  }
   if (l.summary.length) out.push({ t: "ul", items: l.summary });
   if (l.lessons.length) {
     out.push({

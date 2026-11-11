@@ -531,6 +531,9 @@ const M6_RANGED = [
   // D-913 "Follow the picks" practice portfolio (Owner 2026-11-10)
   ["picks_portfolio_seed_aud", "int", 5000, 1000, 100000, "AUD", "O", LRN, "D-913 (Owner 2026-11-10: multiple stocks, think as end-user money)", "Practice money the Follow the picks portfolio starts with"],
   ["picks_portfolio_slots", "int", 5, 1, 10, "stocks", "O", LRN, "D-913 (Owner 2026-11-10)", "Most stocks the Follow the picks portfolio holds at once; each buy is about the value divided by this"],
+  // D-980 candidate picks (Owner 2026-11-11: "start picking stocks based on new candidates so that you can validate")
+  ["picks_candidate_per_measure", "int", 1, 0, 2, "picks", "O", LRN, "D-980 (Owner 2026-11-11)", "Candidate picks per candidate measure per night (0 = none)"],
+  ["picks_candidate_max", "int", 3, 0, 5, "picks", "O", LRN, "D-980 (Owner 2026-11-11)", "Most candidate picks per night in total, placed after the strategy and shortlist picks (0 = none)"],
 ] as const satisfies readonly RangedRow[];
 
 // prettier-ignore

@@ -13,7 +13,8 @@
 //   rule version `cortex:F1.learn@g`, LRN-AT-12).
 //   One-session embargo: the row is fitted just after the cut-off of the week's last session, so it is
 //   first in force on the next session; the run date never enters a statistic.
-// Then the `baseWeekly` hook (hooks.ts). Deterministic: the same stored rows give the same row bytes;
+// The `baseWeekly` hook (hooks.ts) runs FIRST (D-972): a base change tonight restarts the learner on
+// the new base (a fresh equal-weight generation, based_on the new base rule). Deterministic: the same stored rows give the same row bytes;
 // a re-run of the week writes nothing new (insert-or-ignore).
 import type { Client } from "@libsql/client";
 import type { StageOutput } from "@/lib/learning/weeklyRun";
@@ -29,7 +30,7 @@ import { scopedPrng } from "@/lib/stats/rng";
 import { isoWeek } from "@/lib/view/format";
 import type { LearnConfig } from "./config";
 import { loadLearnConfig } from "./configStore";
-import { CORTEX_LEARN_HOOKS, HOOK_SEQ_BASE, type CortexLearnHooks } from "./hooks";
+import { CORTEX_LEARN_HOOKS, HOOK_SEQ_BASE, type CortexLearnHooks, type HookResult } from "./hooks";
 import {
   baseWeightsOf,
   basedOnOf,
@@ -57,6 +58,8 @@ import { angleDaysOfHorizon, eventsSince, lastEventD, logEvent } from "./store";
 /** Seqs of the weekly events on the week's last session (the nightly stage uses 0..99). */
 export const WEEKLY_SEQ = 100; // threshold-ok: event seq layout (hooks.ts header)
 export const PLACEBO_SEQ = 101; // threshold-ok: event seq layout (hooks.ts header)
+/** fitted_at of a system base row: three seconds after the week's last cut-off (after the learner's 2 s). */
+export const BASE_FIT_OFFSET_MS = 3000; // threshold-ok: D-972 embargo instant of a base row
 const H20 = 20; // threshold-ok: the 20-session rows the reweight reads (C.6)
 const DEV_IC_KEYS = ["dev_ic", "rank_ic", "ic20", "ic"] as const;
 
@@ -104,6 +107,10 @@ export function devPriorOf(ids: readonly string[], passports: readonly PassportR
 export function learnerAngleIds(fixed: MapRow, passports: readonly PassportRow[]): string[] {
   const status = new Map<string, AngleStatus>(passports.map((p) => [p.angleId, p.status]));
   const p = fixed.params as unknown as Record<string, unknown>;
+  // D-971: a base row admits its promoted measures (no passport row is written for them)
+  if (Array.isArray(p.admitted)) {
+    for (const id of p.admitted) if (typeof id === "string") status.set(id, "active");
+  }
   const listed =
     Array.isArray(p.angles) && p.angles.every((a) => typeof a === "string")
       ? (p.angles as string[])
@@ -129,11 +136,11 @@ export type CortexWeeklyOpts = {
   readonly hooks?: CortexLearnHooks;
 };
 
-/** The weekly stage for one market; see the header. */
-export async function cortexLearnWeekly(
+/** The weekly stage and its base hook's result (statistics and Owner lines); see the header. */
+export async function cortexLearnWeeklyRun(
   db: Client,
   o: CortexWeeklyOpts,
-): Promise<CortexWeeklyResult[]> {
+): Promise<{ results: CortexWeeklyResult[]; hook: HookResult | null }> {
   const lastSession = isTradingDay(o.d, o.calendar) ? o.d : previousTradingDay(o.d, o.calendar);
   const config = o.config ?? (await loadLearnConfig(db));
   const cHash = configHash(config);
@@ -143,9 +150,45 @@ export async function cortexLearnWeekly(
   const fixedOf = newestPerFamily(maps);
   const passports = await latestPassports(db, o.market);
   const out: CortexWeeklyResult[] = [];
+  // D-972: the base step runs FIRST, so a base change restarts the learner on the new base this week
+  const hooks = o.hooks ?? CORTEX_LEARN_HOOKS;
+  let hook: HookResult | null = null;
+  const restartOn = new Map<string, MapRow>();
+  if (hooks.baseWeekly !== undefined) {
+    try {
+      hook =
+        (await hooks.baseWeekly(db, {
+          market: o.market,
+          d: o.d,
+          lastSession,
+          calendar: o.calendar,
+          fixed: fixedOf.get("F1") ?? null,
+          learner:
+            maps.find((m) => m.ruleVersion === learnerRuleVersion("F1") && isLearnerRow(m)) ?? null,
+          config,
+          seqBase: HOOK_SEQ_BASE,
+          now: embargoFittedAt(lastSession, BASE_FIT_OFFSET_MS, o.cutoffHhmm),
+        })) ?? null;
+      const restarts = hook?.restartLearner ?? [];
+      if (restarts.length > 0) {
+        // the new base row is fitted after tonight's cut-off: read it without the as-of filter
+        const all = await latestMaps(db, o.market);
+        for (const r of restarts) {
+          const row = all.find(
+            (m) => m.family === r.family && m.ruleVersion === r.ruleVersion && !isLearnerRow(m),
+          );
+          if (row !== undefined) restartOn.set(r.family, row);
+        }
+      }
+    } catch {
+      // recorded as a missing base statistic; the re-weighting below still runs
+      hook = null;
+    }
+  }
   for (const family of LEARN_FAMILIES) {
     const rv = learnerRuleVersion(family);
-    const fixed = fixedOf.get(family);
+    const restartRow = restartOn.get(family);
+    const fixed = restartRow ?? fixedOf.get(family);
     const learner = maps.find(
       (m) => m.family === family && m.ruleVersion === rv && isLearnerRow(m),
     );
@@ -193,6 +236,7 @@ export async function cortexLearnWeekly(
           ).length,
           raisedMost: null,
           charged,
+          ...(restartRow === undefined ? {} : { restart: "base_change" }),
         },
         words: words[0]!,
         createdAt: o.now,
@@ -313,30 +357,15 @@ export async function cortexLearnWeekly(
       placeboMove: twin.maxMove,
     });
   }
-  // the probe / base builder's weekly step (hooks.ts), never fatal to the re-weighting
-  const hooks = o.hooks ?? CORTEX_LEARN_HOOKS;
-  if (hooks.baseWeekly !== undefined) {
-    try {
-      const after = await latestMaps(db, o.market);
-      const fixed = newestPerFamily(after).get("F1") ?? null;
-      const learner =
-        after.find((m) => m.ruleVersion === learnerRuleVersion("F1") && isLearnerRow(m)) ?? null;
-      await hooks.baseWeekly(db, {
-        market: o.market,
-        d: o.d,
-        lastSession,
-        calendar: o.calendar,
-        fixed,
-        learner,
-        config,
-        seqBase: HOOK_SEQ_BASE,
-        now: o.now,
-      });
-    } catch {
-      // recorded by the caller's stage output as a missing hook result; the stage itself succeeded
-    }
-  }
-  return out;
+  return { results: out, hook };
+}
+
+/** The weekly stage for one market; see the header. */
+export async function cortexLearnWeekly(
+  db: Client,
+  o: CortexWeeklyOpts,
+): Promise<CortexWeeklyResult[]> {
+  return (await cortexLearnWeeklyRun(db, o)).results;
 }
 
 /** The weekly learning run's stage "cortex" (weeklyRun.ts LEARNING_STAGES, last). */
@@ -347,25 +376,33 @@ export async function cortexWeeklyStage(ctx: {
   readonly calendar: readonly CalendarRow[];
   readonly params?: { readonly decisionCutoff?: string };
 }): Promise<StageOutput> {
-  const results = await cortexLearnWeekly(ctx.db, {
+  const { results, hook } = await cortexLearnWeeklyRun(ctx.db, {
     market: ctx.market,
     d: ctx.d,
     calendar: ctx.calendar,
     now: new Date().toISOString(), // created_at only; never part of a statistic
     ...(ctx.params?.decisionCutoff === undefined ? {} : { cutoffHhmm: ctx.params.decisionCutoff }),
   });
+  const hookStats = (hook?.stats ?? []).map((s) => ({
+    scope: ctx.market,
+    metric: s.metric,
+    value: s.value,
+  }));
   return {
-    stats: results.map((r) => ({
-      scope: ctx.market,
-      metric: `cortex_learn:${r.family}`,
-      value: {
-        action: r.action,
-        generation: r.generation,
-        last_session: r.lastSession,
-        charged: r.charged,
-        max_move: r.maxMove,
-        placebo_move: r.placeboMove,
-      },
-    })),
+    stats: [
+      ...results.map((r) => ({
+        scope: ctx.market,
+        metric: `cortex_learn:${r.family}`,
+        value: {
+          action: r.action,
+          generation: r.generation,
+          last_session: r.lastSession,
+          charged: r.charged,
+          max_move: r.maxMove,
+          placebo_move: r.placeboMove,
+        },
+      })),
+      ...hookStats,
+    ],
   };
 }

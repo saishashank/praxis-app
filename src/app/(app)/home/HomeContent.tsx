@@ -480,6 +480,11 @@ export function HomeContent({
         <p className="mt-1 text-sm text-text-muted" data-summary="">
           {empty ? "Nothing has run yet." : daySentence(v)}
         </p>
+        {v.top5Line ? (
+          <p className="mt-1 text-sm text-text-muted" data-testid="top5-line">
+            {v.top5Line}
+          </p>
+        ) : null}
       </div>
 
       <Strip v={v} asOf={result.asOf} />

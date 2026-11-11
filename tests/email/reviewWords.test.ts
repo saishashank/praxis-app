@@ -6,6 +6,7 @@ import {
   aud,
   audWithPct,
   BRAIN_HEADING,
+  TOP5_HEADING,
   closedLine,
   companyLabel,
   exitWords,
@@ -167,6 +168,24 @@ describe("reviewLists", () => {
       queuedOrders: null,
     });
     expect(empty.s4.join("\n")).not.toContain(BRAIN_HEADING);
+    // D-993: the top-5 target comes first in the masked in-app list too
+    const top5 = {
+      d: "2026-11-10",
+      liquid: 10,
+      named: 0,
+      gainers: [],
+      gainersHad: 0,
+      losers: [],
+      losersHad: 0,
+      picks: { n: 0, up: 0, down: 0, meanMovePpm: null },
+      chanceHits: 0,
+      rolling: { nights: 1, gainers: 0, had: 0, chanceHits: 0 },
+    };
+    const first = reviewLists({ learning: { ...learning, top5 }, closed: [], queuedOrders: null });
+    expect(first.s4.slice(0, 2)).toEqual([
+      `${TOP5_HEADING}:`,
+      "Top 5 gainers today: no large or mid-size share rose, so there was nothing to catch.",
+    ]);
     expect(reviewLists({ learning, closed: [], queuedOrders: null }).s4.join("\n")).not.toContain(
       BRAIN_HEADING,
     );

@@ -190,6 +190,12 @@ describe("weekly pure helpers", () => {
     expect(prior["A-ZZ-99"]).toEqual({ devIc: 0, cluster: "other", name: "" });
     expect(learnerAngleIds(FIXED, [pass("A-D1-02", {})])).toEqual(["A-D1-02"]);
     expect(learnerAngleIds(FIXED, [pass("A-D1-02", {}, "candidate")])).toEqual([]);
+    // D-971: a base row admits its promoted measure without a passport row
+    const base = {
+      ...FIXED,
+      params: { ...FIXED.params, admitted: ["A-D1-02", 7] },
+    } as unknown as typeof FIXED;
+    expect(learnerAngleIds(base, [pass("A-D1-02", {}, "candidate")])).toEqual(["A-D1-02"]);
   });
 });
 

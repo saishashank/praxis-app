@@ -17,6 +17,7 @@ import { loadCalendar } from "@/lib/arena/closeBooks";
 import { marketDate } from "@/lib/data/calendar";
 import { cortexLearnNight } from "@/lib/cortex/learn/stage";
 import { runDailyLearning, type DailyLearningResult } from "@/lib/learning/daily";
+import { candidateTally } from "./candidates";
 import { pickHooks } from "./dailyHooks";
 import { runPicksNight } from "./nightly";
 import { runPickPortfolio } from "./portfolioStore";
@@ -88,7 +89,8 @@ export async function picksMain(
     out(
       `arena-picks ${MARKET} ${d}: published=${p.published} candidates=${p.candidates}` +
         ` bought=${t.bought} missed=${t.missed} closed=${t.closed} open=${t.open}` +
-        ` checked=${p.checks.checked} withdrawn=${p.checks.withdrawn} shortlist=${p.shortlist}`,
+        ` checked=${p.checks.checked} withdrawn=${p.checks.withdrawn} shortlist=${p.shortlist}` +
+        ` candidate=${p.candidateMeasures}`,
     );
     // D-913: the Follow the picks portfolio, rebuilt after the picks; a failure never stops them
     try {
@@ -124,6 +126,11 @@ export async function picksMain(
     }
     // D-923: the learning Cortex's scorecard, on the daily loop's World; a failure never stops the picks
     try {
+      // D-983: the candidate picks' finished results, evidence words of their measures only
+      const candidatePicks =
+        night === undefined
+          ? undefined
+          : await candidateTally(db, MARKET, d).catch(() => undefined);
       const c =
         night === undefined
           ? null
@@ -135,6 +142,7 @@ export async function picksMain(
               movers: night.movers,
               now: new Date(nowMs()).toISOString(),
               cutoffHhmm: params.decisionCutoff,
+              ...(candidatePicks === undefined ? {} : { candidatePicks }),
             });
       out(
         c === null

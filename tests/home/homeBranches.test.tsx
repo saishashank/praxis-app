@@ -33,6 +33,7 @@ function baseView(): HomeView {
     news: { hidden: false, items: [] },
     review: null,
     attentionCount: null,
+    top5Line: null,
   };
 }
 
@@ -115,6 +116,19 @@ describe("daySentence", () => {
   });
   it("says nothing about the strategies when the change is not measured", () => {
     expect(withPpm(null, "Today", 2)).not.toContain("Your strategies");
+  });
+});
+
+describe("D-994 the top-5 gainer line", () => {
+  it("shows the four-week rate line under the day sentence only when one is stored", () => {
+    show((v) => {
+      v.top5Line =
+        "Top 5 gainers named before they moved, the last 20 trading days: 3 of 100 (3%).";
+    });
+    expect(screen.getByTestId("top5-line")).toHaveTextContent("3 of 100");
+    cleanup();
+    show();
+    expect(screen.queryByTestId("top5-line")).toBeNull();
   });
 });
 

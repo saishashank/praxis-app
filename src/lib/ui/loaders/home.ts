@@ -24,6 +24,7 @@ import {
 } from "@/lib/data/quotes/latest";
 import { MARKET_INDEX_CODE } from "@/lib/data/quotes/parse";
 import { liveDayChange } from "./liveDay";
+import { rollingLine, type Top5Rolling } from "@/lib/learning/dailyTop5";
 import { loadAlertHomeFacts, loadIntraday, type IntradayModel } from "./pickAlerts";
 import type { LoaderEnv } from "./shell";
 import {
@@ -284,6 +285,11 @@ export type HomeView = {
   review: { d: string; day: string | null; kind: string } | null;
   /** Owner only: items that need attention in the Control Room; null for everyone else. */
   attentionCount: number | null;
+  /**
+   * D-994 (Owner 2026-11-11 target): the four-week rate of top-5 gainers named before they moved
+   * against chance, one line from the newest stored daily learning; null before the first night.
+   */
+  top5Line: string | null;
 };
 
 function emptyView(): HomeView {
@@ -305,7 +311,37 @@ function emptyView(): HomeView {
     news: { hidden: false, items: [] },
     review: null,
     attentionCount: null,
+    top5Line: null,
   };
+}
+
+/** D-994: the newest stored four-week top-5 line (one indexed row; words only, never a name). */
+export async function loadTop5Line(
+  db: { execute: (q: { sql: string; args: string[] }) => Promise<{ rows: Row[] }> },
+  market: string,
+): Promise<string | null> {
+  const r = await db.execute({
+    sql: `SELECT json_extract(body_json, '$.top5.rolling') AS r FROM daily_learning
+          WHERE market = ? AND json_extract(body_json, '$.top5.rolling') IS NOT NULL
+          ORDER BY d DESC LIMIT 1`,
+    args: [market],
+  });
+  const raw = r.rows[0]?.r;
+  if (raw === null || raw === undefined) return null;
+  try {
+    const v = JSON.parse(String(raw)) as Partial<Top5Rolling>;
+    if (
+      typeof v.nights !== "number" ||
+      typeof v.gainers !== "number" ||
+      typeof v.had !== "number" ||
+      typeof v.chanceHits !== "number"
+    ) {
+      return null;
+    }
+    return rollingLine(v as Top5Rolling);
+  } catch {
+    return null;
+  }
 }
 
 export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
@@ -660,6 +696,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
   view.picksTotal = pickD
     ? await count("SELECT COUNT(*) AS n FROM pick WHERE market = ? AND d = ?", [v.market, pickD])
     : 0;
+  view.top5Line = await soft(() => loadTop5Line(deps.mainDb, v.market), null);
   const since: HomeSinceRow[] = [];
   if (view.picksTotal > 0) {
     since.push({

@@ -66,7 +66,7 @@ describe("picks entry", () => {
       expect(r.code, phase).toBe(0);
       expect(r.lines, phase).toHaveLength(4);
       expect(r.lines[0]).toMatch(
-        /^arena-picks AU 2026-10-20: published=\d+ candidates=\d+ bought=\d+ missed=\d+ closed=\d+ open=\d+ checked=\d+ withdrawn=\d+ shortlist=-?\d+$/,
+        /^arena-picks AU 2026-10-20: published=\d+ candidates=\d+ bought=\d+ missed=\d+ closed=\d+ open=\d+ checked=\d+ withdrawn=\d+ shortlist=-?\d+ candidate=-?\d+$/,
       );
       // D-913: the Follow the picks portfolio runs after the picks, counts only
       expect(r.lines[1]).toMatch(

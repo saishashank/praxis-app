@@ -9,7 +9,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { angleById } from "@/lib/cortex/angles/registry";
 import { isCheckpointNight } from "@/lib/cortex/learn/checkpoint";
 import { learnConfig } from "@/lib/cortex/learn/config";
-import { generationZero, learnerRuleVersion, nightlyRow } from "@/lib/cortex/learn/learner";
+import {
+  embargoFittedAt,
+  generationZero,
+  learnerRuleVersion,
+  nightlyRow,
+} from "@/lib/cortex/learn/learner";
 import { cleanWords } from "@/lib/cortex/learn/learnWords";
 import { cortexLearnNight } from "@/lib/cortex/learn/stage";
 import {
@@ -20,7 +25,12 @@ import {
   leaderMap,
 } from "@/lib/cortex/learn/store";
 import type { AngleDayRow } from "@/lib/cortex/learn/types";
-import { cortexLearnWeekly, cortexWeeklyStage } from "@/lib/cortex/learn/weekly";
+import {
+  BASE_FIT_OFFSET_MS,
+  cortexLearnWeekly,
+  cortexLearnWeeklyRun,
+  cortexWeeklyStage,
+} from "@/lib/cortex/learn/weekly";
 import { weightsHash } from "@/lib/cortex/score/map";
 import {
   insertDecision,
@@ -131,6 +141,7 @@ describe("weekly stage 'cortex'", () => {
       calendar: [],
       now: NOW,
       config: CONFIG,
+      hooks: {},
     });
     expect(r).toEqual([
       expect.objectContaining({
@@ -168,6 +179,7 @@ describe("weekly stage 'cortex'", () => {
       calendar: [],
       now: NOW,
       config: CONFIG,
+      hooks: {},
     });
     expect(await count(db, "SELECT COUNT(*) AS n FROM cortex_map")).toBe(2);
     expect(await count(db, "SELECT COUNT(*) AS n FROM trial_ledger")).toBe(1);
@@ -184,6 +196,7 @@ describe("weekly stage 'cortex'", () => {
           calendar: [],
           now: NOW,
           config: CONFIG,
+          hooks: {},
         })
       )[0]!.action,
     ).toBe("no_fixed_rule");
@@ -195,6 +208,7 @@ describe("weekly stage 'cortex'", () => {
       calendar: [],
       now: NOW,
       config: CONFIG,
+      hooks: {},
     });
     expect(r[0]).toMatchObject({
       action: "generation_zero",
@@ -212,6 +226,7 @@ describe("weekly stage 'cortex'", () => {
       calendar: [],
       now: NOW,
       config: CONFIG,
+      hooks: {},
     });
     const days = weekdays("2026-08-01", "2026-11-20").slice(-60);
     await insertAngleDays(
@@ -227,6 +242,7 @@ describe("weekly stage 'cortex'", () => {
       calendar: [],
       now: NOW,
       config: CONFIG,
+      hooks: {},
     });
     expect(r[0]).toMatchObject({
       action: "reweight",
@@ -252,6 +268,7 @@ describe("weekly stage 'cortex'", () => {
       calendar: [],
       now: NOW,
       config: CONFIG,
+      hooks: {},
     });
     expect(await count(db, "SELECT COUNT(*) AS n FROM cortex_map")).toBe(3);
     expect(await count(db, "SELECT COUNT(*) AS n FROM trial_ledger")).toBe(2);
@@ -266,6 +283,7 @@ describe("weekly stage 'cortex'", () => {
       calendar: [],
       now: NOW,
       config: CONFIG,
+      hooks: {},
     });
     const days = weekdays("2026-08-01", "2026-11-20").slice(-60);
     await insertAngleDays(
@@ -278,6 +296,7 @@ describe("weekly stage 'cortex'", () => {
       calendar: [],
       now: NOW,
       config: CONFIG,
+      hooks: {},
     });
     expect(r[0]).toMatchObject({ action: "no_change", generation: 0, charged: false });
     expect(await count(db, "SELECT COUNT(*) AS n FROM cortex_map")).toBe(2);
@@ -301,6 +320,7 @@ describe("weekly stage 'cortex'", () => {
       calendar: [],
       now: NOW,
       config: CONFIG,
+      hooks: {},
     });
     await insertMap(db, { ...FIXED, ruleVersion: "F1.zz.2", fittedAt: "2026-11-16T00:00:00.000Z" });
     const r = await cortexLearnWeekly(db, {
@@ -309,6 +329,7 @@ describe("weekly stage 'cortex'", () => {
       calendar: [],
       now: NOW,
       config: CONFIG,
+      hooks: {},
     });
     expect(r[0]).toMatchObject({ action: "generation_zero", generation: 1 });
     const l = (await latestMaps(db, M, "2026-11-23")).find((m) => m.ruleVersion === "F1.learn")!;
@@ -322,6 +343,7 @@ describe("weekly stage 'cortex'", () => {
       sql: "INSERT INTO config_version (key, scope, value_json, changed_at) VALUES ('learn_window_sessions', 'global', '60', ?)",
       args: [NOW],
     });
+    // the production hooks: the base step writes base version 1 and reports one statistic
     const out = await cortexWeeklyStage({ db, market: M, d: "2026-11-14", calendar: [] });
     expect(out.stats).toEqual([
       {
@@ -329,14 +351,23 @@ describe("weekly stage 'cortex'", () => {
         metric: "cortex_learn:F1",
         value: expect.objectContaining({ action: "generation_zero", generation: 0 }),
       },
+      {
+        scope: M,
+        metric: "cortex_base",
+        value: {
+          families: [{ family: "F1", version: 1, change: "initial" }],
+          closed: 0,
+          restarts: 0,
+        },
+      },
     ]);
   });
 
-  it("the baseWeekly hook runs after the re-weighting and its failure is not fatal", async () => {
+  it("D-972: the baseWeekly hook runs BEFORE the re-weighting, at the embargo instant; its failure is not fatal", async () => {
     const db = await freshDb("main");
     await seedRule(db);
     const seen: string[] = [];
-    await cortexLearnWeekly(db, {
+    const r = await cortexLearnWeekly(db, {
       market: M,
       d: "2026-11-14",
       calendar: [],
@@ -345,13 +376,88 @@ describe("weekly stage 'cortex'", () => {
       hooks: {
         baseWeekly: async (_db, ctx) => {
           seen.push(
-            `${ctx.lastSession}:${ctx.learner?.ruleVersion}:${ctx.fixed?.ruleVersion}:${ctx.seqBase}`,
+            `${ctx.lastSession}:${ctx.learner?.ruleVersion}:${ctx.fixed?.ruleVersion}:${ctx.seqBase}:${ctx.now}`,
           );
           throw new Error("boom");
         },
       },
     });
-    expect(seen).toEqual(["2026-11-13:F1.learn:F1.zz.1:200"]);
+    // no learner yet when the base step runs; the instant is 3 s after Friday's cut-off
+    expect(seen).toEqual([
+      `2026-11-13:undefined:F1.zz.1:200:${embargoFittedAt("2026-11-13", BASE_FIT_OFFSET_MS)}`,
+    ]);
+    expect(r[0]).toMatchObject({ action: "generation_zero", generation: 0 });
+  });
+
+  it("D-972: a base change restarts the learner the same week on the new base (equal weights, based_on the base row)", async () => {
+    const db = await freshDb("main");
+    await seedRule(db);
+    await cortexLearnWeekly(db, {
+      market: M,
+      d: "2026-11-14",
+      calendar: [],
+      now: NOW,
+      config: CONFIG,
+      hooks: {},
+    });
+    const baseRow: MapRow = {
+      ...FIXED,
+      ruleVersion: "F1.zz.1+b2",
+      fittedAt: embargoFittedAt("2026-11-20", BASE_FIT_OFFSET_MS),
+      params: {
+        ...FIXED.params,
+        angles: ["A-D1-02"],
+        system: true,
+        base_version: 2,
+        claims_p: false,
+        admitted: ["A-D1-02"],
+      } as unknown as MapParams,
+      pool: "system",
+      fitSplit: "base_change",
+    };
+    const res = await cortexLearnWeeklyRun(db, {
+      market: M,
+      d: "2026-11-21",
+      calendar: [],
+      now: NOW,
+      config: CONFIG,
+      hooks: {
+        baseWeekly: async (hdb, ctx) => {
+          await insertMap(hdb, { ...baseRow, fittedAt: ctx.now });
+          return {
+            lines: ["base changed"],
+            stats: [{ metric: "cortex_base", value: { restarts: 1 } }],
+            restartLearner: [
+              { family: "F1", ruleVersion: "F1.zz.1+b2", baseVersion: 2, sinceD: "2026-11-23" },
+              { family: "F1", ruleVersion: "F1.unknown", baseVersion: 3, sinceD: "2026-11-23" },
+            ],
+          };
+        },
+      },
+    });
+    expect(res.results[0]).toMatchObject({ action: "generation_zero", generation: 1 });
+    expect(res.hook?.lines).toEqual(["base changed"]);
+    // on Friday the base row is not in force; from Monday it is the fixed rule and the learner follows it
+    const fri = await latestMaps(db, M, "2026-11-20");
+    expect(fri.some((m) => m.ruleVersion === "F1.zz.1+b2")).toBe(false);
+    const mon = await latestMaps(db, M, "2026-11-23");
+    const l = mon.find((m) => m.ruleVersion === "F1.learn")!;
+    const p = l.params as unknown as Record<string, unknown>;
+    expect(p).toMatchObject({ based_on: "F1.zz.1+b2", generation: 1 });
+    expect(Object.keys((p.weights as { angle: object }).angle)).toEqual(["A-D1-02"]);
+    const ev = await eventsSince(db, M, "2026-11-20");
+    expect(ev.map((e) => [e.kind, e.seq, e.generation])).toEqual([["reweight", 100, 1]]);
+    expect(ev[0]!.evidence).toMatchObject({ basedOn: "F1.zz.1+b2", restart: "base_change" });
+    // the next week: the base row is the fixed rule, the learner re-weights on it (no new restart)
+    const next = await cortexLearnWeekly(db, {
+      market: M,
+      d: "2026-11-28",
+      calendar: [],
+      now: NOW,
+      config: CONFIG,
+      hooks: {},
+    });
+    expect(next[0]!.action).not.toBe("generation_zero");
   });
 });
 

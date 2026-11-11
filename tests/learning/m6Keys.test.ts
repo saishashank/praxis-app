@@ -41,6 +41,9 @@ const RANGED: readonly (readonly [ConfigKey, number, number, number, string])[] 
   // D-913 (Owner 2026-11-10): the Follow the picks portfolio
   ["picks_portfolio_seed_aud", 5000, 1000, 100000, "D-913"],
   ["picks_portfolio_slots", 5, 1, 10, "D-913"],
+  // D-980 (Owner 2026-11-11): candidate picks
+  ["picks_candidate_per_measure", 1, 0, 2, "D-980"],
+  ["picks_candidate_max", 3, 0, 5, "D-980"],
 ];
 
 // [key, default, area]. All fixed.
@@ -248,10 +251,10 @@ describe("M6 keys: explicit keys", () => {
 });
 
 describe("M6 keys: registry hygiene", () => {
-  it("M6_KEY_NAMES lists 11 ranged + 29 fixed + 9 explicit keys, all registered, none repeated", () => {
+  it("M6_KEY_NAMES lists 13 ranged + 29 fixed + 9 explicit keys, all registered, none repeated", () => {
     expect(M6_KEY_NAMES).toHaveLength(RANGED.length + FIXED.length + EXPLICIT.length);
-    expect(M6_KEY_NAMES).toHaveLength(49);
-    expect(new Set(M6_KEY_NAMES).size).toBe(49);
+    expect(M6_KEY_NAMES).toHaveLength(51);
+    expect(new Set(M6_KEY_NAMES).size).toBe(51);
     for (const k of M6_KEY_NAMES) expect(CONFIG_KEYS[k], k).toBeDefined();
     for (const k of [...RANGED.map((r) => r[0]), ...FIXED.map((r) => r[0]), ...EXPLICIT]) {
       expect(M6_KEY_NAMES, k).toContain(k);

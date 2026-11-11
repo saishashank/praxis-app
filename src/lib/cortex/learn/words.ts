@@ -6,6 +6,7 @@ import { angleById } from "../angles/registry";
 import { CARD_BANNED } from "../phrases";
 import { formatDay } from "@/lib/view/format";
 import { PSI_BREAK_PPM, type AngleDayRow, type MoverCoverage } from "./scorecard";
+import type { Top5Flags } from "./top5";
 
 /** What the Evening Review shows under "What the brain learned" (stored in daily_learning.body_json). */
 export type CortexLearnSection = {
@@ -22,6 +23,8 @@ export type CortexLearnSection = {
     readonly coverage: MoverCoverage | null;
     /** The learner's night (duel, checkpoint, leader; stage.ts learnerNight); absent without a learner. */
     readonly learner?: LearnerNightNumbers;
+    /** D-986: per measure (scored set and open probes), did its top tenth hold a top-5 gainer / loser. */
+    readonly top5?: Top5Flags;
   };
 };
 
