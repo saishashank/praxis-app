@@ -1,5 +1,5 @@
 // @vitest-environment node
-// Migration 0033_m18_outcome_basis (D-956, ARN-123): pick_outcome gains the money basis of a settlement.
+// Migration 0032_m18_outcome_basis (D-956, ARN-123): pick_outcome gains the money basis of a settlement.
 // Existing rows read 'price_only'; the value is held by triggers (no CHECK, so the down path can drop the
 // column); a closed row's basis never changes; the migration rolls back and comes back identical.
 import { createClient } from "@libsql/client";
@@ -19,7 +19,7 @@ const PICK = `INSERT INTO pick (market, d, profile, rank, code, family, tier, ru
 const OUTCOME = `INSERT INTO pick_outcome (market, d, profile, rank, kind, code, published_sha, state, updated_d)
   VALUES ('AU','2030-01-02','aggressive',1,'pick','ZZA','${SHA}','waiting','2030-01-02')`;
 
-describe("0033_m18_outcome_basis", () => {
+describe("0032_m18_outcome_basis", () => {
   it("adds the column, rolls back and comes back identical", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
     const ms = await loadMigrations(MIGRATIONS("main"));

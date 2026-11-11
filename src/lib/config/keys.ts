@@ -1,6 +1,7 @@
 import { COST_PROFILE_CODES } from "@/lib/arena/costs";
 import { CALENDAR_MARKETS } from "@/lib/data/calendarAdmin";
 import { DEFAULT_INJECTION_PHRASES } from "@/lib/llm/injection";
+import { HMAC_SCHEME_VERSION } from "@/lib/security/hmacCore.mjs";
 
 // Typed registry of configuration keys (spec ch.15). Values are stored as JSON in config_version.
 // Spec refs cite spec/15_configuration_reference.md line numbers.
@@ -1803,9 +1804,9 @@ export const CONFIG_KEYS = {
     validate: intRange(10, 19),
   },
   // M18 (D-979): fixed registry entries shown on the Configuration page. The HMAC version mirrors
-  // HMAC_SCHEME_VERSION in src/lib/security/hmacCore.mjs (stream B swaps this literal for the import).
+  // HMAC_SCHEME_VERSION in src/lib/security/hmacCore.mjs (the one definition).
   hmac_scheme_version: {
-    default: 2,
+    default: HMAC_SCHEME_VERSION,
     unit: "version",
     editable: "fixed",
     ref: "SEC-115, D-957, D-979",
