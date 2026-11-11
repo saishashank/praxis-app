@@ -72,6 +72,14 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-588 | (final review) The health line's "written" count is over the window it reads (the last 10 nights), and says so: "n written over the last k nights". |
 | D-589 | (final review) Repo hygiene: .vitest/ is ignored (a Vitest JSON reporter output with local machine paths had been committed in WP7 and is removed from the co... |
 | D-913 | (Owner 2026-11-10: "pick multiple stocks so you diversify … while trading on the portfolio think as end-user money … if a stock is not doing well and has no... |
+| D-950 | (Owner 2026-11-11: "replace Follow the picks with My portfolio") My portfolio replaces the D-913 Follow the picks portfolio (one feature, not two): three pra... |
+| D-951 | (Owner 2026-11-11) Strategy split. Only the strategies in play on a session (a holding, or a pick bought that day) share the money. |
+| D-952 | (Owner 2026-11-11) Buy sizing and the cost guard. |
+| D-953 | (Owner 2026-11-11) Sell rules: the D-913 rules unchanged (stop-loss intraday with the gap rule, aim, time frame over with no support, weak with no signal) pl... |
+| D-954 | (Owner 2026-11-11) Rebalance band: at the close, a strategy holding more than its share plus the profile's band_pct sells the excess from its largest holding... |
+| D-955 | (Owner 2026-11-11) Words. Every trade and every split change carries a plain-words reason without the stock, amounts or dates (the page and the review add th... |
+| D-956 | (Owner 2026-11-11) Profiles in config, my_portfolio_profiles (bounds in the validator): conservative 4 holdings, 1.25 % risk per holding, 25 % per stock, shr... |
+| D-957 | (Owner 2026-11-11) Where it shows: the My portfolio card on Home (after the Intraday watch) and on the Picks page (where the Follow the picks card was), thre... |
 
 ## M13L (M13L_design.md)
 

@@ -27,6 +27,7 @@ import { liveDayChange } from "./liveDay";
 import { rollingLine, type Top5Rolling } from "@/lib/learning/dailyTop5";
 import { loadAlertHomeFacts, loadIntraday, type IntradayModel } from "./pickAlerts";
 import type { LoaderEnv } from "./shell";
+import { loadMyPortfolios, type MyPortfoliosView } from "./pickPortfolio";
 import {
   latestDataDate,
   latestRegime,
@@ -276,6 +277,8 @@ export type HomeView = {
   picks: { d: string | null; items: HomePick[] };
   /** UXN-301: the Intraday watch section (shadow, unrated); null when it could not be read. */
   intraday: IntradayModel | null;
+  /** D-950: the three My portfolio practice portfolios; null when they could not be read. */
+  portfolios: MyPortfoliosView | null;
   ideas: { d: string | null; items: HomeIdea[]; signals: number };
   watchlist: HomeWatch[];
   news: {
@@ -306,6 +309,7 @@ function emptyView(): HomeView {
     day: { regime: null, regimeD: null, quality: [], openFlags: 0, index: null },
     picks: { d: null, items: [] },
     intraday: null,
+    portfolios: null,
     ideas: { d: null, items: [], signals: 0 },
     watchlist: [],
     news: { hidden: false, items: [] },
@@ -747,6 +751,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     new Date(v.now.getTime() - 2 * DAY_MS).toISOString(),
   );
   view.intraday = await soft(() => loadIntraday(alertEnv), null);
+  view.portfolios = await soft(() => loadMyPortfolios(alertEnv), null);
   if (alertFacts.hits > 0) {
     since.push({
       key: "pickhits",

@@ -82,7 +82,7 @@ describe("picks are never read by ranking or sizing", () => {
       // benchmark and the window helper so a call is set against the market on the same basis as a pick;
       // it writes only expert_call_outcome, never a pick, order or rank (PRD-035 boundary test).
       f === "src/lib/experts/calls.ts" ||
-      // D-913: the page loader of the Follow the picks card reads the profile name it follows
+      // D-950: the page loader of the My portfolio card reads its settings and the split words
       f === "src/lib/ui/loaders/pickPortfolio.ts" ||
       f.startsWith("src/app/");
     expect(importers.filter((f) => !allowed(f))).toEqual([]);
@@ -117,7 +117,7 @@ describe("picks are never read by ranking or sizing", () => {
     expect(bad).toEqual([]);
   });
 
-  it("writes only to its own tables (pick_check: D-187; pick_market: ARN-103; pick_portfolio_*: D-913)", () => {
+  it("writes only to its own tables (pick_check: D-187; pick_market: ARN-103; pick_portfolio_*: D-913, D-950)", () => {
     const re = /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)/gi;
     const targets = new Set<string>();
     for (const file of walk(path.join(ROOT, "src/lib/picks"))) {
@@ -129,6 +129,8 @@ describe("picks are never read by ranking or sizing", () => {
       "pick_market",
       "pick_outcome",
       "pick_portfolio_day",
+      "pick_portfolio_hold",
+      "pick_portfolio_split",
       "pick_portfolio_trade",
     ]);
   });

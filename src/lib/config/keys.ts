@@ -528,9 +528,13 @@ const M6_RANGED = [
   ["picks_max_per_family", "int", 10, 10, 10, "picks", "O", LRN, "AGT-113; ch.15 l.211; M17 O-76: no per-family cap; bounds pinned to 10 by D-791", "Fixed at 10 = no per-family cap (Owner decision O-76); kept so a stored value cannot bring the cap back"],
   ["pick_valid_sessions", "int", 2, 1, 5, "sessions", "O", LRN, "UXN-040, AGT-113; ch.15 l.212", "Not used since D-187: a waiting pick is checked each night against information instead of a session count"],
   ["pick_success_min_n", "int", 30, 10, 200, "picks", "O", LRN, "UXN-041; ch.15 l.213 (bounds 'as ch. 16' not given, 10-200 agent-chosen, D-111)", "Closed picks needed before model success is shown"],
-  // D-913 "Follow the picks" practice portfolio (Owner 2026-11-10)
-  ["picks_portfolio_seed_aud", "int", 5000, 1000, 100000, "AUD", "O", LRN, "D-913 (Owner 2026-11-10: multiple stocks, think as end-user money)", "Practice money the Follow the picks portfolio starts with"],
-  ["picks_portfolio_slots", "int", 5, 1, 10, "stocks", "O", LRN, "D-913 (Owner 2026-11-10)", "Most stocks the Follow the picks portfolio holds at once; each buy is about the value divided by this"],
+  // D-950 "My portfolio": three practice portfolios, one per risk profile (Owner 2026-11-11; replaces
+  // the D-913 Follow the picks keys picks_portfolio_seed_aud and picks_portfolio_slots)
+  ["my_portfolio_seed_aud", "int", 1000, 1000, 100000, "AUD", "O", LRN, "D-950 (Owner 2026-11-11: A$1,000 per profile)", "Practice money each My portfolio starts with (one per risk profile)"],
+  ["my_portfolio_stock_max_pct", "int", 30, 10, 30, "%", "O", LRN, "D-952 (Owner 2026-11-11: at most 30 % in one stock)", "Most of a My portfolio in one stock (a profile may set less)"],
+  ["my_portfolio_strategy_max_pct", "int", 40, 20, 100, "%", "O", LRN, "D-951 (Owner 2026-11-11: at most 40 % per strategy)", "Most of a My portfolio given to one strategy; what the cap frees stays cash"],
+  ["my_portfolio_cost_max_pct", "num", 1.5, 0.5, 5, "%", "O", LRN, "D-952 (Owner 2026-11-11: brokerage matters with A$1,000)", "Most a buy's brokerage both ways may cost, as a share of the buy (a trim: half); a dearer trade is not made"],
+  ["my_portfolio_min_parcel_aud", "int", 200, 0, 500, "AUD", "O", LRN, "D-952 (the ASX first-buy minimum parcel is A$500; at A$1,000 it would allow one stock)", "Smallest buy of My portfolio"],
   // D-980 candidate picks (Owner 2026-11-11: "start picking stocks based on new candidates so that you can validate")
   ["picks_candidate_per_measure", "int", 1, 0, 2, "picks", "O", LRN, "D-980 (Owner 2026-11-11)", "Candidate picks per candidate measure per night (0 = none)"],
   ["picks_candidate_max", "int", 3, 0, 5, "picks", "O", LRN, "D-980 (Owner 2026-11-11)", "Most candidate picks per night in total, placed after the strategy and shortlist picks (0 = none)"],
@@ -678,6 +682,69 @@ async function validateProfileAmounts(v: unknown): Promise<string | null> {
   return null;
 }
 
+/**
+ * D-956 my_portfolio_profiles: how each risk profile's My portfolio trades. Each field with its
+ * bounds [min, max, whole number]:
+ *   holdings           most stocks held at once
+ *   risk_pct           most of the value lost if a new holding hits its stop-loss
+ *   stock_pct          most of the value in one stock (and never above my_portfolio_stock_max_pct)
+ *   small_stock_pct    most of the value in one smaller company (tier U3)
+ *   shrink_n           finished picks a strategy's record needs before it counts as much as an equal share
+ *   vol_tilt           how far the split leans to calmer strategies (0 none, 1 inverse volatility)
+ *   weak_cash_pct      share of a losing strategy's money kept as cash
+ *   band_pct           drift over a strategy's share that starts a trim
+ *   min_hold_sessions  sessions a holding is kept before it can be trimmed
+ */
+export const MY_PORTFOLIO_FIELDS = {
+  holdings: [1, 6, true], // threshold-ok: D-956 bounds
+  risk_pct: [0.25, 5, false], // threshold-ok: D-956 bounds
+  stock_pct: [5, 30, false], // threshold-ok: D-956 bounds (Owner: at most 30 % in one stock)
+  small_stock_pct: [5, 30, false], // threshold-ok: D-956 bounds
+  shrink_n: [1, 200, true], // threshold-ok: D-956 bounds
+  vol_tilt: [0, 3, false], // threshold-ok: D-956 bounds
+  weak_cash_pct: [0, 100, false], // threshold-ok: D-956 bounds
+  band_pct: [2, 50, false], // threshold-ok: D-956 bounds
+  min_hold_sessions: [0, 20, true], // threshold-ok: D-956 bounds
+} as const satisfies Record<string, readonly [number, number, boolean]>;
+export type MyPortfolioProfile = { [K in keyof typeof MY_PORTFOLIO_FIELDS]: number };
+export const MY_PORTFOLIO_PROFILE_NAMES = ["conservative", "balanced", "aggressive"] as const;
+
+// prettier-ignore
+export const MY_PORTFOLIO_PROFILES_DEFAULT: Record<(typeof MY_PORTFOLIO_PROFILE_NAMES)[number], MyPortfolioProfile> = {
+  // largest shares only (its pick tiers), the smallest risk per holding, leans to calm strategies,
+  // half a losing strategy's money in cash, a wide band and a week before a trim: slow to trade
+  conservative: { holdings: 4, risk_pct: 1.25, stock_pct: 25, small_stock_pct: 20, shrink_n: 30, vol_tilt: 1.5, weak_cash_pct: 50, band_pct: 15, min_hold_sessions: 5 }, // threshold-ok: D-956 defaults
+  // the evidence mix as it is
+  balanced: { holdings: 4, risk_pct: 2, stock_pct: 30, small_stock_pct: 20, shrink_n: 20, vol_tilt: 1, weak_cash_pct: 25, band_pct: 10, min_hold_sessions: 3 }, // threshold-ok: D-956 defaults
+  // smaller companies too (its pick tiers, 20 % each as its pick profile), trusts a winning record
+  // sooner (less shrinkage), little cash, a narrow band and quick trims: more turnover
+  aggressive: { holdings: 3, risk_pct: 3, stock_pct: 30, small_stock_pct: 20, shrink_n: 8, vol_tilt: 0.5, weak_cash_pct: 0, band_pct: 7, min_hold_sessions: 1 }, // threshold-ok: D-956 defaults
+};
+
+const MY_PORTFOLIO_BOUNDS_TEXT = `conservative, balanced and aggressive, each with ${Object.entries(
+  MY_PORTFOLIO_FIELDS,
+)
+  .map(([k, [lo, hi, whole]]) => `${k} ${lo} to ${hi}${whole ? " (whole)" : ""}`)
+  .join(", ")}`;
+
+async function validateMyPortfolioProfiles(v: unknown): Promise<string | null> {
+  if (!exactKeys(v, [...MY_PORTFOLIO_PROFILE_NAMES])) {
+    return `needs ${MY_PORTFOLIO_PROFILE_NAMES.join(", ")}`;
+  }
+  const fields = Object.keys(MY_PORTFOLIO_FIELDS);
+  for (const name of MY_PORTFOLIO_PROFILE_NAMES) {
+    const p = v[name];
+    if (!exactKeys(p, fields)) return `${name} needs ${fields.join(", ")}`;
+    for (const [k, [lo, hi, whole]] of Object.entries(MY_PORTFOLIO_FIELDS)) {
+      const x = p[k];
+      if (!(whole ? isInt(x) : isNum(x)) || (x as number) < lo || (x as number) > hi) {
+        return `${name}: ${k} must be ${whole ? "a whole number" : "a number"} from ${lo} to ${hi}`;
+      }
+    }
+  }
+  return null;
+}
+
 export const INJECTION_PHRASES_KEY_VERSION = "v1";
 /** llm_injection_phrases (ch.15 l.182, LLM-035): a versioned phrase list the Owner can extend. */
 async function validateInjectionPhrases(v: unknown): Promise<string | null> {
@@ -763,6 +830,13 @@ const M6_EXPLICIT_KEYS = {
     ref: "AGT-113, UXN-040; ch.15 l.210 (A$1,000-1,000,000)",
     validate: async (v: unknown) => validateProfileAmounts(v),
   },
+  my_portfolio_profiles: {
+    default: MY_PORTFOLIO_PROFILES_DEFAULT,
+    unit: "mixed",
+    editable: "O",
+    ref: "D-956 (Owner 2026-11-11: the profiles differ in holdings, risk, tilt, cash and turnover)",
+    validate: async (v: unknown) => validateMyPortfolioProfiles(v),
+  },
   cif_horizons_sessions: {
     default: [...CIF_HORIZONS_DEFAULT],
     unit: "sessions",
@@ -821,6 +895,12 @@ const M6_EXPLICIT_META: Record<keyof typeof M6_EXPLICIT_KEYS, ConfigMeta> = {
     label: "Pick profile portfolio amount (sizing examples only)",
     area: LRN,
     bounds: "A$1,000 to A$1,000,000 per profile",
+    input: "object",
+  },
+  my_portfolio_profiles: {
+    label: "My portfolio: how each risk profile trades",
+    area: LRN,
+    bounds: MY_PORTFOLIO_BOUNDS_TEXT,
     input: "object",
   },
   cif_horizons_sessions: { label: "CIF horizons", area: VAL, bounds: "fixed", input: "list" },
