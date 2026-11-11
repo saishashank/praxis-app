@@ -1,8 +1,8 @@
 // Market-aware test matrix harness (TST-139, D-970; M19 adds the markets, not the harness).
 // One JSON file per BUILT market in this folder (`<CODE>.json`); `builtMarketFixtures()` reads them all, so a new
 // market is a new file and no code change. `describeEachMarket(name, fn)` runs a suite once per built market, with
-// the profile as its argument, and names each run "<name> [<CODE>]". Only AU exists in M18 (IN and US are built
-// and off from M19, never on before the AU confidence step, PRD-040); AT-68 is an M19 test and is not touched here.
+// the profile as its argument, and names each run "<name> [<CODE>]". AU, IN and US exist from M19 (IN and US generated from their seeds by
+// scripts/market/gen-fixtures.mjs, built and off, never on before the AU confidence step, PRD-040); AT-68 is E2's.
 import type { Client } from "@libsql/client";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";

@@ -1,0 +1,545 @@
+{
+  "note": "M19 step 0 (D-1007): every AU constant the refactor removes, by module, export and value (bigint as '<n>n'). Recorded on the pre-refactor build tree (fdc9e00) and never rewritten in M19. `field` is the profile field it becomes (null = kept as is).",
+  "recordedOnCommit": "fdc9e00",
+  "entries": [
+    {
+      "module": "src/lib/config/keys.ts",
+      "export": "MODE_MARKETS",
+      "field": "code",
+      "value": ["AU"]
+    },
+    {
+      "module": "src/lib/data/calendar.ts",
+      "export": "CALENDAR_MARKETS",
+      "field": "code",
+      "value": ["AU"]
+    },
+    {
+      "module": "src/lib/arena/cohort.ts",
+      "export": "ARENA_MARKET",
+      "field": "code",
+      "value": "AU"
+    },
+    {
+      "module": "src/lib/ui/loaders/shell.ts",
+      "export": "MARKET",
+      "field": "code",
+      "value": "AU"
+    },
+    {
+      "module": "src/lib/ui/loaders/common.ts",
+      "export": "DEFAULT_MARKET",
+      "field": "code",
+      "value": "AU"
+    },
+    {
+      "module": "src/lib/preferences/service.ts",
+      "export": "SELECTABLE_MARKETS",
+      "field": "code",
+      "value": ["AU"]
+    },
+    {
+      "module": "src/lib/review/send.ts",
+      "export": "MARKET",
+      "field": "code",
+      "value": "AU"
+    },
+    {
+      "module": "src/lib/alerts/deliver.ts",
+      "export": "MARKET",
+      "field": "code",
+      "value": "AU"
+    },
+    {
+      "module": "src/lib/jobs/runNow.ts",
+      "export": "RUN_NOW_MARKET",
+      "field": "code",
+      "value": "AU"
+    },
+    {
+      "module": "src/lib/runs/deadlines.ts",
+      "export": "DEADLINE_MARKET",
+      "field": "code",
+      "value": "AU"
+    },
+    {
+      "module": "src/lib/heartbeat/checks.ts",
+      "export": "MARKET",
+      "field": "code",
+      "value": "AU"
+    },
+    {
+      "module": "src/lib/learning/ownerActions.ts",
+      "export": "MARKET",
+      "field": "code",
+      "value": "AU"
+    },
+    {
+      "module": "src/lib/users/service.ts",
+      "export": "MARKETS",
+      "field": "code",
+      "value": ["AU"]
+    },
+    {
+      "module": "src/lib/users/service.ts",
+      "export": "DEFAULT_MARKET",
+      "field": "code",
+      "value": "AU"
+    },
+    {
+      "module": "src/lib/data/pipeline/rules.mjs",
+      "export": "MARKET",
+      "field": "code",
+      "value": "AU"
+    },
+    {
+      "module": "src/lib/data/index/indexBars.mjs",
+      "export": "INDEX_MARKET",
+      "field": "code",
+      "value": "AU"
+    },
+    {
+      "module": "src/lib/heartbeat/checks.ts",
+      "export": "TZ",
+      "field": "tz",
+      "value": "Australia/Sydney"
+    },
+    {
+      "module": "src/lib/data/pipeline/rules.mjs",
+      "export": "TZ",
+      "field": "tz",
+      "value": "Australia/Sydney"
+    },
+    {
+      "module": "src/lib/data/quotes/latest.ts",
+      "export": "QUOTE_TZ",
+      "field": "tz",
+      "value": "Australia/Sydney"
+    },
+    {
+      "module": "src/lib/agents/decisionView.ts",
+      "export": "AU_TIME_ZONE",
+      "field": "owner_tz",
+      "value": "Australia/Melbourne"
+    },
+    {
+      "module": "src/lib/agents/batch2b.ts",
+      "export": "LATE_2A_AFTER",
+      "field": "batch_schedule",
+      "value": "18:40"
+    },
+    {
+      "module": "src/lib/arena/preopen.ts",
+      "export": "PREOPEN_AT",
+      "field": "preopen_recheck_min",
+      "value": "09:55"
+    },
+    {
+      "module": "src/lib/cortex/pit/knownTime.ts",
+      "export": "INDEX_US_KNOWN_LOCAL",
+      "field": "known_time_rules",
+      "value": "09:00"
+    },
+    {
+      "module": "src/lib/arena/ledger.ts",
+      "export": "SETTLEMENT_LAG_SESSIONS",
+      "field": "settlement_days",
+      "value": 2
+    },
+    {
+      "module": "src/lib/arena/sizing.ts",
+      "export": "MIN_MARKETABLE_PARCEL_MICRO",
+      "field": "parcel_floor",
+      "value": "500000000n"
+    },
+    {
+      "module": "src/lib/cortex/economics/cost.ts",
+      "export": "PARCEL_FLOOR_MICRO",
+      "field": "parcel_floor",
+      "value": "500000000n"
+    },
+    {
+      "module": "src/lib/cortex/economics/cost.ts",
+      "export": "ADV_FLOOR_PER_PARCEL_MICRO",
+      "field": "parcel_floor",
+      "value": "50000000000n"
+    },
+    {
+      "module": "src/lib/cortex/economics/cost.ts",
+      "export": "HALF_SPREAD_PPM_BY_TIER",
+      "field": "slippage_buckets",
+      "value": {
+        "U1": "500n",
+        "U2": "2500n",
+        "U3": "7500n"
+      }
+    },
+    {
+      "module": "src/lib/money/tick.ts",
+      "export": "TICK_TABLE",
+      "field": "tick_table",
+      "value": [
+        {
+          "fromMicro": "0n",
+          "tickMicro": "1000n"
+        },
+        {
+          "fromMicro": "100000n",
+          "tickMicro": "5000n"
+        },
+        {
+          "fromMicro": "2000000n",
+          "tickMicro": "10000n"
+        }
+      ]
+    },
+    {
+      "module": "src/lib/arena/slippage.ts",
+      "export": "SLIPPAGE_BUCKETS",
+      "field": "slippage_buckets",
+      "value": [
+        {
+          "bps": {
+            "den": "1n",
+            "num": "10n"
+          },
+          "fromAdvMicro": "5000000000000n"
+        },
+        {
+          "bps": {
+            "den": "1n",
+            "num": "25n"
+          },
+          "fromAdvMicro": "1000000000000n"
+        },
+        {
+          "bps": {
+            "den": "1n",
+            "num": "60n"
+          },
+          "fromAdvMicro": "250000000000n"
+        },
+        {
+          "bps": {
+            "den": "1n",
+            "num": "120n"
+          },
+          "fromAdvMicro": "100000000000n"
+        }
+      ]
+    },
+    {
+      "module": "src/lib/arena/slippage.ts",
+      "export": "DEFAULT_TICK_CROSS_FACTOR",
+      "field": "slippage_buckets",
+      "value": {
+        "den": "1n",
+        "num": "1n"
+      }
+    },
+    {
+      "module": "src/lib/arena/slippage.ts",
+      "export": "DEFAULT_STALL_FLOOR_BPS",
+      "field": "slippage_buckets",
+      "value": {
+        "den": "1n",
+        "num": "10n"
+      }
+    },
+    {
+      "module": "src/lib/arena/costs.ts",
+      "export": "COST_PROFILES",
+      "field": "cost_formula",
+      "value": {
+        "P0": {
+          "code": "P0",
+          "name": "Zero-fee list, else P1",
+          "rule": {
+            "kind": "zeroFeeListElse",
+            "otherwise": {
+              "feeMicro": "3000000n",
+              "kind": "flat"
+            }
+          },
+          "specRef": "spec 05 ARN-031 l.64",
+          "verified": false,
+          "verify": true,
+          "version": 1
+        },
+        "P1": {
+          "code": "P1",
+          "name": "A$3.00 flat",
+          "rule": {
+            "feeMicro": "3000000n",
+            "kind": "flat"
+          },
+          "specRef": "spec 05 ARN-031 l.64",
+          "verified": false,
+          "verify": true,
+          "version": 1
+        },
+        "P2": {
+          "code": "P2",
+          "name": "First buy under A$1,000 free, else greater of A$11.00 or 0.10%",
+          "rule": {
+            "freeFirstBuyBelowMicro": "1000000000n",
+            "kind": "pct",
+            "maxMicro": null,
+            "minMicro": "11000000n",
+            "rate": {
+              "den": "1000n",
+              "num": "1n"
+            }
+          },
+          "specRef": "spec 05 ARN-031 l.64",
+          "verified": false,
+          "verify": true,
+          "version": 1
+        },
+        "P3": {
+          "code": "P3",
+          "name": "Stress: A$6.50 flat",
+          "rule": {
+            "feeMicro": "6500000n",
+            "kind": "flat"
+          },
+          "specRef": "spec 05 ARN-031 l.64",
+          "verified": false,
+          "verify": true,
+          "version": 1
+        },
+        "P4": {
+          "code": "P4",
+          "name": "0.03% min A$3 max A$9.99",
+          "rule": {
+            "freeFirstBuyBelowMicro": null,
+            "kind": "pct",
+            "maxMicro": "9990000n",
+            "minMicro": "3000000n",
+            "rate": {
+              "den": "10000n",
+              "num": "3n"
+            }
+          },
+          "specRef": "spec 05 ARN-031 l.64",
+          "verified": false,
+          "verify": true,
+          "version": 1
+        },
+        "P5": {
+          "code": "P5",
+          "name": "Default tiers (A$5 to A$29.95, then 0.12%)",
+          "rule": {
+            "above": {
+              "freeFirstBuyBelowMicro": null,
+              "kind": "pct",
+              "maxMicro": null,
+              "minMicro": "0n",
+              "rate": {
+                "den": "2500n",
+                "num": "3n"
+              }
+            },
+            "kind": "tiered",
+            "tiers": [
+              {
+                "feeMicro": "5000000n",
+                "upToMicro": "1000000000n"
+              },
+              {
+                "feeMicro": "10000000n",
+                "upToMicro": "3000000000n"
+              },
+              {
+                "feeMicro": "19950000n",
+                "upToMicro": "10000000000n"
+              },
+              {
+                "feeMicro": "29950000n",
+                "upToMicro": "25000000000n"
+              }
+            ]
+          },
+          "specRef": "spec 05 ARN-031 l.64",
+          "verified": false,
+          "verify": true,
+          "version": 1
+        },
+        "P5b": {
+          "code": "P5b",
+          "name": "A$2.00 up to A$1,000, then 0.20%",
+          "rule": {
+            "above": {
+              "freeFirstBuyBelowMicro": null,
+              "kind": "pct",
+              "maxMicro": null,
+              "minMicro": "0n",
+              "rate": {
+                "den": "500n",
+                "num": "1n"
+              }
+            },
+            "kind": "tiered",
+            "tiers": [
+              {
+                "feeMicro": "2000000n",
+                "upToMicro": "1000000000n"
+              }
+            ]
+          },
+          "specRef": "spec 05 ARN-031 l.64",
+          "verified": false,
+          "verify": true,
+          "version": 1
+        },
+        "P6": {
+          "code": "P6",
+          "name": "A$1.00 or 0.03%, whichever is greater (GST included)",
+          "rule": {
+            "freeFirstBuyBelowMicro": null,
+            "kind": "pct",
+            "maxMicro": null,
+            "minMicro": "1000000n",
+            "rate": {
+              "den": "10000n",
+              "num": "3n"
+            }
+          },
+          "specRef": "O-79d / D-895: webull.com.au/pricing, read 2026-11-08",
+          "verified": true,
+          "verify": true,
+          "version": 1
+        }
+      }
+    },
+    {
+      "module": "src/lib/arena/costs.ts",
+      "export": "COST_PROFILE_CODES",
+      "field": "cost_formula",
+      "value": ["P0", "P1", "P2", "P3", "P4", "P5", "P5b", "P6"]
+    },
+    {
+      "module": "src/lib/data/universe/tiers.mjs",
+      "export": "TIER_RULES",
+      "field": "tiers",
+      "value": {
+        "u1": {
+          "advMicro": "1000000000000n",
+          "minSessions": 54,
+          "priceMicro": "500000n",
+          "top": 300
+        },
+        "u2": {
+          "advMicro": "250000000000n",
+          "listedDays": 365,
+          "mcapMicro": "30000000000000n",
+          "priceMicro": "200000n"
+        },
+        "u3": {
+          "advMicro": "100000000000n",
+          "priceMicro": "100000n"
+        },
+        "windowSessions": 60
+      }
+    },
+    {
+      "module": "src/lib/agents/costGate.ts",
+      "export": "COST_GATE_NOTIONAL_MICRO",
+      "field": null,
+      "value": "600000000n"
+    },
+    {
+      "module": "src/lib/picks/streamCost.ts",
+      "export": "STREAM_PARCEL_MICRO",
+      "field": null,
+      "value": "1000000000n"
+    },
+    {
+      "module": "src/lib/data/index/indexBars.mjs",
+      "export": "INDEX_CODE",
+      "field": "benchmark_index",
+      "value": "AXJO"
+    },
+    {
+      "module": "src/lib/data/index/indexBars.mjs",
+      "export": "INDEX_YAHOO_SYMBOL",
+      "field": "benchmark_index",
+      "value": "^AXJO"
+    },
+    {
+      "module": "src/lib/data/index/indexBars.mjs",
+      "export": "US_INDEX_YAHOO_SYMBOLS",
+      "field": "benchmark_index",
+      "value": {
+        "GSPC": "^GSPC",
+        "VIX": "^VIX"
+      }
+    },
+    {
+      "module": "src/lib/data/index/indexBars.mjs",
+      "export": "INDEX_CODES",
+      "field": "benchmark_index",
+      "value": ["AXJO", "GSPC", "VIX"]
+    },
+    {
+      "module": "src/lib/data/quotes/parse.ts",
+      "export": "MARKET_INDEX_CODE",
+      "field": "benchmark_index",
+      "value": "AXJO"
+    },
+    {
+      "module": "src/lib/cortex/pit/types.ts",
+      "export": "INDEX_CODES_PIT",
+      "field": "benchmark_index",
+      "value": ["AXJO", "GSPC", "VIX"]
+    },
+    {
+      "module": "src/lib/config/keys.ts",
+      "export": "CONFIG_KEYS.decision_cutoff.default",
+      "field": "decision_cutoff",
+      "value": "18:10"
+    },
+    {
+      "module": "src/lib/config/keys.ts",
+      "export": "CONFIG_KEYS.market_mode.default",
+      "field": "code",
+      "value": {
+        "AU": "data_only"
+      }
+    },
+    {
+      "module": "src/lib/config/keys.ts",
+      "export": "CONFIG_KEYS.calendar_draft_markets.default",
+      "field": "code",
+      "value": "AU"
+    },
+    {
+      "module": "src/lib/config/keys.ts",
+      "export": "CONFIG_KEYS.cost_profile_default.default",
+      "field": "cost_formula",
+      "value": "P6"
+    },
+    {
+      "module": "src/lib/config/keys.ts",
+      "export": "CONFIG_KEYS.ledger_notional_aud.default",
+      "field": null,
+      "value": 600
+    },
+    {
+      "module": "src/lib/config/keys.ts",
+      "export": "CONFIG_KEYS.picks_portfolio_seed_aud.default",
+      "field": null,
+      "value": 5000
+    },
+    {
+      "module": "src/lib/config/keys.ts",
+      "export": "CONFIG_KEYS.profile_portfolio_amount.default",
+      "field": null,
+      "value": {
+        "aggressive": 10000,
+        "balanced": 10000,
+        "conservative": 10000
+      }
+    }
+  ]
+}

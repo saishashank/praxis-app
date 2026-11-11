@@ -1,5 +1,8 @@
 import { COST_PROFILE_CODES } from "@/lib/arena/costs";
 import { CALENDAR_MARKETS } from "@/lib/data/calendar";
+import { MKT_KEY_FIELDS, type MktKeyField } from "@/lib/market/fields.mjs";
+import { HOME_MARKET, marketsEnabledDefault } from "@/lib/market/profileCore.mjs";
+import { builtMarkets, seedOf } from "@/lib/market/seed/index.mjs";
 import { DEFAULT_INJECTION_PHRASES } from "@/lib/llm/injection";
 import { HMAC_SCHEME_VERSION } from "@/lib/security/hmacCore.mjs";
 
@@ -41,8 +44,20 @@ const never = async () => "this setting is fixed";
 const oneOf = (allowed: readonly string[]) => async (v: unknown) =>
   typeof v === "string" && allowed.includes(v) ? null : `must be one of ${allowed.join(", ")}`;
 
-/** Markets that have a mode (MKT-102: IN and US do not exist before their build starts). */
-export const MODE_MARKETS = ["AU"] as const;
+/**
+ * Markets that have a mode: the built markets of the seed registry (M19 D-993; was a literal AU list). A market
+ * that is built but not enabled is mode `off` and is never switched on here (D-994).
+ */
+export const MODE_MARKETS: readonly string[] = builtMarkets();
+
+/** The AU decision cut-off (HH:MM): the seed value, so the legacy `decision_cutoff` key and the profile share one definition. */
+const HOME_CUTOFF: string = (seedOf(HOME_MARKET)!.fields.decision_cutoff.value as { time: string })
+  .time;
+
+/** The default of `market_mode`: every built market with the mode its seed row has (AU data_only, the rest off). */
+const MARKET_MODE_DEFAULT: Record<string, string> = Object.fromEntries(
+  builtMarkets().map((c) => [c, seedOf(c)!.mode]),
+);
 /**
  * Modes that can be selected. `full` is accepted here as a value; in PRODUCTION the Owner action
  * (src/lib/data/controls.ts setMarketMode) refuses it unless a go_live_signoff row exists and
@@ -198,11 +213,11 @@ const M4_FIXED = [
   ["short_interest_window_sessions", "int", 10, "sessions", REG, "F6 class (d), spec 07 l.57", "Short-interest change window"],
   ["f4_event_window_sessions", "int", 3, "sessions", REG, "F4, spec 07 l.55 (no negative event in the last 3 sessions)", "F4: negative-event look-back"],
   ["day0_close_offset_min", "int", 10, "min", REG, "ARN-020 day 0; continuous trading ends 10 min before the close [VERIFY]", "Day-0 boundary before the calendar close [VERIFY]"],
-  ["decision_cutoff", "text", "18:10", "Melbourne time", REG, "ARN-020, DAT-001; ch.15 l.15", "Decision cut-off"],
+  ["decision_cutoff", "text", HOME_CUTOFF, "Melbourne time", REG, "ARN-020, DAT-001; ch.15 l.15", "Decision cut-off"],
   ["thesis_breakers_min", "int", 3, "count", REG, "AGT-110", "Thesis-breakers on a card, at least"],
   ["thesis_breakers_max", "int", 5, "count", REG, "AGT-110", "Thesis-breakers on a card, at most"],
   ["thesis_amber_fraction", "num", 0.2, "fraction", REG, "AGT-111 amber within 20 % of the trigger", "Amber when this close to a thesis-breaker trigger"],
-  ["ledger_notional_aud", "int", 600, "A$", VAL, "ARN-080 fixed notional A$600", "Signal-ledger notional per row"],
+  ["ledger_notional_aud", "int", 600, "market currency", VAL, "ARN-080 fixed notional A$600", "Signal-ledger notional per row"],
   // Statistics (ARN-081..087, VAL-110)
   ["alpha", "num", 0.05, "level", VAL, "ARN-081; ch.15 l.62", "Overall test level"],
   ["bootstrap_replications_min", "int", 1000, "replications", VAL, "ARN-081 B = max(1,000, 20 / level); ch.15 l.57", "Bootstrap replications, floor"],
@@ -530,7 +545,7 @@ const M6_RANGED = [
   ["pick_valid_sessions", "int", 2, 1, 5, "sessions", "O", LRN, "UXN-040, AGT-113; ch.15 l.212", "Not used since D-187: a waiting pick is checked each night against information instead of a session count"],
   ["pick_success_min_n", "int", 30, 10, 200, "picks", "O", LRN, "UXN-041; ch.15 l.213 (bounds 'as ch. 16' not given, 10-200 agent-chosen, D-111)", "Closed picks needed before model success is shown"],
   // D-913 "Follow the picks" practice portfolio (Owner 2026-11-10)
-  ["picks_portfolio_seed_aud", "int", 5000, 1000, 100000, "AUD", "O", LRN, "D-913 (Owner 2026-11-10: multiple stocks, think as end-user money)", "Practice money the Follow the picks portfolio starts with"],
+  ["picks_portfolio_seed_aud", "int", 5000, 1000, 100000, "market currency", "O", LRN, "D-913 (Owner 2026-11-10: multiple stocks, think as end-user money)", "Practice money the Follow the picks portfolio starts with"],
   ["picks_portfolio_slots", "int", 5, 1, 10, "stocks", "O", LRN, "D-913 (Owner 2026-11-10)", "Most stocks the Follow the picks portfolio holds at once; each buy is about the value divided by this"],
 ] as const satisfies readonly RangedRow[];
 
@@ -756,7 +771,7 @@ const M6_EXPLICIT_KEYS = {
   },
   profile_portfolio_amount: {
     default: { aggressive: 10000, balanced: 10000, conservative: 10000 },
-    unit: "A$",
+    unit: "market currency",
     editable: "O",
     ref: "AGT-113, UXN-040; ch.15 l.210 (A$1,000-1,000,000)",
     validate: async (v: unknown) => validateProfileAmounts(v),
@@ -1532,7 +1547,169 @@ const MOVERS_META_TABLES = Object.fromEntries(
 /** Every key added by the movers gap additions (D-740 to D-759). */
 export const MOVERS_KEY_NAMES: readonly ConfigKey[] = MOVERS_RANGED.map((r) => r[0]);
 
+// ---- M19 market-profile keys (docs/M19_design.md A1; MKT-107, DAT-241, CXA-002; D-993, D-994) ----------------
+// `mkt.<CODE>.<field>` overlays the seed row of the profile field of that name (src/lib/market/profile.ts reads
+// the newest value); an Owner edit of an O key goes through setProfileField (a counted trial for costs, parcels
+// and settlement, DAT-242). The defaults are the seed values, so the key never holds a second definition.
+
+type MktKeyShape = {
+  unit: string;
+  ref: string;
+  label: string;
+  bounds: string;
+  input: ConfigInput;
+  range?: readonly [number, number];
+  validate: (code: string) => ConfigKeyDef["validate"];
+  /** The key's default from the seed value of the field. */
+  def: (code: string) => unknown;
+};
+
+const seedValue = (code: string, field: MktKeyField): unknown => seedOf(code)!.fields[field].value;
+
+const MKT_SHAPES: Record<MktKeyField, MktKeyShape> = {
+  decision_cutoff: {
+    unit: "local HH:MM",
+    ref: "CXA-002 a, ch.15 15.11.1; one definition with the decision_cutoff key for the home market (D-993)",
+    label: "Decision cut-off",
+    bounds: "fixed (HH:MM, the profile seed)",
+    input: "text",
+    validate: () => never,
+    def: (c) => (seedValue(c, "decision_cutoff") as { time: string }).time,
+  },
+  settlement_days: {
+    unit: "sessions",
+    ref: "CXA-002 b, ch.15 15.11.1",
+    label: "Settlement cycle",
+    bounds: "fixed (whole sessions, 0 to 3)",
+    input: "int",
+    range: [0, 3],
+    validate: () => intRange(0, 3),
+    def: (c) => seedValue(c, "settlement_days"),
+  },
+  parcel_floor: {
+    unit: "market currency",
+    ref: "CXA-002 b, O-60, D-947, ch.15 15.11.1",
+    label: "Smallest parcel the Arena will trade",
+    bounds: "0 or more, in the market's currency (a change is a counted trial)",
+    input: "number",
+    range: [0, 1_000_000_000],
+    validate: () => numRange(0, 1_000_000_000),
+    def: (c) => Number(seedValue(c, "parcel_floor") as bigint) / 1_000_000,
+  },
+  opening_auction_window: {
+    unit: "window",
+    ref: "CXA-002 c, ch.15 15.11.1",
+    label: "Opening auction window",
+    bounds: "fixed (staggered from-to, or a single time)",
+    input: "object",
+    validate: () => never,
+    def: (c) => seedValue(c, "opening_auction_window"),
+  },
+  preopen_recheck_min: {
+    unit: "minutes before open",
+    ref: "CXA-002 c, ch.15 15.11.1",
+    label: "Pre-open re-check, minutes before the open",
+    bounds: "fixed",
+    input: "int",
+    range: [1, 30],
+    validate: () => never,
+    def: (c) => seedValue(c, "preopen_recheck_min"),
+  },
+  classification_scheme: {
+    unit: "scheme",
+    ref: "CXA-002 e, ch.15 15.11.1",
+    label: "Industry classification scheme",
+    bounds: "fixed (gics_group, nse_level2 or sic_2digit)",
+    input: "text",
+    validate: () => never,
+    def: (c) => seedValue(c, "classification_scheme"),
+  },
+  cost_formula: {
+    unit: "profile",
+    ref: "ARN-116, ARN-117, ch.15 15.11.1",
+    label: "Brokerage cost profile of the market",
+    bounds: "one of the market's cost profiles (a change is a counted trial)",
+    input: "text",
+    validate: (c) => oneOf(seedOf(c)!.costProfileCodes),
+    def: (c) => seedValue(c, "cost_formula"),
+  },
+  universe_max: {
+    unit: "codes (0 = no cap)",
+    ref: "MKT-113, D-928, ch.15 15.11.1",
+    label: "Most codes in the market's universe",
+    bounds: "0 (no cap) or 500 to 6,000, only within the quota projection",
+    input: "int",
+    range: [0, 6000],
+    validate: () => async (v) =>
+      v === 0 || (isInt(v) && v >= 500 && v <= 6000)
+        ? null
+        : "must be 0 (no cap) or a whole number from 500 to 6,000",
+    def: (c) => {
+      const v = seedValue(c, "universe_max");
+      return typeof v === "number" ? v : 0;
+    },
+  },
+  dividend_imputation: {
+    unit: "on/off",
+    ref: "CXA-002 i, ch.15 15.11.1",
+    label: "Dividend imputation (franking) angle",
+    bounds: "fixed (true or false)",
+    input: "bool",
+    validate: () => never,
+    def: (c) => seedValue(c, "dividend_imputation"),
+  },
+};
+
+type MktKeyName = `mkt.${string}.${MktKeyField}`;
+
+const MKT_KEYS = Object.fromEntries(
+  builtMarkets().flatMap((code) =>
+    (Object.keys(MKT_KEY_FIELDS) as MktKeyField[]).map((field) => {
+      const shape = MKT_SHAPES[field];
+      return [
+        `mkt.${code}.${field}`,
+        {
+          default: shape.def(code),
+          unit: shape.unit,
+          editable: MKT_KEY_FIELDS[field],
+          ref: shape.ref,
+          ...(shape.range === undefined ? {} : { range: shape.range }),
+          validate: MKT_KEY_FIELDS[field] === "fixed" ? never : shape.validate(code),
+        } satisfies ConfigKeyDef,
+      ] as const;
+    }),
+  ),
+) as Record<MktKeyName, ConfigKeyDef>;
+
+const MKT_META = Object.fromEntries(
+  builtMarkets().flatMap((code) =>
+    (Object.keys(MKT_KEY_FIELDS) as MktKeyField[]).map((field) => {
+      const shape = MKT_SHAPES[field];
+      return [
+        `mkt.${code}.${field}`,
+        {
+          label: `${shape.label} (${code})`,
+          area: "Other",
+          bounds: shape.bounds,
+          input: shape.input,
+        },
+      ] as const;
+    }),
+  ),
+) as Record<MktKeyName, ConfigMeta>;
+
+/** The `mkt.<CODE>.<field>` key of a profile field (the only place the key text is built). */
+export const mktConfigKey = (code: string, field: MktKeyField): string => `mkt.${code}.${field}`;
+/** Parses `mkt.<CODE>.<field>`; null for any other key. */
+export function parseMktKey(key: string): { code: string; field: MktKeyField } | null {
+  const m = /^mkt.([A-Z]{2,5}).([a-z_]+)$/.exec(key);
+  return m !== null && Object.prototype.hasOwnProperty.call(MKT_KEY_FIELDS, m[2]!)
+    ? { code: m[1]!, field: m[2] as MktKeyField }
+    : null;
+}
+
 export const CONFIG_KEYS = {
+  ...MKT_KEYS,
   ...M4_RANGED_KEYS,
   ...M4_FIXED_KEYS,
   ...M5_RANGED_KEYS,
@@ -1934,7 +2111,7 @@ export const CONFIG_KEYS = {
   // also updates `market.mode` (the column the Worker and the pipeline read at run time) in the
   // same transaction. Editing only this row would change nothing at run time.
   market_mode: {
-    default: { AU: "data_only" },
+    default: MARKET_MODE_DEFAULT,
     unit: "mode",
     editable: "fixed",
     ref: "BLD-024",
@@ -2043,6 +2220,19 @@ export const CONFIG_KEYS = {
   },
   // Design 4.6: each market's share of the daily LLM role budgets. Not in the ch.15 extract
   // (D-079): AU is the only market and takes all of it.
+  // D-994: the set of enabled markets. Fixed: the run-time truth is the `market.enabled` column; this key is the
+  // production assertion (PRAXIS_MARKETS_ENABLED split on commas, unset = AU only) the nightly invariant compares
+  // with the column. The only writer of `enabled` is the M20 two-step (none in M19).
+  markets_enabled: {
+    default: marketsEnabledDefault(
+      typeof process === "undefined" ? {} : process.env,
+      builtMarkets(),
+    ).join(", "), // the codes as one text: "AU" (the calendar_draft_markets pattern, D-979)
+    unit: "markets",
+    editable: "fixed",
+    ref: "MKT-110, D-994, ch.15 E",
+    validate: never,
+  },
   llm_market_share: {
     default: { AU: 1 },
     unit: "fraction",
@@ -2072,7 +2262,7 @@ export type ConfigArea =
   | "Sentinel and email"
   | "Learning and knowledge"
   | "Other";
-export type ConfigInput = "int" | "number" | "list" | "object" | "text";
+export type ConfigInput = "int" | "number" | "list" | "object" | "text" | "bool";
 export type ConfigMeta = { label: string; area: ConfigArea; bounds: string; input: ConfigInput };
 
 /** Plain-English headings for the Configuration page (UXN-030); the area ids above stay stable. */
@@ -2105,6 +2295,13 @@ export const CONFIG_AREAS: ConfigArea[] = [
 ];
 
 export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
+  ...MKT_META,
+  markets_enabled: {
+    label: "Markets enabled (the production set; the database column is the run-time truth)",
+    area: "Other",
+    bounds: "fixed (PRAXIS_MARKETS_ENABLED; unset = AU only)",
+    input: "text",
+  },
   ...M4_META,
   ...M5_META_TABLES,
   ...M6_META_TABLES,

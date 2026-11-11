@@ -10,5 +10,5 @@
   "productionMode": "full",
   "seededMode": "data_only",
   "built": true,
-  "note": "Values copied from today's constants (migration 0004 market row, decision_cutoff default, AU_TIME_ZONE, DEFAULT_HOURS, CALENDAR_MARKETS, MODE_MARKETS); tests/market/profiles.test.ts proves they still equal them. M19 replaces the constants with the profile loader (MKT-107)."
+  "note": "Generated from src/lib/market/seed/AU.mjs (M19 A1): today's constants to the byte; tests/market/profiles.test.ts proves the loaded profile equals it."
 }

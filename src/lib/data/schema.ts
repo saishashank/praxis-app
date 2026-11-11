@@ -33,7 +33,17 @@ export type AuTableName = (typeof AU_TABLES)[keyof typeof AU_TABLES];
 
 /** Column names per table, in table order. */
 export const AU_COLUMNS = {
-  market: ["code", "tz", "open_time", "close_time", "cutoff_time", "currency", "mode"],
+  market: [
+    "code",
+    "tz",
+    "open_time",
+    "close_time",
+    "cutoff_time",
+    "currency",
+    "mode",
+    "enabled", // 0034 (M19, D-994)
+    "slots_json", // 0034 (M19, D-996)
+  ],
   trading_calendar: ["market", "d", "kind", "close_time", "confirmed", "source"],
   instrument: [
     "id",

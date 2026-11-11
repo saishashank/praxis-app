@@ -16,6 +16,7 @@ import { getConfig } from "@/lib/config/store";
 import { marketDate } from "@/lib/data/calendar";
 import { addWatchListCode, removeWatchListCode } from "@/lib/data/controls";
 import { authDb, mainDb } from "@/lib/db/client";
+import { resolveMarket } from "@/lib/market/resolve";
 import { envFor } from "@/lib/ui/loaders/shell";
 import type { WatchResult } from "./messages";
 
@@ -61,6 +62,8 @@ export async function toggleWatchlistAction(fd: FormData): Promise<WatchResult> 
     // A masked user never learns or names a code (DAT-124): refuse before touching any data.
     const env = await envFor({ id: user.id, role: user.role });
     if (env.mask.masked) return { error: "masked" };
+    // MKT-110 (c), D-997: a market that is not enabled is never accepted (the stream D2 resolver replaces this call)
+    if (!(await resolveMarket(env.main, market, null)).ok) return { error: "invalid" };
     const meta = requestMeta(await headers());
     const max = await limit();
     return user.role === "owner"

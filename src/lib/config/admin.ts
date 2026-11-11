@@ -15,6 +15,7 @@ import {
   CONFIG_KEYS,
   CONFIG_META,
   isConfigKey,
+  parseMktKey,
   type ConfigArea,
   type ConfigInput,
   type ConfigKey,
@@ -23,6 +24,8 @@ import { invalidateConfigCache } from "./runtime";
 import { configEditRefusal, ruleVersionsSeeded } from "@/lib/learning/bKeyLock";
 import { isCortexRefitKey, recordCortexKeyEdit } from "@/lib/cortex/store/keyEdit";
 import { getConfig, setConfig } from "./store";
+import { valueFromKey } from "@/lib/market/profileCore.mjs";
+import { setProfileField } from "@/lib/market/profileWrite";
 
 export type ConfigRow = {
   key: ConfigKey;
@@ -166,6 +169,11 @@ export function parseConfigInput(
     return NUM_RE.test(text) ? { value: Number(text) } : { error: "must be a number" };
   }
   if (input === "text") return { value: text };
+  if (input === "bool") {
+    return text === "true" || text === "false"
+      ? { value: text === "true" }
+      : { error: "must be true or false" };
+  }
   if (input === "list") {
     const parts: unknown = text.startsWith("[") ? safeJson(text) : text.split(/[\s,]+/);
     const nums = Array.isArray(parts)
@@ -270,6 +278,35 @@ export async function updateConfig(p: UpdateInput): Promise<UpdateResult> {
       now,
     });
     invalidateConfigCache();
+    const mk = parseMktKey(key);
+    if (mk !== null) {
+      // D-999, DAT-242: an Owner edit of a market-profile key is a profile change (field row, change ledger,
+      // version, projection) and, for a cost, parcel or settlement field, a counted trial. The config row above
+      // keeps the Configuration page and the loader overlay in step; a failed profile write is audited.
+      try {
+        const fv = valueFromKey(mk.field, parsed.value, null);
+        if (fv !== undefined) {
+          await setProfileField(p.mainDb, {
+            code: mk.code,
+            field: mk.field,
+            value: fv,
+            actor: String(p.actorId),
+            reason,
+            now,
+          });
+        }
+      } catch {
+        try {
+          await audit(p.authDb, p.env, meta, {
+            ...base,
+            action: "config.profile_write_failed",
+            detail: { key, scope },
+          });
+        } catch {
+          // best effort
+        }
+      }
+    }
     if (isCortexRefitKey(key)) {
       // D-309, CTX-072: an Owner edit of a Cortex key is a charged trial that marks the maps for a
       // refit. The edit itself is done, so a failed charge is audited, not reported as a failed edit.

@@ -23,14 +23,14 @@ describe("0029_pick_portfolio", () => {
     await migrateUp(db, ms);
     const after = await schemaOf(db);
 
-    expect(await migrateDown(db, ms, 5)).toEqual({ rolledBack: 5, version: 28 });
+    expect(await migrateDown(db, ms, 6)).toEqual({ rolledBack: 6, version: 28 });
     const tables = (
       await db.execute(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'pick_portfolio_%'",
       )
     ).rows;
     expect(tables).toHaveLength(0);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 5, version: 33 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 6, version: 34 });
     expect(await schemaOf(db)).toEqual(after);
   });
 

@@ -12243,7 +12243,116 @@
           "close_time",
           "cutoff_time",
           "currency",
-          "mode"
+          "mode",
+          "enabled",
+          "slots_json"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.market_profile",
+      "type": "table",
+      "name": "market_profile",
+      "purpose": "Table market_profile in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0034_m19_market_profile.sql",
+      "attrs": {
+        "columns": [
+          "code",
+          "work_status",
+          "status_changed_at",
+          "built_at",
+          "evidence_recorded_at",
+          "profile_version",
+          "updated_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.market_profile_change",
+      "type": "table",
+      "name": "market_profile_change",
+      "purpose": "Table market_profile_change in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0034_m19_market_profile.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "code",
+          "field",
+          "old_json",
+          "new_json",
+          "changed_at",
+          "actor",
+          "reason",
+          "counted_trial",
+          "trial_ref"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_market_profile_change_code"
+        ]
+      }
+    },
+    {
+      "id": "table:main.market_profile_field",
+      "type": "table",
+      "name": "market_profile_field",
+      "purpose": "Table market_profile_field in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0034_m19_market_profile.sql",
+      "attrs": {
+        "columns": [
+          "code",
+          "field",
+          "value_json",
+          "verify",
+          "verified_at",
+          "evidence_ref",
+          "updated_at"
         ],
         "database": "main",
         "indexes": []
@@ -20041,6 +20150,36 @@
       "id": "service:turso-main|contains|table:main.market",
       "from": "service:turso-main",
       "to": "table:main.market",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.market_profile",
+      "from": "service:turso-main",
+      "to": "table:main.market_profile",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.market_profile_change",
+      "from": "service:turso-main",
+      "to": "table:main.market_profile_change",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.market_profile_field",
+      "from": "service:turso-main",
+      "to": "table:main.market_profile_field",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [

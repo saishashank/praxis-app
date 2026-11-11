@@ -635,3 +635,12 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1005 | Decision numbering: the extract's "M19 starts at D-951" repeats BLD-054's wording for M18; |
 | D-1006 | Migrations and counts: 0034_m19_market_profile.sql (store, seed, market columns) and 0035_m19_market_guard.sql (triggers), each with -- +down; the hard-coded... |
 | D-1007 | Identity baselines (CXA-001, A-20): integration step 0, before any M19 merge, runs AT-32 and AT-50 on the build tree and writes their hashes to tests/accepta... |
+| D-1008 | AT-32 hash scope (A1, built at step 0): the baseline hashes every main-database table except schema_migrations and market (the two tables migration 0034 legi... |
+| D-1009 | AU constants snapshot mechanics (A1): the snapshot lists 50 entries by module, export and value (bigint as <n>n); it is recorded by scripts/market/snapshot-a... |
+| D-1010 | Profile field list and value shapes (A1, DAT-241): 40 fields (the spec 20.1 rows with exchange and timezone split, plus yahoo_suffix, bar_latency_p95_min, pr... |
+| D-1011 | enabled/mode row invariant (A1, D-994): SQLite cannot add a column whose CHECK refers to another column to a table that already has rows, so the rule "enable... |
+| D-1012 | slots_json shape (A1, D-996): { b1, b2a, b2b, late_2a_after, cutoff, cutoff_poll, preopen_recheck: [a, b], quote_from, quote_until, intraday_scan_from, intra... |
+| D-1013 | Error home (A1/A2): MarketNotEnabled, isMarketNotEnabled and UnknownMarket live in src/lib/market/errors.mjs because the loader's requireEnabledMarket needs... |
+| D-1014 | Owner edit of a mkt.* key (A1, DAT-242): updateConfig (audit first) writes the config_version row as for any key and then calls setProfileField (field row, m... |
+| D-1015 | Derived lists (A1, D-993): MODE_MARKETS is builtMarkets(); calendarMarkets() is the keys of CALENDAR_RULE_MODULES and CALENDAR_MARKETS stays as a constant de... |
+| D-1016 | Cortex schema hash (A1, found by the step-0 baseline): the night's input manifest carries schemaSha, the sha256 of the table names (src/lib/cortex/stage.ts),... |

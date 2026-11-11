@@ -537,8 +537,10 @@ export async function loadStageRows(db: Client, o: LoadOptions): Promise<StageRo
     if (!industry.has(code)) industry.set(code, [{ asOf: first, industry: text(r.industry) }]);
   }
 
+  // M19 (D-1016): the market-profile configuration tables (0034) are not part of what a night reads, so they
+  // are left out of the schema hash; the AU manifests stay byte-identical to the pre-M19 baseline (D-1007).
   const names = await db.execute(
-    "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'market_profile%' ORDER BY name",
   );
   const schemaSha = sha256Hex(names.rows.map((r) => text(r.name)).join(","));
 

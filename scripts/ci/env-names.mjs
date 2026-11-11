@@ -57,6 +57,7 @@ export const NOT_CONFIG = new Set([
   "E2E_WALK_ONLY", // ci.yml walks lane: the page filter of e2e/walks.spec.ts
   "E2E_STATES", // ci.yml rich lane: which seeded states to load (M18 TST-135), not configuration
   "PRAXIS_NET_LOG", // CI recorded day: the file the host guard writes refusals and markers to (M18 D-965)
+  "RECORD_AU_SNAPSHOT", // scripts/market/snapshot-au.mjs: the record switch of the AU constants snapshot test (M19 D-1007), not configuration
   "PRAXIS_NET_LABEL", // CI recorded day: the label of one guarded process (M18 D-965)
   "PRAXIS_SIM_NOW", // CI recorded day: the simulated instant of the app process (M18 D-965)
   "ZAP_OUT", // per-run report folder of scripts/ci/zap-run.mjs (M8 T12), not configuration

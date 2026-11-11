@@ -46,9 +46,9 @@ async function quoteRow(market: string, code: string) {
 }
 async function addMarket(code: string, mode: string) {
   await db.execute({
-    sql: `INSERT INTO market (code, tz, open_time, close_time, cutoff_time, currency, mode)
-          VALUES (?, 'UTC', '10:00', '16:00', '16:10', 'XXX', ?)`,
-    args: [code, mode],
+    sql: `INSERT INTO market (code, tz, open_time, close_time, cutoff_time, currency, mode, enabled)
+          VALUES (?, 'UTC', '10:00', '16:00', '16:10', 'XXX', ?, ?)`, // M19 0034: a market that is not off must be enabled
+    args: [code, mode, mode === "off" ? 0 : 1],
   });
 }
 const rowsOf = async () =>
@@ -130,7 +130,10 @@ describe("the invariant", () => {
     await addMarket(OFF, "off");
     await quoteRow(OFF, "AAA");
     expect((await countRowsByMarket(db)).unexpected.map((u) => u.market)).toEqual([OFF]);
-    await db.execute({ sql: "UPDATE market SET mode = 'data_only' WHERE code = ?", args: [OFF] });
+    await db.execute({
+      sql: "UPDATE market SET mode = 'data_only', enabled = 1 WHERE code = ?",
+      args: [OFF],
+    });
     expect((await countRowsByMarket(db)).unexpected).toEqual([]);
   });
 
