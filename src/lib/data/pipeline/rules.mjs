@@ -7,10 +7,12 @@
 // src/lib/data/sources/yahoo.ts (validateBar, parseYahooBars) because plain Node cannot import the
 // TS files. tests/pipeline/rules.test.ts checks both pairs against each other, so a drift fails CI.
 import { createHash } from "node:crypto";
+import { HOME_MARKET, HOME_TZ } from "../../market/homeMarket.mjs";
 import { dayStatusRows, isTradingDayRows, isWalkDay } from "../calendarCore.mjs";
 
-export const MARKET = "AU";
-export const TZ = "Australia/Sydney";
+/** The home market and its exchange zone, read from its seed (M19 C2, D-1051); a run for another market passes its own. */
+export const MARKET = HOME_MARKET;
+export const TZ = HOME_TZ;
 export const SOURCE = "yahoo_eod";
 
 /** Catch-up bounds (design section 3: "bounded, for example 5"). The target date always counts. */

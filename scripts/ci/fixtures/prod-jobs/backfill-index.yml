@@ -45,8 +45,9 @@
           pip install --require-hashes -r scripts/ingest/requirements.txt
           python scripts/ingest/yahoo_fetch.py --request request.json --output bars.json --index-output index.json
       - name: Write the index bars (first-seen only)
-        run: node scripts/backfill/index.mjs commit --index index.json --from "$FROM"
+        run: node scripts/backfill/index.mjs commit ${MARKET_INPUT:+--market "$MARKET_INPUT"} --index index.json --from "$FROM"
         env:
+          MARKET_INPUT: ${{ inputs.market }}
           FROM: ${{ inputs.from }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}

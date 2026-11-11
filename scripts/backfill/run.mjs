@@ -1,8 +1,10 @@
 // History backfill CLI (M2 T9; DAT-125, DAT-125a, DAT-140, decisions 7 and 13). Runs in the
 // `production` GitHub environment on the approved commit (SEC-108 c), from the dispatch-only
 // workflow backfill-history.yml.
-//   node scripts/backfill/run.mjs plan   --out plan.json      (database secrets only)
-//   node scripts/backfill/run.mjs commit --chunks chunks.json (database + data-repo secrets)
+//   node scripts/backfill/run.mjs plan   [--market CODE] --out plan.json      (database secrets only)
+//   node scripts/backfill/run.mjs commit [--market CODE] --chunks chunks.json (database + data-repo secrets)
+// --market (M19 C2, MKT-110 a): omitted = the single enabled market, else exit 2; a market that is not enabled, or one
+//   this job has no source for (the ASIC and ASX history files are the home market's), exits 2 and writes nothing.
 // `plan` decides what the secret-free ASIC fetch step should fetch (months of the ASIC job, newest
 // first, under the cap and the source switch) and reports `fetch=true|false` as a step output.
 // `commit` writes the fetched ASIC months as history files and moves the cursor, then exports any
@@ -23,6 +25,8 @@ import {
   planAsic,
 } from "../../src/lib/data/backfill/engine.mjs";
 import { isMonth } from "../../src/lib/data/backfill/rules.mjs";
+import { HOME_MARKET } from "../../src/lib/market/profileCore.mjs";
+import { resolveScriptMarket, takeMarketFlag } from "../../src/lib/market/scriptMarket.mjs";
 
 const has = (v) => typeof v === "string" && v.trim() !== "";
 const flag = (args, name) => {
@@ -41,7 +45,12 @@ export async function run(argv, env, deps = {}) {
   const out = deps.out ?? ((s) => console.log(s));
   const nowMs = deps.nowMs ?? (() => Date.now());
   const openDb = deps.openDb ?? ((url, authToken) => createClient({ url, authToken }));
-  const [cmd, ...rest] = argv;
+  const mk = takeMarketFlag(argv);
+  if (mk.error) {
+    out(`backfill: failed (${mk.error})`);
+    return 2;
+  }
+  const [cmd, ...rest] = mk.argv;
   if (cmd !== "plan" && cmd !== "commit") {
     out("backfill: failed (usage: plan --out <file> | commit --chunks <file>)");
     return 1;
@@ -73,6 +82,11 @@ export async function run(argv, env, deps = {}) {
     return 1;
   }
   try {
+    const m = await resolveScriptMarket(db, mk.market, { supported: [HOME_MARKET] });
+    if (!m.ok) {
+      out(`backfill ${cmd}: ${m.line}`);
+      return m.exit;
+    }
     if (cmd === "plan") return await plan(db, rest, env, nowMs, out, deps.options ?? {});
     return await commit(db, store, rest, env, nowMs, out, deps.options ?? {});
   } catch {

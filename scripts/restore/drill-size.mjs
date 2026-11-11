@@ -16,6 +16,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadMigrations, migrateUp } from "../../src/lib/db/migrate-core.mjs";
+import { HOME_MARKET } from "../../src/lib/market/profileCore.mjs";
+
+/** The market of the synthetic rows: the enabled market of a freshly migrated database. */
+const DRILL_MARKET = HOME_MARKET;
 import {
   dumpDatabase,
   parseBackup,
@@ -58,8 +62,9 @@ async function seed(db, rows) {
       const px = Math.round((10 + (c % 50) + Math.sin(day / 7) * 2) * 100) / 100;
       stmts.push({
         sql: `INSERT INTO price_bar (market, code, d, o, h, l, c, volume, source, published_at, ingested_at)
-              VALUES ('AU', ?, ?, ?, ?, ?, ?, ?, 'synthetic', ?, ?)`,
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'synthetic', ?, ?)`,
         args: [
+          DRILL_MARKET,
           `S${String(code).padStart(4, "0")}`,
           isoDay(day),
           px,

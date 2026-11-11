@@ -389,3 +389,22 @@ test("guard.mjs: a process under it writes its marker, a request to another host
     clean(dir);
   }
 });
+
+test("--market IN (built, not enabled in the production-shape database): exit 2 before anything is created (MKT-110 a)", async () => {
+  const dir = path.join(tmpdir(), "praxis-rd-refused-never-created");
+  const lines = [];
+  const code = await main(
+    ["run", "--fixtures", dir, "--work", dir, "--market", "IN"],
+    {},
+    { out: (s) => lines.push(s) },
+  );
+  assert.equal(code, 2);
+  assert.deepEqual(lines, ["recorded-day: refused: market not enabled"]);
+  // a bad code is a usage error, also exit 2
+  const bad = await main(
+    ["run", "--fixtures", dir, "--work", dir, "--market", "in!"],
+    {},
+    { out: () => {} },
+  );
+  assert.equal(bad, 2);
+});

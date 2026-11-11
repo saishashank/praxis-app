@@ -5,6 +5,7 @@
 // body other than the four counts are never printed. Exit 1 on anything but HTTP 200.
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { OWNER_TZ } from "../../src/lib/market/profileCore.mjs";
 import { sign } from "../smoke/sign.mjs";
 
 const TIMEOUT_MS = 60000;
@@ -14,7 +15,7 @@ const COUNT_KEYS = ["prunedRuns", "prunedLogs", "prunedNonces", "hashedUsers"];
 // The local calendar date in Melbourne (YYYY-MM-DD): the concurrency key's date (PLT-076).
 export function melbourneDate(nowMs) {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Australia/Melbourne",
+    timeZone: OWNER_TZ,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

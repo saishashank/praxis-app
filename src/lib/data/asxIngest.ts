@@ -16,6 +16,7 @@ import { createClient, type Client } from "@libsql/client";
 import { getConfig } from "@/lib/config/store";
 import { ASX_SOURCE } from "@/lib/data/asxToken";
 import { sydneyDate } from "@/lib/data/pipeline/rules.mjs";
+import { HOME_CUTOFF, HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import { decisionCutoffUtc } from "@/lib/agents/decisionView";
 import { cutoffPollStatement } from "@/lib/sentinel/cutoffPoll";
 import { importUniverse } from "@/lib/data/universe/import";
@@ -24,7 +25,8 @@ import { applyFetchStatus, parseFetchStatus, readFetchState } from "@/lib/data/c
 import { loadEffectiveCap } from "@/lib/sentinel/cap";
 import { ingestFeed } from "@/lib/sentinel/ingest";
 
-const MARKET = "AU";
+/** The market of the ASX feed this module ingests: the home market (M19 C2, D-1051). */
+const MARKET = HOME_MARKET;
 
 export type AsxIngestDeps = {
   readonly openDb?: (url: string, token: string | undefined) => Client;
@@ -132,7 +134,7 @@ export async function asxIngestMain(
       try {
         const cutoffHm = await getConfig(db, "decision_cutoff").catch(() => undefined);
         const cutoffMs = Date.parse(
-          decisionCutoffUtc(today, typeof cutoffHm === "string" ? cutoffHm : "18:10"),
+          decisionCutoffUtc(today, typeof cutoffHm === "string" ? cutoffHm : HOME_CUTOFF),
         );
         const fetchedMs = statSync(path.join(dir, "feed.json")).mtimeMs;
         if (fetchedMs >= cutoffMs) {

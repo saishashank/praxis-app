@@ -113,11 +113,11 @@ async function hasSuccess(db, key) {
   return r.rows.length > 0;
 }
 
-async function startRun(db, key, date, nowIso, commitSha) {
+async function startRun(db, market, key, date, nowIso, commitSha) {
   const r = await db.execute({
     sql: `INSERT INTO run_record (job, market, concurrency_key, scheduled_for, started_at, status, commit_sha)
           VALUES (?, ?, ?, ?, ?, 'running', ?)`,
-    args: [JOB, MARKET, key, date, nowIso, commitSha ?? null],
+    args: [JOB, market, key, date, nowIso, commitSha ?? null],
   });
   return Number(r.lastInsertRowid);
 }
@@ -373,7 +373,7 @@ export async function runBatch1(db, o) {
 
   if (a.kind === "skip" || a.kind === "failed") {
     const failed = a.kind === "failed";
-    const id = await startRun(db, keyFor(market, a.target), a.target, iso(), o.commitSha);
+    const id = await startRun(db, market, keyFor(market, a.target), a.target, iso(), o.commitSha);
     await finishRun(db, id, iso(), {
       status: failed ? "failed" : "skipped",
       rowsRead: a.io.read,
@@ -411,6 +411,7 @@ export async function runBatch1(db, o) {
     if (problem !== null) {
       const id = await startRun(
         db,
+        market,
         keyFor(market, firstTrading.d),
         firstTrading.d,
         iso(),
@@ -534,7 +535,7 @@ async function processDate(ctx, item, isTarget) {
     const estimate = todays.length + 2 + TIERS.length; // bars, marker, refetch hash, quality scores
     if (ctx.monthUsed + io.written + estimate > ctx.writeCap) {
       ctx.capStopped = true;
-      const id = await startRun(db, key, d, iso(), o.commitSha);
+      const id = await startRun(db, market, key, d, iso(), o.commitSha);
       await finishRun(db, id, iso(), {
         status: "skipped",
         error: "backfill write cap reached",
@@ -551,7 +552,7 @@ async function processDate(ctx, item, isTarget) {
           WHERE concurrency_key = ? AND status = 'running'`,
     args: [iso(), "superseded: the previous run did not finish", key],
   });
-  const runId = await startRun(db, key, d, iso(), o.commitSha);
+  const runId = await startRun(db, market, key, d, iso(), o.commitSha);
   io.read += ctx.preReads; // the shared plan reads are charged to the first run record
   ctx.preReads = 0;
   try {

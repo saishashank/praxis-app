@@ -23,7 +23,7 @@ const FETCH = "Fetch Yahoo prices (no secrets)";
 const COMMIT = "Write the month file and move the cursor";
 
 test("workflow_dispatch only: no schedule, push or pull request trigger (PLT-015)", () => {
-  assert.equal(wf.on, "workflow_dispatch");
+  assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"]); // M19 C2: the only input is `market`
   assert.deepEqual(wf.permissions, {});
   assert.doesNotMatch(read(FILE), /^\s*(schedule|push|pull_request\w*):/m);
 });
@@ -55,8 +55,9 @@ test("secrets appear only in env of the plan and commit steps", () => {
     ["Plan the fetch (read-only)", COMMIT],
   );
   const [plan, commit] = withSecrets;
-  assert.deepEqual(Object.keys(plan.env), ["TURSO_MAIN_URL", "TURSO_MAIN_TOKEN"]);
+  assert.deepEqual(Object.keys(plan.env), ["MARKET_INPUT", "TURSO_MAIN_URL", "TURSO_MAIN_TOKEN"]);
   assert.deepEqual(Object.keys(commit.env), [
+    "MARKET_INPUT",
     "TURSO_MAIN_URL",
     "TURSO_MAIN_TOKEN",
     "DATA_REPO_TOKEN",
@@ -105,9 +106,12 @@ test("steps run in order: plan, fetch, commit; commit only after a successful fe
   assert.ok(i(FETCH) < i(COMMIT));
   assert.equal(
     byName("Plan the fetch (read-only)").run,
-    "node scripts/backfill/prices.mjs plan --out plan.json",
+    'node scripts/backfill/prices.mjs plan ${MARKET_INPUT:+--market "$MARKET_INPUT"} --out plan.json',
   );
-  assert.equal(byName(COMMIT).run, "node scripts/backfill/prices.mjs commit --prices prices.json");
+  assert.equal(
+    byName(COMMIT).run,
+    'node scripts/backfill/prices.mjs commit ${MARKET_INPUT:+--market "$MARKET_INPUT"} --prices prices.json',
+  );
   // no `!cancelled()`/`always()`: a failed fetch must not reach the commit step
   assert.equal(byName(COMMIT).if, "steps.plan.outputs.fetch == 'true'");
 });

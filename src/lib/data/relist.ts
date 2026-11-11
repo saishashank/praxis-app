@@ -18,6 +18,7 @@ import {
   type ControlResult,
 } from "@/lib/data/controls";
 import { marketDate } from "@/lib/data/calendar";
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import { RELIST_CONFIRMED, REUSE_CONFIRMED, REUSE_SUSPECTED } from "@/lib/data/universe/apply.mjs";
 import { UNIVERSE_MARKET } from "@/lib/data/universe/import";
 
@@ -62,7 +63,7 @@ async function decide(
     action,
     targetType: "instrument",
     targetId: `${UNIVERSE_MARKET}:${code}`,
-    detail: { code, day: marketDate(new Date(now), "Australia/Melbourne"), prior },
+    detail: { code, day: marketDate(new Date(now), OWNER_TZ), prior },
     apply: async (tx, auditRef) => {
       const u = await tx.execute({
         sql: `UPDATE instrument SET delist_reason = ?

@@ -15,6 +15,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  HOME_BENCHMARK_YAHOO,
+  HOME_MARKET,
+  HOME_TZ,
+  HOME_YAHOO_SUFFIX,
+} from "../../src/lib/market/homeMarket.mjs";
 
 export const DEFAULT_SESSIONS = 260;
 export const DEFAULT_MIN_GAP_S = 5;
@@ -23,7 +29,7 @@ const MAX_RETRIES = 2;
 const BACKOFF_FACTOR = 4;
 const USER_AGENT = "Mozilla/5.0 (compatible; praxis-record-day/1.0)";
 const CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/";
-const INDEX_SYMBOL = "^AXJO";
+const INDEX_SYMBOL = HOME_BENCHMARK_YAHOO;
 const CODE_RE = /^[A-Z0-9]{2,6}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 86_400_000;
@@ -80,7 +86,7 @@ const isWeekend = (s) => [0, 6].includes(new Date(`${s}T00:00:00Z`).getUTCDay())
 
 const sydneyParts = (instant) => {
   const f = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Australia/Sydney",
+    timeZone: HOME_TZ,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -91,14 +97,15 @@ const sydneyParts = (instant) => {
   return { date: `${p.year}-${p.month}-${p.day}`, hour: Number(p.hour) };
 };
 
-/** Holiday dates ('AU' kind 'holiday') from the repo's calendar seed; empty set if unreadable. */
+/** Holiday dates (the home market's kind 'holiday') from the repo's calendar seed; empty set if unreadable. */
 export function readSeedHolidays(root = REPO_ROOT) {
   const out = new Set();
   try {
     const dir = path.join(root, "db", "migrations", "main");
     for (const f of fs.readdirSync(dir).filter((n) => /calendar_seed\.sql$/.test(n))) {
       const text = fs.readFileSync(path.join(dir, f), "utf8");
-      for (const m of text.matchAll(/'AU',\s*'(\d{4}-\d{2}-\d{2})',\s*'holiday'/g)) out.add(m[1]);
+      const re = new RegExp(`'${HOME_MARKET}',\\s*'(\\d{4}-\\d{2}-\\d{2})',\\s*'holiday'`, "g");
+      for (const m of text.matchAll(re)) out.add(m[1]);
     }
   } catch {
     /* fall back to weekdays only */
@@ -302,7 +309,7 @@ export async function run(argv, env, deps = {}) {
     const bars = [];
     let missing = 0;
     for (const code of a.codes) {
-      const json = await getChart(`${code}.AX`);
+      const json = await getChart(`${code}${HOME_YAHOO_SUFFIX}`);
       const rows = json === null ? [] : keep(rowsFromChart(json, code, false, fetchedAt));
       if (rows.length === 0) missing++;
       bars.push(...rows);

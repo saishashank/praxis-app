@@ -1,10 +1,12 @@
 // Batch 1 end-of-day ingest CLI (M2 T6, PLT-016, PLT-076, DAT-003, DAT-020, BLD-024). Runs in the
 // `production` GitHub environment on the approved commit (SEC-108 c), right after the Python
 // fetch step. No TS build: it imports the shared plain-ESM core.
-//   node scripts/ingest/batch1.mjs prepare --request request.json   (read-only)
-//   node scripts/ingest/batch1.mjs run --bars bars.json [--index index.json] [--short short.json] [--actions actions.json]
+//   node scripts/ingest/batch1.mjs prepare [--market CODE] --request request.json   (read-only)
+//   node scripts/ingest/batch1.mjs run [--market CODE] --bars bars.json [--index index.json] [--short short.json] [--actions actions.json]
+// --market CODE: the market (M19 C2, MKT-110 a); omitted = the single enabled market, else exit 2 ("market required");
+//   a market that is not enabled exits 2 with "refused: market not enabled" and writes nothing, not even a run record.
 // --now <ISO instant>: the simulated clock of the CI recorded day (M18 D-965); refused unless PRAXIS_ENV=recorded.
-// (M4 T3: index.json = the python step's `^AXJO` bars, short.json = the no-secrets ASIC step)
+// (M4 T3: index.json = the python step's benchmark-index bars, short.json = the no-secrets ASIC step)
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, COMMIT_SHA (optional), GITHUB_OUTPUT (prepare, optional)
 // `prepare` reads the database only: it decides whether to fetch, writes request.json for the
 // Python step (codes from the DB universe, one session back for the D-1 re-fetch) and reports
@@ -16,6 +18,7 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@libsql/client";
 import { prepareBatch1, runBatch1 } from "../../src/lib/data/pipeline/batch1-core.mjs";
+import { resolveScriptMarket, takeMarketFlag } from "../../src/lib/market/scriptMarket.mjs";
 import { parseNow } from "../e2e-day/now.mjs";
 
 const has = (v) => typeof v === "string" && v.trim() !== "";
@@ -46,7 +49,12 @@ export async function run(argv, env, deps = {}) {
   }
   const nowMs = sim.nowMs ?? deps.nowMs ?? (() => Date.now());
   const openDb = deps.openDb ?? ((url, authToken) => createClient({ url, authToken }));
-  const [cmd, ...rest] = sim.argv;
+  const mk = takeMarketFlag(sim.argv);
+  if (mk.error) {
+    out(`ingest-batch1: failed (${mk.error})`);
+    return 2;
+  }
+  const [cmd, ...rest] = mk.argv;
   if (cmd !== "prepare" && cmd !== "run") {
     out("ingest-batch1: failed (usage: prepare --request <file> | run --bars <file>)");
     return 1;
@@ -66,8 +74,14 @@ export async function run(argv, env, deps = {}) {
     return 1;
   }
   try {
-    if (cmd === "prepare") return await prepare(db, rest, env, nowMs, out);
-    return await ingest(db, rest, env, nowMs, out, deps.runOptions ?? {});
+    // MKT-110 a: the market must be enabled before anything is written (no run record for a refused market)
+    const m = await resolveScriptMarket(db, mk.market);
+    if (!m.ok) {
+      out(`ingest-batch1 ${cmd}: ${m.line}`);
+      return m.exit;
+    }
+    if (cmd === "prepare") return await prepare(db, rest, env, nowMs, out, m.market);
+    return await ingest(db, rest, env, nowMs, out, deps.runOptions ?? {}, m.market);
   } catch {
     // Never print a driver error: it can carry the database URL.
     out(`ingest-batch1 ${cmd}: failed (unexpected error)`);
@@ -77,13 +91,13 @@ export async function run(argv, env, deps = {}) {
   }
 }
 
-async function prepare(db, args, env, nowMs, out) {
+async function prepare(db, args, env, nowMs, out, market) {
   const requestPath = flag(args, "--request");
   if (requestPath === null) {
     out("ingest-batch1 prepare: failed (--request <file> is required)");
     return 1;
   }
-  const r = await prepareBatch1(db, { nowMs: nowMs() });
+  const r = await prepareBatch1(db, { nowMs: nowMs(), market });
   const lines = [];
   if (r.action === "fetch") {
     writeFileSync(requestPath, JSON.stringify(r.request));
@@ -116,13 +130,14 @@ function readOptional(path) {
   }
 }
 
-async function ingest(db, args, env, nowMs, out, runOptions) {
+async function ingest(db, args, env, nowMs, out, runOptions, market) {
   const barsText = readOptional(flag(args, "--bars"));
   const indexText = readOptional(flag(args, "--index"));
   const shortText = readOptional(flag(args, "--short"));
   const actionsText = readOptional(flag(args, "--actions"));
   const res = await runBatch1(db, {
     nowMs,
+    market,
     barsText,
     indexText,
     shortText,

@@ -649,3 +649,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1047 | Market rows in the Worker (C1, D-996, PRD-045): one statement (MARKETS_SQL, WHERE enabled = 1, at most 3 rows) rides in the clock's and the route poster's ex... |
 | D-1048 | Run now (C1, D-996): the request's market is the first gate: not in the enabled rows is refused: market_not_enabled (before "unknown job", "not listed" and "... |
 | D-1049 | Worker ASX files (C1, PRD-047): MARKET in asx/sentinel.ts is HOME_MARKET; the three SQL reads take it as a parameter and add enabled = 1 to the market read (... |
+| D-1050 | Script market rule (C2, MKT-110 a, D-996): src/lib/market/scriptMarket.mjs is the one implementation. --market <CODE> (or --market=CODE; empty = omitted) nam... |
+| D-1051 | Home market constants (C2, C3, D-993, D-1015): the modules that had MARKET = "AU", a Sydney or Melbourne zone, "18:10" or "AUD" with no profile to hand (the... |
+| D-1052 | Workflow pass-through (C2, D-996): ingest-batch1, arena-close, arena-signals, replay, backfill-history, backfill-prices and backfill-index gain a dispatch in... |
+| D-1053 | Slot times as data (C1, C2): worker/src/schedule.ts keeps one slot({...}) entry per slot with the time as an expression (a.b1, ops.maintenance.at, feed.poll.... |

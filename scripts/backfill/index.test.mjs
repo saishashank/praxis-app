@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { HOME_MARKET } from "../../src/lib/market/profileCore.mjs";
 import { ANCHOR_CODE, buildRequest, run, sydneyToday } from "./index.mjs";
 
 const dir = mkdtempSync(path.join(tmpdir(), "praxis-index-"));
@@ -27,6 +28,10 @@ function fakeDb() {
   const keys = new Set();
   const db = {
     closed: false,
+    // the market gate (M19 C2): the one enabled market is the home market
+    async execute() {
+      return { rows: [{ code: HOME_MARKET }] };
+    },
     async batch(stmts) {
       return stmts.map((s) => {
         let n = 0;

@@ -148,10 +148,13 @@ test("steps run in order: plan, fetch, ingest; ingest also records a failed or s
   const fetch = steps.findIndex((s) => s.name === "Fetch bars (no secrets)");
   const ingest = steps.findIndex((s) => s.name === "Ingest batch 1");
   assert.ok(0 < plan && plan < fetch && fetch < ingest, names.join(" | "));
-  assert.equal(steps[plan].run, "node scripts/ingest/batch1.mjs prepare --request request.json");
+  assert.equal(
+    steps[plan].run,
+    'node scripts/ingest/batch1.mjs prepare ${MARKET_INPUT:+--market "$MARKET_INPUT"} --request request.json',
+  );
   assert.equal(
     steps[ingest].run,
-    "node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json --actions actions.json",
+    'node scripts/ingest/batch1.mjs run ${MARKET_INPUT:+--market "$MARKET_INPUT"} --bars bars.json --index index.json --short short.json --actions actions.json',
   );
   assert.match(
     steps[ingest].if,

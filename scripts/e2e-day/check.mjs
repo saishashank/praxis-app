@@ -16,14 +16,15 @@
 import { appendFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { OWNER_TZ } from "../../src/lib/market/profileCore.mjs";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const has = (v) => typeof v === "string" && v.trim() !== "";
 
-/** Today's date in Australia/Melbourne as YYYY-MM-DD. */
+/** Today's date in the Owner's zone (Melbourne) as YYYY-MM-DD. */
 export function melbourneDate(now) {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Australia/Melbourne",
+    timeZone: OWNER_TZ,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

@@ -27,9 +27,10 @@ import {
   validateParams,
   type Job,
 } from "@/lib/jobs/registry.mjs";
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import { melbourneToday } from "@/lib/ops/checklist";
 
-export const RUN_NOW_MARKET = "AU";
+export const RUN_NOW_MARKET = HOME_MARKET;
 /** Default per-job cap in one hour (the registry may set a lower `maxPerHour`, D-851). */
 export const RUN_NOW_MAX_PER_JOB_HOUR = DEFAULT_MAX_PER_HOUR;
 /** At most this many requests over all jobs in one hour. */

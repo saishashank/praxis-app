@@ -11,6 +11,7 @@
 // A date with no stored U1 score means the quality stage has not run for it (no data): entries are
 // blocked, because a missing input is never treated as good (DAT-004, DAT-127).
 import type { Client } from "@libsql/client";
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 
 export type EntryReason = "ok" | "no_quality_score" | "u1_gate_failed" | "code_blocked";
 export type EntryDecision = { allowed: boolean; reason: EntryReason };
@@ -19,7 +20,7 @@ export async function entriesAllowed(
   db: Client,
   code: string,
   date: string,
-  market = "AU",
+  market = HOME_MARKET,
 ): Promise<EntryDecision> {
   const score = await db.execute({
     sql: "SELECT gate_pass FROM quality_score WHERE market = ? AND d = ? AND tier = 'U1'",
