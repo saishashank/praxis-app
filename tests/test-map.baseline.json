@@ -902,7 +902,11 @@
       "tests/coverage/snapshotWorld.test.ts",
       "tests/coverage/statsGuards.test.ts"
     ],
-    "AT-32": ["tests/acceptance/v2/at32Steelman.test.ts", "tests/docs/replayHashPolicy.test.ts"],
+    "AT-32": [
+      "tests/acceptance/v2/at32Steelman.test.ts",
+      "tests/acceptance/v3/replayHash.test.ts",
+      "tests/docs/replayHashPolicy.test.ts"
+    ],
     "AT-33": ["tests/acceptance/v2/at33.test.ts"],
     "AT-34": ["tests/acceptance/v2/at34.test.ts"],
     "AT-35": ["tests/acceptance/v2/at35.test.ts"],
@@ -949,6 +953,7 @@
     "AT-49": ["e2e/shell.spec.ts", "tests/shell/shell.test.tsx"],
     "AT-50": [
       "tests/acceptance/v2/at50.test.ts",
+      "tests/acceptance/v3/replayHash.test.ts",
       "tests/cortex/night/night.test.ts",
       "tests/cortex/pit/asOfView.test.ts",
       "tests/cortex/score/score.test.ts"
@@ -1024,6 +1029,30 @@
     "AT-64": ["tests/acceptance/v2/at64.test.ts"],
     "AT-65": ["tests/acceptance/v2/at65.test.tsx", "tests/picks/wp8.test.tsx"],
     "AT-66": ["e2e/vibrancy.spec.ts"],
+    "AT-67": [
+      "scripts/ci/market-literals.test.mjs",
+      "tests/market/completeness.test.ts",
+      "tests/market/profile.test.ts",
+      "tests/static/marketLiterals.test.ts"
+    ],
+    "AT-68": [
+      "e2e/market-off.spec.ts",
+      "scripts/ci/e2e-listing.test.mjs",
+      "scripts/e2e-day/assert-production-shape.test.mjs",
+      "scripts/ingest/marketRefusal.test.mjs",
+      "tests/acceptance/v3/at68.test.ts",
+      "tests/db/0035_m19_market_guard.test.ts",
+      "tests/market/completeness.test.ts",
+      "tests/market/guard.test.ts",
+      "tests/market/resolve.test.ts",
+      "worker/test/at68Worker.test.ts",
+      "worker/test/enabledMarkets.test.ts"
+    ],
+    "AT-75": [
+      "tests/acceptance/v3/replayHash.test.ts",
+      "tests/market/auConstants.test.ts",
+      "tests/market/profile.test.ts"
+    ],
     "AT-81": ["tests/http/safeLink.test.ts", "tests/sentinel/cap.test.ts"],
     "AT-83": [
       "scripts/ci/workflow-lint.test.mjs",
@@ -1103,6 +1132,7 @@
       "tests/config/verify.test.ts"
     ],
     "BLD-041": ["tests/health/steelman.test.ts", "tests/loaders/loadersPart2.test.ts"],
+    "BLD-050": ["tests/db/0034_m19_market_profile.test.ts"],
     "D-1": [
       "tests/agents/families/f4f5.test.ts",
       "tests/agents/indicators.test.ts",
@@ -1782,6 +1812,7 @@
     "D-204": [
       "tests/config/runtime.test.ts",
       "tests/db/client.test.ts",
+      "tests/market/guard.test.ts",
       "tests/market/moversFloor.test.ts"
     ],
     "D-205": [
@@ -2226,7 +2257,11 @@
     "D-561": ["tests/acceptance/v2/at34.test.ts", "tests/ui/steelmanCard.test.tsx"],
     "D-570": ["tests/experts/import.test.ts"],
     "D-580": ["tests/health/steelman.test.ts"],
-    "D-586": ["tests/acceptance/v2/at32Steelman.test.ts", "tests/acceptance/v2/at41Replay.test.ts"],
+    "D-586": [
+      "tests/acceptance/v2/at32Steelman.test.ts",
+      "tests/acceptance/v2/at41Replay.test.ts",
+      "tests/acceptance/v3/replayHash.test.ts"
+    ],
     "D-587": ["tests/cortex/static/noOpinionReads.test.ts"],
     "D-590": ["tests/experts/screen.test.ts"],
     "D-593": ["tests/experts/screen.test.ts"],
@@ -2507,10 +2542,12 @@
       "tests/review/sections46.test.ts"
     ],
     "D-941": ["tests/picks/isolation.test.ts", "tests/picks/noPicks.test.ts"],
+    "D-947": ["tests/db/0034_m19_market_profile.test.ts"],
     "D-951": ["tests/picks/isolation.test.ts"],
     "D-953": [
       "scripts/arena/signals.test.mjs",
       "tests/agents/batch3.test.ts",
+      "tests/market/projection.test.ts",
       "worker/test/recheck2b.test.ts",
       "worker/test/schedule.test.ts"
     ],
@@ -2653,6 +2690,56 @@
       "tests/ui/expertsPages.test.tsx"
     ],
     "D-979": ["tests/config/m18Keys.test.ts"],
+    "D-990": ["tests/http/cspLock.test.ts"],
+    "D-991": ["scripts/ci/market-literals.test.mjs", "tests/static/marketLiterals.test.ts"],
+    "D-992": [
+      "tests/db/0034_m19_market_profile.test.ts",
+      "tests/market/generators.test.ts",
+      "tests/market/profile.test.ts",
+      "tests/market/projection.test.ts"
+    ],
+    "D-993": [
+      "tests/agents/m4Keys.test.ts",
+      "tests/config/m19Keys.test.ts",
+      "tests/data/controls.test.ts",
+      "tests/market/auConstants.test.ts",
+      "tests/market/profile.test.ts"
+    ],
+    "D-994": [
+      "tests/acceptance/v3/at68.test.ts",
+      "tests/config/m19Keys.test.ts",
+      "tests/data/controls.test.ts",
+      "tests/db/0034_m19_market_profile.test.ts",
+      "tests/e2e/marketsDev.test.ts",
+      "tests/maintenance/rowsByMarket.test.ts",
+      "worker/test/enabledMarkets.test.ts"
+    ],
+    "D-995": [
+      "tests/agents/batch3.test.ts",
+      "tests/db/0035_m19_market_guard.test.ts",
+      "tests/learning/learnStage.test.ts",
+      "tests/maintenance/rowsByMarket.test.ts",
+      "tests/market/guard.test.ts",
+      "worker/test/enabledMarkets.test.ts"
+    ],
+    "D-996": [
+      "scripts/ingest/marketRefusal.test.mjs",
+      "tests/arena/marketFlag.test.ts",
+      "tests/market/projection.test.ts",
+      "worker/test/at68Worker.test.ts",
+      "worker/test/enabledMarkets.test.ts"
+    ],
+    "D-997": [
+      "e2e/market-off.spec.ts",
+      "tests/acceptance/v3/at68.test.ts",
+      "tests/health/emailControlsPage.test.tsx",
+      "tests/loaders/loaders.test.ts",
+      "tests/market/resolve.test.ts",
+      "tests/settings/pages.test.tsx",
+      "tests/ui/loaders/switcher.test.ts"
+    ],
+    "D-998": ["tests/db/0034_m19_market_profile.test.ts", "tests/settings/pages.test.tsx"],
+    "D-999": ["tests/market/completeness.test.ts"],
     "DAT-001": [
       "scripts/backup/drill.test.mjs",
       "tests/agents/acceptanceM4.test.ts",
@@ -2730,7 +2817,7 @@
       "tests/pipeline/batch1.test.ts",
       "tests/pipeline/dataOnly.test.ts"
     ],
-    "DAT-101": ["tests/db/0019_cortex.test.ts"],
+    "DAT-101": ["tests/db/0019_cortex.test.ts", "tests/market/completeness.test.ts"],
     "DAT-103": [
       "scripts/ingest/batch1.test.mjs",
       "scripts/ingest/batch1.workflow.test.mjs",
@@ -3057,6 +3144,12 @@
       "tests/agents/events.v2.test.ts",
       "tests/sentinel/ingest.dedup.test.ts"
     ],
+    "DAT-241": [
+      "tests/config/m19Keys.test.ts",
+      "tests/db/0034_m19_market_profile.test.ts",
+      "tests/market/profile.test.ts"
+    ],
+    "DAT-242": ["tests/db/0034_m19_market_profile.test.ts", "tests/market/completeness.test.ts"],
     "DAT-251": [
       "scripts/asx/fetch.causes.test.mjs",
       "scripts/asx/ingest.test.mjs",
@@ -3704,6 +3797,7 @@
       "e2e/m11l-steelman.spec.ts",
       "scripts/arena/signals.steelmanBreak.test.mjs",
       "scripts/ci/steelman-readers.test.mjs",
+      "tests/acceptance/v2/at46.test.ts",
       "tests/docs/replayHashPolicy.test.ts",
       "tests/health/steelman.test.ts",
       "tests/llm/hardening.test.ts",
@@ -4370,6 +4464,7 @@
       "tests/acceptance/v2/at56.test.ts",
       "tests/acceptance/v2/at61.test.ts",
       "tests/acceptance/v2/at63.test.ts",
+      "tests/acceptance/v3/replayHash.test.ts",
       "tests/agents/m4Keys.test.ts",
       "tests/agents/noMagicThresholds.test.ts",
       "tests/agents/params.test.ts",
@@ -4414,6 +4509,7 @@
       "tests/security/originAll.test.ts",
       "tests/security/validation.test.ts"
     ],
+    "SEC-112": ["e2e/market-off.spec.ts"],
     "SEC-114": ["tests/security/at60OrderBoundary.test.ts", "tests/security/noBrokerLinks.test.ts"],
     "SEC-115": [
       "scripts/watchdog/run.test.mjs",
@@ -4921,6 +5017,12 @@
       "tests/acceptance/v2/at65.test.tsx",
       "tests/picks/pages.test.tsx",
       "tests/picks/wp7.test.ts"
+    ],
+    "UXN-312": ["tests/e2e/marketsDev.test.ts", "tests/ui/loaders/switcher.test.ts"],
+    "UXN-313": [
+      "tests/market/profile.test.ts",
+      "tests/preferences/format.test.ts",
+      "tests/view/formatBranches.test.ts"
     ],
     "UXN-324": ["tests/blueprint/drawio.test.ts"],
     "VAL-101": [

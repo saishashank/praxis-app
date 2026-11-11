@@ -187,6 +187,8 @@ The AT-05b test push is expected. It is not an incident. [AT-05b]
 
 **Start the next market (OPS-061).** Not part of the AU go-live. When AU meets the rules and you approve, the agent builds India, then the USA. [MKT-105, MKT-106]
 
+**Read the Markets row (MKT-114, UXN-312).** Open **Settings**, then **Region & markets**. Only you see every market. Editors and Viewers see the markets that are switched on. AU reads **Active**, or **Active (collecting data only)** while it only collects. India and the USA read **Built — off in production**. That means the code and the facts about the market exist, but nothing runs for it, nothing is stored for it, and no page or email names it. Under each one you see "AT-M evidence: not recorded" and two open items: AU 60 trading days, and your approval. You cannot switch a market on from this row yet. If production ever shows rows, jobs or a page for India or the USA, that is an S2 incident, and **System health** names it (`market_not_enabled`, `market_rows_unexpected` or `markets_enabled_mismatch`). Leave the variable `PRAXIS_MARKETS_ENABLED` unset; the next market's switch-on will say when to set it. [MKT-110, D-994]
+
 ---
 
 ## Deploy
