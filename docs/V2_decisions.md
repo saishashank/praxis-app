@@ -613,3 +613,25 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-988 | The Owner control-room load keeps a statement budget; the data-feed lines are one more statement, so the budget is 91 (was 90), asserted in tests/health/cont... |
 | D-989 | TST-135 (b): the four AT-39 fetch clauses (robots.txt, conditional requests, daily cap, metadata-only record under frozen extraction rules) live in one pure... |
 | D-990 | Build robustness (found at M18 integration): the two fonts are committed as variable woff2 files (latin subset, SIL Open Font License 1.1, licence texts besi... |
+
+## M19 (M19_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-991 | Literal count rule (MKT-107, A-19, gap 1): node scripts/ci/market-literals.mjs --count is the count — files under src, scripts, worker/src (any extension) th... |
+| D-992 | Profile store (DAT-241, gap 3): 0034_m19_market_profile.sql adds market_profile (one row per market: work status, dates, version), market_profile_field (one... |
+| D-993 | Loader and derived constants (MKT-107, DAT-241): src/lib/market/profile.ts is the single reader (loadProfile, loadProfiles, enabledMarkets, requireEnabledMar... |
+| D-994 | Two switches (gap 9): markets_enabled = the set of market rows with enabled = 1 (registered as a fixed key whose production default is PRAXIS_MARKETS_ENABLED... |
+| D-995 | Write guard (MKT-110 b): 0035_m19_market_guard.sql installs BEFORE INSERT and BEFORE UPDATE OF market triggers on every table with a market column except mar... |
+| D-996 | Dispatch refusal (MKT-110 a): the Worker reads every enabled = 1 market row per tick (one statement) and builds the slot table per row with slotsFor(row) fro... |
+| D-997 | UI filter and 404 (MKT-110 c, UXN-312): resolveMarket(db, candidate, user) is the one place a market parameter (query, route segment, form field) is accepted... |
+| D-998 | MKT-114: market_profile.work_status stores the status (not_started / in_build / testing / built / active / paused); the seed sets AU active, IN and US built... |
+| D-999 | DAT-242: complete is computed by isComplete(profile) (every field valued; every verify = 1 field dated and referenced); |
+| D-1000 | AT-67 scan rule (gap 15): scripts/ci/market-literals.mjs (also tests/static/marketLiterals.test.ts) scans src, scripts, worker/src (.ts .tsx .mjs .js .d.mts... |
+| D-1001 | M19/M20 split (gaps 5, 6, 7, 8, 13): UXN-312 — M19 the switcher filter, the status row, the evidence date, the open gate items, the completeness line; |
+| D-1002 | UXN-313 formatting: CurrencyFormat per profile (A$ en-AU, ₹ en-IN with lakh/crore grouping, US$ en-US) passed explicitly to formatMicro/formatCents/money; du... |
+| D-1003 | CXA-002 (a)–(i) field mapping with the AU proof: decision_cutoff, tz/OWNER_TZ, known_time_rules (a); settlement_days, parcel_floor with adv_floor = parcel_fl... |
+| D-1004 | Worker local time (PRD-039 stub): worker/src/localtime.ts keeps the Sydney rule table under the key Australia/Sydney, takes the market row's tz, and throws u... |
+| D-1005 | Decision numbering: the extract's "M19 starts at D-951" repeats BLD-054's wording for M18; |
+| D-1006 | Migrations and counts: 0034_m19_market_profile.sql (store, seed, market columns) and 0035_m19_market_guard.sql (triggers), each with -- +down; the hard-coded... |
+| D-1007 | Identity baselines (CXA-001, A-20): integration step 0, before any M19 merge, runs AT-32 and AT-50 on the build tree and writes their hashes to tests/accepta... |
