@@ -201,8 +201,9 @@ describe("calendar draft job, refusals", () => {
     const before = Number(
       (await main.execute("SELECT COUNT(*) AS n FROM trading_calendar")).rows[0].n,
     );
-    expect(await draft("ZZ", NOV_1)).toBe(1);
-    expect(out.at(-1)).toBe(`calendar-draft: ZZ ${YEAR} no_rules rows=0`);
+    // M19 (D-1050): a market with no enabled row is refused before anything is read or written (exit 2)
+    expect(await draft("ZZ", NOV_1)).toBe(2);
+    expect(out.at(-1)).toBe("calendar-draft: refused: market not enabled");
     expect(
       Number((await main.execute("SELECT COUNT(*) AS n FROM trading_calendar")).rows[0].n),
     ).toBe(before);

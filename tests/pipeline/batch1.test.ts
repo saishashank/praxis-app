@@ -435,7 +435,8 @@ describe("gates: market mode, source, universe", () => {
     const db = await pipelineDb();
     const res = await runBatch1(db, { nowMs: () => at1730(TUE), barsText: null, market: "ZZ" });
     expect(res).toMatchObject({ exit: 1, status: "failed", reason: "market_missing" });
-    expect((await runs(db))[0]).toMatchObject({ error_summary: "config: market_missing" });
+    // M19 (D-1050): no run record - a row for a market with no `market` row is refused by the guard
+    expect(await runs(db)).toHaveLength(0);
   });
 
   it.each([
