@@ -195,6 +195,26 @@ describe("seeded world", () => {
     expect(JSON.stringify(masked)).not.toMatch(/F4|'x'/);
   });
 
+  it("O-81: a learner that has not run a night yet shows the fixed Cortex leading and nothing measured", async () => {
+    const w = await emptyWorld();
+    await w.main.execute(
+      `INSERT INTO cortex_map (market, family, rule_version, fitted_at, params_json, active_set_hash, n_eff, pool, fit_split)
+       VALUES ('AU','F1','F1.learn','2026-10-02T07:10:02.000Z','{"learner":true,"generation":0}','h',1,'p','development')`,
+    );
+    for (const who of ["owner", "viewer"] as const) {
+      const l = (await loadCortex(deps(w, who))).data.learner!;
+      expect(l.on).toBe(true);
+      expect(l.weekly).toBeNull();
+      expect(l.duelText).toBeNull();
+      expect(l.events).toEqual([]);
+      expect(l.eventCount).toBe(0);
+      expect(l.leaders[0]!.text).toMatch(
+        /^The fixed Cortex makes the decisions; the learning Cortex runs beside it/,
+      );
+    }
+    expect((await loadCortex(deps(w, "owner"))).data.mapsLoaded).toBe(0);
+  });
+
   it("shows Editor and Viewer ISO weeks, never an exact date (UX-009)", async () => {
     const w = await seeded();
     for (const who of ["editor", "viewer"] as const) {

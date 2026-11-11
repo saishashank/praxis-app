@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { angleById } from "@/lib/cortex/angles/registry";
 import { isCheckpointNight } from "@/lib/cortex/learn/checkpoint";
 import { learnConfig } from "@/lib/cortex/learn/config";
-import { generationZero, learnerRuleVersion } from "@/lib/cortex/learn/learner";
+import { generationZero, learnerRuleVersion, nightlyRow } from "@/lib/cortex/learn/learner";
 import { cleanWords } from "@/lib/cortex/learn/learnWords";
 import { cortexLearnNight } from "@/lib/cortex/learn/stage";
 import {
@@ -658,6 +658,75 @@ describe("nightly: duel, checkpoint, leader", () => {
     expect(after).toMatchObject({ leader: "fixed", setBy: "owner_kill", sinceD: AFTER });
     const kinds = (await eventsSince(db, M, D)).map((e) => e.kind);
     expect(kinds.filter((k) => k === "fallback")).toHaveLength(1);
+  });
+
+  it("a young learner: no comparison yet, no checkpoint tonight, and a cap ending tomorrow is lifted", async () => {
+    const db = await freshDb("main");
+    await seedRule(db);
+    const start = ["2026-10-14", "2026-10-15"].find(
+      (st) =>
+        !isCheckpointNight({
+          startD: st,
+          d: D,
+          calendar: weekdays(st, "2026-12-31"),
+          abstainTonight: false,
+          abstainLastNight: false,
+        }),
+    )!;
+    const gen0 = generationZero(FIXED, ANGLES, {
+      fittedAt: `${start}T07:00:00.000Z`,
+      configHash: "x",
+    });
+    await insertMap(db, gen0);
+    const capped = nightlyRow(gen0, {
+      nextSession: "2026-10-20",
+      decisions: [
+        {
+          kind: "cap",
+          reason: "fall_alarm",
+          angleId: "A-D1-02",
+          family: null,
+          generation: null,
+          reversesD: null,
+          reversesSeq: null,
+          expiresD: AFTER,
+          evidence: {},
+          words: "",
+        },
+      ],
+      fittedAt: "2026-11-02T07:00:00.000Z",
+    })!.row;
+    await insertMap(db, capped);
+    await seedNight(db, PREV);
+    const s = (await cortexLearnNight(db, nightOpts()))!;
+    expect(s.numbers.learner).toMatchObject({
+      compareMatured: 0,
+      duelNights: 0,
+      checkpoint: false,
+      mapRowWritten: true,
+    });
+    expect(s.lines.some((x) => x.includes("no four-week result is in yet"))).toBe(true);
+    expect(s.lines.some((x) => x.includes("back to its weekly level"))).toBe(true);
+    const next = (await latestMaps(db, M, AFTER)).find((m) => m.ruleVersion === "F1.learn")!;
+    expect((next.params as unknown as { generation_tag: string }).generation_tag).toBe("0e");
+  });
+
+  it("a learner failure keeps the scorecard and says the comparison runs again", async () => {
+    const db = await freshDb("main");
+    await seedLearnerWorld(db);
+    const broken = { ...db, execute: db.execute.bind(db), batch: db.batch.bind(db) } as Client;
+    let calls = 0;
+    const flaky = {
+      execute: async (x: InStatement) => {
+        const sql = typeof x === "string" ? x : x.sql;
+        if (/FROM cortex_learn_compare/.test(sql) && ++calls > 0) throw new Error("boom");
+        return broken.execute(x);
+      },
+      batch: broken.batch,
+    } as unknown as Client;
+    const s = (await cortexLearnNight(flaky, nightOpts()))!;
+    expect(s.numbers.learner).toBeUndefined();
+    expect(s.lines[s.lines.length - 1]).toMatch(/comparison runs again tomorrow/);
   });
 
   it("the probeNight hook sees the learner and adds its lines; a failing hook is not fatal", async () => {

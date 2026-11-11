@@ -26,6 +26,12 @@ import {
   nextGeneration,
   nightlyRow,
 } from "@/lib/cortex/learn/learner";
+import {
+  capLiftWords,
+  cleanWords,
+  duelWaitingWords,
+  startWords,
+} from "@/lib/cortex/learn/learnWords";
 import type { CompareRow } from "@/lib/cortex/learn/types";
 import { devIcOf, devPriorOf, learnerAngleIds } from "@/lib/cortex/learn/weekly";
 import { weightsHash } from "@/lib/cortex/score/map";
@@ -336,5 +342,19 @@ describe("duel glue", () => {
     expect(
       evaluateLeader({ status: behind, leader: "learner", sinceLastChange: 1, config: cfg }),
     ).toBe("fallback");
+  });
+});
+
+describe("integration phrases (LRN-AT-9)", () => {
+  it("are plain market words", () => {
+    for (const w of [
+      startWords("F1"),
+      startWords(null),
+      duelWaitingWords("F1"),
+      capLiftWords(["52-week-high proximity"]),
+    ]) {
+      expect(cleanWords(w), w).toBe(true);
+    }
+    expect(capLiftWords(["a", "b"])).toContain("'a' and 'b'");
   });
 });
