@@ -28,6 +28,8 @@ export const NOT_CONFIG = new Set([
   "GITHUB_API_URL",
   "GITHUB_STEP_SUMMARY",
   "GITHUB_RUN_ID",
+  "GITHUB_HEAD_REF", // release-gate.mjs: the head branch of a pull_request run (ci-streak, D-964)
+  "GITHUB_REF_NAME", // release-gate.mjs: the branch of a push run (ci-streak, D-964)
   "GITHUB_RUN_ATTEMPT",
   "GITHUB_SHA",
   "GITHUB_REPOSITORY",

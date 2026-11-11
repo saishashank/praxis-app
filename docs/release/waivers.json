@@ -1,13 +1,4 @@
 {
-  "_comment": "Owner waivers for the release gate (D-860, scripts/ci/release-gate-core.mjs). Only the conditions in WAIVABLE can be waived (today: staging-e2e-day). A waiver lasts at most 14 days from decidedOn. An expired, malformed or unknown entry is ignored and the condition is judged normally. Keep reason and followUp free of links.",
-  "waivers": [
-    {
-      "condition": "staging-e2e-day",
-      "reason": "V2 release: staging has never run a full day (staging Worker cron off, staging WORKER_HMAC_SECRET not set); Owner chose to release on the other gates and watch production's first nights",
-      "decidedBy": "Owner",
-      "decidedOn": "2026-11-02",
-      "expires": "2026-11-16",
-      "followUp": "Set up a staging test day: staging cron test window, WORKER_HMAC_SECRET on Vercel staging, staging slots listed; run the Staging E2E day before the next release"
-    }
-  ]
+  "_comment": "Owner waivers for the release gate (D-860, scripts/ci/release-gate-core.mjs). Since M18 (OPS-107, D-964) no condition is waivable: staging is retired, its three gate conditions became recorded-day, ci-streak and zap-local in CI, and WAIVABLE is empty, so every entry here is ignored and the condition is judged normally. The file keeps its shape and the validation (at most 14 days from decidedOn, Owner only, no links) for a future decision that re-opens a condition; the V2 staging-e2e-day waiver closed with its condition on 2026-11-11.",
+  "waivers": []
 }

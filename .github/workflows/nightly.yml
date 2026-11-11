@@ -1,3 +1,6 @@
+# Disabled 2026-11-09 (D-906, OPS-107): staging is retired; kept for history and the rollback runbook.
+# Dispatch only: the `schedule:` trigger was removed (D-964). The release gate no longer reads this workflow; its "three greens in a row" is the ci-streak condition on push CI runs.
+#
 # Nightly full suite on staging (M8 T12; docs/M8_design.md 2.8, decision 21; TST-132, TST-131, AT-31).
 # Every night, and on dispatch. A scheduled night does the work only if `main` has a commit newer
 # than the last green run (scripts/ci/nightly-gate.mjs); a dispatch always runs. AT-31 needs THREE
@@ -13,8 +16,6 @@
 name: Nightly
 
 on:
-  schedule:
-    - cron: "37 15 * * *"
   workflow_dispatch:
 
 permissions: {}
