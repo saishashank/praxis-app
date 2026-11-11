@@ -251,7 +251,7 @@ describe("Home content: since yesterday and needs you", () => {
 });
 
 describe("Home content: My portfolio (D-950)", () => {
-  it("shows the three practice portfolios when they were read, nothing when they were not", () => {
+  it("shows the three practice portfolios once one has started, nothing before", () => {
     show();
     expect(screen.queryByTestId("pick-portfolio")).toBeNull();
     cleanup();
@@ -263,7 +263,7 @@ describe("Home content: My portfolio (D-950)", () => {
         strategyMaxPct: 40,
         portfolios: ["conservative", "balanced", "aggressive"].map((profile) => ({
           profile,
-          started: false,
+          started: profile === "balanced",
           holdingsMax: 4,
           asOfD: null,
           seed: null,
@@ -282,7 +282,7 @@ describe("Home content: My portfolio (D-950)", () => {
       } as unknown as HomeView["portfolios"];
     });
     expect(screen.getByTestId("pick-portfolio")).toHaveTextContent("My portfolio");
-    expect(screen.getAllByText("Starts with the first pick.")).toHaveLength(3);
+    expect(screen.getAllByText("Starts with the first pick.")).toHaveLength(2);
   });
 });
 

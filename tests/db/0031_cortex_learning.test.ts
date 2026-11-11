@@ -100,10 +100,11 @@ describe("0031_cortex_learning", () => {
     await migrateUp(db, ms);
     const after = await schemaOf(db);
     for (const t of TABLES) expect(after.some((s) => s.startsWith(`table:${t}:`))).toBe(true);
-    expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 30 });
+    // 0032 (D-950) sits on top
+    expect(await migrateDown(db, ms, 2)).toEqual({ rolledBack: 2, version: 30 });
     const left = await schemaOf(db);
     for (const t of TABLES) expect(left.some((s) => s.includes(t))).toBe(false);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 1, version: 31 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 2, version: 32 });
     expect(await schemaOf(db)).toEqual(after);
   });
 

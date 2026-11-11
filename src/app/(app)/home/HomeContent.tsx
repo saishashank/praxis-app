@@ -545,7 +545,7 @@ export function HomeContent({
 
       {v.intraday ? <IntradaySection model={v.intraday} compact /> : null}
 
-      {v.portfolios ? <PortfolioCard v={v.portfolios} /> : null}
+      {v.portfolios?.portfolios.some((p) => p.started) ? <PortfolioCard v={v.portfolios} /> : null}
 
       <SummaryCard v={v} />
 

@@ -68,9 +68,9 @@ describe("picks entry", () => {
       expect(r.lines[0]).toMatch(
         /^arena-picks AU 2026-10-20: published=\d+ candidates=\d+ bought=\d+ missed=\d+ closed=\d+ open=\d+ checked=\d+ withdrawn=\d+ shortlist=-?\d+$/,
       );
-      // D-913: the Follow the picks portfolio runs after the picks, counts only
+      // D-950: the three My portfolio profiles run after the picks, counts only
       expect(r.lines[1]).toMatch(
-        /^arena-portfolio AU 2026-10-20: trades=\d+ open=\d+ days=\d+ skipped=\d+$/,
+        /^arena-portfolio AU 2026-10-20: trades\/open\/days\/splits\/skipped conservative=\d+\/\d+\/\d+\/\d+\/\d+ balanced=\d+\/\d+\/\d+\/\d+\/\d+ aggressive=\d+\/\d+\/\d+\/\d+\/\d+$/,
       );
       // D-921: the daily learning loop runs after the portfolio, counts only (nothing to learn from on an empty file)
       expect(r.lines[2]).toBe(

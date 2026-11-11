@@ -58,7 +58,7 @@ describe("migrate CLI", () => {
     expect(r.code).toBe(0);
     expect(r.out).toContain("migrate main: applied 32 (now at v32)");
     const again = run(["--db", "main"], { TURSO_MAIN_URL: url });
-    expect(again.out).toContain("applied 0 (now at v31)");
+    expect(again.out).toContain("applied 0 (now at v32)");
     const db = track(createClient({ url }));
     const t = await db.execute("SELECT name FROM sqlite_master WHERE name = 'run_record'");
     expect(t.rows.length).toBe(1);

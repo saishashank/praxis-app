@@ -17,9 +17,10 @@ const PROFILE_NOTE: Record<string, string> = {
 function One({ v }: { v: MyPortfolio }) {
   const id = `portfolio-${v.profile}-h`;
   return (
-    <section
+    <div
+      role="group"
       aria-labelledby={id}
-      className="flex min-w-0 flex-col gap-1 rounded-md border border-border p-3"
+      className="flex min-w-0 flex-col gap-1 break-words rounded-md border border-border p-3"
       data-testid={`my-portfolio-${v.profile}`}
     >
       <h3 id={id} className="m-0 text-base font-semibold">
@@ -110,7 +111,7 @@ function One({ v }: { v: MyPortfolio }) {
           ) : null}
         </>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -118,14 +119,14 @@ export function PortfolioCard({ v }: { v: MyPortfoliosView }) {
   return (
     <section
       aria-labelledby="portfolio-h"
-      className="min-w-0 rounded-lg border border-border bg-surface p-4 text-sm"
+      className="min-w-0 break-words rounded-lg border border-border bg-surface p-4 text-sm"
       data-testid="pick-portfolio"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="portfolio-h" className="m-0 text-lg font-semibold">
           My portfolio
         </h2>
-        {!v.masked && v.portfolios.some((p) => p.started) ? <SimulatedLabel /> : null}
+        {!v.masked ? <SimulatedLabel /> : null}
       </div>
       <p className="m-0 mt-1 text-text-muted">
         Three practice portfolios, one per risk profile
@@ -148,13 +149,15 @@ export function PortfolioCard({ v }: { v: MyPortfoliosView }) {
             Buys a strategy&apos;s best picks that fit its share, at most {v.stockMaxPct}% in one
             stock.
           </li>
-          <li>Skips a buy when the brokerage would be too large a part of it.</li>
+          <li>Skips a buy when the trading fees would be too large a part of it.</li>
           <li>
             Sells at the stop-loss, at the aim, when the time frame ends, when the stock is weak
             with no signal, or when its strategy gives its sell signal.
           </li>
           <li>Trims a strategy only when it drifts well past its share.</li>
-          <li>Practice sizes: a real first buy of a share on the ASX needs at least A$500.</li>
+          {v.masked ? null : (
+            <li>Practice sizes: a real first buy of a share on the ASX needs at least A$500.</li>
+          )}
         </ul>
       </details>
       <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-3">
