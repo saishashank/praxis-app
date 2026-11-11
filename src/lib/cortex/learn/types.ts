@@ -71,6 +71,8 @@ export const LEARN_EVENT_KINDS = [
   "fallback",
   "rollback",
   "placebo",
+  // O-81: a numbered base change (a measure promoted into, or retired from, the fixed Cortex)
+  "base_change",
 ] as const;
 export type LearnEventKind = (typeof LEARN_EVENT_KINDS)[number];
 

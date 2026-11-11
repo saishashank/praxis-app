@@ -93,6 +93,7 @@ import { stepPromotion } from "./states/promotion";
 import { DEFAULT_STATES_PARAMS, type StatesParams } from "./states/types";
 import type { OpenId, OpenTraceEntry } from "./gates/types";
 import type { CortexMap } from "./score/types";
+import { insertProbeRows, openProbeAngles, probeRowsOf } from "./learn/baseStore";
 import type {
   CandidateSource,
   CorpActionProvenance,
@@ -673,7 +674,12 @@ export type StoreReads = {
   readonly sourcesOff: ReadonlySet<InputKind>;
   /** C.5: who leads each family as of the night (`cortex_leader`); absent family = the fixed rule. */
   readonly leaders?: LeaderMap;
+  /** O-81: the probe angles open before the night (learn/baseStore `openProbeAngles`). */
+  readonly probes?: readonly string[];
 };
+
+/** Reads the probe angles open before night `d` (the seam `loadStoreReads` takes). */
+export type ProbeReader = (db: Client, market: string, d: string) => Promise<readonly string[]>;
 
 /** C.5: one family's leader in force on a night (the latest `cortex_leader` row with since_d <= d). */
 export type LeaderRow = {
@@ -746,7 +752,13 @@ export async function loadSourcesOff(db: Client): Promise<ReadonlySet<InputKind>
  */
 export async function loadStoreReads(
   db: Client,
-  o: { market: string; d: string; cutoffHhmm?: string; readLeaders?: LeaderReader },
+  o: {
+    market: string;
+    d: string;
+    cutoffHhmm?: string;
+    readLeaders?: LeaderReader;
+    readProbes?: ProbeReader;
+  },
 ): Promise<StoreReads> {
   const cellRows: { result: unknown }[] = [];
   for (const f of V1_FAMILIES) {
@@ -774,6 +786,7 @@ export async function loadStoreReads(
     })()),
     sourcesOff,
     leaders: await (o.readLeaders ?? readLeaders)(db, o.market, o.d),
+    probes: await (o.readProbes ?? openProbeAngles)(db, o.market, o.d),
   };
 }
 
@@ -918,6 +931,14 @@ export function ruleFromMap(family: Family, map: MapRow | undefined): FamilyNigh
     Array.isArray(p.angles) && p.angles.every((a) => typeof a === "string")
       ? (p.angles as string[])
       : undefined;
+  // O-81: a system base row's promoted angles (scored as active by this rule only)
+  const admitted =
+    angles !== undefined &&
+    Array.isArray(p.admitted) &&
+    p.admitted.length > 0 &&
+    p.admitted.every((a) => typeof a === "string")
+      ? (p.admitted as string[])
+      : undefined;
   const hold = num(p.hold);
   const entryEvery = num(p.entry_every);
   const anchor =
@@ -949,6 +970,7 @@ export function ruleFromMap(family: Family, map: MapRow | undefined): FamilyNigh
     ...(gain !== undefined && loss !== undefined ? { gainLoss: { gain, loss } } : {}),
     ...(slots === undefined ? {} : { slots }),
     ...(angles === undefined ? {} : { angles }),
+    ...(admitted === undefined ? {} : { admitted }),
     ...(p.plan === "time_hold" && hold !== undefined ? { plan: "time_hold" as const, hold } : {}),
     ...cadence,
     ...learner,
@@ -1016,7 +1038,9 @@ export function buildNightInputs(b: InputBuild): NightInputs {
   }
   const passports = new Map<string, AngleStatus>();
   for (const p of b.store.passports) passports.set(p.angleId, p.status);
+  const probes = [...new Set(b.store.probes ?? [])].sort(cmp);
   return {
+    ...(probes.length === 0 ? {} : { probes }),
     market: b.market,
     d: b.d,
     t,
@@ -1338,6 +1362,10 @@ export async function persistNight(
     ),
   ];
   await insertDecisions(db, rows);
+  // O-81: the open probes' values, to cortex_feature_probe only (absent without probes)
+  if (out.probes !== undefined) {
+    await insertProbeRows(db, probeRowsOf(market, d, out.probes, manifestId, inputs.angles));
+  }
   for (const a of out.abstains) {
     await insertAbstain(db, {
       market,
