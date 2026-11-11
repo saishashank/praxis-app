@@ -706,6 +706,14 @@ elements:
     purpose: "Chart links for the Owner (no data pulled)."
     specIds: [DAT-124]
     views: [data, platform]
+  "host:asic.gov.au":
+    purpose: "document links (DAT-253): ASIC public documents, links and own summary only; nothing is fetched."
+    specIds: [DAT-253]
+    views: [data, platform]
+  "host:www.ssrn.com":
+    purpose: "document links (DAT-253): SSRN abstract pages, links only; no PDF is fetched."
+    specIds: [DAT-253]
+    views: [data, platform]
 
 edges:
   - { from: "service:worker", to: "service:actions", kind: dispatch, contract: "workflow_dispatch via the GitHub API with the dispatch token (name only); idempotent per slot.", views: [platform, agents] }
