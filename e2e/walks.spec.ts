@@ -1,7 +1,8 @@
 // UXR-050 / AT-48 walk capture. Only runs with E2E_WALK=<output dir>: screenshots every tab, Settings and
 // one sub-page per tab at 375 and 1280 px for one theme and one role (E2E_WALK_THEME, E2E_WALK_ROLE), and
 // writes metrics (overflow, contrast, selection cues, sticky offsets) to <dir>/<role>-<theme>.json.
-// The images and the log stay outside this repo (SEC-110).
+// The images and the log stay outside this repo (SEC-110). Starts from the rich scenario plus the named states
+// `steelman-cards` and `blueprint-full` when the lane sets E2E_STATES (e2e/seed/states.mjs, TST-135).
 import { test, type Page } from "@playwright/test";
 import { createClient } from "@libsql/client";
 import AxeBuilder from "@axe-core/playwright";
