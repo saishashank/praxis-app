@@ -1,5 +1,7 @@
 // M17 WP1: synthetic ZZ chart payloads (SEC-110: never a real capture). Mirrors the [VERIFY at build]
 // chart `meta` shape; used by the contract test and by AT-61 recorded sessions.
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
+
 export type SyntheticMeta = {
   price?: number | null;
   timeS?: number | null;
@@ -16,7 +18,7 @@ export const zzCode = (n: number): string => `ZZ${String(n % CODE_MOD).padStart(
 
 export function syntheticChart(m: SyntheticMeta): unknown {
   const meta: Record<string, unknown> = { exchangeName: "ASX" };
-  if (m.currency !== null) meta.currency = m.currency ?? "AUD";
+  if (m.currency !== null) meta.currency = m.currency ?? homeProfile().currency;
   if (m.symbol != null) meta.symbol = m.symbol;
   if (m.price != null) meta.regularMarketPrice = m.price;
   if (m.timeS != null) meta.regularMarketTime = m.timeS;

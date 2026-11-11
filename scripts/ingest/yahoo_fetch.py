@@ -1,20 +1,22 @@
 """Yahoo EOD fetcher (M2 T5, design decision 2 / D-057, PLT-072, DAT-103).
 
 Runs in the GitHub Actions job `ingest-batch1` (Python 3.12). It only FETCHES: it reads a JSON
-request, downloads daily bars for `<code>.AX` through yfinance in chunks, and writes `bars.json`.
+request, downloads daily bars for `<code><suffix>` through yfinance in chunks, and writes `bars.json`.
 No database access, no secrets. A Node writer (src/lib/data/sources/yahoo.ts, then the T6 writer)
 validates the file and writes Turso. Nothing is repaired or filled here (DAT-004): rows with an
 unusable value are written with null so the validator rejects them visibly; days with no data at
 all (non-trading days) are skipped.
 
 Request file:  {"codes": ["ZZZ", ...], "start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}   (end inclusive)
-Optional (M4 T3): "indices": ["^AXJO"] asks for index bars too; they go to --index-output (index.json),
-never into bars.json:  [{"code":"AXJO","date","open","high","low","close","source":"yahoo",
+Optional (M19, CXA-002 h): "suffix" is the market profile's Yahoo ticker suffix (".XX"), "currency" its ISO code;
+the Node caller reads both from the profile. Absent, the transitional defaults below apply.
+Optional (M4 T3): "indices": ["^XXXX"] asks for index bars too; they go to --index-output (index.json),
+never into bars.json:  [{"code":"XXXX","date","open","high","low","close","source":"yahoo",
                          "published_at":null,"fetched_at"}, ...]
 Optional (DAT-231): --actions-output writes actions.json, the split and dividend rows that the SAME
 equity request returns (actions=True, no extra request):
-  [{"code","ex_date","kind":"split","ratio","currency":"AUD","source":"yahoo","fetched_at"},
-   {"code","ex_date","kind":"dividend","amount","currency":"AUD","source":"yahoo","fetched_at"}, ...]
+  [{"code","ex_date","kind":"split","ratio","currency","source":"yahoo","fetched_at"},
+   {"code","ex_date","kind":"dividend","amount","currency","source":"yahoo","fetched_at"}, ...]
 Output file:   [{"code","date","open","high","low","close","volume","adj_close",
                  "source":"yahoo","published_at":null,"fetched_at"}, ...]
 
@@ -47,6 +49,12 @@ BACKOFF_FACTOR = 4  # backoff = min_gap * BACKOFF_FACTOR ** attempt
 
 CODE_RE = re.compile(r"^[A-Z0-9]{2,6}$")
 INDEX_RE = re.compile(r"^\^[A-Z0-9]{2,6}$")
+SUFFIX_RE = re.compile(r"^\.[A-Z]{1,3}$")
+CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
+# TRANSITIONAL (M19 B2, CXA-002 h): the home market's Yahoo suffix and currency, used only while a request does
+# not carry "suffix" / "currency". The request writers pass the profile's values; these two lines go when they all do.
+DEFAULT_SUFFIX = ".AX"
+DEFAULT_CURRENCY = "AUD"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -93,9 +101,29 @@ def parse_indices(raw: Any) -> list[str]:
     seen: dict[str, None] = {}
     for i in idx:
         if not isinstance(i, str) or not INDEX_RE.match(i):
-            raise InputError("every index must look like ^AXJO")
+            raise InputError("every index must look like ^XXXX")
         seen[i] = None
     return list(seen)
+
+
+def parse_suffix(raw: Any) -> str:
+    """The request's Yahoo ticker suffix (the market profile's `yahoo_suffix`); the default when absent."""
+    if not isinstance(raw, dict) or "suffix" not in raw:
+        return DEFAULT_SUFFIX
+    s = raw["suffix"]
+    if not isinstance(s, str) or not SUFFIX_RE.match(s):
+        raise InputError("suffix must look like .XX")
+    return s
+
+
+def parse_currency(raw: Any) -> str:
+    """The request's ISO currency code (the market profile's `currency`); the default when absent."""
+    if not isinstance(raw, dict) or "currency" not in raw:
+        return DEFAULT_CURRENCY
+    c = raw["currency"]
+    if not isinstance(c, str) or not CURRENCY_RE.match(c):
+        raise InputError("currency must be a 3-letter ISO code")
+    return c
 
 
 def parse_request(raw: Any) -> tuple[list[str], str, str]:
@@ -158,14 +186,16 @@ def _frame_for(df: Any, ticker: str) -> Any:
         return None
 
 
-def rows_from_frame(df: Any, codes: list[str], fetched_at: str) -> list[dict[str, Any]]:
+def rows_from_frame(
+    df: Any, codes: list[str], fetched_at: str, suffix: str = DEFAULT_SUFFIX
+) -> list[dict[str, Any]]:
     """Convert a yfinance download result to bar rows (no repair, all-NaN days skipped)."""
     out: list[dict[str, Any]] = []
     if df is None or getattr(df, "empty", True):
         return out
     single = len(codes) == 1
     for code in codes:
-        sub = _frame_for(df, f"{code}.AX")
+        sub = _frame_for(df, f"{code}{suffix}")
         if sub is None and single:
             sub = df  # single-ticker results may be flat
         if sub is None or getattr(sub, "empty", True):
@@ -195,17 +225,23 @@ def rows_from_frame(df: Any, codes: list[str], fetched_at: str) -> list[dict[str
     return out
 
 
-def actions_from_frame(df: Any, codes: list[str], fetched_at: str) -> list[dict[str, Any]]:
+def actions_from_frame(
+    df: Any,
+    codes: list[str],
+    fetched_at: str,
+    suffix: str = DEFAULT_SUFFIX,
+    currency: str = DEFAULT_CURRENCY,
+) -> list[dict[str, Any]]:
     """Split and dividend rows (DAT-231) from the same yfinance result as the bars. The columns
     "Stock Splits" (new shares per old share: 2.0 = two-for-one) and "Dividends" (cash per share,
-    AUD) exist because the download is made with actions=True; a frame without them gives no rows.
+    the market currency) exist because the download is made with actions=True; a frame without them gives no rows.
     Zero, NaN and a split ratio of exactly 1 mean "no action that day" and are skipped."""
     out: list[dict[str, Any]] = []
     if df is None or getattr(df, "empty", True):
         return out
     single = len(codes) == 1
     for code in codes:
-        sub = _frame_for(df, f"{code}.AX")
+        sub = _frame_for(df, f"{code}{suffix}")
         if sub is None and single:
             sub = df
         if sub is None or getattr(sub, "empty", True):
@@ -221,7 +257,7 @@ def actions_from_frame(df: Any, codes: list[str], fetched_at: str) -> list[dict[
             base = {
                 "code": code,
                 "ex_date": day.isoformat(),
-                "currency": "AUD",
+                "currency": currency,
                 "source": "yahoo",
                 "fetched_at": fetched_at,
             }
@@ -314,6 +350,8 @@ def fetch_all(
     clock: Callable[[], float] = time.monotonic,
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     actions_out: list[dict[str, Any]] | None = None,
+    suffix: str = DEFAULT_SUFFIX,
+    currency: str = DEFAULT_CURRENCY,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Download in chunks, never closer together than `min_gap_s`. Returns (rows, report).
     DAT-231: each request also asks for the corporate actions (actions=True, same request, no extra
@@ -325,7 +363,7 @@ def fetch_all(
     requests = 0
     retries = 0
     for chunk in chunks(codes, chunk_size):
-        tickers = [f"{c}.AX" for c in chunk]
+        tickers = [f"{c}{suffix}" for c in chunk]
         attempt = 0
         while True:
             if last_request is not None:
@@ -358,9 +396,9 @@ def fetch_all(
                     continue
                 raise FetchError(f"download failed: {type(exc).__name__}") from exc
         stamp = now().strftime("%Y-%m-%dT%H:%M:%S.000Z")
-        rows.extend(rows_from_frame(df, chunk, stamp))
+        rows.extend(rows_from_frame(df, chunk, stamp, suffix))
         if actions_out is not None:
-            actions_out.extend(actions_from_frame(df, chunk, stamp))
+            actions_out.extend(actions_from_frame(df, chunk, stamp, suffix, currency))
     got = {r["code"] for r in rows}
     report = {
         "requested": len(codes),
@@ -388,6 +426,8 @@ def run(
         except json.JSONDecodeError as exc:
             raise InputError("request file is not valid JSON") from exc
     codes, start, end = parse_request(raw)
+    suffix = parse_suffix(raw)
+    currency = parse_currency(raw)
     chunk_size, min_gap_s = load_throttle(env)
     if download is None:
         import yfinance as yf  # imported late so tests and --help work without it
@@ -395,7 +435,16 @@ def run(
         download = yf.download
     actions: list[dict[str, Any]] | None = [] if actions_output_path else None
     rows, report = fetch_all(
-        codes, start, end, chunk_size, min_gap_s, download, sleep=sleep, actions_out=actions
+        codes,
+        start,
+        end,
+        chunk_size,
+        min_gap_s,
+        download,
+        sleep=sleep,
+        actions_out=actions,
+        suffix=suffix,
+        currency=currency,
     )
     tmp = f"{output_path}.tmp"
     with open(tmp, "w", encoding="utf-8") as f:

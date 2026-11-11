@@ -2,6 +2,8 @@
 // M3 design decisions 4, 9 and 12, D-069). Pure functions over bigint micro and exact rationals;
 // every rounding is delegated to src/lib/money (tick.ts slippedFill: adverse, onto the tick grid).
 import { type Micro } from "@/lib/money/micro";
+import type { MarketProfile } from "@/lib/market/profileCore.mjs";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import {
   cmpRat,
   makeRational,
@@ -19,27 +21,36 @@ export type SlippageBucket = {
   readonly bps: Rational;
 };
 
+/** The slippage buckets of a market's profile (`slippage_buckets`): bps as exact rationals, sorted high to low. */
+export function slippageBucketsOf(profile: MarketProfile): readonly SlippageBucket[] {
+  const s = profile.slippage;
+  if (s === null) throw new Error(`slippage buckets for market ${profile.code} not built (M20)`);
+  return s.buckets.map((b) => ({ fromAdvMicro: b.fromAdvMicro, bps: makeRational(BigInt(b.bps)) }));
+}
+
 /**
  * [VERIFY] ARN-032 (l.65) "ADV >= A$5M 10, A$1-5M 25, A$250k-1M 60, A$100-250k 120 bps"; ch.15
  * `slippage_buckets` (+/-50 %, Owner). Sorted high to low. Decision 9: edges are lower-inclusive
  * (ADV exactly A$5M is the 10 bps bucket) and ADV below A$100k uses the 120 bps bucket (the last
  * entry applies to everything under its edge too). Not Owner-approved yet.
  */
-export const SLIPPAGE_BUCKETS: readonly SlippageBucket[] = [
-  { fromAdvMicro: 5_000_000_000_000n, bps: makeRational(10n) },
-  { fromAdvMicro: 1_000_000_000_000n, bps: makeRational(25n) },
-  { fromAdvMicro: 250_000_000_000n, bps: makeRational(60n) },
-  { fromAdvMicro: 100_000_000_000n, bps: makeRational(120n) },
-];
+export const SLIPPAGE_BUCKETS: readonly SlippageBucket[] = slippageBucketsOf(homeProfile());
 export const SLIPPAGE_BUCKETS_VERIFIED = false;
 export const SLIPPAGE_SPEC_REF = "spec 05 ARN-032 l.65; ch.15 slippage_buckets";
 
-/** ARN-032 default `tick_cross_factor` (ch.15, 0.5 to 2). */
-export const DEFAULT_TICK_CROSS_FACTOR: Rational = makeRational(1n);
-/** Decision 4: stall-floor entry slippage is max(10 bps, one tick). */
-export const DEFAULT_STALL_FLOOR_BPS: Rational = makeRational(10n);
-/** Decision 12: ARN-013 threshold, 0.5 % of ADV (new key `untradeable_adv_pct`). */
-export const DEFAULT_UNTRADEABLE_ADV_FRACTION: Rational = makeRational(1n, 200n);
+/** ARN-032 default `tick_cross_factor` (ch.15, 0.5 to 2), from the home market's profile. */
+export const DEFAULT_TICK_CROSS_FACTOR: Rational = makeRational(
+  BigInt(homeProfile().slippage!.tick_cross_factor),
+);
+/** Decision 4: stall-floor entry slippage is max(stall_floor_bps, one tick); the home market's figure. */
+export const DEFAULT_STALL_FLOOR_BPS: Rational = makeRational(
+  BigInt(homeProfile().slippage!.stall_floor_bps),
+);
+/** Decision 12: ARN-013 threshold (AU 0.5 % of ADV; new key `untradeable_adv_pct`), from the profile. */
+export const DEFAULT_UNTRADEABLE_ADV_FRACTION: Rational = makeRational(
+  BigInt(homeProfile().slippage!.untradeable_adv_fraction.num),
+  BigInt(homeProfile().slippage!.untradeable_adv_fraction.den),
+);
 
 /**
  * Bucket bps for a 20-session ADV (micro-AUD). Edges lower-inclusive; ADV under the lowest edge

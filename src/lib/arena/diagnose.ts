@@ -14,7 +14,9 @@ import { createClient, type Client, type InStatement } from "@libsql/client";
 import { loadCalendar } from "./closeBooks";
 import { loadExecutions } from "./cohortWriter";
 import { loadConfirmedActions } from "./corpActionWriter";
-import { INDEX_CODE, loadDayInputs } from "@/lib/agents/candidates";
+import { loadDayInputs } from "@/lib/agents/candidates";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
+import { benchmarkIndexOf, homeProfile } from "@/lib/market/staticProfile.mjs";
 import { runFamilies, type FamilyOutput } from "@/lib/agents/families";
 import { defaultAgentParams, loadAgentParams } from "@/lib/agents/params";
 import { regimeWarmupCloses } from "@/lib/agents/regime";
@@ -24,7 +26,7 @@ import { addDays, previousTradingDay } from "@/lib/data/pipeline/rules.mjs";
 import { TIER_RULES } from "@/lib/data/universe/tiers.mjs";
 import { measure as measureSplits } from "@/lib/data/splitFrequency";
 
-const MARKET = "AU";
+const MARKET = HOME_MARKET; // an AU diagnostic (the batch CLIs take --market); see D-1031
 const READ = /^\s*(SELECT|WITH)\b/i; // money-float-ok: a regular expression, not money
 const WRITE = /\b(INSERT|UPDATE|DELETE|REPLACE|UPSERT|CREATE|DROP|ALTER|ATTACH|PRAGMA|VACUUM)\b/i; // money-float-ok: a regular expression, not money
 
@@ -237,7 +239,7 @@ export async function diagnoseDay(
   const ix = await db.execute({
     sql: `SELECT COUNT(*) AS n, SUM(CASE WHEN published_at < ? THEN 1 ELSE 0 END) AS visible,
             MIN(d) AS first FROM index_bar WHERE market = ? AND index_code = ? AND d <= ?`,
-    args: [day.cutoff, MARKET, INDEX_CODE, d],
+    args: [day.cutoff, MARKET, benchmarkIndexOf(MARKET), d],
   });
   const stored = await db.execute({
     sql: `SELECT d, raw_state, state FROM regime_daily WHERE market = ? AND d <= ?
@@ -364,7 +366,7 @@ export async function tradesReadout(
     const net = Number(r.net); // money-float-ok: a display percentage, never stored
     out(
       `  ${String(r.family)} ${String(r.exit_type)}: trades=${n} wins=${Number(r.wins)} ` +
-        `net=${cost > 0 ? ((net / cost) * 100).toFixed(2) : "0.00"}% of cost (A$${(net / 1e6).toFixed(2)})`,
+        `net=${cost > 0 ? ((net / cost) * 100).toFixed(2) : "0.00"}% of cost (${homeProfile().currencyFormat!.symbol}${(net / 1e6).toFixed(2)})`,
     );
   }
   const open = await db.execute({

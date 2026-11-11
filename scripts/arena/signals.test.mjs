@@ -32,6 +32,26 @@ async function freshDb() {
   return { dir, url, db };
 }
 
+test("signals.mjs: --market IN under the seed is refused, exit 2, no run record (MKT-110 a)", async () => {
+  const { dir, url, db } = await freshDb();
+  try {
+    const lines = [];
+    const code = await signals(
+      ["--date", "2026-10-13", "--market", "IN"],
+      { TURSO_MAIN_URL: url, TURSO_MAIN_TOKEN: "secret-token-do-not-print" },
+      { nowMs: () => NOW, out: (s) => lines.push(s) },
+    );
+    assert.equal(code, 2);
+    assert.equal(lines[0], "arena-2b: refused: market not enabled");
+    assert.doesNotMatch(lines.join("\n"), /secret|file:/);
+    const runs = await db.execute("SELECT COUNT(*) AS n FROM run_record");
+    assert.equal(Number(runs.rows[0].n), 0);
+  } finally {
+    db.close();
+    cleanup(dir);
+  }
+});
+
 test("signals.mjs: data_only production records a skip and writes nothing", async () => {
   const { dir, url, db } = await freshDb();
   try {

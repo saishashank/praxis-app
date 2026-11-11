@@ -105,3 +105,16 @@ def test_main_writes_file_and_prints_counts_only(tmp_path, monkeypatch, capsys):
     assert fp.main(["--plan", str(plan), "--output", str(out)]) == 0
     assert json.loads(out.read_text())["bars"]
     assert "ZZA" not in capsys.readouterr().out
+
+
+def test_plan_suffix_reaches_the_tickers():
+    seen = []
+
+    def download(**kw):
+        seen.append(kw["tickers"])
+        return frame(["ZZA", "ZZB"])
+
+    fp.fetch_month({**PLAN, "suffix": ".NS"}, 100, 1, download, sleep=lambda s: None)
+    assert seen == [["ZZA.NS", "ZZB.NS"]]
+    with pytest.raises(yf_fetch.InputError):
+        fp.fetch_month({**PLAN, "suffix": "NS"}, 100, 1, download, sleep=lambda s: None)

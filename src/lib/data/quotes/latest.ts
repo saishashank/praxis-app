@@ -4,10 +4,12 @@
 // exits reads this table: stops and exits stay at the close (ARN-021).
 import type { Exec } from "@/lib/cortex/store/common";
 import { marketDate } from "@/lib/data/calendar";
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import type { DelayedQuote } from "./types";
 
 /** The quote date is the exchange's own date (the ASX trades on Sydney time). */
-export const QUOTE_TZ = "Australia/Sydney";
+export const QUOTE_TZ: string = homeProfile().tz!;
 /** Codes per read (SQLite host-parameter headroom). */
 export const LATEST_READ_MAX = 200; // threshold-ok: query parameter cap
 
@@ -118,7 +120,7 @@ export function newerThanClose(
 export function quoteTimeMelbourne(quoteAt: string): string {
   const t = new Date(quoteAt);
   return new Intl.DateTimeFormat("en-AU", {
-    timeZone: "Australia/Melbourne",
+    timeZone: OWNER_TZ,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,

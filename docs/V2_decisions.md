@@ -646,3 +646,6 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1016 | Cortex schema hash (A1, found by the step-0 baseline): the night's input manifest carries schemaSha, the sha256 of the table names (src/lib/cortex/stage.ts),... |
 | D-1030 | Static seed profile and derived legacy exports (B1, CXA-002, D-1003): src/lib/market/staticProfile.mjs (staticProfile(code), homeProfile(), benchmarkIndexOf(... |
 | D-1031 | Rule-set readers, angle filter and what B1 left alone (B1, CXA-002 e, f, g, i; PRD-039): src/lib/cortex/profileReaders.ts holds classificationReader, haltRea... |
+| D-1032 | --market on the arena and picks command lines (B2, MKT-110 a, D-996): src/lib/arena/marketFlag.ts resolveCliMarket(db, argv): --market <CODE>, else the singl... |
+| D-1033 | Money engines take the market's table (B2, CXA-002 b, d): tickFor, slippageAmount, slippageTicks, stallSlippageMicro and slippedFill take the tick table as t... |
+| D-1034 | Python fetchers (B2, CXA-002 h): yahoo_fetch.py and fetch_prices.py read the Yahoo ticker suffix (and yahoo_fetch.py the currency) from the request or plan J... |

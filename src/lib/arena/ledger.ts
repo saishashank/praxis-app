@@ -27,6 +27,7 @@
 //                          cash_recv -net, cash_settled +net  (sell)
 // Corrections are compensating `reversal` txns (decision 13), never edits.
 import { assertInt64, type Micro } from "@/lib/money/micro";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import { makeRational, mulRat, type Rational } from "@/lib/money/rational";
 import { floorRat, roundHalfAwayFromZero } from "@/lib/money/round";
 import { addDays, nextTradingDay, type CalendarRow } from "@/lib/data/calendar";
@@ -35,8 +36,8 @@ import { LEDGER_ACCOUNTS, type LedgerAccount, type LedgerKind } from "./schema";
 export const SETTLEMENT_MODES = ["matched", "conservative"] as const;
 /** ARN-025: matched (default) or conservative. */
 export type SettlementMode = (typeof SETTLEMENT_MODES)[number];
-/** ARN-025: AU settlement is T+2 trading sessions (ARN-027 trading calendar). */
-export const SETTLEMENT_LAG_SESSIONS = 2;
+/** ARN-025: settlement is `settlement_days` trading sessions after the trade (AU T+2; ARN-027 trading calendar), from the home market's profile. */
+export const SETTLEMENT_LAG_SESSIONS: number = homeProfile().settlementDays!;
 
 export type Posting = { readonly account: LedgerAccount; readonly deltaMicro: Micro };
 
@@ -310,19 +311,30 @@ export type SettlementItem = {
   readonly netMicro: Micro;
 };
 
-/** T+2 trading sessions after the trade date, skipping weekends and calendar holidays. */
-export function settlementDate(tradeD: string, calendar: readonly CalendarRow[]): string {
+/**
+ * `lagSessions` trading sessions after the trade date (default: the home market's `settlement_days`, AU T+2),
+ * skipping weekends and calendar holidays.
+ */
+export function settlementDate(
+  tradeD: string,
+  calendar: readonly CalendarRow[],
+  lagSessions: number = SETTLEMENT_LAG_SESSIONS,
+): string {
   let d = tradeD;
-  for (let i = 0; i < SETTLEMENT_LAG_SESSIONS; i++) d = nextTradingDay(d, calendar);
+  for (let i = 0; i < lagSessions; i++) d = nextTradingDay(d, calendar);
   return d;
 }
 
-export function settlementItem(fill: LedgerFill, calendar: readonly CalendarRow[]): SettlementItem {
+export function settlementItem(
+  fill: LedgerFill,
+  calendar: readonly CalendarRow[],
+  lagSessions: number = SETTLEMENT_LAG_SESSIONS,
+): SettlementItem {
   return {
     fillId: fill.id,
     side: fill.side,
     tradeD: fill.d,
-    settleD: settlementDate(fill.d, calendar),
+    settleD: settlementDate(fill.d, calendar, lagSessions),
     netMicro: fillNetMicro(fill),
   };
 }

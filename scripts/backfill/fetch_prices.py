@@ -1,7 +1,7 @@
 """Yahoo price-history fetch for one month (M4 T16a, D-092 draft; D-086, DAT-125).
 
 Runs in the job `backfill-prices` with NO secrets and NO database. Reads plan.json
-({"month","start","end","codes"}), downloads daily bars for `<code>.AX` with auto_adjust=False and
+({"month","start","end","codes"}), downloads daily bars for `<code><suffix>` (the plan's "suffix", the market profile's Yahoo suffix) with auto_adjust=False and
 actions=True (Yahoo then returns split-adjusted, dividend-unadjusted bars plus the split column),
 and writes prices.json {"month","vendor":"adjusted","bars":[{code,d,o,h,l,c,volume}],
 "splits":[{code,exDate,ratio}]}. Nothing is repaired (DAT-004): an unusable value is written as
@@ -24,7 +24,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "ingest"))
 import yahoo_fetch as yf_fetch  # noqa: E402  (shared throttle, cleaning and error classes)
 
 
-def month_rows(df: Any, codes: list[str]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def month_rows(
+    df: Any, codes: list[str], suffix: str = yf_fetch.DEFAULT_SUFFIX
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """(bars, splits) from a yfinance frame; all-NaN days are skipped, split value 0/NaN ignored."""
     bars: list[dict[str, Any]] = []
     splits: list[dict[str, Any]] = []
@@ -32,7 +34,7 @@ def month_rows(df: Any, codes: list[str]) -> tuple[list[dict[str, Any]], list[di
         return bars, splits
     single = len(codes) == 1
     for code in codes:
-        sub = yf_fetch._frame_for(df, f"{code}.AX")
+        sub = yf_fetch._frame_for(df, f"{code}{suffix}")
         if sub is None and single:
             sub = df
         if sub is None or getattr(sub, "empty", True):
@@ -80,6 +82,7 @@ def fetch_month(
             raise yf_fetch.InputError("plan.start/end must be YYYY-MM-DD")
     if not isinstance(month, str) or not start.startswith(month) or start > end:
         raise yf_fetch.InputError("plan.month does not match start/end")
+    suffix = yf_fetch.parse_suffix(plan)
     end_exclusive = (date.fromisoformat(end) + timedelta(days=1)).isoformat()
     bars: list[dict[str, Any]] = []
     splits: list[dict[str, Any]] = []
@@ -96,7 +99,7 @@ def fetch_month(
             last = clock()
             try:
                 df = download(
-                    tickers=[f"{c}.AX" for c in chunk],
+                    tickers=[f"{c}{suffix}" for c in chunk],
                     start=start,
                     end=end_exclusive,
                     interval="1d",
@@ -114,7 +117,7 @@ def fetch_month(
                     attempt += 1
                     continue
                 raise yf_fetch.FetchError(f"download failed: {type(exc).__name__}") from exc
-        b, s = month_rows(df, chunk)
+        b, s = month_rows(df, chunk, suffix)
         bars.extend(b)
         splits.extend(s)
     bars.sort(key=lambda r: (r["code"], r["d"]))

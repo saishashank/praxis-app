@@ -13,13 +13,14 @@
 // incident (once while open). Nothing from the file is ever written to a record, log or incident
 // beyond counts. Delisted instruments are never deleted (the table refuses DELETE, DAT-130).
 import type { Client, InStatement } from "@libsql/client";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 import { openS2Once } from "@/lib/heartbeat/incidents";
 import { finishRun, hasSuccess, startRun } from "@/lib/runs/runRecord";
 import { DELIST_REASON, planUniverse, REUSE_SUSPECTED, type UniverseCounts } from "./apply.mjs";
 import { parseListedCompanies, type ParseStats } from "./parse.mjs";
 
 export const UNIVERSE_JOB = "universe-import";
-export const UNIVERSE_MARKET = "AU";
+export const UNIVERSE_MARKET: string = HOME_MARKET;
 export const UNIVERSE_INCIDENT = "universe_shrink";
 /** V1-S7: a delisted code came back looking like a different company; it stays delisted until the Owner decides. */
 export const CODE_REUSE_INCIDENT = "code_reuse_suspected";

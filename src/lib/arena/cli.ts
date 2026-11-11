@@ -6,7 +6,7 @@
 //   close-books [--date YYYY-MM-DD] [--wait-minutes N] [--max-sessions N] [--replay]
 //   signals [--date YYYY-MM-DD] [--wait-minutes N] [--replay] [--phase 2b|3|learn|words|all]
 //                (batch 2b, M4 T8; batch 3, T15; then A6 `learn` and the `words` text, M6 T11; all = in that order)
-//   replay --db file:<path> --from YYYY-MM-DD --to YYYY-MM-DD [--market AU]
+//   replay --db file:<path> --from YYYY-MM-DD --to YYYY-MM-DD [--market <CODE>]
 //
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, COMMIT_SHA (optional), GITHUB_OUTPUT (optional).
 // Output: statuses and counts only. Never a row, a code, a URL, a token or a driver error.
@@ -36,10 +36,10 @@ import {
   recordCatchUpCapped,
   type CloseBooksResult,
 } from "./closeBooks";
+import { loadProfile } from "@/lib/market/profile";
+import { resolveCliMarket } from "./marketFlag";
 import { replaySessions } from "./replay";
 
-const MARKET = "AU";
-const MARKET_TZ = "Australia/Sydney";
 const DEFAULT_WAIT_MINUTES = 20;
 const POLL_MS = 30_000;
 const DEFAULT_MAX_SESSIONS = 10;
@@ -81,20 +81,20 @@ function summary(r: CloseBooksResult): string {
   );
 }
 
-async function hasMarker(db: Client, d: string): Promise<boolean> {
+async function hasMarker(db: Client, market: string, d: string): Promise<boolean> {
   const rs = await db.execute({
     sql: "SELECT 1 FROM completion_marker WHERE market = ? AND d = ? AND kind = 'data'",
-    args: [MARKET, d],
+    args: [market, d],
   });
   return rs.rows.length > 0;
 }
 
 /** Last session with a successful batch 2a (the record's scheduled_for), or null. */
-async function lastClosed(db: Client): Promise<string | null> {
+async function lastClosed(db: Client, market: string): Promise<string | null> {
   const rs = await db.execute({
     sql: `SELECT MAX(scheduled_for) AS d FROM run_record
           WHERE job = ? AND market = ? AND status = 'success'`,
-    args: [ARENA_JOB, MARKET],
+    args: [ARENA_JOB, market],
   });
   const d = rs.rows.length === 0 ? null : rs.rows[0].d;
   return d === null || d === undefined ? null : String(d);
@@ -136,9 +136,16 @@ export async function closeBooksMain(
   let exit = 0;
   const lines: string[] = [];
   try {
-    const target = date ?? marketDate(new Date(nowMs()), MARKET_TZ);
-    const calendar = await loadCalendar(db, MARKET);
-    const done = await lastClosed(db);
+    const chosen = await resolveCliMarket(db, argv);
+    if (!chosen.ok) {
+      out(`arena-2a: ${chosen.line}`);
+      return 2;
+    }
+    const market = chosen.market;
+    const tz = (await loadProfile(db, market)).tz!;
+    const target = date ?? marketDate(new Date(nowMs()), tz);
+    const calendar = await loadCalendar(db, market);
+    const done = await lastClosed(db, market);
     let sessions =
       done === null || done >= target
         ? [target]
@@ -151,7 +158,7 @@ export async function closeBooksMain(
     if (capped > 0) sessions = sessions.slice(0, cap);
     const mode = await db.execute({
       sql: "SELECT mode FROM market WHERE code = ?",
-      args: [MARKET],
+      args: [market],
     });
     const writes = mode.rows.length > 0 && (String(mode.rows[0].mode) === "full" || replay);
     for (const d of sessions) {
@@ -159,10 +166,10 @@ export async function closeBooksMain(
       // Batch 1 late: wait for the target's marker only when this run could actually write
       if (writes && isTarget) {
         const deadline = nowMs() + wait * 60_000;
-        while (!(await hasMarker(db, d)) && nowMs() < deadline) await sleep(POLL_MS);
+        while (!(await hasMarker(db, market, d)) && nowMs() < deadline) await sleep(POLL_MS);
       }
       const result = await closeBooksDay(db, {
-        market: MARKET,
+        market: market,
         d,
         replay,
         strictCalendar: !replay, // D-711
@@ -190,7 +197,7 @@ export async function closeBooksMain(
       // R4-I3 (D-833): a record, so System Health shows the open target without GitHub
       if (!replay) {
         await recordCatchUpCapped(db, {
-          market: MARKET,
+          market: market,
           d: target,
           closed: sessions.length,
           remaining: capped,
@@ -230,9 +237,14 @@ export async function replayMain(
     out("arena-replay: refused (a replay runs against a local file: database only)");
     return 2;
   }
-  const market = flag(argv, "--market") ?? MARKET;
   const db = openDb(url, undefined);
   try {
+    const chosen = await resolveCliMarket(db, argv);
+    if (!chosen.ok) {
+      out(`arena-replay: ${chosen.line}`);
+      return 2;
+    }
+    const market = chosen.market;
     const results = await replaySessions(db, {
       market,
       from,
@@ -315,10 +327,10 @@ function rulesOnlyLlm(ctx: { db: Client; params: AgentParams; kbVersion: string 
   return { r5Router: make(), providers: [], routerFor: () => make(), store };
 }
 
-async function hasClosedBooks(db: Client, d: string): Promise<boolean> {
+async function hasClosedBooks(db: Client, market: string, d: string): Promise<boolean> {
   const rs = await db.execute({
     sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND status IN ('success', 'degraded')`,
-    args: [closeBooksKey(MARKET, d)],
+    args: [closeBooksKey(market, d)],
   });
   return rs.rows.length > 0;
 }
@@ -367,18 +379,25 @@ export async function signalsMain(
   let lastLearn = "";
   let lastWords = "";
   try {
-    const d = flag(argv, "--date") ?? marketDate(new Date(nowMs()), MARKET_TZ);
-    const calendar = await loadCalendar(db, MARKET);
+    const chosen = await resolveCliMarket(db, argv);
+    if (!chosen.ok) {
+      out(`arena-2b: ${chosen.line}`);
+      return 2;
+    }
+    const market = chosen.market;
+    const tz = (await loadProfile(db, market)).tz!;
+    const d = flag(argv, "--date") ?? marketDate(new Date(nowMs()), tz);
+    const calendar = await loadCalendar(db, market);
     const mode = await db.execute({
       sql: "SELECT mode FROM market WHERE code = ?",
-      args: [MARKET],
+      args: [market],
     });
     const writes = mode.rows.length > 0 && (String(mode.rows[0].mode) === "full" || replay);
     let runReview = phase === "3";
     if (phase === "2b" || phase === "all") {
       if (writes) {
         const deadline = nowMs() + wait * 60_000;
-        while (!(await hasClosedBooks(db, d)) && nowMs() < deadline) await sleep(POLL_MS);
+        while (!(await hasClosedBooks(db, market, d)) && nowMs() < deadline) await sleep(POLL_MS);
         // GL-05: then the "first completed poll after the cut-off" marker, at most 4 minutes (bounded,
         // never past cut-off + 4 min). A missing marker never stalls the night: signalsDay records
         // `cutoff_poll_missing` on the run and the announcements are bounded at cut-off + 4 min.
@@ -386,7 +405,7 @@ export async function signalsMain(
           let found = false;
           try {
             found = await waitForCutoffPoll(db, {
-              market: MARKET,
+              market: market,
               d,
               cutoffIso: decisionCutoffUtc(d, (await loadAgentParams(db)).decisionCutoff),
               nowMs,
@@ -399,7 +418,7 @@ export async function signalsMain(
         }
       }
       const result = await signalsDay(db, {
-        market: MARKET,
+        market: market,
         d,
         replay,
         strictCalendar: !replay, // D-711
@@ -408,7 +427,7 @@ export async function signalsMain(
         commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
         onTiming: (stage, ms, note) =>
           out(
-            `arena-2b ${MARKET} ${d}: stage=${stage} ms=${ms}${note === undefined ? "" : ` ${note}`}`,
+            `arena-2b ${market} ${d}: stage=${stage} ms=${ms}${note === undefined ? "" : ` ${note}`}`,
           ),
       });
       out(signalsSummary(result));
@@ -429,7 +448,7 @@ export async function signalsMain(
     }
     if (runReview) {
       const review = await reviewDay(db, {
-        market: MARKET,
+        market: market,
         d,
         replay,
         strictCalendar: !replay, // D-711
@@ -441,7 +460,7 @@ export async function signalsMain(
         notify: { env },
         onStage: (stage, ms, note) =>
           out(
-            `arena-3 ${MARKET} ${d}: stage=${stage} ms=${ms}${note === undefined ? "" : ` ${note}`}`,
+            `arena-3 ${market} ${d}: stage=${stage} ms=${ms}${note === undefined ? "" : ` ${note}`}`,
           ),
       });
       out(reviewSummary(review));
@@ -457,7 +476,7 @@ export async function signalsMain(
     const commitSha = has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined;
     if (phase === "learn" || (phase === "all" && writes)) {
       const learn = await learnDay(db, {
-        market: MARKET,
+        market: market,
         d,
         replay,
         calendar,
@@ -472,7 +491,7 @@ export async function signalsMain(
     if (phase === "words" || (phase === "all" && writes)) {
       const llm = deps.wordsLlm ?? rulesOnlyLlm;
       const words = await wordsDay(db, {
-        market: MARKET,
+        market: market,
         d,
         replay,
         calendar,
