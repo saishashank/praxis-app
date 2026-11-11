@@ -97,7 +97,7 @@ test("secrets appear only in env of the replay step, which is last; the mode goe
   assert.equal(s.env.DATA_REPO, "${{ github.repository }}-data");
   assert.equal(
     s.run,
-    'node --max-old-space-size=12288 scripts/replay/run.mjs --mode "$REPLAY_MODE"',
+    'node --max-old-space-size=12288 scripts/replay/run.mjs --mode "$REPLAY_MODE" ${MARKET_INPUT:+--market "$MARKET_INPUT"}',
   );
   assert.match(s.env.REPLAY_MODE, /inputs\.mode/);
   assert.equal(steps[steps.length - 1], s);
@@ -115,7 +115,7 @@ test("mode learning (M6 T12): still dispatch-only, same single secrets step, slo
   const run = steps[steps.length - 1];
   assert.equal(
     run.run,
-    'node --max-old-space-size=12288 scripts/replay/run.mjs --mode "$REPLAY_MODE"',
+    'node --max-old-space-size=12288 scripts/replay/run.mjs --mode "$REPLAY_MODE" ${MARKET_INPUT:+--market "$MARKET_INPUT"}',
   );
   assert.equal(JSON.stringify(job).match(/secrets./g).length, 3);
   // the CLI accepts the mode the workflow offers

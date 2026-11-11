@@ -16,7 +16,8 @@ import {
   runRoutes,
   type RouteEnv,
 } from "../src/routes";
-import { AU_SLOTS, type Slot } from "../src/schedule";
+import { type Slot } from "../src/schedule";
+import { AU_SLOTS, warmMarkets } from "./auRow";
 import { TURSO_TOKEN, TURSO_URL, makeDb, makeNet, rows, type Net } from "./fakeTurso";
 
 const SECRET = "7".repeat(64);
@@ -241,6 +242,7 @@ describe("routeSlotsDue and decideRoutes (pure)", () => {
 describe("runRoutes", () => {
   it("posts nothing with the shipped table and no list: one read (for the list), no post, no log", async () => {
     dispatchOn();
+    warmMarkets();
     net.pipelines = 0;
     const s = await runRoutes(ENV, at(MON, "20:00"), deps(at(MON, "20:00")));
     expect(s).toEqual({ requests: 1, posted: [], failed: [] });

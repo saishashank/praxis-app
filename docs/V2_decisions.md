@@ -644,3 +644,12 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1014 | Owner edit of a mkt.* key (A1, DAT-242): updateConfig (audit first) writes the config_version row as for any key and then calls setProfileField (field row, m... |
 | D-1015 | Derived lists (A1, D-993): MODE_MARKETS is builtMarkets(); calendarMarkets() is the keys of CALENDAR_RULE_MODULES and CALENDAR_MARKETS stays as a constant de... |
 | D-1016 | Cortex schema hash (A1, found by the step-0 baseline): the night's input manifest carries schemaSha, the sha256 of the table names (src/lib/cortex/stage.ts),... |
+| D-1045 | Worker slot table per enabled market (C1, D-996): worker/src/schedule.ts exports slotsFor(row) (the whole table of one market row, in table order) and slotTa... |
+| D-1046 | Zone rules and feed slots (C1, D-1004): src/lib/market/clockTables.mjs (allow-listed) holds ZONE_RULES (zone name to local-time rule; Sydney and Melbourne sh... |
+| D-1047 | Market rows in the Worker (C1, D-996, PRD-045): one statement (MARKETS_SQL, WHERE enabled = 1, at most 3 rows) rides in the clock's and the route poster's ex... |
+| D-1048 | Run now (C1, D-996): the request's market is the first gate: not in the enabled rows is refused: market_not_enabled (before "unknown job", "not listed" and "... |
+| D-1049 | Worker ASX files (C1, PRD-047): MARKET in asx/sentinel.ts is HOME_MARKET; the three SQL reads take it as a parameter and add enabled = 1 to the market read (... |
+| D-1050 | Script market rule (C2, MKT-110 a, D-996): src/lib/market/scriptMarket.mjs is the one implementation. --market <CODE> (or --market=CODE; empty = omitted) nam... |
+| D-1051 | Home market constants (C2, C3, D-993, D-1015): the modules that had MARKET = "AU", a Sydney or Melbourne zone, "18:10" or "AUD" with no profile to hand (the... |
+| D-1052 | Workflow pass-through (C2, D-996): ingest-batch1, arena-close, arena-signals, replay, backfill-history, backfill-prices and backfill-index gain a dispatch in... |
+| D-1053 | Slot times as data (C1, C2): worker/src/schedule.ts keeps one slot({...}) entry per slot with the time as an expression (a.b1, ops.maintenance.at, feed.poll.... |

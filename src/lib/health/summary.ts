@@ -1,5 +1,6 @@
 // System Health data (PLT-017, PLT-061, UX-090/092/117). Owner-only fields are ABSENT (not null)
 // for other roles: error summaries, per-secret results and details (SEC-101, ROL-102a).
+import { HOME_MARKET, HOME_TZ } from "@/lib/market/homeMarket.mjs";
 import type { Client } from "@libsql/client";
 import type { Role } from "@/lib/auth/permissions";
 import { latestPerJob, type RunStatus } from "@/lib/runs/runRecord";
@@ -113,10 +114,10 @@ async function getQuota(
 // AU trading calendar status for the current Sydney year and the next one (only years with rows).
 async function getCalendar(mainDb: Client, now: Date): Promise<CalendarSummary[] | null> {
   try {
-    const year = Number(marketDate(now, "Australia/Sydney").slice(0, 4));
+    const year = Number(marketDate(now, HOME_TZ).slice(0, 4));
     const out: CalendarSummary[] = [];
     for (const y of [year, year + 1]) {
-      const s = await calendarYearSummary(mainDb, "AU", y);
+      const s = await calendarYearSummary(mainDb, HOME_MARKET, y);
       if (s.total > 0) out.push(s);
     }
     return out;

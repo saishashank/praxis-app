@@ -21,7 +21,7 @@ const SHA_USES = /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/;
 
 test("workflow_dispatch only: no schedule, push or pull request trigger (PLT-015)", () => {
   assert.equal(wf.name, "Arena close the books (batch 2a)");
-  assert.equal(wf.on, "workflow_dispatch");
+  assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"]); // M19 C2: the only input is `market`
   assert.deepEqual(wf.permissions, {});
   assert.doesNotMatch(read(FILE), /^\s*(schedule|push|pull_request\w*):/m);
 });
@@ -64,7 +64,7 @@ test("the database secrets appear only in env of the one closing step, the prod 
   assert.equal(s.env.TURSO_MAIN_URL, "${{ secrets.TURSO_MAIN_URL_PROD }}");
   assert.equal(s.env.TURSO_MAIN_TOKEN, "${{ secrets.TURSO_MAIN_TOKEN_PROD }}");
   assert.equal(s.env.COMMIT_SHA, "${{ steps.approved.outputs.sha }}");
-  assert.equal(s.run, "node scripts/arena/close-books.mjs");
+  assert.equal(s.run, 'node scripts/arena/close-books.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"}');
   assert.ok(!String(s.run).includes("secrets."));
   assert.equal(s.with, undefined);
   assert.equal(wf.env, undefined);

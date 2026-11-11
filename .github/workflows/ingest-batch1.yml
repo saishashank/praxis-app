@@ -25,6 +25,12 @@ on:
     - cron: "15 7 * * *"
     - cron: "15 8 * * *"
   workflow_dispatch:
+    inputs:
+      market:
+        description: Market code (empty = the single enabled market; the Worker sets it when more than one market is enabled)
+        type: string
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -94,8 +100,9 @@ jobs:
       - run: npm ci
       - name: Plan the fetch (read-only)
         id: plan
-        run: node scripts/ingest/batch1.mjs prepare --request request.json
+        run: node scripts/ingest/batch1.mjs prepare ${MARKET_INPUT:+--market "$MARKET_INPUT"} --request request.json
         env:
+          MARKET_INPUT: ${{ inputs.market }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -120,8 +127,9 @@ jobs:
         run: node scripts/ingest/asic_fetch.mjs --request request.json --output short.json
       - name: Ingest batch 1
         if: ${{ !cancelled() && steps.plan.outcome == 'success' }}
-        run: node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json --actions actions.json
+        run: node scripts/ingest/batch1.mjs run ${MARKET_INPUT:+--market "$MARKET_INPUT"} --bars bars.json --index index.json --short short.json --actions actions.json
         env:
+          MARKET_INPUT: ${{ inputs.market }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
           COMMIT_SHA: ${{ steps.approved.outputs.sha }}
@@ -173,8 +181,9 @@ jobs:
       - run: npm ci
       - name: Plan the fetch (read-only)
         id: plan
-        run: node scripts/ingest/batch1.mjs prepare --request request.json
+        run: node scripts/ingest/batch1.mjs prepare ${MARKET_INPUT:+--market "$MARKET_INPUT"} --request request.json
         env:
+          MARKET_INPUT: ${{ inputs.market }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_STAGING }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_STAGING }}
       - name: Check out the private fixtures repo (read-only)
@@ -191,8 +200,9 @@ jobs:
         run: node scripts/ingest/recorded_day.mjs --request request.json --fixtures fixtures --output bars.json --index-output index.json --short-output short.json
       - name: Ingest batch 1
         if: ${{ !cancelled() && steps.plan.outcome == 'success' }}
-        run: node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json --actions actions.json
+        run: node scripts/ingest/batch1.mjs run ${MARKET_INPUT:+--market "$MARKET_INPUT"} --bars bars.json --index index.json --short short.json --actions actions.json
         env:
+          MARKET_INPUT: ${{ inputs.market }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_STAGING }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_STAGING }}
           COMMIT_SHA: ${{ github.sha }}

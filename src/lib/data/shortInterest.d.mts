@@ -1,6 +1,6 @@
 import type { Client } from "@libsql/client";
 
-export const SHORT_MARKET: "AU";
+export const SHORT_MARKET: string;
 export const SHORT_SOURCE: "asic_short";
 export const SHORT_WINDOW_DAYS: number;
 export const SHORT_MAX_DATES: number;

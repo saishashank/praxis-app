@@ -4,7 +4,9 @@
 // (src/lib/data/recorded/hostGuard.mjs) refuses every non-loopback host and counts refusals, and writes a
 // marker so the job can prove each process had the guard installed.
 //
-//   node scripts/e2e-day/recorded-day.mjs run --fixtures <dir> --work <dir> [--date YYYY-MM-DD]
+//   node scripts/e2e-day/recorded-day.mjs run --fixtures <dir> --work <dir> [--date YYYY-MM-DD] [--market CODE]
+//   --market (M19 C2, MKT-110 a): omitted = the single market the migrated database has enabled; a market that is not
+//   enabled exits 2 ("refused: market not enabled") before anything is created or written.
 //   node scripts/e2e-day/recorded-day.mjs check --work <dir>          PLT-073 deadlines (check.mjs --db)
 //   node scripts/e2e-day/recorded-day.mjs assert-net --work <dir>     no refusal, every guard marker present
 //
@@ -28,6 +30,14 @@ import {
   parseNetLog,
   writeGuardMarker,
 } from "../../src/lib/data/recorded/hostGuard.mjs";
+import { seedEnabledMarkets, seedSlots } from "../../src/lib/market/homeMarket.mjs";
+import { OWNER_TZ } from "../../src/lib/market/profileCore.mjs";
+import {
+  REFUSED_EXIT,
+  REFUSED_LINE,
+  REQUIRED_LINE,
+  takeMarketFlag,
+} from "../../src/lib/market/scriptMarket.mjs";
 import { sign } from "../smoke/sign.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -36,8 +46,7 @@ const PORT = 3100; // threshold-ok: the e2e port, as playwright.config.ts
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const HEALTH_WAIT_MS = 120_000; // threshold-ok: next start allowance
 const STEP_LIMIT_MS = 20 * 60_000; // threshold-ok: one step may not run longer than this
-const MARKET = "AU";
-const TZ = "Australia/Melbourne";
+const TZ = OWNER_TZ;
 const HEX = () => randomBytes(32).toString("hex");
 
 // ---- time -------------------------------------------------------------------------------------
@@ -92,21 +101,21 @@ export function nextWeekday(date) {
  * scripts at 17:30, 17:50 and 18:10, then the `evening` app phase (review send 20:00 and the viewer walk).
  * Each app phase is one start of the app at `at` with the signed calls it makes.
  */
-export function timeline(date) {
+export function timeline(date, anchors = seedSlots(seedEnabledMarkets()[0])) {
   const I = (d, t) => new Date(melbourneInstant(d, t)).toISOString();
   return {
     date,
     morning: [
       { id: "sentinel", at: I(date, "08:30"), calls: ["sentinel"] },
-      { id: "preopen", at: I(date, "09:54"), calls: ["preopen"] },
+      { id: "preopen", at: I(date, anchors.preopen_recheck[0]), calls: ["preopen"] },
       { id: "quote-poll", at: I(date, "10:20"), calls: ["quote-poll"] },
       { id: "scan-1", at: I(date, "10:32"), calls: ["intraday-scan"] },
       { id: "scan-2", at: I(date, "11:02"), calls: ["intraday-scan"] },
       { id: "scan-3", at: I(date, "11:32"), calls: ["intraday-scan"] },
     ],
-    batch1: I(date, "17:30"),
-    closeBooks: I(date, "17:50"),
-    signals: I(date, "18:10"),
+    batch1: I(date, anchors.b1),
+    closeBooks: I(date, anchors.b2a),
+    signals: I(date, anchors.b2b),
     evening: [{ id: "evening", at: I(date, "20:00"), calls: ["evening-review"], walk: true }],
     check: I(date, "21:00"),
   };
@@ -444,7 +453,7 @@ function walk(work, simNow) {
   });
 }
 
-async function seedDatabases({ work, fixtures, recordedDate, today }) {
+async function seedDatabases({ work, fixtures, recordedDate, today, market: MARKET }) {
   const fileUrl = (n) => pathToFileURL(path.join(work, n)).href;
   const main = createClient({ url: fileUrl("main.db") });
   const auth = createClient({ url: fileUrl("auth.db") });
@@ -525,13 +534,15 @@ async function seedDatabases({ work, fixtures, recordedDate, today }) {
 
 function parseArgs(argv) {
   const [cmd, ...rest] = argv;
-  const o = { cmd, fixtures: null, work: null, date: null, from: null };
-  for (let i = 0; i < rest.length; i++) {
-    const a = rest[i];
-    if (a === "--fixtures") o.fixtures = rest[++i] ?? null;
-    else if (a === "--work") o.work = rest[++i] ?? null;
-    else if (a === "--date") o.date = rest[++i] ?? null;
-    else if (a === "--from") o.from = rest[++i] ?? null;
+  const mk = takeMarketFlag(rest);
+  if (mk.error) return { error: mk.error };
+  const o = { cmd, fixtures: null, work: null, date: null, from: null, market: mk.market };
+  for (let i = 0; i < mk.argv.length; i++) {
+    const a = mk.argv[i];
+    if (a === "--fixtures") o.fixtures = mk.argv[++i] ?? null;
+    else if (a === "--work") o.work = mk.argv[++i] ?? null;
+    else if (a === "--date") o.date = mk.argv[++i] ?? null;
+    else if (a === "--from") o.from = mk.argv[++i] ?? null;
     else return { error: "unknown option" };
   }
   if (!["run", "check", "assert-net"].includes(String(cmd)))
@@ -550,6 +561,16 @@ export async function main(argv, env = process.env, deps = {}) {
     out(`recorded-day: ${o.error}`);
     return 2;
   }
+  // MKT-110 a: the day runs for an enabled market only, decided before anything is created or written
+  const enabledSeed = seedEnabledMarkets();
+  if (o.market !== null ? !enabledSeed.includes(o.market) : enabledSeed.length !== 1) {
+    out(
+      `recorded-day: ${o.market === null && enabledSeed.length > 1 ? REQUIRED_LINE : REFUSED_LINE}`,
+    );
+    return REFUSED_EXIT;
+  }
+  const market = o.market ?? enabledSeed[0];
+  const anchors = seedSlots(market);
   const work = path.resolve(o.work);
   if (o.cmd === "assert-net") {
     const logFile = path.join(work, "net.log");
@@ -614,7 +635,7 @@ export async function main(argv, env = process.env, deps = {}) {
   if (o.from !== null) {
     // A local resume: the databases and secrets of an earlier run in this folder are reused.
     const day = JSON.parse(readFileSync(path.join(work, "day.json"), "utf8"));
-    const tl = timeline(day.date);
+    const tl = timeline(day.date, anchors);
     const full = buildPlan({
       ...cfgRef,
       tl,
@@ -632,14 +653,14 @@ export async function main(argv, env = process.env, deps = {}) {
     writeFileSync(path.join(work, "net.log"), "");
     // The date is decided by the seed (it needs the migrated calendar), so the plan is built in two parts.
     const today = o.date ?? melbourneParts(Date.now()).date;
-    first = buildPlan({ ...cfgRef, tl: timeline(previousWeekday(today)) }).slice(0, 2);
+    first = buildPlan({ ...cfgRef, tl: timeline(previousWeekday(today), anchors) }).slice(0, 2);
     installHostGuard(guardEnv);
     installNetGuard(guardEnv, net);
     writeGuardMarker(guardEnv, "orchestrator");
     const r1 = await runPlan(first, { exec, out });
     if (r1.code !== 0) return 1;
-    const date = await seedDatabases({ work, fixtures: o.fixtures, recordedDate, today });
-    const tl = timeline(date);
+    const date = await seedDatabases({ work, fixtures: o.fixtures, recordedDate, today, market });
+    const tl = timeline(date, anchors);
     writeFileSync(path.join(work, "day.json"), JSON.stringify({ date, check: tl.check }));
     plan = buildPlan({
       ...cfgRef,

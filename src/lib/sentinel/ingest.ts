@@ -15,6 +15,7 @@
 //      and a sink call for a red one (`breakers.ts`).
 // No order is written here (AGT-012: the Sentinel never changes orders); the alert and e-mail path
 // is T6. Nothing the feed says reaches a log or a response body.
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import { createHash } from "node:crypto";
 import type { Client, InStatement } from "@libsql/client";
 import { normaliseTitle } from "@/lib/agents/announcementDedup";
@@ -126,7 +127,7 @@ function insertAnnouncements(
 export async function countUnassessed(
   db: Pick<Client, "execute">,
   nowIso: string,
-  market = "AU",
+  market = HOME_MARKET,
 ): Promise<number> {
   const since = new Date(Date.parse(nowIso) - CARRY_WINDOW_H * HOUR_MS).toISOString();
   const r = await db.execute({
@@ -140,7 +141,7 @@ export async function countUnassessed(
 }
 
 export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
-  const market = i.market ?? "AU";
+  const market = i.market ?? HOME_MARKET;
   const max = clampItems(i.maxItems);
   const parsed = (i.parser ?? ACTIVE_FEED_PARSER).parse(i.feed);
   if (parsed === null) return { ok: false, error: "unrecognised_format" };

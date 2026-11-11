@@ -15,7 +15,14 @@
 # month file in the private data repo and moves the cursor.
 name: Backfill prices (AU)
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      market:
+        description: Market code (empty = the single enabled market; the Worker sets it when more than one market is enabled)
+        type: string
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -60,8 +67,9 @@ jobs:
           python-version: "3.12"
       - name: Plan the fetch (read-only)
         id: plan
-        run: node scripts/backfill/prices.mjs plan --out plan.json
+        run: node scripts/backfill/prices.mjs plan ${MARKET_INPUT:+--market "$MARKET_INPUT"} --out plan.json
         env:
+          MARKET_INPUT: ${{ inputs.market }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
       # No secrets here: this step only talks to Yahoo and writes prices.json on the runner. It
@@ -74,8 +82,9 @@ jobs:
           python scripts/backfill/fetch_prices.py --plan plan.json --output prices.json
       - name: Write the month file and move the cursor
         if: steps.plan.outputs.fetch == 'true'
-        run: node scripts/backfill/prices.mjs commit --prices prices.json
+        run: node scripts/backfill/prices.mjs commit ${MARKET_INPUT:+--market "$MARKET_INPUT"} --prices prices.json
         env:
+          MARKET_INPUT: ${{ inputs.market }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
           DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN_PROD }}

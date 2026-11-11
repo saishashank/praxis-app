@@ -59,6 +59,10 @@ export const DEFAULT_MAX_PER_HOUR = 6;
  * @param {Omit<Job, "ownerOnly" | "runNow" | "dateBackDays" | "maxPerHour"> & {dateBackDays?: number, maxPerHour?: number, runNow?: boolean}} j
  * @returns {Job}
  */
+// The market-bound times are the home market's slot anchors, read from its seed (M19 C2, D-1051): the Worker builds
+// the same table from the market row, and tests/jobs/registry.test.ts proves the two agree.
+import { HOME_SLOTS } from "../market/homeMarket.mjs";
+
 const job = (j) => ({
   dateBackDays: 0,
   maxPerHour: DEFAULT_MAX_PER_HOUR,
@@ -110,8 +114,8 @@ export const JOBS = [
     label: "Pre-open re-check, attempt 1",
     kind: "route",
     route: "/api/internal/preopen",
-    schedule: "Trading days at 09:54",
-    time: "09:54",
+    schedule: `Trading days at ${HOME_SLOTS.preopen_recheck[0]}`,
+    time: HOME_SLOTS.preopen_recheck[0],
     days: "trading",
     safety: "go-live",
   }),
@@ -162,8 +166,8 @@ export const JOBS = [
     label: "Arena close",
     kind: "workflow",
     workflow: "arena-close.yml",
-    schedule: "Trading days at 17:50",
-    time: "17:50",
+    schedule: `Trading days at ${HOME_SLOTS.b2a}`,
+    time: HOME_SLOTS.b2a,
     days: "trading",
     safety: "go-live",
     note: "A day that is already closed is skipped by the job itself.",
@@ -173,8 +177,8 @@ export const JOBS = [
     label: "Arena signals",
     kind: "workflow",
     workflow: "arena-signals.yml",
-    schedule: "Trading days at 18:10",
-    time: "18:10",
+    schedule: `Trading days at ${HOME_SLOTS.b2b}`,
+    time: HOME_SLOTS.b2b,
     days: "trading",
     safety: "go-live",
     note: "A day that already has its signals is skipped by the job itself.",
@@ -289,8 +293,8 @@ export const JOBS = [
     label: "Nightly data ingest (batch 1)",
     kind: "workflow",
     workflow: "ingest-batch1.yml",
-    schedule: "Every day at 17:30",
-    time: "17:30",
+    schedule: `Every day at ${HOME_SLOTS.b1}`,
+    time: HOME_SLOTS.b1,
     days: "daily",
     safety: "always-on",
   }),
@@ -299,8 +303,8 @@ export const JOBS = [
     label: "Decision cut-off ASX fetch",
     kind: "workflow",
     workflow: "asx-fetch.yml",
-    schedule: "Trading days at 18:10",
-    time: "18:10",
+    schedule: `Trading days at ${HOME_SLOTS.cutoff_poll}`,
+    time: HOME_SLOTS.cutoff_poll,
     days: "trading",
     safety: "always-on",
   }),

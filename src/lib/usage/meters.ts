@@ -43,6 +43,7 @@
 // Decisions: the spec does not name the month boundary, so the quota month is the calendar month
 // in UTC (stored timestamps are UTC, PLT-023; Turso bills by UTC month) and the daily LLM period
 // is the UTC day. Staging is derived like the self-check does: TEST_IDENTITY_SECRET present.
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import type { Client } from "@libsql/client";
 import { getConfig } from "@/lib/config/store";
 
@@ -174,7 +175,7 @@ export async function latestTursoSample(
 
 const melbourneHm = (iso: string) =>
   new Intl.DateTimeFormat("en-AU", {
-    timeZone: "Australia/Melbourne",
+    timeZone: OWNER_TZ,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,

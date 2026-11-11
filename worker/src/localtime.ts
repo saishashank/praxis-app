@@ -1,11 +1,14 @@
-// Australia/Sydney local time without Intl (PLT-070: 10 ms CPU per invocation). Port of the DST
-// rule in src/lib/data/calendar.ts (D-059), reduced to the pure arithmetic the Worker needs; the
-// Worker never imports from src/. worker/test/localtime.test.ts compares this with Intl for
-// 2025..2030 around both transitions.
+// Local time without Intl (PLT-070: 10 ms CPU per invocation) for the zones the market table names (M19 C1,
+// D-1004: the rule table is keyed by zone through src/lib/market/clockTables.mjs, and a zone it does not
+// list throws `unsupported zone`). One rule exists today, the Sydney/Melbourne one. Port of the DST
+// rule in src/lib/data/calendar.ts (D-059), reduced to the pure arithmetic the Worker needs.
+// worker/test/localtime.test.ts compares this with Intl for 2025..2030 around both transitions.
 //
 // Rule: AEST is UTC+10 and AEDT is UTC+11. Daylight time starts on the first Sunday in October
 // at 02:00 AEST and ends on the first Sunday in April at 03:00 AEDT. Both instants are 16:00 UTC
 // on the Saturday before that Sunday, so one comparison pair on the UTC year decides everything.
+
+import { ZONE_RULES } from "../../src/lib/market/clockTables.mjs";
 
 const MIN_MS = 60_000;
 const HOUR_MS = 3_600_000;
@@ -46,6 +49,21 @@ export function sydneyLocal(ms: number): Local {
     dow: wall.getUTCDay(),
     dst,
   };
+}
+
+const ruleOf = (tz: string): string | undefined =>
+  Object.prototype.hasOwnProperty.call(ZONE_RULES, tz) ? ZONE_RULES[tz] : undefined;
+
+/** True when the Worker can compute local time in this zone. */
+export const zoneSupported = (tz: string): boolean => ruleOf(tz) !== undefined;
+
+/**
+ * The wall clock of a UTC instant in a market zone (D-1004). Only the zones in ZONE_RULES are supported; any
+ * other throws `unsupported zone` (unreachable in M19: M20 adds the Kolkata and New York rules).
+ */
+export function localFor(tz: string, ms: number): Local {
+  if (ruleOf(tz) === "au-south-dst") return sydneyLocal(ms);
+  throw new RangeError("unsupported zone");
 }
 
 export const isWeekend = (l: Local): boolean => l.dow === 0 || l.dow === 6;

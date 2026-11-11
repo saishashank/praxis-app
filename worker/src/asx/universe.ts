@@ -35,6 +35,7 @@ import {
   type Outcome,
 } from "./policy";
 import { buildListedCompaniesRequest } from "./request";
+import { MARKET } from "./sentinel";
 import type { AsxDeps, AsxEnv } from "./slots";
 import { acquire, recordOutcome } from "./token";
 
@@ -121,10 +122,11 @@ export async function runUniverse(
         env,
         [
           { sql: "SELECT value_json FROM worker_state WHERE key = ?", args: [ASX_ENABLED_KEY] },
-          { sql: "SELECT mode FROM market WHERE code = 'AU'" },
+          // an enabled market only (MKT-110 a): a market that is not enabled reads as "off"
+          { sql: "SELECT mode FROM market WHERE code = ? AND enabled = 1", args: [MARKET] },
           {
-            sql: "SELECT kind FROM trading_calendar WHERE market = 'AU' AND d = ?",
-            args: [local.date],
+            sql: "SELECT kind FROM trading_calendar WHERE market = ? AND d = ?",
+            args: [MARKET, local.date],
           },
           {
             sql: "SELECT source, status FROM source_register WHERE source IN (?, ?)",

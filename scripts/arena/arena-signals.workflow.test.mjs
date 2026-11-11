@@ -22,7 +22,7 @@ const SHA_USES = /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/;
 
 test("workflow_dispatch only: no schedule, push or pull request trigger (PLT-015)", () => {
   assert.equal(wf.name, "Arena signals and orders (batch 2b)");
-  assert.equal(wf.on, "workflow_dispatch");
+  assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"]); // M19 C2: the only input is `market`
   assert.deepEqual(wf.permissions, {});
   assert.doesNotMatch(read(FILE), /^\s*(schedule|push|pull_request\w*):/m);
 });
@@ -69,7 +69,7 @@ test("the database secrets appear only in env of the one deciding step, the prod
   assert.equal(s.env.TURSO_MAIN_URL, "${{ secrets.TURSO_MAIN_URL_PROD }}");
   assert.equal(s.env.TURSO_MAIN_TOKEN, "${{ secrets.TURSO_MAIN_TOKEN_PROD }}");
   assert.equal(s.env.COMMIT_SHA, "${{ steps.approved.outputs.sha }}");
-  assert.equal(s.run, "node scripts/arena/signals.mjs");
+  assert.equal(s.run, 'node scripts/arena/signals.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"}');
   assert.ok(!String(s.run).includes("secrets."));
   assert.equal(s.with, undefined);
   assert.equal(wf.env, undefined);
@@ -95,7 +95,7 @@ test("the Worker may dispatch this file but its slot is disabled, at 18:10 on tr
   assert.match(sched, /"arena-signals\.yml"/);
   const slot = sched.slice(sched.indexOf('id: "arena-signals"'));
   const body = slot.slice(0, slot.indexOf("}),"));
-  assert.match(body, /time: "18:10"/);
+  assert.match(body, /time: a\.b2b/ /* M19 C1: the time is the market row's b2b anchor */);
   assert.match(body, /workflow: "arena-signals\.yml"/);
   assert.match(body, /tradingDaysOnly: true/);
   assert.match(

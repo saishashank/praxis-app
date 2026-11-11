@@ -5,7 +5,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetClockCache, runClock, type ClockEnv } from "../src/clock";
 import { sydneyLocal } from "../src/localtime";
-import { AU_SLOTS, type Slot } from "../src/schedule";
+import { type Slot } from "../src/schedule";
+import { AU_SLOTS } from "./auRow";
 import { TOKEN, TURSO_TOKEN, TURSO_URL, makeDb, makeNet, rows } from "./fakeTurso";
 
 const MIN = 60_000;

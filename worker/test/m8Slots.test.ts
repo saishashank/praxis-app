@@ -14,7 +14,8 @@ import { isDispatchable } from "../src/dispatch";
 import worker from "../src/index";
 import { sydneyLocal } from "../src/localtime";
 import { runRoutes, type RouteEnv } from "../src/routes";
-import { AU_SLOTS, DISPATCHABLE_WORKFLOWS } from "../src/schedule";
+import { DISPATCHABLE_WORKFLOWS } from "../src/schedule";
+import { AU_SLOTS, warmMarkets } from "./auRow";
 import { TOKEN, TURSO_TOKEN, TURSO_URL, makeDb, makeNet, rows } from "./fakeTurso";
 
 const ENV: ClockEnv = {
@@ -232,14 +233,19 @@ describe("the watchdog slots (M8 T13, PLT-071, D-106)", () => {
     setState("dispatch_enabled", '"1"');
     setState("slots_enabled", JSON.stringify(["backup"]));
     const t = utc("2026-11-04", "20:40", 11);
+    warmMarkets(); // a warm isolate: the enabled markets are already known
     const before = net.pipelines;
     await tick(t); // watchdog-2040 due but not listed
     expect(net.pipelines - before).toBe(1);
     const read = net.calls.filter((c) => c.url.endsWith("/v2/pipeline")).at(-1)!;
     const reqs = JSON.parse(read.body).requests as { stmt?: { sql: string } }[];
-    expect(reqs.filter((r) => /^s*select/i.test(r.stmt?.sql ?? ""))).toHaveLength(1);
+    // one SELECT on worker_state; the enabled-markets read (<= 3 rows, M19 C1) rides in the same request
+    expect(
+      reqs.filter((r) => /^s*select .* from worker_state/i.test(r.stmt?.sql ?? "")),
+    ).toHaveLength(1);
     setState("slots_enabled", JSON.stringify(["watchdog-2040"]));
     resetClockCache();
+    warmMarkets();
     const b2 = net.pipelines;
     await tick(t);
     expect(net.pipelines - b2).toBe(3); // read + claim + record
@@ -294,14 +300,14 @@ describe("the monthly bake-off slot (decision 46)", () => {
     for (const [d, off] of FIRST_SATURDAYS) {
       const l = sydneyLocal(utc(d, "10:00", off));
       expect(
-        candidateSlots(l).map((s) => s.id),
+        candidateSlots(l, AU_SLOTS).map((s) => s.id),
         d,
       ).toContain("llm-bakeoff");
     }
     for (const d of NOT_FIRST) {
       const l = sydneyLocal(utc(d, "10:00", 11));
       expect(
-        candidateSlots(l).map((s) => s.id),
+        candidateSlots(l, AU_SLOTS).map((s) => s.id),
         d,
       ).not.toContain("llm-bakeoff");
     }
@@ -384,6 +390,7 @@ describe("the monthly bake-off slot (decision 46)", () => {
     setState("dispatch_enabled", '"1"');
     setState("slots_enabled", JSON.stringify(["llm-bakeoff"]));
     await tick(utc("2026-11-07", "09:00", 11)); // rollup
+    warmMarkets();
     const before = net.pipelines;
     await tick(utc("2026-11-07", "10:00", 11)); // inputs missing: read only
     expect(net.pipelines - before).toBe(1);
@@ -402,7 +409,7 @@ describe("TST-124: the CPU and subrequest budget with the runtime list", () => {
   it("the decision with the list is cheap: 2000 decisions well under 1 ms each", () => {
     const local = sydneyLocal(utc("2026-11-07", "10:00", 11));
     const t0 = performance.now();
-    for (let i = 0; i < 2000; i++) decideWithSkips(local, facts, new Map(), 0);
+    for (let i = 0; i < 2000; i++) decideWithSkips(local, facts, new Map(), 0, AU_SLOTS);
     expect((performance.now() - t0) / 2000).toBeLessThan(1);
   });
 
@@ -414,7 +421,7 @@ describe("TST-124: the CPU and subrequest budget with the runtime list", () => {
     // the minute with the most due clock slots on 2026-11-07 (a first Saturday)
     let best = { n: -1, m: 0 };
     for (let m = 0; m < 1440; m++) {
-      const n = candidateSlots(sydneyLocal(utc("2026-11-07", hm(m), 11))).length;
+      const n = candidateSlots(sydneyLocal(utc("2026-11-07", hm(m), 11)), AU_SLOTS).length;
       if (n > best.n) best = { n, m };
     }
     expect(best.n).toBeGreaterThanOrEqual(2);

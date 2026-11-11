@@ -11,7 +11,8 @@ import { resetClockCache } from "../src/clock";
 import worker from "../src/index";
 import { sydneyLocal } from "../src/localtime";
 import { routeSlotsDue, runRoutes, type RouteEnv } from "../src/routes";
-import { AU_SLOTS, type Slot } from "../src/schedule";
+import { type Slot, overrideSlotTableForTests } from "../src/schedule";
+import { AU_SLOTS } from "../test/auRow";
 import { TOKEN, TURSO_TOKEN, TURSO_URL, makeDb, makeNet, type Net } from "../test/fakeTurso";
 import { candidateSlots } from "../src/clock";
 
@@ -137,6 +138,7 @@ describe("TST-124: the scheduled handler with every slot enabled stays inside th
       until: s.until,
       catchUpMin: s.catchUpMin,
     }));
+    overrideSlotTableForTests(AU_SLOTS); // the Worker runs the table these tests modify
     for (const s of AU_SLOTS) {
       mutable(s).enabled = true;
       mutable(s).requiresListing = false; // M8 T8: no list in these tests, so nothing may hold a slot back
@@ -154,6 +156,7 @@ describe("TST-124: the scheduled handler with every slot enabled stays inside th
     }
   };
   afterEach(() => {
+    overrideSlotTableForTests(null);
     for (const x of saved) {
       const m = mutable(x.s);
       m.enabled = x.enabled;

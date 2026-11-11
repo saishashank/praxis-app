@@ -1,5 +1,5 @@
 export const BACKFILL_WRITE_CAP_MONTH: number;
-export const MARKET: "AU";
+export const MARKET: string;
 export function addDays(date: string, n: number): string;
 export function isRealDate(s: unknown): s is string;
 export function isValidCode(code: unknown): boolean;

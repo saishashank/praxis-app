@@ -8,6 +8,7 @@
 // the row and nothing earlier: a calibration that reads the archive cannot see an item before the app did.
 // Cost: $0, no new source. Not an Owner-visible feature; it unlocks A2 known dates and, after a year,
 // F2/F3/F5 calibration on live-recorded events.
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import type { InStatement } from "@libsql/client";
 import {
   isTradingDay,
@@ -25,7 +26,7 @@ export type MarketHoursLocal = { tz: string; open_time: string; close_time: stri
 
 /** The market hours used when the market row cannot be read (ASX regular session). */
 export const DEFAULT_HOURS: MarketHoursLocal = {
-  tz: "Australia/Melbourne",
+  tz: OWNER_TZ,
   open_time: "10:00",
   close_time: "16:00",
 };

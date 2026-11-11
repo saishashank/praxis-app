@@ -11,11 +11,12 @@
 import type { Client } from "@libsql/client";
 import { audit, NO_META, type RequestMeta } from "@/lib/auth/audit";
 import type { AuthEnv } from "@/lib/auth/env";
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import { sydneyDate } from "../pipeline/rules.mjs";
 import { resolveAction, settle } from "./engine.mjs";
 import { stateOf } from "./rules.mjs";
 
-export const REVIEW_MARKET = "AU";
+export const REVIEW_MARKET = HOME_MARKET;
 
 export type ResolveError =
   "invalid" | "forbidden" | "not_found" | "not_open" | "conflicts_with_confirmed" | "unavailable";

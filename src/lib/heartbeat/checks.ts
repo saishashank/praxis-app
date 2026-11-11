@@ -25,6 +25,7 @@
 // V1-S3 / D-711 (replaces "a weekday with no row counts as a trading day"): a weekday the calendar
 // has no row for is NOT a trading day (fail safe) and raises a `calendar_missing` incident; a
 // calendar that ends within 60 days raises `calendar_horizon` (DAT-160: next year is drafted early).
+import { HOME_MARKET, HOME_TZ } from "@/lib/market/homeMarket.mjs";
 import type { Client } from "@libsql/client";
 import { CONFIG_KEYS } from "@/lib/config/keys";
 import { getConfig } from "@/lib/config/store";
@@ -50,8 +51,8 @@ import {
   type HeartbeatKind,
 } from "./state";
 
-export const MARKET = "AU";
-export const TZ = "Australia/Sydney";
+export const MARKET = HOME_MARKET;
+export const TZ = HOME_TZ;
 export const POLL_START = "07:00";
 export const POLL_END = "19:30";
 

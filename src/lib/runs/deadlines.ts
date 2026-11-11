@@ -20,9 +20,11 @@ import type { Client } from "@libsql/client";
 import { getConfig } from "@/lib/config/store";
 import type { ConfigKey } from "@/lib/config/keys";
 import { isTradingDay, localToUtc, type CalendarKind, type CalendarRow } from "@/lib/data/calendar";
+import { HOME_MARKET, HOME_SLOTS } from "@/lib/market/homeMarket.mjs";
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 
-export const DEADLINE_TZ = "Australia/Melbourne";
-export const DEADLINE_MARKET = "AU";
+export const DEADLINE_TZ = OWNER_TZ;
+export const DEADLINE_MARKET = HOME_MARKET;
 
 export type DeadlineStatus = "on_time" | "late" | "missing" | "not_due";
 
@@ -53,7 +55,7 @@ export const STEPS: readonly StepDef[] = [
     id: "preopen",
     label: "Pre-open re-check",
     source: { kind: "preopen" },
-    start: "09:54", // ARN-020a; the deadline is the market open
+    start: HOME_SLOTS.preopen_recheck[0], // ARN-020a; the deadline is the market open
     deadline: null,
     tradingOnly: true,
   },
@@ -61,8 +63,8 @@ export const STEPS: readonly StepDef[] = [
     id: "batch1",
     label: "Batch 1 (prices, actions, universe)",
     source: { kind: "run", job: "ingest-batch1" },
-    start: "17:30",
-    deadline: "18:10",
+    start: HOME_SLOTS.b1,
+    deadline: HOME_SLOTS.cutoff,
     deadlineKey: "decision_cutoff",
     tradingOnly: false, // runs every day; a non-trading day ends with a `non-trading` marker
   },
@@ -70,16 +72,16 @@ export const STEPS: readonly StepDef[] = [
     id: "batch2",
     label: "Batch 2 (signals and orders)",
     source: { kind: "run", job: "arena-signals" },
-    start: "18:10",
+    start: HOME_SLOTS.cutoff,
     startKey: "decision_cutoff",
-    deadline: "18:40",
+    deadline: HOME_SLOTS.late_2a_after,
     tradingOnly: true,
   },
   {
     id: "batch3",
     label: "Batch 3 (close the books, review numbers)",
     source: { kind: "run", job: "arena-review" },
-    start: "18:40",
+    start: HOME_SLOTS.late_2a_after,
     deadline: "19:10",
     tradingOnly: true,
   },

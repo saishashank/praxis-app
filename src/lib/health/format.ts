@@ -1,9 +1,10 @@
-// Timestamps are stored in UTC (PLT-023) and shown in Australia/Melbourne (UX). The user's time
+// Timestamps are stored in UTC (PLT-023) and shown in the Owner's zone, Melbourne (UX). The user's time
 // format preference (UX-110) only changes the hour cycle; the zone stays Melbourne.
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 export type TimeFormat = "24h" | "12h";
 
 const base: Intl.DateTimeFormatOptions = {
-  timeZone: "Australia/Melbourne",
+  timeZone: OWNER_TZ,
   year: "numeric",
   month: "2-digit",
   day: "2-digit",

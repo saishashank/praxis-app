@@ -2,6 +2,7 @@
 //   "News: n items waiting for assessment"                       the Sentinel queue beyond this call's cap
 //   "Company list: ASX fetch failed n runs; the Wikidata fallback is off (Data sources)"
 // No code, name or URL is ever in a line.
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import type { Client } from "@libsql/client";
 import { FALLBACK_REGISTER_ROW, LIST_SOURCE } from "@/lib/data/codeHistory";
 import { ASX_SOURCE } from "@/lib/data/asxToken";
@@ -34,11 +35,11 @@ export async function dataFeedLines(db: Client, now: Date): Promise<string[]> {
   const since = new Date(now.getTime() - CARRY_WINDOW_H * HOUR_MS).toISOString();
   const r = await db.execute({
     sql:
-      "SELECT (SELECT COUNT(*) FROM announcement a WHERE a.source = ? AND a.market = 'AU' AND a.ingested_at >= ? " +
+      "SELECT (SELECT COUNT(*) FROM announcement a WHERE a.source = ? AND a.market = ? AND a.ingested_at >= ? " +
       "AND a.published_at >= ? AND NOT EXISTS (SELECT 1 FROM item_assessment s WHERE s.source = a.source AND s.ann_id = a.ann_id)) AS news, " +
       "(SELECT consecutive_failures FROM source_fetch_status WHERE source = ?) AS fails, " +
       "(SELECT status FROM source_register WHERE source = ?) AS reg",
-    args: [ASX_SOURCE, since, since, LIST_SOURCE, FALLBACK_REGISTER_ROW],
+    args: [ASX_SOURCE, HOME_MARKET, since, since, LIST_SOURCE, FALLBACK_REGISTER_ROW],
   });
   const x = r.rows[0];
   const lines: string[] = [];

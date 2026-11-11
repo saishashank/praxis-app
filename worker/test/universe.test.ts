@@ -17,7 +17,8 @@ import {
 } from "../src/asx/universe";
 import { ASX_JOBS, pollDue } from "../src/asx/slots";
 import { PRIORITY_LIMITS } from "../src/asx/policy";
-import { AU_SLOTS, DISPATCHABLE_WORKFLOWS } from "../src/schedule";
+import { DISPATCHABLE_WORKFLOWS } from "../src/schedule";
+import { AU_SLOTS } from "./auRow";
 import { sydneyLocal } from "../src/localtime";
 import { TURSO_TOKEN, TURSO_URL, makeDb, makeNet, rows, type Net } from "./fakeTurso";
 
@@ -136,7 +137,7 @@ describe("the universe slot (schedule and arithmetic)", () => {
     expect(DISPATCHABLE_WORKFLOWS.some((w) => /universe/.test(w))).toBe(false);
     // The Actions clock never picks a Worker-run slot.
     for (let m = 0; m < 1440; m += 1) {
-      const c = candidateSlots({ ...at(0, 0), minute: m });
+      const c = candidateSlots({ ...at(0, 0), minute: m }, AU_SLOTS);
       expect(c.some((x) => x.id === "universe")).toBe(false);
     }
   });

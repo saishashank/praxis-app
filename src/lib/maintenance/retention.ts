@@ -31,6 +31,7 @@ import type { Client, Transaction } from "@libsql/client";
 import { CONFIG_KEYS } from "@/lib/config/keys";
 import { getConfig } from "@/lib/config/store";
 import { localToUtc } from "@/lib/data/calendar";
+import { HOME_MARKET, HOME_TZ } from "@/lib/market/homeMarket.mjs";
 import {
   ANNOUNCEMENT_SOURCE,
   JOB_ASX,
@@ -150,12 +151,8 @@ export async function pruneAnnouncements(
     const month = String(r.concurrency_key).slice(prefix.length);
     if (!isMonth(month) || month < boundary || conflicts.has(month)) continue;
     if (r.file === "conflict") continue;
-    const start = localToUtc(monthFirstDay(month), "00:00", "Australia/Sydney").toISOString();
-    const next = localToUtc(
-      monthFirstDay(addMonths(month, 1)),
-      "00:00",
-      "Australia/Sydney",
-    ).toISOString();
+    const start = localToUtc(monthFirstDay(month), "00:00", HOME_TZ).toISOString();
+    const next = localToUtc(monthFirstDay(addMonths(month, 1)), "00:00", HOME_TZ).toISOString();
     stmts.push({
       sql: `DELETE FROM announcement
             WHERE market = ? AND source = ? AND published_at >= ? AND published_at < ?
@@ -216,7 +213,7 @@ export const PRUNE_MAX_CHUNKS = 40;
 export async function prunePriceBars(
   db: Client,
   nowIso: string,
-  market = "AU",
+  market = HOME_MARKET,
   keepSessions = PRICE_BAR_KEEP_SESSIONS,
 ): Promise<number> {
   // The keep-N boundary without OFFSET (D-959): the oldest of the newest `keepSessions` sessions.

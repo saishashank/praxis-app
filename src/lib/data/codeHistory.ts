@@ -6,11 +6,12 @@
 // Rows-ok: a run touches at most the codes that answered not_found (tens) plus the open rows of
 // code_history (< 500) and one source_fetch_status row; the history list itself is never read here.
 import type { Client } from "@libsql/client";
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 
 export const LIST_SOURCE = "asx_listed_companies";
 export const DELIST_AFTER_RUNS = 3; // threshold-ok: DAT-251 a, three consecutive not_found runs
 export const FALLBACK_REGISTER_ROW = "wikidata_asx";
-const MARKET = "AU";
+const MARKET = HOME_MARKET;
 
 export type FetchStatus = {
   companiesCause: string | null;

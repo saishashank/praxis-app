@@ -6,6 +6,9 @@ import path from "node:path";
 import { actionNames, hasUseServer, routeMethods, urlPathFor } from "../ci/route-coverage.mjs";
 import { loadSeed } from "../ci/licence-register.mjs";
 import { parseYaml } from "./yaml.mjs";
+import { FEED_SLOT_TIMES } from "../../src/lib/market/clockTables.mjs";
+import { HOME_MARKET, OPS_SLOT_TIMES, slotsProjection } from "../../src/lib/market/profileCore.mjs";
+import { SEEDS } from "../../src/lib/market/seed/index.mjs";
 
 const SKIP_DIRS = new Set(["node_modules", ".next", "dist", "coverage", ".git"]);
 const posix = (p) => p.split(path.sep).join("/");
@@ -219,12 +222,43 @@ const strProp = (body, name) => {
   return m ? m[1] : null;
 };
 
-/** Slots of AU_SLOTS and the dispatchable workflow list. */
+/**
+ * A slot's time written as data (M19 C1, D-996): `time: ops.maintenance.at`, `until: feed.poll.until`,
+ * `time: a.preopen_recheck[0]`. The path is read from the tables the Worker builds its slots from
+ * (OPS_SLOT_TIMES, FEED_SLOT_TIMES, and the home market's anchors from its seed), so the model keeps the AU times.
+ */
+function slotContext() {
+  const v = (n) => SEEDS[HOME_MARKET].fields[n].value;
+  const a = slotsProjection({
+    sessionOpen: v("session_open"),
+    sessionClose: v("session_close"),
+    decisionCutoff: v("decision_cutoff").time,
+    batchSchedule: v("batch_schedule"),
+    preopenRecheckMin: v("preopen_recheck_min"),
+  });
+  return { ops: OPS_SLOT_TIMES, feed: FEED_SLOT_TIMES, a };
+}
+
+/** The value of a property written as a string literal or as a path into slotContext(); null when neither. */
+function dataProp(body, name, ctx) {
+  const lit = strProp(body, name);
+  if (lit !== null) return lit;
+  const m = new RegExp(`\\b${name}:\\s*([a-z_]+(?:\\.[A-Za-z_0-9]+|\\[\\d\\])+)\\s*,`).exec(body);
+  if (!m) return null;
+  let cur = ctx;
+  for (const part of m[1].split(/[.[\]]/).filter(Boolean)) {
+    cur = cur?.[/^\d+$/.test(part) ? Number(part) : part];
+  }
+  return cur === undefined || cur === null ? null : cur;
+}
+
+/** Slots of the Worker table (slotsFor in worker/src/schedule.ts) and the dispatchable workflow list. */
 export function readSlots(root) {
   const rel = "worker/src/schedule.ts";
   if (!exists(path.join(root, rel))) return { slots: [], dispatchable: [] };
   const text = read(root, rel);
   const slots = [];
+  const ctx = slotContext();
   const head = /\bslot\(\{/g;
   for (const m of text.matchAll(head)) {
     const open = m.index + m[0].length - 1;
@@ -236,9 +270,11 @@ export function readSlots(root) {
     const wf = /\bworkflow:\s*(?:"([^"]+)"|null)/.exec(body);
     slots.push({
       id,
-      time: strProp(body, "time"),
-      until: strProp(body, "until"),
-      everyMin: /\beveryMin:\s*(\d+)/.exec(body)?.[1] ?? null,
+      time: dataProp(body, "time", ctx),
+      until: dataProp(body, "until", ctx),
+      everyMin:
+        /\beveryMin:\s*(\d+)/.exec(body)?.[1] ??
+        (dataProp(body, "everyMin", ctx) === null ? null : String(dataProp(body, "everyMin", ctx))),
       runner: strProp(body, "runner"),
       route: strProp(body, "route"),
       workflow: wf?.[1] ?? null,

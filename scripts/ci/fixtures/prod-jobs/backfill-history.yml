@@ -37,8 +37,9 @@
       - run: npm ci
       - name: Plan the fetch (read-only)
         id: plan
-        run: node scripts/backfill/run.mjs plan --out plan.json
+        run: node scripts/backfill/run.mjs plan ${MARKET_INPUT:+--market "$MARKET_INPUT"} --out plan.json
         env:
+          MARKET_INPUT: ${{ inputs.market }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
       # No secrets here: this step only talks to the public ASIC download host and writes
@@ -48,8 +49,9 @@
         run: node scripts/backfill/fetch-asic.mjs --plan plan.json --output chunks.json
       - name: Write history files and move the cursors
         if: ${{ !cancelled() && steps.plan.outcome == 'success' }}
-        run: node scripts/backfill/run.mjs commit --chunks chunks.json
+        run: node scripts/backfill/run.mjs commit ${MARKET_INPUT:+--market "$MARKET_INPUT"} --chunks chunks.json
         env:
+          MARKET_INPUT: ${{ inputs.market }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
           DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN_PROD }}

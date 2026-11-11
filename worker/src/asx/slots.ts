@@ -22,7 +22,7 @@
 //    once the body was accepted (or dropped after 3 failed attempts), so a failed hand-off is
 //    retried with a full fetch. Logs carry fixed words and status classes, nothing else.
 import { dbConfigured, pipeline, type DbEnv, type Row, type Stmt } from "../db";
-import { isWeekend, sydneyLocal, type Local } from "../localtime";
+import { hhmm, isWeekend, sydneyLocal, type Local } from "../localtime";
 import {
   ASX_SOURCE,
   ETAG_KEY,
@@ -38,6 +38,7 @@ import {
   FAIL_KEY,
   LAST_SHA_KEY,
   MAP_END_MIN,
+  MARKET,
   MAP_START_MIN,
   MAX_DELIVERY_ATTEMPTS,
   SENTINEL_BODY_MAX_BYTES,
@@ -58,7 +59,7 @@ import {
   type FailState,
 } from "./sentinel";
 import { acquire, recordOutcome } from "./token";
-import { AU_SLOTS } from "../schedule";
+import { anchorsOf, type MarketRow } from "../markets";
 
 export type AsxEnv = DbEnv & {
   PRAXIS_ENV: string;
@@ -82,10 +83,18 @@ export type AsxJob = {
 };
 
 export const POLL_START_MIN = MAP_START_MIN;
-const CUTOFF_SLOT = AU_SLOTS.find((x) => x.id === "decision-cutoff");
-/** The local minute of the decision cut-off (slot `decision-cutoff`, 18:10) and whether it is on. */
-const CUTOFF_MINUTE = CUTOFF_SLOT?.minute ?? 18 * 60 + 10;
-const CUTOFF_SLOT_ENABLED = CUTOFF_SLOT?.enabled === true;
+/**
+ * The local minute of the decision cut-off poll (the market row's `slots_json.cutoff_poll`, slot
+ * `decision-cutoff`), or null when the row has none (then no cut-off marker is written). M19 C1: read from
+ * the market row, not from a constant.
+ */
+function cutoffMinuteOf(slotsJson: string | null): number | null {
+  try {
+    return hhmm(anchorsOf({ slots_json: slotsJson } as MarketRow).cutoff_poll);
+  } catch {
+    return null;
+  }
+}
 export const POLL_END_MIN = MAP_END_MIN;
 export const POLL_EVERY_MIN = 4;
 
@@ -195,6 +204,7 @@ export async function runAsx(
     let lastSha: string | null = null;
     let fail: FailState | null = null;
     let lastOkMs: number | null = null;
+    let cutoffMinute: number | null = null;
     try {
       const [state, mode, cal, lastOk] = await pipeline(
         env,
@@ -203,16 +213,20 @@ export async function runAsx(
             sql: "SELECT key, value_json FROM worker_state WHERE key IN (?, ?, ?, ?)",
             args: [ASX_ENABLED_KEY, ETAG_KEY, LAST_SHA_KEY, FAIL_KEY],
           },
-          { sql: "SELECT mode FROM market WHERE code = 'AU'" },
+          // an enabled market only (MKT-110 a): a market that is not enabled reads as "off"
           {
-            sql: "SELECT kind FROM trading_calendar WHERE market = 'AU' AND d = ?",
-            args: [local.date],
+            sql: "SELECT mode, slots_json FROM market WHERE code = ? AND enabled = 1",
+            args: [MARKET],
+          },
+          {
+            sql: "SELECT kind FROM trading_calendar WHERE market = ? AND d = ?",
+            args: [MARKET, local.date],
           },
           {
             sql:
-              "SELECT last_ok_at FROM sentinel_poll_day WHERE market = 'AU' AND source = ? " +
+              "SELECT last_ok_at FROM sentinel_poll_day WHERE market = ? AND source = ? " +
               "AND last_ok_at IS NOT NULL ORDER BY d DESC LIMIT 1",
-            args: [ASX_SOURCE],
+            args: [MARKET, ASX_SOURCE],
           },
         ],
         deps.fetch,
@@ -238,6 +252,7 @@ export async function runAsx(
           }
         } else if (r[0] === FAIL_KEY) fail = parseFail(str(r, 1));
       }
+      cutoffMinute = cutoffMinuteOf(str(mode.rows[0], 1));
       if (!parseOn(enabledRaw)) return skip("disabled", "asx: skipped (asx_enabled off)");
       if (job.marketBound) {
         const m = str(mode.rows[0], 0);
@@ -363,8 +378,8 @@ export async function runAsx(
     if (
       (kind === "ok" || kind === "not_modified") &&
       !handoffFailed &&
-      local.minute >= CUTOFF_MINUTE &&
-      CUTOFF_SLOT_ENABLED
+      cutoffMinute !== null &&
+      local.minute >= cutoffMinute
     ) {
       extra.push(cutoffPollStmt(local.date, deps.nowMs()));
     }

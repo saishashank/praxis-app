@@ -20,7 +20,7 @@ const byName = (n) => steps.find((s) => s.name === n);
 const SHA_USES = /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/;
 
 test("workflow_dispatch only: no schedule, push or pull request trigger (PLT-015)", () => {
-  assert.equal(wf.on, "workflow_dispatch");
+  assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"]); // M19 C2: the only input is `market`
   assert.deepEqual(wf.permissions, {});
   assert.doesNotMatch(read(FILE), /^\s*(schedule|push|pull_request\w*):/m);
 });
@@ -57,8 +57,9 @@ test("secrets appear only in env of the plan and commit steps, with exactly the 
     ["Plan the fetch (read-only)", "Write history files and move the cursors"],
   );
   const [plan, commit] = withSecrets;
-  assert.deepEqual(Object.keys(plan.env), ["TURSO_MAIN_URL", "TURSO_MAIN_TOKEN"]);
+  assert.deepEqual(Object.keys(plan.env), ["MARKET_INPUT", "TURSO_MAIN_URL", "TURSO_MAIN_TOKEN"]);
   assert.deepEqual(Object.keys(commit.env), [
+    "MARKET_INPUT",
     "TURSO_MAIN_URL",
     "TURSO_MAIN_TOKEN",
     "DATA_REPO_TOKEN",
@@ -104,8 +105,8 @@ test("steps run in order: plan, fetch, commit; commit also records a failed or s
   const fetch = steps.findIndex((s) => s.name === "Fetch ASIC short positions (no secrets)");
   const commit = steps.findIndex((s) => s.name === "Write history files and move the cursors");
   assert.ok(0 < plan && plan < fetch && fetch < commit);
-  assert.equal(steps[plan].run, "node scripts/backfill/run.mjs plan --out plan.json");
-  assert.equal(steps[commit].run, "node scripts/backfill/run.mjs commit --chunks chunks.json");
+  assert.equal(steps[plan].run, 'node scripts/backfill/run.mjs plan ${MARKET_INPUT:+--market "$MARKET_INPUT"} --out plan.json');
+  assert.equal(steps[commit].run, 'node scripts/backfill/run.mjs commit ${MARKET_INPUT:+--market "$MARKET_INPUT"} --chunks chunks.json');
   assert.match(
     steps[commit].if,
     /^\$\{\{ !cancelled\(\) && steps\.plan\.outcome == 'success' \}\}$/,

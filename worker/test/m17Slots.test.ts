@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { decideRoutes, purposeOf, routeSlotsDue, type RouteFacts } from "../src/routes";
 import { sydneyLocal } from "../src/localtime";
-import { AU_SLOTS } from "../src/schedule";
+import { AU_SLOTS } from "./auRow";
 
 const hm = (m: number) =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;

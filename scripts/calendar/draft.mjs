@@ -1,8 +1,10 @@
 // Yearly trading-calendar draft job (OPS-103, DAT-160; D-961). Runs in the `production` GitHub
 // environment on the approved commit from .github/workflows/calendar-draft.yml (the Worker dispatches
 // it once a year, 1 November 09:00 Melbourne).
-//   node scripts/calendar/draft.mjs [--market AU[,XX]] [--year 2028] [--now ISO]
-// For each market (default: every market in the `market` table that has a rule module) it generates
+//   node scripts/calendar/draft.mjs [--market CODE[,CODE]] [--year 2028] [--now ISO]
+// For each market (default: every ENABLED market in the `market` table that has a rule module; a named market must be
+// enabled too: M19 C2, MKT-110 a, the trading_calendar guard refuses a row of any other, so it exits 2 with
+// "refused: market not enabled" and writes nothing) it generates
 // next year's rows from the market's rule module (src/lib/data/calendarRules.mjs, the same rules as the
 // seed generator) and inserts them as PROVISIONAL rows (`confirmed = 0`, source `draft:<rule set>`), but
 // ONLY when the market has no rows for that year at all: a year that already exists (seeded, drafted,
@@ -15,6 +17,8 @@
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN. Output: counts only. Exit 0 done, 1 failed, 2 usage.
 import { fileURLToPath } from "node:url";
 import { CALENDAR_RULE_MODULES, DRAFT_SOURCE_PREFIX } from "../../src/lib/data/calendarRules.mjs";
+import { OWNER_TZ } from "../../src/lib/market/profileCore.mjs";
+import { REFUSED_EXIT, REFUSED_LINE, enabledCodes } from "../../src/lib/market/scriptMarket.mjs";
 
 export const JOB = "calendar-draft";
 const MARKET_RE = /^[A-Z]{2,5}$/;
@@ -22,9 +26,7 @@ const MARKET_RE = /^[A-Z]{2,5}$/;
 /** The Melbourne calendar year of an instant (the Owner's clock, not a market's). */
 export function melbourneYear(now) {
   return Number(
-    new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Melbourne", year: "numeric" }).format(
-      now,
-    ),
+    new Intl.DateTimeFormat("en-CA", { timeZone: OWNER_TZ, year: "numeric" }).format(now),
   );
 }
 
@@ -119,14 +121,17 @@ export async function run(argv, env, out = console.log, deps = {}) {
         return createClient({ url: e.TURSO_MAIN_URL, authToken: e.TURSO_MAIN_TOKEN });
       });
     db = await connect(env);
+    // MKT-110 a: only an enabled market is drafted (and a named one must be enabled before anything is written)
+    const enabled = await enabledCodes(db);
     let markets;
     if (marketArg !== undefined && marketArg !== "") {
       markets = marketArg.split(",").map((m) => m.trim());
+      if (markets.some((m) => !enabled.includes(m))) {
+        out(`calendar-draft: ${REFUSED_LINE}`);
+        return REFUSED_EXIT;
+      }
     } else {
-      const r = await db.execute("SELECT code FROM market ORDER BY code");
-      markets = r.rows
-        .map((x) => String(x.code))
-        .filter((m) => Object.hasOwn(CALENDAR_RULE_MODULES, m));
+      markets = enabled.filter((m) => Object.hasOwn(CALENDAR_RULE_MODULES, m));
     }
     let failed = false;
     for (const market of markets) {
