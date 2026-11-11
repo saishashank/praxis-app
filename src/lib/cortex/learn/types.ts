@@ -112,3 +112,24 @@ export type LearnerWeights = {
   readonly angle: Readonly<Record<string, number>>;
   readonly cluster: Readonly<Record<string, number>>;
 };
+
+/** One decision row the duel reads (taken rows only: no first failing gate). */
+export type DuelDecisionRow = {
+  readonly d: string;
+  readonly bookId: string;
+  readonly code: string;
+  readonly family: string;
+  readonly ruleVersion: string | null;
+  readonly rankKey: string | null;
+};
+
+/** A matured would-have (or live) outcome with the size it was taken at. */
+export type DuelOutcomeRow = {
+  readonly d: string;
+  readonly bookId: string;
+  readonly code: string;
+  readonly ruleVersion: string | null;
+  readonly netMicro: number;
+  readonly fillMicro: number;
+  readonly qty: number;
+};

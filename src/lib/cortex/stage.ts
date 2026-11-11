@@ -111,6 +111,8 @@ import {
   insertState,
   insertOutcome,
   isLearnerRow,
+  learnerHistory,
+  mapInForce,
   latestMaps,
   latestPassports,
   statesInForce,
@@ -1739,13 +1741,20 @@ export async function scoreOutcomes(
   // D-890: the plan a decision was made under: the rule version stored on the decision (migration
   // 0027); a row without one (written before) walks the family's v1 plan as before
   const mapRows = await latestMaps(db, o.market);
+  // D-924: a learner decision walks the generation that made it (the one in force on its night);
+  // the imported fixed rule versions keep the newest fit, as before
+  const learnerRows = mapRows.some(isLearnerRow) ? await learnerHistory(db, o.market) : [];
   const ruleOf = (
     family: Family,
     ruleVersion: string | null | undefined,
+    d: string,
   ): FamilyNightRule | undefined => {
     if (ruleVersion === null || ruleVersion === undefined) return undefined;
     const m = mapRows.find((x) => x.family === family && x.ruleVersion === ruleVersion);
-    return m === undefined ? undefined : ruleFromMap(family, m);
+    if (m === undefined) return undefined;
+    if (!isLearnerRow(m)) return ruleFromMap(family, m);
+    const g = mapInForce(learnerRows, family, ruleVersion, d, o.params.decisionCutoff);
+    return g === undefined ? undefined : ruleFromMap(family, g);
   };
   let scored = 0;
   let unscorable = unsized.rowsAffected;
@@ -1758,7 +1767,7 @@ export async function scoreOutcomes(
     const after = all.filter((b) => b.d > dec.d);
     const atr = atr20Micro(upTo.slice(-250)); // threshold-ok: ATR_HISTORY
     const plan = isV1Family(family)
-      ? familyPlan(family, o.params, atr, ruleOf(family, dec.ruleVersion))
+      ? familyPlan(family, o.params, atr, ruleOf(family, dec.ruleVersion, dec.d))
       : null;
     if (
       plan === null ||

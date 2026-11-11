@@ -1,4 +1,5 @@
 import { COST_PROFILE_CODES } from "@/lib/arena/costs";
+import { LEARN_CONFIG_SPEC } from "@/lib/cortex/learn/config";
 import { DEFAULT_INJECTION_PHRASES } from "@/lib/llm/injection";
 
 // Typed registry of configuration keys (spec ch.15). Values are stored as JSON in config_version.
@@ -1530,6 +1531,66 @@ const MOVERS_META_TABLES = Object.fromEntries(
 /** Every key added by the movers gap additions (D-740 to D-759). */
 export const MOVERS_KEY_NAMES: readonly ConfigKey[] = MOVERS_RANGED.map((r) => r[0]);
 
+// ---- Learning Cortex keys (O-81; cortex_learning_architecture C.9, D-929, D-940) ----
+// Defaults and bounds come from the learning loop's own spec (src/lib/cortex/learn/config.ts
+// LEARN_CONFIG_SPEC), one row per C.9 key, so the two can never disagree. None is a Cortex refit key:
+// an edit never touches the fixed Cortex's map; the next weekly run starts a new (charged) learner
+// generation under the edited levels (D-940).
+const LS = LEARN_CONFIG_SPEC;
+// prettier-ignore
+const LEARN_RANGED = [
+  ["learn_window_sessions", "int", LS.windowSessions.default, LS.windowSessions.min, LS.windowSessions.max, "sessions", "O", LRN, "C.9, D-929", "Trading days of results the weekly re-weighting of the learning Cortex reads"],
+  ["learn_null_sessions", "int", LS.nullSessions.default, LS.nullSessions.min, LS.nullSessions.max, "sessions", "O", LRN, "C.9, D-929", "Trading days the learning Cortex's review uses to tell an alarm from chance"],
+  ["learn_shrink_n0", "int", LS.shrinkN0.default, LS.shrinkN0.min, LS.shrinkN0.max, "nights", "O", LRN, "C.9, D-929", "How strongly the learning Cortex holds on to what the development research found"],
+  ["learn_dev_haircut", "num", LS.devHaircut.default, LS.devHaircut.min, LS.devHaircut.max, "fraction", "O", LRN, "C.9, D-929", "Share of the development research's strength the learning Cortex expects to last"],
+  ["learn_max_step", "num", LS.maxStep.default, LS.maxStep.min, LS.maxStep.max, "fraction", "O", LRN, "C.9, D-929", "Largest share of the way a weight may move in one weekly re-weighting"],
+  ["learn_weight_floor", "num", LS.weightFloor.default, LS.weightFloor.min, LS.weightFloor.max, "x equal weight", "O", LRN, "C.9, D-929", "Lowest weight an angle keeps in the learning Cortex, against an equal share"],
+  ["learn_band_pp", "num", LS.bandPp.default, LS.bandPp.min, LS.bandPp.max, "pp", "O", LRN, "C.9, D-929", "Smallest weight move that is written as a new weekly set of weights"],
+  ["learn_fdr_q", "num", LS.fdrQ.default, LS.fdrQ.min, LS.fdrQ.max, "level", "O", LRN, "C.9, D-929", "False-finding rate allowed across the angles in a weekly re-weighting"],
+  ["learn_probe_q", "num", LS.probeQ.default, LS.probeQ.min, LS.probeQ.max, "level", "O", LRN, "C.9, D-929", "False-finding rate a candidate measure must clear before it joins the base"],
+  ["learn_ph_delta", "num", LS.phDelta.default, LS.phDelta.min, LS.phDelta.max, "per night", "O", LRN, "C.9, D-929", "Drift the review tolerates in an angle's nightly result before it counts a slip"],
+  ["learn_ph_fa_pct", "num", LS.phFaPct.default, LS.phFaPct.min, LS.phFaPct.max, "percentile", "O", LRN, "C.9, D-929", "How rare by chance an alarm in the review must be (99 = about once in 100 trading days)"],
+  ["learn_cap_sessions", "int", LS.capSessions.default, LS.capSessions.min, LS.capSessions.max, "sessions", "O", LRN, "C.9, D-929", "Trading days a review halves a slipping angle's weight in the learning Cortex"],
+  ["learn_actions_week_max", "int", LS.actionsWeekMax.default, LS.actionsWeekMax.min, LS.actionsWeekMax.max, "actions", "O", LRN, "C.9, D-929", "Most weight changes the reviews may make in one week"],
+  ["learn_switch_alpha", "num", LS.switchAlpha.default, LS.switchAlpha.min, LS.switchAlpha.max, "level", "O", LRN, "C.9, D-929", "Chance of luck below which the learning Cortex may take over the decisions"],
+  ["learn_fallback_alpha", "num", LS.fallbackAlpha.default, LS.fallbackAlpha.min, LS.fallbackAlpha.max, "level", "O", LRN, "C.9, D-929", "Chance of luck below which the fixed Cortex takes the decisions back"],
+  ["learn_switch_min_nights", "int", LS.switchMinNights.default, LS.switchMinNights.min, LS.switchMinNights.max, "nights", "O", LRN, "C.9, D-929", "Finished results on nights the two Cortexes differed before the learner may take over"],
+  ["learn_cooldown_sessions", "int", LS.cooldownSessions.default, LS.cooldownSessions.min, LS.cooldownSessions.max, "sessions", "O", LRN, "C.9, D-929", "Trading days after any change of who decides before the learner may take over"],
+  ["learn_psi_break", "num", LS.psiBreak.default, LS.psiBreak.min, LS.psiBreak.max, "index", "O", LRN, "C.9, D-929", "How far an angle's inputs may shift before a night counts as a data change, not a lesson"],
+  ["learner_off", "int", LS.learnerOff.default, LS.learnerOff.min, LS.learnerOff.max, "0 or 1", "O", LRN, "C.9, CTX-072", "1 = the learning Cortex only runs beside the fixed one and may never make the decisions"],
+] as const satisfies readonly RangedRow[];
+
+type LearnRangedKey = (typeof LEARN_RANGED)[number][0];
+
+const LEARN_RANGED_KEYS = Object.fromEntries(
+  LEARN_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<LearnRangedKey, ConfigKeyDef>;
+
+const LEARN_META_TABLES = Object.fromEntries(
+  LEARN_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+    key,
+    {
+      label,
+      area,
+      bounds: boundsText(kind, min, max, unit),
+      input: kind === "int" ? "int" : "number",
+    },
+  ]),
+) as Record<LearnRangedKey, ConfigMeta>;
+
+/** Every key of the learning Cortex (C.9; the stages read them through cortex/learn/configStore.ts). */
+export const LEARN_KEY_NAMES: readonly ConfigKey[] = LEARN_RANGED.map((r) => r[0]);
+
 export const CONFIG_KEYS = {
   ...M4_RANGED_KEYS,
   ...M4_FIXED_KEYS,
@@ -1553,6 +1614,7 @@ export const CONFIG_KEYS = {
   ...M11L_ENUM_KEYS,
   ...M13L_RANGED_KEYS,
   ...MOVERS_RANGED_KEYS,
+  ...LEARN_RANGED_KEYS,
   // ch.15 l.163: evening_review_time / partial_at / send_by 20:00 / 20:30 / 20:45, O; EML-010/011.
   evening_review_time: {
     default: "20:00",
@@ -2072,6 +2134,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   ...M11L_META_TABLES,
   ...M13L_META_TABLES,
   ...MOVERS_META_TABLES,
+  ...LEARN_META_TABLES,
   evening_review_time: {
     label: "Evening Review send time",
     area: SEM,

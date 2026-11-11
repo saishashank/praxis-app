@@ -20,8 +20,31 @@ export type CortexLearnSection = {
     /** Horizon-1 angles whose inputs moved like a data break. */
     readonly dataBreaks: number;
     readonly coverage: MoverCoverage | null;
+    /** The learner's night (duel, checkpoint, leader; stage.ts learnerNight); absent without a learner. */
+    readonly learner?: LearnerNightNumbers;
   };
 };
+
+/** The learner's numbers of a night (integration step 3; D-927, D-928). */
+export type LearnerNightNumbers = {
+  readonly family: string;
+  readonly generation: number;
+  readonly leader: "fixed" | "learner";
+  readonly compareMatured: number;
+  readonly duelNights: number;
+  readonly duelAgree: number;
+  readonly eBetter20: number;
+  readonly eWorse20: number;
+  readonly matured: number;
+  readonly checkpoint: boolean;
+  readonly actions: readonly string[];
+  readonly mapRowWritten: boolean;
+  readonly leaderChange: "switch" | "fallback" | "owner_kill" | null;
+};
+
+/** The scorecard's closing line (left out on a night the learner's review lowered a weight). */
+export const NO_WEIGHT_CHANGED =
+  "No weight changed tonight; the Cortex is never re-weighted on one night's results.";
 
 /** Owner-text bans on top of the card list (CTX-070, LRN-AT-9). */
 export const LEARN_BANNED: readonly RegExp[] = [
@@ -127,7 +150,7 @@ export function scorecardWords(x: {
       `The inputs of ${names(breaks)} look different from the last three months, so ${plural(breaks.length, "its result reads", "their results read")} as a data change tonight, not a lesson.`,
     );
   }
-  lines.push("No weight changed tonight; the Cortex is never re-weighted on one night's results.");
+  lines.push(NO_WEIGHT_CHANGED);
   return {
     lines,
     numbers: {

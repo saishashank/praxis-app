@@ -490,6 +490,30 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-897 | Research challengers, logged and not trading: the heavy-volume-down veto on F1.v2-mom candidates, a bear-state size halving, and the angle yardstick (top-dec... |
 | D-898 | Diagnosis readout of trades (tradesReadout, read-only, run by diagnose-signals.yml): the main books' trades closed in the last ten fill sessions by family an... |
 | D-899 | (O-79e, the result of the one look, 2026-11-08) F1.v2-mom stays in shadow. |
+| D-923 | The learning Cortex is a rule version per family, <family>.learn (v1: F1.learn), stored as append-only cortex_map rows whose params_json carries the fixed ru... |
+| D-924 | Replay parity: latestMaps(db, market, asOfD) counts a row the learning system wrote (learner: true, or a future system-written base row marked system: true)... |
+| D-925 | The loop never writes angle_passport: status moves inside the learner are weights (watch = capped, benched = 0), so the fixed Cortex's scored set and refit g... |
+| D-926 | An angle with weight 0 is still computed and must be defined: benching never changes who is eligible. |
+| D-927 | A switch to the learner binds on the matured hold-length net (learner minus fixed, per trade) unless the rule holds 20 sessions or fewer, when the four-week... |
+| D-928 | Weights change weekly only (the weekly stage); a checkpoint acts only downward and reversibly (cap, rollback, watch, escalate, fallback); a checkpoint never... |
+| D-929 | Cadences, windows and levels are the C.9 table, pre-registered, Owner-editable within bounds (LEARN_CONFIG_SPEC); the prose constants of the design are the s... |
+| D-930 | The scorecard scores every liquid share, never only the picks; movers on company news published before the open are excluded from the angles' next-day lift. |
+| D-931 | Every weekly run re-weights a coin-flip twin (placebo) beside the real learner and logs it; the words say "within chance" when the real move is inside the tw... |
+| D-932 | "Intelligent every next day" is delivered as a fresh scorecard and words every night, protective checkpoint moves every 2 or 3 days, weight generations weekl... |
+| D-933 | (part B) The cluster cap of a weighted score is max(cluster_weight_max, 1/K): with K clusters at equal weight no share is below 1/K, so equal weights are nev... |
+| D-934 | (part A) The 20-session scorecard leg reads the features of D-21 and the return from the close of D-21 to the close of D-1; returns use raw closes, as the da... |
+| D-935 | (part A) The population check is a PSI over 10 bins on [-1, 1] plus a no-value bin, for the next-day leg only, against the summed histograms of the earlier n... |
+| D-936 | (part A) The news-before-open exclusion applies to the next-day leg only; the regime is the stored regime_daily state; mover coverage ("in the Cortex's top t... |
+| D-937 | (part B) A map's cut-off is decisionCutoffUtc of the night; a learner row whose weights do not match its hash, an undeclared cluster weight, a negative or no... |
+| D-938 | (part C) A weekly finding needs both an overlap-corrected t-test (n / 20 effective nights, Bartlett degrees of freedom) rejected by Benjamini-Hochberg at lea... |
+| D-939 | (part C) The duel's e-process uses the null variance (mean square about 0, floored at τ²); the Page-Hinkley null pool leaves out the latest 20 nights; the pl... |
+| D-940 | The 19 C.9 keys are in the configuration registry (LEARN_KEY_NAMES, area Learning and knowledge), defaults and bounds read from LEARN_CONFIG_SPEC; none is a... |
+| D-941 | Weekly stage cortex, last in LEARNING_STAGES: the first run (or a run after the Owner replaced the fixed F1 rule) writes generation 0 of F1.learn from the fi... |
+| D-942 | Nightly duel inside cortexLearnNight, after the scorecard: the taken decisions of D-21 (fixed and learner rows told apart by their stored rule version), the... |
+| D-943 | Checkpoint rows: on a checkpoint night the B.4 checks read the horizon-1 rows of the null window only (a checkpoint night reads at most 15,000 rows, tested o... |
+| D-944 | Cortex page: a "The learning Cortex" panel (learner on or off, who makes the decisions per family, the last weekly check and its words, the duel with "chance... |
+| D-945 | Plug-in points for the probe and base build: |
+| D-946 | A failure of the learner part is never fatal to the night: the scorecard section is still stored, with one plain line that the comparison runs again tomorrow... |
 
 ## M16 (M16_design.md)
 

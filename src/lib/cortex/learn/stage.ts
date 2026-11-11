@@ -6,6 +6,7 @@
 // scorecard rows, one 'scorecard' event, and the night's words into daily_learning.body_json.cortex.
 // Insert-or-ignore everywhere: a re-run of a night writes nothing new and returns the same words.
 // Nothing here changes a Cortex weight, map, passport or family status (observation tier, B.2).
+import type { Client } from "@libsql/client";
 import type { CalendarRow } from "@/lib/data/calendar";
 import { addDays, isTradingDay, previousTradingDay, sessionsBetween } from "@/lib/data/calendar";
 import type { MoverExplanation } from "@/lib/learning/daily";
@@ -15,7 +16,11 @@ import { inResultsWindow } from "../gates/resultsSeason";
 import type { BatchExec } from "../store/common";
 import { HIST_BINS, moverCoverage, scorecardNight, type Histogram } from "./scorecard";
 import { eventsSince, featureNights, insertAngleDays, logEvent } from "./store";
-import { eventWords, scorecardWords, type CortexLearnSection } from "./words";
+import { eventWords, NO_WEIGHT_CHANGED, scorecardWords, type CortexLearnSection } from "./words";
+import type { LearnConfig } from "./config";
+import { loadLearnConfig } from "./configStore";
+import { CORTEX_LEARN_HOOKS, HOOK_SEQ_BASE, type CortexLearnHooks } from "./hooks";
+import { learnerNight } from "./nightLearner";
 
 /** Sessions back to the 20-session feature evening (D-21) and the prior-60 reference window. */
 export const BACK20_SESSIONS = 21; // threshold-ok: design C.6 feature night of the 20-session leg
@@ -34,7 +39,17 @@ export type CortexLearnOpts = {
   readonly movers: readonly MoverExplanation[];
   /** created_at of the event; never part of a statistic. */
   readonly now: string;
+  /** The decision cut-off HH:MM of the night (map as-of, D-924); default the agent parameter. */
+  readonly cutoffHhmm?: string;
+  /** The C.9 levels (default: the configuration store, loadLearnConfig). */
+  readonly config?: LearnConfig;
+  /** The probe / base plug-ins (default CORTEX_LEARN_HOOKS). */
+  readonly hooks?: CortexLearnHooks;
 };
+
+/** The line the section carries when the learner part failed tonight (the scorecard still stands). */
+export const LEARNER_FAILED_WORDS =
+  "The learning Cortex could not compare its picks tonight; the scorecard above is complete and the comparison runs again tomorrow.";
 
 function sessionsBack(d: string, n: number, calendar: readonly CalendarRow[]): string {
   let t = d;
@@ -132,10 +147,69 @@ export async function cortexLearnNight(
     words: eventWords(section),
     createdAt: o.now,
   });
+  // the learner's night (duel, leader, checkpoint): never fatal to the scorecard's words
+  let learner: Awaited<ReturnType<typeof learnerNight>> = null;
+  let learnerFailed = false;
+  try {
+    learner = await learnerNight(db, {
+      market: o.market,
+      d: o.d,
+      calendar: o.calendar,
+      prev,
+      back20,
+      regimeBack20: regimes.get(back20) ?? "unknown",
+      bars,
+      priorEvents: prior,
+      abstainTonight: card.rows.length === 0,
+      now: o.now,
+      ...(o.cutoffHhmm === undefined ? {} : { cutoffHhmm: o.cutoffHhmm }),
+      ...(o.config === undefined ? {} : { config: o.config }),
+    });
+  } catch {
+    learnerFailed = true;
+  }
+  // the probe / base builder's nightly step (hooks.ts), after the learner; never fatal either
+  const hookLines: string[] = [];
+  const hooks = o.hooks ?? CORTEX_LEARN_HOOKS;
+  if (hooks.probeNight !== undefined) {
+    try {
+      const r = await hooks.probeNight(db as Client, {
+        market: o.market,
+        d: o.d,
+        calendar: o.calendar,
+        world: o.world,
+        learner: learner?.learner ?? null,
+        config: learner?.config ?? o.config ?? (await loadLearnConfig(db)),
+        seqBase: HOOK_SEQ_BASE,
+        now: o.now,
+      });
+      if (r && r.lines) hookLines.push(...r.lines);
+    } catch {
+      // the probe step failed tonight; the scorecard and the learner stand
+    }
+  }
+  const out: CortexLearnSection =
+    learner === null && hookLines.length === 0
+      ? learnerFailed
+        ? { ...section, lines: [...section.lines, LEARNER_FAILED_WORDS] }
+        : section
+      : {
+          lines: [
+            ...section.lines.filter(
+              (l) => !(learner?.numbers.mapRowWritten === true && l === NO_WEIGHT_CHANGED),
+            ),
+            ...(learner?.lines ?? []),
+            ...hookLines,
+          ],
+          numbers: {
+            ...section.numbers,
+            ...(learner === null ? {} : { learner: learner.numbers }),
+          },
+        };
   await db.execute({
     sql: `UPDATE daily_learning SET body_json = json_set(body_json, '$.cortex', json(?))
           WHERE market = ? AND d = ?`,
-    args: [JSON.stringify(section), o.market, o.d],
+    args: [JSON.stringify(out), o.market, o.d],
   });
-  return section;
+  return out;
 }

@@ -139,7 +139,8 @@ export type Stage =
   | "factors"
   | "robustness"
   | "rankIc"
-  | "experts";
+  | "experts"
+  | "cortex";
 
 export type StageTime = { readonly stage: Stage; readonly minutes: number };
 
