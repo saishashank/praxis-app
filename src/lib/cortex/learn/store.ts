@@ -14,6 +14,9 @@ import {
   type Exec,
 } from "../store/common";
 import type { AngleDayRow, FeatureNight, Horizon } from "./scorecard";
+import type { DuelDecisionRow, DuelOutcomeRow } from "./types";
+
+export type { DuelDecisionRow, DuelOutcomeRow };
 
 /** Statements per db.batch. */
 export const LEARN_BATCH = 200; // threshold-ok: statements per batched write (C.7)
@@ -96,6 +99,93 @@ export async function angleDaysSince(
     args: [market, fromD, upper(toD)],
   });
   return r.rows.map((x) => toAngleDay(x as Record<string, unknown>));
+}
+
+/**
+ * Scorecard rows of one horizon of nights fromD..toD (inclusive), oldest first. The checkpoint reads
+ * the horizon-1 rows only (design C.10: half the 120-night read).
+ */
+export async function angleDaysOfHorizon(
+  db: Exec,
+  market: string,
+  horizon: Horizon,
+  fromD: string,
+  toD?: string,
+): Promise<AngleDayRow[]> {
+  const r = await db.execute({
+    sql: `SELECT * FROM cortex_angle_day WHERE market = ? AND d >= ? AND d <= ? AND horizon = ?
+          ORDER BY d, angle_id`,
+    args: [market, fromD, upper(toD), horizon],
+  });
+  return r.rows.map((x) => toAngleDay(x as Record<string, unknown>));
+}
+
+// ---- cortex_decision / cortex_outcome (read only, the duel) -----------------------------------------
+
+/**
+ * The taken decision rows (no failing gate) of night d for the given families: the fixed and the
+ * learner books (`#learn` / `#fixed`) together; at most a few rows per book (its slots). One read.
+ */
+export async function takenDecisions(
+  db: Exec,
+  market: string,
+  d: string,
+  families: readonly string[],
+): Promise<DuelDecisionRow[]> {
+  if (families.length === 0) return [];
+  const r = await db.execute({
+    sql: `SELECT d, book_id, code, family, rule_version, rank_key FROM cortex_decision
+          WHERE market = ? AND d = ? AND first_fail_gate IS NULL
+            AND family IN (${families.map(() => "?").join(", ")})
+          ORDER BY book_id, code, arm`,
+    args: [market, d, ...families],
+  });
+  return r.rows.map((row) => {
+    const x = row as Record<string, unknown>;
+    return {
+      d: str(x.d),
+      bookId: str(x.book_id),
+      code: str(x.code),
+      family: str(x.family),
+      ruleVersion: strOrNull(x.rule_version),
+      rankKey: strOrNull(x.rank_key),
+    };
+  });
+}
+
+/**
+ * Filled outcomes with a net of decisions made from fromD on, for the given families, joined to their
+ * decision for the size and rule version. A date-range scan on the outcome key; no OFFSET.
+ */
+export async function filledOutcomesSince(
+  db: Exec,
+  market: string,
+  fromD: string,
+  families: readonly string[],
+): Promise<DuelOutcomeRow[]> {
+  if (families.length === 0) return [];
+  const r = await db.execute({
+    sql: `SELECT o.d, o.book_id, o.code, o.net_micro, o.fill_micro, c.qty, c.rule_version
+          FROM cortex_outcome o JOIN cortex_decision c
+            ON c.market = o.market AND c.d = o.d AND c.book_id = o.book_id AND c.code = o.code
+              AND c.arm = o.arm
+          WHERE o.market = ? AND o.d >= ? AND o.fill_status = 'filled' AND o.net_micro IS NOT NULL
+            AND c.qty > 0 AND c.family IN (${families.map(() => "?").join(", ")})
+          ORDER BY o.d, o.book_id, o.code`,
+    args: [market, fromD, ...families],
+  });
+  return r.rows.map((row) => {
+    const x = row as Record<string, unknown>;
+    return {
+      d: str(x.d),
+      bookId: str(x.book_id),
+      code: str(x.code),
+      ruleVersion: strOrNull(x.rule_version),
+      netMicro: num(x.net_micro),
+      fillMicro: num(x.fill_micro),
+      qty: num(x.qty),
+    };
+  });
 }
 
 // ---- cortex_learn_compare --------------------------------------------------------------------------
@@ -203,7 +293,8 @@ export type LearnEventKind =
   | "switch"
   | "fallback"
   | "rollback"
-  | "placebo";
+  | "placebo"
+  | "base_change";
 
 export type LearnEvent = {
   readonly market: string;
@@ -272,6 +363,23 @@ export async function eventsSince(
       createdAt: str(x.created_at),
     };
   });
+}
+
+/** The newest night with an event of one of `kinds` on or before toD; null when none. */
+export async function lastEventD(
+  db: Exec,
+  market: string,
+  kinds: readonly LearnEventKind[],
+  toD?: string,
+): Promise<string | null> {
+  if (kinds.length === 0) return null;
+  const r = await db.execute({
+    sql: `SELECT MAX(d) AS d FROM cortex_learn_event WHERE market = ? AND d <= ?
+            AND kind IN (${kinds.map(() => "?").join(", ")})`,
+    args: [market, upper(toD), ...kinds],
+  });
+  const d = r.rows[0]?.d;
+  return d === null || d === undefined ? null : str(d);
 }
 
 // ---- cortex_leader ---------------------------------------------------------------------------------

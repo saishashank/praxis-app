@@ -131,6 +131,90 @@ describe("seeded world", () => {
     }
   });
 
+  it("O-81 (D-944): no learner panel before the first generation; learner rows are not counted as maps", async () => {
+    const w = await seeded();
+    expect((await loadCortex(deps(w, "owner"))).data.learner).toBeNull();
+    const run = (sql: string, args: (string | number | null)[] = []) =>
+      w.main.execute({ sql, args });
+    await run(
+      `INSERT INTO cortex_map (market, family, rule_version, fitted_at, params_json, active_set_hash, n_eff, pool, fit_split)
+       VALUES ('AU','F4','F4.learn','2026-10-02T07:10:02.000Z','{"learner":true,"generation":0}','h',1,'p','development')`,
+    );
+    for (const [d, seq, kind, words] of [
+      ["2026-10-02", 100, "reweight", "Weekly re-weighting: more weight to 'x'."],
+      ["2026-10-02", 101, "placebo", "hidden twin"],
+      ["2026-10-14", 0, "scorecard", "hidden nightly"],
+      ["2026-10-14", 1, "watch", "Review: 'x' has slipped."],
+    ] as const) {
+      await run(
+        `INSERT INTO cortex_learn_event (market, d, seq, kind, family, angle_id, generation, evidence_json, words,
+           reverses_seq, expires_d, created_at) VALUES ('AU', ?, ?, ?, 'F4', NULL, 0, '{}', ?, NULL, NULL, ?)`,
+        [d, seq, kind, words, `${d}T09:00:00Z`],
+      );
+    }
+    await run(
+      `INSERT INTO cortex_learn_compare (market, decision_d, family, book_id, fixed_rule_version,
+         learner_rule_version, learner_generation, fixed_code, learner_code, agree, fixed_ret1_ppm,
+         learner_ret1_ppm, fixed_ret20_ppm, learner_ret20_ppm, matured_d, regime)
+       VALUES ('AU','2026-10-05','F4','B1','v1','F4.learn',0,'ZZA','ZZB',0,0,0,1000,21000,'2026-10-16','RISK-ON')`,
+    );
+    await run(
+      `INSERT INTO cortex_leader (market, family, since_d, leader, learner_rule_version, learner_generation,
+         evidence_json, set_by) VALUES ('AU','F4','2026-10-10','learner','F4.learn',0,'{}','evaluator')`,
+    );
+    const v = (await loadCortex(deps(w, "owner"))).data;
+    expect(v.mapsLoaded).toBe(1); // the fixed F1 map only
+    expect(v.families.find((f) => f.mapFitted !== null)!.name).toBe("Follow the trend");
+    const l = v.learner!;
+    expect(l.on).toBe(true);
+    expect(l.leaders).toHaveLength(1);
+    expect(l.leaders[0]!.text).toMatch(/^The learning Cortex makes the decisions since /);
+    expect(l.weekly).toEqual({
+      day: expect.any(String),
+      words: "Weekly re-weighting: more weight to 'x'.",
+    });
+    expect(l.duelText).toMatch(/same share on 0 of 1 nights; .* ahead by 2\.0 % over four weeks/);
+    expect(l.events.map((e) => e.words)).toEqual([
+      "Review: 'x' has slipped.",
+      "Weekly re-weighting: more weight to 'x'.",
+    ]);
+    expect(JSON.stringify(l)).not.toMatch(/[0-9]{4}-[0-9]{2}-[0-9]{2}/);
+    // the Owner kill; a masked viewer sees no words, no family code
+    await run(
+      `INSERT INTO config_version (key, scope, value_json, changed_at) VALUES ('learner_off','global','1',?)`,
+      [NOW.toISOString()],
+    );
+    const off = (await loadCortex(deps(w, "owner"))).data.learner!;
+    expect(off.on).toBe(false);
+    expect(off.leaders[0]!.text).toMatch(/^The fixed Cortex makes the decisions/);
+    const masked = (await loadCortex(deps(w, "viewer"))).data.learner!;
+    expect(masked.events).toEqual([]);
+    expect(masked.eventCount).toBe(2);
+    expect(masked.weekly!.words).toBe("The weekly re-weighting ran.");
+    expect(masked.leaders[0]!.name).toMatch(/^Strategy \d$/);
+    expect(JSON.stringify(masked)).not.toMatch(/F4|'x'/);
+  });
+
+  it("O-81: a learner that has not run a night yet shows the fixed Cortex leading and nothing measured", async () => {
+    const w = await emptyWorld();
+    await w.main.execute(
+      `INSERT INTO cortex_map (market, family, rule_version, fitted_at, params_json, active_set_hash, n_eff, pool, fit_split)
+       VALUES ('AU','F1','F1.learn','2026-10-02T07:10:02.000Z','{"learner":true,"generation":0}','h',1,'p','development')`,
+    );
+    for (const who of ["owner", "viewer"] as const) {
+      const l = (await loadCortex(deps(w, who))).data.learner!;
+      expect(l.on).toBe(true);
+      expect(l.weekly).toBeNull();
+      expect(l.duelText).toBeNull();
+      expect(l.events).toEqual([]);
+      expect(l.eventCount).toBe(0);
+      expect(l.leaders[0]!.text).toMatch(
+        /^The fixed Cortex makes the decisions; the learning Cortex runs beside it/,
+      );
+    }
+    expect((await loadCortex(deps(w, "owner"))).data.mapsLoaded).toBe(0);
+  });
+
   it("shows Editor and Viewer ISO weeks, never an exact date (UX-009)", async () => {
     const w = await seeded();
     for (const who of ["editor", "viewer"] as const) {

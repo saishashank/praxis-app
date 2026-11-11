@@ -1,5 +1,5 @@
 // @vitest-environment node
-// Migration 0031_cortex_learning (D-923…): the learning loop's four tables; rolls back and comes back
+// Migration 0031_cortex_learning (D-923…, O-81): the learning loop's six tables; rolls back and comes back
 // identical, the CHECK constraints hold and every table is append-only.
 import { createClient, type Client } from "@libsql/client";
 import { afterEach, describe, expect, it } from "vitest";
@@ -8,7 +8,14 @@ import { cleanupTempDbs, MIGRATIONS, schemaOf, tempDbUrl, track } from "./helper
 
 afterEach(cleanupTempDbs);
 
-const TABLES = ["cortex_angle_day", "cortex_learn_compare", "cortex_learn_event", "cortex_leader"];
+const TABLES = [
+  "cortex_angle_day",
+  "cortex_learn_compare",
+  "cortex_learn_event",
+  "cortex_leader",
+  "cortex_feature_probe",
+  "cortex_base_version",
+];
 
 async function fresh(): Promise<Client> {
   const db = track(createClient({ url: tempDbUrl() }));
@@ -86,7 +93,7 @@ async function fails(db: Client, sql: string): Promise<string> {
 }
 
 describe("0031_cortex_learning", () => {
-  it("creates the four tables, rolls back and comes back identical", async () => {
+  it("creates the six tables, rolls back and comes back identical", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
     const ms = await loadMigrations(MIGRATIONS("main"));
     expect(ms[30]).toMatchObject({ version: 31, name: "cortex_learning" });
@@ -167,12 +174,92 @@ describe("0031_cortex_learning", () => {
     expect(await fails(db, leader({ since: "'2026-11-14'", set_by: "'import'" }))).toMatch(/CHECK/);
   });
 
+  it("cortex_learn_event: the base_change kind, and the (market, kind, d) index of the probe reader", async () => {
+    const db = await fresh();
+    await db.execute(event({ seq: "150", kind: "'base_change'", family: "'F1'" }));
+    const idx = await db.execute(
+      "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'cortex_learn_event'",
+    );
+    expect(idx.rows.map((r) => r.name)).toContain("cortex_learn_event_kind");
+    const plan = await db.execute(
+      `EXPLAIN QUERY PLAN SELECT * FROM cortex_learn_event INDEXED BY cortex_learn_event_kind
+       WHERE market = 'AU' AND kind IN ('probe_open', 'probe_close') AND d <= '2026-11-10'`,
+    );
+    expect(JSON.stringify(plan.rows)).toMatch(/cortex_learn_event_kind/);
+  });
+
+  it("cortex_feature_probe: one value per code, angle and night; a value or a flag; prunable beyond retention", async () => {
+    const db = await fresh();
+    const today = new Date().toISOString().slice(0, 10);
+    const probe = (d: string, code: string, value: string, flag: string) =>
+      `INSERT INTO cortex_feature_probe (market, d, code, angle_id, value, flag, angle_version, manifest_id)
+       VALUES ('AU', '${d}', '${code}', 'A-D2-07', ${value}, ${flag}, 2, 'm1')`;
+    await db.execute(probe(today, "ZZA", "0.5", "NULL"));
+    await db.execute(probe(today, "ZZB", "NULL", "'hot'"));
+    await db.execute(probe(today, "ZZC", "NULL", "NULL"));
+    expect(await fails(db, probe(today, "ZZA", "0.1", "NULL"))).toMatch(/UNIQUE|PRIMARY/i);
+    expect(await fails(db, probe(today, "ZZD", "1.5", "NULL"))).toMatch(/CHECK/);
+    expect(await fails(db, probe(today, "ZZE", "0.2", "'hot'"))).toMatch(/CHECK/);
+    expect(await fails(db, probe("11 Nov", "ZZF", "0.2", "NULL"))).toMatch(/CHECK/);
+    await db.execute(probe("2020-01-06", "ZZOLD", "0.1", "NULL"));
+    expect(await fails(db, "DELETE FROM cortex_feature_probe WHERE code = 'ZZA'")).toMatch(
+      /append-only/,
+    );
+    await db.execute("DELETE FROM cortex_feature_probe WHERE code = 'ZZOLD'");
+    const left = await db.execute("SELECT code FROM cortex_feature_probe ORDER BY code");
+    expect(left.rows.map((r) => r.code)).toEqual(["ZZA", "ZZB", "ZZC"]);
+  });
+
+  it("cortex_base_version: numbered versions, version 1 is the initial one, one measure per change", async () => {
+    const db = await fresh();
+    const base = (over: Record<string, string> = {}) => {
+      const v = {
+        version: "1",
+        reason: "'initial'",
+        added: "'[]'",
+        removed: "'[]'",
+        angles: "'[\"A-D1-11\"]'",
+        family: "'F1'",
+        ...over,
+      };
+      return `INSERT INTO cortex_base_version (market, family, version, since_d, reason, rule_version,
+        angles_json, added_json, removed_json, evidence_json, created_at) VALUES ('AU', ${v.family}, ${v.version},
+        '2026-11-10', ${v.reason}, 'F1.v2-mom', ${v.angles}, ${v.added}, ${v.removed}, '{}', 'now')`;
+    };
+    await db.execute(base());
+    expect(await fails(db, base())).toMatch(/UNIQUE|PRIMARY/i);
+    await db.execute(
+      base({
+        version: "2",
+        reason: "'promote'",
+        added: "'[\"A-D2-07\"]'",
+        angles: '\'["A-D1-11","A-D2-07"]\'',
+      }),
+    );
+    await db.execute(base({ version: "3", reason: "'retire'", removed: "'[\"A-D2-07\"]'" }));
+    await db.execute(base({ version: "4", reason: "'owner_import'" }));
+    expect(await fails(db, base({ version: "5", reason: "'initial'" }))).toMatch(/CHECK/);
+    expect(await fails(db, base({ version: "5", reason: "'promote'" }))).toMatch(/CHECK/);
+    expect(await fails(db, base({ version: "5", reason: "'retire'" }))).toMatch(/CHECK/);
+    expect(await fails(db, base({ version: "5", reason: "'grow'" }))).toMatch(/CHECK/);
+    expect(
+      await fails(db, base({ version: "5", reason: "'owner_import'", angles: "'{}'" })),
+    ).toMatch(/CHECK/);
+    expect(await fails(db, base({ version: "0" }))).toMatch(/CHECK/);
+    expect(await fails(db, base({ family: "'F9'" }))).toMatch(/CHECK/);
+  });
+
   it("every table is append-only", async () => {
     const db = await fresh();
     await db.execute(angleDay());
     await db.execute(compare());
     await db.execute(event());
     await db.execute(leader());
+    await db.execute(`INSERT INTO cortex_feature_probe (market, d, code, angle_id, value, flag, angle_version,
+      manifest_id) VALUES ('AU', '${new Date().toISOString().slice(0, 10)}', 'ZZA', 'A-D2-07', 0.5, NULL, 2, 'm1')`);
+    await db.execute(`INSERT INTO cortex_base_version (market, family, version, since_d, reason, rule_version,
+      angles_json, added_json, removed_json, evidence_json, created_at) VALUES ('AU', 'F1', 1, '2026-11-10',
+      'initial', 'F1.v2-mom', '[]', '[]', '[]', '{}', 'now')`);
     for (const t of TABLES) {
       expect(await fails(db, `UPDATE ${t} SET market = 'AU'`)).toMatch(/append-only/);
       expect(await fails(db, `DELETE FROM ${t}`)).toMatch(/append-only/);

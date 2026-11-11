@@ -76,10 +76,11 @@ export async function picksMain(
       out(`arena-picks ${MARKET} ${d}: skipped (no reviewed night)`);
       return 0;
     }
+    const params = await loadAgentParams(db);
     const p = await runPicksNight(db, {
       market: MARKET,
       d,
-      params: await loadAgentParams(db),
+      params,
       calendar: await loadCalendar(db, MARKET),
       now: new Date(nowMs()).toISOString(),
     });
@@ -134,11 +135,15 @@ export async function picksMain(
               world: night.world,
               movers: night.movers,
               now: new Date(nowMs()).toISOString(),
+              cutoffHhmm: params.decisionCutoff,
             });
       out(
         c === null
           ? `arena-cortex-learn ${MARKET} ${d}: skipped (no daily learning tonight)`
-          : `arena-cortex-learn ${MARKET} ${d}: angles=${c.numbers.angles} rows=${c.numbers.rows} next_day_right=${c.numbers.nextDayRight}/${c.numbers.nextDayOf} data_breaks=${c.numbers.dataBreaks}`,
+          : `arena-cortex-learn ${MARKET} ${d}: angles=${c.numbers.angles} rows=${c.numbers.rows} next_day_right=${c.numbers.nextDayRight}/${c.numbers.nextDayOf} data_breaks=${c.numbers.dataBreaks}` +
+              (c.numbers.learner === undefined
+                ? ""
+                : ` learner_generation=${c.numbers.learner.generation} leader=${c.numbers.learner.leader} checkpoint=${c.numbers.learner.checkpoint ? 1 : 0} actions=${c.numbers.learner.actions.length}`),
       );
     } catch (error) {
       out(

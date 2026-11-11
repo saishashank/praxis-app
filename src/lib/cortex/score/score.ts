@@ -47,7 +47,7 @@ const badWeight = (w: unknown): boolean => typeof w !== "number" || !Number.isFi
  * cluster weight for a cluster the rule does not declare, no positive cluster weight, or (when
  * `clusterWeightMax` is given) a cluster whose share cw_c / Σ cw exceeds the cap. The cap is
  * max(cluster_weight_max, 1/K): with K clusters at equal weight no share can be below 1/K, so equal
- * weights are never a violation (D-933 proposed).
+ * weights are never a violation (D-933).
  */
 export function weightsProblem(
   weights: ScoreWeights,

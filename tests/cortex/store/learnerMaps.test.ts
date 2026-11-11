@@ -27,6 +27,9 @@ import {
   currentMap,
   insertMap,
   isLearnerRow,
+  isSystemRow,
+  learnerHistory,
+  mapInForce,
   latestMaps,
   learnerMaps,
   mapCutoffOf,
@@ -116,7 +119,8 @@ describe("D-924: latestMaps as of a night's decision cut-off", () => {
         m.ruleVersion,
         (m.params as MapParams).generation ?? null,
       ]);
-    expect(await at("2029-12-31")).toEqual([]);
+    // an imported (fixed) map is never filtered by date (D-924 scope): fitted on 1 Jan, still in force
+    expect(await at("2029-12-31")).toEqual([["F1.zz.1", null]]);
     expect(await at("2030-01-02")).toEqual([["F1.zz.1", null]]);
     expect(await at("2030-01-03")).toEqual([["F1.zz.1", null]]);
     expect(await at("2030-01-06")).toEqual([
@@ -128,6 +132,41 @@ describe("D-924: latestMaps as of a night's decision cut-off", () => {
       ["F1.zz.1", null],
     ]);
     expect(await at()).toEqual(await at("2030-01-10"));
+  });
+
+  it("D-924 scope: an Owner-imported map fitted after night d is still used on night d", async () => {
+    const db = await seeded();
+    // a new fixed fit imported on 20 Jan (after the 10 Jan cut-off) and a system-written base row
+    const LATE = row("F1.zz.1", "2030-01-20T00:00:00.000Z", { ...FIXED_PARAMS, a: 9 } as MapParams);
+    const SYS = row("F1.base.2", "2030-01-20T00:00:00.000Z", {
+      ...FIXED_PARAMS,
+      system: true,
+    } as MapParams);
+    await insertMap(db, LATE);
+    await insertMap(db, SYS);
+    const on10 = await latestMaps(db, M, "2030-01-10", "18:10");
+    expect(on10.map((m) => [m.ruleVersion, m.params.a])).toEqual([
+      ["F1.learn", 1.2],
+      ["F1.zz.1", 9], // the import of 20 Jan is in force on 10 Jan, exactly as before D-924
+    ]);
+    // the system row is bound by the cut-off like a learner row
+    const on21 = await latestMaps(db, M, "2030-01-21", "18:10");
+    expect(on21.map((m) => m.ruleVersion)).toEqual(["F1.base.2", "F1.learn", "F1.zz.1"]);
+    expect(isSystemRow(SYS)).toBe(true);
+    expect(isSystemRow(GEN0)).toBe(true);
+    expect(isSystemRow(FIXED)).toBe(false);
+  });
+
+  it("mapInForce / learnerHistory: the generation in force on a decision's night", async () => {
+    const db = await seeded();
+    const hist = await learnerHistory(db, M);
+    expect(hist.map((m) => m.params.generation)).toEqual([0, 1]);
+    const gen = (d: string) => mapInForce(hist, "F1", "F1.learn", d, "18:10")?.params.generation;
+    expect(gen("2030-01-03")).toBeUndefined();
+    expect(gen("2030-01-06")).toBe(0);
+    expect(gen("2030-01-09")).toBe(0);
+    expect(gen("2030-01-10")).toBe(1);
+    expect(mapInForce(hist, "F4", "F1.learn", "2030-01-10")).toBeUndefined();
   });
 
   it("learnerMaps: only learner rows, as of the night", async () => {
@@ -466,5 +505,67 @@ describe("persistNight and scoreOutcomes with challenger rows", () => {
     expect(cohortReads).toContain("E01");
     expect(cohortReads.some((id) => String(id).includes("#"))).toBe(false);
     expect(res.open).toBeGreaterThan(0); // the holds are still open (no later bar)
+  });
+
+  it("D-924: a learner decision walks the plan of the generation in force on its night", async () => {
+    const LONG = weekdays("2026-02-02", 46);
+    const END = LONG[LONG.length - 1]!;
+    const closedLearn = async (gens: readonly MapRow[]): Promise<number> => {
+      const db = await freshDb("main");
+      const inputs = learnerInputs();
+      const out = runNight(inputs);
+      await persistNight(db, {
+        market: M,
+        d: D,
+        inputs,
+        out,
+        runtimeMs: 1,
+        createdAt: "2026-03-28T08:00:00.000Z",
+      });
+      for (const g of gens) await insertMap(db, g);
+      const learnCodes = [
+        ...new Set(out.shadow.filter((x) => x.bookId === "E01#learn").map((x) => x.code)),
+      ];
+      for (const code of learnCodes) {
+        for (const b of barsFor(code, LONG)) {
+          await db.execute({
+            sql: `INSERT INTO price_bar (market, code, d, o, h, l, c, volume, source, published_at, ingested_at)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'zz', ?, ?)`,
+            args: [
+              M,
+              code,
+              b.d,
+              Number(b.open) / 1e6,
+              Number(b.high) / 1e6,
+              Number(b.low) / 1e6,
+              Number(b.close) / 1e6,
+              Number(b.volume),
+              `${b.d}T07:00:00Z`,
+              `${b.d}T07:00:00Z`,
+            ],
+          });
+        }
+      }
+      await scoreOutcomes(db, {
+        market: M,
+        d: END,
+        params: defaultAgentParams(),
+        now: () => `${END}T09:00:00.000Z`,
+        calendar: calendarFor(LONG),
+      });
+      const r = await db.execute(
+        "SELECT COUNT(*) AS n FROM cortex_outcome WHERE book_id = 'E01#learn' AND exit_d IS NOT NULL",
+      );
+      return Number(r.rows[0]!.n);
+    };
+    const short = { ...LEARN_PARAMS(0), plan: "time_hold", hold: 2 } as MapParams;
+    const long = { ...LEARN_PARAMS(1), plan: "time_hold", hold: 200 } as MapParams;
+    const genShort = row("F1.learn", "2026-01-01T00:00:00.000Z", short);
+    const genLongLater = row("F1.learn", `${END}T00:00:00.000Z`, long); // fitted after the decision
+    const genLongBefore = row("F1.learn", "2026-01-02T00:00:00.000Z", long);
+    // the newest generation holds 200 sessions, but the decision was made under the 2-session one
+    expect(await closedLearn([genShort, genLongLater])).toBeGreaterThan(0);
+    // control: had the long-hold generation been in force on the decision night, nothing would close
+    expect(await closedLearn([genShort, genLongBefore])).toBe(0);
   });
 });

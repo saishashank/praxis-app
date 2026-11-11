@@ -25,6 +25,7 @@ const ORDER: LearningStage[] = [
   "robustness",
   "rankIc",
   "experts",
+  "cortex",
 ];
 
 /** Stages that record their call order and advance the fake clock by `stepMs` each. */
@@ -110,6 +111,7 @@ describe("weekly learning run: budget stop", () => {
       "robustness",
       "rankIc",
       "experts",
+      "cortex",
     ]);
     expect(r.status).toBe("complete");
   });
@@ -125,6 +127,7 @@ describe("weekly learning run: budget stop", () => {
       "robustness",
       "rankIc",
       "experts",
+      "cortex",
     ]);
   });
 });

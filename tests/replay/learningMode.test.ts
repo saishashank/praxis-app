@@ -28,6 +28,7 @@ const STAGES = [
   "robustness",
   "rankIc",
   "experts",
+  "cortex",
 ];
 
 function snapshotBytes(): Uint8Array {
@@ -268,13 +269,14 @@ describe("weekly learning run", () => {
       "robustness",
       "rankIc",
       "experts",
+      "cortex",
     ]);
     expect(
       await rows(
         db,
         "SELECT metric FROM replay_stat WHERE scope = 'learning' AND metric LIKE 'stage:%'",
       ),
-    ).toHaveLength(10);
+    ).toHaveLength(11);
     expect(
       await rows(db, "SELECT 1 FROM replay_stat WHERE scope = 'learning' AND metric = 'status'"),
     ).toHaveLength(1);

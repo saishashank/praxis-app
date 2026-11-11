@@ -17,6 +17,7 @@ import {
   M11L_KEY_NAMES,
   M13L_KEY_NAMES,
   MOVERS_KEY_NAMES,
+  LEARN_KEY_NAMES,
   type ConfigKey,
 } from "@/lib/config/keys";
 import { getConfig, setConfig } from "@/lib/config/store";
@@ -275,6 +276,7 @@ describe("M4 keys: defaults and bounds equal ch.15", () => {
       ...M11L_KEY_NAMES, // the M11-lite keys have their own table in tests/config/m11lKeys.test.ts
       ...M13L_KEY_NAMES, // the M13-lite keys have their own table in tests/config/m13lKeys.test.ts
       ...MOVERS_KEY_NAMES, // the movers gap keys have their own table in tests/config/moversKeys.test.ts
+      ...LEARN_KEY_NAMES, // the learning Cortex keys have their own table in tests/config/learnKeys.test.ts
     ]);
     const listed = new Set<string>([
       ...RANGED.map((r) => r[0]),

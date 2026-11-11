@@ -200,3 +200,17 @@ export function reweightWords(input: {
   }
   return `Weekly re-weighting: ${what}; weights move ${share}.${chance}`;
 }
+
+// ---- the weekly start and the nightly duel without a result yet (integration, D-941) ---------------
+
+export function startWords(family: string | null): string {
+  return `The learning Cortex starts beside the fixed one for ${familyWords(family)}, with the same weight on every angle; it records what it would do from the next trading day and may change weights on Fridays only.`;
+}
+
+export function duelWaitingWords(family: string | null): string {
+  return `Learning Cortex vs fixed Cortex for ${familyWords(family)}: no four-week result is in yet, so there is nothing to compare.`;
+}
+
+export function capLiftWords(names: readonly string[]): string {
+  return `The halved weight of ${nameList(names)} in the learning Cortex is back to its weekly level from the next trading day.`;
+}

@@ -78,7 +78,43 @@ describe("picks entry: the learning Cortex", () => {
       d: D,
       world: NIGHT.world,
       movers: [],
+      cutoffHhmm: "18:10",
     });
+  });
+
+  it("adds the learner's numbers to the line when a learner ran (O-81)", async () => {
+    const url = await fileDb();
+    learn.daily.mockResolvedValue({ ...counts, night: NIGHT });
+    learn.cortex.mockResolvedValue({
+      lines: ["x"],
+      numbers: {
+        rows: 6,
+        angles: 3,
+        nextDayOf: 2,
+        nextDayRight: 1,
+        dataBreaks: 0,
+        coverage: null,
+        learner: { generation: 2, leader: "fixed", checkpoint: true, actions: ["cap"] },
+      },
+    });
+    expect((await cli(url)).lines[3]).toBe(
+      `arena-cortex-learn AU ${D}: angles=3 rows=6 next_day_right=1/2 data_breaks=0 learner_generation=2 leader=fixed checkpoint=1 actions=1`,
+    );
+    learn.cortex.mockResolvedValue({
+      lines: ["x"],
+      numbers: {
+        rows: 6,
+        angles: 3,
+        nextDayOf: 2,
+        nextDayRight: 1,
+        dataBreaks: 0,
+        coverage: null,
+        learner: { generation: 0, leader: "learner", checkpoint: false, actions: [] },
+      },
+    });
+    expect((await cli(url)).lines[3]).toMatch(
+      /learner_generation=0 leader=learner checkpoint=0 actions=0$/,
+    );
   });
 
   it("a failing scorecard prints one line and never stops the picks; an off-session stage is skipped", async () => {

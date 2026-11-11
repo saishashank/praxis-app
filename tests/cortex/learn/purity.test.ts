@@ -6,7 +6,16 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const DIR = path.resolve(__dirname, "../../../src/lib/cortex/learn");
-const PURE = ["scorecard.ts", "words.ts"];
+const PURE = [
+  "scorecard.ts",
+  "words.ts",
+  "duel.ts",
+  "learner.ts",
+  "learnWords.ts",
+  "checkpoint.ts",
+  "compare.ts",
+  "reweight.ts",
+];
 const BAD = [
   /from\s+["']@libsql\/client["']/,
   /from\s+["']@\/lib\/db/,
