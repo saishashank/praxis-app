@@ -17,6 +17,7 @@
 // it in through `hooks`. Without hooks the loop still runs on strategy signals alone.
 // Deterministic: the same stored data gives the same document. Reads: see dailyLoad.ts (about 190k rows).
 import type { Client } from "@libsql/client";
+import type { CortexLearnSection } from "@/lib/cortex/learn/words";
 import type { CalendarRow } from "@/lib/data/calendar";
 import { addDays, isTradingDay, previousTradingDay, sessionsBetween } from "@/lib/data/calendar";
 import { STRATEGY_NAMES_DEFAULT } from "@/lib/config/keys";
@@ -37,6 +38,15 @@ import {
 import { buildImprovements, blockWords, LOOKBACK } from "./dailyImprove";
 import { loadBlocked, loadWorld, MOVERS_PER_SIDE, type World } from "./dailyLoad";
 import { classifyCause, evening, pct, PPM, splitNews } from "./dailyMovers";
+import {
+  parseTop5,
+  ROLLING_NIGHTS,
+  top5Movers,
+  top5Night,
+  type IntradayFound,
+  type PickedBefore,
+  type Top5Night,
+} from "./dailyTop5";
 
 export type MoverCause =
   | "news_before_open"
@@ -88,6 +98,11 @@ export type DailyLearning = {
   lessons: FeatureLesson[];
   improvements: ImprovementItem[];
   hypothesesOpened: string[];
+  /** D-990: the top-5 gainer target of the night (absent on nights stored before it existed). */
+  top5?: Top5Night;
+  /** The learning Cortex's night (src/lib/cortex/learn/stage.ts), added after this loop; absent when
+   *  that step did not run (the review then leaves "What the brain learned" out). */
+  cortex?: CortexLearnSection;
 };
 
 /** What the picks side knows and the learning folder may not read itself (picks isolation, D-181). */
@@ -99,6 +114,8 @@ export type PickHooks = {
     prev: string,
     codes: readonly string[],
   ): Promise<ReadonlyMap<string, string>>;
+  /** D-990: every pick published the evening before (code -> place and source; first profile). */
+  picksOf?(db: Client, market: string, prev: string): Promise<ReadonlyMap<string, PickedBefore>>;
   /** Which of these sessions had at least one published pick. */
   publishedDays(db: Client, market: string, days: readonly string[]): Promise<ReadonlySet<string>>;
   /** How close the shortlist rule came at the close of `prev` for these codes (bars up to prev). */
@@ -145,7 +162,7 @@ function parseBody(json: string): DailyLearning | null {
   try {
     const v = JSON.parse(json) as Partial<DailyLearning> | null;
     if (v === null || typeof v !== "object" || typeof v.d !== "string") return null;
-    return {
+    const out: DailyLearning = {
       d: v.d,
       summary: v.summary ?? [],
       movers: v.movers ?? [],
@@ -153,6 +170,11 @@ function parseBody(json: string): DailyLearning | null {
       improvements: v.improvements ?? [],
       hypothesesOpened: v.hypothesesOpened ?? [],
     };
+    const c = v.cortex;
+    if (c !== null && typeof c === "object" && Array.isArray(c.lines)) out.cortex = c;
+    const t = parseTop5(v.top5);
+    if (t !== null) out.top5 = t;
+    return out;
   } catch {
     return null;
   }
@@ -193,7 +215,10 @@ function buildMovers(
   },
   prepared: ReadonlyMap<string, Prepared>,
   newsAfter: ReadonlyMap<string, ReadonlySet<string>>,
-): MoverExplanation[] {
+): {
+  movers: MoverExplanation[];
+  explain: (m: { code: string; movePpm: number }, side: "gainer" | "loser") => MoverExplanation;
+} {
   const liquid = [...prepared.values()].filter((p) => w.liquidCodes.includes(p.code));
   const crossPrev = crossSection(liquid, w.sectorOf, w.prev);
   const moveOf = new Map(w.moves.map((m) => [m.code, m.movePpm]));
@@ -273,7 +298,10 @@ function buildMovers(
       nearMiss: note === undefined || note.onShortlist ? null : note.note,
     };
   };
-  return [...gainers.map((m) => one(m, "gainer")), ...losers.map((m) => one(m, "loser"))];
+  return {
+    movers: [...gainers.map((m) => one(m, "gainer")), ...losers.map((m) => one(m, "loser"))],
+    explain: one,
+  };
 }
 
 function summarise(
@@ -329,10 +357,85 @@ function summarise(
   return out;
 }
 
-export async function runDailyLearning(
+const moveOf = (w: World, code: string): number =>
+  w.moves.find((m) => m.code === code)?.movePpm ?? 0;
+
+/** D-990: the night's top-5 gainer measure: its reads (picks via the hook, intraday finds, the stored
+ *  nights of the four-week window) and the pure core of dailyTop5.ts. */
+async function top5Of(
   db: Client,
   o: Opts,
-): Promise<{ movers: number; lessons: number; improvements: number; hypotheses: number }> {
+  w: World,
+  prev: string,
+  explain: (
+    code: string,
+    side: "gainer" | "loser",
+  ) => {
+    cause: MoverCause | null;
+    name: string | null;
+  },
+): Promise<Top5Night> {
+  const sets = top5Movers(w.moves, w.liquidCodes);
+  const picked = o.hooks?.picksOf
+    ? await o.hooks.picksOf(db, o.market, prev)
+    : new Map<string, PickedBefore>();
+  let intraday: IntradayFound[] = [];
+  try {
+    const r = await db.execute({
+      sql: "SELECT code, found_at, move_ppm FROM intraday_candidate WHERE market = ? AND session_d = ?",
+      args: [o.market, o.d],
+    });
+    intraday = r.rows.map((x) => ({
+      code: String(x.code),
+      foundAt: String(x.found_at),
+      movePpm: Number(x.move_ppm),
+    }));
+  } catch {
+    intraday = []; // no intraday table on this database: picks only
+  }
+  const window = sessionsBetween(addDays(o.d, -(ROLLING_NIGHTS * 2)), o.d, o.calendar)
+    .filter((s) => s < o.d)
+    .slice(-(ROLLING_NIGHTS - 1));
+  const history: Top5Night[] = [];
+  if (window.length > 0) {
+    const r = await db.execute({
+      sql: `SELECT d, json_extract(body_json, '$.top5') AS t FROM daily_learning
+            WHERE market = ? AND d >= ? AND d < ? ORDER BY d`,
+      args: [o.market, window[0]!, o.d],
+    });
+    for (const x of r.rows) {
+      if (x.t === null || x.t === undefined) continue;
+      try {
+        const t = parseTop5(JSON.parse(String(x.t)));
+        if (t !== null) history.push(t);
+      } catch {
+        // a malformed night is skipped
+      }
+    }
+  }
+  return top5Night({
+    d: o.d,
+    sets,
+    liquid: w.liquidCodes,
+    allMoves: w.moves,
+    picked,
+    intraday,
+    explain,
+    history,
+  });
+}
+
+export type DailyLearningResult = {
+  movers: number;
+  lessons: number;
+  improvements: number;
+  hypotheses: number;
+  /** The night's World and explained movers, for the learning Cortex (no bar is read twice); absent
+   *  when nothing was learned (no session, no bars). */
+  night?: { world: World; movers: readonly MoverExplanation[] };
+};
+
+export async function runDailyLearning(db: Client, o: Opts): Promise<DailyLearningResult> {
   if (!isTradingDay(o.d, o.calendar)) return { ...ZERO };
   let prev: string;
   try {
@@ -387,7 +490,14 @@ export async function runDailyLearning(
         moverCodes,
       )
     : new Map<string, { note: string; onShortlist: boolean }>();
-  const movers = buildMovers(w, o, { picked, notes }, prepared, newsAfter);
+  const { movers, explain } = buildMovers(w, o, { picked, notes }, prepared, newsAfter);
+
+  // D-990: the Owner's top-5 gainer target (picks of the evening before, intraday finds of today)
+  const top5 = await top5Of(db, o, w, prev, (code, side) => {
+    const known = movers.find((m) => m.code === code && m.side === side);
+    const m = known ?? explain({ code, movePpm: moveOf(w, code) }, side);
+    return { cause: m.cause, name: m.name };
+  });
 
   // feed back: beats the market on 10 of the last 15 stored nights -> one hypothesis, once
   const nights = [...recent, { d: o.d, lessons } as DailyLearning];
@@ -470,6 +580,7 @@ export async function runDailyLearning(
     lessons,
     improvements,
     hypothesesOpened,
+    top5,
   };
   await db.execute({
     sql: `INSERT INTO daily_learning (market, d, body_json, created_at) VALUES (?, ?, ?, ?)
@@ -481,5 +592,6 @@ export async function runDailyLearning(
     lessons: lessons.length,
     improvements: improvements.length,
     hypotheses: opened.length,
+    night: { world: w, movers },
   };
 }

@@ -72,6 +72,14 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-588 | (final review) The health line's "written" count is over the window it reads (the last 10 nights), and says so: "n written over the last k nights". |
 | D-589 | (final review) Repo hygiene: .vitest/ is ignored (a Vitest JSON reporter output with local machine paths had been committed in WP7 and is removed from the co... |
 | D-913 | (Owner 2026-11-10: "pick multiple stocks so you diversify … while trading on the portfolio think as end-user money … if a stock is not doing well and has no... |
+| D-950 | (Owner 2026-11-11: "replace Follow the picks with My portfolio") My portfolio replaces the D-913 Follow the picks portfolio (one feature, not two): three pra... |
+| D-951 | (Owner 2026-11-11) Strategy split. Only the strategies in play on a session (a holding, or a pick bought that day) share the money. |
+| D-952 | (Owner 2026-11-11) Buy sizing and the cost guard. |
+| D-953 | (Owner 2026-11-11) Sell rules: the D-913 rules unchanged (stop-loss intraday with the gap rule, aim, time frame over with no support, weak with no signal) pl... |
+| D-954 | (Owner 2026-11-11) Rebalance band: at the close, a strategy holding more than its share plus the profile's band_pct sells the excess from its largest holding... |
+| D-955 | (Owner 2026-11-11) Words. Every trade and every split change carries a plain-words reason without the stock, amounts or dates (the page and the review add th... |
+| D-956 | (Owner 2026-11-11) Profiles in config, my_portfolio_profiles (bounds in the validator): conservative 4 holdings, 1.25 % risk per holding, 25 % per stock, shr... |
+| D-957 | (Owner 2026-11-11) Where it shows: the My portfolio card on Home (after the Intraday watch) and on the Picks page (where the Follow the picks card was), thre... |
 
 ## M13L (M13L_design.md)
 
@@ -319,6 +327,22 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-912 | (Owner 2026-11-10: "stocks in ideas and no picks makes me doubt the basis") Picks are what the Owner trades; the strategies' signals are research. "Tonight's... |
 | D-920 | (Owner 2026-11-10: "no picks yet. This is frustrating") The strategies raise only a handful of signals a night (one on 10 Nov; most rules do not fire in a mi... |
 | D-921 | (Owner 2026-11-10: "the system never learns from each day"; the Evening Review listed the top gainers and losers with "market or sector move?" and nothing wa... |
+| D-980 | (Owner 2026-11-11: "start picking stocks based on new candidates so that you can validate; show me those in the picks, a flag telling it's via a candidate")... |
+| D-981 | The candidate plan, built like the shortlist's: reference = the night's close, stop-loss 2 x ATR(14) below it and only when that is 3-10 % of the price (else... |
+| D-982 | Candidate picks never displace a strategy or a shortlist pick: the pick builder places them after each profile's own picks, in the places those leave free (g... |
+| D-983 | Candidate picks are tracked like every pick (pick_outcome, the nightly check, the luck twin, History). |
+| D-984 | The page: a "Candidate measure" badge on the pick card and on its History row, and a "Candidate" choice in the History status filter (HISTORY_FILTERS; every... |
+| D-985 | Top-5 coverage per measure (the Owner's target, D-990, inside the learning Cortex): each night, for every scored measure and every open probe, whether its to... |
+| D-986 | Its words: the scorecard adds one line before its closing line, naming the scored measure whose top tenth held a top-5 gainer on the most of the last 20 nigh... |
+| D-987 | The candidate picks' results stay evidence words, not an extra "must not be negative" condition of the promotion test: a pick outcome would then feed the Cor... |
+| D-990 | (Owner 2026-11-11: "I want to see the top 5 of top gainers in our picks or intraday consistently. That should be your target.") The nightly top-5 gainer meas... |
+| D-991 | Intraday rule: an intraday_candidate row of session d (the DAT-240 list), its earliest find per share, counts for a gainer only when the share's move at that... |
+| D-992 | A missed top-5 gainer gets its cause from the daily loop's explanation: news before the open (said on its own: "2 moved on news before the open"), else secto... |
+| D-993 | Where it reads first: at the top of the Evening Review's learning section 4 "What we learned today", under "Our target: the day's top 5 gainers" (the e-mail... |
+| D-994 | Home shows the four-week rate against chance in one line under the day sentence ("Top 5 gainers named before they moved, the last 20 trading days: 3 of 100 (... |
+| D-995 | Chance baseline: named shares / liquid shares x 5 = how many of the five a random list of the same size would hold; "about 1 day in N" = 1 / that number. |
+| D-996 | "Did the picks make money overall": the evening-before picks' mean close-to-close move on the day (distinct shares, equal weight, with how many rose and fell). |
+| D-997 | No look-ahead: the gainers of day d are known only after d's close; the picks counted were published the evening before d (before its open); an intraday find... |
 
 ## M14 (M14_design.md)
 
@@ -490,6 +514,40 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-897 | Research challengers, logged and not trading: the heavy-volume-down veto on F1.v2-mom candidates, a bear-state size halving, and the angle yardstick (top-dec... |
 | D-898 | Diagnosis readout of trades (tradesReadout, read-only, run by diagnose-signals.yml): the main books' trades closed in the last ten fill sessions by family an... |
 | D-899 | (O-79e, the result of the one look, 2026-11-08) F1.v2-mom stays in shadow. |
+| D-923 | The learning Cortex is a rule version per family, <family>.learn (v1: F1.learn), stored as append-only cortex_map rows whose params_json carries the fixed ru... |
+| D-924 | Replay parity: latestMaps(db, market, asOfD) counts a row the learning system wrote (learner: true, or a future system-written base row marked system: true)... |
+| D-925 | The loop never writes angle_passport: status moves inside the learner are weights (watch = capped, benched = 0), so the fixed Cortex's scored set and refit g... |
+| D-926 | An angle with weight 0 is still computed and must be defined: benching never changes who is eligible. |
+| D-927 | A switch to the learner binds on the matured hold-length net (learner minus fixed, per trade) unless the rule holds 20 sessions or fewer, when the four-week... |
+| D-928 | Weights change weekly only (the weekly stage); a checkpoint acts only downward and reversibly (cap, rollback, watch, escalate, fallback); a checkpoint never... |
+| D-929 | Cadences, windows and levels are the C.9 table, pre-registered, Owner-editable within bounds (LEARN_CONFIG_SPEC); the prose constants of the design are the s... |
+| D-930 | The scorecard scores every liquid share, never only the picks; movers on company news published before the open are excluded from the angles' next-day lift. |
+| D-931 | Every weekly run re-weights a coin-flip twin (placebo) beside the real learner and logs it; the words say "within chance" when the real move is inside the tw... |
+| D-932 | "Intelligent every next day" is delivered as a fresh scorecard and words every night, protective checkpoint moves every 2 or 3 days, weight generations weekl... |
+| D-933 | (part B) The cluster cap of a weighted score is max(cluster_weight_max, 1/K): with K clusters at equal weight no share is below 1/K, so equal weights are nev... |
+| D-934 | (part A) The 20-session scorecard leg reads the features of D-21 and the return from the close of D-21 to the close of D-1; returns use raw closes, as the da... |
+| D-935 | (part A) The population check is a PSI over 10 bins on [-1, 1] plus a no-value bin, for the next-day leg only, against the summed histograms of the earlier n... |
+| D-936 | (part A) The news-before-open exclusion applies to the next-day leg only; the regime is the stored regime_daily state; mover coverage ("in the Cortex's top t... |
+| D-937 | (part B) A map's cut-off is decisionCutoffUtc of the night; a learner row whose weights do not match its hash, an undeclared cluster weight, a negative or no... |
+| D-938 | (part C) A weekly finding needs both an overlap-corrected t-test (n / 20 effective nights, Bartlett degrees of freedom) rejected by Benjamini-Hochberg at lea... |
+| D-939 | (part C) The duel's e-process uses the null variance (mean square about 0, floored at τ²); the Page-Hinkley null pool leaves out the latest 20 nights; the pl... |
+| D-940 | The 19 C.9 keys are in the configuration registry (LEARN_KEY_NAMES, area Learning and knowledge), defaults and bounds read from LEARN_CONFIG_SPEC; none is a... |
+| D-941 | Weekly stage cortex, last in LEARNING_STAGES: the first run (or a run after the Owner replaced the fixed F1 rule) writes generation 0 of F1.learn from the fi... |
+| D-942 | Nightly duel inside cortexLearnNight, after the scorecard: the taken decisions of D-21 (fixed and learner rows told apart by their stored rule version), the... |
+| D-943 | Checkpoint rows: on a checkpoint night the B.4 checks read the horizon-1 rows of the null window only (a checkpoint night reads at most 15,000 rows, tested o... |
+| D-944 | Cortex page: a "The learning Cortex" panel (learner on or off, who makes the decisions per family, the last weekly check and its words, the duel with "chance... |
+| D-945 | Plug-in points for the probe and base build: |
+| D-946 | A failure of the learner part is never fatal to the night: the scorecard section is still stored, with one plain line that the comparison runs again tomorrow... |
+| D-970 | Event seqs of one night: 0 the scorecard, 1-99 the nightly learner (duel, checkpoint), 100 / 101 the weekly reweight (or no_change) and its placebo, 200-249... |
+| D-971 | The base is per family (one cortex_base_version lineage per family, version 1 = the fixed rule's scored set as the loop first saw it). |
+| D-972 | The weekly order: baseWeekly runs BEFORE the re-weighting, on the week's last session, at the embargo instant (that session's cut-off + 3 s, after the learne... |
+| D-973 | A system base row copies the map in force (the fixed rule or the previous base row) without the learner keys and sets: angles = the new base in registry orde... |
+| D-974 | The promotion test (strictest tier, B.2): from the probe's open night, at least 2 complete fixed 60-trading-day blocks (at most 4 read), every block's mean n... |
+| D-975 | At most one base change per family per 21 trading days; a retirement is chosen before a promotion; a change that would leave the base empty (or name an unkno... |
+| D-976 | Charges: every probe is charged when it opens, before any result (cortex_ledger_cell kind learn_probe + a trial_ledger row, rule version cortex:<family>.prob... |
+| D-977 | Probe sources: a daily-loop mover cause behind a big move on at least 8 of the last 20 nights. volume_no_news maps to A-D2-07 (heavy trading without news); s... |
+| D-978 | Probe scoring: the Cortex stage computes the open probes' values into cortex_feature_probe from the night after opening (never read by S or eligibility, so c... |
+| D-979 | Reads: the probe and base readers scan their own event kinds through INDEXED BY cortex_learn_event_kind (market, kind, d) - a few rows a month - never OFFSET... |
 
 ## M16 (M16_design.md)
 

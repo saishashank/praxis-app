@@ -12,6 +12,7 @@ import { generatePicks } from "./generate";
 import { loadPickInputs } from "./inputs";
 import { writePicks } from "./store";
 import { loadShortlistInputs } from "./shortlistLoad";
+import { loadCandidateInputs } from "./candidates";
 import type { PickInput } from "./types";
 import { trackPicks, type TrackSummary } from "./track";
 import { checkWaitingPicks, type CheckSummary } from "./validity";
@@ -21,6 +22,8 @@ export type PicksNightResult = {
   readonly candidates: number;
   /** D-920: shortlist candidates added to the strategy signals tonight (-1 when the shortlist failed). */
   readonly shortlist: number;
+  /** D-980: candidate-measure inputs offered tonight (-1 when that step failed). */
+  readonly candidateMeasures: number;
   readonly tracking: TrackSummary;
   readonly checks: CheckSummary;
 };
@@ -50,7 +53,7 @@ export async function runPicksNight(
     now: o.now,
   });
   if (!isTradingDay(o.d, o.calendar) || o.params.picks.picksPerProfile === 0) {
-    return { published: 0, candidates: 0, shortlist: 0, tracking, checks };
+    return { published: 0, candidates: 0, shortlist: 0, candidateMeasures: 0, tracking, checks };
   }
   const { inputs, universe } = await loadPickInputs(db, {
     market: o.market,
@@ -72,14 +75,38 @@ export async function runPicksNight(
   } catch {
     shortlistCount = -1;
   }
-  const picks = generatePicks([...inputs, ...shortlist], {
-    market: o.market,
-    d: o.d,
-    calendar: o.calendar,
-    picks: o.params.picks,
-    universe,
-    createdAt: o.now,
-  });
+  // D-980: the candidate measures' picks, after the strategy and shortlist picks (never displace them)
+  let candidates: PickInput[] = [];
+  let candidateCount = 0;
+  try {
+    candidates = await loadCandidateInputs(db, {
+      market: o.market,
+      d: o.d,
+      exclude: new Set([...inputs, ...shortlist].map((x) => x.code)),
+    });
+    candidateCount = candidates.length;
+  } catch {
+    candidateCount = -1;
+  }
+  const picks = generatePicks(
+    [...inputs, ...shortlist],
+    {
+      market: o.market,
+      d: o.d,
+      calendar: o.calendar,
+      picks: o.params.picks,
+      universe,
+      createdAt: o.now,
+    },
+    { inputs: candidates, perProfile: candidates.length },
+  );
   const published = await writePicks(db, picks);
-  return { published, candidates: inputs.length, shortlist: shortlistCount, tracking, checks };
+  return {
+    published,
+    candidates: inputs.length,
+    shortlist: shortlistCount,
+    candidateMeasures: candidateCount,
+    tracking,
+    checks,
+  };
 }

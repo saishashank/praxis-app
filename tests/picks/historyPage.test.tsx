@@ -118,6 +118,37 @@ describe("History tab (D-911)", () => {
     expect(screen.queryByRole("table")).toBeNull();
   });
 
+  it("D-984: the Candidate filter shows candidate-measure picks with their badge, else says none yet", async () => {
+    as(w, "owner");
+    render(await PicksPage({ searchParams: sp({ view: "history", status: "candidate" }) }));
+    expect(screen.getByText(/No candidate pick yet/)).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Candidate" })).toBeInTheDocument();
+    cleanup();
+    await w.main.execute({
+      sql: `INSERT INTO pick (market, d, profile, rank, code, family, tier, rule_version, signal_id, label,
+              reference_micro, buy_max_micro, valid_until_d, stop_micro, aim_micro, n_similar, bad_ppm,
+              typical_ppm, good_ppm, time_frame_sessions, size_micro, risk_micro, factors_json, based_on_json,
+              pick_sha, created_at)
+            VALUES ('AU', ?, 'aggressive', 1, 'ZZDN', 'F1', 'U1', 'CAND.v1:A-D2-07', 'c1', 'UNVALIDATED',
+              10000000, 10050000, '2026-10-23', 9500000, 11000000, 0, -50000, 0, 100000, 20, 1000000000,
+              100000000, '[]', '[]', ?, ?)`,
+      args: [D, SHA, `${D}T07:00:00.000Z`],
+    });
+    await w.main.execute({
+      sql: `INSERT INTO pick_outcome (market, d, profile, rank, kind, code, published_sha, state, updated_d)
+            VALUES ('AU', ?, 'aggressive', 1, 'pick', 'ZZDN', ?, 'waiting', ?)`,
+      args: [D, SHA, D],
+    });
+    render(
+      await PicksPage({
+        searchParams: sp({ profile: "aggressive", view: "history", status: "candidate" }),
+      }),
+    );
+    const rows = within(table()).getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(1);
+    expect(within(rows[0]!).getByTestId("candidate-badge")).toHaveTextContent("Candidate measure");
+  });
+
   it("a masked viewer sees letters and percentages, no prices, no plan and no page links", async () => {
     as(w, "viewer");
     const { container } = render(

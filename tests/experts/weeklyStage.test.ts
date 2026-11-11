@@ -16,9 +16,10 @@ const valueOf = (out: Awaited<ReturnType<typeof expertsStage>>) =>
   out.stats[0]!.value as Record<string, unknown>;
 
 describe("expertsStage", () => {
-  it("is registered last, after rankIc", () => {
-    expect(LEARNING_STAGES[LEARNING_STAGES.length - 1]).toBe("experts");
-    expect(LEARNING_STAGES[LEARNING_STAGES.length - 2]).toBe("rankIc");
+  it("is registered after rankIc, just before the learning Cortex (O-81, last)", () => {
+    expect(LEARNING_STAGES[LEARNING_STAGES.length - 1]).toBe("cortex");
+    expect(LEARNING_STAGES[LEARNING_STAGES.length - 2]).toBe("experts");
+    expect(LEARNING_STAGES[LEARNING_STAGES.length - 3]).toBe("rankIc");
   });
 
   it("nothing eligible is the normal state: no run row, no proposal, no degraded step", async () => {
