@@ -12,7 +12,7 @@ import {
   runRunNow,
   type RunNowEnv,
 } from "../src/runNow";
-import { AU_SLOTS } from "../src/schedule";
+import { AU_SLOTS } from "./auRow";
 import { TOKEN, TURSO_TOKEN, TURSO_URL, makeDb, makeNet, rows, type Net } from "./fakeTurso";
 
 const SECRET = "7".repeat(64);
@@ -297,14 +297,18 @@ describe("safety gates a manual run still respects", () => {
   it("planRequest agrees for a disabled slot in the table (worker-internal)", () => {
     const facts = {
       dispatchEnabled: true,
-      marketMode: "full",
+      markets: new Map([["AU", { mode: "full", calendar: new Map<string, string>() }]]),
       slotsEnabled: { kind: "absent" as const },
       flushDue: false,
       slotInputs: {},
       states: new Map<string, string>(),
-      calendar: new Map<string, string>(),
     };
-    const p = planRequest({ id: 1, jobId: "universe", paramsJson: "{}" }, "2026-10-19", facts);
+    const p = planRequest(
+      { id: 1, jobId: "universe", paramsJson: "{}", market: "AU" },
+      "2026-10-19",
+      facts,
+      AU_SLOTS,
+    );
     expect(p).toEqual({ run: false, status: "refused", result: "refused: unknown job" });
   });
 });

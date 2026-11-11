@@ -13,7 +13,8 @@ import {
 } from "../src/clock";
 import { isDispatchable } from "../src/dispatch";
 import { sydneyLocal } from "../src/localtime";
-import { AU_SLOTS, DISPATCHABLE_WORKFLOWS } from "../src/schedule";
+import { DISPATCHABLE_WORKFLOWS } from "../src/schedule";
+import { AU_SLOTS } from "./auRow";
 import { TOKEN, TURSO_TOKEN, TURSO_URL, makeDb, makeNet } from "./fakeTurso";
 
 const ENV: ClockEnv = {
@@ -50,7 +51,7 @@ describe("calendar-draft (OPS-103, D-961)", () => {
   });
   it("a candidate only on 1 November (09:00 to 12:00), on any weekday, never on another day", () => {
     const cand = (date: string, time: string, offset: number) =>
-      candidateSlots(sydneyLocal(utc(date, time, offset)))
+      candidateSlots(sydneyLocal(utc(date, time, offset)), AU_SLOTS)
         .map((x) => x.id)
         .includes("calendar-draft");
     expect(cand("2027-11-01", "09:00", 11)).toBe(true); // a Monday, AEDT
@@ -89,7 +90,7 @@ describe("turso-usage (OPS-104, D-958)", () => {
   });
   it("every day, also a Saturday, 06:40 to 08:40 Sydney", () => {
     const cand = (date: string, time: string) =>
-      candidateSlots(sydneyLocal(utc(date, time, 11)))
+      candidateSlots(sydneyLocal(utc(date, time, 11)), AU_SLOTS)
         .map((x) => x.id)
         .includes("turso-usage");
     expect(cand("2026-11-14", "06:40")).toBe(true); // Saturday

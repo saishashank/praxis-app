@@ -20,7 +20,7 @@ import { MemoryStore } from "@/lib/llm/store";
 import { learningRunId, learningWeek } from "@/lib/replay/learningMode";
 import { candidateSlots } from "../../worker/src/clock";
 import { sydneyLocal } from "../../worker/src/localtime";
-import { AU_SLOTS } from "../../worker/src/schedule";
+import { AU_SLOTS } from "../../worker/test/auRow";
 import { cleanupTempDbs } from "../db/helpers";
 import { makeRouter } from "../llm/helpers";
 import { MARKET, addNight, lightWorld, nowFor } from "./../learning/learnHelpers";

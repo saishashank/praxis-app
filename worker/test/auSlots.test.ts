@@ -7,7 +7,8 @@
 // never rewritten in M19.
 import { describe, expect, it } from "vitest";
 import snapshotText from "./fixtures/au-slots.snapshot.json?raw";
-import { AU_SLOTS, DEFAULT_CATCH_UP_MIN, DISPATCHABLE_WORKFLOWS } from "../src/schedule";
+import { DEFAULT_CATCH_UP_MIN, DISPATCHABLE_WORKFLOWS, slotsFor } from "../src/schedule";
+import { AU_ROW } from "./auRow";
 
 type Snapshot = ReturnType<typeof current>;
 
@@ -15,7 +16,7 @@ type Snapshot = ReturnType<typeof current>;
 const current = () => ({
   catchUpMin: DEFAULT_CATCH_UP_MIN,
   dispatchable: [...DISPATCHABLE_WORKFLOWS],
-  slots: AU_SLOTS.map((s) => JSON.parse(JSON.stringify(s)) as Record<string, any>),
+  slots: slotsFor(AU_ROW).map((s) => JSON.parse(JSON.stringify(s)) as Record<string, any>),
 });
 
 describe("AU slot snapshot (D-1007)", () => {

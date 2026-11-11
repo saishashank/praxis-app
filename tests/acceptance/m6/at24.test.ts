@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Client } from "@libsql/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { AU_SLOTS } from "../../../worker/src/schedule";
+import { AU_SLOTS } from "../../../worker/test/auRow";
 import { archiveRun, pathAllowed } from "@/lib/kb/archiveCli";
 import { buildAllDocuments, syncDocuments } from "@/lib/kb/documents";
 import { createGitDataClient, gitBlobSha } from "@/lib/kb/gitData";

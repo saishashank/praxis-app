@@ -19,6 +19,14 @@ export class DbError extends Error {
   }
 }
 
+/** The write guard refused a row of a market that is not enabled (D-995). Its name is the log word. */
+export class MarketNotEnabledError extends DbError {
+  constructor() {
+    super("market-not-enabled");
+    this.name = "MarketNotEnabled";
+  }
+}
+
 export function dbConfigured(env: DbEnv): boolean {
   return pipelineUrl(env) !== null && (env.TURSO_MAIN_TOKEN ?? "").trim() !== "";
 }
@@ -37,6 +45,7 @@ function encodeArg(a: Arg): { type: string; value?: string } {
 type WireValue = { type?: string; value?: string };
 type WireResult = {
   type?: string;
+  error?: { message?: string };
   response?: { result?: { rows?: WireValue[][]; affected_row_count?: number } };
 };
 
@@ -72,7 +81,14 @@ export async function pipeline(env: DbEnv, stmts: Stmt[], f: typeof fetch): Prom
   }
   return stmts.map((_, i) => {
     const r = results[i];
-    if (r?.type !== "ok") throw new DbError("statement-error");
+    if (r?.type !== "ok") {
+      // D-995: the write guard of an off market (trigger text `MarketNotEnabled <table>`) becomes a fixed word,
+      // never the message
+      if (typeof r?.error?.message === "string" && r.error.message.includes("MarketNotEnabled")) {
+        throw new MarketNotEnabledError();
+      }
+      throw new DbError("statement-error");
+    }
     const out = r.response?.result;
     return {
       rows: (out?.rows ?? []).map((row) => row.map(decodeValue)),

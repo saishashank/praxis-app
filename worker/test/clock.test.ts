@@ -9,7 +9,7 @@ import {
   CLAIM_STALE_MS,
   MAX_ATTEMPTS,
   candidateSlots as candidateSlotsAll,
-  decide,
+  decide as decideSlots,
   parseEnabled,
   parseState,
   resetClockCache,
@@ -20,9 +20,19 @@ import {
   type StoredState,
 } from "../src/clock";
 import { sydneyLocal } from "../src/localtime";
-import { AU_SLOTS, DISPATCHABLE_WORKFLOWS, type Slot } from "../src/schedule";
+import { DISPATCHABLE_WORKFLOWS, type Slot } from "../src/schedule";
+import { AU_SLOTS } from "./auRow";
 import worker from "../src/index";
 import { TOKEN, TURSO_TOKEN, TURSO_URL, makeDb, makeNet, rows } from "./fakeTurso";
+
+import type { Local } from "../src/localtime";
+const decide = (
+  l: Local,
+  f: Facts,
+  s: ReadonlyMap<string, StoredState>,
+  n: number,
+  slots: readonly Slot[] = AU_SLOTS,
+) => decideSlots(l, f, s, n, slots);
 
 const ENV: ClockEnv = {
   PRAXIS_ENV: "production",
@@ -239,7 +249,7 @@ describe("candidateSlots (pure)", () => {
   const L = (date: string, hm: string) => sydneyLocal(at(date, hm));
   // M8 T8: listed-only go-live slots (kb-archive, ...) are candidates too (the list is read in the same
   // request); these tests are about the slots that run without a list.
-  const candidateSlots = (l: ReturnType<typeof sydneyLocal>, slots?: readonly Slot[]) =>
+  const candidateSlots = (l: ReturnType<typeof sydneyLocal>, slots: readonly Slot[] = AU_SLOTS) =>
     candidateSlotsAll(l, slots).filter((s) => !s.requiresListing);
   it("nothing before the first slot window", () => {
     expect(candidateSlots(L(MON, "22:29"))).toEqual([]);

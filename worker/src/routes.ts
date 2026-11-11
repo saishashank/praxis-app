@@ -29,12 +29,24 @@ import {
   parseSlotsEnabled,
   parseState,
   slotKey,
+  modeOf,
+  tradingOf,
   type SlotList,
 } from "./clock";
 import { dbConfigured, pipeline, type Arg, type DbEnv, type Stmt, type StmtResult } from "./db";
 import { isWeekend, sydneyLocal, type Local } from "./localtime";
-import { isTradingDayKind } from "../../src/lib/data/calendarCore.mjs";
-import { AU_SLOTS, type Slot } from "./schedule";
+import {
+  CALENDAR_SQL,
+  MARKETS_STMT,
+  cachedMarkets,
+  marketFacts,
+  parseMarketRows,
+  readMarkets,
+  rememberMarkets,
+  sameShape,
+  type MarketRow,
+} from "./markets";
+import { slotTable, type Slot } from "./schedule";
 import { pathOf, randomHex, signHeaders } from "./selfcheck";
 
 export const MAX_ROUTE_ATTEMPTS = MAX_ATTEMPTS;
@@ -42,7 +54,6 @@ export const ROUTE_TIMEOUT_MS = 28_000;
 export const DISPATCH_ENABLED_KEY = "dispatch_enabled";
 export const FLUSH_DUE_KEY = "alert_flush_due";
 export const ROUTE_JOB = "worker-route";
-export const MARKET = "AU";
 
 export type RouteEnv = DbEnv & {
   PRAXIS_ENV: string;
@@ -53,9 +64,12 @@ export type RouteDeps = { fetch: typeof fetch; nowMs: () => number };
 
 export type RouteFacts = {
   dispatchEnabled: boolean;
-  /** market.mode for AU, or null when unreadable (treated like "off" for market-bound slots). */
+  /** market.mode of the table's first market, or null when unreadable (treated like "off" for market-bound slots). */
   marketMode: string | null;
   tradingDay: boolean;
+  /** Mode and trading day by market code, for slots tagged with a market (D-1045); absent = none tagged. */
+  marketModes?: Readonly<Record<string, string>>;
+  tradingDays?: Readonly<Record<string, boolean>>;
   /** `alert_flush_due` is set and has passed. */
   flushDue: boolean;
   /** The runtime slot list (M8 T8, decision 32); default absent = as configured. */
@@ -79,7 +93,7 @@ function untilMinute(hm: string): number {
 }
 
 /** Enabled route slots whose window is open at the local minute (pure). */
-export function routeSlotsDue(local: Local, slots: readonly Slot[] = AU_SLOTS): Slot[] {
+export function routeSlotsDue(local: Local, slots: readonly Slot[]): Slot[] {
   return slots
     .filter((s) => {
       if (!s.enabled || !isRoute(s)) return false;
@@ -103,14 +117,17 @@ export function decideRoutes(
   facts: RouteFacts,
   states: ReadonlyMap<string, StoredState>,
   nowMs: number,
-  slots: readonly Slot[] = AU_SLOTS,
+  slots: readonly Slot[],
 ): RouteAction[] {
   if (!facts.dispatchEnabled) return [];
   const out: RouteAction[] = [];
   for (const slot of routeSlotsDue(local, slots)) {
     if (listSkip(slot, facts.slotsEnabled) !== null) continue; // not listed / list unreadable
-    if (slot.marketBound && (facts.marketMode === null || facts.marketMode === "off")) continue;
-    if (slot.tradingDaysOnly && !facts.tradingDay) continue;
+    if (slot.marketBound) {
+      const mode = modeOf(facts, slot);
+      if (mode === null || mode === "off") continue;
+    }
+    if (slot.tradingDaysOnly && !tradingOf(facts, slot)) continue;
     if (slot.needs === "alert_flush_due" && !facts.flushDue) continue;
     if (slot.everyMin !== undefined) {
       out.push({ slot, key: null, attempt: 1, prev: null });
@@ -236,17 +253,39 @@ export async function runRoutes(
   env: RouteEnv,
   scheduledTime: number,
   deps: RouteDeps,
-  slots: readonly Slot[] = AU_SLOTS,
+  /** A fixed slot table (tests). Production passes none: the table is built from the enabled market rows. */
+  fixedSlots?: readonly Slot[],
 ): Promise<RouteSummary> {
   const summary: RouteSummary = { requests: 0, posted: [], failed: [] };
   try {
     const local = sydneyLocal(scheduledTime);
-    const due = routeSlotsDue(local, slots);
-    if (due.length === 0) return summary; // idle minute: no request at all
     if (env.PRAXIS_ENV !== "production" && env.PRAXIS_ENV !== "staging") return summary;
     if (!dbConfigured(env)) return summary;
     if (routeUrl(env.APP_BASE_URL, "/") === null) return summary;
     if ((env.WORKER_HMAC_SECRET ?? "").trim() === "") return summary;
+
+    // ---- the slot table: fixed (tests) or built from the enabled market rows (D-996) ---------------
+    let rows: MarketRow[] | null = null;
+    let slots: readonly Slot[];
+    if (fixedSlots !== undefined) {
+      slots = fixedSlots;
+    } else {
+      rows = cachedMarkets(deps.nowMs());
+      if (rows === null) {
+        // a cold or expired isolate: one request reads the enabled markets (the idle minute still costs
+        // at most this one)
+        try {
+          summary.requests++;
+          rows = await readMarkets(env, deps.fetch, deps.nowMs());
+        } catch (e) {
+          console.log(`routes: db error ${errName(e)}`);
+          return summary;
+        }
+      }
+      slots = slotTable(rows).slots;
+    }
+    const due = routeSlotsDue(local, slots);
+    if (due.length === 0) return summary; // idle minute: no request at all
 
     // ---- request 1: switch, mode, calendar, flush marker, single-shot states -----------------
     const nowMs = deps.nowMs();
@@ -263,18 +302,13 @@ export async function runRoutes(
         args: keys,
       },
     ];
-    let iMode = -1;
+    // the enabled markets with their current mode (one statement, <= 3 rows) and the day's calendar kind
+    const iMode = first.length;
+    first.push(MARKETS_STMT);
     let iCal = -1;
-    if (due.some((s) => s.marketBound)) {
-      iMode = first.length;
-      first.push({ sql: "SELECT mode FROM market WHERE code = ?", args: [MARKET] });
-    }
     if (due.some((s) => s.tradingDaysOnly)) {
       iCal = first.length;
-      first.push({
-        sql: "SELECT kind FROM trading_calendar WHERE market = ? AND d = ?",
-        args: [MARKET, local.date],
-      });
+      first.push({ sql: CALENDAR_SQL, args: [local.date] });
     }
     let r1: StmtResult[];
     try {
@@ -296,13 +330,27 @@ export async function runRoutes(
       else if (k === FLUSH_DUE_KEY) flushRaw = raw;
       else states.set(k, { raw, state: parseState(raw) });
     }
-    const mode = iMode >= 0 ? r1[iMode].rows[0]?.[0] : undefined;
-    const calKind = iCal >= 0 ? r1[iCal].rows[0]?.[0] : undefined;
+    const current = parseMarketRows(r1[iMode].rows);
+    if (fixedSlots === undefined) {
+      const changed = rows !== null && !sameShape(rows, current);
+      rememberMarkets(current, deps.nowMs());
+      if (changed) {
+        console.log("routes: markets changed");
+        return summary; // the next minute decides with the right table
+      }
+    }
+    if (current.length === 0) {
+      console.log("routes: no enabled market");
+      return summary; // MKT-110 a: no enabled market, nothing is posted
+    }
+    const mf = marketFacts(current, iCal >= 0 ? r1[iCal].rows : [], local.date);
     const facts: RouteFacts = {
       dispatchEnabled: parseEnabled(enabledRaw),
-      marketMode: typeof mode === "string" ? mode : null,
-      // V1-S3 / D-711: fail safe, a weekday with no calendar row is NOT a trading day.
-      tradingDay: isTradingDayKind(local.date, typeof calKind === "string" ? calKind : null),
+      // V1-S3 / D-711 (inside marketFacts): fail safe, a weekday with no calendar row is NOT a trading day.
+      marketMode: mf.marketMode,
+      tradingDay: mf.tradingDay,
+      marketModes: mf.marketModes,
+      tradingDays: mf.tradingDays,
       flushDue: flushDue(flushRaw, nowMs),
       slotsEnabled: parseSlotsEnabled(listRaw),
     };
@@ -371,7 +419,7 @@ export async function runRoutes(
               "WHERE NOT EXISTS (SELECT 1 FROM run_record WHERE concurrency_key = ?)",
             args: [
               ROUTE_JOB,
-              MARKET,
+              a.slot.market ?? current[0].code,
               key,
               local.date,
               at,
@@ -396,7 +444,7 @@ export async function runRoutes(
       if (!res.ok) {
         const args: Arg[] = [
           ROUTE_JOB,
-          MARKET,
+          a.slot.market ?? current[0].code,
           `route-failed:${a.slot.id}:${local.date}:${a.attempt}`,
           local.date,
           at,

@@ -16,6 +16,7 @@
 //    withheld until it was accepted); after 3 failed attempts the body is dropped with an S3
 //    `sentinel_ingest_failed` incident.
 // Logs carry fixed words and numbers only: never a URL, a header, a secret or feed content.
+import { HOME_MARKET } from "../../../src/lib/market/profileCore.mjs";
 import type { Stmt } from "../db";
 import { pathOf, randomHex, signHeaders } from "../selfcheck";
 import type { Outcome } from "./policy";
@@ -33,7 +34,8 @@ export const MAX_DELIVERY_ATTEMPTS = 3;
 export const POST_TIMEOUT_MS = 25_000;
 export const LAST_SHA_KEY = "sentinel:last_sha";
 export const FAIL_KEY = "sentinel:fail";
-export const MARKET = "AU";
+/** The market whose exchange feed this is (the ASX announcement feed, D-194): the home market (M19 C1). */
+export const MARKET = HOME_MARKET;
 
 const MIN_MS = 60_000;
 const iso = (ms: number): string => new Date(ms).toISOString();

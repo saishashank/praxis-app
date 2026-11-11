@@ -14,6 +14,8 @@
 //
 // WHAT A MANUAL RUN BYPASSES: only the time window (the slot's start minute and catch-up).
 // WHAT IT STILL RESPECTS (a refusal is recorded, never a silent skip):
+//   - the request's market must be an ENABLED market (M19 C1, MKT-110 a, D-996): any other is refused
+//     with the fixed reason `market_not_enabled`, before every other gate;
 //   - the job must be `runNow` in the registry and a slot that is enabled in the Worker table;
 //   - the dispatch kill switch `dispatch_enabled`;
 //   - the Owner list `slots_enabled` for go-live jobs (not listed, not yet released or an unreadable
@@ -42,6 +44,13 @@ import {
 } from "./clock";
 import { sydneyLocal } from "./localtime";
 import { isTradingDayKind } from "../../src/lib/data/calendarCore.mjs";
+import {
+  MARKETS_STMT,
+  cachedMarkets,
+  parseMarketRows,
+  readMarkets,
+  type MarketRow,
+} from "./markets";
 import { findJob, validateParams } from "../../src/lib/jobs/registry.mjs";
 import {
   FLUSH_DUE_KEY,
@@ -51,9 +60,8 @@ import {
   postSigned,
   type RouteEnv,
 } from "./routes";
-import { AU_SLOTS, type Slot } from "./schedule";
+import { slotTable, type Slot } from "./schedule";
 
-export const MARKET = "AU";
 /** A request nobody started within this long is expired. */
 export const RUN_NOW_EXPIRY_MS = 30 * 60_000; // threshold-ok: D-846
 export const MAX_PER_TICK = 3; // threshold-ok: bounds subrequests and the 28 s route timeout
@@ -61,21 +69,34 @@ export const MAX_PER_TICK = 3; // threshold-ok: bounds subrequests and the 28 s 
 export type RunNowEnv = DbEnv & DispatchEnv & RouteEnv;
 export type RunNowDeps = { fetch: typeof fetch; nowMs: () => number };
 
-export type PendingRequest = { id: number; jobId: string; paramsJson: string };
+export type PendingRequest = { id: number; jobId: string; paramsJson: string; market: string };
+
+/** What the gates know about one enabled market: its mode and its calendar kind by date (absent = no row). */
+export type MarketGateFacts = { mode: string; calendar: ReadonlyMap<string, string> };
 
 export type RunNowFacts = {
   dispatchEnabled: boolean;
-  /** market.mode for AU, or null when unreadable (treated like "off"). */
-  marketMode: string | null;
+  /** The enabled markets by code; a request for any other market is refused `market_not_enabled`. */
+  markets: ReadonlyMap<string, MarketGateFacts>;
   slotsEnabled: SlotList;
   flushDue: boolean;
   /** Parsed workflow inputs by `worker_state` key; null = present but invalid. */
   slotInputs: Readonly<Record<string, Record<string, string> | null>>;
   /** `slot:<id>:<date>` raw state texts for the `after` rule. */
   states: ReadonlyMap<string, string>;
-  /** trading_calendar kind by date (a missing date is absent). */
-  calendar: ReadonlyMap<string, string>;
 };
+
+/** The slot a request runs: the job's slot of the request's market (a later market's ids carry its code). */
+export function slotOfRequest(
+  slots: readonly Slot[],
+  jobId: string,
+  market: string,
+): Slot | undefined {
+  return (
+    slots.find((s) => s.id === jobId && (s.market === undefined || s.market === market)) ??
+    slots.find((s) => s.id === `${jobId}:${market}`)
+  );
+}
 
 export type Plan =
   | { run: false; status: "refused"; result: string }
@@ -86,13 +107,15 @@ export function planRequest(
   req: PendingRequest,
   today: string,
   facts: RunNowFacts,
-  slots: readonly Slot[] = AU_SLOTS,
+  slots: readonly Slot[],
 ): Plan {
   const refuse = (why: string): Plan => ({
     run: false,
     status: "refused",
     result: `refused: ${why}`,
   });
+  const gate = facts.markets.get(req.market);
+  if (gate === undefined) return refuse("market_not_enabled");
   const job = findJob(req.jobId);
   if (job === undefined || !job.runNow) return refuse("unknown job");
   let raw: unknown;
@@ -103,7 +126,7 @@ export function planRequest(
   }
   const params = validateParams(job, raw, today);
   if (params === null) return refuse("bad request");
-  const slot = slots.find((s) => s.id === job.id);
+  const slot = slotOfRequest(slots, job.id, req.market);
   if (
     slot === undefined ||
     !slot.enabled ||
@@ -115,11 +138,11 @@ export function planRequest(
   }
   if (!facts.dispatchEnabled) return refuse("dispatch is off");
   if (listSkip(slot, facts.slotsEnabled) !== null) return refuse("not listed");
-  if (slot.marketBound && (facts.marketMode === null || facts.marketMode === "off")) {
+  if (slot.marketBound && gate.mode === "off") {
     return refuse("market is off");
   }
   const d = params.d ?? today;
-  if (slot.tradingDaysOnly && !isTradingDayKind(d, facts.calendar.get(d) ?? null)) {
+  if (slot.tradingDaysOnly && !isTradingDayKind(d, gate.calendar.get(d) ?? null)) {
     return refuse("not a trading day");
   }
   if (slot.needs === "alert_flush_due" && !facts.flushDue) return refuse("nothing is due");
@@ -151,7 +174,8 @@ export async function runRunNow(
   env: RunNowEnv,
   scheduledTime: number,
   deps: RunNowDeps,
-  slots: readonly Slot[] = AU_SLOTS,
+  /** A fixed slot table (tests). Production passes none: the table is built from the enabled market rows. */
+  fixedSlots?: readonly Slot[],
 ): Promise<RunNowSummary> {
   const summary: RunNowSummary = { requests: 0, started: [], refused: [] };
   try {
@@ -177,7 +201,7 @@ export async function runRunNow(
           },
           {
             sql:
-              "SELECT id, job_id, params_json FROM run_now_request WHERE status = 'pending' " +
+              "SELECT id, job_id, params_json, market FROM run_now_request WHERE status = 'pending' " +
               "ORDER BY id LIMIT ?",
             args: [MAX_PER_TICK],
           },
@@ -192,8 +216,28 @@ export async function runRunNow(
       id: Number(r[0]),
       jobId: String(r[1]),
       paramsJson: String(r[2]),
+      market: String(r[3]),
     }));
     if (pending.length === 0) return summary;
+
+    // the slot table: fixed (tests) or built from the enabled market rows (D-996); a cold or expired isolate
+    // reads the rows in one extra request (run-now requests are rare)
+    let slots: readonly Slot[];
+    if (fixedSlots !== undefined) {
+      slots = fixedSlots;
+    } else {
+      let rows: MarketRow[] | null = cachedMarkets(deps.nowMs());
+      if (rows === null) {
+        try {
+          summary.requests++;
+          rows = await readMarkets(env, deps.fetch, deps.nowMs());
+        } catch (e) {
+          console.log(`run-now: db error ${errName(e)}`);
+          return summary;
+        }
+      }
+      slots = slotTable(rows).slots;
+    }
 
     // ---- request 2: claim, and read every fact the gates need ------------------------------------------
     const claimAt = iso(deps.nowMs());
@@ -207,7 +251,7 @@ export async function runRunNow(
     const afterKeys = new Set<string>();
     const dates = new Set<string>([local.date]);
     for (const p of pending) {
-      const slot = slots.find((s) => s.id === p.jobId);
+      const slot = slotOfRequest(slots, p.jobId, p.market);
       if (slot?.inputsKey) inputKeys.add(slot.inputsKey);
       if (slot?.after) afterKeys.add(slotKey(slot.after, local.date));
       try {
@@ -230,10 +274,12 @@ export async function runRunNow(
         sql: `SELECT key, value_json FROM worker_state WHERE key IN (${placeholders(keys.length)})`,
         args: keys,
       },
-      { sql: "SELECT mode FROM market WHERE code = ?", args: [MARKET] },
+      MARKETS_STMT,
       {
-        sql: `SELECT d, kind FROM trading_calendar WHERE market = ? AND d IN (${placeholders(dateList.length)})`,
-        args: [MARKET, ...dateList],
+        sql:
+          `SELECT market, d, kind FROM trading_calendar WHERE d IN (${placeholders(dateList.length)}) ` +
+          "AND market IN (SELECT code FROM market WHERE enabled = 1)",
+        args: dateList,
       },
     ];
     let r2: StmtResult[];
@@ -262,17 +308,24 @@ export async function runRunNow(
       else if (inputKeys.has(k)) slotInputs[k] = parseInputs(raw);
       else states.set(k, raw);
     }
-    const mode = r2[n + 1]!.rows[0]?.[0];
-    const calendar = new Map<string, string>();
-    for (const row of r2[n + 2]!.rows) calendar.set(String(row[0]), String(row[1]));
+    const enabledRows = parseMarketRows(r2[n + 1]!.rows);
+    const markets = new Map<string, MarketGateFacts>();
+    for (const m of enabledRows) markets.set(m.code, { mode: m.mode, calendar: new Map() });
+    for (const row of r2[n + 2]!.rows) {
+      (markets.get(String(row[0]))?.calendar as Map<string, string> | undefined)?.set(
+        String(row[1]),
+        String(row[2]),
+      );
+    }
+    // the plan uses the table of the rows read now (the gates above read the same rows)
+    if (fixedSlots === undefined) slots = slotTable(enabledRows).slots;
     const facts: RunNowFacts = {
       dispatchEnabled: parseEnabled(enabledRaw),
-      marketMode: typeof mode === "string" ? mode : null,
+      markets,
       slotsEnabled: parseSlotsEnabled(listRaw),
       flushDue: flushDue(flushRaw, deps.nowMs()),
       slotInputs,
       states,
-      calendar,
     };
 
     // ---- run (bounded parallel), then request 3: record every result ---------------------------------
