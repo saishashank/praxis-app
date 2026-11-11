@@ -125,6 +125,23 @@ jobs:
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
           COMMIT_SHA: ${{ steps.approved.outputs.sha }}
+      # DAT-251 c (D-973): RBA and ABS macro series, Fridays only (Sydney), and only when the Owner has set the
+      # repository variable MACRO_FETCH to 1 after accepting the terms: unset = this step is skipped (ships OFF).
+      # One request each, an identifying User-Agent, conditional requests; a failure never fails the batch
+      # (continue-on-error). Secrets only in this step's env: it writes macro_series.
+      - name: Macro series (Friday, off unless MACRO_FETCH is set)
+        if: ${{ !cancelled() && vars.MACRO_FETCH == '1' }}
+        continue-on-error: true
+        run: |
+          if [ "$(TZ=Australia/Sydney date +%u)" != "5" ]; then echo "macro: not a Friday, skipped"; exit 0; fi
+          rc=0
+          node scripts/macro/rba.mjs || rc=1
+          node scripts/macro/abs.mjs || rc=1
+          exit $rc
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+          MACRO_USER_AGENT: ${{ vars.ASX_USER_AGENT }}
 
   # M8 T9 (decision 30, 31; NFR-040): the staging job. The staging Worker dispatches `ref: main`
   # (SEC-017 b-s). Same flow as production, but: it checks out the dispatched `main` commit (staging

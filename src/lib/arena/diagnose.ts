@@ -5,6 +5,7 @@
 // apart. Bundled and run by scripts/arena/diagnose.mjs (.github/workflows/diagnose-signals.yml).
 //
 //   diagnose --dates YYYY-MM-DD[,YYYY-MM-DD...]
+//   diagnose --scenario splitFrequency [--window N]   (DAT-252 (3), D-974: split-day frequency, AT-45)
 //
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN. The client is wrapped so that any statement other than a
 // plain SELECT throws before it reaches the database: this module never writes a row.
@@ -21,6 +22,7 @@ import { liveParams, loadVersionSet, runVersions } from "@/lib/agents/versionRun
 import { computeTiers } from "@/lib/data/pipeline/batch1-core.mjs";
 import { addDays, previousTradingDay } from "@/lib/data/pipeline/rules.mjs";
 import { TIER_RULES } from "@/lib/data/universe/tiers.mjs";
+import { measure as measureSplits } from "@/lib/data/splitFrequency";
 
 const MARKET = "AU";
 const READ = /^\s*(SELECT|WITH)\b/i; // money-float-ok: a regular expression, not money
@@ -387,11 +389,52 @@ export async function tradesReadout(
   }
 }
 
+/** Named read-only scenarios that are not a batch-2b night. Counts and shares only. */
+export const SCENARIOS = ["splitFrequency"] as const;
+
+async function scenarioMain(
+  argv: readonly string[],
+  name: string,
+  env: Readonly<Record<string, string | undefined>>,
+  out: (line: string) => void,
+): Promise<number> {
+  if (!(SCENARIOS as readonly string[]).includes(name)) {
+    out(`diagnose: unknown scenario (${SCENARIOS.join(", ")})`);
+    return 2;
+  }
+  const w = argv.indexOf("--window");
+  const window = w >= 0 ? Number(argv[w + 1]) : 20;
+  if (!Number.isInteger(window) || window < 2) {
+    out("diagnose: usage --scenario splitFrequency [--window N>=2]");
+    return 2;
+  }
+  const url = env.TURSO_MAIN_URL;
+  if (url === undefined || url.trim() === "") {
+    out("diagnose: failed (database not configured)");
+    return 1;
+  }
+  const db = readOnly(createClient({ url, authToken: env.TURSO_MAIN_TOKEN }));
+  try {
+    const s = await measureSplits(db, window);
+    out(`diagnose splitFrequency: ${JSON.stringify(s)}`);
+    return 0;
+  } catch (error) {
+    out(
+      `diagnose splitFrequency: failed (${error instanceof WriteRefused ? error.message : (error as Error).name})`,
+    );
+    return 1;
+  } finally {
+    db.close();
+  }
+}
+
 export async function diagnoseMain(
   argv: readonly string[],
   env: Readonly<Record<string, string | undefined>>,
   out: (line: string) => void = (line) => console.log(line),
 ): Promise<number> {
+  const sc = argv.indexOf("--scenario");
+  if (sc >= 0) return scenarioMain(argv, argv[sc + 1] ?? "", env, out);
   const i = argv.indexOf("--dates");
   const dates = (i >= 0 ? (argv[i + 1] ?? "") : "").split(",").filter((x) => DATE.test(x));
   if (dates.length === 0) {

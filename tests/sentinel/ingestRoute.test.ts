@@ -83,7 +83,15 @@ const memStore = (): NonceStore => {
   };
 };
 type Call = { feed: string; sha: string; today: string };
-const ok = (): IngestResult => ({ ok: true, seen: 2, skipped: 0, new: 2, assessed: 2, carried: 0 });
+const ok = (): IngestResult => ({
+  ok: true,
+  seen: 2,
+  skipped: 0,
+  new: 2,
+  assessed: 2,
+  carried: 0,
+  unassessed: 0,
+});
 const make = (over: Partial<Deps> = {}, calls: Call[] = [], result: () => IngestResult = ok) =>
   createSentinelIngestHandler({
     env: STAGING_ENV,

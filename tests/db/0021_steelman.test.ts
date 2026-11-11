@@ -85,6 +85,7 @@ const night = {
   notWrittenBudget: 1,
   notWrittenNoModel: 1,
   notWrittenCritic: 0,
+  notWrittenError: 0,
   claimsTotal: 40,
   claimsValid: 39,
   validityPpm: 975_000,
@@ -158,11 +159,11 @@ describe("migration 0021_steelman: apply, roll back, apply again", () => {
     const after = await schemaOf(db);
     for (const t of NEW_TABLES) expect(after.some((s) => s.startsWith(`table:${t}:`))).toBe(true);
 
-    expect(await migrateDown(db, ms, 12)).toEqual({ rolledBack: 12, version: 20 });
+    expect(await migrateDown(db, ms, 13)).toEqual({ rolledBack: 13, version: 20 });
     const mid = await schemaOf(db);
     for (const t of NEW_TABLES) expect(mid.some((s) => s.startsWith(`table:${t}:`))).toBe(false);
 
-    expect(await migrateUp(db, ms)).toEqual({ applied: 12, version: 32 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 13, version: 33 });
     expect(await schemaOf(db)).toEqual(after);
   });
 });

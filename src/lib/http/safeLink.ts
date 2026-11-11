@@ -3,7 +3,14 @@
 // Anything else comes back as null, and the page shows the text without a link.
 // `.test` is a reserved top-level domain (RFC 2606): it never resolves on the public internet, so it
 // is accepted for the synthetic data of the test and staging worlds and can never point at a real site.
-const SOURCE_HOSTS: readonly string[] = ["asx.com.au"];
+// DAT-253 (D-975): the registered source sites and the public page each is shown against. M18 stores no
+// document text from asic.gov.au or ssrn.com: they are link targets only (register rows pending, terms [VERIFY]).
+export const SOURCE_SITES = {
+  "asx.com.au": "https://www.asx.com.au/",
+  "asic.gov.au": "https://asic.gov.au/",
+  "ssrn.com": "https://www.ssrn.com/",
+} as const;
+const SOURCE_HOSTS: readonly string[] = Object.keys(SOURCE_SITES);
 const MAX_URL_LENGTH = 2000;
 
 /** True when `host` is a registered source host or a subdomain of one. */

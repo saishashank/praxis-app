@@ -182,6 +182,8 @@ export const REFERENCE_SOURCES = [
   "index_changes_manual",
   "industry_map_manual",
   "fred", // M15 (DAT-101, D-291; migration 0019): pending, no fetcher
+  "asic_documents", // M18 (DAT-253, D-975; migration 0033): pending, links and own summary only, no fetcher
+  "ssrn_papers", // M18 (DAT-253, D-975; migration 0033): pending, abstract page links only, no fetcher
 ] as const;
 
 export type MarketMode = "off" | "data_only" | "full";

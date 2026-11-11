@@ -78,7 +78,30 @@ export type ClockEnv = DbEnv &
   DispatchEnv & {
     BUILD_COMMIT?: string;
   };
-export type ClockDeps = { fetch: typeof fetch; nowMs: () => number };
+/**
+ * M18 TST-136 (D-968): an optional work counter. A test passes one to count the clock's work (a tick that had
+ * something to do, every subrequest it made, every workflow dispatch) and asserts the counts against the
+ * PLT-070 budgets, instead of measuring milliseconds on a shared runner. Production passes none.
+ */
+export type ClockWork = "tick" | "subrequest" | "dispatch";
+export type ClockDeps = {
+  fetch: typeof fetch;
+  nowMs: () => number;
+  count?: (kind: ClockWork) => void;
+};
+
+/** The deps with every subrequest counted; the same object when no counter is injected. */
+function counted(deps: ClockDeps): ClockDeps {
+  const count = deps.count;
+  if (count === undefined) return deps;
+  return {
+    ...deps,
+    fetch: ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      count("subrequest");
+      return deps.fetch(input, init);
+    }) as typeof fetch,
+  };
+}
 
 export type SlotState = { s: "claimed" | "dispatched" | "failed"; n: number; at: string };
 /** `state` is null when the stored text is not a valid state (never dispatched over). */
@@ -434,9 +457,10 @@ export function dispatchFailure(detail: string): { status: number | null; reason
 export async function runClock(
   env: ClockEnv,
   scheduledTime: number,
-  deps: ClockDeps,
+  rawDeps: ClockDeps,
   slots: readonly Slot[] = AU_SLOTS,
 ): Promise<TickSummary> {
+  const deps = counted(rawDeps);
   const summary: TickSummary = { requests: 0, dispatched: [], failed: [], skipped: [] };
   try {
     if (!dbConfigured(env) || refFor(env.PRAXIS_ENV) === null) return summary;
@@ -444,6 +468,7 @@ export async function runClock(
     const cands = candidateSlots(local, slots);
     const needRollup = rollupDate !== local.date;
     if (!needRollup && cands.length === 0) return summary; // idle minute: no request at all
+    deps.count?.("tick");
 
     // ---- request 1: rollup (once per day per isolate) + everything the decision needs --------
     const nowMs = deps.nowMs();
@@ -580,6 +605,7 @@ export async function runClock(
     const record: Stmt[] = [];
     for (const a of owned) {
       const res = await dispatchWorkflow(env, a.slot.workflow ?? "", deps.fetch, a.inputs);
+      deps.count?.("dispatch");
       const at = iso(deps.nowMs());
       const st: SlotState = { s: res.ok ? "dispatched" : "failed", n: a.attempt, at };
       record.push({

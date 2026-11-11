@@ -3,7 +3,9 @@
 // adds one pack with two points a side and one open suggestion. The Owner sees both; an Editor and a
 // Viewer get the card section without codes and a 403 on /review; the card fits a phone with the body
 // collapsed; axe is clean.
+import { createClient } from "@libsql/client";
 import { expect, test } from "@playwright/test";
+import { opaqueDigest } from "../src/lib/view/opaqueRef";
 import { axeViolations, expectNoHorizontalScroll, setTheme, signIn } from "./helpers";
 import { BEAR_TEXT, ensureSteelman } from "./seed/steelman";
 
@@ -11,10 +13,23 @@ import { requireScenario } from "./support/requireScenario";
 requireScenario("rich", "run it in the rich lane: E2E_SCENARIO=rich E2E_STATES=all");
 test.describe.configure({ timeout: 300_000 });
 test.beforeAll(async () => {
-  cardPath = `/cards/${encodeURIComponent(await ensureSteelman())}`;
+  cardId = await ensureSteelman();
+  cardPath = `/cards/${encodeURIComponent(cardId)}`;
+  const m = createClient({ url: process.env.TURSO_MAIN_URL! });
+  try {
+    const r = await m.execute({
+      sql: "SELECT code FROM steelman_pack WHERE card_id = ?",
+      args: [cardId],
+    });
+    cardCode = String(r.rows[0]!.code);
+  } finally {
+    m.close();
+  }
 });
 
 let cardPath = "";
+let cardId = "";
+let cardCode = "";
 
 test("owner: two lists, evidence chips jump to the cited rows, caption says AI-written", async ({
   page,
@@ -54,6 +69,27 @@ for (const role of ["editor", "viewer"] as const) {
     const res = await page.goto("/review");
     expect(res?.status()).toBe(403);
     await expect(page.getByTestId("steelman-suggestion")).toHaveCount(0);
+  });
+}
+
+// OPS-111 (8), D-977: the browser walk for the masked roles. An Editor and a Viewer open the card by its opaque
+// reference (a masked role never sees the stored id, D-135) and read the same two lists, but the page text never
+// carries the stock code, and /review stays refused (above).
+for (const role of ["editor", "viewer"] as const) {
+  test(`${role}: the card shows the steelman by its opaque reference, without the stock code`, async ({
+    page,
+    context,
+  }) => {
+    await signIn(context, role);
+    const res = await page.goto(`/cards/ck:${opaqueDigest("ck", cardId)}`);
+    expect(res?.status()).toBe(200);
+    const box = page.getByTestId("steelman-wide");
+    await expect(box.getByRole("heading", { name: "Strongest case for" })).toBeVisible();
+    await expect(box.getByRole("heading", { name: "Strongest case against" })).toBeVisible();
+    await expect(page.getByTestId("steelman")).toContainText("AI-written");
+    expect(cardCode.length).toBeGreaterThan(0);
+    expect(await page.locator("main").innerText()).not.toContain(cardCode);
+    expect(await axeViolations(page)).toEqual([]);
   });
 }
 

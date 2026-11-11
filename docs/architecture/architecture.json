@@ -2170,6 +2170,33 @@
       }
     },
     {
+      "id": "host:asic.gov.au",
+      "type": "host",
+      "name": "asic.gov.au",
+      "purpose": "document links (DAT-253): ASIC public documents, links and own summary only; nothing is fetched.",
+      "specIds": [
+        "DAT-253"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "data",
+        "platform"
+      ],
+      "source": "src/lib/http/safeLink.ts",
+      "attrs": {
+        "files": [
+          "src/lib/http/safeLink.ts"
+        ]
+      }
+    },
+    {
       "id": "host:asx.api.markitdigital.com",
       "type": "host",
       "name": "asx.api.markitdigital.com",
@@ -2557,7 +2584,35 @@
           "src/lib/alerts/deliver.ts",
           "src/lib/data/sources/asx.ts",
           "src/lib/data/sources/asxMarkit.mjs",
+          "src/lib/http/safeLink.ts",
           "worker/src/asx/request.ts"
+        ]
+      }
+    },
+    {
+      "id": "host:www.ssrn.com",
+      "type": "host",
+      "name": "www.ssrn.com",
+      "purpose": "document links (DAT-253): SSRN abstract pages, links only; no PDF is fetched.",
+      "specIds": [
+        "DAT-253"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "data",
+        "platform"
+      ],
+      "source": "src/lib/http/safeLink.ts",
+      "attrs": {
+        "files": [
+          "src/lib/http/safeLink.ts"
         ]
       }
     },
@@ -7283,6 +7338,33 @@
       }
     },
     {
+      "id": "source:asic_documents",
+      "type": "source",
+      "name": "asic_documents",
+      "purpose": "Data source asic_documents with its licence row (permitted use, risk, status).",
+      "specIds": [
+        "DAT-120",
+        "DAT-121"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A disabled or pending source is not fetched; its status is shown on the Data page.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main",
+      "attrs": {
+        "permittedUse": "public regulator documents: links and own summary only (DAT-253); terms [VERIFY]",
+        "risk": "low",
+        "status": "pending"
+      }
+    },
+    {
       "id": "source:asic_short",
       "type": "source",
       "name": "asic_short",
@@ -7685,6 +7767,33 @@
         "permittedUse": "copyrighted by the RBA: derived numbers only, source named (DAT-236)",
         "risk": "low",
         "status": "enabled"
+      }
+    },
+    {
+      "id": "source:ssrn_papers",
+      "type": "source",
+      "name": "ssrn_papers",
+      "purpose": "Data source ssrn_papers with its licence row (permitted use, risk, status).",
+      "specIds": [
+        "DAT-120",
+        "DAT-121"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A disabled or pending source is not fetched; its status is shown on the Data page.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main",
+      "attrs": {
+        "permittedUse": "abstract page links only, no PDF fetch (DAT-253); terms [VERIFY]",
+        "risk": "medium",
+        "status": "pending"
       }
     },
     {
@@ -9359,6 +9468,41 @@
       }
     },
     {
+      "id": "table:main.code_history",
+      "type": "table",
+      "name": "code_history",
+      "purpose": "Table code_history in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0033_m18_data.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "code",
+          "event",
+          "first_d",
+          "last_d",
+          "runs",
+          "closed_d",
+          "absent"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.cohort",
       "type": "table",
       "name": "cohort",
@@ -10649,7 +10793,8 @@
           "market_ret_ppm",
           "vs_market_ppm",
           "luck_pct",
-          "settled_d"
+          "settled_d",
+          "early"
         ],
         "database": "main",
         "indexes": []
@@ -12036,6 +12181,38 @@
         "indexes": [
           "idx_llm_call_d"
         ]
+      }
+    },
+    {
+      "id": "table:main.macro_series",
+      "type": "table",
+      "name": "macro_series",
+      "purpose": "Table macro_series in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0033_m18_data.sql",
+      "attrs": {
+        "columns": [
+          "source",
+          "series_id",
+          "d",
+          "value_micro",
+          "fetched_at"
+        ],
+        "database": "main",
+        "indexes": []
       }
     },
     {
@@ -13805,6 +13982,38 @@
       }
     },
     {
+      "id": "table:main.source_fetch_status",
+      "type": "table",
+      "name": "source_fetch_status",
+      "purpose": "Table source_fetch_status in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0033_m18_data.sql",
+      "attrs": {
+        "columns": [
+          "source",
+          "consecutive_failures",
+          "last_ok_at",
+          "last_failed_at",
+          "last_cause"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.source_item",
       "type": "table",
       "name": "source_item",
@@ -14000,7 +14209,8 @@
           "claims_valid",
           "validity_ppm",
           "critic_hidden",
-          "created_at"
+          "created_at",
+          "not_written_error"
         ],
         "database": "main",
         "indexes": []
@@ -18480,6 +18690,17 @@
       ]
     },
     {
+      "id": "service:app|http|host:asic.gov.au",
+      "from": "service:app",
+      "to": "host:asic.gov.au",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "data",
+        "platform"
+      ]
+    },
+    {
       "id": "service:app|http|host:asx.api.markitdigital.com",
       "from": "service:app",
       "to": "host:asx.api.markitdigital.com",
@@ -18620,6 +18841,17 @@
       "id": "service:app|http|host:www.asx.com.au",
       "from": "service:app",
       "to": "host:www.asx.com.au",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "data",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|http|host:www.ssrn.com",
+      "from": "service:app",
+      "to": "host:www.ssrn.com",
       "kind": "http",
       "contract": "HTTPS request to an external host.",
       "views": [
@@ -19065,6 +19297,16 @@
       "views": [
         "data",
         "learning"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.code_history",
+      "from": "service:turso-main",
+      "to": "table:main.code_history",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
       ]
     },
     {
@@ -19786,6 +20028,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.macro_series",
+      "from": "service:turso-main",
+      "to": "table:main.macro_series",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.market",
       "from": "service:turso-main",
       "to": "table:main.market",
@@ -20267,6 +20519,16 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.source_fetch_status",
+      "from": "service:turso-main",
+      "to": "table:main.source_fetch_status",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
         "data"
       ]
     },

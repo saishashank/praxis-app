@@ -213,6 +213,18 @@ export type ReplayProgress = {
   readonly cohortsEnded: number;
 };
 
+/** Work counters of one `onStep` call. */
+export type ReplayStep = {
+  /** Sessions processed so far (1-based) of `total`. */
+  readonly session: number;
+  readonly total: number;
+  readonly d: string;
+  /** Cohort-days evaluated so far over the whole run (every live cohort on every session). */
+  readonly cohortDays: number;
+  /** Cohorts started so far. */
+  readonly cohortsStarted: number;
+};
+
 /** One stored cohort-day (diagnostics and the parity test against the database engine). */
 export type CohortDayTrace = {
   readonly cohortId: string;
@@ -250,6 +262,11 @@ export type CohortReplayOptions = {
   /** ARN-026 haircut and the sessions before it (default `DEFAULT_SUSPENSION`: 1/2 from session 21). */
   readonly suspension?: SuspensionConfig;
   readonly progress?: (p: ReplayProgress) => void;
+  /**
+   * M18 TST-136 (D-968): called once per processed session with the work done so far, so a test can assert the
+   * amount of work (sessions, cohort-days) instead of measuring wall-clock time. Off by default; it changes nothing.
+   */
+  readonly onStep?: (s: ReplayStep) => void;
   /** Called with every cohort-day after its NAV is computed (off by default). */
   readonly trace?: (e: CohortDayTrace) => void;
   /** Restrict the registry to these execution ids (default: all). */
@@ -674,6 +691,7 @@ export function replayCohorts(
 
   const cohorts: Cohort[] = [];
   let live: Cohort[] = [];
+  let cohortDays = 0; // onStep: cohort-days evaluated so far
   const startsSeen: string[] = [];
   let advPrev = new Map<string, bigint>();
   const advMemory = new Map<string, bigint>(); // last known ADV per code (marks of a code without facts)
@@ -1325,6 +1343,7 @@ export function replayCohorts(
       sleeveStage(c, env, c.cfg);
     }
     navStage(c, env);
+    cohortDays += 1;
     opts.trace?.({
       cohortId: c.id,
       d: env.d,
@@ -1933,6 +1952,13 @@ export function replayCohorts(
     live = stillLive;
     advPrev = advNow;
     prevClose = closeNow;
+    opts.onStep?.({
+      session: i - firstStart + 1,
+      total: endIdx - firstStart + 1,
+      d,
+      cohortDays,
+      cohortsStarted: cohorts.length,
+    });
     opts.progress?.({
       stage: "sessions",
       session: i - firstStart + 1,

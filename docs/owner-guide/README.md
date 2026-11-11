@@ -12,6 +12,7 @@ Never paste a secret into chat, email, a file, an issue or a log. [SEC-101]
 | Finish the bootstrap release, run the smoke test, use backups and break-glass recovery | [M1_owner_guide.md](M1_owner_guide.md) |
 | Go live: merge, test on staging, revoke, rotate, drill, sign off, switch on | [M8_go_live.md](M8_go_live.md) |
 | Run Praxis day to day, handle problems, roll back, restore | [operations.md](operations.md) |
+| Do an Owner-run check: the quarterly restore drill, the golden-set spot check, the bake-off review, the Blueprint look, the keyboard and screen-reader check | [owner_checks.md](owner_checks.md) |
 | Set or change a secret or setting everywhere at once | [secrets_tool.md](secrets_tool.md) |
 | Rotate one secret in a hurry (suspected leak) | [M8_go_live.md](M8_go_live.md), section N |
 

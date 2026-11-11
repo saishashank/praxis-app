@@ -411,7 +411,8 @@ describe("loader: role split, masking, bounded reads per refresh (decision 24)",
       expect(stats.rows * 8 * 30 * 60).toBeLessThan(0.02 * 500_000_000);
       // M18 (D-958, D-961, D-962, D-963): the usage sample, the two Turso level keys, the drafted-calendar read,
       // the restore-drill read and the plan name add six short statements (a few rows each): 80 became 90.
-      expect(stats.calls).toBeLessThanOrEqual(90);
+      // M18 E2/E3 (DAT-251 b, DAT-252): the Owner's data-feed lines are one more statement: 90 became 91.
+      expect(stats.calls).toBeLessThanOrEqual(91);
     }
   });
 

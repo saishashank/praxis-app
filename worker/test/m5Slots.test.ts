@@ -8,7 +8,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ASX_ANNOUNCEMENTS_URL } from "../src/asx/request";
 import { pollDue } from "../src/asx/slots";
-import { candidateSlots, resetClockCache } from "../src/clock";
+import { candidateSlots, resetClockCache, runClock, type ClockWork } from "../src/clock";
 import worker from "../src/index";
 import { sydneyLocal } from "../src/localtime";
 import { routeSlotsDue, runRoutes, type RouteEnv } from "../src/routes";
@@ -19,12 +19,9 @@ const SECRET = "7".repeat(64);
 const APP = "https://praxis-app.example.test";
 const UA = "praxis-sentinel-test (contact: owner@example.test)";
 const MIN = 60_000;
-// M8 T17: v8 coverage instrumentation slows the CPU measurements; the coverage job sets PRAXIS_COVERAGE_RUN=1.
-const COVERAGE_SLACK = process.env.PRAXIS_COVERAGE_RUN === "1" ? 4 : 1;
-// R3-I4 (D-820): the two PLT-070 CPU-budget tests below are TIMING checks. Names carry "[timing]"; in CI only
-// (CI=true) each gets one retry, so a noisy shared runner does not turn the release gate red. The budget and
-// the margin are unchanged, and the measured median is logged on every run so a trend stays visible.
-const TIMING_RETRY = process.env.CI ? 1 : 0;
+// M18 TST-136 (D-968): the two PLT-070 budget tests below count WORK (subrequests, dispatches, ticks, app posts)
+// against fixed budgets; there is no wall-clock or CPU measurement and no retry. The CPU variants live in
+// worker/timing/m5Slots.wall.test.ts and run in the non-blocking Timing report step.
 const ENV: RouteEnv = {
   PRAXIS_ENV: "production",
   TURSO_MAIN_URL: TURSO_URL,
@@ -524,104 +521,116 @@ describe("TST-124: the scheduled handler with every slot enabled stays inside th
     ).toBe(true);
   });
 
-  async function measure(t: number, runs: number) {
-    const cpu: number[] = [];
-    const subs: number[] = [];
-    for (let i = 0; i < runs; i++) {
-      db = makeDb({ sentinel: true });
-      net = makeNet(db);
-      dispatchOn();
-      marketMode("full");
-      setState("asx_enabled", '"1"');
-      setState("alert_flush_due", JSON.stringify("2020-01-01T00:00:00.000Z"));
-      resetClockCache();
-      appCalls.length = 0;
-      let subrequests = 0;
-      let inside = 0; // CPU used by the fake network and database (not the Worker's own work)
-      vi.stubGlobal("fetch", (async (i2: string | URL | Request, init?: RequestInit) => {
-        subrequests++;
-        const c0 = process.cpuUsage();
-        try {
-          return await f(i2, init);
-        } finally {
-          const c1 = process.cpuUsage(c0);
-          inside += c1.user + c1.system;
-        }
-      }) as typeof fetch);
-      now = t;
-      const before = process.cpuUsage();
+  /** One Worker tick at `t` with every fake local; returns the work done (no clock, no CPU). */
+  async function work(t: number) {
+    db = makeDb({ sentinel: true });
+    net = makeNet(db);
+    dispatchOn();
+    marketMode("full");
+    setState("asx_enabled", '"1"');
+    setState("alert_flush_due", JSON.stringify("2020-01-01T00:00:00.000Z"));
+    resetClockCache();
+    appCalls.length = 0;
+    let subrequests = 0;
+    vi.stubGlobal("fetch", (async (i2: string | URL | Request, init?: RequestInit) => {
+      subrequests++;
+      return f(i2, init);
+    }) as typeof fetch);
+    now = t;
+    try {
       await worker.scheduled({ scheduledTime: t } as ScheduledController, FULL_ENV as never);
-      const used = process.cpuUsage(before);
+    } finally {
       vi.unstubAllGlobals();
-      cpu.push(Math.max(0, used.user + used.system - inside) / 1000); // ms of Worker-side CPU
-      subs.push(subrequests);
     }
-    cpu.sort((a, b) => a - b);
-    return {
-      median: cpu[Math.floor(cpu.length / 2)],
-      max: cpu[cpu.length - 1],
-      subs: Math.max(...subs),
-    };
+    return { subrequests };
   }
 
-  it(
-    "[timing] the busiest minute of a real trading day, with every slot enabled, is cheap",
-    { retry: TIMING_RETRY },
-    async () => {
-      enableAll();
-      const date = "2026-10-19";
-      let best = { n: -1, m: 0 };
-      for (let m = 0; m < 1440; m++) {
-        const l = sydneyLocal(at(date, hm(m), 11));
-        const n =
-          candidateSlots(l, AU_SLOTS).length +
-          routeSlotsDue(l, AU_SLOTS).length +
-          (pollDue(l) ? 1 : 0);
-        if (n > best.n) best = { n, m };
-      }
-      expect(best.n).toBeGreaterThanOrEqual(3);
-      await measure(at(date, hm(best.m), 11), 3); // warm-up (module and JIT)
-      const r = await measure(at(date, hm(best.m), 11), 9);
-      console.info(
-        `[timing] busiest minute: median ${r.median.toFixed(2)} ms CPU, ${r.subs} subrequests`,
-      );
-      expect(r.subs).toBeLessThanOrEqual(50 - 10); // PLT-070: 50 subrequests, margin of 10
-      expect(r.median).toBeLessThan(10 * 0.5 * COVERAGE_SLACK); // PLT-070: 10 ms CPU; assert half with margin
-    },
-  );
+  /** The master clock alone, through its injected work counter (worker/src/clock.ts `deps.count`). */
+  async function clockWork(t: number) {
+    const counts: Record<ClockWork, number> = { tick: 0, subrequest: 0, dispatch: 0 };
+    db = makeDb({ sentinel: true });
+    net = makeNet(db);
+    dispatchOn();
+    marketMode("full");
+    setState("asx_enabled", '"1"');
+    resetClockCache();
+    now = t;
+    const summary = await runClock(FULL_ENV, t, {
+      fetch: f,
+      nowMs: () => t,
+      count: (k) => {
+        counts[k] += 1;
+      },
+    });
+    return { counts, summary };
+  }
 
-  it(
-    "[timing] a simulated pile-up: every M5 route slot, the clock, the ASX poll and the self-check due in the same minute",
-    { retry: TIMING_RETRY },
-    async () => {
-      enableAll();
-      pileUp();
-      const t = at("2026-10-19", "10:00", 11); // Monday, a poll minute
-      const l = sydneyLocal(t);
-      expect(pollDue(l)).toBe(true);
-      const routes = routeSlotsDue(l, AU_SLOTS).map((s) => s.id);
-      expect(routes).toEqual(
-        expect.arrayContaining([
-          "pre-open",
-          "morning",
-          "evening-review",
-          "evening-review-late",
-          "alert-flush",
-        ]),
-      );
-      // alert-flush needs an odd minute: 10:00 is even, so move it onto the same minute like the rest
-      expect(candidateSlots(l, AU_SLOTS).length).toBeGreaterThanOrEqual(5);
-      await measure(t, 3);
-      const r = await measure(t, 9);
-      console.info(`[timing] pile-up: median ${r.median.toFixed(2)} ms CPU, ${r.subs} subrequests`);
-      expect(r.subs).toBeLessThanOrEqual(50);
-      expect(r.median).toBeLessThan(10 * 0.8 * COVERAGE_SLACK);
-      // and the work really happened: app posts, GitHub dispatches and the ASX poll all ran
-      expect(appCalls.length).toBeGreaterThanOrEqual(3);
-      expect(net.github.length).toBeGreaterThanOrEqual(5);
-      expect(asxCalls).toBeGreaterThanOrEqual(1);
-    },
-  );
+  it("the busiest minute of a real trading day, with every slot enabled, stays inside the work budget", async () => {
+    enableAll();
+    const date = "2026-10-19";
+    let best = { n: -1, m: 0 };
+    for (let m = 0; m < 1440; m++) {
+      const l = sydneyLocal(at(date, hm(m), 11));
+      const n =
+        candidateSlots(l, AU_SLOTS).length +
+        routeSlotsDue(l, AU_SLOTS).length +
+        (pollDue(l) ? 1 : 0);
+      if (n > best.n) best = { n, m };
+    }
+    expect(best.n).toBeGreaterThanOrEqual(3);
+    const t = at(date, hm(best.m), 11);
+    const r = await work(t);
+    expect(r.subrequests).toBeGreaterThan(0); // the minute really did work
+    expect(r.subrequests).toBeLessThanOrEqual(50 - 10); // PLT-070: 50 subrequests, margin of 10
+    // the clock alone: one tick with work, every subrequest it made counted, at most one dispatch per candidate
+    const c = await clockWork(t);
+    expect(c.counts.tick).toBe(1);
+    expect(c.counts.subrequest).toBeLessThanOrEqual(10); // threshold-ok: the clock's own share of the 40
+    expect(c.counts.dispatch).toBe(c.summary.dispatched.length + c.summary.failed.length);
+    expect(c.counts.dispatch).toBeLessThanOrEqual(candidateSlots(sydneyLocal(t), AU_SLOTS).length);
+  });
+
+  it("a simulated pile-up: every M5 route slot, the clock, the ASX poll and the self-check due in the same minute, stays inside the work budget", async () => {
+    enableAll();
+    pileUp();
+    const t = at("2026-10-19", "10:00", 11); // Monday, a poll minute
+    const l = sydneyLocal(t);
+    expect(pollDue(l)).toBe(true);
+    const routes = routeSlotsDue(l, AU_SLOTS).map((s) => s.id);
+    expect(routes).toEqual(
+      expect.arrayContaining([
+        "pre-open",
+        "morning",
+        "evening-review",
+        "evening-review-late",
+        "alert-flush",
+      ]),
+    );
+    // alert-flush needs an odd minute: 10:00 is even, so move it onto the same minute like the rest
+    expect(candidateSlots(l, AU_SLOTS).length).toBeGreaterThanOrEqual(5);
+    const r = await work(t);
+    expect(r.subrequests).toBeLessThanOrEqual(50); // PLT-070: 50 subrequests
+    // and the work really happened: app posts, GitHub dispatches and the ASX poll all ran
+    expect(appCalls.length).toBeGreaterThanOrEqual(3);
+    expect(net.github.length).toBeGreaterThanOrEqual(5);
+    expect(asxCalls).toBeGreaterThanOrEqual(1);
+  });
+
+  it("the work counter changes nothing: a run with and without it dispatches the same workflows", async () => {
+    enableAll();
+    pileUp();
+    const t = at("2026-10-19", "10:00", 11);
+    const counted = await clockWork(t);
+    db = makeDb({ sentinel: true });
+    net = makeNet(db);
+    dispatchOn();
+    marketMode("full");
+    setState("asx_enabled", '"1"');
+    resetClockCache();
+    now = t;
+    const plain = await runClock(FULL_ENV, t, { fetch: f, nowMs: () => t });
+    expect(counted.summary).toEqual(plain);
+  });
 
   it("a day of ticks with every slot enabled makes at most 720 ASX requests (TST-124) and one per poll slot", async () => {
     enableAll();

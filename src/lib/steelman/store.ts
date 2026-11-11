@@ -55,6 +55,8 @@ export type NightRow = {
   notWrittenBudget: number;
   notWrittenNoModel: number;
   notWrittenCritic: number;
+  /** OPS-111 (6): an unexpected error stopped the note (counted apart from no_model). */
+  notWrittenError: number;
   claimsTotal: number;
   claimsValid: number;
   validityPpm: number;
@@ -240,9 +242,9 @@ export async function insertNight(db: Exec, n: NightRow): Promise<WriteResult> {
   return inserted(
     await db.execute({
       sql: `INSERT INTO steelman_night (market, d, requested, written, not_written_limit,
-              not_written_budget, not_written_no_model, not_written_critic, claims_total, claims_valid,
-              validity_ppm, critic_hidden, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              not_written_budget, not_written_no_model, not_written_critic, not_written_error, claims_total,
+              claims_valid, validity_ppm, critic_hidden, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT DO NOTHING`,
       args: [
         n.market,
@@ -253,6 +255,7 @@ export async function insertNight(db: Exec, n: NightRow): Promise<WriteResult> {
         n.notWrittenBudget,
         n.notWrittenNoModel,
         n.notWrittenCritic,
+        n.notWrittenError,
         n.claimsTotal,
         n.claimsValid,
         n.validityPpm,
@@ -272,6 +275,7 @@ const nightOf = (r: Row): NightRow => ({
   notWrittenBudget: num(r.not_written_budget),
   notWrittenNoModel: num(r.not_written_no_model),
   notWrittenCritic: num(r.not_written_critic),
+  notWrittenError: num(r.not_written_error),
   claimsTotal: num(r.claims_total),
   claimsValid: num(r.claims_valid),
   validityPpm: num(r.validity_ppm),

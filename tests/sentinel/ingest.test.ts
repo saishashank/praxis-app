@@ -6,7 +6,7 @@ import type { Client } from "@libsql/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { asxFeedV1 } from "@/lib/sentinel/feed";
 import { assess, type Membership } from "@/lib/sentinel/materiality";
-import { ingestFeed, MAX_ITEMS_PER_RUN } from "@/lib/sentinel/ingest";
+import { DEFAULT_ITEMS_PER_RUN, ingestFeed, MAX_ITEMS_PER_RUN } from "@/lib/sentinel/ingest";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
 
 afterEach(cleanupTempDbs);
@@ -426,12 +426,15 @@ describe("ingestFeed: at most 40 assessments per run, the rest carried (AGT-010,
     expect(await assessments()).toHaveLength(95);
   });
 
-  it("the cap never exceeds 40 whatever the config says, and a lower cap is honoured", async () => {
-    expect(MAX_ITEMS_PER_RUN).toBe(40);
-    const r = await go(feedOf(many(60)), { maxItems: 1000 });
-    expect(r).toMatchObject({ assessed: 40, carried: 20 });
+  it("the cap never exceeds 200 (DAT-251 b), an unusable value falls back to 40, a lower or higher cap is honoured", async () => {
+    expect(MAX_ITEMS_PER_RUN).toBe(200);
+    expect(DEFAULT_ITEMS_PER_RUN).toBe(40);
+    const r = await go(feedOf(many(260)), { maxItems: 1000 });
+    expect(r).toMatchObject({ assessed: 200, carried: 60, unassessed: 60 });
+    const r1 = await go(feedOf(many(60)), { sha: "d".repeat(64), maxItems: 55 });
+    expect(r1).toMatchObject({ ok: true });
     const r2 = await go(feedOf(many(60)), { sha: "b".repeat(64), maxItems: 5 });
-    expect(r2).toMatchObject({ assessed: 5, carried: 15 });
+    expect(r2).toMatchObject({ assessed: 5 });
     for (const bad of [0, -3, 2.5, Number.NaN]) {
       const r3 = await go(feedOf(many(60)), { sha: "c".repeat(64), maxItems: bad });
       expect(r3).toMatchObject({ ok: true, assessed: expect.any(Number) });

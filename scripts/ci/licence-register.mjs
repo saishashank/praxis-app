@@ -125,18 +125,21 @@ export const SOURCE_FACTS = {
   },
   rba: {
     label: "Reserve Bank of Australia",
-    provides: "Public interest-rate and macro data.",
-    code: [],
-    hosts: [],
+    provides:
+      "Public interest-rate and macro data: the cash rate target and the interbank overnight cash rate from statistical table F1.",
+    code: ["scripts/macro/rba.mjs"],
+    hosts: ["www.rba.gov.au"],
     terms:
-      "Copyrighted by the RBA. Only derived numbers may be shown, with the source named. The register row exists; no fetcher is built in this release.",
+      'Copyrighted by the RBA. Only derived numbers may be shown, with the source named ("Source: RBA"). Its copyright notice allows reuse of financial data with attribution but does not address automated download (checked in M18, see the exit evidence; [VERIFY]). The weekly fetcher is built and ships OFF: it runs only when the Owner sets the repository variable MACRO_FETCH.',
   },
   abs: {
     label: "Australian Bureau of Statistics",
-    provides: "Public economic statistics.",
-    code: [],
-    hosts: [],
-    terms: "Public data. The register row exists; no fetcher is built in this release.",
+    provides:
+      "Public economic statistics: the quarterly Consumer Price Index from the ABS Data API.",
+    code: ["scripts/macro/abs.mjs"],
+    hosts: ["data.api.abs.gov.au"],
+    terms:
+      "ABS material is generally available under CC BY 4.0 with credit to the ABS (checked in M18, see the exit evidence). The weekly fetcher is built and ships OFF: it runs only when the Owner sets the repository variable MACRO_FETCH.",
   },
   asic_short: {
     label: "ASIC daily aggregate short positions",
@@ -148,11 +151,11 @@ export const SOURCE_FACTS = {
   // M14 (DAT-236, D-239): disabled alternatives and manual uploads.
   wikidata_asx: {
     label: "Wikidata ASX companies (alternative, disabled)",
-    provides: "Company names and industry for ASX codes, as a universe alternative.",
-    code: [],
-    hosts: [],
+    provides: "Company names and industry for ASX codes, as a universe fallback.",
+    code: ["scripts/asx/fetch.mjs", "scripts/data/universe-from-wikidata.mjs"],
+    hosts: ["query.wikidata.org"],
     terms:
-      "Wikidata structured data is CC0 (no conditions). No fetcher is built; a downloaded export can be turned into the listed-companies CSV offline (scripts/data/universe-from-wikidata.mjs) and uploaded by the Owner. The source stays disabled.",
+      "Wikidata structured data is CC0 (no conditions); the endpoint asks for an identifying User-Agent and no bulk requests (Wikidata data-access page, checked in M18). One fixed query is sent only after the ASX company list failed three runs in a row AND the Owner enabled this row; while it is disabled (as seeded) nothing is fetched. A downloaded export can also be turned into the listed-companies CSV offline and uploaded by the Owner.",
   },
   wikipedia_asx200: {
     label: "Wikipedia S&P/ASX 200 list (alternative, disabled)",
@@ -178,6 +181,23 @@ export const SOURCE_FACTS = {
     hosts: [],
     terms:
       "Each FRED series carries its own terms, checked per series before any use. No fetcher is built and the row stays pending.",
+  },
+  asic_documents: {
+    label: "ASIC public documents (pending)",
+    provides:
+      "Links to public regulator documents and our own short summary; no document text is stored.",
+    code: ["src/lib/http/safeLink.ts"],
+    hosts: [],
+    terms:
+      "Public regulator documents: links and our own summary only (DAT-253, D-975). Terms are not yet checked [VERIFY]. Nothing is fetched in this release; the knowledge-base fetch rules (robots, conditional requests, daily cap) apply when polling is built (KB-082). The row stays pending.",
+  },
+  ssrn_papers: {
+    label: "SSRN papers (pending)",
+    provides: "Links to abstract pages only; no PDF is fetched and no text is stored.",
+    code: ["src/lib/http/safeLink.ts"],
+    hosts: [],
+    terms:
+      "Abstract page links only (DAT-253, D-975). Terms are not yet checked [VERIFY]. Nothing is fetched in this release; the row stays pending.",
   },
   industry_map_manual: {
     label: "Industry classes (manual CSV)",

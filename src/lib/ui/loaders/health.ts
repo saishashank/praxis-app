@@ -47,7 +47,7 @@ export type HealthModel = {
  * D-652: the experts line carries the last screening date; a masked viewer sees every date as an ISO week
  * (D-147, D-615), which `maskText` already does for the component reasons, so the line goes through it too.
  */
-const experts = (x: ExpertsHealth, t: (s: string) => string): ExpertsHealth => ({
+export const maskExpertsHealth = (x: ExpertsHealth, t: (s: string) => string): ExpertsHealth => ({
   ...x,
   lastScreening: x.lastScreening === null ? null : t(x.lastScreening),
   text: t(x.text),
@@ -117,6 +117,6 @@ export async function loadHealth(
     strip,
     details: owner,
     steelman: await loadSteelmanHealth(env.main, marketOf(env)),
-    experts: experts(await loadExpertsHealth(env.main, marketOf(env)), t),
+    experts: maskExpertsHealth(await loadExpertsHealth(env.main, marketOf(env)), t),
   };
 }

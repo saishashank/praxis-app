@@ -536,6 +536,9 @@ export default async function HealthPage() {
     if (owner && summary.intradayLines && summary.intradayLines.length > 0) {
       nav.push({ id: "intraday-h", label: "Intraday polling" });
     }
+    if (owner && summary.dataLines && summary.dataLines.length > 0) {
+      nav.push({ id: "data-feeds-h", label: "Data feeds" });
+    }
     if (summary.quality) nav.push({ id: "quality-h", label: "Data quality" });
     if (owner && summary.secrets) nav.push({ id: "secrets-h", label: "Secrets" });
     if (owner && summary.workerSecrets) {
@@ -738,6 +741,19 @@ export default async function HealthPage() {
                 </h2>
                 <ul className="list-disc pl-6 text-sm">
                   {summary.intradayLines.map((l) => (
+                    <li key={l}>{l}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {owner && summary.dataLines && summary.dataLines.length > 0 && (
+              <section aria-labelledby="data-feeds-h" className="flex flex-col gap-3">
+                <h2 id="data-feeds-h" className="text-xl font-semibold">
+                  Data feeds
+                </h2>
+                <ul className="list-disc pl-6 text-sm">
+                  {summary.dataLines.map((l) => (
                     <li key={l}>{l}</li>
                   ))}
                 </ul>

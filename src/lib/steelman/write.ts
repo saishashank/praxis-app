@@ -5,6 +5,7 @@
 // a failure is a `not_written` outcome with a reason (D-484). Nothing here can reach an order, a breaker
 // or a rule (PRD-033): the only tables written are the steelman tables and, through `recordOpinion`,
 // `opinion_track`.
+import { randomUUID } from "node:crypto";
 import type { LlmParams } from "@/lib/agents/params";
 import { allowance, scaledCap, type Role } from "@/lib/llm/budget";
 import { reserveAfterLeft } from "@/lib/llm/dropOrder";
@@ -311,7 +312,29 @@ async function writeInner(
   }
 
   const criticRouter = deps.criticRouterFor(author);
-  if (criticRouter === null) return none("critic_unavailable", claims);
+  if (criticRouter === null) {
+    // OPS-111 (4), D-977: a critic that was never called leaves a call row of its own (provider `none`,
+    // no tokens), written through the router's store, so "no checker" is visible next to real calls.
+    try {
+      await deps.store.recordCall({
+        id: randomUUID(),
+        role: ROLE,
+        provider: "none",
+        modelId: null,
+        fallbackDepth: "rules-only",
+        tokensIn: 0,
+        tokensOut: 0,
+        cached: 0,
+        outcome: "critic_unavailable",
+        injectionFiltered: 0,
+        market: deps.market,
+        d: deps.d,
+      });
+    } catch {
+      // the counter on the night row stands; a missing log row never changes the outcome
+    }
+    return none("critic_unavailable", claims);
+  }
   const listed: Listed[] = [
     ...v.kept.bull.map((point) => ({ side: "bull" as const, point })),
     ...v.kept.bear.map((point) => ({ side: "bear" as const, point })),
