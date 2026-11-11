@@ -57,6 +57,29 @@ describe("storeLatestQuotes / readLatestQuotes", () => {
     expect((await readLatestQuotes(db, "AU", ["AAA"])).get("AAA")!.lastMicro).toBe(11_000_000n);
   });
 
+  it("a re-fetch with the same quote time moves only fetched_at (an untraded stock is not starved)", async () => {
+    const at = "2026-11-09T01:00:00.000Z";
+    await storeLatestQuotes(db, "AU", [q("AAA", 10_500_000n, at)]);
+    await storeLatestQuotes(db, "AU", [
+      { ...q("AAA", 9_500_000n, at), prevCloseMicro: 1n, fetchedAt: "2026-11-09T01:45:00.000Z" },
+    ]);
+    const r = await db.execute(
+      "SELECT last_micro, prev_close_micro, quote_at, fetched_at FROM quote_latest WHERE code = 'AAA'",
+    );
+    expect(r.rows[0]).toMatchObject({
+      last_micro: 10_500_000,
+      prev_close_micro: 10_000_000,
+      quote_at: at,
+      fetched_at: "2026-11-09T01:45:00.000Z",
+    });
+    // an earlier quote still changes nothing, not even fetched_at
+    await storeLatestQuotes(db, "AU", [
+      { ...q("AAA", 1n, "2026-11-09T00:10:00.000Z"), fetchedAt: "2026-11-09T02:00:00.000Z" },
+    ]);
+    const r2 = await db.execute("SELECT fetched_at FROM quote_latest WHERE code = 'AAA'");
+    expect(r2.rows[0]!.fetched_at).toBe("2026-11-09T01:45:00.000Z");
+  });
+
   it("markets are separate; an empty code list reads nothing", async () => {
     await storeLatestQuotes(db, "AU", [q("AAA", 10_500_000n, "2026-11-09T00:35:00.000Z")]);
     expect((await readLatestQuotes(db, "US", ["AAA"])).size).toBe(0);
