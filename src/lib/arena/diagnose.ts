@@ -403,7 +403,7 @@ async function scenarioMain(
     return 2;
   }
   const w = argv.indexOf("--window");
-  const window = w >= 0 ? Number(argv[w + 1]) : 20;
+  const window = w >= 0 ? Number(argv[w + 1]) : 20; // money-float-ok: a session-count CLI flag, not money
   if (!Number.isInteger(window) || window < 2) {
     out("diagnose: usage --scenario splitFrequency [--window N>=2]");
     return 2;
