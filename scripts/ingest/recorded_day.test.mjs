@@ -170,3 +170,19 @@ test("while it runs, fetch to ASX or Yahoo throws; afterwards fetch is restored"
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// M18 OPS-107 / D-965: the CI recorded day runs this script with PRAXIS_ENV=recorded.
+test("PRAXIS_ENV=recorded is accepted like staging and writes the same files", async () => {
+  const dir = setup();
+  try {
+    const lines = [];
+    assert.equal(
+      await run(args(dir), { PRAXIS_ENV: "recorded" }, { out: (s) => lines.push(s) }),
+      0,
+    );
+    assert.equal(json(path.join(dir, "bars.json")).length, 2);
+    assert.match(lines[0], /^recorded_day: bars=2 /);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

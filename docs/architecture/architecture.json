@@ -14902,6 +14902,7 @@
           "e2e",
           "fixtures",
           "python",
+          "recorded-day",
           "release-gate",
           "secrets",
           "worker"

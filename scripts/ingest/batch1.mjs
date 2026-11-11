@@ -3,6 +3,7 @@
 // fetch step. No TS build: it imports the shared plain-ESM core.
 //   node scripts/ingest/batch1.mjs prepare --request request.json   (read-only)
 //   node scripts/ingest/batch1.mjs run --bars bars.json [--index index.json] [--short short.json] [--actions actions.json]
+// --now <ISO instant>: the simulated clock of the CI recorded day (M18 D-965); refused unless PRAXIS_ENV=recorded.
 // (M4 T3: index.json = the python step's `^AXJO` bars, short.json = the no-secrets ASIC step)
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, COMMIT_SHA (optional), GITHUB_OUTPUT (prepare, optional)
 // `prepare` reads the database only: it decides whether to fetch, writes request.json for the
@@ -15,6 +16,7 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@libsql/client";
 import { prepareBatch1, runBatch1 } from "../../src/lib/data/pipeline/batch1-core.mjs";
+import { parseNow } from "../e2e-day/now.mjs";
 
 const has = (v) => typeof v === "string" && v.trim() !== "";
 
@@ -37,9 +39,14 @@ function flag(args, name) {
  */
 export async function run(argv, env, deps = {}) {
   const out = deps.out ?? ((s) => console.log(s));
-  const nowMs = deps.nowMs ?? (() => Date.now());
+  const sim = parseNow(argv, env);
+  if (sim.error) {
+    out(`ingest-batch1: failed (${sim.error})`);
+    return 2;
+  }
+  const nowMs = sim.nowMs ?? deps.nowMs ?? (() => Date.now());
   const openDb = deps.openDb ?? ((url, authToken) => createClient({ url, authToken }));
-  const [cmd, ...rest] = argv;
+  const [cmd, ...rest] = sim.argv;
   if (cmd !== "prepare" && cmd !== "run") {
     out("ingest-batch1: failed (usage: prepare --request <file> | run --bars <file>)");
     return 1;

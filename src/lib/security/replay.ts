@@ -22,7 +22,31 @@ export class TursoNonceStore implements NonceStore {
     private readonly nowSec: () => number = () => Math.floor(Date.now() / 1000),
   ) {}
 
+  // M18 OPS-107 / D-965: the CI recorded day runs the production build against local libSQL files, which the
+  // Turso HTTP protocol cannot serve. A `file:` URL is honoured ONLY when PRAXIS_ENV=recorded (a made-up
+  // environment no deployment has), so production and staging keep the single HTTP path below.
+  private async claimLocal(nonce: string, expiresAtSec: number): Promise<boolean> {
+    const { createClient } = await import("@libsql/client");
+    const db = createClient({ url: String(this.url).trim() });
+    try {
+      await db.execute({
+        sql: "DELETE FROM request_nonce WHERE expires_at < ?",
+        args: [this.nowSec()],
+      });
+      const res = await db.execute({
+        sql: "INSERT INTO request_nonce (nonce, expires_at) VALUES (?, ?) ON CONFLICT DO NOTHING",
+        args: [nonce, expiresAtSec],
+      });
+      return res.rowsAffected === 1;
+    } finally {
+      db.close();
+    }
+  }
+
   async claim(nonce: string, expiresAtSec: number): Promise<boolean> {
+    if (process.env.PRAXIS_ENV === "recorded" && /^file:/.test((this.url ?? "").trim())) {
+      return this.claimLocal(nonce, expiresAtSec);
+    }
     const m = /^(?:libsql|https):\/\/([^/\s]+)\/?$/.exec((this.url ?? "").trim());
     if (!m || !this.token) throw new Error("store misconfigured");
     const now = this.nowSec();

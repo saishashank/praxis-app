@@ -178,6 +178,47 @@ jobs:
         env:
           FIXTURES_CHECKOUT_OUTCOME: ${{ steps.fixtures_checkout.outcome }}
 
+  # M18 OPS-107 / D-964 / D-965 (TST-138, AT-84): the RECORDED DAY replaces the staging E2E day. One full
+  # AU trading day runs on local libSQL files with a simulated clock, from the private recorded fixtures:
+  # migrate, seed, the morning routes (Sentinel, pre-open, quote poll, three intraday scans), Batch 1 at
+  # 17:30, 2a at 17:50, 2b/3/picks/steelman at 18:10, the evening review at 20:00 and the viewer walk, all
+  # against the production build with signed v2 calls. Every process runs with PRAXIS_ENV=recorded, where
+  # the host guard refuses every non-loopback host: the last step fails on any refusal or on a process
+  # that wrote no guard marker. The release gate reads this job as `recorded-day`, and its two closing
+  # steps by name (scripts/ci/release-gate-core.mjs STEP). Same `if:` and token rules as `fixtures`: the
+  # token is read-only, only the checkout step holds it, never a fork PR, and the job uses no cache.
+  recorded-day:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: app
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: ci-fixtures
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Check out the private fixtures repo (read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}-fixtures
+          token: ${{ secrets.FIXTURES_READ_TOKEN }}
+          path: fixtures
+          persist-credentials: false
+      - name: Recorded day (one AU day on local files, simulated clock, no request leaves the runner)
+        run: node scripts/e2e-day/recorded-day.mjs run --fixtures fixtures --work "$RUNNER_TEMP/recorded-day"
+      - name: PLT-073 deadline check (simulated clock)
+        run: node scripts/e2e-day/recorded-day.mjs check --work "$RUNNER_TEMP/recorded-day"
+      - name: Network assertion (no market-data host reached, every guard installed)
+        if: ${{ always() }}
+        run: node scripts/e2e-day/recorded-day.mjs assert-net --work "$RUNNER_TEMP/recorded-day"
+
   # PLT-072: the Yahoo fetcher is Python; its tests mock yfinance and never touch the network.
   python:
     runs-on: ubuntu-latest
@@ -312,7 +353,7 @@ jobs:
   # release switches the --mode below to `full`.
   release-gate:
     if: ${{ !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'release' }}
-    needs: [app, e2e, secrets, worker, fixtures, python, audit, coverage, checks]
+    needs: [app, e2e, secrets, worker, fixtures, recorded-day, python, audit, coverage, checks]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
