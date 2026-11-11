@@ -42,7 +42,11 @@ export function parseRba(csv, { series = RBA_SERIES, keepDays = RBA_KEEP_DAYS } 
 }
 
 export const run = (env, deps) =>
-  runMacro({ source: "rba", url: RBA_URL, accept: "text/csv", parse: (b) => parseRba(b) }, env, deps);
+  runMacro(
+    { source: "rba", url: RBA_URL, accept: "text/csv", parse: (b) => parseRba(b) },
+    env,
+    deps,
+  );
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   process.exit(await run(process.env));

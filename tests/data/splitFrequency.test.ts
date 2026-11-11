@@ -47,12 +47,14 @@ describe("summarise", () => {
 describe("measure and the diagnose scenario", () => {
   it("reads a migrated database and writes nothing", async () => {
     const db = await freshDb("main");
-    const before = Number((await db.execute("SELECT COUNT(*) AS n FROM corporate_action")).rows[0]!.n);
+    const before = Number(
+      (await db.execute("SELECT COUNT(*) AS n FROM corporate_action")).rows[0]!.n,
+    );
     const s = await measure(readOnly(db), 20);
     expect(s.actions).toBe(0);
-    expect(Number((await db.execute("SELECT COUNT(*) AS n FROM corporate_action")).rows[0]!.n)).toBe(
-      before,
-    );
+    expect(
+      Number((await db.execute("SELECT COUNT(*) AS n FROM corporate_action")).rows[0]!.n),
+    ).toBe(before);
   });
 
   it("is registered, refuses an unknown name and a bad window, and needs a database", async () => {

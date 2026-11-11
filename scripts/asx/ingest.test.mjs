@@ -36,10 +36,14 @@ async function setup() {
     mkdirSync(d, { recursive: true });
     writeFileSync(path.join(d, "fetch-status.json"), JSON.stringify(status));
     if (file) writeFileSync(path.join(d, "companies.csv"), file);
-    const code = await ingest(["--dir", d], { TURSO_MAIN_URL: url }, {
-      out: (s) => lines.push(s),
-      nowMs: () => Date.parse(`2026-11-0${n}T01:00:00Z`),
-    });
+    const code = await ingest(
+      ["--dir", d],
+      { TURSO_MAIN_URL: url },
+      {
+        out: (s) => lines.push(s),
+        nowMs: () => Date.parse(`2026-11-0${n}T01:00:00Z`),
+      },
+    );
     return code;
   };
   const history = async () =>
@@ -71,10 +75,13 @@ test("three consecutive not_found runs delist a code; one answer in between rese
     );
     await t.step(3, status(["ZZA"]));
     const h = await t.history();
-    assert.deepEqual(h.map((r) => [r.code, r.event]), [
-      ["ZZA", "delisted"],
-      ["ZZA", "not_found"],
-    ]);
+    assert.deepEqual(
+      h.map((r) => [r.code, r.event]),
+      [
+        ["ZZA", "delisted"],
+        ["ZZA", "not_found"],
+      ],
+    );
     // a different code: not_found, answer, not_found -> counter restarts
     await t.step(4, status(["ZZB"]));
     await t.step(5, status([]));
@@ -94,7 +101,10 @@ test("--write-state lists the open delisted codes; a code listed by ASX is skipp
   try {
     for (const n of [1, 2, 3]) await t.step(n, status(["ZZA"]), csv(["ZZA", "ZZB"]));
     const out = path.join(t.dir, "state.json");
-    assert.equal(await ingest(["--write-state", out], { TURSO_MAIN_URL: t.url }, { out: () => {} }), 0);
+    assert.equal(
+      await ingest(["--write-state", out], { TURSO_MAIN_URL: t.url }, { out: () => {} }),
+      0,
+    );
     assert.deepEqual(JSON.parse(readFileSync(out, "utf8")).delisted, ["ZZA"]);
     // still listed in the ASX file: stays delisted (skipped from the history fetch), never "reappeared"
     await t.step(4, status([], { historyRan: false }), csv(["ZZA", "ZZB"]));

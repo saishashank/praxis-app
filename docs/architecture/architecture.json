@@ -14209,7 +14209,8 @@
           "claims_valid",
           "validity_ppm",
           "critic_hidden",
-          "created_at"
+          "created_at",
+          "not_written_error"
         ],
         "database": "main",
         "indexes": []

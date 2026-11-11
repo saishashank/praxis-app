@@ -3,7 +3,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
-import { causeOf, DEFAULT_BUDGET_MS, fetchAll, MAX_RETRY_AFTER_MS, retryAfterMs } from "./fetch.mjs";
+import {
+  causeOf,
+  DEFAULT_BUDGET_MS,
+  fetchAll,
+  MAX_RETRY_AFTER_MS,
+  retryAfterMs,
+} from "./fetch.mjs";
 
 const NOW = Date.parse("2026-10-26T10:00:00Z");
 const CSV3 =

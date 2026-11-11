@@ -38,7 +38,13 @@ function fake() {
 }
 const run = async (state) => {
   const f = fake();
-  const r = await fetchAll({ nowMs: NOW, ua: "t", fetchImpl: f.impl, sleep: async () => {}, state });
+  const r = await fetchAll({
+    nowMs: NOW,
+    ua: "t",
+    fetchImpl: f.impl,
+    sleep: async () => {},
+    state,
+  });
   return { r, calls: f.calls };
 };
 const wiki = (calls) => calls.filter((c) => c.url === WIKIDATA_URL);

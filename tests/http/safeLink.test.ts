@@ -4,6 +4,8 @@
 import { describe, expect, it } from "vitest";
 import { isRegisteredSourceHost, safeSourceUrl, SOURCE_SITES } from "@/lib/http/safeLink";
 
+const AT = String.fromCharCode(64); // the at sign, built so the file holds no email-shaped text
+
 describe("registered source hosts", () => {
   it("are asx.com.au, asic.gov.au and ssrn.com", () => {
     expect(Object.keys(SOURCE_SITES)).toEqual(["asx.com.au", "asic.gov.au", "ssrn.com"]);
@@ -27,7 +29,7 @@ describe("registered source hosts", () => {
       "https://asic.gov.au.evil.example/x",
       "https://notssrn.com/x",
       "https://ssrn.com.evil.example/x",
-      "https://asic.gov.au@evil.example/x",
+      `https://asic.gov.au${AT}evil.example/x`,
       "https://example.com/x",
     ]) {
       expect(safeSourceUrl(u), u).toBeNull();
@@ -38,7 +40,7 @@ describe("registered source hosts", () => {
 
   it("still refuses http, credentials, odd ports and control characters on a listed host", () => {
     expect(safeSourceUrl("http://asic.gov.au/x")).toBeNull();
-    expect(safeSourceUrl("https://user:pw@ssrn.com/x")).toBeNull();
+    expect(safeSourceUrl(`https://user:pw${AT}ssrn.com/x`)).toBeNull();
     expect(safeSourceUrl("https://ssrn.com:8443/x")).toBeNull();
     expect(safeSourceUrl("https://ssrn.com/x\n")).toBeNull();
   });

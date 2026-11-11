@@ -125,15 +125,17 @@ export const SOURCE_FACTS = {
   },
   rba: {
     label: "Reserve Bank of Australia",
-    provides: "Public interest-rate and macro data: the cash rate target and the interbank overnight cash rate from statistical table F1.",
+    provides:
+      "Public interest-rate and macro data: the cash rate target and the interbank overnight cash rate from statistical table F1.",
     code: ["scripts/macro/rba.mjs"],
     hosts: ["www.rba.gov.au"],
     terms:
-      "Copyrighted by the RBA. Only derived numbers may be shown, with the source named (\"Source: RBA\"). Its copyright notice allows reuse of financial data with attribution but does not address automated download (checked in M18, see the exit evidence; [VERIFY]). The weekly fetcher is built and ships OFF: it runs only when the Owner sets the repository variable MACRO_FETCH.",
+      'Copyrighted by the RBA. Only derived numbers may be shown, with the source named ("Source: RBA"). Its copyright notice allows reuse of financial data with attribution but does not address automated download (checked in M18, see the exit evidence; [VERIFY]). The weekly fetcher is built and ships OFF: it runs only when the Owner sets the repository variable MACRO_FETCH.',
   },
   abs: {
     label: "Australian Bureau of Statistics",
-    provides: "Public economic statistics: the quarterly Consumer Price Index from the ABS Data API.",
+    provides:
+      "Public economic statistics: the quarterly Consumer Price Index from the ABS Data API.",
     code: ["scripts/macro/abs.mjs"],
     hosts: ["data.api.abs.gov.au"],
     terms:
@@ -182,7 +184,8 @@ export const SOURCE_FACTS = {
   },
   asic_documents: {
     label: "ASIC public documents (pending)",
-    provides: "Links to public regulator documents and our own short summary; no document text is stored.",
+    provides:
+      "Links to public regulator documents and our own short summary; no document text is stored.",
     code: ["src/lib/http/safeLink.ts"],
     hosts: [],
     terms:

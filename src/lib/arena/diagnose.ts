@@ -419,7 +419,9 @@ async function scenarioMain(
     out(`diagnose splitFrequency: ${JSON.stringify(s)}`);
     return 0;
   } catch (error) {
-    out(`diagnose splitFrequency: failed (${error instanceof WriteRefused ? error.message : (error as Error).name})`);
+    out(
+      `diagnose splitFrequency: failed (${error instanceof WriteRefused ? error.message : (error as Error).name})`,
+    );
     return 1;
   } finally {
     db.close();

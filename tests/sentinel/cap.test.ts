@@ -32,7 +32,11 @@ describe("the key", () => {
 
 describe("effectiveAssessCap (pure table)", () => {
   it("the key alone when nothing binds", () => {
-    expect(effectiveAssessCap(base)).toMatchObject({ cap: 120, llmHeadroomCap: null, tursoCap: null });
+    expect(effectiveAssessCap(base)).toMatchObject({
+      cap: 120,
+      llmHeadroomCap: null,
+      tursoCap: null,
+    });
   });
   it("the LLM headroom binds: remaining tokens / measured tokens per item", () => {
     const r = effectiveAssessCap({ ...base, tokensPerItem: 1000, llmRemainingTokens: 30_500 });

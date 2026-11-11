@@ -150,7 +150,14 @@ export async function applyFetchStatus(
           await db.execute({
             sql: `INSERT OR IGNORE INTO code_history (market, code, event, first_d, last_d, runs, absent)
                   VALUES (?, ?, 'delisted', ?, ?, ?, ?)`,
-            args: [MARKET, code, today, today, runs, fileCodes !== null && !fileCodes.has(code) ? 1 : 0],
+            args: [
+              MARKET,
+              code,
+              today,
+              today,
+              runs,
+              fileCodes !== null && !fileCodes.has(code) ? 1 : 0,
+            ],
           });
           out.delisted.push(code);
         }

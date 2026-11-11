@@ -22,7 +22,18 @@ export function toMicro(text) {
 }
 
 const MONTHS = {
-  Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12,
+  Jan: 1,
+  Feb: 2,
+  Mar: 3,
+  Apr: 4,
+  May: 5,
+  Jun: 6,
+  Jul: 7,
+  Aug: 8,
+  Sep: 9,
+  Oct: 10,
+  Nov: 11,
+  Dec: 12,
 };
 const pad = (n, w = 2) => String(n).padStart(w, "0");
 const lastDay = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
@@ -53,7 +64,8 @@ export function absDate(s) {
   m = /^(\d{4})$/.exec(t);
   if (m !== null) return `${m[1]}-12-31`;
   m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
-  if (m !== null && Number(m[3]) >= 1 && Number(m[3]) <= lastDay(Number(m[1]), Number(m[2]))) return t;
+  if (m !== null && Number(m[3]) >= 1 && Number(m[3]) <= lastDay(Number(m[1]), Number(m[2])))
+    return t;
   return null;
 }
 

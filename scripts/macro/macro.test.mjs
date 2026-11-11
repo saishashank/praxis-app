@@ -1,13 +1,14 @@
 // DAT-251 c (D-973): RBA and ABS fixtures -> macro_series rows. Fixture files and a fake fetch only: no
 // network. Micro conversion is exact string arithmetic.
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createClient } from "@libsql/client";
 import { loadMigrations, migrateUp } from "../../src/lib/db/migrate-core.mjs";
+import { ABS_CPI, RBA_F1 } from "./fixtures.mjs";
 import { absDate, rbaDate, toMicro } from "./lib.mjs";
 import { parseRba, RBA_URL } from "./rba.mjs";
 import { absUrl, ABS_SERIES, parseAbs, run as runAbs } from "./abs.mjs";
@@ -15,7 +16,6 @@ import { run as runRba } from "./rba.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
-const fixture = (n) => readFileSync(path.join(here, "fixtures", n), "utf8");
 
 test("toMicro is exact: no float, six decimals, junk is null", () => {
   assert.equal(toMicro("4.35"), 4_350_000);
@@ -42,7 +42,7 @@ test("dates: RBA DD-Mon-YYYY, ABS quarter / month / year / day", () => {
 });
 
 test("the RBA F1 fixture: only the allowlisted series, empty cells skipped, 400-day window", () => {
-  const rows = parseRba(fixture("rba-f1.csv"));
+  const rows = parseRba(RBA_F1);
   const key = (r) => `${r.series_id} ${r.d} ${r.value_micro}`;
   assert.deepEqual(rows.map(key).sort(), [
     "FIRMMCCRT 2025-11-05 3580000",
@@ -58,7 +58,7 @@ test("the RBA F1 fixture: only the allowlisted series, empty cells skipped, 400-
 });
 
 test("the ABS fixture: SDMX-CSV rows in any order, bad periods dropped, sorted by day", () => {
-  const rows = parseAbs(fixture("abs-cpi.csv"), "CPI_ALL_GROUPS_AUS_Q");
+  const rows = parseAbs(ABS_CPI, "CPI_ALL_GROUPS_AUS_Q");
   assert.deepEqual(
     rows.map((r) => [r.d, r.value_micro]),
     [
@@ -69,7 +69,10 @@ test("the ABS fixture: SDMX-CSV rows in any order, bad periods dropped, sorted b
     ],
   );
   assert.equal(parseAbs("a,b\n1,2", "x"), null);
-  assert.match(absUrl(ABS_SERIES[0]), /^https:\/\/data\.api\.abs\.gov\.au\/rest\/data\/ABS,CPI,2\.0\.0\/1\.10001\.10\.50\.Q\?startPeriod=/);
+  assert.match(
+    absUrl(ABS_SERIES[0]),
+    /^https:\/\/data\.api\.abs\.gov\.au\/rest\/data\/ABS,CPI,2\.0\.0\/1\.10001\.10\.50\.Q\?startPeriod=/,
+  );
 });
 
 async function withDb(fn) {
@@ -106,7 +109,7 @@ test("the RBA run writes rows once, sends If-Modified-Since next time, and a rep
         calls.push({ u, h: init.headers });
         return init.headers["if-modified-since"]
           ? reply(304)
-          : reply(200, fixture("rba-f1.csv"), { "last-modified": "Thu, 12 Nov 2026 04:30:00 GMT" });
+          : reply(200, RBA_F1, { "last-modified": "Thu, 12 Nov 2026 04:30:00 GMT" });
       },
     };
     const env = { TURSO_MAIN_URL: url, MACRO_USER_AGENT: "test-agent" };
@@ -122,7 +125,7 @@ test("the RBA run writes rows once, sends If-Modified-Since next time, and a rep
     assert.equal(calls[1].h["if-modified-since"], "Thu, 12 Nov 2026 04:30:00 GMT");
     assert.match(lines[1], /not modified/);
     // an unconditional re-parse of identical data changes no row
-    const again = { ...deps, fetchImpl: async () => reply(200, fixture("rba-f1.csv")) };
+    const again = { ...deps, fetchImpl: async () => reply(200, RBA_F1) };
     await db.execute("DELETE FROM worker_state");
     assert.equal(await runRba(env, again), 0);
     assert.match(lines[2], /rows=7 changed=0/);
@@ -137,16 +140,24 @@ test("the ABS run stores the quarter-end days; a refusal or a bad table fails wi
       out: (s) => lines.push(s),
       fetchImpl: async (u, init) => {
         assert.equal(init.headers.accept, "application/vnd.sdmx.data+csv");
-        return reply(200, fixture("abs-cpi.csv"));
+        return reply(200, ABS_CPI);
       },
     };
     assert.equal(await runAbs({ TURSO_MAIN_URL: url }, ok), 0);
-    const r = await db.execute("SELECT d, value_micro FROM macro_series WHERE source='abs' ORDER BY d");
+    const r = await db.execute(
+      "SELECT d, value_micro FROM macro_series WHERE source='abs' ORDER BY d",
+    );
     assert.equal(r.rows.length, 4);
     assert.equal(r.rows[3].d, "2026-09-30");
-    assert.equal(await runAbs({ TURSO_MAIN_URL: url }, { ...ok, fetchImpl: async () => reply(503) }), 1);
     assert.equal(
-      await runAbs({ TURSO_MAIN_URL: url }, { ...ok, fetchImpl: async () => reply(200, "<html/>") }),
+      await runAbs({ TURSO_MAIN_URL: url }, { ...ok, fetchImpl: async () => reply(503) }),
+      1,
+    );
+    assert.equal(
+      await runAbs(
+        { TURSO_MAIN_URL: url },
+        { ...ok, fetchImpl: async () => reply(200, "<html/>") },
+      ),
       1,
     );
     assert.match(lines.at(-1), /did not parse/);

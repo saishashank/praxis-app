@@ -33,7 +33,7 @@ export const COMPANIES_URL = "https://www.asx.com.au/asx/research/ASXListedCompa
 // (ticker symbol) qualifier is the standard shape. [VERIFY] the result shape on the first enabled run.
 export const WIKIDATA_QUERY =
   "SELECT ?code ?companyLabel ?industryLabel WHERE { ?company p:P414 ?s . ?s ps:P414 wd:Q732670 ; pq:P249 ?code . " +
-  "OPTIONAL { ?company wdt:P452 ?industry . } SERVICE wikibase:label { bd:serviceParam wikibase:language \"en\" . } }";
+  'OPTIONAL { ?company wdt:P452 ?industry . } SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . } }';
 export const WIKIDATA_URL = `https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(WIKIDATA_QUERY)}`;
 export const FALLBACK_AFTER_RUNS = 3; // threshold-ok: DAT-252 "three failed runs"
 const MIN_GAP_MS = 700;

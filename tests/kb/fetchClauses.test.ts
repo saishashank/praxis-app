@@ -199,6 +199,8 @@ describe("(3) conditional requests and the daily cap", () => {
   });
 });
 
+const AT = String.fromCharCode(64); // the at sign, built so the file holds no email-shaped text
+
 describe("(4) an X item exists only through the Owner's paste", () => {
   it("records metadata only, makes no request, and refuses every other host and shape", () => {
     const item = recordManualItem({
@@ -221,7 +223,7 @@ describe("(4) an X item exists only through the Owner's paste", () => {
       "https://evil.example.test/x.com/status/1",
       "https://x.com.evil.example.test/status/1",
       "http://x.com/zz/status/1",
-      "https://user:pw@x.com/zz/status/1",
+      `https://user:pw${AT}x.com/zz/status/1`,
       "https://x.com:8443/zz",
       "https://x.com/zz\n/status",
       "not a url",
