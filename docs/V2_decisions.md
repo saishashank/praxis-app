@@ -602,3 +602,13 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-977 | OPS-111 verdicts: (1) → LLM-077 (M22), re-accepted; |
 | D-978 | OPS-112 verdicts: (1) closed: the weekly close requires the horizon session's bar when d equals the horizon session, else marks the outcome early (new column... |
 | D-979 | Fixed V3 keys are registered once: hmac_scheme_version (default = the hmacCore constant), calendar_draft_markets (default = CALENDAR_MARKETS), restore_drill_... |
+| D-980 | DAT-252 fallback threshold counts the current run: |
+| D-981 | DAT-251 a: an HTTP 401 or 403 is classified server_error, never not_found, so a block by the source is never read as a delisting; 404 stays not_found (script... |
+| D-982 | DAT-251 a: a code marked delisted closes its code_history row only after it has been absent from the ASX file and then returned in it; a code that ASX still... |
+| D-983 | DAT-251 a: the asx-fetch job reads its delisted-code list through a read-only state step (ingest.mjs --write-state asx/state.json, secrets only in that step'... |
+| D-984 | DAT-251 b: news_assess_per_run has a hard ceiling of 200 (bounds 20–200) and the Turso cap of 40 applies at notice or worse; the effective cap stays the mini... |
+| D-985 | OPS-111 (9): the steelman reader-file list is generated from the import graph (tests/security/steelman-readers.json, compared by scripts/ci/steelman-readers.... |
+| D-986 | TST-136: the wall-clock variants of the three timing checks live in tests/timing/ and worker/timing/ with their own configs (vitest.timing.config.mts, worker... |
+| D-987 | TST-136: a slow test gets an explicit per-test limit (for example { timeout: 120_000 } on the live look) and never a CI retry; a static test forbids a retry:... |
+| D-988 | The Owner control-room load keeps a statement budget; the data-feed lines are one more statement, so the budget is 91 (was 90), asserted in tests/health/cont... |
+| D-989 | TST-135 (b): the four AT-39 fetch clauses (robots.txt, conditional requests, daily cap, metadata-only record under frozen extraction rules) live in one pure... |
