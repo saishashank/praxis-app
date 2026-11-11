@@ -397,7 +397,7 @@ describe("quiet hours, digest and Evening Review (D-388)", () => {
     await transition(1, "below_stop");
     await db.execute({
       sql: `INSERT INTO intraday_candidate (market, session_d, code, found_slot, found_at, item_source, item_ann_id,
-              item_category, materiality, move_ppm, gates_json) VALUES ('AU', ?, 'ZY01', '1130', ?, 'asx', 'a1', 'Contract', 2, 60000, '{}')`,
+              item_category, materiality, polarity, move_ppm, gates_json) VALUES ('AU', ?, 'ZY01', '1130', ?, 'asx', 'a1', 'Contract', 2, 'positive', 60000, '{}')`,
       args: [SESSION, clock.toISOString()],
     });
     const on = await readPickReview({ db, market: "AU", d: SESSION } as Ctx, true);
@@ -443,9 +443,9 @@ describe("new intraday candidates (EML-040)", () => {
   const seed = async (code: string, failed: string | null = null) =>
     db.execute({
       sql: `INSERT INTO intraday_candidate (market, session_d, code, found_slot, found_at, item_source, item_ann_id,
-              item_category, materiality, move_ppm, rel_volume_ppm, gates_json, indicative_limit_micro,
+              item_category, materiality, polarity, move_ppm, rel_volume_ppm, gates_json, indicative_limit_micro,
               indicative_stop_micro, latest_quote_at)
-            VALUES ('AU', ?, ?, '11:30', ?, 'asx', 'a1', 'Contract', 2, 62000, 2400000, ?, 3100000, 2850000, ?)`,
+            VALUES ('AU', ?, ?, '11:30', ?, 'asx', 'a1', 'Contract', 2, 'positive', 62000, 2400000, ?, 3100000, 2850000, ?)`,
       args: [
         SESSION,
         code,

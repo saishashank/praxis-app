@@ -59,7 +59,10 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
     });
   const model = await loadPicks(env, query);
   const max = await maxPerFamily(env.main);
-  const rule = profileSentence(profileRules(await pickProfilesConfig(env.main), model.profile));
+  const rule = profileSentence(
+    profileRules(await pickProfilesConfig(env.main), model.profile),
+    model.profile,
+  );
   const sort = await loadPicksSort(env);
   const picks = sortPicks(capPerFamily(model.picks, max), sort);
   const chips = model.realD ? await loadAlertChips(env, model.realD) : new Map();
@@ -116,6 +119,7 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
             <li key={p.id} className="min-w-0">
               <PickCard
                 pick={p}
+                profile={model.profile}
                 masked={model.masked}
                 beatsLuck={model.success?.beatsLuck ?? false}
                 chip={chips.get(`${model.realD}.${model.profile}.${p.rank}`) ?? null}

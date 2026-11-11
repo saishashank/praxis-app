@@ -7,6 +7,7 @@
 // A pass only lets the Owner approve a family at the next release; it never trades intraday. The
 // Owner can only set shadow (`ownerSetShadow`). A null set stays shadow.
 import type { Client } from "@libsql/client";
+import { buyIdeaSql } from "@/lib/intraday/side";
 import { getConfig } from "@/lib/config/store";
 import { writeStreamState, type StreamState } from "@/lib/config/streamState";
 import {
@@ -132,8 +133,10 @@ export async function evaluateIntradayStream(
   const sampleFrom = (cell.spec as { sampleFrom?: string }).sampleFrom ?? "";
   const rows = (
     await db.execute({
+      // D-1044: the stream is the BUY ideas (good news, price up); "avoid" rows are not candidates
       sql: `SELECT session_d, code, excess_open_5_ppm AS x FROM intraday_candidate
             WHERE market = ? AND excess_open_5_ppm IS NOT NULL AND session_d >= ?
+              AND ${buyIdeaSql()}
             ORDER BY session_d, code`,
       args: [market, sampleFrom],
     })

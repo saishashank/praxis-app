@@ -168,7 +168,14 @@ export function parcelStallWindow(
 
 // ---- the verdict -----------------------------------------------------------------------------------------
 
-export type TerminalRule = "target" | "bust" | "stall_floor" | "stall_parcel" | "timeout";
+export type TerminalRule =
+  | "target"
+  | "bust"
+  | "stall_floor"
+  | "stall_parcel"
+  | "timeout"
+  /** D-1022: the round ended at a fixed date so the A$5,000 round could begin (recorded as a timeout). */
+  | "round_switch";
 
 export type TerminalVerdict = {
   readonly kind: TerminalKind;
@@ -190,6 +197,12 @@ export type TerminalInput = {
   readonly calendar: readonly CalendarRow[];
   /** Closes of the cohort from its start up to and including the close being judged. */
   readonly history: readonly CloseDay[];
+  /**
+   * D-1022: the caller found that this cohort's round must end at this close (a fixed switch date,
+   * never a clock). Applies only when none of the ARN-052 tests fired, so a cohort that reached its
+   * goal, loss limit or a stall on the same close keeps that verdict.
+   */
+  readonly roundEnds?: boolean;
 };
 
 /**
@@ -224,6 +237,9 @@ export function evaluateTerminal(input: TerminalInput): TerminalVerdict | null {
   } else if (sessions >= params.timeoutSessions) {
     kind = "timeout";
     rule = "timeout";
+  } else if (input.roundEnds === true) {
+    kind = "timeout";
+    rule = "round_switch";
   }
   if (kind === null || rule === null) return null;
   return {

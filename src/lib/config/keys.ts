@@ -147,7 +147,7 @@ const M4_RANGED = [
   ["f6_time_stop", "int", 20, 10, 40, "sessions", "B", FAM, "ch.15 15.3 F6 time_stop", "F6: time exit"],
   // Shared family rules
   ["reentry_block", "int", 10, 5, 20, "sessions", "B", FAM, "FAM-002; ch.15 l.110", "Sessions a code is blocked after a stop exit"],
-  ["max_open_positions", "int", 2, 1, 2, "positions", "O", FAM, "ARN-003; ch.15 l.17", "Most positions open at once"],
+  ["max_open_positions", "int", 2, 1, 2, "positions", "O", FAM, "ARN-003; ch.15 l.17", "Most positions open at once in a first-round (A$600) book and in replays; the A$5,000 round holds up to 6 (D-1021)"],
   // Events and insider/flow (AGT-020, AGT-105)
   ["event_polarity_threshold_pct", "num", 2, 0.5, 10, "%", "B", REG, "AGT-020; ch.15 l.117 (bounds not in the extract, D-079)", "Abnormal return that gives an event a polarity"],
   ["insider_window_sessions", "int", 30, 10, 60, "sessions", "B", REG, "AGT-105; ch.15 l.116 (bounds not in the extract, D-079)", "Insider/flow window"],

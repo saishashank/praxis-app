@@ -438,6 +438,9 @@ describe("/reviews/[date]", () => {
     expect(html).toContain("ZZPCK");
     expect(html).toContain("Zed Pick Resources");
     expect(html).toContain("A$10.05"); // buy up to, Money
+    // D-1004: the valid-until day in market words, never the stored ISO date
+    expect(html).toContain("Fri 23 Oct");
+    expect(html).not.toContain("2026-10-23");
     expect(html).toContain("data-money");
     expect(html).toContain("Simulated");
     expect(html).toContain("Mark as read");

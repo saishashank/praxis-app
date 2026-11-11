@@ -66,7 +66,7 @@ A formal company notice to the exchange, such as results, a dividend, a contract
 _Spec: AGT-020, DAT-103_
 
 ### Arena
-The part of the app where the 12 practice strategies of each market run side by side, each starting with simulated A$600.
+The part of the app where the 12 practice strategies of each market run side by side, each starting with simulated A$5,000 (A$600 in the first round).
 _Spec: ARN-000, ARN-001, UXN-031_
 
 ### ASIC
@@ -872,7 +872,7 @@ A grid of sectors coloured by their day change; tap one to list its companies.
 _Spec: UXN-270_
 
 ### Seed
-The starting simulated money for each practice round: A$600, shown as "starting money".
+The starting simulated money for each practice round: A$5,000 (A$600 in the first round), shown as "starting money".
 _Spec: ARN-001, PRD-002_
 
 ### Sentinel (A1)

@@ -4,6 +4,7 @@
 // unvalidated; with no data each part says "No data yet".
 import "server-only";
 import type { Client } from "@libsql/client";
+import { buyIdeaSql } from "@/lib/intraday/side";
 import { getConfig } from "@/lib/config/store";
 import { activeStreamCell, MIN_CANDIDATES, MIN_SESSIONS } from "@/lib/intraday/evaluator";
 
@@ -40,7 +41,7 @@ export async function loadAlertsReport(db: Client, market: string): Promise<Aler
     await db.execute({
       sql: `SELECT session_d, decision_outcome AS o, excess_open_1_ppm AS a, excess_open_3_ppm AS b,
               excess_open_5_ppm AS c, excess_found_5_ppm AS f
-            FROM intraday_candidate WHERE market = ? ORDER BY session_d`,
+            FROM intraday_candidate WHERE market = ? AND ${buyIdeaSql()} ORDER BY session_d`,
       args: [market],
     })
   ).rows;

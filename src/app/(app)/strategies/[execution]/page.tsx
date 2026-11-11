@@ -222,11 +222,21 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
     { key: "round", header: "Round", cell: (r) => `Round ${r.round}` },
     { key: "started", header: "Started", cell: (r) => dayText(r.startD) },
     {
+      key: "seed",
+      header: "Started with",
+      align: "right",
+      cell: (r) => <Money micro={r.seed.micro} />,
+    },
+    {
       key: "ended",
       header: "How it ended",
       cell: (r) =>
         r.terminalKind
-          ? `${ENDED[r.terminalKind] ?? r.terminalKind}, ${dayText(r.terminalD)}`
+          ? `${
+              r.endedForNewRound
+                ? "Closed for the new, bigger round"
+                : (ENDED[r.terminalKind] ?? r.terminalKind)
+            }, ${dayText(r.terminalD)}`
           : "In progress",
     },
     {

@@ -79,7 +79,10 @@ export async function TrackRecordBody({
   hrefFor: (profile: string) => string;
 }) {
   const model = await loadTrackRecord(env, { profile });
-  const rule = profileSentence(profileRules(await pickProfilesConfig(env.main), model.profile));
+  const rule = profileSentence(
+    profileRules(await pickProfilesConfig(env.main), model.profile),
+    model.profile,
+  );
   const columns: Column<TrackRow>[] = [
     { key: "when", header: "Published", cell: (r) => (model.masked ? r.d : formatDay(r.d)) },
     { key: "stock", header: "Stock", cell: (r) => r.stock },

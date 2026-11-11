@@ -1,13 +1,13 @@
-// NAV bar (UXR-023, UXR-054): a bar from the loss limit (A$300) to the goal (A$1,200) with the start
-// (A$600) marked. The fill is in the signed outcome colour (above the start: gain, below: loss, level:
+// NAV bar (UXR-023, UXR-054): a bar from the loss limit (half the start) to the goal (twice the start) with the start
+// marked. The fill is in the signed outcome colour (above the start: gain, below: loss, level:
 // flat), never grey for a signed value. Every mark is labelled in text. Server component, pure CSS.
 import { cn } from "@/components/ui/cn";
 import { hueStyle } from "@/components/ui/hue";
 import { formatCents } from "@/lib/view/format";
 
-const DEFAULT_MIN = 30_000; // threshold-ok: A$300 loss limit (display default)
-const DEFAULT_START = 60_000; // threshold-ok: A$600 start (display default)
-const DEFAULT_MAX = 120_000; // threshold-ok: A$1,200 goal (display default)
+const DEFAULT_MIN = 250_000; // threshold-ok: A$2,500 loss limit (display default, D-1020)
+const DEFAULT_START = 500_000; // threshold-ok: A$5,000 start (display default, D-1020)
+const DEFAULT_MAX = 1_000_000; // threshold-ok: A$10,000 goal (display default, D-1020)
 const PCT = 100; // threshold-ok: percent
 
 export function NavBar({

@@ -319,6 +319,25 @@ describe("Home content: picks", () => {
     );
   });
 
+  it("D-1002: each profile's card has its own accent colour and a coloured profile label", () => {
+    show((v) => {
+      v.picks.items = [
+        pick({ profile: "aggressive", rank: 1 }),
+        pick({ profile: "balanced", rank: 1 }),
+        pick({ profile: "conservative", rank: 1 }),
+      ];
+    });
+    const cards = [...document.querySelectorAll("[data-pick-card]")];
+    expect(cards.map((c) => c.querySelector("[data-hue]")!.getAttribute("data-hue"))).toEqual([
+      "tier-p0",
+      "tier-p1",
+      "status-allowed",
+    ]);
+    expect(
+      cards.map((c) => c.querySelector("[data-profile]")!.getAttribute("data-profile")),
+    ).toEqual(["aggressive", "balanced", "conservative"]);
+  });
+
   it("falls back to the first three in list order, singular session, unknown profile and size, missing prices", () => {
     show((v) => {
       v.picks.items = [
@@ -338,7 +357,7 @@ describe("Home content: picks", () => {
     });
     const cards = document.querySelectorAll("[data-pick-card]");
     expect(cards).toHaveLength(3);
-    expect(cards[0]!.textContent).toContain("custom #2");
+    expect(cards[0]!.textContent).toContain("Custom #2");
     expect(cards[0]!.textContent).toContain("Time frame 1 session");
     expect(cards[0]!.textContent).not.toContain("company");
     expect(cards[0]!.textContent).not.toContain("Valid until");

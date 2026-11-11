@@ -123,7 +123,10 @@ export async function HistoryBody({
   cursor: string | null;
 }) {
   const model = await loadPickHistory(env, { profile, filter, cursor });
-  const rule = profileSentence(profileRules(await pickProfilesConfig(env.main), model.profile));
+  const rule = profileSentence(
+    profileRules(await pickProfilesConfig(env.main), model.profile),
+    model.profile,
+  );
   const query = `profile=${encodeURIComponent(model.profile)}&view=history&status=${model.filter}`;
   const columns: Column<HistoryRow>[] = [
     { key: "stock", header: "Stock", cell: stockCell },
