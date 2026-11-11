@@ -52,7 +52,9 @@ describe("withAlpha", () => {
 
 describe("CompanyChart dates (D-919)", () => {
   it("the readout, summary and table use plain days, never ISO dates", () => {
-    const { container } = render(<CompanyChart bars={bars} markers={[]} label="Zed" />);
+    const { container } = render(
+      <CompanyChart currency="AUD" bars={bars} markers={[]} label="Zed" />,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Show as table" }));
     expect(container.textContent).toContain("Tue 27 Oct");
     expect(container.textContent).toContain("Wed 28 Oct");
@@ -62,7 +64,7 @@ describe("CompanyChart dates (D-919)", () => {
 
 describe("CompanyChart colours", () => {
   it("candles use the outcome tokens and the volume uses the sector hue at 40 %", async () => {
-    render(<CompanyChart bars={bars} markers={[]} label="Zed" hue="sector-tech" />);
+    render(<CompanyChart currency="AUD" bars={bars} markers={[]} label="Zed" hue="sector-tech" />);
     await waitFor(() => expect(series.calls.length).toBeGreaterThanOrEqual(2));
     const candles = series.calls.find((c) => c.kind === "candles")!.opts as Record<string, string>;
     expect(candles.upColor).toBe("#58ebc0");
@@ -74,7 +76,7 @@ describe("CompanyChart colours", () => {
   });
 
   it("the chosen range chip has a check icon, a fill and aria-pressed", () => {
-    render(<CompanyChart bars={bars} markers={[]} label="Zed" />);
+    render(<CompanyChart currency="AUD" bars={bars} markers={[]} label="Zed" />);
     const group = screen.getByRole("group", { name: "Chart range" });
     const on = within(group).getByRole("button", { name: "6M" });
     expect(on).toHaveAttribute("aria-pressed", "true");

@@ -7,6 +7,8 @@
 import type { Client } from "@libsql/client";
 import { countsInBadge, getQuietHours, listInbox } from "@/lib/alerts/api";
 import { authDb, mainDb } from "@/lib/db/client";
+import { enabledMarkets, loadProfile } from "@/lib/market/profile";
+import { resolveMarketOrNotFound } from "@/lib/market/resolve";
 import { getPreferences } from "@/lib/preferences/service";
 import { activeCodesByDate, melbourneDate } from "@/lib/view/active";
 import {
@@ -18,7 +20,6 @@ import {
 } from "@/lib/view/mask";
 
 export type Db = Client;
-export const MARKET = "AU"; // the only market until a second one activates (ROL-107)
 export type LoaderState = "empty" | "stale" | "ok";
 export type LoaderUser = { id: number; role: string | null };
 export type LoaderEnv = {
@@ -28,25 +29,43 @@ export type LoaderEnv = {
   /** From maskContextFor(); a missing or failed lookup is already `masked: true`. */
   mask: MaskContext;
   now: Date;
-  market?: string;
+  /** The resolved market (D-997): an enabled market, from `?market=`, the user's default or the only one enabled. */
+  market: string;
+  /** ISO 4217 code of the market currency; `currencyFormatOf(env.currency)` is its display format (UXN-313). */
+  currency: string;
 };
 export type MoneyView = { micro: string; currency: string; simulated: true };
 
-/** The loader environment of a signed-in request. A failed grant lookup masks (maskContextFor). */
-export async function envFor(user: LoaderUser, now: Date = new Date()): Promise<LoaderEnv> {
+/**
+ * The loader environment of a signed-in request. A failed grant lookup masks (maskContextFor). The market is
+ * resolved here, the one place a market parameter is accepted (D-997): a `candidate` (the page's `?market=`)
+ * that is not an enabled market is a 404; none means the single enabled market, or the user's default market
+ * when several are enabled.
+ */
+export async function envFor(
+  user: LoaderUser,
+  now: Date = new Date(),
+  candidate?: string | string[] | null,
+): Promise<LoaderEnv> {
   const auth = authDb();
+  const main = mainDb();
   const mask = await maskContextFor(user.role ? { id: user.id, role: user.role } : null, auth, now);
-  return { main: mainDb(), auth, user, mask, now };
+  const several = (await enabledMarkets(main)).length > 1;
+  const defaultMarket = several ? (await getPreferences(auth, user.id)).default_market : null;
+  const market = await resolveMarketOrNotFound(main, candidate, { defaultMarket });
+  const currency = (await loadProfile(main, market)).currency ?? "";
+  return { main, auth, user, mask, now, market, currency };
 }
-
-export const marketOf = (env: LoaderEnv): string => env.market ?? MARKET;
 export const todayD = (env: LoaderEnv): string => melbourneDate(env.now.toISOString()) ?? "";
 const MICRO = 1_000_000; // threshold-ok: micro units per unit
 
-export function money(micro: bigint | number | string | null | undefined): MoneyView | null {
+export function money(
+  micro: bigint | number | string | null | undefined,
+  currency: string,
+): MoneyView | null {
   if (micro === null || micro === undefined) return null;
   try {
-    return { micro: BigInt(micro).toString(), currency: "AUD", simulated: true };
+    return { micro: BigInt(micro).toString(), currency, simulated: true };
   } catch {
     return null;
   }
@@ -61,7 +80,7 @@ export async function maskKit(
   d: string | null,
   extraCodes: Iterable<string> = [],
 ): Promise<{ aliases: StockAliases; lookup: MaskLookup }> {
-  const market = marketOf(env);
+  const market = env.market;
   const lookup = await loadMaskLookup(env.main, market);
   const active =
     d !== null && isDateParam(d)
@@ -75,7 +94,7 @@ export async function maskKitByDate(
   env: LoaderEnv,
   rows: ReadonlyArray<{ d: string; code: string }>,
 ): Promise<{ aliasOf: (d: string) => StockAliases; lookup: MaskLookup }> {
-  const market = marketOf(env);
+  const market = env.market;
   const lookup = await loadMaskLookup(env.main, market);
   const dates = [...new Set(rows.map((r) => r.d))].sort();
   const active =
@@ -121,11 +140,14 @@ export const isDateParam = (v: string): boolean =>
 // ---- the shell ----------------------------------------------------------------------------------
 
 export type ShellBanner = { id: string; text: string };
+export type ShellMarket = { code: string; mode: string; currency: string; exchange: string | null };
 export type ShellModel = {
   state: LoaderState;
   user: LoaderUser;
   masked: boolean;
-  market: { code: string; mode: string; currency: string } | null;
+  market: ShellMarket | null;
+  /** The enabled markets, for the header switcher (D-997, UXN-312); a built market that is off is never listed. */
+  markets: ShellMarket[];
   /** Alerts that count in the bell (UXN-161) and the highest tier among them. */
   bell: { count: number; topTier: "P0" | "P1" | "P2" | null };
   banners: ShellBanner[];
@@ -144,21 +166,27 @@ export async function loadShell(env: LoaderEnv): Promise<ShellModel> {
     user: env.user,
     masked: env.mask.masked,
     market: null,
+    markets: [],
     bell: { count: 0, topTier: null },
     banners: [],
   };
   try {
     const m = await env.main.execute({
-      sql: "SELECT code, mode, currency FROM market WHERE code = ?",
-      args: [marketOf(env)],
+      sql: "SELECT code, mode, currency FROM market WHERE enabled = 1 ORDER BY code",
+      args: [],
     });
-    const row = m.rows[0];
+    for (const x of m.rows) {
+      const profile = await loadProfile(env.main, String(x.code));
+      out.markets.push({
+        code: String(x.code),
+        mode: String(x.mode),
+        currency: String(x.currency),
+        exchange: profile.exchange,
+      });
+    }
+    const row = out.markets.find((x) => x.code === env.market);
     if (row) {
-      out.market = {
-        code: String(row.code),
-        mode: String(row.mode),
-        currency: String(row.currency),
-      };
+      out.market = row;
       const text = MODE_BANNER[out.market.mode];
       if (text) out.banners.push({ id: `mode:${out.market.mode}`, text });
       out.state = "ok";

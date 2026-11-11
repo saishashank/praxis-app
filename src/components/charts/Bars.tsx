@@ -1,4 +1,5 @@
 import { ChartTable } from "./ChartTable";
+import { currencyFormatFor } from "@/lib/view/format";
 import { clamp, money, n, signed, tone } from "./format";
 
 const W = 320;
@@ -11,20 +12,22 @@ export function BustBar({
   seed = 600,
   bust = 300,
   nearPct = 15,
-  currency = "A$",
+  currency,
 }: {
   nav: number;
   seed?: number;
   bust?: number;
   nearPct?: number;
-  currency?: string;
+  /** ISO 4217 code (D-1002). */
+  currency: string;
 }) {
+  const fmt = currencyFormatFor(currency);
   const room = (nav - bust) / (seed - bust);
   const state: BustState = nav <= bust ? "busted" : room * 100 <= nearPct ? "near" : "safe";
   const stateText = { safe: "Safe", near: "Near bust", busted: "Busted" }[state];
   const fill = { safe: tone.c4, near: tone.c3, busted: tone.text }[state];
   const pct = clamp(room, 0, 1);
-  const summary = `Distance to bust: ${stateText}. NAV ${money(nav, currency)}, bust ${money(bust, currency)}, ${n(pct * 100)}% of the way from bust to seed`;
+  const summary = `Distance to bust: ${stateText}. NAV ${money(nav, fmt)}, bust ${money(bust, fmt)}, ${n(pct * 100)}% of the way from bust to seed`;
   return (
     <figure className="m-0">
       <svg role="img" aria-label={summary} viewBox="0 0 200 28" width="100%" height={28}>
@@ -47,8 +50,8 @@ export function BustBar({
         headers={["Measure", "Value"]}
         rows={[
           ["State", stateText],
-          ["NAV", money(nav, currency)],
-          ["Bust level", money(bust, currency)],
+          ["NAV", money(nav, fmt)],
+          ["Bust level", money(bust, fmt)],
         ]}
       />
     </figure>

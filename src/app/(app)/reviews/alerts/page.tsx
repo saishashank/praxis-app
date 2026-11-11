@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth/guard";
 import { Card } from "@/components/ui/Card";
 import { Banner, EmptyState } from "@/components/ui/States";
 import { loadAlertsReport } from "@/lib/ui/loaders/alertsReport";
-import { envFor, marketOf } from "@/lib/ui/loaders/shell";
+import { envFor } from "@/lib/ui/loaders/shell";
 import { alertsReportView, pctText } from "./view";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function AlertsReportPage() {
   const user = await requireUser("read", "/reviews/alerts");
   const env = await envFor(user);
-  const view = alertsReportView(await loadAlertsReport(env.main, marketOf(env)));
+  const view = alertsReportView(await loadAlertsReport(env.main, env.market));
   return (
     <main className="mx-auto flex w-full max-w-3xl min-w-0 flex-col gap-4 px-4 py-6">
       <header className="flex flex-col gap-1">

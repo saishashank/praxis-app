@@ -99,7 +99,7 @@ describe("OverviewSheet", () => {
     name: "Zed Upward Holdings",
     sector: "Technology",
     d: "2026-10-19",
-    close: { micro: "10500000" },
+    close: { micro: "10500000", currency: "AUD" },
     changePpm: 50_000,
     volume: 1200,
     announcements: [

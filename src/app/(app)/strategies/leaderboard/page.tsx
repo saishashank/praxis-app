@@ -3,9 +3,11 @@
 // TIED group and never put in order; the order inside a group is alphabetical, never by the point
 // estimate (UX-020). Strategies without enough finished rounds (effective N below 3) sit under
 // "Not enough evidence yet". All figures are stored rows; a missing one says "Not measured yet".
+import type { CurrencyFormat } from "@/lib/market/profileCore.mjs";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
+import { resolveMarketOrNotFound } from "@/lib/market/resolve";
 import { loadLeaderboard, loadStrategies, type LeaderRow } from "@/lib/ui/loaders/strategies";
 import {
   labelRank,
@@ -28,7 +30,7 @@ import { Banner, EmptyState, ShowDetails } from "@/components/ui/States";
 import { GainLoss, Money, NotMeasured, SimulatedLabel } from "@/components/ui/Values";
 import { regimeLabel } from "@/lib/view/terms";
 import { costPlan } from "@/lib/view/costPlans";
-import { formatMicro } from "@/lib/view/format";
+import { currencyFormatFor, formatMicro } from "@/lib/view/format";
 import { StrategyTabs } from "../StrategyTabs";
 
 export const dynamic = "force-dynamic";
@@ -69,7 +71,11 @@ function cifRowsOf(ev: EvidenceRow): CifRow[] {
   }));
 }
 
-function columns(cost: string | null, regime: RegimeState | null): Column<Row>[] {
+function columns(
+  cost: string | null,
+  regime: RegimeState | null,
+  fmt: CurrencyFormat,
+): Column<Row>[] {
   const cols: Column<Row>[] = [
     {
       key: "strategy",
@@ -161,13 +167,13 @@ function columns(cost: string | null, regime: RegimeState | null): Column<Row>[]
         r.ev?.navMinusSeed ? (
           <span className="flex flex-col items-end text-sm">
             <GainLoss value={r.ev.navMinusSeed.meanMicro} kind="cents">
-              {formatMicro(r.ev.navMinusSeed.meanMicro, { sign: "always" })}
+              {formatMicro(r.ev.navMinusSeed.meanMicro, fmt, { sign: "always" })}
             </GainLoss>
             <span className="text-xs text-text-muted">
               Minus its random-pick twin:{" "}
               {r.ev.minusC2Micro === null
                 ? "Not measured yet"
-                : formatMicro(r.ev.minusC2Micro, { sign: "always" })}
+                : formatMicro(r.ev.minusC2Micro, fmt, { sign: "always" })}
             </span>
           </span>
         ) : (
@@ -188,7 +194,7 @@ function columns(cost: string | null, regime: RegimeState | null): Column<Row>[]
       cell: (r) =>
         cost ? (
           r.leader.recostNav ? (
-            <Money micro={r.leader.recostNav.micro} />
+            <Money micro={r.leader.recostNav.micro} currency={r.leader.recostNav.currency} />
           ) : (
             <NotMeasured />
           )
@@ -258,7 +264,14 @@ export default async function LeaderboardPage({
   const sp = await searchParams;
   const user = await requireUser("read", "/strategies/leaderboard");
   const regime = parseRegime(typeof sp.regime === "string" ? sp.regime : null);
-  const deps = { mainDb: mainDb(), authDb: authDb(), user: { id: user.id, role: user.role } };
+  const market =
+    sp.market === undefined ? undefined : await resolveMarketOrNotFound(mainDb(), sp.market, null);
+  const deps = {
+    mainDb: mainDb(),
+    authDb: authDb(),
+    user: { id: user.id, role: user.role },
+    market,
+  };
   const [lb, evidence, list] = await Promise.all([
     loadLeaderboard(deps, { cost: typeof sp.cost === "string" ? sp.cost : null }),
     loadLeaderEvidence(deps, { regime }),
@@ -344,7 +357,7 @@ export default async function LeaderboardPage({
       current: cost === k,
     })),
   ];
-  const cols = columns(cost, regime);
+  const cols = columns(cost, regime, currencyFormatFor(list.data.currency));
   const ctl: Column<LeaderRow>[] = [
     { key: "name", header: "Control", cell: (c) => c.name },
     {

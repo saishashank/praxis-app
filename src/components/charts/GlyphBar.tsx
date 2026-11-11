@@ -1,7 +1,7 @@
 // Glyph bar (UX-011): a strategy's value on a bar from zero to the goal, with the loss limit, the
 // "stalled" floor and the goal marked and LABELLED IN TEXT (never colour alone). Amounts are integer
 // cents. A missing value draws no marker and says "Not measured yet". Pure CSS positioning, no client code.
-import { formatCents } from "@/lib/view/format";
+import { currencyFormatFor, formatCents } from "@/lib/view/format";
 import { cn } from "../ui/cn";
 import { ChartTable } from "./ChartTable";
 import { NotMeasured } from "../ui/Values";
@@ -14,6 +14,8 @@ export type GlyphBarProps = {
   targetCents?: number;
   /** Accessible name prefix, e.g. the strategy's name. */
   label: string;
+  /** ISO 4217 code of the amounts (D-1002). */
+  currency: string;
 };
 
 const SEED = 60_000; // threshold-ok: A$600 start (display default; real values come from config)
@@ -32,27 +34,29 @@ export function GlyphBar({
   bustCents = BUST,
   targetCents = TARGET,
   label,
+  currency,
 }: GlyphBarProps) {
+  const fmt = currencyFormatFor(currency);
   const known = typeof valueCents === "number" && Number.isFinite(valueCents);
   const max = Math.max(targetCents, known ? valueCents : 0, 1);
   const marks = [
     {
       key: "bust",
       name: "Loss limit",
-      text: `Loss limit ${formatCents(bustCents)}`,
+      text: `Loss limit ${formatCents(bustCents, fmt)}`,
       at: bustCents,
     },
     {
       key: "stall",
       name: "Stall floor",
-      text: `Stalled below ${formatCents(stallCents)}`,
+      text: `Stalled below ${formatCents(stallCents, fmt)}`,
       at: stallCents,
     },
-    { key: "seed", name: "Start", text: `Start ${formatCents(seedCents)}`, at: seedCents },
-    { key: "target", name: "Goal", text: `Goal ${formatCents(targetCents)}`, at: targetCents },
+    { key: "seed", name: "Start", text: `Start ${formatCents(seedCents, fmt)}`, at: seedCents },
+    { key: "target", name: "Goal", text: `Goal ${formatCents(targetCents, fmt)}`, at: targetCents },
   ];
   const summary = known
-    ? `${label}: ${formatCents(valueCents)}. ${marks.map((m) => m.text).join(", ")}.`
+    ? `${label}: ${formatCents(valueCents, fmt)}. ${marks.map((m) => m.text).join(", ")}.`
     : `${label}: not measured yet. ${marks.map((m) => m.text).join(", ")}.`;
   return (
     <figure className="m-0 min-w-0">
@@ -76,7 +80,7 @@ export function GlyphBar({
       </div>
       <figcaption className="mt-2 flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-xs text-text-muted">
         <span className="font-mono text-text">
-          {known ? formatCents(valueCents) : <NotMeasured />}
+          {known ? formatCents(valueCents, fmt) : <NotMeasured />}
         </span>
         {marks.map((m) => (
           <span key={m.key} className="break-words">
@@ -88,8 +92,8 @@ export function GlyphBar({
         caption={`${label}: value and marks`}
         headers={["Level", "Value"]}
         rows={[
-          ["Value", known ? formatCents(valueCents) : "Not measured yet"],
-          ...marks.map((m) => [m.name, formatCents(m.at)]),
+          ["Value", known ? formatCents(valueCents, fmt) : "Not measured yet"],
+          ...marks.map((m) => [m.name, formatCents(m.at, fmt)]),
         ]}
       />
     </figure>

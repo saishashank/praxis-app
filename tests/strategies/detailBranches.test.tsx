@@ -56,6 +56,7 @@ const m = (micro: number) => ({ micro, currency: "AUD" as const, simulated: true
 const ISO = /[0-9]{4}-[0-9]{2}-[0-9]{2}/;
 
 const tile = (over: Partial<StrategyTile> = {}): StrategyTile => ({
+  currency: "AUD",
   execution: "E01",
   family: "F1",
   variant: "U",

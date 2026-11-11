@@ -20,7 +20,7 @@ type Over = Partial<React.ComponentProps<typeof AppShell>>;
 function shell(role: Role = "owner", over: Over = {}) {
   const props = {
     role,
-    market: { code: "AU", mode: "data_only", currency: "AUD" },
+    market: { code: "AU", mode: "data_only", currency: "AUD", exchange: "ASX" },
     bell: { count: 0, topTier: null },
     banners: [],
     signOut: noop,
@@ -184,7 +184,7 @@ describe("region menu (UXN-282)", () => {
     );
   });
   it("an active market is shown as selected", () => {
-    shell("owner", { market: { code: "AU", mode: "full", currency: "AUD" } });
+    shell("owner", { market: { code: "AU", mode: "full", currency: "AUD", exchange: "ASX" } });
     fireEvent.click(screen.getByRole("button", { name: /^Region:/ }));
     expect(screen.getByText("Selected")).toBeInTheDocument();
   });
@@ -243,7 +243,7 @@ describe("header controls (UXR-005, AT-49)", () => {
     expect(chip.querySelector(".sm\\:hidden")?.textContent).toBe("AU");
   });
   it("an active market has a coloured dot", () => {
-    shell("owner", { market: { code: "AU", mode: "full", currency: "AUD" } });
+    shell("owner", { market: { code: "AU", mode: "full", currency: "AUD", exchange: "ASX" } });
     expect(
       screen.getByRole("button", { name: /^Region:/ }).querySelector("[data-region-dot]"),
     ).toHaveAttribute("data-region-dot", "active");

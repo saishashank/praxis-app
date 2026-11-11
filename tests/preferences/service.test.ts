@@ -134,7 +134,7 @@ describe("updatePreferences", () => {
     ["theme", "neon"],
     ["theme", 3],
     ["theme", null],
-    ["default_market", "US"],
+    ["default_market", "JP"],
     ["default_market", "au"],
     ["time_format", "36h"],
     ["alert_p1", "off"],

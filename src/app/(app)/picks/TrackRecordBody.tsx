@@ -32,9 +32,13 @@ function levels(r: TrackRow, masked: boolean) {
   if (masked) return <Masked />;
   return (
     <span className="block">
-      {p.buyUpTo ? <Money micro={p.buyUpTo.micro} /> : <NotMeasured />} /{" "}
-      {p.stop ? <Money micro={p.stop.micro} /> : <NotMeasured />} /{" "}
-      {p.aim ? <Money micro={p.aim.micro} /> : <NotMeasured />}
+      {p.buyUpTo ? (
+        <Money micro={p.buyUpTo.micro} currency={p.buyUpTo.currency} />
+      ) : (
+        <NotMeasured />
+      )}{" "}
+      / {p.stop ? <Money micro={p.stop.micro} currency={p.stop.currency} /> : <NotMeasured />} /{" "}
+      {p.aim ? <Money micro={p.aim.micro} currency={p.aim.currency} /> : <NotMeasured />}
     </span>
   );
 }

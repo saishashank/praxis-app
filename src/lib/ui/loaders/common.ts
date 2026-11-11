@@ -26,11 +26,26 @@ import {
 } from "@/lib/view/mask";
 import { dateStaleness } from "@/lib/view/staleness";
 import { getConfig } from "@/lib/config/store";
+import { enabledMarkets, loadProfile } from "@/lib/market/profile";
+import { resolveMarket } from "@/lib/market/resolve";
+import { getPreferences } from "@/lib/preferences/service";
 import { STRATEGY_NAMES_DEFAULT } from "@/lib/config/keys";
 
 export type Db = Pick<Client, "execute">;
 
-export const DEFAULT_MARKET = "AU";
+/**
+ * The market a loader works for. A page that took a `?market=` has already resolved it (D-997) and passes it
+ * in `deps.market`; otherwise it is the single enabled market, or the user's default when several are enabled.
+ */
+export async function marketFor(deps: LoaderDeps): Promise<string> {
+  if (deps.market !== undefined) return deps.market;
+  const several = (await enabledMarkets(deps.mainDb)).length > 1;
+  const defaultMarket =
+    several && deps.user ? (await getPreferences(deps.authDb, deps.user.id)).default_market : null;
+  const r = await resolveMarket(deps.mainDb, undefined, { defaultMarket });
+  if (!r.ok) throw new Error("no market is enabled");
+  return r.market;
+}
 
 /** How many calendar days the newest data may lag today before the page says it is stale (weekend + a holiday). */
 export const STALE_DAYS = 4; // threshold-ok: calendar days
@@ -58,9 +73,13 @@ export type Loaded<T> = {
 };
 
 /** Every money value leaves a loader like this and is rendered with a visible "Simulated" label (AT-27). */
-export type Money = { micro: number; currency: "AUD"; simulated: true };
+export type Money = { micro: number; currency: string; simulated: true };
 
-export const money = (micro: number): Money => ({ micro, currency: "AUD", simulated: true });
+export const money = (micro: number, currency: string): Money => ({
+  micro,
+  currency,
+  simulated: true,
+});
 
 export const num = (v: unknown): number => (typeof v === "number" ? v : Number(v));
 export const numOrNull = (v: unknown): number | null =>
@@ -189,14 +208,15 @@ export class Masker {
   }
 }
 
-export type Viewer = { now: Date; market: string; masker: Masker };
+export type Viewer = { now: Date; market: string; currency: string; masker: Masker };
 
 /** Reads the mask context once (a failed lookup masks) and builds the masker. */
 export async function openViewer(deps: LoaderDeps): Promise<Viewer> {
   const now = deps.now ?? new Date();
-  const market = deps.market ?? DEFAULT_MARKET;
+  const market = await marketFor(deps);
   const ctx = await maskContextFor(deps.user, deps.authDb, now);
-  return { now, market, masker: new Masker(deps.mainDb, market, ctx) };
+  const currency = (await loadProfile(deps.mainDb, market)).currency ?? "";
+  return { now, market, currency, masker: new Masker(deps.mainDb, market, ctx) };
 }
 
 // ---- small reads -------------------------------------------------------------------------------

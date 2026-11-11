@@ -1,7 +1,7 @@
 // Settings > Region & markets (UXN-282, UX-112 view, MKT-106). Every role sets the market the app opens
 // in and whether times show in Melbourne or exchange time (own preferences). The markets table lists
-// exchange, currency, hours in Melbourne time, status and build progress; Editors and Viewers see only
-// AU and the markets the Owner has shared. Activating a market is the Owner's job elsewhere, not here.
+// exchange, currency, hours in Melbourne time, status and build progress; the Owner sees every profile row,
+// Editors and Viewers the enabled markets the Owner has shared (D-997). Activating a market is the Owner's job elsewhere, not here.
 // Totals are never converted between currencies (O-34).
 import { Card } from "@/components/ui/Card";
 import { DataTable, type Column } from "@/components/ui/DataTable";
@@ -24,16 +24,37 @@ import {
 export const dynamic = "force-dynamic";
 
 const COLUMNS: Column<MarketRow>[] = [
-  { key: "code", header: "Market", cell: (r) => <strong>{r.code}</strong> },
+  { key: "code", header: "Market", cell: (r) => <strong data-market={r.code}>{r.code}</strong> },
   { key: "exchange", header: "Exchange", cell: (r) => r.exchange },
   { key: "currency", header: "Currency", cell: (r) => r.currency },
   { key: "hours", header: "Hours (Melbourne)", cell: (r) => r.hours ?? "n/a" },
-  { key: "status", header: "Status", cell: (r) => r.statusText },
+  {
+    key: "status",
+    header: "Status",
+    cell: (r) => (
+      <>
+        {r.statusText}
+        {r.evidence !== null && <span className="block text-xs text-text-muted">{r.evidence}</span>}
+        {r.gateItems.map((g) => (
+          <span key={g} className="block text-xs text-text-muted">
+            Open: {g}
+          </span>
+        ))}
+        {r.profileLine !== null && (
+          <span className="block text-xs text-text-muted">{r.profileLine}</span>
+        )}
+      </>
+    ),
+  },
   {
     key: "progress",
     header: "Build progress",
     cell: (r) =>
-      r.status === "active" ? "Built" : r.progressPct === null ? "n/a" : `${r.progressPct} %`,
+      r.status === "active" || r.status === "built"
+        ? "Built"
+        : r.progressPct === null
+          ? "n/a"
+          : `${r.progressPct} %`,
   },
 ];
 
@@ -65,7 +86,7 @@ export default async function RegionPage() {
             name="default_market"
             label="Open the app in"
             value={prefs.default_market}
-            options={choosable.length ? choosable : [["AU", "AU (ASX)"]]}
+            options={choosable.length ? choosable : [[prefs.default_market, prefs.default_market]]}
             hint="Only active markets can be chosen."
           />
           {blocked.length > 0 && (

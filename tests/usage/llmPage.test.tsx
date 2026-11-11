@@ -18,6 +18,7 @@ vi.mock("@/lib/ui/loaders/usageLlm", async (orig) => ({
   loadLlmUsage: llmMock,
 }));
 vi.mock("@/lib/db/client", () => ({ mainDb: () => ({}) }));
+vi.mock("@/lib/market/resolve", () => ({ resolveMarketOrNotFound: async () => "AU" }));
 vi.mock("@/lib/auth/actions", () => ({ signInAction: vi.fn(), signOutAction: vi.fn() }));
 
 afterEach(() => {
@@ -63,7 +64,7 @@ async function renderOwner(l: LlmUsage | null | Error) {
 describe("LLM usage section", () => {
   it("is asked for with the signed-in role, so only the Owner gets rows", async () => {
     await renderOwner(llm);
-    expect(llmMock).toHaveBeenCalledWith(expect.anything(), "owner", expect.any(Date));
+    expect(llmMock).toHaveBeenCalledWith(expect.anything(), "owner", expect.any(Date), "AU");
   });
 
   it("shows tokens, requests, cache hit rate, fallback rate and failures per role, provider and day", async () => {

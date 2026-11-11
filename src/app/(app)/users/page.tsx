@@ -9,15 +9,10 @@ import { requireUser } from "@/lib/auth/guard";
 import { getConfig } from "@/lib/config/store";
 import { authDb, mainDb } from "@/lib/db/client";
 import { formatMelbourne } from "@/lib/health/format";
+import { resolveMarketOrNotFound } from "@/lib/market/resolve";
 import { userPreferences } from "@/lib/preferences/read";
 import { ACK_TEXT } from "@/lib/users/ack";
-import {
-  DEFAULT_MARKET,
-  getSharingAck,
-  listGrants,
-  listUsers,
-  type GrantRow,
-} from "@/lib/users/service";
+import { getSharingAck, listGrants, listUsers, type GrantRow } from "@/lib/users/service";
 import { isGrantLive } from "@/lib/view/mask";
 import { ActionForm } from "./ActionForm";
 import { RCell, RHead, RRow, RTable } from "@/components/ui/ResponsiveTable";
@@ -54,9 +49,10 @@ export default async function UsersPage() {
   const user = await requireUser("admin", "/users");
   const tf = (await userPreferences(user.id)).time_format;
   const db = authDb();
+  const market = await resolveMarketOrNotFound(mainDb(), undefined, null);
   const [users, ack, grants] = await Promise.all([
     listUsers(db),
-    getSharingAck(db, DEFAULT_MARKET),
+    getSharingAck(db, market),
     listGrants(db),
   ]);
   const names = new Map<number, string>(users.map((u) => [u.id, u.email]));

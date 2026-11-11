@@ -653,3 +653,9 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1051 | Home market constants (C2, C3, D-993, D-1015): the modules that had MARKET = "AU", a Sydney or Melbourne zone, "18:10" or "AUD" with no profile to hand (the... |
 | D-1052 | Workflow pass-through (C2, D-996): ingest-batch1, arena-close, arena-signals, replay, backfill-history, backfill-prices and backfill-index gain a dispatch in... |
 | D-1053 | Slot times as data (C1, C2): worker/src/schedule.ts keeps one slot({...}) entry per slot with the time as an expression (a.b1, ops.maintenance.at, feed.poll.... |
+| D-1060 | Formatting API (D1, D-1002): formatMicro(micro, fmt, opts?) and formatCents(cents, fmt, opts?) take the CurrencyFormat as a required second argument (the cur... |
+| D-1061 | E-mail loops (D1, D-997): runBrief collects the overnight announcements and today's events of every enabled market that is active and trades on D into the on... |
+| D-1062 | Default market (D1/D2, D-997): default_market is stored as any built market (builtMarkets(), the service is sync and holds the auth database only); updateReg... |
+| D-1063 | Dual time (D1, D-1002): formatMarketTime(iso, marketTz, prefs?) in health/format.ts returns the single Melbourne form when the market zone has the same UTC o... |
+| D-1064 | Pages and switcher (D2, D-997): envFor(user, now?, candidate?) is the one resolver for pages and loaders (?market= candidate not enabled: 404; none: the only... |
+| D-1065 | Markets table (D2, D-998): marketRows has no static IN/US rows; the Owner sees every market row with statusText(profile, mode), "AT-M evidence: not recorded"... |

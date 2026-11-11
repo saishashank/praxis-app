@@ -17,7 +17,14 @@ import {
 import { listVersions, loadReview, readState } from "@/lib/review/assemble";
 import type { Missing } from "@/lib/review/facts";
 import { activeCodesForDate } from "@/lib/view/active";
-import { formatCents, formatDay, formatInstant, isoWeek, MISSING } from "@/lib/view/format";
+import {
+  currencyFormatFor,
+  formatCents,
+  formatDay,
+  formatInstant,
+  isoWeek,
+  MISSING,
+} from "@/lib/view/format";
 import { findLeaks, loadMaskLookup, maskText, StockAliases, weekOnly } from "@/lib/view/mask";
 import { opaqueDigest } from "@/lib/view/opaqueRef";
 import {
@@ -32,7 +39,6 @@ import { modelSuccess, pickRef, successLine } from "./picks";
 import {
   intParam,
   isDateParam,
-  marketOf,
   money,
   textParam,
   todayD,
@@ -176,7 +182,7 @@ async function calendarRows(env: LoaderEnv): Promise<CalendarRow[]> {
   try {
     const rs = await env.main.execute({
       sql: "SELECT d, kind, close_time FROM trading_calendar WHERE market = ? ORDER BY d",
-      args: [marketOf(env)],
+      args: [env.market],
     });
     return rs.rows.map((r) => ({
       d: String(r.d),
@@ -509,10 +515,6 @@ function shiftMonth(month: string, by: number): string {
   return `${yy}-${String(mm + 1).padStart(2, "0")}`;
 }
 
-function currencyPrefix(c: string): string {
-  return c === "AUD" ? "A$" : `${c} `;
-}
-
 /** Sums the stored day P/L of a review's executions per currency (no FX blending, O-34). */
 function dayPlOf(exJson: unknown): DayPl[] {
   let list: unknown;
@@ -536,7 +538,7 @@ function dayPlOf(exJson: unknown): DayPl[] {
     .map(([currency, cents]) => ({
       currency,
       cents,
-      text: formatCents(cents, { currency: currencyPrefix(currency), sign: "always" }),
+      text: formatCents(cents, currencyFormatFor(currency), { sign: "always" }),
     }));
 }
 
@@ -594,7 +596,7 @@ export async function loadReviewCalendar(
         .map(([currency, cents]) => ({
           currency,
           cents,
-          text: formatCents(cents, { currency: currencyPrefix(currency), sign: "always" }),
+          text: formatCents(cents, currencyFormatFor(currency), { sign: "always" }),
         }));
       return {
         week,
@@ -714,7 +716,7 @@ async function pickRows(env: LoaderEnv, d: string): Promise<PickRaw[]> {
                    p.valid_until_d, p.time_frame_sessions, p.based_on_json
             FROM pick p LEFT JOIN instrument i ON i.market = p.market AND i.code = p.code
             WHERE p.market = ? AND p.d = ? ORDER BY p.profile, p.rank LIMIT 60`,
-      args: [marketOf(env), d],
+      args: [env.market, d],
     });
     return r.rows.map((x) => {
       let based: string | null = null;
@@ -754,7 +756,7 @@ async function successLines(
     const confidence = Number(await getConfig(env.main, "cif_confidence"));
     for (const profile of profiles) {
       const s = await modelSuccess(env.main, {
-        market: marketOf(env),
+        market: env.market,
         profile,
         d,
         minN,
@@ -783,9 +785,7 @@ async function newPicksOf(
   return {
     none: rows.length === 0,
     noneLine:
-      rows.length === 0
-        ? await readNoPicksLine(env.main, marketOf(env), d).catch(() => null)
-        : null,
+      rows.length === 0 ? await readNoPicksLine(env.main, env.market, d).catch(() => null) : null,
     honesty: "Personal use only · Not financial advice" + (proven ? "" : " · Model not proven yet"),
     profiles: names.map((profile) => ({
       profile,
@@ -798,9 +798,9 @@ async function newPicksOf(
             rank: r.rank,
             stock: aliases ? aliases.label(r.code) : r.code,
             company: masked ? null : r.name,
-            buyUpTo: masked ? null : money(r.buy),
-            stop: masked ? null : money(r.stop),
-            aim: masked ? null : money(r.aim),
+            buyUpTo: masked ? null : money(r.buy, env.currency),
+            stop: masked ? null : money(r.stop, env.currency),
+            aim: masked ? null : money(r.aim, env.currency),
             validUntil: masked ? (isoWeek(r.valid) ?? MISSING) : r.valid,
             timeFrameWeeks:
               r.sessions === null ? null : Math.max(1, Math.round(r.sessions / SESSIONS_PER_WEEK)),
@@ -852,7 +852,7 @@ export async function loadReviewPage(
       args: [d, review.version],
     });
     const facts = row.rows.length ? parseFacts(String(row.rows[0]!.facts_json)) : null;
-    const market = marketOf(env);
+    const market = env.market;
     const active = await activeCodesForDate(env.main, market, d);
     const lookup = await loadMaskLookup(env.main, market);
     const aliases = new StockAliases([

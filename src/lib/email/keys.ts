@@ -1,6 +1,7 @@
 // Email keys and slot rules (M5 T3, design 2.3 and 2.4, EML-010, NFR-006). One email per key.
 //   review:<d>  p0:<alert_key>  p0b:<first_alert_key>  inc:<incident_id>:open|s1  tokens:<d>
 //   unread7:<d>  reminder:<d>  brief:<d>  test:<d>:<n>  dbdown:<d>:<slot>
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import { createHash } from "node:crypto";
 import type { EmailKind, EmailSlot } from "@/lib/sentinel/schema";
 
@@ -111,7 +112,7 @@ export function monthlyCapExempt(kind: EmailKind, slot: EmailSlot): boolean {
 }
 
 const dateFmt = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Australia/Melbourne",
+  timeZone: OWNER_TZ,
   year: "numeric",
   month: "2-digit",
   day: "2-digit",

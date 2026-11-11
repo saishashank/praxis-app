@@ -12,7 +12,7 @@ import "server-only";
 import { notTakenText } from "./cardParts";
 import { strategyNames, strOrNull } from "./common";
 import { loadMarket, parseMarketQuery, type MarketRow } from "./market";
-import { marketOf, type LoaderEnv } from "./shell";
+import type { LoaderEnv } from "./shell";
 
 const TOP_N = 20; // threshold-ok: D-886 the Owner's "top 20"
 
@@ -197,7 +197,7 @@ export function fallRow(
 
 export async function loadMoversCheck(env: LoaderEnv): Promise<MoversCheck> {
   if (env.mask.masked) return { ...EMPTY, hidden: true };
-  const market = marketOf(env);
+  const market = env.market;
   const { d, up, down } = await topMovers(env);
   if (d === null) return EMPTY;
   const codes = [...new Set([...up, ...down].map((r) => r.stock))];

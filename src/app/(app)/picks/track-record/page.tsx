@@ -15,7 +15,7 @@ type SP = Record<string, string | string[] | undefined>;
 export default async function TrackRecordPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const user = await requireUser("read", "/picks/track-record");
-  const env = await envFor(user);
+  const env = await envFor(user, undefined, sp.market);
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(sp)) if (typeof v === "string") q.set(k, v);
   const query = await parsePicksQuery(env, q);

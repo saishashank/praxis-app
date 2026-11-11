@@ -16,7 +16,7 @@ import {
   type PlanView,
 } from "@/lib/learning/readers";
 import { isoWeek } from "@/lib/view/format";
-import { marketOf, textParam, type LoaderEnv, type LoaderState } from "./shell";
+import { textParam, type LoaderEnv, type LoaderState } from "./shell";
 
 const FAMILY_RE = /^F[1-6]$/;
 const GRADES = ["L0", "L1", "L2", "L3", "retired"] as const;
@@ -84,7 +84,7 @@ export function weekify<T>(v: T): T {
 }
 
 export async function loadKnowledge(env: LoaderEnv, q: KnowledgeQuery): Promise<KnowledgeModel> {
-  const market = marketOf(env);
+  const market = env.market;
   const masked = env.mask.masked;
   const masker = new LearningMasker(env.main, market);
   const lessons = (await listLessons(env.main))

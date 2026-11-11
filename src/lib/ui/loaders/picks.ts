@@ -23,7 +23,6 @@ import { cardHref } from "./cards";
 import { newerThanClose, readLatestQuotes } from "@/lib/data/quotes/latest";
 import {
   isDateParam,
-  marketOf,
   maskKit,
   maskKitByDate,
   money,
@@ -57,7 +56,7 @@ const publicPickId = (realId: string, masked: boolean): string =>
 async function resolvePickRef(env: LoaderEnv, ref: string): Promise<string | null> {
   const r = await env.main.execute({
     sql: "SELECT d, profile, rank FROM pick WHERE market = ? ORDER BY d DESC, profile, rank LIMIT ?",
-    args: [marketOf(env), MAX_REF_ROWS],
+    args: [env.market, MAX_REF_ROWS],
   });
   for (const x of r.rows) {
     const real = `${String(x.d)}.${String(x.profile)}.${Number(x.rank)}`; // money-float-ok: SQL integer column
@@ -195,13 +194,13 @@ export type PicksModel = {
 async function successFor(env: LoaderEnv, profile: string, d: string) {
   const minN = Number(await getConfig(env.main, "pick_success_min_n"));
   const confidence = Number(await getConfig(env.main, "cif_confidence"));
-  const s = await modelSuccess(env.main, { market: marketOf(env), profile, d, minN, confidence });
+  const s = await modelSuccess(env.main, { market: env.market, profile, d, minN, confidence });
   // ARN-123 (D-956): the money basis the closed results were settled on ("Price only" for rows from
   // before M18, "Total return" for later ones, both named when the record holds both).
   const bases = await env.main.execute({
     sql: `SELECT DISTINCT outcome_basis FROM pick_outcome
           WHERE market = ? AND profile = ? AND kind = 'pick' AND state = 'closed'`,
-    args: [marketOf(env), profile],
+    args: [env.market, profile],
   });
   const basisLabel = outcomeBasisLabel(
     bases.rows.map((x) => String(x.outcome_basis) as OutcomeBasisValue),
@@ -232,7 +231,7 @@ const parseList = (json: unknown): string[] => {
 async function pickCodes(env: LoaderEnv, d: string): Promise<string[]> {
   const r = await env.main.execute({
     sql: "SELECT DISTINCT code FROM pick WHERE market = ? AND d = ?",
-    args: [marketOf(env), d],
+    args: [env.market, d],
   });
   return r.rows.map((x) => String(x.code));
 }
@@ -245,13 +244,13 @@ async function pickCodesInRange(
   const ds = rows.map((x) => x.d).sort();
   const r = await env.main.execute({
     sql: "SELECT DISTINCT d, code FROM pick WHERE market = ? AND d >= ? AND d <= ?",
-    args: [marketOf(env), ds[0]!, ds[ds.length - 1]!],
+    args: [env.market, ds[0]!, ds[ds.length - 1]!],
   });
   return r.rows.map((x) => ({ d: String(x.d), code: String(x.code) }));
 }
 
 export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksModel> {
-  const market = marketOf(env);
+  const market = env.market;
   const profiles = await profileNames(env);
   const latest = await env.main.execute({
     sql: "SELECT MAX(d) AS d FROM pick WHERE market = ? AND profile = ? AND d <= ?",
@@ -326,14 +325,14 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
         : null,
       stopPpm: ppmOf(x.stop_micro, x.reference_micro),
       aimPpm: ppmOf(x.aim_micro, x.reference_micro),
-      size: masked ? null : money(String(x.size_micro)),
-      riskAtStop: masked ? null : money(String(x.risk_micro)),
+      size: masked ? null : money(String(x.size_micro), env.currency),
+      riskAtStop: masked ? null : money(String(x.risk_micro), env.currency),
       outcome:
         x.o_state === null
           ? null
           : {
               state: String(x.o_state),
-              entry: masked || x.o_entry === null ? null : money(String(x.o_entry)),
+              entry: masked || x.o_entry === null ? null : money(String(x.o_entry), env.currency),
               exitReason: x.o_reason === null ? null : String(x.o_reason),
               netPpm: toNum(x.o_net),
               withdrawnReason: x.o_withdrawn === null ? null : String(x.o_withdrawn),
@@ -343,9 +342,9 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
       family: String(x.family),
       tier: String(x.tier),
       label: String(x.label),
-      buyUpTo: masked ? null : money(String(x.buy_max_micro)),
-      stop: masked ? null : money(String(x.stop_micro)),
-      aim: masked ? null : money(String(x.aim_micro)),
+      buyUpTo: masked ? null : money(String(x.buy_max_micro), env.currency),
+      stop: masked ? null : money(String(x.stop_micro), env.currency),
+      aim: masked ? null : money(String(x.aim_micro), env.currency),
       validUntil: masked ? (isoWeek(valid) ?? MISSING) : valid,
       scenario,
       aimReachPpm: toNum(x.aim_reach_ppm),
@@ -408,7 +407,7 @@ export async function loadPickDetail(env: LoaderEnv, id: string): Promise<PickDe
   const real = PK_RE.test(id) ? await resolvePickRef(env, id) : env.mask.masked ? null : id;
   const key = real === null ? null : parsePickId(real);
   if (key === null) return null;
-  const market = marketOf(env);
+  const market = env.market;
   const model = await loadPicks(env, { profile: key.profile, d: key.d });
   const pick = model.picks.find((p) => p.rank === key.rank);
   if (!pick) return null;
@@ -455,8 +454,10 @@ export async function loadPickDetail(env: LoaderEnv, id: string): Promise<PickDe
         ? null
         : {
             state: String(x.state),
-            entry: masked || x.entry_micro === null ? null : money(String(x.entry_micro)),
-            exit: masked || x.exit_micro === null ? null : money(String(x.exit_micro)),
+            entry:
+              masked || x.entry_micro === null ? null : money(String(x.entry_micro), env.currency),
+            exit:
+              masked || x.exit_micro === null ? null : money(String(x.exit_micro), env.currency),
             exitReason: x.exit_reason === null ? null : String(x.exit_reason),
             netPpm: net,
             netText: net === null ? "not closed yet" : formatPpm(net),
@@ -511,7 +512,7 @@ export type TrackModel = {
 };
 
 export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): Promise<TrackModel> {
-  const market = marketOf(env);
+  const market = env.market;
   const r = await env.main.execute({
     sql: `SELECT o.d, o.rank, o.code, o.state, o.exit_reason, o.net_ppm, o.entry_micro, o.exit_micro,
                  p.buy_max_micro, p.stop_micro, p.aim_micro, p.bad_ppm, p.good_ppm,
@@ -542,12 +543,12 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
     exitReason: x.exit_reason === null ? null : String(x.exit_reason),
     withdrawnReason: x.withdrawn === null ? null : String(x.withdrawn),
     netPpm: toNum(x.net_ppm),
-    entry: masked || x.entry_micro === null ? null : money(String(x.entry_micro)),
-    exit: masked || x.exit_micro === null ? null : money(String(x.exit_micro)),
+    entry: masked || x.entry_micro === null ? null : money(String(x.entry_micro), env.currency),
+    exit: masked || x.exit_micro === null ? null : money(String(x.exit_micro), env.currency),
     published: {
-      buyUpTo: masked ? null : money(String(x.buy_max_micro)),
-      stop: masked ? null : money(String(x.stop_micro)),
-      aim: masked ? null : money(String(x.aim_micro)),
+      buyUpTo: masked ? null : money(String(x.buy_max_micro), env.currency),
+      stop: masked ? null : money(String(x.stop_micro), env.currency),
+      aim: masked ? null : money(String(x.aim_micro), env.currency),
       badPpm: toNum(x.bad_ppm),
       goodPpm: toNum(x.good_ppm),
     },
@@ -687,7 +688,7 @@ export async function loadPickHistory(
   env: LoaderEnv,
   q: { profile: string; filter: HistoryFilter; cursor: string | null },
 ): Promise<HistoryModel> {
-  const market = marketOf(env);
+  const market = env.market;
   const masked = env.mask.masked;
   const after = masked ? null : parseHistoryCursor(q.cursor);
   const where = ["o.market = ?", "o.profile = ?", "o.kind = 'pick'"];
@@ -767,17 +768,17 @@ export async function loadPickHistory(
       plan: masked
         ? null
         : {
-            buyUpTo: money(String(x.buy_max_micro)),
-            stop: money(String(x.stop_micro)),
-            aim: money(String(x.aim_micro)),
+            buyUpTo: money(String(x.buy_max_micro), env.currency),
+            stop: money(String(x.stop_micro), env.currency),
+            aim: money(String(x.aim_micro), env.currency),
           },
       status,
       entryD: masked ? null : entryD,
-      entry: masked || entry === null ? null : money(entry.toString()),
+      entry: masked || entry === null ? null : money(entry.toString(), env.currency),
       exitD: masked ? null : exitD,
-      exit: masked || exit === null ? null : money(exit.toString()),
+      exit: masked || exit === null ? null : money(exit.toString(), env.currency),
       exitReason: x.exit_reason === null ? null : String(x.exit_reason),
-      now: masked || now === null ? null : money(now.toString()),
+      now: masked || now === null ? null : money(now.toString(), env.currency),
       daysHeld:
         entryD === null
           ? null

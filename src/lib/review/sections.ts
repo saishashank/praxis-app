@@ -5,6 +5,8 @@
 // (cumulative by definition, EML-012), read at D.
 //
 // The readers produce the fact types of the T4 renderer (`ReviewFacts` and its parts).
+import { loadProfile } from "@/lib/market/profile";
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import type { Client } from "@libsql/client";
 import { parseCohortParams } from "@/lib/arena/cohort";
 import { terminalThresholds } from "@/lib/arena/terminal";
@@ -89,7 +91,9 @@ export async function loadCtx(
     env: o.env,
     appUrl: o.appUrl,
     now: o.now,
-    currency: m.rows.length ? str(m.rows[0]!.currency) : "AUD",
+    currency: m.rows.length
+      ? str(m.rows[0]!.currency)
+      : ((await loadProfile(db, o.market)).currency ?? ""),
     mode: m.rows.length ? str(m.rows[0]!.mode) : "off",
     tradingDay: isTradingDay(o.d, calendar),
     calendar,
@@ -576,7 +580,7 @@ export async function readStats(c: Ctx, exact: boolean): Promise<Stats | null> {
 // ---- section 8: Sentinel recap ------------------------------------------------------------------
 
 const timeFmt = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Australia/Melbourne",
+  timeZone: OWNER_TZ,
   hour: "2-digit",
   minute: "2-digit",
   hour12: false,

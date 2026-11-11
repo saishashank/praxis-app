@@ -38,6 +38,7 @@ function baseView(): HomeView {
 }
 
 const pick = (over: Partial<HomePick> = {}): HomePick => ({
+  currency: "AUD",
   profile: "balanced",
   rank: 1,
   stock: "Zed Upward Holdings",

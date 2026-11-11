@@ -53,7 +53,12 @@ export default async function MyAlertsPage() {
                   >
                     <span className="min-w-0 break-words">
                       <strong>{r.stock}</strong> · {profileLabel(r.profile)} #{r.rank} · picked{" "}
-                      {r.pickDate} · limit {r.limit ? <Money micro={r.limit.micro} /> : <Masked />}
+                      {r.pickDate} · limit{" "}
+                      {r.limit ? (
+                        <Money micro={r.limit.micro} currency={r.limit.currency} />
+                      ) : (
+                        <Masked />
+                      )}
                       {r.hitTime ? ` · hit at ${r.hitTime} (delayed quote)` : ""}
                       {r.reason ? ` · ${CLEAR_WORDS[r.reason] ?? r.reason}` : ""}
                       <span className="text-text-muted"> · {MAIL_WORDS[r.mail]}</span>

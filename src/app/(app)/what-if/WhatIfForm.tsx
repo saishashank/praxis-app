@@ -12,6 +12,8 @@ import type { WhatIfOptions } from "@/lib/whatif/options";
 import { whatIfErrorText, type WhatIfActionResult } from "./messages";
 
 type Props = {
+  /** ISO 4217 code of the amounts (D-1002). */
+  currency: string;
   options: WhatIfOptions;
   remaining: number;
   limit: number;
@@ -27,7 +29,7 @@ const profileText = (p: string, names: Record<string, string> = {}): string => {
 
 const FIELD = "rounded-md border border-border bg-bg px-2 py-2 text-text";
 
-export function WhatIfForm({ options, remaining, limit, action }: Props) {
+export function WhatIfForm({ options, remaining, limit, currency, action }: Props) {
   const [kind, setKind] = useState("cost");
   const [result, run, pending] = useActionState<WhatIfActionResult | null, FormData>(
     async (_prev, fd) => action(fd),
@@ -116,7 +118,7 @@ export function WhatIfForm({ options, remaining, limit, action }: Props) {
                   Value if sold today, {profileText(out.result.profile, options.profileNames)}
                 </dt>
                 <dd className="m-0">
-                  <Money micro={out.result.liqNavMicro} />
+                  <Money micro={out.result.liqNavMicro} currency={currency} />
                 </dd>
               </div>
               <div>
@@ -125,19 +127,20 @@ export function WhatIfForm({ options, remaining, limit, action }: Props) {
                   {profileText(out.result.ownProfile, options.profileNames)})
                 </dt>
                 <dd className="m-0">
-                  <Money micro={out.result.ownLiqNavMicro} />
+                  <Money micro={out.result.ownLiqNavMicro} currency={currency} />
                 </dd>
               </div>
               <div>
                 <dt className="text-text-muted">Difference</dt>
                 <dd className="m-0">
-                  <Money micro={out.result.diffMicro} sign="always" />
+                  <Money micro={out.result.diffMicro} currency={currency} sign="always" />
                 </dd>
               </div>
               <div>
                 <dt className="text-text-muted">Brokerage so far (this / its own)</dt>
                 <dd className="m-0">
-                  <Money micro={out.result.feesMicro} /> / <Money micro={out.result.ownFeesMicro} />
+                  <Money micro={out.result.feesMicro} currency={currency} /> /{" "}
+                  <Money micro={out.result.ownFeesMicro} currency={currency} />
                 </dd>
               </div>
             </dl>
@@ -149,19 +152,19 @@ export function WhatIfForm({ options, remaining, limit, action }: Props) {
                   {out.result.pct}%
                 </dt>
                 <dd className="m-0">
-                  <Money micro={out.result.pnlMicro} sign="always" />
+                  <Money micro={out.result.pnlMicro} currency={currency} sign="always" />
                 </dd>
               </div>
               <div>
                 <dt className="text-text-muted">Shares held now</dt>
                 <dd className="m-0">
-                  <Money micro={out.result.valueMicro} />
+                  <Money micro={out.result.valueMicro} currency={currency} />
                 </dd>
               </div>
               <div>
                 <dt className="text-text-muted">Total value after the move</dt>
                 <dd className="m-0">
-                  <Money micro={out.result.navAfterMicro} />
+                  <Money micro={out.result.navAfterMicro} currency={currency} />
                 </dd>
               </div>
             </dl>

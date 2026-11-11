@@ -1,5 +1,6 @@
 // Usage (PLT-050, PLT-051, UX-100). Owner-only (ROL-102a): every figure is self-counted from our
 // own run records and labelled as an estimate.
+import { resolveMarketOrNotFound } from "@/lib/market/resolve";
 import { EmptyState } from "@/components/ui/States";
 import Link from "next/link";
 import { Pill } from "@/components/ui/Pill";
@@ -134,7 +135,12 @@ export default async function UsagePage() {
   }
   let llm: LlmUsage | null = null;
   try {
-    llm = await loadLlmUsage(mainDb(), user.role, now);
+    llm = await loadLlmUsage(
+      mainDb(),
+      user.role,
+      now,
+      await resolveMarketOrNotFound(mainDb(), undefined, null),
+    );
   } catch {
     llm = null; // neutral message below; no error details
   }

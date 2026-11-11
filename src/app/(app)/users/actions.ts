@@ -10,12 +10,12 @@ import { requestMeta } from "@/lib/auth/audit";
 import type { CurrentUser } from "@/lib/auth/session";
 import { getConfig } from "@/lib/config/store";
 import { authDb, mainDb } from "@/lib/db/client";
+import { resolveMarket } from "@/lib/market/resolve";
 import { ACK_TEXT_VERSION } from "@/lib/users/ack";
 import type { ActionResult } from "@/lib/users/messages";
 import {
   addUser,
   changeRole,
-  DEFAULT_MARKET,
   grantUnmask,
   recordSharingAck,
   revokeUnmask,
@@ -39,11 +39,15 @@ function id(fd: FormData, name: string): number {
 
 async function run(user: CurrentUser, fn: (c: Ctx) => Promise<Done>): Promise<ActionResult> {
   try {
+    // The sharing acknowledgement is for the market the app opens in (D-997).
+    const market = await resolveMarket(mainDb(), undefined, null);
+    if (!market.ok) return { error: "unavailable" };
     const result = await fn({
       db: authDb(),
       env: process.env,
       actorId: user.id,
       meta: requestMeta(await headers()),
+      market: market.market,
     });
     if (!result.ok) return { error: result.error };
   } catch {
@@ -56,7 +60,7 @@ async function run(user: CurrentUser, fn: (c: Ctx) => Promise<Done>): Promise<Ac
 export async function recordSharingAckAction(fd: FormData): Promise<ActionResult> {
   const user = await requireUser("admin", PATH);
   if (text(fd, "acknowledge") !== "on") return { error: "invalid" };
-  return run(user, (c) => recordSharingAck(c, DEFAULT_MARKET, ACK_TEXT_VERSION));
+  return run(user, (c) => recordSharingAck(c, c.market, ACK_TEXT_VERSION));
 }
 
 export async function addUserAction(fd: FormData): Promise<ActionResult> {

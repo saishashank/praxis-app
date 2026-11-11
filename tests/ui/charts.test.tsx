@@ -48,10 +48,10 @@ const days: TimePoint[] = Array.from({ length: 120 }, (_, i) => ({
 
 const svgs: Record<string, React.ReactElement> = {
   sparkline: <Sparkline label="BHP close" values={[10, 11, null, 9, 12]} />,
-  glyphBar: <GlyphBar label="Strategy" valueCents={64000} />,
-  bustBarSafe: <BustBar nav={600} />,
-  bustBarNear: <BustBar nav={340} />,
-  bustBarBusted: <BustBar nav={250} />,
+  glyphBar: <GlyphBar currency="AUD" label="Strategy" valueCents={64000} />,
+  bustBarSafe: <BustBar currency="AUD" nav={600} />,
+  bustBarNear: <BustBar currency="AUD" nav={340} />,
+  bustBarBusted: <BustBar currency="AUD" nav={250} />,
   gauge: <Gauge value={82} label="Budget used" />,
   statusRing: (
     <StatusRing

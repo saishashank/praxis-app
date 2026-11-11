@@ -24,6 +24,8 @@
 // accept); the page states it as fixed. Unknown fields are rejected (never ignored). The target is
 // always the actor: there is no user id in the patch. A change and its audit event commit in one
 // write transaction (ROL-104). Audit detail names the changed fields only, never values.
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
+import { builtMarkets } from "@/lib/market/seed/index.mjs";
 import type { Client, Transaction } from "@libsql/client";
 import { auditTx, NO_META, type RequestMeta } from "@/lib/auth/audit";
 import type { AuthEnv } from "@/lib/auth/env";
@@ -39,8 +41,8 @@ export const TIME_ZONES = ["melbourne", "exchange"] as const;
 // M17 (D-444): pick alerts and their e-mails (ARN-112, EML-038..040); the pick order (UXN-309).
 export const ON_OFF = ["on", "off"] as const;
 export const PICK_SORTS = ["chance", "expected_gain"] as const;
-// Only active markets are selectable: AU until a second market activates (ROL-107).
-export const SELECTABLE_MARKETS = ["AU"] as const;
+// A stored default market is any built market (the seed registry, D-993); the Settings form offers, and the
+// action accepts, only the enabled ones, and `resolveMarket` ignores a stored choice that is not enabled (D-997).
 
 export type Theme = (typeof THEMES)[number];
 export type TimeFormat = (typeof TIME_FORMATS)[number];
@@ -53,7 +55,7 @@ export type PickSort = (typeof PICK_SORTS)[number];
 
 export type Preferences = {
   theme: Theme;
-  default_market: (typeof SELECTABLE_MARKETS)[number];
+  default_market: string;
   time_format: TimeFormat;
   alert_p1: AlertDelivery;
   alert_p2: AlertDelivery;
@@ -84,7 +86,7 @@ export const PICK_FIELDS = [
 
 export const DEFAULT_PREFERENCES: Readonly<Preferences> = Object.freeze({
   theme: "light", // D-884: Owner 2026-11-04 "white background, navy blue" (was dark, O-35)
-  default_market: "AU",
+  default_market: HOME_MARKET,
   time_format: "24h",
   alert_p1: "immediate",
   alert_p2: "digest",
@@ -99,7 +101,7 @@ export const DEFAULT_PREFERENCES: Readonly<Preferences> = Object.freeze({
 
 const ALLOWED: { [K in keyof Preferences]: readonly string[] } = {
   theme: THEMES,
-  default_market: SELECTABLE_MARKETS,
+  default_market: builtMarkets(),
   time_format: TIME_FORMATS,
   alert_p1: ALERT_DELIVERY,
   alert_p2: ALERT_DELIVERY,

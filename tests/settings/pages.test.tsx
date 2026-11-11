@@ -34,7 +34,8 @@ vi.mock("next/server", () => ({ connection: async () => undefined }));
 import AboutPage from "@/app/(app)/settings/about/page";
 import AppearancePage from "@/app/(app)/settings/appearance/page";
 import RegionPage from "@/app/(app)/settings/region/page";
-import { marketRows, toMelbourne } from "@/app/(app)/settings/region";
+import { marketRows, toMelbourne, type WorkStatus } from "@/app/(app)/settings/region";
+import { freshDb } from "../db/helpers";
 import RootLayout from "@/app/layout";
 import { currentLook } from "@/lib/preferences/current";
 import { DEFAULT_PREFERENCES } from "@/lib/preferences/service";
@@ -55,7 +56,14 @@ const settingsModel = (role: string) => ({
   preferences: { ...DEFAULT_PREFERENCES },
   themes: [],
   quietHours: null,
-  markets: [{ code: "AU", mode: "data_only", currency: "AUD", selectable: true }],
+  markets:
+    role === "owner"
+      ? [
+          { code: "AU", mode: "data_only", currency: "AUD", enabled: true, selectable: true },
+          { code: "IN", mode: "off", currency: "INR", enabled: false, selectable: false },
+          { code: "US", mode: "off", currency: "USD", enabled: false, selectable: false },
+        ]
+      : [{ code: "AU", mode: "data_only", currency: "AUD", enabled: true, selectable: true }],
   sharing: role === "owner" ? { acknowledgements: 2, lastAt: "2026-10-01T00:00:00.000Z" } : null,
 });
 
@@ -100,42 +108,50 @@ describe("Appearance page", () => {
 });
 
 describe("Region & markets page", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    const main = await freshDb("main");
     envFor.mockImplementation(async () => ({
       now: new Date("2026-10-20T01:00:00Z"),
-      main: {
-        execute: async () => ({
-          rows: [{ code: "AU", tz: "Australia/Sydney", open_time: "10:00", close_time: "16:00" }],
-        }),
-      },
+      main,
       auth: { execute: async () => ({ rows: [] }) },
     }));
   });
 
-  it("Owner sees every market, the disabled reasons and the sharing summary", async () => {
+  it("Owner sees every profile row, the built-off status lines and the sharing summary (D-998)", async () => {
     as("owner");
     loadSettings.mockResolvedValue(settingsModel("owner"));
     render(await RegionPage());
     expect(requireUser).toHaveBeenCalledWith("own_preferences", "/settings/region");
     expect(screen.getByLabelText("Open the app in")).toHaveValue("AU");
     expect(screen.getByLabelText("Show times in")).toHaveValue("melbourne");
-    expect(screen.getByText(/IN \(disabled\): Not started/)).toBeInTheDocument();
-    expect(screen.getByText(/US \(disabled\): Not started/)).toBeInTheDocument();
+    expect(screen.getByText(/IN \(disabled\): Built — off in production/)).toBeInTheDocument();
+    expect(screen.getByText(/US \(disabled\): Built — off in production/)).toBeInTheDocument();
     expect(screen.getByTestId("sharing-summary")).toHaveTextContent(
       "recorded: 2, latest 2026-10-01",
     );
     const table = screen.getAllByRole("table")[0];
     expect(within(table).getByText("10:00–16:00")).toBeInTheDocument();
     expect(within(table).getByText("Active (collecting data only)")).toBeInTheDocument();
+    expect(within(table).getAllByText("Built — off in production")).toHaveLength(2);
+    expect(within(table).getAllByText("AT-M evidence: not recorded")).toHaveLength(2);
+    expect(within(table).getAllByText("Open: Owner approval")).toHaveLength(2);
+    expect(within(table).getAllByText("Open: AU 60 trading days (MKT-105)")).toHaveLength(2);
+    expect(within(table).getAllByText(/Profile: \d+ of 40 fields verified/)).toHaveLength(3);
+    for (const code of ["AU", "IN", "US"]) {
+      expect(table.querySelector(`[data-market="${code}"]`)).not.toBeNull();
+    }
   });
 
-  it("Editor and Viewer see AU only, with no Owner-only fields", async () => {
+  it("Editor and Viewer see the enabled market only: no built-off row, no Owner-only fields", async () => {
     for (const r of ["editor", "viewer"]) {
       as(r);
       loadSettings.mockResolvedValue(settingsModel(r));
-      const { unmount } = render(await RegionPage());
+      const { container, unmount } = render(await RegionPage());
       expect(screen.queryByTestId("sharing-summary")).toBeNull();
       expect(screen.queryByText(/IN \(disabled\)/)).toBeNull();
+      expect(screen.queryByText(/Built — off in production/)).toBeNull();
+      expect(container.querySelector('[data-market="IN"]')).toBeNull();
+      expect(container.querySelector('[data-market="US"]')).toBeNull();
       expect(screen.getByText(/markets the Owner has shared/)).toBeInTheDocument();
       unmount();
     }
@@ -153,26 +169,65 @@ describe("region helpers", () => {
     expect(toMelbourne("2026-10-20", "10:00", "Not/AZone")).toBeNull();
   });
 
-  it("lists IN and US as not started for the Owner and hides them from others unless shared", () => {
+  it("the Owner sees every row; others see enabled markets only, shared ones beyond the home market", () => {
     const model = settingsModel("owner");
     const own = marketRows(model, {}, new Set(), true, "2026-10-20");
     expect(own.map((r) => r.code)).toEqual(["AU", "IN", "US"]);
-    expect(own.find((r) => r.code === "IN")).toMatchObject({
-      status: "not started",
-      selectable: false,
-    });
     expect(marketRows(model, {}, new Set(), false, "2026-10-20").map((r) => r.code)).toEqual([
       "AU",
     ]);
+    // sharing a market that is not enabled never shows it (D-997)
     expect(marketRows(model, {}, new Set(["US"]), false, "2026-10-20").map((r) => r.code)).toEqual([
       "AU",
-      "US",
+    ]);
+    const two = {
+      markets: [
+        ...model.markets.slice(0, 1),
+        { code: "IN", mode: "full", currency: "INR", enabled: true, selectable: true },
+      ],
+    };
+    expect(marketRows(two, {}, new Set(), false, "2026-10-20").map((r) => r.code)).toEqual(["AU"]);
+    expect(marketRows(two, {}, new Set(["IN"]), false, "2026-10-20").map((r) => r.code)).toEqual([
+      "AU",
+      "IN",
     ]);
   });
 
-  it("a market with mode off is paused and cannot be chosen", () => {
+  it("status text follows the stored work status and the mode (D-998)", () => {
+    const prof = (workStatus: WorkStatus) => ({
+      tz: "Asia/Kolkata",
+      open: "09:15",
+      close: "15:30",
+      exchange: "NSE",
+      workStatus,
+      evidenceRecordedAt: workStatus === "built" ? "2026-11-12" : null,
+      verified: 3,
+      total: 40,
+    });
+    const model = (mode: string) => ({
+      markets: [{ code: "IN", mode, currency: "INR", enabled: false, selectable: false }],
+    });
+    const row = (ws: WorkStatus, mode = "off") =>
+      marketRows(model(mode), { IN: prof(ws) }, new Set(), true, "2026-10-20")[0]!;
+    expect(row("built")).toMatchObject({
+      statusText: "Built — off in production",
+      evidence: "AT-M evidence: recorded 2026-11-12",
+      profileLine: "Profile: 3 of 40 fields verified",
+      selectable: false,
+    });
+    expect(row("active", "full")).toMatchObject({ statusText: "Active", selectable: false });
+    expect(row("active", "off").statusText).toBe("Paused");
+    expect(row("in_build").statusText).toBe("In build");
+    expect(row("testing").statusText).toBe("Testing");
+    expect(row("not_started").statusText).toBe("Not started");
+    expect(row("paused").statusText).toBe("Paused");
+  });
+
+  it("a market with mode off and no profile is paused and cannot be chosen", () => {
     const rows = marketRows(
-      { markets: [{ code: "AU", mode: "off", currency: "AUD", selectable: true }] },
+      {
+        markets: [{ code: "AU", mode: "off", currency: "AUD", enabled: true, selectable: true }],
+      },
       {},
       new Set(),
       true,

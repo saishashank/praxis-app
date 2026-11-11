@@ -18,7 +18,9 @@ afterEach(cleanup);
 
 describe("NavBar", () => {
   it("marks the A$600 start on a bar from A$300 to A$1,200 and fills in the gain colour above it", () => {
-    const { container } = render(<NavBar label="Follow the trend" navCents={75_000} />);
+    const { container } = render(
+      <NavBar currency="AUD" label="Follow the trend" navCents={75_000} />,
+    );
     const marker = container.querySelector("[data-nav-start]") as HTMLElement;
     expect(parseFloat(marker.style.left)).toBeCloseTo(33.33, 1); // (600-300)/(1200-300)
     expect(screen.getByText("Start A$600.00")).toBeInTheDocument();
@@ -27,11 +29,11 @@ describe("NavBar", () => {
     expect(fill.getAttribute("data-hue")).toBe("positive");
   });
   it("uses the loss colour below the start and never a grey fill for a signed value", () => {
-    const { container } = render(<NavBar label="x" navCents={45_000} />);
+    const { container } = render(<NavBar currency="AUD" label="x" navCents={45_000} />);
     expect(container.querySelector("[data-nav-fill]")?.getAttribute("data-hue")).toBe("negative");
   });
   it("draws no fill when the value is unknown", () => {
-    const { container } = render(<NavBar label="x" navCents={null} />);
+    const { container } = render(<NavBar currency="AUD" label="x" navCents={null} />);
     expect(container.querySelector("[data-nav-fill]")).toBeNull();
     expect(screen.getByRole("img").getAttribute("aria-label")).toMatch(/not measured yet/);
   });

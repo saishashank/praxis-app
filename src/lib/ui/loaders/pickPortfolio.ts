@@ -7,14 +7,7 @@ import { newerThanClose, readLatestQuotes } from "@/lib/data/quotes/latest";
 import { PORTFOLIO_PROFILE } from "@/lib/picks/portfolioStore";
 import { getConfig } from "@/lib/config/store";
 import { soft } from "./common";
-import {
-  marketOf,
-  maskKitByDate,
-  money,
-  priceMicro,
-  type LoaderEnv,
-  type MoneyView,
-} from "./shell";
+import { maskKitByDate, money, priceMicro, type LoaderEnv, type MoneyView } from "./shell";
 
 const PPM = 1_000_000n; // threshold-ok: parts per million
 const SLOTS_DEFAULT = 5; // threshold-ok: D-913 default, used only if the read fails
@@ -54,7 +47,7 @@ const ppm = (num: bigint, den: bigint): number | null =>
   den > 0n ? Number((num * PPM) / den) : null; // money-float-ok: ppm of exact micro amounts
 
 export async function loadPickPortfolio(env: LoaderEnv): Promise<PortfolioView> {
-  const market = marketOf(env);
+  const market = env.market;
   const masked = env.mask.masked;
   const profile = PORTFOLIO_PROFILE;
   const empty: PortfolioView = {
@@ -141,8 +134,8 @@ export async function loadPickPortfolio(env: LoaderEnv): Promise<PortfolioView> 
     return {
       stock: kit ? kit.aliasOf(String(t.pub_d)).label(code) : code,
       entryD: masked ? null : String(t.entry_d),
-      entry: masked ? null : money(entry.toString()),
-      now: masked || now === null ? null : money(now.toString()),
+      entry: masked ? null : money(entry.toString(), env.currency),
+      now: masked || now === null ? null : money(now.toString(), env.currency),
       changePpm: now === null ? null : ppm(now - entry, entry),
     };
   });
@@ -155,9 +148,9 @@ export async function loadPickPortfolio(env: LoaderEnv): Promise<PortfolioView> 
     started: true,
     slots,
     asOfD: masked ? null : String(newest.d),
-    seed: masked ? null : money(seed.toString()),
-    value: masked ? null : money(valueNow.toString()),
-    cash: masked ? null : money(String(newest.cash_micro)),
+    seed: masked ? null : money(seed.toString(), env.currency),
+    value: masked ? null : money(valueNow.toString(), env.currency),
+    cash: masked ? null : money(String(newest.cash_micro), env.currency),
     sinceStartPpm: ppm(valueNow - seed, seed),
     holdings,
     closed: closedRows.length,

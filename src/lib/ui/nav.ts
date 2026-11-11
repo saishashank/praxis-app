@@ -266,12 +266,13 @@ const MODE_LABEL: Record<string, string> = {
   data_only: "Data only",
   full: "Active",
 };
-const EXCHANGE: Record<string, string> = { AU: "ASX" };
 
 /** "AU · ASX · Data only" (UXN-282). */
-export function regionLabel(market: { code: string; mode: string } | null): string {
+export function regionLabel(
+  market: { code: string; mode: string; exchange?: string | null } | null,
+): string {
   if (!market) return "Region";
-  return [market.code, EXCHANGE[market.code], MODE_LABEL[market.mode] ?? market.mode]
+  return [market.code, market.exchange, MODE_LABEL[market.mode] ?? market.mode]
     .filter(Boolean)
     .join(" · ");
 }
@@ -316,9 +317,9 @@ export function nextTheme(theme: Theme): Theme {
 // ---- region chip (UXR-005) ------------------------------------------------------------------------------
 
 /** The visible chip text, "AU · ASX" (the mode is a dot, not words: UXR-005). */
-export function regionChip(market: { code: string } | null): string {
+export function regionChip(market: { code: string; exchange?: string | null } | null): string {
   if (!market) return "Region";
-  return [market.code, EXCHANGE[market.code]].filter(Boolean).join(" · ");
+  return [market.code, market.exchange].filter(Boolean).join(" · ");
 }
 
 /** The dot of the chip: green only for an active market, grey in data-only and off mode. */

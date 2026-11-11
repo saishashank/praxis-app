@@ -13,7 +13,7 @@ import { GainLoss, Money, NotMeasured } from "@/components/ui/Values";
 import type { StrategyTile as Tile } from "@/lib/ui/loaders/strategies";
 import type { StrategyName } from "@/lib/ui/loaders/common";
 import type { TileExtra } from "@/lib/ui/loaders/strategyViews";
-import { formatDate, formatMicro, formatPpm } from "@/lib/view/format";
+import { currencyFormatFor, formatDate, formatMicro, formatPpm } from "@/lib/view/format";
 import { familyBadge } from "../home/familyMap";
 import { NavBar } from "./NavBar";
 import { tileState } from "./state";
@@ -112,12 +112,13 @@ export function StrategyTile({
             startCents={cents(tile.seed?.micro)}
             minCents={cents(tile.bust?.micro)}
             maxCents={cents(tile.target?.micro)}
+            currency={tile.currency}
             className="px-4"
           />
           <dl className="m-0 mx-4 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
             <dt className="text-text-muted">Value now</dt>
             <dd className="m-0 text-right">
-              <Money micro={tile.nav?.micro ?? null} />
+              <Money micro={tile.nav?.micro ?? null} currency={tile.currency} />
             </dd>
             <dt className="text-text-muted">Change since start</dt>
             <dd className="m-0 text-right">
@@ -131,7 +132,7 @@ export function StrategyTile({
                 </dt>
                 <dd className="m-0 text-right">
                   <GainLoss value={Number(tile.day.change.micro)}>
-                    {`${formatMicro(tile.day.change.micro, { sign: "always" })}${
+                    {`${formatMicro(tile.day.change.micro, currencyFormatFor(tile.day.change.currency), { sign: "always" })}${
                       tile.day.ppm !== null
                         ? ` (${formatPpm(tile.day.ppm, { sign: "always" })})`
                         : ""

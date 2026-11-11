@@ -44,7 +44,7 @@ const FIELD = "min-h-6 w-full rounded-md border border-border bg-bg p-2 text-tex
 export default async function LearnedPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const user = await requireUser("read", LEARNED);
-  const env = await envFor(user);
+  const env = await envFor(user, undefined, sp.market);
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(sp)) if (typeof v === "string") q.set(k, v);
   const query = parseKnowledgeQuery(q);

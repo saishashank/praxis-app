@@ -17,7 +17,13 @@ import { loadCandidateForCode, loadChipsForCode } from "@/lib/ui/loaders/pickAle
 import { AlertChip } from "../../picks/AlertChip";
 import { INTRADAY_UNRATED } from "../../picks/text";
 import { envFor } from "@/lib/ui/loaders/shell";
-import { formatCount, formatDate, formatDay, formatMicro } from "@/lib/view/format";
+import {
+  currencyFormatFor,
+  formatCount,
+  formatDate,
+  formatDay,
+  formatMicro,
+} from "@/lib/view/format";
 import { toggleWatchlistAction } from "../actions";
 import { CompanyChart } from "../CompanyChart";
 import { Change, Dash, FIG, Tile } from "../Figures";
@@ -62,6 +68,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ code: 
   const env = await envFor(user);
   const c = await loadCompany(env, key);
   if (c === null) notFound();
+  const fmt = currencyFormatFor(c.currency);
   // UXN-306: the alert chip and, for an intraday candidate, its catalyst line (unmasked callers: the code is known).
   const chips = c.masked ? [] : await loadChipsForCode(env, c.stock);
   const candidate = c.masked ? null : await loadCandidateForCode(env, c.stock);
@@ -93,7 +100,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ code: 
               <div className="mt-1 flex flex-wrap items-baseline gap-3">
                 {c.closeMicro ? (
                   <span className={`${FIG} text-2xl font-semibold`}>
-                    {formatMicro(c.live ? c.live.priceMicro : c.closeMicro)}
+                    {formatMicro(c.live ? c.live.priceMicro : c.closeMicro, fmt)}
                   </span>
                 ) : (
                   <Masked />
@@ -102,7 +109,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ code: 
               </div>
               <p className="m-0 mt-1 text-sm text-text-muted">
                 {c.live
-                  ? `Delayed, ${c.live.at}. Last close ${c.closeMicro ? formatMicro(c.closeMicro) + ", " : ""}${formatDay(c.d)}`
+                  ? `Delayed, ${c.live.at}. Last close ${c.closeMicro ? formatMicro(c.closeMicro, fmt) + ", " : ""}${formatDay(c.d)}`
                   : `${PRICE_LABEL}${c.d && !c.masked ? `, ${formatDay(c.d)}` : ""}`}
                 . {PRICE_NOTE}
               </p>
@@ -167,7 +174,13 @@ export default async function CompanyPage({ params }: { params: Promise<{ code: 
           <h2 id="chart-h" className="m-0 mb-2 text-lg font-semibold">
             Price chart
           </h2>
-          <CompanyChart bars={c.bars} markers={c.markers} label={title} hue={hue} />
+          <CompanyChart
+            bars={c.bars}
+            markers={c.markers}
+            label={title}
+            hue={hue}
+            currency={c.currency}
+          />
         </section>
       ) : null}
 
@@ -178,7 +191,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ code: 
         <dl className="m-0 mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Tile label="52-week range">
             {c.rangeLowMicro && c.rangeHighMicro ? (
-              `${formatMicro(c.rangeLowMicro)} to ${formatMicro(c.rangeHighMicro)}`
+              `${formatMicro(c.rangeLowMicro, fmt)} to ${formatMicro(c.rangeHighMicro, fmt)}`
             ) : c.masked ? (
               <Dash hint="Hidden for your role" />
             ) : (

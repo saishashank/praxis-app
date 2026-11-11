@@ -7,7 +7,13 @@ import { EmptyState } from "@/components/ui/States";
 import { Pill } from "@/components/ui/Pill";
 import { hueStyle } from "@/components/ui/hue";
 import { Masked } from "@/components/ui/Values";
-import { displayName, formatCount, formatDay, formatMicro } from "@/lib/view/format";
+import {
+  currencyFormatFor,
+  displayName,
+  formatCount,
+  formatDay,
+  formatMicro,
+} from "@/lib/view/format";
 import type { MarketRow } from "@/lib/ui/loaders/market";
 import { Change, FIG } from "./Figures";
 import { RowActions, type WatchMode } from "./RowActions";
@@ -114,12 +120,16 @@ export function MarketTable({
           <Masked />
         ) : r.live ? (
           <span className="block">
-            <span className={FIG}>{formatMicro(r.live.price.micro)}</span>
+            <span className={FIG}>
+              {formatMicro(r.live.price.micro, currencyFormatFor(r.live.price.currency))}
+            </span>
             <span className="block text-xs text-text-muted">delayed {r.live.at}</span>
           </span>
         ) : (
           <span className="block">
-            <span className={FIG}>{formatMicro(r.close.micro)}</span>
+            <span className={FIG}>
+              {formatMicro(r.close.micro, currencyFormatFor(r.close.currency))}
+            </span>
             <span className="block text-xs text-text-muted">close</span>
           </span>
         ),

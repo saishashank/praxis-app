@@ -8,7 +8,7 @@ import { gatherHealthFacts } from "@/lib/health/snapshot";
 import { loadExpertsHealth, type ExpertsHealth } from "@/lib/health/experts";
 import { loadSteelmanHealth, type SteelmanHealth } from "@/lib/health/steelman";
 import { loadMaskLookup, maskText, StockAliases } from "@/lib/view/mask";
-import { marketOf, todayD, type LoaderEnv, type LoaderState } from "./shell";
+import { todayD, type LoaderEnv, type LoaderState } from "./shell";
 
 const STRIP_DAYS = 30; // threshold-ok: decision 60, 30-day strip
 export const COMPONENT_COUNT = 9; // threshold-ok: UXN-283, nine components
@@ -60,7 +60,7 @@ export async function loadHealth(
   const owner = env.user.role === "owner";
   const facts = await gatherHealthFacts(env.main, env.now, todayD(env), vars);
   const comps = computeComponents(facts);
-  const lookup = env.mask.masked ? await loadMaskLookup(env.main, marketOf(env)) : null;
+  const lookup = env.mask.masked ? await loadMaskLookup(env.main, env.market) : null;
   const empty = new StockAliases([]);
   const t = (s: string): string => (lookup ? maskText(s, empty, lookup) : s);
   const components: HealthComponentView[] = comps.map((c) => ({
@@ -116,7 +116,7 @@ export async function loadHealth(
     components,
     strip,
     details: owner,
-    steelman: await loadSteelmanHealth(env.main, marketOf(env)),
-    experts: maskExpertsHealth(await loadExpertsHealth(env.main, marketOf(env)), t),
+    steelman: await loadSteelmanHealth(env.main, env.market),
+    experts: maskExpertsHealth(await loadExpertsHealth(env.main, env.market), t),
   };
 }

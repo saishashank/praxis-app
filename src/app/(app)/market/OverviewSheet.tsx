@@ -6,7 +6,7 @@
 import type { Swot } from "@/lib/view/swot";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useState } from "react";
-import { formatCount, formatMicro, formatPpm } from "@/lib/view/format";
+import { currencyFormatFor, formatCount, formatMicro, formatPpm } from "@/lib/view/format";
 
 type Overview = {
   masked: boolean;
@@ -15,7 +15,7 @@ type Overview = {
   name: string | null;
   sector: string | null;
   d: string | null;
-  close: { micro: string } | null;
+  close: { micro: string; currency: string } | null;
   changePpm: number | null;
   volume: number | null;
   announcements: Array<{ id: number; title: string; published: string; url: string | null }>;
@@ -72,7 +72,9 @@ function Body({ slug }: { slug: string }) {
           {o.close ? (
             <>
               <dt className="text-text-muted">End-of-day price{o.d ? ` (${o.d})` : ""}</dt>
-              <dd className="m-0 font-mono">{formatMicro(o.close.micro)}</dd>
+              <dd className="m-0 font-mono">
+                {formatMicro(o.close.micro, currencyFormatFor(o.close.currency))}
+              </dd>
             </>
           ) : null}
           <dt className="text-text-muted">Day change</dt>

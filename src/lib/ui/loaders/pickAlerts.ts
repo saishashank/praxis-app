@@ -7,7 +7,7 @@ import { getConfig } from "@/lib/config/store";
 import type { ConfigKey } from "@/lib/config/keys";
 import { formatDay, isoWeek, MISSING } from "@/lib/view/format";
 import type { AlertStateName, ClearReason } from "@/lib/alerts/pick/types";
-import { maskKit, marketOf, money, todayD, type LoaderEnv, type MoneyView } from "./shell";
+import { maskKit, money, todayD, type LoaderEnv, type MoneyView } from "./shell";
 
 const SESSIONS_SHOWN = 30; // threshold-ok: UXN-303 "the last 30 sessions"
 const MAX_ROWS = 300; // threshold-ok: bound of the My alerts read
@@ -53,12 +53,12 @@ const CHIP_SQL = `SELECT a.alert_id, a.pick_d, a.profile, a.rank, a.state, a.lim
   WHERE a.user_id = ? AND a.market = ?
     AND a.seq = (SELECT MAX(b.seq) FROM pick_alert b WHERE b.alert_id = a.alert_id)`;
 
-function chipOf(x: Record<string, unknown>, masked: boolean): AlertChipView {
+function chipOf(x: Record<string, unknown>, masked: boolean, currency: string): AlertChipView {
   const state = str(x.state) as AlertStateName;
   return {
     alertId: str(x.alert_id),
     state,
-    limit: masked ? null : money(str(x.limit_micro)),
+    limit: masked ? null : money(str(x.limit_micro), currency),
     hitTime: state === "hit" ? melTime(str(x.quote_at ?? x.at)) : null,
     reason: x.clear_reason === null ? null : (str(x.clear_reason) as ClearReason),
     session: masked ? (isoWeek(str(x.session_d)) ?? MISSING) : str(x.session_d),
@@ -74,12 +74,12 @@ export async function loadAlertChips(
   try {
     const r = await env.main.execute({
       sql: CHIP_SQL + " AND a.pick_d = ?",
-      args: [str(env.user.id), marketOf(env), d],
+      args: [str(env.user.id), env.market, d],
     });
     for (const x of r.rows) {
       out.set(
         pickKeyText({ d: str(x.pick_d), profile: str(x.profile), rank: num(x.rank) }),
-        chipOf(x, env.mask.masked),
+        chipOf(x, env.mask.masked, env.currency),
       );
     }
   } catch {
@@ -96,10 +96,10 @@ export async function loadChipsForCode(
   try {
     const r = await env.main.execute({
       sql: CHIP_SQL + " AND a.code = ? ORDER BY a.pick_d DESC, a.profile LIMIT 5",
-      args: [str(env.user.id), marketOf(env), code],
+      args: [str(env.user.id), env.market, code],
     });
     return r.rows.map((x) => ({
-      ...chipOf(x, env.mask.masked),
+      ...chipOf(x, env.mask.masked, env.currency),
       profile: str(x.profile),
       pickD: str(x.pick_d),
       rank: num(x.rank),
@@ -181,7 +181,7 @@ async function cfgNum(env: LoaderEnv, key: ConfigKey, def: number): Promise<numb
 }
 
 export async function loadIntraday(env: LoaderEnv): Promise<IntradayModel> {
-  const market = marketOf(env);
+  const market = env.market;
   const masked = env.mask.masked;
   const shownMax = await cfgNum(env, "intraday_candidates_shown_max", 5);
   const delayMin = await cfgNum(env, "intraday_quote_delay_min", 20);
@@ -243,9 +243,13 @@ export async function loadIntraday(env: LoaderEnv): Promise<IntradayModel> {
         movePpm: num(x.move_ppm),
         rated: false,
         limit:
-          masked || x.indicative_limit_micro === null ? null : money(str(x.indicative_limit_micro)),
+          masked || x.indicative_limit_micro === null
+            ? null
+            : money(str(x.indicative_limit_micro), env.currency),
         stop:
-          masked || x.indicative_stop_micro === null ? null : money(str(x.indicative_stop_micro)),
+          masked || x.indicative_stop_micro === null
+            ? null
+            : money(str(x.indicative_stop_micro), env.currency),
         quoteTime: x.latest_quote_at === null ? null : melTime(str(x.latest_quote_at)),
         decisionOutcome: x.decision_outcome === null ? null : str(x.decision_outcome),
         href: masked ? null : `/market/${encodeURIComponent(code)}`,
@@ -278,7 +282,7 @@ export async function loadCandidateForCode(
                      AND a.ann_id = c.item_ann_id LIMIT 1) AS title
             FROM intraday_candidate c WHERE c.market = ? AND c.code = ? AND c.session_d <= ?
             ORDER BY c.session_d DESC LIMIT 1`,
-      args: [marketOf(env), code, todayD(env)],
+      args: [env.market, code, todayD(env)],
     });
     const x = r.rows[0];
     if (!x) return null;
@@ -314,7 +318,7 @@ export async function loadAlertHomeFacts(
 ): Promise<AlertHomeFacts> {
   const out: AlertHomeFacts = { hits: 0, candidates: 0, suppressed: 0 };
   try {
-    const market = marketOf(env);
+    const market = env.market;
     const hits = await env.main.execute({
       sql: "SELECT COUNT(DISTINCT alert_id) AS n FROM pick_alert WHERE user_id = ? AND market = ? AND state = 'hit' AND at >= ?",
       args: [str(env.user.id), market, sinceIso],
@@ -453,7 +457,7 @@ export async function loadMyAlerts(env: LoaderEnv): Promise<MyAlertsModel> {
   const settings = await loadAlertSettings(env);
   const base: MyAlertsModel = { masked, alertsOn: settings.pickAlerts === "on", rows: [] };
   try {
-    const market = marketOf(env);
+    const market = env.market;
     const r = await env.main.execute({
       sql: `${CHIP_SQL}
               AND a.session_d IN (SELECT DISTINCT session_d FROM pick_alert WHERE user_id = ? AND market = ?
@@ -478,7 +482,7 @@ export async function loadMyAlerts(env: LoaderEnv): Promise<MyAlertsModel> {
         )
       : null;
     const rows: MyAlertRow[] = r.rows.map((x) => {
-      const chip = chipOf(x, masked);
+      const chip = chipOf(x, masked, env.currency);
       const code = str(x.code);
       return {
         alertId: chip.alertId,

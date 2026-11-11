@@ -21,7 +21,7 @@ import {
   type RiskSwitch,
   type StressRow,
 } from "@/lib/ui/loaders/risk";
-import { formatMicro, formatPpm } from "@/lib/view/format";
+import { currencyFormatFor, formatMicro, formatPpm } from "@/lib/view/format";
 import { dayText } from "../plain";
 import { StrategyTabs } from "../StrategyTabs";
 import { LossLimitBar } from "./LossLimitBar";
@@ -52,7 +52,7 @@ function StrategyCard({ s, nearPct }: { s: RiskStrategy; nearPct: number }) {
         <div>
           <dt className="text-text-muted">Value now</dt>
           <dd className="m-0">
-            <Money micro={s.nav.micro} />
+            <Money micro={s.nav.micro} currency={s.nav.currency} />
           </dd>
         </div>
         <div>
@@ -69,6 +69,7 @@ function StrategyCard({ s, nearPct }: { s: RiskStrategy; nearPct: number }) {
             seed={s.seed.micro / MICRO}
             bust={s.bust.micro / MICRO}
             nearPct={nearPct}
+            currency={s.nav.currency}
           />
         </div>
       )}
@@ -92,7 +93,11 @@ function StrategyCard({ s, nearPct }: { s: RiskStrategy; nearPct: number }) {
                   : `${formatPpm(p.stopDistancePpm)} above its stop`}
               </span>
               <BreakerStatus status={p.breaker} />
-              {p.value === null ? <Masked /> : <Money micro={p.value.micro} />}
+              {p.value === null ? (
+                <Masked />
+              ) : (
+                <Money micro={p.value.micro} currency={p.value.currency} />
+              )}
             </li>
           ))}
         </ul>
@@ -187,7 +192,7 @@ export default async function RiskPage() {
       align: "right",
       cell: (x) => (
         <span data-money="" className="font-mono">
-          {formatMicro(x.pnl.micro, { sign: "always" })}
+          {formatMicro(x.pnl.micro, currencyFormatFor(x.pnl.currency), { sign: "always" })}
         </span>
       ),
     },

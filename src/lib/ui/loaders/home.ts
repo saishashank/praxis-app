@@ -23,6 +23,7 @@ import {
   readLatestQuotes,
   type LatestQuote,
 } from "@/lib/data/quotes/latest";
+import { loadProfile } from "@/lib/market/profile";
 import { MARKET_INDEX_CODE } from "@/lib/data/quotes/parse";
 import { liveDayChange } from "./liveDay";
 import { loadAlertHomeFacts, loadIntraday, type IntradayModel } from "./pickAlerts";
@@ -133,7 +134,9 @@ export type HomePick = {
   family: string;
   tier: string;
   label: string;
-  /** Prices in micro-AUD; null for a masked viewer. */
+  /** ISO 4217 code of the prices below. */
+  currency: string;
+  /** Prices in micro units of the market currency; null for a masked viewer. */
   referenceMicro: number | null;
   stopMicro: number | null;
   aimMicro: number | null;
@@ -182,7 +185,7 @@ export type StrategyTile = {
 };
 
 export type HomeHeadline = {
-  currency: "AUD";
+  currency: string;
   /** Combined result since the strategies started, as a share of what they started with (not a sum of amounts). */
   sinceStartPpm: number | null;
   /** The same ratio for the last session only. */
@@ -339,11 +342,11 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     return {
       id: str(r.execution_id),
       name: names[family]?.name ?? family,
-      seed: money(seed),
-      value: money(value),
-      sinceStart: money(value - seed),
+      seed: money(seed, v.currency),
+      value: money(value, v.currency),
+      sinceStart: money(value - seed, v.currency),
       sinceStartPpm: ratioPpm(value - seed, seed),
-      dayChange: prev === null ? null : money(value - prev),
+      dayChange: prev === null ? null : money(value - prev, v.currency),
       dayChangePpm: prev === null ? null : ratioPpm(value - prev, prev),
       startD: str(r.start_d),
     };
@@ -385,10 +388,10 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
         const now = base + c.changeMicro;
         tiles[i] = {
           ...t,
-          value: money(now),
-          sinceStart: money(now - num(r.seed_micro)),
+          value: money(now, v.currency),
+          sinceStart: money(now - num(r.seed_micro), v.currency),
           sinceStartPpm: ratioPpm(now - num(r.seed_micro), num(r.seed_micro)),
-          dayChange: money(c.changeMicro),
+          dayChange: money(c.changeMicro, v.currency),
           dayChangePpm: ratioPpm(c.changeMicro, base),
         };
         liveSum = {
@@ -402,7 +405,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
       if (liveAt !== null)
         nav.rows.forEach((r, i) => {
           if (live.updated.has(i)) return;
-          tiles[i] = { ...tiles[i]!, dayChange: money(0), dayChangePpm: 0 };
+          tiles[i] = { ...tiles[i]!, dayChange: money(0, v.currency), dayChangePpm: 0 };
           liveSum = {
             change: liveSum?.change ?? 0,
             base: (liveSum?.base ?? 0) + num(r.liq_nav_micro),
@@ -432,20 +435,22 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
   });
   // D-907: the ASX 200 line (two newest closes by primary key, plus the delayed quote). Soft: a
   // failure leaves the line out, never the page.
-  const index =
-    v.market === "AU"
-      ? await soft(async () => {
-          const r = await deps.mainDb.execute({
-            sql: "SELECT d, c_micro FROM index_bar WHERE market = ? AND index_code = ? ORDER BY d DESC LIMIT 2",
-            args: [v.market, MARKET_INDEX_CODE],
-          });
-          const q = await readLatestQuotes(deps.mainDb, v.market, [MARKET_INDEX_CODE]);
-          return indexLine(
-            r.rows.map((x) => ({ d: str(x.d), cMicro: num(x.c_micro) })),
-            q.get(MARKET_INDEX_CODE),
-          );
-        }, null)
-      : null;
+  // The line is the benchmark of the market that quotes it (the home market's index, D-907).
+  const quotesIndex =
+    (await loadProfile(deps.mainDb, v.market)).benchmarkIndex === MARKET_INDEX_CODE;
+  const index = quotesIndex
+    ? await soft(async () => {
+        const r = await deps.mainDb.execute({
+          sql: "SELECT d, c_micro FROM index_bar WHERE market = ? AND index_code = ? ORDER BY d DESC LIMIT 2",
+          args: [v.market, MARKET_INDEX_CODE],
+        });
+        const q = await readLatestQuotes(deps.mainDb, v.market, [MARKET_INDEX_CODE]);
+        return indexLine(
+          r.rows.map((x) => ({ d: str(x.d), cMicro: num(x.c_micro) })),
+          q.get(MARKET_INDEX_CODE),
+        );
+      }, null)
+    : null;
   view.day = {
     regime: regime?.state ?? null,
     regimeD: regime?.d ?? null,
@@ -519,6 +524,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
       family: str(r.family),
       tier: str(r.tier),
       label: scope ? scope.text(str(r.label)) : str(r.label),
+      currency: v.currency,
       referenceMicro: masked ? null : num(r.reference_micro),
       stopMicro: masked ? null : num(r.stop_micro),
       aimMicro: masked ? null : num(r.aim_micro),
@@ -645,7 +651,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     const prev = hist[hist.length - 2];
     view.headline = [
       {
-        currency: "AUD",
+        currency: v.currency,
         sinceStartPpm: series.length > 0 ? series[series.length - 1]! : null,
         dayChangePpm:
           liveSum !== null
@@ -711,6 +717,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     mask: { masked },
     now: v.now,
     market: v.market,
+    currency: v.currency,
   };
   const alertFacts = await loadAlertHomeFacts(
     alertEnv,
