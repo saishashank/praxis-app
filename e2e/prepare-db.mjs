@@ -8,6 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyScenario } from "./seed/index.mjs";
 import { applyStates, parseStates } from "./seed/states.mjs";
+import { apply as applyMarketsDev } from "./seed/states/markets-dev.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const need = (k) => {
@@ -58,6 +59,12 @@ try {
   if (stateNames.length > 0) {
     await applyStates(main, stateNames);
     console.log(`e2e: states ${stateNames.join(", ")}`);
+  }
+  // M19 D-994 / D-1077: a development lane that sets PRAXIS_MARKETS_ENABLED (for example AU,IN,US) enables those built
+  // markets here; unset (every CI lane) the database keeps the production shape (AU only).
+  if ((process.env.PRAXIS_MARKETS_ENABLED ?? "").trim() !== "") {
+    const enabled = await applyMarketsDev(main);
+    console.log(`e2e: markets enabled ${enabled.join(", ")}`);
   }
 } finally {
   main.close();

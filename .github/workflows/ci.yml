@@ -42,6 +42,10 @@ jobs:
       - run: npm run test:smoke
       - run: npm run test:routes
       - run: npm run test:hygiene
+      - name: No market literal outside the profile seed (AT-67, MKT-107)
+        run: npm run test:market-literals
+      - name: Market-off proofs (AT-68 a/b/c, MKT-110; every CI run)
+        run: npx vitest run tests/acceptance/v3/at68.test.ts
       - name: Licence allow-list (UXN-019)
         run: npm run test:licences
       - name: Backup restore drill (TST-108, synthetic data, throwaway key)
@@ -75,7 +79,8 @@ jobs:
           npx playwright test
           e2e/a11y.spec.ts e2e/home.spec.ts e2e/honesty.spec.ts e2e/keyboard.spec.ts
           e2e/m14-data-files.spec.ts e2e/m16-blueprint-access.spec.ts e2e/m16-blueprint-page.spec.ts
-          e2e/m16-blueprint-walk.spec.ts e2e/mobile.spec.ts e2e/owner-flow.spec.ts e2e/pages.spec.ts
+          e2e/m16-blueprint-walk.spec.ts e2e/market-off.spec.ts e2e/mobile.spec.ts e2e/owner-flow.spec.ts
+          e2e/pages.spec.ts
           e2e/reviews.spec.ts e2e/roles.spec.ts e2e/security-headers.spec.ts e2e/selection.spec.ts
           e2e/settings.spec.ts e2e/shell.spec.ts e2e/signed-out.spec.ts e2e/vibrancy.spec.ts
         env:
@@ -251,6 +256,8 @@ jobs:
       - name: Network assertion (no market-data host reached, every guard installed)
         if: ${{ always() }}
         run: node scripts/e2e-day/recorded-day.mjs assert-net --work "$RUNNER_TEMP/recorded-day"
+      - name: Production shape (AT-68, MKT-110 - AU the only enabled market, IN and US built and off, slot build names AU only)
+        run: node scripts/e2e-day/assert-production-shape.mjs --work "$RUNNER_TEMP/recorded-day"
 
   # PLT-072: the Yahoo fetcher is Python; its tests mock yfinance and never touch the network.
   python:

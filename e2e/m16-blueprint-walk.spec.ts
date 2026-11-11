@@ -10,6 +10,7 @@ import { PAGES } from "./pages";
 // @ts-expect-error plain .mjs without types
 import { findSecretShapes } from "../scripts/architecture/schema.mjs";
 import { EMAIL, ROLE_LIST, concretePath, signIn, type Role } from "./helpers";
+import { modelLeaks } from "./support/leaks";
 
 const ROOT = process.cwd();
 const MODEL = JSON.parse(
@@ -20,10 +21,6 @@ const MODEL_IDS = MODEL.elements
   .filter((e) => ["slot", "workflow", "secret", "table", "llm-role", "host"].includes(e.type))
   .map((e) => e.id);
 const BLUEPRINT = /blueprint/i;
-
-function leaks(body: string): string[] {
-  return MODEL_IDS.filter((id) => body.includes(id)).slice(0, 5);
-}
 
 async function walk(context: BrowserContext, role: Role | null) {
   const seen: string[] = [];
@@ -41,7 +38,7 @@ async function walk(context: BrowserContext, role: Role | null) {
       expect(html, `owner ${url}`).not.toMatch(BLUEPRINT);
     } else if (role !== "owner") {
       expect(html, `${role ?? "anonymous"} ${url}`).not.toMatch(BLUEPRINT);
-      expect(leaks(html), `${role ?? "anonymous"} ${url} model text`).toEqual([]);
+      expect(modelLeaks(html, MODEL_IDS), `${role ?? "anonymous"} ${url} model text`).toEqual([]);
     }
   }
   return seen;
@@ -88,7 +85,7 @@ test("non-owner and anonymous responses to the Blueprint paths carry no model te
     if (role) await signIn(context, role);
     for (const p of ["/blueprint", "/api/blueprint/model", "/api/blueprint/export"]) {
       const body = await (await context.request.get(p)).text();
-      expect(leaks(body), `${role ?? "anonymous"} ${p}`).toEqual([]);
+      expect(modelLeaks(body, MODEL_IDS), `${role ?? "anonymous"} ${p}`).toEqual([]);
     }
     await context.close();
   }
@@ -101,7 +98,7 @@ test("the pinned Owner's model response does carry model text (the check can fai
   const context = await browser.newContext({ baseURL });
   await signIn(context, "owner");
   const body = await (await context.request.get("/api/blueprint/model")).text();
-  expect(leaks(body).length).toBeGreaterThan(0);
+  expect(modelLeaks(body, MODEL_IDS).length).toBeGreaterThan(0);
   await context.close();
 });
 

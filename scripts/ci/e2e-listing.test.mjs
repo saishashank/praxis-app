@@ -191,3 +191,15 @@ test("the lanes: empty, populated, rich and walks, with the Lighthouse script co
     /e2e\/lighthouse\.spec\.ts/,
   );
 });
+
+test("AT-68 (M19 E2): market-off.spec.ts runs in the empty lane, and no CI lane enables a market", () => {
+  const i = real();
+  const steps = yaml.load(i.ciText).jobs.e2e.steps.filter((s) => s.run);
+  const lane = steps.find((s) => /e2e\/market-off\.spec\.ts/.test(s.run));
+  assert.ok(lane, "market-off.spec.ts is listed in a lane step");
+  assert.equal(String(lane.env?.E2E_SCENARIO ?? "empty"), "empty");
+  // the production shape (AU the only enabled market) is the point of the spec: no lane may set the variable
+  for (const s of steps) assert.equal(s.env?.PRAXIS_MARKETS_ENABLED, undefined, `step "${s.name}"`);
+  assert.equal(yaml.load(i.ciText).jobs.e2e.env?.PRAXIS_MARKETS_ENABLED, undefined);
+  assert.ok(i.specFiles.includes("e2e/market-off.spec.ts"));
+});
