@@ -212,7 +212,8 @@ describe("slot table (docs/M2_design.md section 3)", () => {
     }
     // The allow-listed files exist and are dispatch-only.
     for (const y of [backupYml, backfillYml, maintenanceYml, arenaYml, signalsYml]) {
-      expect(y).toMatch(/^on: workflow_dispatch$/m);
+      // M19 C2 (D-1052): a dispatch may carry `inputs` (the market), so the block form counts too.
+      expect(y).toMatch(/^on:(?: workflow_dispatch$|\r?\n {2}workflow_dispatch:)/m);
       expect(y).not.toMatch(/^\s*schedule:/m);
     }
     // GL-07 (D-209): the Batch-1 fallback has its own schedule beside the dispatch.
