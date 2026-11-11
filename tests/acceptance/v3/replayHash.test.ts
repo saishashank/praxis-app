@@ -275,6 +275,23 @@ describe("M19 identity baselines (D-1007): AT-32 and AT-50 hashes never change",
     expect(rows.decision_card).toBeGreaterThan(0);
     expect(rows.cortex_decision).toBeGreaterThan(0);
     expect(rows.arena_order).toBeGreaterThan(0);
+    // D-1008 (Fable review): `market` is out of the combined hash because 0034 adds columns and the IN/US
+    // rows; the AU row's pre-0034 columns (the 0004 table) are asserted literally instead, so a change to
+    // AU's zone, hours, cut-off or currency cannot slip past the identity proof.
+    const au = await db.execute(
+      "SELECT code, tz, open_time, close_time, cutoff_time, currency, mode FROM market WHERE code = 'AU'",
+    );
+    expect(au.rows.map((r) => ({ ...r }))).toEqual([
+      {
+        code: "AU",
+        tz: "Australia/Sydney",
+        open_time: "10:00",
+        close_time: "16:00",
+        cutoff_time: "18:10",
+        currency: "AUD",
+        mode: "full",
+      },
+    ]);
     if (RECORD) {
       expect(at50Recorded, "AT-50 ran first").toMatch(/^[0-9a-f]{64}$/);
       const out: Baseline = {
