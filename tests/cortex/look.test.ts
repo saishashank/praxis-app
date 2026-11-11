@@ -118,8 +118,9 @@ describe("quarter arithmetic", () => {
   });
 });
 
-// R3-I4 (D-820): database-backed and bounded by the 30 s test timeout, so it is a timing-sensitive lane: one retry in CI only.
-describe("[timing] the live look (CTX-053 in the app)", { retry: process.env.CI ? 1 : 0 }, () => {
+// M18 TST-136 (D-968): no retry wrapper and no timing tag in the name. Nothing here measures time: `now` is injected into every
+// call, so the result is a function of the seeded rows only; the 30 s test timeout bounds database set-up.
+describe("the live look (CTX-053 in the app)", () => {
   it("on today's data (no live outcomes) nothing is written and every family stays shadow", async () => {
     const db = await freshDb("main");
     const r = await runStatusLooks(db, { market: M, d: D, now: NOW });
