@@ -50,12 +50,14 @@ import type { CellStatistic } from "@/lib/stats/cells";
 import type { AngleDef, AngleStatus } from "./angles/types";
 import {
   atr20Micro,
+  baseBookId,
   familyPlan,
   wouldHaveOutcome,
   type BookState,
   type Decision,
   type FamilyNightRule,
   type FamilyStatusMap,
+  type NightChallenger,
   type NightInputs,
   type NightOutput,
   type StateRef,
@@ -108,6 +110,7 @@ import {
   insertNight,
   insertState,
   insertOutcome,
+  isLearnerRow,
   latestMaps,
   latestPassports,
   statesInForce,
@@ -668,7 +671,58 @@ export type StoreReads = {
   }[];
   readonly statesFromD: readonly { code: string; kind: StateKind; fromD: string }[];
   readonly sourcesOff: ReadonlySet<InputKind>;
+  /** C.5: who leads each family as of the night (`cortex_leader`); absent family = the fixed rule. */
+  readonly leaders?: LeaderMap;
 };
+
+/** C.5: one family's leader in force on a night (the latest `cortex_leader` row with since_d <= d). */
+export type LeaderRow = {
+  readonly family: Family;
+  readonly sinceD: string;
+  readonly leader: "fixed" | "learner";
+  readonly learnerRuleVersion: string | null;
+  readonly learnerGeneration: number | null;
+};
+export type LeaderMap = ReadonlyMap<Family, LeaderRow>;
+
+/** Reads the leaders in force on night `d` (the seam `loadStoreReads` takes, so tests can stub it). */
+export type LeaderReader = (db: Client, market: string, d: string) => Promise<LeaderMap>;
+
+/**
+ * C.5: the latest `cortex_leader` row per family with `since_d <= d` (migration 0031). A database
+ * without the table yet (before 0031) has no leader: the empty map, every family led by its fixed
+ * rule. Any other read error is not swallowed.
+ */
+export async function readLeaders(db: Client, market: string, d: string): Promise<LeaderMap> {
+  let rows: readonly Record<string, unknown>[];
+  try {
+    const r = await db.execute({
+      sql: `SELECT l.family, l.since_d, l.leader, l.learner_rule_version, l.learner_generation
+            FROM cortex_leader l
+            WHERE l.market = ? AND l.since_d = (SELECT MAX(x.since_d) FROM cortex_leader x
+              WHERE x.market = l.market AND x.family = l.family AND x.since_d <= ?)
+            ORDER BY l.family`,
+      args: [market, d],
+    });
+    rows = r.rows as unknown as Record<string, unknown>[];
+  } catch (e) {
+    if (/no such table/i.test(String((e as Error)?.message ?? e))) return new Map();
+    throw e;
+  }
+  const out = new Map<Family, LeaderRow>();
+  for (const r of rows) {
+    const family = text(r.family);
+    if (!isV1Family(family)) continue;
+    out.set(family, {
+      family,
+      sinceD: text(r.since_d),
+      leader: text(r.leader) === "learner" ? "learner" : "fixed",
+      learnerRuleVersion: r.learner_rule_version === null ? null : text(r.learner_rule_version),
+      learnerGeneration: r.learner_generation === null ? null : Number(r.learner_generation),
+    });
+  }
+  return out;
+}
 
 /** Sources switched off in `source_status` as the input kinds the Cortex names them (DAT-127). */
 export async function loadSourcesOff(db: Client): Promise<ReadonlySet<InputKind>> {
@@ -685,9 +739,14 @@ export async function loadSourcesOff(db: Client): Promise<ReadonlySet<InputKind>
   return sourcesOff;
 }
 
+/**
+ * The store reads of night `d`. D-924: the maps are those in force at the night's decision cut-off
+ * (`cutoffHhmm`, the stage passes `params.decisionCutoff`); C.5: the leaders through `readLeaders`
+ * (default `readLeaders`; a test may stub it).
+ */
 export async function loadStoreReads(
   db: Client,
-  o: { market: string; d: string },
+  o: { market: string; d: string; cutoffHhmm?: string; readLeaders?: LeaderReader },
 ): Promise<StoreReads> {
   const cellRows: { result: unknown }[] = [];
   for (const f of V1_FAMILIES) {
@@ -698,7 +757,7 @@ export async function loadStoreReads(
   const sourcesOff = await loadSourcesOff(db);
   return {
     status: await familyStatusMap(db, o.market, o.d),
-    maps: await latestMaps(db, o.market),
+    maps: await latestMaps(db, o.market, o.d, o.cutoffHhmm),
     cellRows,
     passports: await latestPassports(db, o.market),
     ...(await (async () => {
@@ -714,6 +773,7 @@ export async function loadStoreReads(
       };
     })()),
     sourcesOff,
+    leaders: await (o.readLeaders ?? readLeaders)(db, o.market, o.d),
   };
 }
 
@@ -739,21 +799,93 @@ function cellFromResult(result: unknown): CellStatistic | null {
   };
 }
 
-/** The newest map of each family (newest fit over all rule versions, as `currentMap`). */
-function newestPerFamily(rows: readonly MapRow[]): Map<Family, MapRow> {
-  const out = new Map<Family, MapRow>();
+const newerMap = (m: MapRow, have: MapRow | undefined): boolean =>
+  have === undefined ||
+  m.fittedAt > have.fittedAt ||
+  (m.fittedAt === have.fittedAt && m.ruleVersion > have.ruleVersion);
+
+/** D-923: a family's newest learner row (of `ruleVersion` when given); undefined when none. */
+function newestLearner(
+  rows: readonly MapRow[],
+  family: Family,
+  ruleVersion: string | null,
+): MapRow | undefined {
+  let out: MapRow | undefined;
   for (const m of rows) {
-    if (!isV1Family(m.family)) continue;
-    const have = out.get(m.family);
-    if (
-      have === undefined ||
-      m.fittedAt > have.fittedAt ||
-      (m.fittedAt === have.fittedAt && m.ruleVersion > have.ruleVersion)
-    ) {
-      out.set(m.family, m);
-    }
+    if (m.family !== family || !isLearnerRow(m)) continue;
+    if (ruleVersion !== null && m.ruleVersion !== ruleVersion) continue;
+    if (newerMap(m, out)) out = m;
   }
   return out;
+}
+
+/**
+ * The map each family trades on tonight: its newest fit over the FIXED rule versions (as
+ * `currentMap`). D-923 / C.5: a learner row (`params.learner === true`) is skipped unless `leaders`
+ * says the learner leads the family; then the family's newest learner row (of the leader's
+ * `learner_rule_version` when it names one) is the family's map, or the fixed one when none exists.
+ */
+export function newestPerFamily(
+  rows: readonly MapRow[],
+  leaders: LeaderMap = new Map(),
+): Map<Family, MapRow> {
+  const out = new Map<Family, MapRow>();
+  for (const m of rows) {
+    if (!isV1Family(m.family) || isLearnerRow(m)) continue;
+    if (newerMap(m, out.get(m.family))) out.set(m.family, m);
+  }
+  for (const [family, l] of [...leaders].sort((a, b) => cmp(a[0], b[0]))) {
+    if (l.leader !== "learner") continue;
+    const learner = newestLearner(rows, family, l.learnerRuleVersion);
+    if (learner !== undefined) out.set(family, learner);
+  }
+  return out;
+}
+
+/** The `CortexMap` of a stored row (D-923: the learner fields only when the row carries them). */
+function cortexMapOf(family: Family, m: MapRow): CortexMap {
+  const p = m.params as unknown as Record<string, unknown>;
+  return {
+    family,
+    ruleVersion: m.ruleVersion,
+    fittedAt: m.fittedAt,
+    a: m.params.a,
+    b: m.params.b,
+    sMean: m.params.s_mean,
+    sSd: m.params.s_sd,
+    K: m.params.K,
+    clusters: m.params.clusters as CortexMap["clusters"],
+    activeSetHash: m.activeSetHash,
+    nEff: m.nEff,
+    // the stored weights as they are: the refit guard checks them against the stored hash (LRN-AT-6)
+    ...(p.weights === undefined ? {} : { weights: p.weights as CortexMap["weights"] }),
+    ...(typeof p.weights_hash === "string" ? { weightsHash: p.weights_hash } : {}),
+    ...(typeof p.generation === "number" ? { generation: p.generation } : {}),
+    ...(p.learner === true ? { learner: true } : {}),
+  };
+}
+
+/**
+ * D-923: the weights a rule scores with, read leniently from `params_json.weights`: every value that
+ * is not a number becomes NaN and a non-object becomes {}, so a malformed row never scores — its
+ * weights then differ from the stored ones and the refit guard says `map_invalid` (never fixed).
+ */
+function weightsOf(v: unknown): FamilyNightRule["weights"] {
+  const isObj = (x: unknown): x is Record<string, unknown> =>
+    typeof x === "object" && x !== null && !Array.isArray(x);
+  if (!isObj(v)) return {};
+  const numbers = (x: unknown): Record<string, number> | undefined =>
+    isObj(x)
+      ? Object.fromEntries(
+          Object.entries(x).map(([k, w]) => [k, typeof w === "number" ? w : Number.NaN]),
+        )
+      : undefined;
+  const angle = numbers(v.angle);
+  const cluster = numbers(v.cluster);
+  return {
+    ...(angle === undefined ? {} : { angle }),
+    ...(cluster === undefined ? {} : { cluster }),
+  };
 }
 
 /**
@@ -799,6 +931,14 @@ export function ruleFromMap(family: Family, map: MapRow | undefined): FamilyNigh
     anchor !== undefined
       ? { entryEvery, entryAnchor: anchor }
       : {};
+  // D-923: a learner rule version's fields; a map without them reads exactly as before
+  const generation = num(p.generation);
+  const learner = {
+    ...(p.weights === undefined ? {} : { weights: weightsOf(p.weights) }),
+    ...(p.learner === true ? { learner: true } : {}),
+    ...(typeof p.based_on === "string" ? { basedOn: p.based_on } : {}),
+    ...(generation === undefined ? {} : { generation }),
+  };
   return {
     ruleVersion: map.ruleVersion,
     clusters: map.params.clusters as FamilyNightRule["clusters"],
@@ -811,6 +951,7 @@ export function ruleFromMap(family: Family, map: MapRow | undefined): FamilyNigh
     ...(angles === undefined ? {} : { angles }),
     ...(p.plan === "time_hold" && hold !== undefined ? { plan: "time_hold" as const, hold } : {}),
     ...cadence,
+    ...learner,
   };
 }
 
@@ -836,27 +977,28 @@ export function buildNightInputs(b: InputBuild): NightInputs {
   if (b.view.sessions[t] !== b.d) {
     throw new RangeError(`the world ends on ${b.view.sessions[t]}, not ${b.d}`);
   }
-  const newest = newestPerFamily(b.store.maps);
+  const leaders = b.store.leaders ?? new Map<Family, LeaderRow>();
+  const newest = newestPerFamily(b.store.maps, leaders);
+  const fixedNewest = newestPerFamily(b.store.maps);
   const maps = new Map<Family, CortexMap>();
   const rules = new Map<Family, FamilyNightRule>();
+  // C.4: the other rule of each family runs beside it in the shadow arm: the learner while the fixed
+  // rule leads, the fixed rule (`#fixed`) while the learner leads (the roles swap, same code path)
+  const challengers = new Map<Family, NightChallenger>();
   for (const family of V1_FAMILIES) {
     const m = newest.get(family);
-    if (m !== undefined) {
-      maps.set(family, {
-        family,
-        ruleVersion: m.ruleVersion,
-        fittedAt: m.fittedAt,
-        a: m.params.a,
-        b: m.params.b,
-        sMean: m.params.s_mean,
-        sSd: m.params.s_sd,
-        K: m.params.K,
-        clusters: m.params.clusters as CortexMap["clusters"],
-        activeSetHash: m.activeSetHash,
-        nEff: m.nEff,
+    if (m !== undefined) maps.set(family, cortexMapOf(family, m));
+    rules.set(family, ruleFromMap(family, m));
+    const other =
+      m !== undefined && isLearnerRow(m)
+        ? fixedNewest.get(family)
+        : newestLearner(b.store.maps, family, null);
+    if (other !== undefined) {
+      challengers.set(family, {
+        rule: ruleFromMap(family, other),
+        map: cortexMapOf(family, other),
       });
     }
-    rules.set(family, ruleFromMap(family, m));
   }
   const cells = new Map<string, CellStatistic>();
   for (const c of b.store.cellRows) {
@@ -888,6 +1030,7 @@ export function buildNightInputs(b: InputBuild): NightInputs {
       ? {}
       : { contextBooks: b.contextBooks }),
     rules,
+    ...(challengers.size === 0 ? {} : { challengers }),
     states: b.store.states.map((s) => ({
       code: s.code,
       kind: s.kind,
@@ -1189,7 +1332,8 @@ export async function persistNight(
         x,
         tiltOf(x.bookId),
         undefined,
-        inputs.rules.get(x.family)?.ruleVersion,
+        // C.4: a challenger row (`#learn` / `#fixed`) carries its own rule version
+        x.ruleVersion ?? inputs.rules.get(x.family)?.ruleVersion,
       ),
     ),
   ];
@@ -1412,7 +1556,11 @@ export async function cortexStage(db: Client, o: StageOptions): Promise<StageRes
   );
   const t = view.sessions.length - 1;
   stop();
-  const store0 = await loadStoreReads(db, { market: o.market, d: o.d });
+  const store0 = await loadStoreReads(db, {
+    market: o.market,
+    d: o.d,
+    cutoffHhmm: o.params.decisionCutoff,
+  });
   const advanced = await advanceStates(db, {
     market: o.market,
     d: o.d,
@@ -1576,9 +1724,10 @@ export async function scoreOutcomes(
   const profileOf = async (bookId: string) => {
     const hit = profileCache.get(bookId);
     if (hit !== undefined) return hit;
+    // C.4: a challenger row (`E01#learn`, `E01#fixed`) is costed as its real book
     const rs = await db.execute({
       sql: "SELECT params_json FROM cohort WHERE id = ?",
-      args: [bookId],
+      args: [baseBookId(bookId)],
     });
     const profile =
       rs.rows.length === 0
