@@ -55,7 +55,7 @@ jobs:
   e2e:
     needs: app
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -66,14 +66,47 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: E2E + accessibility (TST-126; local production build, throwaway databases)
-        run: npx playwright test
-      - name: Readability grade 8 (UXN-030; populated seed)
+      # TST-134 / D-966 (M18): every spec file in e2e/ is listed below in exactly one lane step, and a spec
+      # that needs another lane FAILS (e2e/support/requireScenario.ts), it never skips.
+      # scripts/ci/e2e-listing.test.mjs parses these steps: a file in no lane, in two, or a listed file
+      # that does not exist, fails the smoke tests. Add a new spec to a lane here.
+      - name: E2E lane empty + accessibility (TST-126; local production build, throwaway databases)
+        run: >-
+          npx playwright test
+          e2e/a11y.spec.ts e2e/home.spec.ts e2e/honesty.spec.ts e2e/keyboard.spec.ts
+          e2e/m14-data-files.spec.ts e2e/m16-blueprint-access.spec.ts e2e/m16-blueprint-page.spec.ts
+          e2e/m16-blueprint-walk.spec.ts e2e/mobile.spec.ts e2e/owner-flow.spec.ts e2e/pages.spec.ts
+          e2e/reviews.spec.ts e2e/roles.spec.ts e2e/security-headers.spec.ts e2e/selection.spec.ts
+          e2e/settings.spec.ts e2e/shell.spec.ts e2e/signed-out.spec.ts e2e/vibrancy.spec.ts
+        env:
+          E2E_SCENARIO: empty
+      - name: E2E lane empty - screenshots of every sweep page (TST-127; capture only)
+        run: npx playwright test e2e/screens.spec.ts --project=screens
+        env:
+          E2E_SCENARIO: empty
+          E2E_SCREENS: "1"
+      - name: E2E lane populated - readability grade 8 (UXN-030; populated seed)
         run: npx playwright test e2e/readability.spec.ts --project=desktop
         env:
           E2E_SCENARIO: populated
-      - name: Lighthouse mobile on Home (AT-26; populated seed)
+      - name: E2E lane populated - Lighthouse mobile on Home (AT-26; populated seed)
         run: npm run test:lighthouse
+      - name: E2E lane rich - the seeded states (steelman, robustness, Cortex, experts, picks)
+        run: >-
+          npx playwright test
+          e2e/m11l-steelman.spec.ts e2e/m13l-experts.spec.ts e2e/m14-robustness.spec.ts
+          e2e/m15-cortex.spec.ts e2e/picks-sections.spec.ts --project=desktop
+        env:
+          E2E_SCENARIO: rich
+          E2E_STATES: all
+      # The design names the AT-65 family-badge page for this lane; that page is not in PAGES yet (walks.spec.ts), so the
+      # lane walks four existing pages until it is added (a filter that matches no page would pass vacuously).
+      - name: E2E lane walks - the walk capture (AT-65 family-badge page joins when it exists)
+        run: npx playwright test e2e/walks.spec.ts --project=desktop
+        env:
+          E2E_SCENARIO: rich
+          E2E_WALK: ${{ runner.temp }}/walk
+          E2E_WALK_ONLY: home,picks,strategies,reviews-learned
       - name: Upload Playwright report (failure only)
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
