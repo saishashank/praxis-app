@@ -15,6 +15,7 @@ import {
   renderSchedule,
   slotForSchedule,
 } from "../time/genWatchdogCron.mjs";
+import { OPS_SLOT_TIMES } from "../../src/lib/market/profileCore.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const read = (f) => readFileSync(path.join(root, f), "utf8");
@@ -166,7 +167,9 @@ test("the Worker dispatches this file only through listed-only slots at 20:40 an
   wd.forEach((body, i) => {
     const [id, time, input] = want[i];
     assert.ok(body.includes(`id: "${id}"`), id);
-    assert.ok(body.includes(`time: "${time}"`), id);
+    // M19 (D-1053): the slot time is the expression `ops.watchdog_HHMM.at`, its value in OPS_SLOT_TIMES
+    assert.ok(body.includes(`time: ops.watchdog_${input}.at`), id);
+    assert.equal(OPS_SLOT_TIMES[`watchdog_${input}`].at, time, id);
     assert.ok(body.includes(`fixedInputs: { slot: "${input}" }`), id);
     for (const line of [
       'runner: "actions"',
