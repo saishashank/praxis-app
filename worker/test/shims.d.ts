@@ -10,6 +10,12 @@ declare module "node:sqlite" {
     close(): void;
   }
 }
+// M18 B1 (HMAC v2): tests compute the body SHA-256 the signed message carries.
+declare module "node:crypto" {
+  export function createHash(algorithm: "sha256"): {
+    update(data: string): { digest(encoding: "hex"): string };
+  };
+}
 declare module "*.sql?raw" {
   const text: string;
   export default text;
