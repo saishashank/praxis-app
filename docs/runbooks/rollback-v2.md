@@ -1,6 +1,6 @@
 # Rolling back from V2 to V1
 
-Applies once migrations 0015 to 0032 have reached a database. Rehearse it once on staging before production (V2 go-live step "Try the rollback once").
+Applies once migrations 0015 to 0032 have reached a database. Staging is retired (D-964), so the rehearsal is a local one: run the steps below against a copy of the migrated local database of the recorded day (`node scripts/e2e-day/recorded-day.mjs run ...` leaves `main.db` in its work folder), then do the production steps.
 
 ## What stays true
 

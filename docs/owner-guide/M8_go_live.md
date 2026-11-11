@@ -1,5 +1,7 @@
 # Owner guide for milestone M8 (go-live)
 
+> **History (M18, D-964).** This guide was written when a staging environment existed. Staging is retired: the staging end-to-end day, the staging ZAP scan and the Nightly suite are replaced by the CI job `recorded-day`, the CI streak and an authenticated ZAP scan of the local build (`docs/runbooks/gates.md`). The body below is unchanged and is kept as the record of how go-live was done; where it says "staging", read "the recorded day". Rotating secrets: `docs/runbooks/rotate-secrets.md`.
+
 ## What this is
 
 This guide takes you from "the build is finished" to "the first real trading day". You do every step in it. The build agent never does an Owner step, never sees a secret and never revokes or rotates anything. [BLD-040, SEC-101]
