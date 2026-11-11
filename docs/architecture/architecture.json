@@ -6675,6 +6675,35 @@
       }
     },
     {
+      "id": "slot:calendar-draft",
+      "type": "slot",
+      "name": "calendar-draft",
+      "purpose": "Yearly trading-calendar draft (M18 OPS-103, D-961): 1 November 09:00; OFF until the Owner lists it",
+      "specIds": [
+        "PLT-071",
+        "PLT-073"
+      ],
+      "owner": "worker",
+      "schedule": "09:00 Australia/Sydney local",
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A missed slot is caught up by the Worker clock or reported by the watchdog.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "platform"
+      ],
+      "source": "worker/src/schedule.ts",
+      "attrs": {
+        "dispatchable": true,
+        "enabled": true,
+        "runner": "actions",
+        "workflow": "calendar-draft.yml"
+      }
+    },
+    {
       "id": "slot:decision-cutoff",
       "type": "slot",
       "name": "decision-cutoff",
@@ -7107,6 +7136,35 @@
         "enabled": true,
         "runner": "actions",
         "workflow": "replay.yml"
+      }
+    },
+    {
+      "id": "slot:turso-usage",
+      "type": "slot",
+      "name": "turso-usage",
+      "purpose": "Daily Turso usage sample (M18 OPS-104, D-958): 06:40; OFF until the Owner lists it",
+      "specIds": [
+        "PLT-071",
+        "PLT-073"
+      ],
+      "owner": "worker",
+      "schedule": "06:40 Australia/Sydney local",
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A missed slot is caught up by the Worker clock or reported by the watchdog.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "platform"
+      ],
+      "source": "worker/src/schedule.ts",
+      "attrs": {
+        "dispatchable": true,
+        "enabled": true,
+        "runner": "actions",
+        "workflow": "turso-usage.yml"
       }
     },
     {
@@ -20520,6 +20578,17 @@
       ]
     },
     {
+      "id": "service:worker|contains|slot:calendar-draft",
+      "from": "service:worker",
+      "to": "slot:calendar-draft",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "platform"
+      ]
+    },
+    {
       "id": "service:worker|contains|slot:decision-cutoff",
       "from": "service:worker",
       "to": "slot:decision-cutoff",
@@ -20679,6 +20748,17 @@
       "id": "service:worker|contains|slot:replay",
       "from": "service:worker",
       "to": "slot:replay",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "agents",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:worker|contains|slot:turso-usage",
+      "from": "service:worker",
+      "to": "slot:turso-usage",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
@@ -20848,6 +20928,16 @@
       ]
     },
     {
+      "id": "slot:calendar-draft|dispatch|workflow:calendar-draft",
+      "from": "slot:calendar-draft",
+      "to": "workflow:calendar-draft",
+      "kind": "dispatch",
+      "contract": "workflow_dispatch from the Worker clock with the dispatch token (name only).",
+      "views": [
+        "platform"
+      ]
+    },
+    {
       "id": "slot:decision-cutoff|dispatch|workflow:asx-fetch",
       "from": "slot:decision-cutoff",
       "to": "workflow:asx-fetch",
@@ -20977,6 +21067,16 @@
       "contract": "workflow_dispatch from the Worker clock with the dispatch token (name only).",
       "views": [
         "agents"
+      ]
+    },
+    {
+      "id": "slot:turso-usage|dispatch|workflow:turso-usage",
+      "from": "slot:turso-usage",
+      "to": "workflow:turso-usage",
+      "kind": "dispatch",
+      "contract": "workflow_dispatch from the Worker clock with the dispatch token (name only).",
+      "views": [
+        "platform"
       ]
     },
     {

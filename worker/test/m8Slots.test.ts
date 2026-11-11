@@ -63,6 +63,8 @@ const GO_LIVE_ACTIONS = [
   "llm-bakeoff",
   "watchdog-2040",
   "watchdog-2150",
+  "calendar-draft", // M18 OPS-103
+  "turso-usage", // M18 OPS-104
 ];
 const GO_LIVE_ROUTES = [
   "alert-flush",

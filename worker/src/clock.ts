@@ -107,6 +107,11 @@ export type Facts = {
    * dispatched slot is never dispatched again (fail safe).
    */
   closedKeys?: ReadonlySet<string>;
+  /**
+   * M18 (D-953): run-record keys with a success/degraded record, for `Slot.recheck.needsKeyPrefix`
+   * (2b is re-dispatched only after 2a settled). Absent = unknown, so such a slot is never re-dispatched.
+   */
+  settledKeys?: ReadonlySet<string>;
 };
 
 /** The runtime list `worker_state.slots_enabled`: absent, a valid list, or unreadable (fail safe). */
@@ -134,7 +139,10 @@ export const RECHECK_CLOSED_SQL =
   "OR (status = 'failed' AND json_extract(details_json, '$.navDays') IS NOT NULL) " +
   "OR (status = 'skipped' AND json_extract(details_json, '$.reason') IS NOT 'no_completion_marker' " +
   // R4-I3 (D-833): a capped catch-up leaves a `skipped` record that does NOT close the night
-  "AND json_extract(details_json, '$.reason') IS NOT 'catch_up_capped') " +
+  "AND json_extract(details_json, '$.reason') IS NOT 'catch_up_capped' " +
+  // M18 (D-953): a 2b that gave up waiting for 2a did not decide the night, so the clock may run it again
+  // (only once 2a has settled: Slot.recheck.needsKeyPrefix)
+  "AND json_extract(details_json, '$.reason') IS NOT 'no_2a_success') " +
   // R2-I3 (D-808): a night REFUSED because the previous session is not closed is closed FOR THE RECHECK
   // only (the guard in closeBooks.ts does not count it): a second run the same day refuses the same way.
   "OR (status = 'failed' AND json_extract(details_json, '$.reason') = 'previous_session_not_closed'))";
@@ -153,6 +161,7 @@ export function candidateSlots(local: Local, slots: readonly Slot[] = AU_SLOTS):
         s.everyMin === undefined &&
         (!s.tradingDaysOnly || !isWeekend(local)) &&
         (s.monthly !== "first-saturday" || isFirstSaturday(local)) &&
+        (s.annual === undefined || isAnnualDay(local, s.annual)) &&
         local.minute >= s.minute &&
         local.minute <= Math.min(s.minute + (s.recheck?.untilMin ?? s.catchUpMin), 1439),
     )
@@ -251,6 +260,10 @@ export function parseInputs(raw: string | undefined): Record<string, string> | n
 export const isFirstSaturday = (local: Local): boolean =>
   local.dow === 6 && Number(local.date.slice(8, 10)) <= 7;
 
+/** True on the given local month/day (M18 `annual` slots). */
+export const isAnnualDay = (local: Local, a: { month: number; day: number }): boolean =>
+  Number(local.date.slice(5, 7)) === a.month && Number(local.date.slice(8, 10)) === a.day;
+
 /** What to dispatch now, in dispatch order. Pure: no I/O. */
 export function decide(
   local: Local,
@@ -308,7 +321,12 @@ export function decideWithSkips(
         facts.closedKeys !== undefined &&
         st.n < MAX_ATTEMPTS &&
         nowMs - Date.parse(st.at) >= rc.afterMin * MINUTE_MS &&
-        !facts.closedKeys.has(`${rc.keyPrefix}${local.date}`)
+        !facts.closedKeys.has(`${rc.keyPrefix}${local.date}`) &&
+        // M18 (D-953): a night that needs another job first (2b needs 2a) waits for its settled record
+        (rc.needsKeyPrefix === undefined ||
+          facts.settledKeys?.has(`${rc.needsKeyPrefix}${local.date}`) === true) &&
+        // M18 (D-953) `once`: a dispatch at or after slot + afterMin was itself the recheck
+        (rc.once !== true || sydneyLocal(Date.parse(st.at)).minute < slot.minute + rc.afterMin)
       ) {
         out.push({ slot, key, attempt: st.n + 1, prev: stored.raw, inputs });
       }
@@ -467,6 +485,25 @@ export async function runClock(
         args: [...recheckKeys, iso(nowMs - RECHECK_RUNNING_MAX_MS)],
       });
     }
+    // M18 (D-953): the prerequisite night of a recheck (2a for 2b) must be success/degraded, the same
+    // predicate batch 2b's own `closedOk` uses, so a re-dispatch never lands on a skip again.
+    const settledKeysWanted = [
+      ...new Set(
+        cands.flatMap((s) =>
+          s.recheck?.needsKeyPrefix ? [`${s.recheck.needsKeyPrefix}${local.date}`] : [],
+        ),
+      ),
+    ];
+    let iSettled = -1;
+    if (settledKeysWanted.length > 0) {
+      iSettled = first.length;
+      first.push({
+        sql:
+          `SELECT DISTINCT concurrency_key FROM run_record WHERE concurrency_key IN (${placeholders(settledKeysWanted.length)}) ` +
+          "AND status IN ('success', 'degraded')",
+        args: settledKeysWanted,
+      });
+    }
     let r1: StmtResult[];
     try {
       summary.requests++;
@@ -500,6 +537,7 @@ export async function runClock(
       slotsEnabled: parseSlotsEnabled(listRaw),
       slotInputs,
       closedKeys: iClosed >= 0 ? new Set(r1[iClosed].rows.map((r) => String(r[0]))) : undefined,
+      settledKeys: iSettled >= 0 ? new Set(r1[iSettled].rows.map((r) => String(r[0]))) : undefined,
     };
     const { actions, skipped } = decideWithSkips(local, facts, states, nowMs, slots);
     summary.skipped = skipped;

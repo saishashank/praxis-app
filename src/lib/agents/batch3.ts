@@ -184,7 +184,9 @@ async function recordSkip(db: Client, o: ReviewOptions, reason: string): Promise
 
 async function decidedOk(db: Client, market: string, d: string): Promise<boolean> {
   const rs = await db.execute({
-    sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND status IN ('success', 'degraded') LIMIT 1`,
+    // M18 (D-953): a 2b recorded `late_2a` decided nothing, so batch 3 has nothing to review
+    sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND status IN ('success', 'degraded')
+          AND COALESCE(json_extract(details_json, '$.reason'), '') <> 'late_2a' LIMIT 1`,
     args: [signalsKey(market, d)],
   });
   return rs.rows.length > 0;

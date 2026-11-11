@@ -65,7 +65,23 @@ export type Slot = {
    * a slot whose run record `<keyPrefix><local date>` is neither closed nor running is dispatched
    * again (bounded by MAX_ATTEMPTS; the script's own success check makes a duplicate a no-op).
    */
-  recheck?: { keyPrefix: string; afterMin: number; untilMin: number };
+  recheck?: {
+    keyPrefix: string;
+    afterMin: number;
+    untilMin: number;
+    /**
+     * M18 (D-953): re-dispatch at most once through the recheck. A dispatch made at or after
+     * `slot minute + afterMin` was itself a recheck, so it is not checked again.
+     */
+    once?: boolean;
+    /**
+     * M18 (D-953): another run-record key prefix (`<prefix><local date>`) that must have a
+     * success/degraded record before the re-dispatch (2b needs a settled 2a). Unknown = no re-dispatch.
+     */
+    needsKeyPrefix?: string;
+  };
+  /** Runner "actions": run only on this local calendar day each year (M18, `calendar-draft`). */
+  annual?: { month: number; day: number };
   note: string;
 };
 
@@ -80,11 +96,13 @@ export const DISPATCHABLE_WORKFLOWS: readonly string[] = [
   "backfill-history.yml",
   "backfill-prices.yml",
   "backup.yml",
+  "calendar-draft.yml",
   "ingest-batch1.yml",
   "kb-archive.yml",
   "llm-bakeoff.yml",
   "maintenance.yml",
   "replay.yml",
+  "turso-usage.yml",
   "watchdog.yml",
 ];
 
@@ -285,6 +303,10 @@ export const AU_SLOTS: readonly Slot[] = [
   // M4 T8 (D-087): batch 2b "signals and orders". Allow-listed, slot OFF like arena-close: the
   // script waits for batch 2a of the same session and, with market.mode other than `full`, writes
   // only a skipped run record (D-066). It decides one session; there is no catch-up.
+  // M18 OPS-106 (D-666, D-953): 2b waits 20 minutes for 2a and then records `skipped (no_2a_success)`.
+  // From 18:25 to 18:40 a 2b that has not closed its night is dispatched again ONCE, and only when 2a has
+  // a success/degraded record by then (`needsKeyPrefix`); after 18:40 the script itself records the night
+  // as degraded `late_2a`. Scheduling only: the inputs and outputs of 2b are unchanged.
   slot({
     id: "arena-signals",
     time: "18:10",
@@ -294,6 +316,14 @@ export const AU_SLOTS: readonly Slot[] = [
     marketBound: true,
     priority: 16,
     catchUpMin: 30,
+    // M18 OPS-106 (D-666, D-953): recheck from 18:25 to 18:40, once, needs a settled 2a (see above the slot).
+    recheck: {
+      keyPrefix: "arena-2b:AU:",
+      afterMin: 15,
+      untilMin: 30,
+      once: true,
+      needsKeyPrefix: "arena-2a:AU:",
+    },
     enabled: true,
     requiresListing: true,
     note: "Batch 2b signals and orders (M4 T8, ARN-060/020): A4/A3/A2, family rules, exits, FAM-001 entries, C2/C3 controls; OFF until the Owner enables the arena",
@@ -512,5 +542,40 @@ export const AU_SLOTS: readonly Slot[] = [
     enabled: true,
     requiresListing: true,
     note: "Intraday scan 10:32-15:32 every 30 min (M17, AGT-140); OFF until the Owner lists it and accepts the quote source",
+  }),
+  // M18 OPS-103 (D-961): the yearly trading-calendar draft, 1 November 09:00 Melbourne (Sydney time is
+  // the same clock). calendar-draft.yml is dispatch-only; with no `market` and no `year` input it drafts
+  // next year for every market that has calendar rules (the market set lives in the script, so no market
+  // literal is added here). The draft is idempotent (it only inserts into a year with no rows), so a long
+  // catch-up is safe. Listed-only like every go-live slot.
+  slot({
+    id: "calendar-draft",
+    time: "09:00",
+    runner: "actions",
+    workflow: "calendar-draft.yml",
+    annual: { month: 11, day: 1 },
+    tradingDaysOnly: false,
+    marketBound: false,
+    priority: 29,
+    catchUpMin: 180,
+    enabled: true,
+    requiresListing: true,
+    note: "Yearly trading-calendar draft (M18 OPS-103, D-961): 1 November 09:00; OFF until the Owner lists it",
+  }),
+  // M18 OPS-104 (D-958): the daily Turso usage sample, 06:40 Melbourne, before the market day. The
+  // workflow holds the platform token (a GitHub environment secret, never on Vercel or here) and skips
+  // with source `unavailable` while it is absent. Idempotent per day (one sample row per run).
+  slot({
+    id: "turso-usage",
+    time: "06:40",
+    runner: "actions",
+    workflow: "turso-usage.yml",
+    tradingDaysOnly: false,
+    marketBound: false,
+    priority: 30,
+    catchUpMin: 120,
+    enabled: true,
+    requiresListing: true,
+    note: "Daily Turso usage sample (M18 OPS-104, D-958): 06:40; OFF until the Owner lists it",
   }),
 ];
