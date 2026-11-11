@@ -20,6 +20,13 @@ const emailActions = vi.hoisted(() => ({
 vi.mock("@/lib/auth/guard", () => ({ requireUser: (...a: unknown[]) => requireUser(...a) }));
 vi.mock("@/lib/health/summary", () => ({ getHealthSummary: summaryMock }));
 vi.mock("@/lib/db/client", () => ({ mainDb: () => ({}), authDb: () => ({}) }));
+// envFor resolves the market against the market table (D-997); the databases here are empty stubs.
+vi.mock("@/lib/market/profile", async (orig) => ({
+  ...(await orig<typeof import("@/lib/market/profile")>()),
+  enabledMarkets: async () => ["AU"],
+  loadProfile: async () => ({ currency: "AUD" }),
+}));
+vi.mock("@/lib/market/resolve", () => ({ resolveMarketOrNotFound: async () => "AU" }));
 vi.mock("@/app/(app)/health/DayTimelineCheck", () => ({ DayTimelineCheck: () => null })); // M8 T12: async server card, tested on its own
 vi.mock("@/app/(app)/health/NightsCheck", () => ({ NightsCheck: () => null })); // V1-I1: async server card
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) })); // Control Room client island
