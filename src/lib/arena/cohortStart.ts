@@ -1,6 +1,6 @@
 // Cohort start stage `ensureCohorts` (M8 T10; docs/M8_design.md decision 3 and 2.6; ARN-001, BLD-030;
 // D-072...D-077 registry, sizing, ledger, sleeves; D-094 / D-139 arena_control). HIGH-RISK: it puts the
-// A$600 seed cash of every cohort into the ledger.
+// seed cash of every cohort (A$600 in round 1, A$5,000 from round 2) into the ledger.
 //
 // Before this stage no production code called `startCohorts` (only tests). Batch 2b runs it ONCE per
 // night, before the night's signals, and only when the market mode is `full`:
@@ -28,6 +28,7 @@ import {
   cohortSlots,
   planCohortStart,
   resolveCohortParams,
+  roundOverridesFor,
   type CohortParams,
   type CohortStart,
 } from "./cohort";
@@ -44,7 +45,7 @@ export type EnsureCohortsOptions = {
   readonly masterSeed?: bigint;
   /** Controls per family for C2 / C3 (batch 2b passes the configured live count). */
   readonly controlsPerFamily?: number;
-  /** Overrides for the resolved cohort parameters (the default seed is the ARN-001 A$600). */
+  /** Overrides for the resolved cohort parameters (default: the seed of the round the start session belongs to, D-1020). */
   readonly params?: CohortParams;
   /** D-191: also open cohorts for the leverage-sleeve executions (tests of the sleeve only). */
   readonly withLeverage?: boolean;
@@ -110,7 +111,9 @@ export async function ensureCohorts(
     ),
   );
   const byId = new Map(executions.map((e) => [e.id, e]));
-  const params = o.params ?? resolveCohortParams({ market: o.market });
+  // D-1020..D-1022: a slot opened on or after the round-2 date takes the A$5,000 seed.
+  const params =
+    o.params ?? resolveCohortParams({ market: o.market, ...roundOverridesFor(startD) });
   const masterSeed = o.masterSeed ?? ARENA_MASTER_SEED;
 
   const starts: CohortStart[] = [];

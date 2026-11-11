@@ -5,6 +5,7 @@
 // and times, never a price, a limit or a headline.
 import { getConfig } from "@/lib/config/store";
 import type { ConfigKey } from "@/lib/config/keys";
+import { avoidSql, buyIdeaSql, ideaSide, type IdeaSide } from "@/lib/intraday/side";
 import { formatDay, isoWeek, MISSING } from "@/lib/view/format";
 import type { AlertStateName, ClearReason } from "@/lib/alerts/pick/types";
 import { maskKit, marketOf, money, todayD, type LoaderEnv, type MoneyView } from "./shell";
@@ -145,6 +146,13 @@ export type IntradayModel = {
   rows: IntradayRow[];
   /** Candidates beyond the shown maximum ("n more"). */
   more: number;
+  /**
+   * D-1041: "Avoid / watch": bad news with the price down. Never a candidate and never counted as a
+   * result; shown apart, in plain words, up to the same maximum.
+   */
+  avoid: IntradayRow[];
+  /** Avoid / watch rows beyond the shown maximum. */
+  avoidMore: number;
   /** Quote delay in minutes (NFR-041 help text). */
   delayMin: number;
 };
@@ -193,12 +201,15 @@ export async function loadIntraday(env: LoaderEnv): Promise<IntradayModel> {
     total: 0,
     rows: [],
     more: 0,
+    avoid: [],
+    avoidMore: 0,
     delayMin,
   };
   try {
     const today = todayD(env);
     const latest = await env.main.execute({
-      sql: "SELECT MAX(session_d) AS d FROM intraday_candidate WHERE market = ? AND session_d <= ?",
+      sql: `SELECT MAX(session_d) AS d FROM intraday_candidate WHERE market = ? AND session_d <= ?
+            AND (${buyIdeaSql()} OR ${avoidSql()})`,
       args: [market, today],
     });
     const scan = await env.main.execute({
@@ -214,7 +225,7 @@ export async function loadIntraday(env: LoaderEnv): Promise<IntradayModel> {
                    i.name, (SELECT a.title FROM announcement a WHERE a.source = c.item_source
                      AND a.ann_id = c.item_ann_id LIMIT 1) AS title
             FROM intraday_candidate c LEFT JOIN instrument i ON i.market = c.market AND i.code = c.code
-            WHERE c.market = ? AND c.session_d = ?
+            WHERE c.market = ? AND c.session_d = ? AND (${buyIdeaSql("c")} OR ${avoidSql("c")})
             ORDER BY c.materiality DESC, COALESCE(c.sector_adj_ppm, c.move_ppm) DESC, c.code
             LIMIT ?`,
       args: [market, d, MAX_CANDIDATES_READ],
@@ -226,14 +237,14 @@ export async function loadIntraday(env: LoaderEnv): Promise<IntradayModel> {
           r.rows.map((x) => str(x.code)),
         )
       : null;
-    const rows: IntradayRow[] = r.rows.map((x) => {
+    const all = r.rows.map((x) => {
       const code = str(x.code);
       const words = catalystWords(
         x.item_category === null ? null : str(x.item_category),
         x.polarity === null ? null : str(x.polarity),
       );
       const title = !masked && x.title !== null ? str(x.title) : null;
-      return {
+      const row: IntradayRow = {
         code,
         stock: kit ? kit.aliases.label(code) : code,
         company: masked || x.name === null ? null : str(x.name),
@@ -250,7 +261,14 @@ export async function loadIntraday(env: LoaderEnv): Promise<IntradayModel> {
         decisionOutcome: x.decision_outcome === null ? null : str(x.decision_outcome),
         href: masked ? null : `/market/${encodeURIComponent(code)}`,
       };
+      return { row, side: ideaSide(str(x.polarity), num(x.move_ppm)) };
     });
+    const rows = all.filter((x) => x.side === "buy").map((x) => x.row);
+    // the faller with the biggest fall first
+    const avoid = all
+      .filter((x) => x.side === "avoid")
+      .map((x) => x.row)
+      .sort((a, b) => a.movePpm - b.movePpm || (a.code < b.code ? -1 : 1));
     return {
       masked,
       session: masked ? (isoWeek(d) ?? MISSING) : d,
@@ -259,6 +277,8 @@ export async function loadIntraday(env: LoaderEnv): Promise<IntradayModel> {
       total: rows.length,
       rows: rows.slice(0, shownMax),
       more: Math.max(0, rows.length - shownMax),
+      avoid: avoid.slice(0, shownMax),
+      avoidMore: Math.max(0, avoid.length - shownMax),
       delayMin,
     };
   } catch {
@@ -270,13 +290,20 @@ export async function loadIntraday(env: LoaderEnv): Promise<IntradayModel> {
 export async function loadCandidateForCode(
   env: LoaderEnv,
   code: string,
-): Promise<{ session: string; foundTime: string; catalyst: string } | null> {
+): Promise<{
+  session: string;
+  foundTime: string;
+  catalyst: string;
+  /** D-1041: a buy idea is an "Intraday candidate"; a bad-news faller is "Avoid / watch". */
+  side: IdeaSide;
+} | null> {
   try {
     const r = await env.main.execute({
-      sql: `SELECT c.session_d, c.found_at, c.item_category, c.polarity,
+      sql: `SELECT c.session_d, c.found_at, c.item_category, c.polarity, c.move_ppm,
                    (SELECT a.title FROM announcement a WHERE a.source = c.item_source
                      AND a.ann_id = c.item_ann_id LIMIT 1) AS title
             FROM intraday_candidate c WHERE c.market = ? AND c.code = ? AND c.session_d <= ?
+              AND (${buyIdeaSql("c")} OR ${avoidSql("c")})
             ORDER BY c.session_d DESC LIMIT 1`,
       args: [marketOf(env), code, todayD(env)],
     });
@@ -291,6 +318,7 @@ export async function loadCandidateForCode(
       session: str(x.session_d),
       foundTime: melTime(str(x.found_at)),
       catalyst: title ? `${words}: ${title}` : words,
+      side: ideaSide(str(x.polarity), num(x.move_ppm)) ?? "buy",
     };
   } catch {
     return null;
@@ -322,13 +350,15 @@ export async function loadAlertHomeFacts(
     out.hits = num(hits.rows[0]?.n ?? 0);
     const d = (
       await env.main.execute({
-        sql: "SELECT MAX(session_d) AS d FROM intraday_candidate WHERE market = ? AND session_d <= ?",
+        sql: `SELECT MAX(session_d) AS d FROM intraday_candidate WHERE market = ? AND session_d <= ?
+              AND ${buyIdeaSql()}`,
         args: [market, todayD(env)],
       })
     ).rows[0]?.d;
     if (d) {
       const c = await env.main.execute({
-        sql: "SELECT COUNT(*) AS n FROM intraday_candidate WHERE market = ? AND session_d = ?",
+        sql: `SELECT COUNT(*) AS n FROM intraday_candidate WHERE market = ? AND session_d = ?
+              AND ${buyIdeaSql()}`,
         args: [market, str(d)],
       });
       out.candidates = num(c.rows[0]?.n ?? 0);

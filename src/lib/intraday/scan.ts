@@ -356,7 +356,8 @@ export async function evaluateQuotes(db: Exec, x: EvaluateInput): Promise<Evalua
     const atr = h === undefined ? null : atrMicro(h.bars);
     const rule: FamilyStopRule | null =
       atr === null ? null : { atrMicro: atr, multPpm: BigInt(Math.round(x.params.stopAtr * PPM)) };
-    const levels = indicativeLevels(q.lastMicro, rule);
+    // D-1040: only a buy idea carries an indicative limit and stop; an "avoid" row is never a trade
+    const levels = verdict.side === "buy" ? indicativeLevels(q.lastMicro, rule) : null;
     const r = await db.execute({
       sql:
         "INSERT INTO intraday_candidate (market, session_d, code, found_slot, found_at, item_source, " +
@@ -382,7 +383,7 @@ export async function evaluateQuotes(db: Exec, x: EvaluateInput): Promise<Evalua
         JSON.stringify({
           passed: gates.passed,
           failed: gates.failed,
-          polarity_consistent: verdict.polarityConsistent,
+          side: verdict.side,
           stream_state: x.params.streamState,
           delayed: true,
         }),

@@ -430,6 +430,10 @@ export type TradeRow = {
 export type PastRound = {
   round: number;
   startD: string;
+  /** What this round started with, read from the stored round (never a constant). */
+  seed: Money;
+  /** True when the round was closed so a round with a bigger starting amount could begin (D-1022). */
+  endedForNewRound: boolean;
   terminalKind: string | null;
   terminalD: string | null;
   sessions: number | null;
@@ -586,6 +590,9 @@ export async function loadStrategyDetail(
   const pastRounds: PastRound[] = cohorts.map((c, i) => ({
     round: total - i,
     startD: c.startD,
+    seed: money(c.seed),
+    // cohorts are newest first: the next newer round started with more and this one was cut short
+    endedForNewRound: c.terminalKind === "timeout" && i > 0 && (cohorts[i - 1]?.seed ?? 0) > c.seed,
     terminalKind: c.terminalKind,
     terminalD: c.terminalD,
     sessions: sessionsOf.get(c.id) ?? null,

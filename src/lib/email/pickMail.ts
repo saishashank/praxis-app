@@ -7,6 +7,7 @@
 // mailer derives "unmailed" from `pick_alert` rows without such a row and a lost tick is repaired.
 // Writes here: `pick_alert_mail` only (the e-mail rows go through sendEmail / recordRow).
 import type { Client } from "@libsql/client";
+import { buyIdeaSql } from "@/lib/intraday/side";
 import { inQuietHours, parseQuietHours, type QuietHours } from "@/lib/alerts/api";
 import {
   MAILED_CLEAR_REASONS,
@@ -707,6 +708,7 @@ export async function mailNewCandidates(
           FROM intraday_candidate i
           LEFT JOIN announcement a ON a.source = i.item_source AND a.ann_id = i.item_ann_id
           WHERE i.market = ? AND i.session_d = ? AND i.email_key IS NULL
+            AND ${buyIdeaSql("i")}
             AND json_extract(i.gates_json, '$.failed') IS NULL
           ORDER BY i.found_at, i.code`,
     args: [c.market, c.sessionD],

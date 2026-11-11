@@ -376,7 +376,7 @@ function SummaryCard({ v }: { v: HomeView }) {
       {s.tiles.length === 0 ? (
         <Empty hue="brand-b" shape="list">
           <span>No strategy is running yet.</span>{" "}
-          <span>The six strategies appear here with A$600 each after tonight&apos;s run.</span>
+          <span>The six strategies appear here with A$5,000 each after tonight&apos;s run.</span>
         </Empty>
       ) : (
         <ul className={tileStrip} aria-label="Strategies today">
@@ -509,8 +509,8 @@ export function HomeContent({
 
       {empty ? (
         <EmptyState motif="home" hue="home" title="No data yet">
-          {result.text} The six strategies show A$600, Starting, once they exist. First trade ideas
-          come after tonight&apos;s run; the first Evening Review arrives this evening.
+          {result.text} The six strategies show A$5,000, Starting, once they exist. First trade
+          ideas come after tonight&apos;s run; the first Evening Review arrives this evening.
         </EmptyState>
       ) : null}
 

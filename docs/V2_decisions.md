@@ -4,6 +4,18 @@
 
 One line per V2 decision from D-206 on, grouped by milestone, with the file that holds the full text. D-001 to D-252 are in [07_decision_log.md](07_decision_log.md). Improvement-batch decisions are in the "Improvements" section at the end of `M13L_design.md`.
 
+## M3 (M3_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-1020 | (O-82) The live arena's second round starts every strategy and every control with A$5,000 (ROUND2_SEED_MICRO, src/lib/arena/cohort.ts). |
+| D-1021 | (O-82) A book of the A$5,000 round holds up to 6 positions (ROUND2_MAX_OPEN_POSITIONS, stored in the cohort's params_json; the A$600 round keeps 2). |
+| D-1022 | (O-82) The switch happens once, at a fixed date, through the normal terminal and restart path (ARN-053), not through a clock or a manual step. |
+| D-1023 | (O-82) Every page that shows a past or present round reads what it started with from the stored cohort row (cohort.seed_micro, params_json), never from a con... |
+| D-1024 | (O-82) The signal ledger notional ledger_notional_aud (ARN-080, A$600) and the cost-gate notional (D-215, COST_GATE_NOTIONAL_MICRO, FAM-005) stay A$600. |
+| D-1025 | (O-82) The config key max_open_positions (ARN-003) keeps its value 2 and bounds 1-2: it still describes the first-round book and the replays; its description... |
+| D-1026 | (O-82) A round_switch ending is stored as kind timeout (no schema change) and its outcome is the liquidation NAV at the close. |
+
 ## M7 (M7_design.md)
 
 | Id | Decision |
@@ -626,3 +638,10 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-915 | (Owner 2026-11-10: "the strategies still show percentage as of yesterday, not the delayed profit or loss for the day") During the session the Home strategy t... |
 | D-916 | (Owner 2026-11-10: a delayed feed on the Market tab without exhausting the Yahoo limit) The Market tables show, for each listed company, the delayed quote al... |
 | D-918 | (Owner 2026-11-10: "the changes on the strategy cards are not visible on the Strategies page") The Strategies page tiles show the same day's change as Home (... |
+| D-1040 | (O-83) A candidate is a buy idea: the catalyst's polarity is good news AND the price is up (the raw move and the sector-adjusted move both). |
+| D-1041 | (O-83) "Avoid / watch": the bad-news fallers are listed apart on Home and Picks under that heading, with a plain sentence ("Bad news and a falling price. The... |
+| D-1042 | (O-83) "Still early in its rise" uses the existing measures only: a buy idea is up by at least the qualifying move (moveThresholdPpm: intraday_move_min_pct 4... |
+| D-1043 | (O-83) A catalyst of neutral polarity (the volume-creep arm, A3) is neither a buy idea nor an avoid row, so those armed codes are still quoted but write no r... |
+| D-1044 | (O-83) Everything that reads intraday rows reads buy ideas only: the top-5 "found intraday" credit (daily.ts feeds dailyTop5; a faller found at -2 % was cred... |
+| D-1045 | (O-83) Outcome tracking already reflects a buy at the found price: measureCandidates computes excess_found_* from the previous close times (1 + move_ppm), th... |
+| D-1046 | (O-83) Not decided here: whether to take an Avoid / watch fall into the evening decision as a veto. |

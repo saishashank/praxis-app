@@ -8,6 +8,8 @@ import { Rail } from "@/components/ui/Family";
 import { Masked, Money } from "@/components/ui/Values";
 import { displayName, formatPpm } from "@/lib/view/format";
 import {
+  AVOID_EXPLAINER,
+  AVOID_TITLE,
   delayStatement,
   INTRADAY_EXPLAINER,
   INTRADAY_NO_LEVELS,
@@ -122,6 +124,39 @@ export function IntradaySection({
         <p data-testid="intraday-more" className="m-0 text-sm text-text-muted">
           {model.more} more not shown.
         </p>
+      ) : null}
+      {model.avoid.length > 0 ? (
+        <div data-testid="intraday-avoid" className="mt-2 flex min-w-0 flex-col gap-2">
+          <h3 className="m-0 text-base font-semibold">{AVOID_TITLE}</h3>
+          <p className="m-0 text-sm text-text-muted">{AVOID_EXPLAINER}</p>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0" aria-label="Avoid or watch">
+            {model.avoid.map((r) => (
+              <li key={r.code} className="min-w-0 text-sm" data-testid="intraday-avoid-row">
+                <span className="font-semibold">
+                  {r.href ? (
+                    <Link href={r.href} className="text-accent underline">
+                      {r.stock}
+                    </Link>
+                  ) : (
+                    r.stock
+                  )}
+                  {r.company ? (
+                    <span className="font-normal text-text-muted"> · {displayName(r.company)}</span>
+                  ) : null}
+                </span>
+                <span className="text-text-muted">
+                  {" · "}
+                  {r.catalyst}
+                  {" · "}Found {r.foundTime} · down {formatPpm(Math.abs(r.movePpm), { digits: 1 })}{" "}
+                  so far
+                </span>
+              </li>
+            ))}
+          </ul>
+          {model.avoidMore > 0 ? (
+            <p className="m-0 text-sm text-text-muted">{model.avoidMore} more not shown.</p>
+          ) : null}
+        </div>
       ) : null}
       <p className="m-0 text-xs text-text-muted">{delayStatement(model.delayMin)}</p>
     </section>

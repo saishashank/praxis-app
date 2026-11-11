@@ -27,7 +27,7 @@ async function addCandidates(db: Client, start: string, ppm: number, tag: string
       sql:
         "INSERT INTO intraday_candidate (market, session_d, code, found_slot, found_at, item_source, " +
         "item_ann_id, item_category, materiality, polarity, move_ppm, gates_json, excess_open_5_ppm) " +
-        "VALUES ('AU', ?, ?, 'scan-1030', ?, 'asx', ?, 'earnings', 2, 'positive', 0, '[]', ?)",
+        "VALUES ('AU', ?, ?, 'scan-1030', ?, 'asx', ?, 'earnings', 2, 'positive', 50000, '[]', ?)",
       args: [sd, `${tag}${i}`, `${sd}T00:30:00Z`, `ann-${tag}${i}`, ppm + ((i * 7) % 11) * 500],
     });
   }

@@ -17,6 +17,7 @@
 // it in through `hooks`. Without hooks the loop still runs on strategy signals alone.
 // Deterministic: the same stored data gives the same document. Reads: see dailyLoad.ts (about 190k rows).
 import type { Client } from "@libsql/client";
+import { buyIdeaSql } from "@/lib/intraday/side";
 import type { CortexLearnSection } from "@/lib/cortex/learn/words";
 import type { CalendarRow } from "@/lib/data/calendar";
 import { addDays, isTradingDay, previousTradingDay, sessionsBetween } from "@/lib/data/calendar";
@@ -382,7 +383,9 @@ async function top5Of(
   let intraday: IntradayFound[] = [];
   try {
     const r = await db.execute({
-      sql: "SELECT code, found_at, move_ppm FROM intraday_candidate WHERE market = ? AND session_d = ?",
+      // D-1044: only buy ideas earn the "found intraday" credit; an avoid / watch faller never does
+      sql: `SELECT code, found_at, move_ppm FROM intraday_candidate WHERE market = ? AND session_d = ?
+            AND ${buyIdeaSql()}`,
       args: [o.market, o.d],
     });
     intraday = r.rows.map((x) => ({

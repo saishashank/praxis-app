@@ -701,8 +701,10 @@ function scaleFraction(v: bigint, f: Rational): bigint {
 
 /** One leg through the M3 sizing engine on `fraction` of the cash and the NAV (ARN-024a). */
 export function sizeLeg(ctx: SizingContext, leg: Leg, legs: number): SizingResult {
+  // `legs` is the number of equal parts the cash is cut into: 1 (all), 2 (half each, FAM-001), or
+  // up to the open slots in the A$5,000 round (D-1021).
   const fraction = mulRat(
-    legs === 2 ? HALF : makeRational(1n),
+    legs > 1 ? makeRational(1n, BigInt(legs)) : makeRational(1n),
     leg.halfSize ? HALF : makeRational(1n),
   );
   const cash = scaleFraction(ctx.cashMicro < 0n ? 0n : ctx.cashMicro, fraction);
@@ -732,6 +734,13 @@ export function sizeLeg(ctx: SizingContext, leg: Leg, legs: number): SizingResul
  */
 export function planLegs(ctx: SizingContext, ranked: readonly Leg[], slots: number): LegResult[] {
   if (ranked.length === 0 || slots < 1) return [];
+  // D-1021 (O-82): a book that may hold more than two positions (the A$5,000 round) spreads its cash
+  // evenly over its OPEN slots, so one idea never takes all of it; each leg stands alone (a leg that
+  // fails its sizing rules is a rejection, the others still go). Books with at most two positions
+  // keep the FAM-001 rule below exactly.
+  if (ctx.params.maxOpenPositions > 2) {
+    return ranked.slice(0, slots).map((leg) => ({ leg, sizing: sizeLeg(ctx, leg, slots) }));
+  }
   if (slots >= 2 && ranked.length >= 2) {
     const two = [ranked[0]!, ranked[1]!].map((leg) => ({ leg, sizing: sizeLeg(ctx, leg, 2) }));
     if (two.every((r) => r.sizing.accepted)) return two;

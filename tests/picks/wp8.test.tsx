@@ -83,12 +83,12 @@ async function seedAlert(userId: number, rank: number, state: "armed" | "hit" | 
   return id;
 }
 
-async function addCandidate(code: string, mat: number, move: number) {
+async function addCandidate(code: string, mat: number, move: number, polarity = "positive") {
   await w.main.execute({
     sql: `INSERT INTO intraday_candidate (market, session_d, code, found_slot, found_at, item_source, item_ann_id,
             item_category, materiality, polarity, move_ppm, sector_adj_ppm, gates_json)
-          VALUES ('AU', ?, ?, '1030', ?, 'asx', ?, 'results', ?, 'positive', ?, ?, '{}')`,
-    args: [SESSION, code, `${SESSION}T00:30:00.000Z`, `a-${code}`, mat, move, move],
+          VALUES ('AU', ?, ?, '1030', ?, 'asx', ?, 'results', ?, ?, ?, ?, '{}')`,
+    args: [SESSION, code, `${SESSION}T00:30:00.000Z`, `a-${code}`, mat, polarity, move, move],
   });
 }
 
@@ -105,6 +105,10 @@ describe("WP8 loaders", () => {
     await addCandidate("ZZUP", 3, 60000);
     await addCandidate("ZZDN", 2, 90000);
     await addCandidate("ZZOTH", 2, 50000);
+    // D-1040/D-1041: a bad-news faller is "Avoid / watch", not a candidate; mixed news is neither
+    await addCandidate("ZZSSM", 3, -45000, "negative");
+    await addCandidate("ZZMIX", 3, 70000, "neutral");
+    await addCandidate("ZZRISE", 3, 70000, "negative"); // bad news but the price is UP: neither
   });
 
   it("chips: the user's own rows; a masked user gets no limit", async () => {
@@ -123,6 +127,9 @@ describe("WP8 loaders", () => {
     expect(m.rows[0]!.code).toBe("ZZUP");
     expect(m.total).toBe(3);
     expect(m.rows.length + m.more).toBe(3);
+    expect(m.rows.map((r) => r.code)).not.toContain("ZZSSM");
+    expect(m.avoid.map((r) => [r.code, r.movePpm])).toEqual([["ZZSSM", -45000]]);
+    expect(m.avoid[0]!.catalyst).toMatch(/bad news/);
     const v = await loadIntraday(envOf(w, "viewer"));
     for (const r of v.rows) {
       expect(r.stock).toMatch(/^Stock [A-Z]$/);
@@ -191,7 +198,7 @@ describe("WP8 loaders", () => {
       args: [`cand:AU:${SESSION}:ZZUP`, `${SESSION}T01:00:00.000Z`],
     });
     const f = await loadAlertHomeFacts(envOf(w, "owner"), `${SESSION}T00:00:00.000Z`);
-    expect(f).toEqual({ hits: 1, candidates: 3, suppressed: 1 });
+    expect(f).toEqual({ hits: 1, candidates: 3, suppressed: 1 }); // avoid rows are not candidates
   });
 });
 
@@ -236,6 +243,8 @@ describe("WP8 components and wording", () => {
           total: 6,
           rows: [row],
           more: 5,
+          avoid: [],
+          avoidMore: 0,
           delayMin: 20,
         }}
       />,
@@ -275,6 +284,8 @@ describe("WP8 components and wording", () => {
           total: 1,
           rows: [row],
           more: 0,
+          avoid: [],
+          avoidMore: 0,
           delayMin: 20,
         }}
       />,
@@ -298,6 +309,8 @@ describe("WP8 components and wording", () => {
           total: 0,
           rows: [],
           more: 0,
+          avoid: [],
+          avoidMore: 0,
           delayMin: 20,
         }}
       />,
