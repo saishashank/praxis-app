@@ -33,8 +33,9 @@
       - run: npm ci
       # The only step with database secrets; it reads only.
       - name: Diagnose the sessions (read-only)
-        run: node scripts/arena/diagnose.mjs --dates "$DATES"
+        run: node scripts/arena/diagnose.mjs --dates "$DATES" ${SCENARIO:+--scenario "$SCENARIO"}
         env:
           DATES: ${{ inputs.dates }}
+          SCENARIO: ${{ inputs.scenario }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}

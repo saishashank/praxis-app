@@ -188,7 +188,7 @@ describe("asx-ingest", () => {
     expect(await asxIngestMain([], {}, { out: (s) => l.push(s) })).toBe(2);
     expect(await asxIngestMain(["--dir", "x"], {}, { out: (s) => l.push(s) })).toBe(1);
     expect(l).toEqual([
-      "asx-ingest: failed (usage: --dir <dir>)",
+      "asx-ingest: failed (usage: --dir <dir> | --write-state <file>)",
       "asx-ingest: failed (database not configured)",
     ]);
   });

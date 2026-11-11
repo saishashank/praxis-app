@@ -55,6 +55,8 @@ export const NOT_CONFIG = new Set([
   "FROM", // backfill-index.yml: the first-date input of a one-off dispatch (D-175), not configuration
   "HISTORY_FLAG", // asx-fetch.yml: the --history switch of a dispatch (D-194), not configuration
   "DATES", // diagnose-signals.yml: the sessions input of a read-only dispatch, not configuration
+  "SCENARIO", // diagnose-signals.yml: the optional named read-only scenario of a dispatch (D-974), not configuration
+  "ASX_FETCH_BUDGET_MS", // scripts/asx/fetch.mjs: optional run-budget override (D-972), not configuration
   "TARGET",
   "TARGETS",
   "TRAINS",

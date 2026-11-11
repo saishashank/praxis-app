@@ -3,7 +3,7 @@
 # clock dispatches this file every 30 minutes on trading days, and its post-deploy step dispatches it
 # once with `history` to fill each company's latest announcements. workflow_dispatch ONLY, no
 # `schedule:` (PLT-015). Same security pattern as backfill-prices.yml: the ASX fetch step has NO
-# secrets and no database access; secrets are referenced ONLY in `env:` of the store step.
+# secrets and no database access; secrets are referenced ONLY in `env:` of the state-read and store steps.
 # SEC-108 c: the job checks out the latest approved deploy-production commit, not the release
 # head. `deployment: false` gives the job the environment's secrets without creating a deployment
 # record, so a data run never counts as an approved deploy (D-023).
@@ -64,9 +64,20 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: npm ci
-      # No secrets here: this step only talks to the ASX and writes the files on the runner.
+      # DAT-251 a / DAT-252 (D-972, D-974): a READ-ONLY look at the delisted codes, the list-failure
+      # counter and the Wikidata register row, written to a file the secret-free fetch step reads.
+      # Never fatal: without it the fetch runs with no skip list and no fallback.
+      - name: Read the fetch state (read-only)
+        run: |
+          mkdir -p asx
+          node scripts/asx/ingest.mjs --write-state asx/state.json
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+      # No secrets here: this step only talks to the ASX (and, after three failed company-list runs
+      # with the Owner's acceptance, to Wikidata) and writes the files on the runner.
       - name: Fetch from the ASX (no secrets)
-        run: node scripts/asx/fetch.mjs --out-dir asx $HISTORY_FLAG
+        run: node scripts/asx/fetch.mjs --out-dir asx --state asx/state.json $HISTORY_FLAG
         env:
           HISTORY_FLAG: ${{ inputs.history && '--history' || '' }}
           ASX_USER_AGENT: ${{ vars.ASX_USER_AGENT }}
