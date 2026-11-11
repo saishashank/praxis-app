@@ -187,7 +187,7 @@ CI: the latest `build` CI runs known when this was written are 43019668103 (head
 | Production markets | AU only (`markets_enabled = ["AU"]`); `tests/market/profiles.test.ts` ("production runs AU in full and nothing else") |
 | ASX Worker | `ASX_LIVE` off (blocked by ASX since 2026-11-02); ASX data only through the GitHub `asx-fetch` job |
 | No staging | retired (D-964); no `PRAXIS_ENV=staging` path added; recorded-day uses `PRAXIS_ENV=recorded` |
-| Market literals | no `IN`, `US`, `Asia/Kolkata` or `America/New_York` added outside the AU profile fixtures (M19 owns the profile) |
+| Market literals | no `IN`, `US`, `Asia/Kolkata` or `America/New_York` added outside the AU profile fixtures (M19 owns the profile); checked: `git diff 63d6868 b0685ca -- src scripts worker/src .github` has no added line matching them |
 | Cost | $0: no new provider, plan or paid API |
 | gitleaks | runs in CI: see CI run on the PR head |
 
