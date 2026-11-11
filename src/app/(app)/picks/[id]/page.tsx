@@ -6,7 +6,6 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/guard";
 import { envFor } from "@/lib/ui/loaders/shell";
 import { loadPickDetail } from "@/lib/ui/loaders/picks";
-import { Breadcrumb } from "@/components/ui/Nav";
 import { ShowDetails } from "@/components/ui/States";
 import { Masked, Money, SimulatedLabel } from "@/components/ui/Values";
 import { ValidationBadge } from "@/components/ui/Badges";
@@ -44,10 +43,6 @@ export default async function WhyThisPickPage({ params }: { params: Promise<{ id
 
   return (
     <main className="mx-auto flex w-full max-w-3xl min-w-0 flex-col gap-4 px-4 py-6">
-      <Breadcrumb
-        backHref="/picks"
-        items={[{ label: "Picks", href: "/picks" }, { label: "Why this pick" }]}
-      />
       <header className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Why this pick: {pick.stock}</h1>
         {pick.company ? <p className="m-0 text-text-muted">{pick.company}</p> : null}

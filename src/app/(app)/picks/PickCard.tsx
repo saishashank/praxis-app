@@ -11,7 +11,16 @@ import { PickFamily } from "./FamilyInfo";
 import { Term } from "@/components/ui/Overlays";
 import { CandidateBadge, ValidationBadge } from "@/components/ui/Badges";
 import { Masked, Money, SimulatedLabel } from "@/components/ui/Values";
-import { FAMILY_BADGES, honestyLine, pct, STOP_GAP_HOVER, stateText, timeFrameText } from "./text";
+import {
+  FAMILY_BADGES,
+  honestyLine,
+  pct,
+  profileHue,
+  STOP_GAP_HOVER,
+  stateText,
+  timeFrameText,
+} from "./text";
+import { ProfileLabel } from "./ProfileLabel";
 
 function StateBadge({ pick }: { pick: PickRowView }) {
   const o = pick.outcome;
@@ -39,14 +48,19 @@ export function PickCard({
   masked,
   beatsLuck,
   chip = null,
+  profile = null,
 }: {
   pick: PickRowView;
+  /** D-1002: the risk profile of the list; colours the card edge and names it. */
+  profile?: string | null;
   masked: boolean;
   beatsLuck: boolean;
   chip?: AlertChipView | null;
 }) {
   const frame = timeFrameText(pick.timeFrameSessions);
-  const hue = FAMILY_BADGES[pick.family]?.code;
+  const famCode = FAMILY_BADGES[pick.family]?.code;
+  const hue =
+    profile !== null ? profileHue(profile) : famCode ? `family-${famCode}` : "outcome-flat";
   const primaryHref = pick.cardHref ?? `/picks/${encodeURIComponent(pick.id)}`;
   return (
     <article
@@ -55,10 +69,13 @@ export function PickCard({
       className="ui-motion block min-w-0 break-words motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0 motion-safe:hover:shadow-md [[data-motion=off]_&]:hover:translate-y-0 [[data-motion=off]_&]:hover:shadow-none"
     >
       <Rail
-        hue={hue ? `family-${hue}` : "outcome-flat"}
+        hue={hue}
         header={
           <header className="flex flex-wrap items-start justify-between gap-2">
             <div className="flex min-w-0 flex-col gap-1">
+              {profile !== null ? (
+                <ProfileLabel profile={profile} suffix={` #${pick.rank}`} className="text-xs" />
+              ) : null}
               <PickFamily pick={pick} />
               {pick.candidate ? <CandidateBadge /> : null}
               <h2 className="m-0 text-lg font-semibold">

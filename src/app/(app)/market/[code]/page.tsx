@@ -9,7 +9,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/guard";
 import { Banner, EmptyState } from "@/components/ui/States";
-import { Breadcrumb } from "@/components/ui/Nav";
 import { BAND_BG, hueStyle } from "@/components/ui/hue";
 import { Masked } from "@/components/ui/Values";
 import { loadCompany } from "@/lib/ui/loaders/company";
@@ -71,10 +70,6 @@ export default async function CompanyPage({ params }: { params: Promise<{ code: 
 
   return (
     <main className="mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-4 px-4 py-6">
-      <Breadcrumb
-        items={[{ href: "/market", label: "Market" }, { label: c.stock }]}
-        backHref="/market"
-      />
       <header
         data-testid="company-header"
         data-sector-hue={hue ?? "none"}

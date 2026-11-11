@@ -18,6 +18,17 @@ export const honestyLine = (beatsLuck: boolean): string =>
 export const profileLabel = (name: string): string =>
   name.length === 0 ? name : name.charAt(0).toUpperCase() + name.slice(1).replace(/_/g, " ");
 
+/**
+ * D-1002: each risk profile has its own accent, from the existing palette tokens (so contrast holds
+ * in every theme): Aggressive = hot pink, Balanced = amber, Conservative = green. Other names use grey.
+ */
+export const PROFILE_HUES: Readonly<Record<string, string>> = {
+  aggressive: "tier-p0",
+  balanced: "tier-p1",
+  conservative: "status-allowed",
+};
+export const profileHue = (name: string): string => PROFILE_HUES[name] ?? "outcome-flat";
+
 type ProfileRules = { tiers: string[]; maxPct: number; riskPct: number };
 
 /** pick_profiles (config) -> one validated entry, or null when the shape is not as expected. */
@@ -36,9 +47,23 @@ export function profileRules(cfg: unknown, name: string): ProfileRules | null {
 
 const TIER_WORDS: Record<string, string> = { U1: "large", U2: "mid-size", U3: "small" };
 
+/** D-1000: what each risk band holds, in plain words (a stock sits in one band only). */
+const BAND_WORDS: Record<string, string> = {
+  aggressive:
+    "The most volatile and the smaller companies, chosen for the biggest possible gain, and the most risk. No stock here is in the other two lists.",
+  balanced:
+    "Middle-of-the-road companies, chosen for the best typical return for the risk taken. No stock here is in the other two lists.",
+  conservative:
+    "The calmest large companies, chosen where similar past trades lost the least, for the lowest risk. No stock here is in the other two lists.",
+};
+
 /** The one-sentence rule of a profile (UXN-040 hover), from the stored caps. */
-export function profileSentence(rules: ProfileRules | null): string {
+export function profileSentence(rules: ProfileRules | null, name?: string): string {
   if (rules === null) return "Rules for this profile are not available.";
+  const band = name === undefined ? undefined : BAND_WORDS[name];
+  if (band !== undefined) {
+    return `${band} No more than ${rules.maxPct}% of the portfolio goes into one company, and you would lose at most about ${rules.riskPct}% of the portfolio if a pick hits its stop-loss.`;
+  }
   // D-200: "large and mid-size companies", not "largest, mid-size companies"
   const words = rules.tiers.map((t) => TIER_WORDS[t] ?? t);
   const sizes =

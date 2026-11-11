@@ -24,12 +24,9 @@ import { CountUp, PopIn } from "./Motion";
 import { WelcomeBanner } from "./WelcomeBanner";
 import { IntradaySection } from "../picks/IntradaySection";
 import { PortfolioCard } from "../picks/PortfolioCard";
+import { ProfileLabel } from "../picks/ProfileLabel";
+import { profileHue } from "../picks/text";
 
-const PROFILE_NAME: Record<string, string> = {
-  aggressive: "Aggressive",
-  balanced: "Balanced",
-  conservative: "Conservative",
-};
 const SIZE_NAME: Record<string, string> = { U1: "Large", U2: "Mid", U3: "Small" };
 const MAX_HOME_CARDS = 3; // threshold-ok: UXR-020 shows up to 3 pick cards
 
@@ -324,15 +321,15 @@ function PickCard({ p, masked }: { p: HomePick; masked: boolean }) {
   const fam = familyBadge(p.family);
   return (
     <Rail
-      hue={`family-${fam.code}`}
+      hue={profileHue(p.profile)}
       className="h-full"
       header={
         <span className="flex flex-wrap items-center justify-between gap-2">
           <PopIn>
             <FamilyBadge code={fam.code} label={fam.label} />
           </PopIn>
-          <span className="text-xs text-text-muted">
-            {PROFILE_NAME[p.profile] ?? p.profile} #{p.rank}
+          <span className="text-xs">
+            <ProfileLabel profile={p.profile} suffix={` #${p.rank}`} />
           </span>
         </span>
       }

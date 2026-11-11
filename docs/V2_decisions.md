@@ -343,6 +343,11 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-995 | Chance baseline: named shares / liquid shares x 5 = how many of the five a random list of the same size would hold; "about 1 day in N" = 1 / that number. |
 | D-996 | "Did the picks make money overall": the evening-before picks' mean close-to-close move on the day (distinct shares, equal weight, with how many rose and fell). |
 | D-997 | No look-ahead: the gainers of day d are known only after d's close; the picks counted were published the evening before d (before its open); an intraday find... |
+| D-1000 | (Owner 2026-11-11: "balanced and aggressive have same picks, and conservative is a subset of balanced. Aggressive means more risk appetite ... 2 cannot have... |
+| D-1001 | Order inside a profile, after the validation label (then the stored rank score, code, family and variant as tie-breaks): |
+| D-1002 | Each profile has its own accent on the Home and Picks pick cards (left edge and the profile label), taken from existing palette hues so contrast is already c... |
+| D-1003 | One breadcrumb per page: the shell's (CrumbsView, from ROUTES in src/lib/ui/nav.ts) is the only one; the page-level copies on Track record, Why this pick and... |
+| D-1004 | The Evening Review's "New picks" list shows the valid-until day in market words ("Thu 12 Nov") through formatDay, not the stored ISO date; a masked reader st... |
 
 ## M14 (M14_design.md)
 
