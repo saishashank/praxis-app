@@ -378,7 +378,7 @@ describe("AT-46 5: the LLM-074 reservation and the LLM-075 window guard", () => 
       tokensIn: a.allowed - left,
       tokensOut: 0,
       cached: 0,
-      outcome: "ok",
+      outcome: "spent", // budget filler, not an answered call: the measured mean (OPS-111 (2)) ignores it
       injectionFiltered: 0,
       market: req.market,
       d: req.d,

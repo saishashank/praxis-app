@@ -41,9 +41,9 @@ export const MEASURED_WINDOW_DAYS = 7; // threshold-ok: one trading week of call
 
 /** The first day of the trailing window ending on `d` (YYYY-MM-DD, UTC arithmetic). */
 export function measuredWindowStart(d: string): string {
-  return new Date(Date.parse(`${d}T00:00:00Z`) - (MEASURED_WINDOW_DAYS - 1) * 86_400_000)
+  return new Date(Date.parse(`${d}T00:00:00Z`) - (MEASURED_WINDOW_DAYS - 1) * 86_400_000) // threshold-ok: ms per day
     .toISOString()
-    .slice(0, 10);
+    .slice(0, 10); // threshold-ok: the YYYY-MM-DD prefix
 }
 
 /** A call that reached a provider and was answered: counts toward the measured mean. */
