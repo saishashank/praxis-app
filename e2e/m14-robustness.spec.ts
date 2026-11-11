@@ -6,7 +6,8 @@ import { expect, test } from "@playwright/test";
 import { axeViolations, signIn } from "./helpers";
 import { ensureM14 } from "./seed/m14";
 
-test.skip(process.env.E2E_SCENARIO !== "rich", "needs E2E_SCENARIO=rich");
+import { requireScenario } from "./support/requireScenario";
+requireScenario("rich", "run it in the rich lane: E2E_SCENARIO=rich E2E_STATES=all");
 test.describe.configure({ timeout: 300_000 });
 test.beforeAll(async () => {
   await ensureM14();

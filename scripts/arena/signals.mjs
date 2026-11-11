@@ -1,6 +1,7 @@
 // Batch 2b "signals and orders" CLI (M4 T8, ARN-060, ARN-020, design 4.1). Runs in the `production`
 // GitHub environment on the approved commit (SEC-108 c) from .github/workflows/arena-signals.yml.
-//   node scripts/arena/signals.mjs [--date YYYY-MM-DD] [--wait-minutes N] [--phase 2b|3|learn|words|all]
+//   node scripts/arena/signals.mjs [--date YYYY-MM-DD] [--wait-minutes N] [--phase 2b|3|learn|words|all] [--now <ISO instant>]
+// --now is the simulated clock of the CI recorded day (M18 D-965); refused unless PRAXIS_ENV=recorded.
 // The default phase `all` runs batch 2b and then, when 2b succeeded, batch 3 (the deterministic review
 // numbers: forward signal ledger, scorecards, ARN-101 re-check, kill switch, evidence timeline; M4 T15)
 // in the same job; `--phase 3` re-runs batch 3 alone for a session whose 2b has succeeded. Then come
@@ -20,12 +21,20 @@
 // (src/lib/steelman/cli.ts) after the picks; it never fails the night (it exits 0 and says degraded).
 import { fileURLToPath } from "node:url";
 import { loadEngine } from "./engine.mjs";
+import { parseNow } from "../e2e-day/now.mjs";
 
 const PICKS_ENTRY = "src/lib/picks/cli.ts";
 const STEELMAN_ENTRY = "src/lib/steelman/cli.ts";
 
 /** @param {string[]} argv @param {Record<string, string | undefined>} env */
-export async function run(argv, env, deps = {}) {
+export async function run(argv0, env, deps0 = {}) {
+  const sim = parseNow(argv0, env);
+  if (sim.error) {
+    (deps0.out ?? console.log)(`arena-2b: refused (${sim.error})`);
+    return 2;
+  }
+  const argv = sim.argv;
+  const deps = sim.nowMs ? { ...deps0, nowMs: sim.nowMs } : deps0;
   const { signalsMain } = await loadEngine();
   const code = await signalsMain(argv, env, deps);
   if (code === 2) return code;

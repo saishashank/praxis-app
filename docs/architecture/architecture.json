@@ -14902,6 +14902,7 @@
           "e2e",
           "fixtures",
           "python",
+          "recorded-day",
           "release-gate",
           "secrets",
           "worker"
@@ -14955,7 +14956,7 @@
         "SEC-108"
       ],
       "owner": "actions",
-      "schedule": null,
+      "schedule": "dispatch only",
       "inputs": [],
       "outputs": [],
       "configKeys": [],
@@ -14973,7 +14974,6 @@
           "deploy"
         ],
         "triggers": [
-          "push",
           "workflow_dispatch"
         ]
       }
@@ -15224,7 +15224,7 @@
         "TST-108"
       ],
       "owner": "actions",
-      "schedule": "cron (UTC): 37 15 * * *",
+      "schedule": "dispatch only",
       "inputs": [],
       "outputs": [],
       "configKeys": [],
@@ -15244,7 +15244,6 @@
           "streak"
         ],
         "triggers": [
-          "schedule",
           "workflow_dispatch"
         ]
       }
@@ -15542,12 +15541,10 @@
       "attrs": {
         "file": ".github/workflows/zap-baseline.yml",
         "jobs": [
-          "local",
-          "staging"
+          "local"
         ],
         "triggers": [
-          "push",
-          "workflow_dispatch"
+          "push"
         ]
       }
     }
@@ -21838,16 +21835,6 @@
       "to": "secret:TURSO_PLATFORM_TOKEN_TEMP",
       "kind": "uses",
       "contract": "Reads the secret TURSO_PLATFORM_TOKEN_TEMP from the GitHub environment (name only).",
-      "views": [
-        "security"
-      ]
-    },
-    {
-      "id": "workflow:zap-baseline|uses|secret:TEST_IDENTITY_SECRET_STAGING",
-      "from": "workflow:zap-baseline",
-      "to": "secret:TEST_IDENTITY_SECRET_STAGING",
-      "kind": "uses",
-      "contract": "Reads the secret TEST_IDENTITY_SECRET_STAGING from the GitHub environment (name only).",
       "views": [
         "security"
       ]

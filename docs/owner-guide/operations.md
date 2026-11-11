@@ -83,7 +83,7 @@ On the first Saturday of the month. Allow about 45 minutes. [OPS-020]
 On 1 January, April, July and October. A reminder shows from day 75. The release gate needs a restore drill pass within 120 days. [OPS-020, TST-108]
 
 1. **Restore drill.** Follow section H of `M8_go_live.md`. In short: add your offline private key and a new short-lived Turso token as secrets, run **Restore drill** with mode `drill`, then delete both secrets and revoke the token, then run again with mode `verify-removed`. From the first drill after go-live, the check replays one stored live cohort and compares it with its stored result. [TST-108]
-2. **Staging sign-in.** Sign in once to staging, so Google keeps its OAuth client in use. [VERIFY Google's rule for unused clients]
+2. **Staging sign-in.** Retired: there is no staging (D-964), so there is no OAuth client to keep in use.
 3. **Rotations due.** If any secret is due, rotate it (see "Rotating a secret" below).
 
 ---
@@ -193,10 +193,10 @@ The AT-05b test push is expected. It is not an incident. [AT-05b]
 
 All changes go in by pull request. [OPS-041]
 
-- A merge into `main` deploys **staging only**: the staging app and the staging Worker. A failing test blocks it.
+- A merge into `main` deploys **nothing**: staging is retired (D-964) and `deploy-staging.yml` is dispatch-only. What staging used to prove is proven by the `recorded-day` job of CI (one full AU day on local files, no request leaves the runner).
 - For production, the agent opens a pull request into `release`, from a branch fixed at the chosen commit (`rc/<sha>`). You merge it.
 - The `deploy-production` job then waits. GitHub emails you. Open **Actions**, open the run, select **Review deployments**, tick `deploy-production`, and select **Approve and deploy**. [SEC-108 c]
-- The release gate must pass first. The gate checks the CI jobs, a staging full day, a restore drill in the last 120 days, a staging ZAP run and a recent nightly run. [TST-112]
+- The release gate must pass first. The gate checks the CI jobs, the recorded day (CI job `recorded-day`), the CI streak (three green push runs, the newest on the commit), an authenticated ZAP scan of the local build, and a restore drill in the last 120 days. No condition can be waived. [TST-112, D-964]
 - Every night the app checks the code that runs in production is the last approved commit. If the `release` head or the deployed commit differs and nobody approved it, you get an S1 incident. [SEC-108 d]
 - Backups and archives go to the private data repository. They never start a deploy. [PLT-022a]
 

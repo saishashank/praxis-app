@@ -10,6 +10,11 @@
 // drops entries that are gone (a deliberate, reviewed act, as the file is committed).
 // The ID-to-MUST step (every MUST in ch. 01-12 has a test or an Owner-executed entry) needs the
 // spec text and stays with docs/test-map.md; this check protects what is already mapped.
+// M18 D4 (TST-138, D-970): docs/test-map.md has a sixth column, "V3 home" (where the row runs now that
+// staging is retired: CI, CI recorded-day, local, prod read-only, Owner; combined with " + "). With
+// --summary the check also fails when an acceptance row AT-01…AT-85 or AT-M1…AT-M5 has no row or no valid
+// home. The id list is read from the acceptance chapter copy in spec/14_*.md (V1: AT-01…AT-31, AT-M1…AT-M5)
+// and extended to AT-85 (chapter 14 of V2 and V3 live in the data repo, so the top id is the constant below).
 // Usage: node scripts/ci/test-map.mjs [--root <dir>] [--baseline <file>] [--update [--prune]]
 //        [--summary]   (markdown table; also appended to $GITHUB_STEP_SUMMARY when set)
 // Output: IDs and paths only. Exit 1 on any finding.
@@ -19,7 +24,8 @@ import { fileURLToPath } from "node:url";
 
 const PREFIXES =
   "AT TST SEC UXN UX PLT DAT ARN AGT EML ROL KB NFR LLM BLD VAL REC OPS FAM D O".split(" ");
-export const ID_RE = new RegExp(`\\b(?:${PREFIXES.join("|")})-\\d{1,3}[a-z]?\\b`, "g");
+// AT-M1..AT-M5 (market activation) are acceptance ids too (M18 D4)
+export const ID_RE = new RegExp(`\\b(?:AT-M\\d|(?:${PREFIXES.join("|")})-\\d{1,3}[a-z]?)\\b`, "g");
 export const TEST_FILE_RE = /\.(?:test|spec)\.(?:[cm]?[jt]s|[jt]sx)$/;
 const SCAN_DIRS = ["tests", "worker/test", "scripts", "src", "e2e"];
 // This script's own test cites made-up IDs in fixtures; it is not evidence for any requirement.
@@ -28,6 +34,52 @@ const SKIP_FILES = new Set(["scripts/ci/test-map.test.mjs"]);
 const SKIP_DIRS = new Set(["node_modules", ".next", "dist", ".wrangler"]);
 
 const norm = (p) => p.replace(/\\/g, "/");
+
+export const HOMES = Object.freeze(["CI", "CI recorded-day", "local", "prod read-only", "Owner"]);
+/** The highest numbered acceptance test of ch. 14 V3 (AT-83 to AT-85 are M18's). */
+export const AT_MAX = 85;
+
+/** "CI + Owner" -> ["CI", "Owner"]; null when empty or any part is not a known home. */
+export function parseHome(cell) {
+  const parts = String(cell ?? "")
+    .split(/\s*\+\s*/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  return parts.length > 0 && parts.every((x) => HOMES.includes(x)) ? parts : null;
+}
+
+/** AT-01…AT-85 and AT-M1…AT-M5, plus any AT id the chapter copies in spec/14_*.md list as a row. */
+export function acceptanceIds(root) {
+  const ids = new Set();
+  for (let i = 1; i <= AT_MAX; i++) ids.add(`AT-${String(i).padStart(2, "0")}`);
+  for (let i = 1; i <= 5; i++) ids.add(`AT-M${i}`);
+  try {
+    const dir = path.join(root, "spec");
+    for (const n of fs.readdirSync(dir).filter((x) => /^14_.*\.md$/.test(x))) {
+      for (const m of fs
+        .readFileSync(path.join(dir, n), "utf8")
+        .matchAll(/^\| (AT-(?:M[1-9]|\d{2})) \|/gm)) {
+        ids.add(m[1]);
+      }
+    }
+  } catch {
+    /* no spec copy: the constants above stand */
+  }
+  return [...ids].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
+}
+
+/** Findings: an acceptance id with no row in the map doc, or only rows without a valid V3 home. */
+export function homeFindings(rows, ids) {
+  const findings = [];
+  for (const id of ids) {
+    const mine = rows.filter((r) => r.ids.some((x) => x.replace(/[a-z]$/, "") === id));
+    if (mine.length === 0) findings.push(`${id}: no row in docs/test-map.md`);
+    else if (!mine.some((r) => r.home !== null && r.home !== undefined)) {
+      findings.push(`${id}: no V3 home (one of ${HOMES.join(", ")}) in docs/test-map.md`);
+    }
+  }
+  return findings;
+}
 
 export function idsIn(text) {
   return [...new Set(text.match(ID_RE) ?? [])];
@@ -43,7 +95,7 @@ export function parseMapDoc(md) {
     const ids = idsIn(cells[0]);
     if (!ids.length) continue;
     const files = [...cells[2].matchAll(/`([^`]+)`/g)].map((m) => norm(m[1]).replace(/^\.\//, ""));
-    rows.push({ ids, files });
+    rows.push({ ids, files, home: cells.length >= 6 ? parseHome(cells[5]) : null });
   }
   return rows;
 }
@@ -164,6 +216,12 @@ function main(argv) {
     return 0;
   }
   const findings = checkMap(baseline, current, (f) => fs.existsSync(path.join(root, f)));
+  const docPath = path.join(root, "docs", "test-map.md");
+  if (argv.includes("--summary") && fs.existsSync(docPath)) {
+    findings.push(
+      ...homeFindings(parseMapDoc(fs.readFileSync(docPath, "utf8")), acceptanceIds(root)),
+    );
+  }
   console.log(
     `test-map: ${Object.keys(baseline).length} baseline IDs, ${Object.keys(current).length} current IDs`,
   );

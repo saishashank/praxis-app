@@ -5,7 +5,7 @@
 //   node scripts/ingest/recorded_day.mjs --request request.json --fixtures fixtures \
 //        --output bars.json --index-output index.json --short-output short.json \
 //        [--announcements-output a.json] [--actions-output c.json] [--date YYYY-MM-DD]
-// It needs PRAXIS_ENV=staging (it refuses to run anywhere else, so recorded data never reaches
+// It needs PRAXIS_ENV=staging or recorded (M18 D-965: the CI recorded day; it refuses to run anywhere else, so recorded data never reaches
 // production) and installs the host guard first: any request to ASX or Yahoo throws. It makes no
 // network request itself and needs no secret and no database. Only bars whose code the request
 // asked for are kept. Output: counts only, never a code, row, path or URL (SEC-110).
@@ -32,8 +32,8 @@ const writeJson = (file, value) => {
  */
 export async function run(argv, env, deps = {}) {
   const out = deps.out ?? ((s) => console.log(s));
-  if (env.PRAXIS_ENV !== "staging") {
-    out("recorded_day: failed (runs on staging only, PRAXIS_ENV must be staging)");
+  if (env.PRAXIS_ENV !== "staging" && env.PRAXIS_ENV !== "recorded") {
+    out("recorded_day: failed (runs on staging only, PRAXIS_ENV must be staging or recorded)");
     return 2;
   }
   const uninstall = installHostGuard(env);

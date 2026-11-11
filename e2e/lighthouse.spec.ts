@@ -14,10 +14,9 @@ import { EMAIL } from "./helpers";
 import { createClient } from "@libsql/client";
 import { encode } from "next-auth/jwt";
 
-test.skip(
-  !process.env.LIGHTHOUSE || process.env.E2E_SCENARIO !== "populated",
-  "run through `npm run test:lighthouse` (LIGHTHOUSE=1, populated seed)",
-);
+import { requireEnv, requireScenario } from "./support/requireScenario";
+requireScenario("populated", "run it through `npm run test:lighthouse`");
+requireEnv("LIGHTHOUSE", "run it through `npm run test:lighthouse` (LIGHTHOUSE=1, populated seed)");
 
 const RUNS = 3;
 

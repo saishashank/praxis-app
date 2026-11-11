@@ -10,10 +10,10 @@ import path from "node:path";
 import { setTheme, signIn, type Role } from "./helpers";
 import { ensureRich } from "./seed/rich";
 
-const OUT = process.env.E2E_WALK ?? "";
+import { requireEnv } from "./support/requireScenario";
+const OUT = requireEnv("E2E_WALK", "set E2E_WALK=<dir> to capture a walk (the walks lane)");
 const THEMES_ = (process.env.E2E_WALK_THEME ?? "dark").split(",");
 const ROLES_ = (process.env.E2E_WALK_ROLE ?? "owner").split(",") as Role[];
-test.skip(!OUT, "set E2E_WALK=<dir> to capture a walk");
 test.describe.configure({ timeout: 900_000 });
 test.beforeAll(async () => {
   await ensureRich();

@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { IMAGE_PATTERN } from "./zap-run.mjs";
+import { JOB, STEP } from "./release-gate-core.mjs";
 import {
   assertHardened,
   assertNoUrlOutput,
@@ -13,8 +14,10 @@ import {
 
 const w = load("zap-baseline");
 
-test("triggers: every push to build and main (local scan) and dispatch (staging scan)", () => {
-  assert.deepEqual(Object.keys(w.wf.on), ["push", "workflow_dispatch"]);
+test("triggers: every push to build and main (the local scan) and nothing else; no staging job (D-964)", () => {
+  assert.deepEqual(Object.keys(w.wf.on), ["push"]);
+  assert.deepEqual(Object.keys(w.wf.jobs), ["local"]);
+  assert.equal(JSON.stringify(w.wf).toLowerCase().includes("staging"), false); // comments aside
   assert.deepEqual(w.wf.on.push.branches, ["build", "main"]);
   assert.doesNotMatch(w.text, /^\s*(schedule|pull_request\w*):/m);
 });
@@ -28,16 +31,15 @@ test("local job: push only, no environment, no repository secret", () => {
   assert.equal(JSON.stringify(j).includes("secrets."), false);
 });
 
-test("staging job: dispatch from main, staging environment, secrets only in the scan step", () => {
-  const j = w.wf.jobs.staging;
-  assert.equal(j.if, "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'");
-  assert.deepEqual(j.environment, { name: "staging", deployment: false });
-  assert.deepEqual(secretsByStep(w.wf), {
-    "Scan staging as the viewer test identity": [
-      "APP_BASE_URL_STAGING",
-      "TEST_IDENTITY_SECRET_STAGING",
-    ],
-  });
+test("the scan is authenticated and the release gate reads exactly that job and step (D-964)", () => {
+  assert.equal(JOB.zap, "local");
+  const scan = w.wf.jobs.local.steps.find((s) => s.name === STEP.zapScan);
+  assert.ok(scan, "the gate's authenticated-scan step exists under its gate name");
+  assert.equal(scan.run, "node scripts/ci/zap-run.mjs local");
+  // no environment value and no secret reaches the scan: the run generates its own
+  assert.equal(scan.env, undefined);
+  assert.deepEqual(secretsByStep(w.wf), {});
+  assert.equal(w.wf.jobs.local.steps.filter((s) => s.name === STEP.zapScan).length, 1);
 });
 
 test("the shared hardening rules hold (permissions, pinned SHAs, no artifact or cache, no expression in run)", () => {
@@ -46,7 +48,7 @@ test("the shared hardening rules hold (permissions, pinned SHAs, no artifact or 
 });
 
 test("output goes only through zap-summary.mjs; the report is deleted and never uploaded", () => {
-  for (const id of ["local", "staging"]) {
+  for (const id of ["local"]) {
     const steps = w.wf.jobs[id].steps;
     const summary = steps.find((s) => s.name?.startsWith("Summary"));
     assert.match(

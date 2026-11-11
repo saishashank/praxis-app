@@ -55,7 +55,7 @@ jobs:
   e2e:
     needs: app
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -66,14 +66,47 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: E2E + accessibility (TST-126; local production build, throwaway databases)
-        run: npx playwright test
-      - name: Readability grade 8 (UXN-030; populated seed)
+      # TST-134 / D-966 (M18): every spec file in e2e/ is listed below in exactly one lane step, and a spec
+      # that needs another lane FAILS (e2e/support/requireScenario.ts), it never skips.
+      # scripts/ci/e2e-listing.test.mjs parses these steps: a file in no lane, in two, or a listed file
+      # that does not exist, fails the smoke tests. Add a new spec to a lane here.
+      - name: E2E lane empty + accessibility (TST-126; local production build, throwaway databases)
+        run: >-
+          npx playwright test
+          e2e/a11y.spec.ts e2e/home.spec.ts e2e/honesty.spec.ts e2e/keyboard.spec.ts
+          e2e/m14-data-files.spec.ts e2e/m16-blueprint-access.spec.ts e2e/m16-blueprint-page.spec.ts
+          e2e/m16-blueprint-walk.spec.ts e2e/mobile.spec.ts e2e/owner-flow.spec.ts e2e/pages.spec.ts
+          e2e/reviews.spec.ts e2e/roles.spec.ts e2e/security-headers.spec.ts e2e/selection.spec.ts
+          e2e/settings.spec.ts e2e/shell.spec.ts e2e/signed-out.spec.ts e2e/vibrancy.spec.ts
+        env:
+          E2E_SCENARIO: empty
+      - name: E2E lane empty - screenshots of every sweep page (TST-127; capture only)
+        run: npx playwright test e2e/screens.spec.ts --project=screens
+        env:
+          E2E_SCENARIO: empty
+          E2E_SCREENS: "1"
+      - name: E2E lane populated - readability grade 8 (UXN-030; populated seed)
         run: npx playwright test e2e/readability.spec.ts --project=desktop
         env:
           E2E_SCENARIO: populated
-      - name: Lighthouse mobile on Home (AT-26; populated seed)
+      - name: E2E lane populated - Lighthouse mobile on Home (AT-26; populated seed)
         run: npm run test:lighthouse
+      - name: E2E lane rich - the seeded states (steelman, robustness, Cortex, experts, picks)
+        run: >-
+          npx playwright test
+          e2e/m11l-steelman.spec.ts e2e/m13l-experts.spec.ts e2e/m14-robustness.spec.ts
+          e2e/m15-cortex.spec.ts e2e/picks-sections.spec.ts --project=desktop
+        env:
+          E2E_SCENARIO: rich
+          E2E_STATES: all
+      # The design names the AT-65 family-badge page for this lane; that page is not in PAGES yet (walks.spec.ts), so the
+      # lane walks four existing pages until it is added (a filter that matches no page would pass vacuously).
+      - name: E2E lane walks - the walk capture (AT-65 family-badge page joins when it exists)
+        run: npx playwright test e2e/walks.spec.ts --project=desktop
+        env:
+          E2E_SCENARIO: rich
+          E2E_WALK: ${{ runner.temp }}/walk
+          E2E_WALK_ONLY: home,picks,strategies,reviews-learned
       - name: Upload Playwright report (failure only)
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -177,6 +210,47 @@ jobs:
         run: node scripts/ci/fixtures-skip-check.mjs fixtures-report.json
         env:
           FIXTURES_CHECKOUT_OUTCOME: ${{ steps.fixtures_checkout.outcome }}
+
+  # M18 OPS-107 / D-964 / D-965 (TST-138, AT-84): the RECORDED DAY replaces the staging E2E day. One full
+  # AU trading day runs on local libSQL files with a simulated clock, from the private recorded fixtures:
+  # migrate, seed, the morning routes (Sentinel, pre-open, quote poll, three intraday scans), Batch 1 at
+  # 17:30, 2a at 17:50, 2b/3/picks/steelman at 18:10, the evening review at 20:00 and the viewer walk, all
+  # against the production build with signed v2 calls. Every process runs with PRAXIS_ENV=recorded, where
+  # the host guard refuses every non-loopback host: the last step fails on any refusal or on a process
+  # that wrote no guard marker. The release gate reads this job as `recorded-day`, and its two closing
+  # steps by name (scripts/ci/release-gate-core.mjs STEP). Same `if:` and token rules as `fixtures`: the
+  # token is read-only, only the checkout step holds it, never a fork PR, and the job uses no cache.
+  recorded-day:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: app
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: ci-fixtures
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Check out the private fixtures repo (read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}-fixtures
+          token: ${{ secrets.FIXTURES_READ_TOKEN }}
+          path: fixtures
+          persist-credentials: false
+      - name: Recorded day (one AU day on local files, simulated clock, no request leaves the runner)
+        run: node scripts/e2e-day/recorded-day.mjs run --fixtures fixtures --work "$RUNNER_TEMP/recorded-day"
+      - name: PLT-073 deadline check (simulated clock)
+        run: node scripts/e2e-day/recorded-day.mjs check --work "$RUNNER_TEMP/recorded-day"
+      - name: Network assertion (no market-data host reached, every guard installed)
+        if: ${{ always() }}
+        run: node scripts/e2e-day/recorded-day.mjs assert-net --work "$RUNNER_TEMP/recorded-day"
 
   # PLT-072: the Yahoo fetcher is Python; its tests mock yfinance and never touch the network.
   python:
@@ -312,7 +386,7 @@ jobs:
   # release switches the --mode below to `full`.
   release-gate:
     if: ${{ !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'release' }}
-    needs: [app, e2e, secrets, worker, fixtures, python, audit, coverage, checks]
+    needs: [app, e2e, secrets, worker, fixtures, recorded-day, python, audit, coverage, checks]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

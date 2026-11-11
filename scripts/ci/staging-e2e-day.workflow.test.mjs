@@ -13,6 +13,10 @@ import {
 const w = load("staging-e2e-day");
 const job = w.wf.jobs.staging;
 
+test("retired (OPS-107, D-964): the header says so and the gate no longer reads this workflow", () => {
+  assert.match(w.text, /^# Disabled 2026-11-09 \(D-906, OPS-107\): staging is retired/);
+});
+
 test("dispatch only, one optional date input, no schedule, push or pull request", () => {
   assert.deepEqual(Object.keys(w.wf.on), ["workflow_dispatch"]);
   assert.deepEqual(Object.keys(w.wf.on.workflow_dispatch.inputs), ["date"]);

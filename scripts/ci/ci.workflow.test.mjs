@@ -7,7 +7,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
-import { CI_REQUIRED_JOBS } from "./release-gate-core.mjs";
+import { CI_REQUIRED_JOBS, JOB, STEP } from "./release-gate-core.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const text = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
@@ -23,13 +23,17 @@ const JOBS = [
   "secrets",
   "worker",
   "fixtures",
+  "recorded-day",
   "python",
   "audit",
   "coverage",
   "checks",
   "release-gate",
 ];
-const GATED = JOBS.filter((j) => j !== "release-gate");
+// M18 D-964: `recorded-day` is read by its own gate condition (and its closing steps by name), so the
+// release gate waits for it (needs) but does not list it among the plain "CI is green" jobs.
+const SEPARATE = ["recorded-day"];
+const GATED = JOBS.filter((j) => j !== "release-gate" && !SEPARATE.includes(j));
 
 test("the job list is exactly the reviewed one", () => {
   assert.deepEqual(Object.keys(jobs).sort(), [...JOBS].sort());
@@ -50,7 +54,7 @@ test("triggers and permissions: contents: read on top, only release-gate reads a
   assert.doesNotMatch(text, /pull_request_target|write-all|: write/);
 });
 
-test("secrets: only the fixtures job reads one, only FIXTURES_READ_TOKEN, only as the checkout token", () => {
+test("secrets: only the fixtures and recorded-day jobs read one, only FIXTURES_READ_TOKEN, only as the checkout token", () => {
   const found = {};
   for (const [id, job] of Object.entries(jobs)) {
     for (const m of JSON.stringify(job).matchAll(/secrets\.(\w+)/g)) {
@@ -58,15 +62,21 @@ test("secrets: only the fixtures job reads one, only FIXTURES_READ_TOKEN, only a
     }
     assert.equal(JSON.stringify(job.env ?? {}).includes("secrets."), false, `${id}: job env`);
   }
-  assert.deepEqual(Object.keys(found), ["fixtures"]);
-  assert.deepEqual([...found.fixtures], ["FIXTURES_READ_TOKEN"]);
-  const holders = steps("fixtures").filter((s) => JSON.stringify(s).includes("secrets."));
-  assert.equal(holders.length, 1);
-  assert.match(holders[0].uses, /^actions\/checkout@/);
-  assert.match(holders[0].with.token, /^\$\{\{ secrets\.FIXTURES_READ_TOKEN \}\}$/);
-  assert.equal(jobs.fixtures.environment.name, "ci-fixtures");
-  // a job with an environment and a token never uses a cache (workflow-lint secret-job-storage)
-  assert.ok(steps("fixtures").every((s) => !s.with || s.with.cache === undefined));
+  assert.deepEqual(Object.keys(found).sort(), ["fixtures", "recorded-day"]);
+  for (const id of ["fixtures", "recorded-day"]) {
+    assert.deepEqual([...found[id]], ["FIXTURES_READ_TOKEN"], id);
+    const holders = steps(id).filter((s) => JSON.stringify(s).includes("secrets."));
+    assert.equal(holders.length, 1, id);
+    assert.match(holders[0].uses, /^actions\/checkout@/, id);
+    assert.match(holders[0].with.token, /^\$\{\{ secrets\.FIXTURES_READ_TOKEN \}\}$/, id);
+    assert.equal(jobs[id].environment.name, "ci-fixtures", id);
+    assert.equal(jobs[id].environment.deployment, false, id);
+    // a job with an environment and a token never uses a cache (workflow-lint secret-job-storage)
+    assert.ok(
+      steps(id).every((s) => !s.with || s.with.cache === undefined),
+      id,
+    );
+  }
 });
 
 test("every action is pinned to a full SHA; no npm install; every pip install is hashed", () => {
@@ -155,12 +165,37 @@ test("checks job: workflow lint, env names, configuration reference", () => {
   assert.ok(runs("app").join("\n").includes("npm run test:licences")); // licence check, normal mode
 });
 
+test("recorded-day job (D-965, AT-84): fork PRs excluded like fixtures, after app, 30 minutes, the three closing steps the gate reads", () => {
+  const j = jobs["recorded-day"];
+  assert.equal(j.if, jobs.fixtures.if); // never a fork PR (the fixtures token)
+  assert.equal(j.needs, "app");
+  assert.equal(j["timeout-minutes"], 30);
+  assert.equal(j.environment.name, "ci-fixtures");
+  assert.equal(JOB.recordedDay, "recorded-day"); // the gate reads this job id
+  const names = steps("recorded-day").map((s) => s.name);
+  // the two steps the gate requires by name, in this order, then nothing after the network assertion
+  assert.ok(names.includes(STEP.recordedDeadlines));
+  assert.equal(names.at(-1), STEP.recordedNetwork);
+  assert.ok(names.indexOf(STEP.recordedDeadlines) < names.indexOf(STEP.recordedNetwork));
+  const net = steps("recorded-day").at(-1);
+  assert.equal(net.if, "${{ always() }}"); // refusals are reported even when the day itself failed
+  const all = runs("recorded-day").join("\n");
+  assert.match(
+    all,
+    /recorded-day\.mjs run --fixtures fixtures --work "\$RUNNER_TEMP\/recorded-day"/,
+  );
+  assert.match(all, /recorded-day\.mjs check --work /);
+  assert.match(all, /recorded-day\.mjs assert-net --work /);
+  // the fixtures token is only in the checkout step: no run step has an env with a secret
+  assert.ok(steps("recorded-day").every((s) => !s.env));
+});
+
 test("release-gate job: PRs into release only, needs every other job, infrastructure mode, no secret", () => {
   const g = jobs["release-gate"];
   assert.match(g.if, /github\.event_name == 'pull_request'/);
   assert.match(g.if, /github\.base_ref == 'release'/);
   assert.match(g.if, /!cancelled\(\)/); // a failed needed job must fail the gate, not skip it
-  assert.deepEqual([...g.needs].sort(), [...GATED].sort());
+  assert.deepEqual([...g.needs].sort(), [...GATED, ...SEPARATE].sort());
   const gate = g.steps.find((s) => /release-gate\.mjs/.test(s.run ?? ""));
   assert.deepEqual(gate.env, {
     GITHUB_TOKEN: "${{ github.token }}",

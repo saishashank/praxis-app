@@ -35,7 +35,7 @@ export interface GateInput {
   now: string;
   /** 40-hex commit under test. */
   sha: string;
-  /** ISO commit date of `sha`; the nightly must have started after it. */
+  /** ISO commit date of `sha` (informational; no condition reads it since D-964). */
   commitDate?: string | null;
   /** True once a go_live_signoff row exists: the infrastructure gate is then refused. */
   signoffExists?: boolean;
@@ -53,11 +53,12 @@ export interface GateInput {
   auditExceptionProblems: number | null;
   /** Number of problems in scripts/ci/zap-exceptions.json, null = not checked. */
   zapExceptionProblems: number | null;
-  stagingE2eDay?: RunFact[];
-  nightly?: RunFact[];
-  zapStaging?: RunFact[];
+  /** Completed push CI runs of the head branch (jobs not needed); null = could not be read (D-964). */
+  ciStreak?: RunFact[] | null;
+  /** zap-baseline.yml runs on the commit (jobs read); the `local` job must be green and authenticated. */
+  zapLocal?: RunFact[];
   restoreDrill?: RunFact[];
-  /** D-860: parsed entries of docs/release/waivers.json (validated inside the core). */
+  /** D-860 (dormant since D-964: nothing is waivable): parsed entries of docs/release/waivers.json (validated inside the core). */
   waivers?: unknown;
   /** YYYY-MM-DD used to judge waiver expiry; defaults to the date of `now`. */
   today?: string;
@@ -102,20 +103,22 @@ export interface GateResult {
 
 export const WAIVABLE: string[];
 export const MAX_WAIVER_DAYS: number;
-export function validateWaivers(raw: unknown, today: string): { valid: Waiver[]; ignored: number };
+export function validateWaivers(
+  raw: unknown,
+  today: string,
+  allow?: readonly string[],
+): { valid: Waiver[]; ignored: number };
 export const MODES: readonly ["full", "infrastructure"];
-export const NIGHTLY_GREENS: number;
-export const NIGHTLY_MAX_HOURS: number;
-export const ZAP_MAX_DAYS: number;
+export const STREAK_GREENS: number;
 export const DRILL_MAX_DAYS: number;
 export const CI_REQUIRED_JOBS: string[];
 export const STEP: {
-  e2eDeadlines: string;
-  e2eStaging: string;
+  recordedDeadlines: string;
+  recordedNetwork: string;
   zapScan: string;
   fixturesStrict: string;
   drill: string;
 };
-export const JOB: { stagingE2eDay: string; nightly: string; zap: string };
+export const JOB: { recordedDay: string; zap: string };
 export function evaluateReleaseGate(input: GateInput): GateResult;
 export function renderGate(result: GateResult): string;
