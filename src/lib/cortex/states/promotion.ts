@@ -16,6 +16,7 @@
 //
 // Everything is recomputed from the view at t (bars, index, events) so the state at t is a pure
 // feature of the view: `prev` only decides whether a row is emitted.
+import { benchmarkIndexOf } from "@/lib/market/staticProfile.mjs";
 import { advPrevious } from "@/lib/agents/indicators";
 import { cmpRat, divRat, makeRational, subRat, type Rational } from "@/lib/money/rational";
 import type { AsOfView, EventRow } from "../pit/types";
@@ -113,7 +114,7 @@ export function sessionAr0(
   const bars = view.bars(code, t, 2);
   if (bars.length < 2 || bars[1]!.d !== view.sessions[t] || bars[0]!.close === 0n) return null;
   const ret = subRat(divRat(makeRational(bars[1]!.close), makeRational(bars[0]!.close)), ONE);
-  const idx = view.index("AXJO", t, 2);
+  const idx = view.index(benchmarkIndexOf(view.market), t, 2);
   if (idx.length === 2 && idx[1]!.d === view.sessions[t] && idx[0]!.close !== 0n) {
     return subRat(
       ret,

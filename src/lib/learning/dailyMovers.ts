@@ -8,11 +8,12 @@
 //   otherwise                                           -> stock_specific
 // Every cause text is one definite plain sentence with the numbers and no question mark.
 import type { CalendarRow } from "@/lib/data/calendar";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import { isTradingDay, previousTradingDay } from "@/lib/data/calendar";
 import type { MoverCause } from "./daily";
 import { SECTOR_MIN } from "./dailyFeatures";
 
-const MARKET_TZ = "Australia/Sydney";
+const MARKET_TZ: string = homeProfile().tz!;
 /** ASX continuous trading opens at 10:00 Sydney and the close auction ends at about 16:10. */
 const OPEN_HHMM = "10:00"; // threshold-ok: ASX open, Sydney time
 const CLOSE_HHMM = "16:00"; // threshold-ok: ASX close, Sydney time (announcements after it wait for the next open)

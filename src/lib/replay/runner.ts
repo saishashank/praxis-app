@@ -17,6 +17,7 @@
 // when a stage ends over budget the run stops cleanly, writes only its run row, the compute report and
 // a `paused_budget` status, and no partial statistics.
 import { FAMILIES, type Family } from "@/lib/agents/schema";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 import type { AgentParams } from "@/lib/agents/params";
 import { agentParamsSha } from "@/lib/agents/params";
 import {
@@ -114,7 +115,7 @@ export const RUN_MODES: readonly RunMode[] = [
   "learning",
 ];
 
-const MARKET = "AU";
+const MARKET = HOME_MARKET; // replay is AU-only in M19 (D-1001 j)
 const MS_PER_MINUTE = 60_000; // threshold-ok: ms per minute
 const NULL_RUNS_DEFAULT = 2000; // threshold-ok: AT-17 null runs (design 4.9)
 const SIZE_B = 2000; // threshold-ok: decision 24 size-check replicates (bootstrap_size_check_replications)

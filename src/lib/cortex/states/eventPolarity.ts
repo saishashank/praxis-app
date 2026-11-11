@@ -15,6 +15,7 @@
 // entry, on D+2, when persistence holds on end-of-day prints: the D+1 close keeps at least half of
 // AR0 and D+1 volume >= `persistVolumeMult` x ADV20 over the 20 sessions before day 0 (the limit fill
 // at D+2 is the fill module's). U1 keeps D+1 entries (AGT-020).
+import { benchmarkIndexOf } from "@/lib/market/staticProfile.mjs";
 import { advPrevious } from "@/lib/agents/indicators";
 import type { EventCategory, Polarity } from "@/lib/agents/schema";
 import { cmpRat, divRat, makeRational, mulRat, subRat, type Rational } from "@/lib/money/rational";
@@ -241,7 +242,7 @@ export function eventEntryCheck(
     divRat(makeRational(series.adjClose[d1]!), makeRational(series.adjClose[pre]!)),
     makeRational(1n),
   );
-  const axjo = view.index("AXJO", i0 + 1, t - i0 + 2);
+  const axjo = view.index(benchmarkIndexOf(view.market), i0 + 1, t - i0 + 2);
   const iPre = axjo.find((b) => b.d === view.sessions[i0 - 1]);
   const iD1 = axjo.find((b) => b.d === view.sessions[i0 + 1]);
   if (iPre !== undefined && iD1 !== undefined && iPre.close !== 0n) {

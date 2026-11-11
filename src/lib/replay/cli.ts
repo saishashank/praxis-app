@@ -12,6 +12,8 @@
 import { createClient, type Client, type InStatement } from "@libsql/client";
 import { defaultAgentParams, loadAgentParams, type AgentParams } from "@/lib/agents/params";
 import { marketDate } from "@/lib/data/calendar";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import { splitFromRow, type LineageSplitRecord, type TrialLedgerRow } from "@/lib/stats/splits";
 import { learningDone, learningWeek, runLearning } from "./learningMode";
 import {
@@ -23,8 +25,8 @@ import {
   type RunMode,
 } from "./runner";
 
-const MARKET = "AU";
-const MARKET_TZ = "Australia/Sydney";
+const MARKET = HOME_MARKET; // replay is AU-only in M19 (D-1001 j)
+const MARKET_TZ: string = homeProfile().tz!;
 const BATCH = 400; // threshold-ok: statements per DB batch
 
 const has = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";

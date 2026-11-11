@@ -21,6 +21,7 @@
 // No clock is read for engine rows (`decided_at` = cut-off(D)); the injected `now` stamps only
 // run_record / app_log.
 import type { Client } from "@libsql/client";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import {
   gateDayStatus,
   localToUtc,
@@ -1697,13 +1698,18 @@ async function recordSkip(db: Client, o: SignalsOptions, reason: string): Promis
 }
 
 /** After this market time a 2b without a 2a is recorded `late_2a` (the Worker's recheck window ends, D-953). */
-export const LATE_2A_AFTER = "18:40"; // threshold-ok: D-953, 2b slot 18:10 + 30 minutes
+export const LATE_2A_AFTER: string = homeProfile().slots!.late_2a_after; // D-953: the 2b slot + 30 minutes, from the profile's batch schedule
 export const LATE_2A_REASON = "late_2a";
 
 /** True when `nowIso` is after LATE_2A_AFTER on session `d` (market time). Pure. */
-export function isLate2a(nowIso: string, d: string, tz: string): boolean {
+export function isLate2a(
+  nowIso: string,
+  d: string,
+  tz: string,
+  late2aAfter: string = LATE_2A_AFTER,
+): boolean {
   const at = Date.parse(nowIso);
-  return Number.isFinite(at) && at > localToUtc(d, LATE_2A_AFTER, tz).getTime();
+  return Number.isFinite(at) && at > localToUtc(d, late2aAfter, tz).getTime();
 }
 
 /** 2a never closed this session and the recheck window is over: `degraded`, reason `late_2a`, no signals. */

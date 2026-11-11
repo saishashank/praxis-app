@@ -14,6 +14,8 @@ import { regimeSeries } from "@/lib/agents/regime";
 import type { CorpActionRecord } from "@/lib/arena/corpActions";
 import { buildCodeSeries, dividendTermsOf, type DividendTerm } from "./adjust";
 import { instantMs, knownTimeOf, makeSessionClock } from "./knownTime";
+import { GLOBAL_INDICES } from "@/lib/market/profileCore.mjs";
+import { benchmarkIndexOf, staticProfile } from "@/lib/market/staticProfile.mjs";
 import { buildManifest } from "./manifest";
 import {
   INPUT_KINDS,
@@ -111,11 +113,9 @@ function assertIncreasing<T extends { readonly d: string }>(
   }
 }
 
-const INDEX_KIND: Readonly<Record<IndexCode, InputKind>> = {
-  AXJO: "index_au",
-  GSPC: "index_us",
-  VIX: "index_us",
-};
+/** A global index (GSPC, VIX) closes after the market's cut-off and follows the index_us rule; the benchmark follows the market's own. */
+const indexKindOf = (code: IndexCode): InputKind =>
+  GLOBAL_INDICES.includes(code) ? "index_us" : "index_au";
 
 function indexChangeRow(r: IndexChangeRow): KnownTimeRow {
   return { knownAt: r.knownAt ?? null, d: r.announced ?? r.effective };
@@ -203,11 +203,11 @@ export function partitionWorld(world: AsOfWorld): PartitionedWorld {
     tiers.set(code, rows);
   }
   const index = new Map<IndexCode, Store<IndexViewBar>>();
-  for (const code of ["AXJO", "GSPC", "VIX"] as const) {
+  for (const code of new Set(staticProfile(world.market).indexCodes)) {
     const rows = world.index?.[code];
     if (!rows) continue;
     assertIncreasing(rows, `index ${code}`);
-    const s = makeStore(INDEX_KIND[code], rows, (b) => ({ d: b.d }), clock);
+    const s = makeStore(indexKindOf(code), rows, (b) => ({ d: b.d }), clock);
     index.set(code, s);
     all.push(s);
   }
@@ -225,7 +225,7 @@ export function partitionWorld(world: AsOfWorld): PartitionedWorld {
   all.push(calendarStore);
   // Regime over the whole benchmark series once: the value at index i depends only on closes <= i
   // (hysteresis carried forward), so the full-series state at i equals the truncated-series state.
-  const axjo = index.get("AXJO");
+  const axjo = index.get(benchmarkIndexOf(world.market));
   const regimeStates: readonly RegimeLabel[] = axjo
     ? regimeSeries(
         axjo.rows.map((b) => b.close),
@@ -331,7 +331,7 @@ export function buildAsOfViewFrom(stores: PartitionedWorld): AsOfView {
   const { world, clock, cutoffMs } = stores;
   const sessions = world.sessions;
   const lastT = sessions.length - 1;
-  const axjo = stores.index.get("AXJO");
+  const axjo = stores.index.get(benchmarkIndexOf(world.market));
   const codesCache = new Map<number, readonly string[]>();
 
   function makeView(maxT: number): AsOfView {

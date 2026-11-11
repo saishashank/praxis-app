@@ -60,7 +60,9 @@ import {
   type NightOutput,
   type StateRef,
 } from "./night";
+import { staticProfile } from "@/lib/market/staticProfile.mjs";
 import { runNight } from "./night";
+import { profileReaders } from "./profileReaders";
 import { buildAsOfView } from "./pit/asOfView";
 import type {
   AsOfView,
@@ -133,7 +135,6 @@ export const MATCHED_CELL_KIND = "matched_cell";
 /** `signal.variant` of every Cortex signal (design 3 note). */
 export const CORTEX_VARIANT = "cortex";
 
-const INDEX_CODE_LIST: readonly IndexCode[] = ["AXJO", "GSPC", "VIX"];
 const V1_FAMILIES: readonly Family[] = ["F1", "F2", "F3", "F4", "F5", "F6"];
 /** The v1 live universe tiers of each family (rankScore.ts FAMILY_TIERS; F5 on U2/U3 with ARN-011). */
 export const DEFAULT_FAMILY_TIERS: Readonly<Record<Family, readonly Tier[]>> = {
@@ -322,7 +323,9 @@ const MIN_CALENDAR_SPAN_DAYS = 14; // threshold-ok: slack before the first sessi
 
 export async function loadStageRows(db: Client, o: LoadOptions): Promise<StageRows> {
   const { market, d } = o;
-  const cutoff = decisionCutoffUtc(d, o.params.decisionCutoff);
+  const profile = staticProfile(market);
+  profileReaders(profile); // CXA-002 e, f, g: an M20 rule set throws `not built (M20)` here
+  const cutoff = decisionCutoffUtc(d, o.params.decisionCutoff, profile.decisionCutoffZone!);
   const span = Math.ceil((STAGE_BAR_SESSIONS * 7) / 5) + MIN_CALENDAR_SPAN_DAYS; // threshold-ok: weekdays to days
   const all = sessionsBetween(addDays(d, -span), d, o.calendar);
   const sessions = all.slice(-STAGE_BAR_SESSIONS);
@@ -405,8 +408,8 @@ export async function loadStageRows(db: Client, o: LoadOptions): Promise<StageRo
   const index: Partial<Record<IndexCode, IndexViewBar[]>> = {};
   for (const r of idxRs.rows) {
     const code = text(r.index_code) as IndexCode;
-    if (!INDEX_CODE_LIST.includes(code)) continue;
-    if (code === "AXJO" && !(text(r.published_at) < cutoff)) continue;
+    if (!profile.indexCodes.includes(code)) continue;
+    if (code === profile.benchmarkIndex && !(text(r.published_at) < cutoff)) continue;
     (index[code] ??= []).push({ d: text(r.d), close: toBig(r.c_micro) });
   }
 

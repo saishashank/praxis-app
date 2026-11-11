@@ -644,3 +644,5 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1014 | Owner edit of a mkt.* key (A1, DAT-242): updateConfig (audit first) writes the config_version row as for any key and then calls setProfileField (field row, m... |
 | D-1015 | Derived lists (A1, D-993): MODE_MARKETS is builtMarkets(); calendarMarkets() is the keys of CALENDAR_RULE_MODULES and CALENDAR_MARKETS stays as a constant de... |
 | D-1016 | Cortex schema hash (A1, found by the step-0 baseline): the night's input manifest carries schemaSha, the sha256 of the table names (src/lib/cortex/stage.ts),... |
+| D-1030 | Static seed profile and derived legacy exports (B1, CXA-002, D-1003): src/lib/market/staticProfile.mjs (staticProfile(code), homeProfile(), benchmarkIndexOf(... |
+| D-1031 | Rule-set readers, angle filter and what B1 left alone (B1, CXA-002 e, f, g, i; PRD-039): src/lib/cortex/profileReaders.ts holds classificationReader, haltRea... |
