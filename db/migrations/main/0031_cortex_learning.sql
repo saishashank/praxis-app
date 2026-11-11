@@ -1,5 +1,5 @@
 -- +up
--- The learning loop feeds the Cortex (D-923…): four additive tables, no change to an existing table.
+-- The learning loop feeds the Cortex (D-923…): six additive tables, no change to an existing table.
 -- Same conventions as 0019: STRICT, WITHOUT ROWID, append-only (UPDATE and DELETE abort), session dates
 -- by GLOB, JSON columns json_valid, returns in integer parts per million. Every row is the output of a
 -- pure function over rows written earlier, so a re-run of a night inserts nothing new (insert-or-ignore).
@@ -79,7 +79,7 @@ CREATE TABLE cortex_learn_event (
   seq INTEGER NOT NULL CHECK (seq >= 0),
   kind TEXT NOT NULL CHECK (kind IN ('scorecard','checkpoint','watch','cap','escalate','reweight',
     'no_change','bench','unbench','probe_open','probe_close','platt_refit','switch','fallback',
-    'rollback','placebo')),
+    'rollback','placebo','base_change')),
   family TEXT CHECK (family IS NULL OR family IN ('F1','F2','F3','F4','F5','F6','F7')),
   angle_id TEXT CHECK (angle_id IS NULL OR length(angle_id) > 0),
   generation INTEGER CHECK (generation IS NULL OR generation >= 0),
@@ -100,6 +100,9 @@ CREATE TRIGGER cortex_learn_event_no_delete BEFORE DELETE ON cortex_learn_event
 BEGIN
   SELECT RAISE(ABORT, 'append-only');
 END;
+-- The probe and base readers (learn/baseStore.ts) scan only their own kinds (a few rows a month)
+-- instead of every event of the market: (market, kind, d) prefix, never OFFSET.
+CREATE INDEX cortex_learn_event_kind ON cortex_learn_event (market, kind, d);
 
 -- 4. Who leads each family: history rows, the latest since_d wins, no row = the fixed rule. Leading never
 -- changes family_status (CTX-053 permission is unchanged); an Owner kill can only hand back to the fixed
@@ -126,8 +129,71 @@ BEGIN
   SELECT RAISE(ABORT, 'append-only');
 END;
 
+-- 5. Sparse nightly values of the open probe angles (candidate measures, design C.6 table 5): angles a
+-- family is trying that are NOT in the night's global scored set, so cortex_feature_daily keeps its
+-- "active set only" contract. One row per code, angle and night; written by the Cortex stage only for
+-- the probes open the night before (learn/baseStage.ts), never read by S or eligibility. value is the
+-- rank-standardised number (null when undefined or a flag), flag the flag or bucket word. Prunable
+-- beyond the same 400-day floor as cortex_feature_daily (0023): deterministic from the bars.
+CREATE TABLE cortex_feature_probe (
+  market TEXT NOT NULL CHECK (length(market) > 0),
+  d TEXT NOT NULL CHECK (d GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  code TEXT NOT NULL CHECK (length(code) > 0),
+  angle_id TEXT NOT NULL CHECK (length(angle_id) > 0),
+  value REAL CHECK (value IS NULL OR (value >= -1 AND value <= 1)),
+  flag TEXT CHECK (flag IS NULL OR length(flag) > 0),
+  angle_version INTEGER NOT NULL CHECK (angle_version >= 1),
+  manifest_id TEXT NOT NULL CHECK (length(manifest_id) > 0),
+  PRIMARY KEY (market, d, code, angle_id),
+  CHECK (value IS NULL OR flag IS NULL)
+) STRICT, WITHOUT ROWID;
+CREATE TRIGGER cortex_feature_probe_no_update BEFORE UPDATE ON cortex_feature_probe
+BEGIN
+  SELECT RAISE(ABORT, 'append-only');
+END;
+CREATE TRIGGER cortex_feature_probe_no_delete BEFORE DELETE ON cortex_feature_probe
+WHEN OLD.d >= date('now', '-400 days')
+BEGIN
+  SELECT RAISE(ABORT, 'append-only (delete only beyond retention)');
+END;
+
+-- 6. The numbered versions of each family's BASE (Owner O-81): the measures the fixed Cortex scores.
+-- Version 1 is the fixed rule's scored set as it stood when the loop first saw it ('initial'); a
+-- candidate measure that passes the strictest evidence is added ('promote'), a base measure that stays
+-- broken under the same evidence is taken out ('retire'), each as a new version with a new
+-- system-written cortex_map row (rule_version, used from since_d, the night after it is written). An
+-- Owner import of a new fixed rule re-bases the family ('owner_import'). System-written, append-only;
+-- the evidence is the promotion test's numbers.
+CREATE TABLE cortex_base_version (
+  market TEXT NOT NULL CHECK (length(market) > 0),
+  family TEXT NOT NULL CHECK (family IN ('F1','F2','F3','F4','F5','F6','F7')),
+  version INTEGER NOT NULL CHECK (version >= 1),
+  since_d TEXT NOT NULL CHECK (since_d GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  reason TEXT NOT NULL CHECK (reason IN ('initial','promote','retire','owner_import')),
+  rule_version TEXT NOT NULL CHECK (length(rule_version) > 0),
+  angles_json TEXT NOT NULL CHECK (json_valid(angles_json) AND json_type(angles_json) = 'array'),
+  added_json TEXT NOT NULL CHECK (json_valid(added_json) AND json_type(added_json) = 'array'),
+  removed_json TEXT NOT NULL CHECK (json_valid(removed_json) AND json_type(removed_json) = 'array'),
+  evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+  created_at TEXT NOT NULL CHECK (length(created_at) > 0),
+  PRIMARY KEY (market, family, version),
+  CHECK ((version = 1) = (reason = 'initial')),
+  CHECK (reason <> 'promote' OR json_array_length(added_json) = 1),
+  CHECK (reason <> 'retire' OR json_array_length(removed_json) = 1)
+) STRICT, WITHOUT ROWID;
+CREATE TRIGGER cortex_base_version_no_update BEFORE UPDATE ON cortex_base_version
+BEGIN
+  SELECT RAISE(ABORT, 'append-only');
+END;
+CREATE TRIGGER cortex_base_version_no_delete BEFORE DELETE ON cortex_base_version
+BEGIN
+  SELECT RAISE(ABORT, 'append-only');
+END;
+
 -- +down
--- Dropping a table drops its triggers; reverse order of creation.
+-- Dropping a table drops its triggers and indexes; reverse order of creation.
+DROP TABLE cortex_base_version;
+DROP TABLE cortex_feature_probe;
 DROP TABLE cortex_leader;
 DROP TABLE cortex_learn_event;
 DROP TABLE cortex_learn_compare;

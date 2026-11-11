@@ -293,7 +293,8 @@ export type LearnEventKind =
   | "switch"
   | "fallback"
   | "rollback"
-  | "placebo";
+  | "placebo"
+  | "base_change";
 
 export type LearnEvent = {
   readonly market: string;

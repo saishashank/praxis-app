@@ -58,6 +58,7 @@ import { cellKey, TOP3_BAND_KEY, type CellStatistic } from "@/lib/stats/cells";
 import type { Prng } from "@/lib/stats/rng";
 import {
   ANGLES,
+  canActivate,
   evaluateAngle,
   rankStandardise,
   ruleScoredSet,
@@ -175,6 +176,12 @@ export type FamilyNightRule = {
   readonly basedOn?: string;
   /** D-923: the learner's weight generation. */
   readonly generation?: number;
+  /**
+   * O-81: listed angles this rule scores as active although their passport is not (a candidate
+   * measure promoted into the family's base, learn/base.ts). Only inside this rule's own scored set:
+   * the night's global set, its hash and the other families' rules are unchanged. Absent = none.
+   */
+  readonly admitted?: readonly string[];
 };
 
 /**
@@ -231,6 +238,13 @@ export type NightInputs = {
    * or the fixed rule when the learner leads). Absent or empty = the night's bytes are unchanged.
    */
   readonly challengers?: ReadonlyMap<Family, NightChallenger>;
+  /**
+   * O-81 / C.6 table 5: the open probe angles (candidate measures) to compute tonight for the
+   * learning loop only. Score angles with a compute that are NOT in the night's scored set; their
+   * values go to `NightOutput.probes` and never into S, eligibility, a gate or the shared features.
+   * Absent or empty = the night's bytes are unchanged.
+   */
+  readonly probes?: readonly string[];
   /** Current `cortex_state` rows per code (the latest per kind). */
   readonly states: readonly StateRef[];
   /** Angle id → passport status; an angle absent here is `candidate` (never scored). */
@@ -344,6 +358,11 @@ export type NightOutput = {
   readonly blocked: readonly BlockedDecision[];
   readonly abstains: readonly Abstain[];
   readonly sectorTilt: readonly SectorTilt[];
+  /**
+   * O-81: code → probe angle id → value (rank-standardised within the universe like the features),
+   * present only when `NightInputs.probes` named a computable probe; stored in cortex_feature_probe.
+   */
+  readonly probes?: ReadonlyMap<string, ReadonlyMap<string, AngleValue>>;
 };
 
 // ---- constants -------------------------------------------------------------------------------------------
@@ -501,6 +520,29 @@ export function featuresAt(
     }
   }
   return perCode;
+}
+
+/**
+ * O-81 / C.6 table 5: the probe angles a night computes: the listed ids that are score angles with a
+ * compute and live readers (`canActivate`, D-291), not exclusive, and NOT already in the night's
+ * scored set (those are in the shared features). Registry order; empty without a list.
+ */
+export function probeDefsOf(
+  angles: readonly AngleDef[],
+  scoredDefs: readonly AngleDef[],
+  probes: readonly string[] | undefined,
+): AngleDef[] {
+  if (probes === undefined || probes.length === 0) return [];
+  const want = new Set(probes);
+  const scored = new Set(scoredDefs.map((a) => a.id));
+  return angles.filter(
+    (a) =>
+      want.has(a.id) &&
+      !scored.has(a.id) &&
+      a.kind === "score" &&
+      a.exclusive !== true &&
+      canActivate(a).ok,
+  );
 }
 
 /** The D9 veto flags of a code: gate angles of domain 9 with a compute that return a flag. */
@@ -1220,7 +1262,12 @@ export function runNight(inputs: NightInputs): NightOutput {
   // ranked within its own tiers; the night's shared features stay as they are
   const ruleSetOf = (rule: FamilyNightRule): RuleSet | undefined => {
     if (rule.angles === undefined) return undefined;
-    const own = ruleScoredSet(angles, status, rule.angles);
+    const admitted = new Set(rule.admitted ?? []);
+    const ruleStatus =
+      admitted.size === 0
+        ? status
+        : (id: string): AngleStatus => (admitted.has(id) ? "active" : status(id));
+    const own = ruleScoredSet(angles, ruleStatus, rule.angles);
     const set = own.map((a) => ({
       id: a.id,
       version: a.version,
@@ -1430,8 +1477,11 @@ export function runNight(inputs: NightInputs): NightOutput {
     }
   }
 
+  // O-81: the open probes, computed beside the night and kept out of everything above
+  const probeDefs = probeDefsOf(angles, scoredDefs, inputs.probes);
   const universe = codes.map((c) => ({ code: c, industry: facts.get(c)!.industry }));
   return {
+    ...(probeDefs.length === 0 ? {} : { probes: featuresAt(view, t, probeDefs, codes) }),
     status: mapMissing ? "abstain_all" : "ran",
     reason: mapMissing ? "map_missing" : null,
     manifest,
