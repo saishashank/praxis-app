@@ -15,6 +15,7 @@ import type { Client } from "@libsql/client";
 import type { Exec } from "@/lib/cortex/store/common";
 import { getConfig } from "@/lib/config/store";
 import { enabledMarkets, loadProfile } from "@/lib/market/profile";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 import { localToUtc, marketDate, sessionsBetween, sessionTimes } from "@/lib/data/calendar";
 import { readQuoteSourceState } from "@/lib/data/controls";
 import {
@@ -448,8 +449,12 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
 }
 
 /** System Health lines of the "pick alerts" series, derived on read. */
-export async function pickAlertsHealth(db: Exec, now: Date, market?: string): Promise<string[]> {
-  market ??= await pollMarket(db);
+/** The health lines read the home market unless a market is named (no extra query: DAT-141 budget). */
+export async function pickAlertsHealth(
+  db: Exec,
+  now: Date,
+  market: string = HOME_MARKET,
+): Promise<string[]> {
   let refusal: QuoteRefusal | null;
   try {
     refusal = refusalFor(await readQuoteSourceState(db));
@@ -488,8 +493,11 @@ export const QUOTE_LINES_MAX = 3; // threshold-ok: display cap
  * "Quotes HH:MM: used n, skipped m (armed a, watch w, held h)". Counts only: no code is named (D-580).
  * `used` is the reservation, replaced by the `+done` row's actual count when one exists (D-697).
  */
-export async function quoteBudgetLines(db: Exec, now: Date, market?: string): Promise<string[]> {
-  market ??= await pollMarket(db);
+export async function quoteBudgetLines(
+  db: Exec,
+  now: Date,
+  market: string = HOME_MARKET,
+): Promise<string[]> {
   const d = marketDate(now, SESSION_TZ);
   // rows-ok: one session's poll slots, at most 73 claim rows
   const r = await db.execute({
