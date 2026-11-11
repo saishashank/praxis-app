@@ -105,8 +105,14 @@ test("steps run in order: plan, fetch, commit; commit also records a failed or s
   const fetch = steps.findIndex((s) => s.name === "Fetch ASIC short positions (no secrets)");
   const commit = steps.findIndex((s) => s.name === "Write history files and move the cursors");
   assert.ok(0 < plan && plan < fetch && fetch < commit);
-  assert.equal(steps[plan].run, 'node scripts/backfill/run.mjs plan ${MARKET_INPUT:+--market "$MARKET_INPUT"} --out plan.json');
-  assert.equal(steps[commit].run, 'node scripts/backfill/run.mjs commit ${MARKET_INPUT:+--market "$MARKET_INPUT"} --chunks chunks.json');
+  assert.equal(
+    steps[plan].run,
+    'node scripts/backfill/run.mjs plan ${MARKET_INPUT:+--market "$MARKET_INPUT"} --out plan.json',
+  );
+  assert.equal(
+    steps[commit].run,
+    'node scripts/backfill/run.mjs commit ${MARKET_INPUT:+--market "$MARKET_INPUT"} --chunks chunks.json',
+  );
   assert.match(
     steps[commit].if,
     /^\$\{\{ !cancelled\(\) && steps\.plan\.outcome == 'success' \}\}$/,

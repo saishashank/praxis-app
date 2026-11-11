@@ -64,7 +64,10 @@ test("the database secrets appear only in env of the one closing step, the prod 
   assert.equal(s.env.TURSO_MAIN_URL, "${{ secrets.TURSO_MAIN_URL_PROD }}");
   assert.equal(s.env.TURSO_MAIN_TOKEN, "${{ secrets.TURSO_MAIN_TOKEN_PROD }}");
   assert.equal(s.env.COMMIT_SHA, "${{ steps.approved.outputs.sha }}");
-  assert.equal(s.run, 'node scripts/arena/close-books.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"}');
+  assert.equal(
+    s.run,
+    'node scripts/arena/close-books.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"}',
+  );
   assert.ok(!String(s.run).includes("secrets."));
   assert.equal(s.with, undefined);
   assert.equal(wf.env, undefined);
