@@ -159,11 +159,13 @@ describe("slot table (docs/M2_design.md section 3)", () => {
       "backfill-history.yml",
       "backfill-prices.yml",
       "backup.yml",
+      "calendar-draft.yml", // M18 OPS-103
       "ingest-batch1.yml",
       "kb-archive.yml",
       "llm-bakeoff.yml",
       "maintenance.yml",
       "replay.yml",
+      "turso-usage.yml", // M18 OPS-104
       "watchdog.yml",
     ]);
     for (const s of AU_SLOTS.filter((x) => x.enabled && x.runner === "actions")) {
@@ -220,6 +222,8 @@ describe("slot table (docs/M2_design.md section 3)", () => {
         s.id === "llm-bakeoff" ||
         s.id === "watchdog-2040" || // M8 T13: both watchdog runs, every day
         s.id === "watchdog-2150" ||
+        s.id === "calendar-draft" || // M18: 1 November, any weekday
+        s.id === "turso-usage" || // M18: daily
         s.id === "ingest-batch1" || // M5 T10, decision 5: also the non-trading marker
         s.id === "evening-review" ||
         s.id === "evening-review-late" ||

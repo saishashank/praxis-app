@@ -23,6 +23,7 @@
 import type { Client } from "@libsql/client";
 import {
   gateDayStatus,
+  localToUtc,
   nextTradingDay,
   type CalendarRow,
   type MarketHours,
@@ -1695,6 +1696,34 @@ async function recordSkip(db: Client, o: SignalsOptions, reason: string): Promis
   return emptyResult(o, "skipped", reason, runId);
 }
 
+/** After this market time a 2b without a 2a is recorded `late_2a` (the Worker's recheck window ends, D-953). */
+export const LATE_2A_AFTER = "18:40"; // threshold-ok: D-953, 2b slot 18:10 + 30 minutes
+export const LATE_2A_REASON = "late_2a";
+
+/** True when `nowIso` is after LATE_2A_AFTER on session `d` (market time). Pure. */
+export function isLate2a(nowIso: string, d: string, tz: string): boolean {
+  const at = Date.parse(nowIso);
+  return Number.isFinite(at) && at > localToUtc(d, LATE_2A_AFTER, tz).getTime();
+}
+
+/** 2a never closed this session and the recheck window is over: `degraded`, reason `late_2a`, no signals. */
+async function recordLate2a(db: Client, o: SignalsOptions): Promise<SignalsResult> {
+  const runId = await startRun(db, {
+    job: SIGNALS_JOB,
+    market: o.market,
+    concurrencyKey: signalsKey(o.market, o.d),
+    scheduledFor: o.d,
+    commitSha: o.commitSha ?? undefined,
+    now: o.now(),
+  });
+  await finishRun(db, runId, {
+    status: "degraded",
+    details: { reason: LATE_2A_REASON },
+    now: o.now(),
+  });
+  return emptyResult(o, "degraded", LATE_2A_REASON, runId, emptyStats(), true);
+}
+
 async function closedOk(db: Client, market: string, d: string): Promise<boolean> {
   const rs = await db.execute({
     sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND status IN ('success', 'degraded')
@@ -1738,7 +1767,15 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
   const dayState = gateDayStatus(o.d, calendar, o.strictCalendar);
   if (dayState === "missing") return recordSkip(db, o, "calendar_missing"); // D-711 fail safe
   if (dayState !== "open") return recordSkip(db, o, "non_trading_day");
-  if (!(await closedOk(db, o.market, o.d))) return recordSkip(db, o, "no_2a_success");
+  if (!(await closedOk(db, o.market, o.d))) {
+    // M18 OPS-106 (D-666, D-953): until 18:40 (market time) a missing 2a is a skip the Worker clock may
+    // re-dispatch once 2a has closed; after it nothing re-dispatches, so the night is recorded as
+    // degraded with its reason instead of a skip that reads as benign.
+    if (o.replay !== true && isLate2a(o.now(), o.d, text(market.rows[0]!.tz))) {
+      return recordLate2a(db, o);
+    }
+    return recordSkip(db, o, "no_2a_success");
+  }
   const hours: MarketHours = {
     tz: text(market.rows[0]!.tz),
     open_time: text(market.rows[0]!.open_time),

@@ -4,7 +4,12 @@
 // the recurring route slots. Synthetic ZZ data, injected fetch and clock, no network.
 import type { Client } from "@libsql/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { pickAlertsHealth, runPickAlertPoll, type PollRunDeps } from "@/lib/alerts/pick/poll";
+import {
+  pickAlertsHealth,
+  quoteBudgetLines,
+  runPickAlertPoll,
+  type PollRunDeps,
+} from "@/lib/alerts/pick/poll";
 import { armedReserve, extrasCadence, remainingPollTicks } from "@/lib/alerts/pick/reserve";
 import { quoteRequestsToday } from "@/lib/data/quotes/budget";
 import { fetchDelayedQuotes } from "@/lib/data/quotes/fetch";
@@ -220,5 +225,139 @@ describe("health lines of the recurring slots (V2-S3, D-698)", () => {
   it("scan: 'no successful run today' on a trading day after the grace", async () => {
     const lines = await intradayScanHealth(db, at("12:00"));
     expect(lines.some((l) => l.startsWith("Intraday scan: no successful run today"))).toBe(true);
+  });
+});
+
+async function heldPosition(code: string): Promise<void> {
+  await db.execute({
+    sql: "INSERT INTO nav_daily_pos (cohort_id, d, code, qty, close_micro, value_micro) VALUES ('C1', '2026-11-03', ?, 10, 1000000, 10000000)",
+    args: [code],
+  });
+}
+async function quoteLatest(code: string, fetchedAt: Date): Promise<void> {
+  await db.execute({
+    sql: "INSERT INTO quote_latest (market, code, last_micro, prev_close_micro, quote_at, fetched_at) VALUES ('AU', ?, 1000000, 1000000, ?, ?)",
+    args: [code, fetchedAt.toISOString(), fetchedAt.toISOString()],
+  });
+}
+
+describe("quote budget: skipped, plan and the System Health line (OPS-109 c, D-971)", () => {
+  it("a healthy tick skips nothing; the plan counts armed, watch (with the index) and held", async () => {
+    await seedPick("ZZ01", 1);
+    await watch("ZZW1");
+    await heldPosition("ZZH1");
+    await runPickAlertPoll(deps(at("10:45")));
+    const row = (
+      await db.execute("SELECT skipped, plan FROM quote_run WHERE slot_minute = '10:45'")
+    ).rows[0];
+    expect(Number(row.skipped)).toBe(0);
+    expect(JSON.parse(String(row.plan))).toEqual({ armed: 1, watch: 2, held: 1 });
+  });
+
+  it("extras left out for lack of budget are counted as skipped", async () => {
+    await seedPick("ZZ01", 1);
+    await watch("ZZW1");
+    await heldPosition("ZZH1");
+    await usage(1850); // the armed reserve takes the room (see the cadence test above)
+    await runPickAlertPoll(deps(at("10:45")));
+    const row = (
+      await db.execute("SELECT skipped, plan FROM quote_run WHERE slot_minute = '10:45'")
+    ).rows[0];
+    expect(Number(row.skipped)).toBe(3); // the index, ZZW1, ZZH1
+    expect(JSON.parse(String(row.plan))).toEqual({ armed: 1, watch: 0, held: 0 });
+  });
+
+  it("the line shows used (the +done count wins), skipped and the plan; counts only, no code", async () => {
+    await seedPick("ZZ01", 1);
+    await heldPosition("ZZH1");
+    await usage(1850);
+    await runPickAlertPoll(deps(at("10:45")));
+    await db.execute({
+      sql: "INSERT INTO quote_run (market, session_d, slot_minute, purpose, started_at, requests) VALUES ('AU', ?, '10:45+done', 'poll', 't', 1)",
+      args: [SESSION],
+    });
+    const lines = await quoteBudgetLines(db, at("10:50"));
+    expect(lines).toEqual(["Quotes 10:45: used 1, skipped 2 (armed 1, watch 0, held 0)"]);
+    expect(lines.join(" ")).not.toMatch(/ZZ/);
+  });
+
+  it("no plan rows (older slots, a weekend): no line; only the newest three slots", async () => {
+    expect(await quoteBudgetLines(db, at("10:50"))).toEqual([]);
+    for (const slot of ["10:00", "10:05", "10:10", "10:15"]) {
+      await db.execute({
+        sql: "INSERT INTO quote_run (market, session_d, slot_minute, purpose, started_at, requests, skipped, plan) VALUES ('AU', ?, ?, 'poll', 't', 3, 0, '{\"armed\":1,\"watch\":1,\"held\":1}')",
+        args: [SESSION, slot],
+      });
+    }
+    expect((await quoteBudgetLines(db, at("10:50"))).map((l) => l.slice(0, 12))).toEqual([
+      "Quotes 10:05",
+      "Quotes 10:10",
+      "Quotes 10:15",
+    ]);
+    expect(await quoteBudgetLines(db, new Date("2026-11-07T01:00:00.000Z"))).toEqual([]);
+  });
+});
+
+describe("quote starvation incident (OPS-109 c, D-971)", () => {
+  const starvedIncidents = async () =>
+    (await db.execute("SELECT severity, detail_json FROM incident WHERE kind = 'quote_starvation'"))
+      .rows;
+
+  it("a held code with a 31-minute-old quote opens one S2 `quote_starvation` a day, counts only", async () => {
+    await heldPosition("ZZH1");
+    await quoteLatest("ZZH1", at("14:29")); // 31 minutes before 15:00
+    await usage(1900); // 95 %: no armed pick, so the tick stops (budget_stop) and cannot fetch
+    const r = await runPickAlertPoll(deps(at("15:00"), { notify: {} }));
+    expect(r).toMatchObject({ status: "skipped", reason: "budget_stop" });
+    const rows = await starvedIncidents();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].severity).toBe("S2");
+    expect(JSON.parse(String(rows[0].detail_json))).toEqual({
+      sessionD: SESSION,
+      held: 1,
+      starved: 1,
+    });
+    // a later tick the same day, even after the incident was resolved: no second one
+    await db.execute("UPDATE incident SET resolved_at = 'x' WHERE kind = 'quote_starvation'");
+    await runPickAlertPoll(deps(at("15:05"), { notify: {} }));
+    expect(await starvedIncidents()).toHaveLength(1);
+  });
+
+  it("29 minutes old: quiet; 31 minutes old without a notify context: quiet", async () => {
+    await heldPosition("ZZH1");
+    await quoteLatest("ZZH1", at("14:31"));
+    await usage(1900);
+    await runPickAlertPoll(deps(at("15:00"), { notify: {} }));
+    expect(await starvedIncidents()).toHaveLength(0);
+    await runPickAlertPoll(deps(at("15:05"))); // 34 minutes old now, but nobody is listening
+    expect(await starvedIncidents()).toHaveLength(0);
+  });
+
+  it("a tick that fetches the held code leaves it fresh: no incident", async () => {
+    await heldPosition("ZZH1");
+    await runPickAlertPoll(
+      deps(at("10:45"), {
+        notify: {},
+        fetch: async (url) => {
+          const code = /chart\/([A-Z0-9]+)\.AX/.exec(url)![1];
+          return {
+            ok: true,
+            status: 200,
+            json: async () =>
+              syntheticChart({
+                price: 10.3,
+                prevClose: 10,
+                volume: 5000,
+                timeS: at("10:30").getTime() / 1000, // the feed's own delay
+                symbol: `${code}.AX`,
+              }),
+          };
+        },
+      }),
+    ); // polls the held code and stores its quote
+    expect((await db.execute("SELECT 1 FROM quote_latest WHERE code = 'ZZH1'")).rows).toHaveLength(
+      1,
+    );
+    expect(await starvedIncidents()).toHaveLength(0);
   });
 });

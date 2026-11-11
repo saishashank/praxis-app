@@ -136,3 +136,56 @@ test("signals.mjs: a replay without a closed 2a fails visibly, after the (zero) 
     cleanup(dir);
   }
 });
+
+// M18 OPS-106 (D-666, D-953): a live 2b without a 2a is a skip until 18:40 market time (the Worker clock
+// re-dispatches it once 2a has closed) and a degraded `late_2a` night after it.
+async function liveNo2a(nowIso) {
+  const { dir, url, db } = await freshDb();
+  try {
+    await db.execute("UPDATE market SET mode = 'full' WHERE code = 'AU'");
+    const lines = [];
+    const code = await signals(
+      ["--date", "2026-10-13", "--wait-minutes", "0"],
+      { TURSO_MAIN_URL: url },
+      {
+        nowMs: () => Date.parse(nowIso),
+        out: (s) => lines.push(s),
+        sleep: async () => {},
+        openDb: (u) => createClient({ url: u, intMode: "bigint" }),
+      },
+    );
+    const rs = await db.execute(
+      // 2b and batch 3 only (the learn and words phases run beside them, as before)
+      "SELECT job, status, details_json FROM run_record WHERE job IN ('arena-signals', 'arena-review') ORDER BY id",
+    );
+    return { code, lines, rows: rs.rows };
+  } finally {
+    db.close();
+    cleanup(dir);
+  }
+}
+
+test("signals.mjs: 18:30 with no 2a success is still a skip (the clock may re-dispatch), exit 1", async () => {
+  const r = await liveNo2a("2026-10-13T07:30:00.000Z"); // 18:30 AEDT
+  assert.equal(r.code, 1);
+  assert.match(r.lines.join("\n"), /arena-2b AU 2026-10-13: skipped \(no_2a_success\)/);
+  assert.deepEqual(
+    r.rows.map((x) => [x.job, x.status, JSON.parse(String(x.details_json)).reason]),
+    [["arena-signals", "skipped", "no_2a_success"]],
+  );
+});
+
+test("signals.mjs: 18:40 sharp is still a skip; 18:41 with no 2a success is degraded late_2a, exit 1, no review", async () => {
+  const edge = await liveNo2a("2026-10-13T07:40:00.000Z"); // 18:40 AEDT
+  assert.match(edge.lines.join("\n"), /skipped \(no_2a_success\)/);
+  assert.equal(edge.rows[0].status, "skipped");
+
+  const r = await liveNo2a("2026-10-13T07:41:00.000Z"); // 18:41 AEDT
+  assert.equal(r.code, 1);
+  assert.match(r.lines.join("\n"), /arena-2b AU 2026-10-13: degraded \(late_2a\)/);
+  assert.deepEqual(
+    r.rows.map((x) => [x.job, x.status, JSON.parse(String(x.details_json)).reason]),
+    [["arena-signals", "degraded", "late_2a"]], // batch 3 did not run on a night 2b decided nothing
+  );
+  assert.doesNotMatch(r.lines.join("\n"), /arena-3/);
+});

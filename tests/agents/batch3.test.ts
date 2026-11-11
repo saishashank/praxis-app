@@ -446,6 +446,21 @@ describe("guards", () => {
     });
     expect(await count(fresh, "replay_stat")).toBe(0n);
   });
+
+  it("M18 D-953: a 2b recorded degraded `late_2a` decided nothing, so there is no review to run", async () => {
+    const fresh = await freshReplayDb();
+    await buildGolden(fresh);
+    await setMode(fresh, "full");
+    await fresh.execute({
+      sql: `INSERT INTO run_record (job, market, concurrency_key, scheduled_for, started_at, ended_at, status, details_json)
+            VALUES ('arena-signals', ?, ?, ?, ?, ?, 'degraded', '{"reason":"late_2a"}')`,
+      args: [MARKET, `arena-2b:${MARKET}:${d(300)}`, d(300), NOW(), NOW()],
+    });
+    expect(await reviewDay(fresh, { market: MARKET, d: d(300), now: NOW, params })).toMatchObject({
+      status: "skipped",
+      reason: "no_2b_success",
+    });
+  });
 });
 
 describe("ARN-101 re-check is report only", () => {

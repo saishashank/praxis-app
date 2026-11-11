@@ -416,9 +416,13 @@ export async function signalsMain(
       if (result.status === "failed") exit = 1;
       // 2a missing after the wait: a visible failure, never orders on a stale ledger
       if (result.status === "skipped" && result.reason === "no_2a_success") exit = 1;
+      // M18 (D-953): after 18:40 the night is recorded degraded `late_2a`: just as visible, and 2b decided nothing
+      const late2a = result.status === "degraded" && result.reason === "late_2a";
+      if (late2a) exit = 1;
       // batch 3 follows 2b back-to-back (design 4.1), unless 2b failed or never had its inputs
       runReview =
         phase === "all" &&
+        !late2a &&
         (result.status === "success" ||
           result.status === "degraded" ||
           result.status === "already_done");
