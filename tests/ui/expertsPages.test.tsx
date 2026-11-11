@@ -220,6 +220,29 @@ describe("expert detail and red flags (D-521)", () => {
     expect(own).toContain('data-unlinked=""');
   });
 
+  // OPS-112 (2), D-978 with DAT-253 (D-975): regulator and paper hosts are registered source hosts, so an
+  // Owner sees their links as links; a look-alike host is still text.
+  it("the Owner sees an ASIC and an SSRN link as links and a look-alike host as text (D-975)", async () => {
+    const w3 = await zzWorld();
+    const flag = (id: string, url: string) =>
+      exec(
+        w3.main,
+        `INSERT INTO expert_red_flag (id, expert_id, text, source_url, noted_d, created_at)
+         VALUES ('${id}', 'X-ZZ2', 'ZZ host caveat.', '${url}', '2026-10-02', '2026-10-02T00:00:00.000Z')`,
+      );
+    await flag("X-ZZ2:rf-asic", "https://asic.gov.au/regulatory-resources/x");
+    await flag("X-ZZ2:rf-ssrn", "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=1");
+    await flag("X-ZZ2:rf-fake", "https://evil-asic.gov.au.example/x");
+    as(w3, "owner");
+    const own = renderToStaticMarkup(
+      await ExpertPage({ params: Promise.resolve({ id: "X-ZZ2" }) }),
+    );
+    expect(own).toContain('href="https://asic.gov.au/regulatory-resources/x"');
+    expect(own).toContain('href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=1"');
+    expect(own).not.toContain('href="https://evil-asic.gov.au.example/x"');
+    expect(text(own)).toContain("https://evil-asic.gov.au.example/x");
+  });
+
   it("a Viewer sees an icon and a count and never the text or the source (page and loader)", async () => {
     as(w, "viewer");
     const html = renderToStaticMarkup(
@@ -496,5 +519,25 @@ describe("techniques: why a cluster has no result (D-599), park reasons, gap rep
     const html = renderToStaticMarkup(await TechniquesPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('href="/reviews/learned/challengers/ch-zz-1"');
     expect(text(html)).toContain("challenger created");
+  });
+
+  // OPS-112 (7), D-978: a refused proposal shows its reason in words, not a bare status.
+  it("a refused proposal row shows its reason text on the page and in the loader", async () => {
+    await exec(
+      w.main,
+      `INSERT INTO expert_proposal (id, market, d, cluster_id, kind, family, challenger_id, status, reason, created_at)
+       VALUES ('expprop:AU:${D}:K-ZZ8', 'AU', ?, 'K-ZZ8', 'challenger', 'F1', NULL, 'refused',
+               'lineage_budget: the weekly lineage budget is spent', ?)`,
+      [D, `${D}T00:00:00.000Z`],
+    );
+    as(w, "owner");
+    const m = await loadTechniques(deps(NOW));
+    expect(row(m, "K-ZZ8").proposal?.statusText).toBe(
+      "challenger refused: lineage_budget: the weekly lineage budget is spent",
+    );
+    const html = renderToStaticMarkup(await TechniquesPage({ searchParams: Promise.resolve({}) }));
+    expect(text(html)).toContain(
+      "challenger refused: lineage_budget: the weekly lineage budget is spent",
+    );
   });
 });

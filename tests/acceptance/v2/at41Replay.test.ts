@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import type { Client } from "@libsql/client";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { settleCalls } from "@/lib/experts/calls";
+import { proposeChallengers } from "@/lib/experts/proposals";
 import { insertClaim } from "@/lib/experts/store";
 import { EXPERT_TABLES } from "@/lib/experts/types";
 import { syncExpertDocs } from "@/lib/experts/weeklyStage";
@@ -26,6 +27,7 @@ import {
 import { goldenCodes } from "../../agents/batch2bScenario";
 import { freshReplayDb } from "../../arena/replayHarness";
 import { cleanupTempDbs } from "../../db/helpers";
+import { plantedWorld, RUN_D } from "../../experts/zzProposals";
 import { addOutcome, addProposal, addScreening, importZzSeed } from "../../experts/zzWorld";
 
 vi.setConfig({ testTimeout: 480000, hookTimeout: 480000 });
@@ -245,6 +247,52 @@ describe("AT-41: replay hash identical with expert data absent and present", () 
     expect(await count(db, "expert_call_outcome")).toBe(outcomes);
     expect(await count(db, "document")).toBe(docs);
     const after = await dumpHash(db);
+    expect(differing(before, after)).toEqual([]);
+    expect(after.hash).toBe(before.hash);
+  });
+});
+
+// OPS-112 (3), D-978: the nights above prove the expert data never changes a decision. This block proves
+// the other direction for the WEEKLY learning run with eligible clusters: a real screening run (survivors
+// ranked) and the challenger proposals move only the expert tables and the challenger path that
+// `createChallenger` writes by design (AT-40 (e): one trial per proposal); no decision, order, book, pick,
+// lesson, rule-version or Cortex table moves. The hash is the complement of that short allowlist, so a
+// new table is covered the day it is created.
+describe("AT-41: the weekly run with eligible clusters moves only the challenger path", () => {
+  /** Tables `createChallenger` writes (proposal -> challenger, its event, its trial, its candidate rule version); nothing else may differ. */
+  const CHALLENGER_PATH = new Set([
+    "challenger",
+    "challenger_event",
+    "trial_ledger",
+    "rule_version", // the challenger's own candidate version row
+    "rule_version_status",
+  ]);
+
+  it("screening and proposals: every other table's rows hash the same before and after", async () => {
+    const w = await plantedWorld();
+    const before = await dumpHash(w.db);
+    const run = await w.screen(RUN_D);
+    expect(run.ranked.length).toBeGreaterThanOrEqual(3); // eligible clusters survived: not vacuous
+    const out = await proposeChallengers(w.ctxAt(RUN_D), run);
+    expect(out.map((o) => o.status)).toEqual(["created", "created"]);
+    const after = await dumpHash(w.db);
+    const moved = differing(before, after);
+    expect(moved.filter((t) => !CHALLENGER_PATH.has(t))).toEqual([]);
+    expect(moved.length).toBeGreaterThan(0); // the challenger path did move (one challenger each)
+    // the named decision, book and rule tables are in the scan and identical
+    for (const t of NAMED.filter((n) => !CHALLENGER_PATH.has(n))) {
+      expect(after.perTable[t], t).toBe(before.perTable[t]);
+    }
+  });
+
+  it("a second run of the same week moves nothing at all", async () => {
+    const w = await plantedWorld();
+    const run = await w.screen(RUN_D);
+    await proposeChallengers(w.ctxAt(RUN_D), run);
+    const before = await dumpHash(w.db);
+    const again = await w.screen(RUN_D);
+    expect(await proposeChallengers(w.ctxAt(RUN_D), again)).toEqual([]);
+    const after = await dumpHash(w.db);
     expect(differing(before, after)).toEqual([]);
     expect(after.hash).toBe(before.hash);
   });

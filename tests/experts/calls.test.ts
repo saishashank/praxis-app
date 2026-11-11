@@ -415,3 +415,57 @@ describe("luckPct", () => {
     ).toBe(100);
   });
 });
+
+describe("the horizon bar (OPS-112 (1), D-978)", () => {
+  it("on the horizon session a missing bar waits; once the bar exists the call closes on it, not early", async () => {
+    for (const [i, c] of [
+      [11, 10],
+      [12, 11],
+      [13, 12],
+    ] as const) {
+      await addClose(run, "ZZH", i, c);
+    }
+    await addCall(db, { id: "C-H", code: "ZZH", direction: "long", horizon: 3, tracked: 1 });
+    // d = the horizon session (idx 14) and its bar is not ingested yet: nothing is written
+    await settleCalls(db, MARKET, at(14), SESSIONS);
+    expect(await outcome(db, "C-H")).toBeUndefined();
+    // the bar arrives: the next run closes on it
+    await addClose(run, "ZZH", 14, 13);
+    await settleCalls(db, MARKET, at(14), SESSIONS);
+    expect(await outcome(db, "C-H")).toMatchObject({
+      state: "closed_horizon",
+      exit_d: at(14),
+      net_ppm: 300_000,
+      early: 0,
+    });
+  });
+
+  it("on a later run the bar is still missing: the call closes on its last bar and is marked early", async () => {
+    for (const [i, c] of [
+      [11, 10],
+      [12, 11],
+      [13, 12],
+    ] as const) {
+      await addClose(run, "ZZI", i, c);
+    }
+    await addCall(db, { id: "C-I", code: "ZZI", direction: "long", horizon: 3, tracked: 1 });
+    await settleCalls(db, MARKET, at(16), SESSIONS);
+    expect(await outcome(db, "C-I")).toMatchObject({
+      state: "closed_horizon",
+      exit_d: at(13),
+      net_ppm: 200_000,
+      early: 1,
+    });
+    // insert-once: a bar that turns up afterwards changes nothing
+    await addClose(run, "ZZI", 14, 99);
+    await settleCalls(db, MARKET, at(20), SESSIONS);
+    expect(await outcome(db, "C-I")).toMatchObject({ exit_d: at(13), early: 1 });
+  });
+
+  it("calls closed on their own horizon bar, by target, by stop or with no bars are never early", async () => {
+    const rows = (await db.execute("SELECT claim_id, early FROM expert_call_outcome")).rows;
+    for (const r of rows) {
+      if (String(r.claim_id) !== "C-I") expect(Number(r.early), String(r.claim_id)).toBe(0);
+    }
+  });
+});
