@@ -253,10 +253,25 @@ function build(
   };
 }
 
+/** The highest rank the pick table allows (its CHECK rank BETWEEN 1 AND 10). */
+export const PICK_RANK_MAX = 10; // threshold-ok: pick.rank CHECK (migration 0010)
+
+/**
+ * D-982: inputs placed after a profile's own picks, in the places they leave free, up to `perProfile`
+ * a profile and never beyond PICK_RANK_MAX (the candidate picks: they never displace a strategy or a
+ * shortlist pick, whatever their label or rank score).
+ */
+export type ExtraInputs = { readonly inputs: readonly PickInput[]; readonly perProfile: number };
+
 /** AGT-113: the night's picks for every profile, in profile-name then rank order. */
-export function generatePicks(inputs: readonly PickInput[], ctx: GenerateContext): Pick[] {
+export function generatePicks(
+  inputs: readonly PickInput[],
+  ctx: GenerateContext,
+  extras?: ExtraInputs,
+): Pick[] {
   const out: Pick[] = [];
   const sorted = [...inputs].sort(cmpInput);
+  const extraSorted = [...(extras?.inputs ?? [])].sort(cmpInput);
   for (const profile of Object.keys(ctx.picks.profiles).sort()) {
     const spec = ctx.picks.profiles[profile]!;
     const amount = ctx.picks.portfolioAmounts[profile];
@@ -281,6 +296,18 @@ export function generatePicks(inputs: readonly PickInput[], ctx: GenerateContext
       rank += 1;
       seen.add(inp.code);
       perFamily.set(inp.family, (perFamily.get(inp.family) ?? 0) + 1);
+      out.push(pick);
+    }
+    let extra = 0;
+    for (const inp of extraSorted) {
+      if (extra >= (extras?.perProfile ?? 0) || rank >= PICK_RANK_MAX) break;
+      if (seen.has(inp.code)) continue;
+      if (!eligible(inp, spec.tiers, rule, cut)) continue;
+      const pick = build(inp, profile, rank + 1, ctx, caps, spec.tiers);
+      if (pick === null) continue;
+      rank += 1;
+      extra += 1;
+      seen.add(inp.code);
       out.push(pick);
     }
   }

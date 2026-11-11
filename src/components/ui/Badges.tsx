@@ -54,6 +54,22 @@ export function ValidationBadge({
   );
 }
 
+/** D-984: a pick made by a candidate measure the learning Cortex is testing (not a proven strategy). */
+export const CANDIDATE_BADGE_TEXT = "Candidate measure";
+
+export function CandidateBadge() {
+  return (
+    <span data-testid="candidate-badge" className="inline-flex">
+      <Pill
+        tone="text-label-unvalidated"
+        title="Picked by a new measure the system is testing; it is not proven yet. Its results are tracked like every pick."
+      >
+        <span>{CANDIDATE_BADGE_TEXT}</span>
+      </Pill>
+    </span>
+  );
+}
+
 const REGIME_TONE: Readonly<Record<string, string>> = {
   SHOCK: "text-regime-shock",
   "RISK-OFF": "text-regime-riskoff",

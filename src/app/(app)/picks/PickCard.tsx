@@ -9,7 +9,7 @@ import type { AlertChipView } from "@/lib/ui/loaders/pickAlerts";
 import { AlertChip } from "./AlertChip";
 import { PickFamily } from "./FamilyInfo";
 import { Term } from "@/components/ui/Overlays";
-import { ValidationBadge } from "@/components/ui/Badges";
+import { CandidateBadge, ValidationBadge } from "@/components/ui/Badges";
 import { Masked, Money, SimulatedLabel } from "@/components/ui/Values";
 import { FAMILY_BADGES, honestyLine, pct, STOP_GAP_HOVER, stateText, timeFrameText } from "./text";
 
@@ -60,6 +60,7 @@ export function PickCard({
           <header className="flex flex-wrap items-start justify-between gap-2">
             <div className="flex min-w-0 flex-col gap-1">
               <PickFamily pick={pick} />
+              {pick.candidate ? <CandidateBadge /> : null}
               <h2 className="m-0 text-lg font-semibold">
                 {pick.stock}
                 {pick.company ? (
@@ -114,6 +115,10 @@ export function PickCard({
                 bad case {pct(pick.scenario.badPpm)}, typical {pct(pick.scenario.typicalPpm)}, good
                 case {pct(pick.scenario.goodPpm)} ({pick.scenario.n} trades)
               </>
+            ) : pick.candidate ? (
+              <span className="italic text-text-muted">
+                none yet: a candidate measure being tested
+              </span>
             ) : (
               <span className="italic text-text-muted">not enough similar cases yet</span>
             )}

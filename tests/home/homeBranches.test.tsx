@@ -28,11 +28,13 @@ function baseView(): HomeView {
     day: { regime: null, regimeD: null, quality: [], openFlags: 0, index: null },
     picks: { d: null, items: [] },
     intraday: null,
+    portfolios: null,
     ideas: { d: null, items: [], signals: 0 },
     watchlist: [],
     news: { hidden: false, items: [] },
     review: null,
     attentionCount: null,
+    top5Line: null,
   };
 }
 
@@ -115,6 +117,19 @@ describe("daySentence", () => {
   });
   it("says nothing about the strategies when the change is not measured", () => {
     expect(withPpm(null, "Today", 2)).not.toContain("Your strategies");
+  });
+});
+
+describe("D-994 the top-5 gainer line", () => {
+  it("shows the four-week rate line under the day sentence only when one is stored", () => {
+    show((v) => {
+      v.top5Line =
+        "Top 5 gainers named before they moved, the last 20 trading days: 3 of 100 (3%).";
+    });
+    expect(screen.getByTestId("top5-line")).toHaveTextContent("3 of 100");
+    cleanup();
+    show();
+    expect(screen.queryByTestId("top5-line")).toBeNull();
   });
 });
 
@@ -246,6 +261,42 @@ describe("Home content: since yesterday and needs you", () => {
       "href",
       "/alerts/1",
     );
+  });
+});
+
+describe("Home content: My portfolio (D-950)", () => {
+  it("shows the three practice portfolios once one has started, nothing before", () => {
+    show();
+    expect(screen.queryByTestId("pick-portfolio")).toBeNull();
+    cleanup();
+    show((v) => {
+      v.portfolios = {
+        masked: false,
+        seed: m(1_000_000_000),
+        stockMaxPct: 30,
+        strategyMaxPct: 40,
+        portfolios: ["conservative", "balanced", "aggressive"].map((profile) => ({
+          profile,
+          started: profile === "balanced",
+          holdingsMax: 4,
+          asOfD: null,
+          seed: null,
+          value: null,
+          cash: null,
+          gain: null,
+          sinceStartPpm: null,
+          worstFallPpm: null,
+          holdings: [],
+          split: null,
+          splitWhy: null,
+          trades: [],
+          closed: 0,
+          wins: 0,
+        })),
+      } as unknown as HomeView["portfolios"];
+    });
+    expect(screen.getByTestId("pick-portfolio")).toHaveTextContent("My portfolio");
+    expect(screen.getAllByText("Starts with the first pick.")).toHaveLength(2);
   });
 });
 

@@ -18,25 +18,29 @@ const day = (cash: number, holdings: number, value: number) =>
 describe("0029_pick_portfolio", () => {
   it("creates both tables, rolls back and comes back identical", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
-    const ms = await loadMigrations(MIGRATIONS("main"));
+    // pinned to 0029: 0032 (D-950) recreates both tables in a new shape (tests/db/0032_my_portfolio.test.ts)
+    const ms = (await loadMigrations(MIGRATIONS("main"))).filter((m) => m.version <= 29);
     expect(ms[28]).toMatchObject({ version: 29, name: "pick_portfolio" });
     await migrateUp(db, ms);
     const after = await schemaOf(db);
 
-    expect(await migrateDown(db, ms, 2)).toEqual({ rolledBack: 2, version: 28 });
+    expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 28 });
     const tables = (
       await db.execute(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'pick_portfolio_%'",
       )
     ).rows;
     expect(tables).toHaveLength(0);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 2, version: 30 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 1, version: 29 });
     expect(await schemaOf(db)).toEqual(after);
   });
 
   it("pick_portfolio_day: value must equal cash plus holdings", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
-    await migrateUp(db, await loadMigrations(MIGRATIONS("main")));
+    await migrateUp(
+      db,
+      (await loadMigrations(MIGRATIONS("main"))).filter((m) => m.version <= 29),
+    );
     await db.execute(day(600, 400, 1000));
     await expect(db.execute(day(600, 400, 999))).rejects.toThrow();
     await db.execute("DELETE FROM pick_portfolio_day");
@@ -45,7 +49,10 @@ describe("0029_pick_portfolio", () => {
 
   it("pick_portfolio_trade: exit columns are all null or all set, with a known reason", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
-    await migrateUp(db, await loadMigrations(MIGRATIONS("main")));
+    await migrateUp(
+      db,
+      (await loadMigrations(MIGRATIONS("main"))).filter((m) => m.version <= 29),
+    );
     // open trade: every exit column null
     await db.execute(trade(1, "NULL,NULL,NULL,NULL"));
     // closed trade: every exit column set

@@ -23,6 +23,7 @@ import { familyBadge } from "./familyMap";
 import { CountUp, PopIn } from "./Motion";
 import { WelcomeBanner } from "./WelcomeBanner";
 import { IntradaySection } from "../picks/IntradaySection";
+import { PortfolioCard } from "../picks/PortfolioCard";
 
 const PROFILE_NAME: Record<string, string> = {
   aggressive: "Aggressive",
@@ -480,6 +481,11 @@ export function HomeContent({
         <p className="mt-1 text-sm text-text-muted" data-summary="">
           {empty ? "Nothing has run yet." : daySentence(v)}
         </p>
+        {v.top5Line ? (
+          <p className="mt-1 text-sm text-text-muted" data-testid="top5-line">
+            {v.top5Line}
+          </p>
+        ) : null}
       </div>
 
       <Strip v={v} asOf={result.asOf} />
@@ -543,6 +549,8 @@ export function HomeContent({
       </Section>
 
       {v.intraday ? <IntradaySection model={v.intraday} compact /> : null}
+
+      {v.portfolios?.portfolios.some((p) => p.started) ? <PortfolioCard v={v.portfolios} /> : null}
 
       <SummaryCard v={v} />
 

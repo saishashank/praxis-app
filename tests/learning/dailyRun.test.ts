@@ -179,6 +179,10 @@ describe("runDailyLearning", () => {
     const day = (await loadDailyLearning(db, "AU", D))!;
     expect(day.d).toBe(D);
     expect(day.movers).toHaveLength(r.movers);
+    // D-923: the night's World and movers go on to the learning Cortex; nothing of it is stored here
+    expect(r.night!.world.d).toBe(D);
+    expect(r.night!.movers).toEqual(day.movers);
+    expect(day.cortex).toBeUndefined();
     const by = (code: string) => day.movers.find((m) => m.code === code)!;
 
     // company news before the open wins over everything else
@@ -318,6 +322,82 @@ async function storeNights(db: Client, beatNights: number): Promise<void> {
   });
   await db.batch(stmts, "write");
 }
+
+describe("D-990 the top-5 gainer target in the stored night", () => {
+  it("names the picked and early intraday gainers, keeps the causes, chance and four weeks", async () => {
+    const db = await fileDb();
+    // the night before, stored with its own top-5 measure (one of five named, chance 0.5)
+    await db.execute({
+      sql: "INSERT INTO daily_learning (market, d, body_json, created_at) VALUES ('AU', ?, ?, 't')",
+      args: [
+        PREV,
+        JSON.stringify({
+          d: PREV,
+          summary: [],
+          movers: [],
+          lessons: [],
+          improvements: [],
+          hypothesesOpened: [],
+          top5: {
+            d: PREV,
+            gainers: [{}, {}, {}, {}, {}],
+            gainersHad: 1,
+            chanceHits: 0.5,
+            rolling: {},
+          },
+        }),
+      ],
+    });
+    // M02 was found intraday at +1 % of its +4 % day; M03 at +3 % (most of the move made)
+    for (const [code, move] of [
+      ["M02", 10_000],
+      ["M03", 30_000],
+    ] as const) {
+      await db.execute({
+        sql: `INSERT INTO intraday_candidate (market, session_d, code, found_slot, found_at, item_source,
+                item_ann_id, materiality, move_ppm, gates_json)
+              VALUES ('AU', ?, ?, '11:00', ?, 'zz', 'a', 2, ?, '{}')`,
+        args: [D, code, `${D}T00:00:00.000Z`, move],
+      });
+    }
+    await run(db, {
+      ...hooks,
+      picksOf: async () =>
+        new Map([
+          ["M04", { where: "Balanced #2", source: "strategy" as const }],
+          ["E03", { where: "Growth #1", source: "candidate" as const }],
+        ]),
+    });
+    const t = (await loadDailyLearning(db, "AU", D))!.top5!;
+    expect(t.gainers.map((g) => [g.code, g.via, g.missed])).toEqual([
+      ["E01", null, "news_before_open"],
+      ["M01", null, "sector_move"],
+      ["M02", "intraday", null],
+      ["M03", null, "sector_move"],
+      ["M04", "strategy", null],
+    ]);
+    expect(t.gainersHad).toBe(2);
+    expect(t.named).toBe(4);
+    expect(t.liquid).toBe(14);
+    expect(t.chanceHits).toBeCloseTo((4 / 14) * 5, 10);
+    expect(t.rolling).toMatchObject({ nights: 2, gainers: 10, had: 3 });
+    expect(t.picks.n).toBe(2);
+    // the review words read from the stored night
+    expect(t.gainers[0]!.name).toBe("E01 Limited");
+    db.close();
+  });
+
+  it("without the picks hook or an intraday table only the evening's signals are known", async () => {
+    const db = await fileDb();
+    await db.execute("DROP TABLE intraday_candidate");
+    await run(db);
+    const t = (await loadDailyLearning(db, "AU", D))!.top5!;
+    expect(t.gainersHad).toBe(0);
+    expect(t.named).toBe(0);
+    expect(t.rolling.nights).toBe(1);
+    db.close();
+  });
+});
 
 describe("feeding the learning system", () => {
   const clusters = async (db: Client) =>

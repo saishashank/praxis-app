@@ -34,6 +34,7 @@ import {
   readAvailability,
   readClosedToday,
   readExecutions,
+  readMyPortfolios,
   readOrders,
   readPickReview,
   readRecap,
@@ -167,6 +168,11 @@ export async function buildFacts(db: Client, o: BuildOptions): Promise<BuiltFact
   // D-909: descriptive, soft: a failing read leaves the section out, never the review
   const missedMovers = await readMissedMovers(c).catch(() => null);
   if (missedMovers !== null) facts.missedMovers = missedMovers;
+  // D-957: one line per My portfolio profile in section 3; soft, a failing read leaves it out
+  if (av.arenaActive && !minimal && !gone.has(3)) {
+    const mine = await readMyPortfolios(c).catch(() => null);
+    if (mine !== null) facts.myPortfolios = mine;
+  }
   if (minimal) {
     const noData = executions.length === 0 ? ` No data for ${formatDay(o.d, anchor(o.d))}.` : "";
     facts.minimalReason = `${o.minimal!.reason}${noData}`;

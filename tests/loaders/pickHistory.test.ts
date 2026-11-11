@@ -9,6 +9,7 @@ import {
   HISTORY_PAGE,
   historyFilterOf,
   loadPickHistory,
+  loadPicks,
   parseHistoryCursor,
 } from "@/lib/ui/loaders/picks";
 import { CODES, D, envOf, fullWorld, NAMES, SHA, type World } from "./world";
@@ -128,5 +129,45 @@ describe("loadPickHistory", () => {
     expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}/);
     expect(text).not.toMatch(/10500000|10000000|2200000|2000000/);
     expect(m.rows[0]!.changePpm).toBe(50_000); // percentages stay
+  });
+});
+
+describe("D-984 candidate picks in the history and on the card", () => {
+  it("the Candidate filter lists only candidate-measure picks, flagged, in every state; the card shows no cases", async () => {
+    const add = async (rank: number, code: string, rule: string) => {
+      await w.main.execute({
+        sql: `INSERT INTO pick (market, d, profile, rank, code, family, tier, rule_version, signal_id, label,
+                reference_micro, buy_max_micro, valid_until_d, stop_micro, aim_micro, n_similar, bad_ppm,
+                typical_ppm, good_ppm, time_frame_sessions, size_micro, risk_micro, factors_json, based_on_json,
+                pick_sha, created_at)
+              VALUES ('AU', ?, 'zzcand', ?, ?, 'F1', 'U1', ?, ?, 'UNVALIDATED', 10000000, 10050000,
+                '2026-10-23', 9500000, 11000000, 0, -50000, 0, 100000, 20, 1000000000, 100000000,
+                '[]', '["From the candidate measure: heavy trading without news — being tested, not proven."]',
+                ?, '2026-10-20T07:10:00.000Z')`,
+        args: [D, rank, code, rule, `s-${rank}`, SHA],
+      });
+      await w.main.execute({
+        sql: `INSERT INTO pick_outcome (market, d, profile, rank, kind, code, published_sha, state, updated_d)
+              VALUES ('AU', ?, 'zzcand', ?, 'pick', ?, ?, 'waiting', ?)`,
+        args: [D, rank, code, SHA, D],
+      });
+    };
+    await add(1, "ZZUP", "F1.v1");
+    await add(2, "ZZOTH", "CAND.v1:A-D2-07");
+    const env = owner();
+    expect(historyFilterOf("candidate")).toBe("candidate");
+    const m = await loadPickHistory(env, { profile: "zzcand", filter: "candidate", cursor: null });
+    expect(m.rows.map((r) => [r.stock, r.candidate, r.status])).toEqual([
+      ["Zed Other Group (ZZOTH)", true, "waiting"],
+    ]);
+    const all = await loadPickHistory(env, { profile: "zzcand", filter: "all", cursor: null });
+    expect(all.rows.map((r) => r.candidate)).toEqual([false, true]);
+    const card = await loadPicks(env, { profile: "zzcand", d: D });
+    const c = card.picks.find((p) => p.rank === 2)!;
+    expect(c.candidate).toBe(true);
+    expect(c.scenario).toBeNull();
+    expect(c.expectedGainPpm).toBeNull();
+    expect(c.basedOn[0]).toContain("From the candidate measure");
+    expect(card.picks.find((p) => p.rank === 1)!.candidate).toBe(false);
   });
 });

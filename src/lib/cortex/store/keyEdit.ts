@@ -111,3 +111,39 @@ export async function refitPending(db: Exec, market: string): Promise<boolean> {
   const fit = await newestFitAt(db, market);
   return fit !== null && String(edit) > fit;
 }
+
+export type CortexTrialCharge = {
+  market: string;
+  /** The family whose lineage (`<market>:<family>`) is charged. */
+  family: string;
+  /** e.g. `cortex:F1.learn@3` (D-923: one charge per learner generation). */
+  ruleVersion: string;
+  variant: string;
+  /** Unique id of the trial row (the call is idempotent by it). */
+  id: string;
+  /** Session date recorded on the trial row. */
+  d: string;
+};
+
+/**
+ * D-923 / CTX-031: one `trial_ledger` row (kind 'challenger', as the key edits above) for a learner
+ * generation, so the lineage's error budget and the Cortex page's luck figure count it. Written
+ * BEFORE the generation's map row and event (LRN-AT-12). A lineage with no split yet is not charged
+ * (false), exactly as `recordCortexKeyEdit` skips it.
+ */
+export async function chargeCortexTrial(db: Exec, c: CortexTrialCharge): Promise<boolean> {
+  const lineageId = `${c.market}:${c.family}`;
+  const r = await db.execute({
+    sql: "SELECT MAX(version) AS v FROM lineage_split WHERE lineage_id = ?",
+    args: [lineageId],
+  });
+  const v = r.rows[0]?.v;
+  if (v === null || v === undefined) return false;
+  await db.execute({
+    sql: `INSERT INTO trial_ledger (id, market, lineage_id, split_version, kind, rule_version,
+            variant, run_id, d) VALUES (?, ?, ?, ?, 'challenger', ?, ?, NULL, ?)
+          ON CONFLICT DO NOTHING`,
+    args: [c.id, c.market, lineageId, Number(v), c.ruleVersion, c.variant, c.d],
+  });
+  return true;
+}

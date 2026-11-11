@@ -25,10 +25,13 @@ import { dateLabel, plural, toneOf, truncate } from "./format";
 import { formatDay } from "@/lib/view/format";
 import { displayTitle } from "@/lib/view/displayText";
 import type { DailyLearning } from "@/lib/learning/daily";
+import { top5Lines } from "@/lib/learning/dailyTop5";
 import {
   type ClosedTradeFact,
   aud,
   audWithPct,
+  BRAIN_HEADING,
+  TOP5_HEADING,
   companyLabel,
   pctPpm,
   sortClosed,
@@ -206,6 +209,8 @@ export interface ReviewFacts {
   pickAlerts?: PickReviewFacts;
   /** D-909: shown only when `learning` is null. */
   missedMovers?: MissedMoversReviewFacts;
+  /** D-957: one plain line per My portfolio profile (section 3). */
+  myPortfolios?: { lines: string[] };
 }
 
 const SECTION_NAMES = [
@@ -420,7 +425,15 @@ function section3(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
   if (!f.arenaActive) return [...out, notActive()];
   if (missing.has(3)) return [...out, unavailable()];
   const ex = live(f.executions);
-  if (ex.length === 0) return [...out, { t: "p", text: "No strategies.", tone: "muted" }];
+  const mine = f.myPortfolios?.lines ?? [];
+  const portfolio: Block[] = mine.length
+    ? [
+        { t: "p", text: "My portfolio (practice money, one per risk profile)", bold: true },
+        { t: "ul", items: mine },
+      ]
+    : [];
+  if (ex.length === 0)
+    return [...out, { t: "p", text: "No strategies.", tone: "muted" }, ...portfolio];
   const carried = f.variant === "nonTrading";
   out.push({
     t: "table",
@@ -441,6 +454,7 @@ function section3(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
     ]),
     right: [1, 2, 3],
   });
+  out.push(...portfolio);
   return out;
 }
 
@@ -452,6 +466,11 @@ function section4(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
   if (missing.has(4)) return [...out, unavailable()];
   const l = f.learning ?? null;
   if (l === null) return [...out, { t: "p", text: LEARNING_MISSING, tone: "muted" }];
+  // D-993: the Owner's target opens the learning section (top-5 gainers named before they moved)
+  const top5 = l.top5 ? top5Lines(l.top5) : [];
+  if (top5.length) {
+    out.push({ t: "p", text: TOP5_HEADING, bold: true }, { t: "ul", items: top5 });
+  }
   if (l.summary.length) out.push({ t: "ul", items: l.summary });
   if (l.lessons.length) {
     out.push({
@@ -471,7 +490,13 @@ function section4(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
     out.push({ t: "p", text: "New ideas being tested", bold: true });
     out.push({ t: "ul", items: l.hypothesesOpened });
   }
-  if (!l.summary.length && !l.lessons.length && !l.hypothesesOpened.length) {
+  const brain = l.cortex?.lines ?? [];
+  if (brain.length) {
+    // D-923: the learning Cortex's night, left out when that step did not run
+    out.push({ t: "p", text: BRAIN_HEADING, bold: true });
+    out.push({ t: "ul", items: [...brain] });
+  }
+  if (!l.summary.length && !l.lessons.length && !l.hypothesesOpened.length && !brain.length) {
     out.push({ t: "p", text: "Nothing new was learned today.", tone: "muted" });
   }
   return out;

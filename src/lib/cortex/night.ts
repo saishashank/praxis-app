@@ -16,7 +16,9 @@
 //
 // Arms (CTX-023, CTX-054, D-266, D-280): a book whose family is `allowed` gets live decisions AND a
 // shadow arm with the CTX-026 portfolio limits off; a book whose family is not allowed gets shadow
-// decisions only (G03 is not applied in that arm). Every blocked candidate is kept with its first
+// decisions only (G03 is not applied in that arm). A family's challenger (C.4, D-923: the learner,
+// or the fixed rule when the learner leads) then runs that same shadow arm on the same candidates,
+// rows tagged `bookId#learn` / `#fixed` with its own rule version. Every blocked candidate is kept with its first
 // failing gate so batch 3 scores it as a would-have trade; every cash-holding book without a live
 // decision gets one abstain record naming the gate that stopped its best candidate.
 //
@@ -56,6 +58,7 @@ import { cellKey, TOP3_BAND_KEY, type CellStatistic } from "@/lib/stats/cells";
 import type { Prng } from "@/lib/stats/rng";
 import {
   ANGLES,
+  canActivate,
   evaluateAngle,
   rankStandardise,
   ruleScoredSet,
@@ -97,7 +100,7 @@ import { isLateBarNight, quotaDegrade } from "./pit/integrity";
 import type { AsOfView, InputKind, InputManifest } from "./pit/types";
 import { scoreCode, type CodeScore } from "./score";
 import { activeSetHash } from "./score/map";
-import type { CortexMap, ScoredAngle } from "./score/types";
+import type { CortexMap, ScoredAngle, ScoreWeights } from "./score/types";
 import { moversGateInput, type MoversNight } from "./moversNight";
 import { coldStartAt } from "./states/coldStart";
 import { NO_SHORT_RISK, SHORT_RISK_REPORTS, shortRisk } from "./states/shortRisk";
@@ -165,7 +168,43 @@ export type FamilyNightRule = {
   /** D-891: entries only on nights whose session distance from `entryAnchor` is a multiple of this. */
   readonly entryEvery?: number;
   readonly entryAnchor?: string;
+  /** D-923 / C.3: the learner's angle and cluster weights (absent = equal weights, the fixed rule). */
+  readonly weights?: ScoreWeights;
+  /** D-923: a learner rule version (`<family>.learn`); its challenger rows carry `#learn`. */
+  readonly learner?: boolean;
+  /** D-923: the fixed rule version the learner started from (e.g. `F1.v2-mom`). */
+  readonly basedOn?: string;
+  /** D-923: the learner's weight generation. */
+  readonly generation?: number;
+  /**
+   * O-81: listed angles this rule scores as active although their passport is not (a candidate
+   * measure promoted into the family's base, learn/base.ts). Only inside this rule's own scored set:
+   * the night's global set, its hash and the other families' rules are unchanged. Absent = none.
+   */
+  readonly admitted?: readonly string[];
 };
+
+/**
+ * C.4: a second rule of a family run on the same candidates in the SHADOW arm only (CTX-026 off for
+ * an allowed family, exactly as the existing shadow arm). Its rows carry `bookId#learn` when the
+ * rule is a learner, `bookId#fixed` when the learner leads and the fixed rule is the challenger.
+ */
+export type NightChallenger = {
+  readonly rule: FamilyNightRule;
+  readonly map: CortexMap;
+};
+
+/** The book-id suffixes of challenger rows (C.4); `baseBookId` strips them. */
+export const LEARN_SUFFIX = "#learn";
+export const FIXED_SUFFIX = "#fixed";
+
+/** The real book of a decision row: its id without a `#learn` / `#fixed` challenger suffix. */
+export function baseBookId(bookId: string): string {
+  for (const s of [LEARN_SUFFIX, FIXED_SUFFIX]) {
+    if (bookId.endsWith(s)) return bookId.slice(0, -s.length);
+  }
+  return bookId;
+}
 
 export type StateRef = {
   readonly code: string;
@@ -194,6 +233,18 @@ export type NightInputs = {
    */
   readonly contextBooks?: readonly BookState[];
   readonly rules: ReadonlyMap<Family, FamilyNightRule>;
+  /**
+   * C.4: per family, a second rule run in the shadow arm only after the family rules (the learner,
+   * or the fixed rule when the learner leads). Absent or empty = the night's bytes are unchanged.
+   */
+  readonly challengers?: ReadonlyMap<Family, NightChallenger>;
+  /**
+   * O-81 / C.6 table 5: the open probe angles (candidate measures) to compute tonight for the
+   * learning loop only. Score angles with a compute that are NOT in the night's scored set; their
+   * values go to `NightOutput.probes` and never into S, eligibility, a gate or the shared features.
+   * Absent or empty = the night's bytes are unchanged.
+   */
+  readonly probes?: readonly string[];
   /** Current `cortex_state` rows per code (the latest per kind). */
   readonly states: readonly StateRef[];
   /** Angle id → passport status; an angle absent here is `candidate` (never scored). */
@@ -261,6 +312,8 @@ export type Decision = {
   readonly stopSpec: StopSpec;
   readonly trace: readonly GateTraceEntry[];
   readonly card: CardFields;
+  /** C.4: the rule version of a challenger row (`bookId#learn` / `#fixed`); absent = the family rule. */
+  readonly ruleVersion?: string;
 };
 
 /** A candidate a gate stopped: the sizing fields are null when the gate failed before they existed. */
@@ -305,6 +358,11 @@ export type NightOutput = {
   readonly blocked: readonly BlockedDecision[];
   readonly abstains: readonly Abstain[];
   readonly sectorTilt: readonly SectorTilt[];
+  /**
+   * O-81: code → probe angle id → value (rank-standardised within the universe like the features),
+   * present only when `NightInputs.probes` named a computable probe; stored in cortex_feature_probe.
+   */
+  readonly probes?: ReadonlyMap<string, ReadonlyMap<string, AngleValue>>;
 };
 
 // ---- constants -------------------------------------------------------------------------------------------
@@ -464,6 +522,29 @@ export function featuresAt(
   return perCode;
 }
 
+/**
+ * O-81 / C.6 table 5: the probe angles a night computes: the listed ids that are score angles with a
+ * compute and live readers (`canActivate`, D-291), not exclusive, and NOT already in the night's
+ * scored set (those are in the shared features). Registry order; empty without a list.
+ */
+export function probeDefsOf(
+  angles: readonly AngleDef[],
+  scoredDefs: readonly AngleDef[],
+  probes: readonly string[] | undefined,
+): AngleDef[] {
+  if (probes === undefined || probes.length === 0) return [];
+  const want = new Set(probes);
+  const scored = new Set(scoredDefs.map((a) => a.id));
+  return angles.filter(
+    (a) =>
+      want.has(a.id) &&
+      !scored.has(a.id) &&
+      a.kind === "score" &&
+      a.exclusive !== true &&
+      canActivate(a).ok,
+  );
+}
+
 /** The D9 veto flags of a code: gate angles of domain 9 with a compute that return a flag. */
 export function l0VetoFlags(
   view: AsOfView,
@@ -576,6 +657,25 @@ type NightCtx = {
   readonly ruleSets: ReadonlyMap<Family, RuleSet>;
 };
 
+/**
+ * C.4: the rule a candidate is evaluated under: the family's rule, map and own scored set, or a
+ * challenger's. Every evaluation step reads the rule from here, so a challenger runs the very code
+ * path the family rule runs.
+ */
+type RuleBinding = {
+  readonly rule: FamilyNightRule | undefined;
+  readonly map: CortexMap | undefined;
+  readonly ruleSet: RuleSet | undefined;
+};
+
+function familyBinding(ctx: NightCtx, family: Family): RuleBinding {
+  return {
+    rule: ctx.inputs.rules.get(family),
+    map: ctx.inputs.maps.get(family),
+    ruleSet: ctx.ruleSets.get(family),
+  };
+}
+
 function statusOf(inputs: NightInputs): (id: string) => AngleStatus {
   return (id) => inputs.passports.get(id) ?? "candidate";
 }
@@ -624,11 +724,12 @@ function evaluateCandidate(
   familyAllowed: boolean,
   deployable: Micro,
   tonight: readonly Exposure[],
+  binding: RuleBinding,
 ): Eval {
   const { inputs } = ctx;
   const { params } = inputs;
   const f = ctx.facts.get(code)!;
-  const rule = inputs.rules.get(book.family);
+  const rule = binding.rule;
   const trace: GateTraceEntry[] = [];
   let score: CodeScore | null = null;
   let cell: CellStatistic | undefined = undefined;
@@ -685,16 +786,19 @@ function evaluateCandidate(
   const bar = f.bar!;
 
   // 2. eligibility (CTX-012; an ATR warming up is an undefined feature too)
-  const ruleSet = ctx.ruleSets.get(book.family);
+  const ruleSet = binding.ruleSet;
   const feats =
     (ruleSet === undefined ? ctx.features : ruleSet.features).get(code) ??
     new Map<string, AngleValue>();
   const scoredAngles = ruleSet?.scoredAngles ?? ctx.scoredAngles;
   const setHash = ruleSet?.hash ?? ctx.hash;
-  const clusters = rule?.clusters ?? inputs.maps.get(book.family)?.clusters ?? [];
+  const clusters = rule?.clusters ?? binding.map?.clusters ?? [];
   score =
     clusters.length > 0
-      ? scoreCode(feats, scoredAngles, inputs.maps.get(book.family), setHash, clusters)
+      ? scoreCode(feats, scoredAngles, binding.map, setHash, clusters, {
+          weights: rule?.weights,
+          clusterWeightMax: params.cortex.clusterWeightMax,
+        })
       : null;
   if (score !== null && score.status === "ineligible") {
     step("G02_eligibility", gateEligibility(score.eligibility));
@@ -954,13 +1058,11 @@ function blockedOf(
   code: string,
   arm: "live" | "shadow",
   e: Eval,
+  rule: FamilyNightRule | undefined,
 ): BlockedDecision {
   const f = ctx.facts.get(code)!;
   const score = e.score !== null && e.score.status === "scored" ? e.score : null;
-  const plan =
-    e.plan ??
-    familyPlan(book.family, ctx.inputs.params, f.atrMicro, ctx.inputs.rules.get(book.family)) ??
-    EMPTY_PLAN;
+  const plan = e.plan ?? familyPlan(book.family, ctx.inputs.params, f.atrMicro, rule) ?? EMPTY_PLAN;
   const spec = e.stopSpec ?? planStopSpec(plan, f.atrMicro);
   return {
     bookId: book.bookId,
@@ -983,7 +1085,7 @@ function blockedOf(
     plan,
     stopSpec: spec,
     trace: e.trace,
-    card: cardOf(ctx, e, e.cell, ctx.inputs.rules.get(book.family)),
+    card: cardOf(ctx, e, e.cell, rule),
     firstFail: e.firstFail!,
   };
 }
@@ -999,6 +1101,7 @@ function decisionOf(
   rank: number,
   rankKey: readonly number[],
   shrunkMeanNet: number,
+  rule: FamilyNightRule | undefined,
 ): Decision {
   const f = ctx.facts.get(code)!;
   const score = e.score as Extract<CodeScore, { status: "scored" }>;
@@ -1023,7 +1126,7 @@ function decisionOf(
     plan: e.plan!,
     stopSpec: e.stopSpec!,
     trace: e.trace,
-    card: cardOf(ctx, e, e.cell, ctx.inputs.rules.get(book.family)),
+    card: cardOf(ctx, e, e.cell, rule),
   };
 }
 
@@ -1157,10 +1260,14 @@ export function runNight(inputs: NightInputs): NightOutput {
   const features = featuresAt(view, t, scoredDefs, codes);
   // D-889: a rule version that lists its own angles scores exactly those (exclusive ones included),
   // ranked within its own tiers; the night's shared features stay as they are
-  const ruleSets = new Map<Family, RuleSet>();
-  for (const [family, rule] of [...inputs.rules].sort((a, b) => byText(a[0], b[0]))) {
-    if (rule.angles === undefined) continue;
-    const own = ruleScoredSet(angles, status, rule.angles);
+  const ruleSetOf = (rule: FamilyNightRule): RuleSet | undefined => {
+    if (rule.angles === undefined) return undefined;
+    const admitted = new Set(rule.admitted ?? []);
+    const ruleStatus =
+      admitted.size === 0
+        ? status
+        : (id: string): AngleStatus => (admitted.has(id) ? "active" : status(id));
+    const own = ruleScoredSet(angles, ruleStatus, rule.angles);
     const set = own.map((a) => ({
       id: a.id,
       version: a.version,
@@ -1170,12 +1277,17 @@ export function runNight(inputs: NightInputs): NightOutput {
       const tier = view.tier(c, t);
       return tier !== null && rule.tiers.includes(tier);
     });
-    ruleSets.set(family, {
+    return {
       scoredAngles: set,
       hash: activeSetHash(set),
       features: featuresAt(view, t, own, tierCodes),
       valid: own.length === new Set(rule.angles).size && own.length > 0,
-    });
+    };
+  };
+  const ruleSets = new Map<Family, RuleSet>();
+  for (const [family, rule] of [...inputs.rules].sort((a, b) => byText(a[0], b[0]))) {
+    const set = ruleSetOf(rule);
+    if (set !== undefined) ruleSets.set(family, set);
   }
   const gateAngles = angles.filter(
     (a) =>
@@ -1228,8 +1340,9 @@ export function runNight(inputs: NightInputs): NightOutput {
     arm: "live" | "shadow",
     allowed: boolean,
     deployable: Micro,
+    binding: RuleBinding = familyBinding(ctx, book.family),
   ): { taken: Decision[]; queued: Decision[]; blocked: BlockedDecision[] } => {
-    const rule = inputs.rules.get(book.family);
+    const rule = binding.rule;
     const slots = rule?.slots ?? DEFAULT_SLOTS;
     const passers: Passer[] = [];
     const armBlocked: BlockedDecision[] = [];
@@ -1245,9 +1358,10 @@ export function runNight(inputs: NightInputs): NightOutput {
         allowed,
         deployable,
         arm === "live" ? tonight : [],
+        binding,
       );
       if (e.firstFail !== null) {
-        armBlocked.push(blockedOf(ctx, book, code, arm, e));
+        armBlocked.push(blockedOf(ctx, book, code, arm, e, rule));
         continue;
       }
       const score = e.score as Extract<CodeScore, { status: "scored" }>;
@@ -1277,6 +1391,7 @@ export function runNight(inputs: NightInputs): NightOutput {
         r.rank,
         r.rankKey,
         r.shrunkMeanNet,
+        rule,
       );
       if (taken.length >= slots) {
         rest.push(dec);
@@ -1339,8 +1454,34 @@ export function runNight(inputs: NightInputs): NightOutput {
     }
   }
 
+  // C.4: each family's challenger (the learner, or the fixed rule when the learner leads) on the
+  // same books and candidates, SHADOW arm only, exactly as the shadow arm above; its rows carry the
+  // book id with `#learn` / `#fixed` and its own rule version. Never a live decision, queue or abstain.
+  const challengers = [...(inputs.challengers ?? new Map<Family, NightChallenger>())].sort((a, b) =>
+    byText(a[0], b[0]),
+  );
+  for (const [family, ch] of challengers) {
+    const binding: RuleBinding = { rule: ch.rule, map: ch.map, ruleSet: ruleSetOf(ch.rule) };
+    const suffix = ch.rule.learner === true ? LEARN_SUFFIX : FIXED_SUFFIX;
+    const tag = <T extends Decision | BlockedDecision>(x: T): T => ({
+      ...x,
+      bookId: `${x.bookId}${suffix}`,
+      ruleVersion: ch.rule.ruleVersion,
+    });
+    for (const book of books) {
+      if (book.family !== family || !isEntryNight(ch.rule, d, view)) continue;
+      const allowed = (inputs.status[book.family] ?? "shadow") === "allowed";
+      const sh = runArm(book, "shadow", allowed, deployableOf(book), binding);
+      shadow.push(...sh.taken.map(tag));
+      blocked.push(...sh.blocked.map(tag));
+    }
+  }
+
+  // O-81: the open probes, computed beside the night and kept out of everything above
+  const probeDefs = probeDefsOf(angles, scoredDefs, inputs.probes);
   const universe = codes.map((c) => ({ code: c, industry: facts.get(c)!.industry }));
   return {
+    ...(probeDefs.length === 0 ? {} : { probes: featuresAt(view, t, probeDefs, codes) }),
     status: mapMissing ? "abstain_all" : "ran",
     reason: mapMissing ? "map_missing" : null,
     manifest,

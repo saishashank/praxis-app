@@ -22,13 +22,16 @@ import type {
   StatRow,
 } from "@/lib/email/templates/review";
 import { money, pct, plural } from "@/lib/email/templates/format";
-import { aud, exitWords, type ClosedTradeFact } from "@/lib/email/templates/reviewWords";
+import { aud, exitWords, pctPpm, type ClosedTradeFact } from "@/lib/email/templates/reviewWords";
 import { formatDay } from "@/lib/view/format";
 import { companyNames, familyNames } from "./names";
 import type { EnvName } from "@/lib/email/templates/core";
 import { melbourneDate } from "@/lib/email/keys";
 import type { PicksParams } from "@/lib/agents/params";
 import { readSection7a } from "@/lib/picks/section7a";
+import { STRATEGIES, type StrategyKey } from "@/lib/picks/allocation";
+import { loadPortfolioSettings, MY_PROFILES } from "@/lib/picks/portfolioConfig";
+import { splitLine, strategyNames } from "@/lib/picks/portfolioWords";
 import { readNight } from "@/lib/steelman/store";
 import { getMeters, usageEnvironment, worstMeter } from "@/lib/usage/meters";
 import { HEALTH_COMPONENTS } from "@/lib/sentinel/schema";
@@ -1305,4 +1308,80 @@ export async function readPicksSection(
       })),
     })),
   };
+}
+
+// ---- D-957: one line per My portfolio profile (section 3) -----------------------------------------
+
+const MICRO_PER_CENT = 10_000n; // threshold-ok: micro-AUD per cent
+
+/**
+ * The three My portfolio practice portfolios on the review date, one plain line each: value, profit or
+ * loss since the start, worst fall from a peak, holdings, the strategy split and the day's trades.
+ * Bounded to the date (EML-035): a profile without a value on that session gives no line. Null when
+ * nothing was valued on the date (or the read fails).
+ */
+export async function readMyPortfolios(c: Ctx): Promise<{ lines: string[] } | null> {
+  const settings = await loadPortfolioSettings(c.db);
+  const names = strategyNames(await familyNames(c.db));
+  const seedCents = BigInt(settings.seedAud) * 100n; // threshold-ok: cents per dollar
+  const days = await c.db.execute({
+    sql: `SELECT profile, value_micro, holdings,
+                 (SELECT MIN(x.fall_ppm) FROM pick_portfolio_day x
+                  WHERE x.market = pd.market AND x.profile = pd.profile AND x.d <= pd.d) AS worst
+          FROM pick_portfolio_day pd WHERE market = ? AND d = ?`,
+    args: [c.market, c.d],
+  });
+  if (days.rows.length === 0) return null;
+  const splits = await c.db.execute({
+    sql: `SELECT profile, shares_json, cash_ppm FROM pick_portfolio_split ps
+          WHERE market = ? AND d = (SELECT MAX(x.d) FROM pick_portfolio_split x
+            WHERE x.market = ps.market AND x.profile = ps.profile AND x.d <= ?)`,
+    args: [c.market, c.d],
+  });
+  const trades = await c.db.execute({
+    sql: `SELECT profile, side, COUNT(*) AS n FROM pick_portfolio_trade
+          WHERE market = ? AND d = ? GROUP BY profile, side`,
+    args: [c.market, c.d],
+  });
+  const lines: string[] = [];
+  for (const profile of MY_PROFILES) {
+    const day = days.rows.find((r) => str(r.profile) === profile);
+    if (day === undefined) continue;
+    const valueCents = BigInt(str(day.value_micro)) / MICRO_PER_CENT;
+    const gain = valueCents - seedCents;
+    const gainPpm = seedCents > 0n ? Number((gain * 1_000_000n) / seedCents) : 0; // threshold-ok: ppm
+    const worst = Number(day.worst ?? 0);
+    const held = Number(day.holdings);
+    const parts = [
+      `${profile.charAt(0).toUpperCase()}${profile.slice(1)}: ${aud(Number(valueCents))}, ${aud(Number(gain), true)} (${pctPpm(gainPpm)}) since the start`,
+      worst < 0 ? `worst fall ${pctPpm(worst)}` : "no fall from a peak yet",
+      held === 0 ? "all in cash" : `${held} ${plural(held, "holding")}`,
+    ];
+    const sp = splits.rows.find((r) => str(r.profile) === profile);
+    if (sp !== undefined) {
+      try {
+        const shares = (
+          JSON.parse(str(sp.shares_json)) as { strategy: string; target_ppm: number }[]
+        )
+          .filter((x) => (STRATEGIES as readonly string[]).includes(x.strategy))
+          .map((x) => ({ strategy: x.strategy as StrategyKey, targetPpm: x.target_ppm }));
+        parts.push(`split ${splitLine(shares, Number(sp.cash_ppm), names)}`);
+      } catch {
+        // the split is decoration of the line
+      }
+    }
+    const n = (side: string) =>
+      Number(trades.rows.find((r) => str(r.profile) === profile && str(r.side) === side)?.n ?? 0);
+    const buys = n("buy");
+    const sells = n("sell");
+    if (buys + sells > 0) {
+      const t = [
+        buys > 0 ? `${buys} ${plural(buys, "buy")}` : null,
+        sells > 0 ? `${sells} ${plural(sells, "sale")}` : null,
+      ].filter((x): x is string => x !== null);
+      parts.push(`today ${t.join(" and ")}`);
+    }
+    lines.push(`${parts.join("; ")}.`);
+  }
+  return lines.length > 0 ? { lines } : null;
 }
