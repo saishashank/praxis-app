@@ -20,9 +20,9 @@ import { pickHooks } from "./dailyHooks";
 import { runPicksNight } from "./nightly";
 import { recordPicksNight } from "./noPicks";
 import { runPickPortfolio } from "./portfolioStore";
+import { resolveCliMarket } from "@/lib/arena/marketFlag";
+import { loadProfile } from "@/lib/market/profile";
 
-const MARKET = "AU";
-const MARKET_TZ = "Australia/Sydney";
 const PHASES_WITH_PICKS = ["all", "3", "picks"];
 
 export type PicksCliDeps = {
@@ -61,43 +61,50 @@ export async function picksMain(
     return 1;
   }
   try {
-    const d = flag(argv, "--date") ?? marketDate(new Date(nowMs()), MARKET_TZ);
+    const chosen = await resolveCliMarket(db, argv);
+    if (!chosen.ok) {
+      out(`arena-picks: ${chosen.line}`);
+      return 2;
+    }
+    const market = chosen.market;
+    const tz = (await loadProfile(db, market)).tz!;
+    const d = flag(argv, "--date") ?? marketDate(new Date(nowMs()), tz);
     const mode = await db.execute({
       sql: "SELECT mode FROM market WHERE code = ?",
-      args: [MARKET],
+      args: [market],
     });
     // Not in full mode: batch 2b has already said so (data_only_guard); nothing to add.
     if (mode.rows.length === 0 || String(mode.rows[0].mode) !== "full") return 0;
     const reviewed = await db.execute({
       sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND status IN ('success', 'degraded')`,
-      args: [reviewKey(MARKET, d)],
+      args: [reviewKey(market, d)],
     });
     if (reviewed.rows.length === 0) {
-      out(`arena-picks ${MARKET} ${d}: skipped (no reviewed night)`);
+      out(`arena-picks ${market} ${d}: skipped (no reviewed night)`);
       return 0;
     }
     const p = await runPicksNight(db, {
-      market: MARKET,
+      market: market,
       d,
       params: await loadAgentParams(db),
-      calendar: await loadCalendar(db, MARKET),
+      calendar: await loadCalendar(db, market),
       now: new Date(nowMs()).toISOString(),
     });
     const t = p.tracking;
     out(
-      `arena-picks ${MARKET} ${d}: published=${p.published} candidates=${p.candidates}` +
+      `arena-picks ${market} ${d}: published=${p.published} candidates=${p.candidates}` +
         ` bought=${t.bought} missed=${t.missed} closed=${t.closed} open=${t.open}` +
         ` checked=${p.checks.checked} withdrawn=${p.checks.withdrawn} shortlist=${p.shortlist}`,
     );
     if (p.noPicksLine !== null) {
       out(
-        `arena-picks ${MARKET} ${d}: no_picks blocked=${JSON.stringify(p.blocked)} ${p.noPicksLine}`,
+        `arena-picks ${market} ${d}: no_picks blocked=${JSON.stringify(p.blocked)} ${p.noPicksLine}`,
       );
     }
     // OPS-110: the night's outcome and its plain-words reason, for Home and the Evening Review
     try {
       await recordPicksNight(db, {
-        market: MARKET,
+        market: market,
         d,
         now: new Date(nowMs()).toISOString(),
         published: p.published,
@@ -107,34 +114,34 @@ export async function picksMain(
         line: p.noPicksLine,
       });
     } catch {
-      out(`arena-picks ${MARKET} ${d}: outcome row not stored`);
+      out(`arena-picks ${market} ${d}: outcome row not stored`);
     }
     // D-913: the Follow the picks portfolio, rebuilt after the picks; a failure never stops them
     try {
-      const f = await runPickPortfolio(db, { market: MARKET, d });
+      const f = await runPickPortfolio(db, { market: market, d });
       out(
-        `arena-portfolio ${MARKET} ${d}: trades=${f.trades} open=${f.open} days=${f.days} skipped=${f.skipped}`,
+        `arena-portfolio ${market} ${d}: trades=${f.trades} open=${f.open} days=${f.days} skipped=${f.skipped}`,
       );
     } catch (error) {
       out(
-        `arena-portfolio ${MARKET} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
+        `arena-portfolio ${market} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
       );
     }
     // D-921: the daily learning loop, after the picks and the portfolio; a failure never stops them
     try {
       const l = await runDailyLearning(db, {
-        market: MARKET,
+        market: market,
         d,
-        calendar: await loadCalendar(db, MARKET),
+        calendar: await loadCalendar(db, market),
         now: new Date(nowMs()).toISOString(),
         hooks: pickHooks,
       });
       out(
-        `arena-learning ${MARKET} ${d}: movers=${l.movers} lessons=${l.lessons} improvements=${l.improvements} hypotheses=${l.hypotheses}`,
+        `arena-learning ${market} ${d}: movers=${l.movers} lessons=${l.lessons} improvements=${l.improvements} hypotheses=${l.hypotheses}`,
       );
     } catch (error) {
       out(
-        `arena-learning ${MARKET} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
+        `arena-learning ${market} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
       );
     }
     return 0;

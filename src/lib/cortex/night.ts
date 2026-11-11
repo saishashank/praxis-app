@@ -62,7 +62,9 @@ import {
   scoredSet,
 } from "./angles/registry";
 import type { AngleCluster, AngleDef, AngleStatus, AngleValue } from "./angles/types";
+import { benchmarkIndexOf, staticProfile } from "@/lib/market/staticProfile.mjs";
 import { costPerOrder, type CostPerOrder } from "./economics/cost";
+import { anglesForProfile } from "./profileReaders";
 import { breakEvenCard } from "./economics/breakEven";
 import { rankCandidates, type RankCandidate } from "./economics/rank";
 import {
@@ -1100,7 +1102,7 @@ export function runNight(inputs: NightInputs): NightOutput {
   if (view.sessions[t] !== d)
     throw new RangeError(`sessions[${t}] is ${view.sessions[t]}, not ${d}`);
   const manifest = view.manifest(t);
-  const angles = inputs.angles ?? ANGLES;
+  const angles = inputs.angles ?? anglesForProfile(ANGLES, staticProfile(view.market));
   const status = statusOf(inputs);
   const scoredDefs = scoredSet(angles, status);
   const scoredAngles: ScoredAngle[] = scoredDefs.map((a) => ({
@@ -1115,7 +1117,7 @@ export function runNight(inputs: NightInputs): NightOutput {
   const codes = view.codes(t);
 
   // L0 night (D-336: bars dated D counted here; the stale share is the core's figure)
-  const axjo = view.index("AXJO", t, 1);
+  const axjo = view.index(benchmarkIndexOf(view.market), t, 1);
   const benchmarkBarD = axjo[axjo.length - 1]?.d ?? null;
   const barsOnD = codes.filter((c) => closeAt(view, t, d, c) !== null).length;
   // stale share: members of the previous session's universe (or tonight's) without a bar dated D

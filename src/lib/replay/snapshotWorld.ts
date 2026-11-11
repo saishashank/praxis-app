@@ -14,6 +14,7 @@ import {
   type ViewBar,
 } from "@/lib/agents/decisionView";
 import { addDays, marketDate, type CalendarRow } from "@/lib/data/calendar";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 import type {
   HaltRow,
   IndexChangeRow as PitIndexChangeRow,
@@ -218,7 +219,7 @@ export class SnapshotWorld implements CohortReplaySource {
     snap: LoadedSnapshot,
     private readonly o: SnapshotWorldOptions,
   ) {
-    this.market = o.market ?? "AU";
+    this.market = o.market ?? HOME_MARKET;
     this.sha = snap.sha;
     this.sessions = (snap.tables.calendar as unknown as { d: string; kind: string }[])
       .filter((r) => r.kind === "session" || r.kind === "early_close")

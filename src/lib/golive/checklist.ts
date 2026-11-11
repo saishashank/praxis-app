@@ -2,6 +2,7 @@
 // decisions 24 and 33). Pure data, no server imports: the page, the action and the tests share it.
 // Every item must be ticked before a sign-off row can be written (the server checks the full set;
 // the page only mirrors it). Wording is plain English and names no secret value.
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 
 export type GoLiveItem = { readonly id: string; readonly label: string; readonly help: string };
 
@@ -46,7 +47,7 @@ export const GO_LIVE_ITEMS: readonly GoLiveItem[] = [
 export const GO_LIVE_ITEM_IDS: readonly string[] = GO_LIVE_ITEMS.map((i) => i.id);
 
 /** The sign-off covers this market (AU is the only market, MKT-102). */
-export const GO_LIVE_MARKET = "AU";
+export const GO_LIVE_MARKET: string = HOME_MARKET;
 /** The Owner must type this exact phrase to sign off. */
 export const SIGNOFF_CONFIRM_PHRASE = "SIGN OFF GO-LIVE";
 export const SIGNOFF_NOTE_MAX = 500; // go_live_signoff.note CHECK

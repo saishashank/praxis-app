@@ -40,6 +40,7 @@ import { decisionCutoffUtc } from "@/lib/agents/decisionView";
 import { getConfig } from "@/lib/config/store";
 import { PicksError } from "./types";
 import { loadTotalReturnSeries } from "./benchmark";
+import { staticProfile } from "@/lib/market/staticProfile.mjs";
 import { BENCH_INDEX, pickMarketStatement } from "./vsMarket";
 
 type Db = Client;
@@ -388,8 +389,13 @@ export async function trackPicks(db: Db, o: TrackOptions): Promise<TrackSummary>
   const sum: TrackSummary = { bought: 0, missed: 0, closed: 0, open: 0 };
   const confirmed = await loadConfirmedActions(db, o.market, o.d);
   const cutoffHm = await getConfig(db, "decision_cutoff").catch(() => undefined);
+  const cutoffProfile = staticProfile(o.market);
   const cutoffOf = (priorD: string): string =>
-    decisionCutoffUtc(priorD, typeof cutoffHm === "string" ? cutoffHm : "18:10");
+    decisionCutoffUtc(
+      priorD,
+      typeof cutoffHm === "string" ? cutoffHm : cutoffProfile.decisionCutoff!,
+      cutoffProfile.decisionCutoffZone!,
+    );
   for (const r of rows.rows) {
     const pubD = text(r.pub_d);
     let levels: Levels = {

@@ -15,19 +15,11 @@
 // a trading halt) kept every large company out of U1. A recent listing (fewer bars) still stays out.
 // A code below the U3 floor gets no tier: it is stored with status `below_floor` and no family sees it.
 
+import { homeProfile } from "../../market/staticProfile.mjs";
+
 export const MICRO = 1_000_000n;
-/** spec 05 ARN-010 table, micro-AUD. */
-export const TIER_RULES = Object.freeze({
-  windowSessions: 60,
-  u1: { advMicro: 1_000_000n * MICRO, priceMicro: 500_000n, top: 300, minSessions: 54 },
-  u2: {
-    advMicro: 250_000n * MICRO,
-    priceMicro: 200_000n,
-    listedDays: 365,
-    mcapMicro: 30_000_000n * MICRO,
-  },
-  u3: { advMicro: 100_000n * MICRO, priceMicro: 100_000n },
-});
+/** spec 05 ARN-010 table, micro units of the market currency: the home market's `tiers` (M19 B2, CXA-002 d). */
+export const TIER_RULES = homeProfile().tiers;
 
 /** Median of a non-empty list (the lower middle of an even count: never an invented value). */
 export function medianMicro(values) {

@@ -8,6 +8,7 @@
 //   - sector angles read `view.industry` and carry `needsData` for the point-in-time map
 //     (D-271: the offline map is the current list, so they are `candidate` in replay);
 //   - market-wide angles ignore `code` and read the universe through `view.codes(t)`.
+import { benchmarkIndexOf, staticProfile } from "@/lib/market/staticProfile.mjs";
 import { mean } from "@/lib/stats/bootstrap";
 import { microToFloat } from "@/lib/agents/indicators";
 import { eventsWithin } from "./d3";
@@ -390,12 +391,12 @@ export const D5_ANGLES: readonly AngleDef[] = [
     existing: ["K-041", "K-044", "AGT-101"],
     compute: (view, _code, t, grid) => {
       const pct = nightMemo(view, `vixPct|${t}`, () => {
-        const vix = view.index("VIX", t, VIX_LOOKBACK + 1);
+        const vix = view.index(staticProfile(view.market).volatilityIndex!, t, VIX_LOOKBACK + 1);
         if (vix.length < VIX_LOOKBACK + 1) return undefined;
         const values = vix.map((b) => microToFloat(b.close));
         return priorPercentile(values.slice(0, VIX_LOOKBACK), values[VIX_LOOKBACK]!);
       });
-      const gspc = view.index("GSPC", t, 200);
+      const gspc = view.index(staticProfile(view.market).regimeIndex!, t, 200);
       if (pct === undefined || gspc.length < 200) return undefined;
       let sum = 0n;
       for (const b of gspc) sum += b.close;
@@ -428,7 +429,7 @@ export const D5_ANGLES: readonly AngleDef[] = [
         for (const p of view.macro(AU_10Y_SERIES, t, MACRO_FETCH)) m.set(p.obsD, p.value);
         return m;
       });
-      const bars = view.index("AXJO", t, MACRO_FETCH);
+      const bars = view.index(benchmarkIndexOf(view.market), t, MACRO_FETCH);
       const x: number[] = [];
       const y: number[] = [];
       for (let i = bars.length - 1; i >= 1 && x.length < w; i -= 1) {

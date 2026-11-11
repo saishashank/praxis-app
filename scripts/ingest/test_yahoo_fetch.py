@@ -473,3 +473,42 @@ def test_run_writes_actions_json_only_when_asked(tmp_path):
     out2 = tmp_path / "bars2.json"
     r2 = yf_fetch.run(write_request(tmp_path), str(out2), env={}, download=Recorder(serve), sleep=lambda s: None)
     assert "action_rows" not in r2 and len(json.loads(out2.read_text())) == 6
+
+
+# --- M19 B2 (CXA-002 h): the Yahoo suffix and the currency ride in the request ------------------
+
+
+def test_parse_suffix_and_currency_default_and_validate():
+    assert yf_fetch.parse_suffix({"codes": ["ZZZ"]}) == yf_fetch.DEFAULT_SUFFIX
+    assert yf_fetch.parse_suffix({"suffix": ".NS"}) == ".NS"
+    for bad in ("NS", ".ns", ".TOOLONG", 5):
+        with pytest.raises(yf_fetch.InputError):
+            yf_fetch.parse_suffix({"suffix": bad})
+    assert yf_fetch.parse_currency({}) == yf_fetch.DEFAULT_CURRENCY
+    assert yf_fetch.parse_currency({"currency": "INR"}) == "INR"
+    with pytest.raises(yf_fetch.InputError):
+        yf_fetch.parse_currency({"currency": "inr"})
+
+
+def test_rows_and_actions_follow_the_suffix_and_currency():
+    df = action_frame(("ZZZ",))
+    df.columns = df.columns.set_levels(
+        [t.replace(".AX", ".NS") for t in df.columns.levels[0]], level=0
+    )
+    df.loc[df.index[1], ("ZZZ.NS", "Dividends")] = 0.5
+    rows = yf_fetch.rows_from_frame(df, ["ZZZ"], FETCHED, ".NS")
+    assert len(rows) == 3 and {r["code"] for r in rows} == {"ZZZ"}
+    acts = yf_fetch.actions_from_frame(df, ["ZZZ"], FETCHED, ".NS", "INR")
+    assert acts == [
+        {"code": "ZZZ", "ex_date": "2020-01-07", "currency": "INR", "source": "yahoo",
+         "fetched_at": FETCHED, "kind": "dividend", "amount": 0.5},
+    ]
+
+
+def test_fetch_all_asks_for_the_requests_suffix():
+    dl = Recorder(lambda n, kw: frame(["ZZ0", "ZZ1"]))
+    clock, sleep, _ = make_clock()
+    yf_fetch.fetch_all(
+        ["ZZ0", "ZZ1"], "2020-01-06", "2020-01-10", 2, 5, dl, sleep=sleep, clock=clock, suffix=".NS"
+    )
+    assert dl.calls[0]["tickers"] == ["ZZ0.NS", "ZZ1.NS"]

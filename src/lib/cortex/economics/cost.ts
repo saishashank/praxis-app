@@ -16,6 +16,7 @@
 //
 // `roundTripCost` (agents/costGate.ts, FAM-005 at the fixed A$600) stays for the v1 path (D-260): once a
 // family is allowed, CTX-021 binds and this figure × `cost_gate_k` is a card diagnostic (G05, informational).
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import { feeFor, type CostProfile, type FeeContext } from "@/lib/arena/costs";
 import {
   DEFAULT_TICK_CROSS_FACTOR,
@@ -40,34 +41,39 @@ const PPM = 1_000_000n;
  * design asks for, to be verified by the Owner against a quoted-spread source before the V2 merge.
  * The half-tick term dominates for low-priced stocks (a A$0.20 stock: half a tick = 1.25 %).
  */
-export const HALF_SPREAD_PPM_BY_TIER: Readonly<Record<LiquidityTier, bigint>> = {
-  U1: 500n, // threshold-ok: D-294 placeholder floor, to verify
-  U2: 2_500n, // threshold-ok: D-294 placeholder floor, to verify
-  U3: 7_500n, // threshold-ok: D-294 placeholder floor, to verify
-};
+export const HALF_SPREAD_PPM_BY_TIER: Readonly<Record<LiquidityTier, bigint>> =
+  homeProfile().slippage!.half_spread_ppm_by_tier;
 export const HALF_SPREAD_VERIFIED = false;
 
 /**
  * CTX-022a "ADV floor per parcel": a A$500 parcel at 1 % participation needs ≈ A$50k ADV (the tier
  * table states it; `untradeableReason` in slippage.ts applies the ARN-013 0.5 % rule separately).
  */
-export const PARCEL_FLOOR_MICRO: Micro = 500_000_000n; // threshold-ok: CTX-027 A$500 parcel floor
+export const PARCEL_FLOOR_MICRO: Micro = homeProfile().parcelFloorMicro!;
 export const PARCEL_PARTICIPATION: Rational = makeRational(1n, 100n); // threshold-ok: CTX-022a 1 %
-export const ADV_FLOOR_PER_PARCEL_MICRO: Micro = 50_000_000_000n; // threshold-ok: CTX-022a ≈ A$50k ADV
+export const ADV_FLOOR_PER_PARCEL_MICRO: Micro = homeProfile().advFloorPerParcelMicro!;
 
 /** Half-spread as a fraction of the price: max(tick(price) / 2 ÷ price, tier floor). Exact. */
-export function halfSpreadFraction(tier: LiquidityTier, priceMicro: Micro): Rational {
+export function halfSpreadFraction(
+  tier: LiquidityTier,
+  priceMicro: Micro,
+  floors: Readonly<Record<LiquidityTier, bigint>> = HALF_SPREAD_PPM_BY_TIER,
+): Rational {
   if (priceMicro <= 0n) throw new RangeError("price must be positive");
-  const floor = HALF_SPREAD_PPM_BY_TIER[tier];
+  const floor = floors[tier];
   if (floor === undefined) throw new RangeError(`unknown liquidity tier: ${String(tier)}`);
   const halfTick = makeRational(tickFor(priceMicro), 2n * priceMicro);
   return maxRat(halfTick, makeRational(floor, PPM));
 }
 
 /** Half-spread in ppm of the price, rounded half away from zero (the CTX-071 table figure). */
-export function halfSpreadPpm(tier: LiquidityTier, priceMicro: Micro): number {
+export function halfSpreadPpm(
+  tier: LiquidityTier,
+  priceMicro: Micro,
+  floors: Readonly<Record<LiquidityTier, bigint>> = HALF_SPREAD_PPM_BY_TIER,
+): number {
   return Number(
-    roundHalfAwayFromZero(mulRat(halfSpreadFraction(tier, priceMicro), makeRational(PPM))),
+    roundHalfAwayFromZero(mulRat(halfSpreadFraction(tier, priceMicro, floors), makeRational(PPM))),
   );
 }
 
@@ -83,6 +89,8 @@ export type CostPerOrderInput = {
   readonly feeContext?: FeeContext;
   readonly tickCrossFactor?: Rational;
   readonly buckets?: readonly SlippageBucket[];
+  /** The market's half-spread floors by tier (profile `slippage_buckets`); default: the home market's. */
+  readonly halfSpreadPpmByTier?: Readonly<Record<LiquidityTier, bigint>>;
 };
 
 export type CostPerOrder = {
@@ -119,7 +127,7 @@ export function costPerOrder(input: CostPerOrderInput): CostPerOrder {
     feeFor(profile, notionalMicro, "buy", input.feeContext) +
     feeFor(profile, notionalMicro, "sell", input.feeContext);
   const fees = makeRational(feeMicro, notionalMicro);
-  const floor = halfSpreadFraction(tier, priceMicro);
+  const floor = halfSpreadFraction(tier, priceMicro, input.halfSpreadPpmByTier);
   let halfSpreadFloorApplied = false;
   const perFill = (side: "buy" | "sell"): Rational => {
     const slip = makeRational(

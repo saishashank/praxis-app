@@ -8,6 +8,7 @@ import type { IndexViewBar, ViewBar } from "@/lib/agents/decisionView";
 import type { EventFact, IndexChangeFact, RegimeLabel, Tier } from "@/lib/agents/families/types";
 import type { AgentParams } from "@/lib/agents/params";
 import type { CorpActionRecord } from "@/lib/arena/corpActions";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import type { CalendarRow } from "@/lib/data/calendar";
 
 // ---- known time ---------------------------------------------------------------------------------------------
@@ -73,8 +74,10 @@ export type KnownTimeRule = (row: KnownTimeRow, clock: SessionClock) => string;
 
 // ---- series ---------------------------------------------------------------------------------------------------
 
-export type IndexCode = "AXJO" | "GSPC" | "VIX";
-export const INDEX_CODES_PIT: readonly IndexCode[] = ["AXJO", "GSPC", "VIX"];
+/** An index code of the view: the market's benchmark or one of the global indices (CXA-002 h). */
+export type IndexCode = string;
+/** The home market's point-in-time index codes: [benchmark, ...GLOBAL_INDICES]. A world names its own through `staticProfile(market).indexCodes`. */
+export const INDEX_CODES_PIT: readonly IndexCode[] = homeProfile().indexCodes;
 
 /**
  * A point-in-time series of one code: raw bars and the split-adjusted view on the basis known at

@@ -20,7 +20,7 @@ import { DELIST_REASON, planUniverse, REUSE_SUSPECTED, type UniverseCounts } fro
 import { parseListedCompanies, type ParseStats } from "./parse.mjs";
 
 export const UNIVERSE_JOB = "universe-import";
-export const UNIVERSE_MARKET = HOME_MARKET;
+export const UNIVERSE_MARKET: string = HOME_MARKET;
 export const UNIVERSE_INCIDENT = "universe_shrink";
 /** V1-S7: a delisted code came back looking like a different company; it stays delisted until the Owner decides. */
 export const CODE_REUSE_INCIDENT = "code_reuse_suspected";

@@ -5,6 +5,9 @@
 // side. GST: the spec states none, so none is added [VERIFY]. Every profile is unverified
 // (verified = 0) until the Owner approves a source; the Arena stays data_only until then.
 import { type Micro } from "@/lib/money/micro";
+import { HOME_MARKET, type MarketProfile } from "@/lib/market/profileCore.mjs";
+import { costProfilesOf } from "@/lib/market/staticProfile.mjs";
+import type { AuCostProfile, AuFeeRule } from "@/lib/market/seed/au/costProfiles.mjs";
 import {
   makeRational,
   mulRat,
@@ -63,27 +66,56 @@ export type FeeContext = {
   readonly firstBuyOfSecurityToday?: boolean;
 };
 
-const AUD = 1_000_000n;
-const aud = (dollars: bigint, cents: bigint = 0n): Micro => dollars * AUD + cents * 10_000n;
-const flat = (feeMicro: Micro): FeeRule => ({ kind: "flat", feeMicro });
-const pct = (
-  rate: string,
-  minMicro: Micro = 0n,
-  maxMicro: Micro | null = null,
-  freeFirstBuyBelowMicro: Micro | null = null,
-): FeeRule => ({
-  kind: "pct",
-  rate: parseRational(rate),
-  minMicro,
-  maxMicro,
-  freeFirstBuyBelowMicro,
-});
+/** A seed fee rule (src/lib/market/seed/au/costProfiles.mjs) as an engine rule: a decimal-percent rate text becomes an exact rational. */
+function ruleFromSeed(rule: AuFeeRule): FeeRule {
+  switch (rule.kind) {
+    case "flat":
+      return { kind: "flat", feeMicro: rule.feeMicro };
+    case "tiered":
+      return {
+        kind: "tiered",
+        tiers: rule.tiers.map((t) => ({ upToMicro: t.upToMicro, feeMicro: t.feeMicro })),
+        above: ruleFromSeed(rule.above),
+      };
+    case "pct":
+      return {
+        kind: "pct",
+        rate: parseRational(rule.rate),
+        minMicro: rule.minMicro,
+        maxMicro: rule.maxMicro,
+        freeFirstBuyBelowMicro: rule.freeFirstBuyBelowMicro,
+      };
+    case "zeroFeeListElse":
+      return { kind: "zeroFeeListElse", otherwise: ruleFromSeed(rule.otherwise) };
+  }
+}
 
-const P1_RULE = flat(aud(3n));
-const SPEC = "spec 05 ARN-031 l.64";
+function profileFromSeed(p: AuCostProfile): CostProfile {
+  return {
+    code: p.code as CostProfileCode,
+    version: p.version,
+    name: p.name,
+    specRef: p.specRef,
+    verify: p.verify,
+    verified: p.verified,
+    rule: ruleFromSeed(p.rule),
+  };
+}
 
-function profile(code: CostProfileCode, name: string, rule: FeeRule): CostProfile {
-  return { code, version: 1, name, specRef: SPEC, verify: true, verified: false, rule };
+/** The cost profiles of a market's seed table (the P-profile codes its `cost_formula` may name), as engine profiles. */
+export function costProfilesOfMarket(market: string): Readonly<Record<string, CostProfile>> {
+  return Object.fromEntries(
+    Object.entries(costProfilesOf(market)).map(([code, p]) => [code, profileFromSeed(p)]),
+  );
+}
+
+/** The profile a market's `cost_formula` names ("P5" for AU); throws when the market has no table built (M20). */
+export function costProfileOfMarket(profile: MarketProfile): CostProfile {
+  const code = profile.costFormula;
+  const found = code === null ? undefined : costProfilesOfMarket(profile.code)[code];
+  if (found === undefined)
+    throw new RangeError(`cost formula ${String(code)} of market ${profile.code} not built (M20)`);
+  return found;
 }
 
 /**
@@ -97,41 +129,9 @@ function profile(code: CostProfileCode, name: string, rule: FeeRule): CostProfil
  * The Owner asked the costs to follow the cheapest reliable broker, so P6 carries that source and
  * is verified; a fee change there is a new version.
  */
-export const COST_PROFILES: Readonly<Record<CostProfileCode, CostProfile>> = {
-  P0: profile("P0", "Zero-fee list, else P1", { kind: "zeroFeeListElse", otherwise: P1_RULE }),
-  P1: profile("P1", "A$3.00 flat", P1_RULE),
-  P2: profile(
-    "P2",
-    "First buy under A$1,000 free, else greater of A$11.00 or 0.10%",
-    pct("0.10%", aud(11n), null, aud(1_000n)),
-  ),
-  P3: profile("P3", "Stress: A$6.50 flat", flat(aud(6n, 50n))),
-  P4: profile("P4", "0.03% min A$3 max A$9.99", pct("0.03%", aud(3n), aud(9n, 99n))),
-  P5: profile("P5", "Default tiers (A$5 to A$29.95, then 0.12%)", {
-    kind: "tiered",
-    tiers: [
-      { upToMicro: aud(1_000n), feeMicro: aud(5n) },
-      { upToMicro: aud(3_000n), feeMicro: aud(10n) },
-      { upToMicro: aud(10_000n), feeMicro: aud(19n, 95n) },
-      { upToMicro: aud(25_000n), feeMicro: aud(29n, 95n) },
-    ],
-    above: pct("0.12%"),
-  }),
-  P5b: profile("P5b", "A$2.00 up to A$1,000, then 0.20%", {
-    kind: "tiered",
-    tiers: [{ upToMicro: aud(1_000n), feeMicro: aud(2n) }],
-    above: pct("0.20%"),
-  }),
-  P6: {
-    code: "P6",
-    version: 1,
-    name: "A$1.00 or 0.03%, whichever is greater (GST included)",
-    specRef: "O-79d / D-895: webull.com.au/pricing, read 2026-11-08",
-    verify: true,
-    verified: true,
-    rule: pct("0.03%", aud(1n)),
-  },
-};
+export const COST_PROFILES: Readonly<Record<CostProfileCode, CostProfile>> = costProfilesOfMarket(
+  HOME_MARKET,
+) as Readonly<Record<CostProfileCode, CostProfile>>;
 
 export function isCostProfileCode(value: unknown): value is CostProfileCode {
   return (COST_PROFILE_CODES as readonly unknown[]).includes(value);

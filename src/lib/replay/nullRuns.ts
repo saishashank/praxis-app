@@ -15,6 +15,7 @@
 // uniform by the KS test at 0.01. The size extrapolated to the working levels is reported, not a pass
 // condition. Pure and deterministic: no clock, no Math.random.
 import type { Candidate } from "@/lib/agents/families";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 import { f1Plan } from "@/lib/agents/families/exits";
 import { FAMILY_RULE_VERSION } from "@/lib/agents/families/constants";
 import type { AgentParams } from "@/lib/agents/params";
@@ -330,7 +331,7 @@ export function randomSignalSource(
   return {
     ...world,
     sessions,
-    market: world.market ?? "AU",
+    market: world.market ?? HOME_MARKET,
     bar: (c, d) => world.bar(c, d),
     positionFacts: (c, d) => world.positionFacts(c, d),
     corpActions: world.corpActions === undefined ? undefined : (c) => world.corpActions!(c),

@@ -35,6 +35,7 @@
 // Determinism (2.8): no clock, no Math.random; every iteration over codes, cohorts and orders is
 // sorted; the PRNG is the arena SplitMix64 seeded by `deriveRngSeed(master, <scope>)`.
 import { PROGRESS_SESSIONS_DEFAULT } from "@/lib/config/keys";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 import {
   evaluateExit,
   runFamilies,
@@ -2007,7 +2008,7 @@ export function replayCohorts(
     })
     .sort((a, b) => cmp(a.startD, b.startD) || cmp(a.id, b.id));
   return {
-    market: "AU",
+    market: HOME_MARKET,
     from: sessions[firstStart]!,
     to: sessions[endIdx]!,
     sessions: sessions.length,

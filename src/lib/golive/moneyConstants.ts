@@ -6,6 +6,7 @@
 // only READS the flags; it never changes a figure. Approval is a code change recorded as a D-nnn
 // (flip the flag, and add `cost_profile` rows at the next version per D-070 note 8).
 import { createHash } from "node:crypto";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import { COST_PROFILES } from "@/lib/arena/costs";
 import { SLIPPAGE_BUCKETS, SLIPPAGE_BUCKETS_VERIFIED } from "@/lib/arena/slippage";
 import { MIN_MARKETABLE_PARCEL_MICRO, MIN_MARKETABLE_PARCEL_VERIFIED } from "@/lib/arena/sizing";
@@ -78,7 +79,7 @@ export function moneyConstants(): readonly MoneyConstant[] {
     },
     {
       id: "min_parcel",
-      label: "Minimum marketable parcel (A$500)",
+      label: `Minimum marketable parcel (${homeProfile().currencyFormat!.symbol}${MIN_MARKETABLE_PARCEL_MICRO / 1_000_000n})`,
       specRef: "spec 05 ARN-024",
       verified: MIN_MARKETABLE_PARCEL_VERIFIED,
       value: MIN_MARKETABLE_PARCEL_MICRO,

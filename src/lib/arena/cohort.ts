@@ -23,6 +23,8 @@ import { createHash } from "node:crypto";
 import { C1_ETF_PLACEHOLDER } from "@/lib/config/keys";
 import { nextTradingDay, type CalendarRow } from "@/lib/data/calendar";
 import { type Micro } from "@/lib/money/micro";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import { makeRational, mulRat, parseRational, type Rational } from "@/lib/money/rational";
 import { roundHalfAwayFromZero } from "@/lib/money/round";
 import { COST_PROFILES, type CostProfileCode } from "./costs";
@@ -49,9 +51,13 @@ import {
 
 // ---- constants -----------------------------------------------------------------------------------------------
 
-export const ARENA_MARKET = "AU";
-/** ARN-001: the AU market seed A$600 (Owner O-25). */
-export const SEED_MICRO: Micro = 600_000_000n;
+/** Micro units per whole currency unit (money is stored in micro units of the market currency). */
+const MICRO_PER_UNIT = 1_000_000n;
+
+export const ARENA_MARKET: string = HOME_MARKET;
+/** ARN-001: the home market's cohort seed amount (AU A$600, Owner O-25), from its profile (`seed_amount`). */
+export const SEED_MICRO: Micro =
+  BigInt((homeProfile().fields.seed_amount!.value as { amount: number }).amount) * MICRO_PER_UNIT;
 export const FAMILIES = ["F1", "F2", "F3", "F4", "F5", "F6"] as const;
 export type FamilyId = (typeof FAMILIES)[number];
 /** ARN-004 / ch.15 `c2_live_per_family`: 20 live C2 (and C3) portfolios per family. */

@@ -6,6 +6,7 @@
 // re-implemented. The CTX-044 promotion flag zeroes positive volume-cluster contributions in the
 // score layer, never inside an angle. Per-call cost is O(window) (a median sort of 60 for A-D2-03
 // and A-D2-10).
+import { benchmarkIndexOf } from "@/lib/market/staticProfile.mjs";
 import { highest, microToFloat } from "@/lib/agents/indicators";
 import { clamp, noNegZero, ratio, seriesAt, sumOf } from "./d1";
 import type { AngleDef, AngleValue, AsOfView, GridPoint } from "./types";
@@ -66,7 +67,7 @@ function volumeCreep(view: AsOfView, code: string, t: number, g: GridPoint): Ang
   const c = s.adjClose;
   if (c[n - 2]! <= 0n) return undefined;
   let ar = ratio(c[n - 1]!, c[n - 2]!) - 1;
-  const idx = view.index("AXJO", t, 2);
+  const idx = view.index(benchmarkIndexOf(view.market), t, 2);
   if (
     idx.length === 2 &&
     idx[1]!.d === s.d[n - 1] &&

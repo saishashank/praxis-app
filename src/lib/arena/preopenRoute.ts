@@ -4,6 +4,7 @@
 // nonce, fixed failure words, nothing echoed. A re-check that fails answers 503 so the Worker retries
 // at 09:58; a skip (market not full, non-trading day) and a repeat answer 200.
 import { signed, type MachineDeps } from "@/lib/alerts/machine";
+import { enabledMarkets } from "@/lib/market/profile";
 import { PREOPEN_PURPOSE, runPreopen } from "./preopen";
 
 const json = (status: number, body: unknown) =>
@@ -13,8 +14,14 @@ export function createPreopenHandler(deps: MachineDeps) {
   return signed(PREOPEN_PURPOSE, deps, async (body, nowSec) => {
     const a = body.attempt;
     if (a !== undefined && a !== 1 && a !== 2) return json(400, { error: "bad_request" });
-    const r = await runPreopen(deps.ctx().db, {
-      market: "AU",
+    const db = deps.ctx().db;
+    // MKT-110 (a): the market is the body's, else the single enabled market; a market that is not enabled is refused
+    const enabled = await enabledMarkets(db);
+    const asked = typeof body.market === "string" ? body.market : null;
+    const market = asked ?? (enabled.length === 1 ? enabled[0]! : null);
+    if (market === null || !enabled.includes(market)) return json(400, { error: "bad_request" });
+    const r = await runPreopen(db, {
+      market,
       d: body.d as string,
       attempt: a === 2 ? 2 : 1,
       strictCalendar: true, // D-711

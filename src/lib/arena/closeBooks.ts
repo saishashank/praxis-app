@@ -74,6 +74,7 @@ import {
 import { suspensionMark } from "./corpActions";
 import { exDividendOn, toExDividendActions, type ExDividendAction } from "./exDividend";
 import { decisionCutoffUtc } from "@/lib/agents/decisionView";
+import { staticProfile } from "@/lib/market/staticProfile.mjs";
 import { getConfig } from "@/lib/config/store";
 import { COST_PROFILES, type CostProfile, type CostProfileCode } from "./costs";
 import {
@@ -1618,9 +1619,11 @@ export async function closeBooksDay(
       if (last !== null) lastCloses.set(a.code, last);
     }
     const cutoffHm = await getConfig(db, "decision_cutoff").catch(() => undefined);
+    const cutoffProfile = staticProfile(opts.market);
     const exDivCutoff = decisionCutoffUtc(
       priorD,
-      typeof cutoffHm === "string" ? cutoffHm : "18:10",
+      typeof cutoffHm === "string" ? cutoffHm : cutoffProfile.decisionCutoff!,
+      cutoffProfile.decisionCutoffZone!,
     );
     const ctx: DayCtx = {
       db,

@@ -4,6 +4,7 @@
 //   cash buffer = one half-away-from-zero rounding to 1 micro (decisions 6 and 7).
 // HIGH-RISK money maths: no float, no iteration (ARN-024a s13).
 import { type Micro } from "@/lib/money/micro";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import {
   addRat,
   divFloor,
@@ -25,8 +26,8 @@ import {
   type UntradeableReason,
 } from "./slippage";
 
-/** [VERIFY] ARN-024 (l.56): AU minimum marketable parcel A$500. Not Owner-approved yet. */
-export const MIN_MARKETABLE_PARCEL_MICRO: Micro = 500_000_000n;
+/** ARN-024 (l.56): the minimum marketable parcel, from the home market's profile (`parcel_floor`; AU A$500, D-710). */
+export const MIN_MARKETABLE_PARCEL_MICRO: Micro = homeProfile().parcelFloorMicro!;
 /** V1-S2 / D-710: false until the Owner approves the parcel; the `full` go-live gate reads it. */
 export const MIN_MARKETABLE_PARCEL_VERIFIED = false;
 /** ARN-024 (l.56) / ch.15 `participation_cap`: 1 % of the 20-session ADV (in shares). */

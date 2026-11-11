@@ -287,7 +287,10 @@ describe("M4 keys: defaults and bounds equal ch.15", () => {
       ...FIXED.map((r) => r[0]),
       ...OBJECT_KEYS,
     ]);
-    const all = Object.keys(CONFIG_KEYS);
+    // the M19 keys (`mkt.<CODE>.<field>`, `markets_enabled`) have their own table in tests/config/m19Keys.test.ts
+    const all = Object.keys(CONFIG_KEYS).filter(
+      (k) => !k.startsWith("mkt.") && k !== "markets_enabled",
+    );
     expect(all.filter((k) => !m3.has(k) && !listed.has(k))).toEqual([]);
     expect(all.length).toBe(m3.size + listed.size);
   });
@@ -357,11 +360,12 @@ describe("M4 object keys", () => {
     expect(await check("insider_score_weights", { director_net: 0.5 })).toMatch(/needs/);
   });
 
-  it("llm_market_share: AU only, each share 0 to 1", async () => {
+  it("llm_market_share: built markets only (M19, D-993), each share 0 to 1", async () => {
     expect(CONFIG_KEYS.llm_market_share.default).toEqual({ AU: 1 });
     expect(await check("llm_market_share", { AU: 0.5 })).toBeNull();
     expect(await check("llm_market_share", { AU: 1.5 })).toMatch(/0 to 1/);
-    expect(await check("llm_market_share", { US: 1 })).toBe("unknown market");
+    expect(await check("llm_market_share", { ZZ: 1 })).toBe("unknown market");
+    expect(await check("llm_market_share", { US: 1 })).toBeNull(); // a built market (D-993)
     expect(await check("llm_market_share", {})).toMatch(/list a share/);
   });
 

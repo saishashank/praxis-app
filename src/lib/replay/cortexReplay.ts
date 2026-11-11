@@ -11,6 +11,7 @@
 // closed where the design says so (D-261 forward-measured states; G08 8a without the list).
 // Pure given its inputs: no clock, no randomness beyond the seeded `scopedPrng`.
 import type { ViewBar } from "@/lib/agents/decisionView";
+import { staticProfile } from "@/lib/market/staticProfile.mjs";
 import type { Family, RegimeLabel } from "@/lib/agents/families/types";
 import type { AgentParams } from "@/lib/agents/params";
 import { COST_PROFILES, type CostProfile } from "@/lib/arena/costs";
@@ -84,8 +85,8 @@ export function asOfWorldOf(cfg: CortexReplayConfig): AsOfWorld {
     const ind = w.industryRowsOf(code);
     if (ind.length > 0) industry.set(code, ind);
   }
-  const index: { AXJO?: ReturnType<SnapshotWorld["indexBarsOf"]> } & Record<string, unknown> = {};
-  for (const code of ["AXJO", "GSPC", "VIX"] as const) {
+  const index: Record<string, ReturnType<SnapshotWorld["indexBarsOf"]>> = {};
+  for (const code of staticProfile(w.market).indexCodes) {
     const rows = w.indexBarsOf(code);
     if (rows.length > 0) index[code] = rows;
   }

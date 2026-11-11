@@ -4,6 +4,7 @@
 // and the universe; the announcement-dependent entries (A-D6-02, -06, -07, -08) carry `needsData`
 // and resolve to `candidate` (their computes serve the forward passport); options (A-D6-04), ETF
 // flows (A-D6-05) and attention (A-D6-09) have no $0 source and stay `candidate`.
+import { benchmarkIndexOf } from "@/lib/market/staticProfile.mjs";
 import { median } from "@/lib/stats/rankIc";
 import { microToFloat } from "@/lib/agents/indicators";
 import { volSeries } from "@/lib/agents/regime";
@@ -61,7 +62,7 @@ export function shortChange(
 export function benchmarkVolPct(view: AsOfView, t: number): number | undefined {
   return nightMemo(view, `axjoVolPct|${t}`, () => {
     const need = VOL_LOOKBACK + VOL_WINDOW + 2;
-    const closes = view.index("AXJO", t, need).map((b) => b.close);
+    const closes = view.index(benchmarkIndexOf(view.market), t, need).map((b) => b.close);
     if (closes.length < need) return undefined;
     const vols = volSeries(closes, VOL_WINDOW).filter((v): v is number => v !== null);
     if (vols.length < VOL_LOOKBACK + 1) return undefined;
@@ -145,7 +146,7 @@ export const D6_ANGLES: readonly AngleDef[] = [
       if (i < 0 || i === t) return undefined;
       const n = t - i + 1;
       const closes = view.adj(code, t, n).adjClose;
-      const bench = view.index("AXJO", t, n);
+      const bench = view.index(benchmarkIndexOf(view.market), t, n);
       if (closes.length < n || bench.length < n) return undefined;
       const r = microToFloat(closes[n - 1]!) / microToFloat(closes[0]!) - 1;
       const b = microToFloat(bench[n - 1]!.close) / microToFloat(bench[0]!.close) - 1;

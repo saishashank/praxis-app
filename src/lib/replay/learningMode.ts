@@ -9,6 +9,7 @@
 // with `paused_budget`; its output is dropped and the next run resumes from it. Stage writers are
 // idempotent, so a stage cut off after its database writes simply runs again and writes nothing new.
 import type { Client } from "@libsql/client";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 import { liveParams, loadVersionSet } from "@/lib/agents/versionRuns";
 import type { AgentParams } from "@/lib/agents/params";
 import { agentParamsSha } from "@/lib/agents/params";
@@ -46,7 +47,7 @@ import { loadSnapshot } from "./snapshot";
 import { SnapshotWorld } from "./snapshotWorld";
 import { budgetFor, isoWeek, type ComputeReport, type ReplayOutput, type RunFile } from "./runner";
 
-const MARKET = "AU";
+const MARKET = HOME_MARKET;
 
 export const learningRunId = (
   market: string,
