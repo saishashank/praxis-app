@@ -89,12 +89,13 @@ export async function picksMain(
         ` bought=${t.bought} missed=${t.missed} closed=${t.closed} open=${t.open}` +
         ` checked=${p.checks.checked} withdrawn=${p.checks.withdrawn} shortlist=${p.shortlist}`,
     );
-    // D-913: the Follow the picks portfolio, rebuilt after the picks; a failure never stops them
+    // D-950: the three My portfolio practice portfolios, rebuilt after the picks; a failure never stops them
     try {
       const f = await runPickPortfolio(db, { market: MARKET, d });
-      out(
-        `arena-portfolio ${MARKET} ${d}: trades=${f.trades} open=${f.open} days=${f.days} skipped=${f.skipped}`,
-      );
+      const each = Object.entries(f)
+        .map(([p, r]) => `${p}=${r.trades}/${r.open}/${r.days}/${r.splits}/${r.skipped}`)
+        .join(" ");
+      out(`arena-portfolio ${MARKET} ${d}: trades/open/days/splits/skipped ${each}`);
     } catch (error) {
       out(
         `arena-portfolio ${MARKET} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,

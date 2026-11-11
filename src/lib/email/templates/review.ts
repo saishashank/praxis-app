@@ -207,6 +207,8 @@ export interface ReviewFacts {
   pickAlerts?: PickReviewFacts;
   /** D-909: shown only when `learning` is null. */
   missedMovers?: MissedMoversReviewFacts;
+  /** D-957: one plain line per My portfolio profile (section 3). */
+  myPortfolios?: { lines: string[] };
 }
 
 const SECTION_NAMES = [
@@ -421,7 +423,15 @@ function section3(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
   if (!f.arenaActive) return [...out, notActive()];
   if (missing.has(3)) return [...out, unavailable()];
   const ex = live(f.executions);
-  if (ex.length === 0) return [...out, { t: "p", text: "No strategies.", tone: "muted" }];
+  const mine = f.myPortfolios?.lines ?? [];
+  const portfolio: Block[] = mine.length
+    ? [
+        { t: "p", text: "My portfolio (practice money, one per risk profile)", bold: true },
+        { t: "ul", items: mine },
+      ]
+    : [];
+  if (ex.length === 0)
+    return [...out, { t: "p", text: "No strategies.", tone: "muted" }, ...portfolio];
   const carried = f.variant === "nonTrading";
   out.push({
     t: "table",
@@ -442,6 +452,7 @@ function section3(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
     ]),
     right: [1, 2, 3],
   });
+  out.push(...portfolio);
   return out;
 }
 

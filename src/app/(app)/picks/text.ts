@@ -146,7 +146,6 @@ export const INTRADAY_NO_LEVELS =
 export const HISTORY_PURPOSE = "History: every pick and what happened to the trade.";
 export const TRACK_PURPOSE =
   "Track record: how good the picks are overall, against their ranges and the market.";
-export const PORTFOLIO_PROFILE_NOTE = "This practice portfolio follows the Balanced picks.";
 export const NO_HISTORY = "Not enough history yet";
 
 /** NFR-041: the delay statement in help text. */

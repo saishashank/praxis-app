@@ -38,9 +38,11 @@ const RANGED: readonly (readonly [ConfigKey, number, number, number, string])[] 
   ["picks_max_per_family", 10, 10, 10, "AGT-113"],
   ["pick_valid_sessions", 2, 1, 5, "AGT-113"],
   ["pick_success_min_n", 30, 10, 200, "D-111"],
-  // D-913 (Owner 2026-11-10): the Follow the picks portfolio
-  ["picks_portfolio_seed_aud", 5000, 1000, 100000, "D-913"],
-  ["picks_portfolio_slots", 5, 1, 10, "D-913"],
+  // D-950 (Owner 2026-11-11): My portfolio (replaces the D-913 picks_portfolio_* keys)
+  ["my_portfolio_seed_aud", 1000, 1000, 100000, "D-950"],
+  ["my_portfolio_stock_max_pct", 30, 10, 30, "D-952"],
+  ["my_portfolio_strategy_max_pct", 40, 20, 100, "D-951"],
+  ["my_portfolio_min_parcel_aud", 200, 0, 500, "D-952"],
 ];
 
 // [key, default, area]. All fixed.
@@ -83,6 +85,7 @@ const EXPLICIT: readonly ConfigKey[] = [
   "kb_archive_time",
   "pick_profiles",
   "profile_portfolio_amount",
+  "my_portfolio_profiles",
   "cif_horizons_sessions",
   "progress_nav_edges_ppm",
   "progress_sessions_edges",
@@ -230,6 +233,51 @@ describe("M6 keys: explicit keys", () => {
     }
   });
 
+  it("my_portfolio_cost_max_pct (D-952): a number from 0.5 to 5 %", async () => {
+    const k = CONFIG_KEYS.my_portfolio_cost_max_pct;
+    expect(k.default).toBe(1.5);
+    expect(k.editable).toBe("O");
+    expect((k as ConfigKeyDef).range).toEqual([0.5, 5]);
+    for (const ok of [0.5, 1.25, 5])
+      expect(await check("my_portfolio_cost_max_pct", ok)).toBeNull();
+    for (const bad of [0.4, 5.1, "1"])
+      expect(await check("my_portfolio_cost_max_pct", bad)).not.toBeNull();
+  });
+
+  it("my_portfolio_profiles (D-956): the three profiles with every field inside its bounds", async () => {
+    const def = CONFIG_KEYS.my_portfolio_profiles.default as Record<string, Record<string, number>>;
+    expect(Object.keys(def).sort()).toEqual(["aggressive", "balanced", "conservative"]);
+    expect(def.conservative).toMatchObject({
+      holdings: 4,
+      shrink_n: 30,
+      vol_tilt: 1.5,
+      weak_cash_pct: 50,
+    });
+    expect(def.balanced).toMatchObject({ holdings: 4, stock_pct: 30 });
+    expect(def.aggressive).toMatchObject({ holdings: 3, small_stock_pct: 20, shrink_n: 8 });
+    // the profiles differ in the Owner's directions
+    expect(def.conservative!.risk_pct).toBeLessThan(def.balanced!.risk_pct!);
+    expect(def.balanced!.risk_pct).toBeLessThan(def.aggressive!.risk_pct!);
+    expect(def.conservative!.shrink_n).toBeGreaterThan(def.aggressive!.shrink_n!);
+    expect(def.conservative!.band_pct).toBeGreaterThan(def.aggressive!.band_pct!);
+    expect(await check("my_portfolio_profiles", def)).toBeNull();
+    expect(CONFIG_META.my_portfolio_profiles.bounds).toContain("holdings 1 to 6 (whole)");
+    const swap = (p: string, f: string, v: unknown) => ({ ...def, [p]: { ...def[p], [f]: v } });
+    for (const bad of [
+      swap("balanced", "holdings", 7),
+      swap("balanced", "holdings", 2.5),
+      swap("conservative", "stock_pct", 31),
+      swap("aggressive", "vol_tilt", -0.1),
+      swap("aggressive", "weak_cash_pct", "10"),
+      swap("aggressive", "extra", 1),
+      { balanced: def.balanced, aggressive: def.aggressive },
+      { ...def, cautious: def.balanced },
+      null,
+    ]) {
+      expect(await check("my_portfolio_profiles", bad), JSON.stringify(bad)).not.toBeNull();
+    }
+  });
+
   it("the three D-091 lists are fixed with the reviewed values", async () => {
     expect(CONFIG_KEYS.cif_horizons_sessions.default).toEqual([63, 126, 252]);
     expect(CONFIG_KEYS.progress_nav_edges_ppm.default).toEqual([
@@ -248,10 +296,13 @@ describe("M6 keys: explicit keys", () => {
 });
 
 describe("M6 keys: registry hygiene", () => {
-  it("M6_KEY_NAMES lists 11 ranged + 29 fixed + 9 explicit keys, all registered, none repeated", () => {
-    expect(M6_KEY_NAMES).toHaveLength(RANGED.length + FIXED.length + EXPLICIT.length);
-    expect(M6_KEY_NAMES).toHaveLength(49);
-    expect(new Set(M6_KEY_NAMES).size).toBe(49);
+  it("M6_KEY_NAMES lists 14 ranged + 29 fixed + 10 explicit keys, all registered, none repeated", () => {
+    // + 1: my_portfolio_cost_max_pct, a ranged number key tested on its own
+    expect(M6_KEY_NAMES).toHaveLength(RANGED.length + 1 + FIXED.length + EXPLICIT.length);
+    expect(M6_KEY_NAMES).toHaveLength(53);
+    expect(new Set(M6_KEY_NAMES).size).toBe(53);
+    expect(M6_KEY_NAMES).toContain("my_portfolio_cost_max_pct");
+    expect(M6_KEY_NAMES).not.toContain("picks_portfolio_seed_aud");
     for (const k of M6_KEY_NAMES) expect(CONFIG_KEYS[k], k).toBeDefined();
     for (const k of [...RANGED.map((r) => r[0]), ...FIXED.map((r) => r[0]), ...EXPLICIT]) {
       expect(M6_KEY_NAMES, k).toContain(k);

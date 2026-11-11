@@ -23,6 +23,7 @@ import { familyBadge } from "./familyMap";
 import { CountUp, PopIn } from "./Motion";
 import { WelcomeBanner } from "./WelcomeBanner";
 import { IntradaySection } from "../picks/IntradaySection";
+import { PortfolioCard } from "../picks/PortfolioCard";
 
 const PROFILE_NAME: Record<string, string> = {
   aggressive: "Aggressive",
@@ -543,6 +544,8 @@ export function HomeContent({
       </Section>
 
       {v.intraday ? <IntradaySection model={v.intraday} compact /> : null}
+
+      {v.portfolios ? <PortfolioCard v={v.portfolios} /> : null}
 
       <SummaryCard v={v} />
 

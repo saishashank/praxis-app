@@ -28,6 +28,7 @@ function baseView(): HomeView {
     day: { regime: null, regimeD: null, quality: [], openFlags: 0, index: null },
     picks: { d: null, items: [] },
     intraday: null,
+    portfolios: null,
     ideas: { d: null, items: [], signals: 0 },
     watchlist: [],
     news: { hidden: false, items: [] },
@@ -246,6 +247,42 @@ describe("Home content: since yesterday and needs you", () => {
       "href",
       "/alerts/1",
     );
+  });
+});
+
+describe("Home content: My portfolio (D-950)", () => {
+  it("shows the three practice portfolios when they were read, nothing when they were not", () => {
+    show();
+    expect(screen.queryByTestId("pick-portfolio")).toBeNull();
+    cleanup();
+    show((v) => {
+      v.portfolios = {
+        masked: false,
+        seed: m(1_000_000_000),
+        stockMaxPct: 30,
+        strategyMaxPct: 40,
+        portfolios: ["conservative", "balanced", "aggressive"].map((profile) => ({
+          profile,
+          started: false,
+          holdingsMax: 4,
+          asOfD: null,
+          seed: null,
+          value: null,
+          cash: null,
+          gain: null,
+          sinceStartPpm: null,
+          worstFallPpm: null,
+          holdings: [],
+          split: null,
+          splitWhy: null,
+          trades: [],
+          closed: 0,
+          wins: 0,
+        })),
+      } as unknown as HomeView["portfolios"];
+    });
+    expect(screen.getByTestId("pick-portfolio")).toHaveTextContent("My portfolio");
+    expect(screen.getAllByText("Starts with the first pick.")).toHaveLength(3);
   });
 });
 

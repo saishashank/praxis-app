@@ -56,7 +56,7 @@ describe("migrate CLI", () => {
     const url = tempDbUrl();
     const r = run(["--db", "main"], { TURSO_MAIN_URL: url });
     expect(r.code).toBe(0);
-    expect(r.out).toContain("migrate main: applied 31 (now at v31)");
+    expect(r.out).toContain("migrate main: applied 32 (now at v32)");
     const again = run(["--db", "main"], { TURSO_MAIN_URL: url });
     expect(again.out).toContain("applied 0 (now at v31)");
     const db = track(createClient({ url }));
@@ -71,7 +71,7 @@ describe("migrate CLI", () => {
       TURSO_AUTH_URL: tempDbUrl(),
     });
     expect(r.code).toBe(0);
-    expect(r.out).toContain("migrate main: applied 31");
+    expect(r.out).toContain("migrate main: applied 32");
     expect(r.out).toContain("migrate auth: applied 6");
   });
 });
