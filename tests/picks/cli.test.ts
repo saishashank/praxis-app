@@ -64,7 +64,7 @@ describe("picks entry", () => {
     for (const phase of ["all", "3", "picks"]) {
       const r = await cli(url, ["--date", D, "--phase", phase]);
       expect(r.code, phase).toBe(0);
-      expect(r.lines, phase).toHaveLength(3);
+      expect(r.lines, phase).toHaveLength(4);
       expect(r.lines[0]).toMatch(
         /^arena-picks AU 2026-10-20: published=\d+ candidates=\d+ bought=\d+ missed=\d+ closed=\d+ open=\d+ checked=\d+ withdrawn=\d+ shortlist=-?\d+$/,
       );
@@ -75,6 +75,10 @@ describe("picks entry", () => {
       // D-921: the daily learning loop runs after the portfolio, counts only (nothing to learn from on an empty file)
       expect(r.lines[2]).toBe(
         "arena-learning AU 2026-10-20: movers=0 lessons=0 improvements=0 hypotheses=0",
+      );
+      // D-923: the learning Cortex's scorecard follows on the loop's World (none on an empty file)
+      expect(r.lines[3]).toBe(
+        "arena-cortex-learn AU 2026-10-20: skipped (no daily learning tonight)",
       );
       expect(r.lines.join("\n")).not.toMatch(/secret|file:/);
     }

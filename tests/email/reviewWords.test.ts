@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   aud,
   audWithPct,
+  BRAIN_HEADING,
   closedLine,
   companyLabel,
   exitWords,
@@ -148,5 +149,26 @@ describe("reviewLists", () => {
       "3 orders queued for the next session.",
     ]);
     expect(reviewLists({ learning: null, closed: [], queuedOrders: null }).s6).toEqual([]);
+  });
+
+  it("D-923: the learning Cortex's lines follow under their heading, and are left out when absent", () => {
+    const cortex = {
+      lines: [
+        "Of the 20 biggest gainers on Tue 10 Nov, the Cortex had 6 in its top tenth.",
+        "No weight changed tonight.",
+      ],
+      numbers: { rows: 6, angles: 3, nextDayOf: 2, nextDayRight: 1, dataBreaks: 0, coverage: null },
+    };
+    const l = reviewLists({ learning: { ...learning, cortex }, closed: [], queuedOrders: null });
+    expect(l.s4.slice(-3)).toEqual([`${BRAIN_HEADING}:`, ...cortex.lines]);
+    const empty = reviewLists({
+      learning: { ...learning, cortex: { ...cortex, lines: [] } },
+      closed: [],
+      queuedOrders: null,
+    });
+    expect(empty.s4.join("\n")).not.toContain(BRAIN_HEADING);
+    expect(reviewLists({ learning, closed: [], queuedOrders: null }).s4.join("\n")).not.toContain(
+      BRAIN_HEADING,
+    );
   });
 });

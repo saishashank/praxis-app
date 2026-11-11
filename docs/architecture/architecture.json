@@ -9617,6 +9617,52 @@
       }
     },
     {
+      "id": "table:main.cortex_angle_day",
+      "type": "table",
+      "name": "cortex_angle_day",
+      "purpose": "Cortex table cortex_angle_day: night results, ledger, features or outcomes (append-only).",
+      "specIds": [
+        "CTX-010",
+        "CTX-011"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "cortex",
+        "data"
+      ],
+      "source": "db/migrations/main/0031_cortex_learning.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "angle_id",
+          "angle_version",
+          "horizon",
+          "feature_d",
+          "n",
+          "ic",
+          "top_excess_ppm",
+          "bottom_excess_ppm",
+          "base_ppm",
+          "regime",
+          "results_season",
+          "psi_ppm",
+          "excluded_news",
+          "active_set_hash",
+          "manifest_id"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.cortex_decision",
       "type": "table",
       "name": "cortex_decision",
@@ -9699,6 +9745,129 @@
           "flags_json",
           "active_set_hash",
           "manifest_id"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.cortex_leader",
+      "type": "table",
+      "name": "cortex_leader",
+      "purpose": "Cortex table cortex_leader: night results, ledger, features or outcomes (append-only).",
+      "specIds": [
+        "CTX-010",
+        "CTX-011"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "cortex",
+        "data"
+      ],
+      "source": "db/migrations/main/0031_cortex_learning.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "family",
+          "since_d",
+          "leader",
+          "learner_rule_version",
+          "learner_generation",
+          "evidence_json",
+          "set_by"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.cortex_learn_compare",
+      "type": "table",
+      "name": "cortex_learn_compare",
+      "purpose": "Cortex table cortex_learn_compare: night results, ledger, features or outcomes (append-only).",
+      "specIds": [
+        "CTX-010",
+        "CTX-011"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "cortex",
+        "data"
+      ],
+      "source": "db/migrations/main/0031_cortex_learning.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "decision_d",
+          "family",
+          "book_id",
+          "fixed_rule_version",
+          "learner_rule_version",
+          "learner_generation",
+          "fixed_code",
+          "learner_code",
+          "agree",
+          "fixed_ret1_ppm",
+          "learner_ret1_ppm",
+          "fixed_ret20_ppm",
+          "learner_ret20_ppm",
+          "matured_d",
+          "regime"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.cortex_learn_event",
+      "type": "table",
+      "name": "cortex_learn_event",
+      "purpose": "Cortex table cortex_learn_event: night results, ledger, features or outcomes (append-only).",
+      "specIds": [
+        "CTX-010",
+        "CTX-011"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "cortex",
+        "data"
+      ],
+      "source": "db/migrations/main/0031_cortex_learning.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "seq",
+          "kind",
+          "family",
+          "angle_id",
+          "generation",
+          "evidence_json",
+          "words",
+          "reverses_seq",
+          "expires_d",
+          "created_at"
         ],
         "database": "main",
         "indexes": []
@@ -18874,6 +19043,17 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.cortex_angle_day",
+      "from": "service:turso-main",
+      "to": "table:main.cortex_angle_day",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "cortex",
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.cortex_decision",
       "from": "service:turso-main",
       "to": "table:main.cortex_decision",
@@ -18888,6 +19068,39 @@
       "id": "service:turso-main|contains|table:main.cortex_feature_daily",
       "from": "service:turso-main",
       "to": "table:main.cortex_feature_daily",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "cortex",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.cortex_leader",
+      "from": "service:turso-main",
+      "to": "table:main.cortex_leader",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "cortex",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.cortex_learn_compare",
+      "from": "service:turso-main",
+      "to": "table:main.cortex_learn_compare",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "cortex",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.cortex_learn_event",
+      "from": "service:turso-main",
+      "to": "table:main.cortex_learn_event",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [

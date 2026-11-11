@@ -29,6 +29,7 @@ import {
   type ClosedTradeFact,
   aud,
   audWithPct,
+  BRAIN_HEADING,
   companyLabel,
   pctPpm,
   sortClosed,
@@ -471,7 +472,13 @@ function section4(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
     out.push({ t: "p", text: "New ideas being tested", bold: true });
     out.push({ t: "ul", items: l.hypothesesOpened });
   }
-  if (!l.summary.length && !l.lessons.length && !l.hypothesesOpened.length) {
+  const brain = l.cortex?.lines ?? [];
+  if (brain.length) {
+    // D-923: the learning Cortex's night, left out when that step did not run
+    out.push({ t: "p", text: BRAIN_HEADING, bold: true });
+    out.push({ t: "ul", items: [...brain] });
+  }
+  if (!l.summary.length && !l.lessons.length && !l.hypothesesOpened.length && !brain.length) {
     out.push({ t: "p", text: "Nothing new was learned today.", tone: "muted" });
   }
   return out;

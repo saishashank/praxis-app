@@ -17,6 +17,7 @@
 // it in through `hooks`. Without hooks the loop still runs on strategy signals alone.
 // Deterministic: the same stored data gives the same document. Reads: see dailyLoad.ts (about 190k rows).
 import type { Client } from "@libsql/client";
+import type { CortexLearnSection } from "@/lib/cortex/learn/words";
 import type { CalendarRow } from "@/lib/data/calendar";
 import { addDays, isTradingDay, previousTradingDay, sessionsBetween } from "@/lib/data/calendar";
 import { STRATEGY_NAMES_DEFAULT } from "@/lib/config/keys";
@@ -88,6 +89,9 @@ export type DailyLearning = {
   lessons: FeatureLesson[];
   improvements: ImprovementItem[];
   hypothesesOpened: string[];
+  /** The learning Cortex's night (src/lib/cortex/learn/stage.ts), added after this loop; absent when
+   *  that step did not run (the review then leaves "What the brain learned" out). */
+  cortex?: CortexLearnSection;
 };
 
 /** What the picks side knows and the learning folder may not read itself (picks isolation, D-181). */
@@ -145,7 +149,7 @@ function parseBody(json: string): DailyLearning | null {
   try {
     const v = JSON.parse(json) as Partial<DailyLearning> | null;
     if (v === null || typeof v !== "object" || typeof v.d !== "string") return null;
-    return {
+    const out: DailyLearning = {
       d: v.d,
       summary: v.summary ?? [],
       movers: v.movers ?? [],
@@ -153,6 +157,9 @@ function parseBody(json: string): DailyLearning | null {
       improvements: v.improvements ?? [],
       hypothesesOpened: v.hypothesesOpened ?? [],
     };
+    const c = v.cortex;
+    if (c !== null && typeof c === "object" && Array.isArray(c.lines)) out.cortex = c;
+    return out;
   } catch {
     return null;
   }
@@ -329,10 +336,17 @@ function summarise(
   return out;
 }
 
-export async function runDailyLearning(
-  db: Client,
-  o: Opts,
-): Promise<{ movers: number; lessons: number; improvements: number; hypotheses: number }> {
+export type DailyLearningResult = {
+  movers: number;
+  lessons: number;
+  improvements: number;
+  hypotheses: number;
+  /** The night's World and explained movers, for the learning Cortex (no bar is read twice); absent
+   *  when nothing was learned (no session, no bars). */
+  night?: { world: World; movers: readonly MoverExplanation[] };
+};
+
+export async function runDailyLearning(db: Client, o: Opts): Promise<DailyLearningResult> {
   if (!isTradingDay(o.d, o.calendar)) return { ...ZERO };
   let prev: string;
   try {
@@ -481,5 +495,6 @@ export async function runDailyLearning(
     lessons: lessons.length,
     improvements: improvements.length,
     hypotheses: opened.length,
+    night: { world: w, movers },
   };
 }

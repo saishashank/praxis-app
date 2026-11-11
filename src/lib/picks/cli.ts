@@ -15,7 +15,8 @@ import { reviewKey } from "@/lib/agents/batch3";
 import { loadAgentParams } from "@/lib/agents/params";
 import { loadCalendar } from "@/lib/arena/closeBooks";
 import { marketDate } from "@/lib/data/calendar";
-import { runDailyLearning } from "@/lib/learning/daily";
+import { cortexLearnNight } from "@/lib/cortex/learn/stage";
+import { runDailyLearning, type DailyLearningResult } from "@/lib/learning/daily";
 import { pickHooks } from "./dailyHooks";
 import { runPicksNight } from "./nightly";
 import { runPickPortfolio } from "./portfolioStore";
@@ -100,20 +101,47 @@ export async function picksMain(
       );
     }
     // D-921: the daily learning loop, after the picks and the portfolio; a failure never stops them
+    let night: DailyLearningResult["night"];
+    let calendar: Awaited<ReturnType<typeof loadCalendar>> = [];
     try {
+      calendar = await loadCalendar(db, MARKET);
       const l = await runDailyLearning(db, {
         market: MARKET,
         d,
-        calendar: await loadCalendar(db, MARKET),
+        calendar,
         now: new Date(nowMs()).toISOString(),
         hooks: pickHooks,
       });
+      night = l.night;
       out(
         `arena-learning ${MARKET} ${d}: movers=${l.movers} lessons=${l.lessons} improvements=${l.improvements} hypotheses=${l.hypotheses}`,
       );
     } catch (error) {
       out(
         `arena-learning ${MARKET} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
+      );
+    }
+    // D-923: the learning Cortex's scorecard, on the daily loop's World; a failure never stops the picks
+    try {
+      const c =
+        night === undefined
+          ? null
+          : await cortexLearnNight(db, {
+              market: MARKET,
+              d,
+              calendar,
+              world: night.world,
+              movers: night.movers,
+              now: new Date(nowMs()).toISOString(),
+            });
+      out(
+        c === null
+          ? `arena-cortex-learn ${MARKET} ${d}: skipped (no daily learning tonight)`
+          : `arena-cortex-learn ${MARKET} ${d}: angles=${c.numbers.angles} rows=${c.numbers.rows} next_day_right=${c.numbers.nextDayRight}/${c.numbers.nextDayOf} data_breaks=${c.numbers.dataBreaks}`,
+      );
+    } catch (error) {
+      out(
+        `arena-cortex-learn ${MARKET} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
       );
     }
     return 0;

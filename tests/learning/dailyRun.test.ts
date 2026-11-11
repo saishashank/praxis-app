@@ -179,6 +179,10 @@ describe("runDailyLearning", () => {
     const day = (await loadDailyLearning(db, "AU", D))!;
     expect(day.d).toBe(D);
     expect(day.movers).toHaveLength(r.movers);
+    // D-923: the night's World and movers go on to the learning Cortex; nothing of it is stored here
+    expect(r.night!.world.d).toBe(D);
+    expect(r.night!.movers).toEqual(day.movers);
+    expect(day.cortex).toBeUndefined();
     const by = (code: string) => day.movers.find((m) => m.code === code)!;
 
     // company news before the open wins over everything else

@@ -117,6 +117,9 @@ export function closedLine(r: ClosedTradeFact): string {
 
 export type SectionLists = { s4: string[]; s5: string[]; s6: string[] };
 
+/** The heading of the learning Cortex's lines inside "What we learned today" (D-923). */
+export const BRAIN_HEADING = "What the brain learned";
+
 /** The plain lists behind sections 4-6, built from structured facts only (no model). */
 export function reviewLists(p: {
   learning: DailyLearning | null;
@@ -133,6 +136,9 @@ export function reviewLists(p: {
       );
     }
     for (const h of p.learning.hypothesesOpened) s4.push(`New idea being tested: ${h}`);
+    // D-923: the learning Cortex's night; left out when that step did not run
+    const brain = p.learning.cortex?.lines ?? [];
+    if (brain.length > 0) s4.push(`${BRAIN_HEADING}:`, ...brain);
   }
   const s5: string[] = [workedHeadline(p.closed).text, ...sortClosed(p.closed).map(closedLine)];
   const s6: string[] = [];

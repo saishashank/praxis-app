@@ -206,6 +206,29 @@ describe("Evening Review variants", () => {
     expect(none).not.toContain("Breakout on heavy volume");
   });
 
+  it("D-923: 'What the brain learned' shows the learning Cortex's lines, and is left out when absent", () => {
+    const base = fx.REVIEW_FULL.learning!;
+    const cortex = {
+      lines: [
+        "Of the 20 biggest gainers on Tue 10 Nov, the Cortex had 6 in its top tenth the evening before.",
+      ],
+      numbers: { rows: 6, angles: 3, nextDayOf: 2, nextDayRight: 1, dataBreaks: 0, coverage: null },
+    };
+    const withBrain = renderReview(fx.reviewFacts({ learning: { ...base, cortex } }));
+    expect(withBrain.text).toContain("What the brain learned");
+    expect(withBrain.text).toContain(cortex.lines[0]);
+    expect(withBrain.html).toContain("What the brain learned");
+    expect(CASES["review-full"]!.out.text).not.toContain("What the brain learned");
+    // only the brain's lines: they count as something learned
+    const only = renderReview(
+      fx.reviewFacts({
+        learning: { ...base, summary: [], lessons: [], hypothesesOpened: [], cortex },
+      }),
+    ).text;
+    expect(only).toContain(cortex.lines[0]);
+    expect(only).not.toContain("Nothing new was learned today.");
+  });
+
   it("what worked: honest when every result is a loss, and when nothing closed", () => {
     const { text } = CASES["review-full"]!.out;
     expect(text).toContain("Nothing worked today: all 2 trades that finished lost money");
