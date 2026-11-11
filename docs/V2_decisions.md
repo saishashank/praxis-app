@@ -612,3 +612,4 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-987 | TST-136: a slow test gets an explicit per-test limit (for example { timeout: 120_000 } on the live look) and never a CI retry; a static test forbids a retry:... |
 | D-988 | The Owner control-room load keeps a statement budget; the data-feed lines are one more statement, so the budget is 91 (was 90), asserted in tests/health/cont... |
 | D-989 | TST-135 (b): the four AT-39 fetch clauses (robots.txt, conditional requests, daily cap, metadata-only record under frozen extraction rules) live in one pure... |
+| D-990 | Build robustness (found at M18 integration): the two fonts are committed as variable woff2 files (latin subset, SIL Open Font License 1.1, licence texts besi... |

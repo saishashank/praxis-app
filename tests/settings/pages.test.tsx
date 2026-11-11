@@ -26,9 +26,8 @@ vi.mock("@/app/(app)/settings/actions", () => ({
   updatePreferencesAction: vi.fn(),
   setQuietHoursAction: vi.fn(),
 }));
-vi.mock("next/font/google", () => ({
-  Source_Sans_3: () => ({ variable: "inter-var" }),
-  Source_Serif_4: () => ({ variable: "mono-var" }),
+vi.mock("next/font/local", () => ({
+  default: (o: { variable: string }) => ({ variable: o.variable }),
 }));
 vi.mock("next/server", () => ({ connection: async () => undefined }));
 

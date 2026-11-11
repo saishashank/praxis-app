@@ -191,6 +191,7 @@ Decisions the stream E builder took without a number (recorded at integration, 2
 - **D-987** TST-136: a slow test gets an explicit per-test limit (for example `{ timeout: 120_000 }` on the live look) and never a CI retry; a static test forbids a `retry:` option in the test folders.
 - **D-988** The Owner control-room load keeps a statement budget; the data-feed lines are one more statement, so the budget is **91** (was 90), asserted in `tests/health/controlRoom.test.tsx`.
 - **D-989** TST-135 (b): the four AT-39 fetch clauses (robots.txt, conditional requests, daily cap, metadata-only record under frozen extraction rules) live in one pure module, `src/lib/kb/fetchRules.ts`, which M22's polling will call; nothing calls it in production until then (`tests/kb/fetchClauses.test.ts`).
+- **D-990** Build robustness (found at M18 integration): the two fonts are committed as variable woff2 files (latin subset, SIL Open Font License 1.1, licence texts beside them in `src/app/fonts/`) and loaded with `next/font/local`, so no build fetches fonts; the `next/font/google` fetch failed CI builds at random ("queries have exactly one entry"). Same families, weights and CSS variables (D-884); `font-src 'self'` unchanged. Proven by `tests/http/cspLock.test.ts` (layout uses the committed file, no external font host).
 
 ## Streams and tasks
 

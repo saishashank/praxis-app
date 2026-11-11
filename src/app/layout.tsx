@@ -1,21 +1,25 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
-import { Source_Sans_3, Source_Serif_4 } from "next/font/google";
+import localFont from "next/font/local";
 import { currentLook } from "@/lib/preferences/current";
 import "./globals.css";
 import "./text-size.css";
 
-// Self-hosted at build time by next/font (served from our origin; font-src 'self', D-130).
-// D-884: Source Sans 3 for text and numbers (tabular figures, UXN-002), Source Serif 4 for titles.
-const sourceSans = Source_Sans_3({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+// Served from our origin (font-src 'self', D-130). D-884: Source Sans 3 for text and numbers (tabular
+// figures, UXN-002), Source Serif 4 for titles. M18 D-990: the files are committed (variable fonts, latin
+// subset, SIL Open Font License 1.1, from Google Fonts) so the build never fetches fonts: the
+// next/font/google fetch failed builds at random in CI.
+const sourceSans = localFont({
+  src: "./fonts/source-sans-3-latin-wght.woff2",
+  weight: "400 700",
+  style: "normal",
   variable: "--font-source-sans",
   display: "swap",
 });
-const sourceSerif = Source_Serif_4({
-  subsets: ["latin"],
-  weight: ["600", "700"],
+const sourceSerif = localFont({
+  src: "./fonts/source-serif-4-latin-opsz-wght.woff2",
+  weight: "600 700",
+  style: "normal",
   variable: "--font-source-serif",
   display: "swap",
 });

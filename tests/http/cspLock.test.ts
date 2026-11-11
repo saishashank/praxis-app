@@ -49,11 +49,12 @@ describe("CSP lock", () => {
     }
   });
 
-  it("fonts are self-hosted by next/font: no external font link in the source", () => {
+  it("fonts are self-hosted from committed files: no external font link in the source", () => {
     const root = path.resolve(import.meta.dirname, "../..");
     const layout = fs.readFileSync(path.join(root, "src/app/layout.tsx"), "utf8");
     const css = fs.readFileSync(path.join(root, "src/app/globals.css"), "utf8");
-    expect(layout).toContain("Source_Sans_3");
+    expect(layout).toContain("next/font/local"); // D-990: committed files, no build-time fetch
+    expect(layout).toContain("./fonts/source-sans-3-latin-wght.woff2");
     for (const text of [layout, css]) {
       expect(text).not.toMatch(/fonts\.(googleapis|gstatic)\.com/);
       expect(text).not.toMatch(/@import\s+url\(/);
