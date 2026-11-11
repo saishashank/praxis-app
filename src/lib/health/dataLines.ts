@@ -4,7 +4,10 @@
 // No code, name or URL is ever in a line.
 import type { Client } from "@libsql/client";
 import { FALLBACK_REGISTER_ROW, LIST_SOURCE } from "@/lib/data/codeHistory";
-import { countUnassessed } from "@/lib/sentinel/ingest";
+import { ASX_SOURCE } from "@/lib/data/asxToken";
+import { CARRY_WINDOW_H } from "@/lib/sentinel/ingest";
+
+const HOUR_MS = 3_600_000; // threshold-ok: unit conversion
 
 const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many);
 
@@ -23,23 +26,25 @@ export function companyListLine(failures: number, fallbackOn: boolean): string |
   return `Company list: ASX fetch failed ${failures} ${plural(failures, "run", "runs")}; ${fb}`;
 }
 
-/** The lines for the Owner. rows-ok: three single-row reads and one bounded count (48 h of announcements). */
+/**
+ * The lines for the Owner, from ONE statement (System Health reads inside a call budget).
+ * rows-ok: two single-row reads and one bounded count (the 48 h carry window, same predicate as countUnassessed).
+ */
 export async function dataFeedLines(db: Client, now: Date): Promise<string[]> {
-  const lines: string[] = [];
-  const news = newsWaitingLine(await countUnassessed(db, now.toISOString()));
-  if (news !== null) lines.push(news);
-  const s = await db.execute({
-    sql: "SELECT consecutive_failures AS n FROM source_fetch_status WHERE source = ?",
-    args: [LIST_SOURCE],
-  });
+  const since = new Date(now.getTime() - CARRY_WINDOW_H * HOUR_MS).toISOString();
   const r = await db.execute({
-    sql: "SELECT status FROM source_register WHERE source = ?",
-    args: [FALLBACK_REGISTER_ROW],
+    sql:
+      "SELECT (SELECT COUNT(*) FROM announcement a WHERE a.source = ? AND a.market = 'AU' AND a.ingested_at >= ? " +
+      "AND a.published_at >= ? AND NOT EXISTS (SELECT 1 FROM item_assessment s WHERE s.source = a.source AND s.ann_id = a.ann_id)) AS news, " +
+      "(SELECT consecutive_failures FROM source_fetch_status WHERE source = ?) AS fails, " +
+      "(SELECT status FROM source_register WHERE source = ?) AS reg",
+    args: [ASX_SOURCE, since, since, LIST_SOURCE, FALLBACK_REGISTER_ROW],
   });
-  const company = companyListLine(
-    s.rows.length > 0 ? Number(s.rows[0]!.n) : 0,
-    r.rows.length > 0 && String(r.rows[0]!.status) === "enabled",
-  );
+  const x = r.rows[0];
+  const lines: string[] = [];
+  const news = newsWaitingLine(Number(x?.news ?? 0));
+  if (news !== null) lines.push(news);
+  const company = companyListLine(Number(x?.fails ?? 0), String(x?.reg ?? "") === "enabled");
   if (company !== null) lines.push(company);
   return lines;
 }
