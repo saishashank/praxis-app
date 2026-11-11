@@ -13,6 +13,7 @@ import { isPublicPath } from "@/lib/http/gate";
 import type { NonceStore } from "@/lib/security/replay";
 import { KEY } from "../auth/helpers";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
+import { seedRestoreDrill } from "./restoreFixture";
 
 vi.mock("@/lib/security/replay", () => ({
   TursoNonceStore: class {
@@ -79,6 +80,7 @@ const post = (b: string | object, headers?: Record<string, string>, nc = nonce()
 
 beforeEach(async () => {
   db = await freshDb("main");
+  await seedRestoreDrill(db);
   mock = createMockProvider();
   await db.execute({
     sql: "INSERT INTO worker_state (key, value_json, updated_at) VALUES ('email_mode', '\"full\"', 'x')",

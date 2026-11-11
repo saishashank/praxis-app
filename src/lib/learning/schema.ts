@@ -481,6 +481,7 @@ export const LEARNING_COLUMNS = {
     "net_micro",
     "net_ppm",
     "updated_d",
+    "outcome_basis", // migration 0032 (D-956): added at the end by ALTER TABLE
   ],
   bakeoff_result: [
     "run_id",

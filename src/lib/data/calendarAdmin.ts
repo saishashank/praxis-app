@@ -11,9 +11,14 @@
 import type { Client } from "@libsql/client";
 import { audit, NO_META, type RequestMeta } from "@/lib/auth/audit";
 import type { AuthEnv } from "@/lib/auth/env";
-import { summariseCalendar, type CalendarRow, type CalendarSummary } from "./calendar";
+import {
+  CALENDAR_MARKETS,
+  summariseCalendar,
+  type CalendarRow,
+  type CalendarSummary,
+} from "./calendar";
 
-export const CALENDAR_MARKETS = ["AU"] as const;
+export { CALENDAR_MARKETS };
 
 export type ConfirmError = "invalid" | "forbidden" | "not_found" | "unavailable";
 export type ConfirmResult = { ok: true; rows: number } | { ok: false; error: ConfirmError };

@@ -275,6 +275,12 @@ describe("M4 keys: defaults and bounds equal ch.15", () => {
       ...M11L_KEY_NAMES, // the M11-lite keys have their own table in tests/config/m11lKeys.test.ts
       ...M13L_KEY_NAMES, // the M13-lite keys have their own table in tests/config/m13lKeys.test.ts
       ...MOVERS_KEY_NAMES, // the movers gap keys have their own table in tests/config/moversKeys.test.ts
+      // the M18 keys have their own table in tests/config/m18Keys.test.ts (news_assess_per_run is in M5_KEY_NAMES)
+      "turso_notice_pct",
+      "turso_free_ceiling_pct",
+      "hmac_scheme_version",
+      "calendar_draft_markets",
+      "restore_drill_reminder",
     ]);
     const listed = new Set<string>([
       ...RANGED.map((r) => r[0]),

@@ -46,6 +46,9 @@
 import { formatTime, type TimeFormat } from "@/lib/health/format";
 import { dayStatusRows, isWalkDay, isWeekendDate, type DayStatus } from "./calendarCore.mjs";
 
+/** The markets with a calendar. Lives here (pure) so config/keys.ts can read it without the DB-touching admin module. */
+export const CALENDAR_MARKETS = ["AU"] as const;
+
 export type CalendarKind = "session" | "holiday" | "early_close";
 
 export type CalendarRow = {

@@ -11,6 +11,7 @@ import { runReminder } from "@/lib/email/reminder";
 import { parseAttentionItems } from "@/lib/health/attention";
 import { KEY } from "../auth/helpers";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
+import { seedRestoreDrill } from "../health/restoreFixture";
 
 afterEach(cleanupTempDbs);
 
@@ -52,6 +53,7 @@ beforeEach(async () => {
   db = await freshDb("main");
   mock = createMockProvider();
   await mode("full");
+  await seedRestoreDrill(db);
 });
 
 describe("AT-20b attention reminder", () => {

@@ -1,5 +1,5 @@
 import { COST_PROFILE_CODES } from "@/lib/arena/costs";
-import { CALENDAR_MARKETS } from "@/lib/data/calendarAdmin";
+import { CALENDAR_MARKETS } from "@/lib/data/calendar";
 import { DEFAULT_INJECTION_PHRASES } from "@/lib/llm/injection";
 import { HMAC_SCHEME_VERSION } from "@/lib/security/hmacCore.mjs";
 
