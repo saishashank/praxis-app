@@ -1,7 +1,7 @@
 // @vitest-environment node
-// TST-139 (D-970; AT-85 "the market matrix runs ... profile fixtures", AU in M18, IN/US in M19/M20): the harness
-// reads one profile fixture per built market, the AU fixture equals today's constants, and the production shape
-// (no market without a `market` row) is checkable. Pure, plus one migrated database.
+// TST-139 (D-970; AT-85 "the market matrix runs ... profile fixtures": AU, IN and US from M19): the harness reads one
+// profile fixture per built market, every fixture equals the seed and the loaded profile (M19 A1), the AU fixture
+// equals today's constants, and the production shape (no market without a `market` row) is checkable.
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -10,7 +10,11 @@ import { decisionCutoffUtc } from "@/lib/agents/decisionView";
 import { AU_TIME_ZONE } from "@/lib/agents/decisionView";
 import { CONFIG_KEYS, MODE_MARKETS } from "@/lib/config/keys";
 import { CALENDAR_MARKETS } from "@/lib/data/calendar";
+import { loadProfile } from "@/lib/market/profile";
+import { builtMarkets, seedOf } from "@/lib/market/seed/index.mjs";
 import { DEFAULT_HOURS } from "@/lib/sentinel/archive";
+// @ts-expect-error the generator is a script (not typed)
+import { fixtureOf } from "../../scripts/market/gen-fixtures.mjs";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
 import {
   builtMarketFixtures,
@@ -22,8 +26,35 @@ import {
 afterEach(cleanupTempDbs);
 
 describe("the fixtures", () => {
-  it("M18 has exactly one built market: AU", () => {
-    expect(builtMarketFixtures().map((m) => m.code)).toEqual(["AU"]);
+  it("M19 builds AU, IN and US (IN and US built and off, MKT-110); the fixtures are the seeds", () => {
+    expect(builtMarketFixtures().map((m) => m.code)).toEqual(builtMarkets());
+    expect(builtMarketFixtures().map((m) => m.code)).toEqual(["AU", "IN", "US"]);
+    for (const m of builtMarketFixtures()) expect(m).toEqual(fixtureOf(seedOf(m.code)!));
+  });
+
+  it("every fixture equals the loaded profile of a migrated database (the matrix runs one definition)", async () => {
+    const db = await freshDb("main");
+    for (const m of builtMarketFixtures()) {
+      const p = await loadProfile(db, m.code);
+      expect({
+        tz: p.tz,
+        open: p.sessionOpen,
+        close: p.sessionClose,
+        cutoff: p.decisionCutoff,
+        zone: p.decisionCutoffZone,
+        currency: p.currency,
+        mode: p.mode,
+      }).toEqual({
+        tz: m.tz,
+        open: m.openTime,
+        close: m.closeTime,
+        cutoff: m.cutoffTime,
+        zone: m.decisionTz,
+        currency: m.currency,
+        mode: m.seededMode,
+      });
+      expect(p.enabled).toBe(m.productionMode !== "off");
+    }
   });
 
   it("a new market is a new file: the harness picks it up with no code change (planted)", () => {
@@ -77,7 +108,7 @@ describe("the AU fixture equals today's constants", () => {
     });
     expect(CONFIG_KEYS.decision_cutoff.default).toBe(au.cutoffTime);
     expect([...CALENDAR_MARKETS]).toEqual([au.code]);
-    expect([...MODE_MARKETS]).toEqual([au.code]);
+    expect([...MODE_MARKETS]).toEqual(builtMarketFixtures().map((m) => m.code));
     // the cut-off reads the same instant through the helper: 18:10 Melbourne is 07:10 UTC in summer time
     expect(decisionCutoffUtc("2026-12-01", au.cutoffTime)).toBe("2026-12-01T07:10:00.000Z");
   });
@@ -115,7 +146,7 @@ describeEachMarket("a market suite", (m: MarketProfileFixture) => {
 });
 
 describe("describeEachMarket", () => {
-  it("ran the suite above once for AU (and would for every other fixture)", () => {
-    expect(seen).toEqual(["AU"]);
+  it("ran the suite above once for AU, IN and US (and would for every other fixture)", () => {
+    expect(seen).toEqual(["AU", "IN", "US"]);
   });
 });

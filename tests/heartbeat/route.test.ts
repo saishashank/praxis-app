@@ -256,6 +256,8 @@ describe("evening behaviour", () => {
 
 describe("failure handling", () => {
   it("an unreadable database during the checks is 'unknown', recorded failed and retryable", async () => {
+    await db.execute("DROP TABLE market_profile_field"); // 0034: the profile tables reference market
+    await db.execute("DROP TABLE market_profile");
     await db.execute("DROP TABLE market");
     const bad = await make("evening")(get(EP));
     expect(await bad.json()).toEqual({ status: "unknown", date: "2026-10-12" });
@@ -345,6 +347,8 @@ describe("V1-I2 / V1-I7: DST-aware evening window and the same-day retry", () =>
   });
 
   it("the retry call finishes a non-final day and skips a final one", async () => {
+    await db.execute("DROP TABLE market_profile_field"); // 0034: the profile tables reference market
+    await db.execute("DROP TABLE market_profile");
     await db.execute("DROP TABLE market");
     const first = await make("evening", AEDT_2110)(cronGet(`${EP}?dst=aedt`));
     expect(await first.json()).toMatchObject({ status: "unknown" });

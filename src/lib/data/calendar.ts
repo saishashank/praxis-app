@@ -45,9 +45,19 @@
 //    replay goldens depend on it, and the arithmetic walks a range a gate has already checked.
 import { formatTime, type TimeFormat } from "@/lib/health/format";
 import { dayStatusRows, isWalkDay, isWeekendDate, type DayStatus } from "./calendarCore.mjs";
+import { CALENDAR_RULE_MODULES } from "./calendarRules.mjs";
 
-/** The markets with a calendar. Lives here (pure) so config/keys.ts can read it without the DB-touching admin module. */
-export const CALENDAR_MARKETS = ["AU"] as const;
+/**
+ * The markets with computed calendar rules: the keys of CALENDAR_RULE_MODULES (calendarRules.mjs), the one table
+ * a market is added to (M19 D-993; was a literal AU list). Lives here (pure) so config/keys.ts can read it
+ * without the DB-touching admin module. A built market without rules (IN, US until M20) is not listed.
+ */
+export function calendarMarkets(): readonly string[] {
+  return Object.keys(CALENDAR_RULE_MODULES).sort();
+}
+
+/** The same list as a constant, derived (not a second definition); readers should prefer calendarMarkets(). */
+export const CALENDAR_MARKETS: readonly string[] = calendarMarkets();
 
 export type CalendarKind = "session" | "holiday" | "early_close";
 

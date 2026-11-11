@@ -22,6 +22,7 @@ export const ERROR_TEXT: Record<string, string> = {
     "Full mode needs the go-live sign-off first. Sign off on the Go-live page, then try again.",
   constants_unverified:
     "Full mode needs the cost, tick, slippage and parcel figures approved first. See the Go-live page.",
+  market_not_enabled: "That market is not enabled, so its mode cannot be changed here.",
   email_off: "Turn the email mode to incidents only before switching to full mode.",
   market_full:
     "Email cannot be switched off while a market is in full mode. Set the market back to data-only first.",

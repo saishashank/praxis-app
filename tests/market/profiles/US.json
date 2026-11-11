@@ -1,0 +1,14 @@
+{
+  "code": "US",
+  "name": "United States (NYSE, Nasdaq)",
+  "tz": "America/New_York",
+  "decisionTz": "America/New_York",
+  "openTime": "09:30",
+  "closeTime": "16:00",
+  "cutoffTime": "18:00",
+  "currency": "USD",
+  "productionMode": "off",
+  "seededMode": "off",
+  "built": true,
+  "note": "Generated from src/lib/market/seed/US.mjs (M19 A1): built and off in production (MKT-110); every value is [VERIFY] until M20 (MKT-114)."
+}

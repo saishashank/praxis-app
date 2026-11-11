@@ -619,8 +619,8 @@ describe("d. market mode (source of truth: market.mode; config value is the hist
       error: "signoff_required",
     });
     for (const [market, mode] of [
-      ["US", "off"],
-      ["IN", "data_only"],
+      ["ZZ", "off"],
+      ["", "off"],
       [undefined, "off"],
       ["AU", "on"],
       ["AU", undefined],
@@ -631,12 +631,21 @@ describe("d. market mode (source of truth: market.mode; config value is the hist
         error: "invalid",
       });
     }
+    // a built market that is not enabled can only be off (D-994): data_only and full are refused
+    for (const mode of ["data_only", "full"]) {
+      for (const market of ["IN", "US"]) {
+        expect(await setMarketMode(base({ market, mode }) as never)).toEqual({
+          ok: false,
+          error: "market_not_enabled",
+        });
+      }
+    }
     expect(await actions()).toEqual([]);
     expect(await marketMode()).toBe("data_only");
   });
 
   it("the default is data_only for AU in both places, so data_only is a no-op", async () => {
-    expect(CONFIG_KEYS.market_mode.default).toEqual({ AU: "data_only" });
+    expect(CONFIG_KEYS.market_mode.default).toEqual({ AU: "data_only", IN: "off", US: "off" });
     expect(await marketMode()).toBe("data_only");
     expect(await setMarketMode(base({ market: "AU", mode: "data_only" }) as never)).toEqual({
       ok: true,
@@ -652,7 +661,7 @@ describe("d. market mode (source of truth: market.mode; config value is the hist
       changed: true,
     });
     expect(await marketMode()).toBe("off");
-    expect(await getConfig(main, "market_mode")).toEqual({ AU: "off" });
+    expect(await getConfig(main, "market_mode")).toEqual({ AU: "off", IN: "off", US: "off" });
     const v = (await main.execute("SELECT * FROM config_version WHERE key = 'market_mode'")).rows;
     expect(v).toHaveLength(1);
     expect(v[0]).toMatchObject({
@@ -669,13 +678,13 @@ describe("d. market mode (source of truth: market.mode; config value is the hist
       changed: true,
     });
     expect(await marketMode()).toBe("data_only");
-    expect(await getConfig(main, "market_mode")).toEqual({ AU: "data_only" });
+    expect(await getConfig(main, "market_mode")).toEqual({ AU: "data_only", IN: "off", US: "off" });
     const last = (
       await main.execute(
         "SELECT previous_json FROM config_version WHERE key = 'market_mode' ORDER BY id DESC LIMIT 1",
       )
     ).rows[0];
-    expect(JSON.parse(String(last.previous_json))).toEqual({ AU: "off" });
+    expect(JSON.parse(String(last.previous_json))).toEqual({ AU: "off", IN: "off", US: "off" });
     const a = (await auditRows(auth)).filter((r) => r.action === "controls.market_mode");
     expect(a.map((r) => r.detail)).toEqual([
       { market: "AU", from: "data_only", to: "off" },
@@ -725,6 +734,8 @@ describe("d. market mode (source of truth: market.mode; config value is the hist
       error: "unavailable",
     });
     expect(await marketMode()).toBe("data_only");
+    await main.execute("DROP TABLE market_profile_field");
+    await main.execute("DROP TABLE market_profile");
     await main.execute("DROP TRIGGER market_no_delete");
     await main.execute("DELETE FROM market");
     expect(await setMarketMode(base({ market: "AU", mode: "off" }) as never)).toEqual({
@@ -738,7 +749,8 @@ describe("d. market mode (source of truth: market.mode; config value is the hist
     expect(validateMarketModes({ AU: "off" })).toBeNull();
     expect(validateMarketModes({ AU: "full" })).toBeNull();
     expect(validateMarketModes({ AU: "on" })).toMatch(/off, data_only or full/);
-    expect(validateMarketModes({ US: "off" })).toMatch(/unknown market/);
+    expect(validateMarketModes({ US: "off" })).toBeNull(); // built, so it has a mode (D-993)
+    expect(validateMarketModes({ ZZ: "off" })).toMatch(/unknown market/);
     expect(validateMarketModes({})).toMatch(/unknown market/);
     expect(validateMarketModes("data_only")).toMatch(/each market/);
     expect(validateMarketModes([])).toMatch(/each market/);
@@ -826,9 +838,9 @@ describe("read model for System Health", () => {
   });
 
   it("dataOnly is false when the market is off or full; parseOn accepts the Worker's forms", async () => {
-    await main.execute("UPDATE market SET mode = 'off'");
+    await main.execute("UPDATE market SET mode = 'off' WHERE code = 'AU'");
     expect((await loadControlsView(main, false)).dataOnly).toBe(false);
-    await main.execute("UPDATE market SET mode = 'full'");
+    await main.execute("UPDATE market SET mode = 'full' WHERE code = 'AU'");
     expect((await loadControlsView(main, false)).dataOnly).toBe(false);
     for (const raw of ['"1"', "1", "true"]) expect(parseOn(raw)).toBe(true);
     for (const raw of ['"0"', "0", "false", "junk", undefined, null, '"yes"'])

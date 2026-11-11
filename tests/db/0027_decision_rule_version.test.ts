@@ -20,12 +20,12 @@ describe("0027_decision_rule_version", () => {
     );
     expect(cols).toContain("rule_version");
 
-    expect(await migrateDown(db, ms, 7)).toEqual({ rolledBack: 7, version: 26 }); // 0028, 0029, 0030, 0031 and 0033 sit on top;
+    expect(await migrateDown(db, ms, 8)).toEqual({ rolledBack: 8, version: 26 }); // 0028, 0029, 0030, 0031 and 0033 sit on top;
     const back = (await db.execute("PRAGMA table_info(cortex_decision)")).rows.map((r) =>
       String(r.name),
     );
     expect(back).not.toContain("rule_version");
-    expect(await migrateUp(db, ms)).toEqual({ applied: 7, version: 33 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 8, version: 34 });
     expect(await schemaOf(db)).toEqual(after);
   });
 });

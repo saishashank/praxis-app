@@ -148,6 +148,7 @@ export type ControlError =
   | "signoff_required"
   | "email_off"
   | "constants_unverified"
+  | "market_not_enabled"
   | "market_full"
   | "confirm_required"
   | "items_missing"
@@ -541,11 +542,13 @@ export async function setMarketMode(p: MarketModeInput): Promise<ControlResult> 
   const to = p.mode;
   try {
     const row = await p.mainDb.execute({
-      sql: "SELECT mode FROM market WHERE code = ?",
+      sql: "SELECT mode, enabled FROM market WHERE code = ?",
       args: [market],
     });
     if (row.rows.length !== 1) return fail("invalid");
     const columnMode = String(row.rows[0].mode);
+    // D-994: a market that is not enabled can only be `off`; the Owner's switch-on is the M20 two-step.
+    if (to !== "off" && Number(row.rows[0].enabled) !== 1) return fail("market_not_enabled");
     const { map } = await readConfigModes(p.mainDb);
     if (columnMode === to && map[market] === to) return NOOP;
     const today = localDay(now);

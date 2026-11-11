@@ -6,17 +6,13 @@
       "module": "src/lib/config/keys.ts",
       "export": "MODE_MARKETS",
       "field": "code",
-      "value": [
-        "AU"
-      ]
+      "value": ["AU"]
     },
     {
       "module": "src/lib/data/calendar.ts",
       "export": "CALENDAR_MARKETS",
       "field": "code",
-      "value": [
-        "AU"
-      ]
+      "value": ["AU"]
     },
     {
       "module": "src/lib/arena/cohort.ts",
@@ -40,9 +36,7 @@
       "module": "src/lib/preferences/service.ts",
       "export": "SELECTABLE_MARKETS",
       "field": "code",
-      "value": [
-        "AU"
-      ]
+      "value": ["AU"]
     },
     {
       "module": "src/lib/review/send.ts",
@@ -84,9 +78,7 @@
       "module": "src/lib/users/service.ts",
       "export": "MARKETS",
       "field": "code",
-      "value": [
-        "AU"
-      ]
+      "value": ["AU"]
     },
     {
       "module": "src/lib/users/service.ts",
@@ -424,16 +416,7 @@
       "module": "src/lib/arena/costs.ts",
       "export": "COST_PROFILE_CODES",
       "field": "cost_formula",
-      "value": [
-        "P0",
-        "P1",
-        "P2",
-        "P3",
-        "P4",
-        "P5",
-        "P5b",
-        "P6"
-      ]
+      "value": ["P0", "P1", "P2", "P3", "P4", "P5", "P5b", "P6"]
     },
     {
       "module": "src/lib/data/universe/tiers.mjs",
@@ -496,11 +479,7 @@
       "module": "src/lib/data/index/indexBars.mjs",
       "export": "INDEX_CODES",
       "field": "benchmark_index",
-      "value": [
-        "AXJO",
-        "GSPC",
-        "VIX"
-      ]
+      "value": ["AXJO", "GSPC", "VIX"]
     },
     {
       "module": "src/lib/data/quotes/parse.ts",
@@ -512,11 +491,7 @@
       "module": "src/lib/cortex/pit/types.ts",
       "export": "INDEX_CODES_PIT",
       "field": "benchmark_index",
-      "value": [
-        "AXJO",
-        "GSPC",
-        "VIX"
-      ]
+      "value": ["AXJO", "GSPC", "VIX"]
     },
     {
       "module": "src/lib/config/keys.ts",

@@ -1,0 +1,20 @@
+// The seed registry (M19 A1; D-993): the markets whose profile is built, in code order. `builtMarkets()` is the
+// synchronous list validators use (validateMarketModes, validateMarketShare); at run time everything asks the
+// `market` table through the loader (`enabledMarkets(db)`). A market is added here, as a seed module, a
+// migration row and a fixture, together.
+import AU from "./AU.mjs";
+import IN from "./IN.mjs";
+import US from "./US.mjs";
+
+/** code -> seed module. */
+export const SEEDS = Object.freeze({ AU, IN, US });
+
+/** The built market codes (the seed registry), e.g. for validators. */
+export function builtMarkets() {
+  return Object.keys(SEEDS).sort();
+}
+
+/** The seed of one market, or undefined. */
+export function seedOf(code) {
+  return Object.prototype.hasOwnProperty.call(SEEDS, code) ? SEEDS[code] : undefined;
+}

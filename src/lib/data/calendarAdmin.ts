@@ -13,12 +13,13 @@ import { audit, NO_META, type RequestMeta } from "@/lib/auth/audit";
 import type { AuthEnv } from "@/lib/auth/env";
 import {
   CALENDAR_MARKETS,
+  calendarMarkets,
   summariseCalendar,
   type CalendarRow,
   type CalendarSummary,
 } from "./calendar";
 
-export { CALENDAR_MARKETS };
+export { CALENDAR_MARKETS, calendarMarkets };
 
 export type ConfirmError = "invalid" | "forbidden" | "not_found" | "unavailable";
 export type ConfirmResult = { ok: true; rows: number } | { ok: false; error: ConfirmError };

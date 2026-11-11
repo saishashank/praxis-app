@@ -352,9 +352,7 @@
       "workflow": "llm-bakeoff.yml",
       "monthly": "first-saturday",
       "inputsKey": "bakeoff_inputs",
-      "requiredInputs": [
-        "candidates"
-      ],
+      "requiredInputs": ["candidates"],
       "tradingDaysOnly": false,
       "marketBound": false,
       "priority": 26,
