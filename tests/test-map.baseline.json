@@ -622,6 +622,7 @@
       "tests/picks/dividendOutcome.test.ts"
     ],
     "AT-01": [
+      "scripts/llm/bakeoff-review.test.mjs",
       "tests/users/actions.test.ts",
       "tests/users/migration.test.ts",
       "tests/users/page.test.tsx",
@@ -901,7 +902,7 @@
       "tests/coverage/snapshotWorld.test.ts",
       "tests/coverage/statsGuards.test.ts"
     ],
-    "AT-32": ["tests/acceptance/v2/at32Steelman.test.ts"],
+    "AT-32": ["tests/acceptance/v2/at32Steelman.test.ts", "tests/docs/replayHashPolicy.test.ts"],
     "AT-33": ["tests/acceptance/v2/at33.test.ts"],
     "AT-34": ["tests/acceptance/v2/at34.test.ts"],
     "AT-35": ["tests/acceptance/v2/at35.test.ts"],
@@ -912,10 +913,15 @@
       "tests/steelman/night.test.ts",
       "tests/steelman/write.test.ts"
     ],
-    "AT-39": ["tests/db/0022_experts.test.ts", "tests/experts/import.test.ts"],
+    "AT-39": [
+      "tests/db/0022_experts.test.ts",
+      "tests/experts/import.test.ts",
+      "tests/kb/fetchClauses.test.ts"
+    ],
     "AT-40": [
       "tests/acceptance/v2/at40Proposals.test.ts",
-      "tests/acceptance/v2/at40Screen.test.ts"
+      "tests/acceptance/v2/at40Screen.test.ts",
+      "tests/acceptance/v2/at41Replay.test.ts"
     ],
     "AT-41": [
       "e2e/m13l-experts.spec.ts",
@@ -989,7 +995,11 @@
       "tests/blueprint/blueprintGuard.test.ts"
     ],
     "AT-58": ["e2e/m16-blueprint-walk.spec.ts", "scripts/architecture/check.test.mjs"],
-    "AT-59": ["e2e/m16-blueprint-page.spec.ts", "tests/blueprint/export.test.ts"],
+    "AT-59": [
+      "e2e/m16-blueprint-page.spec.ts",
+      "tests/blueprint/drawio.test.ts",
+      "tests/blueprint/export.test.ts"
+    ],
     "AT-60": [
       "tests/acceptance/v2/at60Mail.test.ts",
       "tests/alerts/pickAlerts.test.ts",
@@ -1014,6 +1024,7 @@
     "AT-64": ["tests/acceptance/v2/at64.test.ts"],
     "AT-65": ["tests/acceptance/v2/at65.test.tsx", "tests/picks/wp8.test.tsx"],
     "AT-66": ["e2e/vibrancy.spec.ts"],
+    "AT-81": ["tests/http/safeLink.test.ts", "tests/sentinel/cap.test.ts"],
     "AT-83": [
       "scripts/ci/workflow-lint.test.mjs",
       "scripts/restore/dryRun.test.mjs",
@@ -1034,7 +1045,12 @@
       "tests/data/hostGuard.test.ts",
       "worker/test/recheck2b.test.ts"
     ],
-    "AT-85": ["scripts/ci/e2e-listing.test.mjs"],
+    "AT-85": [
+      "scripts/ci/e2e-listing.test.mjs",
+      "tests/e2e/states.test.ts",
+      "tests/market/profiles.test.ts",
+      "tests/static/noRetry.test.ts"
+    ],
     "BLD-011": [
       "scripts/ci/approved-commit.test.mjs",
       "scripts/ci/smokeLogContent.test.mjs",
@@ -1562,6 +1578,7 @@
       "tests/universe/sector.test.ts"
     ],
     "D-135": [
+      "e2e/m11l-steelman.spec.ts",
       "tests/loaders/loaders.test.ts",
       "tests/review/pages.test.tsx",
       "tests/risk/pages.test.tsx"
@@ -2137,6 +2154,7 @@
       "tests/ui/steelmanCard.test.tsx"
     ],
     "D-499": ["tests/picks/isolation.test.ts", "tests/steelman/load.test.ts"],
+    "D-504": ["scripts/arena/signals.steelmanBreak.test.mjs"],
     "D-505": ["tests/steelman/write.test.ts"],
     "D-506": ["tests/steelman/night.test.ts", "tests/ui/steelmanCard.test.tsx"],
     "D-507": ["tests/steelman/night.test.ts"],
@@ -2207,6 +2225,7 @@
     "D-550": ["tests/experts/fit.test.ts"],
     "D-561": ["tests/acceptance/v2/at34.test.ts", "tests/ui/steelmanCard.test.tsx"],
     "D-570": ["tests/experts/import.test.ts"],
+    "D-580": ["tests/health/steelman.test.ts"],
     "D-586": ["tests/acceptance/v2/at32Steelman.test.ts", "tests/acceptance/v2/at41Replay.test.ts"],
     "D-587": ["tests/cortex/static/noOpinionReads.test.ts"],
     "D-590": ["tests/experts/screen.test.ts"],
@@ -2239,7 +2258,7 @@
     "D-642": ["tests/acceptance/v2/at41Replay.test.ts"],
     "D-643": ["tests/loaders/loadersPart2.test.ts"],
     "D-651": ["tests/security/expertBoundary.test.ts"],
-    "D-652": ["tests/loaders/loadersPart2.test.ts"],
+    "D-652": ["tests/health/experts.test.ts", "tests/loaders/loadersPart2.test.ts"],
     "D-661": ["tests/arena/closeGap.test.ts"],
     "D-662": ["worker/test/recheck.test.ts"],
     "D-666": ["scripts/arena/signals.test.mjs", "worker/test/recheck2b.test.ts"],
@@ -2309,6 +2328,7 @@
     "D-820": [
       "tests/cortex/look.test.ts",
       "tests/replay/cohortReplay.test.ts",
+      "tests/static/noRetry.test.ts",
       "worker/test/m5Slots.test.ts"
     ],
     "D-831": ["e2e/m16-blueprint-access.spec.ts"],
@@ -2497,6 +2517,7 @@
     "D-954": [
       "tests/config/m18Keys.test.ts",
       "tests/db/0031_m18_ops.test.ts",
+      "tests/sentinel/cap.test.ts",
       "tests/sentinel/m5Keys.test.ts"
     ],
     "D-956": [
@@ -2512,6 +2533,7 @@
       "tests/config/store.test.ts",
       "tests/db/0031_m18_ops.test.ts",
       "tests/health/controlRoom.test.tsx",
+      "tests/sentinel/cap.test.ts",
       "tests/usage/tursoMeters.test.ts",
       "worker/test/schedule.test.ts"
     ],
@@ -2564,15 +2586,71 @@
       "tests/data/hostGuard.test.ts",
       "tests/data/recordedQuotes.test.ts",
       "tests/data/simClock.test.ts",
-      "tests/security/replayLocal.test.ts"
+      "tests/security/replayLocal.test.ts",
+      "tests/shell/instrumentation.test.ts"
     ],
     "D-966": ["scripts/ci/e2e-listing.test.mjs"],
+    "D-967": [
+      "tests/blueprint/drawio.test.ts",
+      "tests/e2e/states.test.ts",
+      "tests/kb/fetchClauses.test.ts"
+    ],
+    "D-968": [
+      "tests/cortex/look.test.ts",
+      "tests/replay/cohortReplay.test.ts",
+      "tests/static/noRetry.test.ts",
+      "tests/timing/cohortReplay.wall.test.ts",
+      "worker/test/m5Slots.test.ts"
+    ],
+    "D-969": ["scripts/cortex/golden-spot-check.test.mjs", "scripts/llm/bakeoff-review.test.mjs"],
+    "D-970": ["tests/market/profiles.test.ts"],
     "D-971": [
       "scripts/ci/workflow-lint.test.mjs",
       "tests/alerts/pollBudget.test.ts",
       "tests/alerts/starvation.test.ts",
       "tests/db/0031_m18_ops.test.ts",
       "tests/health/summary.test.ts"
+    ],
+    "D-972": [
+      "scripts/asx/fetch.causes.test.mjs",
+      "scripts/asx/ingest.test.mjs",
+      "tests/db/0033_m18_data.test.ts"
+    ],
+    "D-973": [
+      "scripts/ci/licence-register.dat253.test.mjs",
+      "scripts/ingest/batch1.workflow.test.mjs",
+      "scripts/macro/macro.test.mjs",
+      "tests/db/0033_m18_data.test.ts"
+    ],
+    "D-974": [
+      "scripts/asx/fallback.test.mjs",
+      "scripts/ci/licence-register.dat253.test.mjs",
+      "tests/data/splitFrequency.test.ts",
+      "tests/db/0033_m18_data.test.ts"
+    ],
+    "D-975": [
+      "scripts/ci/licence-register.dat253.test.mjs",
+      "tests/db/0033_m18_data.test.ts",
+      "tests/http/safeLink.test.ts",
+      "tests/ui/expertsPages.test.tsx"
+    ],
+    "D-977": [
+      "e2e/m11l-steelman.spec.ts",
+      "scripts/arena/signals.steelmanBreak.test.mjs",
+      "scripts/ci/steelman-readers.test.mjs",
+      "tests/docs/replayHashPolicy.test.ts",
+      "tests/health/steelman.test.ts",
+      "tests/llm/measuredReservation.test.ts",
+      "tests/security/steelmanBoundary.test.ts",
+      "tests/steelman/m18Residuals.test.ts",
+      "tests/ui/steelmanCard.test.tsx"
+    ],
+    "D-978": [
+      "tests/acceptance/v2/at41Replay.test.ts",
+      "tests/db/0033_m18_data.test.ts",
+      "tests/experts/calls.test.ts",
+      "tests/health/experts.test.ts",
+      "tests/ui/expertsPages.test.tsx"
     ],
     "D-979": ["tests/config/m18Keys.test.ts"],
     "DAT-001": [
@@ -2979,7 +3057,32 @@
       "tests/agents/events.v2.test.ts",
       "tests/sentinel/ingest.dedup.test.ts"
     ],
-    "DAT-251": ["tests/config/m18Keys.test.ts", "tests/sentinel/m5Keys.test.ts"],
+    "DAT-251": [
+      "scripts/asx/fetch.causes.test.mjs",
+      "scripts/asx/ingest.test.mjs",
+      "scripts/ci/licence-register.dat253.test.mjs",
+      "scripts/ingest/batch1.workflow.test.mjs",
+      "scripts/macro/macro.test.mjs",
+      "tests/config/m18Keys.test.ts",
+      "tests/health/controlRoom.test.tsx",
+      "tests/health/dataLines.test.ts",
+      "tests/sentinel/cap.test.ts",
+      "tests/sentinel/ingest.test.ts",
+      "tests/sentinel/m5Keys.test.ts"
+    ],
+    "DAT-252": [
+      "scripts/asx/fallback.test.mjs",
+      "scripts/ci/licence-register.dat253.test.mjs",
+      "tests/data/splitFrequency.test.ts",
+      "tests/health/controlRoom.test.tsx",
+      "tests/health/dataLines.test.ts"
+    ],
+    "DAT-253": [
+      "scripts/ci/licence-register.dat253.test.mjs",
+      "tests/db/0033_m18_data.test.ts",
+      "tests/http/safeLink.test.ts",
+      "tests/ui/expertsPages.test.tsx"
+    ],
     "EML-001": ["tests/email/send.test.ts", "tests/email/testRoute.test.ts"],
     "EML-003b": ["tests/email/send.test.ts"],
     "EML-004": [
@@ -3581,7 +3684,8 @@
       "tests/data/hostGuard.test.ts",
       "tests/data/recordedQuotes.test.ts",
       "tests/data/simClock.test.ts",
-      "tests/security/replayLocal.test.ts"
+      "tests/security/replayLocal.test.ts",
+      "tests/shell/instrumentation.test.ts"
     ],
     "OPS-109": [
       "scripts/ci/workflow-lint.test.mjs",
@@ -3595,6 +3699,24 @@
       "tests/picks/cli.test.ts",
       "tests/picks/isolation.test.ts",
       "tests/picks/noPicks.test.ts"
+    ],
+    "OPS-111": [
+      "e2e/m11l-steelman.spec.ts",
+      "scripts/arena/signals.steelmanBreak.test.mjs",
+      "scripts/ci/steelman-readers.test.mjs",
+      "tests/docs/replayHashPolicy.test.ts",
+      "tests/health/steelman.test.ts",
+      "tests/llm/hardening.test.ts",
+      "tests/llm/measuredReservation.test.ts",
+      "tests/security/steelmanBoundary.test.ts",
+      "tests/steelman/m18Residuals.test.ts",
+      "tests/ui/steelmanCard.test.tsx"
+    ],
+    "OPS-112": [
+      "tests/acceptance/v2/at41Replay.test.ts",
+      "tests/experts/calls.test.ts",
+      "tests/health/experts.test.ts",
+      "tests/ui/expertsPages.test.tsx"
     ],
     "PLT-001": [
       "scripts/architecture/check.test.mjs",
@@ -4523,6 +4645,22 @@
     ],
     "TST-133": ["scripts/ci/test-map.test.mjs"],
     "TST-134": ["scripts/ci/e2e-listing.test.mjs"],
+    "TST-135": [
+      "e2e/picks-sections.spec.ts",
+      "e2e/walks.spec.ts",
+      "tests/blueprint/drawio.test.ts",
+      "tests/e2e/states.test.ts",
+      "tests/kb/fetchClauses.test.ts"
+    ],
+    "TST-136": [
+      "tests/cortex/look.test.ts",
+      "tests/replay/cohortReplay.test.ts",
+      "tests/static/noRetry.test.ts",
+      "tests/timing/cohortReplay.wall.test.ts",
+      "worker/test/m5Slots.test.ts"
+    ],
+    "TST-137": ["scripts/cortex/golden-spot-check.test.mjs", "scripts/llm/bakeoff-review.test.mjs"],
+    "TST-139": ["tests/market/profiles.test.ts"],
     "UX-001": ["scripts/ci/contrast-check.test.mjs", "tests/theme/themes.test.ts"],
     "UX-004": [
       "tests/preferences/actions.test.ts",
@@ -4784,6 +4922,7 @@
       "tests/picks/pages.test.tsx",
       "tests/picks/wp7.test.ts"
     ],
+    "UXN-324": ["tests/blueprint/drawio.test.ts"],
     "VAL-101": [
       "tests/agents/acceptanceM4.test.ts",
       "tests/agents/batch2bCards.test.ts",

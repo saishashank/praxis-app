@@ -1,6 +1,7 @@
 // @vitest-environment node
 // M18 TST-136 (D-968; AT-85 "no retry wrapper, 20/20 deterministic"): no test is made green by running it
-// again, and a timing check does not hide in the default suite.
+// again, and a timing check does not hide in the default suite. Supersedes D-820 (the CI-only retries of
+// the three timing checks): those checks now count work, and their wall-clock variants live in tests/timing.
 //   - `retry:` as an option key (vitest `{ retry: 1 }`, `describe(..., { retry })`) is forbidden in every
 //     test file under tests/, worker/test/, worker/timing/ and scripts/;
 //   - a test name that starts with the timing tag is allowed only in the wall-clock variants
