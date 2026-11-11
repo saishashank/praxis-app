@@ -23,6 +23,8 @@ import {
   readLatestQuotes,
   type LatestQuote,
 } from "@/lib/data/quotes/latest";
+import { HOME_SLOTS, HOME_TZ } from "@/lib/market/homeMarket.mjs";
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import { loadProfile } from "@/lib/market/profile";
 import { MARKET_INDEX_CODE } from "@/lib/data/quotes/parse";
 import { liveDayChange } from "./liveDay";
@@ -57,9 +59,9 @@ const PRICE_WINDOW_DAYS = 10; // threshold-ok: calendar days that hold the two n
 const DAY_MS = 86_400_000; // threshold-ok: unit conversion
 const SPARK_DAYS = 30; // threshold-ok: sessions in the Home sparkline
 const MAX_NEEDS = 3; // threshold-ok: UXR-020 items in Needs you
-const RUN_HHMM = "18:10"; // threshold-ok: Batch 2 slot shown as the next run (controlRoom.ts A2)
-const RUN_MINUTES = 18 * 60 + 10; // threshold-ok: same slot in minutes of the Melbourne day
-const MEL_TZ = "Australia/Melbourne";
+const RUN_HHMM = HOME_SLOTS.b2b; // threshold-ok: Batch 2 slot shown as the next run (controlRoom.ts A2)
+const RUN_MINUTES = Number(RUN_HHMM.slice(0, 2)) * 60 + Number(RUN_HHMM.slice(3, 5)); // threshold-ok: HH:MM, same slot in minutes of the Melbourne day
+const MEL_TZ = OWNER_TZ;
 const MEL_PARTS = new Intl.DateTimeFormat("en-AU", {
   timeZone: MEL_TZ,
   weekday: "short",
@@ -824,7 +826,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
 /** "Today" when `d` is today's date in Sydney (the market's clock), else "Fri 6 Nov". */
 export function dayLabel(d: string | null, now: Date): string | null {
   if (!d) return null;
-  if (d === marketDate(now, "Australia/Sydney")) return "Today";
+  if (d === marketDate(now, HOME_TZ)) return "Today";
   return shortDay(d);
 }
 

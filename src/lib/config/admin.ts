@@ -24,7 +24,7 @@ import { invalidateConfigCache } from "./runtime";
 import { configEditRefusal, ruleVersionsSeeded } from "@/lib/learning/bKeyLock";
 import { isCortexRefitKey, recordCortexKeyEdit } from "@/lib/cortex/store/keyEdit";
 import { getConfig, setConfig } from "./store";
-import { valueFromKey } from "@/lib/market/profileCore.mjs";
+import { HOME_MARKET, valueFromKey } from "@/lib/market/profileCore.mjs";
 import { setProfileField } from "@/lib/market/profileWrite";
 
 export type ConfigRow = {
@@ -312,7 +312,7 @@ export async function updateConfig(p: UpdateInput): Promise<UpdateResult> {
       // refit. The edit itself is done, so a failed charge is audited, not reported as a failed edit.
       try {
         await recordCortexKeyEdit(p.mainDb, {
-          market: "AU",
+          market: HOME_MARKET,
           key,
           before,
           after: parsed.value,

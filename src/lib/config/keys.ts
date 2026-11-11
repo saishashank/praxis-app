@@ -54,6 +54,10 @@ export const MODE_MARKETS: readonly string[] = builtMarkets();
 const HOME_CUTOFF: string = (seedOf(HOME_MARKET)!.fields.decision_cutoff.value as { time: string })
   .time;
 
+/** The home market session window (HH:MM): the quote-poll and scan keys must lie inside it (AGT-140). */
+const HOME_OPEN: string = seedOf(HOME_MARKET)!.fields.session_open.value as string;
+const HOME_CLOSE: string = seedOf(HOME_MARKET)!.fields.session_close.value as string;
+
 /** The default of `market_mode`: every built market with the mode its seed row has (AU data_only, the rest off). */
 const MARKET_MODE_DEFAULT: Record<string, string> = Object.fromEntries(
   builtMarkets().map((c) => [c, seedOf(c)!.mode]),
@@ -1311,7 +1315,7 @@ async function validateScanWindow(
   v: unknown,
   get: (k: M17TimeKey) => Promise<unknown>,
 ): Promise<string | null> {
-  const bad = await timeIn("10:00", "16:00")(v);
+  const bad = await timeIn(HOME_OPEN, HOME_CLOSE)(v);
   if (bad) return bad;
   const t = clockMinutes(v)!;
   const other = clockMinutes(
@@ -2390,7 +2394,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   llm_market_share: {
     label: "Share of the daily LLM budgets each market may use",
     area: "Quotas",
-    bounds: 'JSON such as {"AU": 1}, each share 0 to 1',
+    bounds: `JSON such as {"${HOME_MARKET}": 1}, each share 0 to 1`,
     input: "object",
   },
   retention_logs_days: {

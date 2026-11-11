@@ -380,7 +380,7 @@ export function StrategyChart({
           <ChartTable
             visible
             caption={summary}
-            headers={["Date", "Value (A$)", "Market mood"]}
+            headers={["Date", `Value (${fmt.symbol})`, "Market mood"]}
             rows={nav.map((p, i) => [p.time, p.value.toFixed(2), regimes[i] ?? "n/a"])}
           />
         ) : (

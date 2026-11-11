@@ -39,9 +39,10 @@ import {
   retireRuleVersion,
   type RequestBase,
 } from "./promotion";
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import { forceApplyLesson, LaneAError } from "./laneA";
 
-export const MARKET = "AU";
+export const MARKET: string = HOME_MARKET;
 export const ANNOTATION_MAX_CHARS = 1000; // ROL-102b
 export const ANNOTATION_KINDS = ["lesson", "card", "hypothesis"] as const;
 export type AnnotationKind = (typeof ANNOTATION_KINDS)[number];

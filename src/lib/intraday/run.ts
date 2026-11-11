@@ -10,6 +10,7 @@
 //   7. fetch delayed quotes, evaluate, write shadow candidates; a pause is recorded as its own row.
 // Writes: `quote_run` and `intraday_candidate` only. Orders, books and ledgers are never touched.
 import type { Exec } from "@/lib/cortex/store/common";
+import { HOME_SLOTS } from "@/lib/market/homeMarket.mjs";
 import { HOME_MARKET, OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import { getConfig } from "@/lib/config/store";
 import {
@@ -44,7 +45,7 @@ import { scanUniverse, type ScanCode } from "./universe";
 
 export const SCAN_MARKET: string = HOME_MARKET;
 /** Session dates are Melbourne market dates (D-442). */
-const SCAN_POLL_END = "16:00"; // threshold-ok: end of the quote-poll window (poll.ts POLL_END)
+const SCAN_POLL_END = HOME_SLOTS.quote_until; // threshold-ok: end of the quote-poll window (poll.ts POLL_END)
 export const SESSION_TZ: string = OWNER_TZ;
 const MS_PER_MIN = 60_000; // threshold-ok: unit
 const SCAN_END_GRACE_MIN = 3; // threshold-ok: Worker offset 2 min + 1 min of tolerance (V2-I1)

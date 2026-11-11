@@ -14,12 +14,13 @@ import { createClient, type Client } from "@libsql/client";
 import { loadAgentParams, type AgentParams } from "@/lib/agents/params";
 import { CONFIG_KEYS } from "@/lib/config/keys";
 import { marketDate, type CalendarKind, type CalendarRow } from "@/lib/data/calendar";
+import { HOME_MARKET, HOME_TZ } from "@/lib/market/homeMarket.mjs";
 import { createRouter } from "@/lib/llm/router";
 import { DbStore } from "@/lib/llm/store";
 import { steelmanNight, type NightResult, type SteelmanKeys, type SteelmanLlm } from "./night";
 
-const MARKET = "AU";
-const MARKET_TZ = "Australia/Sydney";
+const MARKET: string = HOME_MARKET;
+const MARKET_TZ: string = HOME_TZ;
 const PHASES = ["all", "3", "picks", "steelman"];
 // The key the batch-3 review run is recorded under (src/lib/agents/batch3.ts reviewKey). Written out
 // here because this folder must not import the agents or arena modules (PRD-033).

@@ -29,6 +29,7 @@ import {
   type ClosedTradeFact,
   aud,
   audWithPct,
+  MONEY_SYMBOL,
   companyLabel,
   pctPpm,
   sortClosed,
@@ -325,7 +326,7 @@ function section1(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
   } else {
     out.push({
       t: "table",
-      head: ["Strategy", "Today (A$)", "Today (%)", "Value now"],
+      head: ["Strategy", `Today (${MONEY_SYMBOL})`, "Today (%)", "Value now"],
       rows: live(f.executions).map((e) => [
         { text: nameOf(e), href: joinUrl(f.appUrl, e.path) },
         { text: aud(e.dayPlCents, true), tone: tone(e.dayPlCents) },

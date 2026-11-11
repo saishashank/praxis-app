@@ -343,7 +343,7 @@ async function readMarketOpen(db: Client): Promise<{ openTime: string; tz: strin
   });
   const r = rs.rows[0];
   return {
-    openTime: timeOf(r ? str(r.open_time) : null, "10:00"), // threshold-ok: ASX open, only when the market row is absent
+    openTime: timeOf(r ? str(r.open_time) : null, HOME_SLOTS.quote_from), // threshold-ok: home market open, only when the market row is absent
     tz: r ? String(r.tz) : DEADLINE_TZ,
   };
 }

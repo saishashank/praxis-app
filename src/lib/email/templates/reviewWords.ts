@@ -2,14 +2,17 @@
 // exit reasons in plain words, and the plain-text lists of sections 4-6 that the masked in-app view
 // reads (facts.narrative). Pure: no clock, no database. Shared by the renderer and the readers.
 import type { DailyLearning } from "@/lib/learning/daily";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import { amount } from "./format";
 
 const PPM_PER_PERCENT = 10_000; // threshold-ok: parts per million -> percent
+/** The display symbol of the home market currency (AU: "A$", UXN-313; per-market sections arrive with M20). */
+export const MONEY_SYMBOL = homeProfile().currencyFormat!.symbol;
 
 /** Whole cents -> "A$12.34"; signed -> "+A$12.34" / "-A$12.34". Never colour-only. */
 export function aud(cents: number, signed = false): string {
   const sign = cents < 0 ? "-" : signed && cents > 0 ? "+" : "";
-  return `${sign}A$${amount(cents)}`;
+  return `${sign}${MONEY_SYMBOL}${amount(cents)}`;
 }
 
 /** ppm -> "+1.2%" (signed) or "1.2%". */

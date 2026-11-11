@@ -62,6 +62,7 @@ export const DEFAULT_MAX_PER_HOUR = 6;
 // The market-bound times are the home market's slot anchors, read from its seed (M19 C2, D-1051): the Worker builds
 // the same table from the market row, and tests/jobs/registry.test.ts proves the two agree.
 import { HOME_SLOTS } from "../market/homeMarket.mjs";
+import { OPS_SLOT_TIMES } from "../market/profileCore.mjs";
 
 const job = (j) => ({
   dateBackDays: 0,
@@ -134,8 +135,8 @@ export const JOBS = [
     label: "Monthly model bake-off (first Saturday)",
     kind: "workflow",
     workflow: "llm-bakeoff.yml",
-    schedule: "First Saturday of the month at 10:00",
-    time: "10:00",
+    schedule: `First Saturday of the month at ${OPS_SLOT_TIMES.llm_bakeoff.at}`,
+    time: OPS_SLOT_TIMES.llm_bakeoff.at,
     days: "first-saturday",
     safety: "go-live",
     maxPerHour: 1,
@@ -146,8 +147,8 @@ export const JOBS = [
     label: "Pick alerts: delayed quotes every 5 minutes to 16:00",
     kind: "route",
     route: "/api/internal/pick-alerts",
-    schedule: "Trading days, every 5 minutes from 10:00 to 16:00",
-    time: "10:00",
+    schedule: `Trading days, every 5 minutes from ${HOME_SLOTS.quote_from} to ${HOME_SLOTS.quote_until}`,
+    time: HOME_SLOTS.quote_from,
     days: "trading",
     safety: "go-live",
   }),

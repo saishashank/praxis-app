@@ -69,6 +69,7 @@ import {
   validateMarketModes,
 } from "@/lib/config/keys";
 import { getConfig } from "@/lib/config/store";
+import { HOME_MARKET, HOME_TZ } from "@/lib/market/homeMarket.mjs";
 import { isMarketEnabled } from "@/lib/market/profile";
 import { anyMarketFull, fullModeRefusal, isProductionEnv } from "@/lib/golive/interlock";
 import {
@@ -254,12 +255,12 @@ export async function readQuoteSourceState(db: Exec): Promise<QuoteSourceState> 
 }
 
 async function calendarConfirmed(db: Exec, now: string): Promise<boolean> {
-  const year = marketDate(new Date(now), "Australia/Sydney").slice(0, 4);
+  const year = marketDate(new Date(now), HOME_TZ).slice(0, 4);
   const r = await db.execute({
     sql:
       "SELECT COUNT(*) AS total, COALESCE(SUM(confirmed = 0), 0) AS open FROM trading_calendar " +
-      "WHERE market = 'AU' AND d >= ? AND d <= ?",
-    args: [`${year}-01-01`, `${year}-12-31`],
+      "WHERE market = ? AND d >= ? AND d <= ?",
+    args: [HOME_MARKET, `${year}-01-01`, `${year}-12-31`],
   });
   return Number(r.rows[0].total) > 0 && Number(r.rows[0].open) === 0;
 }

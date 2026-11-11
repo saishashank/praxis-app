@@ -3,6 +3,7 @@
 // Masked users (non-Owner without a live unmask grant) get the plan through the masking module.
 import { withAuth } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 import { LearningMasker } from "@/lib/learning/mask";
 import { isDate, readPlan } from "@/lib/learning/readers";
 import { maskContextFor } from "@/lib/view/mask";
@@ -14,7 +15,7 @@ const HEADERS = { "Cache-Control": "no-store" };
 
 export const GET = withAuth("read", async (req, user) => {
   const url = new URL(req.url);
-  const market = url.searchParams.get("market") ?? "AU";
+  const market = url.searchParams.get("market") ?? HOME_MARKET;
   const d = url.searchParams.get("d") ?? undefined;
   if (!/^[A-Za-z0-9_-]{1,16}$/.test(market) || (d !== undefined && !isDate(d))) {
     return Response.json({ error: "invalid" }, { status: 400, headers: HEADERS });
