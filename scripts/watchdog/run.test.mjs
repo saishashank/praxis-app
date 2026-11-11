@@ -43,7 +43,7 @@ before(async () => {
   lib = await loadWatchdogLib();
   // Incident emails are only sent in modes incidents/full; a system with history (an earlier Worker night).
   await db.execute({
-    sql: "INSERT OR REPLACE INTO worker_state (key, value_json, updated_at) VALUES ('email_mode', ?, ?)",
+    sql: "INSERT INTO worker_state (key, value_json, updated_at) VALUES ('email_mode', ?, ?)",
     args: [JSON.stringify("incidents"), T_2150.toISOString()],
   });
   for (const day of ["2026-10-10", D]) {

@@ -94,6 +94,18 @@ export const JOBS = [
     safety: "go-live",
   }),
   job({
+    id: "calendar-draft",
+    label: "Next year's trading calendar draft",
+    kind: "workflow",
+    workflow: "calendar-draft.yml",
+    schedule: "Every year on 1 November at 09:00",
+    time: "09:00",
+    days: "daily",
+    safety: "go-live",
+    maxPerHour: 1,
+    note: "Drafts only a year that has no rows yet, so a repeat changes nothing (M18, D-961).",
+  }),
+  job({
     id: "pre-open",
     label: "Pre-open re-check, attempt 1",
     kind: "route",
@@ -248,6 +260,18 @@ export const JOBS = [
     time: "00:15",
     days: "daily",
     safety: "go-live",
+  }),
+  job({
+    id: "turso-usage",
+    label: "Turso usage sample",
+    kind: "workflow",
+    workflow: "turso-usage.yml",
+    schedule: "Every day at 06:40",
+    time: "06:40",
+    days: "daily",
+    safety: "go-live",
+    maxPerHour: 2,
+    note: "Reads the platform usage figures; writes one sample row (M18, D-958).",
   }),
   // ---- jobs that run whatever the Owner list says -----------------------------------------------
   job({
