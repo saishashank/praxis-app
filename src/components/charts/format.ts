@@ -1,4 +1,6 @@
 /** Deterministic number helpers shared by the SVG charts (stable output for snapshot tests). */
+import type { CurrencyFormat } from "@/lib/market/profileCore.mjs";
+import { group } from "@/lib/view/format";
 
 /** Round to 2 decimals and strip trailing zeros, so SVG attributes are identical on every platform. */
 export function n(value: number): string {
@@ -19,12 +21,10 @@ export function signed(value: number, digits = 1, suffix = "%"): string {
   return `● ${abs}${suffix}`;
 }
 
-/** Fixed locale so output does not depend on the machine running the test. */
-export function money(value: number, currency = "A$"): string {
+/** Fixed grouping per market currency, so output does not depend on the machine running the test (D-1002). */
+export function money(value: number, fmt: CurrencyFormat): string {
   const sign = value < 0 ? "−" : "";
-  return `${sign}${currency}${Math.round(Math.abs(value))
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
+  return `${sign}${fmt.symbol}${group(Math.round(Math.abs(value)).toString(), fmt.locale)}`;
 }
 
 /** Theme-token colour references (D-130). Charts never contain a colour literal. */

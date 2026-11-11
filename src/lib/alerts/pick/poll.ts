@@ -14,6 +14,7 @@
 import type { Client } from "@libsql/client";
 import type { Exec } from "@/lib/cortex/store/common";
 import { getConfig } from "@/lib/config/store";
+import { enabledMarkets, loadProfile } from "@/lib/market/profile";
 import { localToUtc, marketDate, sessionsBetween, sessionTimes } from "@/lib/data/calendar";
 import { readQuoteSourceState } from "@/lib/data/controls";
 import {
@@ -62,7 +63,12 @@ import {
   type PickAlertMailer,
 } from "./types";
 
-export const POLL_MARKET = "AU";
+/** The market a poll or a health line is about when the caller names none: the first enabled one (D-997). */
+async function pollMarket(db: Exec): Promise<string> {
+  const [first] = await enabledMarkets(db);
+  if (first === undefined) throw new Error("no market is enabled");
+  return first;
+}
 export const PICK_ALERTS_PURPOSE = "pick-alerts";
 /** The slot grid of `quote-poll` (worker/src/schedule.ts); early close is enforced below. */
 export const POLL_START = "10:00"; // threshold-ok: slot window, D-397
@@ -177,7 +183,7 @@ async function checkStarvation(
 
 export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult> {
   const { db } = deps;
-  const market = deps.market ?? POLL_MARKET;
+  const market = deps.market ?? (await pollMarket(db));
   const mailer = deps.mailer ?? NO_MAILER;
   const now = deps.now();
   const sessionD = marketDate(now, SESSION_TZ);
@@ -261,7 +267,9 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
   const extraCodes = new Set<string>();
   const heldKind = new Set<string>(); // OPS-109 c: held codes that are not watch-listed (plan counts)
   // D-907: the ASX 200 first among the extras, one request a tick, for the live line on Home.
-  if (market === "AU") extraCodes.add(MARKET_INDEX_CODE);
+  if ((await loadProfile(db, market)).benchmarkIndex === MARKET_INDEX_CODE) {
+    extraCodes.add(MARKET_INDEX_CODE);
+  }
   for (const c of await watchCodes(db, market, sessionD)) if (!seen.has(c)) extraCodes.add(c);
   for (const c of [...(await heldCodes(db, market))].sort()) {
     if (seen.has(c)) continue;
@@ -440,11 +448,8 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
 }
 
 /** System Health lines of the "pick alerts" series, derived on read. */
-export async function pickAlertsHealth(
-  db: Exec,
-  now: Date,
-  market: string = POLL_MARKET,
-): Promise<string[]> {
+export async function pickAlertsHealth(db: Exec, now: Date, market?: string): Promise<string[]> {
+  market ??= await pollMarket(db);
   let refusal: QuoteRefusal | null;
   try {
     refusal = refusalFor(await readQuoteSourceState(db));
@@ -483,11 +488,8 @@ export const QUOTE_LINES_MAX = 3; // threshold-ok: display cap
  * "Quotes HH:MM: used n, skipped m (armed a, watch w, held h)". Counts only: no code is named (D-580).
  * `used` is the reservation, replaced by the `+done` row's actual count when one exists (D-697).
  */
-export async function quoteBudgetLines(
-  db: Exec,
-  now: Date,
-  market: string = POLL_MARKET,
-): Promise<string[]> {
+export async function quoteBudgetLines(db: Exec, now: Date, market?: string): Promise<string[]> {
+  market ??= await pollMarket(db);
   const d = marketDate(now, SESSION_TZ);
   // rows-ok: one session's poll slots, at most 73 claim rows
   const r = await db.execute({

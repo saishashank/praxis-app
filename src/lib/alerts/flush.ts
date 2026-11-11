@@ -12,6 +12,7 @@ import type { Client } from "@libsql/client";
 import { melbourneDate, emailKeys } from "@/lib/email/keys";
 import { sendEmail, type SendStatus } from "@/lib/email/send";
 import { formatMelbourne } from "@/lib/health/format";
+import { enabledMarkets } from "@/lib/market/profile";
 import { REGIME_BLOCKS } from "@/lib/agents/families/constants";
 import type { Family } from "@/lib/agents/schema";
 import type { AlertRow } from "@/lib/sentinel/schema";
@@ -19,7 +20,6 @@ import {
   clearFlushDue,
   deliverP0,
   markEmailed,
-  MARKET,
   nowOf,
   openWindowEnd,
   P0_PENDING_MAX_MIN,
@@ -46,10 +46,18 @@ const dayNumber = (d: string): number => Math.floor(Date.parse(`${d}T00:00:00Z`)
  * session's (both known states). Once per transition: the key carries the date and the insert is
  * ON CONFLICT DO NOTHING. Returns the key when a new row was written.
  */
-export async function raiseRegimeAlert(
-  ctx: AlertCtx,
-  market: string = MARKET,
-): Promise<string | null> {
+export async function raiseRegimeAlert(ctx: AlertCtx, market?: string): Promise<string | null> {
+  if (market !== undefined) return raiseRegimeAlertFor(ctx, market);
+  // Every enabled market is checked (D-997); the first key raised is returned.
+  let first: string | null = null;
+  for (const m of await enabledMarkets(ctx.db)) {
+    const key = await raiseRegimeAlertFor(ctx, m);
+    first ??= key;
+  }
+  return first;
+}
+
+async function raiseRegimeAlertFor(ctx: AlertCtx, market: string): Promise<string | null> {
   const now = nowOf(ctx);
   const r = await ctx.db.execute({
     sql:

@@ -1,6 +1,8 @@
 // Branch coverage for the display formatters: missing values, signs, odd inputs.
 import { describe, expect, it } from "vitest";
+import { currencyFormatOf } from "@/lib/market/profileCore.mjs";
 import {
+  currencyFormatFor,
   displayName,
   formatCents,
   formatCount,
@@ -17,29 +19,51 @@ import {
   truncate,
 } from "@/lib/view/format";
 
+const AUD = currencyFormatOf("AUD");
+const INR = currencyFormatOf("INR");
+const USD = currencyFormatOf("USD");
+
 const NOW = new Date("2026-11-10T00:00:00Z");
+
+describe("one CurrencyFormat per market (UXN-313, D-1002)", () => {
+  it("prints the symbol and the grouping of each currency", () => {
+    expect(formatMicro("1234567890000", AUD)).toBe("A$1,234,567.89");
+    expect(formatMicro("1234567890000", USD)).toBe("US$1,234,567.89");
+    expect(formatMicro("1234567890000", INR)).toBe("₹12,34,567.89"); // lakh grouping
+    expect(formatMicro("100000000000", INR)).toBe("₹1,00,000.00");
+    expect(formatMicro("10000000000000", INR)).toBe("₹1,00,00,000.00"); // crore
+    expect(formatMicro("999000000", INR)).toBe("₹999.00");
+    expect(formatCents(-12345678, INR, { sign: "always" })).toBe("-₹1,23,456.78");
+    expect(formatCents(12345678, USD)).toBe("US$123,456.78");
+  });
+
+  it("an unregistered currency code prints as its code and never throws", () => {
+    expect(formatCents(150, currencyFormatFor("JPY"))).toBe("JPY 1.50");
+    expect(currencyFormatFor("AUD")).toBe(AUD);
+  });
+});
 
 describe("money", () => {
   it("shows a missing or non-finite cents value as n/a, and signs by style", () => {
-    expect(formatCents(null)).toBe("n/a");
-    expect(formatCents(Number.NaN)).toBe("n/a");
-    expect(formatCents(123456)).toBe("A$1,234.56");
-    expect(formatCents(-5, { sign: "always" })).toBe("-A$0.05");
-    expect(formatCents(5, { sign: "always", currency: "US$" })).toBe("+US$0.05");
-    expect(formatCents(0, { sign: "always" })).toBe("A$0.00");
-    expect(formatCents(-0.2)).toBe("A$0.00");
+    expect(formatCents(null, AUD)).toBe("n/a");
+    expect(formatCents(Number.NaN, AUD)).toBe("n/a");
+    expect(formatCents(123456, AUD)).toBe("A$1,234.56");
+    expect(formatCents(-5, AUD, { sign: "always" })).toBe("-A$0.05");
+    expect(formatCents(5, USD, { sign: "always" })).toBe("+US$0.05");
+    expect(formatCents(0, AUD, { sign: "always" })).toBe("A$0.00");
+    expect(formatCents(-0.2, AUD)).toBe("A$0.00");
   });
   it("reads micro as number, string or bigint and rejects unsafe or malformed input", () => {
-    expect(formatMicro(undefined)).toBe("n/a");
-    expect(formatMicro(null)).toBe("n/a");
-    expect(formatMicro(1.5)).toBe("n/a");
-    expect(formatMicro(Number.MAX_SAFE_INTEGER * 2)).toBe("n/a");
-    expect(formatMicro("12.5")).toBe("n/a");
-    expect(formatMicro("1234567890000")).toBe("A$1,234,567.89");
-    expect(formatMicro(12_345_000n)).toBe("A$12.35");
-    expect(formatMicro(-12_345_000n, { sign: "always" })).toBe("-A$12.35");
-    expect(formatMicro(10_000_000, { sign: "always" })).toBe("+A$10.00");
-    expect(formatMicro(4_000)).toBe("A$0.00");
+    expect(formatMicro(undefined, AUD)).toBe("n/a");
+    expect(formatMicro(null, AUD)).toBe("n/a");
+    expect(formatMicro(1.5, AUD)).toBe("n/a");
+    expect(formatMicro(Number.MAX_SAFE_INTEGER * 2, AUD)).toBe("n/a");
+    expect(formatMicro("12.5", AUD)).toBe("n/a");
+    expect(formatMicro("1234567890000", AUD)).toBe("A$1,234,567.89");
+    expect(formatMicro(12_345_000n, AUD)).toBe("A$12.35");
+    expect(formatMicro(-12_345_000n, AUD, { sign: "always" })).toBe("-A$12.35");
+    expect(formatMicro(10_000_000, AUD, { sign: "always" })).toBe("+A$10.00");
+    expect(formatMicro(4_000, AUD)).toBe("A$0.00");
   });
 });
 

@@ -28,6 +28,8 @@ import { LiveSendBlockedError, type EmailEnvVars, type EmailProvider } from "@/l
 import { emailEnvName, sendEmail, type SendOutcome } from "@/lib/email/send";
 import type { EnvName } from "@/lib/email/templates/core";
 import { notifyIncident } from "@/lib/incidents/notify";
+import { enabledMarkets } from "@/lib/market/profile";
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import {
   assembleReview,
   buildFacts,
@@ -39,7 +41,6 @@ import type { StoredKind } from "./facts";
 
 export const UNREAD_INCIDENT_KIND = "review_unread_7";
 export const UNREAD_INCIDENT_DAYS = 7;
-export const MARKET = "AU";
 
 export type ReviewSendStatus =
   | "waiting"
@@ -88,7 +89,7 @@ function minutesOf(v: unknown, fallback: number): number {
 }
 
 const minuteFmt = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Australia/Melbourne",
+  timeZone: OWNER_TZ,
   hour: "2-digit",
   minute: "2-digit",
   hourCycle: "h23",
@@ -234,6 +235,9 @@ export async function runReviewSend(ctx: ReviewSendCtx, d: string): Promise<Revi
     return { ...base, status: "suppressed_off", reason: "no_app_url" };
   }
   const today = melbourneDate(now);
+  // One review per date, built for the first enabled market until the per-market sections of M20 (D-1061).
+  const markets = await enabledMarkets(db);
+  if (markets.length === 0) return { ...base, status: "paused", reason: "no_market" };
   const minute = melbourneMinute(now);
   const lateDay = d < today; // a send that finishes after midnight keeps its date
   const t = await readTimes(db);
@@ -243,7 +247,7 @@ export async function runReviewSend(ctx: ReviewSendCtx, d: string): Promise<Revi
   if (!final && !lateDay && minute < t.start) return { ...base, reason: "early" };
 
   const o = {
-    market: MARKET,
+    market: markets[0]!,
     d,
     env: templateEnv(emailEnvName(env)),
     appUrl,

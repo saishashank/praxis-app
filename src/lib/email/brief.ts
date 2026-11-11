@@ -10,6 +10,8 @@ import type { Client } from "@libsql/client";
 import { loadCalendar } from "@/lib/arena/closeBooks";
 import { addDays, isTradingDay, localToUtc } from "@/lib/data/calendar";
 import { getConfig } from "@/lib/config/store";
+import { enabledMarkets } from "@/lib/market/profile";
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import { loadAttentionItems } from "@/lib/health/attention";
 import { emailKeys, melbourneDate } from "./keys";
 import { LiveSendBlockedError } from "./provider";
@@ -20,7 +22,7 @@ export type BriefResult =
   | { status: "skipped"; reason: "disabled" | "not_active" | "non_trading" }
   | { status: "sent" | "duplicate" | "suppressed" | "failed"; send: SendStatus };
 
-const TZ = "Australia/Melbourne";
+const TZ = OWNER_TZ;
 const WATCH_SESSIONS = 20; // watch_list_window default (AGT-014)
 const hhmm = (iso: string): string =>
   new Intl.DateTimeFormat("en-GB", {
@@ -32,7 +34,7 @@ const hhmm = (iso: string): string =>
     .format(new Date(iso))
     .replace(/^24:/, "00:");
 
-async function codeSets(db: Client, d: string): Promise<Set<string>> {
+async function codeSets(db: Client, d: string, market: string): Promise<Set<string>> {
   const held = await db.execute({
     sql:
       "SELECT DISTINCT t.code AS code FROM trade t JOIN cohort c ON c.id = t.cohort_id " +
@@ -42,10 +44,10 @@ async function codeSets(db: Client, d: string): Promise<Set<string>> {
   });
   const watch = await db.execute({
     sql:
-      "SELECT DISTINCT code FROM signal WHERE market = 'AU' AND d IN " +
-      "(SELECT DISTINCT d FROM signal WHERE market = 'AU' AND d < ? ORDER BY d DESC LIMIT ?) " +
-      "UNION SELECT code FROM watch_list_owner WHERE market = 'AU' AND removed_at IS NULL AND expires_d >= ?",
-    args: [d, WATCH_SESSIONS, d],
+      "SELECT DISTINCT code FROM signal WHERE market = ? AND d IN " +
+      "(SELECT DISTINCT d FROM signal WHERE market = ? AND d < ? ORDER BY d DESC LIMIT ?) " +
+      "UNION SELECT code FROM watch_list_owner WHERE market = ? AND removed_at IS NULL AND expires_d >= ?",
+    args: [market, market, d, WATCH_SESSIONS, market, d],
   });
   return new Set([...held.rows, ...watch.rows].map((r) => String(r.code)));
 }
@@ -57,51 +59,59 @@ export async function runBrief(ctx: MorningCtx, dOverride?: string): Promise<Bri
   if ((await getConfig(db, "morning_brief_enabled")) !== "on") {
     return { status: "skipped", reason: "disabled" };
   }
-  const m = await db.execute({ sql: "SELECT mode FROM market WHERE code = 'AU'", args: [] });
-  if (!m.rows.length || String(m.rows[0]!.mode) !== "full") {
-    return { status: "skipped", reason: "not_active" };
+  // One brief for the Owner. Each enabled market that is active (mode full) and trades on D adds its
+  // overnight announcements and today's events; with AU alone the content is exactly the single-market
+  // brief (D-997, D-1060). Per-market sections in the template are M20.
+  const active: string[] = [];
+  let anyActive = false;
+  for (const market of await enabledMarkets(db)) {
+    const m = await db.execute({ sql: "SELECT mode FROM market WHERE code = ?", args: [market] });
+    if (!m.rows.length || String(m.rows[0]!.mode) !== "full") continue;
+    anyActive = true;
+    if (isTradingDay(d, await loadCalendar(db, market))) active.push(market);
   }
-  if (!isTradingDay(d, await loadCalendar(db, "AU"))) {
-    return { status: "skipped", reason: "non_trading" };
-  }
+  if (!anyActive) return { status: "skipped", reason: "not_active" };
+  if (active.length === 0) return { status: "skipped", reason: "non_trading" };
 
-  const codes = await codeSets(db, d);
   const from = localToUtc(addDays(d, -1), "19:30", TZ).toISOString();
   const to = localToUtc(d, "08:00", TZ).toISOString();
 
   const overnight: { code: string; title: string; time: string; url?: string }[] = [];
   const events: { label: string; detail: string }[] = [];
-  const ann = await db.execute({
-    sql:
-      "SELECT code, title, url, published_at FROM announcement WHERE market = 'AU' " +
-      "AND published_at >= ? AND published_at < ? ORDER BY published_at, code",
-    args: [from, to],
-  });
-  for (const r of ann.rows) {
-    const code = String(r.code);
-    if (!codes.has(code)) continue;
-    overnight.push({
-      code,
-      title: String(r.title),
-      time: hhmm(String(r.published_at)),
-      url: r.url ? String(r.url) : undefined,
+  for (const market of active) {
+    const codes = await codeSets(db, d, market);
+    const ann = await db.execute({
+      sql:
+        "SELECT code, title, url, published_at FROM announcement WHERE market = ? " +
+        "AND published_at >= ? AND published_at < ? ORDER BY published_at, code",
+      args: [market, from, to],
     });
-  }
-  const ex = await db.execute({
-    sql: "SELECT code, type FROM corporate_action WHERE market = 'AU' AND ex_date = ? ORDER BY code",
-    args: [d],
-  });
-  for (const r of ex.rows) {
-    if (codes.has(String(r.code))) {
-      events.push({ label: String(r.code), detail: `ex-date (${String(r.type)})` });
+    for (const r of ann.rows) {
+      const code = String(r.code);
+      if (!codes.has(code)) continue;
+      overnight.push({
+        code,
+        title: String(r.title),
+        time: hhmm(String(r.published_at)),
+        url: r.url ? String(r.url) : undefined,
+      });
     }
-  }
-  const res = await db.execute({
-    sql: "SELECT code FROM event WHERE market = 'AU' AND day0_d = ? AND category = 'results' GROUP BY code ORDER BY code",
-    args: [d],
-  });
-  for (const r of res.rows) {
-    if (codes.has(String(r.code))) events.push({ label: String(r.code), detail: "results" });
+    const ex = await db.execute({
+      sql: "SELECT code, type FROM corporate_action WHERE market = ? AND ex_date = ? ORDER BY code",
+      args: [market, d],
+    });
+    for (const r of ex.rows) {
+      if (codes.has(String(r.code))) {
+        events.push({ label: String(r.code), detail: `ex-date (${String(r.type)})` });
+      }
+    }
+    const res = await db.execute({
+      sql: "SELECT code FROM event WHERE market = ? AND day0_d = ? AND category = 'results' GROUP BY code ORDER BY code",
+      args: [market, d],
+    });
+    for (const r of res.rows) {
+      if (codes.has(String(r.code))) events.push({ label: String(r.code), detail: "results" });
+    }
   }
 
   const plan: string[] = [];

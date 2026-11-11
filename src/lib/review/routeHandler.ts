@@ -11,6 +11,7 @@
 import type { Client } from "@libsql/client";
 import { melbourneDate } from "@/lib/email/keys";
 import { LiveSendBlockedError } from "@/lib/email/provider";
+import { enabledMarkets } from "@/lib/market/profile";
 import type { EmailEnvVars, EmailProvider } from "@/lib/email/provider";
 import { isValidSecret, verifySignedRequest } from "@/lib/security/hmac";
 import type { NonceStore } from "@/lib/security/replay";
@@ -18,7 +19,7 @@ import { appEnvironment } from "@/lib/workerReport/handler";
 import { recordOutcomes } from "@/lib/intraday/outcome";
 import { measureCandidates } from "@/lib/intraday/measure";
 import { evaluateIntradayStream } from "@/lib/intraday/evaluator";
-import { MARKET, runReviewSend, type ReviewSendResult } from "./send";
+import { runReviewSend, type ReviewSendResult } from "./send";
 
 export const EVENING_REVIEW_PURPOSE = "evening-review";
 export const MAX_BODY_BYTES = 2048;
@@ -132,16 +133,19 @@ export function createEveningReviewHandler(deps: ReviewRouteDeps) {
       const db = deps.db();
       // M17 WP6 (D-399): hand the intraday candidates their outcome (read-after-run, idempotent). An
       // optional step: a failure never blocks the evening review.
+      const markets = await enabledMarkets(db);
       try {
-        await recordOutcomes(db, MARKET, d);
+        for (const market of markets) await recordOutcomes(db, market, d);
       } catch {
         /* the review goes out without outcomes; the next run records them */
       }
       // M17 WP9 (D-399, D-466): measure the candidates whose horizon has completed, then run the
       // VAL-118 evaluator; own try/catch, a failure never blocks the review.
       try {
-        await measureCandidates(db, MARKET, d);
-        await evaluateIntradayStream(db, MARKET, new Date(nowSec * 1000).toISOString());
+        for (const market of markets) {
+          await measureCandidates(db, market, d);
+          await evaluateIntradayStream(db, market, new Date(nowSec * 1000).toISOString());
+        }
       } catch {
         /* measurement is retried by the next evening run */
       }

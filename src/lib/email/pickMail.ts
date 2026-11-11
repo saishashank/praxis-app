@@ -6,6 +6,7 @@
 // (pool slot only; the P0 slot is never touched). Every outcome is a `pick_alert_mail` row, so the
 // mailer derives "unmailed" from `pick_alert` rows without such a row and a lost tick is repaired.
 // Writes here: `pick_alert_mail` only (the e-mail rows go through sendEmail / recordRow).
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import type { Client } from "@libsql/client";
 import { inQuietHours, parseQuietHours, type QuietHours } from "@/lib/alerts/api";
 import {
@@ -380,14 +381,14 @@ async function deliver(
 }
 
 const hmFmt = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Australia/Melbourne",
+  timeZone: OWNER_TZ,
   hour: "2-digit",
   minute: "2-digit",
   hourCycle: "h23",
 });
 const melbourneHm = (at: Date): string => hmFmt.format(at);
 const stampFmt = new Intl.DateTimeFormat("en-AU", {
-  timeZone: "Australia/Melbourne",
+  timeZone: OWNER_TZ,
   weekday: "short",
   day: "numeric",
   month: "short",

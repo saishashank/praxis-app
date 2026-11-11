@@ -17,6 +17,7 @@ import type { Client, InStatement } from "@libsql/client";
 import { safeSourceUrl } from "@/lib/http/safeLink";
 import { getConfig } from "@/lib/config/store";
 import { ASX_SOURCE } from "@/lib/data/asxToken";
+import { enabledMarkets } from "@/lib/market/profile";
 import { emailKeys, melbourneDate } from "@/lib/email/keys";
 import type { EmailEnvVars, EmailProvider } from "@/lib/email/provider";
 import { emailEnvName, sendEmail, type SendOutcome, type SendStatus } from "@/lib/email/send";
@@ -39,7 +40,6 @@ import {
 } from "./tiers";
 
 export const FLUSH_DUE_KEY = "alert_flush_due";
-export const MARKET = "AU";
 /** A P0 older than this is no longer emailed (a late "critical" mail is worse than none). */
 export const P0_PENDING_MAX_MIN = 30; // threshold-ok: delivery freshness bound, D-101
 /** Announcements first assessed longer ago than this raise no alert (the backfill, not news). */
@@ -145,11 +145,29 @@ export type RaiseResult = {
 const safeUrl = (u: string | null | undefined): string =>
   (typeof u === "string" && u.length <= 500 ? safeSourceUrl(u) : null) ?? ASX_FALLBACK_URL;
 
+/** Raises the announcement alerts of one market, or of every enabled market when none is named (D-997). */
 export async function raiseAnnouncementAlerts(
   ctx: AlertCtx,
   o: { market?: string; limit?: number } = {},
 ): Promise<RaiseResult> {
-  const market = o.market ?? MARKET;
+  if (o.market !== undefined) return raiseAnnouncementAlertsFor(ctx, o.market, o.limit);
+  const total: RaiseResult = { created: 0, p0Keys: [], wordKeys: [], p1: 0, p2: 0 };
+  for (const market of await enabledMarkets(ctx.db)) {
+    const r = await raiseAnnouncementAlertsFor(ctx, market, o.limit);
+    total.created += r.created;
+    total.p0Keys.push(...r.p0Keys);
+    total.wordKeys.push(...r.wordKeys);
+    total.p1 += r.p1;
+    total.p2 += r.p2;
+  }
+  return total;
+}
+
+async function raiseAnnouncementAlertsFor(
+  ctx: AlertCtx,
+  market: string,
+  limit?: number,
+): Promise<RaiseResult> {
   const now = nowOf(ctx);
   const nowIso = now.toISOString();
   const since = new Date(now.getTime() - RAISE_WINDOW_H * HOUR_MS).toISOString();
@@ -163,7 +181,7 @@ export async function raiseAnnouncementAlerts(
       "WHERE s.source = ? AND s.market = ? AND s.materiality >= 1 AND s.assessed_at >= ? " +
       "AND NOT EXISTS (SELECT 1 FROM alert x WHERE x.alert_key = 'ann:' || s.market || ':' || s.source || ':' || s.ann_id) " +
       "ORDER BY a.published_at ASC, s.ann_id ASC LIMIT ?",
-    args: [ASX_SOURCE, market, since, o.limit ?? 200],
+    args: [ASX_SOURCE, market, since, limit ?? 200],
   });
   if (q.rows.length === 0) return res;
   const items: Pending[] = q.rows.map((r) => ({

@@ -2,6 +2,7 @@
 // The masked view models (DAT-124, ROL-107, UX-009; D-128): the card, the Evening Review and the alert
 // inbox. Each test fails if an unmasked code, company name, price, link or exact date reaches a masked
 // context, and checks that the unmasked context still shows the real values.
+import { currencyFormatOf } from "@/lib/market/profileCore.mjs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Client } from "@libsql/client";
 import type { DecisionCard } from "@/lib/agents/cards";
@@ -30,6 +31,8 @@ import {
 } from "@/lib/view/mask";
 import { factCodes, maskedReview, parseFacts, reviewLeaks } from "@/lib/view/reviews";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
+
+const AUD = currencyFormatOf("AUD");
 
 afterEach(cleanupTempDbs);
 
@@ -107,7 +110,7 @@ describe("cardViewModel", () => {
   const note = { text: "ZZUP looks strong at $12.34.", provider: "x" };
 
   it("masked: no code, name, price, amount, link or exact date anywhere in the view", () => {
-    const v = cardViewModel(card(), note, { masked: true }, aliases, lookup);
+    const v = cardViewModel(card(), note, { masked: true }, aliases, AUD, lookup);
     expect(findLeaks(v, CODES, NAMES)).toEqual([]);
     const text = JSON.stringify(v);
     expect(text).not.toMatch(/12\.34|1,234|11\.00|A\$3\.20|\$2\b|example\.test|2026-10-1/);
@@ -122,7 +125,7 @@ describe("cardViewModel", () => {
   });
 
   it("masked: a code outside the active set is never lettered by guesswork", () => {
-    const v = cardViewModel(card({ code: "ZZOTH" }), null, { masked: true }, aliases, lookup);
+    const v = cardViewModel(card({ code: "ZZOTH" }), null, { masked: true }, aliases, AUD, lookup);
     expect(v.stock).toBe(UNKNOWN_STOCK);
     expect(v.title).not.toContain("ZZOTH");
   });
@@ -137,6 +140,7 @@ describe("cardViewModel", () => {
       null,
       { masked: true },
       aliases,
+      AUD,
       lookup,
     );
     expect(v.scenario).toBe("Insufficient history (n < 30).");
@@ -146,7 +150,7 @@ describe("cardViewModel", () => {
   });
 
   it("unmasked: the real values, amounts and date", () => {
-    const v = cardViewModel(card(), note, { masked: false }, aliases, lookup);
+    const v = cardViewModel(card(), note, { masked: false }, aliases, AUD, lookup);
     expect(v.title).toBe("Decision Card: ZZUP (E01)");
     expect(v.subtitle).toContain("Mon 19 Oct");
     expect(v.thesis).toContain("ZZUP");
@@ -165,6 +169,7 @@ describe("cardViewModel", () => {
       null,
       { masked: false },
       aliases,
+      AUD,
       lookup,
     );
     expect(v.sizing).toContain("Quantity n/a at n/a");
