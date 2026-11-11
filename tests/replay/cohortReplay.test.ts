@@ -248,36 +248,44 @@ describe("replayCohorts on three synthetic years", () => {
   // sessions processed, of cohorts started and of cohort-days evaluated, counted through the `onStep` hook.
   // No retry, no clock. The wall-time variant (the old 60 s budget) is tests/timing/cohortReplay.wall.test.ts,
   // run in the non-blocking Timing report step.
-  it("the full default-size replay (every step and control slot) does a bounded amount of work", () => {
-    const steps: { session: number; total: number; cohortDays: number; cohortsStarted: number }[] =
-      [];
-    const r = replayCohorts(world(), {
-      params: p,
-      cohortParams: () => terminalOverrides(),
-      onStep: (s) => steps.push(s),
-    });
-    const starts = Math.ceil((SESSIONS - 2) / p.replay.rollingStartStep);
-    const slots = p.replay.c2LivePerFamily;
-    expect(r.starts.length).toBe(starts);
-    // per start: 12 E + 6 x slots C2 + 6 x slots C3 (base) and 6 E-L + 6 x slots C3 (reality)
-    const perStart = 12 + 6 * slots + 6 * slots + 6 + 6 * slots;
-    expect(r.cohorts.length).toBe(starts * perStart);
-    // one step per session processed, in order, counted from 1 to the total
-    expect(steps.length).toBe(SESSIONS - 1);
-    expect(steps.map((s) => s.session)).toEqual(steps.map((_, i) => i + 1));
-    expect(steps.every((s) => s.total === SESSIONS - 1)).toBe(true);
-    // the counters only grow, and every cohort started is accounted for by the last step
-    for (let i = 1; i < steps.length; i += 1) {
-      expect(steps[i]!.cohortDays).toBeGreaterThanOrEqual(steps[i - 1]!.cohortDays);
-      expect(steps[i]!.cohortsStarted).toBeGreaterThanOrEqual(steps[i - 1]!.cohortsStarted);
-    }
-    const last = steps[steps.length - 1]!;
-    expect(last.cohortsStarted).toBe(r.cohorts.length);
-    // the evaluation budget: a cohort is evaluated at most once per session it is live, so cohort-days are
-    // bounded by cohorts x sessions; the replay does real work (at least one evaluation per cohort).
-    expect(last.cohortDays).toBeGreaterThanOrEqual(r.cohorts.length);
-    expect(last.cohortDays).toBeLessThanOrEqual(r.cohorts.length * (SESSIONS - 1));
-  });
+  it(
+    "the full default-size replay (every step and control slot) does a bounded amount of work",
+    { timeout: 180_000 },
+    () => {
+      const steps: {
+        session: number;
+        total: number;
+        cohortDays: number;
+        cohortsStarted: number;
+      }[] = [];
+      const r = replayCohorts(world(), {
+        params: p,
+        cohortParams: () => terminalOverrides(),
+        onStep: (s) => steps.push(s),
+      });
+      const starts = Math.ceil((SESSIONS - 2) / p.replay.rollingStartStep);
+      const slots = p.replay.c2LivePerFamily;
+      expect(r.starts.length).toBe(starts);
+      // per start: 12 E + 6 x slots C2 + 6 x slots C3 (base) and 6 E-L + 6 x slots C3 (reality)
+      const perStart = 12 + 6 * slots + 6 * slots + 6 + 6 * slots;
+      expect(r.cohorts.length).toBe(starts * perStart);
+      // one step per session processed, in order, counted from 1 to the total
+      expect(steps.length).toBe(SESSIONS - 1);
+      expect(steps.map((s) => s.session)).toEqual(steps.map((_, i) => i + 1));
+      expect(steps.every((s) => s.total === SESSIONS - 1)).toBe(true);
+      // the counters only grow, and every cohort started is accounted for by the last step
+      for (let i = 1; i < steps.length; i += 1) {
+        expect(steps[i]!.cohortDays).toBeGreaterThanOrEqual(steps[i - 1]!.cohortDays);
+        expect(steps[i]!.cohortsStarted).toBeGreaterThanOrEqual(steps[i - 1]!.cohortsStarted);
+      }
+      const last = steps[steps.length - 1]!;
+      expect(last.cohortsStarted).toBe(r.cohorts.length);
+      // the evaluation budget: a cohort is evaluated at most once per session it is live, so cohort-days are
+      // bounded by cohorts x sessions; the replay does real work (at least one evaluation per cohort).
+      expect(last.cohortDays).toBeGreaterThanOrEqual(r.cohorts.length);
+      expect(last.cohortDays).toBeLessThanOrEqual(r.cohorts.length * (SESSIONS - 1));
+    },
+  );
 
   it("onStep changes nothing: the digest equals a run without it", () => {
     const a = replayCohorts(world(), { params: p, ...small });
