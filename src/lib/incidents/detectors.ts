@@ -4,6 +4,7 @@
 // record check (Evening Review sent). They return facts; the heartbeat handler passes them to
 // notifyIncident. The LLM provider's daily quota (rules-only mode) is not a quota incident: it is
 // section 9 only (EML-021), so the LLM meter is left out.
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import type { Client } from "@libsql/client";
 import { getConfig } from "@/lib/config/store";
 import { ASX_SOURCE_ID } from "@/lib/data/controls";
@@ -34,7 +35,10 @@ export async function detectAsxTrip(db: Client): Promise<Detected[]> {
 }
 
 /** The last two U1 quality scores both failed the gate (nights are the stored trading dates). */
-export async function detectDataQualityTwoNights(db: Client, market = "AU"): Promise<Detected[]> {
+export async function detectDataQualityTwoNights(
+  db: Client,
+  market = HOME_MARKET,
+): Promise<Detected[]> {
   const r = await db.execute({
     sql: "SELECT d, gate_pass FROM quality_score WHERE market = ? AND tier = 'U1' ORDER BY d DESC LIMIT 2",
     args: [market],

@@ -6,6 +6,7 @@
 // a `kb_archive_run` row (running -> ok | partial | failed | skipped).
 // Used by scripts/kb/archive.mjs (bundled) from the dispatch-only workflow kb-archive.yml.
 // Output: statuses and counts only. Never a URL, a token, a path list or any document content.
+import { OWNER_TZ } from "../market/profileCore.mjs";
 import { createClient, type Client } from "@libsql/client";
 import { buildAllDocuments, syncDocuments } from "./documents";
 import {
@@ -29,7 +30,7 @@ const FAST_FORWARD_ATTEMPTS = 2; // one retry from the new head (design 4.8)
 
 export function melbourneDay(at: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Australia/Melbourne",
+    timeZone: OWNER_TZ,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

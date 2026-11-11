@@ -9,6 +9,7 @@
 // Candidates that may train on prompts get only extracted facts from the router (LLM-036), so they are
 // scored facts-only and never pass. The public golden set is synthetic (codes ZZ…, invented
 // companies); the real set is an Owner item (LLM-040, O-38).
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import type { Client } from "@libsql/client";
 import { defaultAgentParams, type LlmParams } from "@/lib/agents/params";
 import { estimateTokens, type Role } from "./budget";
@@ -572,7 +573,7 @@ export async function runBakeoff(opts: BakeoffOptions): Promise<BakeoffRun> {
       const ask = () =>
         router.route<Answer>({
           role: CATEGORY_ROLE[item.category],
-          market: "AU",
+          market: HOME_MARKET,
           d: opts.date,
           templateVersion: `bakeoff-v1-${item.category}`,
           task: TASKS[item.category],

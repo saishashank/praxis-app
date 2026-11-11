@@ -5,6 +5,7 @@
 // (`health_snapshot` purpose `reminder`, append-only, INSERT OR IGNORE) in exactly the JSON shape
 // src/lib/health/attention.ts parses, plus `reason`, `since_d`, `fix` and `fix_path` per item, which
 // Evening Review section 9 reads. openItems applies the snooze rules.
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import type { Client } from "@libsql/client";
 import { getConfig } from "@/lib/config/store";
 import { CALENDAR_MARKETS } from "@/lib/data/calendarAdmin";
@@ -51,11 +52,14 @@ export async function gatherHealthFacts(
     quotaLevel: "no data",
   };
   try {
-    const m = await db.execute({ sql: "SELECT mode FROM market WHERE code = 'AU'", args: [] });
+    const m = await db.execute({
+      sql: "SELECT mode FROM market WHERE code = ?",
+      args: [HOME_MARKET],
+    });
     f.marketActive = m.rows.length > 0 && String(m.rows[0]!.mode) === "full";
     const s = await db.execute({
-      sql: "SELECT MAX(last_ok_at) AS t FROM sentinel_poll_day WHERE market = 'AU'",
-      args: [],
+      sql: "SELECT MAX(last_ok_at) AS t FROM sentinel_poll_day WHERE market = ?",
+      args: [HOME_MARKET],
     });
     f.sentinelLastOkAt = s.rows[0]?.t ? String(s.rows[0].t) : null;
     f.emailMode = (await readEmailSwitch(db, today)).mode;
