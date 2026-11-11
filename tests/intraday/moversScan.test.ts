@@ -78,12 +78,14 @@ beforeEach(async () => {
   );
 });
 
-const seedHalt = (code: string, since: string) =>
+// D-1040: only good news with the price up is a buy idea, and the stub quote is +5 %, so a halt that
+// expects a RISE (sign 1) makes a candidate; one that expects a fall (sign -1) does not.
+const seedHalt = (code: string, since: string, sign = 1) =>
   db.execute({
     sql:
       "INSERT INTO halt_watch (market, code, since_d, seq, status, reason_class, expected_sign, known_at) " +
-      "VALUES ('AU', ?, ?, 1, 'open', 'capital_raise', -1, 't')",
-    args: [code, since],
+      "VALUES ('AU', ?, ?, 1, 'open', 'capital_raise', ?, 't')",
+    args: [code, since, sign],
   });
 
 describe("armed codes are quoted without a catalyst (A1, A3)", () => {
@@ -101,13 +103,20 @@ describe("armed codes are quoted without a catalyst (A1, A3)", () => {
         item_source: "arm",
         item_category: "halt_resume",
         materiality: 2,
-        polarity: "negative",
+        polarity: "positive",
         sector_adj_ppm: null,
       },
     ]);
     expect(await rows("SELECT code, reason FROM intraday_arm")).toEqual([
       { code: "ZZ01", reason: "halt_resume" },
     ]);
+  });
+
+  it("D-1040: a halt that expects bad news while the price RISES is neither a candidate nor an avoid row", async () => {
+    await seedHalt("ZZ01", "2026-11-03", -1);
+    const r = await runIntradayScan(deps());
+    expect(r).toMatchObject({ status: "ok", written: 0 });
+    expect(await rows("SELECT * FROM intraday_candidate")).toEqual([]);
   });
 
   it("a real catalyst of the day wins over the arm", async () => {
@@ -136,15 +145,14 @@ describe("armed codes are quoted without a catalyst (A1, A3)", () => {
     expect(calls).toEqual([]);
   });
 
-  it("a volume-creep arm written the night before is quoted in the first slot after its arm time", async () => {
+  it("a volume-creep arm (mixed news) is quoted but is no candidate under the buy-ideas-only rule (D-1040)", async () => {
     await db.execute(
       "INSERT INTO intraday_arm (market, session_d, code, reason, expected_sign, armed_from, ref, created_at) " +
         "VALUES ('AU', '2026-11-04', 'ZZ02', 'volume_creep', 0, '10:00', 'A-D2-07', 't')",
     );
     await runIntradayScan(deps());
-    expect(await rows("SELECT code, item_category, polarity FROM intraday_candidate")).toEqual([
-      { code: "ZZ02", item_category: "volume_creep", polarity: "neutral" },
-    ]);
+    expect(calls).toHaveLength(1);
+    expect(await rows("SELECT code, item_category, polarity FROM intraday_candidate")).toEqual([]);
   });
 });
 

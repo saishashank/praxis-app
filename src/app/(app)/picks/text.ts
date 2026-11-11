@@ -162,7 +162,10 @@ export const EMPTY_TRACK_SENTENCE =
 export const TONIGHT_TITLE = "Tonight's picks";
 export const INTRADAY_TITLE = "Intraday watch";
 export const INTRADAY_EXPLAINER =
-  "Stocks with news today that have already moved. Found during the day from delayed prices, not rated, not checked against past results.";
+  "Stocks with good news today that are up but still early in their rise. Found during the day from delayed prices, not rated, not checked against past results.";
+export const AVOID_TITLE = "Avoid / watch";
+export const AVOID_EXPLAINER =
+  "Bad news and a falling price. These are not buy ideas and are not counted as results: they are listed so you can see what not to chase.";
 export const INTRADAY_UNRATED = "Unrated - no history yet";
 export const INTRADAY_UNVALIDATED =
   "Unvalidated: this stream has not been tested against past results.";

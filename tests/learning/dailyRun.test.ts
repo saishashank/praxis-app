@@ -349,15 +349,18 @@ describe("D-990 the top-5 gainer target in the stored night", () => {
       ],
     });
     // M02 was found intraday at +1 % of its +4 % day; M03 at +3 % (most of the move made)
-    for (const [code, move] of [
-      ["M02", 10_000],
-      ["M03", 30_000],
+    // D-1044: M01 was an "avoid / watch" faller at that time (bad news, price down, then it rebounded):
+    // never credited as found intraday
+    for (const [code, move, polarity] of [
+      ["M01", -20_000, "negative"],
+      ["M02", 10_000, "positive"],
+      ["M03", 30_000, "positive"],
     ] as const) {
       await db.execute({
         sql: `INSERT INTO intraday_candidate (market, session_d, code, found_slot, found_at, item_source,
-                item_ann_id, materiality, move_ppm, gates_json)
-              VALUES ('AU', ?, ?, '11:00', ?, 'zz', 'a', 2, ?, '{}')`,
-        args: [D, code, `${D}T00:00:00.000Z`, move],
+                item_ann_id, materiality, polarity, move_ppm, gates_json)
+              VALUES ('AU', ?, ?, '11:00', ?, 'zz', 'a', 2, ?, ?, '{}')`,
+        args: [D, code, `${D}T00:00:00.000Z`, polarity, move],
       });
     }
     await run(db, {

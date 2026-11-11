@@ -17,12 +17,14 @@ beforeAll(async () => {
 afterEach(cleanup);
 
 describe("NavBar", () => {
-  it("marks the A$600 start on a bar from A$300 to A$1,200 and fills in the gain colour above it", () => {
-    const { container } = render(<NavBar label="Follow the trend" navCents={75_000} />);
+  it("marks the A$5,000 start on a bar from A$2,500 to A$10,000 and fills in the gain colour above it", () => {
+    const { container } = render(<NavBar label="Follow the trend" navCents={750_000} />);
     const marker = container.querySelector("[data-nav-start]") as HTMLElement;
-    expect(parseFloat(marker.style.left)).toBeCloseTo(33.33, 1); // (600-300)/(1200-300)
-    expect(screen.getByText("Start A$600.00")).toBeInTheDocument();
-    expect(screen.getByRole("img").getAttribute("aria-label")).toMatch(/A\$750\.00.*start A\$600/);
+    expect(parseFloat(marker.style.left)).toBeCloseTo(33.33, 1); // (5000-2500)/(10000-2500)
+    expect(screen.getByText("Start A$5,000.00")).toBeInTheDocument();
+    expect(screen.getByRole("img").getAttribute("aria-label")).toMatch(
+      /A\$7,500\.00.*start A\$5,000/,
+    );
     const fill = container.querySelector("[data-nav-fill]") as HTMLElement;
     expect(fill.getAttribute("data-hue")).toBe("positive");
   });

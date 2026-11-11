@@ -268,6 +268,10 @@ const CONSERVATIVE = new Set(["E02", "E04"]);
 export function paramOverridesFor(executionId: string): ParamOverrides {
   return {
     ...terminalOverrides(),
+    // D-1020: the golden replay is the A$600 engine; the live restart default (A$5,000, 6 positions
+    // from 2026-11-16) is pinned back so the replayed years keep their meaning
+    seedMicro: 600_000_000n,
+    maxOpenPositions: 2,
     settlementMode: CONSERVATIVE.has(executionId) ? "conservative" : "matched",
   };
 }

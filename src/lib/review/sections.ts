@@ -6,6 +6,7 @@
 //
 // The readers produce the fact types of the T4 renderer (`ReviewFacts` and its parts).
 import type { Client } from "@libsql/client";
+import { ideaSide } from "@/lib/intraday/side";
 import { parseCohortParams } from "@/lib/arena/cohort";
 import { terminalThresholds } from "@/lib/arena/terminal";
 import { loadCalendar } from "@/lib/arena/closeBooks";
@@ -727,11 +728,18 @@ export async function readPickReview(
     if (str(x.state) === "hit") hits.add(str(x.alert_id));
     else clears.set(str(x.clear_reason), (clears.get(str(x.clear_reason)) ?? 0) + 1);
   }
-  const cand = await c.db.execute({
-    sql: `SELECT code, item_source, item_category, decision_outcome FROM intraday_candidate
+  const allRows = await c.db.execute({
+    // D-1044: candidates are buy ideas; bad-news fallers are counted apart as "avoid / watch"
+    sql: `SELECT code, item_source, item_category, decision_outcome, polarity, move_ppm FROM intraday_candidate
           WHERE market = ? AND session_d = ? ORDER BY found_at, code`,
     args: [c.market, c.d],
   });
+  const avoidRows = allRows.rows.filter(
+    (x) => ideaSide(text(x.polarity), Number(x.move_ppm)) === "avoid",
+  );
+  const cand = {
+    rows: allRows.rows.filter((x) => ideaSide(text(x.polarity), Number(x.move_ppm)) === "buy"),
+  };
   const carried = cand.rows.filter((x) => text(x.decision_outcome) === "night_pick").length;
   const mail = await c.db.execute({
     sql: `SELECT m.status, m.kind, m.at, COALESCE(a.code, m.alert_id) AS code FROM pick_alert_mail m
@@ -747,7 +755,13 @@ export async function readPickReview(
       const why = str(x.status) === "suppressed_cap" ? "daily cap reached" : "held in quiet hours";
       return `${str(x.code).replace(/^cand:[^:]*:[^:]*:/, "")}: ${what}, ${why}`;
     });
-  if (hits.size === 0 && clears.size === 0 && cand.rows.length === 0 && held.length === 0)
+  if (
+    hits.size === 0 &&
+    clears.size === 0 &&
+    cand.rows.length === 0 &&
+    avoidRows.length === 0 &&
+    held.length === 0
+  )
     return null;
   const nClear = [...clears.values()].reduce((s, n) => s + n, 0);
   const why = [...clears.entries()].map(([r, n]) => `${n} ${CLEAR_WORDS[r] ?? r}`).join(", ");
@@ -761,6 +775,11 @@ export async function readPickReview(
   if (cand.rows.length > 0) {
     lines.push(
       `Intraday candidates today: ${cand.rows.length} found, ${carried} carried into tonight's decision.`,
+    );
+  }
+  if (avoidRows.length > 0) {
+    lines.push(
+      `Avoid / watch today: ${avoidRows.length} with bad news and a falling price (not candidates).`,
     );
   }
   const names = await companyNames(

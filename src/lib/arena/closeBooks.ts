@@ -53,6 +53,7 @@ import { roundHalfAwayFromZero } from "@/lib/money/round";
 import {
   parseCohortParams,
   resolveCohortParams,
+  roundOverridesFor,
   type CohortParams,
   type ParamOverrides,
 } from "./cohort";
@@ -1660,9 +1661,10 @@ export async function closeBooksDay(
         if (e === undefined) throw new CloseBooksError("execution_missing", executionId);
         return e;
       },
-      paramsFor: (e) =>
+      paramsFor: (e, startD) =>
         resolveCohortParams({
           costProfile: e.cost_profile as CostProfileCode,
+          ...roundOverridesFor(startD),
           ...(opts.restartParams?.(e.id) ?? {}),
         }),
       masterSeed: opts.masterSeed ?? ARENA_MASTER_SEED,
