@@ -353,10 +353,11 @@ export function pendingSettlements(
   fills: readonly LedgerFill[],
   settledFillIds: ReadonlySet<string>,
   calendar: readonly CalendarRow[],
+  lagSessions: number = SETTLEMENT_LAG_SESSIONS,
 ): SettlementItem[] {
   return fills
     .filter((f) => !settledFillIds.has(f.id))
-    .map((f) => settlementItem(f, calendar))
+    .map((f) => settlementItem(f, calendar, lagSessions))
     .filter((item) => item.netMicro !== 0n)
     .sort(compareItems);
 }
