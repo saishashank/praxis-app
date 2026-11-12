@@ -63,7 +63,7 @@ afterEach(() => vi.restoreAllMocks());
 describe("the market rows the Worker reads (migration 0034)", () => {
   it("one statement returns the enabled rows only: AU under the seed, never IN or US", async () => {
     expect(MARKETS_SQL).toBe(
-      "SELECT code, tz, open_time, close_time, cutoff_time, currency, mode, enabled, slots_json FROM market WHERE enabled = 1",
+      "SELECT code, tz, open_time, close_time, cutoff_time, currency, mode, enabled, slots_json, rollback_at FROM market WHERE enabled = 1",
     );
     const read = await readMarkets(ENV, net.f, 0);
     expect(read.map((r) => r.code)).toEqual(["AU"]);
@@ -171,7 +171,7 @@ describe("the clock builds its table from the enabled markets (production path)"
   });
 
   it("a market whose zone the Worker cannot compute is left out and named; AU still runs (D-1004)", async () => {
-    db.prepare("UPDATE market SET enabled = 1 WHERE code = 'IN'").run(); // tz Asia/Kolkata
+    db.prepare("UPDATE market SET enabled = 1, tz = 'Asia/Tokyo' WHERE code = 'IN'").run(); // a zone with no rule (Kolkata has one since M20, D-1117)
     setState("dispatch_enabled", '"1"');
     const table = slotTable(await readMarkets(ENV, net.f, 0));
     expect(table.skipped).toEqual(["IN"]);
@@ -179,8 +179,9 @@ describe("the clock builds its table from the enabled markets (production path)"
     const s = await tick(at(MON, "22:30"));
     expect(s.dispatched).toEqual(["maintenance"]);
     expect(logs.join("\n")).toContain("clock: skipped market IN unusable");
-    expect(zoneSupported(IN_ROW.tz)).toBe(false);
-    expect(() => localFor(IN_ROW.tz, 0)).toThrow("unsupported zone");
+    expect(zoneSupported("Asia/Tokyo")).toBe(false);
+    expect(() => localFor("Asia/Tokyo", 0)).toThrow("unsupported zone");
+    expect(zoneSupported(IN_ROW.tz)).toBe(true); // M20: Kolkata and New York have rules
     expect(localFor(AU_ROW.tz, at(MON, "10:00")).minute).toBe(600);
   });
 

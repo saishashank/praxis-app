@@ -10,6 +10,7 @@ import m6 from "../../db/migrations/main/0006_universe_import.sql?raw";
 import m9 from "../../db/migrations/main/0009_sentinel_email.sql?raw";
 import m26 from "../../db/migrations/main/0026_run_now.sql?raw";
 import m34 from "../../db/migrations/main/0034_m19_market_profile.sql?raw";
+import m36 from "../../db/migrations/main/0036_m20_markets_data.sql?raw";
 
 export const TOKEN = "ghp_TOPSECRET_dispatch_value";
 export const TURSO_TOKEN = "turso-TOPSECRET-token";
@@ -19,8 +20,8 @@ export const TURSO_URL = "libsql://praxis-main-secret-host.turso.io";
 export function makeDb(opts: { sentinel?: boolean } = {}): DatabaseSync {
   const db = new DatabaseSync(":memory:");
   for (const m of opts.sentinel === false
-    ? [m1, m2, m3, m4, m5, m6, m26, m34]
-    : [m1, m2, m3, m4, m5, m6, m9, m26, m34]) {
+    ? [m1, m2, m3, m4, m5, m6, m26, m34, m36]
+    : [m1, m2, m3, m4, m5, m6, m9, m26, m34, m36]) {
     db.exec(m.split("-- +down")[0].replace("-- +up", ""));
   }
   return db;

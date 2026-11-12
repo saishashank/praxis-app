@@ -64,7 +64,7 @@
 //  - Errors never escape `runClock`; log lines carry slot ids and fixed words only.
 import { dbConfigured, pipeline, type Arg, type DbEnv, type Stmt, type StmtResult } from "./db";
 import { dispatchWorkflow, refFor, type DispatchEnv } from "./dispatch";
-import { isWeekend, MINUTE_MS, sydneyLocal, type Local } from "./localtime";
+import { isWeekend, localFor, MINUTE_MS, sydneyLocal, type Local } from "./localtime";
 import {
   CALENDAR_SQL,
   MARKETS_STMT,
@@ -198,21 +198,42 @@ export const tradingOf = (facts: Pick<Facts, "tradingDay" | "tradingDays">, slot
 
 // ---- pure decision ---------------------------------------------------------------------------
 
-/** Enabled, Worker-clock-dispatchable slots whose window is open at the local minute. */
-export function candidateSlots(local: Local, slots: readonly Slot[]): Slot[] {
+/**
+ * The wall clock a slot is decided on (M20 A2, D-1117): its own zone when it has one (a market-bound slot of IN or
+ * US), else the home `local` (every AU slot and every ops slot). A slot with a zone needs the instant `local` was
+ * derived from; without it, or for a zone the Worker cannot compute, the slot has no clock and is never due.
+ */
+export function localOf(slot: Slot, local: Local, atMs: number | undefined): Local | null {
+  if (slot.tz === undefined) return local;
+  if (atMs === undefined) return null;
+  try {
+    return localFor(slot.tz, atMs);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Enabled, Worker-clock-dispatchable slots whose window is open at the local minute of the slot's own zone.
+ * `atMs` is the instant `local` is the home clock of; it is needed only by slots with a zone (`Slot.tz`).
+ */
+export function candidateSlots(local: Local, slots: readonly Slot[], atMs?: number): Slot[] {
   return slots
-    .filter(
-      (s) =>
+    .filter((s) => {
+      const l = localOf(s, local, atMs);
+      return (
+        l !== null &&
         s.enabled &&
         s.runner === "actions" &&
         s.workflow !== null &&
         s.everyMin === undefined &&
-        (!s.tradingDaysOnly || !isWeekend(local)) &&
-        (s.monthly !== "first-saturday" || isFirstSaturday(local)) &&
-        (s.annual === undefined || isAnnualDay(local, s.annual)) &&
-        local.minute >= s.minute &&
-        local.minute <= Math.min(s.minute + (s.recheck?.untilMin ?? s.catchUpMin), 1439),
-    )
+        (!s.tradingDaysOnly || !isWeekend(l)) &&
+        (s.monthly !== "first-saturday" || isFirstSaturday(l)) &&
+        (s.annual === undefined || isAnnualDay(l, s.annual)) &&
+        l.minute >= s.minute &&
+        l.minute <= Math.min(s.minute + (s.recheck?.untilMin ?? s.catchUpMin), 1439)
+      );
+    })
     .sort((a, b) => a.priority - b.priority);
 }
 
@@ -319,22 +340,27 @@ export function decide(
   states: ReadonlyMap<string, StoredState>,
   nowMs: number,
   slots: readonly Slot[],
+  atMs?: number,
 ): Action[] {
-  return decideWithSkips(local, facts, states, nowMs, slots).actions;
+  return decideWithSkips(local, facts, states, nowMs, slots, atMs).actions;
 }
 
 /** Like `decide`, plus every due slot that was held back by the runtime list or its inputs. */
 export function decideWithSkips(
-  local: Local,
+  home: Local,
   facts: Facts,
   states: ReadonlyMap<string, StoredState>,
   nowMs: number,
   slots: readonly Slot[],
+  /** The instant `home` is the Sydney clock of (default `nowMs`): the zone of a slot with `Slot.tz` is read at it. */
+  atMs: number = nowMs,
 ): { actions: Action[]; skipped: Skipped[] } {
   const out: Action[] = [];
   const skipped: Skipped[] = [];
   if (!facts.dispatchEnabled) return { actions: out, skipped };
-  for (const slot of candidateSlots(local, slots)) {
+  for (const slot of candidateSlots(home, slots, atMs)) {
+    // D-1117: the slot's own clock (its market's zone), else the home one
+    const local = localOf(slot, home, atMs) as Local;
     if (slot.marketBound) {
       const mode = modeOf(facts, slot);
       if (mode === null || mode === "off") continue;
@@ -377,7 +403,11 @@ export function decideWithSkips(
         (rc.needsKeyPrefix === undefined ||
           facts.settledKeys?.has(`${rc.needsKeyPrefix}${local.date}`) === true) &&
         // M18 (D-953) `once`: a dispatch at or after slot + afterMin was itself the recheck
-        (rc.once !== true || sydneyLocal(Date.parse(st.at)).minute < slot.minute + rc.afterMin)
+        (rc.once !== true ||
+          (slot.tz === undefined ? sydneyLocal : (ms: number) => localFor(slot.tz as string, ms))(
+            Date.parse(st.at),
+          ).minute <
+            slot.minute + rc.afterMin)
       ) {
         out.push({ slot, key, attempt: st.n + 1, prev: stored.raw, inputs });
       }
@@ -536,19 +566,26 @@ export async function runClock(
       for (const code of built.skipped) console.log(`clock: skipped market ${code} unusable`);
       slots = built.slots;
     }
-    const cands = candidateSlots(local, slots);
+    const cands = candidateSlots(local, slots, scheduledTime);
     if (!needRollup && cands.length === 0) return summary; // idle minute: no request at all
+    // D-1117: the local date of a slot is the date of its own zone (a US evening is the next day in Sydney)
+    const dateOf = (sl: Slot): string => (localOf(sl, local, scheduledTime) ?? local).date;
     deps.count?.("tick");
 
     // ---- request 1: rollup (once per day per isolate) + everything the decision needs --------
     const nowMs = deps.nowMs();
     const first: Stmt[] = [];
     if (needRollup) first.push(rollupInsert(env, local, nowMs));
-    const keys = cands.map((s) => slotKey(s.id, local.date));
+    const keys = cands.map((s) => slotKey(s.id, dateOf(s)));
     const inputKeys = [...new Set(cands.flatMap((s) => (s.inputsKey ? [s.inputsKey] : [])))];
     let iState = -1;
     let iMode = -1;
     let iCal = -1;
+    // the dates whose calendar the tick reads: the home date first, then the date of each other zone a candidate
+    // is decided in (one probe each, at most three)
+    const calDates: string[] = [local.date];
+    for (const c of cands)
+      if (c.tradingDaysOnly && !calDates.includes(dateOf(c))) calDates.push(dateOf(c));
     let iClosed = -1;
     if (cands.length > 0) {
       iState = first.length;
@@ -564,11 +601,11 @@ export async function runClock(
       }
       if (cands.some((s) => s.tradingDaysOnly)) {
         iCal = first.length;
-        first.push({ sql: CALENDAR_SQL, args: [local.date] });
+        for (const d of calDates) first.push({ sql: CALENDAR_SQL, args: [d] });
       }
     }
     const recheckKeys = [
-      ...new Set(cands.flatMap((s) => (s.recheck ? [`${s.recheck.keyPrefix}${local.date}`] : []))),
+      ...new Set(cands.flatMap((s) => (s.recheck ? [`${s.recheck.keyPrefix}${dateOf(s)}`] : []))),
     ];
     if (recheckKeys.length > 0) {
       iClosed = first.length;
@@ -584,7 +621,7 @@ export async function runClock(
     const settledKeysWanted = [
       ...new Set(
         cands.flatMap((s) =>
-          s.recheck?.needsKeyPrefix ? [`${s.recheck.needsKeyPrefix}${local.date}`] : [],
+          s.recheck?.needsKeyPrefix ? [`${s.recheck.needsKeyPrefix}${dateOf(s)}`] : [],
         ),
       ),
     ];
@@ -639,19 +676,36 @@ export async function runClock(
       return summary; // MKT-110 a: no enabled market, no dispatch
     }
     const mf = marketFacts(current, iCal >= 0 ? r1[iCal].rows : [], local.date);
+    // D-1117: a market of another zone trades on ITS date: its calendar probe, not the Sydney one
+    const tradingDays: Record<string, boolean> = { ...mf.tradingDays };
+    let tradingDay = mf.tradingDay;
+    if (iCal >= 0 && calDates.length > 1) {
+      for (const m of current) {
+        let md = local.date;
+        try {
+          md = localFor(m.tz, scheduledTime).date;
+        } catch {
+          // an unsupported zone has no slot; its day stays the home date
+        }
+        const at = calDates.indexOf(md);
+        if (md === local.date || at < 0) continue;
+        tradingDays[m.code] = marketFacts([m], r1[iCal + at].rows, md).tradingDays[m.code];
+      }
+      tradingDay = current[0] === undefined ? false : tradingDays[current[0].code];
+    }
     const facts: Facts = {
       dispatchEnabled: parseEnabled(enabledRaw),
       // V1-S3 / D-711 (inside marketFacts): fail safe, a weekday with no calendar row is NOT a trading day.
       marketMode: mf.marketMode,
-      tradingDay: mf.tradingDay,
+      tradingDay,
       marketModes: mf.marketModes,
-      tradingDays: mf.tradingDays,
+      tradingDays,
       slotsEnabled: parseSlotsEnabled(listRaw),
       slotInputs,
       closedKeys: iClosed >= 0 ? new Set(r1[iClosed].rows.map((r) => String(r[0]))) : undefined,
       settledKeys: iSettled >= 0 ? new Set(r1[iSettled].rows.map((r) => String(r[0]))) : undefined,
     };
-    const { actions, skipped } = decideWithSkips(local, facts, states, nowMs, slots);
+    const { actions, skipped } = decideWithSkips(local, facts, states, nowMs, slots, scheduledTime);
     summary.skipped = skipped;
     // "not-released" is the normal state before the Owner lists a slot: no log line for it.
     for (const sk of skipped) {
@@ -713,8 +767,8 @@ export async function runClock(
         const args: Arg[] = [
           CLOCK_JOB,
           a.slot.market ?? primary.code,
-          `dispatch-failed:${a.slot.id}:${local.date}:${a.attempt}`,
-          local.date,
+          `dispatch-failed:${a.slot.id}:${dateOf(a.slot)}:${a.attempt}`,
+          dateOf(a.slot),
           at,
           at,
           `dispatch ${a.slot.id} ${res.detail}`.slice(0, 120),

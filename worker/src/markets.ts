@@ -18,6 +18,8 @@ export type MarketRow = {
   mode: string;
   enabled: number;
   slots_json: string | null;
+  /** M20 (D-1101): the instant of a full -> off switch; set only while the market awaits its rollback kill. */
+  rollback_at?: string | null;
 };
 
 /** The slot anchors of `market.slots_json` (D-1012): local HH:MM of the market's own zone. */
@@ -37,7 +39,7 @@ export type SlotAnchors = {
 
 /** The per-tick read: every enabled market, one statement (D-996). */
 export const MARKETS_SQL =
-  "SELECT code, tz, open_time, close_time, cutoff_time, currency, mode, enabled, slots_json FROM market WHERE enabled = 1";
+  "SELECT code, tz, open_time, close_time, cutoff_time, currency, mode, enabled, slots_json, rollback_at FROM market WHERE enabled = 1";
 export const MARKETS_STMT: Stmt = { sql: MARKETS_SQL };
 /** Trading-day kind of a date for every enabled market: one probe per market on the (market, d) key. */
 export const CALENDAR_SQL =
@@ -86,7 +88,7 @@ export function anchorsOf(row: MarketRow): SlotAnchors {
 export function parseMarketRows(rows: readonly Row[]): MarketRow[] {
   const out: MarketRow[] = [];
   for (const r of rows) {
-    const [code, tz, open, close, cutoff, currency, mode, enabled, slots] = r;
+    const [code, tz, open, close, cutoff, currency, mode, enabled, slots, rollback] = r;
     if (
       typeof code !== "string" ||
       typeof tz !== "string" ||
@@ -105,6 +107,8 @@ export function parseMarketRows(rows: readonly Row[]): MarketRow[] {
       mode,
       enabled: 1,
       slots_json: typeof slots === "string" ? slots : null,
+      // the key exists only while a rollback is pending, so an ordinary row is the row it always was
+      ...(typeof rollback === "string" && rollback !== "" ? { rollback_at: rollback } : {}),
     });
   }
   return out.sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
@@ -114,7 +118,13 @@ export function parseMarketRows(rows: readonly Row[]): MarketRow[] {
 export function sameShape(a: readonly MarketRow[], b: readonly MarketRow[]): boolean {
   return (
     a.length === b.length &&
-    a.every((x, i) => x.code === b[i].code && x.tz === b[i].tz && x.slots_json === b[i].slots_json)
+    a.every(
+      (x, i) =>
+        x.code === b[i].code &&
+        x.tz === b[i].tz &&
+        x.slots_json === b[i].slots_json &&
+        (x.rollback_at ?? null) === (b[i].rollback_at ?? null),
+    )
   );
 }
 
