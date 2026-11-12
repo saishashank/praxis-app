@@ -737,3 +737,10 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1130 | The kill slot needs no listing (Fable A2 review, note 4): arena-kill:<CODE> is the only Actions slot released without the Owner's slots_enabled list (require... |
 | D-1131 | IN/US slippage buckets come from task A4 (Fable A2 review, note 5): slippage_buckets stays null for IN and US after A2, so stallFloorBpsOf throws for them by... |
 | D-1132 | No robots-permitted free US price source (fill run 2026-11-12): query1/query2.finance.yahoo.com, stooq.com and api.nasdaq.com disallow automated clients in r... |
+| D-1140 | Diwali Muhurat and the NSE 2025 list (A3): the Laxmi Pujan evening session on a weekday is recorded as an early_close row whose close_time is the end of the... |
+| D-1141 | Source hosts and rows are derived (A3, D-1095 amended): |
+| D-1142 | Polite client rules (A3, D-1093): a source is fetched only when its register row is enabled (the Owner's acceptance of a pending risk row is the change to en... |
+| D-1143 | Verification pass results (A3, 2026-11-13, source report run once per market on the build machine): the exchange archive host publishes no robots.txt; www.ns... |
+| D-1144 | IN tick table (A3, D-1104): the NSE circular NSE/CMTR/67133 (13 March 2025, after the 10 June 2024 cut) confirms ₹0.01 below ₹250; the exchange now reviews t... |
+| D-1145 | Tooling touched outside the A3 list (needed): scripts/ci/workflow-lint.mjs gains UPLOAD_ALWAYS_ALLOWED = ["source-report.yml::report"] (a success-time artefa... |
+| D-1146 | Calendar market lists (A3, D-1097 amended): |

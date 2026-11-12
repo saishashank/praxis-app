@@ -45,6 +45,18 @@ export function mayFetch(mode: SourceMode): boolean {
   return !isOff(mode);
 }
 
+/**
+ * M20 (D-1095, D-1128, DAT-120): whether a component may fetch from a MARKET source (a register id of the India or
+ * US rows, not one of the three AU ids above). Both must hold: the register row is `enabled` (a `pending` or
+ * `disabled` row is never fetched, whatever its mode) and the kill switch is not off or tripped (DAT-123). The
+ * polite client applies the same rule (src/lib/data/sources/politeFetch.mjs, `dbGate`) and also needs the market
+ * enabled; this pure form is for the pages and the plans that decide before a request is built.
+ */
+export type RegisterStatus = "pending" | "enabled" | "disabled";
+export function mayFetchRegistered(register: RegisterStatus, mode: SourceMode): boolean {
+  return register === "enabled" && mayFetch(mode);
+}
+
 const ASX_BLOCKED: readonly Family[] = ["F2", "F3", "F5", "F6"];
 const ASX_PROXY: readonly Family[] = ["F1", "F4"];
 

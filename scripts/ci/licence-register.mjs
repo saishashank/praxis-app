@@ -8,10 +8,14 @@
 // The document shows the SEEDED status. The live status is on System Health, Data controls. An
 // Owner risk acceptance (O-23 ASX, O-26 Yahoo) is shown as "pending Owner" because this document
 // is generated from code and holds no Owner date. No person's name, no email, no secret (SEC-110).
+// M20 A3 (D-1096, D-1128): the India and US sources are listed too, from src/lib/market/seed/{in,us}/sources.mjs (the one
+// definition; the rows are written to the register when a market is enabled, never by a migration), in a section of
+// their own so the AU rows and their tests are unchanged. A date is shown as year and month only.
 // Zero dependencies.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { MARKET_SOURCES } from "../../src/lib/market/seed/sourceSites.mjs";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 export const DOC_PATH = "docs/source-licence-register.md";
@@ -420,11 +424,67 @@ const code = (s) => `\`${s}\``;
 const STATUS = { pending: "pending", enabled: "enabled", disabled: "disabled" };
 const RISK = { low: "low", medium: "medium", high: "high" };
 
+/** The year and month of an ISO date (the document shows no day). @param {string | null} d */
+const monthOf = (d) => (typeof d === "string" && d.length >= 7 ? d.slice(0, 7) : "not recorded");
+
+/** The India and US section: one summary and one detail table over the market source rows (M20 A3, D-1096). */
+function marketSection(marketRows) {
+  if (marketRows.length === 0) return [];
+  const summary = table(
+    [
+      "Source id",
+      "Source",
+      "Permitted use",
+      "Risk",
+      "Status when written",
+      "Owner reference",
+      "Acceptance date",
+      "AI summaries allowed",
+    ],
+    marketRows.map((r) => [
+      code(r.source ?? r.id),
+      r.label,
+      r.permitted_use,
+      RISK[r.risk] ?? r.risk,
+      STATUS[r.status] ?? r.status,
+      r.owner_ref ?? "none",
+      acceptanceOf(r),
+      r.summarisation_permitted === 1 ? "yes" : "no",
+    ]),
+  );
+  const detail = table(
+    ["Source id", "What we take", "Licence or terms reference", "Display rule", "Code", "Contacts"],
+    marketRows.map((r) => {
+      const personal = /personal use only/i.test(r.permitted_use ?? "");
+      return [
+        code(r.id),
+        r.provides,
+        `${r.terms} Terms URL: ${r.terms_url ?? "none (a file the Owner uploads)"}. Last checked: ${monthOf(r.last_checked)}.`,
+        personal ? PERSONAL_USE_RULE : PUBLIC_RULE,
+        r.code.length ? r.code.map(code).join(", ") : "no fetcher yet",
+        r.hosts.length ? r.hosts.join(", ") : "none",
+      ];
+    }),
+  );
+  return [
+    "## India and US sources (written when a market is enabled)",
+    "",
+    "- These rows are defined in `src/lib/market/seed/in/sources.mjs` and `src/lib/market/seed/us/sources.mjs` and are written to the register, with their status rows, when the Owner switches the market out of off (D-1128). No migration inserts them, so production holds none while India and the US are off.",
+    "- `enabled` = public statistics, the public holiday lists, EDGAR (free, fair-access terms, a declared contact required) and the manual files. `pending` = a fetched source whose terms are checked and which the Owner turns on. `disabled` = NSE and BSE announcements until the Owner accepts the terms risk (headline and link only, never a body, D-1125).",
+    "- A source whose robots.txt disallows automated clients is never requested; the polite client refuses it (D-1093, D-1132).",
+    "",
+    summary,
+    "",
+    detail,
+    "",
+  ];
+}
+
 /** Acceptance: an Owner reference means the source needs a risk acceptance this file cannot show. */
 export const acceptanceOf = (row) =>
   row.owner_ref ? `pending Owner (${row.owner_ref})` : "not needed";
 
-export function render(rows) {
+export function render(rows, marketRows = []) {
   const facts = (r) => {
     const f = SOURCE_FACTS[r.source];
     if (!f) throw new Error(`no SOURCE_FACTS entry for registered source ${r.source}`);
@@ -467,7 +527,7 @@ export function render(rows) {
       ];
     }),
   );
-  const pending = rows.filter((r) => r.owner_ref && r.status === "pending");
+  const pending = [...rows, ...marketRows].filter((r) => r.owner_ref && r.status === "pending");
   const lines = [
     "# Source-licence register",
     "",
@@ -496,11 +556,12 @@ export function render(rows) {
     ...(pending.length
       ? pending.map(
           (r) =>
-            `- ${facts(r).label} (${r.owner_ref}): the risk acceptance date is pending Owner. Until you accept, the source stays ${r.status} and nothing contacts it.`,
+            `- ${r.label ?? facts(r).label} (${r.owner_ref}): the risk acceptance date is pending Owner. Until you accept, the source stays ${r.status} and nothing contacts it.`,
         )
       : ["- None."]),
     "- Terms URLs and last-checked dates are not recorded in the seed. The source evaluation and the monthly re-check fill them in the live register.",
     "",
+    ...marketSection(marketRows),
     "## Delayed-quote endpoint: facts and fallback (V2-I3, D-792)",
     "",
     "- Request pattern (one per code): `GET https://query1.finance.yahoo.com/v8/finance/chart/{CODE}.AX?interval=1m&range=1d`. The same host and path family as the end-of-day fetch (`scripts/fixtures/record-day.mjs` uses `/v8/finance/chart/` with `interval=1d`). The two scripts share the host but not the code; the fixture recorder is the reference for the payload shape.",
@@ -519,7 +580,10 @@ export function build(root = ROOT) {
   const declared = declaredSources(root).sort();
   const missing = declared.filter((d) => !seedIds.includes(d));
   if (missing.length) throw new Error(`declared in code but not seeded: ${missing.join(", ")}`);
-  return render(rows);
+  const marketRows = Object.values(MARKET_SOURCES)
+    .flat()
+    .map((r) => ({ ...r, source: r.id }));
+  return render(rows, marketRows);
 }
 
 export function main(argv = process.argv.slice(2), root = ROOT, out = console.log) {

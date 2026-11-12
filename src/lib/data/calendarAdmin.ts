@@ -14,12 +14,16 @@ import type { AuthEnv } from "@/lib/auth/env";
 import {
   CALENDAR_MARKETS,
   calendarMarkets,
+  calendarRuleMarkets,
   summariseCalendar,
   type CalendarRow,
   type CalendarSummary,
 } from "./calendar";
 
-export { CALENDAR_MARKETS, calendarMarkets };
+export { CALENDAR_MARKETS, calendarMarkets, calendarRuleMarkets };
+// M20 A3 (D-1097): calendar rows are written when a market is enabled (rules are code, rows are data); the core is
+// plain ESM so the e2e states and the Actions scripts can call it too.
+export { ensureCalendarYears, defaultCalendarYears } from "./calendarEnable.mjs";
 
 export type ConfirmError = "invalid" | "forbidden" | "not_found" | "unavailable";
 export type ConfirmResult = { ok: true; rows: number } | { ok: false; error: ConfirmError };
@@ -80,7 +84,7 @@ export async function confirmCalendar(p: ConfirmInput): Promise<ConfirmResult> {
     return fail("unavailable");
   }
 
-  if (typeof p.market !== "string" || !(CALENDAR_MARKETS as readonly string[]).includes(p.market)) {
+  if (typeof p.market !== "string" || !calendarRuleMarkets().includes(p.market)) {
     return fail("invalid");
   }
   const market = p.market;

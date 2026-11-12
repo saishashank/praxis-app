@@ -160,13 +160,15 @@ describe("confirmCalendar (service)", () => {
   it("refuses a non-Owner actor, bad market, bad year and a year with no rows", async () => {
     expect(await svc({ actorId: editorId })).toEqual({ ok: false, error: "forbidden" });
     expect(await svc({ actorId: 9999 })).toEqual({ ok: false, error: "forbidden" });
-    for (const market of ["IN", "au", 5, undefined]) {
+    for (const market of ["ZZ", "au", 5, undefined]) {
       expect(await svc({ market })).toEqual({ ok: false, error: "invalid" });
     }
     for (const year of [1999, 2101, 2026.5, "2026", undefined, NaN]) {
       expect(await svc({ year })).toEqual({ ok: false, error: "invalid" });
     }
     expect(await svc({ year: 2031 })).toEqual({ ok: false, error: "not_found" });
+    // M20 A3 (D-1146): IN has calendar rules, so it is a known market; while it is off it has no rows to confirm
+    expect(await svc({ market: "IN" })).toEqual({ ok: false, error: "not_found" });
     expect(await auditRows(auth)).toEqual([]);
     expect(await unconfirmed(2026)).toBe(261);
   });
