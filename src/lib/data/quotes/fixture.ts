@@ -17,7 +17,7 @@ const CODE_MOD = 100; // threshold-ok: two-digit code suffix
 export const zzCode = (n: number): string => `ZZ${String(n % CODE_MOD).padStart(2, "0")}`;
 
 export function syntheticChart(m: SyntheticMeta): unknown {
-  const meta: Record<string, unknown> = { exchangeName: "ASX" };
+  const meta: Record<string, unknown> = { exchangeName: homeProfile().exchange };
   if (m.currency !== null) meta.currency = m.currency ?? homeProfile().currency;
   if (m.symbol != null) meta.symbol = m.symbol;
   if (m.price != null) meta.regularMarketPrice = m.price;

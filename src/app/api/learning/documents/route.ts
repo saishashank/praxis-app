@@ -4,6 +4,7 @@
 // Masked users (non-Owner without a live unmask grant) get bodies and lists through the masking module.
 import { withAuth } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 import { LearningMasker } from "@/lib/learning/mask";
 import { maskContextFor } from "@/lib/view/mask";
 import { isDocType, listDocuments, readDocument } from "@/lib/learning/readers";
@@ -16,7 +17,7 @@ const bad = (): Response => Response.json({ error: "invalid" }, { status: 400, h
 
 export const GET = withAuth("read", async (req, user) => {
   const p = new URL(req.url).searchParams;
-  const market = p.get("market") ?? "AU";
+  const market = p.get("market") ?? HOME_MARKET;
   const type = p.get("type");
   const path = p.get("path");
   const limitText = p.get("limit");

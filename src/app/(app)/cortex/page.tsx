@@ -11,6 +11,7 @@ import { Banner } from "@/components/ui/States";
 import { NotMeasured } from "@/components/ui/Values";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import {
   loadCortex,
   type AbstainReason,
@@ -84,18 +85,19 @@ const reasonCols: Column<AbstainReason>[] = [
   { key: "label", header: "Reason", cell: (r) => <span className="break-words">{r.label}</span> },
   { key: "n", header: "Strategy-nights", align: "right", cell: (r) => formatCount(r.count) },
 ];
+const SYMBOL = homeProfile().currencyFormat!.symbol; // the tick table is the home market's (D-1003)
 const tickCols: Column<TickRowView>[] = [
   {
     key: "p",
     header: "Share price",
     align: "right",
-    cell: (r) => `A$${(r.priceMicro / MICRO).toFixed(2)}`,
+    cell: (r) => `${SYMBOL}${(r.priceMicro / MICRO).toFixed(2)}`,
   },
   {
     key: "t",
     header: "Price step",
     align: "right",
-    cell: (r) => `A$${(r.tickMicro / MICRO).toFixed(3)}`,
+    cell: (r) => `${SYMBOL}${(r.tickMicro / MICRO).toFixed(3)}`,
   },
   ...(["U1", "U2", "U3"] as const).map((t) => ({
     key: t,

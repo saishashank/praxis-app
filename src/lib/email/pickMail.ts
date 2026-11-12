@@ -7,6 +7,7 @@
 // mailer derives "unmailed" from `pick_alert` rows without such a row and a lost tick is repaired.
 // Writes here: `pick_alert_mail` only (the e-mail rows go through sendEmail / recordRow).
 import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import type { Client } from "@libsql/client";
 import { inQuietHours, parseQuietHours, type QuietHours } from "@/lib/alerts/api";
 import {
@@ -59,7 +60,7 @@ export type PickFacts = {
   latency?: Latency;
 };
 
-const SESSION_END = "16:00"; // threshold-ok: last quote-poll tick (D-388)
+const SESSION_END = homeProfile().sessionClose!; // threshold-ok: last quote-poll tick (D-388)
 
 const pickKindOf = (e: PickEvent): PickKind =>
   e === "hit" ? "pick_hit" : e === "candidate" ? "pick_candidate" : "pick_cleared";
@@ -406,7 +407,7 @@ export const melbourneStamp = (iso: string): string =>
 export function priceText(micro: bigint): string {
   const whole = micro / 1_000_000n;
   const frac = (micro % 1_000_000n) / 1_000n;
-  return `A$${whole}.${String(frac).padStart(3, "0")}`;
+  return `${homeProfile().currencyFormat!.symbol}${whole}.${String(frac).padStart(3, "0")}`;
 }
 
 // ---- deriving the unmailed transitions and building their facts --------------------------------------

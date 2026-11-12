@@ -674,3 +674,14 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1063 | Dual time (D1, D-1002): formatMarketTime(iso, marketTz, prefs?) in health/format.ts returns the single Melbourne form when the market zone has the same UTC o... |
 | D-1064 | Pages and switcher (D2, D-997): envFor(user, now?, candidate?) is the one resolver for pages and loaders (?market= candidate not enabled: 404; none: the only... |
 | D-1065 | Markets table (D2, D-998): marketRows has no static IN/US rows; the Owner sees every market row with statusText(profile, mode), "AT-M evidence: not recorded"... |
+| D-1075 | AT-67 scan classes and what is not a market fact (E1, D-1000): scripts/ci/market-literals.mjs scans nine classes (market code, exchange word or city, zone, A... |
+| D-1076 | AT-67 allow-list (E1, D-1000): the allow-list is src/lib/market/, the files of seed/allow.mjs, and EXTRA_ALLOW in the script: entries naming one file or a di... |
+| D-1077 | Residual literals replaced (E1, D-1051; byte-identical): the home market's values are read, never retyped: session open and close (homeProfile().sessionOpen/... |
+| D-1078 | Scan output and the count (E1, D-991): the default run lists every hit (file, line, class, first 120 characters) and exits 1 on any, on a stale entry, or on... |
+| D-1079 | Production-shape assertion (E2, D-994, MKT-110): scripts/e2e-day/assert-production-shape.mjs --work <folder> runs as the last step of the recorded-day job be... |
+| D-1080 | Development lanes and the CI rule (E2, D-994): e2e/seed/states/markets-dev.mjs enables the built markets named by PRAXIS_MARKETS_ENABLED (mode stays off, so... |
+| D-1081 | The e2e walk (E2, MKT-110 c, SEC-112, D-997): e2e/market-off.spec.ts runs in the empty lane (requireScenario("empty")) and walks every signed-in page of PAGE... |
+| D-1082 | Where the AT-68 clauses run (E2): the root suite file tests/acceptance/v3/at68.test.ts proves the scripts and workflows (a), the write guard and the invarian... |
+| D-1083 | Test map and reports (E3, TST-133, AT-85): docs/test-map.md gets rows for AT-67 (covered, CI), AT-68 (covered, "CI + CI recorded-day"), AT-75 (covered (AU),... |
+| D-1084 | PRAXIS_MARKETS_ENABLED in the checks (E3, D-994): .env.example (A1) already names it and the code reads it, so scripts/ci/env-names.mjs needs no entry and wa... |
+| D-1085 | Matrix fixtures (E3, TST-139, D-1001): tests/market/profiles/IN.json and US.json already exist from A1 and equal their seeds (node scripts/market/gen-fixture... |

@@ -3,6 +3,7 @@
 // through DataControlForm's confirmation step and a server action that re-checks the Owner and writes
 // the audit event first (docs/M5_design.md 4.12, 4.7, 3).
 import type { EmailControlsView } from "@/lib/data/controls";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 import { DataControlForm } from "./DataControlForm";
 import {
   addWatchListCodeAction,
@@ -110,7 +111,7 @@ export function EmailControlsSection({ v }: { v: EmailControlsView | null }) {
             )}
             <DataControlForm
               action={addWatchListCodeAction}
-              fields={{ market: "AU" }}
+              fields={{ market: HOME_MARKET }}
               label="Add a code"
               explain={`The code joins the watch-list, so announcements about it can raise alerts. It must be a listed AU share. It stays for at most ${v.watchListMaxDays} days.`}
               inputs={[

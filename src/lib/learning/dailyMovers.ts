@@ -15,8 +15,8 @@ import { SECTOR_MIN } from "./dailyFeatures";
 
 const MARKET_TZ: string = homeProfile().tz!;
 /** ASX continuous trading opens at 10:00 Sydney and the close auction ends at about 16:10. */
-const OPEN_HHMM = "10:00"; // threshold-ok: ASX open, Sydney time
-const CLOSE_HHMM = "16:00"; // threshold-ok: ASX close, Sydney time (announcements after it wait for the next open)
+const OPEN_HHMM = homeProfile().sessionOpen!; // threshold-ok: home market open (its own zone)
+const CLOSE_HHMM = homeProfile().sessionClose!; // threshold-ok: home market close (announcements after it wait for the next open)
 const SECTOR_SHARE = 0.6; // threshold-ok: D-921 sector move explains the mover at 60 %
 const INDEX_SHARE = 0.5; // threshold-ok: D-921 index move explains the mover at 50 %
 const VOL_MULT = 2; // threshold-ok: D-921 volume at least 2x usual

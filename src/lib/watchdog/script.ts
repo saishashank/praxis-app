@@ -18,6 +18,7 @@ import { notifyIncident } from "@/lib/incidents/notify";
 import { readEmailSwitch } from "@/lib/email/switch";
 import { renderIncident } from "@/lib/email/templates/notices";
 import type { ReviewFacts } from "@/lib/email/templates/review";
+import { HOME_CURRENCY } from "@/lib/market/homeMarket.mjs";
 import { familyNames } from "@/lib/review/names";
 import {
   HEARTBEAT_EVENING_JOB,
@@ -98,7 +99,7 @@ export async function minimalReviewFacts(
         label: String(x.id),
         name: names[String(x.family)] ?? undefined,
         variant: String(x.variant) === "L" ? ("L" as const) : ("U" as const),
-        currency: "AUD",
+        currency: HOME_CURRENCY,
         navCents: Math.round(nav / MICRO_PER_CENT),
         dayPlCents: Math.round((nav - base) / MICRO_PER_CENT),
         progressPct: 0,

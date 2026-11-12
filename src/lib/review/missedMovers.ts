@@ -12,15 +12,16 @@
 // universe_snapshot PK, signal and blocked_trade (market, d), announcement (market, code, ...)).
 import type { CalendarRow } from "@/lib/data/calendar";
 import { addDays, isTradingDay } from "@/lib/data/calendar";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import type { Ctx } from "./sections";
 import { companyNames, familyNames } from "./names";
 
 export const MOVERS_LISTED = 10; // threshold-ok: gainers and losers listed in the review
 const LIQUID_TIERS = ["U1", "U2"] as const;
 const PPM = 1_000_000; // threshold-ok: parts per million
-/** ASX continuous trading opens at 10:00 Sydney; an announcement before it was knowable at the open. */
-const OPEN_HHMM = "10:00";
-const MARKET_TZ = "Australia/Sydney";
+/** The home market opens its continuous session at this time of its own zone; an announcement before it was knowable at the open. */
+const OPEN_HHMM = homeProfile().sessionOpen!;
+const MARKET_TZ = homeProfile().tz!;
 
 export type MoverFact = {
   readonly code: string;

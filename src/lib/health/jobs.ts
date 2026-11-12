@@ -5,7 +5,12 @@ import {
   HEARTBEAT_MORNING_JOB,
   WORKER_CLOCK_JOB,
 } from "@/lib/heartbeat/state";
+import { FEED_SLOT_TIMES } from "@/lib/market/clockTables.mjs";
+import { HOME_SLOTS, HOME_TZ } from "@/lib/market/homeMarket.mjs";
 import { WATCHDOG_JOB } from "@/lib/watchdog/state";
+
+/** The exchange city of the home market zone ("Australia/Sydney" -> "Sydney"), for the plain-words job notes. */
+const HOME_CITY = HOME_TZ.split("/")[1];
 
 export type JobDef = {
   job: string;
@@ -76,8 +81,7 @@ export const JOBS: readonly JobDef[] = [
     job: "ingest-batch1",
     label: "Batch 1 end-of-day ingest (AU)",
     expectedIntervalSec: 3 * 86_400,
-    noDataNote:
-      "Not run yet (production, trading days at 17:30 Sydney once the Owner enables dispatch)",
+    noDataNote: `Not run yet (production, trading days at ${HOME_SLOTS.b1} ${HOME_CITY} once the Owner enables dispatch)`,
   },
   {
     // M2 T11 (D-067): the Worker imports the ASX listed-companies file once per trading day at
@@ -85,8 +89,7 @@ export const JOBS: readonly JobDef[] = [
     job: "universe-import",
     label: "Instrument universe import (AU)",
     expectedIntervalSec: 3 * 86_400,
-    noDataNote:
-      "Not run yet (production, trading days at 07:30 Sydney once ASX contact and the listed-companies source are accepted)",
+    noDataNote: `Not run yet (production, trading days at ${FEED_SLOT_TIMES.universe.at} ${HOME_CITY} once ASX contact and the listed-companies source are accepted)`,
   },
   {
     // M3 T10 (D-077, ARN-060): batch 2a "close the books", one run per trading day after Batch 1.

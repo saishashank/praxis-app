@@ -114,12 +114,14 @@ export default async function RegionPage() {
         </fieldset>
       </SettingsForm>
       <Card title="Markets" headingLevel={2}>
-        <DataTable
-          caption="Markets, their hours in Melbourne time and status"
-          columns={COLUMNS}
-          rows={rows}
-          rowKey={(r) => r.code}
-        />
+        <div data-markets-table>
+          <DataTable
+            caption="Markets, their hours in Melbourne time and status"
+            columns={COLUMNS}
+            rows={rows}
+            rowKey={(r) => r.code}
+          />
+        </div>
         {isOwner && model.sharing !== null && (
           <p className="mt-3 text-xs text-text-muted" data-testid="sharing-summary">
             Sharing acknowledgements recorded: {model.sharing.acknowledgements}

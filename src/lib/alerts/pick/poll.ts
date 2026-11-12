@@ -15,6 +15,7 @@ import type { Client } from "@libsql/client";
 import type { Exec } from "@/lib/cortex/store/common";
 import { getConfig } from "@/lib/config/store";
 import { enabledMarkets, loadProfile } from "@/lib/market/profile";
+import { HOME_SLOTS } from "@/lib/market/homeMarket.mjs";
 import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 import { localToUtc, marketDate, sessionsBetween, sessionTimes } from "@/lib/data/calendar";
 import { readQuoteSourceState } from "@/lib/data/controls";
@@ -72,8 +73,8 @@ async function pollMarket(db: Exec): Promise<string> {
 }
 export const PICK_ALERTS_PURPOSE = "pick-alerts";
 /** The slot grid of `quote-poll` (worker/src/schedule.ts); early close is enforced below. */
-export const POLL_START = "10:00"; // threshold-ok: slot window, D-397
-export const POLL_END = "16:00"; // threshold-ok: slot window, D-397
+export const POLL_START = HOME_SLOTS.quote_from; // threshold-ok: slot window, D-397
+export const POLL_END = HOME_SLOTS.quote_until; // threshold-ok: slot window, D-397
 const MS_PER_MIN = 60_000; // threshold-ok: unit
 
 export type PollSkipReason =
