@@ -139,7 +139,12 @@ describe("0034_m19_market_profile", () => {
         "SELECT verify, verified_at FROM market_profile_field WHERE code = ?",
         [code],
       );
-      expect(f.every((x) => Number(x.verify) === 1 && x.verified_at === null)).toBe(true);
+      // 0034 wrote every value unverified; 0036 (M20 A3, D-1143) marks the fields a public source states
+      // (verify 0 with a date); every other value stays [VERIFY] with no date
+      expect(
+        f.every((x) => (x.verified_at === null ? Number(x.verify) === 1 : Number(x.verify) === 0)),
+      ).toBe(true);
+      expect(f.filter((x) => x.verified_at !== null)).toHaveLength(5);
     }
     // the two [PROPOSED] parcel floors carry their decision reference (D-947)
     const pf = await rows(
