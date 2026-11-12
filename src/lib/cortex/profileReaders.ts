@@ -60,7 +60,7 @@ export function sicTwoDigit(sic: string | number | null | undefined): string | n
 function storedSicGroup(industry: string | null | undefined): string | null {
   if (industry === undefined || industry === null) return null;
   const t = String(industry).trim();
-  return /^d{2}$/.test(t) ? t : null;
+  return /^[0-9]{2}$/.test(t) ? t : null;
 }
 
 const CLASSIFICATION_READERS: Readonly<Record<string, ClassificationReader>> = Object.freeze({
