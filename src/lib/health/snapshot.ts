@@ -8,7 +8,7 @@
 import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import type { Client } from "@libsql/client";
 import { getConfig } from "@/lib/config/store";
-import { CALENDAR_MARKETS } from "@/lib/data/calendarAdmin";
+import { enabledCalendarMarkets } from "@/lib/data/calendarAdmin";
 import { calendarEscalation, readDraftedYears } from "@/lib/data/calendarEscalation";
 import { readEmailSwitch } from "@/lib/email/switch";
 import { CREDENTIAL_NAMES } from "@/lib/sentinel/schema";
@@ -114,7 +114,10 @@ export async function gatherHealthFacts(
   }
   // OPS-103 (D-961): a drafted next-year calendar the Owner has not confirmed.
   try {
-    f.calendar = calendarEscalation(today, await readDraftedYears(db, CALENDAR_MARKETS, today));
+    f.calendar = calendarEscalation(
+      today,
+      await readDraftedYears(db, await enabledCalendarMarkets(db), today),
+    );
   } catch {
     // unreadable: no finding (the heartbeat raises the incident from its own read)
   }

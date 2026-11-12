@@ -22,6 +22,7 @@ import {
   withEnvPrefix,
 } from "./core";
 import { dateLabel, plural, toneOf, truncate } from "./format";
+import { reviewMarketBlocks, type MarketSectionFact } from "./marketSections";
 import { formatDay } from "@/lib/view/format";
 import { displayTitle } from "@/lib/view/displayText";
 import type { DailyLearning } from "@/lib/learning/daily";
@@ -207,6 +208,11 @@ export interface ReviewFacts {
   pickAlerts?: PickReviewFacts;
   /** D-909: shown only when `learning` is null. */
   missedMovers?: MissedMoversReviewFacts;
+  /**
+   * UXN-313, D-1124: one section per further enabled market that trades on the date, in its own currency. Absent with one
+   * market, so a single-market review is exactly what it was (the M19 snapshot tests).
+   */
+  marketSections?: MarketSectionFact[];
 }
 
 const SECTION_NAMES = [
@@ -774,6 +780,9 @@ function buildDoc(f: ReviewFacts, level: number): Doc {
       blocks.push(...alerts);
       next += 1;
     }
+  }
+  if (f.variant !== "minimal" && f.marketSections !== undefined && f.marketSections.length > 0) {
+    blocks.push(...reviewMarketBlocks(f.marketSections));
   }
   blocks.push({
     t: "link",

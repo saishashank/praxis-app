@@ -2226,7 +2226,9 @@ export const CONFIG_KEYS = {
   // (D-079): AU is the only market and takes all of it.
   // D-994: the set of enabled markets. Fixed: the run-time truth is the `market.enabled` column; this key is the
   // production assertion (PRAXIS_MARKETS_ENABLED split on commas, unset = AU only) the nightly invariant compares
-  // with the column. The only writer of `enabled` is the M20 two-step (none in M19).
+  // with the column. The only writer of `enabled` is `switchMarket` (src/lib/data/marketSwitch.ts, M20, D-1100): the
+  // key is DERIVED from the column, never written by it. After a switch the Owner sets PRAXIS_MARKETS_ENABLED by hand
+  // (D-994); until then the nightly mismatch alarm reminds, and the database column decides what runs.
   markets_enabled: {
     default: marketsEnabledDefault(
       typeof process === "undefined" ? {} : process.env,

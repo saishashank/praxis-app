@@ -23,6 +23,14 @@ export const ERROR_TEXT: Record<string, string> = {
   constants_unverified:
     "Full mode needs the cost, tick, slippage and parcel figures approved first. See the Go-live page.",
   market_not_enabled: "That market is not enabled, so its mode cannot be changed here.",
+  checklist_open: "The switch-on checklist still has open items. Finish them first.",
+  two_step:
+    "A market is switched on in two steps: off, then data only, then full. A rollback goes straight to off.",
+  reason_required: "Give a reason for the rollback.",
+  fx_missing:
+    "Full mode needs the RBA exchange-rate close of today to set the starting money. It is not stored yet.",
+  rollback_pending:
+    "A rollback is waiting for its next-open close. Nothing can be switched until it has run.",
   email_off: "Turn the email mode to incidents only before switching to full mode.",
   market_full:
     "Email cannot be switched off while a market is in full mode. Set the market back to data-only first.",

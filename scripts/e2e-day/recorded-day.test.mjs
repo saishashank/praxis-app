@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -407,4 +407,144 @@ test("--market IN (built, not enabled in the production-shape database): exit 2 
     { out: () => {} },
   );
   assert.equal(bad, 2);
+});
+
+// ---- M20 S1 (D-1119, TST-139): the data-only development day of IN and US ------------------------------------------
+
+import { mkdirSync } from "node:fs";
+import { buildDataOnlyPlan, recordedDates, zonedInstant } from "./recorded-day.mjs";
+import { seedSlots } from "../../src/lib/market/homeMarket.mjs";
+
+test("zonedInstant: the market's own wall clock resolves, half-hour zones and daylight saving included", () => {
+  const iso = (d, t, tz) => new Date(zonedInstant(d, t, tz)).toISOString();
+  assert.equal(iso("2026-11-12", "15:30", "Asia/Kolkata"), "2026-11-12T10:00:00.000Z"); // UTC+5:30
+  assert.equal(iso("2026-11-12", "16:00", "America/New_York"), "2026-11-12T21:00:00.000Z"); // EST, UTC-5
+  assert.equal(iso("2026-07-09", "16:00", "America/New_York"), "2026-07-09T20:00:00.000Z"); // EDT, UTC-4
+  assert.equal(iso("2026-11-12", "17:30", "Australia/Sydney"), "2026-11-12T06:30:00.000Z");
+  assert.throws(
+    () => zonedInstant("2026-03-08", "02:30", "America/New_York"),
+    /no such local time/,
+  ); // the spring gap
+});
+
+test("recordedDates: the dated folders of recorded/<CODE>, oldest first, at most N; none for a missing folder", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "rd-dev-"));
+  try {
+    for (const d of ["2026-11-05", "2026-11-03", "2026-11-04", "not-a-date", "2026-11-06"]) {
+      mkdirSync(path.join(dir, "recorded", "IN", d), { recursive: true });
+    }
+    writeFileSync(path.join(dir, "recorded", "IN", "2026-11-07"), "a file, not a day");
+    assert.deepEqual(recordedDates(dir, "IN", 3), ["2026-11-03", "2026-11-04", "2026-11-05"]);
+    assert.deepEqual(recordedDates(dir, "IN", 10), [
+      "2026-11-03",
+      "2026-11-04",
+      "2026-11-05",
+      "2026-11-06",
+    ]);
+    assert.deepEqual(recordedDates(dir, "US"), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the data-only plan: migrate, seed, then per session prepare -> recorded source -> run -> verdict; guarded; no app, close or review", () => {
+  const calls = [];
+  const plan = buildDataOnlyPlan({
+    work: "/w",
+    fixtures: "/f",
+    market: "IN",
+    dates: ["2026-11-03", "2026-11-04"],
+    seed: async () => calls.push("seed"),
+    verdict: async (d) => calls.push(`verdict ${d}`),
+  });
+  assert.deepEqual(
+    plan.map((s) => s.id),
+    [
+      "migrate-main",
+      "migrate-auth",
+      "seed-dev",
+      "batch1-prepare-2026-11-03",
+      "recorded-source-2026-11-03",
+      "batch1-run-2026-11-03",
+      "verdict-2026-11-03",
+      "batch1-prepare-2026-11-04",
+      "recorded-source-2026-11-04",
+      "batch1-run-2026-11-04",
+      "verdict-2026-11-04",
+    ],
+  );
+  const spawned = plan.filter((s) => s.kind === "spawn");
+  assert.ok(
+    spawned.every((s) => s.guard === true && s.args[0] === "--import" && s.args[1] === GUARD_URL),
+  );
+  // every batch-1 script names the market and runs at the market's own batch time in its own zone (IN: UTC+5:30, no DST)
+  const b1 = seedSlots("IN").b1;
+  const [h, m] = b1.split(":").map(Number);
+  const wantMs = Date.parse(`2026-11-03T00:00:00Z`) + (h * 60 + m - 330) * 60_000;
+  for (const s of spawned.filter((x) => x.id.startsWith("batch1-"))) {
+    assert.equal(s.args[s.args.indexOf("--market") + 1], "IN");
+  }
+  const first = plan.find((s) => s.id === "batch1-prepare-2026-11-03");
+  assert.equal(first.args[first.args.indexOf("--now") + 1], new Date(wantMs).toISOString());
+  const src = plan.find((s) => s.id === "recorded-source-2026-11-03");
+  assert.equal(src.args[src.args.indexOf("--date") + 1], "2026-11-03");
+  const text = JSON.stringify(plan);
+  for (const banned of ["close-books", "signals", "evening", "next", "app-"]) {
+    assert.ok(!text.includes(banned), banned);
+  }
+});
+
+test("run --mode data_only refuses before anything is created: the market must be IN or US and named by PRAXIS_MARKETS_ENABLED", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "rd-dev-"));
+  try {
+    const lines = [];
+    const run = (argv, env) => main(argv, env, { out: (l) => lines.push(l), exec: async () => 0 });
+    const base = ["run", "--fixtures", dir, "--work", path.join(dir, "w"), "--mode", "data_only"];
+    // the variable does not name the market: refused, exit 2, nothing created
+    assert.equal(await run([...base, "--market", "IN"], {}), 2);
+    assert.equal(await run([...base, "--market", "IN"], { PRAXIS_MARKETS_ENABLED: "AU" }), 2);
+    assert.equal(lines[0], "recorded-day: refused: market not enabled");
+    // the home market is never a development day (it is the production shape)
+    assert.equal(await run([...base, "--market", "AU"], { PRAXIS_MARKETS_ENABLED: "AU" }), 2);
+    // a named market with no recorded session: exit 2 with its own words
+    lines.length = 0;
+    assert.equal(await run([...base, "--market", "US"], { PRAXIS_MARKETS_ENABLED: "AU,US" }), 2);
+    assert.equal(lines[0], "recorded-day: no recorded session for the market in the fixtures");
+    // --mode data_only needs a market; a bad mode is a usage error
+    assert.equal(
+      await run(["run", "--fixtures", dir, "--work", dir, "--mode", "data_only"], {}),
+      2,
+    );
+    assert.equal(await run([...base.slice(0, 5), "--mode", "weird", "--market", "IN"], {}), 2);
+    assert.equal(existsSync(path.join(dir, "w")), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("has-sessions: found only when recorded/<CODE> holds a dated folder; it writes found=... to GITHUB_OUTPUT", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "rd-dev-"));
+  try {
+    const out = path.join(dir, "gh-output");
+    writeFileSync(out, "");
+    const lines = [];
+    const ask = (market) =>
+      main(
+        ["has-sessions", "--fixtures", dir, "--market", market],
+        { GITHUB_OUTPUT: out },
+        { out: (l) => lines.push(l) },
+      );
+    assert.equal(await ask("IN"), 0);
+    assert.equal(readFileSync(out, "utf8"), "found=false\n");
+    mkdirSync(path.join(dir, "recorded", "IN", "2026-11-03"), { recursive: true });
+    assert.equal(await ask("IN"), 0);
+    assert.equal(readFileSync(out, "utf8"), "found=false\nfound=true\n");
+    assert.deepEqual(lines, [
+      "recorded-day: recorded sessions not found",
+      "recorded-day: recorded sessions found",
+    ]);
+    assert.equal(await main(["has-sessions", "--market", "IN"], {}, { out: () => {} }), 2); // --fixtures is required
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

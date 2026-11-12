@@ -12,6 +12,8 @@ export type MarketSourceRow = {
   readonly last_checked: string | null;
   readonly risk: "low" | "medium" | "high";
   readonly status: "pending" | "enabled" | "disabled";
+  /** false for a primary price or calendar source: disabling it is not a decision the switch accepts (D-1191). */
+  readonly optional: boolean;
   readonly owner_ref: string | null;
   readonly summarisation_permitted: 0 | 1;
   readonly intervalMs: number;

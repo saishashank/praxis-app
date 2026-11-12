@@ -165,6 +165,13 @@ export const INCIDENT_SPECS: Readonly<Record<string, Spec>> = {
     fix: "Find which job or script named that market (the table is in the incident) and stop it; no data was written.",
     fixPath: "/health",
   },
+  market_kill_incomplete: {
+    component: "Markets",
+    impact:
+      "A market rolled back to off still holds a position the kill could not sell (halted or no price); the market stays enabled until it is closed.",
+    fix: "The kill tries again at the next open. If a share stays halted, check the exchange halt list; the books of the market stay frozen until then.",
+    fixPath: "/settings/region",
+  },
   markets_enabled_mismatch: {
     component: "Markets",
     impact:

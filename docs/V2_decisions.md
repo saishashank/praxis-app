@@ -760,3 +760,13 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1167 | Data limits (A5, D-1115, D-1132): the survivorship caveat text and its lapse rule live in src/lib/market/seed/dataLimits.mjs, keyed by market, so reportCavea... |
 | D-1168 | Labels (A5, DAT-247, D-1121): label_item is read as the newest row per (source, ann_id); the count that gates evaluation is distinct labelled items per marke... |
 | D-1169 | Band locks are symmetric (A5, Fable review, D-1109): the model refuses every fill on a session that closes at either limit. |
+| D-1190 | Next-year calendar watch reads the enabled markets (S1, D-1146 hand-off): enabledCalendarMarkets(db) in src/lib/data/calendarAdmin.ts is the enabled members... |
+| D-1191 | Checklist readers (S1, D-1100, MKT-105, MKT-111): src/lib/market/checklist.ts. licence_rows reads the stored register rows and, for a market that is still of... |
+| D-1192 | Seed from the activation day's FX close (S1, D-1107, ARN-119): src/lib/market/fxSeed.ts reads the newest macro_series row (source rba) on or before the day f... |
+| D-1193 | The switch writer (S1, D-1100, D-1101): switchMarket lives in src/lib/data/marketSwitch.ts (beside controls.ts, using its commit), is the only writer of mark... |
+| D-1194 | The rollback kill (S1, F, D-1101, CTX-028): src/lib/arena/kill.ts, called by closeBooksMain --kill market_off. |
+| D-1195 | Quota projection (S1, F, D-1099, MKT-113): src/lib/usage/projection.ts. projected = ceil(auMeasured x cap x sessionsMarket / (auCodes x sessionsAu)) + fixed... |
+| D-1196 | Markets page and Usage page (S1, UXN-312, D-997): the Owner's "Switch on a market" card under the Markets table (MarketSwitch.tsx, loader loadMarketSwitch) l... |
+| D-1197 | Per-market e-mail sections (S1, D-1124, D-1061, UXN-313, O-34): the Evening Review keeps the first enabled market as before and adds one section for every fu... |
+| D-1198 | The development-mode recorded days (S1, D-1119, TST-139, AT-85, AT-M4): job recorded-day-dev in ci.yml is a separate matrix job (IN, US) after app: the fixtu... |
+| D-1199 | Owner notes for the single V3 PR (S1): the deploy-order note of D-1129 (the Worker reads market.rollback_at before 0036 has run; expect at most one tick wind... |

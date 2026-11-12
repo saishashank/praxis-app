@@ -25,6 +25,11 @@ on:
         type: string
         required: false
         default: ""
+      kill:
+        description: "Rollback kill (M20, D-1101): market_off closes every open book of the market at the open, then disables it. Set only by the Worker slot arena-kill:<CODE>."
+        type: string
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -69,9 +74,10 @@ jobs:
       # The only step with database secrets. It waits (up to 20 minutes) for Batch 1's completion
       # marker, then closes the books of the session and any earlier session still open.
       - name: Close the books
-        run: node scripts/arena/close-books.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"}
+        run: node scripts/arena/close-books.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"} ${KILL_INPUT:+--kill "$KILL_INPUT"}
         env:
           MARKET_INPUT: ${{ inputs.market }}
+          KILL_INPUT: ${{ inputs.kill }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
           COMMIT_SHA: ${{ steps.approved.outputs.sha }}
@@ -103,9 +109,10 @@ jobs:
       - run: npm ci
       # The only step with database secrets.
       - name: Close the books
-        run: node scripts/arena/close-books.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"}
+        run: node scripts/arena/close-books.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"} ${KILL_INPUT:+--kill "$KILL_INPUT"}
         env:
           MARKET_INPUT: ${{ inputs.market }}
+          KILL_INPUT: ${{ inputs.kill }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_STAGING }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_STAGING }}
           COMMIT_SHA: ${{ github.sha }}
