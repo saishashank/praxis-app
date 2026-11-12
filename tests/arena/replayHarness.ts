@@ -8,7 +8,7 @@
 // closed it writes, per healthy cohort, simple deterministic orders for the next open. It uses the
 // real sizing (sizeEntry) and the real ledger readers, so cohorts behave like cohorts.
 import { createClient, type Client } from "@libsql/client";
-import { COST_PROFILES } from "@/lib/arena/costs";
+import { COST_PROFILES, cohortCostProfile } from "@/lib/arena/costs";
 import {
   buildExecutionRegistry,
   createPrng,
@@ -518,7 +518,7 @@ export async function verifyCohort(
             sleeveUnrealAt({ trades, d, closeFor: (code) => closeOf(code, d), adjustments, cfg }),
     sleeveLiquidationCostFor:
       cfg === null ? undefined : (d) => sleeveLiquidationCostMicro(openRealTradeAt(trades, d), cfg),
-    profile: COST_PROFILES[params.costProfile],
+    profile: cohortCostProfile(params),
     tickCrossFactor: params.tickCrossFactor,
   };
   return checkCohortBooks(books, {

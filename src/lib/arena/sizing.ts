@@ -4,6 +4,7 @@
 //   cash buffer = one half-away-from-zero rounding to 1 micro (decisions 6 and 7).
 // HIGH-RISK money maths: no float, no iteration (ARN-024a s13).
 import { type Micro } from "@/lib/money/micro";
+import type { TickBand } from "@/lib/money/tick";
 import type { MarketProfile } from "@/lib/market/profileCore.mjs";
 import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import {
@@ -75,6 +76,8 @@ export type SizingInput = {
   readonly cashBuffer?: Rational;
   readonly tickCrossFactor?: Rational;
   readonly buckets?: readonly SlippageBucket[];
+  /** The market's tick grid (D-1154 item 2); absent = the home market's. */
+  readonly tickTable?: readonly TickBand[];
   readonly untradeableAdvFraction?: Rational;
 };
 
@@ -136,6 +139,7 @@ export function sizeEntry(input: SizingInput): SizingResult {
     input.advValueMicro,
     input.tickCrossFactor ?? DEFAULT_TICK_CROSS_FACTOR,
     input.buckets ?? SLIPPAGE_BUCKETS,
+    input.tickTable,
   );
   const buffer = roundHalfAwayFromZero(
     mulRat(makeRational(input.navMicro), input.cashBuffer ?? DEFAULT_CASH_BUFFER),
@@ -228,6 +232,8 @@ export type StallFloorInput = {
    * adverse (decision 4, `stallFloorSlippageMicro`), scaled to the parcel as shares-equivalent.
    */
   readonly refPriceMicro?: Micro;
+  /** The market's tick grid for the per-share slippage above; absent = the home market's. */
+  readonly tickTable?: readonly TickBand[];
 };
 
 /**
@@ -248,7 +254,7 @@ export function stallFloorMicro(input: StallFloorInput): Micro {
   if (input.refPriceMicro === undefined) {
     slip = mulRat(makeRational(parcel), mulRat(bps, makeRational(1n, 10_000n)));
   } else {
-    const perShare = stallFloorSlippageMicro(input.refPriceMicro, bps);
+    const perShare = stallFloorSlippageMicro(input.refPriceMicro, bps, input.tickTable);
     slip = mulRat(makeRational(parcel), makeRational(perShare, input.refPriceMicro));
   }
   const total = addRat(makeRational(parcel + fee), slip);

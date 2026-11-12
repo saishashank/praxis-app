@@ -37,7 +37,8 @@ import {
   loadCalendar,
   loadSleeveConfig,
 } from "@/lib/arena/closeBooks";
-import { COST_PROFILES, feeFor } from "@/lib/arena/costs";
+import { cohortCostProfile, feeFor } from "@/lib/arena/costs";
+import { marketMoney } from "@/lib/arena/marketMoney";
 import { lockStatus, sleeveEligibility, sleeveMarginMicro } from "@/lib/arena/sleeve";
 import { loadSleeveStates, loadSleeveTrades } from "@/lib/arena/sleeveWriter";
 import {
@@ -619,7 +620,7 @@ async function booksOf(
   const cashMicro = availableCash({
     mode: params.settlementMode,
     balances: balancesFromRows(rows, d),
-    pending: pendingSettlements(fills, settled, calendar),
+    pending: pendingSettlements(fills, settled, calendar, marketMoney(params.market).lagSessions),
     sessionD: d,
   });
   const navMicro = toBig(nav.rows[0]!.nav_micro);
@@ -1097,7 +1098,7 @@ async function prepareCard(
           },
     scenario: await scenarioFor(ctx, c),
     params: ctx.params,
-    costProfile: COST_PROFILES[books.params.costProfile],
+    costProfile: cohortCostProfile(books.params),
     tickCrossFactor: books.params.tickCrossFactor,
   });
   const errors = checkCard(JSON.parse(built.json), ctx.params);
@@ -1160,12 +1161,13 @@ async function entriesFor(
     const selection = selectEntries(poolA, {
       entry: ctx.params.entry,
       advWindow: ctx.params.windows.adv,
-      costProfile: COST_PROFILES[books.params.costProfile],
+      costProfile: cohortCostProfile(books.params),
       costTable: ctx.costTable,
       factsOf: (code) => ctx.day.facts.get(code),
       heldCodes: [...open].sort(),
       cashMicro: books.cashMicro,
       noPosition: noPositionA,
+      market: books.params.market,
     });
     for (const [c, reason] of selection.skipped) nt.set(c, reason);
     const gated = selection.eligible;
@@ -1403,7 +1405,7 @@ async function cortexEntriesFor(
       },
       scenario: { split: null, nets: [] },
       params: ctx.params,
-      costProfile: COST_PROFILES[books.params.costProfile],
+      costProfile: cohortCostProfile(books.params),
       tickCrossFactor: books.params.tickCrossFactor,
     });
     const errors = checkCard(JSON.parse(built.json), ctx.params);

@@ -91,7 +91,8 @@ import {
   type CohortParams,
   type ParamOverrides,
 } from "@/lib/arena/cohort";
-import { COST_PROFILES, feeFor, type CostProfile } from "@/lib/arena/costs";
+import { cohortCostProfile, feeFor, type CostProfile } from "@/lib/arena/costs";
+import { marketMoney } from "@/lib/arena/marketMoney";
 import {
   fillCloseSignalExit,
   fillEntryLimit,
@@ -106,7 +107,6 @@ import {
   availableCash,
   fillTxns,
   fillNetMicro,
-  SETTLEMENT_LAG_SESSIONS,
   seedTxn,
   settlementsDue,
   txnRows,
@@ -192,6 +192,11 @@ export type CohortReplaySource = LedgerSource & {
    * Without it the `halted` flag of the family facts of the session is used.
    */
   halted?(code: string, d: string): boolean | null;
+  /**
+   * M20 D-1109/D-1163: the session of `code` on `d` closed at a price-band limit (IN); no fill is possible. An exit
+   * waits and an entry is cancelled, as for a halt. Absent: never locked (AU, US).
+   */
+  bandLocked?(code: string, d: string): boolean;
   /** The entry decision of the data-quality gate (`entriesAllowed`) on `d`; absent: no quality data. */
   qualityGate?(code: string, d: string): EntryDecision;
   /** Short-interest change (latest minus the value a window earlier, ppm) usable on `d`; absent: unknown. */
@@ -240,6 +245,8 @@ export type CohortDayTrace = {
 
 export type CohortReplayOptions = {
   readonly params: AgentParams;
+  /** The market replayed (default the home market): its settlement lag, tick grid, buckets, cost profile and seed (D-1154). */
+  readonly market?: string;
   /** First start session (default: the second session). Starts repeat every `rolling_start_step`. */
   readonly from?: string;
   /** Last session processed (default: the last of the source). */
@@ -587,6 +594,8 @@ type DayEnv = {
   bar(code: string): ViewBar | null;
   /** Halted today (universe flag, ARN-026); a trading day also advances the code's halt clock. */
   halted(code: string): boolean;
+  /** Closed at a price-band limit today (IN): no fill; an exit waits, an entry is cancelled (D-1163). */
+  bandLocked(code: string): boolean;
   positionFacts(code: string): PositionFacts | null;
   readonly advPrev: ReadonlyMap<string, bigint>;
   readonly prevClose: ReadonlyMap<string, bigint>;
@@ -603,6 +612,8 @@ export function replayCohorts(
   opts: CohortReplayOptions,
 ): CohortReplayResult {
   const { params } = opts;
+  const market = opts.market ?? HOME_MARKET;
+  const money = marketMoney(market); // D-1154: lag, tick grid and buckets of THIS market (the home market = the defaults)
   const sessions = src.sessions;
   if (sessions.length < 2) throw new RangeError("a replay needs at least two sessions");
   const index = new Map<string, number>();
@@ -707,8 +718,8 @@ export function replayCohorts(
     startIdx: number,
   ): Cohort => {
     const startD = sessions[startIdx]!;
-    const p = resolveCohortParams(opts.cohortParams?.(execution) ?? {});
-    const profile = COST_PROFILES[p.costProfile];
+    const p = resolveCohortParams({ market, ...(opts.cohortParams?.(execution) ?? {}) });
+    const profile = cohortCostProfile(p);
     const lev = group === "reality" ? (realityLeverage ?? leverage) : leverage;
     const cfg = carriesSleeve(execution)
       ? { ...defaultSleeveConfig(profile), leverage: BigInt(lev) }
@@ -794,15 +805,17 @@ export function replayCohorts(
     advMicro: env.advPrev.get(code) ?? advMemory.get(code) ?? 0n,
     profile: c.profile,
     tickCrossFactor: c.params.tickCrossFactor,
+    buckets: money.buckets,
+    tickTable: money.tickTable,
     feeContext: { code, firstBuyOfSecurityToday: first },
   });
 
-  /** T+2 trading sessions of THIS calendar (the source's); never settles inside the data when beyond it. */
+  /** The market's settlement lag in trading sessions of THIS calendar (AU T+2, IN T+1); never settles inside the data when beyond it. */
   const settleItem = (fill: LedgerFill, idx: number): SettlementItem => ({
     fillId: fill.id,
     side: fill.side,
     tradeD: fill.d,
-    settleD: sessions[idx + SETTLEMENT_LAG_SESSIONS] ?? NEVER,
+    settleD: sessions[idx + money.lagSessions] ?? NEVER,
     netMicro: fillNetMicro(fill),
   });
 
@@ -930,7 +943,7 @@ export function replayCohorts(
     for (const pos of [...c.positions.values()].sort((a, b) => cmp(a.code, b.code))) {
       if (pos.pendingCs === null) continue;
       const bar = env.bar(pos.code);
-      if (bar === null || env.halted(pos.code)) continue; // waits for a session with a bar, not halted
+      if (bar === null || env.halted(pos.code) || env.bandLocked(pos.code)) continue; // waits for a session with a bar, not halted or band-locked
       const fe = fillEnv(c, bar, env, pos.code);
       const cs = fillCloseSignalExit(fe, pos.qty);
       const level = effLevel(pos);
@@ -958,6 +971,7 @@ export function replayCohorts(
           {
             ...fe,
             halted: env.halted(o.code),
+            bandLocked: env.bandLocked(o.code),
             // the gate result of the fill session; without quality data every code passes (flagged)
             gate:
               gateSource === undefined
@@ -990,6 +1004,7 @@ export function replayCohorts(
         availableCashMicro: cashNow(c, env),
         profile: c.profile,
         feeContext: fe.feeContext,
+        minParcelMicro: c.params.minParcelMicro, // the market's parcel floor (D-1154)
       });
       if (sized.status === "cancel") continue; // cancelled: cash
       if (sized.status === "resized") {
@@ -1050,7 +1065,7 @@ export function replayCohorts(
     if (c.positions.size === 0) return;
     for (const pos of [...c.positions.values()].sort((a, b) => cmp(a.code, b.code))) {
       const bar = env.bar(pos.code);
-      if (bar === null || env.halted(pos.code)) continue;
+      if (bar === null || env.halted(pos.code) || env.bandLocked(pos.code)) continue;
       const level = effLevel(pos);
       const fill = fillIntradayStop(fillEnv(c, bar, env, pos.code), pos.qty, level, {
         afterOpen: pos.entryIdx === env.i,
@@ -1115,7 +1130,7 @@ export function replayCohorts(
     };
     for (const t of c.sleeveTrades.filter((x) => x.closed === null)) {
       const bar = env.bar(t.code);
-      if (bar === null || env.halted(t.code)) continue;
+      if (bar === null || env.halted(t.code) || env.bandLocked(t.code)) continue;
       const fe: FillEnv = { ...fillEnv(c, bar, env, t.code), profile: cfg.profile };
       const afterOpen = t.openD === env.d;
       const closeout = quoteSleeveExit(
@@ -1858,6 +1873,7 @@ export function replayCohorts(
       facts,
       bar,
       halted,
+      bandLocked: (code) => src.bandLocked?.(code, d) === true,
       positionFacts: (code) => {
         let p = pfMemo.get(code);
         if (p === undefined) {
@@ -2008,7 +2024,7 @@ export function replayCohorts(
     })
     .sort((a, b) => cmp(a.startD, b.startD) || cmp(a.id, b.id));
   return {
-    market: HOME_MARKET,
+    market,
     from: sessions[firstStart]!,
     to: sessions[endIdx]!,
     sessions: sessions.length,

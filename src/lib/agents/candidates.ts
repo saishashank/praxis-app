@@ -10,7 +10,8 @@
 import type { Client } from "@libsql/client";
 import { LookAheadError } from "@/lib/arena/marketData";
 import { knownBy, quantityRatio, type CorpActionRecord } from "@/lib/arena/corpActions";
-import { COST_PROFILES } from "@/lib/arena/costs";
+import { cohortCostProfile } from "@/lib/arena/costs";
+import { marketMoney } from "@/lib/arena/marketMoney";
 import type { CohortParams } from "@/lib/arena/cohort";
 import { rejectReasonText, sizeEntry, type SizingResult } from "@/lib/arena/sizing";
 import {
@@ -719,12 +720,14 @@ export function sizeLeg(ctx: SizingContext, leg: Leg, legs: number): SizingResul
     advValueMicro: leg.env.advValueMicro,
     adv20Shares: leg.env.adv20Shares,
     tier: leg.env.tier,
-    profile: COST_PROFILES[ctx.params.costProfile],
+    profile: cohortCostProfile(ctx.params),
     feeContext: { code: leg.env.code, firstBuyOfSecurityToday: true },
     minParcelMicro: ctx.params.minParcelMicro,
     participationCap: ctx.params.participationCap,
     cashBuffer: ctx.params.cashBuffer,
     tickCrossFactor: ctx.params.tickCrossFactor,
+    buckets: marketMoney(ctx.params.market).buckets,
+    tickTable: marketMoney(ctx.params.market).tickTable,
   });
 }
 

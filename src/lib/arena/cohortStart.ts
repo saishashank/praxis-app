@@ -23,6 +23,7 @@ import type { Client } from "@libsql/client";
 import { controlStates, effectiveControl } from "@/lib/agents/controls";
 import { nextTradingDay, type CalendarRow } from "@/lib/data/calendar";
 import {
+  ARENA_MARKET,
   buildExecutionRegistry,
   carriesSleeve,
   cohortSlots,
@@ -33,6 +34,35 @@ import {
 } from "./cohort";
 import { loadCalendar, ARENA_MASTER_SEED } from "./closeBooks";
 import { loadExecutions, seedExecutions, startCohorts } from "./cohortWriter";
+import type { FxRow } from "./seed";
+
+/**
+ * The FX close stored by the switch to `full` (`checklist_json.seed`: `{ rate, date, source }`, or the ledger record
+ * `{ fx_rate, fx_date, fx_source }`), or null when there is none or the market is the home one (fixed seed).
+ */
+export async function activationFxRow(db: Client, market: string): Promise<FxRow | null> {
+  if (market === ARENA_MARKET) return null;
+  const rs = await db.execute({
+    // rows-ok: the newest activation row of one market through idx_market_switch_market, LIMIT 1
+    sql: "SELECT checklist_json FROM market_switch WHERE market = ? AND to_mode = 'full' ORDER BY id DESC LIMIT 1",
+    args: [market],
+  });
+  const raw = rs.rows[0]?.checklist_json;
+  if (raw === undefined || raw === null) return null;
+  let seed: Record<string, unknown> | undefined;
+  try {
+    seed = (JSON.parse(String(raw)) as { seed?: Record<string, unknown> }).seed;
+  } catch {
+    return null;
+  }
+  if (seed === undefined || seed === null) return null;
+  const rate = seed.rate ?? seed.fx_rate;
+  const date = seed.date ?? seed.fx_date;
+  const source = seed.source ?? seed.fx_source;
+  if (typeof rate !== "string" || typeof date !== "string" || typeof source !== "string")
+    return null;
+  return { rate, date, source };
+}
 
 export type EnsureCohortsOptions = {
   readonly market: string;
@@ -46,6 +76,8 @@ export type EnsureCohortsOptions = {
   readonly controlsPerFamily?: number;
   /** Overrides for the resolved cohort parameters (the default seed is the ARN-001 A$600). */
   readonly params?: CohortParams;
+  /** The activation day's FX close for a market that seeds by conversion (IN, US; D-1107); the home market ignores it. */
+  readonly fxRow?: FxRow | null;
   /** D-191: also open cohorts for the leverage-sleeve executions (tests of the sleeve only). */
   readonly withLeverage?: boolean;
 };
@@ -110,7 +142,10 @@ export async function ensureCohorts(
     ),
   );
   const byId = new Map(executions.map((e) => [e.id, e]));
-  const params = o.params ?? resolveCohortParams({ market: o.market });
+  // ARN-119 / D-1107: a market other than the home one seeds from the FX close its activation stored in
+  // `market_switch.checklist_json.seed`; the cohort start below posts the seed once (the `have` set), dated at the start session
+  const fxRow = o.fxRow !== undefined ? o.fxRow : await activationFxRow(db, o.market);
+  const params = o.params ?? resolveCohortParams({ market: o.market, fxRow });
   const masterSeed = o.masterSeed ?? ARENA_MASTER_SEED;
 
   const starts: CohortStart[] = [];

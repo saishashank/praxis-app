@@ -8,7 +8,7 @@
 // The U1 quality gate blocks ENTRIES only (DAT-210): checked at creation and again here at fill;
 // exits are never blocked by it. A halted code gets no fill (ARN-026).
 import { type Micro } from "@/lib/money/micro";
-import { MIN_PRICE_MICRO, tickFor, type Side } from "@/lib/money/tick";
+import { TICK_TABLE, tickFor, type Side, type TickBand } from "@/lib/money/tick";
 import type { EntryDecision } from "@/lib/data/quality/gate";
 import { feeFor, type CostProfile, type FeeContext } from "./costs";
 import type { FillRule } from "./schema";
@@ -70,6 +70,8 @@ export type FillEnv = {
   readonly feeContext?: FeeContext;
   readonly tickCrossFactor?: Rational;
   readonly buckets?: readonly SlippageBucket[];
+  /** The market's tick grid (D-1154 item 2, D-1170); absent = the home market's (AU, unchanged). */
+  readonly tickTable?: readonly TickBand[];
 };
 
 function slipOf(env: FillEnv, ref: Micro, side: Side): Micro {
@@ -79,6 +81,7 @@ function slipOf(env: FillEnv, ref: Micro, side: Side): Micro {
     env.advMicro,
     env.tickCrossFactor ?? DEFAULT_TICK_CROSS_FACTOR,
     env.buckets ?? SLIPPAGE_BUCKETS,
+    env.tickTable,
   ).fillMicro;
 }
 
@@ -228,8 +231,10 @@ export function fillIntradayStop(
     // FAM-007: the level in the ex-date price terms; 0n dividend = the raw level (v1)
     const eff = levelMicro - div; // >= the low, so positive
     // D-184: never below the lowest price on the grid (a A$0.001-0.002 stop would go to zero)
-    const below = slipOf(env, eff, "sell") - tickFor(eff);
-    const fill = below < MIN_PRICE_MICRO ? MIN_PRICE_MICRO : below;
+    const table = env.tickTable ?? TICK_TABLE;
+    const below = slipOf(env, eff, "sell") - tickFor(eff, table);
+    const lowest = table[0]!.tickMicro; // D-184: the lowest price on THIS market's grid
+    const fill = below < lowest ? lowest : below;
     return build(env, "level", "sell", qty, eff, fill);
   }
   return null;

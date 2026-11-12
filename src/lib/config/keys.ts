@@ -1,4 +1,4 @@
-import { COST_PROFILE_CODES } from "@/lib/arena/costs";
+import { allMarketCostProfileCodes } from "@/lib/arena/costs";
 import { CALENDAR_MARKETS } from "@/lib/data/calendar";
 import { MKT_KEY_FIELDS, type MktKeyField } from "@/lib/market/fields.mjs";
 import { HOME_MARKET, marketsEnabledDefault } from "@/lib/market/profileCore.mjs";
@@ -2130,7 +2130,7 @@ export const CONFIG_KEYS = {
     unit: "profile",
     editable: "O",
     ref: "ARN-031",
-    validate: oneOf(COST_PROFILE_CODES),
+    validate: oneOf(allMarketCostProfileCodes()),
   },
   // Line 12 (stall_floor, computed, not editable) with D-069 decision 4: the entry slippage inside
   // the stall floor is max(10 bps, one price tick), so the 10 bps is a fixed key of its own.

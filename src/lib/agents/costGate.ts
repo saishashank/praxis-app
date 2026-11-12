@@ -13,7 +13,7 @@
 // An unmeasured signal passes and the card carries the flag `cost_gate_unmeasured`.
 import type { Client } from "@libsql/client";
 import { feeFor, type CostProfile } from "@/lib/arena/costs";
-import { bucketBpsFor } from "@/lib/arena/slippage";
+import { bucketBpsFor, type SlippageBucket } from "@/lib/arena/slippage";
 import type { Micro } from "@/lib/money/micro";
 import {
   addRat,
@@ -94,12 +94,19 @@ export function costGateTable(
  * Round-trip cost as a fraction of the notional: 2 x brokerage of the profile at A$600 plus 2 x the
  * ARN-032 bucket bps of the 20-session ADV (exact).
  */
-export function roundTripCost(profile: CostProfile, advMicro: Micro): Rational {
-  const fee =
-    feeFor(profile, COST_GATE_NOTIONAL_MICRO, "buy") +
-    feeFor(profile, COST_GATE_NOTIONAL_MICRO, "sell");
-  const fees = makeRational(fee, COST_GATE_NOTIONAL_MICRO);
-  const slip = mulRat(makeRational(2n), divRat(bucketBpsFor(advMicro), makeRational(BPS_DEN)));
+export function roundTripCost(
+  profile: CostProfile,
+  advMicro: Micro,
+  /** The market's fixed notional (its seed amount) and slippage buckets (D-1154); absent = the home market's. */
+  market?: { readonly notionalMicro: Micro; readonly buckets: readonly SlippageBucket[] },
+): Rational {
+  const notional = market?.notionalMicro ?? COST_GATE_NOTIONAL_MICRO;
+  const fee = feeFor(profile, notional, "buy") + feeFor(profile, notional, "sell");
+  const fees = makeRational(fee, notional);
+  const slip = mulRat(
+    makeRational(2n),
+    divRat(bucketBpsFor(advMicro, market?.buckets), makeRational(BPS_DEN)),
+  );
   return addRat(fees, slip);
 }
 

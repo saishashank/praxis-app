@@ -3,7 +3,8 @@
 // standard parcel, so the stream is never judged on cheaper costs than the Cortex. Lives outside
 // `src/lib/intraday` because the cost profile table is an arena module (AT-60 import guard).
 import type { Client } from "@libsql/client";
-import { COST_PROFILES, COST_PROFILE_CODES } from "@/lib/arena/costs";
+import { costProfileOfMarket, costProfilesOfMarket } from "@/lib/arena/costs";
+import { staticProfile } from "@/lib/market/staticProfile.mjs";
 import { getConfig } from "@/lib/config/store";
 import {
   ADV_FLOOR_PER_PARCEL_MICRO,
@@ -39,12 +40,12 @@ export async function streamCostPpm(
       ? ADV_FLOOR_PER_PARCEL_MICRO
       : BigInt(Math.round(Number(snap.adv) * MICRO)); // money-float-ok: boundary conversion
   const code0 = String(await getConfig(db, "cost_profile_default"));
-  const profile =
-    COST_PROFILES[
-      (COST_PROFILE_CODES as readonly string[]).includes(code0)
-        ? (code0 as keyof typeof COST_PROFILES)
-        : "P5"
-    ];
+  // The market's own table (D-1170): a configured code naming one of its profiles, else the one its
+  // `cost_formula` names (AU: P5, unchanged); a code of another market never prices this market's order.
+  const table = costProfilesOfMarket(market);
+  const profile = Object.prototype.hasOwnProperty.call(table, code0)
+    ? table[code0]!
+    : costProfileOfMarket(staticProfile(market));
   return costPerOrder({
     profile,
     notionalMicro: STREAM_PARCEL_MICRO,
