@@ -61,7 +61,8 @@ test("owner: IN and US appear only in the Markets table of Settings, as built an
   }
   const page = await context.newPage();
   await page.goto("/settings/region");
-  const table = page.locator("[data-markets-table]");
+  // DataTable renders a <table> and a stacked card view of the same rows (UXN-017); count in the table only.
+  const table = page.locator("[data-markets-table] table");
   await expect(table.locator('[data-market="AU"]')).toHaveCount(1);
   await expect(table.locator('[data-market="IN"]')).toHaveCount(1);
   await expect(table.locator('[data-market="US"]')).toHaveCount(1);
