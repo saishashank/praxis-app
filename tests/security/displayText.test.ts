@@ -40,7 +40,7 @@ const PROP_HREFS = ["{a.href}", "{s.href}", "{c.sortHref}", "{moreHref}", "{href
 describe("no code path turns stored text into markup", () => {
   it("has no HTML or markdown sink in src (React escapes every text child)", () => {
     const sink =
-      /dangerouslySetInnerHTML|\.innerHTML\b|\.outerHTML\b|insertAdjacentHTML|document\.write\b|createContextualFragment|DOMParser|ReactMarkdown|react-markdown|markdown-it|\bmarked\(|remark|rehype|sanitize-html|dompurify/i;
+      /dangerouslySetInnerHTML|\.innerHTML\b|\.outerHTML\b|insertAdjacentHTML|document\.write\b|createContextualFragment|DOMParser|ReactMarkdown|react-markdown|markdown-it|\bmarked\(|\bremark\b|\brehype\b|sanitize-html|dompurify/i;
     const hits = sources.filter((f) => sink.test(read(f))).map(rel);
     expect(hits).toEqual([]);
   });

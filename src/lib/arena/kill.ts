@@ -120,7 +120,8 @@ export async function closeBooksKill(db: Client, opts: KillOptions): Promise<Kil
   });
   if (m.rows.length !== 1) return result(opts, "skipped", "market_missing");
   const row = m.rows[0]!;
-  if (Number(row.enabled) !== 1) {
+  const enabled = Number(row.enabled); // money-float-ok: the 0/1 enabled flag, not money
+  if (enabled !== 1) {
     // nothing may be written for a market that is not enabled (not even a run record): it is already closed
     return result(opts, "skipped", "market_not_enabled");
   }
