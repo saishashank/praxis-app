@@ -102,7 +102,8 @@ export async function ensureRich(): Promise<void> {
   if (process.env.E2E_SCENARIO !== "rich") return;
   const m = createClient({ url: process.env.TURSO_MAIN_URL! });
   try {
-    const have = await run(m, "SELECT count(*) AS n FROM pick");
+    // Its own marker, not any pick: the E2E_STATES overlays (picks-two-sections) add a pick of their own first.
+    const have = await run(m, "SELECT count(*) AS n FROM execution WHERE id = 'E01'");
     if (Number(have.rows[0].n) > 0) return;
     await seed(m);
   } finally {
