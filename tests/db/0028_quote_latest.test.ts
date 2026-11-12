@@ -27,14 +27,14 @@ describe("0028_quote_latest", () => {
     ).rejects.toThrow();
     await db.execute("DELETE FROM quote_latest");
 
-    expect(await migrateDown(db, ms, 8)).toEqual({ rolledBack: 8, version: 27 });
+    expect(await migrateDown(db, ms, 9)).toEqual({ rolledBack: 9, version: 27 });
     const tables = (
       await db.execute(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'quote_latest'",
       )
     ).rows;
     expect(tables).toHaveLength(0);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 8, version: 35 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 9, version: 36 });
     expect(await schemaOf(db)).toEqual(after);
   });
 });

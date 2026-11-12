@@ -20,14 +20,14 @@ describe("0031_m18_ops", () => {
     expect(ms[30]).toMatchObject({ version: 31, name: "m18_ops" });
     await migrateUp(db, ms);
     const after = await schemaOf(db);
-    expect(await migrateDown(db, ms, 5)).toEqual({ rolledBack: 5, version: 30 });
+    expect(await migrateDown(db, ms, 6)).toEqual({ rolledBack: 6, version: 30 });
     const left = await db.execute(
       "SELECT name FROM sqlite_master WHERE name IN ('usage_sample','market_row_count')",
     );
     expect(left.rows).toHaveLength(0);
     const cols = await db.execute("SELECT name FROM pragma_table_info('quote_run')");
     expect(cols.rows.map((r) => String(r.name))).not.toContain("skipped");
-    expect(await migrateUp(db, ms)).toEqual({ applied: 5, version: 35 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 6, version: 36 });
     expect(await schemaOf(db)).toEqual(after);
   });
 
@@ -110,7 +110,7 @@ describe("0031_m18_ops", () => {
     ]);
     // the rename rows are the only ones a down section removes; history stays append-only
     await expect(db.execute("DELETE FROM config_version")).rejects.toThrow(/append-only/);
-    await migrateDown(db, ms, 5);
+    await migrateDown(db, ms, 6);
     const left = await db.execute(
       "SELECT key, COUNT(*) AS n FROM config_version GROUP BY key ORDER BY key",
     );

@@ -4,6 +4,7 @@
 // The SQL is a checked projection of the seed modules (the single definition): every seeded row equals the
 // module, the generated file equals the generator's output, the two enabled/mode triggers hold, the change
 // ledger is append-only, and the migration rolls back and comes back identical.
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createClient, type Client } from "@libsql/client";
 import { afterEach, describe, expect, it } from "vitest";
@@ -11,8 +12,8 @@ import { loadMigrations, migrateDown, migrateUp } from "@/lib/db/migrate-core.mj
 import { PROFILE_FIELDS } from "@/lib/market/fields.mjs";
 import { encodeValue, slotsJson } from "@/lib/market/profileCore.mjs";
 import { SEEDS, builtMarkets } from "@/lib/market/seed/index.mjs";
-// @ts-expect-error the generator is a script (not typed); its render function is the checked projection
-import { MIGRATION_PATH, renderMigration } from "../../scripts/market/gen-seed-sql.mjs";
+// @ts-expect-error the generator is a script (not typed); its delta check is the checked projection
+import { MIGRATION_PATH, applyDelta } from "../../scripts/market/gen-seed-sql.mjs";
 import { cleanupTempDbs, freshDb, MIGRATIONS, schemaOf, tempDbUrl, track } from "./helpers";
 
 afterEach(cleanupTempDbs);
@@ -21,10 +22,22 @@ const rows = async (db: Client, sql: string, args: (string | number)[] = []) =>
   (await db.execute({ sql, args })).rows;
 
 describe("0034_m19_market_profile", () => {
-  it("is migration 34, and the committed file is the generator's output for the seed", async () => {
+  it("is migration 34: the applied file is frozen and the seed's later changes are the generated delta of 0036", async () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
     expect(ms[33]).toMatchObject({ version: 34, name: "m19_market_profile" });
-    expect(readFileSync(MIGRATION_PATH as string, "utf8")).toBe(renderMigration() as string);
+    // M20 (D-1122): 0034 is an applied migration, never regenerated; its checksum is pinned here and a seed change
+    // since then is projected into 0036 (`gen-seed-sql.mjs --delta 0034`), which must be current
+    expect(ms[33]!.checksum).toBe(
+      createHash("sha256")
+        .update(readFileSync(MIGRATION_PATH as string, "utf8"))
+        .digest("hex"),
+    );
+    expect(
+      createHash("sha256")
+        .update(readFileSync(MIGRATION_PATH as string, "utf8"))
+        .digest("hex"),
+    ).toBe("bc695e98214aba218a1a62cfff49944eb7242b1d33dcb07c63506361257fb9a2");
+    expect(await applyDelta(true)).toBe(true);
   });
 
   it("rolls back and comes back identical", async () => {
@@ -32,7 +45,7 @@ describe("0034_m19_market_profile", () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(db, ms);
     const after = await schemaOf(db);
-    expect(await migrateDown(db, ms, 2)).toEqual({ rolledBack: 2, version: 33 }); // 0035 (the guard) sits on top
+    expect(await migrateDown(db, ms, 3)).toEqual({ rolledBack: 3, version: 33 }); // 0036 and 0035 (the guard) sit on top
     const left = await rows(db, "SELECT name FROM sqlite_master WHERE name LIKE 'market_profile%'");
     expect(left).toHaveLength(0);
     const cols = (await rows(db, "SELECT name FROM pragma_table_info('market')")).map((r) =>
@@ -41,7 +54,7 @@ describe("0034_m19_market_profile", () => {
     expect(cols).not.toContain("enabled");
     expect(cols).not.toContain("slots_json");
     expect((await rows(db, "SELECT code FROM market")).map((r) => String(r.code))).toEqual(["AU"]);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 2, version: 35 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 3, version: 36 });
     expect(await schemaOf(db)).toEqual(after);
   });
 

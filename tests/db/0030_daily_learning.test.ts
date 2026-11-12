@@ -18,12 +18,12 @@ describe("0030_daily_learning", () => {
     expect(ms[29]).toMatchObject({ version: 30, name: "daily_learning" });
     await migrateUp(db, ms);
     const after = await schemaOf(db);
-    expect(await migrateDown(db, ms, 6)).toEqual({ rolledBack: 6, version: 29 });
+    expect(await migrateDown(db, ms, 7)).toEqual({ rolledBack: 7, version: 29 });
     const tables = (
       await db.execute("SELECT name FROM sqlite_master WHERE name = 'daily_learning'")
     ).rows;
     expect(tables).toHaveLength(0);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 6, version: 35 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 7, version: 36 });
     expect(await schemaOf(db)).toEqual(after);
   });
 

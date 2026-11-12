@@ -134,6 +134,7 @@ Spec defaults are taken as recommended; "listed" = listed for the Owner in the V
 - **D-1125** IN announcements: headline + link only, never a body; the fetcher is not called while the register row is `disabled`.
 - **D-1126** Gate and numbering (gaps 4, 5, 23): M20 tasks start only after the CI run on `build` at or after `d476057d` is green (recorded in exit §0); decisions are D-1091 onward.
 - **D-1127** Registry modules resolve by convention (`sources/<code>/day.mjs`, `seed/<code>/*.mjs`, `calendarRules/<code>.mjs` entries added by stream A) so IN and US never edit one file; a missing module throws `not built`.
+- **D-1128** Register rows are not in 0036 (A2 finding, D-1096 amended): `tests/acceptance/v3/replay-hash.baseline.json` hashes `source_register`, `source_register_history` and `source_status` table by table (D-1008 excludes only `schema_migrations` and `market`), so any IN/US register row inserted by a migration moves AU's own hashes and fails the identity test, which must never be rewritten. 0036 therefore carries the 25 D-1096 rows (statuses as listed) as a commented block and inserts none. The orchestrator settles the scope: either extend `MIGRATION_OWNED` in `replayHash.test.ts` with the three register tables (a D-1008-style exclusion, the baseline JSON untouched; then uncomment the block and add the licence-register facts) or seed the rows by a path outside the three tables' hashes. Until then no IN/US source is registered and `politeFetch` refuses every IN/US host (the safe default).
 
 ## Streams and tasks
 

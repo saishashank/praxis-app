@@ -1,15 +1,18 @@
 // Generates db/migrations/main/0034_m19_market_profile.sql from the seed modules (M19 A1; D-992).
 // The seed modules in src/lib/market/seed/ are the single definition of every market fact; the migration is a
 // checked projection of them. Usage:
-//   node scripts/market/gen-seed-sql.mjs           writes the file
-//   node scripts/market/gen-seed-sql.mjs --check   exits 1 when the committed file differs from the seed
+//   (M20: 0034 is applied and no longer regenerated; --delta 0034 below writes the seed change into 0036)
+//   node scripts/market/gen-seed-sql.mjs --check   exits 1 when 0034 plus the 0036 delta differs from the seed
 // A migration that has been applied in production is never regenerated: a later seed change is a new migration
 // (or a profile-writer change), and tests/db/0034_m19_market_profile.test.ts then compares the SEED to the
 // migrated rows only for the values this migration wrote.
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { PROFILE_FIELDS } from "../../src/lib/market/fields.mjs";
+import { createClient } from "@libsql/client";
+import { loadMigrations, migrateUp } from "../../src/lib/db/migrate-core.mjs";
+import { applyRegion } from "../db/regions.mjs";
+import { COUNTED_TRIAL_FIELDS, PROFILE_FIELDS } from "../../src/lib/market/fields.mjs";
 import { encodeValue, slotsJson } from "../../src/lib/market/profileCore.mjs";
 import { SEEDS } from "../../src/lib/market/seed/index.mjs";
 
@@ -176,25 +179,168 @@ ALTER TABLE market DROP COLUMN enabled;
   return out.join("\n");
 }
 
-const invoked = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
-if (invoked) {
-  const text = renderMigration();
-  if (process.argv.includes("--check")) {
-    let current = "";
-    try {
-      current = readFileSync(MIGRATION_PATH, "utf8");
-    } catch {
-      /* missing file: differs */
-    }
-    if (current !== text) {
-      console.error(
-        "0034_m19_market_profile.sql differs from the seed: run node scripts/market/gen-seed-sql.mjs",
-      );
-      process.exit(1);
-    }
-    console.log("0034_m19_market_profile.sql matches the seed");
-  } else {
-    writeFileSync(MIGRATION_PATH, text);
-    console.log(`wrote ${MIGRATION_PATH}`);
+// ---- M20 (D-1122): the seed delta of migration 0034 ------------------------------------------------------------
+// 0034 is an applied artefact and is never regenerated. The IN and US rows the M20 seed changes (the four
+// "set at M20" fields, the verified_at/evidence_ref of recorded evidence, the profile version) reach production
+// through two generated regions of 0036: for every non-AU row that differs between what 0034 wrote and the seed
+// today, one UPDATE (+ one market_profile_change row for a changed value) up, and the inverse down.
+//   node scripts/market/gen-seed-sql.mjs --delta 0034           rewrite the regions of 0036
+//   node scripts/market/gen-seed-sql.mjs --delta 0034 --check   exit 1 when a region differs from the seed
+export const DELTA_MIGRATION_PATH = join(
+  root,
+  "db",
+  "migrations",
+  "main",
+  "0036_m20_markets_data.sql",
+);
+export const DELTA_UP_REGION = "seed delta 0034 up";
+export const DELTA_DOWN_REGION = "seed delta 0034 down";
+export const DELTA_REASON = "M20 profile completion (migration 0036, D-1122)";
+export const DELTA_ACTOR = "migration";
+
+const lit = (v) => (typeof v === "number" ? String(v) : q(v));
+const assign = (o) =>
+  Object.keys(o)
+    .map((k) => `${k} = ${lit(o[k])}`)
+    .join(", ");
+const same = (a, b) => Object.keys(a).every((k) => (a[k] ?? null) === (b[k] ?? null));
+
+/** The rows 0034 wrote (market_profile and market_profile_field), read from a scratch database. */
+async function baseRows() {
+  const db = createClient({ url: ":memory:" });
+  try {
+    const all = await loadMigrations(dirname(DELTA_MIGRATION_PATH));
+    await migrateUp(
+      db,
+      all.filter((m) => m.version <= 34),
+    );
+    // rows-ok: scratch in-memory database, 3 profile rows
+    const profile = (await db.execute("SELECT * FROM market_profile ORDER BY code")).rows;
+    // rows-ok: scratch in-memory database, 120 field rows
+    const fields = (await db.execute("SELECT * FROM market_profile_field ORDER BY code, field"))
+      .rows;
+    return { profile, fields };
+  } finally {
+    db.close();
   }
+}
+
+/** { up, down } bodies of the two generated regions of 0036. */
+export async function renderDelta() {
+  const base = await baseRows();
+  const up = [];
+  const down = [];
+  const ledger = [];
+  for (const code of Object.keys(SEEDS).sort()) {
+    const s = SEEDS[code];
+    const p = base.profile.find((r) => String(r.code) === code);
+    if (p === undefined) throw new Error(`0034 wrote no profile row for ${code}`);
+    const want = {
+      work_status: s.workStatus,
+      status_changed_at: s.statusChangedAt,
+      built_at: s.builtAt,
+      evidence_recorded_at: s.evidenceRecordedAt,
+      profile_version: s.profileVersion,
+      updated_at: s.updatedAt,
+    };
+    const had = Object.fromEntries(Object.keys(want).map((k) => [k, p[k] ?? null]));
+    const diffKeys = Object.keys(want).filter((k) => had[k] !== want[k]);
+    const fieldDiffs = [];
+    for (const field of PROFILE_FIELDS) {
+      const f = s.fields[field];
+      const r = base.fields.find((x) => String(x.code) === code && String(x.field) === field);
+      if (r === undefined) throw new Error(`0034 wrote no ${code}.${field}`);
+      const next = {
+        value_json: encodeValue(f.value),
+        verify: f.verify,
+        verified_at: f.verifiedAt,
+        evidence_ref: f.evidenceRef,
+        updated_at: s.updatedAt,
+      };
+      const prev = {
+        value_json: String(r.value_json),
+        verify: Number(r.verify),
+        verified_at: r.verified_at ?? null,
+        evidence_ref: r.evidence_ref ?? null,
+        updated_at: String(r.updated_at),
+      };
+      if (!same({ ...next, updated_at: null }, { ...prev, updated_at: null }))
+        fieldDiffs.push({ field, next, prev });
+    }
+    if (code === "AU") {
+      if (diffKeys.length > 0 || fieldDiffs.length > 0)
+        throw new Error("the AU seed differs from what 0034 wrote: AU never changes in M20 (A-20)");
+      continue;
+    }
+    if (diffKeys.length > 0) {
+      const pick = (o) => Object.fromEntries(diffKeys.map((k) => [k, o[k]]));
+      up.push(`UPDATE market_profile SET ${assign(pick(want))} WHERE code = ${q(code)};`);
+      down.push(`UPDATE market_profile SET ${assign(pick(had))} WHERE code = ${q(code)};`);
+    }
+    for (const { field, next, prev } of fieldDiffs) {
+      const where = `WHERE code = ${q(code)} AND field = ${q(field)}`;
+      up.push(`UPDATE market_profile_field SET ${assign(next)} ${where};`);
+      down.push(`UPDATE market_profile_field SET ${assign(prev)} ${where};`);
+      if (next.value_json !== prev.value_json) {
+        const counted = COUNTED_TRIAL_FIELDS.includes(field) ? 1 : 0;
+        ledger.push(
+          `INSERT INTO market_profile_change (code, field, old_json, new_json, changed_at, actor, reason, counted_trial) VALUES (${q(code)}, ${q(field)}, ${q(prev.value_json)}, ${q(next.value_json)}, ${q(s.updatedAt)}, ${q(DELTA_ACTOR)}, ${q(DELTA_REASON)}, ${counted});`,
+        );
+      }
+    }
+  }
+  up.push(...ledger);
+  if (ledger.length > 0) {
+    // the ledger is append-only: lift its delete guard for the one statement, restore it identically (0034)
+    down.push(
+      "DROP TRIGGER market_profile_change_no_delete;",
+      `DELETE FROM market_profile_change WHERE actor = ${q(DELTA_ACTOR)} AND reason = ${q(DELTA_REASON)};`,
+      "CREATE TRIGGER market_profile_change_no_delete BEFORE DELETE ON market_profile_change\nBEGIN\n  SELECT RAISE(ABORT, 'append-only');\nEND;",
+    );
+  }
+  const body = (lines) =>
+    lines.length === 0 ? "-- (no differing row)\n" : lines.join("\n") + "\n";
+  return { up: body(up), down: body(down) };
+}
+
+/** Rewrites (or checks) the two regions of 0036; returns true when current. */
+export async function applyDelta(check) {
+  const { up, down } = await renderDelta();
+  const a = applyRegion(DELTA_MIGRATION_PATH, DELTA_UP_REGION, up, check);
+  const b = applyRegion(DELTA_MIGRATION_PATH, DELTA_DOWN_REGION, down, check);
+  return a && b;
+}
+
+const invoked = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+const deltaAt = process.argv.indexOf("--delta");
+if (invoked && deltaAt >= 0) {
+  if (process.argv[deltaAt + 1] !== "0034") {
+    console.error("usage: gen-seed-sql.mjs --delta 0034 [--check]");
+    process.exit(2);
+  }
+  const check = process.argv.includes("--check");
+  const ok = await applyDelta(check);
+  if (check && !ok) {
+    console.error(
+      "0036 seed-delta regions differ from the seed: run node scripts/market/gen-seed-sql.mjs --delta 0034",
+    );
+    process.exit(1);
+  }
+  console.log(check ? "0036 seed-delta regions match the seed" : "0036 seed-delta regions written");
+} else if (invoked) {
+  // From M20 on 0034 is an applied migration and is never regenerated (D-1122): the plain form only checks that
+  // 0034 plus the generated delta of 0036 is the seed, and refuses to write.
+  if (!process.argv.includes("--check")) {
+    console.error(
+      "0034_m19_market_profile.sql is applied and never regenerated: use --delta 0034 (the seed change goes into 0036)",
+    );
+    process.exit(2);
+  }
+  if (!(await applyDelta(true))) {
+    console.error(
+      "0036 seed-delta regions differ from the seed: run node scripts/market/gen-seed-sql.mjs --delta 0034",
+    );
+    process.exit(1);
+  }
+  console.log("0034 + the 0036 delta match the seed");
 }

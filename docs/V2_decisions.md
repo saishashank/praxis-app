@@ -732,3 +732,4 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1125 | IN announcements: headline + link only, never a body; the fetcher is not called while the register row is disabled. |
 | D-1126 | Gate and numbering (gaps 4, 5, 23): M20 tasks start only after the CI run on build at or after d476057d is green (recorded in exit §0); decisions are D-1091... |
 | D-1127 | Registry modules resolve by convention (sources/<code>/day.mjs, seed/<code>/*.mjs, calendarRules/<code>.mjs entries added by stream A) so IN and US never edi... |
+| D-1128 | Register rows are not in 0036 (A2 finding, D-1096 amended): tests/acceptance/v3/replay-hash.baseline.json hashes source_register, source_register_history and... |
