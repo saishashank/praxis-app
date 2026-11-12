@@ -16,6 +16,7 @@ import type {
 import {
   addRat,
   cmpRat,
+  divFloor,
   makeRational,
   mulRat,
   parseDecimalParts,
@@ -322,7 +323,7 @@ function evaluateComponents(
  */
 export function quantityAt(notionalMicro: Micro, priceMicro: Micro): bigint {
   if (priceMicro <= 0n) throw new RangeError("price must be positive to derive a quantity");
-  const q = notionalMicro / priceMicro;
+  const q = divFloor(notionalMicro, priceMicro);
   return q < 1n ? 1n : q;
 }
 

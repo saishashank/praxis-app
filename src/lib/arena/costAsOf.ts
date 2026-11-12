@@ -12,7 +12,7 @@ export type DatedCostProfile = {
   readonly profile: CostProfile;
 };
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DATE_RE = new RegExp("^[0-9]{4}-[0-9]{2}-[0-9]{2}$");
 
 /** Ascending by `effectiveFrom`; empty for a market with one schedule. */
 export function datedCostProfiles(market: string, code: string): readonly DatedCostProfile[] {
