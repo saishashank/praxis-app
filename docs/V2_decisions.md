@@ -690,3 +690,45 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1088 | One home-seed helper (Fable F3, M20): homeMarket.mjs stays the constants facade but derives every value from homeProfile() (staticProfile.mjs); its own slots... |
 | D-1089 | Worker slot zone (Fable F4, M20, under D-1045): clock.ts compares slot minutes on the Sydney clock only; safe in M19 because IN/US zones are not in ZONE_RULE... |
 | D-1090 | Facts the AT-67 scan does not see (Fable F5, M20): sizing.ts STALL_FLOOR_SLIPPAGE_BPS duplicates the AU tick table's stall_floor_bps; the session-time class... |
+
+## M20 (M20_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-1091 | Extract tooling (MKT-112, gaps 1, 2): Node ESM under Requirement/v3/tools/m20/ (lib/fetch.mjs, pull_in.mjs, pull_us.mjs, coverage.mjs, buckets.mjs, calibrate... |
+| D-1092 | Offline/network split: every test in praxis-app runs offline on recorded or hand-made fixtures; the network is touched only by the fill runs (build machine)... |
+| D-1093 | Polite client: src/lib/data/sources/politeFetch.mjs (app) and tools/m20/lib/fetch.mjs (extract) share the rules — declared UA, per-host minimum interval (EDG... |
+| D-1094 | EDGAR contact (gap 22): PRAXIS_EDGAR_CONTACT is an Owner-store value (names only in env-names.mjs, .env.example); the client throws EdgarContactMissing and m... |
+| D-1095 | Source hosts (gap 21): the IN/US hosts enter SOURCE_SITES tagged by market and register id; link allow-listing (AT-81) is unchanged, fetching is gated by the... |
+| D-1096 | Register rows: 0036 seeds every DAT-243/244 candidate as <code>_<source> with the status A3's verification gives (enabled for public statistics, EDGAR, SEC s... |
+| D-1097 | Calendars (gap 10, B.7): rules in calendarRules/{in,us}.mjs (2026 and 2027; the NSE 2027 list drafted until published), rows written only when a market becom... |
+| D-1098 | Universe cap (gap 13): the key is mkt.<CODE>.universe_max (ch. 15); |
+| D-1099 | Projection formula (gap 14, F): projected_m = auMeasured_m × (cap / auCodes) × (sessions_market / sessions_au) + fixed_m; fits iff Turso (AU + projected) ≤ 2... |
+| D-1100 | Checklist and two-step: checklist(db, code) items profile_complete, at_m_evidence, licence_rows, quota_projection, au_mkt105, plus five_green_days and latenc... |
+| D-1101 | Rollback (F): full → off sets mode off and rollback_at, keeps enabled = 1 only until the arena-kill:<CODE> slot (open + 2 min, next trading day) has closed e... |
+| D-1102 | IN-P1 (F): the components rule kind with the ARN-116 constants, exact rationals, one half-up rounding of the total to ₹0.01; known answers ₹15.40 / ₹31.60 /... |
+| D-1103 | US-P1 (F): commission 0; SEC Section 31 and FINRA TAF as dated constants on sells (rate_per_million 27.80 from 2025-05-14; 0.000166/share, cap 8.30, both con... |
+| D-1104 | Tick tables and buckets (F): IN ₹0.01 below ₹250, ₹0.05 above (confirmed against the NSE circular or reverted with a decision line), US $0.0001 below $1, $0.... |
+| D-1105 | Latency (gap 11): bar_latency_p95_min IN/US = { kind: "assumed", minutes: 60 } at M20; production data_only writes one bar_latency_sample per night; full req... |
+| D-1106 | Sleeve reality cap (gap 16): IN 1× (delivery account, consistent with IN-P1's delivery STT), US 2× (Reg T). |
+| D-1107 | Seed FX (gap 15): A$600 × the RBA daily AUD/INR or AUD/USD rate of the activation day (the day full is set), half-up to ₹1,000 / US$10; rate, date and source... |
+| D-1108 | Category maps (gap 9a): 11 categories (DAT-245), AT-69's "8" is a spec slip (listed); materiality 0–3 per category; verifiable per CTX-043; first-match table... |
+| D-1109 | IN bands (F): limits = previous close × (1 ± band) on the tick grid; a close at a limit is band-locked → no fill, order cancelled band_locked; |
+| D-1110 | US LULD (F): trading_halt rows drive the CTX-016 halt path (no exit fill in the window, re-score at the reopen bar); suspensions follow the suspension path;... |
+| D-1111 | EDGAR as filed (AT-38): fundamental_fact append-only keyed by accession; factAsOf reads the latest filing at or before the decision instant; |
+| D-1112 | Classification readers: nse_level2 and sic_2digit map to instrument.industry_group; the NAV cap groups by the reader; |
+| D-1113 | Settlement (F): settlementDays is passed, not defaulted, at every ledger, close-books, settled-cash and replay call site; |
+| D-1114 | Calibration (gap 9b): CXA-002 (j) is a parameterised development-split run per market (M15 WP1…WP6), every family shadow, no holdout look and no holdout_look... |
+| D-1115 | Data limits (gap 12): survivorship.ts (haircut = delisted share per year × 50 % assumed loss, with and without), reportCaveats; docs/cortex/data-limits-{IN,U... |
+| D-1116 | Stage tables (D-1016 closure): STAGE_TABLES fixed list replaces the sqlite_master scan; the base list equals the schema-35 set so the AU schemaSha and the AT... |
+| D-1117 | Worker zones (gap 18, D-1089): asia-kolkata and us-eastern-dst rules with TST-103 tests; |
+| D-1118 | Stall floor (gap 19, D-1090): sizing.ts reads profile.slippage.stall_floor_bps; |
+| D-1119 | Recorded days (TST-139, D-1085): fixtures in praxis-app-fixtures/recorded/{IN,US}/<date>/ (five sessions each, headlines only), recorded from the extract by... |
+| D-1120 | AT-M reports (gaps 7, 20): at-m-report.mjs --market writes docs/test-reports/AT-M-<CODE>.md with the five rows and their evidence; |
+| D-1121 | Labels (gap 8): M20 builds the per-market append-only label_item store, labelsFor(db, market) and evaluationAllowed(db, market) (refuses below 500); the page... |
+| D-1122 | Migration 0036 contents (§A); schema-count tests at 36; every new market-keyed table carries both guard triggers. |
+| D-1123 | M19 hygiene (D-1086…D-1088, D-1090): scriptDb, the one resolver, the home helper, the four allow-list entries parameterised and removed. |
+| D-1124 | Per-market e-mail sections and dual times (UXN-313, D-1061, D-1063): one section per enabled market trading on D; |
+| D-1125 | IN announcements: headline + link only, never a body; the fetcher is not called while the register row is disabled. |
+| D-1126 | Gate and numbering (gaps 4, 5, 23): M20 tasks start only after the CI run on build at or after d476057d is green (recorded in exit §0); decisions are D-1091... |
+| D-1127 | Registry modules resolve by convention (sources/<code>/day.mjs, seed/<code>/*.mjs, calendarRules/<code>.mjs entries added by stream A) so IN and US never edi... |
