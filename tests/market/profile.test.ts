@@ -160,7 +160,7 @@ describe("loadProfile from a migrated database", () => {
           (a, b) => PROFILE_FIELDS.indexOf(a as never) - PROFILE_FIELDS.indexOf(b as never),
         ),
       );
-      expect(p.completeness.verified).toBe(0);
+      expect(p.completeness.verified).toBe(5); // the fields a public source states (M20 A3, D-1143)
       expect(p.angleCount).toBe(99);
     }
     expect(inn).toMatchObject({

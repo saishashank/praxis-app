@@ -5,7 +5,7 @@
 // appends the change ledger, re-projects `market`, and charges a counted trial for a cost, tick, slippage,
 // settlement or parcel change; a second identical write is a no-op; the ledger refuses UPDATE and DELETE.
 import { afterEach, describe, expect, it } from "vitest";
-import { PROFILE_FIELDS } from "@/lib/market/fields.mjs";
+import { PROFILE_FIELDS, type ProfileField } from "@/lib/market/fields.mjs";
 import { completeness, isComplete } from "@/lib/market/profileCore.mjs";
 import { invalidateProfiles, loadProfile } from "@/lib/market/profile";
 import { markFieldVerified, setProfileField } from "@/lib/market/profileWrite";
@@ -32,13 +32,36 @@ describe("completeness from the seed", () => {
       missing: [],
       unverified: [],
     });
-    for (const code of ["IN", "US"]) {
+    // M20 A3 (DAT-241/242): the five fields a public source states carry their evidence; the rest are named and counted
+    const stated = {
+      IN: [
+        "calendar_source",
+        "exchange",
+        "opening_auction_window",
+        "session_close",
+        "session_open",
+      ],
+      US: [
+        "calendar_source",
+        "closing_auction",
+        "opening_auction_window",
+        "session_close",
+        "session_open",
+      ],
+    };
+    for (const code of ["IN", "US"] as const) {
       const p = await loadProfile(db, code);
       expect(p.complete).toBe(false);
       expect(p.completeness.total).toBe(40);
-      expect(p.completeness.valued).toBe(36); // four fields are set at M20
-      expect(p.completeness.verified).toBe(0); // every [VERIFY] value awaits its evidence
-      expect(p.completeness.unverified).toHaveLength(36);
+      expect(p.completeness.valued).toBe(36); // four fields are set by the money tables (A4) and D-1105/1106
+      expect(p.completeness.verified).toBe(5);
+      expect(p.completeness.unverified).toHaveLength(31);
+      expect(p.completeness.unverified).not.toEqual(expect.arrayContaining(stated[code]));
+      for (const f of stated[code]) {
+        expect(p.fields[f as ProfileField]).toMatchObject({ verify: 0, verifiedAt: "2026-11-13" });
+        expect(p.fields[f as ProfileField]?.evidenceRef).toBeTruthy();
+        expect(p.completeness.unverified).not.toContain(f);
+      }
       expect(p.completeness.missing).toHaveLength(4);
     }
   });
