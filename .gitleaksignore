@@ -11,3 +11,7 @@ ffb9ba02cfcb56859210d3e84fc02990dc9abcab:src/lib/agents/families/ruleSchema.ts:g
 16fb5f743532efc228d5c2331b15ec77f73aac19:tests/selfhost/loop.test.ts:generic-api-key:21
 16fb5f743532efc228d5c2331b15ec77f73aac19:tests/selfhost/clock-week.test.ts:generic-api-key:27
 16fb5f743532efc228d5c2331b15ec77f73aac19:tests/selfhost/runner.test.ts:generic-api-key:421
+# M19 step-0 replay-hash baseline (AT-32/AT-50): sha256 digests of table contents keyed by table name (asx_rate_token, credential_expiry, credential_expiry_history). Not secrets.
+e2c6b8b67800fa07ea6191b83aba76bd84132133:tests/acceptance/v3/replay-hash.baseline.json:generic-api-key:21
+e2c6b8b67800fa07ea6191b83aba76bd84132133:tests/acceptance/v3/replay-hash.baseline.json:generic-api-key:61
+e2c6b8b67800fa07ea6191b83aba76bd84132133:tests/acceptance/v3/replay-hash.baseline.json:generic-api-key:62
