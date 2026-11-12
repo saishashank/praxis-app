@@ -1,6 +1,13 @@
 // Ch.16 back-end (M6 T17): AGT-112 nightly read, AGT-113 pick generator, ARN-095 tracking.
 export * from "./types";
-export { generatePicks, labelRank, LABEL_ORDER, profileRule, compareRankScore } from "./generate";
+export {
+  generatePicks,
+  labelRank,
+  LABEL_ORDER,
+  riskBand,
+  bandCuts,
+  compareRankScore,
+} from "./generate";
 export type { GenerateContext } from "./generate";
 export { factorLines, readFactorRows, bucketOf, numericValue } from "./factors";
 export { loadPickInputs, stopFromCard } from "./inputs";

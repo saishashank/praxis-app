@@ -88,6 +88,8 @@ const tile = (over: Partial<StrategyTile> = {}): StrategyTile => ({
 const round = (over: Partial<PastRound> = {}): PastRound => ({
   round: 1,
   startD: "2026-09-01",
+  seed: m(600_000_000),
+  endedForNewRound: false,
   terminalKind: "target",
   terminalD: "2026-09-30",
   sessions: 20,

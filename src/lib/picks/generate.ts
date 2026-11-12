@@ -20,10 +20,8 @@ const MICRO = 1_000_000n; // threshold-ok: micro-AUD per A$
 const PERCENT = 100n; // threshold-ok: percent base
 /** UXN-037: the Based-on list shows two to three reasons. */
 const BASED_ON_MAX = 3; // threshold-ok: UXN-037 shows 2-3 Based-on reasons
-/** AGT-113: Conservative takes "the lowest-volatility third" of its universe. */
-const VOL_THIRD = 3; // threshold-ok: AGT-113 profile rule text (ch.16 l.243), not a ch.15 key
-/** AGT-113: Balanced takes families whose median drop-from-peak is at most 10 %. */
-const BALANCED_MAX_DROP_PPM = 100_000; // threshold-ok: AGT-113 profile rule text (ch.16 l.243), not a ch.15 key
+/** D-1000: the volatility bands are thirds of the night's universe. */
+const BAND_THIRDS = 3; // threshold-ok: D-1000 risk bands are thirds of the universe by volatility
 const LUCK_SALT = "luck";
 
 /** Validation labels, best first (ARN-086). An unknown or missing label sorts as UNVALIDATED. */
@@ -43,13 +41,42 @@ export function labelRank(label: string): number {
   return i < 0 ? LABEL_ORDER.indexOf("UNVALIDATED") : i;
 }
 
-/** Profile rules that the three ch.15 fields cannot carry (ch.16 l.243-244), keyed by the default names. */
-type ProfileRule = { readonly lowVolThird: boolean; readonly maxMedianDropPpm: number | null };
-export function profileRule(name: string): ProfileRule {
-  if (name === "balanced") return { lowVolThird: false, maxMedianDropPpm: BALANCED_MAX_DROP_PPM };
-  if (name === "conservative") return { lowVolThird: true, maxMedianDropPpm: null };
-  return { lowVolThird: false, maxMedianDropPpm: null };
+/** D-1000: the three risk bands. Every stock of a night sits in exactly one. */
+export type RiskBand = "aggressive" | "balanced" | "conservative";
+export const RISK_BANDS: readonly RiskBand[] = ["aggressive", "balanced", "conservative"];
+
+/** Volatility cut-offs of the night: calm = lowest third (<= low), wild = highest third (> high). */
+export type BandCuts = { readonly low: number | null; readonly high: number | null };
+
+/** D-1000: the thirds of the universe's volatility (codes without a volatility are not counted). */
+export function bandCuts(universe: readonly UniverseCode[]): BandCuts {
+  const vols = universe
+    .filter((u) => u.vol !== null)
+    .map((u) => u.vol as number)
+    .sort((a, b) => a - b);
+  if (vols.length === 0) return { low: null, high: null };
+  return {
+    low: vols[Math.ceil(vols.length / BAND_THIRDS) - 1]!,
+    high: vols[Math.ceil((vols.length * 2) / BAND_THIRDS) - 1]!,
+  };
 }
+
+/**
+ * D-1000: the one band of a stock. Aggressive = small companies (U3) or the most volatile third;
+ * Conservative = large companies (U1) in the calmest third; Balanced = everything else. A stock
+ * with no known volatility is never calm: small ones are Aggressive, the rest Balanced.
+ */
+export function riskBand(tier: Tier, vol: number | null, cuts: BandCuts): RiskBand {
+  if (tier === "U3") return "aggressive";
+  if (vol === null || cuts.low === null || cuts.high === null) return "balanced";
+  if (vol > cuts.high) return "aggressive";
+  if (tier === "U1" && vol <= cuts.low) return "conservative";
+  return "balanced";
+}
+
+/** True for the three default profile names; other names keep the plain tier filter. */
+const isBandProfile = (name: string): name is RiskBand =>
+  (RISK_BANDS as readonly string[]).includes(name);
 
 function fraction(text: string): { num: bigint; den: bigint } {
   const [n, d] = text.split("/");
@@ -97,45 +124,82 @@ export type GenerateContext = {
   readonly createdAt: string;
 };
 
-function cmpInput(a: PickInput, b: PickInput): number {
+const cmpText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+function cmpTail(a: PickInput, b: PickInput): number {
   return (
-    labelRank(a.label) - labelRank(b.label) ||
     compareRankScore(a.rankScore, b.rankScore) ||
-    (a.code < b.code ? -1 : a.code > b.code ? 1 : 0) ||
-    (a.family < b.family ? -1 : a.family > b.family ? 1 : 0) ||
-    (a.variant < b.variant ? -1 : a.variant > b.variant ? 1 : 0)
+    cmpText(a.code, b.code) ||
+    cmpText(a.family, b.family) ||
+    cmpText(a.variant, b.variant)
   );
 }
 
-/** Cut-off of the lowest-volatility third among the given codes (null = no codes known). */
-function lowVolCut(universe: readonly UniverseCode[], tiers: readonly string[]): number | null {
-  const vols = universe
-    .filter((u) => tiers.includes(u.tier) && u.vol !== null)
-    .map((u) => u.vol as number)
-    .sort((a, b) => a - b);
-  if (vols.length === 0) return null;
-  return vols[Math.ceil(vols.length / VOL_THIRD) - 1]!;
+/** Typical return per unit of risk: typicalPpm x reference / (reference - stop), as a fraction. */
+function perRisk(i: PickInput): { num: bigint; den: bigint } {
+  return {
+    num: BigInt(i.scenario!.typicalPpm) * i.referenceMicro,
+    den: i.referenceMicro - i.stopMicro!,
+  };
+}
+
+/**
+ * D-1001: the order inside a profile, after the validation label. Aggressive: the biggest good case.
+ * Balanced: typical return per unit of risk (typical case over the distance to the stop-loss).
+ * Conservative: the mildest bad case first (the 10th-percentile outcome of past similar trades, the
+ * nearest stored stand-in for "how often similar trades made money"), then the biggest typical case.
+ * Ties fall to the stored rank score, then code, family and variant.
+ */
+export function cmpForProfile(profile: string): (a: PickInput, b: PickInput) => number {
+  const label = (a: PickInput, b: PickInput) => labelRank(a.label) - labelRank(b.label);
+  if (profile === "aggressive") {
+    return (a, b) => label(a, b) || b.scenario!.goodPpm - a.scenario!.goodPpm || cmpTail(a, b);
+  }
+  if (profile === "balanced") {
+    return (a, b) => {
+      const x = perRisk(a);
+      const y = perRisk(b);
+      const l = x.num * y.den;
+      const r = y.num * x.den;
+      return label(a, b) || (l === r ? 0 : l > r ? -1 : 1) || cmpTail(a, b);
+    };
+  }
+  if (profile === "conservative") {
+    return (a, b) =>
+      label(a, b) ||
+      b.scenario!.badPpm - a.scenario!.badPpm ||
+      b.scenario!.typicalPpm - a.scenario!.typicalPpm ||
+      cmpTail(a, b);
+  }
+  return (a, b) => label(a, b) || cmpTail(a, b);
+}
+
+/** The band of a pick input: the universe's own tier and volatility when the code is in it. */
+type BandLookup = (inp: PickInput) => RiskBand;
+
+function bandLookup(universe: readonly UniverseCode[]): BandLookup {
+  const cuts = bandCuts(universe);
+  const known = new Map(universe.map((u) => [u.code, u]));
+  return (inp) => {
+    const u = known.get(inp.code);
+    return riskBand(u?.tier ?? inp.tier, u ? u.vol : inp.vol, cuts);
+  };
 }
 
 function eligible(
   inp: PickInput,
+  profile: string,
   tiers: readonly string[],
-  rule: ProfileRule,
-  cut: number | null,
+  bandOf: BandLookup,
 ): boolean {
   if (!tiers.includes(inp.tier)) return false;
+  if (isBandProfile(profile) && bandOf(inp) !== profile) return false; // D-1000: disjoint bands
   if (inp.scenario === null) return false; // the three cases need enough history (scenario_min_n)
   if (inp.stopMicro === null || inp.stopMicro <= 0n || inp.stopMicro >= inp.referenceMicro) {
     return false;
   }
   if (inp.holdMedianSessions === null || inp.holdMedianSessions < 1) return false;
   if (inp.scenario.goodPpm <= 0) return false; // an aim must lie above the reference price
-  if (rule.maxMedianDropPpm !== null) {
-    if (inp.medianDropPpm === null || inp.medianDropPpm > rule.maxMedianDropPpm) return false;
-  }
-  if (rule.lowVolThird) {
-    if (inp.vol === null || cut === null || inp.vol > cut) return false;
-  }
   return true;
 }
 
@@ -263,21 +327,26 @@ export const PICK_RANK_MAX = 10; // threshold-ok: pick.rank CHECK (migration 001
  */
 export type ExtraInputs = { readonly inputs: readonly PickInput[]; readonly perProfile: number };
 
-/** AGT-113: the night's picks for every profile, in profile-name then rank order. */
+/**
+ * AGT-113 + D-1000: the night's picks for every profile, in profile-name then rank order. A stock
+ * belongs to one risk band only, so it appears in one of the three default profiles per night.
+ */
 export function generatePicks(
   inputs: readonly PickInput[],
   ctx: GenerateContext,
   extras?: ExtraInputs,
 ): Pick[] {
   const out: Pick[] = [];
-  const sorted = [...inputs].sort(cmpInput);
-  const extraSorted = [...(extras?.inputs ?? [])].sort(cmpInput);
+  const bandOf = bandLookup(ctx.universe);
   for (const profile of Object.keys(ctx.picks.profiles).sort()) {
     const spec = ctx.picks.profiles[profile]!;
     const amount = ctx.picks.portfolioAmounts[profile];
     if (amount === undefined) continue; // no portfolio amount: nothing to size against
-    const rule = profileRule(profile);
-    const cut = rule.lowVolThird ? lowVolCut(ctx.universe, spec.tiers) : null;
+    // only inputs that can ever be picked are sorted (the order reads their scenario)
+    const usable = (inp: PickInput) => eligible(inp, profile, spec.tiers, bandOf);
+    const cmp = cmpForProfile(profile);
+    const sorted = inputs.filter(usable).sort(cmp);
+    const extraSorted = (extras?.inputs ?? []).filter(usable).sort(cmp);
     const caps = {
       maxPct: String(spec.maxPctPerPick),
       riskPct: String(spec.riskPctPerPick),
@@ -290,7 +359,6 @@ export function generatePicks(
       if (rank >= ctx.picks.picksPerProfile) break;
       if (seen.has(inp.code)) continue; // one pick per company per profile
       if ((perFamily.get(inp.family) ?? 0) >= ctx.picks.picksMaxPerFamily) continue;
-      if (!eligible(inp, spec.tiers, rule, cut)) continue;
       const pick = build(inp, profile, rank + 1, ctx, caps, spec.tiers);
       if (pick === null) continue;
       rank += 1;
@@ -302,7 +370,6 @@ export function generatePicks(
     for (const inp of extraSorted) {
       if (extra >= (extras?.perProfile ?? 0) || rank >= PICK_RANK_MAX) break;
       if (seen.has(inp.code)) continue;
-      if (!eligible(inp, spec.tiers, rule, cut)) continue;
       const pick = build(inp, profile, rank + 1, ctx, caps, spec.tiers);
       if (pick === null) continue;
       rank += 1;

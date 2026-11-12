@@ -50,8 +50,8 @@ test("welcome banner: shown on the first visit, gone after Got it, per user", as
   await page.goto("/");
   const banner = page.getByRole("region", { name: "Welcome to Praxis" });
   await expect(banner).toBeVisible();
-  await expect(banner).toContainText("A$1,200");
-  await expect(banner).toContainText("A$300");
+  await expect(banner).toContainText("A$10,000");
+  await expect(banner).toContainText("A$2,500");
   await banner.getByRole("button", { name: "Got it, hide this" }).click();
   await expect(banner).toHaveCount(0);
   await page.reload();

@@ -71,7 +71,7 @@ describe("Picks list", () => {
     const badge = card.querySelector("[data-family]")!;
     expect(badge.getAttribute("data-family")).toBe("br");
     expect(badge.textContent).toContain("Breakout");
-    expect(card.querySelector("[data-hue=family-br]")).not.toBeNull();
+    expect(card.querySelector("[data-hue=tier-p1]")).not.toBeNull(); // D-1002: Balanced accent on the card edge
     fireEvent.click(within(card).getByRole("link", { name: "About Breakout" }));
     const sheet = await screen.findByTestId("family-sheet");
     expect(sheet.textContent).toContain("Buys when");
@@ -156,7 +156,9 @@ describe("Picks list", () => {
       "aria-current",
     );
     // The profile sentence sits directly under the control.
-    expect(chips.parentElement?.querySelector("p")?.textContent).toContain("Balanced: Picks from");
+    expect(chips.parentElement?.querySelector("p")?.textContent).toContain(
+      "Balanced: Middle-of-the-road",
+    );
     expect(screen.getByTestId("success-line").textContent).toBe(
       "Model success: not measured yet — 1 of 30 picks closed",
     );

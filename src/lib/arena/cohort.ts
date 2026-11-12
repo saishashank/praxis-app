@@ -50,8 +50,48 @@ import {
 // ---- constants -----------------------------------------------------------------------------------------------
 
 export const ARENA_MARKET = "AU";
-/** ARN-001: the AU market seed A$600 (Owner O-25). */
+/**
+ * ARN-001: the AU market seed A$600 (Owner O-25), the FIRST round. Kept as the default of
+ * `resolveCohortParams` so history replays, the research replay and every stored round of A$600 keep
+ * their meaning; the live arena resolves its seed per start session with `roundOverridesFor`.
+ */
 export const SEED_MICRO: Micro = 600_000_000n;
+/**
+ * D-1020 (Owner O-82, 2026-11-11): the live arena's second round starts every strategy and control
+ * with A$5,000 so a book can hold several stocks (A$600 and the A$500 parcel allowed only one).
+ */
+export const ROUND2_SEED_MICRO: Micro = 5_000_000_000n;
+/** D-1021: most positions open at once in the A$5,000 round (about A$830 each at an even split). */
+export const ROUND2_MAX_OPEN_POSITIONS = 6;
+/**
+ * D-1022: the first session on which a live cohort starts with the round-2 seed. A fixed date, not a
+ * clock read, so a replay of any night decides the same: a cohort that starts on or after it is
+ * round 2, one that starts before it keeps the A$600 it was seeded with.
+ */
+export const ROUND2_FIRST_START_D = "2026-11-16";
+
+/** The seed and position limit a live cohort starting on `startD` is resolved with (D-1020..D-1022). */
+export function roundOverridesFor(startD: string): ParamOverrides {
+  return startD >= ROUND2_FIRST_START_D
+    ? { seedMicro: ROUND2_SEED_MICRO, maxOpenPositions: ROUND2_MAX_OPEN_POSITIONS }
+    : {};
+}
+
+/**
+ * D-1022: true when a live cohort of the A$600 round must end at the close of `closeD` because its
+ * successor (the open after the liquidation open, `restartSession`) would start in round 2. It fires
+ * once per cohort (its successor is a round-2 cohort and never matches) and never for a replayed
+ * night before the switch.
+ */
+export function roundSwitchDue(
+  cohortStartD: string,
+  closeD: string,
+  calendar: readonly CalendarRow[],
+): boolean {
+  return (
+    cohortStartD < ROUND2_FIRST_START_D && restartSession(closeD, calendar) >= ROUND2_FIRST_START_D
+  );
+}
 export const FAMILIES = ["F1", "F2", "F3", "F4", "F5", "F6"] as const;
 export type FamilyId = (typeof FAMILIES)[number];
 /** ARN-004 / ch.15 `c2_live_per_family`: 20 live C2 (and C3) portfolios per family. */
@@ -483,11 +523,11 @@ export function planCohortStart(input: StartInput): CohortStart {
   };
 }
 
-/** AT-11: every execution and control starts a cohort with A$600 on the same session. */
+/** AT-11: every execution and control starts a cohort with the same seed on the same session. */
 export function planInitialStart(input: {
   readonly registry: readonly ExecutionRow[];
   readonly startD: string;
-  readonly paramsFor: (execution: ExecutionRow) => CohortParams;
+  readonly paramsFor: (execution: ExecutionRow, startD: string) => CohortParams;
   readonly masterSeed: bigint;
   readonly controlsPerFamily?: number;
   readonly dataSnapshotId?: string | null;
@@ -499,7 +539,7 @@ export function planInitialStart(input: {
       execution,
       controlIdx: slot.controlIdx,
       startD: input.startD,
-      params: input.paramsFor(execution),
+      params: input.paramsFor(execution, input.startD),
       masterSeed: input.masterSeed,
       dataSnapshotId: input.dataSnapshotId,
     });
@@ -555,7 +595,7 @@ export function planGroupRestart(input: {
   readonly calendar: readonly CalendarRow[];
   readonly live: readonly SlotCohort[];
   readonly executionFor: (executionId: string) => ExecutionRow;
-  readonly paramsFor: (execution: ExecutionRow) => CohortParams;
+  readonly paramsFor: (execution: ExecutionRow, startD: string) => CohortParams;
   readonly masterSeed: bigint;
   readonly dataSnapshotId?: string | null;
 }): GroupRestartPlan {
@@ -584,7 +624,7 @@ export function planGroupRestart(input: {
       execution,
       controlIdx: cohort.controlIdx,
       startD: restartD,
-      params: input.paramsFor(execution),
+      params: input.paramsFor(execution, restartD),
       masterSeed: input.masterSeed,
       dataSnapshotId: input.dataSnapshotId,
       restartOf: cohort.id,

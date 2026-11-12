@@ -361,7 +361,7 @@ describe("loadCandidateInputs and candidateTally (database)", () => {
       new Map([["ZZ02", share("ZZ02", 0.25)]]),
       { market: "AU", d: D, perMeasure: 1, max: 1 },
     );
-    const picks = generatePicks(
+    const one = generatePicks(
       [],
       { ...gctx, universe: [{ code: "ZZ02", tier: "U1", vol: 0.01 }] },
       {
@@ -369,7 +369,16 @@ describe("loadCandidateInputs and candidateTally (database)", () => {
         perProfile: 1,
       },
     );
-    expect(picks.length).toBeGreaterThan(1); // in every profile that takes U1
+    expect(one).toHaveLength(1); // D-1000: one risk band only
+    // an older row of the same share and night in another profile (before the bands were disjoint)
+    const picks = [
+      ...one,
+      {
+        ...one[0]!,
+        profile: one[0]!.profile === "balanced" ? "aggressive" : "balanced",
+        pickSha: "d".repeat(64),
+      },
+    ];
     await writePicks(db, picks);
     for (const p of picks) {
       const key = [p.market, p.d, p.profile, p.rank];
