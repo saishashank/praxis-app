@@ -10,7 +10,8 @@
 // why and writes nothing. Idempotent: a re-run of the same night writes nothing new.
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN. Output: statuses and counts only.
 // Exit codes: 0 success or expected skip, 1 failed.
-import { createClient, type Client } from "@libsql/client";
+import type { Client } from "@libsql/client";
+import { scriptDb } from "@/lib/db/scriptClient.mjs";
 import { reviewKey } from "@/lib/agents/batch3";
 import { loadAgentParams } from "@/lib/agents/params";
 import { loadCalendar } from "@/lib/arena/closeBooks";
@@ -54,7 +55,7 @@ export async function picksMain(
   }
   let db: Client;
   try {
-    const open = deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t }));
+    const open = deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t }));
     db = open(url, has(env.TURSO_MAIN_TOKEN) ? env.TURSO_MAIN_TOKEN : undefined);
   } catch {
     out("arena-picks: failed (cannot open database)");

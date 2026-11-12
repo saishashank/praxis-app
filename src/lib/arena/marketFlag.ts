@@ -5,7 +5,7 @@
 // market would itself be a refused write). Production has AU as its single enabled market, so an omitted flag
 // resolves to AU and the nightly jobs behave as before.
 import type { Client } from "@libsql/client";
-import { enabledMarkets } from "@/lib/market/profile";
+import { resolveScriptMarket } from "@/lib/market/scriptMarket.mjs";
 
 export type MarketChoice =
   { readonly ok: true; readonly market: string } | { readonly ok: false; readonly line: string };
@@ -20,19 +20,16 @@ function flagValue(args: readonly string[], name: string): string | null {
   return typeof v === "string" && v.trim() !== "" ? v : null;
 }
 
-/** The market a command line runs for: `--market`, else the single enabled market. Reads the `market` table only. */
+/**
+ * The market a command line runs for: `--market`, else the single enabled market. Reads the `market` table only.
+ * Delegates to the one script resolver (`resolveScriptMarket`, M20 A2, D-1087) and keeps this module's fixed words.
+ */
 export async function resolveCliMarket(
   db: Pick<Client, "execute">,
   argv: readonly string[],
 ): Promise<MarketChoice> {
   const asked = flagValue(argv, "--market");
-  const enabled = await enabledMarkets(db);
-  if (asked === null) {
-    return enabled.length === 1
-      ? { ok: true, market: enabled[0]! }
-      : { ok: false, line: MARKET_REQUIRED_LINE };
-  }
-  return enabled.includes(asked)
-    ? { ok: true, market: asked }
-    : { ok: false, line: MARKET_NOT_ENABLED_LINE };
+  const r = await resolveScriptMarket(db, asked);
+  if (r.ok) return { ok: true, market: r.market };
+  return { ok: false, line: asked === null ? MARKET_REQUIRED_LINE : MARKET_NOT_ENABLED_LINE };
 }

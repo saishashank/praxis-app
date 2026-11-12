@@ -17,7 +17,8 @@
 // late the job waits (`--wait-minutes`, default 20) and then fails visibly; it never closes the
 // books on a stale ledger. A missed earlier session is caught up first, oldest first.
 import { appendFileSync } from "node:fs";
-import { createClient, type Client } from "@libsql/client";
+import type { Client } from "@libsql/client";
+import { scriptDb } from "@/lib/db/scriptClient.mjs";
 import { addDays, marketDate, sessionsBetween } from "@/lib/data/calendar";
 import { signalsDay, type SignalsResult } from "@/lib/agents/batch2b";
 import { reviewDay, type ReviewResult } from "@/lib/agents/batch3";
@@ -65,7 +66,7 @@ function defaults(deps: CliDeps) {
     openDb:
       deps.openDb ??
       ((url: string, authToken: string | undefined) =>
-        createClient({ url, authToken, intMode: "bigint" })),
+        scriptDb({ url, token: authToken, intMode: "bigint" })),
     nowMs: deps.nowMs ?? (() => Date.now()),
     sleep: deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))),
     out: deps.out ?? ((line: string) => console.log(line)),

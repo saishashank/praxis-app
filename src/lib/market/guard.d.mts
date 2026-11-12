@@ -15,10 +15,7 @@ export function marketOfStatement(
 /** The typed error for a raw database error from the guard triggers, else null. */
 export function marketNotEnabledFrom(err: unknown, market?: string): MarketNotEnabled | null;
 /** Throws MarketNotEnabled unless the market is enabled (one primary-key read); returns the code. */
-export function assertMarketEnabled(
-  db: { execute: (stmt: never) => Promise<unknown> },
-  code: string,
-): Promise<string>;
+export { assertMarketEnabled } from "./scriptMarket.mjs";
 /**
  * The libsql client with the guard's error mapping: execute, batch, executeMultiple, migrate and the
  * statements of a transaction rethrow a refused write as MarketNotEnabled after `onRefusal` ran.

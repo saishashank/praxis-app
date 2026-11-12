@@ -12,7 +12,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createClient } from "@libsql/client";
+import { scriptDb } from "../../src/lib/db/scriptClient.mjs";
 import { isRealDate } from "../../src/lib/data/backfill/rules.mjs";
 import { HOME_MARKET } from "../../src/lib/market/profileCore.mjs";
 import { resolveScriptMarket, takeMarketFlag } from "../../src/lib/market/scriptMarket.mjs";
@@ -92,10 +92,7 @@ export async function run(argv, env, deps = {}) {
     out("index backfill commit: failed (database not configured)");
     return 1;
   }
-  const db = (deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t })))(
-    url,
-    token || undefined,
-  );
+  const db = (deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t })))(url, token || undefined);
   try {
     const m = await resolveScriptMarket(db, mk.market, { supported: [HOME_MARKET] });
     if (!m.ok) {

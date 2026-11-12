@@ -342,5 +342,5 @@ if (invoked && deltaAt >= 0) {
     );
     process.exit(1);
   }
-  console.log("0034 + the 0036 delta match the seed");
+  console.log("0034 plus the 0036 delta matches the seed");
 }

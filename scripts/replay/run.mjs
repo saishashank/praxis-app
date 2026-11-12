@@ -15,7 +15,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createClient } from "@libsql/client";
+import { scriptDb } from "../../src/lib/db/scriptClient.mjs";
 import { createHistoryStore } from "../../src/lib/data/backfill/dataRepo.mjs";
 import { JOB_YAHOO } from "../../src/lib/data/backfill/priceHistory.mjs";
 import { seedRecentBars } from "../../src/lib/data/backfill/seedRecent.mjs";
@@ -62,7 +62,7 @@ async function seedRecent(env, deps) {
     return 1;
   }
   const work = mkdtempSync(path.join(env.RUNNER_TEMP || tmpdir(), "praxis-seed-"));
-  const db = (deps.openDb ?? ((url, authToken) => createClient({ url, authToken })))(
+  const db = (deps.openDb ?? ((url, authToken) => scriptDb({ url, token: authToken })))(
     env.TURSO_MAIN_URL,
     env.TURSO_MAIN_TOKEN || undefined,
   );

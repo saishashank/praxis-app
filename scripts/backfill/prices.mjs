@@ -14,7 +14,7 @@
 // (optional); plan: GITHUB_OUTPUT (optional). Output: statuses and counts only.
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createClient } from "@libsql/client";
+import { scriptDb } from "../../src/lib/db/scriptClient.mjs";
 import { createHistoryStore } from "../../src/lib/data/backfill/dataRepo.mjs";
 import { commitPriceMonth, planPrices } from "../../src/lib/data/backfill/priceHistory.mjs";
 import {
@@ -53,7 +53,7 @@ export async function loadCodes(db, month) {
 export async function run(argv, env, deps = {}) {
   const out = deps.out ?? ((s) => console.log(s));
   const nowMs = deps.nowMs ?? (() => Date.now());
-  const openDb = deps.openDb ?? ((url, authToken) => createClient({ url, authToken }));
+  const openDb = deps.openDb ?? ((url, authToken) => scriptDb({ url, token: authToken }));
   const mk = takeMarketFlag(argv);
   if (mk.error) {
     out(`prices: failed (${mk.error})`);

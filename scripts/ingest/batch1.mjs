@@ -16,7 +16,7 @@
 // Output: statuses and counts only. Never a row, a code, a URL or a token.
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createClient } from "@libsql/client";
+import { scriptDb } from "../../src/lib/db/scriptClient.mjs";
 import { prepareBatch1, runBatch1 } from "../../src/lib/data/pipeline/batch1-core.mjs";
 import { resolveScriptMarket, takeMarketFlag } from "../../src/lib/market/scriptMarket.mjs";
 import { parseNow } from "../e2e-day/now.mjs";
@@ -48,7 +48,7 @@ export async function run(argv, env, deps = {}) {
     return 2;
   }
   const nowMs = sim.nowMs ?? deps.nowMs ?? (() => Date.now());
-  const openDb = deps.openDb ?? ((url, authToken) => createClient({ url, authToken }));
+  const openDb = deps.openDb ?? ((url, authToken) => scriptDb({ url, token: authToken }));
   const mk = takeMarketFlag(sim.argv);
   if (mk.error) {
     out(`ingest-batch1: failed (${mk.error})`);

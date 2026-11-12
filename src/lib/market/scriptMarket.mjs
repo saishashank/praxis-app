@@ -6,7 +6,7 @@
 //   a market that is not enabled -> exit 2, the log line `refused: market not enabled`, and NO run record: a
 //                       run record for that market would itself be a refused write (the guard trigger, D-995).
 // `assertMarketEnabled` is the typed check a script calls before its first write; stream A2's guard.mjs exports
-// the same function name for code that already holds the guard module, this one only needs the `market` table.
+// the same function (a re-export, D-1087) for code that already holds the guard module.
 import { MarketNotEnabled } from "./errors.mjs";
 
 export const MARKET_FLAG = "--market";
@@ -58,16 +58,20 @@ export async function enabledCodes(db) {
 }
 
 /**
- * Throws MarketNotEnabled when the market is not enabled (a primary-key probe of the 3-row table).
+ * Throws MarketNotEnabled when the market is not enabled (a primary-key probe of the 3-row table); returns the code.
+ * The one definition: guard.mjs re-exports it (M20 A2, D-1087).
  * @param {{ execute: (q: { sql: string, args?: unknown[] }) => Promise<{ rows: unknown[] }> }} db
  * @param {string} code
+ * @returns {Promise<string>}
  */
 export async function assertMarketEnabled(db, code) {
+  // rows-ok: primary-key probe of the 3-row market table
   const res = await db.execute({
-    sql: "SELECT 1 AS ok FROM market WHERE code = ? AND enabled = 1",
+    sql: "SELECT 1 FROM market WHERE code = ? AND enabled = 1",
     args: [code],
   });
-  if (res.rows.length === 0) throw new MarketNotEnabled(code);
+  if (res.rows.length !== 1) throw new MarketNotEnabled(String(code));
+  return code;
 }
 
 /**

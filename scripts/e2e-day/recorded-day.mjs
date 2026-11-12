@@ -24,6 +24,7 @@ import net from "node:net";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createClient } from "@libsql/client";
+import { scriptDb } from "../../src/lib/db/scriptClient.mjs";
 import {
   installHostGuard,
   installNetGuard,
@@ -455,7 +456,7 @@ function walk(work, simNow) {
 
 async function seedDatabases({ work, fixtures, recordedDate, today, market: MARKET }) {
   const fileUrl = (n) => pathToFileURL(path.join(work, n)).href;
-  const main = createClient({ url: fileUrl("main.db") });
+  const main = scriptDb({ url: fileUrl("main.db") });
   const auth = createClient({ url: fileUrl("auth.db") });
   try {
     const now = new Date().toISOString();

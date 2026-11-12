@@ -12,7 +12,7 @@ export function takeMarketFlag(argv: readonly string[]): {
   error: string | null;
 };
 export function enabledCodes(db: ScriptDb): Promise<string[]>;
-export function assertMarketEnabled(db: ScriptDb, code: string): Promise<void>;
+export function assertMarketEnabled(db: ScriptDb, code: string): Promise<string>;
 export function resolveScriptMarket(
   db: ScriptDb,
   flag: string | null,

@@ -17,7 +17,7 @@
 // Output: statuses and counts only. Never a row, a URL, a token or a driver message.
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createClient } from "@libsql/client";
+import { scriptDb } from "../../src/lib/db/scriptClient.mjs";
 import { createHistoryStore } from "../../src/lib/data/backfill/dataRepo.mjs";
 import {
   commitHistoryMonth,
@@ -44,7 +44,7 @@ const flag = (args, name) => {
 export async function run(argv, env, deps = {}) {
   const out = deps.out ?? ((s) => console.log(s));
   const nowMs = deps.nowMs ?? (() => Date.now());
-  const openDb = deps.openDb ?? ((url, authToken) => createClient({ url, authToken }));
+  const openDb = deps.openDb ?? ((url, authToken) => scriptDb({ url, token: authToken }));
   const mk = takeMarketFlag(argv);
   if (mk.error) {
     out(`backfill: failed (${mk.error})`);

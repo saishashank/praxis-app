@@ -68,22 +68,8 @@ export function marketNotEnabledFrom(err, market = "unknown") {
   return typed;
 }
 
-/**
- * Throws MarketNotEnabled unless the market is enabled: one primary-key read of the 3-row `market` table.
- * Call it before the first write of any job with a market input (MKT-110 a); a refused job writes no run record.
- * @param {{ execute: (s: any) => Promise<{ rows: any[] }> }} db
- * @param {string} code
- * @returns {Promise<string>} the code
- */
-export async function assertMarketEnabled(db, code) {
-  // rows-ok: primary-key probe
-  const r = await db.execute({
-    sql: "SELECT 1 FROM market WHERE code = ? AND enabled = 1",
-    args: [code],
-  });
-  if (r.rows.length !== 1) throw new MarketNotEnabled(String(code));
-  return code;
-}
+// The one definition of the pre-write check lives in scriptMarket.mjs (D-1087); this module re-exports it.
+export { assertMarketEnabled } from "./scriptMarket.mjs";
 
 const WRAPPED = new WeakMap();
 const GUARDED_METHODS = new Set(["execute", "batch", "executeMultiple", "migrate"]);

@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createClient } from "@libsql/client";
+import { scriptDb } from "../../src/lib/db/scriptClient.mjs";
 import { FORMAT, validateSeed } from "./validate.mjs";
 
 export { FORMAT };
@@ -347,7 +347,7 @@ function tally(stmts) {
  */
 export async function run(argv, env, deps = {}) {
   const out = deps.out ?? ((s) => console.log(s));
-  const openDb = deps.openDb ?? ((url, authToken) => createClient({ url, authToken }));
+  const openDb = deps.openDb ?? ((url, authToken) => scriptDb({ url, token: authToken }));
   const dry = argv.includes("--dry-run");
   const dir = argv.find((a) => !a.startsWith("--"));
   if (!dir) {

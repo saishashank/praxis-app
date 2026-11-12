@@ -12,7 +12,8 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { createClient, type Client } from "@libsql/client";
+import type { Client } from "@libsql/client";
+import { scriptDb } from "@/lib/db/scriptClient.mjs";
 import { getConfig } from "@/lib/config/store";
 import { ASX_SOURCE } from "@/lib/data/asxToken";
 import { sydneyDate } from "@/lib/data/pipeline/rules.mjs";
@@ -71,7 +72,7 @@ export async function asxIngestMain(
     out("asx-ingest: failed (database not configured)");
     return 1;
   }
-  const open = deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t }));
+  const open = deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t }));
   const db = open(env.TURSO_MAIN_URL, has(env.TURSO_MAIN_TOKEN) ? env.TURSO_MAIN_TOKEN : undefined);
   if (w >= 0 && has(stateFile)) {
     try {
