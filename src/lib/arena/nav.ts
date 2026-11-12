@@ -186,7 +186,7 @@ export function liquidationValueMicro(qty: bigint, mark: Mark, options: NavCostO
     options.buckets ?? SLIPPAGE_BUCKETS,
   );
   const value = qty * sell.fillMicro;
-  return value - feeFor(options.profile, value, "sell", options.feeContext);
+  return value - feeFor(options.profile, value, "sell", { ...options.feeContext, quantity: qty });
 }
 
 export type NavDayInput = NavCostOptions & {

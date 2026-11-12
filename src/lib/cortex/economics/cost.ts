@@ -17,7 +17,7 @@
 // `roundTripCost` (agents/costGate.ts, FAM-005 at the fixed A$600) stays for the v1 path (D-260): once a
 // family is allowed, CTX-021 binds and this figure × `cost_gate_k` is a card diagnostic (G05, informational).
 import { homeProfile } from "@/lib/market/staticProfile.mjs";
-import { feeFor, type CostProfile, type FeeContext } from "@/lib/arena/costs";
+import { feeFor, quantityAt, type CostProfile, type FeeContext } from "@/lib/arena/costs";
 import {
   DEFAULT_TICK_CROSS_FACTOR,
   SLIPPAGE_BUCKETS,
@@ -127,8 +127,14 @@ export function costPerOrder(input: CostPerOrderInput): CostPerOrder {
   const factor = input.tickCrossFactor ?? DEFAULT_TICK_CROSS_FACTOR;
   const buckets = input.buckets ?? SLIPPAGE_BUCKETS;
   const feeMicro =
-    feeFor(profile, notionalMicro, "buy", input.feeContext) +
-    feeFor(profile, notionalMicro, "sell", input.feeContext);
+    feeFor(profile, notionalMicro, "buy", {
+      ...input.feeContext,
+      quantity: quantityAt(notionalMicro, priceMicro),
+    }) +
+    feeFor(profile, notionalMicro, "sell", {
+      ...input.feeContext,
+      quantity: quantityAt(notionalMicro, priceMicro),
+    });
   const fees = makeRational(feeMicro, notionalMicro);
   const floor = halfSpreadFraction(tier, priceMicro, input.halfSpreadPpmByTier, input.tickTable);
   let halfSpreadFloorApplied = false;

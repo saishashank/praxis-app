@@ -15,7 +15,7 @@ import {
   type ExitPlan,
 } from "@/lib/agents/families";
 import type { AgentParams } from "@/lib/agents/params";
-import { feeFor, getCostProfile, type CostProfile } from "@/lib/arena/costs";
+import { feeFor, getCostProfile, quantityAt, type CostProfile } from "@/lib/arena/costs";
 import {
   fillCloseSignalExit,
   fillEntryAtOpen,
@@ -589,8 +589,15 @@ export function pairedExcess(row: Rational, controls: readonly Rational[]): Rati
 }
 
 /** A row's brokerage for a standalone order value (used by cost feasibility; P5 each side). */
-export function roundTripBrokerage(cost: CostSetup, valueMicro: bigint): bigint {
-  return feeFor(cost.profile, valueMicro, "buy") + feeFor(cost.profile, valueMicro, "sell");
+export function roundTripBrokerage(
+  cost: CostSetup,
+  valueMicro: bigint,
+  refPriceMicro?: bigint,
+): bigint {
+  // a US sell needs the quantity (FINRA TAF): derived from the value and the reference price when one is given (D-1154)
+  const ctx =
+    refPriceMicro === undefined ? undefined : { quantity: quantityAt(valueMicro, refPriceMicro) };
+  return feeFor(cost.profile, valueMicro, "buy", ctx) + feeFor(cost.profile, valueMicro, "sell", ctx);
 }
 
 // ---------------------------------------------------------------------------------------------

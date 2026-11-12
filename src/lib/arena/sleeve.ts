@@ -330,7 +330,7 @@ function sleeveFill(
     ...one,
     qty,
     valueMicro: qty * one.fillPriceMicro,
-    brokerageMicro: feeFor(cfg.profile, notionalMicro, one.side, cfg.feeContext),
+    brokerageMicro: feeFor(cfg.profile, notionalMicro, one.side, { ...cfg.feeContext, quantity: qty }),
     costProfile: cfg.profile.code,
   };
 }
@@ -652,7 +652,10 @@ export function planSleeveEntry(input: SleevePlanInput): SleeveEntryPlan {
     return stockOnly(without(), "shadow", "locked");
   }
   const notional = sleeveNotionalMicro(margin, cfg);
-  const estFee = feeFor(cfg.profile, notional, "buy", cfg.feeContext);
+  const estFee = feeFor(cfg.profile, notional, "buy", {
+    ...cfg.feeContext,
+    quantity: notionalShares(notional, input.sizing.refPriceMicro),
+  });
   const withSleeve = sizeEntry({ ...input.sizing, sleeveMarginMicro: margin + estFee });
   const settledFits =
     input.settledCashMicro === undefined || input.settledCashMicro >= margin + estFee;
@@ -864,7 +867,10 @@ export function sleeveUnrealAt(input: {
  */
 export function sleeveLiquidationCostMicro(trade: SleeveTrade | null, cfg: SleeveConfig): Micro {
   if (trade === null) return 0n;
-  return feeFor(cfg.profile, trade.notionalMicro, "sell", cfg.feeContext);
+  return feeFor(cfg.profile, trade.notionalMicro, "sell", {
+    ...cfg.feeContext,
+    quantity: notionalShares(trade.notionalMicro, trade.entryPriceMicro),
+  });
 }
 
 /** Exact trigger move as a rational, for display and tests: -closeout x margin / notional. */
@@ -878,7 +884,13 @@ export function closeoutMove(trade: SleeveTrade, cfg: SleeveConfig): Rational {
 /** Break-even move (ARN-045): both brokerages over notional, as an exact rational (financing aside). */
 export function breakEvenMove(trade: SleeveTrade, cfg: SleeveConfig): Rational {
   const fees =
-    feeFor(cfg.profile, trade.notionalMicro, "buy", cfg.feeContext) +
-    feeFor(cfg.profile, trade.notionalMicro, "sell", cfg.feeContext);
+    feeFor(cfg.profile, trade.notionalMicro, "buy", {
+      ...cfg.feeContext,
+      quantity: notionalShares(trade.notionalMicro, trade.entryPriceMicro),
+    }) +
+    feeFor(cfg.profile, trade.notionalMicro, "sell", {
+      ...cfg.feeContext,
+      quantity: notionalShares(trade.notionalMicro, trade.entryPriceMicro),
+    });
   return divRat(makeRational(fees), makeRational(trade.notionalMicro));
 }

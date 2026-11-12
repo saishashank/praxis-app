@@ -102,7 +102,7 @@ function build(
     slipMicro: diff < 0n ? -diff : diff,
     fillPriceMicro: fillPrice,
     valueMicro: value,
-    brokerageMicro: feeFor(env.profile, value, side, env.feeContext),
+    brokerageMicro: feeFor(env.profile, value, side, { ...env.feeContext, quantity: qty }),
     costProfile: env.profile.code,
     bar: env.bar,
   };

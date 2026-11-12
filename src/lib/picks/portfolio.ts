@@ -207,7 +207,7 @@ export function simulatePortfolio(input: PortfolioInput, p: PortfolioParams): Po
     }
     if (bar.highMicro >= pos.aim) {
       const price = bar.openMicro > pos.aim ? bar.openMicro : pos.aim;
-      close(pos, d, price, feeFor(p.costProfile, pos.qty * price, "sell"), "aim");
+      close(pos, d, price, feeFor(p.costProfile, pos.qty * price, "sell", { quantity: pos.qty }), "aim");
       return true;
     }
     return false;
@@ -264,10 +264,10 @@ export function simulatePortfolio(input: PortfolioInput, p: PortfolioParams): Po
       const slot = divFloor(value(), BigInt(p.slots));
       const budget = slot < cash ? slot : cash;
       let qty = divFloor(budget, k.entryMicro);
-      let fee = qty > 0n ? feeFor(p.costProfile, qty * k.entryMicro, "buy") : 0n;
+      let fee = qty > 0n ? feeFor(p.costProfile, qty * k.entryMicro, "buy", { quantity: qty }) : 0n;
       while (qty > 0n && qty * k.entryMicro + fee > cash) {
         qty -= 1n;
-        fee = qty > 0n ? feeFor(p.costProfile, qty * k.entryMicro, "buy") : 0n;
+        fee = qty > 0n ? feeFor(p.costProfile, qty * k.entryMicro, "buy", { quantity: qty }) : 0n;
       }
       if (qty === 0n || qty * k.entryMicro < p.minParcelMicro) {
         skipped.push({ pubD: k.pubD, rank: k.rank, code: k.code, reason: "cash" });
