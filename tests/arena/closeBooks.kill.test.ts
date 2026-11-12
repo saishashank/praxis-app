@@ -98,7 +98,11 @@ async function world(): Promise<void> {
   const registry = buildExecutionRegistry({ market: "IN" });
   await seedExecutions(db, registry);
   const execution = registry.find((e) => e.id === "E01")!;
-  const params = resolveCohortParams({ ...NO_TERMINAL, market: "IN" });
+  const params = resolveCohortParams({
+    ...NO_TERMINAL,
+    market: "IN",
+    fxRow: { rate: "55.123", date: "2030-01-04", source: "FXRINR" },
+  });
   const start = planCohortStart({
     execution,
     controlIdx: null,
