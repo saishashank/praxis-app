@@ -13,6 +13,7 @@ import {
   bandLockedForSession,
   limitsOfRow,
   loadPriceBand,
+  loadSurveillance,
   type PriceBandRow,
 } from "@/lib/cortex/states/bands";
 import { stepPromotion, type SurveillanceEntry } from "@/lib/cortex/states/promotion";
@@ -281,5 +282,23 @@ describe("loadPriceBand reads the table row (A2 shape)", () => {
       lowerMicro: null,
     });
     expect(await loadPriceBand(db, "IN", "ZZ9", "2030-01-02")).toBeNull();
+  });
+
+  it("loadSurveillance returns the code's list membership by date, GSM over ASM on a shared day", async () => {
+    const ins = (d: string, list: string, stage: number | null) =>
+      db.execute({
+        sql: "INSERT INTO surveillance_list (market, code, d, list, stage, source) VALUES ('IN', 'ZZ1', ?, ?, ?, 'nse_asm')",
+        args: [d, list, stage],
+      });
+    await ins("2030-01-02", "ASM", 1);
+    await ins("2030-01-03", "ASM", 2);
+    await ins("2030-01-03", "GSM", null);
+    await ins("2030-02-01", "ASM", 1); // outside the window
+    const m = await loadSurveillance(db, "IN", "ZZ1", "2030-01-01", "2030-01-31");
+    expect([...m.entries()]).toEqual([
+      ["2030-01-02", { list: "ASM", stage: 1 }],
+      ["2030-01-03", { list: "GSM", stage: null }],
+    ]);
+    expect((await loadSurveillance(db, "IN", "ZZ9", "2030-01-01", "2030-01-31")).size).toBe(0);
   });
 });

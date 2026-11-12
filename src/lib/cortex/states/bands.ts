@@ -129,3 +129,32 @@ export async function loadPriceBand(
     source: String(x.source),
   };
 }
+
+/**
+ * The `surveillance_list` membership of one code over [fromD, toD] as `PromotionInput.surveillance` (membership by
+ * session date, D-1109 trigger 3). A code on both lists the same day reads as GSM (the graded, stricter list); any
+ * stage counts.
+ */
+export async function loadSurveillance(
+  db: Pick<Client, "execute">,
+  market: string,
+  code: string,
+  fromD: string,
+  toD: string,
+): Promise<Map<string, { list: "ASM" | "GSM"; stage: number | null }>> {
+  const r = await db.execute({
+    // rows-ok: one code over a window of sessions through the primary key (market, code, d, list)
+    sql: `SELECT d, list, stage FROM surveillance_list
+          WHERE market = ? AND code = ? AND d >= ? AND d <= ? ORDER BY d, list`,
+    args: [market, code, fromD, toD],
+  });
+  const out = new Map<string, { list: "ASM" | "GSM"; stage: number | null }>();
+  for (const x of r.rows) {
+    // ORDER BY list puts ASM before GSM, so the later row (GSM) wins
+    out.set(String(x.d), {
+      list: String(x.list) === "GSM" ? "GSM" : "ASM",
+      stage: x.stage === null ? null : Number(x.stage),
+    });
+  }
+  return out;
+}
