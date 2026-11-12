@@ -14,7 +14,7 @@ import {
   type ConfigKey,
   type ConfigKeyDef,
 } from "@/lib/config/keys";
-import { CALENDAR_MARKETS, calendarMarkets } from "@/lib/data/calendar";
+import { CALENDAR_MARKETS, calendarMarkets, calendarRuleMarkets } from "@/lib/data/calendar";
 import { CALENDAR_RULE_MODULES } from "@/lib/data/calendarRules.mjs";
 import { builtMarkets } from "@/lib/market/seed/index.mjs";
 
@@ -138,8 +138,13 @@ describe("derived market lists (MKT-107: no literal list)", () => {
   it("MODE_MARKETS is the seed registry; the calendar markets are the rule modules' keys", () => {
     expect([...MODE_MARKETS]).toEqual(builtMarkets());
     expect([...MODE_MARKETS]).toEqual(["AU", "IN", "US"]);
-    expect(calendarMarkets()).toEqual(Object.keys(CALENDAR_RULE_MODULES).sort());
-    expect([...CALENDAR_MARKETS]).toEqual(["AU"]); // IN and US have no calendar rules until M20
+    expect(calendarMarkets()).toEqual(
+      Object.keys(CALENDAR_RULE_MODULES)
+        .filter((m) => !CALENDAR_RULE_MODULES[m].onEnable)
+        .sort(),
+    );
+    expect(calendarRuleMarkets()).toEqual(["AU", "IN", "US"]); // rows of IN and US are written on enable (D-1097)
+    expect([...CALENDAR_MARKETS]).toEqual(["AU"]); // the migration-seeded calendar; IN and US rows come on enable (D-1146)
     expect(def("calendar_draft_markets").default).toBe(calendarMarkets().join(", "));
   });
 

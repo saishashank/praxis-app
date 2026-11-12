@@ -52,7 +52,7 @@ export async function draftYear(db, { market, year, now }) {
   });
   if (Number(have.rows[0].n) > 0) return { status: "exists", rows: 0 };
   const rows = rules.yearRows(year);
-  const source = `${DRAFT_SOURCE_PREFIX}${rules.source}`;
+  const source = `${DRAFT_SOURCE_PREFIX}${rules.sourceOf?.(year) ?? rules.source}`;
   const stamp = now.toISOString();
   await db.batch(
     [

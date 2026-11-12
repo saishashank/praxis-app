@@ -303,7 +303,15 @@ export type FillOrderEnv = FillEnv & {
   readonly halted?: boolean;
   /** Gate decision for the code, consulted for entries only. */
   readonly gate?: EntryDecision;
+  /**
+   * M20 D-1109: the session closed at one of its price-band limits (`bandLockedForSession`, cortex/states/bands.ts).
+   * Absent or false = the AU shape: nothing is refused. Only a market with a daily price band ever sets it.
+   */
+  readonly bandLocked?: boolean;
 };
+
+/** Why `fillOrder` cancels an order (the `arena_order` cancel reason). `band_locked` is M20 D-1109. */
+export type OrderCancelReason = "gate" | "halted" | "band_locked";
 
 export type FillOutcome =
   | {
@@ -311,8 +319,15 @@ export type FillOutcome =
       readonly fill: SimulatedFill;
       readonly initialStopMicro: bigint | null;
     }
-  | { readonly status: "cancelled"; readonly reason: "gate" | "halted"; readonly detail: string }
-  | { readonly status: "unfilled"; readonly reason: "halted" | "stop_not_reached" };
+  | { readonly status: "cancelled"; readonly reason: OrderCancelReason; readonly detail: string }
+  | { readonly status: "unfilled"; readonly reason: "halted" | "stop_not_reached" | "band_locked" };
+
+/** D-1109: a band-locked session executes nothing. An ENTRY is cancelled with this reason; an exit waits (below). */
+const BAND_LOCKED: FillOutcome = {
+  status: "cancelled",
+  reason: "band_locked",
+  detail: "band_locked",
+};
 
 /**
  * Fill one pending order against its session bar.
@@ -326,6 +341,7 @@ export function fillOrder(order: OrderToFill, env: FillOrderEnv): FillOutcome {
     const refusal = gateRefusal(env.gate, "fill");
     if (refusal !== null) return { status: "cancelled", reason: "gate", detail: refusal.detail };
     if (env.halted === true) return { status: "cancelled", reason: "halted", detail: "halted" };
+    if (env.bandLocked === true) return BAND_LOCKED;
     const fill = fillEntryAtOpen(env, order.qty);
     if (order.stopFrom !== undefined) {
       const stop = order.stopFrom(fill.fillPriceMicro);
@@ -342,6 +358,8 @@ export function fillOrder(order: OrderToFill, env: FillOrderEnv): FillOutcome {
     };
   }
   if (env.halted === true) return { status: "unfilled", reason: "halted" };
+  // an exit is never cancelled on a day the stock cannot trade: it stays pending and is retried (as a halt)
+  if (env.bandLocked === true) return { status: "unfilled", reason: "band_locked" };
   if (order.kind === "exit_cs") {
     return { status: "filled", fill: fillCloseSignalExit(env, order.qty), initialStopMicro: null };
   }

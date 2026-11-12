@@ -53,6 +53,17 @@ import { CALENDAR_RULE_MODULES } from "./calendarRules.mjs";
  * without the DB-touching admin module. A built market without rules (IN, US until M20) is not listed.
  */
 export function calendarMarkets(): readonly string[] {
+  return Object.keys(CALENDAR_RULE_MODULES)
+    .filter((m) => CALENDAR_RULE_MODULES[m].onEnable !== true)
+    .sort();
+}
+
+/**
+ * Every market that has calendar rules, including those whose rows are written on enable (M20 D-1097, D-1146):
+ * the list the Owner's confirmation and ensureCalendarYears accept. `calendarMarkets()` stays the migration-seeded
+ * list, so the AU constants snapshot and the production default of `calendar_draft_markets` do not move.
+ */
+export function calendarRuleMarkets(): readonly string[] {
   return Object.keys(CALENDAR_RULE_MODULES).sort();
 }
 

@@ -49,6 +49,7 @@ import type { PoolCode } from "./controlLibrary";
 import type { CohortReplaySource } from "./cohortReplay";
 import type { PositionFacts } from "./returns";
 import { loadSnapshot, type SnapshotAnnouncement } from "./snapshot";
+import type { FundamentalFact } from "@/lib/data/sources/us/companyFacts";
 
 type LoadedSnapshot = ReturnType<typeof loadSnapshot>;
 
@@ -133,6 +134,38 @@ export function snapshotAnnouncementVisible(
     decisionCutoffUtc(day, decisionCutoffHhmm),
   );
   return a.first_ingested_at <= bound;
+}
+
+/** TST-109 (M20 A5, D-1111): a company fact was read at a decision instant that precedes its filing. */
+export class FactAheadOfFiling extends Error {
+  constructor(
+    readonly fact: Pick<FundamentalFact, "concept" | "periodEnd" | "accession" | "filedAt">,
+    decisionAt: string,
+  ) {
+    super(
+      `TST-109 fact read ahead of its filing: ${fact.concept} ${fact.periodEnd} accession ${fact.accession} filed ${fact.filedAt}, decision ${decisionAt}`,
+    );
+    this.name = "FactAheadOfFiling";
+  }
+}
+
+/** True when the fact had been filed by the decision instant (`filed_at <= decisionAt`): the only facts a decision may read. */
+export function factVisible(
+  fact: Pick<FundamentalFact, "filedAt">,
+  decisionAt: string | Date,
+): boolean {
+  const at = decisionAt instanceof Date ? decisionAt.getTime() : Date.parse(decisionAt);
+  if (Number.isNaN(at)) throw new RangeError(`unreadable decision instant: ${String(decisionAt)}`);
+  return Date.parse(fact.filedAt) <= at;
+}
+
+/** Throws `FactAheadOfFiling` for the first fact filed after the decision instant (the TST-109 fact check). */
+export function assertFactsKnown(
+  facts: readonly Pick<FundamentalFact, "concept" | "periodEnd" | "accession" | "filedAt">[],
+  decisionAt: string | Date,
+): void {
+  const iso = decisionAt instanceof Date ? decisionAt.toISOString() : decisionAt;
+  for (const f of facts) if (!factVisible(f, decisionAt)) throw new FactAheadOfFiling(f, iso);
 }
 
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);

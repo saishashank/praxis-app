@@ -2,13 +2,19 @@
 // DAT-253 (D-975; AT-81 "off-list host refused"): three registered source hosts render as links, anything
 // else is plain text. Pure: no network.
 import { describe, expect, it } from "vitest";
+import { MARKET_SITES } from "@/lib/market/seed/sourceSites.mjs";
 import { isRegisteredSourceHost, safeSourceUrl, SOURCE_SITES } from "@/lib/http/safeLink";
 
 const AT = String.fromCharCode(64); // the at sign, built so the file holds no email-shaped text
 
 describe("registered source hosts", () => {
-  it("are asx.com.au, asic.gov.au and ssrn.com", () => {
-    expect(Object.keys(SOURCE_SITES)).toEqual(["asx.com.au", "asic.gov.au", "ssrn.com"]);
+  it("are asx.com.au, asic.gov.au and ssrn.com, then the market hosts of the source rows (M20 D-1095)", () => {
+    expect(Object.keys(SOURCE_SITES).slice(0, 3)).toEqual([
+      "asx.com.au",
+      "asic.gov.au",
+      "ssrn.com",
+    ]);
+    expect(Object.keys(SOURCE_SITES).slice(3)).toEqual(Object.keys(MARKET_SITES));
   });
 
   it("render as links, with subdomains", () => {

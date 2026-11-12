@@ -73,6 +73,8 @@ export function seedForMarket(
   const converted = mulRat(makeRational(BigInt(amount.from_amount)), rate);
   const unit = BigInt(amount.round_to);
   const units = roundHalfAwayFromZero(mulRat(converted, makeRational(1n, unit))) * unit;
+  if (units <= 0n)
+    throw new RangeError(`the converted seed of market ${profile.code} rounds to nothing`);
   const seedMicro = units * MICRO;
   return {
     seedMicro,

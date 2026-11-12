@@ -10,7 +10,7 @@
 --    and `rollback_at` (D-1101: the instant of a full -> off switch, the kill at the next open reads it).
 -- 3. The source_register rows of the IN and US candidate sources (D-1096) are NOT inserted here (D-1128): the
 --    AT-32 identity baseline hashes source_register, its history and source_status, so the rows would move AU's
---    own hashes. They are kept below as a comment, with their statuses, for the stream that settles that scope.
+--    own hashes. They are defined in src/lib/market/seed/{in,us}/sources.mjs and written on enable.
 -- 4. The IN and US profile rows move to the M20 seed (generated regions below, scripts/market/gen-seed-sql.mjs
 --    --delta 0034): the four "set at M20" fields, recorded evidence, profile_version 2.
 
@@ -310,81 +310,32 @@ END;
 ALTER TABLE market ADD COLUMN data_only_since TEXT;
 ALTER TABLE market ADD COLUMN rollback_at TEXT;
 
--- 3. DEFERRED (D-1128): the IN and US candidate sources of D-1096. The AT-32 identity baseline hashes
---    source_register, source_register_history and source_status, so rows added here would move AU's own
---    hashes; the rows below are kept as comments, ready to enable together with the replayHash scope decision.
--- | 3. The IN and US candidate sources (D-1096). enabled: public statistics, EDGAR (free, fair-access terms),
--- |    SEC suspensions, holiday lists, manual CSV uploads. pending: Yahoo (O-26 basis), exchange archives and
--- |    files, SEBI, XBRL, FINRA, Stooq, Nasdaq halts, FRED (Owner key). disabled: NSE and BSE announcements until
--- |    the Owner accepts the terms risk (O-23 pattern; headline and link only when enabled, D-1125).
--- | INSERT INTO source_register (source, permitted_use, risk, status, owner_ref, summarisation_permitted)
--- | VALUES
--- |   ('in_yahoo_ns', 'personal use only (DAT-124); India end-of-day prices under the Yahoo risk basis O-26', 'high', 'pending', 'O-26', 0),
--- |   ('in_nse_bhavcopy', 'NSE daily bhavcopy file; off until its terms are checked (DAT-121)', 'high', 'pending', NULL, 0),
--- |   ('in_nse_announcements', 'NSE corporate announcements: headline and link only, never a body (D-1125); off until the Owner accepts the terms', 'high', 'disabled', NULL, 0),
--- |   ('in_bse_announcements', 'BSE corporate announcements: headline and link only, never a body (D-1125); off until the Owner accepts the terms', 'high', 'disabled', NULL, 0),
--- |   ('in_nse_classification', 'NSE industry classification file', 'medium', 'pending', NULL, 0),
--- |   ('in_nse_fo_oi', 'NSE futures and options open-interest file', 'medium', 'pending', NULL, 0),
--- |   ('in_nse_slb', 'NSE securities lending and borrowing file', 'medium', 'pending', NULL, 0),
--- |   ('in_sebi_pit_sast', 'SEBI insider-trading (PIT) and takeover (SAST) disclosures', 'medium', 'pending', NULL, 0),
--- |   ('in_nse_bands', 'NSE daily price-band file', 'medium', 'pending', NULL, 0),
--- |   ('in_nse_asm_gsm', 'NSE additional and graded surveillance lists', 'medium', 'pending', NULL, 0),
--- |   ('in_nse_indices_manual', 'manual CSV upload by the Owner (Nifty index membership)', 'low', 'enabled', NULL, 0),
--- |   ('in_nse_board_meetings', 'NSE board-meeting calendar', 'medium', 'pending', NULL, 0),
--- |   ('in_nse_bse_xbrl', 'NSE and BSE XBRL financial results', 'medium', 'pending', NULL, 0),
--- |   ('in_rbi', 'public statistics of the Reserve Bank of India: derived numbers only, source named', 'low', 'enabled', NULL, 0),
--- |   ('in_mospi', 'public statistics of the Ministry of Statistics (MoSPI): derived numbers only, source named', 'low', 'enabled', NULL, 0),
--- |   ('in_nse_holidays', 'public NSE trading-holiday list', 'low', 'enabled', NULL, 0),
--- |   ('us_yahoo', 'personal use only (DAT-124); US end-of-day prices under the Yahoo risk basis O-26', 'high', 'pending', 'O-26', 0),
--- |   ('us_stooq', 'Stooq daily price files; off until its terms are checked', 'medium', 'pending', NULL, 0),
--- |   ('us_edgar', 'SEC EDGAR public filings, company facts and Form 4: free, fair-access terms, declared User-Agent required, at most 2 requests a second (D-1094)', 'low', 'enabled', NULL, 1),
--- |   ('us_finra_short', 'FINRA short-interest and short-volume files; licence to be verified', 'medium', 'pending', NULL, 0),
--- |   ('us_nasdaq_halts', 'Nasdaq Trader trading-halt feed', 'medium', 'pending', NULL, 0),
--- |   ('us_sec_suspensions', 'public SEC trading suspensions', 'low', 'enabled', NULL, 1),
--- |   ('us_sp_dji_russell_manual', 'manual CSV upload by the Owner (S&P, Dow Jones and Russell index membership)', 'low', 'enabled', NULL, 0),
--- |   ('us_fred', 'FRED macro series: needs the Owner key; off until it is stored', 'low', 'pending', NULL, 0),
--- |   ('us_nyse_holidays', 'public NYSE trading-holiday list', 'low', 'enabled', NULL, 0);
--- | INSERT INTO source_status (source, mode, since)
--- | VALUES
--- |   ('in_yahoo_ns', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('in_nse_bhavcopy', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('in_nse_announcements', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('in_bse_announcements', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('in_nse_classification', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('in_nse_fo_oi', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('in_nse_slb', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('in_sebi_pit_sast', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('in_nse_bands', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('in_nse_asm_gsm', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('in_nse_indices_manual', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('in_nse_board_meetings', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('in_nse_bse_xbrl', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('in_rbi', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('in_mospi', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('in_nse_holidays', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('us_yahoo', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('us_stooq', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('us_edgar', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('us_finra_short', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('us_nasdaq_halts', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('us_sec_suspensions', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('us_sp_dji_russell_manual', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('us_fred', 'on', '2026-11-12T00:00:00.000Z'),
--- |   ('us_nyse_holidays', 'on', '2026-11-12T00:00:00.000Z');
+-- 3. The IN and US source rows (D-1096) are not in this migration (D-1128): they are defined in
+--    src/lib/market/seed/{in,us}/sources.mjs and written by ensureMarketSources when a market leaves `off`.
 --
 -- 4. The IN and US profile rows move to the M20 seed (generated from src/lib/market/seed/*.mjs).
 -- BEGIN GENERATED seed delta 0034 up (scripts/market/gen-seed-sql.mjs --delta 0034; do not edit by hand)
 UPDATE market_profile SET profile_version = 2 WHERE code = 'IN';
-UPDATE market_profile_field SET value_json = '[{"fromMicro":"0n","tickMicro":"10000n"},{"fromMicro":"250000000n","tickMicro":"50000n"}]', verify = 1, verified_at = NULL, evidence_ref = 'M20 A4 (D-1104, D-1118): [VERIFY], see seed/in/tickTable.mjs', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'tick_table';
-UPDATE market_profile_field SET value_json = '{"buckets":[{"fromAdvMicro":"791700000000000n","bps":10},{"fromAdvMicro":"271500000000000n","bps":25},{"fromAdvMicro":"122000000000000n","bps":60},{"fromAdvMicro":"66500000000000n","bps":120}],"tick_cross_factor":1,"stall_floor_bps":10,"untradeable_adv_fraction":{"num":1,"den":200},"half_spread_ppm_by_tier":{"U1":"500n","U2":"2500n","U3":"7500n"}}', verify = 1, verified_at = NULL, evidence_ref = 'M20 A4 (D-1104, D-1118): [VERIFY], see seed/in/tickTable.mjs', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'slippage_buckets';
-UPDATE market_profile_field SET value_json = '{"windowSessions":60,"u1":{"advMicro":"189200000000000n","priceMicro":"27500000n","top":514,"minSessions":54},"u2":{"advMicro":"88700000000000n","priceMicro":"11000000n","listedDays":365,"mcapMicro":"1650000000000000n"},"u3":{"advMicro":"48100000000000n","priceMicro":"5500000n"}}', verify = 1, verified_at = NULL, evidence_ref = 'M20 A4 (D-1104, D-1118): [VERIFY], see seed/in/tickTable.mjs', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'tiers';
+UPDATE market_profile_field SET value_json = '"NSE"', verify = 0, verified_at = '2026-11-13', evidence_ref = 'NSE market timings page: the National Stock Exchange of India equity segment', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'exchange';
+UPDATE market_profile_field SET value_json = '"09:15"', verify = 0, verified_at = '2026-11-13', evidence_ref = 'NSE market timings page: normal market opens 09:15 IST', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'session_open';
+UPDATE market_profile_field SET value_json = '"15:30"', verify = 0, verified_at = '2026-11-13', evidence_ref = 'NSE market timings page: normal market closes 15:30 IST', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'session_close';
+UPDATE market_profile_field SET value_json = '{"kind":"single","at":"09:15","call_auction":{"from":"09:00","to":"09:08"}}', verify = 0, verified_at = '2026-11-13', evidence_ref = 'NSE pre-open session page: order entry 09:00 to 09:08, call auction ends before 09:15', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'opening_auction_window';
+UPDATE market_profile_field SET value_json = '[{"fromMicro":"0n","tickMicro":"10000n"},{"fromMicro":"250000000n","tickMicro":"50000n"}]', verify = 1, verified_at = NULL, evidence_ref = 'M20 A4 (D-1104, D-1144, D-1118): [VERIFY], see seed/in/tickTable.mjs', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'tick_table';
+UPDATE market_profile_field SET value_json = '{"buckets":[{"fromAdvMicro":"791700000000000n","bps":10},{"fromAdvMicro":"271500000000000n","bps":25},{"fromAdvMicro":"122000000000000n","bps":60},{"fromAdvMicro":"66500000000000n","bps":120}],"tick_cross_factor":1,"stall_floor_bps":10,"untradeable_adv_fraction":{"num":1,"den":200},"half_spread_ppm_by_tier":{"U1":"500n","U2":"2500n","U3":"7500n"}}', verify = 1, verified_at = NULL, evidence_ref = 'M20 A4 (D-1104, D-1144, D-1118): [VERIFY], see seed/in/tickTable.mjs', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'slippage_buckets';
+UPDATE market_profile_field SET value_json = '{"windowSessions":60,"u1":{"advMicro":"189200000000000n","priceMicro":"27500000n","top":514,"minSessions":54},"u2":{"advMicro":"88700000000000n","priceMicro":"11000000n","listedDays":365,"mcapMicro":"1650000000000000n"},"u3":{"advMicro":"48100000000000n","priceMicro":"5500000n"}}', verify = 1, verified_at = NULL, evidence_ref = 'M20 A4 (D-1104, D-1144, D-1118): [VERIFY], see seed/in/tickTable.mjs', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'tiers';
 UPDATE market_profile_field SET value_json = '{"multiple":1,"basis":"SEBI cash-segment delivery (IN-P1 is a delivery formula; no MTF assumed)"}', verify = 1, verified_at = NULL, evidence_ref = 'D-1106: listed for the Owner', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'sleeve_reality_cap';
+UPDATE market_profile_field SET value_json = '"nse_holiday_list"', verify = 0, verified_at = '2026-11-13', evidence_ref = 'NSE public holiday list read in the A3 verification pass (source report row in_nse_holidays)', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'calendar_source';
 UPDATE market_profile_field SET value_json = '{"kind":"assumed","minutes":60,"basis":"batch b1 = close + 60","measured_nights":0}', verify = 1, verified_at = NULL, evidence_ref = 'D-1105: measured in production data_only', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'bar_latency_p95_min';
 UPDATE market_profile SET profile_version = 2 WHERE code = 'US';
+UPDATE market_profile_field SET value_json = '"09:30"', verify = 0, verified_at = '2026-11-13', evidence_ref = 'NYSE hours and calendars page: core trading session opens 09:30 ET', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'session_open';
+UPDATE market_profile_field SET value_json = '"16:00"', verify = 0, verified_at = '2026-11-13', evidence_ref = 'NYSE hours and calendars page: core trading session closes 16:00 ET', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'session_close';
+UPDATE market_profile_field SET value_json = '{"kind":"cross","at":"16:00"}', verify = 0, verified_at = '2026-11-13', evidence_ref = 'NYSE hours and calendars page: closing auction at 16:00 ET', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'closing_auction';
+UPDATE market_profile_field SET value_json = '{"kind":"single","at":"09:30"}', verify = 0, verified_at = '2026-11-13', evidence_ref = 'NYSE hours and calendars page: core open auction at 09:30 ET', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'opening_auction_window';
 UPDATE market_profile_field SET value_json = '[{"fromMicro":"0n","tickMicro":"100n"},{"fromMicro":"1000000n","tickMicro":"10000n"}]', verify = 1, verified_at = NULL, evidence_ref = 'M20 A4 (D-1104, D-1118): [VERIFY], see seed/us/tickTable.mjs', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'tick_table';
 UPDATE market_profile_field SET value_json = '{"buckets":[{"fromAdvMicro":"3250000000000n","bps":10},{"fromAdvMicro":"650000000000n","bps":25},{"fromAdvMicro":"160000000000n","bps":60},{"fromAdvMicro":"70000000000n","bps":120}],"tick_cross_factor":1,"stall_floor_bps":10,"untradeable_adv_fraction":{"num":1,"den":200},"half_spread_ppm_by_tier":{"U1":"500n","U2":"2500n","U3":"7500n"}}', verify = 1, verified_at = NULL, evidence_ref = 'M20 A4 (D-1104, D-1118): [VERIFY], see seed/us/tickTable.mjs', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'slippage_buckets';
 UPDATE market_profile_field SET value_json = '{"windowSessions":60,"u1":{"advMicro":"650000000000n","priceMicro":"330000n","top":300,"minSessions":54},"u2":{"advMicro":"160000000000n","priceMicro":"130000n","listedDays":365,"mcapMicro":"19500000000000n"},"u3":{"advMicro":"70000000000n","priceMicro":"70000n"}}', verify = 1, verified_at = NULL, evidence_ref = 'M20 A4 (D-1104, D-1118): [VERIFY], see seed/us/tickTable.mjs', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'tiers';
 UPDATE market_profile_field SET value_json = '{"multiple":2,"basis":"Reg T 50 % initial margin"}', verify = 1, verified_at = NULL, evidence_ref = 'D-1106: listed for the Owner', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'sleeve_reality_cap';
+UPDATE market_profile_field SET value_json = '"nyse_holiday_list"', verify = 0, verified_at = '2026-11-13', evidence_ref = 'NYSE holiday and early-close list read in the A3 verification pass (source report row us_nyse_holidays)', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'calendar_source';
 UPDATE market_profile_field SET value_json = '{"kind":"assumed","minutes":60,"basis":"batch b1 = close + 60","measured_nights":0}', verify = 1, verified_at = NULL, evidence_ref = 'D-1105: measured in production data_only', updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'bar_latency_p95_min';
 INSERT INTO market_profile_change (code, field, old_json, new_json, changed_at, actor, reason, counted_trial) VALUES ('IN', 'tick_table', '[{"fromMicro":"0n","tickMicro":"50000n"}]', '[{"fromMicro":"0n","tickMicro":"10000n"},{"fromMicro":"250000000n","tickMicro":"50000n"}]', '2026-11-12T00:00:00.000Z', 'migration', 'M20 profile completion (migration 0036, D-1122)', 1);
 INSERT INTO market_profile_change (code, field, old_json, new_json, changed_at, actor, reason, counted_trial) VALUES ('IN', 'slippage_buckets', 'null', '{"buckets":[{"fromAdvMicro":"791700000000000n","bps":10},{"fromAdvMicro":"271500000000000n","bps":25},{"fromAdvMicro":"122000000000000n","bps":60},{"fromAdvMicro":"66500000000000n","bps":120}],"tick_cross_factor":1,"stall_floor_bps":10,"untradeable_adv_fraction":{"num":1,"den":200},"half_spread_ppm_by_tier":{"U1":"500n","U2":"2500n","U3":"7500n"}}', '2026-11-12T00:00:00.000Z', 'migration', 'M20 profile completion (migration 0036, D-1122)', 1);
@@ -402,16 +353,26 @@ INSERT INTO market_profile_change (code, field, old_json, new_json, changed_at, 
 -- The profile rows go back to what 0034 wrote (generated).
 -- BEGIN GENERATED seed delta 0034 down (scripts/market/gen-seed-sql.mjs --delta 0034; do not edit by hand)
 UPDATE market_profile SET profile_version = 1 WHERE code = 'IN';
+UPDATE market_profile_field SET value_json = '"NSE"', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'exchange';
+UPDATE market_profile_field SET value_json = '"09:15"', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'session_open';
+UPDATE market_profile_field SET value_json = '"15:30"', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'session_close';
+UPDATE market_profile_field SET value_json = '{"kind":"single","at":"09:15","call_auction":{"from":"09:00","to":"09:08"}}', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'opening_auction_window';
 UPDATE market_profile_field SET value_json = '[{"fromMicro":"0n","tickMicro":"50000n"}]', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'tick_table';
 UPDATE market_profile_field SET value_json = 'null', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'slippage_buckets';
 UPDATE market_profile_field SET value_json = 'null', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'tiers';
 UPDATE market_profile_field SET value_json = 'null', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'sleeve_reality_cap';
+UPDATE market_profile_field SET value_json = '"nse_holiday_list"', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'calendar_source';
 UPDATE market_profile_field SET value_json = 'null', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'IN' AND field = 'bar_latency_p95_min';
 UPDATE market_profile SET profile_version = 1 WHERE code = 'US';
+UPDATE market_profile_field SET value_json = '"09:30"', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'session_open';
+UPDATE market_profile_field SET value_json = '"16:00"', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'session_close';
+UPDATE market_profile_field SET value_json = '{"kind":"cross","at":"16:00"}', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'closing_auction';
+UPDATE market_profile_field SET value_json = '{"kind":"single","at":"09:30"}', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'opening_auction_window';
 UPDATE market_profile_field SET value_json = '[{"fromMicro":"0n","tickMicro":"10000n"}]', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'tick_table';
 UPDATE market_profile_field SET value_json = 'null', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'slippage_buckets';
 UPDATE market_profile_field SET value_json = 'null', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'tiers';
 UPDATE market_profile_field SET value_json = 'null', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'sleeve_reality_cap';
+UPDATE market_profile_field SET value_json = '"nyse_holiday_list"', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'calendar_source';
 UPDATE market_profile_field SET value_json = 'null', verify = 1, verified_at = NULL, evidence_ref = NULL, updated_at = '2026-11-12T00:00:00.000Z' WHERE code = 'US' AND field = 'bar_latency_p95_min';
 DROP TRIGGER market_profile_change_no_delete;
 DELETE FROM market_profile_change WHERE actor = 'migration' AND reason = 'M20 profile completion (migration 0036, D-1122)';

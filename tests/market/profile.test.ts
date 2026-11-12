@@ -155,9 +155,9 @@ describe("loadProfile from a migrated database", () => {
       expect(p.enabled).toBe(false);
       expect(p.mode).toBe("off");
       expect(p.complete).toBe(false);
-      // M20 A4 filled tiers, slippage_buckets, sleeve_reality_cap and bar_latency_p95_min; every value is still [VERIFY]
+      // M20 A4 filled tiers, slippage_buckets, sleeve_reality_cap and bar_latency_p95_min
       expect(p.completeness.missing).toEqual([]);
-      expect(p.completeness.verified).toBe(0);
+      expect(p.completeness.verified).toBe(5); // the fields a public source states (M20 A3, D-1143)
       expect(p.angleCount).toBe(99);
     }
     expect(inn).toMatchObject({

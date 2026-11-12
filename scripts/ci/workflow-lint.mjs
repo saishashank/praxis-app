@@ -98,6 +98,12 @@ export const SCHEDULED_WORKFLOWS = [
 ];
 /** `file::job` pairs allowed to upload an artifact (failure-only report on synthetic data). */
 export const UPLOAD_ALLOWED = ["ci.yml::e2e"];
+/**
+ * `file::job` pairs allowed to upload an artifact on success (M20 A3, DAT-101): the source report holds no secret, no
+ * environment and no database; its artefact is counts, statuses and hashes only (SEC-110). The secret-job-storage rule
+ * still applies to it, so adding a secret to that job fails the lint.
+ */
+export const UPLOAD_ALWAYS_ALLOWED = ["source-report.yml::report"];
 
 const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const SECRET_REF = /\bsecrets\s*(\.|\[)|secrets:\s*inherit/;
@@ -152,13 +158,14 @@ const FORK_GUARDS = [
 /**
  * @param {string} file workflow file name, e.g. "ci.yml"
  * @param {string} text the YAML text
- * @param {{ pipeline?: string[], scheduled?: string[], uploadAllowed?: string[] }} [opts]
+ * @param {{ pipeline?: string[], scheduled?: string[], uploadAllowed?: string[], uploadAlways?: string[] }} [opts]
  * @returns {{ file: string, rule: string, where: string, message: string }[]}
  */
 export function lintWorkflow(file, text, opts = {}) {
   const pipeline = opts.pipeline ?? PIPELINE_WORKFLOWS;
   const scheduled = opts.scheduled ?? SCHEDULED_WORKFLOWS;
   const uploadAllowed = opts.uploadAllowed ?? UPLOAD_ALLOWED;
+  const uploadAlways = opts.uploadAlways ?? UPLOAD_ALWAYS_ALLOWED;
   const findings = [];
   const add = (rule, where, message) => findings.push({ file, rule, where, message });
 
@@ -293,10 +300,11 @@ export function lintWorkflow(file, text, opts = {}) {
             "a job that holds secrets must not upload an artifact or use a cache",
           );
         }
-        if (isUpload && !uploadAllowed.includes(`${file}::${id}`)) {
+        const always = uploadAlways.includes(`${file}::${id}`);
+        if (isUpload && !always && !uploadAllowed.includes(`${file}::${id}`)) {
           add("artifact-upload", where, "upload-artifact is not on the allow-list (SEC-110)");
         }
-        if (isUpload && uploadAllowed.includes(`${file}::${id}`)) {
+        if (isUpload && !always && uploadAllowed.includes(`${file}::${id}`)) {
           if (typeof s.if !== "string" || !/failure\(\)/.test(s.if)) {
             add("artifact-upload", where, "an allowed upload must run only on failure()");
           }

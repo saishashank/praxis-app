@@ -179,6 +179,7 @@ export function costProfilesOfMarket(market: string): Readonly<Record<string, Co
   PROFILE_CACHE.set(market, built);
   return built;
 }
+/** Never invalidated: valid only because the seeds are static (a changed rate is a new code version and a new process). */
 const PROFILE_CACHE = new Map<string, Readonly<Record<string, CostProfile>>>();
 
 /** The profile a market's `cost_formula` names ("P5" for AU); throws when the market has no table built (M20). */

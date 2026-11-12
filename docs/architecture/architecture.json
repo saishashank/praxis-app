@@ -2189,10 +2189,10 @@
         "data",
         "platform"
       ],
-      "source": "src/lib/http/safeLink.ts",
+      "source": "src/lib/http/sourceSites.ts",
       "attrs": {
         "files": [
-          "src/lib/http/safeLink.ts"
+          "src/lib/http/sourceSites.ts"
         ]
       }
     },
@@ -2225,6 +2225,33 @@
       }
     },
     {
+      "id": "host:cdn.finra.org",
+      "type": "host",
+      "name": "cdn.finra.org",
+      "purpose": "External host cdn.finra.org called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/market/seed/us/sources.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/market/seed/us/sources.mjs"
+        ]
+      }
+    },
+    {
       "id": "host:console.groq.com",
       "type": "host",
       "name": "console.groq.com",
@@ -2247,6 +2274,33 @@
       "attrs": {
         "files": [
           "src/lib/llm/roster.ts"
+        ]
+      }
+    },
+    {
+      "id": "host:data.sec.gov",
+      "type": "host",
+      "name": "data.sec.gov",
+      "purpose": "External host data.sec.gov called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/market/seed/us/sources.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/market/seed/us/sources.mjs"
         ]
       }
     },
@@ -2332,6 +2386,33 @@
       }
     },
     {
+      "id": "host:fred.stlouisfed.org",
+      "type": "host",
+      "name": "fred.stlouisfed.org",
+      "purpose": "External host fred.stlouisfed.org called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/market/seed/us/sources.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/market/seed/us/sources.mjs"
+        ]
+      }
+    },
+    {
       "id": "host:generativelanguage.googleapis.com",
       "type": "host",
       "name": "generativelanguage.googleapis.com",
@@ -2384,6 +2465,34 @@
       "attrs": {
         "files": [
           "src/lib/config/verify.ts"
+        ]
+      }
+    },
+    {
+      "id": "host:legal.yahoo.com",
+      "type": "host",
+      "name": "legal.yahoo.com",
+      "purpose": "External host legal.yahoo.com called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/market/seed/in/sources.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/market/seed/in/sources.mjs",
+          "src/lib/market/seed/us/sources.mjs"
         ]
       }
     },
@@ -2471,7 +2580,63 @@
       "source": "src/lib/data/quotes/fetch.ts",
       "attrs": {
         "files": [
-          "src/lib/data/quotes/fetch.ts"
+          "src/lib/data/quotes/fetch.ts",
+          "src/lib/market/seed/in/sources.mjs",
+          "src/lib/market/seed/us/sources.mjs"
+        ]
+      }
+    },
+    {
+      "id": "host:rbi.org.in",
+      "type": "host",
+      "name": "rbi.org.in",
+      "purpose": "External host rbi.org.in called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/market/seed/in/sources.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/market/seed/in/sources.mjs"
+        ]
+      }
+    },
+    {
+      "id": "host:stooq.com",
+      "type": "host",
+      "name": "stooq.com",
+      "purpose": "External host stooq.com called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/market/seed/us/sources.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/market/seed/us/sources.mjs"
         ]
       }
     },
@@ -2584,8 +2749,251 @@
           "src/lib/alerts/deliver.ts",
           "src/lib/data/sources/asx.ts",
           "src/lib/data/sources/asxMarkit.mjs",
-          "src/lib/http/safeLink.ts",
+          "src/lib/http/sourceSites.ts",
           "worker/src/asx/request.ts"
+        ]
+      }
+    },
+    {
+      "id": "host:www.bseindia.com",
+      "type": "host",
+      "name": "www.bseindia.com",
+      "purpose": "External host www.bseindia.com called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/market/seed/in/sources.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/market/seed/in/sources.mjs"
+        ]
+      }
+    },
+    {
+      "id": "host:www.finra.org",
+      "type": "host",
+      "name": "www.finra.org",
+      "purpose": "External host www.finra.org called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/market/seed/us/sources.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/market/seed/us/sources.mjs"
+        ]
+      }
+    },
+    {
+      "id": "host:www.mospi.gov.in",
+      "type": "host",
+      "name": "www.mospi.gov.in",
+      "purpose": "External host www.mospi.gov.in called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/market/seed/in/sources.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/market/seed/in/sources.mjs"
+        ]
+      }
+    },
+    {
+      "id": "host:www.nasdaqtrader.com",
+      "type": "host",
+      "name": "www.nasdaqtrader.com",
+      "purpose": "External host www.nasdaqtrader.com called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/market/seed/us/sources.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/market/seed/us/sources.mjs"
+        ]
+      }
+    },
+    {
+      "id": "host:www.nseindia.com",
+      "type": "host",
+      "name": "www.nseindia.com",
+      "purpose": "External host www.nseindia.com called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/market/seed/in/sources.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/market/seed/in/sources.mjs"
+        ]
+      }
+    },
+    {
+      "id": "host:www.nyse.com",
+      "type": "host",
+      "name": "www.nyse.com",
+      "purpose": "External host www.nyse.com called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/market/seed/us/sources.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/market/seed/us/sources.mjs"
+        ]
+      }
+    },
+    {
+      "id": "host:www.rbi.org.in",
+      "type": "host",
+      "name": "www.rbi.org.in",
+      "purpose": "External host www.rbi.org.in called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/market/seed/in/sources.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/market/seed/in/sources.mjs"
+        ]
+      }
+    },
+    {
+      "id": "host:www.sebi.gov.in",
+      "type": "host",
+      "name": "www.sebi.gov.in",
+      "purpose": "External host www.sebi.gov.in called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/market/seed/in/sources.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/market/seed/in/sources.mjs"
+        ]
+      }
+    },
+    {
+      "id": "host:www.sec.gov",
+      "type": "host",
+      "name": "www.sec.gov",
+      "purpose": "External host www.sec.gov called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/market/seed/us/sources.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/market/seed/us/sources.mjs"
         ]
       }
     },
@@ -2609,10 +3017,10 @@
         "data",
         "platform"
       ],
-      "source": "src/lib/http/safeLink.ts",
+      "source": "src/lib/http/sourceSites.ts",
       "attrs": {
         "files": [
-          "src/lib/http/safeLink.ts"
+          "src/lib/http/sourceSites.ts"
         ]
       }
     },
@@ -16019,6 +16427,37 @@
       }
     },
     {
+      "id": "workflow:source-report",
+      "type": "workflow",
+      "name": "Source report (DAT-101)",
+      "purpose": "GitHub Actions workflow Source report (DAT-101).",
+      "specIds": [
+        "PLT-015"
+      ],
+      "owner": "actions",
+      "schedule": "dispatch only",
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The run fails on purpose so GitHub's failure email reaches the Owner; the run record shows it.",
+      "runbook": null,
+      "views": [
+        "platform",
+        "security"
+      ],
+      "source": ".github/workflows/source-report.yml",
+      "attrs": {
+        "file": ".github/workflows/source-report.yml",
+        "jobs": [
+          "report"
+        ],
+        "triggers": [
+          "workflow_dispatch"
+        ]
+      }
+    },
+    {
       "id": "workflow:staging-e2e-day",
       "type": "workflow",
       "name": "Staging E2E day",
@@ -17258,6 +17697,17 @@
       "id": "service:actions|contains|workflow:smoke-test",
       "from": "service:actions",
       "to": "workflow:smoke-test",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform",
+        "security"
+      ]
+    },
+    {
+      "id": "service:actions|contains|workflow:source-report",
+      "from": "service:actions",
+      "to": "workflow:source-report",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
@@ -19136,6 +19586,16 @@
       ]
     },
     {
+      "id": "service:app|http|host:cdn.finra.org",
+      "from": "service:app",
+      "to": "host:cdn.finra.org",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
       "id": "service:app|http|host:console.groq.com",
       "from": "service:app",
       "to": "host:console.groq.com",
@@ -19143,6 +19603,16 @@
       "contract": "Documentation link.",
       "views": [
         "llm"
+      ]
+    },
+    {
+      "id": "service:app|http|host:data.sec.gov",
+      "from": "service:app",
+      "to": "host:data.sec.gov",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "platform"
       ]
     },
     {
@@ -19176,6 +19646,16 @@
       ]
     },
     {
+      "id": "service:app|http|host:fred.stlouisfed.org",
+      "from": "service:app",
+      "to": "host:fred.stlouisfed.org",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
       "id": "service:app|http|host:generativelanguage.googleapis.com",
       "from": "service:app",
       "to": "host:generativelanguage.googleapis.com",
@@ -19192,6 +19672,16 @@
       "to": "host:github.com",
       "kind": "http",
       "contract": "Documentation link.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|http|host:legal.yahoo.com",
+      "from": "service:app",
+      "to": "host:legal.yahoo.com",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
       "views": [
         "platform"
       ]
@@ -19227,6 +19717,26 @@
       "views": [
         "agents",
         "data",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|http|host:rbi.org.in",
+      "from": "service:app",
+      "to": "host:rbi.org.in",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|http|host:stooq.com",
+      "from": "service:app",
+      "to": "host:stooq.com",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
         "platform"
       ]
     },
@@ -19269,6 +19779,96 @@
       "contract": "HTTPS request to an external host.",
       "views": [
         "data",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|http|host:www.bseindia.com",
+      "from": "service:app",
+      "to": "host:www.bseindia.com",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|http|host:www.finra.org",
+      "from": "service:app",
+      "to": "host:www.finra.org",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|http|host:www.mospi.gov.in",
+      "from": "service:app",
+      "to": "host:www.mospi.gov.in",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|http|host:www.nasdaqtrader.com",
+      "from": "service:app",
+      "to": "host:www.nasdaqtrader.com",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|http|host:www.nseindia.com",
+      "from": "service:app",
+      "to": "host:www.nseindia.com",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|http|host:www.nyse.com",
+      "from": "service:app",
+      "to": "host:www.nyse.com",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|http|host:www.rbi.org.in",
+      "from": "service:app",
+      "to": "host:www.rbi.org.in",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|http|host:www.sebi.gov.in",
+      "from": "service:app",
+      "to": "host:www.sebi.gov.in",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|http|host:www.sec.gov",
+      "from": "service:app",
+      "to": "host:www.sec.gov",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
         "platform"
       ]
     },

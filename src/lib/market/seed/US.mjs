@@ -10,6 +10,24 @@ const unverified = (value, evidenceRef = null) => ({
   verifiedAt: null,
   evidenceRef,
 });
+// M20 A3 (DAT-241/242, D-1104 to D-1107): a field whose value a public source states is marked verified with the
+// date and the source; every other field stays [VERIFY] (verify 1) until its evidence is recorded.
+const VERIFIED_AT = "2026-11-13";
+const EVIDENCE = {
+  session_open: "NYSE hours and calendars page: core trading session opens 09:30 ET",
+  session_close: "NYSE hours and calendars page: core trading session closes 16:00 ET",
+  closing_auction: "NYSE hours and calendars page: closing auction at 16:00 ET",
+  opening_auction_window: "NYSE hours and calendars page: core open auction at 09:30 ET",
+  calendar_source:
+    "NYSE holiday and early-close list read in the A3 verification pass (source report row us_nyse_holidays)",
+};
+function markVerified(fields, evidence) {
+  const out = { ...fields };
+  for (const [name, ref] of Object.entries(evidence)) {
+    out[name] = { value: out[name].value, verify: 0, verifiedAt: VERIFIED_AT, evidenceRef: ref };
+  }
+  return out;
+}
 
 const PROPOSED = "D-947 [PROPOSED]";
 const M20_A4 = "M20 A4 (D-1104, D-1118): [VERIFY], see seed/us/tickTable.mjs";
@@ -26,69 +44,74 @@ export default Object.freeze({
   evidenceRecordedAt: null,
   updatedAt: "2026-11-12T00:00:00.000Z",
   costProfileCodes: US_COST_PROFILE_CODES,
-  fields: Object.freeze({
-    exchange: unverified("NYSE+Nasdaq"),
-    tz: unverified("America/New_York"),
-    session_open: unverified("09:30"),
-    session_close: unverified("16:00"),
-    closing_auction: unverified({ kind: "cross", at: "16:00" }),
-    opening_auction_window: unverified({ kind: "single", at: "09:30" }),
-    announcement_hours: unverified({ from: "06:00", to: "22:00", tz: "America/New_York" }),
-    decision_cutoff: unverified({ time: "18:00", zone: "America/New_York" }),
-    known_time_rules: unverified({
-      filings: "edgar_acceptance_time",
-      bars: "close_plus_latency",
-      index_global: { kind: "own_bars" },
-    }),
-    batch_schedule: unverified(
-      { kind: "after_close", b1: 60, b2a: 80, b2b: 100, late_2a_after: 130 },
-      "spec 20.1 close + 60 / + 100 / + 130 min; b2a = b1 + 20 [PROPOSED] as in AU",
+  fields: Object.freeze(
+    markVerified(
+      {
+        exchange: unverified("NYSE+Nasdaq"),
+        tz: unverified("America/New_York"),
+        session_open: unverified("09:30"),
+        session_close: unverified("16:00"),
+        closing_auction: unverified({ kind: "cross", at: "16:00" }),
+        opening_auction_window: unverified({ kind: "single", at: "09:30" }),
+        announcement_hours: unverified({ from: "06:00", to: "22:00", tz: "America/New_York" }),
+        decision_cutoff: unverified({ time: "18:00", zone: "America/New_York" }),
+        known_time_rules: unverified({
+          filings: "edgar_acceptance_time",
+          bars: "close_plus_latency",
+          index_global: { kind: "own_bars" },
+        }),
+        batch_schedule: unverified(
+          { kind: "after_close", b1: 60, b2a: 80, b2b: 100, late_2a_after: 130 },
+          "spec 20.1 close + 60 / + 100 / + 130 min; b2a = b1 + 20 [PROPOSED] as in AU",
+        ),
+        review_date_rule: unverified({
+          kind: "latest_session_with_marker",
+          by: "au_review_time",
+          offset_days: -1,
+        }),
+        currency: unverified("USD"),
+        seed_amount: unverified({
+          kind: "fx_rounded",
+          from_amount: 600,
+          from_currency: "AUD",
+          fx_source: "rba_daily",
+          round_to: 10,
+        }),
+        parcel_floor: unverified(300_000_000n, PROPOSED),
+        settlement_days: unverified(1),
+        tick_table: unverified(US_TICK_TABLE, M20_A4),
+        slippage_buckets: unverified(US_SLIPPAGE, M20_A4),
+        tiers: unverified(US_TIERS, M20_A4),
+        cost_formula: unverified("US-P1"),
+        benchmark_index: unverified({ code: "GSPC", yahoo: "^GSPC", name: "S&P 500" }),
+        regime_index: unverified({ code: "GSPC", yahoo: "^GSPC", name: "S&P 500" }),
+        volatility_index: unverified({ code: "VIX", yahoo: "^VIX", name: "VIX" }),
+        control_instrument: unverified({ kind: "broad_index_etf", index: "GSPC" }),
+        classification_scheme: unverified("sic_2digit"),
+        short_data_kind: unverified("finra_short_interest_and_daily_volume"),
+        insider_notice_kind: unverified("sec_form4_13d_13g"),
+        halt_model: unverified("us_luld"),
+        index_change_source: unverified("sp_dji_announcements_russell"),
+        forward_results_dates: unverified({ kind: "edgar_filing_cadence" }),
+        fundamentals_source: unverified({ kind: "edgar_company_facts" }),
+        macro_series: unverified(["FRED", "FED", "GSPC", "VIX"]),
+        dividend_imputation: unverified(false),
+        sleeve_reality_cap: unverified(
+          { multiple: 2, basis: "Reg T 50 % initial margin" },
+          "D-1106: listed for the Owner",
+        ),
+        calendar_source: unverified("nyse_holiday_list"),
+        fx_source: unverified("rba_daily"),
+        yahoo_suffix: unverified(""),
+        bar_latency_p95_min: unverified(
+          { kind: "assumed", minutes: 60, basis: "batch b1 = close + 60", measured_nights: 0 },
+          "D-1105: measured in production data_only",
+        ),
+        preopen_recheck_min: unverified(5),
+        category_map: unverified({ kind: "edgar_8k_items" }),
+        universe_max: unverified(2500),
+      },
+      EVIDENCE,
     ),
-    review_date_rule: unverified({
-      kind: "latest_session_with_marker",
-      by: "au_review_time",
-      offset_days: -1,
-    }),
-    currency: unverified("USD"),
-    seed_amount: unverified({
-      kind: "fx_rounded",
-      from_amount: 600,
-      from_currency: "AUD",
-      fx_source: "rba_daily",
-      round_to: 10,
-    }),
-    parcel_floor: unverified(300_000_000n, PROPOSED),
-    settlement_days: unverified(1),
-    tick_table: unverified(US_TICK_TABLE, M20_A4),
-    slippage_buckets: unverified(US_SLIPPAGE, M20_A4),
-    tiers: unverified(US_TIERS, M20_A4),
-    cost_formula: unverified("US-P1"),
-    benchmark_index: unverified({ code: "GSPC", yahoo: "^GSPC", name: "S&P 500" }),
-    regime_index: unverified({ code: "GSPC", yahoo: "^GSPC", name: "S&P 500" }),
-    volatility_index: unverified({ code: "VIX", yahoo: "^VIX", name: "VIX" }),
-    control_instrument: unverified({ kind: "broad_index_etf", index: "GSPC" }),
-    classification_scheme: unverified("sic_2digit"),
-    short_data_kind: unverified("finra_short_interest_and_daily_volume"),
-    insider_notice_kind: unverified("sec_form4_13d_13g"),
-    halt_model: unverified("us_luld"),
-    index_change_source: unverified("sp_dji_announcements_russell"),
-    forward_results_dates: unverified({ kind: "edgar_filing_cadence" }),
-    fundamentals_source: unverified({ kind: "edgar_company_facts" }),
-    macro_series: unverified(["FRED", "FED", "GSPC", "VIX"]),
-    dividend_imputation: unverified(false),
-    sleeve_reality_cap: unverified(
-      { multiple: 2, basis: "Reg T 50 % initial margin" },
-      "D-1106: listed for the Owner",
-    ),
-    calendar_source: unverified("nyse_holiday_list"),
-    fx_source: unverified("rba_daily"),
-    yahoo_suffix: unverified(""),
-    bar_latency_p95_min: unverified(
-      { kind: "assumed", minutes: 60, basis: "batch b1 = close + 60", measured_nights: 0 },
-      "D-1105: measured in production data_only",
-    ),
-    preopen_recheck_min: unverified(5),
-    category_map: unverified({ kind: "edgar_8k_items" }),
-    universe_max: unverified(2500),
-  }),
+  ),
 });

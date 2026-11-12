@@ -14,6 +14,9 @@
 // [VERIFY] The Owner confirms this list (decision 11) and it must be checked against the ASX
 // trading calendar before the Owner confirms (DAT-160, spec/13 "[VERIFY at build]").
 
+import * as inRules from "./calendarRules/in.mjs";
+import * as usRules from "./calendarRules/us.mjs";
+
 export const EARLY_CLOSE_TIME = "14:10";
 
 /** One-off ASX closures the rules cannot compute (day -> reason). */
@@ -98,11 +101,23 @@ export function yearRows(year) {
 
 /**
  * The rule module of each market that has computed rules: market code -> { yearRows, source }.
- * `source` names the rule set and is stored on every drafted row (`draft:<source>`). A market without an
+ * `source` names the rule set and is stored on every drafted row (`draft:<source>`); a module may add `sourceOf(year)`
+ * to name the rows of one year (the draft job and `ensureCalendarYears` prefer it). A market without an
  * entry here cannot be drafted (the draft job refuses it); M19 adds an entry per market it builds.
  */
 export const CALENDAR_RULE_MODULES = Object.freeze({
   AU: Object.freeze({ yearRows, source: "nsw-asx-rules-v1" }),
+  // M20 A3 (D-1097): the NSE table and the NYSE rules; `sourceOf(year)` names the rows of one year (the NSE list of a
+  // year the exchange has not published yet is a provisional fixed-date subset). `onEnable` marks a market whose rows are
+  // written when it is enabled (ensureCalendarYears), not seeded by a migration: `calendarMarkets()` (and so the
+  // AU constants snapshot and the production default of calendar_draft_markets) lists only the seeded ones (D-1146).
+  IN: Object.freeze({
+    yearRows: inRules.yearRows,
+    source: inRules.SOURCE,
+    sourceOf: inRules.sourceOf,
+    onEnable: true,
+  }),
+  US: Object.freeze({ yearRows: usRules.yearRows, source: usRules.SOURCE, onEnable: true }),
 });
 
 /** Prefix of the `source` column of a drafted row (provisional until the Owner confirms it). */

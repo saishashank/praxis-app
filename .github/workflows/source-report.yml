@@ -1,0 +1,53 @@
+# DAT-101 source report of one market (M20 A3; D-1093, D-1096, AT-M1, TST-138). Reads the market's source rows from
+# src/lib/market/seed/<code>/sources.mjs and makes one polite read per source (terms page hash, one HEAD of the
+# probe page, robots.txt obeyed), then uploads the report as an artefact: ids, statuses, dates, HTTP statuses and
+# hashes only, never a page body, a contact value or a secret (SEC-110).
+# workflow_dispatch ONLY, no `schedule:` (PLT-015). It holds NO secret, NO environment and touches NO database: no
+# Turso variable is named here, and the script opens no database. EDGAR is therefore always reported as
+# `contact_missing` from this workflow (the contact is an Owner-store value, D-1094; the build-machine run, with the
+# contact set in the shell, is the one that probes it). The dispatch input reaches the script through `env:` only.
+# The build runs the same script once per market on the build machine as the verification pass; this workflow is the
+# Owner-triggerable repeat.
+name: Source report (DAT-101)
+
+on:
+  workflow_dispatch:
+    inputs:
+      market:
+        description: Market to report on
+        type: choice
+        required: true
+        options:
+          - IN
+          - US
+
+permissions: {}
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    concurrency:
+      group: source-report
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Run the source report
+        run: node scripts/market/source-report.mjs --market "$MARKET" --out "$RUNNER_TEMP/source-report/source-report-$MARKET.json"
+        env:
+          MARKET: ${{ inputs.market }}
+          PRAXIS_MARKETS_ENABLED: ${{ inputs.market }}
+      - name: Upload the report (counts, statuses and hashes only)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: source-report-${{ inputs.market }}
+          path: ${{ runner.temp }}/source-report/
+          retention-days: 14
+          if-no-files-found: error

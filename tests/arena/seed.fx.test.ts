@@ -60,9 +60,11 @@ describe("seedForMarket", () => {
         },
       },
     } as unknown as Parameters<typeof seedForMarket>[0];
-    // 10 x 0.5 = 5 -> 0.5 of a unit -> up to 10; 10 x 0.4999 = 4.999 -> 0
+    // 10 x 0.5 = 5 -> 0.5 of a unit -> up to 10; 10 x 0.4999 = 4.999 -> rounds to 0, which is refused
     expect(seedForMarket(p, { rate: "0.5", date: "d", source: "s" }).seedMicro).toBe(10n * M);
-    expect(seedForMarket(p, { rate: "0.4999", date: "d", source: "s" }).seedMicro).toBe(0n);
+    expect(() => seedForMarket(p, { rate: "0.4999", date: "d", source: "s" })).toThrow(
+      "rounds to nothing",
+    );
     // 10 x 1.5 = 15 -> 1.5 units of 10 -> 2 -> 20
     expect(seedForMarket(p, { rate: "1.5", date: "d", source: "s" }).seedMicro).toBe(20n * M);
   });
