@@ -14,6 +14,10 @@
 // The flag zeroes positive contributions of the event and volume clusters only (`zeroPositive`);
 // never a negative event, a thesis-breaker or an exit trigger (the consumer reads that from here).
 //
+// Trigger 3 (M20 A5, D-1109; India only, `in_bands`): a code on the exchange's surveillance list (ASM or GSM, any
+// stage) on the session takes no new entry; exits are unaffected. It is read from `PromotionInput.surveillance`
+// (`surveillance_list` rows by session date); when that input is absent nothing below changes (AU path, byte for byte).
+//
 // Everything is recomputed from the view at t (bars, index, events) so the state at t is a pure
 // feature of the view: `prev` only decides whether a row is emitted.
 import { benchmarkIndexOf } from "@/lib/market/staticProfile.mjs";
@@ -44,15 +48,29 @@ export type PromotionParams = Pick<
 
 export type ReviewVerdict = "retraction" | "contradicted" | "satisfactory";
 
+/** One `surveillance_list` membership on a session (DAT-243 g). */
+export type SurveillanceEntry = { readonly list: "ASM" | "GSM"; readonly stage: number | null };
+
 export type PromotionInput = {
   /** Producer facts by event id (financialsParsed is the only one read here). */
   readonly facts?: ReadonlyMap<string, NoticeFacts>;
   /** Review-item verdicts by session date (OI-35). */
   readonly review?: ReadonlyMap<string, ReviewVerdict>;
+  /**
+   * D-1109 trigger 3: the code's `surveillance_list` membership by session date. Absent = the market has no such
+   * list (AU): the machine runs exactly as before. Present = a session with an entry blocks new entries.
+   */
+  readonly surveillance?: ReadonlyMap<string, SurveillanceEntry>;
 };
 
 export type PromotionState =
   | { readonly state: "none" }
+  | {
+      /** D-1109: on the surveillance list this session (only when no other promotion state applies). */
+      readonly state: "surveillance";
+      readonly list: "ASM" | "GSM";
+      readonly stage: number | null;
+    }
   | {
       readonly state: "move_block";
       readonly fromD: string;
@@ -200,7 +218,10 @@ export function promotionStateAt(
   return stepPromotion(view, code, t, null, params, input);
 }
 
-/** One session; `prev` decides only whether a `cortex_state` row is appended. */
+/**
+ * One session; `prev` decides only whether a `cortex_state` row is appended. With no `input.surveillance` this is the
+ * M15 machine unchanged; with it, trigger 3 (D-1109) is added: a surveillance-list code takes no new entry.
+ */
 export function stepPromotion(
   view: AsOfView,
   code: string,
@@ -208,6 +229,43 @@ export function stepPromotion(
   prev: PromotionState | null,
   params: PromotionParams = DEFAULT_STATES_PARAMS,
   input: PromotionInput = {},
+): PromotionStep {
+  if (input.surveillance === undefined) {
+    return stepPromotionBase(view, code, t, prev, params, input);
+  }
+  const d = view.sessions[t]!;
+  const wasSurveillance = prev !== null && prev.state === "surveillance";
+  // the base machine knows nothing of trigger 3: it sees the state before the surveillance overlay
+  const base = stepPromotionBase(view, code, t, wasSurveillance ? null : prev, params, input);
+  const on = input.surveillance.get(d) ?? null;
+  if (on === null) {
+    if (wasSurveillance && base.next.state === "none") {
+      return { ...base, row: row(code, d, "none", { after: "surveillance" }) };
+    }
+    return base;
+  }
+  if (base.next.state !== "none") {
+    // another trigger already holds the code: keep its state, the entry block is the same
+    return { ...base, effects: { ...base.effects, entriesBlocked: true } };
+  }
+  const next: PromotionState = { state: "surveillance", list: on.list, stage: on.stage };
+  const same = prev !== null && prev.state === "surveillance" && prev.list === on.list;
+  return {
+    next,
+    label: "on the exchange's surveillance list: no new entry",
+    reason: "surveillance_list",
+    row: same ? null : row(code, d, "surveillance", { list: on.list, stage: on.stage }),
+    effects: { ...base.effects, entriesBlocked: true },
+  };
+}
+
+function stepPromotionBase(
+  view: AsOfView,
+  code: string,
+  t: number,
+  prev: PromotionState | null,
+  params: PromotionParams,
+  input: PromotionInput,
 ): PromotionStep {
   const d = view.sessions[t]!;
   const s = prev ?? PROMOTION_NONE;
