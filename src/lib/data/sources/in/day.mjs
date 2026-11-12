@@ -17,6 +17,7 @@
 // only ever FETCHES a source whose row is `enabled` (politeFetch.mjs). A source with no register row is "not registered".
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readThrottle } from "../../pipeline/batch1-core.mjs";
 import { assertMarketEnabled } from "../../../market/scriptMarket.mjs";
 import { staticProfile } from "../../../market/staticProfile.mjs";
 import { CATEGORY_MAP } from "../../../market/seed/in/categoryMap.mjs";
@@ -153,6 +154,10 @@ export async function prepareDay(db, o = {}) {
     files: [...FILE_KEYS],
     fetchable,
     disabled: FILE_KEYS.filter((k) => fileGate(reg, k) === "disabled"),
+    // the root batch-1 CLI convention (D-1127): a request for the fetch step and the throttle; this market fetches
+    // exchange files, not per-code Yahoo bars, so no code list and no short dates
+    request: { start: target, end: target, codes: [], short_dates: [] },
+    throttle: await readThrottle(db),
   };
 }
 
@@ -540,7 +545,10 @@ export async function runDay(db, o) {
         now: iso(),
         universe: universe.rows.length,
         barsValid: valid.length,
-        rejected: [],
+        // the data-defect rejects of the file (an unreadable or OHLC-inconsistent row), as AU's stage 8 receives them
+        rejected: bars.rejected
+          .filter((r) => r.reason === "unreadable" || r.reason === "ohlc_inconsistent")
+          .map((r) => ({ code: r.code, date: d, reason: r.reason })),
         refetchDiffs: [],
       });
       return q && typeof q.flags === "number" ? { flags: q.flags } : "done";

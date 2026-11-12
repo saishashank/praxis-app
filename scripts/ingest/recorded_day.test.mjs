@@ -189,7 +189,7 @@ test("PRAXIS_ENV=recorded is accepted like staging and writes the same files", a
   }
 });
 
-test("--market IN reads recorded/in and copies the day files; AU is never read for it (D-1180)", async () => {
+test("--market IN reads recorded/in and copies the day files; AU is never read for it (D-1156)", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "praxis-recday-in-"));
   const au = path.join(dir, "fixtures", "recorded", "au", "2026-11-12");
   const inn = path.join(dir, "fixtures", "recorded", "in", "2026-11-12");

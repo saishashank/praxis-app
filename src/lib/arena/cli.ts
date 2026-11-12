@@ -4,6 +4,8 @@
 // tests can call it directly.
 //
 //   close-books [--date YYYY-MM-DD] [--wait-minutes N] [--max-sessions N] [--replay]
+//   close-books --kill market_off [--market <CODE>] [--date YYYY-MM-DD]   (the rollback kill, M20 D-1101: closes every
+//                open book of a market in rollback at the open, then disables it; src/lib/arena/kill.ts)
 //   signals [--date YYYY-MM-DD] [--wait-minutes N] [--replay] [--phase 2b|3|learn|words|all]
 //                (batch 2b, M4 T8; batch 3, T15; then A6 `learn` and the `words` text, M6 T11; all = in that order)
 //   replay --db file:<path> --from YYYY-MM-DD --to YYYY-MM-DD [--market <CODE>]
@@ -38,6 +40,7 @@ import {
   type CloseBooksResult,
 } from "./closeBooks";
 import { loadProfile } from "@/lib/market/profile";
+import { closeBooksKill, KILL_REASON } from "./kill";
 import { resolveCliMarket } from "./marketFlag";
 import { replaySessions } from "./replay";
 
@@ -106,6 +109,7 @@ export async function closeBooksMain(
   env: Readonly<Record<string, string | undefined>>,
   deps: CliDeps = {},
 ): Promise<number> {
+  if (argv.includes("--kill")) return killMain(argv, env, deps);
   const { openDb, nowMs, sleep, out } = defaults(deps);
   const replay = argv.includes("--replay");
   const url = env.TURSO_MAIN_URL;
@@ -217,6 +221,73 @@ export async function closeBooksMain(
   }
   if (has(env.GITHUB_OUTPUT) && lines.length > 0) {
     appendFileSync(env.GITHUB_OUTPUT, `${lines[lines.length - 1]}\n`);
+  }
+  return exit;
+}
+
+/**
+ * `close-books --kill market_off` (M20 S1, D-1101): the rollback kill. Refused unless the value is `market_off`, never
+ * with `--replay`, and only against a market the resolver accepts (enabled: a market in rollback still is). Exit 0 when
+ * the books are closed and the market disabled (or the run is an expected skip), 1 when a position could not be sold,
+ * 2 on a usage error.
+ */
+export async function killMain(
+  argv: readonly string[],
+  env: Readonly<Record<string, string | undefined>>,
+  deps: CliDeps = {},
+): Promise<number> {
+  const { openDb, nowMs, out } = defaults(deps);
+  if (flag(argv, "--kill") !== KILL_REASON || argv.includes("--replay")) {
+    out(`arena-kill: refused (usage: --kill ${KILL_REASON}, never with --replay)`);
+    return 2;
+  }
+  const url = env.TURSO_MAIN_URL;
+  const token = env.TURSO_MAIN_TOKEN;
+  if (!has(url) || (!has(token) && !url.startsWith("file:"))) {
+    out("arena-kill: failed (database not configured)");
+    return 1;
+  }
+  let db: Client;
+  try {
+    db = openDb(url, has(token) ? token : undefined);
+  } catch {
+    out("arena-kill: failed (cannot open database)");
+    return 1;
+  }
+  let exit = 0;
+  try {
+    const chosen = await resolveCliMarket(db, argv);
+    if (!chosen.ok) {
+      out(`arena-kill: ${chosen.line}`);
+      return 2;
+    }
+    const market = chosen.market;
+    const tz = (await loadProfile(db, market)).tz!;
+    const d = flag(argv, "--date") ?? marketDate(new Date(nowMs()), tz);
+    const r = await closeBooksKill(db, {
+      market,
+      d,
+      now: () => new Date(nowMs()).toISOString(),
+      commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
+      notify: { env },
+    });
+    const why = r.reason === null ? "" : ` (${r.reason})`;
+    out(
+      `arena-kill ${market} ${d}: ${r.status}${why} sold=${r.sold} sleeve=${r.sleeveClosed} cancelled=${r.cancelled}` +
+        ` open=${r.basis.open} lastClose=${r.basis.lastClose} remaining=${r.remaining} disabled=${r.disabled}`,
+    );
+    if (r.status === "failed") exit = 1;
+    if (has(env.GITHUB_OUTPUT))
+      appendFileSync(
+        env.GITHUB_OUTPUT,
+        `status=${r.status}
+`,
+      );
+  } catch (error) {
+    out(`arena-kill: failed (unexpected error ${error instanceof Error ? error.name : "unknown"})`);
+    exit = 1;
+  } finally {
+    db.close();
   }
   return exit;
 }

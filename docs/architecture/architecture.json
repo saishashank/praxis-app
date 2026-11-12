@@ -1183,6 +1183,31 @@
       }
     },
     {
+      "id": "action:src/app/(app)/settings/region/actions.ts#switchMarketAction",
+      "type": "action",
+      "name": "switchMarketAction",
+      "purpose": "Server action switchMarketAction: a form write with a role check and an audit event.",
+      "specIds": [
+        "ROL-102a",
+        "UX-052"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "security"
+      ],
+      "source": "src/app/(app)/settings/region/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/settings/region/actions.ts"
+      }
+    },
+    {
       "id": "action:src/app/(app)/settings/themeActions.ts#cycleThemeAction",
       "type": "action",
       "name": "cycleThemeAction",
@@ -15947,6 +15972,7 @@
           "fixtures",
           "python",
           "recorded-day",
+          "recorded-day-dev",
           "release-gate",
           "secrets",
           "worker"
@@ -18305,6 +18331,16 @@
       "id": "service:app|contains|action:src/app/(app)/settings/alerts/actions.ts#updateAlertSettingsAction",
       "from": "service:app",
       "to": "action:src/app/(app)/settings/alerts/actions.ts#updateAlertSettingsAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "service:app|contains|action:src/app/(app)/settings/region/actions.ts#switchMarketAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/settings/region/actions.ts#switchMarketAction",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [

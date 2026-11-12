@@ -33,14 +33,19 @@ import {
   type CohortStart,
 } from "./cohort";
 import { loadCalendar, ARENA_MASTER_SEED } from "./closeBooks";
+import { openS2Once } from "@/lib/heartbeat/incidents";
 import { loadExecutions, seedExecutions, startCohorts } from "./cohortWriter";
 import type { FxRow } from "./seed";
 
 /**
- * The FX close stored by the switch to `full` (`checklist_json.seed`: `{ rate, date, source }`, or the ledger record
- * `{ fx_rate, fx_date, fx_source }`), or null when there is none or the market is the home one (fixed seed).
+ * The seed the switch to `full` stored (`market_switch.checklist_json.seed` = `{ seed_micro, fx_rate, fx_date,
+ * fx_source, activation_day }`, written by switchMarket, D-1107), as the FX row the seed is recomputed from plus the stored
+ * amount; null when there is none or the market is the home one (fixed seed).
  */
-export async function activationFxRow(db: Client, market: string): Promise<FxRow | null> {
+export async function activationSeed(
+  db: Client,
+  market: string,
+): Promise<{ fx: FxRow; seedMicro: bigint } | null> {
   if (market === ARENA_MARKET) return null;
   const rs = await db.execute({
     // rows-ok: the newest activation row of one market through idx_market_switch_market, LIMIT 1
@@ -56,12 +61,16 @@ export async function activationFxRow(db: Client, market: string): Promise<FxRow
     return null;
   }
   if (seed === undefined || seed === null) return null;
-  const rate = seed.rate ?? seed.fx_rate;
-  const date = seed.date ?? seed.fx_date;
-  const source = seed.source ?? seed.fx_source;
-  if (typeof rate !== "string" || typeof date !== "string" || typeof source !== "string")
+  const { seed_micro: micro, fx_rate: rate, fx_date: date, fx_source: source } = seed;
+  if (
+    typeof rate !== "string" ||
+    typeof date !== "string" ||
+    typeof source !== "string" ||
+    (typeof micro !== "string" && typeof micro !== "number")
+  ) {
     return null;
-  return { rate, date, source };
+  }
+  return { fx: { rate, date, source }, seedMicro: BigInt(micro) };
 }
 
 export type EnsureCohortsOptions = {
@@ -142,12 +151,12 @@ export async function ensureCohorts(
     ),
   );
   const byId = new Map(executions.map((e) => [e.id, e]));
-  // ARN-119 / D-1107: a market other than the home one seeds from the FX close its activation stored in
-  // `market_switch.checklist_json.seed`; the cohort start below posts the seed once (the `have` set), dated at the start session
-  const fxRow = o.fxRow !== undefined ? o.fxRow : await activationFxRow(db, o.market);
-  const params = o.params ?? resolveCohortParams({ market: o.market, fxRow });
   const masterSeed = o.masterSeed ?? ARENA_MASTER_SEED;
 
+  // ARN-119 / D-1107: resolved lazily, only when a start is planned. A market other than the home one seeds from what its
+  // activation stored; with none the night is a noop and an S2 incident (never a throw every night); the recomputed seed
+  // must equal the stored amount.
+  let params: CohortParams | null = o.params ?? null;
   const starts: CohortStart[] = [];
   let held = 0;
   for (const slot of cohortSlots(executions, o.controlsPerFamily)) {
@@ -162,6 +171,24 @@ export async function ensureCohorts(
     if (state !== "enabled") {
       held += 1;
       continue;
+    }
+    if (params === null) {
+      const stored = o.fxRow !== undefined ? null : await activationSeed(db, o.market);
+      if (o.fxRow === undefined && o.market !== ARENA_MARKET && stored === null) {
+        await openS2Once(
+          db,
+          "seed_missing",
+          { market: o.market },
+          new Date().toISOString(),
+          undefined,
+          `Market ${o.market} has no stored activation seed, so its books were not opened`,
+        );
+        return none("noop", "seed_missing");
+      }
+      params = resolveCohortParams({ market: o.market, fxRow: o.fxRow ?? stored?.fx ?? null });
+      if (stored !== null && params.seedMicro !== stored.seedMicro) {
+        throw new Error(`activation seed mismatch for ${o.market}`);
+      }
     }
     starts.push(
       planCohortStart({ execution, controlIdx: slot.controlIdx, startD, params, masterSeed }),

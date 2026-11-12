@@ -203,3 +203,34 @@ test("AT-68 (M19 E2): market-off.spec.ts runs in the empty lane, and no CI lane 
   assert.equal(yaml.load(i.ciText).jobs.e2e.env?.PRAXIS_MARKETS_ENABLED, undefined);
   assert.ok(i.specFiles.includes("e2e/market-off.spec.ts"));
 });
+
+test("D-1119 (M20 S1): the dev markets variable is on ONE step of ONE ci.yml job (recorded-day-dev) and leaks into no other lane", () => {
+  const ci = yaml.load(real().ciText);
+  const holders = [];
+  for (const [id, job] of Object.entries(ci.jobs)) {
+    assert.equal(job.env?.PRAXIS_MARKETS_ENABLED, undefined, `${id}: job env`);
+    for (const s of job.steps ?? []) {
+      if (s.env?.PRAXIS_MARKETS_ENABLED !== undefined) holders.push(`${id}/${s.name}`);
+    }
+  }
+  assert.equal(holders.length, 1, holders.join(", "));
+  assert.match(holders[0], /^recorded-day-dev\/Recorded data_only days/);
+  assert.equal(ci.env?.PRAXIS_MARKETS_ENABLED, undefined, "workflow env");
+  // no e2e lane, no Playwright config and no package script sets it either: market-off.spec.ts proves the production shape
+  const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+  for (const [name, cmd] of Object.entries(pkg.scripts)) {
+    assert.doesNotMatch(cmd, /PRAXIS_MARKETS_ENABLED/, `package script ${name}`);
+  }
+  for (const f of readdirSync(root).filter((x) => /^playwright.*\.config\.ts$/.test(x))) {
+    assert.doesNotMatch(readFileSync(path.join(root, f), "utf8"), /PRAXIS_MARKETS_ENABLED/, f);
+  }
+  // the only other workflow that names it is the dispatch-only source report (no database, artefact only)
+  const others = readdirSync(path.join(root, ".github/workflows")).filter(
+    (f) =>
+      f !== "ci.yml" &&
+      readFileSync(path.join(root, ".github/workflows", f), "utf8").includes(
+        "PRAXIS_MARKETS_ENABLED",
+      ),
+  );
+  assert.deepEqual(others, ["source-report.yml"]);
+});

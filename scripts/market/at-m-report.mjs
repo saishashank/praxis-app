@@ -22,6 +22,7 @@
 //   M5  the isolation test passed (AU and the market side by side, hashes equal)
 // `--check` exits 1 unless every row passes. The stamp is written only when all five pass, only into a `file:`
 // database (never a Turso URL), and only after `assertMarketEnabled`. Counts and test names only: no row, no secret.
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -98,6 +99,19 @@ export function buildReport(p) {
   const files = vitestFiles(readVitest(p.evidence));
   const report = readJson(path.join(p.evidence, `source-report-${p.market}.json`));
   const days = readJson(path.join(p.evidence, `recorded-days-${p.market}.json`));
+  // every evidence file and its hash, so a reader can tell which run a report rests on
+  const names = existsSync(p.evidence)
+    ? readdirSync(p.evidence)
+        .filter((f) => f.endsWith(".json"))
+        .sort()
+    : [];
+  const evidenceFiles = names.map((f) => ({
+    name: f,
+    sha12: createHash("sha256")
+      .update(readFileSync(path.join(p.evidence, f)))
+      .digest("hex")
+      .slice(0, 12),
+  }));
   const unverified = comp.complete ? [] : [...comp.missing, ...comp.unverified].sort();
   const rows = [];
 
@@ -112,7 +126,7 @@ export function buildReport(p) {
       report === null
         ? "missing: source-report-" + p.market + ".json"
         : m1ok
-          ? `${listed.size} sources reported (${report.checked_at}); profile ${comp.complete ? "complete" : "incomplete, unverified fields named below"}`
+          ? `${listed.size} sources reported (the report's own date, UTC: ${report.checked_at}); profile ${comp.complete ? "complete" : "incomplete, unverified fields named below"}`
           : "the report does not list every register row",
     lines: (report?.sources ?? []).map(
       (s) => `${s.id}: ${s.seeded_status}; terms ${s.terms?.status}; probe ${s.probe?.result}`,
@@ -171,7 +185,14 @@ export function buildReport(p) {
   const m5 = fileRow(files, wanted.m5);
   rows.push({ id: "M5", title: "Market isolation", pass: m5.pass, reason: m5.reason });
 
-  return { market: p.market, rows, allPass: rows.every((r) => r.pass), unverified };
+  return {
+    market: p.market,
+    rows,
+    allPass: rows.every((r) => r.pass),
+    unverified,
+    evidenceDir: path.resolve(p.evidence),
+    evidenceFiles,
+  };
 }
 
 /** @param {ReturnType<typeof buildReport>} r @param {string} date */
@@ -190,6 +211,12 @@ export function renderMarkdown(r, date) {
             .map((x) => x.id)
             .join(", ")
     }**`,
+    "",
+    `Evidence folder: \`${r.evidenceDir.split(path.sep).join("/")}\``,
+    "",
+    ...(r.evidenceFiles.length === 0
+      ? ["No evidence files."]
+      : r.evidenceFiles.map((f) => `- \`${f.name}\` sha256 ${f.sha12}`)),
     "",
     "| Row | What | Result | Evidence |",
     "|---|---|---|---|",

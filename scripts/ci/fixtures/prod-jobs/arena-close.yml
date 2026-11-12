@@ -38,9 +38,10 @@
       # The only step with database secrets. It waits (up to 20 minutes) for Batch 1's completion
       # marker, then closes the books of the session and any earlier session still open.
       - name: Close the books
-        run: node scripts/arena/close-books.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"}
+        run: node scripts/arena/close-books.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"} ${KILL_INPUT:+--kill "$KILL_INPUT"}
         env:
           MARKET_INPUT: ${{ inputs.market }}
+          KILL_INPUT: ${{ inputs.kill }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
           COMMIT_SHA: ${{ steps.approved.outputs.sha }}

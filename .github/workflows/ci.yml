@@ -261,6 +261,63 @@ jobs:
         if: ${{ always() }}
         run: node scripts/e2e-day/recorded-day.mjs assert-net --work "$RUNNER_TEMP/recorded-day"
 
+  # M20 S1 (TST-139, D-1119, AT-85, AT-M4): the DEVELOPMENT-mode recorded days of the markets that are built and OFF in
+  # production. One matrix leg per market (IN, US): the market is switched to `data_only` on a scratch database and batch 1
+  # runs over its recorded sessions (five, from `recorded/<CODE>/` of the private fixtures repo), each needing a green
+  # quality verdict and a completion marker; no books, no e-mail, no app. It is a SEPARATE job so the production-shape
+  # `recorded-day` job above is untouched, and the dev markets variable PRAXIS_MARKETS_ENABLED is set on the one step that
+  # needs it, never at job level and in no other job (scripts/ci/e2e-listing.test.mjs pins that). Same `if:` and token rules
+  # as `fixtures`: the token is read-only, only the checkout step holds it, never a fork PR, the job uses no cache. When the
+  # fixtures repo is empty or the market has no recorded session yet, the job warns and every later step is skipped: the
+  # job succeeds (a missing recording is not a failure, like `fixtures`). The release gate does not read this job.
+  recorded-day-dev:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: app
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        market: [IN, US]
+    environment:
+      name: ci-fixtures
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - name: Check out the private fixtures repo (read-only)
+        id: fixtures_checkout
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}-fixtures
+          token: ${{ secrets.FIXTURES_READ_TOKEN }}
+          path: fixtures
+          persist-credentials: false
+      - name: Look for recorded sessions of the market
+        id: sessions
+        if: steps.fixtures_checkout.outcome == 'success'
+        run: node scripts/e2e-day/recorded-day.mjs has-sessions --fixtures fixtures --market "$MARKET_INPUT"
+        env:
+          MARKET_INPUT: ${{ matrix.market }}
+      - name: Note when no recorded session is available
+        if: steps.sessions.outputs.found != 'true'
+        run: echo "::warning::no recorded session for the market (fixtures repo not checked out or no recorded/<market> folder); the development-mode day is skipped"
+      - name: Recorded data_only days (market switched to data_only on a scratch database, five sessions, no request leaves the runner)
+        if: steps.sessions.outputs.found == 'true'
+        run: node scripts/e2e-day/recorded-day.mjs run --fixtures fixtures --work "$RUNNER_TEMP/recorded-day-dev" --market "$MARKET_INPUT" --mode data_only
+        env:
+          MARKET_INPUT: ${{ matrix.market }}
+          PRAXIS_MARKETS_ENABLED: AU,${{ matrix.market }}
+      - name: Network assertion (no market-data host reached, every guard installed)
+        if: ${{ always() && steps.sessions.outputs.found == 'true' }}
+        run: node scripts/e2e-day/recorded-day.mjs assert-net --work "$RUNNER_TEMP/recorded-day-dev"
+
   # PLT-072: the Yahoo fetcher is Python; its tests mock yfinance and never touch the network.
   python:
     runs-on: ubuntu-latest

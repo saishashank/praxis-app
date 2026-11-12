@@ -51,10 +51,10 @@ test("the market input reaches the script through env only, and PRAXIS_MARKETS_E
   );
   assert.ok(run, "the report step");
   assert.doesNotMatch(run.run, /\$\{\{/);
-  assert.match(run.run, /--market "\$MARKET"/);
-  assert.equal(run.env.MARKET, "${{ inputs.market }}");
+  assert.match(run.run, /--market "\$MARKET_INPUT"/);
+  assert.equal(run.env.MARKET_INPUT, "${{ inputs.market }}");
   assert.equal(run.env.PRAXIS_MARKETS_ENABLED, "${{ inputs.market }}");
-  assert.deepEqual(Object.keys(run.env).sort(), ["MARKET", "PRAXIS_MARKETS_ENABLED"]);
+  assert.deepEqual(Object.keys(run.env).sort(), ["MARKET_INPUT", "PRAXIS_MARKETS_ENABLED"]);
 });
 
 test("every action is pinned to a full commit SHA; the only output is the report artefact", () => {
@@ -76,8 +76,8 @@ test("the workflow lint accepts it, and the artefact allowance is for this one j
   assert.deepEqual(lintWorkflow("source-report.yml", text), []);
   // the allowance does not extend to a job that holds a secret
   const withSecret = text.replace(
-    "          MARKET: ${{ inputs.market }}",
-    "          MARKET: ${{ inputs.market }}\n          X: ${{ secrets.SOME_SECRET }}",
+    "          MARKET_INPUT: ${{ inputs.market }}",
+    "          MARKET_INPUT: ${{ inputs.market }}\n          X: ${{ secrets.SOME_SECRET }}",
   );
   assert.ok(
     lintWorkflow("source-report.yml", withSecret).some((f) => f.rule === "secret-job-storage"),

@@ -31,7 +31,7 @@ import { CONFIG_KEYS } from "@/lib/config/keys";
 import { getConfig } from "@/lib/config/store";
 import { localToUtc, marketDate } from "@/lib/data/calendar";
 import { dayStatus, horizonAlarm } from "@/lib/data/calendarCore.mjs";
-import { CALENDAR_MARKETS } from "@/lib/data/calendarAdmin";
+import { enabledCalendarMarkets } from "@/lib/data/calendarAdmin";
 import {
   calendarEscalation,
   KIND_CALENDAR_UNCONFIRMED,
@@ -118,7 +118,10 @@ export async function runChecks(kind: HeartbeatKind, db: Client, now: Date): Pro
   }
   // OPS-103 (D-961): a drafted next-year calendar the Owner has not confirmed. From 1 December an S2
   // incident; from 1 January the provisional rows are in use and the incident names that.
-  for (const f of calendarEscalation(date, await readDraftedYears(db, CALENDAR_MARKETS, date))) {
+  for (const f of calendarEscalation(
+    date,
+    await readDraftedYears(db, await enabledCalendarMarkets(db), date),
+  )) {
     if (f.kind === "draft_ready") continue; // an Owner item on System Health, not an incident
     problems.push({
       kind:

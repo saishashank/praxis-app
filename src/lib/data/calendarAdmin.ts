@@ -150,3 +150,20 @@ export async function confirmCalendar(p: ConfirmInput): Promise<ConfirmResult> {
     return fail("unavailable");
   }
 }
+
+/**
+ * M20 S1 (D-1146, D-1190): the markets whose next-year calendar the health snapshot and the heartbeat watch: the
+ * enabled members of `calendarRuleMarkets()`. A market that is off has no calendar rows, so nothing is listed for it
+ * and production (AU only) reads exactly what `CALENDAR_MARKETS` gave.
+ */
+export async function enabledCalendarMarkets(
+  db: Pick<Client, "execute">,
+): Promise<readonly string[]> {
+  // rows-ok: the market table holds one row per built market (3)
+  const r = await db.execute({
+    sql: "SELECT code FROM market WHERE enabled = 1 ORDER BY code",
+    args: [],
+  });
+  const on = new Set(r.rows.map((x) => String(x.code)));
+  return calendarRuleMarkets().filter((m) => on.has(m));
+}

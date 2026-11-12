@@ -61,6 +61,10 @@ export function parseBhavcopy(text, o) {
       rejected.push({ code, reason: "no_trade" }); // a code that did not trade prints zeros
       continue;
     }
+    if (high < Math.max(open, close, low) || low < 0 || low > Math.min(open, close, high)) {
+      rejected.push({ code, reason: "ohlc_inconsistent" }); // as the AU pipeline (rules.mjs): the bar is not stored
+      continue;
+    }
     if (seen.has(code)) {
       rejected.push({ code, reason: "duplicate" }); // the first series of a code wins
       continue;

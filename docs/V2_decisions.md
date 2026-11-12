@@ -750,6 +750,9 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1153 | Rule kind components (A4, F, D-1102/D-1103): round: "total_half_up_cent" (IN) rounds the exact total once; round: "per_item_half_up_cent" (US) rounds each it... |
 | D-1154 | Settlement lag threading (A4, F, D-1113): pendingSettlements takes lagSessions (default the home lag, so AU is unchanged); closeBooks.ts reads staticProfile(... |
 | D-1155 | seedForMarket(profile, fxRow) (A4, D-1107): src/lib/arena/seed.ts; fixed returns the amount at rate 1 and no FX row; fx_rounded returns round_half_up(from_am... |
+| D-1156 | Recorded-day reader per market, lower-case folders (IN1, S1 hand-off a, D-1119): readRecordedDay(dir, { date, market }) and recordedRootOf(market) read recor... |
+| D-1157 | ARN-119 first posting (IN1, S1 hand-off b, D-1107): ensureCohorts (the close-books night's cohort start stage) reads the FX close stored by the switch to ful... |
+| D-1158 | Band lock has no clock (IN1, Fable review, D-1109, D-1163, D-1169): an exit on a code stuck at its LOWER circuit waits indefinitely at the locked mark, becau... |
 | D-1160 | Filing instants in the as-filed reader (A5, D-1111): a company-facts entry carries only the filing DATE, so a date-only filed_at is stored as the END of that... |
 | D-1161 | Company-facts parsing (A5, DAT-226): one fundamental_fact row per (concept, period end, accession); where a filing lists one period end for several durations... |
 | D-1162 | US halt model (A5, D-1110 F): stepHalt takes an optional HaltModel (viewFor, notices, noticeKind); with none it is the M15 machine unchanged (AU hashes). |
@@ -770,5 +773,13 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1177 | Recorded fixtures (IN1, D-1119, D-1092): praxis-app-fixtures/recorded/in/<date>/ for the five consecutive sessions 2026-11-05, 06, 09, 11 and 12 (2026-11-10... |
 | D-1178 | AT-M report (IN1, D-1120): scripts/market/at-m-report.mjs --market IN/US --evidence <dir> writes docs/test-reports/AT-M-<CODE>.md from evidence files (source... |
 | D-1179 | Calibration IN not run (IN1, D-1114, D-1115, D-1132): the data repository's calibrate is a skeleton (the generalised M15 modules "come later"), and the extra... |
-| D-1180 | Recorded-day reader per market, lower-case folders (IN1, S1 hand-off a, D-1119): readRecordedDay(dir, { date, market }) and recordedRootOf(market) read recor... |
-| D-1181 | ARN-119 first posting (IN1, S1 hand-off b, D-1107): ensureCohorts (the close-books night's cohort start stage) reads the FX close stored by the switch to ful... |
+| D-1190 | Next-year calendar watch reads the enabled markets (S1, D-1146 hand-off): enabledCalendarMarkets(db) in src/lib/data/calendarAdmin.ts is the enabled members... |
+| D-1191 | Checklist readers (S1, D-1100, MKT-105, MKT-111): src/lib/market/checklist.ts. licence_rows reads the stored register rows and, for a market that is still of... |
+| D-1192 | Seed from the activation day's FX close (S1, D-1107, ARN-119): src/lib/market/fxSeed.ts reads the newest macro_series row (source rba) on or before the day f... |
+| D-1193 | The switch writer (S1, D-1100, D-1101): switchMarket lives in src/lib/data/marketSwitch.ts (beside controls.ts, using its commit), is the only writer of mark... |
+| D-1194 | The rollback kill (S1, F, D-1101, CTX-028): src/lib/arena/kill.ts, called by closeBooksMain --kill market_off. |
+| D-1195 | Quota projection (S1, F, D-1099, MKT-113): src/lib/usage/projection.ts. projected = ceil(auMeasured x cap x sessionsMarket / (auCodes x sessionsAu)) + fixed... |
+| D-1196 | Markets page and Usage page (S1, UXN-312, D-997): the Owner's "Switch on a market" card under the Markets table (MarketSwitch.tsx, loader loadMarketSwitch) l... |
+| D-1197 | Per-market e-mail sections (S1, D-1124, D-1061, UXN-313, O-34): the Evening Review keeps the first enabled market as before and adds one section for every fu... |
+| D-1198 | The development-mode recorded days (S1, D-1119, TST-139, AT-85, AT-M4): job recorded-day-dev in ci.yml is a separate matrix job (IN, US) after app: the fixtu... |
+| D-1199 | Owner notes for the single V3 PR (S1): the deploy-order note of D-1129 (the Worker reads market.rollback_at before 0036 has run; expect at most one tick wind... |

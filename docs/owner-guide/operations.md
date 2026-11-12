@@ -230,6 +230,38 @@ Use this after you change any Vercel environment variable. The new value is read
 
 ---
 
+## Switching on India or the US, and rolling back (V3, M20)
+
+Nothing here happens by itself. India and the US are built and **off** in production; the build never switches them on. You do it, after the pull request is merged and deployed, from **Settings > Region & markets > Switch on a market** (Owner only; Editors and Viewers never see it). [MKT-111, AT-71]
+
+**Before the first switch (you do these, once)**
+
+1. **Decide each pending source.** The licence register lists every source of the market. A source marked pending blocks the switch. For each one, accept its risk or turn it off; the decision is recorded as a one-line status change in the build, so ask for a build session. [D-1096, D-1191]
+2. **US only:** put `PRAXIS_EDGAR_CONTACT` (a contact address EDGAR can reach) and `FRED_API_KEY` (a free key) in the Owner store. The US fetchers refuse to run without them. [D-1094]
+3. **Keep Turso on the free plan.** The Usage page shows "Projection per market". The switch stays disabled while AU plus the markets already on plus this one would pass 20 % of the free plan. [D-1195]
+
+**The two steps**
+
+| Step | The button | What it needs | What happens |
+|---|---|---|---|
+| 1 | Switch on (data only) | the five checklist items: profile complete, AT-M evidence recorded, source rows decided, quota projection fits, AU has been live 60 trading days with no open S1 or S2 incident and its 30-day targets met | the market starts collecting data only: prices, announcements, quality checks. No books, no e-mails. |
+| 2 | Switch to full | the same items plus five good trading days (a green quality check each) and ten bar-latency samples, and the exchange-rate close of the day for the starting money | the books open on the next trading day. |
+
+Each item shows its state and where to look. A button that is greyed out says which items are open. You cannot skip step 1. [D-1100, D-1105]
+
+**After a switch: your own step.** Set the production setting `PRAXIS_MARKETS_ENABLED` (for example `AU,IN`) in the host and redeploy the app (see "Redeploy the app"). Until you do, the nightly check says the setting and the database differ; the database decides what runs. [D-994, D-1193]
+
+**Rolling back (one click)**
+
+1. On the same card press **Roll back to off** and give a reason (required). The market goes to off at once: no new orders, no e-mails.
+2. At the next open of that market (two minutes after it) every open position is sold at the open price, orders still waiting are cancelled, and the market is then disabled. Nothing is deleted: all stored data stays. If the market was only collecting data, it is disabled at once and there is nothing to close.
+3. While the close is waiting nothing can be switched. If a share is halted, it cannot be sold: you get an incident, the market stays on, and the close tries again at the next open. [D-1101, D-1194]
+4. Afterwards remove the market from `PRAXIS_MARKETS_ENABLED`.
+
+**Deploy order (once, for the first V3 release).** The Worker reads a new market column before the database migration for it has run. Expect at most one tick window of `statement-error` incidents after the approved deploy, or run the migration first. [D-1129, D-1199]
+
+---
+
 ## Settings you can change, and ones you must not
 
 | You may | You must not |
@@ -237,7 +269,7 @@ Use this after you change any Vercel environment variable. The new value is read
 | Switch a market's data source on or off in Data controls. | Add a payment method to any provider. |
 | Set email mode: `off`, `incidents` or `full`. In production, email cannot go `off` while a market is `full`. | Paste a key into chat, email or a file. |
 | Tick or untick Worker slots on System health. Backup, maintenance and ingest batch 1 always run. | Put the backup private key on Vercel or Cloudflare. |
-| Set the AU market to `data_only` to pause trading. | Put `TEST_IDENTITY_SECRET` in production. |
+| Set the AU market to `data_only` to pause trading. Switch India or the US on only through the checklist (Settings > Region & markets). | Put `TEST_IDENTITY_SECRET` in production. |
 | Add or remove a user. | Approve a deploy you did not expect. |
 
 ## Known gaps to keep in mind

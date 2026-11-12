@@ -12,9 +12,9 @@ import path from "node:path";
 import { HOME_MARKET } from "../../market/profileCore.mjs";
 
 export const RECORDED_ROOT = "recorded/au";
-/** The recorded root of a market: the home market keeps `recorded/au` (byte for byte), any other is `recorded/<code lower case>` (D-1180). */
+/** The recorded root of a market: the home market keeps `recorded/au` (byte for byte), any other is `recorded/<code lower case>` (D-1156). */
 export function recordedRootOf(market) {
-  return market === undefined || market === HOME_MARKET
+  return market === undefined || String(market).toUpperCase() === HOME_MARKET
     ? RECORDED_ROOT
     : `recorded/${String(market).toLowerCase()}`;
 }
@@ -103,7 +103,7 @@ export function readRecordedDay(dir, opts = {}) {
   const date = findRecordedDate(dir, opts.date, opts.market);
   const root = path.resolve(dir);
   const folder = path.join(root, recordedRootOf(opts.market), date);
-  if (opts.market !== undefined && opts.market !== HOME_MARKET) {
+  if (opts.market !== undefined && String(opts.market).toUpperCase() !== HOME_MARKET) {
     // another market: the exchange files of the day, as text, by key; bhavcopy is required
     /** @type {Record<string, string>} */
     const files = {};

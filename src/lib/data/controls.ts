@@ -152,6 +152,11 @@ export type ControlError =
   | "constants_unverified"
   | "market_not_enabled"
   | "market_full"
+  | "checklist_open"
+  | "two_step"
+  | "reason_required"
+  | "fx_missing"
+  | "rollback_pending"
   | "confirm_required"
   | "items_missing"
   | "commit_unknown"
@@ -200,7 +205,7 @@ export function parseOn(raw: unknown): boolean {
 
 const onValue = (on: boolean): string => JSON.stringify(on ? "1" : "0");
 
-type Exec = Pick<Client, "execute"> | Pick<Transaction, "execute">;
+export type Exec = Pick<Client, "execute"> | Pick<Transaction, "execute">;
 
 async function readSwitch(db: Exec, key: string): Promise<boolean> {
   const r = await db.execute({
@@ -499,12 +504,12 @@ export type MarketModeInput = ControlBase & {
   unverifiedConstants?: readonly string[];
 };
 
-type ModeMap = Record<string, unknown>;
+export type ModeMap = Record<string, unknown>;
 
 const isModeMap = (v: unknown): v is ModeMap =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
-async function readConfigModes(db: Exec): Promise<{ raw: string | null; map: ModeMap }> {
+export async function readConfigModes(db: Exec): Promise<{ raw: string | null; map: ModeMap }> {
   const r = await db.execute({
     sql:
       "SELECT value_json FROM config_version WHERE key = ? AND scope = 'global' " +
@@ -606,7 +611,7 @@ export async function setMarketMode(p: MarketModeInput): Promise<ControlResult> 
 //  - 12 BLD-024: emails stay off in production data-only mode (the `email_mode` switch).
 
 const MELBOURNE = "Australia/Melbourne";
-const localDay = (nowIso: string): string => marketDate(new Date(nowIso), MELBOURNE);
+export const localDay = (nowIso: string): string => marketDate(new Date(nowIso), MELBOURNE);
 const daysBetween = (from: string, to: string): number =>
   Math.round(
     (Date.parse(`${to}T00:00:00.000Z`) - Date.parse(`${from}T00:00:00.000Z`)) / 86_400_000,

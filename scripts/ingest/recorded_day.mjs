@@ -5,7 +5,7 @@
 //   node scripts/ingest/recorded_day.mjs --request request.json --fixtures fixtures \
 //        --output bars.json --index-output index.json --short-output short.json \
 //        [--announcements-output a.json] [--actions-output c.json] [--date YYYY-MM-DD]
-//        [--market CODE]   another market (D-1180): reads recorded/<code lower>/<date>/ and copies its day files into the
+//        [--market CODE]   another market (D-1156): reads recorded/<code lower>/<date>/ and copies its day files into the
 //                          --output DIRECTORY unchanged; without it the AU recording is read exactly as before
 // It needs PRAXIS_ENV=staging or recorded (M18 D-965: the CI recorded day; it refuses to run anywhere else, so recorded data never reaches
 // production) and installs the host guard first: any request to ASX or Yahoo throws. It makes no
@@ -50,6 +50,40 @@ export async function run(argv, env, deps = {}) {
     const reqPath = flag(argv, "--request");
     const fixtures = flag(argv, "--fixtures");
     const barsOut = flag(argv, "--output");
+    if (market !== null && market.toUpperCase() !== HOME_MARKET) {
+      // another market (D-1156): no request file and no re-dating; the day files are copied unchanged into the --output
+      // DIRECTORY and that market's own batch 1 reads them under the simulated clock of the job
+      if (fixtures === null || barsOut === null) {
+        out("recorded_day: failed (--fixtures and --output are required)");
+        return 2;
+      }
+      let date = flag(argv, "--date");
+      if (date === null && reqPath !== null) {
+        try {
+          date = JSON.parse(readFileSync(reqPath, "utf8")).start ?? null;
+        } catch {
+          out("recorded_day: failed (request file unreadable)");
+          return 2;
+        }
+      }
+      let other;
+      try {
+        other = readRecordedDay(fixtures, { date: date ?? undefined, market });
+      } catch (e) {
+        out(
+          `recorded_day: failed (recording unreadable: ${e instanceof RecordedDayError ? e.code : "error"})`,
+        );
+        return 2;
+      }
+      fs.mkdirSync(barsOut, { recursive: true });
+      for (const [k, text] of Object.entries(other.files)) {
+        fs.writeFileSync(path.join(barsOut, MARKET_DAY_FILES[k]), text);
+      }
+      out(
+        `recorded_day: market=${market} files=${Object.keys(other.files).length} date=${other.date}`,
+      );
+      return 0;
+    }
     if (reqPath === null || fixtures === null || barsOut === null) {
       out("recorded_day: failed (--request, --fixtures and --output are required)");
       return 2;
@@ -74,22 +108,12 @@ export async function run(argv, env, deps = {}) {
     try {
       day = readRecordedDay(fixtures, {
         date: flag(argv, "--date") ?? undefined,
-        market: market ?? undefined,
       });
     } catch (e) {
       out(
         `recorded_day: failed (recording unreadable: ${e instanceof RecordedDayError ? e.code : "error"})`,
       );
       return 2;
-    }
-    if (market !== null && market !== HOME_MARKET) {
-      // another market (D-1180): the day files are copied unchanged into the --output DIRECTORY; the market's own
-      // batch 1 reads them (a recorded day is replayed under the simulated clock of the job, not re-dated)
-      fs.mkdirSync(barsOut, { recursive: true });
-      for (const [k, text] of Object.entries(day.files))
-        fs.writeFileSync(path.join(barsOut, MARKET_DAY_FILES[k]), text);
-      out(`recorded_day: market=${market} files=${Object.keys(day.files).length} date=${day.date}`);
-      return 0;
     }
     const res = redateDay(day, { sessionDates, shortDates });
     const want = Array.isArray(request.codes) ? new Set(request.codes) : null;

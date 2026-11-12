@@ -25,4 +25,8 @@ describe("Blueprint file tracing", () => {
       for (const f of list.map(norm).filter((x) => !x.includes("*")))
         expect(fs.existsSync(f), f).toBe(true);
   });
+  it("lists the test map for the Region page, which the switch-on checklist reads (M20 S1)", () => {
+    expect(BLUEPRINT_TRACE_INCLUDES["/settings/region"].map(norm)).toEqual(["docs/test-map.md"]);
+    expect(fs.existsSync("docs/test-map.md")).toBe(true);
+  });
 });

@@ -22,6 +22,8 @@ export function prepareDay(
   files?: string[];
   fetchable?: string[];
   disabled?: string[];
+  request?: { start: string; end: string; codes: string[]; short_dates: string[] };
+  throttle?: unknown;
 }>;
 export function runDay(
   db: Client,

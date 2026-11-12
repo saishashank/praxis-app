@@ -19,6 +19,7 @@ import {
 } from "../../../src/lib/data/sources/politeFetch.mjs";
 import { prepareDay, runDay, FILE_KEYS, MARKET } from "../../../src/lib/data/sources/in/day.mjs";
 import { resolveScriptMarket, takeMarketFlag } from "../../../src/lib/market/scriptMarket.mjs";
+import { parseNow } from "../../e2e-day/now.mjs";
 import { scriptDb } from "../../../src/lib/db/scriptClient.mjs";
 
 const ARCHIVE = "https://nsearchives.nseindia.com";
@@ -139,8 +140,13 @@ const flag = (args, name) => {
  */
 export async function run(argv, env, deps = {}) {
   const out = deps.out ?? ((s) => console.log(s));
-  const nowMs = deps.nowMs ?? (() => Date.now());
-  const mk = takeMarketFlag(argv);
+  const sim = parseNow(argv, env);
+  if (sim.error) {
+    out(`ingest-in: failed (${sim.error})`);
+    return 2;
+  }
+  const nowMs = sim.nowMs ?? deps.nowMs ?? (() => Date.now());
+  const mk = takeMarketFlag(sim.argv);
   if (mk.error) {
     out(`ingest-in: failed (${mk.error})`);
     return 2;
@@ -148,8 +154,13 @@ export async function run(argv, env, deps = {}) {
   const [cmd, ...rest] = mk.argv;
   const d = flag(rest, "--d");
   const dir = flag(rest, "--dir");
-  if ((cmd !== "fetch" && cmd !== "run") || d === null || dir === null || !DATE_RE.test(d)) {
-    out("ingest-in: failed (usage: fetch|run --d YYYY-MM-DD --dir <folder>)");
+  const reqFile = flag(rest, "--request");
+  const bad =
+    d === null || !DATE_RE.test(d) || (cmd === "prepare" ? reqFile === null : dir === null);
+  if ((cmd !== "fetch" && cmd !== "run" && cmd !== "prepare") || bad) {
+    out(
+      "ingest-in: failed (usage: prepare --d D --request <file> | fetch|run --d D --dir <folder>)",
+    );
     return 1;
   }
   const url = env.TURSO_MAIN_URL;
@@ -165,6 +176,18 @@ export async function run(argv, env, deps = {}) {
   }
   const market = resolved.market;
   try {
+    if (cmd === "prepare") {
+      const prep = await prepareDay(db, { market, target: d, nowMs });
+      if (prep.action !== "fetch") {
+        out(`ingest-in: ${prep.action} (${prep.reason ?? "nothing to fetch"})`);
+        return 0;
+      }
+      writeFileSync(reqFile, JSON.stringify(prep.request));
+      out(
+        `ingest-in: prepare ${d} (fetchable=${prep.fetchable.length} disabled=${prep.disabled.length})`,
+      );
+      return 0;
+    }
     if (cmd === "fetch") {
       const prep = await prepareDay(db, { market, target: d, nowMs });
       if (prep.action !== "fetch") {

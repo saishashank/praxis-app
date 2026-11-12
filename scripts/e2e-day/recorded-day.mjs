@@ -7,6 +7,13 @@
 //   node scripts/e2e-day/recorded-day.mjs run --fixtures <dir> --work <dir> [--date YYYY-MM-DD] [--market CODE]
 //   --market (M19 C2, MKT-110 a): omitted = the single market the migrated database has enabled; a market that is not
 //   enabled exits 2 ("refused: market not enabled") before anything is created or written.
+//   node scripts/e2e-day/recorded-day.mjs run --fixtures <dir> --work <dir> --market IN|US --mode data_only [--days N]
+//   --mode data_only (M20 S1, TST-139, D-1119): the DEVELOPMENT-mode day of a market that is built and off in production. It
+//   needs PRAXIS_MARKETS_ENABLED to name the market (the CI job `recorded-day-dev` sets it for this one step), switches the
+//   market to `data_only` on the run's own scratch database (its source and calendar rows are written as on a real
+//   switch-on), then runs batch 1 for each recorded session of `<fixtures>/recorded/<CODE>/<date>/` (at most N, default 5)
+//   at the market's own batch time and requires a green quality verdict and a completion marker for each. No books, no
+//   close, no e-mail, no app. The network assertion stays the last step.
 //   node scripts/e2e-day/recorded-day.mjs check --work <dir>          PLT-073 deadlines (check.mjs --db)
 //   node scripts/e2e-day/recorded-day.mjs assert-net --work <dir>     no refusal, every guard marker present
 //
@@ -19,7 +26,14 @@
 // Output is step ids, statuses and counts only (SEC-110): never a code, a row, a URL or a secret.
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -32,6 +46,12 @@ import {
   writeGuardMarker,
 } from "../../src/lib/data/recorded/hostGuard.mjs";
 import { seedEnabledMarkets, seedSlots } from "../../src/lib/market/homeMarket.mjs";
+import { HOME_MARKET, marketsEnabledDefault } from "../../src/lib/market/profileCore.mjs";
+import { recordedRootOf } from "../../src/lib/data/recorded/reader.mjs";
+import { builtMarkets, seedOf } from "../../src/lib/market/seed/index.mjs";
+import { staticProfile } from "../../src/lib/market/staticProfile.mjs";
+import { ensureCalendarYears } from "../../src/lib/data/calendarEnable.mjs";
+import { ensureMarketSources } from "../../src/lib/data/sources/marketSources.mjs";
 import { OWNER_TZ } from "../../src/lib/market/profileCore.mjs";
 import {
   REFUSED_EXIT,
@@ -533,24 +553,322 @@ async function seedDatabases({ work, fixtures, recordedDate, today, market: MARK
   }
 }
 
+// ---- the data-only development day of IN and US (M20 S1, TST-139, D-1119) ------------------------------------------
+
+/** The instant (ms) at which `tz` shows `date` `hhmm`: tried over the zone offsets in use, in 15-minute steps. */
+export function zonedInstant(date, hhmm, tz) {
+  const asUtc = Date.parse(`${date}T${hhmm}:00Z`);
+  const f = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  for (let off = -12 * 60; off <= 14 * 60; off += 15) {
+    const t = asUtc - off * 60_000;
+    const p = Object.fromEntries(f.formatToParts(new Date(t)).map((x) => [x.type, x.value]));
+    if (`${p.year}-${p.month}-${p.day}` === date && `${p.hour}:${p.minute}` === hhmm) return t;
+  }
+  throw new Error("zonedInstant: no such local time");
+}
+
+/** The recorded sessions of a market in a fixtures checkout: the dated folders of `recorded/<CODE>`, oldest first. */
+export function recordedDates(fixtures, market, limit = 5) {
+  const base = path.join(path.resolve(fixtures), recordedRootOf(market));
+  let names;
+  try {
+    names = readdirSync(base, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return names
+    .filter((e) => e.isDirectory() && DATE.test(e.name))
+    .map((e) => e.name)
+    .sort()
+    .slice(0, limit);
+}
+
+/**
+ * The plan of the data-only day: migrate, switch the market on (scratch database only), then for each recorded session
+ * batch 1 (prepare, recorded source, run) at the market's own batch time and the verdict check. Every spawned step is
+ * guarded; there is no app, no close, no signal and no review.
+ */
+export function buildDataOnlyPlan(cfg) {
+  const { work, fixtures, market, dates, seed, verdict } = cfg;
+  const p = (f) => path.join(work, f);
+  const tz = staticProfile(market).tz;
+  const b1 = seedSlots(market).b1;
+  const node = (id, label, script, args) => ({
+    id,
+    label,
+    kind: "spawn",
+    guard: true,
+    cmd: process.execPath,
+    args: ["--import", GUARD_URL, script, ...args],
+  });
+  const plan = [
+    node("migrate-main", "migrate-main", "scripts/db/migrate.mjs", ["--db", "main"]),
+    node("migrate-auth", "migrate-auth", "scripts/db/migrate.mjs", ["--db", "auth"]),
+    { id: "seed-dev", label: "orchestrator", kind: "fn", guard: false, run: seed },
+  ];
+  for (const d of dates) {
+    const at = new Date(zonedInstant(d, b1, tz)).toISOString();
+    if (market.toUpperCase() !== HOME_MARKET) {
+      // another market (D-1127, D-1156): its own batch-1 CLI under scripts/ingest/<code lower>/, fed the recorded day files
+      const cli = `scripts/ingest/${market.toLowerCase()}/batch1.mjs`;
+      plan.push(
+        node(`batch1-prepare-${d}`, "batch1-prepare", cli, [
+          "prepare",
+          "--market",
+          market,
+          "--d",
+          d,
+          "--request",
+          p("request.json"),
+          "--now",
+          at,
+        ]),
+        node(`recorded-source-${d}`, "recorded-source", "scripts/ingest/recorded_day.mjs", [
+          "--market",
+          market,
+          "--request",
+          p("request.json"),
+          "--fixtures",
+          fixtures,
+          "--date",
+          d,
+          "--output",
+          p("day"),
+        ]),
+        node(`batch1-run-${d}`, "batch1-run", cli, [
+          "run",
+          "--market",
+          market,
+          "--d",
+          d,
+          "--dir",
+          p("day"),
+          "--now",
+          at,
+        ]),
+        {
+          id: `verdict-${d}`,
+          label: "orchestrator",
+          kind: "fn",
+          guard: false,
+          run: () => verdict(d),
+        },
+      );
+      continue;
+    }
+    plan.push(
+      node(`batch1-prepare-${d}`, "batch1-prepare", "scripts/ingest/batch1.mjs", [
+        "prepare",
+        "--market",
+        market,
+        "--request",
+        p("request.json"),
+        "--now",
+        at,
+      ]),
+      node(`recorded-source-${d}`, "recorded-source", "scripts/ingest/recorded_day.mjs", [
+        "--market",
+        market,
+        "--request",
+        p("request.json"),
+        "--fixtures",
+        fixtures,
+        "--date",
+        d,
+        "--output",
+        p("bars.json"),
+        "--index-output",
+        p("index.json"),
+        "--short-output",
+        p("short.json"),
+        "--actions-output",
+        p("actions.json"),
+        "--announcements-output",
+        p("announcements.json"),
+      ]),
+      node(`batch1-run-${d}`, "batch1-run", "scripts/ingest/batch1.mjs", [
+        "run",
+        "--market",
+        market,
+        "--bars",
+        p("bars.json"),
+        "--index",
+        p("index.json"),
+        "--short",
+        p("short.json"),
+        "--actions",
+        p("actions.json"),
+        "--now",
+        at,
+      ]),
+      {
+        id: `verdict-${d}`,
+        label: "orchestrator",
+        kind: "fn",
+        guard: false,
+        run: () => verdict(d),
+      },
+    );
+  }
+  return plan;
+}
+
+/**
+ * Switches the market to data_only on the run's scratch database, as the switch-on writer would (without the checklist,
+ * which is proven elsewhere): enabled, data_only, its source rows (accepted for the day: nothing is fetched, the recorded
+ * data is served) and its calendar rows, plus a session row for each recorded date (the recordings are trading days).
+ */
+export async function seedDataOnly({ work, market, dates }) {
+  const fileUrl = (n) => pathToFileURL(path.join(work, n)).href;
+  const main = scriptDb({ url: fileUrl("main.db") });
+  try {
+    const now = new Date();
+    await main.execute({
+      sql: "UPDATE market SET enabled = 1, mode = 'data_only', data_only_since = ? WHERE code = ?",
+      args: [dates[0], market],
+    });
+    await ensureMarketSources(main, market, { now: () => now });
+    const years = [...new Set(dates.map((d) => Number(d.slice(0, 4))))];
+    await ensureCalendarYears(main, market, years, { now: () => now });
+    for (const d of dates) {
+      await main.execute({
+        sql: `INSERT OR IGNORE INTO trading_calendar (market, d, kind, close_time, confirmed, source)
+              VALUES (?, ?, 'session', NULL, 1, 'recorded-day-dev')`,
+        args: [market, d],
+      });
+    }
+    await main.execute({
+      sql: "UPDATE source_register SET status = 'enabled' WHERE substr(source, 1, 3) = ?",
+      args: [`${market.toLowerCase()}_`],
+    });
+    await main.execute({
+      sql: `INSERT INTO worker_state (key, value_json, updated_at) VALUES ('dispatch_enabled', '"1"', ?)
+            ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json`,
+      args: [now.toISOString()],
+    });
+    console.log(`recorded-day: seed ok (market data_only, sessions=${dates.length})`);
+    return 0;
+  } finally {
+    main.close();
+  }
+}
+
+/** The verdict of one session: three quality tiers, all passing, and the completion marker. Counts only in the output. */
+export async function checkVerdict({ work, market, d }) {
+  const main = scriptDb({ url: pathToFileURL(path.join(work, "main.db")).href });
+  try {
+    const q = await main.execute({
+      sql: "SELECT COUNT(*) AS n, COALESCE(MIN(gate_pass), 0) AS g FROM quality_score WHERE market = ? AND d = ?",
+      args: [market, d],
+    });
+    const m = await main.execute({
+      sql: "SELECT COUNT(*) AS n FROM completion_marker WHERE market = ? AND d = ? AND kind = 'data'",
+      args: [market, d],
+    });
+    const green = Number(q.rows[0].n) === 3 && Number(q.rows[0].g) === 1;
+    const marked = Number(m.rows[0].n) === 1;
+    console.log(
+      `recorded-day: verdict ${d} tiers=${q.rows[0].n} green=${green ? 1 : 0} marker=${marked ? 1 : 0}`,
+    );
+    return green && marked ? 0 : 1;
+  } finally {
+    main.close();
+  }
+}
+
+/**
+ * The development-mode day of a built market (D-1119). Refused (exit 2, before anything is created) unless the market is
+ * IN or US (never the home market), PRAXIS_MARKETS_ENABLED names it, and the fixtures hold at least one recorded session.
+ */
+async function runDataOnly(o, env, deps, out) {
+  const market = o.market;
+  const built = builtMarkets();
+  const ok =
+    built.includes(market) &&
+    seedOf(market) !== undefined &&
+    seedOf(market).enabled !== 1 &&
+    marketsEnabledDefault(env, built).includes(market);
+  if (!ok) {
+    out(`recorded-day: ${REFUSED_LINE}`);
+    return REFUSED_EXIT;
+  }
+  const dates = recordedDates(o.fixtures, market, o.days);
+  if (dates.length === 0) {
+    out("recorded-day: no recorded session for the market in the fixtures");
+    return 2;
+  }
+  const work = path.resolve(o.work);
+  mkdirSync(work, { recursive: true });
+  const exec = deps.exec ?? execStep(work);
+  const secrets = { auth: HEX(), actions: HEX(), worker: HEX(), pii: HEX() };
+  writeFileSync(path.join(work, "secrets.json"), JSON.stringify(secrets));
+  writeFileSync(path.join(work, "net.log"), "");
+  const guardEnv = { ...env, PRAXIS_ENV: "recorded", PRAXIS_NET_LOG: path.join(work, "net.log") };
+  installHostGuard(guardEnv);
+  installNetGuard(guardEnv, net);
+  writeGuardMarker(guardEnv, "orchestrator");
+  const plan = buildDataOnlyPlan({
+    work,
+    fixtures: path.resolve(o.fixtures),
+    market,
+    dates,
+    seed: deps.seed ?? (() => seedDataOnly({ work, market, dates })),
+    verdict: deps.verdict ?? ((d) => checkVerdict({ work, market, d })),
+  });
+  writeFileSync(
+    path.join(work, "labels.json"),
+    JSON.stringify(expectedLabels([...plan, { guard: true, label: "orchestrator" }])),
+  );
+  const r = await runPlan(plan, { exec, out });
+  return r.code;
+}
+
 function parseArgs(argv) {
   const [cmd, ...rest] = argv;
   const mk = takeMarketFlag(rest);
   if (mk.error) return { error: mk.error };
-  const o = { cmd, fixtures: null, work: null, date: null, from: null, market: mk.market };
+  const o = {
+    cmd,
+    fixtures: null,
+    work: null,
+    date: null,
+    from: null,
+    market: mk.market,
+    mode: "full",
+    days: 5,
+  };
   for (let i = 0; i < mk.argv.length; i++) {
     const a = mk.argv[i];
     if (a === "--fixtures") o.fixtures = mk.argv[++i] ?? null;
     else if (a === "--work") o.work = mk.argv[++i] ?? null;
     else if (a === "--date") o.date = mk.argv[++i] ?? null;
     else if (a === "--from") o.from = mk.argv[++i] ?? null;
+    else if (a === "--mode") o.mode = mk.argv[++i] ?? "";
+    else if (a === "--days") o.days = Number(mk.argv[++i]);
     else return { error: "unknown option" };
   }
-  if (!["run", "check", "assert-net"].includes(String(cmd)))
-    return { error: "usage: run|check|assert-net" };
+  if (!["run", "check", "assert-net", "has-sessions"].includes(String(cmd)))
+    return { error: "usage: run|check|assert-net|has-sessions" };
+  if (cmd === "has-sessions") {
+    if (!o.fixtures || o.market === null) return { error: "--fixtures and --market are required" };
+    return o;
+  }
   if (!o.work) return { error: "--work is required" };
   if (cmd === "run" && !o.fixtures) return { error: "--fixtures is required" };
   if (o.date !== null && !DATE.test(o.date)) return { error: "--date must be YYYY-MM-DD" };
+  if (!["full", "data_only"].includes(o.mode)) return { error: "--mode must be full or data_only" };
+  if (!Number.isInteger(o.days) || o.days < 1 || o.days > 10)
+    return { error: "--days must be 1 to 10" };
+  if (o.mode === "data_only" && o.market === null)
+    return { error: "--mode data_only needs --market" };
   return o;
 }
 
@@ -562,6 +880,19 @@ export async function main(argv, env = process.env, deps = {}) {
     out(`recorded-day: ${o.error}`);
     return 2;
   }
+  if (o.cmd === "has-sessions") {
+    // M20 S1 (D-1119): the dev job asks first, so a market with no recording yet skips the day instead of failing it
+    const found = recordedDates(o.fixtures, o.market, 1).length > 0;
+    out(`recorded-day: recorded sessions ${found ? "found" : "not found"}`);
+    if (env.GITHUB_OUTPUT)
+      appendFileSync(
+        env.GITHUB_OUTPUT,
+        `found=${found}
+`,
+      );
+    return 0;
+  }
+  if (o.mode === "data_only" && o.cmd === "run") return runDataOnly(o, env, deps, out);
   // MKT-110 a: the day runs for an enabled market only, decided before anything is created or written
   const enabledSeed = seedEnabledMarkets();
   if (o.market !== null ? !enabledSeed.includes(o.market) : enabledSeed.length !== 1) {

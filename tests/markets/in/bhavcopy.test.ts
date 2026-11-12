@@ -54,7 +54,7 @@ describe("parseBhavcopy", () => {
         bhavFile(D, [
           bar("CCC", { close: "n/a" }),
           bar("DDD"),
-          bar("DDD", { series: "BE", close: "5.00" }),
+          bar("DDD", { series: "BE", close: "100.20" }),
         ]),
       ),
     ].join("\n");
@@ -68,6 +68,20 @@ describe("parseBhavcopy", () => {
     });
     expect(r.rows.map((x) => x.code)).toEqual(["DDD"]);
     expect(r.rows[0]!.close).toBe(100.75); // the first series (EQ) won
+  });
+
+  it("rejects an OHLC-inconsistent row (high below the close, low above the open)", () => {
+    const text = bhavFile(D, [
+      bar("AAA", { high: "100.00", close: "100.75" }),
+      bar("BBB", { low: "100.50", open: "100.05" }),
+      bar("CCC"),
+    ]);
+    const r = parseBhavcopy(text, { d: D });
+    expect(r.rejected).toEqual([
+      { code: "AAA", reason: "ohlc_inconsistent" },
+      { code: "BBB", reason: "ohlc_inconsistent" },
+    ]);
+    expect(r.rows.map((x) => x.code)).toEqual(["CCC"]);
   });
 
   it("refuses a bad session date", () => {
