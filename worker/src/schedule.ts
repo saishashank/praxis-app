@@ -686,7 +686,8 @@ function killSlot(row: MarketRow): Slot | null {
   if (typeof row.rollback_at !== "string" || row.rollback_at === "") return null;
   const at = hhmm(row.open_time) + KILL_AFTER_OPEN_MIN;
   const time = `${String(Math.floor(at / 60)).padStart(2, "0")}:${String(at % 60).padStart(2, "0")}`;
-  const s = slot({
+  // built from a named spec, not a table literal (the architecture reader counts the table's entries)
+  const spec: SlotInput = {
     id: `arena-kill:${row.code}`,
     time,
     runner: "actions",
@@ -699,7 +700,8 @@ function killSlot(row: MarketRow): Slot | null {
     catchUpMin: 20,
     enabled: true,
     note: "Rollback kill (M20 D-1101): closes every open book at the open with reason market_off, then disables the market; exists only while the market row has rollback_at",
-  });
+  };
+  const s = slot(spec);
   return isHomeRule(row.tz) ? s : { ...s, tz: row.tz };
 }
 

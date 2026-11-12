@@ -51,3 +51,15 @@ A pure module takes a `MarketProfile` (or the one field) as an argument; the Wor
 - `complete` is computed, never stored (DAT-242); IN and US are incomplete in M19 by design.
 - Adding a market is a seed module, a migration row (`node scripts/market/gen-seed-sql.mjs` for a first build), a fixture
   (`node scripts/market/gen-fixtures.mjs`) and a registry line in `seed/index.mjs`, together.
+- M20: migration 0034 is applied and never regenerated. A later change to an IN or US seed value is projected into the
+  generated regions of 0036 (`node scripts/market/gen-seed-sql.mjs --delta 0034`; `--check` verifies, and the plain
+  `--check` verifies 0034 plus the delta against the seed). The guard triggers of 0036's tables are a generated region
+  too (`node scripts/db/gen-market-guard.mjs`, `M20_TABLES`).
+- M20: a market's batch-1 day is `src/lib/data/sources/<code lowercase>/day.mjs` exporting `prepareDay(db, o)` and
+  `runDay(db, o)` (the shapes of `prepareBatch1` / `runBatch1`, `o.market` set); `batch1-core.mjs` finds it by
+  convention for every built market but the home one, and throws `not built` while it is missing (D-1127).
+- M20: every script opens its database with `scriptDb({ url, token })` (`src/lib/db/scriptClient.mjs`): the guard's
+  error mapping and one S2 `market_not_enabled` incident per refused market-day.
+- M20: the Worker decides a market-bound slot on `localFor(slot.tz, instant)`; `slot.tz` is set only for a zone that
+  does not follow the home rule (IN, US), so the AU table is byte-identical. `FEED_SLOT_TIMES` is keyed by market and
+  holds the home market only.
