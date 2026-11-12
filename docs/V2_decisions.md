@@ -685,3 +685,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1083 | Test map and reports (E3, TST-133, AT-85): docs/test-map.md gets rows for AT-67 (covered, CI), AT-68 (covered, "CI + CI recorded-day"), AT-75 (covered (AU),... |
 | D-1084 | PRAXIS_MARKETS_ENABLED in the checks (E3, D-994): .env.example (A1) already names it and the code reads it, so scripts/ci/env-names.mjs needs no entry and wa... |
 | D-1085 | Matrix fixtures (E3, TST-139, D-1001): tests/market/profiles/IN.json and US.json already exist from A1 and equal their seeds (node scripts/market/gen-fixture... |
+| D-1086 | M19 exit review follow-up, wrapper (Fable, 2026-11-12): wrap the script client factories and the Worker's pipeline() with wrapClient/marketRefusalReporter (a... |
+| D-1087 | One --market resolver (Fable F1, M20): src/lib/arena/marketFlag.ts (D-1032) delegates to resolveScriptMarket (scriptMarket.mjs, D-1050) and guard.mjs re-expo... |
+| D-1088 | One home-seed helper (Fable F3, M20): homeMarket.mjs stays the constants facade but derives every value from homeProfile() (staticProfile.mjs); its own slots... |
+| D-1089 | Worker slot zone (Fable F4, M20, under D-1045): clock.ts compares slot minutes on the Sydney clock only; safe in M19 because IN/US zones are not in ZONE_RULE... |
+| D-1090 | Facts the AT-67 scan does not see (Fable F5, M20): sizing.ts STALL_FLOOR_SLIPPAGE_BPS duplicates the AU tick table's stall_floor_bps; the session-time class... |
