@@ -72,10 +72,10 @@ describe("migration 0023: cortex_feature_daily is prunable beyond 400 days", () 
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(db, ms);
     const after = await schemaOf(db);
-    expect(await migrateDown(db, ms, 13)).toEqual({ rolledBack: 13, version: 22 });
+    expect(await migrateDown(db, ms, 14)).toEqual({ rolledBack: 14, version: 22 });
     await db.execute(feature(dayAgo(900), "ZZOLD"));
     expect(await fails(db, "DELETE FROM cortex_feature_daily")).toMatch(/append-only/);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 13, version: 35 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 14, version: 36 });
     expect(await schemaOf(db)).toEqual(after);
   });
 });
@@ -130,7 +130,7 @@ describe("rollback to V1 (V2-S4)", () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(db, ms);
     const full = await schemaOf(db);
-    expect(await migrateDownTo(db, ms, 14)).toEqual({ rolledBack: 21, version: 14 });
+    expect(await migrateDownTo(db, ms, 14)).toEqual({ rolledBack: 22, version: 14 });
     const v1 = await schemaOf(db);
     expect(v1.some((s) => s.startsWith("table:cortex_night:"))).toBe(false);
     expect(v1.some((s) => s.startsWith("table:expert:"))).toBe(false);
@@ -142,7 +142,7 @@ describe("rollback to V1 (V2-S4)", () => {
     } finally {
       rm(dir);
     }
-    expect(await migrateUp(db, ms)).toEqual({ applied: 21, version: 35 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 22, version: 36 });
     expect(await schemaOf(db)).toEqual(full);
   }, 60_000);
 

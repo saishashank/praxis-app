@@ -117,8 +117,8 @@ export async function run(argv, env, out = console.log, deps = {}) {
     const connect =
       deps.connect ??
       (async (e) => {
-        const { createClient } = await import("@libsql/client");
-        return createClient({ url: e.TURSO_MAIN_URL, authToken: e.TURSO_MAIN_TOKEN });
+        const { scriptDb } = await import("../../src/lib/db/scriptClient.mjs");
+        return scriptDb({ url: e.TURSO_MAIN_URL, token: e.TURSO_MAIN_TOKEN });
       });
     db = await connect(env);
     // MKT-110 a: only an enabled market is drafted (and a named one must be enabled before anything is written)

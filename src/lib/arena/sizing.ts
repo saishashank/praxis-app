@@ -4,6 +4,7 @@
 //   cash buffer = one half-away-from-zero rounding to 1 micro (decisions 6 and 7).
 // HIGH-RISK money maths: no float, no iteration (ARN-024a s13).
 import { type Micro } from "@/lib/money/micro";
+import type { MarketProfile } from "@/lib/market/profileCore.mjs";
 import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import {
   addRat,
@@ -34,8 +35,18 @@ export const MIN_MARKETABLE_PARCEL_VERIFIED = false;
 export const DEFAULT_PARTICIPATION_CAP: Rational = makeRational(1n, 100n);
 /** ARN-024a (l.57) / ch.15 `cash_buffer`: 1 % of NAV. */
 export const DEFAULT_CASH_BUFFER: Rational = makeRational(1n, 100n);
-/** Stall floor (spec 05 section 5.1): entry slippage is taken at 10 bps of the parcel. */
-export const STALL_FLOOR_SLIPPAGE_BPS: Rational = makeRational(10n);
+/**
+ * Stall floor (spec 05 section 5.1): entry slippage is taken at `slippage.stall_floor_bps` of the parcel, read from
+ * the market profile (M20 A2, D-1118; AU 10 bps, IN and US carry AU's). The constant is the home market's figure.
+ */
+export function stallFloorBpsOf(profile: Pick<MarketProfile, "slippage" | "code">): Rational {
+  if (profile.slippage === null || profile.slippage === undefined)
+    throw new RangeError(
+      `market ${profile.code} has no slippage buckets: its stall floor is not set`,
+    );
+  return makeRational(BigInt(profile.slippage.stall_floor_bps));
+}
+export const STALL_FLOOR_SLIPPAGE_BPS: Rational = stallFloorBpsOf(homeProfile());
 
 /**
  * Why a buy is not placed (mirrors `KNOWN_REJECT_REASONS` in schema.ts). Stall condition (b) of
@@ -208,8 +219,10 @@ export type StallFloorInput = {
   readonly profile: CostProfile;
   readonly parcelMicro?: Micro;
   readonly cashBuffer?: Rational;
-  /** Slippage as bps of the parcel (default 10, spec section 5.1). */
+  /** Slippage as bps of the parcel (default: the market profile's `stall_floor_bps`, AU 10, spec section 5.1). */
   readonly slippageBps?: Rational;
+  /** The market whose stall floor this is (D-1118); absent = the home market. */
+  readonly marketProfile?: Pick<MarketProfile, "slippage" | "code">;
   /**
    * Optional reference price: slippage per share becomes max(slippage bps, one tick) rounded
    * adverse (decision 4, `stallFloorSlippageMicro`), scaled to the parcel as shares-equivalent.
@@ -226,14 +239,16 @@ export function stallFloorMicro(input: StallFloorInput): Micro {
   const parcel = input.parcelMicro ?? MIN_MARKETABLE_PARCEL_MICRO;
   const buffer = input.cashBuffer ?? DEFAULT_CASH_BUFFER;
   const fee = feeFor(input.profile, parcel, "buy");
+  const bps =
+    input.slippageBps ??
+    (input.marketProfile === undefined
+      ? STALL_FLOOR_SLIPPAGE_BPS
+      : stallFloorBpsOf(input.marketProfile));
   let slip: Rational;
   if (input.refPriceMicro === undefined) {
-    slip = mulRat(
-      makeRational(parcel),
-      mulRat(input.slippageBps ?? STALL_FLOOR_SLIPPAGE_BPS, makeRational(1n, 10_000n)),
-    );
+    slip = mulRat(makeRational(parcel), mulRat(bps, makeRational(1n, 10_000n)));
   } else {
-    const perShare = stallFloorSlippageMicro(input.refPriceMicro, input.slippageBps);
+    const perShare = stallFloorSlippageMicro(input.refPriceMicro, bps);
     slip = mulRat(makeRational(parcel), makeRational(perShare, input.refPriceMicro));
   }
   const total = addRat(makeRational(parcel + fee), slip);

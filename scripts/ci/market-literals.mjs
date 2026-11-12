@@ -58,14 +58,6 @@ export const EXTRA_ALLOW = Object.freeze([
     reason:
       "the profile tooling (gen-seed-sql, gen-fixtures, snapshot-au) projects the seed to SQL, fixtures and the AU snapshot (D-992, D-1007)",
   },
-  // ---- transitional code, recorded by its builder
-  {
-    file: "scripts/ingest/yahoo_fetch.py",
-    classes: ["yahooSuffix", "currency"],
-    includes: "DEFAULT_",
-    reason:
-      "TRANSITIONAL (M19 B2, CXA-002 h): the defaults used only while a request carries no suffix or currency; the Python tests assert them and Python is not available to prove their removal in M19",
-  },
   // ---- onboarding and glossary copy: the AU strategy amounts stay as words (D-1003, per-market amounts are ARN-119 at M20)
   {
     file: "src/app/(app)/home/HomeContent.tsx",
@@ -91,12 +83,6 @@ export const EXTRA_ALLOW = Object.freeze([
     reason: "a glossary example in AU dollars (teaching text, not a market fact)",
   },
   // ---- AU display tables and texts that describe the AU cost profiles, the AU parcel and the AU spec statements
-  {
-    file: "src/lib/view/costPlans.ts",
-    classes: ["currency"],
-    reason:
-      "plain-words display of the AU broker plans P0 to P6 (the cost_formula tables are AU's; IN and US tables arrive with M20)",
-  },
   {
     file: "src/lib/config/verify.ts",
     classes: ["currency"],
@@ -134,19 +120,6 @@ export const EXTRA_ALLOW = Object.freeze([
     reason: "plain-words description of the AU intraday evaluator's A$1,000 parcel (D-311)",
   },
   // ---- other precise entries
-  {
-    file: "src/app/(app)/health/WorkerSlotsForm.tsx",
-    classes: ["exchangeWord", "zone"],
-    reason:
-      "client component that labels the Worker slot table, which is written in the home market's exchange zone; its props stay as the tests render them",
-  },
-  {
-    file: "src/components/charts/TimeSeriesChart.tsx",
-    classes: ["currency"],
-    includes: "currency =",
-    reason:
-      "default symbol of a chart prop that no page uses yet (a required prop would change its tests); per-market callers pass the format at M20",
-  },
   {
     file: "src/lib/llm/grounding.ts",
     classes: ["exchangeWord", "currency"],

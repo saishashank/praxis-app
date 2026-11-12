@@ -120,7 +120,7 @@ describe("quarter arithmetic", () => {
 
 // M18 TST-136 (D-968): no retry wrapper and no timing tag in the name. Nothing here measures time: `now` is injected into every
 // call, so the result is a function of the seeded rows only; the 30 s test timeout bounds database set-up.
-// A generous per-test limit instead of a retry: set-up is 35 migrations on a shared runner, nothing here asserts a time.
+// A generous per-test limit instead of a retry: set-up is 36 migrations on a shared runner, nothing here asserts a time.
 describe("the live look (CTX-053 in the app)", { timeout: 120_000 }, () => {
   it("on today's data (no live outcomes) nothing is written and every family stays shadow", async () => {
     const db = await freshDb("main");

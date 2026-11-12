@@ -15,7 +15,8 @@
 // Exit codes: 0 report produced, 1 failed, 2 usage.
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { createClient, type Client } from "@libsql/client";
+import type { Client } from "@libsql/client";
+import { scriptDb } from "@/lib/db/scriptClient.mjs";
 import {
   createOracleProvider,
   goldenProblems,
@@ -158,7 +159,7 @@ export async function bakeoffMain(
 
     const url = env.TURSO_MAIN_URL;
     if (live && url && url.trim() !== "") {
-      const db = (deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t })))(
+      const db = (deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t })))(
         url,
         env.TURSO_MAIN_TOKEN,
       );

@@ -35,6 +35,8 @@ import { TIER_RULES, assignTiers, medianMicro } from "../universe/tiers.mjs";
 import { INDEX_YAHOO_SYMBOL, parseIndexText, US_INDEX_YAHOO_SYMBOLS } from "../index/indexBars.mjs";
 import { parseVendorActionsText } from "../vendorActions/vendorActions.mjs";
 import { inputsStage } from "../index/inputsStage.mjs";
+import { seedOf } from "../../market/seed/index.mjs";
+import { staticProfile } from "../../market/staticProfile.mjs";
 import {
   parseShortText,
   planShortDates,
@@ -297,10 +299,14 @@ export async function assess(db, o) {
 
   const oldest = trading[0].d;
   const newest = trading[trading.length - 1].d;
+  const profile = staticProfile(market);
   const request = {
     codes: uni.codes,
     start: previousTradingDay(oldest, calRows), // one session back: the D-1 re-fetch (DAT-002)
     end: newest,
+    // M20 A2 (D-1034, D-1090): the Yahoo fetch has no market default; the request carries the profile's values
+    suffix: profile.yahooSuffix,
+    currency: profile.currency,
     // M4 T3: the benchmark index rides the same Yahoo fetch; the ASIC dates only when that source
     // is on (the Node ASIC step has no secrets and skips an empty list).
     indices: [INDEX_YAHOO_SYMBOL, ...Object.values(US_INDEX_YAHOO_SYMBOLS)], // D-308: + ^GSPC, ^VIX
@@ -311,11 +317,68 @@ export async function assess(db, o) {
   return { ...base, kind: "go", plan, calRows, codes: uni.codes, excluded: uni.excluded, request };
 }
 
+// ---- the per-market dispatcher (M20 A2, D-1127) -------------------------------------------------------------
+// This file is the home market's day (what it has always been, byte for byte). Any OTHER built market (a seed
+// module exists) runs its own day, found by convention: `src/lib/data/sources/<code lowercase>/day.mjs` exports
+//   prepareDay(db, o)   -> the shape of prepareBatch1  ({ action: "fetch" | "nothing_to_fetch" | "skip", ... })
+//   runDay(db, o)       -> the shape of runBatch1      ({ exit, status, reason?, target, dates, ... })
+// with `o.market` set to the code. No registry is edited to add a market: the stream that builds one adds its
+// folder (D-1127, so IN and US never touch one file). A built market whose module does not exist throws
+// `not built` (a fixed word, no path, no value) - never the home pipeline for another market. A market with NO seed
+// (an unknown code) is not dispatched: it falls through to the home pipeline's own `market_missing` refusal.
+// Every day module calls `assertMarketEnabled` before its first write (the CLI already resolved the market).
+const CODE_RE = /^[A-Z][A-Z0-9]{1,7}$/;
+
+/** True when the market's day is the home pipeline in this file. */
+export function runsHomeDay(market) {
+  return market === MARKET || seedOf(market) === undefined;
+}
+
 /**
- * The read-only "what should the fetch step ask for" call (workflow step 1). Writes nothing.
- * @param {Client} db @param {Parameters<typeof assess>[1]} o
+ * The day module of a built market, by convention. `o.dayLoader` (tests) replaces the import.
+ * @param {string} market
+ * @param {(code: string) => Promise<any>} [loader]
+ */
+export async function loadDayModule(market, loader) {
+  if (!CODE_RE.test(market)) throw new Error("not built");
+  const code = market.toLowerCase();
+  let mod;
+  try {
+    mod = loader
+      ? await loader(code)
+      : await import(
+          /* @vite-ignore */ /* webpackIgnore: true */
+          new URL(`../sources/${code}/day.mjs`, import.meta.url).href
+        );
+  } catch {
+    throw new Error("not built");
+  }
+  if (
+    mod === null ||
+    typeof mod !== "object" ||
+    typeof mod.prepareDay !== "function" ||
+    typeof mod.runDay !== "function"
+  )
+    throw new Error("not built");
+  return mod;
+}
+
+/**
+ * The read-only "what should the fetch step ask for" call (workflow step 1). Writes nothing. The home market runs
+ * this file's pipeline; any other built market runs its `sources/<code>/day.mjs` (see the dispatcher above).
+ * @param {Client} db @param {Parameters<typeof assess>[1] & { dayLoader?: (code: string) => Promise<any> }} o
  */
 export async function prepareBatch1(db, o) {
+  const market = o.market ?? MARKET;
+  if (runsHomeDay(market)) return prepareHomeDay(db, o);
+  return (await loadDayModule(market, o.dayLoader)).prepareDay(db, { ...o, market });
+}
+
+/**
+ * The home market's "what should the fetch step ask for" call.
+ * @param {Client} db @param {Parameters<typeof assess>[1]} o
+ */
+export async function prepareHomeDay(db, o) {
   const a = await assess(db, o);
   if (a.kind === "go" && a.request) {
     return {
@@ -355,10 +418,21 @@ export async function prepareBatch1(db, o) {
  */
 
 /**
- * Run the pipeline. Never throws for pipeline problems: it records them and returns an exit code.
- * @param {Client} db @param {RunOptions} o
+ * Run the pipeline. Never throws for pipeline problems: it records them and returns an exit code. The home market
+ * runs this file's pipeline; any other built market runs its `sources/<code>/day.mjs` (the dispatcher above).
+ * @param {Client} db @param {RunOptions & { dayLoader?: (code: string) => Promise<any> }} o
  */
 export async function runBatch1(db, o) {
+  const market = o.market ?? MARKET;
+  if (runsHomeDay(market)) return runHomeDay(db, o);
+  return (await loadDayModule(market, o.dayLoader)).runDay(db, { ...o, market });
+}
+
+/**
+ * The home market's pipeline (the body of runBatch1 before M20).
+ * @param {Client} db @param {RunOptions} o
+ */
+export async function runHomeDay(db, o) {
   const market = o.market ?? MARKET;
   const a = await assess(db, {
     nowMs: o.nowMs(),

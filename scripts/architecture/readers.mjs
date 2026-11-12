@@ -236,7 +236,7 @@ function slotContext() {
     batchSchedule: v("batch_schedule"),
     preopenRecheckMin: v("preopen_recheck_min"),
   });
-  return { ops: OPS_SLOT_TIMES, feed: FEED_SLOT_TIMES, a };
+  return { ops: OPS_SLOT_TIMES, feed: FEED_SLOT_TIMES[HOME_MARKET], a };
 }
 
 /** The value of a property written as a string literal or as a path into slotContext(); null when neither. */

@@ -8548,6 +8548,40 @@
       }
     },
     {
+      "id": "table:main.announcement_category",
+      "type": "table",
+      "name": "announcement_category",
+      "purpose": "Table announcement_category in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "source",
+          "ann_id",
+          "category",
+          "materiality",
+          "verifiable",
+          "map_version"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.app_log",
       "type": "table",
       "name": "app_log",
@@ -8853,6 +8887,39 @@
           "passes",
           "report_sha",
           "trains_on_prompts_checked_d"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.bar_latency_sample",
+      "type": "table",
+      "name": "bar_latency_sample",
+      "purpose": "Table bar_latency_sample in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "close_local",
+          "first_seen_at",
+          "latency_min",
+          "source"
         ],
         "database": "main",
         "indexes": []
@@ -11003,6 +11070,45 @@
       }
     },
     {
+      "id": "table:main.fundamental_fact",
+      "type": "table",
+      "name": "fundamental_fact",
+      "purpose": "Table fundamental_fact in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "code",
+          "cik",
+          "concept",
+          "unit",
+          "fy",
+          "fp",
+          "period_end",
+          "value",
+          "form",
+          "accession",
+          "filed_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.go_live_signoff",
       "type": "table",
       "name": "go_live_signoff",
@@ -11109,6 +11215,38 @@
           "d",
           "purpose",
           "components_json"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.holdout_look",
+      "type": "table",
+      "name": "holdout_look",
+      "purpose": "Table holdout_look in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "attrs": {
+        "columns": [
+          "lineage",
+          "market",
+          "looked_at",
+          "prereg_sha",
+          "verdict"
         ],
         "database": "main",
         "indexes": []
@@ -11783,6 +11921,39 @@
       }
     },
     {
+      "id": "table:main.label_item",
+      "type": "table",
+      "name": "label_item",
+      "purpose": "Table label_item in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "source",
+          "ann_id",
+          "label",
+          "labelled_at",
+          "actor"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.label_validation",
       "type": "table",
       "name": "label_validation",
@@ -12245,7 +12416,9 @@
           "currency",
           "mode",
           "enabled",
-          "slots_json"
+          "slots_json",
+          "data_only_since",
+          "rollback_at"
         ],
         "database": "main",
         "indexes": []
@@ -12387,6 +12560,44 @@
         ],
         "database": "main",
         "indexes": []
+      }
+    },
+    {
+      "id": "table:main.market_switch",
+      "type": "table",
+      "name": "market_switch",
+      "purpose": "Table market_switch in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "market",
+          "from_mode",
+          "to_mode",
+          "enabled_after",
+          "reason",
+          "actor",
+          "at",
+          "checklist_json"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_market_switch_market"
+        ]
       }
     },
     {
@@ -13146,6 +13357,40 @@
           "status",
           "checked",
           "cancelled"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.price_band",
+      "type": "table",
+      "name": "price_band",
+      "purpose": "Table price_band in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "code",
+          "d",
+          "band_pct",
+          "lower_micro",
+          "upper_micro",
+          "source"
         ],
         "database": "main",
         "indexes": []
@@ -14496,6 +14741,39 @@
       }
     },
     {
+      "id": "table:main.surveillance_list",
+      "type": "table",
+      "name": "surveillance_list",
+      "purpose": "Table surveillance_list in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "code",
+          "d",
+          "list",
+          "stage",
+          "source"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.text_label",
       "type": "table",
       "name": "text_label",
@@ -14650,6 +14928,43 @@
         ],
         "database": "main",
         "indexes": []
+      }
+    },
+    {
+      "id": "table:main.trading_halt",
+      "type": "table",
+      "name": "trading_halt",
+      "purpose": "Table trading_halt in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "market",
+          "code",
+          "kind",
+          "halted_at",
+          "resumed_at",
+          "reason",
+          "source"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_trading_halt_code"
+        ]
       }
     },
     {
@@ -19152,6 +19467,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.announcement_category",
+      "from": "service:turso-main",
+      "to": "table:main.announcement_category",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.app_log",
       "from": "service:turso-main",
       "to": "table:main.app_log",
@@ -19234,6 +19559,16 @@
       "contract": "Runs or holds this element.",
       "views": [
         "llm"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.bar_latency_sample",
+      "from": "service:turso-main",
+      "to": "table:main.bar_latency_sample",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
       ]
     },
     {
@@ -19822,6 +20157,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.fundamental_fact",
+      "from": "service:turso-main",
+      "to": "table:main.fundamental_fact",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.go_live_signoff",
       "from": "service:turso-main",
       "to": "table:main.go_live_signoff",
@@ -19851,6 +20196,16 @@
       "views": [
         "data",
         "platform"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.holdout_look",
+      "from": "service:turso-main",
+      "to": "table:main.holdout_look",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
       ]
     },
     {
@@ -20032,6 +20387,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.label_item",
+      "from": "service:turso-main",
+      "to": "table:main.label_item",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.label_validation",
       "from": "service:turso-main",
       "to": "table:main.label_validation",
@@ -20190,6 +20555,16 @@
       "id": "service:turso-main|contains|table:main.market_row_count",
       "from": "service:turso-main",
       "to": "table:main.market_row_count",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.market_switch",
+      "from": "service:turso-main",
+      "to": "table:main.market_switch",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
@@ -20401,6 +20776,16 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.price_band",
+      "from": "service:turso-main",
+      "to": "table:main.price_band",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
         "data"
       ]
     },
@@ -20772,6 +21157,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.surveillance_list",
+      "from": "service:turso-main",
+      "to": "table:main.surveillance_list",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.text_label",
       "from": "service:turso-main",
       "to": "table:main.text_label",
@@ -20808,6 +21203,16 @@
       "id": "service:turso-main|contains|table:main.trading_calendar",
       "from": "service:turso-main",
       "to": "table:main.trading_calendar",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.trading_halt",
+      "from": "service:turso-main",
+      "to": "table:main.trading_halt",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [

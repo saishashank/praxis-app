@@ -12,6 +12,23 @@ import pytest
 import yahoo_fetch as yf_fetch
 
 FETCHED = "2026-01-01T07:30:00.000Z"
+# M20 A2 (D-1090): the module has no suffix or currency default; these tests' world is the home market's, so the
+# helpers below pass it (a request carries the market profile's values).
+SFX, CUR = ".AX", "AUD"
+
+
+def fetch_all(*args, **kw):
+    kw.setdefault("suffix", SFX)
+    kw.setdefault("currency", CUR)
+    return yf_fetch.fetch_all(*args, **kw)
+
+
+def rows_from_frame(df, codes, fetched_at, suffix=SFX):
+    return yf_fetch.rows_from_frame(df, codes, fetched_at, suffix)
+
+
+def actions_from_frame(df, codes, fetched_at, suffix=SFX, currency=CUR):
+    return yf_fetch.actions_from_frame(df, codes, fetched_at, suffix, currency)
 
 
 def frame(codes, days=3, nan_day=None):
@@ -136,7 +153,7 @@ def test_parse_request_rejects(raw):
 
 
 def test_rows_from_frame_shape():
-    rows = yf_fetch.rows_from_frame(frame(["ZZZ"], days=2), ["ZZZ"], FETCHED)
+    rows = rows_from_frame(frame(["ZZZ"], days=2), ["ZZZ"], FETCHED)
     assert rows[0] == {
         "code": "ZZZ",
         "date": "2020-01-06",
@@ -156,7 +173,7 @@ def test_rows_from_frame_shape():
 def test_all_nan_day_is_skipped_but_partial_nan_becomes_null():
     df = frame(["ZZZ"], days=3, nan_day=1)
     df.iloc[2, df.columns.get_loc(("ZZZ.AX", "Close"))] = float("nan")
-    rows = yf_fetch.rows_from_frame(df, ["ZZZ"], FETCHED)
+    rows = rows_from_frame(df, ["ZZZ"], FETCHED)
     assert [r["date"] for r in rows] == ["2020-01-06", "2020-01-08"]
     assert rows[1]["close"] is None  # never filled
 
@@ -167,23 +184,23 @@ def test_fractional_and_missing_volume_is_null():
     df[("ZZZ.AX", "Volume")] = df[("ZZZ.AX", "Volume")].astype("float64")
     df.iloc[0, df.columns.get_loc(("ZZZ.AX", "Volume"))] = 10.5
     df.iloc[1, df.columns.get_loc(("ZZZ.AX", "Volume"))] = float("nan")
-    rows = yf_fetch.rows_from_frame(df, ["ZZZ"], FETCHED)
+    rows = rows_from_frame(df, ["ZZZ"], FETCHED)
     assert [r["volume"] for r in rows] == [None, None]
 
 
 def test_empty_or_none_frame_gives_no_rows():
-    assert yf_fetch.rows_from_frame(None, ["ZZZ"], FETCHED) == []
-    assert yf_fetch.rows_from_frame(pd.DataFrame(), ["ZZZ"], FETCHED) == []
+    assert rows_from_frame(None, ["ZZZ"], FETCHED) == []
+    assert rows_from_frame(pd.DataFrame(), ["ZZZ"], FETCHED) == []
 
 
 def test_code_missing_from_frame_is_skipped():
-    rows = yf_fetch.rows_from_frame(frame(["ZZZ"]), ["ZZZ", "ZZY"], FETCHED)
+    rows = rows_from_frame(frame(["ZZZ"]), ["ZZZ", "ZZY"], FETCHED)
     assert {r["code"] for r in rows} == {"ZZZ"}
 
 
 def test_flat_single_ticker_frame():
     flat = frame(["ZZZ"], days=2)["ZZZ.AX"]
-    rows = yf_fetch.rows_from_frame(flat, ["ZZZ"], FETCHED)
+    rows = rows_from_frame(flat, ["ZZZ"], FETCHED)
     assert len(rows) == 2 and rows[0]["code"] == "ZZZ"
 
 
@@ -194,7 +211,7 @@ def test_chunks_split_and_use_ax_suffix_and_inclusive_end():
     dl = Recorder()
     clock, sleep, state = make_clock()
     codes = [f"ZZ{i}" for i in range(5)]
-    rows, report = yf_fetch.fetch_all(
+    rows, report = fetch_all(
         codes, "2020-01-06", "2020-01-31", 2, 5, dl, sleep=sleep, clock=clock
     )
     assert [c["tickers"] for c in dl.calls] == [
@@ -211,7 +228,7 @@ def test_chunks_split_and_use_ax_suffix_and_inclusive_end():
 def test_minimum_gap_between_requests():
     dl = Recorder()
     clock, sleep, state = make_clock()
-    yf_fetch.fetch_all(["ZZ0", "ZZ1", "ZZ2"], "2020-01-06", "2020-01-10", 1, 7, dl, sleep, clock)
+    fetch_all(["ZZ0", "ZZ1", "ZZ2"], "2020-01-06", "2020-01-10", 1, 7, dl, sleep, clock)
     assert state["sleeps"] == [7, 7]  # none before the first request
 
 
@@ -222,7 +239,7 @@ def test_no_sleep_when_the_gap_has_already_passed():
         state["t"] += 30
         return frame([t[:-3] for t in kw["tickers"]])
 
-    yf_fetch.fetch_all(["ZZ0", "ZZ1"], "2020-01-06", "2020-01-10", 1, 5, Recorder(slow), sleep, clock)
+    fetch_all(["ZZ0", "ZZ1"], "2020-01-06", "2020-01-10", 1, 5, Recorder(slow), sleep, clock)
     assert state["sleeps"] == []
 
 
@@ -231,7 +248,7 @@ def test_missing_codes_are_reported():
         return frame(["ZZ0"])
 
     clock, sleep, _ = make_clock()
-    _, report = yf_fetch.fetch_all(
+    _, report = fetch_all(
         ["ZZ0", "ZZ1"], "2020-01-06", "2020-01-10", 10, 5, Recorder(only_first), sleep, clock
     )
     assert report["missing"] == ["ZZ1"]
@@ -247,7 +264,7 @@ def test_backs_off_on_rate_limit_then_succeeds():
         return frame(["ZZ0"])
 
     clock, sleep, state = make_clock()
-    rows, report = yf_fetch.fetch_all(
+    rows, report = fetch_all(
         ["ZZ0"], "2020-01-06", "2020-01-10", 10, 5, Recorder(flaky), sleep, clock
     )
     assert rows and report["rate_limit_retries"] == 2 and report["requests"] == 3
@@ -260,7 +277,7 @@ def test_rate_limit_exhausted_fails_visibly():
 
     clock, sleep, _ = make_clock()
     with pytest.raises(yf_fetch.RateLimited):
-        yf_fetch.fetch_all(["ZZ0"], "2020-01-06", "2020-01-10", 10, 5, Recorder(always), sleep, clock)
+        fetch_all(["ZZ0"], "2020-01-06", "2020-01-10", 10, 5, Recorder(always), sleep, clock)
 
 
 def test_rate_limit_class_name_is_recognised():
@@ -277,7 +294,7 @@ def test_other_errors_fail_without_leaking_the_message():
 
     clock, sleep, _ = make_clock()
     with pytest.raises(yf_fetch.FetchError) as ei:
-        yf_fetch.fetch_all(["ZZ0"], "2020-01-06", "2020-01-10", 10, 5, Recorder(boom), sleep, clock)
+        fetch_all(["ZZ0"], "2020-01-06", "2020-01-10", 10, 5, Recorder(boom), sleep, clock)
     assert "secret detail" not in str(ei.value)
 
 
@@ -285,7 +302,14 @@ def test_other_errors_fail_without_leaking_the_message():
 
 
 def write_request(tmp_path, **over):
-    req = {"codes": ["ZZZ", "ZZY"], "start": "2020-01-06", "end": "2020-01-08", **over}
+    req = {
+        "codes": ["ZZZ", "ZZY"],
+        "start": "2020-01-06",
+        "end": "2020-01-08",
+        "suffix": SFX,
+        "currency": CUR,
+        **over,
+    }
     p = tmp_path / "request.json"
     p.write_text(json.dumps(req))
     return str(p)
@@ -421,7 +445,7 @@ def test_actions_from_frame_extracts_splits_and_dividends():
     df.loc[df.index[2], ("ZZZ.AX", "Dividends")] = 0.35
     df.loc[df.index[0], ("ZZY.AX", "Stock Splits")] = 1.0  # a ratio of 1 is no action
     df.loc[df.index[0], ("ZZY.AX", "Dividends")] = float("nan")
-    rows = yf_fetch.actions_from_frame(df, ["ZZZ", "ZZY"], FETCHED)
+    rows = actions_from_frame(df, ["ZZZ", "ZZY"], FETCHED)
     assert rows == [
         {"code": "ZZZ", "ex_date": "2020-01-07", "currency": "AUD", "source": "yahoo",
          "fetched_at": FETCHED, "kind": "split", "ratio": 2.0},
@@ -431,8 +455,8 @@ def test_actions_from_frame_extracts_splits_and_dividends():
 
 
 def test_actions_from_frame_without_action_columns_or_empty_gives_nothing():
-    assert yf_fetch.actions_from_frame(frame(["ZZZ"]), ["ZZZ"], FETCHED) == []
-    assert yf_fetch.actions_from_frame(None, ["ZZZ"], FETCHED) == []
+    assert actions_from_frame(frame(["ZZZ"]), ["ZZZ"], FETCHED) == []
+    assert actions_from_frame(None, ["ZZZ"], FETCHED) == []
 
 
 def test_fetch_all_requests_actions_in_the_same_call_and_collects_them():
@@ -444,7 +468,7 @@ def test_fetch_all_requests_actions_in_the_same_call_and_collects_them():
     dl = Recorder(serve)
     clock, sleep, _ = make_clock()
     actions = []
-    rows, report = yf_fetch.fetch_all(
+    rows, report = fetch_all(
         ["ZZ0", "ZZ1", "ZZ2"], "2020-01-06", "2020-01-10", 2, 5, dl, sleep=sleep, clock=clock,
         actions_out=actions,
     )
@@ -478,13 +502,16 @@ def test_run_writes_actions_json_only_when_asked(tmp_path):
 # --- M19 B2 (CXA-002 h): the Yahoo suffix and the currency ride in the request ------------------
 
 
-def test_parse_suffix_and_currency_default_and_validate():
-    assert yf_fetch.parse_suffix({"codes": ["ZZZ"]}) == yf_fetch.DEFAULT_SUFFIX
+def test_parse_suffix_and_currency_are_required_and_validated():
+    # M20 A2 (D-1090): no default - a request without them is refused, never guessed
+    with pytest.raises(yf_fetch.InputError):
+        yf_fetch.parse_suffix({"codes": ["ZZZ"]})
     assert yf_fetch.parse_suffix({"suffix": ".NS"}) == ".NS"
     for bad in ("NS", ".ns", ".TOOLONG", 5):
         with pytest.raises(yf_fetch.InputError):
             yf_fetch.parse_suffix({"suffix": bad})
-    assert yf_fetch.parse_currency({}) == yf_fetch.DEFAULT_CURRENCY
+    with pytest.raises(yf_fetch.InputError):
+        yf_fetch.parse_currency({})
     assert yf_fetch.parse_currency({"currency": "INR"}) == "INR"
     with pytest.raises(yf_fetch.InputError):
         yf_fetch.parse_currency({"currency": "inr"})
@@ -496,9 +523,9 @@ def test_rows_and_actions_follow_the_suffix_and_currency():
         [t.replace(".AX", ".NS") for t in df.columns.levels[0]], level=0
     )
     df.loc[df.index[1], ("ZZZ.NS", "Dividends")] = 0.5
-    rows = yf_fetch.rows_from_frame(df, ["ZZZ"], FETCHED, ".NS")
+    rows = rows_from_frame(df, ["ZZZ"], FETCHED, ".NS")
     assert len(rows) == 3 and {r["code"] for r in rows} == {"ZZZ"}
-    acts = yf_fetch.actions_from_frame(df, ["ZZZ"], FETCHED, ".NS", "INR")
+    acts = actions_from_frame(df, ["ZZZ"], FETCHED, ".NS", "INR")
     assert acts == [
         {"code": "ZZZ", "ex_date": "2020-01-07", "currency": "INR", "source": "yahoo",
          "fetched_at": FETCHED, "kind": "dividend", "amount": 0.5},
@@ -508,7 +535,7 @@ def test_rows_and_actions_follow_the_suffix_and_currency():
 def test_fetch_all_asks_for_the_requests_suffix():
     dl = Recorder(lambda n, kw: frame(["ZZ0", "ZZ1"]))
     clock, sleep, _ = make_clock()
-    yf_fetch.fetch_all(
+    fetch_all(
         ["ZZ0", "ZZ1"], "2020-01-06", "2020-01-10", 2, 5, dl, sleep=sleep, clock=clock, suffix=".NS"
     )
     assert dl.calls[0]["tickers"] == ["ZZ0.NS", "ZZ1.NS"]

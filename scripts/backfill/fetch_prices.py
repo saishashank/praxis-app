@@ -25,7 +25,7 @@ import yahoo_fetch as yf_fetch  # noqa: E402  (shared throttle, cleaning and err
 
 
 def month_rows(
-    df: Any, codes: list[str], suffix: str = yf_fetch.DEFAULT_SUFFIX
+    df: Any, codes: list[str], suffix: str
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """(bars, splits) from a yfinance frame; all-NaN days are skipped, split value 0/NaN ignored."""
     bars: list[dict[str, Any]] = []

@@ -91,17 +91,28 @@ describe("the home market constants equal the removed literals (CXA-001)", () =>
 });
 
 describe("the Worker's zone rule and feed tables (D-1046)", () => {
-  it("only the Sydney and Melbourne zones have a rule; the feed and ops tables are today's times", () => {
+  it("the zones with a rule are Sydney, Melbourne, Kolkata and New York (M20); the feed (home market only) and ops tables are today's times", () => {
     expect(ZONE_RULES).toEqual({
       "Australia/Sydney": "au-south-dst",
       "Australia/Melbourne": "au-south-dst",
+      "Asia/Kolkata": "asia-kolkata",
+      "America/New_York": "us-eastern-dst",
     });
-    expect(FEED_SLOT_TIMES.poll).toEqual({ from: "07:00", until: "19:30", everyMin: 4 });
-    expect(FEED_SLOT_TIMES.fetch).toEqual({ from: "08:00", until: "19:00", everyMin: 30 });
+    expect(Object.keys(FEED_SLOT_TIMES)).toEqual([HOME_MARKET]); // IN and US have no feed slots (D-1117)
+    expect(FEED_SLOT_TIMES[HOME_MARKET]!.poll).toEqual({
+      from: "07:00",
+      until: "19:30",
+      everyMin: 4,
+    });
+    expect(FEED_SLOT_TIMES[HOME_MARKET]!.fetch).toEqual({
+      from: "08:00",
+      until: "19:00",
+      everyMin: 30,
+    });
     expect([
-      FEED_SLOT_TIMES.universe.at,
-      FEED_SLOT_TIMES.late_sweep.at,
-      FEED_SLOT_TIMES.marker_check.at,
+      FEED_SLOT_TIMES[HOME_MARKET]!.universe.at,
+      FEED_SLOT_TIMES[HOME_MARKET]!.late_sweep.at,
+      FEED_SLOT_TIMES[HOME_MARKET]!.marker_check.at,
     ]).toEqual(["07:30", "19:35", "19:50"]);
     expect(OPS_SLOT_TIMES.maintenance).toEqual({ at: "22:30" });
   });

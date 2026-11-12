@@ -18,7 +18,7 @@ describe("market seed generators", () => {
     expect(run("gen-fixtures.mjs", "--check")).toContain("match their seeds");
   });
 
-  it("scripts/market/gen-seed-sql.mjs --check: migration 0034 equals its seed", () => {
+  it("scripts/market/gen-seed-sql.mjs --check: migration 0034 plus the 0036 delta equals its seed", () => {
     expect(run("gen-seed-sql.mjs", "--check")).toContain("matches the seed");
   });
 });

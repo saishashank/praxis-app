@@ -62,6 +62,8 @@ test("request: one anchor code plus ^AXJO for the window, today in Sydney by def
     codes: [ANCHOR_CODE],
     start: "2020-10-01",
     end: "2026-10-23",
+    suffix: ".AX", // the request carries the home profile's Yahoo suffix and currency (M20 A2, D-1090)
+    currency: "AUD",
     indices: ["^AXJO"],
   });
   assert.equal(sydneyToday(NOW), "2026-10-23");

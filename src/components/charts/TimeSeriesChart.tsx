@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import { ChartTable } from "./ChartTable";
 import { n } from "./format";
 
@@ -33,7 +34,7 @@ export function TimeSeriesChart({
   label,
   kind = "line",
   initialRange = "6M",
-  currency = "A$",
+  currency = homeProfile().currencyFormat?.symbol ?? "",
 }: {
   data: TimePoint[];
   label: string;

@@ -2,6 +2,9 @@
 // One call = ONE subrequest, however many statements it carries (PLT-070: 50 per invocation).
 // Errors carry only a fixed name, never a message, URL or value.
 
+import { marketOfStatement } from "../../src/lib/market/guard.mjs";
+import { refusalIncidentStatement, refusalKey } from "../../src/lib/market/refusalIncident.mjs";
+
 export type Arg = string | number | null;
 export type Stmt = { sql: string; args?: Arg[] };
 export type Row = (string | number | null)[];
@@ -54,8 +57,60 @@ function decodeValue(v: WireValue): string | number | null {
   return v.type === "integer" ? Number(v.value) : v.value;
 }
 
+/**
+ * M20 A2 (D-1123): the refusal reporter of the Worker, the same incident as the app's and the scripts' (S2
+ * market_not_enabled, src/lib/market/refusalIncident.mjs): at most once per market per isolate-day here, one open
+ * incident per kind in the table, best effort. It names the market the way the app does (the statement's own codes
+ * checked against the market table). It never throws and its own requests are not reported again.
+ */
+const reported = new Set<string>();
+export function resetRefusalReports(): void {
+  reported.clear();
+}
+async function reportRefusal(
+  env: DbEnv,
+  stmts: Stmt[],
+  table: string | null,
+  f: typeof fetch,
+): Promise<void> {
+  try {
+    const known = new Set<string>();
+    const enabled = new Set<string>();
+    try {
+      const [r] = await run(env, [{ sql: "SELECT code, enabled FROM market" }], f, false);
+      for (const row of r?.rows ?? []) {
+        known.add(String(row[0]));
+        if (Number(row[1]) === 1) enabled.add(String(row[0]));
+      }
+    } catch {
+      /* the lookup is best effort */
+    }
+    const market = marketOfStatement(
+      stmts.map((s) => ({ sql: s.sql, args: s.args })),
+      (c: string) => enabled.has(c),
+      (c: string) => known.has(c),
+    );
+    const at = new Date();
+    const key = refusalKey(at, market);
+    if (reported.has(key)) return;
+    reported.add(key);
+    await run(env, [refusalIncidentStatement(at, market, table) as Stmt], f, false);
+  } catch {
+    /* best effort: the refusal itself is the outcome */
+  }
+}
+
 /** Runs the statements in order in one request. Throws DbError on any failure. */
 export async function pipeline(env: DbEnv, stmts: Stmt[], f: typeof fetch): Promise<StmtResult[]> {
+  return run(env, stmts, f, true);
+}
+
+async function run(
+  env: DbEnv,
+  stmts: Stmt[],
+  f: typeof fetch,
+  report: boolean,
+): Promise<StmtResult[]> {
   const url = pipelineUrl(env);
   const token = (env.TURSO_MAIN_TOKEN ?? "").trim();
   if (url === null || token === "") throw new DbError("not-configured");
@@ -79,20 +134,27 @@ export async function pipeline(env: DbEnv, stmts: Stmt[], f: typeof fetch): Prom
   if (!Array.isArray(results) || results.length !== requests.length) {
     throw new DbError("unexpected-response");
   }
-  return stmts.map((_, i) => {
+  const done: StmtResult[] = [];
+  for (let i = 0; i < stmts.length; i += 1) {
     const r = results[i];
     if (r?.type !== "ok") {
       // D-995: the write guard of an off market (trigger text `MarketNotEnabled <table>`) becomes a fixed word,
-      // never the message
-      if (typeof r?.error?.message === "string" && r.error.message.includes("MarketNotEnabled")) {
+      // never the message; D-1123: and one S2 incident, reported before the throw (best effort)
+      const message = r?.error?.message;
+      if (typeof message === "string" && message.includes("MarketNotEnabled")) {
+        if (report) {
+          const table = /MarketNotEnabled ([A-Za-z_][A-Za-z0-9_]*)/.exec(message)?.[1] ?? null;
+          await reportRefusal(env, stmts, table, f);
+        }
         throw new MarketNotEnabledError();
       }
       throw new DbError("statement-error");
     }
     const out = r.response?.result;
-    return {
+    done.push({
       rows: (out?.rows ?? []).map((row) => row.map(decodeValue)),
       affected: out?.affected_row_count ?? 0,
-    };
-  });
+    });
+  }
+  return done;
 }

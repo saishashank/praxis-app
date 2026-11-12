@@ -11,7 +11,14 @@ import pytest
 import fetch_prices as fp
 import yahoo_fetch as yf_fetch
 
-PLAN = {"month": "2020-01", "start": "2020-01-01", "end": "2020-01-31", "codes": ["ZZA", "ZZB"]}
+# the plan carries the market's Yahoo suffix (M20 A2, D-1090: no default in the module)
+PLAN = {
+    "month": "2020-01",
+    "start": "2020-01-01",
+    "end": "2020-01-31",
+    "codes": ["ZZA", "ZZB"],
+    "suffix": ".AX",
+}
 
 
 def frame(codes, split_on=None):

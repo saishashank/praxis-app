@@ -12,10 +12,30 @@ import { writeFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadMigrations, migrateUp } from "../../src/lib/db/migrate-core.mjs";
+import { applyRegion } from "./regions.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const DIR = join(root, "db", "migrations", "main");
 export const MIGRATION_PATH = join(DIR, "0035_m19_market_guard.sql");
+/** M20 (D-1122): the guard triggers of the tables 0036 creates sit in a generated region of that migration. */
+export const M20_MIGRATION_PATH = join(DIR, "0036_m20_markets_data.sql");
+export const M20_REGION = "guard triggers";
+/**
+ * The market-keyed tables migration 0036 creates, each with its two guard triggers (D-995, D-1022). The list is
+ * written here (the migration's own table list) and verified against the live schema: `m20Tables()` derives the
+ * tables with a `market` column that exist after 0036 and not after 0035, and `--check` fails on any difference.
+ */
+export const M20_TABLES = [
+  "announcement_category",
+  "bar_latency_sample",
+  "fundamental_fact",
+  "holdout_look",
+  "label_item",
+  "market_switch",
+  "price_band",
+  "surveillance_list",
+  "trading_halt",
+];
 /** The schema the guard is generated against: everything up to the profile migration. */
 export const GUARD_BASE_VERSION = 34;
 /** The invariant's own table must be able to record a planted row (D-995); it is never guarded. */
@@ -45,6 +65,28 @@ export async function guardedTables() {
     const names = r.rows.map((x) => String(x.tbl)).filter((n) => !UNGUARDED.includes(n));
     for (const n of names) if (!IDENT.test(n)) throw new Error(`table name not allowed: ${n}`);
     return names;
+  } finally {
+    db.close();
+  }
+}
+
+/** Tables with a `market` column after migration 0036 that were not there after 0035 (derived, sorted). */
+export async function m20Tables() {
+  const db = createClient({ url: ":memory:" });
+  try {
+    const all = await loadMigrations(DIR);
+    const q = `SELECT m.name AS tbl FROM sqlite_master m JOIN pragma_table_info(m.name) c ON c.name = 'market'
+       WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%' ORDER BY m.name`;
+    await migrateUp(
+      db,
+      all.filter((m) => m.version <= 35),
+    );
+    const before = new Set((await db.execute(q)).rows.map((x) => String(x.tbl)));
+    await migrateUp(
+      db,
+      all.filter((m) => m.version <= 36),
+    );
+    return (await db.execute(q)).rows.map((x) => String(x.tbl)).filter((n) => !before.has(n));
   } finally {
     db.close();
   }
@@ -96,6 +138,11 @@ export async function renderMigration() {
   return out.join("\n");
 }
 
+/** The body of the generated region of 0036: the two triggers of each M20 table. */
+export function renderM20Region(tables = M20_TABLES) {
+  return tables.map((t) => `-- ${t}\n${insBody(t)}\n${updBody(t)}\n`).join("\n") + "\n";
+}
+
 const invoked = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (invoked) {
   const text = await renderMigration();
@@ -113,8 +160,23 @@ if (invoked) {
       process.exit(1);
     }
     console.log("0035_m19_market_guard.sql matches the schema");
+    const derived = await m20Tables();
+    if (JSON.stringify(derived) !== JSON.stringify([...M20_TABLES].sort())) {
+      console.error(
+        `0036 creates market-keyed tables ${derived.join(",")} but M20_TABLES lists ${M20_TABLES.join(",")}`,
+      );
+      process.exit(1);
+    }
+    if (!applyRegion(M20_MIGRATION_PATH, M20_REGION, renderM20Region(), true)) {
+      console.error(
+        "0036_m20_markets_data.sql guard region differs: run node scripts/db/gen-market-guard.mjs",
+      );
+      process.exit(1);
+    }
+    console.log("0036_m20_markets_data.sql guard region matches the table list and the schema");
   } else {
     writeFileSync(MIGRATION_PATH, text);
     console.log(`wrote ${MIGRATION_PATH} (${text.split("\n").length} lines)`);
+    applyRegion(M20_MIGRATION_PATH, M20_REGION, renderM20Region(), false);
   }
 }

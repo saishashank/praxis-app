@@ -140,14 +140,14 @@ test("scanTree: a file registered in seed/allow.mjs is honoured, an unregistered
 
 test("scanTree: an extra allow entry covers its classes and lines only", () => {
   const root = temp();
-  const entry = EXTRA_ALLOW.find((e) => e.file === "src/lib/view/costPlans.ts");
-  assert.ok(entry && entry.classes?.includes("currency"), "the AU broker plan entry exists");
+  const entry = EXTRA_ALLOW.find((e) => e.file === "src/lib/view/terms.ts");
+  assert.ok(entry && entry.classes?.includes("currency"), "the AU strategy-amount entry exists");
   try {
-    put(root, "src/lib/view/costPlans.ts", `${PLANTED.currency}\n${PLANTED.marketCode}\n`);
+    put(root, "src/lib/view/terms.ts", `${PLANTED.currency}\n${PLANTED.marketCode}\n`);
     const r = scanTree(root);
     assert.deepEqual(
       r.hits.map((h) => [h.file, h.cls]),
-      [["src/lib/view/costPlans.ts", "marketCode"]],
+      [["src/lib/view/terms.ts", "marketCode"]],
       "the currency lines are allowed, the market code in the same file is not",
     );
   } finally {

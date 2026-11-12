@@ -12,11 +12,11 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createClient } from "@libsql/client";
+import { scriptDb } from "../../src/lib/db/scriptClient.mjs";
 import { isRealDate } from "../../src/lib/data/backfill/rules.mjs";
 import { HOME_MARKET } from "../../src/lib/market/profileCore.mjs";
 import { resolveScriptMarket, takeMarketFlag } from "../../src/lib/market/scriptMarket.mjs";
-import { HOME_TZ } from "../../src/lib/market/homeMarket.mjs";
+import { HOME_CURRENCY, HOME_TZ, HOME_YAHOO_SUFFIX } from "../../src/lib/market/homeMarket.mjs";
 import {
   INDEX_YAHOO_SYMBOL,
   parseIndexText,
@@ -37,7 +37,15 @@ export const sydneyToday = (nowMs) =>
 
 /** The fetcher request for [from, to]: one anchor code plus the index symbol. */
 export function buildRequest(from, to) {
-  return { codes: [ANCHOR_CODE], start: from, end: to, indices: [INDEX_YAHOO_SYMBOL] };
+  // the fetch step has no market default (M20 A2, D-1090): the request carries the home profile's suffix and currency
+  return {
+    codes: [ANCHOR_CODE],
+    start: from,
+    end: to,
+    suffix: HOME_YAHOO_SUFFIX,
+    currency: HOME_CURRENCY,
+    indices: [INDEX_YAHOO_SYMBOL],
+  };
 }
 
 /**
@@ -92,10 +100,7 @@ export async function run(argv, env, deps = {}) {
     out("index backfill commit: failed (database not configured)");
     return 1;
   }
-  const db = (deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t })))(
-    url,
-    token || undefined,
-  );
+  const db = (deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t })))(url, token || undefined);
   try {
     const m = await resolveScriptMarket(db, mk.market, { supported: [HOME_MARKET] });
     if (!m.ok) {

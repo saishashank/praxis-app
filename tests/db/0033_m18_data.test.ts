@@ -19,7 +19,7 @@ describe("0033_m18_data", () => {
     expect(ms[32]).toMatchObject({ version: 33, name: "m18_data" });
     await migrateUp(db, ms);
     const after = await schemaOf(db);
-    expect(await migrateDown(db, ms, 3)).toEqual({ rolledBack: 3, version: 32 });
+    expect(await migrateDown(db, ms, 4)).toEqual({ rolledBack: 4, version: 32 });
     const left = await db.execute(
       "SELECT name FROM sqlite_master WHERE name IN ('code_history','source_fetch_status','macro_series')",
     );
@@ -37,7 +37,7 @@ describe("0033_m18_data", () => {
         )
       ).rows,
     ).toHaveLength(0);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 3, version: 35 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 4, version: 36 });
     expect(await schemaOf(db)).toEqual(after);
   });
 
@@ -105,7 +105,7 @@ describe("0033_m18_data", () => {
       "SELECT dflt_value AS d, \"notnull\" AS nn FROM pragma_table_info('steelman_night') WHERE name = 'not_written_error'";
     const info = await db.execute(q);
     expect([String(info.rows[0]!.d), Number(info.rows[0]!.nn)]).toEqual(["0", 1]);
-    await migrateDown(db, ms, 3);
+    await migrateDown(db, ms, 4);
     expect((await db.execute(q)).rows).toHaveLength(0);
   });
 

@@ -10,7 +10,8 @@
 // Production has no model wired (D-480): the default routers are rules-only, so every subject reads
 // "not written tonight (no model available)" until the Owner enables a live router after the R6
 // bake-off (`deps.llm`). env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN. Output: statuses and counts only.
-import { createClient, type Client } from "@libsql/client";
+import type { Client } from "@libsql/client";
+import { scriptDb } from "@/lib/db/scriptClient.mjs";
 import { loadAgentParams, type AgentParams } from "@/lib/agents/params";
 import { CONFIG_KEYS } from "@/lib/config/keys";
 import { marketDate, type CalendarKind, type CalendarRow } from "@/lib/data/calendar";
@@ -130,7 +131,7 @@ export async function steelmanMain(
   }
   let db: Client;
   try {
-    const open = deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t }));
+    const open = deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t }));
     db = open(url, has(env.TURSO_MAIN_TOKEN) ? env.TURSO_MAIN_TOKEN : undefined);
   } catch {
     out("arena-steelman: degraded (cannot open database)");

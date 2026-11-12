@@ -5,7 +5,7 @@
 // value changed (Turso free plan: a repeat run writes nothing). Derived numbers only, source named
 // (RBA copyright notice, DAT-236). Runs as a Friday step of ingest-batch1.yml gated by the repository
 // variable MACRO_FETCH (unset = skipped, the feature ships OFF, D-973). Tests use fixtures: no network.
-import { createClient } from "@libsql/client";
+import { scriptDb } from "../../src/lib/db/scriptClient.mjs";
 
 export const DEFAULT_UA = "praxis-research/1.0 (personal, non-commercial; weekly macro series)";
 const TIMEOUT_MS = 30_000;
@@ -136,7 +136,7 @@ export async function runMacro({ source, url, accept, parse }, env, deps = {}) {
     out(`${label}: failed (database not configured)`);
     return 1;
   }
-  const db = (deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t })))(
+  const db = (deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t })))(
     env.TURSO_MAIN_URL,
     env.TURSO_MAIN_TOKEN || undefined,
   );

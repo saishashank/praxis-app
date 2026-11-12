@@ -10,7 +10,7 @@
 // backfill-history since T9 (its slot stays disabled until the Owner enables the backfill).
 import { FEED_SLOT_TIMES } from "../../src/lib/market/clockTables.mjs";
 import { HOME_MARKET, OPS_SLOT_TIMES } from "../../src/lib/market/profileCore.mjs";
-import { hhmm, zoneSupported } from "./localtime";
+import { hhmm, isHomeRule, zoneSupported } from "./localtime";
 import { anchorsOf, type MarketRow, type SlotAnchors } from "./markets";
 
 export type Slot = {
@@ -50,6 +50,13 @@ export type Slot = {
    * the clock reads that market's mode and calendar.
    */
   market?: string;
+  /**
+   * The zone this slot's local time and date are in, set by `slotsFor` for a market-bound slot of a market whose
+   * zone does not follow the home (Sydney) rule (M20 A2, D-1117: IN, US). Absent = the home zone, in which the ops
+   * slots and every AU slot are written, so the AU table is byte-identical (worker/test/auSlots.test.ts). The clock
+   * decides a slot on `localFor(slot.tz, instant)` when it is set.
+   */
+  tz?: string;
   /** Dispatch order when several are due in the same minute: lower first. */
   priority: number;
   /** A missed slot may still be dispatched this many minutes after its time (catch-up). */
@@ -120,8 +127,10 @@ export const DISPATCHABLE_WORKFLOWS: readonly string[] = [
 ];
 
 export const DEFAULT_CATCH_UP_MIN = 60;
+/** The rollback kill runs this many minutes after the market's open (D-1101). */
+export const KILL_AFTER_OPEN_MIN = 2;
 
-/** Slot ids that belong to the home market's exchange feed (D-194): no other market has them yet (D-1046). */
+/** Slot ids that belong to a market's exchange feed (D-194); only a market with a FEED_SLOT_TIMES entry has them (D-1117). */
 const FEED_IDS: ReadonlySet<string> = new Set([
   "asx-poll",
   "universe",
@@ -145,7 +154,7 @@ type TableInput = {
   code: string;
   a: SlotAnchors;
   ops: Record<string, { at: string; from: string; until: string; everyMin: number }>;
-  feed: typeof FEED_SLOT_TIMES;
+  feed: (typeof FEED_SLOT_TIMES)[string];
 };
 
 /** The whole table of one market, in table order (market-bound and ops slots interleaved as designed). */
@@ -635,15 +644,18 @@ export function slotsFor(row: MarketRow, opts: TableOptions = {}): readonly Slot
     string,
     { at: string; from: string; until: string; everyMin: number }
   >;
-  const feed = FEED_SLOT_TIMES;
+  // the feed times of this market; a market with no entry has no feed slot (the table is built with the home times
+  // as placeholders and the feed ids are then filtered out, D-1117)
+  const hasFeed = Object.prototype.hasOwnProperty.call(FEED_SLOT_TIMES, code);
+  const feed = hasFeed ? FEED_SLOT_TIMES[code]! : FEED_SLOT_TIMES[HOME_MARKET]!;
   const table = tableOf({ code, a, ops, feed });
-  return table
-    .filter(
-      (x) => (code === HOME_MARKET || !FEED_IDS.has(x.id)) && (opts.ops !== false || x.marketBound),
-    )
+  const zoned = !isHomeRule(row.tz);
+  const slots = table
+    .filter((x) => (hasFeed || !FEED_IDS.has(x.id)) && (opts.ops !== false || x.marketBound))
     .map((x) => {
       if (!x.marketBound) return x;
       const out: Slot = { ...x };
+      if (zoned) out.tz = row.tz;
       if (opts.suffix === true) {
         out.id = `${x.id}:${code}`;
         if (x.after !== undefined) out.after = `${x.after}:${code}`;
@@ -659,6 +671,38 @@ export function slotsFor(row: MarketRow, opts: TableOptions = {}): readonly Slot
       }
       return out;
     });
+  // M20 A2 (D-1101, D-1117): the rollback kill. Only a market with `rollback_at` set has it; it is not market-bound
+  // (the market is off by then) and runs at open + 2 minutes on a trading day of the market, in its zone.
+  const kill = killSlot(row);
+  return kill === null ? slots : [...slots, kill];
+}
+
+/**
+ * The `arena-kill:<CODE>` slot of a market in rollback (D-1101): the arena close with `kill=1` at the open + 2 minutes
+ * on the market's next trading day. Null while the row has no `rollback_at`. The workflow input `kill` and the close
+ * itself are stream S1's; this is only the schedule. It never disables the market itself.
+ */
+function killSlot(row: MarketRow): Slot | null {
+  if (typeof row.rollback_at !== "string" || row.rollback_at === "") return null;
+  const at = hhmm(row.open_time) + KILL_AFTER_OPEN_MIN;
+  const time = `${String(Math.floor(at / 60)).padStart(2, "0")}:${String(at % 60).padStart(2, "0")}`;
+  // built from a named spec, not a table literal (the architecture reader counts the table's entries)
+  const spec: SlotInput = {
+    id: `arena-kill:${row.code}`,
+    time,
+    runner: "actions",
+    workflow: "arena-close.yml",
+    fixedInputs: { market: row.code, kill: "1" },
+    market: row.code,
+    tradingDaysOnly: true,
+    marketBound: false,
+    priority: 14,
+    catchUpMin: 20,
+    enabled: true,
+    note: "Rollback kill (M20 D-1101): closes every open book at the open with reason market_off, then disables the market; exists only while the market row has rollback_at",
+  };
+  const s = slot(spec);
+  return isHomeRule(row.tz) ? s : { ...s, tz: row.tz };
 }
 
 /**

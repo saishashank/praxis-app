@@ -16,7 +16,7 @@ export default Object.freeze({
   workStatus: "built",
   enabled: 0,
   mode: "off",
-  profileVersion: 1,
+  profileVersion: 2,
   statusChangedAt: "2026-11-12",
   builtAt: "2026-11-12",
   evidenceRecordedAt: null,

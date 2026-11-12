@@ -4,7 +4,7 @@ export const REQUIRED_LINE: string;
 export const UNSUPPORTED_LINE: string;
 export const REFUSED_EXIT: 2;
 export type ScriptDb = {
-  execute: (q: { sql: string; args?: unknown[] }) => Promise<{ rows: unknown[] }>;
+  execute: (q: never) => Promise<{ rows: unknown[] }>;
 };
 export function takeMarketFlag(argv: readonly string[]): {
   argv: string[];
@@ -12,7 +12,7 @@ export function takeMarketFlag(argv: readonly string[]): {
   error: string | null;
 };
 export function enabledCodes(db: ScriptDb): Promise<string[]>;
-export function assertMarketEnabled(db: ScriptDb, code: string): Promise<void>;
+export function assertMarketEnabled(db: ScriptDb, code: string): Promise<string>;
 export function resolveScriptMarket(
   db: ScriptDb,
   flag: string | null,

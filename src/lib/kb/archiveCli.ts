@@ -7,7 +7,8 @@
 // Used by scripts/kb/archive.mjs (bundled) from the dispatch-only workflow kb-archive.yml.
 // Output: statuses and counts only. Never a URL, a token, a path list or any document content.
 import { OWNER_TZ } from "../market/profileCore.mjs";
-import { createClient, type Client } from "@libsql/client";
+import type { Client } from "@libsql/client";
+import { scriptDb } from "@/lib/db/scriptClient.mjs";
 import { buildAllDocuments, syncDocuments } from "./documents";
 import {
   createGitDataClient,
@@ -215,8 +216,7 @@ export async function archiveMain(
     log("misconfigured data repo (needs <owner>/<name>-data)");
     return 2;
   }
-  const db =
-    deps.db ?? createClient({ url: env.TURSO_MAIN_URL ?? "", authToken: env.TURSO_MAIN_TOKEN });
+  const db = deps.db ?? scriptDb({ url: env.TURSO_MAIN_URL, token: env.TURSO_MAIN_TOKEN });
   try {
     const r = await archiveRun({
       db,

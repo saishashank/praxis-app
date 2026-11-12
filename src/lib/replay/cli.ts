@@ -9,7 +9,8 @@
 // Output: statuses, counts and minutes only (SEC-110). Never a row, a code, a URL, a token or a driver
 // error. Exit codes: 0 success, expected skip or a clean `paused_budget` stop (recorded), 1 failed,
 // 2 usage. The run is idempotent: a run id that already exists is a no-op.
-import { createClient, type Client, type InStatement } from "@libsql/client";
+import type { Client, InStatement } from "@libsql/client";
+import { scriptDb } from "@/lib/db/scriptClient.mjs";
 import { defaultAgentParams, loadAgentParams, type AgentParams } from "@/lib/agents/params";
 import { marketDate } from "@/lib/data/calendar";
 import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
@@ -329,7 +330,7 @@ export async function replayMain(
     out("replay: failed (database not configured)");
     return 1;
   }
-  const open = deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t }));
+  const open = deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t }));
   let db = open(url, has(token) ? token : undefined);
   let stage = "setup";
   try {

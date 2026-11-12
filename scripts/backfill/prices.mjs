@@ -14,7 +14,7 @@
 // (optional); plan: GITHUB_OUTPUT (optional). Output: statuses and counts only.
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createClient } from "@libsql/client";
+import { scriptDb } from "../../src/lib/db/scriptClient.mjs";
 import { createHistoryStore } from "../../src/lib/data/backfill/dataRepo.mjs";
 import { commitPriceMonth, planPrices } from "../../src/lib/data/backfill/priceHistory.mjs";
 import {
@@ -25,6 +25,7 @@ import {
   monthLastDay,
 } from "../../src/lib/data/backfill/rules.mjs";
 import { HOME_MARKET } from "../../src/lib/market/profileCore.mjs";
+import { HOME_CURRENCY, HOME_YAHOO_SUFFIX } from "../../src/lib/market/homeMarket.mjs";
 import { resolveScriptMarket, takeMarketFlag } from "../../src/lib/market/scriptMarket.mjs";
 
 const has = (v) => typeof v === "string" && v.trim() !== "";
@@ -53,7 +54,7 @@ export async function loadCodes(db, month) {
 export async function run(argv, env, deps = {}) {
   const out = deps.out ?? ((s) => console.log(s));
   const nowMs = deps.nowMs ?? (() => Date.now());
-  const openDb = deps.openDb ?? ((url, authToken) => createClient({ url, authToken }));
+  const openDb = deps.openDb ?? ((url, authToken) => scriptDb({ url, token: authToken }));
   const mk = takeMarketFlag(argv);
   if (mk.error) {
     out(`prices: failed (${mk.error})`);
@@ -126,6 +127,9 @@ async function plan(db, args, env, nowMs, out, options) {
           start: monthFirstDay(p.month),
           end: monthLastDay(p.month),
           codes,
+          // the fetch step has no market default (M20 A2, D-1090): the plan carries the profile's values
+          suffix: HOME_YAHOO_SUFFIX,
+          currency: HOME_CURRENCY,
         }),
       );
       fetch = true;

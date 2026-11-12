@@ -42,7 +42,8 @@ const count = async (sql: string) => Number((await db.execute(sql)).rows[0]!.n);
 describe("the trigger set", () => {
   it("is complete: two triggers on every table with a market column except market_row_count", async () => {
     const g = await guardGaps(db);
-    expect(g.tables).toHaveLength(91); // 92 tables with a market column in 0001..0034, minus the invariant's own
+    // 92 tables with a market column in 0001..0034, minus the invariant's own, plus the nine of 0036
+    expect(g.tables).toHaveLength(100);
     expect(g.tables).toContain("price_bar");
     expect(g.tables).toContain("trading_calendar");
     expect(g.tables).not.toContain("market_row_count");
@@ -74,7 +75,7 @@ describe("the trigger set", () => {
 
   it("the SQL of every guard trigger names its table", async () => {
     const r = await db.execute(GUARD_TRIGGERS);
-    expect(r.rows).toHaveLength(182);
+    expect(r.rows).toHaveLength(200); // 91 tables of 0035 and the 9 of 0036, two each
     for (const x of r.rows) {
       const t = String(x.name).replace(/_market_guard_(ins|upd)$/, "");
       expect(String(x.sql)).toContain(`'MarketNotEnabled ${t}'`);
@@ -205,15 +206,19 @@ describe("cost (PRD-045): one primary-key probe of the 3-row market table per in
 describe("down and up", () => {
   it("down removes exactly the guard triggers and up restores a schema identical to a fresh one", async () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(ms[ms.length - 1]!.name).toBe("m19_market_guard");
-    const full = await schemaOf(db);
+    expect(ms[ms.length - 2]!.name).toBe("m19_market_guard");
+    expect(ms[ms.length - 1]!.name).toBe("m20_markets_data"); // 0036 sits on top: its own triggers go with it
+    const top = await schemaOf(db);
     expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: ms.length - 1 });
+    const full = await schemaOf(db);
+    expect(top.length).toBeGreaterThan(full.length);
+    expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: ms.length - 2 });
     const down = await schemaOf(db);
     expect(down.some((s) => s.includes("_market_guard_"))).toBe(false);
     expect(full.length - down.length).toBe(182);
     await db.execute(bar("IN")); // no guard any more
     await db.execute("DELETE FROM price_bar WHERE market = 'IN'").catch(() => undefined);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 1, version: ms.length });
-    expect(await schemaOf(db)).toEqual(full);
+    expect(await migrateUp(db, ms)).toEqual({ applied: 2, version: ms.length });
+    expect(await schemaOf(db)).toEqual(top);
   });
 });

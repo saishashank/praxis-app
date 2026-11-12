@@ -29,7 +29,7 @@ describe("main 0012_golive", () => {
   it("is the twelfth main migration and the runner is idempotent", async () => {
     const { db, ms } = await fresh();
     expect(ms[11]).toMatchObject({ version: 12, name: "golive" });
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 35 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 36 });
     const cols = (await db.execute("PRAGMA table_info(go_live_signoff)")).rows.map((c) => c.name);
     expect(cols).toEqual([
       "id",
@@ -79,7 +79,7 @@ describe("main 0012_golive", () => {
     const { db, ms } = await fresh();
     const before = await schemaOf(db);
     // 0015 (vendor actions), 0014 (pick checks, D-187) and 0013 (calendar history, D-175) sit on top: three steps reach the schema before 0012
-    expect(await migrateDown(db, ms, 24)).toEqual({ rolledBack: 24, version: 11 });
+    expect(await migrateDown(db, ms, 25)).toEqual({ rolledBack: 25, version: 11 });
     expect((await schemaOf(db)).join("\n")).not.toContain("go_live_signoff");
     await migrateUp(db, ms);
     expect(await schemaOf(db)).toEqual(before);
