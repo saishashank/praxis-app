@@ -9,13 +9,7 @@ import { loadMigrations, migrateDown, migrateUp } from "@/lib/db/migrate-core.mj
 import { marketTables } from "@/lib/maintenance/rowsByMarket";
 import { SEEDS } from "@/lib/market/seed/index.mjs";
 // @ts-expect-error the generators are scripts (not typed)
-import {
-  M20_MIGRATION_PATH,
-  M20_REGION,
-  M20_TABLES,
-  m20Tables,
-  renderM20Region,
-} from "../../scripts/db/gen-market-guard.mjs";
+import * as guardGen from "../../scripts/db/gen-market-guard.mjs";
 // @ts-expect-error the generator is a script (not typed)
 import { applyDelta } from "../../scripts/market/gen-seed-sql.mjs";
 // @ts-expect-error the helper is a script (not typed)
@@ -37,6 +31,14 @@ beforeEach(async () => {
   db = await freshDb("main");
 });
 
+const { M20_MIGRATION_PATH, M20_REGION, M20_TABLES, m20Tables, renderM20Region } =
+  guardGen as unknown as {
+    M20_MIGRATION_PATH: string;
+    M20_REGION: string;
+    M20_TABLES: string[];
+    m20Tables: () => Promise<string[]>;
+    renderM20Region: () => string;
+  };
 const NEW_TABLES = [...(M20_TABLES as string[])].sort();
 const rows = async (sql: string, args: (string | number)[] = []) =>
   (await db.execute({ sql, args })).rows;

@@ -12,6 +12,7 @@
 // Pure given its inputs: no clock, no randomness beyond the seeded `scopedPrng`.
 import type { ViewBar } from "@/lib/agents/decisionView";
 import { staticProfile } from "@/lib/market/staticProfile.mjs";
+import { anglesForProfile } from "@/lib/cortex/profileReaders";
 import type { Family, RegimeLabel } from "@/lib/agents/families/types";
 import type { AgentParams } from "@/lib/agents/params";
 import { COST_PROFILES, type CostProfile } from "@/lib/arena/costs";
@@ -166,7 +167,11 @@ export function createCortexReplay(cfg: CortexReplayConfig): CortexReplay {
         rules: cfg.rules ?? new Map(),
         states: cfg.states?.(d) ?? [],
         passports: cfg.passports ?? new Map(),
-        angles: cfg.angles,
+        // M20 A2: the market's own angle set (no franking angle without imputation, CXA-002 i), as the live night does
+        angles:
+          cfg.angles === undefined
+            ? undefined
+            : anglesForProfile(cfg.angles, staticProfile(view.market)),
         labels: cfg.labels,
         kills: cfg.kills ?? { arena: false, families: new Set(), sourcesOff: new Set() },
         arn011Failed: cfg.arn011Failed?.(d),

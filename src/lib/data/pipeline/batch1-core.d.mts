@@ -79,6 +79,8 @@ export type AssessOptions = {
   market?: string;
   maxDates?: number;
   lookbackDays?: number;
+  /** Tests: replaces the import of `sources/<code>/day.mjs` (the per-market dispatcher, M20 A2, D-1127). */
+  dayLoader?: (code: string) => Promise<unknown>;
 };
 export function assess(db: Client, o: AssessOptions): Promise<Assessment>;
 export function readThrottle(db: Client): Promise<{ chunkSize: number; minGapS: number }>;
@@ -101,6 +103,8 @@ export function prepareBatch1(
 
 export type RunOptions = {
   nowMs: () => number;
+  /** Tests: replaces the import of `sources/<code>/day.mjs` (the per-market dispatcher, M20 A2, D-1127). */
+  dayLoader?: (code: string) => Promise<unknown>;
   barsText?: string | null;
   /** index.json contents (M4 T3); null/absent = no file. */
   indexText?: string | null;
@@ -148,6 +152,20 @@ export type RunResult = {
   dates: DateResult[];
 };
 export function runBatch1(db: Client, o: RunOptions): Promise<RunResult>;
+/** The home market's own pipeline (what runBatch1 was before the dispatcher, D-1127). */
+export function runHomeDay(db: Client, o: RunOptions): Promise<RunResult>;
+export function prepareHomeDay(db: Client, o: AssessOptions): ReturnType<typeof prepareBatch1>;
+/** True when the market's day is the home pipeline (the home market, or a code with no seed). */
+export function runsHomeDay(market: string): boolean;
+/** The module a built market's day lives in: `sources/<code lowercase>/day.mjs`; throws `not built` when absent. */
+export type DayModule = {
+  prepareDay: (db: Client, o: AssessOptions & { market: string }) => Promise<unknown>;
+  runDay: (db: Client, o: RunOptions & { market: string }) => Promise<unknown>;
+};
+export function loadDayModule(
+  market: string,
+  loader?: (code: string) => Promise<unknown>,
+): Promise<DayModule>;
 
 /** D-189: a code's tier, snapshot status and ADV (A$) for the night. */
 export type TierRow = { tier: string; status: string; adv: number | null };
