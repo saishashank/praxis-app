@@ -60,6 +60,8 @@ export const NOT_CONFIG = new Set([
   "RECORD_AU_SNAPSHOT", // scripts/market/snapshot-au.mjs: the record switch of the AU constants snapshot test (M19 D-1007), not configuration
   "PRAXIS_NET_LABEL", // CI recorded day: the label of one guarded process (M18 D-965)
   "PRAXIS_SIM_NOW", // CI recorded day: the simulated instant of the app process (M18 D-965)
+  "PRAXIS_EDGAR_CONTACT", // Owner-store value (M20 D-1094): the contact in the SEC EDGAR User-Agent; no default, no example value, never in a file
+  "FRED_API_KEY", // Owner-store value (M20 DAT-244): the free FRED key; the US macro fetcher refuses without it, never in a file
   "ZAP_OUT", // per-run report folder of scripts/ci/zap-run.mjs (M8 T12), not configuration
   "FROM", // backfill-index.yml: the first-date input of a one-off dispatch (D-175), not configuration
   "HISTORY_FLAG", // asx-fetch.yml: the --history switch of a dispatch (D-194), not configuration

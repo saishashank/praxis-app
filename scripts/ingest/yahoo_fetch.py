@@ -51,10 +51,8 @@ CODE_RE = re.compile(r"^[A-Z0-9]{2,6}$")
 INDEX_RE = re.compile(r"^\^[A-Z0-9]{2,6}$")
 SUFFIX_RE = re.compile(r"^\.[A-Z]{1,3}$")
 CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
-# TRANSITIONAL (M19 B2, CXA-002 h): the home market's Yahoo suffix and currency, used only while a request does
-# not carry "suffix" / "currency". The request writers pass the profile's values; these two lines go when they all do.
-DEFAULT_SUFFIX = ".AX"
-DEFAULT_CURRENCY = "AUD"
+# M20 A2 (D-1090): no market default exists here. The request carries the market profile's Yahoo suffix and ISO
+# currency (the batch-1 and backfill writers pass them); a request without them is refused, never guessed.
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -107,9 +105,9 @@ def parse_indices(raw: Any) -> list[str]:
 
 
 def parse_suffix(raw: Any) -> str:
-    """The request's Yahoo ticker suffix (the market profile's `yahoo_suffix`); the default when absent."""
+    """The request's Yahoo ticker suffix (the market profile's `yahoo_suffix`); required, no default."""
     if not isinstance(raw, dict) or "suffix" not in raw:
-        return DEFAULT_SUFFIX
+        raise InputError("suffix is required (the market profile's yahoo_suffix)")
     s = raw["suffix"]
     if not isinstance(s, str) or not SUFFIX_RE.match(s):
         raise InputError("suffix must look like .XX")
@@ -117,9 +115,9 @@ def parse_suffix(raw: Any) -> str:
 
 
 def parse_currency(raw: Any) -> str:
-    """The request's ISO currency code (the market profile's `currency`); the default when absent."""
+    """The request's ISO currency code (the market profile's `currency`); required, no default."""
     if not isinstance(raw, dict) or "currency" not in raw:
-        return DEFAULT_CURRENCY
+        raise InputError("currency is required (the market profile's currency)")
     c = raw["currency"]
     if not isinstance(c, str) or not CURRENCY_RE.match(c):
         raise InputError("currency must be a 3-letter ISO code")
@@ -187,7 +185,7 @@ def _frame_for(df: Any, ticker: str) -> Any:
 
 
 def rows_from_frame(
-    df: Any, codes: list[str], fetched_at: str, suffix: str = DEFAULT_SUFFIX
+    df: Any, codes: list[str], fetched_at: str, suffix: str
 ) -> list[dict[str, Any]]:
     """Convert a yfinance download result to bar rows (no repair, all-NaN days skipped)."""
     out: list[dict[str, Any]] = []
@@ -229,8 +227,8 @@ def actions_from_frame(
     df: Any,
     codes: list[str],
     fetched_at: str,
-    suffix: str = DEFAULT_SUFFIX,
-    currency: str = DEFAULT_CURRENCY,
+    suffix: str,
+    currency: str,
 ) -> list[dict[str, Any]]:
     """Split and dividend rows (DAT-231) from the same yfinance result as the bars. The columns
     "Stock Splits" (new shares per old share: 2.0 = two-for-one) and "Dividends" (cash per share,
@@ -350,8 +348,9 @@ def fetch_all(
     clock: Callable[[], float] = time.monotonic,
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     actions_out: list[dict[str, Any]] | None = None,
-    suffix: str = DEFAULT_SUFFIX,
-    currency: str = DEFAULT_CURRENCY,
+    *,
+    suffix: str,
+    currency: str,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Download in chunks, never closer together than `min_gap_s`. Returns (rows, report).
     DAT-231: each request also asks for the corporate actions (actions=True, same request, no extra

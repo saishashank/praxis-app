@@ -9,9 +9,13 @@ import { HOME_MARKET, encodeValue, profileFromRows } from "./profileCore.mjs";
 import { UnknownMarket } from "./errors.mjs";
 import { seedOf } from "./seed/index.mjs";
 import { AU_COST_PROFILES } from "./seed/au/costProfiles.mjs";
+import { AU_COST_PLANS } from "./seed/au/costPlans.mjs";
 
 /** code -> cost-profile table (the P-profiles a market's `cost_formula` resolves against). */
 const COST_PROFILE_TABLES = Object.freeze({ [HOME_MARKET]: AU_COST_PROFILES });
+
+/** code -> the plain-words plans of its cost profiles (display only; IN and US add theirs with their tables). */
+const COST_PLAN_TABLES = Object.freeze({ [HOME_MARKET]: AU_COST_PLANS });
 
 const cache = new Map();
 
@@ -74,6 +78,15 @@ export function costProfilesOf(code) {
   const t = COST_PROFILE_TABLES[code];
   if (t === undefined) throw new Error(`cost profiles for market ${code} not built (M20)`);
   return t;
+}
+
+/**
+ * The plain-words plans of a market's cost profiles (code -> { title, detail }); empty for a market whose table is
+ * not built yet. Display only: it never decides a fee.
+ * @param {string} code
+ */
+export function costPlansOf(code) {
+  return Object.prototype.hasOwnProperty.call(COST_PLAN_TABLES, code) ? COST_PLAN_TABLES[code] : {};
 }
 
 /**

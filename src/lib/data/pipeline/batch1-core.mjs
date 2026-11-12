@@ -36,6 +36,7 @@ import { INDEX_YAHOO_SYMBOL, parseIndexText, US_INDEX_YAHOO_SYMBOLS } from "../i
 import { parseVendorActionsText } from "../vendorActions/vendorActions.mjs";
 import { inputsStage } from "../index/inputsStage.mjs";
 import { seedOf } from "../../market/seed/index.mjs";
+import { staticProfile } from "../../market/staticProfile.mjs";
 import {
   parseShortText,
   planShortDates,
@@ -298,10 +299,14 @@ export async function assess(db, o) {
 
   const oldest = trading[0].d;
   const newest = trading[trading.length - 1].d;
+  const profile = staticProfile(market);
   const request = {
     codes: uni.codes,
     start: previousTradingDay(oldest, calRows), // one session back: the D-1 re-fetch (DAT-002)
     end: newest,
+    // M20 A2 (D-1034, D-1090): the Yahoo fetch has no market default; the request carries the profile's values
+    suffix: profile.yahooSuffix,
+    currency: profile.currency,
     // M4 T3: the benchmark index rides the same Yahoo fetch; the ASIC dates only when that source
     // is on (the Node ASIC step has no secrets and skips an empty list).
     indices: [INDEX_YAHOO_SYMBOL, ...Object.values(US_INDEX_YAHOO_SYMBOLS)], // D-308: + ^GSPC, ^VIX
