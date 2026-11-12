@@ -2,13 +2,17 @@
 // complete: work status `built`, enabled 0, mode `off`; every value is the spec 20.1 [VERIFY] figure provisional
 // until M20 (`verify = 1`, `verifiedAt` null); `null` = "set at M20". Nothing in M19 reads a US value on any
 // production path (MKT-110).
+import { US_SLIPPAGE, US_TICK_TABLE, US_TIERS } from "./us/tickTable.mjs";
+import { US_COST_PROFILE_CODES } from "./us/costProfiles.mjs";
 const unverified = (value, evidenceRef = null) => ({
   value,
   verify: 1,
   verifiedAt: null,
   evidenceRef,
 });
+
 const PROPOSED = "D-947 [PROPOSED]";
+const M20_A4 = "M20 A4 (D-1104, D-1118): [VERIFY], see seed/us/tickTable.mjs";
 
 export default Object.freeze({
   code: "US",
@@ -21,7 +25,7 @@ export default Object.freeze({
   builtAt: "2026-11-12",
   evidenceRecordedAt: null,
   updatedAt: "2026-11-12T00:00:00.000Z",
-  costProfileCodes: Object.freeze(["US-P1"]),
+  costProfileCodes: US_COST_PROFILE_CODES,
   fields: Object.freeze({
     exchange: unverified("NYSE+Nasdaq"),
     tz: unverified("America/New_York"),
@@ -55,9 +59,9 @@ export default Object.freeze({
     }),
     parcel_floor: unverified(300_000_000n, PROPOSED),
     settlement_days: unverified(1),
-    tick_table: unverified([{ fromMicro: 0n, tickMicro: 10_000n }]),
-    slippage_buckets: unverified(null),
-    tiers: unverified(null),
+    tick_table: unverified(US_TICK_TABLE, M20_A4),
+    slippage_buckets: unverified(US_SLIPPAGE, M20_A4),
+    tiers: unverified(US_TIERS, M20_A4),
     cost_formula: unverified("US-P1"),
     benchmark_index: unverified({ code: "GSPC", yahoo: "^GSPC", name: "S&P 500" }),
     regime_index: unverified({ code: "GSPC", yahoo: "^GSPC", name: "S&P 500" }),
@@ -72,11 +76,17 @@ export default Object.freeze({
     fundamentals_source: unverified({ kind: "edgar_company_facts" }),
     macro_series: unverified(["FRED", "FED", "GSPC", "VIX"]),
     dividend_imputation: unverified(false),
-    sleeve_reality_cap: unverified(null),
+    sleeve_reality_cap: unverified(
+      { multiple: 2, basis: "Reg T 50 % initial margin" },
+      "D-1106: listed for the Owner",
+    ),
     calendar_source: unverified("nyse_holiday_list"),
     fx_source: unverified("rba_daily"),
     yahoo_suffix: unverified(""),
-    bar_latency_p95_min: unverified(null),
+    bar_latency_p95_min: unverified(
+      { kind: "assumed", minutes: 60, basis: "batch b1 = close + 60", measured_nights: 0 },
+      "D-1105: measured in production data_only",
+    ),
     preopen_recheck_min: unverified(5),
     category_map: unverified({ kind: "edgar_8k_items" }),
     universe_max: unverified(2500),

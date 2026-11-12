@@ -144,7 +144,7 @@ describe("loadProfile from a migrated database", () => {
     expect(p.currencyFormat?.symbol).toBe("A$");
   });
 
-  it("loads IN and US: built, off, incomplete by design (nulls and unverified [VERIFY] fields)", async () => {
+  it("loads IN and US: built, off, incomplete by design (unverified [VERIFY] fields)", async () => {
     const db = await freshDb("main");
     const all = await loadProfiles(db);
     expect(all.map((x) => x.code)).toEqual(["AU", "IN", "US"]);
@@ -155,11 +155,8 @@ describe("loadProfile from a migrated database", () => {
       expect(p.enabled).toBe(false);
       expect(p.mode).toBe("off");
       expect(p.complete).toBe(false);
-      expect(p.completeness.missing).toEqual(
-        ["tiers", "slippage_buckets", "sleeve_reality_cap", "bar_latency_p95_min"].sort(
-          (a, b) => PROFILE_FIELDS.indexOf(a as never) - PROFILE_FIELDS.indexOf(b as never),
-        ),
-      );
+      // M20 A4 filled tiers, slippage_buckets, sleeve_reality_cap and bar_latency_p95_min; every value is still [VERIFY]
+      expect(p.completeness.missing).toEqual([]);
       expect(p.completeness.verified).toBe(0);
       expect(p.angleCount).toBe(99);
     }

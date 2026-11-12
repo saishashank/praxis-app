@@ -1,4 +1,6 @@
 import type { ProfileField, WorkStatus, MarketModeValue } from "../fields.mjs";
+import type { AuCostProfile } from "./au/costProfiles.mjs";
+import type { ComponentsCostProfile } from "./componentsRule.mjs";
 
 export type SeedField = {
   readonly value: unknown;
@@ -26,3 +28,7 @@ export const SEEDS: Readonly<Record<string, MarketSeed>>;
 /** The built market codes (the seed registry), sorted. */
 export function builtMarkets(): string[];
 export function seedOf(code: string): MarketSeed | undefined;
+/** code -> cost-profile table (M20 A4). */
+export const COST_PROFILE_TABLES: Readonly<
+  Record<string, Readonly<Record<string, AuCostProfile | ComponentsCostProfile>>>
+>;
