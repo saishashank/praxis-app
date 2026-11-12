@@ -760,3 +760,15 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1167 | Data limits (A5, D-1115, D-1132): the survivorship caveat text and its lapse rule live in src/lib/market/seed/dataLimits.mjs, keyed by market, so reportCavea... |
 | D-1168 | Labels (A5, DAT-247, D-1121): label_item is read as the newest row per (source, ann_id); the count that gates evaluation is distinct labelled items per marke... |
 | D-1169 | Band locks are symmetric (A5, Fable review, D-1109): the model refuses every fill on a session that closes at either limit. |
+| D-1170 | Shared A4 carry-over closed (IN1, F, D-1154 items 1-4; the commit "M20 IN1 shared"): one module, src/lib/arena/marketMoney.ts, gives a market's settlement la... |
+| D-1171 | India macro rows are parsed and counted, not stored (IN1, DAT-243): macro_series.source is CHECK-limited to ('rba','abs') (migration 0033) and 0036 did not w... |
+| D-1172 | FAM-005 cost-gate notional per market (IN1, follow-on of D-1154 item 3): roundTripCost and selectEntries (EntryGateContext.market) take the market's notional... |
+| D-1173 | AT-69 gate-only clause with the index not pulled (IN1, D-1132): the Nifty 50 and India VIX series are "not pulled" (Yahoo is refused by robots). |
+| D-1174 | The announcement classifier moved to plain ESM (IN1): classify and writeAnnouncementCategory are now src/lib/market/classifyCore.mjs (+ .d.mts), logic unchan... |
+| D-1175 | Band lock wired (IN1, D-1109, D-1163, D-1169, A5 note): |
+| D-1176 | India batch 1 (IN1, D-1127, D-1125): sources/in/day.mjs prepareDay and runDay (calendar by isWalkDay, instruments, the universe snapshot with the market's ti... |
+| D-1177 | Recorded fixtures (IN1, D-1119, D-1092): praxis-app-fixtures/recorded/in/<date>/ for the five consecutive sessions 2026-11-05, 06, 09, 11 and 12 (2026-11-10... |
+| D-1178 | AT-M report (IN1, D-1120): scripts/market/at-m-report.mjs --market IN/US --evidence <dir> writes docs/test-reports/AT-M-<CODE>.md from evidence files (source... |
+| D-1179 | Calibration IN not run (IN1, D-1114, D-1115, D-1132): the data repository's calibrate is a skeleton (the generalised M15 modules "come later"), and the extra... |
+| D-1180 | Recorded-day reader per market, lower-case folders (IN1, S1 hand-off a, D-1119): readRecordedDay(dir, { date, market }) and recordedRootOf(market) read recor... |
+| D-1181 | ARN-119 first posting (IN1, S1 hand-off b, D-1107): ensureCohorts (the close-books night's cohort start stage) reads the FX close stored by the switch to ful... |

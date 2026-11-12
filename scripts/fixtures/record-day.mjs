@@ -15,6 +15,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { recordFromHistory } from "./recordFromHistory.mjs";
 import {
   HOME_BENCHMARK_YAHOO,
   HOME_MARKET,
@@ -174,6 +175,55 @@ export function rowsFromChart(json, code, isIndex, fetchedAt) {
   return out;
 }
 
+/** The offline recorder of a built market's window (see recordFromHistory.mjs); never touches the network. */
+function runFromHistory(argv, out, err) {
+  try {
+    const o = {};
+    for (let i = 0; i < argv.length; i += 2) {
+      const k = argv[i];
+      if (
+        !["--market", "--from", "--out", "--date", "--codes", "--sessions"].includes(k) ||
+        !argv[i + 1]
+      ) {
+        throw new UsageError("unknown or incomplete option (see the usage line in record-day.mjs)");
+      }
+      o[k.slice(2)] = argv[i + 1];
+    }
+    for (const r of ["market", "from", "out", "date", "codes"]) {
+      if (o[r] === undefined) throw new UsageError(`--${r} is required with --market`);
+    }
+    if (!/^[A-Z]{2}$/.test(o.market)) throw new UsageError("--market must be a market code");
+    const outDir = path.resolve(o.out);
+    if (isInsideRepo(outDir)) {
+      throw new UsageError(
+        "--out must be a fixtures checkout outside the praxis-app repo (SEC-110)",
+      );
+    }
+    if (isInsideRepo(path.resolve(o.from))) {
+      throw new UsageError(
+        "--from is the history extract, which must stay outside the praxis-app repo (D-927)",
+      );
+    }
+    const r = recordFromHistory({
+      market: o.market,
+      from: path.resolve(o.from),
+      out: outDir,
+      date: o.date,
+      sessions: o.sessions === undefined ? 5 : Number(o.sessions),
+      codes: o.codes.split(",").map((c) => c.trim()),
+    });
+    out(
+      `record-day: market=${o.market} sessions=${r.folders.length} files=${r.files} codes=${r.codes}`,
+    );
+    return 0;
+  } catch (e) {
+    err(
+      `record-day: ${e instanceof UsageError || e?.name === "Error" || e?.constructor?.name === "HistoryError" ? e.message : "unexpected error"}`,
+    );
+    return 2;
+  }
+}
+
 function parseArgs(argv) {
   const known = new Set(["--out", "--date", "--codes", "--limit", "--sessions"]);
   const o = {};
@@ -228,6 +278,8 @@ const writeJson = (file, value) => {
 export async function run(argv, env, deps = {}) {
   const out = deps.out ?? ((s) => console.log(s));
   const err = deps.err ?? ((s) => console.error(s));
+  // M20 IN1 (D-1119): `--market CODE --from <history dir>` records another market OFFLINE from the extract
+  if (argv.includes("--market")) return runFromHistory(argv, out, err);
   const doFetch = deps.fetch ?? fetch;
   const sleep = deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const now = deps.now ?? (() => new Date());
