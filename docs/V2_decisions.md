@@ -760,6 +760,16 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1167 | Data limits (A5, D-1115, D-1132): the survivorship caveat text and its lapse rule live in src/lib/market/seed/dataLimits.mjs, keyed by market, so reportCavea... |
 | D-1168 | Labels (A5, DAT-247, D-1121): label_item is read as the newest row per (source, ann_id); the count that gates evaluation is distinct labelled items per marke... |
 | D-1169 | Band locks are symmetric (A5, Fable review, D-1109): the model refuses every fill on a session that closes at either limit. |
+| D-1180 | US sources and scripts (US1, D-1127, D-1092): the fetchers under src/lib/data/sources/us/ are plain ESM with .d.mts types (edgar, submissions, filings8k, for... |
+| D-1181 | US-P1 by date and the fee quantity (US1, F, D-1150, D-1154 item 5): src/lib/market/seed/us/costVersions.mjs holds four dated versions of US-P1 (2024-05-22: S... |
+| D-1182 | US classification, no migration (US1, D-1112, D-1165, A5 review note): submissions.mjs writeSicGroup writes the two-digit SIC group into instrument.industry... |
+| D-1183 | US filings as announcements (US1, D-1108, D-1166): one announcement row per accepted filing of the forms the category map has a row for (8-K, 10-Q, 10-K, For... |
+| D-1184 | US notices (US1, AGT-105): Form 4 yields a notice only from the open-market codes P and S, summed in micro-dollars, the larger side naming director_buy or di... |
+| D-1185 | US halts (US1, D-1110, D-1162): the Nasdaq halt feed maps LUDP, LUDS, T5 to luld, H10 to suspension, a market-wide breaker (MWC*) is skipped (no issue), ever... |
+| D-1186 | FINRA short data (US1, DAT-243): the daily short-sale volume file is stored in short_interest as short_ppm = round(short volume x 1,000,000 / total volume),... |
+| D-1187 | US universe and the cap (US1, D-1098, D-1132): symbols.mjs reads the two symbol directories and drops test issues, funds, warrants, rights, units, preferred... |
+| D-1188 | Synthetic US data (US1, D-1132, D-1094, D-1119): no robots-permitted free price source exists and the build machine has no EDGAR contact, so the US price bar... |
+| D-1189 | FRED (US1, D-1094): the client refuses without FRED_API_KEY (FredKeyMissing, no request) and checks the market first; it fetches and parses observations only. |
 | D-1190 | Next-year calendar watch reads the enabled markets (S1, D-1146 hand-off): enabledCalendarMarkets(db) in src/lib/data/calendarAdmin.ts is the enabled members... |
 | D-1191 | Checklist readers (S1, D-1100, MKT-105, MKT-111): src/lib/market/checklist.ts. licence_rows reads the stored register rows and, for a market that is still of... |
 | D-1192 | Seed from the activation day's FX close (S1, D-1107, ARN-119): src/lib/market/fxSeed.ts reads the newest macro_series row (source rba) on or before the day f... |

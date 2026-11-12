@@ -16,6 +16,7 @@ import type {
 import {
   addRat,
   cmpRat,
+  divFloor,
   makeRational,
   mulRat,
   parseDecimalParts,
@@ -146,7 +147,7 @@ function componentsFromSeed(rule: ComponentsFeeRule): FeeRule {
   return { kind: "components", round: rule.round, items: rule.items.map(componentFromSeed) };
 }
 
-function profileFromSeed(p: AuCostProfile | ComponentsCostProfile): CostProfile {
+export function profileFromSeed(p: AuCostProfile | ComponentsCostProfile): CostProfile {
   if (p.rule.kind === "components") {
     return {
       code: p.code as CostProfileCode,
@@ -313,6 +314,17 @@ function evaluateComponents(
     roundedSum += roundToCentMicro(amount);
   }
   return rule.round === "total_half_up_cent" ? roundToCentMicro(total) : roundedSum;
+}
+
+/**
+ * Whole shares of an order when only its value and a price are known (M20 US1, D-1154 item 5): floor(value / price),
+ * at least 1. A US sell carries per-share items (the FINRA TAF), so every sell and NAV fee site passes this as
+ * `FeeContext.quantity` where the quantity itself is not in hand.
+ */
+export function quantityAt(notionalMicro: Micro, priceMicro: Micro): bigint {
+  if (priceMicro <= 0n) throw new RangeError("price must be positive to derive a quantity");
+  const q = divFloor(notionalMicro, priceMicro);
+  return q < 1n ? 1n : q;
 }
 
 /**

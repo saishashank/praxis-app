@@ -443,7 +443,7 @@ export function buildCost(inputs: CardInputs): DecisionCard["cost"] {
   if (exitValue < 1n) return off("no_quantity");
   const entrySlip = z.qty * z.slipMicro;
   const exitSlip = z.qty * quote.slipMicro;
-  const exitBrok = feeFor(inputs.costProfile, exitValue, "sell");
+  const exitBrok = feeFor(inputs.costProfile, exitValue, "sell", { quantity: z.qty });
   const total = z.brokerageMicro + entrySlip + exitBrok + exitSlip;
   return {
     available: true,

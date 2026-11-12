@@ -257,7 +257,12 @@ export function simulateOutcome(base: Levels, bars: readonly DatedBar[], env: Si
     }
     if (bar.highMicro >= levels.aimMicro) {
       const price = bar.openMicro > levels.aimMicro ? bar.openMicro : levels.aimMicro;
-      return close(bar.d, price, feeFor(env.profile, e.qty * price, "sell"), "aim");
+      return close(
+        bar.d,
+        price,
+        feeFor(env.profile, e.qty * price, "sell", { quantity: e.qty }),
+        "aim",
+      );
     }
     if (held >= levels.timeFrameSessions) {
       const next = bars[i + 1];

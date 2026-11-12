@@ -34,6 +34,7 @@ const NON_COMPARISON_READERS = new Set([
   "lib/data/backfill/snapshotCore.mjs",
   "lib/data/backfill/snapshotLoad.mjs",
   "lib/data/index/indexBars.mjs",
+  "lib/data/sources/us/index.mjs", // M20 US1 (D-1188): the US manual index CSV writer, ingest plumbing like indexBars.mjs, not a comparison
   "lib/replay/snapshotWorld.ts",
   "lib/cortex/stageTables.mjs", // D-1116: names index_bar in the pinned schema-hash list; reads nothing
   "lib/cortex/stage.ts", // M15: index levels into the Cortex as-of world (regime, US index known-time), not a comparison

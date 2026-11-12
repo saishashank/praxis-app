@@ -12,7 +12,7 @@
 // The gate applies to E executions only: never to the signal ledger and never to the C2/C3 controls.
 // An unmeasured signal passes and the card carries the flag `cost_gate_unmeasured`.
 import type { Client } from "@libsql/client";
-import { feeFor, type CostProfile } from "@/lib/arena/costs";
+import { feeFor, quantityAt, type CostProfile } from "@/lib/arena/costs";
 import { bucketBpsFor } from "@/lib/arena/slippage";
 import type { Micro } from "@/lib/money/micro";
 import {
@@ -94,10 +94,19 @@ export function costGateTable(
  * Round-trip cost as a fraction of the notional: 2 x brokerage of the profile at A$600 plus 2 x the
  * ARN-032 bucket bps of the 20-session ADV (exact).
  */
-export function roundTripCost(profile: CostProfile, advMicro: Micro): Rational {
+export function roundTripCost(
+  profile: CostProfile,
+  advMicro: Micro,
+  refPriceMicro?: Micro,
+): Rational {
+  // a per-share item (the US FINRA TAF) needs the quantity of the A$600-equivalent order: notional / price (D-1154 item 5)
+  const ctx =
+    refPriceMicro === undefined
+      ? undefined
+      : { quantity: quantityAt(COST_GATE_NOTIONAL_MICRO, refPriceMicro) };
   const fee =
-    feeFor(profile, COST_GATE_NOTIONAL_MICRO, "buy") +
-    feeFor(profile, COST_GATE_NOTIONAL_MICRO, "sell");
+    feeFor(profile, COST_GATE_NOTIONAL_MICRO, "buy", ctx) +
+    feeFor(profile, COST_GATE_NOTIONAL_MICRO, "sell", ctx);
   const fees = makeRational(fee, COST_GATE_NOTIONAL_MICRO);
   const slip = mulRat(makeRational(2n), divRat(bucketBpsFor(advMicro), makeRational(BPS_DEN)));
   return addRat(fees, slip);

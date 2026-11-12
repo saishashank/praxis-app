@@ -92,6 +92,7 @@ import {
   type ParamOverrides,
 } from "@/lib/arena/cohort";
 import { COST_PROFILES, feeFor, type CostProfile } from "@/lib/arena/costs";
+import { profileOnDate } from "@/lib/arena/costAsOf";
 import {
   fillCloseSignalExit,
   fillEntryLimit,
@@ -792,7 +793,7 @@ export function replayCohorts(
   const fillEnv = (c: Cohort, bar: ViewBar, env: DayEnv, code: string, first = true): FillEnv => ({
     bar: { openMicro: bar.open, highMicro: bar.high, lowMicro: bar.low, closeMicro: bar.close },
     advMicro: env.advPrev.get(code) ?? advMemory.get(code) ?? 0n,
-    profile: c.profile,
+    profile: profileOnDate(c.profile, env.d),
     tickCrossFactor: c.params.tickCrossFactor,
     feeContext: { code, firstBuyOfSecurityToday: first },
   });

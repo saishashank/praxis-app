@@ -56,13 +56,20 @@ export function sicTwoDigit(sic: string | number | null | undefined): string | n
   return t.padStart(4, "0").slice(0, 2);
 }
 
+/** A stored two-digit SIC group (`73`), as the US submissions job writes it into `instrument.industry` (M20 US1, D-1182). */
+function storedSicGroup(industry: string | null | undefined): string | null {
+  if (industry === undefined || industry === null) return null;
+  const t = String(industry).trim();
+  return /^[0-9]{2}$/.test(t) ? t : null;
+}
+
 const CLASSIFICATION_READERS: Readonly<Record<string, ClassificationReader>> = Object.freeze({
   // the home scheme and the NSE level-2 string both read `instrument.industry` (D-1112)
   [HOME_SCHEME]: Object.freeze({ scheme: HOME_SCHEME, groupOf: industryColumn }),
   nse_level2: Object.freeze({ scheme: "nse_level2", groupOf: industryColumn }),
   sic_2digit: Object.freeze({
     scheme: "sic_2digit",
-    groupOf: (r: InstrumentClassRow) => sicTwoDigit(r.sic),
+    groupOf: (r: InstrumentClassRow) => sicTwoDigit(r.sic) ?? storedSicGroup(r.industry),
   }),
 });
 
