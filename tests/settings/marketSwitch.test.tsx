@@ -8,7 +8,9 @@ const requireUser = vi.hoisted(() => vi.fn());
 const getPrefs = vi.hoisted(() => vi.fn());
 const loadSettings = vi.hoisted(() => vi.fn());
 const envFor = vi.hoisted(() => vi.fn());
-const switchAction = vi.hoisted(() => vi.fn<(fd: FormData) => Promise<unknown>>());
+const switchAction = vi.hoisted(() =>
+  vi.fn<(fd: FormData) => Promise<{ ok: true; changed: boolean } | { error: string }>>(),
+);
 vi.mock("@/lib/auth/guard", () => ({ requireUser: (...a: unknown[]) => requireUser(...a) }));
 vi.mock("@/lib/db/client", () => ({ authDb: () => ({}), mainDb: () => ({}) }));
 vi.mock("@/lib/preferences/service", async (orig) => ({

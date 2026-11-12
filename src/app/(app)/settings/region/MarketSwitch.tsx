@@ -52,12 +52,14 @@ function ProjectionLines({ m }: { m: SwitchMarketModel }) {
     <div data-testid="projection-lines">
       <p className="m-0 text-xs font-medium">
         Quota projection with AU and the enabled markets:{" "}
-        {m.projection.fits ? "fits" : "does not fit"} (<Link href="/usage#projection">details</Link>)
+        {m.projection.fits ? "fits" : "does not fit"} (<Link href="/usage#projection">details</Link>
+        )
       </p>
       <ul className="m-0 mt-1 list-none p-0 text-xs text-text-muted">
         {m.projection.verdicts.map((v) => (
           <li key={v.metric} data-metric={v.metric} data-ok={v.ok ? "1" : "0"}>
-            {v.label}: {nf.format(v.sharePct)} % of its budget {v.ok ? "(within the line)" : "(over the line)"}
+            {v.label}: {nf.format(v.sharePct)} % of its budget{" "}
+            {v.ok ? "(within the line)" : "(over the line)"}
           </li>
         ))}
       </ul>
@@ -93,7 +95,10 @@ function MarketBlock({
           <p className="m-0 text-sm font-medium">
             Checklist for the step to {m.next === "full" ? "full" : "data only"}:
           </p>
-          <ul aria-label={`Checklist for ${m.code}`} className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+          <ul
+            aria-label={`Checklist for ${m.code}`}
+            className="m-0 flex list-none flex-col gap-1 p-0 text-sm"
+          >
             {m.items.map((i) => (
               <li key={i.id} data-item={i.id} data-ok={i.ok ? "1" : "0"}>
                 <span className="font-medium">{i.ok ? "Done" : "Open"}:</span> {i.text}{" "}
@@ -122,7 +127,10 @@ function MarketBlock({
                 {NEXT_LABEL[m.next]}
               </button>
               <p className="m-0 text-xs text-text-muted" data-testid="open-items">
-                Disabled: {open.length === 0 ? "the checklist could not be read." : `${open.length} item${open.length === 1 ? "" : "s"} open (${open.map((i) => i.id).join(", ")}).`}
+                Disabled:{" "}
+                {open.length === 0
+                  ? "the checklist could not be read."
+                  : `${open.length} item${open.length === 1 ? "" : "s"} open (${open.map((i) => i.id).join(", ")}).`}
               </p>
             </div>
           )}
@@ -157,9 +165,9 @@ export function MarketSwitch({
   return (
     <Card title="Switch on a market" headingLevel={2} data-testid="market-switch">
       <p className="mb-3 text-xs text-text-muted">
-        A market is switched on in two steps: collecting data only, then full. The button works
-        only when every checklist item of the step is done. After a switch, set the production
-        setting for the enabled markets by hand (the nightly check reminds you).
+        A market is switched on in two steps: collecting data only, then full. The button works only
+        when every checklist item of the step is done. After a switch, set the production setting
+        for the enabled markets by hand (the nightly check reminds you).
       </p>
       <div className="flex flex-col gap-4">
         {markets.map((m) => (
