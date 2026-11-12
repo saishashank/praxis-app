@@ -36,10 +36,10 @@ describe("completeness from the seed", () => {
       const p = await loadProfile(db, code);
       expect(p.complete).toBe(false);
       expect(p.completeness.total).toBe(40);
-      expect(p.completeness.valued).toBe(36); // four fields are set at M20
+      expect(p.completeness.valued).toBe(40); // the four M20 fields were set by A4 (all [VERIFY])
       expect(p.completeness.verified).toBe(0); // every [VERIFY] value awaits its evidence
-      expect(p.completeness.unverified).toHaveLength(36);
-      expect(p.completeness.missing).toHaveLength(4);
+      expect(p.completeness.unverified).toHaveLength(40);
+      expect(p.completeness.missing).toHaveLength(0);
     }
   });
 
@@ -115,7 +115,8 @@ describe("setProfileField, the one writer", () => {
     });
     expect(r).toMatchObject({ ok: true, changed: true, version: 2, countedTrial: true });
     expect(r.ok && r.chargedLineages).toEqual(["AU:F1", "AU:F4"]);
-    const ch = (await db.execute("SELECT * FROM market_profile_change")).rows;
+    const ch = (await db.execute("SELECT * FROM market_profile_change WHERE actor <> 'migration'"))
+      .rows;
     expect(ch).toHaveLength(1);
     expect(ch[0]).toMatchObject({
       code: "AU",
@@ -142,7 +143,9 @@ describe("setProfileField, the one writer", () => {
       value: 1,
     });
     expect(again).toMatchObject({ ok: true, changed: false, version: 2, countedTrial: false });
-    expect((await db.execute("SELECT 1 FROM market_profile_change")).rows).toHaveLength(1);
+    expect(
+      (await db.execute("SELECT 1 FROM market_profile_change WHERE actor <> 'migration'")).rows,
+    ).toHaveLength(1);
     expect((await db.execute("SELECT 1 FROM trial_ledger")).rows).toHaveLength(2);
   });
 
@@ -160,7 +163,11 @@ describe("setProfileField, the one writer", () => {
     expect(row.cutoff_time).toBe("18:20");
     expect(JSON.parse(String(row.slots_json)).cutoff).toBe("18:20");
     expect(
-      (await db.execute("SELECT counted_trial FROM market_profile_change")).rows[0]!.counted_trial,
+      (
+        await db.execute(
+          "SELECT counted_trial FROM market_profile_change WHERE actor <> 'migration'",
+        )
+      ).rows[0]!.counted_trial,
     ).toBe(0);
     expect((await db.execute("SELECT 1 FROM trial_ledger")).rows).toHaveLength(0);
   });
@@ -218,7 +225,9 @@ describe("setProfileField, the one writer", () => {
         value: 1,
       }),
     ).toMatchObject({ ok: false, error: "invalid" });
-    expect((await db.execute("SELECT 1 FROM market_profile_change")).rows).toHaveLength(0);
+    expect(
+      (await db.execute("SELECT 1 FROM market_profile_change WHERE actor <> 'migration'")).rows,
+    ).toHaveLength(0);
   });
 
   it("the change ledger refuses UPDATE and DELETE", async () => {
