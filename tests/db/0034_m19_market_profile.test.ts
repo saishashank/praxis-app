@@ -147,21 +147,13 @@ describe("0034_m19_market_profile", () => {
       "SELECT code, evidence_ref FROM market_profile_field WHERE field = 'parcel_floor' AND code <> 'AU' ORDER BY code",
     );
     expect(pf.map((x) => String(x.evidence_ref))).toEqual(["D-947 [PROPOSED]", "D-947 [PROPOSED]"]);
-    // "set at M20": sleeve_reality_cap, tiers, slippage_buckets, bar_latency_p95_min are null for IN and US
+    // migration 0034 wrote sleeve_reality_cap, tiers, slippage_buckets, bar_latency_p95_min as null for IN and US;
+    // 0036 (the generated seed delta, M20 A4) fills them, so no profile value is null after both migrations
     const nulls = await rows(
       db,
       "SELECT code, field FROM market_profile_field WHERE value_json = 'null' ORDER BY code, field",
     );
-    expect(nulls.map((x) => `${String(x.code)}.${String(x.field)}`)).toEqual([
-      "IN.bar_latency_p95_min",
-      "IN.sleeve_reality_cap",
-      "IN.slippage_buckets",
-      "IN.tiers",
-      "US.bar_latency_p95_min",
-      "US.sleeve_reality_cap",
-      "US.slippage_buckets",
-      "US.tiers",
-    ]);
+    expect(nulls).toEqual([]);
   });
 
   it("a market that is not enabled can only be off (insert and update), and AU keeps its mode", async () => {
