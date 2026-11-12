@@ -58,7 +58,13 @@ test("India: probe, terms hash, robots verdict, rate-limit headers, and what is 
       "https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html": { body: "yahoo terms" },
     },
   });
-  const rep = await runReport({ market: "IN", fetchImpl: w.fetchImpl, sleep, now: NOW, env: {} });
+  const rep = await runReport({
+    market: "IN",
+    fetchImpl: w.fetchImpl,
+    sleep,
+    now: NOW,
+    env: { PRAXIS_MARKETS_ENABLED: "IN" },
+  });
   assert.equal(rep.market, "IN");
   assert.equal(rep.checked_at, "2026-11-13");
   assert.equal(rep.sources.length, 16);
@@ -131,7 +137,7 @@ test("US: EDGAR is skipped without the contact (no request to the SEC hosts), pr
     fetchImpl: w.fetchImpl,
     sleep,
     now: NOW,
-    env: {},
+    env: { PRAXIS_MARKETS_ENABLED: "US" },
   });
   const e = without.sources.find((s) => s.id === "us_edgar");
   assert.deepEqual(e.probe, { result: "skipped", reason: "contact_missing" });
@@ -155,7 +161,7 @@ test("US: EDGAR is skipped without the contact (no request to the SEC hosts), pr
     fetchImpl: w2.fetchImpl,
     sleep,
     now: NOW,
-    env: { PRAXIS_EDGAR_CONTACT: DUMMY },
+    env: { PRAXIS_MARKETS_ENABLED: "US", PRAXIS_EDGAR_CONTACT: DUMMY },
   });
   const e2 = withContact.sources.find((s) => s.id === "us_edgar");
   assert.equal(e2.probe.result, "ok");
@@ -182,7 +188,7 @@ test("a host that answers HEAD with 405 is probed once with a one-kilobyte GET r
     fetchImpl,
     sleep,
     now: NOW,
-    env: {},
+    env: { PRAXIS_MARKETS_ENABLED: "US" },
   });
   assert.equal(rep.sources.length, 1);
   assert.equal(rep.sources[0].probe.method, "GET");
@@ -202,7 +208,7 @@ test("an unreachable host is a recorded error and the run still completes", asyn
     fetchImpl,
     sleep,
     now: NOW,
-    env: {},
+    env: { PRAXIS_MARKETS_ENABLED: "IN" },
   });
   assert.equal(rep.sources[0].probe.result, "error");
   assert.equal(rep.sources[0].terms.status, "error");
@@ -218,7 +224,7 @@ test("main writes the JSON and Markdown beside --out, prints counts only, and va
   const file = path.join(dir, "out", "report-IN.json");
   const code = await main(
     ["--market", "IN", "--out", file, "--only", "in_mospi"],
-    {},
+    { PRAXIS_MARKETS_ENABLED: "IN" },
     (l) => lines.push(l),
     {
       fetchImpl: w.fetchImpl,
@@ -236,8 +242,28 @@ test("main writes the JSON and Markdown beside --out, prints counts only, and va
 
   const bad = [];
   assert.equal(await main([], {}, (l) => bad.push(l)), 2);
-  assert.equal(await main(["--market", "in", "--out", file], {}, (l) => bad.push(l)), 2);
-  assert.equal(await main(["--market", "AU", "--out", file], {}, (l) => bad.push(l)), 2);
+  // the market must be named by PRAXIS_MARKETS_ENABLED (D-1142)
+  assert.equal(await main(["--market", "IN", "--out", file], {}, (l) => bad.push(l)), 2);
+  assert.equal(bad.at(-1), "source-report: refused: market not enabled");
+  assert.equal(
+    await main(["--market", "IN", "--out", file], { PRAXIS_MARKETS_ENABLED: "US" }, (l) =>
+      bad.push(l),
+    ),
+    2,
+  );
+  assert.equal(bad.at(-1), "source-report: refused: market not enabled");
+  assert.equal(
+    await main(["--market", "in", "--out", file], { PRAXIS_MARKETS_ENABLED: "IN" }, (l) =>
+      bad.push(l),
+    ),
+    2,
+  );
+  assert.equal(
+    await main(["--market", "AU", "--out", file], { PRAXIS_MARKETS_ENABLED: "AU" }, (l) =>
+      bad.push(l),
+    ),
+    2,
+  );
   assert.match(bad.at(-1), /no source rows for this market/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -246,4 +272,22 @@ test("the script reads the seed and touches no database or secret", () => {
   const src = fs.readFileSync(path.join(HERE, "source-report.mjs"), "utf8");
   assert.doesNotMatch(src, /scriptDb|createClient|TURSO|@libsql|secrets\./);
   assert.match(src, /PRAXIS_EDGAR_CONTACT/); // a name only
+});
+
+test("a disabled source gets neither a probe nor a terms-page request (D-1125)", async () => {
+  const w = web({ robots: { "www.nseindia.com": OPEN, "www.bseindia.com": OPEN } });
+  const rep = await runReport({
+    market: "IN",
+    only: "in_bse_announcements",
+    fetchImpl: w.fetchImpl,
+    sleep,
+    now: NOW,
+    env: { PRAXIS_MARKETS_ENABLED: "IN" },
+  });
+  assert.deepEqual(rep.sources[0].terms, {
+    status: "skipped",
+    reason: "disabled_until_owner_acceptance",
+  });
+  assert.equal(rep.sources[0].probe.result, "skipped");
+  assert.equal(w.calls.length, 0);
 });

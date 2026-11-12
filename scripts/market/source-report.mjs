@@ -22,6 +22,7 @@ import {
   createPoliteFetch,
   isPoliteFetchRefused,
 } from "../../src/lib/data/sources/politeFetch.mjs";
+import { marketsEnabledDefault } from "../../src/lib/market/profileCore.mjs";
 import { marketSourcesOf } from "../../src/lib/market/seed/sourceSites.mjs";
 
 export const REPORT_UA = "Praxis-M20-source-report/1.0 (private research; single owner)";
@@ -56,6 +57,7 @@ export async function runReport(p) {
   const now = p.now ?? (() => new Date());
   const rows = marketSourcesOf(p.market).filter((r) => p.only === undefined || r.id === p.only);
   const contact = (env[CONTACT_ENV] ?? "").trim();
+  const enabled = marketsEnabledDefault(env);
   const userAgent = contact === "" ? REPORT_UA : `Praxis-M20-source-report/1.0 (${contact})`;
 
   // The report's own host table: the hosts a row names, its probe host and its terms host.
@@ -73,7 +75,9 @@ export async function runReport(p) {
     fetchImpl: p.fetchImpl,
     sleep: p.sleep,
     env,
-    gate: () => null, // the report reads the seed, there is no register or market to ask
+    // the market must be named by PRAXIS_MARKETS_ENABLED (checked in main); the register status is deliberately NOT
+    // gated here: the report probes pending rows to record their terms and robots (D-1142)
+    gate: (row) => (enabled.includes(row.market) ? null : "market_not_enabled"),
     userAgent,
     siteOf: (host) => {
       const h = String(host).toLowerCase();
@@ -101,6 +105,8 @@ export async function runReport(p) {
   const termsCache = new Map();
   async function terms(row) {
     if (row.terms_url === null) return { status: "none" };
+    if (row.status === "disabled")
+      return { status: "skipped", reason: "disabled_until_owner_acceptance" }; // D-1125
     if (row.contact === true && contact === "")
       return { status: "skipped", reason: "contact_missing" };
     if (termsCache.has(row.terms_url)) return termsCache.get(row.terms_url);
@@ -231,6 +237,10 @@ export async function main(argv, env = process.env, out = console.log, deps = {}
   }
   if (marketSourcesOf(market).length === 0) {
     out("source-report: refused: no source rows for this market");
+    return 2;
+  }
+  if (!marketsEnabledDefault(env).includes(market)) {
+    out("source-report: refused: market not enabled");
     return 2;
   }
   try {

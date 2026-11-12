@@ -11,6 +11,10 @@
 //   5. robots.txt of the host is read once (6 hours) and obeyed: a disallowed path is refused with
 //      `robots_disallowed`, a Crawl-delay raises the host's interval, an unreachable file (5xx, network) means
 //      "disallow all" (RFC 9309), a 4xx or an HTML page means "no robots";
+//      (a 429 on robots.txt is treated as disallow-all on purpose: a host that is rate-limiting us is not asked again);
+//   5b. redirects are never followed by the platform (`redirect: "manual"`): a 3xx re-enters this function for its
+//      target, so the host table, the gate and robots run again, at most 3 hops, and a target off the host table is
+//      refused with `redirect_off_list` (the same rule applies to the robots.txt read);
 //   6. requests to one host are serialised and spaced by the source's `intervalMs` (and the Crawl-delay);
 //   7. 429 and 5xx answers (and network errors) are retried with backoff, at most 4 times, honouring Retry-After
 //      (capped at 60 s); the last answer is returned.
@@ -41,7 +45,9 @@ export const REFUSALS = Object.freeze([
   "contact_missing",
   "robots_disallowed",
   "robots_unavailable",
+  "redirect_off_list",
 ]);
+export const MAX_REDIRECTS = 3;
 
 export class PoliteFetchRefused extends Error {
   /** @param {string} reason one of REFUSALS */
@@ -61,8 +67,11 @@ export function isPoliteFetchRefused(e) {
 
 /** A robots path pattern (`*` any run, `$` end) as a RegExp anchored at the start. @param {string} p */
 function patternOf(p) {
-  const esc = p.replace(/[.+?^{}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
-  return new RegExp(`^${esc.endsWith("$") ? `${esc.slice(0, -1)}$` : esc}`);
+  const end = p.endsWith("$");
+  const body = end ? p.slice(0, -1) : p;
+  // `$` is an anchor only as the final character of the rule; anywhere else it is a literal
+  const esc = body.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+  return new RegExp(`^${esc}${end ? "$" : ""}`);
 }
 
 /**
@@ -102,7 +111,7 @@ export function parseRobots(text, token = ROBOTS_TOKEN) {
     }
   }
   const t = token.toLowerCase();
-  const own = groups.filter((g) => g.agents.some((a) => a !== "*" && t.includes(a)));
+  const own = groups.filter((g) => g.agents.some((a) => a !== "*" && a === t));
   const pick = own.length > 0 ? own : groups.filter((g) => g.agents.includes("*"));
   const rules = pick.flatMap((g) => g.rules);
   const delay = pick.map((g) => g.delay).find((d) => d !== null) ?? 0;
@@ -235,6 +244,7 @@ export function createPoliteFetch(o = {}) {
           fetchImpl(url, {
             ...init,
             headers: { ...(init.headers ?? {}), "user-agent": ua },
+            redirect: "manual", // a redirect re-enters the gate, the host table and robots (below)
             signal: init.signal ?? AbortSignal.timeout(o.timeoutMs ?? 30_000),
           }),
         );
@@ -258,12 +268,35 @@ export function createPoliteFetch(o = {}) {
     return last;
   }
 
+  const isRedirect = (res) => res.status >= 300 && res.status < 400 && res.headers.get("location");
+
+  /** The robots.txt read; a redirect is followed only to a registered host, at most MAX_REDIRECTS times. */
+  async function followRobots(origin, host, interval, ua) {
+    let url = `${origin}/robots.txt`;
+    let h = host;
+    for (let hop = 0; ; hop += 1) {
+      const res = await attempt(h, interval, url, {}, ua);
+      if (!isRedirect(res)) return res;
+      let t;
+      try {
+        t = new URL(res.headers.get("location"), url);
+      } catch {
+        throw new PoliteFetchRefused("redirect_off_list");
+      }
+      if (hop >= MAX_REDIRECTS || t.protocol !== "https:" || siteOf(t.hostname) === null) {
+        throw new PoliteFetchRefused("redirect_off_list");
+      }
+      url = t.toString();
+      h = t.hostname;
+    }
+  }
+
   async function robotsOf(origin, host, interval, ua) {
     const hit = robotsCache.get(origin);
     if (hit && now() - hit.at < ROBOTS_TTL_MS) return hit.robots;
     let robots;
     try {
-      const res = await attempt(host, interval, `${origin}/robots.txt`, {}, ua);
+      const res = await followRobots(origin, host, interval, ua);
       const ct = String(res.headers.get("content-type") ?? "");
       if (res.status >= 500 || res.status === 429) robots = "unavailable";
       else if (res.status >= 400) robots = NO_ROBOTS;
@@ -271,7 +304,8 @@ export function createPoliteFetch(o = {}) {
         const text = await res.text();
         robots = ct.includes("html") || /^\s*</.test(text) ? NO_ROBOTS : parseRobots(text);
       }
-    } catch {
+    } catch (e) {
+      if (isPoliteFetchRefused(e)) throw e;
       robots = "unavailable";
     }
     robotsCache.set(origin, { at: now(), robots });
@@ -285,6 +319,12 @@ export function createPoliteFetch(o = {}) {
      * @returns {Promise<Response>}
      */
     async fetch(input, init = {}) {
+      return go(input, init, 0);
+    },
+  };
+
+  async function go(input, init, hop) {
+    {
       const { source, userAgent, ...rest } = init;
       let u;
       try {
@@ -319,7 +359,25 @@ export function createPoliteFetch(o = {}) {
       if (robots === "unavailable") throw new PoliteFetchRefused("robots_unavailable");
       if (!robots.allows(`${u.pathname}${u.search}`))
         throw new PoliteFetchRefused("robots_disallowed");
-      return attempt(u.hostname, Math.max(interval0, robots.crawlDelayMs), u.toString(), rest, ua);
-    },
-  };
+      const res = await attempt(
+        u.hostname,
+        Math.max(interval0, robots.crawlDelayMs),
+        u.toString(),
+        rest,
+        ua,
+      );
+      if (!isRedirect(res)) return res;
+      // a redirect is a new request: host table, gate and robots run again for its target (same source)
+      let t;
+      try {
+        t = new URL(res.headers.get("location"), u);
+      } catch {
+        throw new PoliteFetchRefused("redirect_off_list");
+      }
+      if (hop >= MAX_REDIRECTS || siteOf(t.hostname) === null) {
+        throw new PoliteFetchRefused("redirect_off_list");
+      }
+      return go(t.toString(), { ...init, source: id }, hop + 1);
+    }
+  }
 }

@@ -66,6 +66,17 @@ describe("parseRobots", () => {
     expect(parseRobots("User-agent: *\nDisallow: /p\nAllow: /p\n").allows("/p")).toBe(true);
   });
 
+  it("a group is matched by the whole product token, case-insensitively, and a dollar sign inside a rule is literal", () => {
+    const text = "User-agent: Pra\nDisallow: /\n\nUser-agent: *\nAllow: /\n";
+    expect(parseRobots(text, "praxis").allows("/x")).toBe(true); // "pra" is not "praxis"
+    expect(parseRobots("User-agent: PRAXIS\nDisallow: /\n", "praxis").allows("/x")).toBe(false);
+    const d = parseRobots("User-agent: *\nDisallow: /a$b\nDisallow: /end$\n");
+    expect(d.allows("/a$b")).toBe(false);
+    expect(d.allows("/axb")).toBe(true);
+    expect(d.allows("/end")).toBe(false);
+    expect(d.allows("/endx")).toBe(true);
+  });
+
   it("wildcards, end anchors, empty Disallow and comments", () => {
     const r = parseRobots("# c\nUser-agent: *\nDisallow: /*.json$\nDisallow: /tmp*/x # note\n");
     expect(r.allows("/data.json")).toBe(false);
@@ -293,6 +304,82 @@ describe("robots.txt", () => {
     expect(Math.max(...k.sleeps)).toBeGreaterThanOrEqual(1500);
     await c.fetch(PATH, { source: "in_nse_holidays" });
     expect(k.sleeps.at(-1)).toBe(4000);
+  });
+});
+
+describe("redirects (the gate, host table and robots run again)", () => {
+  const PATH = "https://www.nseindia.com/api/holiday-master?type=trading";
+  const ROBOTS = { "https://www.nseindia.com/robots.txt": { body: OPEN() } };
+  it("a 302 to an off-list host is refused and makes no second call", async () => {
+    const { fetchImpl, calls } = recorded({
+      ...ROBOTS,
+      [PATH]: {
+        status: 302,
+        headers: { location: "https://query1.finance.yahoo.com/v8/finance/chart/X" },
+      },
+    });
+    const k = clock();
+    const c = createPoliteFetch({ fetchImpl, gate: open, now: k.now, sleep: k.sleep });
+    await expect(c.fetch(PATH, { source: "in_nse_holidays" })).rejects.toMatchObject({
+      reason: "redirect_off_list",
+    });
+    expect(calls.map((x) => x.url)).toEqual(["https://www.nseindia.com/robots.txt", PATH]);
+    expect(calls.some((x) => x.url.includes("yahoo"))).toBe(false);
+  });
+
+  it("a redirect to a registered host is followed through the checks; robots applies to the target", async () => {
+    const T = "https://www.nseindia.com/api/other";
+    const { fetchImpl, calls } = recorded({
+      "https://www.nseindia.com/robots.txt": { body: "User-agent: *\nDisallow: /api/other\n" },
+      [PATH]: { status: 302, headers: { location: T } },
+      [T]: { body: "x" },
+    });
+    const k = clock();
+    const c = createPoliteFetch({ fetchImpl, gate: open, now: k.now, sleep: k.sleep });
+    await expect(c.fetch(PATH, { source: "in_nse_holidays" })).rejects.toMatchObject({
+      reason: "robots_disallowed",
+    });
+    expect(calls.some((x) => x.url === T)).toBe(false);
+    const ok = recorded({
+      ...ROBOTS,
+      [PATH]: { status: 301, headers: { location: "/api/next" } },
+      "https://www.nseindia.com/api/next": { body: "y" },
+    });
+    const c2 = createPoliteFetch({
+      fetchImpl: ok.fetchImpl,
+      gate: open,
+      now: k.now,
+      sleep: k.sleep,
+    });
+    expect((await c2.fetch(PATH, { source: "in_nse_holidays" })).status).toBe(200);
+  });
+
+  it("a redirect loop stops after three hops", async () => {
+    const { fetchImpl, calls } = recorded({
+      ...ROBOTS,
+      [PATH]: { status: 302, headers: { location: PATH } },
+    });
+    const k = clock();
+    const c = createPoliteFetch({ fetchImpl, gate: open, now: k.now, sleep: k.sleep });
+    await expect(c.fetch(PATH, { source: "in_nse_holidays" })).rejects.toMatchObject({
+      reason: "redirect_off_list",
+    });
+    expect(calls.filter((x) => x.url === PATH)).toHaveLength(4);
+  });
+
+  it("a robots.txt that redirects off the host table is refused", async () => {
+    const { fetchImpl, calls } = recorded({
+      "https://www.nseindia.com/robots.txt": {
+        status: 302,
+        headers: { location: "https://example.com/robots.txt" },
+      },
+    });
+    const k = clock();
+    const c = createPoliteFetch({ fetchImpl, gate: open, now: k.now, sleep: k.sleep });
+    await expect(c.fetch(PATH, { source: "in_nse_holidays" })).rejects.toMatchObject({
+      reason: "redirect_off_list",
+    });
+    expect(calls).toHaveLength(1);
   });
 });
 
