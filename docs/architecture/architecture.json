@@ -2322,9 +2322,10 @@
       "views": [
         "platform"
       ],
-      "source": "src/lib/market/seed/us/sources.mjs",
+      "source": "src/lib/data/sources/us/edgar.mjs",
       "attrs": {
         "files": [
+          "src/lib/data/sources/us/edgar.mjs",
           "src/lib/market/seed/us/sources.mjs"
         ]
       }
@@ -3017,9 +3018,10 @@
       "views": [
         "platform"
       ],
-      "source": "src/lib/market/seed/us/sources.mjs",
+      "source": "src/lib/data/sources/us/edgar.mjs",
       "attrs": {
         "files": [
+          "src/lib/data/sources/us/edgar.mjs",
           "src/lib/market/seed/us/sources.mjs"
         ]
       }

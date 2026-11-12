@@ -61,7 +61,8 @@ import {
   type StateRef,
 } from "./night";
 import { marketMoney } from "@/lib/arena/marketMoney";
-import { staticProfile } from "@/lib/market/staticProfile.mjs";
+import { homeProfile, staticProfile } from "@/lib/market/staticProfile.mjs";
+import { groupOf } from "./gates/portfolio";
 import { stageTablesFor } from "./stageTables.mjs";
 import { runNight } from "./night";
 import { profileReaders } from "./profileReaders";
@@ -326,7 +327,7 @@ const MIN_CALENDAR_SPAN_DAYS = 14; // threshold-ok: slack before the first sessi
 export async function loadStageRows(db: Client, o: LoadOptions): Promise<StageRows> {
   const { market, d } = o;
   const profile = staticProfile(market);
-  profileReaders(profile); // CXA-002 e, f, g: an M20 rule set throws `not built (M20)` here
+  const readers = profileReaders(profile); // CXA-002 e, f, g: an M20 rule set throws `not built (M20)` here
   const cutoff = decisionCutoffUtc(d, o.params.decisionCutoff, profile.decisionCutoffZone!);
   const span = Math.ceil((STAGE_BAR_SESSIONS * 7) / 5) + MIN_CALENDAR_SPAN_DAYS; // threshold-ok: weekdays to days
   const all = sessionsBetween(addDays(d, -span), d, o.calendar);
@@ -539,7 +540,15 @@ export async function loadStageRows(db: Client, o: LoadOptions): Promise<StageRo
   });
   for (const r of groupRs.rows) {
     const code = text(r.code);
-    if (!industry.has(code)) industry.set(code, [{ asOf: first, industry: text(r.industry) }]);
+    // D-1182: the group is the market's scheme applied to the stored value (a US code's two-digit SIC group); the home
+    // scheme keeps the stored text byte for byte (AU)
+    const stored = text(r.industry);
+    const grouped =
+      readers.classification.scheme === homeProfile().classificationScheme
+        ? stored
+        : groupOf(readers.classification, { industry: stored });
+    if (grouped !== null && !industry.has(code))
+      industry.set(code, [{ asOf: first, industry: grouped }]);
   }
 
   // M20 (D-1116, closing D-1016): the schema hash covers a pinned table list, not a scan of the database, so a

@@ -34,6 +34,7 @@ const NON_COMPARISON_READERS = new Set([
   "lib/data/backfill/snapshotCore.mjs",
   "lib/data/backfill/snapshotLoad.mjs",
   "lib/data/index/indexBars.mjs",
+  "lib/data/sources/us/index.mjs", // M20 US1 (D-1188): the US manual index CSV writer, ingest plumbing like indexBars.mjs, not a comparison
   "lib/replay/snapshotWorld.ts",
   "lib/data/sources/in/index.mjs", // M20 IN1: parses the manual index CSV into index_bar rows; a writer, not a comparison
   "lib/data/sources/in/day.mjs", // M20 IN1: the India batch 1 inserts those rows; a writer, not a comparison

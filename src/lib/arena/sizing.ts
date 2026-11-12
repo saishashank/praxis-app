@@ -16,7 +16,7 @@ import {
   type Rational,
 } from "@/lib/money/rational";
 import { floorRat, roundHalfAwayFromZero } from "@/lib/money/round";
-import { feeFor, type CostProfile, type FeeContext } from "./costs";
+import { feeFor, quantityAt, type CostProfile, type FeeContext } from "./costs";
 import type { Tier } from "./schema";
 import {
   DEFAULT_TICK_CROSS_FACTOR,
@@ -177,7 +177,10 @@ export function sizeEntry(input: SizingInput): SizingResult {
   if (pre <= 0n) return noCash(0n, pre);
 
   const feeContext = input.feeContext ?? {};
-  const est = feeFor(input.profile, pre, "buy", feeContext);
+  const est = feeFor(input.profile, pre, "buy", {
+    ...feeContext,
+    quantity: quantityAt(pre, quote.fillMicro),
+  });
   const deployable = pre - est;
   if (deployable <= 0n) return noCash(est, deployable);
 
@@ -192,7 +195,7 @@ export function sizeEntry(input: SizingInput): SizingResult {
     };
   }
   const value = qty * quote.fillMicro;
-  const brokerage = feeFor(input.profile, value, "buy", feeContext);
+  const brokerage = feeFor(input.profile, value, "buy", { ...feeContext, quantity: qty });
   const total = value + brokerage;
   const reasons: SizingReason[] = [];
   // Cannot happen with a non-decreasing profile (P5); guards a profile whose fee falls with value.
@@ -244,7 +247,14 @@ export type StallFloorInput = {
 export function stallFloorMicro(input: StallFloorInput): Micro {
   const parcel = input.parcelMicro ?? MIN_MARKETABLE_PARCEL_MICRO;
   const buffer = input.cashBuffer ?? DEFAULT_CASH_BUFFER;
-  const fee = feeFor(input.profile, parcel, "buy");
+  const fee = feeFor(
+    input.profile,
+    parcel,
+    "buy",
+    input.refPriceMicro === undefined
+      ? undefined
+      : { quantity: quantityAt(parcel, input.refPriceMicro) },
+  );
   const bps =
     input.slippageBps ??
     (input.marketProfile === undefined
@@ -296,7 +306,9 @@ export function resizeEntryAtFill(input: FillResizeInput): FillResize {
   if (price <= 0n) throw new RangeError("fill price must be positive");
   const fits = (q: bigint): boolean => {
     const value = q * price;
-    return value + feeFor(input.profile, value, "buy", input.feeContext) <= cash;
+    return (
+      value + feeFor(input.profile, value, "buy", { ...input.feeContext, quantity: q }) <= cash
+    );
   };
   if (fits(plannedQty)) return { status: "keep", qty: plannedQty };
   // fits() is monotone in q (non-decreasing fee): binary search the largest q below plannedQty

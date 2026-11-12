@@ -12,7 +12,7 @@
 // The gate applies to E executions only: never to the signal ledger and never to the C2/C3 controls.
 // An unmeasured signal passes and the card carries the flag `cost_gate_unmeasured`.
 import type { Client } from "@libsql/client";
-import { feeFor, type CostProfile } from "@/lib/arena/costs";
+import { feeFor, quantityAt, type CostProfile } from "@/lib/arena/costs";
 import { bucketBpsFor, type SlippageBucket } from "@/lib/arena/slippage";
 import type { Micro } from "@/lib/money/micro";
 import {
@@ -97,11 +97,15 @@ export function costGateTable(
 export function roundTripCost(
   profile: CostProfile,
   advMicro: Micro,
+  refPriceMicro?: Micro,
   /** The market's fixed notional (its seed amount) and slippage buckets (D-1154); absent = the home market's. */
   market?: { readonly notionalMicro: Micro; readonly buckets: readonly SlippageBucket[] },
 ): Rational {
   const notional = market?.notionalMicro ?? COST_GATE_NOTIONAL_MICRO;
-  const fee = feeFor(profile, notional, "buy") + feeFor(profile, notional, "sell");
+  // a per-share item (the US FINRA TAF) needs the quantity of the order: notional / price (D-1154 item 5)
+  const ctx =
+    refPriceMicro === undefined ? undefined : { quantity: quantityAt(notional, refPriceMicro) };
+  const fee = feeFor(profile, notional, "buy", ctx) + feeFor(profile, notional, "sell", ctx);
   const fees = makeRational(fee, notional);
   const slip = mulRat(
     makeRational(2n),

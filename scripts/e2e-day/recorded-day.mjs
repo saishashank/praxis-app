@@ -617,8 +617,55 @@ export function buildDataOnlyPlan(cfg) {
   for (const d of dates) {
     const at = new Date(zonedInstant(d, b1, tz)).toISOString();
     if (market.toUpperCase() !== HOME_MARKET) {
-      // another market (D-1127, D-1156): its own batch-1 CLI under scripts/ingest/<code lower>/, fed the recorded day files
-      const cli = `scripts/ingest/${market.toLowerCase()}/batch1.mjs`;
+      // another market (D-1127, D-1156): the folder scripts/ingest/<code lower>/ names its drivers by convention
+      //   recorded_day.mjs there  -> bars.json + feeds.json style (US): run.mjs prepare|run, its own recorded source
+      //   batch1.mjs there        -> day-file style (IN): batch1.mjs prepare|run, the generic recorded_day.mjs --market
+      const dir = `scripts/ingest/${market.toLowerCase()}`;
+      if (existsSync(path.join(ROOT, dir, "recorded_day.mjs"))) {
+        plan.push(
+          node(`batch1-prepare-${d}`, "batch1-prepare", `${dir}/run.mjs`, [
+            "prepare",
+            "--market",
+            market,
+            "--request",
+            p("request.json"),
+            "--now",
+            at,
+          ]),
+          node(`recorded-source-${d}`, "recorded-source", `${dir}/recorded_day.mjs`, [
+            "--market",
+            market,
+            "--fixtures",
+            fixtures,
+            "--date",
+            d,
+            "--bars-output",
+            p("bars.json"),
+            "--feeds-output",
+            p("feeds.json"),
+          ]),
+          node(`batch1-run-${d}`, "batch1-run", `${dir}/run.mjs`, [
+            "run",
+            "--market",
+            market,
+            "--bars",
+            p("bars.json"),
+            "--feeds",
+            p("feeds.json"),
+            "--now",
+            at,
+          ]),
+          {
+            id: `verdict-${d}`,
+            label: "orchestrator",
+            kind: "fn",
+            guard: false,
+            run: () => verdict(d),
+          },
+        );
+        continue;
+      }
+      const cli = `${dir}/batch1.mjs`;
       plan.push(
         node(`batch1-prepare-${d}`, "batch1-prepare", cli, [
           "prepare",
@@ -726,7 +773,7 @@ export function buildDataOnlyPlan(cfg) {
  * which is proven elsewhere): enabled, data_only, its source rows (accepted for the day: nothing is fetched, the recorded
  * data is served) and its calendar rows, plus a session row for each recorded date (the recordings are trading days).
  */
-export async function seedDataOnly({ work, market, dates }) {
+export async function seedDataOnly({ work, market, dates, fixtures }) {
   const fileUrl = (n) => pathToFileURL(path.join(work, n)).href;
   const main = scriptDb({ url: fileUrl("main.db") });
   try {
@@ -744,6 +791,20 @@ export async function seedDataOnly({ work, market, dates }) {
               VALUES (?, ?, 'session', NULL, 1, 'recorded-day-dev')`,
         args: [market, d],
       });
+    }
+    // a market whose recordings carry a bars file (the US) takes its universe from the instrument rows: seed them from
+    // the first recorded session's codes (a market that reads the codes from the exchange file, IN, needs none)
+    if (fixtures !== undefined) {
+      const f = path.join(path.resolve(fixtures), recordedRootOf(market), dates[0], "bars.json");
+      if (existsSync(f)) {
+        const codes = [...new Set(JSON.parse(readFileSync(f, "utf8")).map((r) => String(r.code)))];
+        for (const code of codes) {
+          await main.execute({
+            sql: "INSERT OR IGNORE INTO instrument (market, code, name) VALUES (?, ?, ?)",
+            args: [market, code, code],
+          });
+        }
+      }
     }
     await main.execute({
       sql: "UPDATE source_register SET status = 'enabled' WHERE substr(source, 1, 3) = ?",
@@ -820,7 +881,7 @@ async function runDataOnly(o, env, deps, out) {
     fixtures: path.resolve(o.fixtures),
     market,
     dates,
-    seed: deps.seed ?? (() => seedDataOnly({ work, market, dates })),
+    seed: deps.seed ?? (() => seedDataOnly({ work, market, dates, fixtures: o.fixtures })),
     verdict: deps.verdict ?? ((d) => checkVerdict({ work, market, d })),
   });
   writeFileSync(

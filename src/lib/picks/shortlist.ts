@@ -201,8 +201,8 @@ function replayTrade(
 
 function net(buy: bigint, sell: bigint, hold: number, low: bigint, profile: CostProfile): Outcome {
   const qty = NOTIONAL_MICRO / buy || 1n;
-  const cost = qty * buy + feeFor(profile, qty * buy, "buy");
-  const back = qty * sell - feeFor(profile, qty * sell, "sell");
+  const cost = qty * buy + feeFor(profile, qty * buy, "buy", { quantity: qty });
+  const back = qty * sell - feeFor(profile, qty * sell, "sell", { quantity: qty });
   return {
     netPpm: Number(((back - cost) * BigInt(PPM)) / cost), // money-float-ok: ppm of exact micro amounts
     hold,

@@ -174,6 +174,7 @@ export function selectEntries(ranked: readonly Candidate[], ctx: EntryGateContex
       const cost = roundTripCost(
         ctx.costProfile,
         advValueOf(facts, ctx.advWindow),
+        facts.bar.close, // a per-share item (the US TAF) needs the quantity: notional / price (D-1181)
         ctx.market === undefined ? undefined : costGateMoney(ctx.market),
       );
       const verdict = costGateVerdict(
