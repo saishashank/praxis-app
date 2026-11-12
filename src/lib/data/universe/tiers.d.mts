@@ -29,8 +29,4 @@ export type TierInput = {
 export type TierOut =
   | { tier: "U1" | "U2" | "U3"; status: "active"; advMicro: bigint | null }
   | { tier: "U3"; status: "below_floor"; advMicro: bigint | null };
-export function assignTiers(
-  rows: TierInput[],
-  d: string,
-  rules?: TierRules,
-): Map<string, TierOut>;
+export function assignTiers(rows: TierInput[], d: string, rules?: TierRules): Map<string, TierOut>;
