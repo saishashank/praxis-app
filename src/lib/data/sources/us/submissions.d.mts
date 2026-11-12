@@ -5,6 +5,7 @@ export type Filing = {
   acceptedAt: string | null;
   items: string[];
   description: string | null;
+  primaryDocument: string | null;
 };
 export type Submissions = {
   cik: string;

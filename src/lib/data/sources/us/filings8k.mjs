@@ -10,8 +10,8 @@ import { assertMarketEnabled } from "../../../market/guard.mjs";
 import { filingIndexUrl } from "./edgar.mjs";
 
 export const FILINGS_SOURCE = "us_edgar";
-/** The forms read from `submissions`: the 8-K family and the periodic reports (Form 4 and 13D/G have their own parsers). */
-const FORM_RE = /^(?:8-K(?:\/A)?|10-Q(?:\/A)?|10-K(?:\/A)?)$/i;
+/** The forms read from `submissions`: the 8-K family, the periodic reports, Form 4 and Schedules 13D/G (the category map has a row for each; the notices have their own parsers). */
+const FORM_RE = /^(?:8-K|10-Q|10-K|4|(?:SC|SCHEDULE) 13[DG])(?:[/]A)?$/i;
 
 /**
  * @typedef {{ accession: string, form: string, filedDate: string, acceptedAt: string | null, items: string[],

@@ -6,7 +6,7 @@ import { assertMarketEnabled } from "../../../market/guard.mjs";
 
 /**
  * @typedef {{ accession: string, form: string, filedDate: string, acceptedAt: string | null, items: string[],
- *             description: string | null }} Filing
+ *             description: string | null, primaryDocument: string | null }} Filing
  * @typedef {{ cik: string, name: string | null, sic: string | null, tickers: string[], filings: Filing[] }} Submissions
  */
 
@@ -36,6 +36,7 @@ export function parseSubmissions(json) {
   const accepted = col("acceptanceDateTime");
   const items = col("items");
   const desc = col("primaryDocDescription");
+  const primary = col("primaryDocument");
   /** @type {Filing[]} */
   const filings = [];
   for (let i = 0; i < acc.length; i += 1) {
@@ -53,6 +54,7 @@ export function parseSubmissions(json) {
         .map((s) => s.trim())
         .filter((s) => /^\d\.\d{2}$/.test(s)),
       description: typeof desc[i] === "string" && desc[i].trim() !== "" ? desc[i].trim() : null,
+      primaryDocument: typeof primary[i] === "string" && primary[i] !== "" ? primary[i] : null,
     });
   }
   return {
