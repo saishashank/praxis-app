@@ -41,7 +41,7 @@ describe("the synthetic generator", () => {
     const bars = JSON.parse(a.files[`${SESSIONS[0]}/bars.json`]!) as { source: string }[];
     expect(bars.every((r) => r.source === "synthetic_fixture")).toBe(true);
     // 5 sessions x (bars + 4 submissions + facts + finra + halts + 2 index) + form4 x4 + 13D x2 + suspensions x1 + README
-    expect(Object.keys(a.files).length).toBe(1 + 5 * 10 + 4 + 2 + 1);
+    expect(Object.keys(a.files).length).toBe(1 + 5 * 11 + 4 + 2 + 1);
   });
 });
 
@@ -71,7 +71,7 @@ describe("recorded_day.mjs", () => {
 
   it("writes the same bars and feeds the day module takes", async () => {
     const root = tmp();
-    writeUsFixtures(path.join(root, "recorded", MARKET));
+    writeUsFixtures(path.join(root, "recorded", MARKET.toLowerCase()));
     const out = tmp();
     const lines: string[] = [];
     const code = await recordedDay(
@@ -99,9 +99,9 @@ describe("recorded_day.mjs", () => {
     expect(JSON.parse(readFileSync(path.join(out, "feeds.json"), "utf8"))).toEqual(
       JSON.parse(JSON.stringify(expected.feeds)),
     );
-    expect(readSession(path.join(root, "recorded", MARKET, DAYS[4]!)).feeds.suspensions).toContain(
-      "ZZD",
-    );
+    expect(
+      readSession(path.join(root, "recorded", MARKET.toLowerCase(), DAYS[4]!)).feeds.suspensions,
+    ).toContain("ZZD");
   });
 
   it("an unreadable session is exit 2 and prints no path", async () => {

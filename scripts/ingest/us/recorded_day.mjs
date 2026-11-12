@@ -103,7 +103,7 @@ export async function run(argv, env, deps = {}) {
     }
     let session;
     try {
-      session = readSession(path.join(fixtures, "recorded", market, date));
+      session = readSession(path.join(fixtures, "recorded", market.toLowerCase(), date));
     } catch {
       out("us_recorded_day: failed (the recorded session is unreadable)");
       return 2;

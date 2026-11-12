@@ -6,9 +6,10 @@
 //   - nothing here is, or resembles, a real company's data; no price is a real quote; the README it writes says so.
 // The generator is pure: `buildUsFixtures()` returns the five session dates, the fixture codes and a map of relative
 // path -> text. The test imports it directly; `writeUsFixtures(dir)` writes the same files under a folder (the private
-// fixtures repo, `recorded/US/<date>/...`), which the orchestrator commits. No network, no secret, no history file.
+// fixtures repo, `recorded/us/<date>/...`), which the orchestrator commits. No network, no secret, no history file.
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import SEED from "../../../src/lib/market/seed/US.mjs";
 
 export const SESSIONS = Object.freeze([
   "2026-11-02",
@@ -18,6 +19,8 @@ export const SESSIONS = Object.freeze([
   "2026-11-06",
 ]);
 export const SOURCE = "synthetic_fixture";
+/** The two index codes are the profile's own (regime and volatility index), not a literal here. */
+const INDEX_CODES = [SEED.fields.regime_index.value.code, SEED.fields.volatility_index.value.code];
 
 /** The fictional companies: code, CIK, name, SIC (the two-digit group is the NAV-cap group), base price, base volume. */
 export const COMPANIES = Object.freeze([
@@ -311,7 +314,7 @@ const indexCsv = (dayIndex, base) => {
 
 const README = `SYNTHETIC DATA. Read this before using anything in this folder.
 
-Everything under recorded/US/ is MADE UP by scripts/ingest/us/synthetic.mjs (praxis-app, M20 task US1, D-1188).
+Everything under recorded/us/ is MADE UP by scripts/ingest/us/synthetic.mjs (praxis-app, M20 task US1, D-1188).
 No real company, price, filing or trade is in it:
   - the codes ZZA..ZZD and the CIKs 0009990001..0009990004 are fictional;
   - every price bar carries source "synthetic_fixture"; the prices are a seeded pseudo-random walk, never a quote;
@@ -343,8 +346,28 @@ export function buildUsFixtures() {
     put(`finra/CNMSshvol${d.replaceAll("-", "")}.txt`, finraDaily(i));
     put("halts/halts.xml", haltsXml(i));
     if (i === 4) put("halts/suspensions.xml", SUSPENSION_XML);
-    put("index/GSPC.csv", indexCsv(i, 5000));
-    put("index/VIX.csv", indexCsv(i, 18));
+    put(`index/${INDEX_CODES[0]}.csv`, indexCsv(i, 5000));
+    put(`index/${INDEX_CODES[1]}.csv`, indexCsv(i, 18));
+    // the AU recording layout: index.json beside bars.json (same row shape, synthetic source)
+    put(
+      "index.json",
+      [
+        [INDEX_CODES[0], 5000],
+        [INDEX_CODES[1], 18],
+      ].map(([code, base]) => {
+        const r = indexCsv(i, base).split("\n")[1].split(",");
+        return {
+          code,
+          date: r[0],
+          open: +r[1],
+          high: +r[2],
+          low: +r[3],
+          close: +r[4],
+          source: SOURCE,
+          published_at: null,
+        };
+      }),
+    );
   });
   return { sessions: SESSIONS, companies: COMPANIES, files };
 }
