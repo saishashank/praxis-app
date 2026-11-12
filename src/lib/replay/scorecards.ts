@@ -754,10 +754,7 @@ export function barrierTrade(
         spec.cost.buckets,
       ).fillMicro;
       const value = qty * fill;
-      return done(
-        value - feeFor(spec.cost.profile, value, "sell", { quantity: qty }),
-        "up",
-      );
+      return done(value - feeFor(spec.cost.profile, value, "sell", { quantity: qty }), "up");
     }
   }
   const fill = slippageFill(

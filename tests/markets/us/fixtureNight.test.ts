@@ -14,7 +14,6 @@ import { feeFor, costProfilesOfMarket } from "@/lib/arena/costs";
 import { profileOnDate } from "@/lib/arena/costAsOf";
 import { fillIntradayStop } from "@/lib/arena/fills";
 import { defaultAgentParams } from "@/lib/agents/params";
-import { runBatch1 } from "@/lib/data/pipeline/batch1-core.mjs";
 import { loadStageRows } from "@/lib/cortex/stage";
 import {
   categoryMapReader,
@@ -26,7 +25,7 @@ import { gatePortfolio, groupOf } from "@/lib/cortex/gates/portfolio";
 import { makeRational } from "@/lib/money/rational";
 import { staticProfile } from "@/lib/market/staticProfile.mjs";
 import { cleanupTempDbs } from "../../db/helpers";
-import { DAYS, MARKET, nightMs, sessionFiles, usDevDb } from "./usDev";
+import { DAYS, MARKET, runNight, sessionFiles, usDevDb } from "./usDev";
 
 afterEach(cleanupTempDbs);
 
@@ -37,7 +36,7 @@ async function fiveNights() {
   const db = await usDevDb();
   for (const d of DAYS) {
     const { barsText, feeds } = sessionFiles(d);
-    const r = await runBatch1(db, { nowMs: () => nightMs(d), market: MARKET, barsText, feeds });
+    const r = await runNight(db, d, { barsText, feeds });
     expect(r.exit).toBe(0);
   }
   return db;

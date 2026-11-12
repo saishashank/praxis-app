@@ -207,7 +207,13 @@ export function simulatePortfolio(input: PortfolioInput, p: PortfolioParams): Po
     }
     if (bar.highMicro >= pos.aim) {
       const price = bar.openMicro > pos.aim ? bar.openMicro : pos.aim;
-      close(pos, d, price, feeFor(p.costProfile, pos.qty * price, "sell", { quantity: pos.qty }), "aim");
+      close(
+        pos,
+        d,
+        price,
+        feeFor(p.costProfile, pos.qty * price, "sell", { quantity: pos.qty }),
+        "aim",
+      );
       return true;
     }
     return false;

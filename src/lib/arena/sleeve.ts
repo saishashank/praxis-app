@@ -330,7 +330,10 @@ function sleeveFill(
     ...one,
     qty,
     valueMicro: qty * one.fillPriceMicro,
-    brokerageMicro: feeFor(cfg.profile, notionalMicro, one.side, { ...cfg.feeContext, quantity: qty }),
+    brokerageMicro: feeFor(cfg.profile, notionalMicro, one.side, {
+      ...cfg.feeContext,
+      quantity: qty,
+    }),
     costProfile: cfg.profile.code,
   };
 }

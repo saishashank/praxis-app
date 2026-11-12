@@ -3,9 +3,9 @@
 // development mode only: the market is `data_only` in a migrated test database (never production), the data is the
 // generator's (fictional codes ZZA..ZZD, source synthetic_fixture, see scripts/ingest/us/synthetic.mjs).
 import { afterEach, describe, expect, it } from "vitest";
-import { prepareBatch1, runBatch1 } from "@/lib/data/pipeline/batch1-core.mjs";
+import { prepareBatch1 } from "@/lib/data/pipeline/batch1-core.mjs";
 import { allowMarket, cleanupTempDbs, freshDb } from "../../db/helpers";
-import { DAYS, MARKET, nightMs, sessionFiles, usDevDb } from "./usDev";
+import { DAYS, MARKET, nightMs, runNight, sessionFiles, usDevDb } from "./usDev";
 
 afterEach(cleanupTempDbs);
 
@@ -18,7 +18,14 @@ const count = async (
 describe("the dispatcher reaches the US day module", () => {
   it("prepare asks the fetch step for the universe codes, with an empty suffix and the profile currency", async () => {
     const db = await usDevDb();
-    const r = await prepareBatch1(db, { nowMs: nightMs(DAYS[0]!), market: MARKET });
+    const r = (await prepareBatch1(db, {
+      nowMs: nightMs(DAYS[0]!),
+      market: MARKET,
+    })) as unknown as {
+      action: string;
+      codes: number;
+      request: { suffix: string; currency: string; end: string };
+    };
     expect(r.action).toBe("fetch");
     expect(r.codes).toBe(4);
     expect(r.request.suffix).toBe("");
@@ -32,7 +39,7 @@ describe("one night", () => {
     const db = await usDevDb();
     const d = DAYS[1]!; // 2026-11-03: an 8-K item 1.01 and a Form 4 on ZZB
     const { barsText, feeds } = sessionFiles(d);
-    const res = await runBatch1(db, { nowMs: () => nightMs(d), market: MARKET, barsText, feeds });
+    const res = await runNight(db, d, { barsText, feeds });
     expect(res.exit).toBe(0);
     expect(res.status).toBe("ok");
     expect(
@@ -97,9 +104,9 @@ describe("one night", () => {
     const db = await usDevDb();
     const d = DAYS[0]!;
     const { barsText, feeds } = sessionFiles(d);
-    await runBatch1(db, { nowMs: () => nightMs(d), market: MARKET, barsText, feeds });
+    await runNight(db, d, { barsText, feeds });
     const before = await count(db, "SELECT COUNT(*) AS n FROM price_bar WHERE market = 'US'");
-    const again = await runBatch1(db, { nowMs: () => nightMs(d), market: MARKET, barsText, feeds });
+    const again = await runNight(db, d, { barsText, feeds });
     expect(again.status).toBe("skipped");
     expect(again.reason).toBe("already_done");
     expect(await count(db, "SELECT COUNT(*) AS n FROM price_bar WHERE market = 'US'")).toBe(before);
@@ -108,12 +115,7 @@ describe("one night", () => {
   it("a missing bars file fails the date visibly and writes no bar (DAT-004: nothing is invented)", async () => {
     const db = await usDevDb();
     const d = DAYS[0]!;
-    const res = await runBatch1(db, {
-      nowMs: () => nightMs(d),
-      market: MARKET,
-      barsText: null,
-      feeds: {},
-    });
+    const res = await runNight(db, d, { barsText: null, feeds: {} });
     expect(res.exit).toBe(1);
     expect(res.status).toBe("failed");
     expect(await count(db, "SELECT COUNT(*) AS n FROM price_bar")).toBe(0);
@@ -134,7 +136,7 @@ describe("one night", () => {
       submissions: [{ code: "ZZA", json: { filings: { recent: { accessionNumber: 5 } } } }],
       halts: "<rss><item><ndaq:IssueSymbol>ZZA</ndaq:IssueSymbol></item></rss>",
     };
-    const res = await runBatch1(db, { nowMs: () => nightMs(d), market: MARKET, barsText, feeds });
+    const res = await runNight(db, d, { barsText, feeds });
     expect(res.exit).toBe(0);
     expect(await count(db, "SELECT COUNT(*) AS n FROM price_bar WHERE market = 'US'")).toBe(4);
     expect(
@@ -148,12 +150,7 @@ describe("one night", () => {
   it("a weekend writes a non-trading marker and no bar", async () => {
     const db = await usDevDb();
     const sat = "2026-11-07";
-    const res = await runBatch1(db, {
-      nowMs: () => nightMs(sat),
-      market: MARKET,
-      barsText: "[]",
-      feeds: {},
-    });
+    const res = await runNight(db, sat, { barsText: "[]", feeds: {} });
     expect(res.exit).toBe(0);
     expect(
       await count(
@@ -168,12 +165,7 @@ describe("one night", () => {
   it("a market in mode off writes only a skipped run record", async () => {
     const db = await freshDb("main");
     await allowMarket(db, MARKET); // enabled, but mode off (the seed)
-    const res = await runBatch1(db, {
-      nowMs: () => nightMs(DAYS[0]!),
-      market: MARKET,
-      barsText: "[]",
-      feeds: {},
-    });
+    const res = await runNight(db, DAYS[0]!, { barsText: "[]", feeds: {} });
     expect(res.status).toBe("skipped");
     expect(res.reason).toBe("market_off");
   });
@@ -184,7 +176,7 @@ describe("five sessions in a row (AT-M4: the recorded data_only days, offline)",
     const db = await usDevDb();
     for (const d of DAYS) {
       const { barsText, feeds } = sessionFiles(d);
-      const res = await runBatch1(db, { nowMs: () => nightMs(d), market: MARKET, barsText, feeds });
+      const res = await runNight(db, d, { barsText, feeds });
       expect(res.exit, d).toBe(0);
       expect(res.status, d).toBe("ok");
     }

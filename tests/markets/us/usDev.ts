@@ -4,19 +4,18 @@
 import type { Client } from "@libsql/client";
 import { ensureCalendarYears } from "@/lib/data/calendarAdmin";
 import { ensureMarketSources } from "@/lib/data/sources/marketSources.mjs";
+import { runBatch1 } from "@/lib/data/pipeline/batch1-core.mjs";
 import { allowMarket, freshDb } from "../../db/helpers";
-// @ts-expect-error plain ESM script without types
 import { buildUsFixtures, SESSIONS } from "../../../scripts/ingest/us/synthetic.mjs";
-// @ts-expect-error plain ESM script without types
 import { buildFeeds } from "../../../scripts/ingest/us/feeds.mjs";
 
 export const MARKET = "US";
-export const FIXTURES = buildUsFixtures() as {
+export const FIXTURES = buildUsFixtures() as unknown as {
   sessions: string[];
   companies: { code: string; cik: string; name: string; sic: string; px: number; vol: number }[];
   files: Record<string, string>;
 };
-export const DAYS: string[] = SESSIONS;
+export const DAYS: readonly string[] = SESSIONS;
 /** An instant after the US close of a session date, in the same local date (18:30 New York time in November). */
 export const nightMs = (d: string) => Date.parse(`${d}T23:30:00.000Z`);
 
@@ -63,4 +62,19 @@ export function sessionFiles(d: string): { barsText: string; feeds: Record<strin
     indexCsv,
   });
   return { barsText: get("bars.json")!, feeds };
+}
+
+/** Run the batch-1 night of a session through the dispatcher (the day module takes `feeds`, which the home options type does not list). */
+export function runNight(
+  db: Client,
+  d: string,
+  o: { barsText: string | null; feeds?: unknown; feedsText?: string | null },
+) {
+  return runBatch1(db, { nowMs: () => nightMs(d), market: MARKET, ...o } as never) as Promise<{
+    exit: number;
+    status: string;
+    reason?: string;
+    target: string;
+    dates: unknown[];
+  }>;
 }

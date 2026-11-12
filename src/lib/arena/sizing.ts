@@ -300,7 +300,9 @@ export function resizeEntryAtFill(input: FillResizeInput): FillResize {
   if (price <= 0n) throw new RangeError("fill price must be positive");
   const fits = (q: bigint): boolean => {
     const value = q * price;
-    return value + feeFor(input.profile, value, "buy", { ...input.feeContext, quantity: q }) <= cash;
+    return (
+      value + feeFor(input.profile, value, "buy", { ...input.feeContext, quantity: q }) <= cash
+    );
   };
   if (fits(plannedQty)) return { status: "keep", qty: plannedQty };
   // fits() is monotone in q (non-decreasing fee): binary search the largest q below plannedQty

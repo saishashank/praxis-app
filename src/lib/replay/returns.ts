@@ -597,7 +597,9 @@ export function roundTripBrokerage(
   // a US sell needs the quantity (FINRA TAF): derived from the value and the reference price when one is given (D-1154)
   const ctx =
     refPriceMicro === undefined ? undefined : { quantity: quantityAt(valueMicro, refPriceMicro) };
-  return feeFor(cost.profile, valueMicro, "buy", ctx) + feeFor(cost.profile, valueMicro, "sell", ctx);
+  return (
+    feeFor(cost.profile, valueMicro, "buy", ctx) + feeFor(cost.profile, valueMicro, "sell", ctx)
+  );
 }
 
 // ---------------------------------------------------------------------------------------------
