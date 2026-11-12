@@ -320,9 +320,9 @@ export type FillOutcome =
       readonly initialStopMicro: bigint | null;
     }
   | { readonly status: "cancelled"; readonly reason: OrderCancelReason; readonly detail: string }
-  | { readonly status: "unfilled"; readonly reason: "halted" | "stop_not_reached" };
+  | { readonly status: "unfilled"; readonly reason: "halted" | "stop_not_reached" | "band_locked" };
 
-/** D-1109: a band-locked session executes nothing; the order (entry or exit) is cancelled with this reason. */
+/** D-1109: a band-locked session executes nothing. An ENTRY is cancelled with this reason; an exit waits (below). */
 const BAND_LOCKED: FillOutcome = {
   status: "cancelled",
   reason: "band_locked",
@@ -358,7 +358,8 @@ export function fillOrder(order: OrderToFill, env: FillOrderEnv): FillOutcome {
     };
   }
   if (env.halted === true) return { status: "unfilled", reason: "halted" };
-  if (env.bandLocked === true) return BAND_LOCKED;
+  // an exit is never cancelled on a day the stock cannot trade: it stays pending and is retried (as a halt)
+  if (env.bandLocked === true) return { status: "unfilled", reason: "band_locked" };
   if (order.kind === "exit_cs") {
     return { status: "filled", fill: fillCloseSignalExit(env, order.qty), initialStopMicro: null };
   }

@@ -166,15 +166,14 @@ describe("the fill model refuses every fill on a band-locked session (D-1109)", 
     expect(o).toEqual({ status: "cancelled", reason: "band_locked", detail: "band_locked" });
   });
 
-  it("a close-signal exit and an intraday-stop exit are cancelled band_locked as well", () => {
+  it("a close-signal exit and an intraday-stop exit wait (unfilled band_locked), never cancelled", () => {
     expect(fillOrder({ kind: "exit_cs", qty: 10n }, env({ bandLocked: true }))).toEqual({
-      status: "cancelled",
+      status: "unfilled",
       reason: "band_locked",
-      detail: "band_locked",
     });
     expect(
       fillOrder({ kind: "exit_is", qty: 10n, levelMicro: 119n * R }, env({ bandLocked: true })),
-    ).toEqual({ status: "cancelled", reason: "band_locked", detail: "band_locked" });
+    ).toEqual({ status: "unfilled", reason: "band_locked" });
   });
 
   it("not locked (or the flag absent, the AU shape): the order fills as before", () => {

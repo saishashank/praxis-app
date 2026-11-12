@@ -218,7 +218,7 @@ export function classify(map: CategoryMap, item: AnnouncementItem): Classified {
 /**
  * The one writer of `announcement_category` (D-1108): the market's batch 1 calls it for each new announcement, after
  * `assertMarketEnabled`. The first classification of an announcement stays (a later map version is a new run over
- * the day, not an overwrite). Returns the classification it recorded or found.
+ * the day, not an overwrite). Returns the FRESH classification of this call, which on a repeat may differ from the stored row (read the table for the stored one).
  */
 export async function writeAnnouncementCategory(
   db: Pick<Client, "execute">,

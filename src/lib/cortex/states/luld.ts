@@ -54,13 +54,21 @@ export function haltCoversInstant(row: HaltSourceRow, instantUtc: string): boole
 export type LuldModelOptions = {
   /** The UTC instant (ISO) the regular session of date `d` opens (the profile's open in the market zone). */
   readonly sessionOpenUtc: (d: string) => string;
+  /** The UTC instant (ISO) the regular session of date `d` closes. */
+  readonly sessionCloseUtc: (d: string) => string;
 };
 
 /** The US model (`us_luld`): halted sessions and suspension notices from `trading_halt` rows. */
 export function luldModel(opts: LuldModelOptions): HaltModel {
   const coveredAt = (rows: readonly HaltSourceRow[], d: string): readonly HaltSourceRow[] => {
+    // halted = covers the open AND still running at the close (a pause resolved inside the session is fill-level only)
     const open = opts.sessionOpenUtc(d);
-    return rows.filter((r) => haltCoversInstant(r, open));
+    const close = Date.parse(opts.sessionCloseUtc(d));
+    return rows.filter(
+      (r) =>
+        haltCoversInstant(r, open) &&
+        (r.resumedAt === null || r.resumedAt === undefined || Date.parse(r.resumedAt) >= close),
+    );
   };
   return {
     id: "us_luld",
@@ -97,7 +105,7 @@ export function luldModel(opts: LuldModelOptions): HaltModel {
       for (const r of rows) {
         if (r.kind !== "suspension") continue;
         for (const d of view.sessions) {
-          if (haltCoversInstant(r, opts.sessionOpenUtc(d))) {
+          if (coveredAt([r], d).length > 0) {
             if (!out.has(d)) out.set(d, "suspension");
             break;
           }
@@ -158,7 +166,12 @@ export function haltModelFor(profile: MarketProfile): HaltModel {
     const tz = profile.tz;
     if (open === null || tz === null)
       throw new RangeError("the profile has no session open or zone");
-    return luldModel({ sessionOpenUtc: (d) => localToUtc(d, open, tz).toISOString() });
+    const close = profile.sessionClose;
+    if (close === null) throw new RangeError("the profile has no session close");
+    return luldModel({
+      sessionOpenUtc: (d) => localToUtc(d, open, tz).toISOString(),
+      sessionCloseUtc: (d) => localToUtc(d, close, tz).toISOString(),
+    });
   }
   return reader === "cx16" ? CX16_MODEL : cx16Model(reader);
 }

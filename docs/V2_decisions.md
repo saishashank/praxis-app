@@ -740,9 +740,10 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1160 | Filing instants in the as-filed reader (A5, D-1111): a company-facts entry carries only the filing DATE, so a date-only filed_at is stored as the END of that... |
 | D-1161 | Company-facts parsing (A5, DAT-226): one fundamental_fact row per (concept, period end, accession); where a filing lists one period end for several durations... |
 | D-1162 | US halt model (A5, D-1110 F): stepHalt takes an optional HaltModel (viewFor, notices, noticeKind); with none it is the M15 machine unchanged (AU hashes). |
-| D-1163 | Band lock in the fill model (A5, D-1109 F): fillOrder cancels an order with reason band_locked when FillOrderEnv.bandLocked is true, for an entry AND for an... |
-| D-1164 | Surveillance as promotion trigger 3 (A5, D-1109, CTX-044): |
+| D-1163 | Band lock in the fill model (A5, D-1109 F): fillOrder cancels an ENTRY with reason band_locked when FillOrderEnv.bandLocked is true (gate, then halted, then... |
+| D-1164 | A code on the ASM or GSM surveillance list takes no new entry, as promotion trigger 3 (A5, D-1109, CTX-044). |
 | D-1165 | Classification readers (A5, D-1112): classificationReader returns { scheme, groupOf }; the real column is instrument.industry (D-1112's industry_group was a... |
 | D-1166 | Category maps (A5, D-1108): rows match on type (case-insensitive substring of the source type), item (any of an 8-K's item numbers), form (case-insensitive e... |
 | D-1167 | Data limits (A5, D-1115, D-1132): the survivorship caveat text and its lapse rule live in src/lib/market/seed/dataLimits.mjs, keyed by market, so reportCavea... |
 | D-1168 | Labels (A5, DAT-247, D-1121): label_item is read as the newest row per (source, ann_id); the count that gates evaluation is distinct labelled items per marke... |
+| D-1169 | Band locks are symmetric (A5, Fable review, D-1109): the model refuses every fill on a session that closes at either limit. |

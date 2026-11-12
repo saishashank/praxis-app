@@ -32,7 +32,8 @@ import { allowMarket, cleanupTempDbs, freshDb } from "../../db/helpers";
 import { CENT, path, SESSIONS, statesWorld, type FixtureSpec } from "../../cortex/states/zzStates";
 
 const open = (d: string): string => `${d}T14:30:00.000Z`; // 09:30 New York, winter time (the test sessions are in February)
-const model = luldModel({ sessionOpenUtc: open });
+const close = (d: string): string => `${d}T21:00:00.000Z`; // 16:00 New York
+const model = luldModel({ sessionOpenUtc: open, sessionCloseUtc: close });
 const S = (i: number): string => SESSIONS[i]!;
 const c = (cents: number): bigint => BigInt(cents) * CENT;
 
@@ -78,9 +79,9 @@ describe("a halt row covers a session when it covers the session open", () => {
 });
 
 describe("a luld halt over the open of two sessions", () => {
-  // halted from 09:00 on session 20 to 09:35 on session 21: the open of 20 and of 21 fall inside; 22 reopens
+  // halted from 09:00 on session 20 to before the open of 22: the open of 20 and of 21 fall inside; 22 reopens
   const rows: HaltSourceRow[] = [
-    { kind: "luld", haltedAt: `${S(20)}T14:00:00.000Z`, resumedAt: `${S(21)}T14:35:00.000Z` },
+    { kind: "luld", haltedAt: `${S(20)}T14:00:00.000Z`, resumedAt: `${S(22)}T13:00:00.000Z` },
   ];
 
   it("starts a halt on the first covered session: entries and exit fills blocked, marked at the last trade", () => {
@@ -137,6 +138,26 @@ describe("a luld halt over the open of two sessions", () => {
   it("the same machine for the cx16 model with the view's own flags: no rows, no halt", () => {
     const steps = walk(spec(), 22, [], CX16_MODEL);
     expect(steps.every((s) => s.next.state === "none")).toBe(true);
+  });
+});
+
+describe("an opening pause resolved inside the session", () => {
+  it("leaves the machine at none (fill-level only): the open fill is refused at that instant, not the whole session", () => {
+    const rows: HaltSourceRow[] = [
+      { kind: "luld", haltedAt: `${S(25)}T14:30:00.000Z`, resumedAt: `${S(25)}T14:35:00.000Z` },
+    ];
+    const steps = walk(spec(), 27, rows);
+    expect(steps.every((s) => s.next.state === "none")).toBe(true);
+    expect(steps[25]!.effects.exitFillsBlocked).toBe(false);
+    expect(haltedAtInstant(rows, open(S(25)))).toBe(true);
+    expect(haltedAtInstant(rows, `${S(25)}T14:36:00.000Z`)).toBe(false);
+    // five such pauses in twenty sessions never become a suspension
+    const many: HaltSourceRow[] = [20, 21, 22, 23, 24].map((i) => ({
+      kind: "luld" as const,
+      haltedAt: `${S(i)}T14:30:00.000Z`,
+      resumedAt: `${S(i)}T14:35:00.000Z`,
+    }));
+    expect(walk(spec(), 30, many).every((s) => s.next.state === "none")).toBe(true);
   });
 });
 
@@ -213,7 +234,7 @@ describe("the model a profile selects", () => {
     // 09:30 New York in February is 14:30Z; a row 14:00Z-14:45Z covers the open
     const view = buildAsOfView(statesWorld([spec()]));
     const v = us.viewFor(view, "ZZ1", [
-      { kind: "luld", haltedAt: `${S(5)}T14:00:00.000Z`, resumedAt: `${S(5)}T14:45:00.000Z` },
+      { kind: "luld", haltedAt: `${S(5)}T14:00:00.000Z`, resumedAt: `${S(6)}T13:00:00.000Z` },
     ]);
     expect(v.halted("ZZ1", 5)).toBe(true);
     expect(v.halted("ZZ1", 6)).toBe(false);
