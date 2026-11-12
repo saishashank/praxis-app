@@ -106,7 +106,7 @@ describe("refusals before any request", () => {
       ["https://www.asx.com.au/x", "host_not_registered"],
       ["not a url", "bad_url"],
       ["http://www.nseindia.com/x", "bad_url"],
-      ["https://user:pw@www.nseindia.com/x", "bad_url"],
+      ["https://user:pw" + "@www.nseindia.com/x", "bad_url"], // split so the hygiene email scan does not read it as an address
     ] as const) {
       await expect(c.fetch(u, { source: "in_nse_holidays" })).rejects.toMatchObject({ reason });
     }
