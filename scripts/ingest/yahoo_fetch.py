@@ -9,7 +9,7 @@ all (non-trading days) are skipped.
 
 Request file:  {"codes": ["ZZZ", ...], "start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}   (end inclusive)
 Optional (M19, CXA-002 h): "suffix" is the market profile's Yahoo ticker suffix (".XX"), "currency" its ISO code;
-the Node caller reads both from the profile. Absent, the transitional defaults below apply.
+the Node caller reads both from the profile and always sends them (M20 A2, D-1090).
 Optional (M4 T3): "indices": ["^XXXX"] asks for index bars too; they go to --index-output (index.json),
 never into bars.json:  [{"code":"XXXX","date","open","high","low","close","source":"yahoo",
                          "published_at":null,"fetched_at"}, ...]

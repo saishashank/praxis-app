@@ -692,7 +692,7 @@ function killSlot(row: MarketRow): Slot | null {
     time,
     runner: "actions",
     workflow: "arena-close.yml",
-    fixedInputs: { market: row.code, kill: "1" },
+    fixedInputs: { market: row.code, kill: "market_off" },
     market: row.code,
     tradingDaysOnly: true,
     marketBound: false,

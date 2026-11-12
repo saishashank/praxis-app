@@ -35,6 +35,7 @@ const NON_COMPARISON_READERS = new Set([
   "lib/data/backfill/snapshotLoad.mjs",
   "lib/data/index/indexBars.mjs",
   "lib/replay/snapshotWorld.ts",
+  "lib/cortex/stageTables.mjs", // D-1116: names index_bar in the pinned schema-hash list; reads nothing
   "lib/cortex/stage.ts", // M15: index levels into the Cortex as-of world (regime, US index known-time), not a comparison
   "lib/ui/loaders/company.ts",
   "lib/ui/loaders/home.ts", // D-907: the ASX 200 line on Home, a level and its change (as the company page), not a comparison

@@ -3,7 +3,8 @@
 // direct "minimal review" uses the app's own renderer and send core (one renderer, one email key
 // `review:<d>`, one idempotency key). Nothing here reads a secret except through `env`; nothing
 // prints. Tests inject the database and the mock provider.
-import { createClient, type Client } from "@libsql/client";
+import type { Client } from "@libsql/client";
+import { scriptDb } from "@/lib/db/scriptClient.mjs";
 import { emailKeys, melbourneDate } from "@/lib/email/keys";
 import {
   guardRecipient,
@@ -41,7 +42,7 @@ export interface Problem {
 }
 
 export function openDb(env: EmailEnvVars): Client {
-  return createClient({ url: env.TURSO_MAIN_URL ?? "", authToken: env.TURSO_MAIN_TOKEN });
+  return scriptDb({ url: env.TURSO_MAIN_URL ?? "", token: env.TURSO_MAIN_TOKEN }); // D-1123
 }
 
 /** True when the database answers a trivial query. */

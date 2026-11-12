@@ -64,7 +64,7 @@ describe("the kill slot in the table", () => {
       minute: 9 * 60 + 17,
       runner: "actions",
       workflow: "arena-close.yml",
-      fixedInputs: { market: "IN", kill: "1" },
+      fixedInputs: { market: "IN", kill: "market_off" },
       market: "IN",
       tz: "Asia/Kolkata",
       tradingDaysOnly: true,
@@ -126,7 +126,7 @@ describe("the clock dispatches the kill", () => {
     expect(s.dispatched).toEqual(["arena-kill:IN"]);
     expect(JSON.parse(net.github[0]!.body)).toEqual({
       ref: "release",
-      inputs: { market: "IN", kill: "1" },
+      inputs: { market: "IN", kill: "market_off" },
     });
     expect(
       rows(db, "SELECT key FROM worker_state WHERE key = ?", slotKey("arena-kill:IN", MON)),

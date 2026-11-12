@@ -220,6 +220,7 @@ describe("steelman boundary (iii): who may import the steelman and name its tabl
   const TABLE_NAMERS = new Set([
     "src/lib/config/keys.ts", // config key names that contain the words only
     "src/lib/llm/dropOrder.ts",
+    "src/lib/cortex/stageTables.mjs", // D-1116: the pinned name list of the night schema hash; reads and writes nothing
   ]);
 
   const srcFiles = walk(path.join(ROOT, "src"));

@@ -733,3 +733,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1126 | Gate and numbering (gaps 4, 5, 23): M20 tasks start only after the CI run on build at or after d476057d is green (recorded in exit §0); decisions are D-1091... |
 | D-1127 | Registry modules resolve by convention (sources/<code>/day.mjs, seed/<code>/*.mjs, calendarRules/<code>.mjs entries added by stream A) so IN and US never edi... |
 | D-1128 | Register rows are not in 0036 (A2 finding, D-1096 amended): tests/acceptance/v3/replay-hash.baseline.json hashes source_register, source_register_history and... |
+| D-1129 | Deploy order for 0036 (Fable A2 review, note 3): the Worker reads market.rollback_at (worker/src/markets.ts:42) and deploy-production.yml deploys the Worker... |
+| D-1130 | The kill slot needs no listing (Fable A2 review, note 4): arena-kill:<CODE> is the only Actions slot released without the Owner's slots_enabled list (require... |
+| D-1131 | IN/US slippage buckets come from task A4 (Fable A2 review, note 5): slippage_buckets stays null for IN and US after A2, so stallFloorBpsOf throws for them by... |
+| D-1132 | No robots-permitted free US price source (fill run 2026-11-12): query1/query2.finance.yahoo.com, stooq.com and api.nasdaq.com disallow automated clients in r... |
