@@ -188,7 +188,7 @@ describe("licence_rows (DAT-120, D-1128)", () => {
     const c = await checklist(db, "IN", NOW, { deps: { quota: FITS, reportListed: () => true } });
     const li = item(c, "licence_rows");
     expect(li.ok).toBe(false);
-    expect(li.text).toContain(`${pending} of ${seeded.length} source rows are pending`);
+    expect(li.text).toContain(`${pending} of ${seeded.length} source rows are open`);
     expect(li.evidence).toBe("docs/source-licence-register.md");
   });
 
@@ -202,6 +202,38 @@ describe("licence_rows (DAT-120, D-1128)", () => {
     const open = item(await checklist(db, "IN", NOW, { deps }), "licence_rows");
     expect(open.ok).toBe(false);
     expect(open.text).toContain("in_mospi");
+  });
+});
+
+describe("licence_rows: a disabled primary source is not a decision (S1 fix, D-1191)", () => {
+  const deps = { quota: FITS, reportListed: () => true };
+  it("the seed marks exactly the primary price and calendar sources non-optional", () => {
+    const non = [...marketSourcesOf("IN"), ...marketSourcesOf("US")]
+      .filter((x) => x.optional === false)
+      .map((x) => x.id)
+      .sort();
+    expect(non).toEqual(["in_nse_bhavcopy", "in_nse_holidays", "us_nyse_holidays", "us_yahoo"]);
+  });
+  it("disabling an optional source stays decided; disabling a non-optional one blocks and is named", async () => {
+    await acceptAllSources("IN");
+    await db.execute("UPDATE source_register SET status = 'disabled' WHERE source = 'in_rbi'");
+    expect(item(await checklist(db, "IN", NOW, { deps }), "licence_rows").ok).toBe(true);
+    await db.execute(
+      "UPDATE source_register SET status = 'disabled' WHERE source = 'in_nse_bhavcopy'",
+    );
+    const r = item(await checklist(db, "IN", NOW, { deps }), "licence_rows");
+    expect(r.ok).toBe(false);
+    expect(r.text).toContain("in_nse_bhavcopy");
+    expect(r.text).toContain("1 disabled but needed");
+  });
+  it("a seam row without the flag is treated as optional", async () => {
+    const r = item(
+      await checklist(db, "IN", NOW, {
+        deps: { ...deps, sources: [{ id: "in_x", status: "disabled" }] },
+      }),
+      "licence_rows",
+    );
+    expect(r.ok).toBe(true);
   });
 });
 

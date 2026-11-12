@@ -224,6 +224,53 @@ describe("readAuMeasured and loadProjectionReport", () => {
     expect(m.figures.host_requests).toBe(3);
   });
 
+  // S1 fix (Fable, D-1195): the limits are judged against the whole system, not the AU-tagged slice.
+  // Window rows: k1 AU 1,000 / 100, k2 AU 2,000 / 200, k3 IN 9,999 / 999 (k4 is outside the window). All jobs:
+  // 12,999 reads, 1,299 writes. Untracked traffic: a worker-clock record exists, so 43,200 ticks x 6 = 259,200 tick
+  // reads; 3 signed calls x 2 = 6 nonce writes. Baseline without a platform sample: reads 12,999 + 259,200 = 272,199,
+  // writes 1,299 + 6 = 1,305. With a platform sample of the month the sample (5,000,000 / 40,000) is the baseline.
+  it("the baseline is every job plus the untracked traffic, or the platform sample when there is one; the AU slice only scales", async () => {
+    await allowMarket(db, "IN");
+    await run("arena-close", "AU", "k1", "2026-11-10T08:00:00.000Z", 1000, 100, 0);
+    await run("data-batch1", "AU", "k2", "2026-11-11T08:00:00.000Z", 2000, 200, 0);
+    await run("data-batch1", "IN", "k3", "2026-11-11T09:00:00.000Z", 9999, 999, 0);
+    await run("data-batch1", "AU", "k4", "2026-10-01T08:00:00.000Z", 7777, 777, 0);
+    await run("worker-clock", null, "k6", "2026-11-12T09:00:00.000Z", 0, 0, 0);
+    const none = await readAuMeasured(db, NOW);
+    expect(none.figures.turso_reads).toBe(3000); // the AU slice, unchanged
+    expect(none.baseline!.turso_reads).toBe(272_199);
+    expect(none.baseline!.turso_writes).toBe(1_305);
+    await db.execute(
+      "INSERT INTO usage_sample (sampled_at, rows_read_month, rows_written_month, source) VALUES ('2026-11-19T20:00:00.000Z', 5000000, 40000, 'platform')",
+    );
+    const sampled = await readAuMeasured(db, NOW);
+    expect(sampled.baseline!.turso_reads).toBe(5_000_000);
+    expect(sampled.baseline!.turso_writes).toBe(40_000);
+    expect(sampled.figures.turso_reads).toBe(3000);
+  });
+
+  // Baseline 90,000,000 reads (the platform figure) + US adds 27,511,000 = 117,511,000 > 100,000,000: does not fit,
+  // although AU-only 21,000,000 + 27,511,000 = 48,511,000 would have said it does.
+  it("fits is judged on the baseline: a heavy platform figure turns an AU-slice fit into a miss", async () => {
+    const measured = {
+      figures: fig({ turso_reads: 21_000_000, turso_writes: 420_000 }),
+      baseline: fig({ turso_reads: 90_000_000, turso_writes: 420_000 }),
+      auCodes: 2000,
+      from: "a",
+      to: "b",
+    };
+    const rep = await loadProjectionReport(db, NOW, { measured });
+    expect(rep.au.turso_reads).toBe(90_000_000);
+    const v = rep.fitsWith.US!;
+    expect(v.fits).toBe(false);
+    expect(v.verdicts.find((x) => x.metric === "turso_reads")).toMatchObject({
+      total: 117_511_000,
+      ok: false,
+    });
+    // the scaling still came from the AU slice: 21,000,000 x 2500 x 22 / (2000 x 21) = 27,500,000 + 11,000
+    expect(rep.markets.find((m) => m.market === "US")!.projected!.turso_reads).toBe(27_511_000);
+  });
+
   it("projects IN and US from the profile caps, off and enabled, and counts the enabled ones in each verdict", async () => {
     const measured = {
       figures: fig({ turso_reads: 21_000_000, turso_writes: 420_000 }),

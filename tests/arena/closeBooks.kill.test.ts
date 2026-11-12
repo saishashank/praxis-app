@@ -348,6 +348,39 @@ describe("the kill closes every open book at the open, with reason market_off", 
   });
 });
 
+describe("the age of the close that stands in (D-1194)", () => {
+  it("a close from the last full session is not stale; one older is counted separately and the oldest date is recorded", async () => {
+    await rollback();
+    const fresh = await kill(); // ZZB's last close is Wed 9 Jan = the session before the Thursday kill
+    expect(fresh.basis).toMatchObject({ open: 1, lastClose: 1, staleClose: 0, oldestCloseD: D2 });
+    const det = JSON.parse(
+      String(
+        (
+          await one("SELECT details_json FROM run_record WHERE concurrency_key = ?", [
+            killKey("IN", KD),
+          ])
+        ).details_json,
+      ),
+    );
+    expect(det.basis).toMatchObject({ staleClose: 0, oldestCloseD: D2 });
+    // a Friday kill with the same last close (Wed): the previous session is Thu, so the Wed close is stale
+    await world();
+    await bar("ZZA", "2030-01-11", 95, 96, 93, 94);
+    await rollback();
+    const stale = await kill("2030-01-11");
+    expect(stale.basis).toMatchObject({ lastClose: 1, staleClose: 1, oldestCloseD: D2 });
+  });
+
+  it("the S2 incident names the stale close when the run could not finish", async () => {
+    await openPos("ZZC", 2n, 50, 51, 49, 50, "O:C"); // no price at all: stays open
+    await rollback();
+    await closeBooksKill(db, { market: "IN", d: "2030-01-11", now: NOW });
+    const inc = await one("SELECT detail_json FROM incident WHERE kind = 'market_kill_incomplete'");
+    const d = JSON.parse(String(inc.detail_json));
+    expect(d).toMatchObject({ remaining: 1, staleClose: 1, oldestCloseD: D2 });
+  });
+});
+
 describe("the market is disabled in the same transaction as the last close row", () => {
   it("run record success and enabled = 0, rollback_at NULL land together; afterwards the guard refuses every write", async () => {
     await rollback();

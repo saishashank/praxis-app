@@ -386,6 +386,16 @@ describe("the two-step rule (AT-71 b)", () => {
     expect(String((await row("IN")).mode)).toBe("data_only");
   });
 
+  it("a stale close (older than five days before the activation day) is refused fx_missing, never converted", async () => {
+    await toDataOnly("IN");
+    await green("IN", FIVE);
+    await latency("IN", 10);
+    await fxRow("FXRINR", "2026-11-14", 55_750_000); // six days before Fri 20 Nov
+    expect(await go("IN", "full")).toEqual({ ok: false, error: "fx_missing" });
+    await fxRow("FXRINR", "2026-11-15", 55_750_000); // five days: the oldest accepted
+    expect(await go("IN", "full")).toMatchObject({ ok: true });
+  });
+
   // IN: A$600 x 55.75 = 33,450 -> /1,000 = 33.45 -> 33 -> Rs 33,000 = 33,000,000,000 micro (half-up to Rs 1,000)
   // US: A$600 x 0.6584 = 395.04 -> /10 = 39.504 -> 40 -> US$400 = 400,000,000 micro; at 0.6583 -> 394.98 -> US$390
   it.each([

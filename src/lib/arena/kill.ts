@@ -64,7 +64,14 @@ export type KillResult = {
   /** Orders cancelled by this run. */
   readonly cancelled: number;
   /** Prices used: the session's own open, or the last known close. */
-  readonly basis: { readonly open: number; readonly lastClose: number };
+  readonly basis: {
+    readonly open: number;
+    readonly lastClose: number;
+    /** Of `lastClose`: closes older than the last full session before D (a stale mark, D-1194). */
+    readonly staleClose: number;
+    /** The date of the oldest close used (null when none was). */
+    readonly oldestCloseD: string | null;
+  };
   /** Positions still open after the run (0 when the market was disabled). */
   readonly remaining: number;
   readonly disabled: boolean;
@@ -96,7 +103,7 @@ const result = (
   sold: 0,
   sleeveClosed: 0,
   cancelled: 0,
-  basis: { open: 0, lastClose: 0 },
+  basis: { open: 0, lastClose: 0, staleClose: 0, oldestCloseD: null },
   remaining: 0,
   disabled: false,
   ...extra,
@@ -135,7 +142,17 @@ export async function closeBooksKill(db: Client, opts: KillOptions): Promise<Kil
   let sold = 0;
   let sleeveClosed = 0;
   let cancelled = 0;
-  const basis = { open: 0, lastClose: 0 };
+  const basis: {
+    open: number;
+    lastClose: number;
+    staleClose: number;
+    oldestCloseD: string | null;
+  } = {
+    open: 0,
+    lastClose: 0,
+    staleClose: 0,
+    oldestCloseD: null,
+  };
   try {
     const priorD = previousTradingDay(opts.d, calendar);
     const data = createMarketData(db, opts.market, opts.d);
@@ -181,7 +198,7 @@ export async function closeBooksKill(db: Client, opts: KillOptions): Promise<Kil
       const killFillIds = new Set<string>();
       const envFor = async (
         code: string,
-      ): Promise<{ env: FillEnv; kind: "open" | "lastClose" } | null> => {
+      ): Promise<{ env: FillEnv; kind: "open" | "lastClose"; closeD: string | null } | null> => {
         if (await data.halted(code, opts.d)) return null;
         const bar = await data.bar(code, opts.d);
         const adv = await data.adv(code, priorD);
@@ -189,14 +206,22 @@ export async function closeBooksKill(db: Client, opts: KillOptions): Promise<Kil
           return {
             env: { bar, advMicro: adv, profile, tickCrossFactor: params.tickCrossFactor },
             kind: "open",
+            closeD: null,
           };
         }
         const last = await data.lastClose(code, priorD);
         if (last === null) return null;
+        // rows-ok: one row through the (market, code, d) key, newest first
+        const dated = await db.execute({
+          sql: "SELECT d FROM price_bar WHERE market = ? AND code = ? AND d <= ? ORDER BY d DESC LIMIT 1",
+          args: [opts.market, code, priorD],
+        });
+        const closeD = dated.rows.length === 0 ? null : text(dated.rows[0]!.d);
         const flat: Bar = { openMicro: last, highMicro: last, lowMicro: last, closeMicro: last };
         return {
           env: { bar: flat, advMicro: adv, profile, tickCrossFactor: params.tickCrossFactor },
           kind: "lastClose",
+          closeD,
         };
       };
       // 3a. the stock positions
@@ -227,6 +252,12 @@ export async function closeBooksKill(db: Client, opts: KillOptions): Promise<Kil
         if (written.written) {
           sold += 1;
           basis[priced.kind] += 1;
+          if (priced.closeD !== null) {
+            if (priced.closeD < priorD) basis.staleClose += 1;
+            if (basis.oldestCloseD === null || priced.closeD < basis.oldestCloseD) {
+              basis.oldestCloseD = priced.closeD;
+            }
+          }
           killFillIds.add(`F1:${orderId}`);
         }
       }
@@ -291,10 +322,19 @@ export async function closeBooksKill(db: Client, opts: KillOptions): Promise<Kil
       await openS2Once(
         db,
         INCIDENT_KILL_INCOMPLETE,
-        { market: opts.market, d: opts.d, remaining },
+        {
+          market: opts.market,
+          d: opts.d,
+          remaining,
+          staleClose: basis.staleClose,
+          oldestCloseD: basis.oldestCloseD,
+        },
         opts.now(),
         opts.notify,
-        `The rollback of ${opts.market} could not sell ${remaining} position(s)`,
+        `The rollback of ${opts.market} could not sell ${remaining} position(s)` +
+          (basis.staleClose > 0
+            ? `; ${basis.staleClose} sold at a close as old as ${basis.oldestCloseD}`
+            : ""),
       );
       return result(opts, "failed", "positions_remaining", {
         sold,

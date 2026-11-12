@@ -22,7 +22,12 @@ import { getConfig } from "@/lib/config/store";
 import { CALENDAR_RULE_MODULES } from "@/lib/data/calendarRules.mjs";
 import { builtMarkets, loadProfile } from "@/lib/market/profile";
 import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
-import { estimateUntrackedTraffic, TURSO_FREE_PLAN } from "./meters";
+import {
+  estimateUntrackedTraffic,
+  latestTursoSample,
+  monthBounds,
+  TURSO_FREE_PLAN,
+} from "./meters";
 
 export const PROJECTION_METRICS = [
   "turso_reads",
@@ -188,14 +193,15 @@ const num = (v: unknown): number => Number(v ?? 0);
 export async function readAuMeasured(
   db: Pick<Client, "execute">,
   now: Date,
-): Promise<{ figures: Figures; auCodes: number; from: string; to: string }> {
+): Promise<{ figures: Figures; baseline?: Figures; auCodes: number; from: string; to: string }> {
   const to = now.toISOString();
   const from = new Date(now.getTime() - DAYS_WINDOW * DAY_MS).toISOString();
   // rows-ok: 30 days of run records through idx_run_record_started (a few thousand rows), Owner page only
   const rec = await db.execute({
     sql: `SELECT SUM(CASE WHEN market = ? THEN rows_read ELSE 0 END) AS r,
                  SUM(CASE WHEN market = ? THEN rows_written ELSE 0 END) AS w,
-                 SUM(CASE WHEN job LIKE 'actions-%' THEN duration_ms ELSE 0 END) AS ms
+                 SUM(CASE WHEN job LIKE 'actions-%' THEN duration_ms ELSE 0 END) AS ms,
+                 SUM(rows_read) AS allr, SUM(rows_written) AS allw
           FROM run_record WHERE started_at >= ? AND started_at < ?`,
     args: [HOME_MARKET, HOME_MARKET, from, to],
   });
@@ -216,18 +222,23 @@ export async function readAuMeasured(
     auCodes = num(c.rows[0]?.n);
   }
   const r = rec.rows[0];
-  return {
-    figures: {
-      turso_reads: num(r?.r),
-      turso_writes: num(r?.w),
-      actions_minutes: Math.ceil(num(r?.ms) / 60_000), // threshold-ok: ms per minute
-      worker_requests: ticks,
-      host_requests: traffic.signedCalls,
-    },
-    auCodes,
-    from,
-    to,
+  // D-1195 (S1 fix): the figure the limits are judged against is what the whole system uses now, not the AU-tagged
+  // slice: the platform sample of the month when there is one, else every job's run records plus the untracked Worker
+  // tick reads and nonce writes, exactly as the Turso meters count (meters.ts). The AU slice stays the scaling source.
+  const sample = await latestTursoSample(db, now, monthBounds(now));
+  const figures = {
+    turso_reads: num(r?.r),
+    turso_writes: num(r?.w),
+    actions_minutes: Math.ceil(num(r?.ms) / 60_000), // threshold-ok: ms per minute
+    worker_requests: ticks,
+    host_requests: traffic.signedCalls,
   };
+  const baseline: Figures = {
+    ...figures,
+    turso_reads: sample !== null ? sample.rowsRead : num(r?.allr) + traffic.workerTickReads,
+    turso_writes: sample !== null ? sample.rowsWritten : num(r?.allw) + traffic.nonceWrites,
+  };
+  return { figures, baseline, auCodes, from, to };
 }
 
 export type MarketProjection = {
@@ -263,6 +274,7 @@ export async function loadProjectionReport(
   ]);
   const limits = limitsOf({ tursoCeilingPct, actionsSoftCeiling });
   const measured = deps.measured ?? (await readAuMeasured(db, now));
+  const baseline = measured.baseline ?? measured.figures;
   const sessionsAu = sessionsInNextMonth(HOME_MARKET, now);
   const markets: MarketProjection[] = [];
   for (const code of builtMarkets()) {
@@ -300,10 +312,10 @@ export async function loadProjectionReport(
     const others = markets
       .filter((x) => x.market !== m.market && x.enabled && x.projected !== null)
       .map((x) => x.projected!);
-    fitsWith[m.market] = fits({ au: measured.figures, markets: [...others, m.projected], limits });
+    fitsWith[m.market] = fits({ au: baseline, markets: [...others, m.projected], limits });
   }
   return {
-    au: measured.figures,
+    au: baseline,
     auCodes: measured.auCodes,
     limits,
     window: { from: measured.from, to: measured.to },

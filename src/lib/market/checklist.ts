@@ -67,7 +67,11 @@ export type ChecklistDeps = {
   /** The quota projection verdict for the market; default: `loadProjectionReport`. */
   quota?: (db: Client, code: string, now: Date) => Promise<{ fits: boolean; text: string }>;
   /** Test seam: the market's source rows (id, status) instead of the seed rows. */
-  sources?: readonly { readonly id: string; readonly status: string }[];
+  sources?: readonly {
+    readonly id: string;
+    readonly status: string;
+    readonly optional?: boolean;
+  }[];
   /** Test seam: the AU MKT-105 item (the real reader needs 60 sessions of planted AU history). */
   au?: (db: Client, now: Date) => Promise<ChecklistItem>;
 };
@@ -149,12 +153,17 @@ async function licenceItem(db: Client, code: string, deps: ChecklistDeps): Promi
   const stored = new Map(have.rows.map((r) => [String(r.source), String(r.status)]));
   // The rows are written when the market leaves `off` (D-1128): until then the seed row is the state that will be
   // written, so a pending seed row blocks and an enabled one does not.
+  // A `disabled` row is a decision only for an optional source; a primary price or calendar source (optional: false in
+  // the seed row) that is disabled leaves the market with no data, so it blocks like a pending one (S1 fix, D-1191).
   const pending: string[] = [];
+  const disabledNeeded: string[] = [];
   for (const s of seeded) {
     const status = stored.get(s.id) ?? s.status;
     if (status === "pending") pending.push(s.id);
+    else if (status === "disabled" && s.optional === false) disabledNeeded.push(s.id);
   }
-  const ok = seeded.length > 0 && pending.length === 0;
+  const open = [...pending, ...disabledNeeded];
+  const ok = seeded.length > 0 && open.length === 0;
   return {
     id: "licence_rows",
     ok,
@@ -163,7 +172,7 @@ async function licenceItem(db: Client, code: string, deps: ChecklistDeps): Promi
         ? "No source rows are defined for this market."
         : ok
           ? `All ${seeded.length} source rows are decided (enabled, with the Owner reference where one is needed, or disabled).`
-          : `${pending.length} of ${seeded.length} source rows are pending: ${named(pending)}.`,
+          : `${open.length} of ${seeded.length} source rows are open: ${named(open)}${disabledNeeded.length > 0 ? ` (${disabledNeeded.length} disabled but needed)` : ""}.`,
     evidence: "docs/source-licence-register.md",
   };
 }
