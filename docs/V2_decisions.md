@@ -737,3 +737,9 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1130 | The kill slot needs no listing (Fable A2 review, note 4): arena-kill:<CODE> is the only Actions slot released without the Owner's slots_enabled list (require... |
 | D-1131 | IN/US slippage buckets come from task A4 (Fable A2 review, note 5): slippage_buckets stays null for IN and US after A2, so stallFloorBpsOf throws for them by... |
 | D-1132 | No robots-permitted free US price source (fill run 2026-11-12): query1/query2.finance.yahoo.com, stooq.com and api.nasdaq.com disallow automated clients in r... |
+| D-1150 | US fee constants superseded (A4, F): a search on 2026-11-13 found the SEC Fee Rate Advisory FY2026 (US$20.60 per million of covered sales from 2026-04-04; US... |
+| D-1151 | Fixed conversion for the figures the extracts cannot give (A4, [VERIFY]): the IN price floors and U2 market-cap floor are AU's at Rs 55 per A$ (A$0.50 -> Rs... |
+| D-1152 | Tier size (A4): IN u1.top = 514, the same share of codes (16.31 %) as AU's 300 of 1,839 (A1 u1_top); |
+| D-1153 | Rule kind components (A4, F, D-1102/D-1103): round: "total_half_up_cent" (IN) rounds the exact total once; round: "per_item_half_up_cent" (US) rounds each it... |
+| D-1154 | Settlement lag threading (A4, F, D-1113): pendingSettlements takes lagSessions (default the home lag, so AU is unchanged); closeBooks.ts reads staticProfile(... |
+| D-1155 | seedForMarket(profile, fxRow) (A4, D-1107): src/lib/arena/seed.ts; fixed returns the amount at rate 1 and no FX row; fx_rounded returns round_half_up(from_am... |
