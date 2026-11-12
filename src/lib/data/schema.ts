@@ -43,6 +43,8 @@ export const AU_COLUMNS = {
     "mode",
     "enabled", // 0034 (M19, D-994)
     "slots_json", // 0034 (M19, D-996)
+    "data_only_since", // 0036 (M20, D-1100)
+    "rollback_at", // 0036 (M20, D-1101)
   ],
   trading_calendar: ["market", "d", "kind", "close_time", "confirmed", "source"],
   instrument: [
