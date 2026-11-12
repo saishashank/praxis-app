@@ -121,14 +121,23 @@ describe("the engines take a market's own table", () => {
     };
     expect(settlementItem(fill, cal, 1).settleD).toBe("2026-03-06");
   });
-  it("the cost profile and slippage buckets of a market come from its seed; IN has none built (M20)", () => {
+  it("the cost profile and slippage buckets of a market come from its seed; IN and US resolve (M20 A4)", () => {
     const au = staticProfile("AU");
     expect(costProfileOfMarket(au)).toEqual(COST_PROFILES.P5);
     expect(Object.keys(costProfilesOfMarket("AU"))).toHaveLength(8);
     expect(slippageBucketsOf(au)).toEqual(SLIPPAGE_BUCKETS);
-    const inProfile = staticProfile("IN");
-    expect(() => costProfileOfMarket(inProfile)).toThrow("not built (M20)");
-    expect(() => slippageBucketsOf(inProfile)).toThrow("not built (M20)");
+    for (const [code, formula] of [
+      ["IN", "IN-P1"],
+      ["US", "US-P1"],
+    ] as const) {
+      const p = staticProfile(code);
+      expect(costProfileOfMarket(p).code).toBe(formula);
+      expect(Object.keys(costProfilesOfMarket(code))).toEqual([formula]);
+      expect(slippageBucketsOf(p)).toHaveLength(4);
+      expect(p.settlementDays).toBe(1);
+    }
+    // a market with no seed table still throws, never a guess
+    expect(() => costProfilesOfMarket("ZZ")).toThrow("not built (M20)");
   });
   it("chartSymbol and parseChartMeta follow the market's suffix, benchmark and currency", () => {
     const inProfile = staticProfile("IN");

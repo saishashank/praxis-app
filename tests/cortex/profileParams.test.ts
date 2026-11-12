@@ -74,7 +74,7 @@ describe("the engines take a market's own value", () => {
 });
 
 describe("cost profiles resolve through the seed registry", () => {
-  it("AU resolves, a market without a table is not built (M20)", () => {
+  it("AU, IN and US resolve; a market without a table is not built (M20)", () => {
     expect(Object.keys(costProfilesOf("AU"))).toEqual([
       "P0",
       "P1",
@@ -85,6 +85,8 @@ describe("cost profiles resolve through the seed registry", () => {
       "P5b",
       "P6",
     ]);
-    expect(() => costProfilesOf("IN")).toThrow("not built (M20)");
+    expect(Object.keys(costProfilesOf("IN"))).toEqual(["IN-P1"]);
+    expect(Object.keys(costProfilesOf("US"))).toEqual(["US-P1"]);
+    expect(() => costProfilesOf("ZZ")).toThrow("not built (M20)");
   });
 });
