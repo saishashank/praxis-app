@@ -4,11 +4,11 @@ Design: `docs/M19_design.md`. Requirements: `docs/M19_requirements.md`. Each sec
 
 ## §1 Literal count (AT-67)
 
-Placeholder (orchestrator). To record: the 80-file list at `2d1bdd4` by the D-991 rule, the exit run of `node scripts/ci/market-literals.mjs --count` (expect "0 files with a literal outside the allow-list" and "0 files hold a quoted AU"), and the allow-list contents. Stream E's measurement on the integrated `build` (`8ed6a6eb`) plus stream E is in D-1078: nine classes, 197 hits in 70 files before the carve-outs of D-1075, 82 in 38 after them, 0 after D-1077 and the 18 entries of D-1076 (126 hits in the allowed folders and files, 1,080 files scanned). The allow-list is `src/lib/market/**`, the two files of `src/lib/market/seed/allow.mjs` and the entries of `EXTRA_ALLOW` in `scripts/ci/market-literals.mjs` (each with its reason).
+Exit tree `d476057d`: `node scripts/ci/market-literals.mjs --count` prints "market-literals: 0 files with a literal outside the allow-list (0 hits)" and "market-literals: 0 files hold a quoted AU (D-991 count)". The measurement path is D-1078: nine classes, 197 hits in 70 files before the carve-outs of D-1075, 82 in 38 after them, 0 after the replacements of D-1077 and the 18 entries of D-1076 (126 hits in the allowed folders and files, 1,080 files scanned). The allow-list is `src/lib/market/**`, the two files of `src/lib/market/seed/allow.mjs` and the entries of `EXTRA_ALLOW` in `scripts/ci/market-literals.mjs`, each with its reason; an unused entry fails the scan. Facts the scan does not see (numeric duplicates, four session times, allow-listed per-market facts) are recorded for M20 in D-1090.
 
 ## §2 Tasks
 
-Placeholder (orchestrator): the stream and task table with merge commits and test files (the M18 format). Stream E commits on `v3/m19-e`: E1 `00306605` (scan, residual replacements), E2 `9a725e92` (AT-68 suite, e2e, production shape, CI steps), then the E3 commits (test map, reports, docs, decisions D-1075 to D-1085).
+Merge commits on `build`: A1 `bc56ab9a`, C `6acbbdf0`, D `181622ef`, B `bfb9c7b8`, A2 `f45b8c8e`, E `a7bc2658`. Integration fixes after the merges: `794b3a61` (e2e state `market-built-off` asserts the M19 shape), `1d83e788` (Worker clock test accepts a dispatch with inputs), `b11c1f23` (batch 1 and the calendar draft write no run record for a market with no row, D-1050), the watchdog slot-time test (D-1053), a Prettier pass, and `d476057d` (Fable exit review). Stream E's own commits: E1 `00306605`, E2 `9a725e92`, E3 `33f50c3c`.
 
 | Task | Files (tests first) | Result |
 | --- | --- | --- |
@@ -18,11 +18,11 @@ Placeholder (orchestrator): the stream and task table with merge commits and tes
 
 ## §3 Identity
 
-Placeholder (orchestrator): the AT-32 and AT-50 baseline hashes and the exit hashes (equal), the AU constants snapshot diff (empty), the AU slot snapshot diff (empty), Fable's review notes per F task. The three identity tests are `tests/acceptance/v3/replayHash.test.ts`, `tests/market/auConstants.test.ts` and `worker/test/auSlots.test.ts`; none of the three baseline files is rewritten by stream E.
+AT-50 baseline `2d14c0033689c291f6a881c48ec818d75948b94d45cf0207e396b873ede885c2` and AT-32 combined `e49410a749c6aa5b3a3d195452ea070a24dcd51cf9606da936274522d1d3883f` (`tests/acceptance/v3/replay-hash.baseline.json`, written at step 0, never rewritten); `tests/acceptance/v3/replayHash.test.ts` is green on the exit tree, so the exit hashes equal them, and AT-32 also asserts the AU `market` row columns. `tests/market/auConstants.test.ts` and `worker/test/auSlots.test.ts` are green; the two snapshot files changed once since step 0, in A1's commit `f3853c6e`, by a Prettier reflow of array wrapping only (values identical, verified by the Fable review), before they were added to `.prettierignore`. Fable exit review (2026-11-12): B, A2, C1, E and byte identity ACCEPTED; follow-ups D-1086 to D-1090 for M20; D-1020 corrected (the script and Worker clients are not yet wrapped; the trigger still refuses).
 
 ## §4 Profile
 
-Placeholder (orchestrator): the seeded field table per market (values, `verify`, `evidence_ref`), the completeness result (AU complete; IN and US incomplete with counts), the `market` projection check. Matrix fixtures: `tests/market/profiles/AU.json`, `IN.json`, `US.json` equal their seeds (`node scripts/market/gen-fixtures.mjs --check`, D-1085).
+Three seeded markets, 40 profile fields each (`tests/market/profile.test.ts`). Completeness (`tests/market/completeness.test.ts`): AU complete; IN and US incomplete by design, 36 of 40 fields valued (four are set at M20: `tiers`, `slippage_buckets`, `sleeve_reality_cap`, `bar_latency_p95_min`) and 0 of 40 verified (every [VERIFY] value awaits its evidence). The `market` projection is checked by `tests/market/projection.test.ts` (AU `slots_json` equals the recorded Worker slots). Matrix fixtures `tests/market/profiles/AU.json`, `IN.json`, `US.json` equal their seeds (`node scripts/market/gen-fixtures.mjs --check`, D-1085).
 
 ## §5 Off in production
 
@@ -30,7 +30,7 @@ Report: [test-reports/AT-68.md](test-reports/AT-68.md). Stream E's part: (a) `wo
 
 ## §6 UI and e-mail
 
-Placeholder (orchestrator): the Markets row rendering per role (`tests/acceptance/v3/at68.test.ts`, `tests/settings/pages.test.tsx`), the e-mail snapshots unchanged, the three currency formats (`tests/view/format.test.ts`). The Markets table now carries a `data-markets-table` attribute (D-1077) so the e2e walk can cut it out.
+The Markets row per role is asserted in `tests/acceptance/v3/at68.test.ts` and `tests/settings/pages.test.tsx` (Owner: IN and US "Built — off in production"; Editor and Viewer: enabled rows only). The e-mail tests are green with AU alone enabled (same SQL, same payload, D-1061). The currency formats are pinned by `tests/view/formatBranches.test.ts` (AU `A$`, `en-IN` lakh grouping, an unregistered code as "CODE 1.50") and the dual-time rule by `tests/preferences/format.test.ts` (AU single Melbourne form on every day, D-1063). The Markets table carries `data-markets-table` (D-1077) for the e2e walk.
 
 ## §7 Acceptance
 
@@ -44,7 +44,7 @@ Placeholder (orchestrator): the Markets row rendering per role (`tests/acceptanc
 
 ## §8 Constraints
 
-Placeholder (orchestrator): Turso at or below 20 per cent (Usage page figure on the exit day; the guard's probe cost measured on one night), zero `OFFSET`, no staging path, `ASX_LIVE` off, `$0`, gitleaks clean, decision index, config reference and architecture model regenerated and checked, migration count tests at 35.
+Turso: the guard adds one primary-key probe per inserted row (`EXPLAIN QUERY PLAN` asserted in `tests/db/0035_m19_market_guard.test.ts`); the cold-isolate Worker cost is four requests instead of three (D-1047), inside the PLT-070 margin; the plan stays on the free tier budget (the production Usage page is read at the first deploy after the PR). No `OFFSET` paging in `src`, `worker/src`, `scripts` or `db` (grep of `OFFSET <n|?>` outside tests: none). No staging path. `ASX_LIVE` is a dashboard variable and stays off. Running cost `$0`. Decision index, config reference, architecture model and steelman readers are checked (`npm run test:architecture`, `test:config-reference`); migration count tests are at 35. Exit tree root suite: 10,004 passed, 2 skipped, 1 load flake (`tests/preferences/page.test.tsx`, 14 of 14 on rerun); Worker suite green; `test:smoke` green; `lint:workflows` 0 findings. `test:hygiene` reports HYG-PRIVATE on `docs/M19_design.md` and `docs/M19_requirements.md` until the Owner approves their allow-list entries. Python tests run only in CI (no Python on the build machine).
 
 ## §9 Owner steps for the PR
 
@@ -52,4 +52,4 @@ None new in M19 beyond the standing V3 list. The PR lists D-994 (`PRAXIS_MARKETS
 
 ## §10 BUILD_SETUP §9
 
-Placeholder (orchestrator): "V3 current milestone" = M19 done; "V3 last step done / next step" = M19 exit / M20 requirements extract.
+"V3 current milestone" = M19 done (local `build` `d476057d`); "V3 last step done / next step" = M19 exit evidence / push `build`, check CI, then M20 requirements extract.
