@@ -40,9 +40,9 @@ jobs:
         with:
           node-version-file: .nvmrc
       - name: Run the source report
-        run: node scripts/market/source-report.mjs --market "$MARKET" --out "$RUNNER_TEMP/source-report/source-report-$MARKET.json"
+        run: node scripts/market/source-report.mjs --market "$MARKET_INPUT" --out "$RUNNER_TEMP/source-report/source-report-$MARKET_INPUT.json"
         env:
-          MARKET: ${{ inputs.market }}
+          MARKET_INPUT: ${{ inputs.market }}
           PRAXIS_MARKETS_ENABLED: ${{ inputs.market }}
       - name: Upload the report (counts, statuses and hashes only)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
