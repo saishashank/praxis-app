@@ -122,10 +122,15 @@ describe("Form 4", () => {
     ).toBeNull();
     expect(noticeOfForm4(parseForm4(`<x>${tx("M", "100", "10")}</x>`))).toBeNull();
   });
-  it("an unreadable number rejects that transaction, never the filing", () => {
+  it("an unreadable number rejects that transaction and the filing writes NO notice (a wrong direction is worse than none)", () => {
     const p = parseForm4(`<x>${tx("P", "abc", "10")}${tx("P", "5", "10")}</x>`);
     expect(p.rejected).toBe(1);
     expect(p.buyMicro).toBe(50_000_000n);
+    expect(noticeOfForm4(p)).toBeNull();
+    // a sale that cannot be read next to a readable purchase must not become a director buy
+    expect(
+      noticeOfForm4(parseForm4(`<x>${tx("P", "5", "10")}${tx("S", "abc", "10")}</x>`)),
+    ).toBeNull();
   });
 });
 
@@ -377,5 +382,33 @@ describe("submissions and filings", () => {
         file: "edgar/data/123/0000000000-26-000001.txt",
       },
     ]);
+  });
+});
+
+describe("review fixes (D-1184, D-1186)", () => {
+  it("a parenthesised acronym is not a ticker: only the Ticker: form counts", () => {
+    const xml =
+      "<rss><item><title>SEC order (SEC) for (CEO)</title><pubDate>Fri, 06 Nov 2026 14:30:00 GMT</pubDate></item></rss>";
+    expect(parseSecSuspensions(xml)).toEqual({ rows: [], skipped: 1 });
+  });
+  it("short ppm rounds half up exactly: 1 / 3 -> 333333, 1 / 2000000 -> 1 (0.5 up)", () => {
+    const text =
+      "Date|Symbol|ShortVolume|ShortExemptVolume|TotalVolume|Market\n20261102|AAA|1|0|3|Q\n20261102|BBB|1|0|2000000|Q\n20261102|CCC|1|0|2000001|Q\n";
+    expect(parseDailyShortVolume(text).rows.map((r) => r.shortPpm)).toEqual([333333, 1, 0]);
+  });
+  it("an 8-K item outside the number format is counted, not silently lost", () => {
+    const s = parseSubmissions({
+      cik: 1,
+      filings: {
+        recent: {
+          accessionNumber: ["0009990000-26-000010"],
+          form: ["8-K"],
+          filingDate: ["2026-11-02"],
+          acceptanceDateTime: ["2026-11-02T21:00:00.000Z"],
+          items: ["2.02,abc,9.01"],
+        },
+      },
+    });
+    expect(s.filings[0]).toMatchObject({ items: ["2.02", "9.01"], itemsDropped: 1 });
   });
 });

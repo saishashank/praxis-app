@@ -151,7 +151,11 @@ export function selectEntries(ranked: readonly Candidate[], ctx: EntryGateContex
     const own: string[] = [];
     // FAM-005 cost gate (D-214, D-215)
     if (facts !== undefined) {
-      const cost = roundTripCost(ctx.costProfile, advValueOf(facts, ctx.advWindow));
+      const cost = roundTripCost(
+        ctx.costProfile,
+        advValueOf(facts, ctx.advWindow),
+        facts.bar.close, // a per-share item (the US TAF) needs the quantity: notional / price (D-1181)
+      );
       const verdict = costGateVerdict(
         ctx.costTable,
         c.family,

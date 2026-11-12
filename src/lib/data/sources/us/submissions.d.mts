@@ -4,6 +4,7 @@ export type Filing = {
   filedDate: string;
   acceptedAt: string | null;
   items: string[];
+  itemsDropped: number;
   description: string | null;
   primaryDocument: string | null;
 };

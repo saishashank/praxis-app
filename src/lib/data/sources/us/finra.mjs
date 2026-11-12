@@ -59,7 +59,7 @@ export function parseDailyShortVolume(text) {
     rows.push({
       code,
       d,
-      shortPpm: Math.round((sv * 1_000_000) / tv),
+      shortPpm: Number((BigInt(sv) * 2_000_000n + BigInt(tv)) / (2n * BigInt(tv))),
       shortVolume: sv,
       totalVolume: tv,
     });

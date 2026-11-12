@@ -58,8 +58,11 @@ const version = (v, from, items) =>
 
 /** Ascending by `effective_from`. Version 1 is A4's profile object itself, unchanged. */
 export const US_COST_VERSIONS = Object.freeze([
-  version(4, "2024-05-22", [sec("0.00278%", "2024-05-22"), taf("0.000166", "8.30", "2024-05-22")]),
-  version(3, "2025-05-14", [taf("0.000166", "8.30", "2025-05-14")]),
+  version(4, "2024-05-22", [
+    sec("0.00278%", "2024-05-22"),
+    taf("0.000166", "8.30", "2024-05-22", "0.01"),
+  ]),
+  version(3, "2025-05-14", [taf("0.000166", "8.30", "2025-05-14", "0.01")]),
   version(2, "2026-01-01", [taf("0.000195", "9.79", "2026-01-01", "0.01")]),
   Object.freeze({
     code: "US-P1",

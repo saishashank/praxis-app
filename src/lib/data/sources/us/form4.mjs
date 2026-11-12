@@ -73,10 +73,12 @@ export function parseForm4(xml) {
 }
 
 /**
- * The notice a parsed filing yields, or null. @param {{ buyMicro: bigint, sellMicro: bigint }} p
+ * The notice a parsed filing yields, or null. @param {{ buyMicro: bigint, sellMicro: bigint, rejected?: number }} p
  * @returns {{ kind: "director_buy" | "director_sell", valueMicro: bigint } | null}
  */
 export function noticeOfForm4(p) {
+  // an unreadable transaction could flip the direction of the sum: no notice rather than a wrong one (D-1184)
+  if (p.rejected > 0) return null;
   if (p.buyMicro === p.sellMicro) return null;
   return p.buyMicro > p.sellMicro
     ? { kind: "director_buy", valueMicro: p.buyMicro }

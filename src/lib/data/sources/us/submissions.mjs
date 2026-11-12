@@ -5,12 +5,13 @@
 import { assertMarketEnabled } from "../../../market/guard.mjs";
 
 /**
- * @typedef {{ accession: string, form: string, filedDate: string, acceptedAt: string | null, items: string[],
+ * @typedef {{ accession: string, form: string, filedDate: string, acceptedAt: string | null, items: string[], itemsDropped: number,
  *             description: string | null, primaryDocument: string | null }} Filing
  * @typedef {{ cik: string, name: string | null, sic: string | null, tickers: string[], filings: Filing[] }} Submissions
  */
 
 const ACCESSION_RE = /^\d{10}-\d{2}-\d{6}$/;
+const ITEM_RE = /^\d\.\d{2}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** EDGAR acceptance text `2026-02-20T16:05:11.000Z` (or without millis) -> ISO UTC, else null. @param {unknown} v */
@@ -43,16 +44,18 @@ export function parseSubmissions(json) {
     const accession = String(acc[i] ?? "");
     const form = String(forms[i] ?? "").trim();
     const filedDate = String(filed[i] ?? "");
+    const rawItems = String(items[i] ?? "")
+      .split(",")
+      .map((s) => s.trim());
     if (!ACCESSION_RE.test(accession) || form === "" || !DATE_RE.test(filedDate)) continue;
     filings.push({
       accession,
       form,
       filedDate,
       acceptedAt: acceptanceInstant(accepted[i]),
-      items: String(items[i] ?? "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter((s) => /^\d\.\d{2}$/.test(s)),
+      items: rawItems.filter((s) => ITEM_RE.test(s)),
+      // an item that does not match the number format is dropped, and counted (the filing stays)
+      itemsDropped: rawItems.filter((s) => s !== "" && !ITEM_RE.test(s)).length,
       description: typeof desc[i] === "string" && desc[i].trim() !== "" ? desc[i].trim() : null,
       primaryDocument: typeof primary[i] === "string" && primary[i] !== "" ? primary[i] : null,
     });

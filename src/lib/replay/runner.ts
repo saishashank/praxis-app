@@ -901,7 +901,7 @@ function evidence(
         slippageBps: bps(e),
       })),
       notionalMicro: cost.notionalMicro,
-      roundTripBrokerageMicro: roundTripBrokerage(cost, cost.notionalMicro),
+      roundTripBrokerageMicro: roundTripBrokerage(cost, cost.notionalMicro, cost.refPriceMicro),
       params: params.stats,
     });
 

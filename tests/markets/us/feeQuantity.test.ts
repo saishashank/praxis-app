@@ -175,3 +175,49 @@ describe("US-P1 by date (D-1150, D-1181)", () => {
     expect(rows.every((r) => r.verified === 0)).toBe(true);
   });
 });
+
+// ---- the entry gates take the price (Fable review, D-1181) -----------------------------------------------------------
+import { selectEntries, type EntryGateContext } from "@/lib/agents/entryGates";
+import { runFamilies } from "@/lib/agents/families";
+import type { Candidate } from "@/lib/agents/families/types";
+import { defaultAgentParams } from "@/lib/agents/params";
+import {
+  CENT,
+  DOLLAR,
+  factsOf,
+  inputsOf,
+  makeBars,
+  rising,
+} from "../../fixtures/agents/families/builders";
+
+describe("selectEntries with US-P1 (the cost gate needs the quantity)", () => {
+  it("does not throw: the gate prices the TAF on notional / the night's close", () => {
+    const p = defaultAgentParams();
+    const oversold = (i: number): bigint => {
+      const base = rising(CENT)(Math.min(i, 296));
+      const k = BigInt(Math.max(0, i - 296));
+      return (base * (100n - 4n * k)) / 100n;
+    };
+    const facts = factsOf("ZZA", "U1", makeBars({ close: oversold }), p);
+    const f4 = runFamilies(inputsOf([facts]), p).candidates.find((x) => x.family === "F4")!;
+    const ctx: EntryGateContext = {
+      entry: p.entry,
+      advWindow: p.windows.adv,
+      costProfile: costProfilesOfMarket("US")["US-P1"]!,
+      factsOf: (code) => (code === "ZZA" ? facts : undefined),
+      heldCodes: [],
+      cashMicro: 10_000n * DOLLAR,
+    };
+    expect(() => selectEntries([{ ...f4, code: "ZZA" } as Candidate], ctx)).not.toThrow();
+  });
+});
+
+describe("the older TAF versions keep the US$0.01 per-trade minimum (Fable review)", () => {
+  it("a sell of 30 shares at US$1 under the 2024 and 2025 versions costs at least the minimum", () => {
+    // TAF 30 x 0.000166 = 0.00498 -> min 0.01; SEC (2024 only) 30 x 0.0000278 = 0.000834 -> 0.00
+    const p4 = costProfileAsOf("US", P, "2025-01-15");
+    const p3 = costProfileAsOf("US", P, "2025-08-01");
+    expect(feeFor(p4, USD(30n), "sell", { quantity: 30n })).toBe(10_000n);
+    expect(feeFor(p3, USD(30n), "sell", { quantity: 30n })).toBe(10_000n);
+  });
+});

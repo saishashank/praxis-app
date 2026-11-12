@@ -4,7 +4,7 @@
 //     (T5) are `luld`; the SEC trading suspension (H10) is `suspension`; every other single-issue reason is `halt`;
 //     a market-wide circuit breaker (MWC*) names no issue and is skipped;
 //   - the SEC trading-suspension feed (RSS): one `suspension` per item, the ticker taken from the text when it carries
-//     one (`Ticker: XYZ` or a `(XYZ)` tag), otherwise skipped and counted. A suspension has no resumption instant in
+//     one (the `Ticker: XYZ` form only, a bare parenthesised acronym is not a ticker), otherwise skipped and counted. A suspension has no resumption instant in
 //     the feed, so `resumed_at` stays NULL until a later run sets it (the table allows that one update).
 // Times are converted from the exchange zone (passed in: the profile's `tz`) to UTC instants. Nothing here is a fill
 // rule: the models in `cortex/states/luld.ts` read the rows. Pure parsing, plus one writer behind `assertMarketEnabled`.
@@ -123,7 +123,7 @@ export function parseSecSuspensions(xml) {
   for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)) {
     const item = m[1];
     const text = `${tag(item, "title") ?? ""} ${tag(item, "description") ?? ""}`;
-    const tk = /Ticker:?\s*([A-Z][A-Z.]{0,5})\b/.exec(text) ?? /\(([A-Z][A-Z.]{0,5})\)/.exec(text);
+    const tk = /Ticker:?\s*([A-Z][A-Z.]{0,5})\b/.exec(text);
     const pub = tag(item, "pubDate");
     const t = pub === null ? NaN : Date.parse(pub);
     if (tk === null || !Number.isFinite(t)) {

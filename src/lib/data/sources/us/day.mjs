@@ -445,6 +445,7 @@ export async function runDay(db, o) {
       let ann = 0;
       let cats = 0;
       let sic = 0;
+      let dropped = 0;
       let skipped = 0;
       const classify = (item) => classifyItem(CATEGORY_MAP, item);
       for (const s of feeds.submissions ?? []) {
@@ -453,11 +454,21 @@ export async function runDay(db, o) {
         if (await writeSicGroup(db, market, s.code, subs.sic)) sic += 1;
         const c = announcementsFromSubmissions(subs, s.code, { since: addDays(d, -3) });
         skipped += c.skippedNoTime;
+        const since = addDays(d, -3);
+        for (const f of subs.filings)
+          if (f.acceptedAt !== null && f.acceptedAt.slice(0, 10) >= since)
+            dropped += f.itemsDropped;
         const w = await writeAnnouncements(db, market, c.rows, { classify, now });
         ann += w.inserted;
         cats += w.categories;
       }
-      return { announcements: ann, categories: cats, sic_updates: sic, skipped_no_time: skipped };
+      return {
+        announcements: ann,
+        categories: cats,
+        sic_updates: sic,
+        skipped_no_time: skipped,
+        items_dropped: dropped,
+      };
     });
 
     await guarded("notices", async () => {

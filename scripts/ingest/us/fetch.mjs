@@ -118,7 +118,7 @@ export async function fetchNight(o) {
       submissions[code] = json;
       n += 1;
       for (const f of parseSubmissions(json).filings) {
-        const isNotice = f.form === "4" || f.form === "4/A" || isSchedule13(f.form);
+        const isNotice = f.form === "4" || isSchedule13(f.form);
         if (!isNotice || f.filedDate !== o.request.end || f.primaryDocument === null) continue;
         try {
           documents[f.accession] = await edgar.getText(

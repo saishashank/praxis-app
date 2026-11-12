@@ -134,6 +134,8 @@ export type CostSetup = {
   readonly buckets: readonly SlippageBucket[];
   readonly stressProfile: CostProfile;
   readonly stressBuckets: readonly SlippageBucket[];
+  /** A reference close for a per-share fee item (the US TAF): the quantity is notional / price (D-1181). */
+  readonly refPriceMicro?: bigint;
 };
 
 /** The absolute-gate profile of ARN-081 / VAL-110 (i). */

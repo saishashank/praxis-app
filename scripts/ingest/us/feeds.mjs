@@ -32,7 +32,7 @@ export function buildFeeds(input) {
     for (const f of parseSubmissions(json).filings) {
       const xml = input.documents?.[f.accession];
       if (xml === undefined || f.acceptedAt === null) continue;
-      if (f.form === "4" || f.form === "4/A") {
+      if (f.form === "4") {
         feeds.form4.push({ code, accession: f.accession, acceptedAt: f.acceptedAt, xml });
       } else if (isSchedule13(f.form)) {
         feeds.schedule13.push({
