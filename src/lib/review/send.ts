@@ -29,6 +29,7 @@ import { emailEnvName, sendEmail, type SendOutcome } from "@/lib/email/send";
 import type { EnvName } from "@/lib/email/templates/core";
 import { notifyIncident } from "@/lib/incidents/notify";
 import { enabledMarkets } from "@/lib/market/profile";
+import { withMarketSections } from "./marketSections";
 import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import {
   assembleReview,
@@ -235,7 +236,8 @@ export async function runReviewSend(ctx: ReviewSendCtx, d: string): Promise<Revi
     return { ...base, status: "suppressed_off", reason: "no_app_url" };
   }
   const today = melbourneDate(now);
-  // One review per date, built for the first enabled market until the per-market sections of M20 (D-1061).
+  // One review per date, built for the first enabled market; every further enabled market that trades on the date
+  // adds its own section (D-1061, D-1124, M20): with one market the review is exactly what it was.
   const markets = await enabledMarkets(db);
   if (markets.length === 0) return { ...base, status: "paused", reason: "no_market" };
   const minute = melbourneMinute(now);
@@ -264,7 +266,7 @@ export async function runReviewSend(ctx: ReviewSendCtx, d: string): Promise<Revi
     let created = false;
     if (prior === "sent" && !have) {
       // Only a partial or the watchdog's minimal mail went out: keep the best version in the app.
-      const again = await buildFacts(db, o);
+      const again = await withMarketSections(db, await buildFacts(db, o), o, markets);
       if (isComplete(again) || newest === null) {
         latest = await assembleReview(db, { ...o, built: again });
         created = latest.created && (latest.kind === "full" || latest.kind === "non_trading");
@@ -282,7 +284,7 @@ export async function runReviewSend(ctx: ReviewSendCtx, d: string): Promise<Revi
     };
   }
 
-  const built: BuiltFacts = await buildFacts(db, o);
+  const built: BuiltFacts = await withMarketSections(db, await buildFacts(db, o), o, markets);
   if (!isComplete(built) && !lateDay && minute < t.partial) {
     return { ...base, reason: "inputs_missing" };
   }

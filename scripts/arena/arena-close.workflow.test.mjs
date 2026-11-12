@@ -21,9 +21,29 @@ const SHA_USES = /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/;
 
 test("workflow_dispatch only: no schedule, push or pull request trigger (PLT-015)", () => {
   assert.equal(wf.name, "Arena close the books (batch 2a)");
-  assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"]); // M19 C2: the only input is `market`
+  assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"]); // M19 C2: `market`; M20 S1: and `kill`
   assert.deepEqual(wf.permissions, {});
   assert.doesNotMatch(read(FILE), /^\s*(schedule|push|pull_request\w*):/m);
+});
+
+test("the dispatch inputs are `market` and `kill`, both optional text (M20 S1, D-1101)", () => {
+  const inputs = wf.on.workflow_dispatch.inputs;
+  assert.deepEqual(Object.keys(inputs), ["market", "kill"]);
+  for (const k of ["market", "kill"]) {
+    assert.equal(inputs[k].type, "string");
+    assert.equal(inputs[k].required, false);
+    assert.equal(inputs[k].default, "");
+  }
+  // both inputs reach the script only through env (never an expression inside the script, SEC-110)
+  for (const j of [wf.jobs.production, wf.jobs.staging]) {
+    const step = j.steps.find((s) => s.name === "Close the books");
+    assert.equal(step.env.MARKET_INPUT, "${{ inputs.market }}");
+    assert.equal(step.env.KILL_INPUT, "${{ inputs.kill }}");
+    assert.equal(
+      step.run,
+      'node scripts/arena/close-books.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"} ${KILL_INPUT:+--kill "$KILL_INPUT"}',
+    );
+  }
 });
 
 test("one production job on release, environment production without a deployment record", () => {
@@ -66,7 +86,7 @@ test("the database secrets appear only in env of the one closing step, the prod 
   assert.equal(s.env.COMMIT_SHA, "${{ steps.approved.outputs.sha }}");
   assert.equal(
     s.run,
-    'node scripts/arena/close-books.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"}',
+    'node scripts/arena/close-books.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"} ${KILL_INPUT:+--kill "$KILL_INPUT"}',
   );
   assert.ok(!String(s.run).includes("secrets."));
   assert.equal(s.with, undefined);

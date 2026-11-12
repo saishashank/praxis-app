@@ -8,6 +8,8 @@ import { requireUser } from "@/lib/auth/guard";
 import { mainDb } from "@/lib/db/client";
 import { formatMelbourne } from "@/lib/health/format";
 import { userPreferences } from "@/lib/preferences/read";
+import { ProjectionSection } from "./ProjectionSection";
+import { loadProjectionReport, type ProjectionReport } from "@/lib/usage/projection";
 import { loadTursoSplit, type TursoSplit, type TursoSplitRow } from "@/lib/ui/loaders/usage";
 import { loadBakeoffResults, type BakeoffView } from "@/lib/ui/loaders/usageBakeoff";
 import { loadLlmUsage, type LlmCounts, type LlmUsage } from "@/lib/ui/loaders/usageLlm";
@@ -133,6 +135,12 @@ export default async function UsagePage() {
   } catch {
     split = null; // the section says so below; no error details
   }
+  let projection: ProjectionReport | null = null;
+  try {
+    projection = await loadProjectionReport(mainDb(), now);
+  } catch {
+    projection = null; // the section says so below; no error details
+  }
   let llm: LlmUsage | null = null;
   try {
     llm = await loadLlmUsage(
@@ -188,6 +196,8 @@ export default async function UsagePage() {
       )}
 
       <TursoSplitSection split={split} />
+
+      <ProjectionSection report={projection} />
 
       <LlmSection llm={llm} />
 
