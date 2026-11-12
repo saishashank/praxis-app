@@ -61,6 +61,7 @@ import {
   type StateRef,
 } from "./night";
 import { staticProfile } from "@/lib/market/staticProfile.mjs";
+import { stageTablesFor } from "./stageTables.mjs";
 import { runNight } from "./night";
 import { profileReaders } from "./profileReaders";
 import { buildAsOfView } from "./pit/asOfView";
@@ -540,12 +541,10 @@ export async function loadStageRows(db: Client, o: LoadOptions): Promise<StageRo
     if (!industry.has(code)) industry.set(code, [{ asOf: first, industry: text(r.industry) }]);
   }
 
-  // M19 (D-1016): the market-profile configuration tables (0034) are not part of what a night reads, so they
-  // are left out of the schema hash; the AU manifests stay byte-identical to the pre-M19 baseline (D-1007).
-  const names = await db.execute(
-    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'market_profile%' ORDER BY name",
-  );
-  const schemaSha = sha256Hex(names.rows.map((r) => text(r.name)).join(","));
+  // M20 (D-1116, closing D-1016): the schema hash covers a pinned table list, not a scan of the database, so a
+  // migration that adds a table does not move it. The base list is the schema-35 set (the AU manifests and the AT-32
+  // baseline stay byte-identical, D-1007); a market's rule-set tables are added for that market only.
+  const schemaSha = sha256Hex(stageTablesFor(profile).join(","));
 
   const sum = <T>(m: ReadonlyMap<string, readonly T[]>): number => {
     let n = 0;
