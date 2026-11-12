@@ -2607,6 +2607,7 @@
       "attrs": {
         "files": [
           "src/lib/data/quotes/fetch.ts",
+          "src/lib/data/sources/in/yahooNs.mjs",
           "src/lib/market/seed/in/sources.mjs",
           "src/lib/market/seed/us/sources.mjs"
         ]
@@ -2800,9 +2801,10 @@
       "views": [
         "platform"
       ],
-      "source": "src/lib/market/seed/in/sources.mjs",
+      "source": "src/lib/data/sources/in/announcements.mjs",
       "attrs": {
         "files": [
+          "src/lib/data/sources/in/announcements.mjs",
           "src/lib/market/seed/in/sources.mjs"
         ]
       }

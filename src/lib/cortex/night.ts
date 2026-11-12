@@ -64,6 +64,7 @@ import {
 import type { AngleCluster, AngleDef, AngleStatus, AngleValue } from "./angles/types";
 import { benchmarkIndexOf, staticProfile } from "@/lib/market/staticProfile.mjs";
 import { costPerOrder, type CostPerOrder } from "./economics/cost";
+import { marketMoney } from "@/lib/arena/marketMoney";
 import { anglesForProfile } from "./profileReaders";
 import { breakEvenCard } from "./economics/breakEven";
 import { rankCandidates, type RankCandidate } from "./economics/rank";
@@ -86,7 +87,6 @@ import {
   L0_CODE_LABEL,
   STOP_CAP_LABEL,
   L0_NIGHT_LABEL,
-  MIN_MARKETABLE_PARCEL_MICRO,
   NOT_ENOUGH_HISTORY_LABEL,
   WARMING_UP_LABEL,
   type Exposure,
@@ -126,7 +126,7 @@ export type BookState = {
   readonly positions: readonly BookPosition[];
   /** Cash whose settlement is complete at the decision close. */
   readonly settledCashMicro: Micro;
-  /** Unsettled fills (sale receipts, buy payables) with their T+2 sessions (`pendingSettlements`). */
+  /** Unsettled fills (sale receipts, buy payables) with their settlement sessions (`pendingSettlements` with the market's lag: AU T+2, IN T+1; D-1154). */
   readonly pending?: readonly SettlementItem[];
   readonly navMicro: Micro;
   readonly costProfile: CostProfile;
@@ -788,6 +788,7 @@ function evaluateCandidate(
   halfSize = regimeGate.halfSize || risk.flag; // D7 sizing: a heavily shorted name gets the smaller parcel (D-747)
   const cashIn = halfSize ? scaleHalf(deployable) : deployable;
   const navIn = halfSize ? scaleHalf(book.navMicro) : book.navMicro;
+  const money = marketMoney(inputs.view.market); // D-1154: the market's parcel, buckets and tick grid
   sizing = sizeEntry({
     settledCashMicro: cashIn,
     navMicro: navIn,
@@ -797,9 +798,11 @@ function evaluateCandidate(
     tier,
     profile: book.costProfile,
     feeContext: book.feeContext,
+    minParcelMicro: money.parcelMicro,
+    buckets: money.buckets,
+    tickTable: money.tickTable,
   });
-  const notional =
-    sizing.orderValueMicro > 0n ? sizing.orderValueMicro : MIN_MARKETABLE_PARCEL_MICRO;
+  const notional = sizing.orderValueMicro > 0n ? sizing.orderValueMicro : money.parcelMicro;
   cost = costPerOrder({
     profile: book.costProfile,
     notionalMicro: notional,
@@ -807,6 +810,8 @@ function evaluateCandidate(
     tier,
     advMicro: f.advValueMicro,
     feeContext: book.feeContext,
+    buckets: money.buckets,
+    tickTable: money.tickTable,
   });
   step(
     "G05_cost",
@@ -901,6 +906,7 @@ function evaluateCandidate(
     entryFeeMicro: sizing.brokerageMicro,
     halfSize,
     sizing,
+    parcelMicro: money.parcelMicro,
   });
   if (!step("G12_settled_cash", cash)) return done("G12_settled_cash");
   return done(null);
@@ -1136,7 +1142,8 @@ export function runNight(inputs: NightInputs): NightOutput {
   }
   const deployableOf = (b: BookState): Micro =>
     deployableCash({ settledCashMicro: b.settledCashMicro, pending: b.pending ?? [] }, fillD);
-  const cashHolding = (b: BookState): boolean => deployableOf(b) >= MIN_MARKETABLE_PARCEL_MICRO;
+  const cashHolding = (b: BookState): boolean =>
+    deployableOf(b) >= marketMoney(inputs.view.market).parcelMicro;
 
   if (reason !== null) {
     const night = { status: "abstain_all", reason } as const;

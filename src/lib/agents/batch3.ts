@@ -36,7 +36,7 @@ import {
   loadSleeveConfig,
   sleeveConfigFrom,
 } from "@/lib/arena/closeBooks";
-import { COST_PROFILES } from "@/lib/arena/costs";
+import { cohortCostProfile } from "@/lib/arena/costs";
 import { recostRowsFor } from "@/lib/arena/recost";
 import { parseCohortParams } from "@/lib/arena/cohort";
 import { loadExecutions } from "@/lib/arena/cohortWriter";
@@ -645,7 +645,7 @@ async function recheckCohort(
     },
     sleeveUnrealFor: () => sleeveUnreal,
     sleeveLiquidationCostFor: () => 0n,
-    profile: COST_PROFILES[params.costProfile],
+    profile: cohortCostProfile(params),
     tickCrossFactor: params.tickCrossFactor,
   };
   return checkCohortBooks(books, {

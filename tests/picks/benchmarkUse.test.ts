@@ -36,6 +36,8 @@ const NON_COMPARISON_READERS = new Set([
   "lib/data/index/indexBars.mjs",
   "lib/data/sources/us/index.mjs", // M20 US1 (D-1188): the US manual index CSV writer, ingest plumbing like indexBars.mjs, not a comparison
   "lib/replay/snapshotWorld.ts",
+  "lib/data/sources/in/index.mjs", // M20 IN1: parses the manual index CSV into index_bar rows; a writer, not a comparison
+  "lib/data/sources/in/day.mjs", // M20 IN1: the India batch 1 inserts those rows; a writer, not a comparison
   "lib/cortex/stageTables.mjs", // D-1116: names index_bar in the pinned schema-hash list; reads nothing
   "lib/cortex/stage.ts", // M15: index levels into the Cortex as-of world (regime, US index known-time), not a comparison
   "lib/ui/loaders/company.ts",

@@ -750,6 +750,9 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1153 | Rule kind components (A4, F, D-1102/D-1103): round: "total_half_up_cent" (IN) rounds the exact total once; round: "per_item_half_up_cent" (US) rounds each it... |
 | D-1154 | Settlement lag threading (A4, F, D-1113): pendingSettlements takes lagSessions (default the home lag, so AU is unchanged); closeBooks.ts reads staticProfile(... |
 | D-1155 | seedForMarket(profile, fxRow) (A4, D-1107): src/lib/arena/seed.ts; fixed returns the amount at rate 1 and no FX row; fx_rounded returns round_half_up(from_am... |
+| D-1156 | Recorded-day reader per market, lower-case folders (IN1, S1 hand-off a, D-1119): readRecordedDay(dir, { date, market }) and recordedRootOf(market) read recor... |
+| D-1157 | ARN-119 first posting (IN1, S1 hand-off b, D-1107): ensureCohorts (the close-books night's cohort start stage) reads the FX close stored by the switch to ful... |
+| D-1158 | Band lock has no clock (IN1, Fable review, D-1109, D-1163, D-1169): an exit on a code stuck at its LOWER circuit waits indefinitely at the locked mark, becau... |
 | D-1160 | Filing instants in the as-filed reader (A5, D-1111): a company-facts entry carries only the filing DATE, so a date-only filed_at is stored as the END of that... |
 | D-1161 | Company-facts parsing (A5, DAT-226): one fundamental_fact row per (concept, period end, accession); where a filing lists one period end for several durations... |
 | D-1162 | US halt model (A5, D-1110 F): stepHalt takes an optional HaltModel (viewFor, notices, noticeKind); with none it is the M15 machine unchanged (AU hashes). |
@@ -760,6 +763,16 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1167 | Data limits (A5, D-1115, D-1132): the survivorship caveat text and its lapse rule live in src/lib/market/seed/dataLimits.mjs, keyed by market, so reportCavea... |
 | D-1168 | Labels (A5, DAT-247, D-1121): label_item is read as the newest row per (source, ann_id); the count that gates evaluation is distinct labelled items per marke... |
 | D-1169 | Band locks are symmetric (A5, Fable review, D-1109): the model refuses every fill on a session that closes at either limit. |
+| D-1170 | Shared A4 carry-over closed (IN1, F, D-1154 items 1-4; the commit "M20 IN1 shared"): one module, src/lib/arena/marketMoney.ts, gives a market's settlement la... |
+| D-1171 | India macro rows are parsed and counted, not stored (IN1, DAT-243): macro_series.source is CHECK-limited to ('rba','abs') (migration 0033) and 0036 did not w... |
+| D-1172 | FAM-005 cost-gate notional per market (IN1, follow-on of D-1154 item 3): roundTripCost and selectEntries (EntryGateContext.market) take the market's notional... |
+| D-1173 | AT-69 gate-only clause with the index not pulled (IN1, D-1132): the Nifty 50 and India VIX series are "not pulled" (Yahoo is refused by robots). |
+| D-1174 | The announcement classifier moved to plain ESM (IN1): classify and writeAnnouncementCategory are now src/lib/market/classifyCore.mjs (+ .d.mts), logic unchan... |
+| D-1175 | Band lock wired (IN1, D-1109, D-1163, D-1169, A5 note): |
+| D-1176 | India batch 1 (IN1, D-1127, D-1125): sources/in/day.mjs prepareDay and runDay (calendar by isWalkDay, instruments, the universe snapshot with the market's ti... |
+| D-1177 | Recorded fixtures (IN1, D-1119, D-1092): praxis-app-fixtures/recorded/in/<date>/ for the five consecutive sessions 2026-11-05, 06, 09, 11 and 12 (2026-11-10... |
+| D-1178 | AT-M report (IN1, D-1120): scripts/market/at-m-report.mjs --market IN/US --evidence <dir> writes docs/test-reports/AT-M-<CODE>.md from evidence files (source... |
+| D-1179 | Calibration IN not run (IN1, D-1114, D-1115, D-1132): the data repository's calibrate is a skeleton (the generalised M15 modules "come later"), and the extra... |
 | D-1180 | US sources and scripts (US1, D-1127, D-1092): the fetchers under src/lib/data/sources/us/ are plain ESM with .d.mts types (edgar, submissions, filings8k, for... |
 | D-1181 | US-P1 by date and the fee quantity (US1, F, D-1150, D-1154 item 5): src/lib/market/seed/us/costVersions.mjs holds four dated versions of US-P1 (2024-05-22: S... |
 | D-1182 | US classification, no migration (US1, D-1112, D-1165, A5 review note): submissions.mjs writeSicGroup writes the two-digit SIC group into instrument.industry... |

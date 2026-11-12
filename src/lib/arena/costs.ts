@@ -7,6 +7,7 @@
 import { type Micro } from "@/lib/money/micro";
 import { HOME_MARKET, type MarketProfile } from "@/lib/market/profileCore.mjs";
 import { costProfilesOf } from "@/lib/market/staticProfile.mjs";
+import { builtMarkets } from "@/lib/market/seed/index.mjs";
 import type { AuCostProfile, AuFeeRule } from "@/lib/market/seed/au/costProfiles.mjs";
 import type {
   ComponentItem,
@@ -206,6 +207,43 @@ export function costProfileOfMarket(profile: MarketProfile): CostProfile {
 export const COST_PROFILES: Readonly<Record<CostProfileCode, CostProfile>> = costProfilesOfMarket(
   HOME_MARKET,
 ) as Readonly<Record<CostProfileCode, CostProfile>>;
+
+/**
+ * Every cost-profile code of every built market (AU P0..P6, IN-P1, US-P1; M20 IN1, D-1170): what the
+ * `cost_profile_default` key may name. AU's list stays first and unchanged.
+ */
+export function allMarketCostProfileCodes(): readonly string[] {
+  const out: string[] = [...COST_PROFILE_CODES];
+  for (const m of builtMarkets()) {
+    for (const code of Object.keys(costProfilesOfMarket(m)))
+      if (!out.includes(code)) out.push(code);
+  }
+  return out;
+}
+
+/**
+ * The profile a stored cohort prices with: its own market's table by the code its params carry (AU `P5`, IN `IN-P1`,
+ * US `US-P1`; D-1170). Throws for a code the market does not have, never falls back to another market's.
+ */
+export function cohortCostProfile(p: {
+  readonly market: string;
+  readonly costProfile: string;
+}): CostProfile {
+  const found = costProfilesOfMarket(p.market)[p.costProfile];
+  if (found === undefined) {
+    throw new RangeError(`unknown cost profile ${p.costProfile} for market ${p.market}`);
+  }
+  return found;
+}
+
+/** A profile by code across the built markets (codes are unique: P0..P6, IN-P1, US-P1); for a stored `sleeve_json`. */
+export function costProfileByCode(code: string): CostProfile {
+  for (const m of builtMarkets()) {
+    const found = costProfilesOfMarket(m)[code];
+    if (found !== undefined) return found;
+  }
+  throw new RangeError(`unknown cost profile ${code}`);
+}
 
 export function isCostProfileCode(value: unknown): value is CostProfileCode {
   return (COST_PROFILE_CODES as readonly unknown[]).includes(value);

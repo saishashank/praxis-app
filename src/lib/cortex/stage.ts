@@ -28,7 +28,7 @@ import { controlStates } from "@/lib/agents/controls";
 import type { LimitFillOutcome } from "@/lib/arena/fills";
 import { cardIdOf } from "@/lib/agents/cards";
 import { assertBar } from "@/lib/arena/fills";
-import { COST_PROFILES } from "@/lib/arena/costs";
+import { COST_PROFILES, cohortCostProfile } from "@/lib/arena/costs";
 import { carriesSleeve, parseCohortParams, sha256Hex, type CohortParams } from "@/lib/arena/cohort";
 import { loadExecutions, loadUnresolvedCohorts } from "@/lib/arena/cohortWriter";
 import type { CorpActionRecord } from "@/lib/arena/corpActions";
@@ -60,6 +60,7 @@ import {
   type NightOutput,
   type StateRef,
 } from "./night";
+import { marketMoney } from "@/lib/arena/marketMoney";
 import { homeProfile, staticProfile } from "@/lib/market/staticProfile.mjs";
 import { groupOf } from "./gates/portfolio";
 import { stageTablesFor } from "./stageTables.mjs";
@@ -657,9 +658,14 @@ export async function loadBookStates(
       executionId: exec.id,
       positions,
       settledCashMicro: balancesFromRows(rows, o.d).cash_settled,
-      pending: pendingSettlements(fills as LedgerFill[], settled, o.calendar),
+      pending: pendingSettlements(
+        fills as LedgerFill[],
+        settled,
+        o.calendar,
+        marketMoney(o.market).lagSessions, // D-1154: IN settles T+1; Cortex and the ledger must agree
+      ),
       navMicro: toBig(nav.rows[0]!.nav_micro),
-      costProfile: COST_PROFILES[params.costProfile],
+      costProfile: cohortCostProfile(params),
       sessionsSinceGoLive: Number(navDays.rows[0]?.n ?? 0),
     });
   }
@@ -1585,7 +1591,7 @@ export async function scoreOutcomes(
     barCache.set(code, list);
     return list;
   };
-  const profileCache = new Map<string, (typeof COST_PROFILES)[keyof typeof COST_PROFILES]>();
+  const profileCache = new Map<string, ReturnType<typeof cohortCostProfile>>();
   const profileOf = async (bookId: string) => {
     const hit = profileCache.get(bookId);
     if (hit !== undefined) return hit;
@@ -1596,7 +1602,7 @@ export async function scoreOutcomes(
     const profile =
       rs.rows.length === 0
         ? COST_PROFILES.P5
-        : COST_PROFILES[parseCohortParams(text(rs.rows[0]!.params_json)).costProfile];
+        : cohortCostProfile(parseCohortParams(text(rs.rows[0]!.params_json)));
     profileCache.set(bookId, profile);
     return profile;
   };

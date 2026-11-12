@@ -9,7 +9,22 @@
 import { MIN_MARKETABLE_PARCEL_MICRO } from "@/lib/arena/sizing";
 import type { CostProfile } from "@/lib/arena/costs";
 import { divFloor } from "@/lib/money/rational";
-import { costGateVerdict, roundTripCost, type CostGateTable } from "./costGate";
+import { marketMoney } from "@/lib/arena/marketMoney";
+import {
+  COST_GATE_NOTIONAL_MICRO,
+  costGateVerdict,
+  roundTripCost,
+  type CostGateTable,
+} from "./costGate";
+
+/** The FAM-005 notional and buckets of a market: A$600 scaled by parcel floor over the home parcel floor (D-1172). */
+function costGateMoney(market: string) {
+  const m = marketMoney(market);
+  return {
+    notionalMicro: (COST_GATE_NOTIONAL_MICRO * m.parcelMicro) / MIN_MARKETABLE_PARCEL_MICRO,
+    buckets: m.buckets,
+  };
+}
 import type { EntryParams } from "./params";
 import type { Candidate, CodeFacts } from "./families/types";
 
@@ -41,6 +56,11 @@ export type EntryGateContext = {
    * become the first leg that FAM-006 measures the next candidate against.
    */
   readonly noPosition?: ReadonlySet<string>;
+  /**
+   * The market whose money constants apply (D-1154, D-1172): its parcel floor (the FAM-009 two-parcel test), slippage
+   * buckets and the FAM-005 notional (A$600 scaled by the market's parcel floor over the home one). Absent = the home market.
+   */
+  readonly market?: string;
 };
 
 export type EntrySelection = {
@@ -155,6 +175,7 @@ export function selectEntries(ranked: readonly Candidate[], ctx: EntryGateContex
         ctx.costProfile,
         advValueOf(facts, ctx.advWindow),
         facts.bar.close, // a per-share item (the US TAF) needs the quantity: notional / price (D-1181)
+        ctx.market === undefined ? undefined : costGateMoney(ctx.market),
       );
       const verdict = costGateVerdict(
         ctx.costTable,
@@ -195,7 +216,9 @@ export function selectEntries(ranked: readonly Candidate[], ctx: EntryGateContex
       own.push(...[...seen].sort());
     }
     // FAM-009 (D-220): a half-size candidate that cannot clear two parcels abstains
-    if (c.halfSize && cash < 2n * MIN_MARKETABLE_PARCEL_MICRO) {
+    const parcel =
+      ctx.market === undefined ? MIN_MARKETABLE_PARCEL_MICRO : marketMoney(ctx.market).parcelMicro;
+    if (c.halfSize && cash < 2n * parcel) {
       skipped.set(c, ABSTAIN_SHOCK_REASON);
       continue;
     }

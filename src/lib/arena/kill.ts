@@ -42,6 +42,7 @@ import {
 } from "./ledger";
 import { loadLedgerFills, loadLedgerRows, writeLedgerTxn } from "./ledgerWriter";
 import { createMarketData } from "./marketData";
+import { marketMoney } from "./marketMoney";
 import { derivePositions } from "./nav";
 import { quoteSleeveExit } from "./sleeve";
 import { loadSleeveTrades, writeSleeveClose } from "./sleeveWriter";
@@ -127,6 +128,7 @@ export async function closeBooksKill(db: Client, opts: KillOptions): Promise<Kil
   const pending = row.rollback_at !== null && row.rollback_at !== undefined;
   const reason = text(row.mode) !== "off" || !pending ? "kill_not_pending" : null;
   const calendar = await loadCalendar(db, opts.market);
+  const money = marketMoney(opts.market); // D-1170: the market's buckets and tick grid in every kill fill
   const dayState = gateDayStatus(opts.d, calendar, true);
   const refused = reason ?? (dayState === "open" ? null : "non_trading_day");
   if (refused !== null) return recordSkip(db, opts, refused);
@@ -204,7 +206,14 @@ export async function closeBooksKill(db: Client, opts: KillOptions): Promise<Kil
         const adv = await data.adv(code, priorD);
         if (bar !== null) {
           return {
-            env: { bar, advMicro: adv, profile, tickCrossFactor: params.tickCrossFactor },
+            env: {
+              bar,
+              advMicro: adv,
+              profile,
+              tickCrossFactor: params.tickCrossFactor,
+              buckets: money.buckets,
+              tickTable: money.tickTable,
+            },
             kind: "open",
             closeD: null,
           };
@@ -219,7 +228,14 @@ export async function closeBooksKill(db: Client, opts: KillOptions): Promise<Kil
         const closeD = dated.rows.length === 0 ? null : text(dated.rows[0]!.d);
         const flat: Bar = { openMicro: last, highMicro: last, lowMicro: last, closeMicro: last };
         return {
-          env: { bar: flat, advMicro: adv, profile, tickCrossFactor: params.tickCrossFactor },
+          env: {
+            bar: flat,
+            advMicro: adv,
+            profile,
+            tickCrossFactor: params.tickCrossFactor,
+            buckets: money.buckets,
+            tickTable: money.tickTable,
+          },
           kind: "lastClose",
           closeD,
         };

@@ -23,6 +23,7 @@ import type { Client } from "@libsql/client";
 import { controlStates, effectiveControl } from "@/lib/agents/controls";
 import { nextTradingDay, type CalendarRow } from "@/lib/data/calendar";
 import {
+  ARENA_MARKET,
   buildExecutionRegistry,
   carriesSleeve,
   cohortSlots,
@@ -32,7 +33,45 @@ import {
   type CohortStart,
 } from "./cohort";
 import { loadCalendar, ARENA_MASTER_SEED } from "./closeBooks";
+import { openS2Once } from "@/lib/heartbeat/incidents";
 import { loadExecutions, seedExecutions, startCohorts } from "./cohortWriter";
+import type { FxRow } from "./seed";
+
+/**
+ * The seed the switch to `full` stored (`market_switch.checklist_json.seed` = `{ seed_micro, fx_rate, fx_date,
+ * fx_source, activation_day }`, written by switchMarket, D-1107), as the FX row the seed is recomputed from plus the stored
+ * amount; null when there is none or the market is the home one (fixed seed).
+ */
+export async function activationSeed(
+  db: Client,
+  market: string,
+): Promise<{ fx: FxRow; seedMicro: bigint } | null> {
+  if (market === ARENA_MARKET) return null;
+  const rs = await db.execute({
+    // rows-ok: the newest activation row of one market through idx_market_switch_market, LIMIT 1
+    sql: "SELECT checklist_json FROM market_switch WHERE market = ? AND to_mode = 'full' ORDER BY id DESC LIMIT 1",
+    args: [market],
+  });
+  const raw = rs.rows[0]?.checklist_json;
+  if (raw === undefined || raw === null) return null;
+  let seed: Record<string, unknown> | undefined;
+  try {
+    seed = (JSON.parse(String(raw)) as { seed?: Record<string, unknown> }).seed;
+  } catch {
+    return null;
+  }
+  if (seed === undefined || seed === null) return null;
+  const { seed_micro: micro, fx_rate: rate, fx_date: date, fx_source: source } = seed;
+  if (
+    typeof rate !== "string" ||
+    typeof date !== "string" ||
+    typeof source !== "string" ||
+    (typeof micro !== "string" && typeof micro !== "number")
+  ) {
+    return null;
+  }
+  return { fx: { rate, date, source }, seedMicro: BigInt(micro) };
+}
 
 export type EnsureCohortsOptions = {
   readonly market: string;
@@ -46,6 +85,8 @@ export type EnsureCohortsOptions = {
   readonly controlsPerFamily?: number;
   /** Overrides for the resolved cohort parameters (the default seed is the ARN-001 A$600). */
   readonly params?: CohortParams;
+  /** The activation day's FX close for a market that seeds by conversion (IN, US; D-1107); the home market ignores it. */
+  readonly fxRow?: FxRow | null;
   /** D-191: also open cohorts for the leverage-sleeve executions (tests of the sleeve only). */
   readonly withLeverage?: boolean;
 };
@@ -110,9 +151,12 @@ export async function ensureCohorts(
     ),
   );
   const byId = new Map(executions.map((e) => [e.id, e]));
-  const params = o.params ?? resolveCohortParams({ market: o.market });
   const masterSeed = o.masterSeed ?? ARENA_MASTER_SEED;
 
+  // ARN-119 / D-1107: resolved lazily, only when a start is planned. A market other than the home one seeds from what its
+  // activation stored; with none the night is a noop and an S2 incident (never a throw every night); the recomputed seed
+  // must equal the stored amount.
+  let params: CohortParams | null = o.params ?? null;
   const starts: CohortStart[] = [];
   let held = 0;
   for (const slot of cohortSlots(executions, o.controlsPerFamily)) {
@@ -127,6 +171,24 @@ export async function ensureCohorts(
     if (state !== "enabled") {
       held += 1;
       continue;
+    }
+    if (params === null) {
+      const stored = o.fxRow !== undefined ? null : await activationSeed(db, o.market);
+      if (o.fxRow === undefined && o.market !== ARENA_MARKET && stored === null) {
+        await openS2Once(
+          db,
+          "seed_missing",
+          { market: o.market },
+          new Date().toISOString(),
+          undefined,
+          `Market ${o.market} has no stored activation seed, so its books were not opened`,
+        );
+        return none("noop", "seed_missing");
+      }
+      params = resolveCohortParams({ market: o.market, fxRow: o.fxRow ?? stored?.fx ?? null });
+      if (stored !== null && params.seedMicro !== stored.seedMicro) {
+        throw new Error(`activation seed mismatch for ${o.market}`);
+      }
     }
     starts.push(
       planCohortStart({ execution, controlIdx: slot.controlIdx, startD, params, masterSeed }),

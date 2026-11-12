@@ -74,14 +74,10 @@ import {
 import { suspensionMark } from "./corpActions";
 import { exDividendOn, toExDividendActions, type ExDividendAction } from "./exDividend";
 import { decisionCutoffUtc } from "@/lib/agents/decisionView";
+import { marketMoney } from "./marketMoney";
 import { staticProfile } from "@/lib/market/staticProfile.mjs";
 import { getConfig } from "@/lib/config/store";
-import {
-  COST_PROFILES,
-  costProfilesOfMarket,
-  type CostProfile,
-  type CostProfileCode,
-} from "./costs";
+import { costProfileByCode, costProfilesOfMarket, type CostProfile } from "./costs";
 import {
   fillCloseSignalExit,
   fillEntryLimit,
@@ -315,7 +311,7 @@ export function sleeveConfigFrom(json: string): SleeveConfig {
     financingBasis: BigInt(j.financing_basis),
     recoveryMode: text(j.recovery_mode) as RecoveryMode,
     rec4Sessions: Number.parseInt(text(j.rec4_sessions), 10),
-    profile: COST_PROFILES[text(j.profile) as CostProfileCode],
+    profile: costProfileByCode(text(j.profile)),
   };
 }
 
@@ -543,7 +539,15 @@ async function gateFor(ctx: DayCtx, code: string): Promise<EntryDecision> {
 }
 
 function fillEnvOf(cc: CohortCtx, bar: FillEnv["bar"], advMicro: Micro): FillEnv {
-  return { bar, advMicro, profile: cc.profile, tickCrossFactor: cc.params.tickCrossFactor };
+  const money = marketMoney(cc.params.market); // D-1154: the market's tick grid and buckets (AU = the defaults)
+  return {
+    bar,
+    advMicro,
+    profile: cc.profile,
+    tickCrossFactor: cc.params.tickCrossFactor,
+    buckets: money.buckets,
+    tickTable: money.tickTable,
+  };
 }
 
 /** The cohort's available cash right now (ARN-025, by settlement mode). */
@@ -595,6 +599,8 @@ function fillEntry(
     return { status: "cancelled", reason: "gate", detail };
   }
   if (env.halted === true) return { status: "cancelled", reason: "halted", detail: "halted" };
+  if (env.bandLocked === true)
+    return { status: "cancelled", reason: "band_locked", detail: "band_locked" }; // D-1163
   const limit = fillEntryLimit(env, order.qty, limitMicro);
   if (limit.status === "unfilled") return { status: "unfilled", reason: "limit_not_reached" };
   if (order.stopFrom === undefined) throw new RangeError("a limit order needs a stop rule");
@@ -658,6 +664,9 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
     const bar = await ctx.data.bar(code, ctx.d);
     const advMicro = await ctx.data.adv(code, ctx.priorD);
     const halted = await ctx.data.halted(code, ctx.d);
+    // D-1109/D-1163: a session closed at a price-band limit (IN) refuses every fill: an entry is cancelled, an exit
+    // stays pending, exactly like a halt below (the port is absent for a market with no bands)
+    const bandLocked = bar !== null && (await ctx.data.bandLocked?.(code, ctx.d)) === true;
     if (text(o.kind) === "entry") {
       if (bar === null) {
         await cancelOrder(ctx, orderId, "no_bar");
@@ -716,6 +725,7 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
             ...fillEnvOf(cc, bar, advMicro),
             feeContext: { code, firstBuyOfSecurityToday: first },
             halted,
+            bandLocked,
             gate,
           },
           limitMicro,
@@ -747,6 +757,7 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
           availableCashMicro: await availableCashNow(ctx, cc),
           profile: cc.profile,
           feeContext: { code, firstBuyOfSecurityToday: first },
+          minParcelMicro: cc.params.minParcelMicro, // the market's parcel floor (AU A$500, IN Rs 25,000; D-1154)
         });
         if (sized.status === "cancel") {
           await cancelOrder(ctx, orderId, sized.reason);
@@ -765,6 +776,7 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
               ...fillEnvOf(cc, bar, advMicro),
               feeContext: { code, firstBuyOfSecurityToday: first },
               halted,
+              bandLocked,
               gate,
             },
             limitMicro,
@@ -812,7 +824,7 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
       continue;
     }
     // exit_cs (including the liquidation orders): wait when the code cannot trade today
-    if (bar === null || halted) continue;
+    if (bar === null || halted || bandLocked) continue;
     const trade = (await openTrades(ctx, id)).find((t) => t.code === code);
     const { positions, adjustments } = await holdingsOf(ctx, cc);
     const holding = positions.get(code) ?? 0n;
@@ -864,6 +876,7 @@ async function isStops(ctx: DayCtx, cc: CohortCtx): Promise<void> {
     if (qty === undefined) continue;
     const bar = await ctx.data.bar(t.code, ctx.d);
     if (bar === null || (await ctx.data.halted(t.code, ctx.d))) continue;
+    if ((await ctx.data.bandLocked?.(t.code, ctx.d)) === true) continue; // D-1163: the stop waits, like a halt
     const env = fillEnvOf(cc, bar, await ctx.data.adv(t.code, ctx.priorD));
     const fill = fillIntradayStop(env, qty, effectiveStop(t, ctx.d, adjustments), {
       afterOpen: t.entryD === ctx.d,
@@ -1017,6 +1030,7 @@ async function sleeveExits(ctx: DayCtx, cc: CohortCtx, cfg: SleeveConfig): Promi
     if ((await ctx.data.halted(t.code, ctx.d)) || t.openD > ctx.d) continue;
     const bar = await ctx.data.bar(t.code, ctx.d);
     if (bar === null) continue;
+    if ((await ctx.data.bandLocked?.(t.code, ctx.d)) === true) continue; // D-1163
     const env: FillEnv = {
       bar,
       advMicro: await ctx.data.adv(t.code, ctx.priorD),
@@ -1679,7 +1693,8 @@ export async function closeBooksDay(
       },
       paramsFor: (e) =>
         resolveCohortParams({
-          costProfile: e.cost_profile as CostProfileCode,
+          market: e.market,
+          costProfile: e.cost_profile,
           ...(opts.restartParams?.(e.id) ?? {}),
         }),
       masterSeed: opts.masterSeed ?? ARENA_MASTER_SEED,

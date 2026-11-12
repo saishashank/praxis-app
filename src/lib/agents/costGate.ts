@@ -13,7 +13,7 @@
 // An unmeasured signal passes and the card carries the flag `cost_gate_unmeasured`.
 import type { Client } from "@libsql/client";
 import { feeFor, quantityAt, type CostProfile } from "@/lib/arena/costs";
-import { bucketBpsFor } from "@/lib/arena/slippage";
+import { bucketBpsFor, type SlippageBucket } from "@/lib/arena/slippage";
 import type { Micro } from "@/lib/money/micro";
 import {
   addRat,
@@ -98,17 +98,19 @@ export function roundTripCost(
   profile: CostProfile,
   advMicro: Micro,
   refPriceMicro?: Micro,
+  /** The market's fixed notional (its seed amount) and slippage buckets (D-1154); absent = the home market's. */
+  market?: { readonly notionalMicro: Micro; readonly buckets: readonly SlippageBucket[] },
 ): Rational {
-  // a per-share item (the US FINRA TAF) needs the quantity of the A$600-equivalent order: notional / price (D-1154 item 5)
+  const notional = market?.notionalMicro ?? COST_GATE_NOTIONAL_MICRO;
+  // a per-share item (the US FINRA TAF) needs the quantity of the order: notional / price (D-1154 item 5)
   const ctx =
-    refPriceMicro === undefined
-      ? undefined
-      : { quantity: quantityAt(COST_GATE_NOTIONAL_MICRO, refPriceMicro) };
-  const fee =
-    feeFor(profile, COST_GATE_NOTIONAL_MICRO, "buy", ctx) +
-    feeFor(profile, COST_GATE_NOTIONAL_MICRO, "sell", ctx);
-  const fees = makeRational(fee, COST_GATE_NOTIONAL_MICRO);
-  const slip = mulRat(makeRational(2n), divRat(bucketBpsFor(advMicro), makeRational(BPS_DEN)));
+    refPriceMicro === undefined ? undefined : { quantity: quantityAt(notional, refPriceMicro) };
+  const fee = feeFor(profile, notional, "buy", ctx) + feeFor(profile, notional, "sell", ctx);
+  const fees = makeRational(fee, notional);
+  const slip = mulRat(
+    makeRational(2n),
+    divRat(bucketBpsFor(advMicro, market?.buckets), makeRational(BPS_DEN)),
+  );
   return addRat(fees, slip);
 }
 
