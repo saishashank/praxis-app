@@ -76,7 +76,12 @@ import { exDividendOn, toExDividendActions, type ExDividendAction } from "./exDi
 import { decisionCutoffUtc } from "@/lib/agents/decisionView";
 import { staticProfile } from "@/lib/market/staticProfile.mjs";
 import { getConfig } from "@/lib/config/store";
-import { COST_PROFILES, type CostProfile, type CostProfileCode } from "./costs";
+import {
+  COST_PROFILES,
+  costProfilesOfMarket,
+  type CostProfile,
+  type CostProfileCode,
+} from "./costs";
 import {
   fillCloseSignalExit,
   fillEntryLimit,
@@ -268,8 +273,15 @@ type CohortCtx = {
   readonly cohort: StoredCohort;
   readonly params: CohortParams;
   readonly profile: CostProfile;
+  /** The market's `settlement_days`, threaded to every settlement call (D-1113); AU 2. */
+  readonly lagSessions: number;
   readonly cfg: SleeveConfig | null;
 };
+
+/** The settlement lag in sessions of a market's seed profile (never defaulted at a call site, D-1113). */
+function lagSessionsOf(market: string): number {
+  return staticProfile(market).settlementDays!;
+}
 
 // ---- small readers ---------------------------------------------------------------------------------
 
@@ -392,7 +404,7 @@ async function settleDue(ctx: DayCtx, cc: CohortCtx): Promise<void> {
   const settled = new Set(
     rows.filter((r) => r.kind === "settle" && r.refType === "fill").map((r) => text(r.refId)),
   );
-  const pending = pendingSettlements(fills, settled, ctx.calendar);
+  const pending = pendingSettlements(fills, settled, ctx.calendar, cc.lagSessions);
   for (const txn of settlementsDue(pending, ctx.d)) {
     if ((await writeLedgerTxn(ctx.db, id, txn)).written) ctx.stats.ledgerTxns += 1;
   }
@@ -545,7 +557,7 @@ async function availableCashNow(ctx: DayCtx, cc: CohortCtx): Promise<Micro> {
   const available = availableCash({
     mode: cc.params.settlementMode,
     balances: balancesFromRows(rows, ctx.d),
-    pending: pendingSettlements(fills, settled, ctx.calendar),
+    pending: pendingSettlements(fills, settled, ctx.calendar, cc.lagSessions),
     sessionD: ctx.d,
   });
   return available;
@@ -954,7 +966,7 @@ async function sleeveEntries(ctx: DayCtx, cc: CohortCtx, cfg: SleeveConfig): Pro
     const available = availableCash({
       mode: cc.params.settlementMode,
       balances,
-      pending: pendingSettlements(fills, settled, ctx.calendar),
+      pending: pendingSettlements(fills, settled, ctx.calendar, cc.lagSessions),
       sessionD: ctx.d,
     });
     if (balances.cash_settled < need || available < need) continue;
@@ -1202,6 +1214,7 @@ async function navStage(ctx: DayCtx, cc: CohortCtx): Promise<NavOutcome> {
   const violations = checkCohortBooks(books, {
     mode: cc.params.settlementMode,
     calendar: ctx.calendar,
+    lagSessions: cc.lagSessions,
     dates: [d],
     stored: [day],
     seedMicro: cc.cohort.seedMicro,
@@ -1300,7 +1313,8 @@ async function closeCohortDay(ctx: DayCtx, cohortId: string): Promise<CohortResu
     cache: {},
     cohort,
     params,
-    profile: COST_PROFILES[params.costProfile],
+    profile: costProfilesOfMarket(ctx.market)[params.costProfile]!,
+    lagSessions: lagSessionsOf(ctx.market),
     cfg: act.sleeveJson === null ? null : sleeveConfigFrom(act.sleeveJson),
   };
   const fillsBefore = ctx.stats.fills;

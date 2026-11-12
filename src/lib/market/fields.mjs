@@ -185,9 +185,14 @@ export const FIELD_VALIDATORS = Object.freeze({
       ? null
       : "yahoo_suffix must be like .AX or empty",
   bar_latency_p95_min: (v) =>
-    kindOf(v, ["at_cutoff"]) || (typeof v === "number" && v >= 0 && v <= 1440)
+    kindOf(v, ["at_cutoff"]) ||
+    (kindOf(v, ["assumed"]) &&
+      typeof v.minutes === "number" &&
+      v.minutes >= 0 &&
+      v.minutes <= 1440) ||
+    (typeof v === "number" && v >= 0 && v <= 1440)
       ? null
-      : "bar_latency_p95_min must be minutes or { kind: at_cutoff }",
+      : "bar_latency_p95_min must be minutes, { kind: at_cutoff } or { kind: assumed, minutes }",
   preopen_recheck_min: (v) =>
     isInt(v, 1, 30) ? null : "preopen_recheck_min must be whole minutes 1 to 30",
   category_map: (v) => (isObj(v) && isStr(v.kind) ? null : "category_map must be { kind }"),

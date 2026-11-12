@@ -744,6 +744,12 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1144 | IN tick table (A3, D-1104): the NSE circular NSE/CMTR/67133 (13 March 2025, after the 10 June 2024 cut) confirms ₹0.01 below ₹250; the exchange now reviews t... |
 | D-1145 | Tooling touched outside the A3 list (needed): scripts/ci/workflow-lint.mjs gains UPLOAD_ALWAYS_ALLOWED = ["source-report.yml::report"] (a success-time artefa... |
 | D-1146 | Calendar market lists (A3, D-1097 amended): |
+| D-1150 | US fee constants superseded (A4, F): a search on 2026-11-13 found the SEC Fee Rate Advisory FY2026 (US$20.60 per million of covered sales from 2026-04-04; US... |
+| D-1151 | Fixed conversion for the figures the extracts cannot give (A4, [VERIFY]): the IN price floors and U2 market-cap floor are AU's at Rs 55 per A$ (A$0.50 -> Rs... |
+| D-1152 | Tier size (A4): IN u1.top = 514, the same share of codes (16.31 %) as AU's 300 of 1,839 (A1 u1_top); |
+| D-1153 | Rule kind components (A4, F, D-1102/D-1103): round: "total_half_up_cent" (IN) rounds the exact total once; round: "per_item_half_up_cent" (US) rounds each it... |
+| D-1154 | Settlement lag threading (A4, F, D-1113): pendingSettlements takes lagSessions (default the home lag, so AU is unchanged); closeBooks.ts reads staticProfile(... |
+| D-1155 | seedForMarket(profile, fxRow) (A4, D-1107): src/lib/arena/seed.ts; fixed returns the amount at rate 1 and no FX row; fx_rounded returns round_half_up(from_am... |
 | D-1160 | Filing instants in the as-filed reader (A5, D-1111): a company-facts entry carries only the filing DATE, so a date-only filed_at is stored as the END of that... |
 | D-1161 | Company-facts parsing (A5, DAT-226): one fundamental_fact row per (concept, period end, accession); where a filing lists one period end for several durations... |
 | D-1162 | US halt model (A5, D-1110 F): stepHalt takes an optional HaltModel (viewFor, notices, noticeKind); with none it is the M15 machine unchanged (AU hashes). |

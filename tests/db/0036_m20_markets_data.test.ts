@@ -208,7 +208,7 @@ describe("0036_m20_markets_data", () => {
     ]);
   });
 
-  it("the D-1096 register rows are deferred (D-1128): the register is unchanged and the rows wait in the file as comments", async () => {
+  it("the D-1096 register rows are deferred (D-1128): the register is unchanged and the migration inserts no row", async () => {
     // the AT-32 baseline hashes source_register and its history: a row added by 0036 would move AU's hashes
     expect(await count("SELECT COUNT(*) n FROM source_register")).toBe(22);
     expect(await count("SELECT COUNT(*) n FROM source_register_history WHERE op = 'insert'")).toBe(
@@ -219,20 +219,9 @@ describe("0036_m20_markets_data", () => {
         "SELECT COUNT(*) n FROM source_register WHERE source LIKE 'in\\_%' ESCAPE '\\' OR source LIKE 'us\\_%' ESCAPE '\\'",
       ),
     ).toBe(0);
+    // A3 moved the 25 rows to seed/{in,us}/sources.mjs (D-1128): the migration carries no register insert
     const text = readFileSync(M20_MIGRATION_PATH as string, "utf8");
-    // the commented register block names 16 IN and 9 US sources, announcements disabled, EDGAR enabled
-    const ids = [
-      ...text.matchAll(
-        /^-- \|\s+\('((?:in|us)_[a-z0-9_]+)', '[^']*', '(?:low|medium|high)', '(\w+)'/gm,
-      ),
-    ];
-    expect(ids.filter((m) => m[1]!.startsWith("in_"))).toHaveLength(16);
-    expect(ids.filter((m) => m[1]!.startsWith("us_"))).toHaveLength(9);
-    const status = Object.fromEntries(ids.map((m) => [m[1], m[2]]));
-    expect(status.in_nse_announcements).toBe("disabled");
-    expect(status.in_bse_announcements).toBe("disabled");
-    expect(status.us_edgar).toBe("enabled");
-    expect(status.us_fred).toBe("pending");
+    expect(text).not.toMatch(/INSERT INTO source_register/i);
   });
 
   it("profile_version is 2 for IN and US (the seed), AU stays 1, and the field rows equal the seed", async () => {

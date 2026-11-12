@@ -12,7 +12,7 @@ import {
   parseRational,
   type Rational,
 } from "@/lib/money/rational";
-import { slippedFill, type Side } from "@/lib/money/tick";
+import { slippedFill, type Side, type TickBand } from "@/lib/money/tick";
 
 export type SlippageBucket = {
   /** Lower-inclusive edge of 20-session ADV (traded value), micro-AUD. */
@@ -84,9 +84,10 @@ export function slippageFill(
   advMicro: Micro,
   tickCrossFactor: Rational = DEFAULT_TICK_CROSS_FACTOR,
   buckets: readonly SlippageBucket[] = SLIPPAGE_BUCKETS,
+  tickTable?: readonly TickBand[],
 ): SlippedFill {
   const bucketBps = bucketBpsFor(advMicro, buckets);
-  const fillMicro = slippedFill(refPriceMicro, side, bucketBps, tickCrossFactor);
+  const fillMicro = slippedFill(refPriceMicro, side, bucketBps, tickCrossFactor, tickTable);
   const diff = fillMicro - refPriceMicro;
   return { bucketBps, fillMicro, slipMicro: diff < 0n ? -diff : diff };
 }
@@ -98,9 +99,11 @@ export function slippageFill(
 export function stallFloorSlippageMicro(
   refPriceMicro: Micro,
   stallFloorBps: Rational = DEFAULT_STALL_FLOOR_BPS,
+  tickTable?: readonly TickBand[],
 ): Micro {
   return (
-    slippedFill(refPriceMicro, "buy", stallFloorBps, DEFAULT_TICK_CROSS_FACTOR) - refPriceMicro
+    slippedFill(refPriceMicro, "buy", stallFloorBps, DEFAULT_TICK_CROSS_FACTOR, tickTable) -
+    refPriceMicro
   );
 }
 

@@ -8,11 +8,19 @@ import { type Micro } from "@/lib/money/micro";
 import { HOME_MARKET, type MarketProfile } from "@/lib/market/profileCore.mjs";
 import { costProfilesOf } from "@/lib/market/staticProfile.mjs";
 import type { AuCostProfile, AuFeeRule } from "@/lib/market/seed/au/costProfiles.mjs";
+import type {
+  ComponentItem,
+  ComponentsCostProfile,
+  ComponentsFeeRule,
+} from "@/lib/market/seed/componentsRule.mjs";
 import {
+  addRat,
+  cmpRat,
   makeRational,
   mulRat,
   parseDecimalParts,
   parseRational,
+  ratFromInt,
   type Rational,
 } from "@/lib/money/rational";
 import { roundHalfAwayFromZero } from "@/lib/money/round";
@@ -43,7 +51,30 @@ export type FeeRule =
       /** P0: no fee for a code on the zero-fee list, else `otherwise` (P1). List is empty today. */
       readonly kind: "zeroFeeListElse";
       readonly otherwise: FeeRule;
+    }
+  | {
+      /**
+       * M20 (D-1102, D-1103): a sum of named charges, each an exact rational, rounded to the currency cent
+       * (1 cent = 10_000 micro) half away from zero: once on the TOTAL (`total_half_up_cent`, IN) or on every
+       * item before the sum (`per_item_half_up_cent`, US).
+       */
+      readonly kind: "components";
+      readonly round: "total_half_up_cent" | "per_item_half_up_cent";
+      readonly items: readonly ComponentRule[];
     };
+
+/** One charge of a `components` rule; every amount is exact (micro as a rational), nothing floats. */
+export type ComponentRule = {
+  readonly name: string;
+  readonly side: "buy" | "sell" | "both";
+  readonly basis: "value" | "per_share" | "per_order" | "pct_of";
+  readonly of: readonly string[];
+  /** value / pct_of: a fraction; per_share / per_order: currency units (so x 1_000_000 for micro). */
+  readonly rate: Rational;
+  /** Clamp of the item's exact amount, micro (a rational), before rounding. */
+  readonly minMicro: Rational | null;
+  readonly maxMicro: Rational | null;
+};
 
 export type CostProfile = {
   readonly code: CostProfileCode;
@@ -64,6 +95,8 @@ export type FeeContext = {
   readonly zeroFeeCodes?: ReadonlySet<string>;
   /** P2: true when this buy is the cohort's first buy of this security today. Default false. */
   readonly firstBuyOfSecurityToday?: boolean;
+  /** Whole shares of the fill: required by a `components` rule with a `per_share` item (US TAF). */
+  readonly quantity?: bigint;
 };
 
 /** A seed fee rule (src/lib/market/seed/au/costProfiles.mjs) as an engine rule: a decimal-percent rate text becomes an exact rational. */
@@ -90,7 +123,41 @@ function ruleFromSeed(rule: AuFeeRule): FeeRule {
   }
 }
 
-function profileFromSeed(p: AuCostProfile): CostProfile {
+const MICRO_RAT: Rational = ratFromInt(1_000_000n);
+
+/** Currency units as decimal text -> micro as an exact rational. */
+function microOfUnits(text: string): Rational {
+  return mulRat(parseRational(text), MICRO_RAT);
+}
+
+function componentFromSeed(item: ComponentItem): ComponentRule {
+  return {
+    name: item.name,
+    side: item.side,
+    basis: item.basis,
+    of: item.of ?? [],
+    rate: parseRational(item.rate),
+    minMicro: item.min === undefined ? null : microOfUnits(item.min),
+    maxMicro: item.max === undefined ? null : microOfUnits(item.max),
+  };
+}
+
+function componentsFromSeed(rule: ComponentsFeeRule): FeeRule {
+  return { kind: "components", round: rule.round, items: rule.items.map(componentFromSeed) };
+}
+
+function profileFromSeed(p: AuCostProfile | ComponentsCostProfile): CostProfile {
+  if (p.rule.kind === "components") {
+    return {
+      code: p.code as CostProfileCode,
+      version: p.version,
+      name: p.name,
+      specRef: p.specRef,
+      verify: p.verify,
+      verified: p.verified,
+      rule: componentsFromSeed(p.rule),
+    };
+  }
   return {
     code: p.code as CostProfileCode,
     version: p.version,
@@ -104,10 +171,16 @@ function profileFromSeed(p: AuCostProfile): CostProfile {
 
 /** The cost profiles of a market's seed table (the P-profile codes its `cost_formula` may name), as engine profiles. */
 export function costProfilesOfMarket(market: string): Readonly<Record<string, CostProfile>> {
-  return Object.fromEntries(
+  const hit = PROFILE_CACHE.get(market);
+  if (hit !== undefined) return hit;
+  const built = Object.fromEntries(
     Object.entries(costProfilesOf(market)).map(([code, p]) => [code, profileFromSeed(p)]),
   );
+  PROFILE_CACHE.set(market, built);
+  return built;
 }
+/** Never invalidated: valid only because the seeds are static (a changed rate is a new code version and a new process). */
+const PROFILE_CACHE = new Map<string, Readonly<Record<string, CostProfile>>>();
 
 /** The profile a market's `cost_formula` names ("P5" for AU); throws when the market has no table built (M20). */
 export function costProfileOfMarket(profile: MarketProfile): CostProfile {
@@ -171,7 +244,75 @@ function evaluate(rule: FeeRule, notionalMicro: Micro, side: Side, ctx: FeeConte
       if (ctx.code !== undefined && ctx.zeroFeeCodes?.has(ctx.code) === true) return 0n;
       return evaluate(rule.otherwise, notionalMicro, side, ctx);
     }
+    case "components":
+      return evaluateComponents(rule, notionalMicro, side, ctx);
   }
+}
+
+const CENT_MICRO = 10_000n;
+const ONE_CENT: Rational = makeRational(1n, CENT_MICRO);
+
+/** Exact amount (micro, rational) of one item for this fill; 0 when it does not apply to the side. */
+function componentAmount(
+  item: ComponentRule,
+  notionalMicro: Micro,
+  side: Side,
+  ctx: FeeContext,
+  amounts: ReadonlyMap<string, Rational>,
+): Rational {
+  if (item.side !== "both" && item.side !== side) return ratFromInt(0n);
+  let amount: Rational;
+  switch (item.basis) {
+    case "value":
+      amount = mulRat(makeRational(notionalMicro), item.rate);
+      break;
+    case "per_share": {
+      if (ctx.quantity === undefined || ctx.quantity <= 0n) {
+        throw new RangeError(`cost item ${item.name} is per share: the quantity is required`);
+      }
+      amount = mulRat(mulRat(makeRational(ctx.quantity), item.rate), MICRO_RAT);
+      break;
+    }
+    case "per_order":
+      amount = mulRat(item.rate, MICRO_RAT);
+      break;
+    case "pct_of": {
+      let base = ratFromInt(0n);
+      for (const n of item.of) {
+        const a = amounts.get(n);
+        if (a === undefined) throw new RangeError(`cost item ${item.name} reads unknown item ${n}`);
+        base = addRat(base, a);
+      }
+      amount = mulRat(base, item.rate);
+      break;
+    }
+  }
+  if (item.minMicro !== null && cmpRat(amount, item.minMicro) < 0) amount = item.minMicro;
+  if (item.maxMicro !== null && cmpRat(amount, item.maxMicro) > 0) amount = item.maxMicro;
+  return amount;
+}
+
+/** Round a rational micro amount to a whole cent, half away from zero, back in micro. */
+function roundToCentMicro(amount: Rational): Micro {
+  return roundHalfAwayFromZero(mulRat(amount, ONE_CENT)) * CENT_MICRO;
+}
+
+function evaluateComponents(
+  rule: Extract<FeeRule, { kind: "components" }>,
+  notionalMicro: Micro,
+  side: Side,
+  ctx: FeeContext,
+): Micro {
+  const amounts = new Map<string, Rational>();
+  let total = ratFromInt(0n);
+  let roundedSum = 0n;
+  for (const item of rule.items) {
+    const amount = componentAmount(item, notionalMicro, side, ctx, amounts);
+    amounts.set(item.name, amount);
+    total = addRat(total, amount);
+    roundedSum += roundToCentMicro(amount);
+  }
+  return rule.round === "total_half_up_cent" ? roundToCentMicro(total) : roundedSum;
 }
 
 /**
@@ -207,7 +348,24 @@ type RuleJson =
       max_micro: string | null;
       free_first_buy_below_micro: string | null;
     }
-  | { kind: "zeroFeeListElse"; otherwise: RuleJson };
+  | { kind: "zeroFeeListElse"; otherwise: RuleJson }
+  | {
+      kind: "components";
+      round: "total_half_up_cent" | "per_item_half_up_cent";
+      items: {
+        name: string;
+        side: "buy" | "sell" | "both";
+        basis: "value" | "per_share" | "per_order" | "pct_of";
+        of: string[];
+        rate_num: string;
+        rate_den: string;
+        min_micro: { num: string; den: string } | null;
+        max_micro: { num: string; den: string } | null;
+      }[];
+    };
+
+const ratJson = (r: Rational | null) =>
+  r === null ? null : { num: r.num.toString(), den: r.den.toString() };
 
 function ruleToJson(rule: FeeRule): RuleJson {
   switch (rule.kind) {
@@ -234,6 +392,21 @@ function ruleToJson(rule: FeeRule): RuleJson {
       };
     case "zeroFeeListElse":
       return { kind: "zeroFeeListElse", otherwise: ruleToJson(rule.otherwise) };
+    case "components":
+      return {
+        kind: "components",
+        round: rule.round,
+        items: rule.items.map((i) => ({
+          name: i.name,
+          side: i.side,
+          basis: i.basis,
+          of: [...i.of],
+          rate_num: i.rate.num.toString(),
+          rate_den: i.rate.den.toString(),
+          min_micro: ratJson(i.minMicro),
+          max_micro: ratJson(i.maxMicro),
+        })),
+      };
   }
 }
 
@@ -280,6 +453,34 @@ function ruleFromJson(json: unknown): FeeRule {
     }
     case "zeroFeeListElse":
       return { kind: "zeroFeeListElse", otherwise: ruleFromJson(o.otherwise) };
+    case "components": {
+      if (!Array.isArray(o.items)) throw new TypeError("items must be a list");
+      const ratOrNull = (v: unknown): Rational | null => {
+        if (v === null) return null;
+        const r = objectFrom(v);
+        return makeRational(bigFrom(r.num), bigFrom(r.den));
+      };
+      if (o.round !== "total_half_up_cent" && o.round !== "per_item_half_up_cent") {
+        throw new TypeError("unknown rounding rule");
+      }
+      return {
+        kind: "components",
+        round: o.round,
+        items: o.items.map((x: unknown) => {
+          const i = objectFrom(x);
+          if (!Array.isArray(i.of)) throw new TypeError("of must be a list");
+          return {
+            name: String(i.name),
+            side: i.side as ComponentRule["side"],
+            basis: i.basis as ComponentRule["basis"],
+            of: i.of.map(String),
+            rate: makeRational(bigFrom(i.rate_num), bigFrom(i.rate_den)),
+            minMicro: ratOrNull(i.min_micro),
+            maxMicro: ratOrNull(i.max_micro),
+          };
+        }),
+      };
+    }
     default:
       throw new TypeError("unknown fee rule kind");
   }

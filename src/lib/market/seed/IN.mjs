@@ -3,6 +3,8 @@
 // M20 records its evidence: `verify = 1`, `verifiedAt` null, so `isComplete` is false by construction.
 // `null` = "set at M20" (tiers, slippage buckets, sleeve reality cap, bar latency). Nothing in M19 reads an
 // IN value on any production path (MKT-110).
+import { IN_SLIPPAGE, IN_TICK_TABLE, IN_TIERS } from "./in/tickTable.mjs";
+import { IN_COST_PROFILE_CODES } from "./in/costProfiles.mjs";
 const unverified = (value, evidenceRef = null) => ({
   value,
   verify: 1,
@@ -28,7 +30,9 @@ function markVerified(fields, evidence) {
   }
   return out;
 }
+
 const PROPOSED = "D-947 [PROPOSED]";
+const M20_A4 = "M20 A4 (D-1104, D-1144, D-1118): [VERIFY], see seed/in/tickTable.mjs";
 
 export default Object.freeze({
   code: "IN",
@@ -41,7 +45,7 @@ export default Object.freeze({
   builtAt: "2026-11-12",
   evidenceRecordedAt: null,
   updatedAt: "2026-11-12T00:00:00.000Z",
-  costProfileCodes: Object.freeze(["IN-P1"]),
+  costProfileCodes: IN_COST_PROFILE_CODES,
   fields: Object.freeze(
     markVerified(
       {
@@ -84,9 +88,9 @@ export default Object.freeze({
         }),
         parcel_floor: unverified(25_000_000_000n, PROPOSED),
         settlement_days: unverified(1),
-        tick_table: unverified([{ fromMicro: 0n, tickMicro: 50_000n }]),
-        slippage_buckets: unverified(null),
-        tiers: unverified(null),
+        tick_table: unverified(IN_TICK_TABLE, M20_A4),
+        slippage_buckets: unverified(IN_SLIPPAGE, M20_A4),
+        tiers: unverified(IN_TIERS, M20_A4),
         cost_formula: unverified("IN-P1"),
         benchmark_index: unverified({ code: "NSEI", yahoo: "^NSEI", name: "Nifty 50" }),
         regime_index: unverified({ code: "NSEI", yahoo: "^NSEI", name: "Nifty 50" }),
@@ -104,11 +108,20 @@ export default Object.freeze({
         fundamentals_source: unverified({ kind: "nse_bse_xbrl_or_yahoo_ns" }),
         macro_series: unverified(["RBI", "MOSPI", "NSEI", "INDIAVIX"]),
         dividend_imputation: unverified(false),
-        sleeve_reality_cap: unverified(null),
+        sleeve_reality_cap: unverified(
+          {
+            multiple: 1,
+            basis: "SEBI cash-segment delivery (IN-P1 is a delivery formula; no MTF assumed)",
+          },
+          "D-1106: listed for the Owner",
+        ),
         calendar_source: unverified("nse_holiday_list"),
         fx_source: unverified("rba_daily"),
         yahoo_suffix: unverified(".NS"),
-        bar_latency_p95_min: unverified(null),
+        bar_latency_p95_min: unverified(
+          { kind: "assumed", minutes: 60, basis: "batch b1 = close + 60", measured_nights: 0 },
+          "D-1105: measured in production data_only",
+        ),
         preopen_recheck_min: unverified(5),
         category_map: unverified({ kind: "headline_categories" }),
         universe_max: unverified(2000),

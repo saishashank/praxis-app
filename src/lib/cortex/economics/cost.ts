@@ -27,7 +27,7 @@ import {
 import type { Micro } from "@/lib/money/micro";
 import { addRat, cmpRat, makeRational, maxRat, mulRat, type Rational } from "@/lib/money/rational";
 import { roundHalfAwayFromZero } from "@/lib/money/round";
-import { tickFor } from "@/lib/money/tick";
+import { tickFor, type TickBand } from "@/lib/money/tick";
 
 /** Universe liquidity tiers (ARN-010; the same literals as `Tier` in agents/families/types.ts). */
 export type LiquidityTier = "U1" | "U2" | "U3";
@@ -58,11 +58,12 @@ export function halfSpreadFraction(
   tier: LiquidityTier,
   priceMicro: Micro,
   floors: Readonly<Record<LiquidityTier, bigint>> = HALF_SPREAD_PPM_BY_TIER,
+  tickTable?: readonly TickBand[],
 ): Rational {
   if (priceMicro <= 0n) throw new RangeError("price must be positive");
   const floor = floors[tier];
   if (floor === undefined) throw new RangeError(`unknown liquidity tier: ${String(tier)}`);
-  const halfTick = makeRational(tickFor(priceMicro), 2n * priceMicro);
+  const halfTick = makeRational(tickFor(priceMicro, tickTable), 2n * priceMicro);
   return maxRat(halfTick, makeRational(floor, PPM));
 }
 
@@ -91,6 +92,8 @@ export type CostPerOrderInput = {
   readonly buckets?: readonly SlippageBucket[];
   /** The market's half-spread floors by tier (profile `slippage_buckets`); default: the home market's. */
   readonly halfSpreadPpmByTier?: Readonly<Record<LiquidityTier, bigint>>;
+  /** The market's tick table (profile `tick_table`); default: the home market's. */
+  readonly tickTable?: readonly TickBand[];
 };
 
 export type CostPerOrder = {
@@ -127,11 +130,11 @@ export function costPerOrder(input: CostPerOrderInput): CostPerOrder {
     feeFor(profile, notionalMicro, "buy", input.feeContext) +
     feeFor(profile, notionalMicro, "sell", input.feeContext);
   const fees = makeRational(feeMicro, notionalMicro);
-  const floor = halfSpreadFraction(tier, priceMicro, input.halfSpreadPpmByTier);
+  const floor = halfSpreadFraction(tier, priceMicro, input.halfSpreadPpmByTier, input.tickTable);
   let halfSpreadFloorApplied = false;
   const perFill = (side: "buy" | "sell"): Rational => {
     const slip = makeRational(
-      slippageFill(priceMicro, side, advMicro, factor, buckets).slipMicro,
+      slippageFill(priceMicro, side, advMicro, factor, buckets, input.tickTable).slipMicro,
       priceMicro,
     );
     if (cmpRat(floor, slip) > 0) {
