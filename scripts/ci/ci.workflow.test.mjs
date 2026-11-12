@@ -208,13 +208,13 @@ test("recorded-day-dev job (M20 S1, D-1119, TST-139): a separate matrix job, ski
   assert.equal(find.if, "steps.fixtures_checkout.outcome == 'success'");
   assert.equal(
     find.run,
-    'node scripts/e2e-day/recorded-day.mjs has-sessions --fixtures fixtures --market "$MARKET"',
+    'node scripts/e2e-day/recorded-day.mjs has-sessions --fixtures fixtures --market "$MARKET_INPUT"',
   );
   const run = steps("recorded-day-dev").find((s) => /--mode data_only/.test(s.run ?? ""));
   assert.equal(run.if, "steps.sessions.outputs.found == 'true'");
   assert.equal(
     run.run,
-    'node scripts/e2e-day/recorded-day.mjs run --fixtures fixtures --work "$RUNNER_TEMP/recorded-day-dev" --market "$MARKET" --mode data_only',
+    'node scripts/e2e-day/recorded-day.mjs run --fixtures fixtures --work "$RUNNER_TEMP/recorded-day-dev" --market "$MARKET_INPUT" --mode data_only',
   );
   // the dev markets variable names AU and the matrix market, on this step and no other step of any job
   assert.equal(run.env.PRAXIS_MARKETS_ENABLED, "AU,${{ matrix.market }}");

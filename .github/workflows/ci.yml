@@ -302,17 +302,17 @@ jobs:
       - name: Look for recorded sessions of the market
         id: sessions
         if: steps.fixtures_checkout.outcome == 'success'
-        run: node scripts/e2e-day/recorded-day.mjs has-sessions --fixtures fixtures --market "$MARKET"
+        run: node scripts/e2e-day/recorded-day.mjs has-sessions --fixtures fixtures --market "$MARKET_INPUT"
         env:
-          MARKET: ${{ matrix.market }}
+          MARKET_INPUT: ${{ matrix.market }}
       - name: Note when no recorded session is available
         if: steps.sessions.outputs.found != 'true'
         run: echo "::warning::no recorded session for the market (fixtures repo not checked out or no recorded/<market> folder); the development-mode day is skipped"
       - name: Recorded data_only days (market switched to data_only on a scratch database, five sessions, no request leaves the runner)
         if: steps.sessions.outputs.found == 'true'
-        run: node scripts/e2e-day/recorded-day.mjs run --fixtures fixtures --work "$RUNNER_TEMP/recorded-day-dev" --market "$MARKET" --mode data_only
+        run: node scripts/e2e-day/recorded-day.mjs run --fixtures fixtures --work "$RUNNER_TEMP/recorded-day-dev" --market "$MARKET_INPUT" --mode data_only
         env:
-          MARKET: ${{ matrix.market }}
+          MARKET_INPUT: ${{ matrix.market }}
           PRAXIS_MARKETS_ENABLED: AU,${{ matrix.market }}
       - name: Network assertion (no market-data host reached, every guard installed)
         if: ${{ always() && steps.sessions.outputs.found == 'true' }}
