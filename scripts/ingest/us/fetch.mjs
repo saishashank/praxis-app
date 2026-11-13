@@ -9,6 +9,8 @@
 //   - FINRA: the daily short-sale volume file of the target date;
 //   - Nasdaq: the trade-halt RSS; the SEC trading-suspension feed (EDGAR contact, D-1142);
 //   - the index CSVs are a manual upload (register row us_sp_dji_russell_manual), read from `--index-dir` when given;
+//   - FRED (migration 0037, D-1147): the observations of the three FRED_SERIES since 45 days before the date, only with
+//     the Owner key FRED_API_KEY (word `key_missing` without it, no request) and an enabled `us_fred` row;
 //   - bars: NO source (D-1132). The bars file comes from the seam the Owner enables later; this step does not make it.
 // Every source is isolated: a refusal or an error is one fixed word in the log and the feed is left out; the output is
 // counts and words only, never a URL, a code list or a body.
@@ -29,6 +31,15 @@ import { assertMarketEnabled } from "../../../src/lib/market/guard.mjs";
 import { staticProfile } from "../../../src/lib/market/staticProfile.mjs";
 import { parseSubmissions } from "../../../src/lib/data/sources/us/submissions.mjs";
 import { isSchedule13 } from "../../../src/lib/data/sources/us/schedule13.mjs";
+import {
+  createFredClient,
+  feedMacroEntry,
+  FRED_BACK_DAYS,
+  FRED_SERIES,
+  fredKey,
+  FredKeyMissing,
+} from "../../../src/lib/data/sources/us/macro.mjs";
+import { addDays } from "../../../src/lib/data/pipeline/rules.mjs";
 import { buildFeeds } from "./feeds.mjs";
 
 const TICKERS_URL = "https://www.sec.gov/files/company_tickers.json";
@@ -65,13 +76,15 @@ function documentUrl(cik, accession, primaryDocument) {
 const word = (e) =>
   e instanceof EdgarContactMissing
     ? "contact_missing"
-    : isPoliteFetchRefused(e)
-      ? `refused:${e.reason}`
-      : e instanceof Error && e.name === "EdgarHttpError"
-        ? `http_${e.status}`
-        : e instanceof Error && e.name === "MarketNotEnabled"
-          ? "market_not_enabled"
-          : "error";
+    : e instanceof FredKeyMissing
+      ? "key_missing"
+      : isPoliteFetchRefused(e)
+        ? `refused:${e.reason}`
+        : e instanceof Error && e.name === "EdgarHttpError"
+          ? `http_${e.status}`
+          : e instanceof Error && e.name === "MarketNotEnabled"
+            ? "market_not_enabled"
+            : "error";
 
 /**
  * @param {{ db: { execute: Function }, market: string, env: Record<string, string | undefined>, request: { codes: string[], end: string },
@@ -160,6 +173,20 @@ export async function fetchNight(o) {
     }
   }
 
+  // ---- FRED (needs the Owner key; the series are stored by the database step, migration 0037) ----
+  const macro = [];
+  try {
+    fredKey(env); // the key first: nothing is requested without it
+    const fred = createFredClient({ ...shared, market, env });
+    const start = addDays(o.request.end, -FRED_BACK_DAYS);
+    for (const id of FRED_SERIES)
+      macro.push(feedMacroEntry(id, await fred.observations(id, start)));
+    outcome.fred = `ok:${macro.length}`;
+  } catch (e) {
+    macro.length = 0;
+    outcome.fred = word(e);
+  }
+
   const feeds = buildFeeds({
     submissions,
     documents,
@@ -167,6 +194,7 @@ export async function fetchNight(o) {
     halts,
     suspensions,
     indexCsv: o.indexCsv,
+    macro,
   });
   out(
     `us_fetch: ${Object.entries(outcome)

@@ -19,7 +19,7 @@ describe("0033_m18_data", () => {
     expect(ms[32]).toMatchObject({ version: 33, name: "m18_data" });
     await migrateUp(db, ms);
     const after = await schemaOf(db);
-    expect(await migrateDown(db, ms, 4)).toEqual({ rolledBack: 4, version: 32 });
+    expect(await migrateDown(db, ms, 5)).toEqual({ rolledBack: 5, version: 32 });
     const left = await db.execute(
       "SELECT name FROM sqlite_master WHERE name IN ('code_history','source_fetch_status','macro_series')",
     );
@@ -37,7 +37,7 @@ describe("0033_m18_data", () => {
         )
       ).rows,
     ).toHaveLength(0);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 4, version: 36 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 5, version: 37 });
     expect(await schemaOf(db)).toEqual(after);
   });
 
@@ -76,7 +76,7 @@ describe("0033_m18_data", () => {
     ).rejects.toThrow();
   });
 
-  it("macro_series is keyed by source, series and day and only knows rba and abs", async () => {
+  it("macro_series is keyed by source, series and day; the home sources pass, fred is refused while US is off (0037)", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
     await migrateUp(db, await loadMigrations(MIGRATIONS("main")));
     const ins = (source: string) =>
@@ -84,7 +84,10 @@ describe("0033_m18_data", () => {
        VALUES ('${source}','FIRMMCRTD','2030-01-02', 4350000, '2030-01-03T00:00:00.000Z')`;
     await db.execute(ins("rba"));
     await expect(db.execute(ins("rba"))).rejects.toThrow();
-    await expect(db.execute(ins("fred"))).rejects.toThrow();
+    // 0037 widened the CHECK to rbi, mospi and fred and added the source guard: fred is refused by the guard while the
+    // US market is off, and a name outside the list by the CHECK (tests/db/0037_m20_macro_sources.test.ts)
+    await expect(db.execute(ins("fred"))).rejects.toThrow(/MarketNotEnabled macro_series/);
+    await expect(db.execute(ins("ecb"))).rejects.toThrow();
   });
 
   it("expert_call_outcome.early defaults to 0 and is NOT NULL", async () => {
@@ -105,7 +108,7 @@ describe("0033_m18_data", () => {
       "SELECT dflt_value AS d, \"notnull\" AS nn FROM pragma_table_info('steelman_night') WHERE name = 'not_written_error'";
     const info = await db.execute(q);
     expect([String(info.rows[0]!.d), Number(info.rows[0]!.nn)]).toEqual(["0", 1]);
-    await migrateDown(db, ms, 4);
+    await migrateDown(db, ms, 5);
     expect((await db.execute(q)).rows).toHaveLength(0);
   });
 

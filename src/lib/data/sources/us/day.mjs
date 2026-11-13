@@ -3,7 +3,8 @@
 // dispatcher calls, with the shapes of the home pipeline's:
 //   prepareDay(db, o)  read-only: should a fetch step run, and for which codes and dates
 //   runDay(db, o)      writes the night: universe snapshot, bars, filings and their categories, insider and holder
-//                      notices, short volume, halts, index bars, the quality verdict and the completion marker
+//                      notices, short volume, halts, index bars, the FRED macro rows (0037), the quality verdict and
+//                      the completion marker
 // The network is NOT in this file. The fetch step (`scripts/ingest/us/fetch.mjs`, a workflow step with no database)
 // writes `feeds.json`; this step reads it and the bars file and writes the database. Both steps refuse before any request
 // or write while the market is off: `assertMarketEnabled` is the first statement of each (AT-70, MKT-110 b).
@@ -26,6 +27,8 @@ import { noticeOfForm4, parseForm4, writeInsiderNotice } from "./form4.mjs";
 import { parseDailyShortVolume, writeShortInterest } from "./finra.mjs";
 import { parseNasdaqHalts, parseSecSuspensions, writeHalts } from "./halts.mjs";
 import { parseIndexCsv, writeIndexBars } from "./index.mjs";
+import { feedMacroRows, MACRO_SOURCE } from "./macro.mjs";
+import { storableMacroRows, writeMacroSeries } from "../macroStore.mjs";
 import {
   isSchedule13,
   noticeOfSchedule13,
@@ -44,6 +47,7 @@ export const STAGE_NAMES = [
   "short",
   "halts",
   "index",
+  "macro",
   "quality",
   "marker",
 ];
@@ -556,6 +560,22 @@ export async function runDay(db, o) {
         n += await writeIndexBars(db, market, parseIndexCsv(text, indexCode).rows, now);
       }
       return { inserted: n };
+    });
+
+    // the FRED observations the fetch step put in the feeds file (only with the Owner key, D-1094): stored as
+    // macro_series rows with source fred since migration 0037 (D-1147, closing D-1189); the guard runs first
+    await guarded("macro", async () => {
+      if (!Array.isArray(feeds.macro) || feeds.macro.length === 0) return "no_feed";
+      const p = feedMacroRows(feeds.macro);
+      const st = storableMacroRows(p.rows, [MACRO_SOURCE]);
+      const n = await writeMacroSeries(db, market, st.rows, now);
+      io.written += n;
+      return {
+        series: feeds.macro.length,
+        parsed: p.rows.length,
+        inserted: n,
+        skipped: p.skipped + st.skipped,
+      };
     });
 
     // ---- quality, then the marker ------------------------------------------------------------------------------

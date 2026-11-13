@@ -1,6 +1,7 @@
 // The feeds file of a US night (M20 US1): what the fetch step hands the database step. One JSON object:
 //   { submissions: [{ code, json }], form4: [{ code, accession, acceptedAt, xml }],
-//     schedule13: [{ code, accession, form, acceptedAt, xml }], finraDaily, halts, suspensions, indexCsv: { <index>: csv } }
+//     schedule13: [{ code, accession, form, acceptedAt, xml }], finraDaily, halts, suspensions, indexCsv: { <index>: csv },
+//     macro: [{ seriesId, observations: [{ d, valueMicro: "<integer string>" }] }] }   (FRED, only with the Owner key)
 // `buildFeeds` is pure: it takes the documents however they were obtained (the live fetch step, a recorded fixture
 // folder, a test) and assembles the file. The Form 4 and 13D/G documents are picked by accession from the filings the
 // submissions list, so the file holds only documents of filings the company really lists.
@@ -13,6 +14,7 @@ import { parseSubmissions } from "../../../src/lib/data/sources/us/submissions.m
  *   documents?: Record<string, string>,          accession -> the Form 4 or 13D/G document text
  *   finraDaily?: string | null, halts?: string | null, suspensions?: string | null,
  *   indexCsv?: Record<string, string>,
+ *   macro?: { seriesId: string, observations: { d: string, valueMicro: string }[] }[],
  * }} input
  */
 export function buildFeeds(input) {
@@ -24,6 +26,7 @@ export function buildFeeds(input) {
     halts: input.halts ?? null,
     suspensions: input.suspensions ?? null,
     indexCsv: input.indexCsv ?? {},
+    macro: input.macro ?? [],
   };
   for (const [code, json] of Object.entries(input.submissions ?? {}).sort(([a], [b]) =>
     a < b ? -1 : 1,

@@ -5,6 +5,7 @@ export function buildFeeds(input: {
   halts?: string | null;
   suspensions?: string | null;
   indexCsv?: Record<string, string>;
+  macro?: { seriesId: string; observations: { d: string; valueMicro: string }[] }[];
 }): {
   submissions: { code: string; json: unknown }[];
   form4: { code: string; accession: string; acceptedAt: string; xml: string }[];
@@ -13,4 +14,5 @@ export function buildFeeds(input: {
   halts: string | null;
   suspensions: string | null;
   indexCsv: Record<string, string>;
+  macro: { seriesId: string; observations: { d: string; valueMicro: string }[] }[];
 };

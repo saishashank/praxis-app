@@ -168,16 +168,35 @@ describe("India batch 1 on five hand-made sessions", () => {
     expect(await count(db, "SELECT COUNT(*) AS n FROM index_bar WHERE market='IN'")).toBe(2);
   });
 
-  it("macro rows are counted, never stored (D-1171)", async () => {
+  it("macro rows are stored with the source of their series, revised only when the value changes (0037, D-1147)", async () => {
     const db = await enabledDb();
     const d = SESSIONS[0]!;
-    const r = await runDay(db, {
-      d,
-      files: filesFor(0, { macro: "series_id,d,value\nRBI_REPO,2026-10-01,5.50\n" }),
-      nowMs: NOW(d),
+    const macro =
+      "series_id,d,value\nRBI_REPO,2026-10-01,5.50\nMOSPI_CPI,2026-10-12,4.25\nWHATEVER,2026-10-12,1\n";
+    const r = await runDay(db, { d, files: filesFor(0, { macro }), nowMs: NOW(d) });
+    expect(r.dates[0]!.stages.macro).toMatchObject({ parsed: 2, skipped: 1, inserted: 2 });
+    const rows = await db.execute(
+      "SELECT source, series_id, value_micro FROM macro_series ORDER BY source, series_id",
+    );
+    expect(rows.rows.map((x) => [x.source, x.series_id, Number(x.value_micro)])).toEqual([
+      ["mospi", "MOSPI_CPI", 4_250_000],
+      ["rbi", "RBI_REPO", 5_500_000],
+    ]);
+    // the same file again on the next session: nothing changes; a revised CPI print changes one row
+    const d2 = SESSIONS[1]!;
+    const again = await runDay(db, { d: d2, files: filesFor(1, { macro }), nowMs: NOW(d2) });
+    expect(again.dates[0]!.stages.macro).toMatchObject({ parsed: 2, inserted: 0 });
+    const d3 = SESSIONS[2]!;
+    const revised = await runDay(db, {
+      d: d3,
+      files: filesFor(2, { macro: macro.replace("4.25", "4.30") }),
+      nowMs: NOW(d3),
     });
-    expect(r.dates[0]!.stages.macro).toMatchObject({ parsed: 1, stored: "not_stored" });
-    expect(await count(db, "SELECT COUNT(*) AS n FROM macro_series")).toBe(0);
+    expect(revised.dates[0]!.stages.macro).toMatchObject({ parsed: 2, inserted: 1 });
+    expect(await count(db, "SELECT COUNT(*) AS n FROM macro_series")).toBe(2);
+    expect(
+      await count(db, "SELECT value_micro AS n FROM macro_series WHERE series_id = 'MOSPI_CPI'"),
+    ).toBe(4_300_000);
   });
 });
 
