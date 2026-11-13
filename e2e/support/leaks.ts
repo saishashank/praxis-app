@@ -47,8 +47,20 @@ export function marketLeaks(html: string): string[] {
   return [...new Set(out)];
 }
 
-/** The page's HTML with the Owner's Markets table (`data-markets-table`) cut out: the one place IN and US may appear. */
+/**
+ * The page's HTML with every Owner Markets surface (`data-markets-table`) cut out: the places IN and US may appear —
+ * the Markets table of Settings and the Owner's per-market projection card on Usage (D-1099, D-1196).
+ */
 export function withoutMarketsTable(html: string): string {
+  for (let i = 0; i < 16; i++) {
+    const next = cutFirstMarketsSurface(html);
+    if (next === html) return html;
+    html = next;
+  }
+  return html;
+}
+
+function cutFirstMarketsSurface(html: string): string {
   const start = html.indexOf("data-markets-table");
   if (start < 0) return html;
   const open = html.lastIndexOf("<", start);

@@ -420,5 +420,9 @@ describe("AT-68 (c): no UI for a market that is not enabled", () => {
       '<main><div data-market="AU"></div><div data-markets-table><table><tr><td data-market="IN">IN</td></tr></table></div></main>';
     expect(marketLeaks(page)).toEqual(['data-market="IN"']);
     expect(marketLeaks(withoutMarketsTable(page))).toEqual([]);
+    // every Owner Markets surface is cut (the Settings table and the Usage projection card, D-1196); text outside stays checked
+    const two =
+      '<main><section data-markets-table=""><div data-market="IN"></div></section><p>between</p><section data-markets-table=""><div data-market="US"><section>nested</section></div></section><p>NSE</p></main>';
+    expect(marketLeaks(withoutMarketsTable(two))).toEqual(["NSE"]);
   });
 });
