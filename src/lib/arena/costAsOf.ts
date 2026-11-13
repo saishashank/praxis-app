@@ -65,3 +65,45 @@ export function profileOnDate(profile: CostProfile, d: string): CostProfile {
   }
   return profile;
 }
+
+type RowWriter = {
+  execute(stmt: { sql: string; args: (string | number)[] }): Promise<{ rowsAffected: number }>;
+};
+
+/**
+ * Write the dated `cost_profile` rows of a market's schedule (D-1148, the D-1181 hand-off): the switch-on writer calls
+ * this in the `off -> data_only` transaction beside `ensureMarketSources`, so the replay and the calibration find the
+ * versions a session selects by `effective_from`. One `INSERT OR IGNORE` per version: `cost_profile` is append-only and
+ * keyed by (code, version), so a row that exists, whatever it holds (an Owner approval is a NEW row at a higher
+ * version, D-070 note 8), is never touched, and a second switch-on writes nothing. A market with no dated schedule
+ * (AU, IN) writes nothing.
+ */
+export async function ensureDatedCostProfiles(
+  db: RowWriter,
+  market: string,
+): Promise<{ codes: number; rows: number; inserted: number }> {
+  const codes = [...new Set(costVersionsOf(market).map((v) => v.code))];
+  let rows = 0;
+  let inserted = 0;
+  for (const code of codes) {
+    for (const r of datedCostProfileRows(market, code)) {
+      rows += 1;
+      const res = await db.execute({
+        // rows-ok: one primary-key insert per dated version of the market's schedule (four for US-P1), ignored when present
+        sql: `INSERT OR IGNORE INTO cost_profile (code, version, tiers_json, slippage_json, source, verified, effective_from)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          r.code,
+          r.version,
+          r.tiers_json,
+          r.slippage_json,
+          r.source,
+          r.verified,
+          r.effective_from,
+        ],
+      });
+      inserted += res.rowsAffected;
+    }
+  }
+  return { codes: codes.length, rows, inserted };
+}

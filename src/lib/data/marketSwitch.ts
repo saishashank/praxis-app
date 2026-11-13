@@ -6,8 +6,8 @@
 //
 //   off -> data_only    needs the checklist (profile, AT-M evidence, licence rows, quota projection, AU MKT-105).
 //                       Sets enabled 1, mode data_only, data_only_since today, work_status active; writes the
-//                       market's source rows and its calendar years (rows are written on enable, D-1097/D-1128) and
-//                       re-projects slots_json. No book is opened, no e-mail is sent.
+//                       market's source rows, its calendar years and the dated cost_profile rows of its schedule (rows are
+//                       written on enable, D-1097/D-1128/D-1148) and re-projects slots_json. No book is opened, no e-mail is sent.
 //   data_only -> full  needs the same items plus five green sessions and ten bar-latency samples, and the RBA close of
 //                       the activation day (ARN-119, D-1107): the seed is computed with `seedForMarket` and its
 //                       record is stored in the switch row; books open the next trading day (BLD-030).
@@ -20,6 +20,7 @@
 // `PRAXIS_MARKETS_ENABLED` is the Owner's own step afterwards (D-994): the nightly invariant reminds.
 import type { ChecklistDeps, ChecklistItem } from "@/lib/market/checklist";
 import { checklist } from "@/lib/market/checklist";
+import { ensureDatedCostProfiles } from "@/lib/arena/costAsOf";
 import { seedForMarket } from "@/lib/arena/seed";
 import { validateMarketModes } from "@/lib/config/keys";
 import { ensureCalendarYears } from "@/lib/data/calendarEnable.mjs";
@@ -195,6 +196,7 @@ export async function switchMarket(p: MarketSwitchInput): Promise<SwitchResult> 
           });
           await ensureMarketSources(tx, market, { now: () => new Date(now) });
           await ensureCalendarYears(tx, market, undefined, { now: () => new Date(now) });
+          await ensureDatedCostProfiles(tx, market); // D-1148: the D-1181 versions, INSERT OR IGNORE, never an edit
           await record(1);
         } else if (to === "full") {
           await tx.execute({

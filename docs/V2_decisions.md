@@ -745,6 +745,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1145 | Tooling touched outside the A3 list (needed): scripts/ci/workflow-lint.mjs gains UPLOAD_ALWAYS_ALLOWED = ["source-report.yml::report"] (a success-time artefa... |
 | D-1146 | Calendar market lists (A3, D-1097 amended): |
 | D-1147 | Migration 0037 and the macro store (integration; closes the hand-offs of D-1171 and D-1189): db/migrations/main/0037_m20_macro_sources.sql rebuilds macro_ser... |
+| D-1148 | Dated cost_profile rows on enable (integration; the D-1181 hand-off, D-1193): datedCostProfileRows had no caller, so a replay or calibration of a session bef... |
 | D-1150 | US fee constants superseded (A4, F): a search on 2026-11-13 found the SEC Fee Rate Advisory FY2026 (US$20.60 per million of covered sales from 2026-04-04; US... |
 | D-1151 | Fixed conversion for the figures the extracts cannot give (A4, [VERIFY]): the IN price floors and U2 market-cap floor are AU's at Rs 55 per A$ (A$0.50 -> Rs... |
 | D-1152 | Tier size (A4): IN u1.top = 514, the same share of codes (16.31 %) as AU's 300 of 1,839 (A1 u1_top); |
