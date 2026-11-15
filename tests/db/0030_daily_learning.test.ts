@@ -18,7 +18,7 @@ describe("0030_daily_learning", () => {
     expect(ms[29]).toMatchObject({ version: 30, name: "daily_learning" });
     await migrateUp(db, ms);
     const after = await schemaOf(db);
-    expect(await migrateDown(db, ms, 3)).toEqual({ rolledBack: 3, version: 29 }); // 0031 and 0032 sit on top
+    expect(await migrateDown(db, ms, 4)).toEqual({ rolledBack: 4, version: 29 }); // 0031 to 0033 sit on top
     const tables = (
       await db.execute("SELECT name FROM sqlite_master WHERE name = 'daily_learning'")
     ).rows;

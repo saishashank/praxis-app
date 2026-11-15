@@ -184,7 +184,7 @@ describe("main migration 0007_arena: up / down / up", () => {
     const db = await arenaDb();
     const ms = await loadMigrations(MIGRATIONS("main"));
     const full = await schemaOf(db);
-    await migrateDown(db, ms, 25); // 0032, 0031, 0030, 0029, 0028, 0027 … 0019, 0018, 0017, 0016, 0015, 0014, 0013, 0012, 0011, 0010, 0009 and 0008 sit on top: take the schema as of 0007
+    await migrateDown(db, ms, 26); // 0033, 0032, 0031, 0030, 0029, 0028, 0027 … 0019, 0018, 0017, 0016, 0015, 0014, 0013, 0012, 0011, 0010, 0009 and 0008 sit on top: take the schema as of 0007
     const before = await schemaOf(db);
     expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 6 });
     const mid = await schemaOf(db);

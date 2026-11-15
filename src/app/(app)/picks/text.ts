@@ -242,3 +242,104 @@ export function vsMarketSummaryLine(s: {
   if (s.insufficient) return `Vs market: ${VS_MARKET_INSUFFICIENT} (n = ${s.n}).`;
   return `Median vs market ${ppText(s.medianPpm)}; ${s.beatingPct}% of picks beat the market; n = ${s.n}.`;
 }
+
+// ---- Replay check (D-1069, Owner O-84): the pick scorecard on the Track record page ------------------
+// Counts and percentages only: no stock code, no name, no price, no internal run time or code.
+export const REPLAY_CAVEAT =
+  "Replayed with today's rules on past data. A check, not proof; intraday ideas and news after 2 Nov are not replayed.";
+export const REPLAY_EMPTY = "No replay check has been run yet.";
+export const replayTitle = (sessions: number): string => `Replay check: last ${sessions} sessions`;
+
+const pct1 = (ppm: number): string => formatPpm(ppm, { digits: 1, sign: "always" });
+const oneDecimal = (x: number): string => (Math.round(x * 10) / 10).toFixed(1);
+
+/** "about 1 day in 4" from the expected number of hits a day (a random list as long as ours). */
+export function replayChanceWords(expectedPerDay: number): string {
+  if (!(expectedPerDay > 0)) return "none expected";
+  if (expectedPerDay >= 1) return "about every day";
+  return `about 1 day in ${Math.round(1 / expectedPerDay)}`;
+}
+
+export type ReplayProfileLike = {
+  n: number;
+  nextN: number;
+  nextSumPpm: number;
+  nextUp: number;
+  fiveN: number;
+  fiveSumPpm: number;
+  fiveUp: number;
+  aim: number;
+  stop: number;
+  neither: number;
+  unknown: number;
+};
+
+export type ReplaySummaryLike = {
+  days: number;
+  picksN: number;
+  gainers: { total: number; hits: number; daysWithHit: number };
+  chanceHits: number;
+  losers: { total: number; hits: number; daysWithHit: number };
+  profiles: Record<string, ReplayProfileLike>;
+  misses: Record<string, number>;
+  cortex: {
+    days: number;
+    gainers: number;
+    gainersInTop: number;
+    chanceGainers: number;
+    losers: number;
+    losersInBottom: number;
+    gapDays: number;
+    gapSumPpm: number;
+    gapUpDays: number;
+  };
+};
+
+const MISS_LABEL: Record<string, string> = {
+  news_before_open: "news before the open",
+  sector_move: "sector move",
+  market_move: "market move",
+  news_during_day: "news during the day",
+  no_measure: "no measure",
+};
+
+/** The lines of the section, first line first. Pure; every figure is a stored aggregate. */
+export function replayLines(s: ReplaySummaryLike): {
+  gainers: string;
+  losers: string;
+  profiles: string[];
+  cortex: string[];
+  misses: string | null;
+} {
+  const perDay = s.days === 0 ? 0 : s.chanceHits / s.days;
+  const gainers = `Top-5 gainers in our picks: ${s.gainers.daysWithHit} of ${s.days} days (chance: ${replayChanceWords(perDay)}). ${s.gainers.hits} of ${s.gainers.total} top gainers were in our picks; chance would give about ${oneDecimal(s.chanceHits)}.`;
+  const losers = `Top-5 losers in our picks: ${s.losers.hits} of ${s.losers.total} (${s.losers.daysWithHit} of ${s.days} days had at least one).`;
+  const profiles = Object.entries(s.profiles).map(([name, p]) => {
+    if (p.n === 0) return `${profileLabel(name)}: no picks in this window.`;
+    const next = p.nextN === 0 ? "n/a" : pct1(Math.round(p.nextSumPpm / p.nextN));
+    const five = p.fiveN === 0 ? "not yet known" : pct1(Math.round(p.fiveSumPpm / p.fiveN));
+    const wins = p.nextN === 0 ? "n/a" : `${Math.round((100 * p.nextUp) / p.nextN)}%`;
+    return `${profileLabel(name)}: ${p.n} picks; average next day ${next}, 5 sessions ${five}; ${wins} up next day; aim reached ${p.aim}, stop hit ${p.stop}${p.unknown > 0 ? `, ${p.unknown} not yet known` : ""}.`;
+  });
+  const c = s.cortex;
+  const cortex: string[] = [];
+  if (c.days > 0) {
+    cortex.push(
+      `Cortex's top tenth held ${c.gainersInTop} of the ${c.gainers} top gainers (chance: about ${oneDecimal(c.chanceGainers)}).`,
+    );
+    cortex.push(
+      `Its bottom tenth held ${c.losersInBottom} of the ${c.losers} top losers (chance: about ${oneDecimal(c.losers / 10)}).${c.gapDays > 0 ? ` Next day, its top tenth beat its bottom tenth by ${pct1(Math.round(c.gapSumPpm / c.gapDays))} a day on average (${c.gapUpDays} of ${c.gapDays} days).` : ""}`,
+    );
+  }
+  const missed = Object.entries(s.misses)
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+    .map(([k, n]) => `${MISS_LABEL[k] ?? "no measure"} ${n}`);
+  return {
+    gainers,
+    losers,
+    profiles,
+    cortex,
+    misses: missed.length === 0 ? null : `Gainers we missed, by reason: ${missed.join(", ")}.`,
+  };
+}

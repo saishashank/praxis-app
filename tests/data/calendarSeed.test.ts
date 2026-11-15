@@ -170,7 +170,7 @@ describe("main migration 0005_au_calendar_seed", () => {
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
     const before = await schemaOf(db);
-    expect(await migrateDown(db, ms, 28)).toEqual({ rolledBack: 28, version: 4 }); // 0032, 0031, 0030, 0029, 0028, 0027, 0026, 0025, 0024, 0023, 0022, 0021, 0020, 0019, 0018, 0017, 0016, 0015, 0014, 0013, 0012, 0011, 0010, 0009, 0008, 0007, 0006, then 0005
+    expect(await migrateDown(db, ms, 29)).toEqual({ rolledBack: 29, version: 4 }); // 0033, 0032, 0031, 0030, 0029, 0028, 0027, 0026, 0025, 0024, 0023, 0022, 0021, 0020, 0019, 0018, 0017, 0016, 0015, 0014, 0013, 0012, 0011, 0010, 0009, 0008, 0007, 0006, then 0005
     expect(await loadCalendarRows(db, "AU")).toHaveLength(0);
     const guard = (s: string[]) =>
       s.filter((x) => x.startsWith("trigger:trading_calendar_no_delete"));

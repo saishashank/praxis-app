@@ -482,6 +482,7 @@ export const TRIAL_KINDS = [
   "pattern_test",
   "challenger",
   "new_lineage",
+  "report_look",
 ] as const;
 export type TrialKind = (typeof TRIAL_KINDS)[number];
 

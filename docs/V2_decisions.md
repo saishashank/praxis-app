@@ -565,6 +565,16 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-977 | Probe sources: a daily-loop mover cause behind a big move on at least 8 of the last 20 nights. volume_no_news maps to A-D2-07 (heavy trading without news); s... |
 | D-978 | Probe scoring: the Cortex stage computes the open probes' values into cortex_feature_probe from the night after opening (never read by S or eligibility, so c... |
 | D-979 | Reads: the probe and base readers scan their own event kinds through INDEXED BY cortex_learn_event_kind (market, kind, d) - a few rows a month - never OFFSET... |
+| D-1060 | (O-84) Scorecard only. For each of the last N sessions d that have a following session, the night's picks are rebuilt from data known at the close of d and s... |
+| D-1061 | (O-84) Storage: pick_scorecard_run (one row a run, write-once) and pick_scorecard_day (one row a night, write-once, per-profile sums and the per-night detail... |
+| D-1062 | (O-84) Isolation: the code lives in src/lib/scorecard/ (outside the trading folders, so the tests/picks/isolation.test.ts rule that no replay or learning mod... |
+| D-1063 | (O-84) As-of rules: strategy signals come from SnapshotWorld.familyInputs(d) through runFamilies with the live rule versions (sessions, bars and adjusted clo... |
+| D-1064 | (O-84) Scoring reuses dailyTop5.ts (top5Movers, top5Night: same liquid definition, same chance method "named shares / liquid shares x 5", same miss causes). |
+| D-1065 | (O-84) Not replayed, said on the page and in the log: intraday ideas, candidate measures, and announcements (the snapshot carries no titles or stamps, so "ne... |
+| D-1066 | (O-84 addition) The Cortex line: the FIXED Cortex's night of d (createCortexReplay, default angle set, no learner, no stored weights) is scored with eveningS... |
+| D-1067 | (O-84) Idempotent: the run id is pickscore:<market>:<last d>:<N>:<snapshot sha>:<commit>; a repeat is a no-op. |
+| D-1068 | (O-84) The workflow replay.yml gains the dispatch option pick-scorecard (dispatch only, production environment, the same single secrets step); the log line c... |
+| D-1069 | (O-84) The Track record page shows the section "Replay check: last N sessions" from the latest run: top-5 gainers in our picks as days with a hit of days sco... |
 
 ## M16 (M16_design.md)
 

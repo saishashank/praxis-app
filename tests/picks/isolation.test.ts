@@ -84,6 +84,9 @@ describe("picks are never read by ranking or sizing", () => {
       f === "src/lib/experts/calls.ts" ||
       // D-950: the page loader of the My portfolio card reads its settings and the split words
       f === "src/lib/ui/loaders/pickPortfolio.ts" ||
+      // D-1062 (O-84): the pick scorecard replays the nightly picks on past data as a report; it is
+      // outside the trading folders and writes only its own two tables and one report-only look.
+      f.startsWith("src/lib/scorecard/") ||
       f.startsWith("src/app/");
     expect(importers.filter((f) => !allowed(f))).toEqual([]);
     // and the review import exists, so this guard is not vacuous
