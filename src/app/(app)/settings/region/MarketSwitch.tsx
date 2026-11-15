@@ -169,7 +169,8 @@ export function MarketSwitch({
         when every checklist item of the step is done. After a switch, set the production setting
         for the enabled markets by hand (the nightly check reminds you).
       </p>
-      <div className="flex flex-col gap-4">
+      {/* an Owner Markets surface, like the Markets table (D-1196): the e2e leak walk cuts it */}
+      <div data-markets-table="" className="flex flex-col gap-4">
         {markets.map((m) => (
           <MarketBlock key={m.code} m={m} action={action} />
         ))}

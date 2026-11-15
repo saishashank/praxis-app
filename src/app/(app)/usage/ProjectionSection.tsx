@@ -10,7 +10,12 @@ const one = new Intl.NumberFormat("en-AU", { maximumFractionDigits: 1 });
 
 export function ProjectionSection({ report }: { report: ProjectionReport | null }) {
   return (
-    <section id="projection" aria-labelledby="projection-h" className="flex min-w-0 flex-col gap-3">
+    <section
+      id="projection"
+      aria-labelledby="projection-h"
+      data-markets-table=""
+      className="flex min-w-0 flex-col gap-3"
+    >
       <h2 id="projection-h" className="text-xl font-semibold">
         Projection per market
       </h2>
