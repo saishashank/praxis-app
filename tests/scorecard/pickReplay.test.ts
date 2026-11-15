@@ -159,8 +159,9 @@ describe("as-of guard", () => {
     expect(ia.inputs.length).toBeGreaterThan(0); // and it has pick inputs, so equality is not vacuous
     expect(text(ib)).toEqual(text(ia));
 
-    const passports = await passportsAsOf(db, "AU", GUARD_D);
+    const { statuses: passports, basis } = await passportsAsOf(db, "AU", GUARD_D);
     expect(passports.size).toBe(3);
+    expect(basis).toBe("live");
     const cx = (world: SnapshotWorld, live: typeof params) =>
       createCortexReplay({ world, params: live, passports, schemaSha: "fixed" });
     const na = cx(a, openedA.live).hook.night(GUARD_D, []);
@@ -170,6 +171,44 @@ describe("as-of guard", () => {
     expect(Object.keys(fa!.rows[0]!.features).length).toBeGreaterThan(0); // the Cortex really scored
     expect(text(featureNightOf(nb, GUARD_D))).toEqual(text(fa));
   }, 120_000);
+});
+
+describe("Cortex angle set before go-live (D-1070)", () => {
+  it("a night before the first passport uses the go-live set; a later status never reaches it", async () => {
+    const db = await freshDb("main");
+    await seedPassports(db, "2026-01-01T00:00:00.000Z");
+    const a = angleById("A-D1-02")!;
+    // a LATER version of one angle, frozen long after the go-live passports
+    await insertPassport(db, {
+      market: "AU",
+      angleId: "A-D1-02",
+      version: 2,
+      domain: a.domain,
+      cluster: a.cluster as never,
+      orientation: a.orientation,
+      kind: "score",
+      inputs: [...a.inputs],
+      historyFields: {},
+      status: "retired",
+      horizonSessions: a.horizonSessions,
+      evidence: {},
+      measured: null,
+      frozenAt: "2026-11-01T00:00:00.000Z",
+    });
+    const early = await passportsAsOf(db, "AU", "2025-06-02");
+    expect(early.basis).toBe("golive");
+    expect([...early.statuses.entries()].map(([k, v]) => `${k}:${v}`)).toEqual([
+      "A-D1-02:active",
+      "A-D1-06:active",
+      "A-D2-01:active",
+    ]);
+    const mid = await passportsAsOf(db, "AU", "2026-06-01"); // after go-live, before the later version
+    expect(mid.basis).toBe("live");
+    expect(mid.statuses.get("A-D1-02")).toBe("active");
+    const late = await passportsAsOf(db, "AU", "2026-11-05");
+    expect(late.statuses.get("A-D1-02")).toBe("retired");
+    expect((await passportsAsOf(await freshDb("main"), "AU", "2025-06-02")).statuses.size).toBe(0);
+  });
 });
 
 describe("pick-scorecard CLI", () => {

@@ -46,7 +46,7 @@ const profile = (n: number, next: number, five: number, aim: number, stop: numbe
   unknown: 0,
 });
 
-function day(d: string, nextD: string, hits: number): DayResult {
+function day(d: string, nextD: string, hits: number, basis: "live" | "golive" = "live"): DayResult {
   return {
     d,
     nextD,
@@ -75,9 +75,23 @@ function day(d: string, nextD: string, hits: number): DayResult {
         },
       ],
       losers: [],
-      picks: [],
+      picks:
+        basis === "live"
+          ? [
+              {
+                profile: "balanced",
+                rank: 1,
+                code: "ZZSECRET",
+                source: "strategy",
+                nextPpm: 0,
+                fivePpm: 0,
+                race: "neither",
+              },
+            ]
+          : [],
     },
     cortex: {
+      basis,
       scored: 300,
       gainersInTop: 1,
       gainersN: 5,
@@ -91,7 +105,7 @@ function day(d: string, nextD: string, hits: number): DayResult {
 let w: World;
 beforeAll(async () => {
   w = await fullWorld();
-  const days = [day("2026-11-11", "2026-11-12", 1), day("2026-11-12", "2026-11-13", 0)];
+  const days = [day("2026-11-11", "2026-11-12", 1), day("2026-11-12", "2026-11-13", 0, "golive")];
   const summary = summarise(days, { sessions: 40 });
   const run: ScorecardRun = {
     id: "pickscore:AU:2026-11-12:40:aaaaaaaa:bbbbbbbb",
@@ -128,6 +142,12 @@ describe("Replay check section", () => {
     expect(screen.getByTestId("replay-cortex").textContent).toContain(
       "Cortex's top tenth held 2 of the 10 top gainers (chance: about 1.0)",
     );
+    expect(screen.getByTestId("replay-cortex").textContent).toContain(
+      "Cortex: 1 nights live, 1 nights replayed with its go-live measures.",
+    );
+    expect(screen.getByTestId("replay-strategy").textContent).toContain(
+      "Strategy picks: 1 of 2 nights (others had only shortlist picks).",
+    );
     expect(screen.getByTestId("replay-misses").textContent).toContain("no measure 2");
     expect(screen.getByTestId("replay-caveat").textContent).toBe(REPLAY_CAVEAT);
     // never an ISO date, an internal code or a stock code
@@ -155,6 +175,7 @@ describe("Replay check section", () => {
     cleanup();
     const empty = await fullWorld();
     render(await ReplayCheck({ env: envOf(empty, "owner") }));
+    expect(screen.getByTestId("replay-check").textContent).toContain("Replay check: not run yet");
     expect(screen.getByTestId("replay-check").textContent).toContain(
       "No replay check has been run yet.",
     );

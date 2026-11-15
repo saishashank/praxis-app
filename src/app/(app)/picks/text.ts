@@ -248,6 +248,7 @@ export function vsMarketSummaryLine(s: {
 export const REPLAY_CAVEAT =
   "Replayed with today's rules on past data. A check, not proof; intraday ideas and news after 2 Nov are not replayed.";
 export const REPLAY_EMPTY = "No replay check has been run yet.";
+export const REPLAY_EMPTY_TITLE = "Replay check: not run yet";
 export const replayTitle = (sessions: number): string => `Replay check: last ${sessions} sessions`;
 
 const pct1 = (ppm: number): string => formatPpm(ppm, { digits: 1, sign: "always" });
@@ -276,6 +277,7 @@ export type ReplayProfileLike = {
 
 export type ReplaySummaryLike = {
   days: number;
+  strategyNights?: number;
   picksN: number;
   gainers: { total: number; hits: number; daysWithHit: number };
   chanceHits: number;
@@ -292,6 +294,8 @@ export type ReplaySummaryLike = {
     gapDays: number;
     gapSumPpm: number;
     gapUpDays: number;
+    liveNights?: number;
+    goLiveNights?: number;
   };
 };
 
@@ -309,6 +313,7 @@ export function replayLines(s: ReplaySummaryLike): {
   losers: string;
   profiles: string[];
   cortex: string[];
+  strategy: string | null;
   misses: string | null;
 } {
   const perDay = s.days === 0 ? 0 : s.chanceHits / s.days;
@@ -325,6 +330,9 @@ export function replayLines(s: ReplaySummaryLike): {
   const cortex: string[] = [];
   if (c.days > 0) {
     cortex.push(
+      `Cortex: ${c.liveNights ?? c.days} nights live, ${c.goLiveNights ?? 0} nights replayed with its go-live measures.`,
+    );
+    cortex.push(
       `Cortex's top tenth held ${c.gainersInTop} of the ${c.gainers} top gainers (chance: about ${oneDecimal(c.chanceGainers)}).`,
     );
     cortex.push(
@@ -340,6 +348,10 @@ export function replayLines(s: ReplaySummaryLike): {
     losers,
     profiles,
     cortex,
+    strategy:
+      s.strategyNights === undefined
+        ? null
+        : `Strategy picks: ${s.strategyNights} of ${s.days} nights (others had only shortlist picks).`,
     misses: missed.length === 0 ? null : `Gainers we missed, by reason: ${missed.join(", ")}.`,
   };
 }

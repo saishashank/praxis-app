@@ -44,6 +44,7 @@ import type { ViewBar } from "@/lib/agents/decisionView";
 import {
   cortexDay,
   scoreDay,
+  type CortexBasis,
   type CortexDay,
   type DayResult,
   type LaterBar,
@@ -253,6 +254,7 @@ export function scoreNight(
   nd: string,
   picks: readonly ScoredPick[],
   night: FeatureNight | null,
+  basis: CortexBasis = "live",
 ): DayResult | null {
   const { world } = deps;
   const next = world.familyInputs(nd);
@@ -316,7 +318,7 @@ export function scoreNight(
     });
     return { cause, name: null };
   };
-  const cortex: CortexDay | null = cortexDay(night, sets, liquid, returns);
+  const cortex: CortexDay | null = cortexDay(night, sets, liquid, returns, basis);
   return scoreDay({
     d,
     nextD: nd,
@@ -335,15 +337,26 @@ export function scoreNight(
 
 /**
  * The angle statuses the fixed Cortex had at the end of d: for each angle the newest passport version
- * frozen on or before d (D-1066: a version frozen later is knowledge after d and is not used; an angle
- * with none has no status, so it is not in the scored set). Read only, no OFFSET.
+ * frozen on or before d (D-1066: a version frozen later is knowledge after d and is not used). D-1070:
+ * for a night before the first frozen passport, the EARLIEST frozen set (the go-live set, basis
+ * "golive"), never today's; an empty table gives no statuses. Read only, no OFFSET.
  */
 export async function passportsAsOf(
   db: Pick<Client, "execute">,
   market: string,
   d: string,
-): Promise<Map<string, AngleStatus>> {
-  const cut = `${d}T23:59:59.999Z`;
+): Promise<{ statuses: Map<string, AngleStatus>; basis: CortexBasis }> {
+  let cut = `${d}T23:59:59.999Z`;
+  let basis: CortexBasis = "live";
+  const first = await db.execute({
+    sql: "SELECT MIN(frozen_at) AS f FROM angle_passport WHERE market = ?",
+    args: [market],
+  });
+  const f = first.rows[0]?.f;
+  if (typeof f === "string" && f > cut) {
+    cut = f;
+    basis = "golive";
+  }
   const r = await db.execute({
     sql: `SELECT p.angle_id, p.status FROM angle_passport p
           WHERE p.market = ? AND p.frozen_at <= ?
@@ -352,7 +365,10 @@ export async function passportsAsOf(
           ORDER BY p.angle_id`,
     args: [market, cut, cut],
   });
-  return new Map(r.rows.map((x) => [String(x.angle_id), String(x.status) as AngleStatus]));
+  return {
+    statuses: new Map(r.rows.map((x) => [String(x.angle_id), String(x.status) as AngleStatus])),
+    basis,
+  };
 }
 
 /** The fixed Cortex's features of the evening of d as a FeatureNight (null when it abstained). */
@@ -403,10 +419,10 @@ export async function replayNightsScored(
   for (const d of nights) {
     const nd = world.sessions[world.sessions.indexOf(d) + 1]!;
     const picks = await picksAsOf(deps, opened, d);
-    const passports = await passportsAsOf(deps.db, opened.market, d);
+    const { statuses: passports, basis } = await passportsAsOf(deps.db, opened.market, d);
     const night =
       passports.size === 0 ? null : featureNightOf(cortexOf(passports).hook.night(d, []), d);
-    const day = scoreNight(deps, d, nd, picks, night);
+    const day = scoreNight(deps, d, nd, picks, night, basis);
     if (day !== null) days.push(day);
     done += 1;
     progress?.(done, nights.length);

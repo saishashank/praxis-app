@@ -575,6 +575,9 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1067 | (O-84) Idempotent: the run id is pickscore:<market>:<last d>:<N>:<snapshot sha>:<commit>; a repeat is a no-op. |
 | D-1068 | (O-84) The workflow replay.yml gains the dispatch option pick-scorecard (dispatch only, production environment, the same single secrets step); the log line c... |
 | D-1069 | (O-84) The Track record page shows the section "Replay check: last N sessions" from the latest run: top-5 gainers in our picks as days with a hit of days sco... |
+| D-1070 | (O-84) Cortex coverage: for a night before the first frozen angle passport, the replay uses the EARLIEST frozen passport set (the go-live set), never today's... |
+| D-1071 | (O-84) Strategy history stays the development-split record only (no forward ledger). |
+| D-1072 | (O-84) The section title uses the run's real count ("Replay check: last N sessions"); with no run it reads "Replay check: not run yet". |
 
 ## M16 (M16_design.md)
 

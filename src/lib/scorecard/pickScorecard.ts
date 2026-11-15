@@ -151,7 +151,11 @@ const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 // ---- the Cortex's night -------------------------------------------------------------------------
 
+/** D-1070: "live" = the angle set frozen on or before the night; "golive" = the earliest frozen set, replayed. */
+export type CortexBasis = "live" | "golive";
+
 export type CortexDay = {
+  readonly basis: CortexBasis;
   /** Liquid shares the fixed Cortex could score on the evening of d. */
   readonly scored: number;
   readonly gainersInTop: number;
@@ -175,6 +179,7 @@ export function cortexDay(
   sets: { readonly gainers: readonly MoveLike[]; readonly losers: readonly MoveLike[] },
   liquid: readonly string[],
   returns: ReadonlyMap<string, number>,
+  basis: CortexBasis = "live",
 ): CortexDay | null {
   if (night === null || night.rows.length === 0) return null;
   const ok = new Set(liquid);
@@ -195,6 +200,7 @@ export function cortexDay(
   const g = sets.gainers.filter(inScored);
   const l = sets.losers.filter(inScored);
   return {
+    basis,
     scored: ranked.length,
     gainersInTop: g.filter((m) => top.has(m.code)).length,
     gainersN: g.length,
@@ -341,7 +347,12 @@ export type ScorecardSummary = {
     readonly gapDays: number;
     readonly gapSumPpm: number;
     readonly gapUpDays: number;
+    /** D-1070: nights scored with the angle set live then, and nights replayed with the go-live set. */
+    readonly liveNights: number;
+    readonly goLiveNights: number;
   };
+  /** D-1071: nights with at least one strategy pick (the others had only shortlist picks). */
+  readonly strategyNights: number;
   /** What the replay left out, in the words of the page and the report. */
   readonly skipped: readonly string[];
 };
@@ -392,6 +403,8 @@ export function summarise(
     gapDays: 0,
     gapSumPpm: 0,
     gapUpDays: 0,
+    liveNights: 0,
+    goLiveNights: 0,
   };
   for (const day of days) {
     chance += day.chancePpm / PPM;
@@ -402,6 +415,8 @@ export function summarise(
     const c = day.cortex;
     if (c !== null) {
       cx.days += 1;
+      if (c.basis === "golive") cx.goLiveNights += 1;
+      else cx.liveNights += 1;
       cx.gainers += c.gainersN;
       cx.gainersInTop += c.gainersInTop;
       cx.chanceGainers += c.gainersN / TENTH;
@@ -440,6 +455,7 @@ export function summarise(
     },
     profiles: ordered,
     misses,
+    strategyNights: days.filter((d) => d.detail.picks.some((p) => p.source === "strategy")).length,
     cortex: { ...cx, chanceGainers: Math.round(cx.chanceGainers * 100) / 100 }, // threshold-ok: two decimals
     skipped: o.skipped ?? SKIPPED_DEFAULT,
   };

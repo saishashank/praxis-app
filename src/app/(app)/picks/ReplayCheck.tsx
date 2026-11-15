@@ -3,7 +3,7 @@
 // so a masked viewer sees the same figures with ISO weeks for the dates.
 import { loadReplayCheck } from "@/lib/ui/loaders/pickScorecard";
 import type { LoaderEnv } from "@/lib/ui/loaders/shell";
-import { REPLAY_CAVEAT, REPLAY_EMPTY, replayLines, replayTitle } from "./text";
+import { REPLAY_CAVEAT, REPLAY_EMPTY, REPLAY_EMPTY_TITLE, replayLines, replayTitle } from "./text";
 
 const BOX = "min-w-0 rounded-lg border border-border bg-surface p-3 text-sm";
 
@@ -12,7 +12,7 @@ export async function ReplayCheck({ env }: { env: LoaderEnv }) {
   if (view === null) {
     return (
       <section aria-label="Replay check" className={BOX} data-testid="replay-check">
-        <h2 className="m-0 text-base font-semibold">{replayTitle(40)}</h2>
+        <h2 className="m-0 text-base font-semibold">{REPLAY_EMPTY_TITLE}</h2>
         <p className="m-0 mt-1 text-text-muted">{REPLAY_EMPTY}</p>
       </section>
     );
@@ -38,6 +38,11 @@ export async function ReplayCheck({ env }: { env: LoaderEnv }) {
           </li>
         ))}
       </ul>
+      {lines.strategy !== null ? (
+        <p className="m-0 mt-1 break-words" data-testid="replay-strategy">
+          {lines.strategy}
+        </p>
+      ) : null}
       {lines.cortex.length > 0 ? (
         <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0" data-testid="replay-cortex">
           {lines.cortex.map((l) => (
