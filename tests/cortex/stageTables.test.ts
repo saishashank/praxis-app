@@ -45,6 +45,16 @@ const M20_TABLES = [
   "trading_halt",
 ];
 
+// The six tables 0038 adds (M21 A1, D-1236): none is read by a night, so STAGE_TABLES and the AU schemaSha are unchanged.
+const M21_TABLES = [
+  "golden_label",
+  "owner_holding",
+  "owner_trade",
+  "owner_trade_void",
+  "short_shadow_decision",
+  "short_shadow_outcome",
+];
+
 describe("the base list", () => {
   it("equals the schema-35 table set minus market_profile*, sorted, with no duplicate", async () => {
     expect([...STAGE_TABLES]).toEqual(await scan(35));
@@ -53,10 +63,13 @@ describe("the base list", () => {
     expect(STAGE_TABLES.some((t) => t.startsWith("market_profile"))).toBe(false);
   });
 
-  it("is the whole migrated schema minus the market_profile tables and the nine tables 0036 adds", async () => {
-    const now = await scan(36);
-    expect(now.filter((t) => !M20_TABLES.includes(t))).toEqual([...STAGE_TABLES]);
+  it("is the whole migrated schema minus the market_profile tables, the nine tables 0036 adds and the six 0038 adds", async () => {
+    const now = await scan(38);
+    expect(now.filter((t) => !M20_TABLES.includes(t) && !M21_TABLES.includes(t))).toEqual([
+      ...STAGE_TABLES,
+    ]);
     expect(now.filter((t) => M20_TABLES.includes(t))).toEqual(M20_TABLES);
+    expect(now.filter((t) => M21_TABLES.includes(t))).toEqual(M21_TABLES);
   });
 
   it("the AU schemaSha equals the pre-M20 scan of a schema-35 database, byte for byte", async () => {

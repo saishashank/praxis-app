@@ -7,7 +7,10 @@ export const STATES: Record<
   | "steelman-cards"
   | "alerts-muted"
   | "market-built-off"
-  | "blueprint-full",
+  | "blueprint-full"
+  | "owner-tools-on"
+  | "review-stored"
+  | "labels-queue",
   SeedState
 >;
 export const STATE_NAMES: string[];

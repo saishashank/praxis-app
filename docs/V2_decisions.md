@@ -795,3 +795,53 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1197 | Per-market e-mail sections (S1, D-1124, D-1061, UXN-313, O-34): the Evening Review keeps the first enabled market as before and adds one section for every fu... |
 | D-1198 | The development-mode recorded days (S1, D-1119, TST-139, AT-85, AT-M4): job recorded-day-dev in ci.yml is a separate matrix job (IN, US) after app: the fixtu... |
 | D-1199 | Owner notes for the single V3 PR (S1): the deploy-order note of D-1129 (the Worker reads market.rollback_at before 0036 has run; expect at most one tick wind... |
+
+## M21 (M21_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-1200 | Numbering and gate (BLD-054, BLD-049; requirements Gap 19): |
+| D-1201 | UXN-319 (Gap 1): the 35 items are classified as in §F (2 accepted: UXN-008, UXN-010; 12 superseded; 21 rejected) by the spec's default rule ("accept if it is... |
+| D-1202 | UXN-320 (c) (Gap 2): the header theme toggle of D-171 was moved to Settings › Appearance by UXR-004/005; the clause is tested against that control. "Both siz... |
+| D-1203 | UXN-320 (a): the review frame becomes sandbox="allow-same-origin" without allow-scripts and is sized from its content on load, starting from a server estimat... |
+| D-1204 | UXN-320 (b): the strategy trades loader masks qty for masked roles (it showed share counts to every role; an O-54 correction, listed); a Size column renders... |
+| D-1205 | UXN-320 (d): "muted status bands" are the info, warn, stale banner tones and the neutral status strip; each gets a per-theme band token with text ≥ 4.5:1 on... |
+| D-1206 | UXN-321 (11): the "ASX codes" exception is implemented as "a word equal to the row's own code stays in capitals" (a code with a vowel, such as ANZ, would oth... |
+| D-1207 | UXN-322 (Gap 3): a muted alert can be unmuted by appending an armed row (latest cleared/muted, master toggle on, pick still listed); mute and unmute toasts o... |
+| D-1208 | UXN-323: a cut subject gets a zero-item pack with a domain-separated id (sha256("limit_cut/…")), which the reader maps to "Not written tonight: daily limit r... |
+| D-1209 | UXN-324 (a): roving tab index with arrow keys across nodes, a drawn focus ring per node, and each node's connections as focusable buttons in its panel (focus... |
+| D-1210 | UXN-324 (b) (Gap 18): one predicate hiddenFor decides in the proxy for page, RSC and API requests alike and is the same function the page guards call; signed... |
+| D-1211 | UXN-324 (c) (Gap 4): already automated by tests/blueprint/drawio.test.ts; |
+| D-1212 | Keys (Gap 5): ch. 15 "bool" keys are registered as "on"/"off" text (ON_OFF, the registry has no boolean kind and every Owner switch uses this form); all nine... |
+| D-1213 | committee_enabled (AT-76 M21 part): a key-specific refusal hook (switchRefusal) refuses "on" until the stored steelman health shows 10 qualifying nights at ≥... |
+| D-1214 | UX-131 (Gap 6): "Owner" is the pinned Owner (the Blueprint rule); the tools are visible only to the pinned Owner with owner_real_money_tools = "on", and answ... |
+| D-1215 | The proxy reads the switch through getConfigCached (60 s, per instance; an Owner edit clears the editing instance's cache, others follow within 60 s); a fail... |
+| D-1216 | UXN-314: Aggressive → Turbo, Balanced → Balanced, Conservative → Steady, labels only, on Owner-tool surfaces and the Owner's pick tiles while on. |
+| D-1217 | UXN-315 sizing (F): the night's sizing maths is extracted unchanged into sizeForAmount (pick rows and hashes identical) and reused with the Owner's capital (... |
+| D-1218 | UXN-317 (Gap 13): no broker template ships (the spec's "none hard-coded as supported"; checking brokers needs the internet); the Owner enters up to five temp... |
+| D-1219 | noBrokerLinks.test.ts keeps every pick surface clean; the one allowed external link on a pick tile is the Owner-tools BrokerLinks component passed in through... |
+| D-1220 | UXN-316: holdings are append-only uploads (manual or CSV: code, quantity, average cost; ≤ 200 rows, ≤ 64 KB); the page shows only thesis-breakers, the Owner'... |
+| D-1221 | ARN-121: owner_trade append-only with voids; matching pick = same market and code within the pick's alert window, newest; paper fill = pick_outcome.entry_mic... |
+| D-1222 | ARN-122 lot rules (Gap 17, F): specific lot = one trade row; |
+| D-1223 | ARN-122 placement: /reviews/tax, Owner only (403 for others), always available (§21.7 "on (Owner only)", not a §21.5 item); the trade-log variant appears onl... |
+| D-1224 | FAM-010 (Gap 10, F): a target CS rule (f<n>_target_r 1.0–5.0 or f<n>_target_pct 5–50, never both), triggered at the close and filled at the next open through... |
+| D-1225 | FAM-010 display: the D-885 indicative 2R target is retired everywhere; cards and the trades table show the real target or "No target", with "No target: this... |
+| D-1226 | EML-043 (Gap 11): the stop-hit e-mail reuses kind pick_cleared (variant stop_hit, its own key hash), so no email_message rebuild is needed and the cap, quiet... |
+| D-1227 | UXN-318 (Gap 8): the golden set is CTX-040's three labels (DAT-247, CXA-008), stored in a new append-only golden_label table with skip and unclear answers an... |
+| D-1228 | VAL-121 (Gaps 9, 14): selection, scoring and hypothesis as in §H, fixed before any computation (BLD-051); |
+| D-1229 | ARN-124 a–c (Gap M5): the three re-deferrals are a tested record with reasons and a refusal function; the "sources checked" are recorded offline from the kno... |
+| D-1230 | PLT-078 (Gap 16): app_public_domain is a confirmation the self-check compares with APP_BASE_URL, which stays the one origin that cookies, CSRF and Auth.js us... |
+| D-1231 | PLT-079 (Gap 15): web manifest; a static same-origin service worker that caches only the last / and /picks pages and the static assets, never an API, a write... |
+| D-1232 | UXN-008 and UXN-010 (accepted set): shaped skeletons in SectionLoading; an offline badge distinct from the stale banner. |
+| D-1233 | D-922 scan (Gap 7): a static scan of Owner-read sources plus a rendered-text check in the AT-82 walk, with an allow-list that needs a reason per entry. |
+| D-1234 | AT-82 matrix: the M21 surfaces × six themes × two widths × three roles in one spec; pages unchanged by M21 stay covered by their existing specs. |
+| D-1235 | AT-76/AT-77 clauses that need M22 (Gap 12): |
+| D-1236 | Renumbered at merge (orchestrator, 2026-11-16): |
+| D-1237 | AT-77 "switching on changes no book…": tests/acceptance/v3/at77Hash.test.ts runs the AT-32 golden world with owner_real_money_tools "on" and "off"; every tab... |
+| D-1238 | Generated files are not owned (constraints table): any task regenerates them; conflicts are resolved by re-running the generator. |
+| D-1239 | Owner notes for the single V3 PR: the switch is off and nothing of Phase R is visible until the Owner sets owner_real_money_tools to "on"; brokers are entere... |
+| D-1240 | A1 (config form): a new input kind "text_optional" (a text value that may be empty) is registered for app_public_domain only, and parseConfigInput returns an... |
+| D-1241 | A1 (switch guard): switchRefusal is called in updateConfig after the value is parsed and validated (the design said "right after configEditRefusal", before t... |
+| D-1242 | A1 (preferences): the three new fields live in Preferences with defaults off, 0 and []; stop_hit_emails is a pick field (stored only once chosen) read throug... |
+| D-1243 | A1 (seed states and the hash test): E2E_STATES=all now includes owner-tools-on, so the rich lane runs with the Owner switch on (a lane that must see it off,... |
+| D-1244 | A1 (generated files): tests/test-map.baseline.json is not regenerated in A1 (its --update rewrites about 2,400 lines of earlier milestones; npm run test:map... |

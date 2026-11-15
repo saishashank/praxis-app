@@ -31,7 +31,7 @@ describe("0032_m18_outcome_basis", () => {
       (r) => String(r.name),
     );
     expect(cols).toContain("outcome_basis");
-    expect(await migrateDown(db, ms, 6)).toMatchObject({ rolledBack: 6 });
+    expect(await migrateDown(db, ms, 7)).toMatchObject({ rolledBack: 7 });
     const back = (await db.execute("SELECT name FROM pragma_table_info('pick_outcome')")).rows.map(
       (r) => String(r.name),
     );

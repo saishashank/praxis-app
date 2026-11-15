@@ -47,7 +47,7 @@ try {
 // E2E_SCENARIO: empty (default, production-like data-only) | populated | stale (synthetic ZZ data).
 // E2E_STATES (TST-135, D-967): comma-separated named overlays applied after the scenario, or "all" (see
 // e2e/seed/states.mjs: picks-two-sections, experts-queue, steelman-cards, alerts-muted, market-built-off,
-// blueprint-full). Unset = none. An unknown name stops the run.
+// blueprint-full, owner-tools-on, review-stored, labels-queue). Unset = none. An unknown name stops the run.
 const stateNames = parseStates(process.env.E2E_STATES);
 const scenario = process.env.E2E_SCENARIO ?? "empty";
 const main = createClient({ url: need("TURSO_MAIN_URL") });

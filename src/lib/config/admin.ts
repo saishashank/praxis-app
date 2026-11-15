@@ -21,6 +21,7 @@ import {
   type ConfigKey,
 } from "./keys";
 import { invalidateConfigCache } from "./runtime";
+import { switchRefusal } from "@/lib/config/switchGuards";
 import { configEditRefusal, ruleVersionsSeeded } from "@/lib/learning/bKeyLock";
 import { isCortexRefitKey, recordCortexKeyEdit } from "@/lib/cortex/store/keyEdit";
 import { getConfig, setConfig } from "./store";
@@ -159,6 +160,9 @@ export function parseConfigInput(
 ): { value: unknown } | { error: string } {
   if (typeof raw !== "string") return { error: "is missing" };
   const text = raw.trim();
+  // M21 (D-1240): "text_optional" is a text value that may be empty (app_public_domain is empty until the domain is bought);
+  // the key's own validator still decides. Every plain "text" key keeps refusing an empty value.
+  if (input === "text_optional" && text === "") return { value: "" };
   // Object values (the strategy-name table, D-129) are longer than a scalar; every other kind keeps 500.
   const max = input === "object" ? OBJECT_INPUT_MAX : 500; // threshold-ok: form input guard
   if (text === "" || text.length > max) return { error: "is missing or too long" };
@@ -168,7 +172,7 @@ export function parseConfigInput(
   if (input === "number") {
     return NUM_RE.test(text) ? { value: Number(text) } : { error: "must be a number" };
   }
-  if (input === "text") return { value: text };
+  if (input === "text" || input === "text_optional") return { value: text };
   if (input === "bool") {
     return text === "true" || text === "false"
       ? { value: text === "true" }
@@ -256,6 +260,10 @@ export async function updateConfig(p: UpdateInput): Promise<UpdateResult> {
   } catch {
     return fail("unavailable");
   }
+
+  // M21 (D-1213): a key-specific refusal of the value (the Committee switch needs ten qualifying nights).
+  const switchBlocked = await switchRefusal(p.mainDb, key, parsed.value);
+  if (switchBlocked !== null) return fail("invalid", switchBlocked);
 
   const base = { at: now, actorUserId: p.actorId, targetType: "config", targetId: key };
   try {

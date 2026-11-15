@@ -7,11 +7,17 @@
 import * as alertsMuted from "./states/alerts-muted.mjs";
 import * as blueprintFull from "./states/blueprint-full.mjs";
 import * as expertsQueue from "./states/experts-queue.mjs";
+import * as labelsQueue from "./states/labels-queue.mjs";
 import * as marketBuiltOff from "./states/market-built-off.mjs";
+import * as ownerToolsOn from "./states/owner-tools-on.mjs";
 import * as picksTwoSections from "./states/picks-two-sections.mjs";
+import * as reviewStored from "./states/review-stored.mjs";
 import * as steelmanCards from "./states/steelman-cards.mjs";
 
-/** The six states of TST-135 (a), in the order `all` applies them. */
+/**
+ * The six states of TST-135 (a) and the three of M21 A1 (D-1236), in the order `all` applies them. `owner-tools-on`
+ * switches the Owner tools on in the throwaway database (D-1214): a lane that must see them off names its states.
+ */
 export const STATES = {
   "picks-two-sections": picksTwoSections,
   "experts-queue": expertsQueue,
@@ -19,6 +25,9 @@ export const STATES = {
   "alerts-muted": alertsMuted,
   "market-built-off": marketBuiltOff,
   "blueprint-full": blueprintFull,
+  "owner-tools-on": ownerToolsOn,
+  "review-stored": reviewStored,
+  "labels-queue": labelsQueue,
 };
 export const STATE_NAMES = Object.keys(STATES);
 
