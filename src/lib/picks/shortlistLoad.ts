@@ -54,29 +54,58 @@ export async function loadShortlistInputs(
         closeMicro: priceMicro(x.c),
         volume: Number(x.volume), // money-float-ok: share count
       };
-      const ok =
-        b.openMicro > 0n &&
-        b.lowMicro > 0n &&
-        b.lowMicro <= b.openMicro &&
-        b.lowMicro <= b.closeMicro &&
-        b.highMicro >= b.openMicro &&
-        b.highMicro >= b.closeMicro;
-      if (!ok) continue; // a malformed bar is unusable evidence (as the pick tracking)
+      if (!usableBar(b)) continue; // a malformed bar is unusable evidence (as the pick tracking)
       const k = String(x.code);
       if (!bars.has(k)) bars.set(k, []);
       bars.get(k)!.push(b);
     }
   }
+  return shortlistFromBars({
+    market: o.market,
+    d: o.d,
+    tierOf,
+    codes,
+    bars,
+    exclude: o.exclude,
+    costProfile: o.costProfile,
+  });
+}
+
+/** A bar with a positive open and a low <= open, close <= high (anything else is unusable evidence). */
+export function usableBar(b: DayBar): boolean {
+  return (
+    b.openMicro > 0n &&
+    b.lowMicro > 0n &&
+    b.lowMicro <= b.openMicro &&
+    b.lowMicro <= b.closeMicro &&
+    b.highMicro >= b.openMicro &&
+    b.highMicro >= b.closeMicro
+  );
+}
+
+/**
+ * The pure tail of the nightly shortlist: tonight's candidates from the usable bars up to D of the
+ * liquid codes. Shared with the pick scorecard replay (D-1062), which hands it bars it has cut at D.
+ */
+export function shortlistFromBars(o: {
+  market: string;
+  d: string;
+  tierOf: ReadonlyMap<string, Tier>;
+  codes: readonly string[];
+  bars: ReadonlyMap<string, readonly DayBar[]>;
+  exclude: ReadonlySet<string>;
+  costProfile?: string;
+}): PickInput[] {
   const advMicro = new Map<string, bigint>();
   const input: ShortlistCode[] = [];
-  for (const code of codes) {
-    const list = bars.get(code) ?? [];
+  for (const code of o.codes) {
+    const list = o.bars.get(code) ?? [];
     if (list.length === 0) continue;
     const last = list.slice(-ADV_N);
     let v = 0n;
     for (const b of last) v += b.closeMicro * BigInt(Math.round(b.volume)); // money-float-ok: whole shares
     advMicro.set(code, divFloor(v, BigInt(last.length)));
-    input.push({ code, tier: tierOf.get(code)!, bars: list });
+    input.push({ code, tier: o.tierOf.get(code)!, bars: list });
   }
   return shortlistInputs(input, {
     d: o.d,

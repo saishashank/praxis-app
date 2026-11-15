@@ -35,7 +35,7 @@ export function sessionsBack(d: string, n: number, calendar: readonly CalendarRo
   return day;
 }
 
-type BarPoint = { readonly c: bigint; readonly volume: bigint };
+export type BarPoint = { readonly c: bigint; readonly volume: bigint };
 
 /** The last `count` bars up to d for every code (oldest first). */
 async function recentBars(
@@ -62,13 +62,13 @@ async function recentBars(
   return out;
 }
 
-function volOf(points: readonly BarPoint[], window: number): number | null {
+export function volOf(points: readonly BarPoint[], window: number): number | null {
   if (points.length < window + 1) return null;
   const closes = points.map((p) => microToFloat(p.c));
   return stdevFloat(logReturns(closes).slice(-window), window, 1);
 }
 
-function advValueOf(points: readonly BarPoint[], window: number): bigint {
+export function advValueOf(points: readonly BarPoint[], window: number): bigint {
   const last = points.slice(-window);
   if (last.length === 0) return 0n;
   let value = 0n;

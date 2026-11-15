@@ -100,8 +100,8 @@ describe("rollback to V1 (V2-S4)", () => {
       await expect(migrateUp(db, old)).rejects.toThrow(/applied migration 15 has no file/);
       expect(await migrateUp(db, old, { allowNewer: true })).toEqual({
         applied: 0,
-        version: 32,
-        newer: [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32],
+        version: 33,
+        newer: [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33],
       });
     } finally {
       rm(dir);
@@ -125,12 +125,12 @@ describe("rollback to V1 (V2-S4)", () => {
     }
   });
 
-  it("--down-to walks 0032…0015 down to the V1 schema (0014) and the up path restores it", async () => {
+  it("--down-to walks 0033…0015 down to the V1 schema (0014) and the up path restores it", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(db, ms);
     const full = await schemaOf(db);
-    expect(await migrateDownTo(db, ms, 14)).toEqual({ rolledBack: 18, version: 14 });
+    expect(await migrateDownTo(db, ms, 14)).toEqual({ rolledBack: 19, version: 14 });
     const v1 = await schemaOf(db);
     expect(v1.some((s) => s.startsWith("table:cortex_night:"))).toBe(false);
     expect(v1.some((s) => s.startsWith("table:expert:"))).toBe(false);

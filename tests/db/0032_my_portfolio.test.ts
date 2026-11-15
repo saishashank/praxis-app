@@ -20,8 +20,9 @@ const sell = (seq: number, reason: string, closes = 1, net = "500000") =>
 
 describe("0032_my_portfolio", () => {
   it("recreates the tables, rolls back to the 0029 shapes and comes back identical", async () => {
+    // pinned to 0032: later migrations sit on top (tests/db/0033_pick_scorecard.test.ts)
     const db = track(createClient({ url: tempDbUrl() }));
-    const ms = await loadMigrations(MIGRATIONS("main"));
+    const ms = (await loadMigrations(MIGRATIONS("main"))).filter((m) => m.version <= 32);
     expect(ms[31]).toMatchObject({ version: 32, name: "my_portfolio" });
     await migrateUp(
       db,

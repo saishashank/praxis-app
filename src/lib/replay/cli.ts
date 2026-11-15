@@ -4,6 +4,7 @@
 //
 //   replay --mode light|full|null|injected|evidence|learning [--date YYYY-MM-DD] [--since YYYY-MM-DD]
 //          [--runs N] [--synthetic] [--budget-minutes N]
+//   replay --mode pick-scorecard [--sessions N] [--date YYYY-MM-DD]   (D-1068, O-84: a report only)
 //
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, DATA_REPO, DATA_REPO_TOKEN, COMMIT_SHA (optional)
 // Output: statuses, counts and minutes only (SEC-110). Never a row, a code, a URL, a token or a driver
@@ -13,6 +14,7 @@ import { createClient, type Client, type InStatement } from "@libsql/client";
 import { defaultAgentParams, loadAgentParams, type AgentParams } from "@/lib/agents/params";
 import { marketDate } from "@/lib/data/calendar";
 import { splitFromRow, type LineageSplitRecord, type TrialLedgerRow } from "@/lib/stats/splits";
+import { parseSessions, runPickScorecard } from "@/lib/scorecard/pickScorecardRun";
 import { learningDone, learningWeek, runLearning } from "./learningMode";
 import {
   RUN_MODES,
@@ -24,6 +26,8 @@ import {
 } from "./runner";
 
 const MARKET = "AU";
+/** D-1068: the pick scorecard (O-84) is a report, not a run kind: no replay_run row, no learning write. */
+export const SCORECARD_MODE = "pick-scorecard";
 const MARKET_TZ = "Australia/Sydney";
 const BATCH = 400; // threshold-ok: statements per DB batch
 
@@ -301,8 +305,9 @@ export async function replayMain(
   const out = deps.out ?? ((s: string) => console.log(s));
   const nowMs = deps.nowMs ?? (() => Date.now());
   const mode = flagOf(argv, "--mode");
+  if (mode === SCORECARD_MODE) return pickScorecardMain(argv, env, deps, out, nowMs);
   if (mode === null || !RUN_MODES.includes(mode as RunMode)) {
-    out(`replay: failed (usage: --mode ${RUN_MODES.join("|")})`);
+    out(`replay: failed (usage: --mode ${[...RUN_MODES, SCORECARD_MODE].join("|")})`);
     return 2;
   }
   const m = mode as RunMode;
@@ -433,6 +438,86 @@ export async function replayMain(
     // Never print a driver or store error: it can carry the database URL or the repository name.
     const name = e instanceof Error ? e.name : "Error";
     out(`replay ${m}: failed (${name}) stage=${stage}${codeFrames(e)}${causeCode(e)}`);
+    return 1;
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * D-1068 (O-84): `--mode pick-scorecard [--sessions N] [--date D]`. Replays the last N sessions night by
+ * night with today's fixed rules and scores the picks against the next day's top 5 gainers and losers.
+ * A REPORT: it reads the rule versions, labels and stored development records (all dated before the
+ * holdout), writes only the two scorecard tables and one report-only trial-ledger look, and never
+ * touches a config, Cortex, learner, promotion or arena table.
+ */
+async function pickScorecardMain(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+  deps: CliDeps,
+  out: (line: string) => void,
+  nowMs: () => number,
+): Promise<number> {
+  const date = flagOf(argv, "--date") ?? marketDate(new Date(nowMs()), MARKET_TZ);
+  const sessions = parseSessions(flagOf(argv, "--sessions"));
+  if (
+    !isRealDate(date) ||
+    sessions === null ||
+    argv.includes("--sessions") !== (flagOf(argv, "--sessions") !== null)
+  ) {
+    out("replay: failed (bad argument)");
+    return 2;
+  }
+  const url = env.TURSO_MAIN_URL;
+  const token = env.TURSO_MAIN_TOKEN;
+  if (!has(url) || (!has(token) && !url.startsWith("file:"))) {
+    out("replay: failed (database not configured)");
+    return 1;
+  }
+  const open = deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t }));
+  let db = open(url, has(token) ? token : undefined);
+  let stage = "setup";
+  try {
+    if (deps.prepareSnapshot === undefined) {
+      out("replay: failed (no snapshot source)");
+      return 1;
+    }
+    const params = deps.params ?? (await loadAgentParams(db).catch(() => defaultAgentParams()));
+    stage = "snapshot";
+    const bytes = await deps.prepareSnapshot({
+      from: addYears(date, -(params.replay.eventBackfillYears + 1)),
+      to: date,
+    });
+    stage = "compute";
+    // D-883, D-198: the snapshot build takes about 20 minutes and the server drops the idle connection
+    // meanwhile; the replay's reads and its one write go over a fresh one
+    db.close();
+    db = open(url, has(token) ? token : undefined);
+    await ping(db, deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))));
+    const r = await runPickScorecard({
+      db,
+      params,
+      snapshotBytes: bytes,
+      sessions,
+      commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : "0000000000000000000000000000000000000000",
+      nowMs,
+    });
+    if (r.kind === "already") {
+      out("replay pick-scorecard: already recorded");
+      return 0;
+    }
+    if (r.kind === "empty") {
+      out("replay pick-scorecard: failed (no scorable nights)");
+      return 1;
+    }
+    const s = r.run.summary;
+    out(
+      `replay pick-scorecard: ${r.run.status} sessions=${r.run.sessions} nights=${s.days} picks=${s.picksN} gainers=${s.gainers.hits}/${s.gainers.total} losers=${s.losers.hits}/${s.losers.total} cortex_nights=${s.cortex.days} minutes=${r.minutes.toFixed(2)} rows=${r.rows}`,
+    );
+    return 0;
+  } catch (e) {
+    const name = e instanceof Error ? e.name : "Error";
+    out(`replay pick-scorecard: failed (${name}) stage=${stage}${codeFrames(e)}${causeCode(e)}`);
     return 1;
   } finally {
     db.close();
