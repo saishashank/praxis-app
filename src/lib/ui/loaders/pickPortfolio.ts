@@ -4,7 +4,7 @@
 // closed tally and the latest trades). A masked viewer sees the letter of each stock and percentages
 // only, no amounts, prices or dates (DAT-124).
 import "server-only";
-import { newerThanClose, readLatestQuotes } from "@/lib/data/quotes/latest";
+import { LATEST_READ_MAX, newerThanClose, readLatestQuotes } from "@/lib/data/quotes/latest";
 import { STRATEGIES, type StrategyKey } from "@/lib/picks/allocation";
 import { loadPortfolioSettings, MY_PROFILES } from "@/lib/picks/portfolioConfig";
 import { splitLine, strategyNames } from "@/lib/picks/portfolioWords";
@@ -24,6 +24,8 @@ const RECENT_TRADES = 3; // threshold-ok: latest trades shown per portfolio
 
 export type MyHolding = {
   stock: string;
+  /** Full company name; null for a masked viewer or when no name is stored. */
+  company: string | null;
   strategy: string;
   entryD: string | null;
   entry: MoneyView | null;
@@ -32,7 +34,7 @@ export type MyHolding = {
   changePpm: number | null;
 };
 
-export type MyTrade = { d: string | null; stock: string; words: string };
+export type MyTrade = { d: string | null; stock: string; company: string | null; words: string };
 
 export type MyPortfolio = {
   profile: string;
@@ -140,6 +142,25 @@ export async function loadMyPortfolios(env: LoaderEnv): Promise<MyPortfoliosView
       if (live) nowOf.set(code, live.lastMicro);
     }
   }
+  // company names of the held and traded codes (unmasked viewers only; chunks of 200, no OFFSET)
+  const companyOf = new Map<string, string>();
+  if (!masked) {
+    const all = [
+      ...new Set([
+        ...[...holds.values()].flat().map((h) => s(h.code)),
+        ...[...recent.values()].flat().map((t) => s(t.code)),
+      ]),
+    ];
+    for (let i = 0; i < all.length; i += LATEST_READ_MAX) {
+      const chunk = all.slice(i, i + LATEST_READ_MAX);
+      const rows = await q(
+        `SELECT code, name FROM instrument WHERE market = ? AND code IN (${chunk.map(() => "?").join(", ")})`,
+        [market, ...chunk],
+      );
+      for (const r of rows)
+        if (r.name !== null && r.name !== undefined) companyOf.set(s(r.code), s(r.name));
+    }
+  }
   const kit = masked
     ? await maskKitByDate(env, [
         ...[...holds.values()].flat().map((h) => ({ d: s(h.pub_d), code: s(h.code) })),
@@ -205,6 +226,7 @@ export async function loadMyPortfolios(env: LoaderEnv): Promise<MyPortfoliosView
         const now = nowOf.get(s(h.code)) ?? null;
         return {
           stock: label(h.pub_d, h.code),
+          company: companyOf.get(s(h.code)) ?? null,
           strategy: nameOf(h.strategy),
           entryD: masked ? null : s(h.entry_d),
           entry: masked ? null : money(entry),
@@ -217,6 +239,7 @@ export async function loadMyPortfolios(env: LoaderEnv): Promise<MyPortfoliosView
       trades: (recent.get(profile) ?? []).map((t) => ({
         d: masked ? null : s(t.d),
         stock: label(t.pub_d, t.code),
+        company: companyOf.get(s(t.code)) ?? null,
         words: s(t.words),
       })),
       closed: done.length,

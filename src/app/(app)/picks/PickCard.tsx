@@ -12,8 +12,12 @@ import { Term } from "@/components/ui/Overlays";
 import { CandidateBadge, ValidationBadge } from "@/components/ui/Badges";
 import { Masked, Money, SimulatedLabel } from "@/components/ui/Values";
 import {
+  entryLabel,
+  entryNote,
   FAMILY_BADGES,
   honestyLine,
+  nowMaskedText,
+  nowNote,
   pct,
   profileHue,
   STOP_GAP_HOVER,
@@ -105,6 +109,24 @@ export function PickCard({
               ? ` · typical past result ${pct(pick.expectedGainPpm)}`
               : null}
           </li>
+          {pick.entry ? (
+            <li data-testid="entry-line">
+              {entryLabel(pick.entryBought)} <Money micro={pick.entry.micro} />
+              {entryNote(pick.entryBought, pick.lastCloseD)}
+            </li>
+          ) : null}
+          {pick.now && (pick.now.money || pick.now.changePpm !== null) ? (
+            <li data-testid="now-line">
+              {pick.now.money ? (
+                <>
+                  Now <Money micro={pick.now.money.micro} />
+                  {nowNote(pick.now.changePpm, pick.now.label)}
+                </>
+              ) : pick.now.changePpm !== null ? (
+                nowMaskedText(pick.now.changePpm)
+              ) : null}
+            </li>
+          ) : null}
           <li>
             <Term meaning="The highest price at which this pick counts as bought: tonight's closing price plus a small allowance for price slip.">
               Buy up to

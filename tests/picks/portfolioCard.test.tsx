@@ -23,6 +23,7 @@ const one = (profile: string, over: Partial<MyPortfolio> = {}): MyPortfolio => (
   holdings: [
     {
       stock: "ZZA",
+      company: "Zed A Limited",
       strategy: "Follow the trend",
       entryD: "2030-03-04",
       entry: m("10000000"),
@@ -36,6 +37,7 @@ const one = (profile: string, over: Partial<MyPortfolio> = {}): MyPortfolio => (
     {
       d: "2030-03-04",
       stock: "ZZA",
+      company: "Zed A Limited",
       words: "Bought as a Follow the trend pick: 25% of the money.",
     },
   ],
@@ -68,10 +70,12 @@ describe("PortfolioCard (D-950)", () => {
       );
       expect(box).toHaveTextContent("Nightly shortlist comes in with a new pick.");
       expect(box).toHaveTextContent(
-        "ZZA (Follow the trend) bought at A$10.00 on Mon 4 Mar 2030, now A$10.50",
+        "ZZA · Zed A Limited (Follow the trend) bought at A$10.00 on Mon 4 Mar 2030, now A$10.50",
       );
       expect(box).toHaveTextContent("4 sold, 3 with a gain (75%).");
-      expect(box).toHaveTextContent("Mon 4 Mar 2030: ZZA. Bought as a Follow the trend pick");
+      expect(box).toHaveTextContent(
+        "Mon 4 Mar 2030: ZZA · Zed A Limited. Bought as a Follow the trend pick",
+      );
       expect(box.textContent ?? "").not.toMatch(/\d{4}-\d{2}-\d{2}/);
     }
     expect(screen.getByRole("heading", { name: "Conservative" })).toBeInTheDocument();
@@ -121,6 +125,7 @@ describe("PortfolioCard (D-950)", () => {
         holdings: [
           {
             stock: "Stock A",
+            company: null,
             strategy: "Follow the trend",
             entryD: null,
             entry: null,
@@ -128,7 +133,7 @@ describe("PortfolioCard (D-950)", () => {
             changePpm: 50_000,
           },
         ],
-        trades: [{ d: null, stock: "Stock A", words: "Sold at the aim." }],
+        trades: [{ d: null, stock: "Stock A", company: null, words: "Sold at the aim." }],
       });
     const { container } = render(
       <PortfolioCard

@@ -1,7 +1,7 @@
 // Plain-words helpers of the Picks pages (UXN-040..045, ARN-095). Pure: no database, no clock.
 // Every figure comes from a stored, published value; nothing here computes a price or a probability.
 import type { PickRowView, TrackRow } from "@/lib/ui/loaders/picks";
-import { formatPpm } from "@/lib/view/format";
+import { formatDay, formatPpm } from "@/lib/view/format";
 
 export const HONESTY_BASE = "Personal use only · Not financial advice";
 export const HONESTY_NOT_PROVEN = "Model not proven yet";
@@ -242,3 +242,22 @@ export function vsMarketSummaryLine(s: {
   if (s.insufficient) return `Vs market: ${VS_MARKET_INSUFFICIENT} (n = ${s.n}).`;
   return `Median vs market ${ppText(s.medianPpm)}; ${s.beatingPct}% of picks beat the market; n = ${s.n}.`;
 }
+
+// ---- Entry and current price on the pick cards (Owner 2026-11-16) -------------------------------------
+
+/** Percent with one decimal and a real minus sign: "+5.7%", "−2.1%". */
+export const nowPct = (ppm: number | null): string => formatPpm(ppm, { digits: 1, sign: "always" });
+
+/** Words before the entry price: the buy price once bought, else the pick-night close. */
+export const entryLabel = (bought: boolean): string => (bought ? "Bought at" : "Entry about");
+
+/** Words after the entry price: which close it is (not shown once the pick was actually bought). */
+export const entryNote = (bought: boolean, d: string | null): string =>
+  bought || d === null ? "" : ` (last close ${formatDay(d)})`;
+
+/** Words after the current price: the change from entry and how fresh the price is. */
+export const nowNote = (ppm: number | null, label: string | null): string =>
+  `${ppm === null ? "" : ` (${nowPct(ppm)})`}${label ? `, ${label}` : ""}`;
+
+/** Masked viewers see the change only, never a price or a date. */
+export const nowMaskedText = (ppm: number): string => `Now ${nowPct(ppm)} from entry`;

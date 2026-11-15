@@ -16,6 +16,7 @@ import { opaqueDigest } from "@/lib/view/opaqueRef";
 import { soft, strategyNames } from "./common";
 import { melTime } from "./pickAlerts";
 import { cardHref } from "./cards";
+import { loadPickNow, ppmOf } from "./pickNow";
 import { newerThanClose, readLatestQuotes } from "@/lib/data/quotes/latest";
 import {
   isDateParam,
@@ -99,19 +100,6 @@ export async function parsePicksQuery(
   return { profile, d: d || undefined };
 }
 
-/** Level against the reference price in ppm: exact integer arithmetic, rounded half away from zero. */
-function ppmOf(level: unknown, reference: unknown): number | null {
-  try {
-    const ref = BigInt(String(reference));
-    if (ref <= 0n) return null;
-    const diff = (BigInt(String(level)) - ref) * 1_000_000n; // threshold-ok: ppm
-    const half = ref / 2n;
-    return Number(diff >= 0n ? (diff + half) / ref : -((-diff + half) / ref)); // money-float-ok: small ppm integer
-  } catch {
-    return null;
-  }
-}
-
 /** Where a closed result sits against the range published with the pick (UXN-043). */
 export function rangePosition(
   netPpm: number | null,
@@ -138,6 +126,19 @@ export type PickRowView = {
   /** Stop and aim as ppm of the reference price (the "-8%" and "+10%" of UXN-040). */
   stopPpm: number | null;
   aimPpm: number | null;
+  /**
+   * The price the pick is based on: the buy price once bought, else the pick-night close
+   * (reference); null for a masked viewer. `entryBought` tells which of the two it is.
+   */
+  entry: MoneyView | null;
+  entryBought: boolean;
+  /** The day of that close (the day the pick was published); null for a masked viewer. */
+  lastCloseD: string | null;
+  /**
+   * The current price (delayed quote if newer than the close, else the close) with its change from
+   * the entry. `money` and `label` are null for a masked viewer (percentage only); null when no price.
+   */
+  now: { money: MoneyView | null; changePpm: number | null; label: string | null } | null;
   /** Suggested size and the loss if the stop is hit (before fees); null for a masked user. */
   size: MoneyView | null;
   riskAtStop: MoneyView | null;
@@ -239,6 +240,20 @@ async function pickCodesInRange(
   return r.rows.map((x) => ({ d: String(x.d), code: String(x.code) }));
 }
 
+/** The current-price view of one pick: change from the entry (exact ppm); no price or time when masked. */
+function nowView(
+  n: { micro: bigint; label: string } | undefined,
+  entry: unknown,
+  masked: boolean,
+): PickRowView["now"] {
+  if (n === undefined) return null;
+  return {
+    money: masked ? null : money(n.micro.toString()),
+    changePpm: ppmOf(n.micro, entry),
+    label: masked ? null : n.label,
+  };
+}
+
 export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksModel> {
   const market = marketOf(env);
   const profiles = await profileNames(env);
@@ -278,6 +293,11 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
   const t = (s: string): string => (kit ? maskText(s, kit.aliases, kit.lookup) : s);
   const names = await soft(() => strategyNames(env.main), {});
   const statuses = await soft(() => familyStatusMap(env.main, market, d), null);
+  const nowOf = await loadPickNow(
+    env.main,
+    market,
+    rows.rows.map((x) => String(x.code)),
+  );
   const picks: PickRowView[] = rows.rows.map((x) => {
     const code = String(x.code);
     // D-984: a candidate pick has no past trades; its stored cases are the plan, so none is shown
@@ -292,6 +312,7 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
             n: Number(x.n_similar),
           }; // money-float-ok: SQL integer columns
     const valid = String(x.valid_until_d);
+    const bought = x.o_state === "bought" && x.o_entry !== null;
     // No stored p exists for a V1 pick, so the display is always "no_history" until a family is allowed.
     const chance = chanceDisplay({
       status: statuses?.[String(x.family) as keyof typeof statuses] ?? "shadow",
@@ -317,6 +338,16 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
         : null,
       stopPpm: ppmOf(x.stop_micro, x.reference_micro),
       aimPpm: ppmOf(x.aim_micro, x.reference_micro),
+      entry: masked
+        ? null
+        : bought
+          ? money(String(x.o_entry))
+          : x.reference_micro === null
+            ? null
+            : money(String(x.reference_micro)),
+      entryBought: !masked && bought,
+      lastCloseD: masked ? null : d,
+      now: nowView(nowOf.get(code), bought ? x.o_entry : x.reference_micro, masked),
       size: masked ? null : money(String(x.size_micro)),
       riskAtStop: masked ? null : money(String(x.risk_micro)),
       outcome:

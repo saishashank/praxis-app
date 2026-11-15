@@ -16,6 +16,7 @@ import { maskAlertViews } from "@/lib/view/alerts";
 import { formatDay, plural } from "@/lib/view/format";
 import { regimeLabel } from "@/lib/view/terms";
 import { pickRef } from "./picks";
+import { loadPickNow, ppmOf, type PickNow } from "./pickNow";
 import {
   newerThanClose,
   quoteTimeMelbourne,
@@ -138,6 +139,20 @@ export type HomePick = {
   referenceMicro: number | null;
   stopMicro: number | null;
   aimMicro: number | null;
+  /** Full company name; null for a masked viewer or when none is stored. */
+  company: string | null;
+  /** The price the pick is based on: the buy price once bought, else the pick-night close; null if masked. */
+  entryMicro: number | null;
+  entryBought: boolean;
+  /** The day of the pick-night close; null for a masked viewer. */
+  lastCloseD: string | null;
+  /** Stop and aim as ppm of the reference price (shown to everyone, masked or not). */
+  stopPpm: number | null;
+  aimPpm: number | null;
+  /** The current price and its change from entry; price and freshness are null when masked. */
+  nowMicro: number | null;
+  nowChangePpm: number | null;
+  nowLabel: string | null;
   aimReachPpm: number | null;
   timeFrameSessions: number | null;
   /** Last day the pick can be bought: exact, or the ISO week for a masked viewer. */
@@ -502,9 +517,13 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
   const pickD = strOrNull(pd.rows[0]?.d);
   const pickRows = pickD
     ? await deps.mainDb.execute({
-        sql: `SELECT profile, rank, code, family, tier, label, reference_micro, stop_micro, aim_micro,
-                     aim_reach_ppm, time_frame_sessions, valid_until_d
-              FROM pick WHERE market = ? AND d = ? AND rank <= ? ORDER BY profile, rank LIMIT ?`,
+        sql: `SELECT p.profile, p.rank, p.code, p.family, p.tier, p.label, p.reference_micro, p.stop_micro,
+                     p.aim_micro, p.aim_reach_ppm, p.time_frame_sessions, p.valid_until_d,
+                     i.name, o.entry_micro AS o_entry
+              FROM pick p LEFT JOIN instrument i ON i.market = p.market AND i.code = p.code
+                LEFT JOIN pick_outcome o ON o.market = p.market AND o.d = p.d AND o.profile = p.profile
+                  AND o.rank = p.rank AND o.kind = 'pick' AND o.state = 'bought'
+              WHERE p.market = ? AND p.d = ? AND p.rank <= ? ORDER BY p.profile, p.rank LIMIT ?`,
         args: [v.market, pickD, PICKS_PER_PROFILE, MAX_HOME_PICKS],
       })
     : { rows: [] };
@@ -546,27 +565,53 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     : null;
   const label = (c: string) => (scope ? scope.label(c) : masked ? "Another stock" : c);
 
+  // current price of the pick codes (delayed quote if newer than the close, else the close)
+  const pickNow = masked
+    ? new Map<string, PickNow>()
+    : await soft(
+        () =>
+          loadPickNow(
+            deps.mainDb,
+            v.market,
+            pickRows.rows.map((r) => str(r.code)),
+          ),
+        new Map<string, PickNow>(),
+      );
   view.picks = {
     d: pickD,
-    items: pickRows.rows.map((r) => ({
-      profile: str(r.profile),
-      rank: num(r.rank),
-      stock: label(str(r.code)),
-      family: str(r.family),
-      tier: str(r.tier),
-      label: scope ? scope.text(str(r.label)) : str(r.label),
-      referenceMicro: masked ? null : num(r.reference_micro),
-      stopMicro: masked ? null : num(r.stop_micro),
-      aimMicro: masked ? null : num(r.aim_micro),
-      aimReachPpm: numOrNull(r.aim_reach_ppm),
-      timeFrameSessions: numOrNull(r.time_frame_sessions),
-      validUntil: masked
-        ? scope
-          ? scope.day(str(r.valid_until_d))
-          : null
-        : formatDay(str(r.valid_until_d)),
-      whyHref: `/picks/${encodeURIComponent(masked ? pickRef(`${pickD}.${str(r.profile)}.${num(r.rank)}`) : `${pickD}.${str(r.profile)}.${num(r.rank)}`)}`,
-    })),
+    items: pickRows.rows.map((r) => {
+      const bought = r.o_entry !== null && r.o_entry !== undefined;
+      const entry = bought ? r.o_entry : r.reference_micro;
+      const nowP = pickNow.get(str(r.code));
+      return {
+        profile: str(r.profile),
+        rank: num(r.rank),
+        stock: label(str(r.code)),
+        family: str(r.family),
+        tier: str(r.tier),
+        label: scope ? scope.text(str(r.label)) : str(r.label),
+        referenceMicro: masked ? null : num(r.reference_micro),
+        stopMicro: masked ? null : num(r.stop_micro),
+        aimMicro: masked ? null : num(r.aim_micro),
+        company: masked || r.name === null || r.name === undefined ? null : str(r.name),
+        entryMicro: masked ? null : num(entry),
+        entryBought: !masked && bought,
+        lastCloseD: masked ? null : pickD,
+        stopPpm: ppmOf(r.stop_micro, r.reference_micro),
+        aimPpm: ppmOf(r.aim_micro, r.reference_micro),
+        nowMicro: masked || !nowP ? null : Number(nowP.micro), // money-float-ok: micro-AUD, as the other pick prices
+        nowChangePpm: nowP ? ppmOf(nowP.micro, entry) : null,
+        nowLabel: masked || !nowP ? null : nowP.label,
+        aimReachPpm: numOrNull(r.aim_reach_ppm),
+        timeFrameSessions: numOrNull(r.time_frame_sessions),
+        validUntil: masked
+          ? scope
+            ? scope.day(str(r.valid_until_d))
+            : null
+          : formatDay(str(r.valid_until_d)),
+        whyHref: `/picks/${encodeURIComponent(masked ? pickRef(`${pickD}.${str(r.profile)}.${num(r.rank)}`) : `${pickD}.${str(r.profile)}.${num(r.rank)}`)}`,
+      };
+    }),
   };
 
   // D-900: the newest delayed quote, shown instead of the close when it is from a later day.
