@@ -11,3 +11,7 @@ ffb9ba02cfcb56859210d3e84fc02990dc9abcab:src/lib/agents/families/ruleSchema.ts:g
 16fb5f743532efc228d5c2331b15ec77f73aac19:tests/selfhost/loop.test.ts:generic-api-key:21
 16fb5f743532efc228d5c2331b15ec77f73aac19:tests/selfhost/clock-week.test.ts:generic-api-key:27
 16fb5f743532efc228d5c2331b15ec77f73aac19:tests/selfhost/runner.test.ts:generic-api-key:421
+# Table content hashes in the V3 replay-hash baseline on the build branch (e2c6b8b, 2026-11-12, D-1007): SHA-256 digests keyed by table names such as asx_rate_token and credential_expiry. The scan reads every branch (--log-opts=--all). Not secrets (Owner approved 2026-11-13).
+e2c6b8b67800fa07ea6191b83aba76bd84132133:tests/acceptance/v3/replay-hash.baseline.json:generic-api-key:21
+e2c6b8b67800fa07ea6191b83aba76bd84132133:tests/acceptance/v3/replay-hash.baseline.json:generic-api-key:61
+e2c6b8b67800fa07ea6191b83aba76bd84132133:tests/acceptance/v3/replay-hash.baseline.json:generic-api-key:62
