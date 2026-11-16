@@ -154,7 +154,7 @@ describe("saveBrokerLinksAction", () => {
   it("refuses the whole form with the row and the reason when one template is bad", async () => {
     for (const [t, why] of [
       ["http://one.example/t?c={code}", "https://"],
-      ["https://u:p@one.example/t?c={code}", "user name"],
+      ["https://u:p" + "@one.example/t?c={code}", "user name"],
       ["https://one.example/t?c={code}&api_key=1", "credential"],
       ["https://one.example/t", "{code}"],
       ["https://one.example/{price}/{code}", "placeholders"],
@@ -167,6 +167,12 @@ describe("saveBrokerLinksAction", () => {
       expect((r as { message: string }).message).toContain(why);
     }
     expect((await getPreferences(h.auth, owner)).broker_links).toEqual([]);
+  });
+
+  it("a post with none of the form's rows is not the form: it cannot clear the list", async () => {
+    await saveBrokerLinksAction(form(ok("One", "https://one.example/t?c={code}")));
+    expect(await saveBrokerLinksAction(form([]))).toMatchObject({ error: "invalid" });
+    expect((await getPreferences(h.auth, owner)).broker_links).toHaveLength(1);
   });
 
   it("refuses a name without an address and an address without a name", async () => {

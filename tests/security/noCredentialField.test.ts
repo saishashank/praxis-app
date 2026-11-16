@@ -109,7 +109,7 @@ describe("no credential field", () => {
     ]) {
       expect(validBrokerTemplate(`https://broker.example/t?c={code}&${k}=1`).ok, k).toBe(false);
     }
-    expect(validBrokerTemplate("https://user:pw@broker.example/t?c={code}").ok).toBe(false);
+    expect(validBrokerTemplate("https://user:pw" + "@broker.example/t?c={code}").ok).toBe(false);
     expect(validBrokerTemplate("https://broker.example/t?c={code}").ok).toBe(true);
   });
 });

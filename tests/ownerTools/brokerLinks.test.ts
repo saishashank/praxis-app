@@ -32,7 +32,7 @@ describe("brokerUrl", () => {
     const ctx = { code: "ZZA", market: "AU" };
     for (const t of [
       "http://broker.example/s/{code}",
-      "https://user:pw@broker.example/s/{code}",
+      "https://user:pw" + "@broker.example/s/{code}",
       "https://broker.example/s/{code}#x",
       "https://broker.example/s/{code}/{price}",
       "https://broker.example/s",

@@ -35,7 +35,9 @@ const read = (f: string) => fs.readFileSync(f, "utf8");
 // ---- static sweep ------------------------------------------------------------------------------
 
 // Hrefs that code supplies (build-time notices file, or a path passed in by page code), never stored text.
-const PROP_HREFS = ["{a.href}", "{s.href}", "{c.sortHref}", "{moreHref}", "{href}"];
+// M21 B1 (D-1218, D-1219): "{l.href}" is the Owner-tools BrokerLinks link, built by `brokerUrl` from an https template the
+// Owner typed (validated, only the encoded code and market filled in); it is never stored third-party text.
+const PROP_HREFS = ["{a.href}", "{s.href}", "{c.sortHref}", "{moreHref}", "{href}", "{l.href}"];
 
 describe("no code path turns stored text into markup", () => {
   it("has no HTML or markdown sink in src (React escapes every text child)", () => {

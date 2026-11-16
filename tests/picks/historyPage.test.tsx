@@ -10,6 +10,8 @@ import PicksPage from "@/app/(app)/picks/page";
 
 let current: LoaderEnv;
 vi.mock("@/lib/auth/guard", () => ({ requireUser: vi.fn(async () => ({ id: 1, role: "owner" })) }));
+// M21 B1 (D-1219): the Picks page asks whether the Owner tools are visible to the user; here they are not.
+vi.mock("@/lib/auth/ownerToolsGuard", () => ({ ownerToolsVisibleTo: vi.fn(async () => false) }));
 vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new Error("NEXT_NOT_FOUND");

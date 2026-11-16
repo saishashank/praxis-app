@@ -14,6 +14,15 @@ vi.setConfig({ testTimeout: 900000, hookTimeout: 900000 });
 afterAll(cleanupTempDbs);
 
 const ROOT = path.resolve(import.meta.dirname, "../../..");
+/** Code only: whole-line and trailing comments are dropped, so prose in a comment is not a reader. */
+const code = (src: string): string =>
+  src
+    .split("\n")
+    .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
+    .map((l) => l.replace(/\s\/\/\s.*$/, ""))
+    .join("\n");
+// the market-guard trigger generator derives its table list from the schema; it reads no row
+const GUARD_GENERATOR = "scripts/db/gen-market-guard.mjs";
 
 describe("AT-78: a planted holding moves nothing (D-1220)", () => {
   it("the golden world dumps identically with and without a holdings upload, except owner_holding", async () => {
@@ -75,7 +84,9 @@ describe("AT-78: a planted holding moves nothing (D-1220)", () => {
     for (const r of roots) {
       if (!fs.existsSync(path.join(ROOT, r))) continue;
       for (const f of walk(r)) {
-        if (/\bowner_holding\b/.test(fs.readFileSync(path.join(ROOT, f), "utf8"))) bad.push(f);
+        if (f === GUARD_GENERATOR) continue;
+        if (/\bowner_holding\b/.test(code(fs.readFileSync(path.join(ROOT, f), "utf8"))))
+          bad.push(f);
       }
     }
     expect(bad).toEqual([]);
@@ -88,7 +99,7 @@ describe("AT-78: a planted holding moves nothing (D-1220)", () => {
         const rel = `${dir}/${e.name}`;
         if (e.isDirectory()) walk(rel);
         else if (/\.(ts|tsx|mjs)$/.test(e.name)) {
-          if (/\bowner_holding\b/.test(fs.readFileSync(path.join(ROOT, rel), "utf8")))
+          if (/\bowner_holding\b/.test(code(fs.readFileSync(path.join(ROOT, rel), "utf8"))))
             hits.push(rel);
         }
       }

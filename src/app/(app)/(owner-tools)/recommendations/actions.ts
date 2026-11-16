@@ -48,8 +48,17 @@ export async function saveCapitalAction(fd: FormData): Promise<OwnerActionResult
 /** Up to five broker address templates: a name and an https address with {code}. */
 export async function saveBrokerLinksAction(fd: FormData): Promise<OwnerActionResult> {
   const user = await requireOwnerTools(PATH);
-  const names = fd.getAll("broker_name").map((v) => (typeof v === "string" ? v : ""));
-  const urls = fd.getAll("broker_template").map((v) => (typeof v === "string" ? v : ""));
+  const rawNames = fd.getAll("broker_name");
+  const rawUrls = fd.getAll("broker_template");
+  const names = rawNames.filter((v): v is string => typeof v === "string");
+  const urls = rawUrls.filter((v): v is string => typeof v === "string");
+  if (names.length !== rawNames.length || urls.length !== rawUrls.length) {
+    return { error: "invalid", message: "Enter the names and addresses as text." }; // a file is not text
+  }
+  // The form always posts its five rows; a post with none of them is not this form, so it cannot clear the list.
+  if (names.length === 0 && urls.length === 0) {
+    return { error: "invalid", message: "The form was not sent. Try again." };
+  }
   const form = parseBrokerForm(names, urls);
   if (!form.ok) {
     return { error: "invalid", message: `Row ${form.line}: ${form.reason}.` };
