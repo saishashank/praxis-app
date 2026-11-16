@@ -9,6 +9,7 @@ import { BreakerStatus } from "@/components/ui/Badges";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { ConcentrationChart } from "@/components/charts/ConcentrationChart";
 import { Banner, EmptyState } from "@/components/ui/States";
 import { Pill } from "@/components/ui/Pill";
 import { Masked, Money, SimulatedLabel } from "@/components/ui/Values";
@@ -336,7 +337,14 @@ export default async function RiskPage() {
           />
         ) : (
           <Card>
-            <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
+            <ConcentrationChart
+              items={d.concentration.map((c) => ({
+                label: c.stock,
+                weightPpm: c.weightPpm,
+                strategies: c.strategies,
+              }))}
+            />
+            <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0 text-sm">
               {d.concentration.map((c) => (
                 <li key={c.stock} className="min-w-0 break-words">
                   <span className="font-semibold">{c.stock}</span>:{" "}

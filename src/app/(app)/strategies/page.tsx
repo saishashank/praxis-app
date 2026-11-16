@@ -25,6 +25,7 @@ import { Banner, EmptyState } from "@/components/ui/States";
 import { SimulatedLabel } from "@/components/ui/Values";
 import { buttonClass } from "@/components/ui/Button";
 import { setSortPreferenceAction } from "./actions";
+import { FamilyGroups } from "./FamilyGroups";
 import { StrategyTabs } from "./StrategyTabs";
 import { StrategyTile } from "./StrategyTile";
 
@@ -104,6 +105,15 @@ export default async function StrategiesPage({
       ) : (
         <>
           {list.state === "empty" ? <Banner>{list.text}</Banner> : null}
+
+          <FamilyGroups
+            tiles={tiles.map((t) => ({
+              execution: t.execution,
+              family: t.family,
+              name: names[t.family]?.name ?? t.name,
+              moneyType: t.moneyType,
+            }))}
+          />
 
           <section aria-labelledby="attention-h" className="flex min-w-0 flex-col gap-3">
             <h2 id="attention-h" className="m-0 text-xl font-semibold">
