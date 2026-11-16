@@ -889,6 +889,9 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1301 | L1 (queue and count): nextUnlabelled returns the newest announcement of the market with no golden_label row of any answer, so a skip or an unclear flag takes... |
 | D-1302 | L1 (independence): golden.ts, the loader and the page read none of text_label, label_validation or label_item (a test asserts every statement the page issues... |
 | D-1303 | L1 (keyboard): the three groups are native radios (Tab enters a group, arrows move inside it); 1 to 4 choose within the focused group, S skips, U flags as un... |
+| D-1310 | C4 (cut pack): steelmanNight stores, after the written subjects, one zero-item steelman_pack per subject cut by steelman_daily_cards (items_json "[]", item_c... |
+| D-1311 | C4 (words and count): readSteelmanForCard returns not_written with reason daily_limit for a cut pack whatever the night row holds, and the card shows exactly... |
+| D-1312 | C4 (readers): no module outside src/lib/steelman gains a steelman import, so tests/security/steelman-readers.json is unchanged and steelman-readers stays green. |
 | D-1315 | C5 (bands): the four muted bands are solid per-theme tokens --band-info, --band-warn, --band-stale, --band-neutral in palette.tokens.json (each the theme's s... |
 | D-1316 | C5 (components): Banner gains the tone stale (text colour, --band-stale); info sits on --band-info, warning on --band-warn, danger keeps the plain surface; e... |
 | D-1317 | C5 (emulation spec): the Settings control is the Appearance radio group and Save; the comparison is the computed token set (colours, three hue fills, the fou... |

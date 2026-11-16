@@ -10,7 +10,6 @@ import type { SteelmanView } from "@/lib/steelman/read";
 const CAPTION = "AI-written from the evidence on this card. Not advice; not a forecast.";
 
 const REASON_TEXT: Record<string, string> = {
-  daily_limit: "the daily limit of written cases was reached",
   budget: "the daily model allowance was used up",
   no_model: "no model was available",
   critic_unavailable: "no independent checker was available",
@@ -78,6 +77,12 @@ function Body({ data, prefix }: { data: SteelmanView; prefix: string }) {
 export function Steelman({ data }: { data: SteelmanView | null }) {
   if (data === null) return null;
   if (data.state === "not_written") {
+    if (data.reason === "daily_limit")
+      return (
+        <Card title="Strongest case for and against" data-testid="steelman">
+          <p className="m-0 text-sm text-text-muted">Not written tonight: daily limit reached</p>
+        </Card>
+      );
     const why = data.reason ? REASON_TEXT[data.reason] : undefined;
     return (
       <Card title="Strongest case for and against" data-testid="steelman">

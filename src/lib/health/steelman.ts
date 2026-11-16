@@ -13,6 +13,8 @@ export type SteelmanHealth = {
   /** Nights stored, the last NIGHTS_NEEDED counted. */
   nights: number;
   qualifying: number;
+  /** D-1311: subjects cut by the daily limit over the window. */
+  notWrittenLimit: number;
   text: string;
 };
 
@@ -24,9 +26,17 @@ export function steelmanHealthOf(rows: readonly NightRow[]): SteelmanHealth {
   ).length;
   // `rows` is the window only (readNights limits it), so the count is "over these nights", not ever.
   const written = window.reduce((n, r) => n + r.written, 0);
+  const cut = window.reduce((n, r) => n + r.notWrittenLimit, 0);
+  const tail = cut > 0 ? `; ${cut} not written (daily limit).` : ".";
   const base = `Steelman: ${qualifying} ${qualifying === 1 ? "night" : "nights"} at 98 % or better, ${NIGHTS_NEEDED} needed`;
   if (qualifying >= NIGHTS_NEEDED) {
-    return { state: "ok", nights: rows.length, qualifying, text: `${base}; evidence complete.` };
+    return {
+      state: "ok",
+      nights: rows.length,
+      qualifying,
+      notWrittenLimit: cut,
+      text: `${base}; evidence complete${tail}`,
+    };
   }
   const why =
     rows.length === 0
@@ -38,7 +48,8 @@ export function steelmanHealthOf(rows: readonly NightRow[]): SteelmanHealth {
     state: "ok",
     nights: rows.length,
     qualifying,
-    text: `${base}, pending production (${why}).`,
+    notWrittenLimit: cut,
+    text: `${base}, pending production (${why})${tail}`,
   };
 }
 
@@ -51,6 +62,7 @@ export async function loadSteelmanHealth(db: Exec, market: string): Promise<Stee
       state: "attention",
       nights: 0,
       qualifying: 0,
+      notWrittenLimit: 0,
       text: "Steelman: night counters could not be read.",
     };
   }
