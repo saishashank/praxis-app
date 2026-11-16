@@ -57,7 +57,19 @@ try {
     `e2e: scenario ${seeded.scenario} (${seeded.instruments} instruments, ${seeded.bars} bars)`,
   );
   if (stateNames.length > 0) {
-    await applyStates(main, stateNames);
+    // pick_alert.user_id is String(app_user.id): the seeded viewer's id is only known after the auth rows exist.
+    const auth = createClient({ url: need("TURSO_AUTH_URL") });
+    let viewerId;
+    try {
+      const v = await auth.execute({
+        sql: "SELECT id FROM app_user WHERE email = ?",
+        args: ["viewer@praxis.test"],
+      });
+      viewerId = String(v.rows[0].id);
+    } finally {
+      auth.close();
+    }
+    await applyStates(main, stateNames, undefined, { viewerId });
     console.log(`e2e: states ${stateNames.join(", ")}`);
   }
   // M19 D-994 / D-1077: a development lane that sets PRAXIS_MARKETS_ENABLED (for example AU,IN,US) enables those built

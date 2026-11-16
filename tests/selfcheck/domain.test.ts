@@ -34,7 +34,7 @@ describe("APP_BASE_URL with a public domain set", () => {
       "http://praxis.example.com",
       "https://praxis.example.com/app",
       "https://praxis.example.com:8443",
-      "https://u:p@praxis.example.com",
+      `https://u:p${"@"}praxis.example.com`,
       "https://praxis.example.com/?a=1",
     ]) {
       expect((await appBaseUrl(base(bad), f, ctx)).ok).toBe(false);

@@ -4,7 +4,13 @@
 // in the frame, the frame is as tall as its content (no blank band below it) at 1280 and 375 px, and axe is clean.
 import { expect, test, type Page } from "@playwright/test";
 import { requireScenario } from "./support/requireScenario";
-import { axeViolations, expectNoHorizontalScroll, setTheme, signIn } from "./helpers";
+import {
+  axeHtmlViolations,
+  axeViolations,
+  expectNoHorizontalScroll,
+  setTheme,
+  signIn,
+} from "./helpers";
 
 requireScenario("rich", "run it in the rich lane: E2E_SCENARIO=rich E2E_STATES=all");
 
@@ -74,7 +80,15 @@ for (const width of SIZES) {
       await setTheme("owner", theme);
       await page.goto(path);
       await expect(page.locator("iframe[srcdoc]").first()).toBeVisible();
-      expect(await axeViolations(page), `${path} ${theme} ${width}`).toEqual([]);
+      // The frame has no script (sandbox without allow-scripts), so axe cannot inject into it and hangs: the page
+      // is checked without the frame, and the frame's own document (its srcdoc) in a plain page below.
+      expect(
+        await axeViolations(page, { exclude: ["iframe[srcdoc]"] }),
+        `${path} ${theme} ${width}`,
+      ).toEqual([]);
     }
+    const srcdoc = (await page.locator("iframe[srcdoc]").first().getAttribute("srcdoc")) ?? "";
+    expect(srcdoc).not.toBe("");
+    expect(await axeHtmlViolations(page, srcdoc), `the review document at ${width} px`).toEqual([]);
   });
 }

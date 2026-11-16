@@ -175,3 +175,47 @@ describe("unmute (UXN-322, D-1207)", () => {
     expect(await alertRows()).toHaveLength(5);
   });
 });
+
+describe("alertsOnFor (the user's effective Alerts for all picks)", () => {
+  it("is the stored choice: on, off, and off for an unknown or inactive user", async () => {
+    const { alertsOnFor } = await import("@/lib/alerts/pick/unmute");
+    await setPrefs({ pick_alerts: "on" });
+    expect(await alertsOnFor(auth, main, "1")).toBe(true);
+    await setPrefs({ pick_alerts: "off" });
+    expect(await alertsOnFor(auth, main, "1")).toBe(false);
+    expect(await alertsOnFor(auth, main, "999")).toBe(false);
+    await setPrefs({ pick_alerts: "on" });
+    await auth.execute("UPDATE app_user SET status = 'revoked' WHERE id = 1");
+    expect(await alertsOnFor(auth, main, "1")).toBe(false);
+  });
+
+  it("with no stored choice, or unreadable preferences, a non-owner is off", async () => {
+    const { alertsOnFor } = await import("@/lib/alerts/pick/unmute");
+    await auth.execute("DELETE FROM user_preference");
+    expect(await alertsOnFor(auth, main, "1")).toBe(false);
+    for (const raw of ["not json", "[]", "5"]) {
+      await auth.execute({
+        sql: "INSERT OR REPLACE INTO user_preference (user_id, prefs_json, updated_at) VALUES (1, ?, 't')",
+        args: [raw],
+      });
+      expect(await alertsOnFor(auth, main, "1"), raw).toBe(false);
+    }
+  });
+
+  it("with no stored choice the Owner follows the Owner default config", async () => {
+    const { alertsOnFor } = await import("@/lib/alerts/pick/unmute");
+    const { setConfig } = await import("@/lib/config/store");
+    await auth.execute("UPDATE app_user SET role = 'owner'");
+    await auth.execute("DELETE FROM user_preference");
+    for (const value of ["on", "off"]) {
+      await setConfig(main, {
+        key: "pick_alerts_default_owner",
+        value,
+        userId: null,
+        reason: "test",
+        now: "2026-11-04T00:00:00.000Z",
+      });
+      expect(await alertsOnFor(auth, main, "1"), value).toBe(value === "on");
+    }
+  });
+});
