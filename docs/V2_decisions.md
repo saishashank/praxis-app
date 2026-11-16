@@ -915,3 +915,58 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1327 | Z (AT-82 walk, D-1234): e2e/m21-at82.spec.ts runs in the owner-tools-on lane (E2E_STATES=all,owner-tools-on, scenario rich) because the Owner-tool pages exis... |
 | D-1328 | Z (rendered-text exceptions): the walk does not read the page text of /blueprint (a spec browser for the Owner whose purpose is to show requirement and decis... |
 | D-1329 | Z (the U0 test): scripts/ci/ui-crosscheck.test.mjs, named in the design's U0 row, had not been written by U0; |
+
+## M22 (M22_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-1400 | Numbering and gate: M22 decisions are D-1400…D-1499 in this file; tasks start on build at or after 8b65abc6 (M21 done); the M21 CI run on build recorded in B... |
+| D-1401 | One factory decides live routing (LLM-077, Gap 2 of LLM routes): src/lib/llm/factory.ts returns a live chain for a role only when the role (or words for the... |
+| D-1402 | Role names in the key and in words: llm_live_roles accepts R1, R2, R3, R5, R6, R7 and words (there is no R4 in code, budget.ts:7); the words phase is gated b... |
+| D-1403 | Bake-off reports and index: reports stay at docs/test-reports/ (the folder bakeoff-review.mjs already reads); a generated src/lib/llm/bakeoffIndex.generated.... |
+| D-1404 | Per-role verdict: a role passes for a model when every check of the role's categories and of the injection category passes and its trains-on-prompts value is... |
+| D-1405 | One run per candidate per golden version (BLD-051 spirit): the thresholds are the fixed THRESHOLDS (bakeoff.ts:45-54) plus D-1409, written into the report be... |
+| D-1406 | Live bake-offs in M22 (requirements Gap 1): the approved-commit rule of llm-bakeoff.yml (SEC-108 c) stays; the integration task dispatches it on release with... |
+| D-1407 | Roster refresh (LLM-070 [VERIFY roster]): |
+| D-1408 | Tiers (LLM-080): tier small (≤ 20B or "lite"/"instant"), medium (about 27–70B or "flash"), large (≥ 100B or "pro"); |
+| D-1409 | New golden categories (LLM-081, LLM-063): words ≥ 10 items (JSON valid ≥ 98 %, invented numbers 0, injection resistance 100 %, and zero hits of the D-922 pat... |
+| D-1410 | Budget buckets (requirements Gap 2): Role gains R7; |
+| D-1411 | Drop order with caps: expert_ingest and committee take their bucket caps, pick_reflection spends R6 and is reserved before the steelman for the picks settlin... |
+| D-1412 | Where LLM keys live (LLM-077): only GitHub production-environment secrets, referenced in the env: of the signals step of arena-signals.yml and of the experts... |
+| D-1413 | Workers AI through the REST API (requirements Gap 5): the router runs in GitHub Actions, so the adapter calls Cloudflare's Workers AI REST endpoint with a to... |
+| D-1414 | MiniLM model and runtime (LLM-079 [VERIFY size]): all-MiniLM-L6-v2 in ONNX form (Apache-2.0), its sha256 and size pinned in src/lib/llm/minilm/model.lock.jso... |
+| D-1415 | MiniLM head and training: a multinomial logistic head over the embeddings, trained by scripts/llm/minilm-train.mjs on the rule classifier's labels in the loc... |
+| D-1416 | MiniLM use in V3: shadow only; nothing reads minilm_shadow (reader test). |
+| D-1417 | Committee timing and forward-only (AGT-132): the Committee runs in the signals workflow after the steelman and the reflections, only for the current session,... |
+| D-1418 | Committee models (LLM-010): bull and bear from different providers or model families when the passing set has two, else the rating records same_family = 1; t... |
+| D-1419 | Call records (LLM-066): every Committee call stores its prompt hash, pack id, provider, model id, the model version string the provider returned, parameters,... |
+| D-1420 | Pre-registration (VAL-111): the first Committee night of a trial writes committee_prereg version 1 before any rating, with the frozen horizon, sessions, mini... |
+| D-1421 | Trial statistic and verdict (VAL-111): D = mean approve outcome minus mean reject outcome; the null from within-night label permutations (committee_permutati... |
+| D-1422 | Committee outcomes (ARN-105): the rated signal's forward ledger_row net at the family exit or committee_horizon_sessions, whichever is first; a signal withou... |
+| D-1423 | Trial page and hidden ratings (UXN-289, UXN-290): /strategies/experiments/committee for Owner and Editor, Viewer masked; ratings appear nowhere else (cards,... |
+| D-1424 | Reflections are written by R6 (requirements Gap 3): |
+| D-1425 | Reflection display: "Looking back (AI-written)" under a settled pick in the track record; the first Evening Review of each month carries "Unproven notes", at... |
+| D-1426 | AT-32 complement own-set (requirements Gap 10): tests/acceptance/v3/at32Opinions.test.ts reuses the at32Steelman proof with the own-set extended by exactly c... |
+| D-1427 | Opinion kinds measured (requirements Gap 7): lift meters for steelman and Committee from opinion_track; reflections are written after the outcome and get no... |
+| D-1428 | Promotion request (AGT-148, CTX-060): one opinion_promotion_request row per market and kind, ever, written when the settled count reaches opinion_min_n, the... |
+| D-1429 | Expert jobs ride on the nightly maintenance dispatch (requirements Gap 4): a new experts job in maintenance.yml runs the poll daily, the discovery on Sundays... |
+| D-1430 | Licence status rules (KB-083): robots disallows or terms forbid → no; robots allows and summarising is permitted → enabled; robots allows and summarising unk... |
+| D-1431 | First check and privacy (requirements Gap 8): the build machine runs the first check of every seed source into the private seed folder (licence-check.json),... |
+| D-1432 | Rules-only triage and extraction (LLM-067, LLM-068): with no live R1/R2 the triage answer is "unknown", items stay pending and are shown as waiting for a mod... |
+| D-1433 | Discovery (DAT-229 [VERIFY quotas]): co-mentions of authors in tracked experts' items only; platform search APIs stay blocked (no register row enabled); red-... |
+| D-1434 | Poll priority (DAT-230): daily for experts with an L1+ cluster or a positive confirmed call record, weekly for experts whose tested claims are all rejected a... |
+| D-1435 | Call proposals (KB-084, requirements Gap 9): a deterministic extractor gives the rules answer and the seed proposals; index and macro targets are not_trackab... |
+| D-1436 | Grammar v2 (KB-085): RULE_SCHEMA_VERSION 2 adds rel_sector, persist and ratio; family rule versions stay v1 and byte-equal, the loader refuses v2 for a famil... |
+| D-1437 | Cluster expressions (KB-085, requirements Gap 9): one expression per parked cluster lives in the private expressions.json (rule, exit from a fixed menu: the... |
+| D-1438 | Park reasons for the re-screen: blocked_data (needs data the system cannot get), needs_intraday, discretionary (needs judgement no rule can state), overlay_o... |
+| D-1439 | Alt inputs per market (DAT-248, requirements Gap 6): |
+| D-1440 | Alt-input pre-registration (DAT-248, BLD-051): hypothesis = on sessions where the alt reading is more cautious than the base, the next-20-session index retur... |
+| D-1441 | Display of both readings: with regime_altinputs_enabled = "on" the Cortex page shows the base and the shadow reading side by side in plain words; the key cha... |
+| D-1442 | DAT-249 and DAT-250 stubs: src/lib/deferred/sources.ts records each as rejected with its reason and the date checked; a test proves no fetcher, host or key e... |
+| D-1443 | Sweep conditions (AGT-147 [VERIFY batch endpoint]): the batch endpoint has its own pending register row; the sweep runs only with intraday_sweep_enabled = "o... |
+| D-1444 | Migration 0039 (one, first): thirteen tables as section A, eight of them market-keyed with generated guards; no earlier table changed; schema pins at 39. |
+| D-1445 | Switch guards as a registry: src/lib/config/guards/*.ts, one file per guarded key, each owned by one task; a failed read refuses (fails closed), as the M21 C... |
+| D-1446 | Health lines and plain words: each task delivers a pure line function; |
+| D-1447 | AT-73 shared part: tests/acceptance/v3/at73Shared.test.ts holds the 20-fixture proposal set for call proposals (valid, incomplete, duplicate, hostile text, o... |
+| D-1448 | Acceptance test files: M22 clauses go to split files (at76Trial, at76Reflections, at77WorkersAi, at77Sweep, at79Fetch, at79Calls, at79Clusters, at80Routes, a... |
+| D-1449 | Owner steps for the PR: dispatch the words and Committee-judge bake-offs after the merge and add any passing role to llm_live_roles; import the seed (format... |
