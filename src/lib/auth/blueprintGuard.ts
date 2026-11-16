@@ -8,6 +8,7 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { authDb } from "@/lib/db/client";
+import { hiddenForEntry } from "@/lib/http/hiddenRoutes";
 import { audit, requestMeta, type RequestMeta } from "./audit";
 import { isOwnerEmail, type AuthEnv } from "./env";
 import { getCurrentUser, type CurrentUser } from "./session";
@@ -57,7 +58,12 @@ async function resolve(
 ): Promise<CurrentUser | null> {
   try {
     const user = await deps.getUser();
-    if (!isPinnedOwner(user, deps.env)) return null;
+    // The same predicate the proxy uses (D-1210): one decision, two call sites.
+    const hidden = await hiddenForEntry("blueprint", user, {
+      isPinnedOwner: (u: CurrentUser) => isPinnedOwner(u, deps.env),
+      ownerToolsOn: () => true,
+    });
+    if (hidden || !isPinnedOwner(user, deps.env)) return null;
     await deps.recordEvent(user, event, route, await deps.meta());
     return user;
   } catch {

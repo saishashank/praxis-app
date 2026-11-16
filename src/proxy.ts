@@ -6,6 +6,7 @@ import { SESSION_COOKIE_PLAIN, SESSION_COOKIE_SECURE } from "@/lib/auth/cookies"
 import { parseClaims } from "@/lib/auth/claims";
 import { authDb } from "@/lib/db/client";
 import { gate } from "@/lib/http/gate";
+import { ownerToolsSwitchOn } from "@/lib/http/hiddenRoutes";
 import { getRateLimits, getSessionMaxAgeSec } from "@/lib/http/limits";
 
 // Same names Auth.js derives: __Secure- prefix on https (pinned in src/lib/auth/cookies.ts).
@@ -34,12 +35,13 @@ export function proxy(req: NextRequest) {
     readClaims,
     limits: getRateLimits(),
     isPinnedOwner: (claims) => isPinnedOwnerClaims(authDb(), claims, process.env),
+    ownerToolsOn: ownerToolsSwitchOn,
     nowSec: () => Math.floor(Date.now() / 1000),
   });
 }
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.png|icon.svg|apple-icon.png|brand/).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.png|icon.svg|apple-icon.png|sw.js|manifest.webmanifest|brand/).*)",
   ],
 };

@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { PAGES, allowedRoles } from "../../e2e/pages";
 import { ROLES, can } from "@/lib/auth/permissions";
+import { HIDDEN_ROUTES, hiddenEntryFor } from "@/lib/http/hiddenRoutes";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
 
@@ -17,13 +18,24 @@ function findPages(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-// M16 D-361/D-371: the Blueprint page answers as a missing route to everyone but the pinned Owner,
-// so it is not a registry page; its own guard is tested in tests/blueprint/blueprintGuard.test.ts.
+// M16 D-361/D-371, M21 A2 (D-1210): pages under a HIDDEN_ROUTES prefix (the Blueprint and the three Owner-tool pages)
+// answer as a missing route to everyone but the pinned Owner, so they are not registry pages; each one must call
+// its entry's guard first (checked below). Which pages those are is derived from HIDDEN_ROUTES, not listed here.
 // D-884: the @modal slot holds the Decision Card popup (an overlay of /cards/[id], not an address of
 // its own); the popup's guard is checked below like the page's.
-const onDisk = findPages(path.join(root, "src", "app"))
-  .filter((f) => f !== "src/app/(app)/blueprint/page.tsx" && !f.includes("/@modal/"))
-  .sort();
+const urlPath = (file: string): string => {
+  const rel = file.replace(/^src\/app\//, "").replace(/page\.tsx$/, "");
+  return (
+    "/" +
+    rel
+      .split("/")
+      .filter((x) => x && !(x.startsWith("(") && x.endsWith(")")))
+      .join("/")
+  );
+};
+const allPages = findPages(path.join(root, "src", "app")).filter((f) => !f.includes("/@modal/"));
+const hiddenPages = allPages.filter((f) => hiddenEntryFor(urlPath(f)) !== null);
+const onDisk = allPages.filter((f) => !hiddenPages.includes(f)).sort();
 const src = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
 
 describe("Decision Card popup guard (D-884)", () => {
@@ -37,6 +49,36 @@ describe("Decision Card popup guard (D-884)", () => {
     expect(body.match(/requireUser\(\s*"([^"]+)"/)?.[1]).toBe("read");
     // the empty slot calls nothing
     expect(src("src/app/(app)/@modal/default.tsx")).not.toMatch(/await|requireUser|Db\(/);
+  });
+});
+
+describe("hidden pages (HIDDEN_ROUTES)", () => {
+  it("the Blueprint page is one of them", () => {
+    expect(hiddenPages).toContain("src/app/(app)/blueprint/page.tsx");
+  });
+
+  it("no registry page sits under a hidden prefix, and no hidden page is in the registry", () => {
+    for (const p of PAGES) expect(hiddenEntryFor(p.path), p.file).toBeNull();
+  });
+
+  for (const file of hiddenPages) {
+    const entry = hiddenEntryFor(urlPath(file))!;
+    it(`${file} calls ${entry.guard} before any other await`, () => {
+      const text = src(file);
+      const body = text.slice(text.search(/export\s+default\s+(async\s+)?function/));
+      const awaits = [...body.matchAll(/await\s+([A-Za-z_$][\w$]*)/g)].filter(
+        (m) => m[1] !== "params" && m[1] !== "searchParams",
+      );
+      expect(awaits[0]?.[1]).toBe(entry.guard);
+    });
+  }
+
+  it("every entry names a guard that exists", () => {
+    const guards = {
+      requirePinnedOwner: "src/lib/auth/blueprintGuard.ts",
+      requireOwnerTools: "src/lib/auth/ownerToolsGuard.ts",
+    };
+    for (const e of HIDDEN_ROUTES) expect(src(guards[e.guard])).toContain(`function ${e.guard}`);
   });
 });
 
