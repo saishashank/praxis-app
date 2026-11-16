@@ -28,8 +28,9 @@ CREATE TABLE owner_trade (
   note TEXT CHECK (note IS NULL OR length(note) <= 200),
   source TEXT NOT NULL CHECK (source IN ('typed','csv')),
   upload_id TEXT CHECK (upload_id IS NULL OR length(upload_id) BETWEEN 1 AND 64),
-  entered_at TEXT NOT NULL,
-  entered_by TEXT NOT NULL CHECK (length(entered_by) BETWEEN 1 AND 64)
+  entered_at TEXT NOT NULL CHECK (entered_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*'),
+  entered_by TEXT NOT NULL CHECK (length(entered_by) BETWEEN 1 AND 64),
+  CHECK ((source = 'csv') = (upload_id IS NOT NULL))
 ) STRICT;
 CREATE INDEX idx_owner_trade_code ON owner_trade (market, code, d, id);
 CREATE TRIGGER owner_trade_no_update BEFORE UPDATE ON owner_trade
@@ -44,9 +45,19 @@ END;
 -- 1b. A void of one trade (a mistyped row): once per trade, with a reason; the trade row itself stays.
 CREATE TABLE owner_trade_void (
   trade_id INTEGER PRIMARY KEY REFERENCES owner_trade (id),
-  voided_at TEXT NOT NULL,
+  voided_at TEXT NOT NULL CHECK (voided_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*'),
   reason TEXT NOT NULL CHECK (length(reason) BETWEEN 1 AND 200)
 ) STRICT;
+-- A void of a trade of a market that is not enabled is refused like the trade itself (a trade that does not exist is
+-- left to the foreign key). Not named *_market_guard_*: owner_trade_void has no market column (0035's completeness test).
+CREATE TRIGGER owner_trade_void_market_check_ins BEFORE INSERT ON owner_trade_void
+WHEN EXISTS (SELECT 1 FROM owner_trade WHERE id = NEW.trade_id)
+  AND NOT EXISTS (
+    SELECT 1 FROM owner_trade t JOIN market m ON m.code = t.market WHERE t.id = NEW.trade_id AND m.enabled = 1
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'MarketNotEnabled owner_trade_void');
+END;
 CREATE TRIGGER owner_trade_void_no_update BEFORE UPDATE ON owner_trade_void
 BEGIN
   SELECT RAISE(ABORT, 'append-only');
@@ -63,7 +74,7 @@ CREATE TABLE owner_holding (
   code TEXT NOT NULL CHECK (length(code) BETWEEN 1 AND 32),
   qty INTEGER NOT NULL CHECK (qty > 0),
   avg_cost_micro INTEGER NOT NULL CHECK (avg_cost_micro > 0),
-  uploaded_at TEXT NOT NULL,
+  uploaded_at TEXT NOT NULL CHECK (uploaded_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*'),
   PRIMARY KEY (upload_id, market, code)
 ) STRICT, WITHOUT ROWID;
 CREATE TRIGGER owner_holding_no_update BEFORE UPDATE ON owner_holding
@@ -81,7 +92,7 @@ CREATE TABLE golden_label (
   market TEXT NOT NULL CHECK (length(market) BETWEEN 1 AND 8),
   source TEXT NOT NULL CHECK (length(source) BETWEEN 1 AND 64),
   ann_id TEXT NOT NULL CHECK (length(ann_id) BETWEEN 1 AND 128),
-  labelled_at TEXT NOT NULL,
+  labelled_at TEXT NOT NULL CHECK (labelled_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*'),
   actor TEXT NOT NULL CHECK (length(actor) BETWEEN 1 AND 64),
   answer TEXT NOT NULL CHECK (answer IN ('labelled','skip','unclear')),
   guidance TEXT CHECK (guidance IS NULL OR guidance IN ('up','same','down','none')),
@@ -111,7 +122,7 @@ CREATE TABLE short_shadow_decision (
   family TEXT CHECK (family IS NULL OR length(family) <= 64),
   shortable INTEGER NOT NULL CHECK (shortable IN (0,1)),
   rule_id TEXT NOT NULL CHECK (length(rule_id) BETWEEN 1 AND 64),
-  created_at TEXT NOT NULL,
+  created_at TEXT NOT NULL CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*'),
   PRIMARY KEY (market, d, code, origin)
 ) STRICT, WITHOUT ROWID;
 CREATE TRIGGER short_shadow_decision_no_update BEFORE UPDATE ON short_shadow_decision
@@ -139,7 +150,8 @@ CREATE TABLE short_shadow_outcome (
   borrow_micro INTEGER CHECK (borrow_micro IS NULL OR borrow_micro >= 0),
   net_micro INTEGER,
   net_ppm INTEGER,
-  scored_at TEXT NOT NULL,
+  scored_at TEXT NOT NULL CHECK (scored_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*'),
+  CHECK (status <> 'closed' OR (entry_micro IS NOT NULL AND exit_micro IS NOT NULL AND exit_reason IS NOT NULL)),
   PRIMARY KEY (market, d, code, origin)
 ) STRICT, WITHOUT ROWID;
 CREATE TRIGGER short_shadow_outcome_no_update BEFORE UPDATE ON short_shadow_outcome

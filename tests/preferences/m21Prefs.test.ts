@@ -11,7 +11,11 @@ import {
   getPreferences,
   updatePreferences,
 } from "@/lib/preferences/service";
-import { cleanupTempDbs } from "../db/helpers";
+import { loadSettings } from "@/lib/ui/loaders/settings";
+import { isPinnedOwnerId, ownerTools } from "@/lib/preferences/ownerTools";
+import { setConfig } from "@/lib/config/store";
+import { invalidateConfigCache } from "@/lib/config/runtime";
+import { cleanupTempDbs, freshDb } from "../db/helpers";
 import { addUser, auditRows, authDb, ENV, NOW } from "../auth/helpers";
 
 afterEach(cleanupTempDbs);
@@ -21,7 +25,15 @@ let owner: number;
 let editor: number;
 let viewer: number;
 const META = { ip: "1.1.1.1", userAgent: "ua" };
-const upd = (patch: unknown, id = owner) => updatePreferences(db, ENV, META, { id }, patch, NOW);
+const upd = async (patch: unknown, id = owner) =>
+  updatePreferences(
+    db,
+    ENV,
+    META,
+    { id, pinnedOwner: await isPinnedOwnerId(db, id, ENV) },
+    patch,
+    NOW,
+  );
 const raw = async (id: number) =>
   JSON.parse(
     String(
@@ -36,7 +48,7 @@ const raw = async (id: number) =>
 
 beforeEach(async () => {
   db = await authDb();
-  owner = await addUser(db, { email: "o@example.test", role: "owner" });
+  owner = await addUser(db, { email: "owner@example.test", role: "owner" });
   editor = await addUser(db, { email: "e@example.test", role: "editor" });
   viewer = await addUser(db, { email: "v@example.test", role: "viewer" });
 });
@@ -284,5 +296,96 @@ describe("validBrokerTemplate", () => {
       "https://b.example.com/A%2FB%3Fc%23d",
     );
     expect(fillBrokerTemplate("http://b.example.com/{code}", "ZZ1", "AU")).toBeNull();
+  });
+});
+
+describe("the pinned Owner, not the stored role (D-1214)", () => {
+  // the one stored owner row, seen by an environment that pins another e-mail: a database-role owner who is not pinned
+  const OTHER_PIN = { ...ENV, OWNER_EMAIL: "someone-else@example.test" };
+
+  it("a database-role owner who is not the pinned e-mail is refused for real_capital and broker_links", async () => {
+    expect(await isPinnedOwnerId(db, owner, OTHER_PIN)).toBe(false);
+    const pinnedOwner = await isPinnedOwnerId(db, owner, OTHER_PIN);
+    const asOther = (patch: unknown) =>
+      updatePreferences(db, OTHER_PIN, META, { id: owner, pinnedOwner }, patch, NOW);
+    expect(await asOther({ real_capital: 5000 })).toEqual({ ok: false, error: "forbidden" });
+    expect(await asOther({ broker_links: LINKS })).toEqual({ ok: false, error: "forbidden" });
+    // a caller that wrongly claims the pin for an Editor is stopped by the stored role
+    expect(
+      await updatePreferences(
+        db,
+        ENV,
+        META,
+        { id: editor, pinnedOwner: true },
+        { real_capital: 1 },
+        NOW,
+      ),
+    ).toEqual({ ok: false, error: "forbidden" });
+    // an ordinary field still works for that owner
+    expect(await asOther({ theme: "dim" })).toMatchObject({ ok: true });
+  });
+
+  it("the pinned Owner is allowed; a caller that passes no pin is refused", async () => {
+    expect(await isPinnedOwnerId(db, owner, ENV)).toBe(true);
+    expect(await upd({ real_capital: 5000 })).toMatchObject({ ok: true });
+    expect(
+      await updatePreferences(db, ENV, META, { id: owner }, { real_capital: 6000 }, NOW),
+    ).toEqual({ ok: false, error: "forbidden" });
+  });
+});
+
+describe("ownerTools: the one read (pin and switch)", () => {
+  it("returns the values only to the pinned Owner while owner_real_money_tools is on", async () => {
+    invalidateConfigCache();
+    const main = await freshDb("main");
+    await upd({ real_capital: 5000, broker_links: LINKS });
+    const dbs = { auth: db, main };
+    expect(await ownerTools(dbs, { id: owner }, ENV)).toBeNull(); // switch off (default)
+    await setConfig(main, {
+      key: "owner_real_money_tools",
+      value: "on",
+      userId: null,
+      reason: "test",
+      now: NOW.toISOString(),
+    });
+    expect(await ownerTools(dbs, { id: owner }, ENV)).toEqual({
+      real_capital: 5000,
+      broker_links: LINKS,
+    });
+    const notPinned = { ...ENV, OWNER_EMAIL: "someone-else@example.test" };
+    expect(await ownerTools(dbs, { id: owner }, notPinned)).toBeNull(); // role owner, not the pinned e-mail
+    expect(await ownerTools(dbs, { id: editor }, ENV)).toBeNull();
+    expect(await ownerTools(dbs, null, ENV)).toBeNull();
+  });
+});
+
+describe("loadSettings strips the Owner-tool fields unless the switch is on (D-1214)", () => {
+  it("real_capital and broker_links are 0 and [] while off and present when on, for the pinned Owner only", async () => {
+    invalidateConfigCache();
+    const main = await freshDb("main");
+    const prev = process.env.OWNER_EMAIL;
+    process.env.OWNER_EMAIL = ENV.OWNER_EMAIL;
+    try {
+      await upd({ real_capital: 5000, broker_links: LINKS });
+      const env = (id: number, role: string) =>
+        ({ main, auth: db, user: { id, role } }) as unknown as Parameters<typeof loadSettings>[0];
+      let m = await loadSettings(env(owner, "owner"));
+      expect([m.preferences.real_capital, m.preferences.broker_links]).toEqual([0, []]);
+      await setConfig(main, {
+        key: "owner_real_money_tools",
+        value: "on",
+        userId: null,
+        reason: "test",
+        now: NOW.toISOString(),
+      });
+      invalidateConfigCache();
+      m = await loadSettings(env(owner, "owner"));
+      expect([m.preferences.real_capital, m.preferences.broker_links]).toEqual([5000, LINKS]);
+      m = await loadSettings(env(editor, "editor"));
+      expect([m.preferences.real_capital, m.preferences.broker_links]).toEqual([0, []]);
+    } finally {
+      if (prev === undefined) delete process.env.OWNER_EMAIL;
+      else process.env.OWNER_EMAIL = prev;
+    }
   });
 });

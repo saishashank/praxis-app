@@ -45,7 +45,10 @@ describe("the state registry", () => {
   it("parses lists and 'all', ignores blanks and repeats, and refuses an unknown name", () => {
     expect(parseStates(undefined)).toEqual([]);
     expect(parseStates("  ")).toEqual([]);
-    expect(parseStates("all")).toEqual(STATE_NAMES);
+    // "all" is the default-configuration states: the Owner switch is opt-in (D-1243)
+    expect(parseStates("all")).toEqual(STATE_NAMES.filter((n) => n !== "owner-tools-on"));
+    expect(parseStates("all,owner-tools-on")).toEqual([...parseStates("all"), "owner-tools-on"]);
+    expect(parseStates("owner-tools-on,all")).toEqual(["owner-tools-on", ...parseStates("all")]);
     expect(parseStates("alerts-muted, experts-queue,alerts-muted")).toEqual([
       "alerts-muted",
       "experts-queue",
@@ -78,12 +81,16 @@ describe("every state loads, and applying it twice changes nothing", () => {
     });
   }
 
-  it("all of them together, in order, and again", async () => {
+  it('all of them together, in order, and again; the Owner switch stays off under "all"', async () => {
     const db = await freshDb("main");
     await applyStates(db, parseStates("all"), NOW);
     const once = await counts(db);
     await applyStates(db, parseStates("all"), NOW);
     expect(await counts(db)).toEqual(once);
+    expect(await getConfig(db, "owner_real_money_tools")).toBe("off");
+    expect(Number(once.owner_trade)).toBe(0);
+    await applyStates(db, parseStates("all,owner-tools-on"), NOW);
+    expect(await getConfig(db, "owner_real_money_tools")).toBe("on");
   });
 });
 

@@ -1,6 +1,7 @@
 // State `labels-queue` (M21 A1, D-1236, D-1227; UXN-318): three AU announcements waiting for a golden-set label and no
 // `golden_label` row, so /cortex/labels shows "0 of 500" and the first item from stored rows. Titles are synthetic and
-// plain; codes are ZZ-prefixed. Idempotent: (source, ann_id) is unique, so a second apply is ignored.
+// plain; codes are ZZ-prefixed. NOTE: it is part of `E2E_STATES=all`, so the rich lane gains three price-sensitive AU
+// announcements (price_sensitive = 1) that feed the news, announcement and movers readers of that lane. Idempotent: (source, ann_id) is unique, so a second apply is ignored.
 export const ANNOUNCEMENTS = [
   [
     "e2e-labels-1",

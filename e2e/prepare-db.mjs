@@ -45,7 +45,7 @@ try {
   client.close();
 }
 // E2E_SCENARIO: empty (default, production-like data-only) | populated | stale (synthetic ZZ data).
-// E2E_STATES (TST-135, D-967): comma-separated named overlays applied after the scenario, or "all" (see
+// E2E_STATES (TST-135, D-967): comma-separated named overlays applied after the scenario, or "all" (every state except the opt-in owner-tools-on; "all,owner-tools-on" adds it; see
 // e2e/seed/states.mjs: picks-two-sections, experts-queue, steelman-cards, alerts-muted, market-built-off,
 // blueprint-full, owner-tools-on, review-stored, labels-queue). Unset = none. An unknown name stops the run.
 const stateNames = parseStates(process.env.E2E_STATES);

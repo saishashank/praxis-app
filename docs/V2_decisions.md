@@ -843,5 +843,6 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1240 | A1 (config form): a new input kind "text_optional" (a text value that may be empty) is registered for app_public_domain only, and parseConfigInput returns an... |
 | D-1241 | A1 (switch guard): switchRefusal is called in updateConfig after the value is parsed and validated (the design said "right after configEditRefusal", before t... |
 | D-1242 | A1 (preferences): the three new fields live in Preferences with defaults off, 0 and []; stop_hit_emails is a pick field (stored only once chosen) read throug... |
-| D-1243 | A1 (seed states and the hash test): E2E_STATES=all now includes owner-tools-on, so the rich lane runs with the Owner switch on (a lane that must see it off,... |
+| D-1243 | A1 (seed states and the hash test): E2E_STATES=all keeps meaning the default-configuration states: owner-tools-on is opt-in (OPT_IN_STATES), so the rich lane... |
 | D-1244 | A1 (generated files): tests/test-map.baseline.json is not regenerated in A1 (its --update rewrites about 2,400 lines of earlier milestones; npm run test:map... |
+| D-1245 | A1 review fixes (Opus, 2026-11-16): the Owner-tool preferences are for the PINNED Owner (isPinnedOwner: role owner and the pinned e-mail), not any stored own... |

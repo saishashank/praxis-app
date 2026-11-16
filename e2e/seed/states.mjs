@@ -14,10 +14,7 @@ import * as picksTwoSections from "./states/picks-two-sections.mjs";
 import * as reviewStored from "./states/review-stored.mjs";
 import * as steelmanCards from "./states/steelman-cards.mjs";
 
-/**
- * The six states of TST-135 (a) and the three of M21 A1 (D-1236), in the order `all` applies them. `owner-tools-on`
- * switches the Owner tools on in the throwaway database (D-1214): a lane that must see them off names its states.
- */
+/** The six states of TST-135 (a) and the three of M21 A1 (D-1236), in the order they are applied. */
 export const STATES = {
   "picks-two-sections": picksTwoSections,
   "experts-queue": expertsQueue,
@@ -30,9 +27,15 @@ export const STATES = {
   "labels-queue": labelsQueue,
 };
 export const STATE_NAMES = Object.keys(STATES);
+/**
+ * What `all` means: the states that leave the configuration at its defaults. `owner-tools-on` switches the Owner tools
+ * on in the throwaway database (D-1214, D-1243), so it is named explicitly: `E2E_STATES=all,owner-tools-on`.
+ */
+export const OPT_IN_STATES = ["owner-tools-on"];
+export const ALL_STATE_NAMES = STATE_NAMES.filter((n) => !OPT_IN_STATES.includes(n));
 
 /**
- * "a,b" -> ["a", "b"]; "all" -> every state; empty or unset -> []. An unknown name throws, so a typo in the
+ * "a,b" -> ["a", "b"]; "all" -> every state except the opt-in ones (owner-tools-on), "all,owner-tools-on" adds it; empty or unset -> []. An unknown name throws, so a typo in the
  * lane step is a red job and never a silently empty database.
  * @param {string | undefined} value
  * @returns {string[]}
@@ -40,11 +43,11 @@ export const STATE_NAMES = Object.keys(STATES);
 export function parseStates(value) {
   const v = (value ?? "").trim();
   if (v === "") return [];
-  if (v === "all") return [...STATE_NAMES];
   const names = v
     .split(",")
     .map((s) => s.trim())
-    .filter((s) => s !== "");
+    .filter((s) => s !== "")
+    .flatMap((n) => (n === "all" ? ALL_STATE_NAMES : [n]));
   for (const n of names) {
     if (!(n in STATES))
       throw new Error(`unknown e2e state "${n}" (known: ${STATE_NAMES.join(", ")})`);

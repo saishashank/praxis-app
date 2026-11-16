@@ -42,8 +42,13 @@ const rows = async (sql: string) => (await db.execute(sql)).rows;
 const count = async (sql: string) => Number((await rows(sql))[0]!.n);
 
 const T = "'2030-01-02T00:00:00Z'";
-const SHORT_OUT = (m: string, status = "closed") =>
+const BARE_OUT = (m: string, status: string) =>
   `INSERT INTO short_shadow_outcome (market, d, code, origin, status, scored_at) VALUES ('${m}', '2030-01-02', 'ZZ1', 'lowest_rank', '${status}', ${T})`;
+// a closed outcome carries its entry, exit and exit reason (CHECK)
+const SHORT_OUT = (m: string, status = "closed") =>
+  status === "closed"
+    ? `INSERT INTO short_shadow_outcome (market, d, code, origin, status, entry_micro, exit_micro, exit_reason, scored_at) VALUES ('${m}', '2030-01-02', 'ZZ1', 'lowest_rank', 'closed', 1, 1, 'time', ${T})`
+    : BARE_OUT(m, status);
 /** A valid row of each guarded table for a market. */
 const ROW: Record<string, (m: string) => string> = {
   owner_trade: (m) =>
@@ -126,6 +131,7 @@ describe("0038_m21_owner_tools", () => {
       price_micro: 1,
       fees_micro: 0,
       source: "csv",
+      upload_id: "u1",
       entered_at: "2030-01-02T00:00:00Z",
       entered_by: "owner",
     });
@@ -187,6 +193,73 @@ describe("0038_m21_owner_tools", () => {
     await expect(
       db.execute(`INSERT INTO owner_trade_void (trade_id, voided_at, reason) VALUES (1, ${T}, '')`),
     ).rejects.toThrow();
+  });
+
+  it("a csv trade carries an upload id and a typed one does not (CHECK)", async () => {
+    const ok = ROW.owner_trade!("AU");
+    const withUpload = (sql: string) =>
+      sql.replace("entered_by)", "upload_id, entered_by)").replace("'owner')", "'u1', 'owner')");
+    await expect(db.execute(ok.replace("'typed'", "'csv'"))).rejects.toThrow();
+    await expect(db.execute(withUpload(ok))).rejects.toThrow();
+    await db.execute(withUpload(ok.replace("'typed'", "'csv'")));
+  });
+
+  it("a closed shadow outcome carries its entry, exit and exit reason (CHECK)", async () => {
+    await expect(db.execute(BARE_OUT("AU", "closed"))).rejects.toThrow();
+    await db.execute(SHORT_OUT("AU", "unfilled"));
+    await db.execute(
+      `INSERT INTO short_shadow_outcome (market, d, code, origin, status, entry_micro, exit_micro, exit_reason, scored_at) VALUES ('AU', '2030-01-02', 'ZZ2', 'lowest_rank', 'closed', 1, 1, 'time', ${T})`,
+    );
+  });
+
+  it("every *_at column is an ISO timestamp (CHECK)", async () => {
+    const bad = "'yesterday'";
+    for (const t of GUARDED) {
+      const sql = ROW[t]!("AU").replace(T, bad);
+      expect(sql, t).toContain(bad);
+      await expect(db.execute(sql), t).rejects.toThrow(/CHECK/);
+    }
+    await db.execute(ROW.owner_trade!("AU"));
+    await expect(
+      db.execute(
+        `INSERT INTO owner_trade_void (trade_id, voided_at, reason) VALUES (1, 'x', 'typo')`,
+      ),
+    ).rejects.toThrow(/CHECK/);
+  });
+
+  it("a void of a trade of a market that is not enabled is refused; an AU void passes; an unknown trade is a foreign-key error", async () => {
+    await plantOffMarketRow(db, "owner_trade", {
+      market: "IN",
+      code: "ZZ2",
+      side: "buy",
+      d: "2030-01-02",
+      qty: 1,
+      price_micro: 1,
+      fees_micro: 0,
+      source: "typed",
+      entered_at: "2030-01-02T00:00:00Z",
+      entered_by: "owner",
+    });
+    const id = Number(
+      (await db.execute("SELECT id FROM owner_trade WHERE market = 'IN'")).rows[0]!.id,
+    );
+    await expect(
+      db.execute(
+        `INSERT INTO owner_trade_void (trade_id, voided_at, reason) VALUES (${id}, ${T}, 'typo')`,
+      ),
+    ).rejects.toThrow(/MarketNotEnabled owner_trade_void/);
+    await db.execute(ROW.owner_trade!("AU"));
+    const au = Number(
+      (await db.execute("SELECT id FROM owner_trade WHERE market = 'AU'")).rows[0]!.id,
+    );
+    await db.execute(
+      `INSERT INTO owner_trade_void (trade_id, voided_at, reason) VALUES (${au}, ${T}, 'typo')`,
+    );
+    await expect(
+      db.execute(
+        `INSERT INTO owner_trade_void (trade_id, voided_at, reason) VALUES (999, ${T}, 'x')`,
+      ),
+    ).rejects.toThrow(/FOREIGN/);
   });
 
   it("owner_holding is one row per upload, market and code; quantity and cost are positive", async () => {
@@ -262,11 +335,11 @@ describe("0038_m21_owner_tools", () => {
     await expect(db.execute(SHORT_OUT("AU", "open"))).rejects.toThrow();
     await expect(
       db.execute(
-        `INSERT INTO short_shadow_outcome (market, d, code, origin, status, exit_reason, scored_at) VALUES ('AU', '2030-01-03', 'ZZ1', 'lowest_rank', 'closed', 'target', ${T})`,
+        `INSERT INTO short_shadow_outcome (market, d, code, origin, status, entry_micro, exit_micro, exit_reason, scored_at) VALUES ('AU', '2030-01-03', 'ZZ1', 'lowest_rank', 'closed', 1, 1, 'target', ${T})`,
       ),
     ).rejects.toThrow();
     await db.execute(
-      `INSERT INTO short_shadow_outcome (market, d, code, origin, status, exit_reason, scored_at) VALUES ('AU', '2030-01-03', 'ZZ1', 'lowest_rank', 'closed', 'gap', ${T})`,
+      `INSERT INTO short_shadow_outcome (market, d, code, origin, status, entry_micro, exit_micro, exit_reason, scored_at) VALUES ('AU', '2030-01-03', 'ZZ1', 'lowest_rank', 'closed', 1, 1, 'gap', ${T})`,
     );
   });
 

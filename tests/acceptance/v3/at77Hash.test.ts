@@ -7,7 +7,9 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { setConfig } from "@/lib/config/store";
 import { cleanupTempDbs } from "../../db/helpers";
-import { at32World, dump } from "./at32World";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { at32World, combineTables, dump } from "./at32World";
 
 vi.setConfig({ testTimeout: 900000, hookTimeout: 900000 });
 afterAll(cleanupTempDbs);
@@ -44,6 +46,13 @@ describe("AT-77: the Owner switch moves nothing (D-1237)", () => {
     ).toBe(1);
     const a = await dump(off);
     const b = await dump(on);
+    // the copy cannot drift: its switch-off dump equals the AT-32 baseline, table by table and combined (read only)
+    const base = JSON.parse(readFileSync(join(__dirname, "replay-hash.baseline.json"), "utf8")) as {
+      at32: { hash: string; tables: Record<string, string> };
+    };
+    const baseNames = Object.keys(base.at32.tables).sort();
+    expect(baseNames.filter((n) => a.perTable[n] !== base.at32.tables[n])).toEqual([]);
+    expect(combineTables(a.perTable, baseNames)).toBe(base.at32.hash);
     // not vacuous: the world has cards, signals, orders and decisions
     expect(a.rows.signal).toBeGreaterThan(0);
     expect(a.rows.decision_card).toBeGreaterThan(0);

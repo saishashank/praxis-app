@@ -14,5 +14,7 @@ export const STATES: Record<
   SeedState
 >;
 export const STATE_NAMES: string[];
+export const OPT_IN_STATES: string[];
+export const ALL_STATE_NAMES: string[];
 export function parseStates(value: string | undefined): string[];
 export function applyStates(client: Client, names: string[], nowIso?: string): Promise<string[]>;

@@ -255,7 +255,7 @@ export async function updatePreferences(
   db: Client,
   env: AuthEnv,
   meta: RequestMeta | undefined,
-  actor: { id: number },
+  actor: { id: number; pinnedOwner?: boolean },
   patch: unknown,
   now: Date = new Date(),
 ): Promise<PrefResult> {
@@ -273,9 +273,13 @@ export async function updatePreferences(
       sql: "SELECT role FROM app_user WHERE id = ? AND status = 'active'",
       args: [actor.id],
     });
-    // The Owner's own tools (capital, broker templates) are Owner-only: any other role is forbidden (D-1217, D-1218).
+    // The Owner's own tools (capital, broker templates) are for the PINNED Owner only (D-1214, D-1217, D-1218): the caller
+    // passes pinnedOwner from isPinnedOwner (role owner and the pinned e-mail); any other actor is forbidden.
     const ownerOnly = (STRUCTURED_FIELDS as readonly string[]).some((f) => f in clean);
-    if (!who.rows.length || (ownerOnly && String(who.rows[0]!.role) !== "owner")) {
+    if (
+      !who.rows.length ||
+      (ownerOnly && (actor.pinnedOwner !== true || String(who.rows[0]!.role) !== "owner"))
+    ) {
       await tx.rollback();
       return { ok: false, error: "forbidden" };
     }

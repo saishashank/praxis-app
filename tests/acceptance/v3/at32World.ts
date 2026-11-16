@@ -163,3 +163,7 @@ export async function at32World(prepare?: (db: Client) => Promise<void>): Promis
   });
   return db;
 }
+
+/** The combined hash over `names`, exactly as replayHash.test.ts computes it (so the copy can be checked against the baseline). */
+export const combineTables = (tables: Record<string, string>, names: readonly string[]): string =>
+  sha(names.map((n) => `${n}=${tables[n]}`).join("\n"));
