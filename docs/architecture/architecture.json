@@ -4075,6 +4075,28 @@
       "attrs": {}
     },
     {
+      "id": "page:/reviews/tax",
+      "type": "page",
+      "name": "/reviews/tax",
+      "purpose": "Screen /reviews/tax of the web app.",
+      "specIds": [
+        "UXN-001"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/tax/page.tsx",
+      "attrs": {}
+    },
+    {
       "id": "page:/reviews/techniques",
       "type": "page",
       "name": "/reviews/techniques",
@@ -5006,6 +5028,31 @@
       "attrs": {
         "method": "GET",
         "path": "/api/news/[id]"
+      }
+    },
+    {
+      "id": "route:GET:/api/reports/tax",
+      "type": "route",
+      "name": "GET /api/reports/tax",
+      "purpose": "HTTP endpoint GET /api/reports/tax of the web app.",
+      "specIds": [
+        "PLT-020"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns an error status; the caller retries and the run record shows the failure.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/app/api/reports/tax/route.ts",
+      "attrs": {
+        "method": "GET",
+        "path": "/api/reports/tax"
       }
     },
     {
@@ -18998,6 +19045,16 @@
       ]
     },
     {
+      "id": "service:app|contains|page:/reviews/tax",
+      "from": "service:app",
+      "to": "page:/reviews/tax",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
       "id": "service:app|contains|page:/reviews/techniques",
       "from": "service:app",
       "to": "page:/reviews/techniques",
@@ -19381,6 +19438,16 @@
       "contract": "Runs or holds this element.",
       "views": [
         "data",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|route:GET:/api/reports/tax",
+      "from": "service:app",
+      "to": "route:GET:/api/reports/tax",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
         "platform"
       ]
     },
