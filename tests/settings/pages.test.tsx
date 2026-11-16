@@ -135,7 +135,7 @@ describe("Region & markets page", () => {
     expect(within(table).getAllByText("Built — off in production")).toHaveLength(2);
     expect(within(table).getAllByText("AT-M evidence: not recorded")).toHaveLength(2);
     expect(within(table).getAllByText("Open: Owner approval")).toHaveLength(2);
-    expect(within(table).getAllByText("Open: AU 60 trading days (MKT-105)")).toHaveLength(2);
+    expect(within(table).getAllByText("Open: AU 60 trading days")).toHaveLength(2);
     expect(within(table).getAllByText(/Profile: \d+ of 40 fields verified/)).toHaveLength(3);
     for (const code of ["AU", "IN", "US"]) {
       expect(table.querySelector(`[data-market="${code}"]`)).not.toBeNull();

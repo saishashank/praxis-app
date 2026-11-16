@@ -130,8 +130,8 @@ function DataControlsSection(props: {
       </h2>
       {c.dataOnly && (
         <p role="status" className="m-0 text-sm text-text-muted">
-          Production data-only mode (BLD-024): the nightly data pipeline runs; the Arena, emails and
-          decision agents are off.
+          Production data-only mode: the nightly data pipeline runs; the Arena, emails and decision
+          agents are off.
         </p>
       )}
       <div className="ui-card min-w-0 divide-y divide-border rounded-lg border border-border bg-surface">
@@ -155,7 +155,7 @@ function DataControlsSection(props: {
               <StatePill on={false} />
               <span className="text-xs text-text-muted">
                 {!yahooReady
-                  ? "Accept the Yahoo source (O-26) first."
+                  ? "Accept the Yahoo source first."
                   : "Confirm the AU trading calendar first."}
               </span>
             </>
@@ -202,7 +202,7 @@ function DataControlsSection(props: {
           ) : (
             <>
               <StatePill on={false} />
-              <span className="text-xs text-text-muted">Accept the ASX source (O-23) first.</span>
+              <span className="text-xs text-text-muted">Accept the ASX source first.</span>
             </>
           )}
           {owner && c.asxTripped && (

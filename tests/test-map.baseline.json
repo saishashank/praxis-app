@@ -277,6 +277,7 @@
       "tests/arena/preopenRoute.test.ts"
     ],
     "ARN-021": [
+      "scripts/ci/internal-codes.test.mjs",
       "tests/agents/batch2b.test.ts",
       "tests/agents/batch2bLookAhead.test.ts",
       "tests/agents/orderPlan.test.ts",
@@ -630,11 +631,31 @@
     "ARN-117": ["tests/markets/in/bands.test.ts", "tests/markets/us/costs.test.ts"],
     "ARN-118": ["tests/arena/sizing.test.ts", "tests/arena/slippage.markets.test.ts"],
     "ARN-119": ["tests/markets/in/activationSeed.test.ts"],
+    "ARN-121": [
+      "tests/acceptance/v3/at78TradeLog.test.ts",
+      "tests/ownerTools/tradeActions.test.ts",
+      "tests/ownerTools/tradeLog.test.ts",
+      "tests/ownerTools/tradesPage.test.tsx",
+      "tests/security/ownerTablesReaders.test.ts"
+    ],
+    "ARN-122": [
+      "tests/acceptance/v3/at78Tax.test.ts",
+      "tests/tax/csv.test.ts",
+      "tests/tax/fifo.test.ts",
+      "tests/tax/fromLog.test.ts",
+      "tests/tax/page.test.tsx",
+      "tests/tax/report.test.ts",
+      "tests/tax/taxYear.test.ts"
+    ],
     "ARN-123": [
       "tests/acceptance/v2/at35.test.ts",
       "tests/db/0032_m18_outcome_basis.test.ts",
       "tests/picks/dividendOutcome.test.ts"
     ],
+    "ARN-124": ["tests/deferred/instruments.test.ts"],
+    "ARN-124a": ["tests/deferred/instruments.test.ts"],
+    "ARN-124b": ["tests/deferred/instruments.test.ts"],
+    "ARN-124c": ["tests/deferred/instruments.test.ts"],
     "AT-01": [
       "scripts/llm/bakeoff-review.test.mjs",
       "tests/users/actions.test.ts",
@@ -918,15 +939,21 @@
     ],
     "AT-32": [
       "tests/acceptance/v2/at32Steelman.test.ts",
+      "tests/acceptance/v3/at77Hash.test.ts",
+      "tests/acceptance/v3/at78Holdings.test.ts",
+      "tests/acceptance/v3/at78Short.test.ts",
+      "tests/acceptance/v3/at78TradeLog.test.ts",
       "tests/acceptance/v3/replayHash.test.ts",
       "tests/cortex/stageTables.test.ts",
       "tests/data/sourceRegister.m20.test.ts",
       "tests/db/0036_m20_markets_data.test.ts",
-      "tests/docs/replayHashPolicy.test.ts"
+      "tests/docs/replayHashPolicy.test.ts",
+      "tests/security/ownerTablesReaders.test.ts"
     ],
     "AT-33": ["tests/acceptance/v2/at33.test.ts"],
     "AT-34": ["tests/acceptance/v2/at34.test.ts"],
     "AT-35": ["tests/acceptance/v2/at35.test.ts"],
+    "AT-36": ["tests/acceptance/v3/at76.test.ts"],
     "AT-37": [
       "tests/acceptance/v2/at37Steelman.test.ts",
       "tests/llm/budget.test.ts",
@@ -1025,8 +1052,10 @@
     "AT-58": ["e2e/m16-blueprint-walk.spec.ts", "scripts/architecture/check.test.mjs"],
     "AT-59": [
       "e2e/m16-blueprint-page.spec.ts",
+      "e2e/m21-blueprint-keyboard.spec.ts",
       "tests/blueprint/drawio.test.ts",
-      "tests/blueprint/export.test.ts"
+      "tests/blueprint/export.test.ts",
+      "tests/blueprint/keyboard.test.tsx"
     ],
     "AT-60": [
       "tests/acceptance/v2/at60Mail.test.ts",
@@ -1068,6 +1097,7 @@
       "tests/data/sourceRegister.m20.test.ts",
       "tests/db/0035_m19_market_guard.test.ts",
       "tests/db/0036_m20_markets_data.test.ts",
+      "tests/db/0038_m21_owner_tools.test.ts",
       "tests/db/scriptClient.test.ts",
       "tests/market/completeness.test.ts",
       "tests/market/guard.test.ts",
@@ -1122,10 +1152,67 @@
       "tests/markets/us/day.test.ts",
       "tests/markets/us/fixtureNight.test.ts"
     ],
+    "AT-76": [
+      "tests/acceptance/v3/at76.test.ts",
+      "tests/config/m21Keys.test.ts",
+      "tests/config/switchGuards.test.ts"
+    ],
+    "AT-77": [
+      "e2e/m21-owner-tools-access.spec.ts",
+      "e2e/m21-owner-tools-on.spec.ts",
+      "tests/acceptance/v3/at77.test.ts",
+      "tests/acceptance/v3/at77Hash.test.ts",
+      "tests/alerts/stopHit.test.ts",
+      "tests/auth/ownerToolsGuard.test.ts",
+      "tests/config/m21Keys.test.ts",
+      "tests/db/0038_m21_owner_tools.test.ts",
+      "tests/ownerTools/actions.test.ts",
+      "tests/ownerTools/pages.test.tsx",
+      "tests/ownerTools/tradeActions.test.ts",
+      "tests/ownerTools/tradesPage.test.tsx",
+      "tests/settings/alerts.test.tsx"
+    ],
+    "AT-78": [
+      "tests/acceptance/v3/at78Holdings.test.ts",
+      "tests/acceptance/v3/at78Short.test.ts",
+      "tests/acceptance/v3/at78Tax.test.ts",
+      "tests/acceptance/v3/at78TradeLog.test.ts",
+      "tests/ownerTools/actions.test.ts",
+      "tests/ownerTools/brokerLinks.test.ts",
+      "tests/ownerTools/holdings.test.ts",
+      "tests/ownerTools/pages.test.tsx",
+      "tests/ownerTools/tradeActions.test.ts",
+      "tests/ownerTools/tradesPage.test.tsx",
+      "tests/security/noBrokerLinks.test.ts",
+      "tests/security/noBrokerRequest.test.ts",
+      "tests/security/noCredentialField.test.ts",
+      "tests/tax/report.test.ts"
+    ],
     "AT-81": [
       "tests/http/safeLink.test.ts",
       "tests/http/sourceHosts.test.ts",
       "tests/sentinel/cap.test.ts"
+    ],
+    "AT-82": [
+      "e2e/m21-at82.spec.ts",
+      "e2e/m21-blueprint-keyboard.spec.ts",
+      "e2e/m21-crosscheck-accepted.spec.ts",
+      "e2e/m21-labels.spec.ts",
+      "e2e/m21-owner-tools-access.spec.ts",
+      "e2e/m21-pwa.spec.ts",
+      "e2e/m21-review-frame.spec.ts",
+      "e2e/m21-theme-emulation.spec.ts",
+      "e2e/m21-unmute.spec.ts",
+      "scripts/ci/internal-codes.test.mjs",
+      "scripts/ci/ui-crosscheck.test.mjs",
+      "tests/alerts/unmute.test.ts",
+      "tests/blueprint/keyboard.test.tsx",
+      "tests/charts/concentrationChart.test.tsx",
+      "tests/labels/golden.test.ts",
+      "tests/labels/page.test.tsx",
+      "tests/settings/alerts.test.tsx",
+      "tests/strategies/controlsSummary.test.tsx",
+      "tests/strategies/familyGroups.test.tsx"
     ],
     "AT-83": [
       "scripts/ci/workflow-lint.test.mjs",
@@ -1219,12 +1306,18 @@
       "scripts/ci/licence-register.test.mjs",
       "tests/config/verify.test.ts"
     ],
-    "BLD-041": ["tests/health/steelman.test.ts", "tests/loaders/loadersPart2.test.ts"],
+    "BLD-041": [
+      "tests/acceptance/v3/at76.test.ts",
+      "tests/config/switchGuards.test.ts",
+      "tests/health/steelman.test.ts",
+      "tests/loaders/loadersPart2.test.ts"
+    ],
     "BLD-050": [
       "tests/data/controls.switch.test.ts",
       "tests/db/0034_m19_market_profile.test.ts",
       "tests/market/checklist.test.ts"
     ],
+    "BLD-051": ["tests/shortShadow/evaluate.test.ts"],
     "D-1": [
       "tests/agents/families/f4f5.test.ts",
       "tests/agents/indicators.test.ts",
@@ -2628,18 +2721,24 @@
       "tests/security/expertBoundary.test.ts"
     ],
     "D-922": [
+      "e2e/m21-at82.spec.ts",
+      "scripts/ci/internal-codes.test.mjs",
       "tests/acceptance/m5/at19.test.ts",
       "tests/acceptance/m5/at20.test.ts",
       "tests/acceptance/m5/at21.test.ts",
       "tests/acceptance/m6/at20s46.test.ts",
+      "tests/config/m21Keys.test.ts",
       "tests/email/reviewWords.test.ts",
+      "tests/email/stopHitMail.test.ts",
       "tests/email/templates.test.ts",
       "tests/review/assemble.test.ts",
       "tests/review/sections.test.ts",
       "tests/review/sections46.test.ts"
     ],
     "D-927": ["scripts/fixtures/recordFromHistory.test.mjs"],
+    "D-931": ["tests/acceptance/v3/at77.test.ts"],
     "D-941": ["tests/picks/isolation.test.ts", "tests/picks/noPicks.test.ts"],
+    "D-944": ["tests/ownerTools/holdings.test.ts"],
     "D-947": ["tests/db/0034_m19_market_profile.test.ts"],
     "D-951": ["tests/picks/isolation.test.ts"],
     "D-953": [
@@ -3419,6 +3518,12 @@
     "EML-040": ["tests/email/pickAlerts.test.ts"],
     "EML-041": ["tests/email/pickAlerts.test.ts"],
     "EML-042": ["tests/review/candidatePref.test.ts"],
+    "EML-043": [
+      "tests/alerts/stopHit.test.ts",
+      "tests/email/stopHitMail.test.ts",
+      "tests/preferences/m21Prefs.test.ts",
+      "tests/settings/alerts.test.tsx"
+    ],
     "FAM-001": [
       "tests/agents/acceptanceM4.test.ts",
       "tests/agents/batch2b.test.ts",
@@ -3469,6 +3574,14 @@
       "tests/acceptance/v2/at43.test.ts",
       "tests/agents/entryGates.test.ts",
       "tests/cortex/gates/settledCash.test.ts"
+    ],
+    "FAM-010": [
+      "tests/agents/cardsTarget.test.ts",
+      "tests/agents/families/targetExit.test.ts",
+      "tests/agents/families/targetRebase.test.ts",
+      "tests/learning/targetChallenger.test.ts",
+      "tests/strategies/stopTarget.test.ts",
+      "tests/strategies/tradesTable.test.tsx"
     ],
     "KB-001": ["tests/acceptance/m6/at24.test.ts", "tests/kb/documents.test.ts"],
     "KB-1": ["tests/learning/ruleVersions.test.ts"],
@@ -3813,7 +3926,8 @@
       "tests/acceptance/v2/at44.test.ts",
       "tests/learning/challengerGenerator.test.ts",
       "tests/learning/challengerLifecycle.test.ts",
-      "tests/learning/preRegistered.test.ts"
+      "tests/learning/preRegistered.test.ts",
+      "tests/learning/targetChallenger.test.ts"
     ],
     "O-49": [
       "tests/agents/families/f4f5.test.ts",
@@ -3826,6 +3940,7 @@
       "scripts/watchdog/watchdog.workflow.test.mjs"
     ],
     "O-54": ["e2e/m14-robustness.spec.ts", "tests/loaders/robustness.test.ts"],
+    "O-71": ["scripts/ci/internal-codes.test.mjs"],
     "O-76": [
       "tests/config/m17Keys.test.ts",
       "tests/learning/m6Keys.test.ts",
@@ -3955,7 +4070,8 @@
     "PLT-001": [
       "scripts/architecture/check.test.mjs",
       "scripts/architecture/generate.test.mjs",
-      "tests/blueprint/blueprintPage.test.ts"
+      "tests/blueprint/blueprintPage.test.ts",
+      "tests/blueprint/keyboard.test.tsx"
     ],
     "PLT-011": [
       "scripts/ci/approved-commit.test.mjs",
@@ -4260,6 +4376,14 @@
       "worker/test/localtime.test.ts"
     ],
     "PLT-077": ["worker/test/m17Slots.test.ts"],
+    "PLT-078": ["tests/selfcheck/domain.test.ts"],
+    "PLT-079": [
+      "e2e/m21-pwa.spec.ts",
+      "tests/pwa/components.test.tsx",
+      "tests/pwa/manifest.test.ts",
+      "tests/pwa/sw.test.ts",
+      "tests/security/noPush.test.ts"
+    ],
     "PLT-080": [
       "scripts/usage/turso-sample.test.mjs",
       "scripts/usage/turso-usage.workflow.test.mjs",
@@ -4608,6 +4732,11 @@
       "tests/acceptance/v2/at56.test.ts",
       "tests/acceptance/v2/at61.test.ts",
       "tests/acceptance/v2/at63.test.ts",
+      "tests/acceptance/v3/at77.test.ts",
+      "tests/acceptance/v3/at77Hash.test.ts",
+      "tests/acceptance/v3/at78Holdings.test.ts",
+      "tests/acceptance/v3/at78Short.test.ts",
+      "tests/acceptance/v3/at78TradeLog.test.ts",
       "tests/acceptance/v3/replayHash.test.ts",
       "tests/agents/m4Keys.test.ts",
       "tests/agents/noMagicThresholds.test.ts",
@@ -4640,6 +4769,7 @@
       "tests/security/secretStores.test.ts",
       "tests/sentinel/archive.test.ts",
       "tests/sentinel/ingestRoute.test.ts",
+      "tests/shortShadow/score.test.ts",
       "tests/sources/fixtures.test.ts",
       "tests/sources/realFixtures.test.ts",
       "tests/universe/import.test.ts",
@@ -4886,7 +5016,11 @@
       "tests/replay/runner.test.ts"
     ],
     "TST-133": ["scripts/ci/test-map.test.mjs"],
-    "TST-134": ["scripts/ci/e2e-listing.test.mjs"],
+    "TST-134": [
+      "e2e/m21-at82.spec.ts",
+      "e2e/m21-owner-tools-on.spec.ts",
+      "scripts/ci/e2e-listing.test.mjs"
+    ],
     "TST-135": [
       "e2e/picks-sections.spec.ts",
       "e2e/walks.spec.ts",
@@ -5037,12 +5171,24 @@
     ],
     "UX-122": ["tests/shell/errors.test.tsx"],
     "UX-130": ["tests/picks/pages.test.tsx"],
+    "UX-131": [
+      "e2e/m21-owner-tools-access.spec.ts",
+      "e2e/m21-owner-tools-on.spec.ts",
+      "tests/auth/ownerToolsGuard.test.ts",
+      "tests/security/ownerToolsLazy.test.ts"
+    ],
     "UXN-001": [
       "scripts/ci/contrast-check.test.mjs",
       "tests/theme/themes.test.ts",
       "tests/ui/components/primitives.test.tsx"
     ],
     "UXN-005": ["scripts/ci/contrast-check.test.mjs", "tests/theme/themes.test.ts"],
+    "UXN-008": ["scripts/ci/ui-crosscheck.test.mjs", "tests/market/sectionLoading.test.tsx"],
+    "UXN-010": [
+      "e2e/m21-pwa.spec.ts",
+      "scripts/ci/ui-crosscheck.test.mjs",
+      "tests/pwa/components.test.tsx"
+    ],
     "UXN-015": ["scripts/ci/contrast-check.test.mjs", "tests/theme/themes.test.ts"],
     "UXN-017": [
       "e2e/market-off.spec.ts",
@@ -5074,6 +5220,11 @@
     "UXN-054": ["tests/strategies/pages.test.tsx"],
     "UXN-055": ["tests/strategies/detailBranches.test.tsx"],
     "UXN-057": ["tests/strategies/pages.test.tsx"],
+    "UXN-062": [
+      "e2e/m21-crosscheck-accepted.spec.ts",
+      "scripts/ci/ui-crosscheck.test.mjs",
+      "tests/strategies/controlsSummary.test.tsx"
+    ],
     "UXN-068": ["tests/strategies/pages.test.tsx"],
     "UXN-100": ["tests/risk/cardParts.test.ts"],
     "UXN-102": ["tests/risk/cardParts.test.ts"],
@@ -5086,6 +5237,11 @@
     "UXN-126": ["tests/risk/cardParts.test.ts", "tests/risk/pages.test.tsx"],
     "UXN-150": ["tests/risk/pages.test.tsx"],
     "UXN-152": ["tests/agents/recostNights.test.ts", "tests/arena/recost.test.ts"],
+    "UXN-154": [
+      "e2e/m21-crosscheck-accepted.spec.ts",
+      "scripts/ci/ui-crosscheck.test.mjs",
+      "tests/charts/concentrationChart.test.tsx"
+    ],
     "UXN-157": [
       "tests/alerts/api.test.ts",
       "tests/news/newsPage.test.tsx",
@@ -5115,6 +5271,11 @@
       "tests/alerts/routes.test.ts",
       "tests/alerts/tiers.test.ts",
       "tests/time/m5Slots.test.ts"
+    ],
+    "UXN-255": [
+      "e2e/m21-crosscheck-accepted.spec.ts",
+      "scripts/ci/ui-crosscheck.test.mjs",
+      "tests/strategies/familyGroups.test.tsx"
     ],
     "UXN-270": [
       "e2e/shell.spec.ts",
@@ -5159,6 +5320,7 @@
       "tests/picks/wp8.test.tsx",
       "tests/security/noBrokerLinks.test.ts"
     ],
+    "UXN-303": ["tests/ui/muteButton.test.tsx"],
     "UXN-305": ["tests/picks/wp8.test.tsx"],
     "UXN-307": ["tests/acceptance/v2/at64.test.ts", "tests/picks/wp7.test.ts"],
     "UXN-308": ["tests/picks/wp7.test.ts"],
@@ -5183,7 +5345,54 @@
       "tests/preferences/format.test.ts",
       "tests/view/formatBranches.test.ts"
     ],
-    "UXN-324": ["tests/blueprint/drawio.test.ts"],
+    "UXN-314": [
+      "tests/ownerTools/pages.test.tsx",
+      "tests/ownerTools/recommendations.test.ts",
+      "tests/ownerTools/tiers.test.ts"
+    ],
+    "UXN-315": [
+      "tests/ownerTools/forms.test.tsx",
+      "tests/ownerTools/recommendations.test.ts",
+      "tests/ownerTools/sizing.test.ts",
+      "tests/preferences/m21Prefs.test.ts"
+    ],
+    "UXN-316": ["tests/ownerTools/forms.test.tsx", "tests/ownerTools/holdings.test.ts"],
+    "UXN-317": [
+      "tests/ownerTools/brokerLinks.test.ts",
+      "tests/ownerTools/forms.test.tsx",
+      "tests/ownerTools/recommendations.test.ts",
+      "tests/preferences/m21Prefs.test.ts",
+      "tests/security/noCredentialField.test.ts"
+    ],
+    "UXN-318": [
+      "e2e/m21-labels.spec.ts",
+      "tests/labels/golden.test.ts",
+      "tests/labels/page.test.tsx"
+    ],
+    "UXN-319": ["scripts/ci/ui-crosscheck.test.mjs"],
+    "UXN-320": [
+      "e2e/m21-review-frame.spec.ts",
+      "e2e/m21-theme-emulation.spec.ts",
+      "e2e/vibrancy.spec.ts",
+      "scripts/ci/contrast-check.test.mjs",
+      "tests/market/sizeColumn.test.tsx",
+      "tests/review/reviewFrame.test.tsx",
+      "tests/strategies/tradesTable.test.tsx",
+      "tests/ui/banner.test.tsx"
+    ],
+    "UXN-321": ["tests/market/indexTable.test.tsx", "tests/view/displayName.test.ts"],
+    "UXN-322": [
+      "e2e/m21-unmute.spec.ts",
+      "tests/alerts/unmute.test.ts",
+      "tests/settings/alerts.test.tsx",
+      "tests/ui/muteButton.test.tsx"
+    ],
+    "UXN-323": ["tests/steelman/cutSubjects.test.ts"],
+    "UXN-324": [
+      "e2e/m21-blueprint-keyboard.spec.ts",
+      "tests/blueprint/drawio.test.ts",
+      "tests/blueprint/keyboard.test.tsx"
+    ],
     "VAL-101": [
       "tests/agents/acceptanceM4.test.ts",
       "tests/agents/batch2bCards.test.ts",
@@ -5231,6 +5440,13 @@
       "tests/config/m17Keys.test.ts",
       "tests/intraday/streamLook.test.ts"
     ],
-    "VAL-119": ["tests/acceptance/v2/at63.test.ts"]
+    "VAL-119": ["tests/acceptance/v2/at63.test.ts"],
+    "VAL-121": [
+      "tests/acceptance/v3/at78Short.test.ts",
+      "tests/shortShadow/evaluate.test.ts",
+      "tests/shortShadow/run.test.ts",
+      "tests/shortShadow/score.test.ts",
+      "tests/shortShadow/select.test.ts"
+    ]
   }
 }
