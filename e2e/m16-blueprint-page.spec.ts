@@ -109,8 +109,10 @@ test("hovering every edge of a view shows its summary", async ({ browser, baseUR
     hovered++;
     await expect(page.getByTestId("bp-summary").locator("strong")).toHaveText(id.split("|")[1]);
   }
+  // M21 (D-1291): the Platform view grew denser, so a few more edges lie wholly under others; every
+  // edge is also reached from its node's Connections buttons (D-1321, e2e/m21-blueprint-keyboard.spec.ts).
   expect(hovered, "edges reachable by the mouse").toBeGreaterThanOrEqual(
-    Math.ceil(ids.length * 0.8),
+    Math.ceil(ids.length * 0.75),
   );
   test.info().annotations.push({
     type: "covered edges",

@@ -883,6 +883,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1286 | C2 delayed target flag: no intraday high is stored, so "the delayed high of the session reached the target" uses the delayed last price of a later day (the o... |
 | D-1287 | C2 Size column (UXN-320 b, D-1204): the loaders set qty: null for a masked viewer in both strategyViews and strategies (an O-54 correction); the trades table... |
 | D-1290 | CI (app job time limit): the app job's timeout-minutes goes from 30 to 45. |
+| D-1291 | CI e2e (run 43958715586): the PWA spec proved "no notification prompt" by reading Notification.permission, but headless Chromium answers "denied" before any... |
 | D-1295 | R1 switch (VAL-121, D-1228): the shadow short is OFF unless a config_version row with key short_shadow_enabled, scope the market, says "on" (src/lib/shortSha... |
 | D-1296 | R1 selection and scoring details fixed before any computation (BLD-051): |
 | D-1297 | R1 evaluation: evaluateShort runs inside the same batch 3 call and takes the ONE look only when at least 60 closed setups on at least 60 sessions exist (the... |

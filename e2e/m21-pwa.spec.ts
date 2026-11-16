@@ -65,10 +65,25 @@ test("the worker registers, keeps no page, and offline shows the badge and the o
 test("Settings has the install row and no notification prompt", async ({ browser, baseURL }) => {
   const context = await browser.newContext({ baseURL });
   await signIn(context, "viewer");
+  // Headless Chromium reports "denied" before any prompt, so the proof is that nothing asks: a spy on
+  // the permission request, installed before any page script runs, and no push subscription (D-1291).
+  await context.addInitScript(() => {
+    const w = window as unknown as { __asked: number };
+    w.__asked = 0;
+    if ("Notification" in window)
+      Notification.requestPermission = (() => {
+        w.__asked += 1;
+        return Promise.resolve("default");
+      }) as typeof Notification.requestPermission;
+  });
   const page = await context.newPage();
   await page.goto("/settings");
   await expect(page.getByText("Install Praxis on this device")).toBeVisible();
-  const permission = await page.evaluate(() => Notification.permission);
-  expect(permission).toBe("default");
+  expect(await page.evaluate(() => (window as unknown as { __asked: number }).__asked)).toBe(0);
+  const subscribed = await page.evaluate(async () => {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    return reg ? (await reg.pushManager.getSubscription()) !== null : false;
+  });
+  expect(subscribed).toBe(false);
   await context.close();
 });
