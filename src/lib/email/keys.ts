@@ -41,6 +41,12 @@ export const emailKeys = {
   // M17 WP4 (D-388/D-389): one key per pick per session (alertId = the 64-hex sha of `pick_alert`).
   pickHit: (alertId: string, sessionD: string) => `pickhit:${alertId}:${sessionD}`,
   pickCleared: (alertId: string, sessionD: string) => `pickclr:${alertId}:${sessionD}`,
+  /**
+   * M21 C3 (D-1226): the stop-hit mail rides on kind `pick_cleared`, with its own hash so it never collides with
+   * the cleared mail of the same alert: the first 32 hex of sha256("stop_hit|" + alertId), one per alert and session.
+   */
+  pickStopHit: (alertId: string, sessionD: string) =>
+    `pickclr:${createHash("sha256").update(`stop_hit|${alertId}`).digest("hex").slice(0, 32)}:${sessionD}`,
   pickCandidate: (market: string, sessionD: string, code: string) =>
     `pickcand:${market}:${sessionD}:${code}`,
   pickBatch: (userId: string, sessionD: string, tail: string) =>

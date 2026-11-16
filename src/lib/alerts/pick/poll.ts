@@ -48,6 +48,7 @@ import { notifyIncident, type NotifyCtx } from "@/lib/incidents/notify";
 import { armForSession } from "./arm";
 import { extrasCadence, remainingPollTicks } from "./reserve";
 import { evaluateAlert } from "./evaluate";
+import { stopHitDue, type StopHitItem } from "./stopHit";
 import { STARVATION_MINUTES, starved, type StarvationWindow } from "./starvation";
 import {
   activeAlerts,
@@ -382,6 +383,7 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
   );
   const users = new Set(recipients);
   const mailable: MailableTransition[] = [];
+  const stopHits: StopHitItem[] = [];
   let hits = 0;
   let cleared = 0;
   for (const a of active) {
@@ -407,7 +409,28 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
         params,
       },
     );
-    if (t === null) continue;
+    if (t === null) {
+      // EML-043 (D-1226): a hit alert that stayed hit and whose usable delayed price is under its stop.
+      if (
+        q !== null &&
+        stopHitDue(row, q, { now, maxAgeMin: params.maxAgeMin, delayMin: params.delayMin })
+      ) {
+        stopHits.push({
+          alertId: row.alertId,
+          userId: row.userId,
+          market: row.market,
+          pickD: row.pickD,
+          profile: row.profile,
+          rank: row.rank,
+          code: row.code,
+          limitMicro: row.limitMicro,
+          stopMicro: row.stopMicro,
+          lastMicro: q.lastMicro,
+          quoteAt: q.quoteAt,
+        });
+      }
+      continue;
+    }
     const next: MailableTransition = {
       ...row,
       seq: row.seq + 1,
@@ -430,6 +453,8 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
 
   // Mail second (WP4 hook).
   if (mailable.length > 0) await mailer.notify(mailCtx, mailable);
+  // Stop-hit mail (opt-in, default off): after the hit and clear mail, so those keep their place under the caps.
+  if (stopHits.length > 0 && mailer.stopHit) await mailer.stopHit(mailCtx, stopHits);
 
   // OPS-109 c: after the fetch, so this tick's fresh quotes count.
   await checkStarvation(deps, market, sessionD, starveWindow, deps.now());
