@@ -9,7 +9,8 @@ const HUNDRED = 100n; // threshold-ok: percent base
 const BP = 10_000n; // threshold-ok: basis points per whole
 const TWO = 2n; // threshold-ok: half-up rounding
 
-export type FeeFn = (notionalMicro: bigint, side: "buy" | "sell") => bigint;
+/** The fee of one fill: its value, side and whole shares (a per-share item, such as the US TAF, needs the shares). */
+export type FeeFn = (notionalMicro: bigint, side: "buy" | "sell", quantity: bigint) => bigint;
 export type Caps = { maxPct: string; riskPct: string };
 
 export type Parcel =
@@ -43,7 +44,7 @@ export function sizeParcel(args: {
   if (!Number.isInteger(capitalWhole) || capitalWhole <= 0) return { kind: "no_amount" };
   const capitalMicro = BigInt(capitalWhole) * MICRO;
   const perShareRisk = limitMicro - stopMicro;
-  if (limitMicro <= 0n || perShareRisk <= 0n) return { kind: "too_small" };
+  if (limitMicro <= 0n || stopMicro <= 0n || perShareRisk <= 0n) return { kind: "too_small" };
   const sized = sizeForAmount(
     { amountMicro: capitalMicro, maxPct: caps.maxPct, riskPct: caps.riskPct },
     limitMicro,
@@ -54,7 +55,9 @@ export function sizeParcel(args: {
   const valueMicro = shares * limitMicro;
   if (shares <= 0n || valueMicro < parcelFloorMicro) return { kind: "too_small" };
   const riskMicro =
-    shares * perShareRisk + fee(valueMicro, "buy") + fee(shares * stopMicro, "sell");
+    shares * perShareRisk +
+    fee(valueMicro, "buy", shares) +
+    fee(shares * stopMicro, "sell", shares);
   const riskBp = divFloor(riskMicro * BP + capitalMicro / TWO, capitalMicro);
   return { kind: "ok", shares, valueMicro, riskMicro, riskBp };
 }

@@ -323,7 +323,7 @@ const FIELD_OVERRIDE: Record<string, string[]> = {
   updateAlertSettingsAction: ["pick_alerts", "cleared_pick_emails", "intraday_candidate_emails"],
   // M21 B1: the Owner-tool forms post repeated fields read with getAll
   saveBrokerLinksAction: ["broker_name", "broker_template"],
-  saveHoldingsAction: ["mode", "code", "qty", "cost", "csv_text"],
+  saveHoldingsAction: ["mode", "code", "qty", "cost", "csv_file", "csv_text"],
 };
 // Actions with no form input at all: nothing for a bad input to reach.
 const NO_INPUT = new Set([

@@ -90,7 +90,8 @@ describe("picks are never read by ranking or sizing", () => {
       // M21 B1 (D-1217, D-1260): the Owner's recommendations page sizes the night's picks with the Owner's own
       // capital through the exported `sizeForAmount` and reads the `pick` table; it is display only (no trading,
       // learning or Cortex module reads it back) and lives behind the Owner-tools switch.
-      f.startsWith("src/lib/ownerTools/") ||
+      f === "src/lib/ownerTools/sizing.ts" ||
+      f === "src/lib/ownerTools/recommendations.ts" ||
       f.startsWith("src/app/");
     expect(importers.filter((f) => !allowed(f))).toEqual([]);
     // and the review import exists, so this guard is not vacuous

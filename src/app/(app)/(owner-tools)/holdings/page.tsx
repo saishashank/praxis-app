@@ -8,6 +8,7 @@ import { authDb, mainDb } from "@/lib/db/client";
 import { brokerLinksFor } from "@/lib/ownerTools/brokerLinks";
 import { loadHoldingFacts, type HoldingFacts } from "@/lib/ownerTools/holdingFacts";
 import { loadCurrentHoldings, type CurrentHoldings } from "@/lib/ownerTools/holdings";
+import { loadProfile } from "@/lib/market/profile";
 import { ownerTools } from "@/lib/preferences/ownerTools";
 import { envFor } from "@/lib/ui/loaders/shell";
 import { Banner } from "@/components/ui/States";
@@ -19,7 +20,7 @@ import { saveHoldingsAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-const NO_FACTS: HoldingFacts = { breakers: [], alerts: [], paper: [] };
+const NO_FACTS: HoldingFacts = { known: true, breakers: [], alerts: [], paper: [] };
 
 export default async function HoldingsPage() {
   const user = await requireOwnerTools("/holdings");
@@ -33,7 +34,18 @@ export default async function HoldingsPage() {
   } catch {
     readFailed = true;
   }
-  const facts = await loadHoldingFacts(env, current?.rows.map((r) => r.code) ?? []);
+  let facts = new Map<string, HoldingFacts>();
+  try {
+    facts = await loadHoldingFacts(env, current?.rows.map((r) => r.code) ?? []);
+  } catch {
+    facts = new Map(); // the rows still show, without the facts
+  }
+  let marketName: string = env.market;
+  try {
+    marketName = (await loadProfile(env.main, env.market)).name;
+  } catch {
+    // the market code stands in for its name
+  }
   const entries: HoldingEntry[] = (current?.rows ?? []).map((r) => ({
     code: r.code,
     qty: String(r.qty),
@@ -81,48 +93,54 @@ export default async function HoldingsPage() {
                     links={brokerLinksFor(owner.broker_links, { code: r.code, market: env.market })}
                   />
                 </div>
-                <ul className="m-0 mt-2 list-none space-y-1 p-0">
-                  <li data-testid="holding-breakers">
-                    {f.breakers.length === 0 ? (
-                      <>Thesis checks: nothing flagged.</>
-                    ) : (
-                      <>
-                        Thesis checks:{" "}
-                        {f.breakers
-                          .map(
-                            (b) =>
-                              `${b.status === "triggered" ? "triggered" : "watch"} (${b.trigger}; ${b.value}; ${b.day})`,
-                          )
-                          .join(" · ")}
-                      </>
-                    )}
-                  </li>
-                  <li data-testid="holding-alerts">
-                    {f.alerts.length === 0 ? (
-                      <>Your pick alerts: none.</>
-                    ) : (
-                      <>
-                        Your pick alerts:{" "}
-                        {f.alerts
-                          .map((a) => `${a.tier} idea of ${a.pickDate}, ${a.state}`)
-                          .join(" · ")}
-                      </>
-                    )}
-                  </li>
-                  <li data-testid="holding-paper">
-                    {f.paper.length === 0 ? (
-                      <>Paper book: not held.</>
-                    ) : (
-                      f.paper.map((p) => (
-                        <span key={`${p.strategy}-${p.since}`} className="block">
-                          Paper book: open since {p.since}, {p.qty} shares, stop-loss in force{" "}
-                          <Money micro={p.stopMicro} currency={env.currency} />. {p.strategy}:{" "}
-                          {p.exitRule}
-                        </span>
-                      ))
-                    )}
-                  </li>
-                </ul>
+                {!f.known ? (
+                  <p data-testid="holding-unknown" className="m-0 mt-2">
+                    Not in the {marketName} list: the app has no facts for this code.
+                  </p>
+                ) : (
+                  <ul className="m-0 mt-2 list-none space-y-1 p-0">
+                    <li data-testid="holding-breakers">
+                      {f.breakers.length === 0 ? (
+                        <>Thesis checks: nothing flagged.</>
+                      ) : (
+                        <>
+                          Thesis checks:{" "}
+                          {f.breakers
+                            .map(
+                              (b) =>
+                                `${b.status === "triggered" ? "triggered" : "watch"} (${b.trigger}; ${b.value}; ${b.day})`,
+                            )
+                            .join(" · ")}
+                        </>
+                      )}
+                    </li>
+                    <li data-testid="holding-alerts">
+                      {f.alerts.length === 0 ? (
+                        <>Your pick alerts: none.</>
+                      ) : (
+                        <>
+                          Your pick alerts:{" "}
+                          {f.alerts
+                            .map((a) => `${a.tier} idea of ${a.pickDate}, ${a.state}`)
+                            .join(" · ")}
+                        </>
+                      )}
+                    </li>
+                    <li data-testid="holding-paper">
+                      {f.paper.length === 0 ? (
+                        <>Paper book: not held.</>
+                      ) : (
+                        f.paper.map((p) => (
+                          <span key={`${p.strategy}-${p.since}`} className="block">
+                            Paper book: open since {p.since}, {p.qty} shares, stop-loss in force{" "}
+                            <Money micro={p.stopMicro} currency={env.currency} />. {p.strategy}:{" "}
+                            {p.exitRule}
+                          </span>
+                        ))
+                      )}
+                    </li>
+                  </ul>
+                )}
               </li>
             );
           })}

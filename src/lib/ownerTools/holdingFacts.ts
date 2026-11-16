@@ -10,6 +10,7 @@ import { tierLabel } from "./tiers";
 
 const BREAKER_DAYS = 7; // threshold-ok: a breaker evaluation older than a week is not "active"
 const MAX_BREAKER_ROWS = 2000; // threshold-ok: bound of the breaker read for up to 200 codes
+const MAX_CODES = 200; // threshold-ok: the holdings write limit
 const MAX_POSITION_ROWS = 500; // threshold-ok: bound of the paper-position read for up to 200 codes
 const MS_PER_DAY = 86_400_000; // threshold-ok: ms in a day
 
@@ -36,9 +37,15 @@ export type PaperFact = {
   /** The higher of the first stop and the latest recomputed stop, in micro. */
   stopMicro: string;
 };
-export type HoldingFacts = { breakers: BreakerFact[]; alerts: AlertFact[]; paper: PaperFact[] };
+export type HoldingFacts = {
+  /** False when the code is not in the market's instrument list: the app has no facts for it. */
+  known: boolean;
+  breakers: BreakerFact[];
+  alerts: AlertFact[];
+  paper: PaperFact[];
+};
 
-const empty = (): HoldingFacts => ({ breakers: [], alerts: [], paper: [] });
+const empty = (): HoldingFacts => ({ known: true, breakers: [], alerts: [], paper: [] });
 
 const inList = (n: number): string => Array.from({ length: n }, () => "?").join(", ");
 
@@ -49,7 +56,19 @@ export async function loadHoldingFacts(
 ): Promise<Map<string, HoldingFacts>> {
   const out = new Map<string, HoldingFacts>(codes.map((c) => [c, empty()]));
   if (codes.length === 0) return out;
-  const list = [...codes];
+  const list = [...codes].slice(0, MAX_CODES);
+
+  try {
+    // rows-ok: key probe of (market, code) for at most 200 codes (the unique index), LIMIT bounded
+    const r = await env.main.execute({
+      sql: `SELECT code FROM instrument WHERE market = ? AND code IN (${inList(list.length)}) LIMIT ?`,
+      args: [env.market, ...list, MAX_CODES],
+    });
+    const found = new Set(r.rows.map((x) => String(x.code)));
+    for (const c of list) if (!found.has(c)) out.get(c)!.known = false;
+  } catch {
+    // a failed probe leaves the codes "known": the page then says nothing about them
+  }
 
   try {
     const since = new Date(env.now.getTime() - BREAKER_DAYS * MS_PER_DAY)

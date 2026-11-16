@@ -98,7 +98,8 @@ export async function loadRecommendations(
   const profile = await loadProfile(env.main, env.market);
   const costProfile = costProfileOfMarket(profile);
   const floor = profile.parcelFloorMicro ?? 0n;
-  const fee = (n: bigint, side: "buy" | "sell"): bigint => feeFor(costProfile, n, side);
+  const fee = (n: bigint, side: "buy" | "sell", q: bigint): bigint =>
+    feeFor(costProfile, n, side, { quantity: q });
   const names = await strategyNames(env.main);
   let statuses: Awaited<ReturnType<typeof familyStatusMap>> | null = null;
   try {

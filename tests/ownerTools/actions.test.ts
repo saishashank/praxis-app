@@ -214,6 +214,10 @@ describe("saveHoldingsAction", () => {
     expect(Number(rows[0]!.qty)).toBe(10);
     expect(Number(rows[0]!.avg_cost_micro)).toBe(2_500_000);
     expect(h.revalidated).toContain("/holdings");
+    const ev = (await auditRows(h.auth)).filter((a) => a.action === "owner.holdings_upload");
+    expect(ev).toHaveLength(1);
+    expect(ev[0]!.detail).toEqual({ rows: 1 });
+    expect(JSON.stringify(ev[0])).not.toMatch(/ZZA|2500000/);
   });
 
   it("imports a pasted CSV and an uploaded CSV file", async () => {

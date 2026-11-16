@@ -3,8 +3,10 @@
 // one NEW `owner_holding` upload for the Owner's market; nothing is updated or deleted and nothing else is written.
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { audit, requestMeta } from "@/lib/auth/audit";
 import { requireOwnerTools } from "@/lib/auth/ownerToolsGuard";
-import { mainDb } from "@/lib/db/client";
+import { authDb, mainDb } from "@/lib/db/client";
 import {
   HOLDINGS_ERROR_TEXT,
   HOLDINGS_MAX_CHARS,
@@ -61,6 +63,15 @@ export async function saveHoldingsAction(fd: FormData): Promise<OwnerActionResul
       randomUUID().replace(/-/g, "").slice(0, SUFFIX_LEN),
     );
     if (!r.ok) return { error: r.error, message: HOLDINGS_ERROR_TEXT.unavailable };
+    // The event names the number of rows only: no code, quantity or cost (the Owner's list stays out of the audit trail).
+    await audit(authDb(), process.env, requestMeta(await headers()), {
+      at: new Date().toISOString(),
+      actorUserId: user.id,
+      action: "owner.holdings_upload",
+      targetType: "holdings_upload",
+      targetId: r.uploadId,
+      detail: { rows: parsed.rows.length },
+    });
   } catch {
     return { error: "unavailable", message: HOLDINGS_ERROR_TEXT.unavailable };
   }

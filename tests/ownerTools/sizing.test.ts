@@ -38,7 +38,7 @@ describe("sizeParcel known answers", () => {
 
   it("uses the real AU cost profile: 10.00 each side for parcels of 1,000.01 to 3,000.00", () => {
     const p5 = costProfilesOfMarket("AU").P5!;
-    const fee: FeeFn = (n, side) => feeFor(p5, n, side);
+    const fee: FeeFn = (n, side, q) => feeFor(p5, n, side, { quantity: q });
     // value 2,000.00 buys at 10.00; the sell of 200 x 9.20 = 1,840.00 is also 10.00: risk 160.00 + 20.00 = 180.00 = 1.80 %
     expect(sizeParcel({ capitalWhole: 10_000, caps: AGGRESSIVE, ...PICK, fee })).toMatchObject({
       kind: "ok",
@@ -88,6 +88,28 @@ describe("sizeParcel known answers", () => {
       fee: () => 0n,
     });
     expect(r).toMatchObject({ kind: "ok", shares: 66n, valueMicro: 198n * M, riskMicro: 66n * M });
+  });
+});
+
+describe("sizeParcel with a per-share fee (US-P1)", () => {
+  it("passes the share count to the fee: the TAF and the SEC fee on the sell, hand-computed", () => {
+    const us = costProfilesOfMarket("US")["US-P1"]!;
+    const fee: FeeFn = (n, side, q) => feeFor(us, n, side, { quantity: q });
+    // 200 shares sold at the 9.20 stop = 1,840.00: SEC 0.00206 % = 0.037904 -> 0.04; TAF 200 x 0.000195 = 0.039 -> 0.04;
+    // the buy has no fee. Risk = 200 x 0.80 + 0.08 = 160.08 = 160.58 bp, floored by half-up to 160 bp.
+    expect(sizeParcel({ capitalWhole: 10_000, caps: AGGRESSIVE, ...PICK, fee })).toEqual({
+      kind: "ok",
+      shares: 200n,
+      valueMicro: 2_000n * M,
+      riskMicro: 160_080_000n,
+      riskBp: 160n,
+    });
+  });
+
+  it("a stop of zero or below cannot be sized", () => {
+    expect(
+      sizeParcel({ capitalWhole: 10_000, caps: STEADY, ...PICK, stopMicro: 0n, fee: FLAT5 }),
+    ).toEqual({ kind: "too_small" });
   });
 });
 

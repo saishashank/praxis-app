@@ -154,6 +154,21 @@ describe("/holdings", () => {
     expect((document.querySelector('input[name="cost"]') as HTMLInputElement).value).toBe("8.5");
   });
 
+  it("a code that is not in the instrument list says the app has no facts for it", async () => {
+    await saveHoldings(
+      world.main,
+      "AU",
+      [{ code: "ZZNONE", qty: 1, avgCostMicro: 1_000_000n }],
+      new Date("2026-10-21T00:00:00.000Z"),
+      "bbbbbbbb",
+    );
+    render(await HoldingsPage());
+    expect(screen.getByTestId("holding-unknown").textContent).toMatch(
+      /^Not in the .+ list: the app has no facts for this code.$/,
+    );
+    expect(screen.queryByTestId("holding-breakers")).toBeNull();
+  });
+
   it("rendering the page changes no table (read-only beside the form)", async () => {
     const before = await tableCounts();
     render(await HoldingsPage());
