@@ -22,19 +22,47 @@ import { MarketTable } from "./MarketTable";
 import type { WatchResult } from "./messages";
 import type { WatchMode } from "./RowActions";
 import { sectorKey } from "./sectorHue";
-import { formatDay } from "@/lib/view/format";
+import { formatDay, formatPpm } from "@/lib/view/format";
 import { formatIndexPoints, ppmToPercent } from "./text";
 
 type Star = (fd: FormData) => Promise<WatchResult>;
 
-/** The spinner a section shows while its data loads. */
-export function SectionLoading({ label }: { label: string }) {
+/** The arriving layout, as grey bars (UXN-008, D-1232). */
+export type SkeletonShape = "rows" | "tiles" | "chart";
+
+const SKELETON_BAR = "rounded bg-surface-2";
+
+/**
+ * What a section shows while its data loads: grey bars in the shape of what is coming (rows of a list, tiles,
+ * or a chart), with the label as the one status for a screen reader. Nothing is animated, so Motion: Off and
+ * reduced motion need no switch (D-1232).
+ */
+export function SectionLoading({
+  label,
+  shape = "rows",
+}: {
+  label: string;
+  shape?: SkeletonShape;
+}) {
   return (
-    <div role="status" className="flex items-center gap-2 py-4 text-sm text-text-muted">
-      <span
-        aria-hidden="true"
-        className="inline-block size-5 animate-spin rounded-full border-2 border-border border-t-accent"
-      />
+    <div role="status" className="py-3 text-sm text-text-muted">
+      <div aria-hidden="true" data-skeleton-shape={shape} className="mb-2">
+        {shape === "rows" ? (
+          <div className="flex flex-col gap-2">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} data-skeleton="bar" className={`${SKELETON_BAR} h-8 w-full`} />
+            ))}
+          </div>
+        ) : shape === "tiles" ? (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} data-skeleton="bar" className={`${SKELETON_BAR} h-16`} />
+            ))}
+          </div>
+        ) : (
+          <div data-skeleton="bar" className={`${SKELETON_BAR} h-40 w-full`} />
+        )}
+      </div>
       {label}
     </div>
   );
@@ -116,33 +144,95 @@ function Pager({
   );
 }
 
+/** "up 0.4 %", "down 0.3 %" or "unchanged": the day's move in words, from the stored ppm. */
+function moveWords(ppm: number | null): string {
+  if (ppm === null || !Number.isFinite(ppm)) return "no change yet";
+  const pct = formatPpm(Math.abs(ppm));
+  if (pct === formatPpm(0)) return "unchanged on the day";
+  return `${ppm > 0 ? "up" : "down"} ${pct} on the day`;
+}
+
+/** The closes as a path from 100, so a masked user sees the shape and the move but not the index level (D-1255). */
+function rebased(closes: number[]): number[] {
+  const first = closes[0];
+  return first === undefined || first === 0 ? [] : closes.map((c) => (c / first) * 100);
+}
+
+/**
+ * The main index as a one-row table (UXN-321 item 13, D-1206): a screen-reader caption, the index name as the row
+ * header, column headers, the sparkline, and one visible line saying level, move and freshness in trading words.
+ * A masked user gets the change only (no index name, level or date).
+ */
 export function IndexSection({ index, masked }: { index: Promise<IndexStrip>; masked: boolean }) {
   const strip = use(index);
-  return strip ? (
-    <div className="mt-1 flex flex-wrap items-center gap-3">
-      <span className="font-medium">{masked ? "Market index" : strip.label}</span>
-      {!masked ? (
-        <span className="font-sans tabular-nums">
-          {formatIndexPoints(strip.live ? strip.live.levelMicro : strip.closeMicro)}
-        </span>
-      ) : null}
-      <Change ppm={strip.live ? strip.live.changePpm : strip.changePpm} />
-      <span className="text-sm text-text-muted">
-        {strip.live
-          ? `Delayed, ${strip.live.at}`
-          : `End of day${masked ? "" : `, ${formatDay(strip.d)}`}`}
-      </span>
-      <Sparkline
-        values={strip.closes}
-        label="Main index, last month"
-        format={formatIndexPoints}
-        labels={masked ? undefined : strip.dates.map((d) => formatDay(d))}
-      />
+  if (!strip) {
+    return (
+      <p className="m-0 mt-1 text-sm text-text-muted">
+        No index data has been stored yet. It appears after a nightly run.
+      </p>
+    );
+  }
+  const name = masked ? "Market index" : strip.label;
+  const ppm = strip.live ? strip.live.changePpm : strip.changePpm;
+  const level = formatIndexPoints(strip.live ? strip.live.levelMicro : strip.closeMicro);
+  const fresh = strip.live
+    ? `Delayed, ${strip.live.at}`
+    : `End of day${masked ? "" : `, ${formatDay(strip.d)}`}`;
+  return (
+    <div className="mt-1 flex flex-col gap-2">
+      <table className="w-full border-collapse text-left">
+        <caption className="sr-only">Main index, latest level and change</caption>
+        <thead>
+          <tr className="text-xs text-text-muted">
+            <th scope="col" className="py-1 pr-3 font-medium">
+              Index
+            </th>
+            {!masked ? (
+              <th scope="col" className="py-1 pr-3 font-medium">
+                Level
+              </th>
+            ) : null}
+            <th scope="col" className="py-1 pr-3 font-medium">
+              Change
+            </th>
+            <th scope="col" className="py-1 font-medium">
+              Last month
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row" className="py-1 pr-3 font-medium">
+              {name}
+            </th>
+            {!masked ? <td className="py-1 pr-3 font-sans tabular-nums">{level}</td> : null}
+            <td className="py-1 pr-3">
+              <Change ppm={ppm} />
+            </td>
+            <td className="py-1">
+              {masked ? (
+                <Sparkline
+                  values={rebased(strip.closes)}
+                  label="Main index, last month (first day = 100)"
+                  format={(v) => v.toFixed(1)}
+                />
+              ) : (
+                <Sparkline
+                  values={strip.closes}
+                  label="Main index, last month"
+                  format={formatIndexPoints}
+                  labels={strip.dates.map((d) => formatDay(d))}
+                />
+              )}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p data-testid="index-summary" className="m-0 text-sm text-text-muted">
+        {masked ? `${name}: ` : `${name}: ${level}, `}
+        {moveWords(ppm)}. {fresh}.
+      </p>
     </div>
-  ) : (
-    <p className="m-0 mt-1 text-sm text-text-muted">
-      No index data has been stored yet. It appears after a nightly run.
-    </p>
   );
 }
 

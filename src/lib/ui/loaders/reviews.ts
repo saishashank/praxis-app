@@ -18,6 +18,7 @@ import { listVersions, loadReview, readState } from "@/lib/review/assemble";
 import type { Missing } from "@/lib/review/facts";
 import { activeCodesForDate } from "@/lib/view/active";
 import {
+  displayName,
   currencyFormatFor,
   formatCents,
   formatDay,
@@ -797,7 +798,7 @@ async function newPicksOf(
           return {
             rank: r.rank,
             stock: aliases ? aliases.label(r.code) : r.code,
-            company: masked ? null : r.name,
+            company: masked || r.name === null ? null : displayName(r.name, { code: r.code }),
             buyUpTo: masked ? null : money(r.buy, env.currency),
             stop: masked ? null : money(r.stop, env.currency),
             aim: masked ? null : money(r.aim, env.currency),

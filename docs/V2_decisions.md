@@ -846,3 +846,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1243 | A1 (seed states and the hash test): E2E_STATES=all keeps meaning the default-configuration states: owner-tools-on is opt-in (OPT_IN_STATES), so the rich lane... |
 | D-1244 | A1 (generated files): tests/test-map.baseline.json is not regenerated in A1 (its --update rewrites about 2,400 lines of earlier milestones; npm run test:map... |
 | D-1245 | A1 review fixes (Opus, 2026-11-16): the Owner-tool preferences are for the PINNED Owner (isPinnedOwner: role owner and the pinned e-mail), not any stored own... |
+| D-1255 | C1 (index strip, masking): a masked user's index sparkline is drawn from the closes rebased to 100 at the first day, with "first day = 100" in its label, bec... |
+| D-1256 | C1 (skeletons, UXN-008): SectionLoading takes shape ("rows" default, "tiles", "chart") and draws static grey bars, hidden from assistive tech, with the label... |
+| D-1257 | C1 (frame, F): ReviewFrame shortens the frame to 320 px, reads documentElement.scrollHeight of the frame document on load and on window resize, and sets that... |
+| D-1258 | C1 (names, D-1206): displayName(name, { code }) keeps the word equal to the code in capitals; it is applied to the pick company (picks.ts), the review's new-... |
+| D-1259 | C1 (hand-off to C3): the signature C3 uses at pickAlerts.ts:239 is displayName(name, { code }), where code is the row's own instrument code; a missing or emp... |
