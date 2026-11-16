@@ -366,6 +366,12 @@ export default async function CortexPage() {
               </Link>{" "}
               (each change counts as a trial and the maps are refitted)
             </li>
+            <li>
+              <Link href="/cortex/labels" className="text-accent underline">
+                Label announcements
+              </Link>{" "}
+              (your own answers, the yardstick for the automatic labels)
+            </li>
           </ul>
         ) : (
           <p className="m-0 text-text-muted">Only the Owner can change Cortex settings.</p>

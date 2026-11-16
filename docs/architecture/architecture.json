@@ -367,6 +367,31 @@
       }
     },
     {
+      "id": "action:src/app/(app)/cortex/labels/actions.ts#saveGoldenAction",
+      "type": "action",
+      "name": "saveGoldenAction",
+      "purpose": "Server action saveGoldenAction: a form write with a role check and an audit event.",
+      "specIds": [
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "platform",
+        "security"
+      ],
+      "source": "src/app/(app)/cortex/labels/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/cortex/labels/actions.ts"
+      }
+    },
+    {
       "id": "action:src/app/(app)/health/actions.ts#confirmCalendarAction",
       "type": "action",
       "name": "confirmCalendarAction",
@@ -3686,6 +3711,29 @@
         "cortex"
       ],
       "source": "src/app/(app)/cortex/page.tsx",
+      "attrs": {}
+    },
+    {
+      "id": "page:/cortex/labels",
+      "type": "page",
+      "name": "/cortex/labels",
+      "purpose": "Cortex page: family states and passports (status only).",
+      "specIds": [
+        "CTX-010",
+        "CTX-011"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "cortex"
+      ],
+      "source": "src/app/(app)/cortex/labels/page.tsx",
       "attrs": {}
     },
     {
@@ -18449,6 +18497,17 @@
       ]
     },
     {
+      "id": "service:app|contains|action:src/app/(app)/cortex/labels/actions.ts#saveGoldenAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/cortex/labels/actions.ts#saveGoldenAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform",
+        "security"
+      ]
+    },
+    {
       "id": "service:app|contains|action:src/app/(app)/health/actions.ts#confirmCalendarAction",
       "from": "service:app",
       "to": "action:src/app/(app)/health/actions.ts#confirmCalendarAction",
@@ -19089,6 +19148,16 @@
       "id": "service:app|contains|page:/cortex",
       "from": "service:app",
       "to": "page:/cortex",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "cortex"
+      ]
+    },
+    {
+      "id": "service:app|contains|page:/cortex/labels",
+      "from": "service:app",
+      "to": "page:/cortex/labels",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [

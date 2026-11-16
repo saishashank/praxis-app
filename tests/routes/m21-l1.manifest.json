@@ -1,0 +1,7 @@
+{
+  "routes": {
+    "action src/app/(app)/cortex/labels/actions.ts#saveGoldenAction": {
+      "tests": ["tests/labels/page.test.tsx"]
+    }
+  }
+}

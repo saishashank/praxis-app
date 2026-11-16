@@ -882,3 +882,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1285 | C2 target source: the trades loader reads the execution's rule version params_json once (one row by primary key, rows-ok) and calls E1's targetOf per trade w... |
 | D-1286 | C2 delayed target flag: no intraday high is stored, so "the delayed high of the session reached the target" uses the delayed last price of a later day (the o... |
 | D-1287 | C2 Size column (UXN-320 b, D-1204): the loaders set qty: null for a masked viewer in both strategyViews and strategies (an O-54 correction); the trades table... |
+| D-1300 | L1 (UXN-318, D-1227): /cortex/labels is a registry page for the admin action (Owner only; every other role gets the 403 page), not a hidden route: it needs n... |
+| D-1301 | L1 (queue and count): nextUnlabelled returns the newest announcement of the market with no golden_label row of any answer, so a skip or an unclear flag takes... |
+| D-1302 | L1 (independence): golden.ts, the loader and the page read none of text_label, label_validation or label_item (a test asserts every statement the page issues... |
+| D-1303 | L1 (keyboard): the three groups are native radios (Tab enters a group, arrows move inside it); 1 to 4 choose within the focused group, S skips, U flags as un... |
