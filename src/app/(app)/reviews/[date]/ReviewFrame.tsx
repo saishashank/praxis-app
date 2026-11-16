@@ -19,6 +19,8 @@ export function ReviewFrame({
   const ref = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(clampReviewHeightPx(initialHeightPx));
   const height0 = useRef(height);
+  const width0 = useRef<number | null>(null);
+  const raf = useRef<number | null>(null);
 
   const measure = useCallback(() => {
     const el = ref.current;
@@ -35,13 +37,27 @@ export function ReviewFrame({
     const h = px > 0 ? clampReviewHeightPx(px) : height0.current;
     el.style.height = `${h}px`;
     height0.current = h;
+    width0.current = el.clientWidth;
     setHeight(h);
   }, []);
 
-  // The text reflows when the width changes: measure again.
+  // The text reflows only when the frame's width changes (a phone's URL bar resizes the height alone and must not
+  // make the reader jump): measure again then, once per animation frame.
   useEffect(() => {
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    const onResize = () => {
+      if (raf.current !== null) return;
+      raf.current = window.requestAnimationFrame(() => {
+        raf.current = null;
+        const el = ref.current;
+        if (el !== null && el.clientWidth !== width0.current) measure();
+      });
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      if (raf.current !== null) window.cancelAnimationFrame(raf.current);
+      raf.current = null;
+    };
   }, [measure]);
 
   return (

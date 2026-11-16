@@ -168,7 +168,7 @@ export function IndexSection({ index, masked }: { index: Promise<IndexStrip>; ma
   if (!strip) {
     return (
       <p className="m-0 mt-1 text-sm text-text-muted">
-        No index data has been stored yet. It appears after a nightly run.
+        No index data has been stored yet. It appears after the next trading day closes.
       </p>
     );
   }

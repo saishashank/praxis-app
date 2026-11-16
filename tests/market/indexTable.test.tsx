@@ -72,6 +72,8 @@ describe("Market index table", () => {
     const { container } = await show(<IndexSection index={Promise.resolve(strip)} masked />);
     expect(summary(container)).toBe("Market index: up 0.40% on the day. End of day.");
     expect(container.textContent).not.toMatch(/AXJO|ASX 200|8,512|Nov|2026-/);
+    // the Sparkline's aria-label and text alternative are the leak path: check the markup too
+    expect(container.innerHTML).not.toMatch(/8[,.]?512|8[,.]?400|AXJO|ASX 200|Nov|2026-/);
     expect(within(screen.getAllByRole("table")[0]!).getAllByRole("rowheader")[0]!.textContent).toBe(
       "Market index",
     );

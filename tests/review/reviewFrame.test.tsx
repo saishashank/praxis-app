@@ -74,15 +74,32 @@ describe("ReviewFrame", () => {
     expect(frame().style.height).toBe("500px");
   });
 
-  it("measures again when the window is resized", () => {
+  it("measures again on resize only when the frame's width changed", async () => {
     show();
+    // jsdom fires its own load for a srcdoc frame: let it pass before the scene is set up
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    const width = (w: number) =>
+      Object.defineProperty(frame(), "clientWidth", { configurable: true, value: w });
+    width(800);
     docHeights(frame(), 800);
     act(() => {
       fireEvent.load(frame());
     });
+    const next = () => new Promise((r) => requestAnimationFrame(() => r(null)));
+    // height-only resize (a URL bar): no new measure, the frame does not move
     docHeights(frame(), 1500);
-    act(() => {
+    await act(async () => {
       fireEvent(window, new Event("resize"));
+      await next();
+    });
+    expect(frame().style.height).toBe("800px");
+    // width change: measured again
+    width(400);
+    await act(async () => {
+      fireEvent(window, new Event("resize"));
+      await next();
     });
     expect(frame().style.height).toBe("1500px");
   });

@@ -209,6 +209,7 @@ export function formatInstant(iso: string | null | undefined, now: Date = new Da
 }
 
 const KEEP_UPPER = new Set([
+  "NIB",
   "NL",
   "PLC",
   "ETF",
@@ -237,7 +238,7 @@ const SMALL_WORDS = new Set(["and", "of", "the", "for", "in", "on", "at", "to", 
  * Only an all-capitals name is changed (a name in mixed case is kept as stored). Short all-letter
  * words of up to 3 letters without a vowel, words with digits or dots, and known abbreviations stay
  * in capitals ("BHP", "G8", "SCX.AI", "NL"). A word equal to the row's own `code` also stays in capitals
- * ("ANZ GROUP HOLDINGS" with code ANZ -> "ANZ Group Holdings"; the "ASX codes" exception, D-1206).
+ * (codes of up to 3 characters only, so a longer IN/US ticker never forces a word; "ANZ GROUP HOLDINGS" with code ANZ -> "ANZ Group Holdings"; the "ASX codes" exception, D-1206).
  */
 export function displayName(
   name: string | null | undefined,
@@ -252,7 +253,7 @@ export function displayName(
       if (/^\s+$/.test(w) || w === "") return w;
       const bare = w.replace(/[.,]$/, "");
       if (KEEP_UPPER.has(bare) || /\d/.test(bare) || /\.\w/.test(bare)) return w;
-      if (code !== "" && bare === code) return w;
+      if (code !== "" && code.length <= 3 && bare === code) return w;
       const suffix = SUFFIXES[bare];
       if (suffix !== undefined) return suffix + w.slice(bare.length);
       if (bare.length <= 3 && !/[AEIOU]/.test(bare)) return w;

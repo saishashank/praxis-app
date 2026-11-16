@@ -29,6 +29,10 @@ describe("displayName with the row's own code (D-1206)", () => {
     expect(displayName("Zed Upward Holdings", { code: "ZZUP" })).toBe("Zed Upward Holdings");
     expect(displayName("ANZ Group Holdings", { code: "ANZ" })).toBe("ANZ Group Holdings");
   });
+  it("applies the code rule to codes of up to 3 characters only; NIB stays in capitals", () => {
+    expect(displayName("TITAN COMPANY LIMITED", { code: "TITAN" })).toBe("Titan Company Limited");
+    expect(displayName("NIB HOLDINGS LIMITED", { code: "NHF" })).toBe("NIB Holdings Limited");
+  });
   it("ignores an empty or missing code and a missing name", () => {
     expect(displayName("ANZ GROUP HOLDINGS", { code: "" })).toBe("Anz Group Holdings");
     expect(displayName("ANZ GROUP HOLDINGS", { code: null })).toBe("Anz Group Holdings");

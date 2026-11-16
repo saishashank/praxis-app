@@ -313,7 +313,9 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
     return {
       id: publicPickId(`${d}.${q.profile}.${Number(x.rank)}`, masked),
       rank: Number(x.rank), // money-float-ok: SQL integer column
-      familyName: names[String(x.family)]?.name ?? String(x.family),
+      familyName: names[String(x.family)]
+        ? displayName(names[String(x.family)]!.name)
+        : String(x.family),
       familyInfo: names[String(x.family)]
         ? {
             oneLiner: names[String(x.family)]!.one_liner,
