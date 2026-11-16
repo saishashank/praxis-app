@@ -123,10 +123,7 @@ export function statusText(
 }
 
 /** The gates still open on a built market, in fixed words (the checklist with evidence links is M20, D-1001). */
-export const BUILT_GATE_ITEMS: readonly string[] = [
-  "AU 60 trading days (MKT-105)",
-  "Owner approval",
-];
+export const BUILT_GATE_ITEMS: readonly string[] = ["AU 60 trading days", "Owner approval"];
 
 /**
  * The table. The Owner sees every row in `model.markets` (every profile row); Editors and Viewers see the

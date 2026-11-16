@@ -2,6 +2,8 @@
 
 Checker: Haiku (U0). Decision: D-1201 (2 accepted, 12 superseded, 21 rejected, 35 in total).
 
+Amendment (task Z): this table is the checker's first reading. The ruling is the amended D-1201 in `docs/M21_design.md` (5 accepted, 7 superseded, 23 rejected); `scripts/ci/ui-crosscheck.test.mjs` checks the table against it and checks that each accepted item names a test that exists.
+
 Sources read:
 - Design verdicts: `docs/M21_design.md` section F (UXN-319 cross-check) and the D-1201 line.
 - Item text: `praxis-app-data/Requirement/v1/spec/16_ui_next_level.md`, the 35 lines tagged `[PROPOSED]` (the full set; the grep of all P2/P3 lines shows no other unaccepted item).

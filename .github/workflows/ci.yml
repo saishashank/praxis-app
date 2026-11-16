@@ -45,6 +45,8 @@ jobs:
       - name: Known-route list is current (M21 A2, D-1210; run gen-app-routes.mjs --write after adding a page or route)
         run: node scripts/routes/gen-app-routes.mjs --check
       - run: npm run test:hygiene
+      - name: No internal code in text an Owner reads (D-922, D-1233; allow-list needs a reason)
+        run: npm run test:internal-codes
       - name: No market literal outside the profile seed (AT-67, MKT-107)
         run: npm run test:market-literals
       - name: Market-off proofs (AT-68 a/b/c, MKT-110; every CI run)
@@ -108,7 +110,7 @@ jobs:
           E2E_SCENARIO: rich
           E2E_STATES: all
       - name: E2E lane rich - the Owner tools switched on (UX-131, AT-77; opt-in state, D-1243)
-        run: npx playwright test e2e/m21-owner-tools-on.spec.ts --project=desktop
+        run: npx playwright test e2e/m21-owner-tools-on.spec.ts e2e/m21-at82.spec.ts --project=desktop
         env:
           E2E_SCENARIO: rich
           E2E_STATES: all,owner-tools-on

@@ -383,7 +383,7 @@ describe("AT-68 (c): no UI for a market that is not enabled", () => {
         status: "built",
         statusText: "Built — off in production",
         evidence: "AT-M evidence: not recorded",
-        gateItems: ["AU 60 trading days (MKT-105)", "Owner approval"],
+        gateItems: ["AU 60 trading days", "Owner approval"],
         selectable: false,
       });
     }

@@ -907,3 +907,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1322 | C6 (focus ring): the focused node draws a 3 px ring (--color-focus) 4 px outside its box, as an SVG rect inside the node group; the group's own browser outli... |
 | D-1323 | C6 (export links): the diagram shows "Export as draw.io" and "Export as SVG" beside the element count, as plain links to the existing route for the shown view. |
 | D-1324 | C6 (evidence and lane): docs/test-reports/AT-59.md (c) cites tests/blueprint/drawio.test.ts and export.test.ts as the automated proof (D-1211) and adds the k... |
+| D-1325 | Z (scan, D-1233): scripts/ci/internal-codes.mjs reads string literals (template literals by their static text, the code inside ${ } in turn) and, in .tsx, JS... |
+| D-1326 | Z (first run of the scan): 69 hits in 22 files, 48 left after the SQL rule. |
+| D-1327 | Z (AT-82 walk, D-1234): e2e/m21-at82.spec.ts runs in the owner-tools-on lane (E2E_STATES=all,owner-tools-on, scenario rich) because the Owner-tool pages exis... |
+| D-1328 | Z (rendered-text exceptions): the walk does not read the page text of /blueprint (a spec browser for the Owner whose purpose is to show requirement and decis... |
+| D-1329 | Z (the U0 test): scripts/ci/ui-crosscheck.test.mjs, named in the design's U0 row, had not been written by U0; |

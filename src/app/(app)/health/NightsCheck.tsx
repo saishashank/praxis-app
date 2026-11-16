@@ -18,9 +18,9 @@ export function NightsView({ table }: { table: NightsTable | null }) {
       ) : (
         <>
           <p className="text-sm text-text-muted">
-            Each step against its PLT-073 deadline, oldest night first. A Worker route row appears
-            only for a slot with a failed post; a dash there means no failure was recorded, not a
-            confirmed run.
+            Each step against its deadline, oldest night first. A Worker route row appears only for
+            a slot with a failed post; a dash there means no failure was recorded, not a confirmed
+            run.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm">

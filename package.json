@@ -28,6 +28,7 @@
     "test:architecture": "node scripts/ci/architecture-check.mjs && node scripts/ci/decision-index.mjs --check && node scripts/ci/steelman-readers.mjs --check",
     "test:env-names": "node scripts/ci/env-names.mjs",
     "test:market-literals": "node scripts/ci/market-literals.mjs",
+    "test:internal-codes": "node scripts/ci/internal-codes.mjs",
     "test:map": "node scripts/ci/test-map.mjs --summary",
     "test:map:update": "node scripts/ci/test-map.mjs --update",
     "test:quarantine": "node scripts/ci/quarantine-check.mjs",

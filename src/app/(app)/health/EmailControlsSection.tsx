@@ -24,7 +24,7 @@ const MODE_EXPLAIN = {
   off: "No email of any kind is sent. Nothing is lost: every review and alert stays readable in the app.",
   incidents:
     "Only incident emails are sent (a problem opens or gets worse, tokens due, an unread review after 7 days, the database unreachable, and the watchdog's minimal review if the app is down). No daily review, no alert emails.",
-  full: "Every email is sent: the Evening Review, P0 alert emails, incidents, the attention reminder and the Morning Brief if you turned it on.",
+  full: "Every email is sent: the Evening Review, urgent alert emails, incidents, the attention reminder and the Morning Brief if you turned it on.",
 } as const;
 
 export function EmailControlsSection({ v }: { v: EmailControlsView | null }) {
