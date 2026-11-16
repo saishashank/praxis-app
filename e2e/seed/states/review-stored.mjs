@@ -6,7 +6,7 @@ import { tradingDays } from "../data.mjs";
 
 const SHA = "b".repeat(64);
 const HTML =
-  '<!doctype html><html><head><meta charset="utf-8"><title>Evening Review</title></head><body>' +
+  '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Evening Review</title></head><body>' +
   "<h1>Evening Review</h1><p>This is a synthetic review stored for the end-to-end checks. " +
   "It holds no real company, price or link.</p>" +
   "<h2>What happened today</h2><p>Nothing real happened: this text exists so the frame has a height to measure.</p>" +

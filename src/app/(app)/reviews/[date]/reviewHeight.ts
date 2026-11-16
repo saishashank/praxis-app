@@ -16,3 +16,9 @@ export function clampReviewHeightPx(px: number): number {
   if (!Number.isFinite(px)) return REVIEW_FRAME_MIN_PX;
   return Math.min(REVIEW_FRAME_MAX_PX, Math.max(REVIEW_FRAME_MIN_PX, Math.ceil(px)));
 }
+
+/** A measured content height: the content decides, so there is no floor (a short review has no blank band); only the cap applies. 0 means "no usable measure". */
+export function clampMeasuredHeightPx(px: number): number {
+  if (!Number.isFinite(px) || px <= 0) return 0;
+  return Math.min(REVIEW_FRAME_MAX_PX, Math.ceil(px));
+}

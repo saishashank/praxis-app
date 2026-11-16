@@ -188,6 +188,15 @@ describe("what each state leaves behind", () => {
     ).toEqual(["off"]);
   });
 
+  it("alerts-muted: the alert belongs to the viewer id it is given, so My alerts finds it", async () => {
+    const db = await freshDb("main");
+    await applyStates(db, ["alerts-muted"], NOW, { viewerId: "7" });
+    await applyStates(db, ["alerts-muted"], NOW, { viewerId: "7" }); // idempotent
+    const r = await db.execute("SELECT DISTINCT user_id FROM pick_alert");
+    expect(r.rows.map((x) => String(x.user_id))).toEqual(["7"]);
+    expect((await db.execute("SELECT 1 FROM pick_alert")).rows).toHaveLength(2);
+  });
+
   it("market-built-off asserts the production shape: a second market stops the run", async () => {
     const db = await freshDb("main");
     await applyStates(db, ["market-built-off"], NOW); // AU only: fine

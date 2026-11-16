@@ -5,7 +5,7 @@
 // its content with no blank band and no inner scroll. The frame is srcdoc, so it inherits the app's CSP (no
 // inline script) and frame-ancestors does not apply to it. The stored HTML is never rendered by the parent itself.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { REVIEW_FRAME_MIN_PX, clampReviewHeightPx } from "./reviewHeight";
+import { clampMeasuredHeightPx, clampReviewHeightPx } from "./reviewHeight";
 
 export function ReviewFrame({
   title,
@@ -31,10 +31,13 @@ export function ReviewFrame({
       doc = null; // a frame that is not readable keeps its estimate
     }
     if (el === null || doc === null) return;
-    // A frame taller than its content reports its own height: shorten it first so the content decides.
-    el.style.height = `${REVIEW_FRAME_MIN_PX}px`;
-    const px = doc.documentElement.scrollHeight;
-    const h = px > 0 ? clampReviewHeightPx(px) : height0.current;
+    // The <html> box is as tall as its content whatever the frame's own height is (its height is auto), so a frame
+    // taller than its content does not report its own height. scrollHeight is the fallback for a frame with no layout.
+    const box = Math.ceil(doc.documentElement.getBoundingClientRect().height);
+    const measured = clampMeasuredHeightPx(box > 0 ? box : doc.documentElement.scrollHeight);
+    // The frame's border sits outside its content box (border-box sizing): add it so the content needs no inner scroll.
+    const border = Math.max(0, el.offsetHeight - el.clientHeight);
+    const h = measured > 0 ? measured + border : height0.current;
     el.style.height = `${h}px`;
     height0.current = h;
     width0.current = el.clientWidth;

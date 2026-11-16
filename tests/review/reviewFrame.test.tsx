@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ReviewFrame } from "@/app/(app)/reviews/[date]/ReviewFrame";
 import {
   REVIEW_FRAME_MAX_PX,
-  REVIEW_FRAME_MIN_PX,
+  clampMeasuredHeightPx,
   estimateReviewHeightPx,
 } from "@/app/(app)/reviews/[date]/reviewHeight";
 
@@ -47,13 +47,13 @@ describe("ReviewFrame", () => {
     expect(frame().style.height).toBe("1234px");
   });
 
-  it("a short document shrinks the frame (no empty band) down to the floor", () => {
+  it("a short document shrinks the frame to its content (no empty band, no floor)", () => {
     show();
     docHeights(frame(), 90);
     act(() => {
       fireEvent.load(frame());
     });
-    expect(frame().style.height).toBe(`${REVIEW_FRAME_MIN_PX}px`);
+    expect(frame().style.height).toBe("90px");
   });
 
   it("a very long document is capped, not unbounded", () => {
@@ -102,6 +102,15 @@ describe("ReviewFrame", () => {
       await next();
     });
     expect(frame().style.height).toBe("1500px");
+  });
+});
+
+describe("clampMeasuredHeightPx", () => {
+  it("has no floor, caps at the maximum and reports 0 for no usable measure", () => {
+    expect(clampMeasuredHeightPx(201.2)).toBe(202);
+    expect(clampMeasuredHeightPx(1e9)).toBe(REVIEW_FRAME_MAX_PX);
+    expect(clampMeasuredHeightPx(0)).toBe(0);
+    expect(clampMeasuredHeightPx(Number.NaN)).toBe(0);
   });
 });
 

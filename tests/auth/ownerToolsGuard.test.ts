@@ -86,3 +86,24 @@ describe("requireOwnerTools / requireOwnerToolsRoute", () => {
     expect(new Set(all).size).toBe(1);
   });
 });
+
+describe("ownerToolsVisibleTo", () => {
+  it("is true only for the pinned Owner with the switch on, and never throws", async () => {
+    const { ownerToolsVisibleTo } = await import("@/lib/auth/ownerToolsGuard");
+    for (const [name, user] of USERS) {
+      for (const on of [false, true, "throw"] as const) {
+        const expected = user === PINNED && on === true;
+        expect(await ownerToolsVisibleTo(user, mk(user, on)), `${name} switch ${String(on)}`).toBe(
+          expected,
+        );
+      }
+    }
+  });
+
+  it("a null user is false without reading the switch", async () => {
+    const { ownerToolsVisibleTo } = await import("@/lib/auth/ownerToolsGuard");
+    const ownerToolsOn = vi.fn(async () => true);
+    expect(await ownerToolsVisibleTo(null, { ...mk(null, true), ownerToolsOn })).toBe(false);
+    expect(ownerToolsOn).not.toHaveBeenCalled();
+  });
+});

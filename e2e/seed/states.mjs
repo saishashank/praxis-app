@@ -60,8 +60,9 @@ export function parseStates(value) {
  * @param {import("@libsql/client").Client} client
  * @param {string[]} names
  * @param {string} [nowIso]
+ * @param {{ viewerId?: string }} [ctx] the auth-DB id of the seeded viewer (user rows live in the auth DB; pick_alert.user_id is String(app_user.id))
  */
-export async function applyStates(client, names, nowIso = new Date().toISOString()) {
-  for (const n of names) await STATES[n].apply(client, nowIso);
+export async function applyStates(client, names, nowIso = new Date().toISOString(), ctx = {}) {
+  for (const n of names) await STATES[n].apply(client, nowIso, ctx);
   return names;
 }

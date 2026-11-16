@@ -62,21 +62,40 @@ export async function setTheme(role: Role, theme: string): Promise<void> {
   }
 }
 
-export async function axeViolations(page: Page) {
+export async function axeViolations(page: Page, opts: { exclude?: string[] } = {}) {
   // The Control Room boot fades its readouts in (<= 1.2 s, UXN-285 a); axe measures contrast through
   // opacity, so check the settled page, not a frame mid-fade.
   await page
     .locator('[data-boot="on"]')
     .waitFor({ state: "detached", timeout: 5_000 })
     .catch(() => {});
-  const r = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-    .analyze();
+  const builder = new AxeBuilder({ page }).withTags([
+    "wcag2a",
+    "wcag2aa",
+    "wcag21a",
+    "wcag21aa",
+    "wcag22aa",
+  ]);
+  // A sandboxed frame without allow-scripts cannot take axe's injected script and the run hangs on it: a caller
+  // leaves such a frame out of the page run and checks the frame's own document with axeHtmlViolations.
+  for (const selector of opts.exclude ?? []) builder.exclude(selector);
+  const r = await builder.analyze();
   return r.violations.map((v) => ({
     id: v.id,
     impact: v.impact,
     nodes: v.nodes.map((n) => n.target.join(" ")),
   }));
+}
+
+/** axe on one HTML document (a sandboxed frame's srcdoc) in a plain page of its own, where axe can inject. */
+export async function axeHtmlViolations(page: Page, html: string) {
+  const host = await page.context().newPage();
+  try {
+    await host.setContent(html);
+    return await axeViolations(host);
+  } finally {
+    await host.close();
+  }
 }
 
 export const THEMES = ["dark", "light", "system", "midnight", "dim", "high_contrast"] as const;
