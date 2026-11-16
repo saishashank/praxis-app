@@ -902,3 +902,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1316 | C5 (components): Banner gains the tone stale (text colour, --band-stale); info sits on --band-info, warning on --band-warn, danger keeps the plain surface; e... |
 | D-1317 | C5 (emulation spec): the Settings control is the Appearance radio group and Save; the comparison is the computed token set (colours, three hue fills, the fou... |
 | D-1318 | C5 (vibrancy): the e2e data is fresh, so Home shows no stale banner; the vibrancy test places one element in the Banner's markup (data-band="stale", the band... |
+| D-1320 | C6 (UXN-324 a, keys): the nodes have one tab stop (the node last focused, else the open one, else the first in reading order: columns left to right, rows top... |
+| D-1321 | C6 (edges): an edge is not a tab stop (a view has over a hundred, so each would add a stop and the Platform walk would be unusable); it is reached from the p... |
+| D-1322 | C6 (focus ring): the focused node draws a 3 px ring (--color-focus) 4 px outside its box, as an SVG rect inside the node group; the group's own browser outli... |
+| D-1323 | C6 (export links): the diagram shows "Export as draw.io" and "Export as SVG" beside the element count, as plain links to the existing route for the shown view. |
+| D-1324 | C6 (evidence and lane): docs/test-reports/AT-59.md (c) cites tests/blueprint/drawio.test.ts and export.test.ts as the automated proof (D-1211) and adds the k... |

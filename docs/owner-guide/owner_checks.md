@@ -47,9 +47,9 @@ Five checks only you can do. Each has a script (or a button), the steps in plain
 
 ## 4. Blueprint visual look (AT-59, UXN-324 c)
 
-The tests prove the exported draw.io file has exactly the nodes and arrows of the model. They cannot tell whether the diagram looks right. After a Blueprint change:
+The tests prove the exported draw.io file opens as valid XML and has exactly the nodes and arrows of the model (AT-59 c, `tests/blueprint/drawio.test.ts`), so you do not need to check the counts. They cannot tell whether the diagram looks right. After a Blueprint change:
 
-1. Open the Blueprint page, pick each of the eight views, and use Export as draw.io.
+1. Open the Blueprint page, pick each of the eight views, and use the "Export as draw.io" link above the diagram ("Export as SVG" is beside it). Both links work with the keyboard too.
 2. Open the file in draw.io. Check that boxes do not overlap, labels are readable and each view tells the story its tab names.
 3. Note anything that looks wrong and tell the builder. A wrong look does not block a release; a wrong count would have failed the tests.
 

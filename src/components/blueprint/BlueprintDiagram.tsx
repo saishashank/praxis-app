@@ -2,7 +2,9 @@
 // Blueprint diagram (M16 WP5, UXN-297/298, D-365). Fetches the model from the pinned-Owner API (the
 // URL is a prop from the server page; the model is never bundled, D-372), lays out one view with the
 // layered auto-layout, and draws it as inline SVG with pan, zoom, hover summary, search and a side
-// panel (Sheet: bottom sheet on phones). Config keys are shown read-only.
+// panel (Sheet: bottom sheet on phones). Config keys are shown read-only. Keyboard (M21 C6, UXN-324 a, D-1320 to D-1324):
+// one tab stop among the nodes (roving), arrows move between nodes, Home and End jump, Enter and Space open the panel,
+// Escape returns to the viewport; edges are reached from the panel's connection buttons.
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Card } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
@@ -19,6 +21,59 @@ type Tf = { x: number; y: number; k: number };
 const K_MIN = 0.1;
 const K_MAX = 3;
 const clampK = (k: number) => Math.min(K_MAX, Math.max(K_MIN, k));
+
+/** Reading order of a view: columns left to right, rows top to bottom. */
+const reading = <T extends { x: number; y: number }>(a: T[]): T[] =>
+  [...a].sort((p, q) => p.x - q.x || p.y - q.y);
+
+/**
+ * The node a navigation key moves to (D-1320). Left and right go to the adjacent column, to the row nearest in height;
+ * up and down stay in the column and stop at its ends; Home and End are the first and last in reading order. Every
+ * node is reachable this way. Returns null for any other key.
+ */
+export function moveFocus(
+  nodes: Array<{ id: string; x: number; y: number }>,
+  from: string,
+  key: string,
+): string | null {
+  const cur = nodes.find((n) => n.id === from);
+  if (!cur || nodes.length === 0) return null;
+  const order = reading(nodes);
+  if (key === "Home") return order[0].id;
+  if (key === "End") return order[order.length - 1].id;
+  if (key === "ArrowUp" || key === "ArrowDown") {
+    const col = order.filter((n) => n.x === cur.x);
+    const i = col.findIndex((n) => n.id === from);
+    return col[Math.max(0, Math.min(col.length - 1, i + (key === "ArrowDown" ? 1 : -1)))].id;
+  }
+  if (key === "ArrowLeft" || key === "ArrowRight") {
+    const xs = Array.from(new Set(order.map((n) => n.x)));
+    const nx =
+      key === "ArrowRight" ? xs.find((x) => x > cur.x) : [...xs].reverse().find((x) => x < cur.x);
+    if (nx === undefined) return cur.id;
+    const col = order.filter((n) => n.x === nx);
+    return col.reduce((best, n) => (Math.abs(n.y - cur.y) < Math.abs(best.y - cur.y) ? n : best))
+      .id;
+  }
+  return null;
+}
+
+/** A plain link to the export route: a download, so no client navigation (D-1323). The href comes from page code. */
+function ExportLink({
+  href,
+  id,
+  children,
+}: {
+  href: string;
+  id: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <a href={href} className="underline" data-testid={`bp-export-${id}`}>
+      {children}
+    </a>
+  );
+}
 
 function List({ items }: { items: string[] }) {
   if (items.length === 0) return <span className="text-text-muted">None</span>;
@@ -56,11 +111,13 @@ function ElementPanel({
   edges,
   names,
   status,
+  onEdge,
 }: {
   el: BpElement;
   edges: BpEdge[];
   names: Map<string, string>;
   status: BlueprintStatus;
+  onEdge: (g: BpEdge | null) => void;
 }) {
   const st = status.statuses[el.id] ?? UNKNOWN;
   const mine = edges.filter((g) => g.from === el.id || g.to === el.id);
@@ -159,8 +216,18 @@ function ElementPanel({
             <ul className="m-0 list-none p-0">
               {mine.map((g) => (
                 <li key={g.id} className="mb-1 break-words">
-                  {g.from === el.id ? "to" : "from"} {names.get(g.from === el.id ? g.to : g.from)} (
-                  {g.kind}): {g.contract}
+                  <button
+                    type="button"
+                    data-testid="bp-connection"
+                    onFocus={() => onEdge(g)}
+                    onBlur={() => onEdge(null)}
+                    onPointerEnter={() => onEdge(g)}
+                    onPointerLeave={() => onEdge(null)}
+                    className="min-h-11 w-full rounded border border-border bg-transparent px-2 py-1 text-left text-sm text-text"
+                  >
+                    {g.from === el.id ? "to" : "from"} {names.get(g.from === el.id ? g.to : g.from)}{" "}
+                    ({g.kind}): {g.contract}
+                  </button>
                 </li>
               ))}
             </ul>
@@ -173,9 +240,11 @@ function ElementPanel({
 
 export function BlueprintDiagram({
   modelUrl,
+  exportUrl,
   status,
 }: {
   modelUrl: string;
+  exportUrl: string;
   status: BlueprintStatus;
 }) {
   const router = useRouter();
@@ -185,6 +254,9 @@ export function BlueprintDiagram({
   const [query, setQuery] = useState("");
   const [hover, setHover] = useState<string | null>(null);
   const [hoverEdge, setHoverEdge] = useState<BpEdge | null>(null);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [rover, setRover] = useState<string | null>(null);
+  const nodeRefs = useRef(new Map<string, SVGGElement>());
   const [selected, setSelected] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [manual, setManual] = useState<{ view: string; tf: Tf } | null>(null);
@@ -274,6 +346,44 @@ export function BlueprintDiagram({
     else if (e.key === "0") fit();
   };
 
+  // Bring a node into the visible part of the viewport after a key moved focus to it (D-1320).
+  const reveal = (n: { x: number; y: number }) => {
+    const h = box.current?.clientHeight ?? 0;
+    if (h === 0) return;
+    const sx = tf.x + n.x * tf.k;
+    const sy = tf.y + n.y * tf.k;
+    const w = NODE_W * tf.k;
+    const hh = NODE_H * tf.k;
+    const dx = sx < 0 ? -sx + 8 : sx + w > vw ? vw - (sx + w) - 8 : 0;
+    const dy = sy < 0 ? -sy + 8 : sy + hh > h ? h - (sy + hh) - 8 : 0;
+    if (dx !== 0 || dy !== 0) setTf((t) => ({ ...t, x: t.x + dx, y: t.y + dy }));
+  };
+  const onNodeKey = (e: KeyboardEvent<SVGGElement>, id: string) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      open(id);
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      box.current?.focus();
+      return;
+    }
+    const to = layout
+      ? moveFocus(
+          layout.nodes.map((n) => ({ id: n.el.id, x: n.x, y: n.y })),
+          id,
+          e.key,
+        )
+      : null;
+    if (to === null) return;
+    e.preventDefault();
+    const target = layout!.nodes.find((n) => n.el.id === to)!;
+    setRover(to);
+    nodeRefs.current.get(to)?.focus({ preventScroll: true });
+    reveal(target);
+  };
+
   if (error)
     return (
       <Card title="Blueprint">
@@ -294,6 +404,14 @@ export function BlueprintDiagram({
   ];
   const viewName = model.views.find((v) => v.id === view)?.name ?? view;
   const selectedEl = selected ? byId.get(selected) : null;
+  // The one tab stop among the nodes: the node last focused by key, else the open one, else the first (D-1320).
+  const inView = (id: string | null) => id !== null && layout.nodes.some((n) => n.el.id === id);
+  const stopId = inView(rover)
+    ? rover
+    : inView(selected)
+      ? selected
+      : (reading(layout.nodes.map((n) => ({ id: n.el.id, x: n.x, y: n.y })))[0]?.id ?? null);
+  const exportHref = (format: string) => `${exportUrl}?view=${view}&format=${format}`;
   const zoomButtons: Array<[string, () => void, string]> = [
     ["Zoom in", () => setTf((t) => ({ ...t, k: clampK(t.k * 1.25) })), "+"],
     ["Zoom out", () => setTf((t) => ({ ...t, k: clampK(t.k / 1.25) })), "−"],
@@ -311,8 +429,16 @@ export function BlueprintDiagram({
       <Card
         title={viewName}
         actions={
-          <span className="text-sm text-text-muted">
-            {layout.nodes.length} elements, {layout.edges.length} connections
+          <span className="flex flex-wrap items-center gap-3 text-sm text-text-muted">
+            <span>
+              {layout.nodes.length} elements, {layout.edges.length} connections
+            </span>
+            <ExportLink href={exportHref("drawio")} id="drawio">
+              Export as draw.io
+            </ExportLink>
+            <ExportLink href={exportHref("svg")} id="svg">
+              Export as SVG
+            </ExportLink>
           </span>
         }
       >
@@ -380,7 +506,9 @@ export function BlueprintDiagram({
           ) : (
             <span className="text-text-muted">
               Hover or focus an element for a summary; select it for details. Drag to pan; arrow
-              keys pan; plus and minus zoom.
+              keys pan; plus and minus zoom. With an element focused, arrow keys move between
+              elements, Home and End jump to the first and last, Enter opens its details and Escape
+              returns to the diagram.
             </span>
           )}
         </p>
@@ -417,25 +545,29 @@ export function BlueprintDiagram({
               {layout.edges.map((g) => {
                 const mx = (g.x1 + g.x2) / 2;
                 const d = `M${g.x1} ${g.y1} C${mx} ${g.y1} ${mx} ${g.y2} ${g.x2} ${g.y2}`;
+                const lit = hoverEdge?.id === g.edge.id;
                 return (
                   <g
                     key={g.edge.id}
                     data-edge={g.edge.id}
+                    data-edge-active={lit ? "true" : undefined}
+                    role="img"
+                    aria-label={`${g.edge.kind} connection from ${names.get(g.edge.from)} to ${names.get(g.edge.to)}`}
                     onPointerEnter={() => setHoverEdge(g.edge)}
                     onPointerLeave={() => setHoverEdge(null)}
                   >
                     <path
                       d={d}
                       fill="none"
-                      stroke="var(--color-text-muted)"
-                      strokeWidth={1.5}
-                      opacity={0.7}
+                      stroke={lit ? "var(--color-accent)" : "var(--color-text-muted)"}
+                      strokeWidth={lit ? 3 : 1.5}
+                      opacity={lit ? 1 : 0.7}
                     />
                     <path d={d} fill="none" stroke="transparent" strokeWidth={10} />
                   </g>
                 );
               })}
-              {layout.nodes.map(({ el, x, y }, i) => {
+              {layout.nodes.map(({ el, x, y }) => {
                 const on = el.id === selected;
                 const dim = query.trim() !== "" && !hits.has(el.id);
                 const label = el.name.length > 24 ? `${el.name.slice(0, 23)}…` : el.name;
@@ -447,22 +579,41 @@ export function BlueprintDiagram({
                     role="button"
                     aria-pressed={on}
                     aria-label={`${el.name}, ${el.type}`}
-                    tabIndex={on || (selected === null && i === 0) ? 0 : -1}
+                    ref={(g) => {
+                      if (g) nodeRefs.current.set(el.id, g);
+                      else nodeRefs.current.delete(el.id);
+                    }}
+                    tabIndex={el.id === stopId ? 0 : -1}
                     transform={`translate(${x} ${y})`}
                     opacity={dim ? 0.35 : 1}
-                    style={{ cursor: "pointer" }}
+                    style={{ cursor: "pointer", outline: "none" }}
                     onPointerEnter={() => setHover(el.id)}
                     onPointerLeave={() => setHover(null)}
-                    onFocus={() => setHover(el.id)}
-                    onBlur={() => setHover(null)}
-                    onClick={act}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        act();
-                      }
+                    onFocus={() => {
+                      setHover(el.id);
+                      setFocusId(el.id);
+                      setRover(el.id);
                     }}
+                    onBlur={() => {
+                      setHover(null);
+                      setFocusId((f) => (f === el.id ? null : f));
+                    }}
+                    onClick={act}
+                    onKeyDown={(e) => onNodeKey(e, el.id)}
                   >
+                    {focusId === el.id ? (
+                      <rect
+                        data-focus-ring
+                        x={-4}
+                        y={-4}
+                        width={NODE_W + 8}
+                        height={NODE_H + 8}
+                        rx={11}
+                        fill="none"
+                        stroke="var(--color-focus)"
+                        strokeWidth={3}
+                      />
+                    ) : null}
                     <rect
                       width={NODE_W}
                       height={NODE_H}
@@ -506,7 +657,13 @@ export function BlueprintDiagram({
         onOpenChange={setPanelOpen}
       >
         {selectedEl ? (
-          <ElementPanel el={selectedEl} edges={model.edges} names={names} status={status} />
+          <ElementPanel
+            el={selectedEl}
+            edges={model.edges}
+            names={names}
+            status={status}
+            onEdge={setHoverEdge}
+          />
         ) : null}
       </Sheet>
     </div>
