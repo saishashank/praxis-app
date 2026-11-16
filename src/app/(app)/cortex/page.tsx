@@ -240,6 +240,11 @@ export default async function CortexPage() {
           <p className="m-0" data-learner-duel="">
             {v.learner.duelText ?? "No four-week result of the two Cortexes is in yet."}
           </p>
+          {v.learner.warmStartText !== null ? (
+            <p className="m-0" data-learner-warmstart="">
+              {v.learner.warmStartText}
+            </p>
+          ) : null}
           {v.learner.events.length > 0 ? (
             <ul className="m-0 flex flex-col gap-1 pl-5" data-learner-events="">
               {v.learner.events.map((e, i) => (

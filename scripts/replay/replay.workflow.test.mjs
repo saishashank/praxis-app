@@ -33,6 +33,7 @@ test("workflow_dispatch only, with a choice input `mode`; no schedule, push or p
     "learning",
     "seed-recent",
     "pick-scorecard",
+    "cortex-warm-start",
   ]);
   assert.equal(mode.default, "light");
   assert.deepEqual(wf.permissions, {});

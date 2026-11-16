@@ -583,6 +583,10 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1075 | (O-84 live prices) Home headline since-start and the Strategies tiles' bust distance, position and "Within x% of the bust level" note use the live NAV when t... |
 | D-1076 | (O-84 live prices) Picks History "In profit" / "In loss" decide an open trade by the price its row shows (delayed quote newer than the close, else the last c... |
 | D-1077 | (O-84 live prices) Between rounds (a cohort ended and no live round has a value yet) Strategies and Home say "Round N starts <day> with A$X a strategy. Order... |
+| D-1078 | (Owner) Warm start of the learning Cortex: --mode cortex-warm-start [--sessions N] (src/lib/cortex/learn/warmStart.ts, replay.yml option, default 60, bounds... |
+| D-1079 | (Owner) Point in time: for night D only the bars up to D, the price-sensitive announcements published before D's close (a mover counts as "news before the op... |
+| D-1080 | (Owner) Identifiable and independent of the pick scorecard: every warm-start row has the manifest id prefix warmstart: |
+| D-1081 | (Owner) Not touched: the switch rule (the learner takes decisions only after learn_switch_min_nights matured forward disagreement nights, D-927) and every st... |
 
 ## M16 (M16_design.md)
 

@@ -5,6 +5,7 @@
 //   replay --mode light|full|null|injected|evidence|learning [--date YYYY-MM-DD] [--since YYYY-MM-DD]
 //          [--runs N] [--synthetic] [--budget-minutes N]
 //   replay --mode pick-scorecard [--sessions N] [--date YYYY-MM-DD]   (D-1068, O-84: a report only)
+//   replay --mode cortex-warm-start [--sessions N]   (D-1078: fills the learning Cortex's scorecard)
 //
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, DATA_REPO, DATA_REPO_TOKEN, COMMIT_SHA (optional)
 // Output: statuses, counts and minutes only (SEC-110). Never a row, a code, a URL, a token or a driver
@@ -15,6 +16,18 @@ import { defaultAgentParams, loadAgentParams, type AgentParams } from "@/lib/age
 import { marketDate } from "@/lib/data/calendar";
 import { splitFromRow, type LineageSplitRecord, type TrialLedgerRow } from "@/lib/stats/splits";
 import { parseSessions, runPickScorecard } from "@/lib/scorecard/pickScorecardRun";
+import { loadCalendar } from "@/lib/arena/closeBooks";
+import {
+  planWarmStart,
+  warmStart,
+  WARM_SESSIONS_DEFAULT,
+  WARM_SESSIONS_MAX,
+  WARM_SESSIONS_MIN,
+  type FeatureNightSource,
+} from "@/lib/cortex/learn/warmStart";
+import { loadSnapshot } from "./snapshot";
+import { SnapshotWorld } from "./snapshotWorld";
+import { snapshotFeatureSource } from "./warmStartSource";
 import { learningDone, learningWeek, runLearning } from "./learningMode";
 import {
   RUN_MODES,
@@ -28,6 +41,8 @@ import {
 const MARKET = "AU";
 /** D-1068: the pick scorecard (O-84) is a report, not a run kind: no replay_run row, no learning write. */
 export const SCORECARD_MODE = "pick-scorecard";
+/** D-1078: the learning Cortex's warm start: scorecard rows for past sessions; no replay_run row. */
+export const WARM_START_MODE = "cortex-warm-start";
 const MARKET_TZ = "Australia/Sydney";
 const BATCH = 400; // threshold-ok: statements per DB batch
 
@@ -306,8 +321,11 @@ export async function replayMain(
   const nowMs = deps.nowMs ?? (() => Date.now());
   const mode = flagOf(argv, "--mode");
   if (mode === SCORECARD_MODE) return pickScorecardMain(argv, env, deps, out, nowMs);
+  if (mode === WARM_START_MODE) return warmStartMain(argv, env, deps, out, nowMs);
   if (mode === null || !RUN_MODES.includes(mode as RunMode)) {
-    out(`replay: failed (usage: --mode ${[...RUN_MODES, SCORECARD_MODE].join("|")})`);
+    out(
+      `replay: failed (usage: --mode ${[...RUN_MODES, SCORECARD_MODE, WARM_START_MODE].join("|")})`,
+    );
     return 2;
   }
   const m = mode as RunMode;
@@ -518,6 +536,86 @@ async function pickScorecardMain(
   } catch (e) {
     const name = e instanceof Error ? e.name : "Error";
     out(`replay pick-scorecard: failed (${name}) stage=${stage}${codeFrames(e)}${causeCode(e)}`);
+    return 1;
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * D-1078: `--mode cortex-warm-start [--sessions N]`. Fills the learning Cortex's nightly scorecard
+ * (`cortex_angle_day`) for the last N sessions (default 60, 1..120) exactly as the live stage would have
+ * on those nights, so the next weekly run has the evidence to fit a weight generation. The stored
+ * Cortex features are used where they exist; the snapshot is built only when a needed night was never
+ * stored. Writes only `cortex_angle_day` and one `cortex_learn_event`; needs no pick-scorecard run.
+ */
+async function warmStartMain(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+  deps: CliDeps,
+  out: (line: string) => void,
+  nowMs: () => number,
+): Promise<number> {
+  const date = marketDate(new Date(nowMs()), MARKET_TZ);
+  const text = flagOf(argv, "--sessions");
+  const sessions = text === null ? WARM_SESSIONS_DEFAULT : Number(text);
+  if (
+    !Number.isInteger(sessions) ||
+    sessions < WARM_SESSIONS_MIN ||
+    sessions > WARM_SESSIONS_MAX ||
+    argv.includes("--sessions") !== (text !== null)
+  ) {
+    out("replay: failed (bad argument)");
+    return 2;
+  }
+  const url = env.TURSO_MAIN_URL;
+  const token = env.TURSO_MAIN_TOKEN;
+  if (!has(url) || (!has(token) && !url.startsWith("file:"))) {
+    out("replay: failed (database not configured)");
+    return 1;
+  }
+  const open = deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t }));
+  let db = open(url, has(token) ? token : undefined);
+  let stage = "setup";
+  try {
+    const calendar = await loadCalendar(db, MARKET);
+    stage = "plan";
+    const plan = await planWarmStart(db, { market: MARKET, calendar, sessions });
+    let source: FeatureNightSource | undefined;
+    if (plan.nights.length > 0 && plan.missingFeatureNights.length > 0) {
+      if (deps.prepareSnapshot === undefined) {
+        out("replay: failed (no snapshot source)");
+        return 1;
+      }
+      const params = deps.params ?? (await loadAgentParams(db).catch(() => defaultAgentParams()));
+      stage = "snapshot";
+      const bytes = await deps.prepareSnapshot({
+        from: addYears(date, -(params.replay.eventBackfillYears + 1)),
+        to: date,
+      });
+      stage = "compute";
+      // D-883, D-198: the snapshot build takes about 20 minutes and the server drops the idle connection
+      db.close();
+      db = open(url, has(token) ? token : undefined);
+      await ping(db, deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))));
+      const world = new SnapshotWorld(loadSnapshot(bytes), { params, tierSource: "bars" });
+      source = await snapshotFeatureSource({ db, world, params, market: MARKET });
+    }
+    stage = "write";
+    const r = await warmStart(db, {
+      market: MARKET,
+      calendar,
+      sessions,
+      now: new Date(nowMs()).toISOString(),
+      ...(source === undefined ? {} : { source }),
+    });
+    out(
+      `replay cortex-warm-start: nights_written=${r.written} skipped_existing=${r.skippedExisting} skipped_no_data=${r.skippedNoData} first=${r.firstD ?? "none"} last=${r.lastD ?? "none"} rows=${r.rows}`,
+    );
+    return 0;
+  } catch (e) {
+    const name = e instanceof Error ? e.name : "Error";
+    out(`replay cortex-warm-start: failed (${name}) stage=${stage}${codeFrames(e)}${causeCode(e)}`);
     return 1;
   } finally {
     db.close();
