@@ -65,6 +65,7 @@ import {
 import { syncForwardLedger, type ForwardResult } from "./forwardLedger";
 import { runStatusLooks } from "@/lib/cortex/look";
 import { scoreOutcomes } from "@/lib/cortex/stage";
+import { runShortShadow } from "@/lib/shortShadow";
 import { loadAgentParams, type AgentParams } from "./params";
 import { wordsKey } from "@/lib/learning/learnFacts";
 import { liveRankIc } from "@/lib/learning/rankIcStage";
@@ -1064,6 +1065,31 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
           o.now(),
           REVIEW_JOB,
           `cortex outcomes not scored on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
+            0,
+            LOG_MESSAGE_MAX,
+          ),
+          runId,
+        ],
+      });
+    }
+
+    // M21 R1 (VAL-121, D-1228): the shadow short stream, right after the would-have outcomes. Off unless the market's
+    // switch is on; writes its two tables only, no tick and no log line on success; a failure only logs.
+    try {
+      await runShortShadow(db, {
+        market: o.market,
+        d: o.d,
+        params,
+        now: o.now,
+        calendar: o.calendar,
+      });
+    } catch (error) {
+      await db.execute({
+        sql: "INSERT INTO app_log (at, level, source, message, run_id) VALUES (?, 'warn', ?, ?, ?)",
+        args: [
+          o.now(),
+          REVIEW_JOB,
+          `short shadow not run on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
             0,
             LOG_MESSAGE_MAX,
           ),
