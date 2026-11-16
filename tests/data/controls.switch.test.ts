@@ -324,6 +324,41 @@ describe("off -> data_only", () => {
     },
   );
 
+  it("writes the dated US-P1 cost_profile rows on enable, once, and never touches an existing version (D-1148)", async () => {
+    // an Owner approval or any earlier row is a (code, version) row that already exists: it must stand untouched
+    await main.execute(
+      "INSERT INTO cost_profile (code, version, tiers_json, slippage_json, source, verified, effective_from) VALUES ('US-P1', 2, '{\"planted\":true}', '[]', 'owner', 1, '2026-01-01T00:00:00.000Z')",
+    );
+    await toDataOnly("US");
+    const rows = (
+      await main.execute(
+        "SELECT version, tiers_json, source, verified, effective_from FROM cost_profile WHERE code = 'US-P1' ORDER BY version",
+      )
+    ).rows.map((r) => ({ ...r }));
+    expect(rows.map((r) => [Number(r.version), String(r.effective_from)])).toEqual([
+      [1, "2026-04-04T00:00:00.000Z"],
+      [2, "2026-01-01T00:00:00.000Z"],
+      [3, "2025-05-14T00:00:00.000Z"],
+      [4, "2024-05-22T00:00:00.000Z"],
+    ]);
+    expect(rows[1]).toMatchObject({ tiers_json: '{"planted":true}', source: "owner", verified: 1 });
+    for (const r of [rows[0]!, rows[2]!, rows[3]!]) {
+      expect(Number(r.verified)).toBe(0);
+      expect(String(r.source)).toMatch(/\[VERIFY\]$/);
+      expect(JSON.parse(String(r.tiers_json))).toMatchObject({ kind: "components" });
+    }
+    // no other code's rows, none for India (no dated schedule), and the home table untouched
+    expect(await n("SELECT COUNT(*) AS n FROM cost_profile WHERE code <> 'US-P1'")).toBe(0);
+    await ready("IN");
+    expect(await go("IN", "data_only")).toMatchObject({ ok: true, changed: true });
+    expect(await n("SELECT COUNT(*) AS n FROM cost_profile")).toBe(4);
+    // off and on again: the rows already exist, nothing is written twice
+    expect(await go("US", "off", { reason: "again" })).toMatchObject({ ok: true });
+    const before = await counts(main);
+    expect(await go("US", "data_only", { now: NOW })).toMatchObject({ ok: true, changed: true });
+    expect(diff(before, await counts(main)).cost_profile).toBeUndefined();
+  });
+
   it("a second identical request changes nothing and writes nothing", async () => {
     await ready("IN");
     await go("IN", "data_only");

@@ -629,6 +629,7 @@
     "ARN-116": ["tests/markets/in/costs.test.ts"],
     "ARN-117": ["tests/markets/in/bands.test.ts", "tests/markets/us/costs.test.ts"],
     "ARN-118": ["tests/arena/sizing.test.ts", "tests/arena/slippage.markets.test.ts"],
+    "ARN-119": ["tests/markets/in/activationSeed.test.ts"],
     "ARN-123": [
       "tests/acceptance/v2/at35.test.ts",
       "tests/db/0032_m18_outcome_basis.test.ts",
@@ -933,7 +934,11 @@
       "tests/steelman/night.test.ts",
       "tests/steelman/write.test.ts"
     ],
-    "AT-38": ["tests/markets/us/asFiled.test.ts"],
+    "AT-38": [
+      "tests/acceptance/v3/at70NoRequest.test.ts",
+      "tests/markets/us/asFiled.test.ts",
+      "tests/markets/us/edgar.test.ts"
+    ],
     "AT-39": [
       "tests/db/0022_experts.test.ts",
       "tests/experts/import.test.ts",
@@ -1075,10 +1080,14 @@
       "tests/markets/in/bands.test.ts",
       "tests/markets/in/categoryMap.test.ts",
       "tests/markets/in/costs.test.ts",
+      "tests/markets/in/day.test.ts",
+      "tests/markets/in/fixtureNight.test.ts",
+      "tests/markets/in/settleGuard.test.ts",
       "tests/markets/us/categoryMap.test.ts",
       "tests/money/tick.in.test.ts"
     ],
     "AT-70": [
+      "tests/acceptance/v3/at70NoRequest.test.ts",
       "tests/cortex/survivorship.test.ts",
       "tests/data/politeFetch.test.ts",
       "tests/http/sourceHosts.test.ts",
@@ -1086,6 +1095,9 @@
       "tests/markets/us/asFiled.test.ts",
       "tests/markets/us/categoryMap.test.ts",
       "tests/markets/us/costs.test.ts",
+      "tests/markets/us/day.test.ts",
+      "tests/markets/us/edgar.test.ts",
+      "tests/markets/us/fixtureNight.test.ts",
       "tests/markets/us/luld.test.ts"
     ],
     "AT-71": [
@@ -1105,7 +1117,10 @@
       "tests/labels/evaluate.test.ts",
       "tests/labels/store.test.ts",
       "tests/market/auConstants.test.ts",
-      "tests/market/profile.test.ts"
+      "tests/market/profile.test.ts",
+      "tests/markets/in/fixtureNight.test.ts",
+      "tests/markets/us/day.test.ts",
+      "tests/markets/us/fixtureNight.test.ts"
     ],
     "AT-81": [
       "tests/http/safeLink.test.ts",
@@ -1140,10 +1155,19 @@
     ],
     "AT-M1": [
       "scripts/ci/source-report.workflow.test.mjs",
+      "scripts/market/at-m-report.test.mjs",
       "scripts/market/source-report.test.mjs",
       "tests/market/checklist.test.ts"
     ],
     "AT-M2": ["tests/data/calendarRules.in.test.ts", "tests/data/calendarRules.us.test.ts"],
+    "AT-M3": ["tests/markets/us/fixtureNight.test.ts"],
+    "AT-M4": [
+      "tests/markets/in/atMEvidence.test.ts",
+      "tests/markets/in/day.test.ts",
+      "tests/markets/in/replayWindow.test.ts",
+      "tests/markets/us/day.test.ts"
+    ],
+    "AT-M5": ["tests/market/isolation.test.ts", "tests/markets/us/fixtureNight.test.ts"],
     "BLD-011": [
       "scripts/ci/approved-commit.test.mjs",
       "scripts/ci/smokeLogContent.test.mjs",
@@ -1805,7 +1829,11 @@
     "D-178": ["tests/quality/engine.test.ts", "tests/quality/rules.test.ts"],
     "D-181": ["tests/picks/cli.test.ts", "tests/picks/isolation.test.ts"],
     "D-182": ["tests/llm/providers.test.ts"],
-    "D-184": ["tests/arena/fills.test.ts", "tests/money/money.test.ts"],
+    "D-184": [
+      "tests/arena/fills.test.ts",
+      "tests/markets/us/fixtureNight.test.ts",
+      "tests/money/money.test.ts"
+    ],
     "D-186": ["scripts/replay/replay.workflow.test.mjs", "tests/agents/params.test.ts"],
     "D-187": [
       "tests/golive/migration.test.ts",
@@ -2610,6 +2638,7 @@
       "tests/review/sections.test.ts",
       "tests/review/sections46.test.ts"
     ],
+    "D-927": ["scripts/fixtures/recordFromHistory.test.mjs"],
     "D-941": ["tests/picks/isolation.test.ts", "tests/picks/noPicks.test.ts"],
     "D-947": ["tests/db/0034_m19_market_profile.test.ts"],
     "D-951": ["tests/picks/isolation.test.ts"],
@@ -2865,6 +2894,7 @@
       "tests/agents/decisionView.test.ts",
       "tests/agents/events.test.ts",
       "tests/config/store.test.ts",
+      "tests/markets/us/day.test.ts",
       "tests/pipeline/batch1.test.ts",
       "tests/pipeline/dataOnly.test.ts",
       "tests/pipeline/rules.test.ts",
@@ -3237,7 +3267,19 @@
       "tests/market/checklist.test.ts",
       "tests/market/completeness.test.ts"
     ],
-    "DAT-243": ["tests/markets/in/bands.test.ts"],
+    "DAT-243": [
+      "tests/markets/in/announcements.test.ts",
+      "tests/markets/in/bandFile.test.ts",
+      "tests/markets/in/bands.test.ts",
+      "tests/markets/in/bhavcopy.test.ts",
+      "tests/markets/in/classification.test.ts",
+      "tests/markets/in/foOi.test.ts",
+      "tests/markets/in/insider.test.ts",
+      "tests/markets/in/macro.test.ts",
+      "tests/markets/in/surveillance.test.ts",
+      "tests/markets/in/yahooNs.test.ts",
+      "tests/markets/us/parsers.test.ts"
+    ],
     "DAT-244": ["tests/markets/us/luld.test.ts"],
     "DAT-245": ["tests/markets/in/categoryMap.test.ts", "tests/markets/us/categoryMap.test.ts"],
     "DAT-247": ["tests/labels/evaluate.test.ts", "tests/labels/store.test.ts"],
@@ -4208,6 +4250,7 @@
       "tests/http/gate.test.ts",
       "tests/maintenance/retention.test.ts",
       "tests/maintenance/route.test.ts",
+      "tests/markets/us/day.test.ts",
       "tests/pipeline/batch1.test.ts",
       "tests/pipeline/dataOnly.test.ts",
       "tests/runs/runRecord.test.ts",
@@ -4542,6 +4585,7 @@
       "scripts/ci/smokeLogContent.test.mjs",
       "scripts/ci/source-report.workflow.test.mjs",
       "scripts/ci/workflow-lint.test.mjs",
+      "scripts/fixtures/recordFromHistory.test.mjs",
       "scripts/ingest/batch1.test.mjs",
       "scripts/ingest/batch1.workflow.test.mjs",
       "scripts/maintenance/logContent.test.mjs",

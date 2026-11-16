@@ -206,19 +206,21 @@ describe("cost (PRD-045): one primary-key probe of the 3-row market table per in
 describe("down and up", () => {
   it("down removes exactly the guard triggers and up restores a schema identical to a fresh one", async () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(ms[ms.length - 2]!.name).toBe("m19_market_guard");
-    expect(ms[ms.length - 1]!.name).toBe("m20_markets_data"); // 0036 sits on top: its own triggers go with it
+    expect(ms[ms.length - 3]!.name).toBe("m19_market_guard");
+    // 0036 and 0037 sit on top: their own triggers (0036 guards, 0037 source guard) go with them
+    expect(ms[ms.length - 2]!.name).toBe("m20_markets_data");
+    expect(ms[ms.length - 1]!.name).toBe("m20_macro_sources");
     const top = await schemaOf(db);
-    expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: ms.length - 1 });
+    expect(await migrateDown(db, ms, 2)).toEqual({ rolledBack: 2, version: ms.length - 2 });
     const full = await schemaOf(db);
     expect(top.length).toBeGreaterThan(full.length);
-    expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: ms.length - 2 });
+    expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: ms.length - 3 });
     const down = await schemaOf(db);
     expect(down.some((s) => s.includes("_market_guard_"))).toBe(false);
     expect(full.length - down.length).toBe(182);
     await db.execute(bar("IN")); // no guard any more
     await db.execute("DELETE FROM price_bar WHERE market = 'IN'").catch(() => undefined);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 2, version: ms.length });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 3, version: ms.length });
     expect(await schemaOf(db)).toEqual(top);
   });
 });

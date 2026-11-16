@@ -9,7 +9,7 @@
 //   vitest*.json                `vitest run --reporter=json` over the test files named in ROWS below       -> M2 M3 M5
 //                               (the root suite and the worker suite are two runs; every vitest*.json is merged)
 //   recorded-days-<CODE>.json   the five recorded `data_only` days and the rolling-start replay           -> M4 (+ M2 review)
-//        { days: [{ d, status, outcome, quality }], review: boolean,
+//        { synthetic?: true, days: [{ d, status, outcome, quality }], review: boolean,
 //          replay: { status, sessions, labels: [{ label, status, reason? }] } }
 //
 // The rows (D-1120):
@@ -158,6 +158,8 @@ export function buildReport(p) {
   );
   const consecutive = dayList.every((x, i) => i === 0 || String(dayList[i - 1].d) < String(x.d));
   const rep = days?.replay;
+  // a day set built from generated fictional data (the US, D-1188) says so and is never real-data evidence
+  const synthetic = days?.synthetic === true;
   const labelsOk =
     Array.isArray(rep?.labels) &&
     rep.labels.length > 0 &&
@@ -170,7 +172,7 @@ export function buildReport(p) {
     reason:
       days === null
         ? "missing: recorded-days-" + p.market + ".json"
-        : `${green.length} of ${dayList.length} days green; replay ${rep?.status ?? "not run"}${rep ? ` over ${rep.sessions} sessions` : ""}; labels ${labelsOk ? "computed or not reachable with a reason" : "not all accounted for"}`,
+        : `${synthetic ? "SYNTHETIC data only, no real-data evidence: " : ""}${green.length} of ${dayList.length} days green; replay ${rep?.status ?? "not run"}${rep ? ` over ${rep.sessions} sessions` : ""}; labels ${labelsOk ? "computed or not reachable with a reason" : "not all accounted for"}`,
     lines: [
       ...dayList.map(
         (x) => `${x.d}: ${x.status}, ${x.outcome}${x.quality ? `, quality ${x.quality}` : ""}`,
@@ -189,6 +191,7 @@ export function buildReport(p) {
     market: p.market,
     rows,
     allPass: rows.every((r) => r.pass),
+    synthetic,
     unverified,
     evidenceDir: path.resolve(p.evidence),
     evidenceFiles,
@@ -212,7 +215,13 @@ export function renderMarkdown(r, date) {
             .join(", ")
     }**`,
     "",
-    `Evidence folder: \`${r.evidenceDir.split(path.sep).join("/")}\``,
+    ...(r.synthetic
+      ? [
+          "**The recorded days of this market are SYNTHETIC** (fictional codes, source `synthetic_fixture`; no real price source exists, D-1132, D-1188). This report claims no real-data evidence: the rows show the pipeline runs end to end on generated data, nothing about real prices, filings or facts.",
+          "",
+        ]
+      : []),
+    `Evidence folder: \`${path.basename(r.evidenceDir)}\` (the build machine path is not recorded)`,
     "",
     ...(r.evidenceFiles.length === 0
       ? ["No evidence files."]

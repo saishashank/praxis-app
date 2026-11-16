@@ -1,11 +1,23 @@
 // @vitest-environment node
-// M20 IN1 (DAT-243 macro, D-1132, D-1171, D-1173): the macro CSV and the manual index CSV. Macro rows are parsed and
-// counted but not stored (macro_series.source is CHECK-limited to rba/abs); the index parser keeps the profile's index
-// codes only and the bar's known time is close + latency.
-import { describe, expect, it } from "vitest";
-import { parseMacroCsv, SERIES } from "@/lib/data/sources/in/macro.mjs";
+// M20 IN1 (DAT-243 macro, D-1132, D-1171, D-1173) and integration (0037, D-1147): the macro CSV, its storage through the
+// shared macro writer (source by series: RBI_* -> rbi, MOSPI_* -> mospi; refused before any statement while India is
+// off), and the manual index CSV. The index parser keeps the profile's index codes only and the bar's known time is
+// close + latency.
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  macroSeriesRows,
+  parseMacroCsv,
+  SERIES,
+  SOURCES,
+  sourceOfSeries,
+} from "@/lib/data/sources/in/macro.mjs";
+import { storableMacroRows, writeMacroSeries } from "@/lib/data/sources/macroStore.mjs";
 import { indexBarRows, parseIndexCsv } from "@/lib/data/sources/in/index.mjs";
+import { isMarketNotEnabled } from "@/lib/market/guard.mjs";
+import { allowMarket, cleanupTempDbs, freshDb } from "../../db/helpers";
 import { indexFile } from "./dayFixture";
+
+afterEach(cleanupTempDbs);
 
 describe("macro CSV", () => {
   it("parses known series and counts the rest as skipped", () => {
@@ -18,6 +30,44 @@ describe("macro CSV", () => {
     ]);
     expect(r.skipped).toBe(3);
     expect(SERIES).toHaveLength(3);
+  });
+
+  it("every series maps to one of the market's two source words; an unknown id maps to none", () => {
+    expect(SOURCES).toEqual(["rbi", "mospi"]);
+    expect(SERIES.map((s) => sourceOfSeries(s))).toEqual(["rbi", "rbi", "mospi"]);
+    expect(sourceOfSeries("WHATEVER")).toBeNull();
+    const rows = macroSeriesRows([
+      { seriesId: "MOSPI_CPI", d: "2026-10-12", valueMicro: 4_250_000n },
+      { seriesId: "RBI_REPO", d: "2026-10-01", valueMicro: 5_500_000n },
+    ]);
+    expect(rows.map((r) => r.source)).toEqual(["mospi", "rbi"]);
+    // the writer's own check: a foreign source word or a malformed row is counted, never stored
+    const st = storableMacroRows(
+      [...rows, { source: "fred", seriesId: "FEDFUNDS", d: "2026-10-01", valueMicro: 1n }],
+      SOURCES,
+    );
+    expect(st).toMatchObject({ skipped: 1 });
+    expect(st.rows).toHaveLength(2);
+  });
+
+  it("the writer refuses under the production seed before any statement, and stores once India is enabled", async () => {
+    const db = await freshDb("main");
+    const rows = macroSeriesRows(
+      parseMacroCsv("series_id,d,value\nRBI_REPO,2026-10-01,5.50\nMOSPI_CPI,2026-10-12,4.25\n")
+        .rows,
+    );
+    const err = await writeMacroSeries(db, "IN", rows, "2026-11-13T00:00:00.000Z").then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(isMarketNotEnabled(err)).toBe(true);
+    const n = async () =>
+      Number((await db.execute("SELECT COUNT(*) AS n FROM macro_series")).rows[0]!.n);
+    expect(await n()).toBe(0);
+    await allowMarket(db, "IN");
+    expect(await writeMacroSeries(db, "IN", rows, "2026-11-13T00:00:00.000Z")).toBe(2);
+    expect(await writeMacroSeries(db, "IN", rows, "2026-11-14T00:00:00.000Z")).toBe(0); // same values
+    expect(await n()).toBe(2);
   });
 });
 

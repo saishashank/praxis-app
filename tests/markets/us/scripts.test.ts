@@ -155,7 +155,7 @@ describe("fetch.mjs without the EDGAR contact", () => {
     expect(calls).toEqual([]);
     expect(feeds.submissions).toEqual([]);
     expect(lines[0]).toBe(
-      "us_fetch: edgar=contact_missing suspensions=contact_missing finra=refused:source_not_enabled halts=refused:source_not_enabled",
+      "us_fetch: edgar=contact_missing suspensions=contact_missing finra=refused:source_not_enabled halts=refused:source_not_enabled fred=key_missing",
     );
   });
 

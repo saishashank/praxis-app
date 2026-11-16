@@ -4,15 +4,26 @@
 // asked, through the polite client (register row `us_fred`, `pending` until the Owner accepts it). The key travels
 // only in the request query the polite client sends; it is never logged and never returned.
 //
-// STORAGE IS NOT BUILT HERE: `macro_series.source` is constrained to ('rba','abs') by migration 0033, so a FRED row
-// cannot be stored until a migration widens that CHECK. This module fetches and parses the observations (`{ d,
-// valueMicro }`, a "." gap skipped) and stops there; the hand-off to the orchestrator is in D-1189.
+// Storage (migration 0037, D-1147, closing D-1189): the fetch step asks FRED for the series of `FRED_SERIES` and puts
+// the observations into the feeds file (`feeds.macro`, values as decimal micro strings: JSON has no bigint); the day
+// stage turns them into `macro_series` rows with source `fred` (`feedMacroRows`) and writes them through
+// `writeMacroSeries` (src/lib/data/sources/macroStore.mjs; `assertMarketEnabled` first, the 0037 source guard refuses
+// `fred` while the US is off). The three series are the US counterparts of the home RBA/ABS set (the policy rate, the
+// ten-year yield, the CPI); an id outside the list in a feed is counted as skipped, never stored.
 import { assertMarketEnabled } from "../../../market/guard.mjs";
 import { createPoliteFetch } from "../politeFetch.mjs";
 
 export const FRED_SOURCE = "us_fred";
 export const FRED_KEY_ENV = "FRED_API_KEY";
 export const FRED_HOST = "api.stlouisfed.org";
+/** The `macro_series.source` word of FRED rows (migration 0037). */
+export const MACRO_SOURCE = "fred";
+/** The FRED series the US night stores: effective federal funds rate, 10-year constant maturity, CPI-U (SA). */
+export const FRED_SERIES = Object.freeze(["FEDFUNDS", "DGS10", "CPIAUCSL"]);
+/** How far back the fetch step asks (days before the session): covers a monthly series with a lag. */
+export const FRED_BACK_DAYS = 45;
+const SERIES_RE = /^[A-Za-z0-9_]{1,32}$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export class FredKeyMissing extends Error {
   constructor() {
@@ -68,7 +79,7 @@ export function createFredClient(o) {
     async observations(seriesId, start) {
       await assertMarketEnabled(o.db, o.market);
       const key = fredKey(env);
-      if (!/^[A-Za-z0-9_]{1,32}$/.test(seriesId)) throw new RangeError("bad series id");
+      if (!SERIES_RE.test(seriesId)) throw new RangeError("bad series id");
       const q = new URLSearchParams({ series_id: seriesId, api_key: key, file_type: "json" });
       if (start !== undefined) q.set("observation_start", start);
       const res = await polite.fetch(
@@ -79,4 +90,50 @@ export function createFredClient(o) {
       return parseFredObservations(JSON.parse(await res.text()));
     },
   };
+}
+
+/**
+ * The `feeds.macro` entry of one series, as the fetch step writes it (bigint -> decimal micro string, JSON-safe).
+ * @param {string} seriesId @param {{ d: string, valueMicro: bigint }[]} observations
+ */
+export function feedMacroEntry(seriesId, observations) {
+  return {
+    seriesId,
+    observations: observations.map((o) => ({ d: o.d, valueMicro: o.valueMicro.toString() })),
+  };
+}
+
+/**
+ * `feeds.macro` -> `macro_series` rows with source `fred`. A series outside `FRED_SERIES`, a malformed date or a
+ * value that is not an integer string is skipped and counted (nothing is invented, DAT-004).
+ * @param {unknown} list
+ * @returns {{ rows: { source: string, seriesId: string, d: string, valueMicro: bigint }[], skipped: number }}
+ */
+export function feedMacroRows(list) {
+  const rows = [];
+  let skipped = 0;
+  for (const e of Array.isArray(list) ? list : []) {
+    const seriesId = e?.seriesId;
+    if (typeof seriesId !== "string" || !FRED_SERIES.includes(seriesId)) {
+      skipped += Array.isArray(e?.observations) ? e.observations.length : 1;
+      continue;
+    }
+    for (const o of Array.isArray(e.observations) ? e.observations : []) {
+      if (
+        typeof o?.d !== "string" ||
+        !DATE_RE.test(o.d) ||
+        !/^-?\d{1,24}$/.test(String(o?.valueMicro))
+      ) {
+        skipped += 1;
+        continue;
+      }
+      rows.push({
+        source: MACRO_SOURCE,
+        seriesId,
+        d: o.d,
+        valueMicro: BigInt(String(o.valueMicro)),
+      });
+    }
+  }
+  return { rows, skipped };
 }
