@@ -60,27 +60,42 @@ function featureRows(i: number, sessionD: string): FeatureNight {
   };
 }
 
-type SeedOpts = { features?: boolean; lastSessions?: number; newestClose?: number };
+type SeedOpts = {
+  features?: boolean;
+  lastSessions?: number;
+  newestClose?: number;
+  universe?: boolean;
+  tier?: string;
+  gap?: readonly [string, string]; // no price bars on the sessions from..to
+  tied?: boolean; // codes 30..34 close at the same price every day
+};
 
 async function seed(db: Client, o: SeedOpts = {}): Promise<void> {
   const days = SESSIONS.slice(0, o.lastSessions ?? SESSIONS.length);
   const stmts: InStatement[] = [];
   for (let k = 1; k <= N_CODES; k += 1) {
-    stmts.push({
-      sql: `INSERT INTO universe_snapshot (market, d, code, status, tier, halted) VALUES ('AU', ?, ?, 'active', 'U1', 0)`,
-      args: [SESSIONS[0]!, code(k)],
-    });
+    if (o.universe !== false) {
+      stmts.push({
+        sql: `INSERT INTO universe_snapshot (market, d, code, status, tier, halted) VALUES ('AU', ?, ?, 'active', ?, 0)`,
+        args: [SESSIONS[0]!, code(k), o.tier ?? "U1"],
+      });
+    }
     let prev = 10;
     days.forEach((d, i) => {
+      const inGap = o.gap !== undefined && d >= o.gap[0] && d <= o.gap[1];
       const c =
         o.newestClose !== undefined && i === SESSIONS.length - 1
           ? o.newestClose
-          : Number((prev * (1 + 0.0004 * k + noise(k, i))).toFixed(6));
-      stmts.push({
-        sql: `INSERT INTO price_bar (market, code, d, o, h, l, c, volume, source, published_at, ingested_at)
-              VALUES ('AU', ?, ?, ?, ?, ?, ?, 1000, 'zz', 't', 't')`,
-        args: [code(k), d, prev, Math.max(prev, c) * 1.01, Math.min(prev, c) * 0.99, c],
-      });
+          : o.tied === true && k >= 30 && k <= 34
+            ? Number((10 * 1.002 ** (i + 1)).toFixed(6))
+            : Number((prev * (1 + 0.0004 * k + noise(k, i))).toFixed(6));
+      if (!inGap) {
+        stmts.push({
+          sql: `INSERT INTO price_bar (market, code, d, o, h, l, c, volume, source, published_at, ingested_at)
+                VALUES ('AU', ?, ?, ?, ?, ?, ?, 1000, 'zz', 't', 't')`,
+          args: [code(k), d, prev, Math.max(prev, c) * 1.01, Math.min(prev, c) * 0.99, c],
+        });
+      }
       prev = c;
     });
   }
@@ -289,6 +304,124 @@ describe("warmStart feature nights", () => {
     });
     expect(r.written).toBe(3);
     expect(await rowsOf(bare)).toEqual(await rowsOf(stored));
+  });
+});
+
+describe("warmStart edges", () => {
+  const go = (db: Client, sessions: number, extra: Partial<Parameters<typeof warmStart>[1]> = {}) =>
+    warmStart(db, { market: M, calendar: [], sessions, now: NOW, ...extra });
+
+  it("an empty database has no nights; the default session count applies", async () => {
+    const db = await freshDb("main");
+    const plan = await planWarmStart(db, { market: M, calendar: [] });
+    expect(plan).toEqual({ nights: [], skippedExisting: 0, missingFeatureNights: [] });
+    expect(await go(db, 3)).toMatchObject({ written: 0, nights: [], rows: 0, firstD: null });
+  });
+
+  it("a calendar with no session in the look-back window has no nights", async () => {
+    const db = await freshDb("main");
+    await seed(db);
+    const holidays = weekdays("2025-01-01", "2026-12-31").map((d) => ({
+      d,
+      kind: "holiday" as const,
+      close_time: null,
+    }));
+    const r = await warmStart(db, { market: M, calendar: holidays, sessions: 3, now: NOW });
+    expect(r).toMatchObject({ written: 0, nights: [], skippedExisting: 0 });
+  });
+
+  it("a night with no universe snapshot, or with no liquid share, is skipped", async () => {
+    const noUniverse = await freshDb("main");
+    await seed(noUniverse, { universe: false });
+    expect(await go(noUniverse, 3)).toMatchObject({ written: 0, skippedNoData: 3 });
+
+    const illiquid = await freshDb("main");
+    await seed(illiquid, { tier: "U3" });
+    expect(await go(illiquid, 3)).toMatchObject({ written: 0, skippedNoData: 3 });
+  });
+
+  it("serves a feature night wanted twice (the previous day of one night, the 20-back of another) from the cache", async () => {
+    const db = await freshDb("main");
+    await seed(db);
+    let asked = 0;
+    const r = await go(db, 24, {
+      source: async (d) => {
+        asked += 1;
+        return featureRows(SESSIONS.indexOf(d), d);
+      },
+    });
+    expect(r.written).toBe(24);
+    expect(asked).toBe(0); // stored rows win over the source
+    const nights = lastNights(24);
+    const bare = await freshDb("main");
+    await seed(bare, { features: false, gap: [nights[5]!, nights[17]!] });
+    const seen = new Map<string, number>();
+    const r2 = await go(bare, 24, {
+      source: async (d) => {
+        seen.set(d, (seen.get(d) ?? 0) + 1);
+        return featureRows(SESSIONS.indexOf(d), d);
+      },
+    });
+    // the 13 nights without bars ask for nothing; of the rest, night 4's previous day (night 3) is the
+    // 20-back of night 23 and is still in the cache then, so the source is asked for it once
+    expect(r2.written).toBe(r2.nights.length);
+    expect(r2.skippedNoData).toBeGreaterThanOrEqual(13);
+    expect(seen.get(nights[3]!)).toBe(1);
+    expect([...seen.values()].every((n) => n === 1)).toBe(true);
+  });
+
+  it("a source night with no rows is the same as no night", async () => {
+    const db = await freshDb("main");
+    await seed(db, { features: false });
+    const r = await go(db, 2, { source: async (d) => ({ d, rows: [] }) });
+    expect(r).toMatchObject({ written: 0, skippedNoData: 2 });
+  });
+
+  it("feature nights that carry no angle value give no scorecard rows", async () => {
+    const db = await freshDb("main");
+    await seed(db, { features: false });
+    const r = await go(db, 2, {
+      source: async (d) => ({
+        d,
+        rows: [{ code: code(1), features: {}, activeSetHash: "zzhash", manifestId: "zzmanifest" }],
+      }),
+    });
+    expect(r).toMatchObject({ written: 0, skippedNoData: 2 });
+  });
+
+  it("equal moves rank by code; a share with no bars does not break the night", async () => {
+    const db = await freshDb("main");
+    await seed(db, { tied: true });
+    await db.execute({
+      sql: `INSERT INTO universe_snapshot (market, d, code, status, tier, halted) VALUES ('AU', ?, 'ZZ999', 'active', 'U1', 0)`,
+      args: [SESSIONS[0]!],
+    });
+    expect((await go(db, 1)).written).toBe(1);
+  });
+
+  it("a night whose rows were written meanwhile counts as nothing written", async () => {
+    const db = await freshDb("main");
+    await seed(db);
+    let first = true;
+    const racing = new Proxy(db, {
+      get: (t, p) => {
+        if (p !== "batch") {
+          const v = (t as never)[p];
+          return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(t) : v;
+        }
+        return async (stmts: { sql: string }[], mode: never) => {
+          const res = await t.batch(stmts as never, mode);
+          if (first && stmts[0]?.sql.includes("INTO cortex_angle_day")) {
+            first = false;
+            return t.batch(stmts as never, mode); // the second insert of the same rows is ignored
+          }
+          return res;
+        };
+      },
+    });
+    const r = await go(racing, 3);
+    expect(r.written).toBe(2);
+    expect(r.nights).toHaveLength(2);
   });
 });
 
