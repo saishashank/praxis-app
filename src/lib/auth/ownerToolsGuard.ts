@@ -55,3 +55,14 @@ export async function requireOwnerToolsRoute(
   if (!user) notFound();
   return user;
 }
+
+// A yes or no for a surface that is not an Owner-tool page but shows an Owner-tool part to the Owner only (the pick tile's
+// slot, M21 B1, D-1219): the same predicate as the guard, never a throw. A null user, a failed read or the switch off is
+// false, so nothing of the section is loaded for anyone else.
+export async function ownerToolsVisibleTo(
+  user: CurrentUser | null,
+  deps: OwnerToolsDeps = defaultDeps,
+): Promise<boolean> {
+  if (user === null) return false;
+  return (await resolve({ ...deps, getUser: async () => user })) !== null;
+}

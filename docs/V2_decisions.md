@@ -848,3 +848,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1243 | A1 (seed states and the hash test): E2E_STATES=all keeps meaning the default-configuration states: owner-tools-on is opt-in (OPT_IN_STATES), so the rich lane... |
 | D-1244 | A1 (generated files): tests/test-map.baseline.json is not regenerated in A1 (its --update rewrites about 2,400 lines of earlier milestones; npm run test:map... |
 | D-1245 | A1 review fixes (Opus, 2026-11-16): the Owner-tool preferences are for the PINNED Owner (isPinnedOwner: role owner and the pinned e-mail), not any stored own... |
+| D-1260 | B1 (picks isolation and the guard predicate): src/lib/ownerTools/ joins the allow-list of tests/picks/isolation.test.ts (it imports sizeForAmount and reads t... |
+| D-1261 | B1 (recommendations): the page groups tonight's picks by tier (Turbo, Balanced, Steady) and sizes each pick on its own against the whole of real_capital (lim... |
+| D-1262 | B1 (holdings): the current set is the upload with the greatest upload_id of the market (the id is the compact ISO instant plus a random suffix, so it sorts b... |
+| D-1263 | B1 (layout and menu): (owner-tools)/layout.tsx renders its children and nothing else, so a request a page guard turns away shows no text of the section; the... |
+| D-1264 | B1 (forms): the capital, broker-template and holdings forms post to server actions that call requireOwnerTools first; capital and templates are written throu... |

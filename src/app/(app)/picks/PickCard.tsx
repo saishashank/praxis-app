@@ -1,6 +1,7 @@
 // One pick card (UXN-040, UXN-045): plain words, every price from the stored pick. A masked user sees
 // "Stock A", percentages and counts only: no company name, price, size or exact date (DAT-124, UX-009).
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { PickRowView } from "@/lib/ui/loaders/picks";
 import { formatDay } from "@/lib/view/format";
 import { Rail } from "@/components/ui/Family";
@@ -39,11 +40,14 @@ export function PickCard({
   masked,
   beatsLuck,
   chip = null,
+  extra = null,
 }: {
   pick: PickRowView;
   masked: boolean;
   beatsLuck: boolean;
   chip?: AlertChipView | null;
+  /** M21 D-1219: the Owner's tier label and links, passed in by the page only while the Owner tools are on. */
+  extra?: ReactNode;
 }) {
   const frame = timeFrameText(pick.timeFrameSessions);
   const hue = FAMILY_BADGES[pick.family]?.code;
@@ -80,6 +84,7 @@ export function PickCard({
             <AlertChip chip={chip} />
           </p>
         ) : null}
+        {extra}
         <ul className="m-0 mt-3 list-none space-y-1 p-0 text-sm">
           <li data-testid="chance-line">
             {pick.chanceText}
