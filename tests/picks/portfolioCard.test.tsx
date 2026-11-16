@@ -156,4 +156,110 @@ describe("PortfolioCard (D-950)", () => {
     expect(text).not.toMatch(/A\$|\$\d/);
     expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}|Mar/);
   });
+
+  it("live figures: the live line names the delay and keeps the end-of-day value beside it", () => {
+    render(
+      <PortfolioCard
+        v={{
+          ...base,
+          portfolios: [
+            one("conservative", {
+              liveLabel: "Delayed, 13:05",
+              closeValue: m("1009000000"),
+              closeSinceStartPpm: 9_000,
+            }),
+            one("balanced", {
+              liveLabel: "Delayed, 13:05",
+              closeValue: m("1009000000"),
+              closeSinceStartPpm: null,
+              asOfD: null,
+            }),
+            one("aggressive", {
+              liveLabel: "Delayed, 13:05",
+              closeValue: null,
+              closeSinceStartPpm: 9_000,
+            }),
+          ],
+        }}
+      />,
+    );
+    const live = (p: string) =>
+      within(screen.getByTestId(`my-portfolio-${p}`)).getByTestId("portfolio-live");
+    expect(live("conservative").textContent).toBe(
+      "Delayed, 13:05. End of day Tue 5 Mar 2030: A$1,009.00 (+0.9%).",
+    );
+    // no session date and no end-of-day change: just the value
+    expect(live("balanced").textContent).toBe("Delayed, 13:05. End of day: A$1,009.00.");
+    // no stored end-of-day value: only the end-of-day change
+    expect(live("aggressive").textContent).toBe("Delayed, 13:05. End of day: +0.9%.");
+  });
+
+  it("a live label with no end-of-day figures at all shows the label alone; none shows no live line", () => {
+    render(
+      <PortfolioCard
+        v={{
+          ...base,
+          portfolios: [
+            one("conservative", { liveLabel: "Delayed, 13:05" }),
+            one("balanced"),
+            one("custom"),
+          ],
+        }}
+      />,
+    );
+    expect(
+      within(screen.getByTestId("my-portfolio-conservative")).getByTestId("portfolio-live")
+        .textContent,
+    ).toBe("Delayed, 13:05.");
+    expect(
+      within(screen.getByTestId("my-portfolio-balanced")).queryByTestId("portfolio-live"),
+    ).toBeNull();
+    // an unknown profile has no note line text
+    expect(screen.getByTestId("my-portfolio-custom")).toHaveTextContent("Custom");
+  });
+
+  it("missing pieces are left out: no value, gain, cash, company, entry, current price or change", () => {
+    render(
+      <PortfolioCard
+        v={{
+          ...base,
+          seed: null,
+          portfolios: [
+            one("conservative", {
+              value: null,
+              gain: null,
+              sinceStartPpm: null,
+              cash: null,
+              asOfD: null,
+              holdings: [
+                {
+                  stock: "ZZB",
+                  company: null,
+                  strategy: "Nightly shortlist",
+                  entryD: null,
+                  entry: m("20000000"),
+                  now: null,
+                  changePpm: null,
+                },
+              ],
+              trades: [{ d: null, stock: "ZZB", company: null, words: "Sold at the stop." }],
+            }),
+            one("balanced", { gain: null }),
+            one("aggressive"),
+          ],
+        }}
+      />,
+    );
+    const box = screen.getByTestId("my-portfolio-conservative");
+    expect(box).not.toHaveTextContent("Cash");
+    expect(box).not.toHaveTextContent("+1.2%");
+    expect(box).toHaveTextContent("ZZB (Nightly shortlist) bought at A$20.00");
+    expect(box).not.toHaveTextContent(" on ");
+    expect(box).not.toHaveTextContent("now");
+    expect(box).toHaveTextContent("ZZB. Sold at the stop.");
+    expect(screen.getByTestId("pick-portfolio")).not.toHaveTextContent("each started with");
+    // a gain-less balanced portfolio shows the percentage alone
+    expect(screen.getByTestId("my-portfolio-balanced")).toHaveTextContent("+1.2%");
+    expect(screen.getByTestId("my-portfolio-balanced")).not.toHaveTextContent("+A$12.30");
+  });
 });

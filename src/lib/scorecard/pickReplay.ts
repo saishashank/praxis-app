@@ -21,7 +21,7 @@
 //   Left out (said in the report): candidate measures (CAND.v1), intraday ideas, announcements (the
 //   snapshot carries no titles or stamps, so "news" causes are never assigned), factor lines (display only).
 import type { Client } from "@libsql/client";
-import { logReturns, microToFloat, stdevFloat } from "@/lib/agents/indicators";
+import { microToFloat } from "@/lib/agents/indicators";
 import { runFamilies } from "@/lib/agents/families";
 import { initialStop } from "@/lib/agents/families/exits";
 import type { CodeFacts, Family } from "@/lib/agents/families/types";

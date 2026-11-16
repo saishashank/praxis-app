@@ -610,3 +610,26 @@ describe("Home content: watchlist, news and review", () => {
     expect(screen.getByRole("link", { name: /, 2026-W43/ })).toBeInTheDocument();
   });
 });
+
+describe("Home content: between rounds (Owner 2026-11-16)", () => {
+  it("shows the round note instead of the empty-strategies words when one is stored", () => {
+    show((v) => {
+      v.summary = {
+        strategies: 0,
+        d: null,
+        tiles: [],
+        note: "Round 2 starts Tue 17 Nov with A$5,000 a strategy.",
+      };
+    });
+    expect(screen.getByTestId("round-note")).toHaveTextContent("Round 2 starts Tue 17 Nov");
+    expect(screen.queryByText(/No strategy is running yet/)).toBeNull();
+  });
+
+  it("without a note the empty words stay", () => {
+    show((v) => {
+      v.summary = { strategies: 0, d: null, tiles: [], note: null };
+    });
+    expect(screen.queryByTestId("round-note")).toBeNull();
+    expect(screen.getByText(/No strategy is running yet/)).toBeInTheDocument();
+  });
+});
