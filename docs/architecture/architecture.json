@@ -12792,38 +12792,6 @@
       }
     },
     {
-      "id": "table:main.macro_series",
-      "type": "table",
-      "name": "macro_series",
-      "purpose": "Table macro_series in the main database.",
-      "specIds": [
-        "DAT-200"
-      ],
-      "owner": "database",
-      "schedule": null,
-      "inputs": [],
-      "outputs": [],
-      "configKeys": [],
-      "tables": [],
-      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
-      "runbook": null,
-      "views": [
-        "data"
-      ],
-      "source": "db/migrations/main/0033_m18_data.sql",
-      "attrs": {
-        "columns": [
-          "source",
-          "series_id",
-          "d",
-          "value_micro",
-          "fetched_at"
-        ],
-        "database": "main",
-        "indexes": []
-      }
-    },
-    {
       "id": "table:main.market",
       "type": "table",
       "name": "market",
@@ -21139,16 +21107,6 @@
       "contract": "Runs or holds this element.",
       "views": [
         "llm"
-      ]
-    },
-    {
-      "id": "service:turso-main|contains|table:main.macro_series",
-      "from": "service:turso-main",
-      "to": "table:main.macro_series",
-      "kind": "contains",
-      "contract": "Runs or holds this element.",
-      "views": [
-        "data"
       ]
     },
     {

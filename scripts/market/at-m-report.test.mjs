@@ -217,3 +217,13 @@ test("the root and the worker vitest runs are merged (vitest.json + vitest-worke
   write(dir, "recorded-days-IN.json", days());
   assert.equal(buildReport({ market: "IN", evidence: dir }).allPass, true);
 });
+
+test("synthetic recorded days are labelled and claim no real-data evidence (D-1188)", () => {
+  const r = buildReport({ market: "IN", evidence: evidence({ rd: days(5, { synthetic: true }) }) });
+  assert.equal(r.synthetic, true);
+  assert.match(byId(r).M4.reason, /^SYNTHETIC data only, no real-data evidence/);
+  assert.match(renderMarkdown(r, "2026-11-16"), /recorded days of this market are SYNTHETIC/);
+  const real = buildReport({ market: "IN", evidence: evidence() });
+  assert.equal(real.synthetic, false);
+  assert.doesNotMatch(renderMarkdown(real, "2026-11-16"), /SYNTHETIC/);
+});

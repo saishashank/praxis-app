@@ -1,25 +1,81 @@
-# AT-M-US: the five market acceptance tests for the United States (M20, development mode)
+# AT-M-US: market acceptance in development mode
 
-Reference: V3 spec ch. 20 §20.7 (AT-M1 to AT-M5), D-1120. This file is written by hand by task US1 because `scripts/market/at-m-report.mjs` (IN1) is not merged yet; the generated report replaces it at integration (`node scripts/market/at-m-report.mjs --market US`). It states what was proven offline in development mode and what could not be, by name. The US is **off in production** (PRD-040); nothing here switches it on.
+Generated 2026-11-16 by `scripts/market/at-m-report.mjs --market US` from the build's evidence files. Counts, test names and dates only.
 
-## Home environment
+Result: **not complete: M4**
 
-Local run on the Windows build machine, migrated libSQL files, no network. The US data is the synthetic set of `scripts/ingest/us/synthetic.mjs` (fictional codes, `source: synthetic_fixture`, D-1188); the build has no US price source (D-1132) and no EDGAR contact (D-1094).
+**The recorded days of this market are SYNTHETIC** (fictional codes, source `synthetic_fixture`; no real price source exists, D-1132, D-1188). This report claims no real-data evidence: the rows show the pipeline runs end to end on generated data, nothing about real prices, filings or facts.
 
-## The five rows
+Evidence folder: `evUS` (the build machine path is not recorded)
 
-| Test | Evidence | Status |
-| --- | --- | --- |
-| **AT-M1** source report and `complete` | the A3 verification pass (build-machine run of `scripts/market/source-report.mjs`, D-1143): Yahoo and Stooq disallow automated clients (D-1132), the SEC hosts were not probed (no contact), FRED needs the Owner key; the profile's completeness under the seed names its unverified fields (`tests/market/completeness.test.ts`) | **open**: the profile is not `complete` (fields stay [VERIFY]; no price source) |
-| **AT-M2** calendar rules, DST tests, review step | `calendarRules/us.mjs` year rows for 2026 and 2027, rows written only when the market is enabled (`tests/data/calendarRules.us.test.ts`, `calendarEnable.test.ts`, A3); `worker/test/localtime.test.ts` New York DST; the day module reads the rows (`tests/markets/us/day.test.ts`) | **proven offline** (A2, A3, US1) |
-| **AT-M3** cost tests | US-P1 known answers and the dated schedule (`tests/markets/us/costs.test.ts`, `feeQuantity.test.ts`) | **proven offline** (A4, US1) |
-| **AT-M4** five recorded `data_only` days with green verdicts, rolling-start replay | the five synthetic sessions run through the real batch-1 day, each `ok` with a `complete` marker and the quality hook (`tests/markets/us/day.test.ts`, "five sessions in a row"); the same sessions are in the fixtures repo `recorded/us/<date>/` for the `recorded-day-dev` job (S1) | **proven offline on synthetic data only**; the rolling-start replay needs price history: not run (D-1132) |
-| **AT-M5** isolation hash and the `data_only` to `full` next-day opening | the isolation hash (`tests/market/isolation.test.ts`, IN1) and the first `full` day need the settlement lag and the tick grid threaded by IN1 (D-1154 item 1): the fixture-night guard test is an `it.todo` naming IN1 | **open**, waiting on IN1 |
+- `recorded-days-US.json` sha256 4fd14f99c1b1
+- `source-report-US.json` sha256 7e822ab182ce
+- `vitest-root.json` sha256 ed7d111c9c0e
+- `vitest-worker.json` sha256 b6e1bc658d74
 
-## Not proven, by name
+| Row | What | Result | Evidence |
+|---|---|---|---|
+| M1 | Source report and profile completeness | pass | 9 sources reported (the report's own date, UTC: 2026-11-15); profile incomplete, unverified fields named below |
+| M2 | Calendar rules, DST and the recorded-day review step | pass | 2 files, 24 tests passed; review step taken |
+| M3 | Cost formula known answers | pass | 1 files, 7 tests passed |
+| M4 | Five recorded data_only days and the rolling-start replay | NOT YET | SYNTHETIC data only, no real-data evidence: 5 of 5 days green; replay not_run over 0 sessions; labels computed or not reachable with a reason |
+| M5 | Market isolation | pass | 1 files, 2 tests passed |
 
-- A real US price, filing or fact: none was fetched (no price source, no contact). Every US number in the tests is made up.
-- The US calibration: not run, no price history ([calibration-US.md](../cortex/calibration-US.md)).
-- The switch-on checklist item `at_m_evidence` cannot pass for the US until a price source exists.
+Unverified profile fields (named, PRD-039):
 
-Nothing in this file claims a result that has not happened.
+- announcement_hours
+- bar_latency_p95_min
+- batch_schedule
+- benchmark_index
+- category_map
+- classification_scheme
+- control_instrument
+- cost_formula
+- currency
+- decision_cutoff
+- dividend_imputation
+- exchange
+- forward_results_dates
+- fundamentals_source
+- fx_source
+- halt_model
+- index_change_source
+- insider_notice_kind
+- known_time_rules
+- macro_series
+- parcel_floor
+- preopen_recheck_min
+- regime_index
+- review_date_rule
+- seed_amount
+- settlement_days
+- short_data_kind
+- sleeve_reality_cap
+- slippage_buckets
+- tick_table
+- tiers
+- tz
+- universe_max
+- volatility_index
+- yahoo_suffix
+
+## M1 detail
+
+- us_yahoo: pending; terms ok; probe refused
+- us_stooq: pending; terms refused; probe refused
+- us_edgar: enabled; terms skipped; probe skipped
+- us_finra_short: pending; terms ok; probe ok
+- us_nasdaq_halts: pending; terms ok; probe ok
+- us_sec_suspensions: enabled; terms skipped; probe skipped
+- us_sp_dji_russell_manual: enabled; terms none; probe skipped
+- us_fred: pending; terms ok; probe skipped
+- us_nyse_holidays: enabled; terms ok; probe ok
+
+## M4 detail
+
+- 2026-11-02: ok, complete, quality green 1, marker 1 (recorded-day.mjs run, US, data_only)
+- 2026-11-03: ok, complete, quality green 1, marker 1 (recorded-day.mjs run, US, data_only)
+- 2026-11-04: ok, complete, quality green 1, marker 1 (recorded-day.mjs run, US, data_only)
+- 2026-11-05: ok, complete, quality green 1, marker 1 (recorded-day.mjs run, US, data_only)
+- 2026-11-06: ok, complete, quality green 1, marker 1 (recorded-day.mjs run, US, data_only)
+- label all: not_reachable (no US price history exists, D-1132)

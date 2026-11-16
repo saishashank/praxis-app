@@ -746,6 +746,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1146 | Calendar market lists (A3, D-1097 amended): |
 | D-1147 | Migration 0037 and the macro store (integration; closes the hand-offs of D-1171 and D-1189): db/migrations/main/0037_m20_macro_sources.sql rebuilds macro_ser... |
 | D-1148 | Dated cost_profile rows on enable (integration; the D-1181 hand-off, D-1193): datedCostProfileRows had no caller, so a replay or calibration of a session bef... |
+| D-1149 | Synthetic recorded days are labelled in the AT-M report (integration, D-1188, D-1132, D-1120): scripts/market/at-m-report.mjs reads an optional synthetic: tr... |
 | D-1150 | US fee constants superseded (A4, F): a search on 2026-11-13 found the SEC Fee Rate Advisory FY2026 (US$20.60 per million of covered sales from 2026-04-04; US... |
 | D-1151 | Fixed conversion for the figures the extracts cannot give (A4, [VERIFY]): the IN price floors and U2 market-cap floor are AU's at Rs 55 per A$ (A$0.50 -> Rs... |
 | D-1152 | Tier size (A4): IN u1.top = 514, the same share of codes (16.31 %) as AU's 300 of 1,839 (A1 u1_top); |
@@ -755,6 +756,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1156 | Recorded-day reader per market, lower-case folders (IN1, S1 hand-off a, D-1119): readRecordedDay(dir, { date, market }) and recordedRootOf(market) read recor... |
 | D-1157 | ARN-119 first posting (IN1, S1 hand-off b, D-1107): ensureCohorts (the close-books night's cohort start stage) reads the FX close stored by the switch to ful... |
 | D-1158 | Band lock has no clock (IN1, Fable review, D-1109, D-1163, D-1169): an exit on a code stuck at its LOWER circuit waits indefinitely at the locked mark, becau... |
+| D-1159 | Integration evidence (integration, D-1126, D-1147, D-1148, D-1149, D-1196): docs/M20_exit_evidence.md is complete except the values that need a CI run on the... |
 | D-1160 | Filing instants in the as-filed reader (A5, D-1111): a company-facts entry carries only the filing DATE, so a date-only filed_at is stored as the END of that... |
 | D-1161 | Company-facts parsing (A5, DAT-226): one fundamental_fact row per (concept, period end, accession); where a filing lists one period end for several durations... |
 | D-1162 | US halt model (A5, D-1110 F): stepHalt takes an optional HaltModel (viewFor, notices, noticeKind); with none it is the M15 machine unchanged (AU hashes). |
