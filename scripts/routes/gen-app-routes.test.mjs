@@ -31,6 +31,13 @@ function fixture() {
   put("src/app/robots.ts");
   put("src/app/icon.png");
   put("src/app/layout.tsx");
+  put("src/app/opengraph-image.tsx");
+  put("src/app/(app)/apple-icon.js");
+  put("src/app/sitemap.xml");
+  put("src/app/(app)/_private/page.tsx");
+  put("src/app/(app)/_lib/deep/page.tsx");
+  put("src/app/(app)/photo/(.)gallery/page.tsx");
+  put("src/app/(app)/photo/(..)feed/page.tsx");
   put("public/brand/logo.svg");
   put("public/sw.js");
   return root;
@@ -43,12 +50,15 @@ test("scan: pages, groups removed, slots skipped, handlers, metadata and public 
     "/api/auth/[...nextauth]",
     "/api/x/export",
     "/api/y",
+    "/apple-icon",
     "/brand/logo.svg",
     "/holdings",
     "/icon.png",
     "/market/[code]",
+    "/opengraph-image",
     "/picks",
     "/robots.txt",
+    "/sitemap.xml",
     "/sw.js",
   ]);
   assert.deepEqual(exportRoutes, ["/api/x/export"]);

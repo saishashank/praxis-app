@@ -12,6 +12,8 @@ export type HiddenRoute = {
   visibleTo: "pinned_owner" | "pinned_owner_with_tools";
   /** The page guard every page under these prefixes must call first (tests/ui/pageGuard.test.ts). */
   guard: "requirePinnedOwner" | "requireOwnerTools";
+  /** The guard every route handler (route.ts) under these prefixes must call first. */
+  routeGuard: "requirePinnedOwnerRoute" | "requireOwnerToolsRoute";
 };
 
 export const HIDDEN_ROUTES: readonly HiddenRoute[] = [
@@ -20,12 +22,14 @@ export const HIDDEN_ROUTES: readonly HiddenRoute[] = [
     prefixes: ["/blueprint", "/api/blueprint/"],
     visibleTo: "pinned_owner",
     guard: "requirePinnedOwner",
+    routeGuard: "requirePinnedOwnerRoute",
   },
   {
     id: "owner_tools",
     prefixes: ["/recommendations", "/holdings", "/trades", "/api/owner-tools/"],
     visibleTo: "pinned_owner_with_tools",
     guard: "requireOwnerTools",
+    routeGuard: "requireOwnerToolsRoute",
   },
 ];
 

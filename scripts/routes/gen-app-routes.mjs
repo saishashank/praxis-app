@@ -17,13 +17,17 @@ export const OUT = "src/lib/http/appRoutes.generated.ts";
 
 const PAGE = /^page\.(tsx|ts|jsx|js)$/;
 const ROUTE = /^route\.(tsx|ts|jsx|js)$/;
+// Metadata routes (D-1247): a code file (robots.ts, sitemap.ts, manifest.ts) is served at its public name; a static
+// robots.txt / sitemap.xml / manifest file likewise; icon-like images (static or dynamic .tsx/.ts/.jsx/.js) are served
+// at their base name ("/icon", "/opengraph-image").
 const META = new Map([
-  [/^robots\.(ts|js)$/, "robots.txt"],
-  [/^sitemap\.(ts|js)$/, "sitemap.xml"],
-  [/^manifest\.(ts|js)$/, "manifest.webmanifest"],
+  [/^robots\.(ts|js|txt)$/, "robots.txt"],
+  [/^sitemap\.(ts|js|xml)$/, "sitemap.xml"],
+  [/^manifest\.(ts|js|json|webmanifest)$/, "manifest.webmanifest"],
 ]);
 const IMAGE_META =
   /^(icon|apple-icon|favicon|opengraph-image|twitter-image)\.(png|jpg|jpeg|gif|svg|ico)$/;
+const DYNAMIC_IMAGE_META = /^(icon|apple-icon|opengraph-image|twitter-image)\.(tsx|ts|jsx|js)$/;
 
 function walk(dir, out = []) {
   if (!fs.existsSync(dir)) return out;
@@ -42,6 +46,9 @@ const isSlot = (s) => s.startsWith("@");
 function urlDir(relDir) {
   const segs = relDir.split("/").filter(Boolean);
   if (segs.some(isSlot)) return null; // @modal and friends are overlays, not addresses of their own
+  // private folders (_x) are not routable; an intercepting segment ("(.)x", "(..)x", "(...)x") is an overlay of
+  // another address, not an address of its own (D-1247)
+  if (segs.some((x) => x.startsWith("_") || x.startsWith("(."))) return null;
   return "/" + segs.filter((s) => !isGroup(s)).join("/");
 }
 const join = (dir, name) => (dir === "/" ? "/" + name : dir + "/" + name);
@@ -63,6 +70,8 @@ export function scanRoutes(root = ROOT) {
     } else {
       for (const [re, url] of META) if (re.test(name)) patterns.add(join(dir, url));
       if (IMAGE_META.test(name)) patterns.add(join(dir, name));
+      const dyn = DYNAMIC_IMAGE_META.exec(name);
+      if (dyn) patterns.add(join(dir, dyn[1]));
     }
   }
   const pub = path.join(root, "public");

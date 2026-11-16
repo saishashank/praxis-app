@@ -184,6 +184,35 @@ describe("gate: Owner tools and unknown paths take the same marking", () => {
     expect(a.status).toBe(b.status);
   });
 
+  it("a hidden path and an unknown path each cost exactly one pin read (D-1247)", async () => {
+    for (const p of ["/holdings", "/blueprint", "/zz-missing", "/api/zz-missing/x"]) {
+      let reads = 0;
+      const d = await mk({
+        isPinnedOwner: async () => {
+          reads++;
+          return false;
+        },
+      });
+      await gate(req(p), d);
+      expect(reads, p).toBe(1);
+    }
+    for (const p of ["/holdings", "/zz-missing"]) {
+      const d = await mk({
+        isPinnedOwner: async () => {
+          throw new Error("db");
+        },
+      });
+      expect(marked(await gate(req(p), d)), p).toBe(true);
+    }
+  });
+
+  it("dev only: /__nextjs_* is not marked", async () => {
+    const dev = await mk({ dev: true });
+    const prod = await mk({ dev: false });
+    expect(marked(await gate(req("/__nextjs_original-stack-frames"), dev))).toBe(false);
+    expect(marked(await gate(req("/__nextjs_original-stack-frames"), prod))).toBe(true);
+  });
+
   it("a client-sent hide header is dropped on a known path", async () => {
     const d = await mk({ isPinnedOwner: async () => true });
     const res = await gate(req("/picks", { [HIDE_HEADER]: "1" }), d);

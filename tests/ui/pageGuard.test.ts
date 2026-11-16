@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { PAGES, allowedRoles } from "../../e2e/pages";
 import { ROLES, can } from "@/lib/auth/permissions";
 import { HIDDEN_ROUTES, hiddenEntryFor } from "@/lib/http/hiddenRoutes";
+import { checkHiddenFile } from "./hiddenGuardCheck";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
 
@@ -64,14 +65,127 @@ describe("hidden pages (HIDDEN_ROUTES)", () => {
   for (const file of hiddenPages) {
     const entry = hiddenEntryFor(urlPath(file))!;
     it(`${file} calls ${entry.guard} before any other await`, () => {
-      const text = src(file);
-      const body = text.slice(text.search(/export\s+default\s+(async\s+)?function/));
-      const awaits = [...body.matchAll(/await\s+([A-Za-z_$][\w$]*)/g)].filter(
-        (m) => m[1] !== "params" && m[1] !== "searchParams",
-      );
-      expect(awaits[0]?.[1]).toBe(entry.guard);
+      expect(checkHiddenFile(file, src(file))).toEqual([]);
     });
   }
+
+  // D-1247: route handlers and server actions are separate doors (Next dispatches an action by its id from any page URL).
+  const walk = (dir: string, out: string[] = []): string[] => {
+    if (!fs.existsSync(path.join(root, dir))) return out;
+    for (const e of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${e.name}`;
+      if (e.isDirectory()) walk(rel, out);
+      else if (/\.(ts|tsx)$/.test(e.name)) out.push(rel);
+    }
+    return out;
+  };
+  const candidates = [...walk("src/app"), ...walk("src/lib/ownerTools")];
+
+  it("every route handler under a hidden prefix, and every server action of the Owner-tools section, is guarded", () => {
+    const problems = candidates.flatMap((f) => checkHiddenFile(f, src(f)));
+    expect(problems).toEqual([]);
+  });
+
+  it("the Blueprint route handlers are covered by the same check", () => {
+    const routes = candidates.filter((f) => /api\/blueprint\/.*route\.ts$/.test(f));
+    expect(routes.length).toBeGreaterThanOrEqual(2);
+  });
+
+  describe("planted files fail the check", () => {
+    const OK_PAGE = `export default async function P() {
+  await requireOwnerTools("/holdings");
+}
+`;
+    it("a good page, route and action pass", () => {
+      const pg = "src/app/(app)/(owner-tools)/holdings/page.tsx";
+      expect(checkHiddenFile(pg, OK_PAGE)).toEqual([]);
+      expect(
+        checkHiddenFile(
+          "src/app/api/owner-tools/x/route.ts",
+          `export async function GET() {
+  await requireOwnerToolsRoute("/api/owner-tools/x");
+}
+`,
+        ),
+      ).toEqual([]);
+      expect(
+        checkHiddenFile(
+          "src/lib/ownerTools/actions.ts",
+          `"use server";
+export async function save() {
+  await requireOwnerTools("/x");
+}
+`,
+        ),
+      ).toEqual([]);
+    });
+    it("a route handler method without the guard first fails", () => {
+      const bad = `export async function GET() {
+  await requireOwnerToolsRoute("/x");
+}
+export async function POST() {
+  const x = await load();
+  await requireOwnerToolsRoute("/x");
+}
+`;
+      const r = checkHiddenFile("src/app/api/owner-tools/x/route.ts", bad);
+      expect(r).toHaveLength(1);
+      expect(r[0]).toContain("POST");
+    });
+    it("a Blueprint route handler with the page guard instead of the route guard fails", () => {
+      const r = checkHiddenFile(
+        "src/app/api/blueprint/y/route.ts",
+        `export async function GET() {
+  await requirePinnedOwner();
+}
+`,
+      );
+      expect(r).toHaveLength(1);
+    });
+    it("a server action in the section without requireOwnerTools first fails", () => {
+      const bad = `"use server";
+export async function save() {
+  await db();
+  await requireOwnerTools("/x");
+}
+`;
+      expect(checkHiddenFile("src/app/(app)/(owner-tools)/holdings/actions.ts", bad)).toHaveLength(
+        1,
+      );
+      expect(checkHiddenFile("src/lib/ownerTools/a.ts", bad)).toHaveLength(1);
+    });
+    it("a page under (owner-tools) whose URL is not under a hidden prefix fails", () => {
+      const r = checkHiddenFile("src/app/(app)/(owner-tools)/portfolio/page.tsx", OK_PAGE);
+      expect(r.join()).toContain("not under a HIDDEN_ROUTES prefix");
+    });
+    it("generateMetadata in a hidden page fails unless it calls the guard first", () => {
+      const bad =
+        OK_PAGE +
+        `export async function generateMetadata() {
+  await load();
+}
+`;
+      const good =
+        OK_PAGE +
+        `export async function generateMetadata() {
+  await requireOwnerTools("/h");
+}
+`;
+      const pg = "src/app/(app)/(owner-tools)/holdings/page.tsx";
+      expect(checkHiddenFile(pg, bad).join()).toContain("generateMetadata");
+      expect(checkHiddenFile(pg, good)).toEqual([]);
+    });
+    it("a hidden page with no guard fails", () => {
+      const r = checkHiddenFile(
+        "src/app/(app)/blueprint/page.tsx",
+        `export default async function P() {
+  const x = await load();
+}
+`,
+      );
+      expect(r).toHaveLength(1);
+    });
+  });
 
   it("every entry names a guard that exists", () => {
     const guards = {

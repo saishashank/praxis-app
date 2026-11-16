@@ -174,11 +174,22 @@ export async function gate(req: NextRequest, deps: GateDeps): Promise<NextRespon
     // route take the same rewrite and answer the same status, headers and body, for pages, RSC and API.
     let hide = false;
     if (claims) {
+      // Next's dev overlay and HMR endpoints (/__nextjs_*) are not ours to hide while developing (D-1247).
+      const unknown = !isKnownRoute(path) && !(deps.dev && path.startsWith("/__nextjs_"));
+      // D-1247: a hidden path costs one pin read (inside hiddenFor); an unknown path costs the same single read,
+      // result ignored, so the two are not told apart by timing or by DB load.
+      if (unknown && hiddenEntryFor(path) === null) {
+        try {
+          await deps.isPinnedOwner?.(claims);
+        } catch {
+          // ignored: the path is hidden either way
+        }
+      }
       hide =
         (await hiddenFor(path, claims, {
           isPinnedOwner: async (cl) => (await deps.isPinnedOwner?.(cl)) === true,
           ownerToolsOn: async () => (await deps.ownerToolsOn?.()) === true,
-        })) || !isKnownRoute(path);
+        })) || unknown;
     }
 
     // SEC-014: authenticated writes per user (public paths such as sign-out under /api/auth

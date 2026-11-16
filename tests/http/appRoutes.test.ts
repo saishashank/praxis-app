@@ -49,6 +49,13 @@ describe("isKnownRoute", () => {
     }
   });
 
+  it("splits on / before decoding: an encoded slash stays inside its segment (D-1247)", () => {
+    expect(isKnownRoute("/market/BH%2FP")).toBe(true);
+    expect(isKnownRoute("/api/market/BH%2FP/overview")).toBe(true);
+    expect(isKnownRoute("/market/BH/P")).toBe(false);
+    expect(isKnownRoute("//market//BHP/")).toBe(true);
+  });
+
   it("does not know a missing path, a path below a leaf, or an undecodable one", () => {
     for (const p of ["/zz-missing", "/api/zz-missing/model", "/picks/extra/x", "/%E0%A4%A"]) {
       expect(isKnownRoute(p), p).toBe(false);

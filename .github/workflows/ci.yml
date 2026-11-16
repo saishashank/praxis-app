@@ -41,6 +41,8 @@ jobs:
       - run: npm test
       - run: npm run test:smoke
       - run: npm run test:routes
+      - name: Known-route list is current (M21 A2, D-1210; run gen-app-routes.mjs --write after adding a page or route)
+        run: node scripts/routes/gen-app-routes.mjs --check
       - run: npm run test:hygiene
       - name: No market literal outside the profile seed (AT-67, MKT-107)
         run: npm run test:market-literals
