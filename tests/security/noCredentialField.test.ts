@@ -53,7 +53,7 @@ describe("no credential field", () => {
     expect(Object.keys(DEFAULT_PREFERENCES).filter((k) => CREDENTIAL_NAME.test(k))).toEqual([]);
   });
 
-  it("the Owner-tool forms name only the fields the design lists", () => {
+  it("the Owner-tool forms name only the fields the design lists (B2 adds the trade log fields: market, side, date, price, fees, note, reason, trade_id)", () => {
     const names = new Set<string>();
     for (const f of files.filter((x) => x.startsWith("src/components/ownerTools/"))) {
       for (const m of fs.readFileSync(path.join(ROOT, f), "utf8").matchAll(FIELD_NAME)) {
@@ -68,8 +68,16 @@ describe("no credential field", () => {
         "cost",
         "csv_file",
         "csv_text",
+        "date",
+        "fees",
+        "market",
+        "note",
+        "price",
         "qty",
         "real_capital",
+        "reason",
+        "side",
+        "trade_id",
       ].sort(),
     );
   });

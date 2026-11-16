@@ -1,7 +1,9 @@
 // Monthly alerts report (M17 WP9; VAL-118, VAL-119, D-396, D-467): how the intraday candidates fared,
 // by month, in plain words. Descriptive only. Every figure is shadow and unvalidated: the intraday
 // stream trades nothing and stays shadow until a pre-registered test passes and the Owner approves.
+import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
+import { ownerToolsVisibleTo } from "@/lib/auth/ownerToolsGuard";
 import { Card } from "@/components/ui/Card";
 import { Banner, EmptyState } from "@/components/ui/States";
 import { loadAlertsReport } from "@/lib/ui/loaders/alertsReport";
@@ -14,6 +16,8 @@ export default async function AlertsReportPage() {
   const user = await requireUser("read", "/reviews/alerts");
   const env = await envFor(user);
   const view = alertsReportView(await loadAlertsReport(env.main, env.market));
+  // M21 B2 (D-1221): a link for the Owner only, while the Owner tools are on. The link is all this page knows of the trade log.
+  const tradeLogLink = await ownerToolsVisibleTo(user);
   return (
     <main className="mx-auto flex w-full max-w-3xl min-w-0 flex-col gap-4 px-4 py-6">
       <header className="flex flex-col gap-1">
@@ -24,6 +28,13 @@ export default async function AlertsReportPage() {
         </p>
       </header>
       <Banner tone="info">{view.banner}</Banner>
+      {tradeLogLink ? (
+        <p className="m-0 text-sm" data-testid="trade-log-link">
+          <Link href="/trades" className="text-accent underline">
+            Your trade log: your trades against the paper ideas
+          </Link>
+        </p>
+      ) : null}
       <Card title="Is the intraday idea proven?">
         <p className="m-0 text-sm">{view.verdictText}</p>
         <p className="m-0 mt-2 text-sm text-text-muted">{view.progressText}</p>
