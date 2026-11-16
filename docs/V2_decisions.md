@@ -578,6 +578,11 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1070 | (O-84) Cortex coverage: for a night before the first frozen angle passport, the replay uses the EARLIEST frozen passport set (the go-live set), never today's... |
 | D-1071 | (O-84) Strategy history stays the development-split record only (no forward ledger). |
 | D-1072 | (O-84) The section title uses the run's real count ("Replay check: last N sessions"); with no run it reads "Replay check: not run yet". |
+| D-1073 | (O-84 live prices) My portfolio: when any holding has a delayed quote newer than its close, value, gain and since-start are cash plus shares at those prices... |
+| D-1074 | (O-84 live prices) The quote poll's extras gain the stocks the practice portfolios hold (pick_portfolio_hold) and the users' Home watchlist codes (user_watch... |
+| D-1075 | (O-84 live prices) Home headline since-start and the Strategies tiles' bust distance, position and "Within x% of the bust level" note use the live NAV when t... |
+| D-1076 | (O-84 live prices) Picks History "In profit" / "In loss" decide an open trade by the price its row shows (delayed quote newer than the close, else the last c... |
+| D-1077 | (O-84 live prices) Between rounds (a cohort ended and no live round has a value yet) Strategies and Home say "Round N starts <day> with A$X a strategy. Order... |
 
 ## M16 (M16_design.md)
 
