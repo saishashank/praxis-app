@@ -177,3 +177,56 @@ test("AT-66: no continuous motion with Motion Off or prefers-reduced-motion", as
   }
   void browser;
 });
+
+// M21 C5 (UXN-320 d, D-1205, D-1315): Home with a stale banner. The muted band token resolves to a colour that is
+// not the page surface, the hue rule still holds (D-884 minimum of 1 for light and system, 3 elsewhere), and text on
+// the band passes axe color-contrast (AAA in High contrast). The fresh e2e data shows no stale banner, so the test
+// puts one on the page in the same markup the Banner renders (data-band="stale", the band token as its background).
+test("AT-66: Home with a stale banner keeps the hue rule and the band text passes contrast", async ({
+  page,
+  context,
+}) => {
+  await signIn(context, "owner");
+  const bad: string[] = [];
+  for (const theme of THEMES) {
+    await setTheme("owner", theme);
+    await page.goto("/");
+    await page
+      .locator('[data-boot="on"]')
+      .waitFor({ state: "detached", timeout: 5000 })
+      .catch(() => {});
+    await page.evaluate(() => {
+      if (document.querySelector('[data-band="stale"]')) return;
+      const el = document.createElement("div");
+      el.setAttribute("role", "alert");
+      el.setAttribute("data-band", "stale");
+      el.style.cssText =
+        "background: var(--band-stale); color: var(--color-text); padding: 12px; border: 1px solid var(--color-border);";
+      el.textContent = "Showing data from Fri 6 Nov, end of day.";
+      (document.querySelector("main") ?? document.body).prepend(el);
+    });
+    const { band, surface } = await page.evaluate(() => {
+      const el = document.querySelector('[data-band="stale"]') as HTMLElement;
+      const probe = document.createElement("span");
+      probe.style.background = "var(--color-surface)";
+      document.body.appendChild(probe);
+      const out = {
+        band: getComputedStyle(el).backgroundColor,
+        surface: getComputedStyle(probe).backgroundColor,
+      };
+      probe.remove();
+      return out;
+    });
+    if (band === surface || band === "rgba(0, 0, 0, 0)") bad.push(`${theme}: band is ${band}`);
+    const min = theme === "light" || theme === "system" ? 1 : 3;
+    const h = await hues(page);
+    if (h.tokens.length < min) bad.push(`${theme}: ${h.tokens.length} hues with the banner`);
+    const aaa = theme === "high_contrast";
+    const r = await new AxeBuilder({ page })
+      .include('[data-band="stale"]')
+      .withRules(aaa ? ["color-contrast", "color-contrast-enhanced"] : ["color-contrast"])
+      .analyze();
+    for (const v of r.violations) bad.push(`${theme}: ${v.id} x${v.nodes.length}`);
+  }
+  expect(bad).toEqual([]);
+});

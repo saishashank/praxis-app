@@ -31,10 +31,11 @@ export function StatusStrip({
     <section
       aria-label={label}
       data-mood={mood?.key}
+      data-band={mood ? undefined : "neutral"}
       style={mood ? { background: MOOD_BG[mood.key] } : undefined}
       className={cn(
         "flex flex-wrap items-start gap-x-6 gap-y-3 rounded-lg px-3 py-3 text-sm",
-        mood ? "" : "border-b border-border",
+        mood ? "" : "border-b border-border bg-[var(--band-neutral)]",
         className,
       )}
     >
