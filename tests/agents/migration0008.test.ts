@@ -636,9 +636,9 @@ describe("main migration 0008_agents: up / down / up", () => {
       );
     });
     expect(mid).toEqual(nonAgent);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 25, version: 32 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 26, version: 33 });
     expect(await schemaOf(db)).toEqual(full);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 32 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 33 });
   });
 
   it("a fresh database and a down/up database have the same schema", async () => {
@@ -1109,7 +1109,7 @@ describe("main migration 0008_agents: backup round trip", () => {
       /only category_llm/,
     );
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 32 });
+    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 33 });
   });
 
   it("the meta line lists the forever agent tables (and not the pruned ones)", async () => {
