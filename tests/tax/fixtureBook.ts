@@ -101,7 +101,25 @@ export const TRADES: FixtureTrade[] = [
     code: "ZZOP",
     buy: { d: "2025-10-10", qty: 2, value: 2 * M, fee: 0 },
   },
+  // Bought 1 share at 10.00; a cash takeover at 12.00 on 2025-10-15 closes it with no sale fill (the books settle cash).
+  {
+    id: "T11",
+    cohort: "E02@1",
+    execution: "E02",
+    code: "ZZTK",
+    buy: { d: "2025-08-10", qty: 1, value: 10 * M, fee: 0 },
+  },
 ];
+
+export const TAKEOVER = {
+  cohort: "E02@1",
+  code: "ZZTK",
+  d: "2025-10-15",
+  actionId: "20",
+  cash: 12 * M,
+  cost: 10 * M,
+};
+export const LEGACY_CLOSED_D = "2025-12-20";
 
 export const SPLIT = { cohort: "E01@1", code: "ZZSP", exD: "2025-08-20", num: 2, den: 1 };
 
@@ -244,6 +262,41 @@ export async function seedBook(db: Client): Promise<void> {
         qty_after: "20",
       }),
     ],
+  );
+  await run(
+    db,
+    `INSERT INTO cohort_event (cohort_id, seq, kind, d, detail_json) VALUES (?,1,'ca_adjust',?,?)`,
+    [
+      TAKEOVER.cohort,
+      TAKEOVER.d,
+      JSON.stringify({
+        action_id: TAKEOVER.actionId,
+        type: "merger_cash",
+        code: TAKEOVER.code,
+        ratio_num: "0",
+        ratio_den: "1",
+        qty_before: "1",
+        qty_after: "0",
+      }),
+    ],
+  );
+  for (const [account, delta] of [
+    ["position_cost", -TAKEOVER.cost],
+    ["cash_settled", TAKEOVER.cash],
+    ["equity", TAKEOVER.cost - TAKEOVER.cash],
+  ] as const) {
+    await run(
+      db,
+      `INSERT INTO cash_ledger (cohort_id, d, txn_id, account, delta_micro, kind, ref_type, ref_id)
+       VALUES (?,?,?,?,?,'ca_dispose','corporate_action',?)`,
+      [TAKEOVER.cohort, TAKEOVER.d, `ca:${TAKEOVER.actionId}`, account, delta, TAKEOVER.actionId],
+    );
+  }
+  // the cohort moved its legacy holding (T8) on this date
+  await run(
+    db,
+    "UPDATE cohort SET terminal_kind = 'timeout', terminal_d = ?, ttd_sessions = 1, ttd_days = 1, outcome_micro = 1 WHERE id = 'E01@1'",
+    [LEGACY_CLOSED_D],
   );
   let i = 0;
   for (const dv of DIVIDENDS) {

@@ -30,7 +30,7 @@ describe("financial year by market", () => {
     expect(financialYearOf("US", "2025-12-31")).toBe(2025);
     expect(financialYearOf("US", "2026-01-01")).toBe(2026);
     expect(financialYearRange("US", 2026)).toEqual({ start: "2026-01-01", end: "2026-12-31" });
-    expect(financialYearLabel("US", 2026)).toBe("1 Jan 2026 to 31 Dec 2026");
+    expect(financialYearLabel("US", 2026)).toBe("tax year 2026 (calendar year)");
   });
   it("a market with no rule, or a bad date, throws", () => {
     expect(() => financialYearOf("ZZ", "2026-01-01")).toThrow();

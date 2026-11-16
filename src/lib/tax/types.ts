@@ -18,7 +18,16 @@ export type TaxFill = {
 };
 
 /** A quantity re-base on an ex-date (split, bonus issue): new shares per held share, as an exact ratio. */
-export type Split = { readonly code: string; readonly exD: string; readonly ratio: Rational };
+export type Split = {
+  readonly code: string;
+  readonly exD: string;
+  readonly ratio: Rational;
+  /**
+   * Set for a cash merger, scrip merger or delisting (ratio zero): the holding closes on the ex-date and the cash the
+   * books settled for it (0 when none) is the sale proceeds, spread over the open lots by share count.
+   */
+  readonly closure?: { readonly actionId: string; readonly proceedsMicro: bigint };
+};
 
 export type Disposal = {
   readonly code: string;
@@ -72,6 +81,8 @@ export type BookTrade = {
   /** null for an open trade and for a `legacy` close (no sale price recorded). */
   readonly exit: TaxFill | null;
   readonly legacy: boolean;
+  /** For a legacy close: the date the cohort moved it to the legacy ledger (cohort terminal_d), else null. */
+  readonly legacyD?: string | null;
 };
 
 export type DividendRow = {
@@ -89,6 +100,8 @@ export type ClosedWithoutPrice = {
   readonly executionId: string;
   readonly code: string;
   readonly buyD: string;
+  /** The date it was closed (the cohort's terminal date); the buy date when the books do not say. */
+  readonly closedD: string;
   readonly costMicro: bigint;
 };
 

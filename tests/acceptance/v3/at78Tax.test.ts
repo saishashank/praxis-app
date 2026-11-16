@@ -32,8 +32,8 @@ describe("AT-78 tax report", () => {
       e01[m].disposals.filter((d) => d.code === "ZZAA").map((d) => d.gainMicro);
     expect(aa("specific")).toEqual([136_500_000n, 376_000_000n]);
     expect(aa("fifo")).toEqual([237_500_000n, 188_000_000n, 87_000_000n]);
-    expect(r.total.specific.gainMicro).toBe(538_500_000n);
-    expect(r.total.fifo.gainMicro).toBe(538_500_000n);
+    expect(r.total.specific.gainMicro).toBe(540_500_000n);
+    expect(r.total.fifo.gainMicro).toBe(540_500_000n);
   });
 
   it("carries the fixed words, in the report and on the first line of the CSV", () => {

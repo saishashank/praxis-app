@@ -105,22 +105,36 @@ describe("the fixture book, FY 2026 (1 Jul 2025 to 30 Jun 2026)", () => {
   });
 
   it("the second strategy and the market total", () => {
-    // E02: ZZE2 20_000_000 -> 30_000_000, gain 10_000_000. Market: cost 1_693_000_000, proceeds 2_231_500_000, gain 538_500_000
-    expect(rows(fy2026, "E02", "fifo")).toEqual([
+    // E02: ZZE2 20_000_000 -> 30_000_000, gain 10_000_000; and the cash takeover of ZZTK (below): 10_000_000 -> 12_000_000.
+    // Market: cost 1_693 + 10 = 1_703_000_000, proceeds 2_231.5 + 12 = 2_243_500_000, gain 538.5 + 2 = 540_500_000
+    const e02 = [
       ["ZZE2", "2025-09-05", 10n, 20_000_000n, 30_000_000n, 10_000_000n, false],
-    ]);
+      ["ZZTK", "2025-10-15", 1n, 10_000_000n, 12_000_000n, 2_000_000n, false],
+    ];
+    expect(rows(fy2026, "E02", "fifo")).toEqual(e02);
+    expect(rows(fy2026, "E02", "specific")).toEqual(e02);
     for (const m of [fy2026.total.specific, fy2026.total.fifo]) {
       expect([m.costMicro, m.proceedsMicro, m.gainMicro]).toEqual([
-        1_693_000_000n,
-        2_231_500_000n,
-        538_500_000n,
+        1_703_000_000n,
+        2_243_500_000n,
+        540_500_000n,
       ]);
     }
   });
 
+  it("a cash takeover at 12.00 on a 10.00 lot is a gain of 2.00 in both columns, not a write-off", () => {
+    expect(fy2026.writtenOff).toEqual([]);
+  });
+
   it("a legacy close is listed without a gain; an open trade is not listed", () => {
     expect(fy2026.closedWithoutPrice).toEqual([
-      { executionId: "E01", code: "ZZLG", buyD: "2025-08-01", costMicro: 4_000_000n },
+      {
+        executionId: "E01",
+        code: "ZZLG",
+        buyD: "2025-08-01",
+        closedD: "2025-12-20", // the cohort's terminal date, not the buy date
+        costMicro: 4_000_000n,
+      },
     ]);
     expect(
       rows(fy2026, "E01", "fifo")

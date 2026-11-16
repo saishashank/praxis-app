@@ -57,6 +57,7 @@ const plain = (d) =>
 
 /** "1 Jul 2025 to 30 Jun 2026". */
 export function financialYearLabel(market, fy) {
+  if (startOf(market) === "01-01") return `tax year ${fy} (calendar year)`;
   const r = financialYearRange(market, fy);
   return `${plain(r.start)} to ${plain(r.end)}`;
 }

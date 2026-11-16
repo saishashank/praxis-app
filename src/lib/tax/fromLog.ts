@@ -4,6 +4,7 @@
 // what it reads. Bounded, keyset-paged by trade id (no OFFSET).
 import type { Client } from "@libsql/client";
 import type { Stream } from "./report";
+import { loadMarketSplits } from "./splits";
 import type { TaxFill } from "./types";
 
 const PAGE = 500;
@@ -52,8 +53,14 @@ export async function loadLogStreams(
     }
     after = Number(r.rows[r.rows.length - 1]!.id);
   }
+  // the market's own public split / consolidation / bonus ratios (not Owner data), applied by the matcher
+  const splits = await loadMarketSplits(db, market, [...byCode.keys()], end);
   const streams: Stream[] = [...byCode.entries()]
     .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
-    .map(([, fills]) => ({ executionId: LOG_EXECUTION, fills, splits: [] }));
+    .map(([code, fills]) => ({
+      executionId: LOG_EXECUTION,
+      fills,
+      splits: splits.filter((x) => x.code === code),
+    }));
   return { streams, truncated };
 }

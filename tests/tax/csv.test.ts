@@ -7,20 +7,35 @@ import { buildReport } from "@/lib/tax/report";
 import { PAPER_WORDS, type TaxFill } from "@/lib/tax/types";
 import { parseCsv, unguard } from "./csvParse";
 
+function expectGuarded(c: string): void {
+  const bare = /^-?\d+(\.\d+)?$/.test(c);
+  expect(/^[=+\-@\t\r]/.test(c) && !bare, c).toBe(false);
+}
+
 describe("formula guard", () => {
-  it.each(["=1+1", "+1", "-1", "@SUM(A1)", "\tx", "\rx", '=HYPERLINK("http://x")'])(
+  it.each(["=1+1", "+1", "@SUM(A1)", "\tx", "\rx", '=HYPERLINK("http://x")'])(
     "prefixes %j",
     (raw) => {
       expect(guardCell(raw)).toBe(`'${raw}`);
     },
   );
-  it.each(["", "abc", "1.5", "A=B", "'=already", "ZZAA", " =x"])("leaves %j alone", (raw) => {
-    expect(guardCell(raw)).toBe(raw);
+  it.each(["", "abc", "1.5", "-1", "-0.100070", "A=B", "'=already", "ZZAA", " =x"])(
+    "leaves %j alone",
+    (raw) => {
+      expect(guardCell(raw)).toBe(raw);
+    },
+  );
+  it("a plain number, a loss included, stays bare so it is still a number (D-1269)", () => {
+    expect(csvCell(microText(-100_070n))).toBe("-0.100070");
+    expect(csvCell("12")).toBe("12");
+    expect(unguard("-0.100070")).toBe("-0.100070");
   });
-  it("a negative amount is guarded too (every cell, D-1222) and parses back", () => {
-    expect(csvCell(microText(-100_070n))).toBe("'-0.100070");
-    expect(unguard("'-0.100070")).toBe("-0.100070");
-  });
+  it.each(["=1+2", "-1+2", "@SUM(A1)", "+1+2", "-1e5", "--1"])(
+    "still prefixes %j (not a plain number)",
+    (raw) => {
+      expect(guardCell(raw)).toBe(`'${raw}`);
+    },
+  );
 });
 
 describe("escaping", () => {
@@ -83,7 +98,7 @@ describe("the file", () => {
   });
   it("no cell of a data row starts with a formula character unguarded", () => {
     for (const r of rows) {
-      for (const c of r) expect(/^[=+\-@\t\r]/.test(c), c).toBe(false);
+      for (const c of r) expectGuarded(c);
     }
   });
   it("the planted code round-trips through the guard and the quoting", () => {

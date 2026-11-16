@@ -4,9 +4,10 @@
 // first. A partly used lot gives up round_half_away(cost x shares taken / shares open); a lot used to its last
 // share gives up the whole remaining cost, so cost never drifts. The sale's value and fee are split across the lots
 // it closes by the same proportion, the last lot taking the remainder, so the parts add up to the whole.
-import { makeRational, mulRat } from "@/lib/money/rational";
-import { floorRat, roundHalfAwayFromZero } from "@/lib/money/round";
+import { makeRational } from "@/lib/money/rational";
+import { roundHalfAwayFromZero } from "@/lib/money/round";
 import { isOver12Months } from "./holding";
+import { rebaseLots } from "./rebase";
 import type { Disposal, Split, TaxFill, Unmatched, WrittenOff } from "./types";
 
 export type OpenLot = {
@@ -31,14 +32,29 @@ export function prorata(amount: bigint, num: bigint, den: bigint): bigint {
 type Lot = { lotId: string; buyD: string; qty: bigint; costMicro: bigint };
 type Event =
   | { d: string; rank: 0; key: string; split: Split }
-  | { d: string; rank: 1; key: string; fill: TaxFill };
+  | { d: string; rank: 1 | 2; key: string; fill: TaxFill };
 
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
-export function fifoMatch(fills: readonly TaxFill[], splits: readonly Split[] = []): FifoResult {
+export type FifoOptions = {
+  /** On one date, run the buys before the sells (the Owner's log has no order within a day). Default: by id. */
+  readonly buysFirst?: boolean;
+};
+
+export function fifoMatch(
+  fills: readonly TaxFill[],
+  splits: readonly Split[] = [],
+  options: FifoOptions = {},
+): FifoResult {
+  const sellRank = options.buysFirst === true ? 2 : 1;
   const events: Event[] = [
     ...splits.map((split): Event => ({ d: split.exD, rank: 0, key: split.code, split })),
-    ...fills.map((fill): Event => ({ d: fill.d, rank: 1, key: fill.id, fill })),
+    ...fills.map((fill): Event => ({
+      d: fill.d,
+      rank: fill.side === "sell" ? sellRank : 1,
+      key: fill.id,
+      fill,
+    })),
   ];
   // (date, id); a split goes before the fills of its ex-date
   events.sort((a, b) => cmp(a.d, b.d) || a.rank - b.rank || cmp(a.key, b.key));
@@ -47,13 +63,54 @@ export function fifoMatch(fills: readonly TaxFill[], splits: readonly Split[] = 
 
   for (const e of events) {
     if (e.rank === 0) {
-      // Whole shares, rounded down; a dropped fraction keeps its cost in the lot (no invented gain).
+      const sp = e.split;
+      if (sp.closure !== undefined) {
+        // A cash merger, scrip merger or delisting: every open lot closes on the ex-date for the cash the books settled,
+        // spread by share count (the last lot takes the remainder). No cash at all is a write-off, not a sale.
+        const total = lots.reduce((n, l) => n + l.qty, 0n);
+        let allocated = 0n;
+        lots.forEach((lot, i) => {
+          const last = i === lots.length - 1;
+          const share = last
+            ? sp.closure!.proceedsMicro - allocated
+            : prorata(sp.closure!.proceedsMicro, lot.qty, total);
+          allocated += share;
+          if (sp.closure!.proceedsMicro === 0n) {
+            out.writtenOff.push({
+              code: sp.code,
+              lotId: lot.lotId,
+              exD: e.d,
+              costMicro: lot.costMicro,
+            });
+          } else {
+            out.disposals.push({
+              code: sp.code,
+              sellId: `ca:${sp.closure!.actionId}`,
+              lotId: lot.lotId,
+              buyD: lot.buyD,
+              sellD: e.d,
+              qty: lot.qty,
+              costMicro: lot.costMicro,
+              proceedsMicro: share,
+              gainMicro: share - lot.costMicro,
+              over12Months: isOver12Months(lot.buyD, e.d),
+            });
+          }
+        });
+        lots.length = 0;
+        continue;
+      }
+      // Whole shares: the lot total is the book's aggregate floor(held x ratio); a lot left with none is written off.
+      const next = rebaseLots(
+        lots.map((l) => l.qty),
+        sp.ratio,
+      );
       for (let i = lots.length - 1; i >= 0; i -= 1) {
         const lot = lots[i]!;
-        lot.qty = floorRat(mulRat(makeRational(lot.qty), e.split.ratio));
+        lot.qty = next[i]!;
         if (lot.qty === 0n) {
           out.writtenOff.push({
-            code: e.split.code,
+            code: sp.code,
             lotId: lot.lotId,
             exD: e.d,
             costMicro: lot.costMicro,

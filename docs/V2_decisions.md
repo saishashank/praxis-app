@@ -848,3 +848,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1243 | A1 (seed states and the hash test): E2E_STATES=all keeps meaning the default-configuration states: owner-tools-on is opt-in (OPT_IN_STATES), so the rich lane... |
 | D-1244 | A1 (generated files): tests/test-map.baseline.json is not regenerated in A1 (its --update rewrites about 2,400 lines of earlier milestones; npm run test:map... |
 | D-1245 | A1 review fixes (Opus, 2026-11-16): the Owner-tool preferences are for the PINNED Owner (isPinnedOwner: role owner and the pinned e-mail), not any stored own... |
+| D-1265 | B3 (access): /reviews/tax and /api/reports/tax are not under the owner-tools prefix; both call requireUser("admin") (403 for others; the route uses withAuth,... |
+| D-1266 | B3 (log edge cases): a sale with no earlier buy in the log, or the uncovered part of one, is flagged with no cost and no gain; voided trades are left out in... |
+| D-1267 | B3 (paper-book edge cases): a cash merger, scrip merger or delisting (a zero-ratio ca_adjust) is a disposal on the ex-date in BOTH columns: proceeds are the... |
+| D-1268 | B3 (splits): splits, consolidations and bonus issues change shares, never cost. |
+| D-1269 | B3 (listing, CSV, wording): a strategy with no sale in the year is not listed; the log CSV is praxis-trade-log-gains-<market>-<fy>.csv. |

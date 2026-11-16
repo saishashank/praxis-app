@@ -122,7 +122,8 @@ describe("FIFO", () => {
       [{ code: "ZZ1", exD: "2025-02-01", ratio: makeRational(1n, 2n) }],
     );
     // 5 x 1/2 = 2.5 -> 2 shares, cost 5_000_000 stays; 1 x 1/2 = 0.5 -> 0: written off with its cost
-    expect(r.open).toEqual([{ lotId: "b", buyD: "2025-01-02", qty: 2n, costMicro: 5_000_000n }]);
+    // (the book's aggregate: 6 x 1/2 = 3 shares; the spare share goes to the oldest lot on equal fractions)
+    expect(r.open).toEqual([{ lotId: "b", buyD: "2025-01-02", qty: 3n, costMicro: 5_000_000n }]);
     expect(r.writtenOff).toEqual([
       { code: "ZZ1", lotId: "c", exD: "2025-02-01", costMicro: 1_000_000n },
     ]);

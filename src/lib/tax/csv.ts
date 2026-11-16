@@ -1,13 +1,17 @@
 // CSV export of the tax report (M21 B3; ARN-122, D-1222). The first line is the fixed words. Amounts are exact decimal
 // text of the micro integer (six places), never a float. Formula guard: a cell whose first character is =, +, -, @,
-// a tab or a carriage return is prefixed with a single quote, so a spreadsheet reads it as text (the usual rule, applied
-// to EVERY cell, so a negative amount is also prefixed). Cells with a comma, quote or line break are quoted, quotes doubled.
+// a tab or a carriage return is prefixed with a single quote, so a spreadsheet reads it as text. The one exception is a
+// plain number (optional minus, digits, optional decimals): it stays bare so a loss is still a number (D-1269). Cells with a comma, quote or line break are quoted, quotes doubled.
 import { financialYearLabel } from "@/lib/market/seed/taxYear.mjs";
 import type { Disposal, TaxReport } from "./types";
 
 const GUARDED = new Set(["=", "+", "-", "@", "\t", "\r"]);
 
+const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
+
+/** A plain number (a loss included) stays bare so it stays numeric and SUM works; anything else is guarded (D-1269). */
 export function guardCell(raw: string): string {
+  if (PLAIN_NUMBER.test(raw)) return raw;
   return raw.length > 0 && GUARDED.has(raw[0]!) ? `'${raw}` : raw;
 }
 
@@ -104,7 +108,7 @@ export function reportCsv(r: TaxReport): string {
         "",
         c.code,
         c.buyD,
-        "",
+        c.closedD,
         "",
         microText(c.costMicro),
         "",
@@ -154,7 +158,7 @@ export function reportCsv(r: TaxReport): string {
     const franking =
       x.frankingPct === null && x.frankingCreditMicro === null
         ? "franking not recorded"
-        : `franking ${x.frankingPct ?? "not recorded"}%, credit ${x.frankingCreditMicro === null ? "not recorded" : microText(x.frankingCreditMicro)}`;
+        : `franking ${x.frankingPct ?? "not recorded"}%, credit ${x.frankingCreditMicro === null ? "not recorded" : `${microText(x.frankingCreditMicro)} for the payment`}`;
     lines.push(
       row([
         "dividend",

@@ -100,11 +100,18 @@ export function buildReport(input: ReportInput): TaxReport {
   const closedWithoutPrice: ClosedWithoutPrice[] = [];
   const unmatched: (Unmatched & { executionId: string })[] = [];
   const writtenOff: (WrittenOff & { executionId: string })[] = [];
+  const sameDay: string[] = [];
 
-  const runStream = (executionId: string, fills: readonly TaxFill[], splits: readonly Split[]) => {
+  const runStream = (
+    executionId: string,
+    fills: readonly TaxFill[],
+    splits: readonly Split[],
+    buysFirst = false,
+  ) => {
     const r = fifoMatch(
       fills.filter((f) => f.d <= end),
       splits.filter((s) => s.exD <= end),
+      { buysFirst },
     );
     const s = slot(executionId);
     for (const d of r.disposals) if (inYear(d.sellD, start, end)) s.fifo.push(d);
@@ -118,11 +125,15 @@ export function buildReport(input: ReportInput): TaxReport {
     // Specific lot: one lot per closed trade, the year of the sale.
     for (const exec of new Set(input.trades.map((t) => t.executionId))) {
       const mine = input.trades.filter((t) => t.executionId === exec);
-      const r = specificLots(mine.filter((t) => t.exit === null || t.exit.d <= end));
+      const r = specificLots(
+        mine.filter((t) => t.exit === null || t.exit.d <= end),
+        (cohortId, code) =>
+          (input.splitsByCohort.get(cohortId) ?? []).filter((x) => x.code === code),
+      );
       const s = slot(exec);
       for (const d of r.disposals) if (inYear(d.sellD, start, end)) s.specific.push(d);
       for (const c of r.closedWithoutPrice)
-        if (inYear(c.buyD, start, end)) closedWithoutPrice.push(c);
+        if (inYear(c.closedD, start, end)) closedWithoutPrice.push(c);
     }
     // FIFO: per cohort and code, over the whole history up to the year end. A `legacy` entry never closes through
     // a sale, so its shares are left out (they would otherwise be sold first by a later sale).
@@ -145,7 +156,17 @@ export function buildReport(input: ReportInput): TaxReport {
       );
     }
   } else {
-    for (const st of input.logStreams) runStream(st.executionId, st.fills, st.splits);
+    for (const st of input.logStreams) runStream(st.executionId, st.fills, st.splits, true);
+    for (const st of input.logStreams) {
+      const seen = new Map<string, Set<string>>();
+      for (const f of st.fills) {
+        const k = `${f.code} ${f.d}`;
+        seen.set(k, (seen.get(k) ?? new Set()).add(f.side));
+      }
+      for (const [k, sides] of seen) {
+        if (sides.size === 2 && inYear(k.slice(k.indexOf(" ") + 1), start, end)) sameDay.push(k);
+      }
+    }
     // The log records no lot choice: the specific-lot column is the FIFO one.
     for (const s of executions.values()) s.specific = [...s.fifo];
   }
@@ -168,14 +189,20 @@ export function buildReport(input: ReportInput): TaxReport {
 
   const notes: string[] = [
     "Each year is the one the sale falls in. Figures are in the market's own currency and are never added across markets.",
+    "Amounts are rounded to the cent; totals use the exact figures.",
     "Cost is the buy value plus its brokerage; proceeds are the sale value less its brokerage. Splits and bonus issues change the number of shares, not the cost.",
     '"Over 12 months" means the sale date is after the 12-month anniversary of the buy date.',
   ];
   if (input.source === "log") {
     notes.push(
       "The log records no choice of lot, so the specific-lot column is the FIFO column.",
-      "Splits and bonus issues are not applied to the log: enter quantities as your broker records them. A sale with no earlier buy in the log is listed below and has no gain.",
+      "Splits, consolidations and bonus issues recorded for the market are applied to the log's share counts; enter quantities as they were at the time of each trade. A sale with no earlier buy in the log is listed below and has no gain.",
     );
+    if (sameDay.length > 0) {
+      notes.push(
+        `The log has no time of day: on a date with both a buy and a sale, the buys are taken first (${sameDay.sort().join("; ")}).`,
+      );
+    }
   }
   return {
     market: input.market,

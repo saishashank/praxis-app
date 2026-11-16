@@ -6,6 +6,7 @@ import { makeRational } from "@/lib/money/rational";
 import type { BookTrade, DividendRow, Split, TaxFill } from "./types";
 
 const PAGE = 500;
+const CLOSING = new Set(["merger_cash", "merger_scrip", "delisting"]);
 export const MAX_PAGES = 40;
 
 export type BookData = {
@@ -29,7 +30,7 @@ async function loadTrades(
   for (let page = 0; page < MAX_PAGES; page += 1) {
     // rows-ok: keyset by trade id, LIMIT PAGE, at most MAX_PAGES pages
     const r = await db.execute({
-      sql: `SELECT t.id AS trade_id, t.cohort_id, c.execution_id, t.code, t.legacy,
+      sql: `SELECT t.id AS trade_id, t.cohort_id, c.execution_id, t.code, t.legacy, c.terminal_d,
                    ef.id AS e_id, ef.d AS e_d, ef.qty AS e_qty, ef.value_micro AS e_value, ef.brokerage_micro AS e_fee,
                    xf.id AS x_id, xf.d AS x_d, xf.qty AS x_qty, xf.value_micro AS x_value, xf.brokerage_micro AS x_fee
             FROM trade t
@@ -72,6 +73,7 @@ async function loadTrades(
         entry,
         exit,
         legacy: big(x.legacy) === 1n,
+        legacyD: x.terminal_d === null || x.terminal_d === undefined ? null : str(x.terminal_d),
       });
     }
     if (r.rows.length < PAGE) return { trades, truncated: false };
@@ -103,16 +105,29 @@ async function loadSplits(
     });
     for (const x of r.rows) {
       const detail = JSON.parse(str(x.detail_json)) as {
+        action_id: string;
+        type: string;
         code: string;
         ratio_num: string;
         ratio_den: string;
       };
+      const ratio = makeRational(BigInt(detail.ratio_num), BigInt(detail.ratio_den));
       const list = splits.get(str(x.cohort_id)) ?? [];
-      list.push({
-        code: detail.code,
-        exD: str(x.d),
-        ratio: makeRational(BigInt(detail.ratio_num), BigInt(detail.ratio_den)),
-      });
+      let closure: Split["closure"];
+      if (ratio.num === 0n && CLOSING.has(detail.type)) {
+        // The cash the books settled for the closed holding: the ca_dispose entry `ca:<action id>` (none = no cash)
+        // rows-ok: one row by the unique key (cohort_id, d, txn_id, account)
+        const c = await db.execute({
+          sql: `SELECT delta_micro FROM cash_ledger
+                WHERE cohort_id = ? AND d = ? AND txn_id = ? AND account = 'cash_settled'`,
+          args: [str(x.cohort_id), str(x.d), `ca:${detail.action_id}`],
+        });
+        closure = {
+          actionId: detail.action_id,
+          proceedsMicro: c.rows.length === 0 ? 0n : big(c.rows[0]!.delta_micro),
+        };
+      }
+      list.push({ code: detail.code, exD: str(x.d), ratio, ...(closure ? { closure } : {}) });
       splits.set(str(x.cohort_id), list);
     }
     if (r.rows.length < PAGE) return { splits, truncated: false };
@@ -158,15 +173,16 @@ async function loadDividends(
   if (paid.length === 0) return { rows: [], truncated };
   // The corporate action behind each payment: its code and the franking it recorded (payload only, never computed).
   const info = new Map<string, { code: string; pct: string | null; credit: bigint | null }>();
-  const ids = [...new Set(paid.map((p) => p.refId))].sort();
+  // the action ids are integers; anything else is skipped (a primary-key IN list, not a scan)
+  const ids = [...new Set(paid.map((p) => p.refId))].filter((i) => /^\d+$/.test(i)).sort();
   const CHUNK = 100;
   for (let i = 0; i < ids.length; i += CHUNK) {
     const part = ids.slice(i, i + CHUNK);
     // rows-ok: primary-key list, at most CHUNK ids
     const r = await db.execute({
       sql: `SELECT id, code, payload_json FROM corporate_action
-            WHERE CAST(id AS TEXT) IN (${part.map(() => "?").join(",")})`,
-      args: part,
+            WHERE id IN (${part.map(() => "?").join(",")})`,
+      args: part.map((i) => Number(i)),
     });
     for (const x of r.rows) {
       let payload: Record<string, unknown> = {};

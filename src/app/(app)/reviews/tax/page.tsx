@@ -128,7 +128,8 @@ function ReportBody({ r, fmt }: { r: TaxReport; fmt: (m: bigint) => string }) {
           <ul className="m-0 mt-2 list-disc pl-5 text-sm">
             {r.closedWithoutPrice.map((c) => (
               <li key={`${c.executionId}:${c.code}:${c.buyD}`}>
-                {c.code}, bought {c.buyD}, cost {fmt(c.costMicro)} ({c.executionId})
+                {c.code}, bought {c.buyD}, closed {c.closedD}, cost {fmt(c.costMicro)} (
+                {c.executionId})
               </li>
             ))}
           </ul>
@@ -170,7 +171,7 @@ function ReportBody({ r, fmt }: { r: TaxReport; fmt: (m: bigint) => string }) {
                   {x.code}, paid {x.d}: {fmt(x.amountMicro)};{" "}
                   {x.frankingPct === null && x.frankingCreditMicro === null
                     ? "franking not recorded"
-                    : `franking ${x.frankingPct ?? "not recorded"}%, credit ${x.frankingCreditMicro === null ? "not recorded" : fmt(x.frankingCreditMicro)}`}
+                    : `franking ${x.frankingPct ?? "not recorded"}%, credit ${x.frankingCreditMicro === null ? "not recorded" : `${fmt(x.frankingCreditMicro)} for the payment`}`}
                 </li>
               ))}
             </ul>
@@ -202,8 +203,8 @@ export default async function TaxReportPage({ searchParams }: { searchParams: Pr
         <h1 className="text-2xl font-semibold tracking-tight">Tax report</h1>
         <p className="m-0 text-sm font-medium">{report.words}</p>
         <p className="m-0 text-sm text-text-muted">
-          {report.heading}. {env.market} financial year {report.fyLabel}. Sales are placed in the
-          year they were made.
+          {report.heading}. {env.market}: {report.fyLabel}. Sales are placed in the year they were
+          made.
         </p>
       </header>
       <form method="get" className="flex flex-wrap items-end gap-3 text-sm">

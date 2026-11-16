@@ -79,7 +79,7 @@ describe("/reviews/tax", () => {
     expect(html).toContain("1 Jul 2025 to 30 Jun 2026");
     expect(html).toContain("Specific lot");
     expect(html).toContain("First in, first out (FIFO)");
-    expect(html).toContain("net A$538.50"); // whole-market net gain 538_500_000 micro
+    expect(html).toContain("net A$540.50"); // whole-market net gain 540_500_000 micro
     expect(html).toContain("12 months or less");
     expect(html).toContain("Over 12 months");
     expect(html).toContain("franking not recorded");
