@@ -889,3 +889,6 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1301 | L1 (queue and count): nextUnlabelled returns the newest announcement of the market with no golden_label row of any answer, so a skip or an unclear flag takes... |
 | D-1302 | L1 (independence): golden.ts, the loader and the page read none of text_label, label_validation or label_item (a test asserts every statement the page issues... |
 | D-1303 | L1 (keyboard): the three groups are native radios (Tab enters a group, arrows move inside it); 1 to 4 choose within the focused group, S skips, U flags as un... |
+| D-1310 | C4 (cut pack): steelmanNight stores, after the written subjects, one zero-item steelman_pack per subject cut by steelman_daily_cards (items_json "[]", item_c... |
+| D-1311 | C4 (words and count): readSteelmanForCard returns not_written with reason daily_limit for a cut pack whatever the night row holds, and the card shows exactly... |
+| D-1312 | C4 (readers): no module outside src/lib/steelman gains a steelman import, so tests/security/steelman-readers.json is unchanged and steelman-readers stays green. |

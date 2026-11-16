@@ -2,6 +2,7 @@
 // from the stored pack, its shown points and the night row, and returns plain data. Masking is done by
 // the caller (the cards loader), never here.
 import {
+  isLimitCutPack,
   readNight,
   readOpenSuggestions,
   readPack,
@@ -67,6 +68,9 @@ async function nightReason(
 export async function readSteelmanForCard(db: Exec, cardId: string): Promise<SteelmanView | null> {
   const pack = await readPackForCard(db, cardId);
   if (pack === null) return null;
+  // D-1310: the zero-item pack of a subject cut by the daily limit says so, whatever the night row holds.
+  if (isLimitCutPack(pack))
+    return { state: "not_written", reason: "daily_limit", bull: [], bear: [], cited: [] };
   const all = await readPoints(db, pack.packId);
   const shown = all.filter((p) => p.state === "shown");
   const bull = shown.filter((p) => p.side === "bull").map(view);

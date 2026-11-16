@@ -4,6 +4,7 @@
 // `inserted: false` = already there). A suggestion moves once, open to dismissed or expired.
 import type { Exec, WriteResult } from "@/lib/cortex/store/common";
 import { jsonText, num, parseJson, str, strOrNull } from "@/lib/cortex/store/common";
+import { sha256Hex } from "@/lib/llm/providers";
 
 export type { Exec, WriteResult };
 
@@ -83,11 +84,29 @@ export const pointIdOf = (packId: string, side: Side, n: number): string =>
 
 type Row = Record<string, unknown>;
 
+/**
+ * D-1310: the pack id of a subject cut by the daily limit. Domain-separated ("limit_cut|"), so it can
+ * never equal an items hash (a hash of canonical JSON); the reader recognises a cut subject by it.
+ */
+export const limitCutPackId = (
+  market: string,
+  d: string,
+  kind: SubjectKind,
+  subjectId: string,
+): string => sha256Hex(`limit_cut|${market}|${d}|${kind}|${subjectId}`);
+
+/** True when the pack is the zero-item pack stored for a subject cut by the daily limit. */
+export const isLimitCutPack = (
+  p: Pick<PackRow, "packId" | "market" | "d" | "subjectKind" | "subjectId" | "itemCount">,
+): boolean =>
+  p.itemCount === 0 && p.packId === limitCutPackId(p.market, p.d, p.subjectKind, p.subjectId);
+
 const inserted = (r: { rowsAffected: number }): WriteResult => ({ inserted: r.rowsAffected > 0 });
 
 // ---- pack ---------------------------------------------------------------------------------------
 
 export async function insertPack(db: Exec, p: PackRow): Promise<WriteResult> {
+  // rows-ok: one keyed insert; a night inserts at most one pack per subject of the night
   return inserted(
     await db.execute({
       sql: `INSERT INTO steelman_pack (pack_id, market, d, subject_kind, subject_id, code,

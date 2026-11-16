@@ -14,6 +14,8 @@ import { opinionValue, settleDue } from "./opinion";
 import { buildPack, loadPackInput, type EvidencePack, type PackItem } from "./pack";
 import {
   insertNight,
+  insertPack,
+  limitCutPackId,
   readNight,
   readPackForSubject,
   readPoints,
@@ -275,6 +277,28 @@ export async function steelmanNight(db: Exec, o: NightOptions): Promise<NightRes
       }
     } else {
       res.notWritten[bucket(outcome.reason)] += 1;
+    }
+  }
+  // D-1310 (UXN-323): a subject cut by the daily limit gets a zero-item pack, so its card can say so in plain
+  // words. The insert is idempotent (keyed, DO NOTHING), a failure never stops the night, and nothing reads
+  // the pack but the card reader and the settle step; no book, signal, rule, alert or pick sees it.
+  for (const subject of subjects.slice(cap)) {
+    try {
+      await insertPack(db, {
+        packId: limitCutPackId(o.market, o.d, subject.kind, subject.id),
+        market: o.market,
+        d: o.d,
+        subjectKind: subject.kind,
+        subjectId: subject.id,
+        code: subject.code,
+        cardId: subject.cardId,
+        cutoffAt: o.now,
+        items: [],
+        itemCount: 0,
+        createdAt: o.now,
+      });
+    } catch {
+      // the night row still counts the cut; the card then shows no steelman heading
     }
   }
   res.criticHidden = hidden;

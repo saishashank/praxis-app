@@ -69,7 +69,13 @@ function model(
       components,
       strip: [],
       details: true,
-      steelman: { state: "ok", nights: 0, qualifying: 0, text: "Steelman: pending production." },
+      steelman: {
+        state: "ok",
+        nights: 0,
+        qualifying: 0,
+        notWrittenLimit: 0,
+        text: "Steelman: pending production.",
+      },
       experts: {
         state: "ok",
         claimsToCheck: 0,

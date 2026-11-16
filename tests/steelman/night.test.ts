@@ -165,7 +165,10 @@ describe("steelmanNight with a model (mock providers)", () => {
     const r = await steelmanNight(db, opts(db, { keys: { ...KEYS, dailyCards: 1 } }));
     expect(r).toMatchObject({ requested: 3, written: 1 });
     expect(r.notWritten.limit).toBe(2);
-    expect((await listPacks(db, MARKET, D)).map((p) => p.code)).toEqual(["ZZB"]); // rank 9.5
+    // the cut subjects get zero-item packs (D-1310); only the written one has items
+    const packs = await listPacks(db, MARKET, D);
+    expect(packs.filter((p) => p.itemCount > 0).map((p) => p.code)).toEqual(["ZZB"]); // rank 9.5
+    expect(packs.filter((p) => p.itemCount === 0).map((p) => p.code)).toEqual(["ZZA", "ZZP"]);
   });
 
   it("0 cards turns the stage off but still stores the night row", async () => {
