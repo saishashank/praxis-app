@@ -101,7 +101,11 @@ describe("route model: at most three levels (UXN-033)", () => {
         const full = path.join(dir, e.name);
         if (e.isDirectory()) walk(full);
         else if (e.name === "page.tsx") {
-          const rel = path.relative(root, path.dirname(full)).split(path.sep).filter(Boolean);
+          // a route group folder such as (owner-tools) is not part of the address (D-1214)
+          const rel = path
+            .relative(root, path.dirname(full))
+            .split(path.sep)
+            .filter((seg) => seg !== "" && !/^\(.*\)$/.test(seg));
           found.push("/" + rel.join("/"));
         }
       }

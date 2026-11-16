@@ -17,6 +17,8 @@ const SRC = path.join(ROOT, "src");
 const NO_AUDIT: Record<string, string> = {
   "src/app/(app)/reviews/[date]/actions.ts#markReviewReadAction":
     "marks the Owner's own evening review as read: a read receipt on the Owner's own row, not a state change of the system (EML-036)",
+  "src/app/api/reports/tax/route.ts":
+    "a GET that only reads the books (or the Owner's trade log) and returns a CSV download: nothing is written, so there is no change to audit (M21 B3, D-1265)",
 };
 
 const AUDIT_CALL = /(?<![.\w])(?:audit|auditTx|audited|appendAudit|appendAuditTx)\s*\(/;
