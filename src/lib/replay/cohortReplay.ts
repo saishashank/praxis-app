@@ -1416,6 +1416,7 @@ export function replayCohorts(
         plan: pos.plan,
         fillDay: pos.entryD,
         fillMicro: pos.fillFrame,
+        initialStopMicro: pos.level0,
         sessionsHeld: env.i - pos.entryIdx + 1,
         closeMicro: bar.close,
         highestCloseMicro: pos.highest,

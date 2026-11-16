@@ -26,6 +26,7 @@ import {
   type VAL_ERROR_BUDGET_MODES,
 } from "@/lib/config/keys";
 import { parseRational, type Rational } from "@/lib/money/rational";
+import { targetFromParams, type TargetParams } from "./families/targetOf";
 
 export type ConfigSource = (key: ConfigKey) => unknown;
 
@@ -71,6 +72,8 @@ export type Windows = {
 };
 
 export type F1Params = {
+  /** FAM-010 (D-1224): optional real target from a challenger's `f1_target_r|pct`; absent = none (v1). */
+  target?: TargetParams;
   volumeRatioMin: Rational;
   rsTopFraction: Rational;
   initialStopAtr: Rational;
@@ -88,12 +91,16 @@ export type F1Params = {
   rankVariant: (typeof RANK_VARIANTS)[number];
 };
 export type F2Params = {
+  /** FAM-010 (D-1224): optional real target from a challenger's `f2_target_r|pct`; absent = none (v1). */
+  target?: TargetParams;
   eventArMin: Rational;
   lookbackSessions: number;
   stopAtr: Rational;
   timeStop: number;
 };
 export type F3Params = {
+  /** FAM-010 (D-1224): optional real target from a challenger's `f3_target_r|pct`; absent = none (v1). */
+  target?: TargetParams;
   eventArMin: Rational;
   volumeRatioMin: Rational;
   /** Gap above the day-0 close, as a fraction, at which the order is cancelled. */
@@ -105,6 +112,8 @@ export type F3Params = {
   surpriseMode: (typeof F3_SURPRISE_MODES)[number];
 };
 export type F4Params = {
+  /** FAM-010 (D-1224): optional real target from a challenger's `f4_target_r|pct`; absent = none (v1). */
+  target?: TargetParams;
   /** Float64 thresholds: compared with Wilder RSI values. */
   rsi2Max: number;
   rsi14Max: number;
@@ -116,6 +125,8 @@ export type F4Params = {
   rankVariant: (typeof RANK_VARIANTS)[number];
 };
 export type F5Params = {
+  /** FAM-010 (D-1224): optional real target from a challenger's `f5_target_r|pct`; absent = none (v1). */
+  target?: TargetParams;
   volumeRatioMin: Rational;
   arMin: Rational;
   rangePosMin: Rational;
@@ -128,6 +139,8 @@ export type F5Params = {
   defaultUniverse: (typeof F5_UNIVERSES)[number];
 };
 export type F6Params = {
+  /** FAM-010 (D-1224): optional real target from a challenger's `f6_target_r|pct`; absent = none (v1). */
+  target?: TargetParams;
   minClasses: number;
   /** Insider/flow score counted as evidence (0.5 = two quarter-units). */
   insiderMin: Rational;
@@ -874,7 +887,12 @@ export function paramsWithVersion(
   const has = (k: string): boolean => Object.prototype.hasOwnProperty.call(versionParams, k);
   const built = buildAgentParams((k) => (has(k) ? versionParams[k] : CONFIG_KEYS[k].default));
   const slice = FAMILY_SLICE[family];
-  const next: AgentParams = { ...base, [slice]: built[slice] };
+  const target = targetFromParams(family, versionParams);
+  // only when a target key is present: the slice then carries `target`, else the object (and its hash) is v1's
+  const next: AgentParams = {
+    ...base,
+    [slice]: target === undefined ? built[slice] : { ...built[slice], target },
+  };
   if (has("reentry_block")) next.reentryBlock = built.reentryBlock;
   if (has("event_polarity_threshold_pct")) {
     next.eventPolarityThreshold = built.eventPolarityThreshold;

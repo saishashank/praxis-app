@@ -85,6 +85,14 @@ function slipOf(env: FillEnv, ref: Micro, side: Side): Micro {
   ).fillMicro;
 }
 
+/**
+ * The slippage a CS exit pays at a reference price: per ADV bucket and the market's tick grid (FAM-010,
+ * D-1224: the "family's exit slippage" is this one). Sell side, adverse, on the tick grid.
+ */
+export function csExitSlippedPrice(env: FillEnv, ref: Micro): Micro {
+  return slipOf(env, ref, "sell");
+}
+
 function build(
   env: FillEnv,
   rule: FillRule,

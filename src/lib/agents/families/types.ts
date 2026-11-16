@@ -246,6 +246,18 @@ export type CsRule =
       readonly kind: "volume_dry_up";
       readonly ratioBelow: Rational;
       readonly sessions: number;
+    }
+  | {
+      /**
+       * FAM-010 / D-1224: a real profit target. Exactly one of `targetR` (a multiple of the initial risk
+       * entry - initial stop) and `targetPct` (a fraction of the entry fill) is set. Fires at the close
+       * when close >= the target; fills at the next open through the ordinary CS exit.
+       */
+      readonly id: string;
+      readonly via: Family | null;
+      readonly kind: "target";
+      readonly targetR: Rational | null;
+      readonly targetPct: Rational | null;
     };
 
 export type ExitPlan = {
@@ -324,6 +336,11 @@ export type PositionState = {
   /** Entry fill session and price (raw micro). */
   readonly fillDay: string;
   readonly fillMicro: bigint;
+  /**
+   * The initial stop in force, on the basis of D (FAM-010: the target risk is entry - this). Callers re-base it
+   * with the same corporate-action factors as the fill, so a split while held moves target and fill together.
+   */
+  readonly initialStopMicro: bigint;
   /** Sessions held counting the entry fill session as 1, as of D. */
   readonly sessionsHeld: number;
   readonly closeMicro: bigint;

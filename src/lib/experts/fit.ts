@@ -2,7 +2,7 @@
 // the full canonical Lane-B key set, every value inside its registry bounds, structural switches (if any) from
 // their allowed words. Anything else is parked with a reason; a wrong fit is caught here at run time.
 import {
-  FAMILY_OPTIONAL_KEYS,
+  optionalKeyNames,
   FAMILY_PARAM_KEYS,
   checkStructuralParams,
   paramBounds,
@@ -54,7 +54,7 @@ export function fitCheck(fit: unknown): FitResult {
   const f = family as Family;
   const params = fit.params;
   const required = FAMILY_PARAM_KEYS[f];
-  const optional = FAMILY_OPTIONAL_KEYS[f].map((s) => s.key);
+  const optional = optionalKeyNames(f);
   const missing = required.filter((k) => !Object.prototype.hasOwnProperty.call(params, k));
   if (missing.length > 0) return bad("key_set", `missing ${missing.join(", ")}`);
   const extra = Object.keys(params).filter((k) => !required.includes(k) && !optional.includes(k));

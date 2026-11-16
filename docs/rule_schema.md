@@ -85,6 +85,13 @@ Optional structural switches (KB-081; absent = default = v1 behaviour; set only 
 | `f1_momentum_variant` | "v1" | v1, skip_month_u2 |
 | `f1_rank_variant` | "v1" | v1, composite3, vol_scaled |
 
+Target (FAM-010, D-1224; optional, set only by a pre-registered challenger; absent = no target = v1 behaviour; counted under the O-46 cap; give at most one):
+
+| Key | Bounds | Meaning |
+|---|---|---|
+| `f1_target_r` | 1 to 5 | exit at the next open after a close at or above entry + this many times (entry - initial stop) |
+| `f1_target_pct` | 5 to 50 | exit at the next open after a close at or above entry x (1 + this percent) |
+
 ```json
 {
   "schema_version": 1,
@@ -228,6 +235,13 @@ Universe: U1, U2. Rank: `event_ar_day0_pct` desc.
 | `f2_stop_atr` | 2.5 | 1.5 to 3.5 | x ATR |
 | `f2_time_stop` | 60 | 30 to 90 | sessions |
 | `reentry_block` | 10 | 5 to 20 | sessions |
+
+Target (FAM-010, D-1224; optional, set only by a pre-registered challenger; absent = no target = v1 behaviour; counted under the O-46 cap; give at most one):
+
+| Key | Bounds | Meaning |
+|---|---|---|
+| `f2_target_r` | 1 to 5 | exit at the next open after a close at or above entry + this many times (entry - initial stop) |
+| `f2_target_pct` | 5 to 50 | exit at the next open after a close at or above entry x (1 + this percent) |
 
 ```json
 {
@@ -387,6 +401,13 @@ Optional structural switches (KB-081; absent = default = v1 behaviour; set only 
 | Key | Default | Allowed |
 |---|---|---|
 | `f3_surprise_mode` | "category" | category, day0_ar |
+
+Target (FAM-010, D-1224; optional, set only by a pre-registered challenger; absent = no target = v1 behaviour; counted under the O-46 cap; give at most one):
+
+| Key | Bounds | Meaning |
+|---|---|---|
+| `f3_target_r` | 1 to 5 | exit at the next open after a close at or above entry + this many times (entry - initial stop) |
+| `f3_target_pct` | 5 to 50 | exit at the next open after a close at or above entry x (1 + this percent) |
 
 ```json
 {
@@ -548,6 +569,13 @@ Optional structural switches (KB-081; absent = default = v1 behaviour; set only 
 | `f4_entry_variant` | "v1" | v1, reversal5_u2 |
 | `f4_rank_variant` | "v1" | v1, composite3, vol_scaled |
 
+Target (FAM-010, D-1224; optional, set only by a pre-registered challenger; absent = no target = v1 behaviour; counted under the O-46 cap; give at most one):
+
+| Key | Bounds | Meaning |
+|---|---|---|
+| `f4_target_r` | 1 to 5 | exit at the next open after a close at or above entry + this many times (entry - initial stop) |
+| `f4_target_pct` | 5 to 50 | exit at the next open after a close at or above entry x (1 + this percent) |
+
 ```json
 {
   "schema_version": 1,
@@ -687,6 +715,13 @@ Universe: U2, U3. Rank: `volume_ratio` desc.
 | `f5_trail_atr` | 3 | 2 to 4 | x ATR |
 | `f5_volume_ratio_min` | 3 | 2 to 5 | x |
 | `reentry_block` | 10 | 5 to 20 | sessions |
+
+Target (FAM-010, D-1224; optional, set only by a pre-registered challenger; absent = no target = v1 behaviour; counted under the O-46 cap; give at most one):
+
+| Key | Bounds | Meaning |
+|---|---|---|
+| `f5_target_r` | 1 to 5 | exit at the next open after a close at or above entry + this many times (entry - initial stop) |
+| `f5_target_pct` | 5 to 50 | exit at the next open after a close at or above entry x (1 + this percent) |
 
 ```json
 {
@@ -864,6 +899,13 @@ Universe: U1, U2. Rank: `class_insider_score` desc.
 | `insider_score_weights` | {"director_net":0.5,"holder_new_or_increase":0.25,"holder_decrease":0.25} | object | score |
 | `insider_window_sessions` | 30 | 10 to 60 | sessions |
 | `reentry_block` | 10 | 5 to 20 | sessions |
+
+Target (FAM-010, D-1224; optional, set only by a pre-registered challenger; absent = no target = v1 behaviour; counted under the O-46 cap; give at most one):
+
+| Key | Bounds | Meaning |
+|---|---|---|
+| `f6_target_r` | 1 to 5 | exit at the next open after a close at or above entry + this many times (entry - initial stop) |
+| `f6_target_pct` | 5 to 50 | exit at the next open after a close at or above entry x (1 + this percent) |
 
 ```json
 {

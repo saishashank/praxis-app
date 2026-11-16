@@ -496,6 +496,7 @@ export function walkPosition(src: PathSource, spec: PositionSpec, cost: CostSetu
       plan,
       fillDay: entryD,
       fillMicro: frameFill,
+      initialStopMicro: level0,
       sessionsHeld: i - spec.entryIdx + 1,
       closeMicro: bar.close,
       highestCloseMicro: highest,

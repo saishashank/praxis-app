@@ -848,6 +848,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1243 | A1 (seed states and the hash test): E2E_STATES=all keeps meaning the default-configuration states: owner-tools-on is opt-in (OPT_IN_STATES), so the rich lane... |
 | D-1244 | A1 (generated files): tests/test-map.baseline.json is not regenerated in A1 (its --update rewrites about 2,400 lines of earlier milestones; npm run test:map... |
 | D-1245 | A1 review fixes (Opus, 2026-11-16): the Owner-tool preferences are for the PINNED Owner (isPinnedOwner: role owner and the pinned e-mail), not any stored own... |
+| D-1250 | E1 target keys (F, deviation from the design's "structural kind ratio"): f<n>_target_r and f<n>_target_pct are NOT entries of FAMILY_OPTIONAL_KEYS or CONFIG_... |
+| D-1251 | E1 target level and basis: the level is the smallest whole-micro close that triggers (R: entry + ceil(R x (entry - initial stop)); percent: ceil(entry x (1 +... |
 | D-1255 | C1 (index strip, masking): a masked user's index sparkline is drawn from the closes rebased to 100 at the first day, with "first day = 100" in its label, bec... |
 | D-1256 | C1 (skeletons, UXN-008): SectionLoading takes shape ("rows" default, "tiles", "chart") and draws static grey bars, hidden from assistive tech, with the label... |
 | D-1257 | C1 (frame, F): ReviewFrame shortens the frame to 320 px, reads documentElement.scrollHeight of the frame document on load and on window resize, and sets that... |

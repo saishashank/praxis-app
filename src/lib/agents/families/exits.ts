@@ -16,6 +16,7 @@ import {
 import type { AgentParams } from "../params";
 import { roundHalfAway } from "../regime";
 import type { Family } from "../schema";
+import { targetLevel, withTarget } from "./targetOf";
 import type {
   CsRule,
   CsTrigger,
@@ -63,7 +64,7 @@ export function gapCancelsAtFill(openMicro: bigint, maxOpenMicro: bigint): boole
 
 const initialRule = (spec: StopSpec): InitialStopRule => ({ id: "initial", via: null, spec });
 
-export function f1Plan(p: AgentParams, atrMicro: bigint | null): ExitPlan {
+function f1Base(p: AgentParams, atrMicro: bigint | null): ExitPlan {
   return {
     initialStops: [
       initialRule({ atr_micro: atrMicro, k: p.f1.initialStopAtr, cap: null, level_micro: null }),
@@ -82,7 +83,7 @@ export function f1Plan(p: AgentParams, atrMicro: bigint | null): ExitPlan {
   };
 }
 
-export function f2Plan(p: AgentParams, atrMicro: bigint | null, eventLow: bigint | null): ExitPlan {
+function f2Base(p: AgentParams, atrMicro: bigint | null, eventLow: bigint | null): ExitPlan {
   const cs: CsRule[] = [
     { id: "guidance_down", via: null, kind: "negative_event", categories: ["guidance_down"] },
   ];
@@ -105,7 +106,7 @@ export function f2Plan(p: AgentParams, atrMicro: bigint | null, eventLow: bigint
   };
 }
 
-export function f3Plan(p: AgentParams, atrMicro: bigint | null, day0Low: bigint): ExitPlan {
+function f3Base(p: AgentParams, atrMicro: bigint | null, day0Low: bigint): ExitPlan {
   return {
     initialStops: [initialRule({ atr_micro: atrMicro, k: null, cap: null, level_micro: day0Low })],
     trails: [{ id: "trail", via: null, k: p.f3.trailAtr, activateGain: p.f3.trailAfter }],
@@ -121,7 +122,7 @@ export function f3Plan(p: AgentParams, atrMicro: bigint | null, day0Low: bigint)
   };
 }
 
-export function f4Plan(p: AgentParams, atrMicro: bigint | null): ExitPlan {
+function f4Base(p: AgentParams, atrMicro: bigint | null): ExitPlan {
   return {
     initialStops: [
       initialRule({ atr_micro: atrMicro, k: p.f4.stopAtr, cap: null, level_micro: null }),
@@ -140,7 +141,7 @@ export function f4Plan(p: AgentParams, atrMicro: bigint | null): ExitPlan {
   };
 }
 
-export function f5Plan(p: AgentParams, atrMicro: bigint | null, c: SpecConstants): ExitPlan {
+function f5Base(p: AgentParams, atrMicro: bigint | null, c: SpecConstants): ExitPlan {
   return {
     initialStops: [
       initialRule({
@@ -175,7 +176,7 @@ export function f5Plan(p: AgentParams, atrMicro: bigint | null, c: SpecConstants
  * F6: its own IS 2 x ATR and CS 20 sessions, plus the earliest exit of every contributing (a)/(b)
  * family: their rules are appended with the family as `via` and a family-prefixed id.
  */
-export function f6Plan(
+function f6Base(
   p: AgentParams,
   atrMicro: bigint | null,
   contributors: readonly { readonly family: Family; readonly plan: ExitPlan }[],
@@ -218,6 +219,28 @@ export function f6Plan(
   };
 }
 
+/** FAM-010 (D-1224): every family plan carries its optional target LAST (no target key = the v1 plan). */
+export const f1Plan = (p: AgentParams, atrMicro: bigint | null): ExitPlan =>
+  withTarget(f1Base(p, atrMicro), p.f1.target);
+export const f2Plan = (
+  p: AgentParams,
+  atrMicro: bigint | null,
+  eventLow: bigint | null,
+): ExitPlan => withTarget(f2Base(p, atrMicro, eventLow), p.f2.target);
+export const f3Plan = (p: AgentParams, atrMicro: bigint | null, day0Low: bigint): ExitPlan =>
+  withTarget(f3Base(p, atrMicro, day0Low), p.f3.target);
+export const f4Plan = (p: AgentParams, atrMicro: bigint | null): ExitPlan =>
+  withTarget(f4Base(p, atrMicro), p.f4.target);
+export const f5Plan = (p: AgentParams, atrMicro: bigint | null, c: SpecConstants): ExitPlan =>
+  withTarget(f5Base(p, atrMicro, c), p.f5.target);
+export function f6Plan(
+  p: AgentParams,
+  atrMicro: bigint | null,
+  contributors: readonly { readonly family: Family; readonly plan: ExitPlan }[],
+): ExitPlan {
+  return withTarget(f6Base(p, atrMicro, contributors), p.f6.target);
+}
+
 // ---- evaluation ----
 
 const ratText = (r: Rational): string => `${r.num}/${r.den}`;
@@ -252,6 +275,17 @@ function evalCs(rule: CsRule, pos: PositionState): CsTrigger | null {
       return pos.closeMicro < rule.levelMicro
         ? fire(rule, `close ${pos.closeMicro} < ${rule.levelMicro}`)
         : null;
+    case "target": {
+      // FAM-010: the initial stop is the caller's, already on D's basis (corporate actions re-based with the fill)
+      const level = targetLevel(
+        { r: rule.targetR, pct: rule.targetPct },
+        pos.fillMicro,
+        pos.initialStopMicro,
+      );
+      return level !== null && pos.closeMicro >= level
+        ? fire(rule, `close ${pos.closeMicro} >= target ${level}`)
+        : null;
+    }
     case "volume_dry_up": {
       const tail = pos.volumeRatios.slice(-rule.sessions);
       if (rule.sessions < 1 || tail.length < rule.sessions) return null;
