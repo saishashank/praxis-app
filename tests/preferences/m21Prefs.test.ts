@@ -249,8 +249,8 @@ describe("validBrokerTemplate", () => {
   });
 
   it("refuses userinfo, http, a fragment, an unknown placeholder, a missing {code}, a placeholder in the host", () => {
-    bad("https://user@broker.example.com/{code}", /user/i);
-    bad("https://user:pass@broker.example.com/{code}", /user/i);
+    bad("https://user@broker.example.test/{code}", /user/i);
+    bad("https://user:pass@broker.example.test/{code}", /user/i);
     bad("http://broker.example.com/{code}", /https/i);
     bad("ftp://broker.example.com/{code}", /https/i);
     bad("//broker.example.com/{code}", /https/i);
