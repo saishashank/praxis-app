@@ -13,7 +13,7 @@ import {
   type OutcomeBasisValue,
 } from "@/lib/picks/benchmark";
 import { vsMarketSummary, type VsMarketSummary } from "@/lib/picks/vsMarket";
-import { formatDay, formatPpm, isoWeek, MISSING } from "@/lib/view/format";
+import { displayName, formatDay, formatPpm, isoWeek, MISSING } from "@/lib/view/format";
 import { dateStaleness } from "@/lib/view/staleness";
 import { maskText } from "@/lib/view/mask";
 import { opaqueDigest } from "@/lib/view/opaqueRef";
@@ -313,7 +313,9 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
     return {
       id: publicPickId(`${d}.${q.profile}.${Number(x.rank)}`, masked),
       rank: Number(x.rank), // money-float-ok: SQL integer column
-      familyName: names[String(x.family)]?.name ?? String(x.family),
+      familyName: names[String(x.family)]
+        ? displayName(names[String(x.family)]!.name)
+        : String(x.family),
       familyInfo: names[String(x.family)]
         ? {
             oneLiner: names[String(x.family)]!.one_liner,
@@ -338,7 +340,7 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
               withdrawnReason: x.o_withdrawn === null ? null : String(x.o_withdrawn),
             },
       stock: kit ? kit.aliases.label(code) : code,
-      company: masked ? null : x.name === null ? null : String(x.name),
+      company: masked ? null : x.name === null ? null : displayName(String(x.name), { code }),
       family: String(x.family),
       tier: String(x.tier),
       label: String(x.label),
