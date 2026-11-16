@@ -19,6 +19,9 @@ const one = (profile: string, over: Partial<MyPortfolio> = {}): MyPortfolio => (
   cash: m("600000000"),
   gain: m("12300000"),
   sinceStartPpm: 12_300,
+  liveLabel: null,
+  closeValue: null,
+  closeSinceStartPpm: null,
   worstFallPpm: -8_000,
   holdings: [
     {

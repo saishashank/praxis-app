@@ -17,7 +17,7 @@ import { soft, strategyNames } from "./common";
 import { melTime } from "./pickAlerts";
 import { cardHref } from "./cards";
 import { loadPickNow, ppmOf } from "./pickNow";
-import { newerThanClose, readLatestQuotes } from "@/lib/data/quotes/latest";
+import { LATEST_READ_MAX, newerThanClose, readLatestQuotes } from "@/lib/data/quotes/latest";
 import {
   isDateParam,
   marketOf,
@@ -634,10 +634,53 @@ export type HistoryFilter = (typeof HISTORY_FILTERS)[number];
 // against the buy price (the latest close of the code, read with the price_bar key)
 const LAST_CLOSE_MICRO = `(SELECT pb.c FROM price_bar pb WHERE pb.market = o.market AND pb.code = o.code
   ORDER BY pb.d DESC LIMIT 1) * 1000000`;
-const RESULT_WHERE: Record<"profit" | "loss", string> = {
-  profit: `((o.state = 'closed' AND o.net_ppm > 0) OR (o.state = 'bought' AND ${LAST_CLOSE_MICRO} > o.entry_micro))`,
-  loss: `((o.state = 'closed' AND o.net_ppm < 0) OR (o.state = 'bought' AND ${LAST_CLOSE_MICRO} < o.entry_micro))`,
+// The price of an open trade is the one its row shows: a delayed quote newer than the close when there is
+// one (the `live` CTE of loadPickHistory), else the last close. Display only (ARN-021).
+const resultWhere = (kind: "profit" | "loss", live: boolean): string => {
+  const price = live
+    ? `COALESCE((SELECT lv.micro FROM live lv WHERE lv.code = o.code), ${LAST_CLOSE_MICRO})`
+    : LAST_CLOSE_MICRO;
+  return kind === "profit"
+    ? `((o.state = 'closed' AND o.net_ppm > 0) OR (o.state = 'bought' AND ${price} > o.entry_micro))`
+    : `((o.state = 'closed' AND o.net_ppm < 0) OR (o.state = 'bought' AND ${price} < o.entry_micro))`;
 };
+
+/** Newer-than-close delayed prices of the codes of open picks (chunks of 200, no OFFSET). */
+async function liveOpenPrices(env: LoaderEnv, market: string): Promise<Map<string, bigint>> {
+  const out = new Map<string, bigint>();
+  const open = await soft(
+    async () =>
+      (
+        await env.main.execute({
+          sql: "SELECT DISTINCT code FROM pick_outcome WHERE market = ? AND kind = 'pick' AND state = 'bought'",
+          args: [market],
+        })
+      ).rows.map((r) => String(r.code)),
+    [] as string[],
+  );
+  for (let i = 0; i < open.length; i += LATEST_READ_MAX) {
+    const chunk = open.slice(i, i + LATEST_READ_MAX);
+    const closes = await soft(
+      async () =>
+        (
+          await env.main.execute({
+            sql: `SELECT pb.code, pb.d FROM price_bar pb
+                  WHERE pb.market = ? AND pb.code IN (${chunk.map(() => "?").join(", ")})
+                    AND pb.d = (SELECT MAX(x.d) FROM price_bar x WHERE x.market = pb.market AND x.code = pb.code)`,
+            args: [market, ...chunk],
+          })
+        ).rows,
+      [],
+    );
+    const closeD = new Map(closes.map((c) => [String(c.code), String(c.d)]));
+    const quotes = await soft(() => readLatestQuotes(env.main, market, chunk), new Map());
+    for (const code of chunk) {
+      const live = newerThanClose(quotes.get(code), closeD.get(code) ?? null);
+      if (live) out.set(code, live.lastMicro);
+    }
+  }
+  return out;
+}
 const HISTORY_STATE: Record<
   Exclude<HistoryFilter, "all" | "profit" | "loss" | "candidate">,
   string
@@ -721,8 +764,15 @@ export async function loadPickHistory(
   const after = masked ? null : parseHistoryCursor(q.cursor);
   const where = ["o.market = ?", "o.profile = ?", "o.kind = 'pick'"];
   const args: (string | number)[] = [market, q.profile];
+  let withSql = "";
+  const withArgs: (string | number)[] = [];
   if (q.filter === "profit" || q.filter === "loss") {
-    where.push(RESULT_WHERE[q.filter]);
+    const livePx = await liveOpenPrices(env, market);
+    if (livePx.size > 0) {
+      withSql = `WITH live(code, micro) AS (VALUES ${[...livePx].map(() => "(?, ?)").join(", ")}) `;
+      for (const [code, micro] of livePx) withArgs.push(code, Number(micro)); // money-float-ok: micro-AUD within 2^53
+    }
+    where.push(resultWhere(q.filter, livePx.size > 0));
   } else if (q.filter === "candidate") {
     // D-984: the picks of the candidate measures being tested, in every state
     where.push("p.rule_version LIKE ?");
@@ -737,7 +787,7 @@ export async function loadPickHistory(
   }
   args.push(HISTORY_PAGE + 1);
   const r = await env.main.execute({
-    sql: `SELECT o.d, o.rank, o.code, o.state, o.entry_d, o.entry_micro, o.exit_d, o.exit_micro,
+    sql: `${withSql}SELECT o.d, o.rank, o.code, o.state, o.entry_d, o.entry_micro, o.exit_d, o.exit_micro,
                  o.exit_reason, o.net_ppm, p.buy_max_micro, p.stop_micro, p.aim_micro, i.name,
                  p.rule_version
           FROM pick_outcome o JOIN pick p ON p.market = o.market AND p.d = o.d
@@ -745,7 +795,7 @@ export async function loadPickHistory(
           LEFT JOIN instrument i ON i.market = o.market AND i.code = o.code
           WHERE ${where.join(" AND ")}
           ORDER BY o.d DESC, o.rank LIMIT ?`,
-    args,
+    args: [...withArgs, ...args],
   });
   const page = r.rows.slice(0, HISTORY_PAGE);
   const profiles = await profileNames(env);

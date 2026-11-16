@@ -25,6 +25,7 @@ import {
 } from "@/lib/data/quotes/latest";
 import { MARKET_INDEX_CODE } from "@/lib/data/quotes/parse";
 import { liveDayChange } from "./liveDay";
+import { pendingRoundNote } from "./roundNote";
 import { rollingLine, type Top5Rolling } from "@/lib/learning/dailyTop5";
 import { loadAlertHomeFacts, loadIntraday, type IntradayModel } from "./pickAlerts";
 import type { LoaderEnv } from "./shell";
@@ -276,6 +277,8 @@ export type HomeView = {
     strategies: number;
     d: string | null;
     tiles: StrategyTile[];
+    /** Between rounds: "Round 2 starts Tue 17 Nov with A$5,000 a strategy. ..."; null otherwise. */
+    note?: string | null;
   };
   day: {
     regime: string | null;
@@ -320,7 +323,7 @@ function emptyView(): HomeView {
     since: [],
     needs: [],
     picksTotal: 0,
-    summary: { strategies: 0, d: null, tiles: [] },
+    summary: { strategies: 0, d: null, tiles: [], note: null },
     day: { regime: null, regimeD: null, quality: [], openFlags: 0, index: null },
     picks: { d: null, items: [] },
     intraday: null,
@@ -466,7 +469,11 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
       strategies: tiles.length,
       d: navD,
       tiles,
+      note: null,
     };
+  } else {
+    // a round ended and the next has not started trading: one line instead of "No strategy is running yet"
+    view.summary.note = await pendingRoundNote(deps.mainDb, v.market, v.now);
   }
 
   // Day line.
@@ -727,7 +734,16 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     view.headline = [
       {
         currency: "AUD",
-        sinceStartPpm: series.length > 0 ? series[series.length - 1]! : null,
+        // Same live NAV as the tiles and the day change when the live overlay applies (display only).
+        sinceStartPpm:
+          liveSum !== null && last && num(last.s) > 0
+            ? ratioPpm(
+                num(last.v) + (liveSum as { change: number }).change - num(last.s),
+                num(last.s),
+              )
+            : series.length > 0
+              ? series[series.length - 1]!
+              : null,
         dayChangePpm:
           liveSum !== null
             ? ratioPpm((liveSum as { change: number }).change, (liveSum as { base: number }).base)

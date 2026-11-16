@@ -43,6 +43,21 @@ function One({ v }: { v: MyPortfolio }) {
               </GainLoss>
             ) : null}
           </p>
+          {v.liveLabel ? (
+            <p className="m-0 text-xs text-text-muted" data-testid="portfolio-live">
+              {v.liveLabel}.
+              {v.closeValue ? (
+                <>
+                  {" "}
+                  End of day{v.asOfD ? ` ${formatDay(v.asOfD)}` : ""}:{" "}
+                  <Money micro={v.closeValue.micro} />
+                  {v.closeSinceStartPpm !== null ? ` (${pctText(v.closeSinceStartPpm)})` : ""}.
+                </>
+              ) : v.closeSinceStartPpm !== null ? (
+                <> End of day: {pctText(v.closeSinceStartPpm)}.</>
+              ) : null}
+            </p>
+          ) : null}
           <p className="m-0 text-text-muted">
             Worst fall from a peak:{" "}
             {v.worstFallPpm !== null && v.worstFallPpm < 0

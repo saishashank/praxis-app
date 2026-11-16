@@ -96,6 +96,9 @@ export default async function StrategiesPage({
       ) : (
         <>
           {list.state === "empty" ? <Banner>{list.text}</Banner> : null}
+          {list.state !== "empty" && list.data.pendingRound ? (
+            <Banner>{list.data.pendingRound}</Banner>
+          ) : null}
 
           <section aria-labelledby="attention-h" className="flex min-w-0 flex-col gap-3">
             <h2 id="attention-h" className="m-0 text-xl font-semibold">

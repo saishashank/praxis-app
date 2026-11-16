@@ -4,7 +4,12 @@
 // closed tally and the latest trades). A masked viewer sees the letter of each stock and percentages
 // only, no amounts, prices or dates (DAT-124).
 import "server-only";
-import { LATEST_READ_MAX, newerThanClose, readLatestQuotes } from "@/lib/data/quotes/latest";
+import {
+  LATEST_READ_MAX,
+  newerThanClose,
+  quoteTimeMelbourne,
+  readLatestQuotes,
+} from "@/lib/data/quotes/latest";
 import { STRATEGIES, type StrategyKey } from "@/lib/picks/allocation";
 import { loadPortfolioSettings, MY_PROFILES } from "@/lib/picks/portfolioConfig";
 import { splitLine, strategyNames } from "@/lib/picks/portfolioWords";
@@ -45,11 +50,17 @@ export type MyPortfolio = {
   /** The newest valued session; null before the first pick or for a masked viewer. */
   asOfD: string | null;
   seed: MoneyView | null;
+  /** Live value (cash plus holdings at delayed quotes) when a holding has a newer quote, else the close value. */
   value: MoneyView | null;
   cash: MoneyView | null;
   /** Value minus the seed. */
   gain: MoneyView | null;
   sinceStartPpm: number | null;
+  /** "Delayed, 13:05" when value, gain and sinceStartPpm are live; null when they are end of day. */
+  liveLabel: string | null;
+  /** The stored end-of-day value and since-start, kept beside live figures; null when not live. */
+  closeValue: MoneyView | null;
+  closeSinceStartPpm: number | null;
   /** The largest fall from a peak so far, ppm (0 or below). */
   worstFallPpm: number | null;
   holdings: MyHolding[];
@@ -100,7 +111,7 @@ export async function loadMyPortfolios(env: LoaderEnv): Promise<MyPortfoliosView
              GROUP BY profile`),
   );
   const holds = byProfile(
-    await q(`SELECT profile, code, strategy, pub_d, entry_d, entry_micro FROM pick_portfolio_hold
+    await q(`SELECT profile, code, strategy, pub_d, entry_d, entry_micro, qty FROM pick_portfolio_hold
              WHERE market = ? ORDER BY profile, pos`),
   );
   const splits = byProfile(
@@ -124,6 +135,7 @@ export async function loadMyPortfolios(env: LoaderEnv): Promise<MyPortfoliosView
   // latest prices of the held stocks (the close, or a newer delayed quote)
   const codes = [...new Set([...holds.values()].flat().map((h) => s(h.code)))];
   const nowOf = new Map<string, bigint>();
+  const liveAt = new Map<string, string>(); // code -> quote time, only for codes shown live
   if (codes.length > 0) {
     const closes = await q(
       `SELECT pb.code, pb.d, pb.c FROM price_bar pb
@@ -139,7 +151,10 @@ export async function loadMyPortfolios(env: LoaderEnv): Promise<MyPortfoliosView
     const quotes = await soft(() => readLatestQuotes(env.main, market, codes), new Map());
     for (const code of codes) {
       const live = newerThanClose(quotes.get(code), closeD.get(code) ?? null);
-      if (live) nowOf.set(code, live.lastMicro);
+      if (live) {
+        nowOf.set(code, live.lastMicro);
+        liveAt.set(code, live.quoteAt);
+      }
     }
   }
   // company names of the held and traded codes (unmasked viewers only; chunks of 200, no OFFSET)
@@ -185,6 +200,9 @@ export async function loadMyPortfolios(env: LoaderEnv): Promise<MyPortfoliosView
       cash: null,
       gain: null,
       sinceStartPpm: null,
+      liveLabel: null,
+      closeValue: null,
+      closeSinceStartPpm: null,
       worstFallPpm: null,
       holdings: [],
       split: null,
@@ -212,16 +230,34 @@ export async function loadMyPortfolios(env: LoaderEnv): Promise<MyPortfoliosView
       }
     }
     const done = closed.get(profile) ?? [];
+    // Live value (display only, ARN-021): cash plus each holding at its delayed quote (or its close),
+    // when any holding has a quote newer than its close. Same prices as the holdings list below.
+    const held = holds.get(profile) ?? [];
+    const liveCodes = held.filter((h) => liveAt.has(s(h.code)));
+    let liveValue: bigint | null = null;
+    let liveLabel: string | null = null;
+    if (liveCodes.length > 0 && held.every((h) => nowOf.has(s(h.code)))) {
+      liveValue = held.reduce(
+        (sum, h) => sum + big(h.qty) * nowOf.get(s(h.code))!,
+        big(day.cash_micro),
+      );
+      const at = liveCodes.map((h) => liveAt.get(s(h.code))!).sort()[liveCodes.length - 1]!;
+      liveLabel = `Delayed, ${quoteTimeMelbourne(at)}`;
+    }
+    const shown = liveValue ?? value;
     return {
       ...base,
       started: true,
       asOfD: masked ? null : s(day.d),
-      value: masked ? null : money(value),
+      value: masked ? null : money(shown),
       cash: masked ? null : money(s(day.cash_micro)),
-      gain: masked ? null : money(value - seed),
-      sinceStartPpm: ppm(value - seed, seed),
+      gain: masked ? null : money(shown - seed),
+      sinceStartPpm: ppm(shown - seed, seed),
+      liveLabel,
+      closeValue: masked || liveLabel === null ? null : money(value),
+      closeSinceStartPpm: liveLabel === null ? null : ppm(value - seed, seed),
       worstFallPpm: Number(worst.get(profile)?.[0]?.worst ?? 0), // money-float-ok: SQL integer ppm
-      holdings: (holds.get(profile) ?? []).map((h) => {
+      holdings: held.map((h) => {
         const entry = big(h.entry_micro);
         const now = nowOf.get(s(h.code)) ?? null;
         return {

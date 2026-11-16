@@ -389,8 +389,16 @@ function SummaryCard({ v }: { v: HomeView }) {
     <Card title="Strategies today" aria-label="Strategies today">
       {s.tiles.length === 0 ? (
         <Empty hue="brand-b" shape="list">
-          <span>No strategy is running yet.</span>{" "}
-          <span>The six strategies appear here with A$5,000 each after tonight&apos;s run.</span>
+          {s.note ? (
+            <span data-testid="round-note">{s.note}</span>
+          ) : (
+            <>
+              <span>No strategy is running yet.</span>{" "}
+              <span>
+                The six strategies appear here with A$5,000 each after tonight&apos;s run.
+              </span>
+            </>
+          )}
         </Empty>
       ) : (
         <ul className={tileStrip} aria-label="Strategies today">

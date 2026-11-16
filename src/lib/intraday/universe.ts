@@ -22,6 +22,33 @@ export async function heldCodes(db: Exec, market: string): Promise<Set<string>> 
   return new Set(r.rows.map((x) => String(x.code)));
 }
 
+/**
+ * Codes the site shows a delayed price for outside the book (display only, ARN-021): the stocks the
+ * practice portfolios hold now (`pick_portfolio_hold` is rewritten each run, so these are the latest
+ * holdings), then the users' Home watchlist codes (`user_watchlist` lives in the auth database, so it
+ * is read from `auth`; without it only the held codes are returned). Held first so a per-poll cap drops
+ * watchlist codes before held ones. Bounded reads, no OFFSET (Turso free quota).
+ */
+export async function displayHeldCodes(
+  db: Exec,
+  market: string,
+  auth?: Exec,
+): Promise<{ held: string[]; watchlist: string[] }> {
+  const held = await db.execute({
+    sql: "SELECT DISTINCT code FROM pick_portfolio_hold WHERE market = ? ORDER BY code LIMIT 400",
+    args: [market],
+  });
+  const wl = !auth
+    ? { rows: [] as Record<string, unknown>[] }
+    : await auth.execute({
+        sql: "SELECT DISTINCT code FROM user_watchlist WHERE market = ? ORDER BY code LIMIT 400",
+        args: [market],
+      });
+  const h = held.rows.map((x) => String(x.code));
+  const seen = new Set(h);
+  return { held: h, watchlist: wl.rows.map((x) => String(x.code)).filter((c) => !seen.has(c)) };
+}
+
 export async function scanUniverse(
   db: Exec,
   market: string,
