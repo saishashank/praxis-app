@@ -5,6 +5,7 @@
 // Destructive actions are neutral in the list; red appears only in the confirm sheet. P0 alerts are fixed.
 import { Avatar } from "@/components/shell/GearMenu";
 import { ValueRow } from "@/components/ui/ValueRow";
+import { InstallRow } from "@/components/pwa/InstallRow";
 import { requireUser } from "@/lib/auth/guard";
 import { signOutAction } from "@/lib/auth/actions";
 import { authDb } from "@/lib/db/client";
@@ -164,6 +165,7 @@ export default async function SettingsPage() {
         </Group>
 
         <Group id="about" title="About" hue="reviews" icon={<AboutIcon />}>
+          <InstallRow />
           <ValueRow
             label="Version"
             value={<span className="font-mono">{build || "—"}</span>}
