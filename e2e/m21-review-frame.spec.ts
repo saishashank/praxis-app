@@ -1,9 +1,12 @@
 // M21 C1 / AT-82 (UXN-320 a, D-1203, F): the stored Evening Review in its frame. The plain e2e seed holds no stored
-// review, so this runs on the `review-stored` state (E2E_STATES=review-stored, or "all"; e2e/seed/states.mjs) and
-// skips itself when the page has no frame. Checks: the sandbox is allow-same-origin and nothing else, no script runs
+// review, so this runs in the rich lane on the `review-stored` state (E2E_SCENARIO=rich E2E_STATES=all; e2e/seed/states.mjs)
+// and fails when the page has no frame. Checks: the sandbox is allow-same-origin and nothing else, no script runs
 // in the frame, the frame is as tall as its content (no blank band below it) at 1280 and 375 px, and axe is clean.
 import { expect, test, type Page } from "@playwright/test";
+import { requireScenario } from "./support/requireScenario";
 import { axeViolations, expectNoHorizontalScroll, setTheme, signIn } from "./helpers";
+
+requireScenario("rich", "run it in the rich lane: E2E_SCENARIO=rich E2E_STATES=all");
 
 const SIZES = [1280, 375] as const;
 
@@ -23,10 +26,7 @@ for (const width of SIZES) {
   }) => {
     await signIn(context, "owner");
     await page.setViewportSize({ width, height: 900 });
-    test.skip(
-      !(await openStoredReview(page)),
-      "no stored review: run with E2E_STATES=review-stored",
-    );
+    expect(await openStoredReview(page), "the review-stored state holds one review").toBe(true);
     const frame = page.locator("iframe[srcdoc]").first();
     await expect(frame).toBeVisible();
 
@@ -68,10 +68,7 @@ for (const width of SIZES) {
   }) => {
     await signIn(context, "owner");
     await page.setViewportSize({ width, height: 900 });
-    test.skip(
-      !(await openStoredReview(page)),
-      "no stored review: run with E2E_STATES=review-stored",
-    );
+    expect(await openStoredReview(page), "the review-stored state holds one review").toBe(true);
     const path = new URL(page.url()).pathname;
     for (const theme of ["dark", "light"] as const) {
       await setTheme("owner", theme);
