@@ -578,6 +578,10 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1070 | (O-84) Cortex coverage: for a night before the first frozen angle passport, the replay uses the EARLIEST frozen passport set (the go-live set), never today's... |
 | D-1071 | (O-84) Strategy history stays the development-split record only (no forward ledger). |
 | D-1072 | (O-84) The section title uses the run's real count ("Replay check: last N sessions"); with no run it reads "Replay check: not run yet". |
+| D-1078 | (Owner) Warm start of the learning Cortex: --mode cortex-warm-start [--sessions N] (src/lib/cortex/learn/warmStart.ts, replay.yml option, default 60, bounds... |
+| D-1079 | (Owner) Point in time: for night D only the bars up to D, the price-sensitive announcements published before D's close (a mover counts as "news before the op... |
+| D-1080 | (Owner) Identifiable and independent of the pick scorecard: every warm-start row has the manifest id prefix warmstart: |
+| D-1081 | (Owner) Not touched: the switch rule (the learner takes decisions only after learn_switch_min_nights matured forward disagreement nights, D-927) and every st... |
 
 ## M16 (M16_design.md)
 
