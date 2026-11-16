@@ -30,7 +30,9 @@ const summary = (c: HTMLElement) =>
 describe("Market index table", () => {
   it("is one table with a caption, a row header and column headers", async () => {
     await show(<IndexSection index={Promise.resolve(strip)} masked={false} />);
-    const table = screen.getByRole("table", { name: "Main index, latest level and change" });
+    const table = screen.getByRole("table", {
+      name: "Main index, latest level and change",
+    }) as HTMLTableElement;
     expect(table.querySelector("caption")?.textContent).toBe("Main index, latest level and change");
     // the sparkline adds its own table of values, so count this table's own rows
     expect(table.tHead!.rows).toHaveLength(1);
