@@ -197,6 +197,8 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
       : null,
     stopText: t.stop ? formatMicro(t.stop.micro, currencyFormatFor(t.stop.currency)) : null,
     targetText: t.target ? formatMicro(t.target.micro, currencyFormatFor(t.target.currency)) : null,
+    noTarget: t.entryPrice !== null && t.target === null,
+    targetReached: t.targetReached,
     lastPriceText: t.lastPrice
       ? formatMicro(t.lastPrice.micro, currencyFormatFor(t.lastPrice.currency))
       : null,
@@ -544,6 +546,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
                 target: tile.target ? dollars(tile.target.micro) : null,
               }}
               trades={trades}
+              noTargetNote={!ex.hasTarget}
               showMarkers={!detail.masked}
               drawdown={drawdown}
               maxDropText={maxDropText}
@@ -563,9 +566,11 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
                 className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md bg-surface-2 p-2 text-sm"
               >
                 <span className="min-w-0 font-semibold break-words">{t.stock}</span>
-                <span>
-                  {t.qty} {t.qty === 1 ? "share" : "shares"}
-                </span>
+                {t.qty === null ? null : (
+                  <span>
+                    {t.qty} {t.qty === 1 ? "share" : "shares"}
+                  </span>
+                )}
                 <span className="text-text-muted">
                   since {t.entryDay === null ? "an earlier session" : dayText(t.entryDay)}
                 </span>

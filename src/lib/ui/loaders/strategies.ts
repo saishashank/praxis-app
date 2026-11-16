@@ -422,7 +422,8 @@ export type TradeRow = {
   /** Entry and exit dates: exact, or ISO weeks for a masked viewer. */
   entryDay: string | null;
   exitDay: string | null;
-  qty: number;
+  /** Shares; null for a masked viewer (UXN-320 b, D-1204). */
+  qty: number | null;
   open: boolean;
   exitType: string | null;
   /** Return of the trade between its two fills, ppm; null while open. */
@@ -556,7 +557,7 @@ export async function loadStrategyDetail(
         stock: sc.label(str(r.code)),
         entryDay: sc.day(str(r.entry_d)),
         exitDay: r.exit_d === null || r.exit_d === undefined ? null : sc.day(str(r.exit_d)),
-        qty: num(r.qty),
+        qty: masked ? null : num(r.qty),
         open: r.exit_type === null,
         exitType: strOrNull(r.exit_type),
         returnPpm: xp === null || ep <= 0 ? null : Math.round(((xp - ep) * PPM) / ep),
