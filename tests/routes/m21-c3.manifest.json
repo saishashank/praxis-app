@@ -1,0 +1,7 @@
+{
+  "routes": {
+    "action src/app/(app)/alerts/actions.ts#unmuteAlertAction": {
+      "tests": ["tests/settings/alerts.test.tsx", "tests/alerts/unmute.test.ts"]
+    }
+  }
+}

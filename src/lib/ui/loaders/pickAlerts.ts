@@ -5,7 +5,8 @@
 // and times, never a price, a limit or a headline.
 import { getConfig } from "@/lib/config/store";
 import type { ConfigKey } from "@/lib/config/keys";
-import { formatDay, isoWeek, MISSING } from "@/lib/view/format";
+import { displayName, formatDay, isoWeek, MISSING } from "@/lib/view/format";
+import { effectiveStopHitEmails } from "@/lib/preferences/service";
 import type { AlertStateName, ClearReason } from "@/lib/alerts/pick/types";
 import { maskKit, money, todayD, type LoaderEnv, type MoneyView } from "./shell";
 
@@ -236,7 +237,7 @@ export async function loadIntraday(env: LoaderEnv): Promise<IntradayModel> {
       return {
         code,
         stock: kit ? kit.aliases.label(code) : code,
-        company: masked || x.name === null ? null : str(x.name),
+        company: masked || x.name === null ? null : displayName(str(x.name), { code }),
         foundTime: melTime(str(x.found_at)),
         catalyst: title ? `${words}: ${title}` : words,
         materiality: num(x.materiality),
@@ -367,6 +368,8 @@ export type MyAlertRow = {
   mail: MailStatus;
   /** Only an armed alert can be muted. */
   canMute: boolean;
+  /** Only an alert the user muted can come back (UXN-322, D-1207); every other clear is final. */
+  canUnmute: boolean;
 };
 
 export type MyAlertsModel = {
@@ -407,6 +410,10 @@ export type AlertSettingsModel = {
   pickAlerts: "on" | "off";
   clearedEmails: "on" | "off";
   candidateEmails: "on" | "off";
+  /** EML-043 (D-1226): the stored choice, else config `stop_hit_email_default` (default off). */
+  stopHitEmails: "on" | "off";
+  /** True while the user never chose it (the config default applies). */
+  stopHitIsDefault: boolean;
   picksSort: "chance" | "expected_gain";
   /** True while the user never chose `pick_alerts` (the default applies). */
   alertsIsDefault: boolean;
@@ -434,10 +441,20 @@ export async function loadAlertSettings(env: LoaderEnv): Promise<AlertSettingsMo
   const q = v.quiet_hours;
   const qo = typeof q === "object" && q !== null ? (q as Record<string, unknown>) : {};
   const cap = await cfgNum(env, "pick_alert_emails_per_day", -1);
+  let stopDefault: unknown = "off";
+  try {
+    stopDefault = await getConfig(env.main, "stop_hit_email_default");
+  } catch {
+    stopDefault = "off";
+  }
+  const storedStopHit =
+    v.stop_hit_emails === "on" || v.stop_hit_emails === "off" ? v.stop_hit_emails : null;
   return {
     pickAlerts,
     clearedEmails: v.cleared_pick_emails === "off" ? "off" : "on",
     candidateEmails: v.intraday_candidate_emails === "off" ? "off" : "on",
+    stopHitEmails: effectiveStopHitEmails(storedStopHit, stopDefault),
+    stopHitIsDefault: storedStopHit === null,
     picksSort: v.picks_sort === "expected_gain" ? "expected_gain" : "chance",
     alertsIsDefault: stored === null,
     dailyCap: cap < 0 ? null : cap,
@@ -497,6 +514,7 @@ export async function loadMyAlerts(env: LoaderEnv): Promise<MyAlertsModel> {
         session: chip.session,
         mail: mail.get(chip.alertId) ?? "none",
         canMute: chip.state === "armed",
+        canUnmute: chip.state === "cleared" && chip.reason === "muted",
       };
     });
     return { ...base, rows };

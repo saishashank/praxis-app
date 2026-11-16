@@ -90,6 +90,33 @@
       }
     },
     {
+      "id": "action:src/app/(app)/alerts/actions.ts#unmuteAlertAction",
+      "type": "action",
+      "name": "unmuteAlertAction",
+      "purpose": "Server action unmuteAlertAction: mutes or restores pick alerts for the signed-in user.",
+      "specIds": [
+        "ARN-115",
+        "ROL-102a",
+        "UXN-303"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "email",
+        "security"
+      ],
+      "source": "src/app/(app)/alerts/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/alerts/actions.ts"
+      }
+    },
+    {
       "id": "action:src/app/(app)/cards/[id]/actions.ts#addCardNoteAction",
       "type": "action",
       "name": "addCardNoteAction",
@@ -18055,6 +18082,17 @@
       "id": "service:app|contains|action:src/app/(app)/alerts/actions.ts#setAlertsForAllAction",
       "from": "service:app",
       "to": "action:src/app/(app)/alerts/actions.ts#setAlertsForAllAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "email",
+        "security"
+      ]
+    },
+    {
+      "id": "service:app|contains|action:src/app/(app)/alerts/actions.ts#unmuteAlertAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/alerts/actions.ts#unmuteAlertAction",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [

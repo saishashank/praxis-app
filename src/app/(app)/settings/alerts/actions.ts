@@ -11,7 +11,12 @@ import { authDb } from "@/lib/db/client";
 import { updatePreferences } from "@/lib/preferences/service";
 import type { ActionResult } from "@/lib/users/messages";
 
-const FIELDS = ["pick_alerts", "cleared_pick_emails", "intraday_candidate_emails"] as const;
+const FIELDS = [
+  "pick_alerts",
+  "cleared_pick_emails",
+  "intraday_candidate_emails",
+  "stop_hit_emails",
+] as const;
 
 export async function updateAlertSettingsAction(fd: FormData): Promise<ActionResult> {
   const user = await requireUser("own_preferences", "/settings/alerts");

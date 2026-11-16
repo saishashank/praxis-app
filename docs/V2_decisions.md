@@ -853,3 +853,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1257 | C1 (frame, F): ReviewFrame shortens the frame to 320 px, reads documentElement.scrollHeight of the frame document on load and on window resize, and sets that... |
 | D-1258 | C1 (names, D-1206): displayName(name, { code }) keeps the word equal to the code in capitals; it is applied to the pick company (picks.ts), the review's new-... |
 | D-1259 | C1 (hand-off to C3): the signature C3 uses at pickAlerts.ts:239 is displayName(name, { code }), where code is the row's own instrument code; a missing or emp... |
+| D-1270 | C3 (unmute service): the unmute legality lives in src/lib/alerts/pick/unmute.ts (unmuteAlert), not inside the action, so it is tested on a migrated database... |
+| D-1271 | C3 (stop-hit trigger and send): the poll collects a stop-hit item for each alert that stayed hit this tick (no transition) with a usable delayed price under... |
+| D-1272 | C3 (quiet hours and the cap for the stop-hit mail): during a user's quiet hours the stop-hit mail is neither sent nor claimed and is not held to a digest (pi... |
+| D-1273 | C3 (template, AU unchanged): the stop-hit text is a new stop_hit variant of renderPickCleared; the below_stop and above_chase_cap variants, the hit mail and... |
+| D-1274 | C3 (My alerts UI): a muted alert shows a "Muted" chip with "Unmute"; mute and unmute each show a toast with Undo that runs the opposite action (the toast is... |
