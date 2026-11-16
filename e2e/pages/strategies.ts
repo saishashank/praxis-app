@@ -26,4 +26,11 @@ export const STRATEGIES_PAGES: PageEntry[] = [
     action: "read",
     h1: "Cortex",
   },
+  // M21 L1 (D-1227): the golden-set labelling page is Owner only (the "admin" action).
+  {
+    file: "src/app/(app)/cortex/labels/page.tsx",
+    path: "/cortex/labels",
+    action: "admin",
+    h1: "Label announcements",
+  },
 ];

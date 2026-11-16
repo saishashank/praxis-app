@@ -64,6 +64,7 @@ export const KNOWN_ROUTE_PATTERNS: readonly string[] = [
   "/cards/[id]",
   "/config",
   "/cortex",
+  "/cortex/labels",
   "/health",
   "/holdings",
   "/icon.png",

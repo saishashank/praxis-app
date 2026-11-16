@@ -102,7 +102,7 @@ jobs:
         run: >-
           npx playwright test
           e2e/m11l-steelman.spec.ts e2e/m13l-experts.spec.ts e2e/m14-robustness.spec.ts
-          e2e/m15-cortex.spec.ts e2e/m21-review-frame.spec.ts e2e/m21-unmute.spec.ts e2e/picks-sections.spec.ts --project=desktop
+          e2e/m15-cortex.spec.ts e2e/m21-labels.spec.ts e2e/m21-review-frame.spec.ts e2e/m21-unmute.spec.ts e2e/picks-sections.spec.ts --project=desktop
         env:
           E2E_SCENARIO: rich
           E2E_STATES: all
