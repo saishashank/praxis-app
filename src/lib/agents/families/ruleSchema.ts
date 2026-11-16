@@ -20,6 +20,7 @@
 // ./rules.ts and ./exits.ts (the tests check that its param references are exactly the family's
 // Lane-B keys and that its literals equal the registry's fixed keys). docs/rule_schema.md is
 // generated from this module by scripts/learning/genRuleSchema.mjs and checked by a test.
+import { checkTargetParams, targetKeysOf } from "./targetOf";
 import {
   CONFIG_KEYS,
   F1_MOMENTUM_VARIANTS,
@@ -666,12 +667,21 @@ export const FAMILY_OPTIONAL_KEYS: Readonly<Record<Family, readonly StructuralKe
   F6: [],
 };
 
+/**
+ * Optional key names of a family in a params_json: the structural switches plus the FAM-010 target keys
+ * (`f<n>_target_r`, `f<n>_target_pct`; D-1224, counted by O-46 through STOP_SIZING_KEY).
+ */
+export const optionalKeyNames = (family: Family): string[] => [
+  ...FAMILY_OPTIONAL_KEYS[family].map((s) => s.key),
+  ...targetKeysOf(family),
+];
+
 /** Problems with the structural keys present in a params_json (an absent key is fine: default). */
 export function checkStructuralParams(
   family: Family,
   params: Readonly<Record<string, unknown>>,
 ): string[] {
-  const errors: string[] = [];
+  const errors: string[] = checkTargetParams(family, params);
   for (const s of FAMILY_OPTIONAL_KEYS[family]) {
     if (!Object.prototype.hasOwnProperty.call(params, s.key)) continue;
     const v = params[s.key];

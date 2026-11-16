@@ -21,6 +21,7 @@ import { divCeil, makeRational, mulRat, type Rational } from "@/lib/money/ration
 import type { Fraction } from "@/lib/replay/returns";
 import type { AgentParams } from "./params";
 import { initialStop } from "./families/exits";
+import { planInitialStop, targetLevel } from "./families/targetOf";
 import type { Candidate, CsRule, EventFact, ExitPlan, Family, RegimeLabel } from "./families/types";
 import { roundHalfAway } from "./regime";
 import { ENTRY_SKIP_REASONS } from "./schema";
@@ -288,6 +289,8 @@ function csDetail(r: CsRule): Detail {
       return { categories: r.categories === null ? null : [...r.categories].sort() };
     case "close_below_level":
       return { level_micro: r.levelMicro.toString() };
+    case "target":
+      return { target_r: ratOrNull(r.targetR), target_pct: ratOrNull(r.targetPct) };
     case "volume_dry_up":
       return { ratio_below: ratText(r.ratioBelow), sessions: r.sessions };
   }
@@ -320,7 +323,14 @@ export function buildExitPlan(plan: ExitPlan, closeMicro: bigint): CardExit[] {
     });
   }
   for (const c of plan.cs) {
-    out.push({ rule: c.id, tag: "CS", via: c.via, kind: c.kind, detail: csDetail(c) });
+    let detail: Detail = csDetail(c);
+    if (c.kind === "target") {
+      // C2 (D-1225): the real target at the card's reference close, from the tightest initial stop
+      const stop = planInitialStop(plan, closeMicro, initialStop);
+      const level = targetLevel({ r: c.targetR, pct: c.targetPct }, closeMicro, stop);
+      detail = { ...detail, target_at_close_micro: level === null ? null : level.toString() };
+    }
+    out.push({ rule: c.id, tag: "CS", via: c.via, kind: c.kind, detail });
   }
   return out;
 }
