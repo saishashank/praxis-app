@@ -889,3 +889,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1301 | L1 (queue and count): nextUnlabelled returns the newest announcement of the market with no golden_label row of any answer, so a skip or an unclear flag takes... |
 | D-1302 | L1 (independence): golden.ts, the loader and the page read none of text_label, label_validation or label_item (a test asserts every statement the page issues... |
 | D-1303 | L1 (keyboard): the three groups are native radios (Tab enters a group, arrows move inside it); 1 to 4 choose within the focused group, S skips, U flags as un... |
+| D-1305 | C7 (UXN-062, D-1201): the Leaderboard card is ControlsSummary, drawn from lb.data.strategies and lb.data.controls with no new query. |
+| D-1306 | C7 (UXN-154): ConcentrationChart is hand-drawn SVG (D-128): a donut for 12 items or fewer (DONUT_MAX), a treemap above (a balanced binary split along the lon... |
+| D-1307 | C7 (UXN-255): FamilyGroups is a server component with one native <details> per family, closed by default, listing that family's strategies as links to their... |
+| D-1308 | C7 (words): none of the three shows a family code, strategy code or internal id; family names come from the stored names table the page already loads. |
+| D-1309 | C7 (test lane): e2e/m21-crosscheck-accepted.spec.ts runs in the rich lane on the existing seed (six strategies, one held position, E03 and E04 finished round... |

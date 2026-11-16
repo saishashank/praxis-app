@@ -32,6 +32,7 @@ import { regimeLabel } from "@/lib/view/terms";
 import { costPlan } from "@/lib/view/costPlans";
 import { currencyFormatFor, formatMicro } from "@/lib/view/format";
 import { StrategyTabs } from "../StrategyTabs";
+import { ControlsSummary } from "./ControlsSummary";
 
 export const dynamic = "force-dynamic";
 
@@ -510,6 +511,7 @@ export default async function LeaderboardPage({
               period, and for each strategy a twin that makes random picks but uses the same exit
               rules. A strategy that beats them by luck is flagged &ldquo;possible luck&rdquo;.
             </p>
+            <ControlsSummary strategies={lb.data.strategies} controls={lb.data.controls} />
             <DataTable
               caption="Matched controls"
               columns={ctl}
