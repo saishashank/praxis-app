@@ -25,7 +25,7 @@ describe("0027_decision_rule_version", () => {
       String(r.name),
     );
     expect(back).not.toContain("rule_version");
-    expect(await migrateUp(db, ms)).toEqual({ applied: 6, version: 32 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 7, version: 33 });
     expect(await schemaOf(db)).toEqual(after);
   });
 });

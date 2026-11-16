@@ -23,7 +23,7 @@ describe("0030_daily_learning", () => {
       await db.execute("SELECT name FROM sqlite_master WHERE name = 'daily_learning'")
     ).rows;
     expect(tables).toHaveLength(0);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 3, version: 32 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 4, version: 33 });
     expect(await schemaOf(db)).toEqual(after);
   });
 
