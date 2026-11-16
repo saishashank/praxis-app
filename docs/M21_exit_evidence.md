@@ -27,7 +27,7 @@ Merge commits are `git log --merges --oneline 6c556e7a..HEAD` of `build`, oldest
 | Task | Merge commit | Decisions | Test files (main ones) |
 | --- | --- | --- | --- |
 | A1 migration 0038, keys, preferences, seed states | `79345acf` (Opus accepted with fixes) | D-1236, D-1240 to D-1245 | `tests/db/0038_m21_owner_tools.test.ts`, `tests/config/m21Keys.test.ts`, `tests/acceptance/v3/{at76,at77Hash}.test.ts` |
-| A2 hidden routes in the proxy **F** | `a3c6aea2` (Opus accepted with fixes) | D-1210, D-1214, D-1215 (no separate line for D-1246 and D-1247: cited in A2's code and e2e comments only, listed in §9) | `tests/http/{hiddenRoutes,appRoutes}.test.ts`, `tests/auth/ownerToolsGuard.test.ts`, `tests/security/ownerToolsLazy.test.ts`, `tests/acceptance/v3/at77.test.ts` |
+| A2 hidden routes in the proxy **F** | `a3c6aea2` (Opus accepted with fixes) | D-1210, D-1214, D-1215, D-1246, D-1247 | `tests/http/{hiddenRoutes,appRoutes}.test.ts`, `tests/auth/ownerToolsGuard.test.ts`, `tests/security/ownerToolsLazy.test.ts`, `tests/acceptance/v3/at77.test.ts` |
 | U0 UXN-319 cross-check | `28ae5db7` (with the C7 re-rule) | D-1201 (amended) | `scripts/ci/ui-crosscheck.test.mjs` (written by Z, D-1329: U0 had left it out) |
 | C1 review frame, title case, index table, skeletons **F** | `797cfc86` (Opus accepted with fixes) | D-1203, D-1206, D-1255 to D-1259 | `tests/review/{pages,reviewFrame}.test.tsx`, `tests/view/displayName.test.ts`, `tests/market/indexTable.test.tsx` |
 | B3 tax report **F** | `c59f9892` (Opus accepted with fixes) | D-1222, D-1223, D-1265 to D-1269 | `tests/tax/*`, `tests/acceptance/v3/at78Tax.test.ts` |
@@ -103,7 +103,7 @@ Deviations from the design, each decided and recorded:
 - **D-1297 (the one `holdout_look` write).** `evaluateShort` takes the ONE look only when at least 60 closed setups on at least 60 sessions exist, as one `holdout_look` row (lineage `short_shadow`), the only write outside the two shadow tables, made at most once ever; a second call is refused before any computation. The scoring details were fixed in D-1296 before any computation (BLD-051).
 - **D-1290 (CI `app` job time limit).** The `app` job's `timeout-minutes` goes from 30 to 45 (run 43938393694 was cancelled in `npm run build` after `npm test` took 1,538 s on a slow runner; 45 matches the longest e2e lane).
 - **D-1327 (walk matrix).** The AT-82 walk rotates the six themes over the pages instead of crossing every page with every theme.
-- **Gaps in the numbering:** D-1246 and D-1247 are cited by A2's e2e support and comments but have no decision line in the design; D-1252 to D-1254, D-1284, D-1288, D-1289, D-1291 to D-1294, D-1298, D-1299, D-1304, D-1313, D-1314 and D-1319 were left unused by the parallel tasks' reserved ranges. The numbers are never reused.
+- **Gaps in the numbering:** D-1246 and D-1247 were cited by A2's code and tests before they had a line; both are now written out in the design. D-1290 and D-1291 are the two CI fixes (the app job time limit; the PWA no-prompt proof and the Blueprint edge-hover floor). D-1252 to D-1254, D-1284, D-1288, D-1289, D-1292 to D-1294, D-1298, D-1299, D-1304, D-1313, D-1314 and D-1319 were left unused by the parallel tasks' reserved ranges. The numbers are never reused.
 
 ## §10 BUILD_SETUP section 9
 
