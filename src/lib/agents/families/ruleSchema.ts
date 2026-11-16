@@ -20,7 +20,15 @@
 // ./rules.ts and ./exits.ts (the tests check that its param references are exactly the family's
 // Lane-B keys and that its literals equal the registry's fixed keys). docs/rule_schema.md is
 // generated from this module by scripts/learning/genRuleSchema.mjs and checked by a test.
-import { checkTargetParams, targetKeysOf } from "./targetOf";
+import {
+  TARGET_FAMILIES,
+  TARGET_PCT_BOUNDS,
+  TARGET_R_BOUNDS,
+  checkTargetParams,
+  targetKeysOf,
+  targetPctKey,
+  targetRKey,
+} from "./targetOf";
 import {
   CONFIG_KEYS,
   F1_MOMENTUM_VARIANTS,
@@ -707,6 +715,9 @@ const FAMILIES: readonly string[] = ["F1", "F2", "F3", "F4", "F5", "F6"];
 
 /** [min, max] of a Lane-B key, or null when it is not a ranged key. */
 export function paramBounds(key: string): readonly [number, number] | null {
+  // the FAM-010 target keys are not registry keys; their bounds are the target constants (D-1250)
+  if (TARGET_FAMILIES.some((f) => key === targetRKey(f))) return TARGET_R_BOUNDS;
+  if (TARGET_FAMILIES.some((f) => key === targetPctKey(f))) return TARGET_PCT_BOUNDS;
   const def = (CONFIG_KEYS as Record<string, { range?: readonly [number, number] }>)[key];
   return def?.range ?? null;
 }
@@ -1047,6 +1058,20 @@ export function renderRuleSchemaDoc(): string {
         out.push(`| \`${s.key}\` | ${cell(JSON.stringify(d.default))} | ${allowed} |`);
       }
     }
+    out.push("");
+    out.push(
+      "Target (FAM-010, D-1224; optional, set only by a pre-registered challenger; absent = no target = v1 behaviour; counted under the O-46 cap; give at most one):",
+    );
+    out.push("");
+    out.push("| Key | Bounds | Meaning |");
+    out.push("|---|---|---|");
+    const [rKey, pctKey] = targetKeysOf(fam);
+    out.push(
+      `| \`${rKey}\` | ${TARGET_R_BOUNDS[0]} to ${TARGET_R_BOUNDS[1]} | exit at the next open after a close at or above entry + this many times (entry - initial stop) |`,
+    );
+    out.push(
+      `| \`${pctKey}\` | ${TARGET_PCT_BOUNDS[0]} to ${TARGET_PCT_BOUNDS[1]} | exit at the next open after a close at or above entry x (1 + this percent) |`,
+    );
     out.push("");
     out.push("```json");
     out.push(JSON.stringify(spec, null, 2));

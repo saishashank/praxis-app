@@ -16,7 +16,7 @@ import {
 import type { AgentParams } from "../params";
 import { roundHalfAway } from "../regime";
 import type { Family } from "../schema";
-import { planInitialStop, targetLevel, withTarget } from "./targetOf";
+import { targetLevel, withTarget } from "./targetOf";
 import type {
   CsRule,
   CsTrigger,
@@ -276,9 +276,12 @@ function evalCs(rule: CsRule, pos: PositionState): CsTrigger | null {
         ? fire(rule, `close ${pos.closeMicro} < ${rule.levelMicro}`)
         : null;
     case "target": {
-      // FAM-010: the initial stop is the tightest level of the plan's initial-stop rules at the fill.
-      const stop = planInitialStop(pos.plan, pos.fillMicro, initialStop);
-      const level = targetLevel({ r: rule.targetR, pct: rule.targetPct }, pos.fillMicro, stop);
+      // FAM-010: the initial stop is the caller's, already on D's basis (corporate actions re-based with the fill)
+      const level = targetLevel(
+        { r: rule.targetR, pct: rule.targetPct },
+        pos.fillMicro,
+        pos.initialStopMicro,
+      );
       return level !== null && pos.closeMicro >= level
         ? fire(rule, `close ${pos.closeMicro} >= target ${level}`)
         : null;

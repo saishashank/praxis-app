@@ -171,6 +171,7 @@ export function position(plan: ExitPlan, over: Partial<PositionState> = {}): Pos
     plan,
     fillDay: dayAgo(5),
     fillMicro: 2n * DOLLAR,
+    initialStopMicro: 1n * DOLLAR,
     sessionsHeld: 5,
     closeMicro: 2n * DOLLAR,
     highestCloseMicro: 2n * DOLLAR,

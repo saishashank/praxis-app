@@ -56,7 +56,7 @@ import {
   type Bar,
 } from "./indicators";
 import { insiderFlowFor, insiderSinceIso } from "./insiderFlow";
-import { crossing, scaleMicro, type Crossing } from "./orderPlan";
+import { crossing, initialStopAtFill, scaleMicro, type Crossing } from "./orderPlan";
 import type { AgentParams } from "./params";
 import { benchmarkIndexOf, homeProfile } from "@/lib/market/staticProfile.mjs";
 import { computeRegime, type RegimeResult, type RegimeLabel } from "./regime";
@@ -642,6 +642,10 @@ export function positionState(
     plan: { ...plan.plan, cs },
     fillDay: trade.fillD,
     fillMicro,
+    initialStopMicro: scaleMicro(
+      initialStopAtFill(plan, trade.fillMicro, atFill.priceFactor),
+      sinceFill.priceFactor,
+    ),
     sessionsHeld: held,
     closeMicro: facts.bar.close,
     highestCloseMicro: highest,

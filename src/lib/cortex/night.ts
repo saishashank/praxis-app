@@ -1457,6 +1457,7 @@ export function wouldHaveOutcome(input: WouldHaveInput): WouldHaveOutcome | null
       plan: input.plan,
       fillDay: first.d,
       fillMicro: fill.fillPriceMicro,
+      initialStopMicro: stop,
       sessionsHeld: i + 1,
       closeMicro: b.close,
       highestCloseMicro: highest,

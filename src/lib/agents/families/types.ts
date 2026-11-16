@@ -336,6 +336,11 @@ export type PositionState = {
   /** Entry fill session and price (raw micro). */
   readonly fillDay: string;
   readonly fillMicro: bigint;
+  /**
+   * The initial stop in force, on the basis of D (FAM-010: the target risk is entry - this). Callers re-base it
+   * with the same corporate-action factors as the fill, so a split while held moves target and fill together.
+   */
+  readonly initialStopMicro: bigint;
   /** Sessions held counting the entry fill session as 1, as of D. */
   readonly sessionsHeld: number;
   readonly closeMicro: bigint;

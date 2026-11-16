@@ -4,7 +4,7 @@
 // the v1 plan, byte for byte. Exact integer micro arithmetic and rationals only; no float on a money path.
 import { divCeil, parseRational, type Rational } from "@/lib/money/rational";
 import type { Family } from "../schema";
-import type { CsRule, ExitPlan, StopSpec } from "./types";
+import type { CsRule, ExitPlan } from "./types";
 
 /** Bounds of the two keys (FAM-010: 1.0 to 5.0 times the initial risk; 5 to 50 percent). */
 export const TARGET_R_BOUNDS = [1, 5] as const; // threshold-ok: FAM-010 bounds
@@ -57,12 +57,19 @@ export function checkTargetParams(
   return errors;
 }
 
-/** The family's target from a rule version's params_json, or undefined (no target, or invalid). */
+/** A stored target value that is invalid (it should have been refused at registration, D-1250). */
+export class InvalidTargetParams extends Error {}
+
+/**
+ * The family's target from a rule version's params_json, or undefined (no target key). An invalid stored
+ * value throws: a challenger with a bad target must not silently run as "no target".
+ */
 export function targetFromParams(
   family: Family,
   params: Readonly<Record<string, unknown>>,
 ): TargetParams | undefined {
-  if (checkTargetParams(family, params).length > 0) return undefined;
+  const problems = checkTargetParams(family, params);
+  if (problems.length > 0) throw new InvalidTargetParams(problems.join("; "));
   const r = params[targetRKey(family)];
   const pct = params[targetPctKey(family)];
   if (isFinite_(r)) return { r: parseRational(decimalText(r)), pct: null };
@@ -81,8 +88,9 @@ export function targetLevel(
   stopMicro: bigint,
 ): bigint | null {
   if (t.r !== null) {
+    // a stop that is unavailable (cold ATR gives 0) or not below the entry gives no R target
     const risk = entryMicro - stopMicro;
-    if (risk <= 0n) return null;
+    if (stopMicro < 1n || risk <= 0n) return null;
     return entryMicro + divCeil(t.r.num * risk, t.r.den);
   }
   if (t.pct !== null) return divCeil(entryMicro * (t.pct.den + t.pct.num), t.pct.den);
@@ -104,20 +112,6 @@ export function targetOf(
     if (t !== undefined) return targetLevel(t, entryMicro, initialStopMicro);
   }
   return null;
-}
-
-/** The tightest initial stop of a plan at an entry fill (ARN-021: the highest level of its initial-stop rules). */
-export function planInitialStop(
-  plan: ExitPlan,
-  fillMicro: bigint,
-  stopOf: (spec: StopSpec, fill: bigint) => bigint,
-): bigint {
-  let level = 0n;
-  for (const rule of plan.initialStops) {
-    const s = stopOf(rule.spec, fillMicro);
-    if (s > level) level = s;
-  }
-  return level < 1n ? 1n : level;
 }
 
 /** The plan with the family's target appended LAST, so every existing CS rule keeps its precedence. */

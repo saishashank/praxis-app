@@ -7,6 +7,7 @@ import { COST_PROFILES } from "@/lib/arena/costs";
 import { csExitSlippedPrice, fillCloseSignalExit, type FillEnv } from "@/lib/arena/fills";
 import { evaluateExit, f1Plan, f4Plan } from "@/lib/agents/families/exits";
 import {
+  InvalidTargetParams,
   targetFromParams,
   targetLevel,
   targetOf,
@@ -32,7 +33,14 @@ const tgt = (r: [bigint, bigint] | null, pct: [bigint, bigint] | null): ExitPlan
     pct: pct === null ? null : makeRational(pct[0], pct[1]),
   });
 const at = (plan: ExitPlan, close: bigint) =>
-  evaluateExit(position(plan, { fillMicro: ENTRY, closeMicro: close, sessionsHeld: 3 }));
+  evaluateExit(
+    position(plan, {
+      fillMicro: ENTRY,
+      initialStopMicro: STOP,
+      closeMicro: close,
+      sessionsHeld: 3,
+    }),
+  );
 
 describe("target price (hand-computed)", () => {
   it("2R: 10_000_000 + 2 x (10_000_000 - 9_000_000) = 12_000_000", () => {
@@ -58,7 +66,10 @@ describe("target price (hand-computed)", () => {
     expect(targetOf({ f1_target_r: 2 }, ENTRY, STOP)).toBe(12_000_000n);
     expect(targetOf({ f4_target_pct: 10 }, ENTRY, STOP)).toBe(11_000_000n);
     expect(targetOf({ f1_trail_atr: 3 }, ENTRY, STOP)).toBeNull();
-    expect(targetOf({ f1_target_r: 9 }, ENTRY, STOP)).toBeNull(); // out of bounds: no target
+    // an invalid stored value is refused loudly, never read as "no target" (D-1250)
+    expect(() => targetOf({ f1_target_r: 9 }, ENTRY, STOP)).toThrow(InvalidTargetParams);
+    // a missing stop (cold ATR gives 0) gives no R target
+    expect(targetLevel({ r: makeRational(2n), pct: null }, ENTRY, 0n)).toBeNull();
   });
 });
 
@@ -80,6 +91,7 @@ describe("trigger at the close", () => {
     const ev = evaluateExit(
       position(plan, {
         fillMicro: ENTRY,
+        initialStopMicro: STOP,
         closeMicro: 12_500_000n,
         closeAboveExitSma: true,
         sessionsHeld: 3,
@@ -100,10 +112,12 @@ describe("trigger at the close", () => {
       "target",
     ]);
   });
-  it("a version without a target keeps the exact v1 parameters hash; both keys give none", () => {
+  it("a version without a target keeps the exact v1 parameters hash; both keys are refused", () => {
     const p = defaultAgentParams();
     expect(agentParamsSha(paramsWithVersion(p, "F1", {}))).toBe(agentParamsSha(p));
-    expect(targetFromParams("F1", { f1_target_r: 2, f1_target_pct: 10 })).toBeUndefined();
+    expect(() => targetFromParams("F1", { f1_target_r: 2, f1_target_pct: 10 })).toThrow(
+      InvalidTargetParams,
+    );
   });
 });
 
