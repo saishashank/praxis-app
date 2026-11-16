@@ -3,6 +3,7 @@
 // is the session user's, never a parameter). Owner-only fields (the sharing acknowledgement trail) are
 // absent for Editors and Viewers.
 import { getQuietHours, type QuietHours } from "@/lib/alerts/api";
+import { ownerTools } from "@/lib/preferences/ownerTools";
 import { getPreferences, THEMES, type Preferences } from "@/lib/preferences/service";
 import { checklist, type ChecklistItem, type ChecklistStep } from "@/lib/market/checklist";
 import { builtMarkets, loadProfile } from "@/lib/market/profile";
@@ -28,7 +29,14 @@ export type SettingsModel = {
 };
 
 export async function loadSettings(env: LoaderEnv): Promise<SettingsModel> {
-  const preferences = await getPreferences(env.auth, env.user.id);
+  const stored = await getPreferences(env.auth, env.user.id);
+  // D-1214: the Owner-tool fields reach the page only for the pinned Owner while the switch is on (ownerTools).
+  const tools = await ownerTools({ auth: env.auth, main: env.main }, env.user, process.env);
+  const preferences = {
+    ...stored,
+    real_capital: tools?.real_capital ?? 0,
+    broker_links: tools?.broker_links ?? [],
+  };
   const quietHours = await getQuietHours(env.auth, env.user.id);
   const m = await env.main.execute({
     sql: "SELECT code, mode, currency, enabled FROM market ORDER BY code",

@@ -54,9 +54,13 @@ describe("M13-lite keys", () => {
     for (const k of M13L_KEY_NAMES) expect(CONFIG_KEYS[k]).toBeDefined();
   });
 
-  it("the deferred polling and extraction keys are not registered (D-510)", () => {
+  it("the deferred polling and extraction keys are not registered (D-510), except the one M21 registers (D-1212)", () => {
     const names = Object.keys(CONFIG_KEYS);
-    expect(names.filter((k) => /^expert_(poll|extract|discover)/.test(k))).toEqual([]);
+    // M21 (D-1212, ch. 15 §15.11.2) registers expert_poll_items_daily; its reader is the M22 poller, so nothing else of the
+    // polling, extraction and discovery family exists yet.
+    expect(names.filter((k) => /^expert_(poll|extract|discover)/.test(k))).toEqual([
+      "expert_poll_items_daily",
+    ]);
     expect(names.filter((k) => /^llm_budget_r7/.test(k))).toEqual([]);
   });
 

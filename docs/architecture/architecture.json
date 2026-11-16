@@ -11585,6 +11585,43 @@
       }
     },
     {
+      "id": "table:main.golden_label",
+      "type": "table",
+      "name": "golden_label",
+      "purpose": "Table golden_label in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0038_m21_owner_tools.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "source",
+          "ann_id",
+          "labelled_at",
+          "actor",
+          "answer",
+          "guidance",
+          "event_confirm",
+          "tone",
+          "span"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.halt_watch",
       "type": "table",
       "name": "halt_watch",
@@ -13156,6 +13193,111 @@
       }
     },
     {
+      "id": "table:main.owner_holding",
+      "type": "table",
+      "name": "owner_holding",
+      "purpose": "Table owner_holding in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0038_m21_owner_tools.sql",
+      "attrs": {
+        "columns": [
+          "upload_id",
+          "market",
+          "code",
+          "qty",
+          "avg_cost_micro",
+          "uploaded_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.owner_trade",
+      "type": "table",
+      "name": "owner_trade",
+      "purpose": "Table owner_trade in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0038_m21_owner_tools.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "market",
+          "code",
+          "side",
+          "d",
+          "qty",
+          "price_micro",
+          "fees_micro",
+          "note",
+          "source",
+          "upload_id",
+          "entered_at",
+          "entered_by"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_owner_trade_code"
+        ]
+      }
+    },
+    {
+      "id": "table:main.owner_trade_void",
+      "type": "table",
+      "name": "owner_trade_void",
+      "purpose": "Table owner_trade_void in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0038_m21_owner_tools.sql",
+      "attrs": {
+        "columns": [
+          "trade_id",
+          "voided_at",
+          "reason"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.pattern_daily",
       "type": "table",
       "name": "pattern_daily",
@@ -14603,6 +14745,85 @@
           "ingested_at",
           "assumed_time",
           "source"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.short_shadow_decision",
+      "type": "table",
+      "name": "short_shadow_decision",
+      "purpose": "Table short_shadow_decision in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0038_m21_owner_tools.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "code",
+          "origin",
+          "book_id",
+          "rank_key",
+          "family",
+          "shortable",
+          "rule_id",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.short_shadow_outcome",
+      "type": "table",
+      "name": "short_shadow_outcome",
+      "purpose": "Table short_shadow_outcome in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0038_m21_owner_tools.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "code",
+          "origin",
+          "status",
+          "entry_d",
+          "entry_micro",
+          "exit_d",
+          "exit_micro",
+          "exit_reason",
+          "fees_micro",
+          "borrow_micro",
+          "net_micro",
+          "net_ppm",
+          "scored_at"
         ],
         "database": "main",
         "indexes": []
@@ -20786,6 +21007,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.golden_label",
+      "from": "service:turso-main",
+      "to": "table:main.golden_label",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.halt_watch",
       "from": "service:turso-main",
       "to": "table:main.halt_watch",
@@ -21214,6 +21445,36 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.owner_holding",
+      "from": "service:turso-main",
+      "to": "table:main.owner_holding",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.owner_trade",
+      "from": "service:turso-main",
+      "to": "table:main.owner_trade",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.owner_trade_void",
+      "from": "service:turso-main",
+      "to": "table:main.owner_trade_void",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.pattern_daily",
       "from": "service:turso-main",
       "to": "table:main.pattern_daily",
@@ -21605,6 +21866,26 @@
       "id": "service:turso-main|contains|table:main.short_interest",
       "from": "service:turso-main",
       "to": "table:main.short_interest",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.short_shadow_decision",
+      "from": "service:turso-main",
+      "to": "table:main.short_shadow_decision",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.short_shadow_outcome",
+      "from": "service:turso-main",
+      "to": "table:main.short_shadow_outcome",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [

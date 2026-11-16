@@ -38,6 +38,9 @@ describe("defaults and merge", () => {
       cleared_pick_emails: "on",
       intraday_candidate_emails: "on",
       picks_sort: "chance",
+      stop_hit_emails: "off", // M21 (D-1226): the effective default is the config key
+      real_capital: 0, // M21 (D-1217)
+      broker_links: [], // M21 (D-1218)
     });
     expect(DEFAULT_PREFERENCES.theme).toBe("light"); // D-884: default is light
   });

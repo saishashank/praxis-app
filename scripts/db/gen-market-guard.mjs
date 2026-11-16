@@ -36,6 +36,20 @@ export const M20_TABLES = [
   "surveillance_list",
   "trading_halt",
 ];
+/** M21 (D-1236): the guard triggers of the tables 0038 creates sit in a generated region of that migration. */
+export const M21_MIGRATION_PATH = join(DIR, "0038_m21_owner_tools.sql");
+export const M21_REGION = "guard triggers";
+/**
+ * The market-keyed tables migration 0038 creates (owner_trade_void has no market column and is not guarded).
+ * Verified against the live schema by `m21Tables()`; `--check` fails on any difference.
+ */
+export const M21_TABLES = [
+  "golden_label",
+  "owner_holding",
+  "owner_trade",
+  "short_shadow_decision",
+  "short_shadow_outcome",
+];
 /** The schema the guard is generated against: everything up to the profile migration. */
 export const GUARD_BASE_VERSION = 34;
 /** The invariant's own table must be able to record a planted row (D-995); it is never guarded. */
@@ -85,6 +99,28 @@ export async function m20Tables() {
     await migrateUp(
       db,
       all.filter((m) => m.version <= 36),
+    );
+    return (await db.execute(q)).rows.map((x) => String(x.tbl)).filter((n) => !before.has(n));
+  } finally {
+    db.close();
+  }
+}
+
+/** Tables with a `market` column after migration 0038 that were not there after 0037 (derived, sorted). */
+export async function m21Tables() {
+  const db = createClient({ url: ":memory:" });
+  try {
+    const all = await loadMigrations(DIR);
+    const q = `SELECT m.name AS tbl FROM sqlite_master m JOIN pragma_table_info(m.name) c ON c.name = 'market'
+       WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%' ORDER BY m.name`;
+    await migrateUp(
+      db,
+      all.filter((m) => m.version <= 37),
+    );
+    const before = new Set((await db.execute(q)).rows.map((x) => String(x.tbl)));
+    await migrateUp(
+      db,
+      all.filter((m) => m.version <= 38),
     );
     return (await db.execute(q)).rows.map((x) => String(x.tbl)).filter((n) => !before.has(n));
   } finally {
@@ -143,6 +179,11 @@ export function renderM20Region(tables = M20_TABLES) {
   return tables.map((t) => `-- ${t}\n${insBody(t)}\n${updBody(t)}\n`).join("\n") + "\n";
 }
 
+/** The body of the generated region of 0038: the two triggers of each M21 table. */
+export function renderM21Region(tables = M21_TABLES) {
+  return renderM20Region(tables);
+}
+
 const invoked = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (invoked) {
   const text = await renderMigration();
@@ -174,9 +215,24 @@ if (invoked) {
       process.exit(1);
     }
     console.log("0036_m20_markets_data.sql guard region matches the table list and the schema");
+    const derived21 = await m21Tables();
+    if (JSON.stringify(derived21) !== JSON.stringify([...M21_TABLES].sort())) {
+      console.error(
+        `0038 creates market-keyed tables ${derived21.join(",")} but M21_TABLES lists ${M21_TABLES.join(",")}`,
+      );
+      process.exit(1);
+    }
+    if (!applyRegion(M21_MIGRATION_PATH, M21_REGION, renderM21Region(), true)) {
+      console.error(
+        "0038_m21_owner_tools.sql guard region differs: run node scripts/db/gen-market-guard.mjs",
+      );
+      process.exit(1);
+    }
+    console.log("0038_m21_owner_tools.sql guard region matches the table list and the schema");
   } else {
     writeFileSync(MIGRATION_PATH, text);
     console.log(`wrote ${MIGRATION_PATH} (${text.split("\n").length} lines)`);
     applyRegion(M20_MIGRATION_PATH, M20_REGION, renderM20Region(), false);
+    applyRegion(M21_MIGRATION_PATH, M21_REGION, renderM21Region(), false);
   }
 }

@@ -7,9 +7,14 @@ export const STATES: Record<
   | "steelman-cards"
   | "alerts-muted"
   | "market-built-off"
-  | "blueprint-full",
+  | "blueprint-full"
+  | "owner-tools-on"
+  | "review-stored"
+  | "labels-queue",
   SeedState
 >;
 export const STATE_NAMES: string[];
+export const OPT_IN_STATES: string[];
+export const ALL_STATE_NAMES: string[];
 export function parseStates(value: string | undefined): string[];
 export function applyStates(client: Client, names: string[], nowIso?: string): Promise<string[]>;

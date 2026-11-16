@@ -1712,8 +1712,134 @@ export function parseMktKey(key: string): { code: string; field: MktKeyField } |
     : null;
 }
 
+// ---- M21 keys (ch.15 §15.11.2; docs/M21_design.md section A, D-1212, D-1213, D-1231) ----
+// Nine Owner switches and limits. The ch.15 "bool" keys are "on"/"off" text like every other Owner switch (D-1212). Phase R
+// (the Owner tools) is off in a fresh configuration; the readers of the sweep, poll and proposal keys are M22 and M23.
+
+/** A lowercase host name of 1 to 253 characters with at least one dot: no scheme, port, path, wildcard or trailing dot. */
+const HOST_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const PUBLIC_HOST_RE = new RegExp("^" + HOST_LABEL + "(?:[.]" + HOST_LABEL + ")+$");
+
+/** Empty (unset) or the public host name the Owner has bought (PLT-078). Only a confirmation, never a redirect (D-1230). */
+const validPublicDomain = async (v: unknown): Promise<string | null> =>
+  typeof v === "string" && (v === "" || (v.length <= 253 && PUBLIC_HOST_RE.test(v))) // threshold-ok: DNS name length
+    ? null
+    : "must be empty, or a lowercase host name such as praxis.example.com (no https://, port, path or wildcard)";
+
+const M21_ON_OFF = {
+  default: "off",
+  unit: "on/off",
+  editable: "O",
+  validate: oneOf(ON_OFF),
+} as const satisfies Omit<ConfigKeyDef, "ref">;
+
+const M21_KEYS = {
+  committee_enabled: { ...M21_ON_OFF, ref: "AGT-145, D-938, D-1213" },
+  intraday_sweep_enabled: { ...M21_ON_OFF, ref: "AGT-147" },
+  intraday_sweep_requests_per_slot: {
+    default: 5,
+    unit: "requests",
+    editable: "O",
+    ref: "AGT-147",
+    range: [0, 20],
+    validate: intRange(0, 20),
+  },
+  stop_hit_email_default: { ...M21_ON_OFF, ref: "EML-043, D-933" },
+  owner_real_money_tools: { ...M21_ON_OFF, ref: "UX-131, PRD-041, D-1214" },
+  app_public_domain: {
+    default: "",
+    unit: "host name",
+    editable: "O",
+    ref: "PLT-078, D-1230",
+    validate: validPublicDomain,
+  },
+  pwa_push_enabled: {
+    ...M21_ON_OFF,
+    ref: "PLT-079, D-1231",
+    validate: async (v: unknown) =>
+      v === "on" ? "Web push is not built: e-mail stays the alert channel" : oneOf(ON_OFF)(v),
+  },
+  expert_poll_items_daily: {
+    default: 150,
+    unit: "items/day",
+    editable: "O",
+    ref: "KB-082, KB-083, D-939",
+    range: [0, 500],
+    validate: intRange(0, 500),
+  },
+  llm_proposals_per_month: {
+    default: 3,
+    unit: "proposals/month",
+    editable: "O",
+    ref: "CXA-007",
+    range: [0, 10],
+    validate: intRange(0, 10),
+  },
+} as const satisfies Record<string, ConfigKeyDef>;
+
+type M21Key = keyof typeof M21_KEYS;
+
+const M21_META_TABLES: Record<M21Key, ConfigMeta> = {
+  committee_enabled: {
+    label: "The Committee (the two-sided case for each pick)",
+    area: LRN,
+    bounds:
+      "on or off; can be switched on after 10 nights with the case-writing check at 98 % or better",
+    input: "text",
+  },
+  intraday_sweep_enabled: {
+    label: "Midday market sweep for extra candidates",
+    area: OTH,
+    bounds: "on or off",
+    input: "text",
+  },
+  intraday_sweep_requests_per_slot: {
+    label: "Requests the midday sweep may make in one slot",
+    area: OTH,
+    bounds: "whole number, 0 to 20",
+    input: "int",
+  },
+  stop_hit_email_default: {
+    label: "E-mail me when a pick reaches its stop (the default for each person)",
+    area: SEM,
+    bounds: "on or off",
+    input: "text",
+  },
+  owner_real_money_tools: {
+    label: "Owner tools for real money (recommendations, holdings and trades)",
+    area: OTH,
+    bounds: "on or off; every change is recorded in the audit log",
+    input: "text",
+  },
+  app_public_domain: {
+    label: "The public web address of the app, once you have bought one",
+    area: OTH,
+    bounds: "empty, or a lowercase host name such as praxis.example.com",
+    input: "text_optional",
+  },
+  pwa_push_enabled: {
+    label: "Push notifications on installed devices",
+    area: OTH,
+    bounds: "off only: web push is not built and e-mail stays the alert channel",
+    input: "text",
+  },
+  expert_poll_items_daily: {
+    label: "Most items the expert poller reads in a day",
+    area: LRN,
+    bounds: "whole number, 0 to 500",
+    input: "int",
+  },
+  llm_proposals_per_month: {
+    label: "Most model-written proposals for the Owner to review in a month",
+    area: LRN,
+    bounds: "whole number, 0 to 10",
+    input: "int",
+  },
+};
+
 export const CONFIG_KEYS = {
   ...MKT_KEYS,
+  ...M21_KEYS,
   ...M4_RANGED_KEYS,
   ...M4_FIXED_KEYS,
   ...M5_RANGED_KEYS,
@@ -2268,7 +2394,7 @@ export type ConfigArea =
   | "Sentinel and email"
   | "Learning and knowledge"
   | "Other";
-export type ConfigInput = "int" | "number" | "list" | "object" | "text" | "bool";
+export type ConfigInput = "int" | "number" | "list" | "object" | "text" | "text_optional" | "bool";
 export type ConfigMeta = { label: string; area: ConfigArea; bounds: string; input: ConfigInput };
 
 /** Plain-English headings for the Configuration page (UXN-030); the area ids above stay stable. */
@@ -2319,6 +2445,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   ...M11L_META_TABLES,
   ...M13L_META_TABLES,
   ...MOVERS_META_TABLES,
+  ...M21_META_TABLES,
   evening_review_time: {
     label: "Evening Review send time",
     area: SEM,
@@ -2683,6 +2810,9 @@ export const M15_KEY_NAMES: readonly ConfigKey[] = [
   ...M15_RANGED.map((r) => r[0]),
   ...M15_FIXED.map((r) => r[0]),
 ];
+
+/** Every key added in M21 (docs/M21_design.md section A, D-1212): the nine §15.11.2 keys. */
+export const M21_KEY_NAMES: readonly ConfigKey[] = Object.keys(M21_KEYS) as M21Key[];
 
 /**
  * The Cortex keys whose Owner edit is a charged trial and refits the map (CTX-072): every editable

@@ -29,6 +29,7 @@ import { builtMarkets } from "@/lib/market/seed/index.mjs";
 import type { Client, Transaction } from "@libsql/client";
 import { auditTx, NO_META, type RequestMeta } from "@/lib/auth/audit";
 import type { AuthEnv } from "@/lib/auth/env";
+import { parseBrokerLinks, readBrokerLinks, type BrokerLink } from "./brokerTemplate";
 
 export const THEMES = ["dark", "light", "system", "midnight", "dim", "high_contrast"] as const;
 export const TIME_FORMATS = ["24h", "12h"] as const;
@@ -74,7 +75,19 @@ export type Preferences = {
   intraday_candidate_emails: OnOff;
   /** Pick order on Picks and Home; `sortPicks(rows, basis)` takes exactly these two values. */
   picks_sort: PickSort;
+  /**
+   * E-mail when a pick reaches its stop (EML-043, D-1226). The role-blind default here is "off"; the effective default
+   * is the config key `stop_hit_email_default` while the field is not stored (see PICK_FIELDS, effectiveStopHitEmails).
+   */
+  stop_hit_emails: OnOff;
+  /** The Owner's own capital for sizing, whole units of the home-market currency, 0 = not set (D-1217). Owner only. */
+  real_capital: number;
+  /** Up to five broker link templates the Owner typed (D-1218). Owner only. */
+  broker_links: BrokerLink[];
 };
+
+/** Whole units of the home-market currency the Owner may enter as capital (D-1217). */
+export const REAL_CAPITAL_MAX = 10_000_000; // threshold-ok: input bound of a typed amount
 
 /** Fields that are stored only once the user chose them (their default depends on role or on config). */
 export const PICK_FIELDS = [
@@ -82,7 +95,13 @@ export const PICK_FIELDS = [
   "cleared_pick_emails",
   "intraday_candidate_emails",
   "picks_sort",
+  "stop_hit_emails",
 ] as const;
+
+/** Structured fields have their own validators and are written by the Owner only (D-1217, D-1218). */
+export const STRUCTURED_FIELDS = ["real_capital", "broker_links"] as const;
+type StructuredField = (typeof STRUCTURED_FIELDS)[number];
+type EnumField = Exclude<keyof Preferences, StructuredField>;
 
 export const DEFAULT_PREFERENCES: Readonly<Preferences> = Object.freeze({
   theme: "light", // D-884: Owner 2026-11-04 "white background, navy blue" (was dark, O-35)
@@ -97,9 +116,12 @@ export const DEFAULT_PREFERENCES: Readonly<Preferences> = Object.freeze({
   cleared_pick_emails: "on",
   intraday_candidate_emails: "on",
   picks_sort: "chance",
+  stop_hit_emails: "off",
+  real_capital: 0,
+  broker_links: [],
 });
 
-const ALLOWED: { [K in keyof Preferences]: readonly string[] } = {
+const ALLOWED: { [K in EnumField]: readonly string[] } = {
   theme: THEMES,
   default_market: builtMarkets(),
   time_format: TIME_FORMATS,
@@ -112,8 +134,19 @@ const ALLOWED: { [K in keyof Preferences]: readonly string[] } = {
   cleared_pick_emails: ON_OFF,
   intraday_candidate_emails: ON_OFF,
   picks_sort: PICK_SORTS,
+  stop_hit_emails: ON_OFF,
 };
-const FIELDS = Object.keys(ALLOWED) as Array<keyof Preferences>;
+const ENUM_FIELDS = Object.keys(ALLOWED) as EnumField[];
+const FIELDS = [...ENUM_FIELDS, ...STRUCTURED_FIELDS] as Array<keyof Preferences>;
+
+const isWholeCapital = (v: unknown): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= REAL_CAPITAL_MAX;
+
+/** The stop-hit e-mail setting in force: the stored choice, else the config default (D-1226). */
+export function effectiveStopHitEmails(stored: string | null, configDefault: unknown): OnOff {
+  if (stored === "on" || stored === "off") return stored;
+  return configDefault === "on" ? "on" : "off";
+}
 
 export type PrefError = "invalid" | "forbidden" | "unavailable";
 export type PrefResult = { ok: true; changed: string[] } | { ok: false; error: PrefError };
@@ -123,14 +156,17 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 
 // Defaults overlaid with every stored value that is still valid; anything else keeps its default.
 function merge(raw: unknown): Preferences {
-  const out: Record<string, string> = { ...DEFAULT_PREFERENCES };
+  const out: Record<string, unknown> = { ...DEFAULT_PREFERENCES };
   if (isRecord(raw)) {
-    for (const f of FIELDS) {
+    for (const f of ENUM_FIELDS) {
       const v = raw[f];
       if (typeof v === "string" && ALLOWED[f].includes(v)) out[f] = v;
     }
   }
-  return out as Preferences;
+  const o = out as unknown as Preferences;
+  o.real_capital = isRecord(raw) && isWholeCapital(raw.real_capital) ? raw.real_capital : 0;
+  o.broker_links = isRecord(raw) ? readBrokerLinks(raw.broker_links) : [];
+  return o;
 }
 
 function parseStored(json: unknown): unknown {
@@ -178,18 +214,25 @@ async function storedPickKeys(db: Pick<Client, "execute">, userId: number): Prom
   });
   const v = r.rows.length ? parseStored(r.rows[0].prefs_json) : null;
   const out = new Set<string>();
-  if (isRecord(v)) for (const f of PICK_FIELDS) if (f in v) out.add(f);
+  if (isRecord(v)) for (const f of [...PICK_FIELDS, ...STRUCTURED_FIELDS]) if (f in v) out.add(f);
   return out;
 }
 
 // Whole-patch validation: any unknown key or invalid value rejects everything.
 function validate(patch: unknown): Partial<Preferences> | null {
   if (!isRecord(patch)) return null;
-  const clean: Record<string, string> = {};
+  const clean: Record<string, unknown> = {};
   for (const key of Object.keys(patch)) {
     if (!(FIELDS as string[]).includes(key)) return null;
     const v = patch[key];
-    if (typeof v !== "string" || !ALLOWED[key as keyof Preferences].includes(v)) return null;
+    if (key === "real_capital") {
+      if (!isWholeCapital(v)) return null;
+    } else if (key === "broker_links") {
+      const links = parseBrokerLinks(v);
+      if (links === null) return null;
+      clean[key] = links;
+      continue;
+    } else if (typeof v !== "string" || !ALLOWED[key as EnumField].includes(v)) return null;
     clean[key] = v;
   }
   return clean as Partial<Preferences>;
@@ -200,9 +243,11 @@ function storable(
   next: Preferences,
   clean: Partial<Preferences>,
   explicit: ReadonlySet<string>,
-): Record<string, string> {
-  const out: Record<string, string> = { ...next };
-  for (const f of PICK_FIELDS) if (!(f in clean) && !explicit.has(f)) delete out[f];
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...next };
+  for (const f of [...PICK_FIELDS, ...STRUCTURED_FIELDS]) {
+    if (!(f in clean) && !explicit.has(f)) delete out[f];
+  }
   return out;
 }
 
@@ -210,7 +255,7 @@ export async function updatePreferences(
   db: Client,
   env: AuthEnv,
   meta: RequestMeta | undefined,
-  actor: { id: number },
+  actor: { id: number; pinnedOwner?: boolean },
   patch: unknown,
   now: Date = new Date(),
 ): Promise<PrefResult> {
@@ -223,11 +268,18 @@ export async function updatePreferences(
     return { ok: false, error: "unavailable" };
   }
   try {
+    // rows-ok: app_user primary-key read
     const who = await tx.execute({
-      sql: "SELECT 1 FROM app_user WHERE id = ? AND status = 'active'",
+      sql: "SELECT role FROM app_user WHERE id = ? AND status = 'active'",
       args: [actor.id],
     });
-    if (!who.rows.length) {
+    // The Owner's own tools (capital, broker templates) are for the PINNED Owner only (D-1214, D-1217, D-1218): the caller
+    // passes pinnedOwner from isPinnedOwner (role owner and the pinned e-mail); any other actor is forbidden.
+    const ownerOnly = (STRUCTURED_FIELDS as readonly string[]).some((f) => f in clean);
+    if (
+      !who.rows.length ||
+      (ownerOnly && (actor.pinnedOwner !== true || String(who.rows[0]!.role) !== "owner"))
+    ) {
       await tx.rollback();
       return { ok: false, error: "forbidden" };
     }
@@ -238,8 +290,10 @@ export async function updatePreferences(
     // A pick field counts as changed when it is chosen for the first time, even to its default.
     const changed = FIELDS.filter(
       (f) =>
-        next[f] !== cur[f] ||
-        ((PICK_FIELDS as readonly string[]).includes(f) && f in clean && !explicit.has(f)),
+        JSON.stringify(next[f]) !== JSON.stringify(cur[f]) ||
+        (([...PICK_FIELDS, ...STRUCTURED_FIELDS] as readonly string[]).includes(f) &&
+          f in clean &&
+          !explicit.has(f)),
     );
     if (!changed.length) {
       await tx.rollback();
