@@ -1,0 +1,8 @@
+{
+  "$comment": "M21 B3 (D-1222, D-1265): the tax report CSV. A test file must mention the path.",
+  "routes": {
+    "GET /api/reports/tax": {
+      "tests": ["tests/tax/page.test.tsx", "tests/acceptance/v3/at78Tax.test.ts"]
+    }
+  }
+}

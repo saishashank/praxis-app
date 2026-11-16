@@ -48,6 +48,7 @@ export const KNOWN_ROUTE_PATTERNS: readonly string[] = [
   "/api/market/[code]/overview",
   "/api/market/search",
   "/api/news/[id]",
+  "/api/reports/tax",
   "/api/test-identity/login",
   "/apple-icon.png",
   "/audit",
@@ -88,6 +89,7 @@ export const KNOWN_ROUTE_PATTERNS: readonly string[] = [
   "/reviews/learned/compare",
   "/reviews/learned/families/[family]",
   "/reviews/learned/lessons/[id]",
+  "/reviews/tax",
   "/reviews/techniques",
   "/robots.txt",
   "/settings",
@@ -112,4 +114,7 @@ export const KNOWN_ROUTE_PATTERNS: readonly string[] = [
 ];
 
 /** Route handlers that set Content-Disposition: they take the SEC-014 export rate limit. */
-export const GENERATED_EXPORT_ROUTES: readonly string[] = ["/api/blueprint/export"];
+export const GENERATED_EXPORT_ROUTES: readonly string[] = [
+  "/api/blueprint/export",
+  "/api/reports/tax",
+];

@@ -16,4 +16,11 @@ export const REVIEWS_PAGES: PageEntry[] = [
     action: "read",
     h1: "Glossary",
   },
+  // M21 B3 (D-1223): the paper tax report is Owner only (the "admin" action) and always available.
+  {
+    file: "src/app/(app)/reviews/tax/page.tsx",
+    path: "/reviews/tax",
+    action: "admin",
+    h1: "Tax report",
+  },
 ];
