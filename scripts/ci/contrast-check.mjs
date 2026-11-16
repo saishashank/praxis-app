@@ -107,6 +107,18 @@ export const V2_PAIRS = V2_HUES.flatMap((h) => {
 });
 PAIRS.push(...V2_PAIRS);
 
+// M21 C5 (UXN-320 d, D-1205, D-1315): the muted status bands (Banner tones info / warn / stale and the status
+// strip's neutral state). Text and muted text must pass on each band; the warning tone's own text colour sits on
+// the warn band.
+export const BANDS = ["info", "warn", "stale", "neutral"];
+PAIRS.push(
+  ...BANDS.flatMap((b) => [
+    ["text", `band-${b}`, "text"],
+    ["text-muted", `band-${b}`, "text"],
+  ]),
+  ["warning", "band-warn", "text"],
+);
+
 export const THEME_NAMES = ["dark", "light", "midnight", "dim", "high_contrast"];
 
 export function threshold(theme, kind) {
@@ -139,6 +151,7 @@ function declarations(body) {
   const out = {};
   for (const m of body.matchAll(/--color-([a-z0-9-]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();
   for (const m of body.matchAll(/--(tint-[a-z]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();
+  for (const m of body.matchAll(/--(band-[a-z]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();
   return out;
 }
 
@@ -199,6 +212,8 @@ export function resolveBg(t, spec) {
   return mixHex(t[base], t[`${tint}-fill`], Number(strength[1]) / 100);
 }
 
+const tokenName = (k) => (/^(band|tint)-/.test(k) ? `--${k}` : `--color-${k}`);
+
 export function check(css) {
   const themes = parseThemes(css);
   const results = [];
@@ -213,7 +228,7 @@ export function check(css) {
     for (const [fg, bg, kind] of PAIRS) {
       const bgHex = resolveBg(t, bg);
       if (!t[fg] || !bgHex) {
-        failures.push(`${name}: missing --color-${!t[fg] ? fg : bg}`);
+        failures.push(`${name}: missing ${tokenName(!t[fg] ? fg : bg)}`);
         continue;
       }
       const r = ratio(t[fg], bgHex);
@@ -228,7 +243,7 @@ export function check(css) {
   if (themes["system-dark"] && themes.dark) {
     for (const k of Object.keys(themes.dark)) {
       if (themes["system-dark"][k] !== themes.dark[k]) {
-        failures.push(`system dark block differs from dark theme at --color-${k}`);
+        failures.push(`system dark block differs from dark theme at ${tokenName(k)}`);
       }
     }
   }

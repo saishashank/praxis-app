@@ -45,12 +45,15 @@ export function EmptyState({
   );
 }
 
-export type BannerTone = "info" | "warning" | "danger";
+export type BannerTone = "info" | "warning" | "stale" | "danger";
 
-const BANNER_TONE: Record<BannerTone, string> = {
-  info: "text-text",
-  warning: "text-warning",
-  danger: "text-danger",
+/** Text colour and muted band per tone (UXN-320 d, D-1205): the band token is per theme in palette.tokens.json;
+ * `danger` keeps the plain surface because its red text and border already carry it. */
+const BANNER_TONE: Record<BannerTone, { text: string; band?: string; bg?: string }> = {
+  info: { text: "text-text", band: "info", bg: "bg-[var(--band-info)]" },
+  warning: { text: "text-warning", band: "warn", bg: "bg-[var(--band-warn)]" },
+  stale: { text: "text-text", band: "stale", bg: "bg-[var(--band-stale)]" },
+  danger: { text: "text-danger" },
 };
 
 /** A notice under the header or above a section. `danger` and `warning` announce themselves. */
@@ -66,9 +69,11 @@ export function Banner({
   return (
     <div
       role={tone === "info" ? "status" : "alert"}
+      data-band={BANNER_TONE[tone].band}
       className={cn(
-        "flex min-w-0 items-start gap-2 rounded-lg border border-border bg-surface p-3 text-sm break-words",
-        BANNER_TONE[tone],
+        "flex min-w-0 items-start gap-2 rounded-lg border border-border p-3 text-sm break-words",
+        BANNER_TONE[tone].bg ?? "bg-surface",
+        BANNER_TONE[tone].text,
       )}
     >
       {tone === "info" ? (
@@ -88,7 +93,7 @@ export function Banner({
 export function StaleBanner({ status }: { status: Staleness }) {
   if (status.state === "fresh") return null;
   return (
-    <Banner tone="warning" title={status.state === "missing" ? "No data yet" : "Out of date"}>
+    <Banner tone="stale" title={status.state === "missing" ? "No data yet" : "Out of date"}>
       {status.text}
     </Banner>
   );

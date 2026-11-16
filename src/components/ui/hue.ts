@@ -16,3 +16,8 @@ export function hueStyle(hue: string): CSSProperties {
 export const BAND_BG = "color-mix(in srgb, var(--h-fill) var(--tint-band), var(--color-surface))";
 /** Lighter tint for tiles and pills (`--tint-tile`). */
 export const TILE_BG = "color-mix(in srgb, var(--h-fill) var(--tint-tile), var(--color-surface-2))";
+
+/** The muted status bands (UXN-320 d, D-1205) are not hue tints: each is a solid per-theme token
+ * (`--band-info`, `--band-warn`, `--band-stale`, `--band-neutral` in palette.tokens.json), checked by
+ * scripts/ci/contrast-check.mjs for text on the band. `Banner` and `StatusStrip` use them as `bg-[var(--band-*)]`. */
+export const STATUS_BANDS = ["info", "warn", "stale", "neutral"] as const;

@@ -81,7 +81,7 @@ jobs:
           npx playwright test
           e2e/a11y.spec.ts e2e/home.spec.ts e2e/honesty.spec.ts e2e/keyboard.spec.ts
           e2e/m14-data-files.spec.ts e2e/m16-blueprint-access.spec.ts e2e/m16-blueprint-page.spec.ts
-          e2e/m16-blueprint-walk.spec.ts e2e/m21-owner-tools-access.spec.ts e2e/m21-pwa.spec.ts e2e/market-off.spec.ts e2e/mobile.spec.ts e2e/owner-flow.spec.ts
+          e2e/m16-blueprint-walk.spec.ts e2e/m21-owner-tools-access.spec.ts e2e/m21-pwa.spec.ts e2e/m21-theme-emulation.spec.ts e2e/market-off.spec.ts e2e/mobile.spec.ts e2e/owner-flow.spec.ts
           e2e/pages.spec.ts
           e2e/reviews.spec.ts e2e/roles.spec.ts e2e/security-headers.spec.ts e2e/selection.spec.ts
           e2e/settings.spec.ts e2e/shell.spec.ts e2e/signed-out.spec.ts e2e/vibrancy.spec.ts
