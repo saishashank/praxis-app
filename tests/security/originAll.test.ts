@@ -209,7 +209,10 @@ describe("SEC-011: writes to server actions need our own origin", () => {
   it("every action is guarded: it reads the session or is the sign-in / sign-out action", () => {
     const open = actions.filter((a) => {
       const src = fs.readFileSync(path.join(ROOT, a.file), "utf8");
-      return !/requireUser|getCurrentUser|signIn\(|signOut\(|authorize\(/.test(src);
+      // M21 B1: the Owner-tools actions read the session through requireOwnerTools (D-1247)
+      return !/requireUser|requireOwnerTools|getCurrentUser|signIn\(|signOut\(|authorize\(/.test(
+        src,
+      );
     });
     expect(open.map((a) => a.id)).toEqual([]);
   });

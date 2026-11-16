@@ -3,6 +3,7 @@
 // (DAT-124), decided in the loader. At most `picks_max_per_family` picks per family are shown.
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/guard";
+import { ownerToolsVisibleTo } from "@/lib/auth/ownerToolsGuard";
 import { envFor } from "@/lib/ui/loaders/shell";
 import {
   historyFilterOf,
@@ -65,6 +66,18 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
   const chips = model.realD ? await loadAlertChips(env, model.realD) : new Map();
   const intraday = await loadIntraday(env);
   const portfolio = await loadPickPortfolio(env);
+  // M21 D-1214, D-1219: the Owner's tier label and broker links ride on the tile through its `extra` slot, computed only
+  // when the one hidden-route predicate says the tools are visible to this user; the module is loaded then and only then.
+  const extras = (await ownerToolsVisibleTo(user))
+    ? await (
+        await import("@/lib/ownerTools/pickExtras")
+      ).pickExtras({
+        user,
+        market: env.market,
+        profile: model.profile,
+        picks: picks.map((p) => ({ id: p.id, code: p.stock })),
+      })
+    : null;
 
   return (
     <main className="mx-auto flex w-full max-w-4xl min-w-0 flex-col gap-4 px-4 py-6">
@@ -119,6 +132,7 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
                 masked={model.masked}
                 beatsLuck={model.success?.beatsLuck ?? false}
                 chip={chips.get(`${model.realD}.${model.profile}.${p.rank}`) ?? null}
+                extra={extras?.get(p.id) ?? null}
               />
             </li>
           ))}

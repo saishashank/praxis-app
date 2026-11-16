@@ -855,6 +855,11 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1257 | C1 (frame, F): ReviewFrame shortens the frame to 320 px, reads documentElement.scrollHeight of the frame document on load and on window resize, and sets that... |
 | D-1258 | C1 (names, D-1206): displayName(name, { code }) keeps the word equal to the code in capitals; it is applied to the pick company (picks.ts), the review's new-... |
 | D-1259 | C1 (hand-off to C3): the signature C3 uses at pickAlerts.ts:239 is displayName(name, { code }), where code is the row's own instrument code; a missing or emp... |
+| D-1260 | B1 (picks isolation and the guard predicate): src/lib/ownerTools/ joins the allow-list of tests/picks/isolation.test.ts (it imports sizeForAmount and reads t... |
+| D-1261 | B1 (recommendations): the page groups tonight's picks by tier (Turbo, Balanced, Steady) and sizes each pick on its own against the whole of real_capital (lim... |
+| D-1262 | B1 (holdings): the current set is the upload with the greatest upload_id of the market (the id is the compact ISO instant plus a random suffix, so it sorts b... |
+| D-1263 | B1 (layout and menu): (owner-tools)/layout.tsx renders its children and nothing else, so a request a page guard turns away shows no text of the section; the... |
+| D-1264 | B1 (forms): the capital, broker-template and holdings forms post to server actions that call requireOwnerTools first; capital and templates are written throu... |
 | D-1265 | B3 (access): /reviews/tax and /api/reports/tax are not under the owner-tools prefix; both call requireUser("admin") (403 for others; the route uses withAuth,... |
 | D-1266 | B3 (log edge cases): a sale with no earlier buy in the log, or the uncovered part of one, is flagged with no cost and no gain; voided trades are left out in... |
 | D-1267 | B3 (paper-book edge cases): a cash merger, scrip merger or delisting (a zero-ratio ca_adjust) is a disposal on the ex-date in BOTH columns: proceeds are the... |

@@ -35,7 +35,10 @@ const read = (f: string) => fs.readFileSync(f, "utf8");
 // ---- static sweep ------------------------------------------------------------------------------
 
 // Hrefs that code supplies (build-time notices file, or a path passed in by page code), never stored text.
+// M21 B1 (D-1218, D-1219): "{l.href}" is the Owner-tools BrokerLinks link, allowed in that one file only, built by `brokerUrl` from an https template the
+// Owner typed (validated, only the encoded code and market filled in); it is never stored third-party text.
 const PROP_HREFS = ["{a.href}", "{s.href}", "{c.sortHref}", "{moreHref}", "{href}"];
+const BROKER_LINKS_FILE = "src/components/ownerTools/BrokerLinks.tsx";
 
 describe("no code path turns stored text into markup", () => {
   it("has no HTML or markdown sink in src (React escapes every text child)", () => {
@@ -65,6 +68,7 @@ describe("no code path turns stored text into markup", () => {
     const PINNED = new Set(["{a.url}", "{item.url}", ...PROP_HREFS]);
     const bad: string[] = [];
     const seenPinned = new Set<string>();
+    let seenBroker = false;
     for (const f of sources.filter((x) => x.endsWith(".tsx"))) {
       for (const m of read(f).matchAll(/<a\b([^>]*?)>/gs)) {
         const attrs = m[1];
@@ -74,6 +78,7 @@ describe("no code path turns stored text into markup", () => {
         const literalHttps = /^"https:\/\/[^"\s]+"$/.test(href);
         const internal = /^"[/#][^"]*"$/.test(href) || /^\{`[/#]/.test(href);
         if (PINNED.has(href)) seenPinned.add(href);
+        else if (href === "{l.href}" && rel(f) === BROKER_LINKS_FILE) seenBroker = true;
         else if (!literalHttps && !internal) bad.push(where);
         if (
           /target=("_blank"|\{"_blank"\})/.test(attrs) &&
@@ -85,6 +90,7 @@ describe("no code path turns stored text into markup", () => {
     }
     expect(bad).toEqual([]);
     expect([...seenPinned].sort()).toEqual(["{a.url}", "{item.url}", ...PROP_HREFS].sort());
+    expect(seenBroker).toBe(true);
   });
 
   it("no stored URL reaches an href except through the loaders that call safeSourceUrl", () => {
