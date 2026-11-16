@@ -870,3 +870,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1272 | C3 (quiet hours and the cap for the stop-hit mail): during a user's quiet hours the stop-hit mail is neither sent nor claimed and is not held to a digest (pi... |
 | D-1273 | C3 (template, AU unchanged): the stop-hit text is a new stop_hit variant of renderPickCleared; the below_stop and above_chase_cap variants, the hit mail and... |
 | D-1274 | C3 (My alerts UI): a muted alert shows a "Muted" chip with "Unmute"; mute and unmute each show a toast with Undo that runs the opposite action (the toast is... |
+| D-1280 | P1 (service worker scope, supersedes the page cache in D-1231): the worker caches no page at all, including / and /picks, because a signed-in page carries us... |
+| D-1281 | P1 (domain check): appBaseUrl takes an optional run context { publicDomain }; with a domain set the host must equal it (case-insensitive; https, no path, por... |
+| D-1282 | P1 (offline badge and install row): OfflineBadge (root layout, client only, useSyncExternalStore on online/offline) reads "Offline: the figures shown may be... |
+| D-1283 | P1 (no push, tested): tests/security/noPush.test.ts scans src and public for push subscription, permission request and notification calls and checks the pwa_... |

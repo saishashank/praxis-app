@@ -1,6 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { connection } from "next/server";
 import localFont from "next/font/local";
+import { OfflineBadge } from "@/components/pwa/OfflineBadge";
+import { RegisterSW } from "@/components/pwa/RegisterSW";
 import { currentLook } from "@/lib/preferences/current";
 import "./globals.css";
 import "./text-size.css";
@@ -29,6 +31,9 @@ export const metadata: Metadata = {
   description: "Practice-only investment research. All trades are simulated.",
 };
 
+// M21 P1 (PLT-079): the installed app's browser bar and status bar follow the light palette.
+export const viewport: Viewport = { themeColor: "#f5f7fb", width: "device-width", initialScale: 1 };
+
 // Render per request so the CSP nonce set in the proxy reaches Next's own scripts.
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   await connection();
@@ -42,7 +47,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       data-motion={motion === "off" ? "off" : undefined}
       data-text-size={textSize === "large" ? "large" : undefined}
     >
-      <body className="min-h-screen antialiased">{children}</body>
+      <body className="min-h-screen antialiased">
+        {children}
+        <OfflineBadge />
+        <RegisterSW />
+      </body>
     </html>
   );
 }

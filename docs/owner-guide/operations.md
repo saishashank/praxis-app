@@ -262,6 +262,21 @@ Each item shows its state and where to look. A button that is greyed out says wh
 
 ---
 
+## Custom domain and installing the app (M21)
+
+Praxis runs on its Vercel address until you choose to buy a name. Nothing changes until you do these steps, in this order:
+
+1. Buy the name from a registrar you trust.
+2. In Vercel, open the project, then **Domains**, and add the name.
+3. Add the DNS records Vercel shows you at your registrar, and wait until Vercel says the domain is valid.
+4. In Vercel's **production** environment, change `APP_BASE_URL` to the new address (https, no path), then redeploy.
+5. In Google's OAuth client, add the new redirect address for sign-in.
+6. Open **Configuration** and set **Public domain** to the host name only, for example `praxis.example.com` (no https, no path).
+
+The next self-check confirms it: while a public domain is set, `APP_BASE_URL` must be on that host. Sign-in cookies belong to one host, so everyone signs in again once. Leave the setting empty to keep the Vercel address.
+
+**Installing the app.** Settings > About has "Install Praxis on this device". Where the browser allows it, one button installs; otherwise use the browser menu ("Install app" or "Add to Home Screen"). The installed app keeps only its own screens' fixed files (code and icons) for speed. It never stores prices, pages, picks or anything from your account, and there are no push alerts: e-mail stays the alert channel. When the device is offline the app shows a badge that the figures shown may be old.
+
 ## Settings you can change, and ones you must not
 
 | You may | You must not |
