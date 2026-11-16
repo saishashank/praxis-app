@@ -112,6 +112,7 @@ export const KNOWN_ROUTE_PATTERNS: readonly string[] = [
   "/strategies/risk",
   "/sw.js",
   "/terms",
+  "/trades",
   "/usage",
   "/users",
   "/what-if",

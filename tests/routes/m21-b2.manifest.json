@@ -1,0 +1,10 @@
+{
+  "routes": {
+    "action src/app/(app)/(owner-tools)/trades/actions.ts#addTradesAction": {
+      "tests": ["tests/ownerTools/tradeActions.test.ts"]
+    },
+    "action src/app/(app)/(owner-tools)/trades/actions.ts#voidTradeAction": {
+      "tests": ["tests/ownerTools/tradeActions.test.ts"]
+    }
+  }
+}

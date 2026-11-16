@@ -870,6 +870,11 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1272 | C3 (quiet hours and the cap for the stop-hit mail): during a user's quiet hours the stop-hit mail is neither sent nor claimed and is not held to a digest (pi... |
 | D-1273 | C3 (template, AU unchanged): the stop-hit text is a new stop_hit variant of renderPickCleared; the below_stop and above_chase_cap variants, the hit mail and... |
 | D-1274 | C3 (My alerts UI): a muted alert shows a "Muted" chip with "Unmute"; mute and unmute each show a toast with Undo that runs the opposite action (the toast is... |
+| D-1275 | B2 (matching and input): a buy is matched to the newest stored pick of the same market and code whose pick date is before the trade date and whose trade date... |
+| D-1276 | B2 (comparison maths, F): slippage = round_half_away((price - paper) x 1,000,000 / paper) ppm, shown as a signed percentage with two decimals by integer math... |
+| D-1277 | B2 (monthly table): one row per calendar month of the trade date, newest first: trades compared (those with a paper price), the mean of their slippage (round... |
+| D-1278 | B2 (writers, readers, access): src/lib/ownerTools/tradeLog/store.ts is the only module that inserts into owner_trade / owner_trade_void (typed and csv source... |
+| D-1279 | B2 (bounds and wording): the log is read keyset by id, 500 rows a page, at most 10 pages (5,000 trades; a banner says when the log is longer), the newest 100... |
 | D-1280 | P1 (service worker scope, supersedes the page cache in D-1231): the worker caches no page at all, including / and /picks, because a signed-in page carries us... |
 | D-1281 | P1 (domain check): appBaseUrl takes an optional run context { publicDomain }; with a domain set the host must equal it (case-insensitive; https, no path, por... |
 | D-1282 | P1 (offline badge and install row): OfflineBadge (root layout, client only, useSyncExternalStore on online/offline) reads "Offline: the figures shown may be... |
