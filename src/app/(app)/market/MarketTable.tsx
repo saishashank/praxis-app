@@ -182,9 +182,11 @@ export function MarketTable({
       />
     ),
   });
-  const visible = masked
-    ? columns.filter((c) => c.key !== "price" && c.key !== "sizeBadge")
-    : columns;
+  // UXN-320 (b), D-1204: the Size column renders only when at least one row has a value, and never for a masked role.
+  const hasSize = !masked && rows.some((r) => r.sizeGroup !== null);
+  const visible = columns.filter(
+    (c) => !(masked && c.key === "price") && !(c.key === "sizeBadge" && !hasSize),
+  );
   return (
     <DataTable
       caption={caption}

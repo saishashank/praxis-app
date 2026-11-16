@@ -870,3 +870,6 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1272 | C3 (quiet hours and the cap for the stop-hit mail): during a user's quiet hours the stop-hit mail is neither sent nor claimed and is not held to a digest (pi... |
 | D-1273 | C3 (template, AU unchanged): the stop-hit text is a new stop_hit variant of renderPickCleared; the below_stop and above_chase_cap variants, the hit mail and... |
 | D-1274 | C3 (My alerts UI): a muted alert shows a "Muted" chip with "Unmute"; mute and unmute each show a toast with Undo that runs the opposite action (the toast is... |
+| D-1285 | C2 target source: the trades loader reads the execution's rule version params_json once (one row by primary key, rows-ok) and calls E1's targetOf per trade w... |
+| D-1286 | C2 delayed target flag: no intraday high is stored, so "the delayed high of the session reached the target" uses the delayed last price of a later day (the o... |
+| D-1287 | C2 Size column (UXN-320 b, D-1204): the loaders set qty: null for a masked viewer in both strategyViews and strategies (an O-54 correction); the trades table... |
