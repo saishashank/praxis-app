@@ -803,7 +803,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | Id | Decision |
 | --- | --- |
 | D-1200 | Numbering and gate (BLD-054, BLD-049; requirements Gap 19): |
-| D-1201 | UXN-319 (Gap 1): the 35 items are classified as in §F (2 accepted: UXN-008, UXN-010; 12 superseded; 21 rejected) by the spec's default rule ("accept if it is... |
+| D-1201 | UXN-319 (Gap 1): the 35 items are classified as in §F by the spec's default rule ("accept if it is pure presentation on data the pages already load; reject i... |
 | D-1202 | UXN-320 (c) (Gap 2): the header theme toggle of D-171 was moved to Settings › Appearance by UXR-004/005; the clause is tested against that control. "Both siz... |
 | D-1203 | UXN-320 (a): the review frame becomes sandbox="allow-same-origin" without allow-scripts and is sized from its content on load, starting from a server estimat... |
 | D-1204 | UXN-320 (b): the strategy trades loader masks qty for masked roles (it showed share counts to every role; an O-54 correction, listed); a Size column renders... |
@@ -834,7 +834,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1229 | ARN-124 a–c (Gap M5): the three re-deferrals are a tested record with reasons and a refusal function; the "sources checked" are recorded offline from the kno... |
 | D-1230 | PLT-078 (Gap 16): app_public_domain is a confirmation the self-check compares with APP_BASE_URL, which stays the one origin that cookies, CSRF and Auth.js us... |
 | D-1231 | PLT-079 (Gap 15): web manifest; a static same-origin service worker that caches only the last / and /picks pages and the static assets, never an API, a write... |
-| D-1232 | UXN-008 and UXN-010 (accepted set): shaped skeletons in SectionLoading; an offline badge distinct from the stale banner. |
+| D-1232 | The accepted set: UXN-008 shaped skeletons in SectionLoading; |
 | D-1233 | D-922 scan (Gap 7): a static scan of Owner-read sources plus a rendered-text check in the AT-82 walk, with an allow-list that needs a reason per entry. |
 | D-1234 | AT-82 matrix: the M21 surfaces × six themes × two widths × three roles in one spec; pages unchanged by M21 stay covered by their existing specs. |
 | D-1235 | AT-76/AT-77 clauses that need M22 (Gap 12): |
