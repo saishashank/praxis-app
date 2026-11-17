@@ -1158,3 +1158,4 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1713 | CXA-009 look and verdict (R3, D-1605, D-1634): one lineage, sector_ic, one look over the full window with the engine's sectorIcLook; |
 | D-1714 | CXA-009 runner mode (R3, D-1629, D-1630): scripts/research/run-lineage.mjs --lineage sector_ic selects the sector mode; it reuses the argument parser, the ou... |
 | D-1715 | CXA-009 consequence and caveats (R3, D-1634): a PASS keeps F7 in shadow and records the result for the CTX-053 path; it changes no weight or status. |
+| D-1716 | CXA-009 result (R3, D-1634): the one look, taken 2026-11-17 from a clean tree at runner commit e9263f2b05d8 over the full window (2000-01-04 to 2026-10-22),... |
