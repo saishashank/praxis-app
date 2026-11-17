@@ -563,6 +563,60 @@
       "sha": "a760cf235117f6e86ce3c8bea9d76edfb295727ecd5edbe601cbc5b6988a5a00",
       "preregPath": "docs/research/prereg/CXA-008.json",
       "note": "plan only, frozen before any count; the look waits for the golden floor"
+    },
+    {
+      "seq": 51,
+      "item": "CXA-011",
+      "lineage": "shock_stops_F1",
+      "market": "AU",
+      "sha": "e168b9e77bfecc6b95592ab04f02f8cc285adef27c0619625f8b302b5054f4f2",
+      "preregPath": "docs/research/prereg/CXA-011.json",
+      "note": "plan only, frozen before any count; the look waits for 30 recorded holds of the family"
+    },
+    {
+      "seq": 52,
+      "item": "CXA-011",
+      "lineage": "shock_stops_F2",
+      "market": "AU",
+      "sha": "e168b9e77bfecc6b95592ab04f02f8cc285adef27c0619625f8b302b5054f4f2",
+      "preregPath": "docs/research/prereg/CXA-011.json",
+      "note": "plan only, frozen before any count; the look waits for 30 recorded holds of the family"
+    },
+    {
+      "seq": 53,
+      "item": "CXA-011",
+      "lineage": "shock_stops_F3",
+      "market": "AU",
+      "sha": "e168b9e77bfecc6b95592ab04f02f8cc285adef27c0619625f8b302b5054f4f2",
+      "preregPath": "docs/research/prereg/CXA-011.json",
+      "note": "plan only, frozen before any count; the look waits for 30 recorded holds of the family"
+    },
+    {
+      "seq": 54,
+      "item": "CXA-011",
+      "lineage": "shock_stops_F4",
+      "market": "AU",
+      "sha": "e168b9e77bfecc6b95592ab04f02f8cc285adef27c0619625f8b302b5054f4f2",
+      "preregPath": "docs/research/prereg/CXA-011.json",
+      "note": "plan only, frozen before any count; the look waits for 30 recorded holds of the family"
+    },
+    {
+      "seq": 55,
+      "item": "CXA-011",
+      "lineage": "shock_stops_F5",
+      "market": "AU",
+      "sha": "e168b9e77bfecc6b95592ab04f02f8cc285adef27c0619625f8b302b5054f4f2",
+      "preregPath": "docs/research/prereg/CXA-011.json",
+      "note": "plan only, frozen before any count; the look waits for 30 recorded holds of the family"
+    },
+    {
+      "seq": 56,
+      "item": "CXA-011",
+      "lineage": "shock_stops_F6",
+      "market": "AU",
+      "sha": "e168b9e77bfecc6b95592ab04f02f8cc285adef27c0619625f8b302b5054f4f2",
+      "preregPath": "docs/research/prereg/CXA-011.json",
+      "note": "plan only, frozen before any count; the look waits for 30 recorded holds of the family"
     }
   ]
 }
