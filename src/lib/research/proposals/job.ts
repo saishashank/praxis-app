@@ -130,10 +130,10 @@ async function recentTitles(db: Client, market: string, d: string): Promise<stri
 /** Runs the monthly job once. Never changes anything but the three tables of `store.ts`. */
 export async function runProposalJob(db: Client, o: JobInput): Promise<JobOutcome> {
   if (!Number.isInteger(o.perMonth) || o.perMonth <= 0) return NONE;
-  if (o.ask === null) return { ...NONE, status: "no_live_model" };
   if (!(await isFirstSession(db, o.market, o.d))) return { ...NONE, status: "not_first_session" };
   const month = o.d.slice(0, 7);
   if (await monthDone(db, o.market, month)) return { ...NONE, status: "already_run" };
+  if (o.ask === null) return { ...NONE, status: "no_live_model" };
 
   const res = await o.ask({
     task: PROPOSAL_TASK,

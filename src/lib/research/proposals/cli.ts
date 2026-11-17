@@ -5,7 +5,7 @@
 //
 //   proposals [--date YYYY-MM-DD]
 //
-// Refuses a replay flag and any date but the current session (forward only). Does nothing unless the factory reports role R2
+// Refuses a replay flag and any date but the current session (forward only); silent unless the market is enabled and in full mode. Does nothing unless the factory reports role R2
 // live (production: `llm_live_roles` is empty until the Owner lists R2 after a bake-off PASS), then it prints "no live model".
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN. Output: statuses and counts only, never any text of an answer.
 import type { Client } from "@libsql/client";
@@ -22,6 +22,8 @@ import { parseProposalList, RESPONSE_SCHEMA } from "./schema";
 const MARKET: string = HOME_MARKET;
 const REPLAY_FLAGS = ["--replay", "--recorded", "--recorded-day"] as const;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+const SILENT: readonly string[] = ["off", "not_first_session", "already_run"];
 
 const has = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
 
@@ -112,10 +114,15 @@ export async function proposalsMain(
     }
     // rows-ok: market keyed by code, one row
     const m = await db.execute({
-      sql: "SELECT enabled FROM market WHERE code = ?",
+      sql: "SELECT enabled, mode FROM market WHERE code = ?",
       args: [MARKET],
     });
-    if (m.rows.length !== 1 || Number(m.rows[0]!.enabled) !== 1) return 0;
+    if (
+      m.rows.length !== 1 ||
+      Number(m.rows[0]!.enabled) !== 1 ||
+      String(m.rows[0]!.mode) !== "full"
+    )
+      return 0;
     const perMonth = Number(await getConfig(db, "llm_proposals_per_month"));
     const params = await loadAgentParams(db);
     const night = await (deps.llm ?? loadNightLlm)({
@@ -130,7 +137,8 @@ export async function proposalsMain(
       perMonth,
       ask: askOf(night, d),
     });
-    out(line(d, r));
+    // the nights that are not the month's first session say nothing (the other stages are silent on an empty night)
+    if (!SILENT.includes(r.status)) out(line(d, r));
     return 0;
   } catch (error) {
     out(

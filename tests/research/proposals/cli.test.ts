@@ -33,6 +33,12 @@ const open = (db: Client) => () =>
 const count = async (db: Client, t: string): Promise<number> =>
   Number((await db.execute(`SELECT COUNT(*) n FROM ${t}`)).rows[0]!.n);
 
+const full = async (): Promise<Client> => {
+  const db = await freshDb("main");
+  await db.execute("UPDATE market SET mode = 'full' WHERE code = 'AU'");
+  return db;
+};
+
 describe("proposalsMain", () => {
   it("refuses a replay flag and a date that is not today, and is calm without a database", async () => {
     const lines: string[] = [];
@@ -54,7 +60,7 @@ describe("proposalsMain", () => {
   });
 
   it("production today (no role listed): says 'no live model' and writes nothing", async () => {
-    const db = await freshDb("main");
+    const db = await full();
     const lines: string[] = [];
     const code = await proposalsMain([], ENV, {
       out: (s) => lines.push(s),
@@ -71,7 +77,7 @@ describe("proposalsMain", () => {
   });
 
   it("a live R2 (injected night): one run stores the valid proposals; the line carries counts only", async () => {
-    const db = await freshDb("main");
+    const db = await full();
     const lines: string[] = [];
     const router = {
       route: async (req: { rules: unknown }) => ({
@@ -96,8 +102,29 @@ describe("proposalsMain", () => {
     expect(await count(db, "trial_ledger")).toBe(3);
   });
 
+  it("says nothing on a data-only market, and on a night that is not the month's first session", async () => {
+    const lines: string[] = [];
+    const d = await freshDb("main");
+    await d.execute("UPDATE market SET mode = 'data_only' WHERE code = 'AU'"); // silent, like the other stages
+    await proposalsMain([], ENV, {
+      out: (s) => lines.push(s),
+      openDb: open(d),
+      nowMs: () => NOW_MS,
+    });
+    const db = await full();
+    await db.execute(
+      "INSERT INTO trading_calendar (market, d, kind, confirmed, source) VALUES ('AU', '2031-03-01', 'session', 1, 'test')",
+    );
+    await proposalsMain([], ENV, {
+      out: (s) => lines.push(s),
+      openDb: open(db),
+      nowMs: () => NOW_MS,
+    });
+    expect(lines).toEqual([]);
+  });
+
   it("an unexpected failure is one degraded line and exit 0", async () => {
-    const db = await freshDb("main");
+    const db = await full();
     const lines: string[] = [];
     const code = await proposalsMain([], ENV, {
       out: (s) => lines.push(s),
