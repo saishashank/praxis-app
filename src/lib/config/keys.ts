@@ -1837,9 +1837,162 @@ const M21_META_TABLES: Record<M21Key, ConfigMeta> = {
   },
 };
 
+// ---- M22 keys (ch. 15 §15.11.3 and the ten V2 keys; docs/M22_design.md section A, D-1402, D-1410, D-1455) ----
+// Fourteen keys, every default the safe one: no live role, no Workers AI neurons, MiniLM and the alt inputs off, and the two
+// token buckets that, with the five role caps, add up to 235,000 inside the unchanged 240,000 daily total (D-1410). Their
+// readers arrive with the M22 tasks that own them; until then nothing reads them but the budget.
+
+/** The names `llm_live_roles` may list (D-1402): the roles of the router and the words phase. There is no R4 in code. */
+const LIVE_ROLE_NAMES = ["R1", "R2", "R3", "R5", "R6", "R7", "words"] as const;
+
+/** A list of distinct names from LIVE_ROLE_NAMES; an empty list keeps every role on rules (LLM-077). */
+const validLiveRoles = async (v: unknown): Promise<string | null> =>
+  Array.isArray(v) &&
+  v.every((x) => typeof x === "string" && (LIVE_ROLE_NAMES as readonly string[]).includes(x)) &&
+  new Set(v).size === v.length
+    ? null
+    : `must be a list of distinct names from ${LIVE_ROLE_NAMES.join(", ")} (empty keeps every job on rules)`;
+
+const M22_ON_OFF = {
+  default: "off",
+  unit: "on/off",
+  editable: "O",
+  validate: oneOf(ON_OFF),
+} as const satisfies Omit<ConfigKeyDef, "ref">;
+
+const m22Int = (
+  def: number,
+  min: number,
+  max: number,
+  unit: string,
+  ref: string,
+  editable: "O" | "fixed" = "O",
+): ConfigKeyDef => ({
+  default: def,
+  unit,
+  editable,
+  ref,
+  range: [min, max],
+  validate: editable === "fixed" ? never : intRange(min, max),
+});
+
+const M22_KEYS = {
+  llm_live_roles: {
+    default: [] as string[],
+    unit: "jobs",
+    editable: "O",
+    ref: "LLM-077, D-1402",
+    validate: validLiveRoles,
+  },
+  llm_budget_workers_ai_daily: m22Int(0, 0, 10_000, "neurons/day", "LLM-078, D-936"),
+  minilm_enabled: { ...M22_ON_OFF, ref: "LLM-079, D-946" },
+  regime_altinputs_enabled: { ...M22_ON_OFF, ref: "DAT-248, D-945" },
+  llm_budget_committee_daily: m22Int(40_000, 0, 60_000, "tokens/day", "LLM-061, D-1410"),
+  committee_shortlist: m22Int(3, 0, 5, "picks", "AGT-132"),
+  committee_horizon_sessions: m22Int(20, 5, 60, "sessions", "ARN-105, D-1420"),
+  committee_trial_sessions: m22Int(126, 63, 252, "sessions", "VAL-111, D-1420"),
+  committee_min_settled: m22Int(150, 100, 500, "picks", "VAL-111, D-1420"),
+  committee_permutations: m22Int(20_000, 5_000, 100_000, "reshuffles", "VAL-111, D-1421", "fixed"),
+  committee_call_record_retention_months: m22Int(18, 6, 36, "months", "LLM-066, D-1455"),
+  llm_budget_experts_daily: m22Int(30_000, 0, 60_000, "tokens/day", "LLM-068, D-1410"),
+  expert_extract_daily: m22Int(20, 0, 60, "items/day", "DAT-228"),
+  expert_tracked_max: m22Int(150, 20, 300, "experts", "DAT-229"),
+} as const satisfies Record<string, ConfigKeyDef>;
+
+type M22Key = keyof typeof M22_KEYS;
+
+const M22_META_TABLES: Record<M22Key, ConfigMeta> = {
+  llm_live_roles: {
+    label: "AI jobs allowed to use a live model at night (empty keeps every job on written rules)",
+    area: LRN,
+    bounds:
+      "empty, or a list of distinct names from R1, R2, R3, R5, R6, R7, words; a job runs live only after its test run has passed",
+    input: "word_list",
+  },
+  llm_budget_workers_ai_daily: {
+    label: "Daily allowance for the platform's built-in AI service (0 keeps it off)",
+    area: "Quotas",
+    bounds: "whole number, 0 to 10,000",
+    input: "int",
+  },
+  minilm_enabled: {
+    label: "A small reader that double-checks announcement categories in the background",
+    area: LRN,
+    bounds: "on or off; it only compares and publishes its agreement, it changes nothing",
+    input: "text",
+  },
+  regime_altinputs_enabled: {
+    label: "Prediction-market odds as an extra check on the market mood",
+    area: LRN,
+    bounds: "on or off; a check on the mood only, never a buy or sell signal",
+    input: "text",
+  },
+  llm_budget_committee_daily: {
+    label: "Daily AI token budget for the Committee",
+    area: "Quotas",
+    bounds: "whole number, 0 to 60,000",
+    input: "int",
+  },
+  committee_shortlist: {
+    label: "Most picks the Committee reviews each night",
+    area: LRN,
+    bounds: "whole number, 0 to 5",
+    input: "int",
+  },
+  committee_horizon_sessions: {
+    label: "Sessions a Committee rating is followed before it is scored",
+    area: LRN,
+    bounds: "whole number, 5 to 60; frozen once a trial starts",
+    input: "int",
+  },
+  committee_trial_sessions: {
+    label: "Sessions the Committee trial runs",
+    area: LRN,
+    bounds: "whole number, 63 to 252; frozen once a trial starts",
+    input: "int",
+  },
+  committee_min_settled: {
+    label: "Fewest settled picks the Committee trial needs before it gives a verdict",
+    area: LRN,
+    bounds: "whole number, 100 to 500; frozen once a trial starts",
+    input: "int",
+  },
+  committee_permutations: {
+    label: "Reshuffles used to test the Committee trial result",
+    area: LRN,
+    bounds: "fixed",
+    input: "int",
+  },
+  committee_call_record_retention_months: {
+    label: "Months the Committee's raw answers are kept after its trial",
+    area: "Retention",
+    bounds: "whole number, 6 to 36",
+    input: "int",
+  },
+  llm_budget_experts_daily: {
+    label: "Daily AI token budget for reading experts' posts",
+    area: "Quotas",
+    bounds: "whole number, 0 to 60,000",
+    input: "int",
+  },
+  expert_extract_daily: {
+    label: "Most expert items the AI reads for claims in a day",
+    area: LRN,
+    bounds: "whole number, 0 to 60",
+    input: "int",
+  },
+  expert_tracked_max: {
+    label: "Most experts tracked at once",
+    area: LRN,
+    bounds: "whole number, 20 to 300",
+    input: "int",
+  },
+};
+
 export const CONFIG_KEYS = {
   ...MKT_KEYS,
   ...M21_KEYS,
+  ...M22_KEYS,
   ...M4_RANGED_KEYS,
   ...M4_FIXED_KEYS,
   ...M5_RANGED_KEYS,
@@ -2394,7 +2547,8 @@ export type ConfigArea =
   | "Sentinel and email"
   | "Learning and knowledge"
   | "Other";
-export type ConfigInput = "int" | "number" | "list" | "object" | "text" | "text_optional" | "bool";
+export type ConfigInput =
+  "int" | "number" | "list" | "word_list" | "object" | "text" | "text_optional" | "bool";
 export type ConfigMeta = { label: string; area: ConfigArea; bounds: string; input: ConfigInput };
 
 /** Plain-English headings for the Configuration page (UXN-030); the area ids above stay stable. */
@@ -2446,6 +2600,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   ...M13L_META_TABLES,
   ...MOVERS_META_TABLES,
   ...M21_META_TABLES,
+  ...M22_META_TABLES,
   evening_review_time: {
     label: "Evening Review send time",
     area: SEM,
@@ -2813,6 +2968,9 @@ export const M15_KEY_NAMES: readonly ConfigKey[] = [
 
 /** Every key added in M21 (docs/M21_design.md section A, D-1212): the nine §15.11.2 keys. */
 export const M21_KEY_NAMES: readonly ConfigKey[] = Object.keys(M21_KEYS) as M21Key[];
+
+/** Every key added in M22 (docs/M22_design.md section A, D-1455): the four §15.11.3 keys and the ten V2 keys. */
+export const M22_KEY_NAMES: readonly ConfigKey[] = Object.keys(M22_KEYS) as M22Key[];
 
 /**
  * The Cortex keys whose Owner edit is a charged trial and refits the map (CTX-072): every editable

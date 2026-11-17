@@ -29,8 +29,7 @@ import { decisionCutoffUtc } from "@/lib/agents/decisionView";
 import { waitForCutoffPoll } from "@/lib/sentinel/cutoffPoll";
 import { learnDay, type LearnResult } from "@/lib/learning/learnStage";
 import { wordsDay, type WordsLlm, type WordsResult } from "@/lib/learning/wordsStage";
-import { createRouter, type LlmRouter } from "@/lib/llm/router";
-import { DbStore } from "@/lib/llm/store";
+import { nightlyLlm } from "@/lib/llm/nightlyLlm";
 import {
   ARENA_JOB,
   closeBooksDay,
@@ -385,18 +384,15 @@ function wordsSummary(r: WordsResult): string {
   );
 }
 
-/** Rules-only routers over the database call log: the default until the bake-off (LLM-040). */
+/** The words phase's routers from the nightly seam (rules-only until the bake-off passes, LLM-040, D-1445). */
 function rulesOnlyLlm(ctx: { db: Client; params: AgentParams; kbVersion: string }): WordsLlm {
-  const store = new DbStore(ctx.db);
-  const make = (): LlmRouter =>
-    createRouter({
-      mode: "rules-only",
-      params: ctx.params.llm,
-      kbVersion: ctx.kbVersion,
-      store,
-      providers: [],
-    });
-  return { r5Router: make(), providers: [], routerFor: () => make(), store };
+  const night = nightlyLlm(ctx);
+  return {
+    r5Router: night.routerFor("R5"),
+    providers: night.providers,
+    routerFor: () => night.routerFor("R3"),
+    store: night.store,
+  };
 }
 
 async function hasClosedBooks(db: Client, market: string, d: string): Promise<boolean> {

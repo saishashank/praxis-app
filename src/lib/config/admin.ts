@@ -163,6 +163,9 @@ export function parseConfigInput(
   // M21 (D-1240): "text_optional" is a text value that may be empty (app_public_domain is empty until the domain is bought);
   // the key's own validator still decides. Every plain "text" key keeps refusing an empty value.
   if (input === "text_optional" && text === "") return { value: "" };
+  // M22 (D-1455): "word_list" is a list of words (llm_live_roles); empty text is the empty list, the key's validator decides
+  // which names are allowed.
+  if (input === "word_list" && text === "") return { value: [] };
   // Object values (the strategy-name table, D-129) are longer than a scalar; every other kind keeps 500.
   const max = input === "object" ? OBJECT_INPUT_MAX : 500; // threshold-ok: form input guard
   if (text === "" || text.length > max) return { error: "is missing or too long" };
@@ -189,6 +192,13 @@ export function parseConfigInput(
       ? { value: nums }
       : { error: "must be a list of whole numbers such as 14, 7, 2" };
   }
+  if (input === "word_list") {
+    const parts: unknown =
+      text.startsWith("[") || text.startsWith("{") ? safeJson(text) : text.split(/[\s,]+/);
+    return Array.isArray(parts) && parts.every((p) => typeof p === "string")
+      ? { value: parts.filter((p) => p !== "") }
+      : { error: 'must be a list of names such as R1, words or ["R1", "words"]' };
+  }
   const obj = safeJson(text);
   return typeof obj === "object" && obj !== null && !Array.isArray(obj)
     ? { value: obj }
@@ -203,6 +213,7 @@ function scalar(v: unknown): string {
 
 // Plain-English display of a value with its unit, e.g. "30 days", "14, 7, 2 days".
 export function formatConfigValue(v: unknown, unit: string): string {
+  if (Array.isArray(v) && v.length === 0) return "none";
   if (Array.isArray(v)) return `${v.map(scalar).join(", ")} ${unit}`;
   if (typeof v === "object" && v !== null) {
     return Object.entries(v)

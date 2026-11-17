@@ -348,7 +348,17 @@ export type ReplayParams = {
 };
 
 export type LlmParams = {
-  roleDailyTokens: { R1: number; R2: number; R3: number; R5: number; R6: number };
+  /** Daily token cap per budget key (D-1410): the roles, the Committee and experts buckets; R7 reads the Committee cap. */
+  roleDailyTokens: {
+    R1: number;
+    R2: number;
+    R3: number;
+    R5: number;
+    R6: number;
+    R7: number;
+    committee: number;
+    experts: number;
+  };
   dailyTotal: number;
   nightlyTokensPerMarket: number;
   /** Per market, as an exact fraction. */
@@ -766,6 +776,9 @@ export function buildAgentParams(value: ConfigSource): AgentParams {
         R3: num("llm_budget_r3_daily"),
         R5: num("llm_budget_r5_daily"),
         R6: num("llm_budget_r6_steelman_daily"),
+        R7: num("llm_budget_committee_daily"),
+        committee: num("llm_budget_committee_daily"),
+        experts: num("llm_budget_experts_daily"),
       },
       dailyTotal: num("llm_daily_budget_total"),
       nightlyTokensPerMarket: num("nightly_tokens_per_market"),

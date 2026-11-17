@@ -2,11 +2,12 @@
 // MemoryStore is for tests and replay; DbStore uses migration 0008's tables. llm_call holds counts
 // and outcomes only: no prompt text, no keys (hashes live in the in-memory call record).
 import type { Client } from "@libsql/client";
-import type { BudgetUsage, Role } from "./budget";
+import type { BudgetKey, BudgetUsage, Role } from "./budget";
 
 export type CallRow = {
   id: string;
-  role: Role;
+  /** The budget key the call is charged to: its role, or the Committee or experts bucket (M22, D-1410). */
+  role: BudgetKey;
   provider: string;
   modelId: string | null;
   /** Index in the provider chain, or "rules-only". */
@@ -26,14 +27,14 @@ export interface LlmStore {
   cacheGet(key: CacheKey, nowIso: string): Promise<string | null>;
   cachePut(key: CacheKey, responseJson: string, expiresAt: string, nowIso: string): Promise<void>;
   recordCall(row: CallRow): Promise<void>;
-  usage(role: Role, market: string, d: string): Promise<BudgetUsage>;
+  usage(role: BudgetKey, market: string, d: string): Promise<BudgetUsage>;
   /** Requests made to one provider on `d` (LLM-021 request budget). */
   requestsToday(provider: string, d: string): Promise<number>;
   /**
    * OPS-111 (2), D-977: the mean tokens (in + out) of one answered call of `role` over the trailing
    * MEASURED_WINDOW_DAYS ending on `d`, from the counts the providers returned; null when none.
    */
-  measuredMean?(role: Role, market: string, d: string): Promise<number | null>;
+  measuredMean?(role: BudgetKey, market: string, d: string): Promise<number | null>;
 }
 
 /** Trailing window (days) of the measured per-call mean. */
@@ -59,7 +60,7 @@ export const isMeasuredCall = (
 
 export function meanTokensPerCall(
   rows: readonly CallRow[],
-  role: Role,
+  role: BudgetKey,
   market: string,
   d: string,
 ): number | null {
@@ -92,10 +93,10 @@ export class MemoryStore implements LlmStore {
   async recordCall(row: CallRow): Promise<void> {
     this.rows.push(row);
   }
-  async usage(role: Role, market: string, d: string): Promise<BudgetUsage> {
+  async usage(role: BudgetKey, market: string, d: string): Promise<BudgetUsage> {
     return sumUsage(this.rows, role, market, d);
   }
-  async measuredMean(role: Role, market: string, d: string): Promise<number | null> {
+  async measuredMean(role: BudgetKey, market: string, d: string): Promise<number | null> {
     return meanTokensPerCall(this.rows, role, market, d);
   }
   async requestsToday(provider: string, d: string): Promise<number> {
@@ -103,7 +104,7 @@ export class MemoryStore implements LlmStore {
   }
 }
 
-export function sumUsage(rows: readonly CallRow[], role: Role, market: string, d: string) {
+export function sumUsage(rows: readonly CallRow[], role: BudgetKey, market: string, d: string) {
   const u: BudgetUsage = { roleDay: 0, totalDay: 0, marketNight: 0 };
   for (const r of rows) {
     if (r.market !== market || r.d !== d || r.cached === 1) continue;
@@ -159,7 +160,7 @@ export class DbStore implements LlmStore {
     });
   }
 
-  async usage(role: Role, market: string, d: string): Promise<BudgetUsage> {
+  async usage(role: BudgetKey, market: string, d: string): Promise<BudgetUsage> {
     const r = await this.db.execute({
       sql: "SELECT role, COALESCE(SUM(tokens_in + tokens_out), 0) AS t FROM llm_call WHERE market = ? AND d = ? AND cached = 0 GROUP BY role",
       args: [market, d],
@@ -174,7 +175,7 @@ export class DbStore implements LlmStore {
     return u;
   }
 
-  async measuredMean(role: Role, market: string, d: string): Promise<number | null> {
+  async measuredMean(role: BudgetKey, market: string, d: string): Promise<number | null> {
     // rows-ok: the (market, d, role) index over seven days of one market, a few hundred rows
     const r = await this.db.execute({
       sql: `SELECT AVG(tokens_in + tokens_out) AS m FROM llm_call

@@ -15,6 +15,7 @@ import {
   M15_KEY_NAMES,
   M17_KEY_NAMES,
   M21_KEY_NAMES,
+  M22_KEY_NAMES,
   M11L_KEY_NAMES,
   M13L_KEY_NAMES,
   MOVERS_KEY_NAMES,
@@ -277,6 +278,7 @@ describe("M4 keys: defaults and bounds equal ch.15", () => {
       ...M13L_KEY_NAMES, // the M13-lite keys have their own table in tests/config/m13lKeys.test.ts
       ...MOVERS_KEY_NAMES, // the movers gap keys have their own table in tests/config/moversKeys.test.ts
       ...M21_KEY_NAMES, // the M21 keys have their own table in tests/config/m21Keys.test.ts (D-1212)
+      ...M22_KEY_NAMES, // the M22 keys have their own table in tests/config/m22Keys.test.ts (D-1455)
       // the M18 keys have their own table in tests/config/m18Keys.test.ts (news_assess_per_run is in M5_KEY_NAMES)
       "turso_notice_pct",
       "turso_free_ceiling_pct",

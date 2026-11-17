@@ -970,3 +970,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1447 | AT-73 shared part: tests/acceptance/v3/at73Shared.test.ts holds the 20-fixture proposal set for call proposals (valid, incomplete, duplicate, hostile text, o... |
 | D-1448 | Acceptance test files: M22 clauses go to split files (at76Trial, at76Reflections, at77WorkersAi, at77Sweep, at79Fetch, at79Calls, at79Clusters, at80Routes, a... |
 | D-1449 | Owner steps for the PR: dispatch the words and Committee-judge bake-offs after the merge and add any passing role to llm_live_roles; import the seed (format... |
+| D-1455 | Key shapes (task A2): llm_live_roles is stored as a JSON array of distinct names from R1, R2, R3, R5, R6, R7, words and edited as text (a new input kind word... |
+| D-1456 | Budget bucket rule (task A2, D-1410): budgetKey selects the cap, the usage sum and the llm_call.role value; the default is the request's role, except that R7... |
+| D-1457 | Reflection reservation (task A2, D-1411): reserveAfterLeft(stage, params, market, usage, reflectionReserve = 0) adds the reserve (limited to the R6 cap still... |
+| D-1458 | Guard registry (task A2, D-1445): GUARDS is a Partial<Record<ConfigKey, Guard>> (only guarded keys appear; a total record over all keys would be noise), Guar... |
+| D-1459 | Nightly seam (task A2, D-1401): src/lib/llm/nightlyLlm.ts exports nightlyLlm(ctx) giving routerFor(role), providers and store; it is rules-only and builds no... |
