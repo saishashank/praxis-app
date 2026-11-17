@@ -156,6 +156,13 @@ export interface MissedMoversReviewFacts {
   losers: MoverFactRow[];
 }
 
+/** M22 C3 (D-1425): the first review of a month lists last month's AI-written pick reflections. */
+export interface UnprovenNotesReviewFacts {
+  title: string;
+  caption: string;
+  lines: { code: string; text: string }[];
+}
+
 export interface StatsFacts {
   headline: string;
   rows: StatRow[];
@@ -208,6 +215,8 @@ export interface ReviewFacts {
   pickAlerts?: PickReviewFacts;
   /** D-909: shown only when `learning` is null. */
   missedMovers?: MissedMoversReviewFacts;
+  /** D-1425: present only in the first review of a month, and only when reflections were written last month. */
+  unprovenNotes?: UnprovenNotesReviewFacts;
   /**
    * UXN-313, D-1124: one section per further enabled market that trades on the date, in its own currency. Absent with one
    * market, so a single-market review is exactly what it was (the M19 snapshot tests).
@@ -545,7 +554,19 @@ function section6(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
     });
   }
   out.push(...moversBlocks(f));
+  out.push(...unprovenNotesBlocks(f));
   return out;
+}
+
+/** D-1425: the monthly "Unproven notes", each line a code and the AI-written note, under the fixed words. */
+function unprovenNotesBlocks(f: ReviewFacts): Block[] {
+  const u = f.unprovenNotes;
+  if (!u || u.lines.length === 0) return [];
+  return [
+    { t: "p", text: u.title, bold: true },
+    { t: "p", text: u.caption },
+    { t: "ul", items: u.lines.map((l) => `${l.code}: ${l.text}`) },
+  ];
 }
 
 /** Biggest gainers and losers: the daily learning's explanations, else the descriptive fallback. */

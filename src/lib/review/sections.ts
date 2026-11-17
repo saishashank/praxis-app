@@ -12,6 +12,7 @@ import { parseCohortParams } from "@/lib/arena/cohort";
 import { terminalThresholds } from "@/lib/arena/terminal";
 import { loadCalendar } from "@/lib/arena/closeBooks";
 import { addDays, isTradingDay, type CalendarRow } from "@/lib/data/calendar";
+import { readWrittenCreatedBetween } from "@/lib/steelman/reflectRead";
 import { parseOn } from "@/lib/data/controls";
 import type {
   AlertFact,
@@ -1309,5 +1310,60 @@ export async function readPicksSection(
         link: x.link,
       })),
     })),
+  };
+}
+
+// ---- M22 C3: monthly "Unproven notes" (AGT-146, D-1425) ---------------------------------------------------------------
+// The first Evening Review of each month carries at most 10 of last month's written pick reflections with the fixed words
+// "AI-written, not tested". Read from the stored written reflections only (`reflectRead.ts`) (written ones; `not_written` rows show nothing);
+// nothing here calls a model, and nothing in the review feeds back into a pick, a rule or an order (PRD-033).
+
+/** D-1425: reflections listed in the monthly section. */
+export const UNPROVEN_NOTES_MAX = 10; // threshold-ok: D-1425 "at most 10"
+export const UNPROVEN_NOTES_TITLE = "Unproven notes";
+export const UNPROVEN_NOTES_CAPTION = "AI-written, not tested";
+const REFLECTION_LOOKBACK_DAYS = 150; // threshold-ok: pick date of a reflection written last month (time frame plus a margin)
+
+export type UnprovenNotesFacts = {
+  readonly title: string;
+  readonly caption: string;
+  readonly lines: readonly { readonly code: string; readonly text: string }[];
+};
+
+const monthOf = (d: string): string => d.slice(0, 7); // threshold-ok: YYYY-MM
+
+/** True when `d` is a trading day and no earlier trading day of its month exists in the calendar. */
+export function isFirstReviewOfMonth(d: string, calendar: readonly CalendarRow[]): boolean {
+  if (!isTradingDay(d, calendar)) return false;
+  for (let x = addDays(d, -1); monthOf(x) === monthOf(d); x = addDays(x, -1)) {
+    if (isTradingDay(x, calendar)) return false;
+  }
+  return true;
+}
+
+/** The first and last UTC instant (ISO) of the month before `d`'s month. */
+function lastMonthWindow(d: string): { from: string; to: string } {
+  const to = `${monthOf(d)}-01T00:00:00`; // exclusive
+  const lastDay = addDays(`${monthOf(d)}-01`, -1);
+  return { from: `${monthOf(lastDay)}-01T00:00:00`, to };
+}
+
+/** The monthly section, or null when it is not the month's first review or no reflection was written last month. */
+export async function readUnprovenNotes(c: Ctx): Promise<UnprovenNotesFacts | null> {
+  if (!isFirstReviewOfMonth(c.d, c.calendar)) return null;
+  const w = lastMonthWindow(c.d);
+  const r = await readWrittenCreatedBetween(c.db, {
+    market: c.market,
+    fromD: addDays(c.d, -REFLECTION_LOOKBACK_DAYS),
+    toD: c.d,
+    createdFrom: w.from,
+    createdTo: w.to,
+    limit: UNPROVEN_NOTES_MAX,
+  });
+  if (r.length === 0) return null;
+  return {
+    title: UNPROVEN_NOTES_TITLE,
+    caption: UNPROVEN_NOTES_CAPTION,
+    lines: r.map((x) => ({ code: x.code, text: x.text })),
   };
 }

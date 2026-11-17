@@ -36,6 +36,7 @@ import {
   readExecutions,
   readOrders,
   readPickReview,
+  readUnprovenNotes,
   readRecap,
   readStats,
   unreadStreak,
@@ -167,6 +168,10 @@ export async function buildFacts(db: Client, o: BuildOptions): Promise<BuiltFact
   // D-909: descriptive, soft: a failing read leaves the section out, never the review
   const missedMovers = await readMissedMovers(c).catch(() => null);
   if (missedMovers !== null) facts.missedMovers = missedMovers;
+  // D-1425: the month's first review lists last month's AI-written reflections; soft, a failing read leaves it out
+  const unprovenNotes = minimal ? null : await readUnprovenNotes(c).catch(() => null);
+  if (unprovenNotes !== null)
+    facts.unprovenNotes = { ...unprovenNotes, lines: [...unprovenNotes.lines] };
   if (minimal) {
     const noData = executions.length === 0 ? ` No data for ${formatDay(o.d, anchor(o.d))}.` : "";
     facts.minimalReason = `${o.minimal!.reason}${noData}`;

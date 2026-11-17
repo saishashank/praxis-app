@@ -998,3 +998,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1475 | Neuron estimate and the day's spend (task L3, D-1413): the adapter charges ceil((prompt chars / 4 + max output tokens) x 250 / 1000) neurons per call before... |
 | D-1476 | Off by construction (task L3, D-1413): providerForRoster takes dailyNeurons (absent = 0), and the factory today passes none, so a Workers AI route is unavail... |
 | D-1477 | Host and AT-77 (task L3, D-1413): api.cloudflare.com joins LLM_PROVIDER_HOST_SUFFIXES (so the recorded-day guard names it); the M21 clause of AT-77 that forb... |
+| D-1490 | Reflection facts and answer (task C3, D-1424, AGT-134): one call per pick that settled in the session (pick_market.settled_d = the session, kind pick, no pic... |
+| D-1491 | What is written and when (task C3, D-1424): pick_reflection is the only table written (plus the call log through the router's store); one append-only row per... |
+| D-1492 | Forward only and the entry (task C3, D-1417 pattern): reflectMain(argv, env, deps) in src/lib/steelman/reflectCli.ts refuses a replay flag and any date but t... |
+| D-1493 | Reservation (task C3, D-1411, D-1457): reflectionReserve(db, market, d) = the picks settling in the session times reflectionCallReservation (the worst case o... |
+| D-1494 | Display (task C3, D-1425, UXN-288, O-54): the track record loader sets lookingBack on a settled pick's row from its written reflection; the row shows "Lookin... |
