@@ -202,3 +202,19 @@ test("a lineage without a plan entry for the hash of the plan file is refused", 
     rmSync(w.base, { recursive: true, force: true });
   }
 });
+
+test("--no-look stops after the counts and the development figures: no ledger entry, no output", async () => {
+  const w = world();
+  try {
+    const p = path.join(w.root, "docs", "research", "registry.json");
+    const before = readFileSync(p, "utf8");
+    const lines = [];
+    await run([...argsOf(w, "all"), "--no-look"], { log: (t) => lines.push(t) });
+    assert.equal(readFileSync(p, "utf8"), before);
+    assert.ok(lines.some((l) => l.includes("development")));
+    assert.ok(!lines.some((l) => l.includes("HOLDOUT LOOK")));
+    assert.throws(() => readdirSync(w.out));
+  } finally {
+    rmSync(w.base, { recursive: true, force: true });
+  }
+});

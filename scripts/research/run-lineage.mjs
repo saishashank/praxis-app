@@ -1,7 +1,7 @@
 // CXA-003 runner (M23 R2; D-1629, D-1630, D-1685 to D-1688). Offline, no network, no database:
 //   node scripts/research/run-lineage.mjs --history <folder> --prereg docs/research/prereg/CXA-003.json
 //        --lineage <cxa003_... | all> --out <folder outside the repository> --calendar <index file name>
-//        [--bars-dir yahoo] [--shorts-dir asic] [--ledger docs/research/registry.json] [--root <repo>] [--allow-dirty]
+//        [--bars-dir yahoo] [--shorts-dir asic] [--ledger docs/research/registry.json] [--root <repo>] [--allow-dirty] [--no-look]
 // The history folder and the output folder must lie OUTSIDE the repository (SEC-110). The run refuses a lineage that has no
 // plan entry with the hash of the committed plan file, and a lineage whose look is already in the ledger. Order of work
 // (BLD-051, D-1687): entries and floors for every lineage, development figures, the one holdout look per lineage and its
@@ -35,10 +35,11 @@ const STR_ARGS = [
 ];
 
 export function parseArgs(argv) {
-  const out = { allowDirty: false };
+  const out = { allowDirty: false, noLook: false };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === "--allow-dirty") out.allowDirty = true;
+    else if (a === "--no-look") out.noLook = true;
     else if (a.startsWith("--") && STR_ARGS.includes(a.slice(2))) {
       const v = argv[i + 1];
       if (v === undefined || v.startsWith("--")) throw new Error(`${a} needs a value`);
@@ -277,6 +278,13 @@ export async function run(argv, io = { log: (t) => console.log(t) }) {
     };
     io.log(line(`${id} development`, dev[id].base));
     io.log(line(`${id}_p5000 development (Larger account, not your book)`, dev[id].large));
+  }
+
+  if (args.noLook) {
+    io.log(
+      "--no-look: stopped after the counts and the development figures; no look was taken and nothing was written",
+    );
+    return { reports: [], looks: [] };
   }
 
   // 3. the one holdout look per lineage, then its variant; each is appended to the ledger when taken
