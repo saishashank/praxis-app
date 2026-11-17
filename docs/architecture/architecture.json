@@ -2306,6 +2306,33 @@
       }
     },
     {
+      "id": "host:api.cloudflare.com",
+      "type": "host",
+      "name": "api.cloudflare.com",
+      "purpose": "External host api.cloudflare.com called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/llm/workersAi.ts",
+      "attrs": {
+        "files": [
+          "src/lib/llm/workersAi.ts"
+        ]
+      }
+    },
+    {
       "id": "host:api.github.com",
       "type": "host",
       "name": "api.github.com",
@@ -20768,6 +20795,16 @@
       "contract": "Documentation link.",
       "views": [
         "llm"
+      ]
+    },
+    {
+      "id": "service:app|http|host:api.cloudflare.com",
+      "from": "service:app",
+      "to": "host:api.cloudflare.com",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "platform"
       ]
     },
     {

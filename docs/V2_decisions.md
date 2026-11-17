@@ -995,3 +995,6 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1472 | Accept the risk (E1): acceptRiskAction in [id]/actions.ts is gated by requireUser("admin") (Owner only; an Editor and a Viewer are a 403) and the service acc... |
 | D-1473 | Monthly mode (E1, D-1429): runMonthlyLicence(db, deps) in check.ts is the entry the experts job calls on every run; it does nothing (returns null) when an ex... |
 | D-1474 | Terms reader and first-check file (E1): readTerms is a conservative phrase reader over the text of the first terms page found (tags and scripts removed, cut... |
+| D-1475 | Neuron estimate and the day's spend (task L3, D-1413): the adapter charges ceil((prompt chars / 4 + max output tokens) x 250 / 1000) neurons per call before... |
+| D-1476 | Off by construction (task L3, D-1413): providerForRoster takes dailyNeurons (absent = 0), and the factory today passes none, so a Workers AI route is unavail... |
+| D-1477 | Host and AT-77 (task L3, D-1413): api.cloudflare.com joins LLM_PROVIDER_HOST_SUFFIXES (so the recorded-day guard names it); the M21 clause of AT-77 that forb... |
