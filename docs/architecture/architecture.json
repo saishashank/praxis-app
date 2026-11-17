@@ -1211,6 +1211,32 @@
       }
     },
     {
+      "id": "action:src/app/(app)/reviews/experts/sources/actions.ts#candidateAction",
+      "type": "action",
+      "name": "candidateAction",
+      "purpose": "Server action candidateAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/experts/sources/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/reviews/experts/sources/actions.ts"
+      }
+    },
+    {
       "id": "action:src/app/(app)/settings/actions.ts#setQuietHoursAction",
       "type": "action",
       "name": "setQuietHoursAction",
@@ -4259,6 +4285,34 @@
         "learning"
       ],
       "source": "src/app/(app)/reviews/experts/queue/page.tsx",
+      "attrs": {}
+    },
+    {
+      "id": "page:/reviews/experts/sources",
+      "type": "page",
+      "name": "/reviews/experts/sources",
+      "purpose": "Expert library page /reviews/experts/sources: experts by tested evidence, the claim queue and technique clusters (hypotheses, not advice).",
+      "specIds": [
+        "KB-074",
+        "KB-075",
+        "PRD-034",
+        "UXN-292",
+        "UXN-293",
+        "UXN-294",
+        "UXN-295"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "learning"
+      ],
+      "source": "src/app/(app)/reviews/experts/sources/page.tsx",
       "attrs": {}
     },
     {
@@ -17298,6 +17352,7 @@
       "attrs": {
         "file": ".github/workflows/maintenance.yml",
         "jobs": [
+          "experts",
           "production",
           "staging"
         ],
@@ -19411,6 +19466,17 @@
       ]
     },
     {
+      "id": "service:app|contains|action:src/app/(app)/reviews/experts/sources/actions.ts#candidateAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/reviews/experts/sources/actions.ts#candidateAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
       "id": "service:app|contains|action:src/app/(app)/settings/actions.ts#setQuietHoursAction",
       "from": "service:app",
       "to": "action:src/app/(app)/settings/actions.ts#setQuietHoursAction",
@@ -19913,6 +19979,16 @@
       "id": "service:app|contains|page:/reviews/experts/queue",
       "from": "service:app",
       "to": "page:/reviews/experts/queue",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning"
+      ]
+    },
+    {
+      "id": "service:app|contains|page:/reviews/experts/sources",
+      "from": "service:app",
+      "to": "page:/reviews/experts/sources",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
@@ -24296,6 +24372,46 @@
       "to": "secret:ACTIONS_HMAC_SECRET_STAGING",
       "kind": "uses",
       "contract": "Reads the secret ACTIONS_HMAC_SECRET_STAGING from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:maintenance|uses|secret:GOOGLE_AI_API_KEY",
+      "from": "workflow:maintenance",
+      "to": "secret:GOOGLE_AI_API_KEY",
+      "kind": "uses",
+      "contract": "Reads the secret GOOGLE_AI_API_KEY from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:maintenance|uses|secret:GROQ_API_KEY",
+      "from": "workflow:maintenance",
+      "to": "secret:GROQ_API_KEY",
+      "kind": "uses",
+      "contract": "Reads the secret GROQ_API_KEY from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:maintenance|uses|secret:OPENROUTER_API_KEY",
+      "from": "workflow:maintenance",
+      "to": "secret:OPENROUTER_API_KEY",
+      "kind": "uses",
+      "contract": "Reads the secret OPENROUTER_API_KEY from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:maintenance|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:maintenance",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
       "views": [
         "security"
       ]

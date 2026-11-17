@@ -990,3 +990,10 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1472 | Accept the risk (E1): acceptRiskAction in [id]/actions.ts is gated by requireUser("admin") (Owner only; an Editor and a Viewer are a 403) and the service acc... |
 | D-1473 | Monthly mode (E1, D-1429): runMonthlyLicence(db, deps) in check.ts is the entry the experts job calls on every run; it does nothing (returns null) when an ex... |
 | D-1474 | Terms reader and first-check file (E1): readTerms is a conservative phrase reader over the text of the first terms page found (tags and scripts removed, cut... |
+| D-1478 | Fetch guard (E2, KB-082, D-1429): every request of the experts job goes through guardedFetch (src/lib/experts/poll/guard.ts) in front of pollFeeds. |
+| D-1479 | Poll job as built (E2, D-939, D-1430, D-1434): one run a day (a poll row per day, a second run does nothing). |
+| D-1480 | Discovery and the Sources page (E2, DAT-229, UXN-296, D-1433): |
+| D-1481 | Triage and extraction as built (E2, LLM-067…069, D-1432): only when BOTH R1 and R2 are live tonight (nightlyLlm(...).status) does anything run; otherwise not... |
+| D-1482 | The experts job (E2, D-1429, D-1412): experts in maintenance.yml, production only (staging is retired), on release, the same approved-commit steps as the pro... |
+| D-1483 | Boundary test (E2, PRD-035, D-525): src/lib/experts/poll is the one folder under src/lib/experts that may reach the web and a model, so tests/security/expert... |
+| D-1484 | Health line (E2, KB-082): loadExpertsHealth appends the polling line only once a poll run exists (so the line is unchanged before the job first runs): "Readi... |

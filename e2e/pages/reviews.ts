@@ -23,4 +23,11 @@ export const REVIEWS_PAGES: PageEntry[] = [
     action: "admin",
     h1: "Tax report",
   },
+  // M22 E2 (KB-082, UXN-296): the expert sources page is Owner only (the "admin" action).
+  {
+    file: "src/app/(app)/reviews/experts/sources/page.tsx",
+    path: "/reviews/experts/sources",
+    action: "admin",
+    h1: "Expert sources",
+  },
 ];
