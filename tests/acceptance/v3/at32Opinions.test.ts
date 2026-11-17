@@ -22,6 +22,8 @@ import { trialNight } from "@/lib/committee/trial";
 import { defaultAgentParams } from "@/lib/agents/params";
 import { cleanupTempDbs } from "../../db/helpers";
 import { committeeLlm, committeeProvider, KEYS as COMMITTEE_KEYS } from "../../committee/harness";
+import { meterOf, type Case } from "@/lib/opinions/meter";
+import { evidenceOf, requestPromotion } from "@/lib/opinions/promotion";
 import { shadowNight } from "@/lib/llm/minilm/shadow";
 import { fakeEmbedder, headOf, lockOf, withAnnouncements } from "../../llm/minilm/helpers";
 import { STEELMAN_OWN, MIGRATION_OWNED, at32World, combineTables } from "./at32World";
@@ -176,6 +178,26 @@ const M22_STAGE_WRITERS: Array<(db: Client) => Promise<void>> = [
       switchOn: true,
     });
     if (r.status !== "running") throw new Error(`the trial step did not run: ${JSON.stringify(r)}`);
+  },
+  // C4: the promotion request of the steelman kind, from the meter of 60 synthetic settled cases (two judge versions); the
+  // write is the one statement of requestPromotion and touches only opinion_promotion_request. The warning line goes to
+  // app_log, which is hashed, so (like the trial's final path) it is proven in tests/opinions/promotion.test.ts.
+  async (db) => {
+    const cases: Case[] = Array.from({ length: 60 }, (_, i) => ({
+      lean: i % 2 === 0 ? "for" : "against",
+      netPpm: (i % 2 === 0 ? 1000 : 0) + (i % 3) * 100,
+      model: i < 30 ? "zz-a" : "zz-b",
+    }));
+    const m = meterOf("AU", "steelman", cases, 60);
+    if (!m.earned) throw new Error("the synthetic meter did not earn a review");
+    const wrote = await requestPromotion(db, {
+      market: "AU",
+      kind: "steelman",
+      d: "2030-01-04",
+      evidence: evidenceOf(m),
+      now: TS,
+    });
+    if (!wrote) throw new Error("the promotion request was not written");
   },
 ];
 

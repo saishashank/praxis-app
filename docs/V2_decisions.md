@@ -1031,3 +1031,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1508 | Confirmation (E3, D-1435, D-524, AT-79): confirmCall (one click on the proposal shown) and confirmTypedCall (the editable form: code, direction, date, horizo... |
 | D-1509 | Seed proposals and boundary (E3, D-1435, D-543): scripts/experts/call-proposals.mjs --seed <folder> [--dry-run] [--universe <file>] re-extracts a proposal fo... |
 | D-1510 | L5 merge (orchestrator): the onnxruntime-node pin and its lock-file regeneration are left out of the merge. |
+| D-1517 | Meters (task C4, D-1427, AGT-148, CTX-060): src/lib/opinions/meter.ts measures the two kinds that have a forward meter, per market. |
+| D-1518 | Judge versions and stability (task C4, D-1428): the judge-model versions seen are the Committee's judge_model and, for the steelman, the smallest author_mode... |
+| D-1519 | Promotion request (task C4, D-1428): src/lib/opinions/promotion.ts: requestPromotion is one insert-or-ignore on opinion_promotion_request (primary key market... |
+| D-1520 | Entry, page and health as built (task C4): opinionMetersMain(argv, env, deps) in src/lib/opinions/cli.ts (flag --date, replay flags refused, counts only, alw... |
