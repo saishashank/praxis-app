@@ -18,6 +18,7 @@ import { runResearchNight, type ResearchStep } from "@/lib/research/night";
 import { syncLedger } from "@/lib/research/steps/lookSync";
 import { sectorIndexStep } from "@/lib/research/steps/sectorIndex";
 import { monitorsStep } from "@/lib/research/steps/monitors";
+import { annCalibrationStep } from "@/lib/research/steps/annCalibration";
 import { cleanupTempDbs } from "../../db/helpers";
 import { STEELMAN_OWN, MIGRATION_OWNED, at32World, combineTables } from "./at32World";
 
@@ -140,6 +141,11 @@ const M23_STEP_WRITERS: Array<(db: Client) => Promise<void>> = [
   async (db) => {
     await monitorsStep.run(db, { market: "AU", d: "2030-04-02", now: TS });
   },
+  // T2 (D-1635, D-1690...D-1694): the real announcement-calibration step. It freezes the plan of its 23 lineages, counts the
+  // archive (empty on the golden world: n = 0) and writes one research_meter row; below the floor it takes no look.
+  async (db) => {
+    await annCalibrationStep.run(db, { market: "AU", d: "2031-04-08", now: TS });
+  },
 ];
 
 const base = JSON.parse(readFileSync(join(__dirname, "replay-hash.baseline.json"), "utf8")) as {
@@ -200,15 +206,20 @@ describe("AT-32 (research): the M23 own-set, the seam and the complement proof (
     expect(live.perTable).toEqual(a.perTable);
     expect(live.rows).toEqual(a.rows);
     // the ledger import writes one plan, one look and its numbers for the committed F1.v2-mom entry (D-1607); the monitors
-    // step (M1) writes its quarterly rows into residual_monitor; the steps still stubs write nothing (each task that lands a
-    // step moves its own table out of the zero list)
+    // step (M1) writes its quarterly rows into residual_monitor; the announcement step (T2) freezes the plans of its 23
+    // lineages (one more than the 24 of the ledger: its plan-only entries are the same rows) and writes one meter row; the
+    // steps still stubs write nothing (each task that lands a step moves its own table out of the zero list)
     const own = async (t: string): Promise<number> =>
       Number((await on.execute(`SELECT COUNT(*) n FROM ${t}`)).rows[0]!.n);
-    for (const t of ["research_prereg", "research_result", "holdout_look"])
-      expect(await own(t), t).toBe(1);
+    for (const t of ["research_result", "holdout_look"]) expect(await own(t), t).toBe(1);
+    // the one recorded F1 plan plus the 23 plan-only lineages of CXA-004 (ledger entries and the step freeze the same text)
+    expect(await own("research_prereg"), "research_prereg").toBe(24);
+    // the archive of the golden world is empty: one meter row, "collecting", and no look of its own
+    expect(await own("research_meter"), "research_meter").toBe(1);
     expect(await own("residual_monitor"), "residual_monitor").toBeGreaterThan(0);
     for (const t of M23_OWN.filter(
-      (x) => !["research_prereg", "research_result", "residual_monitor"].includes(x),
+      (x) =>
+        !["research_prereg", "research_result", "residual_monitor", "research_meter"].includes(x),
     )) {
       expect(await own(t), t).toBe(0);
     }

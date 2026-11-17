@@ -1142,3 +1142,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1677 | Monitor 2 and 3 data (M1, D-1616, D-1617): the calibration period is cal-<date of the newest fitted map> (the map version), so a refit makes one new row. |
 | D-1678 | Monitor 4 data (M1, D-1618): no table records which stop a live position used, so the count is read from two stored facts: a window is a cortex_state corpora... |
 | D-1679 | Boundary and tests (M1, D-1614, AT-74): the monitors import no arena, agent, pick, order, e-mail, alert or status-writing module and write only residual_moni... |
+| D-1690 | CXA-004 set and lineages (T2, D-1635): the set is derived, not listed: an angle belongs when its registry needsData names the announcement archive and it rea... |
+| D-1691 | CXA-004 counter and meter (T2, D-1623, D-1641): the counter is the number of distinct session_d with at least one archive item of a timing class, per market. |
+| D-1692 | CXA-004 look path (T2, D-1605, D-1635): below 252 nothing is read but dates (the pure engine returns before its reader is called; a test proves it with 251). |
+| D-1693 | CXA-004 labels (T2, D-1635, D-1636): the three labels are evaluated as one family, and only on the night the angle looks are taken: if at least 70 % of the h... |
+| D-1694 | CXA-004 boundary, tests and a finding (T2, D-1645, D-1646): the step reads the archive, the calendar and its own tables and writes only research_prereg, rese... |

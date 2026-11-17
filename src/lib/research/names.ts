@@ -11,6 +11,33 @@ export const LINEAGE_NAMES: Readonly<Record<string, LineageName>> = {
   regime_altinputs: { name: "Outside-signal market-state test", kind: "live" },
   committee_trial: { name: "Committee trial", kind: "live" },
   f1_v2_mom: { name: "Long-hold momentum rule", kind: "offline" },
+  // CXA-004 (M23 T2, D-1690): the 22 announcement angles and the labels, looked at by the app itself once the archive holds 252 sessions
+  "ann_angle_A-D3-01": { name: "Announcement category and tone test", kind: "live" },
+  "ann_angle_A-D3-02": { name: "Price-sensitive flag as weight test", kind: "live" },
+  "ann_angle_A-D3-03": { name: "Day-of-announcement price surprise test", kind: "live" },
+  "ann_angle_A-D3-04": { name: "Day-of-announcement volume shock test", kind: "live" },
+  "ann_angle_A-D3-05": { name: "Drift after announcement by category test", kind: "live" },
+  "ann_angle_A-D3-06": { name: "Announcement clustering test", kind: "live" },
+  "ann_angle_A-D3-07": {
+    name: "Announcement timing (after close or during the session) test",
+    kind: "live",
+  },
+  "ann_angle_A-D3-08": { name: "Announcement tone score test", kind: "live" },
+  "ann_angle_A-D3-09": { name: "Director and substantial-holder trades test", kind: "live" },
+  "ann_angle_A-D3-10": { name: "Scheduled events as timing risk test", kind: "live" },
+  "ann_angle_A-D4-04": { name: "Earnings-guidance revision test", kind: "live" },
+  "ann_angle_A-D5-10": { name: "Sector sentiment from announcements test", kind: "live" },
+  "ann_angle_A-D6-02": { name: "Index-inclusion flows test", kind: "live" },
+  "ann_angle_A-D6-06": { name: "Announcement-tone aggregate test", kind: "live" },
+  "ann_angle_A-D6-07": { name: "Announcement volume spike test", kind: "live" },
+  "ann_angle_A-D6-08": { name: "Crowded-trade composite test", kind: "live" },
+  "ann_angle_A-D8-04": { name: "Results-season timing test", kind: "live" },
+  "ann_angle_A-D8-06": { name: "Days-to-scheduled-event test", kind: "live" },
+  "ann_angle_A-D9-02": { name: "Corporate-action confidence test", kind: "live" },
+  "ann_angle_A-D9-03": { name: "Cross-source agreement test", kind: "live" },
+  "ann_angle_A-D10-05": { name: "Expert-cluster consensus test", kind: "live" },
+  "ann_angle_A-D10-06": { name: "Red-team counter-test", kind: "live" },
+  ann_labels: { name: "Announcement text-label test", kind: "live" },
 };
 
 const UNNAMED = "An unnamed test";
