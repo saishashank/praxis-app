@@ -126,7 +126,6 @@ const M22_STAGE_WRITERS: Array<(db: Client) => Promise<void>> = [
     if (res.rated !== 1)
       throw new Error(`the Committee stage did not rate: ${JSON.stringify(res)}`);
   },
-<<<<<<< HEAD
   // L5: the real MiniLM shadow stage (fake embedder) reads one ZZ announcement (the golden world has none, and its
   // announcement table is hashed, so the read is answered by a view) and writes only minilm_shadow.
   async (db) => {
@@ -146,7 +145,7 @@ const M22_STAGE_WRITERS: Array<(db: Client) => Promise<void>> = [
       },
     );
     if (r.written !== 1) throw new Error(`the MiniLM stage did not write: ${JSON.stringify(r)}`);
-=======
+  },
   // C2: the trial step (the interim path, which writes only committee_trial_result) over a pre-registered trial with one
   // night of ratings. The final path also writes the audited switch-off and an alert line, so it is proven in at76Trial.
   async (db) => {
@@ -177,7 +176,6 @@ const M22_STAGE_WRITERS: Array<(db: Client) => Promise<void>> = [
       switchOn: true,
     });
     if (r.status !== "running") throw new Error(`the trial step did not run: ${JSON.stringify(r)}`);
->>>>>>> v3/m22-c2
   },
 ];
 
