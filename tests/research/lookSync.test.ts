@@ -181,13 +181,15 @@ describe("the committed ledger (D-1609)", () => {
   it("the live step imports it into a fresh database once and never looks again", async () => {
     const db = await freshDb("main");
     const a = await syncLedger(db, { market: "AU", now: NOW });
-    expect(a).toEqual({ imported: 1, present: 0, problems: 0 });
+    // every recorded look of the committed ledger (F1.v2-mom and the later offline looks) comes in once
+    const looks = ledger.entries.filter((e) => e.verdict !== undefined).length;
+    expect(a).toEqual({ imported: looks, present: 0, problems: 0 });
     expect(
       (await db.execute("SELECT verdict FROM holdout_look WHERE lineage = 'f1_v2_mom'")).rows[0]!
         .verdict,
     ).toBe("NULL");
     await RESEARCH_STEPS[0]!.run(db, { market: "AU", d: "2030-02-01", now: NOW });
-    expect(await n(db, "holdout_look")).toBe(1);
+    expect(await n(db, "holdout_look")).toBe(looks);
     expect(await n(db, "holdout_look_refusal")).toBe(0);
   });
 
