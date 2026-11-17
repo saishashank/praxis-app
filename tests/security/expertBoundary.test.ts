@@ -186,6 +186,24 @@ describe("expert boundary (ii): what src/lib/experts may import", () => {
     "src/lib/data/sources/politeFetch.mjs",
     "node:crypto",
   ]);
+  // M22 E2 (D-1478): the polling job lives in src/lib/experts/poll. It is the one place under src/lib/experts that may read
+  // the web (through the guarded fetch of guard.ts, the platform fetch is injected by cli.ts) and ask a model (only through
+  // the night's routers of nightlyLlm.ts, with the types of the router and the schema). It never builds a provider (the
+  // factory is the only place, tests/security/liveProviderSites.test.ts) and imports no other model module.
+  const POLL_DIR = "src/lib/experts/poll/";
+  const POLL_EXTRA = new Set([
+    "node:dns/promises", // the DNS answer of a host, to refuse a private address (cli.ts)
+    "src/lib/db/scriptClient.mjs", // the script database client (cli.ts)
+    "src/lib/agents/params", // loadAgentParams and its type (cli.ts, extract.ts)
+    "src/lib/market/homeMarket.mjs", // the home market code and zone (cli.ts, extract.ts)
+    "src/lib/kb/fetchRules", // pollFeeds, the robots and feed rules (the only fetcher of expert pages)
+  ]);
+  const POLL_LLM = new Set([
+    "src/lib/llm/nightlyLlm",
+    "src/lib/llm/router",
+    "src/lib/llm/jsonSchema",
+  ]);
+  const inPoll = (f: string): boolean => rel(f).startsWith(POLL_DIR);
   const FORBIDDEN: Array<[string, RegExp]> = [
     ["arena orders and fills", /^src\/lib\/arena\/(?!cohort$)/],
     ["night and decision writers", /^src\/lib\/cortex\/(night|store\/decisions)(\/|$)/],
@@ -211,6 +229,7 @@ describe("expert boundary (ii): what src/lib/experts may import", () => {
       for (const spec of specifiers(fs.readFileSync(f, "utf8"))) {
         const r = resolveSpec(f, spec);
         if (r.startsWith("src/lib/experts/")) continue;
+        if (inPoll(f) && (POLL_EXTRA.has(r) || POLL_LLM.has(r))) continue;
         if (!ALLOWED_OUTSIDE.has(r)) bad.push(`${rel(f)} imports ${spec}`);
       }
     }
@@ -223,6 +242,7 @@ describe("expert boundary (ii): what src/lib/experts may import", () => {
       for (const spec of specifiers(fs.readFileSync(f, "utf8"))) {
         const r = resolveSpec(f, spec);
         for (const [name, re] of FORBIDDEN) {
+          if (name === "llm" && inPoll(f) && POLL_LLM.has(r)) continue;
           if (re.test(r)) bad.push(`${rel(f)} imports ${spec} (${name})`);
         }
       }
@@ -258,6 +278,42 @@ describe("expert boundary (ii): what src/lib/experts may import", () => {
       "arena orders and fills",
       "llm",
     ]);
+  });
+});
+
+describe("expert boundary (ii-b): the polling job's own limits (M22 E2, D-1478)", () => {
+  const POLL_FILES = EXPERT_FILES.filter((f) => rel(f).startsWith("src/lib/experts/poll/"));
+  const code = (f: string): string => stripComments(fs.readFileSync(f, "utf8"));
+
+  it("scans the polling modules", () => {
+    const names = POLL_FILES.map(rel);
+    for (const n of ["job", "priority", "discovery", "extract", "cli", "guard", "store"])
+      expect(names).toContain(`src/lib/experts/poll/${n}.ts`);
+  });
+
+  it("a model is reached only through the night's routers, in extract.ts and cli.ts, and no provider is built", () => {
+    const users = POLL_FILES.filter((f) => /@\/lib\/llm/.test(code(f))).map(rel);
+    expect(users).toEqual(["src/lib/experts/poll/cli.ts", "src/lib/experts/poll/extract.ts"]);
+    const bad = POLL_FILES.filter((f) =>
+      /createLiveProvider|providerForRoster|mode:\s*["']live["']|@\/lib\/llm\/(factory|providers|roster)/.test(
+        code(f),
+      ),
+    ).map(rel);
+    expect(bad).toEqual([]);
+  });
+
+  it("the web is reached only through guard.ts and cli.ts, never with an HTTP client", () => {
+    const client =
+      /\bXMLHttpRequest\b|node:https?["']|\baxios\b|\bundici\b|node-fetch|\bWebSocket\b|@anthropic-ai|\bmessages\.create\b/;
+    expect(POLL_FILES.filter((f) => client.test(code(f))).map(rel)).toEqual([]);
+    const calls = POLL_FILES.filter((f) => /\bfetch\s*\(/.test(code(f))).map(rel);
+    expect(calls).toEqual(["src/lib/experts/poll/cli.ts", "src/lib/experts/poll/guard.ts"]);
+  });
+
+  it("every request the job makes goes through guardedFetch (job.ts passes pollFeeds nothing else)", () => {
+    const text = code(path.join(ROOT, "src/lib/experts/poll/job.ts"));
+    expect(text).toMatch(/fetch:\s*guardedFetch\(/);
+    expect(text.match(/deps\.fetch/g)).toHaveLength(1); // only as the argument of guardedFetch
   });
 });
 
@@ -379,9 +435,12 @@ describe("expert boundary (iv): no network and no model", () => {
   it("src/lib/experts has no fetch, no HTTP client, no model client", () => {
     const re =
       /\bfetch\s*\(|\bXMLHttpRequest\b|node:https?["']|\baxios\b|\bundici\b|node-fetch|\bWebSocket\b|@anthropic-ai|@\/lib\/llm|\bmessages\.create\b/;
-    const bad = EXPERT_FILES.filter((f) => re.test(stripComments(fs.readFileSync(f, "utf8")))).map(
-      rel,
-    );
+    // the polling job (src/lib/experts/poll) is checked by its own tests in (ii-b)
+    const bad = EXPERT_FILES.filter(
+      (f) =>
+        !rel(f).startsWith("src/lib/experts/poll/") &&
+        re.test(stripComments(fs.readFileSync(f, "utf8"))),
+    ).map(rel);
     expect(bad).toEqual([]);
   });
 
@@ -447,6 +506,8 @@ describe("expert boundary (v): the database and the fixtures", () => {
     (f) => /(zz|seed|fixture)/i.test(path.basename(f)) || rel(f).startsWith("tests/experts/"),
   );
   // a template-literal host (`zz${n}.example.test`) counts with its interpolation replaced
+  const REFUSED_HOSTS =
+    /^(127\.0\.0\.1|169\.254\.169\.254|localhost|2130706433|0x7f\.1|017700000001)$/;
   const URL_RE = /https?:\/\/((?:[A-Za-z0-9.-]|\$\{[^}]*\})+)/g;
 
   it("fixture URLs in the expert tests are on example.test", () => {
@@ -457,6 +518,8 @@ describe("expert boundary (v): the database and the fixtures", () => {
       for (const m of src.matchAll(URL_RE)) {
         const host = m[1].replace(/\$\{[^}]*\}/g, "x").toLowerCase();
         if (host === "example.test" || host.endsWith(".example.test")) continue;
+        // M22 E2 (D-1478): the guard and job tests name these non-public hosts only to prove they are refused and never contacted
+        if (rel(f).startsWith("tests/experts/poll/") && REFUSED_HOSTS.test(host)) continue;
         // a documentation URL inside a comment is not a fixture
         const line = src.slice(src.lastIndexOf("\n", m.index) + 1, src.indexOf("\n", m.index));
         if (/^\s*(\/\/|\*)/.test(line)) continue;

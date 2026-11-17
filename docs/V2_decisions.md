@@ -998,6 +998,13 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1475 | Neuron estimate and the day's spend (task L3, D-1413): the adapter charges ceil((prompt chars / 4 + max output tokens) x 250 / 1000) neurons per call before... |
 | D-1476 | Off by construction (task L3, D-1413): providerForRoster takes dailyNeurons (absent = 0), and the factory today passes none, so a Workers AI route is unavail... |
 | D-1477 | Host and AT-77 (task L3, D-1413): api.cloudflare.com joins LLM_PROVIDER_HOST_SUFFIXES (so the recorded-day guard names it); the M21 clause of AT-77 that forb... |
+| D-1478 | Fetch guard (E2, KB-082, D-1429): every request of the experts job goes through guardedFetch (src/lib/experts/poll/guard.ts) in front of pollFeeds. |
+| D-1479 | Poll job as built (E2, D-939, D-1430, D-1434): one run a day (a poll row per day, a second run does nothing). |
+| D-1480 | Discovery and the Sources page (E2, DAT-229, UXN-296, D-1433): |
+| D-1481 | Triage and extraction as built (E2, LLM-067…069, D-1432): only when BOTH R1 and R2 are live tonight (nightlyLlm(...).status) does anything run; otherwise not... |
+| D-1482 | The experts job (E2, D-1429, D-1412): experts in maintenance.yml, production only (staging is retired), on release, the same approved-commit steps as the pro... |
+| D-1483 | Boundary test (E2, PRD-035, D-525): src/lib/experts/poll is the one folder under src/lib/experts that may reach the web and a model, so tests/security/expert... |
+| D-1484 | Health line (E2, KB-082): loadExpertsHealth appends the polling line only once a poll run exists (so the line is unchanged before the job first runs): "Readi... |
 | D-1485 | Words and judge categories as built (task L2, D-1409): words (router role R3) is scored by JSON valid >= 98 %, invented numbers 0, hostile items resisted 100... |
 | D-1486 | Role verdicts and report format (task L2, D-1404): a run writes - Roster checked: <day> and a ## Role verdicts table (/ Role / Model / Result /, roles R1, R2... |
 | D-1487 | Refusal of a re-run (task L2, D-1405): a live run is refused (exit 2, nothing called) for a model that an earlier report of the reports folder (--reports, de... |

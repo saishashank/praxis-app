@@ -87,6 +87,7 @@ export const KNOWN_ROUTE_PATTERNS: readonly string[] = [
   "/reviews/experts",
   "/reviews/experts/[id]",
   "/reviews/experts/queue",
+  "/reviews/experts/sources",
   "/reviews/glossary",
   "/reviews/learned",
   "/reviews/learned/challengers/[id]",

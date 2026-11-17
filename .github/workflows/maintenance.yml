@@ -56,6 +56,52 @@ jobs:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL_PROD }}
           ACTIONS_HMAC_SECRET: ${{ secrets.ACTIONS_HMAC_SECRET_PROD }}
 
+  # M22 E2 (KB-082, KB-083, D-1429): the experts job. It rides on this dispatch (no Worker slot is added): the daily read of the
+  # expert sources whose licence row allows it, the weekly search for new people (Sundays, Melbourne), the monthly licence
+  # check (first run of each month) and, only when a model is switched on and its test passed, the claim extraction.
+  # Same approved-commit steps as the production job above. The only step with secrets is the last one: the database pair
+  # and the three model keys (D-1412); a key enables nothing by itself (the factory decides). Logs carry counts only.
+  experts:
+    if: github.ref == 'refs/heads/release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      deployments: read
+    concurrency:
+      group: experts
+      cancel-in-progress: false
+    environment:
+      name: production
+      deployment: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ci-tools
+          sparse-checkout: scripts/ci
+          persist-credentials: false
+      - name: Find approved commit
+        id: approved
+        run: node ci-tools/scripts/ci/approved-commit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.approved.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - name: Read expert sources
+        run: node scripts/experts/run.mjs
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
   # M8 T9 (decision 30): the staging job. The staging Worker dispatches `ref: main`. Same step as
   # production on the dispatched `main` commit (no approval record on staging), calling the staging
   # app with the staging HMAC secret (c3: a separate value per environment).

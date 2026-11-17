@@ -4,6 +4,7 @@ import Link from "next/link";
 export const EXPERTS = "/reviews/experts";
 export const TECHNIQUES = "/reviews/techniques";
 export const QUEUE = "/reviews/experts/queue";
+export const SOURCES = "/reviews/experts/sources";
 export const detailHref = (id: string): string => `${EXPERTS}/${encodeURIComponent(id)}`;
 export const challengerLink = (id: string): string =>
   `/reviews/learned/challengers/${encodeURIComponent(id)}`;
