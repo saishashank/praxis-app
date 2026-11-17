@@ -916,3 +916,4 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1328 | Z (rendered-text exceptions): the walk does not read the page text of /blueprint (a spec browser for the Owner whose purpose is to show requirement and decis... |
 | D-1329 | Z (the U0 test): scripts/ci/ui-crosscheck.test.mjs, named in the design's U0 row, had not been written by U0; |
 | D-1330 | CI fixes after run 43992252704: the alerts-muted seed uses a 64-hex alert id (the unmute action refuses any other shape as invalid, so the e2e never reached... |
+| D-1331 | CI fix after run 44002592203: the D-922 patterns and matchPatterns move to scripts/ci/internal-code-patterns.mjs (no file-system or import.meta use), re-expo... |

@@ -17,20 +17,9 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { stripComments } from "./market-literals.mjs";
 
-/** The D-922 patterns (design M21 section J). The names are what a report prints. */
-export const PATTERNS = Object.freeze({
-  strategyCode: /\bE\d{2}\b/,
-  variantCode: /\bF\d-[UL]\b/,
-  controlCode: /\bC\d-F\d\b/,
-  specId: /\b(?:ARN|UXN|UXR|AGT|CTX|CXA|DAT|EML|FAM|VAL|PLT|MKT|SEC|LLM|KB|OPS|TST|BLD|PRD)-\d+/,
-  decisionId: /\bD-\d{3,4}\b/,
-  acceptanceId: /\bAT-\d+/,
-  ownerDecisionId: /\bO-\d+/,
-  priorityTag: /\bP[012]\b/,
-  nav: /\bNAV\b/,
-  cohortWord: /\bCS\b|\bIS\b/,
-  statusTag: /\[(?:VERIFY|PROPOSED)\]/,
-});
+import { matchPatterns, PATTERNS } from "./internal-code-patterns.mjs";
+
+export { matchPatterns, PATTERNS };
 
 export const ROOTS = [
   "src/app",
@@ -45,13 +34,6 @@ const SKIP_FILE = /\.(?:test|spec)\.[a-z]+$|\.d\.(?:ts|mts)$/;
 const SQL = /^\s*(?:SELECT|INSERT|UPDATE|DELETE|WITH|PRAGMA|CREATE|REPLACE)\b/;
 
 const posix = (p) => p.split(path.sep).join("/");
-
-/** Names of the patterns that match `text`. */
-export function matchPatterns(text) {
-  return Object.entries(PATTERNS)
-    .filter(([, re]) => re.test(text))
-    .map(([name]) => name);
-}
 
 // `<` is not here: `</p>` is a closing tag, not the start of a regular expression
 const REGEX_AFTER = "(,=:[!&|?{};+-*%>~^";

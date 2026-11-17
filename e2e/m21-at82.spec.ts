@@ -12,7 +12,7 @@
 // requirement and decision ids of the build, Owner only) and the evidence markers of the steelman (E01-style citations the
 // AI-written points refer to; they are reference labels inside `#ev-` and `#m-ev-` targets, not strategy codes).
 import { expect, test, type Page } from "@playwright/test";
-import { matchPatterns } from "../scripts/ci/internal-codes.mjs";
+import { matchPatterns } from "../scripts/ci/internal-code-patterns.mjs";
 import {
   axeViolations,
   expectNoHorizontalScroll,
