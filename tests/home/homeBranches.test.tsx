@@ -318,9 +318,12 @@ describe("Home content: picks", () => {
     expect(cards).toHaveLength(1);
     const t = cards[0]!.textContent!;
     expect(t).toContain("Balanced #1");
-    expect(t).toContain("Large company");
-    expect(t).toContain("Time frame 4 sessions");
-    expect(t).toContain("Valid until Fri 23 Oct");
+    expect(t).toContain("Window 4 sessions");
+    expect(document.querySelector("[data-testid=home-pick-size]")).toHaveAttribute(
+      "title",
+      "Large company",
+    );
+    expect(t).toContain("until Fri 23 Oct");
     expect(t).not.toMatch(ISO);
     expect(screen.getByRole("link", { name: "Why this pick" })).toHaveAttribute(
       "href",
@@ -369,12 +372,12 @@ describe("Home content: picks", () => {
     const cards = document.querySelectorAll("[data-pick-card]");
     expect(cards).toHaveLength(3);
     expect(cards[0]!.textContent).toContain("Custom #2");
-    expect(cards[0]!.textContent).toContain("Time frame 1 session");
-    expect(cards[0]!.textContent).not.toContain("company");
-    expect(cards[0]!.textContent).not.toContain("Valid until");
+    expect(cards[0]!.textContent).toContain("Window 1 session");
+    expect(cards[0]!.textContent).not.toContain("Large");
+    expect(cards[0]!.textContent).not.toContain("until");
     expect(cards[0]!.textContent).toContain("Aim n/a");
     expect(cards[0]!.textContent).toContain("Stop n/a");
-    expect(cards[1]!.textContent).toContain("Time frame not set");
+    expect(cards[1]!.textContent).toContain("Window not set");
   });
 
   it("shows percentages only for a masked viewer, and nothing for an unmasked pick without prices", () => {
@@ -395,9 +398,10 @@ describe("Home content: picks", () => {
       { masked: true, role: "viewer" },
     );
     const card = document.querySelector("[data-pick-card]")!;
-    expect(card.textContent).toContain("Aim (+10%) · Stop (-8%)");
+    expect(card.textContent).toContain("Aim +10%");
+    expect(card.textContent).toContain("Stop -8%");
     expect(card.textContent).not.toMatch(/A$|Entry|Now/);
-    expect(card.textContent).toContain("Valid until week 2026-W43");
+    expect(card.textContent).toContain("until week 2026-W43");
     cleanup();
     show((v) => {
       v.picks.items = [
@@ -437,9 +441,16 @@ describe("Home content: pick prices (Owner 2026-11-16)", () => {
     });
     const text = cardText();
     expect(text).toContain("ZZUP · Zed Upward Holdings");
-    expect(text).toContain("Entry about A$1.23 (last close Thu 12 Nov)");
-    expect(text).toContain("Now A$1.30 (+5.7%), Delayed, 13:05");
-    expect(text).toContain("Aim A$1.45 (+18%) · Stop A$1.10 (-11%)");
+    expect(text).toContain("Entry A$1.23 · close Thu 12 Nov");
+    expect(text).toContain("Now A$1.30 +5.7% · Delayed, 13:05");
+    expect(text).toContain("Aim A$1.45 +18%");
+    expect(text).toContain("Stop A$1.10 -11%");
+    // D-1085: the name is one truncated line, the size a chip, values keep their groups together.
+    const name = screen.getByTitle("Zed Upward Holdings");
+    expect(name.className).toContain("truncate");
+    expect(name.className).toContain("min-w-0");
+    expect(screen.getByTestId("home-pick-size").textContent).toBe("Large");
+    expect(screen.getByTestId("home-now-line").querySelector(".whitespace-nowrap")).not.toBeNull();
   });
 
   it("says Bought at once bought, and leaves out the now line when there is no current price", () => {
@@ -455,7 +466,7 @@ describe("Home content: pick prices (Owner 2026-11-16)", () => {
         }),
       ];
     });
-    expect(cardText()).toContain("Bought at A$1.20");
+    expect(cardText()).toContain("Bought A$1.20");
     expect(cardText()).not.toContain("Now ");
   });
 
@@ -481,7 +492,8 @@ describe("Home content: pick prices (Owner 2026-11-16)", () => {
     );
     const text = cardText();
     expect(text).toContain("Now +5.7% from entry");
-    expect(text).toContain("Aim (+18%) · Stop (-11%)");
+    expect(text).toContain("Aim +18%");
+    expect(text).toContain("Stop -11%");
     expect(text).not.toMatch(/Zed|ZZUP|A$|Delayed|last close/);
   });
 });

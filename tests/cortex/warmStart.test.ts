@@ -22,7 +22,9 @@ import {
 import { cortexLearnWeekly } from "@/lib/cortex/learn/weekly";
 import { insertMap, insertPassport, type MapParams, type MapRow } from "@/lib/cortex/store";
 import { runDailyLearning } from "@/lib/learning/daily";
+import { defaultAgentParams } from "@/lib/agents/params";
 import { replayMain } from "@/lib/replay/cli";
+import { buildSnapshot } from "@/lib/replay/snapshot";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
 import { rankVal, weekdays } from "./learn/zzLearn";
 
@@ -293,7 +295,11 @@ describe("warmStart feature nights", () => {
     expect(plan.nights).toEqual(lastNights(3));
     expect(plan.missingFeatureNights.length).toBeGreaterThan(3);
     const none = await warmStart(bare, { market: M, calendar: [], sessions: 3, now: NOW });
-    expect(none).toMatchObject({ written: 0, skippedNoData: 3 });
+    expect(none).toMatchObject({
+      written: 0,
+      skippedNoData: 3,
+      skipReasons: { universe: 0, moves: 0, features: 3, liquid: 0, card: 0 },
+    });
     expect(await angleDaysSince(bare, M, "2000-01-01")).toHaveLength(0);
     const r = await warmStart(bare, {
       market: M,
@@ -333,11 +339,19 @@ describe("warmStart edges", () => {
   it("a night with no universe snapshot, or with no liquid share, is skipped", async () => {
     const noUniverse = await freshDb("main");
     await seed(noUniverse, { universe: false });
-    expect(await go(noUniverse, 3)).toMatchObject({ written: 0, skippedNoData: 3 });
+    expect(await go(noUniverse, 3)).toMatchObject({
+      written: 0,
+      skippedNoData: 3,
+      skipReasons: { universe: 3, moves: 0, features: 0, liquid: 0, card: 0 },
+    });
 
     const illiquid = await freshDb("main");
     await seed(illiquid, { tier: "U3" });
-    expect(await go(illiquid, 3)).toMatchObject({ written: 0, skippedNoData: 3 });
+    expect(await go(illiquid, 3)).toMatchObject({
+      written: 0,
+      skippedNoData: 3,
+      skipReasons: { universe: 0, moves: 0, features: 0, liquid: 3, card: 0 },
+    });
   });
 
   it("serves a feature night wanted twice (the previous day of one night, the 20-back of another) from the cache", async () => {
@@ -366,6 +380,9 @@ describe("warmStart edges", () => {
     // 20-back of night 23 and is still in the cache then, so the source is asked for it once
     expect(r2.written).toBe(r2.nights.length);
     expect(r2.skippedNoData).toBeGreaterThanOrEqual(13);
+    expect(r2.skipReasons.moves).toBeGreaterThanOrEqual(13); // no bars on those nights: no movers
+    const s = r2.skipReasons;
+    expect(s.universe + s.moves + s.features + s.liquid + s.card).toBe(r2.skippedNoData);
     expect(seen.get(nights[3]!)).toBe(1);
     expect([...seen.values()].every((n) => n === 1)).toBe(true);
   });
@@ -374,7 +391,7 @@ describe("warmStart edges", () => {
     const db = await freshDb("main");
     await seed(db, { features: false });
     const r = await go(db, 2, { source: async (d) => ({ d, rows: [] }) });
-    expect(r).toMatchObject({ written: 0, skippedNoData: 2 });
+    expect(r).toMatchObject({ written: 0, skippedNoData: 2, skipReasons: { features: 2 } });
   });
 
   it("feature nights that carry no angle value give no scorecard rows", async () => {
@@ -386,7 +403,7 @@ describe("warmStart edges", () => {
         rows: [{ code: code(1), features: {}, activeSetHash: "zzhash", manifestId: "zzmanifest" }],
       }),
     });
-    expect(r).toMatchObject({ written: 0, skippedNoData: 2 });
+    expect(r).toMatchObject({ written: 0, skippedNoData: 2, skipReasons: { card: 2 } });
   });
 
   it("equal moves rank by code; a share with no bars does not break the night", async () => {
@@ -507,12 +524,21 @@ describe("replay --mode cortex-warm-start", () => {
             ? (...a: unknown[]) => ((t as never)[p] as (...x: unknown[]) => unknown)(...a)
             : (t as never)[p],
     });
-  const run = async (db: Client, argv: string[]) => {
+  const run = async (
+    db: Client,
+    argv: string[],
+    extra: Partial<Parameters<typeof replayMain>[2]> = {},
+  ) => {
     const lines: string[] = [];
     const code = await replayMain(
       ["--mode", "cortex-warm-start", ...argv],
       { TURSO_MAIN_URL: "file:x.db" },
-      { openDb: () => keepOpen(db), out: (s) => void lines.push(s), nowMs: () => Date.parse(NOW) },
+      {
+        openDb: () => keepOpen(db),
+        out: (s) => void lines.push(s),
+        nowMs: () => Date.parse(NOW),
+        ...extra,
+      },
     );
     return { code, lines };
   };
@@ -526,25 +552,42 @@ describe("replay --mode cortex-warm-start", () => {
     expect((await run(db, ["--sessions"])).code).toBe(2);
   });
 
-  it("writes the nights from stored features and says nights, skipped, first and last", async () => {
+  it("builds the snapshot world even when every feature night is stored, and reads the nights from it", async () => {
     const db = await freshDb("main");
     await seed(db);
-    const r = await run(db, ["--sessions", "3"]);
+    let asked = 0;
+    // an empty snapshot: the world has no universe, so the nights skip as `universe` (not read from the database)
+    const bytes = buildSnapshot({
+      from: "2026-01-01",
+      to: "2026-01-02",
+      inputs: {
+        calendar: [],
+        universe: [],
+        bars: [],
+        index_bars: [],
+        corporate_actions: [],
+        announcements: [],
+      },
+    }).bytes;
+    const r = await run(db, ["--sessions", "3"], {
+      prepareSnapshot: async () => {
+        asked += 1;
+        return bytes;
+      },
+      params: defaultAgentParams(),
+      sleep: async () => {},
+    });
+    expect(asked).toBe(1);
     expect(r.code).toBe(0);
-    const nights = lastNights(3);
     expect(r.lines).toHaveLength(1);
-    expect(r.lines[0]).toMatch(
-      new RegExp(
-        `^replay cortex-warm-start: nights_written=3 skipped_existing=0 skipped_no_data=0 first=${nights[0]} last=${nights[2]} rows=[0-9]+$`,
-      ),
+    expect(r.lines[0]).toContain(
+      "nights_written=0 skipped_existing=0 skipped_no_data=3 first=none last=none rows=0 skip_reasons=universe:3,moves:0,features:0,liquid:0,card:0 feature_nulls=no_session:0,no_passports:0,abstained:0 feature_nights=0/0",
     );
-    const again = await run(db, ["--sessions", "3"]);
-    expect(again.lines[0]).toContain("nights_written=0 skipped_existing=3");
   });
 
-  it("needs a snapshot source only when a feature night was never stored", async () => {
+  it("needs a snapshot source whenever there are nights to write", async () => {
     const db = await freshDb("main");
-    await seed(db, { features: false });
+    await seed(db);
     const r = await run(db, ["--sessions", "3"]);
     expect(r).toEqual({ code: 1, lines: ["replay: failed (no snapshot source)"] });
   });

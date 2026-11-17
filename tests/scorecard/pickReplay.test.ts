@@ -263,7 +263,7 @@ describe("pick-scorecard CLI", () => {
     const env = { TURSO_MAIN_URL: url, COMMIT_SHA: "c".repeat(40) };
     expect(await replayMain(["--mode", "pick-scorecard", "--sessions", "8"], env, deps)).toBe(0);
     expect(lines.at(-1)).toMatch(
-      /^replay pick-scorecard: complete sessions=8 nights=8 picks=\d+ gainers=\d+\/\d+ losers=\d+\/\d+ cortex_nights=\d+ minutes=[\d.]+ rows=\d+$/,
+      /^replay pick-scorecard: complete sessions=8 nights=8 picks=\d+ gainers=\d+\/\d+ losers=\d+\/\d+ cortex_nights=\d+ minutes=[\d.]+ rows=\d+ passport_nights=\d+ cortex_abstain=\S+$/,
     );
     expect(lines.at(-1)).not.toMatch(/ZZ\d\d/); // statuses and counts only: no stock code
 

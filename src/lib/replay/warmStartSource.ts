@@ -8,8 +8,14 @@ import type { Client } from "@libsql/client";
 import type { AgentParams } from "@/lib/agents/params";
 import type { AngleStatus } from "@/lib/cortex/angles/types";
 import type { FeatureNightSource } from "@/lib/cortex/learn/warmStart";
-import { createCortexReplay, type CortexReplay } from "@/lib/replay/cortexReplay";
-import { featureNightOf, openReplay, passportsAsOf } from "@/lib/scorecard/pickReplay";
+import { createCortexReplay, cortexTierFrom, type CortexReplay } from "@/lib/replay/cortexReplay";
+import {
+  featureNightTallied,
+  newCortexTally,
+  openReplay,
+  passportsAsOf,
+  type CortexTally,
+} from "@/lib/scorecard/pickReplay";
 import type { SnapshotWorld } from "./snapshotWorld";
 
 /** The manifest's schema stamp: the pick scorecard's constant, so a night's manifest id is stable. */
@@ -20,7 +26,15 @@ export async function snapshotFeatureSource(deps: {
   readonly world: SnapshotWorld;
   readonly params: AgentParams;
   readonly market: string;
+  /** D-1082: the first night the warm start will ask for; the tier series starts a lookback before it. */
+  readonly firstNight?: string;
+  /** D-1083: receives why feature nights came back empty (counts only). */
+  readonly tally?: CortexTally;
 }): Promise<FeatureNightSource> {
+  const fromD =
+    deps.firstNight === undefined
+      ? undefined
+      : cortexTierFrom(deps.world.sessions, deps.firstNight);
   const opened = await openReplay(deps);
   const by = new Map<string, CortexReplay>();
   const cortexOf = (passports: Map<string, AngleStatus>): CortexReplay => {
@@ -32,15 +46,24 @@ export async function snapshotFeatureSource(deps: {
         params: opened.live,
         passports,
         schemaSha: SCHEMA_SHA,
+        ...(fromD === undefined ? {} : { fromD }),
       });
       by.set(key, c);
     }
     return c;
   };
+  const tally = deps.tally ?? newCortexTally();
   return async (d) => {
-    if (!deps.world.sessions.includes(d)) return null;
+    tally.nights += 1;
+    if (!deps.world.sessions.includes(d)) {
+      tally.noSession += 1;
+      return null;
+    }
     const { statuses } = await passportsAsOf(deps.db, deps.market, d);
-    if (statuses.size === 0) return null;
-    return featureNightOf(cortexOf(statuses).hook.night(d, []), d);
+    if (statuses.size === 0) {
+      tally.noPassports += 1;
+      return null;
+    }
+    return featureNightTallied(cortexOf(statuses).hook.night(d, []), d, tally);
   };
 }

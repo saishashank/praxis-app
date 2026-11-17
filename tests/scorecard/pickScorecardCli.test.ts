@@ -161,7 +161,7 @@ describe("pick-scorecard CLI arguments and set-up", () => {
     expect(asked!.from < "2026-11-12").toBe(true);
     // 4 sessions, bars on 3: of the 2 nights asked for only the first can be scored
     expect(lines.at(-1)).toMatch(
-      /^replay pick-scorecard: partial sessions=2 nights=1 picks=\d+ gainers=\d+\/\d+ losers=\d+\/\d+ cortex_nights=0 minutes=[\d.]+ rows=\d+$/,
+      /^replay pick-scorecard: partial sessions=2 nights=1 picks=\d+ gainers=\d+\/\d+ losers=\d+\/\d+ cortex_nights=0 minutes=[\d.]+ rows=\d+ passport_nights=\d+ cortex_abstain=\S+$/,
     );
     const check = track(createClient({ url }));
     const run = await loadLatestScorecard(check, "AU");
