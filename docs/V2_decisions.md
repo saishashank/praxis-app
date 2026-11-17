@@ -1118,3 +1118,6 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1645 | AT-32 own-set (tests/acceptance/v3/at32Research.test.ts): the eight 0040 tables plus trial_ledger (proposal charges) and app_log; every other table hashes eq... |
 | D-1646 | Roles and review: Opus reviews every pre-registration file against this document before its runner runs (R2, R3, T2, T4, M3, T1), every F task, and the exit;... |
 | D-1647 | Exit and the PR: Z writes the forward reports from the registry and meters on the exit day, the AT reports and docs/M23_exit_evidence.md; after M23, the V3 P... |
+| D-1655 | Engine conventions (R1): a setup's net is in parts per million of its entry value (whole shares = floor(parcel / entry price), at least 1; one fee on each si... |
+| D-1656 | Sector IC conventions (R1): a month counts toward the floor when at least minGroupsPerMonth groups have at least minMembers members, from member counts alone... |
+| D-1657 | Report writer (R1): renderReport accepts a verdict only from PASS, NULL, INCONCLUSIVE, a 64-hex sha, and refuses any text that looks like a private path (dri... |
