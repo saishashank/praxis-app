@@ -17,6 +17,8 @@ import {
   type LedgerCellRow,
 } from "@/lib/cortex/store/ledger";
 import { streamCostPpm } from "@/lib/picks/streamCost";
+import { streamLineage } from "@/lib/research/lineages/intradayStream";
+import { preregister, takeLook } from "@/lib/research/registry";
 import { bootstrapMean, isUndefined } from "@/lib/stats/stationaryBootstrap";
 import { scopedPrng } from "@/lib/stats/rng";
 
@@ -121,12 +123,135 @@ async function cellForThisLook(db: Client, market: string, now: string): Promise
   return latest;
 }
 
+type StreamResult = {
+  passed: boolean;
+  candidates: number;
+  sessions: number;
+  meanNetPpm: number | null;
+  lowerPpm: number | null;
+};
+
+/**
+ * M23 (D-1608, D-1723): each stream cell is its own registry lineage with its own frozen plan (the cell's logged spec, hypothesis
+ * text included). Freezing happens before any figure is computed; a registry fault never changes the evaluation (null: no
+ * registry look is taken tonight and the ledger cell stays open, so the next night asks again).
+ */
+async function freezeCellPlan(
+  db: Client,
+  market: string,
+  cell: LedgerCellRow,
+  now: string,
+): Promise<{ lineage: string; sha: string } | null> {
+  const lineage = streamLineage(cell.cellId, market);
+  if (lineage === null) return null;
+  try {
+    const p = await preregister(db, {
+      lineage,
+      market,
+      item: "VAL-118",
+      frozen: cell.spec as Record<string, unknown>,
+      now,
+    });
+    return p.status === "refused" ? null : { lineage, sha: p.sha };
+  } catch {
+    return null;
+  }
+}
+
+const verdictOf = (r: StreamResult): "PASS" | "NULL" | "INCONCLUSIVE" =>
+  r.lowerPpm === null ? "INCONCLUSIVE" : r.passed ? "PASS" : "NULL";
+
+/**
+ * The one look of a cell, through the registry (D-1604): the registry decides whether it is taken; the ledger cell's own
+ * once-only gate then records the same result. A look already in the registry whose cell result was lost (a fault between the
+ * two writes) is completed from the registry's stored figures, never from tonight's. Returns the result the cell now holds, or
+ * null when nothing was recorded.
+ */
+async function recordLook(
+  db: Client,
+  o: {
+    market: string;
+    cell: LedgerCellRow;
+    plan: { lineage: string; sha: string } | null;
+    now: string;
+    result: StreamResult;
+  },
+): Promise<StreamResult | null> {
+  if (o.plan === null) return null;
+  try {
+    // rows-ok: research_result primary key (lineage, market), one row
+    const have = await db.execute({
+      sql: "SELECT stats_json FROM research_result WHERE lineage = ? AND market = ?",
+      args: [o.plan.lineage, o.market],
+    });
+    if (have.rows.length > 0) {
+      const stored = JSON.parse(String(have.rows[0]!.stats_json)) as StreamResult;
+      return (await setCellResult(db, o.cell.cellId, o.now, stored)) ? stored : null;
+    }
+    const r = await takeLook(db, {
+      lineage: o.plan.lineage,
+      market: o.market,
+      sha: o.plan.sha,
+      caller: "intradayEvaluator",
+      now: o.now,
+      compute: () => ({
+        verdict: verdictOf(o.result),
+        nSetups: o.result.candidates,
+        nBlocks: Math.floor(o.result.sessions / BLOCK),
+        stats: o.result,
+      }),
+    });
+    if (r.status !== "looked") return null;
+    return (await setCellResult(db, o.cell.cellId, o.now, o.result)) ? o.result : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A cell that already holds its ledger result but has no registry look (a look taken before the registry, or a fault between
+ * the two writes) is entered in the registry with that recorded result and the date it was recorded, through the same gate; the
+ * ledger is never changed. One primary-key read a night when the registry already holds the look.
+ */
+async function enterRecordedLook(
+  db: Client,
+  o: { market: string; cell: LedgerCellRow; plan: { lineage: string; sha: string } | null },
+): Promise<void> {
+  if (o.plan === null || o.cell.resultAt === null) return;
+  try {
+    // rows-ok: holdout_look primary key (lineage, market), one row
+    const seen = await db.execute({
+      sql: "SELECT 1 FROM holdout_look WHERE lineage = ? AND market = ?",
+      args: [o.plan.lineage, o.market],
+    });
+    if (seen.rows.length > 0) return;
+    const r = o.cell.result as StreamResult;
+    await takeLook(db, {
+      lineage: o.plan.lineage,
+      market: o.market,
+      sha: o.plan.sha,
+      caller: "intradayEvaluator",
+      now: o.cell.resultAt,
+      compute: () => ({
+        verdict: verdictOf(r),
+        nSetups: r.candidates,
+        nBlocks: Math.floor(r.sessions / BLOCK),
+        stats: r,
+      }),
+    });
+  } catch {
+    // a registry fault never changes the evaluation; the next night asks again
+  }
+}
+
 export async function evaluateIntradayStream(
   db: Client,
   market: string,
   now: string,
 ): Promise<StreamEvaluation> {
   const cell = await cellForThisLook(db, market, now);
+  const plan = await freezeCellPlan(db, market, cell, now);
+  await enterRecordedLook(db, { market, cell, plan });
   // A later cell is a fresh trial: only sessions from its log date on count (no re-test of the data
   // that already failed). The first cell (v1) sees all candidates, as before.
   const sampleFrom = (cell.spec as { sampleFrom?: string }).sampleFrom ?? "";
@@ -177,7 +302,7 @@ export async function evaluateIntradayStream(
     }
   }
   const pass = sampleMet && lowerPpm !== null && lowerPpm > 0;
-  const result = {
+  const result: StreamResult = {
     passed: pass,
     candidates: rows.length,
     sessions: dates.length,
@@ -187,17 +312,20 @@ export async function evaluateIntradayStream(
   // D-671: ONE look per cell. The state changes only where the look is recorded; on every other
   // night the figures above are descriptive and the state is left exactly as it is (so an Owner
   // demotion to shadow holds too). `setCellResult` is the gate: it succeeds once.
+  // M23 (D-1608): the look goes through the registry first; the ledger cell records the same result.
   let lookRecorded = false;
+  let held: StreamResult | null = null;
   if (sampleMet && cell.resultAt === null && now > cell.loggedAt) {
-    lookRecorded = await setCellResult(db, cell.cellId, now, result);
+    held = await recordLook(db, { market, cell, plan, now, result });
+    lookRecorded = held !== null;
   }
   // D-672: idempotent apply. A look recorded here, or one whose state write was lost between the
   // two statements (no config_version row carries its marker), sets the state from the RECORDED
   // result, never from tonight's figures.
-  const recorded = lookRecorded
-    ? result
+  const recorded: StreamResult | null = lookRecorded
+    ? held
     : cell.resultAt !== null
-      ? (cell.result as typeof result)
+      ? (cell.result as StreamResult)
       : null;
   let changed = false;
   if (recorded !== null) {

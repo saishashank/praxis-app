@@ -1163,6 +1163,17 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1714 | CXA-009 runner mode (R3, D-1629, D-1630): scripts/research/run-lineage.mjs --lineage sector_ic selects the sector mode; it reuses the argument parser, the ou... |
 | D-1715 | CXA-009 consequence and caveats (R3, D-1634): a PASS keeps F7 in shadow and records the result for the CTX-053 path; it changes no weight or status. |
 | D-1716 | CXA-009 result (R3, D-1634): the one look, taken 2026-11-17 from a clean tree at runner commit e9263f2b05d8 over the full window (2000-01-04 to 2026-10-22),... |
+| D-1717 | Ledger merge of M3 after R3 (orchestrator, D-1606, as D-1689): |
+| D-1720 | Meters in general (M3, D-1623, D-1613): the meters step writes, per enabled market and night, one research_meter row for each of 12 live-tested lines (F1 to... |
+| D-1721 | CXA-014 movers (M3, D-1625; [PROPOSED] values listed): the plan is docs/research/prereg/CXA-014.json (committed with its plan-only ledger entries, seq 40 to... |
+| D-1722 | CXA-008 labels (M3, D-1636; [PROPOSED] values listed): the plan is docs/research/prereg/CXA-008.json (ledger seq 46 to 48 on its branch, 48 to 50 after the m... |
+| D-1723 | VAL-120 intraday cells (M3, D-1608, D-670): each cell is its own lineage intraday_stream_<cell> (intraday_stream_v1, then intraday_stream_v1_<year>Q<n>); its... |
+| D-1724 | CXA-005 meter (M3, D-1624): per family F1 to F6, neff_live_<family> against 150 and neff_trade_<family> against cortex_min_neff_trade, from the n_eff_live of... |
+| D-1725 | Projection (M3, D-1623): the projected date is the session ceil(remaining / pace) sessions after the night on weekdays that are not holiday rows; for the for... |
+| D-1726 | Evaluation rules, in one place (M3, D-1605, D-1604; for the statistics review): |
+| D-1727 | Boundary, ledger and tests (M3, D-1645, D-1646): the files write only research_meter and app_log directly and the look tables through the registry (static al... |
+| D-1728 | Findings, said before any look (M3, listed): |
+| D-1729 | Hand-offs (M3 to M4 and Z): M4 reads the latest research_meter row per lineage by key: neff_live_F1..F6, neff_trade_F1..F6, movers_a1..a8 (blocked for A2, A4... |
 | D-1740 | CXA-012 key read (R4, D-1638): src/lib/cortex/survivorship.ts reads survivorship_loss_assumed_pct (already registered in M23 A1, default 50, range 30 to 80,... |
 | D-1741 | AU data-limits record (R4, D-1638): dataLimits.mjs gains AU: survivorship (id survivorship_au, the offline history holds only today's codes, the loss assumed... |
 | D-1742 | Industry label (R4, D-1638): industryLabel(d, firstSnapshotAsOf) returns "static industry" (STATIC_INDUSTRY, the wording R3 used in the CXA-009 report) for a... |

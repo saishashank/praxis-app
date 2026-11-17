@@ -482,6 +482,87 @@
         "developmentMonths": 254
       },
       "seq": 41
+    },
+    {
+      "seq": 42,
+      "item": "CXA-014",
+      "lineage": "movers_a1",
+      "market": "AU",
+      "sha": "d7e31b914a0d176d1217c026d89eee1fd87360bf97801484c2bb40199e6c8a66",
+      "preregPath": "docs/research/prereg/CXA-014.json",
+      "note": "plan only, frozen before any count; the look waits for the rule's n"
+    },
+    {
+      "seq": 43,
+      "item": "CXA-014",
+      "lineage": "movers_a2",
+      "market": "AU",
+      "sha": "d7e31b914a0d176d1217c026d89eee1fd87360bf97801484c2bb40199e6c8a66",
+      "preregPath": "docs/research/prereg/CXA-014.json",
+      "note": "plan only, frozen before any count; the look waits for the rule's n"
+    },
+    {
+      "seq": 44,
+      "item": "CXA-014",
+      "lineage": "movers_a3",
+      "market": "AU",
+      "sha": "d7e31b914a0d176d1217c026d89eee1fd87360bf97801484c2bb40199e6c8a66",
+      "preregPath": "docs/research/prereg/CXA-014.json",
+      "note": "plan only, frozen before any count; the look waits for the rule's n"
+    },
+    {
+      "seq": 45,
+      "item": "CXA-014",
+      "lineage": "movers_a4",
+      "market": "AU",
+      "sha": "d7e31b914a0d176d1217c026d89eee1fd87360bf97801484c2bb40199e6c8a66",
+      "preregPath": "docs/research/prereg/CXA-014.json",
+      "note": "plan only, frozen before any count; the look waits for the rule's n"
+    },
+    {
+      "seq": 46,
+      "item": "CXA-014",
+      "lineage": "movers_a5",
+      "market": "AU",
+      "sha": "d7e31b914a0d176d1217c026d89eee1fd87360bf97801484c2bb40199e6c8a66",
+      "preregPath": "docs/research/prereg/CXA-014.json",
+      "note": "plan only, frozen before any count; the look waits for the rule's n"
+    },
+    {
+      "seq": 47,
+      "item": "CXA-014",
+      "lineage": "movers_a8",
+      "market": "AU",
+      "sha": "d7e31b914a0d176d1217c026d89eee1fd87360bf97801484c2bb40199e6c8a66",
+      "preregPath": "docs/research/prereg/CXA-014.json",
+      "note": "plan only, frozen before any count; the look waits for the rule's n"
+    },
+    {
+      "seq": 48,
+      "item": "CXA-008",
+      "lineage": "text_label_guidance",
+      "market": "AU",
+      "sha": "a760cf235117f6e86ce3c8bea9d76edfb295727ecd5edbe601cbc5b6988a5a00",
+      "preregPath": "docs/research/prereg/CXA-008.json",
+      "note": "plan only, frozen before any count; the look waits for the golden floor"
+    },
+    {
+      "seq": 49,
+      "item": "CXA-008",
+      "lineage": "text_label_event_confirm",
+      "market": "AU",
+      "sha": "a760cf235117f6e86ce3c8bea9d76edfb295727ecd5edbe601cbc5b6988a5a00",
+      "preregPath": "docs/research/prereg/CXA-008.json",
+      "note": "plan only, frozen before any count; the look waits for the golden floor"
+    },
+    {
+      "seq": 50,
+      "item": "CXA-008",
+      "lineage": "text_label_tone",
+      "market": "AU",
+      "sha": "a760cf235117f6e86ce3c8bea9d76edfb295727ecd5edbe601cbc5b6988a5a00",
+      "preregPath": "docs/research/prereg/CXA-008.json",
+      "note": "plan only, frozen before any count; the look waits for the golden floor"
     }
   ]
 }

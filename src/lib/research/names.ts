@@ -38,6 +38,19 @@ export const LINEAGE_NAMES: Readonly<Record<string, LineageName>> = {
   "ann_angle_A-D10-05": { name: "Expert-cluster consensus test", kind: "live" },
   "ann_angle_A-D10-06": { name: "Red-team counter-test", kind: "live" },
   ann_labels: { name: "Announcement text-label test", kind: "live" },
+  // CXA-014 (M23 M3, D-1625, D-1721): the six mover rules, one look each at its own sample, taken by the app itself
+  movers_a1: { name: "Halt-resume block test", kind: "live" },
+  movers_a2: { name: "Results-window entries test", kind: "live" },
+  movers_a3: { name: "Volume-creep names test", kind: "live" },
+  movers_a4: { name: "Heavily-shorted names test", kind: "live" },
+  movers_a5: { name: "Young-listing setups test", kind: "live" },
+  movers_a8: { name: "Sector-adjusted move test", kind: "live" },
+  // CXA-008 (M23 M3, D-1636, D-1722): one look per machine label once the golden floor is met
+  text_label_guidance: { name: "Guidance-label test", kind: "live" },
+  text_label_event_confirm: { name: "Event-confirmation-label test", kind: "live" },
+  text_label_tone: { name: "Tone-label test", kind: "live" },
+  // VAL-118 (D-1608, D-1723): the first intraday cell; a later cell of a quarter is named by lineageName below
+  intraday_stream_v1: { name: "Intraday stream test", kind: "live" },
   // M23 R2 (D-1688): the new-edge tests run on the build machine; a variant is the same test at a larger parcel
   cxa003_hi52_vol: { name: "New 52-week high on heavy volume", kind: "offline" },
   cxa003_lowvol: { name: "Lowest-volatility stocks", kind: "offline" },
@@ -59,7 +72,12 @@ const UNNAMED = "An unnamed test";
 
 /** The plain name of a lineage; a lineage without an entry reads as an unnamed test (a test makes that a failure). */
 export function lineageName(lineage: string): string {
-  return LINEAGE_NAMES[lineage]?.name ?? UNNAMED;
+  const hit = LINEAGE_NAMES[lineage];
+  if (hit !== undefined) return hit.name;
+  // a later intraday cell (D-1608): one fresh sample per quarter after a failed look
+  const q = /^intraday_stream_v1_(\d{4})Q([1-4])$/.exec(lineage);
+  if (q !== null) return `Intraday stream test, fresh sample from quarter ${q[2]} of ${q[1]}`;
+  return UNNAMED;
 }
 
 /** The lineages that are looked at offline: a database look of one that is missing from the ledger is an Owner item. */

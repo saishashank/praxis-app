@@ -4990,10 +4990,13 @@
       "tests/db/0024_movers.test.ts",
       "tests/experts/calls.test.ts",
       "tests/intraday/streamLook.test.ts",
+      "tests/intraday/streamRegistry.test.ts",
+      "tests/labels/labelEval.test.ts",
       "tests/llm/goldenSets.test.ts",
       "tests/llm/minilm/shadow.test.ts",
       "tests/quality/engine.test.ts",
       "tests/replay/cortexReplay.test.ts",
+      "tests/research/meters/movers.test.ts",
       "tests/research/sectorIc.test.ts",
       "tests/review/haltAttention.test.ts",
       "tests/review/unprovenNotes.test.ts",
@@ -5689,9 +5692,11 @@
       "tests/acceptance/v2/at63.test.ts",
       "tests/config/m17Keys.test.ts",
       "tests/db/0040_m23_research.test.ts",
-      "tests/intraday/streamLook.test.ts"
+      "tests/intraday/streamLook.test.ts",
+      "tests/intraday/streamRegistry.test.ts"
     ],
     "VAL-119": ["tests/acceptance/v2/at63.test.ts"],
+    "VAL-120": ["tests/intraday/streamRegistry.test.ts", "tests/research/meters/intraday.test.ts"],
     "VAL-121": [
       "tests/acceptance/v3/at72Registry.test.ts",
       "tests/acceptance/v3/at78Short.test.ts",

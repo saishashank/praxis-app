@@ -70,7 +70,7 @@ const str = (v: unknown): string => String(v);
 const num = (v: unknown): number => Number(v);
 
 /** The distinct session dates with a timed archive item after `after` and up to `to`, oldest first (one keyed hop each). */
-async function sessionsAfter(
+export async function sessionsAfter(
   db: Client,
   market: string,
   after: string,
@@ -94,7 +94,7 @@ async function sessionsAfter(
   return out;
 }
 
-async function labelCoverageFromDb(
+export async function labelCoverageFromDb(
   db: Client,
   market: string,
   holdoutFrom: string,
@@ -182,6 +182,29 @@ function computeOf(
     nSetups: r.holdDays,
     nBlocks: Math.floor(r.holdDays / ANN_BLOCK_SESSIONS),
     stats: stats(r, f),
+  };
+}
+
+/**
+ * The look of the three labels as one family (D-1693): PASS when any label is rejected, NULL when some reached a statistic, else
+ * INCONCLUSIVE; aggregates only. Shared with the automatic label evaluation (M3), which takes this look later when coverage was short.
+ */
+export function labelsComputed(lf: FamilyResult): LookComputed {
+  if (lf.status === "below_sample") return { status: "below_sample", reason: lf.reason };
+  const stats: Record<string, number | string | null> = {
+    sessions: lf.sessions,
+    holdSessions: lf.holdSessions,
+    familySize: lf.familySize,
+  };
+  for (const x of lf.results) {
+    stats[`${x.key}_verdict`] = x.verdict;
+    stats[`${x.key}_holdMeanIc`] = x.holdMean === null ? null : Math.round(x.holdMean * 1e6) / 1e6; // threshold-ok: 6 places
+  }
+  return {
+    verdict: labelsVerdict(lf.results),
+    nSetups: lf.results.reduce((s, x) => s + x.holdDays, 0),
+    nBlocks: Math.floor(Math.max(0, ...lf.results.map((x) => x.holdDays)) / ANN_BLOCK_SESSIONS),
+    stats,
   };
 }
 
@@ -278,28 +301,7 @@ export async function runAnnCalibration(
             sha: shas.get(ANN_LABELS_LINEAGE)!,
             caller: "annCalibration",
             now: o.now,
-            compute: () => {
-              if (lf.status === "below_sample")
-                return { status: "below_sample", reason: lf.reason };
-              const stats: Record<string, number | string | null> = {
-                sessions: lf.sessions,
-                holdSessions: lf.holdSessions,
-                familySize: lf.familySize,
-              };
-              for (const x of lf.results) {
-                stats[`${x.key}_verdict`] = x.verdict;
-                stats[`${x.key}_holdMeanIc`] =
-                  x.holdMean === null ? null : Math.round(x.holdMean * 1e6) / 1e6; // threshold-ok: 6 places
-              }
-              return {
-                verdict: labelsVerdict(lf.results),
-                nSetups: lf.results.reduce((s, x) => s + x.holdDays, 0),
-                nBlocks: Math.floor(
-                  Math.max(0, ...lf.results.map((x) => x.holdDays)) / ANN_BLOCK_SESSIONS,
-                ),
-                stats,
-              };
-            },
+            compute: () => labelsComputed(lf),
           });
           if (r.status === "looked") taken += 1;
         }
