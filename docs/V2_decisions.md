@@ -1031,3 +1031,9 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1508 | Confirmation (E3, D-1435, D-524, AT-79): confirmCall (one click on the proposal shown) and confirmTypedCall (the editable form: code, direction, date, horizo... |
 | D-1509 | Seed proposals and boundary (E3, D-1435, D-543): scripts/experts/call-proposals.mjs --seed <folder> [--dry-run] [--universe <file>] re-extracts a proposal fo... |
 | D-1510 | L5 merge (orchestrator): the onnxruntime-node pin and its lock-file regeneration are left out of the merge. |
+| D-1521 | Grammar v2 as built (task E4, D-1436): RULE_SCHEMA_VERSION stays 1, because that constant is what a family rule version and every stored rule_version row car... |
+| D-1522 | Evaluator and exit menu as built (E4, D-1437): src/lib/experts/ruleEval.ts is pure and reads a RuleDataSource (codes, a field value by code and date, sector,... |
+| D-1523 | Importer format 2 as built (E4, D-1437, D-1471, D-1509): the manifest accepts praxis-expert-seed/1 or /2; the three optional files (licence-check.json, call-... |
+| D-1524 | Screening as built (E4, D-1437, VAL-112): eligibleExpressed (src/lib/experts/expressed.ts) selects clusters that are confirmed by a person, end-of-day testab... |
+| D-1525 | express-check (E4, D-1437, D-1438): scripts/experts/express-check.mjs --seed <folder> loads the seed with the importer's own loader (shape errors first), run... |
+| D-1526 | Boundary and the holdout (E4, PRD-033, VAL-112): the new expert code reads nothing trading-side and writes nothing: ruleEval.ts and expressed.ts import only... |
