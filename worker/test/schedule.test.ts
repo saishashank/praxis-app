@@ -1,4 +1,4 @@
-// M18 A4 (OPS-103, OPS-104, OPS-106; D-953, D-958, D-961): the slot definitions the clock dispatches for
+// M18 A4 (OPS-103, OPS-104, OPS-106; D-1782, D-958, D-961): the slot definitions the clock dispatches for
 // the calendar draft and the Turso usage sample, and the 2b recheck window. No network, no secret.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {

@@ -21,7 +21,7 @@ export function signed(value: number, digits = 1, suffix = "%"): string {
   return `● ${abs}${suffix}`;
 }
 
-/** Fixed grouping per market currency, so output does not depend on the machine running the test (D-1002). */
+/** Fixed grouping per market currency, so output does not depend on the machine running the test (D-1815). */
 export function money(value: number, fmt: CurrencyFormat): string {
   const sign = value < 0 ? "−" : "";
   return `${sign}${fmt.symbol}${group(Math.round(Math.abs(value)).toString(), fmt.locale)}`;

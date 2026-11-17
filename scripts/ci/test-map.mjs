@@ -10,7 +10,7 @@
 // drops entries that are gone (a deliberate, reviewed act, as the file is committed).
 // The ID-to-MUST step (every MUST in ch. 01-12 has a test or an Owner-executed entry) needs the
 // spec text and stays with docs/test-map.md; this check protects what is already mapped.
-// M18 D4 (TST-138, D-970): docs/test-map.md has a sixth column, "V3 home" (where the row runs now that
+// M18 D4 (TST-138, D-1787): docs/test-map.md has a sixth column, "V3 home" (where the row runs now that
 // staging is retired: CI, CI recorded-day, local, prod read-only, Owner; combined with " + "). With
 // --summary the check also fails when an acceptance row AT-01…AT-85 or AT-M1…AT-M5 has no row or no valid
 // home. The id list is read from the acceptance chapter copy in spec/14_*.md (V1: AT-01…AT-31, AT-M1…AT-M5)

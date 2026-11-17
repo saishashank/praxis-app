@@ -1,6 +1,6 @@
 # Rotating a secret
 
-M18 OPS-108 (D-976). One section per secret of the production table (`scripts/secrets/rows.json`, the same rows as `docs/owner-guide/M8_go_live.md` section F and `docs/owner-guide/secrets_tool.md`). It holds names, places and commands only: never a value. Staging is retired (D-964), so the three staging-only rows (`b-s`, `c4`, `h-s`) are not rotated any more: revoke them at the issuer once (listed at the end).
+M18 OPS-108 (D-1793). One section per secret of the production table (`scripts/secrets/rows.json`, the same rows as `docs/owner-guide/M8_go_live.md` section F and `docs/owner-guide/secrets_tool.md`). It holds names, places and commands only: never a value. Staging is retired (D-964), so the three staging-only rows (`b-s`, `c4`, `h-s`) are not rotated any more: revoke them at the issuer once (listed at the end).
 
 ## The same five steps for every secret
 

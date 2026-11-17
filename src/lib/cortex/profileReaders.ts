@@ -1,5 +1,5 @@
 // Cortex readers of the market-profile fields that select a rule set (M19 B1, built at M20 A5; CXA-002 e, f, g, i;
-// D-1003, D-1108, D-1112). AU has one reader per field (today's behaviour, unchanged); IN and US select the readers
+// D-1816, D-1108, D-1112). AU has one reader per field (today's behaviour, unchanged); IN and US select the readers
 // built at M20 by the VALUE of the profile field (the scheme, the halt model, the map kind), never by a market code. A
 // value with no reader still throws `not built (M20): ...` (the stub class stays for any later market), so a profile
 // that names an unknown rule set can never run a night on the AU rules by accident (PRD-039). Pure except

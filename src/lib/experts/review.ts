@@ -470,7 +470,7 @@ export async function mergeCluster(
 /** The market a call is written for (the page and the action pass the home market; the service holds none). */
 export type CallCtx = ReviewCtx & { market: string };
 
-const PROPOSAL_RE = /^[0-9a-f]{64}$/; // threshold-ok: a sha-256 hex proposal id (0039)
+const PROPOSAL_RE = /^[0-9a-f]{64}$/; // threshold-ok: a sha-256 hex proposal id (0042)
 const CODE_RE = /^[A-Z0-9][A-Z0-9.-]{0,31}$/; // threshold-ok: expert_call.code is at most 32 characters
 const MAX_HORIZON = 1000; // threshold-ok: longest horizon kept, in sessions
 const DAY_CHARS = 10; // threshold-ok: length of YYYY-MM-DD

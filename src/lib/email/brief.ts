@@ -62,7 +62,7 @@ export async function runBrief(ctx: MorningCtx, dOverride?: string): Promise<Bri
   }
   // One brief for the Owner. Each enabled market that is active (mode full) and trades on D adds its
   // overnight announcements and today's events; with AU alone the content is exactly the single-market
-  // brief (D-997, D-1060); with more than one, each market has its own section (D-1124, M20).
+  // brief (D-1812, D-1827); with more than one, each market has its own section (D-1124, M20).
   const active: string[] = [];
   let anyActive = false;
   for (const market of await enabledMarkets(db)) {

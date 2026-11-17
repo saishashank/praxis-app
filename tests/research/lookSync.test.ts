@@ -216,7 +216,7 @@ describe("registryRows (the page list)", () => {
       frozen: { h: 1 },
       now: NOW,
     });
-    // a look written before 0040, with the older word and no result row
+    // a look written before 0043, with the older word and no result row
     await db.execute(
       `INSERT INTO holdout_look (lineage, market, looked_at, prereg_sha, verdict) VALUES ('short_shadow', 'AU', '2029-12-01T00:00:00Z', '${p.sha.slice(0, 16)}', 'fail')`,
     );

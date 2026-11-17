@@ -1,4 +1,4 @@
-// The write guard, application side (M19 A2; MKT-110 b, D-995). Migration 0035 installs BEFORE INSERT and
+// The write guard, application side (M19 A2; MKT-110 b, D-1810). Migration 0038 installs BEFORE INSERT and
 // BEFORE UPDATE OF market triggers on every table with a `market` column; a row of a market that is not enabled is
 // refused with the text `MarketNotEnabled <table>`. This module maps that database error to the typed
 // `MarketNotEnabled` (defined in errors.mjs, D-1013; re-exported here, never redefined) and gives every writer

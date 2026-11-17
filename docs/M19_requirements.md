@@ -1,6 +1,6 @@
 # M19 requirements: Market-profile refactor
 
-Delta extract from `Requirement/v3/spec/` (V3 draft, session V3-1, 2026-11-11): ch. 12 V3 (M19 row, BLD-048…BLD-055), ch. 20 (MKT-107…MKT-114, DAT-241, DAT-242), ch. 22 (CXA-001, CXA-002), ch. 24 (UXN-312, UXN-313 as defined in ch. 20 §20.5), ch. 26 (TST-139, AT-85 kept green), ch. 15 V3 (§15.11.1 keys), ch. 14 V3 (AT-67, AT-68, AT-75, AT-85), ch. 00 V3 (O-82, O-83, A-18…A-22, D-923…D-950), ch. 01 V3 (PRD-039, PRD-040, PRD-045…PRD-049). AT-32 and AT-50 are V2 replay tests (V2 ch. 14), not defined in the V3 files. Continues from M18 on `build`. Build decisions in this milestone start at **D-951** (BLD-054) and are recorded in `docs/M19_design.md`.
+Delta extract from `Requirement/v3/spec/` (V3 draft, session V3-1, 2026-11-11): ch. 12 V3 (M19 row, BLD-048…BLD-055), ch. 20 (MKT-107…MKT-114, DAT-241, DAT-242), ch. 22 (CXA-001, CXA-002), ch. 24 (UXN-312, UXN-313 as defined in ch. 20 §20.5), ch. 26 (TST-139, AT-85 kept green), ch. 15 V3 (§15.11.1 keys), ch. 14 V3 (AT-67, AT-68, AT-75, AT-85), ch. 00 V3 (O-82, O-83, A-18…A-22, D-923…D-950), ch. 01 V3 (PRD-039, PRD-040, PRD-045…PRD-049). AT-32 and AT-50 are V2 replay tests (V2 ch. 14), not defined in the V3 files. Continues from M18 on `build`. Build decisions in this milestone start at **D-1780** (BLD-054) and are recorded in `docs/M19_design.md`.
 
 Source of truth: the V3 spec in `D:\Projects\Praxis\wt-v3-req\Requirement\v3\spec\` (read-only). Quotes below are copied from that text. Code paths are the files in `D:\Projects\Praxis\wt-v3` that most likely change; they come from a grep and are marked **(guess)** where the path is only a probable home. "new" means no existing file was found.
 
@@ -42,7 +42,7 @@ These apply to every V3 milestone, including M19.
 - **BLD-051 Research honesty (PRD-042, CXA-015).** Every research task pre-registers its hypothesis, grid point, split and n before any computation; one holdout look; no re-tuning after a look. Not in M19.
 - **BLD-052 Self-hosted infrastructure is not V3.** `infra/selfhost` is standalone. M19 tasks neither depend on it nor touch it.
 - **BLD-053 Progress recording and the resume task.** BUILD_SETUP §9 "V3" heading with rows "V3 current milestone" and "V3 last step done / next step". Write "V3 PR opened" in the milestone row only once the PR exists. The lock-file rule of CLAUDE.md §5 and the stale-lock rule (touch the lock each task) apply.
-- **BLD-054 Decision numbering (D-924).** Build decisions continue from **D-951** in `docs/M19_design.md`. `docs/07_decision_log.md` is not edited for V3.
+- **BLD-054 Decision numbering (D-924).** Build decisions continue from **D-1780** in `docs/M19_design.md`. `docs/07_decision_log.md` is not edited for V3.
 - **BLD-055 Milestone package (as v1/V2).** "Haiku requirements extract (`docs/M<nn>_requirements.md`) → design + decisions (`docs/M<nn>_design.md`) → tasks with tests first → Haiku review → Opus/Fable acceptance of the **F** items → `docs/M<nn>_exit_evidence.md` with every AT of the milestone and its evidence → §9 row update."
 
 ---
@@ -272,7 +272,7 @@ Given-clause from ch. 15 (line 65): "an edit to a `mkt.<CODE>.*` key that affect
 | D-nnn | Decision (short) | M19 IDs |
 |---|---|---|
 | D-923 | V3 is a delta on v1 + V2; ch. 17 stays frozen v7; CXA amendments only | CXA-001, CXA-002 |
-| D-924 | Build decisions from D-951 in milestone design docs | BLD-054 |
+| D-924 | Build decisions from D-1780 in milestone design docs | BLD-054 |
 | D-925 | One market-profile model: `market_profile` table + `mkt.<CODE>.*` keys, a single loader, and a static test forbidding literal market constants elsewhere; AU values reproduce today's behaviour byte-for-byte | MKT-107, DAT-241, AT-67 |
 | D-926 | "Off in production" = three proofs; the only IN/US text in production is the Owner-only Markets row | MKT-110, UXN-312, AT-68 |
 | D-947 | Design parcel floors where the exchange has none: IN ₹25,000, US US$300; Owner-editable within bounds; a change is a counted trial **[PROPOSED]** | DAT-241, CXA-002 b |

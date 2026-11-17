@@ -229,7 +229,7 @@ export async function steelmanNight(db: Exec, o: NightOptions): Promise<NightRes
       const failedBefore: WriteOutcome = {
         state: "not_written",
         reason: "rejected",
-        // OPS-111 (3), D-977: the counters of a night that crashed before its row come back from the stored
+        // OPS-111 (3), D-1794: the counters of a night that crashed before its row come back from the stored
         // points, so a resumed night reads the same as an uninterrupted one: valid = kept by the author
         // (shown or hidden by the critic), the rest were dropped by the claim checks.
         claims: {

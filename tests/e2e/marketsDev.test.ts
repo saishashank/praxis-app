@@ -1,5 +1,5 @@
 // @vitest-environment node
-// M19 E2 (D-994, D-1077, UXN-312): the development state `markets-dev` enables the built markets named by
+// M19 E2 (D-1809, D-1835, UXN-312): the development state `markets-dev` enables the built markets named by
 // PRAXIS_MARKETS_ENABLED in the throwaway e2e database, and does nothing when the variable is unset (every CI lane
 // keeps the production shape that `market-built-off` and e2e/market-off.spec.ts assert).
 import { afterEach, describe, expect, it } from "vitest";

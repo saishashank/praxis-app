@@ -1,4 +1,4 @@
-// Development lanes only (M19 E2, D-994, D-1077, UXN-312): `PRAXIS_MARKETS_ENABLED=AU,IN,US` enables every built market
+// Development lanes only (M19 E2, D-1809, D-1835, UXN-312): `PRAXIS_MARKETS_ENABLED=AU,IN,US` enables every built market
 // in the throwaway e2e database, so the header switcher and the Markets table can be seen with more than one market.
 // It is NOT one of the production-shape states of `E2E_STATES=all` (it contradicts `market-built-off`, which fails
 // when a second market is enabled); e2e/prepare-db.mjs applies it after the states, and only when the variable is

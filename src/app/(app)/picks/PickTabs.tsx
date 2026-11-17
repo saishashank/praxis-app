@@ -3,6 +3,7 @@
 // it, taken from the stored `pick_profiles` caps.
 import { Segmented } from "@/components/ui/Segmented";
 import { profileLabel } from "./text";
+import { ProfileLabel } from "./ProfileLabel";
 
 export function ProfileSwitch({
   profiles,
@@ -24,7 +25,7 @@ export function ProfileSwitch({
         items={profiles.map((p) => ({ value: p, label: profileLabel(p), href: hrefFor(p) }))}
       />
       <p className="m-0 text-sm text-text-muted">
-        {profileLabel(current)}: {rule}
+        <ProfileLabel profile={current} />: {rule}
       </p>
     </div>
   );

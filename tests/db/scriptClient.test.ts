@@ -1,5 +1,5 @@
 // @vitest-environment node
-// M20 A2 (D-1123; closes D-1020, D-1086; AT-68 a): the script client. A script write for a market that is not enabled
+// M20 A2 (D-1123; closes D-1818, D-1086; AT-68 a): the script client. A script write for a market that is not enabled
 // surfaces as the typed MarketNotEnabled with ONE S2 incident; AU writes pass; nothing about the URL or token leaks.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {

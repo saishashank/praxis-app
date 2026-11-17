@@ -1,4 +1,4 @@
-// DAT-251 a / DAT-252 (D-972, D-974): what the ASX fetch step learned, stored by the store step.
+// DAT-251 a / DAT-252 (D-1789, D-1791): what the ASX fetch step learned, stored by the store step.
 //   code_history          a code that answered `not_found` on 3 consecutive history runs becomes
 //                         `delisted` and leaves the history fetch list; it comes back only after it was
 //                         missing from the ASX file and then returns.

@@ -3,7 +3,7 @@
 // AU.mjs being the single definition), never written
 // again: the pipeline rules, the Actions scripts and the data modules that used `MARKET = "AU"` / `TZ = ...` /
 // `"18:10"` take them from here until M20 hands each of them a `MarketProfile`. The home market is the market
-// whose pre-profile global keys stay its authority (profileCore.mjs `HOME_MARKET`, D-993).
+// whose pre-profile global keys stay its authority (profileCore.mjs `HOME_MARKET`, D-1808).
 import { HOME_MARKET } from "./profileCore.mjs";
 import { SEEDS } from "./seed/index.mjs";
 import { homeProfile, staticProfile } from "./staticProfile.mjs";

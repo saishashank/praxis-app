@@ -68,17 +68,21 @@ describe("picks entry", () => {
       const noPicks = r.lines.filter((l) => l.includes(": no_picks blocked="));
       r.lines = r.lines.filter((l) => !l.includes(": no_picks blocked="));
       expect(noPicks.length, phase).toBeLessThanOrEqual(1);
-      expect(r.lines, phase).toHaveLength(3);
+      expect(r.lines, phase).toHaveLength(4);
       expect(r.lines[0]).toMatch(
-        /^arena-picks AU 2026-10-20: published=\d+ candidates=\d+ bought=\d+ missed=\d+ closed=\d+ open=\d+ checked=\d+ withdrawn=\d+ shortlist=-?\d+$/,
+        /^arena-picks AU 2026-10-20: published=\d+ candidates=\d+ bought=\d+ missed=\d+ closed=\d+ open=\d+ checked=\d+ withdrawn=\d+ shortlist=-?\d+ candidate=-?\d+$/,
       );
-      // D-913: the Follow the picks portfolio runs after the picks, counts only
+      // D-950: the three My portfolio profiles run after the picks, counts only
       expect(r.lines[1]).toMatch(
-        /^arena-portfolio AU 2026-10-20: trades=\d+ open=\d+ days=\d+ skipped=\d+$/,
+        /^arena-portfolio AU 2026-10-20: trades\/open\/days\/splits\/skipped conservative=\d+\/\d+\/\d+\/\d+\/\d+ balanced=\d+\/\d+\/\d+\/\d+\/\d+ aggressive=\d+\/\d+\/\d+\/\d+\/\d+$/,
       );
       // D-921: the daily learning loop runs after the portfolio, counts only (nothing to learn from on an empty file)
       expect(r.lines[2]).toBe(
         "arena-learning AU 2026-10-20: movers=0 lessons=0 improvements=0 hypotheses=0",
+      );
+      // D-923: the learning Cortex's scorecard follows on the loop's World (none on an empty file)
+      expect(r.lines[3]).toBe(
+        "arena-cortex-learn AU 2026-10-20: skipped (no daily learning tonight)",
       );
       expect(r.lines.join("\n")).not.toMatch(/secret|file:/);
     }

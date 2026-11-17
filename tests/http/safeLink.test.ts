@@ -1,5 +1,5 @@
 // @vitest-environment node
-// DAT-253 (D-975; AT-81 "off-list host refused"): three registered source hosts render as links, anything
+// DAT-253 (D-1792; AT-81 "off-list host refused"): three registered source hosts render as links, anything
 // else is plain text. Pure: no network.
 import { describe, expect, it } from "vitest";
 import { MARKET_SITES } from "@/lib/market/seed/sourceSites.mjs";

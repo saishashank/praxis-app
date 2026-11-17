@@ -617,7 +617,7 @@ describe("main migration 0008_agents: up / down / up", () => {
     const db = await freshDb("main");
     const ms = await loadMigrations(MIGRATIONS("main"));
     const full = await schemaOf(db);
-    await migrateDown(db, ms, 32); // 0033, 0032, 0031, 0030, 0029, 0028, 0027 … 0019, 0018, 0017, 0016, 0015, 0014, 0013, 0012, 0011, 0010 and 0009 sit on top: take the schema as of 0008
+    await migrateDown(db, ms, 35); // 0043 to 0031, 0030, 0029, 0028, 0027 … 0019, 0018, 0017, 0016, 0015, 0014, 0013, 0012, 0011, 0010 and 0009 sit on top: take the schema as of 0008
     const before = await schemaOf(db);
     expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: 7 });
     const mid = await schemaOf(db);
@@ -636,9 +636,9 @@ describe("main migration 0008_agents: up / down / up", () => {
       );
     });
     expect(mid).toEqual(nonAgent);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 33, version: 40 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 36, version: 43 });
     expect(await schemaOf(db)).toEqual(full);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 40 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 43 });
   });
 
   it("a fresh database and a down/up database have the same schema", async () => {
@@ -760,7 +760,7 @@ describe("main migration 0008_agents: event (LLM fields NULL -> value once)", ()
 
   it("refuses a change to any rule-derived column", async () => {
     const db = await seeded();
-    await db.execute("UPDATE market SET enabled = 1 WHERE code = 'US'"); // M19 0035: with US enabled the freeze trigger, not the write guard, refuses the move
+    await db.execute("UPDATE market SET enabled = 1 WHERE code = 'US'"); // M19 0038: with US enabled the freeze trigger, not the write guard, refuses the move
     for (const set of [
       "market = 'US'",
       "source = 'x'",
@@ -1110,7 +1110,7 @@ describe("main migration 0008_agents: backup round trip", () => {
       /only category_llm/,
     );
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 40 });
+    expect(await migrateUp(target, ms)).toEqual({ applied: 0, version: 43 });
   });
 
   it("the meta line lists the forever agent tables (and not the pruned ones)", async () => {

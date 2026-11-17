@@ -40,6 +40,16 @@ import type { CortexReplayHook } from "./cohortReplay";
 import type { FillRowRule } from "@/lib/cortex/economics/fillRow";
 import type { SnapshotWorld } from "./snapshotWorld";
 
+/** Sessions before the first replayed night that the tier series must reach (the warm start's D-20 night, with slack). */
+export const CORTEX_TIER_LOOKBACK = 25; // threshold-ok: BACK20_SESSIONS plus slack
+/** Sessions of bar-derived tiers when the caller names no start (a replay window of 60 plus the lookback). */
+export const CORTEX_TIER_DEFAULT_SESSIONS = 90; // threshold-ok: default replay window plus lookback
+
+/** The first session whose tiers a replay of nights from `firstNight` on needs (D-1082). */
+export function cortexTierFrom(sessions: readonly string[], firstNight: string): string {
+  return sessions[Math.max(0, sessions.indexOf(firstNight) - CORTEX_TIER_LOOKBACK)]!;
+}
+
 const ADV_WINDOW = 20; // threshold-ok: sessions of the would-have ADV (the v1 ADV window)
 
 export type CortexReplayConfig = {
@@ -67,6 +77,11 @@ export type CortexReplayConfig = {
    */
   readonly regimeOverride?: RegimeLabel;
   readonly prng?: (scope: string) => Prng;
+  /**
+   * Bars-tiered worlds only (D-1082): the first session of the bar-derived tier series. Default: the
+   * last CORTEX_TIER_DEFAULT_SESSIONS sessions. Nights before it have no tiers and abstain.
+   */
+  readonly fromD?: string;
 };
 
 /** The replay producer of the `AsOfWorld` (design 3a): one builder, the snapshot as the source. */
@@ -76,12 +91,18 @@ export function asOfWorldOf(cfg: CortexReplayConfig): AsOfWorld {
   const tiers = new Map<string, readonly TierRow[]>();
   const halts = new Map<string, readonly HaltRow[]>();
   const industry = new Map<string, readonly IndustryRow[]>();
+  // D-1082: a bars-tiered world has universe rows for the last live sessions only; its tiers come from the bars
+  const fromBars = w.barsTiered
+    ? w.cortexTierRows(
+        cfg.fromD ?? w.sessions[Math.max(0, w.sessions.length - CORTEX_TIER_DEFAULT_SESSIONS)]!,
+      )
+    : null;
   for (const code of w.codes) {
     bars.set(code, w.barsOf(code));
-    const t = w.tierRowsOf(code);
+    const t = fromBars === null ? w.tierRowsOf(code) : (fromBars.tiers.get(code) ?? []);
     if (t.length > 0) {
       tiers.set(code, t);
-      halts.set(code, w.haltRowsOf(code));
+      halts.set(code, fromBars === null ? w.haltRowsOf(code) : fromBars.halts.get(code)!);
     }
     const ind = w.industryRowsOf(code);
     if (ind.length > 0) industry.set(code, ind);

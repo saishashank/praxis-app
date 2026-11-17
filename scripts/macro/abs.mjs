@@ -1,4 +1,4 @@
-// ABS Data API (SDMX-CSV) -> macro_series (DAT-251 c, D-973).
+// ABS Data API (SDMX-CSV) -> macro_series (DAT-251 c, D-1790).
 //   node scripts/macro/abs.mjs        env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, MACRO_USER_AGENT (optional)
 // Source: Australian Bureau of Statistics (CC BY 4.0, credit the ABS: abs.gov.au privacy, copyright and
 // disclaimer page, checked 2026-11-11). Host and shape verified 2026-11-11: GET

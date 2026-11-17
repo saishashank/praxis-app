@@ -445,7 +445,7 @@ export async function runHomeDay(db, o) {
   if (a.kind === "done")
     return { exit: 0, status: "skipped", reason: a.reason, target: a.target, dates: [] };
 
-  // M19 (D-1050, D-1025): a market with no row writes no run record - the guard trigger would refuse it.
+  // M19 (D-1050, D-1823): a market with no row writes no run record - the guard trigger would refuse it.
   if (a.kind === "failed" && a.reason === "market_missing")
     return { exit: 1, status: "failed", reason: a.reason, target: a.target, dates: [] };
 

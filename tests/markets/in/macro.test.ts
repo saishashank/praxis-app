@@ -1,5 +1,5 @@
 // @vitest-environment node
-// M20 IN1 (DAT-243 macro, D-1132, D-1171, D-1173) and integration (0037, D-1147): the macro CSV, its storage through the
+// M20 IN1 (DAT-243 macro, D-1132, D-1171, D-1173) and integration (0040, D-1147): the macro CSV, its storage through the
 // shared macro writer (source by series: RBI_* -> rbi, MOSPI_* -> mospi; refused before any statement while India is
 // off), and the manual index CSV. The index parser keeps the profile's index codes only and the bar's known time is
 // close + latency.

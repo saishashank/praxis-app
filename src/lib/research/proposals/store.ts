@@ -10,7 +10,7 @@ import { nameKey, ruleShaOf } from "./validate";
 import { PROPOSAL_KINDS, type ProposalKind } from "./schema";
 
 const ID_PREFIX_CHARS = 12; // threshold-ok: characters of the proposal id in the charged lineage name
-const MODEL_ID_MAX = 128; // threshold-ok: model_id column cap (0040)
+const MODEL_ID_MAX = 128; // threshold-ok: model_id column cap (0043)
 const KNOWN_ROWS = 300; // threshold-ok: bound on the earlier proposals and rule versions read for the duplicate check
 const LOG_SOURCE = "research";
 

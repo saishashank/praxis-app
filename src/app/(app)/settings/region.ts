@@ -1,9 +1,9 @@
-// Region & markets view model (UXN-282, UXN-312, MKT-106, MKT-114, D-128 decision 27, D-997, D-998). Pure
+// Region & markets view model (UXN-282, UXN-312, MKT-106, MKT-114, D-128 decision 27, D-1812, D-998). Pure
 // helpers plus two readers that add the market hours and the per-market sharing check on top of loadSettings.
 // Hours are converted to Melbourne time for today's date, so the daylight-saving switch days show the right
 // hours. Every row comes from the `market` table and its profile (the static IN/US rows and the exchange map
 // are gone: every built market has a row). The Owner sees every row; Editors and Viewers see enabled markets
-// only, never a built-off row (D-997).
+// only, never a built-off row (D-1812).
 import type { Client } from "@libsql/client";
 import { loadProfile } from "@/lib/market/profile";
 import { HOME_MARKET, OWNER_TZ } from "@/lib/market/profileCore.mjs";
@@ -122,7 +122,7 @@ export function statusText(
   }
 }
 
-/** The gates still open on a built market, in fixed words (the checklist with evidence links is M20, D-1001). */
+/** The gates still open on a built market, in fixed words (the checklist with evidence links is M20, D-1814). */
 export const BUILT_GATE_ITEMS: readonly string[] = ["AU 60 trading days", "Owner approval"];
 
 /**

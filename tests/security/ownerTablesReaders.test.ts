@@ -92,7 +92,7 @@ describe("ARN-121: only the allow-listed files name an Owner table", () => {
 });
 
 describe("the Owner tables are append-only in code", () => {
-  it("no file updates or deletes an Owner table row (the 0038 triggers would refuse it anyway)", () => {
+  it("no file updates or deletes an Owner table row (the 0041 triggers would refuse it anyway)", () => {
     const WRITE =
       /\b(?:UPDATE|DELETE\s+FROM|INSERT\s+OR\s+REPLACE\s+INTO|REPLACE\s+INTO)\s+owner_(?:trade|trade_void|holding)\b|ON\s+CONFLICT[^;`"']*DO\s+UPDATE/i;
     const bad = [...sources].filter(([, s]) => TABLE.test(s) && WRITE.test(s)).map(([f]) => f);

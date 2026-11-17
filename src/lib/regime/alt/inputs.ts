@@ -16,7 +16,7 @@ export const PREDICTION_SOURCES = {
 export type PredictionRegisterId = keyof typeof PREDICTION_SOURCES;
 export const PREDICTION_REGISTER_IDS = Object.keys(PREDICTION_SOURCES) as PredictionRegisterId[];
 
-/** The `macro_series.source` words (migrations 0033 and 0037); a profile entry is lower-cased and kept when it is one of them. */
+/** The `macro_series.source` words (migrations 0036 and 0040); a profile entry is lower-cased and kept when it is one of them. */
 export const MACRO_SOURCE_WORDS = ["rba", "abs", "rbi", "mospi", "fred"] as const;
 
 /** A prediction-market probability older than this many days is not an input (the fetcher writes every session). */

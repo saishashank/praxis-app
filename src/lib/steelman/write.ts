@@ -319,7 +319,7 @@ async function writeInner(
 
   const criticRouter = deps.criticRouterFor(author);
   if (criticRouter === null) {
-    // OPS-111 (4), D-977: a critic that was never called leaves a call row of its own (provider `none`,
+    // OPS-111 (4), D-1794: a critic that was never called leaves a call row of its own (provider `none`,
     // no tokens), written through the router's store, so "no checker" is visible next to real calls.
     try {
       await deps.store.recordCall({

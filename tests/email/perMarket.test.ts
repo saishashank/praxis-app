@@ -1,5 +1,5 @@
 // @vitest-environment node
-// M20 S1 (UXN-313, D-1124, D-1061, O-34): per-market sections of the Evening Review and the Morning Brief. Two enabled
+// M20 S1 (UXN-313, D-1124, D-1828, O-34): per-market sections of the Evening Review and the Morning Brief. Two enabled
 // markets in full mode that trade on the date give two sections, each in its own currency, never pooled; AU alone (or a
 // second market that is off or data-only) leaves the e-mail byte-identical to the M19 one (the snapshot tests pin it).
 import type { Client } from "@libsql/client";

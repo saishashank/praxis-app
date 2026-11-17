@@ -47,7 +47,7 @@ Secrets that Actions cannot see are proven by a signed route on the deployed app
 Actions never prints the app URL (it comes from the environment secret
 `APP_BASE_URL_STAGING` or `APP_BASE_URL_PROD`; if missing, the step says so and exits 1).
 
-Signing scheme v2 (SEC-115, D-957; code: `src/lib/security/hmac.ts` and `scripts/smoke/sign.mjs`):
+Signing scheme v2 (SEC-115, D-1786; code: `src/lib/security/hmac.ts` and `scripts/smoke/sign.mjs`):
 
 | Item | Value |
 | --- | --- |

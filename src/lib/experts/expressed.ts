@@ -1,4 +1,4 @@
-// Expressed clusters at screening time (M22 E4; KB-085, D-1437). Reads `cluster_expression` (0039); writes nothing.
+// Expressed clusters at screening time (M22 E4; KB-085, D-1437). Reads `cluster_expression` (0042); writes nothing.
 // A cluster is an expressed candidate when a person confirmed it, a supporting claim is checked (as for a fitted
 // cluster, LLM-069), it has NO family fit (a fitted cluster is screened as a fit) and its latest expression is
 // `expressed`. Each statement names its row cap; no OFFSET.

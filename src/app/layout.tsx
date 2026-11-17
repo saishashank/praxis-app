@@ -8,7 +8,7 @@ import "./globals.css";
 import "./text-size.css";
 
 // Served from our origin (font-src 'self', D-130). D-884: Source Sans 3 for text and numbers (tabular
-// figures, UXN-002), Source Serif 4 for titles. M18 D-990: the files are committed (variable fonts, latin
+// figures, UXN-002), Source Serif 4 for titles. M18 D-1805: the files are committed (variable fonts, latin
 // subset, SIL Open Font License 1.1, from Google Fonts) so the build never fetches fonts: the
 // next/font/google fetch failed builds at random in CI.
 const sourceSans = localFont({

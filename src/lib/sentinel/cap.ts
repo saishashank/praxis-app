@@ -1,4 +1,4 @@
-// DAT-251 b (D-954): how many announcements one Sentinel call may assess.
+// DAT-251 b (D-1783): how many announcements one Sentinel call may assess.
 //   effective cap = min(news_assess_per_run, LLM headroom cap, Turso cap)
 //   LLM headroom cap  the items the rest of today's LLM budget can assess at the measured cost per item
 //   Turso cap         40 (the old AGT-010 / PLT-075 ceiling) while the Turso meter is at `notice` or worse
@@ -19,7 +19,7 @@ import {
 } from "@/lib/usage/meters";
 
 /** The Turso cap: the old fixed ceiling, applied only near the Turso line. */
-export const TURSO_NEAR_LINE_CAP = 40; // threshold-ok: DAT-251 b / D-954, fixed
+export const TURSO_NEAR_LINE_CAP = 40; // threshold-ok: DAT-251 b / D-1783, fixed
 /** Measured LLM tokens one assessed item costs today: the Sentinel is rules-only, so none. */
 export const LLM_TOKENS_PER_ITEM = 0; // threshold-ok: measured, see the header
 

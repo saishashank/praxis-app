@@ -1,5 +1,5 @@
 // @vitest-environment node
-// DAT-252 (3), D-974: the split-day frequency is a pure function plus one read-only measurement, and it
+// DAT-252 (3), D-1791: the split-day frequency is a pure function plus one read-only measurement, and it
 // is a scenario of the SELECT-only diagnose CLI. Fixture data only.
 import { afterEach, describe, expect, it } from "vitest";
 import { diagnoseMain, readOnly, SCENARIOS } from "@/lib/arena/diagnose";

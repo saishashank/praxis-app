@@ -11,7 +11,7 @@ export const TERMS: readonly Term[] = [
   {
     official: "Execution / Arena",
     shown: "Strategy / My strategies",
-    hover: "One of 6 practice strategies, each starting with A$600 of pretend money.",
+    hover: "One of 6 practice strategies, each starting with A$5,000 of pretend money.",
   },
   {
     official: "NAV",
@@ -21,7 +21,7 @@ export const TERMS: readonly Term[] = [
   {
     official: "Seed / Target / Bust",
     shown: "Starting money / Goal / Loss limit",
-    hover: "Starts at A$600, aims for A$1,200, stops and restarts if it falls to A$300.",
+    hover: "Starts at A$5,000, aims for A$10,000, stops and restarts if it falls to A$2,500.",
   },
   {
     official: "Cohort",

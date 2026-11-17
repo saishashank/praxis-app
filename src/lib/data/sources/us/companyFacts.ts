@@ -7,7 +7,7 @@
 // value, never a later one (the replay's TST-109 check, replay/snapshotWorld.ts, fails a read ahead of its filing).
 //
 // No network here: the fetch of the JSON is the US1 task's (polite client, `PRAXIS_EDGAR_CONTACT`, D-1094); this file
-// takes the parsed JSON. Writes go through the `fundamental_fact` guard triggers (0036), so a market that is off is
+// takes the parsed JSON. Writes go through the `fundamental_fact` guard triggers (0039), so a market that is off is
 // refused by the database itself.
 import type { Client } from "@libsql/client";
 

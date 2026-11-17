@@ -1,4 +1,4 @@
-// AU brokerage cost profiles P0 to P6, moved byte-for-byte from src/lib/arena/costs.ts (M19 A1, D-1003 d).
+// AU brokerage cost profiles P0 to P6, moved byte-for-byte from src/lib/arena/costs.ts (M19 A1, D-1816 d).
 // The figures, names, spec references and flags are today's; a rate is kept as its decimal-percent text
 // ("0.12%") because this module is plain ESM with no rational type: the engine in costs.ts (stream B2)
 // parses it with parseRational exactly as it does today. Money is micro units of the market currency

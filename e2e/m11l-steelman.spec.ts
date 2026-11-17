@@ -72,7 +72,7 @@ for (const role of ["editor", "viewer"] as const) {
   });
 }
 
-// OPS-111 (8), D-977: the browser walk for the masked roles. An Editor and a Viewer open the card by its opaque
+// OPS-111 (8), D-1794: the browser walk for the masked roles. An Editor and a Viewer open the card by its opaque
 // reference (a masked role never sees the stored id, D-135) and read the same two lists, but the page text never
 // carries the stock code, and /review stays refused (above).
 for (const role of ["editor", "viewer"] as const) {

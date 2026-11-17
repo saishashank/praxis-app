@@ -1,6 +1,6 @@
 # Replay hash policy
 
-What the AT-32 replay hash compares, what it leaves out, and who may change that. Written for M11-lite residual 12 (closed in M18, OPS-111, D-977).
+What the AT-32 replay hash compares, what it leaves out, and who may change that. Written for M11-lite residual 12 (closed in M18, OPS-111, D-1794).
 
 ## The rule
 

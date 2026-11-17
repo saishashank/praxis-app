@@ -1,5 +1,5 @@
 // Generates the market profile fixtures tests/market/profiles/<CODE>.json from the seed modules (M19 A1; TST-139,
-// D-970, D-1001): the fixture IS the seed (a seed edit without a fixture edit fails `--check`), so the test
+// D-1787, D-1814): the fixture IS the seed (a seed edit without a fixture edit fails `--check`), so the test
 // matrix (describeEachMarket) runs AU, IN and US from one definition. Usage:
 //   node scripts/market/gen-fixtures.mjs           writes the three files
 //   node scripts/market/gen-fixtures.mjs --check   exits 1 when a committed file differs from the seed

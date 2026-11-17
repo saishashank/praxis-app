@@ -82,7 +82,7 @@ describe("picks are never read by ranking or sizing", () => {
       // benchmark and the window helper so a call is set against the market on the same basis as a pick;
       // it writes only expert_call_outcome, never a pick, order or rank (PRD-035 boundary test).
       f === "src/lib/experts/calls.ts" ||
-      // D-913: the page loader of the Follow the picks card reads the profile name it follows
+      // D-950: the page loader of the My portfolio card reads its settings and the split words
       f === "src/lib/ui/loaders/pickPortfolio.ts" ||
       // OPS-110 (D-941): Home and the Evening Review read the stored "No picks tonight: ..." line
       f === "src/lib/ui/loaders/home.ts" ||
@@ -92,6 +92,9 @@ describe("picks are never read by ranking or sizing", () => {
       // learning or Cortex module reads it back) and lives behind the Owner-tools switch.
       f === "src/lib/ownerTools/sizing.ts" ||
       f === "src/lib/ownerTools/recommendations.ts" ||
+      // D-1062 (O-84): the pick scorecard replays the nightly picks on past data as a report; it is
+      // outside the trading folders and writes only its own two tables and one report-only look.
+      f.startsWith("src/lib/scorecard/") ||
       f.startsWith("src/app/");
     expect(importers.filter((f) => !allowed(f))).toEqual([]);
     // and the review import exists, so this guard is not vacuous
@@ -126,8 +129,8 @@ describe("picks are never read by ranking or sizing", () => {
     expect(bad).toEqual([]);
   });
 
-  it("writes only to its own tables (pick_check: D-187; pick_market: ARN-103; pick_portfolio_*: D-913)", () => {
-    // INSERT OR IGNORE / OR REPLACE INTO counts too (D-951).
+  it("writes only to its own tables (pick_check: D-187; pick_market: ARN-103; pick_portfolio_*: D-913, D-950)", () => {
+    // INSERT OR IGNORE / OR REPLACE INTO counts too (D-1780).
     const re = /\b(?:INSERT\s+(?:OR\s+[a-z]+\s+)?INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)/gi;
     const targets = new Set<string>();
     for (const file of walk(path.join(ROOT, "src/lib/picks"))) {
@@ -139,6 +142,8 @@ describe("picks are never read by ranking or sizing", () => {
       "pick_market",
       "pick_outcome",
       "pick_portfolio_day",
+      "pick_portfolio_hold",
+      "pick_portfolio_split",
       "pick_portfolio_trade",
     ]);
   });

@@ -44,7 +44,7 @@
 //    the slot has passed and there is neither a success nor a running record for the key."
 //
 // How the rules apply here:
-//  - M19 C1 (D-996): the slot table is built per ENABLED market row (schedule.ts `slotTable`, markets.ts); a
+//  - M19 C1 (D-1811): the slot table is built per ENABLED market row (schedule.ts `slotTable`, markets.ts); a
 //    market that is not enabled has no slot and nothing is dispatched for it. The rows are cached per isolate
 //    (idle minutes stay free) and re-read in the same request as the state whenever a window is open.
 //  - The decision (`candidateSlots`, `decide`) is pure arithmetic on the Sydney local minute
@@ -133,7 +133,7 @@ export type Facts = {
   /** market.mode of the table's first market, or null when unreadable (treated like "off" for market-bound slots). */
   marketMode: string | null;
   tradingDay: boolean;
-  /** Mode and trading day by market code, for slots tagged with a market (D-1045); absent = none tagged. */
+  /** Mode and trading day by market code, for slots tagged with a market (D-1825); absent = none tagged. */
   marketModes?: Readonly<Record<string, string>>;
   tradingDays?: Readonly<Record<string, boolean>>;
   /** The runtime slot list (default: absent, i.e. today's behaviour). */
@@ -146,7 +146,7 @@ export type Facts = {
    */
   closedKeys?: ReadonlySet<string>;
   /**
-   * M18 (D-953): run-record keys with a success/degraded record, for `Slot.recheck.needsKeyPrefix`
+   * M18 (D-1782): run-record keys with a success/degraded record, for `Slot.recheck.needsKeyPrefix`
    * (2b is re-dispatched only after 2a settled). Absent = unknown, so such a slot is never re-dispatched.
    */
   settledKeys?: ReadonlySet<string>;
@@ -178,7 +178,7 @@ export const RECHECK_CLOSED_SQL =
   "OR (status = 'skipped' AND json_extract(details_json, '$.reason') IS NOT 'no_completion_marker' " +
   // R4-I3 (D-833): a capped catch-up leaves a `skipped` record that does NOT close the night
   "AND json_extract(details_json, '$.reason') IS NOT 'catch_up_capped' " +
-  // M18 (D-953): a 2b that gave up waiting for 2a did not decide the night, so the clock may run it again
+  // M18 (D-1782): a 2b that gave up waiting for 2a did not decide the night, so the clock may run it again
   // (only once 2a has settled: Slot.recheck.needsKeyPrefix)
   "AND json_extract(details_json, '$.reason') IS NOT 'no_2a_success') " +
   // R2-I3 (D-808): a night REFUSED because the previous session is not closed is closed FOR THE RECHECK
@@ -399,10 +399,10 @@ export function decideWithSkips(
         st.n < MAX_ATTEMPTS &&
         nowMs - Date.parse(st.at) >= rc.afterMin * MINUTE_MS &&
         !facts.closedKeys.has(`${rc.keyPrefix}${local.date}`) &&
-        // M18 (D-953): a night that needs another job first (2b needs 2a) waits for its settled record
+        // M18 (D-1782): a night that needs another job first (2b needs 2a) waits for its settled record
         (rc.needsKeyPrefix === undefined ||
           facts.settledKeys?.has(`${rc.needsKeyPrefix}${local.date}`) === true) &&
-        // M18 (D-953) `once`: a dispatch at or after slot + afterMin was itself the recheck
+        // M18 (D-1782) `once`: a dispatch at or after slot + afterMin was itself the recheck
         (rc.once !== true ||
           (slot.tz === undefined ? sydneyLocal : (ms: number) => localFor(slot.tz as string, ms))(
             Date.parse(st.at),
@@ -533,7 +533,7 @@ export async function runClock(
     const local = sydneyLocal(scheduledTime);
     let needRollup = rollupDate !== local.date;
 
-    // ---- the slot table: fixed (tests) or built from the enabled market rows (D-996) ---------------
+    // ---- the slot table: fixed (tests) or built from the enabled market rows (D-1811) ---------------
     let rows: MarketRow[] | null = null;
     let rowsFresh = false;
     let slots: readonly Slot[];
@@ -616,7 +616,7 @@ export async function runClock(
         args: [...recheckKeys, iso(nowMs - RECHECK_RUNNING_MAX_MS)],
       });
     }
-    // M18 (D-953): the prerequisite night of a recheck (2a for 2b) must be success/degraded, the same
+    // M18 (D-1782): the prerequisite night of a recheck (2a for 2b) must be success/degraded, the same
     // predicate batch 2b's own `closedOk` uses, so a re-dispatch never lands on a skip again.
     const settledKeysWanted = [
       ...new Set(

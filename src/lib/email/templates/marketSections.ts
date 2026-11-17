@@ -1,4 +1,4 @@
-// Per-market sections of the Evening Review and the Morning Brief (UXN-313, D-1124, D-1061; M20 S1). With one market the
+// Per-market sections of the Evening Review and the Morning Brief (UXN-313, D-1124, D-1828; M20 S1). With one market the
 // e-mail is exactly what it was (the M19 snapshot tests): these blocks are added only when a SECOND enabled market that
 // trades on the date has something to say, one section per market, in its own currency, never pooled with another
 // market's figures (O-34). Pure and deterministic: no clock, no locale API (grouping is done here, the lakh style for

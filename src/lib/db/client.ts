@@ -27,7 +27,7 @@ function make(urlVar: string, tokenVar: string, intMode?: "bigint"): Client {
 }
 
 /**
- * M19 A2 (D-995): the incident writer for a refused write. S2 `market_not_enabled`, at most once per market per
+ * M19 A2 (D-1810): the incident writer for a refused write. S2 `market_not_enabled`, at most once per market per
  * process-day here (the incident itself opens once while unresolved), best effort: it never throws, and it
  * writes through the raw client (the incident table has no market column, the guard is not in its way).
  */

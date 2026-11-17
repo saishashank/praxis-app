@@ -25,7 +25,7 @@ export const benchmarkLabel = (basis: BenchBasis): string =>
   basis === "total_return" ? TOTAL_RETURN_BASIS_LABEL : PRICE_ONLY_BASIS_LABEL;
 
 /**
- * ARN-123 (D-956): the label of a pick's OWN result by its stored outcome basis. Rows settled before M18
+ * ARN-123 (D-1785): the label of a pick's OWN result by its stored outcome basis. Rows settled before M18
  * are price only and keep the D-143 wording; later rows credit dividends. A list that holds both says so
  * in one plain sentence; an empty list keeps the old wording.
  */

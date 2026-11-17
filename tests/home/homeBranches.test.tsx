@@ -29,11 +29,13 @@ function baseView(): HomeView {
     day: { regime: null, regimeD: null, quality: [], openFlags: 0, index: null },
     picks: { d: null, items: [] },
     intraday: null,
+    portfolios: null,
     ideas: { d: null, items: [], signals: 0 },
     watchlist: [],
     news: { hidden: false, items: [] },
     review: null,
     attentionCount: null,
+    top5Line: null,
   };
 }
 
@@ -48,6 +50,15 @@ const pick = (over: Partial<HomePick> = {}): HomePick => ({
   referenceMicro: 10_000_000,
   stopMicro: 9_200_000,
   aimMicro: 11_000_000,
+  company: null,
+  entryMicro: 10_000_000,
+  entryBought: false,
+  lastCloseD: "2026-10-19",
+  stopPpm: -80_000,
+  aimPpm: 100_000,
+  nowMicro: null,
+  nowChangePpm: null,
+  nowLabel: null,
   aimReachPpm: null,
   timeFrameSessions: 4,
   validUntil: "2026-10-23",
@@ -128,6 +139,19 @@ describe("daySentence", () => {
   });
   it("says nothing about the strategies when the change is not measured", () => {
     expect(withPpm(null, "Today", 2)).not.toContain("Your strategies");
+  });
+});
+
+describe("D-994 the top-5 gainer line", () => {
+  it("shows the four-week rate line under the day sentence only when one is stored", () => {
+    show((v) => {
+      v.top5Line =
+        "Top 5 gainers named before they moved, the last 20 trading days: 3 of 100 (3%).";
+    });
+    expect(screen.getByTestId("top5-line")).toHaveTextContent("3 of 100");
+    cleanup();
+    show();
+    expect(screen.queryByTestId("top5-line")).toBeNull();
   });
 });
 
@@ -262,6 +286,42 @@ describe("Home content: since yesterday and needs you", () => {
   });
 });
 
+describe("Home content: My portfolio (D-950)", () => {
+  it("shows the three practice portfolios once one has started, nothing before", () => {
+    show();
+    expect(screen.queryByTestId("pick-portfolio")).toBeNull();
+    cleanup();
+    show((v) => {
+      v.portfolios = {
+        masked: false,
+        seed: m(1_000_000_000),
+        stockMaxPct: 30,
+        strategyMaxPct: 40,
+        portfolios: ["conservative", "balanced", "aggressive"].map((profile) => ({
+          profile,
+          started: profile === "balanced",
+          holdingsMax: 4,
+          asOfD: null,
+          seed: null,
+          value: null,
+          cash: null,
+          gain: null,
+          sinceStartPpm: null,
+          worstFallPpm: null,
+          holdings: [],
+          split: null,
+          splitWhy: null,
+          trades: [],
+          closed: 0,
+          wins: 0,
+        })),
+      } as unknown as HomeView["portfolios"];
+    });
+    expect(screen.getByTestId("pick-portfolio")).toHaveTextContent("My portfolio");
+    expect(screen.getAllByText("Starts with the first pick.")).toHaveLength(2);
+  });
+});
+
 describe("Home content: picks", () => {
   it("shows the top pick of a profile with prices, size word, time frame and plain valid-until day", () => {
     show((v) => {
@@ -271,14 +331,36 @@ describe("Home content: picks", () => {
     expect(cards).toHaveLength(1);
     const t = cards[0]!.textContent!;
     expect(t).toContain("Balanced #1");
-    expect(t).toContain("Large company");
-    expect(t).toContain("Time frame 4 sessions");
-    expect(t).toContain("Valid until Fri 23 Oct");
+    expect(t).toContain("Window 4 sessions");
+    expect(document.querySelector("[data-testid=home-pick-size]")).toHaveAttribute(
+      "title",
+      "Large company",
+    );
+    expect(t).toContain("until Fri 23 Oct");
     expect(t).not.toMatch(ISO);
     expect(screen.getByRole("link", { name: "Why this pick" })).toHaveAttribute(
       "href",
       "/picks/p1",
     );
+  });
+
+  it("D-1002: each profile's card has its own accent colour and a coloured profile label", () => {
+    show((v) => {
+      v.picks.items = [
+        pick({ profile: "aggressive", rank: 1 }),
+        pick({ profile: "balanced", rank: 1 }),
+        pick({ profile: "conservative", rank: 1 }),
+      ];
+    });
+    const cards = [...document.querySelectorAll("[data-pick-card]")];
+    expect(cards.map((c) => c.querySelector("[data-hue]")!.getAttribute("data-hue"))).toEqual([
+      "tier-p0",
+      "tier-p1",
+      "status-allowed",
+    ]);
+    expect(
+      cards.map((c) => c.querySelector("[data-profile]")!.getAttribute("data-profile")),
+    ).toEqual(["aggressive", "balanced", "conservative"]);
   });
 
   it("falls back to the first three in list order, singular session, unknown profile and size, missing prices", () => {
@@ -292,6 +374,8 @@ describe("Home content: picks", () => {
           validUntil: null,
           aimMicro: null,
           stopMicro: null,
+          aimPpm: null,
+          stopPpm: null,
         }),
         pick({ rank: 3, timeFrameSessions: null }),
         pick({ rank: 4 }),
@@ -300,32 +384,130 @@ describe("Home content: picks", () => {
     });
     const cards = document.querySelectorAll("[data-pick-card]");
     expect(cards).toHaveLength(3);
-    expect(cards[0]!.textContent).toContain("custom #2");
-    expect(cards[0]!.textContent).toContain("Time frame 1 session");
-    expect(cards[0]!.textContent).not.toContain("company");
-    expect(cards[0]!.textContent).not.toContain("Valid until");
+    expect(cards[0]!.textContent).toContain("Custom #2");
+    expect(cards[0]!.textContent).toContain("Window 1 session");
+    expect(cards[0]!.textContent).not.toContain("Large");
+    expect(cards[0]!.textContent).not.toContain("until");
     expect(cards[0]!.textContent).toContain("Aim n/a");
     expect(cards[0]!.textContent).toContain("Stop n/a");
-    expect(cards[1]!.textContent).toContain("Time frame not set");
+    expect(cards[1]!.textContent).toContain("Window not set");
   });
 
-  it("hides prices for a masked viewer and says so, and says nothing for an unmasked pick without prices", () => {
+  it("shows percentages only for a masked viewer, and nothing for an unmasked pick without prices", () => {
     show(
       (v) => {
         v.picks.items = [
-          pick({ referenceMicro: null, stock: "Stock A", validUntil: "week 2026-W43" }),
+          pick({
+            referenceMicro: null,
+            stopMicro: null,
+            aimMicro: null,
+            entryMicro: null,
+            lastCloseD: null,
+            stock: "Stock A",
+            validUntil: "week 2026-W43",
+          }),
         ];
       },
       { masked: true, role: "viewer" },
     );
     const card = document.querySelector("[data-pick-card]")!;
-    expect(card.textContent).toContain("Prices hidden for your role");
-    expect(card.textContent).toContain("Valid until week 2026-W43");
+    expect(card.textContent).toContain("Aim +10%");
+    expect(card.textContent).toContain("Stop -8%");
+    expect(card.textContent).not.toMatch(/A$|Entry|Now/);
+    expect(card.textContent).toContain("until week 2026-W43");
     cleanup();
     show((v) => {
-      v.picks.items = [pick({ referenceMicro: null })];
+      v.picks.items = [
+        pick({
+          referenceMicro: null,
+          stopMicro: null,
+          aimMicro: null,
+          entryMicro: null,
+          stopPpm: null,
+          aimPpm: null,
+        }),
+      ];
     });
     expect(document.querySelector("[data-pick-card]")!.textContent).not.toMatch(/Aim|Stop|hidden/);
+  });
+});
+
+describe("Home content: pick prices (Owner 2026-11-16)", () => {
+  const priced = {
+    company: "Zed Upward Holdings",
+    referenceMicro: 1_230_000,
+    stopMicro: 1_100_000,
+    aimMicro: 1_450_000,
+    entryMicro: 1_230_000,
+    lastCloseD: "2026-11-12",
+    stopPpm: -110_000,
+    aimPpm: 180_000,
+    nowMicro: 1_300_000,
+    nowChangePpm: 56_911,
+    nowLabel: "Delayed, 13:05",
+  };
+  const cardText = () => document.querySelector("[data-pick-card]")!.textContent ?? "";
+
+  it("shows the company, entry, current price and aim and stop with percent", () => {
+    show((v) => {
+      v.picks.items = [pick({ stock: "ZZUP", ...priced })];
+    });
+    const text = cardText();
+    expect(text).toContain("ZZUP · Zed Upward Holdings");
+    expect(text).toContain("Entry A$1.23 · close Thu 12 Nov");
+    expect(text).toContain("Now A$1.30 +5.7% · Delayed, 13:05");
+    expect(text).toContain("Aim A$1.45 +18%");
+    expect(text).toContain("Stop A$1.10 -11%");
+    // D-1085: the name is one truncated line, the size a chip, values keep their groups together.
+    const name = screen.getByTitle("Zed Upward Holdings");
+    expect(name.className).toContain("truncate");
+    expect(name.className).toContain("min-w-0");
+    expect(screen.getByTestId("home-pick-size").textContent).toBe("Large");
+    expect(screen.getByTestId("home-now-line").querySelector(".whitespace-nowrap")).not.toBeNull();
+  });
+
+  it("says Bought at once bought, and leaves out the now line when there is no current price", () => {
+    show((v) => {
+      v.picks.items = [
+        pick({
+          ...priced,
+          entryBought: true,
+          entryMicro: 1_200_000,
+          nowMicro: null,
+          nowChangePpm: null,
+          nowLabel: null,
+        }),
+      ];
+    });
+    expect(cardText()).toContain("Bought A$1.20");
+    expect(cardText()).not.toContain("Now ");
+  });
+
+  it("masked: percentages only, no name, price or date", () => {
+    show(
+      (v) => {
+        v.picks.items = [
+          pick({
+            ...priced,
+            stock: "Stock A",
+            company: null,
+            referenceMicro: null,
+            stopMicro: null,
+            aimMicro: null,
+            entryMicro: null,
+            lastCloseD: null,
+            nowMicro: null,
+            nowLabel: null,
+          }),
+        ];
+      },
+      { masked: true, role: "viewer" },
+    );
+    const text = cardText();
+    expect(text).toContain("Now +5.7% from entry");
+    expect(text).toContain("Aim +18%");
+    expect(text).toContain("Stop -11%");
+    expect(text).not.toMatch(/Zed|ZZUP|A$|Delayed|last close/);
   });
 });
 
@@ -451,5 +633,28 @@ describe("Home content: watchlist, news and review", () => {
       v.review = { d: "2026-W43", day: "2026-W43", kind: "evening" };
     });
     expect(screen.getByRole("link", { name: /, 2026-W43/ })).toBeInTheDocument();
+  });
+});
+
+describe("Home content: between rounds (Owner 2026-11-16)", () => {
+  it("shows the round note instead of the empty-strategies words when one is stored", () => {
+    show((v) => {
+      v.summary = {
+        strategies: 0,
+        d: null,
+        tiles: [],
+        note: "Round 2 starts Tue 17 Nov with A$5,000 a strategy.",
+      };
+    });
+    expect(screen.getByTestId("round-note")).toHaveTextContent("Round 2 starts Tue 17 Nov");
+    expect(screen.queryByText(/No strategy is running yet/)).toBeNull();
+  });
+
+  it("without a note the empty words stay", () => {
+    show((v) => {
+      v.summary = { strategies: 0, d: null, tiles: [], note: null };
+    });
+    expect(screen.queryByTestId("round-note")).toBeNull();
+    expect(screen.getByText(/No strategy is running yet/)).toBeInTheDocument();
   });
 });

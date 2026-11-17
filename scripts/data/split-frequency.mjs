@@ -1,7 +1,7 @@
 // How often do splits and consolidations occur in the stored data? (M14 DAT-232, D-236; the numbers
 // go into the AT-45 report.) Read only: it runs SELECTs and writes nothing. The logic lives in
 // src/lib/data/splitFrequency.ts (bundled here), and the same scenario runs from
-// `node scripts/arena/diagnose.mjs --scenario splitFrequency` (DAT-252 (3), D-974).
+// `node scripts/arena/diagnose.mjs --scenario splitFrequency` (DAT-252 (3), D-1791).
 //   node scripts/data/split-frequency.mjs [--db <libsql url or file path>] [--window 20]
 // Without --db it uses TURSO_MAIN_URL / TURSO_MAIN_TOKEN. Output: counts and shares only, no
 // secrets and no row text.

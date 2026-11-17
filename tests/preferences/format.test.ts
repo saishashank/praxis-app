@@ -31,7 +31,7 @@ describe("formatTime", () => {
   });
 });
 
-// UXN-313, D-1002: the dual "local · Melbourne" time shows only when the market zone differs from Melbourne.
+// UXN-313, D-1815: the dual "local · Melbourne" time shows only when the market zone differs from Melbourne.
 describe("formatMarketTime", () => {
   it("an AU market (Sydney shares Melbourne's offset) is the single Melbourne form, unchanged", () => {
     for (const at of [

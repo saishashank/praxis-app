@@ -4,6 +4,18 @@
 
 One line per V2 decision from D-206 on, grouped by milestone, with the file that holds the full text. D-001 to D-252 are in [07_decision_log.md](07_decision_log.md). Improvement-batch decisions are in the "Improvements" section at the end of `M13L_design.md`.
 
+## M3 (M3_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-1020 | (O-82) The live arena's second round starts every strategy and every control with A$5,000 (ROUND2_SEED_MICRO, src/lib/arena/cohort.ts). |
+| D-1021 | (O-82) A book of the A$5,000 round holds up to 6 positions (ROUND2_MAX_OPEN_POSITIONS, stored in the cohort's params_json; the A$600 round keeps 2). |
+| D-1022 | (O-82) The switch happens once, at a fixed date, through the normal terminal and restart path (ARN-053), not through a clock or a manual step. |
+| D-1023 | (O-82) Every page that shows a past or present round reads what it started with from the stored cohort row (cohort.seed_micro, params_json), never from a con... |
+| D-1024 | (O-82) The signal ledger notional ledger_notional_aud (ARN-080, A$600) and the cost-gate notional (D-215, COST_GATE_NOTIONAL_MICRO, FAM-005) stay A$600. |
+| D-1025 | (O-82) The config key max_open_positions (ARN-003) keeps its value 2 and bounds 1-2: it still describes the first-round book and the replays; its description... |
+| D-1026 | (O-82) A round_switch ending is stored as kind timeout (no schema change) and its outcome is the liquidation NAV at the close. |
+
 ## M7 (M7_design.md)
 
 | Id | Decision |
@@ -72,6 +84,14 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-588 | (final review) The health line's "written" count is over the window it reads (the last 10 nights), and says so: "n written over the last k nights". |
 | D-589 | (final review) Repo hygiene: .vitest/ is ignored (a Vitest JSON reporter output with local machine paths had been committed in WP7 and is removed from the co... |
 | D-913 | (Owner 2026-11-10: "pick multiple stocks so you diversify … while trading on the portfolio think as end-user money … if a stock is not doing well and has no... |
+| D-950 | (Owner 2026-11-11: "replace Follow the picks with My portfolio") My portfolio replaces the D-913 Follow the picks portfolio (one feature, not two): three pra... |
+| D-951 | (Owner 2026-11-11) Strategy split. Only the strategies in play on a session (a holding, or a pick bought that day) share the money. |
+| D-952 | (Owner 2026-11-11) Buy sizing and the cost guard. |
+| D-953 | (Owner 2026-11-11) Sell rules: the D-913 rules unchanged (stop-loss intraday with the gap rule, aim, time frame over with no support, weak with no signal) pl... |
+| D-954 | (Owner 2026-11-11) Rebalance band: at the close, a strategy holding more than its share plus the profile's band_pct sells the excess from its largest holding... |
+| D-955 | (Owner 2026-11-11) Words. Every trade and every split change carries a plain-words reason without the stock, amounts or dates (the page and the review add th... |
+| D-956 | (Owner 2026-11-11) Profiles in config, my_portfolio_profiles (bounds in the validator): conservative 4 holdings, 1.25 % risk per holding, 25 % per stock, shr... |
+| D-957 | (Owner 2026-11-11) Where it shows: the My portfolio card on Home (after the Intraday watch) and on the Picks page (where the Follow the picks card was), thre... |
 
 ## M13L (M13L_design.md)
 
@@ -319,6 +339,27 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-912 | (Owner 2026-11-10: "stocks in ideas and no picks makes me doubt the basis") Picks are what the Owner trades; the strategies' signals are research. "Tonight's... |
 | D-920 | (Owner 2026-11-10: "no picks yet. This is frustrating") The strategies raise only a handful of signals a night (one on 10 Nov; most rules do not fire in a mi... |
 | D-921 | (Owner 2026-11-10: "the system never learns from each day"; the Evening Review listed the top gainers and losers with "market or sector move?" and nothing wa... |
+| D-980 | (Owner 2026-11-11: "start picking stocks based on new candidates so that you can validate; show me those in the picks, a flag telling it's via a candidate")... |
+| D-981 | The candidate plan, built like the shortlist's: reference = the night's close, stop-loss 2 x ATR(14) below it and only when that is 3-10 % of the price (else... |
+| D-982 | Candidate picks never displace a strategy or a shortlist pick: the pick builder places them after each profile's own picks, in the places those leave free (g... |
+| D-983 | Candidate picks are tracked like every pick (pick_outcome, the nightly check, the luck twin, History). |
+| D-984 | The page: a "Candidate measure" badge on the pick card and on its History row, and a "Candidate" choice in the History status filter (HISTORY_FILTERS; every... |
+| D-985 | Top-5 coverage per measure (the Owner's target, D-990, inside the learning Cortex): each night, for every scored measure and every open probe, whether its to... |
+| D-986 | Its words: the scorecard adds one line before its closing line, naming the scored measure whose top tenth held a top-5 gainer on the most of the last 20 nigh... |
+| D-987 | The candidate picks' results stay evidence words, not an extra "must not be negative" condition of the promotion test: a pick outcome would then feed the Cor... |
+| D-990 | (Owner 2026-11-11: "I want to see the top 5 of top gainers in our picks or intraday consistently. That should be your target.") The nightly top-5 gainer meas... |
+| D-991 | Intraday rule: an intraday_candidate row of session d (the DAT-240 list), its earliest find per share, counts for a gainer only when the share's move at that... |
+| D-992 | A missed top-5 gainer gets its cause from the daily loop's explanation: news before the open (said on its own: "2 moved on news before the open"), else secto... |
+| D-993 | Where it reads first: at the top of the Evening Review's learning section 4 "What we learned today", under "Our target: the day's top 5 gainers" (the e-mail... |
+| D-994 | Home shows the four-week rate against chance in one line under the day sentence ("Top 5 gainers named before they moved, the last 20 trading days: 3 of 100 (... |
+| D-995 | Chance baseline: named shares / liquid shares x 5 = how many of the five a random list of the same size would hold; "about 1 day in N" = 1 / that number. |
+| D-996 | "Did the picks make money overall": the evening-before picks' mean close-to-close move on the day (distinct shares, equal weight, with how many rose and fell). |
+| D-997 | No look-ahead: the gainers of day d are known only after d's close; the picks counted were published the evening before d (before its open); an intraday find... |
+| D-1000 | (Owner 2026-11-11: "balanced and aggressive have same picks, and conservative is a subset of balanced. Aggressive means more risk appetite ... 2 cannot have... |
+| D-1001 | Order inside a profile, after the validation label (then the stored rank score, code, family and variant as tie-breaks): |
+| D-1002 | Each profile has its own accent on the Home and Picks pick cards (left edge and the profile label), taken from existing palette hues so contrast is already c... |
+| D-1003 | One breadcrumb per page: the shell's (CrumbsView, from ROUTES in src/lib/ui/nav.ts) is the only one; the page-level copies on Track record, Why this pick and... |
+| D-1004 | The Evening Review's "New picks" list shows the valid-until day in market words ("Thu 12 Nov") through formatDay, not the stored ISO date; a masked reader st... |
 
 ## M14 (M14_design.md)
 
@@ -490,6 +531,66 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-897 | Research challengers, logged and not trading: the heavy-volume-down veto on F1.v2-mom candidates, a bear-state size halving, and the angle yardstick (top-dec... |
 | D-898 | Diagnosis readout of trades (tradesReadout, read-only, run by diagnose-signals.yml): the main books' trades closed in the last ten fill sessions by family an... |
 | D-899 | (O-79e, the result of the one look, 2026-11-08) F1.v2-mom stays in shadow. |
+| D-923 | The learning Cortex is a rule version per family, <family>.learn (v1: F1.learn), stored as append-only cortex_map rows whose params_json carries the fixed ru... |
+| D-924 | Replay parity: latestMaps(db, market, asOfD) counts a row the learning system wrote (learner: true, or a future system-written base row marked system: true)... |
+| D-925 | The loop never writes angle_passport: status moves inside the learner are weights (watch = capped, benched = 0), so the fixed Cortex's scored set and refit g... |
+| D-926 | An angle with weight 0 is still computed and must be defined: benching never changes who is eligible. |
+| D-927 | A switch to the learner binds on the matured hold-length net (learner minus fixed, per trade) unless the rule holds 20 sessions or fewer, when the four-week... |
+| D-928 | Weights change weekly only (the weekly stage); a checkpoint acts only downward and reversibly (cap, rollback, watch, escalate, fallback); a checkpoint never... |
+| D-929 | Cadences, windows and levels are the C.9 table, pre-registered, Owner-editable within bounds (LEARN_CONFIG_SPEC); the prose constants of the design are the s... |
+| D-930 | The scorecard scores every liquid share, never only the picks; movers on company news published before the open are excluded from the angles' next-day lift. |
+| D-931 | Every weekly run re-weights a coin-flip twin (placebo) beside the real learner and logs it; the words say "within chance" when the real move is inside the tw... |
+| D-932 | "Intelligent every next day" is delivered as a fresh scorecard and words every night, protective checkpoint moves every 2 or 3 days, weight generations weekl... |
+| D-933 | (part B) The cluster cap of a weighted score is max(cluster_weight_max, 1/K): with K clusters at equal weight no share is below 1/K, so equal weights are nev... |
+| D-934 | (part A) The 20-session scorecard leg reads the features of D-21 and the return from the close of D-21 to the close of D-1; returns use raw closes, as the da... |
+| D-935 | (part A) The population check is a PSI over 10 bins on [-1, 1] plus a no-value bin, for the next-day leg only, against the summed histograms of the earlier n... |
+| D-936 | (part A) The news-before-open exclusion applies to the next-day leg only; the regime is the stored regime_daily state; mover coverage ("in the Cortex's top t... |
+| D-937 | (part B) A map's cut-off is decisionCutoffUtc of the night; a learner row whose weights do not match its hash, an undeclared cluster weight, a negative or no... |
+| D-938 | (part C) A weekly finding needs both an overlap-corrected t-test (n / 20 effective nights, Bartlett degrees of freedom) rejected by Benjamini-Hochberg at lea... |
+| D-939 | (part C) The duel's e-process uses the null variance (mean square about 0, floored at τ²); the Page-Hinkley null pool leaves out the latest 20 nights; the pl... |
+| D-940 | The 19 C.9 keys are in the configuration registry (LEARN_KEY_NAMES, area Learning and knowledge), defaults and bounds read from LEARN_CONFIG_SPEC; none is a... |
+| D-941 | Weekly stage cortex, last in LEARNING_STAGES: the first run (or a run after the Owner replaced the fixed F1 rule) writes generation 0 of F1.learn from the fi... |
+| D-942 | Nightly duel inside cortexLearnNight, after the scorecard: the taken decisions of D-21 (fixed and learner rows told apart by their stored rule version), the... |
+| D-943 | Checkpoint rows: on a checkpoint night the B.4 checks read the horizon-1 rows of the null window only (a checkpoint night reads at most 15,000 rows, tested o... |
+| D-944 | Cortex page: a "The learning Cortex" panel (learner on or off, who makes the decisions per family, the last weekly check and its words, the duel with "chance... |
+| D-945 | Plug-in points for the probe and base build: |
+| D-946 | A failure of the learner part is never fatal to the night: the scorecard section is still stored, with one plain line that the comparison runs again tomorrow... |
+| D-970 | Event seqs of one night: 0 the scorecard, 1-99 the nightly learner (duel, checkpoint), 100 / 101 the weekly reweight (or no_change) and its placebo, 200-249... |
+| D-971 | The base is per family (one cortex_base_version lineage per family, version 1 = the fixed rule's scored set as the loop first saw it). |
+| D-972 | The weekly order: baseWeekly runs BEFORE the re-weighting, on the week's last session, at the embargo instant (that session's cut-off + 3 s, after the learne... |
+| D-973 | A system base row copies the map in force (the fixed rule or the previous base row) without the learner keys and sets: angles = the new base in registry orde... |
+| D-974 | The promotion test (strictest tier, B.2): from the probe's open night, at least 2 complete fixed 60-trading-day blocks (at most 4 read), every block's mean n... |
+| D-975 | At most one base change per family per 21 trading days; a retirement is chosen before a promotion; a change that would leave the base empty (or name an unkno... |
+| D-976 | Charges: every probe is charged when it opens, before any result (cortex_ledger_cell kind learn_probe + a trial_ledger row, rule version cortex:<family>.prob... |
+| D-977 | Probe sources: a daily-loop mover cause behind a big move on at least 8 of the last 20 nights. volume_no_news maps to A-D2-07 (heavy trading without news); s... |
+| D-978 | Probe scoring: the Cortex stage computes the open probes' values into cortex_feature_probe from the night after opening (never read by S or eligibility, so c... |
+| D-979 | Reads: the probe and base readers scan their own event kinds through INDEXED BY cortex_learn_event_kind (market, kind, d) - a few rows a month - never OFFSET... |
+| D-1060 | (O-84) Scorecard only. For each of the last N sessions d that have a following session, the night's picks are rebuilt from data known at the close of d and s... |
+| D-1061 | (O-84) Storage: pick_scorecard_run (one row a run, write-once) and pick_scorecard_day (one row a night, write-once, per-profile sums and the per-night detail... |
+| D-1062 | (O-84) Isolation: the code lives in src/lib/scorecard/ (outside the trading folders, so the tests/picks/isolation.test.ts rule that no replay or learning mod... |
+| D-1063 | (O-84) As-of rules: strategy signals come from SnapshotWorld.familyInputs(d) through runFamilies with the live rule versions (sessions, bars and adjusted clo... |
+| D-1064 | (O-84) Scoring reuses dailyTop5.ts (top5Movers, top5Night: same liquid definition, same chance method "named shares / liquid shares x 5", same miss causes). |
+| D-1065 | (O-84) Not replayed, said on the page and in the log: intraday ideas, candidate measures, and announcements (the snapshot carries no titles or stamps, so "ne... |
+| D-1066 | (O-84 addition) The Cortex line: the FIXED Cortex's night of d (createCortexReplay, default angle set, no learner, no stored weights) is scored with eveningS... |
+| D-1067 | (O-84) Idempotent: the run id is pickscore:<market>:<last d>:<N>:<snapshot sha>:<commit>; a repeat is a no-op. |
+| D-1068 | (O-84) The workflow replay.yml gains the dispatch option pick-scorecard (dispatch only, production environment, the same single secrets step); the log line c... |
+| D-1069 | (O-84) The Track record page shows the section "Replay check: last N sessions" from the latest run: top-5 gainers in our picks as days with a hit of days sco... |
+| D-1070 | (O-84) Cortex coverage: for a night before the first frozen angle passport, the replay uses the EARLIEST frozen passport set (the go-live set), never today's... |
+| D-1071 | (O-84) Strategy history stays the development-split record only (no forward ledger). |
+| D-1072 | (O-84) The section title uses the run's real count ("Replay check: last N sessions"); with no run it reads "Replay check: not run yet". |
+| D-1073 | (O-84 live prices) My portfolio: when any holding has a delayed quote newer than its close, value, gain and since-start are cash plus shares at those prices... |
+| D-1074 | (O-84 live prices) The quote poll's extras gain the stocks the practice portfolios hold (pick_portfolio_hold) and the users' Home watchlist codes (user_watch... |
+| D-1075 | (O-84 live prices) Home headline since-start and the Strategies tiles' bust distance, position and "Within x% of the bust level" note use the live NAV when t... |
+| D-1076 | (O-84 live prices) Picks History "In profit" / "In loss" decide an open trade by the price its row shows (delayed quote newer than the close, else the last c... |
+| D-1077 | (O-84 live prices) Between rounds (a cohort ended and no live round has a value yet) Strategies and Home say "Round N starts <day> with A$X a strategy. Order... |
+| D-1078 | (Owner) Warm start of the learning Cortex: --mode cortex-warm-start [--sessions N] (src/lib/cortex/learn/warmStart.ts, replay.yml option, default 60, bounds... |
+| D-1079 | (Owner) Point in time: for night D only the bars up to D, the price-sensitive announcements published before D's close (a mover counts as "news before the op... |
+| D-1080 | (Owner) Identifiable and independent of the pick scorecard: every warm-start row has the manifest id prefix warmstart: |
+| D-1081 | (Owner) Not touched: the switch rule (the learner takes decisions only after learn_switch_min_nights matured forward disagreement nights, D-927) and every st... |
+| D-1082 | The Cortex replay now takes its tier and halt series from the bar-derived tiers when the snapshot world is bars-tiered (SnapshotWorld.cortexTierRows(fromD),... |
+| D-1083 | Diagnostics, counts and statuses only, no data and no secrets. |
+| D-1084 | Every display change for a delayed quote is measured against our own stored last close, which newerThanClose already guarantees is older than the quote. |
+| D-1085 | The Home pick card is compact at 360 to 400 px. |
 
 ## M16 (M16_design.md)
 
@@ -568,18 +669,18 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-915 | (Owner 2026-11-10: "the strategies still show percentage as of yesterday, not the delayed profit or loss for the day") During the session the Home strategy t... |
 | D-916 | (Owner 2026-11-10: a delayed feed on the Market tab without exhausting the Yahoo limit) The Market tables show, for each listed company, the delayed quote al... |
 | D-918 | (Owner 2026-11-10: "the changes on the strategy cards are not visible on the Strategies page") The Strategies page tiles show the same day's change as Home (... |
+| D-1040 | (O-83) A candidate is a buy idea: the catalyst's polarity is good news AND the price is up (the raw move and the sector-adjusted move both). |
+| D-1041 | (O-83) "Avoid / watch": the bad-news fallers are listed apart on Home and Picks under that heading, with a plain sentence ("Bad news and a falling price. The... |
+| D-1042 | (O-83) "Still early in its rise" uses the existing measures only: a buy idea is up by at least the qualifying move (moveThresholdPpm: intraday_move_min_pct 4... |
+| D-1043 | (O-83) A catalyst of neutral polarity (the volume-creep arm, A3) is neither a buy idea nor an avoid row, so those armed codes are still quoted but write no r... |
+| D-1044 | (O-83) Everything that reads intraday rows reads buy ideas only: the top-5 "found intraday" credit (daily.ts feeds dailyTop5; a faller found at -2 % was cred... |
+| D-1045 | (O-83) Outcome tracking already reflects a buy at the found price: measureCandidates computes excess_found_* from the previous close times (1 + move_ppm), th... |
+| D-1046 | (O-83) Not decided here: whether to take an Avoid / watch fall into the evening decision as a veto. |
 
 ## M18 (M18_design.md)
 
 | Id | Decision |
 | --- | --- |
-| D-951 | OPS-110 is closed by evidence, not by a fix to the decision path: the night's "No picks tonight: …" reason is a stored line (src/lib/picks/noPicks.ts), writt... |
-| D-952 | OPS-106 gap table (the spec names the decisions, not the gaps). |
-| D-953 | D-666 is closed on the Worker side, not in the scripts: the arena-signals slot gains recheck: { keyPrefix: "arena-2b:AU:" → derived from the slot's market, a... |
-| D-954 | DAT-251 b key conflict: sentinel_max_items_per_run (1–40) is renamed news_assess_per_run (default 40, bounds 20–200, Owner) with a config_version row rename... |
-| D-955 | Acceptance for the extract's "no AT named" items and reference corrections: |
-| D-956 | ARN-123 verdict: the picks track record does not credit dividends (track.ts net = qty × exit − brokerage − cost) while its benchmark is total-return (D-490),... |
-| D-957 | SEC-115 scheme v2: message v2\n${METHOD}\n${path}\n${timestamp}\n${nonce}\n${sha256(body)} with header X-Praxis-Version: 2; the verifier refuses any other ve... |
 | D-958 | Turso metering transport: a daily Actions job (turso-usage.yml, Worker slot turso-usage 06:40 Melbourne, approved-commit, deployment: false) reads the platfo... |
 | D-959 | OFFSET has zero exceptions: news.ts and reviews.ts page by keyset cursor ((published_at, id), (d)), retention.ts finds the keep-N boundary with MIN(k) FROM (... |
 | D-960 | The row-by-market invariant runs inside the nightly maintenance route: it counts rows per market in every table with a market column (list derived from schem... |
@@ -592,104 +693,111 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-967 | TST-135: seed states are idempotent overlays (E2E_STATES, e2e/seed/states/<name>.ts) on a scenario, loaded and re-applied by a unit test; market-built-off as... |
 | D-968 | TST-136: the three timing checks become count-based budget tests (Worker work-unit counters through an injected count dep in clock.ts; replay step/evaluation... |
 | D-969 | TST-137: one guide page docs/owner-guide/owner_checks.md; scripts/cortex/golden-spot-check.mjs (seeded 20-row draw from label, agreement and κ on --answers;... |
-| D-970 | TST-138/139: docs/test-map.md gains a "V3 home" column that test-map.mjs requires for every AT-01…AT-85 and AT-M1…AT-M5 (staging-homed tests move to CI recor... |
-| D-971 | OPS-109: (a) is already pinned (vercel@63.1.0) and gets a lint rule so it stays exact; |
-| D-972 | DAT-251 a: asx-fetch classifies every request (not_found / rate_limited / server_error / network / parse), backs off on 429 (Retry-After or doubling) inside... |
-| D-973 | DAT-251 c: RBA and ABS fetchers are Node scripts under scripts/macro/ run as a Friday step of ingest-batch1.yml gated by the repository variable MACRO_FETCH... |
-| D-974 | DAT-252: the Wikidata converter runs in CI on a fixture export; the fallback fetch (one SPARQL request per asx-fetch run) engages only when the listed-compan... |
-| D-975 | DAT-253: SOURCE_HOSTS gains asic.gov.au and ssrn.com; register rows asic_documents and ssrn_papers are seeded pending with their terms [VERIFY] (listed); the... |
-| D-976 | OPS-108: docs/runbooks/rotate-secrets.md is written per secret with the secrets tool steps and the smoke proof; rotation and PAT revocation are PR-listed Own... |
-| D-977 | OPS-111 verdicts: (1) → LLM-077 (M22), re-accepted; |
-| D-978 | OPS-112 verdicts: (1) closed: the weekly close requires the horizon session's bar when d equals the horizon session, else marks the outcome early (new column... |
-| D-979 | Fixed V3 keys are registered once: hmac_scheme_version (default = the hmacCore constant), calendar_draft_markets (default = CALENDAR_MARKETS), restore_drill_... |
-| D-980 | DAT-252 fallback threshold counts the current run: |
-| D-981 | DAT-251 a: an HTTP 401 or 403 is classified server_error, never not_found, so a block by the source is never read as a delisting; 404 stays not_found (script... |
-| D-982 | DAT-251 a: a code marked delisted closes its code_history row only after it has been absent from the ASX file and then returned in it; a code that ASX still... |
-| D-983 | DAT-251 a: the asx-fetch job reads its delisted-code list through a read-only state step (ingest.mjs --write-state asx/state.json, secrets only in that step'... |
-| D-984 | DAT-251 b: news_assess_per_run has a hard ceiling of 200 (bounds 20–200) and the Turso cap of 40 applies at notice or worse; the effective cap stays the mini... |
-| D-985 | OPS-111 (9): the steelman reader-file list is generated from the import graph (tests/security/steelman-readers.json, compared by scripts/ci/steelman-readers.... |
-| D-986 | TST-136: the wall-clock variants of the three timing checks live in tests/timing/ and worker/timing/ with their own configs (vitest.timing.config.mts, worker... |
-| D-987 | TST-136: a slow test gets an explicit per-test limit (for example { timeout: 120_000 } on the live look) and never a CI retry; a static test forbids a retry:... |
 | D-988 | The Owner control-room load keeps a statement budget; the data-feed lines are one more statement, so the budget is 91 (was 90), asserted in tests/health/cont... |
 | D-989 | TST-135 (b): the four AT-39 fetch clauses (robots.txt, conditional requests, daily cap, metadata-only record under frozen extraction rules) live in one pure... |
-| D-990 | Build robustness (found at M18 integration): the two fonts are committed as variable woff2 files (latin subset, SIL Open Font License 1.1, licence texts besi... |
+| D-1780 | OPS-110 is closed by evidence, not by a fix to the decision path: the night's "No picks tonight: …" reason is a stored line (src/lib/picks/noPicks.ts), writt... |
+| D-1781 | OPS-106 gap table (the spec names the decisions, not the gaps). |
+| D-1782 | D-666 is closed on the Worker side, not in the scripts: the arena-signals slot gains recheck: { keyPrefix: "arena-2b:AU:" → derived from the slot's market, a... |
+| D-1783 | DAT-251 b key conflict: sentinel_max_items_per_run (1–40) is renamed news_assess_per_run (default 40, bounds 20–200, Owner) with a config_version row rename... |
+| D-1784 | Acceptance for the extract's "no AT named" items and reference corrections: |
+| D-1785 | ARN-123 verdict: the picks track record does not credit dividends (track.ts net = qty × exit − brokerage − cost) while its benchmark is total-return (D-490),... |
+| D-1786 | SEC-115 scheme v2: message v2\n${METHOD}\n${path}\n${timestamp}\n${nonce}\n${sha256(body)} with header X-Praxis-Version: 2; the verifier refuses any other ve... |
+| D-1787 | TST-138/139: docs/test-map.md gains a "V3 home" column that test-map.mjs requires for every AT-01…AT-85 and AT-M1…AT-M5 (staging-homed tests move to CI recor... |
+| D-1788 | OPS-109: (a) is already pinned (vercel@63.1.0) and gets a lint rule so it stays exact; |
+| D-1789 | DAT-251 a: asx-fetch classifies every request (not_found / rate_limited / server_error / network / parse), backs off on 429 (Retry-After or doubling) inside... |
+| D-1790 | DAT-251 c: RBA and ABS fetchers are Node scripts under scripts/macro/ run as a Friday step of ingest-batch1.yml gated by the repository variable MACRO_FETCH... |
+| D-1791 | DAT-252: the Wikidata converter runs in CI on a fixture export; the fallback fetch (one SPARQL request per asx-fetch run) engages only when the listed-compan... |
+| D-1792 | DAT-253: SOURCE_HOSTS gains asic.gov.au and ssrn.com; register rows asic_documents and ssrn_papers are seeded pending with their terms [VERIFY] (listed); the... |
+| D-1793 | OPS-108: docs/runbooks/rotate-secrets.md is written per secret with the secrets tool steps and the smoke proof; rotation and PAT revocation are PR-listed Own... |
+| D-1794 | OPS-111 verdicts: (1) → LLM-077 (M22), re-accepted; |
+| D-1795 | OPS-112 verdicts: (1) closed: the weekly close requires the horizon session's bar when d equals the horizon session, else marks the outcome early (new column... |
+| D-1796 | Fixed V3 keys are registered once: hmac_scheme_version (default = the hmacCore constant), calendar_draft_markets (default = CALENDAR_MARKETS), restore_drill_... |
+| D-1797 | DAT-252 fallback threshold counts the current run: |
+| D-1798 | DAT-251 a: an HTTP 401 or 403 is classified server_error, never not_found, so a block by the source is never read as a delisting; 404 stays not_found (script... |
+| D-1799 | DAT-251 a: a code marked delisted closes its code_history row only after it has been absent from the ASX file and then returned in it; a code that ASX still... |
+| D-1800 | DAT-251 a: the asx-fetch job reads its delisted-code list through a read-only state step (ingest.mjs --write-state asx/state.json, secrets only in that step'... |
+| D-1801 | DAT-251 b: news_assess_per_run has a hard ceiling of 200 (bounds 20–200) and the Turso cap of 40 applies at notice or worse; the effective cap stays the mini... |
+| D-1802 | OPS-111 (9): the steelman reader-file list is generated from the import graph (tests/security/steelman-readers.json, compared by scripts/ci/steelman-readers.... |
+| D-1803 | TST-136: the wall-clock variants of the three timing checks live in tests/timing/ and worker/timing/ with their own configs (vitest.timing.config.mts, worker... |
+| D-1804 | TST-136: a slow test gets an explicit per-test limit (for example { timeout: 120_000 } on the live look) and never a CI retry; a static test forbids a retry:... |
+| D-1805 | Build robustness (found at M18 integration): the two fonts are committed as variable woff2 files (latin subset, SIL Open Font License 1.1, licence texts besi... |
 
 ## M19 (M19_design.md)
 
 | Id | Decision |
 | --- | --- |
-| D-991 | Literal count rule (MKT-107, A-19, gap 1): node scripts/ci/market-literals.mjs --count is the count — files under src, scripts, worker/src (any extension) th... |
-| D-992 | Profile store (DAT-241, gap 3): 0034_m19_market_profile.sql adds market_profile (one row per market: work status, dates, version), market_profile_field (one... |
-| D-993 | Loader and derived constants (MKT-107, DAT-241): src/lib/market/profile.ts is the single reader (loadProfile, loadProfiles, enabledMarkets, requireEnabledMar... |
-| D-994 | Two switches (gap 9): markets_enabled = the set of market rows with enabled = 1 (registered as a fixed key whose production default is PRAXIS_MARKETS_ENABLED... |
-| D-995 | Write guard (MKT-110 b): 0035_m19_market_guard.sql installs BEFORE INSERT and BEFORE UPDATE OF market triggers on every table with a market column except mar... |
-| D-996 | Dispatch refusal (MKT-110 a): the Worker reads every enabled = 1 market row per tick (one statement) and builds the slot table per row with slotsFor(row) fro... |
-| D-997 | UI filter and 404 (MKT-110 c, UXN-312): resolveMarket(db, candidate, user) is the one place a market parameter (query, route segment, form field) is accepted... |
 | D-998 | MKT-114: market_profile.work_status stores the status (not_started / in_build / testing / built / active / paused); the seed sets AU active, IN and US built... |
 | D-999 | DAT-242: complete is computed by isComplete(profile) (every field valued; every verify = 1 field dated and referenced); |
-| D-1000 | AT-67 scan rule (gap 15): scripts/ci/market-literals.mjs (also tests/static/marketLiterals.test.ts) scans src, scripts, worker/src (.ts .tsx .mjs .js .d.mts... |
-| D-1001 | M19/M20 split (gaps 5, 6, 7, 8, 13): UXN-312 — M19 the switcher filter, the status row, the evidence date, the open gate items, the completeness line; |
-| D-1002 | UXN-313 formatting: CurrencyFormat per profile (A$ en-AU, ₹ en-IN with lakh/crore grouping, US$ en-US) passed explicitly to formatMicro/formatCents/money; du... |
-| D-1003 | CXA-002 (a)–(i) field mapping with the AU proof: decision_cutoff, tz/OWNER_TZ, known_time_rules (a); settlement_days, parcel_floor with adv_floor = parcel_fl... |
-| D-1004 | Worker local time (PRD-039 stub): worker/src/localtime.ts keeps the Sydney rule table under the key Australia/Sydney, takes the market row's tz, and throws u... |
-| D-1005 | Decision numbering: the extract's "M19 starts at D-951" repeats BLD-054's wording for M18; |
-| D-1006 | Migrations and counts: 0034_m19_market_profile.sql (store, seed, market columns) and 0035_m19_market_guard.sql (triggers), each with -- +down; the hard-coded... |
+| D-1005 | Decision numbering: the extract's "M19 starts at D-1780" repeats BLD-054's wording for M18; |
+| D-1006 | Migrations and counts: 0037_m19_market_profile.sql (store, seed, market columns) and 0038_m19_market_guard.sql (triggers), each with -- +down; the hard-coded... |
 | D-1007 | Identity baselines (CXA-001, A-20): integration step 0, before any M19 merge, runs AT-32 and AT-50 on the build tree and writes their hashes to tests/accepta... |
-| D-1008 | AT-32 hash scope (A1, built at step 0): the baseline hashes every main-database table except schema_migrations and market (the two tables migration 0034 legi... |
+| D-1008 | AT-32 hash scope (A1, built at step 0): the baseline hashes every main-database table except schema_migrations and market (the two tables migration 0037 legi... |
 | D-1009 | AU constants snapshot mechanics (A1): the snapshot lists 50 entries by module, export and value (bigint as <n>n); it is recorded by scripts/market/snapshot-a... |
 | D-1010 | Profile field list and value shapes (A1, DAT-241): 40 fields (the spec 20.1 rows with exchange and timezone split, plus yahoo_suffix, bar_latency_p95_min, pr... |
-| D-1011 | enabled/mode row invariant (A1, D-994): SQLite cannot add a column whose CHECK refers to another column to a table that already has rows, so the rule "enable... |
-| D-1012 | slots_json shape (A1, D-996): { b1, b2a, b2b, late_2a_after, cutoff, cutoff_poll, preopen_recheck: [a, b], quote_from, quote_until, intraday_scan_from, intra... |
+| D-1011 | enabled/mode row invariant (A1, D-1809): |
+| D-1012 | slots_json shape (A1, D-1811): { b1, b2a, b2b, late_2a_after, cutoff, cutoff_poll, preopen_recheck: [a, b], quote_from, quote_until, intraday_scan_from, intr... |
 | D-1013 | Error home (A1/A2): MarketNotEnabled, isMarketNotEnabled and UnknownMarket live in src/lib/market/errors.mjs because the loader's requireEnabledMarket needs... |
 | D-1014 | Owner edit of a mkt.* key (A1, DAT-242): updateConfig (audit first) writes the config_version row as for any key and then calls setProfileField (field row, m... |
-| D-1015 | Derived lists (A1, D-993): MODE_MARKETS is builtMarkets(); calendarMarkets() is the keys of CALENDAR_RULE_MODULES and CALENDAR_MARKETS stays as a constant de... |
+| D-1015 | Derived lists (A1, D-1808): MODE_MARKETS is builtMarkets(); calendarMarkets() is the keys of CALENDAR_RULE_MODULES and CALENDAR_MARKETS stays as a constant d... |
 | D-1016 | Cortex schema hash (A1, found by the step-0 baseline): the night's input manifest carries schemaSha, the sha256 of the table names (src/lib/cortex/stage.ts),... |
-| D-1017 | Guard trigger conditions (A2, D-995): the insert trigger is WHEN NEW.market IS NOT NULL AND NOT EXISTS (SELECT 1 FROM market WHERE code = NEW.market AND enab... |
-| D-1018 | Update trigger (A2, D-995): BEFORE UPDATE OF market fires only when the new market differs from the old (NEW.market IS NOT OLD.market) and is not enabled. |
-| D-1019 | Typed error (A2, D-995, D-1013): wrapClient (guard.mjs) rethrows a refused write as the one MarketNotEnabled class from errors.mjs with table from the trigge... |
-| D-1020 | Where the wrapper is applied (A2, D-995): mainDb() only (the auth database has no market table; authDbBigint is the signed backup export, read-only). |
-| D-1021 | Enabled-set mismatch alarm (A2, D-994): checkMarketRows (the nightly step) also runs checkEnabledSet, which compares the market.enabled = 1 set with marketsE... |
-| D-1022 | Guard generation (A2, D-995): scripts/db/gen-market-guard.mjs applies migrations 0001 to 0034 to a scratch database and reads every table with a market colum... |
-| D-1023 | Fixtures (A2, D-995): a row of a market that is not enabled can no longer be inserted directly, so plantOffMarketRow(db, table, row) (tests/db/helpers.ts) en... |
-| D-1024 | The scope common (A2, found by the full suite): document.market is common for the source register and the expert mirror (src/lib/kb/render.ts:654, src/lib/ex... |
-| D-1025 | Write guard and the skip records of the jobs (A2, D-995, D-996): a library job called for a market that is not enabled (or has no row) cannot even record its... |
-| D-1026 | Fixture rule (A2, D-1023): a test that keys rows by a market other than AU enables it through allowMarket(db, code) (tests/db/helpers.ts, a row for an unknow... |
-| D-1030 | Static seed profile and derived legacy exports (B1, CXA-002, D-1003): src/lib/market/staticProfile.mjs (staticProfile(code), homeProfile(), benchmarkIndexOf(... |
+| D-1017 | Guard trigger conditions (A2, D-1810): the insert trigger is WHEN NEW.market IS NOT NULL AND NOT EXISTS (SELECT 1 FROM market WHERE code = NEW.market AND ena... |
+| D-1018 | Update trigger (A2, D-1810): BEFORE UPDATE OF market fires only when the new market differs from the old (NEW.market IS NOT OLD.market) and is not enabled. |
+| D-1019 | Typed error (A2, D-1810, D-1013): wrapClient (guard.mjs) rethrows a refused write as the one MarketNotEnabled class from errors.mjs with table from the trigg... |
+| D-1030 | Static seed profile and derived legacy exports (B1, CXA-002, D-1816): src/lib/market/staticProfile.mjs (staticProfile(code), homeProfile(), benchmarkIndexOf(... |
 | D-1031 | Rule-set readers, angle filter and what B1 left alone (B1, CXA-002 e, f, g, i; PRD-039): src/lib/cortex/profileReaders.ts holds classificationReader, haltRea... |
-| D-1032 | --market on the arena and picks command lines (B2, MKT-110 a, D-996): src/lib/arena/marketFlag.ts resolveCliMarket(db, argv): --market <CODE>, else the singl... |
+| D-1032 | --market on the arena and picks command lines (B2, MKT-110 a, D-1811): src/lib/arena/marketFlag.ts resolveCliMarket(db, argv): --market <CODE>, else the sing... |
 | D-1033 | Money engines take the market's table (B2, CXA-002 b, d): tickFor, slippageAmount, slippageTicks, stallSlippageMicro and slippedFill take the tick table as t... |
 | D-1034 | Python fetchers (B2, CXA-002 h): yahoo_fetch.py and fetch_prices.py read the Yahoo ticker suffix (and yahoo_fetch.py the currency) from the request or plan J... |
-| D-1045 | Worker slot table per enabled market (C1, D-996): worker/src/schedule.ts exports slotsFor(row) (the whole table of one market row, in table order) and slotTa... |
-| D-1046 | Zone rules and feed slots (C1, D-1004): src/lib/market/clockTables.mjs (allow-listed) holds ZONE_RULES (zone name to local-time rule; Sydney and Melbourne sh... |
-| D-1047 | Market rows in the Worker (C1, D-996, PRD-045): one statement (MARKETS_SQL, WHERE enabled = 1, at most 3 rows) rides in the clock's and the route poster's ex... |
-| D-1048 | Run now (C1, D-996): the request's market is the first gate: not in the enabled rows is refused: market_not_enabled (before "unknown job", "not listed" and "... |
+| D-1047 | Market rows in the Worker (C1, D-1811, PRD-045): one statement (MARKETS_SQL, WHERE enabled = 1, at most 3 rows) rides in the clock's and the route poster's e... |
+| D-1048 | Run now (C1, D-1811): the request's market is the first gate: not in the enabled rows is refused: market_not_enabled (before "unknown job", "not listed" and... |
 | D-1049 | Worker ASX files (C1, PRD-047): MARKET in asx/sentinel.ts is HOME_MARKET; the three SQL reads take it as a parameter and add enabled = 1 to the market read (... |
-| D-1050 | Script market rule (C2, MKT-110 a, D-996): src/lib/market/scriptMarket.mjs is the one implementation. --market <CODE> (or --market=CODE; empty = omitted) nam... |
-| D-1051 | Home market constants (C2, C3, D-993, D-1015): the modules that had MARKET = "AU", a Sydney or Melbourne zone, "18:10" or "AUD" with no profile to hand (the... |
-| D-1052 | Workflow pass-through (C2, D-996): ingest-batch1, arena-close, arena-signals, replay, backfill-history, backfill-prices and backfill-index gain a dispatch in... |
+| D-1050 | Script market rule (C2, MKT-110 a, D-1811): src/lib/market/scriptMarket.mjs is the one implementation. --market <CODE> (or --market=CODE; empty = omitted) na... |
+| D-1051 | Home market constants (C2, C3, D-1808, D-1015): the modules that had MARKET = "AU", a Sydney or Melbourne zone, "18:10" or "AUD" with no profile to hand (the... |
+| D-1052 | Workflow pass-through (C2, D-1811): ingest-batch1, arena-close, arena-signals, replay, backfill-history, backfill-prices and backfill-index gain a dispatch i... |
 | D-1053 | Slot times as data (C1, C2): worker/src/schedule.ts keeps one slot({...}) entry per slot with the time as an expression (a.b1, ops.maintenance.at, feed.poll.... |
-| D-1060 | Formatting API (D1, D-1002): formatMicro(micro, fmt, opts?) and formatCents(cents, fmt, opts?) take the CurrencyFormat as a required second argument (the cur... |
-| D-1061 | E-mail loops (D1, D-997): runBrief collects the overnight announcements and today's events of every enabled market that is active and trades on D into the on... |
-| D-1062 | Default market (D1/D2, D-997): default_market is stored as any built market (builtMarkets(), the service is sync and holds the auth database only); updateReg... |
-| D-1063 | Dual time (D1, D-1002): formatMarketTime(iso, marketTz, prefs?) in health/format.ts returns the single Melbourne form when the market zone has the same UTC o... |
-| D-1064 | Pages and switcher (D2, D-997): envFor(user, now?, candidate?) is the one resolver for pages and loaders (?market= candidate not enabled: 404; none: the only... |
-| D-1065 | Markets table (D2, D-998): marketRows has no static IN/US rows; the Owner sees every market row with statusText(profile, mode), "AT-M evidence: not recorded"... |
-| D-1075 | AT-67 scan classes and what is not a market fact (E1, D-1000): scripts/ci/market-literals.mjs scans nine classes (market code, exchange word or city, zone, A... |
-| D-1076 | AT-67 allow-list (E1, D-1000): the allow-list is src/lib/market/, the files of seed/allow.mjs, and EXTRA_ALLOW in the script: entries naming one file or a di... |
-| D-1077 | Residual literals replaced (E1, D-1051; byte-identical): the home market's values are read, never retyped: session open and close (homeProfile().sessionOpen/... |
-| D-1078 | Scan output and the count (E1, D-991): the default run lists every hit (file, line, class, first 120 characters) and exits 1 on any, on a stale entry, or on... |
-| D-1079 | Production-shape assertion (E2, D-994, MKT-110): scripts/e2e-day/assert-production-shape.mjs --work <folder> runs as the last step of the recorded-day job be... |
-| D-1080 | Development lanes and the CI rule (E2, D-994): e2e/seed/states/markets-dev.mjs enables the built markets named by PRAXIS_MARKETS_ENABLED (mode stays off, so... |
-| D-1081 | The e2e walk (E2, MKT-110 c, SEC-112, D-997): e2e/market-off.spec.ts runs in the empty lane (requireScenario("empty")) and walks every signed-in page of PAGE... |
-| D-1082 | Where the AT-68 clauses run (E2): the root suite file tests/acceptance/v3/at68.test.ts proves the scripts and workflows (a), the write guard and the invarian... |
-| D-1083 | Test map and reports (E3, TST-133, AT-85): docs/test-map.md gets rows for AT-67 (covered, CI), AT-68 (covered, "CI + CI recorded-day"), AT-75 (covered (AU),... |
-| D-1084 | PRAXIS_MARKETS_ENABLED in the checks (E3, D-994): .env.example (A1) already names it and the code reads it, so scripts/ci/env-names.mjs needs no entry and wa... |
-| D-1085 | Matrix fixtures (E3, TST-139, D-1001): tests/market/profiles/IN.json and US.json already exist from A1 and equal their seeds (node scripts/market/gen-fixture... |
 | D-1086 | M19 exit review follow-up, wrapper (Fable, 2026-11-12): wrap the script client factories and the Worker's pipeline() with wrapClient/marketRefusalReporter (a... |
 | D-1087 | One --market resolver (Fable F1, M20): src/lib/arena/marketFlag.ts (D-1032) delegates to resolveScriptMarket (scriptMarket.mjs, D-1050) and guard.mjs re-expo... |
 | D-1088 | One home-seed helper (Fable F3, M20): homeMarket.mjs stays the constants facade but derives every value from homeProfile() (staticProfile.mjs); its own slots... |
-| D-1089 | Worker slot zone (Fable F4, M20, under D-1045): clock.ts compares slot minutes on the Sydney clock only; safe in M19 because IN/US zones are not in ZONE_RULE... |
+| D-1089 | Worker slot zone (Fable F4, M20, under D-1825): clock.ts compares slot minutes on the Sydney clock only; safe in M19 because IN/US zones are not in ZONE_RULE... |
 | D-1090 | Facts the AT-67 scan does not see (Fable F5, M20): sizing.ts STALL_FLOOR_SLIPPAGE_BPS duplicates the AU tick table's stall_floor_bps; the session-time class... |
+| D-1806 | Literal count rule (MKT-107, A-19, gap 1): node scripts/ci/market-literals.mjs --count is the count — files under src, scripts, worker/src (any extension) th... |
+| D-1807 | Profile store (DAT-241, gap 3): 0037_m19_market_profile.sql adds market_profile (one row per market: work status, dates, version), market_profile_field (one... |
+| D-1808 | Loader and derived constants (MKT-107, DAT-241): src/lib/market/profile.ts is the single reader (loadProfile, loadProfiles, enabledMarkets, requireEnabledMar... |
+| D-1809 | Two switches (gap 9): markets_enabled = the set of market rows with enabled = 1 (registered as a fixed key whose production default is PRAXIS_MARKETS_ENABLED... |
+| D-1810 | Write guard (MKT-110 b): 0038_m19_market_guard.sql installs BEFORE INSERT and BEFORE UPDATE OF market triggers on every table with a market column except mar... |
+| D-1811 | Dispatch refusal (MKT-110 a): the Worker reads every enabled = 1 market row per tick (one statement) and builds the slot table per row with slotsFor(row) fro... |
+| D-1812 | UI filter and 404 (MKT-110 c, UXN-312): resolveMarket(db, candidate, user) is the one place a market parameter (query, route segment, form field) is accepted... |
+| D-1813 | AT-67 scan rule (gap 15): scripts/ci/market-literals.mjs (also tests/static/marketLiterals.test.ts) scans src, scripts, worker/src (.ts .tsx .mjs .js .d.mts... |
+| D-1814 | M19/M20 split (gaps 5, 6, 7, 8, 13): UXN-312 — M19 the switcher filter, the status row, the evidence date, the open gate items, the completeness line; |
+| D-1815 | UXN-313 formatting: CurrencyFormat per profile (A$ en-AU, ₹ en-IN with lakh/crore grouping, US$ en-US) passed explicitly to formatMicro/formatCents/money; du... |
+| D-1816 | CXA-002 (a)–(i) field mapping with the AU proof: decision_cutoff, tz/OWNER_TZ, known_time_rules (a); settlement_days, parcel_floor with adv_floor = parcel_fl... |
+| D-1817 | Worker local time (PRD-039 stub): worker/src/localtime.ts keeps the Sydney rule table under the key Australia/Sydney, takes the market row's tz, and throws u... |
+| D-1818 | Where the wrapper is applied (A2, D-1810): mainDb() only (the auth database has no market table; authDbBigint is the signed backup export, read-only). |
+| D-1819 | Enabled-set mismatch alarm (A2, D-1809): checkMarketRows (the nightly step) also runs checkEnabledSet, which compares the market.enabled = 1 set with markets... |
+| D-1820 | Guard generation (A2, D-1810): scripts/db/gen-market-guard.mjs applies migrations 0001 to 0037 to a scratch database and reads every table with a market colu... |
+| D-1821 | Fixtures (A2, D-1810): a row of a market that is not enabled can no longer be inserted directly, so plantOffMarketRow(db, table, row) (tests/db/helpers.ts) e... |
+| D-1822 | The scope common (A2, found by the full suite): document.market is common for the source register and the expert mirror (src/lib/kb/render.ts:654, src/lib/ex... |
+| D-1823 | Write guard and the skip records of the jobs (A2, D-1810, D-1811): a library job called for a market that is not enabled (or has no row) cannot even record i... |
+| D-1824 | Fixture rule (A2, D-1821): a test that keys rows by a market other than AU enables it through allowMarket(db, code) (tests/db/helpers.ts, a row for an unknow... |
+| D-1825 | Worker slot table per enabled market (C1, D-1811): worker/src/schedule.ts exports slotsFor(row) (the whole table of one market row, in table order) and slotT... |
+| D-1826 | Zone rules and feed slots (C1, D-1817): src/lib/market/clockTables.mjs (allow-listed) holds ZONE_RULES (zone name to local-time rule; Sydney and Melbourne sh... |
+| D-1827 | Formatting API (D1, D-1815): formatMicro(micro, fmt, opts?) and formatCents(cents, fmt, opts?) take the CurrencyFormat as a required second argument (the cur... |
+| D-1828 | E-mail loops (D1, D-1812): runBrief collects the overnight announcements and today's events of every enabled market that is active and trades on D into the o... |
+| D-1829 | Default market (D1/D2, D-1812): default_market is stored as any built market (builtMarkets(), the service is sync and holds the auth database only); updateRe... |
+| D-1830 | Dual time (D1, D-1815): formatMarketTime(iso, marketTz, prefs?) in health/format.ts returns the single Melbourne form when the market zone has the same UTC o... |
+| D-1831 | Pages and switcher (D2, D-1812): envFor(user, now?, candidate?) is the one resolver for pages and loaders (?market= candidate not enabled: 404; none: the onl... |
+| D-1832 | Markets table (D2, D-998): marketRows has no static IN/US rows; the Owner sees every market row with statusText(profile, mode), "AT-M evidence: not recorded"... |
+| D-1833 | AT-67 scan classes and what is not a market fact (E1, D-1813): scripts/ci/market-literals.mjs scans nine classes (market code, exchange word or city, zone, A... |
+| D-1834 | AT-67 allow-list (E1, D-1813): the allow-list is src/lib/market/, the files of seed/allow.mjs, and EXTRA_ALLOW in the script: entries naming one file or a di... |
+| D-1835 | Residual literals replaced (E1, D-1051; byte-identical): the home market's values are read, never retyped: session open and close (homeProfile().sessionOpen/... |
+| D-1836 | Scan output and the count (E1, D-1806): the default run lists every hit (file, line, class, first 120 characters) and exits 1 on any, on a stale entry, or on... |
+| D-1837 | Production-shape assertion (E2, D-1809, MKT-110): scripts/e2e-day/assert-production-shape.mjs --work <folder> runs as the last step of the recorded-day job b... |
+| D-1838 | Development lanes and the CI rule (E2, D-1809): e2e/seed/states/markets-dev.mjs enables the built markets named by PRAXIS_MARKETS_ENABLED (mode stays off, so... |
+| D-1839 | The e2e walk (E2, MKT-110 c, SEC-112, D-1812): e2e/market-off.spec.ts runs in the empty lane (requireScenario("empty")) and walks every signed-in page of PAG... |
+| D-1840 | Where the AT-68 clauses run (E2): the root suite file tests/acceptance/v3/at68.test.ts proves the scripts and workflows (a), the write guard and the invarian... |
+| D-1841 | Test map and reports (E3, TST-133, AT-85): docs/test-map.md gets rows for AT-67 (covered, CI), AT-68 (covered, "CI + CI recorded-day"), AT-75 (covered (AU),... |
+| D-1842 | PRAXIS_MARKETS_ENABLED in the checks (E3, D-1809): .env.example (A1) already names it and the code reads it, so scripts/ci/env-names.mjs needs no entry and w... |
+| D-1843 | Matrix fixtures (E3, TST-139, D-1814): tests/market/profiles/IN.json and US.json already exist from A1 and equal their seeds (node scripts/market/gen-fixture... |
 
 ## M20 (M20_design.md)
 
@@ -700,7 +808,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1093 | Polite client: src/lib/data/sources/politeFetch.mjs (app) and tools/m20/lib/fetch.mjs (extract) share the rules — declared UA, per-host minimum interval (EDG... |
 | D-1094 | EDGAR contact (gap 22): PRAXIS_EDGAR_CONTACT is an Owner-store value (names only in env-names.mjs, .env.example); the client throws EdgarContactMissing and m... |
 | D-1095 | Source hosts (gap 21): the IN/US hosts enter SOURCE_SITES tagged by market and register id; link allow-listing (AT-81) is unchanged, fetching is gated by the... |
-| D-1096 | Register rows: 0036 seeds every DAT-243/244 candidate as <code>_<source> with the status A3's verification gives (enabled for public statistics, EDGAR, SEC s... |
+| D-1096 | Register rows: 0039 seeds every DAT-243/244 candidate as <code>_<source> with the status A3's verification gives (enabled for public statistics, EDGAR, SEC s... |
 | D-1097 | Calendars (gap 10, B.7): rules in calendarRules/{in,us}.mjs (2026 and 2027; the NSE 2027 list drafted until published), rows written only when a market becom... |
 | D-1098 | Universe cap (gap 13): the key is mkt.<CODE>.universe_max (ch. 15); |
 | D-1099 | Projection formula (gap 14, F): projected_m = auMeasured_m × (cap / auCodes) × (sessions_market / sessions_au) + fixed_m; fits iff Turso (AU + projected) ≤ 2... |
@@ -723,17 +831,17 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1116 | Stage tables (D-1016 closure): STAGE_TABLES fixed list replaces the sqlite_master scan; the base list equals the schema-35 set so the AU schemaSha and the AT... |
 | D-1117 | Worker zones (gap 18, D-1089): asia-kolkata and us-eastern-dst rules with TST-103 tests; |
 | D-1118 | Stall floor (gap 19, D-1090): sizing.ts reads profile.slippage.stall_floor_bps; |
-| D-1119 | Recorded days (TST-139, D-1085): fixtures in praxis-app-fixtures/recorded/{IN,US}/<date>/ (five sessions each, headlines only), recorded from the extract by... |
+| D-1119 | Recorded days (TST-139, D-1843): fixtures in praxis-app-fixtures/recorded/{IN,US}/<date>/ (five sessions each, headlines only), recorded from the extract by... |
 | D-1120 | AT-M reports (gaps 7, 20): at-m-report.mjs --market writes docs/test-reports/AT-M-<CODE>.md with the five rows and their evidence; |
 | D-1121 | Labels (gap 8): M20 builds the per-market append-only label_item store, labelsFor(db, market) and evaluationAllowed(db, market) (refuses below 500); the page... |
-| D-1122 | Migration 0036 contents (§A); schema-count tests at 36; every new market-keyed table carries both guard triggers. |
+| D-1122 | Migration 0039 contents (§A); schema-count tests at 36; every new market-keyed table carries both guard triggers. |
 | D-1123 | M19 hygiene (D-1086…D-1088, D-1090): scriptDb, the one resolver, the home helper, the four allow-list entries parameterised and removed. |
-| D-1124 | Per-market e-mail sections and dual times (UXN-313, D-1061, D-1063): one section per enabled market trading on D; |
+| D-1124 | Per-market e-mail sections and dual times (UXN-313, D-1828, D-1830): one section per enabled market trading on D; |
 | D-1125 | IN announcements: headline + link only, never a body; the fetcher is not called while the register row is disabled. |
 | D-1126 | Gate and numbering (gaps 4, 5, 23): M20 tasks start only after the CI run on build at or after d476057d is green (recorded in exit §0); decisions are D-1091... |
 | D-1127 | Registry modules resolve by convention (sources/<code>/day.mjs, seed/<code>/*.mjs, calendarRules/<code>.mjs entries added by stream A) so IN and US never edi... |
-| D-1128 | Register rows are not in 0036 (A2 finding, D-1096 amended): tests/acceptance/v3/replay-hash.baseline.json hashes source_register, source_register_history and... |
-| D-1129 | Deploy order for 0036 (Fable A2 review, note 3): the Worker reads market.rollback_at (worker/src/markets.ts:42) and deploy-production.yml deploys the Worker... |
+| D-1128 | Register rows are not in 0039 (A2 finding, D-1096 amended): tests/acceptance/v3/replay-hash.baseline.json hashes source_register, source_register_history and... |
+| D-1129 | Deploy order for 0039 (Fable A2 review, note 3): the Worker reads market.rollback_at (worker/src/markets.ts:42) and deploy-production.yml deploys the Worker... |
 | D-1130 | The kill slot needs no listing (Fable A2 review, note 4): arena-kill:<CODE> is the only Actions slot released without the Owner's slots_enabled list (require... |
 | D-1131 | IN/US slippage buckets come from task A4 (Fable A2 review, note 5): slippage_buckets stays null for IN and US after A2, so stallFloorBpsOf throws for them by... |
 | D-1132 | No robots-permitted free US price source (fill run 2026-11-12): query1/query2.finance.yahoo.com, stooq.com and api.nasdaq.com disallow automated clients in r... |
@@ -744,7 +852,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1144 | IN tick table (A3, D-1104): the NSE circular NSE/CMTR/67133 (13 March 2025, after the 10 June 2024 cut) confirms ₹0.01 below ₹250; the exchange now reviews t... |
 | D-1145 | Tooling touched outside the A3 list (needed): scripts/ci/workflow-lint.mjs gains UPLOAD_ALWAYS_ALLOWED = ["source-report.yml::report"] (a success-time artefa... |
 | D-1146 | Calendar market lists (A3, D-1097 amended): |
-| D-1147 | Migration 0037 and the macro store (integration; closes the hand-offs of D-1171 and D-1189): db/migrations/main/0037_m20_macro_sources.sql rebuilds macro_ser... |
+| D-1147 | Migration 0040 and the macro store (integration; closes the hand-offs of D-1171 and D-1189): db/migrations/main/0040_m20_macro_sources.sql rebuilds macro_ser... |
 | D-1148 | Dated cost_profile rows on enable (integration; the D-1181 hand-off, D-1193): datedCostProfileRows had no caller, so a replay or calibration of a session bef... |
 | D-1149 | Synthetic recorded days are labelled in the AT-M report (integration, D-1188, D-1132, D-1120): scripts/market/at-m-report.mjs reads an optional synthetic: tr... |
 | D-1150 | US fee constants superseded (A4, F): a search on 2026-11-13 found the SEC Fee Rate Advisory FY2026 (US$20.60 per million of covered sales from 2026-04-04; US... |
@@ -768,7 +876,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1168 | Labels (A5, DAT-247, D-1121): label_item is read as the newest row per (source, ann_id); the count that gates evaluation is distinct labelled items per marke... |
 | D-1169 | Band locks are symmetric (A5, Fable review, D-1109): the model refuses every fill on a session that closes at either limit. |
 | D-1170 | Shared A4 carry-over closed (IN1, F, D-1154 items 1-4; the commit "M20 IN1 shared"): one module, src/lib/arena/marketMoney.ts, gives a market's settlement la... |
-| D-1171 | India macro rows are parsed and counted, not stored (IN1, DAT-243): macro_series.source is CHECK-limited to ('rba','abs') (migration 0033) and 0036 did not w... |
+| D-1171 | India macro rows are parsed and counted, not stored (IN1, DAT-243): macro_series.source is CHECK-limited to ('rba','abs') (migration 0036) and 0039 did not w... |
 | D-1172 | FAM-005 cost-gate notional per market (IN1, follow-on of D-1154 item 3): roundTripCost and selectEntries (EntryGateContext.market) take the market's notional... |
 | D-1173 | AT-69 gate-only clause with the index not pulled (IN1, D-1132): the Nifty 50 and India VIX series are "not pulled" (Yahoo is refused by robots). |
 | D-1174 | The announcement classifier moved to plain ESM (IN1): classify and writeAnnouncementCategory are now src/lib/market/classifyCore.mjs (+ .d.mts), logic unchan... |
@@ -793,10 +901,10 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1193 | The switch writer (S1, D-1100, D-1101): switchMarket lives in src/lib/data/marketSwitch.ts (beside controls.ts, using its commit), is the only writer of mark... |
 | D-1194 | The rollback kill (S1, F, D-1101, CTX-028): src/lib/arena/kill.ts, called by closeBooksMain --kill market_off. |
 | D-1195 | Quota projection (S1, F, D-1099, MKT-113): src/lib/usage/projection.ts. projected = ceil(auMeasured x cap x sessionsMarket / (auCodes x sessionsAu)) + fixed... |
-| D-1196 | Markets page and Usage page (S1, UXN-312, D-997): the Owner's "Switch on a market" card under the Markets table (MarketSwitch.tsx, loader loadMarketSwitch) l... |
-| D-1197 | Per-market e-mail sections (S1, D-1124, D-1061, UXN-313, O-34): the Evening Review keeps the first enabled market as before and adds one section for every fu... |
+| D-1196 | Markets page and Usage page (S1, UXN-312, D-1812): the Owner's "Switch on a market" card under the Markets table (MarketSwitch.tsx, loader loadMarketSwitch)... |
+| D-1197 | Per-market e-mail sections (S1, D-1124, D-1828, UXN-313, O-34): the Evening Review keeps the first enabled market as before and adds one section for every fu... |
 | D-1198 | The development-mode recorded days (S1, D-1119, TST-139, AT-85, AT-M4): job recorded-day-dev in ci.yml is a separate matrix job (IN, US) after app: the fixtu... |
-| D-1199 | Owner notes for the single V3 PR (S1): the deploy-order note of D-1129 (the Worker reads market.rollback_at before 0036 has run; expect at most one tick wind... |
+| D-1199 | Owner notes for the single V3 PR (S1): the deploy-order note of D-1129 (the Worker reads market.rollback_at before 0039 has run; expect at most one tick wind... |
 
 ## M21 (M21_design.md)
 
@@ -968,13 +1076,13 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1441 | Display of both readings: with regime_altinputs_enabled = "on" the Cortex page shows the base and the shadow reading side by side in plain words; the key cha... |
 | D-1442 | DAT-249 and DAT-250 stubs: src/lib/deferred/sources.ts records each as rejected with its reason and the date checked; a test proves no fetcher, host or key e... |
 | D-1443 | Sweep conditions (AGT-147 [VERIFY batch endpoint]): the batch endpoint has its own pending register row; the sweep runs only with intraday_sweep_enabled = "o... |
-| D-1444 | Migration 0039 (one, first): thirteen tables as section A, eight of them market-keyed with generated guards; no earlier table changed; schema pins at 39. |
+| D-1444 | Migration 0042 (one, first): thirteen tables as section A, eight of them market-keyed with generated guards; no earlier table changed; schema pins at 39. |
 | D-1445 | Switch guards as a registry: src/lib/config/guards/*.ts, one file per guarded key, each owned by one task; a failed read refuses (fails closed), as the M21 C... |
 | D-1446 | Health lines and plain words: each task delivers a pure line function; |
 | D-1447 | AT-73 shared part: tests/acceptance/v3/at73Shared.test.ts holds the 20-fixture proposal set for call proposals (valid, incomplete, duplicate, hostile text, o... |
 | D-1448 | Acceptance test files: M22 clauses go to split files (at76Trial, at76Reflections, at77WorkersAi, at77Sweep, at79Fetch, at79Calls, at79Clusters, at80Routes, a... |
 | D-1449 | Owner steps for the PR: dispatch the words and Committee-judge bake-offs after the merge and add any passing role to llm_live_roles; import the seed (format... |
-| D-1450 | Migration 0039 as built (A1): the thirteen tables of D-1444 exactly, each STRICT with a -- +down; beyond the design text only closed-shape checks (hex shas a... |
+| D-1450 | Migration 0042 as built (A1): the thirteen tables of D-1444 exactly, each STRICT with a -- +down; beyond the design text only closed-shape checks (hex shas a... |
 | D-1451 | Register rows (A1, requirements Gap 8): polymarket_public, kalshi_public and yahoo_delayed_batch are defined in code (PENDING_SOURCE_ROWS in scripts/ci/licen... |
 | D-1452 | Seed states (A1): committee-trial switches the Committee on in the throwaway database, so it is opt-in like owner-tools-on (OPT_IN_STATES; a lane names it: E... |
 | D-1453 | AT-32 complement (A1): tests/acceptance/v3/at32Opinions.test.ts hashes every table except the steelman's own and exactly the eight of D-1426; the five other... |
@@ -1075,7 +1183,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | --- | --- |
 | D-1600 | Numbering and gate: M23 decisions are D-1600…D-1699 in this file; tasks start on build at or after bc247714 (M22 done); the M22 CI run on build recorded in B... |
 | D-1601 | Time-box (K14): 10 build days, a build day being a Melbourne calendar day on which an M23 task ran; day 1 is the day A1 starts; a calendar backstop of 21 day... |
-| D-1602 | One vocabulary (K8): the registry stores PASS, NULL or INCONCLUSIVE, enforced by a new insert trigger on holdout_look; rows written before 0040 are never rew... |
+| D-1602 | One vocabulary (K8): the registry stores PASS, NULL or INCONCLUSIVE, enforced by a new insert trigger on holdout_look; rows written before 0043 are never rew... |
 | D-1603 | Hash first: a look needs a research_prereg row with the same lineage, market and sha (trigger); preregister refuses a second, different text for the same lin... |
 | D-1604 | One writer: takeLook in src/lib/research/registry.ts is the only code that inserts into holdout_look (static test); a second attempt writes a holdout_look_re... |
 | D-1605 | INCONCLUSIVE and the look (K12): an item whose n floor is not met is INCONCLUSIVE without a look; n is counted on entries (setups, sessions, blocks) before a... |
@@ -1084,7 +1192,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1608 | Intraday cells (K7): each VAL-118 cell (v1, then one per quarter after a failed look, D-670) is its own registry lineage (intraday_stream_<cell>), with the e... |
 | D-1609 | F1.v2-mom (O-79): recorded as ledger entry 1 (lineage f1_v2_mom, AU, verdict NULL, note "stays in shadow under the gap cap"); its gap definition is never swi... |
 | D-1610 | Pre-registration files and reports: each item's hypothesis is transcribed from this document into docs/research/prereg/CXA-0xx.json (canonical JSON, fixed ke... |
-| D-1611 | Migration 0040 as designed in §A: eight market-keyed tables, two triggers on holdout_look, no earlier table rebuilt; |
+| D-1611 | Migration 0043 as designed in §A: eight market-keyed tables, two triggers on holdout_look, no earlier table rebuilt; |
 | D-1612 | Keys: the five §15.11.4 keys are registered fixed (no Owner edit); label_golden_min and survivorship_loss_assumed_pct replace the two constants by reading th... |
 | D-1613 | Night seam: one runResearchNight call after the Cortex night's movers step, skipped on replay, fail-soft, per enabled market, steps in a fixed order (lookSyn... |
 | D-1614 | Monitors in general: quarterly (first night after the quarter's last session), one row per monitor and market, value in value_json, alarm 0/1, plain-words Ow... |
@@ -1118,7 +1226,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1642 | LLM budget: the proposal run (about 15,000 tokens, first session of the month) and the live paraphrase run (about 20,000 tokens, the session on or after the... |
 | D-1643 | Page: four sections on the Cortex page in plain words (§D, task M4); proposal counts Owner-only; no rating, proposal or research figure on cards, picks or e-... |
 | D-1644 | Cut list (BLD-049), applied from the top when fewer than 2 build days remain and the remaining tasks will not finish: |
-| D-1645 | AT-32 own-set (tests/acceptance/v3/at32Research.test.ts): the eight 0040 tables plus trial_ledger (proposal charges) and app_log; every other table hashes eq... |
+| D-1645 | AT-32 own-set (tests/acceptance/v3/at32Research.test.ts): the eight 0043 tables plus trial_ledger (proposal charges) and app_log; every other table hashes eq... |
 | D-1646 | Roles and review: Opus reviews every pre-registration file against this document before its runner runs (R2, R3, T2, T4, M3, T1), every F task, and the exit;... |
 | D-1647 | Exit and the PR: Z writes the forward reports from the registry and meters on the exit day, the AT reports and docs/M23_exit_evidence.md; after M23, the V3 P... |
 | D-1650 | Registry triggers and the three legacy writers (A1): holdout_look_prereg_ins and holdout_look_verdict_ins exempt exactly the three lineages short_shadow, reg... |
@@ -1218,3 +1326,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1772 | Rollback runbook corrected (final review). |
 | D-1773 | Production deploy order (final review). deploy-production.yml deploys the Worker before Vercel, and migrations run only in the Vercel build, so the V3 Worker... |
 | D-1774 | Dependency audit exceptions renewed (CI run 44162205441, audit job). |
+| D-1775 | Orchestrator integration of main into the V3 build (merge of origin/main, 53 commits: delayed prices, Cortex learning loop, My portfolio, pick scorecard, pic... |
+| D-1776 | Round 2 (main D-1020 to D-1022: A$5,000 seed, six open positions, first cohort start 2026-11-16) is the home market's only. roundOverridesFor is applied in e... |
+| D-1777 | The market write guard (0038) is regenerated, not extended by a tail migration. |
+| D-1778 | Main's migration tests for 0029, 0031 and 0033 are pinned to their own version (ms.filter(version <= N)), as main's test for 0032 already was, because V3 mig... |
+| D-1779 | Main's display changes (pick card with entry, now, aim and stop rows, My portfolio card and loader, delayed-price labels on Strategies and Risk, end-of-day d... |

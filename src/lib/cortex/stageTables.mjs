@@ -1,13 +1,13 @@
 // The tables a night reads, pinned (M20 A2, D-1116; closes D-1016). `schemaSha` of a night manifest (stage.ts) is the
 // SHA-256 of these table names, comma-joined: it used to be a scan of sqlite_master, which moves with every
-// migration. The base list below is exactly the schema-35 table set (the schema the AU baseline hashes of
+// migration. The base list below is exactly the schema-38 table set without the ten tables of main's 0031 to 0033 (the schema the AU baseline hashes of
 // tests/acceptance/v3/replay-hash.baseline.json were recorded on) minus the market_profile* configuration tables
-// (M19, D-1016), sorted, so the AU `schemaSha` of a recorded night is byte-identical after 0036 and no baseline is
+// (M19, D-1016), sorted, so the AU `schemaSha` of a recorded night is byte-identical after 0039 and no baseline is
 // rewritten. A market's rule-set tables are added by `stageTablesFor(profile)` for that market only, so IN and US
-// nights carry their own tables in the hash and AU never does. A migration after 0035 does NOT change this list;
+// nights carry their own tables in the hash and AU never does. A migration after 0038 does NOT change this list;
 // a table that the night starts to read is added here deliberately, with a decision, and the AU hash then moves.
 
-/** The base list: schema-35 tables minus market_profile*, in byte order (the order SQLite sorts names in). */
+/** The base list: schema-38 tables (without main's ten) minus market_profile*, in byte order (the order SQLite sorts names in). */
 export const STAGE_TABLES = Object.freeze([
   "adjustment_factor",
   "alert",

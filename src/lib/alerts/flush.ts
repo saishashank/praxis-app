@@ -48,7 +48,7 @@ const dayNumber = (d: string): number => Math.floor(Date.parse(`${d}T00:00:00Z`)
  */
 export async function raiseRegimeAlert(ctx: AlertCtx, market?: string): Promise<string | null> {
   if (market !== undefined) return raiseRegimeAlertFor(ctx, market);
-  // Every enabled market is checked (D-997); the first key raised is returned.
+  // Every enabled market is checked (D-1812); the first key raised is returned.
   let first: string | null = null;
   for (const m of await enabledMarkets(ctx.db)) {
     const key = await raiseRegimeAlertFor(ctx, m);

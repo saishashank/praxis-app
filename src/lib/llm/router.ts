@@ -148,7 +148,7 @@ export function requestReservation(
 }
 
 /**
- * OPS-111 (2), D-977: the reservation is the estimate, raised to the measured need when the trailing mean
+ * OPS-111 (2), D-1794: the reservation is the estimate, raised to the measured need when the trailing mean
  * of a call of this role (the provider's own returned counts) says a first call plus a repair would cost
  * more. The estimate is the floor: a measured mean never lowers it.
  */

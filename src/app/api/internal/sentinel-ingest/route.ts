@@ -22,7 +22,7 @@ export async function POST(req: Request): Promise<Response> {
     ingest: async (feed, sha, today, nowSec) => {
       try {
         const db = mainDb();
-        // DAT-251 b (D-954): the key, bounded by the LLM headroom and, near the Turso line, by 40.
+        // DAT-251 b (D-1783): the key, bounded by the LLM headroom and, near the Turso line, by 40.
         const cap = await loadEffectiveCap(db, new Date(nowSec * 1000));
         const r = await ingestFeed({
           db,

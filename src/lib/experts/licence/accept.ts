@@ -22,7 +22,7 @@ export type AcceptError =
 export type AcceptResult = { ok: true } | { error: AcceptError };
 
 const ID_RE = /^[A-Za-z0-9_.:-]{1,32}$/; // threshold-ok: expert id column length (0022)
-const KEY_MAX = 64; // threshold-ok: expert_source_licence.source_key cap (0039)
+const KEY_MAX = 64; // threshold-ok: expert_source_licence.source_key cap (0042)
 const ACTION = "expert_licence_accept_risk";
 
 export async function acceptRisk(

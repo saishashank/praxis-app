@@ -220,9 +220,9 @@ describe("expert detail and red flags (D-521)", () => {
     expect(own).toContain('data-unlinked=""');
   });
 
-  // OPS-112 (2), D-978 with DAT-253 (D-975): regulator and paper hosts are registered source hosts, so an
+  // OPS-112 (2), D-1795 with DAT-253 (D-1792): regulator and paper hosts are registered source hosts, so an
   // Owner sees their links as links; a look-alike host is still text.
-  it("the Owner sees an ASIC and an SSRN link as links and a look-alike host as text (D-975)", async () => {
+  it("the Owner sees an ASIC and an SSRN link as links and a look-alike host as text (D-1792)", async () => {
     const w3 = await zzWorld();
     const flag = (id: string, url: string) =>
       exec(
@@ -521,7 +521,7 @@ describe("techniques: why a cluster has no result (D-599), park reasons, gap rep
     expect(text(html)).toContain("challenger created");
   });
 
-  // OPS-112 (7), D-978: a refused proposal shows its reason in words, not a bare status.
+  // OPS-112 (7), D-1795: a refused proposal shows its reason in words, not a bare status.
   it("a refused proposal row shows its reason text on the page and in the loader", async () => {
     await exec(
       w.main,

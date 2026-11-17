@@ -25,6 +25,7 @@ import {
   canonicalJson,
   parseCohortParams,
   planGroupRestart,
+  roundSwitchDue,
   type CohortParams,
   type CohortStart,
   type GroupRestartPlan,
@@ -483,6 +484,7 @@ export async function evaluateCohort(
     startD: cohort.startD,
     calendar: input.calendar,
     history,
+    roundEnds: cohort.live && roundSwitchDue(cohort.startD, input.d, input.calendar),
   });
   if (verdict === null) return null;
   const [fills, adjustments, trades, sleeves] = await Promise.all([
@@ -670,7 +672,7 @@ async function restartGroupIn(tx: Transaction, plan: GroupRestartPlan): Promise<
 
 export type RestartConfig = {
   readonly executionFor: (executionId: string) => ExecutionRow;
-  readonly paramsFor: (execution: ExecutionRow) => CohortParams;
+  readonly paramsFor: (execution: ExecutionRow, startD: string) => CohortParams;
   readonly masterSeed: bigint;
   readonly dataSnapshotId?: string | null;
   /** ch.15 max_promotions_per_week for a pending promotion at this restart (default: the registry value). */

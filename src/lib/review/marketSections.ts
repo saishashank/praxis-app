@@ -1,7 +1,7 @@
 // The further markets of the Evening Review (UXN-313, D-1124; M20 S1). The review of a date is built for the first
-// enabled market as before (D-1061); every OTHER enabled market that is in `full` mode and trades on the date adds one
+// enabled market as before (D-1828); every OTHER enabled market that is in `full` mode and trades on the date adds one
 // section: its own facts (`buildFacts` is read-only and takes the market), projected to a handful of figures in its own
-// currency, with its session close in its own zone and in Melbourne (`formatMarketTime`, D-1063). A market in data-only
+// currency, with its session close in its own zone and in Melbourne (`formatMarketTime`, D-1830). A market in data-only
 // mode has no books and sends no e-mail, so it adds nothing (MKT-111). With no such market the facts are returned
 // unchanged: a single-market review is byte-identical to the M19 one.
 import type { Client } from "@libsql/client";

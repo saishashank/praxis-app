@@ -20,14 +20,14 @@ Five kinds of work:
 
 - **PRD-033 / AGT-011a / D-930.** No model output may create, size, change or cancel an order, a thesis-breaker or a rule. Every opinion, proposal and shadow reading is data that nothing on the trading side reads.
 - **AU byte-identical (A-20).** AT-32/AT-50 replay hash and the three identity files (`tests/acceptance/v3/replay-hash.baseline.json`, `tests/market/au-constants.snapshot.json`, `worker/test/fixtures/au-slots.snapshot.json`) are never rewritten. The Worker slot table therefore gains no slot (`worker/test/auSlots.test.ts:22-35` compares every slot and the dispatchable workflow list).
-- **IN and US off in production (AT-68).** Every new market-keyed table carries the 0035/0036 guard triggers (`scripts/db/gen-market-guard.mjs`); production `markets_enabled` stays `["AU"]`.
+- **IN and US off in production (AT-68).** Every new market-keyed table carries the 0038/0039 guard triggers (`scripts/db/gen-market-guard.mjs`); production `markets_enabled` stays `["AU"]`.
 - **PRD-045.** $0; Turso within 20 % of the free plan; keyset reads with `rows-ok:` comments; no `OFFSET` (`tests/security/noOffsetPaging.test.ts`).
 - **LLM spend inside the existing guards.** `llm_daily_budget_total` stays 240,000 (`src/lib/config/keys.ts:2154-2160`); every new call goes through `createRouter` (`src/lib/llm/router.ts:169`), whose budget check (`:289-301`), injection filter (`:200`), datamarking (`:115-121`), schema validation with one repair (`:306-358`) and grounding (`:342-346`) apply unchanged.
 - **No secrets anywhere.** LLM keys live only in GitHub environment secrets; none on Vercel (LLM-077).
 - **No internal codes in Owner-read text (D-922).** `npm run test:internal-codes` (M21) covers every new string; role names such as R6 never reach a page.
 - **No staging; e2e only in CI** (PRD-046). Every Playwright spec is verified by the CI run.
 - **Committee gated (BLD-041, D-938).** The switch stays refused until 10 steelman nights at 98 % citation validity (`src/lib/config/switchGuards.ts:15-31`, M21).
-- **Research honesty (BLD-051, CXA-015).** Every measurement M22 adds is pre-registered (hypothesis, split, n, hash) before any computation, takes one look recorded in `holdout_look` (`db/migrations/main/0036_m20_markets_data.sql:163-169`), and publishes its result whatever it is.
+- **Research honesty (BLD-051, CXA-015).** Every measurement M22 adds is pre-registered (hypothesis, split, n, hash) before any computation, takes one look recorded in `holdout_look` (`db/migrations/main/0039_m20_markets_data.sql:163-169`), and publishes its result whatever it is.
 - **One PR (PRD-048).** M22 opens no PR; decisions are listed for the single V3 PR.
 
 ---
@@ -56,7 +56,7 @@ Five kinds of work:
 
 ### B.3 LLM-079 Local MiniLM classifier (shadow)
 - **Intent:** an optional, offline, CPU-only sentence-embedding classifier for announcement category and materiality, trained on the rule labels and the Owner golden set, compared every night against the rule classifier with the agreement published; it may only ever feed alert routing and wording, never filters, F6 or breakers. Model files are pinned by hash.
-- **Current state:** nothing exists; the rule classifier is AGT-011 (Sentinel); golden labels arrive through the M21 labelling page (`golden_label`, `db/migrations/main/0038_m21_owner_tools.sql:91`).
+- **Current state:** nothing exists; the rule classifier is AGT-011 (Sentinel); golden labels arrive through the M21 labelling page (`golden_label`, `db/migrations/main/0041_m21_owner_tools.sql:91`).
 - **Keys:** `minilm_enabled` (default off).
 - **Acceptance:** AT-80 (shadow changes no filter, vote or breaker; AT-32 hash; agreement published).
 
@@ -80,7 +80,7 @@ Five kinds of work:
 ### C.2 AGT-146 Pick reflections
 - **Intent:** one grounded note per settled pick, written by R6 within the V2 budgets and first in the drop order, a monthly "Unproven notes" section in the Evening Review, and writes only to `pick_reflection`; rules-only production shows "not available tonight" and the path is mock-proven in CI.
 - **V2 ids:** AGT-134 (at most 80 words, grounded in the publication record, the outcome and vs-market figure, the thesis-breaker history and the steelman points), UXN-288 ("Looking back (AI-written)" under the settled pick).
-- **Current state:** `pick_reflection` table exists, append-only and market-guarded (`0021_steelman.sql:165-186`, `0035_m19_market_guard.sql:840-851`); no writer and no reader in `src/`; `pick_reflection_enabled` is on by default (`keys.ts:1402`); the drop order gives reflections no cap of their own (`dropOrder.ts:28-30`). V2 ch. 03 said R3; V3 says R6 (conflict, see the design).
+- **Current state:** `pick_reflection` table exists, append-only and market-guarded (`0021_steelman.sql:165-186`, `0038_m19_market_guard.sql:840-851`); no writer and no reader in `src/`; `pick_reflection_enabled` is on by default (`keys.ts:1402`); the drop order gives reflections no cap of their own (`dropOrder.ts:28-30`). V2 ch. 03 said R3; V3 says R6 (conflict, see the design).
 - **Acceptance:** AT-76 (reflections write only `pick_reflection`, queue under budget, AT-32 hash identical with reflections on and off).
 
 ### C.3 AGT-148 Opinion measurement and promotion request
@@ -116,7 +116,7 @@ Five kinds of work:
 
 ### E.1 DAT-248 FRED and prediction-market regime inputs, shadow
 - **Intent:** macro series and public prediction-market probabilities on named macro events become regime gate and veto inputs only, never score inputs; they stay in shadow until the regime rule with them beats the rule without them on a pre-registered one-look test, and the Cortex page shows both readings meanwhile.
-- **Current state:** the regime is deterministic from index bars (`src/lib/agents/regime.ts:1`, `regimeSeries` `:128`); FRED is a pending register row with no AU fetcher (`src/lib/data/schema.ts:189-196`) and `macro_series` rows with source `fred` are refused unless US is enabled (`0037_m20_macro_sources.sql`, `src/lib/data/sources/macroStore.mjs:1-10`); AU macro comes from the M18 RBA/ABS fetchers behind the Owner's `MACRO_FETCH` variable (D-973); no prediction-market source exists.
+- **Current state:** the regime is deterministic from index bars (`src/lib/agents/regime.ts:1`, `regimeSeries` `:128`); FRED is a pending register row with no AU fetcher (`src/lib/data/schema.ts:189-196`) and `macro_series` rows with source `fred` are refused unless US is enabled (`0040_m20_macro_sources.sql`, `src/lib/data/sources/macroStore.mjs:1-10`); AU macro comes from the M18 RBA/ABS fetchers behind the Owner's `MACRO_FETCH` variable (D-1790); no prediction-market source exists.
 - **Keys:** `regime_altinputs_enabled` (default off; display both readings when on; gates only after the one-look pass).
 - **Acceptance:** AT-81 regime clause (inputs change no gate while off and only gates, never scores, when on).
 

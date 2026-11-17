@@ -1,5 +1,5 @@
 // @vitest-environment node
-// The seed projections are checked, not trusted (M19 A1; D-992, D-1001): the migration SQL and the IN/US/AU test
+// The seed projections are checked, not trusted (M19 A1; D-1807, D-1814): the migration SQL and the IN/US/AU test
 // fixtures are generated from src/lib/market/seed/*.mjs, and `--check` fails when a committed file differs.
 // The step-0 snapshot recorder refuses to run unnoticed: it only runs inside vitest with its record flag.
 import { execFileSync } from "node:child_process";
@@ -18,7 +18,7 @@ describe("market seed generators", () => {
     expect(run("gen-fixtures.mjs", "--check")).toContain("match their seeds");
   });
 
-  it("scripts/market/gen-seed-sql.mjs --check: migration 0034 plus the 0036 delta equals its seed", () => {
+  it("scripts/market/gen-seed-sql.mjs --check: migration 0037 plus the 0039 delta equals its seed", () => {
     expect(run("gen-seed-sql.mjs", "--check")).toContain("matches the seed");
   });
 });

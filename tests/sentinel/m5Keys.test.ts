@@ -29,7 +29,7 @@ const RANGED: readonly (readonly [ConfigKey, number, number, number, string])[] 
   ["p0_batch_window_min", 5, 1, 15, "D-097"],
   ["watch_list_window", 20, 5, 60, "D-097"],
   ["owner_add_expiry_days", 90, 1, 90, "D-097"],
-  ["news_assess_per_run", 40, 20, 200, "D-954"],
+  ["news_assess_per_run", 40, 20, 200, "D-1783"],
   ["email_daily_cap", 20, 5, 50, "l.189"],
   ["email_monthly_cap", 300, 50, 1000, "l.190"],
   ["unopened_review_banner_days", 3, 1, 14, "D-097"],

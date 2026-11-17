@@ -1,4 +1,4 @@
-// The incident of a refused write for a market that is not enabled (M20 A2, D-1123; D-995): ONE definition of its
+// The incident of a refused write for a market that is not enabled (M20 A2, D-1123; D-1810): ONE definition of its
 // statement and its once-per-market-per-day key, shared by the script client (src/lib/db/scriptClient.mjs), the
 // app's `mainDb()` reporter and the Worker's Turso pipeline (worker/src/db.ts). Pure, no client import, so the
 // Worker bundle can take it. The row is the record of `notifyIncident` without e-mail (S2, one open incident per

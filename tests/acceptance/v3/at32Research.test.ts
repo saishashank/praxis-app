@@ -1,6 +1,6 @@
 // @vitest-environment node
 // AT-32 complement proof for the M23 research tables and the night seam (M23 A1, D-1611, D-1613, D-1645; PRD-033, AT-73,
-// AT-68 b): the proof of at32Opinions.test.ts, with the own-set of D-1645, the eight 0040 tables plus `trial_ledger` (the
+// AT-68 b): the proof of at32Opinions.test.ts, with the own-set of D-1645, the eight 0043 tables plus `trial_ledger` (the
 // proposal charges) and `app_log` (the Owner-visible lines). Three things are proved on the golden ZZ world of AT-32:
 //   1. the own-set is exactly those ten names, and every one of the eight tables exists;
 //   2. the seam itself: the world run with the research night ON (the real call from the Cortex stage, every step a stub
@@ -44,7 +44,7 @@ vi.mock("@/lib/research/night", async (orig) => {
 
 const sha = (t: string): string => createHash("sha256").update(t).digest("hex");
 
-/** D-1611, D-1645: the eight tables 0040 adds. */
+/** D-1611, D-1645: the eight tables 0043 adds. */
 const M23_OWN = [
   "research_prereg",
   "holdout_look_refusal",
@@ -200,7 +200,7 @@ const baseNames = Object.keys(base.at32.tables).sort();
 const baseOutside = baseNames.filter((n) => !OWN.has(n));
 
 describe("AT-32 (research): the M23 own-set, the seam and the complement proof (D-1645)", () => {
-  it("the own-set is the steelman's own tables plus the eight 0040 tables, trial_ledger, app_log and holdout_look", () => {
+  it("the own-set is the steelman's own tables plus the eight 0043 tables, trial_ledger, app_log and holdout_look", () => {
     expect([...M23_OWN].sort()).toEqual([
       "angle_proposal",
       "holdout_look_refusal",

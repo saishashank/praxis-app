@@ -381,3 +381,76 @@ describe("MarketSearch", () => {
     expect(res.violations).toEqual([]);
   });
 });
+
+describe("OverviewSheet live quote", () => {
+  const base = {
+    masked: false,
+    stock: "ZZUP",
+    slug: "ZZUP",
+    name: "Zed Upward Holdings",
+    sector: "Technology",
+    d: "2026-10-19",
+    close: { micro: "10500000", currency: "AUD" },
+    changePpm: 50_000,
+    live: null as {
+      priceMicro: string | null;
+      currency: string;
+      changePpm: number;
+      at: string;
+    } | null,
+    volume: 1200,
+    announcements: [],
+    summary: "Summary.",
+    swot: null,
+    notice: "Notice.",
+  };
+  async function open(over: Record<string, unknown>, slug = "ZZUP", label = "ZZUP") {
+    respond.mockReturnValue({ ...base, ...over });
+    render(<OverviewSheet slug={slug} label={label} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: `Company overview for ${label}` }));
+    });
+    return screen.findByRole("dialog");
+  }
+
+  it("a live quote shows the delayed price and the change on the close, beside the end-of-day price", async () => {
+    const dialog = await open({
+      live: { priceMicro: "10800000", currency: "AUD", changePpm: 28_571, at: "Wed 4 Nov, 13:05" },
+    });
+    await within(dialog).findByText("Zed Upward Holdings");
+    expect(within(dialog).getByTestId("overview-live")).toHaveTextContent("A$10.80");
+    expect(within(dialog).getByText("Delayed price, Wed 4 Nov, 13:05")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Change on the close, delayed Wed 4 Nov, 13:05"),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText("+2.86%")).toBeInTheDocument(); // the live change, not the day's
+    expect(within(dialog).queryByText("Day change")).toBeNull();
+    expect(within(dialog).getByText("End-of-day price (Mon 19 Oct)")).toBeInTheDocument();
+    expect(within(dialog).getByText("A$10.50")).toBeInTheDocument();
+  });
+
+  it("a masked live quote has a change only: no delayed price row", async () => {
+    const dialog = await open(
+      {
+        masked: true,
+        name: null,
+        sector: null,
+        close: null,
+        live: { priceMicro: null, currency: "AUD", changePpm: -12_000, at: "Wed 4 Nov, 13:05" },
+      },
+      "stock-b",
+      "Stock B",
+    );
+    await within(dialog).findByText("Change on the close, delayed Wed 4 Nov, 13:05");
+    expect(within(dialog).queryByTestId("overview-live")).toBeNull();
+    expect(dialog.textContent).toMatch(/[−-]1\.20%/);
+    expect(dialog.textContent).not.toMatch(/A\$/);
+  });
+
+  it("without a live quote or a day change, the end-of-day price has no date when none is known and the change reads n/a", async () => {
+    const dialog = await open({ d: null, changePpm: null });
+    await within(dialog).findByText("Day change");
+    expect(within(dialog).getByText("n/a")).toBeInTheDocument();
+    expect(within(dialog).getByText("End-of-day price")).toBeInTheDocument();
+  });
+});

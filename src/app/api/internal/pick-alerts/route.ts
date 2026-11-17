@@ -21,6 +21,7 @@ export async function POST(req: Request): Promise<Response> {
     fetch: (url, init) => fetch(url, init),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     recipients: (main) => defaultRecipients(main, authDb()),
+    auth: () => authDb(),
     // WP4: mail is the last step of the tick (state first); the digest runs at step 3.
     mailer: createPickMailer({ db: mainDb(), env, auth: authDb() }),
   })(req);

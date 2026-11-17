@@ -31,7 +31,7 @@ export interface LlmStore {
   /** Requests made to one provider on `d` (LLM-021 request budget). */
   requestsToday(provider: string, d: string): Promise<number>;
   /**
-   * OPS-111 (2), D-977: the mean tokens (in + out) of one answered call of `role` over the trailing
+   * OPS-111 (2), D-1794: the mean tokens (in + out) of one answered call of `role` over the trailing
    * MEASURED_WINDOW_DAYS ending on `d`, from the counts the providers returned; null when none.
    */
   measuredMean?(role: BudgetKey, market: string, d: string): Promise<number | null>;

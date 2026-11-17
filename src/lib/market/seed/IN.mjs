@@ -1,4 +1,4 @@
-// The India (NSE) market profile seed (M19 A1; DAT-241, MKT-114, D-998, D-999, D-1001). Built, not complete:
+// The India (NSE) market profile seed (M19 A1; DAT-241, MKT-114, D-998, D-999, D-1814). Built, not complete:
 // work status `built`, enabled 0, mode `off`. Every value is the spec 20.1 [VERIFY] figure provisional until
 // M20 records its evidence: `verify = 1`, `verifiedAt` null, so `isComplete` is false by construction.
 // `null` = "set at M20" (tiers, slippage buckets, sleeve reality cap, bar latency). Nothing in M19 reads an

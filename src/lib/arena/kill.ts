@@ -16,7 +16,7 @@
 //      market's own lag (T+1 for IN, T+1 for US; `settlementItem`), so the books reconcile although no later job runs;
 //   5. NOTHING else is written: no new entry, no NAV row, no terminal event, no financing accrual, no e-mail;
 //   6. when no position is left (`remaining = 0`), ONE transaction finishes the run record as `success` and sets
-//      `enabled = 0, rollback_at = NULL`; from then on the 0035 guard refuses every write for the market.
+//      `enabled = 0, rollback_at = NULL`; from then on the 0038 guard refuses every write for the market.
 // A position that cannot be sold (halted, or no price at all) stays open: the run is `failed`, `enabled` and
 // `rollback_at` stay, an S2 `market_kill_incomplete` opens, and the next trading day's slot tries again.
 // Forever tables stay; the audit event of the rollback is the switch's own (the reason).

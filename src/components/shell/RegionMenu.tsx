@@ -25,7 +25,7 @@ export function RegionMenu({
   markets = [],
 }: {
   market: RegionMarket | null;
-  /** The enabled markets (D-997). With several, each is a link that switches the page to it. */
+  /** The enabled markets (D-1812). With several, each is a link that switches the page to it. */
   markets?: RegionMarket[];
 }) {
   const label = regionLabel(market);

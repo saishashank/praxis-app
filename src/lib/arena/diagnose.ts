@@ -5,7 +5,7 @@
 // apart. Bundled and run by scripts/arena/diagnose.mjs (.github/workflows/diagnose-signals.yml).
 //
 //   diagnose --dates YYYY-MM-DD[,YYYY-MM-DD...]
-//   diagnose --scenario splitFrequency [--window N]   (DAT-252 (3), D-974: split-day frequency, AT-45)
+//   diagnose --scenario splitFrequency [--window N]   (DAT-252 (3), D-1791: split-day frequency, AT-45)
 //
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN. The client is wrapped so that any statement other than a
 // plain SELECT throws before it reaches the database: this module never writes a row.

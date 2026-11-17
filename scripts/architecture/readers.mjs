@@ -129,6 +129,9 @@ export function readTables(root) {
         .map((l) => l.replace(/--.*$/, ""))
         .join("\n");
       const key = (n) => `${db}.${n}`;
+      // where each table is created in this file: a DROP before a CREATE of the same name (a table
+      // recreated in a new shape, 0032) drops only the older one
+      const createdAt = new Map();
       for (const m of sql.matchAll(
         /\bCREATE\s+(?:VIRTUAL\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?(\w+)["`]?/gi,
       )) {
@@ -149,6 +152,7 @@ export function readTables(root) {
                 .map((p) => p.trim().split(/\s+/)[0]?.replace(/["`]/g, ""))
                 .filter((c) => c && !CONSTRAINT_START.test(c));
         tables.set(key(m[1]), { db, name: m[1], columns, indexes: [], migration: f });
+        createdAt.set(m[1], m.index);
       }
       for (const m of sql.matchAll(
         /\bALTER\s+TABLE\s+["`]?(\w+)["`]?\s+ADD\s+COLUMN\s+["`]?(\w+)/gi,
@@ -176,8 +180,10 @@ export function readTables(root) {
           tables.set(key(m[2]), { ...t, name: m[2] });
         }
       }
-      for (const m of sql.matchAll(/\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?["`]?(\w+)/gi))
-        tables.delete(key(m[1]));
+      for (const m of sql.matchAll(/\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?["`]?(\w+)/gi)) {
+        const created = createdAt.get(m[1]);
+        if (created === undefined || created < m.index) tables.delete(key(m[1]));
+      }
       for (const m of sql.matchAll(
         /\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?(\w+)["`]?\s+ON\s+["`]?(\w+)/gi,
       )) {
@@ -223,7 +229,7 @@ const strProp = (body, name) => {
 };
 
 /**
- * A slot's time written as data (M19 C1, D-996): `time: ops.maintenance.at`, `until: feed.poll.until`,
+ * A slot's time written as data (M19 C1, D-1811): `time: ops.maintenance.at`, `until: feed.poll.until`,
  * `time: a.preopen_recheck[0]`. The path is read from the tables the Worker builds its slots from
  * (OPS_SLOT_TIMES, FEED_SLOT_TIMES, and the home market's anchors from its seed), so the model keeps the AU times.
  */

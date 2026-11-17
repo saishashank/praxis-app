@@ -109,7 +109,7 @@ export function StrategyChart({
   maxDropText,
   noTargetNote = false,
 }: {
-  /** ISO 4217 code of the chart amounts (D-1002). */
+  /** ISO 4217 code of the chart amounts (D-1815). */
   currency: string;
   name: string;
   nav: ChartPoint[];

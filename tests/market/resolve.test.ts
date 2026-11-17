@@ -1,5 +1,5 @@
 // @vitest-environment node
-// resolveMarket (M19 A1; MKT-110 c, D-997): the one place a market parameter is accepted. A candidate that is
+// resolveMarket (M19 A1; MKT-110 c, D-1812): the one place a market parameter is accepted. A candidate that is
 // not in enabledMarkets(db) is invalid (a page turns it into notFound()); none means the single enabled market,
 // or the user's default when several are enabled. AT-68 (c).
 import { afterEach, describe, expect, it } from "vitest";

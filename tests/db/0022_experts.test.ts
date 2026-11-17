@@ -16,7 +16,7 @@ import {
   track,
 } from "./helpers";
 
-// M19 0035: these tests key their rows by the invented market ZZ; the write guard needs it enabled.
+// M19 0038: these tests key their rows by the invented market ZZ; the write guard needs it enabled.
 const freshDb = async (name: "main" | "auth") => {
   const db = await baseFreshDb(name);
   if (name === "main") await allowMarket(db, "ZZ");
@@ -120,7 +120,7 @@ describe("migration 0022_experts: apply, roll back, apply again", () => {
     expect(NEW_TABLES).toHaveLength(16);
     for (const t of NEW_TABLES) expect(after.some((s) => s.startsWith(`table:${t}:`))).toBe(true);
 
-    expect(await migrateDown(db, ms, 19)).toEqual({ rolledBack: 19, version: 21 });
+    expect(await migrateDown(db, ms, 22)).toEqual({ rolledBack: 22, version: 21 });
     const mid = await schemaOf(db);
     for (const t of NEW_TABLES) expect(mid.some((s) => s.startsWith(`table:${t}:`))).toBe(false);
     const reg = await db.execute(
@@ -136,7 +136,7 @@ describe("migration 0022_experts: apply, roll back, apply again", () => {
     );
     expect(hist.rows).toHaveLength(0);
 
-    expect(await migrateUp(db, ms)).toEqual({ applied: 19, version: 40 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 22, version: 43 });
     expect(await schemaOf(db)).toEqual(after);
   });
 
@@ -144,7 +144,7 @@ describe("migration 0022_experts: apply, roll back, apply again", () => {
     const db = track(createClient({ url: tempDbUrl() }));
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(db, ms);
-    await migrateDown(db, ms, 12);
+    await migrateDown(db, ms, 15);
     expect(await fails(db, "DELETE FROM source_register WHERE source = 'yahoo_eod'")).toContain(
       "forever table",
     );

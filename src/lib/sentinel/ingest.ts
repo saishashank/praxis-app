@@ -31,7 +31,7 @@ import { AU_TIME_ZONE } from "@/lib/agents/decisionView";
 import { loadMembership, membershipOf } from "./membership";
 import { archiveStatements, DEFAULT_HOURS, type MarketHoursLocal } from "./archive";
 
-/** DAT-251 b (D-954): the hard ceiling of the key `news_assess_per_run` (20 to 200); it supersedes the AGT-010 / PLT-075 ceiling of 40. */
+/** DAT-251 b (D-1783): the hard ceiling of the key `news_assess_per_run` (20 to 200); it supersedes the AGT-010 / PLT-075 ceiling of 40. */
 export const MAX_ITEMS_PER_RUN = 200;
 /** The default of the key, and what an unusable value falls back to. */
 export const DEFAULT_ITEMS_PER_RUN = 40;

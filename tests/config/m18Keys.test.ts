@@ -1,5 +1,5 @@
 // @vitest-environment node
-// M18 configuration keys (OPS-103/104/105, SEC-115, DAT-251 b; D-954, D-958, D-979). An independent
+// M18 configuration keys (OPS-103/104/105, SEC-115, DAT-251 b; D-1783, D-958, D-1796). An independent
 // transcription: a change to a default or a bound in keys.ts must change it here too.
 import { describe, expect, it } from "vitest";
 import { CALENDAR_MARKETS } from "@/lib/data/calendarAdmin";
@@ -26,7 +26,7 @@ describe("M18 Owner-editable keys", () => {
     }
   });
 
-  it("the old key name is gone from the registry (renamed, D-954)", () => {
+  it("the old key name is gone from the registry (renamed, D-1783)", () => {
     expect(isConfigKey("sentinel_max_items_per_run")).toBe(false);
     expect(isConfigKey("news_assess_per_run")).toBe(true);
   });
@@ -52,7 +52,7 @@ describe("M18 Owner-editable keys", () => {
   });
 });
 
-describe("M18 fixed keys (D-979)", () => {
+describe("M18 fixed keys (D-1796)", () => {
   const FIXED: ReadonlyArray<readonly [ConfigKey, unknown]> = [
     ["turso_free_ceiling_pct", 20],
     ["hmac_scheme_version", 2],

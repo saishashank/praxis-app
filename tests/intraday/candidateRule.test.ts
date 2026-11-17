@@ -2,7 +2,13 @@
 // M17 WP5 (AT-61 a b): the candidate rule, indicative levels, gates and today's catalysts. ZZ data only.
 import type { Client } from "@libsql/client";
 import { afterEach, describe, expect, it } from "vitest";
-import { isCandidate, moveThresholdPpm, type CandidateInput } from "@/lib/intraday/candidate";
+import {
+  earlyMaxPpm,
+  isCandidate,
+  moveThresholdPpm,
+  type CandidateInput,
+} from "@/lib/intraday/candidate";
+import { ideaSide } from "@/lib/intraday/side";
 import { scanGates, type ScanGateInput } from "@/lib/intraday/gates";
 import { indicativeLevels } from "@/lib/intraday/levels";
 import { scanUniverse } from "@/lib/intraday/universe";
@@ -32,7 +38,7 @@ const OK: CandidateInput = {
 
 describe("isCandidate", () => {
   it("passes when catalyst, move, volume and freshness all hold", () => {
-    expect(isCandidate(OK)).toEqual({ ok: true, polarityConsistent: true });
+    expect(isCandidate(OK)).toEqual({ ok: true, side: "buy" });
   });
 
   it.each([
@@ -52,11 +58,51 @@ describe("isCandidate", () => {
     expect(isCandidate({ ...OK, ...over })).toEqual({ ok: false, failed });
   });
 
-  it("a down move against a positive catalyst is a candidate flagged as inconsistent", () => {
-    expect(isCandidate({ ...OK, movePpm: -50_000 })).toEqual({
+  it("D-1040: good news with the price DOWN is not a candidate", () => {
+    expect(isCandidate({ ...OK, movePpm: -50_000 })).toEqual({ ok: false, failed: ["direction"] });
+  });
+
+  it("D-1040: bad news with the price down is an avoid row, never a buy idea", () => {
+    const bad: Catalyst = { ...CAT, polarity: -1 };
+    // the SSM case of 11 Nov: "Company announcement, bad news", down 4.5 % at 10:11
+    expect(isCandidate({ ...OK, catalyst: bad, movePpm: -45_000 })).toEqual({
       ok: true,
-      polarityConsistent: false,
+      side: "avoid",
     });
+    // bad news with the price up is neither
+    expect(isCandidate({ ...OK, catalyst: bad })).toEqual({ ok: false, failed: ["direction"] });
+  });
+
+  it("D-1040: mixed news is neither a buy idea nor an avoid row", () => {
+    const mixed: Catalyst = { ...CAT, polarity: 0 };
+    expect(isCandidate({ ...OK, catalyst: mixed })).toEqual({ ok: false, failed: ["direction"] });
+    expect(isCandidate({ ...OK, catalyst: mixed, movePpm: -50_000 })).toEqual({
+      ok: false,
+      failed: ["direction"],
+    });
+  });
+
+  it("D-1042: a buy idea must still be early: up no more than twice the qualifying move", () => {
+    expect(earlyMaxPpm(10_000, 4)).toBe(80_000);
+    expect(earlyMaxPpm(40_000, 4)).toBe(120_000);
+    expect(isCandidate({ ...OK, movePpm: 80_000 })).toEqual({ ok: true, side: "buy" });
+    expect(isCandidate({ ...OK, movePpm: 80_001 })).toEqual({ ok: false, failed: ["early"] });
+    // a falling stock is never "too late": the early cap applies to buy ideas only
+    const bad: Catalyst = { ...CAT, polarity: -1 };
+    expect(isCandidate({ ...OK, catalyst: bad, movePpm: -150_000 })).toEqual({
+      ok: true,
+      side: "avoid",
+    });
+  });
+
+  it("the stored side: positive and up = buy; negative and down = avoid; anything else = none", () => {
+    expect(ideaSide("positive", 1)).toBe("buy");
+    expect(ideaSide("positive", -1)).toBeNull();
+    expect(ideaSide("negative", -1)).toBe("avoid");
+    expect(ideaSide("negative", 1)).toBeNull();
+    expect(ideaSide("neutral", 50_000)).toBeNull();
+    expect(ideaSide(null, 50_000)).toBeNull();
+    expect(ideaSide("positive", 0)).toBeNull();
   });
 
   it("the move threshold is max(key, 1.5 x sd)", () => {

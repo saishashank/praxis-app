@@ -20,6 +20,7 @@ import {
   M11L_KEY_NAMES,
   M13L_KEY_NAMES,
   MOVERS_KEY_NAMES,
+  LEARN_KEY_NAMES,
   type ConfigKey,
 } from "@/lib/config/keys";
 import { getConfig, setConfig } from "@/lib/config/store";
@@ -287,6 +288,7 @@ describe("M4 keys: defaults and bounds equal ch.15", () => {
       "hmac_scheme_version",
       "calendar_draft_markets",
       "restore_drill_reminder",
+      ...LEARN_KEY_NAMES, // the learning Cortex keys have their own table in tests/config/learnKeys.test.ts
     ]);
     const listed = new Set<string>([
       ...RANGED.map((r) => r[0]),
@@ -366,12 +368,12 @@ describe("M4 object keys", () => {
     expect(await check("insider_score_weights", { director_net: 0.5 })).toMatch(/needs/);
   });
 
-  it("llm_market_share: built markets only (M19, D-993), each share 0 to 1", async () => {
+  it("llm_market_share: built markets only (M19, D-1808), each share 0 to 1", async () => {
     expect(CONFIG_KEYS.llm_market_share.default).toEqual({ AU: 1 });
     expect(await check("llm_market_share", { AU: 0.5 })).toBeNull();
     expect(await check("llm_market_share", { AU: 1.5 })).toMatch(/0 to 1/);
     expect(await check("llm_market_share", { ZZ: 1 })).toBe("unknown market");
-    expect(await check("llm_market_share", { US: 1 })).toBeNull(); // a built market (D-993)
+    expect(await check("llm_market_share", { US: 1 })).toBeNull(); // a built market (D-1808)
     expect(await check("llm_market_share", {})).toMatch(/list a share/);
   });
 

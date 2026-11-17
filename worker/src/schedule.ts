@@ -1,5 +1,5 @@
 // The slot table as data (docs/M2_design.md section 3, "AU slot schedule (PLT-073)"), built per market
-// from the `market` row (M19 C1, D-996): the market-bound slots read their local HH:MM from the row's
+// from the `market` row (M19 C1, D-1811): the market-bound slots read their local HH:MM from the row's
 // `slots_json` anchors (the profile projection, src/lib/market/profileCore.mjs), the market-independent ops
 // slots from OPS_SLOT_TIMES, and the home market's exchange-feed slots from FEED_SLOT_TIMES. This file holds
 // no market code and no clock time. `slotsFor(row)` of the AU row reproduces the former AU table to the
@@ -45,7 +45,7 @@ export type Slot = {
   /** Needs the market mode (the market's mode must not be "off"); nightly ops slots do not. */
   marketBound: boolean;
   /**
-   * The market this slot belongs to, set only when more than one market is enabled (D-1045); absent means the
+   * The market this slot belongs to, set only when more than one market is enabled (D-1825); absent means the
    * table's only market. A market-bound dispatch then passes it to the workflow as the `market` input and
    * the clock reads that market's mode and calendar.
    */
@@ -90,12 +90,12 @@ export type Slot = {
     afterMin: number;
     untilMin: number;
     /**
-     * M18 (D-953): re-dispatch at most once through the recheck. A dispatch made at or after
+     * M18 (D-1782): re-dispatch at most once through the recheck. A dispatch made at or after
      * `slot minute + afterMin` was itself a recheck, so it is not checked again.
      */
     once?: boolean;
     /**
-     * M18 (D-953): another run-record key prefix (`<prefix><local date>`) that must have a
+     * M18 (D-1782): another run-record key prefix (`<prefix><local date>`) that must have a
      * success/degraded record before the re-dispatch (2b needs a settled 2a). Unknown = no re-dispatch.
      */
     needsKeyPrefix?: string;
@@ -353,7 +353,7 @@ const tableOf = ({ code, a, ops, feed }: TableInput): Slot[] => [
   // M4 T8 (D-087): batch 2b "signals and orders". Allow-listed, slot OFF like arena-close: the
   // script waits for batch 2a of the same session and, with market.mode other than `full`, writes
   // only a skipped run record (D-066). It decides one session; there is no catch-up.
-  // M18 OPS-106 (D-666, D-953): 2b waits 20 minutes for 2a and then records `skipped (no_2a_success)`.
+  // M18 OPS-106 (D-666, D-1782): 2b waits 20 minutes for 2a and then records `skipped (no_2a_success)`.
   // From 18:25 to 18:40 a 2b that has not closed its night is dispatched again ONCE, and only when 2a has
   // a success/degraded record by then (`needsKeyPrefix`); after 18:40 the script itself records the night
   // as degraded `late_2a`. Scheduling only: the inputs and outputs of 2b are unchanged.
@@ -366,7 +366,7 @@ const tableOf = ({ code, a, ops, feed }: TableInput): Slot[] => [
     marketBound: true,
     priority: 16,
     catchUpMin: 30,
-    // M18 OPS-106 (D-666, D-953): recheck from 18:25 to 18:40, once, needs a settled 2a (see above the slot).
+    // M18 OPS-106 (D-666, D-1782): recheck from 18:25 to 18:40, once, needs a settled 2a (see above the slot).
     recheck: {
       keyPrefix: `arena-2b:${code}:`,
       afterMin: 15,
@@ -632,7 +632,7 @@ const tableOf = ({ code, a, ops, feed }: TableInput): Slot[] => [
 
 /**
  * The slot table of one enabled market row, in table order (market-bound and ops slots interleaved as
- * designed). Throws `unsupported zone` for a market whose zone the Worker cannot compute (D-1004) and
+ * designed). Throws `unsupported zone` for a market whose zone the Worker cannot compute (D-1817) and
  * RangeError for an unusable `slots_json`; the clock catches both per market and skips that market.
  */
 export function slotsFor(row: MarketRow, opts: TableOptions = {}): readonly Slot[] {
@@ -706,7 +706,7 @@ function killSlot(row: MarketRow): Slot | null {
 }
 
 /**
- * The slot table of every enabled market, in code order (D-996). One market: `slotsFor(row)` untagged (the
+ * The slot table of every enabled market, in code order (D-1811). One market: `slotsFor(row)` untagged (the
  * AU table of the snapshot). Several: the first market's full table, tagged, plus each later market's
  * market-bound slots with `:<code>` ids and tags; the ops slots appear once. A market whose zone or anchors
  * are unusable is left out and named in `skipped` (never thrown: one broken row must not stop the others).

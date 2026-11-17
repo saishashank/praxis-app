@@ -1,7 +1,7 @@
 // Caller-side signer for Actions -> Vercel calls (SEC-017, SEC-115). Zero dependencies.
 // The scheme (message, header names) is defined once in src/lib/security/hmacCore.mjs and shared
 // with the verifier and the Worker signer (V1-I3); a known-answer test keeps the primitives in step.
-// v2 (D-957): the signature covers method, path and the body hash, so `target` is required.
+// v2 (D-1786): the signature covers method, path and the body hash, so `target` is required.
 import { createHash, createHmac } from 'node:crypto';
 import { hmacMessage, signedHeaders } from '../../src/lib/security/hmacCore.mjs';
 

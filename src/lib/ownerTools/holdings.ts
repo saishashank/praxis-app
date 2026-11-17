@@ -134,7 +134,7 @@ export async function saveHoldings(
     );
     return { ok: true, uploadId };
   } catch {
-    return { ok: false, error: "unavailable" }; // e.g. a market that is not enabled (the 0038 guard)
+    return { ok: false, error: "unavailable" }; // e.g. a market that is not enabled (the 0041 guard)
   }
 }
 

@@ -13,6 +13,7 @@ import { loadPickInputs } from "./inputs";
 import { countBlocks, noPicksSentence, type BlockCounts } from "./noPicks";
 import { writePicks } from "./store";
 import { loadShortlistInputs } from "./shortlistLoad";
+import { loadCandidateInputs } from "./candidates";
 import type { PickInput } from "./types";
 import { trackPicks, type TrackSummary } from "./track";
 import { checkWaitingPicks, type CheckSummary } from "./validity";
@@ -26,6 +27,8 @@ export type PicksNightResult = {
   readonly blocked: BlockCounts;
   /** OPS-110: plain-words reason when nothing was published on a trading day, else null. */
   readonly noPicksLine: string | null;
+  /** D-980: candidate-measure inputs offered tonight (-1 when that step failed). */
+  readonly candidateMeasures: number;
   readonly tracking: TrackSummary;
   readonly checks: CheckSummary;
 };
@@ -59,6 +62,7 @@ export async function runPicksNight(
       published: 0,
       candidates: 0,
       shortlist: 0,
+      candidateMeasures: 0,
       blocked: {},
       noPicksLine: null,
       tracking,
@@ -85,14 +89,31 @@ export async function runPicksNight(
   } catch {
     shortlistCount = -1;
   }
-  const picks = generatePicks([...inputs, ...shortlist], {
-    market: o.market,
-    d: o.d,
-    calendar: o.calendar,
-    picks: o.params.picks,
-    universe,
-    createdAt: o.now,
-  });
+  // D-980: the candidate measures' picks, after the strategy and shortlist picks (never displace them)
+  let candidates: PickInput[] = [];
+  let candidateCount = 0;
+  try {
+    candidates = await loadCandidateInputs(db, {
+      market: o.market,
+      d: o.d,
+      exclude: new Set([...inputs, ...shortlist].map((x) => x.code)),
+    });
+    candidateCount = candidates.length;
+  } catch {
+    candidateCount = -1;
+  }
+  const picks = generatePicks(
+    [...inputs, ...shortlist],
+    {
+      market: o.market,
+      d: o.d,
+      calendar: o.calendar,
+      picks: o.params.picks,
+      universe,
+      createdAt: o.now,
+    },
+    { inputs: candidates, perProfile: candidates.length },
+  );
   const published = await writePicks(db, picks);
   const blocked = countBlocks([...inputs, ...shortlist]);
   const noPicksLine =
@@ -107,6 +128,7 @@ export async function runPicksNight(
     published,
     candidates: inputs.length,
     shortlist: shortlistCount,
+    candidateMeasures: candidateCount,
     blocked,
     noPicksLine,
     tracking,

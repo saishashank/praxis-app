@@ -1,4 +1,4 @@
-// UXN-312, MKT-110 (c), D-997: the header switcher lists the enabled markets only, a built market that is off is
+// UXN-312, MKT-110 (c), D-1812: the header switcher lists the enabled markets only, a built market that is off is
 // never named, and a `?market=` candidate that is not enabled is a 404 at the one resolver (envFor).
 import type { Client } from "@libsql/client";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -41,7 +41,7 @@ const opened = (shell: Awaited<ReturnType<typeof loadShell>>): string => {
 
 const owner = { id: 1, role: "owner" };
 
-describe("the enabled-only switcher (D-997)", () => {
+describe("the enabled-only switcher (D-1812)", () => {
   it("lists AU alone when only AU is enabled, never IN or US", async () => {
     const shell = await loadShell(await envFor(owner));
     expect(shell.markets.map((m) => m.code)).toEqual(["AU"]);
@@ -62,7 +62,7 @@ describe("the enabled-only switcher (D-997)", () => {
   });
 });
 
-describe("one resolver for every page (D-997)", () => {
+describe("one resolver for every page (D-1812)", () => {
   it("a market that is not enabled is a 404; none or an enabled one resolves", async () => {
     await expect(envFor(owner, undefined, "IN")).rejects.toThrow("NEXT_NOT_FOUND");
     await expect(envFor(owner, undefined, "US")).rejects.toThrow("NEXT_NOT_FOUND");

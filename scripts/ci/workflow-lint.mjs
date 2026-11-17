@@ -32,7 +32,7 @@
 //   [cli-unpinned]          `npx vercel` without an exact semver suffix (so `vercel@latest`, `vercel@63`
 //                           or a bare `vercel` fails), and an `npx wrangler@<spec>` that is not exact semver
 //                           (a bare `npx wrangler` is the lockfile's devDependency and stays allowed)
-//                           (OPS-109 a, D-971)
+//                           (OPS-109 a, D-1788)
 //
 // Exceptions: scripts/ci/workflow-lint-exceptions.json lists known findings by file, job, step (the
 // 1-based step number) and rule, each with a reason. An entry with approvedBy "pending" is NOT an

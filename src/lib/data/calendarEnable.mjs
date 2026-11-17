@@ -3,7 +3,7 @@
 // the rows of each year that has none, as PROVISIONAL rows (`confirmed = 0`, source `draft:<rule set>`, the same
 // shape as the yearly draft job); a year that already has any row is never touched, so a second call, or a call after
 // the market was switched off and on again, writes nothing. The market must be enabled first: the guard triggers of
-// `trading_calendar` (migration 0035) refuse a row of any other, and this function says so before writing, with the
+// `trading_calendar` (migration 0038) refuse a row of any other, and this function says so before writing, with the
 // typed `MarketNotEnabled`. So production holds no IN or US calendar row while a market is off.
 // Callers: the switch-on writer (task S1) after the `market` update, the development states (e2e/seed/states/
 // markets-dev.mjs) and the `recorded-day-dev` setup. No network, no clock beyond the optional `now`.

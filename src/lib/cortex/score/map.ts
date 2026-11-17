@@ -8,7 +8,8 @@
 //   (D-281). Never an exception on the night path: the result says why.
 import { canonicalJson, sha256Hex } from "@/lib/arena/cohort";
 import { plattApply } from "@/lib/stats/calibration";
-import type { CortexMap, ScoredAngle } from "./types";
+import { weightsProblem } from "./score";
+import type { CortexMap, ScoredAngle, ScoreWeights } from "./types";
 
 /**
  * The hash of a scored set: sha256 of the canonical JSON of `["id@version", ...]` sorted by id. The
@@ -20,6 +21,15 @@ export function activeSetHash(scored: readonly ScoredAngle[]): string {
   return sha256Hex(canonicalJson(ids));
 }
 
+/**
+ * D-923: the hash of a learner's weights, sha256 of the canonical JSON (keys sorted at every level),
+ * so the same weights in any key order give the same hash. The weekly run stores it as
+ * `params_json.weights_hash`; the refit guard recomputes it (LRN-AT-6).
+ */
+export function weightsHash(weights: ScoreWeights): string {
+  return sha256Hex(canonicalJson(weights));
+}
+
 /** Why a map yields no p tonight. */
 export type MapGuardReason = "map_missing" | "map_stale" | "map_invalid";
 
@@ -27,14 +37,26 @@ export type MapGuard =
   | { readonly ok: true; readonly map: CortexMap }
   | { readonly ok: false; readonly reason: MapGuardReason; readonly detail: string };
 
+/** What the rule scores with, for the weights check (`scoreCode` always passes it). */
+export type MapGuardRule = {
+  /** The weights the rule version scores with (absent = equal weights). */
+  readonly weights?: ScoreWeights;
+  /** `cluster_weight_max`; absent = the cap is not re-checked. */
+  readonly clusterWeightMax?: number;
+};
+
 /**
  * CTX-012 refit guard. `currentHash` is `activeSetHash` of tonight's scored set of the family;
  * `clustersDeclared` the clusters the rule version declares (must match the map's K and set).
+ * D-923 / LRN-AT-6: a map with weights must carry the matching `weightsHash` (both or neither), the
+ * rule's weights (when `rule` is given) must be the map's, and the weights must be scoreable within
+ * the cluster cap; any of these failing is `map_invalid` (a hand-edited row), never silently fixed.
  */
 export function mapGuard(
   map: CortexMap | undefined,
   currentHash: string,
   clustersDeclared?: readonly string[],
+  rule?: MapGuardRule,
 ): MapGuard {
   if (map === undefined) return { ok: false, reason: "map_missing", detail: "no map loaded" };
   if (map.activeSetHash !== currentHash) {
@@ -61,7 +83,30 @@ export function mapGuard(
       return { ok: false, reason: "map_stale", detail: `clusters ${have} vs declared ${want}` };
     }
   }
+  const weights = weightsCheck(map, rule);
+  if (weights !== null) return { ok: false, reason: "map_invalid", detail: weights };
   return { ok: true, map };
+}
+
+/** The D-923 weights checks of `mapGuard`; null = pass (always for a map and rule without weights). */
+function weightsCheck(map: CortexMap, rule: MapGuardRule | undefined): string | null {
+  const ruleWeights = rule?.weights;
+  if (map.weights === undefined && map.weightsHash === undefined && ruleWeights === undefined) {
+    return null;
+  }
+  if (map.weights === undefined || map.weightsHash === undefined) {
+    return "weights and weights_hash must come together";
+  }
+  if (weightsHash(map.weights) !== map.weightsHash) {
+    return `weights hash ${map.weightsHash.slice(0, 12)}… does not match the weights`;
+  }
+  if (
+    rule !== undefined &&
+    (ruleWeights === undefined || weightsHash(ruleWeights) !== map.weightsHash)
+  ) {
+    return "the rule scores with other weights than its map";
+  }
+  return weightsProblem(map.weights, map.clusters, rule?.clusterWeightMax);
 }
 
 /** p for a raw S under a guarded map (C2 `plattApply`). */

@@ -164,7 +164,7 @@ async function seedExperts(db: Client): Promise<void> {
 
 async function world(withExperts: boolean): Promise<{ db: Client }> {
   const db = await freshReplayDb();
-  // M19 0035: the ZZ expert seed holds one US call, so US is enabled in BOTH worlds (the market table must not differ)
+  // M19 0038: the ZZ expert seed holds one US call, so US is enabled in BOTH worlds (the market table must not differ)
   await allowMarket(db, "US");
   await buildNight(db, { codes: goldenCodes() });
   await setMode(db, "full");
@@ -254,7 +254,7 @@ describe("AT-41: replay hash identical with expert data absent and present", () 
   });
 });
 
-// OPS-112 (3), D-978: the nights above prove the expert data never changes a decision. This block proves
+// OPS-112 (3), D-1795: the nights above prove the expert data never changes a decision. This block proves
 // the other direction for the WEEKLY learning run with eligible clusters: a real screening run (survivors
 // ranked) and the challenger proposals move only the expert tables and the challenger path that
 // `createChallenger` writes by design (AT-40 (e): one trial per proposal); no decision, order, book, pick,

@@ -1,4 +1,4 @@
-// AT-67 (M19 E1, D-1000, D-1075 to D-1078): self-tests of the market-literal scan. A planted literal of every
+// AT-67 (M19 E1, D-1813, D-1833 to D-1836): self-tests of the market-literal scan. A planted literal of every
 // class fails, the allow-list is honoured and nothing else is, comments and test files are not scanned, a stale
 // allow-list entry is reported, and the real tree reaches 0.
 import { test } from "node:test";
@@ -111,7 +111,7 @@ test("scanTree: a planted file outside the allow-list fails, test folders and th
       "worker/src/c.ts",
     ]);
     assert.ok(r.allowed >= 2, "the seed folder is allowed");
-    assert.equal(r.quotedFiles.length, 1, "the D-991 count names the quoted-AU file");
+    assert.equal(r.quotedFiles.length, 1, "the D-1806 count names the quoted-AU file");
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

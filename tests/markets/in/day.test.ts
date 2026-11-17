@@ -168,7 +168,7 @@ describe("India batch 1 on five hand-made sessions", () => {
     expect(await count(db, "SELECT COUNT(*) AS n FROM index_bar WHERE market='IN'")).toBe(2);
   });
 
-  it("macro rows are stored with the source of their series, revised only when the value changes (0037, D-1147)", async () => {
+  it("macro rows are stored with the source of their series, revised only when the value changes (0040, D-1147)", async () => {
     const db = await enabledDb();
     const d = SESSIONS[0]!;
     const macro =

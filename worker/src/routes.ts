@@ -67,7 +67,7 @@ export type RouteFacts = {
   /** market.mode of the table's first market, or null when unreadable (treated like "off" for market-bound slots). */
   marketMode: string | null;
   tradingDay: boolean;
-  /** Mode and trading day by market code, for slots tagged with a market (D-1045); absent = none tagged. */
+  /** Mode and trading day by market code, for slots tagged with a market (D-1825); absent = none tagged. */
   marketModes?: Readonly<Record<string, string>>;
   tradingDays?: Readonly<Record<string, boolean>>;
   /** `alert_flush_due` is set and has passed. */
@@ -264,7 +264,7 @@ export async function runRoutes(
     if (routeUrl(env.APP_BASE_URL, "/") === null) return summary;
     if ((env.WORKER_HMAC_SECRET ?? "").trim() === "") return summary;
 
-    // ---- the slot table: fixed (tests) or built from the enabled market rows (D-996) ---------------
+    // ---- the slot table: fixed (tests) or built from the enabled market rows (D-1811) ---------------
     let rows: MarketRow[] | null = null;
     let slots: readonly Slot[];
     if (fixedSlots !== undefined) {

@@ -1,5 +1,5 @@
 // Macro-series storage for a built market (M20 integration; D-1147, closes the hand-offs of D-1171 and D-1189).
-// `macro_series` is keyed by (source, series_id, d) and has no `market` column: migration 0037 widened its `source`
+// `macro_series` is keyed by (source, series_id, d) and has no `market` column: migration 0040 widened its `source`
 // list to the India sources (`rbi`, `mospi`) and the US one (`fred`) and guards them with two source triggers
 // (`rbi`/`mospi` need IN enabled, `fred` needs US enabled; `MarketNotEnabled macro_series`). This writer is the ONE
 // path the India day stage and the US day stage use:
@@ -57,7 +57,7 @@ export async function writeMacroSeries(db, market, rows, fetchedAt) {
     const slice = rows.slice(i, i + ROWS_PER_STATEMENT);
     stmts.push({
       // rows-ok: at most 100 keyed upserts per statement (a market's macro day is a few dozen rows); a stored row changes
-      // only when its value differs, as the home macro writer does; `source` is never updated (the 0037 guard holds)
+      // only when its value differs, as the home macro writer does; `source` is never updated (the 0040 guard holds)
       sql:
         "INSERT INTO macro_series (source, series_id, d, value_micro, fetched_at) VALUES " +
         slice.map(() => "(?, ?, ?, ?, ?)").join(", ") +

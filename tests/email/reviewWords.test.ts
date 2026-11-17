@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import {
   aud,
   audWithPct,
+  BRAIN_HEADING,
+  TOP5_HEADING,
   closedLine,
   companyLabel,
   exitWords,
@@ -148,5 +150,44 @@ describe("reviewLists", () => {
       "3 orders queued for the next session.",
     ]);
     expect(reviewLists({ learning: null, closed: [], queuedOrders: null }).s6).toEqual([]);
+  });
+
+  it("D-923: the learning Cortex's lines follow under their heading, and are left out when absent", () => {
+    const cortex = {
+      lines: [
+        "Of the 20 biggest gainers on Tue 10 Nov, the Cortex had 6 in its top tenth.",
+        "No weight changed tonight.",
+      ],
+      numbers: { rows: 6, angles: 3, nextDayOf: 2, nextDayRight: 1, dataBreaks: 0, coverage: null },
+    };
+    const l = reviewLists({ learning: { ...learning, cortex }, closed: [], queuedOrders: null });
+    expect(l.s4.slice(-3)).toEqual([`${BRAIN_HEADING}:`, ...cortex.lines]);
+    const empty = reviewLists({
+      learning: { ...learning, cortex: { ...cortex, lines: [] } },
+      closed: [],
+      queuedOrders: null,
+    });
+    expect(empty.s4.join("\n")).not.toContain(BRAIN_HEADING);
+    // D-993: the top-5 target comes first in the masked in-app list too
+    const top5 = {
+      d: "2026-11-10",
+      liquid: 10,
+      named: 0,
+      gainers: [],
+      gainersHad: 0,
+      losers: [],
+      losersHad: 0,
+      picks: { n: 0, up: 0, down: 0, meanMovePpm: null },
+      chanceHits: 0,
+      rolling: { nights: 1, gainers: 0, had: 0, chanceHits: 0 },
+    };
+    const first = reviewLists({ learning: { ...learning, top5 }, closed: [], queuedOrders: null });
+    expect(first.s4.slice(0, 2)).toEqual([
+      `${TOP5_HEADING}:`,
+      "Top 5 gainers today: no large or mid-size share rose, so there was nothing to catch.",
+    ]);
+    expect(reviewLists({ learning, closed: [], queuedOrders: null }).s4.join("\n")).not.toContain(
+      BRAIN_HEADING,
+    );
   });
 });

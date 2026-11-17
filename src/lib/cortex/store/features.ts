@@ -22,6 +22,8 @@ export type FeatureRow = {
  */
 export const CORTEX_PRUNED_TABLES = {
   cortex_feature_daily: { column: "d", kind: "date", days: 400 },
+  // O-81 (migration 0031): the probes' values, same floor and trigger rule
+  cortex_feature_probe: { column: "d", kind: "date", days: 400 },
 } as const satisfies Record<string, { column: string; kind: "date" | "instant"; days: number }>;
 
 const ROWS_PER_BATCH = 200;

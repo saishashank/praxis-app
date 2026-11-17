@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/guard";
 import { envFor } from "@/lib/ui/loaders/shell";
 import { parsePicksQuery } from "@/lib/ui/loaders/picks";
-import { Breadcrumb } from "@/components/ui/Nav";
 import { TrackRecordBody } from "../TrackRecordBody";
 import { NOT_REAL_ORDERS } from "../text";
 
@@ -23,10 +22,6 @@ export default async function TrackRecordPage({ searchParams }: { searchParams: 
 
   return (
     <main className="mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-4 px-4 py-6">
-      <Breadcrumb
-        backHref="/picks"
-        items={[{ label: "Picks", href: "/picks" }, { label: "Track record" }]}
-      />
       <header className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Track record</h1>
         <p className="m-0 text-sm text-text-muted">

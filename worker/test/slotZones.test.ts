@@ -1,7 +1,7 @@
 // M20 A2 (D-1117, D-1089, MKT-110 a): the clock decides a market-bound slot on the wall clock of its OWN market zone.
 // An enabled IN row fires ingest-batch1:IN at 16:30 Kolkata and not at the Sydney minute; a US slot is decided on the
 // New York date (a US evening is already the next day in Sydney); AU and the ops slots keep the home clock, so the AU
-// table is byte-identical (worker/test/auSlots.test.ts). Real SQLite with migrations 0034 and 0036.
+// table is byte-identical (worker/test/auSlots.test.ts). Real SQLite with migrations 0037 and 0039.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   candidateSlots,

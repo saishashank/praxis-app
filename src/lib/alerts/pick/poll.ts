@@ -35,7 +35,7 @@ import {
 import type { DelayedQuote, QuoteRefusal } from "@/lib/data/quotes/types";
 import { LATEST_READ_MAX, storeLatestQuotesSoft } from "@/lib/data/quotes/latest";
 import { MARKET_INDEX_CODE } from "@/lib/data/quotes/parse";
-import { heldCodes } from "@/lib/intraday/universe";
+import { displayHeldCodes, heldCodes } from "@/lib/intraday/universe";
 import {
   SESSION_TZ,
   minutesSincePause,
@@ -66,7 +66,7 @@ import {
   type PickAlertMailer,
 } from "./types";
 
-/** The market a poll or a health line is about when the caller names none: the first enabled one (D-997). */
+/** The market a poll or a health line is about when the caller names none: the first enabled one (D-1812). */
 async function pollMarket(db: Exec): Promise<string> {
   const [first] = await enabledMarkets(db);
   if (first === undefined) throw new Error("no market is enabled");
@@ -96,13 +96,15 @@ export type PollRunDeps = {
   sleep: (ms: number) => Promise<void>;
   /** Wall clock (ms) for the whole-run deadline; defaults to Date.now (V2-S7). */
   clock?: () => number;
+  /** The auth database, for the users' watchlist codes (display prices only); optional. */
+  auth?: Exec;
   /** Users whose pick alerts are on (ARN-112); the route reads the auth DB. */
   recipients: () => Promise<string[]>;
   /** WP4 hook; defaults to none (no mail leaves). */
   mailer?: PickAlertMailer;
   market?: string;
   /**
-   * OPS-109 c (D-971): with this set the tick checks quote starvation and raises the S2
+   * OPS-109 c (D-1788): with this set the tick checks quote starvation and raises the S2
    * `quote_starvation` incident once a day (the env is the incident email's; `{}` records only).
    */
   notify?: Omit<NotifyCtx, "db" | "now">;
@@ -152,7 +154,7 @@ async function latestFetched(
 }
 
 /**
- * OPS-109 c (D-971): raise S2 `quote_starvation` (at most once a day) when a held position has had no
+ * OPS-109 c (D-1788): raise S2 `quote_starvation` (at most once a day) when a held position has had no
  * fresh quote for STARVATION_MINUTES inside the poll window of a trading day. The incident carries
  * counts only, never a code. Never fails the tick: an error here leaves the poll's result alone.
  */
@@ -279,6 +281,20 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
     if (!extraCodes.has(c)) heldKind.add(c);
     extraCodes.add(c);
   }
+  // Display only (ARN-021): the practice portfolios' holdings, then the users' Home watchlists, for the
+  // site's delayed prices. Held before watchlist, after the book's own codes; the per-run cap below
+  // (`allowed`) and the cadence apply to them like any extra. A failed read leaves the plan as it was.
+  try {
+    const shown = await displayHeldCodes(db, market, deps.auth);
+    for (const c of shown.held) {
+      if (seen.has(c)) continue;
+      if (!extraCodes.has(c)) heldKind.add(c);
+      extraCodes.add(c);
+    }
+    for (const c of shown.watchlist) if (!seen.has(c)) extraCodes.add(c);
+  } catch {
+    // keep the plan without them
+  }
   const ticksLeft = remainingPollTicks(now, end, stepMin);
   const cadence = extrasCadence({
     ...dayBudget,
@@ -291,7 +307,7 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
   if (extrasDue) for (const c of extraCodes) add(c);
   const planned = codes.slice(0, allowed);
   const narrowed = (extraCodes.size > 0 && !extrasDue) || codes.length > planned.length;
-  // OPS-109 c (D-971): what the budget left out, and the plan's make-up (counts only).
+  // OPS-109 c (D-1788): what the budget left out, and the plan's make-up (counts only).
   const skippedCodes = armedCodes.length + extraCodes.size - planned.length;
   const armedSet = new Set(armedCodes);
   const plan = {
@@ -515,7 +531,7 @@ export async function pickAlertsHealth(
 export const QUOTE_LINES_MAX = 3; // threshold-ok: display cap
 
 /**
- * OPS-109 c (D-971): one fixed-word line per recent poll slot of the day,
+ * OPS-109 c (D-1788): one fixed-word line per recent poll slot of the day,
  * "Quotes HH:MM: used n, skipped m (armed a, watch w, held h)". Counts only: no code is named (D-580).
  * `used` is the reservation, replaced by the `+done` row's actual count when one exists (D-697).
  */
@@ -560,6 +576,8 @@ export type PickAlertsHandlerDeps = Omit<MachineDeps, "ctx"> & {
   sleep: PollRunDeps["sleep"];
   /** Reads the auth DB (injected so tests need none). */
   recipients: (db: Exec) => Promise<string[]>;
+  /** The auth DB for the users' watchlist codes (display prices only). */
+  auth?: () => Exec;
   mailer?: PickAlertMailer;
 };
 
@@ -580,6 +598,7 @@ export function createPickAlertsHandler(deps: PickAlertsHandlerDeps) {
         fetch: deps.fetch,
         sleep: deps.sleep,
         recipients: () => deps.recipients(db),
+        auth: deps.auth?.(),
         mailer: deps.mailer,
         notify: { env: deps.env as AlertCtx["env"] },
       });

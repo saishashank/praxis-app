@@ -27,7 +27,7 @@ const row = (i: number, over: Partial<NightRow> = {}): NightRow => ({
   ...over,
 });
 
-// OPS-111 (13), D-977: the line shows to every role, so it must stay free of anything the masking rule
+// OPS-111 (13), D-1794: the line shows to every role, so it must stay free of anything the masking rule
 // would hide: no ASX code, no company name, no date. Counts and fixed words only.
 describe("steelman health line masking (D-580)", () => {
   const NO_CODE_NAME_DATE = /\b[A-Z]{3,4}\b|\d{4}-\d{2}-\d{2}|\b(Pty|Ltd|Limited|Corp)\b/;

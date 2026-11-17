@@ -12,6 +12,7 @@ import { ProfileSwitch } from "./PickTabs";
 import { SuccessStrip } from "./SuccessStrip";
 import { pickProfilesConfig } from "./data";
 import { PicksEmptyArt } from "./EmptyArt";
+import { ReplayCheck } from "./ReplayCheck";
 import {
   EMPTY_TRACK_SENTENCE,
   TRACK_PURPOSE,
@@ -96,7 +97,10 @@ export async function TrackRecordBody({
   hrefFor: (profile: string) => string;
 }) {
   const model = await loadTrackRecord(env, { profile });
-  const rule = profileSentence(profileRules(await pickProfilesConfig(env.main), model.profile));
+  const rule = profileSentence(
+    profileRules(await pickProfilesConfig(env.main), model.profile),
+    model.profile,
+  );
   const columns: Column<TrackRow>[] = [
     { key: "when", header: "Published", cell: (r) => (model.masked ? r.d : formatDay(r.d)) },
     { key: "stock", header: "Stock", cell: (r) => r.stock },
@@ -156,6 +160,8 @@ export async function TrackRecordBody({
           <p className="m-0 mt-1 text-text-muted">{VS_MARKET_HELP}</p>
         </section>
       ) : null}
+
+      {await ReplayCheck({ env })}
 
       {!model.masked && model.rows.length > 0 ? <SimulatedLabel /> : null}
 

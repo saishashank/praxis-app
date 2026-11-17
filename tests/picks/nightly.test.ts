@@ -28,11 +28,14 @@ import {
 } from "./harness";
 
 const specs: CodeSpec[] = [
-  { code: "ZZA1", tier: "U1", base: 10_000_000n, step: 0n },
-  { code: "ZZB1", tier: "U1", base: 10_000_000n, step: 0n },
+  // D-1000: the bars are flat (volatility 0 for all), so size alone sets the band: small companies
+  // (ZZA1, ZZB1, ZZD3) are Aggressive, ZZC2 (mid-size) Balanced, ZZE1 and ZZF1 (large and calm) Conservative
+  { code: "ZZA1", tier: "U3", base: 10_000_000n, step: 0n },
+  { code: "ZZB1", tier: "U3", base: 10_000_000n, step: 0n },
   { code: "ZZC2", tier: "U2", base: 10_000_000n, step: 0n },
   { code: "ZZD3", tier: "U3", base: 10_000_000n, step: 0n },
   { code: "ZZE1", tier: "U1", base: 10_000_000n, step: 0n },
+  { code: "ZZF1", tier: "U1", base: 10_000_000n, step: 0n },
 ];
 
 let db: Client;
@@ -46,7 +49,13 @@ beforeAll(async () => {
   await addUniverse(run, D, specs);
   await addHistory(run);
   await addExecutionAndLabel(run, "F1", "F1.v1", "PASSED-BACKTEST");
-  const rank: Record<string, string> = { ZZA1: "9/1", ZZB1: "8/1", ZZC2: "7/1", ZZD3: "6/1" };
+  const rank: Record<string, string> = {
+    ZZA1: "9/1",
+    ZZB1: "8/1",
+    ZZC2: "7/1",
+    ZZD3: "6/1",
+    ZZF1: "5/1",
+  };
   for (const s of specs.filter((x) => x.code !== "ZZE1")) {
     const id = await addSignal(run, {
       d: D,
@@ -93,18 +102,18 @@ describe("AGT-113 publication", () => {
     const trading = await snap();
     const res = await night();
     expect(await snap()).toBe(trading);
-    expect(res.candidates).toBe(5);
+    expect(res.candidates).toBe(6);
     const picks = await rows("SELECT * FROM pick ORDER BY profile, rank");
     expect(res.published).toBe(picks.length);
     const aggressive = picks.filter((p) => p.profile === "aggressive");
     // all F1: at most 2 per family; ZZE1 (F4, no history) is never picked
     expect(aggressive.map((p) => p.code)).toEqual(["ZZA1", "ZZB1"]);
     expect(picks.some((p) => p.code === "ZZE1")).toBe(false);
-    // Conservative takes U1 only; Balanced fails closed with no drop-from-peak history
-    expect(picks.filter((p) => p.profile === "conservative").every((p) => p.tier === "U1")).toBe(
-      true,
-    );
-    expect(picks.filter((p) => p.profile === "balanced")).toEqual([]);
+    // D-1000: disjoint risk bands, each stock in one profile only (Conservative = calm large
+    // ZZF1; ZZE1 has no history for its family; Balanced = mid-size ZZC2)
+    expect(picks.filter((p) => p.profile === "conservative").map((p) => p.code)).toEqual(["ZZF1"]);
+    expect(picks.filter((p) => p.profile === "balanced").map((p) => p.code)).toEqual(["ZZC2"]);
+    expect(new Set(picks.map((p) => p.code)).size).toBe(picks.length);
     const top = aggressive[0]!;
     expect(top.label).toBe("PASSED-BACKTEST");
     expect(top.card_id).toBe(`card:sig:AU:${D}:F1:F1.v1:U:ZZA1`);
@@ -175,22 +184,11 @@ describe("AGT-113 publication", () => {
     await expect(db.execute("DELETE FROM pick_outcome")).rejects.toThrow(/forever/);
   });
 
-  it("gives Balanced picks once the development trades show a small drop-from-peak", async () => {
-    for (let i = 0; i < 32; i += 1) {
-      await run(
-        `INSERT INTO attribution (subject_kind, subject_id, version, market, d, final, tags_json,
-           mfe_ppm, mae_ppm, hold_sessions, cost_micro, slippage_micro)
-         VALUES ('ledger_row', ?, 1, ?, ?, 1, '{}', 50000, -40000, 4, 1, 1)`,
-        [`lr-F1-${i}`, MARKET, SESSIONS[i + 3]!],
-      );
-    }
-    const res = await night();
-    expect(res.published).toBeGreaterThan(0);
-    const balanced = await rows(
-      "SELECT code, tier FROM pick WHERE profile = 'balanced' ORDER BY rank",
+  it("D-1000: a stock never turns up in two profiles on one night", async () => {
+    const dup = await rows(
+      "SELECT code, COUNT(DISTINCT profile) AS n FROM pick GROUP BY d, code HAVING n > 1",
     );
-    expect(balanced.length).toBeGreaterThan(0);
-    expect(balanced.every((p) => p.tier !== "U3")).toBe(true);
+    expect(dup).toEqual([]);
   });
 });
 

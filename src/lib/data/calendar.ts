@@ -49,7 +49,7 @@ import { CALENDAR_RULE_MODULES } from "./calendarRules.mjs";
 
 /**
  * The markets with computed calendar rules: the keys of CALENDAR_RULE_MODULES (calendarRules.mjs), the one table
- * a market is added to (M19 D-993; was a literal AU list). Lives here (pure) so config/keys.ts can read it
+ * a market is added to (M19 D-1808; was a literal AU list). Lives here (pure) so config/keys.ts can read it
  * without the DB-touching admin module. A built market without rules (IN, US until M20) is not listed.
  */
 export function calendarMarkets(): readonly string[] {

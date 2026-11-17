@@ -88,7 +88,7 @@ const reasonCols: Column<AbstainReason>[] = [
   { key: "label", header: "Reason", cell: (r) => <span className="break-words">{r.label}</span> },
   { key: "n", header: "Strategy-nights", align: "right", cell: (r) => formatCount(r.count) },
 ];
-const SYMBOL = homeProfile().currencyFormat!.symbol; // the tick table is the home market's (D-1003)
+const SYMBOL = homeProfile().currencyFormat!.symbol; // the tick table is the home market's (D-1816)
 const tickCols: Column<TickRowView>[] = [
   {
     key: "p",
@@ -237,6 +237,49 @@ export default async function CortexPage() {
           </ul>
         ) : null}
       </Section>
+
+      {v.learner !== null ? (
+        <Section id="learner" title="The learning Cortex">
+          <p className="m-0" data-learner-on={v.learner.on ? "on" : "off"}>
+            {v.learner.onText}
+          </p>
+          <ul className="m-0 list-none p-0" data-learner-leaders="">
+            {v.learner.leaders.map((l) => (
+              <li key={l.name} className="break-words">
+                <strong>{l.name}:</strong> {l.text}
+              </li>
+            ))}
+          </ul>
+          <p className="m-0" data-learner-weekly="">
+            {v.learner.weekly === null
+              ? "No weekly re-weighting has run yet; weights change on Fridays only."
+              : `Last weekly check, ${v.learner.weekly.day}: ${v.learner.weekly.words}`}
+          </p>
+          <p className="m-0" data-learner-duel="">
+            {v.learner.duelText ?? "No four-week result of the two Cortexes is in yet."}
+          </p>
+          {v.learner.warmStartText !== null ? (
+            <p className="m-0" data-learner-warmstart="">
+              {v.learner.warmStartText}
+            </p>
+          ) : null}
+          {v.learner.events.length > 0 ? (
+            <ul className="m-0 flex flex-col gap-1 pl-5" data-learner-events="">
+              {v.learner.events.map((e, i) => (
+                <li key={`${e.day}-${i}`} className="break-words">
+                  {e.day}: {e.words}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="m-0 text-text-muted">
+              {v.learner.eventCount === 0
+                ? "No learning step in the last 30 trading days."
+                : `${v.learner.eventCount} learning steps in the last 30 trading days.`}
+            </p>
+          )}
+        </Section>
+      ) : null}
 
       {has.placebo ? (
         <Section id="placebo" title="Placebo check">

@@ -1,4 +1,4 @@
-// OPS-111 (9), D-977: the steelman reader list comes from the import graph; a planted reader appears and the
+// OPS-111 (9), D-1794: the steelman reader list comes from the import graph; a planted reader appears and the
 // stored list is current.
 import assert from "node:assert/strict";
 import fs from "node:fs";

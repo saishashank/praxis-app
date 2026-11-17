@@ -35,7 +35,7 @@ export function Masked({ label = MASKED_TEXT, className }: { label?: string; cla
 type MoneyProps = {
   cents?: number | null;
   micro?: string | bigint | number | null;
-  /** ISO 4217 code of the amount (a MoneyView carries it); the symbol and grouping follow (D-1002). */
+  /** ISO 4217 code of the amount (a MoneyView carries it); the symbol and grouping follow (D-1815). */
   currency: string;
   sign?: SignStyle;
   masked?: boolean;

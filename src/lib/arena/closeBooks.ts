@@ -51,8 +51,10 @@ import type { Micro } from "@/lib/money/micro";
 import { makeRational, mulRat, type Rational } from "@/lib/money/rational";
 import { roundHalfAwayFromZero } from "@/lib/money/round";
 import {
+  ARENA_MARKET,
   parseCohortParams,
   resolveCohortParams,
+  roundOverridesFor,
   type CohortParams,
   type ParamOverrides,
 } from "./cohort";
@@ -1691,10 +1693,12 @@ export async function closeBooksDay(
         if (e === undefined) throw new CloseBooksError("execution_missing", executionId);
         return e;
       },
-      paramsFor: (e) =>
+      paramsFor: (e, startD) =>
         resolveCohortParams({
           market: e.market,
           costProfile: e.cost_profile,
+          // D-1020..D-1022: the round-2 seed is the home market's (AU); other markets seed from their own profile
+          ...(e.market === ARENA_MARKET ? roundOverridesFor(startD) : {}),
           ...(opts.restartParams?.(e.id) ?? {}),
         }),
       masterSeed: opts.masterSeed ?? ARENA_MASTER_SEED,

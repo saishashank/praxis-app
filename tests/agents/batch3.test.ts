@@ -435,8 +435,8 @@ describe("guards", () => {
     expect(
       await reviewDay(fresh, { market: MARKET, d: "2031-03-01", now: NOW, params }),
     ).toMatchObject({ status: "skipped", reason: "non_trading_day" });
-    // M19 0035: the skip would be a run record of a market with no row; the write guard refuses it (a refused job
-    // writes no run record, D-995), so the call fails with the guard refusal instead of recording market_missing
+    // M19 0038: the skip would be a run record of a market with no row; the write guard refuses it (a refused job
+    // writes no run record, D-1810), so the call fails with the guard refusal instead of recording market_missing
     await expect(reviewDay(fresh, { market: "ZZ", d: d(300), now: NOW, params })).rejects.toThrow(
       /MarketNotEnabled run_record/,
     );
@@ -448,7 +448,7 @@ describe("guards", () => {
     expect(await count(fresh, "replay_stat")).toBe(0n);
   });
 
-  it("M18 D-953: a 2b recorded degraded `late_2a` decided nothing, so there is no review to run", async () => {
+  it("M18 D-1782: a 2b recorded degraded `late_2a` decided nothing, so there is no review to run", async () => {
     const fresh = await freshReplayDb();
     await buildGolden(fresh);
     await setMode(fresh, "full");

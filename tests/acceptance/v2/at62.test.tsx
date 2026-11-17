@@ -45,6 +45,8 @@ describe("AT-62 (b) shadow honesty", () => {
           total: 3,
           rows,
           more: 0,
+          avoid: [],
+          avoidMore: 0,
           delayMin: 20,
         }}
       />,

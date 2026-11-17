@@ -1,4 +1,4 @@
-// The seed registry (M19 A1; D-993): the markets whose profile is built, in code order. `builtMarkets()` is the
+// The seed registry (M19 A1; D-1808): the markets whose profile is built, in code order. `builtMarkets()` is the
 // synchronous list validators use (validateMarketModes, validateMarketShare); at run time everything asks the
 // `market` table through the loader (`enabledMarkets(db)`). A market is added here, as a seed module, a
 // migration row and a fixture, together.

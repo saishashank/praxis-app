@@ -31,17 +31,28 @@ beforeAll(async () => {
   await pick(PREV, "balanced", 1, "ZZA"); // the first profile by name wins: aggressive #2
   await pick(PREV, "balanced", 3, "ZZB", SHORTLIST_RULE);
   await pick("2030-03-02", "balanced", 1, "ZZC");
+  await pick(PREV, "balanced", 4, "ZZD", "CAND.v1:A-D2-07");
 });
 afterAll(cleanupTempDbs);
 
 describe("pickHooks (D-921)", () => {
   it("names who was picked the evening before, a shortlist pick as such", async () => {
-    const m = await pickHooks.pickedBefore(db, "AU", PREV, ["ZZA", "ZZB", "ZZC", "ZZX"]);
+    const m = await pickHooks.pickedBefore(db, "AU", PREV, ["ZZA", "ZZB", "ZZC", "ZZD", "ZZX"]);
     expect(Object.fromEntries(m)).toEqual({
       ZZA: "Picked (Aggressive #2)",
       ZZB: "Picked from the shortlist (Balanced #3)",
+      ZZD: "Picked from a candidate measure (Balanced #4)",
     });
     expect((await pickHooks.pickedBefore(db, "AU", PREV, [])).size).toBe(0);
+  });
+
+  it("D-990: every pick of the evening before with its place and source", async () => {
+    const m = await pickHooks.picksOf!(db, "AU", PREV);
+    expect(Object.fromEntries(m)).toEqual({
+      ZZA: { where: "Aggressive #2", source: "strategy" },
+      ZZB: { where: "Balanced #3", source: "shortlist" },
+      ZZD: { where: "Balanced #4", source: "candidate" },
+    });
   });
 
   it("lists the sessions that had a published pick", async () => {

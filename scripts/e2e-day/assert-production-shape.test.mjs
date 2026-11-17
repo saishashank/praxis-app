@@ -1,4 +1,4 @@
-// M19 E2 (AT-68, MKT-110, D-1079): the production-shape assertion of the CI recorded day, on a fresh migrated
+// M19 E2 (AT-68, MKT-110, D-1837): the production-shape assertion of the CI recorded day, on a fresh migrated
 // database. The production shape passes; each deviation (a second market enabled, the home market off its mode, a row
 // counted for a market that is not enabled, a stray market row, a market tag in the recorded slot table) fails it.
 import { test } from "node:test";

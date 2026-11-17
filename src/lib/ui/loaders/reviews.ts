@@ -802,7 +802,7 @@ async function newPicksOf(
             buyUpTo: masked ? null : money(r.buy, env.currency),
             stop: masked ? null : money(r.stop, env.currency),
             aim: masked ? null : money(r.aim, env.currency),
-            validUntil: masked ? (isoWeek(r.valid) ?? MISSING) : r.valid,
+            validUntil: masked ? (isoWeek(r.valid) ?? MISSING) : formatDay(r.valid),
             timeFrameWeeks:
               r.sessions === null ? null : Math.max(1, Math.round(r.sessions / SESSIONS_PER_WEEK)),
             basedOn: r.basedOn === null ? null : t(r.basedOn),

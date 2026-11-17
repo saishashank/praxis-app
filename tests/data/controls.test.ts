@@ -631,7 +631,7 @@ describe("d. market mode (source of truth: market.mode; config value is the hist
         error: "invalid",
       });
     }
-    // a built market that is not enabled can only be off (D-994): data_only and full are refused
+    // a built market that is not enabled can only be off (D-1809): data_only and full are refused
     for (const mode of ["data_only", "full"]) {
       for (const market of ["IN", "US"]) {
         expect(await setMarketMode(base({ market, mode }) as never)).toEqual({
@@ -749,7 +749,7 @@ describe("d. market mode (source of truth: market.mode; config value is the hist
     expect(validateMarketModes({ AU: "off" })).toBeNull();
     expect(validateMarketModes({ AU: "full" })).toBeNull();
     expect(validateMarketModes({ AU: "on" })).toMatch(/off, data_only or full/);
-    expect(validateMarketModes({ US: "off" })).toBeNull(); // built, so it has a mode (D-993)
+    expect(validateMarketModes({ US: "off" })).toBeNull(); // built, so it has a mode (D-1808)
     expect(validateMarketModes({ ZZ: "off" })).toMatch(/unknown market/);
     expect(validateMarketModes({})).toMatch(/unknown market/);
     expect(validateMarketModes("data_only")).toMatch(/each market/);

@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import type { Client } from "@libsql/client";
 import { isVerdict, type Verdict } from "./verdict";
 
-/** The item ids the `research_prereg` table accepts (migration 0040). */
+/** The item ids the `research_prereg` table accepts (migration 0043). */
 export type PreregItem =
   | "CXA-003"
   | "CXA-004"

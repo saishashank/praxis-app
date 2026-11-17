@@ -1,10 +1,10 @@
-// OPS-109 c (M18, D-971): quote starvation. A held position is "starved" when its newest delayed
+// OPS-109 c (M18, D-1788): quote starvation. A held position is "starved" when its newest delayed
 // quote (`quote_latest.fetched_at`) is older than `minutes` while the poll window is open on a
 // trading day. Pure: the poll tick reads the rows and the window and raises the S2 `quote_starvation`
 // incident once a day. Nothing here reads a clock, a database or a code's name for the Owner line.
 
 /** Minutes without a fresh quote before a held code is starved. */
-export const STARVATION_MINUTES = 30; // threshold-ok: D-971 (OPS-109 c)
+export const STARVATION_MINUTES = 30; // threshold-ok: D-1788 (OPS-109 c)
 
 export type StarvationWindow = { start: Date; end: Date };
 

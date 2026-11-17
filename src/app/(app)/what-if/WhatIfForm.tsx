@@ -12,7 +12,7 @@ import type { WhatIfOptions } from "@/lib/whatif/options";
 import { whatIfErrorText, type WhatIfActionResult } from "./messages";
 
 type Props = {
-  /** ISO 4217 code of the amounts (D-1002). */
+  /** ISO 4217 code of the amounts (D-1815). */
   currency: string;
   options: WhatIfOptions;
   remaining: number;

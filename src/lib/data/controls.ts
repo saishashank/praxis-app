@@ -554,7 +554,7 @@ export async function setMarketMode(p: MarketModeInput): Promise<ControlResult> 
     });
     if (row.rows.length !== 1) return fail("invalid");
     const columnMode = String(row.rows[0].mode);
-    // D-994: a market that is not enabled can only be `off`; the Owner's switch-on is the M20 two-step.
+    // D-1809: a market that is not enabled can only be `off`; the Owner's switch-on is the M20 two-step.
     if (to !== "off" && Number(row.rows[0].enabled) !== 1) return fail("market_not_enabled");
     const { map } = await readConfigModes(p.mainDb);
     if (columnMode === to && map[market] === to) return NOOP;
@@ -791,7 +791,7 @@ export async function addWatchListCode(p: WatchListAddInput): Promise<ControlRes
   const code = p.code;
   const today = localDay(now);
   try {
-    // D-997 (M19 A2): a market parameter outside the enabled set is invalid (MODE_MARKETS is the built set now)
+    // D-1812 (M19 A2): a market parameter outside the enabled set is invalid (MODE_MARKETS is the built set now)
     if (!(await isMarketEnabled(p.mainDb, market))) return fail("invalid");
     const max = await ownerAddExpiryDays(p.mainDb);
     const days = p.days === undefined ? max : p.days;
@@ -849,7 +849,7 @@ export async function removeWatchListCode(p: WatchListRemoveInput): Promise<Cont
   const market = p.market;
   const code = p.code;
   try {
-    if (!(await isMarketEnabled(p.mainDb, market))) return fail("invalid"); // D-997, as in the add
+    if (!(await isMarketEnabled(p.mainDb, market))) return fail("invalid"); // D-1812, as in the add
     const open = await p.mainDb.execute({
       sql: "SELECT id FROM watch_list_owner WHERE market = ? AND code = ? AND removed_at IS NULL",
       args: [market, code],

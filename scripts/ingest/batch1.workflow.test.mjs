@@ -85,7 +85,7 @@ test("secrets appear only in env of the database steps (plan, ingest and the off
     [
       "Plan the fetch (read-only)",
       "Ingest batch 1",
-      "Macro series (Friday, off unless MACRO_FETCH is set)", // DAT-251 c (D-973): gated by vars.MACRO_FETCH
+      "Macro series (Friday, off unless MACRO_FETCH is set)", // DAT-251 c (D-1790): gated by vars.MACRO_FETCH
     ],
   );
   for (const s of withSecrets) {
@@ -102,7 +102,7 @@ test("secrets appear only in env of the database steps (plan, ingest and the off
   }
   assert.equal(wf.env, undefined);
   assert.equal(job.env, undefined);
-  assert.equal(JSON.stringify(job).match(/secrets\./g).length, 6); // two steps with the pair, plus the macro step (D-973)
+  assert.equal(JSON.stringify(job).match(/secrets\./g).length, 6); // two steps with the pair, plus the macro step (D-1790)
 });
 
 test("the Python fetch step has no secrets and only the throttle values from the plan step", () => {
@@ -181,7 +181,7 @@ test("the Worker may dispatch this file and the slot for it is enabled", () => {
   assert.match(slot, /enabled: true/);
 });
 
-test("the macro step ships OFF: it needs vars.MACRO_FETCH, never fails the batch, and runs only on Fridays (D-973)", () => {
+test("the macro step ships OFF: it needs vars.MACRO_FETCH, never fails the batch, and runs only on Fridays (D-1790)", () => {
   const s = steps.find((x) => x.name?.startsWith("Macro series"));
   assert.ok(s, "the macro step exists");
   assert.match(String(s.if), /vars\.MACRO_FETCH == '1'/);

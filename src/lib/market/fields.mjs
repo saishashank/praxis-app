@@ -1,4 +1,4 @@
-// The market profile's field list (M19 A1; DAT-241, D-992, D-1008). One name per row of the ch. 20 profile
+// The market profile's field list (M19 A1; DAT-241, D-1807, D-1008). One name per row of the ch. 20 profile
 // table (docs/M19_design.md, spec 20_markets_in_us.md 20.1) plus the five fields CXA-002 needs
 // (yahoo_suffix, bar_latency_p95_min, preopen_recheck_min, category_map, universe_max). The list is pinned by
 // tests/market/profile.test.ts: adding a field is a migration, a seed edit and a test edit together.
@@ -58,7 +58,7 @@ export const WORK_STATUSES = Object.freeze([
   "paused",
 ]);
 
-/** The two-switch modes (D-994). */
+/** The two-switch modes (D-1809). */
 export const MARKET_MODES = Object.freeze(["off", "data_only", "full"]);
 
 /**
@@ -74,7 +74,7 @@ export const COUNTED_TRIAL_FIELDS = Object.freeze([
 ]);
 
 /**
- * The fields behind a `mkt.<CODE>.<field>` configuration key (spec ch. 15 15.11.1, D-993) and whether the
+ * The fields behind a `mkt.<CODE>.<field>` configuration key (spec ch. 15 15.11.1, D-1808) and whether the
  * Owner may edit the key. A key overlays the seed row; an Owner edit goes through setProfileField.
  */
 export const MKT_KEY_FIELDS = Object.freeze({

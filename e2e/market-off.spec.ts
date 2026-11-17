@@ -1,4 +1,4 @@
-// M19 E2, AT-68 (c), MKT-110 (c), SEC-112 (V2 ch. 18 l.7), D-997, D-1064: with only AU enabled, a market that is built
+// M19 E2, AT-68 (c), MKT-110 (c), SEC-112 (V2 ch. 18 l.7), D-1812, D-1831: with only AU enabled, a market that is built
 // but not enabled (IN, US) appears NOWHERE in a rendered page for an Editor or a Viewer, and for the Owner only inside
 // the Markets table of Settings. Every signed-in page carries `data-market="AU"`. A market parameter that names a
 // market that is not enabled is a 404: `/market?market=IN` through the resolver, `/market/IN` because the company

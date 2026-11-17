@@ -18,7 +18,7 @@ export function BustBar({
   seed?: number;
   bust?: number;
   nearPct?: number;
-  /** ISO 4217 code (D-1002). */
+  /** ISO 4217 code (D-1815). */
   currency: string;
 }) {
   const fmt = currencyFormatFor(currency);

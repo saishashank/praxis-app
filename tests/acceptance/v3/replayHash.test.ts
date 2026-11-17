@@ -7,7 +7,7 @@
 //
 // AT-32 hash scope (D-1008): every table of the main database except `schema_migrations` and `market`
 // (the two tables a migration legitimately changes: the applied-version list, and the market row that
-// gains its enabled/slots columns and the IN/US rows in 0034) and except tables absent from the
+// gains its enabled/slots columns and the IN/US rows in 0037) and except tables absent from the
 // baseline (the tables M19 adds). Each remaining table is compared by its own hash, so a failure names
 // the table; the combined hash over the baseline's tables is compared as well.
 // Record (only ever on the pre-refactor tree): RECORD_BASELINE=1 npx vitest run tests/acceptance/v3/replayHash.test.ts
@@ -275,8 +275,8 @@ describe("M19 identity baselines (D-1007): AT-32 and AT-50 hashes never change",
     expect(rows.decision_card).toBeGreaterThan(0);
     expect(rows.cortex_decision).toBeGreaterThan(0);
     expect(rows.arena_order).toBeGreaterThan(0);
-    // D-1008 (Fable review): `market` is out of the combined hash because 0034 adds columns and the IN/US
-    // rows; the AU row's pre-0034 columns (the 0004 table) are asserted literally instead, so a change to
+    // D-1008 (Fable review): `market` is out of the combined hash because 0037 adds columns and the IN/US
+    // rows; the AU row's pre-0037 columns (the 0004 table) are asserted literally instead, so a change to
     // AU's zone, hours, cut-off or currency cannot slip past the identity proof.
     const au = await db.execute(
       "SELECT code, tz, open_time, close_time, cutoff_time, currency, mode FROM market WHERE code = 'AU'",

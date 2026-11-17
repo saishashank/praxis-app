@@ -16,7 +16,7 @@ export type SettingsModel = {
   preferences: Preferences;
   themes: readonly string[];
   quietHours: QuietHours | null;
-  /** Owner: every profile row. Editor and Viewer: the enabled markets only (D-997). */
+  /** Owner: every profile row. Editor and Viewer: the enabled markets only (D-1812). */
   markets: Array<{
     code: string;
     mode: string;

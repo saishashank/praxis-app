@@ -45,7 +45,7 @@ async function seed(meanExcess: number): Promise<{ db: Client; last: string }> {
       sql:
         "INSERT INTO intraday_candidate (market, session_d, code, found_slot, found_at, item_source, " +
         "item_ann_id, item_category, materiality, polarity, move_ppm, gates_json) " +
-        "VALUES ('AU', ?, ?, 'scan-1030', ?, 'asx', ?, 'earnings', 2, 'positive', 0, '[]')",
+        "VALUES ('AU', ?, ?, 'scan-1030', ?, 'asx', ?, 'earnings', 2, 'positive', 1, '[]')",
       args: [sd, code, `${sd}T00:30:00Z`, `ann-${code}`],
     });
     stmts.push({
@@ -80,7 +80,7 @@ describe("AT-63 (a) nightly measurement", () => {
     // ZZ5: noise (35 % 11) - 5 = -3 -> -0.3 %; close_5 = 100 * (1 + 0.015 - 0.003); index flat
     expect(Number(row.excess_open_5_ppm)).toBe(12_000);
     expect(Number(row.excess_open_1_ppm)).toBe(0);
-    expect(Number(row.excess_found_5_ppm)).toBe(12_000);
+    expect(Number(row.excess_found_5_ppm)).toBe(11_999); // move_ppm 1 (a buy idea must be up): 1 ppm under the open-based figure
     expect(row.measured_at).not.toBeNull();
     const again = await measureCandidates(db, M, last);
     expect(again.updated).toBe(0);

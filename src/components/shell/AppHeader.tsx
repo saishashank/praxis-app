@@ -23,7 +23,7 @@ const ICONS: Record<TabView["id"], ReactNode> = {
 export type HeaderProps = {
   role: Role;
   market: RegionMarket | null;
-  /** The enabled markets the switcher lists (D-997); a built market that is off is never in it. */
+  /** The enabled markets the switcher lists (D-1812); a built market that is off is never in it. */
   markets?: RegionMarket[];
   bell: BellView;
   /** Badge counts by tab id (Strategies: attention count, UXN-046). */

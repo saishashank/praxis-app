@@ -41,7 +41,7 @@ A private-side converter (not in this repository) turns the research notes into 
 
 ## Format `praxis-expert-seed/2` (M22 E4; KB-085, D-1523)
 
-The manifest says `praxis-expert-seed/2` and the folder may add three files (all refused in a format-1 seed; the database must be at schema 39 when licence or expression rows are planned):
+The manifest says `praxis-expert-seed/2` and the folder may add three files (all refused in a format-1 seed; the database must be at schema 42 when licence or expression rows are planned):
 
 | File                                              | Content                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

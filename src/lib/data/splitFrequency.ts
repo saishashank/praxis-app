@@ -1,5 +1,5 @@
 // How often do splits and consolidations occur in the stored data? (M14 DAT-232, D-236; DAT-252 (3),
-// D-974: the figures go into the AT-45 reference.) Read only: SELECTs, nothing is written.
+// D-1791: the figures go into the AT-45 reference.) Read only: SELECTs, nothing is written.
 //   - split / consolidation / bonus-issue days per calendar year (corporate_action, ex_date);
 //   - the share of codes (with price bars) that have at least one;
 //   - the share of N-session windows (default 20, the volume-ratio window) that contain an ex-date.

@@ -64,7 +64,7 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: npm ci
-      # DAT-251 a / DAT-252 (D-972, D-974): a READ-ONLY look at the delisted codes, the list-failure
+      # DAT-251 a / DAT-252 (D-1789, D-1791): a READ-ONLY look at the delisted codes, the list-failure
       # counter and the Wikidata register row, written to a file the secret-free fetch step reads.
       # Never fatal: without it the fetch runs with no skip list and no fallback.
       - name: Read the fetch state (read-only)

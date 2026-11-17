@@ -1,7 +1,7 @@
 // Settings > Region & markets (UXN-282, UX-112 view, MKT-106). Every role sets the market the app opens
 // in and whether times show in Melbourne or exchange time (own preferences). The markets table lists
 // exchange, currency, hours in Melbourne time, status and build progress; the Owner sees every profile row,
-// Editors and Viewers the enabled markets the Owner has shared (D-997). The Owner's switch-on card (checklist, quota projection, the two-step control and the rollback) follows the table (M20, UXN-312).
+// Editors and Viewers the enabled markets the Owner has shared (D-1812). The Owner's switch-on card (checklist, quota projection, the two-step control and the rollback) follows the table (M20, UXN-312).
 // Totals are never converted between currencies (O-34).
 import { Card } from "@/components/ui/Card";
 import { DataTable, type Column } from "@/components/ui/DataTable";

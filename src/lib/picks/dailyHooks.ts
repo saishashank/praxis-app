@@ -4,6 +4,8 @@
 // Read-only; the picks entry (cli.ts) hands these in.
 import type { Client } from "@libsql/client";
 import type { PickHooks } from "@/lib/learning/daily";
+import type { PickedBefore } from "@/lib/learning/dailyTop5";
+import { isCandidateRule } from "./candidates";
 import { SHORTLIST_RULE, shortlistNotes, type ShortlistCode } from "./shortlist";
 import type { Tier } from "./types";
 
@@ -25,12 +27,35 @@ export const pickHooks: PickHooks = {
       const code = String(x.code);
       if (out.has(code)) continue; // the first profile and rank
       const where = `${cap(String(x.profile))} #${String(x.rank)}`;
+      const rv = String(x.rule_version);
       out.set(
         code,
-        String(x.rule_version) === SHORTLIST_RULE
+        rv === SHORTLIST_RULE
           ? `Picked from the shortlist (${where})`
-          : `Picked (${where})`,
+          : isCandidateRule(rv)
+            ? `Picked from a candidate measure (${where})`
+            : `Picked (${where})`,
       );
+    }
+    return out;
+  },
+  // D-990: every pick published the evening before (any profile), for the top-5 gainer target
+  async picksOf(db: Client, market, prev) {
+    const out = new Map<string, PickedBefore>();
+    const r = await db.execute({
+      sql: `SELECT code, profile, rank, rule_version FROM pick WHERE market = ? AND d = ?
+            ORDER BY profile, rank`,
+      args: [market, prev],
+    });
+    for (const x of r.rows) {
+      const code = String(x.code);
+      if (out.has(code)) continue; // the first profile and rank
+      const rv = String(x.rule_version);
+      out.set(code, {
+        where: `${cap(String(x.profile))} #${String(x.rank)}`,
+        source:
+          rv === SHORTLIST_RULE ? "shortlist" : isCandidateRule(rv) ? "candidate" : "strategy",
+      });
     }
     return out;
   },

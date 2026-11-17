@@ -4,8 +4,8 @@
 // The tables to look at are every table whose schema has a `market` column, read from the live database
 // (sqlite_master and pragma_table_info), so a migration that adds one is covered without a list to
 // maintain; tests/maintenance/rowsByMarket.test.ts asserts the derived list equals a scan of the
-// migration files. The enabled set is the `market` table rows with `enabled = 1` (M19 D-994: a market that is
-// not enabled holds no data, whatever its mode; migration 0035's write guard refuses such rows, so a hit here
+// migration files. The enabled set is the `market` table rows with `enabled = 1` (M19 D-1809: a market that is
+// not enabled holds no data, whatever its mode; migration 0038's write guard refuses such rows, so a hit here
 // means the guard was bypassed or a trigger is missing). The nightly step also compares that set with the
 // production setting (`PRAXIS_MARKETS_ENABLED`, key `markets_enabled`) and raises S2 `markets_enabled_mismatch`.
 // No market code is written here.
@@ -28,9 +28,9 @@ const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const DETAIL_ROWS = 20; // threshold-ok: rows named in the incident detail
 
 /**
- * Tables whose `market` column also holds a scope that belongs to no market (D-1024): `document.market` is "common" for
+ * Tables whose `market` column also holds a scope that belongs to no market (D-1822): `document.market` is "common" for
  * the source register and the expert mirror. That value is not a market, so it is never counted or alarmed. The
- * guard (migration 0035, scripts/db/gen-market-guard.mjs COMMON_SCOPE) lets the same value through.
+ * guard (migration 0038, scripts/db/gen-market-guard.mjs COMMON_SCOPE) lets the same value through.
  */
 export const COMMON_SCOPE: Readonly<Record<string, string>> = { document: "common" };
 
@@ -62,7 +62,7 @@ export async function marketTables(db: Q): Promise<MarketTable[]> {
     .filter((t) => IDENT.test(t.table));
 }
 
-/** Markets that are on: a `market` row with `enabled = 1` (D-994). */
+/** Markets that are on: a `market` row with `enabled = 1` (D-1809). */
 export async function enabledMarkets(db: Q): Promise<string[]> {
   // rows-ok: the market table holds one row per built market (3)
   const r = await db.execute("SELECT code FROM market WHERE enabled = 1 ORDER BY code");
@@ -111,7 +111,7 @@ export async function countRowsByMarket(db: Q): Promise<MarketRowsResult> {
   gaps.push([prev, null]);
 
   for (const t of tables) {
-    const noMarket = COMMON_SCOPE[t.table]; // a scope that belongs to no market (D-1024)
+    const noMarket = COMMON_SCOPE[t.table]; // a scope that belongs to no market (D-1822)
     if (t.indexed) {
       for (const [lo0, hi] of gaps) {
         let lo = lo0;
@@ -189,7 +189,7 @@ export async function checkMarketRows(
   return res;
 }
 
-/** S2 `markets_enabled_mismatch` when the `market.enabled` set differs from the production setting (D-994). */
+/** S2 `markets_enabled_mismatch` when the `market.enabled` set differs from the production setting (D-1809). */
 export async function checkEnabledSet(
   db: Client,
   now: Date,

@@ -13,7 +13,7 @@
 // Splits, consolidations and bonus issues inside the window are re-based (M7 T4, decision 33): from
 // the ex-date the levels are divided by the exact M3 quantity ratio and a held position's shares are
 // multiplied by it and rounded down (`rebaseQty`), cash unchanged, as the arena does. Known limit
-// (D-122): no other corporate action (mergers, delistings). Dividends (ARN-123, D-956): a settlement
+// (D-122): no other corporate action (mergers, delistings). Dividends (ARN-123, D-1785): a settlement
 // written after M18 credits the confirmed cash and special dividends that went ex after the fill session
 // and on or before the exit session, on the shares held at the prior close (the books' entitlement rule,
 // ARN-036), and is stored with outcome_basis 'total_return' (label "Total return - dividends included");
@@ -122,7 +122,7 @@ type SimEnv = {
    */
   readonly exDividends?: readonly PickExDividend[];
   /**
-   * ARN-123 (D-956): also CREDIT those dividends to the net result (total-return basis). Off = the
+   * ARN-123 (D-1785): also CREDIT those dividends to the net result (total-return basis). Off = the
    * price-only maths every earlier row was settled with, byte for byte.
    */
   readonly creditDividends?: boolean;
@@ -435,7 +435,7 @@ export async function trackPicks(db: Db, o: TrackOptions): Promise<TrackSummary>
       asOfD: o.d,
       actions,
       exDividends: pickExDividends(confirmed, code, bars, pubD, cutoffOf),
-      creditDividends: true, // ARN-123 (D-956): every settlement written from now on is total return
+      creditDividends: true, // ARN-123 (D-1785): every settlement written from now on is total return
       withdrawnNight,
     });
     const stored = text(r.state);

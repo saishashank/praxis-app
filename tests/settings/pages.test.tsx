@@ -176,7 +176,7 @@ describe("region helpers", () => {
     expect(marketRows(model, {}, new Set(), false, "2026-10-20").map((r) => r.code)).toEqual([
       "AU",
     ]);
-    // sharing a market that is not enabled never shows it (D-997)
+    // sharing a market that is not enabled never shows it (D-1812)
     expect(marketRows(model, {}, new Set(["US"]), false, "2026-10-20").map((r) => r.code)).toEqual([
       "AU",
     ]);

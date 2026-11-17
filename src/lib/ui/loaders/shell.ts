@@ -29,7 +29,7 @@ export type LoaderEnv = {
   /** From maskContextFor(); a missing or failed lookup is already `masked: true`. */
   mask: MaskContext;
   now: Date;
-  /** The resolved market (D-997): an enabled market, from `?market=`, the user's default or the only one enabled. */
+  /** The resolved market (D-1812): an enabled market, from `?market=`, the user's default or the only one enabled. */
   market: string;
   /** ISO 4217 code of the market currency; `currencyFormatOf(env.currency)` is its display format (UXN-313). */
   currency: string;
@@ -38,7 +38,7 @@ export type MoneyView = { micro: string; currency: string; simulated: true };
 
 /**
  * The loader environment of a signed-in request. A failed grant lookup masks (maskContextFor). The market is
- * resolved here, the one place a market parameter is accepted (D-997): a `candidate` (the page's `?market=`)
+ * resolved here, the one place a market parameter is accepted (D-1812): a `candidate` (the page's `?market=`)
  * that is not an enabled market is a 404; none means the single enabled market, or the user's default market
  * when several are enabled.
  */
@@ -146,7 +146,7 @@ export type ShellModel = {
   user: LoaderUser;
   masked: boolean;
   market: ShellMarket | null;
-  /** The enabled markets, for the header switcher (D-997, UXN-312); a built market that is off is never listed. */
+  /** The enabled markets, for the header switcher (D-1812, UXN-312); a built market that is off is never listed. */
   markets: ShellMarket[];
   /** Alerts that count in the bell (UXN-161) and the highest tier among them. */
   bell: { count: number; topTier: "P0" | "P1" | "P2" | null };

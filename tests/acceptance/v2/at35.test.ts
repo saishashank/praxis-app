@@ -197,7 +197,7 @@ describe("AT-35 picks vs market", () => {
     await expect(run("DELETE FROM pick_market")).rejects.toThrow(/append-only/);
   });
 
-  // AT-35 (c), ARN-123 / D-956: the pick side credits the in-window dividend; a row settled before the
+  // AT-35 (c), ARN-123 / D-1785: the pick side credits the in-window dividend; a row settled before the
   // deploy stays price only and is not rewritten.
   it("(c) the pick side credits the in-window dividend: net = sale - fees - cost + 100 x A$0.50", async () => {
     const o = (await run("SELECT * FROM pick_outcome WHERE rank = 2")).rows[0]!;

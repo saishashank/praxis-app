@@ -1,10 +1,10 @@
-// RBA and ABS macro fetchers, shared part (DAT-251 c, D-973). Node, no dependency. One request per source,
+// RBA and ABS macro fetchers, shared part (DAT-251 c, D-1790). Node, no dependency. One request per source,
 // an identifying User-Agent, a conditional `If-Modified-Since` (the last Last-Modified is kept in
 // worker_state under macro:<source>:last_modified), numbers parsed to integer micro units by string
 // arithmetic (never a float), written to `macro_series` with an upsert that changes a row only when its
 // value changed (Turso free plan: a repeat run writes nothing). Derived numbers only, source named
 // (RBA copyright notice, DAT-236). Runs as a Friday step of ingest-batch1.yml gated by the repository
-// variable MACRO_FETCH (unset = skipped, the feature ships OFF, D-973). Tests use fixtures: no network.
+// variable MACRO_FETCH (unset = skipped, the feature ships OFF, D-1790). Tests use fixtures: no network.
 import { scriptDb } from "../../src/lib/db/scriptClient.mjs";
 
 export const DEFAULT_UA = "praxis-research/1.0 (personal, non-commercial; weekly macro series)";

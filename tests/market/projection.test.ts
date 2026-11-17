@@ -1,5 +1,5 @@
 // @vitest-environment node
-// The `market` row is the Worker's projection of the profile (M19 A1; D-992, D-996): the row's tz, open, close,
+// The `market` row is the Worker's projection of the profile (M19 A1; D-1807, D-1811): the row's tz, open, close,
 // cut-off and currency equal the profile's, and `slots_json` equals slotsProjection(profile) for every seeded
 // market. The AU projection also reproduces the Worker's recorded AU slot table (the step-0 snapshot,
 // worker/test/fixtures/au-slots.snapshot.json): the same anchors, to the minute.
@@ -68,7 +68,7 @@ describe("the market row equals the profile's projection", () => {
     expect(s.quote_until).toBe(slot("quote-poll").until);
     expect(s.intraday_scan_from).toBe(slot("intraday-scan").time);
     expect(s.intraday_scan_until).toBe(slot("intraday-scan").until);
-    // the late-2a threshold (LATE_2A_AFTER, D-953): 2b slot + 30 minutes
+    // the late-2a threshold (LATE_2A_AFTER, D-1782): 2b slot + 30 minutes
     expect(s.late_2a_after).toBe(addMinutes(s.b2b, 30));
   });
 

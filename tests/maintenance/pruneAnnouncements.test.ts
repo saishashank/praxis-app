@@ -194,7 +194,7 @@ describe("pruneAnnouncements guard", () => {
     await cursor({ exported_down_to: "2024-07" });
     await exported("2024-07");
     const a = await ann("2024-07-10T00:00:00.000Z", { source: "other_feed" });
-    await allowMarket(main, "IN"); // M19 0035: the guard refuses an announcement of a market that is not enabled
+    await allowMarket(main, "IN"); // M19 0038: the guard refuses an announcement of a market that is not enabled
     const b = await ann("2024-07-10T00:00:00.000Z", { market: "IN" });
     await ann("2024-07-10T00:00:00.000Z");
     expect(await pruneAnnouncements(main, NOW_ISO, 400)).toBe(1);

@@ -50,10 +50,10 @@ export async function schemaOf(db: Client): Promise<string[]> {
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
- * Plants a row of a market that is not enabled (M19 A2, D-995): migration 0035's triggers refuse such a row, so the
+ * Plants a row of a market that is not enabled (M19 A2, D-1810): migration 0038's triggers refuse such a row, so the
  * helper enables the market, inserts, and restores the market to what it was (a market with no `market` row gets
  * one, off and disabled). Use it for fixtures that need an off-market row, e.g. the nightly invariant's. A direct
- * `UPDATE market SET mode` on a market that is not enabled is refused by 0034's row-invariant triggers, so the
+ * `UPDATE market SET mode` on a market that is not enabled is refused by 0037's row-invariant triggers, so the
  * helper only ever touches `enabled`.
  */
 export async function plantOffMarketRow(

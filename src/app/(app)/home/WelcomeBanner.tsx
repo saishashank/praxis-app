@@ -18,8 +18,8 @@ export function WelcomeBanner() {
             Welcome to Praxis
           </h2>
           <p className="mt-1 text-sm">
-            Six practice strategies each start with A$600 of pretend money. A strategy reaches its
-            goal at A$1,200 and stops at its loss limit of A$300. Nothing here is real money and
+            Six practice strategies each start with A$5,000 of pretend money. A strategy reaches its
+            goal at A$10,000 and stops at its loss limit of A$2,500. Nothing here is real money and
             nothing can place an order.
           </p>
           <p className="mt-2 text-sm">

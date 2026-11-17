@@ -1,5 +1,5 @@
 // @vitest-environment node
-// TST-139 (D-970; AT-85 "the market matrix runs ... profile fixtures": AU, IN and US from M19): the harness reads one
+// TST-139 (D-1787; AT-85 "the market matrix runs ... profile fixtures": AU, IN and US from M19): the harness reads one
 // profile fixture per built market, every fixture equals the seed and the loaded profile (M19 A1), the AU fixture
 // equals today's constants, and the production shape (no market without a `market` row) is checkable.
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -130,7 +130,7 @@ describe("marketsWithoutRow: the production shape", () => {
     await run("AU", "k1");
     await run(null, "k2");
     expect(await marketsWithoutRow(db)).toEqual([]);
-    // M19 0035: the write guard refuses a row of a market with no row, so the shape is reached by a bypass of it
+    // M19 0038: the write guard refuses a row of a market with no row, so the shape is reached by a bypass of it
     await expect(run("ZQ", "k3")).rejects.toThrow(/MarketNotEnabled/);
     await db.execute("DROP TRIGGER run_record_market_guard_ins");
     await run("ZQ", "k3");

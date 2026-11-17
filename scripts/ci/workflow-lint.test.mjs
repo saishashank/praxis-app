@@ -321,7 +321,7 @@ test("the exceptions file lists only pending deploy-file entries (Owner-only fil
   }
 });
 
-// OPS-109 a (D-971, AT-83 "CLI pin"): a floating vercel / wrangler version fails CI.
+// OPS-109 a (D-1788, AT-83 "CLI pin"): a floating vercel / wrangler version fails CI.
 const cliWorkflow = (run) =>
   `on: workflow_dispatch\npermissions:\n  contents: read\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n${run
     .split("\n")

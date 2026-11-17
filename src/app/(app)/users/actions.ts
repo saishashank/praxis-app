@@ -39,7 +39,7 @@ function id(fd: FormData, name: string): number {
 
 async function run(user: CurrentUser, fn: (c: Ctx) => Promise<Done>): Promise<ActionResult> {
   try {
-    // The sharing acknowledgement is for the market the app opens in (D-997).
+    // The sharing acknowledgement is for the market the app opens in (D-1812).
     const market = await resolveMarket(mainDb(), undefined, null);
     if (!market.ok) return { error: "unavailable" };
     const result = await fn({

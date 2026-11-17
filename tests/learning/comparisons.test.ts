@@ -317,7 +317,7 @@ describe("determinism", () => {
 describe("persistence", () => {
   it("writes idempotently; the look moves the finding once", async () => {
     const db = await freshDb("main");
-    await allowMarket(db, MARKET); // M19 0035: the invented market ZZ must be enabled for its rows to be stored
+    await allowMarket(db, MARKET); // M19 0038: the invented market ZZ must be enabled for its rows to be stored
     const week = "2026-10-24";
     const ps = [pair("P-real", 1.5, 120, 21), pair("P-null", 0, 120, 31)];
     const night = nightlyComparisons(params, ps, week);

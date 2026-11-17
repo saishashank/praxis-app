@@ -1,4 +1,4 @@
-// Licence store (M22 E1; KB-083, D-1430). `expert_source_licence` is append-only (0039): a check or an acceptance
+// Licence store (M22 E1; KB-083, D-1430). `expert_source_licence` is append-only (0042): a check or an acceptance
 // adds a row, and the LATEST row per (expert, source) is the status. Every statement names its cap; no OFFSET.
 import type { Client } from "@libsql/client";
 import { sourcesOf, type LicenceSource } from "./engine.mjs";
@@ -25,7 +25,7 @@ export type LicenceRow = {
   note: string | null;
 };
 
-const NOTE_MAX = 200; // threshold-ok: expert_source_licence.note cap (0039)
+const NOTE_MAX = 200; // threshold-ok: expert_source_licence.note cap (0042)
 const COLS =
   "expert_id, source_key, checked_at, terms_url, robots, summarisation, status, actor, note";
 

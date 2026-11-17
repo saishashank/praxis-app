@@ -48,7 +48,7 @@ export const TERMS_PATHS = Object.freeze([
   "/legal",
 ]);
 export const LIMITS = Object.freeze({
-  keyChars: 64, // threshold-ok: expert_source_licence.source_key length cap (0039)
+  keyChars: 64, // threshold-ok: expert_source_licence.source_key length cap (0042)
   maxRedirects: 3, // threshold-ok: same cap as the polite fetcher
   maxTermsChars: 300_000, // threshold-ok: a terms page is read up to this many characters, then cut
   maxSourcesPerExpert: 10, // threshold-ok: five home URLs and the handles, both capped by the seed format

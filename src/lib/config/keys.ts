@@ -1,4 +1,5 @@
 import { allMarketCostProfileCodes } from "@/lib/arena/costs";
+import { LEARN_CONFIG_SPEC } from "@/lib/cortex/learn/config";
 import { CALENDAR_MARKETS } from "@/lib/data/calendar";
 import { MKT_KEY_FIELDS, type MktKeyField } from "@/lib/market/fields.mjs";
 import { HOME_MARKET, marketsEnabledDefault } from "@/lib/market/profileCore.mjs";
@@ -45,8 +46,8 @@ const oneOf = (allowed: readonly string[]) => async (v: unknown) =>
   typeof v === "string" && allowed.includes(v) ? null : `must be one of ${allowed.join(", ")}`;
 
 /**
- * Markets that have a mode: the built markets of the seed registry (M19 D-993; was a literal AU list). A market
- * that is built but not enabled is mode `off` and is never switched on here (D-994).
+ * Markets that have a mode: the built markets of the seed registry (M19 D-1808; was a literal AU list). A market
+ * that is built but not enabled is mode `off` and is never switched on here (D-1809).
  */
 export const MODE_MARKETS: readonly string[] = builtMarkets();
 
@@ -167,7 +168,7 @@ const M4_RANGED = [
   ["f6_time_stop", "int", 20, 10, 40, "sessions", "B", FAM, "ch.15 15.3 F6 time_stop", "F6: time exit"],
   // Shared family rules
   ["reentry_block", "int", 10, 5, 20, "sessions", "B", FAM, "FAM-002; ch.15 l.110", "Sessions a code is blocked after a stop exit"],
-  ["max_open_positions", "int", 2, 1, 2, "positions", "O", FAM, "ARN-003; ch.15 l.17", "Most positions open at once"],
+  ["max_open_positions", "int", 2, 1, 2, "positions", "O", FAM, "ARN-003; ch.15 l.17", "Most positions open at once in a first-round (A$600) book and in replays; the A$5,000 round holds up to 6 (D-1021)"],
   // Events and insider/flow (AGT-020, AGT-105)
   ["event_polarity_threshold_pct", "num", 2, 0.5, 10, "%", "B", REG, "AGT-020; ch.15 l.117 (bounds not in the extract, D-079)", "Abnormal return that gives an event a polarity"],
   ["insider_window_sessions", "int", 30, 10, 60, "sessions", "B", REG, "AGT-105; ch.15 l.116 (bounds not in the extract, D-079)", "Insider/flow window"],
@@ -334,7 +335,7 @@ const M5_RANGED = [
   ["p0_batch_window_min", "int", 5, 1, 15, "min", "O", SEM, "EML-020, AGT-115; ch.15 l.120 (bounds not in the extract, D-097)", "P0 follow-ups inside this window are batched into one email"],
   ["watch_list_window", "int", 20, 5, 60, "sessions", "O", SEM, "AGT-014; ch.15 l.121 (bounds not in the extract, D-097)", "A code with a family signal in the last this many sessions is on the watch-list"],
   ["owner_add_expiry_days", "int", 90, 1, 90, "days", "O", SEM, "AGT-014 (expiry at most 90 days); ch.15 l.121 (lower bound D-097)", "Longest an Owner-added watch-list code stays on"],
-  ["news_assess_per_run", "int", 40, 20, 200, "items", "O", SEM, "DAT-251 b (supersedes the AGT-010/PLT-075 ceiling of 40), D-954", "Announcements assessed per Sentinel call (the effective cap is also bounded by the LLM headroom and, near the Turso line, by 40)"],
+  ["news_assess_per_run", "int", 40, 20, 200, "items", "O", SEM, "DAT-251 b (supersedes the AGT-010/PLT-075 ceiling of 40), D-1783", "Announcements assessed per Sentinel call (the effective cap is also bounded by the LLM headroom and, near the Turso line, by 40)"],
   // Email budget and review follow-up (EML-004, EML-036, NFR-006)
   ["email_daily_cap", "int", 20, 5, 50, "emails/day", "O", SEM, "EML-004; ch.15 l.189", "Emails per day (3 are reserved, P0 uses the rest)"],
   ["email_monthly_cap", "int", 300, 50, 1000, "emails/month", "O", SEM, "EML-004; ch.15 l.190", "Emails per month"],
@@ -548,9 +549,16 @@ const M6_RANGED = [
   ["picks_max_per_family", "int", 10, 10, 10, "picks", "O", LRN, "AGT-113; ch.15 l.211; M17 O-76: no per-family cap; bounds pinned to 10 by D-791", "Fixed at 10 = no per-family cap (Owner decision O-76); kept so a stored value cannot bring the cap back"],
   ["pick_valid_sessions", "int", 2, 1, 5, "sessions", "O", LRN, "UXN-040, AGT-113; ch.15 l.212", "Not used since D-187: a waiting pick is checked each night against information instead of a session count"],
   ["pick_success_min_n", "int", 30, 10, 200, "picks", "O", LRN, "UXN-041; ch.15 l.213 (bounds 'as ch. 16' not given, 10-200 agent-chosen, D-111)", "Closed picks needed before model success is shown"],
-  // D-913 "Follow the picks" practice portfolio (Owner 2026-11-10)
-  ["picks_portfolio_seed_aud", "int", 5000, 1000, 100000, "market currency", "O", LRN, "D-913 (Owner 2026-11-10: multiple stocks, think as end-user money)", "Practice money the Follow the picks portfolio starts with"],
-  ["picks_portfolio_slots", "int", 5, 1, 10, "stocks", "O", LRN, "D-913 (Owner 2026-11-10)", "Most stocks the Follow the picks portfolio holds at once; each buy is about the value divided by this"],
+  // D-950 "My portfolio": three practice portfolios, one per risk profile (Owner 2026-11-11; replaces
+  // the D-913 Follow the picks keys picks_portfolio_seed_aud and picks_portfolio_slots)
+  ["my_portfolio_seed_aud", "int", 1000, 1000, 100000, "market currency", "O", LRN, "D-950 (Owner 2026-11-11: A$1,000 per profile)", "Practice money each My portfolio starts with (one per risk profile)"],
+  ["my_portfolio_stock_max_pct", "int", 30, 10, 30, "%", "O", LRN, "D-952 (Owner 2026-11-11: at most 30 % in one stock)", "Most of a My portfolio in one stock (a profile may set less)"],
+  ["my_portfolio_strategy_max_pct", "int", 40, 20, 100, "%", "O", LRN, "D-951 (Owner 2026-11-11: at most 40 % per strategy)", "Most of a My portfolio given to one strategy; what the cap frees stays cash"],
+  ["my_portfolio_cost_max_pct", "num", 1.5, 0.5, 5, "%", "O", LRN, "D-952 (Owner 2026-11-11: brokerage matters with A$1,000)", "Most a buy's brokerage both ways may cost, as a share of the buy (a trim: half); a dearer trade is not made"],
+  ["my_portfolio_min_parcel_aud", "int", 200, 0, 500, "market currency", "O", LRN, "D-952 (the ASX first-buy minimum parcel is A$500; at A$1,000 it would allow one stock)", "Smallest buy of My portfolio"],
+  // D-980 candidate picks (Owner 2026-11-11: "start picking stocks based on new candidates so that you can validate")
+  ["picks_candidate_per_measure", "int", 1, 0, 2, "picks", "O", LRN, "D-980 (Owner 2026-11-11)", "Candidate picks per candidate measure per night (0 = none)"],
+  ["picks_candidate_max", "int", 3, 0, 5, "picks", "O", LRN, "D-980 (Owner 2026-11-11)", "Most candidate picks per night in total, placed after the strategy and shortlist picks (0 = none)"],
 ] as const satisfies readonly RangedRow[];
 
 // prettier-ignore
@@ -695,6 +703,69 @@ async function validateProfileAmounts(v: unknown): Promise<string | null> {
   return null;
 }
 
+/**
+ * D-956 my_portfolio_profiles: how each risk profile's My portfolio trades. Each field with its
+ * bounds [min, max, whole number]:
+ *   holdings           most stocks held at once
+ *   risk_pct           most of the value lost if a new holding hits its stop-loss
+ *   stock_pct          most of the value in one stock (and never above my_portfolio_stock_max_pct)
+ *   small_stock_pct    most of the value in one smaller company (tier U3)
+ *   shrink_n           finished picks a strategy's record needs before it counts as much as an equal share
+ *   vol_tilt           how far the split leans to calmer strategies (0 none, 1 inverse volatility)
+ *   weak_cash_pct      share of a losing strategy's money kept as cash
+ *   band_pct           drift over a strategy's share that starts a trim
+ *   min_hold_sessions  sessions a holding is kept before it can be trimmed
+ */
+export const MY_PORTFOLIO_FIELDS = {
+  holdings: [1, 6, true], // threshold-ok: D-956 bounds
+  risk_pct: [0.25, 5, false], // threshold-ok: D-956 bounds
+  stock_pct: [5, 30, false], // threshold-ok: D-956 bounds (Owner: at most 30 % in one stock)
+  small_stock_pct: [5, 30, false], // threshold-ok: D-956 bounds
+  shrink_n: [1, 200, true], // threshold-ok: D-956 bounds
+  vol_tilt: [0, 3, false], // threshold-ok: D-956 bounds
+  weak_cash_pct: [0, 100, false], // threshold-ok: D-956 bounds
+  band_pct: [2, 50, false], // threshold-ok: D-956 bounds
+  min_hold_sessions: [0, 20, true], // threshold-ok: D-956 bounds
+} as const satisfies Record<string, readonly [number, number, boolean]>;
+export type MyPortfolioProfile = { [K in keyof typeof MY_PORTFOLIO_FIELDS]: number };
+export const MY_PORTFOLIO_PROFILE_NAMES = ["conservative", "balanced", "aggressive"] as const;
+
+// prettier-ignore
+export const MY_PORTFOLIO_PROFILES_DEFAULT: Record<(typeof MY_PORTFOLIO_PROFILE_NAMES)[number], MyPortfolioProfile> = {
+  // largest shares only (its pick tiers), the smallest risk per holding, leans to calm strategies,
+  // half a losing strategy's money in cash, a wide band and a week before a trim: slow to trade
+  conservative: { holdings: 4, risk_pct: 1.25, stock_pct: 25, small_stock_pct: 20, shrink_n: 30, vol_tilt: 1.5, weak_cash_pct: 50, band_pct: 15, min_hold_sessions: 5 }, // threshold-ok: D-956 defaults
+  // the evidence mix as it is
+  balanced: { holdings: 4, risk_pct: 2, stock_pct: 30, small_stock_pct: 20, shrink_n: 20, vol_tilt: 1, weak_cash_pct: 25, band_pct: 10, min_hold_sessions: 3 }, // threshold-ok: D-956 defaults
+  // smaller companies too (its pick tiers, 20 % each as its pick profile), trusts a winning record
+  // sooner (less shrinkage), little cash, a narrow band and quick trims: more turnover
+  aggressive: { holdings: 3, risk_pct: 3, stock_pct: 30, small_stock_pct: 20, shrink_n: 8, vol_tilt: 0.5, weak_cash_pct: 0, band_pct: 7, min_hold_sessions: 1 }, // threshold-ok: D-956 defaults
+};
+
+const MY_PORTFOLIO_BOUNDS_TEXT = `conservative, balanced and aggressive, each with ${Object.entries(
+  MY_PORTFOLIO_FIELDS,
+)
+  .map(([k, [lo, hi, whole]]) => `${k} ${lo} to ${hi}${whole ? " (whole)" : ""}`)
+  .join(", ")}`;
+
+async function validateMyPortfolioProfiles(v: unknown): Promise<string | null> {
+  if (!exactKeys(v, [...MY_PORTFOLIO_PROFILE_NAMES])) {
+    return `needs ${MY_PORTFOLIO_PROFILE_NAMES.join(", ")}`;
+  }
+  const fields = Object.keys(MY_PORTFOLIO_FIELDS);
+  for (const name of MY_PORTFOLIO_PROFILE_NAMES) {
+    const p = v[name];
+    if (!exactKeys(p, fields)) return `${name} needs ${fields.join(", ")}`;
+    for (const [k, [lo, hi, whole]] of Object.entries(MY_PORTFOLIO_FIELDS)) {
+      const x = p[k];
+      if (!(whole ? isInt(x) : isNum(x)) || (x as number) < lo || (x as number) > hi) {
+        return `${name}: ${k} must be ${whole ? "a whole number" : "a number"} from ${lo} to ${hi}`;
+      }
+    }
+  }
+  return null;
+}
+
 export const INJECTION_PHRASES_KEY_VERSION = "v1";
 /** llm_injection_phrases (ch.15 l.182, LLM-035): a versioned phrase list the Owner can extend. */
 async function validateInjectionPhrases(v: unknown): Promise<string | null> {
@@ -780,6 +851,13 @@ const M6_EXPLICIT_KEYS = {
     ref: "AGT-113, UXN-040; ch.15 l.210 (A$1,000-1,000,000)",
     validate: async (v: unknown) => validateProfileAmounts(v),
   },
+  my_portfolio_profiles: {
+    default: MY_PORTFOLIO_PROFILES_DEFAULT,
+    unit: "mixed",
+    editable: "O",
+    ref: "D-956 (Owner 2026-11-11: the profiles differ in holdings, risk, tilt, cash and turnover)",
+    validate: async (v: unknown) => validateMyPortfolioProfiles(v),
+  },
   cif_horizons_sessions: {
     default: [...CIF_HORIZONS_DEFAULT],
     unit: "sessions",
@@ -838,6 +916,12 @@ const M6_EXPLICIT_META: Record<keyof typeof M6_EXPLICIT_KEYS, ConfigMeta> = {
     label: "Pick profile portfolio amount (sizing examples only)",
     area: LRN,
     bounds: "A$1,000 to A$1,000,000 per profile",
+    input: "object",
+  },
+  my_portfolio_profiles: {
+    label: "My portfolio: how each risk profile trades",
+    area: LRN,
+    bounds: MY_PORTFOLIO_BOUNDS_TEXT,
     input: "object",
   },
   cif_horizons_sessions: { label: "CIF horizons", area: VAL, bounds: "fixed", input: "list" },
@@ -1551,7 +1635,7 @@ const MOVERS_META_TABLES = Object.fromEntries(
 /** Every key added by the movers gap additions (D-740 to D-759). */
 export const MOVERS_KEY_NAMES: readonly ConfigKey[] = MOVERS_RANGED.map((r) => r[0]);
 
-// ---- M19 market-profile keys (docs/M19_design.md A1; MKT-107, DAT-241, CXA-002; D-993, D-994) ----------------
+// ---- M19 market-profile keys (docs/M19_design.md A1; MKT-107, DAT-241, CXA-002; D-1808, D-1809) ----------------
 // `mkt.<CODE>.<field>` overlays the seed row of the profile field of that name (src/lib/market/profile.ts reads
 // the newest value); an Owner edit of an O key goes through setProfileField (a counted trial for costs, parcels
 // and settlement, DAT-242). The defaults are the seed values, so the key never holds a second definition.
@@ -1573,7 +1657,7 @@ const seedValue = (code: string, field: MktKeyField): unknown => seedOf(code)!.f
 const MKT_SHAPES: Record<MktKeyField, MktKeyShape> = {
   decision_cutoff: {
     unit: "local HH:MM",
-    ref: "CXA-002 a, ch.15 15.11.1; one definition with the decision_cutoff key for the home market (D-993)",
+    ref: "CXA-002 a, ch.15 15.11.1; one definition with the decision_cutoff key for the home market (D-1808)",
     label: "Decision cut-off",
     bounds: "fixed (HH:MM, the profile seed)",
     input: "text",
@@ -2041,6 +2125,65 @@ const M23_META_TABLES: Record<M23Key, ConfigMeta> = {
     input: "int",
   },
 };
+// ---- Learning Cortex keys (O-81; cortex_learning_architecture C.9, D-929, D-940) ----
+// Defaults and bounds come from the learning loop's own spec (src/lib/cortex/learn/config.ts
+// LEARN_CONFIG_SPEC), one row per C.9 key, so the two can never disagree. None is a Cortex refit key:
+// an edit never touches the fixed Cortex's map; the next weekly run starts a new (charged) learner
+// generation under the edited levels (D-940).
+const LS = LEARN_CONFIG_SPEC;
+// prettier-ignore
+const LEARN_RANGED = [
+  ["learn_window_sessions", "int", LS.windowSessions.default, LS.windowSessions.min, LS.windowSessions.max, "sessions", "O", LRN, "C.9, D-929", "Trading days of results the weekly re-weighting of the learning Cortex reads"],
+  ["learn_null_sessions", "int", LS.nullSessions.default, LS.nullSessions.min, LS.nullSessions.max, "sessions", "O", LRN, "C.9, D-929", "Trading days the learning Cortex's review uses to tell an alarm from chance"],
+  ["learn_shrink_n0", "int", LS.shrinkN0.default, LS.shrinkN0.min, LS.shrinkN0.max, "nights", "O", LRN, "C.9, D-929", "How strongly the learning Cortex holds on to what the development research found"],
+  ["learn_dev_haircut", "num", LS.devHaircut.default, LS.devHaircut.min, LS.devHaircut.max, "fraction", "O", LRN, "C.9, D-929", "Share of the development research's strength the learning Cortex expects to last"],
+  ["learn_max_step", "num", LS.maxStep.default, LS.maxStep.min, LS.maxStep.max, "fraction", "O", LRN, "C.9, D-929", "Largest share of the way a weight may move in one weekly re-weighting"],
+  ["learn_weight_floor", "num", LS.weightFloor.default, LS.weightFloor.min, LS.weightFloor.max, "x equal weight", "O", LRN, "C.9, D-929", "Lowest weight an angle keeps in the learning Cortex, against an equal share"],
+  ["learn_band_pp", "num", LS.bandPp.default, LS.bandPp.min, LS.bandPp.max, "pp", "O", LRN, "C.9, D-929", "Smallest weight move that is written as a new weekly set of weights"],
+  ["learn_fdr_q", "num", LS.fdrQ.default, LS.fdrQ.min, LS.fdrQ.max, "level", "O", LRN, "C.9, D-929", "False-finding rate allowed across the angles in a weekly re-weighting"],
+  ["learn_probe_q", "num", LS.probeQ.default, LS.probeQ.min, LS.probeQ.max, "level", "O", LRN, "C.9, D-929", "False-finding rate a candidate measure must clear before it joins the base"],
+  ["learn_ph_delta", "num", LS.phDelta.default, LS.phDelta.min, LS.phDelta.max, "per night", "O", LRN, "C.9, D-929", "Drift the review tolerates in an angle's nightly result before it counts a slip"],
+  ["learn_ph_fa_pct", "num", LS.phFaPct.default, LS.phFaPct.min, LS.phFaPct.max, "percentile", "O", LRN, "C.9, D-929", "How rare by chance an alarm in the review must be (99 = about once in 100 trading days)"],
+  ["learn_cap_sessions", "int", LS.capSessions.default, LS.capSessions.min, LS.capSessions.max, "sessions", "O", LRN, "C.9, D-929", "Trading days a review halves a slipping angle's weight in the learning Cortex"],
+  ["learn_actions_week_max", "int", LS.actionsWeekMax.default, LS.actionsWeekMax.min, LS.actionsWeekMax.max, "actions", "O", LRN, "C.9, D-929", "Most weight changes the reviews may make in one week"],
+  ["learn_switch_alpha", "num", LS.switchAlpha.default, LS.switchAlpha.min, LS.switchAlpha.max, "level", "O", LRN, "C.9, D-929", "Chance of luck below which the learning Cortex may take over the decisions"],
+  ["learn_fallback_alpha", "num", LS.fallbackAlpha.default, LS.fallbackAlpha.min, LS.fallbackAlpha.max, "level", "O", LRN, "C.9, D-929", "Chance of luck below which the fixed Cortex takes the decisions back"],
+  ["learn_switch_min_nights", "int", LS.switchMinNights.default, LS.switchMinNights.min, LS.switchMinNights.max, "nights", "O", LRN, "C.9, D-929", "Finished results on nights the two Cortexes differed before the learner may take over"],
+  ["learn_cooldown_sessions", "int", LS.cooldownSessions.default, LS.cooldownSessions.min, LS.cooldownSessions.max, "sessions", "O", LRN, "C.9, D-929", "Trading days after any change of who decides before the learner may take over"],
+  ["learn_psi_break", "num", LS.psiBreak.default, LS.psiBreak.min, LS.psiBreak.max, "index", "O", LRN, "C.9, D-929", "How far an angle's inputs may shift before a night counts as a data change, not a lesson"],
+  ["learner_off", "int", LS.learnerOff.default, LS.learnerOff.min, LS.learnerOff.max, "0 or 1", "O", LRN, "C.9, CTX-072", "1 = the learning Cortex only runs beside the fixed one and may never make the decisions"],
+] as const satisfies readonly RangedRow[];
+
+type LearnRangedKey = (typeof LEARN_RANGED)[number][0];
+
+const LEARN_RANGED_KEYS = Object.fromEntries(
+  LEARN_RANGED.map(([key, kind, def, min, max, unit, edit, , ref]) => [
+    key,
+    {
+      default: def,
+      unit,
+      editable: edit,
+      ref,
+      range: [min, max] as const,
+      validate: kind === "int" ? intRange(min, max) : numRange(min, max),
+    } satisfies ConfigKeyDef,
+  ]),
+) as unknown as Record<LearnRangedKey, ConfigKeyDef>;
+
+const LEARN_META_TABLES = Object.fromEntries(
+  LEARN_RANGED.map(([key, kind, , min, max, unit, , area, , label]) => [
+    key,
+    {
+      label,
+      area,
+      bounds: boundsText(kind, min, max, unit),
+      input: kind === "int" ? "int" : "number",
+    },
+  ]),
+) as Record<LearnRangedKey, ConfigMeta>;
+
+/** Every key of the learning Cortex (C.9; the stages read them through cortex/learn/configStore.ts). */
+export const LEARN_KEY_NAMES: readonly ConfigKey[] = LEARN_RANGED.map((r) => r[0]);
 
 export const CONFIG_KEYS = {
   ...MKT_KEYS,
@@ -2069,6 +2212,7 @@ export const CONFIG_KEYS = {
   ...M11L_ENUM_KEYS,
   ...M13L_RANGED_KEYS,
   ...MOVERS_RANGED_KEYS,
+  ...LEARN_RANGED_KEYS,
   // ch.15 l.163: evening_review_time / partial_at / send_by 20:00 / 20:30 / 20:45, O; EML-010/011.
   evening_review_time: {
     default: "20:00",
@@ -2300,13 +2444,13 @@ export const CONFIG_KEYS = {
     ref: "DAT-141, OPS-104, D-958",
     validate: intRange(1),
   },
-  // M18 (OPS-104, D-958, D-979): the share of the Turso free plan this system may use, and the share at
+  // M18 (OPS-104, D-958, D-1796): the share of the Turso free plan this system may use, and the share at
   // which the Owner is told. The Usage page draws the ceiling as the "20 % line".
   turso_free_ceiling_pct: {
     default: 20,
     unit: "% of the free plan",
     editable: "fixed",
-    ref: "OPS-104, PRD-045, O-81, D-979",
+    ref: "OPS-104, PRD-045, O-81, D-1796",
     validate: never,
   },
   turso_notice_pct: {
@@ -2314,30 +2458,30 @@ export const CONFIG_KEYS = {
     unit: "% of the free plan",
     editable: "O",
     range: [10, 19] as const,
-    ref: "OPS-104, D-958, D-979",
+    ref: "OPS-104, D-958, D-1796",
     validate: intRange(10, 19),
   },
-  // M18 (D-979): fixed registry entries shown on the Configuration page. The HMAC version mirrors
+  // M18 (D-1796): fixed registry entries shown on the Configuration page. The HMAC version mirrors
   // HMAC_SCHEME_VERSION in src/lib/security/hmacCore.mjs (the one definition).
   hmac_scheme_version: {
     default: HMAC_SCHEME_VERSION,
     unit: "version",
     editable: "fixed",
-    ref: "SEC-115, D-957, D-979",
+    ref: "SEC-115, D-1786, D-1796",
     validate: never,
   },
   calendar_draft_markets: {
-    default: CALENDAR_MARKETS.join(", "), // the market codes as one text: "AU" (D-979)
+    default: CALENDAR_MARKETS.join(", "), // the market codes as one text: "AU" (D-1796)
     unit: "markets",
     editable: "fixed",
-    ref: "OPS-103, D-961, D-979",
+    ref: "OPS-103, D-961, D-1796",
     validate: never,
   },
   restore_drill_reminder: {
     default: "quarterly, first day",
     unit: "schedule",
     editable: "fixed",
-    ref: "OPS-105, D-962, D-979",
+    ref: "OPS-105, D-962, D-1796",
     validate: never,
   },
   turso_staging_share: {
@@ -2557,19 +2701,19 @@ export const CONFIG_KEYS = {
   },
   // Design 4.6: each market's share of the daily LLM role budgets. Not in the ch.15 extract
   // (D-079): AU is the only market and takes all of it.
-  // D-994: the set of enabled markets. Fixed: the run-time truth is the `market.enabled` column; this key is the
+  // D-1809: the set of enabled markets. Fixed: the run-time truth is the `market.enabled` column; this key is the
   // production assertion (PRAXIS_MARKETS_ENABLED split on commas, unset = AU only) the nightly invariant compares
   // with the column. The only writer of `enabled` is `switchMarket` (src/lib/data/marketSwitch.ts, M20, D-1100): the
   // key is DERIVED from the column, never written by it. After a switch the Owner sets PRAXIS_MARKETS_ENABLED by hand
-  // (D-994); until then the nightly mismatch alarm reminds, and the database column decides what runs.
+  // (D-1809); until then the nightly mismatch alarm reminds, and the database column decides what runs.
   markets_enabled: {
     default: marketsEnabledDefault(
       typeof process === "undefined" ? {} : process.env,
       builtMarkets(),
-    ).join(", "), // the codes as one text: "AU" (the calendar_draft_markets pattern, D-979)
+    ).join(", "), // the codes as one text: "AU" (the calendar_draft_markets pattern, D-1796)
     unit: "markets",
     editable: "fixed",
-    ref: "MKT-110, D-994, ch.15 E",
+    ref: "MKT-110, D-1809, ch.15 E",
     validate: never,
   },
   llm_market_share: {
@@ -2656,6 +2800,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   ...M21_META_TABLES,
   ...M22_META_TABLES,
   ...M23_META_TABLES,
+  ...LEARN_META_TABLES,
   evening_review_time: {
     label: "Evening Review send time",
     area: SEM,

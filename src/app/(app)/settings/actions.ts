@@ -33,7 +33,7 @@ async function save(path: string, fields: readonly string[], fd: FormData): Prom
     if (v !== null) patch[f] = v; // a File value fails validation as a non-string
   }
   try {
-    // D-997: a default market is accepted only when it is an enabled market (the service checks the built set).
+    // D-1812: a default market is accepted only when it is an enabled market (the service checks the built set).
     if (typeof patch.default_market === "string") {
       if (!(await resolveMarket(mainDb(), patch.default_market, null)).ok)
         return { error: "invalid" };

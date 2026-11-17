@@ -1,6 +1,6 @@
 // AU tick table, slippage buckets and liquidity tiers, moved byte-for-byte from src/lib/money/tick.ts,
 // src/lib/arena/slippage.ts, src/lib/cortex/economics/cost.ts and src/lib/data/universe/tiers.mjs
-// (M19 A1, D-1003 d). Plain ESM data in micro units of the market currency (AUD). The engines (stream B2)
+// (M19 A1, D-1816 d). Plain ESM data in micro units of the market currency (AUD). The engines (stream B2)
 // take these as arguments; an edit here is a new money constant (D-710, D-817).
 
 /**

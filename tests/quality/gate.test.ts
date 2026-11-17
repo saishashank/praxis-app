@@ -37,7 +37,7 @@ describe("entriesAllowed", () => {
     });
     await score(1, "2026-10-12");
     expect(await entriesAllowed(db, "ZZA", D)).toMatchObject({ reason: "no_quality_score" });
-    await allowMarket(db, "IN"); // M19 0035: a score of another market needs that market enabled to be stored
+    await allowMarket(db, "IN"); // M19 0038: a score of another market needs that market enabled to be stored
     await score(1, D, "IN");
     expect(await entriesAllowed(db, "ZZA", D)).toMatchObject({ reason: "no_quality_score" });
   });

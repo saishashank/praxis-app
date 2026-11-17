@@ -1,5 +1,5 @@
 // @vitest-environment node
-// M19 B1 -> M20 A5 (CXA-002 e, f, g, i; D-1003, D-1108, D-1112; PRD-039): the profile-selected rule sets. AU keeps its
+// M19 B1 -> M20 A5 (CXA-002 e, f, g, i; D-1816, D-1108, D-1112; PRD-039): the profile-selected rule sets. AU keeps its
 // readers; the IN and US values now resolve to the readers built at M20, chosen by the VALUE of the profile field; a
 // value with no reader still throws `not built (M20)` (the stub class stays for any later market). The franking angle
 // (A-D4-05) is skipped without dividend imputation and the angle count follows the profile (AU 100, IN and US 99).

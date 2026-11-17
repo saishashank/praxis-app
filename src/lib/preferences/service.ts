@@ -42,8 +42,8 @@ export const TIME_ZONES = ["melbourne", "exchange"] as const;
 // M17 (D-444): pick alerts and their e-mails (ARN-112, EML-038..040); the pick order (UXN-309).
 export const ON_OFF = ["on", "off"] as const;
 export const PICK_SORTS = ["chance", "expected_gain"] as const;
-// A stored default market is any built market (the seed registry, D-993); the Settings form offers, and the
-// action accepts, only the enabled ones, and `resolveMarket` ignores a stored choice that is not enabled (D-997).
+// A stored default market is any built market (the seed registry, D-1808); the Settings form offers, and the
+// action accepts, only the enabled ones, and `resolveMarket` ignores a stored choice that is not enabled (D-1812).
 
 export type Theme = (typeof THEMES)[number];
 export type TimeFormat = (typeof TIME_FORMATS)[number];

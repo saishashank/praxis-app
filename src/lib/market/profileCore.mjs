@@ -1,15 +1,15 @@
-// The pure core of the market profile (M19 A1; DAT-241, DAT-242, D-993). Plain ESM with no I/O and no
+// The pure core of the market profile (M19 A1; DAT-241, DAT-242, D-1808). Plain ESM with no I/O and no
 // framework import, so the Worker and the Actions scripts can import it like calendarCore.mjs, and the typed
 // loader (profile.ts) is a thin reader on top. Holds: the Owner's display zone, the global indices, the
 // market-independent ops slot times, the stored-value codec, `profileFromRows` (database rows + overlay ->
 // MarketProfile), `slotsProjection` (the Worker's per-market slot anchors), `completeness`/`isComplete`
-// (DAT-242), the per-currency display format (UXN-313, D-1002) and the production default of the
-// `markets_enabled` set (D-994).
+// (DAT-242), the per-currency display format (UXN-313, D-1815) and the production default of the
+// `markets_enabled` set (D-1809).
 import { MKT_KEY_FIELDS, PROFILE_FIELDS, validateField } from "./fields.mjs";
 
 /**
  * The market whose pre-profile global keys (`decision_cutoff`) predate the profile: that key stays its authority
- * (D-993). The only market code outside the seed files.
+ * (D-1808). The only market code outside the seed files.
  */
 export const HOME_MARKET = "AU";
 
@@ -23,7 +23,7 @@ export const OWNER_TZ = "Australia/Melbourne";
 export const GLOBAL_INDICES = Object.freeze(["GSPC", "VIX"]);
 
 /**
- * The market-independent ops slots of the Worker clock, as local (Melbourne) HH:MM (D-996). Recurring slots
+ * The market-independent ops slots of the Worker clock, as local (Melbourne) HH:MM (D-1811). Recurring slots
  * name `from`, `until` and `everyMin`. The Worker's schedule.ts reads these; it holds no time literal itself.
  */
 export const OPS_SLOT_TIMES = Object.freeze({
@@ -45,7 +45,7 @@ export const OPS_SLOT_TIMES = Object.freeze({
 });
 
 /**
- * The display format of a currency (UXN-313, D-1002): symbol and locale. `en-IN` groups in lakh and crore
+ * The display format of a currency (UXN-313, D-1815): symbol and locale. `en-IN` groups in lakh and crore
  * (₹1,00,000.00). Keyed by ISO 4217 code, which is what `profile.currency` holds.
  */
 export const CURRENCY_FORMATS = Object.freeze({
@@ -62,7 +62,7 @@ export function currencyFormatOf(currency) {
 }
 
 /**
- * The production default of the `markets_enabled` key (D-994): PRAXIS_MARKETS_ENABLED split on commas,
+ * The production default of the `markets_enabled` key (D-1809): PRAXIS_MARKETS_ENABLED split on commas,
  * unset or empty -> ["AU"]. A plain variable, never a secret. Codes outside the built set are dropped.
  * @param {Record<string, string | undefined>} [env]
  * @param {readonly string[]} [built]
@@ -298,7 +298,7 @@ export function isComplete(profile) {
 // ---- the Worker's slot anchors --------------------------------------------------------------------------------
 
 /**
- * The projection the Worker clock reads from `market.slots_json` (D-996): the market-bound slot anchors as
+ * The projection the Worker clock reads from `market.slots_json` (D-1811): the market-bound slot anchors as
  * local HH:MM of the market's own zone. Derived from the profile only, so the projection test can compare it
  * with the stored column. AU reproduces today's table: batches 17:30 / 17:50 / 18:10, late 2a 18:40, cut-off
  * poll 18:10, pre-open 09:54 and 09:58, quote poll 10:00 to 16:00, intraday scan 10:32 to 15:32.

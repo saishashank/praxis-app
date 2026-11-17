@@ -7,7 +7,7 @@
 // a row, a URL or a driver error.
 //   asx-ingest --dir <dir>
 //   asx-ingest --write-state <file>   read-only: the delisted codes, the list-failure counter and
-//                                     whether the Wikidata fallback row is enabled (D-972, D-974)
+//                                     whether the Wikidata fallback row is enabled (D-1789, D-1791)
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -99,7 +99,7 @@ export async function asxIngestMain(
   };
   let exit = 0;
   try {
-    // DAT-251 b (D-954): the key, bounded by the LLM headroom and, near the Turso line, by 40.
+    // DAT-251 b (D-1783): the key, bounded by the LLM headroom and, near the Turso line, by 40.
     const cap = await loadEffectiveCap(db, new Date(nowMs())).catch(() => undefined);
     let feedOk = false;
     const history = existsSync(dir)
@@ -147,7 +147,7 @@ export async function asxIngestMain(
       }
     }
     const asxCsv = read("companies.csv");
-    // D-974: the Wikidata CSV is taken only when the ASX file did not arrive (fetch.mjs wrote it only
+    // D-1791: the Wikidata CSV is taken only when the ASX file did not arrive (fetch.mjs wrote it only
     // after three failed runs with the register row enabled).
     const csv = asxCsv ?? read("companies-wikidata.csv");
     const fromWikidata = asxCsv === null && csv !== null;
@@ -165,7 +165,7 @@ export async function asxIngestMain(
       );
       if (!u.ok) exit = 1;
     }
-    // D-972 / D-974: what the fetch learned (causes, not_found codes, the list-failure counter).
+    // D-1789 / D-1791: what the fetch learned (causes, not_found codes, the list-failure counter).
     const status = parseFetchStatus(read("fetch-status.json"));
     if (status !== null) {
       try {

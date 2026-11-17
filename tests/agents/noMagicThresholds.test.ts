@@ -15,7 +15,13 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const ROOT = path.resolve(__dirname, "../..");
-const SCAN_DIRS = ["src/lib/agents", "src/lib/replay", "src/lib/llm", "src/lib/learning"];
+const SCAN_DIRS = [
+  "src/lib/agents",
+  "src/lib/replay",
+  "src/lib/llm",
+  "src/lib/learning",
+  "src/lib/cortex/learn", // D-923: the learning Cortex (design C.9: every level a pre-registered key)
+];
 // ownerActions.ts is HTTP/route plumbing for the Owner routes (status codes, the ROL-102b note length), not
 // rule code (D-125); like schema.ts it is not scanned.
 const SKIP_FILES = new Set(["schema.ts", "ownerActions.ts"]);

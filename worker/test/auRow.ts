@@ -1,6 +1,6 @@
-// The AU `market` row as migration 0034 seeds it (M19 C1, D-996): the Worker builds its slot table from this
+// The AU `market` row as migration 0037 seeds it (M19 C1, D-1811): the Worker builds its slot table from this
 // row, so the tests that used the removed `AU_SLOTS` constant build the same table from it. The values are the
-// seed's (src/lib/market/seed/AU.mjs, db/migrations/main/0034_m19_market_profile.sql); worker/test/auRow.test.ts
+// seed's (src/lib/market/seed/AU.mjs, db/migrations/main/0037_m19_market_profile.sql); worker/test/auRow.test.ts
 // proves the migration row equals this one.
 import { slotsFor } from "../src/schedule";
 import { pinMarkets, type MarketRow } from "../src/markets";
@@ -29,7 +29,7 @@ export const AU_ROW: MarketRow = {
   }),
 };
 
-/** A built-off market row as migration 0034 seeds it: IN, enabled 0, mode off (tests plant `enabled = 1`). */
+/** A built-off market row as migration 0037 seeds it: IN, enabled 0, mode off (tests plant `enabled = 1`). */
 export const IN_ROW: MarketRow = {
   code: "IN",
   tz: "Asia/Kolkata",

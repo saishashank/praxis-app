@@ -2,7 +2,7 @@
 // Settings > Region & markets: the Owner's switch-on and rollback (MKT-111, AT-71, D-1100, D-1101; M20 S1).
 // Owner only: requireUser("admin") runs first (a refusal is a 403 and is audit-logged by the guard, AT-02). The market,
 // the target mode and the reason come from the form and are validated again by `switchMarket`; the actor is always the
-// signed-in Owner. `PRAXIS_MARKETS_ENABLED` is not touched here: it stays the Owner's own step (D-994).
+// signed-in Owner. `PRAXIS_MARKETS_ENABLED` is not touched here: it stays the Owner's own step (D-1809).
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { requestMeta } from "@/lib/auth/audit";

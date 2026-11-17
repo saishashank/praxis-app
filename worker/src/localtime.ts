@@ -1,5 +1,5 @@
 // Local time without Intl (PLT-070: 10 ms CPU per invocation) for the zones the market table names (M19 C1,
-// D-1004: the rule table is keyed by zone through src/lib/market/clockTables.mjs, and a zone it does not
+// D-1817: the rule table is keyed by zone through src/lib/market/clockTables.mjs, and a zone it does not
 // list throws `unsupported zone`). Three rules (M20 A2, D-1117): the Sydney/Melbourne one, Kolkata (UTC+5:30, no DST) and
 // US Eastern (second Sunday of March to first Sunday of November, 02:00 local). Port of the DST rule in
 // src/lib/data/calendar.ts (D-059), reduced to the pure arithmetic the Worker needs.
@@ -97,7 +97,7 @@ const ruleOf = (tz: string): string | undefined =>
 export const zoneSupported = (tz: string): boolean => ruleOf(tz) !== undefined;
 
 /**
- * The wall clock of a UTC instant in a market zone (D-1004, D-1117). Only the zones in ZONE_RULES are supported; any
+ * The wall clock of a UTC instant in a market zone (D-1817, D-1117). Only the zones in ZONE_RULES are supported; any
  * other throws `unsupported zone`.
  */
 export function localFor(tz: string, ms: number): Local {

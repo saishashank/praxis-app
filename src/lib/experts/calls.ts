@@ -204,7 +204,7 @@ export async function settleCalls(
     const bars = await closesOf(db, market, call.code, call.callD, upTo);
     const core = callOutcome(call, bars, elapsed);
     if (core === null) continue;
-    // OPS-112 (1), D-978: a horizon close needs the horizon session's own bar. On the horizon session itself
+    // OPS-112 (1), D-1795: a horizon close needs the horizon session's own bar. On the horizon session itself
     // a missing bar means "not ingested yet": wait for the next run instead of closing one bar early. On a
     // later run the bar is still missing (a halt, a gap), so the call closes on its last bar and is marked
     // `early` (the outcome row is insert-once, so the mark stands).

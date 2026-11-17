@@ -1,5 +1,5 @@
 // @vitest-environment node
-// M19 configuration keys (docs/M19_design.md A1; MKT-107, DAT-241, D-993, D-994, D-1003): the nine
+// M19 configuration keys (docs/M19_design.md A1; MKT-107, DAT-241, D-1808, D-1809, D-1816): the nine
 // `mkt.<CODE>.<field>` keys per built market, `markets_enabled`, `market_mode`'s default, MODE_MARKETS and the
 // calendar markets as derived values. An independent transcription: a change to a default or a bound in keys.ts
 // or a seed must change it here too.
@@ -71,7 +71,7 @@ describe("the mkt.<CODE>.<field> keys (spec ch. 15 15.11.1)", () => {
     expect(mkt.sort()).toEqual(EXPECTED.map((e) => e[0]).sort());
   });
 
-  it("mkt.AU.decision_cutoff is the decision_cutoff key's default: one definition (D-993)", () => {
+  it("mkt.AU.decision_cutoff is the decision_cutoff key's default: one definition (D-1808)", () => {
     expect(def("mkt.AU.decision_cutoff").default).toBe(def("decision_cutoff").default);
     expect(def("decision_cutoff").default).toBe("18:10");
   });
@@ -119,7 +119,7 @@ describe("the mkt.<CODE>.<field> keys (spec ch. 15 15.11.1)", () => {
   });
 });
 
-describe("markets_enabled and market_mode (D-994)", () => {
+describe("markets_enabled and market_mode (D-1809)", () => {
   it("markets_enabled is fixed, text-listed, and AU alone while PRAXIS_MARKETS_ENABLED is unset", async () => {
     expect(def("markets_enabled").editable).toBe("fixed");
     expect(await check("markets_enabled", "AU")).not.toBeNull();
@@ -148,11 +148,13 @@ describe("derived market lists (MKT-107: no literal list)", () => {
     expect(def("calendar_draft_markets").default).toBe(calendarMarkets().join(", "));
   });
 
-  it("the money keys lose their A$ labels and keep their numbers (D-1003)", () => {
+  it("the money keys lose their A$ labels and keep their numbers (D-1816)", () => {
     expect(def("ledger_notional_aud").unit).toBe("market currency");
     expect(def("ledger_notional_aud").default).toBe(600);
-    expect(def("picks_portfolio_seed_aud").unit).toBe("market currency");
-    expect(def("picks_portfolio_seed_aud").default).toBe(5000);
+    // main replaced picks_portfolio_seed_aud with the three My portfolio keys (D-950, D-1775)
+    expect(def("my_portfolio_seed_aud").unit).toBe("market currency");
+    expect(def("my_portfolio_seed_aud").default).toBe(1000);
+    expect(def("my_portfolio_min_parcel_aud").unit).toBe("market currency");
     expect(def("profile_portfolio_amount").unit).toBe("market currency");
     expect(def("profile_portfolio_amount").default).toEqual({
       aggressive: 10000,

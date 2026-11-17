@@ -416,7 +416,7 @@ describe("luckPct", () => {
   });
 });
 
-describe("the horizon bar (OPS-112 (1), D-978)", () => {
+describe("the horizon bar (OPS-112 (1), D-1795)", () => {
   it("on the horizon session a missing bar waits; once the bar exists the call closes on it, not early", async () => {
     for (const [i, c] of [
       [11, 10],

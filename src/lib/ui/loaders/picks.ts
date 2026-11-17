@@ -4,6 +4,7 @@
 // dates and masked free text; the figures that carry no price (probabilities, counts) stay.
 import { getConfig } from "@/lib/config/store";
 import { chanceDisplay, chanceLine, type ChanceDisplay } from "@/lib/picks/chance";
+import { CANDIDATE_RULE_PREFIX, isCandidateRule } from "@/lib/picks/candidates";
 import { familyStatusMap } from "@/lib/cortex/store/status";
 import { modelSuccess, successLine, type ModelSuccess } from "@/lib/picks/success";
 import {
@@ -21,7 +22,8 @@ import { opaqueDigest } from "@/lib/view/opaqueRef";
 import { soft, strategyNames } from "./common";
 import { melTime } from "./pickAlerts";
 import { cardHref } from "./cards";
-import { newerThanClose, readLatestQuotes } from "@/lib/data/quotes/latest";
+import { loadPickNow, ppmOf } from "./pickNow";
+import { LATEST_READ_MAX, newerThanClose, readLatestQuotes } from "@/lib/data/quotes/latest";
 import {
   isDateParam,
   maskKit,
@@ -49,6 +51,8 @@ export const pickRef = (realId: string): string => "pk:" + opaqueDigest("pk", re
 export { modelSuccess, successLine };
 /** UXN-309 order, re-exported for the Picks page (D-136: only this loader imports src/lib/picks). */
 export { sortPicks } from "@/lib/picks/sort";
+/** D-984: the candidate-pick test, re-exported for the pages (D-136: only this loader imports picks). */
+export { isCandidateRule };
 
 /** The id shown in links: readable for an unmasked viewer, opaque for a masked one (no date in the URL). */
 const publicPickId = (realId: string, masked: boolean): string =>
@@ -101,19 +105,6 @@ export async function parsePicksQuery(
   return { profile, d: d || undefined };
 }
 
-/** Level against the reference price in ppm: exact integer arithmetic, rounded half away from zero. */
-function ppmOf(level: unknown, reference: unknown): number | null {
-  try {
-    const ref = BigInt(String(reference));
-    if (ref <= 0n) return null;
-    const diff = (BigInt(String(level)) - ref) * 1_000_000n; // threshold-ok: ppm
-    const half = ref / 2n;
-    return Number(diff >= 0n ? (diff + half) / ref : -((-diff + half) / ref)); // money-float-ok: small ppm integer
-  } catch {
-    return null;
-  }
-}
-
 /** Where a closed result sits against the range published with the pick (UXN-043). */
 export function rangePosition(
   netPpm: number | null,
@@ -140,6 +131,19 @@ export type PickRowView = {
   /** Stop and aim as ppm of the reference price (the "-8%" and "+10%" of UXN-040). */
   stopPpm: number | null;
   aimPpm: number | null;
+  /**
+   * The price the pick is based on: the buy price once bought, else the pick-night close
+   * (reference); null for a masked viewer. `entryBought` tells which of the two it is.
+   */
+  entry: MoneyView | null;
+  entryBought: boolean;
+  /** The day of that close (the day the pick was published); null for a masked viewer. */
+  lastCloseD: string | null;
+  /**
+   * The current price (delayed quote if newer than the close, else the close) with its change from
+   * the entry. `money` and `label` are null for a masked viewer (percentage only); null when no price.
+   */
+  now: { money: MoneyView | null; changePpm: number | null; label: string | null } | null;
   /** Suggested size and the loss if the stop is hit (before fees); null for a masked user. */
   size: MoneyView | null;
   riskAtStop: MoneyView | null;
@@ -176,6 +180,8 @@ export type PickRowView = {
   expectedGainPpm: number | null;
   /** UXN-302: published time and data basis, e.g. "Published 18:10 on 2026-11-01 from closing prices". */
   stamp: string;
+  /** D-984: picked by a candidate measure being tested (rule version CAND.*), shown with a badge. */
+  candidate: boolean;
 };
 
 export type PicksModel = {
@@ -196,7 +202,7 @@ async function successFor(env: LoaderEnv, profile: string, d: string) {
   const minN = Number(await getConfig(env.main, "pick_success_min_n"));
   const confidence = Number(await getConfig(env.main, "cif_confidence"));
   const s = await modelSuccess(env.main, { market: env.market, profile, d, minN, confidence });
-  // ARN-123 (D-956): the money basis the closed results were settled on ("Price only" for rows from
+  // ARN-123 (D-1785): the money basis the closed results were settled on ("Price only" for rows from
   // before M18, "Total return" for later ones, both named when the record holds both).
   const bases = await env.main.execute({
     sql: `SELECT DISTINCT outcome_basis FROM pick_outcome
@@ -250,6 +256,21 @@ async function pickCodesInRange(
   return r.rows.map((x) => ({ d: String(x.d), code: String(x.code) }));
 }
 
+/** The current-price view of one pick: change from the entry (exact ppm); no price or time when masked. */
+function nowView(
+  n: { micro: bigint; label: string } | undefined,
+  entry: unknown,
+  masked: boolean,
+  currency: string,
+): PickRowView["now"] {
+  if (n === undefined) return null;
+  return {
+    money: masked ? null : money(n.micro.toString(), currency),
+    changePpm: ppmOf(n.micro, entry),
+    label: masked ? null : n.label,
+  };
+}
+
 export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksModel> {
   const market = env.market;
   const profiles = await profileNames(env);
@@ -273,7 +294,7 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
   const rows = await env.main.execute({
     sql: `SELECT p.rank, p.code, p.family, p.tier, p.label, p.buy_max_micro, p.stop_micro, p.aim_micro,
                  p.valid_until_d, p.bad_ppm, p.typical_ppm, p.good_ppm, p.n_similar, p.aim_reach_ppm,
-                 p.time_frame_sessions, p.based_on_json, p.card_id, p.created_at, i.name, p.reference_micro,
+                 p.time_frame_sessions, p.rule_version, p.based_on_json, p.card_id, p.created_at, i.name, p.reference_micro,
                  p.size_micro, p.risk_micro, o.state AS o_state, o.entry_micro AS o_entry,
                  o.exit_reason AS o_reason, o.net_ppm AS o_net,
                  (SELECT c.reason FROM pick_check c WHERE c.market = p.market AND c.d = p.d
@@ -289,10 +310,17 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
   const t = (s: string): string => (kit ? maskText(s, kit.aliases, kit.lookup) : s);
   const names = await soft(() => strategyNames(env.main), {});
   const statuses = await soft(() => familyStatusMap(env.main, market, d), null);
+  const nowOf = await loadPickNow(
+    env.main,
+    market,
+    rows.rows.map((x) => String(x.code)),
+  );
   const picks: PickRowView[] = rows.rows.map((x) => {
     const code = String(x.code);
+    // D-984: a candidate pick has no past trades; its stored cases are the plan, so none is shown
+    const candidate = isCandidateRule(String(x.rule_version ?? ""));
     const scenario =
-      x.bad_ppm === null || x.typical_ppm === null || x.good_ppm === null
+      candidate || x.bad_ppm === null || x.typical_ppm === null || x.good_ppm === null
         ? null
         : {
             badPpm: Number(x.bad_ppm),
@@ -301,6 +329,7 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
             n: Number(x.n_similar),
           }; // money-float-ok: SQL integer columns
     const valid = String(x.valid_until_d);
+    const bought = x.o_state === "bought" && x.o_entry !== null;
     // No stored p exists for a V1 pick, so the display is always "no_history" until a family is allowed.
     const chance = chanceDisplay({
       status: statuses?.[String(x.family) as keyof typeof statuses] ?? "shadow",
@@ -328,6 +357,16 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
         : null,
       stopPpm: ppmOf(x.stop_micro, x.reference_micro),
       aimPpm: ppmOf(x.aim_micro, x.reference_micro),
+      entry: masked
+        ? null
+        : bought
+          ? money(String(x.o_entry), env.currency)
+          : x.reference_micro === null
+            ? null
+            : money(String(x.reference_micro), env.currency),
+      entryBought: !masked && bought,
+      lastCloseD: masked ? null : d,
+      now: nowView(nowOf.get(code), bought ? x.o_entry : x.reference_micro, masked, env.currency),
       size: masked ? null : money(String(x.size_micro), env.currency),
       riskAtStop: masked ? null : money(String(x.risk_micro), env.currency),
       outcome:
@@ -358,6 +397,7 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
       chanceText: chanceLine(chance),
       expectedGainPpm: scenario ? scenario.typicalPpm : null,
       stamp: pickStamp(x.created_at === null ? null : String(x.created_at), d, masked),
+      candidate,
     };
   });
   const stale = dateStaleness(d, todayD(env), STALE_DAYS);
@@ -653,6 +693,7 @@ export const HISTORY_FILTERS = [
   "loss",
   "not_traded",
   "waiting",
+  "candidate",
   "all",
 ] as const;
 export type HistoryFilter = (typeof HISTORY_FILTERS)[number];
@@ -660,11 +701,57 @@ export type HistoryFilter = (typeof HISTORY_FILTERS)[number];
 // against the buy price (the latest close of the code, read with the price_bar key)
 const LAST_CLOSE_MICRO = `(SELECT pb.c FROM price_bar pb WHERE pb.market = o.market AND pb.code = o.code
   ORDER BY pb.d DESC LIMIT 1) * 1000000`;
-const RESULT_WHERE: Record<"profit" | "loss", string> = {
-  profit: `((o.state = 'closed' AND o.net_ppm > 0) OR (o.state = 'bought' AND ${LAST_CLOSE_MICRO} > o.entry_micro))`,
-  loss: `((o.state = 'closed' AND o.net_ppm < 0) OR (o.state = 'bought' AND ${LAST_CLOSE_MICRO} < o.entry_micro))`,
+// The price of an open trade is the one its row shows: a delayed quote newer than the close when there is
+// one (the `live` CTE of loadPickHistory), else the last close. Display only (ARN-021).
+const resultWhere = (kind: "profit" | "loss", live: boolean): string => {
+  const price = live
+    ? `COALESCE((SELECT lv.micro FROM live lv WHERE lv.code = o.code), ${LAST_CLOSE_MICRO})`
+    : LAST_CLOSE_MICRO;
+  return kind === "profit"
+    ? `((o.state = 'closed' AND o.net_ppm > 0) OR (o.state = 'bought' AND ${price} > o.entry_micro))`
+    : `((o.state = 'closed' AND o.net_ppm < 0) OR (o.state = 'bought' AND ${price} < o.entry_micro))`;
 };
-const HISTORY_STATE: Record<Exclude<HistoryFilter, "all" | "profit" | "loss">, string> = {
+
+/** Newer-than-close delayed prices of the codes of open picks (chunks of 200, no OFFSET). */
+async function liveOpenPrices(env: LoaderEnv, market: string): Promise<Map<string, bigint>> {
+  const out = new Map<string, bigint>();
+  const open = await soft(
+    async () =>
+      (
+        await env.main.execute({
+          sql: "SELECT DISTINCT code FROM pick_outcome WHERE market = ? AND kind = 'pick' AND state = 'bought'",
+          args: [market],
+        })
+      ).rows.map((r) => String(r.code)),
+    [] as string[],
+  );
+  for (let i = 0; i < open.length; i += LATEST_READ_MAX) {
+    const chunk = open.slice(i, i + LATEST_READ_MAX);
+    const closes = await soft(
+      async () =>
+        (
+          await env.main.execute({
+            sql: `SELECT pb.code, pb.d FROM price_bar pb
+                  WHERE pb.market = ? AND pb.code IN (${chunk.map(() => "?").join(", ")})
+                    AND pb.d = (SELECT MAX(x.d) FROM price_bar x WHERE x.market = pb.market AND x.code = pb.code)`,
+            args: [market, ...chunk],
+          })
+        ).rows,
+      [],
+    );
+    const closeD = new Map(closes.map((c) => [String(c.code), String(c.d)]));
+    const quotes = await soft(() => readLatestQuotes(env.main, market, chunk), new Map());
+    for (const code of chunk) {
+      const live = newerThanClose(quotes.get(code), closeD.get(code) ?? null);
+      if (live) out.set(code, live.lastMicro);
+    }
+  }
+  return out;
+}
+const HISTORY_STATE: Record<
+  Exclude<HistoryFilter, "all" | "profit" | "loss" | "candidate">,
+  string
+> = {
   open: "bought",
   closed: "closed",
   not_traded: "missed",
@@ -695,6 +782,8 @@ export type HistoryRow = {
   changePpm: number | null;
   /** A closed trade's result after costs. */
   netPpm: number | null;
+  /** D-984: a pick of a candidate measure being tested. */
+  candidate: boolean;
 };
 
 export type HistoryModel = {
@@ -742,8 +831,19 @@ export async function loadPickHistory(
   const after = masked ? null : parseHistoryCursor(q.cursor);
   const where = ["o.market = ?", "o.profile = ?", "o.kind = 'pick'"];
   const args: (string | number)[] = [market, q.profile];
+  let withSql = "";
+  const withArgs: (string | number)[] = [];
   if (q.filter === "profit" || q.filter === "loss") {
-    where.push(RESULT_WHERE[q.filter]);
+    const livePx = await liveOpenPrices(env, market);
+    if (livePx.size > 0) {
+      withSql = `WITH live(code, micro) AS (VALUES ${[...livePx].map(() => "(?, ?)").join(", ")}) `;
+      for (const [code, micro] of livePx) withArgs.push(code, Number(micro)); // money-float-ok: micro-AUD within 2^53
+    }
+    where.push(resultWhere(q.filter, livePx.size > 0));
+  } else if (q.filter === "candidate") {
+    // D-984: the picks of the candidate measures being tested, in every state
+    where.push("p.rule_version LIKE ?");
+    args.push(`${CANDIDATE_RULE_PREFIX}.%`);
   } else if (q.filter !== "all") {
     where.push("o.state = ?");
     args.push(HISTORY_STATE[q.filter]);
@@ -754,14 +854,15 @@ export async function loadPickHistory(
   }
   args.push(HISTORY_PAGE + 1);
   const r = await env.main.execute({
-    sql: `SELECT o.d, o.rank, o.code, o.state, o.entry_d, o.entry_micro, o.exit_d, o.exit_micro,
-                 o.exit_reason, o.net_ppm, p.buy_max_micro, p.stop_micro, p.aim_micro, i.name
+    sql: `${withSql}SELECT o.d, o.rank, o.code, o.state, o.entry_d, o.entry_micro, o.exit_d, o.exit_micro,
+                 o.exit_reason, o.net_ppm, p.buy_max_micro, p.stop_micro, p.aim_micro, i.name,
+                 p.rule_version
           FROM pick_outcome o JOIN pick p ON p.market = o.market AND p.d = o.d
             AND p.profile = o.profile AND p.rank = o.rank
           LEFT JOIN instrument i ON i.market = o.market AND i.code = o.code
           WHERE ${where.join(" AND ")}
           ORDER BY o.d DESC, o.rank LIMIT ?`,
-    args,
+    args: [...withArgs, ...args],
   });
   const page = r.rows.slice(0, HISTORY_PAGE);
   const profiles = await profileNames(env);
@@ -836,6 +937,7 @@ export async function loadPickHistory(
             : dayCount(entryD, today),
       changePpm: entry !== null && to !== null ? changeOf(entry, to) : null,
       netPpm: status === "closed" ? toNum(x.net_ppm) : null,
+      candidate: isCandidateRule(String(x.rule_version ?? "")),
     };
   });
   const last = page[page.length - 1];

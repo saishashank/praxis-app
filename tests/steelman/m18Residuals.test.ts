@@ -1,5 +1,5 @@
 // @vitest-environment node
-// M18 OPS-111 (D-977), the closed residuals of M11-lite that live in the night stage:
+// M18 OPS-111 (D-1794), the closed residuals of M11-lite that live in the night stage:
 //   (3) a night that crashed before its row resumes with the same counters as an uninterrupted one;
 //   (4) a critic that was never called leaves an llm_call row of its own (provider none);
 //   (6) an unexpected error is counted apart from no_model and the card says so.

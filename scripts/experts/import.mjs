@@ -14,8 +14,8 @@ import { FORMAT, validateSeed } from "./validate.mjs";
 
 export { FORMAT };
 export const MIN_SCHEMA = 22;
-/** Format-2 files write 0039 tables (expert_source_licence, cluster_expression). */
-export const MIN_SCHEMA_V2 = 39;
+/** Format-2 files write 0042 tables (expert_source_licence, cluster_expression). */
+export const MIN_SCHEMA_V2 = 42;
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const REQUIRED = ["manifest.json", "experts.json", "items.json", "claims.json", "clusters.json"];
 const OPTIONAL = ["calls.json", "licence-check.json", "call-proposals.json", "expressions.json"];

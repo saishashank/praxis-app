@@ -26,7 +26,7 @@ Merge commits are `git log --merges --oneline 6c556e7a..HEAD` of `build`, oldest
 
 | Task | Merge commit | Decisions | Test files (main ones) |
 | --- | --- | --- | --- |
-| A1 migration 0038, keys, preferences, seed states | `79345acf` (Opus accepted with fixes) | D-1236, D-1240 to D-1245 | `tests/db/0038_m21_owner_tools.test.ts`, `tests/config/m21Keys.test.ts`, `tests/acceptance/v3/{at76,at77Hash}.test.ts` |
+| A1 migration 0041, keys, preferences, seed states | `79345acf` (Opus accepted with fixes) | D-1236, D-1240 to D-1245 | `tests/db/0041_m21_owner_tools.test.ts`, `tests/config/m21Keys.test.ts`, `tests/acceptance/v3/{at76,at77Hash}.test.ts` |
 | A2 hidden routes in the proxy **F** | `a3c6aea2` (Opus accepted with fixes) | D-1210, D-1214, D-1215, D-1246, D-1247 | `tests/http/{hiddenRoutes,appRoutes}.test.ts`, `tests/auth/ownerToolsGuard.test.ts`, `tests/security/ownerToolsLazy.test.ts`, `tests/acceptance/v3/at77.test.ts` |
 | U0 UXN-319 cross-check | `28ae5db7` (with the C7 re-rule) | D-1201 (amended) | `scripts/ci/ui-crosscheck.test.mjs` (written by Z, D-1329: U0 had left it out) |
 | C1 review frame, title case, index table, skeletons **F** | `797cfc86` (Opus accepted with fixes) | D-1203, D-1206, D-1255 to D-1259 | `tests/review/{pages,reviewFrame}.test.tsx`, `tests/view/displayName.test.ts`, `tests/market/indexTable.test.tsx` |
@@ -88,7 +88,7 @@ Opus review notes for each **F** task: the review fixes of A1, A2, B1, B3, E1 an
 | Zero `OFFSET` | `tests/security/noOffsetPaging.test.ts` at zero exceptions |
 | No staging path, `ASX_LIVE` off, $0, no secret | no staging workflow touched; `worker/` not edited; no new provider; no credential field (`noCredentialField.test.ts`); gitleaks on the remote run: clean (run 44024571945, secrets job green) |
 | Decision index, config reference, architecture regenerated | `node scripts/ci/decision-index.mjs` (848 decisions in `docs/V2_decisions.md`), `node scripts/ci/config-reference.mjs --check`, `node scripts/architecture/generate.mjs` (548 elements, 648 edges), all re-run on the exit tree |
-| Schema pins at 38 | the schema pins read 38 since 0038 (`tests/backup/core.test.ts`, `tests/db/0038_m21_owner_tools.test.ts`) |
+| Schema pins at 38 | the schema pins read 38 since 0041 (`tests/backup/core.test.ts`, `tests/db/0041_m21_owner_tools.test.ts`) |
 | Market literals at 0 | `npm run test:market-literals`: 0 |
 | AU identity | §3 |
 | No internal code in Owner-read text | §7 |

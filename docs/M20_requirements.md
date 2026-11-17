@@ -20,10 +20,10 @@ It has six kinds of work, in the order the spec gives:
 Facts that bind every M20 task:
 
 - **Production `markets_enabled` stays `["AU"]` for all of V3.** BLD-050: "`markets_enabled` in production stays `["AU"]` for the whole of V3 (AT-68 on every CI run), and the switch-on is an Owner step after the merge (MKT-111, §20.6)." PRD-040 says the same.
-- **Nothing IN or US is written to production Turso.** PRD-040: "no IN/US row is written to Turso". MKT-110 (b): "the data layer refuses any write whose `market` is not enabled (`MarketNotEnabled`, logged as an incident)". The write guard is in M19 (D-995, `db/migrations/main/0035_m19_market_guard.sql`).
+- **Nothing IN or US is written to production Turso.** PRD-040: "no IN/US row is written to Turso". MKT-110 (b): "the data layer refuses any write whose `market` is not enabled (`MarketNotEnabled`, logged as an incident)". The write guard is in M19 (D-1810, `db/migrations/main/0038_m19_market_guard.sql`).
 - **History extracts go to `D:\Projects\Praxis\data\history\in\` and `D:\Projects\Praxis\data\history\us\`, and are never committed.** D-927: "IN/US development, validation and holdout history lives at `D:\Projects\Praxis\data\history\in\` and `\us\` (never committed, like the M15 extract); CI fixtures live in `praxis-app-fixtures` only." Neither folder exists yet (the folder holds asic, fred, index, m15, meta, rba, yahoo).
 - **`tools/m20/PLAN.md` is named by the spec and does not exist.** MKT-112 names "plan `tools/m20/PLAN.md`, same shape as `v2/tools/m15/PLAN.md`". RESUME §3 says "`tools/m20/PLAN.md` written first". The expected home is `D:\Projects\Praxis\wt-v3-req\Requirement\v3\tools\m20\PLAN.md`; the `Requirement\v3\` folder has only `BACKLOG.md`, `README.md`, `RESUME.md` and `spec\`. The reference `Requirement\v2\tools\m15\PLAN.md` exists. See Gap 1.
-- **Build decisions start at D-1091.** BLD-054 and the M19 extract say D-951, but the M19 design (D-1005) corrected the start to D-991 and M19 used D-991…D-1090. See Gap 4.
+- **Build decisions start at D-1091.** BLD-054 and the M19 extract say D-1780, but the M19 design (D-1005) corrected the start to D-1806 and M19 used D-1806…D-1090. See Gap 4.
 - **AU stays byte-identical.** A-20: "Every CXA-002 parameterisation leaves AU behaviour byte-identical (AT-32/AT-50 hash); any difference is a defect, not a tuning." The AT-32 and AT-50 baseline is `tests/acceptance/v3/replay-hash.baseline.json` (written at M19 step 0, never rewritten).
 - **The M19 gate must hold.** BLD-050: "M20 starts only after M19 exits (AT-67, AT-68 green)." See Gap 5.
 
@@ -38,7 +38,7 @@ Facts that bind every M20 task:
 - **PRD-046 No staging.** Verification is CI plus prod-safe flags. The recorded-day CI job is the staging replacement (TST-138).
 - **PRD-047 ASX Worker live fetch stays off.** "`ASX_LIVE` stays off in the Worker." M20 touches `worker/src/clock.ts` and `worker/src/localtime.ts` for IN/US slots and zones, and must not re-enable the ASX poll.
 - **PRD-048 One pull request.** M20 opens no PR and asks the Owner nothing (BLD-048). Decisions are recorded in `docs/M20_design.md` and listed in the V3 PR.
-- **MKT-107 / AT-67.** "A literal market code, timezone, cut-off time, currency, parcel floor, tick table, settlement cycle or index code outside the profile loader and the profile seed is a defect (AT-67 static test)." AT-67 allows the loader, the seed and the migrations. The M19 allow-list (`src/lib/market/**`, `src/lib/market/seed/allow.mjs`, and `EXTRA_ALLOW` in `scripts/ci/market-literals.mjs`) and the D-1000 scan rule apply. An unused allow-list entry fails the scan (M19 exit §1).
+- **MKT-107 / AT-67.** "A literal market code, timezone, cut-off time, currency, parcel floor, tick table, settlement cycle or index code outside the profile loader and the profile seed is a defect (AT-67 static test)." AT-67 allows the loader, the seed and the migrations. The M19 allow-list (`src/lib/market/**`, `src/lib/market/seed/allow.mjs`, and `EXTRA_ALLOW` in `scripts/ci/market-literals.mjs`) and the D-1813 scan rule apply. An unused allow-list entry fails the scan (M19 exit §1).
 - **BLD-051 / CXA-015 research honesty.** "Every lineage has at most **one** holdout look, recorded in a `holdout_look` registry" (CXA-015). MKT-112: "the holdout rule (CXA-015) applies per market." No M20 task may look at a holdout twice.
 - **MKT-110 three proofs hold while M20 adds code.** The M19 proofs (dispatch refusal, write guard and nightly invariant, UI filter and 404) must stay green on every CI run (AT-68). M19 design (line 225) says a test that plants an off-market row must use `plantOffMarketRow` (defined in `tests/db/helpers.ts`).
 - **Owner-facing times are in Melbourne time.** UXN-313: "every market time is shown as local **and** Melbourne". Project memory: report all times to the Owner in Melbourne time.
@@ -53,7 +53,7 @@ Facts that bind every M20 task:
 - **BLD-050 India and US together (O-83).** "M20 starts only after M19 exits (AT-67, AT-68 green)." "Neither track may write to production."
 - **BLD-051 Research honesty.** Every research task pre-registers its hypothesis, grid point, split and n before any computation. M20 research surfaces are CXA-002 (j) per-market calibration and CXA-012 measurements (Section E).
 - **BLD-053 Progress recording.** BUILD_SETUP §9 "V3" heading with rows "V3 current milestone" and "V3 last step done / next step". "V3 PR opened" is written only when the PR exists (M20 does not write it).
-- **BLD-054 Decision numbering (D-924).** "Build decisions continue from D-951 in `docs/M19_design.md`" (the wording was for M18). The live rule is D-1005: M20 decisions start at **D-1091** in `docs/M20_design.md`. `docs/07_decision_log.md` is not edited for V3.
+- **BLD-054 Decision numbering (D-924).** "Build decisions continue from D-1780 in `docs/M19_design.md`" (the wording was for M18). The live rule is D-1005: M20 decisions start at **D-1091** in `docs/M20_design.md`. `docs/07_decision_log.md` is not edited for V3.
 - **BLD-055 Milestone package.** "Haiku requirements extract (`docs/M<nn>_requirements.md`) → design + decisions (`docs/M<nn>_design.md`) → tasks with tests first → Haiku review → Opus/Fable acceptance of the **F** items → `docs/M<nn>_exit_evidence.md` with every AT of the milestone and its evidence → §9 row update."
 
 ---
@@ -79,7 +79,7 @@ The ch. 12 M20 row, verbatim: "Shared: `tools/m20/PLAN.md` + extract scripts →
 
 ### B.3 DAT-241 / DAT-242 profile values and completeness (IN and US)
 - **DAT-242 text:** "A profile is `complete` only when every field has a value and every [VERIFY] field has a `verified_at` date and the evidence reference (the DAT-101 report or the licence register row). The switch-on checklist (MKT-111) requires `complete`."
-- **M19 state (D-999):** "IN and US are incomplete in M19 by design". Every IN and US value is seeded with `verify = 1` and no `verified_at` (D-998 / D-999 / D-1001 in M19 design). Seeds: `src/lib/market/seed/IN.mjs`, `src/lib/market/seed/US.mjs`. `src/lib/market/profileWrite.ts` line 258: "Records the date and evidence of an unchanged [VERIFY] value (DAT-242; used from M20)."
+- **M19 state (D-999):** "IN and US are incomplete in M19 by design". Every IN and US value is seeded with `verify = 1` and no `verified_at` (D-998 / D-999 / D-1814 in M19 design). Seeds: `src/lib/market/seed/IN.mjs`, `src/lib/market/seed/US.mjs`. `src/lib/market/profileWrite.ts` line 258: "Records the date and evidence of an unchanged [VERIFY] value (DAT-242; used from M20)."
 - **Four fields are still `null` ("set at M20")** for IN and US (D-1010; tests `tests/market/completeness.test.ts` line 39 "four fields are set at M20"): `tiers`, `slippage_buckets`, `sleeve_reality_cap`, `bar_latency_p95_min`. Recorded as `null` in the seeds (`value_json = null`).
 - **Completeness test (M19):** `tests/market/completeness.test.ts` line 68 already asserts the target: "verifying every IN field with a date and a reference, and filling the four M20 fields, makes it complete".
 - **Tags:** **[VERIFY]** all IN and US values in the DAT-241 table (Section L).
@@ -121,15 +121,15 @@ The ch. 12 M20 row, verbatim: "Shared: `tools/m20/PLAN.md` + extract scripts →
 - **Tags:** **[VERIFY]** NSE main board ≈ 2,000. **[PROPOSED, D-928]** caps. MKT-104 is v1.
 - **Decisions:** D-928.
 - **Acceptance:** none named. The projection is needed before any `full` switch (MKT-111: "the quota projection with the market added fits MKT-113").
-- **Files:** `src/lib/config/keys.ts` (`universe_max` registered in M19, "read by nothing until M20" per M19 D-1001 / gap 8); Usage page (existing; guess: `src/app/(app)/usage/`). Projection code: new (guess).
+- **Files:** `src/lib/config/keys.ts` (`universe_max` registered in M19, "read by nothing until M20" per M19 D-1814 / gap 8); Usage page (existing; guess: `src/app/(app)/usage/`). Projection code: new (guess).
 
 ### B.9 MKT-111 Switch-on checklist and rollback (AT-71)
 - **Full text (MKT-111):** "The Owner switches a built market on in two steps from Settings → Region (Owner only): `off` → `data_only` (ingest, snapshots, Sentinel, shadow Cortex; no books, no e-mails) for ≥ 5 trading days with green quality verdicts, then `data_only` → `full` (books open the next trading day, BLD-030 pattern). The switch is enabled only when the market's checklist is complete: AT-M1…AT-M5 evidence for that market (§20.7), the licence register rows for every source of that market are `enabled` or `owner-accepted-risk` (DAT-120), the quota projection with the market added fits MKT-113, and AU meets MKT-105. **Rollback** is `full` → `off` in one click: existing rows are kept (forever tables stay), no new row is written, books are closed at the next session's open as a kill (CTX-028), and the audit event records the reason."
 - **D-929 (ch. 00):** "Switch-on = MKT-105 for AU + per-market checklist (AT-M evidence, licence rows, quota projection) + two-step `off → data_only (≥ 5 days) → full`; rollback `full → off` keeps rows, writes nothing new, closes books at the next open; default order India then US."
 - **M19 writer state:** `src/lib/config/keys.ts` line 2229: "The only writer of `enabled` is the M20 two-step (none in M19)." `src/lib/data/controls.ts` line 552: "the Owner's switch-on is the M20 two-step."
-- **UXN-312 M20 part (D-1001):** "M20 the checklist with links, the quota projection, the two-step and rollback."
+- **UXN-312 M20 part (D-1814):** "M20 the checklist with links, the quota projection, the two-step and rollback."
 - **Tags:** MKT-105, BLD-030, DAT-120, CTX-028 are v1 IDs (Gap 6). The 5-day rule and the checklist are in-spec.
-- **Decisions:** D-929; D-994 (two switches: `markets_enabled` is the DB column `market.enabled`; `PRAXIS_MARKETS_ENABLED` is the production assertion; the Owner sets the variable with the M20 switch-on, M19 design §9).
+- **Decisions:** D-929; D-1809 (two switches: `markets_enabled` is the DB column `market.enabled`; `PRAXIS_MARKETS_ENABLED` is the production assertion; the Owner sets the variable with the M20 switch-on, M19 design §9).
 - **Acceptance:** AT-71 (Section H).
 - **Files:** `src/lib/config/keys.ts` (`markets_enabled`, `market_mode`), `src/lib/data/controls.ts` (the writer), `src/app/(app)/settings/region/` (page, `region.ts` lines 30 and 125 carry the M20 checklist comments). `src/components/shell/RegionMenu.tsx` (switcher, M19 filter). Rollback writes an audit event (guess: existing audit helper, to find).
 
@@ -193,14 +193,14 @@ Verbatim rows of ch. 20 §20.2 (Need | Candidate source | Terms / risk to verify
 ### C.5 ARN-120 Settlement and deployable cash (IN, T+1) **F**
 - **Full text:** "`settlement_days` from the profile replaces the T+2 constant in CTX-027 and ARN-025 (IN and US T+1); the replay enforces the same (AT-M4). The stall predicate (ARN-071) uses the market's `parcel_floor`."
 - **AT-69 IN clause:** "T+1 proceeds fund a buy the next session but not the same session".
-- **M19 sites to change (M19 design, D-1003 / gap list):** `closeBooks.ts`, `settledCash.ts`, `replay/ledger.ts` (the T+2 arithmetic). Paths found: `src/lib/arena/closeBooks.ts`, `src/lib/cortex/gates/settledCash.ts`; `replay/ledger.ts` not found under that name (**guess**: `src/lib/replay/`).
+- **M19 sites to change (M19 design, D-1816 / gap list):** `closeBooks.ts`, `settledCash.ts`, `replay/ledger.ts` (the T+2 arithmetic). Paths found: `src/lib/arena/closeBooks.ts`, `src/lib/cortex/gates/settledCash.ts`; `replay/ledger.ts` not found under that name (**guess**: `src/lib/replay/`).
 - **Tags:** ARN-071, ARN-025 are v1 (Gap 6). **F**.
 - **Acceptance:** AT-69 (T+1 funding), AT-M4 (replay).
 
 ### C.6 DAT-241 IN field values (ch. 20 §20.1 table, IN column, verbatim)
 | Field | IN [VERIFY] (verbatim) | M20 action |
 |---|---|---|
-| exchange, timezone | NSE (+ BSE codes), Asia/Kolkata | verify; Worker zone table (D-1004) |
+| exchange, timezone | NSE (+ BSE codes), Asia/Kolkata | verify; Worker zone table (D-1817) |
 | session (local) | 09:15–15:30 (pre-open auction 09:00–09:08) | verify; `session` class (D-1090 notes the session-time class) |
 | opening_auction_window | single open 09:15 after the 09:00–09:08 call auction | CXA-002 (c) |
 | announcement hours (local) | NSE/BSE filings 24 h, bulk after close [VERIFY] | verify |
@@ -239,11 +239,11 @@ Verbatim rows of ch. 20 §20.2 (Need | Candidate source | Terms / risk to verify
 - **AT-75 IN clause (ch. 22 line 43):** "an IN fixture night applies T+1, the ₹ parcel floor, the single open and band-locking".
 - **Files (M19 stubs to replace):** `src/lib/cortex/profileReaders.ts` (`classificationReader` line 28, `haltReader` line 33, `categoryMapReader` line 43; each throws `NotBuiltM20`), `src/lib/cortex/stage.ts` line 327 (`profileReaders(profile); // CXA-002 e, f, g: an M20 rule set throws ...`), `tests/cortex/profileStubs.test.ts` (asserts the IN and US throws; replaced in M20).
 
-### C.8 Worker zone and slots for IN (D-1004, D-1046, D-1089)
-- **D-1004 text (M19):** "M20 adds the Kolkata (no DST) and New York tables with the DST tests of TST-103."
+### C.8 Worker zone and slots for IN (D-1817, D-1826, D-1089)
+- **D-1817 text (M19):** "M20 adds the Kolkata (no DST) and New York tables with the DST tests of TST-103."
 - **D-1089 text (M19 design line 167):** "When M20 adds Kolkata and New York the minute test must use the slot market's own zone (`Slot` gains `tz`), or an IN slot fires at the Sydney time."
-- **D-1046 text (M19):** a market "whose zone is not in `ZONE_RULES` (IN, US until M20) is left out of the table with the log line `clock: skipped market <CODE> unusable`, never guessed (D-1004 `unsupported zone`)."
-- **Files:** `worker/src/localtime.ts` (line 62: "M20 adds the Kolkata and New York rules"; `ZONE_RULES`), `worker/src/clock.ts` (Sydney-only slot minutes, D-1089), `worker/src/schedule.ts` (`slotsFor(row)`, `slotTable(rows)`, D-1045), `src/lib/market/clockTables.mjs` (`ZONE_RULES`, `FEED_SLOT_TIMES`; comment "tests at M20" / "another market's feed slots are added with its data work at M20").
+- **D-1826 text (M19):** a market "whose zone is not in `ZONE_RULES` (IN, US until M20) is left out of the table with the log line `clock: skipped market <CODE> unusable`, never guessed (D-1817 `unsupported zone`)."
+- **Files:** `worker/src/localtime.ts` (line 62: "M20 adds the Kolkata and New York rules"; `ZONE_RULES`), `worker/src/clock.ts` (Sydney-only slot minutes, D-1089), `worker/src/schedule.ts` (`slotsFor(row)`, `slotTable(rows)`, D-1825), `src/lib/market/clockTables.mjs` (`ZONE_RULES`, `FEED_SLOT_TIMES`; comment "tests at M20" / "another market's feed slots are added with its data work at M20").
 
 ### C.9 IN sleeve cap, tiers, latency (the four M20 fields)
 - `sleeve_reality_cap` IN: "set at M20 (SEBI margin rules)" (ch. 20 §20.1 table). Not set in M19.
@@ -308,7 +308,7 @@ The V3 files do not define these; they are V2 ch. 06 (`Requirement/v2/spec/06_da
 - **US `sleeve_reality_cap`:** "set at M20 (Reg T 2×)" (not set in M19).
 
 ### D.8 US Worker zone (America/New_York)
-- D-1004 M20 adds the New York table with "the DST tests of TST-103" (Section C.8). US slot minutes also need `Slot.tz` (D-1089).
+- D-1817 M20 adds the New York table with "the DST tests of TST-103" (Section C.8). US slot minutes also need `Slot.tz` (D-1089).
 
 ### D.9 CXA-012 US survivorship
 - "US: the survivorship caveat (DAT-130/131, CXA-012) in every report until own snapshots satisfy ARN-082" (MKT-112). "US and AU early years assumed" (CXA-012 haircut assumed, not measured). "US replays carry the survivorship caveat" is the report requirement.
@@ -348,17 +348,17 @@ The V3 files do not define these; they are V2 ch. 06 (`Requirement/v2/spec/06_da
 ## G. UI and e-mail per market (UXN-312 and UXN-313, M20 part)
 
 - **UXN-312 full text (ch. 20 §20.5):** "The header switcher (UX-003) lists only **enabled** markets in production (MKT-110 c); development lists all built markets. Settings → Region → Markets (Owner only) shows every market with its MKT-114 status, the switch-on checklist (MKT-111) with each item's evidence link, the quota projection (MKT-113), and the `off` / `data_only` / `full` control with the two-step rule and the rollback button. Editors and Viewers never see IN/US rows while a market is off."
-- **M20 part of UXN-312 (D-1001):** "M20 the checklist with links, the quota projection, the two-step and rollback."
+- **M20 part of UXN-312 (D-1814):** "M20 the checklist with links, the quota projection, the two-step and rollback."
 - **UXN-313 full text (ch. 20 §20.5):** "Every figure carries its market's currency symbol and formatting (₹ with Indian digit grouping; US$); every market time is shown as local **and** Melbourne ("09:15 IST · 14:45 Melbourne"), the freshness line stays in trading words ("End of day, Fri 6 Nov"; the plain-words rule of D-884/D-919/D-922); the family badge colours (UXN-311) are the same across markets; the Evening Review and Morning Brief gain one section per enabled market, never pooled (MKT-103), sent on that market's trading days (EML-016)."
 - **M19 state (for M20 to finish):**
-  - D-1002: `CurrencyFormat` per profile (`A$` en-AU, `₹` en-IN with lakh/crore grouping, `US$` en-US).
-  - D-1063: `formatMarketTime(iso, marketTz, prefs?)` (`health/format.ts`): "the M20 per-market pages call it."
-  - D-1061: "`runReviewSend` builds the one review of the date for the first enabled market until the per-market sections of M20 (`paused`/`no_market` when none is enabled)."
+  - D-1815: `CurrencyFormat` per profile (`A$` en-AU, `₹` en-IN with lakh/crore grouping, `US$` en-US).
+  - D-1830: `formatMarketTime(iso, marketTz, prefs?)` (`health/format.ts`): "the M20 per-market pages call it."
+  - D-1828: "`runReviewSend` builds the one review of the date for the first enabled market until the per-market sections of M20 (`paused`/`no_market` when none is enabled)."
   - `src/lib/email/brief.ts` line 64: "Per-market sections in the template are M20."
   - `src/lib/email/templates/reviewWords.ts` line 9: "per-market sections arrive with M20."
-  - `src/lib/review/send.ts` line 238: "One review per date, built for the first enabled market until the per-market sections of M20 (D-1061)."
-- **Reader for M20 UI:** `src/components/shell/RegionMenu.tsx` (switcher, M19 filter), `src/app/(app)/settings/region/` (page), `src/app/(app)/settings/region.ts` (line 30 and 125: "the checklist with evidence links is M20, D-1001"), `src/lib/ui/loaders/*.ts` (loaders; M19 filter, D-997 `resolveMarket`).
-- **Dual time rule:** D-1063 gives "YYYY-MM-DD HH:MM <zone> · HH:MM Melbourne" for a non-AU zone.
+  - `src/lib/review/send.ts` line 238: "One review per date, built for the first enabled market until the per-market sections of M20 (D-1828)."
+- **Reader for M20 UI:** `src/components/shell/RegionMenu.tsx` (switcher, M19 filter), `src/app/(app)/settings/region/` (page), `src/app/(app)/settings/region.ts` (line 30 and 125: "the checklist with evidence links is M20, D-1814"), `src/lib/ui/loaders/*.ts` (loaders; M19 filter, D-1812 `resolveMarket`).
+- **Dual time rule:** D-1830 gives "YYYY-MM-DD HH:MM <zone> · HH:MM Melbourne" for a non-AU zone.
 
 ---
 
@@ -382,7 +382,7 @@ The V3 files do not define these; they are V2 ch. 06 (`Requirement/v2/spec/06_da
 
 ### H.5 AT-68 IN/US off in production (every CI run)
 - **Pass condition (ch. 14):** "Production configuration (`markets_enabled = ["AU"]`): dispatch, write, UI — (a) master clock and every market-taking workflow refuse IN/US; (b) `MarketNotEnabled` on a planted IN write + incident; nightly row-by-market invariant 0 and alarms on a planted row; (c) no IN/US item on any page, loader, e-mail or switcher; IN/US routes 404; Editor/Viewer walks `leaks()` empty; Owner Markets row reads "Built — off in production"."
-- **M20 must keep it green.** New IN/US pages and loaders must sit behind `resolveMarket` (D-997). The M20 switch-on code path must not run while `markets_enabled` is `["AU"]`.
+- **M20 must keep it green.** New IN/US pages and loaders must sit behind `resolveMarket` (D-1812). The M20 switch-on code path must not run while `markets_enabled` is `["AU"]`.
 - **M19 evidence:** `docs/test-reports/AT-68.md` (the AT table of `docs/M19_exit_evidence.md` lists it as "CI and CI recorded-day").
 
 ### H.6 AT-75 IN and US clauses (ch. 22 line 43; ch. 14 V3)
@@ -395,8 +395,8 @@ The V3 files do not define these; they are V2 ch. 06 (`Requirement/v2/spec/06_da
 
 ### H.8 AT-85 Test completeness (kept green)
 - "AU/IN/US profile fixtures run" (ch. 14 V3 AT-85 summary; ch. 26 AT-85: "the market matrix runs AU/IN/US profile fixtures").
-- **TST-139 (ch. 26):** "the recorded-day job runs AU in `full` and IN/US in `off` (the production shape) **and** one IN and one US recorded day in `data_only` (the development shape)". The IN and US `data_only` recorded days need fixtures in `praxis-app-fixtures`, which M20 creates (D-1085: "The `data_only` recorded days for IN and US stay M20 (fixtures in `praxis-app-fixtures`), a recorded partial, not a stub.").
-- **Files:** `tests/market/profiles/IN.json` and `US.json` (exist, equal their seeds, D-1085); `scripts/market/gen-fixtures.mjs` (`--check`); `e2e/` and `tests/` matrix config (location: M19 TST-139).
+- **TST-139 (ch. 26):** "the recorded-day job runs AU in `full` and IN/US in `off` (the production shape) **and** one IN and one US recorded day in `data_only` (the development shape)". The IN and US `data_only` recorded days need fixtures in `praxis-app-fixtures`, which M20 creates (D-1843: "The `data_only` recorded days for IN and US stay M20 (fixtures in `praxis-app-fixtures`), a recorded partial, not a stub.").
+- **Files:** `tests/market/profiles/IN.json` and `US.json` (exist, equal their seeds, D-1843); `scripts/market/gen-fixtures.mjs` (`--check`); `e2e/` and `tests/` matrix config (location: M19 TST-139).
 
 ### H.9 AT-32 / AT-50 replay hash
 - Unchanged by M20 (A-20). M20's first IN or US-reading change to the night must record "the manifest change as a decided, visible change" (D-1016 follow-up).
@@ -421,7 +421,7 @@ The V3 files do not define these; they are V2 ch. 06 (`Requirement/v2/spec/06_da
 
 | Key | Default (production) | Bounds | Edit | Ref | M20 work |
 |---|---|---|---|---|---|
-| markets_enabled | `["AU"]` | subset of built markets | E (production) / O via the Markets two-step (MKT-111) | MKT-110, MKT-111 | two-step writer; env `PRAXIS_MARKETS_ENABLED` set only at switch-on (D-994) |
+| markets_enabled | `["AU"]` | subset of built markets | E (production) / O via the Markets two-step (MKT-111) | MKT-110, MKT-111 | two-step writer; env `PRAXIS_MARKETS_ENABLED` set only at switch-on (D-1809) |
 | market_mode (per market) | AU `full`; IN `off`; US `off` | off / data_only / full | O (two-step, checklist) | MKT-109, MKT-111 | two-step writer |
 | mkt.<CODE>.decision_cutoff | AU 18:10 Melbourne; IN/US per DAT-241 | HH:MM local | — (profile seed; change = counted trial) | CXA-002 a | verify IN and US |
 | mkt.<CODE>.settlement_days | AU 2; IN 1; US 1 | 0–3 | — | CXA-002 b | ARN-120 |
@@ -466,11 +466,11 @@ Other ch. 00 decisions that are M20 and not M19 (ch. 00 progress text): "D-927 (
 
 ### K.1 Named in the brief (quoted in full from `docs/M19_design.md`)
 
-- **D-1016** (line 121): "- **D-1016** Cortex schema hash (A1, found by the step-0 baseline): the night's input manifest carries `schemaSha`, the sha256 of the table names (`src/lib/cortex/stage.ts`), so any migration that adds a table changes every manifest id and with it `cortex_night`, `cortex_decision`, `cortex_feature_daily` and `input_manifest` in the AT-32 world. The three market-profile tables (`market_profile*`, 0034) are configuration a night never reads and are left out of that hash (`name NOT LIKE 'market_profile%'`), so the AU manifests, and the AT-32 baseline, stay byte-identical; the baseline file is not rewritten. A later M19/M20 migration that adds a data table must either do the same or record the manifest change as a decision (Fable review, F task B1). Review (Fable, 2026-11-12): accepted for M19 (`schema_sha` is write-only metadata; nothing reads, compares or dedupes on it; production AU manifests keep their pre-0034 value). Follow-up for M20, when the night starts reading the profile tables: replace the `sqlite_master` scan in `loadStageRows` with a fixed list of the tables the night reads (name + column names), and re-record the AT-32 baseline as a decided, visible change."
-- **D-1086** (line 164): "- **D-1086** M19 exit review follow-up, wrapper (Fable, 2026-11-12): wrap the script client factories and the Worker's `pipeline()` with `wrapClient`/`marketRefusalReporter` (a shared `scriptDb()`) at M20, before any IN/US write path exists (see D-1020)."
+- **D-1016** (line 121): "- **D-1016** Cortex schema hash (A1, found by the step-0 baseline): the night's input manifest carries `schemaSha`, the sha256 of the table names (`src/lib/cortex/stage.ts`), so any migration that adds a table changes every manifest id and with it `cortex_night`, `cortex_decision`, `cortex_feature_daily` and `input_manifest` in the AT-32 world. The three market-profile tables (`market_profile*`, 0037) are configuration a night never reads and are left out of that hash (`name NOT LIKE 'market_profile%'`), so the AU manifests, and the AT-32 baseline, stay byte-identical; the baseline file is not rewritten. A later M19/M20 migration that adds a data table must either do the same or record the manifest change as a decision (Fable review, F task B1). Review (Fable, 2026-11-12): accepted for M19 (`schema_sha` is write-only metadata; nothing reads, compares or dedupes on it; production AU manifests keep their pre-0037 value). Follow-up for M20, when the night starts reading the profile tables: replace the `sqlite_master` scan in `loadStageRows` with a fixed list of the tables the night reads (name + column names), and re-record the AT-32 baseline as a decided, visible change."
+- **D-1086** (line 164): "- **D-1086** M19 exit review follow-up, wrapper (Fable, 2026-11-12): wrap the script client factories and the Worker's `pipeline()` with `wrapClient`/`marketRefusalReporter` (a shared `scriptDb()`) at M20, before any IN/US write path exists (see D-1818)."
 - **D-1087** (line 165): "- **D-1087** One `--market` resolver (Fable F1, M20): `src/lib/arena/marketFlag.ts` (D-1032) delegates to `resolveScriptMarket` (`scriptMarket.mjs`, D-1050) and `guard.mjs` re-exports its `assertMarketEnabled`, so there is one refusal vocabulary (`refused: market required` vs `market required` today). Harmless while one market is enabled."
 - **D-1088** (line 166): "- **D-1088** One home-seed helper (Fable F3, M20): `homeMarket.mjs` stays the constants facade but derives every value from `homeProfile()` (`staticProfile.mjs`); its own `slotsProjection` call goes. No byte change (verified: the six `HOME_*` values equal the profile's)."
-- **D-1089** (line 167): "- **D-1089** Worker slot zone (Fable F4, M20, under D-1045): `clock.ts` compares slot minutes on the Sydney clock only; safe in M19 because IN/US zones are not in `ZONE_RULES` (D-1046). When M20 adds Kolkata and New York the minute test must use the slot market's own zone (`Slot` gains `tz`), or an IN slot fires at the Sydney time."
+- **D-1089** (line 167): "- **D-1089** Worker slot zone (Fable F4, M20, under D-1825): `clock.ts` compares slot minutes on the Sydney clock only; safe in M19 because IN/US zones are not in `ZONE_RULES` (D-1826). When M20 adds Kolkata and New York the minute test must use the slot market's own zone (`Slot` gains `tz`), or an IN slot fires at the Sydney time."
 - **D-1090** (line 168): "- **D-1090** Facts the AT-67 scan does not see (Fable F5, M20): `sizing.ts` `STALL_FLOOR_SLIPPAGE_BPS` duplicates the AU tick table's `stall_floor_bps`; the session-time class omits 09:58, 10:32, 15:32 and 18:00; the allow-list entries `WorkerSlotsForm.tsx`, `TimeSeriesChart.tsx` (`A$` default), `view/costPlans.ts` and the `yahoo_fetch.py` defaults are per-market facts to parameterise (the batch-1 and index workflows still pass no suffix or currency, D-1034); `stage.ts` and `cortexReplay.ts` pass `angles` without `anglesForProfile` (AU-only replay, D-1031). Each is an M20 task line."
 
 **Where each lands:** D-1016 → B.10 / Section E (`loadStageRows`, AT-32 manifest re-record); D-1086 → Section B.x / Gap 17 (script factories and Worker `pipeline()`); D-1087 → `src/lib/arena/marketFlag.ts`, `scriptMarket.mjs`, `guard.mjs`; D-1088 → `src/lib/market/homeMarket.mjs`, `staticProfile.mjs`; D-1089 → `worker/src/clock.ts`, `Slot` gets `tz`; D-1090 → `src/lib/arena/sizing.ts`, `WorkerSlotsForm.tsx`, `TimeSeriesChart.tsx`, `view/costPlans.ts`, `scripts/ingest/yahoo_fetch.py`, `scripts/backfill/fetch_prices.py`, `src/lib/cortex/stage.ts`, `cortexReplay.ts`.
@@ -479,28 +479,28 @@ Other ch. 00 decisions that are M20 and not M19 (ch. 00 progress text): "D-927 (
 
 | D-nnn (M19 line) | The M20 part, quoted from the M19 text |
 |---|---|
-| D-994 (line 100) | "The only writer of `enabled` is the M20 two-step (none in M19)." |
+| D-1809 (line 100) | "The only writer of `enabled` is the M20 two-step (none in M19)." |
 | D-998 (line 104) | "IN and US `built` (M19 built the model and the proofs; their data work is M20)" |
 | D-999 (line 105) | "IN and US are incomplete in M19 by design (gaps 4, 7, 17)" |
-| D-1001 (line 107) | "M20 the checklist with links, the quota projection, the two-step and rollback. CXA-002 (a) — AU `bar_latency_p95_min` is today's measured value; IN/US `null` [VERIFY] until M20's 10-night measurement." |
-| D-1003 (line 109) | "IN/US amounts are ARN-119 at M20" (currency-denominated keys lose their `A$` labels) |
-| D-1004 (line 110) | "M20 adds the Kolkata (no DST) and New York tables with the DST tests of TST-103." |
+| D-1814 (line 107) | "M20 the checklist with links, the quota projection, the two-step and rollback. CXA-002 (a) — AU `bar_latency_p95_min` is today's measured value; IN/US `null` [VERIFY] until M20's 10-night measurement." |
+| D-1816 (line 109) | "IN/US amounts are ARN-119 at M20" (currency-denominated keys lose their `A$` labels) |
+| D-1817 (line 110) | "M20 adds the Kolkata (no DST) and New York tables with the DST tests of TST-103." |
 | D-1010 (line 116) | "`null` means "set at M20" (IN and US `tiers`, `slippage_buckets`, `sleeve_reality_cap`, `bar_latency_p95_min`)" |
 | D-1016 (line 121) | see K.1 |
-| D-1020 (line 125) | "wrapping the factories (a shared `scriptDb()`) is M20 (D-1086)." |
+| D-1818 (line 125) | "wrapping the factories (a shared `scriptDb()`) is M20 (D-1086)." |
 | D-1031 (line 152) | "any other value throws `not built (M20): <what> <value>`, `NotBuiltM20`" |
 | D-1033 (line 149) | "A market whose table is not built (IN and US) throws `not built (M20)`." |
-| D-1046 (line 134) | "a market whose zone is not in `ZONE_RULES` (IN, US until M20) is left out of the table with the log line `clock: skipped market <CODE> unusable`" |
+| D-1826 (line 134) | "a market whose zone is not in `ZONE_RULES` (IN, US until M20) is left out of the table with the log line `clock: skipped market <CODE> unusable`" |
 | D-1051 (line 139) | "These modules are home-market modules until M20 hands each a `MarketProfile`" |
-| D-1061 (line 143) | "until the per-market sections of M20" |
-| D-1063 (line 145) | "No AU page uses another form; the M20 per-market pages call it." |
-| D-1085 (line 163) | "The `data_only` recorded days for IN and US stay M20 (fixtures in `praxis-app-fixtures`), a recorded partial, not a stub." |
+| D-1828 (line 143) | "until the per-market sections of M20" |
+| D-1830 (line 145) | "No AU page uses another form; the M20 per-market pages call it." |
+| D-1843 (line 163) | "The `data_only` recorded days for IN and US stay M20 (fixtures in `praxis-app-fixtures`), a recorded partial, not a stub." |
 | D-1086 to D-1090 | K.1 |
 
 Also in the M19 text (not a numbered decision): the `trading_calendar` note (M19 design line 220, Gap 10), the `markets_enabled` / `PRAXIS_MARKETS_ENABLED` note (line 222, B.9), the `plantOffMarketRow` note (line 225, Section "Hard constraints"), the Worker local-time stub (line 226, C.8), and the "No Owner prompt" note (line 230: "every M20 reader is a tested `not built (M20)` stub (PRD-039)").
 
 ### K.3 Items in M19's exit that M20 inherits
-- The M19 "Gaps" and "Not in M19" list in `docs/M19_requirements.md` (the brief's source) assign to M20: MKT-111, MKT-112, MKT-113, MKT-109 (switch-on gate), DAT-243 to DAT-247, ARN-116 to ARN-120, CXA-002 (j), AT-69 to AT-71, AT-M1…AT-M5 (dev), UXN-318 (M21 per its row), and "D-929, D-927, D-928 build decisions for switch-on, history path, caps. M20." Note: M19 requirements file states "D-951" numbering (stale, Gap 4).
+- The M19 "Gaps" and "Not in M19" list in `docs/M19_requirements.md` (the brief's source) assign to M20: MKT-111, MKT-112, MKT-113, MKT-109 (switch-on gate), DAT-243 to DAT-247, ARN-116 to ARN-120, CXA-002 (j), AT-69 to AT-71, AT-M1…AT-M5 (dev), UXN-318 (M21 per its row), and "D-929, D-927, D-928 build decisions for switch-on, history path, caps. M20." Note: M19 requirements file states "D-1780" numbering (stale, Gap 4).
 
 ---
 
@@ -508,7 +508,7 @@ Also in the M19 text (not a numbered decision): the `trading_calendar` note (M19
 
 | # | Item | What must be verified | Spec source named |
 |---|---|---|---|
-| L1 | MKT-107 count | (M19 closed it; re-count if any new literal enters) | ch. 20 MKT-107; D-991 |
+| L1 | MKT-107 count | (M19 closed it; re-count if any new literal enters) | ch. 20 MKT-107; D-1806 |
 | L2 | DAT-241 IN and US fields (every row) | each value, with `verified_at` and evidence | ch. 20 §20.1 (DAT-241) |
 | L3 | DAT-242 completeness | `complete` only when every `verify = 1` field has date and reference | ch. 20 §20.1 (DAT-242) |
 | L4 | DAT-243 IN sources (Yahoo `.NS`/`.BO`, O-26) | IN tickers covered by O-26 personal-use basis | ch. 20 §20.2; A-18 |
@@ -601,7 +601,7 @@ Not M20 (listed here so the orchestrator does not start them): Polymarket and Ka
 1. **`tools/m20/PLAN.md` does not exist.** The spec names it (MKT-112; RESUME §3 "written first"; README folder map). The `Requirement\v3\` folder has no `tools\` folder. The M15 reference `Requirement\v2\tools\m15\PLAN.md` exists. The first M20 task is to write the plan.
 2. **History folders do not exist.** `D:\Projects\Praxis\data\history\in\` and `\us\` are absent. Present: `asic`, `fred`, `index`, `m15`, `meta`, `rba`, `yahoo`.
 3. **DAT-224…226 and AT-38 are not in the V3 files.** The brief expected them in `23_llm_and_data_delta.md`; ch. 23 has no EDGAR text. They are V2 text (`Requirement/v2/spec/06_data_delta.md` and `14_acceptance_delta.md` line 13), quoted in D.4 and H.4.
-4. **Decision numbering conflict.** `docs/M19_requirements.md` (the brief's template) says "Build decisions in this milestone start at D-951" and quotes BLD-054 for M19. `docs/M19_design.md` D-1005 corrects it: M18 used D-951…D-990, so M19 started at D-991, and M19 used D-991…D-1090. This extract uses **D-1091** for M20, consistent with D-1005.
+4. **Decision numbering conflict.** `docs/M19_requirements.md` (the brief's template) says "Build decisions in this milestone start at D-1780" and quotes BLD-054 for M19. `docs/M19_design.md` D-1005 corrects it: M18 used D-1780…D-1805, so M19 started at D-1806, and M19 used D-1806…D-1090. This extract uses **D-1091** for M20, consistent with D-1005.
 5. **The M19 gate is not recorded as green on the remote.** `docs/M19_exit_evidence.md` records the exit tree `d476057d` and says the next step is "push `build`, check CI, then M20 requirements extract." BLD-050 requires "M20 starts only after M19 exits (AT-67, AT-68 green)." The orchestrator must confirm CI on `build` before M20 tasks start.
 6. **Many IDs cited in the M20 rows have no text in the V3 extract.** From v1 or V2 (their text must be read at build): DAT-010, DAT-101, DAT-120, DAT-121, DAT-130/131, DAT-160, DAT-232, DAT-234, DAT-236, ARN-001, ARN-025, ARN-031, ARN-032, ARN-049, ARN-071, ARN-082, AGT-011, AGT-011a (the rule is quoted in DAT-245), AGT-020 (categories listed in DAT-245), CTX-010…028, CTX-040, CTX-043, CTX-044, CTX-050…054, CTX-016, CTX-022a, MKT-103, MKT-104, MKT-105, MKT-106, BLD-024, BLD-030, EML-016, OPS-061 (v1 text read at line 58, partial), PLT-071, PLT-073, SEC-112, D-238, D-239, D-242, D-285, D-296, D-297, D-346, FAM-102, O-23, O-26, O-29, O-60, O-79, O-81, A-D2-07/08, A-D3-09, A-D3-10, A-D4-05, A-D8-04/06, PRD-031, NFR-023, VAL-112, TST-103, TST-109.
 7. **AT-M1…AT-M5 text is v1 and partly superseded.** V1 ch. 14 is the source. AT-M0 is replaced by the switch-on checklist (§20.7). AT-M5 names the v1 status `active`; MKT-114 changed the status set (`not started → in build → testing → built → active ⇄ paused`).
@@ -618,12 +618,12 @@ Not M20 (listed here so the orchestrator does not start them): Polymarket and Ka
 15. **Rounding and FX rule for the seeds.** ARN-119 and DAT-241 say the IN seed is "A$600 at activation-day FX close rounded to ₹1,000" and the US seed "rounded to US$10". DAT-241 names the RBA daily rates as the FX source for IN and US as well as AU. The spec does not say which rate series converts INR or USD at the activation day; the orchestrator decides and records it.
 16. **`sleeve_reality_cap` and `tiers` have no formula.** IN "set at M20 (SEBI margin rules)", US "set at M20 (Reg T 2×)", tiers "thresholds in ₹ set at M20 from the extract", ARN-118 "ADV buckets are set from each market's extract at M20 so that the bucket boundaries fall at the same ADV percentiles as AU's." The method is in the spec; the values are not.
 17. **M19 items the spec does not place.** D-1086 (script factory wrapper) and D-1087 (one `--market` resolver) are M19 follow-ups marked M20. The spec does not mention them. They are build hygiene recorded in M19; they are included here because the M19 decision text says "at M20".
-18. **Worker IN and US slot minutes.** D-1089 says the minute test must use the slot's own zone. The spec gives the batch schedule as "close + 60 / + 100 / + 130 min" (DAT-241 batch schedule row) and does not give the IN and US feed slot times. The D-1046 `FEED_SLOT_TIMES` values for IN and US are not in the spec.
+18. **Worker IN and US slot minutes.** D-1089 says the minute test must use the slot's own zone. The spec gives the batch schedule as "close + 60 / + 100 / + 130 min" (DAT-241 batch schedule row) and does not give the IN and US feed slot times. The D-1826 `FEED_SLOT_TIMES` values for IN and US are not in the spec.
 19. **D-1090 sizing constant.** `sizing.ts` `STALL_FLOOR_SLIPPAGE_BPS` duplicates the AU `stall_floor_bps`. The IN and US values are not given in the spec.
 20. **AT-M1 needs a DAT-101 workflow.** The spec says "on a workflow with `markets_enabled` limited to the test run and **no production database**". No workflow file is named. The build designs it (guess: `.github/workflows/`).
 21. **`SOURCE_HOSTS` for IN and US.** DAT-253 adds `asic.gov.au` and `ssrn.com`. AT-81 (M18) refuses any host outside `SOURCE_HOSTS`. The spec does not list the NSE, BSE, EDGAR, FINRA, Nasdaq, SEC, RBI, MOSPI or Stooq hosts. The build must add them as the source rows pass DAT-101, and the spec does not say how.
 22. **EDGAR User-Agent contact.** DAT-224 says the contact "is held as configuration in the secret store, never in the spec or repo (SEC-110)". The value is an input from the Owner and must not be invented. Setting it is an Owner step (or a secret-store task the orchestrator cannot do alone); the M20 code must refuse to call EDGAR without it.
-23. **Stale M19 pointers.** The M19 requirements file says "D-951" for M19 (its header, line 3) and its Gaps list (gap 6) assigns `CXA-002 (j)` to M20. Both are carried over here as M20 work; the D-951 start is superseded by D-1005.
+23. **Stale M19 pointers.** The M19 requirements file says "D-1780" for M19 (its header, line 3) and its Gaps list (gap 6) assigns `CXA-002 (j)` to M20. Both are carried over here as M20 work; the D-1780 start is superseded by D-1005.
 24. **Owner steps after merge.** Listed in the V3 PR (ch. 14 V3 "Owner-executed tests after the V3 merge"): switch IN or US to `data_only` and later `full` through the Markets page (AT-71 live); the first market section appears in the Evening Review. These are not M20 build tasks.
 
 ---
@@ -647,16 +647,16 @@ Not M20 (listed here so the orchestrator does not start them): Polymarket and Ka
 - **Profile data:** the four "set at M20" fields for IN and US (`tiers`, `slippage_buckets`, `sleeve_reality_cap`, `bar_latency_p95_min`), and every IN and US `verify = 1` value (D-999, D-1010). `tests/market/completeness.test.ts` line 68 is the target test.
 - **Stubs to replace (each throws `not built (M20)`):** `src/lib/cortex/profileReaders.ts` (`classificationReader`, `haltReader`, `categoryMapReader`), `src/lib/arena/costs.ts` (lines 112–117), `src/lib/arena/slippage.ts` (line 27), `src/lib/market/staticProfile.mjs` (lines 70–75), `src/lib/market/calendar` readers in `src/lib/data/calendar.ts` (line 53), `worker/src/localtime.ts` (line 62). Their tests assert the throw and must change in the same commit: `tests/cortex/profileStubs.test.ts`, `tests/arena/profileParams.test.ts` (lines 124–131), `tests/cortex/profileParams.test.ts` (lines 77–88), `tests/config/m19Keys.test.ts` (line 142).
 - **Test fixtures:** tests that plant off-market rows use `plantOffMarketRow` (`tests/db/helpers.ts`); a direct insert throws (M19 design line 225). M20 tests planting IN or US rows follow the same rule.
-- **Guard list frozen at schema 34:** `GUARD_BASE_VERSION`; "a later migration that adds such a table adds its own two triggers, and `tests/db/0035_m19_market_guard.test.ts` fails until it does" (D-1022). M20 migrations that add a market-keyed table must add triggers.
+- **Guard list frozen at schema 37:** `GUARD_BASE_VERSION`; "a later migration that adds such a table adds its own two triggers, and `tests/db/0038_m19_market_guard.test.ts` fails until it does" (D-1820). M20 migrations that add a market-keyed table must add triggers.
 - **Cortex manifest hash (D-1016):** replace the `sqlite_master` scan in `loadStageRows` with a fixed table list when the night reads profile tables; re-record the AT-32 baseline as a visible change.
 - **Replay tests:** `stage.ts` and `cortexReplay.ts` pass `angles` without `anglesForProfile` (D-1090, D-1031).
-- **Scripts:** `--market` resolver (D-1087), script factory wrapper (D-1086, D-1020), Python fetchers' `suffix` and `currency` (D-1034, D-1090).
-- **Worker:** Kolkata and New York tables with DST tests (D-1004, D-1046, TST-103), `Slot.tz` (D-1089).
+- **Scripts:** `--market` resolver (D-1087), script factory wrapper (D-1086, D-1818), Python fetchers' `suffix` and `currency` (D-1034, D-1090).
+- **Worker:** Kolkata and New York tables with DST tests (D-1817, D-1826, TST-103), `Slot.tz` (D-1089).
 - **Home seed helper:** `src/lib/market/homeMarket.mjs` derives from `homeProfile()` (D-1088).
-- **Recorded days:** IN and US `data_only` recorded days need fixtures in `praxis-app-fixtures` (D-1085, TST-139).
-- **Evening Review and Morning Brief:** per-market sections (D-1061, UXN-313, MKT-103, EML-016).
-- **Per-market pages:** `formatMarketTime` call sites (D-1063).
-- **Switch-on writer:** the two-step writer and rollback (D-994, MKT-111); `markets_enabled` and `PRAXIS_MARKETS_ENABLED` change only at the Owner's switch-on (M19 design §9).
+- **Recorded days:** IN and US `data_only` recorded days need fixtures in `praxis-app-fixtures` (D-1843, TST-139).
+- **Evening Review and Morning Brief:** per-market sections (D-1828, UXN-313, MKT-103, EML-016).
+- **Per-market pages:** `formatMarketTime` call sites (D-1830).
+- **Switch-on writer:** the two-step writer and rollback (D-1809, MKT-111); `markets_enabled` and `PRAXIS_MARKETS_ENABLED` change only at the Owner's switch-on (M19 design §9).
 - **Calendar decision:** whether `trading_calendar` IN and US rows are configuration (M19 design line 220; Gap 10).
 - **Scan allow-list:** the D-1090 entries (`WorkerSlotsForm.tsx`, `TimeSeriesChart.tsx`, `view/costPlans.ts`, `yahoo_fetch.py` defaults) are per-market facts to parameterise (M19 exit §1).
 - **M19 exit evidence to re-check:** `docs/test-reports/AT-67.md`, `AT-68.md`, `AT-75.md` (the AU part, with IN and US rows due in M20).

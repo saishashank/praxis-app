@@ -14,7 +14,7 @@ export type GlyphBarProps = {
   targetCents?: number;
   /** Accessible name prefix, e.g. the strategy's name. */
   label: string;
-  /** ISO 4217 code of the amounts (D-1002). */
+  /** ISO 4217 code of the amounts (D-1815). */
   currency: string;
 };
 

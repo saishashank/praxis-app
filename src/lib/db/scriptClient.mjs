@@ -1,4 +1,4 @@
-// The database client of every Actions script and command line (M20 A2, D-1123; closes D-1020 and D-1086): a libsql
+// The database client of every Actions script and command line (M20 A2, D-1123; closes D-1818 and D-1086): a libsql
 // client wrapped with the write guard's error mapping (src/lib/market/guard.mjs `wrapClient`) and the refusal
 // reporter, so a script write for a market that is not enabled surfaces as the typed `MarketNotEnabled` and opens
 // ONE S2 `market_not_enabled` incident, exactly as the app's `mainDb()` does. Plain ESM (no alias, no TypeScript):

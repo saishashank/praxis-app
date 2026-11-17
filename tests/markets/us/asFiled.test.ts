@@ -157,7 +157,7 @@ describe("factAsOf: the AT-38 pair", () => {
     await expect(db.execute("DELETE FROM fundamental_fact")).rejects.toThrow(/append-only/);
   });
 
-  it("the database refuses facts of a market that is off (the 0036 guard)", async () => {
+  it("the database refuses facts of a market that is off (the 0039 guard)", async () => {
     await db.execute("UPDATE market SET enabled = 0 WHERE code = 'US'");
     await expect(appendFacts(db, parse().slice(0, 1))).rejects.toThrow(/MarketNotEnabled/);
   });

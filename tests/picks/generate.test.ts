@@ -2,7 +2,10 @@
 // AGT-113 pick generator (pure): ch.16 acceptance criteria, caps, ordering, determinism.
 import { describe, expect, it } from "vitest";
 import {
+  bandCuts,
+  cmpForProfile,
   compareRankScore,
+  riskBand,
   generatePicks,
   labelRank,
   nthSessionAfter,
@@ -46,6 +49,18 @@ const universe: UniverseCode[] = [
   { code: "ZZ04", tier: "U2", vol: 0.04 },
   { code: "ZZ05", tier: "U3", vol: 0.05 },
   { code: "ZZ06", tier: "U1", vol: 0.015 },
+];
+
+// D-1000: every code a small company, so all of them are Aggressive (the band of the plain tests)
+const wild: UniverseCode[] = universe.map((u) => ({ ...u, tier: "U3" }));
+// ZZ01 sits in the middle third of volatility (Balanced); the others fill the calm and wild thirds
+const mid: UniverseCode[] = [
+  { code: "ZZ01", tier: "U1", vol: 0.02 },
+  { code: "ZZ02", tier: "U1", vol: 0.01 },
+  { code: "ZZ03", tier: "U1", vol: 0.01 },
+  { code: "ZZ04", tier: "U1", vol: 0.03 },
+  { code: "ZZ05", tier: "U1", vol: 0.03 },
+  { code: "ZZ06", tier: "U1", vol: 0.03 },
 ];
 
 function ctx(over: Partial<GenerateContext> = {}): GenerateContext {
@@ -94,9 +109,7 @@ describe("AGT-113 acceptance (ch.16 section 16.21)", () => {
   });
 
   it("derives the buy zone, aim and first buy session from stored numbers only", () => {
-    const [p] = generatePicks([mk({ code: "ZZ01" })], ctx()).filter(
-      (x) => x.profile === "balanced",
-    );
+    const [p] = generatePicks([mk({ code: "ZZ01" })], ctx());
     expect(p!.buyMaxMicro).toBe(slippageFill(REF, "buy", 5_000_000_000n).fillMicro);
     expect(p!.aimMicro).toBe(REF + (REF * 110_000n) / 1_000_000n);
     // D-187: D is a Friday; the stored date is the first session it can be bought (Monday), then
@@ -110,9 +123,14 @@ describe("AGT-113 acceptance (ch.16 section 16.21)", () => {
     const sameFamily = ["ZZ01", "ZZ02", "ZZ03", "ZZ06"].map((code, i) =>
       mk({ code, rankScore: `${9 - i}/1` }),
     );
-    const picks = generatePicks(sameFamily, ctx()).filter((p) => p.profile === "aggressive");
+    const picks = generatePicks(sameFamily, ctx({ universe: wild })).filter(
+      (p) => p.profile === "aggressive",
+    );
     expect(picks.length).toBe(params.picks.picksMaxPerFamily);
-    const dup = generatePicks([mk({ code: "ZZ01" }), mk({ code: "ZZ01", family: "F4" })], ctx());
+    const dup = generatePicks(
+      [mk({ code: "ZZ01" }), mk({ code: "ZZ01", family: "F4" })],
+      ctx({ universe: wild }),
+    );
     expect(dup.filter((p) => p.profile === "aggressive")).toHaveLength(1);
   });
 
@@ -132,7 +150,7 @@ describe("AGT-113 acceptance (ch.16 section 16.21)", () => {
       mk({ code: "ZZ03", rankScore: "50/1", label: "UNVALIDATED", family: "F5" }),
       mk({ code: "ZZ06", rankScore: "60/1", label: "UNVALIDATED", family: "F3" }),
     ];
-    const codes = generatePicks(list, ctx())
+    const codes = generatePicks(list, ctx({ universe: wild }))
       .filter((p) => p.profile === "aggressive")
       .map((p) => p.code);
     expect(codes).toEqual(["ZZ02", "ZZ06", "ZZ03", "ZZ01"]);
@@ -160,22 +178,89 @@ describe("profile rules and caps", () => {
     expect(con.length).toBeGreaterThan(0);
   });
 
-  it("drops families whose median drop-from-peak is above 10 % (or unknown) for Balanced", () => {
-    const list = [
-      mk({ code: "ZZ01", medianDropPpm: 120_000 }),
-      mk({ code: "ZZ02", medianDropPpm: null, family: "F4" }),
-      mk({ code: "ZZ03", medianDropPpm: 100_000, family: "F5" }),
+  it("D-1000: puts every stock in exactly one band and never in two profiles", () => {
+    const cuts = bandCuts(universe);
+    expect(cuts).toEqual({ low: 0.015, high: 0.03 });
+    expect(riskBand("U3", 0.001, cuts)).toBe("aggressive"); // small is always Aggressive
+    expect(riskBand("U1", 0.04, cuts)).toBe("aggressive"); // the most volatile third
+    expect(riskBand("U2", 0.04, cuts)).toBe("aggressive");
+    expect(riskBand("U1", 0.015, cuts)).toBe("conservative"); // calm and large
+    expect(riskBand("U2", 0.01, cuts)).toBe("balanced"); // calm but only mid-size
+    expect(riskBand("U1", 0.02, cuts)).toBe("balanced");
+    expect(riskBand("U1", null, cuts)).toBe("balanced"); // unknown volatility is never calm
+    expect(riskBand("U3", null, cuts)).toBe("aggressive");
+    expect(riskBand("U1", 0.01, { low: null, high: null })).toBe("balanced");
+    // the same stocks offered to every profile: each shows up in one profile only
+    const picks = generatePicks(many(), ctx());
+    const seen = new Map<string, string>();
+    for (const p of picks) {
+      expect(seen.get(p.code) ?? p.profile).toBe(p.profile);
+      seen.set(p.code, p.profile);
+    }
+    const of = (profile: string) => picks.filter((p) => p.profile === profile).map((p) => p.code);
+    expect(of("conservative").sort()).toEqual(["ZZ01", "ZZ06"]);
+    expect(of("balanced").sort()).toEqual(["ZZ02", "ZZ03"]);
+    expect(of("aggressive").sort()).toEqual(["ZZ04", "ZZ05"]);
+  });
+
+  it("D-1000: the band wins over the tier caps and holds for candidate (extra) inputs too", () => {
+    const extra = [mk({ code: "ZZ01" }), mk({ code: "ZZ02", family: "F4" })];
+    const picks = generatePicks([], ctx(), { inputs: extra, perProfile: 5 });
+    expect(picks.map((p) => [p.profile, p.code]).sort()).toEqual([
+      ["balanced", "ZZ02"],
+      ["conservative", "ZZ01"],
+    ]);
+  });
+
+  it("D-1001: ranks Aggressive by good case, Balanced by typical return per unit of risk, Conservative by mildest bad case", () => {
+    const sc = (badPpm: number, typicalPpm: number, goodPpm: number) => ({
+      n: 80,
+      badPpm,
+      typicalPpm,
+      goodPpm,
+    });
+    const aggr = [
+      mk({ code: "ZZ01", scenario: sc(-60_000, 30_000, 110_000), family: "F1" }),
+      mk({ code: "ZZ02", scenario: sc(-60_000, 30_000, 250_000), family: "F2" }),
+      mk({ code: "ZZ03", scenario: sc(-60_000, 30_000, 180_000), family: "F3" }),
     ];
-    const balanced = generatePicks(list, ctx())
-      .filter((p) => p.profile === "balanced")
-      .map((p) => p.code);
-    expect(balanced).toEqual(["ZZ03"]);
-    const aggressive = generatePicks(list, ctx()).filter((p) => p.profile === "aggressive");
-    expect(aggressive).toHaveLength(3);
+    expect(aggr.sort(cmpForProfile("aggressive")).map((x) => x.code)).toEqual([
+      "ZZ02",
+      "ZZ03",
+      "ZZ01",
+    ]);
+    // same typical case, a tighter stop = more return per unit of risk
+    const bal = [
+      mk({ code: "ZZ01", stopMicro: 9_200_000n }), // 8 % away
+      mk({ code: "ZZ02", stopMicro: 9_600_000n }), // 4 % away
+      mk({ code: "ZZ03", stopMicro: 9_200_000n, scenario: sc(-60_000, 60_000, 110_000) }), // 8 % away, double
+    ];
+    expect(bal.sort(cmpForProfile("balanced")).map((x) => x.code)).toEqual([
+      "ZZ02",
+      "ZZ03",
+      "ZZ01",
+    ]);
+    const con = [
+      mk({ code: "ZZ01", scenario: sc(-60_000, 30_000, 110_000) }),
+      mk({ code: "ZZ02", scenario: sc(-10_000, 20_000, 110_000) }),
+      mk({ code: "ZZ03", scenario: sc(-10_000, 25_000, 110_000) }),
+    ];
+    expect(con.sort(cmpForProfile("conservative")).map((x) => x.code)).toEqual([
+      "ZZ03",
+      "ZZ02",
+      "ZZ01",
+    ]);
+    // a label still comes first, and the order is the same whichever way the inputs arrive
+    const labelled = [
+      mk({ code: "ZZ01", label: "FAILED", scenario: sc(-1_000, 90_000, 900_000) }),
+      mk({ code: "ZZ02", scenario: sc(-60_000, 30_000, 110_000) }),
+    ];
+    expect(labelled.sort(cmpForProfile("aggressive")).map((x) => x.code)).toEqual(["ZZ02", "ZZ01"]);
   });
 
   it("sizes by the smaller of the position cap and the risk cap", () => {
-    const picks = generatePicks([mk({ code: "ZZ01" })], ctx());
+    const picks = generatePicks([mk({ code: "ZZ01" })], ctx({ universe: mid }));
+    expect(picks.map((p) => p.profile)).toEqual(["balanced"]);
     for (const p of picks) {
       const spec = params.picks.profiles[p.profile]!;
       const amount = BigInt(params.picks.portfolioAmounts[p.profile]!) * 1_000_000n;
@@ -188,9 +273,10 @@ describe("profile rules and caps", () => {
     const bal = picks.find((p) => p.profile === "balanced")!;
     expect(bal.sizeMicro).toBe(1_000_000_000n);
     // a stop 50 % away: the 1 % risk cap (A$100) binds, so the size is about A$200
-    const wide = generatePicks([mk({ code: "ZZ01", stopMicro: 5_000_000n })], ctx()).find(
-      (p) => p.profile === "balanced",
-    )!;
+    const wide = generatePicks(
+      [mk({ code: "ZZ01", stopMicro: 5_000_000n })],
+      ctx({ universe: mid }),
+    ).find((p) => p.profile === "balanced")!;
     expect(wide.sizeMicro).toBeGreaterThan(190_000_000n);
     expect(wide.sizeMicro).toBeLessThan(210_000_000n);
     expect(wide.riskMicro).toBeLessThanOrEqual(100_000_000n + 1n);

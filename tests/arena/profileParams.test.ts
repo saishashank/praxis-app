@@ -1,5 +1,5 @@
 // @vitest-environment node
-// M19 B2 (CXA-002 b, c, d, h; D-1003, D-1030, D-1031): the Arena, money, picks, intraday and data constants that were
+// M19 B2 (CXA-002 b, c, d, h; D-1816, D-1030, D-1031): the Arena, money, picks, intraday and data constants that were
 // AU literals are the profile's values to the byte, and every engine takes a market's own table as an argument.
 import { describe, expect, it } from "vitest";
 import {

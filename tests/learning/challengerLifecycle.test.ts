@@ -319,7 +319,7 @@ describe("limits (KB-042, ARN-005, ARN-065, ARN-085, KB-043)", () => {
 
   it("promotions: at most max_promotions_per_week (3) APPLIED per market per Melbourne ISO week; force-apply and rollback do not count", async () => {
     const { db } = await world();
-    await allowMarket(db, "US"); // M19 0035: a promotion of another market needs that market enabled to be stored
+    await allowMarket(db, "US"); // M19 0038: a promotion of another market needs that market enabled to be stored
     const promo = async (id: string, kind: string, applied: string | null, market = MARKET) => {
       await db.execute({
         sql: `INSERT INTO promotion (id, market, family, kind, from_version, to_version, challenger_id,

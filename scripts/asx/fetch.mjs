@@ -4,14 +4,14 @@
 //   companies.csv  the ASX listed-companies file (the universe import reads it once a day)
 //   history-NNN.json with --history: each listed company's latest announcements (a one-off
 //                  fill), in chunks of HISTORY_CHUNK items
-//   fetch-status.json  per-request causes for the store step (DAT-251 a, D-972): counts and codes only
+//   fetch-status.json  per-request causes for the store step (DAT-251 a, D-1789): counts and codes only
 //   companies-wikidata.csv  only when the listed-companies file failed 3 runs in a row AND the
-//                  `wikidata_asx` register row is enabled (DAT-252, D-974); one request
+//                  `wikidata_asx` register row is enabled (DAT-252, D-1791); one request
 // Politeness (DAT-122): one request at a time, MIN_GAP_MS between requests, an identifying
 // User-Agent (vars.ASX_USER_AGENT), metadata only (no PDF is fetched). A failed request is counted,
 // never retried in a loop; the commit step stores what arrived.
 //
-// DAT-251 a (D-972): every request gets a cause: ok | not_found (404) | rate_limited (429) |
+// DAT-251 a (D-1789): every request gets a cause: ok | not_found (404) | rate_limited (429) |
 // server_error (5xx and every other refusal, 401/403 included: a block must never look like a
 // delisting) | network (no answer) | parse (the body is not the JSON we expect). A 429 widens the gap
 // (Retry-After, capped at MAX_RETRY_AFTER_MS, else doubled) and the history loop stops when the run
@@ -28,7 +28,7 @@ import { companyFeedUrl, marketFeedUrl } from "../../src/lib/data/sources/asxMar
 import { convert } from "../data/universe-from-wikidata.mjs";
 
 export const COMPANIES_URL = "https://www.asx.com.au/asx/research/ASXListedCompanies.csv";
-// DAT-252 (D-974): one fixed SPARQL query against Wikidata's public endpoint. Q732670 is the
+// DAT-252 (D-1791): one fixed SPARQL query against Wikidata's public endpoint. Q732670 is the
 // Australian Securities Exchange (Wikidata search, 2026-11-11); the P414 statement with a P249
 // (ticker symbol) qualifier is the standard shape. [VERIFY] the result shape on the first enabled run.
 export const WIKIDATA_QUERY =
@@ -181,7 +181,7 @@ export async function fetchAll(o) {
     stats.companies = codesOf(csv).length;
   }
 
-  // DAT-252 (D-974): the third failed run in a row, and only when the Owner enabled the register row.
+  // DAT-252 (D-1791): the third failed run in a row, and only when the Owner enabled the register row.
   if (csv === null && (state.consecutiveFailures ?? 0) + 1 >= FALLBACK_AFTER_RUNS) {
     if (state.wikidataEnabled === true) {
       const w = await call(WIKIDATA_URL, "application/sparql-results+json");

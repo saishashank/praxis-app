@@ -1,4 +1,4 @@
-// The `--market` flag of the arena and picks command lines (M19 B2; MKT-110 a, D-996). A script that writes
+// The `--market` flag of the arena and picks command lines (M19 B2; MKT-110 a, D-1811). A script that writes
 // market-keyed rows takes `--market <CODE>` with no literal default: omitted, it uses the single enabled market
 // (and exits 2 "market required" when there is not exactly one); a market that is not enabled is refused before
 // the first write, with the fixed words `refused: market not enabled` and no run record (a run record of that

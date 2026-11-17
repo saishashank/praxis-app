@@ -22,7 +22,7 @@ export class DbError extends Error {
   }
 }
 
-/** The write guard refused a row of a market that is not enabled (D-995). Its name is the log word. */
+/** The write guard refused a row of a market that is not enabled (D-1810). Its name is the log word. */
 export class MarketNotEnabledError extends DbError {
   constructor() {
     super("market-not-enabled");
@@ -138,7 +138,7 @@ async function run(
   for (let i = 0; i < stmts.length; i += 1) {
     const r = results[i];
     if (r?.type !== "ok") {
-      // D-995: the write guard of an off market (trigger text `MarketNotEnabled <table>`) becomes a fixed word,
+      // D-1810: the write guard of an off market (trigger text `MarketNotEnabled <table>`) becomes a fixed word,
       // never the message; D-1123: and one S2 incident, reported before the throw (best effort)
       const message = r?.error?.message;
       if (typeof message === "string" && message.includes("MarketNotEnabled")) {

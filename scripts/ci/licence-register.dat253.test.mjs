@@ -1,4 +1,4 @@
-// DAT-253 (D-975) and DAT-251 c / DAT-252 (D-973, D-974): the register document lists the two new
+// DAT-253 (D-1792) and DAT-251 c / DAT-252 (D-1790, D-1791): the register document lists the two new
 // pending rows, and the RBA / ABS / Wikidata entries name the code that fetches them.
 import assert from "node:assert/strict";
 import { test } from "node:test";

@@ -1,4 +1,4 @@
-// The US (NYSE + Nasdaq) market profile seed (M19 A1; DAT-241, MKT-114, D-998, D-999, D-1001). Built, not
+// The US (NYSE + Nasdaq) market profile seed (M19 A1; DAT-241, MKT-114, D-998, D-999, D-1814). Built, not
 // complete: work status `built`, enabled 0, mode `off`; every value is the spec 20.1 [VERIFY] figure provisional
 // until M20 (`verify = 1`, `verifiedAt` null); `null` = "set at M20". Nothing in M19 reads a US value on any
 // production path (MKT-110).

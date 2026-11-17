@@ -205,7 +205,7 @@ describe("steelman boundary (ii): SQL write allowlist", () => {
 });
 
 describe("steelman boundary (iii): who may import the steelman and name its tables", () => {
-  // The readers: generated from the import graph by scripts/ci/steelman-readers.mjs (OPS-111 (9), D-977) and
+  // The readers: generated from the import graph by scripts/ci/steelman-readers.mjs (OPS-111 (9), D-1794) and
   // stored in tests/security/steelman-readers.json; a new reader is a reviewed diff of that file. Nothing
   // that decides, sizes, places, learns or picks may be on it (the forbidden checks in (i) and below).
   const IMPORTERS = new Set(

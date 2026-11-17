@@ -145,7 +145,7 @@ export type RaiseResult = {
 const safeUrl = (u: string | null | undefined): string =>
   (typeof u === "string" && u.length <= 500 ? safeSourceUrl(u) : null) ?? ASX_FALLBACK_URL;
 
-/** Raises the announcement alerts of one market, or of every enabled market when none is named (D-997). */
+/** Raises the announcement alerts of one market, or of every enabled market when none is named (D-1812). */
 export async function raiseAnnouncementAlerts(
   ctx: AlertCtx,
   o: { market?: string; limit?: number } = {},

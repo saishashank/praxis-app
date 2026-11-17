@@ -1,5 +1,5 @@
 // @vitest-environment node
-// M19 A2 (D-995; AT-68 b): the application side of the write guard. A refused insert becomes the typed
+// M19 A2 (D-1810; AT-68 b): the application side of the write guard. A refused insert becomes the typed
 // MarketNotEnabled (the class errors.mjs defines, re-exported by guard.mjs), the incident is written once, AU
 // passes, any other database error passes through unchanged, and assertMarketEnabled refuses a market that is off.
 import { createClient, type Client } from "@libsql/client";

@@ -6,7 +6,13 @@
 import type { Swot } from "@/lib/view/swot";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useState } from "react";
-import { currencyFormatFor, formatCount, formatMicro, formatPpm } from "@/lib/view/format";
+import {
+  currencyFormatFor,
+  formatCount,
+  formatDay,
+  formatMicro,
+  formatPpm,
+} from "@/lib/view/format";
 
 type Overview = {
   masked: boolean;
@@ -17,6 +23,7 @@ type Overview = {
   d: string | null;
   close: { micro: string; currency: string } | null;
   changePpm: number | null;
+  live: { priceMicro: string | null; currency: string; changePpm: number; at: string } | null;
   volume: number | null;
   announcements: Array<{ id: number; title: string; published: string; url: string | null }>;
   summary: string;
@@ -69,17 +76,33 @@ function Body({ slug }: { slug: string }) {
               <dd className="m-0 break-words">{o.sector}</dd>
             </>
           ) : null}
+          {o.live?.priceMicro ? (
+            <>
+              <dt className="text-text-muted">Delayed price, {o.live.at}</dt>
+              <dd className="m-0 font-mono" data-testid="overview-live">
+                {formatMicro(o.live.priceMicro, currencyFormatFor(o.live.currency))}
+              </dd>
+            </>
+          ) : null}
           {o.close ? (
             <>
-              <dt className="text-text-muted">End-of-day price{o.d ? ` (${o.d})` : ""}</dt>
+              <dt className="text-text-muted">
+                End-of-day price{o.d ? ` (${formatDay(o.d)})` : ""}
+              </dt>
               <dd className="m-0 font-mono">
                 {formatMicro(o.close.micro, currencyFormatFor(o.close.currency))}
               </dd>
             </>
           ) : null}
-          <dt className="text-text-muted">Day change</dt>
+          <dt className="text-text-muted">
+            {o.live ? `Change on the close, delayed ${o.live.at}` : "Day change"}
+          </dt>
           <dd className="m-0 font-mono">
-            {o.changePpm === null ? "n/a" : formatPpm(o.changePpm, { sign: "always" })}
+            {o.live
+              ? formatPpm(o.live.changePpm, { sign: "always" })
+              : o.changePpm === null
+                ? "n/a"
+                : formatPpm(o.changePpm, { sign: "always" })}
           </dd>
           <dt className="text-text-muted">Volume</dt>
           <dd className="m-0 font-mono">{formatCount(o.volume)}</dd>

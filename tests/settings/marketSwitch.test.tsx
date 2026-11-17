@@ -1,4 +1,4 @@
-// M20 S1 (AT-71, UXN-312, MKT-111, D-997): the Owner's switch-on card on Settings > Region. The Owner sees the
+// M20 S1 (AT-71, UXN-312, MKT-111, D-1812): the Owner's switch-on card on Settings > Region. The Owner sees the
 // checklist with each item's evidence, the projection and the control; the control is disabled while any item of the
 // next step is open and names the open items; the rollback asks for a reason; Editors and Viewers see nothing of it.
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
@@ -270,7 +270,7 @@ describe("loadMarketSwitch (the Owner's model, from the database)", () => {
     };
   };
 
-  it("is null for an Editor and a Viewer (D-997)", async () => {
+  it("is null for an Editor and a Viewer (D-1812)", async () => {
     for (const role of ["editor", "viewer"])
       expect(await loadMarketSwitch((await envOf(role)).env)).toBeNull();
   });

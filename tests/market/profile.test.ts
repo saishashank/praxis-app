@@ -1,5 +1,5 @@
 // @vitest-environment node
-// The market-profile loader (M19 A1; MKT-107, DAT-241, D-992, D-993). Loads AU, IN and US from a migrated
+// The market-profile loader (M19 A1; MKT-107, DAT-241, D-1807, D-1808). Loads AU, IN and US from a migrated
 // database, overlays a `mkt.<CODE>.<field>` configuration row, caches per handle and invalidates, and refuses a
 // market that is not enabled. Pure core checks (field list, codec, slots) sit beside it. AT-67, AT-75 (AU).
 import { afterEach, describe, expect, it } from "vitest";

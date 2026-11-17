@@ -1,5 +1,5 @@
 // @vitest-environment node
-// M19 B1 (CXA-002 a, b, d, h; D-1003, D-1030): the Cortex and agents constants that used to be AU literals are
+// M19 B1 (CXA-002 a, b, d, h; D-1816, D-1030): the Cortex and agents constants that used to be AU literals are
 // the profile's values, to the byte, and the engines take a market's own table or code as an argument.
 import { describe, expect, it } from "vitest";
 import { INDEX_CODE } from "@/lib/agents/candidates";

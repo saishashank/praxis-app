@@ -1,4 +1,4 @@
-// The AT-67 allow-list (D-1000): files outside `src/lib/market/**` that may hold a market literal because they
+// The AT-67 allow-list (D-1813): files outside `src/lib/market/**` that may hold a market literal because they
 // ARE a per-market rule table keyed by market code. Each entry must exist in the tree (the scanner checks).
 // scripts/ci/market-literals.mjs (stream E1) reads this list; nothing else exempts a file.
 export const MARKET_LITERAL_ALLOW = Object.freeze([

@@ -32,6 +32,15 @@ describe("picks rule sentence (D-200)", () => {
     expect(profileSentence({ tiers: ["X9"], maxPct: 5, riskPct: 1 })).toMatch(/^Picks from X9/);
     expect(profileSentence(null)).toBe("Rules for this profile are not available.");
   });
+
+  it("D-1000: a default profile says which risk band it holds, in plain words", () => {
+    const r = { tiers: ["U1"], maxPct: 5, riskPct: 1 };
+    expect(profileSentence(r, "aggressive")).toMatch(/^The most volatile and the smaller/);
+    expect(profileSentence(r, "balanced")).toMatch(/^Middle-of-the-road companies/);
+    expect(profileSentence(r, "conservative")).toMatch(/^The calmest large companies/);
+    expect(profileSentence(r, "conservative")).toContain("No more than 5% of the portfolio");
+    expect(profileSentence(r, "custom")).toMatch(/^Picks from large companies\./);
+  });
 });
 
 describe("sector names (D-200)", () => {

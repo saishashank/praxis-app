@@ -20,7 +20,7 @@ import { TrackRecordBody } from "./TrackRecordBody";
 import { HistoryBody } from "./HistoryBody";
 import { SuccessStrip } from "./SuccessStrip";
 import { PortfolioCard } from "./PortfolioCard";
-import { loadPickPortfolio } from "@/lib/ui/loaders/pickPortfolio";
+import { loadMyPortfolios } from "@/lib/ui/loaders/pickPortfolio";
 import { IntradaySection } from "./IntradaySection";
 import { SortToggle } from "./SortToggle";
 import { setPicksSortAction } from "../settings/alerts/actions";
@@ -60,12 +60,15 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
     });
   const model = await loadPicks(env, query);
   const max = await maxPerFamily(env.main);
-  const rule = profileSentence(profileRules(await pickProfilesConfig(env.main), model.profile));
+  const rule = profileSentence(
+    profileRules(await pickProfilesConfig(env.main), model.profile),
+    model.profile,
+  );
   const sort = await loadPicksSort(env);
   const picks = sortPicks(capPerFamily(model.picks, max), sort);
   const chips = model.realD ? await loadAlertChips(env, model.realD) : new Map();
   const intraday = await loadIntraday(env);
-  const portfolio = await loadPickPortfolio(env);
+  const portfolio = await loadMyPortfolios(env);
   // M21 D-1214, D-1219: the Owner's tier label and broker links ride on the tile through its `extra` slot, computed only
   // when the one hidden-route predicate says the tools are visible to this user; the module is loaded then and only then.
   const extras = (await ownerToolsVisibleTo(user))
@@ -100,7 +103,7 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
 
       {model.success ? <SuccessStrip success={model.success} profile={model.profile} /> : null}
 
-      <PortfolioCard v={portfolio} current={model.profile} />
+      <PortfolioCard v={portfolio} />
 
       {model.state === "stale" && model.staleText ? (
         <Banner tone="warning" title="Out of date">
@@ -129,6 +132,7 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
             <li key={p.id} className="min-w-0">
               <PickCard
                 pick={p}
+                profile={model.profile}
                 masked={model.masked}
                 beatsLuck={model.success?.beatsLuck ?? false}
                 chip={chips.get(`${model.realD}.${model.profile}.${p.rank}`) ?? null}

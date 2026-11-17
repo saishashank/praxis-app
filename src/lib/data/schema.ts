@@ -41,10 +41,10 @@ export const AU_COLUMNS = {
     "cutoff_time",
     "currency",
     "mode",
-    "enabled", // 0034 (M19, D-994)
-    "slots_json", // 0034 (M19, D-996)
-    "data_only_since", // 0036 (M20, D-1100)
-    "rollback_at", // 0036 (M20, D-1101)
+    "enabled", // 0037 (M19, D-1809)
+    "slots_json", // 0037 (M19, D-1811)
+    "data_only_since", // 0039 (M20, D-1100)
+    "rollback_at", // 0039 (M20, D-1101)
   ],
   trading_calendar: ["market", "d", "kind", "close_time", "confirmed", "source"],
   instrument: [
@@ -203,8 +203,8 @@ export const REFERENCE_SOURCES = [
   "index_changes_manual",
   "industry_map_manual",
   "fred", // M15 (DAT-101, D-291; migration 0019): pending, no fetcher
-  "asic_documents", // M18 (DAT-253, D-975; migration 0033): pending, links and own summary only, no fetcher
-  "ssrn_papers", // M18 (DAT-253, D-975; migration 0033): pending, abstract page links only, no fetcher
+  "asic_documents", // M18 (DAT-253, D-1792; migration 0036): pending, links and own summary only, no fetcher
+  "ssrn_papers", // M18 (DAT-253, D-1792; migration 0036): pending, abstract page links only, no fetcher
 ] as const;
 
 export type MarketMode = "off" | "data_only" | "full";

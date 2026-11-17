@@ -1,4 +1,4 @@
-// The registered source sites (DAT-253, D-975; M20 A3, D-1095): the hosts a stored link may point at, and the public
+// The registered source sites (DAT-253, D-1792; M20 A3, D-1095): the hosts a stored link may point at, and the public
 // page each is shown against. The AU entries are written here; the India and US hosts come from the per-market
 // source rows (src/lib/market/seed/{in,us}/sources.mjs), so a host is named once. A host is a domain: a subdomain
 // of it is registered too.

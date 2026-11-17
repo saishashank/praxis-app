@@ -1,4 +1,4 @@
-// DAT-252 (D-974): the Wikidata fallback engages only after 3 failed listed-companies runs in a row AND
+// DAT-252 (D-1791): the Wikidata fallback engages only after 3 failed listed-companies runs in a row AND
 // with the `wikidata_asx` register row enabled. No network: a fake fetch and a fixture export.
 import assert from "node:assert/strict";
 import { test } from "node:test";

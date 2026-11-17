@@ -86,7 +86,7 @@ describe("Steelman component", () => {
     expect(bare).toContain("Not available tonight.");
   });
 
-  it("an unexpected error is not blamed on a missing model (OPS-111 (6), D-977)", () => {
+  it("an unexpected error is not blamed on a missing model (OPS-111 (6), D-1794)", () => {
     const v: SteelmanView = {
       state: "not_written",
       reason: "error",

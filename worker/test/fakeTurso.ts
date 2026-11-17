@@ -9,8 +9,8 @@ import m5 from "../../db/migrations/main/0005_au_calendar_seed.sql?raw";
 import m6 from "../../db/migrations/main/0006_universe_import.sql?raw";
 import m9 from "../../db/migrations/main/0009_sentinel_email.sql?raw";
 import m26 from "../../db/migrations/main/0026_run_now.sql?raw";
-import m34 from "../../db/migrations/main/0034_m19_market_profile.sql?raw";
-import m36 from "../../db/migrations/main/0036_m20_markets_data.sql?raw";
+import m34 from "../../db/migrations/main/0037_m19_market_profile.sql?raw";
+import m36 from "../../db/migrations/main/0039_m20_markets_data.sql?raw";
 
 export const TOKEN = "ghp_TOPSECRET_dispatch_value";
 export const TURSO_TOKEN = "turso-TOPSECRET-token";

@@ -1,5 +1,5 @@
 // The ONE definition of the Actions -> Vercel signing scheme (SEC-017, SEC-101, SEC-115; V1-I3, D-780,
-// D-957). Pure, dependency-free. Consumed by src/lib/security/hmac.ts (verifier), scripts/smoke/sign.mjs
+// D-1786). Pure, dependency-free. Consumed by src/lib/security/hmac.ts (verifier), scripts/smoke/sign.mjs
 // (Node callers) and worker/src/selfcheck.ts (WebCrypto, Worker). Only the HMAC and SHA-256 primitives
 // differ between runtimes; the canonical message, the header names and the header shape live here.
 //   key     = the secret string as UTF-8 (ACTIONS_HMAC_SECRET, 64 hex chars)

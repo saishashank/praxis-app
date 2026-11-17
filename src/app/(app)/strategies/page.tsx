@@ -105,6 +105,9 @@ export default async function StrategiesPage({
       ) : (
         <>
           {list.state === "empty" ? <Banner>{list.text}</Banner> : null}
+          {list.state !== "empty" && list.data.pendingRound ? (
+            <Banner>{list.data.pendingRound}</Banner>
+          ) : null}
 
           <FamilyGroups
             tiles={tiles.map((t) => ({

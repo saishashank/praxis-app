@@ -54,7 +54,7 @@ export async function run(argv0, env, deps0 = {}) {
   }
   const argv = sim.argv;
   const deps = sim.nowMs ? { ...deps0, nowMs: sim.nowMs } : deps0;
-  // `deps.loadEngine` lets a test break one bundle build (OPS-111 (5), D-977); production passes nothing.
+  // `deps.loadEngine` lets a test break one bundle build (OPS-111 (5), D-1794); production passes nothing.
   const load = deps.loadEngine ?? loadEngine;
   const { signalsMain } = await load();
   const code = await signalsMain(argv, env, deps);

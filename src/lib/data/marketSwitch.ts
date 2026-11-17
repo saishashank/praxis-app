@@ -2,7 +2,7 @@
 // HIGH-RISK (money, kill): Owner only, audit first, one main-DB write transaction (the `commit` pattern of
 // controls.ts, which this module uses; it lives beside it only to keep controls.ts readable).
 //
-// `switchMarket` is the ONLY writer of `market.enabled` (D-994).
+// `switchMarket` is the ONLY writer of `market.enabled` (D-1809).
 //
 //   off -> data_only    needs the checklist (profile, AT-M evidence, licence rows, quota projection, AU MKT-105).
 //                       Sets enabled 1, mode data_only, data_only_since today, work_status active; writes the
@@ -17,7 +17,7 @@
 //                       market_mode rows are written here; forever tables stay.
 //   data_only -> off    no books exist: enabled 0 at once.
 // Any other step is refused `two_step`; while a rollback awaits its kill every switch is refused `rollback_pending`.
-// `PRAXIS_MARKETS_ENABLED` is the Owner's own step afterwards (D-994): the nightly invariant reminds.
+// `PRAXIS_MARKETS_ENABLED` is the Owner's own step afterwards (D-1809): the nightly invariant reminds.
 import type { ChecklistDeps, ChecklistItem } from "@/lib/market/checklist";
 import { checklist } from "@/lib/market/checklist";
 import { ensureDatedCostProfiles } from "@/lib/arena/costAsOf";

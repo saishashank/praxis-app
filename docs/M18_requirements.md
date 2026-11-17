@@ -1,6 +1,6 @@
 # M18 requirements: Live-risk fixes, ops and test debt
 
-Delta extract from `Requirement/v3/spec/` (V3 draft, session V3-1, 2026-11-11): ch. 12 V3 (M18 row, BLD-048…BLD-055), ch. 25 (OPS-103…OPS-111, SEC-115, PLT-080), ch. 26 (TST-134…TST-139, AT-85), ch. 23 (DAT-251…DAT-253), ch. 24 (ARN-123), ch. 14 V3 (AT-83…AT-85), ch. 15 V3 (M18 keys), ch. 01 V3 (PRD-039…PRD-049), ch. 00 V3 (D-923…D-950, O-82, O-83). AT-26 and AT-30 are v1 tests (`Requirement/v1/spec/14_system_acceptance.md`) re-run in M18. Continues from M17 on `build`. Build decisions in this milestone start at **D-951** (BLD-054) and are recorded in `docs/M18_design.md`.
+Delta extract from `Requirement/v3/spec/` (V3 draft, session V3-1, 2026-11-11): ch. 12 V3 (M18 row, BLD-048…BLD-055), ch. 25 (OPS-103…OPS-111, SEC-115, PLT-080), ch. 26 (TST-134…TST-139, AT-85), ch. 23 (DAT-251…DAT-253), ch. 24 (ARN-123), ch. 14 V3 (AT-83…AT-85), ch. 15 V3 (M18 keys), ch. 01 V3 (PRD-039…PRD-049), ch. 00 V3 (D-923…D-950, O-82, O-83). AT-26 and AT-30 are v1 tests (`Requirement/v1/spec/14_system_acceptance.md`) re-run in M18. Continues from M17 on `build`. Build decisions in this milestone start at **D-1780** (BLD-054) and are recorded in `docs/M18_design.md`.
 
 Source of truth: the V3 spec in `D:\Projects\Praxis\wt-v3-req\Requirement\v3\spec\` (read-only). Quotes below are copied from that text. Code paths are the files in `D:\Projects\Praxis\wt-v3` that most likely change; they come from a grep and are marked **(guess)** where the path is only a probable home. "new" means no existing file was found.
 
@@ -174,7 +174,7 @@ Exit (ch. 14 V3): AT-83, AT-84, AT-85, plus the re-runs of AT-26 and AT-30. Exit
 - **Full text:** "**DAT-251 ASX request failures, news cap, RBA/ABS.** (a) The ≈ 192 failed ASX requests per `asx-fetch` run are classified by cause (delisted or renamed code, 404, 429, parse) and handled: dead codes leave the fetch list through the code-history table (CTX-015), 429s back off within the run's budget, parse failures are stored with the raw body hash for the fixture set; target after M18: < 10 failures per run excluding genuine delistings [PROPOSED]. (b) The news-assessment cap of 40 items per run becomes the key `news_assess_per_run` (default 40, bounds 20–200) raised only inside the LLM budget and the Turso 20 % ceiling, with the Sentinel item count that was left unassessed shown on System Health. (c) The RBA and ABS fetchers (F-A3-14) are built as Actions steps (CSV/XLS endpoints [VERIFY terms, both public statistics]) feeding the macro series for AU; per-market equivalents (RBI/MOSPI, FRED) follow the profile."
 - **Decisions:** none in V3 table; D-945 (FRED, regime inputs) is related to (c) per-market equivalents, not M18.
 - **Config:** `news_assess_per_run` = 40, range 20–200, Owner (ch. 15 V3, ch. 23).
-- **Conflict flagged:** the existing key `sentinel_max_items_per_run` (`src/lib/config/keys.ts` line 316) has default 40 and range **1–40**, and the code comment cites AGT-010 and PLT-075. The V3 spec asks for a new key `news_assess_per_run` with range 20–200. The build must decide: rename, or add the new key and keep the old one. Record as a D-951+ build decision.
+- **Conflict flagged:** the existing key `sentinel_max_items_per_run` (`src/lib/config/keys.ts` line 316) has default 40 and range **1–40**, and the code comment cites AGT-010 and PLT-075. The V3 spec asks for a new key `news_assess_per_run` with range 20–200. The build must decide: rename, or add the new key and keep the old one. Record as a D-1780+ build decision.
 - **Acceptance:** no AT row names DAT-251 in ch. 14 V3. Flagged. Evidence in `docs/M18_exit_evidence.md`.
 - **Files:**
   - `scripts/asx/fetch.mjs`, `scripts/asx/fetch.test.mjs`, `scripts/asx/ingest.mjs`, `.github/workflows/asx-fetch.yml` (failure classification, backoff).
@@ -330,7 +330,7 @@ Coverage gaps (flagged, not fixed here): **PLT-080, DAT-251, DAT-252, DAT-253, A
 | D-nnn | Decision (short) | M18 IDs |
 |---|---|---|
 | D-923 | V3 is a delta; CXA amendments only | context |
-| D-924 | Build decisions from D-951 | BLD-054 |
+| D-924 | Build decisions from D-1780 | BLD-054 |
 | D-934 | Research items time-boxed | none in M18 |
 | D-935 | Staging retired; condition replaced; waiver closed | OPS-107, AT-84 |
 | D-940 | Turso metering reads platform API; 15 % notice, 20 % degrade; static OFFSET test; row-by-market invariant | OPS-104 |

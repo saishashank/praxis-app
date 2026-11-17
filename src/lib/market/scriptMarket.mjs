@@ -1,10 +1,10 @@
-// The market input of every script that writes a market-keyed row (M19 C2, MKT-110 a, D-996). Plain ESM so the
+// The market input of every script that writes a market-keyed row (M19 C2, MKT-110 a, D-1811). Plain ESM so the
 // Actions scripts import it like profileCore.mjs. The rule, in one place:
 //   --market <CODE>   names the market; NO literal default exists anywhere.
 //   omitted or empty  = the single enabled market; with none or several enabled the script exits 2
 //                       ("market required"): it must not guess.
 //   a market that is not enabled -> exit 2, the log line `refused: market not enabled`, and NO run record: a
-//                       run record for that market would itself be a refused write (the guard trigger, D-995).
+//                       run record for that market would itself be a refused write (the guard trigger, D-1810).
 // `assertMarketEnabled` is the typed check a script calls before its first write; stream A2's guard.mjs exports
 // the same function (a re-export, D-1087) for code that already holds the guard module.
 import { MarketNotEnabled } from "./errors.mjs";

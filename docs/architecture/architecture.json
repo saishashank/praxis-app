@@ -9417,7 +9417,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "source": "db/migrations/main/0042_m22_llm_experts.sql",
       "attrs": {
         "columns": [
           "source",
@@ -9526,7 +9526,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0040_m23_research.sql",
+      "source": "db/migrations/main/0043_m23_research.sql",
       "attrs": {
         "columns": [
           "proposal_id",
@@ -9653,7 +9653,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "source": "db/migrations/main/0039_m20_markets_data.sql",
       "attrs": {
         "columns": [
           "market",
@@ -9998,7 +9998,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "source": "db/migrations/main/0039_m20_markets_data.sql",
       "attrs": {
         "columns": [
           "market",
@@ -10602,7 +10602,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "source": "db/migrations/main/0042_m22_llm_experts.sql",
       "attrs": {
         "columns": [
           "cluster_id",
@@ -10676,7 +10676,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0033_m18_data.sql",
+      "source": "db/migrations/main/0036_m18_data.sql",
       "attrs": {
         "columns": [
           "market",
@@ -10793,7 +10793,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "source": "db/migrations/main/0042_m22_llm_experts.sql",
       "attrs": {
         "columns": [
           "id",
@@ -10838,7 +10838,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "source": "db/migrations/main/0042_m22_llm_experts.sql",
       "attrs": {
         "columns": [
           "trial_id",
@@ -10871,7 +10871,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "source": "db/migrations/main/0042_m22_llm_experts.sql",
       "attrs": {
         "columns": [
           "market",
@@ -10914,7 +10914,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "source": "db/migrations/main/0042_m22_llm_experts.sql",
       "attrs": {
         "columns": [
           "trial_id",
@@ -11191,6 +11191,92 @@
       }
     },
     {
+      "id": "table:main.cortex_angle_day",
+      "type": "table",
+      "name": "cortex_angle_day",
+      "purpose": "Cortex table cortex_angle_day: night results, ledger, features or outcomes (append-only).",
+      "specIds": [
+        "CTX-010",
+        "CTX-011"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "cortex",
+        "data"
+      ],
+      "source": "db/migrations/main/0031_cortex_learning.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "angle_id",
+          "angle_version",
+          "horizon",
+          "feature_d",
+          "n",
+          "ic",
+          "top_excess_ppm",
+          "bottom_excess_ppm",
+          "base_ppm",
+          "regime",
+          "results_season",
+          "psi_ppm",
+          "excluded_news",
+          "active_set_hash",
+          "manifest_id"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.cortex_base_version",
+      "type": "table",
+      "name": "cortex_base_version",
+      "purpose": "Cortex table cortex_base_version: night results, ledger, features or outcomes (append-only).",
+      "specIds": [
+        "CTX-010",
+        "CTX-011"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "cortex",
+        "data"
+      ],
+      "source": "db/migrations/main/0031_cortex_learning.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "family",
+          "version",
+          "since_d",
+          "reason",
+          "rule_version",
+          "angles_json",
+          "added_json",
+          "removed_json",
+          "evidence_json",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.cortex_decision",
       "type": "table",
       "name": "cortex_decision",
@@ -11276,6 +11362,168 @@
         ],
         "database": "main",
         "indexes": []
+      }
+    },
+    {
+      "id": "table:main.cortex_feature_probe",
+      "type": "table",
+      "name": "cortex_feature_probe",
+      "purpose": "Cortex table cortex_feature_probe: night results, ledger, features or outcomes (append-only).",
+      "specIds": [
+        "CTX-010",
+        "CTX-011"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "cortex",
+        "data"
+      ],
+      "source": "db/migrations/main/0031_cortex_learning.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "code",
+          "angle_id",
+          "value",
+          "flag",
+          "angle_version",
+          "manifest_id"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.cortex_leader",
+      "type": "table",
+      "name": "cortex_leader",
+      "purpose": "Cortex table cortex_leader: night results, ledger, features or outcomes (append-only).",
+      "specIds": [
+        "CTX-010",
+        "CTX-011"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "cortex",
+        "data"
+      ],
+      "source": "db/migrations/main/0031_cortex_learning.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "family",
+          "since_d",
+          "leader",
+          "learner_rule_version",
+          "learner_generation",
+          "evidence_json",
+          "set_by"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.cortex_learn_compare",
+      "type": "table",
+      "name": "cortex_learn_compare",
+      "purpose": "Cortex table cortex_learn_compare: night results, ledger, features or outcomes (append-only).",
+      "specIds": [
+        "CTX-010",
+        "CTX-011"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "cortex",
+        "data"
+      ],
+      "source": "db/migrations/main/0031_cortex_learning.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "decision_d",
+          "family",
+          "book_id",
+          "fixed_rule_version",
+          "learner_rule_version",
+          "learner_generation",
+          "fixed_code",
+          "learner_code",
+          "agree",
+          "fixed_ret1_ppm",
+          "learner_ret1_ppm",
+          "fixed_ret20_ppm",
+          "learner_ret20_ppm",
+          "matured_d",
+          "regime"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.cortex_learn_event",
+      "type": "table",
+      "name": "cortex_learn_event",
+      "purpose": "Cortex table cortex_learn_event: night results, ledger, features or outcomes (append-only).",
+      "specIds": [
+        "CTX-010",
+        "CTX-011"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "cortex",
+        "data"
+      ],
+      "source": "db/migrations/main/0031_cortex_learning.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "seq",
+          "kind",
+          "family",
+          "angle_id",
+          "generation",
+          "evidence_json",
+          "words",
+          "reverses_seq",
+          "expires_d",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": [
+          "cortex_learn_event_kind"
+        ]
       }
     },
     {
@@ -12121,7 +12369,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "source": "db/migrations/main/0042_m22_llm_experts.sql",
       "attrs": {
         "columns": [
           "claim_id",
@@ -12196,7 +12444,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "source": "db/migrations/main/0042_m22_llm_experts.sql",
       "attrs": {
         "columns": [
           "proposal_id",
@@ -12240,7 +12488,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "source": "db/migrations/main/0042_m22_llm_experts.sql",
       "attrs": {
         "columns": [
           "kind",
@@ -12349,7 +12597,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "source": "db/migrations/main/0042_m22_llm_experts.sql",
       "attrs": {
         "columns": [
           "expert_id",
@@ -12511,7 +12759,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "source": "db/migrations/main/0039_m20_markets_data.sql",
       "attrs": {
         "columns": [
           "market",
@@ -12589,7 +12837,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0038_m21_owner_tools.sql",
+      "source": "db/migrations/main/0041_m21_owner_tools.sql",
       "attrs": {
         "columns": [
           "market",
@@ -12699,7 +12947,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "source": "db/migrations/main/0039_m20_markets_data.sql",
       "attrs": {
         "columns": [
           "lineage",
@@ -12731,7 +12979,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0040_m23_research.sql",
+      "source": "db/migrations/main/0043_m23_research.sql",
       "attrs": {
         "columns": [
           "lineage",
@@ -13431,7 +13679,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "source": "db/migrations/main/0039_m20_markets_data.sql",
       "attrs": {
         "columns": [
           "market",
@@ -13903,7 +14151,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0034_m19_market_profile.sql",
+      "source": "db/migrations/main/0037_m19_market_profile.sql",
       "attrs": {
         "columns": [
           "code",
@@ -13937,7 +14185,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0034_m19_market_profile.sql",
+      "source": "db/migrations/main/0037_m19_market_profile.sql",
       "attrs": {
         "columns": [
           "id",
@@ -13976,7 +14224,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0034_m19_market_profile.sql",
+      "source": "db/migrations/main/0037_m19_market_profile.sql",
       "attrs": {
         "columns": [
           "code",
@@ -14010,7 +14258,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0031_m18_ops.sql",
+      "source": "db/migrations/main/0034_m18_ops.sql",
       "attrs": {
         "columns": [
           "d",
@@ -14041,7 +14289,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "source": "db/migrations/main/0039_m20_markets_data.sql",
       "attrs": {
         "columns": [
           "id",
@@ -14079,7 +14327,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "source": "db/migrations/main/0042_m22_llm_experts.sql",
       "attrs": {
         "columns": [
           "market",
@@ -14195,7 +14443,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "source": "db/migrations/main/0042_m22_llm_experts.sql",
       "attrs": {
         "columns": [
           "market",
@@ -14298,7 +14546,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0038_m21_owner_tools.sql",
+      "source": "db/migrations/main/0041_m21_owner_tools.sql",
       "attrs": {
         "columns": [
           "upload_id",
@@ -14331,7 +14579,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0038_m21_owner_tools.sql",
+      "source": "db/migrations/main/0041_m21_owner_tools.sql",
       "attrs": {
         "columns": [
           "id",
@@ -14373,7 +14621,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0038_m21_owner_tools.sql",
+      "source": "db/migrations/main/0041_m21_owner_tools.sql",
       "attrs": {
         "columns": [
           "trade_id",
@@ -14717,7 +14965,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0029_pick_portfolio.sql",
+      "source": "db/migrations/main/0032_my_portfolio.sql",
       "attrs": {
         "columns": [
           "market",
@@ -14726,7 +14974,78 @@
           "cash_micro",
           "holdings_micro",
           "value_micro",
-          "holdings"
+          "holdings",
+          "fall_ppm"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.pick_portfolio_hold",
+      "type": "table",
+      "name": "pick_portfolio_hold",
+      "purpose": "Table pick_portfolio_hold in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0032_my_portfolio.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "profile",
+          "code",
+          "pos",
+          "strategy",
+          "pub_d",
+          "entry_d",
+          "entry_micro",
+          "qty",
+          "cost_micro"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.pick_portfolio_split",
+      "type": "table",
+      "name": "pick_portfolio_split",
+      "purpose": "Table pick_portfolio_split in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0032_my_portfolio.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "profile",
+          "d",
+          "shares_json",
+          "cash_ppm",
+          "words"
         ],
         "database": "main",
         "indexes": []
@@ -14751,22 +15070,26 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0029_pick_portfolio.sql",
+      "source": "db/migrations/main/0032_my_portfolio.sql",
       "attrs": {
         "columns": [
           "market",
           "profile",
+          "seq",
+          "d",
+          "side",
+          "code",
+          "strategy",
           "pub_d",
           "rank",
-          "code",
-          "entry_d",
-          "entry_micro",
+          "pos",
           "qty",
-          "cost_micro",
-          "exit_d",
-          "exit_micro",
-          "exit_reason",
-          "net_micro"
+          "price_micro",
+          "fee_micro",
+          "net_micro",
+          "reason",
+          "closes",
+          "words"
         ],
         "database": "main",
         "indexes": []
@@ -14813,6 +15136,88 @@
         ],
         "database": "main",
         "indexes": []
+      }
+    },
+    {
+      "id": "table:main.pick_scorecard_day",
+      "type": "table",
+      "name": "pick_scorecard_day",
+      "purpose": "Table pick_scorecard_day in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0033_pick_scorecard.sql",
+      "attrs": {
+        "columns": [
+          "run_id",
+          "d",
+          "next_d",
+          "picks_n",
+          "gainers_n",
+          "gainer_hits",
+          "losers_n",
+          "loser_hits",
+          "liquid_n",
+          "named_n",
+          "chance_ppm",
+          "cortex_scored",
+          "cortex_gainers_in_top",
+          "cortex_losers_in_bottom",
+          "cortex_gap_ppm",
+          "profiles_json",
+          "detail_json"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.pick_scorecard_run",
+      "type": "table",
+      "name": "pick_scorecard_run",
+      "purpose": "Table pick_scorecard_run in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0033_pick_scorecard.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "market",
+          "created_at",
+          "commit_sha",
+          "sessions",
+          "first_d",
+          "last_d",
+          "status",
+          "summary_json"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_pick_scorecard_run_market"
+        ]
       }
     },
     {
@@ -15015,7 +15420,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "source": "db/migrations/main/0039_m20_markets_data.sql",
       "attrs": {
         "columns": [
           "market",
@@ -15280,7 +15685,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "source": "db/migrations/main/0042_m22_llm_experts.sql",
       "attrs": {
         "columns": [
           "market",
@@ -15460,7 +15865,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0040_m23_research.sql",
+      "source": "db/migrations/main/0043_m23_research.sql",
       "attrs": {
         "columns": [
           "market",
@@ -15495,7 +15900,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0040_m23_research.sql",
+      "source": "db/migrations/main/0043_m23_research.sql",
       "attrs": {
         "columns": [
           "lineage",
@@ -15528,7 +15933,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0040_m23_research.sql",
+      "source": "db/migrations/main/0043_m23_research.sql",
       "attrs": {
         "columns": [
           "lineage",
@@ -15562,7 +15967,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0040_m23_research.sql",
+      "source": "db/migrations/main/0043_m23_research.sql",
       "attrs": {
         "columns": [
           "market",
@@ -15912,7 +16317,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0040_m23_research.sql",
+      "source": "db/migrations/main/0043_m23_research.sql",
       "attrs": {
         "columns": [
           "market",
@@ -16026,7 +16431,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0040_m23_research.sql",
+      "source": "db/migrations/main/0043_m23_research.sql",
       "attrs": {
         "columns": [
           "market",
@@ -16096,7 +16501,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0038_m21_owner_tools.sql",
+      "source": "db/migrations/main/0041_m21_owner_tools.sql",
       "attrs": {
         "columns": [
           "market",
@@ -16133,7 +16538,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0038_m21_owner_tools.sql",
+      "source": "db/migrations/main/0041_m21_owner_tools.sql",
       "attrs": {
         "columns": [
           "market",
@@ -16307,7 +16712,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0033_m18_data.sql",
+      "source": "db/migrations/main/0036_m18_data.sql",
       "attrs": {
         "columns": [
           "source",
@@ -16712,7 +17117,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "source": "db/migrations/main/0039_m20_markets_data.sql",
       "attrs": {
         "columns": [
           "market",
@@ -16902,7 +17307,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0036_m20_markets_data.sql",
+      "source": "db/migrations/main/0039_m20_markets_data.sql",
       "attrs": {
         "columns": [
           "id",
@@ -16941,7 +17346,7 @@
         "data",
         "learning"
       ],
-      "source": "db/migrations/main/0008_agents.sql",
+      "source": "db/migrations/main/0033_pick_scorecard.sql",
       "attrs": {
         "columns": [
           "id",
@@ -17014,7 +17419,7 @@
       "views": [
         "data"
       ],
-      "source": "db/migrations/main/0031_m18_ops.sql",
+      "source": "db/migrations/main/0034_m18_ops.sql",
       "attrs": {
         "columns": [
           "sampled_at",
@@ -22294,6 +22699,28 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.cortex_angle_day",
+      "from": "service:turso-main",
+      "to": "table:main.cortex_angle_day",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "cortex",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.cortex_base_version",
+      "from": "service:turso-main",
+      "to": "table:main.cortex_base_version",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "cortex",
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.cortex_decision",
       "from": "service:turso-main",
       "to": "table:main.cortex_decision",
@@ -22308,6 +22735,50 @@
       "id": "service:turso-main|contains|table:main.cortex_feature_daily",
       "from": "service:turso-main",
       "to": "table:main.cortex_feature_daily",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "cortex",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.cortex_feature_probe",
+      "from": "service:turso-main",
+      "to": "table:main.cortex_feature_probe",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "cortex",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.cortex_leader",
+      "from": "service:turso-main",
+      "to": "table:main.cortex_leader",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "cortex",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.cortex_learn_compare",
+      "from": "service:turso-main",
+      "to": "table:main.cortex_learn_compare",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "cortex",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.cortex_learn_event",
+      "from": "service:turso-main",
+      "to": "table:main.cortex_learn_event",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
@@ -23253,6 +23724,26 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.pick_portfolio_hold",
+      "from": "service:turso-main",
+      "to": "table:main.pick_portfolio_hold",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.pick_portfolio_split",
+      "from": "service:turso-main",
+      "to": "table:main.pick_portfolio_split",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.pick_portfolio_trade",
       "from": "service:turso-main",
       "to": "table:main.pick_portfolio_trade",
@@ -23272,6 +23763,26 @@
         "agents",
         "data",
         "llm"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.pick_scorecard_day",
+      "from": "service:turso-main",
+      "to": "table:main.pick_scorecard_day",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.pick_scorecard_run",
+      "from": "service:turso-main",
+      "to": "table:main.pick_scorecard_run",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
       ]
     },
     {

@@ -164,7 +164,7 @@ describe("loadLlmUsage", () => {
       outcome: "ok",
       d: "2026-08-01",
     });
-    await allowMarket(db, "US"); // M19 0035: an llm_call row of another market needs that market enabled
+    await allowMarket(db, "US"); // M19 0038: an llm_call row of another market needs that market enabled
     await insert(db, {
       ...base,
       role: "narrator",

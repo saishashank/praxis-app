@@ -16,7 +16,7 @@ Merge commits are `git log --merges --oneline 9986b15f..HEAD` of this branch, ol
 | Task | Commit or merge | Decisions | Test files (main ones) |
 | --- | --- | --- | --- |
 | R1 research engine and report writer **F** | `ba8d2892`, merge `b78db151` | D-1655 to D-1657 | `tests/research/{eventStudy,report,sectorIcStat}.test.ts`, `tests/acceptance/v3/at72Exits.test.ts`, `scripts/research/report.test.mjs` |
-| A1 migration 0040, five keys, night seam **F** | `ce9051df`, merge `2de179a6` | D-1650 | `tests/db/0040_m23_research.test.ts`, `tests/config/m23Keys.test.ts`, `tests/acceptance/v3/at32Research.test.ts`, the schema-pin tests (39 to 40) |
+| A1 migration 0043, five keys, night seam **F** | `ce9051df`, merge `2de179a6` | D-1650 | `tests/db/0043_m23_research.test.ts`, `tests/config/m23Keys.test.ts`, `tests/acceptance/v3/at32Research.test.ts`, the schema-pin tests (39 to 40) |
 | T1 CXA-008 paraphrase harness and agreement | `f31d1424`, merge `2a08eab7` | D-1660 to D-1664 | `tests/labels/{paraphrase,agreement}.test.ts`, `tests/acceptance/v3/at75Labels.test.ts` |
 | A2 registry gate, writers on the gate, offline ledger, names **F** | `c013c73c`, merge `8f43aa90` | D-1665 to D-1669 | `tests/research/{registry,lookSync}.test.ts`, `tests/security/{holdoutWriters,researchBoundary}.test.ts`, `tests/acceptance/v3/at72Registry.test.ts`, `scripts/research/registry-check.test.mjs` |
 | S1 sector index series **F** | `4ae2924b`, merge `4d788a1f` | D-1670 to D-1674 | `tests/research/sectorSeries.test.ts`, `tests/acceptance/v3/at75Series.test.ts` |
@@ -38,13 +38,13 @@ Merge commits are `git log --merges --oneline 9986b15f..HEAD` of this branch, ol
 
 **Z's own fixes (the full gate found two real failures and fixed them):**
 
-- **D-1770**: after A1 added migration 0040, `tests/golive/v2steps.test.tsx` and `docs/runbooks/rollback-v2.md` still named 0039 as the newest migration. The runbook now reads 0015 to 0040 and lists the eight 0040 tables and the two registry triggers among what a rollback deletes; the test expects 0040.
+- **D-1770**: after A1 added migration 0043, `tests/golive/v2steps.test.tsx` and `docs/runbooks/rollback-v2.md` still named 0042 as the newest migration. The runbook now reads 0015 to 0043 and lists the eight 0043 tables and the two registry triggers among what a rollback deletes; the test expects 0043.
 - **D-1771**: `tests/picks/benchmarkUse.test.ts` (DAT-235) now lists the three M23 readers of `index_bar` as non-comparison readers (`lib/cortex/monitors/promotion.ts`, `lib/regime/alt/evaluate.ts`, `lib/research/meters/common.ts`), and `scripts/arena/signals.stages.test.mjs` no longer quotes the picks entry path, so `tests/picks/isolation.test.ts` (D-181) holds.
 
 ## §2 Identity
 
 - **AT-32 and AT-50 are not rewritten.** `git diff --stat 9986b15f HEAD --` over `tests/acceptance/v3/replay-hash.baseline.json`, `tests/market/au-constants.snapshot.json` and `worker/test/fixtures/au-slots.snapshot.json` is **empty**; `git diff --stat 9986b15f HEAD -- worker` is empty too. Test run: `replayHash.test.ts`, `tests/acceptance/v2/at50.test.ts`, `at68.test.ts` and `tests/market/auConstants.test.ts`: 36 tests in 4 files, pass.
-- **The `at32Research` own-set** (D-1645): the eight 0040 tables plus `trial_ledger` (proposal charges) and `app_log`. With the research night on and off on a recorded AU night, every other table hashes equal. The test runs every step writer of the research night on the golden world (`M23_STEP_WRITERS`, every earlier entry kept): after T4 the real steps write 28 meter rows, nothing in `shock_stop_outcome`, no look, and the AU hash equals the baseline. Test run: `at32Research` with the angle-proposal and research files: 94 tests in 6 files, pass.
+- **The `at32Research` own-set** (D-1645): the eight 0043 tables plus `trial_ledger` (proposal charges) and `app_log`. With the research night on and off on a recorded AU night, every other table hashes equal. The test runs every step writer of the research night on the golden world (`M23_STEP_WRITERS`, every earlier entry kept): after T4 the real steps write 28 meter rows, nothing in `shock_stop_outcome`, no look, and the AU hash equals the baseline. Test run: `at32Research` with the angle-proposal and research files: 94 tests in 6 files, pass.
 - **AU constants and slot snapshots are unchanged** (the empty diff above), and the worker suite is green (26 files, 603 tests).
 
 ## §3 Registry
@@ -98,13 +98,13 @@ Acceptance reports: `AT-72.md` (new), `AT-73.md` (M23 part added), `AT-74.md` (n
 | Zero `OFFSET` | `tests/security/noOffsetPaging.test.ts` is in the green `security` folder (27 files, 686 tests) |
 | LLM budget unchanged | `tests/llm/budgetBuckets.test.ts` is in the green `llm` folder; no new bucket, no change to `llm_daily_budget_total` (D-1642); no model is live for M23 |
 | No staging path, `ASX_LIVE` off, $0, no secret | no staging workflow touched; the only workflow change is one added step in `ci.yml` (the registry check, A2); no locked production workflow was edited; no new key or secret name (`npm run test:env-names` ok, 4 pre-existing warnings); gitleaks on the remote run: to be filled at push |
-| Schema pins at 40 | `tests/backup/core.test.ts`, `tests/db/0040_m23_research.test.ts` and the pin tests of the older migrations; the rollback runbook and its test name 0040 (D-1770) |
+| Schema pins at 40 | `tests/backup/core.test.ts`, `tests/db/0043_m23_research.test.ts` and the pin tests of the older migrations; the rollback runbook and its test name 0043 (D-1770) |
 | `worker/` untouched | `git diff --stat 9986b15f HEAD -- worker` is empty; the worker suite is green |
 | Decision index, config reference, architecture regenerated | `node scripts/ci/decision-index.mjs --check` exit 0 (1,139 decisions); `npm run test:config-reference` exit 0; `npm run test:architecture` (model complete and up to date; the generator reports 579 elements, 681 edges); `node scripts/db/gen-market-guard.mjs --check`, `node scripts/routes/gen-app-routes.mjs --check`, `node scripts/llm/bakeoff-index.mjs --check`, `node scripts/ci/test-map.mjs --check` (1,179 baseline ids, 1,179 current) all exit 0 |
 | Market literals at 0 | `npm run test:market-literals`: 0 hits in 0 files outside the allow-list (127 allowed, 1,437 scanned) |
 | No internal code in Owner-read text | `npm run test:internal-codes`: 0 hits outside the allow-list (48 allowed, 354 files scanned) |
 | Repo hygiene, no private data | `npm run test:hygiene`: OK; nothing from `data\` is in the repository, reports hold aggregates only |
-| IN and US off | `at68.test.ts` green; every step loops over the enabled markets only; every 0040 table has both guard triggers (`gen-market-guard.mjs --check`) |
+| IN and US off | `at68.test.ts` green; every step loops over the enabled markets only; every 0043 table has both guard triggers (`gen-market-guard.mjs --check`) |
 
 **Full gate, observed 2026-11-18.** One `tests/*` folder at a time (`timeout 1500 npx vitest run <dir> --maxWorkers=2`):
 

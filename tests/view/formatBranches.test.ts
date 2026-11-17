@@ -25,7 +25,7 @@ const USD = currencyFormatOf("USD");
 
 const NOW = new Date("2026-11-10T00:00:00Z");
 
-describe("one CurrencyFormat per market (UXN-313, D-1002)", () => {
+describe("one CurrencyFormat per market (UXN-313, D-1815)", () => {
   it("prints the symbol and the grouping of each currency", () => {
     expect(formatMicro("1234567890000", AUD)).toBe("A$1,234,567.89");
     expect(formatMicro("1234567890000", USD)).toBe("US$1,234,567.89");

@@ -1,5 +1,5 @@
 // @vitest-environment node
-// DAT-251 b (D-954; AT-81): the key news_assess_per_run (20 to 200, Owner), the effective cap
+// DAT-251 b (D-1783; AT-81): the key news_assess_per_run (20 to 200, Owner), the effective cap
 // min(key, LLM headroom, Turso cap) and the unassessed count. Fixture data only.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Client } from "@libsql/client";

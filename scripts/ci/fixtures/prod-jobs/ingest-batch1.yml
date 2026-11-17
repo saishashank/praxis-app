@@ -71,7 +71,7 @@
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
           COMMIT_SHA: ${{ steps.approved.outputs.sha }}
-      # DAT-251 c (D-973): RBA and ABS macro series, Fridays only (Sydney), and only when the Owner has set the
+      # DAT-251 c (D-1790): RBA and ABS macro series, Fridays only (Sydney), and only when the Owner has set the
       # repository variable MACRO_FETCH to 1 after accepting the terms: unset = this step is skipped (ships OFF).
       # One request each, an identifying User-Agent, conditional requests; a failure never fails the batch
       # (continue-on-error). Secrets only in this step's env: it writes macro_series.

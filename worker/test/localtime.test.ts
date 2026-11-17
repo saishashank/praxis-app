@@ -281,7 +281,7 @@ describe("Kolkata local time (TST-103, D-1117)", () => {
   });
 });
 
-describe("zones and rules (D-1004, D-1117)", () => {
+describe("zones and rules (D-1817, D-1117)", () => {
   it("supported zones are exactly those of ZONE_RULES; any other throws unsupported zone", () => {
     for (const tz of [
       "Australia/Sydney",

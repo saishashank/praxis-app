@@ -1,5 +1,5 @@
 // @vitest-environment node
-// AT-68 (M19 E2, MKT-110, D-994 to D-997, D-1079; runs in the `app` job of every CI run): with only AU enabled
+// AT-68 (M19 E2, MKT-110, D-1809 to D-1812, D-1837; runs in the `app` job of every CI run): with only AU enabled
 // (the production shape, the seed) nothing of IN or US can happen. Three clauses, each proven on the real code:
 //   (a) no job: the Worker builds AU slots only (the clock and `runNow` refusing IN are worker/test/at68Worker.test.ts,
 //       the same CI run); every writing script refuses `--market IN`

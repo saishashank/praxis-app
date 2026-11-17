@@ -1,4 +1,4 @@
-// DAT-251 c (D-973): RBA and ABS fixtures -> macro_series rows. Fixture files and a fake fetch only: no
+// DAT-251 c (D-1790): RBA and ABS fixtures -> macro_series rows. Fixture files and a fake fetch only: no
 // network. Micro conversion is exact string arithmetic.
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";

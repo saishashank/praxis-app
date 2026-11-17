@@ -3,7 +3,7 @@
 //
 //   modelLeaks   the blueprint walk's check (M16, AT-57 c/d): a prefixed id of the architecture model that no
 //                ordinary page prints (D-372). Extracted from e2e/m16-blueprint-walk.spec.ts.
-//   marketLeaks  the market-off walk's check (M19, AT-68 c, SEC-112, D-997): a market that is built but not enabled
+//   marketLeaks  the market-off walk's check (M19, AT-68 c, SEC-112, D-1812): a market that is built but not enabled
 //                (IN, US) appears nowhere in a rendered page. Looks for the `data-market` attribute of IN or US
 //                and for the exchange, city and currency words of those markets as whole words.
 
@@ -12,7 +12,7 @@ export function modelLeaks(body: string, ids: readonly string[]): string[] {
   return ids.filter((id) => body.includes(id)).slice(0, 5);
 }
 
-/** Exchange, city, country and currency words of the markets that are built but off (D-997), searched as whole words. */
+/** Exchange, city, country and currency words of the markets that are built but off (D-1812), searched as whole words. */
 export const MARKET_WORDS: readonly string[] = [
   "NSE",
   "BSE",

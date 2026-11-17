@@ -8,8 +8,8 @@ export * from "./disagreement";
 
 import { disagreement, type Disagreement } from "./disagreement";
 import { eligibility, type Eligibility } from "./eligibility";
-import { mapGuard, pOf, type MapGuard } from "./map";
-import { scoreOf, type Score } from "./score";
+import { mapGuard, pOf, type MapGuard, type MapGuardRule } from "./map";
+import { scoreOf, weightsProblem, type Score } from "./score";
 import type { CodeFeatures, CortexMap, ScoredAngle } from "./types";
 
 export type CodeScore =
@@ -30,6 +30,8 @@ export type CodeScore =
  * One code tonight: ineligible on any undefined scored angle; else S over the map's clusters (or the
  * declared clusters when no map is loaded), d, and p when the map passes the refit guard.
  * `currentHash` = `activeSetHash(scored)`, computed once per family by the caller.
+ * `rule` (D-923): the weights the rule version scores with and `cluster_weight_max`; S uses the
+ * weights when they are scoreable (else equal weights, and the guard says `map_invalid`, so no p).
  */
 export function scoreCode(
   features: CodeFeatures,
@@ -37,12 +39,23 @@ export function scoreCode(
   map: CortexMap | undefined,
   currentHash: string,
   clustersDeclared: readonly CortexMap["clusters"][number][],
+  rule?: MapGuardRule,
 ): CodeScore {
   const elig = eligibility(features, scored);
   if (!elig.eligible) return { status: "ineligible", eligibility: elig };
-  const guard = mapGuard(map, currentHash, clustersDeclared);
+  const guard = mapGuard(map, currentHash, clustersDeclared, rule);
   const clusters = guard.ok ? guard.map.clusters : clustersDeclared;
-  const score = scoreOf(features, scored, clusters, clusters.length);
+  const w = rule?.weights;
+  const usable =
+    w !== undefined && weightsProblem(w, clusters, rule?.clusterWeightMax) === null ? w : undefined;
+  const score = scoreOf(
+    features,
+    scored,
+    clusters,
+    clusters.length,
+    usable,
+    rule?.clusterWeightMax,
+  );
   return {
     status: "scored",
     score,

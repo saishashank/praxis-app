@@ -193,7 +193,7 @@ export const SOURCE_FACTS = {
     code: ["src/lib/http/safeLink.ts"],
     hosts: [],
     terms:
-      "Public regulator documents: links and our own summary only (DAT-253, D-975). Terms are not yet checked [VERIFY]. Nothing is fetched in this release; the knowledge-base fetch rules (robots, conditional requests, daily cap) apply when polling is built (KB-082). The row stays pending.",
+      "Public regulator documents: links and our own summary only (DAT-253, D-1792). Terms are not yet checked [VERIFY]. Nothing is fetched in this release; the knowledge-base fetch rules (robots, conditional requests, daily cap) apply when polling is built (KB-082). The row stays pending.",
   },
   ssrn_papers: {
     label: "SSRN papers (pending)",
@@ -201,7 +201,7 @@ export const SOURCE_FACTS = {
     code: ["src/lib/http/safeLink.ts"],
     hosts: [],
     terms:
-      "Abstract page links only (DAT-253, D-975). Terms are not yet checked [VERIFY]. Nothing is fetched in this release; the row stays pending.",
+      "Abstract page links only (DAT-253, D-1792). Terms are not yet checked [VERIFY]. Nothing is fetched in this release; the row stays pending.",
   },
   industry_map_manual: {
     label: "Industry classes (manual CSV)",

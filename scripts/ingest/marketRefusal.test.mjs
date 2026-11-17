@@ -1,8 +1,8 @@
-// M19 C2 (MKT-110 a, AT-68 (a), D-996): every script that writes a market-keyed row takes `--market` with no
+// M19 C2 (MKT-110 a, AT-68 (a), D-1811): every script that writes a market-keyed row takes `--market` with no
 // literal default and refuses a market that is not enabled BEFORE its first write: exit 2, the fixed line
 // `refused: market not enabled`, and no run record (a run record for that market would itself be a refused
 // write). Omitted = the single enabled market; two or more enabled and no flag = exit 2 "market required".
-// A real migrated libSQL file (0034 seed: AU enabled, IN and US built and off); no network.
+// A real migrated libSQL file (0037 seed: AU enabled, IN and US built and off); no network.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -226,7 +226,7 @@ test("calendar draft names only enabled markets: --market IN is refused, the def
   }
 });
 
-// ---- the dispatching workflows carry the market input to the script (D-996) -------------------------------------
+// ---- the dispatching workflows carry the market input to the script (D-1811) -------------------------------------
 const WORKFLOWS = {
   "ingest-batch1": ["batch1.mjs prepare", "batch1.mjs run"],
   "arena-close": ["close-books.mjs"],

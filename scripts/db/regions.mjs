@@ -1,4 +1,4 @@
-// Generated regions inside a hand-written migration (M20 A2, D-1122). A migration such as 0036 is mostly written
+// Generated regions inside a hand-written migration (M20 A2, D-1122). A migration such as 0039 is mostly written
 // by hand; the parts that are a projection of something else (the guard triggers of its new tables, the seed delta
 // of the profile fields) sit between two marker lines and are rewritten by the generator that owns them:
 //   -- BEGIN GENERATED <name> (<generator>)

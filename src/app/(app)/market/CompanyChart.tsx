@@ -81,7 +81,7 @@ export function CompanyChart({
   label: string;
   /** The company's sector hue token stem, e.g. "sector-tech"; volume bars use it at 40 %. */
   hue?: string | null;
-  /** ISO 4217 code of the prices (D-1002). */
+  /** ISO 4217 code of the prices (D-1815). */
   currency: string;
 }) {
   const fmt = currencyFormatFor(currency);

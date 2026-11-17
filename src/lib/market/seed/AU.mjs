@@ -1,4 +1,4 @@
-// The AU market profile seed (M19 A1; DAT-241, D-992, CXA-001). The single definition of every AU market fact:
+// The AU market profile seed (M19 A1; DAT-241, D-1807, CXA-001). The single definition of every AU market fact:
 // each value is today's v1/V2 constant to the byte (tests/market/au-constants.snapshot.json, recorded before
 // the refactor, is compared with this seed by tests/market/auConstants.test.ts). `verify = 0` everywhere:
 // the [VERIFY] money constants were approved at the v1 go-live (D-710 sign-off), the rest is live AU behaviour.

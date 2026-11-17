@@ -23,12 +23,10 @@ import { familyBadge } from "./familyMap";
 import { CountUp, PopIn } from "./Motion";
 import { WelcomeBanner } from "./WelcomeBanner";
 import { IntradaySection } from "../picks/IntradaySection";
+import { PortfolioCard } from "../picks/PortfolioCard";
+import { ProfileLabel } from "../picks/ProfileLabel";
+import { nowPct, pct, profileHue } from "../picks/text";
 
-const PROFILE_NAME: Record<string, string> = {
-  aggressive: "Aggressive",
-  balanced: "Balanced",
-  conservative: "Conservative",
-};
 const SIZE_NAME: Record<string, string> = { U1: "Large", U2: "Mid", U3: "Small" };
 const MAX_HOME_CARDS = 3; // threshold-ok: UXR-020 shows up to 3 pick cards
 
@@ -320,46 +318,126 @@ function NeedsYou({ needs }: { needs: HomeNeed[] }) {
   );
 }
 
+/** One label/value row of the pick card grid; values break only between their groups (D-1085). */
+function PickRow({
+  label,
+  testId,
+  children,
+}: {
+  label: string;
+  testId?: string;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <dt className="text-text-muted">{label}</dt>{" "}
+      <dd className="m-0 min-w-0" data-testid={testId}>
+        {children}
+      </dd>
+    </>
+  );
+}
+
+/** A price with its percentage, kept on one line; either part may be missing (masked viewer). */
+function PriceChange({
+  micro,
+  ppm,
+  currency,
+}: {
+  micro: number | null;
+  ppm: number | null;
+  currency: string;
+}) {
+  if (micro === null && ppm === null) return <>n/a</>;
+  return (
+    <span className="whitespace-nowrap">
+      {micro !== null ? <Money micro={micro} currency={currency} /> : null}
+      {ppm !== null ? `${micro !== null ? " " : ""}${pct(ppm)}` : null}
+    </span>
+  );
+}
+
 /** UXR-020 (3) + UXR-052: family rail, tinted band, family badge; primary action "Why this pick". */
 function PickCard({ p, masked }: { p: HomePick; masked: boolean }) {
   const fam = familyBadge(p.family);
   return (
     <Rail
-      hue={`family-${fam.code}`}
+      hue={profileHue(p.profile)}
       className="h-full"
       header={
         <span className="flex flex-wrap items-center justify-between gap-2">
           <PopIn>
             <FamilyBadge code={fam.code} label={fam.label} />
           </PopIn>
-          <span className="text-xs text-text-muted">
-            {PROFILE_NAME[p.profile] ?? p.profile} #{p.rank}
+          <span className="text-xs">
+            <ProfileLabel profile={p.profile} suffix={` #${p.rank}`} />
           </span>
         </span>
       }
     >
-      <p className="m-0 min-w-0 break-words">
-        <span className="font-semibold">{p.stock}</span>
+      <p className="m-0 flex min-w-0 items-baseline gap-1" data-testid="home-pick-title">
+        <span className="shrink-0 font-semibold">{p.stock}</span>{" "}
+        {p.company ? (
+          <span className="min-w-0 flex-1 truncate text-text-muted" title={p.company}>
+            {"· "}
+            {p.company}
+          </span>
+        ) : null}{" "}
         {SIZE_NAME[p.tier] ? (
-          <span className="text-text-muted"> · {SIZE_NAME[p.tier]} company</span>
+          <span
+            className="shrink-0 rounded-md bg-surface-2 px-1.5 text-xs text-text-muted"
+            title={`${SIZE_NAME[p.tier]} company`}
+            data-testid="home-pick-size"
+          >
+            {SIZE_NAME[p.tier]}
+          </span>
         ) : null}
       </p>
-      {p.referenceMicro !== null ? (
-        <p className="m-0 mt-1 text-sm">
-          Aim {p.aimMicro !== null ? <Money micro={p.aimMicro} currency={p.currency} /> : "n/a"} ·
-          Stop {p.stopMicro !== null ? <Money micro={p.stopMicro} currency={p.currency} /> : "n/a"}
-        </p>
-      ) : masked ? (
-        <p className="m-0 mt-1 text-sm">
-          <Masked label="Prices hidden for your role" />
-        </p>
-      ) : null}
-      <p className="m-0 mt-1 text-xs text-text-muted">
-        {p.timeFrameSessions !== null
-          ? `Time frame ${p.timeFrameSessions} ${plural(p.timeFrameSessions, "session")}`
-          : "Time frame not set"}
-        {p.validUntil ? ` · Valid until ${dayText(p.validUntil)}` : ""}
-      </p>
+      <dl className="m-0 mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+        {p.entryMicro !== null ? (
+          <PickRow label={p.entryBought ? "Bought" : "Entry"} testId="home-entry-line">
+            <span className="whitespace-nowrap">
+              <Money micro={p.entryMicro} currency={p.currency} />
+            </span>
+            {!p.entryBought && p.lastCloseD !== null ? (
+              <span className="whitespace-nowrap"> · close {formatDay(p.lastCloseD)}</span>
+            ) : null}
+          </PickRow>
+        ) : null}
+        {p.nowMicro !== null ? (
+          <PickRow label="Now" testId="home-now-line">
+            <span className="whitespace-nowrap">
+              <Money micro={p.nowMicro} currency={p.currency} />
+              {p.nowChangePpm !== null ? ` ${nowPct(p.nowChangePpm)}` : ""}
+            </span>
+            {p.nowLabel ? <span className="whitespace-nowrap"> · {p.nowLabel}</span> : null}
+          </PickRow>
+        ) : masked && p.nowChangePpm !== null ? (
+          <PickRow label="Now" testId="home-now-line">
+            <span className="whitespace-nowrap">{nowPct(p.nowChangePpm)} from entry</span>
+          </PickRow>
+        ) : null}
+        {p.referenceMicro !== null || p.aimPpm !== null || p.stopPpm !== null ? (
+          <>
+            <PickRow label="Aim">
+              <PriceChange micro={p.aimMicro} ppm={p.aimPpm} currency={p.currency} />
+            </PickRow>
+            <PickRow label="Stop">
+              <PriceChange micro={p.stopMicro} ppm={p.stopPpm} currency={p.currency} />
+            </PickRow>
+          </>
+        ) : null}
+        <PickRow label="Window">
+          <span className="whitespace-nowrap">
+            {p.timeFrameSessions !== null
+              ? `${p.timeFrameSessions} ${plural(p.timeFrameSessions, "session")}`
+              : "not set"}
+          </span>
+          {p.validUntil ? (
+            <span className="whitespace-nowrap"> · until {dayText(p.validUntil)}</span>
+          ) : null}
+        </PickRow>
+      </dl>
       <p className="m-0 mt-3">
         <Link href={p.whyHref} className={buttonClass("default")}>
           Why this pick
@@ -376,8 +454,16 @@ function SummaryCard({ v }: { v: HomeView }) {
     <Card title="Strategies today" aria-label="Strategies today">
       {s.tiles.length === 0 ? (
         <Empty hue="brand-b" shape="list">
-          <span>No strategy is running yet.</span>{" "}
-          <span>The six strategies appear here with A$600 each after tonight&apos;s run.</span>
+          {s.note ? (
+            <span data-testid="round-note">{s.note}</span>
+          ) : (
+            <>
+              <span>No strategy is running yet.</span>{" "}
+              <span>
+                The six strategies appear here with A$5,000 each after tonight&apos;s run.
+              </span>
+            </>
+          )}
         </Empty>
       ) : (
         <ul className={tileStrip} aria-label="Strategies today">
@@ -483,6 +569,11 @@ export function HomeContent({
         <p className="mt-1 text-sm text-text-muted" data-summary="">
           {empty ? "Nothing has run yet." : daySentence(v)}
         </p>
+        {v.top5Line ? (
+          <p className="mt-1 text-sm text-text-muted" data-testid="top5-line">
+            {v.top5Line}
+          </p>
+        ) : null}
       </div>
 
       <Strip v={v} asOf={result.asOf} />
@@ -506,8 +597,8 @@ export function HomeContent({
 
       {empty ? (
         <EmptyState motif="home" hue="home" title="No data yet">
-          {result.text} The six strategies show A$600, Starting, once they exist. First trade ideas
-          come after tonight&apos;s run; the first Evening Review arrives this evening.
+          {result.text} The six strategies show A$5,000, Starting, once they exist. First trade
+          ideas come after tonight&apos;s run; the first Evening Review arrives this evening.
         </EmptyState>
       ) : null}
 
@@ -546,6 +637,8 @@ export function HomeContent({
       </Section>
 
       {v.intraday ? <IntradaySection model={v.intraday} compact /> : null}
+
+      {v.portfolios?.portfolios.some((p) => p.started) ? <PortfolioCard v={v.portfolios} /> : null}
 
       <SummaryCard v={v} />
 

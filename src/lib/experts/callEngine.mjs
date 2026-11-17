@@ -25,7 +25,7 @@ const MAX_TEXT = 1000; // threshold-ok: the text read; claim summaries are at mo
 const MAX_HORIZON = 1000; // threshold-ok: longest horizon kept, in sessions (about four years)
 const DAYS_PER_WEEK = 7; // threshold-ok: calendar days in a week
 const DAYS_PER_MONTH = 30; // threshold-ok: calendar days counted for "a month" in a horizon phrase
-const REASON_MAX = 200; // threshold-ok: expert_call_proposal.reason cap (0039)
+const REASON_MAX = 200; // threshold-ok: expert_call_proposal.reason cap (0042)
 const SCALE_DIGITS = 6; // threshold-ok: micro units are millionths
 
 const LONG_WORDS =

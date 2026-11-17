@@ -34,7 +34,7 @@ import { STRATEGY_NAMES_DEFAULT } from "@/lib/config/keys";
 export type Db = Pick<Client, "execute">;
 
 /**
- * The market a loader works for. A page that took a `?market=` has already resolved it (D-997) and passes it
+ * The market a loader works for. A page that took a `?market=` has already resolved it (D-1812) and passes it
  * in `deps.market`; otherwise it is the single enabled market, or the user's default when several are enabled.
  */
 export async function marketFor(deps: LoaderDeps): Promise<string> {

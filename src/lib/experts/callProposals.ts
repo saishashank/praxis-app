@@ -1,6 +1,6 @@
 // Structured-call proposals (M22 E3; KB-084, D-1435, D-543, D-524). The typed face of the plain engine in
 // `callEngine.mjs` (which the Node scripts also load) plus the stored side: proposals are rows of
-// `expert_call_proposal` (append-only, 0039), complete or not. A proposal NEVER tracks itself: `expert_call` is written
+// `expert_call_proposal` (append-only, 0042), complete or not. A proposal NEVER tracks itself: `expert_call` is written
 // only by the Owner's confirmation (`confirmCall` in review.ts) and by the seed importer, so the paper tracker
 // (`settleCalls`) reads confirmed calls only. This file reads the universe and the calendar for the context of a
 // summary; it writes only proposal rows. A model is reached only through the injected `ask` (the night's router, wired
@@ -43,7 +43,7 @@ export type CallProposal = Omit<CallProposalCore, "source"> & {
 
 const IN_CHUNK = 50; // threshold-ok: codes asked per statement
 const PENDING_LIMIT = 200; // threshold-ok: claims proposed per run (the daily extraction cap is far lower)
-const REASON_MAX = 200; // threshold-ok: expert_call_proposal.reason cap (0039)
+const REASON_MAX = 200; // threshold-ok: expert_call_proposal.reason cap (0042)
 
 const s = (v: unknown): string => String(v);
 const n = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));

@@ -1,4 +1,4 @@
-// DAT-251 a (D-972): the store step keeps code_history. A code with `not_found` on 3 consecutive history
+// DAT-251 a (D-1789): the store step keeps code_history. A code with `not_found` on 3 consecutive history
 // runs becomes `delisted` and leaves the fetch list; it returns only after being missing from the ASX
 // file and then present again. Real migrated file database, no network, counts only in the log.
 import assert from "node:assert/strict";

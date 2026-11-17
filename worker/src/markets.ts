@@ -1,4 +1,4 @@
-// The Worker's view of the `market` table (M19 C1, MKT-110 a, D-994, D-996). The clock, the route poster and
+// The Worker's view of the `market` table (M19 C1, MKT-110 a, D-1809, D-1811). The clock, the route poster and
 // the run-now handler build their slot tables from the ENABLED market rows only: a market that is not enabled
 // gets no slot, no dispatch and no run-now. One statement reads them (<= 3 rows); the rows are cached per
 // isolate for MARKETS_TTL_MS so an idle minute still costs no database request, and every tick that reads
@@ -37,7 +37,7 @@ export type SlotAnchors = {
   intraday_scan_until: string;
 };
 
-/** The per-tick read: every enabled market, one statement (D-996). */
+/** The per-tick read: every enabled market, one statement (D-1811). */
 export const MARKETS_SQL =
   "SELECT code, tz, open_time, close_time, cutoff_time, currency, mode, enabled, slots_json, rollback_at FROM market WHERE enabled = 1";
 export const MARKETS_STMT: Stmt = { sql: MARKETS_SQL };
@@ -172,7 +172,7 @@ export type MarketFacts = {
   marketMode: string | null;
   /** True when the first market trades on `date`. */
   tradingDay: boolean;
-  /** Mode and trading day by market code, for tagged slots (D-1045). */
+  /** Mode and trading day by market code, for tagged slots (D-1825). */
   marketModes: Readonly<Record<string, string>>;
   tradingDays: Readonly<Record<string, boolean>>;
 };

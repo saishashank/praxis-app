@@ -1,5 +1,5 @@
 // @vitest-environment node
-// OPS-109 c (M18 A3, D-971, AT-83): the pure quote-starvation check. A held code whose newest
+// OPS-109 c (M18 A3, D-1788, AT-83): the pure quote-starvation check. A held code whose newest
 // `quote_latest.fetched_at` is older than 30 minutes inside the poll window on a trading day is
 // starved; a weekend or a time outside the window never is. Synthetic ZZ codes only.
 import { describe, expect, it } from "vitest";

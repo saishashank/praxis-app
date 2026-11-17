@@ -1,12 +1,12 @@
 // The two tables the Worker clock (worker/src) reads that are market facts but not profile fields (M19 C1,
-// D-996, D-1004). Plain ESM, no imports, so the Worker can bundle it like profileCore.mjs. This file is in
+// D-1811, D-1817). Plain ESM, no imports, so the Worker can bundle it like profileCore.mjs. This file is in
 // the src/lib/market/** allow-list: it is the one place a zone name or an exchange-feed time is written down
 // for the Worker.
 
 /**
  * The local-time rule each zone the Worker can compute follows (PLT-070: no Intl, 10 ms CPU). The rule id
  * names an implementation in worker/src/localtime.ts. A zone that is not listed is unsupported: the Worker
- * throws `unsupported zone` for a market row that names it (D-1004). Sydney and Melbourne share offset and
+ * throws `unsupported zone` for a market row that names it (D-1817). Sydney and Melbourne share offset and
  * DST dates, so one rule serves both; Kolkata (UTC+5:30, no DST) and New York (US Eastern DST) joined at M20
  * (D-1117) with their Intl comparison tests (worker/test/localtime.test.ts, TST-103).
  */

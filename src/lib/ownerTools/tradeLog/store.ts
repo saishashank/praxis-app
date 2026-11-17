@@ -1,5 +1,5 @@
 // The Owner's trade log store (M21 B2, ARN-121, D-1221, D-1275). Append-only: a trade is a new `owner_trade` row, a mistyped
-// one is voided by a new `owner_trade_void` row, and nothing is ever updated or deleted (the 0038 triggers refuse both).
+// one is voided by a new `owner_trade_void` row, and nothing is ever updated or deleted (the 0041 triggers refuse both).
 // With src/lib/tax/fromLog.ts, this is the only module that names `owner_trade` or `owner_trade_void` (the readers test
 // of ARN-121 allow-lists the two files); no trading, learning or Cortex module reads either table, so a trade can never
 // move a book, order, signal or alert. Every read is bounded and keyset-paged; no OFFSET.
@@ -61,7 +61,7 @@ export async function appendTrades(
     );
     return { ok: true, uploadId };
   } catch {
-    return { ok: false, error: "unavailable" }; // e.g. a market that is not enabled (the 0038 guard)
+    return { ok: false, error: "unavailable" }; // e.g. a market that is not enabled (the 0041 guard)
   }
 }
 

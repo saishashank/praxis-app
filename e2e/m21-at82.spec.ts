@@ -75,7 +75,7 @@ test.beforeAll(async () => {
 });
 
 async function resolve(page: Page, s: Surface, role: string): Promise<string | null> {
-  // a masked role opens a card by its opaque reference only (D-135, D-977); the stored id is the Owner's (D-1332)
+  // a masked role opens a card by its opaque reference only (D-135, D-1794); the stored id is the Owner's (D-1332)
   if (s.path === "card")
     return role === "owner"
       ? `/cards/${encodeURIComponent(cardId)}`

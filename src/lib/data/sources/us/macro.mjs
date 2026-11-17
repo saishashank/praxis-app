@@ -4,10 +4,10 @@
 // asked, through the polite client (register row `us_fred`, `pending` until the Owner accepts it). The key travels
 // only in the request query the polite client sends; it is never logged and never returned.
 //
-// Storage (migration 0037, D-1147, closing D-1189): the fetch step asks FRED for the series of `FRED_SERIES` and puts
+// Storage (migration 0040, D-1147, closing D-1189): the fetch step asks FRED for the series of `FRED_SERIES` and puts
 // the observations into the feeds file (`feeds.macro`, values as decimal micro strings: JSON has no bigint); the day
 // stage turns them into `macro_series` rows with source `fred` (`feedMacroRows`) and writes them through
-// `writeMacroSeries` (src/lib/data/sources/macroStore.mjs; `assertMarketEnabled` first, the 0037 source guard refuses
+// `writeMacroSeries` (src/lib/data/sources/macroStore.mjs; `assertMarketEnabled` first, the 0040 source guard refuses
 // `fred` while the US is off). The three series are the US counterparts of the home RBA/ABS set (the policy rate, the
 // ten-year yield, the CPI); an id outside the list in a feed is counted as skipped, never stored.
 import { assertMarketEnabled } from "../../../market/guard.mjs";
@@ -16,7 +16,7 @@ import { createPoliteFetch } from "../politeFetch.mjs";
 export const FRED_SOURCE = "us_fred";
 export const FRED_KEY_ENV = "FRED_API_KEY";
 export const FRED_HOST = "api.stlouisfed.org";
-/** The `macro_series.source` word of FRED rows (migration 0037). */
+/** The `macro_series.source` word of FRED rows (migration 0040). */
 export const MACRO_SOURCE = "fred";
 /** The FRED series the US night stores: effective federal funds rate, 10-year constant maturity, CPI-U (SA). */
 export const FRED_SERIES = Object.freeze(["FEDFUNDS", "DGS10", "CPIAUCSL"]);

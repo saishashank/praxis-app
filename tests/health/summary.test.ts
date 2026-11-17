@@ -72,7 +72,7 @@ describe("R4-I3: capped arena catch-up on the jobs view", () => {
   });
 });
 
-describe("OPS-109 c: the per-slot quote budget line (D-971)", () => {
+describe("OPS-109 c: the per-slot quote budget line (D-1788)", () => {
   const slot = (hm: string, requests: number, skipped: number, plan: string) =>
     db.execute({
       sql: `INSERT INTO quote_run (market, session_d, slot_minute, purpose, started_at, requests, skipped, plan)

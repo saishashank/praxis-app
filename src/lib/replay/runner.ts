@@ -115,7 +115,7 @@ export const RUN_MODES: readonly RunMode[] = [
   "learning",
 ];
 
-const MARKET = HOME_MARKET; // replay is AU-only in M19 (D-1001 j)
+const MARKET = HOME_MARKET; // replay is AU-only in M19 (D-1814 j)
 const MS_PER_MINUTE = 60_000; // threshold-ok: ms per minute
 const NULL_RUNS_DEFAULT = 2000; // threshold-ok: AT-17 null runs (design 4.9)
 const SIZE_B = 2000; // threshold-ok: decision 24 size-check replicates (bootstrap_size_check_replications)
@@ -140,7 +140,8 @@ export type Stage =
   | "factors"
   | "robustness"
   | "rankIc"
-  | "experts";
+  | "experts"
+  | "cortex";
 
 export type StageTime = { readonly stage: Stage; readonly minutes: number };
 

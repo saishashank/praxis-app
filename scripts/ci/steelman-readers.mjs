@@ -1,4 +1,4 @@
-// The steelman's reader list, generated from the import graph (OPS-111 (9), D-977). Every source file
+// The steelman's reader list, generated from the import graph (OPS-111 (9), D-1794). Every source file
 // outside src/lib/steelman that imports a steelman module is a "reader"; the list is stored in
 // tests/security/steelman-readers.json and tests/security/steelmanBoundary.test.ts compares the live graph
 // to it, so a new reader shows up as a reviewed diff of that file instead of a hand-kept set (the M11-lite

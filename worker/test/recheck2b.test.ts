@@ -1,4 +1,4 @@
-// OPS-106 / D-953 / D-666 (M18 A4, AT-84): a 2b that skipped with `no_2a_success` because 2a closed
+// OPS-106 / D-1782 / D-666 (M18 A4, AT-84): a 2b that skipped with `no_2a_success` because 2a closed
 // late is dispatched again EXACTLY ONCE, only after 2a has a success/degraded record, only between
 // 18:25 and 18:40 Sydney time. Scheduling only: nothing here changes what 2b decides. Pure decision
 // cases plus the real-SQLite clock (as recheck.test.ts). AEST Monday, no network.
@@ -49,7 +49,7 @@ const facts = (over: Partial<Facts> = {}): Facts => ({
   ...over,
 });
 
-describe("the arena-signals slot (D-953)", () => {
+describe("the arena-signals slot (D-1782)", () => {
   it("rechecks the 2b night from 18:25 to 18:40 and needs a settled 2a", () => {
     expect(slot.recheck).toEqual({
       keyPrefix: "arena-2b:AU:",

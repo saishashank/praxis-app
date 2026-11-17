@@ -17,8 +17,10 @@ import { formatDay, plural } from "@/lib/view/format";
 import { regimeLabel } from "@/lib/view/terms";
 import { readNoPicksLine } from "@/lib/picks/noPicks";
 import { pickRef } from "./picks";
+import { loadPickNow, ppmOf, type PickNow } from "./pickNow";
 import {
   newerThanClose,
+  quoteChangePpm,
   quoteTimeMelbourne,
   readLatestQuotes,
   type LatestQuote,
@@ -28,8 +30,11 @@ import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import { loadProfile } from "@/lib/market/profile";
 import { MARKET_INDEX_CODE } from "@/lib/data/quotes/parse";
 import { liveDayChange } from "./liveDay";
+import { pendingRoundNote } from "./roundNote";
+import { rollingLine, type Top5Rolling } from "@/lib/learning/dailyTop5";
 import { loadAlertHomeFacts, loadIntraday, type IntradayModel } from "./pickAlerts";
 import type { LoaderEnv } from "./shell";
+import { loadMyPortfolios, type MyPortfoliosView } from "./pickPortfolio";
 import {
   latestDataDate,
   latestRegime,
@@ -142,6 +147,20 @@ export type HomePick = {
   referenceMicro: number | null;
   stopMicro: number | null;
   aimMicro: number | null;
+  /** Full company name; null for a masked viewer or when none is stored. */
+  company: string | null;
+  /** The price the pick is based on: the buy price once bought, else the pick-night close; null if masked. */
+  entryMicro: number | null;
+  entryBought: boolean;
+  /** The day of the pick-night close; null for a masked viewer. */
+  lastCloseD: string | null;
+  /** Stop and aim as ppm of the reference price (shown to everyone, masked or not). */
+  stopPpm: number | null;
+  aimPpm: number | null;
+  /** The current price and its change from entry; price and freshness are null when masked. */
+  nowMicro: number | null;
+  nowChangePpm: number | null;
+  nowLabel: string | null;
   aimReachPpm: number | null;
   timeFrameSessions: number | null;
   /** Last day the pick can be bought: exact, or the ISO week for a masked viewer. */
@@ -219,16 +238,10 @@ export function indexLine(
     base !== null && base > 0 ? Math.round(((now - base) * PPM) / base) : null;
   if (q !== null) {
     const level = Number(q.lastMicro) / 1_000_000; // money-float-ok: index points for display
-    const base =
-      q.prevCloseMicro !== null
-        ? Number(q.prevCloseMicro) / 1_000_000 // money-float-ok: index points for display
-        : last
-          ? last.cMicro / 1_000_000 // money-float-ok: index points for display
-          : null;
     return {
       name: "ASX 200",
       level,
-      changePpm: ppmOf(level, base),
+      changePpm: quoteChangePpm(q.lastMicro, last ? BigInt(last.cMicro) : null, q.prevCloseMicro),
       at: quoteTimeMelbourne(q.quoteAt),
       d: q.quoteD,
     };
@@ -267,6 +280,8 @@ export type HomeView = {
     strategies: number;
     d: string | null;
     tiles: StrategyTile[];
+    /** Between rounds: "Round 2 starts Tue 17 Nov with A$5,000 a strategy. ..."; null otherwise. */
+    note?: string | null;
   };
   day: {
     regime: string | null;
@@ -283,6 +298,8 @@ export type HomeView = {
   picks: { d: string | null; items: HomePick[] };
   /** UXN-301: the Intraday watch section (shadow, unrated); null when it could not be read. */
   intraday: IntradayModel | null;
+  /** D-950: the three My portfolio practice portfolios; null when they could not be read. */
+  portfolios: MyPortfoliosView | null;
   ideas: { d: string | null; items: HomeIdea[]; signals: number };
   watchlist: HomeWatch[];
   news: {
@@ -292,6 +309,11 @@ export type HomeView = {
   review: { d: string; day: string | null; kind: string } | null;
   /** Owner only: items that need attention in the Control Room; null for everyone else. */
   attentionCount: number | null;
+  /**
+   * D-994 (Owner 2026-11-11 target): the four-week rate of top-5 gainers named before they moved
+   * against chance, one line from the newest stored daily learning; null before the first night.
+   */
+  top5Line: string | null;
 };
 
 function emptyView(): HomeView {
@@ -305,16 +327,47 @@ function emptyView(): HomeView {
     needs: [],
     picksTotal: 0,
     noPicksLine: null,
-    summary: { strategies: 0, d: null, tiles: [] },
+    summary: { strategies: 0, d: null, tiles: [], note: null },
     day: { regime: null, regimeD: null, quality: [], openFlags: 0, index: null },
     picks: { d: null, items: [] },
     intraday: null,
+    portfolios: null,
     ideas: { d: null, items: [], signals: 0 },
     watchlist: [],
     news: { hidden: false, items: [] },
     review: null,
     attentionCount: null,
+    top5Line: null,
   };
+}
+
+/** D-994: the newest stored four-week top-5 line (one indexed row; words only, never a name). */
+export async function loadTop5Line(
+  db: { execute: (q: { sql: string; args: string[] }) => Promise<{ rows: Row[] }> },
+  market: string,
+): Promise<string | null> {
+  const r = await db.execute({
+    sql: `SELECT json_extract(body_json, '$.top5.rolling') AS r FROM daily_learning
+          WHERE market = ? AND json_extract(body_json, '$.top5.rolling') IS NOT NULL
+          ORDER BY d DESC LIMIT 1`,
+    args: [market],
+  });
+  const raw = r.rows[0]?.r;
+  if (raw === null || raw === undefined) return null;
+  try {
+    const v = JSON.parse(String(raw)) as Partial<Top5Rolling>;
+    if (
+      typeof v.nights !== "number" ||
+      typeof v.gainers !== "number" ||
+      typeof v.had !== "number" ||
+      typeof v.chanceHits !== "number"
+    ) {
+      return null;
+    }
+    return rollingLine(v as Top5Rolling);
+  } catch {
+    return null;
+  }
 }
 
 export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
@@ -420,7 +473,11 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
       strategies: tiles.length,
       d: navD,
       tiles,
+      note: null,
     };
+  } else {
+    // a round ended and the next has not started trading: one line instead of "No strategy is running yet"
+    view.summary.note = await pendingRoundNote(deps.mainDb, v.market, v.currency, v.now);
   }
 
   // Day line.
@@ -473,9 +530,13 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
   const pickD = strOrNull(pd.rows[0]?.d);
   const pickRows = pickD
     ? await deps.mainDb.execute({
-        sql: `SELECT profile, rank, code, family, tier, label, reference_micro, stop_micro, aim_micro,
-                     aim_reach_ppm, time_frame_sessions, valid_until_d
-              FROM pick WHERE market = ? AND d = ? AND rank <= ? ORDER BY profile, rank LIMIT ?`,
+        sql: `SELECT p.profile, p.rank, p.code, p.family, p.tier, p.label, p.reference_micro, p.stop_micro,
+                     p.aim_micro, p.aim_reach_ppm, p.time_frame_sessions, p.valid_until_d,
+                     i.name, o.entry_micro AS o_entry
+              FROM pick p LEFT JOIN instrument i ON i.market = p.market AND i.code = p.code
+                LEFT JOIN pick_outcome o ON o.market = p.market AND o.d = p.d AND o.profile = p.profile
+                  AND o.rank = p.rank AND o.kind = 'pick' AND o.state = 'bought'
+              WHERE p.market = ? AND p.d = ? AND p.rank <= ? ORDER BY p.profile, p.rank LIMIT ?`,
         args: [v.market, pickD, PICKS_PER_PROFILE, MAX_HOME_PICKS],
       })
     : { rows: [] };
@@ -517,28 +578,54 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     : null;
   const label = (c: string) => (scope ? scope.label(c) : masked ? "Another stock" : c);
 
+  // current price of the pick codes (delayed quote if newer than the close, else the close)
+  const pickNow = masked
+    ? new Map<string, PickNow>()
+    : await soft(
+        () =>
+          loadPickNow(
+            deps.mainDb,
+            v.market,
+            pickRows.rows.map((r) => str(r.code)),
+          ),
+        new Map<string, PickNow>(),
+      );
   view.picks = {
     d: pickD,
-    items: pickRows.rows.map((r) => ({
-      profile: str(r.profile),
-      rank: num(r.rank),
-      stock: label(str(r.code)),
-      family: str(r.family),
-      tier: str(r.tier),
-      label: scope ? scope.text(str(r.label)) : str(r.label),
-      currency: v.currency,
-      referenceMicro: masked ? null : num(r.reference_micro),
-      stopMicro: masked ? null : num(r.stop_micro),
-      aimMicro: masked ? null : num(r.aim_micro),
-      aimReachPpm: numOrNull(r.aim_reach_ppm),
-      timeFrameSessions: numOrNull(r.time_frame_sessions),
-      validUntil: masked
-        ? scope
-          ? scope.day(str(r.valid_until_d))
-          : null
-        : formatDay(str(r.valid_until_d)),
-      whyHref: `/picks/${encodeURIComponent(masked ? pickRef(`${pickD}.${str(r.profile)}.${num(r.rank)}`) : `${pickD}.${str(r.profile)}.${num(r.rank)}`)}`,
-    })),
+    items: pickRows.rows.map((r) => {
+      const bought = r.o_entry !== null && r.o_entry !== undefined;
+      const entry = bought ? r.o_entry : r.reference_micro;
+      const nowP = pickNow.get(str(r.code));
+      return {
+        profile: str(r.profile),
+        rank: num(r.rank),
+        stock: label(str(r.code)),
+        family: str(r.family),
+        tier: str(r.tier),
+        label: scope ? scope.text(str(r.label)) : str(r.label),
+        currency: v.currency,
+        referenceMicro: masked ? null : num(r.reference_micro),
+        stopMicro: masked ? null : num(r.stop_micro),
+        aimMicro: masked ? null : num(r.aim_micro),
+        company: masked || r.name === null || r.name === undefined ? null : str(r.name),
+        entryMicro: masked ? null : num(entry),
+        entryBought: !masked && bought,
+        lastCloseD: masked ? null : pickD,
+        stopPpm: ppmOf(r.stop_micro, r.reference_micro),
+        aimPpm: ppmOf(r.aim_micro, r.reference_micro),
+        nowMicro: masked || !nowP ? null : Number(nowP.micro), // money-float-ok: micro-AUD, as the other pick prices
+        nowChangePpm: nowP ? ppmOf(nowP.micro, entry) : null,
+        nowLabel: masked || !nowP ? null : nowP.label,
+        aimReachPpm: numOrNull(r.aim_reach_ppm),
+        timeFrameSessions: numOrNull(r.time_frame_sessions),
+        validUntil: masked
+          ? scope
+            ? scope.day(str(r.valid_until_d))
+            : null
+          : formatDay(str(r.valid_until_d)),
+        whyHref: `/picks/${encodeURIComponent(masked ? pickRef(`${pickD}.${str(r.profile)}.${num(r.rank)}`) : `${pickD}.${str(r.profile)}.${num(r.rank)}`)}`,
+      };
+    }),
   };
 
   // D-900: the newest delayed quote, shown instead of the close when it is from a later day.
@@ -556,11 +643,14 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     const q = newerThanClose(live.get(code), last ? last.d : null);
     if (q !== null) {
       const lastC = Number(q.lastMicro) / 1_000_000; // money-float-ok: display dollars, as `c` is stored
-      const base = q.prevCloseMicro !== null ? Number(q.prevCloseMicro) / 1_000_000 : null; // money-float-ok: display dollars
       return {
         stock: label(code),
         close: lastC,
-        changePpm: base !== null && base > 0 ? Math.round(((lastC - base) * PPM) / base) : null,
+        changePpm: quoteChangePpm(
+          q.lastMicro,
+          last ? BigInt(Math.round(last.c * 1_000_000)) : null, // money-float-ok: stored close back to micro
+          q.prevCloseMicro,
+        ),
         at: quoteTimeMelbourne(q.quoteAt),
       };
     }
@@ -654,7 +744,16 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     view.headline = [
       {
         currency: v.currency,
-        sinceStartPpm: series.length > 0 ? series[series.length - 1]! : null,
+        // Same live NAV as the tiles and the day change when the live overlay applies (display only).
+        sinceStartPpm:
+          liveSum !== null && last && num(last.s) > 0
+            ? ratioPpm(
+                num(last.v) + (liveSum as { change: number }).change - num(last.s),
+                num(last.s),
+              )
+            : series.length > 0
+              ? series[series.length - 1]!
+              : null,
         dayChangePpm:
           liveSum !== null
             ? ratioPpm((liveSum as { change: number }).change, (liveSum as { base: number }).base)
@@ -675,6 +774,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
   if (view.picksTotal === 0) {
     view.noPicksLine = await soft(() => readNoPicksLine(deps.mainDb, v.market, null), null);
   }
+  view.top5Line = await soft(() => loadTop5Line(deps.mainDb, v.market), null);
   const since: HomeSinceRow[] = [];
   if (view.picksTotal > 0) {
     since.push({
@@ -726,6 +826,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     new Date(v.now.getTime() - 2 * DAY_MS).toISOString(),
   );
   view.intraday = await soft(() => loadIntraday(alertEnv), null);
+  view.portfolios = await soft(() => loadMyPortfolios(alertEnv), null);
   if (alertFacts.hits > 0) {
     since.push({
       key: "pickhits",

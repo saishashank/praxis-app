@@ -1,7 +1,7 @@
-// M19 C1 (MKT-110 a, AT-68 (a), D-994, D-996, D-1004): the Worker builds its slot table per ENABLED market
+// M19 C1 (MKT-110 a, AT-68 (a), D-1809, D-1811, D-1817): the Worker builds its slot table per ENABLED market
 // row and refuses everything else. A market that is not enabled has no slot, no dispatch and no run-now;
 // a built-off market that is enabled (mode off) gets its slots but nothing market-bound runs; a market
-// whose zone the Worker cannot compute is left out, never guessed. Real SQLite with migration 0034.
+// whose zone the Worker cannot compute is left out, never guessed. Real SQLite with migration 0037.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetClockCache, runClock, slotKey, type ClockEnv } from "../src/clock";
 import { DbError, MarketNotEnabledError, pipeline } from "../src/db";
@@ -60,7 +60,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-describe("the market rows the Worker reads (migration 0034)", () => {
+describe("the market rows the Worker reads (migration 0037)", () => {
   it("one statement returns the enabled rows only: AU under the seed, never IN or US", async () => {
     expect(MARKETS_SQL).toBe(
       "SELECT code, tz, open_time, close_time, cutoff_time, currency, mode, enabled, slots_json, rollback_at FROM market WHERE enabled = 1",
@@ -170,7 +170,7 @@ describe("the clock builds its table from the enabled markets (production path)"
     expect(rollups().map((r) => r.concurrency_key)).toEqual([`worker-clock:AU:${MON}`]);
   });
 
-  it("a market whose zone the Worker cannot compute is left out and named; AU still runs (D-1004)", async () => {
+  it("a market whose zone the Worker cannot compute is left out and named; AU still runs (D-1817)", async () => {
     db.prepare("UPDATE market SET enabled = 1, tz = 'Asia/Tokyo' WHERE code = 'IN'").run(); // a zone with no rule (Kolkata has one since M20, D-1117)
     setState("dispatch_enabled", '"1"');
     const table = slotTable(await readMarkets(ENV, net.f, 0));
@@ -208,7 +208,7 @@ describe("the clock builds its table from the enabled markets (production path)"
   });
 });
 
-describe("run now refuses a market that is not enabled (D-996)", () => {
+describe("run now refuses a market that is not enabled (D-1811)", () => {
   const T0 = Date.UTC(2026, 9, 18, 16, 0); // Mon 19 Oct 2026 03:00 Sydney
   const add = (jobId: string, market: string) =>
     Number(
@@ -264,7 +264,7 @@ describe("run now refuses a market that is not enabled (D-996)", () => {
   });
 });
 
-describe("the write guard's refusal is a fixed word in the Worker (D-995)", () => {
+describe("the write guard's refusal is a fixed word in the Worker (D-1810)", () => {
   it("a statement error carrying MarketNotEnabled becomes MarketNotEnabledError, never the message", async () => {
     const f = (async () =>
       Response.json({

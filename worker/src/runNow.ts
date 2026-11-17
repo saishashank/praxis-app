@@ -14,7 +14,7 @@
 //
 // WHAT A MANUAL RUN BYPASSES: only the time window (the slot's start minute and catch-up).
 // WHAT IT STILL RESPECTS (a refusal is recorded, never a silent skip):
-//   - the request's market must be an ENABLED market (M19 C1, MKT-110 a, D-996): any other is refused
+//   - the request's market must be an ENABLED market (M19 C1, MKT-110 a, D-1811): any other is refused
 //     with the fixed reason `market_not_enabled`, before every other gate;
 //   - the job must be `runNow` in the registry and a slot that is enabled in the Worker table;
 //   - the dispatch kill switch `dispatch_enabled`;
@@ -220,7 +220,7 @@ export async function runRunNow(
     }));
     if (pending.length === 0) return summary;
 
-    // the slot table: fixed (tests) or built from the enabled market rows (D-996); a cold or expired isolate
+    // the slot table: fixed (tests) or built from the enabled market rows (D-1811); a cold or expired isolate
     // reads the rows in one extra request (run-now requests are rare)
     let slots: readonly Slot[];
     if (fixedSlots !== undefined) {

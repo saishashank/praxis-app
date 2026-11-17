@@ -21,7 +21,7 @@ export const JUDGE_RATINGS = ["approve", "neutral", "reject"] as const;
 export type JudgeRating = (typeof JUDGE_RATINGS)[number];
 
 /** The most reasons a rating carries (committee_rating.reasons_json holds at most five). */
-export const MAX_REASONS = 5; // threshold-ok: AGT-145, 0039 CHECK
+export const MAX_REASONS = 5; // threshold-ok: AGT-145, 0042 CHECK
 
 const MAX_OUTPUT_TOKENS = 600; // threshold-ok: reservation size of a rating with five reasons
 const TEMPLATE = "committee-judge-v1";

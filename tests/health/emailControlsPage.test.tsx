@@ -20,7 +20,7 @@ const emailActions = vi.hoisted(() => ({
 vi.mock("@/lib/auth/guard", () => ({ requireUser: (...a: unknown[]) => requireUser(...a) }));
 vi.mock("@/lib/health/summary", () => ({ getHealthSummary: summaryMock }));
 vi.mock("@/lib/db/client", () => ({ mainDb: () => ({}), authDb: () => ({}) }));
-// envFor resolves the market against the market table (D-997); the databases here are empty stubs.
+// envFor resolves the market against the market table (D-1812); the databases here are empty stubs.
 vi.mock("@/lib/market/profile", async (orig) => ({
   ...(await orig<typeof import("@/lib/market/profile")>()),
   enabledMarkets: async () => ["AU"],

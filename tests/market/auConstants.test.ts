@@ -181,7 +181,7 @@ describe("AU constants snapshot (D-1007)", () => {
         : live.get(`${e.module}#${e.export}`);
       const now = e.export.startsWith("CONFIG_KEYS.") ? canon(key) : key;
       if (now === undefined) continue; // the export was removed by a refactor task: the profile check carries it
-      // A market list or map derived from the registry (MODE_MARKETS, market_mode) may gain IN and US (D-993):
+      // A market list or map derived from the registry (MODE_MARKETS, market_mode) may gain IN and US (D-1808):
       // the AU entry must still be there with its recorded value.
       const same =
         e.field === "code" &&
@@ -278,7 +278,7 @@ describe("AU constants snapshot equals loadProfile('AU') (D-1007, AT-75 AU)", ()
     is("SETTLEMENT_LAG_SESSIONS", p.settlementDays);
     is("MIN_MARKETABLE_PARCEL_MICRO", p.parcelFloorMicro);
     is("PARCEL_FLOOR_MICRO", p.parcelFloorMicro);
-    is("ADV_FLOOR_PER_PARCEL_MICRO", p.advFloorPerParcelMicro); // parcel floor x 100: A$50,000 (D-1003 b)
+    is("ADV_FLOOR_PER_PARCEL_MICRO", p.advFloorPerParcelMicro); // parcel floor x 100: A$50,000 (D-1816 b)
     is("HALF_SPREAD_PPM_BY_TIER", slip.half_spread_ppm_by_tier);
     is("TICK_TABLE", p.tickTable);
     is("TIER_RULES", p.tiers);

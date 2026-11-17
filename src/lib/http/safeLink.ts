@@ -3,7 +3,7 @@
 // Anything else comes back as null, and the page shows the text without a link.
 // `.test` is a reserved top-level domain (RFC 2606): it never resolves on the public internet, so it
 // is accepted for the synthetic data of the test and staging worlds and can never point at a real site.
-// DAT-253 (D-975), M20 D-1095: the registered source sites live in ./sourceSites (the AU hosts and, derived from the
+// DAT-253 (D-1792), M20 D-1095: the registered source sites live in ./sourceSites (the AU hosts and, derived from the
 // per-market source rows, the India and US hosts); this module only decides what may be rendered as a link.
 import { SOURCE_SITES } from "./sourceSites";
 

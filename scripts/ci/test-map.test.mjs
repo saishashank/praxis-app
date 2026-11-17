@@ -122,7 +122,7 @@ test("the committed baseline holds against this repository", () => {
   assert.deepEqual(f, []);
 });
 
-// M18 D4 (TST-138, D-970, AT-85): every acceptance row names a V3 home.
+// M18 D4 (TST-138, D-1787, AT-85): every acceptance row names a V3 home.
 import { HOMES, acceptanceIds, homeFindings, parseHome } from "./test-map.mjs";
 
 test("parseHome: the five homes, combined with ' + '; anything else is no home", () => {

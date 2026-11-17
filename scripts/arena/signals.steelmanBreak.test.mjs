@@ -1,4 +1,4 @@
-// OPS-111 (5), D-977: the try/catch around the steelman bundle (D-504) is proven by a test that breaks the
+// OPS-111 (5), D-1794: the try/catch around the steelman bundle (D-504) is proven by a test that breaks the
 // bundle build. The steelman is an opinion only: a stage that cannot even load changes neither the exit
 // code nor anything the night wrote, and says so in one line.
 import assert from "node:assert/strict";

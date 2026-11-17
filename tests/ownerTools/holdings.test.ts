@@ -160,7 +160,7 @@ describe("saving and reading uploads", () => {
     await expect(db.execute("DELETE FROM owner_holding")).rejects.toThrow(/append-only/);
   });
 
-  it("a market that is not enabled cannot be saved to (the 0035 guard), and nothing is half-written", async () => {
+  it("a market that is not enabled cannot be saved to (the 0038 guard), and nothing is half-written", async () => {
     const r = await saveHoldings(db, "ZZ", A, new Date("2030-01-01T00:00:00.000Z"), "33333333");
     expect(r).toEqual({ ok: false, error: "unavailable" });
     expect(Number((await db.execute("SELECT COUNT(*) AS n FROM owner_holding")).rows[0]!.n)).toBe(

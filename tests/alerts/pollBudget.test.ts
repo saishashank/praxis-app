@@ -241,7 +241,7 @@ async function quoteLatest(code: string, fetchedAt: Date): Promise<void> {
   });
 }
 
-describe("quote budget: skipped, plan and the System Health line (OPS-109 c, D-971)", () => {
+describe("quote budget: skipped, plan and the System Health line (OPS-109 c, D-1788)", () => {
   it("a healthy tick skips nothing; the plan counts armed, watch (with the index) and held", async () => {
     await seedPick("ZZ01", 1);
     await watch("ZZW1");
@@ -298,7 +298,7 @@ describe("quote budget: skipped, plan and the System Health line (OPS-109 c, D-9
   });
 });
 
-describe("quote starvation incident (OPS-109 c, D-971)", () => {
+describe("quote starvation incident (OPS-109 c, D-1788)", () => {
   const starvedIncidents = async () =>
     (await db.execute("SELECT severity, detail_json FROM incident WHERE kind = 'quote_starvation'"))
       .rows;

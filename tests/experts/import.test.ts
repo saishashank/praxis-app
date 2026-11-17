@@ -17,7 +17,7 @@ import {
   track,
 } from "../db/helpers";
 
-// M19 0035: the ZZ seed holds one US call; the write guard needs that market enabled to store it.
+// M19 0038: the ZZ seed holds one US call; the write guard needs that market enabled to store it.
 const freshDb = async (name: "main" | "auth") => {
   const db = await baseFreshDb(name);
   if (name === "main") await allowMarket(db, "US");
@@ -557,12 +557,12 @@ describe("format 2: licence check, call proposals, expressions", () => {
     expect(r.rows[0]!.status).toBe("no");
   });
 
-  it("a database below schema 39 refuses format-2 rows and still takes a plain seed", async () => {
+  it("a database below schema 42 refuses format-2 rows and still takes a plain seed", async () => {
     const db = await freshDb("main");
-    await db.execute("DELETE FROM schema_migrations WHERE version >= 39");
+    await db.execute("DELETE FROM schema_migrations WHERE version >= 42");
     const refused = await go([seed2()], db);
     expect(refused.code).toBe(1);
-    expect(refused.text).toMatch(/below 39/);
+    expect(refused.text).toMatch(/below 42/);
     expect(await count(db, "expert")).toBe(0);
     expect((await go([seed()], db)).code).toBe(0);
   });

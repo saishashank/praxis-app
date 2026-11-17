@@ -256,9 +256,9 @@ describe("evening behaviour", () => {
 
 describe("failure handling", () => {
   it("an unreadable database during the checks is 'unknown', recorded failed and retryable", async () => {
-    await db.execute("DROP TABLE market_profile_field"); // 0034: the profile tables reference market
+    await db.execute("DROP TABLE market_profile_field"); // 0037: the profile tables reference market
     await db.execute("DROP TABLE market_profile");
-    // 0035: the run_record guard triggers read market, and the run record of this test must still be written
+    // 0038: the run_record guard triggers read market, and the run record of this test must still be written
     await db.execute("DROP TRIGGER run_record_market_guard_ins");
     await db.execute("DROP TRIGGER run_record_market_guard_upd");
     await db.execute("DROP TABLE market");
@@ -350,9 +350,9 @@ describe("V1-I2 / V1-I7: DST-aware evening window and the same-day retry", () =>
   });
 
   it("the retry call finishes a non-final day and skips a final one", async () => {
-    await db.execute("DROP TABLE market_profile_field"); // 0034: the profile tables reference market
+    await db.execute("DROP TABLE market_profile_field"); // 0037: the profile tables reference market
     await db.execute("DROP TABLE market_profile");
-    // 0035: the run_record guard triggers read market, and the run record of this test must still be written
+    // 0038: the run_record guard triggers read market, and the run record of this test must still be written
     await db.execute("DROP TRIGGER run_record_market_guard_ins");
     await db.execute("DROP TRIGGER run_record_market_guard_upd");
     await db.execute("DROP TABLE market");

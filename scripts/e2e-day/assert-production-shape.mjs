@@ -1,4 +1,4 @@
-// M19 E2 (MKT-110, AT-68, D-994, D-1079): the PRODUCTION SHAPE of the market set, asserted at the end of the CI recorded
+// M19 E2 (MKT-110, AT-68, D-1809, D-1837): the PRODUCTION SHAPE of the market set, asserted at the end of the CI recorded
 // day on the job's own database. A day that ran with the seed must leave exactly what production has:
 //   - `market`: the home market (AU) `enabled 1`, mode `full` (the recorded day switches the run on, as production did at
 //     go-live); every other built market (IN, US) `enabled 0`, mode `off`; no other market row;
@@ -27,7 +27,7 @@ import { localDbUrl } from "./check.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
-/** The enabled set production has (D-994): the production default of the `markets_enabled` key. */
+/** The enabled set production has (D-1809): the production default of the `markets_enabled` key. */
 export const PRODUCTION_ENABLED = Object.freeze(marketsEnabledDefault({}));
 
 /** The shape production has: `enabled` and the modes a built market may hold, per code. */

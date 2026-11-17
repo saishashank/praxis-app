@@ -25,7 +25,7 @@ export interface MonitorDef {
 }
 
 export const QUARTER_RE = /^\d{4}-Q[1-4]$/;
-/** The longest `value_json` the table accepts (CHECK in 0040). */
+/** The longest `value_json` the table accepts (CHECK in 0043). */
 const VALUE_MAX = 4000; // threshold-ok: column CHECK of residual_monitor.value_json
 
 /** "2030-02-14" -> "2030-Q1". */

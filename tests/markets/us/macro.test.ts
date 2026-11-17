@@ -1,8 +1,8 @@
 // @vitest-environment node
-// M20 integration (migration 0037, D-1147; closes D-1189): the FRED observations reach `macro_series` with source `fred`.
+// M20 integration (migration 0040, D-1147; closes D-1189): the FRED observations reach `macro_series` with source `fred`.
 // The fetch step puts them in the feeds file (`feeds.macro`, integer strings), the day's `macro` stage stores them
 // through the shared writer (guard first), a re-run changes nothing, a revised value changes one row, and under the
-// production seed (US off) the writer refuses before any statement and the 0037 trigger refuses a planted row.
+// production seed (US off) the writer refuses before any statement and the 0040 trigger refuses a planted row.
 import { afterEach, describe, expect, it } from "vitest";
 import {
   feedMacroEntry,
@@ -98,7 +98,7 @@ describe("the macro stage of the US night", () => {
     expect(JSON.parse(String(last.details_json)).stages.macro).toBe("no_feed");
   });
 
-  it("under the production seed the writer refuses before any statement and the 0037 trigger refuses a planted row", async () => {
+  it("under the production seed the writer refuses before any statement and the 0040 trigger refuses a planted row", async () => {
     const db = await freshDb("main");
     const rows = feedMacroRows(MACRO).rows;
     const err = await writeMacroSeries(db, "US", rows, "2026-11-13T00:00:00.000Z").then(

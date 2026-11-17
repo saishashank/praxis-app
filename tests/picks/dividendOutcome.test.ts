@@ -1,5 +1,5 @@
 // @vitest-environment node
-// ARN-123 (M18 B3, D-956; money maths): a NEW pick settlement credits the confirmed cash and special
+// ARN-123 (M18 B3, D-1785; money maths): a NEW pick settlement credits the confirmed cash and special
 // dividends that went ex after the fill session and on or before the exit session, on the quantity held
 // at the prior close (the books' entitlement rule, ARN-036), and says so (outcome basis 'total_return').
 // Hand table (P5 costs; size A$1,000 at A$10.00 = 100 shares; dividend 0.50 per share = A$50.00):
@@ -193,7 +193,7 @@ describe("with a split inside the window", () => {
   });
 });
 
-describe("the label follows the stored basis (D-956; D-143 wording kept for old rows)", () => {
+describe("the label follows the stored basis (D-1785; D-143 wording kept for old rows)", () => {
   it("price_only rows keep the old words, total_return rows say dividends are included", () => {
     expect(outcomeBasisLabel([])).toBe("Price only — dividends not included.");
     expect(outcomeBasisLabel(["price_only", "price_only"])).toBe(

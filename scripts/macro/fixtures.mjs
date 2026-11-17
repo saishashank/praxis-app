@@ -1,4 +1,4 @@
-// Fixture text for the RBA and ABS parsers (DAT-251 c, D-973): synthetic rows in the layout the two sources use
+// Fixture text for the RBA and ABS parsers (DAT-251 c, D-1790): synthetic rows in the layout the two sources use
 // (verified 2026-11-11). Kept as JS strings, not .csv files, so the repository hygiene scan sees no data file.
 // The RBA text starts with the UTF-8 byte-order mark the real file has.
 export const RBA_F1 =

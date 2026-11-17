@@ -178,7 +178,7 @@ describe("what each state leaves behind", () => {
     ]);
     const p = await db.execute("SELECT state, claim_id FROM expert_call_proposal ORDER BY state");
     expect(p.rows.map((x) => String(x.state))).toEqual(["complete", "incomplete"]);
-    // the complete proposal can be confirmed (the 0039 guard accepts it); the incomplete one cannot
+    // the complete proposal can be confirmed (the 0042 guard accepts it); the incomplete one cannot
     await db.execute(
       "INSERT INTO expert_call_confirm (claim_id, proposal_id, price_basis, confirmed_by, confirmed_at) VALUES ('C-SRC-1', '" +
         "c".repeat(64) +

@@ -237,7 +237,7 @@ export async function runReviewSend(ctx: ReviewSendCtx, d: string): Promise<Revi
   }
   const today = melbourneDate(now);
   // One review per date, built for the first enabled market; every further enabled market that trades on the date
-  // adds its own section (D-1061, D-1124, M20): with one market the review is exactly what it was.
+  // adds its own section (D-1828, D-1124, M20): with one market the review is exactly what it was.
   const markets = await enabledMarkets(db);
   if (markets.length === 0) return { ...base, status: "paused", reason: "no_market" };
   const minute = melbourneMinute(now);

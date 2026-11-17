@@ -1699,8 +1699,8 @@ async function recordSkip(db: Client, o: SignalsOptions, reason: string): Promis
   return emptyResult(o, "skipped", reason, runId);
 }
 
-/** After this market time a 2b without a 2a is recorded `late_2a` (the Worker's recheck window ends, D-953). */
-export const LATE_2A_AFTER: string = homeProfile().slots!.late_2a_after; // D-953: the 2b slot + 30 minutes, from the profile's batch schedule
+/** After this market time a 2b without a 2a is recorded `late_2a` (the Worker's recheck window ends, D-1782). */
+export const LATE_2A_AFTER: string = homeProfile().slots!.late_2a_after; // D-1782: the 2b slot + 30 minutes, from the profile's batch schedule
 export const LATE_2A_REASON = "late_2a";
 
 /** True when `nowIso` is after LATE_2A_AFTER on session `d` (market time). Pure. */
@@ -1776,7 +1776,7 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
   if (dayState === "missing") return recordSkip(db, o, "calendar_missing"); // D-711 fail safe
   if (dayState !== "open") return recordSkip(db, o, "non_trading_day");
   if (!(await closedOk(db, o.market, o.d))) {
-    // M18 OPS-106 (D-666, D-953): until 18:40 (market time) a missing 2a is a skip the Worker clock may
+    // M18 OPS-106 (D-666, D-1782): until 18:40 (market time) a missing 2a is a skip the Worker clock may
     // re-dispatch once 2a has closed; after it nothing re-dispatches, so the night is recorded as
     // degraded with its reason instead of a skip that reads as benign.
     if (o.replay !== true && isLate2a(o.now(), o.d, text(market.rows[0]!.tz))) {

@@ -47,7 +47,7 @@ describe("preconditions", () => {
 
   it("an unknown market is refused by the write guard and a market that is off is skipped", async () => {
     const db = await lightWorld();
-    // M19 0035: the skip would be a run record of a market with no row; the write guard refuses it (D-995)
+    // M19 0038: the skip would be a run record of a market with no row; the write guard refuses it (D-1810)
     await expect(
       learnDay(db, { market: "XX", d: D, now: nowFor(D), params: PARAMS }),
     ).rejects.toThrow(/MarketNotEnabled run_record/);

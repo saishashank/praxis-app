@@ -1,13 +1,13 @@
-// AT-67 / MKT-107 (M19, D-991, D-1000, D-1075 to D-1078): a market fact is written once, in the market profile
+// AT-67 / MKT-107 (M19, D-1806, D-1813, D-1833 to D-1836): a market fact is written once, in the market profile
 // seed. This scan fails when a market literal appears in code outside the allow-list. Zero dependencies.
 //
 //   node scripts/ci/market-literals.mjs           report every hit; exit 1 when any is outside the allow-list
-//   node scripts/ci/market-literals.mjs --count   print the D-991 count and the hit count (never fails)
+//   node scripts/ci/market-literals.mjs --count   print the D-1806 count and the hit count (never fails)
 //   node scripts/ci/market-literals.mjs --root <dir>   scan another tree (the self-tests plant literals in a temp copy)
 //
 // What is scanned: `src`, `scripts`, `worker/src` (.ts .tsx .mts .mjs .js .d.mts .py .yml), comments stripped
 // (`//`, `/* */`, `#` in Python and YAML, Python docstrings). Not scanned: `*.test.*`, `*.spec.*`, `test/`, `tests/`,
-// `__tests__/`, `e2e/`, `scripts/ci/fixtures/`, `node_modules`, `.next` (D-1000; migrations and docs are outside the
+// `__tests__/`, `e2e/`, `scripts/ci/fixtures/`, `node_modules`, `.next` (D-1813; migrations and docs are outside the
 // roots). The allow-list is `src/lib/market/**` (seed files, profileCore, homeMarket, staticProfile, clockTables,
 // guard: the one place a market fact lives), the files registered in `src/lib/market/seed/allow.mjs`, and the
 // precise entries of EXTRA_ALLOW below (each with a reason, and the classes it covers when not all).
@@ -20,14 +20,14 @@ export const CLASSES = Object.freeze({
   // a market code as a string value
   marketCode: /(["'`])(?:AU|IN|US)\1/,
   // exchange words as a string value, and the exchange cities anywhere in a code line (text of a label, a zone name).
-  // Melbourne is the Owner's own zone (OWNER_TZ, UXN-313), the same for every market: not a market fact (D-1075).
+  // Melbourne is the Owner's own zone (OWNER_TZ, UXN-313), the same for every market: not a market fact (D-1833).
   exchangeWord: /(["'`])(?:ASX|NSE|BSE|NYSE|Nasdaq)\1|\b(?:Sydney|Kolkata|Mumbai|New York)\b/,
-  // the IANA zones of the three markets (the Owner zone Australia/Melbourne is not one, D-1075)
+  // the IANA zones of the three markets (the Owner zone Australia/Melbourne is not one, D-1833)
   zone: /Australia\/(?!Melbourne\b)|Asia\/Kolkata|America\/New_York/,
   // AU session, pre-open and cut-off times as a string value
   sessionTime: /["'`](?:10:00|16:00|16:10|09:55|09:54|17:30|17:50|18:10|18:40)["'`]/,
   // a currency symbol or code
-  // (`A${` is an SVG arc command in a template, not a symbol; the en-AU date and number locale is the Owner's, D-1075)
+  // (`A${` is an SVG arc command in a template, not a symbol; the en-AU date and number locale is the Owner's, D-1833)
   currency: /\bA\$(?!\{)|\bUS\$(?!\{)|₹|(["'`])(?:AUD|INR|USD)\1/,
   // the Yahoo symbol suffix of a market
   yahooSuffix: /\.(?:AX|NS|BO)["'`]/,
@@ -39,7 +39,7 @@ export const CLASSES = Object.freeze({
   classification: /["'`]gics/i,
 });
 
-/** Files and folders the scan never reads (D-1000). */
+/** Files and folders the scan never reads (D-1813). */
 const SKIP_FILE = /\.(?:test|spec)\.[a-z]+$|(?:^|\/)test_[^/]*\.py$|_test\.py$/;
 const SKIP_DIR = new Set(["test", "tests", "__tests__", "e2e", "node_modules", ".next"]);
 const SKIP_PREFIX = ["scripts/ci/fixtures/"];
@@ -47,7 +47,7 @@ const EXT = /\.(?:ts|tsx|mts|mjs|js|py|yml)$/; // `.d.mts` ends in `.mts`
 const ROOTS = ["src", "scripts", "worker/src"];
 
 /**
- * Precise allow-list entries beyond `src/lib/market/**` and `allow.mjs` (D-1076). An entry names a `file` (or a `dir`
+ * Precise allow-list entries beyond `src/lib/market/**` and `allow.mjs` (D-1834). An entry names a `file` (or a `dir`
  * prefix ending in "/"), may narrow to `classes` and to the lines whose text holds `includes`, and always has a reason.
  * The scan reports an entry that matches no file or no hit: it is stale and must go.
  * @type {{ file?: string, dir?: string, classes?: string[], includes?: string, reason: string }[]}
@@ -56,25 +56,32 @@ export const EXTRA_ALLOW = Object.freeze([
   {
     dir: "scripts/market/",
     reason:
-      "the profile tooling (gen-seed-sql, gen-fixtures, snapshot-au) projects the seed to SQL, fixtures and the AU snapshot (D-992, D-1007)",
+      "the profile tooling (gen-seed-sql, gen-fixtures, snapshot-au) projects the seed to SQL, fixtures and the AU snapshot (D-1807, D-1007)",
   },
-  // ---- onboarding and glossary copy: the AU strategy amounts stay as words (D-1003, per-market amounts are ARN-119 at M20)
+  // ---- onboarding and glossary copy: the AU strategy amounts stay as words (D-1816, per-market amounts are ARN-119 at M20)
   {
     file: "src/app/(app)/home/HomeContent.tsx",
     classes: ["currency"],
     reason:
-      "onboarding copy of the six AU practice strategies' starting amount (D-1003: the numbers stay)",
+      "onboarding copy of the six AU practice strategies' starting amount (D-1816: the numbers stay)",
+  },
+  {
+    file: "src/app/(app)/picks/PortfolioCard.tsx",
+    classes: ["currency"],
+    includes: "first buy of a share",
+    reason:
+      "My portfolio sizing note: the AU first-buy parcel in words (main D-950, D-952; per-market parcel text is ARN-119 at M20)",
   },
   {
     file: "src/app/(app)/home/WelcomeBanner.tsx",
     classes: ["currency"],
     reason:
-      "onboarding copy of the AU starting amount, goal and loss limit (D-1003: the numbers stay)",
+      "onboarding copy of the AU starting amount, goal and loss limit (D-1816: the numbers stay)",
   },
   {
     file: "src/lib/view/terms.ts",
     classes: ["currency"],
-    reason: "hover words of the AU strategy amounts (D-1003: the numbers stay)",
+    reason: "hover words of the AU strategy amounts (D-1816: the numbers stay)",
   },
   {
     file: "src/app/(app)/reviews/glossary/entries.ts",
@@ -93,7 +100,7 @@ export const EXTRA_ALLOW = Object.freeze([
     file: "src/lib/config/keys.ts",
     classes: ["currency"],
     reason:
-      "AU-denominated bounds and reference text of the money keys (D-1003: numbers stay, the unit label reads market currency)",
+      "AU-denominated bounds and reference text of the money keys (D-1816: numbers stay, the unit label reads market currency)",
   },
   {
     file: "src/lib/config/keys.ts",
@@ -135,7 +142,7 @@ export const EXTRA_ALLOW = Object.freeze([
   },
   {
     file: "scripts/ci/market-literals.mjs",
-    reason: "defines the literal classes (D-1000); its own patterns are the text it searches for",
+    reason: "defines the literal classes (D-1813); its own patterns are the text it searches for",
   },
 ]);
 
@@ -385,7 +392,7 @@ function main(argv) {
     console.log(
       `market-literals: ${byFile.size} files with a literal outside the allow-list (${r.hits.length} hits)`,
     );
-    console.log(`market-literals: ${r.quotedFiles.length} files hold a quoted AU (D-991 count)`);
+    console.log(`market-literals: ${r.quotedFiles.length} files hold a quoted AU (D-1806 count)`);
     return 0;
   }
   for (const h of r.hits) console.log(`${h.file}:${h.line}  [${h.cls}]  ${h.text.slice(0, 120)}`);

@@ -322,7 +322,7 @@ describe("expert boundary (ii-b): the polling job's own limits (M22 E2, D-1478)"
 });
 
 describe("expert boundary (iii): SQL write allowlist", () => {
-  // M22 tables of the expert library (migration 0039): the licence store and the job-run row (E1, D-1450).
+  // M22 tables of the expert library (migration 0042): the licence store and the job-run row (E1, D-1450).
   const M22_EXPERT_TABLES = [
     "expert_source_licence",
     "expert_poll_run",

@@ -72,7 +72,7 @@ try {
     await applyStates(main, stateNames, undefined, { viewerId });
     console.log(`e2e: states ${stateNames.join(", ")}`);
   }
-  // M19 D-994 / D-1077: a development lane that sets PRAXIS_MARKETS_ENABLED (for example AU,IN,US) enables those built
+  // M19 D-1809 / D-1835: a development lane that sets PRAXIS_MARKETS_ENABLED (for example AU,IN,US) enables those built
   // markets here; unset (every CI lane) the database keeps the production shape (AU only).
   if ((process.env.PRAXIS_MARKETS_ENABLED ?? "").trim() !== "") {
     const enabled = await applyMarketsDev(main);

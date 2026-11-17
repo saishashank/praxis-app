@@ -26,7 +26,12 @@ import {
   type MoneyView,
 } from "./shell";
 import { displayTitle } from "@/lib/view/displayText";
-import { newerThanClose, quoteTimeMelbourne, readLatestQuotes } from "@/lib/data/quotes/latest";
+import {
+  newerThanClose,
+  quoteChangePpm,
+  quoteTimeMelbourne,
+  readLatestQuotes,
+} from "@/lib/data/quotes/latest";
 import { soft } from "./common";
 
 const MEMO_MS = 600_000; // threshold-ok: design 2.9, 10-minute ceiling
@@ -529,7 +534,7 @@ async function withLive(env: LoaderEnv, closeD: string, lists: MarketList[]): Pr
     if (close <= 0n) continue;
     r.live = {
       price: { micro: q.lastMicro.toString(), currency: env.currency, simulated: true },
-      changePpm: Number(((q.lastMicro - close) * 1_000_000n) / close), // money-float-ok: ppm of micro prices
+      changePpm: quoteChangePpm(q.lastMicro, close, q.prevCloseMicro) ?? 0,
       at: quoteTimeMelbourne(q.quoteAt),
     };
   }
@@ -590,6 +595,8 @@ export type OverviewModel = {
   d: string | null;
   close: MoneyView | null;
   changePpm: number | null;
+  /** Delayed quote newer than the close (display only, as on the company page); a masked viewer gets the change only. */
+  live: { priceMicro: string | null; currency: string; changePpm: number; at: string } | null;
   volume: number | null;
   announcements: Array<{ id: number; title: string; published: string; url: string | null }>;
   /** Facts only until the summary writer is live (decision 48). */
@@ -634,8 +641,25 @@ export async function loadOverview(env: LoaderEnv, key: string): Promise<Overvie
     args: [market, code, NEWS_ROWS],
   });
   const stock = kit ? kit.aliases.label(code) : code;
+  const live = last
+    ? await soft(async () => {
+        const q = newerThanClose(
+          (await readLatestQuotes(env.main, market, [code!])).get(code!),
+          String(last.d),
+        );
+        const close = BigInt(priceMicro(Number(last.c)));
+        if (q === null || close <= 0n) return null;
+        return {
+          priceMicro: masked ? null : q.lastMicro.toString(),
+          currency: env.currency,
+          changePpm: quoteChangePpm(q.lastMicro, close, q.prevCloseMicro) ?? 0,
+          at: quoteTimeMelbourne(q.quoteAt),
+        };
+      }, null)
+    : null;
   return {
     masked,
+    live,
     stock,
     slug: masked ? slugOf(stock) : code,
     name: masked ? null : displayName(String(i.name)),

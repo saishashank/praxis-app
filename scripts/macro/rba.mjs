@@ -1,8 +1,8 @@
-// RBA statistical table F1 (daily interest rates) -> macro_series (DAT-251 c, D-973).
+// RBA statistical table F1 (daily interest rates) -> macro_series (DAT-251 c, D-1790).
 //   node scripts/macro/rba.mjs        env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, MACRO_USER_AGENT (optional)
 // Source: Reserve Bank of Australia (RBA copyright notice: financial data may be reused with attribution
 // "Source: RBA"; it does not address automated download, checked 2026-11-11; the Friday step is gated by
-// the MACRO_FETCH variable so the Owner accepts that first, D-973). Layout verified 2026-11-11: a UTF-8
+// the MACRO_FETCH variable so the Owner accepts that first, D-1790). Layout verified 2026-11-11: a UTF-8
 // BOM, a title row, "Title,<series names>", description / frequency / type / units rows, two blank rows,
 // "Source", "Publication date", "Series ID,<ids>", then data rows "DD-Mon-YYYY,v1,v2,...".
 import { fileURLToPath } from "node:url";

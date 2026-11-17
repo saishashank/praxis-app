@@ -6,7 +6,7 @@
 //   bhavcopy (CSV)            required: a missing or empty file fails the date, nothing is invented (DAT-004)
 //   bands (CSV)               price bands            asm, gsm (JSON text)   surveillance lists
 //   announcements_nse (JSON)  headline + link only   announcements_bse (JSON)
-//   insider (CSV)  fo_oi (CSV)  classification (CSV, monthly)  macro (CSV, -> macro_series since 0037)  index (CSV, manual upload)
+//   insider (CSV)  fo_oi (CSV)  classification (CSV, monthly)  macro (CSV, -> macro_series since 0040)  index (CSV, manual upload)
 // Every write path calls `assertMarketEnabled` FIRST (MKT-110 a): with India off (production) `runDay` throws
 // MarketNotEnabled before it reads a file, opens a run record or calls any client. Stages that fail are recorded in the
 // run's details and never fail the bars (the bars are the primary product); a missing optional file is a stage word.
@@ -499,7 +499,7 @@ export async function runDay(db, o) {
     await guarded("macro", async () => {
       if (files.macro === undefined) return "no_file";
       const p = parseMacroCsv(files.macro);
-      // stored since migration 0037 (D-1147, closing D-1171): source rbi or mospi by series, the guard first
+      // stored since migration 0040 (D-1147, closing D-1171): source rbi or mospi by series, the guard first
       const st = storableMacroRows(macroSeriesRows(p.rows), MACRO_SOURCES);
       const n = await writeMacroSeries(db, market, st.rows, iso());
       io.written += n;

@@ -9,7 +9,7 @@
 //   - FINRA: the daily short-sale volume file of the target date;
 //   - Nasdaq: the trade-halt RSS; the SEC trading-suspension feed (EDGAR contact, D-1142);
 //   - the index CSVs are a manual upload (register row us_sp_dji_russell_manual), read from `--index-dir` when given;
-//   - FRED (migration 0037, D-1147): the observations of the three FRED_SERIES since 45 days before the date, only with
+//   - FRED (migration 0040, D-1147): the observations of the three FRED_SERIES since 45 days before the date, only with
 //     the Owner key FRED_API_KEY (word `key_missing` without it, no request) and an enabled `us_fred` row;
 //   - bars: NO source (D-1132). The bars file comes from the seam the Owner enables later; this step does not make it.
 // Every source is isolated: a refusal or an error is one fixed word in the log and the feed is left out; the output is
@@ -173,7 +173,7 @@ export async function fetchNight(o) {
     }
   }
 
-  // ---- FRED (needs the Owner key; the series are stored by the database step, migration 0037) ----
+  // ---- FRED (needs the Owner key; the series are stored by the database step, migration 0040) ----
   const macro = [];
   try {
     fredKey(env); // the key first: nothing is requested without it

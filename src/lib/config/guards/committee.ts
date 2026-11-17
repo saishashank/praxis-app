@@ -50,7 +50,7 @@ async function trialRunning(db: Pick<Client, "execute">): Promise<boolean> {
     });
     return r.rows.length > 0;
   } catch (e) {
-    // The tables come with migration 0039: before it there is no trial. Any other failure refuses (fails closed).
+    // The tables come with migration 0042: before it there is no trial. Any other failure refuses (fails closed).
     if (e instanceof Error && /no such table/i.test(e.message)) return false;
     return true;
   }

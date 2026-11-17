@@ -1,5 +1,5 @@
-// The market-profile loader: the single reader of a market's facts (M19 A1; MKT-107, DAT-241, D-993).
-// A profile is the seed row + the field rows (`market_profile`, `market_profile_field`, migration 0034) + the
+// The market-profile loader: the single reader of a market's facts (M19 A1; MKT-107, DAT-241, D-1808).
+// A profile is the seed row + the field rows (`market_profile`, `market_profile_field`, migration 0037) + the
 // newest `mkt.<CODE>.<field>` configuration value of the Owner-editable keys, typed, frozen and cached per
 // database handle for PROFILE_CACHE_MS (60 s); the one writer (profileWrite.ts) calls `invalidateProfiles()`.
 // Everything that used to hold a market literal asks this module (or takes a MarketProfile argument). Turso
@@ -25,7 +25,7 @@ export { OWNER_TZ, GLOBAL_INDICES } from "./profileCore.mjs";
 
 type Db = Pick<Client, "execute">;
 
-/** How long a loaded profile is reused (`profile_cache_ms`, D-993). */
+/** How long a loaded profile is reused (`profile_cache_ms`, D-1808). */
 export const PROFILE_CACHE_MS = 60_000;
 
 /** The configuration key of a profile field's overlay (`mkt.<CODE>.<field>`). */
@@ -135,7 +135,7 @@ export async function loadProfiles(db: Db): Promise<MarketProfile[]> {
   return out;
 }
 
-/** The enabled markets (`markets_enabled`, D-994), sorted. Production: AU only. */
+/** The enabled markets (`markets_enabled`, D-1809), sorted. Production: AU only. */
 export async function enabledMarkets(db: Db): Promise<string[]> {
   // rows-ok: the market table holds one row per built market (3)
   const r = await db.execute("SELECT code FROM market WHERE enabled = 1 ORDER BY code");

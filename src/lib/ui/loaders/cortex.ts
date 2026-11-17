@@ -17,6 +17,7 @@ import {
   CORTEX_FAMILIES,
   decisionsForNight,
   familyStatusMap,
+  isLearnerRow,
   latestMaps,
   latestPassports,
   latestStatement,
@@ -24,8 +25,20 @@ import {
   refitPending,
   type CortexFamily,
   type FamilyStatusWord,
+  type MapRow,
 } from "@/lib/cortex/store";
 import { tickCostRow, LIQUIDITY_TIERS } from "@/lib/cortex/economics/cost";
+import { LEARN_CONFIG } from "@/lib/cortex/learn/config";
+import { duelStatus } from "@/lib/cortex/learn/duel";
+import { luckWords, percentWords } from "@/lib/cortex/learn/learnWords";
+import {
+  compareRowsSince,
+  eventsSince,
+  lastEventD,
+  leaderMap,
+  type LeaderRow as LearnLeaderRow,
+} from "@/lib/cortex/learn/store";
+import { WARM_EVENT_SEQ } from "@/lib/cortex/learn/warmConst";
 import { FAMILY_WORD, CLUSTER_WORD } from "@/lib/cortex/phrases";
 import { EMPTY_RESEARCH, loadResearchView, type ResearchView } from "@/lib/research/pageView";
 import { formatDay, formatInstant, isoWeek, MISSING } from "@/lib/view/format";
@@ -121,6 +134,24 @@ export type TickRowView = {
 };
 export type OpinionView = { kind: string; total: number; settled: number };
 
+/** O-81 (D-944): the learning Cortex in plain words (design C.11 "Cortex page panel"). */
+export type LearnerView = {
+  /** False when the Owner switched it off (learner_off = 1). */
+  on: boolean;
+  onText: string;
+  /** Who makes the decisions per family that has a learner. */
+  leaders: { name: string; text: string }[];
+  /** The newest weekly re-weighting: its day and words (null before the first one). */
+  weekly: { day: string; words: string } | null;
+  /** The duel in plain words, with "chance of luck about 1 in N"; null before any result. */
+  duelText: string | null;
+  /** D-1078: one line when past sessions were replayed into the scorecard (warm start); else null. */
+  warmStartText: string | null;
+  /** Events of the last 30 sessions, newest first (Owner only; a masked viewer sees the count). */
+  events: { day: string; words: string }[];
+  eventCount: number;
+};
+
 export type CortexView = {
   role: string | null;
   masked: boolean;
@@ -158,6 +189,8 @@ export type CortexView = {
   opinions: OpinionView[];
   /** The four research sections (M23 M4; D-1760): tests and their one look, waiting for data, risk monitors, sector series. */
   research: ResearchView;
+  /** The learning Cortex (null until its first generation is written). */
+  learner: LearnerView | null;
   tickCost: TickRowView[];
   /** Owner controls (CTX-072): the page links to the existing writers, it has no writer of its own. */
   controls: { canEdit: boolean; configHref: string; killHref: string };
@@ -222,7 +255,9 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
           : formatInstant(iso);
   const since = lastD === null ? "0000-00-00" : dayMinus(lastD, WINDOW_DAYS);
 
-  const maps = await soft(() => latestMaps(db, market), []);
+  const allMaps = await soft(() => latestMaps(db, market), []);
+  // D-944: the learner's own rows (F1.learn) are not the fixed maps; the learner panel shows them
+  const maps = allMaps.filter((m) => !isLearnerRow(m));
   const mapFamilies = new Map<CortexFamily, string>();
   for (const m of maps) {
     const cur = mapFamilies.get(m.family);
@@ -434,6 +469,20 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
     };
   });
 
+  const learner = await soft(
+    () =>
+      loadLearnerView(db, {
+        market,
+        lastD,
+        masked,
+        learnerRows: allMaps.filter(isLearnerRow),
+        familyName: (f, i) =>
+          masked ? `Strategy ${i + 1}` : (stratNames[f]?.name ?? sentenceCase(FAMILY_WORD[f] ?? f)),
+        weekOf,
+      }),
+    null,
+  );
+
   const mapsLoaded = mapFamilies.size;
   const pending = await soft(() => refitPending(db, market), false);
   const view: CortexView = {
@@ -461,6 +510,7 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
     },
     opinions,
     research,
+    learner,
     tickCost,
     controls: {
       canEdit: role === "owner",
@@ -484,4 +534,104 @@ function safeParse(s: unknown): unknown {
   } catch {
     return null;
   }
+}
+
+// ---- the learning Cortex panel (O-81, D-944; design C.11) ----------------------------------------------
+
+const LEARN_EVENTS_DAYS = 45; // threshold-ok: calendar days that hold the last 30 sessions
+const LEARN_EVENTS_MAX = 30; // threshold-ok: event lines listed
+const WARM_START_DAYS = 200; // threshold-ok: calendar days that hold the 120 sessions a warm start may cover
+const ISO_DATE_LEN = 10; // threshold-ok: the date part of an ISO instant
+const HIDDEN_KINDS = new Set(["scorecard", "placebo"]);
+
+export async function loadLearnerView(
+  db: Client,
+  o: {
+    market: string;
+    lastD: string | null;
+    masked: boolean;
+    learnerRows: readonly MapRow[];
+    familyName: (f: CortexFamily, i: number) => string;
+    weekOf: (d: string) => string;
+  },
+): Promise<LearnerView | null> {
+  if (o.learnerRows.length === 0) return null;
+  const off = fin(await soft(() => getConfig(db, "learner_off"), 0)) === 1;
+  const asOf = o.lastD ?? "9999-12-31";
+  const dayOf = (d: string): string => (o.masked ? o.weekOf(d) : formatDay(d));
+  const leaders = await soft(
+    () => leaderMap(db, o.market, asOf),
+    new Map<string, LearnLeaderRow>(),
+  );
+  const families = [...new Set(o.learnerRows.map((m) => m.family))].sort();
+  const leaderList = families.map((f) => {
+    const l = leaders.get(f);
+    const learnerLeads = l?.leader === "learner" && !off;
+    const since = l === undefined ? "" : ` since ${dayOf(l.sinceD)}`;
+    return {
+      name: o.familyName(f, CORTEX_FAMILIES.indexOf(f)),
+      text: learnerLeads
+        ? `The learning Cortex makes the decisions${since}; the fixed one runs beside it.`
+        : `The fixed Cortex makes the decisions${l?.leader === "fixed" ? since : ""}; the learning Cortex runs beside it and is compared every night.`,
+    };
+  });
+  const firstFit = o.learnerRows.reduce((m, r) => (r.fittedAt < m ? r.fittedAt : m), asOf);
+  const startD = firstFit.slice(0, ISO_DATE_LEN);
+  const from = o.lastD === null ? startD : dayMinus(o.lastD, LEARN_EVENTS_DAYS);
+  const events = await soft(
+    () => eventsSince(db, o.market, from < startD ? startD : from, asOf),
+    [],
+  );
+  const weeklyD = await soft(() => lastEventD(db, o.market, ["reweight", "no_change"], asOf), null);
+  let weekly: LearnerView["weekly"] = null;
+  if (weeklyD !== null) {
+    const of = await soft(() => eventsSince(db, o.market, weeklyD, weeklyD), []);
+    const w = of.find((e) => e.kind === "reweight" || e.kind === "no_change");
+    weekly = {
+      day: dayOf(weeklyD),
+      words: o.masked ? "The weekly re-weighting ran." : (w?.words ?? ""),
+    };
+  }
+  // D-1078: nights the warm start replayed from the price history (events carry the count)
+  const warmEvents = await soft(
+    () => eventsSince(db, o.market, dayMinus(o.lastD ?? asOf, WARM_START_DAYS), asOf),
+    [],
+  );
+  const warmNights = warmEvents
+    .filter((e) => e.seq === WARM_EVENT_SEQ && e.kind === "scorecard")
+    .reduce((n, e) => {
+      const v = (e.evidence as { warmStart?: unknown; nights?: unknown } | null) ?? {};
+      return v.warmStart === true && typeof v.nights === "number" ? n + v.nights : n;
+    }, 0);
+  const warmStartText =
+    warmNights === 0
+      ? null
+      : `Learning evidence includes ${warmNights} past sessions replayed from the price history (as of each evening), so ${weeklyD === null ? "the next weekly run" : "each weekly run"} can change weights.`;
+  const rows = await soft(() => compareRowsSince(db, o.market, startD, asOf), []);
+  let duelText: string | null = null;
+  if (rows.length > 0) {
+    const s = duelStatus({ compareRows: rows, net: [], hold: null, config: LEARN_CONFIG });
+    const ahead = s.mean20 >= 0;
+    const differ =
+      s.differ20 === 0
+        ? "they have not differed yet."
+        : `on the ${s.differ20} nights they differed, the learner's pick was ${ahead ? "ahead" : "behind"} by ${percentWords(Math.abs(s.mean20))} over four weeks (${luckWords(ahead ? s.eBetter20 : s.eWorse20)}).`;
+    duelText = `Learning Cortex vs fixed Cortex: they chose the same share on ${s.agree} of ${s.nights} nights; ${differ}`;
+  }
+  const shown = events
+    .filter((e) => !HIDDEN_KINDS.has(e.kind))
+    .sort((a, b) => (a.d === b.d ? b.seq - a.seq : a.d < b.d ? 1 : -1))
+    .slice(0, LEARN_EVENTS_MAX);
+  return {
+    on: !off,
+    onText: off
+      ? "Switched off by the Owner: the learning Cortex only runs beside the fixed one and never makes the decisions."
+      : "On: the learning Cortex runs beside the fixed one, changes weights on Fridays only and can only take over on strict evidence.",
+    leaders: leaderList,
+    weekly,
+    duelText,
+    warmStartText,
+    events: o.masked ? [] : shown.map((e) => ({ day: dayOf(e.d), words: e.words })),
+    eventCount: shown.length,
+  };
 }

@@ -28,6 +28,7 @@ import {
   rollsStage,
   type WeeklyContext,
 } from "@/lib/learning/weeklyStages";
+import { cortexWeeklyStage } from "@/lib/cortex/learn/weekly";
 import { expertsStage } from "@/lib/experts/weeklyStage";
 import { rankIcStage } from "@/lib/learning/rankIcStage";
 import { robustnessStage } from "@/lib/learning/robustnessStage";
@@ -178,6 +179,7 @@ export async function runLearning(o: LearningRunOptions): Promise<LearningOutput
       robustness: wrap(robustnessStage),
       rankIc: wrap(rankIcStage),
       experts: wrap(expertsStage),
+      cortex: wrap(cortexWeeklyStage),
     },
   });
 

@@ -1,5 +1,5 @@
 // @vitest-environment node
-// AT-67 (M19 E1, MKT-107, D-991, D-1000): a market fact is written once, in the profile seed. The scan
+// AT-67 (M19 E1, MKT-107, D-1806, D-1813): a market fact is written once, in the profile seed. The scan
 // (scripts/ci/market-literals.mjs, also `npm run test:market-literals`) finds no market code, exchange or city word,
 // market zone, AU session time, currency symbol, Yahoo suffix, index code, parcel literal or classification name in code
 // outside the allow-list. A literal planted into a temporary copy of the tree must fail, and removing it must pass.
@@ -18,7 +18,7 @@ const put = (root: string, rel: string, text: string) => {
 };
 
 describe("AT-67 market literals", () => {
-  it("the tree has 0 literals outside the allow-list (the D-991 count is 0 too)", () => {
+  it("the tree has 0 literals outside the allow-list (the D-1806 count is 0 too)", () => {
     const r = scanTree(ROOT);
     expect(r.hits.map((h) => `${h.file}:${h.line} [${h.cls}] ${h.text}`)).toEqual([]);
     expect(r.quotedFiles).toEqual([]);

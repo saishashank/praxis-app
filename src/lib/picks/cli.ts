@@ -16,7 +16,9 @@ import { reviewKey } from "@/lib/agents/batch3";
 import { loadAgentParams } from "@/lib/agents/params";
 import { loadCalendar } from "@/lib/arena/closeBooks";
 import { marketDate } from "@/lib/data/calendar";
-import { runDailyLearning } from "@/lib/learning/daily";
+import { cortexLearnNight } from "@/lib/cortex/learn/stage";
+import { runDailyLearning, type DailyLearningResult } from "@/lib/learning/daily";
+import { candidateTally } from "./candidates";
 import { pickHooks } from "./dailyHooks";
 import { runPicksNight } from "./nightly";
 import { recordPicksNight } from "./noPicks";
@@ -84,10 +86,11 @@ export async function picksMain(
       out(`arena-picks ${market} ${d}: skipped (no reviewed night)`);
       return 0;
     }
+    const params = await loadAgentParams(db);
     const p = await runPicksNight(db, {
       market: market,
       d,
-      params: await loadAgentParams(db),
+      params,
       calendar: await loadCalendar(db, market),
       now: new Date(nowMs()).toISOString(),
     });
@@ -95,7 +98,8 @@ export async function picksMain(
     out(
       `arena-picks ${market} ${d}: published=${p.published} candidates=${p.candidates}` +
         ` bought=${t.bought} missed=${t.missed} closed=${t.closed} open=${t.open}` +
-        ` checked=${p.checks.checked} withdrawn=${p.checks.withdrawn} shortlist=${p.shortlist}`,
+        ` checked=${p.checks.checked} withdrawn=${p.checks.withdrawn} shortlist=${p.shortlist}` +
+        ` candidate=${p.candidateMeasures}`,
     );
     if (p.noPicksLine !== null) {
       out(
@@ -117,32 +121,70 @@ export async function picksMain(
     } catch {
       out(`arena-picks ${market} ${d}: outcome row not stored`);
     }
-    // D-913: the Follow the picks portfolio, rebuilt after the picks; a failure never stops them
+    // D-950: the three My portfolio practice portfolios, rebuilt after the picks; a failure never stops them
     try {
-      const f = await runPickPortfolio(db, { market: market, d });
-      out(
-        `arena-portfolio ${market} ${d}: trades=${f.trades} open=${f.open} days=${f.days} skipped=${f.skipped}`,
-      );
+      const f = await runPickPortfolio(db, { market, d });
+      const each = Object.entries(f)
+        .map(([p, r]) => `${p}=${r.trades}/${r.open}/${r.days}/${r.splits}/${r.skipped}`)
+        .join(" ");
+      out(`arena-portfolio ${market} ${d}: trades/open/days/splits/skipped ${each}`);
     } catch (error) {
       out(
         `arena-portfolio ${market} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
       );
     }
     // D-921: the daily learning loop, after the picks and the portfolio; a failure never stops them
+    let night: DailyLearningResult["night"];
+    let calendar: Awaited<ReturnType<typeof loadCalendar>> = [];
     try {
+      calendar = await loadCalendar(db, market);
       const l = await runDailyLearning(db, {
         market: market,
         d,
-        calendar: await loadCalendar(db, market),
+        calendar,
         now: new Date(nowMs()).toISOString(),
         hooks: pickHooks,
       });
+      night = l.night;
       out(
         `arena-learning ${market} ${d}: movers=${l.movers} lessons=${l.lessons} improvements=${l.improvements} hypotheses=${l.hypotheses}`,
       );
     } catch (error) {
       out(
         `arena-learning ${market} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
+      );
+    }
+    // D-923: the learning Cortex's scorecard, on the daily loop's World; a failure never stops the picks
+    try {
+      // D-983: the candidate picks' finished results, evidence words of their measures only
+      const candidatePicks =
+        night === undefined
+          ? undefined
+          : await candidateTally(db, market, d).catch(() => undefined);
+      const c =
+        night === undefined
+          ? null
+          : await cortexLearnNight(db, {
+              market,
+              d,
+              calendar,
+              world: night.world,
+              movers: night.movers,
+              now: new Date(nowMs()).toISOString(),
+              cutoffHhmm: params.decisionCutoff,
+              ...(candidatePicks === undefined ? {} : { candidatePicks }),
+            });
+      out(
+        c === null
+          ? `arena-cortex-learn ${market} ${d}: skipped (no daily learning tonight)`
+          : `arena-cortex-learn ${market} ${d}: angles=${c.numbers.angles} rows=${c.numbers.rows} next_day_right=${c.numbers.nextDayRight}/${c.numbers.nextDayOf} data_breaks=${c.numbers.dataBreaks}` +
+              (c.numbers.learner === undefined
+                ? ""
+                : ` learner_generation=${c.numbers.learner.generation} leader=${c.numbers.learner.leader} checkpoint=${c.numbers.learner.checkpoint ? 1 : 0} actions=${c.numbers.learner.actions.length}`),
+      );
+    } catch (error) {
+      out(
+        `arena-cortex-learn ${market} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
       );
     }
     return 0;

@@ -1,4 +1,4 @@
-// Market-aware test matrix harness (TST-139, D-970; M19 adds the markets, not the harness).
+// Market-aware test matrix harness (TST-139, D-1787; M19 adds the markets, not the harness).
 // One JSON file per BUILT market in this folder (`<CODE>.json`); `builtMarketFixtures()` reads them all, so a new
 // market is a new file and no code change. `describeEachMarket(name, fn)` runs a suite once per built market, with
 // the profile as its argument, and names each run "<name> [<CODE>]". AU, IN and US exist from M19 (IN and US generated from their seeds by
@@ -55,7 +55,7 @@ export function describeEachMarket(
 }
 
 /**
- * The production shape (TST-139, D-970): every market named in a run record has a `market` row. Used by the
+ * The production shape (TST-139, D-1787): every market named in a run record has a `market` row. Used by the
  * recorded-day job and the market tests; returns the offending codes (empty = ok). Only distinct markets are read.
  * rows-ok: DISTINCT over run_record.market, at most the 180-day window, and only on a local test database.
  */

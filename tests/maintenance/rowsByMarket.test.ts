@@ -30,7 +30,7 @@ const NOW = new Date("2026-11-12T00:30:00.000Z");
 const D = "2026-11-12";
 
 // A foreign code that is not in the `market` table at all, and a code made off through a market row. Since
-// migration 0035 a row of a market that is not enabled cannot be inserted directly: the fixtures plant it through
+// migration 0038 a row of a market that is not enabled cannot be inserted directly: the fixtures plant it through
 // plantOffMarketRow (enable, insert, disable); a code with no market row gets one, off.
 const FOREIGN = "ZQ";
 const OFF = "ZO";
@@ -63,7 +63,7 @@ async function quoteRow(market: string, code: string) {
 async function addMarket(code: string, mode: string) {
   await db.execute({
     sql: `INSERT INTO market (code, tz, open_time, close_time, cutoff_time, currency, mode, enabled)
-          VALUES (?, 'UTC', '10:00', '16:00', '16:10', 'XXX', ?, ?)`, // M19 0034: a market that is not off must be enabled
+          VALUES (?, 'UTC', '10:00', '16:00', '16:10', 'XXX', ?, ?)`, // M19 0037: a market that is not off must be enabled
     args: [code, mode, mode === "off" ? 0 : 1],
   });
 }
@@ -111,7 +111,7 @@ describe("the invariant", () => {
     expect((await db.execute("SELECT 1 FROM incident")).rows).toHaveLength(0);
   });
 
-  it("document rows of the scope 'common' (the source register, the expert mirror) belong to no market and are quiet (D-1024)", async () => {
+  it("document rows of the scope 'common' (the source register, the expert mirror) belong to no market and are quiet (D-1822)", async () => {
     await db.execute(
       `INSERT INTO document (path, version, market, doc_type, front_json, body, body_sha, d, created_at)
        VALUES ('knowledge/sources/register.md', 1, 'common', 'source_register', '{}', 'b', '${"a".repeat(64)}', '2026-11-12', 't')`,
@@ -186,7 +186,7 @@ describe("the invariant", () => {
     expect((await db.execute("SELECT 1 FROM incident")).rows).toHaveLength(1);
   });
 
-  it("the guard refuses the direct insert the invariant would otherwise have found (D-995)", async () => {
+  it("the guard refuses the direct insert the invariant would otherwise have found (D-1810)", async () => {
     await expect(
       db.execute(
         "INSERT INTO quote_latest (market, code, last_micro, quote_at, fetched_at) VALUES ('ZQ', 'A', 1, 't', 't')",
@@ -219,7 +219,7 @@ describe("the invariant", () => {
   });
 });
 
-describe("the enabled set against the production setting (D-994)", () => {
+describe("the enabled set against the production setting (D-1809)", () => {
   it("is quiet when the database and PRAXIS_MARKETS_ENABLED agree (unset = AU only)", async () => {
     const r = await checkEnabledSet(db, NOW, {});
     expect(r).toEqual({ expected: ["AU"], actual: ["AU"], mismatch: false });

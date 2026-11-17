@@ -157,7 +157,7 @@ test("signals.mjs: a replay without a closed 2a fails visibly, after the (zero) 
   }
 });
 
-// M18 OPS-106 (D-666, D-953): a live 2b without a 2a is a skip until 18:40 market time (the Worker clock
+// M18 OPS-106 (D-666, D-1782): a live 2b without a 2a is a skip until 18:40 market time (the Worker clock
 // re-dispatches it once 2a has closed) and a degraded `late_2a` night after it.
 async function liveNo2a(nowIso) {
   const { dir, url, db } = await freshDb();

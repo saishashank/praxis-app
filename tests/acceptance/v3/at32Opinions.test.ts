@@ -2,7 +2,7 @@
 // AT-32 complement proof for the M22 opinion tables (M22 A1, D-1426, D-1444; PRD-033, AT-68 b): the steelman's proof
 // (tests/acceptance/v2/at32Steelman.test.ts) hashes the COMPLEMENT of a named own-set, so a table is covered the day a
 // migration creates it. M22 extends that own-set by exactly eight tables (the Committee's, the promotion request, the
-// MiniLM shadow, the alt-input regime reading and its points) and nothing else; every other table, the five other 0039
+// MiniLM shadow, the alt-input regime reading and its points) and nothing else; every other table, the five other 0042
 // tables included, stays in the hash. Three things are proved on the golden ZZ world of AT-32 (steelman stage off):
 //   1. the own-set is exactly the steelman's own tables plus the eight, and every one of the eight exists and is excluded;
 //   2. rows in the eight tables (what the M22 stages write) leave the dump of every other table, byte for byte, as it was,
@@ -46,7 +46,7 @@ const M22_OWN = [
   "alt_input_point",
 ] as const;
 
-/** The five 0039 tables that are NOT in the own-set: they stay in the hash. */
+/** The five 0042 tables that are NOT in the own-set: they stay in the hash. */
 const M22_HASHED = [
   "cluster_expression",
   "expert_call_confirm",
@@ -237,7 +237,7 @@ describe("AT-32 (opinions): the M22 own-set and the complement proof (D-1426)", 
     for (const t of [...M22_OWN, ...M22_HASHED]) expect(tables, `${t} exists`).toContain(t);
 
     const before = await complementDump(db);
-    // the five other 0039 tables are in the complement
+    // the five other 0042 tables are in the complement
     for (const t of M22_HASHED) expect(Object.keys(before.perTable), t).toContain(t);
     for (const t of M22_OWN) expect(Object.keys(before.perTable), t).not.toContain(t);
     // the world is not empty
@@ -278,7 +278,7 @@ describe("AT-32 (opinions): the M22 own-set and the complement proof (D-1426)", 
     expect(combineTables(after.perTable, baseNames)).toBe(base.at32.hash);
   });
 
-  it("is not vacuous: a row in a hashed 0039 table changes exactly that table's hash", async () => {
+  it("is not vacuous: a row in a hashed 0042 table changes exactly that table's hash", async () => {
     const db = await at32World();
     const before = await complementDump(db);
     await db.execute(

@@ -1,4 +1,4 @@
-// AT-68 (a), M19 E2 (MKT-110 a, D-996, D-1048, D-1079): the Worker half of "no job for a market that is not enabled",
+// AT-68 (a), M19 E2 (MKT-110 a, D-1811, D-1048, D-1837): the Worker half of "no job for a market that is not enabled",
 // proven on the production shape (the migration seed: AU enabled, IN and US built and off). The rest of AT-68 is
 // tests/acceptance/v3/at68.test.ts (root suite, same CI run); this file lives here because the Worker's SQLite double
 // (fakeTurso) is typed by the Worker package.

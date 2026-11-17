@@ -3,7 +3,7 @@
 // the server, in a test and in a screenshot. A missing or non-finite value is shown as "n/a", never
 // as 0 or a blank (honest numbers, UX-041). Money is stored as integer cents or micro units of the
 // market currency (`*_micro`) and ratios as ppm; this module is the only place those units become text.
-// The symbol and the digit grouping come from the market's `CurrencyFormat` (UXN-313, D-1002): a call
+// The symbol and the digit grouping come from the market's `CurrencyFormat` (UXN-313, D-1815): a call
 // site always passes one (from `currencyFormatOf(profile.currency)`); there is no default.
 import { CURRENCY_FORMATS, OWNER_TZ, type CurrencyFormat } from "@/lib/market/profileCore.mjs";
 

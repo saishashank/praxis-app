@@ -41,7 +41,7 @@ export type ImportInput = {
   /** ISO timestamp source (injected so tests are deterministic). */
   now: () => string;
   commit?: string;
-  /** Where the file came from: the Worker (default), the Owner's upload on Configuration (DAT-236) or the Wikidata fallback (D-974). */
+  /** Where the file came from: the Worker (default), the Owner's upload on Configuration (DAT-236) or the Wikidata fallback (D-1791). */
   source?: "worker" | "manual" | "wikidata";
   /** Email environment: present = the shrink incident is also emailed (M5 T11). */
   env?: Record<string, string | undefined>;

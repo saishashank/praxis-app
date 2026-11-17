@@ -272,7 +272,7 @@ jobs:
         run: node scripts/e2e-day/recorded-day.mjs run --fixtures fixtures --work "$RUNNER_TEMP/recorded-day"
       - name: PLT-073 deadline check (simulated clock)
         run: node scripts/e2e-day/recorded-day.mjs check --work "$RUNNER_TEMP/recorded-day"
-      # AT-68 / MKT-110 (M19 E2, D-1079): the day ends in the production shape. Placed before the network
+      # AT-68 / MKT-110 (M19 E2, D-1837): the day ends in the production shape. Placed before the network
       # assertion, which stays the very last step (the gate and ci.workflow.test.mjs pin it by name, D-965).
       - name: Production shape (AT-68, MKT-110 - AU the only enabled market, IN and US built and off, slot build names AU only)
         run: node scripts/e2e-day/assert-production-shape.mjs --work "$RUNNER_TEMP/recorded-day"

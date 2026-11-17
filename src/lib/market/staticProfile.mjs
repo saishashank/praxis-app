@@ -60,7 +60,7 @@ export function staticProfile(code) {
   return profile;
 }
 
-/** The home market's seed profile: the market whose constants predate the profile (AU, D-993). */
+/** The home market's seed profile: the market whose constants predate the profile (AU, D-1808). */
 export function homeProfile() {
   return staticProfile(HOME_MARKET);
 }

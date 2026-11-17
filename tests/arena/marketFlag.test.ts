@@ -1,5 +1,5 @@
 // @vitest-environment node
-// M19 B2 (MKT-110 a, D-996): the `--market` flag of the arena and picks command lines. No literal default: the
+// M19 B2 (MKT-110 a, D-1811): the `--market` flag of the arena and picks command lines. No literal default: the
 // flag, else the single enabled market, else "market required"; a market that is not enabled is refused with the
 // fixed words, and the pre-open route and the picks CLI refuse it the same way.
 import { afterEach, describe, expect, it } from "vitest";

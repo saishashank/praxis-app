@@ -4,6 +4,8 @@
 //
 //   replay --mode light|full|null|injected|evidence|learning [--date YYYY-MM-DD] [--since YYYY-MM-DD]
 //          [--runs N] [--synthetic] [--budget-minutes N]
+//   replay --mode pick-scorecard [--sessions N] [--date YYYY-MM-DD]   (D-1068, O-84: a report only)
+//   replay --mode cortex-warm-start [--sessions N]   (D-1078: fills the learning Cortex's scorecard)
 //
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, DATA_REPO, DATA_REPO_TOKEN, COMMIT_SHA (optional)
 // Output: statuses, counts and minutes only (SEC-110). Never a row, a code, a URL, a token or a driver
@@ -16,6 +18,22 @@ import { marketDate } from "@/lib/data/calendar";
 import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import { splitFromRow, type LineageSplitRecord, type TrialLedgerRow } from "@/lib/stats/splits";
+import { parseSessions, runPickScorecard } from "@/lib/scorecard/pickScorecardRun";
+import { loadCalendar } from "@/lib/arena/closeBooks";
+import {
+  planWarmStart,
+  warmStart,
+  WARM_SESSIONS_DEFAULT,
+  WARM_SESSIONS_MAX,
+  WARM_SESSIONS_MIN,
+  type FeatureNightSource,
+  type WarmWorld,
+} from "@/lib/cortex/learn/warmStart";
+import { loadSnapshot } from "./snapshot";
+import { SnapshotWorld } from "./snapshotWorld";
+import { snapshotFeatureSource } from "./warmStartSource";
+import type { SkipReasons } from "@/lib/cortex/learn/warmStart";
+import { histogramText, newCortexTally, type CortexTally } from "@/lib/scorecard/pickReplay";
 import { learningDone, learningWeek, runLearning } from "./learningMode";
 import {
   RUN_MODES,
@@ -26,8 +44,20 @@ import {
   type RunMode,
 } from "./runner";
 
-const MARKET = HOME_MARKET; // replay is AU-only in M19 (D-1001 j)
+const MARKET = HOME_MARKET; // replay is AU-only in M19 (D-1814 j)
 const MARKET_TZ: string = homeProfile().tz!;
+
+/** D-1083: the skip-reason breakdown of a warm start, counts only. */
+function warmDiagText(skips: SkipReasons, t: CortexTally): string {
+  const skip = `skip_reasons=universe:${skips.universe},moves:${skips.moves},features:${skips.features},liquid:${skips.liquid},card:${skips.card}`;
+  const nulls = `feature_nulls=no_session:${t.noSession},no_passports:${t.noPassports},abstained:${[...t.abstained.values()].reduce((a, b) => a + b, 0)}`;
+  return `${skip} ${nulls} feature_nights=${t.featured}/${t.nights} cortex_abstain=${histogramText(t.abstained)}`;
+}
+
+/** D-1068: the pick scorecard (O-84) is a report, not a run kind: no replay_run row, no learning write. */
+export const SCORECARD_MODE = "pick-scorecard";
+/** D-1078: the learning Cortex's warm start: scorecard rows for past sessions; no replay_run row. */
+export const WARM_START_MODE = "cortex-warm-start";
 const BATCH = 400; // threshold-ok: statements per DB batch
 
 const has = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
@@ -304,8 +334,12 @@ export async function replayMain(
   const out = deps.out ?? ((s: string) => console.log(s));
   const nowMs = deps.nowMs ?? (() => Date.now());
   const mode = flagOf(argv, "--mode");
+  if (mode === SCORECARD_MODE) return pickScorecardMain(argv, env, deps, out, nowMs);
+  if (mode === WARM_START_MODE) return warmStartMain(argv, env, deps, out, nowMs);
   if (mode === null || !RUN_MODES.includes(mode as RunMode)) {
-    out(`replay: failed (usage: --mode ${RUN_MODES.join("|")})`);
+    out(
+      `replay: failed (usage: --mode ${[...RUN_MODES, SCORECARD_MODE, WARM_START_MODE].join("|")})`,
+    );
     return 2;
   }
   const m = mode as RunMode;
@@ -436,6 +470,186 @@ export async function replayMain(
     // Never print a driver or store error: it can carry the database URL or the repository name.
     const name = e instanceof Error ? e.name : "Error";
     out(`replay ${m}: failed (${name}) stage=${stage}${codeFrames(e)}${causeCode(e)}`);
+    return 1;
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * D-1068 (O-84): `--mode pick-scorecard [--sessions N] [--date D]`. Replays the last N sessions night by
+ * night with today's fixed rules and scores the picks against the next day's top 5 gainers and losers.
+ * A REPORT: it reads the rule versions, labels and stored development records (all dated before the
+ * holdout), writes only the two scorecard tables and one report-only trial-ledger look, and never
+ * touches a config, Cortex, learner, promotion or arena table.
+ */
+async function pickScorecardMain(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+  deps: CliDeps,
+  out: (line: string) => void,
+  nowMs: () => number,
+): Promise<number> {
+  const date = flagOf(argv, "--date") ?? marketDate(new Date(nowMs()), MARKET_TZ);
+  const sessions = parseSessions(flagOf(argv, "--sessions"));
+  if (
+    !isRealDate(date) ||
+    sessions === null ||
+    argv.includes("--sessions") !== (flagOf(argv, "--sessions") !== null)
+  ) {
+    out("replay: failed (bad argument)");
+    return 2;
+  }
+  const url = env.TURSO_MAIN_URL;
+  const token = env.TURSO_MAIN_TOKEN;
+  if (!has(url) || (!has(token) && !url.startsWith("file:"))) {
+    out("replay: failed (database not configured)");
+    return 1;
+  }
+  const open = deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t }));
+  let db = open(url, has(token) ? token : undefined);
+  let stage = "setup";
+  try {
+    if (deps.prepareSnapshot === undefined) {
+      out("replay: failed (no snapshot source)");
+      return 1;
+    }
+    const params = deps.params ?? (await loadAgentParams(db).catch(() => defaultAgentParams()));
+    stage = "snapshot";
+    const bytes = await deps.prepareSnapshot({
+      from: addYears(date, -(params.replay.eventBackfillYears + 1)),
+      to: date,
+    });
+    stage = "compute";
+    // D-883, D-198: the snapshot build takes about 20 minutes and the server drops the idle connection
+    // meanwhile; the replay's reads and its one write go over a fresh one
+    db.close();
+    db = open(url, has(token) ? token : undefined);
+    await ping(db, deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))));
+    const r = await runPickScorecard({
+      db,
+      params,
+      snapshotBytes: bytes,
+      sessions,
+      commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : "0000000000000000000000000000000000000000",
+      nowMs,
+    });
+    if (r.kind === "already") {
+      out("replay pick-scorecard: already recorded");
+      return 0;
+    }
+    if (r.kind === "empty") {
+      out("replay pick-scorecard: failed (no scorable nights)");
+      return 1;
+    }
+    const s = r.run.summary;
+    out(
+      `replay pick-scorecard: ${r.run.status} sessions=${r.run.sessions} nights=${s.days} picks=${s.picksN} gainers=${s.gainers.hits}/${s.gainers.total} losers=${s.losers.hits}/${s.losers.total} cortex_nights=${s.cortex.days} minutes=${r.minutes.toFixed(2)} rows=${r.rows} passport_nights=${r.cortex.nights - r.cortex.noPassports} cortex_abstain=${histogramText(r.cortex.abstained)}`,
+    );
+    return 0;
+  } catch (e) {
+    const name = e instanceof Error ? e.name : "Error";
+    out(`replay pick-scorecard: failed (${name}) stage=${stage}${codeFrames(e)}${causeCode(e)}`);
+    return 1;
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * D-1078: `--mode cortex-warm-start [--sessions N]`. Fills the learning Cortex's nightly scorecard
+ * (`cortex_angle_day`) for the last N sessions (default 60, 1..120) exactly as the live stage would have
+ * on those nights, so the next weekly run has the evidence to fit a weight generation. The stored
+ * Cortex features are used where they exist; the snapshot is built only when a needed night was never
+ * stored. Writes only `cortex_angle_day` and one `cortex_learn_event`; needs no pick-scorecard run.
+ */
+async function warmStartMain(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+  deps: CliDeps,
+  out: (line: string) => void,
+  nowMs: () => number,
+): Promise<number> {
+  const date = marketDate(new Date(nowMs()), MARKET_TZ);
+  const text = flagOf(argv, "--sessions");
+  const sessions = text === null ? WARM_SESSIONS_DEFAULT : Number(text);
+  if (
+    !Number.isInteger(sessions) ||
+    sessions < WARM_SESSIONS_MIN ||
+    sessions > WARM_SESSIONS_MAX ||
+    argv.includes("--sessions") !== (text !== null)
+  ) {
+    out("replay: failed (bad argument)");
+    return 2;
+  }
+  const url = env.TURSO_MAIN_URL;
+  const token = env.TURSO_MAIN_TOKEN;
+  if (!has(url) || (!has(token) && !url.startsWith("file:"))) {
+    out("replay: failed (database not configured)");
+    return 1;
+  }
+  const open = deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t }));
+  let db = open(url, has(token) ? token : undefined);
+  let stage = "setup";
+  try {
+    const calendar = await loadCalendar(db, MARKET);
+    stage = "plan";
+    const plan = await planWarmStart(db, { market: MARKET, calendar, sessions });
+    let source: FeatureNightSource | undefined;
+    let warmWorld: WarmWorld | undefined;
+    const tally = newCortexTally();
+    // D-1084: the snapshot world is always built when there are nights: stored feature nights do not
+    // guarantee that the database universe and bars cover the planned nights
+    if (plan.nights.length > 0) {
+      if (deps.prepareSnapshot === undefined) {
+        out("replay: failed (no snapshot source)");
+        return 1;
+      }
+      const params = deps.params ?? (await loadAgentParams(db).catch(() => defaultAgentParams()));
+      stage = "snapshot";
+      const bytes = await deps.prepareSnapshot({
+        from: addYears(date, -(params.replay.eventBackfillYears + 1)),
+        to: date,
+      });
+      stage = "compute";
+      // D-883, D-198: the snapshot build takes about 20 minutes and the server drops the idle connection
+      db.close();
+      db = open(url, has(token) ? token : undefined);
+      await ping(db, deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))));
+      const world = new SnapshotWorld(loadSnapshot(bytes), { params, tierSource: "bars" });
+      // D-1084: the universe, closes and bars come from the snapshot (bar-derived tiers, point in time)
+      warmWorld = {
+        tiersOn: (d) => world.warmTiersOn(d),
+        closesOn: (d) => world.warmClosesOn(d),
+        barsOf: (codes, from, to) => world.warmBars(codes, from, to),
+      };
+      if (plan.missingFeatureNights.length > 0) {
+        source = await snapshotFeatureSource({
+          db,
+          world,
+          params,
+          market: MARKET,
+          firstNight: plan.nights[0]!,
+          tally,
+        });
+      }
+    }
+    stage = "write";
+    const r = await warmStart(db, {
+      market: MARKET,
+      calendar,
+      sessions,
+      now: new Date(nowMs()).toISOString(),
+      ...(source === undefined ? {} : { source }),
+      ...(warmWorld === undefined ? {} : { world: warmWorld }),
+    });
+    out(
+      `replay cortex-warm-start: nights_written=${r.written} skipped_existing=${r.skippedExisting} skipped_no_data=${r.skippedNoData} first=${r.firstD ?? "none"} last=${r.lastD ?? "none"} rows=${r.rows} ${warmDiagText(r.skipReasons, tally)}`,
+    );
+    return 0;
+  } catch (e) {
+    const name = e instanceof Error ? e.name : "Error";
+    out(`replay cortex-warm-start: failed (${name}) stage=${stage}${codeFrames(e)}${causeCode(e)}`);
     return 1;
   } finally {
     db.close();

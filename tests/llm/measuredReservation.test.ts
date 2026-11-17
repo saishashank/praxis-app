@@ -1,5 +1,5 @@
 // @vitest-environment node
-// OPS-111 (2), D-977: the router records the provider's returned token counts per call, and the budget
+// OPS-111 (2), D-1794: the router records the provider's returned token counts per call, and the budget
 // reservation is the estimate raised to the trailing measured mean of that role (the estimate is the
 // floor). No network.
 import { afterEach, describe, expect, it } from "vitest";

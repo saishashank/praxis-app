@@ -90,7 +90,7 @@ describe("the home market constants equal the removed literals (CXA-001)", () =>
   });
 });
 
-describe("the Worker's zone rule and feed tables (D-1046)", () => {
+describe("the Worker's zone rule and feed tables (D-1826)", () => {
   it("the zones with a rule are Sydney, Melbourne, Kolkata and New York (M20); the feed (home market only) and ops tables are today's times", () => {
     expect(ZONE_RULES).toEqual({
       "Australia/Sydney": "au-south-dst",
@@ -117,7 +117,7 @@ describe("the Worker's zone rule and feed tables (D-1046)", () => {
     expect(OPS_SLOT_TIMES.maintenance).toEqual({ at: "22:30" });
   });
 
-  it("the AU market row of migration 0034 carries exactly the anchors the registry reads from the seed", async () => {
+  it("the AU market row of migration 0037 carries exactly the anchors the registry reads from the seed", async () => {
     const db = await freshDb("main");
     try {
       const r = await db.execute("SELECT slots_json FROM market WHERE code = 'AU'");

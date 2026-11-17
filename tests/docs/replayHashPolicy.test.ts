@@ -1,5 +1,5 @@
 // @vitest-environment node
-// OPS-111 (12), D-977: docs/runbooks/replay-hash-policy.md names exactly the wall-clock columns the AT-32
+// OPS-111 (12), D-1794: docs/runbooks/replay-hash-policy.md names exactly the wall-clock columns the AT-32
 // replay hash drops. A column added to the test without the page (or the page without the test) fails here.
 import { readFileSync } from "node:fs";
 import path from "node:path";

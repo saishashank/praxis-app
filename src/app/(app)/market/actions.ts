@@ -59,7 +59,7 @@ export async function toggleWatchlistAction(fd: FormData): Promise<WatchResult> 
   }
   try {
     // A masked user never learns or names a code (DAT-124): refuse before touching any data.
-    // MKT-110 (c), D-997: a market that is not enabled is never accepted (`invalid`, nothing echoed). No market
+    // MKT-110 (c), D-1812: a market that is not enabled is never accepted (`invalid`, nothing echoed). No market
     // field means the single enabled market (or the user's default when several are enabled).
     const resolved = await resolveMarket(mainDb(), field(fd, "market"), null);
     if (!resolved.ok) return { error: "invalid" };

@@ -1,5 +1,5 @@
 // State `market-built-off` (TST-135 (a), D-967, MKT-107): asserts the PRODUCTION SHAPE of the market set -
-// AU is the only ENABLED market; IN and US are built (they have `market` rows since migration 0034) but are
+// AU is the only ENABLED market; IN and US are built (they have `market` rows since migration 0037) but are
 // not enabled and their mode is `off`; no other market has a row, and `market_modes` names no mode but `off`
 // for a market that is not enabled. Nothing is written: a seeded e2e database is already in that shape, and
 // the state exists so a lane that names it fails loudly if a scenario ever enables or adds a market.

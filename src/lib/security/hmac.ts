@@ -1,6 +1,6 @@
 // Signed Actions -> Vercel calls (SEC-017, SEC-101). Small on purpose; Opus reviews every line.
 //
-// Signing scheme v2 (SEC-115, D-957; the same text is in scripts/smoke/README.md; scripts/smoke/sign.mjs
+// Signing scheme v2 (SEC-115, D-1786; the same text is in scripts/smoke/README.md; scripts/smoke/sign.mjs
 // is the caller-side twin and a known-answer test keeps both in step):
 //   X-Praxis-Version    "2"; anything else (a v1 signer sends none) is refused before the compare
 //   X-Praxis-Timestamp  unix seconds, integer string

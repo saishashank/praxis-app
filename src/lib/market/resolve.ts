@@ -1,4 +1,4 @@
-// The one place a market parameter is accepted (M19 A1; MKT-110 c, D-997). A candidate from a query
+// The one place a market parameter is accepted (M19 A1; MKT-110 c, D-1812). A candidate from a query
 // (`?market=`), a route segment or a form field is a market only if it is in `enabledMarkets(db)`; anything
 // else is `notFound()` on a page and `{ error: "invalid" }` in an action. No candidate means the single enabled
 // market, or the user's `default_market` preference when several are enabled. Nothing about a market that is

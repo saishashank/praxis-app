@@ -10,9 +10,22 @@ import type { AlertChipView } from "@/lib/ui/loaders/pickAlerts";
 import { AlertChip } from "./AlertChip";
 import { PickFamily } from "./FamilyInfo";
 import { Term } from "@/components/ui/Overlays";
-import { ValidationBadge } from "@/components/ui/Badges";
+import { CandidateBadge, ValidationBadge } from "@/components/ui/Badges";
 import { Masked, Money, SimulatedLabel } from "@/components/ui/Values";
-import { FAMILY_BADGES, honestyLine, pct, STOP_GAP_HOVER, stateText, timeFrameText } from "./text";
+import {
+  entryLabel,
+  entryNote,
+  FAMILY_BADGES,
+  honestyLine,
+  nowMaskedText,
+  nowNote,
+  pct,
+  profileHue,
+  STOP_GAP_HOVER,
+  stateText,
+  timeFrameText,
+} from "./text";
+import { ProfileLabel } from "./ProfileLabel";
 
 function StateBadge({ pick }: { pick: PickRowView }) {
   const o = pick.outcome;
@@ -41,8 +54,11 @@ export function PickCard({
   beatsLuck,
   chip = null,
   extra = null,
+  profile = null,
 }: {
   pick: PickRowView;
+  /** D-1002: the risk profile of the list; colours the card edge and names it. */
+  profile?: string | null;
   masked: boolean;
   beatsLuck: boolean;
   chip?: AlertChipView | null;
@@ -50,7 +66,9 @@ export function PickCard({
   extra?: ReactNode;
 }) {
   const frame = timeFrameText(pick.timeFrameSessions);
-  const hue = FAMILY_BADGES[pick.family]?.code;
+  const famCode = FAMILY_BADGES[pick.family]?.code;
+  const hue =
+    profile !== null ? profileHue(profile) : famCode ? `family-${famCode}` : "outcome-flat";
   const primaryHref = pick.cardHref ?? `/picks/${encodeURIComponent(pick.id)}`;
   return (
     <article
@@ -59,11 +77,15 @@ export function PickCard({
       className="ui-motion block min-w-0 break-words motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0 motion-safe:hover:shadow-md [[data-motion=off]_&]:hover:translate-y-0 [[data-motion=off]_&]:hover:shadow-none"
     >
       <Rail
-        hue={hue ? `family-${hue}` : "outcome-flat"}
+        hue={hue}
         header={
           <header className="flex flex-wrap items-start justify-between gap-2">
             <div className="flex min-w-0 flex-col gap-1">
+              {profile !== null ? (
+                <ProfileLabel profile={profile} suffix={` #${pick.rank}`} className="text-xs" />
+              ) : null}
               <PickFamily pick={pick} />
+              {pick.candidate ? <CandidateBadge /> : null}
               <h2 className="m-0 text-lg font-semibold">
                 {pick.stock}
                 {pick.company ? (
@@ -92,6 +114,25 @@ export function PickCard({
               ? ` · typical past result ${pct(pick.expectedGainPpm)}`
               : null}
           </li>
+          {pick.entry ? (
+            <li data-testid="entry-line">
+              {entryLabel(pick.entryBought)}{" "}
+              <Money micro={pick.entry.micro} currency={pick.entry.currency} />
+              {entryNote(pick.entryBought, pick.lastCloseD)}
+            </li>
+          ) : null}
+          {pick.now && (pick.now.money || pick.now.changePpm !== null) ? (
+            <li data-testid="now-line">
+              {pick.now.money ? (
+                <>
+                  Now <Money micro={pick.now.money.micro} currency={pick.now.money.currency} />
+                  {nowNote(pick.now.changePpm, pick.now.label)}
+                </>
+              ) : pick.now.changePpm !== null ? (
+                nowMaskedText(pick.now.changePpm)
+              ) : null}
+            </li>
+          ) : null}
           <li>
             <Term meaning="The highest price at which this pick counts as bought: tonight's closing price plus a small allowance for price slip.">
               Buy up to
@@ -131,6 +172,10 @@ export function PickCard({
                 bad case {pct(pick.scenario.badPpm)}, typical {pct(pick.scenario.typicalPpm)}, good
                 case {pct(pick.scenario.goodPpm)} ({pick.scenario.n} trades)
               </>
+            ) : pick.candidate ? (
+              <span className="italic text-text-muted">
+                none yet: a candidate measure being tested
+              </span>
             ) : (
               <span className="italic text-text-muted">not enough similar cases yet</span>
             )}

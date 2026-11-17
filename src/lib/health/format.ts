@@ -1,6 +1,6 @@
 // Timestamps are stored in UTC (PLT-023) and shown in the Owner zone, Melbourne (UX). The user's time
 // format preference (UX-110) only changes the hour cycle; the zone stays Melbourne. A market whose zone
-// has a different offset from Melbourne at that instant shows both (UXN-313, D-1002): `formatMarketTime`.
+// has a different offset from Melbourne at that instant shows both (UXN-313, D-1815): `formatMarketTime`.
 import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 
 export type TimeFormat = "24h" | "12h";
@@ -48,7 +48,7 @@ function offsetMinutes(tz: string, at: Date): number {
 }
 
 /**
- * An instant for a market (UXN-313, D-1002): when the market zone has the same UTC offset as the Owner
+ * An instant for a market (UXN-313, D-1815): when the market zone has the same UTC offset as the Owner
  * zone (Melbourne) at that instant, the single Melbourne form of `formatTime` (so an AU market, whose zone
  * is Sydney, is unchanged to the byte); otherwise "<date> HH:MM <zone> · HH:MM Melbourne".
  */

@@ -309,12 +309,14 @@
       "tests/agents/batch2b.test.ts",
       "tests/agents/batch2bLookAhead.test.ts",
       "tests/agents/orderPlan.test.ts",
+      "tests/alerts/pollDisplay.test.ts",
       "tests/arena/closeBooks.test.ts",
       "tests/arena/fillWriter.test.ts",
       "tests/arena/fills.test.ts",
       "tests/arena/sizing.test.ts",
       "tests/arena/tst101.test.ts",
       "tests/cortex/night/wouldHave.test.ts",
+      "tests/picks/liveDisplay.test.ts",
       "tests/picks/track.test.ts"
     ],
     "ARN-022": [
@@ -513,11 +515,7 @@
     ],
     "ARN-072": ["tests/replay/replayStats.test.ts", "tests/replay/scorecards.test.ts"],
     "ARN-073": ["tests/review/sections.test.ts"],
-    "ARN-074": [
-      "tests/agents/patterns.test.ts",
-      "tests/replay/scorecards.test.ts",
-      "tests/review/sections.test.ts"
-    ],
+    "ARN-074": ["tests/agents/patterns.test.ts", "tests/replay/scorecards.test.ts"],
     "ARN-075": ["tests/review/sections.test.ts"],
     "ARN-076": [
       "tests/agents/families/f6common.test.ts",
@@ -678,7 +676,7 @@
     ],
     "ARN-123": [
       "tests/acceptance/v2/at35.test.ts",
-      "tests/db/0032_m18_outcome_basis.test.ts",
+      "tests/db/0035_m18_outcome_basis.test.ts",
       "tests/picks/dividendOutcome.test.ts"
     ],
     "ARN-124": ["tests/deferred/instruments.test.ts"],
@@ -694,6 +692,7 @@
       "tests/users/page.test.tsx",
       "tests/users/service.test.ts"
     ],
+    "AT-1": ["tests/cortex/night/learnerBytes.test.ts", "tests/cortex/store/learnerMaps.test.ts"],
     "AT-02": [
       "e2e/m14-robustness.spec.ts",
       "tests/auth/guard.test.ts",
@@ -710,7 +709,9 @@
       "tests/pages.test.tsx",
       "tests/preferences/actions.test.ts"
     ],
+    "AT-2": ["tests/cortex/learn/scorecard.test.ts"],
     "AT-03": ["scripts/ci/bundle-secret-scan.test.mjs"],
+    "AT-3": ["tests/cortex/learn/reweight.test.ts"],
     "AT-04": [
       "scripts/backup/drill.test.mjs",
       "scripts/backup/run.test.mjs",
@@ -719,6 +720,7 @@
       "tests/backup/exportRoute.test.ts",
       "tests/http/gate.test.ts"
     ],
+    "AT-4": ["tests/cortex/learn/reweight.test.ts"],
     "AT-05": [
       "tests/data/asxToken.test.ts",
       "tests/data/calendar.test.ts",
@@ -730,6 +732,7 @@
       "worker/test/dispatch.test.ts",
       "worker/test/localtime.test.ts"
     ],
+    "AT-5": ["tests/cortex/learn/checkpoint.test.ts", "tests/cortex/learn/reweight.test.ts"],
     "AT-05a": [
       "scripts/backup/drill.test.mjs",
       "scripts/backup/run.test.mjs",
@@ -752,6 +755,7 @@
       "tests/watchdog/migration.test.ts",
       "tests/watchdog/route.test.ts"
     ],
+    "AT-6": ["tests/cortex/night/challenger.test.ts", "tests/cortex/score/weights.test.ts"],
     "AT-07": [
       "tests/config/store.test.ts",
       "tests/corporateActions/pipeline.test.ts",
@@ -760,6 +764,7 @@
       "tests/quality/gate.test.ts",
       "tests/quality/rules.test.ts"
     ],
+    "AT-7": ["tests/cortex/learn/compare.test.ts"],
     "AT-08": [
       "tests/config/store.test.ts",
       "tests/corporateActions/adjusted.test.ts",
@@ -768,13 +773,26 @@
       "tests/corporateActions/rules.test.ts",
       "tests/pipeline/batch1.test.ts"
     ],
+    "AT-8": ["tests/cortex/learn/checkpoint.test.ts"],
     "AT-09": ["tests/backfill/engine.test.ts", "tests/backfill/rules.test.ts"],
-    "AT-10": ["tests/arena/acceptance.test.ts", "tests/arena/tst101.test.ts"],
+    "AT-9": [
+      "tests/cortex/learn/learnWords.test.ts",
+      "tests/cortex/learn/learnerPure.test.ts",
+      "tests/cortex/learn/words.test.ts"
+    ],
+    "AT-10": [
+      "tests/arena/acceptance.test.ts",
+      "tests/arena/tst101.test.ts",
+      "tests/cortex/learn/learnerLoop.test.ts",
+      "tests/cortex/learn/stage.test.ts"
+    ],
     "AT-11": [
       "tests/arena/acceptance.test.ts",
       "tests/arena/cohort.test.ts",
       "tests/arena/cohortWriter.test.ts",
-      "tests/arena/terminal.test.ts"
+      "tests/arena/terminal.test.ts",
+      "tests/cortex/learn/scorecard.test.ts",
+      "tests/cortex/learn/stage.test.ts"
     ],
     "AT-12": [
       "tests/arena/acceptance.test.ts",
@@ -983,9 +1001,9 @@
       "tests/acceptance/v3/replayHash.test.ts",
       "tests/cortex/stageTables.test.ts",
       "tests/data/sourceRegister.m20.test.ts",
-      "tests/db/0036_m20_markets_data.test.ts",
-      "tests/db/0039_m22_llm_experts.test.ts",
-      "tests/db/0040_m23_research.test.ts",
+      "tests/db/0039_m20_markets_data.test.ts",
+      "tests/db/0042_m22_llm_experts.test.ts",
+      "tests/db/0043_m23_research.test.ts",
       "tests/docs/replayHashPolicy.test.ts",
       "tests/security/ownerTablesReaders.test.ts"
     ],
@@ -993,7 +1011,6 @@
     "AT-34": ["tests/acceptance/v2/at34.test.ts"],
     "AT-35": ["tests/acceptance/v2/at35.test.ts"],
     "AT-36": [
-      "tests/acceptance/v3/at76.test.ts",
       "tests/acceptance/v3/at76Trial.test.ts",
       "tests/committee/page.test.tsx",
       "tests/committee/prereg.test.ts",
@@ -1050,6 +1067,7 @@
     "AT-50": [
       "tests/acceptance/v2/at50.test.ts",
       "tests/acceptance/v3/replayHash.test.ts",
+      "tests/cortex/night/learnerBytes.test.ts",
       "tests/cortex/night/night.test.ts",
       "tests/cortex/pit/asOfView.test.ts",
       "tests/cortex/score/score.test.ts",
@@ -1144,11 +1162,11 @@
       "tests/acceptance/v3/at68.test.ts",
       "tests/data/calendarEnable.test.ts",
       "tests/data/sourceRegister.m20.test.ts",
-      "tests/db/0035_m19_market_guard.test.ts",
-      "tests/db/0036_m20_markets_data.test.ts",
-      "tests/db/0038_m21_owner_tools.test.ts",
-      "tests/db/0039_m22_llm_experts.test.ts",
-      "tests/db/0040_m23_research.test.ts",
+      "tests/db/0038_m19_market_guard.test.ts",
+      "tests/db/0039_m20_markets_data.test.ts",
+      "tests/db/0041_m21_owner_tools.test.ts",
+      "tests/db/0042_m22_llm_experts.test.ts",
+      "tests/db/0043_m23_research.test.ts",
       "tests/db/scriptClient.test.ts",
       "tests/market/completeness.test.ts",
       "tests/market/guard.test.ts",
@@ -1240,7 +1258,7 @@
       "tests/auth/ownerToolsGuard.test.ts",
       "tests/config/m21Keys.test.ts",
       "tests/config/m22Keys.test.ts",
-      "tests/db/0038_m21_owner_tools.test.ts",
+      "tests/db/0041_m21_owner_tools.test.ts",
       "tests/ownerTools/actions.test.ts",
       "tests/ownerTools/pages.test.tsx",
       "tests/ownerTools/tradeActions.test.ts",
@@ -1410,7 +1428,7 @@
     ],
     "BLD-050": [
       "tests/data/controls.switch.test.ts",
-      "tests/db/0034_m19_market_profile.test.ts",
+      "tests/db/0037_m19_market_profile.test.ts",
       "tests/market/checklist.test.ts"
     ],
     "BLD-051": [
@@ -1423,9 +1441,11 @@
       "tests/agents/indicators.test.ts",
       "tests/cortex/angles/d2.test.ts",
       "tests/cortex/angles/d5.test.ts",
+      "tests/cortex/learn/stage.test.ts",
       "tests/pipeline/batch1.test.ts"
     ],
     "D-016": ["tests/pages.test.tsx"],
+    "D-21": ["tests/cortex/learn/scorecard.test.ts", "tests/cortex/learn/stage.test.ts"],
     "D-024": ["scripts/smoke/checks.test.mjs"],
     "D-029": [
       "tests/review/route.test.ts",
@@ -2663,12 +2683,7 @@
     "D-800": ["tests/http/vercelCrons.test.ts"],
     "D-805": ["tests/golive/moneyApproval.test.ts"],
     "D-814": ["scripts/ci/zap-baseline.workflow.test.mjs"],
-    "D-820": [
-      "tests/cortex/look.test.ts",
-      "tests/replay/cohortReplay.test.ts",
-      "tests/static/noRetry.test.ts",
-      "worker/test/m5Slots.test.ts"
-    ],
+    "D-820": ["tests/static/noRetry.test.ts"],
     "D-831": ["e2e/m16-blueprint-access.spec.ts"],
     "D-833": ["tests/arena/cli.test.ts"],
     "D-840": [
@@ -2738,7 +2753,8 @@
     "D-888": [
       "tests/acceptance/v2/at50.test.ts",
       "tests/cortex/angles/d1.test.ts",
-      "tests/cortex/night/f1mom.test.ts"
+      "tests/cortex/night/f1mom.test.ts",
+      "tests/cortex/night/learnerBytes.test.ts"
     ],
     "D-889": ["tests/agents/cortexStageProvenance.test.ts", "tests/cortex/night/f1mom.test.ts"],
     "D-890": [
@@ -2747,7 +2763,11 @@
       "tests/cortex/store/tables.test.ts",
       "tests/db/0027_decision_rule_version.test.ts"
     ],
-    "D-891": ["tests/agents/cortexStageProvenance.test.ts", "tests/cortex/night/f1mom.test.ts"],
+    "D-891": [
+      "tests/agents/cortexStageProvenance.test.ts",
+      "tests/cortex/night/f1mom.test.ts",
+      "tests/cortex/night/learnerBytes.test.ts"
+    ],
     "D-892": ["tests/cortex/import.test.ts", "tests/cortex/statusNoP.test.ts"],
     "D-894": ["tests/acceptance/v2/at54.test.ts"],
     "D-895": [
@@ -2781,7 +2801,8 @@
     "D-908": [
       "tests/picks/replayHistory.test.ts",
       "tests/replay/pickHistory.test.ts",
-      "tests/replay/runner.test.ts"
+      "tests/replay/runner.test.ts",
+      "tests/scorecard/pickReplayInputs.test.ts"
     ],
     "D-909": ["tests/review/missedMovers.test.ts"],
     "D-910": [
@@ -2793,11 +2814,7 @@
     "D-913": [
       "tests/db/0029_pick_portfolio.test.ts",
       "tests/learning/m6Keys.test.ts",
-      "tests/picks/cli.test.ts",
-      "tests/picks/isolation.test.ts",
-      "tests/picks/portfolio.test.ts",
-      "tests/picks/portfolioCard.test.tsx",
-      "tests/picks/portfolioStore.test.ts"
+      "tests/picks/isolation.test.ts"
     ],
     "D-914": ["scripts/time/scheduleGate.test.mjs"],
     "D-915": [
@@ -2852,38 +2869,71 @@
       "tests/review/sections.test.ts",
       "tests/review/sections46.test.ts"
     ],
-    "D-927": ["scripts/fixtures/recordFromHistory.test.mjs"],
+    "D-923": [
+      "tests/agents/noMagicThresholds.test.ts",
+      "tests/cortex/learn/learnerLoop.test.ts",
+      "tests/cortex/learn/learnerPure.test.ts",
+      "tests/cortex/learn/purity.test.ts",
+      "tests/cortex/learn/scorecard.test.ts",
+      "tests/cortex/learn/stage.test.ts",
+      "tests/cortex/learn/store.test.ts",
+      "tests/cortex/learn/words.test.ts",
+      "tests/cortex/night/challenger.test.ts",
+      "tests/cortex/night/learnerBytes.test.ts",
+      "tests/cortex/score/weights.test.ts",
+      "tests/cortex/store/learnerMaps.test.ts",
+      "tests/db/0031_cortex_learning.test.ts",
+      "tests/email/reviewWords.test.ts",
+      "tests/email/templates.test.ts",
+      "tests/learning/dailyRun.test.ts",
+      "tests/picks/cli.test.ts",
+      "tests/picks/cliCortexLearn.test.ts"
+    ],
+    "D-924": ["tests/cortex/learn/learnerLoop.test.ts", "tests/cortex/store/learnerMaps.test.ts"],
+    "D-926": ["tests/cortex/night/learnerBytes.test.ts", "tests/cortex/score/weights.test.ts"],
+    "D-927": [
+      "scripts/fixtures/recordFromHistory.test.mjs",
+      "tests/cortex/learn/learnerLoop.test.ts",
+      "tests/cortex/learn/learnerPure.test.ts"
+    ],
+    "D-928": ["tests/cortex/learn/learnerLoop.test.ts", "tests/cortex/learn/learnerPure.test.ts"],
+    "D-929": ["tests/config/learnKeys.test.ts"],
     "D-931": ["tests/acceptance/v3/at77.test.ts"],
     "D-939": ["tests/acceptance/v3/at79Fetch.test.ts", "tests/experts/poll/job.test.ts"],
+    "D-940": ["tests/config/learnKeys.test.ts"],
     "D-941": ["tests/picks/isolation.test.ts", "tests/picks/noPicks.test.ts"],
-    "D-944": ["tests/ownerTools/holdings.test.ts"],
-    "D-947": ["tests/db/0034_m19_market_profile.test.ts"],
-    "D-951": ["tests/picks/isolation.test.ts"],
-    "D-953": [
-      "scripts/arena/signals.test.mjs",
-      "tests/agents/batch3.test.ts",
-      "tests/market/projection.test.ts",
-      "worker/test/recheck2b.test.ts",
-      "worker/test/schedule.test.ts"
+    "D-944": ["tests/loaders/cortex.test.ts", "tests/ownerTools/holdings.test.ts"],
+    "D-947": ["tests/db/0037_m19_market_profile.test.ts"],
+    "D-950": [
+      "tests/db/0029_pick_portfolio.test.ts",
+      "tests/db/0031_cortex_learning.test.ts",
+      "tests/db/0032_my_portfolio.test.ts",
+      "tests/home/homeBranches.test.tsx",
+      "tests/learning/m6Keys.test.ts",
+      "tests/picks/cli.test.ts",
+      "tests/picks/isolation.test.ts",
+      "tests/picks/portfolio.test.ts",
+      "tests/picks/portfolioCard.test.tsx",
+      "tests/picks/portfolioStore.test.ts"
     ],
-    "D-954": [
-      "tests/config/m18Keys.test.ts",
-      "tests/db/0031_m18_ops.test.ts",
-      "tests/sentinel/cap.test.ts",
-      "tests/sentinel/m5Keys.test.ts"
+    "D-951": [
+      "tests/learning/m6Keys.test.ts",
+      "tests/picks/allocation.test.ts",
+      "tests/picks/portfolio.test.ts"
     ],
-    "D-956": [
-      "tests/acceptance/v2/at35.test.ts",
-      "tests/db/0032_m18_outcome_basis.test.ts",
-      "tests/picks/dividendOutcome.test.ts"
-    ],
+    "D-952": ["tests/learning/m6Keys.test.ts", "tests/picks/portfolio.test.ts"],
+    "D-953": ["tests/picks/portfolio.test.ts"],
+    "D-954": ["tests/picks/portfolio.test.ts"],
+    "D-955": ["tests/picks/portfolio.test.ts", "tests/picks/portfolioWords.test.ts"],
+    "D-956": ["tests/learning/m6Keys.test.ts", "tests/picks/portfolio.test.ts"],
+    "D-957": ["tests/review/myPortfolio.test.ts"],
     "D-958": [
       "scripts/ci/staging-jobs.workflow.test.mjs",
       "scripts/usage/turso-sample.test.mjs",
       "scripts/usage/turso-usage.workflow.test.mjs",
       "tests/config/m18Keys.test.ts",
       "tests/config/store.test.ts",
-      "tests/db/0031_m18_ops.test.ts",
+      "tests/db/0034_m18_ops.test.ts",
       "tests/health/controlRoom.test.tsx",
       "tests/sentinel/cap.test.ts",
       "tests/usage/tursoMeters.test.ts",
@@ -2895,7 +2945,7 @@
       "tests/ui/loaders/reviewsPaging.test.ts"
     ],
     "D-960": [
-      "tests/db/0031_m18_ops.test.ts",
+      "tests/db/0034_m18_ops.test.ts",
       "tests/maintenance/retention.test.ts",
       "tests/maintenance/rowsByMarket.test.ts"
     ],
@@ -2955,107 +3005,28 @@
       "worker/test/m5Slots.test.ts"
     ],
     "D-969": ["scripts/cortex/golden-spot-check.test.mjs", "scripts/llm/bakeoff-review.test.mjs"],
-    "D-970": ["tests/market/profiles.test.ts"],
-    "D-971": [
-      "scripts/ci/workflow-lint.test.mjs",
-      "tests/alerts/pollBudget.test.ts",
-      "tests/alerts/starvation.test.ts",
-      "tests/db/0031_m18_ops.test.ts",
-      "tests/health/summary.test.ts"
+    "D-970": ["tests/cortex/learn/seqLayout.test.ts"],
+    "D-971": ["tests/cortex/learn/learnerPure.test.ts"],
+    "D-972": ["tests/cortex/learn/learnerLoop.test.ts"],
+    "D-980": ["tests/learning/m6Keys.test.ts", "tests/picks/candidates.test.ts"],
+    "D-982": ["tests/picks/candidates.test.ts"],
+    "D-984": [
+      "tests/loaders/pickHistory.test.ts",
+      "tests/picks/candidateCard.test.tsx",
+      "tests/picks/candidates.test.ts",
+      "tests/picks/historyPage.test.tsx"
     ],
-    "D-972": [
-      "scripts/asx/fetch.causes.test.mjs",
-      "scripts/asx/ingest.test.mjs",
-      "tests/db/0033_m18_data.test.ts"
+    "D-985": ["tests/cortex/learn/top5.test.ts"],
+    "D-987": ["tests/cortex/learn/top5.test.ts"],
+    "D-990": [
+      "tests/learning/dailyRun.test.ts",
+      "tests/learning/dailyTop5.test.ts",
+      "tests/picks/dailyHooks.test.ts"
     ],
-    "D-973": [
-      "scripts/ci/licence-register.dat253.test.mjs",
-      "scripts/ingest/batch1.workflow.test.mjs",
-      "scripts/macro/macro.test.mjs",
-      "tests/db/0033_m18_data.test.ts"
-    ],
-    "D-974": [
-      "scripts/asx/fallback.test.mjs",
-      "scripts/ci/licence-register.dat253.test.mjs",
-      "tests/data/splitFrequency.test.ts",
-      "tests/db/0033_m18_data.test.ts"
-    ],
-    "D-975": [
-      "scripts/ci/licence-register.dat253.test.mjs",
-      "tests/db/0033_m18_data.test.ts",
-      "tests/http/safeLink.test.ts",
-      "tests/ui/expertsPages.test.tsx"
-    ],
-    "D-977": [
-      "e2e/m11l-steelman.spec.ts",
-      "e2e/m21-at82.spec.ts",
-      "scripts/arena/signals.steelmanBreak.test.mjs",
-      "scripts/ci/steelman-readers.test.mjs",
-      "tests/docs/replayHashPolicy.test.ts",
-      "tests/health/steelman.test.ts",
-      "tests/llm/measuredReservation.test.ts",
-      "tests/security/steelmanBoundary.test.ts",
-      "tests/steelman/m18Residuals.test.ts",
-      "tests/ui/steelmanCard.test.tsx"
-    ],
-    "D-978": [
-      "tests/acceptance/v2/at41Replay.test.ts",
-      "tests/db/0033_m18_data.test.ts",
-      "tests/experts/calls.test.ts",
-      "tests/health/experts.test.ts",
-      "tests/ui/expertsPages.test.tsx"
-    ],
-    "D-979": ["tests/config/m18Keys.test.ts"],
-    "D-990": ["tests/http/cspLock.test.ts"],
-    "D-991": ["scripts/ci/market-literals.test.mjs", "tests/static/marketLiterals.test.ts"],
-    "D-992": [
-      "tests/db/0034_m19_market_profile.test.ts",
-      "tests/market/generators.test.ts",
-      "tests/market/profile.test.ts",
-      "tests/market/projection.test.ts"
-    ],
-    "D-993": [
-      "tests/agents/m4Keys.test.ts",
-      "tests/config/m19Keys.test.ts",
-      "tests/data/controls.test.ts",
-      "tests/market/auConstants.test.ts",
-      "tests/market/profile.test.ts"
-    ],
-    "D-994": [
-      "tests/acceptance/v3/at68.test.ts",
-      "tests/config/m19Keys.test.ts",
-      "tests/data/controls.test.ts",
-      "tests/db/0034_m19_market_profile.test.ts",
-      "tests/e2e/marketsDev.test.ts",
-      "tests/maintenance/rowsByMarket.test.ts",
-      "worker/test/enabledMarkets.test.ts"
-    ],
-    "D-995": [
-      "tests/agents/batch3.test.ts",
-      "tests/db/0035_m19_market_guard.test.ts",
-      "tests/learning/learnStage.test.ts",
-      "tests/maintenance/rowsByMarket.test.ts",
-      "tests/market/guard.test.ts",
-      "worker/test/enabledMarkets.test.ts"
-    ],
-    "D-996": [
-      "scripts/ingest/marketRefusal.test.mjs",
-      "tests/arena/marketFlag.test.ts",
-      "tests/market/projection.test.ts",
-      "worker/test/at68Worker.test.ts",
-      "worker/test/enabledMarkets.test.ts"
-    ],
-    "D-997": [
-      "e2e/market-off.spec.ts",
-      "tests/acceptance/v3/at68.test.ts",
-      "tests/health/emailControlsPage.test.tsx",
-      "tests/loaders/loaders.test.ts",
-      "tests/market/resolve.test.ts",
-      "tests/settings/marketSwitch.test.tsx",
-      "tests/settings/pages.test.tsx",
-      "tests/ui/loaders/switcher.test.ts"
-    ],
-    "D-998": ["tests/db/0034_m19_market_profile.test.ts", "tests/settings/pages.test.tsx"],
+    "D-993": ["tests/email/reviewWords.test.ts", "tests/email/templates.test.ts"],
+    "D-994": ["tests/home/homeBranches.test.tsx", "tests/loaders/homeTop5.test.ts"],
+    "D-997": ["tests/learning/dailyTop5.test.ts"],
+    "D-998": ["tests/db/0037_m19_market_profile.test.ts", "tests/settings/pages.test.tsx"],
     "D-999": ["tests/market/completeness.test.ts"],
     "DAT-001": [
       "scripts/backup/drill.test.mjs",
@@ -3481,12 +3452,12 @@
     ],
     "DAT-241": [
       "tests/config/m19Keys.test.ts",
-      "tests/db/0034_m19_market_profile.test.ts",
+      "tests/db/0037_m19_market_profile.test.ts",
       "tests/market/completeness.test.ts",
       "tests/market/profile.test.ts"
     ],
     "DAT-242": [
-      "tests/db/0034_m19_market_profile.test.ts",
+      "tests/db/0037_m19_market_profile.test.ts",
       "tests/market/checklist.test.ts",
       "tests/market/completeness.test.ts"
     ],
@@ -3514,7 +3485,7 @@
       "scripts/ci/licence-register.m22.test.mjs",
       "tests/acceptance/v3/at72Registry.test.ts",
       "tests/acceptance/v3/at81Regime.test.ts",
-      "tests/db/0040_m23_research.test.ts",
+      "tests/db/0043_m23_research.test.ts",
       "tests/health/regimeAlt.test.ts",
       "tests/regime/alt/evaluate.test.ts",
       "tests/regime/alt/inputs.test.ts",
@@ -3546,7 +3517,7 @@
     ],
     "DAT-253": [
       "scripts/ci/licence-register.dat253.test.mjs",
-      "tests/db/0033_m18_data.test.ts",
+      "tests/db/0036_m18_data.test.ts",
       "tests/http/safeLink.test.ts",
       "tests/ui/expertsPages.test.tsx"
     ],
@@ -3578,11 +3549,7 @@
     ],
     "EML-012": ["tests/acceptance/m6/at20s46.test.ts", "tests/review/sections46.test.ts"],
     "EML-013": ["tests/acceptance/m5/at20.test.ts", "tests/email/templates.test.ts"],
-    "EML-014": [
-      "tests/acceptance/m5/at20.test.ts",
-      "tests/email/templates.test.ts",
-      "tests/review/sections.test.ts"
-    ],
+    "EML-014": ["tests/acceptance/m5/at20.test.ts", "tests/email/templates.test.ts"],
     "EML-015": [
       "tests/acceptance/m5/at20.test.ts",
       "tests/acceptance/m6/at20s46.test.ts",
@@ -4189,7 +4156,31 @@
     "O-79c": ["tests/cortex/import.test.ts", "tests/cortex/statusNoP.test.ts"],
     "O-79d": ["tests/arena/costs.test.ts"],
     "O-80": ["tests/data/quotes/latest.test.ts", "tests/db/0028_quote_latest.test.ts"],
-    "O-81": ["tests/security/noOffsetPaging.test.ts"],
+    "O-81": [
+      "tests/config/learnKeys.test.ts",
+      "tests/cortex/learn/base.test.ts",
+      "tests/cortex/learn/baseStage.test.ts",
+      "tests/cortex/learn/probes.test.ts",
+      "tests/cortex/night/probes.test.ts",
+      "tests/db/0031_cortex_learning.test.ts",
+      "tests/experts/weeklyStage.test.ts",
+      "tests/loaders/cortex.test.ts",
+      "tests/picks/cliCortexLearn.test.ts",
+      "tests/security/noOffsetPaging.test.ts"
+    ],
+    "O-82": ["tests/arena/roundSwitch.test.ts"],
+    "O-84": [
+      "tests/db/0033_pick_scorecard.test.ts",
+      "tests/picks/isolation.test.ts",
+      "tests/picks/replayCheck.test.tsx",
+      "tests/picks/replayCheckEdges.test.tsx",
+      "tests/scorecard/pickReplay.test.ts",
+      "tests/scorecard/pickReplayInputs.test.ts",
+      "tests/scorecard/pickReplayScoreNight.test.ts",
+      "tests/scorecard/pickScorecard.test.ts",
+      "tests/scorecard/pickScorecardBranches.test.ts",
+      "tests/scorecard/pickScorecardCli.test.ts"
+    ],
     "OPS-020": [
       "tests/ops/checklist.test.ts",
       "tests/ops/page.test.tsx",
@@ -5554,7 +5545,6 @@
       "tests/settings/pages.test.tsx",
       "tests/settings/settingsActions.test.ts",
       "tests/shell/nav.test.ts",
-      "tests/shell/shell.test.tsx",
       "tests/shell/themeAction.test.ts",
       "tests/theme/themes.test.ts"
     ],
@@ -5688,7 +5678,7 @@
       "tests/acceptance/v3/at76Trial.test.ts",
       "tests/committee/prereg.test.ts",
       "tests/committee/trial.test.ts",
-      "tests/db/0040_m23_research.test.ts"
+      "tests/db/0043_m23_research.test.ts"
     ],
     "VAL-112": [
       "tests/acceptance/v2/at44.test.ts",
@@ -5712,7 +5702,7 @@
     "VAL-118": [
       "tests/acceptance/v2/at63.test.ts",
       "tests/config/m17Keys.test.ts",
-      "tests/db/0040_m23_research.test.ts",
+      "tests/db/0043_m23_research.test.ts",
       "tests/intraday/streamLook.test.ts",
       "tests/intraday/streamRegistry.test.ts"
     ],
@@ -5721,7 +5711,7 @@
     "VAL-121": [
       "tests/acceptance/v3/at72Registry.test.ts",
       "tests/acceptance/v3/at78Short.test.ts",
-      "tests/db/0040_m23_research.test.ts",
+      "tests/db/0043_m23_research.test.ts",
       "tests/research/lookSync.test.ts",
       "tests/shortShadow/evaluate.test.ts",
       "tests/shortShadow/run.test.ts",

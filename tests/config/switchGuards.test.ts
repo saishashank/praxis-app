@@ -134,7 +134,7 @@ describe("updateConfig calls the guard (Owner edit, audited)", () => {
 
 // ---- M22 A2 (D-1445): the guard registry ----------------------------------------------------------------------------
 
-// The two tables of migration 0039 (task A1), with the columns the guard reads and the NOT NULL columns a real row needs, so
+// The two tables of migration 0042 (task A1), with the columns the guard reads and the NOT NULL columns a real row needs, so
 // the same inserts work before and after A1 is merged (IF NOT EXISTS leaves the real tables alone).
 const TRIAL_TABLES = [
   "CREATE TABLE IF NOT EXISTS committee_prereg (trial_id TEXT NOT NULL, version INTEGER NOT NULL, market TEXT NOT NULL, frozen_json TEXT NOT NULL, sha TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (trial_id, version))",
