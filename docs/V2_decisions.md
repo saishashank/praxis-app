@@ -1156,3 +1156,10 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1701 | Monitor 6 record and revisit (M2, D-1620): the quarterly row records the option (abstain when disagreement exceeds cortex_disagreement_max, value read from t... |
 | D-1702 | Monitor 7 data (M2, D-1621; [VERIFY] answered): checked at M2 start, calibration stores no expected stall rate (no column, no cortex_map or family_status fie... |
 | D-1703 | Monitor 8 data (M2, D-1622; [VERIFY] answered): the exclusion status is the outcome fill_status = 'unfilled' (an entry the fill model did not fill: gap cap,... |
+| D-1710 | CXA-009 panel and window (R3, D-1634): the panel is the first session of each calendar month on the series' own session list (the dates that carry rows of S1... |
+| D-1711 | CXA-009 members and classification (R3, D-1633, D-1672): the backfill feeds sectorSeries with every session of the extract calendar; the members of a session... |
+| D-1712 | CXA-009 frozen parameters (R3, D-1634, D-1656): minMembers 3, minGroupsPerMonth 4 (the R1 suggestion, so a rank correlation is never taken on fewer than 4 po... |
+| D-1713 | CXA-009 look and verdict (R3, D-1605, D-1634): one lineage, sector_ic, one look over the full window with the engine's sectorIcLook; |
+| D-1714 | CXA-009 runner mode (R3, D-1629, D-1630): scripts/research/run-lineage.mjs --lineage sector_ic selects the sector mode; it reuses the argument parser, the ou... |
+| D-1715 | CXA-009 consequence and caveats (R3, D-1634): a PASS keeps F7 in shadow and records the result for the CTX-053 path; it changes no weight or status. |
+| D-1716 | CXA-009 result (R3, D-1634): the one look, taken 2026-11-17 from a clean tree at runner commit e9263f2b05d8 over the full window (2000-01-04 to 2026-10-22),... |

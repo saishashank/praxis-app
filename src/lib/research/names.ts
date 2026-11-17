@@ -45,6 +45,8 @@ export const LINEAGE_NAMES: Readonly<Record<string, LineageName>> = {
   cxa003_earnings_drift: { name: "Drift after better results", kind: "offline" },
   cxa003_index_incl: { name: "Run-up to index inclusion", kind: "offline" },
   cxa003_insider_cluster: { name: "Clusters of director buying", kind: "offline" },
+  // M23 R3 (D-1713): the sector rank-correlation test on the backfilled industry-group series, one look on the build machine
+  sector_ic: { name: "Industry-group momentum test", kind: "offline" },
   cxa003_hi52_vol_p5000: {
     name: "New 52-week high on heavy volume, larger account",
     kind: "offline",

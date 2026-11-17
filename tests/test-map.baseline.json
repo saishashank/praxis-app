@@ -4993,6 +4993,7 @@
       "tests/llm/minilm/shadow.test.ts",
       "tests/quality/engine.test.ts",
       "tests/replay/cortexReplay.test.ts",
+      "tests/research/sectorIc.test.ts",
       "tests/review/haltAttention.test.ts",
       "tests/review/unprovenNotes.test.ts",
       "tests/security/expertBoundary.test.ts",

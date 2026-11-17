@@ -218,3 +218,126 @@ test("--no-look stops after the counts and the development figures: no ledger en
     rmSync(w.base, { recursive: true, force: true });
   }
 });
+
+// --- CXA-009 sector_ic mode (M23 R3; D-1714) on a synthetic ZZ folder ---------------------------------------------------
+const SEC_PLAN = (months) => ({
+  item: "CXA-009",
+  market: "ZZ",
+  lineages: [{ id: "sector_ic", hypothesis: "h" }],
+  bootstrap: { block_months: 3, replicates: 200, seed: "20261018", alpha: 0.1 },
+  floors: { months, groups_min_members: 3, groups_per_month: 4 },
+});
+
+function sectorWorld(months) {
+  const w = world();
+  const planText = `${JSON.stringify(SEC_PLAN(months))}\n`;
+  writeFileSync(path.join(w.root, "docs", "research", "prereg", "CXA-009.json"), planText);
+  writeFileSync(
+    path.join(w.root, "docs", "research", "registry.json"),
+    JSON.stringify(
+      {
+        format: 1,
+        entries: [
+          {
+            seq: 1,
+            item: "CXA-009",
+            lineage: "sector_ic",
+            market: "ZZ",
+            sha: sha(planText),
+            preregPath: "docs/research/prereg/CXA-009.json",
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+  );
+  mkdirSync(path.join(w.history, "meta"), { recursive: true });
+  writeFileSync(
+    path.join(w.history, "meta", "asx_listed_2030-01-01.json"),
+    JSON.stringify({
+      as_of: "2030-01-01",
+      rows: CODES.map((code, i) => ({ code, industry: `Group ${Math.floor(i / 3)}` })),
+    }),
+  );
+  return w;
+}
+
+const secArgs = (w, over = {}) => [
+  "--history",
+  over.history ?? w.history,
+  "--prereg",
+  "docs/research/prereg/CXA-009.json",
+  "--lineage",
+  "sector_ic",
+  "--out",
+  over.out ?? w.out,
+  "--calendar",
+  "yahoo/_IDX.json",
+  "--root",
+  w.root,
+  "--allow-dirty",
+];
+
+test("sector_ic below its month floor is INCONCLUSIVE: no ledger entry, a report input, no code written", async () => {
+  const w = sectorWorld(95);
+  try {
+    const p = path.join(w.root, "docs", "research", "registry.json");
+    const before = readFileSync(p, "utf8");
+    const lines = [];
+    await run(secArgs(w), { log: (t) => lines.push(t) });
+    assert.equal(readFileSync(p, "utf8"), before);
+    const rep = JSON.parse(readFileSync(path.join(w.out, "sector_ic.report.json"), "utf8"));
+    assert.equal(rep.verdict, "INCONCLUSIVE");
+    assert.equal(rep.n.floorMet, false);
+    assert.ok(lines.some((l) => l.includes("no look was spent")));
+    assert.ok(!/ZZ[A-L]\b/.test(readFileSync(path.join(w.out, "sector_ic.report.json"), "utf8")));
+  } finally {
+    rmSync(w.base, { recursive: true, force: true });
+  }
+});
+
+test("sector_ic with the floor met takes one look, appends it, and a second run is refused", async () => {
+  const w = sectorWorld(5);
+  try {
+    const lines = [];
+    await run(secArgs(w), { log: (t) => lines.push(t) });
+    const ledger = JSON.parse(
+      readFileSync(path.join(w.root, "docs", "research", "registry.json"), "utf8"),
+    );
+    assert.equal(ledger.entries.length, 2);
+    assert.equal(ledger.entries[1].seq, 2);
+    assert.equal(ledger.entries[1].lineage, "sector_ic");
+    assert.ok(["PASS", "NULL", "INCONCLUSIVE"].includes(ledger.entries[1].verdict));
+    assert.ok(ledger.entries[1].nBlocks >= 5);
+    assert.ok(lines.some((l) => l.includes("sector_ic LOOK")));
+    const rep = JSON.parse(readFileSync(path.join(w.out, "sector_ic.report.json"), "utf8"));
+    assert.equal(rep.result.rows.length, 3);
+    await assert.rejects(() => run(secArgs(w), quiet), /second look/);
+  } finally {
+    rmSync(w.base, { recursive: true, force: true });
+  }
+});
+
+test("sector_ic --no-look counts only: nothing written; folders inside the repository are refused", async () => {
+  const w = sectorWorld(5);
+  try {
+    const p = path.join(w.root, "docs", "research", "registry.json");
+    const before = readFileSync(p, "utf8");
+    const lines = [];
+    await run([...secArgs(w), "--no-look"], { log: (t) => lines.push(t) });
+    assert.equal(readFileSync(p, "utf8"), before);
+    assert.ok(lines.some((l) => l.includes("qualifying monthly blocks")));
+    assert.throws(() => readdirSync(w.out));
+    await assert.rejects(
+      () => run(secArgs(w, { history: path.join(w.root, "docs") }), quiet),
+      /history folder/,
+    );
+    await assert.rejects(
+      () => run(secArgs(w, { out: path.join(w.root, "docs", "x") }), quiet),
+      /output folder/,
+    );
+  } finally {
+    rmSync(w.base, { recursive: true, force: true });
+  }
+});
