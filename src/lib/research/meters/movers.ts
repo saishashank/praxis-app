@@ -233,7 +233,9 @@ export async function runMovers(
   const out: MoverOutcome[] = [];
   for (const rule of MOVER_RULES) {
     const src = sources[rule.id];
-    const prev = await previousMeter(db, o.market, rule.lineage, o.d);
+    // a night that was blocked wrote n 0 without counting: the count restarts from the beginning, never from that row
+    const last = await previousMeter(db, o.market, rule.lineage, o.d);
+    const prev = last !== null && last.status === "blocked" ? null : last;
     const base = { market: o.market, lineage: rule.lineage, d: o.d, target: rule.n, now: o.now };
     if (!planOk || src === undefined) {
       await writeMeter(db, { ...base, n: 0, status: "blocked", projectedD: null });

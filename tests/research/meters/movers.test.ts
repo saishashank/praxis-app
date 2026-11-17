@@ -298,6 +298,15 @@ describe("A1 halt-resume block on a database", () => {
     expect(look.map((r) => String(r.verdict))).toEqual(["NULL"]);
   });
 
+  it("a blocked night does not become the base of the count: the next night counts from the start", async () => {
+    const db = await freshDb("main");
+    await plant(db, -0.03);
+    const blocked = await runMovers(db, at(DAYS[21]!), { io: { read: () => null } });
+    expect(blocked.every((x) => x.status === "blocked")).toBe(true);
+    const out = await runMovers(db, at(DAYS[22]!), { io });
+    expect(out.find((x) => x.rule === "A1")).toMatchObject({ n: 40, status: "looked" });
+  });
+
   it("missing prices leave events out: below n nothing is written and the look waits for new events", async () => {
     const db = await freshDb("main");
     // a gap in the data: ten events have no bars
