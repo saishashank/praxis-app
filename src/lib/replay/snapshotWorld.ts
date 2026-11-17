@@ -377,6 +377,46 @@ export class SnapshotWorld implements CohortReplaySource {
     return (this.tiers.get(code) ?? []).map((r) => ({ d: r.d, halted: r.halted === 1 }));
   }
 
+  /**
+   * D-1084: the universe of night `d` for the warm start, point in time: the bar-derived tier (from the
+   * bars before `d`) of every code that is active and not halted on `d`.
+   */
+  warmTiersOn(d: string): ReadonlyMap<string, string> {
+    const out = new Map<string, string>();
+    for (const [code, t] of this.tiersAt(d)) {
+      if (!t.active) continue;
+      if (this.tiers.get(code)?.some((r) => r.d === d && r.halted === 1) === true) continue;
+      out.set(code, t.tier);
+    }
+    return out;
+  }
+
+  /** D-1084: the closes (as plain numbers) of every code with a bar on `d`. */
+  warmClosesOn(d: string): ReadonlyMap<string, number> {
+    const out = new Map<string, number>();
+    for (const [code, list] of this.bars) {
+      const i = this.barIdx.get(code)?.get(d);
+      if (i !== undefined) out.set(code, microToFloat(list[i]!.close));
+    }
+    return out;
+  }
+
+  /** D-1084: usable closes (open and close above zero, as the database read keeps them) from `from` to `to`. */
+  warmBars(
+    codes: readonly string[],
+    from: string,
+    to: string,
+  ): Map<string, { d: string; c: number }[]> {
+    const out = new Map<string, { d: string; c: number }[]>();
+    for (const code of codes) {
+      const list = (this.bars.get(code) ?? [])
+        .filter((b) => b.d >= from && b.d <= to && b.close > 0n && b.open > 0n)
+        .map((b) => ({ d: b.d, c: microToFloat(b.close) }));
+      if (list.length > 0) out.set(code, list);
+    }
+    return out;
+  }
+
   /** True when the ARN-010 tiers come from the bars (the replay runner) and not the universe rows. */
   get barsTiered(): boolean {
     return this.o.tierSource === "bars";

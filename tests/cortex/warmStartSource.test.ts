@@ -13,6 +13,8 @@ import { histogramText, newCortexTally } from "@/lib/scorecard/pickReplay";
 import { buildSnapshot, loadSnapshot } from "@/lib/replay/snapshot";
 import { SnapshotWorld } from "@/lib/replay/snapshotWorld";
 import { replayMain } from "@/lib/replay/cli";
+import { warmStart, type WarmWorld } from "@/lib/cortex/learn/warmStart";
+import { microToFloat } from "@/lib/agents/indicators";
 import { snapshotFeatureSource } from "@/lib/replay/warmStartSource";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
 import { weekdayCalendar } from "../fixtures/stats/t13";
@@ -260,6 +262,116 @@ describe("D-1082 the Cortex replay of a bars-tiered world with late universe row
         ]),
       ),
     ).toBe("a:1,b:2");
+  });
+});
+
+describe("D-1084 the warm start reads the universe, closes and bars from the world", () => {
+  const worldOf = (w: SnapshotWorld): WarmWorld => ({
+    tiersOn: (d) => w.warmTiersOn(d),
+    closesOn: (d) => w.warmClosesOn(d),
+    barsOf: (codes, from, to) => w.warmBars(codes, from, to),
+  });
+
+  /** A database holding the world's bars and a universe of the last `n` sessions only. */
+  async function dbOf(w: SnapshotWorld, n: number): Promise<Client> {
+    const db = await freshDb("main");
+    for (const id of IDS) await passport(db, id, 1, "active", "2026-01-01T00:00:00.000Z");
+    const last = CAL.slice(-n);
+    const stmts: { sql: string; args: (string | number)[] }[] = CODES.map((c) => ({
+      sql: `INSERT INTO universe_snapshot (market, d, code, status, tier, halted) VALUES ('AU', ?, ?, 'active', 'U1', 0)`,
+      args: [last[0]!, c],
+    }));
+    for (const c of CODES) {
+      for (const b of w.barsOf(c).filter((x) => x.d >= last[0]!)) {
+        const f = (m: bigint): number => microToFloat(m);
+        stmts.push({
+          sql: `INSERT INTO price_bar (market, code, d, o, h, l, c, volume, source, published_at, ingested_at)
+                VALUES ('AU', ?, ?, ?, ?, ?, ?, ?, 'zz', 't', 't')`,
+          args: [c, b.d, f(b.open), f(b.high), f(b.low), f(b.close), Number(b.volume)],
+        });
+      }
+    }
+    for (let i = 0; i < stmts.length; i += 500) await db.batch(stmts.slice(i, i + 500), "write");
+    return db;
+  }
+  const rowsOf = async (db: Client) =>
+    (await db.execute("SELECT * FROM cortex_angle_day ORDER BY d, angle_id")).rows.map((r) =>
+      JSON.stringify(Object.values(r)),
+    );
+  const NOW = "2026-11-12T09:30:00.000Z";
+
+  it("writes the same rows as the database path when the database is complete", async () => {
+    const a = await dbOf(world, 30);
+    const b = await dbOf(world, 30);
+    const src = (db: Client) =>
+      snapshotFeatureSource({ ...deps(db), firstNight: CAL[CAL.length - 12]! });
+    const viaDb = await warmStart(a, {
+      market: "AU",
+      calendar: [],
+      sessions: 3,
+      now: NOW,
+      source: await src(a),
+    });
+    const viaWorld = await warmStart(b, {
+      market: "AU",
+      calendar: [],
+      sessions: 3,
+      now: NOW,
+      source: await src(b),
+      world: worldOf(world),
+    });
+    expect(viaDb.written).toBe(3);
+    expect(viaWorld.written).toBe(3);
+    const rowsDb = await rowsOf(a);
+    expect(rowsDb.length).toBeGreaterThan(0);
+    expect(await rowsOf(b)).toEqual(rowsDb);
+  }, 240_000);
+
+  it("writes nights from before the database's universe, which the database path skips", async () => {
+    const a = await dbOf(world, 6);
+    const b = await dbOf(world, 6);
+    const o = (db: Client, w?: WarmWorld) =>
+      snapshotFeatureSource({ ...deps(db), firstNight: CAL[CAL.length - 12]! }).then((source) => ({
+        market: "AU",
+        calendar: [],
+        sessions: 10,
+        now: NOW,
+        source,
+        ...(w === undefined ? {} : { world: w }),
+      }));
+    const viaDb = await warmStart(a, await o(a));
+    const viaWorld = await warmStart(b, await o(b, worldOf(world)));
+    expect(viaDb.skipReasons.universe).toBeGreaterThan(0);
+    expect(viaWorld.written).toBeGreaterThan(viaDb.written);
+    expect(viaWorld.skipReasons.universe).toBe(0);
+    expect(viaWorld.nights[0]! < CAL[CAL.length - 6]!).toBe(true);
+  }, 240_000);
+
+  it("a world with no universe on a night skips it as universe", async () => {
+    const db = await dbOf(world, 6);
+    const none = { ...worldOf(world), tiersOn: () => null };
+    const empty = { ...worldOf(world), tiersOn: () => new Map<string, string>() };
+    for (const w of [none, empty]) {
+      const r = await warmStart(db, {
+        market: "AU",
+        calendar: [],
+        sessions: 2,
+        now: NOW,
+        world: w,
+      });
+      expect(r).toMatchObject({ written: 0, skippedNoData: 2, skipReasons: { universe: 2 } });
+    }
+  });
+
+  it("the world's halted code leaves the night's universe, and bad bars are not read", () => {
+    expect(lateWorld.warmTiersOn(CAL[410]!).has("ZZ01")).toBe(false);
+    expect(lateWorld.warmTiersOn(CAL[411]!).has("ZZ01")).toBe(true);
+    expect(lateWorld.warmTiersOn(CAL[340]!).has("ZZ99")).toBe(false); // below the tier floor
+    expect(lateWorld.warmClosesOn(CAL[411]!).size).toBeGreaterThan(20);
+    expect(lateWorld.warmClosesOn("2020-01-01").size).toBe(0);
+    const bars = lateWorld.warmBars(["ZZ01", "NOPE"], CAL[400]!, CAL[402]!);
+    expect([...bars.keys()]).toEqual(["ZZ01"]);
+    expect(bars.get("ZZ01")!.map((x) => x.d)).toEqual([CAL[400], CAL[401], CAL[402]]);
   });
 });
 

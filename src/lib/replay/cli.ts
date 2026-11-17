@@ -24,6 +24,7 @@ import {
   WARM_SESSIONS_MAX,
   WARM_SESSIONS_MIN,
   type FeatureNightSource,
+  type WarmWorld,
 } from "@/lib/cortex/learn/warmStart";
 import { loadSnapshot } from "./snapshot";
 import { SnapshotWorld } from "./snapshotWorld";
@@ -592,6 +593,7 @@ async function warmStartMain(
     stage = "plan";
     const plan = await planWarmStart(db, { market: MARKET, calendar, sessions });
     let source: FeatureNightSource | undefined;
+    let warmWorld: WarmWorld | undefined;
     const tally = newCortexTally();
     if (plan.nights.length > 0 && plan.missingFeatureNights.length > 0) {
       if (deps.prepareSnapshot === undefined) {
@@ -610,6 +612,12 @@ async function warmStartMain(
       db = open(url, has(token) ? token : undefined);
       await ping(db, deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))));
       const world = new SnapshotWorld(loadSnapshot(bytes), { params, tierSource: "bars" });
+      // D-1084: the universe, closes and bars come from the snapshot (bar-derived tiers, point in time)
+      warmWorld = {
+        tiersOn: (d) => world.warmTiersOn(d),
+        closesOn: (d) => world.warmClosesOn(d),
+        barsOf: (codes, from, to) => world.warmBars(codes, from, to),
+      };
       source = await snapshotFeatureSource({
         db,
         world,
@@ -626,6 +634,7 @@ async function warmStartMain(
       sessions,
       now: new Date(nowMs()).toISOString(),
       ...(source === undefined ? {} : { source }),
+      ...(warmWorld === undefined ? {} : { world: warmWorld }),
     });
     out(
       `replay cortex-warm-start: nights_written=${r.written} skipped_existing=${r.skippedExisting} skipped_no_data=${r.skippedNoData} first=${r.firstD ?? "none"} last=${r.lastD ?? "none"} rows=${r.rows} ${warmDiagText(r.skipReasons, tally)}`,
