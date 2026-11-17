@@ -16,8 +16,9 @@ import { loadAgentParams, type AgentParams } from "@/lib/agents/params";
 import { CONFIG_KEYS } from "@/lib/config/keys";
 import { marketDate, type CalendarKind, type CalendarRow } from "@/lib/data/calendar";
 import { HOME_MARKET, HOME_TZ } from "@/lib/market/homeMarket.mjs";
-import { createRouter } from "@/lib/llm/router";
-import { DbStore } from "@/lib/llm/store";
+import { readLiveRoles } from "@/lib/llm/factory";
+import { nightlyLlm } from "@/lib/llm/nightlyLlm";
+import { reflectionReserve } from "./reflect";
 import { steelmanNight, type NightResult, type SteelmanKeys, type SteelmanLlm } from "./night";
 
 const MARKET: string = HOME_MARKET;
@@ -32,7 +33,12 @@ export type SteelmanCliDeps = {
   readonly nowMs?: () => number;
   readonly out?: (line: string) => void;
   /** The model side. Default: rules-only routers over the call log (nothing is called, D-480). */
-  readonly llm?: (ctx: { db: Client; params: AgentParams; kbVersion: string }) => SteelmanLlm;
+  readonly llm?: (ctx: {
+    db: Client;
+    params: AgentParams;
+    kbVersion: string;
+    liveRoles?: readonly string[] | null;
+  }) => SteelmanLlm;
 };
 
 const has = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
@@ -42,21 +48,20 @@ function flag(args: readonly string[], name: string): string | null {
   return i >= 0 && has(args[i + 1]) ? args[i + 1] : null;
 }
 
-/** Rules-only routers: D-177, no role has a live model before its bake-off passes. */
+/** The seam's routers: rules-only unless `llm_live_roles` lists the role and the factory's conditions hold (D-177, D-1460). */
 export function rulesOnlySteelmanLlm(ctx: {
   db: Client;
   params: AgentParams;
   kbVersion: string;
+  liveRoles?: readonly string[] | null;
 }): SteelmanLlm {
-  const store = new DbStore(ctx.db);
-  const router = createRouter({
-    mode: "rules-only",
-    params: ctx.params.llm,
-    kbVersion: ctx.kbVersion,
-    store,
-    providers: [],
-  });
-  return { authorRouter: router, criticRouterFor: () => null, providers: [], store };
+  const night = nightlyLlm(ctx);
+  return {
+    authorRouter: night.routerFor("R6"),
+    criticRouterFor: () => null,
+    providers: night.providers,
+    store: night.store,
+  };
 }
 
 /** The three steelman keys from the config store (global scope), registry default when unset or invalid. */
@@ -154,13 +159,23 @@ export async function steelmanMain(
     }
     const params = await loadAgentParams(db);
     const kbVersion = params.llm.injectionPhrasesVersion;
-    const llm = (deps.llm ?? rulesOnlySteelmanLlm)({ db, params, kbVersion });
+    // D-1460: a failed read is null, which keeps every role rules-only.
+    const liveRoles = await readLiveRoles(db);
+    const llm = (deps.llm ?? rulesOnlySteelmanLlm)({ db, params, kbVersion, liveRoles });
+    // D-1493: what the pick reflections of tonight still need from the writer role; the steelman leaves it.
+    let reserve = 0;
+    try {
+      reserve = await reflectionReserve(db, MARKET, d);
+    } catch {
+      reserve = 0;
+    }
     const r = await steelmanNight(db, {
       market: MARKET,
       d,
       llmParams: params.llm,
       keys: await readKeys(db, params),
       llm,
+      reflectionReserve: reserve,
       calendar: await readCalendar(db, MARKET),
       now: new Date(nowMs()).toISOString(),
     });

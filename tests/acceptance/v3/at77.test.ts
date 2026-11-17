@@ -141,7 +141,7 @@ describe("AT-77 (a): a fresh configuration", () => {
   });
 });
 
-describe("AT-77 (b): no Workers-AI adapter and no sweep reader exist in src (D-1235)", () => {
+describe("AT-77 (b): Workers AI is named only by its adapter files and no sweep reader exists in src (D-1235, M22 D-1413)", () => {
   const files = (dir: string, out: string[] = []): string[] => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, e.name);
@@ -150,9 +150,15 @@ describe("AT-77 (b): no Workers-AI adapter and no sweep reader exist in src (D-1
     }
     return out;
   };
-  it("no source file calls a Workers-AI model or reads a sweep", () => {
+  it("only the adapter files name Workers AI; no Worker binding call; no sweep reader", () => {
+    // M22 L3 (D-1413) adds the REST adapter; the Worker binding call stays absent everywhere.
+    const ALLOWED = new Set(["workersAi.ts", "providers.ts", "roster.ts"]);
     const offenders = files(path.resolve(import.meta.dirname, "..", "..", "..", "src")).filter(
-      (f) => /workers-ai|@cf\/|env\.AI\.run|readSweep|sweepReader/.test(fs.readFileSync(f, "utf8")),
+      (f) => {
+        const text = fs.readFileSync(f, "utf8");
+        if (/env\.AI\.run|readSweep|sweepReader/.test(text)) return true;
+        return /workers-ai|@cf\//.test(text) && !ALLOWED.has(path.basename(f));
+      },
     );
     expect(offenders).toEqual([]);
   });

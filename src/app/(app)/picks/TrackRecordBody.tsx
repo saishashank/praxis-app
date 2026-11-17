@@ -51,6 +51,19 @@ function VsMarket({ v }: { v: NonNullable<TrackRow["vsMarket"]> }) {
   );
 }
 
+/** UXN-288, D-1425: the AI-written note under a settled pick; nothing when none was written. */
+export const LOOKING_BACK_TITLE = "Looking back (AI-written)";
+
+function LookingBack({ r }: { r: TrackRow }) {
+  if (r.lookingBack === null) return null;
+  return (
+    <span className="mt-2 block text-text-muted" data-testid="looking-back">
+      <span className="block font-medium">{LOOKING_BACK_TITLE}</span>
+      <span className="block break-words">{r.lookingBack}</span>
+    </span>
+  );
+}
+
 function result(r: TrackRow) {
   if (r.state === "missed") {
     return (
@@ -102,7 +115,16 @@ export async function TrackRecordBody({
           `${pct(r.published.badPpm)} to ${pct(r.published.goodPpm)}`
         ),
     },
-    { key: "result", header: "What happened", cell: (r) => result(r) },
+    {
+      key: "result",
+      header: "What happened",
+      cell: (r) => (
+        <>
+          {result(r)}
+          <LookingBack r={r} />
+        </>
+      ),
+    },
   ];
 
   return (

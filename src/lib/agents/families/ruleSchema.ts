@@ -975,6 +975,309 @@ export function ruleSpecJson(family: Family): string {
   return JSON.stringify(FAMILY_SPECS[family]);
 }
 
+// ---- schema v2: expert rules (KB-085, D-1436) ------------------------------------------------------------
+// Version 2 is the grammar an EXPERT rule (an expressed cluster) is written in. It keeps every v1 node kind that needs
+// no family parameter (condition with a literal value, AND/OR group, count_of with a whole-number n) and adds three:
+//   rel_sector  {rel_sector: {field, op, value}}   (the field minus the median of the same field over the codes of the same
+//                                                   sector, under the market's classification scheme) op value
+//   persist     {persist: {n, m, when}}            `when` (a condition, rel_sector or ratio) true on at least n of the last
+//                                                   m sessions, today included
+//   ratio       {ratio: {num, den, op, value}}     num / den op value (false when den is 0 or either is missing)
+// A family rule version stays v1: FAMILY_SPECS is unchanged and the family loader (validateRuleSpec) refuses v2.
+
+export const RULE_SCHEMA_VERSION_V2 = 2;
+/** The schema versions that exist; a family rule uses 1, an expert rule 1 or 2. */
+export const RULE_SCHEMA_VERSIONS = [RULE_SCHEMA_VERSION, RULE_SCHEMA_VERSION_V2] as const;
+export const RULE_NODE_KINDS_V2 = ["rel_sector", "persist", "ratio"] as const;
+/** Operators of the v2 comparisons (the crossing operators need a previous value and stay on plain conditions). */
+export const V2_COMPARE_OPERATORS = ["<", "<=", ">", ">=", "=="] as const;
+export type V2CompareOp = (typeof V2_COMPARE_OPERATORS)[number];
+export const PERSIST_MAX_WINDOW = 20; // threshold-ok: loader bound on the persistence window, not a rule
+export const EXPRESSION_MAX_SESSIONS = 250; // threshold-ok: loader bound on a hold or a cap, as the largest max-hold key
+export const EXPRESSION_EXIT_KINDS = ["hold", "family"] as const;
+
+export type V2Literal = {
+  readonly field: string;
+  readonly op: RuleOperator;
+  readonly value: number | boolean | string;
+};
+export type RelSectorNode = {
+  readonly rel_sector: { readonly field: string; readonly op: V2CompareOp; readonly value: number };
+};
+export type RatioNode = {
+  readonly ratio: {
+    readonly num: string;
+    readonly den: string;
+    readonly op: V2CompareOp;
+    readonly value: number;
+  };
+};
+export type PersistNode = {
+  readonly persist: {
+    readonly n: number;
+    readonly m: number;
+    readonly when: V2Literal | RelSectorNode | RatioNode;
+  };
+};
+export type RuleNodeV2 =
+  | V2Literal
+  | { readonly logic: "AND" | "OR"; readonly items: readonly RuleNodeV2[] }
+  | { readonly count_of: { readonly n: number; readonly items: readonly V2Literal[] } }
+  | RelSectorNode
+  | PersistNode
+  | RatioNode;
+/** An expressed entry rule: the entry condition only; the exit is chosen from the fixed menu (D-1437). */
+export type ExpressedRule = { readonly schema_version: 2; readonly entry: RuleNodeV2 };
+export type ExpressionExit =
+  | { readonly family: Family; readonly kind: "hold"; readonly sessions: number }
+  | { readonly family: Family; readonly kind: "family"; readonly max_sessions: number };
+
+const isWholeIn = (v: unknown, lo: number, hi: number): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi;
+
+/** A field an entry rule may read: a known field that is not a position field (positions exist only after entry). */
+function entryField(name: unknown, where: string, errors: string[], numeric: boolean): void {
+  const f = typeof name === "string" ? FIELD_BY_NAME.get(name) : undefined;
+  if (f === undefined) errors.push(`${where}: unknown field ${String(name)}`);
+  else if (f.source === "position") errors.push(`${where}: ${f.name} is a position field`);
+  else if (numeric && f.type !== "number")
+    errors.push(`${where}: ${f.name} must be a numeric field`);
+}
+
+function checkV2Literal(n: Record<string, unknown>, where: string, errors: string[]): void {
+  if (Object.keys(n).sort().join(",") !== "field,op,value") {
+    errors.push(`${where}: a v2 condition has exactly field, op and value (no param)`);
+    return;
+  }
+  const base = errors.length;
+  entryField(n.field, where, errors, false);
+  if (errors.length > base) return;
+  checkCondition(n, where, { errors, declared: new Set(), params: null });
+}
+
+function checkCompare(
+  o: Record<string, unknown>,
+  keys: string,
+  where: string,
+  errors: string[],
+): boolean {
+  if (Object.keys(o).sort().join(",") !== keys) {
+    errors.push(`${where}: has exactly ${keys.split(",").join(", ")}`);
+    return false;
+  }
+  if (!(V2_COMPARE_OPERATORS as readonly unknown[]).includes(o.op))
+    errors.push(`${where}: op is one of ${V2_COMPARE_OPERATORS.join(" ")}`);
+  if (typeof o.value !== "number" || !Number.isFinite(o.value))
+    errors.push(`${where}: value is a number`);
+  return true;
+}
+
+function checkRelSector(n: Record<string, unknown>, where: string, errors: string[]): void {
+  if (Object.keys(n).length !== 1 || !isObj(n.rel_sector)) {
+    errors.push(`${where}: rel_sector stands alone`);
+    return;
+  }
+  const o = n.rel_sector;
+  if (!checkCompare(o, "field,op,value", `${where}.rel_sector`, errors)) return;
+  entryField(o.field, `${where}.rel_sector`, errors, true);
+}
+
+function checkRatio(n: Record<string, unknown>, where: string, errors: string[]): void {
+  if (Object.keys(n).length !== 1 || !isObj(n.ratio)) {
+    errors.push(`${where}: ratio stands alone`);
+    return;
+  }
+  const o = n.ratio;
+  if (!checkCompare(o, "den,num,op,value", `${where}.ratio`, errors)) return;
+  entryField(o.num, `${where}.ratio.num`, errors, true);
+  entryField(o.den, `${where}.ratio.den`, errors, true);
+}
+
+function checkPersist(n: Record<string, unknown>, where: string, errors: string[]): void {
+  if (Object.keys(n).length !== 1 || !isObj(n.persist)) {
+    errors.push(`${where}: persist stands alone`);
+    return;
+  }
+  const o = n.persist;
+  if (Object.keys(o).sort().join(",") !== "m,n,when") {
+    errors.push(`${where}: persist has exactly n, m and when`);
+    return;
+  }
+  const mOk = isWholeIn(o.m, 1, PERSIST_MAX_WINDOW);
+  if (!mOk) errors.push(`${where}: m is a whole number from 1 to ${PERSIST_MAX_WINDOW}`);
+  if (!isWholeIn(o.n, 1, mOk ? (o.m as number) : PERSIST_MAX_WINDOW))
+    errors.push(`${where}: n is a whole number from 1 to m`);
+  const w = o.when;
+  if (!isObj(w)) {
+    errors.push(`${where}: when is a condition, rel_sector or ratio`);
+    return;
+  }
+  if ("rel_sector" in w) checkRelSector(w, `${where}.when`, errors);
+  else if ("ratio" in w) checkRatio(w, `${where}.when`, errors);
+  else if ("logic" in w || "count_of" in w || "persist" in w)
+    errors.push(`${where}: when is a condition, rel_sector or ratio`);
+  else checkV2Literal(w, `${where}.when`, errors);
+}
+
+const isCompound = (x: Record<string, unknown>): boolean =>
+  "logic" in x || "count_of" in x || "persist" in x || "rel_sector" in x || "ratio" in x;
+
+function checkNodeV2(n: unknown, where: string, errors: string[], depth: number): void {
+  if (depth > MAX_DEPTH) {
+    errors.push(`${where}: nested more than ${MAX_DEPTH} levels`);
+    return;
+  }
+  if (!isObj(n)) {
+    errors.push(`${where}: a node is an object`);
+    return;
+  }
+  if ("rel_sector" in n) return checkRelSector(n, where, errors);
+  if ("ratio" in n) return checkRatio(n, where, errors);
+  if ("persist" in n) return checkPersist(n, where, errors);
+  if ("logic" in n || "items" in n) {
+    if (Object.keys(n).sort().join(",") !== "items,logic") {
+      errors.push(`${where}: a group has exactly logic and items`);
+      return;
+    }
+    if (n.logic !== "AND" && n.logic !== "OR") errors.push(`${where}: logic is AND or OR`);
+    if (!Array.isArray(n.items) || n.items.length < 1) {
+      errors.push(`${where}: a group has at least one item`);
+      return;
+    }
+    n.items.forEach((x, i) => checkNodeV2(x, `${where}.items[${i}]`, errors, depth + 1));
+    return;
+  }
+  if ("count_of" in n) {
+    const co = n.count_of;
+    if (
+      Object.keys(n).length !== 1 ||
+      !isObj(co) ||
+      Object.keys(co).sort().join(",") !== "items,n"
+    ) {
+      errors.push(`${where}: count_of stands alone with exactly n and items`);
+      return;
+    }
+    const items = Array.isArray(co.items) ? co.items : [];
+    if (items.length < 1) errors.push(`${where}: count_of lists at least one condition`);
+    items.forEach((x, i) => {
+      if (!isObj(x) || isCompound(x))
+        errors.push(`${where}.items[${i}]: count_of lists plain conditions only`);
+      else checkV2Literal(x, `${where}.items[${i}]`, errors);
+    });
+    if (!isWholeIn(co.n, 1, Math.max(items.length, 1)))
+      errors.push(`${where}: n is a whole number from 1 to the number of conditions`);
+    return;
+  }
+  checkV2Literal(n, where, errors);
+}
+
+/** Loader check of an expressed entry rule (schema v2). Never throws; an empty list means it conforms. */
+export function validateExpressedRule(spec: unknown): string[] {
+  if (!isObj(spec)) return ["rule must be an object"];
+  if (Object.keys(spec).sort().join(",") !== "entry,schema_version")
+    return ["rule has exactly schema_version and entry"];
+  if (spec.schema_version !== RULE_SCHEMA_VERSION_V2)
+    return [`schema_version must be ${RULE_SCHEMA_VERSION_V2}`];
+  const errors: string[] = [];
+  checkNodeV2(spec.entry, "entry", errors, 0);
+  return errors;
+}
+
+/** The exit of an expressed cluster: a hold of n sessions, or the named family's own exits, capped. */
+export function validateExpressionExit(exit: unknown): string[] {
+  if (!isObj(exit)) return ["exit must be an object"];
+  const errors: string[] = [];
+  if (typeof exit.family !== "string" || !FAMILIES.includes(exit.family))
+    errors.push(`exit: family is one of ${FAMILIES.join(", ")}`);
+  if (exit.kind === "hold") {
+    if (Object.keys(exit).sort().join(",") !== "family,kind,sessions")
+      errors.push("exit: a hold has exactly family, kind and sessions");
+    else if (!isWholeIn(exit.sessions, 1, EXPRESSION_MAX_SESSIONS))
+      errors.push(`exit: sessions is a whole number from 1 to ${EXPRESSION_MAX_SESSIONS}`);
+  } else if (exit.kind === "family") {
+    if (Object.keys(exit).sort().join(",") !== "family,kind,max_sessions")
+      errors.push("exit: a family exit has exactly family, kind and max_sessions");
+    else if (!isWholeIn(exit.max_sessions, 1, EXPRESSION_MAX_SESSIONS))
+      errors.push(`exit: max_sessions is a whole number from 1 to ${EXPRESSION_MAX_SESSIONS}`);
+  } else errors.push(`exit: kind is one of ${EXPRESSION_EXIT_KINDS.join(", ")}`);
+  return errors;
+}
+
+/**
+ * The loader by role (D-1436): a FAMILY rule is schema v1 only; an EXPERT rule is a v1 spec or a v2 expressed rule.
+ * Returns the problems found; never throws.
+ */
+export function validateRuleForRole(
+  role: "family" | "expert",
+  spec: unknown,
+  params: Readonly<Record<string, unknown>> | null = null,
+): string[] {
+  if (!isObj(spec)) return ["spec must be an object"];
+  if (role === "family") {
+    if (spec.schema_version !== RULE_SCHEMA_VERSION)
+      return [`a family rule is schema v${RULE_SCHEMA_VERSION}`];
+    return validateRuleSpec(spec, params);
+  }
+  if (spec.schema_version === RULE_SCHEMA_VERSION) return validateRuleSpec(spec, params);
+  if (spec.schema_version === RULE_SCHEMA_VERSION_V2) return validateExpressedRule(spec);
+  return [`schema_version must be one of ${RULE_SCHEMA_VERSIONS.join(", ")}`];
+}
+
+/** The v2 section of docs/rule_schema.md. */
+function renderV2Section(): string[] {
+  const out: string[] = [];
+  out.push("## Schema v2: expert rules (KB-085, D-1436)");
+  out.push("");
+  out.push(
+    "A family rule version stays schema v1 (the specifications above are unchanged). An expressed cluster is an expert rule in schema v2: it keeps the v1 condition (literal value only, no `param`), group and count_of (whole-number n) nodes and adds three node kinds. The loader accepts v1 for a family and v1 or v2 for an expert rule; it refuses v2 for a family.",
+  );
+  out.push("");
+  out.push(
+    "Shape: `{schema_version: 2, entry: <node>}`; position fields are not allowed in an entry.",
+  );
+  out.push("");
+  out.push("| Node | Form | True when |");
+  out.push("|---|---|---|");
+  out.push(
+    "| `rel_sector` | `{rel_sector: {field, op, value}}` | the numeric field minus the median of that field over the codes of the same sector (the market's classification scheme, the code itself included) compares with the value |",
+  );
+  out.push(
+    `| \`persist\` | \`{persist: {n, m, when}}\` | \`when\` (a condition, \`rel_sector\` or \`ratio\`) holds on at least n of the last m sessions, today included; m is 1 to ${PERSIST_MAX_WINDOW}, n is 1 to m; a session before the data starts does not count |`,
+  );
+  out.push(
+    "| `ratio` | `{ratio: {num, den, op, value}}` | numeric field num divided by numeric field den compares with the value; false when either is missing or den is 0 |",
+  );
+  out.push("");
+  out.push(
+    `Comparison operators of the three new nodes: ${V2_COMPARE_OPERATORS.map((o) => `\`${o}\``).join(", ")} (the crossing operators stay on plain conditions).`,
+  );
+  out.push("");
+  out.push(
+    `Exit (D-1437), one of: \`{family, kind: "hold", sessions: n}\` (close the position after n sessions) or \`{family, kind: "family", max_sessions: n}\` (the named family's own exits, evaluated on closes, forced shut after n sessions); n is 1 to ${EXPRESSION_MAX_SESSIONS}. \`family\` names the lineage whose development split the screening uses.`,
+  );
+  out.push("");
+  out.push("```json");
+  out.push(
+    JSON.stringify(
+      {
+        schema_version: 2,
+        entry: {
+          logic: "AND",
+          items: [
+            { rel_sector: { field: "net_debt_ebitda", op: "<", value: 0 } },
+            { persist: { n: 3, m: 5, when: { field: "close_above_sma5", op: "==", value: true } } }, // threshold-ok: example rule shown in the schema document, not a live threshold
+            { ratio: { num: "volume_ratio", den: "rsi14", op: ">=", value: 0.05 } }, // threshold-ok: example rule shown in the schema document, not a live threshold
+          ],
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  out.push("```");
+  return out;
+}
+
 // ---- generated reference ----------------------------------------------------------------------------
 
 const cell = (s: string): string => s.replace(/\|/g, "\\|");
@@ -1077,6 +1380,7 @@ export function renderRuleSchemaDoc(): string {
     out.push(JSON.stringify(spec, null, 2));
     out.push("```");
   }
+  out.push(...renderV2Section());
   out.push("");
   return out.join("\n");
 }

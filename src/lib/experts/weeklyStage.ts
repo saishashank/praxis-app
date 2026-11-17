@@ -22,9 +22,12 @@ export const SKIP_REASONS: Readonly<Record<SkipReason, 0>> = {
   insufficient_rows: 0,
   insufficient_controls: 0,
   insufficient_blocks: 0,
+  invalid_expression: 0,
+  no_rule_data: 0,
+  already_screened: 0,
 };
 
-/** Counts by reason, all seven reasons present (zero-filled); `null` when the run was read back (D-599). */
+/** Counts by reason, every reason present (zero-filled); `null` when the run was read back (D-599). */
 export function skipCounts(s: ScreeningSummary): Record<SkipReason, number> | null {
   if (s.status === "exists") return null;
   const out: Record<SkipReason, number> = { ...SKIP_REASONS };

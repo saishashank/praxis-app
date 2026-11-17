@@ -1,21 +1,29 @@
-// First bake-off review (TST-137, D-969; LLM-077 is M22): the Owner reads the report and decides which role a
-// model may serve. This script lists the bake-off reports under docs/test-reports/ with the PASS or FAIL line of
-// every model, and prints the exact `llm_live_roles` edit the Owner would make for a model that passed.
-//   node scripts/llm/bakeoff-review.mjs [--dir docs/test-reports] [--role R6]
-// A report is a markdown file that starts "# LLM bake-off report" (scripts/llm/bakeoff.mjs --report-out). The
-// summary table's last column is the result. Read-only; no network, no database. The key `llm_live_roles` is not
-// in the configuration yet (it arrives in M22, LLM-077): until then the script says so and the edit is a plan, not
-// something to type anywhere. Exit 0 always when the folder is readable, 2 on usage, 1 when it is not.
+// Bake-off review (TST-137, D-969; LLM-077, D-1404): the Owner reads the report and decides which role a model may
+// serve. This script lists the bake-off reports under docs/test-reports/ with the PASS or FAIL line of every model and
+// the role verdicts (the "## Role verdicts" table: | Role | Model | Result |), and prints the exact `llm_live_roles` edit
+// for every role that passed: the NEWEST report that covers a role decides it, so a later FAIL withdraws an earlier PASS.
+//   node scripts/llm/bakeoff-review.mjs [--dir docs/test-reports] [--role R6|R1|R2|R7|words]
+// A report is a markdown file that starts "# LLM bake-off report" (scripts/llm/bakeoff.mjs --report-out). Read-only; no
+// network, no database; it changes nothing: the Owner makes the edit in the configuration, whose guard refuses a role
+// without a PASS. Exit 0 always when the folder is readable, 2 on usage, 1 when it is not.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const ROLES = ["R1", "R2", "R3", "R5", "R6"];
-export const KEY_AVAILABLE = false; // llm_live_roles is added in M22 (LLM-077)
+export const ROLES = ["R1", "R2", "R6", "R7", "words"];
+export const KEY_AVAILABLE = true; // llm_live_roles exists since M22 (LLM-077)
+const WORDS = {
+  R1: "announcement triage",
+  R2: "claim extraction",
+  R6: "case writing",
+  R7: "Committee judge",
+  words: "plain-words writing (also review wording and daily summary wording)",
+};
 
 /**
  * @param {string} text report markdown
- * @returns {{ run: string | null, date: string | null, models: { model: string, result: "PASS" | "FAIL" }[] } | null}
+ * @returns {{ run: string | null, date: string | null, models: { model: string, result: "PASS" | "FAIL" }[],
+ *             roles: { role: string, model: string, result: "PASS" | "FAIL" }[] } | null}
  *          null when the text is not a bake-off report
  */
 export function parseReport(text) {
@@ -26,37 +34,62 @@ export function parseReport(text) {
     return l === undefined ? null : l.slice(label.length + 3).trim();
   };
   const models = [];
-  let inSummary = false;
+  const roles = [];
+  let section = "";
   for (const l of lines) {
-    if (l.startsWith("## Summary")) {
-      inSummary = true;
+    if (l.startsWith("## ")) {
+      section = l.slice(3).trim();
       continue;
     }
-    if (inSummary && l.startsWith("## ")) break;
-    if (!inSummary || !l.startsWith("|")) continue;
+    if (!l.startsWith("|") || (section !== "Summary" && section !== "Role verdicts")) continue;
     const cells = l
       .split("|")
       .slice(1, -1)
       .map((c) => c.trim());
     const last = cells[cells.length - 1];
-    if (cells.length >= 2 && (last === "PASS" || last === "FAIL"))
-      models.push({ model: cells[0], result: last });
+    if (last !== "PASS" && last !== "FAIL") continue;
+    if (section === "Summary" && cells.length >= 2) models.push({ model: cells[0], result: last });
+    if (section === "Role verdicts" && cells.length >= 3)
+      roles.push({ role: cells[0], model: cells[1], result: last });
   }
-  return { run: grab("Run"), date: grab("Date"), models };
+  return { run: grab("Run"), date: grab("Date"), models, roles };
 }
 
-/** @param {{ file: string, report: NonNullable<ReturnType<typeof parseReport>> }[]} reports @param {string | null} role */
+const byNewest = (a, b) =>
+  (b.report.date ?? "").localeCompare(a.report.date ?? "") ||
+  (b.report.run ?? "").localeCompare(a.report.run ?? "", "en", { numeric: true }) ||
+  a.file.localeCompare(b.file);
+
+/**
+ * The edit lines. A report with a role verdicts table decides the roles it names, the newest report per role (a FAIL
+ * withdraws an earlier PASS); a report without the table (the older format) names no role, so its passing models are
+ * listed with the role to be named by --role.
+ * @param {{ file: string, report: NonNullable<ReturnType<typeof parseReport>> }[]} reports @param {string | null} role
+ */
 export function planEdit(reports, role) {
-  const passed = [];
-  for (const { file, report } of reports) {
-    for (const m of report.models)
-      if (m.result === "PASS") passed.push({ file, run: report.run, model: m.model });
+  const lines = [];
+  const sorted = [...reports].sort(byNewest);
+  for (const r of ROLES) {
+    if (role !== null && role !== r) continue;
+    const newest = sorted.find((x) => x.report.roles.some((v) => v.role === r));
+    if (newest === undefined) continue;
+    for (const v of newest.report.roles)
+      if (v.role === r && v.result === "PASS")
+        lines.push(
+          `llm_live_roles: add ${r} (${WORDS[r]}) for ${v.model} (passed in ${newest.file}, run ${newest.report.run ?? "unknown"})`,
+        );
   }
-  return passed.map((p) =>
-    role === null
-      ? `llm_live_roles: add <role> for ${p.model} (passed in ${p.file}, run ${p.run ?? "unknown"}); pass --role to name it`
-      : `llm_live_roles: add ${role} for ${p.model} (passed in ${p.file}, run ${p.run ?? "unknown"})`,
-  );
+  for (const { file, report } of reports) {
+    if (report.roles.length > 0) continue;
+    for (const m of report.models)
+      if (m.result === "PASS")
+        lines.push(
+          role === null
+            ? `llm_live_roles: add <role> for ${m.model} (passed in ${file}, run ${report.run ?? "unknown"}); pass --role to name it`
+            : `llm_live_roles: add ${role} for ${m.model} (passed in ${file}, run ${report.run ?? "unknown"})`,
+        );
+  }
+  return lines;
 }
 
 /** @param {string[]} argv @param {(s: string) => void} out */
@@ -91,13 +124,14 @@ export function run(argv, out = (s) => console.log(s)) {
   for (const { file, report } of reports) {
     out(`${file} (run ${report.run ?? "unknown"}, ${report.date ?? "undated"})`);
     for (const m of report.models) out(`  ${m.model}: ${m.result}`);
+    for (const v of report.roles) out(`  ${v.role} ${v.model}: ${v.result}`);
   }
   const plan = planEdit(reports, role);
   if (plan.length === 0) out("No model has passed: nothing to add to llm_live_roles.");
   else for (const p of plan) out(p);
-  if (!KEY_AVAILABLE) {
+  if (KEY_AVAILABLE && plan.length > 0) {
     out(
-      "Note: the llm_live_roles setting arrives with milestone M22 (LLM-077). Until then this is the edit you would make, not one to apply.",
+      "To apply: add the role names above to the llm_live_roles setting (the Owner's step; the setting refuses a role without a PASS). Review wording and daily summary wording follow the writing switch (words).",
     );
   }
   return 0;

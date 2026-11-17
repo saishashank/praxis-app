@@ -919,3 +919,149 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1331 | CI fix after run 44002592203: the D-922 patterns and matchPatterns move to scripts/ci/internal-code-patterns.mjs (no file-system or import.meta use), re-expo... |
 | D-1332 | CI fixes after run 44008882224 (the AT-82 walk now loads and finds real faults): the two Owner-tool CSV file inputs (holdings, trades) carry an accessible na... |
 | D-1333 | CI fix after run 44017363748: every sideways-scrolling table box with nothing focusable inside (trades months, tax, card, nights check, usage, projection) ta... |
+
+## M22 (M22_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-1400 | Numbering and gate: M22 decisions are D-1400…D-1499 in this file; tasks start on build at or after 8b65abc6 (M21 done); the M21 CI run on build recorded in B... |
+| D-1401 | One factory decides live routing (LLM-077, Gap 2 of LLM routes): src/lib/llm/factory.ts returns a live chain for a role only when the role (or words for the... |
+| D-1402 | Role names in the key and in words: llm_live_roles accepts R1, R2, R3, R5, R6, R7 and words (there is no R4 in code, budget.ts:7); the words phase is gated b... |
+| D-1403 | Bake-off reports and index: reports stay at docs/test-reports/ (the folder bakeoff-review.mjs already reads); a generated src/lib/llm/bakeoffIndex.generated.... |
+| D-1404 | Per-role verdict: a role passes for a model when every check of the role's categories and of the injection category passes and its trains-on-prompts value is... |
+| D-1405 | One run per candidate per golden version (BLD-051 spirit): the thresholds are the fixed THRESHOLDS (bakeoff.ts:45-54) plus D-1409, written into the report be... |
+| D-1406 | Live bake-offs in M22 (requirements Gap 1): the approved-commit rule of llm-bakeoff.yml (SEC-108 c) stays; the integration task dispatches it on release with... |
+| D-1407 | Roster refresh (LLM-070 [VERIFY roster]): |
+| D-1408 | Tiers (LLM-080): tier small (≤ 20B or "lite"/"instant"), medium (about 27–70B or "flash"), large (≥ 100B or "pro"); |
+| D-1409 | New golden categories (LLM-081, LLM-063): words ≥ 10 items (JSON valid ≥ 98 %, invented numbers 0, injection resistance 100 %, and zero hits of the D-922 pat... |
+| D-1410 | Budget buckets (requirements Gap 2): Role gains R7; |
+| D-1411 | Drop order with caps: expert_ingest and committee take their bucket caps, pick_reflection spends R6 and is reserved before the steelman for the picks settlin... |
+| D-1412 | Where LLM keys live (LLM-077): only GitHub production-environment secrets, referenced in the env: of the signals step of arena-signals.yml and of the experts... |
+| D-1413 | Workers AI through the REST API (requirements Gap 5): the router runs in GitHub Actions, so the adapter calls Cloudflare's Workers AI REST endpoint with a to... |
+| D-1414 | MiniLM model and runtime (LLM-079 [VERIFY size]): all-MiniLM-L6-v2 in ONNX form (Apache-2.0), its sha256 and size pinned in src/lib/llm/minilm/model.lock.jso... |
+| D-1415 | MiniLM head and training: a multinomial logistic head over the embeddings, trained by scripts/llm/minilm-train.mjs on the rule classifier's labels in the loc... |
+| D-1416 | MiniLM use in V3: shadow only; nothing reads minilm_shadow (reader test). |
+| D-1417 | Committee timing and forward-only (AGT-132): the Committee runs in the signals workflow after the steelman and the reflections, only for the current session,... |
+| D-1418 | Committee models (LLM-010): bull and bear from different providers or model families when the passing set has two, else the rating records same_family = 1; t... |
+| D-1419 | Call records (LLM-066): every Committee call stores its prompt hash, pack id, provider, model id, the model version string the provider returned, parameters,... |
+| D-1420 | Pre-registration (VAL-111): the first Committee night of a trial writes committee_prereg version 1 before any rating, with the frozen horizon, sessions, mini... |
+| D-1421 | Trial statistic and verdict (VAL-111): D = mean approve outcome minus mean reject outcome; the null from within-night label permutations (committee_permutati... |
+| D-1422 | Committee outcomes (ARN-105): the rated signal's forward ledger_row net at the family exit or committee_horizon_sessions, whichever is first; a signal withou... |
+| D-1423 | Trial page and hidden ratings (UXN-289, UXN-290): /strategies/experiments/committee for Owner and Editor, Viewer masked; ratings appear nowhere else (cards,... |
+| D-1424 | Reflections are written by R6 (requirements Gap 3): |
+| D-1425 | Reflection display: "Looking back (AI-written)" under a settled pick in the track record; the first Evening Review of each month carries "Unproven notes", at... |
+| D-1426 | AT-32 complement own-set (requirements Gap 10): tests/acceptance/v3/at32Opinions.test.ts reuses the at32Steelman proof with the own-set extended by exactly c... |
+| D-1427 | Opinion kinds measured (requirements Gap 7): lift meters for steelman and Committee from opinion_track; reflections are written after the outcome and get no... |
+| D-1428 | Promotion request (AGT-148, CTX-060): one opinion_promotion_request row per market and kind, ever, written when the settled count reaches opinion_min_n, the... |
+| D-1429 | Expert jobs ride on the nightly maintenance dispatch (requirements Gap 4): a new experts job in maintenance.yml runs the poll daily, the discovery on Sundays... |
+| D-1430 | Licence status rules (KB-083): robots disallows or terms forbid → no; robots allows and summarising is permitted → enabled; robots allows and summarising unk... |
+| D-1431 | First check and privacy (requirements Gap 8): the build machine runs the first check of every seed source into the private seed folder (licence-check.json),... |
+| D-1432 | Rules-only triage and extraction (LLM-067, LLM-068): with no live R1/R2 the triage answer is "unknown", items stay pending and are shown as waiting for a mod... |
+| D-1433 | Discovery (DAT-229 [VERIFY quotas]): co-mentions of authors in tracked experts' items only; platform search APIs stay blocked (no register row enabled); red-... |
+| D-1434 | Poll priority (DAT-230): daily for experts with an L1+ cluster or a positive confirmed call record, weekly for experts whose tested claims are all rejected a... |
+| D-1435 | Call proposals (KB-084, requirements Gap 9): a deterministic extractor gives the rules answer and the seed proposals; index and macro targets are not_trackab... |
+| D-1436 | Grammar v2 (KB-085): RULE_SCHEMA_VERSION 2 adds rel_sector, persist and ratio; family rule versions stay v1 and byte-equal, the loader refuses v2 for a famil... |
+| D-1437 | Cluster expressions (KB-085, requirements Gap 9): one expression per parked cluster lives in the private expressions.json (rule, exit from a fixed menu: the... |
+| D-1438 | Park reasons for the re-screen: blocked_data (needs data the system cannot get), needs_intraday, discretionary (needs judgement no rule can state), overlay_o... |
+| D-1439 | Alt inputs per market (DAT-248, requirements Gap 6): |
+| D-1440 | Alt-input pre-registration (DAT-248, BLD-051): hypothesis = on sessions where the alt reading is more cautious than the base, the next-20-session index retur... |
+| D-1441 | Display of both readings: with regime_altinputs_enabled = "on" the Cortex page shows the base and the shadow reading side by side in plain words; the key cha... |
+| D-1442 | DAT-249 and DAT-250 stubs: src/lib/deferred/sources.ts records each as rejected with its reason and the date checked; a test proves no fetcher, host or key e... |
+| D-1443 | Sweep conditions (AGT-147 [VERIFY batch endpoint]): the batch endpoint has its own pending register row; the sweep runs only with intraday_sweep_enabled = "o... |
+| D-1444 | Migration 0039 (one, first): thirteen tables as section A, eight of them market-keyed with generated guards; no earlier table changed; schema pins at 39. |
+| D-1445 | Switch guards as a registry: src/lib/config/guards/*.ts, one file per guarded key, each owned by one task; a failed read refuses (fails closed), as the M21 C... |
+| D-1446 | Health lines and plain words: each task delivers a pure line function; |
+| D-1447 | AT-73 shared part: tests/acceptance/v3/at73Shared.test.ts holds the 20-fixture proposal set for call proposals (valid, incomplete, duplicate, hostile text, o... |
+| D-1448 | Acceptance test files: M22 clauses go to split files (at76Trial, at76Reflections, at77WorkersAi, at77Sweep, at79Fetch, at79Calls, at79Clusters, at80Routes, a... |
+| D-1449 | Owner steps for the PR: dispatch the words and Committee-judge bake-offs after the merge and add any passing role to llm_live_roles; import the seed (format... |
+| D-1450 | Migration 0039 as built (A1): the thirteen tables of D-1444 exactly, each STRICT with a -- +down; beyond the design text only closed-shape checks (hex shas a... |
+| D-1451 | Register rows (A1, requirements Gap 8): polymarket_public, kalshi_public and yahoo_delayed_batch are defined in code (PENDING_SOURCE_ROWS in scripts/ci/licen... |
+| D-1452 | Seed states (A1): committee-trial switches the Committee on in the throwaway database, so it is opt-in like owner-tools-on (OPT_IN_STATES; a lane names it: E... |
+| D-1453 | AT-32 complement (A1): tests/acceptance/v3/at32Opinions.test.ts hashes every table except the steelman's own and exactly the eight of D-1426; the five other... |
+| D-1454 | Schema pins (A1): every pin moves from 38 to 39 (migration tests, backup, CLI, rollback runbook). |
+| D-1455 | Key shapes (task A2): llm_live_roles is stored as a JSON array of distinct names from R1, R2, R3, R5, R6, R7, words and edited as text (a new input kind word... |
+| D-1456 | Budget bucket rule (task A2, D-1410): budgetKey selects the cap, the usage sum and the llm_call.role value; the default is the request's role, except that R7... |
+| D-1457 | Reflection reservation (task A2, D-1411): reserveAfterLeft(stage, params, market, usage, reflectionReserve = 0) adds the reserve (limited to the R6 cap still... |
+| D-1458 | Guard registry (task A2, D-1445): GUARDS is a Partial<Record<ConfigKey, Guard>> (only guarded keys appear; a total record over all keys would be noise), Guar... |
+| D-1459 | Nightly seam (task A2, D-1401): src/lib/llm/nightlyLlm.ts exports nightlyLlm(ctx) giving routerFor(role), providers and store; it is rules-only and builds no... |
+| D-1460 | Factory is synchronous over a pre-read list (task L1, D-1401): routerFor(role, ctx), liveRoutes(ctx) and routesStatus(ctx) take ctx.liveRoles already read (r... |
+| D-1461 | Chain rules (task L1, D-1401, D-1408): a passing model joins a role's chain only when its roster row is not retired, trainsOnPrompts is exactly false (unknow... |
+| D-1462 | Role words and gates (task L1, D-1402): ROLE_WORDS (in roster.ts): |
+| D-1463 | Health line (task L1, D-1446): src/lib/health/llmRoutes.ts shows one line per switched-on job, or one calm line when none is; it is computed without a key ch... |
+| D-1464 | Index and guard details (task L1, D-1403, D-1404): per role the newest covering report wins by its Date, then its Run id (numeric-aware), then a FAIL over a... |
+| D-1465 | Committee budget check (task C1, D-1410, D-1411): the night checks the four calls of a signal against the Committee bucket, the daily total and the nightly c... |
+| D-1466 | Injected model side (task C1, D-1401, D-1417): committeeNight takes CommitteeLlm (routerFor(role, select) with select = only or avoid provider ids, null when... |
+| D-1467 | What is written and when (task C1, D-1417, D-1420): nothing when the switch is off, a replay flag (--replay, --recorded, --recorded-day) is set, the date is... |
+| D-1468 | Model choice (task C1, D-1418): "family" is the provider id. |
+| D-1469 | Call records (task C1, D-1419, LLM-066): the router hands back the validated answer, not the provider's text, so raw_response holds that answer's JSON (at mo... |
+| D-1470 | Licence engine (task E1, D-1430): the check logic is one plain module, src/lib/experts/licence/engine.mjs (+ .d.mts), because the build-machine script (scrip... |
+| D-1471 | Status decision as built (E1, D-1430): robots disallows or the terms forbid gives no; robots allows or has no file gives enabled (summarising unknown is titl... |
+| D-1472 | Accept the risk (E1): acceptRiskAction in [id]/actions.ts is gated by requireUser("admin") (Owner only; an Editor and a Viewer are a 403) and the service acc... |
+| D-1473 | Monthly mode (E1, D-1429): runMonthlyLicence(db, deps) in check.ts is the entry the experts job calls on every run; it does nothing (returns null) when an ex... |
+| D-1474 | Terms reader and first-check file (E1): readTerms is a conservative phrase reader over the text of the first terms page found (tags and scripts removed, cut... |
+| D-1475 | Neuron estimate and the day's spend (task L3, D-1413): the adapter charges ceil((prompt chars / 4 + max output tokens) x 250 / 1000) neurons per call before... |
+| D-1476 | Off by construction (task L3, D-1413): providerForRoster takes dailyNeurons (absent = 0), and the factory today passes none, so a Workers AI route is unavail... |
+| D-1477 | Host and AT-77 (task L3, D-1413): api.cloudflare.com joins LLM_PROVIDER_HOST_SUFFIXES (so the recorded-day guard names it); the M21 clause of AT-77 that forb... |
+| D-1478 | Fetch guard (E2, KB-082, D-1429): every request of the experts job goes through guardedFetch (src/lib/experts/poll/guard.ts) in front of pollFeeds. |
+| D-1479 | Poll job as built (E2, D-939, D-1430, D-1434): one run a day (a poll row per day, a second run does nothing). |
+| D-1480 | Discovery and the Sources page (E2, DAT-229, UXN-296, D-1433): |
+| D-1481 | Triage and extraction as built (E2, LLM-067…069, D-1432): only when BOTH R1 and R2 are live tonight (nightlyLlm(...).status) does anything run; otherwise not... |
+| D-1482 | The experts job (E2, D-1429, D-1412): experts in maintenance.yml, production only (staging is retired), on release, the same approved-commit steps as the pro... |
+| D-1483 | Boundary test (E2, PRD-035, D-525): src/lib/experts/poll is the one folder under src/lib/experts that may reach the web and a model, so tests/security/expert... |
+| D-1484 | Health line (E2, KB-082): loadExpertsHealth appends the polling line only once a poll run exists (so the line is unchanged before the job first runs): "Readi... |
+| D-1485 | Words and judge categories as built (task L2, D-1409): words (router role R3) is scored by JSON valid >= 98 %, invented numbers 0, hostile items resisted 100... |
+| D-1486 | Role verdicts and report format (task L2, D-1404): a run writes - Roster checked: <day> and a ## Role verdicts table (/ Role / Model / Result /, roles R1, R2... |
+| D-1487 | Refusal of a re-run (task L2, D-1405): a live run is refused (exit 2, nothing called) for a model that an earlier report of the reports folder (--reports, de... |
+| D-1488 | Review script (task L2, D-1404): bakeoff-review.mjs has KEY_AVAILABLE = true, lists the role verdicts of every report and prints one llm_live_roles: add <rol... |
+| D-1489 | Roster refresh of 2026-11-17 (task L2, D-1407): the provider pages were read with a fetch tool on that day (what was read is in docs/llm-roster.md). |
+| D-1490 | Reflection facts and answer (task C3, D-1424, AGT-134): one call per pick that settled in the session (pick_market.settled_d = the session, kind pick, no pic... |
+| D-1491 | What is written and when (task C3, D-1424): pick_reflection is the only table written (plus the call log through the router's store); one append-only row per... |
+| D-1492 | Forward only and the entry (task C3, D-1417 pattern): reflectMain(argv, env, deps) in src/lib/steelman/reflectCli.ts refuses a replay flag and any date but t... |
+| D-1493 | Reservation (task C3, D-1411, D-1457): reflectionReserve(db, market, d) = the picks settling in the session times reflectionCallReservation (the worst case o... |
+| D-1494 | Display (task C3, D-1425, UXN-288, O-54): the track record loader sets lookingBack on a settled pick's row from its written reflection; the row shows "Lookin... |
+| D-1495 | Trial steps, trial id and the look (task C2, D-1420, D-1421, BLD-051): the nightly run gains two small steps around the Committee night, trial prereg before... |
+| D-1496 | Statistic and null as built (task C2, D-1421): |
+| D-1497 | Verdict rules as built (task C2, D-1421): "sessions" are the nights with at least one committee_rating row (skipped nights count: the trial runs in calendar... |
+| D-1498 | Outcomes as built (task C2, D-1422, ARN-105): one statement joins the trial's real ratings to ledger_row by signal id (forward, closed rows only; the smalles... |
+| D-1499 | Trial page and health line as built (task C2, D-1423, UXN-289, UXN-290): /strategies/experiments/committee takes the read action (every signed-in role) and t... |
+| D-1500 | Pin, lock and what "the lock hash mismatches" means (task L5, D-1414): onnxruntime-node is pinned exactly at 1.31.1 (published 2026-10-26, more than two week... |
+| D-1501 | Head and trainer (task L5, D-1415): the classes are the rule classifier's own categories (classifyAnnouncement, AGT-011), so the head's labels are whatever t... |
+| D-1502 | What the shadow stores and compares (task L5, D-1416): one minilm_shadow row per announcement (primary key market, day, source, announcement id) with the rul... |
+| D-1503 | Nobody reads it (task L5, D-1416): tests/security/minilmReaders.test.ts keeps the table named only by the stage and the health line (and the trigger generato... |
+| D-1504 | Entry and health as built (task L5): minilmMain(argv, env, deps) in cli.ts (shadow, default, and embed; --model and --vocab are flags, so no new environment... |
+| D-1505 | Call engine (task E3, D-1435, D-543): the rules extractor is one plain module, src/lib/experts/callEngine.mjs (+ .d.mts), because the seed script and the imp... |
+| D-1506 | Model answer (E3, D-1435): CALL_ANSWER_SCHEMA (code, direction, date, horizon number and unit, price basis) and parseModelAnswer: an answer is accepted only... |
+| D-1507 | Stored proposals (E3, D-1435): proposalIdOf is the hash of the claim and every field, so the same proposal has one id and storeProposal is insert-or-ignore o... |
+| D-1508 | Confirmation (E3, D-1435, D-524, AT-79): confirmCall (one click on the proposal shown) and confirmTypedCall (the editable form: code, direction, date, horizo... |
+| D-1509 | Seed proposals and boundary (E3, D-1435, D-543): scripts/experts/call-proposals.mjs --seed <folder> [--dry-run] [--universe <file>] re-extracts a proposal fo... |
+| D-1510 | L5 merge (orchestrator): the onnxruntime-node pin and its lock-file regeneration are left out of the merge. |
+| D-1511 | Nightly order (task L4, D-1417, D-1460): after the picks, scripts/arena/signals.mjs runs, each in its own bundle and each soft (one degraded line, exit code... |
+| D-1512 | Workers AI stays unwired (task L4, D-1476, D-1413): the factory still passes no dailyNeurons, so a Workers AI route is no_key and neither reads a secret nor... |
+| D-1513 | Model keys and the stored copy (task L4, D-1412): the three model-key secret names are NOT in arena-signals.yml in this task. |
+| D-1514 | MiniLM step (task L5 hand-off, D-1504, D-1510): minilmMain(["shadow", "--model", <path>, "--vocab", <path>, "--date"?]) runs only when both models/minilm/mod... |
+| D-1515 | Reflection reservation and the selection (task L4, D-1493, D-1466): steelmanMain computes reflectionReserve(db, market, d) and passes it through steelmanNigh... |
+| D-1516 | Trial wiring (task C2 hand-off): trialMain(["prereg"]) before and trialMain(["result"]) after committeeMain, each forward-only and soft. |
+| D-1517 | Meters (task C4, D-1427, AGT-148, CTX-060): src/lib/opinions/meter.ts measures the two kinds that have a forward meter, per market. |
+| D-1518 | Judge versions and stability (task C4, D-1428): the judge-model versions seen are the Committee's judge_model and, for the steelman, the smallest author_mode... |
+| D-1519 | Promotion request (task C4, D-1428): src/lib/opinions/promotion.ts: requestPromotion is one insert-or-ignore on opinion_promotion_request (primary key market... |
+| D-1520 | Entry, page and health as built (task C4): opinionMetersMain(argv, env, deps) in src/lib/opinions/cli.ts (flag --date, replay flags refused, counts only, alw... |
+| D-1521 | Grammar v2 as built (task E4, D-1436): RULE_SCHEMA_VERSION stays 1, because that constant is what a family rule version and every stored rule_version row car... |
+| D-1522 | Evaluator and exit menu as built (E4, D-1437): src/lib/experts/ruleEval.ts is pure and reads a RuleDataSource (codes, a field value by code and date, sector,... |
+| D-1523 | Importer format 2 as built (E4, D-1437, D-1471, D-1509): the manifest accepts praxis-expert-seed/1 or /2; the three optional files (licence-check.json, call-... |
+| D-1524 | Screening as built (E4, D-1437, VAL-112): eligibleExpressed (src/lib/experts/expressed.ts) selects clusters that are confirmed by a person, end-of-day testab... |
+| D-1525 | express-check (E4, D-1437, D-1438): scripts/experts/express-check.mjs --seed <folder> loads the seed with the importer's own loader (shape errors first), run... |
+| D-1526 | Boundary and the holdout (E4, PRD-033, VAL-112): the new expert code reads nothing trading-side and writes nothing: ruleEval.ts and expressed.ts import only... |
+| D-1527 | Alt reading as built (task E5, D-1439, D-1440): src/lib/regime/alt/{inputs,rule,shadow,evaluate}.ts. |
+| D-1528 | Macro series carry context only (task E5, D-1440): the stored reading lists the newest macro values, but the rule uses prediction-market probabilities alone,... |
+| D-1529 | One call, display only, and the look (task E5, D-1440, D-1441, BLD-051): batch 3 calls altRegimeNight once per session, soft, after the status look; it reads... |
+| D-1530 | Prediction-market fetcher (task E5, D-1439): src/lib/data/sources/predictionMarkets.mjs parses two fixture payload shapes and fetches only the sources whose... |
+| D-1531 | Sweep as built (task E5, D-1443, D-1442): src/lib/intraday/sweep.ts plans U1 then U2 batches of 20 codes (assumed batch size, [VERIFY] with the endpoint at a... |
+| D-1532 | Trial steps in the night (orchestrator, after the C2 and L4 merge): signals.mjs passes the night's own arguments to both trial steps (["prereg", ...argv], ["... |
+| D-1533 | AT-22 after the L5 merge (orchestrator): the annotation-boundary check reads every source file under src/lib/llm recursively (it read the folder flat and fai... |
+| D-1534 | Live bake-off dispatch not run (task Z, D-1406): the live bake-off of the Groq candidates is not dispatched during the build. |
+| D-1535 | Health lines wired (task Z1, D-1446): loadHealth carries m22 (a state and plain-word lines) built from loadLlmRoutesHealth (Owner only: the AI-jobs lines nam... |
+| D-1536 | Opinion meters in the night (task Z1, D-1520): signals.mjs runs opinionMetersMain last, soft like every stage after the picks. |
+| D-1537 | Expert calls and expressed clusters in the jobs (task Z1, D-1435, D-1506, D-1522): the experts job runs a propose step after the extraction (phases all and e... |
+| D-1538 | Number-literal scan (task Z1): the nine literals the merged tree left in bakeoff.ts, minilm/* and the example rule in ruleSchema.ts are not rule values (a he... |
+| D-1539 | AT-76 pointers (task Z1, D-1448): the two it.todo lines of at76.test.ts are replaced by one test that checks the split files exist (at76Trial, at76Reflection... |
+| D-1540 | Left for the Owner or a later task (task Z1; listed): the model keys in the signals step of the production job and its stored copy (D-1513), the Workers AI t... |

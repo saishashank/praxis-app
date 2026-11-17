@@ -120,7 +120,7 @@ describe("migration 0022_experts: apply, roll back, apply again", () => {
     expect(NEW_TABLES).toHaveLength(16);
     for (const t of NEW_TABLES) expect(after.some((s) => s.startsWith(`table:${t}:`))).toBe(true);
 
-    expect(await migrateDown(db, ms, 17)).toEqual({ rolledBack: 17, version: 21 });
+    expect(await migrateDown(db, ms, 18)).toEqual({ rolledBack: 18, version: 21 });
     const mid = await schemaOf(db);
     for (const t of NEW_TABLES) expect(mid.some((s) => s.startsWith(`table:${t}:`))).toBe(false);
     const reg = await db.execute(
@@ -136,7 +136,7 @@ describe("migration 0022_experts: apply, roll back, apply again", () => {
     );
     expect(hist.rows).toHaveLength(0);
 
-    expect(await migrateUp(db, ms)).toEqual({ applied: 17, version: 38 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 18, version: 39 });
     expect(await schemaOf(db)).toEqual(after);
   });
 
@@ -144,7 +144,7 @@ describe("migration 0022_experts: apply, roll back, apply again", () => {
     const db = track(createClient({ url: tempDbUrl() }));
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(db, ms);
-    await migrateDown(db, ms, 11);
+    await migrateDown(db, ms, 12);
     expect(await fails(db, "DELETE FROM source_register WHERE source = 'yahoo_eod'")).toContain(
       "forever table",
     );

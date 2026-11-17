@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import type { Role } from "./budget";
 import { toProviderSchema, type JsonSchema } from "./jsonSchema";
 import { supportsStrictSchema } from "./roster";
+import { createWorkersAiProvider } from "./workersAi";
 
 /** Stable JSON: object keys sorted, so equal values hash equally on every machine. */
 export function canonicalJson(value: unknown): string {
@@ -128,6 +129,8 @@ const HTTP_TOO_MANY = 429; // threshold-ok: HTTP status code
 
 export type LiveOptions = {
   kind: LiveKind;
+  /** The id the call log and the router chain use; defaults to the kind (a night with two models of one kind needs two ids). */
+  id?: string;
   models: Readonly<Partial<Record<Role, string>>>;
   trainsOnPrompts: boolean;
   timeoutMs: number;
@@ -153,7 +156,7 @@ export function createLiveProvider(opts: LiveOptions): LlmProvider {
     return k && k.trim() !== "" ? k : undefined;
   };
   return {
-    id: opts.kind,
+    id: opts.id ?? opts.kind,
     kind: "live",
     // OpenRouter is $0 only through ":free" models (LLM-003); a non-free model id marks it paid.
     paid:
@@ -257,4 +260,58 @@ export function createLiveProvider(opts: LiveOptions): LlmProvider {
       }
     },
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Roster to adapter (M22 L1, D-1401): the factory builds every live provider through this one function.
+
+const DEFAULT_LIVE_TIMEOUT_MS = 30_000; // threshold-ok: HTTP timeout of a live call
+
+export type RosterProviderOptions = {
+  /** Role to model id served by this adapter instance. */
+  models: Readonly<Partial<Record<Role, string>>>;
+  /** From the roster entry; only an explicit false is trusted by the factory. */
+  trainsOnPrompts: boolean;
+  id?: string;
+  timeoutMs?: number;
+  dailyRequests?: number;
+  /** Workers AI only (D-1413): the day's neuron budget (`llm_budget_workers_ai_daily`); absent or 0 = off. */
+  dailyNeurons?: number;
+  /** Workers AI only: neurons already spent today, read from the call log by the caller. */
+  spentNeuronsToday?: () => number;
+  env?: Readonly<Record<string, string | undefined>>;
+  fetchImpl?: typeof fetch;
+};
+
+/**
+ * The live adapter for a roster provider name, or null when none exists (an unknown provider, the retired
+ * GitHub Models entry, a provider whose adapter has not shipped). Nothing outside `factory.ts` and
+ * `bakeoffCli.ts` calls this (tests/security/liveProviderSites.test.ts). The `workers-ai` case (L3) is off while its neuron budget is 0.
+ */
+export function providerForRoster(
+  provider: string,
+  opts: RosterProviderOptions,
+): LlmProvider | null {
+  if (provider === "workers-ai") {
+    return createWorkersAiProvider({
+      id: opts.id,
+      models: opts.models,
+      dailyNeurons: opts.dailyNeurons,
+      spentNeuronsToday: opts.spentNeuronsToday,
+      timeoutMs: opts.timeoutMs ?? DEFAULT_LIVE_TIMEOUT_MS,
+      env: opts.env,
+      fetchImpl: opts.fetchImpl,
+    });
+  }
+  if (provider !== "google" && provider !== "groq" && provider !== "openrouter") return null;
+  return createLiveProvider({
+    kind: provider,
+    id: opts.id,
+    models: opts.models,
+    trainsOnPrompts: opts.trainsOnPrompts,
+    timeoutMs: opts.timeoutMs ?? DEFAULT_LIVE_TIMEOUT_MS,
+    dailyRequests: opts.dailyRequests,
+    env: opts.env,
+    fetchImpl: opts.fetchImpl,
+  });
 }

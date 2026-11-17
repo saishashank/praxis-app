@@ -411,6 +411,16 @@ export function ControlRoom({
         {h.experts.text}
       </p>
 
+      <ul
+        aria-label="AI and expert-library readings"
+        className="m-0 flex list-none flex-col gap-1 p-0 text-sm text-text-muted"
+        data-testid="m22-health"
+      >
+        {h.m22.lines.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+
       <Card title="Free-tier limits">
         {model.gauges === null ? (
           <p className="m-0 text-sm text-text-muted">

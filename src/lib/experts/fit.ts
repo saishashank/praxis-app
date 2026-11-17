@@ -6,6 +6,10 @@ import {
   FAMILY_PARAM_KEYS,
   checkStructuralParams,
   paramBounds,
+  validateExpressedRule,
+  validateExpressionExit,
+  type ExpressedRule,
+  type ExpressionExit,
 } from "@/lib/agents/families/ruleSchema";
 import { FAMILIES, type Family } from "@/lib/agents/schema";
 import type { ClusterRow } from "./types";
@@ -98,4 +102,40 @@ export function parkReason(
   if (cluster.closestFamily === "new") return "needs_new_lineage";
   if (cluster.vocabularyGaps > 0) return "vocabulary_gap";
   return "needs_new_lineage";
+}
+
+// ---- expressed clusters (KB-085, D-1436, D-1437) --------------------------------------------------------
+// A cluster with no family fit may carry an EXPRESSION: a schema-v2 entry rule plus an exit from the fixed menu.
+// It is judged here, at run time, exactly as a fit is (a wrong expression is parked, never screened).
+
+export type ExpressionOk = {
+  readonly ok: true;
+  readonly family: Family;
+  readonly rule: ExpressedRule;
+  readonly exit: ExpressionExit;
+};
+export type ExpressionResult =
+  | ExpressionOk
+  | { readonly ok: false; readonly reason: "invalid_expression"; readonly detail: string };
+
+/** Parses and validates the stored `rule_json` and `exit_json` texts (or already-parsed values) of an expression. */
+export function expressionCheck(rule: unknown, exit: unknown): ExpressionResult {
+  const parse = (v: unknown): unknown => {
+    if (typeof v !== "string") return v;
+    try {
+      return JSON.parse(v) as unknown;
+    } catch {
+      return undefined;
+    }
+  };
+  const r = parse(rule);
+  const x = parse(exit);
+  const problems = [...validateExpressedRule(r), ...validateExpressionExit(x)];
+  if (problems.length > 0) return { ok: false, reason: "invalid_expression", detail: problems[0]! };
+  return {
+    ok: true,
+    family: (x as ExpressionExit).family,
+    rule: r as ExpressedRule,
+    exit: x as ExpressionExit,
+  };
 }

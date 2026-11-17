@@ -10,7 +10,7 @@
 // failing field (LLM-074). A model never gets a second repair.
 import { randomUUID } from "node:crypto";
 import type { LlmParams } from "@/lib/agents/params";
-import { allowance, estimateTokens, fits, type Role } from "./budget";
+import { allowance, bucketOf, estimateTokens, fits, type BudgetKey, type Role } from "./budget";
 import { checkGrounding } from "./grounding";
 import { datamark, DATAMARK } from "./datamark";
 import { DEFAULT_INJECTION_PHRASES, filterMany } from "./injection";
@@ -44,6 +44,11 @@ export type RouterConfig = {
 
 export type RouteRequest<T> = {
   role: Role;
+  /**
+   * M22 (D-1410): the budget bucket the call is charged to and logged under (`llm_call.role`): its own role by default
+   * (R7, the Committee judge, defaults to the Committee bucket). The model lookup and the cache still use `role`.
+   */
+  budgetKey?: BudgetKey;
   market: string;
   /** Business date (YYYY-MM-DD) the call is charged to. */
   d: string;
@@ -198,6 +203,7 @@ export function createRouter(cfg: RouterConfig) {
     let tokensOut = 0;
     let budgetExhausted = false;
     const fl = filterMany(req.untrusted ?? [], phrases);
+    const bucket = bucketOf(req.budgetKey ?? req.role);
 
     const finish = async (
       value: T,
@@ -211,7 +217,7 @@ export function createRouter(cfg: RouterConfig) {
       if (write) {
         const row: CallRow = {
           id,
-          role: req.role,
+          role: bucket,
           provider: source === "cache" ? attempts[attempts.length - 1].provider : source,
           modelId,
           fallbackDepth: depth,
@@ -286,12 +292,12 @@ export function createRouter(cfg: RouterConfig) {
         }
       }
 
-      const usage = await cfg.store.usage(req.role, req.market, today);
-      const allow = allowance(cfg.params, req.role, req.market, req.nightly === true, usage);
+      const usage = await cfg.store.usage(bucket, req.market, today);
+      const allow = allowance(cfg.params, bucket, req.market, req.nightly === true, usage);
       const schema =
         req.schema && req.citationIds ? withCitationEnum(req.schema, req.citationIds) : req.schema;
       const measured = cfg.store.measuredMean
-        ? await cfg.store.measuredMean(req.role, req.market, today)
+        ? await cfg.store.measuredMean(bucket, req.market, today)
         : null;
       if (!fits(allow, reservationWithMeasured(requestReservation(req, text, prompt), measured))) {
         // Role and total budgets are shared by every provider, so exhaustion ends the chain (LLM-050).

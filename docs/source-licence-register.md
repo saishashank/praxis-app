@@ -74,6 +74,7 @@ How to read this page:
 - Yahoo Finance delayed intraday quotes (O-26): the risk acceptance date is pending Owner. Until you accept, the source stays pending and nothing contacts it.
 - Yahoo Finance end-of-day prices, India (.NS) (O-26): the risk acceptance date is pending Owner. Until you accept, the source stays pending and nothing contacts it.
 - Yahoo Finance end-of-day prices, US (O-26): the risk acceptance date is pending Owner. Until you accept, the source stays pending and nothing contacts it.
+- Yahoo Finance delayed quotes, batch endpoint (pending) (O-26): the risk acceptance date is pending Owner. Until you accept, the source stays pending and nothing contacts it.
 - Terms URLs and last-checked dates are not recorded in the seed. The source evaluation and the monthly re-check fill them in the live register.
 
 ## India and US sources (written when a market is enabled)
@@ -137,6 +138,23 @@ How to read this page:
 | `us_sp_dji_russell_manual` | Index adds and deletes keyed by the Owner from the index providers' public notices. | A file the Owner prepares and uploads; nothing is fetched. Terms URL: none (a file the Owner uploads). Last checked: not recorded. | Public data. May be shown with its source named. | no fetcher yet | none |
 | `us_fred` | US macro series (rates, inflation) for the regime inputs. | Each FRED series carries its own terms, checked per series before use; the API needs the Owner's key (the Owner-store name FRED_API_KEY, never in code). Off until the key is stored; the host's robots.txt asks for a 2 second crawl delay, which the client honours. Terms URL: https://fred.stlouisfed.org/docs/api/terms_of_use.html. Last checked: 2026-11. | Public data. May be shown with its source named. | no fetcher yet | api.stlouisfed.org |
 | `us_nyse_holidays` | The exchange's published holidays and early closes, the check behind the calendar rows. | Public holiday and early-close page of the exchange; the host's robots.txt allows it. Read once a year to confirm the calendar rules. Terms URL: https://www.nyse.com/trade/hours-calendars. Last checked: 2026-11. | Public data. May be shown with its source named. | `src/lib/data/calendarRules/us.mjs` | www.nyse.com |
+
+## Pending sources for the LLM and expert milestone (written when accepted)
+
+- These rows are defined in `scripts/ci/licence-register.mjs` and are written to the live register, with a status row of `off`, only when the Owner accepts the source (D-1439, D-1443). No migration inserts them, so production holds none until then.
+- No fetcher and no host exists for any of them yet, so nothing contacts these sources. Every term is marked [VERIFY].
+
+| Source id | Source | Permitted use | Risk | Status | Owner reference | Acceptance date | AI summaries allowed |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `polymarket_public` | Polymarket public odds (pending) | Public read of event probabilities; derived numbers only. [VERIFY] | medium | pending | none | not needed | no |
+| `kalshi_public` | Kalshi public odds (pending) | Public read of event probabilities; derived numbers only. [VERIFY] | medium | pending | none | not needed | no |
+| `yahoo_delayed_batch` | Yahoo Finance delayed quotes, batch endpoint (pending) | Delayed quotes for personal use under O-26; batch use not yet confirmed. [VERIFY] | high | pending | O-26 | pending Owner (O-26) | no |
+
+| Source id | What we take | Licence or terms reference | Display rule | Code | Contacts |
+| --- | --- | --- | --- | --- | --- |
+| `polymarket_public` | One probability per public event and day, used only as an input to the shadow regime reading (DAT-248, D-1439). | Public read, free, no account (DAT-248). Terms are not yet checked [VERIFY]. No fetcher is built in this release, so nothing is requested; the row stays pending until the Owner accepts the terms. Terms URL: not recorded yet. Last checked: not recorded. | Public data. May be shown with its source named. | no fetcher yet | none |
+| `kalshi_public` | One probability per public event and day, used only as an input to the shadow regime reading (DAT-248, D-1439). | Public read, free, no account (DAT-248). Terms are not yet checked [VERIFY]. No fetcher is built in this release, so nothing is requested; the row stays pending until the Owner accepts the terms. Terms URL: not recorded yet. Last checked: not recorded. | Public data. May be shown with its source named. | no fetcher yet | none |
+| `yahoo_delayed_batch` | Delayed quotes for many codes in one request, for the whole-market intraday sweep (AGT-147, D-1443). | The accepted delayed-quote basis (O-26) may not cover the batch endpoint [VERIFY]. The sweep stays off and no request is made until this row is accepted by the Owner and `intraday_sweep_enabled` is on. Terms URL: not recorded yet. Last checked: not recorded. | Public data. May be shown with its source named. | no fetcher yet | none |
 
 ## Delayed-quote endpoint: facts and fallback (V2-I3, D-792)
 

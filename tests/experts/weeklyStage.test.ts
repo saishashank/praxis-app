@@ -31,7 +31,7 @@ describe("expertsStage", () => {
     expect(v.degraded).toEqual([]);
     expect(v.screening).toMatchObject({ status: "nothing_eligible", considered: 0, survivors: 0 });
     expect((v.screening as { skipped: Record<string, number> }).skipped).toEqual(SKIP_REASONS);
-    expect(Object.keys(SKIP_REASONS)).toHaveLength(7);
+    expect(Object.keys(SKIP_REASONS)).toHaveLength(10); // seven of the fitted lanes and three of the expressed (M22 E4)
     expect(v.proposals).toEqual({});
     expect(v.f7).toMatchObject({ fires: false, l2_clusters: 0, recorded: false });
     expect(v.settle).toEqual({ tracked: 0, settled: 0, skipped: 0 });

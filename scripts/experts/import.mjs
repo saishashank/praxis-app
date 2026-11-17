@@ -2,7 +2,7 @@
 //   node scripts/experts/import.mjs <seed-folder> [--dry-run]
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN (a file: URL needs no token). Output: counts only, never a row, a
 // name, a URL or a token. The folder is private data and must lie OUTSIDE this repository (SEC-110).
-// The format `praxis-expert-seed/1` is documented in scripts/experts/README.md and enforced by validate.mjs.
+// The formats `praxis-expert-seed/1` and `/2` (M22 E4: licence-check.json, call-proposals.json, expressions.json) are documented in scripts/experts/README.md and enforced by validate.mjs.
 // No network request and no LLM call is made anywhere (O-64). Re-running is safe (insert-or-ignore on every
 // key; the append-only chain rows are inserted only when their seq 1 is missing).
 import { createHash } from "node:crypto";
@@ -14,9 +14,11 @@ import { FORMAT, validateSeed } from "./validate.mjs";
 
 export { FORMAT };
 export const MIN_SCHEMA = 22;
+/** Format-2 files write 0039 tables (expert_source_licence, cluster_expression). */
+export const MIN_SCHEMA_V2 = 39;
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const REQUIRED = ["manifest.json", "experts.json", "items.json", "claims.json", "clusters.json"];
-const OPTIONAL = ["calls.json"];
+const OPTIONAL = ["calls.json", "licence-check.json", "call-proposals.json", "expressions.json"];
 const ACTOR = "seed";
 
 /** Sorted-key JSON text, the same as the Cortex importer writes into JSON columns. */
@@ -30,6 +32,11 @@ export function canonical(v) {
       .join(",")}}`;
   }
   return JSON.stringify(v);
+}
+
+/** The pre-registration sha of an expression (D-1437): sha256 of the text with line ends as \n, trimmed. Only the sha is stored. */
+export function preregSha(text) {
+  return createHash("sha256").update(String(text).replace(/\r\n/g, "\n").trim()).digest("hex");
 }
 
 /** source_item.id (0022): lower-case 64-hex sha256 of url + '|' + (content_hash ?? ''). */
@@ -92,6 +99,8 @@ export function plan(data) {
   const claims = data["claims.json"].claims;
   const clusters = data["clusters.json"].clusters;
   const calls = data["calls.json"]?.calls ?? [];
+  const licence = data["licence-check.json"]?.results ?? [];
+  const expressions = data["expressions.json"]?.expressions ?? [];
 
   for (const x of experts) {
     ins(
@@ -142,6 +151,36 @@ export function plan(data) {
         [`${x.id}:rf${i + 1}`, x.id, r.text, r.source_url, r.noted_d, at],
       );
     });
+  }
+  // M22 E4 (D-1471): E1's check results, actor import, the file's own time; after experts (the insert guard needs the
+  // expert). Append-only, so a re-run adds nothing (the key is expert, source and time).
+  for (const x of licence) {
+    ins(
+      "expert_source_licence",
+      "licence",
+      [
+        "expert_id",
+        "source_key",
+        "checked_at",
+        "terms_url",
+        "robots",
+        "summarisation",
+        "status",
+        "actor",
+        "note",
+      ],
+      [
+        x.expert_id,
+        x.source_key,
+        x.checked_at,
+        x.terms_url ?? null,
+        x.robots,
+        x.summarisation,
+        x.status,
+        "import",
+        x.note ?? null,
+      ],
+    );
   }
   for (const x of items) {
     ins(
@@ -220,6 +259,36 @@ export function plan(data) {
       c.id,
       ["state", "merged_into", "reason", "actor", "at"],
       ["proposed", null, null, ACTOR, at],
+    );
+  }
+  // M22 E4 (D-1437, D-1438): one expression per cluster and version; after the clusters (the insert guard needs them).
+  for (const x of expressions) {
+    const expressed = x.outcome === "expressed";
+    ins(
+      "cluster_expression",
+      "expressions",
+      [
+        "cluster_id",
+        "version",
+        "outcome",
+        "rule_json",
+        "exit_json",
+        "park_reason",
+        "reason_text",
+        "prereg_sha",
+        "created_at",
+      ],
+      [
+        x.cluster_id,
+        x.version ?? 1,
+        x.outcome,
+        expressed ? canonical(x.rule) : null,
+        expressed ? canonical(x.exit) : null,
+        expressed ? null : x.park_reason,
+        x.reason,
+        expressed ? preregSha(x.preregistration) : null,
+        at,
+      ],
     );
   }
   for (const x of claims) {
@@ -335,7 +404,7 @@ function tally(stmts) {
     claim_clusters: 0,
     calls: 0,
   };
-  for (const s of stmts) c[s.tag] += 1;
+  for (const s of stmts) c[s.tag] = (c[s.tag] ?? 0) + 1;
   return c;
 }
 
@@ -372,8 +441,14 @@ export async function run(argv, env, deps = {}) {
   }
   const { market, stmts } = plan(loaded.data);
   const planned = tally(stmts);
+  const proposals = loaded.data["call-proposals.json"]?.proposals;
+  // D-1523: call proposals are checked and counted, never stored (the Owner queue recomputes them from the claims).
+  const proposalNote =
+    proposals === undefined ? "" : `; call proposals checked ${proposals.length} (not stored)`;
   if (dry) {
-    out(`expert import dry run (${market}): ${JSON.stringify(planned)}; nothing written`);
+    out(
+      `expert import dry run (${market}): ${JSON.stringify(planned)}${proposalNote}; nothing written`,
+    );
     return 0;
   }
   const url = env.TURSO_MAIN_URL;
@@ -392,8 +467,10 @@ export async function run(argv, env, deps = {}) {
     } catch {
       schema = 0;
     }
-    if (schema < MIN_SCHEMA) {
-      out(`expert import: refused (database schema ${schema} is below ${MIN_SCHEMA})`);
+    const needs =
+      (planned.licence ?? 0) + (planned.expressions ?? 0) > 0 ? MIN_SCHEMA_V2 : MIN_SCHEMA;
+    if (schema < needs) {
+      out(`expert import: refused (database schema ${schema} is below ${needs})`);
       return 1;
     }
     // One batch = one transaction; a refusal anywhere rolls the whole seed back.
@@ -409,7 +486,7 @@ export async function run(argv, env, deps = {}) {
       Object.keys(planned).map((k) => [k, planned[k] - written[k]]),
     );
     out(
-      `expert import (${market}): written ${JSON.stringify(written)}; already present ${JSON.stringify(present)}`,
+      `expert import (${market}): written ${JSON.stringify(written)}; already present ${JSON.stringify(present)}${proposalNote}`,
     );
     return 0;
   } catch {

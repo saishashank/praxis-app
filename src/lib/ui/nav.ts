@@ -116,6 +116,13 @@ export const ROUTES: readonly RouteNode[] = [
   },
   { pattern: "/what-if", label: "What-if", parent: "/strategies", tab: "strategies" },
   { pattern: "/cortex", label: "Cortex", parent: "/strategies", tab: "strategies" },
+  // M22 (D-1423, D-1444): the Committee trial page, under Strategies. A label only; the page arrives with its task.
+  {
+    pattern: "/strategies/experiments/committee",
+    label: "Committee trial",
+    parent: "/strategies",
+    tab: "strategies",
+  },
   {
     pattern: "/cortex/labels",
     label: "Label announcements",
@@ -165,6 +172,13 @@ export const ROUTES: readonly RouteNode[] = [
   {
     pattern: "/reviews/experts/queue",
     label: "Claims to check",
+    parent: "/reviews/experts",
+    tab: "reviews",
+  },
+  // M22 (D-1430, D-1444): the licence results of the expert sources, under Experts. A label only.
+  {
+    pattern: "/reviews/experts/sources",
+    label: "Expert sources",
     parent: "/reviews/experts",
     tab: "reviews",
   },

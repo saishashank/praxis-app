@@ -977,10 +977,62 @@
       }
     },
     {
+      "id": "action:src/app/(app)/reviews/experts/[id]/actions.ts#acceptRiskAction",
+      "type": "action",
+      "name": "acceptRiskAction",
+      "purpose": "Server action acceptRiskAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/experts/[id]/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/reviews/experts/[id]/actions.ts"
+      }
+    },
+    {
       "id": "action:src/app/(app)/reviews/experts/queue/actions.ts#bulkConfirmExpertAction",
       "type": "action",
       "name": "bulkConfirmExpertAction",
       "purpose": "Server action bulkConfirmExpertAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/experts/queue/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/reviews/experts/queue/actions.ts"
+      }
+    },
+    {
+      "id": "action:src/app/(app)/reviews/experts/queue/actions.ts#confirmCallAction",
+      "type": "action",
+      "name": "confirmCallAction",
+      "purpose": "Server action confirmCallAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
       "specIds": [
         "ARN-060",
         "ROL-102a"
@@ -1182,6 +1234,58 @@
       "source": "src/app/(app)/reviews/experts/queue/actions.ts",
       "attrs": {
         "file": "src/app/(app)/reviews/experts/queue/actions.ts"
+      }
+    },
+    {
+      "id": "action:src/app/(app)/reviews/experts/queue/actions.ts#typedCallAction",
+      "type": "action",
+      "name": "typedCallAction",
+      "purpose": "Server action typedCallAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/experts/queue/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/reviews/experts/queue/actions.ts"
+      }
+    },
+    {
+      "id": "action:src/app/(app)/reviews/experts/sources/actions.ts#candidateAction",
+      "type": "action",
+      "name": "candidateAction",
+      "purpose": "Server action candidateAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/experts/sources/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/reviews/experts/sources/actions.ts"
       }
     },
     {
@@ -2280,6 +2384,33 @@
       }
     },
     {
+      "id": "host:api.cloudflare.com",
+      "type": "host",
+      "name": "api.cloudflare.com",
+      "purpose": "External host api.cloudflare.com called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/llm/workersAi.ts",
+      "attrs": {
+        "files": [
+          "src/lib/llm/workersAi.ts"
+        ]
+      }
+    },
+    {
       "id": "host:api.github.com",
       "type": "host",
       "name": "api.github.com",
@@ -2530,7 +2661,8 @@
       "source": "src/lib/config/verify.ts",
       "attrs": {
         "files": [
-          "src/lib/config/verify.ts"
+          "src/lib/config/verify.ts",
+          "src/lib/llm/roster.ts"
         ]
       }
     },
@@ -3260,6 +3392,33 @@
       }
     },
     {
+      "id": "host:www.youtube.com",
+      "type": "host",
+      "name": "www.youtube.com",
+      "purpose": "External host www.youtube.com called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/experts/licence/engine.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/experts/licence/engine.mjs"
+        ]
+      }
+    },
+    {
       "id": "llm-provider:github-models",
       "type": "llm-provider",
       "name": "github-models",
@@ -3377,6 +3536,36 @@
       }
     },
     {
+      "id": "llm-provider:workers-ai",
+      "type": "llm-provider",
+      "name": "workers-ai",
+      "purpose": "Free-tier LLM provider workers-ai in the dated roster; used only after a bake-off passes.",
+      "specIds": [
+        "LLM-070",
+        "LLM-071"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The router moves to the next provider in the roster or stays rules-only.",
+      "runbook": null,
+      "views": [
+        "llm"
+      ],
+      "source": "src/lib/llm/roster.ts",
+      "attrs": {
+        "models": [
+          "@cf/meta/llama-3.2-3b-instruct",
+          "@cf/openai/gpt-oss-120b",
+          "@cf/openai/gpt-oss-20b",
+          "@cf/qwen/qwen3.8-27b"
+        ]
+      }
+    },
+    {
       "id": "llm-role:R1",
       "type": "llm-role",
       "name": "R1",
@@ -3400,7 +3589,6 @@
       "attrs": {
         "candidates": [
           "google/gemini-3.5-flash-lite",
-          "groq/llama-3.1-8b-instant",
           "groq/openai/gpt-oss-20b"
         ]
       }
@@ -3522,6 +3710,33 @@
           "groq/openai/gpt-oss-20b",
           "groq/qwen/qwen3.8-27b"
         ]
+      }
+    },
+    {
+      "id": "llm-role:R7",
+      "type": "llm-role",
+      "name": "R7",
+      "purpose": "R7 Committee judge: weighs the bull and bear cases into a rating; text only, never a decision, spends the Committee budget bucket.",
+      "specIds": [
+        "LLM-001",
+        "LLM-061",
+        "LLM-066"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Falls back to rules-only output; no free text is ever required.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "llm"
+      ],
+      "source": "src/lib/llm/budget.ts",
+      "attrs": {
+        "candidates": []
       }
     },
     {
@@ -4182,6 +4397,34 @@
       "attrs": {}
     },
     {
+      "id": "page:/reviews/experts/sources",
+      "type": "page",
+      "name": "/reviews/experts/sources",
+      "purpose": "Expert library page /reviews/experts/sources: experts by tested evidence, the claim queue and technique clusters (hypotheses, not advice).",
+      "specIds": [
+        "KB-074",
+        "KB-075",
+        "PRD-034",
+        "UXN-292",
+        "UXN-293",
+        "UXN-294",
+        "UXN-295"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "learning"
+      ],
+      "source": "src/app/(app)/reviews/experts/sources/page.tsx",
+      "attrs": {}
+    },
+    {
       "id": "page:/reviews/glossary",
       "type": "page",
       "name": "/reviews/glossary",
@@ -4617,6 +4860,28 @@
         "platform"
       ],
       "source": "src/app/(app)/strategies/[execution]/page.tsx",
+      "attrs": {}
+    },
+    {
+      "id": "page:/strategies/experiments/committee",
+      "type": "page",
+      "name": "/strategies/experiments/committee",
+      "purpose": "Screen /strategies/experiments/committee of the web app.",
+      "specIds": [
+        "UXN-001"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/app/(app)/strategies/experiments/committee/page.tsx",
       "attrs": {}
     },
     {
@@ -9134,6 +9399,38 @@
       }
     },
     {
+      "id": "table:main.alt_input_point",
+      "type": "table",
+      "name": "alt_input_point",
+      "purpose": "Table alt_input_point in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "source",
+          "event_key",
+          "d",
+          "prob_ppm",
+          "fetched_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.angle_forward_flag",
       "type": "table",
       "name": "angle_forward_flag",
@@ -10247,6 +10544,42 @@
       }
     },
     {
+      "id": "table:main.cluster_expression",
+      "type": "table",
+      "name": "cluster_expression",
+      "purpose": "Table cluster_expression in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "cluster_id",
+          "version",
+          "outcome",
+          "rule_json",
+          "exit_json",
+          "park_reason",
+          "reason_text",
+          "prereg_sha",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.cluster_state",
       "type": "table",
       "name": "cluster_state",
@@ -10396,6 +10729,161 @@
           "kind",
           "d",
           "detail_json"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.committee_call",
+      "type": "table",
+      "name": "committee_call",
+      "purpose": "Table committee_call in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "market",
+          "d",
+          "signal_id",
+          "stage",
+          "prompt_sha",
+          "pack_id",
+          "provider",
+          "model_id",
+          "model_version",
+          "params_json",
+          "raw_response",
+          "parsed_json",
+          "created_at",
+          "expires_d"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_committee_call_expires",
+          "idx_committee_call_signal"
+        ]
+      }
+    },
+    {
+      "id": "table:main.committee_prereg",
+      "type": "table",
+      "name": "committee_prereg",
+      "purpose": "Table committee_prereg in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "trial_id",
+          "version",
+          "market",
+          "frozen_json",
+          "sha",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.committee_rating",
+      "type": "table",
+      "name": "committee_rating",
+      "purpose": "Table committee_rating in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "signal_id",
+          "trial_id",
+          "pack_id",
+          "rating",
+          "reasons_json",
+          "bull_model",
+          "bear_model",
+          "risk_model",
+          "judge_model",
+          "same_family",
+          "timings_json",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_committee_rating_trial"
+        ]
+      }
+    },
+    {
+      "id": "table:main.committee_trial_result",
+      "type": "table",
+      "name": "committee_trial_result",
+      "purpose": "Table committee_trial_result in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "trial_id",
+          "market",
+          "d",
+          "kind",
+          "verdict",
+          "stats_json",
+          "created_at"
         ],
         "database": "main",
         "indexes": []
@@ -11575,6 +12063,38 @@
       }
     },
     {
+      "id": "table:main.expert_call_confirm",
+      "type": "table",
+      "name": "expert_call_confirm",
+      "purpose": "Table expert_call_confirm in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "claim_id",
+          "proposal_id",
+          "price_basis",
+          "confirmed_by",
+          "confirmed_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.expert_call_outcome",
       "type": "table",
       "name": "expert_call_outcome",
@@ -11612,6 +12132,81 @@
           "luck_pct",
           "settled_d",
           "early"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.expert_call_proposal",
+      "type": "table",
+      "name": "expert_call_proposal",
+      "purpose": "Table expert_call_proposal in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "proposal_id",
+          "claim_id",
+          "market",
+          "code",
+          "direction",
+          "call_d",
+          "horizon_sessions",
+          "price_basis",
+          "target_micro",
+          "stop_micro",
+          "state",
+          "reason",
+          "source",
+          "model_id",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_expert_call_proposal_claim"
+        ]
+      }
+    },
+    {
+      "id": "table:main.expert_poll_run",
+      "type": "table",
+      "name": "expert_poll_run",
+      "purpose": "Table expert_poll_run in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "kind",
+          "d",
+          "counts_json",
+          "created_at"
         ],
         "database": "main",
         "indexes": []
@@ -11693,6 +12288,44 @@
         ],
         "database": "main",
         "indexes": []
+      }
+    },
+    {
+      "id": "table:main.expert_source_licence",
+      "type": "table",
+      "name": "expert_source_licence",
+      "purpose": "Table expert_source_licence in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "expert_id",
+          "source_key",
+          "checked_at",
+          "terms_url",
+          "robots",
+          "summarisation",
+          "status",
+          "actor",
+          "note"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_expert_source_licence_source"
+        ]
       }
     },
     {
@@ -13356,6 +13989,43 @@
       }
     },
     {
+      "id": "table:main.minilm_shadow",
+      "type": "table",
+      "name": "minilm_shadow",
+      "purpose": "Table minilm_shadow in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "source",
+          "ann_id",
+          "rule_category",
+          "model_category",
+          "rule_material",
+          "model_material",
+          "model_sha",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.nav_daily",
       "type": "table",
       "name": "nav_daily",
@@ -13429,6 +14099,38 @@
           "close_micro",
           "value_micro",
           "haircut"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.opinion_promotion_request",
+      "type": "table",
+      "name": "opinion_promotion_request",
+      "purpose": "Table opinion_promotion_request in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "kind",
+          "requested_d",
+          "evidence_json",
+          "created_at"
         ],
         "database": "main",
         "indexes": []
@@ -14482,6 +15184,40 @@
           "ic",
           "source",
           "computed_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.regime_alt_reading",
+      "type": "table",
+      "name": "regime_alt_reading",
+      "purpose": "Table regime_alt_reading in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "base_state",
+          "alt_state",
+          "inputs_status",
+          "inputs_json",
+          "created_at"
         ],
         "database": "main",
         "indexes": []
@@ -16747,6 +17483,7 @@
       "attrs": {
         "file": ".github/workflows/maintenance.yml",
         "jobs": [
+          "experts",
           "production",
           "staging"
         ],
@@ -18761,9 +19498,31 @@
       ]
     },
     {
+      "id": "service:app|contains|action:src/app/(app)/reviews/experts/[id]/actions.ts#acceptRiskAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/reviews/experts/[id]/actions.ts#acceptRiskAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
       "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#bulkConfirmExpertAction",
       "from": "service:app",
       "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#bulkConfirmExpertAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#confirmCallAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#confirmCallAction",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
@@ -18841,6 +19600,28 @@
       "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#rejectClaimAction",
       "from": "service:app",
       "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#rejectClaimAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#typedCallAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#typedCallAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|action:src/app/(app)/reviews/experts/sources/actions.ts#candidateAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/reviews/experts/sources/actions.ts#candidateAction",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
@@ -19358,6 +20139,16 @@
       ]
     },
     {
+      "id": "service:app|contains|page:/reviews/experts/sources",
+      "from": "service:app",
+      "to": "page:/reviews/experts/sources",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning"
+      ]
+    },
+    {
       "id": "service:app|contains|page:/reviews/glossary",
       "from": "service:app",
       "to": "page:/reviews/glossary",
@@ -19541,6 +20332,16 @@
       "id": "service:app|contains|page:/strategies/[execution]",
       "from": "service:app",
       "to": "page:/strategies/[execution]",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|page:/strategies/experiments/committee",
+      "from": "service:app",
+      "to": "page:/strategies/experiments/committee",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [
@@ -20209,6 +21010,16 @@
       ]
     },
     {
+      "id": "service:app|http|host:api.cloudflare.com",
+      "from": "service:app",
+      "to": "host:api.cloudflare.com",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
       "id": "service:app|http|host:api.github.com",
       "from": "service:app",
       "to": "host:api.github.com",
@@ -20574,6 +21385,16 @@
       ]
     },
     {
+      "id": "service:app|http|host:www.youtube.com",
+      "from": "service:app",
+      "to": "host:www.youtube.com",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
       "id": "service:turso-auth|contains|table:auth.alert_user_state",
       "from": "service:turso-auth",
       "to": "table:auth.alert_user_state",
@@ -20702,6 +21523,16 @@
       "views": [
         "data",
         "learning"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.alt_input_point",
+      "from": "service:turso-main",
+      "to": "table:main.alt_input_point",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
       ]
     },
     {
@@ -21012,6 +21843,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.cluster_expression",
+      "from": "service:turso-main",
+      "to": "table:main.cluster_expression",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.cluster_state",
       "from": "service:turso-main",
       "to": "table:main.cluster_state",
@@ -21050,6 +21891,46 @@
       "contract": "Runs or holds this element.",
       "views": [
         "learning"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.committee_call",
+      "from": "service:turso-main",
+      "to": "table:main.committee_call",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.committee_prereg",
+      "from": "service:turso-main",
+      "to": "table:main.committee_prereg",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.committee_rating",
+      "from": "service:turso-main",
+      "to": "table:main.committee_rating",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.committee_trial_result",
+      "from": "service:turso-main",
+      "to": "table:main.committee_trial_result",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
       ]
     },
     {
@@ -21370,6 +22251,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.expert_call_confirm",
+      "from": "service:turso-main",
+      "to": "table:main.expert_call_confirm",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.expert_call_outcome",
       "from": "service:turso-main",
       "to": "table:main.expert_call_outcome",
@@ -21378,6 +22269,26 @@
       "views": [
         "data",
         "learning"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.expert_call_proposal",
+      "from": "service:turso-main",
+      "to": "table:main.expert_call_proposal",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.expert_poll_run",
+      "from": "service:turso-main",
+      "to": "table:main.expert_poll_run",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
       ]
     },
     {
@@ -21400,6 +22311,16 @@
       "views": [
         "data",
         "learning"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.expert_source_licence",
+      "from": "service:turso-main",
+      "to": "table:main.expert_source_licence",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
       ]
     },
     {
@@ -21851,6 +22772,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.minilm_shadow",
+      "from": "service:turso-main",
+      "to": "table:main.minilm_shadow",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.nav_daily",
       "from": "service:turso-main",
       "to": "table:main.nav_daily",
@@ -21869,6 +22800,16 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.opinion_promotion_request",
+      "from": "service:turso-main",
+      "to": "table:main.opinion_promotion_request",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
         "data"
       ]
     },
@@ -22159,6 +23100,16 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.regime_alt_reading",
+      "from": "service:turso-main",
+      "to": "table:main.regime_alt_reading",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
         "data"
       ]
     },
@@ -23594,6 +24545,46 @@
       "to": "secret:ACTIONS_HMAC_SECRET_STAGING",
       "kind": "uses",
       "contract": "Reads the secret ACTIONS_HMAC_SECRET_STAGING from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:maintenance|uses|secret:GOOGLE_AI_API_KEY",
+      "from": "workflow:maintenance",
+      "to": "secret:GOOGLE_AI_API_KEY",
+      "kind": "uses",
+      "contract": "Reads the secret GOOGLE_AI_API_KEY from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:maintenance|uses|secret:GROQ_API_KEY",
+      "from": "workflow:maintenance",
+      "to": "secret:GROQ_API_KEY",
+      "kind": "uses",
+      "contract": "Reads the secret GROQ_API_KEY from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:maintenance|uses|secret:OPENROUTER_API_KEY",
+      "from": "workflow:maintenance",
+      "to": "secret:OPENROUTER_API_KEY",
+      "kind": "uses",
+      "contract": "Reads the secret OPENROUTER_API_KEY from the GitHub environment (name only).",
+      "views": [
+        "security"
+      ]
+    },
+    {
+      "id": "workflow:maintenance|uses|secret:TURSO_MAIN_TOKEN_PROD",
+      "from": "workflow:maintenance",
+      "to": "secret:TURSO_MAIN_TOKEN_PROD",
+      "kind": "uses",
+      "contract": "Reads the secret TURSO_MAIN_TOKEN_PROD from the GitHub environment (name only).",
       "views": [
         "security"
       ]

@@ -397,6 +397,10 @@ rules:
     purpose: "R6 Steelman author: bull and bear points that cite evidence-pack items; text only, never a decision."
     specIds: [LLM-001, LLM-061, LLM-063]
     views: [llm, agents]
+  - match: "llm-role:R7"
+    purpose: "R7 Committee judge: weighs the bull and bear cases into a rating; text only, never a decision, spends the Committee budget bucket."
+    specIds: [LLM-001, LLM-061, LLM-066]
+    views: [llm, agents]
   - match: "llm-provider:*"
     purpose: "Free-tier LLM provider {name} in the dated roster; used only after a bake-off passes."
     specIds: [LLM-070, LLM-071]

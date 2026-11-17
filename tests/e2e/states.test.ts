@@ -1,6 +1,7 @@
 // @vitest-environment node
 // TST-135 (a), D-967 (AT-85 "every seed state loads"): each named e2e state loads onto a fresh migrated
 // database and applying it again changes nothing. Plain SQL and synthetic ZZ data only.
+import { createHash } from "node:crypto";
 import type { Client } from "@libsql/client";
 import { afterEach, describe, expect, it } from "vitest";
 import * as expertsSeed from "../../e2e/seed/experts";
@@ -26,7 +27,7 @@ async function counts(db: Client): Promise<Record<string, number>> {
 }
 
 describe("the state registry", () => {
-  it("names the six states of TST-135 (a) and the three of M21 A1 (D-1236)", () => {
+  it("names the six states of TST-135 (a), the three of M21 A1 (D-1236) and the two of M22 A1 (D-1444)", () => {
     expect(STATE_NAMES).toEqual([
       "picks-two-sections",
       "experts-queue",
@@ -37,7 +38,10 @@ describe("the state registry", () => {
       "owner-tools-on",
       "review-stored",
       "labels-queue",
+      "committee-trial",
+      "experts-sources",
     ]);
+    expect(STATE_NAMES).toHaveLength(11);
     for (const n of STATE_NAMES)
       expect(typeof STATES[n as keyof typeof STATES].apply).toBe("function");
   });
@@ -45,9 +49,12 @@ describe("the state registry", () => {
   it("parses lists and 'all', ignores blanks and repeats, and refuses an unknown name", () => {
     expect(parseStates(undefined)).toEqual([]);
     expect(parseStates("  ")).toEqual([]);
-    // "all" is the default-configuration states: the Owner switch is opt-in (D-1243)
-    expect(parseStates("all")).toEqual(STATE_NAMES.filter((n) => n !== "owner-tools-on"));
+    // "all" is the default-configuration states: the Owner switch (D-1243) and the Committee switch are opt-in
+    const OPT_IN = ["owner-tools-on", "committee-trial"];
+    expect(parseStates("all")).toEqual(STATE_NAMES.filter((n) => !OPT_IN.includes(n)));
+    expect(parseStates("all")).toContain("experts-sources");
     expect(parseStates("all,owner-tools-on")).toEqual([...parseStates("all"), "owner-tools-on"]);
+    expect(parseStates("all,committee-trial")).toEqual([...parseStates("all"), "committee-trial"]);
     expect(parseStates("owner-tools-on,all")).toEqual(["owner-tools-on", ...parseStates("all")]);
     expect(parseStates("alerts-muted, experts-queue,alerts-muted")).toEqual([
       "alerts-muted",
@@ -81,7 +88,7 @@ describe("every state loads, and applying it twice changes nothing", () => {
     });
   }
 
-  it('all of them together, in order, and again; the Owner switch stays off under "all"', async () => {
+  it('all of them together, in order, and again; the Owner and Committee switches stay off under "all"', async () => {
     const db = await freshDb("main");
     await applyStates(db, parseStates("all"), NOW);
     const once = await counts(db);
@@ -89,8 +96,14 @@ describe("every state loads, and applying it twice changes nothing", () => {
     expect(await counts(db)).toEqual(once);
     expect(await getConfig(db, "owner_real_money_tools")).toBe("off");
     expect(Number(once.owner_trade)).toBe(0);
+    expect(await getConfig(db, "committee_enabled")).toBe("off");
+    expect(Number(once.committee_rating)).toBe(0);
+    expect(Number(once.expert_call_proposal)).toBe(2);
     await applyStates(db, parseStates("all,owner-tools-on"), NOW);
     expect(await getConfig(db, "owner_real_money_tools")).toBe("on");
+    expect(await getConfig(db, "committee_enabled")).toBe("off");
+    await applyStates(db, parseStates("all,committee-trial"), NOW);
+    expect(await getConfig(db, "committee_enabled")).toBe("on");
   });
 });
 
@@ -112,6 +125,71 @@ describe("what each state leaves behind", () => {
       "SELECT COUNT(*) AS n FROM config_version WHERE key = 'owner_real_money_tools'",
     );
     expect(Number(v.rows[0]!.n)).toBe(1);
+  });
+
+  it("committee-trial: the switch on, one pre-registration with a matching sha, three nights of three ratings, three interim rows", async () => {
+    const db = await freshDb("main");
+    expect(await getConfig(db, "committee_enabled")).toBe("off");
+    await applyStates(db, ["committee-trial"], NOW);
+    expect(await getConfig(db, "committee_enabled")).toBe("on");
+    const p = await db.execute(
+      "SELECT trial_id, version, market, frozen_json, sha FROM committee_prereg",
+    );
+    expect(p.rows).toHaveLength(1);
+    expect([String(p.rows[0]!.version), String(p.rows[0]!.market)]).toEqual(["1", "AU"]);
+    expect(String(p.rows[0]!.sha)).toBe(
+      createHash("sha256").update(String(p.rows[0]!.frozen_json)).digest("hex"),
+    );
+    const r = await db.execute("SELECT d, rating FROM committee_rating ORDER BY d, signal_id");
+    expect(r.rows).toHaveLength(9);
+    expect(new Set(r.rows.map((x) => String(x.d))).size).toBe(3);
+    expect(new Set(r.rows.map((x) => String(x.rating)))).toEqual(
+      new Set(["approve", "neutral", "reject"]),
+    );
+    const t = await db.execute("SELECT kind, verdict FROM committee_trial_result");
+    expect(t.rows.map((x) => [String(x.kind), String(x.verdict)])).toEqual([
+      ["interim", "running"],
+      ["interim", "running"],
+      ["interim", "running"],
+    ]);
+    // the config key is written once, however often the state is applied
+    await applyStates(db, ["committee-trial"], NOW);
+    const v = await db.execute(
+      "SELECT COUNT(*) AS n FROM config_version WHERE key = 'committee_enabled'",
+    );
+    expect(Number(v.rows[0]!.n)).toBe(1);
+  });
+
+  it("experts-sources: a tracked expert with an enabled licence, a candidate with an unchecked one, a complete and an incomplete proposal", async () => {
+    const db = await freshDb("main");
+    await applyStates(db, ["experts-sources"], NOW);
+    const e = await db.execute("SELECT id, status, tier FROM expert ORDER BY id");
+    expect(e.rows.map((x) => [String(x.id), String(x.status), String(x.tier)])).toEqual([
+      ["X-SRC1", "tracked", "core"],
+      ["X-SRC2", "candidate", "discovered"],
+    ]);
+    const l = await db.execute(
+      "SELECT expert_id, status FROM expert_source_licence ORDER BY expert_id",
+    );
+    expect(l.rows.map((x) => [String(x.expert_id), String(x.status)])).toEqual([
+      ["X-SRC1", "enabled"],
+      ["X-SRC2", "unchecked"],
+    ]);
+    const p = await db.execute("SELECT state, claim_id FROM expert_call_proposal ORDER BY state");
+    expect(p.rows.map((x) => String(x.state))).toEqual(["complete", "incomplete"]);
+    // the complete proposal can be confirmed (the 0039 guard accepts it); the incomplete one cannot
+    await db.execute(
+      "INSERT INTO expert_call_confirm (claim_id, proposal_id, price_basis, confirmed_by, confirmed_at) VALUES ('C-SRC-1', '" +
+        "c".repeat(64) +
+        "', 'close', 'owner', '2026-10-16T09:00:00Z')",
+    );
+    await expect(
+      db.execute(
+        "INSERT INTO expert_call_confirm (claim_id, proposal_id, price_basis, confirmed_by, confirmed_at) VALUES ('C-SRC-2', '" +
+          "d".repeat(64) +
+          "', 'close', 'owner', '2026-10-16T09:00:00Z')",
+      ),
+    ).rejects.toThrow(/complete proposal/);
   });
 
   it("review-stored: one stored Evening Review for the newest weekday, no other review", async () => {
