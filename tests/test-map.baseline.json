@@ -1192,7 +1192,7 @@
       "tests/usage/projectionSection.test.tsx",
       "worker/test/killSlot.test.ts"
     ],
-    "AT-72": ["tests/acceptance/v3/at72Exits.test.ts"],
+    "AT-72": ["tests/acceptance/v3/at72Exits.test.ts", "tests/acceptance/v3/at72Registry.test.ts"],
     "AT-73": [
       "tests/acceptance/v3/at32Research.test.ts",
       "tests/acceptance/v3/at73Shared.test.ts",
@@ -1200,7 +1200,11 @@
       "tests/security/committeeBoundary.test.ts",
       "tests/security/opinionBoundary.test.ts"
     ],
+    "AT-74": ["tests/acceptance/v3/at74.test.ts"],
     "AT-75": [
+      "tests/acceptance/v3/at32Research.test.ts",
+      "tests/acceptance/v3/at75Labels.test.ts",
+      "tests/acceptance/v3/at75Series.test.ts",
       "tests/acceptance/v3/replayHash.test.ts",
       "tests/cortex/survivorship.test.ts",
       "tests/labels/evaluate.test.ts",
@@ -3494,9 +3498,14 @@
     ],
     "DAT-244": ["tests/markets/us/luld.test.ts"],
     "DAT-245": ["tests/markets/in/categoryMap.test.ts", "tests/markets/us/categoryMap.test.ts"],
-    "DAT-247": ["tests/labels/evaluate.test.ts", "tests/labels/store.test.ts"],
+    "DAT-247": [
+      "tests/acceptance/v3/at75Labels.test.ts",
+      "tests/labels/evaluate.test.ts",
+      "tests/labels/store.test.ts"
+    ],
     "DAT-248": [
       "scripts/ci/licence-register.m22.test.mjs",
+      "tests/acceptance/v3/at72Registry.test.ts",
       "tests/acceptance/v3/at81Regime.test.ts",
       "tests/db/0040_m23_research.test.ts",
       "tests/health/regimeAlt.test.ts",
@@ -4944,6 +4953,7 @@
       "tests/acceptance/v3/at32Opinions.test.ts",
       "tests/acceptance/v3/at32Research.test.ts",
       "tests/acceptance/v3/at73Shared.test.ts",
+      "tests/acceptance/v3/at74.test.ts",
       "tests/acceptance/v3/at76Reflections.test.ts",
       "tests/acceptance/v3/at77.test.ts",
       "tests/acceptance/v3/at77Hash.test.ts",
@@ -5648,6 +5658,7 @@
       "tests/stats/val110ErrorBudget.test.ts"
     ],
     "VAL-111": [
+      "tests/acceptance/v3/at72Registry.test.ts",
       "tests/acceptance/v3/at76Trial.test.ts",
       "tests/committee/prereg.test.ts",
       "tests/committee/trial.test.ts",
@@ -5680,8 +5691,10 @@
     ],
     "VAL-119": ["tests/acceptance/v2/at63.test.ts"],
     "VAL-121": [
+      "tests/acceptance/v3/at72Registry.test.ts",
       "tests/acceptance/v3/at78Short.test.ts",
       "tests/db/0040_m23_research.test.ts",
+      "tests/research/lookSync.test.ts",
       "tests/shortShadow/evaluate.test.ts",
       "tests/shortShadow/run.test.ts",
       "tests/shortShadow/score.test.ts",

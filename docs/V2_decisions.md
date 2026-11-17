@@ -1147,3 +1147,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1692 | CXA-004 look path (T2, D-1605, D-1635): below 252 nothing is read but dates (the pure engine returns before its reader is called; a test proves it with 251). |
 | D-1693 | CXA-004 labels (T2, D-1635, D-1636): the three labels are evaluated as one family, and only on the night the angle looks are taken: if at least 70 % of the h... |
 | D-1694 | CXA-004 boundary, tests and a finding (T2, D-1645, D-1646): the step reads the archive, the calendar and its own tables and writes only research_prereg, rese... |
+| D-1700 | Monitor 5 floor (M2, D-1619, AT-74): the "one regime only" label needs at least GATE_DEFAULTS.regimeMinSetups (30) setups of the family in the quarter, and t... |
+| D-1701 | Monitor 6 record and revisit (M2, D-1620): the quarterly row records the option (abstain when disagreement exceeds cortex_disagreement_max, value read from t... |
+| D-1702 | Monitor 7 data (M2, D-1621; [VERIFY] answered): checked at M2 start, calibration stores no expected stall rate (no column, no cortex_map or family_status fie... |
+| D-1703 | Monitor 8 data (M2, D-1622; [VERIFY] answered): the exclusion status is the outcome fill_status = 'unfilled' (an entry the fill model did not fill: gap cap,... |
