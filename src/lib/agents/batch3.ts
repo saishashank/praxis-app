@@ -66,6 +66,7 @@ import { syncForwardLedger, type ForwardResult } from "./forwardLedger";
 import { runStatusLooks } from "@/lib/cortex/look";
 import { scoreOutcomes } from "@/lib/cortex/stage";
 import { runShortShadow } from "@/lib/shortShadow";
+import { altRegimeNight } from "@/lib/regime/alt/shadow";
 import { loadAgentParams, type AgentParams } from "./params";
 import { wordsKey } from "@/lib/learning/learnFacts";
 import { liveRankIc } from "@/lib/learning/rankIcStage";
@@ -1112,6 +1113,26 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
           o.now(),
           REVIEW_JOB,
           `cortex status look failed on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
+            0,
+            LOG_MESSAGE_MAX,
+          ),
+          runId,
+        ],
+      });
+    }
+
+    // M22 E5 (DAT-248, D-1440, D-1441): the shadow regime reading, ONE call per session. It writes regime_alt_reading only and
+    // returns nothing the gate or any score reads (the base state is regime_daily, written by batch 2b, and is not touched here);
+    // with no outside input source accepted the row says `unavailable`. A failure only logs.
+    try {
+      await altRegimeNight(db, { market: o.market, d: o.d, now: o.now() });
+    } catch (error) {
+      await db.execute({
+        sql: "INSERT INTO app_log (at, level, source, message, run_id) VALUES (?, 'warn', ?, ?, ?)",
+        args: [
+          o.now(),
+          REVIEW_JOB,
+          `shadow regime reading not written on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
             0,
             LOG_MESSAGE_MAX,
           ),

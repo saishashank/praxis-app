@@ -1047,5 +1047,10 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1524 | Screening as built (E4, D-1437, VAL-112): eligibleExpressed (src/lib/experts/expressed.ts) selects clusters that are confirmed by a person, end-of-day testab... |
 | D-1525 | express-check (E4, D-1437, D-1438): scripts/experts/express-check.mjs --seed <folder> loads the seed with the importer's own loader (shape errors first), run... |
 | D-1526 | Boundary and the holdout (E4, PRD-033, VAL-112): the new expert code reads nothing trading-side and writes nothing: ruleEval.ts and expressed.ts import only... |
+| D-1527 | Alt reading as built (task E5, D-1439, D-1440): src/lib/regime/alt/{inputs,rule,shadow,evaluate}.ts. |
+| D-1528 | Macro series carry context only (task E5, D-1440): the stored reading lists the newest macro values, but the rule uses prediction-market probabilities alone,... |
+| D-1529 | One call, display only, and the look (task E5, D-1440, D-1441, BLD-051): batch 3 calls altRegimeNight once per session, soft, after the status look; it reads... |
+| D-1530 | Prediction-market fetcher (task E5, D-1439): src/lib/data/sources/predictionMarkets.mjs parses two fixture payload shapes and fetches only the sources whose... |
+| D-1531 | Sweep as built (task E5, D-1443, D-1442): src/lib/intraday/sweep.ts plans U1 then U2 batches of 20 codes (assumed batch size, [VERIFY] with the endpoint at a... |
 | D-1532 | Trial steps in the night (orchestrator, after the C2 and L4 merge): signals.mjs passes the night's own arguments to both trial steps (["prereg", ...argv], ["... |
 | D-1533 | AT-22 after the L5 merge (orchestrator): the annotation-boundary check reads every source file under src/lib/llm recursively (it read the folder flat and fai... |

@@ -75,3 +75,29 @@ export async function scanUniverse(
     .sort((a, b) => RANK[a.kind] - RANK[b.kind] || (a.code < b.code ? -1 : a.code > b.code ? 1 : 0))
     .slice(0, codesMax);
 }
+
+/**
+ * M22 E5 (AGT-147, D-1443): the codes of tiers U1 then U2 of the latest snapshot, not halted, at most `limit` of them, in
+ * priority order (tier, then code). Read only; the scan universe above is not changed by it.
+ */
+export async function tierCodes(
+  db: Exec,
+  market: string,
+  d: string,
+  limit: number,
+): Promise<ScanCode[]> {
+  if (limit <= 0) return [];
+  // rows-ok: universe_snapshot primary key (market, d, ...) newest snapshot, tiers U1 and U2 only, LIMIT = the sweep's capacity
+  const r = await db.execute({
+    sql:
+      "SELECT code, tier, halted, adv FROM universe_snapshot WHERE market = ? AND tier IN ('U1', 'U2') AND halted = 0 " +
+      "AND d = (SELECT MAX(d) FROM universe_snapshot WHERE market = ? AND d <= ?) ORDER BY tier, code LIMIT ?",
+    args: [market, market, d, limit],
+  });
+  return r.rows.map((x) => ({
+    code: String(x.code),
+    kind: String(x.tier) as "U1" | "U2",
+    halted: false,
+    adv: x.adv === null ? null : Number(x.adv),
+  }));
+}
