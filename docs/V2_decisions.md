@@ -1003,3 +1003,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1487 | Refusal of a re-run (task L2, D-1405): a live run is refused (exit 2, nothing called) for a model that an earlier report of the reports folder (--reports, de... |
 | D-1488 | Review script (task L2, D-1404): bakeoff-review.mjs has KEY_AVAILABLE = true, lists the role verdicts of every report and prints one llm_live_roles: add <rol... |
 | D-1489 | Roster refresh of 2026-11-17 (task L2, D-1407): the provider pages were read with a fetch tool on that day (what was read is in docs/llm-roster.md). |
+| D-1495 | Trial steps, trial id and the look (task C2, D-1420, D-1421, BLD-051): the nightly run gains two small steps around the Committee night, trial prereg before... |
+| D-1496 | Statistic and null as built (task C2, D-1421): |
+| D-1497 | Verdict rules as built (task C2, D-1421): "sessions" are the nights with at least one committee_rating row (skipped nights count: the trial runs in calendar... |
+| D-1498 | Outcomes as built (task C2, D-1422, ARN-105): one statement joins the trial's real ratings to ledger_row by signal id (forward, closed rows only; the smalles... |
+| D-1499 | Trial page and health line as built (task C2, D-1423, UXN-289, UXN-290): /strategies/experiments/committee takes the read action (every signed-in role) and t... |

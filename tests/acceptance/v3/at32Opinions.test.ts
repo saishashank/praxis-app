@@ -17,6 +17,8 @@ import { join } from "node:path";
 import type { Client } from "@libsql/client";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { committeeNight } from "@/lib/committee/night";
+import { frozenText, shaOf } from "@/lib/committee/prereg";
+import { trialNight } from "@/lib/committee/trial";
 import { defaultAgentParams } from "@/lib/agents/params";
 import { cleanupTempDbs } from "../../db/helpers";
 import { committeeLlm, committeeProvider, KEYS as COMMITTEE_KEYS } from "../../committee/harness";
@@ -121,6 +123,37 @@ const M22_STAGE_WRITERS: Array<(db: Client) => Promise<void>> = [
     });
     if (res.rated !== 1)
       throw new Error(`the Committee stage did not rate: ${JSON.stringify(res)}`);
+  },
+  // C2: the trial step (the interim path, which writes only committee_trial_result) over a pre-registered trial with one
+  // night of ratings. The final path also writes the audited switch-off and an alert line, so it is proven in at76Trial.
+  async (db) => {
+    const frozen = frozenText({
+      market: "AU",
+      started_d: "2030-01-03",
+      horizon_sessions: 5,
+      trial_sessions: 6,
+      min_settled: 12,
+      permutations: 100,
+      cost_threshold_ppm: 1000,
+      p_level_ppm: 50_000,
+      segment_min: 50,
+      statistic: "zz",
+    });
+    await db.execute({
+      sql: "INSERT INTO committee_prereg (trial_id, version, market, frozen_json, sha, created_at) VALUES ('c2-trial', 1, 'AU', ?, ?, '2030-01-03T00:00:00Z')",
+      args: [frozen, shaOf(frozen)],
+    });
+    await db.execute(
+      `INSERT INTO committee_rating (market, d, signal_id, trial_id, pack_id, rating, reasons_json, same_family, timings_json, created_at) VALUES ('AU', '2030-01-03', 'c2-s1', 'c2-trial', 'p1', 'neutral', '[]', 0, '{}', '${TS}')`,
+    );
+    const r = await trialNight(db, {
+      market: "AU",
+      d: "2030-01-03",
+      today: "2030-01-03",
+      now: TS,
+      switchOn: true,
+    });
+    if (r.status !== "running") throw new Error(`the trial step did not run: ${JSON.stringify(r)}`);
   },
 ];
 

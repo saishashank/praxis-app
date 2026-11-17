@@ -116,6 +116,11 @@ jobs:
         env:
           E2E_SCENARIO: rich
           E2E_STATES: all,owner-tools-on
+      - name: E2E lane rich - the Committee trial page (UXN-289, AT-76; opt-in state, D-1452)
+        run: npx playwright test e2e/m22-committee.spec.ts --project=desktop
+        env:
+          E2E_SCENARIO: rich
+          E2E_STATES: all,committee-trial
       # The design names the AT-65 family-badge page for this lane; that page is not in PAGES yet (walks.spec.ts), so the
       # lane walks four existing pages until it is added (a filter that matches no page would pass vacuously).
       - name: E2E lane walks - the walk capture (AT-65 family-badge page joins when it exists)

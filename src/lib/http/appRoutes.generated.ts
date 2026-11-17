@@ -107,6 +107,7 @@ export const KNOWN_ROUTE_PATTERNS: readonly string[] = [
   "/signin",
   "/strategies",
   "/strategies/[execution]",
+  "/strategies/experiments/committee",
   "/strategies/ideas",
   "/strategies/leaderboard",
   "/strategies/movers",
