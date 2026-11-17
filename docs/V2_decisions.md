@@ -980,3 +980,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1457 | Reflection reservation (task A2, D-1411): reserveAfterLeft(stage, params, market, usage, reflectionReserve = 0) adds the reserve (limited to the R6 cap still... |
 | D-1458 | Guard registry (task A2, D-1445): GUARDS is a Partial<Record<ConfigKey, Guard>> (only guarded keys appear; a total record over all keys would be noise), Guar... |
 | D-1459 | Nightly seam (task A2, D-1401): src/lib/llm/nightlyLlm.ts exports nightlyLlm(ctx) giving routerFor(role), providers and store; it is rules-only and builds no... |
+| D-1470 | Licence engine (task E1, D-1430): the check logic is one plain module, src/lib/experts/licence/engine.mjs (+ .d.mts), because the build-machine script (scrip... |
+| D-1471 | Status decision as built (E1, D-1430): robots disallows or the terms forbid gives no; robots allows or has no file gives enabled (summarising unknown is titl... |
+| D-1472 | Accept the risk (E1): acceptRiskAction in [id]/actions.ts is gated by requireUser("admin") (Owner only; an Editor and a Viewer are a 403) and the service acc... |
+| D-1473 | Monthly mode (E1, D-1429): runMonthlyLicence(db, deps) in check.ts is the entry the experts job calls on every run; it does nothing (returns null) when an ex... |
+| D-1474 | Terms reader and first-check file (E1): readTerms is a conservative phrase reader over the text of the first terms page found (tags and scripts removed, cut... |

@@ -88,6 +88,9 @@ describe("expert boundary (i): who may import src/lib/experts", () => {
     // expert pipeline when a feature keeps beating the market; it reads no expert material into any
     // decision, and the hypothesis is graded by the same screening before it can become a challenger.
     "src/lib/learning/dailyHypothesis.ts",
+    // M22 E1 (D-1470): the Owner-run first licence check reads the pure licence engine (robots, terms, status
+    // rules); it opens no database and feeds nothing into a decision.
+    "scripts/experts/licence-check.mjs",
   ]);
   // Readers: the KB mirror, the pages and their loaders. Nothing that decides, sizes or places.
   const READERS = new Set(["src/lib/kb/documents.ts", "src/lib/kb/mapping.ts"]);
@@ -179,6 +182,8 @@ describe("expert boundary (ii): what src/lib/experts may import", () => {
     // the review service (WP6, D-610, D-611): the audit writer, the auth env type and the actor hash
     "src/lib/auth/audit",
     "src/lib/auth/env",
+    // M22 E1 (D-1470): the licence engine reads robots.txt with the polite fetcher's parser (a pure function)
+    "src/lib/data/sources/politeFetch.mjs",
     "node:crypto",
   ]);
   const FORBIDDEN: Array<[string, RegExp]> = [
@@ -257,11 +262,14 @@ describe("expert boundary (ii): what src/lib/experts may import", () => {
 });
 
 describe("expert boundary (iii): SQL write allowlist", () => {
-  const WRITES = new Set<string>(EXPERT_TABLES);
+  // M22 tables of the expert library (migration 0039): the licence store and the job-run row (E1, D-1450).
+  const M22_EXPERT_TABLES = ["expert_source_licence", "expert_poll_run"];
+  const WRITES = new Set<string>([...EXPERT_TABLES, ...M22_EXPERT_TABLES]);
   // What the experts may read besides their own tables: the challenger event log (F7 gate), the bars and the
   // universe snapshot (paper calls), and the user table (the review service re-checks the actor, D-610).
   const READS = new Set<string>([
     ...EXPERT_TABLES,
+    ...M22_EXPERT_TABLES,
     "challenger_event",
     "price_bar",
     "universe_snapshot",

@@ -977,6 +977,32 @@
       }
     },
     {
+      "id": "action:src/app/(app)/reviews/experts/[id]/actions.ts#acceptRiskAction",
+      "type": "action",
+      "name": "acceptRiskAction",
+      "purpose": "Server action acceptRiskAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/experts/[id]/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/reviews/experts/[id]/actions.ts"
+      }
+    },
+    {
       "id": "action:src/app/(app)/reviews/experts/queue/actions.ts#bulkConfirmExpertAction",
       "type": "action",
       "name": "bulkConfirmExpertAction",
@@ -3256,6 +3282,33 @@
           "src/app/(app)/market/CompanyChart.tsx",
           "src/app/(app)/strategies/[execution]/StrategyChart.tsx",
           "src/components/charts/TimeSeriesChart.tsx"
+        ]
+      }
+    },
+    {
+      "id": "host:www.youtube.com",
+      "type": "host",
+      "name": "www.youtube.com",
+      "purpose": "External host www.youtube.com called over HTTPS.",
+      "specIds": [
+        "NFR-006",
+        "SEC-017"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The calling job retries, then records a failed fetch; no data is invented.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/lib/experts/licence/engine.mjs",
+      "attrs": {
+        "files": [
+          "src/lib/experts/licence/engine.mjs"
         ]
       }
     },
@@ -19259,6 +19312,17 @@
       ]
     },
     {
+      "id": "service:app|contains|action:src/app/(app)/reviews/experts/[id]/actions.ts#acceptRiskAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/reviews/experts/[id]/actions.ts#acceptRiskAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
       "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#bulkConfirmExpertAction",
       "from": "service:app",
       "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#bulkConfirmExpertAction",
@@ -21068,6 +21132,16 @@
       "contract": "Documentation link.",
       "views": [
         "data",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|http|host:www.youtube.com",
+      "from": "service:app",
+      "to": "host:www.youtube.com",
+      "kind": "http",
+      "contract": "HTTPS request to an external host.",
+      "views": [
         "platform"
       ]
     },
