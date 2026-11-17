@@ -109,6 +109,7 @@ describe("picks are never read by ranking or sizing", () => {
     // exit code; no other trading file may even mention the picks folder.
     const bad = allCode
       .filter(inTrading)
+      .filter((f) => !/\.test\.(?:mjs|ts)$/.test(f)) // D-1541: a test that stubs the stage list is not trading code
       .filter((f) => /["'`]src\/lib\/picks/.test(readFileSync(f, "utf8"))) // quoted, not a comment
       .map(rel);
     expect(bad).toEqual(["scripts/arena/signals.mjs"]);

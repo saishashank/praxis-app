@@ -43,6 +43,7 @@ const NON_COMPARISON_READERS = new Set([
   "lib/ui/loaders/company.ts",
   "lib/ui/loaders/home.ts", // D-907: the ASX 200 line on Home, a level and its change (as the company page), not a comparison
   "lib/arena/diagnose.ts", // read-only signals diagnosis (#58): counts index rows to check regime coverage, not a comparison
+  "lib/regime/alt/evaluate.ts", // D-1541 (M22 E5): the shadow market-state check reads the index close 20 sessions on to score the state it named; a check of a reading, not a comparison of a strategy with the market
   "lib/learning/dailyLoad.ts", // D-921: the day's AXJO level move, one of the mover causes ("the market moved"); a description of a day, not a comparison of a strategy with the market
 ]);
 

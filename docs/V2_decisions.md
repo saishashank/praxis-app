@@ -1065,3 +1065,4 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1538 | Number-literal scan (task Z1): the nine literals the merged tree left in bakeoff.ts, minilm/* and the example rule in ruleSchema.ts are not rule values (a he... |
 | D-1539 | AT-76 pointers (task Z1, D-1448): the two it.todo lines of at76.test.ts are replaced by one test that checks the split files exist (at76Trial, at76Reflection... |
 | D-1540 | Left for the Owner or a later task (task Z1; listed): the model keys in the signals step of the production job and its stored copy (D-1513), the Workers AI t... |
+| D-1541 | Two guard tests after the M22 merge (orchestrator, D-181, DAT-235): the full gate on the merged build failed two source scans. |
