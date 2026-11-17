@@ -1197,6 +1197,8 @@
       "tests/acceptance/v3/at32Research.test.ts",
       "tests/acceptance/v3/at73Shared.test.ts",
       "tests/acceptance/v3/at79Calls.test.ts",
+      "tests/research/proposals/job.test.ts",
+      "tests/research/proposals/validate.test.ts",
       "tests/security/committeeBoundary.test.ts",
       "tests/security/opinionBoundary.test.ts"
     ],
@@ -3665,7 +3667,8 @@
       "tests/agents/batch2bLookAhead.test.ts",
       "tests/agents/controls.test.ts",
       "tests/agents/families/f6common.test.ts",
-      "tests/agents/orderPlan.test.ts"
+      "tests/agents/orderPlan.test.ts",
+      "tests/research/proposals/validate.test.ts"
     ],
     "FAM-002": [
       "tests/agents/batch2b.test.ts",
@@ -3729,7 +3732,13 @@
     ],
     "KB-011": ["tests/acceptance/m6/at24.test.ts", "tests/agents/versionRuns.test.ts"],
     "KB-012": ["tests/agents/versionRuns.test.ts", "tests/learning/ruleVersions.test.ts"],
-    "KB-020": ["tests/kb/documents.test.ts", "tests/learning/lessons.test.ts"],
+    "KB-020": [
+      "tests/kb/documents.test.ts",
+      "tests/learning/lessons.test.ts",
+      "tests/research/proposals/injection.test.ts",
+      "tests/research/proposals/job.test.ts",
+      "tests/research/proposals/validate.test.ts"
+    ],
     "KB-030": ["tests/acceptance/m6/at22.test.ts", "tests/learning/laneA.test.ts"],
     "KB-031": ["tests/acceptance/m6/at22.test.ts"],
     "KB-032": ["tests/acceptance/m6/at22.test.ts", "tests/llm/bakeoff.test.ts"],
@@ -3739,7 +3748,9 @@
       "tests/learning/challengerEvidence.test.ts",
       "tests/learning/challengerGenerator.test.ts",
       "tests/learning/challengerLifecycle.test.ts",
-      "tests/learning/migration0010.test.ts"
+      "tests/learning/migration0010.test.ts",
+      "tests/research/proposals/job.test.ts",
+      "tests/research/proposals/validate.test.ts"
     ],
     "KB-041": ["tests/acceptance/m6/at23.test.ts"],
     "KB-042": [
@@ -3839,6 +3850,7 @@
       "tests/experts/import.test.ts",
       "tests/experts/ruleEval.test.ts"
     ],
+    "KB-999": ["tests/research/proposals/validate.test.ts"],
     "LLM-001": [
       "tests/acceptance/m6/at22.test.ts",
       "tests/learning/wordsStage.test.ts",
@@ -3967,7 +3979,11 @@
       "tests/experts/store.test.ts"
     ],
     "LLM-070": ["tests/acceptance/v2/at46.test.ts", "tests/llm/roster.test.ts"],
-    "LLM-071": ["tests/acceptance/v2/at46.test.ts", "tests/llm/hardening.test.ts"],
+    "LLM-071": [
+      "tests/acceptance/v2/at46.test.ts",
+      "tests/llm/hardening.test.ts",
+      "tests/research/proposals/validate.test.ts"
+    ],
     "LLM-072": ["tests/acceptance/v2/at46.test.ts", "tests/llm/hardening.test.ts"],
     "LLM-073": [
       "tests/acceptance/v2/at46.test.ts",

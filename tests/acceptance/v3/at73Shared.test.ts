@@ -6,11 +6,14 @@
 //     no `expert_call` is written (the Owner's confirmation is the only way a call is tracked, AT-79);
 // (c) no deciding module imports the proposal engine or the opinion folders, and the opinion and proposal tables have no
 //     foreign key into a trading table.
-// M23 adds the angle proposals (CXA-007) to this same file: a case in FIXTURES' sibling list and a table in OPINION_TABLES.
+// M23 T3 (CXA-007, D-1730...D-1739) adds the angle half at the end of this file (the 20 angle fixtures, the weight refusal, the
+// complement on and off, no card or e-mail naming the table) and `angle_proposal` to OPINION_TABLES.
 // Synthetic ZZ data only (SEC-110).
 import fs from "node:fs";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
+import { runProposalJob } from "@/lib/research/proposals/job";
+import { registeredAngleNames, validateBatch } from "@/lib/research/proposals/validate";
 import { parseModelAnswer, proposeCallStructure } from "@/lib/experts/callEngine.mjs";
 import { proposeForClaim, storeProposal, withIds } from "@/lib/experts/callProposals";
 import { insertClaim } from "@/lib/experts/store";
@@ -422,6 +425,7 @@ describe("AT-73 (c): no path from an opinion or a proposal to trading", () => {
     "alt_input_point",
     "expert_call_proposal",
     "expert_call_confirm",
+    "angle_proposal",
   ];
 
   it("no opinion or proposal table has a foreign key into an order, book, ledger, rule or pick table", async () => {
@@ -446,5 +450,134 @@ describe("AT-73 (c): no path from an opinion or a proposal to trading", () => {
       ),
     );
     expect(OPINION_TABLES.filter((t) => !have.has(t))).toEqual([]);
+  });
+});
+
+// ---- M23 T3: the angle half (CXA-007, D-1730...D-1739) ----
+describe("AT-73 (angle half): the 20 angle fixtures", () => {
+  const ANGLE_FIX = JSON.parse(
+    fs.readFileSync(
+      path.join(import.meta.dirname, "../../fixtures/research/proposals-20.json"),
+      "utf8",
+    ),
+  ) as { items: Array<{ id: string; kind: string; expect: string; item: unknown }> };
+  const RAW = ANGLE_FIX.items.map((f) => f.item);
+  const OWN_TABLES = new Set(["angle_proposal", "trial_ledger", "app_log"]);
+  const answer = (items: unknown[]) => async () => ({
+    value: { proposals: items },
+    live: true,
+    modelId: "stand-in",
+    budgetExhausted: false,
+  });
+  type Db = Awaited<ReturnType<typeof freshDb>>;
+
+  it("only the valid non-duplicates are stored; the weight changes are refused", () => {
+    const v = validateBatch(RAW, { ruleShas: new Set(), names: registeredAngleNames() });
+    expect(v.map((x) => x.state)).toEqual(ANGLE_FIX.items.map((f) => f.expect));
+    expect(v.filter((x) => x.state === "stored")).toHaveLength(6);
+    const weights = ANGLE_FIX.items.filter((f) => f.kind === "weight").map((f) => f.id);
+    expect(weights).toEqual(["w1", "w2", "w3"]);
+    for (const [i, f] of ANGLE_FIX.items.entries())
+      if (weights.includes(f.id)) expect(v[i]!.state, f.id).toBe("refused_weight");
+  });
+
+  it("stored and charged are the same set: one new_lineage charge per stored proposal and none per refused one", async () => {
+    const db = await freshDb("main");
+    // ten items a month at most (the key's top): the twenty are read over two months
+    await runProposalJob(db, {
+      market: "AU",
+      d: "2031-03-03",
+      now: AT,
+      perMonth: 10,
+      ask: answer(RAW.slice(0, 10)),
+    });
+    await runProposalJob(db, {
+      market: "AU",
+      d: "2031-04-01",
+      now: AT,
+      perMonth: 10,
+      ask: answer(RAW.slice(10)),
+    });
+    const n = async (sql: string): Promise<number> => Number((await db.execute(sql)).rows[0]!.n);
+    expect(await n("SELECT COUNT(*) n FROM angle_proposal WHERE state = 'stored'")).toBe(6);
+    expect(await n("SELECT COUNT(*) n FROM trial_ledger WHERE kind = 'new_lineage'")).toBe(6);
+    expect(await n("SELECT COUNT(*) n FROM angle_proposal")).toBe(20);
+  });
+
+  it("the complement is equal with the job on or off: no table outside the three own tables moves", async () => {
+    const dump = async (db: Db): Promise<Record<string, string>> => {
+      const names = (
+        await db.execute(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+        )
+      ).rows.map((r) => String(r.name));
+      const out: Record<string, string> = {};
+      for (const t of names)
+        if (!OWN_TABLES.has(t) && !["schema_migrations", "source_register_history"].includes(t))
+          out[t] = JSON.stringify((await db.execute(`SELECT * FROM ${t}`)).rows);
+      return out;
+    };
+    const off = await freshDb("main");
+    const on = await freshDb("main");
+    await runProposalJob(on, {
+      market: "AU",
+      d: "2031-03-03",
+      now: AT,
+      perMonth: 10,
+      ask: answer(RAW),
+    });
+    expect(await dump(on)).toEqual(await dump(off));
+  });
+
+  it("no card, pick, ranking, rule, sizing, e-mail or page module names the proposal table or its lineage (static)", () => {
+    const ROOT = path.resolve(import.meta.dirname, "../../..");
+    const allowed = /^src\/lib\/research\/(proposals\/|names\.ts$)/;
+    const hits: string[] = [];
+    const walkAll = (dir: string): void => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) walkAll(full);
+        else if (/\.(ts|tsx|mjs|sql)$/.test(e.name)) {
+          const rel = path.relative(ROOT, full).split(path.sep).join("/");
+          if (allowed.test(rel)) continue;
+          if (
+            /angle_proposal|llm_proposal_|research\/proposals/.test(fs.readFileSync(full, "utf8"))
+          )
+            hits.push(rel);
+        }
+      }
+    };
+    walkAll(path.join(ROOT, "src"));
+    walkAll(path.join(ROOT, "scripts"));
+    // the market-guard generator and the entry wiring are the only other places that name them
+    expect(
+      hits.filter(
+        (h) =>
+          !/^scripts\/(db\/gen-market-guard|arena\/signals)(\.test|\.stages\.test)?\.mjs$/.test(h),
+      ),
+    ).toEqual([]);
+  });
+
+  it("rendered: the text of a stored proposal is found in angle_proposal and in no other table", async () => {
+    const db = await freshDb("main");
+    await runProposalJob(db, {
+      market: "AU",
+      d: "2031-03-03",
+      now: AT,
+      perMonth: 3,
+      ask: answer(RAW.slice(0, 1)),
+    });
+    const marker = "Quiet breakouts after results";
+    const holders: string[] = [];
+    const tables = (
+      await db.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+      )
+    ).rows.map((r) => String(r.name));
+    for (const t of tables) {
+      const r = await db.execute(`SELECT * FROM ${t}`);
+      if (JSON.stringify(r.rows).includes(marker)) holders.push(t);
+    }
+    expect(holders).toEqual(["angle_proposal"]);
   });
 });

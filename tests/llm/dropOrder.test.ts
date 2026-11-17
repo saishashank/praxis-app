@@ -13,6 +13,13 @@ describe("drop order (D-482)", () => {
     expect(DROP_ORDER.indexOf("steelman")).toBeLessThan(DROP_ORDER.indexOf("evening_review"));
   });
 
+  it("research (the monthly proposal run) is dropped before every other stage and reserves for none of its own (D-1642)", () => {
+    expect(DROP_ORDER[0]).toBe("research");
+    expect(reserveAfter("research", p)).toBe(
+      reserveAfter("expert_ingest", p) + p.roleDailyTokens.experts,
+    );
+  });
+
   it("the Evening Review reserves nothing; the steelman leaves the R5 cap", () => {
     expect(reserveAfter("evening_review", p)).toBe(0);
     expect(reserveAfter("steelman", p)).toBe(p.roleDailyTokens.R5);
