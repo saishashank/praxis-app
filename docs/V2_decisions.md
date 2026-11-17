@@ -975,3 +975,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1452 | Seed states (A1): committee-trial switches the Committee on in the throwaway database, so it is opt-in like owner-tools-on (OPT_IN_STATES; a lane names it: E... |
 | D-1453 | AT-32 complement (A1): tests/acceptance/v3/at32Opinions.test.ts hashes every table except the steelman's own and exactly the eight of D-1426; the five other... |
 | D-1454 | Schema pins (A1): every pin moves from 38 to 39 (migration tests, backup, CLI, rollback runbook). |
+| D-1455 | Key shapes (task A2): llm_live_roles is stored as a JSON array of distinct names from R1, R2, R3, R5, R6, R7, words and edited as text (a new input kind word... |
+| D-1456 | Budget bucket rule (task A2, D-1410): budgetKey selects the cap, the usage sum and the llm_call.role value; the default is the request's role, except that R7... |
+| D-1457 | Reflection reservation (task A2, D-1411): reserveAfterLeft(stage, params, market, usage, reflectionReserve = 0) adds the reserve (limited to the R6 cap still... |
+| D-1458 | Guard registry (task A2, D-1445): GUARDS is a Partial<Record<ConfigKey, Guard>> (only guarded keys appear; a total record over all keys would be noise), Guar... |
+| D-1459 | Nightly seam (task A2, D-1401): src/lib/llm/nightlyLlm.ts exports nightlyLlm(ctx) giving routerFor(role), providers and store; it is rules-only and builds no... |

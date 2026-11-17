@@ -451,7 +451,16 @@ export function bakeoffParams(): LlmParams {
   const big = Number.MAX_SAFE_INTEGER;
   return {
     ...base,
-    roleDailyTokens: { R1: big, R2: big, R3: big, R5: big, R6: big },
+    roleDailyTokens: {
+      R1: big,
+      R2: big,
+      R3: big,
+      R5: big,
+      R6: big,
+      R7: big,
+      committee: big,
+      experts: big,
+    },
     dailyTotal: big,
     nightlyTokensPerMarket: big,
   };

@@ -16,8 +16,7 @@ import { loadAgentParams, type AgentParams } from "@/lib/agents/params";
 import { CONFIG_KEYS } from "@/lib/config/keys";
 import { marketDate, type CalendarKind, type CalendarRow } from "@/lib/data/calendar";
 import { HOME_MARKET, HOME_TZ } from "@/lib/market/homeMarket.mjs";
-import { createRouter } from "@/lib/llm/router";
-import { DbStore } from "@/lib/llm/store";
+import { nightlyLlm } from "@/lib/llm/nightlyLlm";
 import { steelmanNight, type NightResult, type SteelmanKeys, type SteelmanLlm } from "./night";
 
 const MARKET: string = HOME_MARKET;
@@ -48,15 +47,13 @@ export function rulesOnlySteelmanLlm(ctx: {
   params: AgentParams;
   kbVersion: string;
 }): SteelmanLlm {
-  const store = new DbStore(ctx.db);
-  const router = createRouter({
-    mode: "rules-only",
-    params: ctx.params.llm,
-    kbVersion: ctx.kbVersion,
-    store,
-    providers: [],
-  });
-  return { authorRouter: router, criticRouterFor: () => null, providers: [], store };
+  const night = nightlyLlm(ctx);
+  return {
+    authorRouter: night.routerFor("R6"),
+    criticRouterFor: () => null,
+    providers: night.providers,
+    store: night.store,
+  };
 }
 
 /** The three steelman keys from the config store (global scope), registry default when unset or invalid. */

@@ -3525,6 +3525,33 @@
       }
     },
     {
+      "id": "llm-role:R7",
+      "type": "llm-role",
+      "name": "R7",
+      "purpose": "R7 Committee judge: weighs the bull and bear cases into a rating; text only, never a decision, spends the Committee budget bucket.",
+      "specIds": [
+        "LLM-001",
+        "LLM-061",
+        "LLM-066"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Falls back to rules-only output; no free text is ever required.",
+      "runbook": null,
+      "views": [
+        "agents",
+        "llm"
+      ],
+      "source": "src/lib/llm/budget.ts",
+      "attrs": {
+        "candidates": []
+      }
+    },
+    {
       "id": "page:/",
       "type": "page",
       "name": "/",
