@@ -141,6 +141,11 @@ const M23_STEP_WRITERS: Array<(db: Client) => Promise<void>> = [
   async (db) => {
     await monitorsStep.run(db, { market: "AU", d: "2030-04-02", now: TS });
   },
+  // M2 (D-1619...D-1622, D-1700...D-1703): the same monitors step now runs monitors 5 to 8; this night is the first one
+  // after the quarter 2030-Q2 and reads the empty world (their reads touch the cortex, cohort and statement tables only).
+  async (db) => {
+    await monitorsStep.run(db, { market: "AU", d: "2030-07-02", now: TS });
+  },
   // T2 (D-1635, D-1690...D-1694): the real announcement-calibration step. It freezes the plan of its 23 lineages, counts the
   // archive (empty on the golden world: n = 0) and writes one research_meter row; below the floor it takes no look.
   async (db) => {
