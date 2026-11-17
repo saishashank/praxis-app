@@ -1192,7 +1192,11 @@
       "tests/usage/projectionSection.test.tsx",
       "worker/test/killSlot.test.ts"
     ],
-    "AT-72": ["tests/acceptance/v3/at72Exits.test.ts", "tests/acceptance/v3/at72Registry.test.ts"],
+    "AT-72": [
+      "e2e/m23-cortex.spec.ts",
+      "tests/acceptance/v3/at72Exits.test.ts",
+      "tests/acceptance/v3/at72Registry.test.ts"
+    ],
     "AT-73": [
       "tests/acceptance/v3/at32Research.test.ts",
       "tests/acceptance/v3/at73Shared.test.ts",
@@ -1202,7 +1206,7 @@
       "tests/security/committeeBoundary.test.ts",
       "tests/security/opinionBoundary.test.ts"
     ],
-    "AT-74": ["tests/acceptance/v3/at74.test.ts"],
+    "AT-74": ["e2e/m23-cortex.spec.ts", "tests/acceptance/v3/at74.test.ts"],
     "AT-75": [
       "tests/acceptance/v3/at32Research.test.ts",
       "tests/acceptance/v3/at75Labels.test.ts",
