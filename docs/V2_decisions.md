@@ -1121,3 +1121,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1655 | Engine conventions (R1): a setup's net is in parts per million of its entry value (whole shares = floor(parcel / entry price), at least 1; one fee on each si... |
 | D-1656 | Sector IC conventions (R1): a month counts toward the floor when at least minGroupsPerMonth groups have at least minMembers members, from member counts alone... |
 | D-1657 | Report writer (R1): renderReport accepts a verdict only from PASS, NULL, INCONCLUSIVE, a 64-hex sha, and refuses any text that looks like a private path (dri... |
+| D-1660 | Golden floor read (T1): goldenMin(db) in src/lib/labels/store.ts reads label_golden_min through the config store and returns the constant 500 when the key is... |
+| D-1661 | Agreement (T1, D-1636): per label kind and market, over the distinct items with at least one labelled golden answer, the Owner's answer is the item's newest... |
+| D-1662 | Harness (T1, D-1636): per fixture item three calls (original, neutral paraphrase, tone-flipped paraphrase) through the R2 router; stability = items whose gui... |
+| D-1663 | Production shadow (T1, D-1636, D-1642): textLabelsEnabled(env, {r2Live}) is true in staging as before, or in any environment when the factory's status lists... |
+| D-1664 | Fixture (T1): tests/fixtures/labels/paraphrase-zz.json holds 30 synthetic ZZ items (five invented events, each in both directions), with the expected guidanc... |
