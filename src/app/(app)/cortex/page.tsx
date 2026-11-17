@@ -23,6 +23,7 @@ import {
 } from "@/lib/ui/loaders/cortex";
 import { currencyFormatFor, formatCount, formatDay, formatMicro } from "@/lib/view/format";
 import { StrategyTabs } from "../strategies/StrategyTabs";
+import { ResearchSections, researchHas } from "./ResearchSections";
 
 export const dynamic = "force-dynamic";
 
@@ -125,6 +126,7 @@ export default async function CortexPage() {
     abstain: a.total > 0 || a.shadowFilled > 0 || a.idleSharePpm !== null,
     sector: v.sectorTilt !== null,
     opinion: v.opinions.length > 0,
+    ...researchHas(v.research),
   };
   const missing = [
     has.passports ? null : "Angles",
@@ -134,6 +136,10 @@ export default async function CortexPage() {
     has.abstain ? null : "Nights with no trade",
     has.sector ? null : "Sector tilt (shadow only)",
     has.opinion ? null : "Opinion track",
+    has.tests ? null : "Tests and their one look",
+    has.waiting ? null : "Waiting for data",
+    has.monitors ? null : "Risk monitors",
+    has.sectorSeries ? null : "Sector series",
   ].filter((x): x is string => x !== null);
 
   return (
@@ -336,6 +342,8 @@ export default async function CortexPage() {
           )}
         </Section>
       ) : null}
+
+      <ResearchSections research={v.research} />
 
       <Section id="ticks" title="Price steps and costs">
         <DataTable

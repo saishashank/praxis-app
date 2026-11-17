@@ -10,6 +10,8 @@ const ROOT = path.resolve(import.meta.dirname, "../..");
 const posix = (p: string) => p.split(path.sep).join("/");
 const SCAN = ["src", "scripts", "worker/src", "e2e"];
 const OWNER = "src/lib/research/registry.ts";
+// M23 M4 (D-1765): the e2e seed states fill a throwaway database with rows a spec renders; the one that seeds looks is listed.
+const SEED_STATES = ["e2e/seed/states/cortex-research.mjs"];
 
 const walk = (dir: string, out: string[] = []): string[] => {
   if (!fs.existsSync(dir)) return out;
@@ -45,6 +47,7 @@ describe("the holdout registry has one writer (D-1604)", () => {
   it("only registry.ts writes holdout_look, and it does", () => {
     const writers: string[] = [];
     for (const f of files) {
+      if (SEED_STATES.includes(posix(path.relative(ROOT, f)))) continue;
       if (WRITE.test(stripComments(fs.readFileSync(f, "utf8"))))
         writers.push(posix(path.relative(ROOT, f)));
       WRITE.lastIndex = 0;

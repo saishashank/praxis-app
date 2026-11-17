@@ -1190,3 +1190,13 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1743 | CXA-013 AU source check (R4, D-1639): DAT-101 applied to a free point-in-time fundamentals source for the ASX, recorded 2026-11-17 as a desk check (the sourc... |
 | D-1744 | IN and US CXA-013 lines (R4, D-1639): both pages re-read on 2026-11-17 against the current code and registers and dated "CXA-013 re-read 2026-11-17". |
 | D-1745 | CXA-012 and CXA-013 reports (R4, D-1610, D-1638): both written in the report format with status INCONCLUSIVE for the lineage-style fields (these are records,... |
+| D-1760 | Page model (M4, D-1643): src/lib/research/pageView.ts builds one ResearchView (tests, inconclusive names, waiting rows, eight monitor rows, sector series, Ow... |
+| D-1761 | Tests section (M4, D-1602, D-1609): every lineage is shown through lineageName; the result word is Pass, Null (no edge found) or Inconclusive (older stored w... |
+| D-1762 | Waiting section (M4, D-1623, D-1720): the newest research_meter row of each asked lineage in one statement (a keyed MAX per lineage over a json_each list; th... |
+| D-1763 | Sector series (M4, D-1632, D-1741, D-1742): the newest night's equal-weight returns by industry group (return in percent, member count) read by the primary key. |
+| D-1764 | Risk monitors and health line (M4, D-1614...D-1622): eight rows, each the newest quarterly row (monitor 2 and monitor 6 may also hold a one-off cal- row; the... |
+| D-1765 | Seed state and e2e (M4, D-1643, TST-135): state cortex-research (e2e/seed/states/cortex-research.mjs): three looks (Pass, Null, Inconclusive) each with a pre... |
+| D-1766 | Masking (M4, ROL-107, D-175): the research half holds no money, no stock code and no book id, so a masked viewer sees the same sections; an exact date become... |
+| D-1767 | Wording (M4, UI market wording): dates read as in the rest of the app (formatDay, "Fri 6 Nov"); no run time or run id is shown, and the "Looked at" cell is a... |
+| D-1768 | Tests of the page (M4): tests/ui/cortexResearch.test.tsx (the page rendered from the seed for each role: names, results, the 12-character fingerprint, specia... |
+| D-1769 | Reads and budget (M4, D-1641, Turso free plan): a page view adds nine statements, all keyed or bounded: the registry list (A2, LIMIT 200), the stream cell pr... |

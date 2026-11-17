@@ -27,6 +27,7 @@ import {
 } from "@/lib/cortex/store";
 import { tickCostRow, LIQUIDITY_TIERS } from "@/lib/cortex/economics/cost";
 import { FAMILY_WORD, CLUSTER_WORD } from "@/lib/cortex/phrases";
+import { EMPTY_RESEARCH, loadResearchView, type ResearchView } from "@/lib/research/pageView";
 import { formatDay, formatInstant, isoWeek, MISSING } from "@/lib/view/format";
 import {
   loaded,
@@ -155,6 +156,8 @@ export type CortexView = {
   sectorTilt: { d: string; rows: { book: string; sector: string; tiltPp: number }[] } | null;
   coldStart: { nights: number; firstD: string | null; lastD: string | null; warming: boolean };
   opinions: OpinionView[];
+  /** The four research sections (M23 M4; D-1760): tests and their one look, waiting for data, risk monitors, sector series. */
+  research: ResearchView;
   tickCost: TickRowView[];
   /** Owner controls (CTX-072): the page links to the existing writers, it has no writer of its own. */
   controls: { canEdit: boolean; configHref: string; killHref: string };
@@ -411,6 +414,17 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
     return r.rows.map((x) => ({ kind: str(x.kind), total: num(x.n), settled: num(x.s) }));
   }, [] as OpinionView[]);
 
+  // research half (M23 M4): dates in trading terms, an ISO week for a masked viewer; proposal counts for the Owner only (D-1643)
+  const research = await soft(
+    () =>
+      loadResearchView(db, {
+        market,
+        owner: role === "owner",
+        when: (d) => (masked ? weekOf(d) : formatDay(d)),
+      }),
+    EMPTY_RESEARCH,
+  );
+
   const tickCost: TickRowView[] = TICK_PRICES_CENTS.map((c) => {
     const row = tickCostRow(BigInt(c) * CENTS_TO_MICRO);
     return {
@@ -446,6 +460,7 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
       warming: mapsLoaded === 0,
     },
     opinions,
+    research,
     tickCost,
     controls: {
       canEdit: role === "owner",

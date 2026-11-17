@@ -12,6 +12,7 @@ import { loadCommitteeHealth } from "@/lib/health/committee";
 import { loadOpinionsHealth } from "@/lib/health/opinions";
 import { loadMinilmHealth } from "@/lib/health/minilm";
 import { loadRegimeAltHealth } from "@/lib/health/regimeAlt";
+import { loadResearchHealth } from "@/lib/health/research";
 import { loadMaskLookup, maskText, StockAliases } from "@/lib/view/mask";
 import { todayD, type LoaderEnv, type LoaderState } from "./shell";
 
@@ -74,12 +75,18 @@ async function loadM22Lines(
   const opinions = await loadOpinionsHealth(env.main, env.market);
   const minilm = await loadMinilmHealth(env.main);
   const alt = await loadRegimeAltHealth(env.main);
-  const parts = [routes, committee, opinions, minilm, alt].filter((x) => x !== null);
+  const research = owner ? await loadResearchHealth(env.main) : null;
+  const parts = [routes, committee, opinions, minilm, alt, research].filter((x) => x !== null);
   return {
     state: parts.some((p) => p.state === "attention") ? "attention" : "ok",
-    lines: [...(routes?.lines ?? []), committee.text, ...opinions.lines, minilm.line, alt.line].map(
-      t,
-    ),
+    lines: [
+      ...(routes?.lines ?? []),
+      committee.text,
+      ...opinions.lines,
+      minilm.line,
+      alt.line,
+      ...(research === null ? [] : [research.line]),
+    ].map(t),
   };
 }
 
