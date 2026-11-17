@@ -1142,3 +1142,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1677 | Monitor 2 and 3 data (M1, D-1616, D-1617): the calibration period is cal-<date of the newest fitted map> (the map version), so a refit makes one new row. |
 | D-1678 | Monitor 4 data (M1, D-1618): no table records which stop a live position used, so the count is read from two stored facts: a window is a cortex_state corpora... |
 | D-1679 | Boundary and tests (M1, D-1614, AT-74): the monitors import no arena, agent, pick, order, e-mail, alert or status-writing module and write only residual_moni... |
+| D-1685 | Split boundary (R2, D-1628) [VERIFY resolved]: the M15 design freeze records development up to 2021-12-31 and validation from 2022-01-01; |
+| D-1686 | CXA-003 detectors (R2, D-1627), frozen in docs/research/prereg/CXA-003.json: all on the split-adjusted daily bars, the signal being known at the close of the... |
+| D-1687 | CXA-003 conventions (R2, D-1605, D-1628, D-1655): the tier of a session is assignTiers over the bars up to and including that session (60-session window, raw... |
+| D-1688 | CXA-003 ledger and report (R2, D-1606, D-1628, D-1631): the first commit freezes nine plans (six lineages and the three _p5000 variants) in docs/research/reg... |

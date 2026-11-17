@@ -18,6 +18,78 @@
         "basis": "published record, one look spent"
       },
       "note": "stays in shadow, gap cap"
+    },
+    {
+      "seq": 2,
+      "item": "CXA-003",
+      "lineage": "cxa003_hi52_vol",
+      "market": "AU",
+      "sha": "d86dde1578d81b0f9f8c081b78c4f1c5d2194440e4fc56cb2468f4578e3b6b0a",
+      "preregPath": "docs/research/prereg/CXA-003.json"
+    },
+    {
+      "seq": 3,
+      "item": "CXA-003",
+      "lineage": "cxa003_lowvol",
+      "market": "AU",
+      "sha": "d86dde1578d81b0f9f8c081b78c4f1c5d2194440e4fc56cb2468f4578e3b6b0a",
+      "preregPath": "docs/research/prereg/CXA-003.json"
+    },
+    {
+      "seq": 4,
+      "item": "CXA-003",
+      "lineage": "cxa003_short_cover",
+      "market": "AU",
+      "sha": "d86dde1578d81b0f9f8c081b78c4f1c5d2194440e4fc56cb2468f4578e3b6b0a",
+      "preregPath": "docs/research/prereg/CXA-003.json"
+    },
+    {
+      "seq": 5,
+      "item": "CXA-003",
+      "lineage": "cxa003_earnings_drift",
+      "market": "AU",
+      "sha": "d86dde1578d81b0f9f8c081b78c4f1c5d2194440e4fc56cb2468f4578e3b6b0a",
+      "preregPath": "docs/research/prereg/CXA-003.json"
+    },
+    {
+      "seq": 6,
+      "item": "CXA-003",
+      "lineage": "cxa003_index_incl",
+      "market": "AU",
+      "sha": "d86dde1578d81b0f9f8c081b78c4f1c5d2194440e4fc56cb2468f4578e3b6b0a",
+      "preregPath": "docs/research/prereg/CXA-003.json"
+    },
+    {
+      "seq": 7,
+      "item": "CXA-003",
+      "lineage": "cxa003_insider_cluster",
+      "market": "AU",
+      "sha": "d86dde1578d81b0f9f8c081b78c4f1c5d2194440e4fc56cb2468f4578e3b6b0a",
+      "preregPath": "docs/research/prereg/CXA-003.json"
+    },
+    {
+      "seq": 8,
+      "item": "CXA-003",
+      "lineage": "cxa003_hi52_vol_p5000",
+      "market": "AU",
+      "sha": "d86dde1578d81b0f9f8c081b78c4f1c5d2194440e4fc56cb2468f4578e3b6b0a",
+      "preregPath": "docs/research/prereg/CXA-003.json"
+    },
+    {
+      "seq": 9,
+      "item": "CXA-003",
+      "lineage": "cxa003_lowvol_p5000",
+      "market": "AU",
+      "sha": "d86dde1578d81b0f9f8c081b78c4f1c5d2194440e4fc56cb2468f4578e3b6b0a",
+      "preregPath": "docs/research/prereg/CXA-003.json"
+    },
+    {
+      "seq": 10,
+      "item": "CXA-003",
+      "lineage": "cxa003_short_cover_p5000",
+      "market": "AU",
+      "sha": "d86dde1578d81b0f9f8c081b78c4f1c5d2194440e4fc56cb2468f4578e3b6b0a",
+      "preregPath": "docs/research/prereg/CXA-003.json"
     }
   ]
 }
