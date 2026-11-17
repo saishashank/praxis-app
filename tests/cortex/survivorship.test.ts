@@ -82,7 +82,7 @@ describe("reportCaveats (CXA-012)", () => {
 });
 
 describe("the assumed loss reads survivorship_loss_assumed_pct (CXA-012, D-1740)", () => {
-  const def = CONFIG_KEYS.survivorship_loss_assumed_pct as {
+  const def = CONFIG_KEYS.survivorship_loss_assumed_pct as unknown as {
     default: number;
     range: [number, number];
   };
