@@ -15,7 +15,8 @@ import {
 import { vsMarketSummary, type VsMarketSummary } from "@/lib/picks/vsMarket";
 import { displayName, formatDay, formatPpm, isoWeek, MISSING } from "@/lib/view/format";
 import { dateStaleness } from "@/lib/view/staleness";
-import { maskText } from "@/lib/view/mask";
+import { maskText, PRICE_HIDDEN } from "@/lib/view/mask";
+import { readWrittenForProfile } from "@/lib/steelman/reflectRead";
 import { opaqueDigest } from "@/lib/view/opaqueRef";
 import { soft, strategyNames } from "./common";
 import { melTime } from "./pickAlerts";
@@ -488,6 +489,8 @@ export type TrackRow = {
     badPpm: number | null;
     goodPpm: number | null;
   };
+  /** M22 C3 (AGT-146, D-1425): the AI-written note looking back at a settled pick; null when none was written. Masked as the row is. */
+  lookingBack: string | null;
   /** A closed result against the published range. */
   position: "inside" | "below" | "above" | null;
   /** ARN-103/UXN-288: the stored market figures of a settled pick; null before settlement. */
@@ -512,6 +515,48 @@ export type TrackModel = {
   /** ARN-104: summary over filled, settled picks (missed excluded); null with no settled rows. */
   vsMarket: (VsMarketSummary & { basisLabel: string }) | null;
 };
+
+/** A price figure as the reflections write it: two decimals (a percentage has one). */
+const PRICE_NUMBER_RE = /\b\d+\.\d{2}\b/g;
+
+/**
+ * M22 C3 (D-1425): the written reflections of the listed picks, set on their rows. Soft: a failed read leaves the rows without
+ * a note. A masked viewer gets the note through `maskText` (codes and names to letters, dates to weeks) and with every price
+ * figure hidden, as the row hides its prices (O-54). `not_written` rows show nothing.
+ */
+async function attachLookingBack(
+  env: LoaderEnv,
+  profile: string,
+  raw: ReadonlyArray<{ d: string; code: string; x: Record<string, unknown> }>,
+  rows: TrackRow[],
+  kit: Awaited<ReturnType<typeof maskKitByDate>> | null,
+): Promise<void> {
+  if (raw.length === 0) return;
+  const days = raw.map((r) => r.d).sort();
+  try {
+    const r = await readWrittenForProfile(env.main, {
+      market: env.market,
+      profile,
+      fromD: days[0]!,
+      toD: days[days.length - 1]!,
+      limit: TRACK_ROWS,
+    });
+    const byId = new Map(
+      r.map((x) => [publicPickId(`${x.d}.${profile}.${x.rank}`, env.mask.masked), x]),
+    );
+    for (const row of rows) {
+      const hit = byId.get(row.id);
+      if (!hit) continue;
+      const d = hit.d;
+      const text = hit.text;
+      row.lookingBack = kit
+        ? maskText(text, kit.aliasOf(d), kit.lookup).replace(PRICE_NUMBER_RE, PRICE_HIDDEN)
+        : text;
+    }
+  } catch {
+    // no note shown
+  }
+}
 
 export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): Promise<TrackModel> {
   const market = env.market;
@@ -554,6 +599,7 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
       badPpm: toNum(x.bad_ppm),
       goodPpm: toNum(x.good_ppm),
     },
+    lookingBack: null,
     position:
       String(x.state) === "closed"
         ? rangePosition(toNum(x.net_ppm), toNum(x.bad_ppm), toNum(x.good_ppm))
@@ -573,6 +619,7 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
             windowToD: masked ? (isoWeek(String(x.window_to_d)) ?? MISSING) : String(x.window_to_d),
           },
   }));
+  await attachLookingBack(env, q.profile, raw, rows, kit);
   const settled = rows.filter((x) => x.vsMarket !== null);
   const vsMarket =
     settled.length === 0

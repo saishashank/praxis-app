@@ -10,6 +10,7 @@
     "src/lib/config/guards/committee.ts",
     "src/lib/health/steelman.ts",
     "src/lib/review/sections.ts",
-    "src/lib/ui/loaders/cards.ts"
+    "src/lib/ui/loaders/cards.ts",
+    "src/lib/ui/loaders/picks.ts"
   ]
 }
