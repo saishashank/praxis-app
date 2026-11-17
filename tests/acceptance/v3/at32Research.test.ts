@@ -21,6 +21,7 @@ import { monitorsStep } from "@/lib/research/steps/monitors";
 import { annCalibrationStep } from "@/lib/research/steps/annCalibration";
 import { labelEvalStep } from "@/lib/research/steps/labelEval";
 import { metersStep } from "@/lib/research/steps/meters";
+import { runProposalJob } from "@/lib/research/proposals/job";
 import { cleanupTempDbs } from "../../db/helpers";
 import { STEELMAN_OWN, MIGRATION_OWNED, at32World, combineTables } from "./at32World";
 
@@ -162,7 +163,27 @@ const M23_STEP_WRITERS: Array<(db: Client) => Promise<void>> = [
   async (db) => {
     await labelEvalStep.run(db, { market: "AU", d: "2031-04-08", now: TS });
   },
+  // T3 (D-1730...D-1739): the real CXA-007 monthly job on the world, with a model stand-in that answers the 20 fixtures. It
+  // stores the valid ones as shadow rows, charges each as a new_lineage trial and logs one line; the complement does not move.
+  async (db) => {
+    await runProposalJob(db, {
+      market: "AU",
+      d: "2040-02-03",
+      now: TS,
+      perMonth: 10,
+      ask: async () => ({
+        value: { proposals: PROPOSALS_20.items.map((f) => f.item) },
+        live: true,
+        modelId: "stand-in",
+        budgetExhausted: false,
+      }),
+    });
+  },
 ];
+
+const PROPOSALS_20 = JSON.parse(
+  readFileSync(join(__dirname, "../../fixtures/research/proposals-20.json"), "utf8"),
+) as { items: Array<{ item: unknown }> };
 
 const base = JSON.parse(readFileSync(join(__dirname, "replay-hash.baseline.json"), "utf8")) as {
   at32: { hash: string; tables: Record<string, string> };

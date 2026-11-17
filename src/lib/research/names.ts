@@ -68,6 +68,15 @@ export const LINEAGE_NAMES: Readonly<Record<string, LineageName>> = {
   cxa003_short_cover_p5000: { name: "Falling short positions, larger account", kind: "offline" },
 };
 
+/**
+ * Lineages whose key carries a made-up suffix (M23 T3, D-1739): each stored model-written proposal is charged under
+ * `llm_proposal_<first 12 hex of its id>`, so the name is by prefix. They are looked at offline (the KB-076 screen) and have no
+ * look in the registry, so they are neither listed nor counted as offline.
+ */
+export const LINEAGE_PREFIX_NAMES: Readonly<Record<string, string>> = {
+  llm_proposal_: "Model-written rule proposal (kept for your review)",
+};
+
 const UNNAMED = "An unnamed test";
 
 /** The plain name of a lineage; a lineage without an entry reads as an unnamed test (a test makes that a failure). */
@@ -77,6 +86,8 @@ export function lineageName(lineage: string): string {
   // a later intraday cell (D-1608): one fresh sample per quarter after a failed look
   const q = /^intraday_stream_v1_(\d{4})Q([1-4])$/.exec(lineage);
   if (q !== null) return `Intraday stream test, fresh sample from quarter ${q[2]} of ${q[1]}`;
+  for (const [prefix, name] of Object.entries(LINEAGE_PREFIX_NAMES))
+    if (lineage.startsWith(prefix)) return name;
   return UNNAMED;
 }
 

@@ -1174,6 +1174,16 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1727 | Boundary, ledger and tests (M3, D-1645, D-1646): the files write only research_meter and app_log directly and the look tables through the registry (static al... |
 | D-1728 | Findings, said before any look (M3, listed): |
 | D-1729 | Hand-offs (M3 to M4 and Z): M4 reads the latest research_meter row per lineage by key: neff_live_F1..F6, neff_trade_F1..F6, movers_a1..a8 (blocked for A2, A4... |
+| D-1730 | CXA-007 shape (T3, D-1636, D-1637, PRD-033): src/lib/research/proposals/{schema,validate,store,job,cli}.ts. |
+| D-1731 | CXA-007 check order and states (T3, D-1637): one raw item, checked in a fixed order, each check deterministic and pure: size (over 8,000 serialised character... |
+| D-1732 | CXA-007 weight refusal (T3, D-1637; finding, listed): refused_weight when any key at any depth, normalised to lower case letters and digits, is weight, weigh... |
+| D-1733 | CXA-007 hostile text (T3, D-1637, LLM-035): refused_hostile when any string of the item, keys included and at any depth up to 12, is changed by the router's... |
+| D-1734 | CXA-007 duplicates (T3, D-1637, K10): the canonical hash (sorted keys, no spacing) of the rule against every earlier stored proposal of the market and every... |
+| D-1735 | CXA-007 storage and charge (T3, D-1636, D-1637, K16): store.ts is the only writer, and writes angle_proposal, trial_ledger and app_log in one batch per run. |
+| D-1736 | CXA-007 Owner line (T3, D-1637): one plain app_log line per monthly run, counts only: "The monthly model-written proposals were checked: N kept for you to re... |
+| D-1737 | CXA-007 model path (T3, D-1637, D-1642, LLM-034, LLM-036, LLM-071): askOf takes the R2 router from the night seam (routerFor("R2"), budgetKey "R2", a nightly... |
+| D-1738 | CXA-007 schedule and gate (T3, D-1637, D-1642): the job asks only when llm_proposals_per_month is above 0, R2 is live, d is the first session of its month (n... |
+| D-1739 | CXA-007 names, drop order and tests (T3, D-1609, D-1642): names.ts names the charged lineages by prefix (llm_proposal_ gives "Model-written rule proposal (ke... |
 | D-1740 | CXA-012 key read (R4, D-1638): src/lib/cortex/survivorship.ts reads survivorship_loss_assumed_pct (already registered in M23 A1, default 50, range 30 to 80,... |
 | D-1741 | AU data-limits record (R4, D-1638): dataLimits.mjs gains AU: survivorship (id survivorship_au, the offline history holds only today's codes, the loss assumed... |
 | D-1742 | Industry label (R4, D-1638): industryLabel(d, firstSnapshotAsOf) returns "static industry" (STATIC_INDUSTRY, the wording R3 used in the CXA-009 report) for a... |
