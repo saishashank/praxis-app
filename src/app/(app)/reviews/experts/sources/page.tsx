@@ -70,7 +70,10 @@ export default async function SourcesPage() {
                 {v.experts.map((e) => (
                   <tr key={e.id} className="align-top">
                     <td>
-                      <Link href={detailHref(e.id)} className="text-accent underline">
+                      <Link
+                        href={detailHref(e.id)}
+                        className="inline-flex min-h-6 min-w-6 items-center text-accent underline"
+                      >
                         {e.name}
                       </Link>
                     </td>

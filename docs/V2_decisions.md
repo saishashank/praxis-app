@@ -1067,3 +1067,4 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1540 | Left for the Owner or a later task (task Z1; listed): the model keys in the signals step of the production job and its stored copy (D-1513), the Workers AI t... |
 | D-1541 | Two guard tests after the M22 merge (orchestrator, D-181, DAT-235): the full gate on the merged build failed two source scans. |
 | D-1542 | Two CI findings on the first M22 push (orchestrator): |
+| D-1543 | CI e2e finding on the M22 push (orchestrator): axe reported target-size (serious) on the expert-name links in the table of the sources page (/reviews/experts... |
