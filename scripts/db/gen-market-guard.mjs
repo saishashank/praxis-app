@@ -68,6 +68,20 @@ export const M22_TABLES = [
   "opinion_promotion_request",
   "regime_alt_reading",
 ];
+/** M23 (D-1611): the guard triggers of the tables 0040 creates sit in a generated region of that migration. */
+export const M23_MIGRATION_PATH = join(DIR, "0040_m23_research.sql");
+export const M23_REGION = "guard triggers";
+/** The market-keyed tables migration 0040 creates (all eight). Verified against the live schema by `m23Tables()`. */
+export const M23_TABLES = [
+  "angle_proposal",
+  "holdout_look_refusal",
+  "research_meter",
+  "research_prereg",
+  "research_result",
+  "residual_monitor",
+  "sector_index",
+  "shock_stop_outcome",
+];
 /** The schema the guard is generated against: everything up to the profile migration. */
 export const GUARD_BASE_VERSION = 34;
 /** The invariant's own table must be able to record a planted row (D-995); it is never guarded. */
@@ -168,6 +182,28 @@ export async function m22Tables() {
   }
 }
 
+/** Tables with a `market` column after migration 0040 that were not there after 0039 (derived, sorted). */
+export async function m23Tables() {
+  const db = createClient({ url: ":memory:" });
+  try {
+    const all = await loadMigrations(DIR);
+    const q = `SELECT m.name AS tbl FROM sqlite_master m JOIN pragma_table_info(m.name) c ON c.name = 'market'
+       WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%' ORDER BY m.name`;
+    await migrateUp(
+      db,
+      all.filter((m) => m.version <= 39),
+    );
+    const before = new Set((await db.execute(q)).rows.map((x) => String(x.tbl)));
+    await migrateUp(
+      db,
+      all.filter((m) => m.version <= 40),
+    );
+    return (await db.execute(q)).rows.map((x) => String(x.tbl)).filter((n) => !before.has(n));
+  } finally {
+    db.close();
+  }
+}
+
 // The insert trigger: a NULL market belongs to no market (run_record, a run without a market) and passes; the
 // NOT NULL columns refuse a NULL by their own constraint. The probe is one primary-key read of `market` (3 rows).
 const common = (t) =>
@@ -226,6 +262,11 @@ export function renderM21Region(tables = M21_TABLES) {
 
 /** The body of the generated region of 0039: the two triggers of each M22 table. */
 export function renderM22Region(tables = M22_TABLES) {
+  return renderM20Region(tables);
+}
+
+/** The body of the generated region of 0040: the two triggers of each M23 table. */
+export function renderM23Region(tables = M23_TABLES) {
   return renderM20Region(tables);
 }
 
@@ -288,11 +329,26 @@ if (invoked) {
       process.exit(1);
     }
     console.log("0039_m22_llm_experts.sql guard region matches the table list and the schema");
+    const derived23 = await m23Tables();
+    if (JSON.stringify(derived23) !== JSON.stringify([...M23_TABLES].sort())) {
+      console.error(
+        `0040 creates market-keyed tables ${derived23.join(",")} but M23_TABLES lists ${M23_TABLES.join(",")}`,
+      );
+      process.exit(1);
+    }
+    if (!applyRegion(M23_MIGRATION_PATH, M23_REGION, renderM23Region(), true)) {
+      console.error(
+        "0040_m23_research.sql guard region differs: run node scripts/db/gen-market-guard.mjs",
+      );
+      process.exit(1);
+    }
+    console.log("0040_m23_research.sql guard region matches the table list and the schema");
   } else {
     writeFileSync(MIGRATION_PATH, text);
     console.log(`wrote ${MIGRATION_PATH} (${text.split("\n").length} lines)`);
     applyRegion(M20_MIGRATION_PATH, M20_REGION, renderM20Region(), false);
     applyRegion(M21_MIGRATION_PATH, M21_REGION, renderM21Region(), false);
     applyRegion(M22_MIGRATION_PATH, M22_REGION, renderM22Region(), false);
+    applyRegion(M23_MIGRATION_PATH, M23_REGION, renderM23Region(), false);
   }
 }

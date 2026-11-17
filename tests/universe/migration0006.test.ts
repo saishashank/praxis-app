@@ -72,7 +72,7 @@ describe("main migration 0006_universe_import", () => {
     const regBefore = (await db.execute("SELECT * FROM source_register ORDER BY source")).rows.map(
       (r) => ({ ...r }),
     );
-    expect(await migrateDown(db, ms, 34)).toEqual({ rolledBack: 34, version: 5 });
+    expect(await migrateDown(db, ms, 35)).toEqual({ rolledBack: 35, version: 5 });
     expect(await cols(db)).not.toContain("industry");
     expect(await cols(db)).not.toContain("missing_count");
     expect(
@@ -91,14 +91,14 @@ describe("main migration 0006_universe_import", () => {
     await expect(db.execute("DELETE FROM source_register")).rejects.toThrow(/forever table/);
     await expect(db.execute("DELETE FROM source_register_history")).rejects.toThrow(/append-only/);
 
-    expect(await migrateUp(db, ms)).toEqual({ applied: 34, version: 39 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 35, version: 40 });
     expect(await schemaOf(db)).toEqual(before);
     expect(
       (await db.execute("SELECT * FROM source_register ORDER BY source")).rows.map((r) => ({
         ...r,
       })),
     ).toEqual(regBefore);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 39 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 40 });
   });
 
   it("down keeps instruments that were already imported (only the two columns go)", async () => {

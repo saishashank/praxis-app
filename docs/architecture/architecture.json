@@ -9508,6 +9508,46 @@
       }
     },
     {
+      "id": "table:main.angle_proposal",
+      "type": "table",
+      "name": "angle_proposal",
+      "purpose": "Table angle_proposal in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0040_m23_research.sql",
+      "attrs": {
+        "columns": [
+          "proposal_id",
+          "market",
+          "month",
+          "kind",
+          "state",
+          "rule_json",
+          "orientation",
+          "cluster",
+          "evidence_json",
+          "model_id",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_angle_proposal_month"
+        ]
+      }
+    },
+    {
       "id": "table:main.announcement",
       "type": "table",
       "name": "announcement",
@@ -12673,6 +12713,38 @@
       }
     },
     {
+      "id": "table:main.holdout_look_refusal",
+      "type": "table",
+      "name": "holdout_look_refusal",
+      "purpose": "Table holdout_look_refusal in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0040_m23_research.sql",
+      "attrs": {
+        "columns": [
+          "lineage",
+          "market",
+          "at",
+          "prereg_sha",
+          "caller"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.incident",
       "type": "table",
       "name": "incident",
@@ -15370,6 +15442,141 @@
       }
     },
     {
+      "id": "table:main.research_meter",
+      "type": "table",
+      "name": "research_meter",
+      "purpose": "Table research_meter in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0040_m23_research.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "lineage",
+          "d",
+          "n",
+          "target",
+          "projected_d",
+          "status",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.research_prereg",
+      "type": "table",
+      "name": "research_prereg",
+      "purpose": "Table research_prereg in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0040_m23_research.sql",
+      "attrs": {
+        "columns": [
+          "lineage",
+          "market",
+          "item",
+          "frozen_json",
+          "sha",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.research_result",
+      "type": "table",
+      "name": "research_result",
+      "purpose": "Table research_result in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0040_m23_research.sql",
+      "attrs": {
+        "columns": [
+          "lineage",
+          "market",
+          "looked_at",
+          "prereg_sha",
+          "n_setups",
+          "n_blocks",
+          "stats_json"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.residual_monitor",
+      "type": "table",
+      "name": "residual_monitor",
+      "purpose": "Table residual_monitor in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0040_m23_research.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "monitor",
+          "period",
+          "value_json",
+          "alarm",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.review_read",
       "type": "table",
       "name": "review_read",
@@ -15687,6 +15894,42 @@
       }
     },
     {
+      "id": "table:main.sector_index",
+      "type": "table",
+      "name": "sector_index",
+      "purpose": "Table sector_index in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0040_m23_research.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "group_code",
+          "weighting",
+          "ret_ppm",
+          "level_ppm",
+          "n_members",
+          "map_as_of",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.sentinel_ingest",
       "type": "table",
       "name": "sentinel_ingest",
@@ -15759,6 +16002,41 @@
           "blocked",
           "max_gap_s",
           "last_ok_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.shock_stop_outcome",
+      "type": "table",
+      "name": "shock_stop_outcome",
+      "purpose": "Table shock_stop_outcome in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0040_m23_research.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "family",
+          "origin",
+          "d_entry",
+          "d_shock",
+          "base_net_ppm",
+          "tight_net_ppm",
+          "created_at"
         ],
         "database": "main",
         "indexes": []
@@ -21557,6 +21835,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.angle_proposal",
+      "from": "service:turso-main",
+      "to": "table:main.angle_proposal",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.announcement",
       "from": "service:turso-main",
       "to": "table:main.announcement",
@@ -22419,6 +22707,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.holdout_look_refusal",
+      "from": "service:turso-main",
+      "to": "table:main.holdout_look_refusal",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.incident",
       "from": "service:turso-main",
       "to": "table:main.incident",
@@ -23157,6 +23455,46 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.research_meter",
+      "from": "service:turso-main",
+      "to": "table:main.research_meter",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.research_prereg",
+      "from": "service:turso-main",
+      "to": "table:main.research_prereg",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.research_result",
+      "from": "service:turso-main",
+      "to": "table:main.research_result",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.residual_monitor",
+      "from": "service:turso-main",
+      "to": "table:main.residual_monitor",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.review_read",
       "from": "service:turso-main",
       "to": "table:main.review_read",
@@ -23242,6 +23580,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.sector_index",
+      "from": "service:turso-main",
+      "to": "table:main.sector_index",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.sentinel_ingest",
       "from": "service:turso-main",
       "to": "table:main.sentinel_ingest",
@@ -23260,6 +23608,16 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.shock_stop_outcome",
+      "from": "service:turso-main",
+      "to": "table:main.shock_stop_outcome",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
         "data"
       ]
     },
