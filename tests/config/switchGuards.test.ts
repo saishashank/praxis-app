@@ -190,7 +190,6 @@ describe("the registry (D-1445)", () => {
 
   it("the stubs pass every value on every database, including a failing one, until their task owns them", async () => {
     const stubs = [
-      ["minilm_enabled", minilmGuard, "on"],
       ["regime_altinputs_enabled", regimeAltGuard, "on"],
       ["intraday_sweep_enabled", sweepGuard, "on"],
     ] as const;
@@ -200,6 +199,14 @@ describe("the registry (D-1445)", () => {
       expect(await guard(throwing("down"), value), key).toBeNull();
       expect(await switchRefusal(main, key, value), key).toBeNull();
     }
+  });
+
+  it("minilm_enabled is owned by L5: registered, refuses on, never reads the database (tests/llm/minilm/guard.test.ts)", async () => {
+    expect(GUARDS.minilm_enabled).toBe(minilmGuard);
+    expect(await minilmGuard(throwing("down"), "on")).toBe(
+      "The local classifier has not been trained yet",
+    );
+    expect(await switchRefusal(main, "minilm_enabled", "off")).toBeNull();
   });
 
   it("llm_live_roles is owned by L1: registered and no longer a stub (tests/config/liveRolesGuard.test.ts)", async () => {

@@ -1003,3 +1003,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1487 | Refusal of a re-run (task L2, D-1405): a live run is refused (exit 2, nothing called) for a model that an earlier report of the reports folder (--reports, de... |
 | D-1488 | Review script (task L2, D-1404): bakeoff-review.mjs has KEY_AVAILABLE = true, lists the role verdicts of every report and prints one llm_live_roles: add <rol... |
 | D-1489 | Roster refresh of 2026-11-17 (task L2, D-1407): the provider pages were read with a fetch tool on that day (what was read is in docs/llm-roster.md). |
+| D-1500 | Pin, lock and what "the lock hash mismatches" means (task L5, D-1414): onnxruntime-node is pinned exactly at 1.31.1 (published 2026-10-26, more than two week... |
+| D-1501 | Head and trainer (task L5, D-1415): the classes are the rule classifier's own categories (classifyAnnouncement, AGT-011), so the head's labels are whatever t... |
+| D-1502 | What the shadow stores and compares (task L5, D-1416): one minilm_shadow row per announcement (primary key market, day, source, announcement id) with the rul... |
+| D-1503 | Nobody reads it (task L5, D-1416): tests/security/minilmReaders.test.ts keeps the table named only by the stage and the health line (and the trigger generato... |
+| D-1504 | Entry and health as built (task L5): minilmMain(argv, env, deps) in cli.ts (shadow, default, and embed; --model and --vocab are flags, so no new environment... |
