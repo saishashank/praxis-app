@@ -985,6 +985,11 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1462 | Role words and gates (task L1, D-1402): ROLE_WORDS (in roster.ts): |
 | D-1463 | Health line (task L1, D-1446): src/lib/health/llmRoutes.ts shows one line per switched-on job, or one calm line when none is; it is computed without a key ch... |
 | D-1464 | Index and guard details (task L1, D-1403, D-1404): per role the newest covering report wins by its Date, then its Run id (numeric-aware), then a FAIL over a... |
+| D-1465 | Committee budget check (task C1, D-1410, D-1411): the night checks the four calls of a signal against the Committee bucket, the daily total and the nightly c... |
+| D-1466 | Injected model side (task C1, D-1401, D-1417): committeeNight takes CommitteeLlm (routerFor(role, select) with select = only or avoid provider ids, null when... |
+| D-1467 | What is written and when (task C1, D-1417, D-1420): nothing when the switch is off, a replay flag (--replay, --recorded, --recorded-day) is set, the date is... |
+| D-1468 | Model choice (task C1, D-1418): "family" is the provider id. |
+| D-1469 | Call records (task C1, D-1419, LLM-066): the router hands back the validated answer, not the provider's text, so raw_response holds that answer's JSON (at mo... |
 | D-1470 | Licence engine (task E1, D-1430): the check logic is one plain module, src/lib/experts/licence/engine.mjs (+ .d.mts), because the build-machine script (scrip... |
 | D-1471 | Status decision as built (E1, D-1430): robots disallows or the terms forbid gives no; robots allows or has no file gives enabled (summarising unknown is titl... |
 | D-1472 | Accept the risk (E1): acceptRiskAction in [id]/actions.ts is gated by requireUser("admin") (Owner only; an Editor and a Viewer are a 403) and the service acc... |

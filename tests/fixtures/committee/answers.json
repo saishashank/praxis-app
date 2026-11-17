@@ -1,0 +1,19 @@
+{
+  "note": "Recorded-style Committee answers for the mock providers (synthetic, digit-free, SEC-110). Two points per stage; the judge's reasons are the same shape with a rating.",
+  "bull": [
+    "The recorded event is a favourable one for the company.",
+    "The rule evidence on the card passed its check."
+  ],
+  "bear": [
+    "Past similar trades give a wide range of results.",
+    "A data flag limits how far the evidence can be trusted."
+  ],
+  "risk": [
+    "Thin trading could make an exit costly.",
+    "The market regime may turn against the position."
+  ],
+  "judge": [
+    "The favourable event outweighs the flagged data.",
+    "The range of past results is wide but acceptable."
+  ]
+}
