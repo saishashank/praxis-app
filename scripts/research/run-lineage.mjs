@@ -376,7 +376,7 @@ export async function run(argv, io = { log: (t) => console.log(t) }) {
     caveats: [
       "survivors only: the extract holds codes that still trade, so a haircut of one percentage point per 60 sessions held is assumed (each figure is shown with and without it)",
       "prices are split-adjusted vendor bars; dividends are not added to either a setup or its controls",
-      "the publication time of a short-position report is assumed (end of the third weekday after its date)",
+      "the publication time of a short-position report is assumed by the collector (end of a fixed number of weekdays after its date), not observed",
       "controls are drawn from the same survivors, which removes part of the survivorship bias",
     ],
   };
