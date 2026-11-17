@@ -49,6 +49,19 @@ export const LINEAGE_NAMES: Readonly<Record<string, LineageName>> = {
   text_label_guidance: { name: "Guidance-label test", kind: "live" },
   text_label_event_confirm: { name: "Event-confirmation-label test", kind: "live" },
   text_label_tone: { name: "Tone-label test", kind: "live" },
+  // CXA-011 (M23 T4, D-1638, D-1750): the tighter-stop comparison per strategy, one look each at 30 holds, taken by the app itself
+  shock_stops_F1: { name: "Tighter stops after a market shock: Follow the trend", kind: "live" },
+  shock_stops_F2: {
+    name: "Tighter stops after a market shock: Good company, good news",
+    kind: "live",
+  },
+  shock_stops_F3: { name: "Tighter stops after a market shock: News jump", kind: "live" },
+  shock_stops_F4: { name: "Tighter stops after a market shock: Buy the dip", kind: "live" },
+  shock_stops_F5: {
+    name: "Tighter stops after a market shock: Small-company spotter",
+    kind: "live",
+  },
+  shock_stops_F6: { name: "Tighter stops after a market shock: Signals agree", kind: "live" },
   // VAL-118 (D-1608, D-1723): the first intraday cell; a later cell of a quarter is named by lineageName below
   intraday_stream_v1: { name: "Intraday stream test", kind: "live" },
   // M23 R2 (D-1688): the new-edge tests run on the build machine; a variant is the same test at a larger parcel

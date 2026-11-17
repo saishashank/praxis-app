@@ -22,6 +22,7 @@ import { annCalibrationStep } from "@/lib/research/steps/annCalibration";
 import { labelEvalStep } from "@/lib/research/steps/labelEval";
 import { metersStep } from "@/lib/research/steps/meters";
 import { runProposalJob } from "@/lib/research/proposals/job";
+import { shockStopsStep } from "@/lib/research/steps/shockStops";
 import { cleanupTempDbs } from "../../db/helpers";
 import { STEELMAN_OWN, MIGRATION_OWNED, at32World, combineTables } from "./at32World";
 
@@ -179,6 +180,12 @@ const M23_STEP_WRITERS: Array<(db: Client) => Promise<void>> = [
       }),
     });
   },
+  // T4 (D-1638, D-1750...D-1759): the real SHOCK comparator step on the world's last session. It freezes the plans of its six
+  // lineages and writes six meter rows; the golden world has no filled hold that saw a SHOCK session, so it records no pair
+  // (the hold-level proof is in tests/research/shockStops.test.ts); its reads touch nothing else.
+  async (db) => {
+    await shockStopsStep.run(db, { market: "AU", d: "2031-04-08", now: TS });
+  },
 ];
 
 const PROPOSALS_20 = JSON.parse(
@@ -258,8 +265,9 @@ describe("AT-32 (research): the M23 own-set, the seam and the complement proof (
     for (const t of ["research_result", "holdout_look"])
       expect(await own(t), t).toBe(ledger.entries.filter((e) => e.verdict !== undefined).length);
     // the archive of the golden world is empty: T2 writes one meter row, "collecting", and no look of its own; M3 writes the 12
-    // live-tested rows (F1 to F6, two lines each), the 6 mover rows and the 3 label rows (no stream cell exists yet): 22 in all
-    expect(await own("research_meter"), "research_meter").toBe(22);
+    // live-tested rows (F1 to F6, two lines each), the 6 mover rows and the 3 label rows (no stream cell exists yet): 22; T4 adds the
+    // 6 SHOCK comparator rows (one per family): 28 in all
+    expect(await own("research_meter"), "research_meter").toBe(28);
     expect(await own("residual_monitor"), "residual_monitor").toBeGreaterThan(0);
     for (const t of M23_OWN.filter(
       (x) =>

@@ -1380,6 +1380,12 @@ export type WouldHaveInput = {
   readonly profile: CostProfile;
   readonly advMicro: Micro;
   readonly feeContext?: FeeContext;
+  /**
+   * M23 T4 (D-1750), shadow comparison only: asked after every session that did not end the hold, with the session's
+   * bar, its index in `bars` and the stop level in force; a level above the one in force replaces it from the next
+   * session. Absent for every scoring the app does today, so the walk is unchanged.
+   */
+  readonly raiseStop?: (bar: ViewBar, index: number, level: Micro) => Micro | null;
 };
 
 export type WouldHaveOutcome = {
@@ -1468,6 +1474,8 @@ export function wouldHaveOutcome(input: WouldHaveInput): WouldHaveOutcome | null
     };
     const ev = evaluateExit(pos);
     for (const l of ev.isLevels) if (l.levelMicro > level) level = l.levelMicro;
+    const raised = input.raiseStop?.(b, i, level);
+    if (raised !== undefined && raised !== null && raised > level) level = raised;
     pendingCs = ev.cs?.rule ?? null;
   }
   if (exit === null) return null;
