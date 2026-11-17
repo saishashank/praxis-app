@@ -1,0 +1,305 @@
+{
+  "note": "Synthetic ZZ announcements for the paraphrase harness; no real company or text.",
+  "items": [
+    {
+      "id": "zz-01",
+      "original": "ZZA lifts full year guidance",
+      "neutral": "ZZA raises its outlook for the year",
+      "flipped": "ZZA cuts its full year guidance",
+      "guidance": "up",
+      "tone": "positive",
+      "flippedTone": "negative",
+      "flippedGuidance": "down"
+    },
+    {
+      "id": "zz-02",
+      "original": "ZZB reports its weakest quarterly revenue",
+      "neutral": "ZZB announces its worst quarter for sales",
+      "flipped": "ZZB reports record quarterly revenue",
+      "guidance": "none",
+      "tone": "negative",
+      "flippedTone": "positive",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-03",
+      "original": "ZZC wins a large supply contract",
+      "neutral": "ZZC secures a major supply agreement",
+      "flipped": "ZZC loses a large supply contract",
+      "guidance": "none",
+      "tone": "positive",
+      "flippedTone": "negative",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-04",
+      "original": "ZZD confirms dividend will be cut",
+      "neutral": "ZZD says the payout will be reduced",
+      "flipped": "ZZD confirms dividend will rise",
+      "guidance": "down",
+      "tone": "negative",
+      "flippedTone": "positive",
+      "flippedGuidance": "up"
+    },
+    {
+      "id": "zz-05",
+      "original": "ZZE completes acquisition ahead of plan",
+      "neutral": "ZZE finishes its purchase earlier than planned",
+      "flipped": "ZZE abandons acquisition after delays",
+      "guidance": "none",
+      "tone": "positive",
+      "flippedTone": "negative",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-06",
+      "original": "ZZF cuts its full year guidance",
+      "neutral": "ZZF lowers its outlook for the year",
+      "flipped": "ZZF lifts full year guidance",
+      "guidance": "down",
+      "tone": "negative",
+      "flippedTone": "positive",
+      "flippedGuidance": "up"
+    },
+    {
+      "id": "zz-07",
+      "original": "ZZA1 reports record quarterly revenue",
+      "neutral": "ZZA1 announces its best ever quarter for sales",
+      "flipped": "ZZA1 reports its weakest quarterly revenue",
+      "guidance": "none",
+      "tone": "positive",
+      "flippedTone": "negative",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-08",
+      "original": "ZZB1 loses a large supply contract",
+      "neutral": "ZZB1 forfeits a major supply agreement",
+      "flipped": "ZZB1 wins a large supply contract",
+      "guidance": "none",
+      "tone": "negative",
+      "flippedTone": "positive",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-09",
+      "original": "ZZC1 confirms dividend will rise",
+      "neutral": "ZZC1 says the payout will be increased",
+      "flipped": "ZZC1 confirms dividend will be cut",
+      "guidance": "up",
+      "tone": "positive",
+      "flippedTone": "negative",
+      "flippedGuidance": "down"
+    },
+    {
+      "id": "zz-10",
+      "original": "ZZD1 abandons acquisition after delays",
+      "neutral": "ZZD1 drops its purchase following setbacks",
+      "flipped": "ZZD1 completes acquisition ahead of plan",
+      "guidance": "none",
+      "tone": "negative",
+      "flippedTone": "positive",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-11",
+      "original": "ZZE1 lifts full year guidance",
+      "neutral": "ZZE1 raises its outlook for the year",
+      "flipped": "ZZE1 cuts its full year guidance",
+      "guidance": "up",
+      "tone": "positive",
+      "flippedTone": "negative",
+      "flippedGuidance": "down"
+    },
+    {
+      "id": "zz-12",
+      "original": "ZZF1 reports its weakest quarterly revenue",
+      "neutral": "ZZF1 announces its worst quarter for sales",
+      "flipped": "ZZF1 reports record quarterly revenue",
+      "guidance": "none",
+      "tone": "negative",
+      "flippedTone": "positive",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-13",
+      "original": "ZZA2 wins a large supply contract",
+      "neutral": "ZZA2 secures a major supply agreement",
+      "flipped": "ZZA2 loses a large supply contract",
+      "guidance": "none",
+      "tone": "positive",
+      "flippedTone": "negative",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-14",
+      "original": "ZZB2 confirms dividend will be cut",
+      "neutral": "ZZB2 says the payout will be reduced",
+      "flipped": "ZZB2 confirms dividend will rise",
+      "guidance": "down",
+      "tone": "negative",
+      "flippedTone": "positive",
+      "flippedGuidance": "up"
+    },
+    {
+      "id": "zz-15",
+      "original": "ZZC2 completes acquisition ahead of plan",
+      "neutral": "ZZC2 finishes its purchase earlier than planned",
+      "flipped": "ZZC2 abandons acquisition after delays",
+      "guidance": "none",
+      "tone": "positive",
+      "flippedTone": "negative",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-16",
+      "original": "ZZD2 cuts its full year guidance",
+      "neutral": "ZZD2 lowers its outlook for the year",
+      "flipped": "ZZD2 lifts full year guidance",
+      "guidance": "down",
+      "tone": "negative",
+      "flippedTone": "positive",
+      "flippedGuidance": "up"
+    },
+    {
+      "id": "zz-17",
+      "original": "ZZE2 reports record quarterly revenue",
+      "neutral": "ZZE2 announces its best ever quarter for sales",
+      "flipped": "ZZE2 reports its weakest quarterly revenue",
+      "guidance": "none",
+      "tone": "positive",
+      "flippedTone": "negative",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-18",
+      "original": "ZZF2 loses a large supply contract",
+      "neutral": "ZZF2 forfeits a major supply agreement",
+      "flipped": "ZZF2 wins a large supply contract",
+      "guidance": "none",
+      "tone": "negative",
+      "flippedTone": "positive",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-19",
+      "original": "ZZA3 confirms dividend will rise",
+      "neutral": "ZZA3 says the payout will be increased",
+      "flipped": "ZZA3 confirms dividend will be cut",
+      "guidance": "up",
+      "tone": "positive",
+      "flippedTone": "negative",
+      "flippedGuidance": "down"
+    },
+    {
+      "id": "zz-20",
+      "original": "ZZB3 abandons acquisition after delays",
+      "neutral": "ZZB3 drops its purchase following setbacks",
+      "flipped": "ZZB3 completes acquisition ahead of plan",
+      "guidance": "none",
+      "tone": "negative",
+      "flippedTone": "positive",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-21",
+      "original": "ZZC3 lifts full year guidance",
+      "neutral": "ZZC3 raises its outlook for the year",
+      "flipped": "ZZC3 cuts its full year guidance",
+      "guidance": "up",
+      "tone": "positive",
+      "flippedTone": "negative",
+      "flippedGuidance": "down"
+    },
+    {
+      "id": "zz-22",
+      "original": "ZZD3 reports its weakest quarterly revenue",
+      "neutral": "ZZD3 announces its worst quarter for sales",
+      "flipped": "ZZD3 reports record quarterly revenue",
+      "guidance": "none",
+      "tone": "negative",
+      "flippedTone": "positive",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-23",
+      "original": "ZZE3 wins a large supply contract",
+      "neutral": "ZZE3 secures a major supply agreement",
+      "flipped": "ZZE3 loses a large supply contract",
+      "guidance": "none",
+      "tone": "positive",
+      "flippedTone": "negative",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-24",
+      "original": "ZZF3 confirms dividend will be cut",
+      "neutral": "ZZF3 says the payout will be reduced",
+      "flipped": "ZZF3 confirms dividend will rise",
+      "guidance": "down",
+      "tone": "negative",
+      "flippedTone": "positive",
+      "flippedGuidance": "up"
+    },
+    {
+      "id": "zz-25",
+      "original": "ZZA4 completes acquisition ahead of plan",
+      "neutral": "ZZA4 finishes its purchase earlier than planned",
+      "flipped": "ZZA4 abandons acquisition after delays",
+      "guidance": "none",
+      "tone": "positive",
+      "flippedTone": "negative",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-26",
+      "original": "ZZB4 cuts its full year guidance",
+      "neutral": "ZZB4 lowers its outlook for the year",
+      "flipped": "ZZB4 lifts full year guidance",
+      "guidance": "down",
+      "tone": "negative",
+      "flippedTone": "positive",
+      "flippedGuidance": "up"
+    },
+    {
+      "id": "zz-27",
+      "original": "ZZC4 reports record quarterly revenue",
+      "neutral": "ZZC4 announces its best ever quarter for sales",
+      "flipped": "ZZC4 reports its weakest quarterly revenue",
+      "guidance": "none",
+      "tone": "positive",
+      "flippedTone": "negative",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-28",
+      "original": "ZZD4 loses a large supply contract",
+      "neutral": "ZZD4 forfeits a major supply agreement",
+      "flipped": "ZZD4 wins a large supply contract",
+      "guidance": "none",
+      "tone": "negative",
+      "flippedTone": "positive",
+      "flippedGuidance": "none"
+    },
+    {
+      "id": "zz-29",
+      "original": "ZZE4 confirms dividend will rise",
+      "neutral": "ZZE4 says the payout will be increased",
+      "flipped": "ZZE4 confirms dividend will be cut",
+      "guidance": "up",
+      "tone": "positive",
+      "flippedTone": "negative",
+      "flippedGuidance": "down"
+    },
+    {
+      "id": "zz-30",
+      "original": "ZZF4 abandons acquisition after delays",
+      "neutral": "ZZF4 drops its purchase following setbacks",
+      "flipped": "ZZF4 completes acquisition ahead of plan",
+      "guidance": "none",
+      "tone": "negative",
+      "flippedTone": "positive",
+      "flippedGuidance": "none"
+    }
+  ]
+}
