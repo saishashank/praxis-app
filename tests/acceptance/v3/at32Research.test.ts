@@ -14,6 +14,7 @@ import { join } from "node:path";
 import type { Client } from "@libsql/client";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { runResearchNight, type ResearchStep } from "@/lib/research/night";
+import { sectorIndexStep } from "@/lib/research/steps/sectorIndex";
 import { cleanupTempDbs } from "../../db/helpers";
 import { STEELMAN_OWN, MIGRATION_OWNED, at32World, combineTables } from "./at32World";
 
@@ -101,6 +102,11 @@ const M23_STEP_WRITERS: Array<(db: Client) => Promise<void>> = [
       `INSERT INTO shock_stop_outcome (market, family, origin, d_entry, d_shock, base_net_ppm, tight_net_ppm, created_at) VALUES ('AU', 'F1', 'o1', '2030-01-02', '2030-01-03', 0, 0, '${TS}')`,
     ];
     for (const s of sql) await db.execute(s);
+  },
+  // S1 (D-1670...D-1674): the real sector index step on the world's last session. The world has no classification, so it
+  // writes no row here (AT-75 series proves the rows on a ZZ fixture); the run proves its reads touch nothing else.
+  async (db) => {
+    await sectorIndexStep.run(db, { market: "AU", d: "2031-04-08", now: TS });
   },
 ];
 

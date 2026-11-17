@@ -1127,3 +1127,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1662 | Harness (T1, D-1636): per fixture item three calls (original, neutral paraphrase, tone-flipped paraphrase) through the R2 router; stability = items whose gui... |
 | D-1663 | Production shadow (T1, D-1636, D-1642): textLabelsEnabled(env, {r2Live}) is true in staging as before, or in any environment when the factory's status lists... |
 | D-1664 | Fixture (T1): tests/fixtures/labels/paraphrase-zz.json holds 30 synthetic ZZ items (five invented events, each in both directions), with the expected guidanc... |
+| D-1670 | Series arithmetic (S1, D-1632): a member's return is round((close - previous close) x 1,000,000 / previous close), half away from zero, in whole ppm; a membe... |
+| D-1671 | Minimum members (S1, D-1634): the series keeps every group that has at least one counted member and stores n_members; the floor of 3 members is applied by th... |
+| D-1672 | Step reads (S1, D-1641): per night and enabled market, one probe for a row on the session or later (forward only and idempotent: a repeat or an earlier night... |
+| D-1673 | Panel hand-off for R3 (S1, D-1633, D-1634): sectorSeries(days) (oldest first, each day {d, close, members} with that day's code-to-group map, so a code that... |
+| D-1674 | Fixture (S1): tests/research/sectorFixture.ts holds a 3-group, 6-code, 5-session synthetic ZZ fixture with the hand-computed returns and levels (a 61 % move... |
