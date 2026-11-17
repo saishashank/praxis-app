@@ -1163,3 +1163,9 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1714 | CXA-009 runner mode (R3, D-1629, D-1630): scripts/research/run-lineage.mjs --lineage sector_ic selects the sector mode; it reuses the argument parser, the ou... |
 | D-1715 | CXA-009 consequence and caveats (R3, D-1634): a PASS keeps F7 in shadow and records the result for the CTX-053 path; it changes no weight or status. |
 | D-1716 | CXA-009 result (R3, D-1634): the one look, taken 2026-11-17 from a clean tree at runner commit e9263f2b05d8 over the full window (2000-01-04 to 2026-10-22),... |
+| D-1740 | CXA-012 key read (R4, D-1638): src/lib/cortex/survivorship.ts reads survivorship_loss_assumed_pct (already registered in M23 A1, default 50, range 30 to 80,... |
+| D-1741 | AU data-limits record (R4, D-1638): dataLimits.mjs gains AU: survivorship (id survivorship_au, the offline history holds only today's codes, the loss assumed... |
+| D-1742 | Industry label (R4, D-1638): industryLabel(d, firstSnapshotAsOf) returns "static industry" (STATIC_INDUSTRY, the wording R3 used in the CXA-009 report) for a... |
+| D-1743 | CXA-013 AU source check (R4, D-1639): DAT-101 applied to a free point-in-time fundamentals source for the ASX, recorded 2026-11-17 as a desk check (the sourc... |
+| D-1744 | IN and US CXA-013 lines (R4, D-1639): both pages re-read on 2026-11-17 against the current code and registers and dated "CXA-013 re-read 2026-11-17". |
+| D-1745 | CXA-012 and CXA-013 reports (R4, D-1610, D-1638): both written in the report format with status INCONCLUSIVE for the lineage-style fields (these are records,... |

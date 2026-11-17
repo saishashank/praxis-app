@@ -31,6 +31,8 @@ actions. The caveat is on every India report and does not lapse with the market'
 India's results are parsed from NSE/BSE XBRL **when A3's terms check passes**; otherwise the fundamentals-dependent
 family is **BLOCKED-DATA** for India and says so on the report. Nothing is guessed from headlines.
 
+*CXA-013 re-read 2026-11-17: unchanged. India is off; the XBRL terms check under DAT-101 has not been run, so fundamentals stay BLOCKED-DATA.*
+
 ## 4. Director trades (not blocked)
 
 SEBI (PIT) disclosures carry the transaction type, so the director-trade split is available for India and is **not**

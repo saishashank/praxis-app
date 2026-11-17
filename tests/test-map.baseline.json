@@ -3133,6 +3133,7 @@
     "DAT-101": [
       "scripts/ci/source-report.workflow.test.mjs",
       "scripts/market/source-report.test.mjs",
+      "tests/cortex/survivorship.test.ts",
       "tests/data/politeFetch.test.ts",
       "tests/data/sourceRegister.m20.test.ts",
       "tests/db/0019_cortex.test.ts",
