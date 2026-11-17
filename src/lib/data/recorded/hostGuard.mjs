@@ -20,6 +20,7 @@ export const LLM_PROVIDER_HOST_SUFFIXES = Object.freeze([
   "generativelanguage.googleapis.com",
   "api.groq.com",
   "openrouter.ai",
+  "api.cloudflare.com", // Workers AI REST endpoint (M22 L3, D-1413)
 ]);
 
 /** Host suffixes that staging must never reach (the host itself and every subdomain). */

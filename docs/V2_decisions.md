@@ -985,3 +985,6 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1462 | Role words and gates (task L1, D-1402): ROLE_WORDS (in roster.ts): |
 | D-1463 | Health line (task L1, D-1446): src/lib/health/llmRoutes.ts shows one line per switched-on job, or one calm line when none is; it is computed without a key ch... |
 | D-1464 | Index and guard details (task L1, D-1403, D-1404): per role the newest covering report wins by its Date, then its Run id (numeric-aware), then a FAIL over a... |
+| D-1475 | Neuron estimate and the day's spend (task L3, D-1413): the adapter charges ceil((prompt chars / 4 + max output tokens) x 250 / 1000) neurons per call before... |
+| D-1476 | Off by construction (task L3, D-1413): providerForRoster takes dailyNeurons (absent = 0), and the factory today passes none, so a Workers AI route is unavail... |
+| D-1477 | Host and AT-77 (task L3, D-1413): api.cloudflare.com joins LLM_PROVIDER_HOST_SUFFIXES (so the recorded-day guard names it); the M21 clause of AT-77 that forb... |

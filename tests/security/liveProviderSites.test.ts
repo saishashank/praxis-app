@@ -81,15 +81,18 @@ describe("recorded-day host guard (LLM-077)", () => {
     "https://generativelanguage.googleapis.com/v1beta/models/x:generateContent",
     "https://api.groq.com/openai/v1/chat/completions",
     "https://openrouter.ai/api/v1/chat/completions",
+    "https://api.cloudflare.com/client/v4/accounts/x/ai/run/y", // Workers AI (M22 L3)
   ];
-  it("names the three provider hosts, and every adapter endpoint is blocked", () => {
-    expect(LLM_PROVIDER_HOST_SUFFIXES).toHaveLength(3);
+  it("names the four provider hosts, and every adapter endpoint is blocked", () => {
+    expect(LLM_PROVIDER_HOST_SUFFIXES).toHaveLength(4);
     for (const s of LLM_PROVIDER_HOST_SUFFIXES) expect(BLOCKED_HOST_SUFFIXES).toContain(s);
     for (const u of ENDPOINTS) expect(isBlockedHost(new URL(u).hostname), u).toBe(true);
   });
 
-  it("the endpoints in providers.ts are exactly the ones the guard names", () => {
-    const text = readFileSync(path.join(ROOT, "src/lib/llm/providers.ts"), "utf8");
+  it("the endpoints in providers.ts and workersAi.ts are exactly the ones the guard names", () => {
+    const text = ["providers.ts", "workersAi.ts"]
+      .map((f) => readFileSync(path.join(ROOT, "src/lib/llm", f), "utf8"))
+      .join(" ");
     const hosts = [...text.matchAll(/"https:\/\/([^/"]+)/g)].map((m) => m[1]).sort();
     expect(hosts).toEqual(ENDPOINTS.map((u) => new URL(u).hostname).sort());
   });

@@ -5,7 +5,7 @@
 // null = the page does not state the figure for the free plan (read it in the provider dashboard).
 
 export type RosterStatus = "verified" | "unverified" | "retired";
-export type RosterProvider = "google" | "groq" | "openrouter" | "github-models";
+export type RosterProvider = "google" | "groq" | "openrouter" | "github-models" | "workers-ai";
 
 /** LLM-080 (D-1408): model size class. small: 20B or less, or "lite"/"instant"; medium: about 27-70B, or "flash"; large: 100B or more, or "pro". */
 export type ModelTier = "small" | "medium" | "large";
