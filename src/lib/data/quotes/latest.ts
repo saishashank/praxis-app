@@ -120,7 +120,12 @@ export function quoteChangePpm(
 ): number | null {
   const base = storedCloseMicro ?? quotePrevCloseMicro;
   if (base === null || base <= 0n) return null;
-  return Number(((lastMicro - base) * 1_000_000n) / base); // money-float-ok: ppm of micro prices
+  const num = (lastMicro - base) * 1_000_000n;
+  const q = num / base;
+  const r = num % base;
+  const twice = (r < 0n ? -r : r) * 2n;
+  const round = twice >= base ? (num < 0n ? -1n : 1n) : 0n; // half away from zero
+  return Number(q + round); // money-float-ok: ppm of micro prices
 }
 
 /** "11:35" in Melbourne time, for the "delayed, as of" label. Pure. */

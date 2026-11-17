@@ -27,7 +27,12 @@ import {
   type MoneyView,
 } from "./shell";
 import { displayTitle } from "@/lib/view/displayText";
-import { newerThanClose, quoteTimeMelbourne, readLatestQuotes } from "@/lib/data/quotes/latest";
+import {
+  newerThanClose,
+  quoteChangePpm,
+  quoteTimeMelbourne,
+  readLatestQuotes,
+} from "@/lib/data/quotes/latest";
 import { soft } from "./common";
 
 const MEMO_MS = 600_000; // threshold-ok: design 2.9, 10-minute ceiling
@@ -530,7 +535,7 @@ async function withLive(env: LoaderEnv, closeD: string, lists: MarketList[]): Pr
     if (close <= 0n) continue;
     r.live = {
       price: { micro: q.lastMicro.toString(), currency: "AUD", simulated: true },
-      changePpm: Number(((q.lastMicro - close) * 1_000_000n) / close), // money-float-ok: ppm of micro prices
+      changePpm: quoteChangePpm(q.lastMicro, close, q.prevCloseMicro) ?? 0,
       at: quoteTimeMelbourne(q.quoteAt),
     };
   }
@@ -647,7 +652,7 @@ export async function loadOverview(env: LoaderEnv, key: string): Promise<Overvie
         if (q === null || close <= 0n) return null;
         return {
           priceMicro: masked ? null : q.lastMicro.toString(),
-          changePpm: Number(((q.lastMicro - close) * 1_000_000n) / close), // money-float-ok: ppm of micro prices
+          changePpm: quoteChangePpm(q.lastMicro, close, q.prevCloseMicro) ?? 0,
           at: quoteTimeMelbourne(q.quoteAt),
         };
       }, null)

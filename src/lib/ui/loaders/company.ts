@@ -264,7 +264,7 @@ export async function loadCompany(env: LoaderEnv, key: string): Promise<CompanyM
         if (q === null || close <= 0n) return null;
         return {
           priceMicro: q.lastMicro.toString(),
-          changePpm: Number(((q.lastMicro - close) * 1_000_000n) / close), // money-float-ok: ppm of micro prices
+          changePpm: quoteChangePpm(q.lastMicro, close, q.prevCloseMicro) ?? 0,
           at: quoteTimeMelbourne(q.quoteAt),
         };
       }, null)

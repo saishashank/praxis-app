@@ -88,6 +88,9 @@ describe("D-1084: one change for a delayed quote, from our stored close", () => 
   it("falls back to the quote's previous close only when no stored close exists; null without a base", () => {
     expect(quoteChangePpm(110n, null, 100n)).toBe(100_000);
     expect(quoteChangePpm(110n, 200n, 100n)).toBe(-450_000);
+    expect(quoteChangePpm(5n, 3n, null)).toBe(666_667); // rounds half away from zero
+    expect(quoteChangePpm(1n, 3n, null)).toBe(-666_667);
+    expect(quoteChangePpm(2n, 3n, null)).toBe(-333_333);
     expect(quoteChangePpm(110n, null, null)).toBeNull();
     expect(quoteChangePpm(110n, 0n, null)).toBeNull();
     expect(
