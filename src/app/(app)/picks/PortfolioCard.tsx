@@ -43,6 +43,21 @@ function One({ v }: { v: MyPortfolio }) {
               </GainLoss>
             ) : null}
           </p>
+          {v.liveLabel ? (
+            <p className="m-0 text-xs text-text-muted" data-testid="portfolio-live">
+              {v.liveLabel}.
+              {v.closeValue ? (
+                <>
+                  {" "}
+                  End of day{v.asOfD ? ` ${formatDay(v.asOfD)}` : ""}:{" "}
+                  <Money micro={v.closeValue.micro} />
+                  {v.closeSinceStartPpm !== null ? ` (${pctText(v.closeSinceStartPpm)})` : ""}.
+                </>
+              ) : v.closeSinceStartPpm !== null ? (
+                <> End of day: {pctText(v.closeSinceStartPpm)}.</>
+              ) : null}
+            </p>
+          ) : null}
           <p className="m-0 text-text-muted">
             Worst fall from a peak:{" "}
             {v.worstFallPpm !== null && v.worstFallPpm < 0
@@ -69,7 +84,9 @@ function One({ v }: { v: MyPortfolio }) {
             >
               {v.holdings.map((h, i) => (
                 <li key={`${h.stock}-${i}`} className="min-w-0 break-words">
-                  <strong>{h.stock}</strong> <span className="text-text-muted">({h.strategy})</span>
+                  <strong>{h.stock}</strong>
+                  {h.company ? <span className="text-text-muted"> · {h.company}</span> : null}{" "}
+                  <span className="text-text-muted">({h.strategy})</span>
                   {h.entry ? (
                     <>
                       {" "}
@@ -103,7 +120,8 @@ function One({ v }: { v: MyPortfolio }) {
                 {v.trades.map((t, i) => (
                   <li key={i} className="break-words">
                     {t.d ? `${formatDay(t.d)}: ` : ""}
-                    <strong>{t.stock}</strong>. {t.words}
+                    <strong>{t.stock}</strong>
+                    {t.company ? ` · ${t.company}` : ""}. {t.words}
                   </li>
                 ))}
               </ul>

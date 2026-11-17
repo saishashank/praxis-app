@@ -233,3 +233,38 @@ describe("Cortex page, seeded world", () => {
     expect(screen.getByText(/maps are refitted at the next fitting run/)).toBeInTheDocument();
   });
 });
+
+describe("Cortex page, learning panel", () => {
+  const learner = async (): Promise<World> => {
+    const w = await seeded();
+    await w.main.execute({
+      sql: `INSERT INTO cortex_map (market, family, rule_version, fitted_at, params_json, active_set_hash, n_eff, pool, fit_split)
+            VALUES ('AU','F4','F4.learn','2026-10-02T07:10:02.000Z','{"learner":true,"generation":0}','h',1,'p','development')`,
+      args: [],
+    });
+    return w;
+  };
+
+  it("shows no warm-start line until a warm start has run", async () => {
+    await show(await learner(), "owner");
+    expect(q("[data-learner-duel]")).toBeInTheDocument();
+    expect(document.querySelector("[data-learner-warmstart]")).toBeNull();
+  });
+
+  it("says how many past sessions a warm start replayed, to the Owner and to a viewer", async () => {
+    for (const as of ["owner", "viewer"] as const) {
+      const w = await learner();
+      await w.main.execute({
+        sql: `INSERT INTO cortex_learn_event (market, d, seq, kind, family, angle_id, generation, evidence_json, words,
+                reverses_seq, expires_d, created_at) VALUES ('AU', '2026-10-14', 99, 'scorecard', NULL, NULL, NULL,
+                '{"warmStart":true,"nights":42}', 'Warm start.', NULL, NULL, '2026-10-14T09:00:00Z')`,
+        args: [],
+      });
+      await show(w, as);
+      expect(q("[data-learner-warmstart]").textContent).toBe(
+        "Learning evidence includes 42 past sessions replayed from the price history (as of each evening), so the next weekly run can change weights.",
+      );
+      cleanup();
+    }
+  });
+});

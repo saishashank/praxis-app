@@ -193,6 +193,20 @@ describe("seeded world", () => {
     expect(masked.weekly!.words).toBe("The weekly re-weighting ran.");
     expect(masked.leaders[0]!.name).toMatch(/^Strategy \d$/);
     expect(JSON.stringify(masked)).not.toMatch(/F4|'x'/);
+    // D-1078: a warm start's event gives the one line about replayed past sessions (market words, no dates)
+    expect(l.warmStartText).toBeNull();
+    await run(
+      `INSERT INTO cortex_learn_event (market, d, seq, kind, family, angle_id, generation, evidence_json, words,
+         reverses_seq, expires_d, created_at) VALUES ('AU', '2026-10-14', 99, 'scorecard', NULL, NULL, NULL,
+         '{"warmStart":true,"nights":58}', 'Warm start.', NULL, NULL, '2026-10-14T09:00:00Z')`,
+    );
+    for (const who of ["owner", "viewer"] as const) {
+      const warm = (await loadCortex(deps(w, who))).data.learner!;
+      expect(warm.warmStartText).toBe(
+        "Learning evidence includes 58 past sessions replayed from the price history (as of each evening), so each weekly run can change weights.",
+      );
+      expect(warm.eventCount).toBe(2); // the warm-start event is a hidden scorecard kind
+    }
   });
 
   it("O-81: a learner that has not run a night yet shows the fixed Cortex leading and nothing measured", async () => {
@@ -213,6 +227,36 @@ describe("seeded world", () => {
       );
     }
     expect((await loadCortex(deps(w, "owner"))).data.mapsLoaded).toBe(0);
+  });
+
+  it("D-1078: the warm-start line counts only warm-start events, and speaks of the next weekly run before one has run", async () => {
+    const w = await seeded(); // has a night, so the look-back window has an end
+    const run = (sql: string, args: (string | number | null)[] = []) =>
+      w.main.execute({ sql, args });
+    await run(
+      `INSERT INTO cortex_map (market, family, rule_version, fitted_at, params_json, active_set_hash, n_eff, pool, fit_split)
+       VALUES ('AU','F4','F4.learn','2026-10-02T07:10:02.000Z','{"learner":true,"generation":0}','h',1,'p','development')`,
+    );
+    const event = (d: string, seq: number, kind: string, evidence: string) =>
+      run(
+        `INSERT INTO cortex_learn_event (market, d, seq, kind, family, angle_id, generation, evidence_json, words,
+           reverses_seq, expires_d, created_at) VALUES ('AU', ?, ?, ?, NULL, NULL, NULL, ?, 'x', NULL, NULL, '2026-10-14T09:00:00Z')`,
+        [d, seq, kind, evidence],
+      );
+    const text = async () => (await loadCortex(deps(w, "owner"))).data.learner!.warmStartText;
+    expect(await text()).toBeNull(); // no events at all
+    // not a warm start, nights not a number, another kind or sequence: none of them count
+    await event("2026-10-08", 99, "scorecard", '{"nights":5}');
+    await event("2026-10-09", 99, "scorecard", '{"warmStart":false,"nights":5}');
+    await event("2026-10-10", 99, "scorecard", "null");
+    await event("2026-10-11", 99, "watch", '{"warmStart":true,"nights":5}');
+    await event("2026-10-12", 99, "scorecard", '{"warmStart":true,"nights":"7"}');
+    await event("2026-10-13", 98, "scorecard", '{"warmStart":true,"nights":5}');
+    expect(await text()).toBeNull();
+    await event("2026-10-14", 99, "scorecard", '{"warmStart":true,"nights":12}');
+    expect(await text()).toBe(
+      "Learning evidence includes 12 past sessions replayed from the price history (as of each evening), so the next weekly run can change weights.",
+    );
   });
 
   it("shows Editor and Viewer ISO weeks, never an exact date (UX-009)", async () => {

@@ -280,6 +280,7 @@ describe("AT-44 3: one lineage, 25 trials across two split versions", () => {
       pattern_test: 3,
       challenger: 10,
       new_lineage: 0,
+      report_look: 0,
     });
     // the budget of split 1 is used up: one more challenger is refused
     expect(await challenger(db, { f1_rs_top_fraction: 0.15 }, "2026-10-19")).toMatchObject({

@@ -64,13 +64,13 @@ export const TOP5_NIGHTS = 20; // threshold-ok: four weeks of trading days
 export const LEARNER_FAILED_WORDS =
   "The learning Cortex could not compare its picks tonight; the scorecard above is complete and the comparison runs again tomorrow.";
 
-function sessionsBack(d: string, n: number, calendar: readonly CalendarRow[]): string {
+export function sessionsBack(d: string, n: number, calendar: readonly CalendarRow[]): string {
   let t = d;
   for (let i = 0; i < n; i += 1) t = previousTradingDay(t, calendar);
   return t;
 }
 
-async function regimeBefore(db: BatchExec, market: string, d: string): Promise<string> {
+export async function regimeBefore(db: BatchExec, market: string, d: string): Promise<string> {
   // the regime the Cortex itself read for the night d (cortex/stage.ts: the latest state before d)
   const r = await db.execute({
     sql: "SELECT state FROM regime_daily WHERE market = ? AND d < ? ORDER BY d DESC LIMIT 1",

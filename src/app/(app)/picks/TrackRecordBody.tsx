@@ -12,6 +12,7 @@ import { ProfileSwitch } from "./PickTabs";
 import { SuccessStrip } from "./SuccessStrip";
 import { pickProfilesConfig } from "./data";
 import { PicksEmptyArt } from "./EmptyArt";
+import { ReplayCheck } from "./ReplayCheck";
 import {
   EMPTY_TRACK_SENTENCE,
   TRACK_PURPOSE,
@@ -133,6 +134,8 @@ export async function TrackRecordBody({
           <p className="m-0 mt-1 text-text-muted">{VS_MARKET_HELP}</p>
         </section>
       ) : null}
+
+      {await ReplayCheck({ env })}
 
       {!model.masked && model.rows.length > 0 ? <SimulatedLabel /> : null}
 

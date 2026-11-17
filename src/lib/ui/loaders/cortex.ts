@@ -38,6 +38,7 @@ import {
   leaderMap,
   type LeaderRow as LearnLeaderRow,
 } from "@/lib/cortex/learn/store";
+import { WARM_EVENT_SEQ } from "@/lib/cortex/learn/warmConst";
 import { FAMILY_WORD, CLUSTER_WORD } from "@/lib/cortex/phrases";
 import { formatDay, formatInstant, isoWeek, MISSING } from "@/lib/view/format";
 import {
@@ -143,6 +144,8 @@ export type LearnerView = {
   weekly: { day: string; words: string } | null;
   /** The duel in plain words, with "chance of luck about 1 in N"; null before any result. */
   duelText: string | null;
+  /** D-1078: one line when past sessions were replayed into the scorecard (warm start); else null. */
+  warmStartText: string | null;
   /** Events of the last 30 sessions, newest first (Owner only; a masked viewer sees the count). */
   events: { day: string; words: string }[];
   eventCount: number;
@@ -522,6 +525,7 @@ function safeParse(s: unknown): unknown {
 
 const LEARN_EVENTS_DAYS = 45; // threshold-ok: calendar days that hold the last 30 sessions
 const LEARN_EVENTS_MAX = 30; // threshold-ok: event lines listed
+const WARM_START_DAYS = 200; // threshold-ok: calendar days that hold the 120 sessions a warm start may cover
 const ISO_DATE_LEN = 10; // threshold-ok: the date part of an ISO instant
 const HIDDEN_KINDS = new Set(["scorecard", "placebo"]);
 
@@ -573,6 +577,21 @@ export async function loadLearnerView(
       words: o.masked ? "The weekly re-weighting ran." : (w?.words ?? ""),
     };
   }
+  // D-1078: nights the warm start replayed from the price history (events carry the count)
+  const warmEvents = await soft(
+    () => eventsSince(db, o.market, dayMinus(o.lastD ?? asOf, WARM_START_DAYS), asOf),
+    [],
+  );
+  const warmNights = warmEvents
+    .filter((e) => e.seq === WARM_EVENT_SEQ && e.kind === "scorecard")
+    .reduce((n, e) => {
+      const v = (e.evidence as { warmStart?: unknown; nights?: unknown } | null) ?? {};
+      return v.warmStart === true && typeof v.nights === "number" ? n + v.nights : n;
+    }, 0);
+  const warmStartText =
+    warmNights === 0
+      ? null
+      : `Learning evidence includes ${warmNights} past sessions replayed from the price history (as of each evening), so ${weeklyD === null ? "the next weekly run" : "each weekly run"} can change weights.`;
   const rows = await soft(() => compareRowsSince(db, o.market, startD, asOf), []);
   let duelText: string | null = null;
   if (rows.length > 0) {
@@ -596,6 +615,7 @@ export async function loadLearnerView(
     leaders: leaderList,
     weekly,
     duelText,
+    warmStartText,
     events: o.masked ? [] : shown.map((e) => ({ day: dayOf(e.d), words: e.words })),
     eventCount: shown.length,
   };
