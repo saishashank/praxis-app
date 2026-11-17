@@ -1,10 +1,10 @@
 # M21 exit evidence: UI residuals and Owner tools (V3)
 
-Design: `docs/M21_design.md`. Requirements: `docs/M21_requirements.md`. The section headings below are the exit checklist of the design (section "Exit checklist"). This file was completed by task Z on the branch `v3/m21-z` (`build` with every M21 task merged). **"to be filled at push"** marks the only values that need a push and a CI run; nothing else is open in this file. **Every Playwright spec was written against the seed states and the page registries and was NOT run locally**: a Next production build fails inside `wt-*` worktrees (the node_modules junction), so each e2e spec is verified by the CI `e2e` job only (section 11).
+Design: `docs/M21_design.md`. Requirements: `docs/M21_requirements.md`. The section headings below are the exit checklist of the design (section "Exit checklist"). This file was completed by task Z on the branch `v3/m21-z` (`build` with every M21 task merged). The values that needed a push and a CI run are filled in (run 44024571945). **Every Playwright spec was written against the seed states and the page registries and was NOT run locally**: a Next production build fails inside `wt-*` worktrees (the node_modules junction), so each e2e spec is verified by the CI `e2e` job only (section 11).
 
 ## §0 Gate
 
-The CI run that proved M20 green on `build` before the first M21 merge (D-1200): run **43347157615** on commit `6c556e7a`. The final CI run on the pushed head: **to be filled at push**.
+The CI run that proved M20 green on `build` before the first M21 merge (D-1200): run **43347157615** on commit `6c556e7a`. The final CI run on the pushed head: run **44024571945** on commit `432a4df3`, every job green. The e2e job first ran the AT-82 walk in CI and found real faults, fixed in D-1330 (unmute seed id, export tap targets, Blueprint branch tests), D-1331 (the internal-code patterns in their own module so the walk can load them), D-1332 (CSV file input names, opaque card references for masked roles, rich seed OR IGNORE) and D-1333 (every sideways-scrolling table box is a focusable labelled region); the runs in between were 43992252704, 44002592203, 44008882224 and 44017363748.
 
 ## §1 Cross-check (UXN-319, D-1201)
 
@@ -86,7 +86,7 @@ Opus review notes for each **F** task: the review fixes of A1, A2, B1, B3, E1 an
 | --- | --- |
 | Turso at or under 20 % of the free plan | every new statement is a key probe or a bounded keyset read with a `rows-ok:` comment; the proxy's one cached config read per instance per 60 s (D-1215); the measured Usage figure after the deploy: Owner, read-only |
 | Zero `OFFSET` | `tests/security/noOffsetPaging.test.ts` at zero exceptions |
-| No staging path, `ASX_LIVE` off, $0, no secret | no staging workflow touched; `worker/` not edited; no new provider; no credential field (`noCredentialField.test.ts`); gitleaks on the remote run: to be filled at push |
+| No staging path, `ASX_LIVE` off, $0, no secret | no staging workflow touched; `worker/` not edited; no new provider; no credential field (`noCredentialField.test.ts`); gitleaks on the remote run: clean (run 44024571945, secrets job green) |
 | Decision index, config reference, architecture regenerated | `node scripts/ci/decision-index.mjs` (848 decisions in `docs/V2_decisions.md`), `node scripts/ci/config-reference.mjs --check`, `node scripts/architecture/generate.mjs` (548 elements, 648 edges), all re-run on the exit tree |
 | Schema pins at 38 | the schema pins read 38 since 0038 (`tests/backup/core.test.ts`, `tests/db/0038_m21_owner_tools.test.ts`) |
 | Market literals at 0 | `npm run test:market-literals`: 0 |
@@ -107,7 +107,7 @@ Deviations from the design, each decided and recorded:
 
 ## §10 BUILD_SETUP section 9
 
-"V3 current milestone" = M21 done; "V3 last step done / next step" = M21 exit / M22 requirements extract. Written by the orchestrator after the final CI run is green: **to be filled at push**.
+"V3 current milestone" = M21 done; "V3 last step done / next step" = M21 exit / M22 requirements extract. Written by the orchestrator after the final CI run was green (run 44024571945, 2026-11-17).
 
 ## §11 Not verified locally
 
