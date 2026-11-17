@@ -11,6 +11,17 @@
 // carries a host, URL or path (SEC-110). The error message is fixed for the same reason.
 import { appendFileSync } from "node:fs";
 
+/**
+ * The three LLM provider hosts (M22 L1, LLM-077, D-1401): a recorded night that tried a model call fails at once. The
+ * recorded mode already refuses every non-loopback host; naming them here also keeps staging off them and gives a test
+ * (tests/security/liveProviderSites.test.ts) one list to compare with the adapters' endpoints.
+ */
+export const LLM_PROVIDER_HOST_SUFFIXES = Object.freeze([
+  "generativelanguage.googleapis.com",
+  "api.groq.com",
+  "openrouter.ai",
+]);
+
 /** Host suffixes that staging must never reach (the host itself and every subdomain). */
 export const BLOCKED_HOST_SUFFIXES = Object.freeze([
   "asx.com.au",
@@ -19,6 +30,7 @@ export const BLOCKED_HOST_SUFFIXES = Object.freeze([
   "yahoo.net",
   "yahooapis.com",
   "yimg.com",
+  ...LLM_PROVIDER_HOST_SUFFIXES,
 ]);
 
 /** @param {string} host */

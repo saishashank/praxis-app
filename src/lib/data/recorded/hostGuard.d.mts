@@ -1,3 +1,4 @@
+export const LLM_PROVIDER_HOST_SUFFIXES: readonly string[];
 export const BLOCKED_HOST_SUFFIXES: readonly string[];
 export function isBlockedHost(host: string): boolean;
 export function isLoopbackHost(host: string): boolean;

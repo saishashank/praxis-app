@@ -190,7 +190,6 @@ describe("the registry (D-1445)", () => {
 
   it("the stubs pass every value on every database, including a failing one, until their task owns them", async () => {
     const stubs = [
-      ["llm_live_roles", liveRolesGuard, ["R1", "words"]],
       ["minilm_enabled", minilmGuard, "on"],
       ["regime_altinputs_enabled", regimeAltGuard, "on"],
       ["intraday_sweep_enabled", sweepGuard, "on"],
@@ -201,6 +200,13 @@ describe("the registry (D-1445)", () => {
       expect(await guard(throwing("down"), value), key).toBeNull();
       expect(await switchRefusal(main, key, value), key).toBeNull();
     }
+  });
+
+  it("llm_live_roles is owned by L1: registered and no longer a stub (tests/config/liveRolesGuard.test.ts)", async () => {
+    expect(GUARDS.llm_live_roles).toBe(liveRolesGuard);
+    // no bake-off PASS is recorded in the repository: adding any job is refused, emptying the list passes
+    expect(await switchRefusal(main, "llm_live_roles", ["R1"])).not.toBeNull();
+    expect(await switchRefusal(main, "llm_live_roles", [])).toBeNull();
   });
 
   it("an unguarded key, an unknown key and a prototype name pass", async () => {

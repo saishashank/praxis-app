@@ -7,9 +7,14 @@
 export type RosterStatus = "verified" | "unverified" | "retired";
 export type RosterProvider = "google" | "groq" | "openrouter" | "github-models";
 
+/** LLM-080 (D-1408): model size class. small: 20B or less, or "lite"/"instant"; medium: about 27-70B, or "flash"; large: 100B or more, or "pro". */
+export type ModelTier = "small" | "medium" | "large";
+
 export type RosterEntry = {
   provider: RosterProvider;
   modelId: string;
+  /** Size class (D-1408); null for a provider-wide retired entry. A refresh must set it on every new row. */
+  tier: ModelTier | null;
   roles: readonly string[];
   limits: { rpm: number | null; rpd: number | null; tpm: number | null };
   trainsOnPrompts: boolean | null;
@@ -39,6 +44,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "google",
     modelId: "gemini-2.5-pro",
+    tier: "large",
     roles: ["R3", "R6"],
     limits: NO_LIMITS,
     trainsOnPrompts: true,
@@ -52,6 +58,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "google",
     modelId: "gemini-2.5-flash",
+    tier: "medium",
     roles: ["R2"],
     limits: NO_LIMITS,
     trainsOnPrompts: true,
@@ -65,6 +72,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "google",
     modelId: "gemini-3.5-flash-lite",
+    tier: "small",
     roles: ["R1"],
     limits: NO_LIMITS,
     trainsOnPrompts: true,
@@ -78,6 +86,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "google",
     modelId: "gemini-3.8-flash",
+    tier: "medium",
     roles: ["R2"],
     limits: NO_LIMITS,
     trainsOnPrompts: true,
@@ -91,6 +100,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "groq",
     modelId: "openai/gpt-oss-120b",
+    tier: "large",
     roles: ["R2", "R3", "R6"],
     limits: { rpm: 30, rpd: 1000, tpm: 8000 }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: false,
@@ -104,6 +114,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "groq",
     modelId: "openai/gpt-oss-20b",
+    tier: "small",
     roles: ["R1", "R2", "R6"],
     limits: { rpm: 30, rpd: 1000, tpm: 8000 }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: false,
@@ -117,6 +128,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "groq",
     modelId: "qwen/qwen3.8-27b",
+    tier: "medium",
     roles: ["R2", "R6"],
     limits: { rpm: 30, rpd: 1000, tpm: 8000 }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: false,
@@ -130,6 +142,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "groq",
     modelId: "llama-3.1-8b-instant",
+    tier: "small",
     roles: ["R1"],
     limits: NO_LIMITS,
     trainsOnPrompts: false,
@@ -143,6 +156,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "openrouter",
     modelId: "qwen/qwen3.8-27b:free",
+    tier: "medium",
     roles: ["R2"],
     limits: { rpm: 20, rpd: 50, tpm: null }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: null,
@@ -157,6 +171,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "google",
     modelId: "gemini-2.0-flash",
+    tier: "medium",
     roles: [],
     limits: NO_LIMITS,
     trainsOnPrompts: null,
@@ -170,6 +185,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "google",
     modelId: "gemini-2.0-flash-lite",
+    tier: "small",
     roles: [],
     limits: NO_LIMITS,
     trainsOnPrompts: null,
@@ -183,6 +199,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "groq",
     modelId: "llama-3.3-70b-versatile",
+    tier: "medium",
     roles: [],
     limits: NO_LIMITS,
     trainsOnPrompts: null,
@@ -196,6 +213,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "github-models",
     modelId: "*",
+    tier: null,
     roles: [],
     limits: NO_LIMITS,
     trainsOnPrompts: null,
@@ -207,6 +225,41 @@ export const ROSTER: readonly RosterEntry[] = [
     note: "GitHub Models retired 2026-07-30 (spec 03 / LLM-070); no adapter exists.",
   },
 ];
+
+/** Cheapest first (D-1408): the chain of a role is its passing models in this order, then roster order. */
+export const TIER_RANK: Readonly<Record<ModelTier, number>> = { small: 0, medium: 1, large: 2 };
+
+/** The roles the bake-off verdicts are kept for (D-1404): R3 and R5 are gated by the words verdict (D-1402). */
+export type GateRole = "R1" | "R2" | "R6" | "R7" | "words";
+export const GATE_ROLES: readonly GateRole[] = ["R1", "R2", "R6", "R7", "words"];
+
+/** The verdict a router role is gated by: the words phase (R3 wording, R5 narrative) has one switch and one verdict. */
+export function gateOf(role: string): GateRole | null {
+  if (role === "R3" || role === "R5") return "words";
+  return (GATE_ROLES as readonly string[]).includes(role) ? (role as GateRole) : null;
+}
+
+/** Which tiers each role may use (D-1408). The words phase follows R3 and R5. */
+export const ROLE_TIERS: Readonly<Record<string, readonly ModelTier[]>> = {
+  R1: ["small", "medium"],
+  R2: ["medium", "large", "small"],
+  R3: ["small", "medium"],
+  R5: ["small", "medium"],
+  R6: ["large", "medium"],
+  R7: ["large"],
+  words: ["small", "medium"],
+};
+
+/** Plain words for the roles in every Owner-read text (D-1402, D-922): never the code. */
+export const ROLE_WORDS: Readonly<Record<string, string>> = {
+  R1: "announcement triage",
+  R2: "claim extraction",
+  R3: "review wording",
+  R5: "daily summary wording",
+  R6: "case writing",
+  R7: "Committee judge",
+  words: "plain-words writing",
+};
 
 /** Is this provider/model usable on a route? Unknown ids and retired ids are not. */
 export function isRoutable(provider: string, modelId: string): boolean {

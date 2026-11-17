@@ -44,6 +44,8 @@ jobs:
       - run: npm run test:routes
       - name: Known-route list is current (M21 A2, D-1210; run gen-app-routes.mjs --write after adding a page or route)
         run: node scripts/routes/gen-app-routes.mjs --check
+      - name: Bake-off index is current (M22 L1, LLM-077; run bakeoff-index.mjs --write after a report is added)
+        run: npm run test:bakeoff-index
       - run: npm run test:hygiene
       - name: No internal code in text an Owner reads (D-922, D-1233; allow-list needs a reason)
         run: npm run test:internal-codes

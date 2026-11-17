@@ -1,11 +1,12 @@
 // @vitest-environment node
-// M22 A2 (D-1401, D-1445 seam; AT-80 defaults): the one place every night-time CLI takes its routers from. In A2 it is
-// rules-only: no provider, no network, one logged rules-only row per call. L1 later points it at the factory.
+// M22 A2 (D-1401, D-1445 seam; AT-80 defaults), pointed at the factory by L1: the one place every night-time CLI takes its
+// routers from. With no list read (or an empty one) it is rules-only: no provider, no network, one logged rules-only row
+// per call. The live cases are in tests/llm/factory.test.ts and tests/acceptance/v3/at80Routes.test.ts.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultAgentParams } from "@/lib/agents/params";
-import { nightlyLlm } from "@/lib/llm/nightlyLlm";
+import { loadNightLlm, nightlyLlm } from "@/lib/llm/nightlyLlm";
 import { cleanupTempDbs, freshDb, ROOT } from "../db/helpers";
 import { fixture, request } from "./helpers";
 
@@ -54,10 +55,24 @@ describe("the seam is the only router source of the night CLIs, and builds nothi
     }
   });
 
-  it("nightlyLlm.ts has no live mode and no provider construction in A2", () => {
+  it("nightlyLlm.ts builds no router and no provider itself: both come from the factory (L1)", () => {
     const text = src("src/lib/llm/nightlyLlm.ts");
-    expect(text).not.toMatch(/mode:\s*"(live|mock)"/);
-    expect(text).not.toMatch(/createLiveProvider|createMockProvider/);
-    expect(text).toMatch(/mode:\s*"rules-only"/);
+    expect(text).not.toMatch(/mode:\s*"(live|mock|rules-only)"/);
+    expect(text).not.toMatch(/createLiveProvider|createMockProvider|createRouter/);
+    expect(text).toContain('from "./factory"');
+  });
+
+  it("a list that is absent, null or empty keeps every role rules-only; a failed read does too", async () => {
+    const db = await freshDb("main");
+    const base = { db, params: defaultAgentParams(), kbVersion: "kb1", env: { GROQ_API_KEY: "k" } };
+    for (const liveRoles of [undefined, null, []] as const) {
+      const llm = nightlyLlm({ ...base, liveRoles });
+      expect(llm.providers).toEqual([]);
+      expect(llm.routerFor("R6").mode).toBe("rules-only");
+    }
+    const failing = { ...base, db: { execute: () => Promise.reject(new Error("down")) } as never };
+    const failed = await loadNightLlm(failing);
+    expect(failed.status.liveRoles).toBeNull();
+    expect(failed.routerFor("R6").mode).toBe("rules-only");
   });
 });

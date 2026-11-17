@@ -980,3 +980,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1457 | Reflection reservation (task A2, D-1411): reserveAfterLeft(stage, params, market, usage, reflectionReserve = 0) adds the reserve (limited to the R6 cap still... |
 | D-1458 | Guard registry (task A2, D-1445): GUARDS is a Partial<Record<ConfigKey, Guard>> (only guarded keys appear; a total record over all keys would be noise), Guar... |
 | D-1459 | Nightly seam (task A2, D-1401): src/lib/llm/nightlyLlm.ts exports nightlyLlm(ctx) giving routerFor(role), providers and store; it is rules-only and builds no... |
+| D-1460 | Factory is synchronous over a pre-read list (task L1, D-1401): routerFor(role, ctx), liveRoutes(ctx) and routesStatus(ctx) take ctx.liveRoles already read (r... |
+| D-1461 | Chain rules (task L1, D-1401, D-1408): a passing model joins a role's chain only when its roster row is not retired, trainsOnPrompts is exactly false (unknow... |
+| D-1462 | Role words and gates (task L1, D-1402): ROLE_WORDS (in roster.ts): |
+| D-1463 | Health line (task L1, D-1446): src/lib/health/llmRoutes.ts shows one line per switched-on job, or one calm line when none is; it is computed without a key ch... |
+| D-1464 | Index and guard details (task L1, D-1403, D-1404): per role the newest covering report wins by its Date, then its Run id (numeric-aware), then a FAIL over a... |
