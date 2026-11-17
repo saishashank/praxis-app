@@ -15,6 +15,7 @@ import { scriptDb } from "@/lib/db/scriptClient.mjs";
 import { loadAgentParams } from "@/lib/agents/params";
 import { CONFIG_KEYS } from "@/lib/config/keys";
 import { marketDate } from "@/lib/data/calendar";
+import { readLiveRoles, routesStatus } from "@/lib/llm/factory";
 import { nightlyLlm, type NightCtx } from "@/lib/llm/nightlyLlm";
 import { HOME_MARKET, HOME_TZ } from "@/lib/market/homeMarket.mjs";
 import { reflectNight, type ReflectLlm, type ReflectResult } from "./reflect";
@@ -45,13 +46,19 @@ function flag(args: readonly string[], name: string): string | null {
 }
 
 /**
- * The one place the reflection stage asks whether its role is live. Until tasks L1 and L4 ship the factory wiring this answers
- * "no": the night then writes a `not_written` row per settled pick and calls no model. Task L4 replaces this body with the
- * factory's `routesStatus(ctx)` for the case-writing role (the same single pass that enables the steelman, D-1424) and points
- * the nightly seam at the factory; nothing else in this file changes.
+ * The one place the reflection stage asks whether its role is live (D-1424, D-1492): the factory's decision for the
+ * case-writing role over the list the CLI read, the same single pass that enables the steelman. An unreadable list is not live.
  */
-export function routesLive(): { R6: boolean } {
-  return { R6: false };
+export function routesLive(ctx: Pick<NightCtx, "liveRoles" | "env" | "index" | "roster"> = {}): {
+  R6: boolean;
+} {
+  const status = routesStatus({
+    liveRoles: ctx.liveRoles,
+    env: ctx.env ?? process.env,
+    index: ctx.index,
+    roster: ctx.roster,
+  });
+  return { R6: status.roles.find((r) => r.role === "R6")?.live === true };
 }
 
 /** The seam's router for the case-writing role. */
@@ -141,7 +148,13 @@ export async function reflectMain(
       return 0;
     }
     const params = await loadAgentParams(db);
-    const ctx: NightCtx = { db, params, kbVersion: params.llm.injectionPhrasesVersion };
+    // D-1460: a failed read is null, which keeps the role rules-only.
+    const ctx: NightCtx = {
+      db,
+      params,
+      kbVersion: params.llm.injectionPhrasesVersion,
+      liveRoles: await readLiveRoles(db),
+    };
     const llm = (deps.llm ?? nightReflectLlm)(ctx);
     const live = await (deps.routes ?? routesLive)(ctx);
     const r = await reflectNight(db, {

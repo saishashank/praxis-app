@@ -175,9 +175,12 @@ export function routesStatus(
 
 export type RouterChoice = { router: LlmRouter; route: RoleRoute };
 
+/** A restriction of the chain by provider id (M22 L4, D-1466): only this one, and/or none of these. */
+export type ProviderSelect = { readonly only?: string; readonly avoid?: readonly string[] };
+
 export type NightRoutes = {
-  /** A fresh router per call (its own cool-down state), all over the same call log. */
-  routerOf: (role: Role) => RouterChoice;
+  /** A fresh router per call (its own cool-down state), all over the same call log; `select` narrows its chain by provider id. */
+  routerOf: (role: Role, select?: ProviderSelect) => RouterChoice;
   /** Every live provider of the night (shared by the routers); empty while rules-only. */
   providers: readonly LlmProvider[];
   status: RoutesStatus;
@@ -223,13 +226,19 @@ export function liveRoutes(ctx: FactoryCtx): NightRoutes {
       return route;
     }),
   };
-  const routerOf = (role: Role): RouterChoice => {
+  const routerOf = (role: Role, select?: ProviderSelect): RouterChoice => {
     const p = plans.get(role)!;
     const { candidates, ...route } = p;
-    const chain = candidates.flatMap((c) => {
-      const prov = providers.get(`${c.entry.provider}\u0000${c.entry.modelId}`);
-      return prov ? [prov] : [];
-    });
+    const chain = candidates
+      .flatMap((c) => {
+        const prov = providers.get(`${c.entry.provider}\u0000${c.entry.modelId}`);
+        return prov ? [prov] : [];
+      })
+      .filter(
+        (prov) =>
+          (select?.only === undefined || prov.id === select.only) &&
+          !(select?.avoid ?? []).includes(prov.id),
+      );
     if (!route.live || chain.length === 0) {
       return {
         route:

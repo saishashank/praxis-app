@@ -6,7 +6,13 @@
 import type { Client } from "@libsql/client";
 import type { AgentParams } from "@/lib/agents/params";
 import type { Role } from "./budget";
-import { liveRoutes, readLiveRoles, type FactoryCtx, type RoutesStatus } from "./factory";
+import {
+  liveRoutes,
+  readLiveRoles,
+  type FactoryCtx,
+  type ProviderSelect,
+  type RoutesStatus,
+} from "./factory";
 import type { LlmProvider } from "./providers";
 import type { LlmRouter } from "./router";
 import { DbStore, type LlmStore } from "./store";
@@ -26,7 +32,7 @@ export type NightCtx = {
 
 export type NightLlm = {
   /** A router for one role; each call returns a fresh router (its own cool-down state), all over the same call log. */
-  readonly routerFor: (role: Role) => LlmRouter;
+  readonly routerFor: (role: Role, select?: ProviderSelect) => LlmRouter;
   /** The providers the routers use: none while rules-only. */
   readonly providers: readonly LlmProvider[];
   /** The call log the budget reservations read (the store the routers write to). */
@@ -49,7 +55,7 @@ export function nightlyLlm(ctx: NightCtx): NightLlm {
     roster: ctx.roster,
   });
   return {
-    routerFor: (role) => routes.routerOf(role).router,
+    routerFor: (role, select) => routes.routerOf(role, select).router,
     providers: routes.providers,
     store,
     status: routes.status,

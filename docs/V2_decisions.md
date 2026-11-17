@@ -1031,3 +1031,9 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1508 | Confirmation (E3, D-1435, D-524, AT-79): confirmCall (one click on the proposal shown) and confirmTypedCall (the editable form: code, direction, date, horizo... |
 | D-1509 | Seed proposals and boundary (E3, D-1435, D-543): scripts/experts/call-proposals.mjs --seed <folder> [--dry-run] [--universe <file>] re-extracts a proposal fo... |
 | D-1510 | L5 merge (orchestrator): the onnxruntime-node pin and its lock-file regeneration are left out of the merge. |
+| D-1511 | Nightly order (task L4, D-1417, D-1460): after the picks, scripts/arena/signals.mjs runs, each in its own bundle and each soft (one degraded line, exit code... |
+| D-1512 | Workers AI stays unwired (task L4, D-1476, D-1413): the factory still passes no dailyNeurons, so a Workers AI route is no_key and neither reads a secret nor... |
+| D-1513 | Model keys and the stored copy (task L4, D-1412): the three model-key secret names are NOT in arena-signals.yml in this task. |
+| D-1514 | MiniLM step (task L5 hand-off, D-1504, D-1510): minilmMain(["shadow", "--model", <path>, "--vocab", <path>, "--date"?]) runs only when both models/minilm/mod... |
+| D-1515 | Reflection reservation and the selection (task L4, D-1493, D-1466): steelmanMain computes reflectionReserve(db, market, d) and passes it through steelmanNigh... |
+| D-1516 | Trial wiring (task C2 hand-off): trialMain(["prereg"]) before and trialMain(["result"]) after committeeMain, each forward-only and soft. |

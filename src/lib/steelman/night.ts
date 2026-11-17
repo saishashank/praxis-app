@@ -51,6 +51,8 @@ export type NightOptions = {
   readonly llmParams: LlmParams;
   readonly keys: SteelmanKeys;
   readonly llm: SteelmanLlm;
+  /** Tokens the pick reflections still need from the writer role tonight (D-1493); absent = 0. */
+  readonly reflectionReserve?: number;
   readonly calendar: readonly CalendarRow[];
   /** ISO UTC time stamped on every row written. */
   readonly now: string;
@@ -250,6 +252,7 @@ export async function steelmanNight(db: Exec, o: NightOptions): Promise<NightRes
                 criticRouterFor: o.llm.criticRouterFor,
                 providers: o.llm.providers,
                 store: o.llm.store,
+                reflectionReserve: o.reflectionReserve,
               },
               subject,
               pack,

@@ -16,6 +16,7 @@ import { decisionCutoffUtc } from "@/lib/agents/decisionView";
 import { loadAgentParams, type AgentParams } from "@/lib/agents/params";
 import { CONFIG_KEYS } from "@/lib/config/keys";
 import { marketDate } from "@/lib/data/calendar";
+import { readLiveRoles, routesStatus } from "@/lib/llm/factory";
 import { nightlyLlm, type NightCtx } from "@/lib/llm/nightlyLlm";
 import { HOME_MARKET, HOME_TZ } from "@/lib/market/homeMarket.mjs";
 import type { CommitteeLlm } from "./debate";
@@ -40,9 +41,9 @@ export type CommitteeCliDeps = {
   readonly openDb?: (url: string, token: string | undefined) => Client;
   readonly nowMs?: () => number;
   readonly out?: (line: string) => void;
-  /** The model side. Default: the nightly seam's routers (rules-only until task L1 points the seam at the factory). */
+  /** The model side. Default: the nightly seam's routers (the factory's routers). */
   readonly llm?: (ctx: NightCtx) => CommitteeLlm;
-  /** Which of R6 and R7 are live. Default: `routesLive` (none yet). */
+  /** Which of R6 and R7 are live. Default: `routesLive` (the factory's decision). */
   readonly routes?: (ctx: NightCtx) => Promise<LiveRoles> | LiveRoles;
 };
 
@@ -54,20 +55,43 @@ function flag(args: readonly string[], name: string): string | null {
 }
 
 /**
- * The one place the Committee asks whether its two roles are live. Until task L1 ships the factory this answers "neither":
- * the night then writes a `skipped_models` row per shortlisted signal and calls no model. Tasks L1 and L4 replace this body
- * with the factory's `routesStatus(ctx)` (R6 and R7 both passing their bake-off and listed in `llm_live_roles`, D-1417) and
- * make the nightly seam build the live routers; nothing else in this folder changes.
+ * The one place the Committee asks whether its two roles are live (D-1417, D-1466): the factory's decision (`routesStatus`)
+ * over the list the CLI read, so a role is live only when it is listed, its bake-off passed and its key is present. An
+ * unreadable list (`ctx.liveRoles` null or absent) is neither live; the night then writes `skipped_models` rows and calls
+ * no model.
  */
-export function routesLive(): LiveRoles {
-  return { R6: false, R7: false };
+export function routesLive(
+  ctx: Pick<NightCtx, "liveRoles" | "env" | "index" | "roster"> = {},
+): LiveRoles {
+  const status = routesStatus({
+    liveRoles: ctx.liveRoles,
+    env: ctx.env ?? process.env,
+    index: ctx.index,
+    roster: ctx.roster,
+  });
+  const live = (role: "R6" | "R7"): boolean =>
+    status.roles.find((r) => r.role === role)?.live === true;
+  return { R6: live("R6"), R7: live("R7") };
 }
 
-/** The seam's rules-only routers shaped to the Committee: one router per role, any selection (nothing is called). */
+/**
+ * The seam's routers shaped to the Committee: one router per role and selection. `select` (`only`, `avoid`, by provider id,
+ * D-1418) narrows the chain; null when no provider of the night remains after it (rules-only nights have none).
+ */
 export function nightCommitteeLlm(ctx: NightCtx): CommitteeLlm {
   const night = nightlyLlm(ctx);
   return {
-    routerFor: (role) => night.routerFor(role),
+    routerFor: (role, select) => {
+      if (select !== undefined) {
+        const left = night.providers.filter(
+          (p) =>
+            (select.only === undefined || p.id === select.only) &&
+            !(select.avoid ?? []).includes(p.id),
+        );
+        if (left.length === 0) return null;
+      }
+      return night.routerFor(role, select);
+    },
     providers: night.providers,
     store: night.store,
   };
@@ -157,7 +181,13 @@ export async function committeeMain(
       return 0;
     }
     const params = await loadAgentParams(db);
-    const ctx: NightCtx = { db, params, kbVersion: params.llm.injectionPhrasesVersion };
+    // D-1460: a failed read is null, which keeps both roles rules-only.
+    const ctx: NightCtx = {
+      db,
+      params,
+      kbVersion: params.llm.injectionPhrasesVersion,
+      liveRoles: await readLiveRoles(db),
+    };
     const llm = (deps.llm ?? nightCommitteeLlm)(ctx);
     const live = await (deps.routes ?? routesLive)(ctx);
     const r = await committeeNight(db, {
