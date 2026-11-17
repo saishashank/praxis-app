@@ -16,6 +16,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import { LEDGER_PATH } from "@/lib/research/ledgerFile";
 import { runResearchNight, type ResearchStep } from "@/lib/research/night";
 import { syncLedger } from "@/lib/research/steps/lookSync";
+import { sectorIndexStep } from "@/lib/research/steps/sectorIndex";
 import { cleanupTempDbs } from "../../db/helpers";
 import { STEELMAN_OWN, MIGRATION_OWNED, at32World, combineTables } from "./at32World";
 
@@ -128,6 +129,11 @@ const M23_STEP_WRITERS: Array<(db: Client) => Promise<void>> = [
       "docs/research/prereg/zz.json": plan,
     };
     await syncLedger(db, { market: "AU", now: TS }, { read: (p) => files[p] ?? null });
+  },
+  // S1 (D-1670...D-1674): the real sector index step on the world's last session. The world has no classification, so it
+  // writes no row here (AT-75 series proves the rows on a ZZ fixture); the run proves its reads touch nothing else.
+  async (db) => {
+    await sectorIndexStep.run(db, { market: "AU", d: "2031-04-08", now: TS });
   },
 ];
 

@@ -1132,3 +1132,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1667 | Offline ledger (A2): docs/research/registry.json is {format: 1, entries: [...]}, each entry {seq, item, lineage, market, sha, preregPath, lookedAt?, verdict?... |
 | D-1668 | Ledger import (A2): steps/lookSync.ts reads only the committed ledger and the files it names (a path with .. or an absolute path is not read), for the night'... |
 | D-1669 | Names and the page list (A2): names.ts holds a plain name and a kind (live or offline) per lineage (no market, no code); a test fails on a ledger or writer l... |
+| D-1670 | Series arithmetic (S1, D-1632): a member's return is round((close - previous close) x 1,000,000 / previous close), half away from zero, in whole ppm; a membe... |
+| D-1671 | Minimum members (S1, D-1634): the series keeps every group that has at least one counted member and stores n_members; the floor of 3 members is applied by th... |
+| D-1672 | Step reads (S1, D-1641): per night and enabled market, one probe for a row on the session or later (forward only and idempotent: a repeat or an earlier night... |
+| D-1673 | Panel hand-off for R3 (S1, D-1633, D-1634): sectorSeries(days) (oldest first, each day {d, close, members} with that day's code-to-group map, so a code that... |
+| D-1674 | Fixture (S1): tests/research/sectorFixture.ts holds a 3-group, 6-code, 5-session synthetic ZZ fixture with the hand-computed returns and levels (a 61 % move... |
