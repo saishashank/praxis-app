@@ -367,7 +367,7 @@ describe("trialNight: the nightly step", () => {
     expect(await trialNight(db, stepOpts(dayOf(9)))).toEqual({ status: "finished" });
     expect(
       (await db.execute("SELECT verdict FROM holdout_look")).rows.map((r) => r.verdict),
-    ).toEqual(["FAIL"]);
+    ).toEqual(["NULL"]);
   });
 
   it("FAIL when the sample and the sessions are met and the labels carry no signal", async () => {

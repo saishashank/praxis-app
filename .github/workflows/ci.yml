@@ -51,6 +51,8 @@ jobs:
         run: npm run test:internal-codes
       - name: No market literal outside the profile seed (AT-67, MKT-107)
         run: npm run test:market-literals
+      - name: Offline research ledger is sound (M23 A2, D-1606; append-only, hashes match the frozen files)
+        run: npm run test:research-registry
       - name: Market-off proofs (AT-68 a/b/c, MKT-110; every CI run)
         run: npx vitest run tests/acceptance/v3/at68.test.ts
       - name: Licence allow-list (UXN-019)

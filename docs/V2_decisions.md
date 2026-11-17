@@ -1122,3 +1122,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1655 | Engine conventions (R1): a setup's net is in parts per million of its entry value (whole shares = floor(parcel / entry price), at least 1; one fee on each si... |
 | D-1656 | Sector IC conventions (R1): a month counts toward the floor when at least minGroupsPerMonth groups have at least minMembers members, from member counts alone... |
 | D-1657 | Report writer (R1): renderReport accepts a verdict only from PASS, NULL, INCONCLUSIVE, a 64-hex sha, and refuses any text that looks like a private path (dri... |
+| D-1665 | Registry gate (A2): preregister(db, {lineage, market, item, frozen, now}) freezes one plan per lineage and market (a plan is a JSON object stored with sorted... |
+| D-1666 | The three first writers on the gate (A2): short shadow, outside-signal state and the Committee trial freeze their plan ({hypothesis} for the first two, the s... |
+| D-1667 | Offline ledger (A2): docs/research/registry.json is {format: 1, entries: [...]}, each entry {seq, item, lineage, market, sha, preregPath, lookedAt?, verdict?... |
+| D-1668 | Ledger import (A2): steps/lookSync.ts reads only the committed ledger and the files it names (a path with .. or an absolute path is not read), for the night'... |
+| D-1669 | Names and the page list (A2): names.ts holds a plain name and a kind (live or offline) per lineage (no market, no code); a test fails on a ledger or writer l... |
