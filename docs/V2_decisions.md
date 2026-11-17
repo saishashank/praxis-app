@@ -915,3 +915,4 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1327 | Z (AT-82 walk, D-1234): e2e/m21-at82.spec.ts runs in the owner-tools-on lane (E2E_STATES=all,owner-tools-on, scenario rich) because the Owner-tool pages exis... |
 | D-1328 | Z (rendered-text exceptions): the walk does not read the page text of /blueprint (a spec browser for the Owner whose purpose is to show requirement and decis... |
 | D-1329 | Z (the U0 test): scripts/ci/ui-crosscheck.test.mjs, named in the design's U0 row, had not been written by U0; |
+| D-1330 | CI fixes after run 43992252704: the alerts-muted seed uses a 64-hex alert id (the unmute action refuses any other shape as invalid, so the e2e never reached... |

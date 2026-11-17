@@ -2,7 +2,8 @@
 // muted it (clear reason `muted`), with the mail outcome `off`, so My alerts and Settings > Alerts render a
 // muted history from stored rows. Synthetic ZZ code, fixed ids, idempotent (the unique (alert_id, seq) keeps
 // the alert rows single; the mail row is guarded by a NOT EXISTS).
-export const ALERT_ID = "e2e-alert-muted";
+// An alert id is 64 lower-case hex characters (the unmute action refuses any other shape as "invalid", D-1330).
+export const ALERT_ID = "e2ea" + "0".repeat(60);
 export const CODE = "ZZAM";
 
 /**

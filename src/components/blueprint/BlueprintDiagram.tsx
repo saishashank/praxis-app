@@ -69,7 +69,12 @@ function ExportLink({
   children: React.ReactNode;
 }) {
   return (
-    <a href={href} className="underline" data-testid={`bp-export-${id}`}>
+    // a 24 px tap target at least (WCAG 2.5.8; axe target-size), the links sit side by side
+    <a
+      href={href}
+      className="inline-flex min-h-6 min-w-6 items-center px-1 underline"
+      data-testid={`bp-export-${id}`}
+    >
       {children}
     </a>
   );
