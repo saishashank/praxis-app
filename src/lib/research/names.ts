@@ -73,7 +73,7 @@ export function lineageName(lineage: string): string {
   const hit = LINEAGE_NAMES[lineage];
   if (hit !== undefined) return hit.name;
   // a later intraday cell (D-1608): one fresh sample per quarter after a failed look
-  const q = /^intraday_stream_v1_(d{4})Q([1-4])$/.exec(lineage);
+  const q = /^intraday_stream_v1_(\d{4})Q([1-4])$/.exec(lineage);
   if (q !== null) return `Intraday stream test, fresh sample from quarter ${q[2]} of ${q[1]}`;
   return UNNAMED;
 }

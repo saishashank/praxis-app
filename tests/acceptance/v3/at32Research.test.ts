@@ -19,6 +19,8 @@ import { syncLedger } from "@/lib/research/steps/lookSync";
 import { sectorIndexStep } from "@/lib/research/steps/sectorIndex";
 import { monitorsStep } from "@/lib/research/steps/monitors";
 import { annCalibrationStep } from "@/lib/research/steps/annCalibration";
+import { labelEvalStep } from "@/lib/research/steps/labelEval";
+import { metersStep } from "@/lib/research/steps/meters";
 import { cleanupTempDbs } from "../../db/helpers";
 import { STEELMAN_OWN, MIGRATION_OWNED, at32World, combineTables } from "./at32World";
 
@@ -151,6 +153,15 @@ const M23_STEP_WRITERS: Array<(db: Client) => Promise<void>> = [
   async (db) => {
     await annCalibrationStep.run(db, { market: "AU", d: "2031-04-08", now: TS });
   },
+  // M3 (D-1720...D-1723): the real meters step (live-tested progress, the six mover rules, the intraday stream) and the real
+  // label evaluation on the world's last session; they read the Cortex, mover, intraday and golden tables and write only
+  // research_meter and the registry tables (the golden world has no halts, flags, candidates or golden labels, so no look)
+  async (db) => {
+    await metersStep.run(db, { market: "AU", d: "2031-04-08", now: TS });
+  },
+  async (db) => {
+    await labelEvalStep.run(db, { market: "AU", d: "2031-04-08", now: TS });
+  },
 ];
 
 const base = JSON.parse(readFileSync(join(__dirname, "replay-hash.baseline.json"), "utf8")) as {
@@ -225,8 +236,9 @@ describe("AT-32 (research): the M23 own-set, the seam and the complement proof (
     );
     for (const t of ["research_result", "holdout_look"])
       expect(await own(t), t).toBe(ledger.entries.filter((e) => e.verdict !== undefined).length);
-    // the archive of the golden world is empty: one meter row, "collecting", and no look of its own (T2)
-    expect(await own("research_meter"), "research_meter").toBe(1);
+    // the archive of the golden world is empty: T2 writes one meter row, "collecting", and no look of its own; M3 writes the 12
+    // live-tested rows (F1 to F6, two lines each), the 6 mover rows and the 3 label rows (no stream cell exists yet): 22 in all
+    expect(await own("research_meter"), "research_meter").toBe(22);
     expect(await own("residual_monitor"), "residual_monitor").toBeGreaterThan(0);
     for (const t of M23_OWN.filter(
       (x) =>
