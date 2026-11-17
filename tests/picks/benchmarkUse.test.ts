@@ -44,6 +44,9 @@ const NON_COMPARISON_READERS = new Set([
   "lib/ui/loaders/home.ts", // D-907: the ASX 200 line on Home, a level and its change (as the company page), not a comparison
   "lib/arena/diagnose.ts", // read-only signals diagnosis (#58): counts index rows to check regime coverage, not a comparison
   "lib/learning/dailyLoad.ts", // D-921: the day's AXJO level move, one of the mover causes ("the market moved"); a description of a day, not a comparison of a strategy with the market
+  "lib/cortex/monitors/promotion.ts", // M23 M1 (D-1615): the market-adjusted 20-session return of flagged codes, on the Cortex's own price-index basis (as its outcomes); a monitor reading, not a comparison of a strategy with the market
+  "lib/regime/alt/evaluate.ts", // M23 A2: the alt-input regime evaluation reads index levels to form its outcome on the regime reading's own basis, not a strategy comparison
+  "lib/research/meters/common.ts", // M23 M3 (D-1720): the movers meters' market-adjusted returns on the Cortex price-index basis; a count and a gross excess for a shadow meter, not a comparison
 ]);
 
 describe("DAT-235: market comparisons use the total-return series", () => {

@@ -1210,3 +1210,5 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1767 | Wording (M4, UI market wording): dates read as in the rest of the app (formatDay, "Fri 6 Nov"); no run time or run id is shown, and the "Looked at" cell is a... |
 | D-1768 | Tests of the page (M4): tests/ui/cortexResearch.test.tsx (the page rendered from the seed for each role: names, results, the 12-character fingerprint, specia... |
 | D-1769 | Reads and budget (M4, D-1641, Turso free plan): a page view adds nine statements, all keyed or bounded: the registry list (A2, LIMIT 200), the stream cell pr... |
+| D-1770 | Rollback runbook and its test at schema 40 (Z, found by the full gate): docs/runbooks/rollback-v2.md and the assertion in tests/golive/v2steps.test.tsx still... |
+| D-1771 | Two source guards fixed (Z, found by the full gate): |

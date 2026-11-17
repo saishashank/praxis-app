@@ -30,7 +30,7 @@ function harness({ code = 0, breakEntry = null } = {}) {
     loaded.push(entry);
     if (entry === breakEntry) throw new SyntaxError("did not build");
     if (entry === undefined) return { signalsMain: async () => code };
-    if (entry === "src/lib/picks/cli.ts") return { picksMain: rec("picks") };
+    if (String(entry).endsWith("picks/cli.ts")) return { picksMain: rec("picks") };
     if (entry === ENTRIES.steelman) return { steelmanMain: rec("steelman") };
     if (entry === ENTRIES.reflect) return { reflectMain: rec("reflect") };
     if (entry === ENTRIES.committee) return { committeeMain: rec("committee") };
