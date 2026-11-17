@@ -85,11 +85,6 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY_PROD }}
           OWNER_EMAIL: ${{ secrets.OWNER_EMAIL_PROD }}
           PII_HASH_KEY: ${{ secrets.PII_HASH_KEY_PROD }}
-          # M22 L4 (D-1412): the model keys, read only by the factory and only for a role listed in llm_live_roles
-          # (empty until the Owner opens it after a bake-off pass); a present key enables nothing by itself.
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
   # M8 T9 (decision 30): the staging job. The staging Worker dispatches `ref: main`. Same step as
   # production on the dispatched `main` commit (no approval record on staging) with the staging

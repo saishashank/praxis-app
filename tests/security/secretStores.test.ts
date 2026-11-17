@@ -320,7 +320,7 @@ describe("the secrets tool reads a copy of the table (scripts/secrets/rows.json)
   });
 });
 
-describe("model keys live in exactly four places (M22 L4, D-1412, LLM-077)", () => {
+describe("model keys live in exactly three places today; the signals step is pending Owner approval (M22 L4, D-1412, D-1513, LLM-077)", () => {
   const KEYS = ["GOOGLE_AI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY"];
   type Step = { name?: string; env?: Record<string, string> };
   type Job = { steps?: Step[]; env?: Record<string, string> };
@@ -343,27 +343,17 @@ describe("model keys live in exactly four places (M22 L4, D-1412, LLM-077)", () 
     return out.sort();
   };
 
-  it("only the bake-off, the smoke test, the signals step and the experts job hold them", () => {
+  it("only the bake-off, the smoke test and the experts job hold them; the signals step does not yet (D-1513)", () => {
     const places = holders();
     expect(places.map((p) => p.split("#").slice(0, 2).join("#"))).toEqual(
-      [
-        "arena-signals.yml#production",
-        "llm-bakeoff.yml#production",
-        "maintenance.yml#experts",
-        "smoke-test.yml#production",
-      ].sort(),
+      ["llm-bakeoff.yml#production", "maintenance.yml#experts", "smoke-test.yml#production"].sort(),
     );
     expect(places.some((p) => p.includes("#job-env") || p.includes("#top#"))).toBe(false);
-    expect(places).toContain("arena-signals.yml#production#Decide the session");
+    expect(places.some((p) => p.startsWith("arena-signals.yml"))).toBe(false);
   });
 
   it("no workflow outside those places even names a model key as a secret", () => {
-    const allowed = new Set([
-      "arena-signals.yml",
-      "llm-bakeoff.yml",
-      "maintenance.yml",
-      "smoke-test.yml",
-    ]);
+    const allowed = new Set(["llm-bakeoff.yml", "maintenance.yml", "smoke-test.yml"]);
     for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".yml")))
       if (!allowed.has(f))
         for (const k of KEYS)

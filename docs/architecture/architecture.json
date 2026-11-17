@@ -24101,36 +24101,6 @@
       ]
     },
     {
-      "id": "workflow:arena-signals|uses|secret:GOOGLE_AI_API_KEY",
-      "from": "workflow:arena-signals",
-      "to": "secret:GOOGLE_AI_API_KEY",
-      "kind": "uses",
-      "contract": "Reads the secret GOOGLE_AI_API_KEY from the GitHub environment (name only).",
-      "views": [
-        "security"
-      ]
-    },
-    {
-      "id": "workflow:arena-signals|uses|secret:GROQ_API_KEY",
-      "from": "workflow:arena-signals",
-      "to": "secret:GROQ_API_KEY",
-      "kind": "uses",
-      "contract": "Reads the secret GROQ_API_KEY from the GitHub environment (name only).",
-      "views": [
-        "security"
-      ]
-    },
-    {
-      "id": "workflow:arena-signals|uses|secret:OPENROUTER_API_KEY",
-      "from": "workflow:arena-signals",
-      "to": "secret:OPENROUTER_API_KEY",
-      "kind": "uses",
-      "contract": "Reads the secret OPENROUTER_API_KEY from the GitHub environment (name only).",
-      "views": [
-        "security"
-      ]
-    },
-    {
       "id": "workflow:arena-signals|uses|secret:PII_HASH_KEY_PROD",
       "from": "workflow:arena-signals",
       "to": "secret:PII_HASH_KEY_PROD",

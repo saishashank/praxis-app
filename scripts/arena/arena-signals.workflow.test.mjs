@@ -64,16 +64,7 @@ test("the database secrets appear only in env of the one deciding step, the prod
   const s = withSecrets[0];
   assert.deepEqual(
     Object.keys(s.env).filter((k) => String(s.env[k]).includes("secrets.")),
-    [
-      "TURSO_MAIN_URL",
-      "TURSO_MAIN_TOKEN",
-      "RESEND_API_KEY",
-      "OWNER_EMAIL",
-      "PII_HASH_KEY",
-      "GROQ_API_KEY",
-      "GOOGLE_AI_API_KEY",
-      "OPENROUTER_API_KEY",
-    ], // M8 T9 / D-154; M22 L4 / D-1412 the model keys
+    ["TURSO_MAIN_URL", "TURSO_MAIN_TOKEN", "RESEND_API_KEY", "OWNER_EMAIL", "PII_HASH_KEY"], // M8 T9 / D-154
   );
   assert.equal(s.env.TURSO_MAIN_URL, "${{ secrets.TURSO_MAIN_URL_PROD }}");
   assert.equal(s.env.TURSO_MAIN_TOKEN, "${{ secrets.TURSO_MAIN_TOKEN_PROD }}");
