@@ -1,7 +1,9 @@
-// CXA-003 runner (M23 R2; D-1629, D-1630, D-1685 to D-1688). Offline, no network, no database:
+// CXA-003 and CXA-009 runner (M23 R2, R3; D-1629, D-1630, D-1685 to D-1688, D-1710 to D-1715). Offline, no network, no database:
 //   node scripts/research/run-lineage.mjs --history <folder> --prereg docs/research/prereg/CXA-003.json
 //        --lineage <cxa003_... | all> --out <folder outside the repository> --calendar <index file, relative to the history folder>
 //        [--bars-dir yahoo] [--shorts-dir asic] [--ledger docs/research/registry.json] [--root <repo>] [--allow-dirty] [--no-look]
+// The CXA-009 mode is `--lineage sector_ic --prereg docs/research/prereg/CXA-009.json [--industry <listed-company file, relative to
+// the history folder>]`: it builds the industry-group series from the extract, counts the monthly blocks, and takes the one look.
 // The history folder and the output folder must lie OUTSIDE the repository (SEC-110). The run refuses a lineage that has no
 // plan entry with the hash of the committed plan file, and a lineage whose look is already in the ledger. Order of work
 // (BLD-051, D-1687): entries and floors for every lineage, development figures, the one holdout look per lineage and its
@@ -32,6 +34,7 @@ const STR_ARGS = [
   "ledger",
   "root",
   "now",
+  "industry",
 ];
 
 export function parseArgs(argv) {
@@ -96,9 +99,8 @@ function appendLedger(ledgerPath, lib, entry) {
   writeFileSync(ledgerPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
 }
 
-function loadHistory(args, lib) {
+function loadBars(args, lib) {
   const bars = path.join(args.history, args["bars-dir"] ?? "yahoo");
-  const shortsDir = path.join(args.history, args["shorts-dir"] ?? "asic");
   const calendarFile = JSON.parse(readFileSync(path.join(args.history, args.calendar), "utf8"));
   const dates = lib.sessionsFromIndexFile(calendarFile);
   const sessionOf = new Map(dates.map((d, i) => [d, i]));
@@ -117,6 +119,13 @@ function loadHistory(args, lib) {
     );
     if (s !== null) series.set(code, s);
   }
+  return { world: { dates, series }, files };
+}
+
+function loadHistory(args, lib) {
+  const { world, files } = loadBars(args, lib);
+  const series = world.series;
+  const shortsDir = path.join(args.history, args["shorts-dir"] ?? "asic");
   const shorts = new Map();
   let reports = 0;
   if (existsSync(shortsDir)) {
@@ -146,7 +155,7 @@ function loadHistory(args, lib) {
     }
     shorts.set(code, kept);
   }
-  return { world: { dates, series }, shorts, files, reports };
+  return { world, shorts, files, reports };
 }
 
 const fmt = (v) => (v === null || v === undefined ? "n/a" : Math.round(v * 100) / 100);
@@ -171,6 +180,216 @@ const noHaircutText = (figs) =>
         : `${w} below sample`,
     )
     .join("; ");
+
+const IC_UNIT = "thousandths of a rank correlation (1000 = a perfect ranking)";
+const milli = (v) => (v === null || v === undefined ? null : v * 1000);
+
+/** The CXA-009 mode (D-1714): series from the extract, the month count, then the one look. */
+async function runSectorIc(c, io) {
+  const { args, history, outDir, root, plan, planSha, preregRel, ledgerPath, ledgerLib, prov } = c;
+  const spec = plan.lineages.find((l) => l.id === "sector_ic");
+  const lib = await loadEngine(path.join("src", "lib", "research", "lineages", "cxa003.ts"));
+  const sec = await loadEngine(path.join("src", "lib", "research", "lineages", "sectorIc.ts"));
+  const names = await loadEngine(path.join("src", "lib", "research", "names.ts"));
+  io.log("loading the bars and the industry file of the history extract (read only)");
+  const { world, files } = loadBars({ ...args, history }, lib);
+  const metaDir = path.join(history, "meta");
+  const industryRel =
+    args.industry ??
+    `meta/${readdirSync(metaDir)
+      .filter((n) => /^asx_listed_.*\.json$/.test(n))
+      .sort()
+      .pop()}`;
+  const industryFile = JSON.parse(readFileSync(path.join(history, industryRel), "utf8"));
+  const groupOf = sec.parseIndustryFile(industryFile);
+  const asOf = String(industryFile.as_of ?? "");
+  const lastSession = world.dates.length - 1;
+  io.log(
+    `calendar ${world.dates.length} sessions; ${files} bar files, ${world.series.size} with bars; ${groupOf.size} codes with an industry group`,
+  );
+  const universe = new lib.Universe(world);
+  const days = sec.buildDays(world, universe, groupOf, asOf);
+  const rows = sec.seriesOfDays(days);
+  const p = {
+    lineage: "sector_ic",
+    minMembers: plan.floors.groups_min_members,
+    minGroupsPerMonth: plan.floors.groups_per_month,
+    minMonths: plan.floors.months,
+    expectedBlockMonths: plan.bootstrap.block_months,
+    alpha: plan.bootstrap.alpha,
+    replicates: plan.bootstrap.replicates,
+    masterSeed: BigInt(plan.bootstrap.seed),
+  };
+  const counted = sec.countMonths(rows, p);
+  io.log(
+    `series: ${rows.length} rows, ${new Set(rows.map((r) => r.group)).size} groups; qualifying monthly blocks (counted from member counts and dates, no outcome read) = ${counted}, floor ${p.minMonths}`,
+  );
+  if (args.noLook) {
+    io.log("--no-look: stopped after the counts; no look was taken and nothing was written");
+    return { reports: [], looks: [] };
+  }
+  const holdoutFrom = plan.holdout_from ?? "2022-01-01";
+  const lookedAt = (args.now ?? new Date().toISOString()).replace(/\.\d+Z$/, "Z");
+  const r = sec.sectorIcRun(rows, p, holdoutFrom);
+  const res = r.result;
+  const looks = [];
+  let verdict = "INCONCLUSIVE";
+  let reason;
+  if (res.status === "below_sample") {
+    reason = `${res.months} qualifying monthly blocks, the floor is ${res.floor}; no look was spent`;
+    io.log(`sector_ic: INCONCLUSIVE, ${reason}`);
+  } else {
+    verdict = res.verdict;
+    reason = res.reason;
+    appendLedger(ledgerPath, ledgerLib, {
+      item: plan.item,
+      lineage: "sector_ic",
+      market: plan.market,
+      sha: planSha,
+      preregPath: preregRel,
+      lookedAt,
+      verdict,
+      nSetups: Math.round(res.meanGroupsPerMonth * res.usedMonths),
+      nBlocks: res.usedMonths,
+      stats: {
+        meanIc: res.meanIc,
+        lowerIc: res.lowerIc,
+        alpha: res.alpha,
+        qualifyingMonths: res.months,
+        degenerateMonths: res.degenerateMonths,
+        meanGroupsPerMonth: res.meanGroupsPerMonth,
+        holdoutMeanIc: res.holdoutMeanIc,
+        holdoutMonths: res.holdoutMonths,
+        developmentMeanIc: r.developmentMeanIc,
+        developmentMonths: r.developmentMonths,
+      },
+    });
+    looks.push({
+      lineage: "sector_ic",
+      market: plan.market,
+      date: lookedAt.slice(0, 10),
+      sha: planSha,
+      verdict,
+    });
+    io.log(
+      `sector_ic LOOK: ${verdict} months=${res.usedMonths} meanIC=${fmt(milli(res.meanIc))} milli lower=${fmt(milli(res.lowerIc))} milli (alpha ${res.alpha}) holdout mean=${fmt(milli(res.holdoutMeanIc))} milli over ${res.holdoutMonths} months`,
+    );
+    const problems = ledgerLib.checkLedger(
+      ledgerLib.parseLedger(readFileSync(ledgerPath, "utf8")).entries,
+      (q) => (existsSync(path.join(root, q)) ? readFileSync(path.join(root, q), "utf8") : null),
+    );
+    if (problems.length > 0) throw new Error(`the ledger check failed: ${problems.join("; ")}`);
+  }
+  mkdirSync(outDir, { recursive: true });
+  const allLooks = ledgerLib
+    .parseLedger(readFileSync(ledgerPath, "utf8"))
+    .entries.filter((e) => e.item === plan.item && e.verdict !== undefined)
+    .map((e) => ({
+      lineage: e.lineage,
+      market: e.market,
+      date: e.lookedAt.slice(0, 10),
+      sha: e.sha,
+      verdict: e.verdict,
+    }));
+  const looked = res.status === "looked";
+  const report = {
+    item: plan.item,
+    title: names.lineageName("sector_ic"),
+    lineage: "sector_ic",
+    market: plan.market,
+    verdict,
+    hypothesis: spec.hypothesis,
+    prereg: {
+      file: preregRel,
+      sha256: planSha,
+      commit: prov.preregCommit,
+      date: prov.preregDate,
+      runnerCommit: prov.runnerCommit,
+    },
+    data: {
+      sourceClass:
+        "daily bars and the listed-company industry file of the build machine history extract (kept outside the repository)",
+      window: `${world.dates[0]} to ${world.dates[lastSession]}`,
+      universe:
+        "the top-turnover tier of the app tier rule on every session, in the industry groups of the extract's current map",
+      knownTime:
+        "a signal ends 21 sessions before the month start and an outcome starts at the month start session close; the industry map is today's map for every date",
+      caveats: [
+        "static industry: every code is in the group the extract's file gives today, for all dates",
+        "survivors only: the extract holds codes that still trade, so groups look better than they were",
+        "codes with no group, or the group Not Applic (funds and trusts), are left out",
+        "prices are split-adjusted vendor closes; dividends are not added",
+        "the backfilled series is built here and is not imported into production",
+      ],
+    },
+    split: {
+      kind: "full",
+      reason:
+        "the effect size needs about 95 monthly blocks and the months after 2021 are far fewer, so one look takes the full window; the two parts are reported and decide nothing",
+    },
+    n: {
+      setups: looked ? Math.round(res.meanGroupsPerMonth * res.usedMonths) : 0,
+      sessions: r.sessions,
+      blocks: looked ? res.usedMonths : res.months,
+      floorSetups: 0,
+      floorBlocks: p.minMonths,
+      floorMet: looked,
+    },
+    statistic: {
+      definition: `Mean over months of the rank correlation, across the month's industry groups, between each group's return over the 126 sessions that end 21 sessions before the month start and its return over the 21 sessions after the month start, less the month's group mean. A month needs at least ${p.minGroupsPerMonth} groups of at least ${p.minMembers} members; the lower bound is the one-sided stationary block-bootstrap bound (expected block ${p.expectedBlockMonths} months). ${looked ? `${res.months} months qualified, ${res.degenerateMonths} had no defined correlation; the mean group count was ${fmt(res.meanGroupsPerMonth)}. ` : ""}The development figure covers the months that start before ${holdoutFrom} and the holdout figure the months from then; both are shown beside the full figure and decide nothing.`,
+      costProfile: "none (an index figure, nothing is traded)",
+      parcel: "none",
+      control: "the other groups of the same month",
+      haircut: "none; the survivors-only caveat stands",
+    },
+    result: {
+      unit: IC_UNIT,
+      alpha: looked ? res.alpha : null,
+      rows: looked
+        ? [
+            {
+              window: "development",
+              mean: milli(r.developmentMeanIc),
+              lower: null,
+              n: r.developmentMonths,
+            },
+            {
+              window: "holdout",
+              mean: milli(res.holdoutMeanIc),
+              lower: null,
+              n: res.holdoutMonths,
+            },
+            {
+              window: "full",
+              mean: milli(res.meanIc),
+              lower: milli(res.lowerIc),
+              n: res.usedMonths,
+            },
+          ]
+        : [],
+    },
+    verdictReason: reason,
+    ...(verdict === "INCONCLUSIVE" && !looked
+      ? {
+          missingData: "enough monthly blocks to meet the floor",
+          firesLater: "not before the data holds that many; the plan hash stays the same",
+        }
+      : {}),
+    looks: allLooks,
+    refusals: [],
+    next:
+      verdict === "PASS"
+        ? "The sector tilt stays in shadow; the result is on file for the shadow path (CTX-053) after the Owner review. Nothing trades."
+        : "The sector tilt stays in shadow. No further look is allowed on this plan; any new idea is a new lineage with its own plan.",
+  };
+  writeFileSync(
+    path.join(outDir, "sector_ic.report.json"),
+    `${JSON.stringify(report, null, 2)}\n`,
+    "utf8",
+  );
+  io.log("wrote the report input (outside the repository)");
+  return { reports: [report], looks };
+}
 
 export async function run(argv, io = { log: (t) => console.log(t) }) {
   const args = parseArgs(argv);
@@ -212,6 +431,13 @@ export async function run(argv, io = { log: (t) => console.log(t) }) {
       throw new Error(`no plan entry with the hash of ${preregRel} for ${v.id}`);
   }
   const prov = provenance(root, preregRel, args.allowDirty);
+  if (asked.includes("sector_ic")) {
+    if (asked.length !== 1) throw new Error("sector_ic is run on its own");
+    return runSectorIc(
+      { args, history, outDir, root, plan, planSha, preregRel, ledgerPath, ledgerLib, prov },
+      io,
+    );
+  }
 
   const lib = await loadEngine(path.join("src", "lib", "research", "lineages", "cxa003.ts"));
   const names = await loadEngine(path.join("src", "lib", "research", "names.ts"));
