@@ -78,7 +78,13 @@ export function TradesForm({
           First row: <code>market,code,side,date,quantity,price,fees,note</code>. Up to 200 rows and
           64 KB. A file with any bad row adds nothing.
         </p>
-        <input type="file" name="csv_file" accept=".csv,text/csv" className="text-sm" />
+        <input
+          type="file"
+          name="csv_file"
+          accept=".csv,text/csv"
+          aria-label="Choose a CSV file"
+          className="text-sm"
+        />
         <textarea
           name="csv_text"
           rows={4}

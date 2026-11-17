@@ -22,6 +22,7 @@ import {
   THEMES,
   type Role,
 } from "./helpers";
+import { opaqueDigest } from "../src/lib/view/opaqueRef";
 import { ensureRich } from "./seed/rich";
 import { ensureSteelman } from "./seed/steelman";
 import { requireScenario } from "./support/requireScenario";
@@ -73,8 +74,12 @@ test.beforeAll(async () => {
   cardId = await ensureSteelman();
 });
 
-async function resolve(page: Page, s: Surface): Promise<string | null> {
-  if (s.path === "card") return `/cards/${encodeURIComponent(cardId)}`;
+async function resolve(page: Page, s: Surface, role: string): Promise<string | null> {
+  // a masked role opens a card by its opaque reference only (D-135, D-977); the stored id is the Owner's (D-1332)
+  if (s.path === "card")
+    return role === "owner"
+      ? `/cards/${encodeURIComponent(cardId)}`
+      : `/cards/ck:${opaqueDigest("ck", cardId)}`;
   if (s.path === "review") {
     await page.goto("/reviews");
     const link = page.locator('main a[href^="/reviews/20"]').first();
@@ -105,7 +110,7 @@ for (const [ri, role] of ROLE_LIST.entries()) {
       for (const [i, s] of surfaces.entries()) {
         const theme = THEMES[(i + ri + wi) % THEMES.length]!;
         await setTheme(role as Role, theme);
-        const path = await resolve(page, s);
+        const path = await resolve(page, s, role);
         // the Owner must find every seeded page; a masked role may have no stored review to open
         if (path === null && role !== "owner") continue;
         expect(path, `${s.name}: the seeded page exists`).not.toBeNull();

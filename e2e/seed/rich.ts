@@ -276,6 +276,8 @@ async function seed(m: Client): Promise<void> {
   );
 
   // picks: three profiles x five families (one pick per family per profile, ranks 1..5)
+  // OR IGNORE: the picks-two-sections overlay (loaded first in the owner-tools lane) already holds balanced rank 1 of the
+  // same day; its row is kept (D-1332)
   for (const [pi, profile] of PROFILES.entries()) {
     for (const [fi, fam] of FAMILIES.entries()) {
       const c = codes[(pi * 5 + fi) % codes.length];
@@ -284,7 +286,7 @@ async function seed(m: Client): Promise<void> {
       await sigIns(sid, fam, `P${pi}`, c.code, String(5 - fi));
       await run(
         m,
-        `INSERT INTO pick (market, d, profile, rank, code, family, tier, rule_version, signal_id, card_id, label,
+        `INSERT OR IGNORE INTO pick (market, d, profile, rank, code, family, tier, rule_version, signal_id, card_id, label,
            reference_micro, buy_max_micro, valid_until_d, stop_micro, aim_micro, aim_reach_ppm, n_similar, bad_ppm,
            typical_ppm, good_ppm, time_frame_sessions, size_micro, risk_micro, factors_json, based_on_json, pick_sha,
            created_at) VALUES ('AU',?,?,?,?,?,'U1','v1',?,NULL,?,?,?,?,?,?,?,41,-50000,12000,90000,20,100000000,10000000,'[]','[]',?,?)`,

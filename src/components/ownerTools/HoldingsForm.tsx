@@ -77,7 +77,13 @@ export function HoldingsForm({
         <p className="m-0 text-xs text-text-muted">
           First row: <code>code,quantity,average_cost</code>. Up to 200 rows and 64 KB.
         </p>
-        <input type="file" name="csv_file" accept=".csv,text/csv" className="text-sm" />
+        <input
+          type="file"
+          name="csv_file"
+          accept=".csv,text/csv"
+          aria-label="Choose a CSV file"
+          className="text-sm"
+        />
         <textarea
           name="csv_text"
           rows={4}

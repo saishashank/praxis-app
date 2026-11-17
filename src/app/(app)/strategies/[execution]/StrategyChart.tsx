@@ -547,7 +547,14 @@ export function TradesTable({
           {view === "open" ? "No open trades right now." : "No closed trades in this round yet."}
         </p>
       ) : (
-        <div className="ui-scroll-x min-w-0 overflow-x-auto rounded-lg border border-border">
+        // a scrolling table with nothing focusable inside: the box itself takes focus so a keyboard can scroll it (axe
+        // scrollable-region-focusable, D-1332)
+        <div
+          className="ui-scroll-x min-w-0 overflow-x-auto rounded-lg border border-border"
+          tabIndex={0}
+          role="region"
+          aria-label={`Trades in this round, ${view}`}
+        >
           <table className="w-full min-w-[44rem] border-collapse text-sm">
             <caption className="sr-only">Trades in this round, {view}</caption>
             <thead>
