@@ -4811,6 +4811,28 @@
       "attrs": {}
     },
     {
+      "id": "page:/strategies/experiments/committee",
+      "type": "page",
+      "name": "/strategies/experiments/committee",
+      "purpose": "Screen /strategies/experiments/committee of the web app.",
+      "specIds": [
+        "UXN-001"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/app/(app)/strategies/experiments/committee/page.tsx",
+      "attrs": {}
+    },
+    {
       "id": "page:/strategies/ideas",
       "type": "page",
       "name": "/strategies/ideas",
@@ -20236,6 +20258,16 @@
       "id": "service:app|contains|page:/strategies/[execution]",
       "from": "service:app",
       "to": "page:/strategies/[execution]",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|page:/strategies/experiments/committee",
+      "from": "service:app",
+      "to": "page:/strategies/experiments/committee",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [

@@ -132,6 +132,13 @@ describe("committee boundary (i): import guard", () => {
 
 describe("committee boundary (ii): SQL write allowlist", () => {
   const ALLOWED = new Set(["committee_rating", "committee_call"]);
+  // M22 C2: the trial files write their own rows (the pre-registration; the interim and final result, the one look, the
+  // Owner alert line). Nothing else in the folder may; the engine files keep the two engine tables.
+  const TRIAL_WRITES: Record<string, string[]> = {
+    "src/lib/committee/prereg.ts": ["committee_prereg"],
+    "src/lib/committee/trial.ts": ["committee_trial_result", "holdout_look", "app_log"],
+  };
+  const allowedIn = (file: string): Set<string> => new Set([...(TRIAL_WRITES[file] ?? ALLOWED)]);
   const WRITE_RE =
     /(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|(?<!DO\s)UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+([A-Za-z_][A-Za-z0-9_]*)/gi;
   const DYNAMIC_RE =
@@ -142,7 +149,7 @@ describe("committee boundary (ii): SQL write allowlist", () => {
     const bad: string[] = [];
     for (const f of COMMITTEE_FILES) {
       for (const m of stripComments(fs.readFileSync(f, "utf8")).matchAll(WRITE_RE)) {
-        if (!ALLOWED.has(m[1].toLowerCase())) bad.push(`${rel(f)}: ${m[0]}`);
+        if (!allowedIn(rel(f)).has(m[1].toLowerCase())) bad.push(`${rel(f)}: ${m[0]}`);
       }
     }
     expect(bad).toEqual([]);

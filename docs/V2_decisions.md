@@ -1015,6 +1015,11 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1492 | Forward only and the entry (task C3, D-1417 pattern): reflectMain(argv, env, deps) in src/lib/steelman/reflectCli.ts refuses a replay flag and any date but t... |
 | D-1493 | Reservation (task C3, D-1411, D-1457): reflectionReserve(db, market, d) = the picks settling in the session times reflectionCallReservation (the worst case o... |
 | D-1494 | Display (task C3, D-1425, UXN-288, O-54): the track record loader sets lookingBack on a settled pick's row from its written reflection; the row shows "Lookin... |
+| D-1495 | Trial steps, trial id and the look (task C2, D-1420, D-1421, BLD-051): the nightly run gains two small steps around the Committee night, trial prereg before... |
+| D-1496 | Statistic and null as built (task C2, D-1421): |
+| D-1497 | Verdict rules as built (task C2, D-1421): "sessions" are the nights with at least one committee_rating row (skipped nights count: the trial runs in calendar... |
+| D-1498 | Outcomes as built (task C2, D-1422, ARN-105): one statement joins the trial's real ratings to ledger_row by signal id (forward, closed rows only; the smalles... |
+| D-1499 | Trial page and health line as built (task C2, D-1423, UXN-289, UXN-290): /strategies/experiments/committee takes the read action (every signed-in role) and t... |
 | D-1500 | Pin, lock and what "the lock hash mismatches" means (task L5, D-1414): onnxruntime-node is pinned exactly at 1.31.1 (published 2026-10-26, more than two week... |
 | D-1501 | Head and trainer (task L5, D-1415): the classes are the rule classifier's own categories (classifyAnnouncement, AGT-011), so the head's labels are whatever t... |
 | D-1502 | What the shadow stores and compares (task L5, D-1416): one minilm_shadow row per announcement (primary key market, day, source, announcement id) with the rul... |
