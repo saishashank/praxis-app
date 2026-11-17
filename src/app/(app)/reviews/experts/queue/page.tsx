@@ -8,6 +8,7 @@ import { Banner, EmptyState } from "@/components/ui/States";
 import { NotMeasured } from "@/components/ui/Values";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import { loadQueue } from "@/lib/ui/loaders/experts";
 import { PageHead, Shell } from "../../learned/parts";
 import { familyName } from "../../learned/plain";
@@ -22,6 +23,8 @@ import {
   parkClaimAction,
   rejectClaimAction,
 } from "./actions";
+import { CallBlock } from "./CallBlock";
+import { loadCallBoard } from "./callBoard";
 import { EditClaim, MergeInto, OneAction } from "./QueueForm";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +44,12 @@ export default async function QueuePage() {
     authDb: authDb(),
     user: { id: user.id, role: user.role },
   });
+
+  const calls = await loadCallBoard(
+    mainDb(),
+    HOME_MARKET,
+    q.experts.flatMap((e) => e.claims.filter((c) => c.type === "call").map((c) => c.id)),
+  );
 
   return (
     <Shell>
@@ -167,6 +176,7 @@ export default async function QueuePage() {
                       ))
                     )}
                   </span>
+                  <CallBlock claimId={c.id} entry={calls.get(c.id)} masked={q.masked} />
                   <div className="flex min-w-0 flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <OneAction

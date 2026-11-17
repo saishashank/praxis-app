@@ -91,6 +91,9 @@ describe("expert boundary (i): who may import src/lib/experts", () => {
     // M22 E1 (D-1470): the Owner-run first licence check reads the pure licence engine (robots, terms, status
     // rules); it opens no database and feeds nothing into a decision.
     "scripts/experts/licence-check.mjs",
+    // M22 E3 (D-1435): the Owner-run seed call proposals read the pure call engine (a rules extractor); no database,
+    // no network, no model, and a proposal feeds nothing into a decision.
+    "scripts/experts/call-proposals.mjs",
   ]);
   // Readers: the KB mirror, the pages and their loaders. Nothing that decides, sizes or places.
   const READERS = new Set(["src/lib/kb/documents.ts", "src/lib/kb/mapping.ts"]);
@@ -319,7 +322,13 @@ describe("expert boundary (ii-b): the polling job's own limits (M22 E2, D-1478)"
 
 describe("expert boundary (iii): SQL write allowlist", () => {
   // M22 tables of the expert library (migration 0039): the licence store and the job-run row (E1, D-1450).
-  const M22_EXPERT_TABLES = ["expert_source_licence", "expert_poll_run"];
+  const M22_EXPERT_TABLES = [
+    "expert_source_licence",
+    "expert_poll_run",
+    // M22 E3 (D-1435): the call proposals and the Owner confirmation of one
+    "expert_call_proposal",
+    "expert_call_confirm",
+  ];
   const WRITES = new Set<string>([...EXPERT_TABLES, ...M22_EXPERT_TABLES]);
   // What the experts may read besides their own tables: the challenger event log (F7 gate), the bars and the
   // universe snapshot (paper calls), and the user table (the review service re-checks the actor, D-610).
@@ -329,6 +338,7 @@ describe("expert boundary (iii): SQL write allowlist", () => {
     "challenger_event",
     "price_bar",
     "universe_snapshot",
+    "trading_calendar", // M22 E3: the holiday rows a horizon in weeks is counted on
     "app_user",
   ]);
   const WRITE_RE =

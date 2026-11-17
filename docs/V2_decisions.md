@@ -1010,3 +1010,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1487 | Refusal of a re-run (task L2, D-1405): a live run is refused (exit 2, nothing called) for a model that an earlier report of the reports folder (--reports, de... |
 | D-1488 | Review script (task L2, D-1404): bakeoff-review.mjs has KEY_AVAILABLE = true, lists the role verdicts of every report and prints one llm_live_roles: add <rol... |
 | D-1489 | Roster refresh of 2026-11-17 (task L2, D-1407): the provider pages were read with a fetch tool on that day (what was read is in docs/llm-roster.md). |
+| D-1505 | Call engine (task E3, D-1435, D-543): the rules extractor is one plain module, src/lib/experts/callEngine.mjs (+ .d.mts), because the seed script and the imp... |
+| D-1506 | Model answer (E3, D-1435): CALL_ANSWER_SCHEMA (code, direction, date, horizon number and unit, price basis) and parseModelAnswer: an answer is accepted only... |
+| D-1507 | Stored proposals (E3, D-1435): proposalIdOf is the hash of the claim and every field, so the same proposal has one id and storeProposal is insert-or-ignore o... |
+| D-1508 | Confirmation (E3, D-1435, D-524, AT-79): confirmCall (one click on the proposal shown) and confirmTypedCall (the editable form: code, direction, date, horizo... |
+| D-1509 | Seed proposals and boundary (E3, D-1435, D-543): scripts/experts/call-proposals.mjs --seed <folder> [--dry-run] [--universe <file>] re-extracts a proposal fo... |
