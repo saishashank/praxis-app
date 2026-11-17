@@ -2,6 +2,8 @@
 // scripts/experts/express-check.mjs (M22 E4; KB-085, D-1437): validates every expression of the private seed and prints
 // counts and K-ids by outcome; never a name, a rule or a text; a shortfall against the target of 20 is reported, not an
 // error. Synthetic ZZ seed only.
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { validateExpressedRule, validateExpressionExit } from "@/lib/agents/families/ruleSchema";
 import { checkExpressions, run, TARGET_EXPRESSED } from "../../scripts/experts/express-check.mjs";
@@ -113,7 +115,9 @@ describe("express-check", () => {
     expect(lines.pop()).toMatch(/outside the repository/);
     expect(await run([], {}, { out, schema })).toBe(1);
     expect(lines.pop()).toMatch(/usage/);
-    expect(await run(["--seed", "D:\\zz-does-not-exist-xyz"], {}, { out, schema })).toBe(1);
+    expect(
+      await run(["--seed", join(tmpdir(), "zz-does-not-exist-xyz")], {}, { out, schema }),
+    ).toBe(1);
     expect(lines.pop()).toMatch(/not found/);
     const f = zzSeedV2() as Partial<SeedFilesV2>;
     delete f["expressions.json"];
