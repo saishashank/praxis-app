@@ -136,7 +136,7 @@ describe("committee boundary (ii): SQL write allowlist", () => {
   // Owner alert line). Nothing else in the folder may; the engine files keep the two engine tables.
   const TRIAL_WRITES: Record<string, string[]> = {
     "src/lib/committee/prereg.ts": ["committee_prereg"],
-    "src/lib/committee/trial.ts": ["committee_trial_result", "holdout_look", "app_log"],
+    "src/lib/committee/trial.ts": ["committee_trial_result", "app_log"], // the look goes through the registry gate (M23 A2, D-1604)
   };
   const allowedIn = (file: string): Set<string> => new Set([...(TRIAL_WRITES[file] ?? ALLOWED)]);
   const WRITE_RE =

@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "entries": [
+    {
+      "seq": 1,
+      "item": "M15",
+      "lineage": "f1_v2_mom",
+      "market": "AU",
+      "sha": "a87f7508104c59abbcbad74371e3f1511ae54618fe5799904473c3d361769b0a",
+      "preregPath": "docs/M15_design.md#D-899",
+      "lookedAt": "2026-11-08T00:00:00Z",
+      "verdict": "NULL",
+      "nSetups": 2822,
+      "nBlocks": 11,
+      "stats": {
+        "setupsExamined": 2822,
+        "holdoutBlocks": 11,
+        "basis": "published record, one look spent"
+      },
+      "note": "stays in shadow, gap cap"
+    }
+  ]
+}

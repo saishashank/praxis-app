@@ -58,7 +58,7 @@ const looks = async (db: Client): Promise<number> =>
 describe("evaluateAlt", () => {
   it("the hypothesis text and fingerprint are fixed", () => {
     expect(HYPOTHESIS_TEXT).toMatch(/one look; never re-looked/i);
-    expect(PREREG_SHA).toMatch(/^[0-9a-f]{16}$/);
+    expect(PREREG_SHA).toMatch(/^[0-9a-f]{64}$/);
     expect(MIN_DIFFERING).toBe(30);
     expect(FORWARD_SESSIONS).toBe(20);
   });
@@ -86,7 +86,7 @@ describe("evaluateAlt", () => {
       lineage: ALT_LINEAGE,
       market: "AU",
       prereg_sha: PREREG_SHA,
-      verdict: first.verdict,
+      verdict: first.verdict === "pass" ? "PASS" : "NULL", // the registry word (D-1602)
     });
     const refused = { status: "refused", reason: "already_looked" };
     expect(await evaluateAlt(db, { market: "AU", now: () => NOW })).toEqual(refused);

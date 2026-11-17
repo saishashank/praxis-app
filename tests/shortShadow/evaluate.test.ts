@@ -43,7 +43,7 @@ async function seedClosed(db: Client, n: number, ppm: (i: number) => number): Pr
 describe("evaluateShort", () => {
   it("the hypothesis text is fixed and the pre-registration fingerprint is of that text", () => {
     expect(HYPOTHESIS_TEXT).toMatch(/one look; never re-looked/i);
-    expect(PREREG_SHA).toMatch(/^[0-9a-f]{16}$/);
+    expect(PREREG_SHA).toMatch(/^[0-9a-f]{64}$/);
     expect(MIN_SETUPS).toBe(60);
     expect(MIN_SESSIONS).toBe(60);
   });
@@ -98,7 +98,7 @@ describe("evaluateShort", () => {
     expect(rows[0]!.lineage).toBe(SHORT_LINEAGE);
     expect(rows[0]!.market).toBe(MKT);
     expect(rows[0]!.prereg_sha).toBe(PREREG_SHA);
-    expect(rows[0]!.verdict).toBe("fail");
+    expect(rows[0]!.verdict).toBe("NULL"); // the registry word (D-1602)
   });
 
   it("a second evaluation is refused, even with more data, and writes nothing", async () => {
@@ -110,7 +110,7 @@ describe("evaluateShort", () => {
     expect(again).toEqual({ status: "refused", reason: "already_looked" });
     expect(await count(db, "holdout_look")).toBe(1);
     expect(String((await db.execute("SELECT verdict FROM holdout_look")).rows[0]!.verdict)).toBe(
-      "fail",
+      "NULL",
     );
   });
 

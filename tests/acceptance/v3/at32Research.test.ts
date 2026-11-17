@@ -13,7 +13,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@libsql/client";
 import { afterAll, describe, expect, it, vi } from "vitest";
+import { LEDGER_PATH } from "@/lib/research/ledgerFile";
 import { runResearchNight, type ResearchStep } from "@/lib/research/night";
+import { syncLedger } from "@/lib/research/steps/lookSync";
 import { cleanupTempDbs } from "../../db/helpers";
 import { STEELMAN_OWN, MIGRATION_OWNED, at32World, combineTables } from "./at32World";
 
@@ -46,8 +48,11 @@ const M23_OWN = [
   "angle_proposal",
   "shock_stop_outcome",
 ] as const;
-/** D-1645: the two existing tables the research night may also write (proposal charges, Owner-visible lines). */
-const M23_SHARED = ["trial_ledger", "app_log"] as const;
+/**
+ * D-1645: the existing tables the research night may also write (proposal charges, Owner-visible lines) and, since A2, the
+ * look registry itself: the ledger import (lookSync) writes it only through the registry gate (D-1607).
+ */
+const M23_SHARED = ["trial_ledger", "app_log", "holdout_look"] as const;
 
 const OWN = new Set<string>([...STEELMAN_OWN, ...M23_OWN, ...M23_SHARED]);
 
@@ -102,6 +107,28 @@ const M23_STEP_WRITERS: Array<(db: Client) => Promise<void>> = [
     ];
     for (const s of sql) await db.execute(s);
   },
+  // A2: the real lookSync step, one synthetic recorded look through the registry gate
+  async (db) => {
+    const plan = '{"hypothesis":"synthetic offline plan"}\n';
+    const entry = {
+      seq: 1,
+      item: "CXA-003",
+      lineage: "zz_sync",
+      market: "AU",
+      sha: sha(plan),
+      preregPath: "docs/research/prereg/zz.json",
+      lookedAt: TS,
+      verdict: "NULL",
+      nSetups: 2,
+      nBlocks: 1,
+      stats: {},
+    };
+    const files: Record<string, string> = {
+      [LEDGER_PATH]: JSON.stringify({ format: 1, entries: [entry] }),
+      "docs/research/prereg/zz.json": plan,
+    };
+    await syncLedger(db, { market: "AU", now: TS }, { read: (p) => files[p] ?? null });
+  },
 ];
 
 const base = JSON.parse(readFileSync(join(__dirname, "replay-hash.baseline.json"), "utf8")) as {
@@ -112,7 +139,7 @@ const baseNames = Object.keys(base.at32.tables).sort();
 const baseOutside = baseNames.filter((n) => !OWN.has(n));
 
 describe("AT-32 (research): the M23 own-set, the seam and the complement proof (D-1645)", () => {
-  it("the own-set is the steelman's own tables plus the eight 0040 tables, trial_ledger and app_log", () => {
+  it("the own-set is the steelman's own tables plus the eight 0040 tables, trial_ledger, app_log and holdout_look", () => {
     expect([...M23_OWN].sort()).toEqual([
       "angle_proposal",
       "holdout_look_refusal",
@@ -123,7 +150,7 @@ describe("AT-32 (research): the M23 own-set, the seam and the complement proof (
       "sector_index",
       "shock_stop_outcome",
     ]);
-    expect(OWN.size).toBe(STEELMAN_OWN.size + 8 + 2);
+    expect(OWN.size).toBe(STEELMAN_OWN.size + 8 + 3);
     for (const t of M23_OWN) expect(STEELMAN_OWN.has(t), t).toBe(false);
   });
 
@@ -161,9 +188,14 @@ describe("AT-32 (research): the M23 own-set, the seam and the complement proof (
     const live = await complementDump(on);
     expect(live.perTable).toEqual(a.perTable);
     expect(live.rows).toEqual(a.rows);
-    // with the stubs the seam writes nothing at all, not even into the own-set
-    for (const t of M23_OWN) {
-      expect(Number((await on.execute(`SELECT COUNT(*) n FROM ${t}`)).rows[0]!.n), t).toBe(0);
+    // only the ledger import writes (D-1607): one plan, one look and its numbers for the committed F1.v2-mom entry; the six
+    // other steps are still stubs and write nothing
+    const own = async (t: string): Promise<number> =>
+      Number((await on.execute(`SELECT COUNT(*) n FROM ${t}`)).rows[0]!.n);
+    for (const t of ["research_prereg", "research_result", "holdout_look"])
+      expect(await own(t), t).toBe(1);
+    for (const t of M23_OWN.filter((x) => !["research_prereg", "research_result"].includes(x))) {
+      expect(await own(t), t).toBe(0);
     }
     // a replayed night and a disabled market do not run it either
     expect((await runResearchNight(on, { market: "AU", d, now: TS, replay: true })).status).toBe(

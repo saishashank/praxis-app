@@ -15,7 +15,15 @@
 import type { Client } from "@libsql/client";
 import { getConfig, setConfig } from "@/lib/config/store";
 import { belowInt, scopedPrng } from "@/lib/stats/rng";
-import { parseFrozen, preregProblem, readVersions, TRIAL_LINEAGE, type Frozen } from "./prereg";
+import { preregister, takeLook } from "@/lib/research/registry";
+import {
+  lookTaken,
+  parseFrozen,
+  preregProblem,
+  readVersions,
+  TRIAL_LINEAGE,
+  type Frozen,
+} from "./prereg";
 import { readOutcomes, type RatedOutcome } from "./outcomes";
 import { readTrial } from "./store";
 
@@ -400,7 +408,7 @@ async function writeFinal(
   trialId: string,
   verdict: Exclude<Verdict, "running">,
   stats: string,
-  sha: string,
+  first: { sha: string; frozenJson: string } | null,
 ): Promise<boolean> {
   // rows-ok: one keyed insert, once per trial (the primary key makes the final verdict a one-time write)
   const w = await db.execute({
@@ -409,21 +417,57 @@ async function writeFinal(
     args: [trialId, o.market, o.d, verdict, stats, o.now],
   });
   if (w.rowsAffected === 0) return false;
-  if (verdict !== "INVALID") await writeLook(db, o, verdict, sha);
+  if (verdict !== "INVALID" && first !== null) await writeLook(db, o, verdict, first, stats);
   return true;
 }
+
+/** The registry word of a trial verdict (D-1602): FAIL is NULL; PASS and INCONCLUSIVE stay. */
+const REGISTRY_WORD: Record<string, "PASS" | "NULL" | "INCONCLUSIVE"> = {
+  PASS: "PASS",
+  FAIL: "NULL",
+  INCONCLUSIVE: "INCONCLUSIVE",
+};
 
 async function writeLook(
   db: Client,
   o: Pick<StepOptions, "market" | "now">,
   verdict: string,
-  sha: string,
+  first: { sha: string; frozenJson: string },
+  stats: string,
 ): Promise<void> {
-  // rows-ok: one keyed insert into the look registry (lineage, market); never repeated
-  await db.execute({
-    sql: `INSERT INTO holdout_look (lineage, market, looked_at, prereg_sha, verdict)
-          VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
-    args: [TRIAL_LINEAGE, o.market, o.now, sha, verdict],
+  const word = REGISTRY_WORD[verdict];
+  if (word === undefined) return;
+  // the trial is one registry lineage; its frozen text is the pre-registration as stored (same sha)
+  const plan = await preregister(db, {
+    lineage: TRIAL_LINEAGE,
+    market: o.market,
+    item: "VAL-111",
+    frozen: first.frozenJson,
+    now: o.now,
+  });
+  if (plan.status === "refused") return;
+  let body: Record<string, unknown> = {};
+  try {
+    body = JSON.parse(stats) as Record<string, unknown>;
+  } catch {
+    body = {};
+  }
+  const num = (k: string): number => {
+    const v = body[k];
+    return typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : 0;
+  };
+  await takeLook(db, {
+    lineage: TRIAL_LINEAGE,
+    market: o.market,
+    sha: plan.sha,
+    caller: "committee_trial",
+    now: o.now,
+    compute: () => ({
+      verdict: word,
+      nSetups: num("settled"),
+      nBlocks: num("nights"),
+      stats: body,
+    }),
   });
 }
 
@@ -447,14 +491,22 @@ export async function trialNight(db: Client, o: StepOptions): Promise<StepResult
   if (trial.finished) {
     await switchOff(db, o.now, "The Committee trial has ended");
     const first = versions[0];
-    // repair: a final verdict other than INVALID always has its look on file
+    // repair: a final verdict other than INVALID always has its look on file (a look already there is not attempted again)
     // rows-ok: committee_trial_result primary key (trial_id, market, d, kind) prefix, LIMIT 1
     const fin = await db.execute({
-      sql: `SELECT verdict FROM committee_trial_result WHERE trial_id = ? AND market = ? AND kind = 'final' LIMIT 1`,
+      sql: `SELECT verdict, stats_json FROM committee_trial_result WHERE trial_id = ? AND market = ? AND kind = 'final' LIMIT 1`,
       args: [trial.trialId, o.market],
     });
     const v = fin.rows[0] === undefined ? null : String(fin.rows[0].verdict);
-    if (first !== undefined && v !== null && v !== "INVALID") await writeLook(db, o, v, first.sha);
+    if (first !== undefined && v !== null && v !== "INVALID" && !(await lookTaken(db, o.market))) {
+      await writeLook(
+        db,
+        o,
+        v,
+        first,
+        fin.rows[0]!.stats_json === undefined ? "{}" : String(fin.rows[0]!.stats_json),
+      );
+    }
     return { status: "finished" };
   }
   if (!(o.switchOn ?? (await getConfig(db, "committee_enabled")) === "on"))
@@ -468,14 +520,7 @@ export async function trialNight(db: Client, o: StepOptions): Promise<StepResult
       detail: problem ?? "no pre-registration",
       versions: versions.length,
     });
-    const wrote = await writeFinal(
-      db,
-      o,
-      trial.trialId,
-      "INVALID",
-      text,
-      first?.sha ?? "0".repeat(64),
-    ); // threshold-ok: sha length
+    const wrote = await writeFinal(db, o, trial.trialId, "INVALID", text, first ?? null);
     if (wrote) {
       await alertLine(
         db,
@@ -504,7 +549,7 @@ export async function trialNight(db: Client, o: StepOptions): Promise<StepResult
     trial.trialId,
     v.verdict,
     statsJson(m, v, frozen, false),
-    first.sha,
+    first,
   );
   await switchOff(db, o.now, `The Committee trial ${VERDICT_WORD[v.verdict]}`);
   if (wrote)

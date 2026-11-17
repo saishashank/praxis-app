@@ -1127,3 +1127,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1662 | Harness (T1, D-1636): per fixture item three calls (original, neutral paraphrase, tone-flipped paraphrase) through the R2 router; stability = items whose gui... |
 | D-1663 | Production shadow (T1, D-1636, D-1642): textLabelsEnabled(env, {r2Live}) is true in staging as before, or in any environment when the factory's status lists... |
 | D-1664 | Fixture (T1): tests/fixtures/labels/paraphrase-zz.json holds 30 synthetic ZZ items (five invented events, each in both directions), with the expected guidanc... |
+| D-1665 | Registry gate (A2): preregister(db, {lineage, market, item, frozen, now}) freezes one plan per lineage and market (a plan is a JSON object stored with sorted... |
+| D-1666 | The three first writers on the gate (A2): short shadow, outside-signal state and the Committee trial freeze their plan ({hypothesis} for the first two, the s... |
+| D-1667 | Offline ledger (A2): docs/research/registry.json is {format: 1, entries: [...]}, each entry {seq, item, lineage, market, sha, preregPath, lookedAt?, verdict?... |
+| D-1668 | Ledger import (A2): steps/lookSync.ts reads only the committed ledger and the files it names (a path with .. or an absolute path is not read), for the night'... |
+| D-1669 | Names and the page list (A2): names.ts holds a plain name and a kind (live or offline) per lineage (no market, no code); a test fails on a ledger or writer l... |
