@@ -221,6 +221,7 @@ describe("steelman boundary (iii): who may import the steelman and name its tabl
     "src/lib/config/keys.ts", // config key names that contain the words only
     "src/lib/llm/dropOrder.ts",
     "src/lib/cortex/stageTables.mjs", // D-1116: the pinned name list of the night schema hash; reads and writes nothing
+    "src/lib/opinions/meter.ts", // M22 C4, D-1518: one read-only lookup of the model that wrote a settled opinion; imports no steelman module
   ]);
 
   const srcFiles = walk(path.join(ROOT, "src"));

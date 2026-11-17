@@ -10,6 +10,9 @@ import { getConfig } from "@/lib/config/store";
 import { readVersions, type Frozen } from "@/lib/committee/prereg";
 import { readTrial } from "@/lib/committee/store";
 import { INTERIM_NOTE } from "@/lib/committee/trial";
+import { loadRequested } from "@/lib/health/opinions";
+import { loadMeters, NO_METER } from "@/lib/opinions/meter";
+import { viewOf, type MeterView } from "@/lib/opinions/view";
 import { formatDay } from "@/lib/view/format";
 import { weekOnly } from "@/lib/view/mask";
 import { cardHref } from "./cards";
@@ -90,6 +93,12 @@ export type NightView = {
 
 export type FigureView = { label: string; value: string };
 
+/** The opinion meters (C4, AGT-148): counts and a gap, read-only; counts only, so nothing here is masked. */
+export type OpinionMetersView = {
+  meters: MeterView[];
+  noMeter: { label: string; reason: string }[];
+};
+
 export type CommitteeTrialView = {
   /** "none": no trial yet; "running"; "finished". */
   status: "none" | "running" | "finished";
@@ -128,6 +137,8 @@ export type CommitteeTrialView = {
     segments: { model: string; n: number; gap: string | null }[];
   };
   final: null | { verdict: string; verdictWord: string; dayText: string };
+  /** The opinion meters (C4). */
+  opinions: OpinionMetersView;
   nights: NightView[];
   /** Nights with nothing but skipped signals, over the whole trial. */
   skippedNights: number;
@@ -307,6 +318,22 @@ async function skippedNightCount(db: Db, market: string, trialId: string): Promi
   return num(r.rows[0]?.n ?? 0);
 }
 
+/** The opinion meters of a market (C4). A failed read shows none, never an error. */
+async function opinionMeters(db: Db, market: string): Promise<OpinionMetersView> {
+  return soft(
+    async () => {
+      const minN = num(await getConfig(db, "opinion_min_n"));
+      const requested = await loadRequested(db, market);
+      const meters = await loadMeters(db, market, minN);
+      return {
+        meters: meters.map((m) => viewOf(m, requested.has(m.kind))),
+        noMeter: NO_METER.map((n) => ({ ...n })),
+      };
+    },
+    { meters: [], noMeter: NO_METER.map((n) => ({ ...n })) },
+  );
+}
+
 /** The Committee trial page model. `before` is the cursor of an older page of nights (the Owner's; ignored when masked). */
 export async function loadCommitteeTrial(
   deps: LoaderDeps,
@@ -316,6 +343,7 @@ export async function loadCommitteeTrial(
   const masked = v.masker.masked;
   const day = (d: string): string => (masked ? (weekOnly(d) ?? "") : formatDay(d, v.now));
   const switchOn = (await soft(() => getConfig(deps.mainDb, "committee_enabled"), "off")) === "on";
+  const opinions = await opinionMeters(deps.mainDb, v.market);
   const empty: CommitteeTrialView = {
     status: "none",
     statusText: switchOn
@@ -326,6 +354,7 @@ export async function loadCommitteeTrial(
     progress: null,
     figure: null,
     final: null,
+    opinions,
     nights: [],
     skippedNights: 0,
     earlier: null,
@@ -416,6 +445,7 @@ export async function loadCommitteeTrial(
           dayText: day(str(top!.d)),
         }
       : null,
+    opinions,
     nights,
     skippedNights,
     earlier,

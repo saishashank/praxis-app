@@ -236,6 +236,41 @@ export default async function CommitteeTrialPage({
           </section>
         </>
       )}
+      <Card
+        title="How far each kind of opinion has been tested"
+        headingLevel={2}
+        data-testid="opinion-meters"
+      >
+        <p className="m-0 mb-2 text-sm text-text-muted">
+          Read only. An opinion counts for nothing in trading. When one has enough settled cases and
+          a gap that holds in two judge versions, a review is asked for; only a new spec version and
+          an Owner decision can change anything.
+        </p>
+        <ul className="m-0 flex list-none flex-col gap-3 p-0 text-sm">
+          {v.opinions.meters.map((m) => (
+            <li
+              key={m.kind}
+              data-testid={`opinion-meter-${m.kind}`}
+              className="min-w-0 break-words"
+            >
+              <p className="m-0 font-medium">
+                {m.label}: {m.progress}
+              </p>
+              {m.lift !== null ? <p className="m-0 mt-1">{m.lift}</p> : null}
+              {m.versions !== null ? (
+                <p className="m-0 mt-1 text-text-muted">{m.versions}</p>
+              ) : null}
+              {m.missing !== null ? <p className="m-0 mt-1 text-text-muted">{m.missing}</p> : null}
+              {m.earned !== null ? <p className="m-0 mt-1 font-medium">{m.earned}</p> : null}
+            </li>
+          ))}
+          {v.opinions.noMeter.map((n) => (
+            <li key={n.label} className="min-w-0 break-words text-text-muted">
+              {n.label}: no forward meter. {n.reason}
+            </li>
+          ))}
+        </ul>
+      </Card>
     </main>
   );
 }

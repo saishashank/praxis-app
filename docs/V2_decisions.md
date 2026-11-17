@@ -1037,3 +1037,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1514 | MiniLM step (task L5 hand-off, D-1504, D-1510): minilmMain(["shadow", "--model", <path>, "--vocab", <path>, "--date"?]) runs only when both models/minilm/mod... |
 | D-1515 | Reflection reservation and the selection (task L4, D-1493, D-1466): steelmanMain computes reflectionReserve(db, market, d) and passes it through steelmanNigh... |
 | D-1516 | Trial wiring (task C2 hand-off): trialMain(["prereg"]) before and trialMain(["result"]) after committeeMain, each forward-only and soft. |
+| D-1517 | Meters (task C4, D-1427, AGT-148, CTX-060): src/lib/opinions/meter.ts measures the two kinds that have a forward meter, per market. |
+| D-1518 | Judge versions and stability (task C4, D-1428): the judge-model versions seen are the Committee's judge_model and, for the steelman, the smallest author_mode... |
+| D-1519 | Promotion request (task C4, D-1428): src/lib/opinions/promotion.ts: requestPromotion is one insert-or-ignore on opinion_promotion_request (primary key market... |
+| D-1520 | Entry, page and health as built (task C4): opinionMetersMain(argv, env, deps) in src/lib/opinions/cli.ts (flag --date, replay flags refused, counts only, alw... |
