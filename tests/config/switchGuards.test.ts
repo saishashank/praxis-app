@@ -9,8 +9,8 @@ import { invalidateConfigCache } from "@/lib/config/runtime";
 import { committeeGuard, FROZEN_TRIAL_KEYS } from "@/lib/config/guards/committee";
 import { liveRolesGuard } from "@/lib/config/guards/liveRoles";
 import { minilmGuard } from "@/lib/config/guards/minilm";
-import { regimeAltGuard } from "@/lib/config/guards/regimeAlt";
-import { sweepGuard } from "@/lib/config/guards/sweep";
+import { REGIME_ALT_REFUSAL, regimeAltGuard } from "@/lib/config/guards/regimeAlt";
+import { SWEEP_REFUSAL, sweepGuard } from "@/lib/config/guards/sweep";
 import { CONFIG_KEYS } from "@/lib/config/keys";
 import { GUARDS, switchRefusal } from "@/lib/config/switchGuards";
 import { insertNight, type NightRow } from "@/lib/steelman/store";
@@ -188,17 +188,30 @@ describe("the registry (D-1445)", () => {
     expect(await committeeGuard(throwing("down"), "on")).toBe(REFUSAL(0)); // fails closed
   });
 
-  it("the stubs pass every value on every database, including a failing one, until their task owns them", async () => {
-    const stubs = [
-      ["regime_altinputs_enabled", regimeAltGuard, "on"],
-      ["intraday_sweep_enabled", sweepGuard, "on"],
-    ] as const;
-    for (const [key, guard, value] of stubs) {
-      expect(GUARDS[key], key).toBe(guard);
-      expect(await guard(main, value), key).toBeNull();
-      expect(await guard(throwing("down"), value), key).toBeNull();
-      expect(await switchRefusal(main, key, value), key).toBeNull();
-    }
+  it("regime_altinputs_enabled is owned by E5: display only, refuses on only when the shadow table cannot be read (fails closed)", async () => {
+    expect(GUARDS.regime_altinputs_enabled).toBe(regimeAltGuard);
+    expect(await switchRefusal(main, "regime_altinputs_enabled", "on")).toBeNull();
+    expect(await switchRefusal(main, "regime_altinputs_enabled", "off")).toBeNull();
+    expect(await regimeAltGuard(throwing("down"), "on")).toBe(REGIME_ALT_REFUSAL);
+    expect(await regimeAltGuard(throwing("down"), "off")).toBeNull();
+  });
+
+  it("intraday_sweep_enabled is owned by E5: on is refused until the batch source row is accepted, fails closed", async () => {
+    expect(GUARDS.intraday_sweep_enabled).toBe(sweepGuard);
+    expect(await switchRefusal(main, "intraday_sweep_enabled", "on")).toBe(SWEEP_REFUSAL);
+    expect(await switchRefusal(main, "intraday_sweep_enabled", "off")).toBeNull();
+    expect(await sweepGuard(throwing("down"), "on")).toBe(SWEEP_REFUSAL);
+    expect(await sweepGuard(throwing("down"), "off")).toBeNull();
+    await main.execute({
+      sql: "INSERT INTO source_register (source, risk, status) VALUES ('yahoo_delayed_batch', 'medium', 'pending')",
+      args: [],
+    });
+    expect(await switchRefusal(main, "intraday_sweep_enabled", "on")).toBe(SWEEP_REFUSAL);
+    await main.execute({
+      sql: "UPDATE source_register SET status = 'enabled' WHERE source = 'yahoo_delayed_batch'",
+      args: [],
+    });
+    expect(await switchRefusal(main, "intraday_sweep_enabled", "on")).toBeNull();
   });
 
   it("minilm_enabled is owned by L5: registered, refuses on, never reads the database (tests/llm/minilm/guard.test.ts)", async () => {

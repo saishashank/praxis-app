@@ -12,6 +12,8 @@ import { NotMeasured } from "@/components/ui/Values";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
 import { homeProfile } from "@/lib/market/staticProfile.mjs";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
+import { loadRegimeLine } from "@/lib/regime/alt/shadow";
 import {
   loadCortex,
   type AbstainReason,
@@ -112,6 +114,8 @@ export default async function CortexPage() {
   const page = await loadCortex({ mainDb: mainDb(), authDb: authDb(), user });
   const v = page.data;
   const a = v.abstains;
+  // D-1441: both regime readings in plain words, only while the switch is on (a display line, nothing reads it).
+  const regimeLine = await loadRegimeLine(mainDb(), HOME_MARKET);
   // Parts with nothing stored yet are gathered in one closed list instead of eight "Not measured yet" cards.
   const has = {
     passports: v.passports.total > 0,
@@ -145,6 +149,12 @@ export default async function CortexPage() {
           {v.asOfMelbourne !== null ? ` Latest run: ${v.asOfMelbourne}.` : ""}
         </p>
       </header>
+
+      {regimeLine !== null ? (
+        <p className="m-0 text-sm" data-regime-alt="">
+          {regimeLine}
+        </p>
+      ) : null}
 
       {v.shadowOnly ? (
         <Banner tone="info" title="Shadow only">

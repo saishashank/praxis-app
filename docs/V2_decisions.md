@@ -1041,3 +1041,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1518 | Judge versions and stability (task C4, D-1428): the judge-model versions seen are the Committee's judge_model and, for the steelman, the smallest author_mode... |
 | D-1519 | Promotion request (task C4, D-1428): src/lib/opinions/promotion.ts: requestPromotion is one insert-or-ignore on opinion_promotion_request (primary key market... |
 | D-1520 | Entry, page and health as built (task C4): opinionMetersMain(argv, env, deps) in src/lib/opinions/cli.ts (flag --date, replay flags refused, counts only, alw... |
+| D-1527 | Alt reading as built (task E5, D-1439, D-1440): src/lib/regime/alt/{inputs,rule,shadow,evaluate}.ts. |
+| D-1528 | Macro series carry context only (task E5, D-1440): the stored reading lists the newest macro values, but the rule uses prediction-market probabilities alone,... |
+| D-1529 | One call, display only, and the look (task E5, D-1440, D-1441, BLD-051): batch 3 calls altRegimeNight once per session, soft, after the status look; it reads... |
+| D-1530 | Prediction-market fetcher (task E5, D-1439): src/lib/data/sources/predictionMarkets.mjs parses two fixture payload shapes and fetches only the sources whose... |
+| D-1531 | Sweep as built (task E5, D-1443, D-1442): src/lib/intraday/sweep.ts plans U1 then U2 batches of 20 codes (assumed batch size, [VERIFY] with the endpoint at a... |

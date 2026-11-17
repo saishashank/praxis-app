@@ -124,6 +124,13 @@ describe("opinion boundary (ii): who names an opinion table", () => {
     "src/lib/experts/callEngine.mjs",
     "src/lib/experts/callProposals.ts",
     "src/lib/experts/review.ts",
+    // the shadow regime reading with outside signals (E5): its writer, reader, one look, fetcher, switch guard and health line
+    "src/lib/config/guards/regimeAlt.ts",
+    "src/lib/data/sources/predictionMarkets.mjs",
+    "src/lib/health/regimeAlt.ts",
+    "src/lib/regime/alt/evaluate.ts",
+    "src/lib/regime/alt/inputs.ts",
+    "src/lib/regime/alt/shadow.ts",
     // the health lines (read-only)
     "src/lib/health/committee.ts",
     "src/lib/health/minilm.ts",

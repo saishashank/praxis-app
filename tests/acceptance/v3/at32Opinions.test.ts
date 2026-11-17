@@ -25,6 +25,7 @@ import { committeeLlm, committeeProvider, KEYS as COMMITTEE_KEYS } from "../../c
 import { meterOf, type Case } from "@/lib/opinions/meter";
 import { evidenceOf, requestPromotion } from "@/lib/opinions/promotion";
 import { shadowNight } from "@/lib/llm/minilm/shadow";
+import { altRegimeNight } from "@/lib/regime/alt/shadow";
 import { fakeEmbedder, headOf, lockOf, withAnnouncements } from "../../llm/minilm/helpers";
 import { STEELMAN_OWN, MIGRATION_OWNED, at32World, combineTables } from "./at32World";
 
@@ -147,6 +148,16 @@ const M22_STAGE_WRITERS: Array<(db: Client) => Promise<void>> = [
       },
     );
     if (r.written !== 1) throw new Error(`the MiniLM stage did not write: ${JSON.stringify(r)}`);
+  },
+  // E5: the real shadow regime reading (the one call of batch 3) on the golden world's newest regime row, with no outside source
+  // accepted (a register row would be a hashed table): it writes only regime_alt_reading, status unavailable.
+  async (db) => {
+    const d = String(
+      (await db.execute("SELECT MAX(d) AS d FROM regime_daily WHERE market = 'AU'")).rows[0]!.d,
+    );
+    const r = await altRegimeNight(db, { market: "AU", d, now: TS });
+    if (r.status !== "written")
+      throw new Error(`the shadow regime stage did not write: ${JSON.stringify(r)}`);
   },
   // C2: the trial step (the interim path, which writes only committee_trial_result) over a pre-registered trial with one
   // night of ratings. The final path also writes the audited switch-off and an alert line, so it is proven in at76Trial.
