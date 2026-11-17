@@ -182,6 +182,7 @@ describe("expert boundary (ii): what src/lib/experts may import", () => {
     "src/lib/kb/documents",
     "src/lib/kb/render",
     "src/lib/config/store", // getConfig for expert_min_scored
+    "src/lib/config/keys", // M22 E4 (D-1522): the registry defaults of the family exit conditions (a static table), ruleEval.ts
     // the review service (WP6, D-610, D-611): the audit writer, the auth env type and the actor hash
     "src/lib/auth/audit",
     "src/lib/auth/env",
@@ -339,6 +340,7 @@ describe("expert boundary (iii): SQL write allowlist", () => {
     "price_bar",
     "universe_snapshot",
     "trading_calendar", // M22 E3: the holiday rows a horizon in weeks is counted on
+    "cluster_expression", // M22 E4 (D-1526): read-only; the importer writes it, no expert module does
     "app_user",
   ]);
   const WRITE_RE =

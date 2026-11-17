@@ -5,15 +5,21 @@
 // over all tested clusters of the run, and the run is stored insert-once per (market, d) in one transaction
 // with its results and claim moves. No trial is charged here: the trial ledger is written only by
 // createChallenger (WP5).
+// M22 E4 (KB-085, D-1437): an EXPRESSED cluster (no family fit, a schema-v2 rule and an exit from the fixed menu) is
+// one more hypothesis in the SAME single BH pass, charged once (an expression already screened is not screened
+// again), its rows read only through the development view (devView.evaluateExpressed); the holdout is never read.
 import type { Client } from "@libsql/client";
 import { FAMILY_ORDER } from "@/lib/agents/families/constants";
+import type { ExpressedRule, ExpressionExit } from "@/lib/agents/families/ruleSchema";
 import type { Family } from "@/lib/agents/schema";
 import { canonicalJson, sha256Hex } from "@/lib/arena/cohort";
 import { incumbentOf } from "@/lib/learning/challengerLifecycle";
 import { loadSplit, type WeeklyContext } from "@/lib/learning/weeklyStages";
 import { lineageId } from "@/lib/stats/splits";
 import { makeExpertDevView, type ExpertDevView, type ReplayFn } from "./devView";
-import { fitCheck, type FitOk } from "./fit";
+import { expressionCheck, fitCheck, type FitOk } from "./fit";
+import { alreadyScreened, eligibleExpressed } from "./expressed";
+import type { RuleDataSource } from "./ruleEval";
 import {
   clusterStatistic,
   isInsufficient,
@@ -32,7 +38,10 @@ export type SkipReason =
   | "no_incumbent"
   | "insufficient_rows"
   | "insufficient_controls"
-  | "insufficient_blocks";
+  | "insufficient_blocks"
+  | "invalid_expression"
+  | "no_rule_data"
+  | "already_screened";
 
 export type ScreeningSummary = {
   /** `ran`: a new run was stored; `exists`: this (market, d) was already screened (no-op); `nothing_eligible`: no run row. */
@@ -59,6 +68,11 @@ export type ScreenDeps = {
   readonly replay?: ReplayFn;
   /** Replaces the cluster statistic (the access-spy test wraps it). */
   readonly statistic?: typeof clusterStatistic;
+  /**
+   * The data an expressed rule reads (production adapts the snapshot world; tests pass a synthetic table).
+   * Absent or null: expressed clusters are skipped as `no_rule_data` and the fitted clusters run as before.
+   */
+  readonly expressedSource?: (c: ScreenContext) => RuleDataSource | null;
 };
 
 /** The weekly context, or any object with the five fields the screening reads (tests inject a replay). */
@@ -71,7 +85,9 @@ const ppm = (x: number): number => Math.round(x * 1_000_000); // money-float-ok:
 
 type Tested = {
   readonly clusterId: string;
-  readonly fit: FitOk;
+  readonly family: Family;
+  /** The fitted parameters; null for an expressed cluster (it is not a challenger candidate). */
+  readonly fit: FitOk | null;
   readonly sha: string;
   readonly stat: ClusterStat;
 };
@@ -131,7 +147,7 @@ export async function readRunSurvivors(db: Exec, runId: string): Promise<Survivo
   const out: SurvivorRef[] = [];
   for (const x of r.rows) {
     const fit = fitCheck(JSON.parse(String(x.family_fit_json)));
-    if (!fit.ok) continue;
+    if (!fit.ok) continue; // an expressed survivor has no family fit: it is not a challenger candidate
     out.push({
       clusterId: String(x.cluster_id),
       family: fit.family,
@@ -171,7 +187,8 @@ export async function screenClusters(
   }
 
   const candidates = await eligibleClusters(db, market);
-  if (candidates.length === 0) {
+  const expressedCands = await eligibleExpressed(db);
+  if (candidates.length === 0 && expressedCands.length === 0) {
     return {
       status: "nothing_eligible",
       runId,
@@ -195,11 +212,36 @@ export async function screenClusters(
     byFamily.set(fit.family, [...(byFamily.get(fit.family) ?? []), { id: k.id, fit }]);
   }
 
+  const expByFamily = new Map<
+    Family,
+    { id: string; sha: string; rule: ExpressedRule; exit: ExpressionExit }[]
+  >();
+  for (const k of expressedCands) {
+    const ex = expressionCheck(k.ruleJson, k.exitJson);
+    if (!ex.ok) {
+      skipped.push({ clusterId: k.id, reason: "invalid_expression" });
+      continue;
+    }
+    const sha = sha256Hex(
+      canonicalJson({ family: ex.family, rule: ex.rule, exit: ex.exit, prereg: k.preregSha }),
+    );
+    if (await alreadyScreened(db, k.id, sha)) {
+      skipped.push({ clusterId: k.id, reason: "already_screened" });
+      continue;
+    }
+    expByFamily.set(ex.family, [
+      ...(expByFamily.get(ex.family) ?? []),
+      { id: k.id, sha, rule: ex.rule, exit: ex.exit },
+    ]);
+  }
+  const source = expByFamily.size === 0 ? null : (deps.expressedSource?.(c) ?? null);
+
   const splits: Record<string, number> = {};
   const tested: Tested[] = [];
   for (const family of FAMILY_ORDER) {
-    const group = byFamily.get(family);
-    if (group === undefined) continue;
+    const group = byFamily.get(family) ?? [];
+    const expGroup = expByFamily.get(family) ?? [];
+    if (group.length === 0 && expGroup.length === 0) continue;
     // a family without a stored split or live incumbent cannot be screened (as the challengers stage)
     const split = await loadSplit(db, lineageId(market, family));
     const incumbent = split === null ? null : await incumbentOf(db, market, family);
@@ -212,7 +254,8 @@ export async function screenClusters(
             ? "no_incumbent"
             : null;
     if (lane !== null || split === null) {
-      for (const g of group) skipped.push({ clusterId: g.id, reason: lane ?? "no_split" });
+      for (const g of [...group, ...expGroup])
+        skipped.push({ clusterId: g.id, reason: lane ?? "no_split" });
       continue;
     }
     splits[family] = split.version;
@@ -231,11 +274,31 @@ export async function screenClusters(
         skipped.push({ clusterId: g.id, reason: `insufficient_${stat.insufficient}` });
         continue;
       }
-      tested.push({ clusterId: g.id, fit: g.fit, sha, stat });
+      tested.push({ clusterId: g.id, family, fit: g.fit, sha, stat });
+    }
+    for (const g of expGroup) {
+      if (source === null) {
+        skipped.push({ clusterId: g.id, reason: "no_rule_data" });
+        continue;
+      }
+      const sample = view.evaluateExpressed(g.rule, g.exit, source);
+      const stat = statistic(sample, `${market}:${d}:${g.id}:${g.sha}`, {
+        replicates: params.stats.bootstrapReplicationsMin,
+        minRows: params.stats.minTrades,
+        minBlocks: params.stats.minBlocks,
+      });
+      if (isInsufficient(stat)) {
+        skipped.push({ clusterId: g.id, reason: `insufficient_${stat.insufficient}` });
+        continue;
+      }
+      tested.push({ clusterId: g.id, family, fit: null, sha: g.sha, stat });
     }
   }
 
-  const eligible = candidates.length - skipped.filter((s) => s.reason === "invalid_fit").length;
+  const considered = candidates.length + expressedCands.length;
+  const eligible =
+    considered -
+    skipped.filter((s) => s.reason === "invalid_fit" || s.reason === "invalid_expression").length;
   const rows: ScreeningRow[] = screenRun(
     tested.map((t) => ({ id: t.clusterId, stat: t.stat })),
     q,
@@ -253,7 +316,7 @@ export async function screenClusters(
         market,
         d,
         q,
-        candidates.length,
+        considered,
         eligible,
         tested.length,
         survivors,
@@ -270,7 +333,7 @@ export async function screenClusters(
         args: [
           runId,
           t.clusterId,
-          t.fit.family,
+          t.family,
           t.sha,
           t.stat.rows,
           t.stat.blocks,
@@ -297,18 +360,18 @@ export async function screenClusters(
   }
 
   const ranked: SurvivorRef[] = tested
-    .filter((t) => rowOf.get(t.clusterId)!.survived)
+    .filter((t) => t.fit !== null && rowOf.get(t.clusterId)!.survived)
     .map((t) => ({
       clusterId: t.clusterId,
-      family: t.fit.family,
-      params: t.fit.params,
+      family: t.family,
+      params: t.fit!.params,
       rank: rowOf.get(t.clusterId)!.rank!,
     }))
     .sort((a, b) => a.rank - b.rank);
   return {
     status: "ran",
     runId,
-    considered: candidates.length,
+    considered,
     eligible,
     screened: tested.length,
     survivors,

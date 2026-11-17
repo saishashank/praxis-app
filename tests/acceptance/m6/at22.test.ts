@@ -338,7 +338,10 @@ describe("AT-22 annotations are never part of an LLM context (KB-051, LLM-036)",
     const { join, resolve } = await import("node:path");
     const root = resolve(__dirname, "../../../src/lib");
     const files = [
-      ...readdirSync(join(root, "llm")).map((f) => join(root, "llm", f)),
+      // every source file under src/lib/llm, sub-folders included (M22 added minilm/, D-1533)
+      ...readdirSync(join(root, "llm"), { recursive: true, encoding: "utf8" })
+        .filter((f) => /\.(?:ts|tsx|mts|mjs|js|json)$/.test(f))
+        .map((f) => join(root, "llm", f)),
       join(root, "learning", "playbook.ts"),
       join(root, "learning", "laneA.ts"),
       join(root, "learning", "wordsStage.ts"),
