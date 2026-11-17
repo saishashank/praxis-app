@@ -20,6 +20,8 @@ import { committeeNight } from "@/lib/committee/night";
 import { defaultAgentParams } from "@/lib/agents/params";
 import { cleanupTempDbs } from "../../db/helpers";
 import { committeeLlm, committeeProvider, KEYS as COMMITTEE_KEYS } from "../../committee/harness";
+import { shadowNight } from "@/lib/llm/minilm/shadow";
+import { fakeEmbedder, headOf, lockOf, withAnnouncements } from "../../llm/minilm/helpers";
 import { STEELMAN_OWN, MIGRATION_OWNED, at32World, combineTables } from "./at32World";
 
 vi.setConfig({ testTimeout: 900000, hookTimeout: 900000 });
@@ -121,6 +123,26 @@ const M22_STAGE_WRITERS: Array<(db: Client) => Promise<void>> = [
     });
     if (res.rated !== 1)
       throw new Error(`the Committee stage did not rate: ${JSON.stringify(res)}`);
+  },
+  // L5: the real MiniLM shadow stage (fake embedder) reads one ZZ announcement (the golden world has none, and its
+  // announcement table is hashed, so the read is answered by a view) and writes only minilm_shadow.
+  async (db) => {
+    const r = await shadowNight(
+      withAnnouncements(db, [
+        { source: "zz", ann_id: "a9", type: null, title: "Quarterly update" },
+      ]),
+      {
+        market: "AU",
+        d: "2030-01-03",
+        enabled: true,
+        cap: 5,
+        head: headOf(),
+        lock: lockOf(),
+        embedder: fakeEmbedder(),
+        now: TS,
+      },
+    );
+    if (r.written !== 1) throw new Error(`the MiniLM stage did not write: ${JSON.stringify(r)}`);
   },
 ];
 

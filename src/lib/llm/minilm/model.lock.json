@@ -1,0 +1,16 @@
+{
+  "format": "praxis-minilm-lock/1",
+  "model": "all-MiniLM-L6-v2",
+  "licence": "Apache-2.0",
+  "url": "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx",
+  "sha256": null,
+  "sizeBytes": null,
+  "maxBytes": 100000000,
+  "dim": 384,
+  "maxSeqLen": 128,
+  "vocab": {
+    "url": "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/vocab.txt",
+    "sha256": null
+  },
+  "note": "Not pinned yet: the file's fingerprint and size are filled in by the first fetch in the fixtures lane (D-1500). While sha256 is null the setting stays refused."
+}

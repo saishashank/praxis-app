@@ -1015,3 +1015,9 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1492 | Forward only and the entry (task C3, D-1417 pattern): reflectMain(argv, env, deps) in src/lib/steelman/reflectCli.ts refuses a replay flag and any date but t... |
 | D-1493 | Reservation (task C3, D-1411, D-1457): reflectionReserve(db, market, d) = the picks settling in the session times reflectionCallReservation (the worst case o... |
 | D-1494 | Display (task C3, D-1425, UXN-288, O-54): the track record loader sets lookingBack on a settled pick's row from its written reflection; the row shows "Lookin... |
+| D-1500 | Pin, lock and what "the lock hash mismatches" means (task L5, D-1414): onnxruntime-node is pinned exactly at 1.31.1 (published 2026-10-26, more than two week... |
+| D-1501 | Head and trainer (task L5, D-1415): the classes are the rule classifier's own categories (classifyAnnouncement, AGT-011), so the head's labels are whatever t... |
+| D-1502 | What the shadow stores and compares (task L5, D-1416): one minilm_shadow row per announcement (primary key market, day, source, announcement id) with the rul... |
+| D-1503 | Nobody reads it (task L5, D-1416): tests/security/minilmReaders.test.ts keeps the table named only by the stage and the health line (and the trigger generato... |
+| D-1504 | Entry and health as built (task L5): minilmMain(argv, env, deps) in cli.ts (shadow, default, and embed; --model and --vocab are flags, so no new environment... |
+| D-1510 | L5 merge (orchestrator): the onnxruntime-node pin and its lock-file regeneration are left out of the merge. |
