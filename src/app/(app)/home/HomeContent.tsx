@@ -25,7 +25,7 @@ import { WelcomeBanner } from "./WelcomeBanner";
 import { IntradaySection } from "../picks/IntradaySection";
 import { PortfolioCard } from "../picks/PortfolioCard";
 import { ProfileLabel } from "../picks/ProfileLabel";
-import { entryLabel, entryNote, nowMaskedText, nowNote, pct, profileHue } from "../picks/text";
+import { nowPct, pct, profileHue } from "../picks/text";
 
 const SIZE_NAME: Record<string, string> = { U1: "Large", U2: "Mid", U3: "Small" };
 const MAX_HOME_CARDS = 3; // threshold-ok: UXR-020 shows up to 3 pick cards
@@ -316,6 +316,37 @@ function NeedsYou({ needs }: { needs: HomeNeed[] }) {
   );
 }
 
+/** One label/value row of the pick card grid; values break only between their groups (D-1085). */
+function PickRow({
+  label,
+  testId,
+  children,
+}: {
+  label: string;
+  testId?: string;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <dt className="text-text-muted">{label}</dt>{" "}
+      <dd className="m-0 min-w-0" data-testid={testId}>
+        {children}
+      </dd>
+    </>
+  );
+}
+
+/** A price with its percentage, kept on one line; either part may be missing (masked viewer). */
+function PriceChange({ micro, ppm }: { micro: number | null; ppm: number | null }) {
+  if (micro === null && ppm === null) return <>n/a</>;
+  return (
+    <span className="whitespace-nowrap">
+      {micro !== null ? <Money micro={micro} /> : null}
+      {ppm !== null ? `${micro !== null ? " " : ""}${pct(ppm)}` : null}
+    </span>
+  );
+}
+
 /** UXR-020 (3) + UXR-052: family rail, tinted band, family badge; primary action "Why this pick". */
 function PickCard({ p, masked }: { p: HomePick; masked: boolean }) {
   const fam = familyBadge(p.family);
@@ -334,45 +365,69 @@ function PickCard({ p, masked }: { p: HomePick; masked: boolean }) {
         </span>
       }
     >
-      <p className="m-0 min-w-0 break-words">
-        <span className="font-semibold">{p.stock}</span>
-        {p.company ? <span className="text-text-muted"> · {p.company}</span> : null}
+      <p className="m-0 flex min-w-0 items-baseline gap-1" data-testid="home-pick-title">
+        <span className="shrink-0 font-semibold">{p.stock}</span>{" "}
+        {p.company ? (
+          <span className="min-w-0 flex-1 truncate text-text-muted" title={p.company}>
+            {"· "}
+            {p.company}
+          </span>
+        ) : null}{" "}
         {SIZE_NAME[p.tier] ? (
-          <span className="text-text-muted"> · {SIZE_NAME[p.tier]} company</span>
+          <span
+            className="shrink-0 rounded-md bg-surface-2 px-1.5 text-xs text-text-muted"
+            title={`${SIZE_NAME[p.tier]} company`}
+            data-testid="home-pick-size"
+          >
+            {SIZE_NAME[p.tier]}
+          </span>
         ) : null}
       </p>
-      {p.entryMicro !== null ? (
-        <p className="m-0 mt-1 text-sm" data-testid="home-entry-line">
-          {entryLabel(p.entryBought)} <Money micro={p.entryMicro} />
-          {entryNote(p.entryBought, p.lastCloseD)}
-        </p>
-      ) : null}
-      {p.nowMicro !== null ? (
-        <p className="m-0 mt-1 text-sm" data-testid="home-now-line">
-          Now <Money micro={p.nowMicro} />
-          {nowNote(p.nowChangePpm, p.nowLabel)}
-        </p>
-      ) : masked && p.nowChangePpm !== null ? (
-        <p className="m-0 mt-1 text-sm" data-testid="home-now-line">
-          {nowMaskedText(p.nowChangePpm)}
-        </p>
-      ) : null}
-      {p.referenceMicro !== null || p.aimPpm !== null || p.stopPpm !== null ? (
-        <p className="m-0 mt-1 text-sm">
-          Aim {p.aimMicro !== null ? <Money micro={p.aimMicro} /> : null}
-          {p.aimPpm !== null ? `${p.aimMicro !== null ? " " : ""}(${pct(p.aimPpm)})` : null}
-          {p.aimMicro === null && p.aimPpm === null ? "n/a" : null} · Stop{" "}
-          {p.stopMicro !== null ? <Money micro={p.stopMicro} /> : null}
-          {p.stopPpm !== null ? `${p.stopMicro !== null ? " " : ""}(${pct(p.stopPpm)})` : null}
-          {p.stopMicro === null && p.stopPpm === null ? "n/a" : null}
-        </p>
-      ) : null}
-      <p className="m-0 mt-1 text-xs text-text-muted">
-        {p.timeFrameSessions !== null
-          ? `Time frame ${p.timeFrameSessions} ${plural(p.timeFrameSessions, "session")}`
-          : "Time frame not set"}
-        {p.validUntil ? ` · Valid until ${dayText(p.validUntil)}` : ""}
-      </p>
+      <dl className="m-0 mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+        {p.entryMicro !== null ? (
+          <PickRow label={p.entryBought ? "Bought" : "Entry"} testId="home-entry-line">
+            <span className="whitespace-nowrap">
+              <Money micro={p.entryMicro} />
+            </span>
+            {!p.entryBought && p.lastCloseD !== null ? (
+              <span className="whitespace-nowrap"> · close {formatDay(p.lastCloseD)}</span>
+            ) : null}
+          </PickRow>
+        ) : null}
+        {p.nowMicro !== null ? (
+          <PickRow label="Now" testId="home-now-line">
+            <span className="whitespace-nowrap">
+              <Money micro={p.nowMicro} />
+              {p.nowChangePpm !== null ? ` ${nowPct(p.nowChangePpm)}` : ""}
+            </span>
+            {p.nowLabel ? <span className="whitespace-nowrap"> · {p.nowLabel}</span> : null}
+          </PickRow>
+        ) : masked && p.nowChangePpm !== null ? (
+          <PickRow label="Now" testId="home-now-line">
+            <span className="whitespace-nowrap">{nowPct(p.nowChangePpm)} from entry</span>
+          </PickRow>
+        ) : null}
+        {p.referenceMicro !== null || p.aimPpm !== null || p.stopPpm !== null ? (
+          <>
+            <PickRow label="Aim">
+              <PriceChange micro={p.aimMicro} ppm={p.aimPpm} />
+            </PickRow>
+            <PickRow label="Stop">
+              <PriceChange micro={p.stopMicro} ppm={p.stopPpm} />
+            </PickRow>
+          </>
+        ) : null}
+        <PickRow label="Window">
+          <span className="whitespace-nowrap">
+            {p.timeFrameSessions !== null
+              ? `${p.timeFrameSessions} ${plural(p.timeFrameSessions, "session")}`
+              : "not set"}
+          </span>
+          {p.validUntil ? (
+            <span className="whitespace-nowrap"> · until {dayText(p.validUntil)}</span>
+          ) : null}
+        </PickRow>
+      </dl>
       <p className="m-0 mt-3">
         <Link href={p.whyHref} className={buttonClass("default")}>
           Why this pick

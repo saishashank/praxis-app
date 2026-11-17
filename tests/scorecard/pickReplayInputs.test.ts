@@ -247,12 +247,20 @@ describe("replayNightsScored", () => {
     );
     expect(r.nights).toEqual(["2026-11-10", "2026-11-11"]);
     expect(r.days).toEqual([]);
+    // D-1083: no passports in the database, so both nights are counted as having none
+    expect(r.cortex).toMatchObject({ nights: 2, noPassports: 2, featured: 0 });
     expect(seen).toEqual([
       [1, 2],
       [2, 2],
     ]);
     // without a callback the run is the same
     expect((await replayNightsScored({ db, world, params }, 1)).nights).toEqual(["2026-11-11"]);
+    // a world with a single session has no night to replay
+    const one = stub([], { sessions: ["2026-11-12"], bar: () => undefined, indexBarsOf: () => [] });
+    expect(await replayNightsScored({ db, world: one, params }, 3)).toMatchObject({
+      nights: [],
+      cortex: { nights: 0 },
+    });
   }, 60_000);
 });
 

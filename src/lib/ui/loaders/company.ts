@@ -7,7 +7,12 @@
 // Unmasked users get the candles (integer micro prices), key numbers, markers and our activity.
 import { displayName, formatInstant, isoWeek, MISSING } from "@/lib/view/format";
 import { MARKET_INDEX_CODE } from "@/lib/data/quotes/parse";
-import { newerThanClose, quoteTimeMelbourne, readLatestQuotes } from "@/lib/data/quotes/latest";
+import {
+  newerThanClose,
+  quoteChangePpm,
+  quoteTimeMelbourne,
+  readLatestQuotes,
+} from "@/lib/data/quotes/latest";
 import { safeSourceUrl } from "@/lib/http/safeLink";
 import { dateStaleness } from "@/lib/view/staleness";
 import { maskText, normCode } from "@/lib/view/mask";
@@ -259,7 +264,7 @@ export async function loadCompany(env: LoaderEnv, key: string): Promise<CompanyM
         if (q === null || close <= 0n) return null;
         return {
           priceMicro: q.lastMicro.toString(),
-          changePpm: Number(((q.lastMicro - close) * 1_000_000n) / close), // money-float-ok: ppm of micro prices
+          changePpm: quoteChangePpm(q.lastMicro, close, q.prevCloseMicro) ?? 0,
           at: quoteTimeMelbourne(q.quoteAt),
         };
       }, null)
@@ -443,7 +448,7 @@ export async function loadIndexStrip(env: LoaderEnv): Promise<IndexStrip> {
       if (q === null || lastC <= 0) return null;
       return {
         levelMicro: Number(q.lastMicro), // money-float-ok: index level in integer micro units
-        changePpm: Math.round(((Number(q.lastMicro) - lastC) / lastC) * PPM), // money-float-ok: derived ratio
+        changePpm: quoteChangePpm(q.lastMicro, BigInt(lastC), q.prevCloseMicro) ?? 0,
         at: quoteTimeMelbourne(q.quoteAt),
       };
     }, null);

@@ -19,6 +19,7 @@ import { pickRef } from "./picks";
 import { loadPickNow, ppmOf, type PickNow } from "./pickNow";
 import {
   newerThanClose,
+  quoteChangePpm,
   quoteTimeMelbourne,
   readLatestQuotes,
   type LatestQuote,
@@ -231,16 +232,10 @@ export function indexLine(
     base !== null && base > 0 ? Math.round(((now - base) * PPM) / base) : null;
   if (q !== null) {
     const level = Number(q.lastMicro) / 1_000_000; // money-float-ok: index points for display
-    const base =
-      q.prevCloseMicro !== null
-        ? Number(q.prevCloseMicro) / 1_000_000 // money-float-ok: index points for display
-        : last
-          ? last.cMicro / 1_000_000 // money-float-ok: index points for display
-          : null;
     return {
       name: "ASX 200",
       level,
-      changePpm: ppmOf(level, base),
+      changePpm: quoteChangePpm(q.lastMicro, last ? BigInt(last.cMicro) : null, q.prevCloseMicro),
       at: quoteTimeMelbourne(q.quoteAt),
       d: q.quoteD,
     };
@@ -636,11 +631,14 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     const q = newerThanClose(live.get(code), last ? last.d : null);
     if (q !== null) {
       const lastC = Number(q.lastMicro) / 1_000_000; // money-float-ok: display dollars, as `c` is stored
-      const base = q.prevCloseMicro !== null ? Number(q.prevCloseMicro) / 1_000_000 : null; // money-float-ok: display dollars
       return {
         stock: label(code),
         close: lastC,
-        changePpm: base !== null && base > 0 ? Math.round(((lastC - base) * PPM) / base) : null,
+        changePpm: quoteChangePpm(
+          q.lastMicro,
+          last ? BigInt(Math.round(last.c * 1_000_000)) : null, // money-float-ok: stored close back to micro
+          q.prevCloseMicro,
+        ),
         at: quoteTimeMelbourne(q.quoteAt),
       };
     }

@@ -24,10 +24,13 @@ import {
   WARM_SESSIONS_MAX,
   WARM_SESSIONS_MIN,
   type FeatureNightSource,
+  type WarmWorld,
 } from "@/lib/cortex/learn/warmStart";
 import { loadSnapshot } from "./snapshot";
 import { SnapshotWorld } from "./snapshotWorld";
 import { snapshotFeatureSource } from "./warmStartSource";
+import type { SkipReasons } from "@/lib/cortex/learn/warmStart";
+import { histogramText, newCortexTally, type CortexTally } from "@/lib/scorecard/pickReplay";
 import { learningDone, learningWeek, runLearning } from "./learningMode";
 import {
   RUN_MODES,
@@ -39,6 +42,14 @@ import {
 } from "./runner";
 
 const MARKET = "AU";
+
+/** D-1083: the skip-reason breakdown of a warm start, counts only. */
+function warmDiagText(skips: SkipReasons, t: CortexTally): string {
+  const skip = `skip_reasons=universe:${skips.universe},moves:${skips.moves},features:${skips.features},liquid:${skips.liquid},card:${skips.card}`;
+  const nulls = `feature_nulls=no_session:${t.noSession},no_passports:${t.noPassports},abstained:${[...t.abstained.values()].reduce((a, b) => a + b, 0)}`;
+  return `${skip} ${nulls} feature_nights=${t.featured}/${t.nights} cortex_abstain=${histogramText(t.abstained)}`;
+}
+
 /** D-1068: the pick scorecard (O-84) is a report, not a run kind: no replay_run row, no learning write. */
 export const SCORECARD_MODE = "pick-scorecard";
 /** D-1078: the learning Cortex's warm start: scorecard rows for past sessions; no replay_run row. */
@@ -530,7 +541,7 @@ async function pickScorecardMain(
     }
     const s = r.run.summary;
     out(
-      `replay pick-scorecard: ${r.run.status} sessions=${r.run.sessions} nights=${s.days} picks=${s.picksN} gainers=${s.gainers.hits}/${s.gainers.total} losers=${s.losers.hits}/${s.losers.total} cortex_nights=${s.cortex.days} minutes=${r.minutes.toFixed(2)} rows=${r.rows}`,
+      `replay pick-scorecard: ${r.run.status} sessions=${r.run.sessions} nights=${s.days} picks=${s.picksN} gainers=${s.gainers.hits}/${s.gainers.total} losers=${s.losers.hits}/${s.losers.total} cortex_nights=${s.cortex.days} minutes=${r.minutes.toFixed(2)} rows=${r.rows} passport_nights=${r.cortex.nights - r.cortex.noPassports} cortex_abstain=${histogramText(r.cortex.abstained)}`,
     );
     return 0;
   } catch (e) {
@@ -582,7 +593,11 @@ async function warmStartMain(
     stage = "plan";
     const plan = await planWarmStart(db, { market: MARKET, calendar, sessions });
     let source: FeatureNightSource | undefined;
-    if (plan.nights.length > 0 && plan.missingFeatureNights.length > 0) {
+    let warmWorld: WarmWorld | undefined;
+    const tally = newCortexTally();
+    // D-1084: the snapshot world is always built when there are nights: stored feature nights do not
+    // guarantee that the database universe and bars cover the planned nights
+    if (plan.nights.length > 0) {
       if (deps.prepareSnapshot === undefined) {
         out("replay: failed (no snapshot source)");
         return 1;
@@ -599,7 +614,22 @@ async function warmStartMain(
       db = open(url, has(token) ? token : undefined);
       await ping(db, deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))));
       const world = new SnapshotWorld(loadSnapshot(bytes), { params, tierSource: "bars" });
-      source = await snapshotFeatureSource({ db, world, params, market: MARKET });
+      // D-1084: the universe, closes and bars come from the snapshot (bar-derived tiers, point in time)
+      warmWorld = {
+        tiersOn: (d) => world.warmTiersOn(d),
+        closesOn: (d) => world.warmClosesOn(d),
+        barsOf: (codes, from, to) => world.warmBars(codes, from, to),
+      };
+      if (plan.missingFeatureNights.length > 0) {
+        source = await snapshotFeatureSource({
+          db,
+          world,
+          params,
+          market: MARKET,
+          firstNight: plan.nights[0]!,
+          tally,
+        });
+      }
     }
     stage = "write";
     const r = await warmStart(db, {
@@ -608,9 +638,10 @@ async function warmStartMain(
       sessions,
       now: new Date(nowMs()).toISOString(),
       ...(source === undefined ? {} : { source }),
+      ...(warmWorld === undefined ? {} : { world: warmWorld }),
     });
     out(
-      `replay cortex-warm-start: nights_written=${r.written} skipped_existing=${r.skippedExisting} skipped_no_data=${r.skippedNoData} first=${r.firstD ?? "none"} last=${r.lastD ?? "none"} rows=${r.rows}`,
+      `replay cortex-warm-start: nights_written=${r.written} skipped_existing=${r.skippedExisting} skipped_no_data=${r.skippedNoData} first=${r.firstD ?? "none"} last=${r.lastD ?? "none"} rows=${r.rows} ${warmDiagText(r.skipReasons, tally)}`,
     );
     return 0;
   } catch (e) {
