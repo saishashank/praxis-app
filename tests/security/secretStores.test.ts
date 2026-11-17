@@ -3,6 +3,8 @@
 // workflows, .env.example, the smoke checks and the Owner guide, so a rotation cannot miss a store.
 import fs from "node:fs";
 import path from "node:path";
+// @ts-expect-error js-yaml is untyped in this package
+import yaml from "js-yaml";
 import { describe, expect, it } from "vitest";
 import { CREDENTIAL_NAME_LIST } from "@/lib/sentinel/schema";
 import {
@@ -315,5 +317,66 @@ describe("the secrets tool reads a copy of the table (scripts/secrets/rows.json)
       JSON.stringify(JSON.parse(read(file))) === JSON.stringify(JSON.parse(wanted));
     if (process.env.PRAXIS_UPDATE_GUIDE === "1" && !same()) fs.writeFileSync(full, wanted);
     expect(JSON.parse(read(file))).toEqual(JSON.parse(wanted));
+  });
+});
+
+describe("model keys live in exactly four places (M22 L4, D-1412, LLM-077)", () => {
+  const KEYS = ["GOOGLE_AI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY"];
+  type Step = { name?: string; env?: Record<string, string> };
+  type Job = { steps?: Step[]; env?: Record<string, string> };
+  const dir = path.join(root, ".github", "workflows");
+  /** `file#job#step` of every place a workflow puts a model key in an env mapping or reads it as a secret. */
+  const holders = (): string[] => {
+    const out: string[] = [];
+    for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".yml"))) {
+      const wf = yaml.load(fs.readFileSync(path.join(dir, f), "utf8")) as {
+        env?: Record<string, string>;
+        jobs?: Record<string, Job>;
+      };
+      if (KEYS.some((k) => wf.env && k in wf.env)) out.push(`${f}#top#`);
+      for (const [job, def] of Object.entries(wf.jobs ?? {})) {
+        if (KEYS.some((k) => def.env && k in def.env)) out.push(`${f}#${job}#job-env`);
+        for (const s of def.steps ?? [])
+          if (KEYS.some((k) => s.env && k in s.env)) out.push(`${f}#${job}#${s.name ?? "step"}`);
+      }
+    }
+    return out.sort();
+  };
+
+  it("only the bake-off, the smoke test, the signals step and the experts job hold them", () => {
+    const places = holders();
+    expect(places.map((p) => p.split("#").slice(0, 2).join("#"))).toEqual(
+      [
+        "arena-signals.yml#production",
+        "llm-bakeoff.yml#production",
+        "maintenance.yml#experts",
+        "smoke-test.yml#production",
+      ].sort(),
+    );
+    expect(places.some((p) => p.includes("#job-env") || p.includes("#top#"))).toBe(false);
+    expect(places).toContain("arena-signals.yml#production#Decide the session");
+  });
+
+  it("no workflow outside those places even names a model key as a secret", () => {
+    const allowed = new Set([
+      "arena-signals.yml",
+      "llm-bakeoff.yml",
+      "maintenance.yml",
+      "smoke-test.yml",
+    ]);
+    for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".yml")))
+      if (!allowed.has(f))
+        for (const k of KEYS)
+          expect(fs.readFileSync(path.join(dir, f), "utf8"), `${f} ${k}`).not.toContain(k);
+  });
+
+  it("none is in a Vercel configuration file or a Vercel environment list in the repository", () => {
+    const vercel = read("vercel.json");
+    for (const k of KEYS) expect(vercel).not.toContain(k);
+    for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".yml"))) {
+      const text = fs.readFileSync(path.join(dir, f), "utf8");
+      if (/vercel (env|pull|deploy)|VERCEL_TOKEN/.test(text) && f !== "smoke-test.yml")
+        for (const k of KEYS) expect(text, `${f} ${k}`).not.toContain(k);
+    }
   });
 });

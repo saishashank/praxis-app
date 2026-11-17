@@ -58,6 +58,8 @@ export type WriteDeps = {
   readonly providers: readonly LlmProvider[];
   /** Usage reader for the pre-call reservation (D-481, D-482). */
   readonly store: LlmStore;
+  /** Tokens the pick reflections of tonight still need from the writer role (D-1493); absent = 0. */
+  readonly reflectionReserve?: number;
 };
 
 const ROLE: Role = "R6";
@@ -118,7 +120,7 @@ const triedAndFailed = (attempts: readonly { outcome: string }[]): boolean =>
  * cap alike). False = not enough room: the subject is skipped (`budget`).
  */
 export async function hasRoom(
-  deps: Pick<WriteDeps, "params" | "store" | "market" | "d">,
+  deps: Pick<WriteDeps, "params" | "store" | "market" | "d" | "reflectionReserve">,
   reservation: number,
 ): Promise<boolean> {
   const usage = await deps.store.usage(ROLE, deps.market, deps.d);
@@ -126,8 +128,12 @@ export async function hasRoom(
   const share = deps.params.marketShare[deps.market];
   const totalLeft = scaledCap(deps.params.dailyTotal, share) - usage.totalDay;
   const nightLeft = deps.params.nightlyTokensPerMarket - usage.marketNight;
-  const later = await reserveAfterLeft("steelman", deps.params, deps.market, (role) =>
-    deps.store.usage(role, deps.market, deps.d),
+  const later = await reserveAfterLeft(
+    "steelman",
+    deps.params,
+    deps.market,
+    (role) => deps.store.usage(role, deps.market, deps.d),
+    deps.reflectionReserve ?? 0,
   );
   return reservation <= Math.min(allow.allowed, totalLeft - later, nightLeft - later);
 }

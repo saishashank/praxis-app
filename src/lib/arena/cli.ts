@@ -29,6 +29,7 @@ import { decisionCutoffUtc } from "@/lib/agents/decisionView";
 import { waitForCutoffPoll } from "@/lib/sentinel/cutoffPoll";
 import { learnDay, type LearnResult } from "@/lib/learning/learnStage";
 import { wordsDay, type WordsLlm, type WordsResult } from "@/lib/learning/wordsStage";
+import { readLiveRoles } from "@/lib/llm/factory";
 import { nightlyLlm } from "@/lib/llm/nightlyLlm";
 import {
   ARENA_JOB,
@@ -56,7 +57,12 @@ function flag(args: readonly string[], name: string): string | null {
 
 export type CliDeps = {
   /** Test seam: the routers of the `words` phase (default: rules-only, no provider; LLM-040). */
-  readonly wordsLlm?: (ctx: { db: Client; params: AgentParams; kbVersion: string }) => WordsLlm;
+  readonly wordsLlm?: (ctx: {
+    db: Client;
+    params: AgentParams;
+    kbVersion: string;
+    liveRoles?: readonly string[] | null;
+  }) => WordsLlm;
   readonly openDb?: (url: string, token: string | undefined) => Client;
   readonly nowMs?: () => number;
   readonly sleep?: (ms: number) => Promise<void>;
@@ -384,8 +390,16 @@ function wordsSummary(r: WordsResult): string {
   );
 }
 
-/** The words phase's routers from the nightly seam (rules-only until the bake-off passes, LLM-040, D-1445). */
-function rulesOnlyLlm(ctx: { db: Client; params: AgentParams; kbVersion: string }): WordsLlm {
+/**
+ * The words phase's routers from the nightly seam (D-1445, D-1460): rules-only unless `llm_live_roles` (read once before the
+ * phase, `ctx.liveRoles`) lists a role whose bake-off passed and whose key is present; an unreadable list is rules-only (LLM-040).
+ */
+function nightWordsLlm(ctx: {
+  db: Client;
+  params: AgentParams;
+  kbVersion: string;
+  liveRoles?: readonly string[] | null;
+}): WordsLlm {
   const night = nightlyLlm(ctx);
   return {
     r5Router: night.routerFor("R5"),
@@ -557,7 +571,9 @@ export async function signalsMain(
       if (learn.status === "failed") exit = 1;
     }
     if (phase === "words" || (phase === "all" && writes)) {
-      const llm = deps.wordsLlm ?? rulesOnlyLlm;
+      const llm = deps.wordsLlm ?? nightWordsLlm;
+      // D-1460: the list is read here, before the synchronous words phase; null (unreadable) keeps every role rules-only.
+      const liveRoles = await readLiveRoles(db);
       const words = await wordsDay(db, {
         market: market,
         d,
@@ -565,7 +581,7 @@ export async function signalsMain(
         calendar,
         now: nowIso,
         commitSha,
-        llm: (ctx) => llm({ db, ...ctx }),
+        llm: (ctx) => llm({ db, ...ctx, liveRoles }),
       });
       out(wordsSummary(words));
       lastWords = `words=${words.status}`;
