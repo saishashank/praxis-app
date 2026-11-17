@@ -1029,6 +1029,32 @@
       }
     },
     {
+      "id": "action:src/app/(app)/reviews/experts/queue/actions.ts#confirmCallAction",
+      "type": "action",
+      "name": "confirmCallAction",
+      "purpose": "Server action confirmCallAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/experts/queue/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/reviews/experts/queue/actions.ts"
+      }
+    },
+    {
       "id": "action:src/app/(app)/reviews/experts/queue/actions.ts#confirmClaimAction",
       "type": "action",
       "name": "confirmClaimAction",
@@ -1189,6 +1215,32 @@
       "type": "action",
       "name": "rejectClaimAction",
       "purpose": "Server action rejectClaimAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
+      "specIds": [
+        "ARN-060",
+        "ROL-102a"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Returns a typed error to the form; no partial write.",
+      "runbook": null,
+      "views": [
+        "learning",
+        "platform"
+      ],
+      "source": "src/app/(app)/reviews/experts/queue/actions.ts",
+      "attrs": {
+        "file": "src/app/(app)/reviews/experts/queue/actions.ts"
+      }
+    },
+    {
+      "id": "action:src/app/(app)/reviews/experts/queue/actions.ts#typedCallAction",
+      "type": "action",
+      "name": "typedCallAction",
+      "purpose": "Server action typedCallAction: an Owner or Editor checks, edits, parks or merges expert claims and confirms technique clusters; audited.",
       "specIds": [
         "ARN-060",
         "ROL-102a"
@@ -19468,6 +19520,17 @@
       ]
     },
     {
+      "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#confirmCallAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#confirmCallAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
       "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#confirmClaimAction",
       "from": "service:app",
       "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#confirmClaimAction",
@@ -19537,6 +19600,17 @@
       "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#rejectClaimAction",
       "from": "service:app",
       "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#rejectClaimAction",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "learning",
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|action:src/app/(app)/reviews/experts/queue/actions.ts#typedCallAction",
+      "from": "service:app",
+      "to": "action:src/app/(app)/reviews/experts/queue/actions.ts#typedCallAction",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [

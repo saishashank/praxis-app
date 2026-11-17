@@ -1025,4 +1025,9 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1502 | What the shadow stores and compares (task L5, D-1416): one minilm_shadow row per announcement (primary key market, day, source, announcement id) with the rul... |
 | D-1503 | Nobody reads it (task L5, D-1416): tests/security/minilmReaders.test.ts keeps the table named only by the stage and the health line (and the trigger generato... |
 | D-1504 | Entry and health as built (task L5): minilmMain(argv, env, deps) in cli.ts (shadow, default, and embed; --model and --vocab are flags, so no new environment... |
+| D-1505 | Call engine (task E3, D-1435, D-543): the rules extractor is one plain module, src/lib/experts/callEngine.mjs (+ .d.mts), because the seed script and the imp... |
+| D-1506 | Model answer (E3, D-1435): CALL_ANSWER_SCHEMA (code, direction, date, horizon number and unit, price basis) and parseModelAnswer: an answer is accepted only... |
+| D-1507 | Stored proposals (E3, D-1435): proposalIdOf is the hash of the claim and every field, so the same proposal has one id and storeProposal is insert-or-ignore o... |
+| D-1508 | Confirmation (E3, D-1435, D-524, AT-79): confirmCall (one click on the proposal shown) and confirmTypedCall (the editable form: code, direction, date, horizo... |
+| D-1509 | Seed proposals and boundary (E3, D-1435, D-543): scripts/experts/call-proposals.mjs --seed <folder> [--dry-run] [--universe <file>] re-extracts a proposal fo... |
 | D-1510 | L5 merge (orchestrator): the onnxruntime-node pin and its lock-file regeneration are left out of the merge. |
