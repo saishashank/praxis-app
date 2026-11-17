@@ -2,7 +2,7 @@
 // D-1078: `snapshotFeatureSource`, the feature nights a warm start rebuilds from a snapshot world: a night
 // outside the world or before any frozen passport gives null; otherwise the fixed Cortex's features of
 // that evening, with one replay shared by the nights that have the same angle statuses; and the CLI path
-// (`--mode cortex-warm-start`) that builds it from a snapshot only when a night was never stored. ZZ data.
+// (`--mode cortex-warm-start`) that builds the snapshot world whenever there are nights, and the source only when a night was never stored. ZZ data.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Client } from "@libsql/client";
 import { defaultAgentParams } from "@/lib/agents/params";
@@ -13,11 +13,17 @@ import { histogramText, newCortexTally } from "@/lib/scorecard/pickReplay";
 import { buildSnapshot, loadSnapshot } from "@/lib/replay/snapshot";
 import { SnapshotWorld } from "@/lib/replay/snapshotWorld";
 import { replayMain } from "@/lib/replay/cli";
-import { warmStart, type WarmWorld } from "@/lib/cortex/learn/warmStart";
+import { loadCalendar } from "@/lib/arena/closeBooks";
+import { planWarmStart, warmStart, type WarmWorld } from "@/lib/cortex/learn/warmStart";
 import { microToFloat } from "@/lib/agents/indicators";
 import { snapshotFeatureSource } from "@/lib/replay/warmStartSource";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
 import { weekdayCalendar } from "../fixtures/stats/t13";
+
+vi.mock("@/lib/cortex/learn/warmStart", async (orig) => {
+  const m = await orig<typeof import("@/lib/cortex/learn/warmStart")>();
+  return { ...m, warmStart: vi.fn(m.warmStart) };
+});
 
 vi.mock("@/lib/replay/cortexReplay", async (orig) => {
   const m = await orig<typeof import("@/lib/replay/cortexReplay")>();
@@ -514,6 +520,51 @@ describe("replay --mode cortex-warm-start, set-up and failures", () => {
     const skips = [6, 7, 8, 9, 10].reduce((a, i) => a + Number(m![i]), 0);
     expect(skips).toBe(Number(m![2])); // the reasons add up to the skipped nights
   }, 120_000);
+
+  it("passes the snapshot world to the warm start whether or not every feature night is stored", async () => {
+    const worldOf = () => vi.mocked(warmStart).mock.calls.at(-1)![1].world;
+    const go = async (db: Client) =>
+      run(
+        ["--sessions", "3"],
+        { TURSO_MAIN_URL: "file:x.db" },
+        {
+          openDb: () => keepOpen(db),
+          params,
+          prepareSnapshot: async () => snapshotBytes(),
+          sleep: async () => {},
+        },
+      );
+    // some feature nights missing: the source and the world
+    const missing = await seedDb();
+    expect((await go(missing)).code).toBe(0);
+    expect(worldOf()).toBeDefined();
+    expect(vi.mocked(warmStart).mock.calls.at(-1)![1].source).toBeDefined();
+
+    // every needed feature night stored: the world, and no source
+    const stored = await seedDb();
+    const src = await snapshotFeatureSource(deps(stored, world));
+    const plan = await planWarmStart(stored, {
+      market: "AU",
+      calendar: await loadCalendar(stored, "AU"),
+      sessions: 3,
+    });
+    expect(plan.missingFeatureNights.length).toBeGreaterThan(0);
+    for (const d of plan.missingFeatureNights) {
+      const night = (await src(d))!;
+      for (const r of night.rows) {
+        await stored.execute({
+          sql: `INSERT INTO cortex_feature_daily (market, d, code, features_json, flags_json, active_set_hash, manifest_id)
+                VALUES ('AU', ?, ?, ?, '{}', ?, ?)`,
+          args: [night.d, r.code, JSON.stringify(r.features), r.activeSetHash, r.manifestId],
+        });
+      }
+    }
+    const r = await go(stored);
+    expect(r.code).toBe(0);
+    expect(worldOf()).toBeDefined();
+    expect(vi.mocked(warmStart).mock.calls.at(-1)![1].source).toBeUndefined();
+    expect(r.lines[0]).toContain("nights_written=3 ");
+  }, 240_000);
 
   it("uses injected parameters, and a reconnect that fails at first is retried after a pause", async () => {
     const db = await seedDb();

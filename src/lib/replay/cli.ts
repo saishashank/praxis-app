@@ -595,7 +595,9 @@ async function warmStartMain(
     let source: FeatureNightSource | undefined;
     let warmWorld: WarmWorld | undefined;
     const tally = newCortexTally();
-    if (plan.nights.length > 0 && plan.missingFeatureNights.length > 0) {
+    // D-1084: the snapshot world is always built when there are nights: stored feature nights do not
+    // guarantee that the database universe and bars cover the planned nights
+    if (plan.nights.length > 0) {
       if (deps.prepareSnapshot === undefined) {
         out("replay: failed (no snapshot source)");
         return 1;
@@ -618,14 +620,16 @@ async function warmStartMain(
         closesOn: (d) => world.warmClosesOn(d),
         barsOf: (codes, from, to) => world.warmBars(codes, from, to),
       };
-      source = await snapshotFeatureSource({
-        db,
-        world,
-        params,
-        market: MARKET,
-        firstNight: plan.nights[0]!,
-        tally,
-      });
+      if (plan.missingFeatureNights.length > 0) {
+        source = await snapshotFeatureSource({
+          db,
+          world,
+          params,
+          market: MARKET,
+          firstNight: plan.nights[0]!,
+          tally,
+        });
+      }
     }
     stage = "write";
     const r = await warmStart(db, {
