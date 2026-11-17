@@ -145,7 +145,8 @@ Listed, not asked (PRD-048: nothing in M23 prompts the Owner; every open point i
 4. Optional: upload a historical index-change list so `cxa003_index_incl` can be run under its frozen hash; director-notice and announcement history have no free source.
 5. Read the eight monitor alarms each quarter; the demotion signal (D-1615) and the stall item (D-1621) ask for a decision.
 6. Review the [PROPOSED] values: D-1619, D-1625, D-1627, D-1636, D-1722.
-7. Later work, not M23: wire a `PanelLoader` for CXA-004 and the late label look (finding 6); store forward records for movers A2, A4 and A5 (finding 7).
+7. **Before approving the V3 production deploy (D-1773):** run `node scripts/db/migrate.mjs --db main` against production, approve outside 10:00 to 19:30 Melbourne on a trading day, then run smoke stage 2. To roll back, follow the corrected runbook (D-1772): app, Worker and approved commit together.
+8. Later work, not M23: wire a `PanelLoader` for CXA-004 and the late label look (finding 6); store forward records for movers A2, A4 and A5 (finding 7).
 
 ## §8 BUILD_SETUP section 9 (rows for the orchestrator to write)
 

@@ -4,7 +4,9 @@ Applies once migrations 0015 to 0040 have reached a database. Staging is retired
 
 ## What stays true
 
-- V1 code never reads the V2 tables and the V2 changes to old tables are additive, so a V1 deployment runs correctly on a V2 database. The Worker and the workflows on `main` keep working.
+- V1 code never reads the V2 tables and the V2 changes to old tables are additive, so a V1 deployment runs correctly on a V2 database.
+- **Signed calls change with V3 (D-1772).** From M18 the app accepts only signing scheme v2 (SEC-115, D-957), and the V3 Worker and the production workflows sign with v2. An app rolled back to a build before V3 refuses every v2-signed call with 401. So roll the app, the Worker and the workflows back **together**: the Worker with `npx wrangler rollback --name praxis-sentinel` (from `worker/`, to the deployment before V3), and the workflows by re-approving the earlier commit in `deploy-production`, because Actions run the approved commit.
+- **Service worker (D-1772).** V3 adds `public/sw.js` (static files only). After a rollback to a build without it, installed copies keep serving cached static files until their update check fails; if that matters, ship a no-op `sw.js` that unregisters itself with the rollback.
 - Nothing in V2 trades money on its own: every Cortex family is in shadow, so there is no position to unwind.
 
 ## Level 1: instant rollback (no build, minutes)

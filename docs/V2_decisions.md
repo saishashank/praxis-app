@@ -1215,3 +1215,5 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1769 | Reads and budget (M4, D-1641, Turso free plan): a page view adds nine statements, all keyed or bounded: the registry list (A2, LIMIT 200), the stream cell pr... |
 | D-1770 | Rollback runbook and its test at schema 40 (Z, found by the full gate): docs/runbooks/rollback-v2.md and the assertion in tests/golive/v2steps.test.tsx still... |
 | D-1771 | Two source guards fixed (Z, found by the full gate): |
+| D-1772 | Rollback runbook corrected (final review). |
+| D-1773 | Production deploy order (final review). deploy-production.yml deploys the Worker before Vercel, and migrations run only in the Vercel build, so the V3 Worker... |
