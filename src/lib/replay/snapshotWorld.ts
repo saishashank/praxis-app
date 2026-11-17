@@ -377,6 +377,54 @@ export class SnapshotWorld implements CohortReplaySource {
     return (this.tiers.get(code) ?? []).map((r) => ({ d: r.d, halted: r.halted === 1 }));
   }
 
+  /** True when the ARN-010 tiers come from the bars (the replay runner) and not the universe rows. */
+  get barsTiered(): boolean {
+    return this.o.tierSource === "bars";
+  }
+
+  /**
+   * The tier and halt series the Cortex replay reads, as change points, for the sessions from `fromD`
+   * on, from the bar-derived tiers (`tiersAt`, D-189), the same series `familyInputs` uses. The raw
+   * universe rows cover only the last live sessions, so they cannot serve a night older than that
+   * (D-1082). A code below the floor on a session gets a null tier, as the live stage leaves a
+   * non-active universe row out. Bounded: only the sessions from `fromD`, not the whole history.
+   */
+  cortexTierRows(fromD: string): {
+    readonly tiers: ReadonlyMap<string, readonly TierRow[]>;
+    readonly halts: ReadonlyMap<string, readonly HaltRow[]>;
+  } {
+    const tiers = new Map<string, TierRow[]>();
+    const halts = new Map<string, HaltRow[]>();
+    const lastTier = new Map<string, Tier | null>();
+    const lastHalt = new Map<string, boolean>();
+    const haltedOn = new Map<string, Set<string>>();
+    for (const [code, rows] of this.tiers) {
+      haltedOn.set(code, new Set(rows.filter((r) => r.halted === 1).map((r) => r.d)));
+    }
+    for (const d of this.sessions) {
+      if (d < fromD) continue;
+      const day = this.tiersAt(d);
+      for (const code of this.codes) {
+        const t = day.get(code);
+        const tier = t !== undefined && t.active ? t.tier : null;
+        const halted = haltedOn.get(code)?.has(d) ?? false;
+        if (!lastTier.has(code) || lastTier.get(code) !== tier) {
+          const list = tiers.get(code) ?? [];
+          list.push({ d, tier });
+          tiers.set(code, list);
+          lastTier.set(code, tier);
+        }
+        if (!lastHalt.has(code) || lastHalt.get(code) !== halted) {
+          const list = halts.get(code) ?? [];
+          list.push({ d, halted });
+          halts.set(code, list);
+          lastHalt.set(code, halted);
+        }
+      }
+    }
+    return { tiers, halts };
+  }
+
   /** Index closes of one index (AXJO, GSPC, VIX), oldest first; empty when absent. */
   indexBarsOf(indexCode: string): readonly IndexViewBar[] {
     return this.indexBarsBy.get(indexCode) ?? [];

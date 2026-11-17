@@ -36,7 +36,7 @@ import { shortlistFromBars, usableBar } from "@/lib/picks/shortlistLoad";
 import { SHORTLIST_RULE, type DayBar } from "@/lib/picks/shortlist";
 import type { PickInput, Tier, UniverseCode } from "@/lib/picks/types";
 import type { AngleStatus } from "@/lib/cortex/angles/types";
-import { createCortexReplay, type CortexReplay } from "@/lib/replay/cortexReplay";
+import { createCortexReplay, cortexTierFrom, type CortexReplay } from "@/lib/replay/cortexReplay";
 import { signalId } from "@/lib/replay/ledger";
 import type { SnapshotWorld } from "@/lib/replay/snapshotWorld";
 import type { FeatureNight } from "@/lib/cortex/learn/scorecard";
@@ -392,6 +392,53 @@ export function featureNightOf(
   };
 }
 
+/** D-1083: counts of why a Cortex night gave no features (counts and statuses only, no data). */
+export type CortexTally = {
+  /** Nights asked for. */
+  nights: number;
+  /** Nights whose session is not in the snapshot. */
+  noSession: number;
+  /** Nights with no frozen passport statuses. */
+  noPassports: number;
+  /** Nights that gave features. */
+  featured: number;
+  /** Nights the Cortex ran but gave no features or abstained: reason (or "no_features") to count. */
+  abstained: Map<string, number>;
+};
+
+export const newCortexTally = (): CortexTally => ({
+  nights: 0,
+  noSession: 0,
+  noPassports: 0,
+  featured: 0,
+  abstained: new Map(),
+});
+
+/** `featureNightOf` that also tallies the outcome; what it returns is unchanged. */
+export function featureNightTallied(
+  out: Parameters<typeof featureNightOf>[0] & { readonly reason: string | null },
+  d: string,
+  tally: CortexTally,
+): FeatureNight | null {
+  const night = featureNightOf(out, d);
+  if (night !== null) tally.featured += 1;
+  else {
+    const why = out.reason ?? "no_features";
+    tally.abstained.set(why, (tally.abstained.get(why) ?? 0) + 1);
+  }
+  return night;
+}
+
+/** `reason:count` pairs, sorted by reason; "none" when empty. */
+export function histogramText(h: ReadonlyMap<string, number>): string {
+  return h.size === 0
+    ? "none"
+    : [...h]
+        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+        .map(([k, v]) => `${k}:${v}`)
+        .join(",");
+}
+
 export type ReplayProgress = (done: number, total: number) => void;
 
 /** Replay every night (sequential, deterministic order); a night without a scorable day is skipped. */
@@ -399,9 +446,12 @@ export async function replayNightsScored(
   deps: PickReplayDeps,
   n: number,
   progress?: ReplayProgress,
-): Promise<{ days: DayResult[]; nights: string[] }> {
+): Promise<{ days: DayResult[]; nights: string[]; cortex: CortexTally }> {
   const { world } = deps;
   const nights = replayNights(world.sessions, n);
+  const tally = newCortexTally();
+  // D-1082: bar-derived tiers from the first night (less the lookback) on, not the whole history
+  const fromD = nights.length === 0 ? undefined : cortexTierFrom(world.sessions, nights[0]!);
   const opened = await openReplay(deps);
   // one Cortex replay per distinct angle set (the set only changes when a passport version is frozen)
   const cortexBy = new Map<string, CortexReplay>();
@@ -409,7 +459,13 @@ export async function replayNightsScored(
     const key = JSON.stringify([...passports]);
     let c = cortexBy.get(key);
     if (c === undefined) {
-      c = createCortexReplay({ world, params: opened.live, passports, schemaSha: SCHEMA_SHA });
+      c = createCortexReplay({
+        world,
+        params: opened.live,
+        passports,
+        schemaSha: SCHEMA_SHA,
+        ...(fromD === undefined ? {} : { fromD }),
+      });
       cortexBy.set(key, c);
     }
     return c;
@@ -420,12 +476,14 @@ export async function replayNightsScored(
     const nd = world.sessions[world.sessions.indexOf(d) + 1]!;
     const picks = await picksAsOf(deps, opened, d);
     const { statuses: passports, basis } = await passportsAsOf(deps.db, opened.market, d);
-    const night =
-      passports.size === 0 ? null : featureNightOf(cortexOf(passports).hook.night(d, []), d);
+    tally.nights += 1;
+    let night: FeatureNight | null = null;
+    if (passports.size === 0) tally.noPassports += 1;
+    else night = featureNightTallied(cortexOf(passports).hook.night(d, []), d, tally);
     const day = scoreNight(deps, d, nd, picks, night, basis);
     if (day !== null) days.push(day);
     done += 1;
     progress?.(done, nights.length);
   }
-  return { days, nights };
+  return { days, nights, cortex: tally };
 }

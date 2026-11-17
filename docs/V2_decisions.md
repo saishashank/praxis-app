@@ -587,6 +587,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1079 | (Owner) Point in time: for night D only the bars up to D, the price-sensitive announcements published before D's close (a mover counts as "news before the op... |
 | D-1080 | (Owner) Identifiable and independent of the pick scorecard: every warm-start row has the manifest id prefix warmstart: |
 | D-1081 | (Owner) Not touched: the switch rule (the learner takes decisions only after learn_switch_min_nights matured forward disagreement nights, D-927) and every st... |
+| D-1082 | The Cortex replay now takes its tier and halt series from the bar-derived tiers when the snapshot world is bars-tiered (SnapshotWorld.cortexTierRows(fromD),... |
+| D-1083 | Diagnostics, counts and statuses only, no data and no secrets. |
 
 ## M16 (M16_design.md)
 

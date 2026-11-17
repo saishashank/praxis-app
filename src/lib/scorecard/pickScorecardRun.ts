@@ -7,7 +7,7 @@ import type { AgentParams } from "@/lib/agents/params";
 import { sha256Hex } from "@/lib/data/backfill/rules.mjs";
 import { loadSnapshot } from "@/lib/replay/snapshot";
 import { SnapshotWorld } from "@/lib/replay/snapshotWorld";
-import { replayNightsScored } from "./pickReplay";
+import { replayNightsScored, type CortexTally } from "./pickReplay";
 import { SESSIONS_DEFAULT, SESSIONS_MAX, SKIPPED_DEFAULT, summarise } from "./pickScorecard";
 import {
   persistScorecard,
@@ -31,6 +31,8 @@ export type ScorecardResult =
       readonly run: ScorecardRun;
       readonly rows: number;
       readonly minutes: number;
+      /** D-1083: why Cortex nights gave no features (counts only). */
+      readonly cortex: CortexTally;
     }
   | { readonly kind: "already" }
   | { readonly kind: "empty" };
@@ -46,7 +48,7 @@ export async function runPickScorecard(o: {
   const t0 = o.nowMs();
   const snap = loadSnapshot(o.snapshotBytes);
   const world = new SnapshotWorld(snap, { params: o.params, tierSource: "bars" });
-  const { days, nights } = await replayNightsScored(
+  const { days, nights, cortex } = await replayNightsScored(
     { db: o.db, world, params: o.params, market: MARKET },
     o.sessions,
   );
@@ -72,5 +74,5 @@ export async function runPickScorecard(o: {
     summary,
   };
   const rows = await persistScorecard(o.db, run, days);
-  return { kind: "recorded", run, rows, minutes: (o.nowMs() - t0) / 60_000 }; // threshold-ok: ms per minute
+  return { kind: "recorded", run, rows, minutes: (o.nowMs() - t0) / 60_000, cortex }; // threshold-ok: ms per minute
 }

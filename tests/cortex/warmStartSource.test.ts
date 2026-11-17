@@ -8,7 +8,8 @@ import type { Client } from "@libsql/client";
 import { defaultAgentParams } from "@/lib/agents/params";
 import { angleById } from "@/lib/cortex/angles/registry";
 import { insertPassport } from "@/lib/cortex/store";
-import { createCortexReplay } from "@/lib/replay/cortexReplay";
+import { asOfWorldOf, createCortexReplay, cortexTierFrom } from "@/lib/replay/cortexReplay";
+import { histogramText, newCortexTally } from "@/lib/scorecard/pickReplay";
 import { buildSnapshot, loadSnapshot } from "@/lib/replay/snapshot";
 import { SnapshotWorld } from "@/lib/replay/snapshotWorld";
 import { replayMain } from "@/lib/replay/cli";
@@ -30,7 +31,11 @@ const N3 = CAL[410]!;
 const SWITCH = `${CAL[405]!}T00:00:00.000Z`; // a later passport version frozen between N2 and N3
 const IDS = ["A-D1-02", "A-D2-01", "A-D1-06"];
 
-function snapshotBytes(): Uint8Array {
+/**
+ * `late`: D-1082 production shape: universe rows exist only for the last sessions (a few codes, one halted
+ * for a day), and an extra thin code that is below the tier floor until session 350.
+ */
+function snapshotBytes(late = false): Uint8Array {
   let seed = 4242;
   const rnd = (): number => {
     seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -40,15 +45,19 @@ function snapshotBytes(): Uint8Array {
   const universe: Record<string, unknown>[] = [];
   CODES.forEach((code, k) => {
     let c = 5 + rnd() * 5;
-    universe.push({
-      d: CAL[0],
-      code,
-      status: "active",
-      tier: "U1",
-      mcap_est: 1e9,
-      adv: 5e7,
-      halted: 0,
-    });
+    if (!late || k < 12) {
+      for (const d of late ? [CAL[410], CAL[411]] : [CAL[0]]) {
+        universe.push({
+          d,
+          code,
+          status: "active",
+          tier: "U1",
+          mcap_est: 1e9,
+          adv: 5e7,
+          halted: late && k === 0 && d === CAL[410] ? 1 : 0,
+        });
+      }
+    }
     for (const d of CAL) {
       const o = c;
       c = Math.max(0.5, c * (1 + 0.0025 * (1 + (k % 5)) + (rnd() - 0.5) * 0.02));
@@ -63,6 +72,20 @@ function snapshotBytes(): Uint8Array {
       });
     }
   });
+  if (late) {
+    const c = 5;
+    CAL.forEach((d, i) => {
+      bars.push({
+        code: "ZZ99",
+        d,
+        o: c,
+        h: c * 1.01,
+        l: c * 0.99,
+        c,
+        volume: i < 350 ? 10 : 5_000_000,
+      });
+    });
+  }
   let idx = 7000;
   const index_bars = CAL.map((d) => {
     idx *= 1 + (rnd() - 0.48) * 0.01;
@@ -78,7 +101,9 @@ function snapshotBytes(): Uint8Array {
 }
 
 let world: SnapshotWorld;
+let lateWorld: SnapshotWorld;
 beforeAll(() => {
+  lateWorld = new SnapshotWorld(loadSnapshot(snapshotBytes(true)), { params, tierSource: "bars" });
   world = new SnapshotWorld(loadSnapshot(snapshotBytes()), { params, tierSource: "bars" });
 }, 60_000);
 afterAll(cleanupTempDbs);
@@ -150,6 +175,92 @@ describe("snapshotFeatureSource", () => {
     expect(built() - before).toBe(2);
     expect(c!.rows[0]!.activeSetHash).not.toBe(a!.rows[0]!.activeSetHash);
   }, 120_000);
+});
+
+describe("D-1082 the Cortex replay of a bars-tiered world with late universe rows", () => {
+  const FIRST = CAL[300]!; // 110 sessions before the first universe row
+  const fromD = cortexTierFrom(CAL, FIRST);
+  const night = (d: string, from?: string) =>
+    createCortexReplay({
+      world: lateWorld,
+      params,
+      schemaSha: "t",
+      ...(from === undefined ? {} : { fromD: from }),
+    }).hook.night(d, []);
+
+  it("runs a night long before the first universe row, from the bar-derived tiers", () => {
+    expect(lateWorld.tierRowsOf("ZZ01").map((r) => r.d)).toEqual([CAL[410], CAL[411]]);
+    const out = night(CAL[320]!, fromD);
+    expect(out.reason).not.toBe("late_bar");
+    expect(out.features.size).toBeGreaterThan(10);
+  }, 60_000);
+
+  it("a night before the tier series starts has no codes and abstains late_bar", () => {
+    const out = night(CAL[100]!, fromD);
+    expect(out.reason).toBe("late_bar");
+    expect(out.features.size).toBe(0);
+  });
+
+  it("without fromD the series covers the last sessions, and a start past the end gives none", () => {
+    expect(night(CAL[410]!).features.size).toBeGreaterThan(10);
+    expect(asOfWorldOf({ world: lateWorld, params, fromD: "2999-01-01" }).tiers).toBeUndefined();
+  }, 60_000);
+
+  it("the tier and halt series are change points; a thin code is null until it trades", () => {
+    const { tiers, halts } = lateWorld.cortexTierRows(CAL[340]!);
+    const thin = tiers.get("ZZ99")!;
+    expect(thin[0]).toEqual({ d: CAL[340], tier: null });
+    expect(thin.length).toBeGreaterThan(1);
+    expect(thin[1]!.d >= CAL[350]!).toBe(true);
+    expect(thin[1]!.tier).not.toBeNull();
+    expect(halts.get("ZZ01")).toEqual([
+      { d: CAL[340], halted: false },
+      { d: CAL[410], halted: true },
+      { d: CAL[411], halted: false },
+    ]);
+    expect(halts.get("ZZ20")).toEqual([{ d: CAL[340], halted: false }]);
+    expect(lateWorld.barsTiered).toBe(true);
+    expect(world.barsTiered).toBe(true);
+    expect(new SnapshotWorld(loadSnapshot(snapshotBytes()), { params }).barsTiered).toBe(false);
+  }, 60_000);
+
+  it("snapshotFeatureSource gives features for a night 20 sessions before the first universe row", async () => {
+    const db = await freshDb("main");
+    for (const id of IDS) await passport(db, id, 1, "active", "2026-01-01T00:00:00.000Z");
+    const tally = newCortexTally();
+    const src = await snapshotFeatureSource({
+      ...deps(db, lateWorld),
+      firstNight: CAL[385]!,
+      tally,
+    });
+    const got = await src(CAL[390]!); // 20 sessions before the first universe row
+    expect(got).not.toBeNull();
+    expect(got!.rows.length).toBeGreaterThan(10);
+    expect(await src("2020-01-01")).toBeNull();
+    expect(await src(CAL[100]!)).toBeNull(); // before the tier series: the Cortex abstains
+    expect(tally.nights).toBe(3);
+    expect(tally.featured).toBe(1);
+    expect(tally.noSession).toBe(1);
+    expect(tally.noPassports).toBe(0);
+    expect(histogramText(tally.abstained)).toBe("late_bar:1");
+  }, 120_000);
+
+  it("tallies nights without passports, and writes nothing about nights it was not asked for", async () => {
+    const db = await freshDb("main");
+    const tally = newCortexTally();
+    const src = await snapshotFeatureSource({ ...deps(db, lateWorld), tally });
+    expect(await src(CAL[390]!)).toBeNull();
+    expect(tally).toMatchObject({ nights: 1, noPassports: 1, featured: 0 });
+    expect(histogramText(tally.abstained)).toBe("none");
+    expect(
+      histogramText(
+        new Map([
+          ["b", 2],
+          ["a", 1],
+        ]),
+      ),
+    ).toBe("a:1,b:2");
+  });
 });
 
 describe("replay --mode cortex-warm-start, set-up and failures", () => {
@@ -247,7 +358,7 @@ describe("replay --mode cortex-warm-start, set-up and failures", () => {
     );
     expect(r.code).toBe(0);
     expect(r.lines[0]).toMatch(
-      /nights_written=0 skipped_existing=0 skipped_no_data=0 first=none last=none rows=0$/,
+      /nights_written=0 skipped_existing=0 skipped_no_data=0 first=none last=none rows=0 skip_reasons=universe:0,moves:0,features:0,liquid:0,card:0 feature_nulls=no_session:0,no_passports:0,abstained:0 feature_nights=0\/0 cortex_abstain=none$/,
     );
     expect(asked).toBe(0);
   });
@@ -281,13 +392,15 @@ describe("replay --mode cortex-warm-start, set-up and failures", () => {
     expect(slept).toEqual([]); // the reconnect answered at once
     expect(r.lines).toHaveLength(1);
     const m =
-      /nights_written=(\d+) skipped_existing=0 skipped_no_data=(\d+) first=(\S+) last=(\S+) rows=(\d+)$/.exec(
+      /nights_written=(\d+) skipped_existing=0 skipped_no_data=(\d+) first=(\S+) last=(\S+) rows=(\d+) skip_reasons=universe:(\d+),moves:(\d+),features:(\d+),liquid:(\d+),card:(\d+) feature_nulls=\S+ feature_nights=\d+\/\d+ cortex_abstain=\S+$/.exec(
         r.lines[0]!,
       );
     expect(m).not.toBeNull();
     expect(Number(m![1]) + Number(m![2])).toBe(3);
     expect(Number(m![1])).toBeGreaterThan(0);
     expect(Number(m![5])).toBeGreaterThan(0);
+    const skips = [6, 7, 8, 9, 10].reduce((a, i) => a + Number(m![i]), 0);
+    expect(skips).toBe(Number(m![2])); // the reasons add up to the skipped nights
   }, 120_000);
 
   it("uses injected parameters, and a reconnect that fails at first is retried after a pause", async () => {

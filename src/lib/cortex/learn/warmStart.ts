@@ -71,6 +71,22 @@ export type WarmStartResult = {
   readonly firstD: string | null;
   readonly lastD: string | null;
   readonly rows: number;
+  /** D-1083: why nights were left out (their sum is `skippedNoData`). */
+  readonly skipReasons: SkipReasons;
+};
+
+/** The ways a planned night is skipped for want of data, in the order the run checks them. */
+export type SkipReasons = {
+  /** No universe snapshot on or before the night. */
+  readonly universe: number;
+  /** No code with a close on the night and the one before. */
+  readonly moves: number;
+  /** The Cortex feature night of D-1 or D-20 is missing. */
+  readonly features: number;
+  /** No liquid (U1/U2) code in the night's universe. */
+  readonly liquid: number;
+  /** The scorecard of the night had no rows. */
+  readonly card: number;
 };
 
 export type WarmStartPlan = {
@@ -158,6 +174,7 @@ export async function warmStart(db: Client, o: WarmStartOpts): Promise<WarmStart
     firstD: null,
     lastD: null,
     rows: 0,
+    skipReasons: { universe: 0, moves: 0, features: 0, liquid: 0, card: 0 },
   };
   if (plan.nights.length === 0) return none;
   const { market, calendar } = o;
@@ -252,6 +269,7 @@ export async function warmStart(db: Client, o: WarmStartOpts): Promise<WarmStart
 
   const written: string[] = [];
   let skippedNoData = 0;
+  const skips = { universe: 0, moves: 0, features: 0, liquid: 0, card: 0 };
   let rowsTotal = 0;
   for (const d of plan.nights) {
     const prev = previousTradingDay(d, calendar);
@@ -259,6 +277,7 @@ export async function warmStart(db: Client, o: WarmStartOpts): Promise<WarmStart
     const tierOf = await universeOf(d);
     if (tierOf === null) {
       skippedNoData += 1;
+      skips.universe += 1;
       continue;
     }
     const [cNow, cPrev] = [await closeOn(d), await closeOn(prev)];
@@ -273,6 +292,7 @@ export async function warmStart(db: Client, o: WarmStartOpts): Promise<WarmStart
     moves.sort((x, y) => y.movePpm - x.movePpm || (x.code < y.code ? -1 : 1));
     if (moves.length === 0) {
       skippedNoData += 1;
+      skips.moves += 1;
       continue;
     }
     const gainers = moves.filter((m) => m.movePpm > 0).slice(0, MOVERS_PER_SIDE);
@@ -316,8 +336,14 @@ export async function warmStart(db: Client, o: WarmStartOpts): Promise<WarmStart
       .map(([c]) => c)
       .sort();
     const [featuresPrev, featuresBack20] = [await featureOf(prev), await featureOf(back20)];
-    if (featuresPrev === null || featuresBack20 === null || liquidCodes.length === 0) {
+    if (featuresPrev === null || featuresBack20 === null) {
       skippedNoData += 1;
+      skips.features += 1;
+      continue;
+    }
+    if (liquidCodes.length === 0) {
+      skippedNoData += 1;
+      skips.liquid += 1;
       continue;
     }
     // bars up to d only (look-ahead guard: whatever the read returned past d is dropped)
@@ -358,6 +384,7 @@ export async function warmStart(db: Client, o: WarmStartOpts): Promise<WarmStart
     computedCards.push({ d, evidence: { hist: card.histograms } });
     if (card.rows.length === 0) {
       skippedNoData += 1;
+      skips.card += 1;
       continue;
     }
     const marked: AngleDayRow[] = card.rows.map((r) => ({
@@ -378,6 +405,7 @@ export async function warmStart(db: Client, o: WarmStartOpts): Promise<WarmStart
     firstD: written[0] ?? null,
     lastD: written[written.length - 1] ?? null,
     rows: rowsTotal,
+    skipReasons: skips,
   };
   if (out.lastD !== null) {
     await logEvent(db, {
