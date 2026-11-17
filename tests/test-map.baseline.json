@@ -972,6 +972,7 @@
       "scripts/ci/licence-register.m22.test.mjs",
       "tests/acceptance/v2/at32Steelman.test.ts",
       "tests/acceptance/v3/at32Opinions.test.ts",
+      "tests/acceptance/v3/at32Research.test.ts",
       "tests/acceptance/v3/at76Reflections.test.ts",
       "tests/acceptance/v3/at77Hash.test.ts",
       "tests/acceptance/v3/at78Holdings.test.ts",
@@ -984,6 +985,7 @@
       "tests/data/sourceRegister.m20.test.ts",
       "tests/db/0036_m20_markets_data.test.ts",
       "tests/db/0039_m22_llm_experts.test.ts",
+      "tests/db/0040_m23_research.test.ts",
       "tests/docs/replayHashPolicy.test.ts",
       "tests/security/ownerTablesReaders.test.ts"
     ],
@@ -1138,6 +1140,7 @@
       "scripts/e2e-day/assert-production-shape.test.mjs",
       "scripts/ingest/marketRefusal.test.mjs",
       "tests/acceptance/v3/at32Opinions.test.ts",
+      "tests/acceptance/v3/at32Research.test.ts",
       "tests/acceptance/v3/at68.test.ts",
       "tests/data/calendarEnable.test.ts",
       "tests/data/sourceRegister.m20.test.ts",
@@ -1145,6 +1148,7 @@
       "tests/db/0036_m20_markets_data.test.ts",
       "tests/db/0038_m21_owner_tools.test.ts",
       "tests/db/0039_m22_llm_experts.test.ts",
+      "tests/db/0040_m23_research.test.ts",
       "tests/db/scriptClient.test.ts",
       "tests/market/completeness.test.ts",
       "tests/market/guard.test.ts",
@@ -1188,7 +1192,9 @@
       "tests/usage/projectionSection.test.tsx",
       "worker/test/killSlot.test.ts"
     ],
+    "AT-72": ["tests/acceptance/v3/at72Exits.test.ts"],
     "AT-73": [
+      "tests/acceptance/v3/at32Research.test.ts",
       "tests/acceptance/v3/at73Shared.test.ts",
       "tests/acceptance/v3/at79Calls.test.ts",
       "tests/security/committeeBoundary.test.ts",
@@ -2826,6 +2832,7 @@
       "tests/acceptance/m6/at20s46.test.ts",
       "tests/config/m21Keys.test.ts",
       "tests/config/m22Keys.test.ts",
+      "tests/config/m23Keys.test.ts",
       "tests/email/reviewWords.test.ts",
       "tests/email/stopHitMail.test.ts",
       "tests/email/templates.test.ts",
@@ -3491,6 +3498,7 @@
     "DAT-248": [
       "scripts/ci/licence-register.m22.test.mjs",
       "tests/acceptance/v3/at81Regime.test.ts",
+      "tests/db/0040_m23_research.test.ts",
       "tests/health/regimeAlt.test.ts",
       "tests/regime/alt/evaluate.test.ts",
       "tests/regime/alt/inputs.test.ts",
@@ -4934,6 +4942,7 @@
       "tests/acceptance/v2/at61.test.ts",
       "tests/acceptance/v2/at63.test.ts",
       "tests/acceptance/v3/at32Opinions.test.ts",
+      "tests/acceptance/v3/at32Research.test.ts",
       "tests/acceptance/v3/at73Shared.test.ts",
       "tests/acceptance/v3/at76Reflections.test.ts",
       "tests/acceptance/v3/at77.test.ts",
@@ -5641,7 +5650,8 @@
     "VAL-111": [
       "tests/acceptance/v3/at76Trial.test.ts",
       "tests/committee/prereg.test.ts",
-      "tests/committee/trial.test.ts"
+      "tests/committee/trial.test.ts",
+      "tests/db/0040_m23_research.test.ts"
     ],
     "VAL-112": [
       "tests/acceptance/v2/at44.test.ts",
@@ -5665,11 +5675,13 @@
     "VAL-118": [
       "tests/acceptance/v2/at63.test.ts",
       "tests/config/m17Keys.test.ts",
+      "tests/db/0040_m23_research.test.ts",
       "tests/intraday/streamLook.test.ts"
     ],
     "VAL-119": ["tests/acceptance/v2/at63.test.ts"],
     "VAL-121": [
       "tests/acceptance/v3/at78Short.test.ts",
+      "tests/db/0040_m23_research.test.ts",
       "tests/shortShadow/evaluate.test.ts",
       "tests/shortShadow/run.test.ts",
       "tests/shortShadow/score.test.ts",

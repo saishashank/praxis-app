@@ -63,13 +63,13 @@ const ROW: Record<string, (m: string) => string> = {
   label_item: (m) =>
     `INSERT INTO label_item (market, source, ann_id, label, labelled_at, actor) VALUES ('${m}', 't', 'a1', 'material', '2030-01-02T00:00:00Z', 'owner')`,
   holdout_look: (m) =>
-    `INSERT INTO holdout_look (lineage, market, looked_at, prereg_sha, verdict) VALUES ('L1', '${m}', '2030-01-02T00:00:00Z', 'abcdef0', 'shadow')`,
+    `INSERT INTO holdout_look (lineage, market, looked_at, prereg_sha, verdict) VALUES ('short_shadow', '${m}', '2030-01-02T00:00:00Z', 'abcdef0', 'shadow')`,
 };
 
 describe("0036_m20_markets_data", () => {
   it("is migration 36 and its generated regions are current", async () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(ms).toHaveLength(39);
+    expect(ms).toHaveLength(40);
     expect(ms[35]).toMatchObject({ version: 36, name: "m20_markets_data" });
     const text = readFileSync(M20_MIGRATION_PATH as string, "utf8");
     expect(regionOf(text, M20_REGION as string)).toBe(renderM20Region() as string);
@@ -87,7 +87,7 @@ describe("0036_m20_markets_data", () => {
     const before = (
       await d2.execute("SELECT code, mode, enabled FROM market ORDER BY code")
     ).rows.map((r) => ({ ...r }));
-    expect(await migrateDown(d2, ms, 4)).toEqual({ rolledBack: 4, version: 35 });
+    expect(await migrateDown(d2, ms, 5)).toEqual({ rolledBack: 5, version: 35 });
     const names = (await schemaOf(d2)).join("\n");
     for (const t of NEW_TABLES) expect(names).not.toContain(`table:${t}:`);
     const cols = (await d2.execute("SELECT name FROM pragma_table_info('market')")).rows.map((r) =>
@@ -101,7 +101,7 @@ describe("0036_m20_markets_data", () => {
           .rows[0]!.v,
       ),
     ).toBe(1);
-    expect(await migrateUp(d2, ms)).toEqual({ applied: 4, version: 39 });
+    expect(await migrateUp(d2, ms)).toEqual({ applied: 5, version: 40 });
     expect(await schemaOf(d2)).toEqual(after);
     expect(
       (await d2.execute("SELECT code, mode, enabled FROM market ORDER BY code")).rows.map((r) => ({
