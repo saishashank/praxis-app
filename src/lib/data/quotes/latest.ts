@@ -108,6 +108,21 @@ export function newerThanClose(
   return q.quoteD > closeD ? q : null;
 }
 
+/**
+ * D-1084, pure: the change of a delayed quote in ppm. Measured against our stored last close (which
+ * `newerThanClose` guarantees is older than the quote); the quote's own previous close is used only
+ * when no stored close exists. Null when there is no positive base.
+ */
+export function quoteChangePpm(
+  lastMicro: bigint,
+  storedCloseMicro: bigint | null,
+  quotePrevCloseMicro: bigint | null,
+): number | null {
+  const base = storedCloseMicro ?? quotePrevCloseMicro;
+  if (base === null || base <= 0n) return null;
+  return Number(((lastMicro - base) * 1_000_000n) / base); // money-float-ok: ppm of micro prices
+}
+
 /** "11:35" in Melbourne time, for the "delayed, as of" label. Pure. */
 export function quoteTimeMelbourne(quoteAt: string): string {
   const t = new Date(quoteAt);

@@ -426,7 +426,7 @@ describe("Home redesign (UXR-020, 044, 053, 055, 056)", () => {
       expect(badge, c.textContent ?? "").not.toBeNull();
       expect(badge!.textContent).toMatch(/^(BR|VC|ND|BO|SC|CO|EX)\s?\S/);
       expect(c.textContent).toMatch(/Aim .*Stop /);
-      expect(c.textContent).toMatch(/Time frame/);
+      expect(c.textContent).toMatch(/Window /);
       expect(within(c as HTMLElement).getByRole("link", { name: "Why this pick" })).toBeTruthy();
     }
   });

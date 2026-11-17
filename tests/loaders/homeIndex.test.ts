@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { LatestQuote } from "@/lib/data/quotes/latest";
 import { chartSymbol, MARKET_INDEX_CODE, parseChartMeta } from "@/lib/data/quotes/parse";
 import { INDEX_CODE, INDEX_YAHOO_SYMBOL } from "@/lib/data/index/indexBars.mjs";
+import { quoteChangePpm } from "@/lib/data/quotes/latest";
 import { dayLabel, freshnessLabel, indexLine } from "@/lib/ui/loaders/home";
 
 const closes = [
@@ -72,6 +73,27 @@ describe("indexLine", () => {
   });
   it("a quote without a previous close falls back to the newest stored close", () => {
     expect(indexLine(closes, quote({ prevCloseMicro: null }))!.changePpm).toBe(10_000);
+  });
+});
+
+describe("D-1084: one change for a delayed quote, from our stored close", () => {
+  it("ignores the quote's own previous close (Owner phone 17 Nov: -1.65% on Market, -2.06% on Home)", () => {
+    // 8,895.10 against our stored close 9,044.40, while Yahoo's previous close was 9,082.30.
+    const q = quote({ lastMicro: 8_895_100_000n, prevCloseMicro: 9_082_300_000n });
+    const stored = [{ d: "2026-11-06", cMicro: 9_044_400_000 }];
+    const home = indexLine(stored, q)!.changePpm;
+    expect(home).toBe(quoteChangePpm(8_895_100_000n, 9_044_400_000n, 9_082_300_000n));
+    expect(home).toBe(-16_507); // -1.65%, the Market page's figure, not -2.06%
+  });
+  it("falls back to the quote's previous close only when no stored close exists; null without a base", () => {
+    expect(quoteChangePpm(110n, null, 100n)).toBe(100_000);
+    expect(quoteChangePpm(110n, 200n, 100n)).toBe(-450_000);
+    expect(quoteChangePpm(110n, null, null)).toBeNull();
+    expect(quoteChangePpm(110n, 0n, null)).toBeNull();
+    expect(
+      indexLine([], quote({ lastMicro: 8_484_000_000n, prevCloseMicro: 8_400_000_000n }))!
+        .changePpm,
+    ).toBe(10_000);
   });
 });
 
