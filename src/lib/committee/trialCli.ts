@@ -67,6 +67,8 @@ export async function trialMain(
     }
     const o = { market: MARKET, d, today, now: now.toISOString() };
     const r = phase === "prereg" ? await ensurePrereg(db, o) : await trialNight(db, o);
+    // D-1532: switched off or no trial to run, the step says nothing, as every other opinion stage of the night
+    if (r.status === "off" || r.status === "no_trial") return 0;
     const extra =
       "verdict" in r ? ` verdict=${r.verdict}` : "reason" in r ? ` reason=${r.reason}` : "";
     out(`arena-committee-trial ${MARKET} ${d}: ${phase} ${r.status}${extra}`);

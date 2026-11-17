@@ -1041,3 +1041,4 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1518 | Judge versions and stability (task C4, D-1428): the judge-model versions seen are the Committee's judge_model and, for the steelman, the smallest author_mode... |
 | D-1519 | Promotion request (task C4, D-1428): src/lib/opinions/promotion.ts: requestPromotion is one insert-or-ignore on opinion_promotion_request (primary key market... |
 | D-1520 | Entry, page and health as built (task C4): opinionMetersMain(argv, env, deps) in src/lib/opinions/cli.ts (flag --date, replay flags refused, counts only, alw... |
+| D-1532 | Trial steps in the night (orchestrator, after the C2 and L4 merge): signals.mjs passes the night's own arguments to both trial steps (["prereg", ...argv], ["... |

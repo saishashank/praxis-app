@@ -84,9 +84,10 @@ export async function run(argv0, env, deps0 = {}) {
   await soft("reflect", REFLECT_ENTRY, "reflectMain", argv);
   // D-1516: the trial entry is wired only where the file exists (it arrives with task C2).
   const trial = existsSync(path.join(root, TRIAL_ENTRY));
-  if (trial) await soft("trial", TRIAL_ENTRY, "trialMain", ["prereg"]);
+  // D-1532: the night's own arguments follow, so the date and the replay refusal apply as for every other stage
+  if (trial) await soft("trial", TRIAL_ENTRY, "trialMain", ["prereg", ...argv]);
   await soft("committee", COMMITTEE_ENTRY, "committeeMain", argv);
-  if (trial) await soft("trial", TRIAL_ENTRY, "trialMain", ["result"]);
+  if (trial) await soft("trial", TRIAL_ENTRY, "trialMain", ["result", ...argv]);
   return afterPicks;
 }
 
