@@ -2583,7 +2583,8 @@
       "source": "src/lib/config/verify.ts",
       "attrs": {
         "files": [
-          "src/lib/config/verify.ts"
+          "src/lib/config/verify.ts",
+          "src/lib/llm/roster.ts"
         ]
       }
     },
@@ -3457,6 +3458,36 @@
       }
     },
     {
+      "id": "llm-provider:workers-ai",
+      "type": "llm-provider",
+      "name": "workers-ai",
+      "purpose": "Free-tier LLM provider workers-ai in the dated roster; used only after a bake-off passes.",
+      "specIds": [
+        "LLM-070",
+        "LLM-071"
+      ],
+      "owner": "external",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "The router moves to the next provider in the roster or stays rules-only.",
+      "runbook": null,
+      "views": [
+        "llm"
+      ],
+      "source": "src/lib/llm/roster.ts",
+      "attrs": {
+        "models": [
+          "@cf/meta/llama-3.2-3b-instruct",
+          "@cf/openai/gpt-oss-120b",
+          "@cf/openai/gpt-oss-20b",
+          "@cf/qwen/qwen3.8-27b"
+        ]
+      }
+    },
+    {
       "id": "llm-role:R1",
       "type": "llm-role",
       "name": "R1",
@@ -3480,7 +3511,6 @@
       "attrs": {
         "candidates": [
           "google/gemini-3.5-flash-lite",
-          "groq/llama-3.1-8b-instant",
           "groq/openai/gpt-oss-20b"
         ]
       }

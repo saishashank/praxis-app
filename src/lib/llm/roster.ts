@@ -34,11 +34,12 @@ export type RosterEntry = {
   note: string;
 };
 
-const GOOGLE = "https://ai.google.dev/gemini-api/docs/rate-limits";
+const GOOGLE = "https://ai.google.dev/gemini-api/docs/rate-limits"; // redirects to aistudio.google.com/docs/rate-limits (read 2026-11-17)
 const GROQ = "https://console.groq.com/docs/rate-limits";
 const OPENROUTER = "https://openrouter.ai/docs/api-reference/limits";
+const WORKERS_AI = "https://developers.cloudflare.com/workers-ai/platform/pricing/";
 const NO_LIMITS = { rpm: null, rpd: null, tpm: null } as const;
-const CHECKED = "2026-10-29";
+const CHECKED = "2026-11-17"; // D-1485: provider pages re-read this day (see docs/llm-roster.md)
 
 export const ROSTER: readonly RosterEntry[] = [
   {
@@ -140,20 +141,6 @@ export const ROSTER: readonly RosterEntry[] = [
     note: "Same base table; TPD 200K. Next bake-off candidate (D-182).",
   },
   {
-    provider: "groq",
-    modelId: "llama-3.1-8b-instant",
-    tier: "small",
-    roles: ["R1"],
-    limits: NO_LIMITS,
-    trainsOnPrompts: false,
-    strictSchema: null,
-    knowledgeCutoff: null,
-    checkedOn: CHECKED,
-    status: "unverified",
-    sourceUrl: GROQ,
-    note: "Not in the rate-limits table read on this date; returned errors on all items in D-180.",
-  },
-  {
     provider: "openrouter",
     modelId: "qwen/qwen3.8-27b:free",
     tier: "medium",
@@ -166,6 +153,62 @@ export const ROSTER: readonly RosterEntry[] = [
     status: "unverified",
     sourceUrl: OPENROUTER,
     note: "Fallback only, never primary. Limits are the account-wide :free limits (50/day under 10 credits, 1000/day at 10+). Per-model trains_on_prompts not re-read.",
+  },
+  {
+    provider: "workers-ai",
+    modelId: "@cf/meta/llama-3.2-3b-instruct",
+    tier: "small",
+    roles: [],
+    limits: NO_LIMITS,
+    trainsOnPrompts: false,
+    strictSchema: null,
+    knowledgeCutoff: null,
+    checkedOn: CHECKED,
+    status: "unverified",
+    sourceUrl: WORKERS_AI,
+    note: "Neuron-priced, not request-limited: free allowance 10,000 neurons a day. No role until a bake-off passes (D-1407).",
+  },
+  {
+    provider: "workers-ai",
+    modelId: "@cf/openai/gpt-oss-20b",
+    tier: "small",
+    roles: [],
+    limits: NO_LIMITS,
+    trainsOnPrompts: false,
+    strictSchema: null,
+    knowledgeCutoff: null,
+    checkedOn: CHECKED,
+    status: "unverified",
+    sourceUrl: WORKERS_AI,
+    note: "Same allowance; must handle the strict answer schema or it fails its bake-off (D-1476).",
+  },
+  {
+    provider: "workers-ai",
+    modelId: "@cf/qwen/qwen3.8-27b",
+    tier: "medium",
+    roles: [],
+    limits: NO_LIMITS,
+    trainsOnPrompts: false,
+    strictSchema: null,
+    knowledgeCutoff: null,
+    checkedOn: CHECKED,
+    status: "unverified",
+    sourceUrl: WORKERS_AI,
+    note: "Same allowance; output is the dearest per token of the list.",
+  },
+  {
+    provider: "workers-ai",
+    modelId: "@cf/openai/gpt-oss-120b",
+    tier: "large",
+    roles: [],
+    limits: NO_LIMITS,
+    trainsOnPrompts: false,
+    strictSchema: null,
+    knowledgeCutoff: null,
+    checkedOn: CHECKED,
+    status: "unverified",
+    sourceUrl: WORKERS_AI,
+    note: "Same allowance; large tier.",
   },
   // Retired: must never be reachable.
   {
@@ -209,6 +252,20 @@ export const ROSTER: readonly RosterEntry[] = [
     status: "retired",
     sourceUrl: "https://console.groq.com/docs/deprecations",
     note: "Shut down 2026-08-16 (D-182).",
+  },
+  {
+    provider: "groq",
+    modelId: "llama-3.1-8b-instant",
+    tier: "small",
+    roles: [],
+    limits: NO_LIMITS,
+    trainsOnPrompts: null,
+    strictSchema: null,
+    knowledgeCutoff: null,
+    checkedOn: CHECKED,
+    status: "retired",
+    sourceUrl: "https://console.groq.com/docs/deprecations",
+    note: "Shut down 2026-08-16 (deprecations page read 2026-11-17); replacement openai/gpt-oss-20b.",
   },
   {
     provider: "github-models",
@@ -323,4 +380,9 @@ export function assertWindowAfterCutoff(
     throw new Error(
       `${provider}/${modelId}: window starts ${windowStartD}, not after the knowledge cut-off ${hit.knowledgeCutoff}`,
     );
+}
+
+/** The newest `checkedOn` day of the roster (D-1405: a bake-off report names it, and a candidate is run once per golden set and roster day). */
+export function rosterCheckedOn(): string {
+  return ROSTER.reduce((m, e) => (e.checkedOn > m ? e.checkedOn : m), "");
 }

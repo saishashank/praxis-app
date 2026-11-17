@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { parseReport, planEdit, run } from "./bakeoff-review.mjs";
+import { KEY_AVAILABLE, parseReport, planEdit, ROLES, run } from "./bakeoff-review.mjs";
 
 const REPORT = `# LLM bake-off report
 
@@ -44,6 +44,7 @@ test("parseReport reads the run, the date and each model's result; other markdow
       { model: "groq/zz-model-a", result: "PASS" },
       { model: "gemini/zz-model-b", result: "FAIL" },
     ],
+    roles: [],
   });
   assert.equal(parseReport("# AT-01 report\n| a | PASS |"), null);
   assert.equal(parseReport(""), null);
@@ -74,7 +75,7 @@ test("lists the reports, ignores other files, prints the edit and the M22 note",
         "llm_live_roles: add R6 for groq/zz-model-a (passed in bakeoff-1.md, run bk-2026-11-20)",
       ),
     );
-    assert.match(lines.at(-1), /arrives with milestone M22/);
+    assert.match(lines.at(-1), /To apply: add the role names above to the llm_live_roles setting/);
   });
 });
 
@@ -100,4 +101,78 @@ test("no report, no pass, a missing folder and a bad role each say so", () => {
     run(["--role", "R9"], () => {}),
     2,
   );
+});
+
+const ROLES_REPORT = (run, date, r6, words) => `# LLM bake-off report
+
+- Run: ${run}
+- Date: ${date}
+- Roster checked: 2026-11-17
+
+## Summary
+
+| Model | Items | JSON valid % | Invented numbers | Errors | Tokens | Result |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| zz-model-a | 156 | 100.00 | 0 | 0 | 900 | FAIL |
+
+## Role verdicts
+
+| Role | Model | Result |
+| --- | --- | --- |
+| R1 | zz-model-a | PASS |
+| R6 | zz-model-a | ${r6} |
+| words | zz-model-a | ${words} |
+`;
+
+test("parseReport reads the role verdicts table", () => {
+  const p = parseReport(ROLES_REPORT("bk-1", "2026-11-20", "PASS", "FAIL"));
+  assert.deepEqual(p.roles, [
+    { role: "R1", model: "zz-model-a", result: "PASS" },
+    { role: "R6", model: "zz-model-a", result: "PASS" },
+    { role: "words", model: "zz-model-a", result: "FAIL" },
+  ]);
+  assert.equal(p.models.length, 1);
+});
+
+test("the edit lists a role per passing verdict; --role narrows; a model that failed is not listed", () => {
+  const reports = [
+    { file: "r.md", report: parseReport(ROLES_REPORT("bk-1", "2026-11-20", "PASS", "FAIL")) },
+  ];
+  assert.deepEqual(planEdit(reports, null), [
+    "llm_live_roles: add R1 (announcement triage) for zz-model-a (passed in r.md, run bk-1)",
+    "llm_live_roles: add R6 (case writing) for zz-model-a (passed in r.md, run bk-1)",
+  ]);
+  assert.deepEqual(planEdit(reports, "R6"), [
+    "llm_live_roles: add R6 (case writing) for zz-model-a (passed in r.md, run bk-1)",
+  ]);
+  assert.deepEqual(planEdit(reports, "words"), []);
+});
+
+test("the newest report decides a role: a later FAIL withdraws an earlier PASS", () => {
+  const reports = [
+    { file: "a.md", report: parseReport(ROLES_REPORT("bk-1", "2026-11-20", "PASS", "PASS")) },
+    { file: "b.md", report: parseReport(ROLES_REPORT("bk-2", "2026-11-27", "FAIL", "PASS")) },
+  ];
+  const plan = planEdit(reports, null);
+  assert.ok(!plan.some((l) => l.includes(" R6 ")));
+  assert.ok(plan.some((l) => l.includes("add words (plain-words writing") && l.includes("b.md")));
+});
+
+test("run prints the role verdicts and the apply note; the roles are the five gate roles", () => {
+  assert.deepEqual(ROLES, ["R1", "R2", "R6", "R7", "words"]);
+  assert.equal(KEY_AVAILABLE, true);
+  withDir({ "bakeoff-1.md": ROLES_REPORT("bk-1", "2026-11-20", "PASS", "PASS") }, (dir) => {
+    const lines = [];
+    assert.equal(
+      run(["--dir", dir], (s) => lines.push(s)),
+      0,
+    );
+    assert.ok(lines.includes("  R6 zz-model-a: PASS"));
+    assert.ok(lines.some((l) => l.startsWith("llm_live_roles: add R1 (announcement triage)")));
+    assert.match(lines.at(-1), /To apply/);
+    assert.equal(
+      run(["--dir", dir, "--role", "R3"], () => {}),
+      2,
+    );
+  });
 });

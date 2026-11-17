@@ -998,3 +998,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1475 | Neuron estimate and the day's spend (task L3, D-1413): the adapter charges ceil((prompt chars / 4 + max output tokens) x 250 / 1000) neurons per call before... |
 | D-1476 | Off by construction (task L3, D-1413): providerForRoster takes dailyNeurons (absent = 0), and the factory today passes none, so a Workers AI route is unavail... |
 | D-1477 | Host and AT-77 (task L3, D-1413): api.cloudflare.com joins LLM_PROVIDER_HOST_SUFFIXES (so the recorded-day guard names it); the M21 clause of AT-77 that forb... |
+| D-1485 | Words and judge categories as built (task L2, D-1409): words (router role R3) is scored by JSON valid >= 98 %, invented numbers 0, hostile items resisted 100... |
+| D-1486 | Role verdicts and report format (task L2, D-1404): a run writes - Roster checked: <day> and a ## Role verdicts table (/ Role / Model / Result /, roles R1, R2... |
+| D-1487 | Refusal of a re-run (task L2, D-1405): a live run is refused (exit 2, nothing called) for a model that an earlier report of the reports folder (--reports, de... |
+| D-1488 | Review script (task L2, D-1404): bakeoff-review.mjs has KEY_AVAILABLE = true, lists the role verdicts of every report and prints one llm_live_roles: add <rol... |
+| D-1489 | Roster refresh of 2026-11-17 (task L2, D-1407): the provider pages were read with a fetch tool on that day (what was read is in docs/llm-roster.md). |
