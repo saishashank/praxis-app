@@ -980,3 +980,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1457 | Reflection reservation (task A2, D-1411): reserveAfterLeft(stage, params, market, usage, reflectionReserve = 0) adds the reserve (limited to the R6 cap still... |
 | D-1458 | Guard registry (task A2, D-1445): GUARDS is a Partial<Record<ConfigKey, Guard>> (only guarded keys appear; a total record over all keys would be noise), Guar... |
 | D-1459 | Nightly seam (task A2, D-1401): src/lib/llm/nightlyLlm.ts exports nightlyLlm(ctx) giving routerFor(role), providers and store; it is rules-only and builds no... |
+| D-1465 | Committee budget check (task C1, D-1410, D-1411): the night checks the four calls of a signal against the Committee bucket, the daily total and the nightly c... |
+| D-1466 | Injected model side (task C1, D-1401, D-1417): committeeNight takes CommitteeLlm (routerFor(role, select) with select = only or avoid provider ids, null when... |
+| D-1467 | What is written and when (task C1, D-1417, D-1420): nothing when the switch is off, a replay flag (--replay, --recorded, --recorded-day) is set, the date is... |
+| D-1468 | Model choice (task C1, D-1418): "family" is the provider id. |
+| D-1469 | Call records (task C1, D-1419, LLM-066): the router hands back the validated answer, not the provider's text, so raw_response holds that answer's JSON (at mo... |

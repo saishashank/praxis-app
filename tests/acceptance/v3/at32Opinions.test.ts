@@ -16,7 +16,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@libsql/client";
 import { afterAll, describe, expect, it, vi } from "vitest";
+import { committeeNight } from "@/lib/committee/night";
+import { defaultAgentParams } from "@/lib/agents/params";
 import { cleanupTempDbs } from "../../db/helpers";
+import { committeeLlm, committeeProvider, KEYS as COMMITTEE_KEYS } from "../../committee/harness";
 import { STEELMAN_OWN, MIGRATION_OWNED, at32World, combineTables } from "./at32World";
 
 vi.setConfig({ testTimeout: 900000, hookTimeout: 900000 });
@@ -98,6 +101,27 @@ const M22_STAGE_WRITERS: Array<(db: Client) => Promise<void>> = [
     ];
     for (const s of sql) await db.execute(s);
   },
+  // C1: the real Committee night (mock providers) on the golden world: the newest session's top signal is rated; it writes
+  // only committee_rating and committee_call (and an opinion_track row, which the steelman's own-set already excludes).
+  async (db) => {
+    const d = String(
+      (await db.execute("SELECT MAX(d) AS d FROM signal WHERE market = 'AU'")).rows[0]!.d,
+    );
+    const res = await committeeNight(db, {
+      market: "AU",
+      d,
+      today: d,
+      llmParams: defaultAgentParams().llm,
+      keys: { ...COMMITTEE_KEYS, shortlist: 1 },
+      llm: committeeLlm([committeeProvider("alpha"), committeeProvider("beta")]),
+      live: { R6: true, R7: true },
+      now: TS,
+      nowMs: () => 0,
+      deadlineMs: Number.MAX_SAFE_INTEGER,
+    });
+    if (res.rated !== 1)
+      throw new Error(`the Committee stage did not rate: ${JSON.stringify(res)}`);
+  },
 ];
 
 describe("AT-32 (opinions): the M22 own-set and the complement proof (D-1426)", () => {
@@ -147,8 +171,17 @@ describe("AT-32 (opinions): the M22 own-set and the complement proof (D-1426)", 
     // an M22 stage writes: the eight tables fill, the complement does not move
     for (const w of M22_STAGE_WRITERS) await w(db);
     for (const t of M22_OWN) {
-      expect(Number((await db.execute(`SELECT COUNT(*) n FROM ${t}`)).rows[0]!.n), t).toBe(1);
+      expect(
+        Number((await db.execute(`SELECT COUNT(*) n FROM ${t}`)).rows[0]!.n),
+        t,
+      ).toBeGreaterThanOrEqual(1);
     }
+    // the real Committee run rated one signal and stored its four calls, beside the static rows
+    const rated = await db.execute(
+      "SELECT COUNT(*) n FROM committee_rating WHERE rating = 'approve' AND signal_id <> 's1'",
+    );
+    expect(Number(rated.rows[0]!.n)).toBe(1);
+    expect(Number((await db.execute("SELECT COUNT(*) n FROM committee_call")).rows[0]!.n)).toBe(5);
     const after = await complementDump(db);
     expect(
       Object.keys(before.perTable).filter((t) => before.perTable[t] !== after.perTable[t]),
