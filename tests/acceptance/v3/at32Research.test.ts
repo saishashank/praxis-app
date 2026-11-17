@@ -14,6 +14,7 @@ import { join } from "node:path";
 import type { Client } from "@libsql/client";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { runResearchNight, type ResearchStep } from "@/lib/research/night";
+import { monitorsStep } from "@/lib/research/steps/monitors";
 import { cleanupTempDbs } from "../../db/helpers";
 import { STEELMAN_OWN, MIGRATION_OWNED, at32World, combineTables } from "./at32World";
 
@@ -102,6 +103,10 @@ const M23_STEP_WRITERS: Array<(db: Client) => Promise<void>> = [
     ];
     for (const s of sql) await db.execute(s);
   },
+  // M1 (D-1614): the real monitors step, on the quarter before the night; it writes only residual_monitor and app_log
+  async (db) => {
+    await monitorsStep.run(db, { market: "AU", d: "2030-04-02", now: TS });
+  },
 ];
 
 const base = JSON.parse(readFileSync(join(__dirname, "replay-hash.baseline.json"), "utf8")) as {
@@ -161,9 +166,13 @@ describe("AT-32 (research): the M23 own-set, the seam and the complement proof (
     const live = await complementDump(on);
     expect(live.perTable).toEqual(a.perTable);
     expect(live.rows).toEqual(a.rows);
-    // with the stubs the seam writes nothing at all, not even into the own-set
+    // the steps still stubs write nothing; the monitors step (M1) writes its quarterly rows into residual_monitor only
+    // (each task that lands a step moves its own table out of this list)
+    const STEP_WRITTEN = new Set<string>(["residual_monitor"]);
     for (const t of M23_OWN) {
-      expect(Number((await on.execute(`SELECT COUNT(*) n FROM ${t}`)).rows[0]!.n), t).toBe(0);
+      const n = Number((await on.execute(`SELECT COUNT(*) n FROM ${t}`)).rows[0]!.n);
+      if (STEP_WRITTEN.has(t)) expect(n, t).toBeGreaterThan(0);
+      else expect(n, t).toBe(0);
     }
     // a replayed night and a disabled market do not run it either
     expect((await runResearchNight(on, { market: "AU", d, now: TS, replay: true })).status).toBe(

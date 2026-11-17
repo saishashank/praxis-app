@@ -1127,3 +1127,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1662 | Harness (T1, D-1636): per fixture item three calls (original, neutral paraphrase, tone-flipped paraphrase) through the R2 router; stability = items whose gui... |
 | D-1663 | Production shadow (T1, D-1636, D-1642): textLabelsEnabled(env, {r2Live}) is true in staging as before, or in any environment when the factory's status lists... |
 | D-1664 | Fixture (T1): tests/fixtures/labels/paraphrase-zz.json holds 30 synthetic ZZ items (five invented events, each in both directions), with the expected guidanc... |
+| D-1675 | Monitor runner and periods (M1, D-1614): src/lib/cortex/monitors/store.ts holds the one writer (INSERT OR IGNORE into residual_monitor, then one app_log warn... |
+| D-1676 | Monitor 1 data (M1, D-1615): flags are cortex_state rows of kind promotion in state flagged; a flag belongs to the quarter in which its 20th later session fa... |
+| D-1677 | Monitor 2 and 3 data (M1, D-1616, D-1617): the calibration period is cal-<date of the newest fitted map> (the map version), so a refit makes one new row. |
+| D-1678 | Monitor 4 data (M1, D-1618): no table records which stop a live position used, so the count is read from two stored facts: a window is a cortex_state corpora... |
+| D-1679 | Boundary and tests (M1, D-1614, AT-74): the monitors import no arena, agent, pick, order, e-mail, alert or status-writing module and write only residual_moni... |
