@@ -220,7 +220,12 @@ function SplitTable({
   rows: TursoSplitRow[];
 }) {
   return (
-    <div className="overflow-x-auto">
+    <div
+      className="overflow-x-auto"
+      tabIndex={0}
+      role="region"
+      aria-label="Table (scrolls sideways)"
+    >
       <table className="w-full border-collapse text-left text-sm">
         <caption className="text-left font-medium">{caption}</caption>
         <thead>
@@ -325,7 +330,12 @@ function ModelsInUse({ llm }: { llm: LlmUsage }) {
           rules. A model is used only after it passes the bake-off and is switched on.
         </p>
       ) : (
-        <div className="mt-2 overflow-x-auto">
+        <div
+          className="mt-2 overflow-x-auto"
+          tabIndex={0}
+          role="region"
+          aria-label="Table (scrolls sideways)"
+        >
           <table className="w-full border-collapse text-left text-sm">
             <caption className="sr-only">Models that answered since {llm.sinceD}</caption>
             <thead>
@@ -390,7 +400,12 @@ function LlmSection({ llm }: { llm: LlmUsage | null }) {
             fixed rules answered because an earlier one could not. A failure ended without a model
             answer (for example the daily budget was used up).
           </p>
-          <div className="overflow-x-auto">
+          <div
+            className="overflow-x-auto"
+            tabIndex={0}
+            role="region"
+            aria-label="Table (scrolls sideways)"
+          >
             <table className="w-full border-collapse text-left text-sm">
               <caption className="text-left font-medium">
                 By role and provider since {llm.sinceD}
@@ -411,7 +426,12 @@ function LlmSection({ llm }: { llm: LlmUsage | null }) {
               </tbody>
             </table>
           </div>
-          <div className="overflow-x-auto">
+          <div
+            className="overflow-x-auto"
+            tabIndex={0}
+            role="region"
+            aria-label="Table (scrolls sideways)"
+          >
             <table className="w-full border-collapse text-left text-sm">
               <caption className="text-left font-medium">
                 By day and provider (newest first)

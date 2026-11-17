@@ -52,7 +52,12 @@ export function ProjectionSection({ report }: { report: ProjectionReport | null 
                 {m.projected === null || fit === null ? (
                   <p className="m-0 text-sm">No projection: {m.note ?? "not available."}</p>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div
+                    className="overflow-x-auto"
+                    tabIndex={0}
+                    role="region"
+                    aria-label="Table (scrolls sideways)"
+                  >
                     <table className="w-full border-collapse text-left text-sm">
                       <caption className="text-left text-xs text-text-muted">
                         Cap {whole.format(m.cap ?? 0)} codes, {m.sessions} trading days next month

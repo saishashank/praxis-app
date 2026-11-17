@@ -22,7 +22,12 @@ export function NightsView({ table }: { table: NightsTable | null }) {
             a slot with a failed post; a dash there means no failure was recorded, not a confirmed
             run.
           </p>
-          <div className="overflow-x-auto">
+          <div
+            className="overflow-x-auto"
+            tabIndex={0}
+            role="region"
+            aria-label="Table (scrolls sideways)"
+          >
             <table className="w-full border-collapse text-left text-sm">
               <caption className="sr-only">Step results for the last 7 nights</caption>
               <thead>

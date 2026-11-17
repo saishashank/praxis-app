@@ -34,7 +34,12 @@ function Disposals({
       {section.disposals.length === 0 ? (
         <p className="m-0 text-sm text-text-muted">No sales in this year.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div
+          className="overflow-x-auto"
+          tabIndex={0}
+          role="region"
+          aria-label="Table (scrolls sideways)"
+        >
           <table className="w-full min-w-[40rem] text-left text-sm">
             <thead>
               <tr className="text-text-muted">

@@ -918,3 +918,4 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1330 | CI fixes after run 43992252704: the alerts-muted seed uses a 64-hex alert id (the unmute action refuses any other shape as invalid, so the e2e never reached... |
 | D-1331 | CI fix after run 44002592203: the D-922 patterns and matchPatterns move to scripts/ci/internal-code-patterns.mjs (no file-system or import.meta use), re-expo... |
 | D-1332 | CI fixes after run 44008882224 (the AT-82 walk now loads and finds real faults): the two Owner-tool CSV file inputs (holdings, trades) carry an accessible na... |
+| D-1333 | CI fix after run 44017363748: every sideways-scrolling table box with nothing focusable inside (trades months, tax, card, nights check, usage, projection) ta... |

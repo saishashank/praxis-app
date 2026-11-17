@@ -82,7 +82,12 @@ export default async function TradesPage() {
                 Nothing to compare yet. Add a trade below.
               </p>
             ) : (
-              <div className="overflow-x-auto">
+              <div
+                className="overflow-x-auto"
+                tabIndex={0}
+                role="region"
+                aria-label="Table (scrolls sideways)"
+              >
                 <table
                   data-testid="months-table"
                   className="w-full min-w-[32rem] text-left text-sm"
