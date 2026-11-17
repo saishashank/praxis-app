@@ -1065,3 +1065,56 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1538 | Number-literal scan (task Z1): the nine literals the merged tree left in bakeoff.ts, minilm/* and the example rule in ruleSchema.ts are not rule values (a he... |
 | D-1539 | AT-76 pointers (task Z1, D-1448): the two it.todo lines of at76.test.ts are replaced by one test that checks the split files exist (at76Trial, at76Reflection... |
 | D-1540 | Left for the Owner or a later task (task Z1; listed): the model keys in the signals step of the production job and its stored copy (D-1513), the Workers AI t... |
+
+## M23 (M23_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-1600 | Numbering and gate: M23 decisions are D-1600…D-1699 in this file; tasks start on build at or after bc247714 (M22 done); the M22 CI run on build recorded in B... |
+| D-1601 | Time-box (K14): 10 build days, a build day being a Melbourne calendar day on which an M23 task ran; day 1 is the day A1 starts; a calendar backstop of 21 day... |
+| D-1602 | One vocabulary (K8): the registry stores PASS, NULL or INCONCLUSIVE, enforced by a new insert trigger on holdout_look; rows written before 0040 are never rew... |
+| D-1603 | Hash first: a look needs a research_prereg row with the same lineage, market and sha (trigger); preregister refuses a second, different text for the same lin... |
+| D-1604 | One writer: takeLook in src/lib/research/registry.ts is the only code that inserts into holdout_look (static test); a second attempt writes a holdout_look_re... |
+| D-1605 | INCONCLUSIVE and the look (K12): an item whose n floor is not met is INCONCLUSIVE without a look; n is counted on entries (setups, sessions, blocks) before a... |
+| D-1606 | Offline looks (history on the build machine): the committed docs/research/registry.json is the registry of record for offline items, append-only by seq, chec... |
+| D-1607 | Production sync: steps/lookSync.ts imports offline entries into research_prereg, holdout_look and research_result through the same gate each night (AU only w... |
+| D-1608 | Intraday cells (K7): each VAL-118 cell (v1, then one per quarter after a failed look, D-670) is its own registry lineage (intraday_stream_<cell>), with the e... |
+| D-1609 | F1.v2-mom (O-79): recorded as ledger entry 1 (lineage f1_v2_mom, AU, verdict NULL, note "stays in shadow under the gap cap"); its gap definition is never swi... |
+| D-1610 | Pre-registration files and reports: each item's hypothesis is transcribed from this document into docs/research/prereg/CXA-0xx.json (canonical JSON, fixed ke... |
+| D-1611 | Migration 0040 as designed in §A: eight market-keyed tables, two triggers on holdout_look, no earlier table rebuilt; |
+| D-1612 | Keys: the five §15.11.4 keys are registered fixed (no Owner edit); label_golden_min and survivorship_loss_assumed_pct replace the two constants by reading th... |
+| D-1613 | Night seam: one runResearchNight call after the Cortex night's movers step, skipped on replay, fail-soft, per enabled market, steps in a fixed order (lookSyn... |
+| D-1614 | Monitors in general: quarterly (first night after the quarter's last session), one row per monitor and market, value in value_json, alarm 0/1, plain-words Ow... |
+| D-1615 | Monitor 1 (K2): hit = a promotion-flagged U2/U3 code whose 20-session market-adjusted return after the flag is below 0; hit rate per quarter; and the mean ne... |
+| D-1616 | Monitor 2: once per market at calibration, 2,000 seeded simulated families under a null edge and under a planted edge equal to the family's minimum detectabl... |
+| D-1617 | Monitor 3 (K1): the slope's 90 % upper bound per family per quarter; alarm "Confidence figures are over-stated for <family>" when it is below 0.7. |
+| D-1618 | Monitor 4: count of positions whose stop came from the two-basis rule in the quarter, and how many of them closed on that stop; alarm when the count is above... |
+| D-1619 | Monitor 5: per family the share of the quarter's setups by regime; the label "one regime only" when one regime holds 90 % or more of them [PROPOSED]; no alar... |
+| D-1620 | Monitor 6: one record row (the chosen option: G10 abstains when disagreement exceeds cortex_disagreement_max; the reason in words) plus the quarter's G10 abs... |
+| D-1621 | Monitor 7: realised stall rate per family from the quarter's live and shadow outcomes against the expected rate recorded at calibration; where calibration re... |
+| D-1622 | Monitor 8: share of gate-passing setups that the fill model leaves unfilled per family (the outcome status named at M2 start [VERIFY]); alarm when it rises 5... |
+| D-1623 | Meters: one research_meter row per lineage and market per night (n, target, projected date by the trading calendar at the trailing 60-session rate, status);... |
+| D-1624 | CXA-005 meter: per family, the latest quarterly look's n_eff_live against 150 (live-tested) and the trade floor (cortex_min_neff_trade), projected from nEffL... |
+| D-1625 | CXA-014 pre-registration [PROPOSED] (no n or hypothesis exists in M15): one-sided 90 % block-bootstrap lower bound beyond 0 in the stated direction, block =... |
+| D-1626 | Survivorship in CXA-003 (K17): the AU extract holds survivors only, so the AU haircut is assumed, as M15 did (1 percentage point per 60 sessions held, D-893)... |
+| D-1627 | CXA-003 list (pre-registered). Common: market AU; universe U1 by the tier rule as of each session; entry at the next open after the signal session, exit at t... |
+| D-1628 | CXA-003 split and PASS rule (K15): the M15 split version (development before the M15 boundary, holdout after it, as in D-894 [VERIFY the date at R2 start]);... |
+| D-1629 | Runner and privacy: scripts/research/run-lineage.mjs takes the extract by --history, uses no network, writes rows only to an --out outside the repo, and comm... |
+| D-1630 | Who runs the looks: the R2 and R3 builders run them on the build machine in their task, after Opus has checked that the pre-registration commit precedes the... |
+| D-1631 | Lineages without history (K9): cxa003_earnings_drift (no announcement history, no AU statement parser), cxa003_index_incl (no historical index-change list; D... |
+| D-1632 | Sector series weighting (K4): equal-weight only; sector_index_weighting stays equal; value-weight rows are not written because no free shares-on-issue source... |
+| D-1633 | Backfill (K5): production stores the series forward from the first night after the merge; the backfilled history is computed on the build machine by the same... |
+| D-1634 | CXA-009 pre-registration (K6): monthly panel on the first session of each month; signal = the group's equal-weight return over the 126 sessions ending 21 ses... |
+| D-1635 | CXA-004 pre-registration (K3, K18): the counter is the number of distinct sessions with at least one timed archive item (pre-open, intraday, post-close) per... |
+| D-1636 | CXA-008 rules (K11): harness thresholds stability ≥ 0.90 on neutral paraphrases and flip ≥ 0.80 on tone-flipped ones [PROPOSED]; agreement threshold = the CT... |
+| D-1637 | CXA-007 job: role R2 (claim extraction) via nightlyLlm, budgetKey "R2", first session of each month, at most llm_proposals_per_month; envelope {kind: angle /... |
+| D-1638 | CXA-011 pre-registration: for every Cortex would-have hold (shadow and live arm) of families F1…F6 that sees a SHOCK session, the comparator raises the stop... |
+| D-1639 | CXA-012 records: the key replaces the constant; |
+| D-1640 | CXA-013 records: the AU source check reads the terms of each free candidate the register knows for AU company fundamentals at R4 start [VERIFY] and records t... |
+| D-1641 | Turso estimate: per AU night about 25 sector_index rows, 20 research_meter rows, under 5 shock_stop_outcome rows; 8 monitor rows a quarter; at most 3 proposa... |
+| D-1642 | LLM budget: the proposal run (about 15,000 tokens, first session of the month) and the live paraphrase run (about 20,000 tokens, the session on or after the... |
+| D-1643 | Page: four sections on the Cortex page in plain words (§D, task M4); proposal counts Owner-only; no rating, proposal or research figure on cards, picks or e-... |
+| D-1644 | Cut list (BLD-049), applied from the top when fewer than 2 build days remain and the remaining tasks will not finish: |
+| D-1645 | AT-32 own-set (tests/acceptance/v3/at32Research.test.ts): the eight 0040 tables plus trial_ledger (proposal charges) and app_log; every other table hashes eq... |
+| D-1646 | Roles and review: Opus reviews every pre-registration file against this document before its runner runs (R2, R3, T2, T4, M3, T1), every F task, and the exit;... |
+| D-1647 | Exit and the PR: Z writes the forward reports from the registry and meters on the exit day, the AT reports and docs/M23_exit_evidence.md; after M23, the V3 P... |
