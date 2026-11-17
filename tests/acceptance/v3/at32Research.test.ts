@@ -204,8 +204,15 @@ describe("AT-32 (research): the M23 own-set, the seam and the complement proof (
     // step moves its own table out of the zero list)
     const own = async (t: string): Promise<number> =>
       Number((await on.execute(`SELECT COUNT(*) n FROM ${t}`)).rows[0]!.n);
-    for (const t of ["research_prereg", "research_result", "holdout_look"])
-      expect(await own(t), t).toBe(1);
+    // the committed ledger decides the counts: one plan row per lineage, one look and one result per recorded verdict
+    const ledger = JSON.parse(readFileSync(join(__dirname, "../../..", LEDGER_PATH), "utf8")) as {
+      entries: { lineage: string; verdict?: string }[];
+    };
+    expect(await own("research_prereg"), "research_prereg").toBe(
+      new Set(ledger.entries.map((e) => e.lineage)).size,
+    );
+    for (const t of ["research_result", "holdout_look"])
+      expect(await own(t), t).toBe(ledger.entries.filter((e) => e.verdict !== undefined).length);
     expect(await own("residual_monitor"), "residual_monitor").toBeGreaterThan(0);
     for (const t of M23_OWN.filter(
       (x) => !["research_prereg", "research_result", "residual_monitor"].includes(x),

@@ -11,6 +11,19 @@ export const LINEAGE_NAMES: Readonly<Record<string, LineageName>> = {
   regime_altinputs: { name: "Outside-signal market-state test", kind: "live" },
   committee_trial: { name: "Committee trial", kind: "live" },
   f1_v2_mom: { name: "Long-hold momentum rule", kind: "offline" },
+  // M23 R2 (D-1688): the new-edge tests run on the build machine; a variant is the same test at a larger parcel
+  cxa003_hi52_vol: { name: "New 52-week high on heavy volume", kind: "offline" },
+  cxa003_lowvol: { name: "Lowest-volatility stocks", kind: "offline" },
+  cxa003_short_cover: { name: "Falling short positions", kind: "offline" },
+  cxa003_earnings_drift: { name: "Drift after better results", kind: "offline" },
+  cxa003_index_incl: { name: "Run-up to index inclusion", kind: "offline" },
+  cxa003_insider_cluster: { name: "Clusters of director buying", kind: "offline" },
+  cxa003_hi52_vol_p5000: {
+    name: "New 52-week high on heavy volume, larger account",
+    kind: "offline",
+  },
+  cxa003_lowvol_p5000: { name: "Lowest-volatility stocks, larger account", kind: "offline" },
+  cxa003_short_cover_p5000: { name: "Falling short positions, larger account", kind: "offline" },
 };
 
 const UNNAMED = "An unnamed test";

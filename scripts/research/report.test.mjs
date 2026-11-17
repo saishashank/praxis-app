@@ -103,3 +103,29 @@ test("refuses a private path in the text, a bad item name and bad arguments", ()
     await assert.rejects(writeReport([]), /--result/);
     await assert.rejects(writeReport(["--bogus"]), /unknown argument/);
   }));
+
+test("several result files of one item make one document with a table of verdicts first", () =>
+  withTemp(async (dir) => {
+    const a = path.join(dir, "a.json");
+    const b = path.join(dir, "b.json");
+    writeFileSync(a, JSON.stringify(input()));
+    writeFileSync(
+      b,
+      JSON.stringify(
+        input({
+          lineage: "zz_script_p5000",
+          verdict: "INCONCLUSIVE",
+          statistic: { ...input().statistic, variantLabel: "Larger account, not your book" },
+        }),
+      ),
+    );
+    const out = path.join(dir, "out", "CXA-903.md");
+    await writeReport(["--result", a, "--result", b, "--out", out]);
+    const text = readFileSync(out, "utf8");
+    assert.ok(text.startsWith("# CXA-903 summary"));
+    assert.ok(
+      text.indexOf("| Synthetic script test | zz_script |") < text.indexOf("## Hypothesis"),
+    );
+    assert.equal((text.match(/## Hypothesis/g) ?? []).length, 2);
+    assert.ok(text.includes("Larger account, not your book"));
+  }));
