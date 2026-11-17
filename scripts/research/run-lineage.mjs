@@ -1,6 +1,6 @@
 // CXA-003 runner (M23 R2; D-1629, D-1630, D-1685 to D-1688). Offline, no network, no database:
 //   node scripts/research/run-lineage.mjs --history <folder> --prereg docs/research/prereg/CXA-003.json
-//        --lineage <cxa003_... | all> --out <folder outside the repository> --calendar <index file name>
+//        --lineage <cxa003_... | all> --out <folder outside the repository> --calendar <index file, relative to the history folder>
 //        [--bars-dir yahoo] [--shorts-dir asic] [--ledger docs/research/registry.json] [--root <repo>] [--allow-dirty] [--no-look]
 // The history folder and the output folder must lie OUTSIDE the repository (SEC-110). The run refuses a lineage that has no
 // plan entry with the hash of the committed plan file, and a lineage whose look is already in the ledger. Order of work
@@ -99,7 +99,7 @@ function appendLedger(ledgerPath, lib, entry) {
 function loadHistory(args, lib) {
   const bars = path.join(args.history, args["bars-dir"] ?? "yahoo");
   const shortsDir = path.join(args.history, args["shorts-dir"] ?? "asic");
-  const calendarFile = JSON.parse(readFileSync(path.join(bars, args.calendar), "utf8"));
+  const calendarFile = JSON.parse(readFileSync(path.join(args.history, args.calendar), "utf8"));
   const dates = lib.sessionsFromIndexFile(calendarFile);
   const sessionOf = new Map(dates.map((d, i) => [d, i]));
   const series = new Map();

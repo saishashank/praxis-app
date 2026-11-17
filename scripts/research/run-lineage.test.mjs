@@ -104,7 +104,7 @@ const argsOf = (w, lineage, over = {}) => [
   "--out",
   over.out ?? w.out,
   "--calendar",
-  "_IDX.json",
+  "yahoo/_IDX.json",
   "--root",
   w.root,
   "--allow-dirty",
