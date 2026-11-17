@@ -450,6 +450,14 @@
       },
       "note": "Larger account, not your book",
       "seq": 39
+    },
+    {
+      "seq": 40,
+      "item": "CXA-009",
+      "lineage": "sector_ic",
+      "market": "AU",
+      "sha": "2f2cdbf5ece9d2b983060aa0e2ad4749f89f48aa7f07361754c458bf6d06ae3c",
+      "preregPath": "docs/research/prereg/CXA-009.json"
     }
   ]
 }

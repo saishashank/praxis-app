@@ -1152,3 +1152,9 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1692 | CXA-004 look path (T2, D-1605, D-1635): below 252 nothing is read but dates (the pure engine returns before its reader is called; a test proves it with 251). |
 | D-1693 | CXA-004 labels (T2, D-1635, D-1636): the three labels are evaluated as one family, and only on the night the angle looks are taken: if at least 70 % of the h... |
 | D-1694 | CXA-004 boundary, tests and a finding (T2, D-1645, D-1646): the step reads the archive, the calendar and its own tables and writes only research_prereg, rese... |
+| D-1710 | CXA-009 panel and window (R3, D-1634): the panel is the first session of each calendar month on the series' own session list (the dates that carry rows of S1... |
+| D-1711 | CXA-009 members and classification (R3, D-1633, D-1672): the backfill feeds sectorSeries with every session of the extract calendar; the members of a session... |
+| D-1712 | CXA-009 frozen parameters (R3, D-1634, D-1656): minMembers 3, minGroupsPerMonth 4 (the R1 suggestion, so a rank correlation is never taken on fewer than 4 po... |
+| D-1713 | CXA-009 look and verdict (R3, D-1605, D-1634): one lineage, sector_ic, one look over the full window with the engine's sectorIcLook; |
+| D-1714 | CXA-009 runner mode (R3, D-1629, D-1630): scripts/research/run-lineage.mjs --lineage sector_ic selects the sector mode; it reuses the argument parser, the ou... |
+| D-1715 | CXA-009 consequence and caveats (R3, D-1634): a PASS keeps F7 in shadow and records the result for the CTX-053 path; it changes no weight or status. |
