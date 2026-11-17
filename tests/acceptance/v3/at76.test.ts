@@ -1,6 +1,8 @@
 // @vitest-environment node
 // AT-76 (M21 part; D-1213, D-1235; BLD-041): a fresh configuration has the Committee off, and the switch is refused on a
 // planted 9-night health count and accepted on 10. The trial and reflections clauses belong to M22 and re-run there.
+import { existsSync } from "node:fs";
+import path from "node:path";
 import type { Client } from "@libsql/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { updateConfig } from "@/lib/config/admin";
@@ -71,7 +73,17 @@ describe("AT-76 (M21 part)", () => {
     expect(await getConfig(main, "committee_enabled")).toBe("on");
   });
 
-  // The remaining AT-76 clauses need the Committee itself (D-1235): they are written in M22 and re-run there.
-  it.todo("M22: the AT-36 trial, the reflections and the live Workers-AI adapter checks");
-  it.todo("M22: the intraday sweep reads intraday_sweep_requests_per_slot and its batch endpoint");
+  // M22 clauses live in split files (D-1448): the trial and its page in at76Trial.test.ts, the reflections in
+  // at76Reflections.test.ts, the Committee engine (debate, judge, night, entry) in tests/committee/*.test.ts, the
+  // Workers AI adapter in at77WorkersAi.test.ts and the intraday sweep in at77Sweep.test.ts.
+  it("M22 clauses are proven in the split files of D-1448", () => {
+    for (const name of ["at76Trial", "at76Reflections", "at77WorkersAi", "at77Sweep"]) {
+      expect(existsSync(path.join(__dirname, `${name}.test.ts`)), name).toBe(true);
+    }
+    for (const name of ["debate", "judge", "night", "cli"]) {
+      expect(existsSync(path.join(__dirname, "../../committee", `${name}.test.ts`)), name).toBe(
+        true,
+      );
+    }
+  });
 });

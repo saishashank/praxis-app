@@ -3,7 +3,7 @@
 // (Melbourne); counts only in the output; a missing database is a calm "degraded". Fixture fetch, no network, no model.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { Client } from "@libsql/client";
-import { expertsMain } from "@/lib/experts/poll/cli";
+import { callAskOf, expertsMain } from "@/lib/experts/poll/cli";
 import { cleanupTempDbs } from "../../db/helpers";
 import { zzWorld } from "../uiWorld";
 import {
@@ -71,9 +71,13 @@ describe("expertsMain", () => {
       "experts licence 2030-03-05",
       "experts poll 2030-03-05",
       "experts extract 2030-03-05",
+      "experts propose 2030-03-05",
     ]);
     expect(r.out[1]).toContain("new=1");
     expect(r.out[2]).toBe("experts extract 2030-03-05: no model switched on, items wait");
+    expect(r.out[3]).toMatch(
+      /^experts propose 2030-03-05: looked=\d+ complete=\d+ incomplete=\d+ not_trackable=\d+ model=0$/,
+    );
     for (const l of r.out) expect(l).not.toMatch(/example\.test|ZZ|https?:/);
     expect(
       Number(
@@ -114,12 +118,44 @@ describe("expertsMain", () => {
     });
     expect(await r.code).toBe(1);
     expect(r.out.some((l) => l.startsWith("experts poll"))).toBe(true);
-    expect(r.out.at(-1)).toBe("experts extract 2030-03-05: failed (TypeError)");
+    expect(r.out.at(-2)).toBe("experts extract 2030-03-05: failed (TypeError)");
+    expect(r.out.at(-1)).toBe("experts propose 2030-03-05: failed (TypeError)");
   });
 
   it("the date comes from the Melbourne day when none is given", async () => {
     const r = run(["--phase", "poll"], { nowMs: () => Date.parse("2030-03-05T14:30:00.000Z") }); // 01:30 on the 6th in Melbourne
     await r.code;
     expect(r.out[0]).toMatch(/^experts poll 2030-03-06:/);
+  });
+
+  it("the call proposals ask the R1 router only when R1 is live, charged to the experts bucket (D-1435)", async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const answer = {
+      code: "ZZA",
+      direction: "long",
+      date: "2030-03-05",
+      horizon_n: 5,
+      horizon_unit: "sessions",
+      price_basis: "close",
+    };
+    const night = (live: boolean) =>
+      ({
+        status: { roles: [{ role: "R1", live }] },
+        routerFor: () => ({
+          route: async (req: Record<string, unknown>) => {
+            seen.push(req);
+            return { value: answer, llmUsed: true, source: "groq" };
+          },
+        }),
+      }) as unknown as Parameters<typeof callAskOf>[0];
+    expect(callAskOf(night(false), "2030-03-05")).toBeNull();
+    const ask = callAskOf(night(true), "2030-03-05")!;
+    const res = await ask({
+      summary: "ZZA to rise",
+      rules: answer as never,
+      parse: () => answer as never,
+    });
+    expect(res).toEqual({ value: answer, live: true, modelId: "groq" });
+    expect(seen[0]).toMatchObject({ role: "R1", budgetKey: "experts", untrusted: ["ZZA to rise"] });
   });
 });

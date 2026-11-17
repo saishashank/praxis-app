@@ -85,7 +85,7 @@ async function embedMain(
     lines.push(
       JSON.stringify({
         label: it.label ?? classifyAnnouncement(it.type ?? null, it.title).category,
-        embedding: vectors[i]!.map((v) => Math.round(v * 1e6) / 1e6),
+        embedding: vectors[i]!.map((v) => Math.round(v * 1e6) / 1e6), // threshold-ok: rounding of a stored embedding to six decimals, a file format
       }),
     ),
   );

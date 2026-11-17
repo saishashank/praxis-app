@@ -295,4 +295,21 @@ describe("opinionMetersMain", () => {
       /^opinions AU 2030-02-01: steelman=0\/\d+ committee=\d+\/\d+ requested=\d$/,
     );
   });
+
+  it("prints nothing on a night with no settled case and no request (D-1536)", async () => {
+    const db = await build([]);
+    const lines: string[] = [];
+    const closing = {
+      ...db,
+      execute: db.execute.bind(db),
+      close: () => undefined,
+    } as unknown as Client;
+    const code = await opinionMetersMain(["--date", "2030-02-01"], env, {
+      out: (s) => lines.push(s),
+      openDb: () => closing,
+      nowMs: () => Date.parse(NOW),
+    });
+    expect(code).toBe(0);
+    expect(lines).toEqual([]);
+  });
 });

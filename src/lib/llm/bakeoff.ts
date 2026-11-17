@@ -721,7 +721,7 @@ export function priorRunsFromReport(text: string): PriorRun[] {
     const l = lines.find((x) => x.startsWith(`- ${label}:`));
     return l === undefined ? null : l.slice(label.length + 3).trim(); // threshold-ok: "- " and ":" around the label
   };
-  const golden = /^([0-9a-f]{8,64})\b/.exec(grab("Golden set") ?? "")?.[1];
+  const golden = /^([0-9a-f]{8,64})\b/.exec(grab("Golden set") ?? "")?.[1]; // threshold-ok: length bounds of a hex id in a stored report, not a rule
   if (golden === undefined) return [];
   const out: PriorRun[] = [];
   let inSummary = false;

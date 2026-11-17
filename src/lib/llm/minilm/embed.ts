@@ -11,7 +11,7 @@ export type Embedder = {
 };
 
 const UNK = "[UNK]";
-const MAX_WORD_CHARS = 100;
+const MAX_WORD_CHARS = 100; // threshold-ok: word-piece tokenizer limit fixed by the model's vocabulary format
 
 /** Uncased BERT basic tokenization: lowercase, accents stripped, punctuation and symbols split off. Pure. */
 export function basicTokens(text: string): string[] {

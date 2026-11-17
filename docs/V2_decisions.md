@@ -1054,3 +1054,10 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1531 | Sweep as built (task E5, D-1443, D-1442): src/lib/intraday/sweep.ts plans U1 then U2 batches of 20 codes (assumed batch size, [VERIFY] with the endpoint at a... |
 | D-1532 | Trial steps in the night (orchestrator, after the C2 and L4 merge): signals.mjs passes the night's own arguments to both trial steps (["prereg", ...argv], ["... |
 | D-1533 | AT-22 after the L5 merge (orchestrator): the annotation-boundary check reads every source file under src/lib/llm recursively (it read the folder flat and fai... |
+| D-1534 | Live bake-off dispatch not run (task Z, D-1406): the live bake-off of the Groq candidates is not dispatched during the build. |
+| D-1535 | Health lines wired (task Z1, D-1446): loadHealth carries m22 (a state and plain-word lines) built from loadLlmRoutesHealth (Owner only: the AI-jobs lines nam... |
+| D-1536 | Opinion meters in the night (task Z1, D-1520): signals.mjs runs opinionMetersMain last, soft like every stage after the picks. |
+| D-1537 | Expert calls and expressed clusters in the jobs (task Z1, D-1435, D-1506, D-1522): the experts job runs a propose step after the extraction (phases all and e... |
+| D-1538 | Number-literal scan (task Z1): the nine literals the merged tree left in bakeoff.ts, minilm/* and the example rule in ruleSchema.ts are not rule values (a he... |
+| D-1539 | AT-76 pointers (task Z1, D-1448): the two it.todo lines of at76.test.ts are replaced by one test that checks the split files exist (at76Trial, at76Reflection... |
+| D-1540 | Left for the Owner or a later task (task Z1; listed): the model keys in the signals step of the production job and its stored copy (D-1513), the Workers AI t... |

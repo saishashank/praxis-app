@@ -53,6 +53,8 @@ export async function opinionMetersMain(
     const d = has(given) && DATE_RE.test(given) ? given : marketDate(new Date(nowMs()), HOME_TZ);
     const r = await runPromotion(db, { market: MARKET, d, now: new Date(nowMs()).toISOString() });
     const parts = r.meters.map((m) => `${m.kind}=${m.settled}/${m.needed}`).join(" ");
+    // Like every other opinion stage, an empty night (no settled case, no request) prints nothing (M22 Z, D-1536).
+    if (r.meters.every((m) => m.settled === 0) && r.requested.length === 0) return 0;
     out(`opinions ${MARKET} ${d}: ${parts} requested=${r.requested.length}`);
     return 0;
   } catch (error) {

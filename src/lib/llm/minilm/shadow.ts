@@ -50,8 +50,8 @@ export type ShadowInput = {
 };
 
 const nextDay = (d: string): string => {
-  const t = Date.parse(`${d}T00:00:00Z`) + 86_400_000;
-  return new Date(t).toISOString().slice(0, 10);
+  const t = Date.parse(`${d}T00:00:00Z`) + 86_400_000; // threshold-ok: milliseconds in a day
+  return new Date(t).toISOString().slice(0, 10); // threshold-ok: length of an ISO date
 };
 
 /** The text the model reads: the exchange's type words and the title (no body is stored or read). */
@@ -102,7 +102,7 @@ export async function shadowNight(db: Exec, x: ShadowInput): Promise<ShadowResul
     return result("unavailable", "the model is not available", 0);
 
   const have = (await agreementOf(db, x.market, x.d)).rows;
-  const room = Math.max(0, Math.min(Math.trunc(x.cap), 200) - have);
+  const room = Math.max(0, Math.min(Math.trunc(x.cap), 200) - have); // threshold-ok: hard ceiling on one night's announcements read, a read bound
   if (room === 0) return result("nothing", null, 0);
 
   // rows-ok: announcement idx_announcement_published range for one day, anti-join on the minilm_shadow primary key, ORDER BY id, LIMIT room (at most news_assess_per_run)

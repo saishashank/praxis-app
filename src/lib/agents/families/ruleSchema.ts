@@ -1265,8 +1265,8 @@ function renderV2Section(): string[] {
           logic: "AND",
           items: [
             { rel_sector: { field: "net_debt_ebitda", op: "<", value: 0 } },
-            { persist: { n: 3, m: 5, when: { field: "close_above_sma5", op: "==", value: true } } },
-            { ratio: { num: "volume_ratio", den: "rsi14", op: ">=", value: 0.05 } },
+            { persist: { n: 3, m: 5, when: { field: "close_above_sma5", op: "==", value: true } } }, // threshold-ok: example rule shown in the schema document, not a live threshold
+            { ratio: { num: "volume_ratio", den: "rsi14", op: ">=", value: 0.05 } }, // threshold-ok: example rule shown in the schema document, not a live threshold
           ],
         },
       },

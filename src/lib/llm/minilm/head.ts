@@ -32,7 +32,7 @@ export type MinilmLock = {
 
 export const HEAD_FORMAT = "praxis-minilm-head/1";
 export const LOCK_FORMAT = "praxis-minilm-lock/1";
-const HEX64 = /^[0-9a-f]{64}$/;
+const HEX64 = /^[0-9a-f]{64}$/; // threshold-ok: hex length of a SHA-256 digest
 export const isSha = (v: unknown): v is string => typeof v === "string" && HEX64.test(v);
 
 /** The refusal texts, in plain words (D-1415). */

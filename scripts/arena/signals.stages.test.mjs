@@ -15,6 +15,7 @@ const ENTRIES = {
   committee: "src/lib/committee/cli.ts",
   trial: "src/lib/committee/trialCli.ts",
   minilm: "src/lib/llm/minilm/cli.ts",
+  opinions: "src/lib/opinions/cli.ts",
 };
 
 function harness({ code = 0, breakEntry = null } = {}) {
@@ -33,6 +34,7 @@ function harness({ code = 0, breakEntry = null } = {}) {
     if (entry === ENTRIES.reflect) return { reflectMain: rec("reflect") };
     if (entry === ENTRIES.committee) return { committeeMain: rec("committee") };
     if (entry === ENTRIES.trial) return { trialMain: rec("trial") };
+    if (entry === ENTRIES.opinions) return { opinionMetersMain: rec("opinions") };
     if (entry === ENTRIES.minilm) return { minilmMain: rec("minilm") };
     throw new Error(`unexpected entry ${entry}`);
   };
@@ -61,7 +63,7 @@ test("the stages run in order: steelman, reflections, Committee; each from its o
     assert.equal(code, 0);
     assert.deepEqual(
       h.calls.map((c) => c[0]),
-      ["picks", "steelman", "reflect", "committee"],
+      ["picks", "steelman", "reflect", "committee", "opinions"],
     );
     assert.equal(new Set(h.loaded).size, h.loaded.length, "one bundle per stage");
   } finally {
@@ -71,9 +73,10 @@ test("the stages run in order: steelman, reflections, Committee; each from its o
 
 test("each stage after the picks fails soft: one degraded line, exit code unchanged, later stages still run", async () => {
   for (const [name, exp] of [
-    ["steelman", ["reflect", "committee"]],
-    ["reflect", ["steelman", "committee"]],
-    ["committee", ["steelman", "reflect"]],
+    ["steelman", ["reflect", "committee", "opinions"]],
+    ["reflect", ["steelman", "committee", "opinions"]],
+    ["committee", ["steelman", "reflect", "opinions"]],
+    ["opinions", ["steelman", "reflect", "committee"]],
   ]) {
     const h = harness({ code: 1, breakEntry: ENTRIES[name] });
     const lines = [];
@@ -134,7 +137,7 @@ test("the trial pre-registration runs before the Committee and its result after,
     await run([], {}, { loadEngine: h.loadEngine, out: () => {}, root: withTrial });
     assert.deepEqual(
       h.calls.map((c) => c.slice(0, 2).join(" ")),
-      ["picks", "steelman", "reflect", "trial prereg", "committee", "trial result"],
+      ["picks", "steelman", "reflect", "trial prereg", "committee", "trial result", "opinions"],
     );
   } finally {
     rmSync(bare, { recursive: true, force: true });
@@ -175,6 +178,7 @@ test("no stage entry imports another stage's entry (PRD-033)", () => {
     "committee/cli",
     "committee/trialCli",
     "minilm/cli",
+    "opinions/cli",
   ];
   for (const [stage, file] of Object.entries(ENTRIES)) {
     let text;

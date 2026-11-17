@@ -22,7 +22,7 @@
 // M22 L4 (D-1511): after the picks come, each in its own bundle and each failing soft the same way, in this order: the
 // MiniLM shadow (only when its model files are present, D-1514), the steelman, the pick reflections
 // (src/lib/steelman/reflectCli.ts), the Committee trial pre-registration, the Committee (src/lib/committee/cli.ts), the trial
-// result (the two trial steps only when src/lib/committee/trialCli.ts exists, D-1516). No stage imports another. The model
+// result (the two trial steps only when src/lib/committee/trialCli.ts exists, D-1516), the opinion meters (src/lib/opinions/cli.ts). No stage imports another. The model
 // keys (GROQ_API_KEY, GOOGLE_AI_API_KEY, OPENROUTER_API_KEY) are read only by the factory, and only for a role listed in
 // llm_live_roles (empty in production until the Owner opens it after a bake-off pass).
 import { existsSync } from "node:fs";
@@ -36,6 +36,7 @@ const STEELMAN_ENTRY = "src/lib/steelman/cli.ts";
 const REFLECT_ENTRY = "src/lib/steelman/reflectCli.ts";
 const COMMITTEE_ENTRY = "src/lib/committee/cli.ts";
 const TRIAL_ENTRY = "src/lib/committee/trialCli.ts";
+const OPINIONS_ENTRY = "src/lib/opinions/cli.ts";
 const MINILM_ENTRY = "src/lib/llm/minilm/cli.ts";
 // D-1514: where the small reader's files would sit on the runner; absent today (nothing fetches them), so the step is a no-op.
 const MINILM_MODEL = "models/minilm/model.onnx";
@@ -88,6 +89,8 @@ export async function run(argv0, env, deps0 = {}) {
   if (trial) await soft("trial", TRIAL_ENTRY, "trialMain", ["prereg", ...argv]);
   await soft("committee", COMMITTEE_ENTRY, "committeeMain", argv);
   if (trial) await soft("trial", TRIAL_ENTRY, "trialMain", ["result", ...argv]);
+  // M22 Z (D-1536): the bull and bear note meters and the promotion request come last; they print nothing on an empty night.
+  await soft("opinions", OPINIONS_ENTRY, "opinionMetersMain", argv);
   return afterPicks;
 }
 

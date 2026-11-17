@@ -188,6 +188,11 @@
       "tests/steelman/load.test.ts",
       "tests/steelman/pack.test.ts"
     ],
+    "AGT-132": [
+      "tests/committee/cli.test.ts",
+      "tests/committee/night.test.ts",
+      "tests/committee/shortlist.test.ts"
+    ],
     "AGT-133": [
       "tests/acceptance/v2/at32Steelman.test.ts",
       "tests/acceptance/v2/at33.test.ts",
@@ -202,6 +207,7 @@
       "tests/acceptance/v2/at34.test.ts",
       "tests/steelman/night.test.ts"
     ],
+    "AGT-134": ["tests/steelman/reflect.test.ts"],
     "AGT-135": ["tests/acceptance/v2/at45.test.ts", "tests/agents/events.v2.test.ts"],
     "AGT-136": [
       "tests/agents/families/m14Variants.test.ts",
@@ -214,7 +220,28 @@
     "AGT-140": ["tests/time/m5Slots.test.ts"],
     "AGT-143": ["tests/intraday/candidateRule.test.ts"],
     "AGT-144": ["tests/acceptance/v2/at61.test.ts"],
-    "AGT-147": ["scripts/ci/licence-register.m22.test.mjs"],
+    "AGT-145": [
+      "tests/committee/cli.test.ts",
+      "tests/committee/debate.test.ts",
+      "tests/committee/judge.test.ts",
+      "tests/committee/night.test.ts"
+    ],
+    "AGT-146": [
+      "tests/acceptance/v3/at76Reflections.test.ts",
+      "tests/review/unprovenNotes.test.ts",
+      "tests/steelman/reflect.test.ts",
+      "tests/steelman/reflectCli.test.ts"
+    ],
+    "AGT-147": [
+      "scripts/ci/licence-register.m22.test.mjs",
+      "tests/acceptance/v3/at77Sweep.test.ts",
+      "tests/intraday/sweep.test.ts"
+    ],
+    "AGT-148": [
+      "tests/opinions/meter.test.ts",
+      "tests/opinions/page.test.tsx",
+      "tests/opinions/promotion.test.ts"
+    ],
     "ARN-001": [
       "tests/arena/acceptance.test.ts",
       "tests/arena/cohort.test.ts",
@@ -609,6 +636,7 @@
       "tests/picks/isolation.test.ts",
       "tests/picks/vsMarket.test.ts"
     ],
+    "ARN-105": ["tests/committee/trial.test.ts"],
     "ARN-106": [
       "tests/acceptance/v2/at43.test.ts",
       "tests/arena/exDividendStop.test.ts",
@@ -659,6 +687,8 @@
     "ARN-124c": ["tests/deferred/instruments.test.ts"],
     "AT-01": [
       "scripts/llm/bakeoff-review.test.mjs",
+      "tests/llm/bakeoff.test.ts",
+      "tests/llm/bakeoffIndex.test.ts",
       "tests/users/actions.test.ts",
       "tests/users/migration.test.ts",
       "tests/users/page.test.tsx",
@@ -942,10 +972,13 @@
       "scripts/ci/licence-register.m22.test.mjs",
       "tests/acceptance/v2/at32Steelman.test.ts",
       "tests/acceptance/v3/at32Opinions.test.ts",
+      "tests/acceptance/v3/at76Reflections.test.ts",
       "tests/acceptance/v3/at77Hash.test.ts",
       "tests/acceptance/v3/at78Holdings.test.ts",
       "tests/acceptance/v3/at78Short.test.ts",
       "tests/acceptance/v3/at78TradeLog.test.ts",
+      "tests/acceptance/v3/at80MiniLm.test.ts",
+      "tests/acceptance/v3/at81Regime.test.ts",
       "tests/acceptance/v3/replayHash.test.ts",
       "tests/cortex/stageTables.test.ts",
       "tests/data/sourceRegister.m20.test.ts",
@@ -957,7 +990,13 @@
     "AT-33": ["tests/acceptance/v2/at33.test.ts"],
     "AT-34": ["tests/acceptance/v2/at34.test.ts"],
     "AT-35": ["tests/acceptance/v2/at35.test.ts"],
-    "AT-36": ["tests/acceptance/v3/at76.test.ts"],
+    "AT-36": [
+      "tests/acceptance/v3/at76.test.ts",
+      "tests/acceptance/v3/at76Trial.test.ts",
+      "tests/committee/page.test.tsx",
+      "tests/committee/prereg.test.ts",
+      "tests/committee/trial.test.ts"
+    ],
     "AT-37": [
       "tests/acceptance/v2/at37Steelman.test.ts",
       "tests/llm/budget.test.ts",
@@ -971,8 +1010,10 @@
       "tests/markets/us/edgar.test.ts"
     ],
     "AT-39": [
+      "tests/acceptance/v3/at79Fetch.test.ts",
       "tests/db/0022_experts.test.ts",
       "tests/experts/import.test.ts",
+      "tests/experts/poll/job.test.ts",
       "tests/kb/fetchClauses.test.ts"
     ],
     "AT-40": [
@@ -1147,6 +1188,12 @@
       "tests/usage/projectionSection.test.tsx",
       "worker/test/killSlot.test.ts"
     ],
+    "AT-73": [
+      "tests/acceptance/v3/at73Shared.test.ts",
+      "tests/acceptance/v3/at79Calls.test.ts",
+      "tests/security/committeeBoundary.test.ts",
+      "tests/security/opinionBoundary.test.ts"
+    ],
     "AT-75": [
       "tests/acceptance/v3/replayHash.test.ts",
       "tests/cortex/survivorship.test.ts",
@@ -1159,7 +1206,10 @@
       "tests/markets/us/fixtureNight.test.ts"
     ],
     "AT-76": [
+      "e2e/m22-committee.spec.ts",
       "tests/acceptance/v3/at76.test.ts",
+      "tests/acceptance/v3/at76Reflections.test.ts",
+      "tests/acceptance/v3/at76Trial.test.ts",
       "tests/config/m21Keys.test.ts",
       "tests/config/switchGuards.test.ts"
     ],
@@ -1168,6 +1218,8 @@
       "e2e/m21-owner-tools-on.spec.ts",
       "tests/acceptance/v3/at77.test.ts",
       "tests/acceptance/v3/at77Hash.test.ts",
+      "tests/acceptance/v3/at77Sweep.test.ts",
+      "tests/acceptance/v3/at77WorkersAi.test.ts",
       "tests/alerts/stopHit.test.ts",
       "tests/auth/ownerToolsGuard.test.ts",
       "tests/config/m21Keys.test.ts",
@@ -1195,9 +1247,28 @@
       "tests/security/noCredentialField.test.ts",
       "tests/tax/report.test.ts"
     ],
-    "AT-79": ["tests/experts/licence/check.test.ts"],
-    "AT-80": ["tests/config/m22Keys.test.ts", "tests/llm/nightlyLlm.test.ts"],
+    "AT-79": [
+      "e2e/m22-sources.spec.ts",
+      "tests/acceptance/v3/at73Shared.test.ts",
+      "tests/acceptance/v3/at79Calls.test.ts",
+      "tests/acceptance/v3/at79Clusters.test.ts",
+      "tests/acceptance/v3/at79Fetch.test.ts",
+      "tests/experts/confirmCall.test.ts",
+      "tests/experts/licence/check.test.ts",
+      "tests/experts/poll/cli.test.ts",
+      "tests/experts/poll/job.test.ts"
+    ],
+    "AT-80": [
+      "tests/acceptance/v3/at80Hostile.test.ts",
+      "tests/acceptance/v3/at80MiniLm.test.ts",
+      "tests/acceptance/v3/at80Night.test.ts",
+      "tests/acceptance/v3/at80Routes.test.ts",
+      "tests/acceptance/v3/at80WorkersAi.test.ts",
+      "tests/config/m22Keys.test.ts",
+      "tests/llm/nightlyLlm.test.ts"
+    ],
     "AT-81": [
+      "tests/acceptance/v3/at81Regime.test.ts",
       "tests/http/safeLink.test.ts",
       "tests/http/sourceHosts.test.ts",
       "tests/sentinel/cap.test.ts"
@@ -1326,7 +1397,11 @@
       "tests/db/0034_m19_market_profile.test.ts",
       "tests/market/checklist.test.ts"
     ],
-    "BLD-051": ["tests/shortShadow/evaluate.test.ts"],
+    "BLD-051": [
+      "tests/committee/prereg.test.ts",
+      "tests/regime/alt/evaluate.test.ts",
+      "tests/shortShadow/evaluate.test.ts"
+    ],
     "D-1": [
       "tests/agents/families/f4f5.test.ts",
       "tests/agents/indicators.test.ts",
@@ -2384,7 +2459,12 @@
       "tests/ui/steelmanCard.test.tsx"
     ],
     "D-499": ["tests/picks/isolation.test.ts", "tests/steelman/load.test.ts"],
-    "D-504": ["scripts/arena/signals.steelmanBreak.test.mjs"],
+    "D-504": [
+      "scripts/arena/signals.stages.test.mjs",
+      "scripts/arena/signals.steelmanBreak.test.mjs",
+      "tests/committee/cli.test.ts",
+      "tests/steelman/reflectCli.test.ts"
+    ],
     "D-505": ["tests/steelman/write.test.ts"],
     "D-506": ["tests/steelman/night.test.ts", "tests/ui/steelmanCard.test.tsx"],
     "D-507": ["tests/steelman/night.test.ts"],
@@ -2425,6 +2505,7 @@
     "D-523": ["tests/experts/kbDocs.test.ts", "tests/security/expertBoundary.test.ts"],
     "D-524": [
       "tests/experts/calls.test.ts",
+      "tests/experts/confirmCall.test.ts",
       "tests/picks/isolation.test.ts",
       "tests/security/expertBoundary.test.ts"
     ],
@@ -2453,6 +2534,7 @@
     "D-536": ["tests/experts/import.test.ts", "tests/experts/store.test.ts"],
     "D-536a": ["tests/experts/screen.test.ts", "tests/experts/status.test.ts"],
     "D-536b": ["tests/experts/proposals.test.ts"],
+    "D-543": ["tests/experts/callProposals.test.ts"],
     "D-550": ["tests/experts/fit.test.ts"],
     "D-561": ["tests/acceptance/v2/at34.test.ts", "tests/ui/steelmanCard.test.tsx"],
     "D-570": ["tests/experts/import.test.ts"],
@@ -2483,7 +2565,11 @@
     "D-624": ["tests/experts/weeklyStage.test.ts", "tests/health/experts.test.ts"],
     "D-631": ["e2e/m13l-experts.spec.ts", "tests/ui/expertsPages.test.tsx"],
     "D-632": ["tests/experts/review.test.ts"],
-    "D-633": ["tests/experts/queueActions.test.ts", "tests/ui/expertsPages.test.tsx"],
+    "D-633": [
+      "tests/experts/confirmCall.test.ts",
+      "tests/experts/queueActions.test.ts",
+      "tests/ui/expertsPages.test.tsx"
+    ],
     "D-640": [
       "tests/experts/calls.test.ts",
       "tests/picks/isolation.test.ts",
@@ -2742,12 +2828,15 @@
       "tests/email/reviewWords.test.ts",
       "tests/email/stopHitMail.test.ts",
       "tests/email/templates.test.ts",
+      "tests/llm/bakeoff.test.ts",
+      "tests/llm/goldenSets.test.ts",
       "tests/review/assemble.test.ts",
       "tests/review/sections.test.ts",
       "tests/review/sections46.test.ts"
     ],
     "D-927": ["scripts/fixtures/recordFromHistory.test.mjs"],
     "D-931": ["tests/acceptance/v3/at77.test.ts"],
+    "D-939": ["tests/acceptance/v3/at79Fetch.test.ts", "tests/experts/poll/job.test.ts"],
     "D-941": ["tests/picks/isolation.test.ts", "tests/picks/noPicks.test.ts"],
     "D-944": ["tests/ownerTools/holdings.test.ts"],
     "D-947": ["tests/db/0034_m19_market_profile.test.ts"],
@@ -2964,6 +3053,7 @@
       "tests/pipeline/dataOnly.test.ts",
       "tests/replay/ledger.test.ts"
     ],
+    "DAT-1": ["tests/deferred/sources.test.ts"],
     "DAT-002": [
       "scripts/backup/drill.test.mjs",
       "tests/agents/acceptanceM4.test.ts",
@@ -3330,6 +3420,9 @@
     ],
     "DAT-226": ["tests/markets/us/asFiled.test.ts"],
     "DAT-227": ["tests/db/0022_experts.test.ts"],
+    "DAT-228": ["tests/experts/poll/job.test.ts"],
+    "DAT-229": ["tests/experts/poll/candidates.test.tsx", "tests/experts/poll/discovery.test.ts"],
+    "DAT-230": ["tests/experts/poll/priority.test.ts"],
     "DAT-231": ["tests/acceptance/v2/at45.test.ts", "tests/ingest/vendorActions.test.ts"],
     "DAT-232": ["tests/acceptance/v2/at45.test.ts", "tests/agents/events.v2.test.ts"],
     "DAT-233": [
@@ -3393,7 +3486,18 @@
     "DAT-244": ["tests/markets/us/luld.test.ts"],
     "DAT-245": ["tests/markets/in/categoryMap.test.ts", "tests/markets/us/categoryMap.test.ts"],
     "DAT-247": ["tests/labels/evaluate.test.ts", "tests/labels/store.test.ts"],
-    "DAT-248": ["scripts/ci/licence-register.m22.test.mjs"],
+    "DAT-248": [
+      "scripts/ci/licence-register.m22.test.mjs",
+      "tests/acceptance/v3/at81Regime.test.ts",
+      "tests/health/regimeAlt.test.ts",
+      "tests/regime/alt/evaluate.test.ts",
+      "tests/regime/alt/inputs.test.ts",
+      "tests/regime/alt/predictionMarkets.test.ts",
+      "tests/regime/alt/rule.test.ts",
+      "tests/regime/alt/shadow.test.ts"
+    ],
+    "DAT-249": ["tests/deferred/sources.test.ts"],
+    "DAT-250": ["tests/deferred/sources.test.ts"],
     "DAT-251": [
       "scripts/asx/fetch.causes.test.mjs",
       "scripts/asx/ingest.test.mjs",
@@ -3685,11 +3789,36 @@
       "tests/stats/rankScore.test.ts",
       "tests/stats/splits.test.ts"
     ],
+    "KB-082": [
+      "e2e/m22-sources.spec.ts",
+      "scripts/ci/maintenance.workflow.test.mjs",
+      "tests/acceptance/v3/at79Fetch.test.ts",
+      "tests/experts/poll/cli.test.ts",
+      "tests/experts/poll/guard.test.ts",
+      "tests/experts/poll/job.test.ts",
+      "tests/health/expertsPolling.test.ts"
+    ],
     "KB-083": [
+      "scripts/ci/maintenance.workflow.test.mjs",
+      "tests/acceptance/v3/at79Fetch.test.ts",
       "tests/experts/licence/accept.test.ts",
       "tests/experts/licence/check.test.ts",
       "tests/experts/licence/engine.test.ts",
-      "tests/experts/licence/page.test.tsx"
+      "tests/experts/licence/page.test.tsx",
+      "tests/experts/poll/cli.test.ts"
+    ],
+    "KB-084": [
+      "tests/acceptance/v3/at79Calls.test.ts",
+      "tests/experts/callProposals.test.ts",
+      "tests/experts/confirmCall.test.ts"
+    ],
+    "KB-085": [
+      "tests/acceptance/v3/at79Clusters.test.ts",
+      "tests/agents/families/ruleSchemaV2.test.ts",
+      "tests/experts/expressCheck.test.ts",
+      "tests/experts/expressedScreen.test.ts",
+      "tests/experts/import.test.ts",
+      "tests/experts/ruleEval.test.ts"
     ],
     "LLM-001": [
       "tests/acceptance/m6/at22.test.ts",
@@ -3715,6 +3844,8 @@
       "tests/llm/router.test.ts"
     ],
     "LLM-010": [
+      "tests/committee/debate.test.ts",
+      "tests/committee/judge.test.ts",
       "tests/learning/critic.test.ts",
       "tests/learning/wordsStage.test.ts",
       "tests/steelman/critic.test.ts",
@@ -3801,26 +3932,67 @@
     "LLM-063": ["tests/acceptance/v2/at37Steelman.test.ts", "tests/llm/bakeoff.test.ts"],
     "LLM-064": [
       "tests/acceptance/v2/at33.test.ts",
+      "tests/committee/debate.test.ts",
+      "tests/committee/judge.test.ts",
       "tests/steelman/claims.test.ts",
       "tests/steelman/write.test.ts"
     ],
     "LLM-065": ["tests/acceptance/v2/at33.test.ts"],
-    "LLM-068": ["tests/llm/budgetBuckets.test.ts"],
+    "LLM-066": ["tests/committee/debate.test.ts", "tests/committee/night.test.ts"],
+    "LLM-067": ["tests/experts/poll/extract.test.ts"],
+    "LLM-068": ["tests/experts/poll/extract.test.ts", "tests/llm/budgetBuckets.test.ts"],
     "LLM-069": [
       "tests/acceptance/v2/at40Screen.test.ts",
+      "tests/experts/poll/extract.test.ts",
       "tests/experts/review.test.ts",
       "tests/experts/store.test.ts"
     ],
     "LLM-070": ["tests/acceptance/v2/at46.test.ts", "tests/llm/roster.test.ts"],
     "LLM-071": ["tests/acceptance/v2/at46.test.ts", "tests/llm/hardening.test.ts"],
     "LLM-072": ["tests/acceptance/v2/at46.test.ts", "tests/llm/hardening.test.ts"],
-    "LLM-073": ["tests/acceptance/v2/at46.test.ts", "tests/llm/hardening.test.ts"],
+    "LLM-073": [
+      "tests/acceptance/v2/at46.test.ts",
+      "tests/acceptance/v3/at80Hostile.test.ts",
+      "tests/llm/bakeoff.test.ts",
+      "tests/llm/hardening.test.ts"
+    ],
     "LLM-074": [
       "tests/acceptance/v2/at46.test.ts",
       "tests/learning/wordsStage.test.ts",
       "tests/llm/hardening.test.ts"
     ],
     "LLM-075": ["tests/acceptance/v2/at46.test.ts", "tests/llm/hardening.test.ts"],
+    "LLM-077": [
+      "tests/acceptance/v3/at80Night.test.ts",
+      "tests/acceptance/v3/at80Routes.test.ts",
+      "tests/config/liveRolesGuard.test.ts",
+      "tests/llm/bakeoffIndex.test.ts",
+      "tests/llm/factory.test.ts",
+      "tests/security/liveProviderSites.test.ts",
+      "tests/security/secretStores.test.ts"
+    ],
+    "LLM-078": [
+      "tests/acceptance/v3/at77WorkersAi.test.ts",
+      "tests/acceptance/v3/at80WorkersAi.test.ts",
+      "tests/llm/workersAi.test.ts"
+    ],
+    "LLM-079": [
+      "tests/acceptance/v3/at80MiniLm.test.ts",
+      "tests/health/minilm.test.ts",
+      "tests/llm/minilm/cli.test.ts",
+      "tests/llm/minilm/embed.test.ts",
+      "tests/llm/minilm/head.test.ts",
+      "tests/llm/minilm/model.test.ts",
+      "tests/llm/minilm/realModel.test.ts",
+      "tests/llm/minilm/shadow.test.ts",
+      "tests/security/minilmReaders.test.ts"
+    ],
+    "LLM-080": ["tests/llm/factory.test.ts"],
+    "LLM-081": [
+      "tests/acceptance/v3/at80Hostile.test.ts",
+      "tests/llm/bakeoff.test.ts",
+      "tests/llm/goldenSets.test.ts"
+    ],
     "NFR-001": ["tests/market/checklist.test.ts"],
     "NFR-002": [
       "tests/acceptance/m5/at18.test.ts",
@@ -3961,7 +4133,11 @@
       "scripts/ci/staging-jobs.workflow.test.mjs",
       "scripts/watchdog/watchdog.workflow.test.mjs"
     ],
-    "O-54": ["e2e/m14-robustness.spec.ts", "tests/loaders/robustness.test.ts"],
+    "O-54": [
+      "e2e/m14-robustness.spec.ts",
+      "tests/loaders/robustness.test.ts",
+      "tests/steelman/reflectDisplay.test.ts"
+    ],
     "O-71": ["scripts/ci/internal-codes.test.mjs"],
     "O-76": [
       "tests/config/m17Keys.test.ts",
@@ -4755,11 +4931,17 @@
       "tests/acceptance/v2/at61.test.ts",
       "tests/acceptance/v2/at63.test.ts",
       "tests/acceptance/v3/at32Opinions.test.ts",
+      "tests/acceptance/v3/at73Shared.test.ts",
+      "tests/acceptance/v3/at76Reflections.test.ts",
       "tests/acceptance/v3/at77.test.ts",
       "tests/acceptance/v3/at77Hash.test.ts",
       "tests/acceptance/v3/at78Holdings.test.ts",
       "tests/acceptance/v3/at78Short.test.ts",
       "tests/acceptance/v3/at78TradeLog.test.ts",
+      "tests/acceptance/v3/at79Calls.test.ts",
+      "tests/acceptance/v3/at79Clusters.test.ts",
+      "tests/acceptance/v3/at80MiniLm.test.ts",
+      "tests/acceptance/v3/at81Regime.test.ts",
       "tests/acceptance/v3/replayHash.test.ts",
       "tests/agents/m4Keys.test.ts",
       "tests/agents/noMagicThresholds.test.ts",
@@ -4785,9 +4967,12 @@
       "tests/db/0024_movers.test.ts",
       "tests/experts/calls.test.ts",
       "tests/intraday/streamLook.test.ts",
+      "tests/llm/goldenSets.test.ts",
+      "tests/llm/minilm/shadow.test.ts",
       "tests/quality/engine.test.ts",
       "tests/replay/cortexReplay.test.ts",
       "tests/review/haltAttention.test.ts",
+      "tests/review/unprovenNotes.test.ts",
       "tests/security/expertBoundary.test.ts",
       "tests/security/secretStores.test.ts",
       "tests/sentinel/archive.test.ts",
@@ -4795,6 +4980,8 @@
       "tests/shortShadow/score.test.ts",
       "tests/sources/fixtures.test.ts",
       "tests/sources/realFixtures.test.ts",
+      "tests/steelman/reflect.test.ts",
+      "tests/steelman/reflectDisplay.test.ts",
       "tests/universe/import.test.ts",
       "tests/universe/parse.test.ts",
       "tests/universe/route.test.ts",
@@ -5042,6 +5229,7 @@
     "TST-134": [
       "e2e/m21-at82.spec.ts",
       "e2e/m21-owner-tools-on.spec.ts",
+      "e2e/m22-committee.spec.ts",
       "scripts/ci/e2e-listing.test.mjs"
     ],
     "TST-135": [
@@ -5334,9 +5522,16 @@
     "UXN-284": ["e2e/screens.spec.ts"],
     "UXN-285": ["tests/health/controlRoom.test.tsx"],
     "UXN-287": ["e2e/m11l-steelman.spec.ts", "tests/acceptance/v2/at34.test.ts"],
-    "UXN-288": ["tests/acceptance/v2/at35.test.ts"],
+    "UXN-288": ["tests/acceptance/v2/at35.test.ts", "tests/steelman/reflectDisplay.test.ts"],
+    "UXN-289": ["e2e/m22-committee.spec.ts", "tests/committee/page.test.tsx"],
+    "UXN-290": [
+      "e2e/m22-committee.spec.ts",
+      "tests/acceptance/v3/at76Trial.test.ts",
+      "tests/committee/page.test.tsx"
+    ],
     "UXN-292": ["e2e/m13l-experts.spec.ts", "tests/ui/expertsPages.test.tsx"],
     "UXN-295": ["tests/experts/queueActions.test.ts", "tests/experts/review.test.ts"],
+    "UXN-296": ["e2e/m22-sources.spec.ts", "tests/experts/poll/candidates.test.tsx"],
     "UXN-298": ["tests/blueprint/panelData.test.ts"],
     "UXN-301": [
       "tests/acceptance/v2/at62.test.tsx",
@@ -5438,6 +5633,11 @@
       "tests/stats/stats.test.ts",
       "tests/stats/val110.test.ts",
       "tests/stats/val110ErrorBudget.test.ts"
+    ],
+    "VAL-111": [
+      "tests/acceptance/v3/at76Trial.test.ts",
+      "tests/committee/prereg.test.ts",
+      "tests/committee/trial.test.ts"
     ],
     "VAL-112": [
       "tests/acceptance/v2/at44.test.ts",
