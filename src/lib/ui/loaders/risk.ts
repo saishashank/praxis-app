@@ -7,8 +7,16 @@
 import "server-only";
 import { parseCohortParams } from "@/lib/arena/cohort";
 import { terminalThresholds } from "@/lib/arena/terminal";
+import {
+  LATEST_READ_MAX,
+  newerThanClose,
+  quoteTimeMelbourne,
+  readLatestQuotes,
+  type LatestQuote,
+} from "@/lib/data/quotes/latest";
 import { loadControls, type ControlState } from "./strategies";
 import {
+  soft,
   configInt,
   loaded,
   maxDate,
@@ -52,6 +60,8 @@ export type RiskPosition = {
   /** (close - stop) / close, ppm; null when there is no stop. */
   stopDistancePpm: number | null;
   held: boolean;
+  /** True when the weight, stop distance and value use a delayed quote newer than the close. */
+  live: boolean;
   /** Value of the position; null for a masked viewer. */
   value: Money | null;
 };
@@ -61,6 +71,8 @@ export type RiskStrategy = {
   name: string;
   d: string;
   nav: Money;
+  /** "Delayed, 13:05" when nav and the positions use delayed quotes (display only, ARN-021); else null (end of day). */
+  liveLabel: string | null;
   /** Loss limit of the round (UXN-150, "bust"), micro; null if the round's parameters cannot be read. */
   bust: Money | null;
   /** Starting money of the round. */
@@ -218,6 +230,32 @@ export async function loadRisk(deps: LoaderDeps): Promise<Loaded<RiskView>> {
           ORDER BY p.cohort_id, p.code`,
     args: ids,
   });
+  // Display only (ARN-021): the delayed quote of each held stock when it is from a later day than the
+  // close; the books, stops and statistics keep the close. Chunked reads, no OFFSET.
+  const quotes = new Map<string, LatestQuote>();
+  {
+    const codes = [...new Set(posRows.rows.map((r) => str(r.code)))];
+    for (let i = 0; i < codes.length; i += LATEST_READ_MAX) {
+      const got = await soft(
+        () => readLatestQuotes(deps.mainDb, v.market, codes.slice(i, i + LATEST_READ_MAX)),
+        new Map<string, LatestQuote>(),
+      );
+      for (const [k, q] of got) quotes.set(k, q);
+    }
+  }
+  const liveOf = (r: (typeof posRows.rows)[number]): LatestQuote | null =>
+    num(r.haircut) === 1 ? null : newerThanClose(quotes.get(str(r.code)), str(r.d));
+  const liveAtOf = new Map<string, string>(); // cohort -> newest quote time used
+  for (const r of posRows.rows) {
+    const q = liveOf(r);
+    if (q === null) continue;
+    const id = str(r.cohort_id);
+    const n = navOf.get(id);
+    if (!n) continue;
+    n.nav += num(r.qty) * (Number(q.lastMicro) - num(r.close_micro)); // money-float-ok: micro-AUD within 2^53
+    const at = liveAtOf.get(id);
+    if (at === undefined || q.quoteAt > at) liveAtOf.set(id, q.quoteAt);
+  }
   const stopRows = await deps.mainDb.execute({
     sql: `SELECT t.cohort_id, t.code, t.stop_micro,
                  (SELECT MAX(s.level_micro) FROM stop_level s WHERE s.trade_id = t.id
@@ -294,10 +332,15 @@ export async function loadRisk(deps: LoaderDeps): Promise<Loaded<RiskView>> {
     const sc = scopeOf(nav.d);
     totalNav += nav.nav;
     const rows = byCohort.get(c.id) ?? [];
+    let invested = 0;
     const positions: RiskPosition[] = rows.map((r) => {
-      const close = num(r.close_micro);
+      const lq = liveOf(r);
+      const close = lq ? Number(lq.lastMicro) : num(r.close_micro); // money-float-ok: micro-AUD within 2^53
       const stop = stopOf.get(`${c.id}|${str(r.code)}`);
-      const value = num(r.value_micro);
+      const value = lq
+        ? num(r.value_micro) + num(r.qty) * (close - num(r.close_micro))
+        : num(r.value_micro);
+      invested += value;
       const label = sc.label(str(r.code));
       const w = weight.get(label) ?? { sum: 0, strategies: new Set<string>(), label };
       w.sum += value;
@@ -313,16 +356,17 @@ export async function loadRisk(deps: LoaderDeps): Promise<Loaded<RiskView>> {
         stopDistancePpm:
           stop === undefined || close <= 0 ? null : Math.round(((close - stop) * PPM) / close),
         held: num(r.haircut) === 1,
+        live: lq !== null,
         value: masked ? null : money(value),
       };
     });
-    const invested = rows.reduce((s, r) => s + num(r.value_micro), 0);
     const bust = bustOf(c.paramsJson);
     strategies.push({
       execution: c.execution,
       name: names[c.family]?.name ?? c.family,
       d: nav.d,
       nav: money(nav.nav),
+      liveLabel: liveAtOf.has(c.id) ? `Delayed, ${quoteTimeMelbourne(liveAtOf.get(c.id)!)}` : null,
       bust: bust === null ? null : money(bust),
       seed: money(c.seed),
       nearBust:

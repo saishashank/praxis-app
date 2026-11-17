@@ -32,7 +32,7 @@ import {
 import type { DelayedQuote, QuoteRefusal } from "@/lib/data/quotes/types";
 import { storeLatestQuotesSoft } from "@/lib/data/quotes/latest";
 import { MARKET_INDEX_CODE } from "@/lib/data/quotes/parse";
-import { heldCodes } from "@/lib/intraday/universe";
+import { displayHeldCodes, heldCodes } from "@/lib/intraday/universe";
 import {
   SESSION_TZ,
   minutesSincePause,
@@ -85,6 +85,8 @@ export type PollRunDeps = {
   sleep: (ms: number) => Promise<void>;
   /** Wall clock (ms) for the whole-run deadline; defaults to Date.now (V2-S7). */
   clock?: () => number;
+  /** The auth database, for the users' watchlist codes (display prices only); optional. */
+  auth?: Exec;
   /** Users whose pick alerts are on (ARN-112); the route reads the auth DB. */
   recipients: () => Promise<string[]>;
   /** WP4 hook; defaults to none (no mail leaves). */
@@ -194,6 +196,16 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
   if (market === "AU") extraCodes.add(MARKET_INDEX_CODE);
   for (const c of await watchCodes(db, market, sessionD)) if (!seen.has(c)) extraCodes.add(c);
   for (const c of [...(await heldCodes(db, market))].sort()) if (!seen.has(c)) extraCodes.add(c);
+  // Display only (ARN-021): the practice portfolios' holdings, then the users' Home watchlists, for the
+  // site's delayed prices. Held before watchlist, after the book's own codes; the per-run cap below
+  // (`allowed`) and the cadence apply to them like any extra. A failed read leaves the plan as it was.
+  try {
+    const shown = await displayHeldCodes(db, market, deps.auth);
+    for (const c of shown.held) if (!seen.has(c)) extraCodes.add(c);
+    for (const c of shown.watchlist) if (!seen.has(c)) extraCodes.add(c);
+  } catch {
+    // keep the plan without them
+  }
   const ticksLeft = remainingPollTicks(now, end, stepMin);
   const cadence = extrasCadence({
     ...dayBudget,
@@ -396,6 +408,8 @@ export type PickAlertsHandlerDeps = Omit<MachineDeps, "ctx"> & {
   sleep: PollRunDeps["sleep"];
   /** Reads the auth DB (injected so tests need none). */
   recipients: (db: Exec) => Promise<string[]>;
+  /** The auth DB for the users' watchlist codes (display prices only). */
+  auth?: () => Exec;
   mailer?: PickAlertMailer;
 };
 
@@ -416,6 +430,7 @@ export function createPickAlertsHandler(deps: PickAlertsHandlerDeps) {
         fetch: deps.fetch,
         sleep: deps.sleep,
         recipients: () => deps.recipients(db),
+        auth: deps.auth?.(),
         mailer: deps.mailer,
       });
       const body =

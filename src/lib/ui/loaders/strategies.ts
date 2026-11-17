@@ -10,6 +10,7 @@ import { controlStates } from "@/lib/agents/controls";
 import { parseCohortParams } from "@/lib/arena/cohort";
 import { RECOST_KEYS } from "@/lib/arena/recost";
 import { terminalThresholds } from "@/lib/arena/terminal";
+import { pendingRoundNote } from "./roundNote";
 import {
   configInt,
   latestRegime,
@@ -200,6 +201,8 @@ export type StrategiesView = {
   tiles: StrategyTile[];
   attentionCount: number;
   market: { control: ControlState };
+  /** While one round has ended and the next has not started: "Round 2 starts Tue 17 Nov with A$5,000 a strategy. ..." */
+  pendingRound: string | null;
 };
 
 export async function loadStrategies(
@@ -279,21 +282,19 @@ export async function loadStrategies(
     for (const r of lr.rows) labels.set(str(r.execution_id), str(r.label));
   }
 
-  const tiles: StrategyTile[] = execs.rows.map((e) => {
-    const id = str(e.id);
-    const family = str(e.family);
-    const c = latest.get(id) ?? null;
-    const series = c ? (navs.get(c.id) ?? []) : [];
-    const last = series.length > 0 ? series[series.length - 1]!.nav : null;
+  // Position, bust distance and the "close to the bust level" note from one NAV; run again with the
+  // live NAV when the delayed overlay applies (display only), so they agree with the figure shown.
+  const derive = (
+    c: CohortRow | null,
+    nav: number | null,
+    control: string,
+  ): Pick<
+    StrategyTile,
+    "positionPpm" | "stage" | "bustDistancePpm" | "attention" | "needsAttention"
+  > => {
     const lim = c ? limitsOf(c) : null;
-    const g = glyphOf(last, c?.seed ?? 0, lim, c?.terminalKind ?? null);
-    const control = worst(
-      controls.market,
-      controls.family.get(family) ?? "enabled",
-      controls.execution.get(id) ?? "enabled",
-    );
-    const bustDist =
-      last !== null && lim !== null && last > 0 ? ratioPpm(last - lim.bust, last) : null;
+    const g = glyphOf(nav, c?.seed ?? 0, lim, c?.terminalKind ?? null);
+    const bustDist = nav !== null && lim !== null && nav > 0 ? ratioPpm(nav - lim.bust, nav) : null;
     const attention: string[] = [];
     if (control === "killed") attention.push("Stopped by the kill switch");
     else if (control === "paused") attention.push("Paused");
@@ -306,6 +307,27 @@ export async function loadStrategies(
     ) {
       attention.push(`Within ${nearPct}% of the bust level`);
     }
+    return {
+      positionPpm: g.positionPpm,
+      stage: g.stage,
+      bustDistancePpm: bustDist,
+      attention,
+      needsAttention: attention.length > 0,
+    };
+  };
+  const tiles: StrategyTile[] = execs.rows.map((e) => {
+    const id = str(e.id);
+    const family = str(e.family);
+    const c = latest.get(id) ?? null;
+    const series = c ? (navs.get(c.id) ?? []) : [];
+    const last = series.length > 0 ? series[series.length - 1]!.nav : null;
+    const lim = c ? limitsOf(c) : null;
+    const control = worst(
+      controls.market,
+      controls.family.get(family) ?? "enabled",
+      controls.execution.get(id) ?? "enabled",
+    );
+    const d = derive(c, last, control);
     return {
       execution: id,
       family,
@@ -321,16 +343,16 @@ export async function loadStrategies(
       seed: c ? money(c.seed) : null,
       nav: last === null ? null : money(last),
       returnPpm: last !== null && c ? ratioPpm(last - c.seed, c.seed) : null,
-      positionPpm: g.positionPpm,
+      positionPpm: d.positionPpm,
       bust: lim ? money(lim.bust) : null,
       target: lim ? money(lim.target) : null,
-      stage: g.stage,
-      bustDistancePpm: bustDist,
+      stage: d.stage,
+      bustDistancePpm: d.bustDistancePpm,
       label: labels.get(id) ?? null,
       regime: regime?.state ?? null,
       control,
-      needsAttention: attention.length > 0,
-      attention,
+      needsAttention: d.needsAttention,
+      attention: d.attention,
       spark: series.slice(-SPARK_POINTS).map((p) => p.nav),
       day:
         series.length >= 2 && last !== null
@@ -373,6 +395,7 @@ export async function loadStrategies(
         ...tiles[i]!,
         nav: money(now),
         returnPpm: ratioPpm(now - x.seed, x.seed),
+        ...derive(latest.get(x.execution) ?? null, now, tiles[i]!.control),
         day: { change: money(change), ppm: ratioPpm(change, x.nav), label },
       };
     }
@@ -395,6 +418,10 @@ export async function loadStrategies(
     return (ka === kb ? 0 : ka < kb ? -1 : 1) || cmp(a.execution, b.execution);
   });
 
+  // A round ended and the next has not traded yet: say so instead of "No rounds yet" (Owner 2026-11-16).
+  const pendingRound = tiles.some((t) => t.live && t.nav !== null)
+    ? null
+    : await pendingRoundNote(deps.mainDb, v.market, v.now);
   return loaded(
     newest,
     v.now,
@@ -404,8 +431,9 @@ export async function loadStrategies(
       tiles,
       attentionCount: tiles.filter((t) => t.needsAttention).length,
       market: { control: controls.market },
+      pendingRound,
     },
-    "No rounds yet — the strategies make their first trades after tonight's run.",
+    pendingRound ?? "No rounds yet — the strategies make their first trades after tonight's run.",
   );
 }
 

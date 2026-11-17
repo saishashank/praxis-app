@@ -25,7 +25,7 @@ import { WelcomeBanner } from "./WelcomeBanner";
 import { IntradaySection } from "../picks/IntradaySection";
 import { PortfolioCard } from "../picks/PortfolioCard";
 import { ProfileLabel } from "../picks/ProfileLabel";
-import { profileHue } from "../picks/text";
+import { entryLabel, entryNote, nowMaskedText, nowNote, pct, profileHue } from "../picks/text";
 
 const SIZE_NAME: Record<string, string> = { U1: "Large", U2: "Mid", U3: "Small" };
 const MAX_HOME_CARDS = 3; // threshold-ok: UXR-020 shows up to 3 pick cards
@@ -336,18 +336,35 @@ function PickCard({ p, masked }: { p: HomePick; masked: boolean }) {
     >
       <p className="m-0 min-w-0 break-words">
         <span className="font-semibold">{p.stock}</span>
+        {p.company ? <span className="text-text-muted"> · {p.company}</span> : null}
         {SIZE_NAME[p.tier] ? (
           <span className="text-text-muted"> · {SIZE_NAME[p.tier]} company</span>
         ) : null}
       </p>
-      {p.referenceMicro !== null ? (
-        <p className="m-0 mt-1 text-sm">
-          Aim {p.aimMicro !== null ? <Money micro={p.aimMicro} /> : "n/a"} · Stop{" "}
-          {p.stopMicro !== null ? <Money micro={p.stopMicro} /> : "n/a"}
+      {p.entryMicro !== null ? (
+        <p className="m-0 mt-1 text-sm" data-testid="home-entry-line">
+          {entryLabel(p.entryBought)} <Money micro={p.entryMicro} />
+          {entryNote(p.entryBought, p.lastCloseD)}
         </p>
-      ) : masked ? (
+      ) : null}
+      {p.nowMicro !== null ? (
+        <p className="m-0 mt-1 text-sm" data-testid="home-now-line">
+          Now <Money micro={p.nowMicro} />
+          {nowNote(p.nowChangePpm, p.nowLabel)}
+        </p>
+      ) : masked && p.nowChangePpm !== null ? (
+        <p className="m-0 mt-1 text-sm" data-testid="home-now-line">
+          {nowMaskedText(p.nowChangePpm)}
+        </p>
+      ) : null}
+      {p.referenceMicro !== null || p.aimPpm !== null || p.stopPpm !== null ? (
         <p className="m-0 mt-1 text-sm">
-          <Masked label="Prices hidden for your role" />
+          Aim {p.aimMicro !== null ? <Money micro={p.aimMicro} /> : null}
+          {p.aimPpm !== null ? `${p.aimMicro !== null ? " " : ""}(${pct(p.aimPpm)})` : null}
+          {p.aimMicro === null && p.aimPpm === null ? "n/a" : null} · Stop{" "}
+          {p.stopMicro !== null ? <Money micro={p.stopMicro} /> : null}
+          {p.stopPpm !== null ? `${p.stopMicro !== null ? " " : ""}(${pct(p.stopPpm)})` : null}
+          {p.stopMicro === null && p.stopPpm === null ? "n/a" : null}
         </p>
       ) : null}
       <p className="m-0 mt-1 text-xs text-text-muted">
@@ -372,8 +389,16 @@ function SummaryCard({ v }: { v: HomeView }) {
     <Card title="Strategies today" aria-label="Strategies today">
       {s.tiles.length === 0 ? (
         <Empty hue="brand-b" shape="list">
-          <span>No strategy is running yet.</span>{" "}
-          <span>The six strategies appear here with A$5,000 each after tonight&apos;s run.</span>
+          {s.note ? (
+            <span data-testid="round-note">{s.note}</span>
+          ) : (
+            <>
+              <span>No strategy is running yet.</span>{" "}
+              <span>
+                The six strategies appear here with A$5,000 each after tonight&apos;s run.
+              </span>
+            </>
+          )}
         </Empty>
       ) : (
         <ul className={tileStrip} aria-label="Strategies today">

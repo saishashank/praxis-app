@@ -53,6 +53,11 @@ function StrategyCard({ s, nearPct }: { s: RiskStrategy; nearPct: number }) {
           <dt className="text-text-muted">Value now</dt>
           <dd className="m-0">
             <Money micro={s.nav.micro} />
+            {s.liveLabel ? (
+              <span className="block text-xs text-text-muted" data-testid="risk-live">
+                {s.liveLabel}
+              </span>
+            ) : null}
           </dd>
         </div>
         <div>

@@ -49,7 +49,7 @@ describe("migration 0016_known_at", () => {
     const db = track(createClient({ url: tempDbUrl() }));
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(db, ms);
-    await migrateDown(db, ms, 17); // 0017 to 0032 sit on top of 0016: the schema as of 0015
+    await migrateDown(db, ms, 18); // 0017 to 0033 sit on top of 0016: the schema as of 0015
     expect(
       (await rows(db, "PRAGMA table_info(corporate_action)")).map((c) => c.name),
     ).not.toContain("known_at");

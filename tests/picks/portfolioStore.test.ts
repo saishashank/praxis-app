@@ -115,12 +115,15 @@ describe("runPickPortfolio (D-950)", () => {
     expect(bal.holdings).toEqual([
       expect.objectContaining({
         stock: "ZZUP",
+        company: "Zed Upward Holdings",
         strategy: "Follow the trend",
         entryD: D,
         changePpm: 50_000,
       }),
     ]);
-    expect(bal.trades).toEqual([expect.objectContaining({ d: D, stock: "ZZUP" })]);
+    expect(bal.trades).toEqual([
+      expect.objectContaining({ d: D, stock: "ZZUP", company: "Zed Upward Holdings" }),
+    ]);
     expect(v.portfolios[0]).toMatchObject({
       started: true,
       holdings: [],
@@ -134,6 +137,8 @@ describe("runPickPortfolio (D-950)", () => {
     expect(mb.holdings[0]!.entry).toBeNull();
     expect(mb.holdings[0]!.changePpm).toBe(50_000);
     expect(mb.trades[0]!.d).toBeNull();
+    expect(mb.holdings[0]!.company).toBeNull();
+    expect(mb.trades[0]!.company).toBeNull();
     expect(findLeaks(m, CODES, NAMES)).toEqual([]);
   });
 

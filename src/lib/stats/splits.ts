@@ -401,7 +401,12 @@ export function validationSessions(
 // ---- trial ledger ----
 
 export type TrialKind =
-  "validation_access" | "holdout_access" | "pattern_test" | "challenger" | "new_lineage";
+  | "validation_access"
+  | "holdout_access"
+  | "pattern_test"
+  | "challenger"
+  | "new_lineage"
+  | "report_look";
 
 export type TrialLedgerRow = {
   readonly id: string;
@@ -479,6 +484,7 @@ export function trialCounts(
     pattern_test: 0,
     challenger: 0,
     new_lineage: 0,
+    report_look: 0, // D-1061: a report-only look never counts toward the budget
   };
   for (const r of ledger) {
     if (r.lineage_id === lineage && r.split_version === splitVersion) byKind[r.kind] += 1;
