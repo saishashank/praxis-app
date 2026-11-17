@@ -5,7 +5,7 @@ import type { Client } from "@libsql/client";
 import type { AgentParams } from "@/lib/agents/params";
 import type { CalendarRow } from "@/lib/data/calendar";
 import { shortShadowEnabled } from "./enabled";
-import { evaluateShort, type ShortEvaluation } from "./evaluate";
+import { evaluateShort, shortLookTaken, type ShortEvaluation } from "./evaluate";
 import { scoreShort } from "./score";
 import { SHORT_RULE_ID, selectShort } from "./select";
 import { insertShortDecision } from "./store";
@@ -54,7 +54,10 @@ export async function runShortShadow(
     now: o.now,
     calendar: o.calendar,
   });
-  const evaluation = await evaluateShort(db, { market: o.market, now: o.now });
+  // the night is not an attempt at a second look: once the look is on file the call is skipped (a direct second attempt is audited)
+  const evaluation: ShortEvaluation = (await shortLookTaken(db, o.market))
+    ? { status: "refused", reason: "already_looked" }
+    : await evaluateShort(db, { market: o.market, now: o.now });
   return { ran: true, selected: setups.length, scored: sc.scored, open: sc.open, evaluation };
 }
 

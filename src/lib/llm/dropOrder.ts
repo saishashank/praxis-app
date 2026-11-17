@@ -1,5 +1,6 @@
 // Drop order of the LLM stages when the daily total runs short (LLM-050 s13, LLM-062, D-482).
-// Earlier entries are dropped first; the Evening Review text (R5) is dropped last. A stage may spend
+// Earlier entries are dropped first (M23 T3, D-1642: `research`, the monthly CXA-007 proposal run on the R2 bucket, goes before
+// anything else and has no cap or reservation of its own); the Evening Review text (R5) is dropped last. A stage may spend
 // only what is left after the caps of the stages that come after it, so a late stage is never starved.
 // M22 (D-1411): the expert and Committee stages take their bucket caps; reflections spend the R6 bucket (shared with the
 // steelman) and are reserved per night by the caller. Stages that do not exist in code yet (overviews, news summaries) are
@@ -8,6 +9,7 @@ import type { LlmParams } from "@/lib/agents/params";
 import { scaledCap, type BudgetKey, type BudgetUsage } from "./budget";
 
 export const DROP_ORDER = [
+  "research",
   "expert_ingest",
   "committee",
   "company_overview",

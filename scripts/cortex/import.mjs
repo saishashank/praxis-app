@@ -52,6 +52,9 @@ import {
 
 export const FORMAT = "praxis-cortex-artefact/1";
 export const MIN_SCHEMA = 19;
+/** M23 R2 (D-1628): a larger-parcel sensitivity variant is a simulation only; nothing ending in this may enter the app. */
+export const SENSITIVITY_SUFFIX = "_p5000";
+const isSensitivity = (v) => typeof v === "string" && v.endsWith(SENSITIVITY_SUFFIX);
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const isObj = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -157,6 +160,13 @@ export function validatePassports(j) {
     const p = `passports[${i}]`;
     if (!check(e, f, p, isObj(r), "object required")) return;
     check(e, f, `${p}.angle_id`, isStr(r.angle_id), "string required");
+    check(
+      e,
+      f,
+      `${p}.angle_id`,
+      !isSensitivity(r.angle_id),
+      "a larger-parcel sensitivity variant (an id ending _p5000) is never imported",
+    );
     check(e, f, `${p}.version`, isInt(r.version) && r.version >= 1, "integer >= 1 required");
     check(
       e,
@@ -256,6 +266,13 @@ export function validateCells(j) {
       `${p}.lineage_id`,
       c.lineage_id === null || isStr(c.lineage_id),
       "string or null required",
+    );
+    check(
+      e,
+      f,
+      `${p}.lineage_id`,
+      !isSensitivity(c.lineage_id) && !isSensitivity(c.angle_id),
+      "a larger-parcel sensitivity variant (a lineage ending _p5000) is never imported",
     );
     const hasR = c.result_at !== null && c.result_at !== undefined;
     const hasJ = c.result !== null && c.result !== undefined;

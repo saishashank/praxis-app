@@ -42,8 +42,8 @@ const count = async (sql: string) => Number((await db.execute(sql)).rows[0]!.n);
 describe("the trigger set", () => {
   it("is complete: two triggers on every table with a market column except market_row_count", async () => {
     const g = await guardGaps(db);
-    // 92 tables with a market column in 0001..0034, minus the invariant's own, plus the nine of 0036, the five of 0038 and the eight of 0039
-    expect(g.tables).toHaveLength(113);
+    // 92 tables with a market column in 0001..0034, minus the invariant's own, plus the nine of 0036, the five of 0038, the eight of 0039 and the eight of 0040
+    expect(g.tables).toHaveLength(121);
     expect(g.tables).toContain("price_bar");
     expect(g.tables).toContain("trading_calendar");
     expect(g.tables).not.toContain("market_row_count");
@@ -75,7 +75,7 @@ describe("the trigger set", () => {
 
   it("the SQL of every guard trigger names its table", async () => {
     const r = await db.execute(GUARD_TRIGGERS);
-    expect(r.rows).toHaveLength(226); // 91 tables of 0035, the 9 of 0036, the 5 of 0038 and the 8 of 0039, two each
+    expect(r.rows).toHaveLength(242); // 91 tables of 0035, the 9 of 0036, the 5 of 0038, the 8 of 0039 and the 8 of 0040, two each
     for (const x of r.rows) {
       const t = String(x.name).replace(/_market_guard_(ins|upd)$/, "");
       expect(String(x.sql)).toContain(`'MarketNotEnabled ${t}'`);
@@ -206,23 +206,24 @@ describe("cost (PRD-045): one primary-key probe of the 3-row market table per in
 describe("down and up", () => {
   it("down removes exactly the guard triggers and up restores a schema identical to a fresh one", async () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(ms[ms.length - 5]!.name).toBe("m19_market_guard");
-    // 0036, 0037, 0038 and 0039 sit on top: their own triggers (0036, 0038 and 0039 guards, 0037 source guard) go with them
-    expect(ms[ms.length - 4]!.name).toBe("m20_markets_data");
-    expect(ms[ms.length - 3]!.name).toBe("m20_macro_sources");
-    expect(ms[ms.length - 2]!.name).toBe("m21_owner_tools");
-    expect(ms[ms.length - 1]!.name).toBe("m22_llm_experts");
+    expect(ms[ms.length - 6]!.name).toBe("m19_market_guard");
+    // 0036, 0037, 0038, 0039 and 0040 sit on top: their own triggers (0036, 0038, 0039 and 0040 guards, 0037 source guard) go with them
+    expect(ms[ms.length - 5]!.name).toBe("m20_markets_data");
+    expect(ms[ms.length - 4]!.name).toBe("m20_macro_sources");
+    expect(ms[ms.length - 3]!.name).toBe("m21_owner_tools");
+    expect(ms[ms.length - 2]!.name).toBe("m22_llm_experts");
+    expect(ms[ms.length - 1]!.name).toBe("m23_research");
     const top = await schemaOf(db);
-    expect(await migrateDown(db, ms, 4)).toEqual({ rolledBack: 4, version: ms.length - 4 });
+    expect(await migrateDown(db, ms, 5)).toEqual({ rolledBack: 5, version: ms.length - 5 });
     const full = await schemaOf(db);
     expect(top.length).toBeGreaterThan(full.length);
-    expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: ms.length - 5 });
+    expect(await migrateDown(db, ms, 1)).toEqual({ rolledBack: 1, version: ms.length - 6 });
     const down = await schemaOf(db);
     expect(down.some((s) => s.includes("_market_guard_"))).toBe(false);
     expect(full.length - down.length).toBe(182);
     await db.execute(bar("IN")); // no guard any more
     await db.execute("DELETE FROM price_bar WHERE market = 'IN'").catch(() => undefined);
-    expect(await migrateUp(db, ms)).toEqual({ applied: 5, version: ms.length });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 6, version: ms.length });
     expect(await schemaOf(db)).toEqual(top);
   });
 });

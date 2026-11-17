@@ -421,7 +421,8 @@ describe("loader: role split, masking, bounded reads per refresh (decision 24)",
       // M18 E2/E3 (DAT-251 b, DAT-252): the Owner's data-feed lines are one more statement: 90 became 91.
       // M22 Z (D-1446, D-1535): the five new lines (AI jobs, Committee, bull and bear notes, small reader,
       // outside-signals reading) are nine short single-row reads (switch settings and newest-row reads), so 91 became 100.
-      expect(stats.calls).toBeLessThanOrEqual(100);
+      // M23 M4 (D-1764): the Owner's research line is one statement with two counts, so 100 became 101.
+      expect(stats.calls).toBeLessThanOrEqual(101);
     }
   });
 

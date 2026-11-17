@@ -7,6 +7,7 @@
 import * as alertsMuted from "./states/alerts-muted.mjs";
 import * as blueprintFull from "./states/blueprint-full.mjs";
 import * as committeeTrial from "./states/committee-trial.mjs";
+import * as cortexResearch from "./states/cortex-research.mjs";
 import * as expertsQueue from "./states/experts-queue.mjs";
 import * as expertsSources from "./states/experts-sources.mjs";
 import * as labelsQueue from "./states/labels-queue.mjs";
@@ -17,7 +18,7 @@ import * as reviewStored from "./states/review-stored.mjs";
 import * as steelmanCards from "./states/steelman-cards.mjs";
 
 /**
- * The six states of TST-135 (a), the three of M21 A1 (D-1236) and the two of M22 A1 (D-1444), in the order they are applied.
+ * The six states of TST-135 (a), the three of M21 A1 (D-1236) the two of M22 A1 (D-1444) and the one of M23 M4 (D-1765), in the order they are applied.
  * `owner-tools-on` and `committee-trial` switch a feature on in the throwaway database (D-1214, D-1213).
  */
 export const STATES = {
@@ -32,6 +33,7 @@ export const STATES = {
   "labels-queue": labelsQueue,
   "committee-trial": committeeTrial,
   "experts-sources": expertsSources,
+  "cortex-research": cortexResearch,
 };
 export const STATE_NAMES = Object.keys(STATES);
 /**

@@ -65,7 +65,7 @@ const ROW: Record<string, (m: string) => string> = {
 describe("0038_m21_owner_tools", () => {
   it("is migration 38 and its generated guard region is current", async () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(ms).toHaveLength(39);
+    expect(ms).toHaveLength(40);
     expect(ms[37]).toMatchObject({ version: 38, name: "m21_owner_tools" });
     const text = readFileSync(M21_MIGRATION_PATH, "utf8");
     expect(regionOf(text, M21_REGION)).toBe(renderM21Region());
@@ -367,11 +367,11 @@ describe("0038_m21_owner_tools", () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(d2, ms);
     const after = await schemaOf(d2);
-    expect(await migrateDown(d2, ms, 2)).toEqual({ rolledBack: 2, version: 37 });
+    expect(await migrateDown(d2, ms, 3)).toEqual({ rolledBack: 3, version: 37 });
     const names = (await schemaOf(d2)).join("\n");
     for (const t of ALL_NEW) expect(names).not.toContain(`table:${t}:`);
     expect(names).not.toContain("owner_trade");
-    expect(await migrateUp(d2, ms)).toEqual({ applied: 2, version: 39 });
+    expect(await migrateUp(d2, ms)).toEqual({ applied: 3, version: 40 });
     expect(await schemaOf(d2)).toEqual(after);
   });
 });

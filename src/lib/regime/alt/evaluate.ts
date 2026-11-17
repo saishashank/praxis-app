@@ -4,13 +4,19 @@
 // known, at least 30 of them differing sessions. Statistic: mean return on the other sessions minus mean on the differing
 // ones, in parts per million, evaluated as the mean of weighted rows (weight N/N_other for the others, -N/N_differing for the
 // differing) so the stationary block bootstrap of the stats library applies; the one-sided 90 % lower bound above 0 is a PASS.
-// The look is one row in `holdout_look` (lineage `regime_altinputs`); a second evaluation is refused and computes nothing. A PASS
+// The look is one row in `holdout_look` (lineage `regime_altinputs`) through the registry gate (M23 A2); a second evaluation is refused, audited and computes nothing. A PASS
 // only lets the Owner consider a gate change in a later spec version: nothing here changes any gate.
-import { createHash } from "node:crypto";
 import type { Client } from "@libsql/client";
 import { bootstrapMean, isUndefined } from "@/lib/stats/stationaryBootstrap";
 import { scopedPrng } from "@/lib/stats/rng";
 import { loadProfile } from "@/lib/market/profile";
+import {
+  canonicalJson,
+  preregister,
+  sha256Hex,
+  takeLook,
+  type LookComputed,
+} from "@/lib/research/registry";
 import { moreCautious } from "./rule";
 
 export const ALT_LINEAGE = "regime_altinputs";
@@ -25,7 +31,9 @@ export const HYPOTHESIS_TEXT =
   "return of the other sessions minus the mean of the differing sessions; the sample is at least 30 differing sessions; the " +
   "one-sided 90 % block-bootstrap lower bound must be above 0. One look; never re-looked. A pass lets the Owner consider a " +
   "gate change in a later specification version only.";
-export const PREREG_SHA = createHash("sha256").update(HYPOTHESIS_TEXT).digest("hex").slice(0, 16); // threshold-ok: sha prefix
+/** The frozen plan: the hypothesis text. Its sha256 (64 hex) is the registry hash stored with the look (M23 A2). */
+export const FROZEN_PLAN = { hypothesis: HYPOTHESIS_TEXT } as const;
+export const PREREG_SHA = sha256Hex(canonicalJson(FROZEN_PLAN));
 
 export type AltEvaluation =
   | { readonly status: "refused"; readonly reason: "already_looked" }
@@ -40,7 +48,7 @@ export type AltEvaluation =
     };
 
 /** True once the one look of this market has been taken. */
-export async function altLookTaken(db: Pick<Client, "execute">, market: string): Promise<boolean> {
+export async function altLookTaken(db: Client, market: string): Promise<boolean> {
   // rows-ok: a primary-key probe of the registry (lineage, market)
   const rs = await db.execute({
     sql: "SELECT 1 FROM holdout_look WHERE lineage = ? AND market = ?",
@@ -52,8 +60,8 @@ export async function altLookTaken(db: Pick<Client, "execute">, market: string):
 type Point = { d: string; differing: boolean; retPpm: number };
 
 /** The sample: readings with an outside input and a known 20-session return. */
-async function sampleOf(db: Pick<Client, "execute">, market: string): Promise<Point[]> {
-  const prof = await loadProfile(db as Client, market);
+async function sampleOf(db: Client, market: string): Promise<Point[]> {
+  const prof = await loadProfile(db, market);
   const index = prof.benchmarkIndex;
   if (index === null) return [];
   // rows-ok: regime_alt_reading primary key (market, d), oldest first, LIMIT 2000
@@ -87,16 +95,20 @@ async function sampleOf(db: Pick<Client, "execute">, market: string): Promise<Po
   return out;
 }
 
-export async function evaluateAlt(
-  db: Pick<Client, "execute">,
-  o: { market: string; now: () => string },
-): Promise<AltEvaluation> {
-  if (await altLookTaken(db, o.market)) return { status: "refused", reason: "already_looked" };
-  const pts = await sampleOf(db, o.market);
+type Measured =
+  | { below: true; detail: Extract<AltEvaluation, { status: "below_sample" }> }
+  | { below: false; detail: Extract<AltEvaluation, { status: "looked" }>; computed: LookComputed };
+
+/** Reads the sample once and measures it; "below" when the pre-registered sample is not met. */
+async function measure(db: Client, market: string): Promise<Measured> {
+  const pts = await sampleOf(db, market);
   const diff = pts.filter((p) => p.differing);
   const rest = pts.filter((p) => !p.differing);
   if (diff.length < MIN_DIFFERING || rest.length === 0) {
-    return { status: "below_sample", differing: diff.length, sessions: pts.length };
+    return {
+      below: true,
+      detail: { status: "below_sample", differing: diff.length, sessions: pts.length },
+    };
   }
   const n = pts.length;
   const values = pts.map(
@@ -106,23 +118,65 @@ export async function evaluateAlt(
   const boot = bootstrapMean(
     { sessions: pts.map((_, i) => i), sessionCount: n },
     values,
-    scopedPrng(`boot:${ALT_LINEAGE}:${o.market}`),
+    scopedPrng(`boot:${ALT_LINEAGE}:${market}`),
     { expectedBlock: FORWARD_SESSIONS, maxHold: FORWARD_SESSIONS },
   );
   const lower = isUndefined(boot) ? null : boot.oneSidedLo;
-  const verdict = difference > 0 && lower !== null && lower > 0 ? "pass" : "fail";
-  const ins = await db.execute({
-    sql: `INSERT INTO holdout_look (lineage, market, looked_at, prereg_sha, verdict)
-          VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
-    args: [ALT_LINEAGE, o.market, o.now(), PREREG_SHA, verdict],
-  });
-  if (ins.rowsAffected === 0) return { status: "refused", reason: "already_looked" };
+  const pass = difference > 0 && lower !== null && lower > 0;
   return {
-    status: "looked",
-    verdict,
-    differing: diff.length,
-    sessions: n,
-    differencePpm: difference,
-    lowerPpm: lower,
+    below: false,
+    detail: {
+      status: "looked",
+      verdict: pass ? "pass" : "fail",
+      differing: diff.length,
+      sessions: n,
+      differencePpm: difference,
+      lowerPpm: lower,
+    },
+    computed: {
+      verdict: pass ? "PASS" : "NULL",
+      nSetups: diff.length,
+      nBlocks: Math.ceil(n / FORWARD_SESSIONS),
+      stats: { differencePpm: difference, lowerPpm: lower, sessions: n },
+    },
   };
+}
+
+/**
+ * The one look (D-1666). A look already on file goes straight to the gate, which refuses and audits it; otherwise the sample
+ * is read and, when it is met, the plan is frozen and the look taken. Below the sample nothing at all is written.
+ */
+export async function evaluateAlt(
+  db: Client,
+  o: { market: string; now: () => string },
+): Promise<AltEvaluation> {
+  const now = o.now();
+  const m = (await altLookTaken(db, o.market)) ? null : await measure(db, o.market);
+  if (m !== null && m.below) return m.detail;
+  const plan = await preregister(db, {
+    lineage: ALT_LINEAGE,
+    market: o.market,
+    item: "DAT-248",
+    frozen: FROZEN_PLAN,
+    now,
+  });
+  const r = await takeLook(db, {
+    lineage: ALT_LINEAGE,
+    market: o.market,
+    sha: plan.sha,
+    caller: "regime_altinputs",
+    now,
+    compute: () => (m === null || m.below ? never() : m.computed),
+  });
+  if (r.status === "refused" && r.reason === "not_preregistered") {
+    throw new Error("the outside-signal test plan could not be frozen");
+  }
+  if (r.status === "refused" || m === null || m.below) {
+    return { status: "refused", reason: "already_looked" };
+  }
+  return m.detail;
+}
+
+function never(): never {
+  throw new Error("the gate computed a look that was already on file");
 }

@@ -1989,10 +1989,64 @@ const M22_META_TABLES: Record<M22Key, ConfigMeta> = {
   },
 };
 
+// ---- M23 keys (ch. 15 §15.11.4; docs/M23_design.md section A, D-1612, D-1650) ----
+// Five fixed keys: no Owner edit. Readers arrive with the M23 tasks that own them (the monitors, the meters, the label
+// evaluation, the sector series and the look registry); until then nothing reads them.
+
+const M23_KEYS = {
+  sector_index_weighting: {
+    default: "equal",
+    unit: "equal or value",
+    editable: "fixed",
+    ref: "CXA-009, D-1612",
+    validate: never,
+  },
+  survivorship_loss_assumed_pct: m22Int(50, 30, 80, "percent", "CXA-003, D-1612", "fixed"),
+  label_golden_min: m22Int(500, 100, 2000, "labels", "CXA-005, D-1612, D-1650", "fixed"),
+  residual_monitor_alarm_pp: m22Int(5, 1, 20, "points", "CXA-010, D-1612, D-1650", "fixed"),
+  holdout_looks_max: m22Int(1, 1, 1, "looks", "CXA-015, D-1612", "fixed"),
+} as const satisfies Record<string, ConfigKeyDef>;
+
+type M23Key = keyof typeof M23_KEYS;
+
+const M23_META_TABLES: Record<M23Key, ConfigMeta> = {
+  sector_index_weighting: {
+    label: "How each industry group's index weights its members",
+    area: LRN,
+    bounds: "fixed: equal weights",
+    input: "text",
+  },
+  survivorship_loss_assumed_pct: {
+    label: "Share of the gap to the best-case result assumed lost to delisted companies",
+    area: LRN,
+    bounds: "fixed at 50 percent",
+    input: "int",
+  },
+  label_golden_min: {
+    label: "Fewest hand-checked announcements before the labelling check gives a verdict",
+    area: LRN,
+    bounds: "fixed",
+    input: "int",
+  },
+  residual_monitor_alarm_pp: {
+    label: "Gap in percentage points that makes a background watch raise a flag",
+    area: LRN,
+    bounds: "fixed",
+    input: "int",
+  },
+  holdout_looks_max: {
+    label: "Looks allowed at the held-back data for one test",
+    area: LRN,
+    bounds: "fixed at one",
+    input: "int",
+  },
+};
+
 export const CONFIG_KEYS = {
   ...MKT_KEYS,
   ...M21_KEYS,
   ...M22_KEYS,
+  ...M23_KEYS,
   ...M4_RANGED_KEYS,
   ...M4_FIXED_KEYS,
   ...M5_RANGED_KEYS,
@@ -2601,6 +2655,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   ...MOVERS_META_TABLES,
   ...M21_META_TABLES,
   ...M22_META_TABLES,
+  ...M23_META_TABLES,
   evening_review_time: {
     label: "Evening Review send time",
     area: SEM,
@@ -2971,6 +3026,9 @@ export const M21_KEY_NAMES: readonly ConfigKey[] = Object.keys(M21_KEYS) as M21K
 
 /** Every key added in M22 (docs/M22_design.md section A, D-1455): the four §15.11.3 keys and the ten V2 keys. */
 export const M22_KEY_NAMES: readonly ConfigKey[] = Object.keys(M22_KEYS) as M22Key[];
+
+/** Every key added in M23 (docs/M23_design.md section A, D-1612): the five §15.11.4 keys, all fixed. */
+export const M23_KEY_NAMES: readonly ConfigKey[] = Object.keys(M23_KEYS) as M23Key[];
 
 /**
  * The Cortex keys whose Owner edit is a charged trial and refits the map (CTX-072): every editable

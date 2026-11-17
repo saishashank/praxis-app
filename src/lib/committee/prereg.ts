@@ -118,7 +118,7 @@ export function preregProblem(rows: readonly PreregRow[]): string | null {
   return null;
 }
 
-async function lookTaken(db: Exec, market: string): Promise<boolean> {
+export async function lookTaken(db: Exec, market: string): Promise<boolean> {
   // rows-ok: holdout_look primary key (lineage, market), one row
   const r = await db.execute({
     sql: "SELECT 1 FROM holdout_look WHERE lineage = ? AND market = ? LIMIT 1",

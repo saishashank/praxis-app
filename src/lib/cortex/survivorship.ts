@@ -3,14 +3,50 @@
 // missing. `haircut` states that bias in percentage points per year (the share of codes delisted each year times the
 // assumed loss on a delisting, 50 % by default), shown beside the unadjusted figure; `reportCaveats` returns the
 // caveats a report of a market must carry (the US survivorship caveat on every US report until its own snapshots
-// satisfy ARN-082; India's "measured on the bhavcopy archive"; the home market: none, its reports are unchanged).
+// satisfy ARN-082; India's "measured on the bhavcopy archive"; AU: the assumed haircut, matched only from its first own universe snapshot, D-1741).
 // Pure: a profile and the coverage facts in, plain values out.
+import { CONFIG_KEYS } from "@/lib/config/keys";
 import type { MarketProfile } from "@/lib/market/profileCore.mjs";
 import { dataLimitsOf } from "@/lib/market/seed/dataLimits.mjs";
 import { parseRational, subRat, mulRat, makeRational, type Rational } from "@/lib/money/rational";
 
-/** The assumed mean loss on a delisting, in percent (D-1115: assumed, not measured, and labelled so). */
-export const ASSUMED_DELISTING_LOSS_PCT = 50;
+const LOSS_KEY = CONFIG_KEYS.survivorship_loss_assumed_pct as {
+  readonly default: number;
+  readonly range: readonly [number, number];
+};
+
+/**
+ * The assumed mean loss on a delisting, in percent (D-1115: assumed, not measured, and labelled so). It is the default
+ * of the config key `survivorship_loss_assumed_pct` (D-1740), so every current value is unchanged.
+ */
+export const ASSUMED_DELISTING_LOSS_PCT: number = LOSS_KEY.default;
+
+/**
+ * The assumed loss as text, checked against the key's bounds (fixed at pre-registration, CXA-012). With no argument it
+ * is the key's default. The caller that holds a database passes `getConfig`'s value.
+ */
+export function assumedLossPct(value?: number | string): string {
+  const t = asText(value ?? ASSUMED_DELISTING_LOSS_PCT, "assumedLossPct");
+  const n = Number(t);
+  if (n < LOSS_KEY.range[0] || n > LOSS_KEY.range[1]) {
+    throw new RangeError(
+      `assumedLossPct must be between ${LOSS_KEY.range[0]} and ${LOSS_KEY.range[1]}`,
+    );
+  }
+  return t;
+}
+
+/** The label a market's industry figures carry before its first `instrument_class` snapshot (D-1742; CXA-009). */
+export const STATIC_INDUSTRY = "static industry";
+
+/**
+ * CXA-012: sessions before a market's first own `instrument_class` snapshot read the industry map of today, so they are
+ * labelled "static industry"; from the snapshot on the map is point in time and no label is needed (null). A market
+ * with no snapshot yet is static on every date. Dates are ISO `YYYY-MM-DD`, compared as text.
+ */
+export function industryLabel(d: string, firstSnapshotAsOf: string | null): string | null {
+  return firstSnapshotAsOf === null || d < firstSnapshotAsOf ? STATIC_INDUSTRY : null;
+}
 
 export type Haircut = {
   readonly delistedSharePerYearPct: string;
@@ -50,10 +86,19 @@ const asText = (v: number | string, name: string): string => {
  */
 export function haircut(input: {
   readonly delistedSharePerYear: number | string;
+  /** A measured loss on a delisting (not bounded). Not given together with `assumedLossPct`. */
   readonly meanLossPct?: number | string;
+  /** The assumed loss, read from `survivorship_loss_assumed_pct` (bounded); the key's default when absent. */
+  readonly assumedLossPct?: number | string;
 }): Haircut {
   const share = asText(input.delistedSharePerYear, "delistedSharePerYear");
-  const loss = asText(input.meanLossPct ?? ASSUMED_DELISTING_LOSS_PCT, "meanLossPct");
+  if (input.meanLossPct !== undefined && input.assumedLossPct !== undefined) {
+    throw new RangeError("give a measured meanLossPct or an assumedLossPct, not both");
+  }
+  const loss =
+    input.meanLossPct === undefined
+      ? assumedLossPct(input.assumedLossPct)
+      : asText(input.meanLossPct, "meanLossPct");
   if (parseRational(share).num > 100n * parseRational(share).den) {
     throw new RangeError("delistedSharePerYear is a percent, at most 100");
   }
@@ -81,7 +126,23 @@ export type SurvivorshipCoverage = {
   readonly ownSnapshotsSatisfyArn082?: boolean;
   /** Delisted codes per year as a percent of the universe, when measured; null/absent = not measured. */
   readonly delistedSharePerYear?: number | string | null;
+  /** The `as_of` date of the market's first own `universe_snapshot`; null/absent = none yet (D-1741). */
+  readonly firstOwnUniverseSnapshot?: string | null;
+  /** The first session the report covers; matched controls need it on or after the first own snapshot. */
+  readonly reportStart?: string;
 };
+
+function matchedControls(
+  s: { readonly matched_controls: "matched" | "unmatched"; readonly matched_from?: string },
+  coverage: SurvivorshipCoverage,
+): "matched" | "unmatched" {
+  if (s.matched_from === undefined) return s.matched_controls;
+  const first = coverage.firstOwnUniverseSnapshot;
+  if (first === undefined || first === null || coverage.reportStart === undefined) {
+    return "unmatched";
+  }
+  return coverage.reportStart >= first ? "matched" : "unmatched";
+}
 
 export type ReportCaveat = {
   readonly id: string;
@@ -114,7 +175,7 @@ export function reportCaveats(
       text: s.text,
       haircut:
         share === undefined || share === null ? null : haircut({ delistedSharePerYear: share }),
-      matchedControls: s.matched_controls,
+      matchedControls: matchedControls(s, coverage),
     },
   ];
 }

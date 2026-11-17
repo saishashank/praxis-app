@@ -51,6 +51,8 @@ jobs:
         run: npm run test:internal-codes
       - name: No market literal outside the profile seed (AT-67, MKT-107)
         run: npm run test:market-literals
+      - name: Offline research ledger is sound (M23 A2, D-1606; append-only, hashes match the frozen files)
+        run: npm run test:research-registry
       - name: Market-off proofs (AT-68 a/b/c, MKT-110; every CI run)
         run: npx vitest run tests/acceptance/v3/at68.test.ts
       - name: Licence allow-list (UXN-019)
@@ -107,7 +109,7 @@ jobs:
         run: >-
           npx playwright test
           e2e/m11l-steelman.spec.ts e2e/m13l-experts.spec.ts e2e/m14-robustness.spec.ts
-          e2e/m15-cortex.spec.ts e2e/m21-blueprint-keyboard.spec.ts e2e/m21-crosscheck-accepted.spec.ts e2e/m21-labels.spec.ts e2e/m21-review-frame.spec.ts e2e/m21-unmute.spec.ts e2e/m22-sources.spec.ts e2e/picks-sections.spec.ts --project=desktop
+          e2e/m15-cortex.spec.ts e2e/m21-blueprint-keyboard.spec.ts e2e/m21-crosscheck-accepted.spec.ts e2e/m21-labels.spec.ts e2e/m21-review-frame.spec.ts e2e/m21-unmute.spec.ts e2e/m22-sources.spec.ts e2e/m23-cortex.spec.ts e2e/picks-sections.spec.ts --project=desktop
         env:
           E2E_SCENARIO: rich
           E2E_STATES: all

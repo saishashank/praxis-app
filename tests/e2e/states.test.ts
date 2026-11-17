@@ -40,8 +40,9 @@ describe("the state registry", () => {
       "labels-queue",
       "committee-trial",
       "experts-sources",
+      "cortex-research",
     ]);
-    expect(STATE_NAMES).toHaveLength(11);
+    expect(STATE_NAMES).toHaveLength(12);
     for (const n of STATE_NAMES)
       expect(typeof STATES[n as keyof typeof STATES].apply).toBe("function");
   });
@@ -190,6 +191,23 @@ describe("what each state leaves behind", () => {
           "', 'close', 'owner', '2026-10-16T09:00:00Z')",
       ),
     ).rejects.toThrow(/complete proposal/);
+  });
+
+  it("cortex-research: three looks with matching plans, one refusal, the meters, eight monitors, one night of groups and two proposals", async () => {
+    const db = await freshDb("main");
+    await applyStates(db, ["cortex-research"], NOW);
+    const one = async (sql: string) => Number((await db.execute(sql)).rows[0]!.n);
+    expect(await one("SELECT COUNT(*) AS n FROM holdout_look")).toBe(3);
+    expect(
+      await one(
+        "SELECT COUNT(*) AS n FROM holdout_look h JOIN research_prereg p ON p.lineage = h.lineage AND p.market = h.market AND p.sha = h.prereg_sha",
+      ),
+    ).toBe(3);
+    expect(await one("SELECT COUNT(*) AS n FROM holdout_look_refusal")).toBe(1);
+    expect(await one("SELECT COUNT(*) AS n FROM research_meter")).toBe(4);
+    expect(await one("SELECT COUNT(DISTINCT monitor) AS n FROM residual_monitor")).toBe(8);
+    expect(await one("SELECT COUNT(*) AS n FROM sector_index")).toBe(3);
+    expect(await one("SELECT COUNT(*) AS n FROM angle_proposal")).toBe(2);
   });
 
   it("review-stored: one stored Evening Review for the newest weekday, no other review", async () => {

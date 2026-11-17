@@ -41,6 +41,8 @@ are biased upward.
 - A fact filed with a date only counts as known at the end of its UTC filing day (D-1160), so a calibration never reads
   a value earlier than the market could have known it.
 
+*CXA-013 re-read 2026-11-17: unchanged. The US is off and no EDGAR snapshot exists yet, so F2 runs as F2-no-fundamentals.*
+
 ## 4. Director trades (not blocked)
 
 Form 4 carries the transaction type (purchase, sale, grant, exercise), so the director-trade split the AU feed cannot

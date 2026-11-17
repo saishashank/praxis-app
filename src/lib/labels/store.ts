@@ -5,9 +5,26 @@
 // market guard, so a market that is off is refused by the database.
 import type { Client } from "@libsql/client";
 import { ANNOUNCEMENT_CATEGORIES } from "@/lib/cortex/profileReaders";
+import { getConfig } from "@/lib/config/store";
+import type { ConfigKey } from "@/lib/config/keys";
 
 /** D-1121: an evaluation against the labels refuses to run below this many labelled items of the market. */
 export const MIN_LABELS_FOR_EVALUATION = 500;
+
+/**
+ * The golden-set floor read from the configuration store (key `label_golden_min`, fixed at 500; M23 T1, D-1612, D-1660).
+ * The key is registered by M23 A1; until it is, or when the stored value is not a whole number of at least 1, the
+ * constant above is returned, so the value is the same either way.
+ */
+export async function goldenMin(db: Pick<Client, "execute">): Promise<number> {
+  try {
+    const v = await getConfig(db, "label_golden_min" as ConfigKey);
+    if (typeof v === "number" && Number.isInteger(v) && v >= 1) return v;
+  } catch {
+    // the key is not registered yet: the typed default below
+  }
+  return MIN_LABELS_FOR_EVALUATION;
+}
 
 export type LabelRow = {
   readonly market: string;

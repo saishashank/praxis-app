@@ -1068,3 +1068,150 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1541 | Two guard tests after the M22 merge (orchestrator, D-181, DAT-235): the full gate on the merged build failed two source scans. |
 | D-1542 | Two CI findings on the first M22 push (orchestrator): |
 | D-1543 | CI e2e finding on the M22 push (orchestrator): axe reported target-size (serious) on the expert-name links in the table of the sources page (/reviews/experts... |
+
+## M23 (M23_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-1600 | Numbering and gate: M23 decisions are D-1600…D-1699 in this file; tasks start on build at or after bc247714 (M22 done); the M22 CI run on build recorded in B... |
+| D-1601 | Time-box (K14): 10 build days, a build day being a Melbourne calendar day on which an M23 task ran; day 1 is the day A1 starts; a calendar backstop of 21 day... |
+| D-1602 | One vocabulary (K8): the registry stores PASS, NULL or INCONCLUSIVE, enforced by a new insert trigger on holdout_look; rows written before 0040 are never rew... |
+| D-1603 | Hash first: a look needs a research_prereg row with the same lineage, market and sha (trigger); preregister refuses a second, different text for the same lin... |
+| D-1604 | One writer: takeLook in src/lib/research/registry.ts is the only code that inserts into holdout_look (static test); a second attempt writes a holdout_look_re... |
+| D-1605 | INCONCLUSIVE and the look (K12): an item whose n floor is not met is INCONCLUSIVE without a look; n is counted on entries (setups, sessions, blocks) before a... |
+| D-1606 | Offline looks (history on the build machine): the committed docs/research/registry.json is the registry of record for offline items, append-only by seq, chec... |
+| D-1607 | Production sync: steps/lookSync.ts imports offline entries into research_prereg, holdout_look and research_result through the same gate each night (AU only w... |
+| D-1608 | Intraday cells (K7): each VAL-118 cell (v1, then one per quarter after a failed look, D-670) is its own registry lineage (intraday_stream_<cell>), with the e... |
+| D-1609 | F1.v2-mom (O-79): recorded as ledger entry 1 (lineage f1_v2_mom, AU, verdict NULL, note "stays in shadow under the gap cap"); its gap definition is never swi... |
+| D-1610 | Pre-registration files and reports: each item's hypothesis is transcribed from this document into docs/research/prereg/CXA-0xx.json (canonical JSON, fixed ke... |
+| D-1611 | Migration 0040 as designed in §A: eight market-keyed tables, two triggers on holdout_look, no earlier table rebuilt; |
+| D-1612 | Keys: the five §15.11.4 keys are registered fixed (no Owner edit); label_golden_min and survivorship_loss_assumed_pct replace the two constants by reading th... |
+| D-1613 | Night seam: one runResearchNight call after the Cortex night's movers step, skipped on replay, fail-soft, per enabled market, steps in a fixed order (lookSyn... |
+| D-1614 | Monitors in general: quarterly (first night after the quarter's last session), one row per monitor and market, value in value_json, alarm 0/1, plain-words Ow... |
+| D-1615 | Monitor 1 (K2): hit = a promotion-flagged U2/U3 code whose 20-session market-adjusted return after the flag is below 0; hit rate per quarter; and the mean ne... |
+| D-1616 | Monitor 2: once per market at calibration, 2,000 seeded simulated families under a null edge and under a planted edge equal to the family's minimum detectabl... |
+| D-1617 | Monitor 3 (K1): the slope's 90 % upper bound per family per quarter; alarm "Confidence figures are over-stated for <family>" when it is below 0.7. |
+| D-1618 | Monitor 4: count of positions whose stop came from the two-basis rule in the quarter, and how many of them closed on that stop; alarm when the count is above... |
+| D-1619 | Monitor 5: per family the share of the quarter's setups by regime; the label "one regime only" when one regime holds 90 % or more of them [PROPOSED]; no alar... |
+| D-1620 | Monitor 6: one record row (the chosen option: G10 abstains when disagreement exceeds cortex_disagreement_max; the reason in words) plus the quarter's G10 abs... |
+| D-1621 | Monitor 7: realised stall rate per family from the quarter's live and shadow outcomes against the expected rate recorded at calibration; where calibration re... |
+| D-1622 | Monitor 8: share of gate-passing setups that the fill model leaves unfilled per family (the outcome status named at M2 start [VERIFY]); alarm when it rises 5... |
+| D-1623 | Meters: one research_meter row per lineage and market per night (n, target, projected date by the trading calendar at the trailing 60-session rate, status);... |
+| D-1624 | CXA-005 meter: per family, the latest quarterly look's n_eff_live against 150 (live-tested) and the trade floor (cortex_min_neff_trade), projected from nEffL... |
+| D-1625 | CXA-014 pre-registration [PROPOSED] (no n or hypothesis exists in M15): one-sided 90 % block-bootstrap lower bound beyond 0 in the stated direction, block =... |
+| D-1626 | Survivorship in CXA-003 (K17): the AU extract holds survivors only, so the AU haircut is assumed, as M15 did (1 percentage point per 60 sessions held, D-893)... |
+| D-1627 | CXA-003 list (pre-registered). Common: market AU; universe U1 by the tier rule as of each session; entry at the next open after the signal session, exit at t... |
+| D-1628 | CXA-003 split and PASS rule (K15): the M15 split version (development before the M15 boundary, holdout after it, as in D-894 [VERIFY the date at R2 start]);... |
+| D-1629 | Runner and privacy: scripts/research/run-lineage.mjs takes the extract by --history, uses no network, writes rows only to an --out outside the repo, and comm... |
+| D-1630 | Who runs the looks: the R2 and R3 builders run them on the build machine in their task, after Opus has checked that the pre-registration commit precedes the... |
+| D-1631 | Lineages without history (K9): cxa003_earnings_drift (no announcement history, no AU statement parser), cxa003_index_incl (no historical index-change list; D... |
+| D-1632 | Sector series weighting (K4): equal-weight only; sector_index_weighting stays equal; value-weight rows are not written because no free shares-on-issue source... |
+| D-1633 | Backfill (K5): production stores the series forward from the first night after the merge; the backfilled history is computed on the build machine by the same... |
+| D-1634 | CXA-009 pre-registration (K6): monthly panel on the first session of each month; signal = the group's equal-weight return over the 126 sessions ending 21 ses... |
+| D-1635 | CXA-004 pre-registration (K3, K18): the counter is the number of distinct sessions with at least one timed archive item (pre-open, intraday, post-close) per... |
+| D-1636 | CXA-008 rules (K11): harness thresholds stability ≥ 0.90 on neutral paraphrases and flip ≥ 0.80 on tone-flipped ones [PROPOSED]; agreement threshold = the CT... |
+| D-1637 | CXA-007 job: role R2 (claim extraction) via nightlyLlm, budgetKey "R2", first session of each month, at most llm_proposals_per_month; envelope {kind: angle /... |
+| D-1638 | CXA-011 pre-registration: for every Cortex would-have hold (shadow and live arm) of families F1…F6 that sees a SHOCK session, the comparator raises the stop... |
+| D-1639 | CXA-012 records: the key replaces the constant; |
+| D-1640 | CXA-013 records: the AU source check reads the terms of each free candidate the register knows for AU company fundamentals at R4 start [VERIFY] and records t... |
+| D-1641 | Turso estimate: per AU night about 25 sector_index rows, 20 research_meter rows, under 5 shock_stop_outcome rows; 8 monitor rows a quarter; at most 3 proposa... |
+| D-1642 | LLM budget: the proposal run (about 15,000 tokens, first session of the month) and the live paraphrase run (about 20,000 tokens, the session on or after the... |
+| D-1643 | Page: four sections on the Cortex page in plain words (§D, task M4); proposal counts Owner-only; no rating, proposal or research figure on cards, picks or e-... |
+| D-1644 | Cut list (BLD-049), applied from the top when fewer than 2 build days remain and the remaining tasks will not finish: |
+| D-1645 | AT-32 own-set (tests/acceptance/v3/at32Research.test.ts): the eight 0040 tables plus trial_ledger (proposal charges) and app_log; every other table hashes eq... |
+| D-1646 | Roles and review: Opus reviews every pre-registration file against this document before its runner runs (R2, R3, T2, T4, M3, T1), every F task, and the exit;... |
+| D-1647 | Exit and the PR: Z writes the forward reports from the registry and meters on the exit day, the AT reports and docs/M23_exit_evidence.md; after M23, the V3 P... |
+| D-1650 | Registry triggers and the three legacy writers (A1): holdout_look_prereg_ins and holdout_look_verdict_ins exempt exactly the three lineages short_shadow, reg... |
+| D-1655 | Engine conventions (R1): a setup's net is in parts per million of its entry value (whole shares = floor(parcel / entry price), at least 1; one fee on each si... |
+| D-1656 | Sector IC conventions (R1): a month counts toward the floor when at least minGroupsPerMonth groups have at least minMembers members, from member counts alone... |
+| D-1657 | Report writer (R1): renderReport accepts a verdict only from PASS, NULL, INCONCLUSIVE, a 64-hex sha, and refuses any text that looks like a private path (dri... |
+| D-1660 | Golden floor read (T1): goldenMin(db) in src/lib/labels/store.ts reads label_golden_min through the config store and returns the constant 500 when the key is... |
+| D-1661 | Agreement (T1, D-1636): per label kind and market, over the distinct items with at least one labelled golden answer, the Owner's answer is the item's newest... |
+| D-1662 | Harness (T1, D-1636): per fixture item three calls (original, neutral paraphrase, tone-flipped paraphrase) through the R2 router; stability = items whose gui... |
+| D-1663 | Production shadow (T1, D-1636, D-1642): textLabelsEnabled(env, {r2Live}) is true in staging as before, or in any environment when the factory's status lists... |
+| D-1664 | Fixture (T1): tests/fixtures/labels/paraphrase-zz.json holds 30 synthetic ZZ items (five invented events, each in both directions), with the expected guidanc... |
+| D-1665 | Registry gate (A2): preregister(db, {lineage, market, item, frozen, now}) freezes one plan per lineage and market (a plan is a JSON object stored with sorted... |
+| D-1666 | The three first writers on the gate (A2): short shadow, outside-signal state and the Committee trial freeze their plan ({hypothesis} for the first two, the s... |
+| D-1667 | Offline ledger (A2): docs/research/registry.json is {format: 1, entries: [...]}, each entry {seq, item, lineage, market, sha, preregPath, lookedAt?, verdict?... |
+| D-1668 | Ledger import (A2): steps/lookSync.ts reads only the committed ledger and the files it names (a path with .. or an absolute path is not read), for the night'... |
+| D-1669 | Names and the page list (A2): names.ts holds a plain name and a kind (live or offline) per lineage (no market, no code); a test fails on a ledger or writer l... |
+| D-1670 | Series arithmetic (S1, D-1632): a member's return is round((close - previous close) x 1,000,000 / previous close), half away from zero, in whole ppm; a membe... |
+| D-1671 | Minimum members (S1, D-1634): the series keeps every group that has at least one counted member and stores n_members; the floor of 3 members is applied by th... |
+| D-1672 | Step reads (S1, D-1641): per night and enabled market, one probe for a row on the session or later (forward only and idempotent: a repeat or an earlier night... |
+| D-1673 | Panel hand-off for R3 (S1, D-1633, D-1634): sectorSeries(days) (oldest first, each day {d, close, members} with that day's code-to-group map, so a code that... |
+| D-1674 | Fixture (S1): tests/research/sectorFixture.ts holds a 3-group, 6-code, 5-session synthetic ZZ fixture with the hand-computed returns and levels (a 61 % move... |
+| D-1675 | Monitor runner and periods (M1, D-1614): src/lib/cortex/monitors/store.ts holds the one writer (INSERT OR IGNORE into residual_monitor, then one app_log warn... |
+| D-1676 | Monitor 1 data (M1, D-1615): flags are cortex_state rows of kind promotion in state flagged; a flag belongs to the quarter in which its 20th later session fa... |
+| D-1677 | Monitor 2 and 3 data (M1, D-1616, D-1617): the calibration period is cal-<date of the newest fitted map> (the map version), so a refit makes one new row. |
+| D-1678 | Monitor 4 data (M1, D-1618): no table records which stop a live position used, so the count is read from two stored facts: a window is a cortex_state corpora... |
+| D-1679 | Boundary and tests (M1, D-1614, AT-74): the monitors import no arena, agent, pick, order, e-mail, alert or status-writing module and write only residual_moni... |
+| D-1685 | Split boundary (R2, D-1628) [VERIFY resolved]: the M15 design freeze records development up to 2021-12-31 and validation from 2022-01-01; |
+| D-1686 | CXA-003 detectors (R2, D-1627), frozen in docs/research/prereg/CXA-003.json: all on the split-adjusted daily bars, the signal being known at the close of the... |
+| D-1687 | CXA-003 conventions (R2, D-1605, D-1628, D-1655): the tier of a session is assignTiers over the bars up to and including that session (60-session window, raw... |
+| D-1688 | CXA-003 ledger and report (R2, D-1606, D-1628, D-1631): the first commit freezes nine plans (six lineages and the three _p5000 variants) in docs/research/reg... |
+| D-1689 | Ledger merge of R2 and T2 (orchestrator, D-1606): both tasks appended to the same ledger from the same base, T2 as seq 2 to 24 and R2 as seq 2 to 16. |
+| D-1690 | CXA-004 set and lineages (T2, D-1635): the set is derived, not listed: an angle belongs when its registry needsData names the announcement archive and it rea... |
+| D-1691 | CXA-004 counter and meter (T2, D-1623, D-1641): the counter is the number of distinct session_d with at least one archive item of a timing class, per market. |
+| D-1692 | CXA-004 look path (T2, D-1605, D-1635): below 252 nothing is read but dates (the pure engine returns before its reader is called; a test proves it with 251). |
+| D-1693 | CXA-004 labels (T2, D-1635, D-1636): the three labels are evaluated as one family, and only on the night the angle looks are taken: if at least 70 % of the h... |
+| D-1694 | CXA-004 boundary, tests and a finding (T2, D-1645, D-1646): the step reads the archive, the calendar and its own tables and writes only research_prereg, rese... |
+| D-1700 | Monitor 5 floor (M2, D-1619, AT-74): the "one regime only" label needs at least GATE_DEFAULTS.regimeMinSetups (30) setups of the family in the quarter, and t... |
+| D-1701 | Monitor 6 record and revisit (M2, D-1620): the quarterly row records the option (abstain when disagreement exceeds cortex_disagreement_max, value read from t... |
+| D-1702 | Monitor 7 data (M2, D-1621; [VERIFY] answered): checked at M2 start, calibration stores no expected stall rate (no column, no cortex_map or family_status fie... |
+| D-1703 | Monitor 8 data (M2, D-1622; [VERIFY] answered): the exclusion status is the outcome fill_status = 'unfilled' (an entry the fill model did not fill: gap cap,... |
+| D-1710 | CXA-009 panel and window (R3, D-1634): the panel is the first session of each calendar month on the series' own session list (the dates that carry rows of S1... |
+| D-1711 | CXA-009 members and classification (R3, D-1633, D-1672): the backfill feeds sectorSeries with every session of the extract calendar; the members of a session... |
+| D-1712 | CXA-009 frozen parameters (R3, D-1634, D-1656): minMembers 3, minGroupsPerMonth 4 (the R1 suggestion, so a rank correlation is never taken on fewer than 4 po... |
+| D-1713 | CXA-009 look and verdict (R3, D-1605, D-1634): one lineage, sector_ic, one look over the full window with the engine's sectorIcLook; |
+| D-1714 | CXA-009 runner mode (R3, D-1629, D-1630): scripts/research/run-lineage.mjs --lineage sector_ic selects the sector mode; it reuses the argument parser, the ou... |
+| D-1715 | CXA-009 consequence and caveats (R3, D-1634): a PASS keeps F7 in shadow and records the result for the CTX-053 path; it changes no weight or status. |
+| D-1716 | CXA-009 result (R3, D-1634): the one look, taken 2026-11-17 from a clean tree at runner commit e9263f2b05d8 over the full window (2000-01-04 to 2026-10-22),... |
+| D-1717 | Ledger merge of M3 after R3 (orchestrator, D-1606, as D-1689): |
+| D-1720 | Meters in general (M3, D-1623, D-1613): the meters step writes, per enabled market and night, one research_meter row for each of 12 live-tested lines (F1 to... |
+| D-1721 | CXA-014 movers (M3, D-1625; [PROPOSED] values listed): the plan is docs/research/prereg/CXA-014.json (committed with its plan-only ledger entries, seq 40 to... |
+| D-1722 | CXA-008 labels (M3, D-1636; [PROPOSED] values listed): the plan is docs/research/prereg/CXA-008.json (ledger seq 46 to 48 on its branch, 48 to 50 after the m... |
+| D-1723 | VAL-120 intraday cells (M3, D-1608, D-670): each cell is its own lineage intraday_stream_<cell> (intraday_stream_v1, then intraday_stream_v1_<year>Q<n>); its... |
+| D-1724 | CXA-005 meter (M3, D-1624): per family F1 to F6, neff_live_<family> against 150 and neff_trade_<family> against cortex_min_neff_trade, from the n_eff_live of... |
+| D-1725 | Projection (M3, D-1623): the projected date is the session ceil(remaining / pace) sessions after the night on weekdays that are not holiday rows; for the for... |
+| D-1726 | Evaluation rules, in one place (M3, D-1605, D-1604; for the statistics review): |
+| D-1727 | Boundary, ledger and tests (M3, D-1645, D-1646): the files write only research_meter and app_log directly and the look tables through the registry (static al... |
+| D-1728 | Findings, said before any look (M3, listed): |
+| D-1729 | Hand-offs (M3 to M4 and Z): M4 reads the latest research_meter row per lineage by key: neff_live_F1..F6, neff_trade_F1..F6, movers_a1..a8 (blocked for A2, A4... |
+| D-1730 | CXA-007 shape (T3, D-1636, D-1637, PRD-033): src/lib/research/proposals/{schema,validate,store,job,cli}.ts. |
+| D-1731 | CXA-007 check order and states (T3, D-1637): one raw item, checked in a fixed order, each check deterministic and pure: size (over 8,000 serialised character... |
+| D-1732 | CXA-007 weight refusal (T3, D-1637; finding, listed): refused_weight when any key at any depth, normalised to lower case letters and digits, is weight, weigh... |
+| D-1733 | CXA-007 hostile text (T3, D-1637, LLM-035): refused_hostile when any string of the item, keys included and at any depth up to 12, is changed by the router's... |
+| D-1734 | CXA-007 duplicates (T3, D-1637, K10): the canonical hash (sorted keys, no spacing) of the rule against every earlier stored proposal of the market and every... |
+| D-1735 | CXA-007 storage and charge (T3, D-1636, D-1637, K16): store.ts is the only writer, and writes angle_proposal, trial_ledger and app_log in one batch per run. |
+| D-1736 | CXA-007 Owner line (T3, D-1637): one plain app_log line per monthly run, counts only: "The monthly model-written proposals were checked: N kept for you to re... |
+| D-1737 | CXA-007 model path (T3, D-1637, D-1642, LLM-034, LLM-036, LLM-071): askOf takes the R2 router from the night seam (routerFor("R2"), budgetKey "R2", a nightly... |
+| D-1738 | CXA-007 schedule and gate (T3, D-1637, D-1642): the job asks only when llm_proposals_per_month is above 0, R2 is live, d is the first session of its month (n... |
+| D-1739 | CXA-007 names, drop order and tests (T3, D-1609, D-1642): names.ts names the charged lineages by prefix (llm_proposal_ gives "Model-written rule proposal (ke... |
+| D-1740 | CXA-012 key read (R4, D-1638): src/lib/cortex/survivorship.ts reads survivorship_loss_assumed_pct (already registered in M23 A1, default 50, range 30 to 80,... |
+| D-1741 | AU data-limits record (R4, D-1638): dataLimits.mjs gains AU: survivorship (id survivorship_au, the offline history holds only today's codes, the loss assumed... |
+| D-1742 | Industry label (R4, D-1638): industryLabel(d, firstSnapshotAsOf) returns "static industry" (STATIC_INDUSTRY, the wording R3 used in the CXA-009 report) for a... |
+| D-1743 | CXA-013 AU source check (R4, D-1639): DAT-101 applied to a free point-in-time fundamentals source for the ASX, recorded 2026-11-17 as a desk check (the sourc... |
+| D-1744 | IN and US CXA-013 lines (R4, D-1639): both pages re-read on 2026-11-17 against the current code and registers and dated "CXA-013 re-read 2026-11-17". |
+| D-1745 | CXA-012 and CXA-013 reports (R4, D-1610, D-1638): both written in the report format with status INCONCLUSIVE for the lineage-style fields (these are records,... |
+| D-1750 | CXA-011 plan as frozen (T4, D-1638): docs/research/prereg/CXA-011.json transcribes D-1638 and fixes its open readings before any code (commit 3613bd19): the... |
+| D-1751 | One walker for both paths (T4, D-1638): wouldHaveOutcome (src/lib/cortex/night.ts) gains an optional raiseStop(bar, index, level) that is asked after each se... |
+| D-1752 | Hold inputs (T4, D-1750): src/lib/cortex/holdInputs.ts rebuilds what scoreOutcomes gave the walker (bars, ATR(20) plan, the stored rule version's time hold,... |
+| D-1753 | Population window (T4, D-1750): a night reads the stored SHOCK sessions of the last 260 sessions (regime_daily, a range read of at most 300 rows) and, only w... |
+| D-1754 | Recording (T4, D-1750): one shock_stop_outcome row per hold (origin = decision date, arm, code and book cut at 64 characters; d_entry is the fill session, d_... |
+| D-1755 | Variant cap (T4, D-1638, O-46): before the first row of a family in a quarter the step asks the existing count (stopVariantsThisQuarter) and needs the family... |
+| D-1756 | Meters and the look (T4, D-1605, D-1623, D-1638): each night six research_meter rows (recorded holds against 30; collecting, met, looked, blocked); the plan... |
+| D-1757 | Statistic (T4, D-1750): the mean paired difference (tight less base, ppm) with the one-sided 90 % lower bound from a stationary block bootstrap that resample... |
+| D-1758 | Names, ledger and the AT-32 proof (T4, D-1609, D-1645): names.ts gives each lineage "Tighter stops after a market shock: <strategy name>" (live, taken by the... |
+| D-1759 | Boundary (T4, D-1614): the comparator reads the Cortex decisions and outcomes, the regime and the daily bars and writes only shock_stop_outcome, research_met... |
+| D-1760 | Page model (M4, D-1643): src/lib/research/pageView.ts builds one ResearchView (tests, inconclusive names, waiting rows, eight monitor rows, sector series, Ow... |
+| D-1761 | Tests section (M4, D-1602, D-1609): every lineage is shown through lineageName; the result word is Pass, Null (no edge found) or Inconclusive (older stored w... |
+| D-1762 | Waiting section (M4, D-1623, D-1720): the newest research_meter row of each asked lineage in one statement (a keyed MAX per lineage over a json_each list; th... |
+| D-1763 | Sector series (M4, D-1632, D-1741, D-1742): the newest night's equal-weight returns by industry group (return in percent, member count) read by the primary key. |
+| D-1764 | Risk monitors and health line (M4, D-1614...D-1622): eight rows, each the newest quarterly row (monitor 2 and monitor 6 may also hold a one-off cal- row; the... |
+| D-1765 | Seed state and e2e (M4, D-1643, TST-135): state cortex-research (e2e/seed/states/cortex-research.mjs): three looks (Pass, Null, Inconclusive) each with a pre... |
+| D-1766 | Masking (M4, ROL-107, D-175): the research half holds no money, no stock code and no book id, so a masked viewer sees the same sections; an exact date become... |
+| D-1767 | Wording (M4, UI market wording): dates read as in the rest of the app (formatDay, "Fri 6 Nov"); no run time or run id is shown, and the "Looked at" cell is a... |
+| D-1768 | Tests of the page (M4): tests/ui/cortexResearch.test.tsx (the page rendered from the seed for each role: names, results, the 12-character fingerprint, specia... |
+| D-1769 | Reads and budget (M4, D-1641, Turso free plan): a page view adds nine statements, all keyed or bounded: the registry list (A2, LIMIT 200), the stream cell pr... |
+| D-1770 | Rollback runbook and its test at schema 40 (Z, found by the full gate): docs/runbooks/rollback-v2.md and the assertion in tests/golive/v2steps.test.tsx still... |
+| D-1771 | Two source guards fixed (Z, found by the full gate): |

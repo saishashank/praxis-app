@@ -89,7 +89,7 @@ async function insertExpert(): Promise<void> {
 describe("0039_m22_llm_experts", () => {
   it("is migration 39 and its generated guard region is current", async () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(ms).toHaveLength(39);
+    expect(ms).toHaveLength(40);
     expect(ms[38]).toMatchObject({ version: 39, name: "m22_llm_experts" });
     const text = readFileSync(M22_MIGRATION_PATH, "utf8");
     expect(regionOf(text, M22_REGION)).toBe(renderM22Region());
@@ -488,10 +488,10 @@ describe("0039_m22_llm_experts", () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
     await migrateUp(d2, ms);
     const after = await schemaOf(d2);
-    expect(await migrateDown(d2, ms, 1)).toEqual({ rolledBack: 1, version: 38 });
+    expect(await migrateDown(d2, ms, 2)).toEqual({ rolledBack: 2, version: 38 });
     const names = (await schemaOf(d2)).join("\n");
     for (const t of ALL_NEW) expect(names).not.toContain(`table:${t}:`);
-    expect(await migrateUp(d2, ms)).toEqual({ applied: 1, version: 39 });
+    expect(await migrateUp(d2, ms)).toEqual({ applied: 2, version: 40 });
     expect(await schemaOf(d2)).toEqual(after);
   });
 });

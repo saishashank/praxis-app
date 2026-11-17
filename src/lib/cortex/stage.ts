@@ -124,6 +124,7 @@ import {
   type PassportRow,
   type StateKind,
 } from "./store";
+import { runResearchNight } from "@/lib/research/night";
 
 // ---- constants --------------------------------------------------------------------------------------
 
@@ -1481,6 +1482,8 @@ export async function cortexStage(db: Client, o: StageOptions): Promise<StageRes
     createdAt: o.now(),
   });
   if (o.replay !== true) await recordMovers(db, o, view, t, moversNow);
+  // M23 (D-1613): the research night after the movers step; skipped on replay, fail-soft, an enabled market only
+  if (o.replay !== true) await runResearchNight(db, { market: o.market, d: o.d, now: o.now() });
   const allowed = allowedFamilies(
     store.status,
     o.killedArena === true,
