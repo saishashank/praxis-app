@@ -1190,3 +1190,13 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1743 | CXA-013 AU source check (R4, D-1639): DAT-101 applied to a free point-in-time fundamentals source for the ASX, recorded 2026-11-17 as a desk check (the sourc... |
 | D-1744 | IN and US CXA-013 lines (R4, D-1639): both pages re-read on 2026-11-17 against the current code and registers and dated "CXA-013 re-read 2026-11-17". |
 | D-1745 | CXA-012 and CXA-013 reports (R4, D-1610, D-1638): both written in the report format with status INCONCLUSIVE for the lineage-style fields (these are records,... |
+| D-1750 | CXA-011 plan as frozen (T4, D-1638): docs/research/prereg/CXA-011.json transcribes D-1638 and fixes its open readings before any code (commit 3613bd19): the... |
+| D-1751 | One walker for both paths (T4, D-1638): wouldHaveOutcome (src/lib/cortex/night.ts) gains an optional raiseStop(bar, index, level) that is asked after each se... |
+| D-1752 | Hold inputs (T4, D-1750): src/lib/cortex/holdInputs.ts rebuilds what scoreOutcomes gave the walker (bars, ATR(20) plan, the stored rule version's time hold,... |
+| D-1753 | Population window (T4, D-1750): a night reads the stored SHOCK sessions of the last 260 sessions (regime_daily, a range read of at most 300 rows) and, only w... |
+| D-1754 | Recording (T4, D-1750): one shock_stop_outcome row per hold (origin = decision date, arm, code and book cut at 64 characters; d_entry is the fill session, d_... |
+| D-1755 | Variant cap (T4, D-1638, O-46): before the first row of a family in a quarter the step asks the existing count (stopVariantsThisQuarter) and needs the family... |
+| D-1756 | Meters and the look (T4, D-1605, D-1623, D-1638): each night six research_meter rows (recorded holds against 30; collecting, met, looked, blocked); the plan... |
+| D-1757 | Statistic (T4, D-1750): the mean paired difference (tight less base, ppm) with the one-sided 90 % lower bound from a stationary block bootstrap that resample... |
+| D-1758 | Names, ledger and the AT-32 proof (T4, D-1609, D-1645): names.ts gives each lineage "Tighter stops after a market shock: <strategy name>" (live, taken by the... |
+| D-1759 | Boundary (T4, D-1614): the comparator reads the Cortex decisions and outcomes, the regime and the daily bars and writes only shock_stop_outcome, research_met... |
