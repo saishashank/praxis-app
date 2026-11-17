@@ -17,6 +17,7 @@ import { LEDGER_PATH } from "@/lib/research/ledgerFile";
 import { runResearchNight, type ResearchStep } from "@/lib/research/night";
 import { syncLedger } from "@/lib/research/steps/lookSync";
 import { sectorIndexStep } from "@/lib/research/steps/sectorIndex";
+import { monitorsStep } from "@/lib/research/steps/monitors";
 import { cleanupTempDbs } from "../../db/helpers";
 import { STEELMAN_OWN, MIGRATION_OWNED, at32World, combineTables } from "./at32World";
 
@@ -135,6 +136,10 @@ const M23_STEP_WRITERS: Array<(db: Client) => Promise<void>> = [
   async (db) => {
     await sectorIndexStep.run(db, { market: "AU", d: "2031-04-08", now: TS });
   },
+  // M1 (D-1614): the real monitors step, on the quarter before the night; it writes only residual_monitor and app_log
+  async (db) => {
+    await monitorsStep.run(db, { market: "AU", d: "2030-04-02", now: TS });
+  },
 ];
 
 const base = JSON.parse(readFileSync(join(__dirname, "replay-hash.baseline.json"), "utf8")) as {
@@ -194,13 +199,17 @@ describe("AT-32 (research): the M23 own-set, the seam and the complement proof (
     const live = await complementDump(on);
     expect(live.perTable).toEqual(a.perTable);
     expect(live.rows).toEqual(a.rows);
-    // only the ledger import writes (D-1607): one plan, one look and its numbers for the committed F1.v2-mom entry; the six
-    // other steps are still stubs and write nothing
+    // the ledger import writes one plan, one look and its numbers for the committed F1.v2-mom entry (D-1607); the monitors
+    // step (M1) writes its quarterly rows into residual_monitor; the steps still stubs write nothing (each task that lands a
+    // step moves its own table out of the zero list)
     const own = async (t: string): Promise<number> =>
       Number((await on.execute(`SELECT COUNT(*) n FROM ${t}`)).rows[0]!.n);
     for (const t of ["research_prereg", "research_result", "holdout_look"])
       expect(await own(t), t).toBe(1);
-    for (const t of M23_OWN.filter((x) => !["research_prereg", "research_result"].includes(x))) {
+    expect(await own("residual_monitor"), "residual_monitor").toBeGreaterThan(0);
+    for (const t of M23_OWN.filter(
+      (x) => !["research_prereg", "research_result", "residual_monitor"].includes(x),
+    )) {
       expect(await own(t), t).toBe(0);
     }
     // a replayed night and a disabled market do not run it either

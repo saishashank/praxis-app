@@ -1137,3 +1137,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1672 | Step reads (S1, D-1641): per night and enabled market, one probe for a row on the session or later (forward only and idempotent: a repeat or an earlier night... |
 | D-1673 | Panel hand-off for R3 (S1, D-1633, D-1634): sectorSeries(days) (oldest first, each day {d, close, members} with that day's code-to-group map, so a code that... |
 | D-1674 | Fixture (S1): tests/research/sectorFixture.ts holds a 3-group, 6-code, 5-session synthetic ZZ fixture with the hand-computed returns and levels (a 61 % move... |
+| D-1675 | Monitor runner and periods (M1, D-1614): src/lib/cortex/monitors/store.ts holds the one writer (INSERT OR IGNORE into residual_monitor, then one app_log warn... |
+| D-1676 | Monitor 1 data (M1, D-1615): flags are cortex_state rows of kind promotion in state flagged; a flag belongs to the quarter in which its 20th later session fa... |
+| D-1677 | Monitor 2 and 3 data (M1, D-1616, D-1617): the calibration period is cal-<date of the newest fitted map> (the map version), so a refit makes one new row. |
+| D-1678 | Monitor 4 data (M1, D-1618): no table records which stop a live position used, so the count is read from two stored facts: a window is a cortex_state corpora... |
+| D-1679 | Boundary and tests (M1, D-1614, AT-74): the monitors import no arena, agent, pick, order, e-mail, alert or status-writing module and write only residual_moni... |
